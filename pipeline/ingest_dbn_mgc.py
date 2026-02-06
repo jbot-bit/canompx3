@@ -49,8 +49,9 @@ from pipeline.paths import GOLD_DB_PATH
 # CONFIGURATION
 # =============================================================================
 
-# DBN file location
-DBN_PATH = Path(r"C:\Users\sydne\OneDrive\Desktop\CANONICAL TRADING\OHLCV_MGC_FULL\glbx-mdp3-20100912-20260203.ohlcv-1m.dbn.zst")
+# DBN file location (portable, relative to project root)
+PROJECT_ROOT = Path(__file__).parent.parent
+DBN_PATH = PROJECT_ROOT / "OHLCV_MGC_FULL" / "glbx-mdp3-20100912-20260203.ohlcv-1m.dbn.zst"
 
 # Database
 DB_PATH = GOLD_DB_PATH
@@ -541,6 +542,16 @@ def main():
     else:
         print("DRY RUN: Database will not be modified")
     print()
+
+    # Ensure connection is closed on ALL exit paths (including sys.exit)
+    import atexit
+    def _close_con():
+        if con is not None:
+            try:
+                con.close()
+            except Exception:
+                pass
+    atexit.register(_close_con)
 
     # =========================================================================
     # PHASE 1-4: EXTRACT, VALIDATE, TRANSFORM, AGGREGATE

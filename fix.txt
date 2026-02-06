@@ -1,0 +1,103 @@
+YOU ARE MPX3 CODE GUARDIAN + BUILDER. FAIL-CLOSED. TWO-PASS MANDATORY.
+
+AUTHORITY ORDER (must read + obey, in this order; if conflict -> STOP):
+1) CLAUDE.md
+2) CANONICAL_LOGIC.txt (if present)
+3) work.txt (if present)
+4) docs/schema_reference.md (if present)
+
+SCOPE (explicit):
+- Address the “Honest Codebase Audit” claims by VERIFYING them against the repo.
+- Then implement fixes in a controlled order:
+  (A) Correctness bugs (UTC/local window mismatch in bars_5m builder, atomicity gap)
+  (B) Portability + reproducibility (.gitignore, requirements/pyproject, remove hardcoded Windows path)
+  (C) Performance bottlenecks (iterrows/apply in hot loops, indexes)
+- DO NOT implement daily_features / ORB / strategy logic.
+- DO NOT touch trading logic or schemas beyond safe, additive performance indexes/constraints (only if allowed by CLAUDE.md).
+
+HARD CONSTRAINTS:
+- No broad refactors. Surgical edits only.
+- No new tables. No schema migrations unless explicitly allowed and proven safe.
+- No mock data. No phantom columns/tables.
+- Keep existing behavior identical for current working flows unless the change is to fix a proven correctness bug.
+- Every claim must be supported by evidence: file path + line numbers + the exact snippet.
+
+========================
+PASS 1 — AUDIT (NO CODE CHANGES)
+========================
+Goal: Prove what’s true vs false about the reported issues.
+
+1) Reproduce / verify each “CRITICAL Fix Now” claim with evidence:
+   - #1 Hardcoded Windows absolute path (locate all occurrences; show paths + lines)
+   - #2 .iterrows() in hot loop (locate all occurrences of .iterrows and .apply; classify: hot loop vs acceptable small loops)
+   - #3 UTC vs local trading-day mismatch in build_bars_5m.py
+        * Identify exactly how start/end date args are converted into ts_utc bounds
+        * Determine if we are using trading-day (Brisbane 09:00 boundary) anywhere in bars_5m build
+        * Show the exact SQL window used for DELETE + INSERT and whether it misses 23:00 UTC prev day bars
+   - #4 No .gitignore (confirm)
+   - #5 No requirements.txt / pyproject.toml (confirm)
+   - #6 Transaction atomicity gap (confirm whether build_bars_5m uses BEGIN/COMMIT; verify DELETE+INSERT behavior)
+
+2) Verify selected HIGH/MEDIUM items only if they’re likely real:
+   - “0 rows = success” behavior in build_bars_5m.py (confirm exit code behavior and guardrails)
+   - Connections not closed on error paths (confirm; note sys.exit paths)
+   - Checkpoint locking (confirm: concurrent run risk)
+   - Indexes / constraints: confirm current schema + PKs
+
+3) Output PASS 1 report in this exact structure:
+   - VERIFIED BUGS (must fix): list with file:line + why
+   - FALSE / NOT-AN-ISSUE: list with evidence
+   - RISKS (not fixing now): list with rationale
+   - Proposed minimal patch list (files + exact changes) ordered by priority
+   - Gates to run after PASS 2 (commands)
+
+STOP CONDITIONS (PASS 1):
+- If any “fix” would violate CLAUDE.md constraints, STOP and ask for explicit authorization.
+- If a reported bug cannot be proven with evidence, label it “UNPROVEN” and do NOT fix in PASS 2.
+
+========================
+PASS 2 — BUILD (ONLY AFTER EXPLICIT “APPROVE PASS 2”)
+========================
+If approved, implement fixes in this order, but ONLY for items VERIFIED in PASS 1:
+
+PRIORITY 1 — Correctness + data safety
+1) build_bars_5m date-window correctness:
+   - If start/end are trading-day dates (Brisbane boundary), ensure ts_utc bounds cover [23:00 UTC (D-1), 23:00 UTC (D)] per trading day.
+   - Ensure DELETE window matches INSERT window exactly.
+   - Add a fail-closed sanity query that checks no missing early-hour bars for the first/last trading day in range.
+2) Transaction atomicity:
+   - Wrap DELETE + INSERT in explicit BEGIN/COMMIT with ROLLBACK on failure.
+   - Ensure failure after DELETE cannot leave table empty for that range.
+
+PRIORITY 2 — Portability + reproducibility
+3) Replace hardcoded absolute paths:
+   - Ensure DBN file path comes ONLY from asset_configs.py or CLI flag.
+   - If ingest_dbn_mgc.py still has a hardcoded DBN_PATH, replace with a safe default that fail-closes unless configured (or leave unchanged if forbidden; if forbidden -> document).
+4) Add .gitignore (repo root):
+   - Must ignore: *.db, checkpoints/, *.dbn*, *.zst, .venv/, __pycache__/, logs/.
+5) Add requirements.txt (or pyproject.toml) minimally:
+   - Pin only top-level deps you actually import (duckdb, pandas, numpy, databento).
+   - Keep it minimal and deterministic.
+
+PRIORITY 3 — Performance
+6) Remove proven hot-loop .iterrows/.apply:
+   - Only if VERIFIED and actually hot.
+   - Replace with vectorized extraction or array loops (numpy/pandas values) consistent with your canonical ingestion rules.
+7) Optional: indexes (ONLY if allowed by CLAUDE.md):
+   - Add safe indexes that speed common queries (e.g., (symbol, ts_utc) already PK; consider additional on ts_utc alone if needed).
+   - No schema breaking changes.
+
+POST-PASS2 REQUIRED GATES (must run and paste outputs):
+- python pipeline/check_drift.py
+- python pipeline/ingest_dbn_mgc.py --dry-run --start 2024-01-01 --end 2024-01-07
+- python pipeline/ingest_dbn.py --instrument MGC --dry-run --start 2024-01-01 --end 2024-01-07
+- python pipeline/build_bars_5m.py --instrument MGC --start 2024-01-01 --end 2024-01-31
+- python pipeline/check_db.py
+- Add one correctness query:
+    * Confirm 5m alignment: minute(ts_utc)%5==0 for all bars_5m rows in range (fail if any)
+
+DELIVERABLE FORMAT:
+- PASS 1: report + minimal patch plan
+- PASS 2: diffs + gate outputs + final status board
+
+BEGIN PASS 1 NOW.

@@ -162,6 +162,16 @@ def main():
         print("DRY RUN: Database will not be modified")
     print()
 
+    # Ensure connection is closed on ALL exit paths (including sys.exit)
+    import atexit
+    def _close_con():
+        if con is not None:
+            try:
+                con.close()
+            except Exception:
+                pass
+    atexit.register(_close_con)
+
     # =========================================================================
     # DATE FILTERS WITH MINIMUM DATE ENFORCEMENT
     # =========================================================================

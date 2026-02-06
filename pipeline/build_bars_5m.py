@@ -15,6 +15,10 @@ For each (symbol, bucket_ts):
 Idempotent: DELETE existing bars_5m rows for the date range, then INSERT rebuilt rows.
 BARS_5M ONLY: Does NOT touch bars_1m or any other table.
 
+NOTE: --start/--end are UTC calendar dates, NOT Brisbane trading days.
+      The query window is [start 00:00 UTC, end+1 00:00 UTC).
+      Trading day logic (Brisbane 09:00 boundary) belongs in daily_features, not here.
+
 Usage:
     python pipeline/build_bars_5m.py --instrument MGC --start 2024-01-01 --end 2024-01-31
     python pipeline/build_bars_5m.py --instrument MGC --start 2024-01-01 --end 2024-01-31 --dry-run
@@ -300,47 +304,48 @@ def main():
 
     con = duckdb.connect(str(GOLD_DB_PATH))
 
-    # Build
-    print("Building 5-minute bars...")
-    row_count = build_5m_bars(con, symbol, start_date, end_date, args.dry_run)
-    print()
-
-    # Verify (skip for dry run)
-    if not args.dry_run and row_count > 0:
-        print("Verifying integrity...")
-        ok, failures = verify_5m_integrity(con, symbol, start_date, end_date)
-
-        if not ok:
-            print("FATAL: Integrity verification FAILED:")
-            for f in failures:
-                print(f"  - {f}")
-            con.close()
-            sys.exit(1)
-
-        print("  No duplicates: PASSED [OK]")
-        print("  5-minute alignment: PASSED [OK]")
-        print("  OHLCV sanity: PASSED [OK]")
-        print("  Volume non-negative: PASSED [OK]")
+    try:
+        # Build
+        print("Building 5-minute bars...")
+        row_count = build_5m_bars(con, symbol, start_date, end_date, args.dry_run)
         print()
-        print("ALL INTEGRITY CHECKS PASSED [OK]")
-    elif args.dry_run:
-        print("Integrity check skipped (dry run)")
-    print()
 
-    elapsed = datetime.now() - start_time
+        # Verify (skip for dry run)
+        if not args.dry_run and row_count > 0:
+            print("Verifying integrity...")
+            ok, failures = verify_5m_integrity(con, symbol, start_date, end_date)
 
-    print("=" * 60)
-    print(f"SUMMARY: {row_count:,} bars_5m rows {'(would be) ' if args.dry_run else ''}built")
-    print(f"Wall time: {elapsed}")
-    print("=" * 60)
+            if not ok:
+                print("FATAL: Integrity verification FAILED:")
+                for f in failures:
+                    print(f"  - {f}")
+                sys.exit(1)
 
-    con.close()
-
-    if args.dry_run:
+            print("  No duplicates: PASSED [OK]")
+            print("  5-minute alignment: PASSED [OK]")
+            print("  OHLCV sanity: PASSED [OK]")
+            print("  Volume non-negative: PASSED [OK]")
+            print()
+            print("ALL INTEGRITY CHECKS PASSED [OK]")
+        elif args.dry_run:
+            print("Integrity check skipped (dry run)")
         print()
-        print("DRY RUN COMPLETE. No changes made.")
 
-    sys.exit(0)
+        elapsed = datetime.now() - start_time
+
+        print("=" * 60)
+        print(f"SUMMARY: {row_count:,} bars_5m rows {'(would be) ' if args.dry_run else ''}built")
+        print(f"Wall time: {elapsed}")
+        print("=" * 60)
+
+        if args.dry_run:
+            print()
+            print("DRY RUN COMPLETE. No changes made.")
+
+        sys.exit(0)
+
+    finally:
+        con.close()
 
 
 if __name__ == "__main__":
