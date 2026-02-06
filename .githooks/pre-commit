@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+#
+# Pre-commit hook: blocks commit if guardrails fail.
+# Runs in <10 seconds. Fail-closed.
+#
+# Setup: git config core.hooksPath .githooks
+#
+
+set -e
+
+echo "=== PRE-COMMIT CHECKS ==="
+echo ""
+
+# 1. Drift check (~2 seconds)
+echo "[1/3] Drift check..."
+python pipeline/check_drift.py > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+    echo "BLOCKED: Drift detected."
+    python pipeline/check_drift.py
+    exit 1
+fi
+echo "  PASSED"
+
+# 2. Fast pure-function tests (~3 seconds)
+echo "[2/3] Fast tests..."
+python -m pytest tests/test_validation.py tests/test_contract_selection.py tests/test_trading_days.py tests/test_check_drift.py tests/test_paths.py -x -q 2>&1 | tail -3
+if [ ${PIPESTATUS[0]} -ne 0 ]; then
+    echo "BLOCKED: Unit tests failed."
+    exit 1
+fi
+
+# 3. Syntax check on staged .py files
+echo "[3/3] Syntax check..."
+STAGED_PY=$(git diff --cached --name-only --diff-filter=ACM | grep '\.py$' || true)
+if [ -n "$STAGED_PY" ]; then
+    for f in $STAGED_PY; do
+        python -m py_compile "$f" 2>/dev/null
+        if [ $? -ne 0 ]; then
+            echo "BLOCKED: Syntax error in $f"
+            python -m py_compile "$f"
+            exit 1
+        fi
+    done
+    echo "  PASSED"
+else
+    echo "  No .py files staged"
+fi
+
+echo ""
+echo "=== ALL PRE-COMMIT CHECKS PASSED ==="

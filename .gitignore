@@ -3,11 +3,15 @@ gold.db
 gold.db.wal
 
 # Data files (large, not for VCS)
+DB/
 OHLCV_MGC_FULL/
 dbn/
 *.dbn
 *.dbn.zst
 *.zip
+
+# Generated tools
+pipeline-explorer.html
 
 # Python
 __pycache__/

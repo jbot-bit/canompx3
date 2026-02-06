@@ -160,6 +160,149 @@ def check_non_bars1m_writes(files: list[Path]) -> list[str]:
     return violations
 
 
+def check_schema_query_consistency(pipeline_dir: Path) -> list[str]:
+    """Check that all SQL table references exist in init_db.py schema."""
+    violations = []
+
+    init_db_path = pipeline_dir / "init_db.py"
+    if not init_db_path.exists():
+        return violations
+
+    # Extract tables defined in init_db.py
+    init_content = init_db_path.read_text(encoding='utf-8')
+    create_tables = set(re.findall(r'CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)', init_content, re.IGNORECASE))
+
+    if not create_tables:
+        return violations
+
+    # Scan all pipeline files for SQL table references
+    table_ref_patterns = [
+        re.compile(r'(?:FROM|INTO|UPDATE|JOIN)\s+(\w+)', re.IGNORECASE),
+    ]
+
+    for fpath in pipeline_dir.glob("*.py"):
+        if fpath.name == "init_db.py" or fpath.name == "check_drift.py":
+            continue
+
+        content = fpath.read_text(encoding='utf-8')
+        lines = content.splitlines()
+
+        for line_num, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith('#'):
+                continue
+
+            for pattern in table_ref_patterns:
+                for match in pattern.finditer(line):
+                    table = match.group(1)
+                    # Skip SQL keywords and common false positives
+                    if table.upper() in ('SELECT', 'WHERE', 'AND', 'OR', 'NOT', 'NULL',
+                                          'SET', 'VALUES', 'ORDER', 'GROUP', 'BY', 'AS',
+                                          'HAVING', 'LIMIT', 'OFFSET', 'DISTINCT', 'ON',
+                                          'TRANSACTION', 'TABLE', 'REPLACE', 'EXISTS',
+                                          'SCHEMA', 'COLUMNS', 'INFORMATION_SCHEMA',
+                                          'MAIN', 'INDEX', 'VIEW', 'TYPE'):
+                        continue
+                    # Skip information_schema references
+                    if 'information_schema' in line.lower():
+                        continue
+                    if table not in create_tables:
+                        violations.append(
+                            f"  {fpath.name}:{line_num}: References table '{table}' not in init_db.py schema"
+                        )
+
+    return violations
+
+
+def check_import_cycles(pipeline_dir: Path) -> list[str]:
+    """Check for import cycles between pipeline modules."""
+    violations = []
+
+    # ingest_dbn_mgc.py must NOT import from ingest_dbn.py (reverse dependency)
+    mgc_path = pipeline_dir / "ingest_dbn_mgc.py"
+    if not mgc_path.exists():
+        return violations
+
+    content = mgc_path.read_text(encoding='utf-8')
+    lines = content.splitlines()
+
+    for line_num, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if stripped.startswith('#'):
+            continue
+        if 'from pipeline.ingest_dbn import' in line or 'import pipeline.ingest_dbn' in line:
+            violations.append(
+                f"  ingest_dbn_mgc.py:{line_num}: Imports from ingest_dbn.py (circular dependency risk)"
+            )
+        if 'from .ingest_dbn import' in line or 'from . import ingest_dbn' in line:
+            violations.append(
+                f"  ingest_dbn_mgc.py:{line_num}: Relative import from ingest_dbn (circular dependency risk)"
+            )
+
+    return violations
+
+
+def check_hardcoded_paths(pipeline_dir: Path) -> list[str]:
+    """Check for hardcoded absolute Windows paths in pipeline code."""
+    violations = []
+
+    path_patterns = [
+        re.compile(r'["\']C:\\Users', re.IGNORECASE),
+        re.compile(r'["\']C:/Users', re.IGNORECASE),
+        re.compile(r'["\']D:\\', re.IGNORECASE),
+        re.compile(r'["\']D:/', re.IGNORECASE),
+    ]
+
+    for fpath in pipeline_dir.glob("*.py"):
+        if fpath.name == "check_drift.py":
+            continue
+
+        content = fpath.read_text(encoding='utf-8')
+        lines = content.splitlines()
+
+        for line_num, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith('#'):
+                continue
+
+            for pattern in path_patterns:
+                if pattern.search(line):
+                    violations.append(
+                        f"  {fpath.name}:{line_num}: Hardcoded absolute path: {stripped[:80]}"
+                    )
+
+    return violations
+
+
+def check_connection_leaks(pipeline_dir: Path) -> list[str]:
+    """Check that duckdb.connect() calls have proper cleanup."""
+    violations = []
+
+    for fpath in pipeline_dir.glob("*.py"):
+        if fpath.name in ("check_drift.py", "check_db.py", "__init__.py"):
+            continue
+
+        content = fpath.read_text(encoding='utf-8')
+
+        # Count duckdb.connect() calls
+        connect_count = len(re.findall(r'duckdb\.connect\(', content))
+        if connect_count == 0:
+            continue
+
+        # Check for cleanup mechanisms
+        has_close = 'con.close()' in content or '.close()' in content
+        has_finally = 'finally:' in content
+        has_atexit = 'atexit' in content
+        has_with = 'with duckdb' in content
+
+        if not (has_close or has_finally or has_atexit or has_with):
+            violations.append(
+                f"  {fpath.name}: {connect_count} duckdb.connect() calls but no close/finally/atexit/with"
+            )
+
+    return violations
+
+
 def main():
     print("=" * 60)
     print("PIPELINE DRIFT CHECK")
@@ -195,6 +338,42 @@ def main():
     # Check 3: Writes to non-bars_1m tables in ingest scripts
     print("Check 3: Non-bars_1m writes in ingest scripts...")
     v = check_non_bars1m_writes(INGEST_WRITE_FILES)
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 4: Import cycle prevention
+    print("Check 4: Import cycle prevention...")
+    v = check_import_cycles(PIPELINE_DIR)
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 5: Hardcoded absolute paths
+    print("Check 5: Hardcoded absolute paths...")
+    v = check_hardcoded_paths(PIPELINE_DIR)
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 6: Connection leak detection
+    print("Check 6: Connection leak detection...")
+    v = check_connection_leaks(PIPELINE_DIR)
     if v:
         print("  FAILED:")
         for line in v:

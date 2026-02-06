@@ -16,5 +16,8 @@ GOLD_DB_PATH = PROJECT_ROOT / "gold.db"
 DBN_DIR = PROJECT_ROOT / "dbn"
 OHLCV_DIR = PROJECT_ROOT / "OHLCV_MGC_FULL"
 
-# Default DBN file
+# Daily DBN files directory (1,559 individual daily .dbn.zst files)
+DAILY_DBN_DIR = PROJECT_ROOT / "DB" / "GOLD_DB_FULLSIZE"
+
+# Default DBN file (single concatenated file — may not exist if using daily files)
 DEFAULT_DBN_FILE = OHLCV_DIR / "glbx-mdp3-20100912-20260203.ohlcv-1m.dbn.zst"
