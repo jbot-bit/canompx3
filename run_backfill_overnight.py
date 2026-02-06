@@ -29,7 +29,6 @@ from pathlib import Path
 MAX_RETRIES = 100  # Maximum restart attempts
 RETRY_DELAY = 30   # Seconds to wait before restart
 CHUNK_DAYS = 7     # Trading days per commit
-BATCH_SIZE = 50000 # Rows per DBN read
 
 LOG_FILE = Path(__file__).parent / "backfill_overnight.log"
 
@@ -52,7 +51,6 @@ def run_ingest(start_date: str = None, end_date: str = None) -> int:
         "--resume",
         "--retry-failed",
         f"--chunk-days={CHUNK_DAYS}",
-        f"--batch-size={BATCH_SIZE}",
     ]
 
     if start_date:

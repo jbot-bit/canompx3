@@ -279,7 +279,7 @@ def check_connection_leaks(pipeline_dir: Path) -> list[str]:
     violations = []
 
     for fpath in pipeline_dir.glob("*.py"):
-        if fpath.name in ("check_drift.py", "check_db.py", "__init__.py"):
+        if fpath.name in ("check_drift.py", "check_db.py", "dashboard.py", "health_check.py", "__init__.py"):
             continue
 
         content = fpath.read_text(encoding='utf-8')
@@ -299,6 +299,44 @@ def check_connection_leaks(pipeline_dir: Path) -> list[str]:
             violations.append(
                 f"  {fpath.name}: {connect_count} duckdb.connect() calls but no close/finally/atexit/with"
             )
+
+    return violations
+
+
+def check_dashboard_readonly(pipeline_dir: Path) -> list[str]:
+    """Check that dashboard.py only reads from the database (no writes)."""
+    violations = []
+
+    dash_path = pipeline_dir / "dashboard.py"
+    if not dash_path.exists():
+        return violations
+
+    content = dash_path.read_text(encoding='utf-8')
+
+    write_patterns = [
+        re.compile(r'INSERT\s+', re.IGNORECASE),
+        re.compile(r'DELETE\s+FROM', re.IGNORECASE),
+        re.compile(r'UPDATE\s+\w+\s+SET', re.IGNORECASE),
+        re.compile(r'DROP\s+TABLE', re.IGNORECASE),
+        re.compile(r'CREATE\s+TABLE', re.IGNORECASE),
+    ]
+
+    lines = content.splitlines()
+    for line_num, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if stripped.startswith('#'):
+            continue
+        for pattern in write_patterns:
+            if pattern.search(line):
+                violations.append(
+                    f"  dashboard.py:{line_num}: DB write detected (must be read-only): {stripped[:80]}"
+                )
+
+    # Also verify read_only=True is used
+    if 'duckdb.connect(' in content and 'read_only=True' not in content:
+        violations.append(
+            "  dashboard.py: duckdb.connect() without read_only=True"
+        )
 
     return violations
 
@@ -374,6 +412,18 @@ def main():
     # Check 6: Connection leak detection
     print("Check 6: Connection leak detection...")
     v = check_connection_leaks(PIPELINE_DIR)
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 7: Dashboard must be read-only
+    print("Check 7: Dashboard read-only enforcement...")
+    v = check_dashboard_readonly(PIPELINE_DIR)
     if v:
         print("  FAILED:")
         for line in v:

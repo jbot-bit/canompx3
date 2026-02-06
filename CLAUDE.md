@@ -24,6 +24,8 @@ Gold (MGC) Data Pipeline — builds a clean, replayable local dataset of Micro G
 | `init_db.py` | 132 | Database schema initialization |
 | `asset_configs.py` | 111 | Per-instrument config (MGC, MNQ, NQ) |
 | `check_db.py` | 84 | Database inspection tool |
+| `dashboard.py` | 450 | Self-contained HTML report generator (7 panels) |
+| `health_check.py` | 100 | Quick all-in-one health check CLI |
 | `paths.py` | 21 | Canonical path constants |
 
 ### Root Scripts
@@ -125,8 +127,16 @@ python pipeline/build_bars_5m.py --instrument MGC --start 2024-01-01 --end 2024-
 
 ```bash
 python pipeline/check_drift.py                        # Drift detection (7 checks)
-python -m pytest tests/ -v                             # Full test suite
+python -m pytest tests/ -v                             # Full test suite (86 tests)
 python -m pytest tests/ -x -q                          # Fast test run (stop on first fail)
+python pipeline/health_check.py                        # All-in-one health check
+```
+
+### Dashboard
+
+```bash
+python pipeline/dashboard.py                           # Generate dashboard.html
+python pipeline/dashboard.py --output report.html      # Custom output path
 ```
 
 ### Testing
