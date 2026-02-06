@@ -1,0 +1,287 @@
+# CANONICAL TRADING LOGIC SPEC
+Authoritative – Non-Negotiable
+
+## Purpose
+This document defines the mandatory accounting, risk, and performance logic
+for the trading system. All metrics must reflect REALIZED outcomes, not
+chart-perfect projections.
+
+This document is axiomatic.
+It is NOT a request for redesign, optimization, or interpretation.
+
+---
+
+## 1. Atomic Unit: R-Multiples
+
+### Definition
+1R = initial risk on a trade.
+
+1R = |Entry − Stop|
+
+### Rules
+- All performance metrics MUST be stored and evaluated in R-multiples
+- Currency values are derived only for display
+- R normalizes performance across instruments, sizes, and account types
+
+### Examples
+- Risk $100, profit $300 → +3R
+- Risk $100, lose $50 → −0.5R
+
+---
+
+## 2. Calculation Engines (MANDATORY SEPARATION)
+
+Two engines MUST exist and remain distinct.
+
+---
+
+### 2A. Theoretical RR Engine (Pre-Trade)
+
+Purpose:
+- Planning
+- Scanning
+- Chart evaluation
+
+Inputs:
+- Entry (Pe)
+- Stop (Psl)
+- Target (Ptp)
+
+Formulas:
+- Long:
+  RR_theoretical = (Ptp − Pe) / (Pe − Psl)
+- Short:
+  RR_theoretical = (Pe − Ptp) / (Psl − Pe)
+
+Validation:
+- Flag RR < 1.0
+- Flag targets exceeding ADR / ATR bounds
+
+---
+
+### 2B. Realized RR Engine (Post-Trade / Simulation)
+
+Purpose:
+- Truthful performance
+- Expectancy
+- Survivability
+
+Required Inputs:
+- Slippage (entry + exit)
+- Commission (entry + exit)
+- Spread
+- Financing (if applicable)
+
+#### Realized Risk ($)
+Costs INCREASE risk.
+
+Realized_Risk_$ =
+(|Pe − Psl| × PointValue)
++ Slippage_entry
++ Slippage_exit
++ Commission_entry
++ Commission_exit
++ Spread
+
+#### Realized Reward ($)
+Costs REDUCE reward.
+
+Realized_Reward_$ =
+(|Ptp − Pe| × PointValue)
+− Slippage_entry
+− Slippage_exit
+− Commission_entry
+− Commission_exit
+− Spread
+
+#### Realized RR
+Realized_RR = Realized_Reward_$ / Realized_Risk_$
+
+Rule:
+Any discrepancy between theoretical RR and realized RR MUST be visible.
+
+---
+
+## 3. Position Sizing Logic
+
+### Standard Account
+Risk is based on equity.
+
+PositionSize =
+(AccountEquity × Risk%) / (|Pe − Psl| × PointValue)
+
+---
+
+### Prop Firm Mode (CRITICAL)
+
+Usable risk capital = Max Drawdown (NOT account balance)
+
+True_Risk_% = RiskAmount / MaxDrawdown
+
+Example:
+- Account: $100k
+- Max DD: $5k
+- Risk: $500
+
+True_Risk_% = 10%
+
+Rule:
+True Risk % MUST be displayed.
+
+---
+
+## 4. Strategy Viability Metrics (REQUIRED)
+
+### Expectancy (in R)
+E = (WinRate × AvgWin_R) − (LossRate × AvgLoss_R)
+
+If E ≤ 0 after costs → strategy is invalid.
+
+---
+
+### Risk of Ruin (RoR)
+Inputs:
+- Win rate
+- Payoff ratio
+- TRUE risk %
+
+Rule:
+Warn user if RoR exceeds safety threshold.
+
+---
+
+### Walk-Forward Validation
+- Optimize In-Sample
+- Validate Out-of-Sample
+- Roll forward
+- Material degradation OOS = non-robust strategy
+
+---
+
+## 5. Execution & Order Types
+
+Trades MUST be categorized:
+
+- Market: highest slippage
+- Limit: low slippage, fill risk
+- Stop-Entry: worst slippage in volatility
+
+Missed limit trades MUST be tracked.
+
+---
+
+## 6. Dynamic Reward Logic
+
+### Volatility-Aware Targets
+- Evaluate targets against ADR / ATR
+- Flag targets exceeding remaining range
+
+---
+
+### Scaled Exits (Blended R)
+Blended_R = Σ (ExitFraction_i × R_i)
+
+Example:
+50% at 1R, 50% at 3R → 2R
+
+Each R MUST be net of costs.
+
+---
+
+## 7. Developer Checklist
+
+- Store outcomes in R
+- Separate theoretical vs realized RR
+- Include ALL costs inside RR
+- Support prop-firm drawdown logic
+- Compute expectancy and RoR
+- Display true risk + realized expectancy
+
+---
+
+---
+
+## 8. Entry Technique: Confirm Bars (VALIDATED 2026-02-05)
+
+### Purpose
+Filter fakeouts by requiring multiple closes outside ORB before entry.
+
+### Definition
+confirm_bars = number of consecutive 1-minute closes outside ORB range required before entry
+
+### Rules
+- confirm_bars=1: Enter on FIRST close outside ORB (original behavior)
+- confirm_bars=2: Wait for 2nd consecutive close outside ORB
+- confirm_bars=3: Wait for 3rd consecutive close outside ORB
+
+### Evidence
+Testing on MGC 0900 ORB showed:
+- 1 bar confirm: +0.084R avg
+- 3 bar confirm: +0.160R avg (almost 2x better)
+
+### Implementation
+Entry signal triggers only when:
+1. Current bar closes outside ORB range
+2. Previous (confirm_bars - 1) bars also closed outside ORB in same direction
+3. All confirms must be consecutive (no gaps)
+
+---
+
+## 9. Strategy Validation Requirements (MANDATORY)
+
+### Sample Size
+- Minimum: 50 trades (absolute floor)
+- Preferred: 100+ trades (for statistical confidence)
+- Reject any strategy with < 30 trades
+
+### Yearly Robustness (CRITICAL)
+A strategy is ONLY valid if it is profitable in ALL years tested.
+
+Example:
+- 2024: +0.3R (OK)
+- 2025: -0.1R (FAIL)
+- 2026: +0.5R (OK)
+Result: REJECTED (failed 2025)
+
+Rationale: Yearly variance reveals regime dependency.
+If a strategy fails any single year, it may fail future years.
+
+### Stress Test
+Strategy must survive +50% cost increase.
+- If ExpR at base costs = +0.15R
+- ExpR at +50% costs must still be > 0
+
+### Validation Checklist
+1. Sample size >= 100 trades
+2. Post-cost ExpR > 0 (using $8.40 RT for MGC)
+3. Positive in ALL years tested
+4. Survives +50% cost stress test
+
+If ANY check fails, strategy is REJECTED.
+
+---
+
+## 10. MGC Cost Model Reference
+
+See: pipeline/cost_model.py (CANONICAL source)
+
+### MGC (Micro Gold) Costs
+- Commission RT: $2.40
+- Spread (double): $2.00
+- Slippage: $4.00
+- **Total Friction: $8.40 RT**
+
+### Honest Accounting
+- Spread is DOUBLED (entry + exit)
+- Slippage assumed on both sides
+- This is conservative but realistic
+
+### Other Instruments
+NQ and MPL require broker specs before validation.
+cost_model.py correctly blocks unvalidated instruments.
+
+---
+
+## Final Rule
+If a metric does not reflect real money behavior,
+it must not be presented as truth.

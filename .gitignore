@@ -1,0 +1,43 @@
+# Database
+gold.db
+gold.db.wal
+
+# Data files (large, not for VCS)
+OHLCV_MGC_FULL/
+dbn/
+*.dbn
+*.dbn.zst
+*.zip
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# Logs & checkpoints
+*.log
+pipeline/checkpoints/
+
+# Environment & secrets
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude Code
+.claude/
+
+# Windows junk
+nul
+Thumbs.db
+Desktop.ini
+
+# Misc
+backfill_overnight.log
