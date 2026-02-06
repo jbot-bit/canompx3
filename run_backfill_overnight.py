@@ -48,7 +48,7 @@ def run_ingest(start_date: str = None, end_date: str = None) -> int:
 
     cmd = [
         sys.executable,
-        "pipeline/ingest_dbn_mgc.py",
+        "pipeline/ingest_dbn_daily.py",
         "--resume",
         "--retry-failed",
         f"--chunk-days={CHUNK_DAYS}",

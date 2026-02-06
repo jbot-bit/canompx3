@@ -164,15 +164,9 @@ def main():
         print(f"FATAL: Data directory not found: {data_dir}")
         sys.exit(1)
 
-    # =========================================================================
-    # LOAD SYMBOLOGY (instrument_id -> contract_name)
-    # =========================================================================
-    print("Loading symbology mapping...")
-    id_to_name = load_symbology(data_dir)
-    mgc_ids = {k for k, v in id_to_name.items() if MGC_OUTRIGHT_PATTERN.match(v)}
-    print(f"  Total mappings: {len(id_to_name)}")
-    print(f"  MGC contract IDs: {len(mgc_ids)}")
-    print()
+    # NOTE: Symbology mapping is NOT needed — Databento's to_df() already
+    # resolves instrument_ids to readable contract names (e.g. "MGCG4").
+    # The MGC_OUTRIGHT_PATTERN filter handles everything downstream.
 
     # =========================================================================
     # DISCOVER FILES
@@ -261,18 +255,9 @@ def main():
 
             chunk_df = chunk_df.reset_index()
 
-            # =================================================================
-            # MAP INSTRUMENT IDS TO CONTRACT NAMES
-            # =================================================================
-            chunk_df['symbol'] = chunk_df['symbol'].astype(str).map(id_to_name)
-
-            # Drop rows where mapping failed (unknown instruments)
-            unmapped = chunk_df['symbol'].isna()
-            if unmapped.any():
-                chunk_df = chunk_df[~unmapped]
-
-            if len(chunk_df) == 0:
-                continue
+            # NOTE: to_df() already resolves instrument_ids to readable
+            # contract names (e.g. "MGCG4", "GCJ1"), so no symbology
+            # mapping is needed here.
 
             # =================================================================
             # FILTER TO MGC OUTRIGHTS ONLY (exclude GC.FUT and spreads)
