@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 @pytest.fixture
 def tmp_db(tmp_path):
-    """Create a temporary DuckDB with bars_1m and bars_5m schema."""
+    """Create a temporary DuckDB with bars_1m, bars_5m, and daily_features schema."""
     db_path = tmp_path / "test.db"
     con = duckdb.connect(str(db_path))
 
@@ -53,6 +53,10 @@ def tmp_db(tmp_path):
             PRIMARY KEY (symbol, ts_utc)
         )
     """)
+
+    # Import the canonical schema DDL to keep test schema in sync
+    from pipeline.init_db import DAILY_FEATURES_SCHEMA
+    con.execute(DAILY_FEATURES_SCHEMA)
 
     yield con
     con.close()

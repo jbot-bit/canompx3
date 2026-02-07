@@ -34,7 +34,7 @@ MONTH_CODES = 'FGHJKMNQUVXZ'
 
 ASSET_CONFIGS = {
     "MGC": {
-        "dbn_path": PROJECT_ROOT / "OHLCV_MGC_FULL" / "glbx-mdp3-20100912-20260203.ohlcv-1m.dbn.zst",
+        "dbn_path": PROJECT_ROOT / "DB" / "GOLD_DB_FULLSIZE",
         "symbol": "MGC",
         "outright_pattern": re.compile(r'^MGC[FGHJKMNQUVXZ]\d{1,2}$'),
         "prefix_len": 3,

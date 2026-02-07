@@ -77,6 +77,24 @@ def check_db():
             print(f"  Date range: {date_range[0]} to {date_range[1]}")
         print()
 
+    # Check daily_features
+    if 'daily_features' in table_names:
+        print("daily_features:")
+        count = con.execute("SELECT COUNT(*) FROM daily_features").fetchone()[0]
+        print(f"  Row count: {count:,}")
+
+        if count > 0:
+            date_range = con.execute(
+                "SELECT MIN(trading_day), MAX(trading_day) FROM daily_features"
+            ).fetchone()
+            print(f"  Date range: {date_range[0]} to {date_range[1]}")
+
+            orb_minutes = con.execute(
+                "SELECT DISTINCT orb_minutes FROM daily_features"
+            ).fetchall()
+            print(f"  ORB durations: {[o[0] for o in orb_minutes]}")
+        print()
+
     con.close()
 
 

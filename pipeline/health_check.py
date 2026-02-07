@@ -43,9 +43,13 @@ def check_database() -> tuple[bool, str]:
     try:
         bars_1m = con.execute("SELECT COUNT(*) FROM bars_1m").fetchone()[0]
         bars_5m = con.execute("SELECT COUNT(*) FROM bars_5m").fetchone()[0]
+        daily_feat = con.execute("SELECT COUNT(*) FROM daily_features").fetchone()[0]
     finally:
         con.close()
-    return True, f"gold.db exists ({size_mb}MB, {bars_1m:,} bars_1m, {bars_5m:,} bars_5m)"
+    return True, (
+        f"gold.db exists ({size_mb}MB, {bars_1m:,} bars_1m, "
+        f"{bars_5m:,} bars_5m, {daily_feat:,} daily_features)"
+    )
 
 
 def check_dbn_files() -> tuple[bool, str]:

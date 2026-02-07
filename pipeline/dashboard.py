@@ -46,10 +46,13 @@ def collect_db_metrics(db_path: Path) -> dict:
         "size_mb": 0,
         "bars_1m_count": 0,
         "bars_5m_count": 0,
+        "daily_features_count": 0,
         "bars_1m_min_date": None,
         "bars_1m_max_date": None,
         "bars_5m_min_date": None,
         "bars_5m_max_date": None,
+        "daily_features_min_date": None,
+        "daily_features_max_date": None,
         "symbols": [],
         "tables": [],
     }
@@ -82,6 +85,13 @@ def collect_db_metrics(db_path: Path) -> dict:
                 dr = con.execute("SELECT MIN(DATE(ts_utc)), MAX(DATE(ts_utc)) FROM bars_5m").fetchone()
                 result["bars_5m_min_date"] = str(dr[0])
                 result["bars_5m_max_date"] = str(dr[1])
+
+        if "daily_features" in result["tables"]:
+            result["daily_features_count"] = con.execute("SELECT COUNT(*) FROM daily_features").fetchone()[0]
+            if result["daily_features_count"] > 0:
+                dr = con.execute("SELECT MIN(trading_day), MAX(trading_day) FROM daily_features").fetchone()
+                result["daily_features_min_date"] = str(dr[0])
+                result["daily_features_max_date"] = str(dr[1])
     finally:
         con.close()
 
@@ -391,6 +401,8 @@ def render_db_panel(db: dict) -> str:
         <tr><td>bars_1m range</td><td>{db['bars_1m_min_date'] or 'N/A'} &rarr; {db['bars_1m_max_date'] or 'N/A'}</td></tr>
         <tr><td>bars_5m rows</td><td><strong>{db['bars_5m_count']:,}</strong></td></tr>
         <tr><td>bars_5m range</td><td>{db['bars_5m_min_date'] or 'N/A'} &rarr; {db['bars_5m_max_date'] or 'N/A'}</td></tr>
+        <tr><td>daily_features rows</td><td><strong>{db['daily_features_count']:,}</strong></td></tr>
+        <tr><td>daily_features range</td><td>{db['daily_features_min_date'] or 'N/A'} &rarr; {db['daily_features_max_date'] or 'N/A'}</td></tr>
         <tr><td>Symbols</td><td>{', '.join(db['symbols']) or 'None'}</td></tr>
       </table>
     </div>

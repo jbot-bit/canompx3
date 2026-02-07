@@ -26,6 +26,8 @@ Gold (MGC) Data Pipeline — builds a clean, replayable local dataset of Micro G
 | `check_db.py` | 84 | Database inspection tool |
 | `dashboard.py` | 450 | Self-contained HTML report generator (7 panels) |
 | `health_check.py` | 100 | Quick all-in-one health check CLI |
+| `build_daily_features.py` | 480 | Daily features builder (ORBs, sessions, RSI, outcomes) |
+| `cost_model.py` | 120 | Canonical cost model (MGC friction, R-multiples, stress test) |
 | `paths.py` | 21 | Canonical path constants |
 
 ### Root Scripts
@@ -59,7 +61,8 @@ Databento DBN files (.dbn.zst)
   → gold.db:bars_1m (1-minute OHLCV, UTC timestamps)
   → pipeline/build_bars_5m.py (deterministic aggregation)
   → gold.db:bars_5m (5-minute OHLCV, fully rebuildable)
-  → [NOT YET BUILT: daily_features, ORB calculations]
+  → pipeline/build_daily_features.py (ORBs, sessions, RSI, outcomes)
+  → gold.db:daily_features (one row per trading day)
 ```
 
 ### Database Schema (DuckDB)
@@ -75,6 +78,15 @@ Databento DBN files (.dbn.zst)
 - Deterministically aggregated from bars_1m
 - Bucket = floor(epoch(ts)/300)*300
 - Fully rebuildable at any time
+
+**daily_features** (one row per trading day per instrument):
+- Primary key: `(symbol, trading_day)`
+- `trading_day`: DATE (09:00 Brisbane boundary)
+- `bar_count_1m`: INTEGER (bars in trading day)
+- Session stats: `session_{asia,london,ny}_{high,low}` (DOUBLE)
+- RSI: `rsi_14_at_0900` (DOUBLE, Wilder's 14-period on 5m closes)
+- 6 ORBs x 8 columns each: `orb_{0900,1000,1100,1800,2300,0030}_{high,low,size,break_dir,break_ts,outcome,mae_r,mfe_r}`
+- Built by `pipeline/build_daily_features.py` (idempotent, configurable --orb-minutes)
 
 ### Time & Calendar Model (CRITICAL)
 
@@ -121,6 +133,14 @@ python pipeline/run_pipeline.py --instrument MGC --start 2024-01-01 --end 2024-1
 ```bash
 python pipeline/build_bars_5m.py --instrument MGC --start 2024-01-01 --end 2024-12-31
 python pipeline/build_bars_5m.py --instrument MGC --start 2024-01-01 --end 2024-12-31 --dry-run
+```
+
+### Daily Features
+
+```bash
+python pipeline/build_daily_features.py --instrument MGC --start 2024-01-01 --end 2024-12-31
+python pipeline/build_daily_features.py --instrument MGC --start 2024-01-01 --end 2024-12-31 --orb-minutes 15
+python pipeline/build_daily_features.py --instrument MGC --start 2024-01-01 --end 2024-12-31 --dry-run
 ```
 
 ### Guardrails
@@ -252,10 +272,9 @@ Defaults (override if needed):
 ## What's NOT Built Yet
 
 See `ROADMAP.md` for planned features including:
-- `daily_features` table (ORB calculations, session stats)
+- Cost model (`pipeline/cost_model.py`) — for MAE/MFE in R-multiples
 - `trading_app/` module (strategy detection, execution)
 - `validated_setups` table (production strategies)
-- Cost model (`pipeline/cost_model.py`)
 - Strategy validation framework
 
 **Do NOT reference these unbuilt features in code or tests. Build guardrails for what exists.**

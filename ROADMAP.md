@@ -4,21 +4,17 @@ Features planned but NOT YET BUILT. Move items to CLAUDE.md as they are implemen
 
 ---
 
-## Phase 1: Daily Features Pipeline (Next)
+## Phase 1: Daily Features Pipeline — DONE
 
-- `pipeline/build_daily_features.py` — compute ORBs, session stats, RSI from bars_1m/bars_5m
-- `daily_features` table — one row per trading day per instrument
-  - Session highs/lows (Asia 09:00-17:00, London 18:00-23:00, NY 23:00-02:00)
-  - 6 ORBs with 8 columns each (high, low, size, break_dir, outcome, r_multiple, mae, mfe)
-  - RSI at ORB (Wilder's smoothing, 14-period, on 5m closes)
-  - ORB break rules: CLOSE outside range (not touch), 1-minute closes for detection
+- `pipeline/build_daily_features.py` — BUILT (6 staged modules, 42 tests)
+- `daily_features` table — BUILT (58 columns, schema in init_db.py)
+- Configurable ORB duration (5/15/30 min via --orb-minutes)
+- Wired into run_pipeline.py orchestrator
 
-## Phase 2: Cost Model
+## Phase 2: Cost Model — DONE
 
-- `pipeline/cost_model.py` — contract specs, friction calculations
-  - MGC: $10/point, $8.40 RT friction (commission $2.40 + spread $2.00 + slippage $4.00)
-  - Realized RR formulas
-  - Single source of truth for all cost calculations
+- `pipeline/cost_model.py` — BUILT (CostSpec, R-multiples, stress test, 20 tests)
+- MAE/MFE wired into build_daily_features.py outcome calculation
 
 ## Phase 3: Trading App
 

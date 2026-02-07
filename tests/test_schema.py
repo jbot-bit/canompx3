@@ -8,7 +8,7 @@ import pytest
 import duckdb
 from pathlib import Path
 
-from pipeline.init_db import init_db
+from pipeline.init_db import init_db, ORB_LABELS
 
 
 class TestInitDb:
@@ -90,6 +90,50 @@ class TestInitDb:
         con.close()
         assert count_after == 0
 
+    def test_creates_daily_features_table(self, tmp_path):
+        db_path = tmp_path / "test.db"
+        init_db(db_path, force=False)
+
+        con = duckdb.connect(str(db_path))
+        tables = [t[0] for t in con.execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
+        ).fetchall()]
+        con.close()
+
+        assert "daily_features" in tables
+
+    def test_daily_features_has_orb_columns(self, tmp_path):
+        db_path = tmp_path / "test.db"
+        init_db(db_path, force=False)
+
+        con = duckdb.connect(str(db_path))
+        cols = [c[0] for c in con.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'daily_features'"
+        ).fetchall()]
+        con.close()
+
+        # Each ORB label should have 8 columns
+        for label in ORB_LABELS:
+            for suffix in ['high', 'low', 'size', 'break_dir', 'break_ts', 'outcome', 'mae_r', 'mfe_r']:
+                col_name = f"orb_{label}_{suffix}"
+                assert col_name in cols, f"Missing ORB column: {col_name}"
+
+    def test_daily_features_has_session_columns(self, tmp_path):
+        db_path = tmp_path / "test.db"
+        init_db(db_path, force=False)
+
+        con = duckdb.connect(str(db_path))
+        cols = [c[0] for c in con.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'daily_features'"
+        ).fetchall()]
+        con.close()
+
+        for col in ['session_asia_high', 'session_asia_low',
+                     'session_london_high', 'session_london_low',
+                     'session_ny_high', 'session_ny_low',
+                     'rsi_14_at_0900']:
+            assert col in cols, f"Missing session column: {col}"
+
     def test_idempotent_without_force(self, tmp_path):
         db_path = tmp_path / "test.db"
 
@@ -105,3 +149,4 @@ class TestInitDb:
 
         assert "bars_1m" in tables
         assert "bars_5m" in tables
+        assert "daily_features" in tables

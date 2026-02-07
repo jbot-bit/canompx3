@@ -95,13 +95,31 @@ def step_build_5m(instrument: str, args) -> int:
 
 
 def step_build_features(instrument: str, args) -> int:
-    """Step 3: Rebuild daily_features from bars. NOT IMPLEMENTED."""
-    print("FATAL: daily_features build is NOT IMPLEMENTED")
-    print(f"       Instrument: {instrument}")
-    print(f"       Date range: {args.start or 'all'} to {args.end or 'all'}")
+    """Step 3: Rebuild daily_features from bars_1m/bars_5m."""
+    if not args.start or not args.end:
+        print("FATAL: --start and --end are required for daily_features build")
+        return 1
+
+    cmd = [
+        sys.executable,
+        str(PROJECT_ROOT / "pipeline" / "build_daily_features.py"),
+        f"--instrument={instrument}",
+        f"--start={args.start}",
+        f"--end={args.end}",
+    ]
+
+    if args.dry_run:
+        cmd.append("--dry-run")
+
+    # Pass orb_minutes if available
+    orb_minutes = getattr(args, 'orb_minutes', 5)
+    cmd.append(f"--orb-minutes={orb_minutes}")
+
+    print(f"  Command: {' '.join(cmd)}")
     print()
-    print("To add this step, create pipeline/build_daily_features.py and update this runner.")
-    return 1
+
+    result = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
+    return result.returncode
 
 
 def step_audit(instrument: str, args) -> int:
@@ -125,7 +143,7 @@ def step_audit(instrument: str, args) -> int:
 PIPELINE_STEPS = [
     ("ingest", "Ingest DBN -> bars_1m", step_ingest),
     ("build_5m", "Rebuild bars_5m from bars_1m", step_build_5m),
-    ("build_features", "Rebuild daily_features [NOT IMPLEMENTED]", step_build_features),
+    ("build_features", "Rebuild daily_features from bars", step_build_features),
     ("audit", "Database integrity check", step_audit),
 ]
 
@@ -149,6 +167,8 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Show planned steps without executing")
     parser.add_argument("--chunk-days", type=int, default=7, help="Trading days per ingest commit")
     parser.add_argument("--batch-size", type=int, default=50000, help="Rows per DBN read batch")
+    parser.add_argument("--orb-minutes", type=int, default=5, choices=[5, 15, 30],
+                        help="ORB duration in minutes (default: 5)")
     args = parser.parse_args()
 
     instrument = args.instrument.upper()

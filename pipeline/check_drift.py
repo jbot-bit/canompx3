@@ -161,7 +161,11 @@ def check_non_bars1m_writes(files: list[Path]) -> list[str]:
 
 
 def check_schema_query_consistency(pipeline_dir: Path) -> list[str]:
-    """Check that all SQL table references exist in init_db.py schema."""
+    """Check that SQL table references in triple-quoted strings match init_db.py schema.
+
+    Only scans inside triple-quoted SQL strings (containing SELECT/INSERT/DELETE/UPDATE)
+    to avoid false positives from Python import statements and comments.
+    """
     violations = []
 
     init_db_path = pipeline_dir / "init_db.py"
@@ -175,41 +179,66 @@ def check_schema_query_consistency(pipeline_dir: Path) -> list[str]:
     if not create_tables:
         return violations
 
-    # Scan all pipeline files for SQL table references
-    table_ref_patterns = [
-        re.compile(r'(?:FROM|INTO|UPDATE|JOIN)\s+(\w+)', re.IGNORECASE),
-    ]
+    # SQL keywords and known non-table identifiers to skip
+    sql_keywords = {
+        'SELECT', 'WHERE', 'AND', 'OR', 'NOT', 'NULL', 'SET', 'VALUES',
+        'ORDER', 'GROUP', 'BY', 'AS', 'HAVING', 'LIMIT', 'OFFSET',
+        'DISTINCT', 'ON', 'TRANSACTION', 'TABLE', 'REPLACE', 'EXISTS',
+        'SCHEMA', 'COLUMNS', 'INFORMATION_SCHEMA', 'MAIN', 'INDEX',
+        'VIEW', 'TYPE', 'INTERVAL', 'ZONE', 'CAST', 'COUNT', 'MIN',
+        'MAX', 'SUM', 'AVG', 'FIRST', 'LAST', 'EXTRACT', 'EPOCH',
+        'BEGIN', 'COMMIT', 'ROLLBACK', 'DROP', 'CREATE', 'IF',
+    }
+
+    # Extract CTE names: WITH x AS (...), y AS (...), z AS (...)
+    # Matches both the first CTE (after WITH) and subsequent ones (after comma)
+    cte_pattern = re.compile(r'(?:WITH|,)\s+(\w+)\s+AS\s*\(', re.IGNORECASE)
+
+    # Pattern for table references in SQL
+    table_ref_pattern = re.compile(r'(?:FROM|INTO|UPDATE|JOIN)\s+(\w+)', re.IGNORECASE)
+
+    # Extract triple-quoted strings that contain SQL
+    sql_string_pattern = re.compile(r'"""(.*?)"""|\'\'\'(.*?)\'\'\'', re.DOTALL)
+    sql_indicator = re.compile(r'\b(SELECT|INSERT|DELETE|UPDATE|CREATE)\b', re.IGNORECASE)
 
     for fpath in pipeline_dir.glob("*.py"):
-        if fpath.name == "init_db.py" or fpath.name == "check_drift.py":
+        if fpath.name in ("init_db.py", "check_drift.py"):
             continue
 
         content = fpath.read_text(encoding='utf-8')
-        lines = content.splitlines()
 
-        for line_num, line in enumerate(lines, 1):
-            stripped = line.strip()
-            if stripped.startswith('#'):
+        for match in sql_string_pattern.finditer(content):
+            sql_text = match.group(1) or match.group(2)
+
+            # Only check strings that look like SQL
+            if not sql_indicator.search(sql_text):
                 continue
 
-            for pattern in table_ref_patterns:
-                for match in pattern.finditer(line):
-                    table = match.group(1)
-                    # Skip SQL keywords and common false positives
-                    if table.upper() in ('SELECT', 'WHERE', 'AND', 'OR', 'NOT', 'NULL',
-                                          'SET', 'VALUES', 'ORDER', 'GROUP', 'BY', 'AS',
-                                          'HAVING', 'LIMIT', 'OFFSET', 'DISTINCT', 'ON',
-                                          'TRANSACTION', 'TABLE', 'REPLACE', 'EXISTS',
-                                          'SCHEMA', 'COLUMNS', 'INFORMATION_SCHEMA',
-                                          'MAIN', 'INDEX', 'VIEW', 'TYPE'):
-                        continue
-                    # Skip information_schema references
-                    if 'information_schema' in line.lower():
-                        continue
-                    if table not in create_tables:
-                        violations.append(
-                            f"  {fpath.name}:{line_num}: References table '{table}' not in init_db.py schema"
-                        )
+            # Extract CTE names from this SQL block
+            cte_names = {m.group(1) for m in cte_pattern.finditer(sql_text)}
+
+            # Find line number of the match start
+            line_num = content[:match.start()].count('\n') + 1
+
+            for ref_match in table_ref_pattern.finditer(sql_text):
+                table = ref_match.group(1)
+                if table.upper() in sql_keywords:
+                    continue
+                if 'information_schema' in sql_text.lower():
+                    continue
+                # Skip CTE names and known DataFrame variable patterns
+                if table in cte_names:
+                    continue
+                if table.endswith('_df'):
+                    continue
+                # Skip column names used after EXTRACT(... FROM col)
+                extract_ctx = sql_text[max(0, ref_match.start()-30):ref_match.start()]
+                if 'EXTRACT' in extract_ctx.upper() or 'EPOCH' in extract_ctx.upper():
+                    continue
+                if table not in create_tables:
+                    violations.append(
+                        f"  {fpath.name}:~{line_num}: SQL references table '{table}' not in init_db.py schema"
+                    )
 
     return violations
 
@@ -385,8 +414,20 @@ def main():
         print("  PASSED [OK]")
     print()
 
-    # Check 4: Import cycle prevention
-    print("Check 4: Import cycle prevention...")
+    # Check 4: Schema-query table name consistency
+    print("Check 4: Schema-query table name consistency...")
+    v = check_schema_query_consistency(PIPELINE_DIR)
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 5: Import cycle prevention
+    print("Check 5: Import cycle prevention...")
     v = check_import_cycles(PIPELINE_DIR)
     if v:
         print("  FAILED:")
@@ -397,8 +438,8 @@ def main():
         print("  PASSED [OK]")
     print()
 
-    # Check 5: Hardcoded absolute paths
-    print("Check 5: Hardcoded absolute paths...")
+    # Check 6: Hardcoded absolute paths
+    print("Check 6: Hardcoded absolute paths...")
     v = check_hardcoded_paths(PIPELINE_DIR)
     if v:
         print("  FAILED:")
@@ -409,8 +450,8 @@ def main():
         print("  PASSED [OK]")
     print()
 
-    # Check 6: Connection leak detection
-    print("Check 6: Connection leak detection...")
+    # Check 7: Connection leak detection
+    print("Check 7: Connection leak detection...")
     v = check_connection_leaks(PIPELINE_DIR)
     if v:
         print("  FAILED:")
@@ -421,8 +462,8 @@ def main():
         print("  PASSED [OK]")
     print()
 
-    # Check 7: Dashboard must be read-only
-    print("Check 7: Dashboard read-only enforcement...")
+    # Check 8: Dashboard must be read-only
+    print("Check 8: Dashboard read-only enforcement...")
     v = check_dashboard_readonly(PIPELINE_DIR)
     if v:
         print("  FAILED:")

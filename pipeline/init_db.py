@@ -5,6 +5,7 @@ Initialize the DuckDB database schema for MGC data pipeline.
 Creates tables:
 - bars_1m: Primary 1-minute OHLCV data (raw data from Databento)
 - bars_5m: Derived 5-minute OHLCV data (aggregated from bars_1m)
+- daily_features: One row per trading day per instrument (ORBs, session stats, RSI)
 
 Usage:
     python pipeline/init_db.py [--force]
@@ -56,6 +57,65 @@ CREATE TABLE IF NOT EXISTS bars_5m (
 );
 """
 
+# ORB labels (local Brisbane times) — all 6 are equal, no primary/secondary
+ORB_LABELS = ["0900", "1000", "1100", "1800", "2300", "0030"]
+
+
+def _build_daily_features_ddl() -> str:
+    """Generate CREATE TABLE DDL for daily_features.
+
+    Columns per ORB (8 each):
+      orb_{label}_high      - ORB range high
+      orb_{label}_low       - ORB range low
+      orb_{label}_size      - high - low (points)
+      orb_{label}_break_dir - 'long', 'short', or NULL (no break)
+      orb_{label}_break_ts  - timestamp of first break (1m close outside range)
+      orb_{label}_outcome   - outcome at RR=1.0 ('win', 'loss', 'scratch', NULL)
+      orb_{label}_mae_r     - max adverse excursion in R (NULL until cost model)
+      orb_{label}_mfe_r     - max favorable excursion in R (NULL until cost model)
+    """
+    orb_cols = []
+    for label in ORB_LABELS:
+        orb_cols.extend([
+            f"    orb_{label}_high      DOUBLE,",
+            f"    orb_{label}_low       DOUBLE,",
+            f"    orb_{label}_size      DOUBLE,",
+            f"    orb_{label}_break_dir TEXT,",
+            f"    orb_{label}_break_ts  TIMESTAMPTZ,",
+            f"    orb_{label}_outcome   TEXT,",
+            f"    orb_{label}_mae_r     DOUBLE,",
+            f"    orb_{label}_mfe_r     DOUBLE,",
+        ])
+    orb_block = "\n".join(orb_cols)
+
+    return f"""
+CREATE TABLE IF NOT EXISTS daily_features (
+    trading_day       DATE    NOT NULL,
+    symbol            TEXT    NOT NULL,
+    orb_minutes       INTEGER NOT NULL,
+    bar_count_1m      INTEGER,
+
+    -- Session stats (local Brisbane times)
+    session_asia_high   DOUBLE,
+    session_asia_low    DOUBLE,
+    session_london_high DOUBLE,
+    session_london_low  DOUBLE,
+    session_ny_high     DOUBLE,
+    session_ny_low      DOUBLE,
+
+    -- RSI (Wilder's 14-period on 5m closes, computed at first ORB)
+    rsi_14_at_0900    DOUBLE,
+
+    -- ORB columns (6 ORBs x 8 columns = 48)
+{orb_block}
+
+    PRIMARY KEY (symbol, trading_day, orb_minutes)
+);
+"""
+
+
+DAILY_FEATURES_SCHEMA = _build_daily_features_ddl()
+
 
 def init_db(db_path: Path, force: bool = False):
     """Initialize database with schema."""
@@ -73,8 +133,9 @@ def init_db(db_path: Path, force: bool = False):
 
     if force:
         print("FORCE MODE: Dropping existing tables...")
-        con.execute("DROP TABLE IF EXISTS bars_1m")
+        con.execute("DROP TABLE IF EXISTS daily_features")
         con.execute("DROP TABLE IF EXISTS bars_5m")
+        con.execute("DROP TABLE IF EXISTS bars_1m")
         print("  Tables dropped.")
         print()
 
@@ -86,6 +147,9 @@ def init_db(db_path: Path, force: bool = False):
 
     con.execute(BARS_5M_SCHEMA)
     print("  bars_5m: created (or already exists)")
+
+    con.execute(DAILY_FEATURES_SCHEMA)
+    print("  daily_features: created (or already exists)")
 
     con.commit()
     print()
@@ -101,12 +165,12 @@ def init_db(db_path: Path, force: bool = False):
     print(f"  Tables found: {table_names}")
 
     # Check columns for each table
-    for table_name in ['bars_1m', 'bars_5m']:
+    for table_name in ['bars_1m', 'bars_5m', 'daily_features']:
         if table_name in table_names:
             cols = con.execute(
                 f"SELECT column_name, data_type FROM information_schema.columns WHERE table_name = '{table_name}'"
             ).fetchall()
-            print(f"  {table_name} columns: {[c[0] for c in cols]}")
+            print(f"  {table_name} columns ({len(cols)}): {[c[0] for c in cols]}")
 
     con.close()
 
