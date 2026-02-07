@@ -132,11 +132,16 @@ def init_db(db_path: Path, force: bool = False):
     con = duckdb.connect(str(db_path))
 
     if force:
-        print("FORCE MODE: Dropping existing tables...")
+        print("FORCE MODE: Dropping ALL tables...")
+        # Drop trading_app tables first (FK dependencies on daily_features)
+        for t in ["validated_setups_archive", "validated_setups",
+                   "experimental_strategies", "orb_outcomes"]:
+            con.execute(f"DROP TABLE IF EXISTS {t}")
+        # Drop pipeline tables
         con.execute("DROP TABLE IF EXISTS daily_features")
         con.execute("DROP TABLE IF EXISTS bars_5m")
         con.execute("DROP TABLE IF EXISTS bars_1m")
-        print("  Tables dropped.")
+        print("  All tables dropped (pipeline + trading_app).")
         print()
 
     # Create tables

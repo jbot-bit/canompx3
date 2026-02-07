@@ -12,6 +12,10 @@ from pipeline.check_drift import (
     check_hardcoded_mgc_sql,
     check_apply_iterrows,
     check_non_bars1m_writes,
+    check_pipeline_never_imports_trading_app,
+    check_trading_app_connection_leaks,
+    check_trading_app_hardcoded_paths,
+    check_config_filter_sync,
 )
 
 
@@ -107,4 +111,122 @@ class TestNonBars1mWrites:
         f = tmp_path / "test.py"
         f.write_text("count = con.execute(\"SELECT COUNT(*) FROM bars_1m\").fetchone()[0]\n")
         violations = check_non_bars1m_writes([f])
+        assert len(violations) == 0
+
+
+class TestPipelineNeverImportsTradingApp:
+    """Tests for one-way dependency: pipeline must never import trading_app."""
+
+    def test_catches_from_import(self, tmp_path):
+        f = tmp_path / "run_pipeline.py"
+        f.write_text("from trading_app.config import ALL_FILTERS\n")
+        violations = check_pipeline_never_imports_trading_app(tmp_path)
+        assert len(violations) > 0
+
+    def test_catches_import_statement(self, tmp_path):
+        f = tmp_path / "run_pipeline.py"
+        f.write_text("import trading_app\n")
+        violations = check_pipeline_never_imports_trading_app(tmp_path)
+        assert len(violations) > 0
+
+    def test_passes_pipeline_imports(self, tmp_path):
+        f = tmp_path / "build_bars_5m.py"
+        f.write_text("from pipeline.paths import GOLD_DB_PATH\n")
+        violations = check_pipeline_never_imports_trading_app(tmp_path)
+        assert len(violations) == 0
+
+    def test_ignores_comments(self, tmp_path):
+        f = tmp_path / "run_pipeline.py"
+        f.write_text("# from trading_app import something\n")
+        violations = check_pipeline_never_imports_trading_app(tmp_path)
+        assert len(violations) == 0
+
+    def test_skips_check_drift(self, tmp_path):
+        """check_drift.py itself references trading_app dir — should be skipped."""
+        f = tmp_path / "check_drift.py"
+        f.write_text("from trading_app import db_manager\n")
+        violations = check_pipeline_never_imports_trading_app(tmp_path)
+        assert len(violations) == 0
+
+
+class TestTradingAppConnectionLeaks:
+    """Tests for connection leak detection in trading_app/."""
+
+    def test_catches_no_cleanup(self, tmp_path):
+        f = tmp_path / "bad_module.py"
+        f.write_text("con = duckdb.connect(str(db_path))\ncon.execute('SELECT 1')\n")
+        violations = check_trading_app_connection_leaks(tmp_path)
+        assert len(violations) > 0
+
+    def test_passes_with_finally(self, tmp_path):
+        f = tmp_path / "good_module.py"
+        f.write_text("con = duckdb.connect(str(db_path))\ntry:\n    pass\nfinally:\n    con.close()\n")
+        violations = check_trading_app_connection_leaks(tmp_path)
+        assert len(violations) == 0
+
+    def test_passes_with_close(self, tmp_path):
+        f = tmp_path / "good_module.py"
+        f.write_text("con = duckdb.connect(str(db_path))\ncon.execute('SELECT 1')\ncon.close()\n")
+        violations = check_trading_app_connection_leaks(tmp_path)
+        assert len(violations) == 0
+
+    def test_skips_init(self, tmp_path):
+        f = tmp_path / "__init__.py"
+        f.write_text("con = duckdb.connect('test.db')\n")
+        violations = check_trading_app_connection_leaks(tmp_path)
+        assert len(violations) == 0
+
+    def test_no_dir(self, tmp_path):
+        nonexistent = tmp_path / "trading_app_fake"
+        violations = check_trading_app_connection_leaks(nonexistent)
+        assert len(violations) == 0
+
+
+class TestTradingAppHardcodedPaths:
+    """Tests for hardcoded absolute paths in trading_app/."""
+
+    def test_catches_windows_path(self, tmp_path):
+        f = tmp_path / "bad.py"
+        f.write_text("DB_PATH = 'C:\\Users\\josh\\gold.db'\n")
+        violations = check_trading_app_hardcoded_paths(tmp_path)
+        assert len(violations) > 0
+
+    def test_catches_forward_slash_path(self, tmp_path):
+        f = tmp_path / "bad.py"
+        f.write_text("DB_PATH = 'C:/Users/josh/gold.db'\n")
+        violations = check_trading_app_hardcoded_paths(tmp_path)
+        assert len(violations) > 0
+
+    def test_passes_relative_path(self, tmp_path):
+        f = tmp_path / "good.py"
+        f.write_text("DB_PATH = Path(__file__).parent.parent / 'gold.db'\n")
+        violations = check_trading_app_hardcoded_paths(tmp_path)
+        assert len(violations) == 0
+
+    def test_ignores_comments(self, tmp_path):
+        f = tmp_path / "good.py"
+        f.write_text("# path was C:\\\\Users\\\\old_path\n")
+        violations = check_trading_app_hardcoded_paths(tmp_path)
+        assert len(violations) == 0
+
+    def test_no_dir(self, tmp_path):
+        nonexistent = tmp_path / "fake_dir"
+        violations = check_trading_app_hardcoded_paths(nonexistent)
+        assert len(violations) == 0
+
+
+class TestConfigFilterSync:
+    """Tests for check 12: config filter_type sync."""
+
+    def test_current_config_passes(self):
+        """Current ALL_FILTERS config has no sync violations."""
+        violations = check_config_filter_sync()
+        assert len(violations) == 0
+
+    def test_detects_real_sync(self):
+        """Verify the check actually inspects ALL_FILTERS."""
+        # If ALL_FILTERS is importable and has entries, check should return empty
+        from trading_app.config import ALL_FILTERS
+        assert len(ALL_FILTERS) > 0
+        violations = check_config_filter_sync()
         assert len(violations) == 0

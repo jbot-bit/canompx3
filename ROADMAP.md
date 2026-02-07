@@ -16,52 +16,39 @@ Features planned but NOT YET BUILT. Move items to CLAUDE.md as they are implemen
 - `pipeline/cost_model.py` — BUILT (CostSpec, R-multiples, stress test, 20 tests)
 - MAE/MFE wired into build_daily_features.py outcome calculation
 
-## Phase 3: Trading App
+## Phase 3: Trading App — DONE
 
-- `trading_app/config.py` — filter definitions (MGC_ORB_SIZE_FILTERS)
-- `trading_app/setup_detector.py` — setup detection logic
-- `trading_app/data_loader.py` — data loader with filter checking
-- `trading_app/strategy_discovery.py` — backtesting engine
-- `trading_app/execution_spec.py` — ExecutionSpec system
-- `trading_app/entry_rules.py` — entry rule implementations
+- `trading_app/config.py` — 8 filters in ALL_FILTERS registry (34 tests)
+- `trading_app/execution_spec.py` — ExecutionSpec dataclass (17 tests)
+- `trading_app/entry_rules.py` — confirm bars detection (15 tests)
+- `trading_app/db_manager.py` — 4 trading_app tables (8 tests)
+- `trading_app/outcome_builder.py` — pre-compute outcomes for RR×CB grid (14 tests)
+- `trading_app/setup_detector.py` — filter daily_features by conditions (7 tests)
+- `trading_app/strategy_discovery.py` — grid search 864 combos (11 tests)
+- `trading_app/strategy_validator.py` — 6-phase validation framework (17 tests)
+- Integration test: end-to-end outcome→discovery→validation (5 tests)
 
-## Phase 4: Strategy Validation
+## Phase 4: Database/Config Sync — DONE
 
-- `validated_setups` table — production strategies
-- `validated_setups_archive` — historical versions for audit
-- `experimental_strategies` table — parallel strategy source
-- 6-phase autonomous validation framework
-- Strategy family isolation (ORB_L4, ORB_BOTH_LOST, ORB_RSI, ORB_NIGHT)
+- `tests/test_app_sync.py` — 28 sync tests (ORB_LABELS, ALL_FILTERS, grid params, schema columns)
+- Drift check 12: config filter_type sync enforcement
+- Zero tolerance for mismatches, fail-closed
 
-## Phase 5: Database/Config Sync
+## Phase 5: Live Trading Requirements
 
-- `test_app_sync.py` — mandatory sync validation between DB and config.py
-- Zero tolerance for mismatches
-- Fail-closed enforcement
-
-## Phase 6: Live Trading Requirements
-
+- Run trading_app pipeline on real gold.db data
 - Boundary + state test suites (80%+ coverage for live code)
-- Test templates: boundary_test_template.py, state_test_template.py
 - Entry/exit logic, position sizing, risk management testing
 
-## Phase 7: Skills System (Optional)
+## Phase 6: Skills System (Optional)
 
 - `skills/code-guardian/` — auto-protection for production files
-- `skills/quick-nav/` — navigation helper
-- `skills/project-organizer/` — file organization
+- `skills/strategy-validator/` — 6-phase validation skill
 - `skills/focus-mode/` — ADHD task management
-- `skills/strategy-validator/` — 6-phase validation
-- `skills/database-design/` — schema guidance
-- `skills/code-review-pipeline/` — multi-agent review
-- `skills/brainstorming/` — feature design
-- `skills/reflect.md` — session learning
 
 ---
 
-## Rules to Enforce When Built
-
-These rules apply ONLY when the corresponding features exist:
+## Rules to Enforce (ACTIVE)
 
 ### Strategy Family Isolation
 - Cross-family inference FORBIDDEN
@@ -77,3 +64,4 @@ These rules apply ONLY when the corresponding features exist:
 - NEVER update validated_setups without updating config.py
 - Run test_app_sync.py after every change
 - Zero tolerance for mismatches
+- Drift check 12 catches filter_type mismatches automatically

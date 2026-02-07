@@ -67,16 +67,17 @@ TZ_LOCAL = ZoneInfo("Australia/Brisbane")
 TZ_UTC = ZoneInfo("UTC")
 
 # Outright contract pattern
-# MGC + month_code (FGHJKMNQUVXZ) + year (1-2 digits)
-MGC_OUTRIGHT_PATTERN = re.compile(r'^MGC[FGHJKMNQUVXZ]\d{1,2}$')
+# GC + month_code (FGHJKMNQUVXZ) + year (1-2 digits)
+# We use GC (full-size Gold) bars for price data — better tick coverage than MGC.
+# Prices are identical (same underlying); cost model remains MGC ($10/point).
+GC_OUTRIGHT_PATTERN = re.compile(r'^GC[FGHJKMNQUVXZ]\d{1,2}$')
 
 # Month codes for expiry parsing
 MONTH_CODES = 'FGHJKMNQUVXZ'  # Jan=F, Feb=G, ..., Dec=Z
 
-# MINIMUM DATE: MGC has garbage data before 2019 (5-28% bar coverage)
-# ORB calculations require all 5 bars in window - pre-2019 data is UNUSABLE
-# See MEMORY.md for analysis
-MINIMUM_START_DATE = date(2019, 1, 1)
+# MINIMUM DATE: Dataset starts 2021-02-05 (GC data from Databento)
+# GC has full bar coverage from dataset start — no pre-2019 issue like MGC had
+MINIMUM_START_DATE = date(2021, 1, 1)
 
 
 # =============================================================================
@@ -303,7 +304,7 @@ def choose_front_contract(daily_volumes: dict, outright_pattern=None, prefix_len
     3. If tie or parse fails: lexicographically smallest
     """
     # Filter to outrights only
-    pattern = outright_pattern or MGC_OUTRIGHT_PATTERN
+    pattern = outright_pattern or GC_OUTRIGHT_PATTERN
     outrights = {s: v for s, v in daily_volumes.items()
                  if pattern.match(str(s))}
 
@@ -629,7 +630,7 @@ def main():
         # FILTER TO OUTRIGHTS FIRST (VECTORIZED)
         # (Spreads have negative prices which is valid for them, so filter before validation)
         # =====================================================================
-        outright_mask = chunk_df['symbol'].apply(lambda s: bool(MGC_OUTRIGHT_PATTERN.match(str(s))))
+        outright_mask = chunk_df['symbol'].apply(lambda s: bool(GC_OUTRIGHT_PATTERN.match(str(s))))
         chunk_df = chunk_df[outright_mask]
 
         if len(chunk_df) == 0:
@@ -669,7 +670,7 @@ def main():
             volumes = day_df.groupby('symbol')['volume'].sum().to_dict()
 
             # Choose front contract (deterministic)
-            front = choose_front_contract(volumes, outright_pattern=MGC_OUTRIGHT_PATTERN, prefix_len=3, log_func=lambda msg: None)
+            front = choose_front_contract(volumes, outright_pattern=GC_OUTRIGHT_PATTERN, prefix_len=2, log_func=lambda msg: None)
             if not front:
                 continue
 

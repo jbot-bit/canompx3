@@ -4,7 +4,10 @@ This file provides guidance to Claude Code when working with this repository.
 
 ## Project Overview
 
-Gold (MGC) Data Pipeline — builds a clean, replayable local dataset of Micro Gold futures (MGC) from Databento DBN files for ORB-based trading research and backtesting.
+Gold (MGC) Data Pipeline — builds a clean, replayable local dataset for Micro Gold futures (MGC) trading research and backtesting from Databento DBN files.
+
+**CRITICAL: Price Data Source**
+Raw data files contain GC (full-size Gold futures) which has ~40-70% more 1-minute bars than MGC. The pipeline ingests **GC bars** for accurate ORB construction, stores them under `symbol='MGC'` (prices are identical — same underlying, same exchange), and uses the **MGC cost model** ($10/point, $8.40 RT friction) for all trading math. The `source_symbol` column records the actual GC contract used (e.g., GCJ1, GCG5).
 
 **Target ORBs**: 09:00, 10:00, 11:00 (primary), 18:00, 23:00, 00:30 (secondary)
 
@@ -98,11 +101,13 @@ Databento DBN files (.dbn.zst)
 
 ### Futures Contract Handling
 
-- `MGC1!` = continuous front-month symbol (charting/broker convention)
-- Databento returns real contracts (MGCG4, MGCM4, etc.)
-- Pipeline selects front/most liquid contract per day (highest volume, excludes spreads)
+- Raw data contains GC (full-size Gold) and MGC (Micro Gold) bars
+- **Pipeline uses GC outrights** for price data (better bar coverage for accurate ORBs)
+- Databento returns real contracts (GCG4, GCM4, etc.)
+- Pipeline selects front/most liquid GC contract per day (highest volume, excludes spreads)
 - Deterministic tiebreak: earliest expiry → lexicographic smallest
-- Stores under `symbol='MGC'` with `source_symbol=actual contract`
+- Stores under `symbol='MGC'` with `source_symbol=actual GC contract`
+- Cost model uses MGC specs ($10/point) — you trade MGC, GC is just the price source
 
 ---
 
@@ -253,13 +258,13 @@ Defaults (override if needed):
 
 1. **Data files**: 1,559 daily `.dbn.zst` files in `DB/GOLD_DB_FULLSIZE/`. Pipeline currently expects a single concatenated file — `ingest_dbn_daily.py` handles individual daily files.
 
-2. **Contract selection**: Automatically handles futures rolls by selecting most liquid contract per day (highest volume, excluding spreads with '-' in symbol).
+2. **Contract selection**: Uses GC (full-size Gold) outrights for price data — better 1m bar coverage than MGC. Automatically handles futures rolls by selecting most liquid GC contract per day (highest volume, excluding spreads). Prices are identical to MGC (same underlying).
 
 3. **5-minute bars**: Always rebuilt from 1-minute bars. Never manually edit bars_5m.
 
 4. **Weekend/holiday handling**: Missing data stored as NULL. Scripts will not crash on days without data.
 
-5. **Minimum start date**: MGC data before 2019-01-01 has only 5-28% bar coverage and is unusable for ORB calculations. Pipeline enforces this cutoff.
+5. **Minimum start date**: Dataset starts 2021-02-05. GC has full bar coverage from this date. Old MGC-only limit (pre-2019) no longer applies since we use GC bars.
 
 6. **Schema migration**: If you have old data, wipe and rebuild:
    ```bash

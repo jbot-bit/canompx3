@@ -19,6 +19,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
 PIPELINE_DIR = PROJECT_ROOT / "pipeline"
+TRADING_APP_DIR = PROJECT_ROOT / "trading_app"
 
 # =============================================================================
 # FILES TO CHECK
@@ -229,7 +230,7 @@ def check_schema_query_consistency(pipeline_dir: Path) -> list[str]:
                 # Skip CTE names and known DataFrame variable patterns
                 if table in cte_names:
                     continue
-                if table.endswith('_df'):
+                if table.endswith('_df') or table.endswith('_frame'):
                     continue
                 # Skip column names used after EXTRACT(... FROM col)
                 extract_ctx = sql_text[max(0, ref_match.start()-30):ref_match.start()]
@@ -332,6 +333,106 @@ def check_connection_leaks(pipeline_dir: Path) -> list[str]:
     return violations
 
 
+def check_pipeline_never_imports_trading_app(pipeline_dir: Path) -> list[str]:
+    """Check that pipeline/ modules NEVER import from trading_app/.
+
+    One-way dependency rule:
+      trading_app CAN import from pipeline (cost_model, paths, init_db)
+      pipeline NEVER imports from trading_app
+    """
+    violations = []
+
+    import_patterns = [
+        re.compile(r'from\s+trading_app'),
+        re.compile(r'import\s+trading_app'),
+    ]
+
+    for fpath in pipeline_dir.glob("*.py"):
+        if fpath.name == "check_drift.py":
+            continue
+
+        content = fpath.read_text(encoding='utf-8')
+        lines = content.splitlines()
+
+        for line_num, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith('#'):
+                continue
+
+            for pattern in import_patterns:
+                if pattern.search(line):
+                    violations.append(
+                        f"  {fpath.name}:{line_num}: Imports from trading_app "
+                        f"(one-way dependency violation): {stripped[:80]}"
+                    )
+
+    return violations
+
+
+def check_trading_app_connection_leaks(trading_app_dir: Path) -> list[str]:
+    """Check that duckdb.connect() calls in trading_app/ have proper cleanup."""
+    violations = []
+
+    if not trading_app_dir.exists():
+        return violations
+
+    for fpath in trading_app_dir.glob("*.py"):
+        if fpath.name == "__init__.py":
+            continue
+
+        content = fpath.read_text(encoding='utf-8')
+
+        connect_count = len(re.findall(r'duckdb\.connect\(', content))
+        if connect_count == 0:
+            continue
+
+        has_close = 'con.close()' in content or '.close()' in content
+        has_finally = 'finally:' in content
+        has_atexit = 'atexit' in content
+        has_with = 'with duckdb' in content
+
+        if not (has_close or has_finally or has_atexit or has_with):
+            violations.append(
+                f"  {fpath.name}: {connect_count} duckdb.connect() calls "
+                f"but no close/finally/atexit/with"
+            )
+
+    return violations
+
+
+def check_trading_app_hardcoded_paths(trading_app_dir: Path) -> list[str]:
+    """Check for hardcoded absolute Windows paths in trading_app code."""
+    violations = []
+
+    if not trading_app_dir.exists():
+        return violations
+
+    path_patterns = [
+        re.compile(r'["\']C:\\Users', re.IGNORECASE),
+        re.compile(r'["\']C:/Users', re.IGNORECASE),
+        re.compile(r'["\']D:\\', re.IGNORECASE),
+        re.compile(r'["\']D:/', re.IGNORECASE),
+    ]
+
+    for fpath in trading_app_dir.glob("*.py"):
+        content = fpath.read_text(encoding='utf-8')
+        lines = content.splitlines()
+
+        for line_num, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith('#'):
+                continue
+
+            for pattern in path_patterns:
+                if pattern.search(line):
+                    violations.append(
+                        f"  {fpath.name}:{line_num}: Hardcoded absolute path: "
+                        f"{stripped[:80]}"
+                    )
+
+    return violations
+
+
 def check_dashboard_readonly(pipeline_dir: Path) -> list[str]:
     """Check that dashboard.py only reads from the database (no writes)."""
     violations = []
@@ -366,6 +467,25 @@ def check_dashboard_readonly(pipeline_dir: Path) -> list[str]:
         violations.append(
             "  dashboard.py: duckdb.connect() without read_only=True"
         )
+
+    return violations
+
+
+def check_config_filter_sync() -> list[str]:
+    """Check that ALL_FILTERS keys match filter_type inside each filter."""
+    violations = []
+
+    try:
+        from trading_app.config import ALL_FILTERS
+
+        for key, filt in ALL_FILTERS.items():
+            if filt.filter_type != key:
+                violations.append(
+                    f"  ALL_FILTERS['{key}'].filter_type = '{filt.filter_type}' (mismatch)"
+                )
+    except ImportError:
+        # trading_app may not exist yet
+        pass
 
     return violations
 
@@ -465,6 +585,54 @@ def main():
     # Check 8: Dashboard must be read-only
     print("Check 8: Dashboard read-only enforcement...")
     v = check_dashboard_readonly(PIPELINE_DIR)
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 9: pipeline/ must never import from trading_app/
+    print("Check 9: Pipeline never imports trading_app (one-way dependency)...")
+    v = check_pipeline_never_imports_trading_app(PIPELINE_DIR)
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 10: Connection leak detection in trading_app/
+    print("Check 10: Trading app connection leak detection...")
+    v = check_trading_app_connection_leaks(TRADING_APP_DIR)
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 11: Hardcoded paths in trading_app/
+    print("Check 11: Trading app hardcoded paths...")
+    v = check_trading_app_hardcoded_paths(TRADING_APP_DIR)
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 12: Config/DB sync — filter_type keys match filter objects
+    print("Check 12: Config filter_type sync...")
+    v = check_config_filter_sync()
     if v:
         print("  FAILED:")
         for line in v:

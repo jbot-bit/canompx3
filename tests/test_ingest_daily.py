@@ -19,7 +19,7 @@ from pipeline.ingest_dbn_daily import (
 )
 from pipeline.ingest_dbn_mgc import (
     CheckpointManager,
-    MGC_OUTRIGHT_PATTERN,
+    GC_OUTRIGHT_PATTERN,
 )
 
 
@@ -74,25 +74,25 @@ class TestDiscoverDailyFiles:
         assert len(files) == 1
 
 
-class TestMgcOutrightFilter:
-    """Tests for the MGC outright contract pattern."""
+class TestGcOutrightFilter:
+    """Tests for the GC outright contract pattern."""
 
-    def test_matches_mgc_outrights(self):
-        assert MGC_OUTRIGHT_PATTERN.match("MGCG4")
-        assert MGC_OUTRIGHT_PATTERN.match("MGCZ25")
-        assert MGC_OUTRIGHT_PATTERN.match("MGCM1")
-        assert MGC_OUTRIGHT_PATTERN.match("MGCQ24")
+    def test_matches_gc_outrights(self):
+        assert GC_OUTRIGHT_PATTERN.match("GCG4")
+        assert GC_OUTRIGHT_PATTERN.match("GCZ25")
+        assert GC_OUTRIGHT_PATTERN.match("GCM1")
+        assert GC_OUTRIGHT_PATTERN.match("GCQ24")
 
-    def test_rejects_gc_contracts(self):
-        assert MGC_OUTRIGHT_PATTERN.match("GCG4") is None
-        assert MGC_OUTRIGHT_PATTERN.match("GCZ25") is None
+    def test_rejects_mgc_contracts(self):
+        assert GC_OUTRIGHT_PATTERN.match("MGCG4") is None
+        assert GC_OUTRIGHT_PATTERN.match("MGCZ25") is None
 
     def test_rejects_spreads(self):
-        assert MGC_OUTRIGHT_PATTERN.match("MGCG4-MGCM4") is None
+        assert GC_OUTRIGHT_PATTERN.match("GCG4-GCM4") is None
 
     def test_rejects_non_futures(self):
-        assert MGC_OUTRIGHT_PATTERN.match("MGC") is None
-        assert MGC_OUTRIGHT_PATTERN.match("MGCX") is None
+        assert GC_OUTRIGHT_PATTERN.match("GC") is None
+        assert GC_OUTRIGHT_PATTERN.match("GCX") is None
 
 
 class TestCheckpointRoundtrip:

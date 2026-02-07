@@ -265,7 +265,15 @@ If ANY check fails, strategy is REJECTED.
 
 See: pipeline/cost_model.py (CANONICAL source)
 
+### Price Data: GC bars, MGC cost model
+- Raw data contains GC (full-size Gold) — better 1m bar coverage than MGC
+- Pipeline ingests GC outrights for accurate ORB construction
+- Stored under symbol='MGC' (GC and MGC have IDENTICAL prices — same underlying)
+- source_symbol records actual GC contract (GCJ1, GCG5, etc.)
+- ALL cost/R-multiple math uses MGC specs below (what you actually trade)
+
 ### MGC (Micro Gold) Costs
+- Point value: $10/point (MGC, NOT $100/point GC)
 - Commission RT: $2.40
 - Spread (double): $2.00
 - Slippage: $4.00

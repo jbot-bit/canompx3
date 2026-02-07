@@ -26,6 +26,9 @@ from pathlib import Path
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
 
+# Force unbuffered stdout so progress prints appear immediately
+sys.stdout.reconfigure(line_buffering=True)
+
 import pandas as pd
 import duckdb
 import databento as db
@@ -43,7 +46,7 @@ from pipeline.ingest_dbn_mgc import (
     check_merge_integrity,
     run_final_gates,
     CheckpointManager,
-    MGC_OUTRIGHT_PATTERN,
+    GC_OUTRIGHT_PATTERN,
     MINIMUM_START_DATE,
 )
 
@@ -133,12 +136,19 @@ def main():
     parser.add_argument("--resume", action="store_true", help="Resume from checkpoint")
     parser.add_argument("--retry-failed", action="store_true", help="Retry failed days")
     parser.add_argument("--dry-run", action="store_true", help="Validate only, no DB writes")
-    parser.add_argument("--chunk-days", type=int, default=7,
-                        help="Trading days per commit (default: 7)")
+    parser.add_argument("--chunk-days", type=int, default=50,
+                        help="Trading days per commit (default: 50)")
+    parser.add_argument("--db", type=str, default=None,
+                        help="Database path (default: gold.db)")
     args = parser.parse_args()
 
     start_time = datetime.now()
     data_dir = Path(args.data_dir)
+
+    # Override DB path if specified
+    global GOLD_DB_PATH
+    if args.db:
+        GOLD_DB_PATH = Path(args.db)
 
     # =========================================================================
     # STARTUP
@@ -166,7 +176,7 @@ def main():
 
     # NOTE: Symbology mapping is NOT needed — Databento's to_df() already
     # resolves instrument_ids to readable contract names (e.g. "MGCG4").
-    # The MGC_OUTRIGHT_PATTERN filter handles everything downstream.
+    # The GC_OUTRIGHT_PATTERN filter handles everything downstream.
 
     # =========================================================================
     # DISCOVER FILES
@@ -231,13 +241,16 @@ def main():
         'contracts_used': set(),
     }
 
-    trading_day_buffer = {}  # trading_day -> list of (ts_utc, source_symbol, o, h, l, c, v)
+    # Buffer: accumulate DataFrames per trading day (vectorized, no iterrows)
+    trading_day_buffer = {}  # trading_day -> list of DataFrames
 
+    print(f"Processing {len(daily_files)} files...")
     for file_idx, (file_date, fpath) in enumerate(daily_files):
-        # Progress
-        if (file_idx + 1) % 50 == 0:
-            print(f"  Progress: {file_idx + 1}/{len(daily_files)} files, "
-                  f"{stats['rows_written']:,} rows written")
+        # Progress every 10 files
+        if (file_idx + 1) % 10 == 0 or file_idx == 0:
+            pct = (file_idx + 1) / len(daily_files) * 100
+            print(f"  [{pct:5.1f}%] File {file_idx + 1}/{len(daily_files)} "
+                  f"({file_date}) — {stats['rows_written']:,} rows written")
 
         try:
             # Open daily DBN file
@@ -255,15 +268,11 @@ def main():
 
             chunk_df = chunk_df.reset_index()
 
-            # NOTE: to_df() already resolves instrument_ids to readable
-            # contract names (e.g. "MGCG4", "GCJ1"), so no symbology
-            # mapping is needed here.
-
             # =================================================================
-            # FILTER TO MGC OUTRIGHTS ONLY (exclude GC.FUT and spreads)
+            # FILTER TO GC OUTRIGHTS (vectorized str.match, not apply+lambda)
             # =================================================================
-            outright_mask = chunk_df['symbol'].apply(
-                lambda s: bool(MGC_OUTRIGHT_PATTERN.match(str(s)))
+            outright_mask = chunk_df['symbol'].astype(str).str.match(
+                r'^GC[FGHJKMNQUVXZ]\d{1,2}$'
             )
             chunk_df = chunk_df[outright_mask]
 
@@ -295,15 +304,13 @@ def main():
             chunk_df['trading_day'] = trading_days
 
             for tday, day_df in chunk_df.groupby('trading_day'):
-                if tday < start_filter:
-                    continue
-                if tday > end_filter:
+                if tday < start_filter or tday > end_filter:
                     continue
 
                 volumes = day_df.groupby('symbol')['volume'].sum().to_dict()
                 front = choose_front_contract(
-                    volumes, outright_pattern=MGC_OUTRIGHT_PATTERN,
-                    prefix_len=3, log_func=lambda msg: None
+                    volumes, outright_pattern=GC_OUTRIGHT_PATTERN,
+                    prefix_len=2, log_func=lambda msg: None
                 )
                 if not front:
                     continue
@@ -316,18 +323,16 @@ def main():
                     print(f"FATAL: PK safety failed for {fpath.name}: {pk_reason}")
                     sys.exit(1)
 
-                front_df = front_df.sort_index()
+                # Build insert-ready DataFrame (vectorized, no iterrows)
+                insert_df = front_df[['open', 'high', 'low', 'close', 'volume']].copy()
+                insert_df = insert_df.reset_index()
+                insert_df.rename(columns={'ts_event': 'ts_utc'}, inplace=True)
+                insert_df['symbol'] = 'MGC'
+                insert_df['source_symbol'] = front
 
                 if tday not in trading_day_buffer:
                     trading_day_buffer[tday] = []
-
-                for ts_utc, row in front_df.iterrows():
-                    trading_day_buffer[tday].append((
-                        ts_utc, front,
-                        float(row['open']), float(row['high']),
-                        float(row['low']), float(row['close']),
-                        int(row['volume']),
-                    ))
+                trading_day_buffer[tday].append(insert_df)
 
             stats['files_processed'] += 1
 
@@ -355,20 +360,29 @@ def main():
                 sorted_days = sorted_days[args.chunk_days:]
                 continue
 
-            chunk_rows = []
+            # Concat all buffered DataFrames for this chunk (vectorized)
+            chunk_dfs = []
             for d in chunk_days_list:
-                chunk_rows.extend(trading_day_buffer[d])
+                chunk_dfs.extend(trading_day_buffer[d])
+            if not chunk_dfs:
+                for d in chunk_days_list:
+                    del trading_day_buffer[d]
+                sorted_days = sorted_days[args.chunk_days:]
+                continue
+            chunk_frame = pd.concat(chunk_dfs, ignore_index=True)
+            n_rows = len(chunk_frame)
 
-            if not args.dry_run and con and chunk_rows:
+            if not args.dry_run and con:
                 checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, 'in_progress')
                 try:
                     con.execute("BEGIN TRANSACTION")
-                    con.executemany(
-                        """INSERT OR REPLACE INTO bars_1m
+                    # Bulk insert from DataFrame — orders of magnitude faster than executemany
+                    con.execute("""
+                        INSERT OR REPLACE INTO bars_1m
                         (ts_utc, symbol, source_symbol, open, high, low, close, volume)
-                        VALUES (?, 'MGC', ?, ?, ?, ?, ?, ?)""",
-                        chunk_rows
-                    )
+                        SELECT ts_utc, symbol, source_symbol, open, high, low, close, volume
+                        FROM chunk_frame
+                    """)
 
                     int_ok, int_reason = check_merge_integrity(con, chunk_start, chunk_end)
                     if not int_ok:
@@ -381,15 +395,15 @@ def main():
 
                     con.execute("COMMIT")
                     checkpoint_mgr.write_checkpoint(
-                        chunk_start, chunk_end, 'done', rows_written=len(chunk_rows)
+                        chunk_start, chunk_end, 'done', rows_written=n_rows
                     )
 
                     stats['chunks_done'] += 1
-                    stats['rows_written'] += len(chunk_rows)
+                    stats['rows_written'] += n_rows
                     stats['trading_days_processed'] += len(chunk_days_list)
 
                     print(f"  DONE: {chunk_start} to {chunk_end}: "
-                          f"{len(chunk_rows):,} rows, {len(chunk_days_list)} days")
+                          f"{n_rows:,} rows, {len(chunk_days_list)} days")
 
                 except Exception as e:
                     con.execute("ROLLBACK")
@@ -400,10 +414,10 @@ def main():
                     sys.exit(1)
             else:
                 stats['chunks_done'] += 1
-                stats['rows_written'] += len(chunk_rows)
+                stats['rows_written'] += n_rows
                 stats['trading_days_processed'] += len(chunk_days_list)
-                if chunk_rows:
-                    print(f"  DRY RUN: {chunk_start} to {chunk_end}: {len(chunk_rows):,} rows")
+                if n_rows:
+                    print(f"  DRY RUN: {chunk_start} to {chunk_end}: {n_rows:,} rows")
 
             for d in chunk_days_list:
                 del trading_day_buffer[d]
@@ -417,54 +431,60 @@ def main():
         chunk_start = str(sorted_days[0])
         chunk_end = str(sorted_days[-1])
 
-        chunk_rows = []
+        chunk_dfs = []
         for d in sorted_days:
-            chunk_rows.extend(trading_day_buffer[d])
+            chunk_dfs.extend(trading_day_buffer[d])
 
-        if not args.dry_run and con and chunk_rows:
-            checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, 'in_progress')
-            try:
-                con.execute("BEGIN TRANSACTION")
-                con.executemany(
-                    """INSERT OR REPLACE INTO bars_1m
-                    (ts_utc, symbol, source_symbol, open, high, low, close, volume)
-                    VALUES (?, 'MGC', ?, ?, ?, ?, ?, ?)""",
-                    chunk_rows
-                )
+        if not chunk_dfs:
+            pass  # nothing to flush
+        else:
+            chunk_frame = pd.concat(chunk_dfs, ignore_index=True)
+            n_rows = len(chunk_frame)
 
-                int_ok, int_reason = check_merge_integrity(con, chunk_start, chunk_end)
-                if not int_ok:
+            if not args.dry_run and con:
+                checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, 'in_progress')
+                try:
+                    con.execute("BEGIN TRANSACTION")
+                    con.execute("""
+                        INSERT OR REPLACE INTO bars_1m
+                        (ts_utc, symbol, source_symbol, open, high, low, close, volume)
+                        SELECT ts_utc, symbol, source_symbol, open, high, low, close, volume
+                        FROM chunk_frame
+                    """)
+
+                    int_ok, int_reason = check_merge_integrity(con, chunk_start, chunk_end)
+                    if not int_ok:
+                        con.execute("ROLLBACK")
+                        checkpoint_mgr.write_checkpoint(
+                            chunk_start, chunk_end, 'failed', error=int_reason
+                        )
+                        print(f"FATAL: Final chunk integrity failed: {int_reason}")
+                        sys.exit(1)
+
+                    con.execute("COMMIT")
+                    checkpoint_mgr.write_checkpoint(
+                        chunk_start, chunk_end, 'done', rows_written=n_rows
+                    )
+
+                    stats['chunks_done'] += 1
+                    stats['rows_written'] += n_rows
+                    stats['trading_days_processed'] += len(sorted_days)
+
+                    print(f"  DONE: Final {chunk_start} to {chunk_end}: "
+                          f"{n_rows:,} rows")
+
+                except Exception as e:
                     con.execute("ROLLBACK")
                     checkpoint_mgr.write_checkpoint(
-                        chunk_start, chunk_end, 'failed', error=int_reason
+                        chunk_start, chunk_end, 'failed', error=str(e)
                     )
-                    print(f"FATAL: Final chunk integrity failed: {int_reason}")
+                    print(f"FATAL: Final chunk exception: {e}")
                     sys.exit(1)
-
-                con.execute("COMMIT")
-                checkpoint_mgr.write_checkpoint(
-                    chunk_start, chunk_end, 'done', rows_written=len(chunk_rows)
-                )
-
+            elif args.dry_run:
                 stats['chunks_done'] += 1
-                stats['rows_written'] += len(chunk_rows)
+                stats['rows_written'] += n_rows
                 stats['trading_days_processed'] += len(sorted_days)
-
-                print(f"  DONE: Final {chunk_start} to {chunk_end}: "
-                      f"{len(chunk_rows):,} rows")
-
-            except Exception as e:
-                con.execute("ROLLBACK")
-                checkpoint_mgr.write_checkpoint(
-                    chunk_start, chunk_end, 'failed', error=str(e)
-                )
-                print(f"FATAL: Final chunk exception: {e}")
-                sys.exit(1)
-        elif args.dry_run and chunk_rows:
-            stats['chunks_done'] += 1
-            stats['rows_written'] += len(chunk_rows)
-            stats['trading_days_processed'] += len(sorted_days)
-            print(f"  DRY RUN: Final {chunk_start} to {chunk_end}: {len(chunk_rows):,} rows")
+                print(f"  DRY RUN: Final {chunk_start} to {chunk_end}: {n_rows:,} rows")
 
     # =========================================================================
     # FINAL GATES
