@@ -75,9 +75,9 @@ GC_OUTRIGHT_PATTERN = re.compile(r'^GC[FGHJKMNQUVXZ]\d{1,2}$')
 # Month codes for expiry parsing
 MONTH_CODES = 'FGHJKMNQUVXZ'  # Jan=F, Feb=G, ..., Dec=Z
 
-# MINIMUM DATE: Dataset starts 2021-02-05 (GC data from Databento)
-# GC has full bar coverage from dataset start — no pre-2019 issue like MGC had
-MINIMUM_START_DATE = date(2021, 1, 1)
+# MINIMUM DATE: Dataset now covers 2016-02-01 onward (GC data from Databento)
+# Two data directories: gold_db_fullsize_2016-2021 and GOLD_DB_FULLSIZE (2021+)
+MINIMUM_START_DATE = date(2016, 1, 1)
 
 
 # =============================================================================
