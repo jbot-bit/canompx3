@@ -1,6 +1,8 @@
 # Market Playbook — Gold Futures (GC/MGC)
 
 Empirical findings from 1,460 trading days (2021-02-05 to 2026-02-04).
+Database now contains 2,922 trading days (2016-02-01 to 2026-02-04) but
+outcomes/strategies below are computed on the 2021-2026 slice.
 689,310 outcomes computed with realistic entry models (E1/E2/E3).
 312 strategies validated (post-cost, stress-tested, yearly robust).
 

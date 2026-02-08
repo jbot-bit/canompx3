@@ -38,10 +38,9 @@ Features planned but NOT YET BUILT. Move items to CLAUDE.md as they are implemen
 
 ## Phase 5: Expanded Scan — DONE
 
-- Grid: 6 ORBs x 6 RRs x 5 CBs x 12 filters = 2,160 combos
-- orb_outcomes: 229,770 rows | experimental: 2,160 | validated: 252
-- CB5 dominates (122/252), win rate monotonic CB1=39% -> CB5=53%
-- Year-over-year analysis: all top strategies stable or improving
+- Grid: 6 ORBs x 6 RRs x 5 CBs x 13 filters x 3 EMs = 6,480 combos (post-5b expansion)
+- orb_outcomes: 689,310 rows | experimental: 6,480 | validated: 312
+- Edge requires G4+ ORB size filter (NO_FILTER and L-filters ALL negative ExpR)
 - MARKET_PLAYBOOK.md: comprehensive empirical findings
 
 ## Phase 5b: Entry Model Fix + Risk Floor + Win PnL Fix — DONE
@@ -55,44 +54,63 @@ Features planned but NOT YET BUILT. Move items to CLAUDE.md as they are implemen
 - DB rebuild COMPLETE: 689,310 outcomes, 6,480 strategies, 312 validated
 - Validator: exclude_years + min_years_positive_pct params added
 
-## Phase 6: Live Trading Preparation — IN PROGRESS
+## Phase 6: Live Trading Preparation — DONE (6a-6d), 6e TODO
 
 ### 6a. Strategy Portfolio Construction — DONE
-- `trading_app/portfolio.py` — diversified selection, position sizing, capital estimation (22 tests)
+- `trading_app/portfolio.py` — diversified selection, position sizing, capital estimation (32 tests)
 - PortfolioStrategy/Portfolio dataclasses with JSON serialization
 - compute_position_size() standard + prop firm modes
 - diversify_strategies() with max per ORB + max per entry model
-- correlation_matrix() from daily R-series
+- correlation_matrix() from daily R-series with shared calendar + overlap guard
 - estimate_daily_capital() for risk budgeting
 
 ### 6b. Execution Engine — DONE
-- `trading_app/execution_engine.py` — bar-by-bar state machine (19 tests)
+- `trading_app/execution_engine.py` — bar-by-bar state machine (19 tests + 20 integration tests)
 - State: ARMED -> CONFIRMING -> ENTERED -> EXITED
 - ORB detection, break detection, confirm bar counting
-- E1/E2/E3 entry model resolution
+- E1/E2/E3 entry model resolution with RiskManager fully wired
 - Target/stop/session-end exit handling
-- Ambiguous bar = conservative loss
 - armed_at_bar guard: E1/E3 never fill on the confirm bar itself
 
 ### 6c. Risk Management — DONE
 - `trading_app/risk_manager.py` — RiskLimits + RiskManager (22 tests)
 - Circuit breaker (daily loss limit)
-- Max concurrent positions
-- Max per ORB positions
-- Max daily trades
+- Max concurrent positions, max per ORB, max daily trades
 - Drawdown warning threshold
+- Fully integrated with ExecutionEngine (on_trade_entry/on_trade_exit)
 
 ### 6d. Paper Trading / Simulation — DONE
 - `trading_app/paper_trader.py` — historical replay with journal (9 tests)
 - replay_historical(): feeds bars_1m through ExecutionEngine + RiskManager
-- JournalEntry/DaySummary/ReplayResult dataclasses
-- Risk rejection tracking
+- Engine handles risk internally (emits REJECT events)
+- EOD scratch PnL uses mark-to-market from engine
 - CLI for replay runs
 
 ### 6e. Monitoring & Alerting — TODO
 - Strategy performance tracking (live vs backtest drift)
 - Alert on: drawdown exceeding historical, win rate divergence, ORB size regime shift
 - Dashboard for live strategy status
+
+---
+
+## Codebase Audit — DONE (2026-02-08)
+
+Full codebase audit completed. See `AUDIT_FINDINGS.md` for details.
+- 5 critical bugs fixed (C1-C5), 6 important fixes (I1-I4, I6-I7)
+- 97 new tests across 10 coverage gaps (T1-T10)
+- 3 new drift checks (17-19)
+- **655 tests pass, 19 drift checks pass**
+- R1 (fill-bar granularity) logged as HIGH PRIORITY R&D task
+
+---
+
+## Nested ORB Research — IN PROGRESS (feature/nested-orb branch)
+
+- Hypothesis: wider ORB range (15/30m) + 5m entry bars reduces noise
+- Isolated research track: zero changes to production tables or code
+- 6 new modules in `trading_app/nested/` (~1,800 LOC)
+- 3 new tables: nested_outcomes, nested_strategies, nested_validated
+- Pending: builder completion, discovery, validation, A/B comparison
 
 ---
 

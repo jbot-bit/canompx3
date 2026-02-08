@@ -19,19 +19,47 @@ Raw data files contain GC (full-size Gold futures) which has ~40-70% more 1-minu
 
 | File | LOC | Purpose |
 |------|-----|---------|
-| `ingest_dbn_mgc.py` | 924 | MGC-specific DBN ingestion with 7 validation gates |
+| `ingest_dbn_mgc.py` | 925 | MGC-specific DBN ingestion with 7 validation gates |
 | `ingest_dbn.py` | 525 | Generic multi-instrument wrapper |
 | `build_bars_5m.py` | 352 | Deterministic 5m bar aggregation from 1m bars |
-| `run_pipeline.py` | 264 | Pipeline orchestrator (ingest → 5m → features → audit) |
-| `check_drift.py` | 220 | Static analysis drift detector (7 checks) |
-| `init_db.py` | 132 | Database schema initialization |
+| `build_daily_features.py` | 891 | Daily features builder (ORBs, sessions, RSI, outcomes) |
+| `run_pipeline.py` | 284 | Pipeline orchestrator (ingest → 5m → features → audit) |
+| `check_drift.py` | 1048 | Static analysis drift detector (19 checks) |
+| `init_db.py` | 214 | Database schema initialization |
+| `cost_model.py` | 185 | Canonical cost model (MGC friction, R-multiples, stress test) |
+| `dashboard.py` | 635 | Self-contained HTML report generator (7 panels) |
 | `asset_configs.py` | 111 | Per-instrument config (MGC, MNQ, NQ) |
-| `check_db.py` | 84 | Database inspection tool |
-| `dashboard.py` | 450 | Self-contained HTML report generator (7 panels) |
 | `health_check.py` | 100 | Quick all-in-one health check CLI |
-| `build_daily_features.py` | 480 | Daily features builder (ORBs, sessions, RSI, outcomes) |
-| `cost_model.py` | 120 | Canonical cost model (MGC friction, R-multiples, stress test) |
-| `paths.py` | 21 | Canonical path constants |
+| `check_db.py` | 84 | Database inspection tool |
+| `paths.py` | 23 | Canonical path constants |
+
+### Trading App (`trading_app/`)
+
+| File | LOC | Purpose |
+|------|-----|---------|
+| `config.py` | 214 | 12 ORB size filters + NO_FILTER + VolumeFilter, ENTRY_MODELS |
+| `execution_engine.py` | 666 | Bar-by-bar state machine (ARMED → CONFIRMING → ENTERED → EXITED) |
+| `portfolio.py` | 609 | Diversified strategy selection, position sizing, correlation |
+| `outcome_builder.py` | 379 | Pre-compute outcomes for RR x CB x EM grid |
+| `strategy_discovery.py` | 513 | Bulk-load grid search across 6,480 combos |
+| `strategy_validator.py` | 303 | 6-phase validation + risk floor + stress test |
+| `paper_trader.py` | 369 | Historical replay with journal + risk management |
+| `db_manager.py` | 296 | Schema for 4 trading_app tables |
+| `entry_rules.py` | 275 | detect_confirm + resolve_entry (E1/E2/E3) |
+| `risk_manager.py` | 137 | Circuit breaker, max concurrent/daily limits |
+| `execution_spec.py` | 84 | ExecutionSpec dataclass with entry_model field |
+| `setup_detector.py` | 84 | Filter daily_features by conditions |
+
+### Nested ORB Research (`trading_app/nested/`)
+
+| File | LOC | Purpose |
+|------|-----|---------|
+| `schema.py` | 289 | 3 new tables (nested_outcomes, nested_strategies, nested_validated) |
+| `builder.py` | 390 | Resample 1m→5m + build nested outcomes (15/30m ORB + 5m entry bars) |
+| `discovery.py` | 283 | Strategy discovery on nested tables |
+| `validator.py` | 180 | Validation on nested tables |
+| `compare.py` | 261 | A/B comparison tool (baseline vs nested) |
+| `audit_outcomes.py` | 389 | Independent outcome verification |
 
 ### Root Scripts
 
@@ -65,8 +93,15 @@ Databento DBN files (.dbn.zst)
   → gold.db:bars_1m (1-minute OHLCV, UTC timestamps)
   → pipeline/build_bars_5m.py (deterministic aggregation)
   → gold.db:bars_5m (5-minute OHLCV, fully rebuildable)
-  → pipeline/build_daily_features.py (ORBs, sessions, RSI, outcomes)
-  → gold.db:daily_features (one row per trading day)
+  → pipeline/build_daily_features.py (ORBs, sessions, RSI)
+  → gold.db:daily_features (one row per trading day per orb_minutes)
+
+  → trading_app/outcome_builder.py (pre-compute all trade outcomes)
+  → gold.db:orb_outcomes (689,310 outcomes)
+  → trading_app/strategy_discovery.py (grid search 6,480 combos)
+  → gold.db:experimental_strategies
+  → trading_app/strategy_validator.py (6-phase validation)
+  → gold.db:validated_setups (312 strategies)
 ```
 
 ### Database Schema (DuckDB)
@@ -83,14 +118,28 @@ Databento DBN files (.dbn.zst)
 - Bucket = floor(epoch(ts)/300)*300
 - Fully rebuildable at any time
 
-**daily_features** (one row per trading day per instrument):
-- Primary key: `(symbol, trading_day)`
+**daily_features** (one row per trading day per instrument per orb_minutes):
+- Primary key: `(symbol, trading_day, orb_minutes)`
 - `trading_day`: DATE (09:00 Brisbane boundary)
+- `orb_minutes`: INTEGER (5, 15, or 30)
 - `bar_count_1m`: INTEGER (bars in trading day)
 - Session stats: `session_{asia,london,ny}_{high,low}` (DOUBLE)
 - RSI: `rsi_14_at_0900` (DOUBLE, Wilder's 14-period on 5m closes)
 - 6 ORBs x 8 columns each: `orb_{0900,1000,1100,1800,2300,0030}_{high,low,size,break_dir,break_ts,outcome,mae_r,mfe_r}`
 - Built by `pipeline/build_daily_features.py` (idempotent, configurable --orb-minutes)
+
+**orb_outcomes** (pre-computed trade outcomes):
+- One row per (day, ORB, RR, CB, entry_model) combination
+- 689,310 rows (2021-2026 data)
+- Used by strategy_discovery.py for bulk backtesting
+
+**experimental_strategies** (grid search results):
+- 6,480 strategy combos (6 ORBs x 6 RRs x 5 CBs x 13 filters x 3 EMs)
+- Metrics: sample_size, win_rate, expectancy_r, sharpe_ratio, max_drawdown_r, yearly_results
+
+**validated_setups** (strategies passing validation):
+- 312 validated strategies (post-cost, stress-tested, yearly robust)
+- Only G4+ ORB size filters have positive ExpR
 
 ### Time & Calendar Model (CRITICAL)
 
@@ -153,7 +202,7 @@ python pipeline/build_daily_features.py --instrument MGC --start 2024-01-01 --en
 
 ```bash
 python pipeline/check_drift.py                        # Drift detection (19 checks)
-python -m pytest tests/ -v                             # Full test suite (~500 tests)
+python -m pytest tests/ -v                             # Full test suite (655 tests)
 python -m pytest tests/ -x -q                          # Fast test run (stop on first fail)
 python pipeline/health_check.py                        # All-in-one health check
 ```
@@ -165,12 +214,30 @@ python pipeline/dashboard.py                           # Generate dashboard.html
 python pipeline/dashboard.py --output report.html      # Custom output path
 ```
 
+### Trading App
+
+```bash
+python trading_app/outcome_builder.py --instrument MGC --start 2021-02-05 --end 2026-02-04
+python trading_app/strategy_discovery.py --instrument MGC
+python trading_app/strategy_validator.py --instrument MGC --min-sample 50
+python trading_app/paper_trader.py --instrument MGC --start 2025-01-01 --end 2025-12-31
+```
+
+### Nested ORB Research
+
+```bash
+python -m trading_app.nested.builder --instrument MGC --orb-minutes 15 30
+python -m trading_app.nested.discovery --instrument MGC
+python -m trading_app.nested.validator --instrument MGC --min-sample 200
+python -m trading_app.nested.compare --instrument MGC
+```
+
 ### Testing
 
 ```bash
-python -m pytest tests/ -v                             # All tests
-python -m pytest tests/test_validation.py -v           # Specific test file
-python -m pytest tests/ -x -q --timeout=30             # Quick run with timeout
+python -m pytest tests/ -v                             # All 655 tests
+python -m pytest tests/test_trading_app/ -v            # Trading app tests only
+python -m pytest tests/ -x -q                          # Fast run (stop on first fail)
 ```
 
 ---
@@ -184,15 +251,27 @@ Runs automatically before every commit:
 - Syntax validation on changed files
 Setup: `git config core.hooksPath .githooks`
 
-### 2. Drift Detection (`pipeline/check_drift.py`)
+### 2. Drift Detection (`pipeline/check_drift.py` — 19 checks)
 Static analysis that catches:
 1. Hardcoded 'MGC' SQL in generic pipeline code
 2. `.apply()`/`.iterrows()` on large data (performance anti-pattern)
 3. Writes to non-bars_1m tables in ingest scripts
-4. Schema-query table name mismatches
+4. Schema-query table name mismatches (pipeline/)
 5. Import cycles between pipeline modules
 6. Hardcoded absolute Windows paths
 7. DuckDB connection leaks (missing close/finally/atexit)
+8. Pipeline → trading_app import direction (one-way dependency)
+9. Trading app connection cleanup
+10. Trading app hardcoded paths
+11. Trading app connection leaks
+12. Config filter_type sync enforcement
+13. ENTRY_MODELS sync enforcement
+14. Entry price sanity (no entry_price = ORB level without E3 guard)
+15. Nested → production import isolation
+16. Nested import validation (no cross-contamination)
+17. Nested production table write guard (blocks SQL writes to orb_outcomes etc.)
+18. Schema-query table name mismatches (trading_app/)
+19. Timezone hygiene (blocks pytz imports and hardcoded timedelta(hours=10))
 
 ### 3. Claude Code Hooks
 Auto-run checks when editing pipeline files:
@@ -314,7 +393,9 @@ strict filters (G6/G8) are EXPECTED behavior, not bugs.
 
 ## What's NOT Built Yet
 
-See `ROADMAP.md` for planned features including:
-- Phase 6e: Monitoring & alerting (live vs backtest drift detection)
+See `ROADMAP.md` for planned features:
+- **Phase 6e**: Monitoring & alerting (live vs backtest drift detection)
+- **R1**: Update backtester for intra-bar/fill-bar granularity (HIGH PRIORITY before live trading — see `AUDIT_FINDINGS.md`)
+- **Nested ORB**: Research track in progress on `feature/nested-orb` branch (15/30m ORB + 5m entry bars)
 
 **Do NOT reference unbuilt features in code or tests. Build guardrails for what exists.**

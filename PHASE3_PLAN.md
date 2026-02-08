@@ -1,5 +1,10 @@
 # Phase 3 Implementation Plan: trading_app
 
+> **HISTORICAL DOCUMENT** — Phase 3 is COMPLETE. This plan was used during
+> initial implementation. For current state, see `CLAUDE.md` and `ROADMAP.md`.
+> LOC counts, test counts, and row counts below are from the original session
+> and may not reflect current values.
+
 ## Status Snapshot (2026-02-07)
 
 ### DONE (verified working)

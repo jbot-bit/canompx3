@@ -1,5 +1,10 @@
 # HONESTY AUDIT RESULTS
 
+> **Note**: This audit was performed before the GC switch (2026-02-07). Contract
+> names below show MGC. The pipeline now uses GC outrights for better bar coverage.
+> The ingestion logic and validation gates are unchanged — only the contract filter
+> pattern changed. See `CLAUDE.md` for current architecture.
+
 **Date:** 2026-02-05
 **Script:** `pipeline/ingest_dbn_mgc.py`
 **Data Range Tested:** 2024-01-02 to 2024-01-03 (2 trading days, 2,750 bars)
