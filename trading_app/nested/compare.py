@@ -234,7 +234,7 @@ def _print_report(results: dict):
                     f"    {key[1]} RR{key[2]} CB{key[3]} {key[4]}: "
                     f"Sharpe {b['sharpe_ratio']:.3f} -> {n['sharpe_ratio']:.3f} "
                     f"(+{p['sharpe_delta']:.4f}), "
-                    f"ExpR {b['expectancy_r']:.4f} -> {n['expectancy_r']:.4f}"
+                    f"ExpR {(b['expectancy_r'] or 0):.4f} -> {(n['expectancy_r'] or 0):.4f}"
                 )
 
     print("\n" + "=" * 80)
