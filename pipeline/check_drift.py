@@ -169,13 +169,19 @@ def check_schema_query_consistency(pipeline_dir: Path) -> list[str]:
     """
     violations = []
 
-    init_db_path = pipeline_dir / "init_db.py"
-    if not init_db_path.exists():
-        return violations
-
-    # Extract tables defined in init_db.py
-    init_content = init_db_path.read_text(encoding='utf-8')
-    create_tables = set(re.findall(r'CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)', init_content, re.IGNORECASE))
+    # Gather tables from all schema files (pipeline + trading_app)
+    create_tables = set()
+    schema_files = [
+        pipeline_dir / "init_db.py",
+        pipeline_dir.parent / "trading_app" / "db_manager.py",
+        pipeline_dir.parent / "trading_app" / "nested" / "schema.py",
+    ]
+    for sf in schema_files:
+        if sf.exists():
+            sf_content = sf.read_text(encoding='utf-8')
+            create_tables.update(re.findall(
+                r'CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)', sf_content, re.IGNORECASE
+            ))
 
     if not create_tables:
         return violations

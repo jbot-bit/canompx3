@@ -325,6 +325,95 @@ def collect_data_quality(db_path: Path) -> dict:
     return result
 
 
+def collect_strategy_metrics(db_path: Path) -> dict:
+    """Query validated_setups + experimental_strategies for strategy panel."""
+    result = {
+        "has_data": False,
+        "validated_count": 0,
+        "experimental_count": 0,
+        "top_strategies": [],
+        "session_breakdown": [],
+        "best_expr": 0,
+        "best_sharpe": 0,
+    }
+
+    if not db_path.exists():
+        return result
+
+    con = duckdb.connect(str(db_path), read_only=True)
+    try:
+        tables = [t[0] for t in con.execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+        ).fetchall()]
+
+        if "validated_setups" not in tables:
+            return result
+
+        count = con.execute(
+            "SELECT COUNT(*) FROM validated_setups WHERE status = 'active'"
+        ).fetchone()[0]
+        if count == 0:
+            return result
+
+        result["has_data"] = True
+        result["validated_count"] = count
+
+        if "experimental_strategies" in tables:
+            result["experimental_count"] = con.execute(
+                "SELECT COUNT(*) FROM experimental_strategies"
+            ).fetchone()[0]
+
+        # Top 10 by ExpR
+        top = con.execute("""
+            SELECT orb_label, entry_model, confirm_bars, rr_target,
+                   filter_type, sample_size, win_rate, expectancy_r,
+                   sharpe_ratio, max_drawdown_r
+            FROM validated_setups
+            WHERE status = 'active'
+            ORDER BY expectancy_r DESC
+            LIMIT 10
+        """).fetchall()
+        result["top_strategies"] = [
+            {
+                "orb": r[0], "em": r[1], "cb": r[2], "rr": r[3],
+                "filter": r[4], "n": r[5], "wr": r[6], "expr": r[7],
+                "sharpe": r[8], "maxdd": r[9],
+            }
+            for r in top
+        ]
+
+        # Session breakdown
+        sessions = con.execute("""
+            SELECT orb_label,
+                   COUNT(*) as count,
+                   ROUND(AVG(expectancy_r), 3) as avg_expr,
+                   ROUND(MAX(expectancy_r), 3) as best_expr,
+                   ROUND(AVG(sharpe_ratio), 3) as avg_sharpe
+            FROM validated_setups
+            WHERE status = 'active'
+            GROUP BY orb_label
+            ORDER BY count DESC
+        """).fetchall()
+        result["session_breakdown"] = [
+            {"orb": r[0], "count": r[1], "avg_expr": r[2],
+             "best_expr": r[3], "avg_sharpe": r[4]}
+            for r in sessions
+        ]
+
+        # Global bests
+        bests = con.execute("""
+            SELECT MAX(expectancy_r), MAX(sharpe_ratio)
+            FROM validated_setups WHERE status = 'active'
+        """).fetchone()
+        result["best_expr"] = round(bests[0], 3) if bests[0] else 0
+        result["best_sharpe"] = round(bests[1], 3) if bests[1] else 0
+
+    finally:
+        con.close()
+
+    return result
+
+
 def collect_roadmap_status(roadmap_path: Path) -> list[dict]:
     """Parse ROADMAP.md for phase checklist."""
     phases = []
@@ -509,6 +598,64 @@ def render_roadmap_panel(phases: list[dict]) -> str:
     """
 
 
+def render_strategy_panel(strats: dict) -> str:
+    """Render validated strategies panel."""
+    if not strats["has_data"]:
+        return '<div class="panel"><h2>Validated Strategies</h2><p>No strategies yet. Run strategy_validator.py first.</p></div>'
+
+    # Badges
+    count_badge = status_badge(True, f"{strats['validated_count']} validated")
+    expr_badge = f'<span class="badge badge-ok">Best ExpR +{strats["best_expr"]:.3f}</span>'
+    sharpe_badge = f'<span class="badge badge-ok">Best Sharpe +{strats["best_sharpe"]:.3f}</span>'
+
+    # Top 10 table
+    top_rows = ""
+    for i, s in enumerate(strats["top_strategies"], 1):
+        wr_pct = f"{s['wr'] * 100:.0f}%"
+        sharpe = f"+{s['sharpe']:.2f}" if s['sharpe'] and s['sharpe'] >= 0 else (
+            f"{s['sharpe']:.2f}" if s['sharpe'] else "N/A")
+        maxdd = f"{s['maxdd']:.1f}R" if s['maxdd'] else "N/A"
+        top_rows += f"""
+        <tr>
+          <td>{i}</td><td>{s['orb']}</td><td>{s['em']}</td>
+          <td>{s['cb']}</td><td>{s['rr']:.1f}</td><td>{s['filter']}</td>
+          <td>{s['n']}</td><td>{wr_pct}</td>
+          <td><strong>+{s['expr']:.3f}</strong></td>
+          <td>{sharpe}</td><td>{maxdd}</td>
+        </tr>"""
+
+    # Session breakdown
+    session_rows = ""
+    for s in strats["session_breakdown"]:
+        session_rows += f"""
+        <tr>
+          <td>{s['orb']}</td><td>{s['count']}</td>
+          <td>+{s['avg_expr']:.3f}</td><td>+{s['best_expr']:.3f}</td>
+          <td>+{s['avg_sharpe']:.3f}</td>
+        </tr>"""
+
+    return f"""
+    <div class="panel wide">
+      <h2>Validated Strategies</h2>
+      <p style="margin-bottom:10px">
+        {count_badge} {expr_badge} {sharpe_badge}
+        &nbsp; (from {strats['experimental_count']:,} experimental)
+      </p>
+      <h3>Top 10 by Expectancy</h3>
+      <table>
+        <tr><th>#</th><th>ORB</th><th>EM</th><th>CB</th><th>RR</th><th>Filter</th>
+            <th>N</th><th>WR</th><th>ExpR</th><th>Sharpe</th><th>MaxDD</th></tr>
+        {top_rows}
+      </table>
+      <h3 style="margin-top:14px">Session Breakdown</h3>
+      <table>
+        <tr><th>Session</th><th>Count</th><th>Avg ExpR</th><th>Best ExpR</th><th>Avg Sharpe</th></tr>
+        {session_rows}
+      </table>
+    </div>
+    """
+
+
 def render_system_panel() -> str:
     return f"""
     <div class="panel">
@@ -566,7 +713,8 @@ li { padding: 2px 0; }
 
 
 def render_dashboard(db: dict, cp: dict, inv: dict, quality: dict,
-                     contracts: list, guardrails: dict, roadmap: list) -> str:
+                     contracts: list, guardrails: dict, roadmap: list,
+                     strategies: dict | None = None) -> str:
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -582,6 +730,7 @@ def render_dashboard(db: dict, cp: dict, inv: dict, quality: dict,
     {render_db_panel(db)}
     {render_quality_panel(quality)}
     {render_guardrails_panel(guardrails)}
+    {render_strategy_panel(strategies) if strategies else ''}
     {render_contract_panel(contracts)}
     {render_roadmap_panel(roadmap)}
     {render_system_panel()}
@@ -623,7 +772,10 @@ def main():
     roadmap = collect_roadmap_status(ROADMAP_PATH)
     print(f"  Roadmap phases: {len(roadmap)}")
 
-    html = render_dashboard(db, cp, inv, quality, contracts, guardrails, roadmap)
+    strategies = collect_strategy_metrics(GOLD_DB_PATH)
+    print(f"  Strategies: {strategies['validated_count']} validated")
+
+    html = render_dashboard(db, cp, inv, quality, contracts, guardrails, roadmap, strategies)
 
     output_path = PROJECT_ROOT / args.output
     output_path.write_text(html, encoding="utf-8")
