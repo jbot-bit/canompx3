@@ -22,6 +22,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 sys.stdout.reconfigure(line_buffering=True)
 
 import duckdb
+import numpy as np
 import pandas as pd
 
 from pipeline.paths import GOLD_DB_PATH
@@ -387,7 +388,6 @@ def build_strategy_daily_series(
         """, strategy_ids).fetchdf()
 
         # Step 4: Build per-strategy series
-        import numpy as np
         series_dict = {}
         stats = {}
 
@@ -417,14 +417,23 @@ def build_strategy_daily_series(
             series = pd.Series(np.nan, index=all_days, name=sid)
             series.iloc[eligible_mask] = 0.0
 
-            # Overlay actual trade returns
+            # Overlay actual trade returns — ONLY on eligible days (0.0).
+            # orb_outcomes has break-days regardless of filter, so we must
+            # guard against overwriting NaN (ineligible) with a real pnl_r.
             strat_outcomes = outcomes[outcomes["strategy_id"] == sid]
             trade_days_set = set()
+            overlays_skipped_ineligible = 0
+            overlays_skipped_missing = 0
             for _, oc in strat_outcomes.iterrows():
                 td = pd.Timestamp(oc["trading_day"])
-                if td in series.index:
+                if td not in series.index:
+                    overlays_skipped_missing += 1
+                elif series.loc[td] == 0.0:
                     series.loc[td] = oc["pnl_r"]
                     trade_days_set.add(td)
+                else:
+                    # Day is NaN (ineligible for this filter) — skip
+                    overlays_skipped_ineligible += 1
 
             series_dict[sid] = series
 
@@ -434,6 +443,8 @@ def build_strategy_daily_series(
                 "eligible_days": eligible_count,
                 "traded_days": traded_count,
                 "padded_zero_days": eligible_count - traded_count,
+                "overlays_skipped_ineligible": overlays_skipped_ineligible,
+                "overlays_skipped_missing": overlays_skipped_missing,
             }
 
         if not series_dict:
@@ -469,7 +480,6 @@ def correlation_matrix(
     # Compute pairwise correlation with overlap guard
     cols = list(series_df.columns)
     n = len(cols)
-    import numpy as np
     corr = pd.DataFrame(np.nan, index=cols, columns=cols)
 
     for i in range(n):
