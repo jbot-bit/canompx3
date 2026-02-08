@@ -533,6 +533,46 @@ class TestBuildStrategyDailySeries:
         assert s["traded_days"] == 30
         assert s["padded_zero_days"] == 70
 
+    def test_ineligible_outcomes_not_overlaid(self, tmp_path):
+        """REGRESSION: outcomes on filter-ineligible days must NOT be overlaid.
+
+        This is the core bug from fix4.txt. orb_outcomes has break-days
+        regardless of filter, so if a G8 strategy has outcomes on days
+        where orb_size < 8, those must remain NaN (not get pnl_r).
+        """
+        df_rows = _make_daily_features_rows(50)
+        # G8 filter: only days with orb_0900_size >= 8.0
+        strat = _make_strategy(
+            strategy_id="MGC_0900_E1_RR2.0_CB5_ORB_G8",
+            orb_label="0900", filter_type="ORB_G8",
+        )
+        # Create outcomes on ALL days — including ineligible ones
+        outcomes = [
+            {"trading_day": df_rows[i]["trading_day"], "orb_label": "0900",
+             "rr_target": 2.0, "confirm_bars": 5, "entry_model": "E1", "pnl_r": 0.5}
+            for i in range(50)
+        ]
+        db_path = _setup_db_with_outcomes(tmp_path, [strat], df_rows, outcomes)
+        series_df, stats = build_strategy_daily_series(db_path, [strat["strategy_id"]])
+        col = series_df[strat["strategy_id"]]
+        s = stats[strat["strategy_id"]]
+
+        # Verify ineligible days remain NaN (not overwritten by pnl_r)
+        for i in range(min(50, len(col))):
+            size = df_rows[i]["orb_0900_size"]
+            if size < 8.0:
+                assert np.isnan(col.iloc[i]), (
+                    f"Day {i} (size={size}) is ineligible for G8 but got {col.iloc[i]}; "
+                    f"should be NaN"
+                )
+
+        # Verify skipped count is non-zero
+        assert s["overlays_skipped_ineligible"] > 0, (
+            "Expected some overlays skipped due to ineligibility"
+        )
+        # traded_days must be much less than total outcomes
+        assert s["traded_days"] < 50, "Not all outcomes should be overlaid for G8 filter"
+
     def test_empty_strategies(self, tmp_path):
         """Empty strategy list returns empty DataFrame."""
         df_rows = _make_daily_features_rows(10)
