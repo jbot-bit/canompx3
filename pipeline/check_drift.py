@@ -376,7 +376,7 @@ def check_trading_app_connection_leaks(trading_app_dir: Path) -> list[str]:
     if not trading_app_dir.exists():
         return violations
 
-    for fpath in trading_app_dir.glob("*.py"):
+    for fpath in trading_app_dir.rglob("*.py"):
         if fpath.name == "__init__.py":
             continue
 
@@ -414,7 +414,7 @@ def check_trading_app_hardcoded_paths(trading_app_dir: Path) -> list[str]:
         re.compile(r'["\']D:/', re.IGNORECASE),
     ]
 
-    for fpath in trading_app_dir.glob("*.py"):
+    for fpath in trading_app_dir.rglob("*.py"):
         content = fpath.read_text(encoding='utf-8')
         lines = content.splitlines()
 
@@ -504,6 +504,50 @@ def check_entry_models_sync() -> list[str]:
             )
     except ImportError:
         pass
+
+    return violations
+
+
+def check_nested_isolation() -> list[str]:
+    """Check that trading_app/nested/ never imports from production modules.
+
+    One-way dependency rule for nested subpackage:
+      nested CAN import from: pipeline/, trading_app/config.py, trading_app/entry_rules.py,
+        trading_app/outcome_builder.py (for compute_single_outcome, RR_TARGETS, etc.),
+        trading_app/strategy_discovery.py (for compute_metrics, _load_daily_features, etc.),
+        trading_app/strategy_validator.py (for validate_strategy)
+      nested NEVER imports from: trading_app/db_manager.py (production schema)
+    """
+    violations = []
+
+    nested_dir = TRADING_APP_DIR / "nested"
+    if not nested_dir.exists():
+        return violations
+
+    # Forbidden: importing init_trading_app_schema or verify_trading_app_schema
+    # (nested has its own schema module)
+    forbidden_patterns = [
+        re.compile(r'from\s+trading_app\.db_manager\s+import'),
+        re.compile(r'import\s+trading_app\.db_manager'),
+    ]
+
+    for fpath in nested_dir.glob("*.py"):
+        if fpath.name == "__init__.py":
+            continue
+
+        content = fpath.read_text(encoding='utf-8')
+        lines = content.splitlines()
+
+        for line_num, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith('#'):
+                continue
+            for pattern in forbidden_patterns:
+                if pattern.search(line):
+                    violations.append(
+                        f"  nested/{fpath.name}:{line_num}: Imports from db_manager "
+                        f"(nested must use own schema): {stripped[:80]}"
+                    )
 
     return violations
 
@@ -711,6 +755,18 @@ def main():
     # Check 14: Entry price sanity (no hardcoded ORB level in outcome_builder)
     print("Check 14: Entry price sanity...")
     v = check_entry_price_sanity()
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 15: Nested subpackage isolation (no db_manager imports)
+    print("Check 15: Nested subpackage isolation...")
+    v = check_nested_isolation()
     if v:
         print("  FAILED:")
         for line in v:
