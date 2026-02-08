@@ -21,11 +21,11 @@ if [ $? -ne 0 ]; then
 fi
 echo "  PASSED"
 
-# 2. Fast pure-function tests (~3 seconds)
+# 2. Fast tests — all Tier 1 tests except slow integration/paper_trader
 echo "[2/3] Fast tests..."
-python -m pytest tests/test_validation.py tests/test_contract_selection.py tests/test_trading_days.py tests/test_check_drift.py tests/test_paths.py -x -q 2>&1 | tail -3
+python -m pytest tests/ --ignore=tests/test_trader_logic.py --ignore=tests/test_trading_app/test_integration.py --ignore=tests/test_trading_app/test_paper_trader.py -x -q -n auto --dist loadscope 2>&1 | tail -5
 if [ ${PIPESTATUS[0]} -ne 0 ]; then
-    echo "BLOCKED: Unit tests failed."
+    echo "BLOCKED: Tests failed."
     exit 1
 fi
 

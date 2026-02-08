@@ -50,7 +50,7 @@ def run_nested_validation(
     con = duckdb.connect(str(db_path))
     try:
         if not dry_run:
-            init_nested_schema(db_path=db_path)
+            init_nested_schema(con=con)
 
         # Fetch unvalidated strategies
         rows = con.execute(

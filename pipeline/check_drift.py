@@ -588,6 +588,48 @@ def check_entry_price_sanity() -> list[str]:
     return violations
 
 
+def check_all_imports_resolve() -> list[str]:
+    """Verify that all .py files in pipeline/ and trading_app/ can be imported.
+
+    Catches typos in import statements, missing dependencies, and broken
+    module references BEFORE runtime.
+    """
+    import importlib
+    violations = []
+
+    # Ensure project root is on sys.path (modules use sys.path.insert)
+    root_str = str(PROJECT_ROOT)
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
+
+    for base_dir in [PIPELINE_DIR, TRADING_APP_DIR]:
+        if not base_dir.exists():
+            continue
+
+        for fpath in base_dir.rglob("*.py"):
+            if fpath.name.startswith("_") and fpath.name != "__init__.py":
+                continue
+            if fpath.name == "__init__.py":
+                continue
+            # Skip check_drift itself (circular)
+            if fpath.name == "check_drift.py":
+                continue
+
+            # Convert file path to module path
+            rel = fpath.relative_to(PROJECT_ROOT)
+            module = str(rel).replace("\\", "/").replace("/", ".").removesuffix(".py")
+
+            try:
+                importlib.import_module(module)
+            except Exception as e:
+                err_type = type(e).__name__
+                violations.append(
+                    f"  {module}: {err_type}: {str(e)[:100]}"
+                )
+
+    return violations
+
+
 def main():
     print("=" * 60)
     print("PIPELINE DRIFT CHECK")
@@ -767,6 +809,18 @@ def main():
     # Check 15: Nested subpackage isolation (no db_manager imports)
     print("Check 15: Nested subpackage isolation...")
     v = check_nested_isolation()
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 16: All imports resolve (no typos, missing deps)
+    print("Check 16: All imports resolve...")
+    v = check_all_imports_resolve()
     if v:
         print("  FAILED:")
         for line in v:

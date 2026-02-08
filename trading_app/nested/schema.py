@@ -19,12 +19,25 @@ import duckdb
 from pipeline.paths import GOLD_DB_PATH
 
 
-def init_nested_schema(db_path: Path | None = None, force: bool = False) -> None:
-    """Create nested ORB tables if they don't exist."""
+def init_nested_schema(
+    db_path: Path | None = None,
+    force: bool = False,
+    con: "duckdb.DuckDBPyConnection | None" = None,
+) -> None:
+    """Create nested ORB tables if they don't exist.
+
+    Args:
+        db_path: Path to DuckDB file (ignored if con is provided).
+        force: Drop existing tables first.
+        con: Existing DuckDB connection to reuse.  When provided the caller
+             owns the connection lifecycle (no close here).
+    """
     if db_path is None:
         db_path = GOLD_DB_PATH
 
-    con = duckdb.connect(str(db_path))
+    owns_con = con is None
+    if owns_con:
+        con = duckdb.connect(str(db_path))
     try:
         if force:
             print("WARN: Force mode: Dropping existing nested tables...")
@@ -156,7 +169,8 @@ def init_nested_schema(db_path: Path | None = None, force: bool = False) -> None
         print("Nested ORB schema initialized successfully")
 
     finally:
-        con.close()
+        if owns_con:
+            con.close()
 
 
 def verify_nested_schema(db_path: Path | None = None) -> tuple[bool, list[str]]:

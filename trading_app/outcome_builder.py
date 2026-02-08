@@ -265,6 +265,8 @@ def build_outcomes(
             bars_df = con.execute(
                 bars_query, [symbol, td_start.isoformat(), td_end.isoformat()]
             ).fetchdf()
+            if not bars_df.empty:
+                bars_df["ts_utc"] = pd.to_datetime(bars_df["ts_utc"], utc=True)
 
             if bars_df.empty:
                 continue

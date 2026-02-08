@@ -10,9 +10,8 @@ Usage:
 """
 
 import sys
-import json
 from pathlib import Path
-from datetime import date, datetime, timezone
+from datetime import date
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -122,7 +121,7 @@ def run_nested_discovery(
     con = duckdb.connect(str(db_path))
     try:
         if not dry_run:
-            init_nested_schema(db_path=db_path)
+            init_nested_schema(con=con)
 
         total_strategies = 0
 

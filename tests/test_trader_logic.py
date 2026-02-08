@@ -457,9 +457,14 @@ SAMPLE_SIZE = 50  # rows per test — enough to catch errors, fast enough for CI
 
 
 def _skip_if_no_db():
-    """Skip test if gold.db not present (CI environment)."""
+    """Skip test if gold.db not present or locked (CI or builder running)."""
     if not GOLD_DB.exists():
         pytest.skip("gold.db not available")
+    try:
+        test_con = duckdb.connect(str(GOLD_DB), read_only=True)
+        test_con.close()
+    except Exception:
+        pytest.skip("gold.db locked by another process")
 
 
 def _sample_outcomes(con, n=SAMPLE_SIZE, where_extra=""):

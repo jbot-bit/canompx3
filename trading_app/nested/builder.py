@@ -13,7 +13,7 @@ Usage:
 import sys
 import time
 from pathlib import Path
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -22,7 +22,6 @@ sys.path.insert(0, str(PROJECT_ROOT))
 sys.stdout.reconfigure(line_buffering=True)
 
 import duckdb
-import numpy as np
 import pandas as pd
 
 from pipeline.paths import GOLD_DB_PATH
@@ -58,10 +57,8 @@ def resample_to_5m(bars_1m_df: pd.DataFrame, after_ts: datetime) -> pd.DataFrame
     if post_orb.empty:
         return pd.DataFrame(columns=["ts_utc", "open", "high", "low", "close", "volume"])
 
-    # Floor to 5-minute boundaries: epoch // 300 * 300
-    epochs = post_orb["ts_utc"].astype("int64") // 10**9
-    bucket_epochs = (epochs // 300) * 300
-    post_orb["bucket"] = pd.to_datetime(bucket_epochs, unit="s", utc=True)
+    # Floor to 5-minute boundaries (robust for any datetime64 resolution)
+    post_orb["bucket"] = post_orb["ts_utc"].dt.floor("5min")
 
     # Aggregate per bucket
     grouped = post_orb.groupby("bucket", sort=True)
@@ -125,6 +122,7 @@ def build_nested_outcomes(
     end_date: date | None = None,
     orb_minutes_list: list[int] | None = None,
     dry_run: bool = False,
+    resume: bool = False,
 ) -> int:
     """Build nested_outcomes for all RR targets x confirm_bars using 5m entry bars.
 
@@ -135,6 +133,8 @@ def build_nested_outcomes(
       4. For each (ORB x RR x CB x EM): compute outcome with 5m bars
       5. For E3: verify sub-bar fill against 1m data
       6. INSERT into nested_outcomes
+
+    With --resume, skips days already completed (queries max trading_day per orb_minutes).
 
     Returns count of rows written.
     """
@@ -148,7 +148,7 @@ def build_nested_outcomes(
     con = duckdb.connect(str(db_path))
     try:
         if not dry_run:
-            init_nested_schema(db_path=db_path)
+            init_nested_schema(con=con)
 
         total_written = 0
         t0 = time.monotonic()
@@ -188,7 +188,28 @@ def build_nested_outcomes(
                       "Run: python pipeline/build_daily_features.py --orb-minutes {orb_minutes}")
                 continue
 
-            print(f"  {total_days} trading days loaded")
+            # Resume: skip days already completed
+            skip_before = None
+            if resume and not dry_run:
+                result = con.execute(
+                    """SELECT MAX(trading_day) FROM nested_outcomes
+                       WHERE symbol = ? AND orb_minutes = ?""",
+                    [instrument, orb_minutes],
+                ).fetchone()
+                if result and result[0] is not None:
+                    skip_before = result[0]
+                    original_count = total_days
+                    rows = [r for r in rows if dict(zip(col_names, r))["trading_day"] >= skip_before]
+                    total_days = len(rows)
+                    print(f"  {original_count} total trading days, resuming from {skip_before} (re-processes last day)")
+                    print(f"  {total_days} days remaining")
+                    if total_days == 0:
+                        print(f"  All days already completed for orb_minutes={orb_minutes}")
+                        continue
+                else:
+                    print(f"  {total_days} trading days loaded (fresh start)")
+            else:
+                print(f"  {total_days} trading days loaded")
 
             for day_idx, row in enumerate(rows):
                 row_dict = dict(zip(col_names, row))
@@ -206,6 +227,8 @@ def build_nested_outcomes(
                        ORDER BY ts_utc ASC""",
                     [symbol, td_start.isoformat(), td_end.isoformat()],
                 ).fetchdf()
+                if not bars_1m_df.empty:
+                    bars_1m_df["ts_utc"] = pd.to_datetime(bars_1m_df["ts_utc"], utc=True)
 
                 if bars_1m_df.empty:
                     continue
@@ -332,15 +355,35 @@ def main():
         help="ORB duration(s) to build (default: 15 30)",
     )
     parser.add_argument("--dry-run", action="store_true", help="Validate without writing")
+    parser.add_argument("--resume", action="store_true",
+                        help="Resume from last completed day (skip already-built days)")
+    parser.add_argument("--audit", action="store_true",
+                        help="Run spot-check audit after build completes")
+    parser.add_argument("--audit-days", type=int, default=10,
+                        help="Number of random days to audit (default: 10)")
     args = parser.parse_args()
 
-    build_nested_outcomes(
+    total = build_nested_outcomes(
         instrument=args.instrument,
         start_date=args.start,
         end_date=args.end,
         orb_minutes_list=args.orb_minutes,
         dry_run=args.dry_run,
+        resume=args.resume,
     )
+
+    if args.audit and not args.dry_run and total > 0:
+        print("\n--- Running post-build audit ---")
+        from trading_app.nested.audit_outcomes import audit_nested_outcomes
+        results = audit_nested_outcomes(
+            instrument=args.instrument,
+            n_days=args.audit_days,
+            seed=42,
+            orb_minutes_list=args.orb_minutes,
+        )
+        if results["n_mismatch"] > 0:
+            print(f"\nWARNING: {results['n_mismatch']} audit mismatches found!")
+            sys.exit(1)
 
 
 if __name__ == "__main__":

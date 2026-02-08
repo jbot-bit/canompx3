@@ -445,7 +445,7 @@ def _wilders_rsi(closes: np.ndarray, period: int = 14) -> float | None:
         avg_gain = (avg_gain * (period - 1) + gains[i]) / period
         avg_loss = (avg_loss * (period - 1) + losses[i]) / period
 
-    if avg_loss == 0:
+    if avg_loss < 1e-12:
         return 100.0
 
     rs = avg_gain / avg_loss

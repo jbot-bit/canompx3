@@ -21,11 +21,8 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Drift check
+      - name: Drift check (16 static analysis checks)
         run: python pipeline/check_drift.py
 
-      - name: Unit tests (pure functions, no DB)
-        run: python -m pytest tests/test_validation.py tests/test_contract_selection.py tests/test_trading_days.py tests/test_check_drift.py tests/test_paths.py -v
-
-      - name: Schema and aggregation tests (temp DB)
-        run: python -m pytest tests/test_schema.py tests/test_build_bars_5m.py -v
+      - name: Tier 1 - All tests (no gold.db needed)
+        run: python -m pytest tests/ -v --ignore=tests/test_trader_logic.py -n auto --dist loadscope
