@@ -57,7 +57,20 @@ CREATE TABLE IF NOT EXISTS bars_5m (
 );
 """
 
-# ORB labels (local Brisbane times) — all 6 are equal, no primary/secondary
+# ORB labels: 5-minute Opening Range Breakout windows at these local times.
+# All times are Australia/Brisbane (UTC+10, no DST).
+#
+# Session mapping and UTC equivalents:
+#   0900 Brisbane = 23:00 UTC (prev day) — US equity close / CME open
+#   1000 Brisbane = 00:00 UTC             — 1hr after CME open
+#   1100 Brisbane = 01:00 UTC             — 2hr after CME open
+#   1800 Brisbane = 08:00 UTC             — GLOBEX/London open
+#   2300 Brisbane = 13:00 UTC             — Overnight/NY afternoon
+#   0030 Brisbane = 14:30 UTC             — Late overnight
+#
+# The ORB is the high-low range of the first 5 minutes (configurable).
+# A "break" occurs when a 1-min bar closes above orb_high (long) or
+# below orb_low (short). See pipeline/build_daily_features.py for logic.
 ORB_LABELS = ["0900", "1000", "1100", "1800", "2300", "0030"]
 
 

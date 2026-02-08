@@ -11,6 +11,7 @@ These tests ensure that:
 5. Strategy ID format is deterministic and parseable
 6. Filter JSON serialization round-trips correctly
 7. daily_features ORB columns match ORB_LABELS exactly
+8. ENTRY_MODELS is consistent across modules
 """
 
 import sys
@@ -27,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from pipeline.init_db import ORB_LABELS, DAILY_FEATURES_SCHEMA
 from trading_app.config import (
     ALL_FILTERS,
+    ENTRY_MODELS,
     NoFilter,
     OrbSizeFilter,
     MGC_ORB_SIZE_FILTERS,
@@ -116,7 +118,7 @@ class TestAllFiltersSync:
     def test_filters_are_frozen(self):
         """All filters are frozen (hashable, immutable)."""
         for key, filt in ALL_FILTERS.items():
-            hash(filt)  # Should not raise
+            hash(filt)
 
     def test_size_filters_have_thresholds(self):
         """Every ORB size filter has at least min_size or max_size set."""
@@ -130,18 +132,16 @@ class TestAllFiltersSync:
 
 
 # ============================================================================
-# 3. RR_TARGETS and CONFIRM_BARS_OPTIONS consistency
+# 3. RR_TARGETS, CONFIRM_BARS_OPTIONS, ENTRY_MODELS consistency
 # ============================================================================
 
 class TestGridParamsSync:
     """Grid parameters must be consistent and valid."""
 
     def test_rr_targets_sorted(self):
-        """RR_TARGETS is sorted ascending."""
         assert RR_TARGETS == sorted(RR_TARGETS)
 
     def test_rr_targets_positive(self):
-        """All RR targets are positive."""
         assert all(rr > 0 for rr in RR_TARGETS)
 
     def test_rr_targets_no_duplicates(self):
@@ -158,9 +158,22 @@ class TestGridParamsSync:
 
     def test_grid_size(self):
         """Total grid size matches expected formula."""
-        expected = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * len(ALL_FILTERS)
-        # 6 ORBs * 6 RRs * 5 CBs * 12 filters = 2160
-        assert expected == 6 * 6 * 5 * 12
+        expected = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * len(ALL_FILTERS) * len(ENTRY_MODELS)
+        # 6 ORBs * 6 RRs * 5 CBs * 12 filters * 3 models = 6480
+        assert expected == 6 * 6 * 5 * 12 * 3
+
+
+class TestEntryModelsSync:
+    """ENTRY_MODELS must be consistent."""
+
+    def test_entry_models_exact(self):
+        assert ENTRY_MODELS == ["E1", "E2", "E3"]
+
+    def test_entry_models_no_duplicates(self):
+        assert len(ENTRY_MODELS) == len(set(ENTRY_MODELS))
+
+    def test_entry_models_are_strings(self):
+        assert all(isinstance(em, str) for em in ENTRY_MODELS)
 
 
 # ============================================================================
@@ -171,27 +184,29 @@ class TestStrategyIdSync:
     """Strategy IDs must be deterministic and parseable."""
 
     def test_format(self):
-        sid = make_strategy_id("MGC", "0900", 2.0, 1, "NO_FILTER")
-        assert sid == "MGC_0900_RR2.0_CB1_NO_FILTER"
+        sid = make_strategy_id("MGC", "0900", "E1", 2.0, 1, "NO_FILTER")
+        assert sid == "MGC_0900_E1_RR2.0_CB1_NO_FILTER"
 
     def test_parseable(self):
         """Strategy ID can be parsed back to components."""
-        sid = make_strategy_id("MGC", "0900", 2.0, 1, "ORB_L4")
-        parts = sid.split("_", 2)  # MGC, 0900, RR2.0_CB1_ORB_L4
+        sid = make_strategy_id("MGC", "0900", "E2", 2.0, 1, "ORB_L4")
+        parts = sid.split("_", 3)  # MGC, 0900, E2, RR2.0_CB1_ORB_L4
         assert parts[0] == "MGC"
         assert parts[1] == "0900"
+        assert parts[2] == "E2"
 
     def test_all_grid_ids_unique(self):
         """Every combination in the full grid produces a unique ID."""
         ids = set()
         for orb in ORB_LABELS:
-            for rr in RR_TARGETS:
-                for cb in CONFIRM_BARS_OPTIONS:
-                    for fk in ALL_FILTERS:
-                        sid = make_strategy_id("MGC", orb, rr, cb, fk)
-                        assert sid not in ids, f"Duplicate ID: {sid}"
-                        ids.add(sid)
-        assert len(ids) == 2160
+            for em in ENTRY_MODELS:
+                for rr in RR_TARGETS:
+                    for cb in CONFIRM_BARS_OPTIONS:
+                        for fk in ALL_FILTERS:
+                            sid = make_strategy_id("MGC", orb, em, rr, cb, fk)
+                            assert sid not in ids, f"Duplicate ID: {sid}"
+                            ids.add(sid)
+        assert len(ids) == 6480
 
 
 # ============================================================================
@@ -236,10 +251,11 @@ class TestSchemaSync:
 
         required = {
             "strategy_id", "instrument", "orb_label", "orb_minutes",
-            "rr_target", "confirm_bars", "filter_type", "filter_params",
-            "sample_size", "win_rate", "avg_win_r", "avg_loss_r",
-            "expectancy_r", "sharpe_ratio", "max_drawdown_r", "yearly_results",
-            "validation_status", "validation_notes",
+            "rr_target", "confirm_bars", "entry_model", "filter_type",
+            "filter_params", "sample_size", "win_rate", "avg_win_r",
+            "avg_loss_r", "expectancy_r", "sharpe_ratio", "max_drawdown_r",
+            "median_risk_points", "avg_risk_points",
+            "yearly_results", "validation_status", "validation_notes",
         }
         missing = required - cols
         assert not missing, f"Missing columns in experimental_strategies: {missing}"
@@ -264,10 +280,11 @@ class TestSchemaSync:
 
         required = {
             "strategy_id", "promoted_from", "instrument", "orb_label",
-            "orb_minutes", "rr_target", "confirm_bars", "filter_type",
-            "filter_params", "sample_size", "win_rate", "expectancy_r",
-            "years_tested", "all_years_positive", "stress_test_passed",
-            "sharpe_ratio", "max_drawdown_r", "yearly_results", "status",
+            "orb_minutes", "rr_target", "confirm_bars", "entry_model",
+            "filter_type", "filter_params", "sample_size", "win_rate",
+            "expectancy_r", "years_tested", "all_years_positive",
+            "stress_test_passed", "sharpe_ratio", "max_drawdown_r",
+            "yearly_results", "status",
         }
         missing = required - cols
         assert not missing, f"Missing columns in validated_setups: {missing}"
@@ -292,9 +309,9 @@ class TestSchemaSync:
 
         required = {
             "trading_day", "symbol", "orb_label", "orb_minutes",
-            "rr_target", "confirm_bars", "entry_ts", "entry_price",
-            "stop_price", "target_price", "outcome", "exit_ts",
-            "exit_price", "pnl_r", "mae_r", "mfe_r",
+            "rr_target", "confirm_bars", "entry_model", "entry_ts",
+            "entry_price", "stop_price", "target_price", "outcome",
+            "exit_ts", "exit_price", "pnl_r", "mae_r", "mfe_r",
         }
         missing = required - cols
         assert not missing, f"Missing columns in orb_outcomes: {missing}"
@@ -309,7 +326,6 @@ class TestImportSync:
 
     def test_outcome_builder_uses_init_db_orb_labels(self):
         """outcome_builder imports ORB_LABELS from init_db (not hardcoded)."""
-        from trading_app.outcome_builder import build_outcomes
         import trading_app.outcome_builder as ob
         import inspect
         source = inspect.getsource(ob)
@@ -321,4 +337,18 @@ class TestImportSync:
         import trading_app.strategy_discovery as sd
         source = inspect.getsource(sd)
         assert 'from trading_app.outcome_builder import RR_TARGETS' in source
-        assert 'from trading_app.outcome_builder import' in source and 'CONFIRM_BARS_OPTIONS' in source
+        assert 'CONFIRM_BARS_OPTIONS' in source
+
+    def test_outcome_builder_imports_entry_models(self):
+        """outcome_builder imports ENTRY_MODELS from config."""
+        import inspect
+        import trading_app.outcome_builder as ob
+        source = inspect.getsource(ob)
+        assert 'from trading_app.config import ENTRY_MODELS' in source
+
+    def test_strategy_discovery_imports_entry_models(self):
+        """strategy_discovery imports ENTRY_MODELS from config."""
+        import inspect
+        import trading_app.strategy_discovery as sd
+        source = inspect.getsource(sd)
+        assert 'ENTRY_MODELS' in source

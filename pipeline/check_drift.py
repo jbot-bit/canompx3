@@ -490,6 +490,60 @@ def check_config_filter_sync() -> list[str]:
     return violations
 
 
+def check_entry_models_sync() -> list[str]:
+    """Check that ENTRY_MODELS constant matches expected values."""
+    violations = []
+
+    try:
+        from trading_app.config import ENTRY_MODELS
+
+        expected = ["E1", "E2", "E3"]
+        if ENTRY_MODELS != expected:
+            violations.append(
+                f"  ENTRY_MODELS = {ENTRY_MODELS}, expected {expected}"
+            )
+    except ImportError:
+        pass
+
+    return violations
+
+
+def check_entry_price_sanity() -> list[str]:
+    """Flag entry_price = orb_high/orb_low in outcome code without E3 guard.
+
+    Catches regression to the broken behavior where entry_price was set to
+    the ORB level regardless of entry model.
+    """
+    violations = []
+
+    outcome_path = TRADING_APP_DIR / "outcome_builder.py"
+    if not outcome_path.exists():
+        return violations
+
+    content = outcome_path.read_text(encoding='utf-8')
+    lines = content.splitlines()
+
+    # Pattern: entry_price = orb_high or entry_price = orb_low
+    # This should only appear inside E3 logic in entry_rules.py, never in outcome_builder
+    dangerous_patterns = [
+        re.compile(r'entry_price\s*=\s*orb_high'),
+        re.compile(r'entry_price\s*=\s*orb_low'),
+    ]
+
+    for line_num, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if stripped.startswith('#'):
+            continue
+        for pattern in dangerous_patterns:
+            if pattern.search(line):
+                violations.append(
+                    f"  outcome_builder.py:{line_num}: Direct entry_price = ORB level "
+                    f"(must be set by entry model, not hardcoded): {stripped[:80]}"
+                )
+
+    return violations
+
+
 def main():
     print("=" * 60)
     print("PIPELINE DRIFT CHECK")
@@ -633,6 +687,30 @@ def main():
     # Check 12: Config/DB sync — filter_type keys match filter objects
     print("Check 12: Config filter_type sync...")
     v = check_config_filter_sync()
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 13: ENTRY_MODELS sync
+    print("Check 13: ENTRY_MODELS sync...")
+    v = check_entry_models_sync()
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 14: Entry price sanity (no hardcoded ORB level in outcome_builder)
+    print("Check 14: Entry price sanity...")
+    v = check_entry_price_sanity()
     if v:
         print("  FAILED:")
         for line in v:

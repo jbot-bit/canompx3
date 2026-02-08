@@ -26,14 +26,28 @@ import numpy as np
 import pandas as pd
 
 from pipeline.paths import GOLD_DB_PATH
-from pipeline.cost_model import get_cost_spec, pnl_points_to_r
+from pipeline.cost_model import get_cost_spec, pnl_points_to_r, to_r_multiple
 from pipeline.init_db import ORB_LABELS
 from pipeline.build_daily_features import compute_trading_day_utc_range
 from trading_app.entry_rules import detect_entry_with_confirm_bars
+from trading_app.config import ENTRY_MODELS
 from trading_app.db_manager import init_trading_app_schema
 
-# Grid parameters
+# Grid parameters — see trading_app/config.py for full documentation
+#
+# RR_TARGETS: Risk-reward ratio multiples.
+#   Target price = entry_price +/- (risk_points * rr_target * direction)
+#   Risk = |entry_price - stop_price| where stop = opposite ORB level.
+#   RR1.0 = target at 1x risk (high WR, low edge per trade)
+#   RR4.0 = target at 4x risk (low WR, needs big moves)
+#   Optimal: RR2.5 for 0900/1000, RR2.0 for 1800, RR1.5 for 2300
 RR_TARGETS = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0]
+
+# CONFIRM_BARS_OPTIONS: How many consecutive 1-min closes outside ORB
+#   before confirming a breakout signal and triggering entry.
+#   CB1 = fastest entry, more fakeouts
+#   CB5 = most confirmation, may miss momentum (but best for E3 retrace)
+#   Optimal: CB2 for 0900/1000 E1, CB5 for 1800 E3
 CONFIRM_BARS_OPTIONS = [1, 2, 3, 4, 5]
 
 
@@ -47,9 +61,10 @@ def compute_single_outcome(
     confirm_bars: int,
     trading_day_end: datetime,
     cost_spec,
+    entry_model: str = "E1",
 ) -> dict:
     """
-    Compute outcome for a single (rr_target, confirm_bars) combination.
+    Compute outcome for a single (rr_target, confirm_bars, entry_model) combination.
 
     Returns dict with keys matching orb_outcomes columns.
     """
@@ -75,6 +90,7 @@ def compute_single_outcome(
         break_dir=break_dir,
         confirm_bars=confirm_bars,
         detection_window_end=trading_day_end,
+        entry_model=entry_model,
     )
 
     if not signal.triggered:
@@ -152,8 +168,8 @@ def compute_single_outcome(
             result["exit_ts"] = exit_ts_val
             result["exit_price"] = target_price
             result["pnl_r"] = round(
-                pnl_points_to_r(cost_spec, entry_price, stop_price,
-                                risk_points * rr_target),
+                to_r_multiple(cost_spec, entry_price, stop_price,
+                              risk_points * rr_target),
                 4,
             )
         else:
@@ -268,29 +284,31 @@ def build_outcomes(
 
                 for rr_target in RR_TARGETS:
                     for cb in CONFIRM_BARS_OPTIONS:
-                        outcome = compute_single_outcome(
-                            bars_df=bars_df,
-                            break_ts=break_ts,
-                            orb_high=orb_high,
-                            orb_low=orb_low,
-                            break_dir=break_dir,
-                            rr_target=rr_target,
-                            confirm_bars=cb,
-                            trading_day_end=td_end,
-                            cost_spec=cost_spec,
-                        )
+                        for em in ENTRY_MODELS:
+                            outcome = compute_single_outcome(
+                                bars_df=bars_df,
+                                break_ts=break_ts,
+                                orb_high=orb_high,
+                                orb_low=orb_low,
+                                break_dir=break_dir,
+                                rr_target=rr_target,
+                                confirm_bars=cb,
+                                trading_day_end=td_end,
+                                cost_spec=cost_spec,
+                                entry_model=em,
+                            )
 
-                        day_batch.append([
-                            trading_day, symbol, orb_label, orb_minutes,
-                            rr_target, cb,
-                            outcome["entry_ts"], outcome["entry_price"],
-                            outcome["stop_price"], outcome["target_price"],
-                            outcome["outcome"], outcome["exit_ts"],
-                            outcome["exit_price"], outcome["pnl_r"],
-                            outcome["mae_r"], outcome["mfe_r"],
-                        ])
+                            day_batch.append([
+                                trading_day, symbol, orb_label, orb_minutes,
+                                rr_target, cb, em,
+                                outcome["entry_ts"], outcome["entry_price"],
+                                outcome["stop_price"], outcome["target_price"],
+                                outcome["outcome"], outcome["exit_ts"],
+                                outcome["exit_price"], outcome["pnl_r"],
+                                outcome["mae_r"], outcome["mfe_r"],
+                            ])
 
-                        total_written += 1
+                            total_written += 1
 
             # Batch insert all outcomes for this trading day
             if day_batch and not dry_run:
@@ -298,11 +316,11 @@ def build_outcomes(
                     """
                     INSERT OR REPLACE INTO orb_outcomes
                     (trading_day, symbol, orb_label, orb_minutes,
-                     rr_target, confirm_bars,
+                     rr_target, confirm_bars, entry_model,
                      entry_ts, entry_price, stop_price, target_price,
                      outcome, exit_ts, exit_price, pnl_r,
                      mae_r, mfe_r)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     day_batch,
                 )

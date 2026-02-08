@@ -39,6 +39,24 @@ class TestCostSpec:
         spec = get_cost_spec("MGC")
         assert spec.friction_in_points == pytest.approx(0.84)
 
+    def test_mgc_tick_size(self):
+        spec = get_cost_spec("MGC")
+        assert spec.tick_size == 0.10
+
+    def test_mgc_min_ticks_floor(self):
+        spec = get_cost_spec("MGC")
+        assert spec.min_ticks_floor == 10
+
+    def test_mgc_min_risk_floor_points(self):
+        """min_risk_floor = 10 ticks * 0.10 = 1.0 point."""
+        spec = get_cost_spec("MGC")
+        assert spec.min_risk_floor_points == pytest.approx(1.0)
+
+    def test_mgc_min_risk_floor_dollars(self):
+        """min_risk_floor_dollars = 1.0 point * $10 = $10.00."""
+        spec = get_cost_spec("MGC")
+        assert spec.min_risk_floor_dollars == pytest.approx(10.0)
+
     def test_costspec_is_frozen(self):
         spec = get_cost_spec("MGC")
         with pytest.raises(AttributeError):
@@ -159,3 +177,9 @@ class TestStressTest:
         spec = get_cost_spec("MGC")
         stressed = stress_test_costs(spec)
         assert stressed.point_value == spec.point_value
+
+    def test_stress_preserves_tick_size(self):
+        spec = get_cost_spec("MGC")
+        stressed = stress_test_costs(spec)
+        assert stressed.tick_size == spec.tick_size
+        assert stressed.min_ticks_floor == spec.min_ticks_floor

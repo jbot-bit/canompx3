@@ -23,7 +23,7 @@ import duckdb
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.cost_model import get_cost_spec
 from pipeline.init_db import ORB_LABELS
-from trading_app.config import ALL_FILTERS
+from trading_app.config import ALL_FILTERS, ENTRY_MODELS
 from trading_app.setup_detector import detect_setups
 from trading_app.db_manager import init_trading_app_schema
 from trading_app.outcome_builder import RR_TARGETS, CONFIRM_BARS_OPTIONS
@@ -37,7 +37,8 @@ def compute_metrics(outcomes: list[dict], cost_spec) -> dict:
     Compute performance metrics from a list of outcome rows.
 
     Returns dict with: sample_size, win_rate, avg_win_r, avg_loss_r,
-    expectancy_r, sharpe_ratio, max_drawdown_r, yearly_results.
+    expectancy_r, sharpe_ratio, max_drawdown_r, median_risk_points,
+    avg_risk_points, yearly_results.
     """
     if not outcomes:
         return {
@@ -48,6 +49,8 @@ def compute_metrics(outcomes: list[dict], cost_spec) -> dict:
             "expectancy_r": None,
             "sharpe_ratio": None,
             "max_drawdown_r": None,
+            "median_risk_points": None,
+            "avg_risk_points": None,
             "yearly_results": "{}",
         }
 
@@ -66,6 +69,8 @@ def compute_metrics(outcomes: list[dict], cost_spec) -> dict:
             "expectancy_r": None,
             "sharpe_ratio": None,
             "max_drawdown_r": None,
+            "median_risk_points": None,
+            "avg_risk_points": None,
             "yearly_results": "{}",
         }
 
@@ -123,6 +128,24 @@ def compute_metrics(outcomes: list[dict], cost_spec) -> dict:
         ) if year_data["trades"] > 0 else 0.0
         year_data["total_r"] = round(year_data["total_r"], 4)
 
+    # Risk stats (from entry_price and stop_price)
+    risk_points_list = [
+        abs(o["entry_price"] - o["stop_price"])
+        for o in traded
+        if o.get("entry_price") is not None and o.get("stop_price") is not None
+    ]
+    if risk_points_list:
+        sorted_risks = sorted(risk_points_list)
+        mid = len(sorted_risks) // 2
+        if len(sorted_risks) % 2 == 0:
+            median_risk = (sorted_risks[mid - 1] + sorted_risks[mid]) / 2
+        else:
+            median_risk = sorted_risks[mid]
+        avg_risk = sum(risk_points_list) / len(risk_points_list)
+    else:
+        median_risk = None
+        avg_risk = None
+
     return {
         "sample_size": len(outcomes),
         "win_rate": round(win_rate, 4),
@@ -131,6 +154,8 @@ def compute_metrics(outcomes: list[dict], cost_spec) -> dict:
         "expectancy_r": round(expectancy_r, 4),
         "sharpe_ratio": round(sharpe_ratio, 4) if sharpe_ratio is not None else None,
         "max_drawdown_r": round(max_dd, 4),
+        "median_risk_points": round(median_risk, 4) if median_risk is not None else None,
+        "avg_risk_points": round(avg_risk, 4) if avg_risk is not None else None,
         "yearly_results": json.dumps(yearly),
     }
 
@@ -138,12 +163,98 @@ def compute_metrics(outcomes: list[dict], cost_spec) -> dict:
 def make_strategy_id(
     instrument: str,
     orb_label: str,
+    entry_model: str,
     rr_target: float,
     confirm_bars: int,
     filter_type: str,
 ) -> str:
-    """Generate deterministic strategy ID."""
-    return f"{instrument}_{orb_label}_RR{rr_target}_CB{confirm_bars}_{filter_type}"
+    """Generate deterministic strategy ID.
+
+    Format: {instrument}_{orb_label}_{entry_model}_RR{rr}_CB{cb}_{filter_type}
+    Example: MGC_0900_E1_RR2.5_CB2_ORB_G4
+
+    Components:
+      instrument  - Trading instrument (MGC = Micro Gold Futures)
+      orb_label   - ORB session time in Brisbane local (0900, 1000, 1800, etc.)
+      entry_model - E1 (next bar open), E2 (confirm close), E3 (limit retrace)
+      RR          - Risk/Reward target (1.0 to 4.0)
+      CB          - Confirm bars required (1 to 5)
+      filter_type - ORB size filter (NO_FILTER, ORB_G4, ORB_L3, etc.)
+    """
+    return f"{instrument}_{orb_label}_{entry_model}_RR{rr_target}_CB{confirm_bars}_{filter_type}"
+
+
+def _load_daily_features(con, instrument, orb_minutes, start_date, end_date):
+    """Load all daily_features rows once into a list of dicts."""
+    params = [instrument, orb_minutes]
+    where = ["symbol = ?", "orb_minutes = ?"]
+    if start_date:
+        where.append("trading_day >= ?")
+        params.append(start_date)
+    if end_date:
+        where.append("trading_day <= ?")
+        params.append(end_date)
+
+    rows = con.execute(
+        f"SELECT * FROM daily_features WHERE {' AND '.join(where)} ORDER BY trading_day",
+        params,
+    ).fetchall()
+    cols = [desc[0] for desc in con.description]
+    return [dict(zip(cols, r)) for r in rows]
+
+
+def _build_filter_day_sets(features, orb_labels, all_filters):
+    """Pre-compute matching day sets for every (filter, orb) combo."""
+    result = {}
+    for filter_key, strategy_filter in all_filters.items():
+        for orb_label in orb_labels:
+            days = set()
+            for row in features:
+                if row.get(f"orb_{orb_label}_break_dir") is None:
+                    continue
+                if strategy_filter.matches_row(row, orb_label):
+                    days.add(row["trading_day"])
+            result[(filter_key, orb_label)] = days
+    return result
+
+
+def _load_outcomes_bulk(con, instrument, orb_minutes, orb_labels, entry_models):
+    """
+    Load all non-NULL outcomes in one query per (orb, entry_model).
+
+    Returns dict keyed by (orb_label, entry_model, rr_target, confirm_bars)
+    with value = list of outcome dicts.
+    """
+    grouped = {}
+    for orb_label in orb_labels:
+        for em in entry_models:
+            rows = con.execute(
+                """SELECT trading_day, rr_target, confirm_bars,
+                          outcome, pnl_r, mae_r, mfe_r,
+                          entry_price, stop_price
+                   FROM orb_outcomes
+                   WHERE symbol = ? AND orb_minutes = ?
+                     AND orb_label = ? AND entry_model = ?
+                     AND outcome IS NOT NULL
+                   ORDER BY trading_day""",
+                [instrument, orb_minutes, orb_label, em],
+            ).fetchall()
+
+            for r in rows:
+                key = (orb_label, em, r[1], r[2])  # (orb, em, rr, cb)
+                if key not in grouped:
+                    grouped[key] = []
+                grouped[key].append({
+                    "trading_day": r[0],
+                    "outcome": r[3],
+                    "pnl_r": r[4],
+                    "mae_r": r[5],
+                    "mfe_r": r[6],
+                    "entry_price": r[7],
+                    "stop_price": r[8],
+                })
+
+    return grouped
 
 
 def run_discovery(
@@ -157,6 +268,9 @@ def run_discovery(
     """
     Grid search over all strategy variants.
 
+    Bulk-loads data upfront (1 features query + 18 outcome queries),
+    then iterates the grid in Python with no further DB reads.
+
     Returns count of strategies written.
     """
     if db_path is None:
@@ -169,98 +283,103 @@ def run_discovery(
         if not dry_run:
             init_trading_app_schema(db_path=db_path)
 
+        # ---- Bulk load phase (all DB reads happen here) ----
+        print("Loading daily features...")
+        features = _load_daily_features(con, instrument, orb_minutes, start_date, end_date)
+        print(f"  {len(features)} daily_features rows loaded")
+
+        print("Building filter/ORB day sets...")
+        filter_days = _build_filter_day_sets(features, ORB_LABELS, ALL_FILTERS)
+
+        print("Loading outcomes (bulk)...")
+        outcomes_by_key = _load_outcomes_bulk(con, instrument, orb_minutes, ORB_LABELS, ENTRY_MODELS)
+        print(f"  {sum(len(v) for v in outcomes_by_key.values())} outcome rows loaded")
+
+        # ---- Grid iteration (pure Python, no DB reads) ----
         total_strategies = 0
-        total_combos = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * len(ALL_FILTERS)
+        total_combos = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * len(ALL_FILTERS) * len(ENTRY_MODELS)
         combo_idx = 0
+        insert_batch = []
 
         for filter_key, strategy_filter in ALL_FILTERS.items():
             for orb_label in ORB_LABELS:
-                # Get matching days for this filter + ORB
-                matching_days = detect_setups(
-                    con=con,
-                    strategy_filter=strategy_filter,
-                    orb_label=orb_label,
-                    instrument=instrument,
-                    orb_minutes=orb_minutes,
-                    start_date=start_date,
-                    end_date=end_date,
-                )
+                matching_day_set = filter_days[(filter_key, orb_label)]
 
-                matching_day_set = {d[0] for d in matching_days}
+                for em in ENTRY_MODELS:
+                    for rr_target in RR_TARGETS:
+                        for cb in CONFIRM_BARS_OPTIONS:
+                            combo_idx += 1
 
-                for rr_target in RR_TARGETS:
-                    for cb in CONFIRM_BARS_OPTIONS:
-                        combo_idx += 1
+                            if not matching_day_set:
+                                continue
 
-                        # Query orb_outcomes for this combo, filtered to matching days
-                        if not matching_day_set:
-                            continue
+                            # Filter pre-loaded outcomes by matching days
+                            all_outcomes = outcomes_by_key.get((orb_label, em, rr_target, cb), [])
+                            outcomes = [o for o in all_outcomes if o["trading_day"] in matching_day_set]
 
-                        # Build date list for IN clause
-                        params = [instrument, orb_minutes, orb_label, rr_target, cb]
-                        date_placeholders = ", ".join(["?"] * len(matching_day_set))
-                        params.extend(sorted(matching_day_set))
+                            if not outcomes:
+                                continue
 
-                        rows = con.execute(
-                            f"""SELECT trading_day, outcome, pnl_r, mae_r, mfe_r
-                                FROM orb_outcomes
-                                WHERE symbol = ? AND orb_minutes = ?
-                                AND orb_label = ? AND rr_target = ? AND confirm_bars = ?
-                                AND outcome IS NOT NULL
-                                AND trading_day IN ({date_placeholders})
-                                ORDER BY trading_day""",
-                            params,
-                        ).fetchall()
+                            metrics = compute_metrics(outcomes, cost_spec)
+                            strategy_id = make_strategy_id(
+                                instrument, orb_label, em, rr_target, cb, filter_key,
+                            )
 
-                        if not rows:
-                            continue
-
-                        outcomes = [
-                            {
-                                "trading_day": r[0],
-                                "outcome": r[1],
-                                "pnl_r": r[2],
-                                "mae_r": r[3],
-                                "mfe_r": r[4],
-                            }
-                            for r in rows
-                        ]
-
-                        metrics = compute_metrics(outcomes, cost_spec)
-                        strategy_id = make_strategy_id(
-                            instrument, orb_label, rr_target, cb, filter_key,
-                        )
-
-                        if not dry_run:
-                            con.execute(
-                                """INSERT OR REPLACE INTO experimental_strategies
-                                   (strategy_id, instrument, orb_label, orb_minutes,
-                                    rr_target, confirm_bars, filter_type, filter_params,
-                                    sample_size, win_rate, avg_win_r, avg_loss_r,
-                                    expectancy_r, sharpe_ratio, max_drawdown_r,
-                                    yearly_results)
-                                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                                [
+                            if not dry_run:
+                                insert_batch.append([
                                     strategy_id, instrument, orb_label, orb_minutes,
-                                    rr_target, cb, filter_key, strategy_filter.to_json(),
+                                    rr_target, cb, em, filter_key,
+                                    strategy_filter.to_json(),
                                     metrics["sample_size"], metrics["win_rate"],
                                     metrics["avg_win_r"], metrics["avg_loss_r"],
                                     metrics["expectancy_r"], metrics["sharpe_ratio"],
-                                    metrics["max_drawdown_r"], metrics["yearly_results"],
-                                ],
-                            )
+                                    metrics["max_drawdown_r"],
+                                    metrics["median_risk_points"], metrics["avg_risk_points"],
+                                    metrics["yearly_results"],
+                                ])
 
-                        total_strategies += 1
+                                # Flush batch every 500 rows
+                                if len(insert_batch) >= 500:
+                                    con.executemany(
+                                        """INSERT OR REPLACE INTO experimental_strategies
+                                           (strategy_id, instrument, orb_label, orb_minutes,
+                                            rr_target, confirm_bars, entry_model,
+                                            filter_type, filter_params,
+                                            sample_size, win_rate, avg_win_r, avg_loss_r,
+                                            expectancy_r, sharpe_ratio, max_drawdown_r,
+                                            median_risk_points, avg_risk_points,
+                                            yearly_results)
+                                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                        insert_batch,
+                                    )
+                                    insert_batch = []
 
-                if combo_idx % 50 == 0:
+                            total_strategies += 1
+
+                if combo_idx % 500 == 0:
                     print(f"  Progress: {combo_idx}/{total_combos} combos, {total_strategies} strategies")
+
+        # Flush remaining batch
+        if insert_batch and not dry_run:
+            con.executemany(
+                """INSERT OR REPLACE INTO experimental_strategies
+                   (strategy_id, instrument, orb_label, orb_minutes,
+                    rr_target, confirm_bars, entry_model,
+                    filter_type, filter_params,
+                    sample_size, win_rate, avg_win_r, avg_loss_r,
+                    expectancy_r, sharpe_ratio, max_drawdown_r,
+                    median_risk_points, avg_risk_points,
+                    yearly_results)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                insert_batch,
+            )
 
         if not dry_run:
             con.commit()
 
         print(f"Done: {total_strategies} strategies from {total_combos} combos")
         if dry_run:
-            print("  (DRY RUN — no data written)")
+            print("  (DRY RUN -- no data written)")
 
         return total_strategies
 

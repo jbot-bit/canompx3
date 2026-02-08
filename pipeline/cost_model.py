@@ -32,6 +32,8 @@ class CostSpec:
     commission_rt: float      # Round-trip commission ($)
     spread_doubled: float     # Spread cost doubled for entry+exit ($)
     slippage: float           # Expected slippage both sides ($)
+    tick_size: float = 0.10   # Minimum price increment (points)
+    min_ticks_floor: int = 10 # Minimum risk in ticks for stress test
 
     @property
     def total_friction(self) -> float:
@@ -42,6 +44,16 @@ class CostSpec:
     def friction_in_points(self) -> float:
         """Total friction converted to price points."""
         return self.total_friction / self.point_value
+
+    @property
+    def min_risk_floor_points(self) -> float:
+        """Minimum risk floor in points (tick-based)."""
+        return self.min_ticks_floor * self.tick_size
+
+    @property
+    def min_risk_floor_dollars(self) -> float:
+        """Minimum risk floor in dollars (tick-based)."""
+        return self.min_risk_floor_points * self.point_value
 
 
 # =============================================================================
@@ -55,6 +67,8 @@ COST_SPECS = {
         commission_rt=2.40,
         spread_doubled=2.00,
         slippage=4.00,
+        tick_size=0.10,
+        min_ticks_floor=10,
     ),
 }
 
@@ -166,4 +180,6 @@ def stress_test_costs(spec: CostSpec, multiplier: float = 1.5) -> CostSpec:
         commission_rt=spec.commission_rt * multiplier,
         spread_doubled=spec.spread_doubled * multiplier,
         slippage=spec.slippage * multiplier,
+        tick_size=spec.tick_size,
+        min_ticks_floor=spec.min_ticks_floor,
     )

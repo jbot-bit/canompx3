@@ -47,6 +47,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 orb_minutes       INTEGER     NOT NULL,
                 rr_target         DOUBLE      NOT NULL,
                 confirm_bars      INTEGER     NOT NULL,
+                entry_model       TEXT        NOT NULL,
 
                 -- Entry details (NULL if no entry signal)
                 entry_ts          TIMESTAMPTZ,
@@ -64,7 +65,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 mae_r             DOUBLE,
                 mfe_r             DOUBLE,
 
-                PRIMARY KEY (symbol, trading_day, orb_label, orb_minutes, rr_target, confirm_bars),
+                PRIMARY KEY (symbol, trading_day, orb_label, orb_minutes, rr_target, confirm_bars, entry_model),
                 FOREIGN KEY (symbol, trading_day, orb_minutes)
                     REFERENCES daily_features(symbol, trading_day, orb_minutes)
             )
@@ -82,6 +83,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 orb_minutes       INTEGER     NOT NULL,
                 rr_target         DOUBLE      NOT NULL,
                 confirm_bars      INTEGER     NOT NULL,
+                entry_model       TEXT        NOT NULL,
 
                 -- Filters
                 filter_type       TEXT,
@@ -95,6 +97,8 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 expectancy_r      DOUBLE,
                 sharpe_ratio      DOUBLE,
                 max_drawdown_r    DOUBLE,
+                median_risk_points DOUBLE,
+                avg_risk_points   DOUBLE,
 
                 -- Yearly breakdown (JSON)
                 yearly_results    TEXT,
@@ -118,6 +122,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 orb_minutes       INTEGER     NOT NULL,
                 rr_target         DOUBLE      NOT NULL,
                 confirm_bars      INTEGER     NOT NULL,
+                entry_model       TEXT        NOT NULL,
                 filter_type       TEXT        NOT NULL,
                 filter_params     TEXT,
 
@@ -214,9 +219,9 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
 
             expected_cols = {
                 "trading_day", "symbol", "orb_label", "orb_minutes",
-                "rr_target", "confirm_bars", "entry_ts", "entry_price",
-                "stop_price", "target_price", "outcome", "exit_ts",
-                "exit_price", "pnl_r", "mae_r", "mfe_r"
+                "rr_target", "confirm_bars", "entry_model", "entry_ts",
+                "entry_price", "stop_price", "target_price", "outcome",
+                "exit_ts", "exit_price", "pnl_r", "mae_r", "mfe_r"
             }
             actual_cols = {row[0] for row in result}
 
@@ -234,10 +239,12 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
 
             expected_cols = {
                 "strategy_id", "created_at", "instrument", "orb_label",
-                "orb_minutes", "rr_target", "confirm_bars", "filter_type",
-                "filter_params", "sample_size", "win_rate", "avg_win_r",
-                "avg_loss_r", "expectancy_r", "sharpe_ratio", "max_drawdown_r",
-                "yearly_results", "validation_status", "validation_notes"
+                "orb_minutes", "rr_target", "confirm_bars", "entry_model",
+                "filter_type", "filter_params", "sample_size", "win_rate",
+                "avg_win_r", "avg_loss_r", "expectancy_r", "sharpe_ratio",
+                "max_drawdown_r", "median_risk_points", "avg_risk_points",
+                "yearly_results", "validation_status",
+                "validation_notes"
             }
             actual_cols = {row[0] for row in result}
 

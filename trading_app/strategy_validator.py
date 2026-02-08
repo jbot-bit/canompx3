@@ -37,7 +37,9 @@ sys.stdout.reconfigure(line_buffering=True)
 
 def validate_strategy(row: dict, cost_spec, stress_multiplier: float = 1.5,
                       min_sample: int = 30, min_sharpe: float | None = None,
-                      max_drawdown: float | None = None) -> tuple[str, str]:
+                      max_drawdown: float | None = None,
+                      exclude_years: set[int] | None = None,
+                      min_years_positive_pct: float = 1.0) -> tuple[str, str]:
     """
     Run 6-phase validation on a single strategy row.
 
@@ -48,11 +50,16 @@ def validate_strategy(row: dict, cost_spec, stress_multiplier: float = 1.5,
         min_sample: Minimum sample size (reject below this)
         min_sharpe: Optional minimum Sharpe ratio (Phase 5)
         max_drawdown: Optional max drawdown in R (Phase 6)
+        exclude_years: Years to exclude from Phase 3 yearly check
+        min_years_positive_pct: Fraction of included years that must be
+            positive (0.0-1.0). Default 1.0 = ALL years must be positive.
 
     Returns:
         (status, notes): "PASSED" or "REJECTED", with explanation.
     """
     notes = []
+    if exclude_years is None:
+        exclude_years = set()
 
     # Phase 1: Sample size
     sample = row.get("sample_size") or 0
@@ -76,66 +83,51 @@ def validate_strategy(row: dict, cost_spec, stress_multiplier: float = 1.5,
     if not yearly:
         return "REJECTED", "Phase 3: No yearly data"
 
-    for year, data in yearly.items():
-        avg_r = data.get("avg_r", 0)
-        if avg_r <= 0:
-            return "REJECTED", f"Phase 3: Year {year} avg_r={avg_r} <= 0"
+    included_years = {y: d for y, d in yearly.items() if int(y) not in exclude_years}
+    if not included_years:
+        return "REJECTED", "Phase 3: No yearly data after exclusions"
+
+    positive_count = sum(1 for d in included_years.values() if d.get("avg_r", 0) > 0)
+    total_included = len(included_years)
+    pct_positive = positive_count / total_included
+
+    if pct_positive < min_years_positive_pct:
+        neg_years = [y for y, d in included_years.items() if d.get("avg_r", 0) <= 0]
+        return "REJECTED", (
+            f"Phase 3: {positive_count}/{total_included} years positive "
+            f"({pct_positive:.0%} < {min_years_positive_pct:.0%}), "
+            f"negative: {', '.join(sorted(neg_years))}"
+        )
 
     # Phase 4: Stress test
-    # Recompute expectancy with inflated costs
-    # stress_test increases friction by multiplier. The effect on R is:
-    # friction_increase_in_points = (stress_friction - base_friction) / point_value
-    # This reduces each win's R and increases each loss's R (makes it more negative)
+    # Phase 4: Stress test — "ExpR > 0 at +50% costs"
+    # Compute extra friction per trade in R-multiples.
+    # delta_r = extra_cost_dollars / risk_dollars
+    # Risk source (preferred → fallback):
+    #   1. median_risk_points from row (outcome-based, if available)
+    #   2. avg_risk_points from row (outcome-based, if available)
+    #   3. tick-based floor: min_ticks_floor * tick_size (from CostSpec)
     stressed = stress_test_costs(cost_spec, stress_multiplier)
-    friction_delta_points = stressed.friction_in_points - cost_spec.friction_in_points
-
-    win_rate = row.get("win_rate", 0)
-    avg_win_r = row.get("avg_win_r", 0)
-    avg_loss_r = row.get("avg_loss_r", 0)
-
-    # Under stress: wins shrink, losses grow (in absolute terms)
-    # Approximate: each trade's R shifts by -friction_delta_points/risk_points
-    # But we don't have risk_points per trade. Conservative: assume risk=ORB size.
-    # Simpler approach: scale the friction impact proportionally.
-    # friction_delta_r ≈ friction_delta_points * point_value / (avg_risk_dollars)
-    # Since we work in R-multiples already, the additional friction per trade in R is:
-    # delta_r = total_friction_increase / risk_in_dollars
-    # Without knowing exact risk, use the friction_in_points as a fraction of 1R.
-    # This is approximate but conservative.
-    # Better: just check if expectancy can absorb the extra cost.
-    # extra_cost_per_trade_R = friction_delta_points / (avg risk in points)
-    # Since 1R = risk in points, and friction_delta is in points:
-    # extra_cost_R ≈ friction_delta_points (when risk = 1 point... not realistic)
-    #
-    # Most practical: recompute E with adjusted win/loss R values.
-    # Each trade pays friction_delta more. In R terms, if we assume the average
-    # risk for MGC ORBs is ~3-5 points:
-    # extra_cost_r = friction_delta_points / avg_risk_points
-    # We don't track avg_risk_points, so use a conservative estimate.
-    # For now: reduce ExpR by (friction_delta * point_value) / (point_value * 1)
-    # = friction_delta (in points) ... which would be too aggressive.
-    #
-    # Simplest correct approach: just check if ExpR > stress margin.
-    # stress_margin = friction_delta_points * (avg trades per unit risk)
-    # ACTUALLY: the cleanest way is to ask "does the strategy survive if
-    # every trade loses an extra fraction of R?"
-    # extra_friction_per_trade = friction_delta (dollars) / risk_dollars
-    # We know friction_delta dollars = (stress - base) total friction.
-    # Without risk_dollars, approximate using ExpR > some threshold.
-    # The CANONICAL approach: "ExpR > 0 at +50% costs"
-    # Conservative approximation: reduce ExpR by the per-trade friction increase
-    # expressed in R. For MGC: base friction = $8.40, stress = $12.60.
-    # Extra = $4.20. Average ORB risk ~ 3-5 points = $30-50. So extra ~0.08-0.14R.
-    # Use: stress_exp = exp_r - (stress_friction - base_friction) / point_value
-    # This assumes risk = 1 point (maximally conservative). In practice risk > 1 pt.
     stress_friction_delta = stressed.total_friction - cost_spec.total_friction
-    # Conservative: assume minimum realistic risk of 2 points for MGC
-    min_risk_dollars = 2.0 * cost_spec.point_value
-    extra_cost_per_trade_r = stress_friction_delta / min_risk_dollars
+
+    # Determine risk denominator
+    median_risk = row.get("median_risk_points")
+    avg_risk = row.get("avg_risk_points")
+    if median_risk is not None and median_risk > 0:
+        strategy_risk_points = median_risk
+    elif avg_risk is not None and avg_risk > 0:
+        strategy_risk_points = avg_risk
+    else:
+        strategy_risk_points = cost_spec.min_risk_floor_points
+
+    strategy_risk_dollars = strategy_risk_points * cost_spec.point_value
+    # Floor: never below tick-based minimum
+    denom = max(strategy_risk_dollars, cost_spec.min_risk_floor_dollars)
+    extra_cost_per_trade_r = stress_friction_delta / denom
     stress_exp = exp_r - extra_cost_per_trade_r
 
     if stress_exp <= 0:
-        return "REJECTED", f"Phase 4: Stress ExpR={stress_exp:.4f} <= 0 (base={exp_r}, delta_r={extra_cost_per_trade_r:.4f})"
+        return "REJECTED", f"Phase 4: Stress ExpR={stress_exp:.4f} <= 0 (base={exp_r}, delta_r={extra_cost_per_trade_r:.4f}, risk_pts={strategy_risk_points:.2f})"
 
     # Phase 5: Sharpe ratio (optional)
     if min_sharpe is not None:
@@ -162,6 +154,8 @@ def run_validation(
     stress_multiplier: float = 1.5,
     min_sharpe: float | None = None,
     max_drawdown: float | None = None,
+    exclude_years: set[int] | None = None,
+    min_years_positive_pct: float = 1.0,
     dry_run: bool = False,
 ) -> tuple[int, int]:
     """
@@ -202,6 +196,8 @@ def run_validation(
                 min_sample=min_sample,
                 min_sharpe=min_sharpe,
                 max_drawdown=max_drawdown,
+                exclude_years=exclude_years,
+                min_years_positive_pct=min_years_positive_pct,
             )
 
             if not dry_run:
@@ -229,16 +225,18 @@ def run_validation(
                     con.execute(
                         """INSERT OR REPLACE INTO validated_setups
                            (strategy_id, promoted_from, instrument, orb_label,
-                            orb_minutes, rr_target, confirm_bars, filter_type,
-                            filter_params, sample_size, win_rate, expectancy_r,
+                            orb_minutes, rr_target, confirm_bars, entry_model,
+                            filter_type, filter_params,
+                            sample_size, win_rate, expectancy_r,
                             years_tested, all_years_positive, stress_test_passed,
                             sharpe_ratio, max_drawdown_r, yearly_results, status)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         [
                             strategy_id, strategy_id,
                             row_dict["instrument"], row_dict["orb_label"],
                             row_dict["orb_minutes"], row_dict["rr_target"],
-                            row_dict["confirm_bars"], row_dict.get("filter_type", ""),
+                            row_dict["confirm_bars"], row_dict.get("entry_model", "E1"),
+                            row_dict.get("filter_type", ""),
                             row_dict.get("filter_params", ""),
                             row_dict.get("sample_size", 0),
                             row_dict.get("win_rate", 0),
@@ -280,8 +278,14 @@ def main():
     parser.add_argument("--stress-multiplier", type=float, default=1.5, help="Cost stress multiplier")
     parser.add_argument("--min-sharpe", type=float, default=None, help="Min Sharpe ratio (optional)")
     parser.add_argument("--max-drawdown", type=float, default=None, help="Max drawdown in R (optional)")
+    parser.add_argument("--exclude-years", type=int, nargs="*", default=None,
+                        help="Years to exclude from Phase 3 (e.g. --exclude-years 2021)")
+    parser.add_argument("--min-years-positive-pct", type=float, default=1.0,
+                        help="Fraction of included years that must be positive (0.0-1.0, default 1.0)")
     parser.add_argument("--dry-run", action="store_true", help="No DB writes")
     args = parser.parse_args()
+
+    exclude = set(args.exclude_years) if args.exclude_years else None
 
     run_validation(
         instrument=args.instrument,
@@ -289,6 +293,8 @@ def main():
         stress_multiplier=args.stress_multiplier,
         min_sharpe=args.min_sharpe,
         max_drawdown=args.max_drawdown,
+        exclude_years=exclude,
+        min_years_positive_pct=args.min_years_positive_pct,
         dry_run=args.dry_run,
     )
 

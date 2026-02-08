@@ -62,8 +62,8 @@ class TestInitSchema:
         # Insert a row into experimental_strategies
         con = duckdb.connect(str(db_path))
         con.execute("""
-            INSERT INTO experimental_strategies (strategy_id, instrument, orb_label, orb_minutes, rr_target, confirm_bars)
-            VALUES ('test', 'MGC', '0900', 5, 2.0, 3)
+            INSERT INTO experimental_strategies (strategy_id, instrument, orb_label, orb_minutes, rr_target, confirm_bars, entry_model)
+            VALUES ('test', 'MGC', '0900', 5, 2.0, 3, 'E1')
         """)
         con.commit()
         con.close()
@@ -89,9 +89,9 @@ class TestInitSchema:
 
         expected = {
             "trading_day", "symbol", "orb_label", "orb_minutes",
-            "rr_target", "confirm_bars", "entry_ts", "entry_price",
-            "stop_price", "target_price", "outcome", "exit_ts",
-            "exit_price", "pnl_r", "mae_r", "mfe_r"
+            "rr_target", "confirm_bars", "entry_model", "entry_ts",
+            "entry_price", "stop_price", "target_price", "outcome",
+            "exit_ts", "exit_price", "pnl_r", "mae_r", "mfe_r"
         }
         assert expected.issubset(col_names)
 
@@ -107,16 +107,16 @@ class TestInitSchema:
         """)
 
         con.execute("""
-            INSERT INTO orb_outcomes (symbol, trading_day, orb_label, orb_minutes, rr_target, confirm_bars)
-            VALUES ('MGC', '2024-01-15', '0900', 5, 2.0, 3)
+            INSERT INTO orb_outcomes (symbol, trading_day, orb_label, orb_minutes, rr_target, confirm_bars, entry_model)
+            VALUES ('MGC', '2024-01-15', '0900', 5, 2.0, 3, 'E1')
         """)
         con.commit()
 
         # Duplicate should fail
         with pytest.raises(duckdb.ConstraintException):
             con.execute("""
-                INSERT INTO orb_outcomes (symbol, trading_day, orb_label, orb_minutes, rr_target, confirm_bars)
-                VALUES ('MGC', '2024-01-15', '0900', 5, 2.0, 3)
+                INSERT INTO orb_outcomes (symbol, trading_day, orb_label, orb_minutes, rr_target, confirm_bars, entry_model)
+                VALUES ('MGC', '2024-01-15', '0900', 5, 2.0, 3, 'E1')
             """)
 
         con.close()
@@ -144,12 +144,12 @@ class TestVerifySchema:
             CREATE TABLE orb_outcomes (
                 trading_day DATE, symbol TEXT, orb_label TEXT,
                 orb_minutes INTEGER, rr_target DOUBLE, confirm_bars INTEGER,
-                entry_ts TIMESTAMPTZ, entry_price DOUBLE,
+                entry_model TEXT, entry_ts TIMESTAMPTZ, entry_price DOUBLE,
                 stop_price DOUBLE, target_price DOUBLE,
                 outcome TEXT, exit_ts TIMESTAMPTZ,
                 exit_price DOUBLE, pnl_r DOUBLE,
                 mae_r DOUBLE, mfe_r DOUBLE,
-                PRIMARY KEY (symbol, trading_day, orb_label, orb_minutes, rr_target, confirm_bars)
+                PRIMARY KEY (symbol, trading_day, orb_label, orb_minutes, rr_target, confirm_bars, entry_model)
             )
         """)
         con.commit()

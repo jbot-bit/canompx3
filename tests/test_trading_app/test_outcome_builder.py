@@ -20,6 +20,7 @@ from trading_app.outcome_builder import (
     RR_TARGETS,
     CONFIRM_BARS_OPTIONS,
 )
+from trading_app.config import ENTRY_MODELS
 from trading_app.entry_rules import EntrySignal
 from pipeline.cost_model import get_cost_spec
 
@@ -53,29 +54,28 @@ def _make_bars(start_ts, prices, interval_minutes=1):
 
 
 # ============================================================================
-# compute_single_outcome tests
+# compute_single_outcome tests (E2: confirm bar close entry)
 # ============================================================================
 
 class TestComputeSingleOutcome:
-    """Tests for the core outcome computation function."""
+    """Tests for the core outcome computation function using E2 model."""
 
     def test_long_win_rr2(self):
-        """Long trade hits target at RR=2.0."""
-        # ORB: high=2700, low=2690. Break long.
-        # Entry at 2700 (orb_high), stop at 2690, risk=10.
-        # RR=2 target = 2700 + 20 = 2720.
+        """Long trade hits target at RR=2.0 with E2 entry."""
         orb_high, orb_low = 2700.0, 2690.0
         break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
         td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
 
-        # Bars: break bar, then confirm bar closes above orb_high, then rally to target
+        # Bar 0: confirm (close=2701 > orb_high=2700). E2 entry at 2701.
+        # Risk = 2701 - 2690 = 11. Target = 2701 + 22 = 2723
+        # Bar 1-3: price rises to hit target
         bars = _make_bars(
             datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
             [
-                (2698, 2701, 2695, 2701, 100),  # break bar: close > orb_high
-                (2701, 2705, 2700, 2703, 100),  # confirm bar 1: close > orb_high
-                (2703, 2710, 2702, 2710, 100),  # rally
-                (2710, 2721, 2709, 2720, 100),  # hits target 2720
+                (2698, 2701, 2695, 2701, 100),
+                (2701, 2710, 2700, 2710, 100),
+                (2710, 2720, 2709, 2718, 100),
+                (2718, 2725, 2717, 2724, 100),
             ],
         )
 
@@ -89,27 +89,31 @@ class TestComputeSingleOutcome:
             confirm_bars=1,
             trading_day_end=td_end,
             cost_spec=_cost(),
+            entry_model="E2",
         )
 
         assert result["outcome"] == "win"
-        assert result["entry_price"] == orb_high
+        assert result["entry_price"] == 2701.0  # E2: confirm bar close
         assert result["stop_price"] == orb_low
-        assert result["target_price"] == 2720.0
+        assert result["target_price"] == pytest.approx(2701.0 + 11.0 * 2.0, abs=0.01)
         assert result["pnl_r"] is not None
         assert result["pnl_r"] > 0
 
     def test_short_loss(self):
-        """Short trade hits stop."""
+        """Short trade hits stop with E2 entry."""
         orb_high, orb_low = 2700.0, 2690.0
         break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
         td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
 
+        # Bar 0: short confirm (close=2689 < orb_low=2690). E2 entry at 2689.
+        # Stop = orb_high = 2700. Risk = 2700 - 2689 = 11.
+        # Bar 1-2: price reverses and hits stop
         bars = _make_bars(
             datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
             [
-                (2692, 2695, 2688, 2689, 100),  # break bar: close < orb_low
-                (2689, 2691, 2687, 2688, 100),  # confirm
-                (2688, 2701, 2687, 2700, 100),  # bounces back to stop (orb_high=2700)
+                (2692, 2695, 2688, 2689, 100),
+                (2689, 2691, 2687, 2688, 100),
+                (2688, 2701, 2687, 2700, 100),
             ],
         )
 
@@ -123,11 +127,12 @@ class TestComputeSingleOutcome:
             confirm_bars=1,
             trading_day_end=td_end,
             cost_spec=_cost(),
+            entry_model="E2",
         )
 
         assert result["outcome"] == "loss"
         assert result["pnl_r"] == -1.0
-        assert result["exit_price"] == orb_high  # stop for short is orb_high
+        assert result["exit_price"] == orb_high
 
     def test_no_confirm_returns_nulls(self):
         """When confirm_bars=3 but only 1 bar closes outside, no entry."""
@@ -138,9 +143,9 @@ class TestComputeSingleOutcome:
         bars = _make_bars(
             datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
             [
-                (2698, 2701, 2695, 2701, 100),  # close above orb_high
-                (2701, 2702, 2694, 2695, 100),  # close INSIDE orb range — resets
-                (2695, 2698, 2694, 2697, 100),  # still inside
+                (2698, 2701, 2695, 2701, 100),
+                (2701, 2702, 2694, 2695, 100),
+                (2695, 2698, 2694, 2697, 100),
             ],
         )
 
@@ -154,6 +159,7 @@ class TestComputeSingleOutcome:
             confirm_bars=3,
             trading_day_end=td_end,
             cost_spec=_cost(),
+            entry_model="E2",
         )
 
         assert result["outcome"] is None
@@ -164,13 +170,16 @@ class TestComputeSingleOutcome:
         """Trade that never hits target or stop = scratch."""
         orb_high, orb_low = 2700.0, 2690.0
         break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
-        td_end = datetime(2024, 1, 5, 0, 5, tzinfo=timezone.utc)  # very short window
+        td_end = datetime(2024, 1, 5, 0, 5, tzinfo=timezone.utc)
 
+        # Bar 0: confirm (close=2701). E2 entry at 2701.
+        # Bar 1: narrow range, doesn't hit target (2723) or stop (2690)
+        # trading_day_end is very close, so scratch
         bars = _make_bars(
             datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
             [
-                (2698, 2701, 2695, 2701, 100),  # confirm bar
-                (2701, 2703, 2698, 2702, 100),  # drifts, no target/stop
+                (2698, 2701, 2695, 2701, 100),
+                (2701, 2703, 2698, 2702, 100),
             ],
         )
 
@@ -184,21 +193,24 @@ class TestComputeSingleOutcome:
             confirm_bars=1,
             trading_day_end=td_end,
             cost_spec=_cost(),
+            entry_model="E2",
         )
 
         assert result["outcome"] == "scratch"
 
     def test_ambiguous_bar_conservative_loss(self):
-        """Bar that hits both target and stop → conservative loss."""
+        """Bar that hits both target and stop -> conservative loss."""
         orb_high, orb_low = 2700.0, 2690.0
         break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
         td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
 
+        # Bar 0: confirm (close=2701). E2 entry at 2701.
+        # Risk = 11, target = 2723
+        # Bar 1: huge range — hits both target (high=2725 > 2723) and stop (low=2685 < 2690)
         bars = _make_bars(
             datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
             [
-                (2698, 2701, 2695, 2701, 100),  # confirm
-                # Huge range: low=2685 (below stop 2690), high=2725 (above target 2720 for RR=2)
+                (2698, 2701, 2695, 2701, 100),
                 (2701, 2725, 2685, 2710, 200),
             ],
         )
@@ -213,6 +225,7 @@ class TestComputeSingleOutcome:
             confirm_bars=1,
             trading_day_end=td_end,
             cost_spec=_cost(),
+            entry_model="E2",
         )
 
         assert result["outcome"] == "loss"
@@ -224,74 +237,85 @@ class TestComputeSingleOutcome:
         break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
         td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
 
-        bars = _make_bars(
-            datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
-            [
-                (2698, 2701, 2695, 2701, 100),  # confirm
-                (2701, 2708, 2698, 2705, 100),  # favorable excursion: +8
-                (2705, 2706, 2689, 2690, 100),  # hits stop at 2690
-            ],
-        )
-
-        result = compute_single_outcome(
-            bars_df=bars,
-            break_ts=break_ts,
-            orb_high=orb_high,
-            orb_low=orb_low,
-            break_dir="long",
-            rr_target=2.0,
-            confirm_bars=1,
-            trading_day_end=td_end,
-            cost_spec=_cost(),
-        )
-
-        assert result["outcome"] == "loss"
-        assert result["mfe_r"] is not None
-        assert result["mfe_r"] > 0  # had some favorable movement
-        assert result["mae_r"] is not None
-        assert result["mae_r"] > 0  # hit stop = max adverse
-
-    def test_zero_risk_returns_nulls(self):
-        """If entry == stop (zero risk), returns empty result."""
-        orb_high, orb_low = 2700.0, 2700.0  # zero-size ORB
-        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
-        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
-
-        bars = _make_bars(
-            datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
-            [
-                (2700, 2702, 2699, 2701, 100),
-                (2701, 2705, 2700, 2703, 100),
-            ],
-        )
-
-        result = compute_single_outcome(
-            bars_df=bars,
-            break_ts=break_ts,
-            orb_high=orb_high,
-            orb_low=orb_low,
-            break_dir="long",
-            rr_target=2.0,
-            confirm_bars=1,
-            trading_day_end=td_end,
-            cost_spec=_cost(),
-        )
-
-        assert result["outcome"] is None
-        assert result["entry_price"] is None
-
-    def test_rr_targets_grid(self):
-        """Different RR targets produce different target prices."""
-        orb_high, orb_low = 2700.0, 2690.0
-        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
-        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
-
-        # Big rally — hits all targets
+        # Bar 0: confirm (close=2701). E2 entry at 2701.
+        # Bar 1: favorable excursion (high=2708), then
+        # Bar 2: adverse excursion — stop hit (low=2689 < 2690)
         bars = _make_bars(
             datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
             [
                 (2698, 2701, 2695, 2701, 100),
-                (2701, 2750, 2700, 2750, 100),  # massive bar
+                (2701, 2708, 2698, 2705, 100),
+                (2705, 2706, 2689, 2690, 100),
+            ],
+        )
+
+        result = compute_single_outcome(
+            bars_df=bars,
+            break_ts=break_ts,
+            orb_high=orb_high,
+            orb_low=orb_low,
+            break_dir="long",
+            rr_target=2.0,
+            confirm_bars=1,
+            trading_day_end=td_end,
+            cost_spec=_cost(),
+            entry_model="E2",
+        )
+
+        assert result["outcome"] == "loss"
+        assert result["mfe_r"] is not None
+        assert result["mfe_r"] > 0
+        assert result["mae_r"] is not None
+        assert result["mae_r"] > 0
+
+    def test_zero_risk_returns_nulls(self):
+        """If orb_high == orb_low (zero ORB), E3 produces zero risk."""
+        # With E3, entry_price = orb_high and stop_price = orb_low.
+        # When orb_high == orb_low, risk = 0 -> null result.
+        orb_high, orb_low = 2700.0, 2700.0
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
+        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
+
+        # Need a bar that closes outside ORB (> 2700) to confirm,
+        # then a retrace bar that touches 2700
+        bars = _make_bars(
+            datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
+            [
+                (2700, 2702, 2699, 2701, 100),  # confirm: close > 2700
+                (2701, 2702, 2699, 2700, 100),  # retrace: low <= 2700
+            ],
+        )
+
+        result = compute_single_outcome(
+            bars_df=bars,
+            break_ts=break_ts,
+            orb_high=orb_high,
+            orb_low=orb_low,
+            break_dir="long",
+            rr_target=2.0,
+            confirm_bars=1,
+            trading_day_end=td_end,
+            cost_spec=_cost(),
+            entry_model="E3",
+        )
+
+        # E3 entry at 2700, stop at 2700 -> risk = 0 -> null result
+        assert result["outcome"] is None
+        assert result["entry_price"] is None
+
+    def test_rr_targets_grid(self):
+        """Different RR targets produce different target prices with E2."""
+        orb_high, orb_low = 2700.0, 2690.0
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
+        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
+
+        # Bar 0: confirm (close=2701). E2 entry at 2701. Risk = 11.
+        # Bar 1: massive range to ensure all RR targets hit
+        bars = _make_bars(
+            datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
+            [
+                (2698, 2701, 2695, 2701, 100),
+                (2701, 2750, 2700, 2750, 100),
             ],
         )
 
@@ -307,8 +331,10 @@ class TestComputeSingleOutcome:
                 confirm_bars=1,
                 trading_day_end=td_end,
                 cost_spec=_cost(),
+                entry_model="E2",
             )
-            assert result["target_price"] == 2700.0 + 10.0 * rr
+            # E2 entry at 2701, risk=11, target = 2701 + 11*rr
+            assert result["target_price"] == pytest.approx(2701.0 + 11.0 * rr, abs=0.01)
             targets_seen.add(result["target_price"])
 
         assert len(targets_seen) == len(RR_TARGETS)
@@ -322,28 +348,139 @@ class TestComputeSingleOutcome:
         bars = _make_bars(
             datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
             [
-                (2698, 2701, 2695, 2701, 100),  # 1st close above orb_high
-                (2701, 2705, 2700, 2703, 100),  # 2nd close above orb_high → confirmed
-                (2703, 2730, 2702, 2725, 100),  # rally to target
+                (2698, 2701, 2695, 2701, 100),
+                (2701, 2705, 2700, 2703, 100),
+                (2703, 2730, 2702, 2725, 100),
             ],
         )
 
-        # confirm_bars=1 should trigger on first bar
         r1 = compute_single_outcome(
             bars_df=bars, break_ts=break_ts, orb_high=orb_high, orb_low=orb_low,
             break_dir="long", rr_target=2.0, confirm_bars=1,
-            trading_day_end=td_end, cost_spec=_cost(),
+            trading_day_end=td_end, cost_spec=_cost(), entry_model="E2",
         )
-        # confirm_bars=2 should trigger on second bar (later entry_ts)
         r2 = compute_single_outcome(
             bars_df=bars, break_ts=break_ts, orb_high=orb_high, orb_low=orb_low,
             break_dir="long", rr_target=2.0, confirm_bars=2,
-            trading_day_end=td_end, cost_spec=_cost(),
+            trading_day_end=td_end, cost_spec=_cost(), entry_model="E2",
         )
 
         assert r1["entry_ts"] is not None
         assert r2["entry_ts"] is not None
         assert r2["entry_ts"] > r1["entry_ts"]
+
+
+# ============================================================================
+# Entry model specific tests
+# ============================================================================
+
+class TestEntryModelE1:
+    """E1: next bar open after confirm."""
+
+    def test_e1_entry_is_next_bar_open(self):
+        orb_high, orb_low = 2700.0, 2690.0
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
+        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
+
+        bars = _make_bars(
+            datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
+            [
+                (2698, 2701, 2695, 2701, 100),  # confirm: close > orb_high
+                (2703, 2730, 2702, 2725, 100),  # E1 entry: open=2703
+                (2725, 2740, 2720, 2735, 100),
+            ],
+        )
+
+        result = compute_single_outcome(
+            bars_df=bars, break_ts=break_ts, orb_high=orb_high, orb_low=orb_low,
+            break_dir="long", rr_target=2.0, confirm_bars=1,
+            trading_day_end=td_end, cost_spec=_cost(), entry_model="E1",
+        )
+
+        assert result["entry_price"] == 2703.0  # open of bar after confirm
+        assert result["stop_price"] == orb_low
+        # Risk = 2703 - 2690 = 13 points
+        assert result["target_price"] == pytest.approx(2703.0 + 13.0 * 2.0, abs=0.01)
+
+
+class TestEntryModelE2:
+    """E2: confirm bar close."""
+
+    def test_e2_entry_is_confirm_close(self):
+        orb_high, orb_low = 2700.0, 2690.0
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
+        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
+
+        bars = _make_bars(
+            datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
+            [
+                (2698, 2701, 2695, 2701, 100),  # confirm: close=2701
+                (2701, 2730, 2700, 2725, 100),
+            ],
+        )
+
+        result = compute_single_outcome(
+            bars_df=bars, break_ts=break_ts, orb_high=orb_high, orb_low=orb_low,
+            break_dir="long", rr_target=2.0, confirm_bars=1,
+            trading_day_end=td_end, cost_spec=_cost(), entry_model="E2",
+        )
+
+        assert result["entry_price"] == 2701.0  # confirm bar close
+        assert result["stop_price"] == orb_low
+        # Risk = 2701 - 2690 = 11 points
+        assert result["target_price"] == pytest.approx(2701.0 + 11.0 * 2.0, abs=0.01)
+
+
+class TestEntryModelE3:
+    """E3: limit at ORB level with retrace."""
+
+    def test_e3_entry_at_orb_level_on_retrace(self):
+        orb_high, orb_low = 2700.0, 2690.0
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
+        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
+
+        bars = _make_bars(
+            datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
+            [
+                (2698, 2701, 2695, 2701, 100),  # confirm bar: close > orb_high
+                (2701, 2705, 2699, 2703, 100),  # low=2699 <= orb_high=2700, retrace!
+                (2703, 2730, 2702, 2725, 100),
+            ],
+        )
+
+        result = compute_single_outcome(
+            bars_df=bars, break_ts=break_ts, orb_high=orb_high, orb_low=orb_low,
+            break_dir="long", rr_target=2.0, confirm_bars=1,
+            trading_day_end=td_end, cost_spec=_cost(), entry_model="E3",
+        )
+
+        assert result["entry_price"] == orb_high  # limit fill at ORB level
+        assert result["stop_price"] == orb_low
+        # Risk = 2700 - 2690 = 10 (same as ORB size for E3)
+        assert result["target_price"] == pytest.approx(2700.0 + 10.0 * 2.0, abs=0.01)
+
+    def test_e3_no_retrace_no_fill(self):
+        orb_high, orb_low = 2700.0, 2690.0
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
+        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
+
+        bars = _make_bars(
+            datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
+            [
+                (2698, 2701, 2695, 2701, 100),  # confirm
+                (2701, 2710, 2701, 2708, 100),  # low=2701 > orb_high=2700, NO retrace
+                (2708, 2720, 2707, 2718, 100),  # still no retrace
+            ],
+        )
+
+        result = compute_single_outcome(
+            bars_df=bars, break_ts=break_ts, orb_high=orb_high, orb_low=orb_low,
+            break_dir="long", rr_target=2.0, confirm_bars=1,
+            trading_day_end=td_end, cost_spec=_cost(), entry_model="E3",
+        )
+
+        assert result["outcome"] is None
+        assert result["entry_price"] is None
 
 
 # ============================================================================
@@ -358,27 +495,22 @@ class TestBuildOutcomes:
         db_path = tmp_path / "test.db"
         con = duckdb.connect(str(db_path))
 
-        # Create pipeline schema
         from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA, DAILY_FEATURES_SCHEMA
         con.execute(BARS_1M_SCHEMA)
         con.execute(BARS_5M_SCHEMA)
         con.execute(DAILY_FEATURES_SCHEMA)
 
-        # Create trading_app schema
         from trading_app.db_manager import init_trading_app_schema
         con.close()
         init_trading_app_schema(db_path=db_path)
 
         con = duckdb.connect(str(db_path))
 
-        # Insert 1 trading day of bars_1m (2024-01-05, UTC range 23:00 Jan 4 → 23:00 Jan 5)
-        # ORB 0900 Brisbane = 23:00 UTC previous day. 5-min ORB = 23:00-23:05 UTC
         base_ts = datetime(2024, 1, 4, 23, 0, tzinfo=timezone.utc)
         bars = []
         price = 2700.0
-        for i in range(300):  # 5 hours of bars
+        for i in range(300):
             ts = base_ts + timedelta(minutes=i)
-            # Gentle uptrend
             o = price + i * 0.1
             h = o + 2
             l = o - 1
@@ -391,10 +523,8 @@ class TestBuildOutcomes:
             bars,
         )
 
-        # Insert daily_features with a break on ORB 0900
-        # ORB high/low from first 5 bars
-        orb_high = 2700.0 + 4 * 0.1 + 2  # ~2702.4
-        orb_low = 2700.0 - 1  # 2699.0
+        orb_high = 2700.0 + 4 * 0.1 + 2
+        orb_low = 2700.0 - 1
         con.execute(
             """INSERT INTO daily_features
                (trading_day, symbol, orb_minutes, bar_count_1m,
@@ -423,15 +553,13 @@ class TestBuildOutcomes:
             orb_minutes=5,
         )
 
-        # Should produce rows for the 0900 ORB break
-        # 6 RR targets × 3 confirm_bars = 18 rows for that ORB
-        assert count >= 18
+        # 1 ORB break * 6 RR * 5 CB * 3 entry_models = 90 rows
+        assert count >= 90
 
-        # Verify DB has rows
         con = duckdb.connect(str(db_path), read_only=True)
         actual = con.execute("SELECT COUNT(*) FROM orb_outcomes").fetchone()[0]
         con.close()
-        assert actual >= 18
+        assert actual >= 90
 
     def test_dry_run_no_writes(self, tmp_path):
         """dry_run=True produces no DB writes."""
@@ -446,10 +574,9 @@ class TestBuildOutcomes:
             dry_run=True,
         )
 
-        assert count > 0  # counted but not written
+        assert count > 0
 
         con = duckdb.connect(str(db_path), read_only=True)
-        # orb_outcomes table may not exist in dry_run since schema init is skipped
         tables = [r[0] for r in con.execute(
             "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
         ).fetchall()]
@@ -475,7 +602,6 @@ class TestBuildOutcomes:
         actual = con.execute("SELECT COUNT(*) FROM orb_outcomes").fetchone()[0]
         con.close()
 
-        # Second run replaces, doesn't duplicate
         assert actual == count1
 
     def test_no_break_day_no_rows(self, tmp_path):
@@ -490,7 +616,6 @@ class TestBuildOutcomes:
         from trading_app.db_manager import init_trading_app_schema
         init_trading_app_schema(db_path=db_path)
 
-        # Insert daily_features with NO break
         con = duckdb.connect(str(db_path))
         con.execute(
             """INSERT INTO daily_features
@@ -508,6 +633,21 @@ class TestBuildOutcomes:
         )
 
         assert count == 0
+
+    def test_entry_model_column_populated(self, tmp_path):
+        """entry_model column has correct values in DB."""
+        db_path = self._setup_db(tmp_path)
+        build_outcomes(
+            db_path=db_path, instrument="MGC",
+            start_date=date(2024, 1, 1), end_date=date(2024, 12, 31),
+        )
+
+        con = duckdb.connect(str(db_path), read_only=True)
+        models = {r[0] for r in con.execute(
+            "SELECT DISTINCT entry_model FROM orb_outcomes"
+        ).fetchall()}
+        con.close()
+        assert models == {"E1", "E2", "E3"}
 
 
 class TestCLI:

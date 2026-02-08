@@ -16,6 +16,7 @@ from trading_app.strategy_discovery import (
     make_strategy_id,
     run_discovery,
 )
+from trading_app.config import ENTRY_MODELS
 from pipeline.cost_model import get_cost_spec
 
 
@@ -33,10 +34,10 @@ class TestComputeMetrics:
     def test_win_rate(self):
         """Win rate = wins / (wins + losses)."""
         outcomes = [
-            {"trading_day": date(2024, 1, i), "outcome": "win", "pnl_r": 2.0, "mae_r": 0.5, "mfe_r": 2.5}
+            {"trading_day": date(2024, 1, i), "outcome": "win", "pnl_r": 2.0, "mae_r": 0.5, "mfe_r": 2.5, "entry_price": 2703.0, "stop_price": 2690.0}
             for i in range(1, 8)
         ] + [
-            {"trading_day": date(2024, 1, i), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.2}
+            {"trading_day": date(2024, 1, i), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.2, "entry_price": 2703.0, "stop_price": 2690.0}
             for i in range(8, 11)
         ]
 
@@ -46,57 +47,51 @@ class TestComputeMetrics:
     def test_expectancy(self):
         """E = (WR * AvgWin_R) - (LR * AvgLoss_R)."""
         outcomes = [
-            {"trading_day": date(2024, 1, 1), "outcome": "win", "pnl_r": 2.0, "mae_r": 0.5, "mfe_r": 2.0},
-            {"trading_day": date(2024, 1, 2), "outcome": "win", "pnl_r": 3.0, "mae_r": 0.5, "mfe_r": 3.0},
-            {"trading_day": date(2024, 1, 3), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0},
-            {"trading_day": date(2024, 1, 4), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0},
+            {"trading_day": date(2024, 1, 1), "outcome": "win", "pnl_r": 2.0, "mae_r": 0.5, "mfe_r": 2.0, "entry_price": 2703.0, "stop_price": 2690.0},
+            {"trading_day": date(2024, 1, 2), "outcome": "win", "pnl_r": 3.0, "mae_r": 0.5, "mfe_r": 3.0, "entry_price": 2703.0, "stop_price": 2690.0},
+            {"trading_day": date(2024, 1, 3), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2703.0, "stop_price": 2690.0},
+            {"trading_day": date(2024, 1, 4), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2703.0, "stop_price": 2690.0},
         ]
 
         m = compute_metrics(outcomes, _cost())
-        # WR=0.5, AvgWin=2.5, LR=0.5, AvgLoss=1.0
-        # E = 0.5*2.5 - 0.5*1.0 = 1.25 - 0.5 = 0.75
         assert m["expectancy_r"] == pytest.approx(0.75, abs=0.01)
 
     def test_sharpe_ratio(self):
         """Sharpe = mean(R) / std(R)."""
-        # All same R → std=0 → sharpe=None
         outcomes = [
-            {"trading_day": date(2024, 1, i), "outcome": "win", "pnl_r": 1.0, "mae_r": 0.5, "mfe_r": 1.0}
+            {"trading_day": date(2024, 1, i), "outcome": "win", "pnl_r": 1.0, "mae_r": 0.5, "mfe_r": 1.0, "entry_price": 2703.0, "stop_price": 2690.0}
             for i in range(1, 5)
         ]
         m = compute_metrics(outcomes, _cost())
-        assert m["sharpe_ratio"] is None  # std = 0
+        assert m["sharpe_ratio"] is None
 
     def test_sharpe_ratio_valid(self):
         """Sharpe computes correctly with mixed results."""
         outcomes = [
-            {"trading_day": date(2024, 1, 1), "outcome": "win", "pnl_r": 2.0, "mae_r": 0.5, "mfe_r": 2.0},
-            {"trading_day": date(2024, 1, 2), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0},
+            {"trading_day": date(2024, 1, 1), "outcome": "win", "pnl_r": 2.0, "mae_r": 0.5, "mfe_r": 2.0, "entry_price": 2703.0, "stop_price": 2690.0},
+            {"trading_day": date(2024, 1, 2), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2703.0, "stop_price": 2690.0},
         ]
         m = compute_metrics(outcomes, _cost())
         assert m["sharpe_ratio"] is not None
-        # mean = 0.5, std = sqrt(((2-0.5)^2 + (-1-0.5)^2)/1) = sqrt(4.5) ≈ 2.12
-        # sharpe ≈ 0.5 / 2.12 ≈ 0.236
         assert abs(m["sharpe_ratio"]) < 1.0
 
     def test_max_drawdown(self):
         """Max drawdown tracks peak-to-trough in cumulative R."""
         outcomes = [
-            {"trading_day": date(2024, 1, 1), "outcome": "win", "pnl_r": 3.0, "mae_r": 0.5, "mfe_r": 3.0},
-            {"trading_day": date(2024, 1, 2), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0},
-            {"trading_day": date(2024, 1, 3), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0},
-            {"trading_day": date(2024, 1, 4), "outcome": "win", "pnl_r": 2.0, "mae_r": 0.5, "mfe_r": 2.0},
+            {"trading_day": date(2024, 1, 1), "outcome": "win", "pnl_r": 3.0, "mae_r": 0.5, "mfe_r": 3.0, "entry_price": 2703.0, "stop_price": 2690.0},
+            {"trading_day": date(2024, 1, 2), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2703.0, "stop_price": 2690.0},
+            {"trading_day": date(2024, 1, 3), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2703.0, "stop_price": 2690.0},
+            {"trading_day": date(2024, 1, 4), "outcome": "win", "pnl_r": 2.0, "mae_r": 0.5, "mfe_r": 2.0, "entry_price": 2703.0, "stop_price": 2690.0},
         ]
         m = compute_metrics(outcomes, _cost())
-        # Equity: 0→3→2→1→3. Peak=3 at idx 0, trough=1 at idx 2. DD=2.0
         assert m["max_drawdown_r"] == pytest.approx(2.0, abs=0.01)
 
     def test_yearly_breakdown(self):
         """Yearly results contain per-year stats."""
         outcomes = [
-            {"trading_day": date(2024, 1, 1), "outcome": "win", "pnl_r": 2.0, "mae_r": 0.5, "mfe_r": 2.0},
-            {"trading_day": date(2024, 6, 1), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0},
-            {"trading_day": date(2025, 1, 1), "outcome": "win", "pnl_r": 1.5, "mae_r": 0.5, "mfe_r": 1.5},
+            {"trading_day": date(2024, 1, 1), "outcome": "win", "pnl_r": 2.0, "mae_r": 0.5, "mfe_r": 2.0, "entry_price": 2703.0, "stop_price": 2690.0},
+            {"trading_day": date(2024, 6, 1), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2703.0, "stop_price": 2690.0},
+            {"trading_day": date(2025, 1, 1), "outcome": "win", "pnl_r": 1.5, "mae_r": 0.5, "mfe_r": 1.5, "entry_price": 2703.0, "stop_price": 2690.0},
         ]
         m = compute_metrics(outcomes, _cost())
         yearly = json.loads(m["yearly_results"])
@@ -110,15 +105,27 @@ class TestComputeMetrics:
         m = compute_metrics([], _cost())
         assert m["sample_size"] == 0
         assert m["win_rate"] is None
+        assert m["median_risk_points"] is None
+        assert m["avg_risk_points"] is None
 
     def test_all_scratches(self):
-        """Only scratches → no win/loss stats."""
+        """Only scratches -> no win/loss stats."""
         outcomes = [
-            {"trading_day": date(2024, 1, 1), "outcome": "scratch", "pnl_r": None, "mae_r": 0.1, "mfe_r": 0.1},
+            {"trading_day": date(2024, 1, 1), "outcome": "scratch", "pnl_r": None, "mae_r": 0.1, "mfe_r": 0.1, "entry_price": None, "stop_price": None},
         ]
         m = compute_metrics(outcomes, _cost())
         assert m["sample_size"] == 1
         assert m["win_rate"] is None
+
+    def test_risk_stats_computed(self):
+        """median_risk_points and avg_risk_points computed from entry/stop."""
+        outcomes = [
+            {"trading_day": date(2024, 1, 1), "outcome": "win", "pnl_r": 2.0, "mae_r": 0.5, "mfe_r": 2.0, "entry_price": 2703.0, "stop_price": 2690.0},
+            {"trading_day": date(2024, 1, 2), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2705.0, "stop_price": 2690.0},
+        ]
+        m = compute_metrics(outcomes, _cost())
+        assert m["median_risk_points"] == pytest.approx(14.0, abs=0.01)  # median of 13, 15
+        assert m["avg_risk_points"] == pytest.approx(14.0, abs=0.01)  # avg of 13, 15
 
 
 # ============================================================================
@@ -129,14 +136,20 @@ class TestMakeStrategyId:
     """Tests for strategy ID generation."""
 
     def test_format(self):
-        sid = make_strategy_id("MGC", "0900", 2.0, 1, "NO_FILTER")
-        assert sid == "MGC_0900_RR2.0_CB1_NO_FILTER"
+        sid = make_strategy_id("MGC", "0900", "E1", 2.0, 1, "NO_FILTER")
+        assert sid == "MGC_0900_E1_RR2.0_CB1_NO_FILTER"
 
     def test_different_params_different_ids(self):
-        s1 = make_strategy_id("MGC", "0900", 2.0, 1, "NO_FILTER")
-        s2 = make_strategy_id("MGC", "0900", 2.0, 2, "NO_FILTER")
-        s3 = make_strategy_id("MGC", "1000", 2.0, 1, "NO_FILTER")
-        assert s1 != s2 != s3
+        s1 = make_strategy_id("MGC", "0900", "E1", 2.0, 1, "NO_FILTER")
+        s2 = make_strategy_id("MGC", "0900", "E1", 2.0, 2, "NO_FILTER")
+        s3 = make_strategy_id("MGC", "1000", "E1", 2.0, 1, "NO_FILTER")
+        s4 = make_strategy_id("MGC", "0900", "E2", 2.0, 1, "NO_FILTER")
+        assert len({s1, s2, s3, s4}) == 4
+
+    def test_entry_model_in_id(self):
+        for em in ENTRY_MODELS:
+            sid = make_strategy_id("MGC", "0900", em, 2.0, 1, "NO_FILTER")
+            assert f"_{em}_" in sid
 
 
 # ============================================================================

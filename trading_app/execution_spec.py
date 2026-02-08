@@ -22,6 +22,7 @@ class ExecutionSpec:
     """
 
     confirm_bars: int
+    entry_model: str = "E1"
     order_type: str = "market"
 
     # Future extension points for TCA
@@ -39,8 +40,11 @@ class ExecutionSpec:
         Raises:
             ValueError: If parameters are invalid
         """
-        if self.confirm_bars not in [1, 2, 3]:
-            raise ValueError(f"confirm_bars must be 1, 2, or 3, got {self.confirm_bars}")
+        if not (1 <= self.confirm_bars <= 5):
+            raise ValueError(f"confirm_bars must be 1-5, got {self.confirm_bars}")
+
+        if self.entry_model not in ["E1", "E2", "E3"]:
+            raise ValueError(f"entry_model must be E1/E2/E3, got {self.entry_model}")
 
         if self.order_type not in ["market", "limit", "stop"]:
             raise ValueError(
@@ -72,7 +76,7 @@ class ExecutionSpec:
 
     def __str__(self) -> str:
         """Human-readable string representation."""
-        parts = [f"CB{self.confirm_bars}", self.order_type.upper()]
+        parts = [f"CB{self.confirm_bars}", self.entry_model, self.order_type.upper()]
         if self.limit_offset_pct is not None:
             parts.append(f"offset={self.limit_offset_pct:.2%}")
         if self.benchmark is not None:

@@ -1,185 +1,447 @@
 # Market Playbook — Gold Futures (GC/MGC)
 
 Empirical findings from 1,460 trading days (2021-02-05 to 2026-02-04).
-This is NOT a strategy list — it's what we've learned about how this market behaves.
+689,310 outcomes computed with realistic entry models (E1/E2/E3).
+312 strategies validated (post-cost, stress-tested, yearly robust).
+
+**IMPORTANT**: These findings supersede the earlier 252-strategy scan which had
+two bugs: entry at ORB level (unreachable price) and missing friction on wins.
+The current scan uses honest entry prices and correct cost deductions.
 
 ---
 
-## ORB Behavior
+## Entry Models (Phase 5b Fix)
 
-### Break rates are near-universal
-- Every ORB label breaks on 84-88% of trading days (1,229-1,290 out of 1,460)
-- A break existing tells you almost nothing — it's the default state
+Three entry models replace the original broken entry logic:
 
-### ORB size varies by session
-| ORB | Avg Risk (pts) | Breakeven WR at 1RR |
-|-----|---------------|---------------------|
-| 0900 | 2.09 | 58.4% |
-| 1000 | 1.99 | 58.7% |
-| 1100 | 3.18 | 55.8% |
-| 1800 | 2.33 | 57.6% |
-| 2300 | 3.49 | 55.4% |
-| 0030 | 3.81 | 55.0% |
+| Model | Entry Price | When | Fill Rate |
+|-------|-----------|------|-----------|
+| **E1** (Market-On-Next-Bar) | Next bar OPEN after confirm | 1 bar after confirmation | ~100% |
+| **E2** (Market-On-Confirm-Close) | Confirm bar CLOSE | At confirmation | 100% |
+| **E3** (Limit-At-ORB) | ORB level (orb_high/orb_low) | First retrace after confirm | ~96-97% on G5+ days |
 
-**Key insight**: Overnight ORBs (2300, 0030) have larger ranges (~3.5-3.8pt), which means friction ($8.40 RT) eats less of the R-multiple. Day ORBs (0900, 1000) have ~2pt ranges where costs consume ~30% of each win.
+**E3** fill rate is much higher on G5+ days (~97%) vs overall (~70-80%). On large-ORB
+days, price retraces are common because the initial breakout is more volatile.
 
-### 0900 ORB has ZERO validated strategies
-Despite being the "primary" ORB, 0900 fails validation across all RR/CB/filter combos. Not enough edge after costs to survive yearly robustness + stress testing. This is likely because the 0900 ORB is the most traded, most efficient time — less alpha available.
+### Entry model performance depends on ORB time
+| ORB | Best EM | Why |
+|-----|---------|-----|
+| 0900 | **E1** (+38.2R) | Fast momentum entry; extra confirmation wastes edge |
+| 1000 | **E1** (+18.6R) | Same pattern as 0900 |
+| 1800 | **E3** (+22.6R) | GLOBEX open spikes through then retraces; E3 catches the pullback |
+| 2300 | **E3** (+12.3R) | Overnight session has mean-reversion character |
 
-### Overnight ORBs (2300, 0030) carry most validated strategies
-149 of 252 validated strategies use overnight ORBs (2300: 93, 0030: 56). Structural reasons:
-- Larger ORB sizes = better cost absorption
-- Lower liquidity = less efficient pricing = more alpha
-- CME electronic-only session = different participant mix
-
-### 1800 ORB is a strong performer
-67 validated strategies — second only to 2300. The 1800 ORB marks the CME session open, providing a natural structural edge.
-
-### By ORB breakdown (expanded scan)
-| ORB | Validated | % of total |
-|-----|-----------|-----------|
-| 2300 | 93 | 36.9% |
-| 1800 | 67 | 26.6% |
-| 0030 | 56 | 22.2% |
-| 1100 | 26 | 10.3% |
-| 1000 | 10 | 4.0% |
-| 0900 | 0 | 0.0% |
+**Key insight**: E1 and E3 exploit opposite mechanisms. E1 = ride the momentum.
+E3 = get a better price on the pullback. The right model depends on the session character.
 
 ---
 
-## Confirm Bars
+## The Central Finding: ORB Size Is the Edge
 
-### CB5 is the dominant edge filter (expanded scan, 2,160 combos)
-122 of 252 validated strategies use CB5. The win rate improvement is monotonic:
+The single most important variable is **ORB size**. Larger ORBs produce better outcomes because:
+1. More room for directional follow-through relative to noise
+2. Fixed friction ($8.40 RT) is a smaller percentage of risk
+3. Large ORBs signal genuine institutional participation
 
-| CB | Validated | Avg ExpR | Overall WR | Entries |
-|----|-----------|----------|------------|---------|
-| CB1 | 0 | - | 39.1% | 45,954 |
-| CB2 | 1 | 0.118 | 44.2% | 45,090 |
-| CB3 | 43 | 0.238 | 47.7% | 44,448 |
-| CB4 | 86 | 0.283 | 50.6% | 43,932 |
-| CB5 | 122 | 0.309 | 52.6% | 43,494 |
+### Win rate by 0900 ORB size (E1 RR2.5 CB2):
+| ORB Size | N | Win Rate | Avg R |
+|----------|---|----------|-------|
+| < 2pt | 948 | 27.2% | -0.47 |
+| 2-4pt | 144 | 25.7% | -0.30 |
+| 4-6pt | 49 | 38.8% | +0.19 |
+| 6-10pt | 42 | 50.0% | +0.59 |
+| 10-20pt | 20 | 36.8% | +0.23 |
 
-CB5 only loses 5.4% of entries vs CB1 but wins 13.5pp more often. Fakeout breaks are extremely common — waiting 5 consecutive 1m closes outside the ORB filters them effectively.
+**Breakeven is around 4pt ORB size.** Below 4pt, the house wins.
 
-### Why CB5 beats CB3
-The original scan (CB1-3 only) made CB3 look dominant. Expanding to CB4-5 revealed that the fakeout-filtering benefit continues improving with more confirm bars, with diminishing entry loss per step. CB5 is the sweet spot — CB6+ would likely start losing meaningful entries.
+### ORB size filter sensitivity (0900 E1 RR2.5 CB2):
+| Filter | N | WR | TotalR | AvgR | Notes |
+|--------|---|-----|--------|------|-------|
+| G4+ | 125 | 40.0% | +38.2 | +0.31 | Best total R |
+| G5+ | 102 | 41.2% | +37.0 | +0.36 | Good balance |
+| G6+ | 76 | 40.8% | +28.8 | +0.38 | Highest per-trade edge |
+| G8+ | 47 | 36.2% | +12.4 | +0.26 | Declining (overfitting) |
+| G10+ | 34 | 32.4% | +5.0 | +0.15 | Too restrictive |
 
----
+**G4+ maximizes total R; G5+/G6+ maximize per-trade edge.**
 
-## Win Rate Monotonicity (Verified)
+### Percentage-based filter as alternative
+A 0.15% of price filter approximates G5 point-based (TotalR: +37.2 vs +37.0)
+but auto-adapts to gold price level. A 5pt ORB at $4800 (0.10%) is different
+from 5pt at $1800 (0.28%). Consider implementing for regime stability.
 
-Win rate declines perfectly with RR target (zero violations across 90 transitions):
-
-| RR | Traded | Win Rate |
-|----|--------|----------|
-| 1.0 | 22,487 | 66.3% |
-| 1.5 | 22,367 | 53.0% |
-| 2.0 | 22,208 | 44.3% |
-| 2.5 | 22,042 | 38.0% |
-| 3.0 | 21,839 | 32.9% |
-| 4.0 | 21,450 | 26.0% |
-
----
-
-## RSI at 0900 — Not Useful as a Filter
-
-### The indicator is stale for most ORBs
-RSI-14 on 5m closes is computed at 09:00 Brisbane (23:00 UTC).
-- ORB 0900: 0.7 hours stale (reasonable)
-- ORB 1000: 1.6 hours stale (marginal)
-- ORB 1800: 9.6 hours stale (useless)
-- ORB 2300: 14.4 hours stale (useless)
-- ORB 0030: 15.9 hours stale (useless)
-
-Using a 16-hour-old RSI reading to filter a 0030 ORB trade is meaningless.
-
-### The signal is indistinguishable from noise
-RSI > 70 ("overbought") win rate by ORB:
-- 0030: 76.9% vs 71.1% rest (+5.8pp on N=65)
-- 0900: 66.1% vs 73.2% rest (**-7.1pp** — OPPOSITE direction!)
-- 1000: 77.3% vs 72.5% rest (+4.8pp on N=66)
-
-The "overbought is better" signal flips direction depending on ORB. On 65-66 trades per bucket, a 5pp difference is ~3 trades. That's noise.
-
-### Oversold is completely useless
-- Only 29 days in 5 years had RSI < 30 (2.0% of days)
-- ALL 108 oversold strategies rejected at Phase 1 (sample size < 30)
-- No statistical power whatsoever
-
-### RSI distribution is tightly centered
-- p5=34.5, p25=44.3, p50=50.5, p75=57.7, p95=70.5
-- Only 5.6% of days are "overbought", 2.0% "oversold"
-- Gold RSI barely reaches extremes — the 30/70 thresholds are too strict for this market
-
----
-
-## ORB Size Filters
-
-### Expanded filter grid (12 filters)
+### Validated strategies by filter
 | Filter | Validated | Avg ExpR | Description |
 |--------|-----------|----------|-------------|
-| NO_FILTER | 44 | 0.257 | No size restriction |
-| ORB_G2 | 40 | 0.252 | Size >= 2pt |
-| ORB_L3 | 40 | 0.267 | Size < 3pt |
-| ORB_G3 | 27 | 0.296 | Size >= 3pt |
-| ORB_L4 | 27 | 0.251 | Size < 4pt |
-| ORB_G4 | 21 | 0.343 | Size >= 4pt |
-| ORB_L6 | 16 | 0.244 | Size < 6pt |
-| ORB_L2 | 14 | 0.271 | Size < 2pt |
-| ORB_G5 | 10 | 0.381 | Size >= 5pt |
-| ORB_G6 | 7 | 0.401 | Size >= 6pt |
-| ORB_L8 | 4 | 0.218 | Size < 8pt |
-| ORB_G8 | 2 | 0.462 | Size >= 8pt |
+| ORB_G6 | 97 | 0.30 | Size >= 6pt (most validated) |
+| ORB_G5 | 90 | 0.28 | Size >= 5pt |
+| ORB_G4 | 73 | 0.22 | Size >= 4pt |
+| ORB_G3 | 34 | 0.17 | Size >= 3pt |
+| ORB_G8 | 18 | 0.21 | Size >= 8pt |
+| NO_FILTER | 0 | - | ALL negative ExpR |
+| ORB_L* | 0 | - | ALL negative ExpR |
 
-**Pattern**: Higher G-thresholds have fewer strategies but higher ExpR. Larger ORBs = more room for the trade to breathe + friction is smaller as % of risk. But they're rarer, so sample sizes are smaller.
+**NO_FILTER and L-filter strategies are ALL negative.** Without filtering for large ORBs, there is no edge after costs.
 
 ---
 
-## Year-over-Year Stability
+## Confirm Bar Analysis
 
-### ORB sizes are dramatically increasing (gold volatility regime change)
-| ORB | 2021 median | 2022 median | 2023 median | 2024 median | 2025 median |
-|-----|-------------|-------------|-------------|-------------|-------------|
-| 0900 | 0.7pt | 0.8pt | 0.8pt | 2.5pt | 14.8pt |
-| 1000 | 0.9pt | 0.9pt | 0.8pt | 1.3pt | 3.3pt |
-| 1100 | 1.5pt | 1.9pt | 1.5pt | 2.2pt | 5.0pt |
-| 1800 | 1.1pt | 1.4pt | 1.1pt | 1.8pt | 3.6pt |
-| 2300 | 2.5pt | 2.7pt | 2.2pt | 4.8pt | 8.0pt |
-| 0030 | 2.7pt | 2.9pt | 2.4pt | 4.3pt | 7.2pt |
+### CB behavior depends on ORB time AND entry model
 
-2025 ORB sizes are 3-4x larger than 2021. This means:
-- G4/G5/G6 filters will pass on MORE days going forward
-- L2/L3 filters will pass on FEWER days
-- Fixed-point cost friction ($8.40) becomes less significant as ORB sizes grow
-- Strategies validated on small-ORB years may be MORE profitable in the current regime
+On **G5+ days** (the tradeable universe), CB2 is optimal for momentum entries:
 
-### Break rates stable across years
-84-88% break rate every year, every ORB. No structural shift.
+**0900 E1 RR2.5 G5+ (momentum entry):**
+| CB | N | WR | TotalR | AvgR |
+|----|---|-----|--------|------|
+| CB1 | 102 | 38.2% | +28.9 | +0.30 |
+| **CB2** | **102** | **41.2%** | **+37.0** | **+0.38** |
+| CB3 | 99 | 35.4% | +21.1 | +0.23 |
+| CB4 | 99 | 33.3% | +15.0 | +0.16 |
+| CB5 | 98 | 29.6% | +4.3 | +0.05 |
 
-### Win rates positive every year for top strategies
-The most consistent strategies maintain positive expectancy in every individual year (2021-2025), not just in aggregate. No "one good year carrying the average."
+**1800 E3 RR2.0 G5+ (retrace entry):**
+| CB | N | WR | TotalR | AvgR |
+|----|---|-----|--------|------|
+| CB1 | 81 | 43.2% | +13.8 | +0.17 |
+| CB2 | 80 | 45.0% | +17.6 | +0.22 |
+| CB3 | 78 | 46.2% | +19.6 | +0.25 |
+| CB4 | 77 | 46.8% | +20.6 | +0.27 |
+| **CB5** | **75** | **48.0%** | **+22.6** | **+0.30** |
 
-### Most consistent strategy
-MGC_1800_RR2.0_CB4_ORB_L3 — lowest year-to-year standard deviation (StdR=0.0227), positive every year.
+**Why the reversal**: On G5+ days, 0900 breakouts are genuine (large institutional
+moves). Extra confirmation bars waste the edge — CB2 is enough to confirm direction,
+then E1 captures momentum. But for 1800 E3, more confirm bars = more time for the
+retrace to develop = better fill quality at the ORB level.
 
 ---
 
-## Cost Model Reality
+## RR Target Optimization
 
-### MGC friction is significant on small ORBs
-- Total RT friction: $8.40 (commission $2.40 + spread $2.00 + slippage $4.00)
-- On a 2pt ORB: friction = 0.84pt = 42% of risk
-- On a 4pt ORB: friction = 0.84pt = 21% of risk
-- On a 10pt ORB: friction = 0.84pt = 8.4% of risk
+**0900 E1 CB2 G5+:**
+| RR | N | WR | TotalR | AvgR |
+|----|---|-----|--------|------|
+| 1.0 | 102 | 56.9% | +7.5 | +0.08 |
+| 1.5 | 102 | 50.0% | +18.6 | +0.19 |
+| 2.0 | 102 | 45.1% | +28.4 | +0.29 |
+| **2.5** | **102** | **41.2%** | **+37.0** | **+0.38** |
+| 3.0 | 102 | 32.4% | +27.1 | +0.29 |
+| 4.0 | 102 | 24.5% | +21.7 | +0.23 |
 
-**The ORB_G4 filter (size > 4pt) exists because small ORBs get eaten by costs.**
+**RR2.5 is the sweet spot** for 0900: enough room for the trend, not so far it rarely hits.
 
-### 1RR is the most cost-sensitive target
-At 1RR, your win gives you less than 1R (friction reduces the win).
-For a 2pt ORB: win_r = 0.70, so you're risking 1R to make 0.70R.
-You need 59% win rate just to break even.
-At RR1.5-2.0 the math is kinder per trade but you need fewer, bigger wins.
+**1800 E3 CB5 G5+:**
+| RR | N | WR | TotalR | AvgR |
+|----|---|-----|--------|------|
+| 1.0 | 75 | 64.0% | +11.2 | +0.15 |
+| 1.5 | 75 | 54.7% | +17.5 | +0.23 |
+| **2.0** | **75** | **48.0%** | **+22.6** | **+0.30** |
+| 2.5 | 75 | 40.0% | +20.2 | +0.27 |
+
+**RR2.0 is optimal for 1800 E3**: lower target works because E3 gets a better entry price
+(closer to the ORB level), so the risk-to-reward math favors a slightly closer target.
+
+---
+
+## Direction Bias
+
+**0900/1000: Long breakouts are stronger than short**
+
+| ORB | Direction | N | WR | AvgR | TotalR |
+|-----|-----------|---|-----|------|--------|
+| 0900 | LONG | 56 | 44.6% | +0.50 | +26.8 |
+| 0900 | SHORT | 46 | 37.0% | +0.23 | +10.2 |
+| 1000 | LONG | 48 | 41.7% | +0.41 | +18.6 |
+| 1000 | SHORT | 40 | 30.0% | -0.04 | -1.8 |
+
+**1000 SHORT is actually negative** — long-only filter adds significant edge at 1000.
+0900 short is still positive but weaker. Both-directions 0900 gives more total R (+37 vs +27).
+
+**1800 shows no strong directional bias** with E3 entry (long +10.7R, short +4.4R at RR2.5).
+
+---
+
+## Correlation Between ORBs
+
+Different ORBs show **negative PnL correlation** (even better than independence):
+
+| Pair | PnL Correlation | Interpretation |
+|------|----------------|---------------|
+| 0900 vs 1000 | -0.04 | Near zero |
+| 0900 vs 1800 | -0.12 | Mild hedging |
+| 1000 vs 1800 | **-0.39** | **Strong hedging** |
+| 0900 vs 2300 | +0.11 | Mild positive |
+| 1000 vs 2300 | +0.29 | Some overlap |
+| 1800 vs 2300 | -0.09 | Near zero |
+
+**1000 and 1800 are strongly negatively correlated**: when one loses, the other tends
+to win. This makes them an excellent pair for portfolio construction.
+
+Note: Trade DATE overlap between ORBs is high (91-100%, same G5+ days), but break
+directions are ~50% random between ORBs, creating genuine PnL independence.
+
+---
+
+## Optimized Portfolio (4 Legs)
+
+Each leg exploits a **different mechanism** at a different session:
+
+### Leg 1: 0900 E1 CB2 RR2.5 G4+ (both directions)
+- **Mechanism**: Momentum breakout at US market open
+- N=125, WR=40.0%, TotalR=+38.2, AvgR=+0.31
+- Avg risk: 12.9pt ($129/contract)
+- Positive every year 2022-2026
+
+### Leg 2: 1000 E1 CB2 RR2.5 G5+ LONG-ONLY
+- **Mechanism**: Gold intraday long bias on large-move days
+- N=48, WR=41.7%, TotalR=+18.6, AvgR=+0.39
+- Avg risk: 12.5pt ($125/contract)
+- Only trades 2025+ in meaningful volume
+
+### Leg 3: 1800 E3 CB5 RR2.0 G5+ (both directions)
+- **Mechanism**: GLOBEX open spike-and-retrace; limit entry at ORB level
+- N=75, WR=48.0%, TotalR=+22.6, AvgR=+0.30
+- Avg risk: 8.9pt ($89/contract)
+- Highest win rate of any leg
+
+### Leg 4 (optional): 2300 E3 CB4 RR1.5 G8+
+- **Mechanism**: Overnight session retrace entry on very large ORB days
+- N=50, WR=52.0%, TotalR=+12.3, AvgR=+0.25
+- Requires G8+ filter (stricter)
+- Adds +12.3R and reduces max DD by 1.2R
+
+### Combined performance
+
+**3-leg portfolio:**
+| Year | N | R | Notes |
+|------|---|---|-------|
+| 2021 | 9 | -4.0 | Low vol, few trades |
+| 2022 | 9 | +3.5 | |
+| 2023 | 6 | +6.4 | |
+| 2024 | 16 | +0.8 | |
+| 2025 | 157 | +56.5 | Regime shift kicks in |
+| 2026 | 51 | +16.3 | YTD (Jan-Feb) |
+| **TOTAL** | **248** | **+79.4** | |
+
+- Max Drawdown: 9.6R
+- Max Consecutive Losses: 7
+- Avg: 19 trades/month, +6.5R/month (2025-2026)
+
+**4-leg portfolio (with 2300):**
+| Year | N | R |
+|------|---|---|
+| 2021 | 10 | -5.0 |
+| 2022 | 10 | +4.8 |
+| 2023 | 6 | +6.4 |
+| 2024 | 24 | +1.7 |
+| 2025 | 188 | +62.6 |
+| 2026 | 60 | +21.3 |
+| **TOTAL** | **298** | **+91.7** |
+
+- Max Drawdown: 8.3R
+- Max Consecutive Losses: 7
+
+### Dollar economics (1 MGC contract per signal)
+| Metric | 3-leg | 4-leg |
+|--------|-------|-------|
+| Avg risk/trade | $116 | ~$110 |
+| 2025 return | $6,570 | $7,260 |
+| Max DD | $1,115 | $963 |
+| Capital needed | ~$2,300 | ~$2,200 |
+| 2025 ROI | ~283% | ~330% |
+
+*Capital = margin ($1,210) + max DD buffer*
+
+---
+
+## Worst-Case Scenarios
+
+| Metric | Value |
+|--------|-------|
+| Worst month | 2025-06: -2.7R ($314) |
+| Max consecutive losses | 7 |
+| Max drawdown | 9.6R (3-leg) / 8.3R (4-leg) |
+| Longest flat period | 334 days (Dec 2023 - Nov 2024) |
+| Max win streak | 7 |
+
+---
+
+## The Regime Shift (Critical Context)
+
+Gold prices and ORB sizes have changed dramatically:
+
+| Year | Avg Gold Price | 0900 Median ORB | G5+ Days (0900) |
+|------|---------------|-----------------|-----------------|
+| 2021 | $1,794 | 0.7pt | 7 (3%) |
+| 2022 | $1,807 | 0.9pt | 9 (3%) |
+| 2023 | $1,955 | 0.9pt | 2 (1%) |
+| 2024 | $2,404 | 1.0pt | 7 (3%) |
+| 2025 | $3,463 | 2.5pt | 70 (27%) |
+| 2026 | $4,768 | 14.8pt | 21 (88%) |
+
+**2021-2024**: G5+ days were rare (2-9/year). Strategies had tiny samples.
+**2025-2026**: G5+ days are common (70+/year). The strategies generate real trade volume.
+
+### Multi-ORB day frequency (2025)
+| G5+ ORBs triggered | Days | % |
+|--------------------|------|---|
+| 0 | 139 | 44% |
+| 1 | 69 | 22% |
+| 2 | 44 | 14% |
+| 3 | 31 | 10% |
+| 4 | 33 | 10% |
+
+108/282 days (38%) had 2+ G5+ ORBs triggered simultaneously.
+Position sizing must account for correlated exposure on multi-ORB days.
+
+### Regime risk
+- If gold returns to $1800, G5+ days drop to ~5/year (untradeable frequency)
+- The edge requires elevated volatility/price levels
+- A 5pt ORB at $4800 gold = 0.10% — increasingly normal
+
+---
+
+## Day of Week (Low Confidence)
+
+| Day | N | WR | AvgR | Confidence |
+|-----|---|-----|------|-----------|
+| Monday | 44 | 34.1% | +0.21 | Medium (large N) |
+| Tuesday | 17 | 52.9% | +0.71 | Low (small N) |
+| Wednesday | 15 | 33.3% | +0.06 | Low |
+| Thursday | 12 | 41.7% | +0.34 | Low |
+| Friday | 14 | 57.1% | +0.83 | Low |
+
+**Monday weakness is the only pattern with reasonable sample.** Tuesday/Friday
+appear strong but N is too small to be reliable. Not recommended as a filter.
+
+---
+
+## Volatility Persistence
+
+Previous day's ORB size mildly predicts today's edge:
+
+| Previous ORB | N | WR | AvgR |
+|-------------|---|-----|------|
+| Small (<3pt) | 36 | 41.7% | +0.39 |
+| Medium (3-6pt) | 28 | 32.1% | +0.11 |
+| Large (6-10pt) | 14 | 50.0% | +0.59 |
+| Huge (10+pt) | 24 | 45.8% | +0.52 |
+
+**Consecutive G5+ days** are stronger: when yesterday was also G5+, WR=45.1%,
+AvgR=+0.47 vs WR=37.3%, AvgR=+0.25 for non-streak days (N=51 each).
+
+---
+
+## RSI as Directional Confirmation
+
+RSI at 0900 predicts outcome **when combined with direction**:
+
+| RSI + Direction | N | WR | AvgR | TotalR |
+|----------------|---|-----|------|--------|
+| RSI 60+ LONG | 24 | 54.2% | +0.81 | +19.5 |
+| RSI 40-60 LONG | 21 | 47.6% | +0.52 | +10.9 |
+| RSI 40-60 SHORT | 21 | 42.9% | +0.36 | +7.6 |
+| RSI 60+ SHORT | 14 | 28.6% | -0.00 | -0.0 |
+| RSI <40 SHORT | 11 | 36.4% | +0.25 | +2.7 |
+| RSI <40 LONG | 11 | 18.2% | -0.34 | -3.7 |
+
+**Key pattern**: RSI confirms direction. Long in bullish RSI (60+) = +0.81 AvgR.
+Long in bearish RSI (<40) = -0.34 AvgR. Short in bullish RSI = breakeven.
+
+**Not yet actionable**: Small samples (N=11-24). Monitor but don't filter yet.
+If confirmed with more data, RSI 60+ LONG-only could be a very strong signal.
+
+---
+
+## MAE/MFE Analysis
+
+### Trade excursion patterns (0900 E1 CB2 RR2.5 G5+)
+| Outcome | N | Avg MAE | Med MAE | Avg MFE | Med MFE |
+|---------|---|---------|---------|---------|---------|
+| Win | 42 | 0.27R | 0.22R | 2.45R | 2.39R |
+| Loss | 56 | 1.04R | 1.00R | 0.62R | 0.41R |
+| Scratch | 4 | 0.54R | 0.54R | 0.80R | 0.74R |
+
+**Winners barely dip** (MAE 0.22R median) before going to target.
+**45% of losses went 0.5R favorable before stopping out** (25 of 56).
+**27% of losses went 1.0R favorable** (15 of 56) — trailing stop candidates.
+
+### Trailing stop opportunity (theoretical)
+Moving stop to breakeven at +1.0R would rescue losses that went favorable:
+
+| Leg | Current R | Losses Rescued | R Saved | With Trailing |
+|-----|-----------|---------------|---------|---------------|
+| 0900 E1 CB2 RR2.5 G4+ | +38.2 | 18 | +18.0 | +56.2 |
+| 1000 E1 CB2 RR2.5 G5+ LONG | +18.6 | 4 | +4.0 | +22.6 |
+| 1800 E3 CB5 RR2.0 G5+ | +22.6 | 9 | +9.0 | +31.6 |
+| 2300 E3 CB4 RR1.5 G8+ | +12.3 | 1 | +1.0 | +13.3 |
+| **TOTAL** | **+91.7** | **32** | **+32.0** | **+123.7** |
+
+*Upper bound — requires bar-by-bar simulation to verify ordering.
+Some wins that dipped back below entry after +1.0R would also become breakeven.*
+
+### Loss speed patterns
+| Duration | N | Avg MFE |
+|----------|---|---------|
+| <30min (fast stop) | 19 | 0.13R |
+| 30-60min | 12 | 0.41R |
+| 1-2hr | 21 | 0.67R |
+| 2hr+ (slow bleed) | 19 | 1.09R |
+
+Fast losses (< 30min) never went favorable — genuine immediate reversals.
+Slow losses (2hr+) went 1.09R favorable on average — prime trailing stop targets.
+
+---
+
+## Multi-Trade Day Analysis
+
+When the portfolio fires multiple signals on the same day:
+
+| Trades/Day | Days | Avg Day R | Total R |
+|-----------|------|-----------|---------|
+| 1 trade | 64 | -0.02 | -1.5 |
+| 2 trades | 44 | +0.49 | +21.3 |
+| 3 trades | 20 | +2.46 | +49.2 |
+| 4 trades | 9 | +1.65 | +14.9 |
+
+**3-4 trade days are the money makers.** When multiple ORBs trigger G5+,
+it signals a high-volatility day where breakouts tend to follow through.
+
+Worst single day: -2.0R (capped by portfolio diversification).
+Best single day: +5.8R.
+
+---
+
+## Gold Price Level Effect
+
+| Price Level | N | WR | AvgR | Notes |
+|------------|---|-----|------|-------|
+| <$2000 | 10 | 20.0% | -0.18 | Low vol, small ORBs |
+| $2000-3000 | 12 | 41.7% | +0.39 | |
+| $3000-4000 | 25 | 60.0% | +0.90 | Sweet spot |
+| $4000+ | 55 | 36.4% | +0.21 | Still positive |
+
+**$3000-4000 is the sweet spot** (WR=60%, AvgR=+0.90). At $4000+, the edge narrows
+but remains positive. This is because 5pt at $4800 is only 0.10% of price — the
+point-based filter becomes less selective. Consider switching to percentage-based.
+
+---
+
+## Cost Model
+
+### MGC friction per round-trip
+- Commission: $2.40/RT
+- Spread: $2.00/RT (1 tick x $10)
+- Slippage: $4.00/RT
+- **Total: $8.40/RT = 0.84pt**
+
+### Impact by ORB size
+| ORB Size | Friction % of Risk | Win at 1RR | Need WR |
+|----------|-------------------|------------|---------|
+| 2pt | 42% | 0.58R | 63.3% |
+| 4pt | 21% | 0.79R | 55.9% |
+| 6pt | 14% | 0.86R | 53.7% |
+| 10pt | 8.4% | 0.92R | 52.2% |
 
 ---
 
@@ -190,15 +452,14 @@ At RR1.5-2.0 the math is kinder per trade but you need fewer, bigger wins.
 - MGC only had ~78% coverage — not enough for accurate ORBs
 - Prices are identical (same underlying, same exchange)
 
-### Missing bars = missing volume, not missing price
-Databento only emits a bar when there's a trade. Gaps mean no trades, not missing data. The OHLCV of the next bar after a gap already captures the full price range.
+### 689,310 outcomes computed
+- 6 ORBs x 6 RRs x 5 CBs x 3 entry models x ~1,460 days
+- Entry models: E1 (next bar open), E2 (confirm close), E3 (limit at ORB retrace)
+- All outcomes include realistic entry prices from actual bar data
 
-### Late-session data thins out
-- 2,887 "ghost scratches" — entries with zero bars after entry
-- 97% are on ORB 0030 and 2300 (overnight ORBs near end of CME session)
-- GC volume dies after ~14:00 UTC. Entries after that may fire on the last trade of the day.
-- These are classified as "scratch" (technically correct — no target/stop hit observed)
-- Impact: worst case ~0.9pp on aggregate win rate
-
-### ~56-bar days are weekends
-10 days have <500 bars. All are Sundays/holidays with thin electronic-only trading. ORBs on these days exist but are unreliable.
+### Validation criteria
+- Exclude 2021 (structurally different low-vol regime, 3% G5+ rate)
+- 80% of included years must be positive
+- Post-cost ExpR > 0
+- Survive 1.5x cost stress test
+- Minimum 50 trades
