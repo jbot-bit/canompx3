@@ -49,8 +49,9 @@ Raw data files contain GC (full-size Gold futures) which has ~40-70% more 1-minu
 
 ### Data Files (gitignored)
 
-- `DB/GOLD_DB_FULLSIZE/` — 1,559 daily `.dbn.zst` files (2021-02-05 to 2026-02-04)
-- `gold.db` — DuckDB database (created by `init_db.py`)
+- `DB/GOLD_DB_FULLSIZE/` — 1,555 daily `.dbn.zst` files (2021-02-05 to 2026-02-04)
+- `DB/gold_db_fullsize_2016-2021/` — 1,557 daily `.dbn.zst` files (2016-02-01 to 2021-02-03)
+- `gold.db` — DuckDB database (created by `init_db.py`, ~10 years of data)
 
 ---
 
@@ -151,8 +152,8 @@ python pipeline/build_daily_features.py --instrument MGC --start 2024-01-01 --en
 ### Guardrails
 
 ```bash
-python pipeline/check_drift.py                        # Drift detection (7 checks)
-python -m pytest tests/ -v                             # Full test suite (86 tests)
+python pipeline/check_drift.py                        # Drift detection (19 checks)
+python -m pytest tests/ -v                             # Full test suite (~500 tests)
 python -m pytest tests/ -x -q                          # Fast test run (stop on first fail)
 python pipeline/health_check.py                        # All-in-one health check
 ```
@@ -256,7 +257,10 @@ Defaults (override if needed):
 
 ## Important Notes
 
-1. **Data files**: 1,559 daily `.dbn.zst` files in `DB/GOLD_DB_FULLSIZE/`. Pipeline currently expects a single concatenated file — `ingest_dbn_daily.py` handles individual daily files.
+1. **Data files**: Two directories of daily `.dbn.zst` files covering 10 years:
+   - `DB/GOLD_DB_FULLSIZE/` — 1,555 files (2021-02-05 to 2026-02-04)
+   - `DB/gold_db_fullsize_2016-2021/` — 1,557 files (2016-02-01 to 2021-02-03)
+   Pipeline currently expects a single concatenated file — `ingest_dbn_daily.py` handles individual daily files. Use `--data-dir` to point at either directory.
 
 2. **Contract selection**: Uses GC (full-size Gold) outrights for price data — better 1m bar coverage than MGC. Automatically handles futures rolls by selecting most liquid GC contract per day (highest volume, excluding spreads). Prices are identical to MGC (same underlying).
 
@@ -264,7 +268,7 @@ Defaults (override if needed):
 
 4. **Weekend/holiday handling**: Missing data stored as NULL. Scripts will not crash on days without data.
 
-5. **Minimum start date**: Dataset starts 2021-02-05. GC has full bar coverage from this date. Old MGC-only limit (pre-2019) no longer applies since we use GC bars.
+5. **Minimum start date**: Dataset starts 2016-02-01. GC has full bar coverage from this date. Two data directories cover 2016-2021 and 2021-2026 with zero overlap.
 
 6. **Schema migration**: If you have old data, wipe and rebuild:
    ```bash

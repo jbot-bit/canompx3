@@ -243,6 +243,9 @@ class ExecutionEngine:
                     trade.pnl_r = 0.0
 
                 self.daily_pnl_r += trade.pnl_r
+                self.completed_trades.append(trade)
+                if self.risk_manager is not None:
+                    self.risk_manager.on_trade_exit(trade.pnl_r)
 
                 events.append(TradeEvent(
                     event_type="SCRATCH",
@@ -253,7 +256,6 @@ class ExecutionEngine:
                     contracts=trade.contracts,
                     reason="session_end",
                 ))
-                self.completed_trades.append(trade)
             elif trade.state in (TradeState.ARMED, TradeState.CONFIRMING):
                 trade.state = TradeState.EXITED
                 self.completed_trades.append(trade)
@@ -439,6 +441,8 @@ class ExecutionEngine:
         trade.target_price = target_price
         trade.state = TradeState.ENTERED
         self.daily_trade_count += 1
+        if self.risk_manager is not None:
+            self.risk_manager.on_trade_entry()
 
         new_trades.append(trade)
 
@@ -480,6 +484,7 @@ class ExecutionEngine:
                         can_enter, reason = self.risk_manager.can_enter(
                             strategy_id=trade.strategy_id,
                             orb_label=trade.orb_label,
+                            active_trades=self.active_trades,
                             daily_pnl_r=self.daily_pnl_r,
                         )
                         if not can_enter:
@@ -506,6 +511,8 @@ class ExecutionEngine:
                     trade.target_price = target_price
                     trade.state = TradeState.ENTERED
                     self.daily_trade_count += 1
+                    if self.risk_manager is not None:
+                        self.risk_manager.on_trade_entry()
 
                     events.append(TradeEvent(
                         event_type="ENTRY",
@@ -516,6 +523,8 @@ class ExecutionEngine:
                         contracts=trade.contracts,
                         reason="confirm_bars_met_E1",
                     ))
+                    # Don't check exit on fill bar — match backtester behavior
+                    continue
 
                 elif trade.entry_model == "E3":
                     # E3: check if bar retraces to ORB level
@@ -550,6 +559,7 @@ class ExecutionEngine:
                             can_enter, reason = self.risk_manager.can_enter(
                                 strategy_id=trade.strategy_id,
                                 orb_label=trade.orb_label,
+                                active_trades=self.active_trades,
                                 daily_pnl_r=self.daily_pnl_r,
                             )
                             if not can_enter:
@@ -576,6 +586,8 @@ class ExecutionEngine:
                         trade.target_price = target_price
                         trade.state = TradeState.ENTERED
                         self.daily_trade_count += 1
+                        if self.risk_manager is not None:
+                            self.risk_manager.on_trade_entry()
 
                         events.append(TradeEvent(
                             event_type="ENTRY",
@@ -640,6 +652,8 @@ class ExecutionEngine:
 
         self.daily_pnl_r += trade.pnl_r
         self.completed_trades.append(trade)
+        if self.risk_manager is not None:
+            self.risk_manager.on_trade_exit(trade.pnl_r)
 
         events.append(TradeEvent(
             event_type="EXIT",

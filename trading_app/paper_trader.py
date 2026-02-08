@@ -165,8 +165,8 @@ def replay_historical(
             end_date=end_date or date.max,
         )
 
-    engine = ExecutionEngine(portfolio, cost_spec)
     risk_mgr = RiskManager(risk_limits)
+    engine = ExecutionEngine(portfolio, cost_spec, risk_manager=risk_mgr)
 
     con = duckdb.connect(str(db_path), read_only=True)
     try:
@@ -197,14 +197,7 @@ def replay_historical(
 
                 for event in events:
                     if event.event_type == "ENTRY":
-                        # Check risk limits
-                        allowed, reason = risk_mgr.can_enter(
-                            event.strategy_id,
-                            _orb_from_strategy(event.strategy_id),
-                            engine.active_trades,
-                            engine.daily_pnl_r,
-                        )
-
+                        # Engine already checked risk_manager — just record
                         entry = JournalEntry(
                             mode="replay",
                             trading_day=td,
@@ -215,16 +208,24 @@ def replay_historical(
                             entry_price=event.price,
                             contracts=event.contracts,
                         )
+                        day_summary.trades_entered += 1
+                        result.journal.append(entry)
 
-                        if not allowed:
-                            entry.risk_rejected = True
-                            entry.risk_reason = reason
-                            day_summary.risk_rejections += 1
-                            result.total_risk_rejections += 1
-                        else:
-                            risk_mgr.on_trade_entry()
-                            day_summary.trades_entered += 1
-
+                    elif event.event_type == "REJECT":
+                        entry = JournalEntry(
+                            mode="replay",
+                            trading_day=td,
+                            strategy_id=event.strategy_id,
+                            entry_model=_entry_model_from_strategy(event.strategy_id),
+                            direction=event.direction,
+                            entry_ts=event.timestamp,
+                            entry_price=event.price,
+                            contracts=event.contracts,
+                            risk_rejected=True,
+                            risk_reason=event.reason,
+                        )
+                        day_summary.risk_rejections += 1
+                        result.total_risk_rejections += 1
                         result.journal.append(entry)
 
                     elif event.event_type in ("EXIT", "SCRATCH"):
@@ -239,7 +240,7 @@ def replay_historical(
                                 je.outcome = event.reason.split("_")[0] if "_" in event.reason else event.reason
                                 break
 
-                        # Update PnL tracking
+                        # Update PnL tracking from completed trade
                         trade = _find_completed_trade(engine, event.strategy_id)
                         if trade and trade.pnl_r is not None:
                             for je in reversed(result.journal):
@@ -251,8 +252,6 @@ def replay_historical(
                                     je.stop_price = trade.stop_price
                                     je.target_price = trade.target_price
                                     break
-
-                            risk_mgr.on_trade_exit(trade.pnl_r)
 
                             if trade.pnl_r > 0:
                                 day_summary.wins += 1
@@ -270,13 +269,18 @@ def replay_historical(
                 if event.event_type == "SCRATCH":
                     day_summary.scratches += 1
                     result.total_scratches += 1
+                    # Get actual mark-to-market PnL from engine's completed trade
+                    trade = _find_completed_trade(engine, event.strategy_id)
+                    scratch_pnl = trade.pnl_r if (trade and trade.pnl_r is not None) else 0.0
                     for je in reversed(result.journal):
                         if (je.strategy_id == event.strategy_id
                                 and je.trading_day == td
                                 and je.exit_ts is None
                                 and not je.risk_rejected):
                             je.outcome = "scratch"
-                            je.pnl_r = 0.0
+                            je.exit_ts = event.timestamp
+                            je.exit_price = event.price
+                            je.pnl_r = scratch_pnl
                             break
 
             day_summary.daily_pnl_r = engine.daily_pnl_r

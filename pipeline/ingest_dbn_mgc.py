@@ -579,10 +579,10 @@ def main():
     start_filter = date.fromisoformat(args.start) if args.start else MINIMUM_START_DATE
     end_filter = date.fromisoformat(args.end) if args.end else None
 
-    # ENFORCE MINIMUM DATE (MGC pre-2019 data is garbage - 5-28% coverage)
+    # ENFORCE MINIMUM DATE (GC data available from 2016-02-01 onward)
     if start_filter < MINIMUM_START_DATE:
         print(f"WARNING: Requested start {start_filter} is before MINIMUM_START_DATE {MINIMUM_START_DATE}")
-        print("         MGC data pre-2019 has only 5-28% bar coverage - ORBs will be incomplete/wrong")
+        print(f"         GC data coverage starts {MINIMUM_START_DATE}")
         print(f"         FORCING start to {MINIMUM_START_DATE}")
         print()
         start_filter = MINIMUM_START_DATE

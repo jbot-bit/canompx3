@@ -430,3 +430,235 @@ class TestE3StopBeforeFill:
         assert confirm.confirmed is True
         signal = resolve_entry(bars, confirm, "E3", WINDOW_END)
         assert signal.triggered is False
+
+
+# ============================================================================
+# ORB boundary behavior tests
+# ============================================================================
+
+class TestORBBoundaryConfirm:
+    """Pin down exact boundary: close == orb_high/orb_low is NOT a break.
+
+    detect_confirm uses strict inequality (> for long, < for short).
+    A close exactly at the ORB boundary stays INSIDE the range.
+    """
+
+    def test_long_close_exactly_at_orb_high_no_confirm(self):
+        bars = _make_bars([ORB_HIGH], BREAK_TS)
+        result = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, WINDOW_END)
+        assert result.confirmed is False
+
+    def test_long_close_one_tick_above_orb_high_confirms(self):
+        bars = _make_bars([ORB_HIGH + 0.1], BREAK_TS)
+        result = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, WINDOW_END)
+        assert result.confirmed is True
+        assert result.confirm_bar_close == ORB_HIGH + 0.1
+
+    def test_short_close_exactly_at_orb_low_no_confirm(self):
+        bars = _make_bars([ORB_LOW], BREAK_TS)
+        result = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "short", 1, WINDOW_END)
+        assert result.confirmed is False
+
+    def test_short_close_one_tick_below_orb_low_confirms(self):
+        bars = _make_bars([ORB_LOW - 0.1], BREAK_TS)
+        result = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "short", 1, WINDOW_END)
+        assert result.confirmed is True
+        assert result.confirm_bar_close == ORB_LOW - 0.1
+
+
+class TestORBBoundaryConsecutiveReset:
+    """A close exactly at the ORB boundary resets the consecutive counter.
+
+    With confirm_bars=2, if bar 1 closes outside and bar 2 closes exactly
+    at the boundary, the counter resets -- bar 2 counts as INSIDE.
+    """
+
+    def test_long_boundary_close_resets_consecutive_count(self):
+        bars = _make_bars([ORB_HIGH + 1.0, ORB_HIGH, ORB_HIGH + 2.0], BREAK_TS)
+        result = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 2, WINDOW_END)
+        # Bar 0: outside (count=1), Bar 1: at boundary = inside (count=0),
+        # Bar 2: outside (count=1). Never reaches 2.
+        assert result.confirmed is False
+
+    def test_short_boundary_close_resets_consecutive_count(self):
+        bars = _make_bars([ORB_LOW - 1.0, ORB_LOW, ORB_LOW - 2.0], BREAK_TS)
+        result = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "short", 2, WINDOW_END)
+        assert result.confirmed is False
+
+    def test_long_boundary_reset_then_two_outside_confirms(self):
+        bars = _make_bars(
+            [ORB_HIGH + 1.0, ORB_HIGH, ORB_HIGH + 2.0, ORB_HIGH + 3.0],
+            BREAK_TS,
+        )
+        result = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 2, WINDOW_END)
+        # Bar 0: count=1, Bar 1: reset, Bar 2: count=1, Bar 3: count=2 -> confirm
+        assert result.confirmed is True
+        assert result.confirm_bar_idx == 3
+
+
+class TestORBBoundaryE3Retrace:
+    """E3 retrace uses <= for long and >= for short (inclusive at boundary).
+
+    A bar whose low exactly equals orb_high DOES count as a retrace for long.
+    A bar whose high exactly equals orb_low DOES count as a retrace for short.
+    """
+
+    def test_e3_long_retrace_exactly_at_orb_high_fills(self):
+        timestamps = [
+            BREAK_TS,
+            BREAK_TS + timedelta(minutes=1),
+        ]
+        bars = pd.DataFrame({
+            "ts_utc": timestamps,
+            "open": [ORB_HIGH + 1.0, ORB_HIGH + 2.0],
+            "high": [ORB_HIGH + 2.0, ORB_HIGH + 3.0],
+            "low": [ORB_HIGH + 0.5, ORB_HIGH],  # bar 1 low exactly at orb_high
+            "close": [ORB_HIGH + 1.0, ORB_HIGH + 1.5],
+            "volume": [100, 100],
+        })
+        confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, WINDOW_END)
+        assert confirm.confirmed is True
+        signal = resolve_entry(bars, confirm, "E3", WINDOW_END)
+        assert signal.triggered is True
+        assert signal.entry_price == ORB_HIGH
+
+    def test_e3_long_retrace_one_tick_above_orb_high_no_fill(self):
+        timestamps = [
+            BREAK_TS,
+            BREAK_TS + timedelta(minutes=1),
+        ]
+        bars = pd.DataFrame({
+            "ts_utc": timestamps,
+            "open": [ORB_HIGH + 1.0, ORB_HIGH + 2.0],
+            "high": [ORB_HIGH + 2.0, ORB_HIGH + 3.0],
+            "low": [ORB_HIGH + 0.5, ORB_HIGH + 0.1],  # just above orb_high
+            "close": [ORB_HIGH + 1.0, ORB_HIGH + 1.5],
+            "volume": [100, 100],
+        })
+        confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, WINDOW_END)
+        assert confirm.confirmed is True
+        signal = resolve_entry(bars, confirm, "E3", WINDOW_END)
+        assert signal.triggered is False
+
+    def test_e3_short_retrace_exactly_at_orb_low_fills(self):
+        timestamps = [
+            BREAK_TS,
+            BREAK_TS + timedelta(minutes=1),
+        ]
+        bars = pd.DataFrame({
+            "ts_utc": timestamps,
+            "open": [ORB_LOW - 1.0, ORB_LOW - 2.0],
+            "high": [ORB_LOW - 0.5, ORB_LOW],  # bar 1 high exactly at orb_low
+            "low": [ORB_LOW - 2.0, ORB_LOW - 3.0],
+            "close": [ORB_LOW - 1.0, ORB_LOW - 1.5],
+            "volume": [100, 100],
+        })
+        confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "short", 1, WINDOW_END)
+        assert confirm.confirmed is True
+        signal = resolve_entry(bars, confirm, "E3", WINDOW_END)
+        assert signal.triggered is True
+        assert signal.entry_price == ORB_LOW
+
+    def test_e3_short_retrace_one_tick_below_orb_low_no_fill(self):
+        timestamps = [
+            BREAK_TS,
+            BREAK_TS + timedelta(minutes=1),
+        ]
+        bars = pd.DataFrame({
+            "ts_utc": timestamps,
+            "open": [ORB_LOW - 1.0, ORB_LOW - 2.0],
+            "high": [ORB_LOW - 0.5, ORB_LOW - 0.1],  # just below orb_low
+            "low": [ORB_LOW - 2.0, ORB_LOW - 3.0],
+            "close": [ORB_LOW - 1.0, ORB_LOW - 1.5],
+            "volume": [100, 100],
+        })
+        confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "short", 1, WINDOW_END)
+        assert confirm.confirmed is True
+        signal = resolve_entry(bars, confirm, "E3", WINDOW_END)
+        assert signal.triggered is False
+
+
+class TestORBBoundaryE3Stop:
+    """E3 stop uses <= for long (lows <= stop) and >= for short (highs >= stop).
+
+    A bar whose low exactly equals the stop price DOES trigger the stop,
+    invalidating the E3 fill even if the retrace would otherwise succeed.
+    """
+
+    def test_e3_long_stop_exactly_at_orb_low_blocks_fill(self):
+        timestamps = [
+            BREAK_TS,
+            BREAK_TS + timedelta(minutes=1),
+            BREAK_TS + timedelta(minutes=2),
+        ]
+        bars = pd.DataFrame({
+            "ts_utc": timestamps,
+            "open": [ORB_HIGH + 1.0, ORB_HIGH + 0.5, ORB_HIGH + 0.5],
+            "high": [ORB_HIGH + 2.0, ORB_HIGH + 1.0, ORB_HIGH + 1.0],
+            "low": [ORB_HIGH + 0.5, ORB_LOW, ORB_HIGH],  # bar 1 low == stop, bar 2 retraces
+            "close": [ORB_HIGH + 1.0, ORB_LOW + 1.0, ORB_HIGH + 0.5],
+            "volume": [100, 100, 100],
+        })
+        confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, WINDOW_END)
+        assert confirm.confirmed is True
+        signal = resolve_entry(bars, confirm, "E3", WINDOW_END)
+        assert signal.triggered is False
+
+    def test_e3_long_stop_one_tick_above_orb_low_allows_fill(self):
+        timestamps = [
+            BREAK_TS,
+            BREAK_TS + timedelta(minutes=1),
+            BREAK_TS + timedelta(minutes=2),
+        ]
+        bars = pd.DataFrame({
+            "ts_utc": timestamps,
+            "open": [ORB_HIGH + 1.0, ORB_HIGH + 0.5, ORB_HIGH + 0.5],
+            "high": [ORB_HIGH + 2.0, ORB_HIGH + 1.0, ORB_HIGH + 1.0],
+            "low": [ORB_HIGH + 0.5, ORB_LOW + 0.1, ORB_HIGH],  # bar 1 just above stop, bar 2 retraces
+            "close": [ORB_HIGH + 1.0, ORB_LOW + 1.0, ORB_HIGH + 0.5],
+            "volume": [100, 100, 100],
+        })
+        confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, WINDOW_END)
+        assert confirm.confirmed is True
+        signal = resolve_entry(bars, confirm, "E3", WINDOW_END)
+        assert signal.triggered is True
+        assert signal.entry_price == ORB_HIGH
+
+    def test_e3_short_stop_exactly_at_orb_high_blocks_fill(self):
+        timestamps = [
+            BREAK_TS,
+            BREAK_TS + timedelta(minutes=1),
+            BREAK_TS + timedelta(minutes=2),
+        ]
+        bars = pd.DataFrame({
+            "ts_utc": timestamps,
+            "open": [ORB_LOW - 1.0, ORB_LOW - 0.5, ORB_LOW - 0.5],
+            "high": [ORB_LOW - 0.5, ORB_HIGH, ORB_LOW],  # bar 1 high == stop, bar 2 retraces
+            "low": [ORB_LOW - 2.0, ORB_LOW - 1.0, ORB_LOW - 1.0],
+            "close": [ORB_LOW - 1.0, ORB_HIGH - 1.0, ORB_LOW - 0.5],
+            "volume": [100, 100, 100],
+        })
+        confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "short", 1, WINDOW_END)
+        assert confirm.confirmed is True
+        signal = resolve_entry(bars, confirm, "E3", WINDOW_END)
+        assert signal.triggered is False
+
+    def test_e3_short_stop_one_tick_below_orb_high_allows_fill(self):
+        timestamps = [
+            BREAK_TS,
+            BREAK_TS + timedelta(minutes=1),
+            BREAK_TS + timedelta(minutes=2),
+        ]
+        bars = pd.DataFrame({
+            "ts_utc": timestamps,
+            "open": [ORB_LOW - 1.0, ORB_LOW - 0.5, ORB_LOW - 0.5],
+            "high": [ORB_LOW - 0.5, ORB_HIGH - 0.1, ORB_LOW],  # bar 1 just below stop, bar 2 retraces
+            "low": [ORB_LOW - 2.0, ORB_LOW - 1.0, ORB_LOW - 1.0],
+            "close": [ORB_LOW - 1.0, ORB_HIGH - 1.0, ORB_LOW - 0.5],
+            "volume": [100, 100, 100],
+        })
+        confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "short", 1, WINDOW_END)
+        assert confirm.confirmed is True
+        signal = resolve_entry(bars, confirm, "E3", WINDOW_END)
+        assert signal.triggered is True
+        assert signal.entry_price == ORB_LOW

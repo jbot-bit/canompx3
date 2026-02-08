@@ -651,17 +651,18 @@ class TestRandomOutcomeMath:
                 orb_high = r[f"orb_{orb}_high"]
                 orb_low = r[f"orb_{orb}_low"]
                 entry = r["entry_price"]
-                is_long = entry > r["stop_price"]
+                stop = r["stop_price"]
+                is_long = entry > stop
+                # E1 fills at next bar's open — can gap beyond ORB in either direction.
+                # The key invariant: stop must be on the correct side of entry.
                 if is_long:
-                    # E1 long: entry should be >= orb_high (next bar open after confirm)
-                    assert entry >= orb_high - 0.01, (
-                        f"E1 long entry={entry} < orb_high={orb_high} "
+                    assert stop < entry, (
+                        f"E1 long: stop={stop} >= entry={entry} "
                         f"({orb} {r['trading_day']})"
                     )
                 else:
-                    # E1 short: entry should be <= orb_low
-                    assert entry <= orb_low + 0.01, (
-                        f"E1 short entry={entry} > orb_low={orb_low} "
+                    assert stop > entry, (
+                        f"E1 short: stop={stop} <= entry={entry} "
                         f"({orb} {r['trading_day']})"
                     )
         finally:

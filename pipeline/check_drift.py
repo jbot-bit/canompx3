@@ -588,6 +588,172 @@ def check_entry_price_sanity() -> list[str]:
     return violations
 
 
+def check_nested_production_writes() -> list[str]:
+    """Check that nested/*.py never writes to production tables.
+
+    Production tables: orb_outcomes, experimental_strategies, validated_setups.
+    Nested code must only write to nested_outcomes, nested_strategies, nested_validated.
+    """
+    violations = []
+
+    nested_dir = TRADING_APP_DIR / "nested"
+    if not nested_dir.exists():
+        return violations
+
+    production_tables = ["orb_outcomes", "experimental_strategies", "validated_setups"]
+    write_keywords = ["INSERT", "DELETE", "UPDATE", "DROP"]
+
+    for fpath in nested_dir.glob("*.py"):
+        if fpath.name == "__init__.py":
+            continue
+
+        content = fpath.read_text(encoding='utf-8')
+        lines = content.splitlines()
+
+        for line_num, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith('#'):
+                continue
+
+            for table in production_tables:
+                for keyword in write_keywords:
+                    pattern = re.compile(
+                        rf'{keyword}\s+(?:OR\s+REPLACE\s+)?(?:INTO\s+|FROM\s+)?{table}\b',
+                        re.IGNORECASE,
+                    )
+                    if pattern.search(line):
+                        violations.append(
+                            f"  nested/{fpath.name}:{line_num}: SQL write to production table "
+                            f"'{table}': {stripped[:80]}"
+                        )
+
+    return violations
+
+
+def check_schema_query_consistency_trading_app(trading_app_dir: Path) -> list[str]:
+    """Extend Check 4 to scan trading_app/ for SQL table reference consistency."""
+    violations = []
+
+    # Gather ALL known tables from all schema files
+    create_tables = set()
+    schema_files = [
+        PIPELINE_DIR / "init_db.py",
+        trading_app_dir / "db_manager.py",
+        trading_app_dir / "nested" / "schema.py",
+    ]
+    for sf in schema_files:
+        if sf.exists():
+            sf_content = sf.read_text(encoding='utf-8')
+            create_tables.update(re.findall(
+                r'CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)', sf_content, re.IGNORECASE
+            ))
+
+    if not create_tables:
+        return violations
+
+    sql_keywords = {
+        'SELECT', 'WHERE', 'AND', 'OR', 'NOT', 'NULL', 'SET', 'VALUES',
+        'ORDER', 'GROUP', 'BY', 'AS', 'HAVING', 'LIMIT', 'OFFSET',
+        'DISTINCT', 'ON', 'TRANSACTION', 'TABLE', 'REPLACE', 'EXISTS',
+        'SCHEMA', 'COLUMNS', 'INFORMATION_SCHEMA', 'MAIN', 'INDEX',
+        'VIEW', 'TYPE', 'INTERVAL', 'ZONE', 'CAST', 'COUNT', 'MIN',
+        'MAX', 'SUM', 'AVG', 'FIRST', 'LAST', 'EXTRACT', 'EPOCH',
+        'BEGIN', 'COMMIT', 'ROLLBACK', 'DROP', 'CREATE', 'IF',
+        'TEXT', 'INTEGER', 'DOUBLE', 'BOOLEAN', 'DATE', 'TIMESTAMP',
+        'TIMESTAMPTZ', 'VARCHAR', 'BIGINT', 'REAL', 'FLOAT',
+    }
+
+    cte_pattern = re.compile(r'(?:WITH|,)\s+(\w+)\s+AS\s*\(', re.IGNORECASE)
+    table_ref_pattern = re.compile(r'(?:FROM|INTO|UPDATE|JOIN)\s+(\w+)', re.IGNORECASE)
+    sql_string_pattern = re.compile(r'"""(.*?)"""|\'\'\'(.*?)\'\'\'', re.DOTALL)
+    sql_indicator = re.compile(r'\b(SELECT|INSERT|DELETE|UPDATE|CREATE)\b', re.IGNORECASE)
+
+    if not trading_app_dir.exists():
+        return violations
+
+    for fpath in trading_app_dir.rglob("*.py"):
+        if fpath.name in ("__init__.py", "schema.py", "db_manager.py"):
+            continue
+
+        content = fpath.read_text(encoding='utf-8')
+
+        for match in sql_string_pattern.finditer(content):
+            sql_text = match.group(1) or match.group(2)
+
+            # Require at least 2 SQL keywords to distinguish real SQL from docstrings
+            # (docstrings can contain "Update", "Create" etc. as English words)
+            sql_hits = sql_indicator.findall(sql_text)
+            if len(sql_hits) < 2:
+                continue
+
+            cte_names = {m.group(1) for m in cte_pattern.finditer(sql_text)}
+            line_num = content[:match.start()].count('\n') + 1
+
+            for ref_match in table_ref_pattern.finditer(sql_text):
+                table = ref_match.group(1)
+                if table.upper() in sql_keywords:
+                    continue
+                if 'information_schema' in sql_text.lower():
+                    continue
+                if table in cte_names:
+                    continue
+                if table.endswith('_df') or table.endswith('_frame'):
+                    continue
+                extract_ctx = sql_text[max(0, ref_match.start()-30):ref_match.start()]
+                if 'EXTRACT' in extract_ctx.upper() or 'EPOCH' in extract_ctx.upper():
+                    continue
+                if table not in create_tables:
+                    violations.append(
+                        f"  {fpath.name}:~{line_num}: SQL references table '{table}' "
+                        f"not in schema"
+                    )
+
+    return violations
+
+
+def check_timezone_hygiene() -> list[str]:
+    """Block pytz imports and hardcoded timedelta(hours=10) patterns.
+
+    Known footguns:
+      - pytz has surprising DST normalization behavior
+      - timedelta(hours=10) is a hardcoded Brisbane offset instead of using zoneinfo
+    """
+    violations = []
+
+    pytz_pattern = re.compile(r'import\s+pytz|from\s+pytz\s+import')
+    # Match timedelta(hours=10) with optional spaces
+    hardcoded_tz_pattern = re.compile(r'timedelta\s*\(\s*hours\s*=\s*10\s*\)')
+
+    for base_dir in [PIPELINE_DIR, TRADING_APP_DIR]:
+        if not base_dir.exists():
+            continue
+
+        for fpath in base_dir.rglob("*.py"):
+            if fpath.name in ("__init__.py", "check_drift.py"):
+                continue
+
+            content = fpath.read_text(encoding='utf-8')
+            lines = content.splitlines()
+
+            for line_num, line in enumerate(lines, 1):
+                stripped = line.strip()
+                if stripped.startswith('#'):
+                    continue
+
+                if pytz_pattern.search(line):
+                    violations.append(
+                        f"  {fpath.name}:{line_num}: pytz import "
+                        f"(use zoneinfo instead): {stripped[:80]}"
+                    )
+                if hardcoded_tz_pattern.search(line):
+                    violations.append(
+                        f"  {fpath.name}:{line_num}: Hardcoded timedelta(hours=10) "
+                        f"(use timezone.utc or zoneinfo): {stripped[:80]}"
+                    )
+
+    return violations
+
+
 def check_all_imports_resolve() -> list[str]:
     """Verify that all .py files in pipeline/ and trading_app/ can be imported.
 
@@ -821,6 +987,42 @@ def main():
     # Check 16: All imports resolve (no typos, missing deps)
     print("Check 16: All imports resolve...")
     v = check_all_imports_resolve()
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 17: Nested code must never write to production tables
+    print("Check 17: Nested production table write guard...")
+    v = check_nested_production_writes()
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 18: Schema-query consistency in trading_app/
+    print("Check 18: Trading app schema-query consistency...")
+    v = check_schema_query_consistency_trading_app(TRADING_APP_DIR)
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 19: Timezone hygiene (no pytz, no hardcoded UTC+10)
+    print("Check 19: Timezone hygiene...")
+    v = check_timezone_hygiene()
     if v:
         print("  FAILED:")
         for line in v:

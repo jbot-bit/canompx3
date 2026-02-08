@@ -408,6 +408,90 @@ class TestFilters:
 # CLI Tests
 # ============================================================================
 
+class TestArmedAtBarGuard:
+    """The armed_at_bar guard prevents look-ahead bias.
+
+    When E1 transitions to ARMED on bar N, the trade must NOT fill on
+    bar N (the confirm bar).  It must wait for bar N+1.  Without this
+    guard, the confirm bar and the fill bar would be the same bar,
+    which is look-ahead bias.
+    """
+
+    def _build_orb_and_break(self, engine, ts_base):
+        """Build 2300 ORB (high=2705, low=2695) and trigger a long break.
+
+        Returns (break_bar_ts, break_events).
+        """
+        # 5 bars inside the ORB window (13:00-13:04 UTC)
+        for i in range(5):
+            engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
+
+        # Bar at 13:05 — outside the window, close > orb_high => long break
+        break_ts = ts_base + timedelta(minutes=5)
+        events = engine.on_bar(
+            _bar(break_ts, 2704, 2710, 2703, 2706)
+        )
+        return break_ts, events
+
+    def test_e1_armed_at_bar_no_fill_same_bar(self):
+        """E1 ARMED on bar N must NOT produce an ENTRY on bar N."""
+        strategy = _make_strategy(
+            entry_model="E1",
+            confirm_bars=1,
+            strategy_id="MGC_2300_E1_RR2.0_CB1_NO_FILTER",
+        )
+        engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
+        engine.on_trading_day_start(date(2024, 1, 5))
+
+        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        break_ts, break_events = self._build_orb_and_break(engine, ts_base)
+
+        # --- Bar N (break bar) assertions ---
+        # 1) No ENTRY event on the break bar
+        entry_events = [e for e in break_events if e.event_type == "ENTRY"]
+        assert len(entry_events) == 0, "E1 must NOT fill on the break/confirm bar"
+
+        # 2) Trade exists and is ARMED
+        armed = [t for t in engine.active_trades if t.state == TradeState.ARMED]
+        assert len(armed) == 1, "Exactly one trade should be ARMED"
+
+        # 3) armed_at_bar matches current bar count (the guard value)
+        trade = armed[0]
+        assert trade.armed_at_bar == engine._bar_count, (
+            "armed_at_bar must equal _bar_count on the bar where ARMED was set"
+        )
+
+    def test_e1_armed_fills_on_next_bar(self):
+        """E1 ARMED on bar N fills on bar N+1 with that bar's open price."""
+        strategy = _make_strategy(
+            entry_model="E1",
+            confirm_bars=1,
+            strategy_id="MGC_2300_E1_RR2.0_CB1_NO_FILTER",
+        )
+        engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
+        engine.on_trading_day_start(date(2024, 1, 5))
+
+        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        _break_ts, break_events = self._build_orb_and_break(engine, ts_base)
+
+        # Confirm ARMED, no ENTRY on bar N
+        assert len([e for e in break_events if e.event_type == "ENTRY"]) == 0
+
+        # --- Bar N+1 ---
+        next_bar_ts = ts_base + timedelta(minutes=6)
+        next_bar = _bar(next_bar_ts, 2708, 2715, 2707, 2712)
+        next_events = engine.on_bar(next_bar)
+
+        entry_events = [e for e in next_events if e.event_type == "ENTRY"]
+        assert len(entry_events) == 1, "E1 must fill on the bar after ARMED"
+        assert entry_events[0].price == 2708.0, "E1 fills at next bar's open"
+        assert entry_events[0].timestamp == next_bar_ts
+
+        # Trade should now be ENTERED
+        entered = [t for t in engine.active_trades if t.state == TradeState.ENTERED]
+        assert len(entered) == 1
+
+
 class TestCLI:
     def test_import(self):
         """Module imports without error."""
