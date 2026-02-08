@@ -274,12 +274,43 @@ Defaults (override if needed):
 
 ---
 
+## Strategy Classification Rules (FIX5 — MANDATORY)
+
+### Trade Day Invariant
+A valid trade day requires BOTH:
+1. A break occurred (outcome exists in `orb_outcomes`)
+2. The strategy's `filter_type` makes the day eligible (per `daily_features`)
+
+`orb_outcomes` contains ALL break-days regardless of filter. The portfolio overlay
+MUST only write `pnl_r` on eligible days (`series == 0.0`). Low trade counts under
+strict filters (G6/G8) are EXPECTED behavior, not bugs.
+
+### Classification Thresholds (from `config.py`)
+| Class | Min Samples | Usage |
+|-------|------------|-------|
+| **CORE** | >= 100 | Standalone portfolio weight |
+| **REGIME** | 30-99 | Conditional overlay / signal only |
+| **INVALID** | < 30 | Not tradeable |
+
+### Behavioral Rules
+1. NEVER treat "low trade count" alone as evidence of a bug
+2. ALWAYS verify `trade_days <= eligible_days` before investigating
+3. If `trade_days > eligible_days` → assume corruption until proven otherwise
+4. Do NOT suggest "fixing" filters to increase sample size
+5. NEVER recommend REGIME strategies as standalone trading systems
+6. G6/G8 filters are volatility regime detectors — evaluate for conditional uplift, drawdown reduction, crisis alpha
+
+### Where Edge Lives
+- Edge requires G4+ ORB size filter (NO_FILTER and L-filters have negative ExpR)
+- E1 for momentum sessions (0900/1000), E3 for retrace sessions (1800/2300)
+- ORB size is THE edge: <4pt = house wins, 4-10pt = breakeven+, >10pt = strong
+- 2021 is structurally different (tiny ORBs) — exclude from validation
+
+---
+
 ## What's NOT Built Yet
 
 See `ROADMAP.md` for planned features including:
-- Cost model (`pipeline/cost_model.py`) — for MAE/MFE in R-multiples
-- `trading_app/` module (strategy detection, execution)
-- `validated_setups` table (production strategies)
-- Strategy validation framework
+- Phase 6e: Monitoring & alerting (live vs backtest drift detection)
 
-**Do NOT reference these unbuilt features in code or tests. Build guardrails for what exists.**
+**Do NOT reference unbuilt features in code or tests. Build guardrails for what exists.**

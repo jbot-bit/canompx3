@@ -27,7 +27,7 @@ import pandas as pd
 
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.cost_model import get_cost_spec, CostSpec
-from trading_app.config import ALL_FILTERS
+from trading_app.config import ALL_FILTERS, classify_strategy
 
 
 # =========================================================================
@@ -52,6 +52,11 @@ class PortfolioStrategy:
     median_risk_points: float | None
     weight: float = 1.0
     max_contracts: int = 1
+
+    @property
+    def classification(self) -> str:
+        """CORE / REGIME / INVALID per FIX5 rules."""
+        return classify_strategy(self.sample_size)
 
 
 @dataclass

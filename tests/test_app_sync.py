@@ -29,6 +29,9 @@ from pipeline.init_db import ORB_LABELS, DAILY_FEATURES_SCHEMA
 from trading_app.config import (
     ALL_FILTERS,
     ENTRY_MODELS,
+    CORE_MIN_SAMPLES,
+    REGIME_MIN_SAMPLES,
+    classify_strategy,
     NoFilter,
     OrbSizeFilter,
     MGC_ORB_SIZE_FILTERS,
@@ -174,6 +177,45 @@ class TestEntryModelsSync:
 
     def test_entry_models_are_strings(self):
         assert all(isinstance(em, str) for em in ENTRY_MODELS)
+
+
+# ============================================================================
+# 3b. Strategy classification sync (FIX5 rules)
+# ============================================================================
+
+class TestStrategyClassificationSync:
+    """FIX5 strategy classification thresholds must be consistent."""
+
+    def test_core_threshold(self):
+        assert CORE_MIN_SAMPLES == 100
+
+    def test_regime_threshold(self):
+        assert REGIME_MIN_SAMPLES == 30
+
+    def test_regime_below_core(self):
+        assert REGIME_MIN_SAMPLES < CORE_MIN_SAMPLES
+
+    def test_classify_core(self):
+        assert classify_strategy(100) == "CORE"
+        assert classify_strategy(500) == "CORE"
+
+    def test_classify_regime(self):
+        assert classify_strategy(30) == "REGIME"
+        assert classify_strategy(99) == "REGIME"
+
+    def test_classify_invalid(self):
+        assert classify_strategy(29) == "INVALID"
+        assert classify_strategy(0) == "INVALID"
+
+    def test_boundary_core(self):
+        """Exactly CORE_MIN_SAMPLES is CORE, one below is REGIME."""
+        assert classify_strategy(CORE_MIN_SAMPLES) == "CORE"
+        assert classify_strategy(CORE_MIN_SAMPLES - 1) == "REGIME"
+
+    def test_boundary_regime(self):
+        """Exactly REGIME_MIN_SAMPLES is REGIME, one below is INVALID."""
+        assert classify_strategy(REGIME_MIN_SAMPLES) == "REGIME"
+        assert classify_strategy(REGIME_MIN_SAMPLES - 1) == "INVALID"
 
 
 # ============================================================================

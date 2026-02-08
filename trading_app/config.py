@@ -146,3 +146,36 @@ ALL_FILTERS: dict[str, StrategyFilter] = {
 # E3 = Limit order at ORB level, waiting for retrace (better price, may not fill)
 # See entry_rules.py for implementation: detect_confirm() + resolve_entry()
 ENTRY_MODELS = ["E1", "E2", "E3"]
+
+# =========================================================================
+# Strategy classification thresholds (FIX5 rules)
+# =========================================================================
+# CORE: enough samples for standalone portfolio weight
+# REGIME: conditional overlay / signal only (not standalone)
+# INVALID: fails min-sample, stress, or robustness
+CORE_MIN_SAMPLES = 100
+REGIME_MIN_SAMPLES = 30
+
+
+def classify_strategy(sample_size: int) -> str:
+    """Classify a strategy by sample size per FIX5 rules.
+
+    Returns 'CORE', 'REGIME', or 'INVALID'.
+    """
+    if sample_size >= CORE_MIN_SAMPLES:
+        return "CORE"
+    elif sample_size >= REGIME_MIN_SAMPLES:
+        return "REGIME"
+    else:
+        return "INVALID"
+
+
+# =========================================================================
+# Portfolio overlay invariant (FIX5 rules)
+# =========================================================================
+# A valid trade day requires BOTH conditions:
+#   1) A break occurred (outcome exists in orb_outcomes)
+#   2) The strategy's filter_type makes the day eligible
+# orb_outcomes contains ALL break-days regardless of filter.
+# Overlay must ONLY write pnl_r on eligible days (series == 0.0).
+# Low trade counts under strict filters (G6/G8) are EXPECTED, not bugs.
