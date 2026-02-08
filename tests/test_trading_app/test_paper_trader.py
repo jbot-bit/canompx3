@@ -1,5 +1,8 @@
 """
 Tests for trading_app.paper_trader module.
+
+Optimized: uses 0900 ORB (150 bars/day vs 900 bars/day for 2300 ORB),
+class-scoped fixtures share expensive DB + replay across tests.
 """
 
 import sys
@@ -32,9 +35,9 @@ def _cost():
 
 def _make_strategy(**overrides):
     base = {
-        "strategy_id": "MGC_2300_E2_RR2.0_CB1_NO_FILTER",
+        "strategy_id": "MGC_0900_E2_RR2.0_CB1_NO_FILTER",
         "instrument": "MGC",
-        "orb_label": "2300",
+        "orb_label": "0900",
         "entry_model": "E2",
         "rr_target": 2.0,
         "confirm_bars": 1,
@@ -66,7 +69,7 @@ def _setup_replay_db(tmp_path, n_days=5):
     """
     Create a DB with bars_1m + daily_features for replay testing.
 
-    Generates uptrending data with breaks at 2300 ORB (13:00 UTC).
+    Uses 0900 ORB (23:00 UTC = minute 0 of trading day) — only 150 bars/day needed.
     """
     db_path = tmp_path / "replay.db"
     con = duckdb.connect(str(db_path))
@@ -86,8 +89,7 @@ def _setup_replay_db(tmp_path, n_days=5):
             trading_day += timedelta(days=1)
             continue
 
-        # 2300 ORB window = 13:00-13:05 UTC
-        # Trading day: 23:00 UTC prev day to 23:00 UTC this day
+        # 0900 Brisbane = 23:00 UTC prev day = trading day start
         prev_day = trading_day - timedelta(days=1)
         td_start = datetime(prev_day.year, prev_day.month, prev_day.day,
                             23, 0, tzinfo=timezone.utc)
@@ -95,36 +97,25 @@ def _setup_replay_db(tmp_path, n_days=5):
         base_price = 2700.0 + days_created * 2.0
         bars = []
 
-        # Generate 900 bars (15 hours) — covers 23:00 to 14:00 UTC
-        # 2300 ORB window at 13:00 UTC = minute 840 from td_start
-        for i in range(900):
+        # 150 bars (2.5 hours) — ORB at minute 0-4, break at 5, trend after
+        for i in range(150):
             ts = td_start + timedelta(minutes=i)
-            # ORB window: 13:00-13:05 UTC (minutes 840-845 from td_start)
-            # Bars in ORB range: stable around base_price
-            # Break bar after 13:05: close > orb_high + margin
-            minute_offset = i
 
-            if minute_offset < 840:
-                # Pre-ORB: stable
-                o = base_price + 0.1 * (minute_offset % 10)
-                h = o + 0.5
-                l = o - 0.3
-                c = o + 0.2
-            elif minute_offset < 845:
-                # ORB window: range is base_price-0.5 to base_price+2.0
+            if i < 5:
+                # ORB window: 23:00-23:05 UTC
                 o = base_price + 1.0
                 h = base_price + 2.0
                 l = base_price - 0.5
                 c = base_price + 1.5
-            elif minute_offset == 845:
-                # Break bar: close > orb_high (base+2.0) -> long break
+            elif i == 5:
+                # Break bar: close > orb_high -> long break
                 o = base_price + 2.5
                 h = base_price + 4.0
                 l = base_price + 2.0
-                c = base_price + 3.5  # Close > orb_high
+                c = base_price + 3.5
             else:
-                # Post-break: trend up for wins
-                trend = (minute_offset - 845) * 0.02
+                # Post-break: strong uptrend (resolves RR2.0 within ~50 bars)
+                trend = (i - 5) * 0.1
                 o = base_price + 3.5 + trend
                 h = o + 1.0
                 l = o - 0.3
@@ -142,16 +133,15 @@ def _setup_replay_db(tmp_path, n_days=5):
             bars,
         )
 
-        # Daily features with 2300 ORB
         orb_high = round(base_price + 2.0, 2)
         orb_low = round(base_price - 0.5, 2)
-        break_ts = (td_start + timedelta(minutes=845)).isoformat()
+        break_ts = (td_start + timedelta(minutes=5)).isoformat()
 
         con.execute(
             """INSERT OR REPLACE INTO daily_features
                (trading_day, symbol, orb_minutes, bar_count_1m,
-                orb_2300_high, orb_2300_low, orb_2300_size,
-                orb_2300_break_dir, orb_2300_break_ts)
+                orb_0900_high, orb_0900_low, orb_0900_size,
+                orb_0900_break_dir, orb_0900_break_ts)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::TIMESTAMPTZ)""",
             [
                 trading_day, "MGC", 5, len(bars),
@@ -169,7 +159,7 @@ def _setup_replay_db(tmp_path, n_days=5):
 
 
 # ============================================================================
-# Helpers Tests
+# Helpers Tests (no DB needed)
 # ============================================================================
 
 class TestHelpers:
@@ -182,12 +172,30 @@ class TestHelpers:
 
 
 # ============================================================================
-# Replay Tests
+# Replay Tests — shared class fixture (runs replay ONCE)
 # ============================================================================
+
+@pytest.fixture(scope="class")
+def shared_replay(tmp_path_factory):
+    """Shared DB + replay result for all TestReplay tests."""
+    tmp_dir = tmp_path_factory.mktemp("replay_shared")
+    db_path = _setup_replay_db(tmp_dir, n_days=5)
+    strategy = _make_strategy()
+    portfolio = _make_portfolio([strategy])
+    result = replay_historical(
+        db_path=db_path,
+        portfolio=portfolio,
+        instrument="MGC",
+        start_date=date(2024, 1, 8),
+        end_date=date(2024, 1, 15),
+    )
+    return result, db_path, strategy
+
 
 class TestReplay:
 
     def test_empty_portfolio(self, tmp_path):
+        """Empty portfolio produces no trades (needs own fixture)."""
         db_path = _setup_replay_db(tmp_path, n_days=3)
         portfolio = _make_portfolio([])
         result = replay_historical(
@@ -200,67 +208,31 @@ class TestReplay:
         assert result.total_trades == 0
         assert result.days_processed == 0
 
-    def test_replay_produces_trades(self, tmp_path):
-        db_path = _setup_replay_db(tmp_path, n_days=5)
-        strategy = _make_strategy()
-        portfolio = _make_portfolio([strategy])
-        result = replay_historical(
-            db_path=db_path,
-            portfolio=portfolio,
-            instrument="MGC",
-            start_date=date(2024, 1, 8),
-            end_date=date(2024, 1, 15),
-        )
+    def test_replay_produces_trades(self, shared_replay):
+        result, _, _ = shared_replay
         assert result.days_processed > 0
         assert result.total_trades > 0
 
-    def test_journal_entries_have_strategy_id(self, tmp_path):
-        db_path = _setup_replay_db(tmp_path, n_days=3)
-        strategy = _make_strategy()
-        portfolio = _make_portfolio([strategy])
-        result = replay_historical(
-            db_path=db_path,
-            portfolio=portfolio,
-            instrument="MGC",
-            start_date=date(2024, 1, 8),
-            end_date=date(2024, 1, 12),
-        )
+    def test_journal_entries_have_strategy_id(self, shared_replay):
+        result, _, strategy = shared_replay
         for entry in result.journal:
             assert entry.strategy_id == strategy.strategy_id
             assert entry.mode == "replay"
 
-    def test_day_summaries_populated(self, tmp_path):
-        db_path = _setup_replay_db(tmp_path, n_days=3)
-        strategy = _make_strategy()
-        portfolio = _make_portfolio([strategy])
-        result = replay_historical(
-            db_path=db_path,
-            portfolio=portfolio,
-            instrument="MGC",
-            start_date=date(2024, 1, 8),
-            end_date=date(2024, 1, 12),
-        )
+    def test_day_summaries_populated(self, shared_replay):
+        result, _, _ = shared_replay
         assert len(result.day_summaries) > 0
         for ds in result.day_summaries:
             assert ds.bars_processed > 0
 
-    def test_pnl_is_sum_of_days(self, tmp_path):
-        db_path = _setup_replay_db(tmp_path, n_days=5)
-        strategy = _make_strategy()
-        portfolio = _make_portfolio([strategy])
-        result = replay_historical(
-            db_path=db_path,
-            portfolio=portfolio,
-            instrument="MGC",
-            start_date=date(2024, 1, 8),
-            end_date=date(2024, 1, 15),
-        )
+    def test_pnl_is_sum_of_days(self, shared_replay):
+        result, _, _ = shared_replay
         day_pnl_sum = sum(ds.daily_pnl_r for ds in result.day_summaries)
         assert abs(result.total_pnl_r - day_pnl_sum) < 0.01
 
 
 # ============================================================================
-# Risk Integration Tests
+# Risk Integration Tests (needs own fixture for custom risk limits)
 # ============================================================================
 
 class TestRiskIntegration:
@@ -270,7 +242,6 @@ class TestRiskIntegration:
         strategy = _make_strategy()
         portfolio = _make_portfolio([strategy])
 
-        # Set daily trade limit to 1 — second trade should be rejected
         limits = RiskLimits(max_daily_trades=1)
 
         result = replay_historical(
@@ -281,9 +252,6 @@ class TestRiskIntegration:
             end_date=date(2024, 1, 12),
             risk_limits=limits,
         )
-        # With 1 strategy and 3 days, no rejections expected
-        # (only 1 trade per day from the same strategy)
-        # But this validates the path runs without error
         assert result.days_processed > 0
 
 
