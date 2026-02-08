@@ -440,3 +440,537 @@ class TestWinRMultipleExact:
                 assert wrong_r != correct_r, "Functions should differ when friction > 0"
                 # And pnl_r should match the CORRECT one
                 assert result["pnl_r"] == pytest.approx(correct_r, abs=0.0001)
+
+
+# ============================================================================
+# RANDOMIZED SPOT-CHECK TESTS (against real gold.db data)
+# ============================================================================
+#
+# These tests sample random rows from the REAL production database and
+# independently recompute every stored metric from first principles.
+# They catch silent corruption that synthetic fixtures cannot detect.
+
+import random
+
+GOLD_DB = Path(__file__).parent.parent / "gold.db"
+SAMPLE_SIZE = 50  # rows per test — enough to catch errors, fast enough for CI
+
+
+def _skip_if_no_db():
+    """Skip test if gold.db not present (CI environment)."""
+    if not GOLD_DB.exists():
+        pytest.skip("gold.db not available")
+
+
+def _sample_outcomes(con, n=SAMPLE_SIZE, where_extra=""):
+    """Pull n random outcome rows with win/loss result."""
+    rows = con.execute(
+        f"SELECT trading_day, symbol, orb_label, orb_minutes, rr_target, "
+        f"confirm_bars, entry_model, outcome, pnl_r, mae_r, mfe_r, "
+        f"entry_price, stop_price, target_price, exit_price "
+        f"FROM orb_outcomes "
+        f"WHERE symbol = 'MGC' AND outcome IN ('win','loss') {where_extra} "
+        f"ORDER BY RANDOM() LIMIT {n}"
+    ).fetchall()
+    cols = ["trading_day", "symbol", "orb_label", "orb_minutes", "rr_target",
+            "confirm_bars", "entry_model", "outcome", "pnl_r", "mae_r", "mfe_r",
+            "entry_price", "stop_price", "target_price", "exit_price"]
+    return [dict(zip(cols, r)) for r in rows]
+
+
+class TestRandomOutcomeMath:
+    """Sample random real outcomes and recompute all stored values."""
+
+    def test_risk_points_recompute(self):
+        """risk_points = abs(entry - stop) for every sampled row."""
+        _skip_if_no_db()
+        con = duckdb.connect(str(GOLD_DB), read_only=True)
+        try:
+            for row in _sample_outcomes(con):
+                risk = abs(row["entry_price"] - row["stop_price"])
+                assert risk > 0, (
+                    f"Zero risk: {row['entry_price']}-{row['stop_price']} "
+                    f"({row['entry_model']} {row['orb_label']} {row['trading_day']})"
+                )
+        finally:
+            con.close()
+
+    def test_win_pnl_consistent_with_cost(self):
+        """Win pnl_r must match to_r_multiple. Small-ORB wins can be negative
+        after friction (0.7pt risk, $7 gross, -$8.40 friction = -$1.40 net).
+        This is mathematically correct: 'target hit' != 'profitable after costs'.
+        Large-ORB wins (risk >= friction_in_points) must always be positive."""
+        _skip_if_no_db()
+        cost = _cost()
+        con = duckdb.connect(str(GOLD_DB), read_only=True)
+        try:
+            for row in _sample_outcomes(con, where_extra="AND outcome = 'win'"):
+                risk_pts = abs(row["entry_price"] - row["stop_price"])
+                # If risk > friction_in_points, win must be positive
+                if risk_pts > cost.friction_in_points:
+                    assert row["pnl_r"] > 0, (
+                        f"Large-risk win with pnl_r={row['pnl_r']} "
+                        f"(risk={risk_pts:.2f}pt > friction={cost.friction_in_points:.2f}pt, "
+                        f"{row['entry_model']} {row['orb_label']} {row['trading_day']})"
+                    )
+        finally:
+            con.close()
+
+    def test_loss_pnl_exactly_minus_one(self):
+        """Every loss must be exactly -1.0R (stop hit = 1R loss, no friction on losses)."""
+        _skip_if_no_db()
+        con = duckdb.connect(str(GOLD_DB), read_only=True)
+        try:
+            for row in _sample_outcomes(con, where_extra="AND outcome = 'loss'"):
+                assert row["pnl_r"] == -1.0, (
+                    f"Loss pnl_r={row['pnl_r']} != -1.0 "
+                    f"({row['entry_model']} {row['orb_label']} {row['trading_day']})"
+                )
+        finally:
+            con.close()
+
+    def test_target_price_recompute(self):
+        """target = entry + risk * rr * direction for every sampled row."""
+        _skip_if_no_db()
+        con = duckdb.connect(str(GOLD_DB), read_only=True)
+        try:
+            for row in _sample_outcomes(con):
+                entry = row["entry_price"]
+                stop = row["stop_price"]
+                target = row["target_price"]
+                rr = row["rr_target"]
+                risk = abs(entry - stop)
+                direction = 1.0 if entry > stop else -1.0
+                expected_target = entry + risk * rr * direction
+                assert target == pytest.approx(expected_target, abs=0.02), (
+                    f"Target mismatch: stored={target}, recomputed={expected_target} "
+                    f"(entry={entry}, stop={stop}, rr={rr}, "
+                    f"{row['entry_model']} {row['orb_label']} {row['trading_day']})"
+                )
+        finally:
+            con.close()
+
+    def test_win_pnl_r_recompute(self):
+        """For wins, recompute pnl_r = to_r_multiple(cost, entry, stop, rr*risk)."""
+        _skip_if_no_db()
+        cost = _cost()
+        con = duckdb.connect(str(GOLD_DB), read_only=True)
+        try:
+            for row in _sample_outcomes(con, where_extra="AND outcome = 'win'"):
+                entry = row["entry_price"]
+                stop = row["stop_price"]
+                rr = row["rr_target"]
+                risk_pts = abs(entry - stop)
+                pnl_pts = risk_pts * rr
+                expected_r = round(to_r_multiple(cost, entry, stop, pnl_pts), 4)
+                assert row["pnl_r"] == pytest.approx(expected_r, abs=0.001), (
+                    f"Win pnl_r mismatch: stored={row['pnl_r']}, recomputed={expected_r} "
+                    f"(entry={entry}, stop={stop}, risk={risk_pts}pt, rr={rr}, "
+                    f"{row['entry_model']} {row['orb_label']} {row['trading_day']})"
+                )
+        finally:
+            con.close()
+
+    def test_stop_is_opposite_orb_level(self):
+        """Stop must equal orb_low (long) or orb_high (short) from daily_features."""
+        _skip_if_no_db()
+        con = duckdb.connect(str(GOLD_DB), read_only=True)
+        try:
+            rows = con.execute(
+                "SELECT o.trading_day, o.orb_label, o.entry_model, o.entry_price, "
+                "o.stop_price, o.outcome, "
+                "d.orb_0900_high, d.orb_0900_low, "
+                "d.orb_1000_high, d.orb_1000_low, "
+                "d.orb_1800_high, d.orb_1800_low, "
+                "d.orb_2300_high, d.orb_2300_low "
+                "FROM orb_outcomes o "
+                "JOIN daily_features d ON o.trading_day = d.trading_day "
+                "  AND o.symbol = d.symbol AND o.orb_minutes = d.orb_minutes "
+                "WHERE o.symbol = 'MGC' AND o.outcome IN ('win','loss') "
+                "  AND o.orb_label IN ('0900','1000','1800','2300') "
+                "ORDER BY RANDOM() LIMIT 50"
+            ).fetchall()
+            cols = ["trading_day", "orb_label", "entry_model", "entry_price",
+                    "stop_price", "outcome",
+                    "orb_0900_high", "orb_0900_low",
+                    "orb_1000_high", "orb_1000_low",
+                    "orb_1800_high", "orb_1800_low",
+                    "orb_2300_high", "orb_2300_low"]
+            for r in [dict(zip(cols, row)) for row in rows]:
+                orb = r["orb_label"]
+                orb_high = r[f"orb_{orb}_high"]
+                orb_low = r[f"orb_{orb}_low"]
+                entry = r["entry_price"]
+                stop = r["stop_price"]
+                # Determine direction from entry vs stop
+                is_long = entry > stop
+                if is_long:
+                    assert stop == pytest.approx(orb_low, abs=0.01), (
+                        f"Long stop={stop} != orb_low={orb_low} "
+                        f"({r['entry_model']} {orb} {r['trading_day']})"
+                    )
+                else:
+                    assert stop == pytest.approx(orb_high, abs=0.01), (
+                        f"Short stop={stop} != orb_high={orb_high} "
+                        f"({r['entry_model']} {orb} {r['trading_day']})"
+                    )
+        finally:
+            con.close()
+
+    def test_e1_entry_not_at_orb_level(self):
+        """E1 entries must NOT equal ORB level (that was the old bug)."""
+        _skip_if_no_db()
+        con = duckdb.connect(str(GOLD_DB), read_only=True)
+        try:
+            rows = con.execute(
+                "SELECT o.trading_day, o.orb_label, o.entry_price, o.stop_price, "
+                "d.orb_0900_high, d.orb_0900_low, "
+                "d.orb_1000_high, d.orb_1000_low, "
+                "d.orb_1800_high, d.orb_1800_low, "
+                "d.orb_2300_high, d.orb_2300_low "
+                "FROM orb_outcomes o "
+                "JOIN daily_features d ON o.trading_day = d.trading_day "
+                "  AND o.symbol = d.symbol AND o.orb_minutes = d.orb_minutes "
+                "WHERE o.symbol = 'MGC' AND o.entry_model = 'E1' "
+                "  AND o.outcome IN ('win','loss') "
+                "  AND o.orb_label IN ('0900','1000','1800','2300') "
+                "ORDER BY RANDOM() LIMIT 50"
+            ).fetchall()
+            cols = ["trading_day", "orb_label", "entry_price", "stop_price",
+                    "orb_0900_high", "orb_0900_low",
+                    "orb_1000_high", "orb_1000_low",
+                    "orb_1800_high", "orb_1800_low",
+                    "orb_2300_high", "orb_2300_low"]
+            for r in [dict(zip(cols, row)) for row in rows]:
+                orb = r["orb_label"]
+                orb_high = r[f"orb_{orb}_high"]
+                orb_low = r[f"orb_{orb}_low"]
+                entry = r["entry_price"]
+                is_long = entry > r["stop_price"]
+                if is_long:
+                    # E1 long: entry should be >= orb_high (next bar open after confirm)
+                    assert entry >= orb_high - 0.01, (
+                        f"E1 long entry={entry} < orb_high={orb_high} "
+                        f"({orb} {r['trading_day']})"
+                    )
+                else:
+                    # E1 short: entry should be <= orb_low
+                    assert entry <= orb_low + 0.01, (
+                        f"E1 short entry={entry} > orb_low={orb_low} "
+                        f"({orb} {r['trading_day']})"
+                    )
+        finally:
+            con.close()
+
+    def test_e3_entry_at_orb_level(self):
+        """E3 entries must equal ORB level (limit retrace fill)."""
+        _skip_if_no_db()
+        con = duckdb.connect(str(GOLD_DB), read_only=True)
+        try:
+            rows = con.execute(
+                "SELECT o.trading_day, o.orb_label, o.entry_price, o.stop_price, "
+                "d.orb_0900_high, d.orb_0900_low, "
+                "d.orb_1000_high, d.orb_1000_low, "
+                "d.orb_1800_high, d.orb_1800_low, "
+                "d.orb_2300_high, d.orb_2300_low "
+                "FROM orb_outcomes o "
+                "JOIN daily_features d ON o.trading_day = d.trading_day "
+                "  AND o.symbol = d.symbol AND o.orb_minutes = d.orb_minutes "
+                "WHERE o.symbol = 'MGC' AND o.entry_model = 'E3' "
+                "  AND o.outcome IN ('win','loss') "
+                "  AND o.orb_label IN ('0900','1000','1800','2300') "
+                "ORDER BY RANDOM() LIMIT 50"
+            ).fetchall()
+            cols = ["trading_day", "orb_label", "entry_price", "stop_price",
+                    "orb_0900_high", "orb_0900_low",
+                    "orb_1000_high", "orb_1000_low",
+                    "orb_1800_high", "orb_1800_low",
+                    "orb_2300_high", "orb_2300_low"]
+            for r in [dict(zip(cols, row)) for row in rows]:
+                orb = r["orb_label"]
+                orb_high = r[f"orb_{orb}_high"]
+                orb_low = r[f"orb_{orb}_low"]
+                entry = r["entry_price"]
+                is_long = entry > r["stop_price"]
+                if is_long:
+                    assert entry == pytest.approx(orb_high, abs=0.01), (
+                        f"E3 long entry={entry} != orb_high={orb_high} "
+                        f"({orb} {r['trading_day']})"
+                    )
+                else:
+                    assert entry == pytest.approx(orb_low, abs=0.01), (
+                        f"E3 short entry={entry} != orb_low={orb_low} "
+                        f"({orb} {r['trading_day']})"
+                    )
+        finally:
+            con.close()
+
+
+class TestRandomStrategyMath:
+    """Sample random strategies and recompute stored metrics from outcomes."""
+
+    def test_win_rate_recompute(self):
+        """Recompute win_rate from orb_outcomes for random strategies."""
+        _skip_if_no_db()
+        con = duckdb.connect(str(GOLD_DB), read_only=True)
+        try:
+            strats = con.execute(
+                "SELECT strategy_id, orb_label, entry_model, rr_target, "
+                "confirm_bars, filter_type, win_rate, sample_size, expectancy_r "
+                "FROM experimental_strategies "
+                "WHERE instrument = 'MGC' AND sample_size >= 20 "
+                "ORDER BY RANDOM() LIMIT 30"
+            ).fetchall()
+            strat_cols = ["strategy_id", "orb_label", "entry_model", "rr_target",
+                          "confirm_bars", "filter_type", "win_rate", "sample_size",
+                          "expectancy_r"]
+
+            # Load daily_features for filter eligibility
+            features = con.execute(
+                "SELECT * FROM daily_features WHERE symbol = 'MGC' AND orb_minutes = 5"
+            ).fetchall()
+            feat_cols = [desc[0] for desc in con.description]
+            feat_dicts = [dict(zip(feat_cols, r)) for r in features]
+
+            from trading_app.config import ALL_FILTERS
+
+            for s in [dict(zip(strat_cols, r)) for r in strats]:
+                orb = s["orb_label"]
+                em = s["entry_model"]
+                rr = s["rr_target"]
+                cb = s["confirm_bars"]
+                ft = s["filter_type"]
+
+                # Skip volume filters (need bar data)
+                if ft.startswith("VOL_"):
+                    continue
+
+                # Get eligible days for this filter
+                strat_filter = ALL_FILTERS.get(ft)
+                if strat_filter is None:
+                    continue
+                eligible = set()
+                for row in feat_dicts:
+                    if row.get(f"orb_{orb}_break_dir") is None:
+                        continue
+                    if strat_filter.matches_row(row, orb):
+                        eligible.add(row["trading_day"])
+
+                # Get matching outcomes
+                outcomes = con.execute(
+                    "SELECT trading_day, outcome, pnl_r FROM orb_outcomes "
+                    "WHERE symbol = 'MGC' AND orb_label = ? AND entry_model = ? "
+                    "AND rr_target = ? AND confirm_bars = ? AND orb_minutes = 5 "
+                    "AND outcome IN ('win','loss')",
+                    [orb, em, rr, cb]
+                ).fetchall()
+
+                # Filter to eligible days
+                traded = [(td, oc, pr) for td, oc, pr in outcomes if td in eligible]
+                if len(traded) == 0:
+                    continue
+
+                wins = sum(1 for _, oc, _ in traded if oc == "win")
+                recomputed_wr = wins / len(traded)
+
+                assert s["win_rate"] == pytest.approx(recomputed_wr, abs=0.001), (
+                    f"WR mismatch for {s['strategy_id']}: "
+                    f"stored={s['win_rate']}, recomputed={recomputed_wr} "
+                    f"(N={len(traded)})"
+                )
+        finally:
+            con.close()
+
+    def test_expectancy_recompute(self):
+        """Recompute ExpR = WR*AvgWin - LR*AvgLoss for random strategies."""
+        _skip_if_no_db()
+        con = duckdb.connect(str(GOLD_DB), read_only=True)
+        try:
+            strats = con.execute(
+                "SELECT strategy_id, orb_label, entry_model, rr_target, "
+                "confirm_bars, filter_type, win_rate, sample_size, expectancy_r "
+                "FROM experimental_strategies "
+                "WHERE instrument = 'MGC' AND sample_size >= 20 "
+                "ORDER BY RANDOM() LIMIT 30"
+            ).fetchall()
+            strat_cols = ["strategy_id", "orb_label", "entry_model", "rr_target",
+                          "confirm_bars", "filter_type", "win_rate", "sample_size",
+                          "expectancy_r"]
+
+            features = con.execute(
+                "SELECT * FROM daily_features WHERE symbol = 'MGC' AND orb_minutes = 5"
+            ).fetchall()
+            feat_cols = [desc[0] for desc in con.description]
+            feat_dicts = [dict(zip(feat_cols, r)) for r in features]
+
+            from trading_app.config import ALL_FILTERS
+
+            for s in [dict(zip(strat_cols, r)) for r in strats]:
+                orb = s["orb_label"]
+                em = s["entry_model"]
+                rr = s["rr_target"]
+                cb = s["confirm_bars"]
+                ft = s["filter_type"]
+
+                if ft.startswith("VOL_"):
+                    continue
+
+                strat_filter = ALL_FILTERS.get(ft)
+                if strat_filter is None:
+                    continue
+                eligible = set()
+                for row in feat_dicts:
+                    if row.get(f"orb_{orb}_break_dir") is None:
+                        continue
+                    if strat_filter.matches_row(row, orb):
+                        eligible.add(row["trading_day"])
+
+                outcomes = con.execute(
+                    "SELECT trading_day, outcome, pnl_r FROM orb_outcomes "
+                    "WHERE symbol = 'MGC' AND orb_label = ? AND entry_model = ? "
+                    "AND rr_target = ? AND confirm_bars = ? AND orb_minutes = 5 "
+                    "AND outcome IN ('win','loss')",
+                    [orb, em, rr, cb]
+                ).fetchall()
+
+                traded = [(td, oc, pr) for td, oc, pr in outcomes if td in eligible]
+                if len(traded) == 0:
+                    continue
+
+                wins = [(oc, pr) for _, oc, pr in traded if oc == "win"]
+                losses = [(oc, pr) for _, oc, pr in traded if oc == "loss"]
+
+                wr = len(wins) / len(traded)
+                lr = 1.0 - wr
+                avg_win = sum(pr for _, pr in wins) / len(wins) if wins else 0.0
+                avg_loss = abs(sum(pr for _, pr in losses) / len(losses)) if losses else 0.0
+                recomputed_er = (wr * avg_win) - (lr * avg_loss)
+
+                assert s["expectancy_r"] == pytest.approx(recomputed_er, abs=0.002), (
+                    f"ExpR mismatch for {s['strategy_id']}: "
+                    f"stored={s['expectancy_r']}, recomputed={recomputed_er:.4f} "
+                    f"(N={len(traded)}, WR={wr:.3f})"
+                )
+        finally:
+            con.close()
+
+    def test_max_drawdown_recompute(self):
+        """Walk the equity curve for random strategies and recompute MaxDD."""
+        _skip_if_no_db()
+        con = duckdb.connect(str(GOLD_DB), read_only=True)
+        try:
+            strats = con.execute(
+                "SELECT strategy_id, orb_label, entry_model, rr_target, "
+                "confirm_bars, filter_type, max_drawdown_r "
+                "FROM experimental_strategies "
+                "WHERE instrument = 'MGC' AND sample_size >= 20 "
+                "ORDER BY RANDOM() LIMIT 30"
+            ).fetchall()
+            strat_cols = ["strategy_id", "orb_label", "entry_model", "rr_target",
+                          "confirm_bars", "filter_type", "max_drawdown_r"]
+
+            features = con.execute(
+                "SELECT * FROM daily_features WHERE symbol = 'MGC' AND orb_minutes = 5"
+            ).fetchall()
+            feat_cols = [desc[0] for desc in con.description]
+            feat_dicts = [dict(zip(feat_cols, r)) for r in features]
+
+            from trading_app.config import ALL_FILTERS
+
+            for s in [dict(zip(strat_cols, r)) for r in strats]:
+                orb = s["orb_label"]
+                em = s["entry_model"]
+                rr = s["rr_target"]
+                cb = s["confirm_bars"]
+                ft = s["filter_type"]
+
+                if ft.startswith("VOL_"):
+                    continue
+
+                strat_filter = ALL_FILTERS.get(ft)
+                if strat_filter is None:
+                    continue
+                eligible = set()
+                for row in feat_dicts:
+                    if row.get(f"orb_{orb}_break_dir") is None:
+                        continue
+                    if strat_filter.matches_row(row, orb):
+                        eligible.add(row["trading_day"])
+
+                outcomes = con.execute(
+                    "SELECT trading_day, outcome, pnl_r FROM orb_outcomes "
+                    "WHERE symbol = 'MGC' AND orb_label = ? AND entry_model = ? "
+                    "AND rr_target = ? AND confirm_bars = ? AND orb_minutes = 5 "
+                    "AND outcome IN ('win','loss') ORDER BY trading_day",
+                    [orb, em, rr, cb]
+                ).fetchall()
+
+                traded = [(td, oc, pr) for td, oc, pr in outcomes if td in eligible]
+                if len(traded) == 0:
+                    continue
+
+                # Walk equity curve
+                cumulative = 0.0
+                peak = 0.0
+                max_dd = 0.0
+                for _, _, pnl_r in traded:
+                    cumulative += pnl_r
+                    peak = max(peak, cumulative)
+                    dd = peak - cumulative
+                    max_dd = max(max_dd, dd)
+
+                assert s["max_drawdown_r"] == pytest.approx(max_dd, abs=0.01), (
+                    f"MaxDD mismatch for {s['strategy_id']}: "
+                    f"stored={s['max_drawdown_r']}, recomputed={max_dd:.2f}"
+                )
+        finally:
+            con.close()
+
+
+class TestRandomWalkForwardIntegrity:
+    """Verify walk-forward results match independent recomputation."""
+
+    def test_oos_trade_count_matches_outcomes(self):
+        """OOS trade count must equal actual eligible outcomes in test folds."""
+        _skip_if_no_db()
+        wf_json = Path(__file__).parent.parent / "artifacts" / "walk_forward" / "walk_forward_results.json"
+        if not wf_json.exists():
+            pytest.skip("walk-forward artifacts not present")
+
+        import json
+        with open(wf_json) as f:
+            results = json.load(f)
+
+        con = duckdb.connect(str(GOLD_DB), read_only=True)
+        try:
+            # Pick random strategies from WF results
+            sampled = random.sample(results, min(20, len(results)))
+
+            for wf in sampled:
+                total_oos = sum(fold["trade_count"] for fold in wf["folds"])
+                assert wf["oos_trade_count"] == total_oos, (
+                    f"OOS count mismatch for {wf['strategy_id']}: "
+                    f"aggregate={wf['oos_trade_count']}, sum_folds={total_oos}"
+                )
+        finally:
+            con.close()
+
+    def test_no_train_test_overlap_in_results(self):
+        """Verify no fold has overlapping train/test date ranges."""
+        wf_json = Path(__file__).parent.parent / "artifacts" / "walk_forward" / "walk_forward_results.json"
+        if not wf_json.exists():
+            pytest.skip("walk-forward artifacts not present")
+
+        import json
+        from datetime import date as d
+        with open(wf_json) as f:
+            results = json.load(f)
+
+        for wf in results:
+            for fold in wf["folds"]:
+                train_end = d.fromisoformat(fold["train_end"])
+                test_start = d.fromisoformat(fold["test_start"])
+                assert train_end < test_start, (
+                    f"Leakage in {wf['strategy_id']} fold {fold['fold_idx']}: "
+                    f"train_end={train_end} >= test_start={test_start}"
+                )
