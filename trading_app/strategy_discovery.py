@@ -23,7 +23,7 @@ import duckdb
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.cost_model import get_cost_spec
 from pipeline.init_db import ORB_LABELS
-from trading_app.config import ALL_FILTERS, ENTRY_MODELS
+from trading_app.config import ALL_FILTERS, ENTRY_MODELS, VolumeFilter
 from trading_app.setup_detector import detect_setups
 from trading_app.db_manager import init_trading_app_schema
 from trading_app.outcome_builder import RR_TARGETS, CONFIRM_BARS_OPTIONS
@@ -218,6 +218,103 @@ def _build_filter_day_sets(features, orb_labels, all_filters):
     return result
 
 
+def _ts_minute_key(ts):
+    """Normalize a timestamp to UTC (year, month, day, hour, minute) tuple.
+
+    DuckDB returns TIMESTAMPTZ as local timezone (e.g., Brisbane AEST+10),
+    while Python datetime may use timezone.utc. Normalize to UTC for
+    consistent comparison.
+    """
+    utc_ts = ts.astimezone(timezone.utc) if ts.tzinfo is not None else ts
+    return (utc_ts.year, utc_ts.month, utc_ts.day, utc_ts.hour, utc_ts.minute)
+
+
+def _compute_relative_volumes(con, features, instrument, orb_labels, all_filters):
+    """
+    Pre-compute relative volume at break bar for each (trading_day, orb_label).
+
+    Enriches each feature row dict with rel_vol_{orb_label} key.
+    Only runs if at least one VolumeFilter is in all_filters.
+    Fail-closed: missing data -> rel_vol stays absent -> filter rejects.
+    """
+    import statistics
+
+    # Determine max lookback needed across all volume filters
+    vol_filters = [f for f in all_filters.values() if isinstance(f, VolumeFilter)]
+    if not vol_filters:
+        return
+    max_lookback = max(f.lookback_days for f in vol_filters)
+
+    # Step 1: Collect all break timestamps and unique UTC minutes-of-day
+    break_ts_list = []
+    unique_minutes = set()
+    for row in features:
+        for orb_label in orb_labels:
+            break_ts = row.get(f"orb_{orb_label}_break_ts")
+            if break_ts is not None and hasattr(break_ts, "hour"):
+                break_ts_list.append(break_ts)
+                utc_ts = break_ts.astimezone(timezone.utc) if break_ts.tzinfo is not None else break_ts
+                unique_minutes.add(utc_ts.hour * 60 + utc_ts.minute)
+
+    if not unique_minutes:
+        return
+
+    # Step 2: Load historical volumes for each unique minute-of-day
+    # Keyed by minute-of-day, each entry is [(minute_key, volume), ...] sorted chronologically
+    minute_history = {}
+    for mod in sorted(unique_minutes):
+        h, m = divmod(mod, 60)
+        rows = con.execute(
+            """SELECT ts_utc, volume FROM bars_1m
+               WHERE symbol = ?
+               AND EXTRACT(HOUR FROM (ts_utc AT TIME ZONE 'UTC')) = ?
+               AND EXTRACT(MINUTE FROM (ts_utc AT TIME ZONE 'UTC')) = ?
+               ORDER BY ts_utc""",
+            [instrument, h, m],
+        ).fetchall()
+        minute_history[mod] = [(_ts_minute_key(ts), vol) for ts, vol in rows]
+
+    # Step 3: Compute relative volume for each (day, orb_label) break
+    for row in features:
+        for orb_label in orb_labels:
+            break_ts = row.get(f"orb_{orb_label}_break_ts")
+            if break_ts is None:
+                continue
+
+            break_key = _ts_minute_key(break_ts)
+            utc_ts = break_ts.astimezone(timezone.utc) if break_ts.tzinfo is not None else break_ts
+            mod = utc_ts.hour * 60 + utc_ts.minute
+            history = minute_history.get(mod, [])
+            if not history:
+                continue  # fail-closed
+
+            # Find this break bar in the chronological history
+            idx = None
+            for j, (k, _) in enumerate(history):
+                if k == break_key:
+                    idx = j
+                    break
+            if idx is None:
+                continue  # fail-closed: break bar not in bars_1m
+
+            break_vol = history[idx][1]
+            if break_vol is None or break_vol == 0:
+                continue  # fail-closed
+
+            # Take prior N entries (up to max_lookback)
+            start = max(0, idx - max_lookback)
+            prior_vols = [v for _, v in history[start:idx] if v > 0]
+
+            if not prior_vols:
+                continue  # fail-closed: no baseline
+
+            baseline = statistics.median(prior_vols)
+            if baseline <= 0:
+                continue  # fail-closed
+
+            row[f"rel_vol_{orb_label}"] = break_vol / baseline
+
+
 def _load_outcomes_bulk(con, instrument, orb_minutes, orb_labels, entry_models):
     """
     Load all non-NULL outcomes in one query per (orb, entry_model).
@@ -287,6 +384,9 @@ def run_discovery(
         print("Loading daily features...")
         features = _load_daily_features(con, instrument, orb_minutes, start_date, end_date)
         print(f"  {len(features)} daily_features rows loaded")
+
+        print("Computing relative volumes for volume filters...")
+        _compute_relative_volumes(con, features, instrument, ORB_LABELS, ALL_FILTERS)
 
         print("Building filter/ORB day sets...")
         filter_days = _build_filter_day_sets(features, ORB_LABELS, ALL_FILTERS)

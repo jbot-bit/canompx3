@@ -34,7 +34,9 @@ from trading_app.config import (
     classify_strategy,
     NoFilter,
     OrbSizeFilter,
+    VolumeFilter,
     MGC_ORB_SIZE_FILTERS,
+    MGC_VOLUME_FILTERS,
     StrategyFilter,
 )
 from trading_app.outcome_builder import RR_TARGETS, CONFIRM_BARS_OPTIONS
@@ -85,6 +87,7 @@ class TestAllFiltersSync:
         "NO_FILTER",
         "ORB_L2", "ORB_L3", "ORB_L4", "ORB_L6", "ORB_L8",
         "ORB_G2", "ORB_G3", "ORB_G4", "ORB_G5", "ORB_G6", "ORB_G8",
+        "VOL_RV12_N20",
     }
 
     def test_expected_keys(self):
@@ -126,12 +129,20 @@ class TestAllFiltersSync:
     def test_size_filters_have_thresholds(self):
         """Every ORB size filter has at least min_size or max_size set."""
         for key, filt in ALL_FILTERS.items():
-            if key == "NO_FILTER":
+            if key == "NO_FILTER" or isinstance(filt, VolumeFilter):
                 continue
             assert isinstance(filt, OrbSizeFilter), f"{key} should be OrbSizeFilter"
             assert filt.min_size is not None or filt.max_size is not None, (
                 f"{key} has neither min_size nor max_size"
             )
+
+    def test_volume_filters_have_params(self):
+        """Every volume filter has min_rel_vol and lookback_days set."""
+        for key, filt in ALL_FILTERS.items():
+            if not isinstance(filt, VolumeFilter):
+                continue
+            assert filt.min_rel_vol > 0, f"{key} min_rel_vol must be positive"
+            assert filt.lookback_days > 0, f"{key} lookback_days must be positive"
 
 
 # ============================================================================
@@ -162,8 +173,8 @@ class TestGridParamsSync:
     def test_grid_size(self):
         """Total grid size matches expected formula."""
         expected = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * len(ALL_FILTERS) * len(ENTRY_MODELS)
-        # 6 ORBs * 6 RRs * 5 CBs * 12 filters * 3 models = 6480
-        assert expected == 6 * 6 * 5 * 12 * 3
+        # 6 ORBs * 6 RRs * 5 CBs * 13 filters * 3 models = 7020
+        assert expected == 6 * 6 * 5 * 13 * 3
 
 
 class TestEntryModelsSync:
@@ -248,7 +259,7 @@ class TestStrategyIdSync:
                             sid = make_strategy_id("MGC", orb, em, rr, cb, fk)
                             assert sid not in ids, f"Duplicate ID: {sid}"
                             ids.add(sid)
-        assert len(ids) == 6480
+        assert len(ids) == 7020
 
 
 # ============================================================================

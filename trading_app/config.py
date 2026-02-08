@@ -59,8 +59,8 @@ ORB SIZE FILTERS:
   NO_FILTER: Trade all days regardless of ORB size.
     ALL no-filter strategies have negative expectancy. Do not trade.
 
-GRID (6,480 strategy combinations):
-  6 ORBs x 6 RRs x 5 CBs x 12 filters x 3 entry models = 6,480
+GRID (7,020 strategy combinations):
+  6 ORBs x 6 RRs x 5 CBs x 13 filters x 3 entry models = 7,020
 
 ==========================================================================
 """
@@ -114,6 +114,28 @@ class OrbSizeFilter(StrategyFilter):
         return True
 
 
+@dataclass(frozen=True)
+class VolumeFilter(StrategyFilter):
+    """Filter by relative volume at break bar (Selective Classification).
+
+    Abstain from trading when breakout volume is below normal.
+    Relative volume = break_bar_volume / median(same minute-of-day, N prior days).
+    Fail-closed: if rel_vol data missing, day is ineligible.
+
+    The rel_vol_{orb_label} key must be pre-computed and injected into the
+    row dict before calling matches_row (see strategy_discovery._compute_relative_volumes).
+    """
+
+    min_rel_vol: float = 1.2
+    lookback_days: int = 20
+
+    def matches_row(self, row: dict, orb_label: str) -> bool:
+        rel_vol = row.get(f"rel_vol_{orb_label}")
+        if rel_vol is None:
+            return False  # fail-closed: no data = ineligible
+        return rel_vol >= self.min_rel_vol
+
+
 # =========================================================================
 # PREDEFINED FILTER SETS — full ORB size spectrum
 # =========================================================================
@@ -134,10 +156,21 @@ MGC_ORB_SIZE_FILTERS = {
     "G8": OrbSizeFilter(filter_type="ORB_G8", description="ORB size >= 8 points", min_size=8.0),
 }
 
+# Volume-based filters (Selective Classification — abstain on low volume)
+MGC_VOLUME_FILTERS = {
+    "VOL_RV12_N20": VolumeFilter(
+        filter_type="VOL_RV12_N20",
+        description="Relative volume >= 1.2 (20-day lookback)",
+        min_rel_vol=1.2,
+        lookback_days=20,
+    ),
+}
+
 # Master filter registry (all filters by filter_type key)
 ALL_FILTERS: dict[str, StrategyFilter] = {
     "NO_FILTER": NoFilter(),
     **{f"ORB_{k}": v for k, v in MGC_ORB_SIZE_FILTERS.items()},
+    **MGC_VOLUME_FILTERS,
 }
 
 # Entry models: realistic fill assumptions for backtesting

@@ -9,8 +9,10 @@ from trading_app.config import (
     StrategyFilter,
     NoFilter,
     OrbSizeFilter,
+    VolumeFilter,
     ALL_FILTERS,
     MGC_ORB_SIZE_FILTERS,
+    MGC_VOLUME_FILTERS,
 )
 
 
@@ -122,8 +124,11 @@ class TestAllFilters:
             assert key in ALL_FILTERS, f"{key} missing from ALL_FILTERS"
 
     def test_total_count(self):
-        # NO_FILTER + 5 L-filters + 6 G-filters = 12
-        assert len(ALL_FILTERS) == 12
+        # NO_FILTER + 5 L-filters + 6 G-filters + 1 VOL-filter = 13
+        assert len(ALL_FILTERS) == 13
+
+    def test_contains_volume_filter(self):
+        assert "VOL_RV12_N20" in ALL_FILTERS
 
     def test_all_are_strategy_filters(self):
         for name, f in ALL_FILTERS.items():
@@ -137,3 +142,61 @@ class TestAllFilters:
         for name, f in ALL_FILTERS.items():
             data = json.loads(f.to_json())
             assert "filter_type" in data, f"{name} JSON missing filter_type"
+
+
+class TestVolumeFilter:
+    """VolumeFilter matches by relative volume at break bar."""
+
+    def test_matches_above_threshold(self):
+        f = VolumeFilter(filter_type="TEST", description="test", min_rel_vol=1.2)
+        assert f.matches_row({"rel_vol_0900": 1.5}, "0900") is True
+
+    def test_rejects_below_threshold(self):
+        f = VolumeFilter(filter_type="TEST", description="test", min_rel_vol=1.2)
+        assert f.matches_row({"rel_vol_0900": 0.8}, "0900") is False
+
+    def test_at_boundary_matches(self):
+        """Exactly at min_rel_vol should match (>=)."""
+        f = VolumeFilter(filter_type="TEST", description="test", min_rel_vol=1.2)
+        assert f.matches_row({"rel_vol_0900": 1.2}, "0900") is True
+
+    def test_fail_closed_missing(self):
+        """Missing rel_vol key -> ineligible (fail-closed)."""
+        f = VolumeFilter(filter_type="TEST", description="test", min_rel_vol=1.2)
+        assert f.matches_row({}, "0900") is False
+
+    def test_fail_closed_none(self):
+        """None rel_vol -> ineligible (fail-closed)."""
+        f = VolumeFilter(filter_type="TEST", description="test", min_rel_vol=1.2)
+        assert f.matches_row({"rel_vol_0900": None}, "0900") is False
+
+    def test_uses_correct_orb_label(self):
+        """Uses rel_vol for the specific ORB label."""
+        f = VolumeFilter(filter_type="TEST", description="test", min_rel_vol=1.2)
+        row = {"rel_vol_0900": 0.5, "rel_vol_1800": 2.0}
+        assert f.matches_row(row, "0900") is False
+        assert f.matches_row(row, "1800") is True
+
+    def test_frozen(self):
+        f = VolumeFilter(filter_type="TEST", description="test")
+        with pytest.raises(AttributeError):
+            f.min_rel_vol = 2.0
+
+    def test_hashable(self):
+        f1 = VolumeFilter(filter_type="TEST", description="test", min_rel_vol=1.2)
+        f2 = VolumeFilter(filter_type="TEST", description="test", min_rel_vol=1.2)
+        assert hash(f1) == hash(f2)
+
+    def test_to_json_roundtrip(self):
+        f = MGC_VOLUME_FILTERS["VOL_RV12_N20"]
+        data = json.loads(f.to_json())
+        assert data["filter_type"] == "VOL_RV12_N20"
+        assert data["min_rel_vol"] == 1.2
+        assert data["lookback_days"] == 20
+
+    def test_predefined_vol_rv12_n20(self):
+        """VOL_RV12_N20 has correct parameters."""
+        f = ALL_FILTERS["VOL_RV12_N20"]
+        assert isinstance(f, VolumeFilter)
+        assert f.min_rel_vol == 1.2
+        assert f.lookback_days == 20
