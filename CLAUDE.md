@@ -395,7 +395,7 @@ strict filters (G6/G8) are EXPECTED behavior, not bugs.
 
 See `ROADMAP.md` for planned features:
 - **Phase 6e**: Monitoring & alerting (live vs backtest drift detection)
-- **R1**: Update backtester for intra-bar/fill-bar granularity (HIGH PRIORITY before live trading — see `AUDIT_FINDINGS.md`)
-- **Nested ORB**: Research track in progress on `feature/nested-orb` branch (15/30m ORB + 5m entry bars)
+- **orb_outcomes rebuild**: R1 fill-bar exit logic is in code but stored outcomes (689K rows) need full rebuild to apply
+- **orb_outcomes 2016-2020 backfill**: outcomes only cover 2021-2026; bars_1m data exists back to 2016
 
 **Do NOT reference unbuilt features in code or tests. Build guardrails for what exists.**

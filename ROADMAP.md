@@ -124,34 +124,37 @@ Features planned but NOT YET BUILT. Move items to CLAUDE.md as they are implemen
 
 ---
 
-## Nested ORB Research — IN PROGRESS (feature/nested-orb branch)
+## Nested ORB Research — DONE (feature/nested-orb branch, Phase 8)
 
 Hypothesis: wider ORB range (15/30m) + 5m entry bars reduces noise and improves edge.
 
-### Completed
+### Results
 - 6 new modules in `trading_app/nested/` (~1,800 LOC)
 - 3 new tables: nested_outcomes, nested_strategies, nested_validated
 - Schema, builder, discovery, validator, compare, audit_outcomes all implemented
 - Isolation enforced: drift checks 15-17 block cross-contamination
-- 15m nested ORB findings documented (1000 session is clear winner)
-
-### Current Status
-- Rebuilding nested_outcomes on full 2021-2026 dataset (previously only 2025-2026)
-- Re-running discovery and validation with 5 years of data
-- Goal: populate nested_validated (was 0 rows due to insufficient yearly data)
+- 15m nested ORB findings: 1000 session is clear winner (+0.1222 Sharpe premium)
+- 76 nested strategies validated (Tier 1), 30 at Tier 2 (2.0x stress + Sharpe floor)
+- Portfolio integration complete: `include_nested=True` flag in portfolio.py
+- A/B comparison done: nested helps 1000 session, hurts 2300/0030
 
 ### Remaining
-- A/B comparison: `python -m trading_app.nested.compare --instrument MGC`
-- Decision: merge winning nested strategies into production or keep as research overlay
+- 30m ORB: not yet built/populated
+- Decision: merge feature/nested-orb to main when ready
 
 ---
 
 ## Phase 8: Remaining Work — TODO
 
-### 8a. Fill-Bar Granularity (R1) — HIGH PRIORITY
-- Current backtester resolves outcomes at bar boundaries
-- Need intra-bar simulation for accurate fill modeling before live trading
-- See `AUDIT_FINDINGS.md` for details
+### 8a. Fill-Bar Granularity (R1) — DONE (2026-02-09)
+- `_check_fill_bar_exit()` in outcome_builder.py checks fill bar OHLC for E1/E3
+- E1: entry at bar open, full bar OHLC is post-fill — check stop/target
+- E3: intra-bar limit fill, check bar OHLC (stop already guarded by entry_rules)
+- E2: skipped (entry at bar close, no post-fill action on that bar)
+- Ambiguous fill bar (both stop+target hit): conservative loss
+- 9 new tests in TestFillBarExits, 670 tests pass, 19/19 drift checks
+- **NOTE:** orb_outcomes (689K rows) needs full rebuild to apply new logic to stored data
+- See `AUDIT_FINDINGS.md` for original finding
 
 ### 8b. Monitoring & Alerting (Phase 6e) — TODO
 - Strategy performance tracking (live vs backtest drift detection)

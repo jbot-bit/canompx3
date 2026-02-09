@@ -153,11 +153,13 @@
 
 ## R&D TASKS (future work)
 
-### R1: Update backtester for intra-bar/fill-bar granularity (HIGH PRIORITY)
+### R1: Update backtester for intra-bar/fill-bar granularity — DONE (2026-02-09)
 - **Context:** C3 fix made engine match backtester by skipping fill-bar exit check.
-  Both now exclude the fill bar from exit logic. This is correct for consistency,
-  but the backtester's assumption (no price action on fill bar) is unrealistic.
-- **Action:** Update outcome_builder.py to check exits on fill bar using sub-bar
-  (1m within 5m) data for accurate simulation. Then re-validate all strategies.
-- **Risk:** Trading a "realistic" engine on "fantasy" backtest data if not addressed.
-- **Status:** [ ] Not started
+  Both excluded the fill bar from exit logic. This was correct for consistency,
+  but the backtester's assumption (no price action on fill bar) was unrealistic.
+- **Fix:** Added `_check_fill_bar_exit()` to outcome_builder.py. E1 checks full bar
+  OHLC (entry at open). E3 checks bar OHLC (entry_rules already guards stop on
+  retrace bar, so fill-bar exits primarily catch targets). E2 skipped (entry at
+  bar close). Ambiguous fill bars resolve as conservative loss.
+- **Tests:** 9 new tests in TestFillBarExits (test_trader_logic.py). 670 total pass.
+- **Status:** [x] Code complete. orb_outcomes rebuild needed to apply to stored data.
