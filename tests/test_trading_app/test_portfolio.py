@@ -416,18 +416,23 @@ def _setup_db_with_outcomes(tmp_path, strategies, daily_features_rows, outcome_r
 
 import datetime
 
-def _make_daily_features_rows(n_days=300, start="2023-01-02"):
-    """Generate n_days of daily_features rows with ORB sizes."""
+def _make_daily_features_rows(n_days=300, start="2023-01-02", orb_minutes=5):
+    """Generate n_days of daily_features rows with ORB sizes.
+
+    orb_minutes controls ORB size multiplier:
+      5 -> 1.0x, 15 -> 1.5x, 30 -> 1.8x  (wider ORBs for longer windows)
+    """
+    multiplier = {5: 1.0, 15: 1.5, 30: 1.8}.get(orb_minutes, 1.0)
     rows = []
     d = datetime.date.fromisoformat(start)
     for i in range(n_days):
         rows.append({
             "trading_day": d,
             "symbol": "MGC",
-            "orb_minutes": 5,
+            "orb_minutes": orb_minutes,
             # Vary sizes: 0900 always has data; 2300 has size that varies
-            "orb_0900_size": 5.0 + (i % 10) * 0.5,  # 5.0 - 9.5
-            "orb_2300_size": 3.0 + (i % 8) * 0.5,    # 3.0 - 6.5
+            "orb_0900_size": (5.0 + (i % 10) * 0.5) * multiplier,  # 5m: 5.0 - 9.5
+            "orb_2300_size": (3.0 + (i % 8) * 0.5) * multiplier,    # 5m: 3.0 - 6.5
         })
         # Skip weekends (rough approximation)
         d += datetime.timedelta(days=1)
@@ -706,6 +711,250 @@ class TestCorrelationMatrix:
         db_path = _setup_db_with_outcomes(tmp_path, [], df_rows, [])
         corr = correlation_matrix(db_path, [])
         assert corr.empty
+
+
+class TestNestedIntegration:
+    """Tests for nested ORB strategy integration (Phase 8 fixes)."""
+
+    def _setup_nested_db(self, tmp_path, baseline_strats, nested_strats,
+                         daily_features_rows, outcome_rows,
+                         nested_outcome_rows=None):
+        """Create a test DB with both baseline and nested tables."""
+        db_path = _setup_db_with_outcomes(
+            tmp_path, baseline_strats, daily_features_rows, outcome_rows,
+        )
+        # Init nested schema on same DB
+        from trading_app.nested.schema import init_nested_schema
+        con = duckdb.connect(str(db_path))
+        init_nested_schema(con=con)
+
+        for s in nested_strats:
+            # Insert into nested_strategies
+            con.execute("""
+                INSERT INTO nested_strategies
+                (strategy_id, instrument, orb_label, orb_minutes,
+                 entry_resolution, rr_target, confirm_bars, entry_model,
+                 filter_type, filter_params,
+                 sample_size, win_rate, avg_win_r, avg_loss_r, expectancy_r,
+                 sharpe_ratio, max_drawdown_r, median_risk_points, avg_risk_points,
+                 yearly_results)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, [
+                s["strategy_id"], s["instrument"], s["orb_label"],
+                s.get("orb_minutes", 15), s.get("entry_resolution", 5),
+                s["rr_target"], s["confirm_bars"], s["entry_model"],
+                s["filter_type"], "{}",
+                s["sample_size"], s["win_rate"], 1.8, 1.0, s["expectancy_r"],
+                s.get("sharpe_ratio"), s.get("max_drawdown_r"),
+                s.get("median_risk_points"), s.get("median_risk_points"), "{}",
+            ])
+
+            # Insert into nested_validated
+            con.execute("""
+                INSERT INTO nested_validated
+                (strategy_id, promoted_from, instrument, orb_label, orb_minutes,
+                 entry_resolution, rr_target, confirm_bars, entry_model,
+                 filter_type, filter_params,
+                 sample_size, win_rate, expectancy_r, years_tested,
+                 all_years_positive, stress_test_passed,
+                 sharpe_ratio, max_drawdown_r, yearly_results, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, [
+                s["strategy_id"], s["strategy_id"], s["instrument"],
+                s["orb_label"], s.get("orb_minutes", 15),
+                s.get("entry_resolution", 5),
+                s["rr_target"], s["confirm_bars"], s["entry_model"],
+                s["filter_type"], "{}",
+                s["sample_size"], s["win_rate"], s["expectancy_r"], 4,
+                True, True, s.get("sharpe_ratio"), s.get("max_drawdown_r"),
+                "{}", "active",
+            ])
+
+        # Insert nested outcomes
+        if nested_outcome_rows:
+            for oc in nested_outcome_rows:
+                con.execute("""
+                    INSERT INTO nested_outcomes
+                    (trading_day, symbol, orb_label, orb_minutes,
+                     entry_resolution, rr_target, confirm_bars, entry_model,
+                     outcome, pnl_r)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, [
+                    oc["trading_day"], oc.get("symbol", "MGC"),
+                    oc["orb_label"], oc.get("orb_minutes", 15),
+                    oc.get("entry_resolution", 5),
+                    oc["rr_target"], oc["confirm_bars"], oc["entry_model"],
+                    oc.get("outcome", "win"), oc["pnl_r"],
+                ])
+
+        con.commit()
+        con.close()
+        return db_path
+
+    def test_load_validated_strategies_include_nested(self, tmp_path):
+        """Union of baseline + nested strategies with median_risk_points from JOIN."""
+        baseline = [_make_strategy(
+            strategy_id="MGC_0900_E1_RR2.0_CB5_ORB_G4",
+            orb_label="0900", filter_type="ORB_G4",
+            median_risk_points=8.5,
+        )]
+        nested = [_make_strategy(
+            strategy_id="N_MGC_0900_E1_RR2.0_CB5_ORB_G4",
+            orb_label="0900", filter_type="ORB_G4",
+            expectancy_r=0.25, median_risk_points=12.0,
+        )]
+        df_rows = _make_daily_features_rows(10)
+        db_path = self._setup_nested_db(tmp_path, baseline, nested, df_rows, [])
+
+        results = load_validated_strategies(db_path, "MGC", 0.10, include_nested=True)
+        assert len(results) == 2
+
+        sources = {r["source"] for r in results}
+        assert sources == {"baseline", "nested"}
+
+        # Verify nested has median_risk_points from nested_strategies JOIN
+        nested_r = [r for r in results if r["source"] == "nested"][0]
+        assert nested_r["median_risk_points"] == pytest.approx(12.0)
+
+    def test_load_validated_strategies_nested_table_missing(self, tmp_path):
+        """include_nested=True with no nested tables returns baseline only."""
+        strategies = [_make_strategy()]
+        db_path = _setup_db(tmp_path, strategies)
+
+        results = load_validated_strategies(db_path, "MGC", 0.10, include_nested=True)
+        assert len(results) == 1
+        assert results[0]["source"] == "baseline"
+
+    def test_build_portfolio_include_nested(self, tmp_path):
+        """Build portfolio with both baseline and nested strategies."""
+        baseline = [_make_strategy(
+            strategy_id="MGC_0900_E1_RR2.0_CB5_ORB_G4",
+            orb_label="0900", filter_type="ORB_G4",
+        )]
+        nested = [_make_strategy(
+            strategy_id="N_MGC_1000_E1_RR2.0_CB5_ORB_G4",
+            orb_label="1000", filter_type="ORB_G4",
+            expectancy_r=0.20,
+        )]
+        df_rows = _make_daily_features_rows(10)
+        db_path = self._setup_nested_db(tmp_path, baseline, nested, df_rows, [])
+
+        portfolio = build_portfolio(db_path=db_path, instrument="MGC", include_nested=True)
+        assert len(portfolio.strategies) == 2
+
+        sources = {s.source for s in portfolio.strategies}
+        assert sources == {"baseline", "nested"}
+
+    def test_build_strategy_daily_series_nested(self, tmp_path):
+        """Nested strategy reads from nested_outcomes, baseline from orb_outcomes."""
+        df_rows_5m = _make_daily_features_rows(50, orb_minutes=5)
+        df_rows_15m = _make_daily_features_rows(50, orb_minutes=15)
+
+        baseline = [_make_strategy(
+            strategy_id="MGC_0900_E1_RR2.0_CB5_NO_FILTER",
+            orb_label="0900", filter_type="NO_FILTER",
+        )]
+        nested = [_make_strategy(
+            strategy_id="N_MGC_0900_E1_RR2.0_CB5_NO_FILTER",
+            orb_label="0900", filter_type="NO_FILTER",
+            expectancy_r=0.25,
+        )]
+
+        # Baseline outcomes on first 20 days
+        outcomes_baseline = [
+            {"trading_day": df_rows_5m[i]["trading_day"], "orb_label": "0900",
+             "orb_minutes": 5, "rr_target": 2.0, "confirm_bars": 5,
+             "entry_model": "E1", "pnl_r": 0.5}
+            for i in range(20)
+        ]
+        # Nested outcomes on first 15 days
+        outcomes_nested = [
+            {"trading_day": df_rows_15m[i]["trading_day"], "orb_label": "0900",
+             "orb_minutes": 15, "entry_resolution": 5,
+             "rr_target": 2.0, "confirm_bars": 5, "entry_model": "E1", "pnl_r": 0.8}
+            for i in range(15)
+        ]
+
+        db_path = self._setup_nested_db(
+            tmp_path, baseline, nested,
+            df_rows_5m + df_rows_15m,
+            outcomes_baseline,
+            nested_outcome_rows=outcomes_nested,
+        )
+
+        series_df, stats = build_strategy_daily_series(db_path, [
+            baseline[0]["strategy_id"], nested[0]["strategy_id"],
+        ])
+        assert baseline[0]["strategy_id"] in stats
+        assert nested[0]["strategy_id"] in stats
+        assert stats[baseline[0]["strategy_id"]]["traded_days"] == 20
+        assert stats[nested[0]["strategy_id"]]["traded_days"] == 15
+
+    def test_build_strategy_daily_series_mixed_orb_minutes(self, tmp_path):
+        """REGRESSION: baseline G6 on 5m ORBs vs nested G8 on 15m ORBs.
+
+        15m ORBs are 1.5x larger so G8 filter passes much more often on 15m.
+        This verifies Fix 2: each strategy uses its own orb_minutes daily_features.
+        """
+        df_rows_5m = _make_daily_features_rows(100, orb_minutes=5)
+        df_rows_15m = _make_daily_features_rows(100, orb_minutes=15)
+
+        # Baseline: G6 filter on 5m ORBs (0900 sizes: 5.0-9.5)
+        # G6 = orb_size >= 6.0 -> eligible when i%10 >= 2 -> 80% eligible
+        baseline = [_make_strategy(
+            strategy_id="MGC_0900_E1_RR2.0_CB5_ORB_G6",
+            orb_label="0900", filter_type="ORB_G6",
+        )]
+        # Nested: G8 filter on 15m ORBs (0900 sizes: 7.5-14.25, i.e. 1.5x)
+        # G8 = orb_size >= 8.0 -> eligible when (5.0 + i%10*0.5)*1.5 >= 8.0
+        # i.e. 5.0+x >= 5.33 -> x >= 0.33 -> i%10 >= 1 -> 90% eligible
+        nested = [_make_strategy(
+            strategy_id="N_MGC_0900_E1_RR2.0_CB5_ORB_G8",
+            orb_label="0900", filter_type="ORB_G8",
+            expectancy_r=0.20,
+        )]
+
+        db_path = self._setup_nested_db(
+            tmp_path, baseline, nested,
+            df_rows_5m + df_rows_15m, [], nested_outcome_rows=[],
+        )
+
+        series_df, stats = build_strategy_daily_series(db_path, [
+            baseline[0]["strategy_id"], nested[0]["strategy_id"],
+        ])
+
+        baseline_eligible = stats[baseline[0]["strategy_id"]]["eligible_days"]
+        nested_eligible = stats[nested[0]["strategy_id"]]["eligible_days"]
+
+        # Nested G8 on 15m should have MORE eligible days than baseline G6 on 5m
+        # because 15m ORBs are 1.5x larger
+        assert nested_eligible > baseline_eligible, (
+            f"Nested G8 on 15m ({nested_eligible}) should have more eligible days "
+            f"than baseline G6 on 5m ({baseline_eligible})"
+        )
+
+    def test_portfolio_json_roundtrip_nested(self, tmp_path):
+        """JSON roundtrip preserves source field for nested strategies."""
+        baseline = [_make_strategy(
+            strategy_id="MGC_0900_E1_RR2.0_CB5_ORB_G4",
+            orb_label="0900", filter_type="ORB_G4",
+        )]
+        nested = [_make_strategy(
+            strategy_id="N_MGC_1000_E1_RR2.0_CB5_ORB_G4",
+            orb_label="1000", filter_type="ORB_G4",
+            expectancy_r=0.20,
+        )]
+        df_rows = _make_daily_features_rows(10)
+        db_path = self._setup_nested_db(tmp_path, baseline, nested, df_rows, [])
+
+        portfolio = build_portfolio(db_path=db_path, instrument="MGC", include_nested=True)
+        json_str = portfolio.to_json()
+        loaded = Portfolio.from_json(json_str)
+
+        sources = {s.source for s in loaded.strategies}
+        assert sources == {"baseline", "nested"}
+        for orig, loaded_s in zip(portfolio.strategies, loaded.strategies):
+            assert orig.source == loaded_s.source
 
 
 class TestCLI:

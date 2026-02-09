@@ -29,6 +29,14 @@ from pipeline.cost_model import get_cost_spec, CostSpec
 from trading_app.config import ALL_FILTERS, classify_strategy
 
 
+def _get_table_names(con: duckdb.DuckDBPyConnection) -> set[str]:
+    """Return set of table names in the main schema."""
+    rows = con.execute(
+        "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+    ).fetchall()
+    return {r[0] for r in rows}
+
+
 # =========================================================================
 # Data classes
 # =========================================================================
@@ -217,25 +225,28 @@ def load_validated_strategies(
 
         # Load nested strategies if requested
         if include_nested:
-            # Check if nested_validated table exists
-            tables = con.execute(
-                "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
-            ).fetchall()
-            table_names = {row[0] for row in tables}
+            table_names = _get_table_names(con)
 
             if "nested_validated" in table_names:
                 nested_rows = con.execute("""
-                    SELECT strategy_id, instrument, orb_label, entry_model,
-                           rr_target, confirm_bars, filter_type,
-                           expectancy_r, win_rate, sample_size,
-                           sharpe_ratio, max_drawdown_r,
-                           NULL as median_risk_points, 'nested' as source
-                    FROM nested_validated
-                    WHERE instrument = ?
-                      AND LOWER(status) = 'active'
-                      AND expectancy_r >= ?
-                    ORDER BY expectancy_r DESC
+                    SELECT nv.strategy_id, nv.instrument, nv.orb_label, nv.entry_model,
+                           nv.rr_target, nv.confirm_bars, nv.filter_type,
+                           nv.expectancy_r, nv.win_rate, nv.sample_size,
+                           nv.sharpe_ratio, nv.max_drawdown_r,
+                           ns.median_risk_points, 'nested' as source
+                    FROM nested_validated nv
+                    LEFT JOIN nested_strategies ns
+                      ON nv.strategy_id = ns.strategy_id
+                    WHERE nv.instrument = ?
+                      AND LOWER(nv.status) = 'active'
+                      AND nv.expectancy_r >= ?
+                    ORDER BY nv.expectancy_r DESC
                 """, [instrument, min_expectancy_r]).fetchall()
+
+                nested_cols = [desc[0] for desc in con.description]
+                assert len(nested_cols) == len(cols), (
+                    f"Nested column count ({len(nested_cols)}) != baseline ({len(cols)})"
+                )
 
                 # Append nested results
                 for row in nested_rows:
@@ -375,8 +386,8 @@ def build_strategy_daily_series(
     Build per-strategy daily R-series on a shared calendar.
 
     Supports both baseline (from orb_outcomes) and nested (from nested_outcomes)
-    strategies. Determines source from validated_setups.status and nested_validated
-    tables.
+    strategies. Queries both validated_setups and nested_validated to determine
+    source. Handles mixed orb_minutes by loading daily_features per group.
 
     For each strategy:
       - Trade day with outcome -> actual pnl_r
@@ -403,12 +414,8 @@ def build_strategy_daily_series(
             WHERE strategy_id IN ({placeholders})
         """, strategy_ids).fetchdf()
 
-        # Check if nested_validated exists
-        tables = {
-            row[0] for row in con.execute(
-                "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
-            ).fetchall()
-        }
+        # Check if nested tables exist
+        tables = _get_table_names(con)
         nested_strats = pd.DataFrame()
         if "nested_validated" in tables:
             nested_strats = con.execute(f"""
@@ -425,21 +432,28 @@ def build_strategy_daily_series(
             return pd.DataFrame(), {}
 
         instrument = strats.iloc[0]["instrument"]
-        orb_minutes = int(strats.iloc[0]["orb_minutes"])
 
-        # Step 2: Load shared calendar (all daily_features rows for instrument)
-        df_rows = con.execute("""
-            SELECT trading_day, orb_0900_size, orb_1000_size, orb_1100_size,
-                   orb_1800_size, orb_2300_size, orb_0030_size
-            FROM daily_features
-            WHERE symbol = ? AND orb_minutes = ?
-            ORDER BY trading_day
-        """, [instrument, orb_minutes]).fetchdf()
+        # Step 2: Load shared calendar per orb_minutes group
+        unique_om = sorted(strats["orb_minutes"].unique())
+        df_rows_by_om = {}
+        all_days = None
+        for om in unique_om:
+            om_int = int(om)
+            df_om = con.execute("""
+                SELECT trading_day, orb_0900_size, orb_1000_size, orb_1100_size,
+                       orb_1800_size, orb_2300_size, orb_0030_size
+                FROM daily_features
+                WHERE symbol = ? AND orb_minutes = ?
+                ORDER BY trading_day
+            """, [instrument, om_int]).fetchdf()
+            if df_om.empty:
+                continue
+            df_rows_by_om[om_int] = df_om
+            if all_days is None:
+                all_days = pd.DatetimeIndex(pd.to_datetime(df_om["trading_day"]))
 
-        if df_rows.empty:
+        if all_days is None:
             return pd.DataFrame(), {}
-
-        all_days = pd.DatetimeIndex(pd.to_datetime(df_rows["trading_day"]))
 
         # Step 3: Load outcomes from both orb_outcomes (baseline) and nested_outcomes (nested)
         outcomes_baseline = con.execute(f"""
@@ -457,7 +471,7 @@ def build_strategy_daily_series(
         """, strategy_ids).fetchdf()
 
         outcomes_nested = pd.DataFrame()
-        if "nested_validated" in tables:
+        if "nested_outcomes" in tables and "nested_validated" in tables:
             outcomes_nested = con.execute(f"""
                 SELECT nv.strategy_id, no.trading_day, no.pnl_r
                 FROM nested_validated nv
@@ -468,6 +482,7 @@ def build_strategy_daily_series(
                   AND no.entry_model = nv.entry_model
                   AND no.rr_target = nv.rr_target
                   AND no.confirm_bars = nv.confirm_bars
+                  AND no.entry_resolution = nv.entry_resolution
                 WHERE nv.strategy_id IN ({placeholders})
                   AND no.pnl_r IS NOT NULL
             """, strategy_ids).fetchdf()
@@ -483,6 +498,12 @@ def build_strategy_daily_series(
             sid = strat["strategy_id"]
             ftype = strat["filter_type"]
             orb_label = strat["orb_label"]
+            strat_om = int(strat["orb_minutes"])
+
+            # Look up daily_features for this strategy's orb_minutes
+            df_rows = df_rows_by_om.get(strat_om)
+            if df_rows is None:
+                continue
 
             # Determine eligible days from daily_features using filter
             filt = ALL_FILTERS.get(ftype)
