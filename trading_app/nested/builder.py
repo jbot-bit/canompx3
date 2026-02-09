@@ -22,13 +22,15 @@ sys.path.insert(0, str(PROJECT_ROOT))
 sys.stdout.reconfigure(line_buffering=True)
 
 import duckdb
+import numpy as np
 import pandas as pd
 
 from pipeline.paths import GOLD_DB_PATH
-from pipeline.cost_model import get_cost_spec
+from pipeline.cost_model import get_cost_spec, pnl_points_to_r, to_r_multiple
 from pipeline.init_db import ORB_LABELS
 from pipeline.build_daily_features import compute_trading_day_utc_range
-from trading_app.outcome_builder import compute_single_outcome, RR_TARGETS, CONFIRM_BARS_OPTIONS
+from trading_app.outcome_builder import RR_TARGETS, CONFIRM_BARS_OPTIONS
+from trading_app.entry_rules import detect_confirm, resolve_entry
 from trading_app.config import ENTRY_MODELS
 from trading_app.nested.schema import init_nested_schema
 
@@ -128,13 +130,14 @@ def build_nested_outcomes(
 
     For each orb_minutes in orb_minutes_list:
       1. Query daily_features for ORB levels and break info
-      2. Query bars_1m for each trading day
-      3. Resample post-ORB bars to 5m
-      4. For each (ORB x RR x CB x EM): compute outcome with 5m bars
-      5. For E3: verify sub-bar fill against 1m data
-      6. INSERT into nested_outcomes
+      2. Bulk-load bars_1m for the full date range (single query)
+      3. Partition bars by trading day boundaries in Python
+      4. Resample post-ORB bars to 5m
+      5. For each (ORB x RR x CB x EM): compute outcome with 5m bars
+      6. For E3: verify sub-bar fill against 1m data
+      7. INSERT into nested_outcomes
 
-    With --resume, skips days already completed (queries max trading_day per orb_minutes).
+    With --resume, skips days already in nested_outcomes (set-based gap detection).
 
     Returns count of rows written.
     """
@@ -188,21 +191,23 @@ def build_nested_outcomes(
                       "Run: python pipeline/build_daily_features.py --orb-minutes {orb_minutes}")
                 continue
 
-            # Resume: skip days already completed
-            skip_before = None
+            # Resume: skip days already completed (set-based gap detection)
             if resume and not dry_run:
-                result = con.execute(
-                    """SELECT MAX(trading_day) FROM nested_outcomes
-                       WHERE symbol = ? AND orb_minutes = ?""",
-                    [instrument, orb_minutes],
-                ).fetchone()
-                if result and result[0] is not None:
-                    skip_before = result[0]
+                completed_days = {
+                    r[0] for r in con.execute(
+                        """SELECT DISTINCT trading_day FROM nested_outcomes
+                           WHERE symbol = ? AND orb_minutes = ?""",
+                        [instrument, orb_minutes],
+                    ).fetchall()
+                }
+                if completed_days:
                     original_count = total_days
-                    rows = [r for r in rows if dict(zip(col_names, r))["trading_day"] >= skip_before]
+                    rows = [r for r in rows
+                            if dict(zip(col_names, r))["trading_day"] not in completed_days]
                     total_days = len(rows)
-                    print(f"  {original_count} total trading days, resuming from {skip_before} (re-processes last day)")
-                    print(f"  {total_days} days remaining")
+                    print(f"  {original_count} total trading days, "
+                          f"{len(completed_days)} already completed, "
+                          f"{total_days} remaining")
                     if total_days == 0:
                         print(f"  All days already completed for orb_minutes={orb_minutes}")
                         continue
@@ -211,24 +216,41 @@ def build_nested_outcomes(
             else:
                 print(f"  {total_days} trading days loaded")
 
+            # --- Bulk-load bars_1m for the full date range ---
+            trading_days = [dict(zip(col_names, r))["trading_day"] for r in rows]
+            first_td_start, _ = compute_trading_day_utc_range(trading_days[0])
+            _, last_td_end = compute_trading_day_utc_range(trading_days[-1])
+
+            print(f"  Bulk-loading bars_1m ({first_td_start.date()} to {last_td_end.date()})...")
+            bulk_t0 = time.monotonic()
+            all_bars_1m = con.execute(
+                """SELECT ts_utc, open, high, low, close, volume
+                   FROM bars_1m
+                   WHERE symbol = ?
+                   AND ts_utc >= ?::TIMESTAMPTZ
+                   AND ts_utc < ?::TIMESTAMPTZ
+                   ORDER BY ts_utc ASC""",
+                [instrument, first_td_start.isoformat(), last_td_end.isoformat()],
+            ).fetchdf()
+            if not all_bars_1m.empty:
+                all_bars_1m["ts_utc"] = pd.to_datetime(all_bars_1m["ts_utc"], utc=True)
+            print(f"  Loaded {len(all_bars_1m)} bars in {time.monotonic() - bulk_t0:.1f}s")
+
+            # Pre-compute trading day boundaries using searchsorted for O(log n) partitioning
+            ts_values = all_bars_1m["ts_utc"].values  # numpy datetime64 array (sorted)
+
             for day_idx, row in enumerate(rows):
                 row_dict = dict(zip(col_names, row))
                 trading_day = row_dict["trading_day"]
                 symbol = row_dict["symbol"]
 
-                # Get bars_1m for this trading day
+                # Partition bars for this trading day using searchsorted
                 td_start, td_end = compute_trading_day_utc_range(trading_day)
-                bars_1m_df = con.execute(
-                    """SELECT ts_utc, open, high, low, close, volume
-                       FROM bars_1m
-                       WHERE symbol = ?
-                       AND ts_utc >= ?::TIMESTAMPTZ
-                       AND ts_utc < ?::TIMESTAMPTZ
-                       ORDER BY ts_utc ASC""",
-                    [symbol, td_start.isoformat(), td_end.isoformat()],
-                ).fetchdf()
-                if not bars_1m_df.empty:
-                    bars_1m_df["ts_utc"] = pd.to_datetime(bars_1m_df["ts_utc"], utc=True)
+                td_start_np = pd.Timestamp(td_start).to_numpy()
+                td_end_np = pd.Timestamp(td_end).to_numpy()
+                i_start = ts_values.searchsorted(td_start_np, side="left")
+                i_end = ts_values.searchsorted(td_end_np, side="left")
+                bars_1m_df = all_bars_1m.iloc[i_start:i_end]
 
                 if bars_1m_df.empty:
                     continue
@@ -252,52 +274,170 @@ def build_nested_outcomes(
                     if bars_5m_df.empty:
                         continue
 
-                    for rr_target in RR_TARGETS:
-                        for cb in CONFIRM_BARS_OPTIONS:
-                            for em in ENTRY_MODELS:
-                                outcome = compute_single_outcome(
-                                    bars_df=bars_5m_df,
-                                    break_ts=break_ts,
-                                    orb_high=orb_high,
-                                    orb_low=orb_low,
-                                    break_dir=break_dir,
-                                    rr_target=rr_target,
-                                    confirm_bars=cb,
-                                    trading_day_end=td_end,
-                                    cost_spec=cost_spec,
-                                    entry_model=em,
+                    # OPTIMIZATION: cache detect_confirm per (ORB, CB)
+                    # detect_confirm does NOT depend on RR or EM
+                    confirm_cache = {}
+                    for cb in CONFIRM_BARS_OPTIONS:
+                        confirm_cache[cb] = detect_confirm(
+                            bars_5m_df, break_ts, orb_high, orb_low,
+                            break_dir, cb, td_end,
+                        )
+
+                    # OPTIMIZATION: cache resolve_entry per (ORB, CB, EM)
+                    # resolve_entry does NOT depend on RR
+                    entry_cache = {}
+                    for cb in CONFIRM_BARS_OPTIONS:
+                        for em in ENTRY_MODELS:
+                            signal = resolve_entry(
+                                bars_5m_df, confirm_cache[cb], em, td_end,
+                            )
+
+                            # E3 sub-bar fill verification
+                            if (em == "E3"
+                                    and signal.triggered
+                                    and signal.entry_ts is not None):
+                                fill_ok = _verify_e3_sub_bar_fill(
+                                    bars_1m_df,
+                                    signal.entry_ts,
+                                    signal.entry_price,
+                                    break_dir,
                                 )
+                                if not fill_ok:
+                                    signal = None  # Mark as invalid
 
-                                # E3 sub-bar fill verification
-                                if (em == "E3"
-                                        and outcome.get("entry_ts") is not None
-                                        and outcome.get("outcome") is not None):
-                                    fill_ok = _verify_e3_sub_bar_fill(
-                                        bars_1m_df,
-                                        outcome["entry_ts"],
-                                        outcome["entry_price"],
-                                        break_dir,
-                                    )
-                                    if not fill_ok:
-                                        # Override to no-fill
-                                        outcome = {
-                                            "entry_ts": None, "entry_price": None,
-                                            "stop_price": None, "target_price": None,
-                                            "outcome": None, "exit_ts": None,
-                                            "exit_price": None, "pnl_r": None,
-                                            "mae_r": None, "mfe_r": None,
-                                        }
+                            entry_cache[(cb, em)] = signal
 
-                                day_batch.append([
-                                    trading_day, symbol, orb_label, orb_minutes,
-                                    ENTRY_RESOLUTION,
-                                    rr_target, cb, em,
-                                    outcome["entry_ts"], outcome["entry_price"],
-                                    outcome["stop_price"], outcome["target_price"],
-                                    outcome["outcome"], outcome["exit_ts"],
-                                    outcome["exit_price"], outcome["pnl_r"],
-                                    outcome["mae_r"], outcome["mfe_r"],
-                                ])
+                    # OPTIMIZATION: for each (CB, EM) entry, compute all RR targets
+                    # sharing the same post-entry bars
+                    for cb in CONFIRM_BARS_OPTIONS:
+                        for em in ENTRY_MODELS:
+                            signal = entry_cache[(cb, em)]
+
+                            # No entry (not triggered or E3 fill failed)
+                            if signal is None or not signal.triggered:
+                                for rr_target in RR_TARGETS:
+                                    day_batch.append([
+                                        trading_day, symbol, orb_label, orb_minutes,
+                                        ENTRY_RESOLUTION,
+                                        rr_target, cb, em,
+                                        None, None, None, None,
+                                        None, None, None, None,
+                                        None, None,
+                                    ])
+                                    total_written += 1
+                                continue
+
+                            entry_price = signal.entry_price
+                            stop_price = signal.stop_price
+                            entry_ts = signal.entry_ts
+                            risk_points = abs(entry_price - stop_price)
+
+                            if risk_points <= 0:
+                                for rr_target in RR_TARGETS:
+                                    day_batch.append([
+                                        trading_day, symbol, orb_label, orb_minutes,
+                                        ENTRY_RESOLUTION,
+                                        rr_target, cb, em,
+                                        None, None, None, None,
+                                        None, None, None, None,
+                                        None, None,
+                                    ])
+                                    total_written += 1
+                                continue
+
+                            # Get post-entry bars ONCE for all RR targets
+                            post_entry = bars_5m_df[
+                                (bars_5m_df["ts_utc"] > pd.Timestamp(entry_ts))
+                                & (bars_5m_df["ts_utc"] < pd.Timestamp(td_end))
+                            ].sort_values("ts_utc")
+
+                            if post_entry.empty:
+                                # Scratch for all RR targets
+                                mae_r = round(pnl_points_to_r(cost_spec, entry_price, stop_price, 0.0), 4)
+                                mfe_r = mae_r
+                                for rr_target in RR_TARGETS:
+                                    target_price = (entry_price + risk_points * rr_target
+                                                    if break_dir == "long"
+                                                    else entry_price - risk_points * rr_target)
+                                    day_batch.append([
+                                        trading_day, symbol, orb_label, orb_minutes,
+                                        ENTRY_RESOLUTION,
+                                        rr_target, cb, em,
+                                        entry_ts, entry_price, stop_price, target_price,
+                                        "scratch", None, None, None,
+                                        mae_r, mfe_r,
+                                    ])
+                                    total_written += 1
+                                continue
+
+                            # Pre-extract arrays ONCE
+                            highs = post_entry["high"].values
+                            lows = post_entry["low"].values
+                            if break_dir == "long":
+                                hit_stop = lows <= stop_price
+                                favorable = highs - entry_price
+                                adverse = entry_price - lows
+                            else:
+                                hit_stop = highs >= stop_price
+                                favorable = entry_price - lows
+                                adverse = highs - entry_price
+
+                            # Compute each RR target using shared arrays
+                            for rr_target in RR_TARGETS:
+                                if break_dir == "long":
+                                    target_price = entry_price + risk_points * rr_target
+                                    hit_target = highs >= target_price
+                                else:
+                                    target_price = entry_price - risk_points * rr_target
+                                    hit_target = lows <= target_price
+
+                                any_hit = hit_target | hit_stop
+
+                                if not any_hit.any():
+                                    outcome_str = "scratch"
+                                    max_fav = float(np.max(favorable))
+                                    max_adv = float(np.max(adverse))
+                                    mae_r = round(pnl_points_to_r(cost_spec, entry_price, stop_price, -max_adv), 4)
+                                    mfe_r = round(pnl_points_to_r(cost_spec, entry_price, stop_price, max_fav), 4)
+                                    day_batch.append([
+                                        trading_day, symbol, orb_label, orb_minutes,
+                                        ENTRY_RESOLUTION,
+                                        rr_target, cb, em,
+                                        entry_ts, entry_price, stop_price, target_price,
+                                        outcome_str, None, None, None,
+                                        mae_r, mfe_r,
+                                    ])
+                                else:
+                                    first_hit_idx = int(np.argmax(any_hit))
+                                    exit_ts_val = post_entry.iloc[first_hit_idx]["ts_utc"].to_pydatetime()
+                                    max_fav = float(np.max(favorable[:first_hit_idx + 1]))
+                                    max_adv = float(np.max(adverse[:first_hit_idx + 1]))
+                                    mae_r = round(pnl_points_to_r(cost_spec, entry_price, stop_price, -max_adv), 4)
+                                    mfe_r = round(pnl_points_to_r(cost_spec, entry_price, stop_price, max_fav), 4)
+
+                                    if hit_target[first_hit_idx] and hit_stop[first_hit_idx]:
+                                        outcome_str = "loss"
+                                        exit_price = stop_price
+                                        pnl_r = -1.0
+                                    elif hit_target[first_hit_idx]:
+                                        outcome_str = "win"
+                                        exit_price = target_price
+                                        pnl_r = round(
+                                            to_r_multiple(cost_spec, entry_price, stop_price,
+                                                          risk_points * rr_target), 4)
+                                    else:
+                                        outcome_str = "loss"
+                                        exit_price = stop_price
+                                        pnl_r = -1.0
+
+                                    day_batch.append([
+                                        trading_day, symbol, orb_label, orb_minutes,
+                                        ENTRY_RESOLUTION,
+                                        rr_target, cb, em,
+                                        entry_ts, entry_price, stop_price, target_price,
+                                        outcome_str, exit_ts_val, exit_price, pnl_r,
+                                        mae_r, mfe_r,
+                                    ])
 
                                 total_written += 1
 
@@ -315,7 +455,7 @@ def build_nested_outcomes(
                         day_batch,
                     )
 
-                if (day_idx + 1) % 50 == 0:
+                if (day_idx + 1) % 100 == 0:
                     if not dry_run:
                         con.commit()
                     elapsed = time.monotonic() - t0

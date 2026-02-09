@@ -93,24 +93,75 @@ Features planned but NOT YET BUILT. Move items to CLAUDE.md as they are implemen
 
 ---
 
-## Codebase Audit — DONE (2026-02-08)
+## Phase 7: Audit & Analysis — DONE (2026-02-08)
 
-Full codebase audit completed. See `AUDIT_FINDINGS.md` for details.
+### 7a. Codebase Audit — DONE
+- Full codebase audit completed. See `AUDIT_FINDINGS.md` for details.
 - 5 critical bugs fixed (C1-C5), 6 important fixes (I1-I4, I6-I7)
 - 97 new tests across 10 coverage gaps (T1-T10)
 - 3 new drift checks (17-19)
 - **655 tests pass, 19 drift checks pass**
 - R1 (fill-bar granularity) logged as HIGH PRIORITY R&D task
 
+### 7b. Independent Bars Coverage Audit — DONE
+- `pipeline/audit_bars_coverage.py` (~300 LOC)
+- Samples ~60 trading days across 4 tiers: boundary, roll, anomaly, random
+- Test run (90 days): 86 PASS, 4 WARN (roll-day expected), 0 FAIL
+- No modifications to existing pipeline code
+
+### 7c. Strategy Analysis — DONE
+- `STRATEGY_ANALYSIS_ASIA_OPEN.md` with live recommendations
+- 0900 Asia Open: E1 CB2 RR2.5 G6+ = +0.40 ExpR (TOP)
+- 1800 Evening: E3 CB4-5 RR2.0 G6+ = +0.43 ExpR, best Sharpe
+- 3-leg core portfolio: +0.55 combined ExpR, 6.5R max drawdown
+
+### 7d. Ship-Ready Hardening — DONE (2026-02-09)
+- Ruff linting: cleaned all warnings across codebase
+- Strategy viewer CLI (`trading_app/view_strategies.py`) + dashboard panel
+- Pre-commit hook wired via `.githooks/`
+- GitHub Actions CI on push/PR
+- README and backup scripts
+
 ---
 
 ## Nested ORB Research — IN PROGRESS (feature/nested-orb branch)
 
-- Hypothesis: wider ORB range (15/30m) + 5m entry bars reduces noise
-- Isolated research track: zero changes to production tables or code
+Hypothesis: wider ORB range (15/30m) + 5m entry bars reduces noise and improves edge.
+
+### Completed
 - 6 new modules in `trading_app/nested/` (~1,800 LOC)
 - 3 new tables: nested_outcomes, nested_strategies, nested_validated
-- Pending: builder completion, discovery, validation, A/B comparison
+- Schema, builder, discovery, validator, compare, audit_outcomes all implemented
+- Isolation enforced: drift checks 15-17 block cross-contamination
+- 15m nested ORB findings documented (1000 session is clear winner)
+
+### Current Status
+- Rebuilding nested_outcomes on full 2021-2026 dataset (previously only 2025-2026)
+- Re-running discovery and validation with 5 years of data
+- Goal: populate nested_validated (was 0 rows due to insufficient yearly data)
+
+### Remaining
+- A/B comparison: `python -m trading_app.nested.compare --instrument MGC`
+- Decision: merge winning nested strategies into production or keep as research overlay
+
+---
+
+## Phase 8: Remaining Work — TODO
+
+### 8a. Fill-Bar Granularity (R1) — HIGH PRIORITY
+- Current backtester resolves outcomes at bar boundaries
+- Need intra-bar simulation for accurate fill modeling before live trading
+- See `AUDIT_FINDINGS.md` for details
+
+### 8b. Monitoring & Alerting (Phase 6e) — TODO
+- Strategy performance tracking (live vs backtest drift detection)
+- Alert on: drawdown exceeding historical, win rate divergence, ORB size regime shift
+- Dashboard for live strategy status
+
+### 8c. orb_outcomes Backfill 2016-2020 — TODO
+- orb_outcomes currently covers 2021-2026 only (689,310 rows)
+- 2016-2020 data exists in bars_1m/bars_5m/daily_features but outcomes not yet built
+- Would enable 10-year validation instead of 5-year
 
 ---
 
