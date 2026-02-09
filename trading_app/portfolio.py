@@ -49,6 +49,7 @@ class PortfolioStrategy:
     sharpe_ratio: float | None
     max_drawdown_r: float | None
     median_risk_points: float | None
+    source: str = "baseline"  # "baseline" or "nested"
     weight: float = 1.0
     max_contracts: int = 1
 
@@ -186,27 +187,61 @@ def load_validated_strategies(
     db_path: Path,
     instrument: str,
     min_expectancy_r: float = 0.10,
+    include_nested: bool = False,
 ) -> list[dict]:
-    """Load validated strategies from DB, filtered by minimum ExpR."""
+    """Load validated strategies from DB, filtered by minimum ExpR.
+
+    When include_nested=True, also loads nested_validated strategies and
+    marks each with source='baseline' or source='nested'.
+    """
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        rows = con.execute("""
+        # Load baseline strategies
+        baseline_rows = con.execute("""
             SELECT vs.strategy_id, vs.instrument, vs.orb_label, vs.entry_model,
                    vs.rr_target, vs.confirm_bars, vs.filter_type,
                    vs.expectancy_r, vs.win_rate, vs.sample_size,
                    vs.sharpe_ratio, vs.max_drawdown_r,
-                   es.median_risk_points
+                   es.median_risk_points, 'baseline' as source
             FROM validated_setups vs
             LEFT JOIN experimental_strategies es
               ON vs.strategy_id = es.strategy_id
             WHERE vs.instrument = ?
-              AND vs.status = 'ACTIVE'
+              AND LOWER(vs.status) = 'active'
               AND vs.expectancy_r >= ?
             ORDER BY vs.expectancy_r DESC
         """, [instrument, min_expectancy_r]).fetchall()
 
         cols = [desc[0] for desc in con.description]
-        return [dict(zip(cols, row)) for row in rows]
+        results = [dict(zip(cols, row)) for row in baseline_rows]
+
+        # Load nested strategies if requested
+        if include_nested:
+            # Check if nested_validated table exists
+            tables = con.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+            ).fetchall()
+            table_names = {row[0] for row in tables}
+
+            if "nested_validated" in table_names:
+                nested_rows = con.execute("""
+                    SELECT strategy_id, instrument, orb_label, entry_model,
+                           rr_target, confirm_bars, filter_type,
+                           expectancy_r, win_rate, sample_size,
+                           sharpe_ratio, max_drawdown_r,
+                           NULL as median_risk_points, 'nested' as source
+                    FROM nested_validated
+                    WHERE instrument = ?
+                      AND LOWER(status) = 'active'
+                      AND expectancy_r >= ?
+                    ORDER BY expectancy_r DESC
+                """, [instrument, min_expectancy_r]).fetchall()
+
+                # Append nested results
+                for row in nested_rows:
+                    results.append(dict(zip(cols, row)))
+
+        return results
     finally:
         con.close()
 
@@ -264,9 +299,13 @@ def build_portfolio(
     risk_per_trade_pct: float = 2.0,
     max_concurrent_positions: int = 3,
     max_daily_loss_r: float = 5.0,
+    include_nested: bool = False,
 ) -> Portfolio:
     """
     Build a diversified portfolio from validated strategies.
+
+    Args:
+        include_nested: If True, also includes nested_validated strategies.
 
     Returns Portfolio with selected strategies and risk parameters.
     """
@@ -274,7 +313,9 @@ def build_portfolio(
         db_path = GOLD_DB_PATH
 
     # Load and filter candidates
-    candidates = load_validated_strategies(db_path, instrument, min_expectancy_r)
+    candidates = load_validated_strategies(
+        db_path, instrument, min_expectancy_r, include_nested=include_nested
+    )
 
     if not candidates:
         return Portfolio(
@@ -307,6 +348,7 @@ def build_portfolio(
             sharpe_ratio=s.get("sharpe_ratio"),
             max_drawdown_r=s.get("max_drawdown_r"),
             median_risk_points=s.get("median_risk_points"),
+            source=s.get("source", "baseline"),
         ))
 
     return Portfolio(
@@ -332,6 +374,10 @@ def build_strategy_daily_series(
     """
     Build per-strategy daily R-series on a shared calendar.
 
+    Supports both baseline (from orb_outcomes) and nested (from nested_outcomes)
+    strategies. Determines source from validated_setups.status and nested_validated
+    tables.
+
     For each strategy:
       - Trade day with outcome -> actual pnl_r
       - Eligible day (filter passes) but no trade -> 0.0
@@ -348,14 +394,33 @@ def build_strategy_daily_series(
     try:
         placeholders = ", ".join(["?"] * len(strategy_ids))
 
-        # Step 1: Load strategy parameters
-        strats = con.execute(f"""
+        # Step 1: Load strategy parameters from BOTH baseline and nested
+        baseline_strats = con.execute(f"""
             SELECT strategy_id, instrument, orb_label, orb_minutes,
-                   entry_model, rr_target, confirm_bars, filter_type
+                   entry_model, rr_target, confirm_bars, filter_type,
+                   'baseline' as source
             FROM validated_setups
             WHERE strategy_id IN ({placeholders})
         """, strategy_ids).fetchdf()
 
+        # Check if nested_validated exists
+        tables = {
+            row[0] for row in con.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+            ).fetchall()
+        }
+        nested_strats = pd.DataFrame()
+        if "nested_validated" in tables:
+            nested_strats = con.execute(f"""
+                SELECT strategy_id, instrument, orb_label, orb_minutes,
+                       entry_model, rr_target, confirm_bars, filter_type,
+                       'nested' as source
+                FROM nested_validated
+                WHERE strategy_id IN ({placeholders})
+            """, strategy_ids).fetchdf()
+
+        # Combine baseline and nested
+        strats = pd.concat([baseline_strats, nested_strats], ignore_index=True)
         if strats.empty:
             return pd.DataFrame(), {}
 
@@ -376,8 +441,8 @@ def build_strategy_daily_series(
 
         all_days = pd.DatetimeIndex(pd.to_datetime(df_rows["trading_day"]))
 
-        # Step 3: Load all relevant outcomes in one query
-        outcomes = con.execute(f"""
+        # Step 3: Load outcomes from both orb_outcomes (baseline) and nested_outcomes (nested)
+        outcomes_baseline = con.execute(f"""
             SELECT vs.strategy_id, oo.trading_day, oo.pnl_r
             FROM validated_setups vs
             JOIN orb_outcomes oo
@@ -390,6 +455,25 @@ def build_strategy_daily_series(
             WHERE vs.strategy_id IN ({placeholders})
               AND oo.pnl_r IS NOT NULL
         """, strategy_ids).fetchdf()
+
+        outcomes_nested = pd.DataFrame()
+        if "nested_validated" in tables:
+            outcomes_nested = con.execute(f"""
+                SELECT nv.strategy_id, no.trading_day, no.pnl_r
+                FROM nested_validated nv
+                JOIN nested_outcomes no
+                  ON no.symbol = nv.instrument
+                  AND no.orb_label = nv.orb_label
+                  AND no.orb_minutes = nv.orb_minutes
+                  AND no.entry_model = nv.entry_model
+                  AND no.rr_target = nv.rr_target
+                  AND no.confirm_bars = nv.confirm_bars
+                WHERE nv.strategy_id IN ({placeholders})
+                  AND no.pnl_r IS NOT NULL
+            """, strategy_ids).fetchdf()
+
+        # Combine outcomes
+        outcomes = pd.concat([outcomes_baseline, outcomes_nested], ignore_index=True)
 
         # Step 4: Build per-strategy series
         series_dict = {}
@@ -571,6 +655,7 @@ def main():
     parser.add_argument("--risk-pct", type=float, default=2.0, help="Risk per trade in percent")
     parser.add_argument("--max-concurrent", type=int, default=3, help="Max concurrent positions")
     parser.add_argument("--max-daily-loss", type=float, default=5.0, help="Max daily loss (R)")
+    parser.add_argument("--include-nested", action="store_true", help="Include nested ORB strategies")
     parser.add_argument("--output", type=str, default=None, help="Output JSON file path")
     args = parser.parse_args()
 
@@ -583,6 +668,7 @@ def main():
         risk_per_trade_pct=args.risk_pct,
         max_concurrent_positions=args.max_concurrent,
         max_daily_loss_r=args.max_daily_loss,
+        include_nested=args.include_nested,
     )
 
     summary = portfolio.summary()
