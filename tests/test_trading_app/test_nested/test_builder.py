@@ -215,13 +215,17 @@ class TestOutcomeResolutionDifference:
 
         With 1m bars and E1: confirm at :00, entry at :01 open, target hit at :07.
         With 5m bars and E1: confirm at 5m candle 0, entry at 5m candle 1 open,
-        post-entry scan on 5m candle 2 which has both target+stop -> ambiguous -> loss.
+        fill bar high < target (no fill-bar exit), then candle 2 has both
+        target+stop -> ambiguous -> loss.
         """
         orb_high, orb_low = 2700.0, 2690.0
         break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
         td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
 
         # 15 bars = 3 x 5m candles after resample
+        # E1 entry = 2701 (bar :01 open). Risk=11. Target=2723.
+        # Key: 5m candle 1 high must be < 2723 so fill-bar exit doesn't trigger.
+        # 1m bars :05-:09 highs kept <= 2722.
         bars_1m = _make_bars(
             datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
             [
@@ -231,24 +235,24 @@ class TestOutcomeResolutionDifference:
                 (2701, 2702, 2700, 2701, 100),  # :02
                 (2701, 2702, 2700, 2701, 100),  # :03
                 (2701, 2702, 2700, 2701, 100),  # :04
-                # 5m candle 1 (:05-:09): price rises, target hit at :07 (1m)
+                # 5m candle 1 (:05-:09): gradual rise, no 1m bar hits target
                 (2701, 2710, 2700, 2710, 100),  # :05
-                (2710, 2720, 2709, 2718, 100),  # :06
-                (2718, 2724, 2717, 2720, 100),  # :07 high=2724 >= target=2723 -> 1m WIN
-                (2720, 2721, 2719, 2720, 100),  # :08
+                (2710, 2716, 2709, 2715, 100),  # :06
+                (2715, 2722, 2714, 2720, 100),  # :07 high=2722 < target=2723
+                (2720, 2722, 2719, 2720, 100),  # :08
                 (2720, 2721, 2719, 2720, 100),  # :09
-                # 5m candle 2 (:10-:14): spike + crash (on 5m, this is the post-entry bar)
-                (2720, 2725, 2685, 2686, 100),  # :10 both target+stop
-                (2686, 2688, 2684, 2685, 100),  # :11
-                (2685, 2686, 2683, 2684, 100),  # :12
-                (2684, 2685, 2682, 2683, 100),  # :13
-                (2683, 2684, 2681, 2682, 100),  # :14
+                # 5m candle 2 (:10-:14): spike + crash -> 1m :10 hits target alone
+                (2720, 2724, 2718, 2722, 100),  # :10 high=2724 >= 2723 -> 1m WIN
+                (2722, 2723, 2685, 2686, 100),  # :11 crash (hits stop on 1m)
+                (2686, 2688, 2684, 2685, 100),  # :12
+                (2685, 2686, 2683, 2684, 100),  # :13
+                (2684, 2685, 2681, 2682, 100),  # :14
             ],
         )
 
         # 1m path: E1 entry at :01 open = 2701
         # Risk = 2701 - 2690 = 11. Target = 2701 + 22 = 2723
-        # Bar :07 high = 2724 >= 2723 -> WIN
+        # Bar :10 high = 2724 >= 2723 -> WIN (target hit before stop on 1m)
         result_1m = compute_single_outcome(
             bars_df=bars_1m, break_ts=break_ts,
             orb_high=orb_high, orb_low=orb_low, break_dir="long",
@@ -259,10 +263,9 @@ class TestOutcomeResolutionDifference:
 
         # 5m path: 3 candles
         # Candle 0 (:00): open=2698, high=2702, low=2695, close=2701 -> confirm
-        # Candle 1 (:05): E1 entry at open. open=2701, high=2724, low=2700, close=2720
-        #   Scan starts from bars > entry_ts (:05). Next bar is candle 2 (:10).
-        # Candle 2 (:10): open=2720, high=2725, low=2681, close=2682
-        #   high=2725 >= 2723 -> target hit
+        # Candle 1 (:05): E1 entry at open=2701, high=2722 < 2723 -> no fill-bar exit
+        # Candle 2 (:10): open=2720, high=2724, low=2681, close=2682
+        #   high=2724 >= 2723 -> target hit
         #   low=2681 <= 2690 -> stop hit
         #   BOTH on same bar -> ambiguous -> conservative LOSS
         bars_5m = resample_to_5m(bars_1m, datetime(2024, 1, 4, 23, 59, tzinfo=timezone.utc))

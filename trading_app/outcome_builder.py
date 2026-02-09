@@ -51,6 +51,82 @@ RR_TARGETS = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0]
 CONFIRM_BARS_OPTIONS = [1, 2, 3, 4, 5]
 
 
+def _check_fill_bar_exit(
+    bars_df: pd.DataFrame,
+    entry_ts: datetime,
+    entry_price: float,
+    stop_price: float,
+    target_price: float,
+    break_dir: str,
+    entry_model: str,
+    cost_spec,
+    rr_target: float,
+) -> dict | None:
+    """Check if the fill bar itself hits stop or target.
+
+    Returns outcome dict if exit detected on fill bar, None otherwise.
+    For E1: entry is at bar open, so full bar OHLC is post-fill.
+    For E3: entry is intra-bar at ORB level, check bar OHLC against levels.
+    For E2: caller should not invoke (bar close = fill point).
+    """
+    fill_bar = bars_df[bars_df["ts_utc"] == pd.Timestamp(entry_ts)]
+    if fill_bar.empty:
+        return None
+
+    bar = fill_bar.iloc[0]
+    bar_high = bar["high"]
+    bar_low = bar["low"]
+
+    if break_dir == "long":
+        hit_target = bar_high >= target_price
+        hit_stop = bar_low <= stop_price
+        favorable_pts = float(bar_high - entry_price)
+        adverse_pts = float(entry_price - bar_low)
+    else:
+        hit_target = bar_low <= target_price
+        hit_stop = bar_high >= stop_price
+        favorable_pts = float(entry_price - bar_low)
+        adverse_pts = float(bar_high - entry_price)
+
+    if not hit_target and not hit_stop:
+        return None
+
+    exit_ts_val = bar["ts_utc"].to_pydatetime()
+    result = {}
+
+    if hit_target and hit_stop:
+        # Ambiguous — conservative loss (matches existing convention)
+        result["outcome"] = "loss"
+        result["exit_ts"] = exit_ts_val
+        result["exit_price"] = stop_price
+        result["pnl_r"] = -1.0
+    elif hit_target:
+        risk_points = abs(entry_price - stop_price)
+        result["outcome"] = "win"
+        result["exit_ts"] = exit_ts_val
+        result["exit_price"] = target_price
+        result["pnl_r"] = round(
+            to_r_multiple(cost_spec, entry_price, stop_price,
+                          risk_points * rr_target),
+            4,
+        )
+    else:
+        result["outcome"] = "loss"
+        result["exit_ts"] = exit_ts_val
+        result["exit_price"] = stop_price
+        result["pnl_r"] = -1.0
+
+    # MAE/MFE for fill-bar exit: single-bar excursion
+    result["mae_r"] = round(
+        pnl_points_to_r(cost_spec, entry_price, stop_price, max(adverse_pts, 0.0)), 4
+    )
+    result["mfe_r"] = round(
+        pnl_points_to_r(cost_spec, entry_price, stop_price, max(favorable_pts, 0.0)), 4
+    )
+
+    return result
+
+
 def compute_single_outcome(
     bars_df: pd.DataFrame,
     break_ts: datetime,
@@ -114,6 +190,17 @@ def compute_single_outcome(
     result["entry_price"] = entry_price
     result["stop_price"] = stop_price
     result["target_price"] = target_price
+
+    # Check fill bar for immediate exit (E1, E3 only)
+    # E2 fills at bar close — no post-fill price action on that bar
+    if entry_model != "E2":
+        fill_exit = _check_fill_bar_exit(
+            bars_df, entry_ts, entry_price, stop_price, target_price,
+            break_dir, entry_model, cost_spec, rr_target,
+        )
+        if fill_exit is not None:
+            result.update(fill_exit)
+            return result
 
     # Scan bars forward from entry to determine outcome
     post_entry = bars_df[

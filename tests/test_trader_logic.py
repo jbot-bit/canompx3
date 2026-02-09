@@ -342,10 +342,10 @@ class TestMaeMfeBounds:
 
 
 class TestE3NoSameBarFill:
-    """Check 6: E3 outcome scan starts AFTER fill bar."""
+    """Check 6: E3 exit must be on or after fill bar."""
 
-    def test_e3_exit_after_entry(self):
-        """If E3 fills and exits, exit_ts > entry_ts."""
+    def test_e3_exit_on_or_after_entry(self):
+        """If E3 fills and exits, exit_ts >= entry_ts (fill-bar exit is valid)."""
         # Bar 0: confirm. Bar 1: retrace fills E3. Bar 2+: outcome scan.
         bars = _make_bars(
             BREAK_TS,
@@ -360,8 +360,8 @@ class TestE3NoSameBarFill:
             2.0, 1, TD_END, _cost(), "E3",
         )
         if result["entry_ts"] is not None and result["exit_ts"] is not None:
-            assert result["exit_ts"] > result["entry_ts"], (
-                "E3 exit must be after entry (no same-bar resolution)"
+            assert result["exit_ts"] >= result["entry_ts"], (
+                "E3 exit must be on or after entry bar"
             )
 
 
@@ -440,6 +440,204 @@ class TestWinRMultipleExact:
                 assert wrong_r != correct_r, "Functions should differ when friction > 0"
                 # And pnl_r should match the CORRECT one
                 assert result["pnl_r"] == pytest.approx(correct_r, abs=0.0001)
+
+
+# ============================================================================
+# FILL-BAR EXIT TESTS (R1)
+# ============================================================================
+
+class TestFillBarExits:
+    """R1: Fill bar can hit stop/target for E1 and E3 entries."""
+
+    def test_e1_fill_bar_stop_hit(self):
+        """E1 fills at bar open. Bar's low breaches stop -> loss on fill bar."""
+        # ORB 2700-2690, long break. E1 entry at bar 1 open=2703.
+        # Risk = 2703-2690 = 13. Stop = 2690.
+        # Bar 1 (fill bar): low=2688 < stop=2690 -> stop hit on fill bar.
+        bars = _make_bars(
+            BREAK_TS,
+            [
+                (2698, 2701, 2695, 2701, 100),  # bar 0: confirm
+                (2703, 2706, 2688, 2695, 100),  # bar 1: E1 fill, low breaches stop
+                (2695, 2730, 2694, 2725, 100),  # bar 2: would rally (never reached)
+            ],
+        )
+        result = compute_single_outcome(
+            bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
+            2.0, 1, TD_END, _cost(), "E1",
+        )
+        assert result["outcome"] == "loss"
+        assert result["pnl_r"] == -1.0
+        assert result["exit_ts"] == result["entry_ts"], (
+            "Fill-bar exit: exit_ts must equal entry_ts"
+        )
+
+    def test_e1_fill_bar_target_hit(self):
+        """E1 fills at bar open. Bar's high reaches target -> win on fill bar."""
+        # ORB 2700-2690, long break, RR=1.0. E1 entry at bar 1 open=2703.
+        # Risk = 13. Target = 2703 + 13 = 2716.
+        # Bar 1 (fill bar): high=2720 >= target=2716 -> target hit.
+        bars = _make_bars(
+            BREAK_TS,
+            [
+                (2698, 2701, 2695, 2701, 100),  # bar 0: confirm
+                (2703, 2720, 2702, 2718, 100),  # bar 1: E1 fill, high hits target
+            ],
+        )
+        result = compute_single_outcome(
+            bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
+            1.0, 1, TD_END, _cost(), "E1",
+        )
+        assert result["outcome"] == "win"
+        assert result["pnl_r"] > 0
+        assert result["exit_ts"] == result["entry_ts"]
+
+    def test_e1_fill_bar_ambiguous(self):
+        """E1 fill bar hits both stop and target -> conservative loss."""
+        # ORB 2700-2690, long, RR=1.0. E1 entry at bar 1 open=2703.
+        # Risk = 13. Target = 2716. Stop = 2690.
+        # Bar 1: high=2720 >= 2716 AND low=2685 <= 2690 -> ambiguous.
+        bars = _make_bars(
+            BREAK_TS,
+            [
+                (2698, 2701, 2695, 2701, 100),  # bar 0: confirm
+                (2703, 2720, 2685, 2710, 200),  # bar 1: hits both
+            ],
+        )
+        result = compute_single_outcome(
+            bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
+            1.0, 1, TD_END, _cost(), "E1",
+        )
+        assert result["outcome"] == "loss"
+        assert result["pnl_r"] == -1.0
+        assert result["exit_ts"] == result["entry_ts"]
+
+    def test_e1_fill_bar_no_exit(self):
+        """E1 fill bar doesn't hit stop or target -> proceeds to post_entry."""
+        # ORB 2700-2690, long, RR=2.0. E1 entry at bar 1 open=2703.
+        # Risk = 13. Target = 2703 + 26 = 2729. Stop = 2690.
+        # Bar 1: high=2710 < 2729, low=2701 > 2690 -> no fill-bar exit.
+        # Bar 2: high=2735 >= 2729 -> target hit on post_entry scan.
+        bars = _make_bars(
+            BREAK_TS,
+            [
+                (2698, 2701, 2695, 2701, 100),  # bar 0: confirm
+                (2703, 2710, 2701, 2708, 100),  # bar 1: E1 fill, no exit
+                (2708, 2735, 2707, 2730, 100),  # bar 2: target hit
+            ],
+        )
+        result = compute_single_outcome(
+            bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
+            2.0, 1, TD_END, _cost(), "E1",
+        )
+        assert result["outcome"] == "win"
+        assert result["exit_ts"] > result["entry_ts"], (
+            "No fill-bar exit: exit should be on a later bar"
+        )
+
+    def test_e3_fill_bar_stop_invalidates_entry(self):
+        """E3: if fill bar's low breaches stop, entry_rules rejects the fill entirely."""
+        # ORB 2700-2690, long. E3 retrace bar low=2688 <= stop=2690.
+        # Entry_rules guard: stop breached on retrace bar -> no fill.
+        bars = _make_bars(
+            BREAK_TS,
+            [
+                (2698, 2701, 2695, 2701, 100),  # bar 0: confirm
+                (2703, 2705, 2688, 2695, 100),  # bar 1: retrace + stop hit -> no fill
+                (2695, 2730, 2694, 2725, 100),  # bar 2: irrelevant
+            ],
+        )
+        result = compute_single_outcome(
+            bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
+            2.0, 1, TD_END, _cost(), "E3",
+        )
+        # E3 entry_rules correctly reject: stop breached on retrace bar
+        assert result["outcome"] is None
+        assert result["entry_ts"] is None
+
+    def test_e3_fill_bar_target_hit(self):
+        """E3 fills on retrace, same bar also reaches target -> win on fill bar."""
+        # ORB 2700-2690, long, RR=1.0. E3 entry=2700. Risk=10. Target=2710.
+        # Bar 1: low=2699 (retrace, fills at 2700), high=2715 >= 2710 (target).
+        # Stop=2690, low=2699 > 2690 (no stop breach).
+        bars = _make_bars(
+            BREAK_TS,
+            [
+                (2698, 2701, 2695, 2701, 100),  # bar 0: confirm
+                (2703, 2715, 2699, 2712, 100),  # bar 1: retrace + target hit
+            ],
+        )
+        result = compute_single_outcome(
+            bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
+            1.0, 1, TD_END, _cost(), "E3",
+        )
+        assert result["outcome"] == "win"
+        assert result["pnl_r"] > 0
+        assert result["exit_ts"] == result["entry_ts"]
+
+    def test_e3_fill_bar_survives(self):
+        """E3 fills intra-bar, fill bar doesn't breach stop or target."""
+        # ORB 2700-2690, long, RR=2.0. E3 entry=2700. Risk=10. Target=2720.
+        # Bar 1: retrace (low=2699 <= 2700), but low > stop, high < target.
+        # Bar 2: target hit.
+        bars = _make_bars(
+            BREAK_TS,
+            [
+                (2698, 2701, 2695, 2701, 100),  # bar 0: confirm
+                (2703, 2705, 2699, 2704, 100),  # bar 1: retrace fill, survives
+                (2704, 2725, 2703, 2722, 100),  # bar 2: target hit
+            ],
+        )
+        result = compute_single_outcome(
+            bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
+            2.0, 1, TD_END, _cost(), "E3",
+        )
+        assert result["outcome"] == "win"
+        assert result["exit_ts"] > result["entry_ts"]
+
+    def test_e1_fill_bar_exit_changes_outcome(self):
+        """Without fill-bar check this would be a win; with it, it's a loss."""
+        # ORB 2700-2690, long, RR=2.0. E1 entry at bar 1 open=2703.
+        # Risk = 13. Target = 2729. Stop = 2690.
+        # Bar 1 (fill bar): low=2689 < 2690 -> stop hit on fill bar (loss).
+        # Bar 2-3: rally to 2735 > target (would be win without fill-bar check).
+        bars = _make_bars(
+            BREAK_TS,
+            [
+                (2698, 2701, 2695, 2701, 100),  # bar 0: confirm
+                (2703, 2706, 2689, 2704, 100),  # bar 1: fill bar, stop hit
+                (2704, 2720, 2703, 2718, 100),  # bar 2: rally
+                (2718, 2735, 2717, 2732, 100),  # bar 3: would hit target
+            ],
+        )
+        result = compute_single_outcome(
+            bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
+            2.0, 1, TD_END, _cost(), "E1",
+        )
+        # Must be loss (fill bar stop), not win (later target)
+        assert result["outcome"] == "loss"
+        assert result["pnl_r"] == -1.0
+        assert result["exit_ts"] == result["entry_ts"]
+
+    def test_e2_fill_bar_unchanged(self):
+        """E2 entry: fill bar is NOT checked (entry at bar close)."""
+        # ORB 2700-2690, long, RR=2.0. E2 entry at confirm bar close=2701.
+        # Risk = 11. Target = 2723. Stop = 2690.
+        # Bar 0 (confirm/fill): low=2695 > stop, high=2701 < target.
+        # Bar 1: target hit. Should be "win" (fill bar not checked for E2).
+        bars = _make_bars(
+            BREAK_TS,
+            [
+                (2698, 2701, 2695, 2701, 100),  # bar 0: confirm (E2 fill bar)
+                (2701, 2725, 2700, 2724, 100),  # bar 1: target hit
+            ],
+        )
+        result = compute_single_outcome(
+            bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
+            2.0, 1, TD_END, _cost(), "E2",
+        )
+        assert result["outcome"] == "win"
+        assert result["exit_ts"] > result["entry_ts"]
 
 
 # ============================================================================
