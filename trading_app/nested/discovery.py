@@ -21,7 +21,7 @@ import duckdb
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.cost_model import get_cost_spec
 from pipeline.init_db import ORB_LABELS
-from trading_app.config import ALL_FILTERS, ENTRY_MODELS, VolumeFilter
+from trading_app.config import ALL_FILTERS, ENTRY_MODELS
 from trading_app.outcome_builder import RR_TARGETS, CONFIRM_BARS_OPTIONS
 from trading_app.strategy_discovery import (
     compute_metrics,

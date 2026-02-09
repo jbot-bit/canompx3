@@ -32,9 +32,8 @@ from pipeline.paths import GOLD_DB_PATH, DAILY_DBN_DIR, PROJECT_ROOT
 from pipeline.ingest_dbn_mgc import (
     GC_OUTRIGHT_PATTERN,
     choose_front_contract,
-    compute_trading_days,
 )
-from pipeline.ingest_dbn_daily import DAILY_FILE_PATTERN, discover_daily_files
+from pipeline.ingest_dbn_daily import DAILY_FILE_PATTERN
 
 try:
     import databento as db

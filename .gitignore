@@ -10,8 +10,12 @@ dbn/
 *.dbn.zst
 *.zip
 
+# Backups
+backups/
+
 # Generated tools
 pipeline-explorer.html
+dashboard.html
 
 # Python
 __pycache__/

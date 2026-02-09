@@ -1,0 +1,100 @@
+You are Claude Code operating in the MPX3 repo.
+
+SELF-IDENTIFY (MANDATORY FIRST)
+1) Print: git branch, git status, HEAD commit hash
+2) Print: which DB file you are using (path)
+3) Print: the exact file(s) you will touch (paths)
+4) Print (≤7 bullets): what “walk-forward” means in THIS repo + where it is currently missing
+
+FAIL-CLOSED RULES
+- PASS 1 = AUDIT ONLY (no edits)
+- PASS 2 = MINIMAL IMPLEMENTATION ONLY (no refactors)
+- NO DB/schema changes
+- NO trading logic changes in outcome_builder / entry_rules / validator
+- Walk-forward must be implemented as an evaluation layer on top of existing outcomes + discovery + validation.
+- If anything is ambiguous, STOP and ask.
+
+GOAL
+Implement REAL walk-forward evaluation so strategies are assessed out-of-sample:
+- Train window: N years (default 3)
+- Test window: M years (default 1)
+- Slide forward by M years and repeat
+- Output: per-fold metrics + aggregated OOS metrics per strategy
+- Must be callable from CLI (paper_trader or a new script) using flags already mentioned in docstring:
+  --walk-forward --train-years 3 --test-years 1
+
+CONSTRAINTS
+- Must reuse existing strategy definitions and existing outcomes tables (orb_outcomes + daily_features eligibility)
+- Must not “peek” across folds:
+  - any thresholds/filters that require historical baselines (e.g., relative volume baselines) must be computed using TRAIN data only for that fold
+  - if that is too large to implement now, then explicitly disable volume filter in walk-forward or implement fold-safe baseline calc (choose one and justify)
+
+PASS 1 — AUDIT (NO EDITS)
+1) Find where CLI flags are documented (paper_trader docstring etc).
+2) Search repo for:
+   - walk-forward
+   - train-years / test-years
+   - out-of-sample / OOS
+   Report findings with file+line.
+3) Identify the minimal insertion point:
+   - Where strategies are enumerated (experimental_strategies / validated_setups)
+   - Where per-day outcomes are assembled per strategy (strategy_discovery / portfolio series builder)
+4) Decide minimal architecture:
+   Option A (preferred): Add new module trading_app/walk_forward.py with pure functions:
+     - build_fold_splits(trading_days, train_years, test_years)
+     - compute_strategy_metrics(strategy_id, days_subset)
+     - walk_forward_eval(strategy_id, folds) -> per_fold + aggregate
+   Option B: implement inside paper_trader.py
+   You must justify choice based on existing structure.
+5) Define EXACT invariants you will enforce:
+   - OOS days never used in training fold metrics
+   - Strategy eligibility filtering applied identically in train/test
+   - Sample size threshold applied per test fold and/or across combined OOS (state it)
+6) Produce PASS 1 report:
+   - “What exists”
+   - “What’s missing”
+   - “Implementation plan”
+   - “Files to change”
+STOP after PASS 1.
+
+PASS 2 — IMPLEMENT (MINIMAL)
+1) Implement fold splitter:
+   - Use trading_day (Brisbane date) as fold axis
+   - Fold example:
+     Train: 2019-2021, Test: 2022
+     Train: 2020-2022, Test: 2023
+     ...
+2) Implement fold-safe evaluation:
+   For each strategy_id:
+   - Build daily series for the fold’s TEST days:
+     - eligible but no trade = 0.0
+     - ineligible = NaN
+     - overlay pnl_r only if eligible (reuse the fixed logic)
+   - Compute metrics on TEST days:
+     - trade_count
+     - ExpR (mean pnl_r on trade days or daily series mean—state which and keep consistent)
+     - MaxDD (on cumulative daily series, ignoring NaNs)
+     - Sharpe (daily) if available, else keep simple mean/std and state
+3) Aggregation:
+   - Provide combined OOS metrics across all test folds
+   - Provide per-fold table
+4) Wire CLI:
+   - Add flags to chosen entrypoint:
+     --walk-forward
+     --train-years
+     --test-years
+     --min-oos-trades (default 100)  (fail-closed)
+5) Output artifacts:
+   - Write CSV/JSON to a deterministic path (no DB writes), e.g.:
+     artifacts/walk_forward/{run_id}/walk_forward_summary.csv
+6) Tests (must add):
+   - test_fold_splitter_no_leakage (no overlap between train and test)
+   - test_metrics_on_subset_days (changing subset changes result deterministically)
+7) Run gates and paste outputs:
+   - pytest -q
+   - any repo drift checks
+8) Commit:
+   - “Add walk-forward OOS evaluation (train-years/test-years)”
+   - Print commit hash + diffstat
+
+STOP.

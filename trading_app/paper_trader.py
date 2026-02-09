@@ -12,9 +12,8 @@ Usage:
 """
 
 import sys
-import json
 from pathlib import Path
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -25,9 +24,9 @@ sys.stdout.reconfigure(line_buffering=True)
 import duckdb
 
 from pipeline.paths import GOLD_DB_PATH
-from pipeline.cost_model import get_cost_spec, CostSpec
+from pipeline.cost_model import get_cost_spec
 from trading_app.portfolio import Portfolio, build_portfolio
-from trading_app.execution_engine import ExecutionEngine, TradeEvent
+from trading_app.execution_engine import ExecutionEngine
 from trading_app.risk_manager import RiskManager, RiskLimits
 
 

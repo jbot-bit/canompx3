@@ -13,7 +13,7 @@ Usage:
 import sys
 import time
 from pathlib import Path
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))

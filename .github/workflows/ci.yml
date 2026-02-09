@@ -21,8 +21,11 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Drift check (16 static analysis checks)
+      - name: Ruff lint check
+        run: ruff check pipeline/ trading_app/
+
+      - name: Drift check (19 static analysis checks)
         run: python pipeline/check_drift.py
 
       - name: Tier 1 - All tests (no gold.db needed)
-        run: python -m pytest tests/ -v --ignore=tests/test_trader_logic.py -n auto --dist loadscope
+        run: python -m pytest tests/ -v --ignore=tests/test_trader_logic.py -n auto --dist loadscope --cov=pipeline --cov=trading_app --cov-report=term-missing

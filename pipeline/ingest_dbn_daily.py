@@ -17,13 +17,12 @@ Usage:
     python pipeline/ingest_dbn_daily.py --dry-run
 """
 
-import os
 import sys
 import re
 import json
 import argparse
 from pathlib import Path
-from datetime import datetime, date, timedelta
+from datetime import datetime, date
 from zoneinfo import ZoneInfo
 
 # Force unbuffered stdout so progress prints appear immediately
@@ -36,7 +35,7 @@ import databento as db
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pipeline.paths import GOLD_DB_PATH, DAILY_DBN_DIR
+from pipeline.paths import DAILY_DBN_DIR
 from pipeline.ingest_dbn_mgc import (
     validate_chunk,
     validate_timestamp_utc,

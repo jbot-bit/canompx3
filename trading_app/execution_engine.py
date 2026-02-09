@@ -24,10 +24,9 @@ from enum import Enum
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-import pandas as pd
 
-from pipeline.cost_model import CostSpec, to_r_multiple, pnl_points_to_r
-from trading_app.config import ALL_FILTERS, ENTRY_MODELS
+from pipeline.cost_model import CostSpec, to_r_multiple
+from trading_app.config import ALL_FILTERS
 from trading_app.portfolio import Portfolio, PortfolioStrategy
 
 

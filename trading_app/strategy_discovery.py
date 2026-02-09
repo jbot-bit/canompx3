@@ -13,7 +13,7 @@ Usage:
 import sys
 import json
 from pathlib import Path
-from datetime import date, datetime, timezone
+from datetime import date, timezone
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -24,7 +24,6 @@ from pipeline.paths import GOLD_DB_PATH
 from pipeline.cost_model import get_cost_spec
 from pipeline.init_db import ORB_LABELS
 from trading_app.config import ALL_FILTERS, ENTRY_MODELS, VolumeFilter
-from trading_app.setup_detector import detect_setups
 from trading_app.db_manager import init_trading_app_schema
 from trading_app.outcome_builder import RR_TARGETS, CONFIRM_BARS_OPTIONS
 

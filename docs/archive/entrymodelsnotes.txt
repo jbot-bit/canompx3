@@ -1,0 +1,70 @@
+Based on the provided sources, the entry logic, stop placement, and data handling procedures you outlined are **conceptually correct** and align with professional backtesting standards.
+
+Here is the validation of your checklist against the principles found in the source material:
+
+### 1. Entry Logic Validation
+
+*   **E1 (Market-On-Confirm / Next Open):** **Valid.**
+    *   Entering on the *next* bar's open is the standard method to avoid **look-ahead bias**. The sources explicitly warn that "For-Loop" backtests often incorrectly buy at the *same* close used to generate the signal, which is unrealistic. Using `entry_ts` = next bar timestamp ensures the signal is fully formed before execution.
+*   **E2 (Market-On-Confirm-Close):** **Valid (with caveats).**
+    *   This represents an immediate execution. While possible, it requires a backtest engine that strictly separates signal generation from order execution to avoid "peeking" at the close price before the bar ends. As noted in the sources, precise execution handling is the "heart" of an event-driven backtester.
+*   **E3 (Limit-At-ORB):** **Valid & Crucial.**
+    *   **"No Fill → No Trade":** Your logic to treat unfilled limit orders as `NULL`/No Trade is methodologically superior to forcing a fill. This aligns with the concept of **Selective Classification (Abstention)** discussed in the PhD thesis. Allowing a model to "abstain" (or in this case, fail to fill) when conditions aren't met improves the reliability of the system.
+    *   **Forecast-to-Fill:** This logic mirrors the "Forecast-to-Fill" engineering approach, where a strategy is penalized for execution constraints. If the market runs away without touching your limit, recording it as a trade would introduce significant error.
+
+### 2. Stop Placement & Risk
+
+*   **Variable Risk (E1/E2 vs. E3):** **Correct.**
+    *   Your observation that **risk points vary by entry model** is accurate.
+    *   **E1/E2:** Entering *after* momentum confirmation (slippage) naturally places the entry further from the structural stop (Opposite ORB). This results in wider risk and necessitates a further target to achieve the same R:R.
+    *   **E3:** Entering *at* the breakout level (Limit) keeps the risk tighter (exactly `orb_size`).
+    *   **Source Alignment:** This creates an **asymmetric payoff profile**, which is a key property of robust trend-following systems. The goal is to bound losses (via structural stops) while letting winners run.
+
+### 3. Schema & Downstream Effects
+
+*   **Schema Design:** **Correct.**
+    *   Adding `entry_model` to the primary key is necessary because the *same* trading day and ORB setup will produce *different* outcomes (PnL, Drawdown, Win Rate) depending on the execution method.
+*   **Re-running Discovery:** **Mandatory.**
+    *   Because `entry_price` and `risk_points` change, your **Expectancy (ExpR)** and **Win Rate (WR)** will shift. Strategies that passed validation under a "perfect fill" assumption might fail under E1 (Next Open) due to reduced R:R. This constitutes a necessary "stress test" of the strategy's robustness.
+
+### Final Verdict
+
+**Your logic is sound.** You are effectively moving from a theoretical signal to a "Forecast-to-Fill" architecture, where execution frictions (entry delay in E1, limit constraints in E3) are explicitly modeled.
+
+**Recommendation:** Proceed with the schema update and re-run the pipeline. As noted in the sources, ensuring your backtest accounts for these execution nuances is what separates a "lucky backtest" from an "allocator-grade" strategy.
+
+
+Based on the sources provided, here is the confirmation and analysis of your proposed logic for Stop Models and "No Fill" handling in your backtest.
+
+### 1. Stop Model Selection: **Option A (Opposite ORB Level)**
+**Verdict:** **Correct choice.** Staying with Option A is methodologically sound and aligns with professional strategy design principles found in the sources.
+
+*   **Structural Integrity:** Using the opposite ORB level ties your risk to the specific volatility regime of that day's opening session. This is superior to Option B (fixed/normalized stops) because market volatility is non-stationary. As noted in the Gold Futures study, effective strategies often use volatility-aware exits (like ATR) rather than fixed points to ensure stops are "adaptive to market conditions". A stop at the opposite ORB level effectively acts as a volatility-adaptive stop.
+*   **Manageability:** You correctly identified that adding Option B would double your grid (Strategy variants × Stop models). Keeping the universe manageable is crucial to avoid "multiple testing" and "data snooping," which increase the probability of false discoveries.
+*   **Recommendation:** Stick to Option A. If you need to normalize risk later, do it via **position sizing** (adjusting contract size based on the distance to the stop) rather than changing the stop location itself.
+
+### 2. E3 "No Fill" Handling
+**Verdict:** **Correct behavior.** Your logic to emit `NULL` or `empty` for unfilled signals is critical for accurate backtesting.
+
+*   **The "Selective Classification" Principle:**
+    *   Your "No Fill" logic mirrors the concept of **Selective Classification (SC)** or "classification with a reject option" discussed extensively in the academic thesis. SC allows a model to "abstain from predicting" (or in your case, trading) when conditions aren't met.
+    *   The sources explicitly state that a strategy "will not trade when our inference label is 0... Label 0 represents a flat signal".
+    *   Treating unfilled limit orders as "no trade" prevents the contamination of your performance metrics. If you recorded them as 0 PnL trades, you would artificially deflate your average trade metrics and volatility; if you forced fills, you would introduce "look-ahead bias" or unrealistic execution.
+
+*   **Impact on Sample Size:**
+    *   You noted this reduces sample size. This is true and must be monitored.
+    *   **The "Active Day" Reality:** Profitable institutional strategies often spend a significant amount of time "flat." The Gold Futures study noted that roughly **58% of days** showed zero returns because the model sat flat when signals were weak.
+    *   **Sample Size Warning:** Since E3 reduces your trade count, you must ensure you still meet the minimum threshold for statistical validity. According to the BacktestBase research, you ideally need **200–500 trades** to establish institutional-grade confidence. If "No Fill" logic drops your sample size below ~30 trades, the results become statistically unreliable (Central Limit Theorem floor).
+
+### Summary Checklist for Implementation
+
+| Logic Component | Status | Source Validation |
+| :--- | :--- | :--- |
+| **Stop Model A** | **Keep** | Aligns with adaptive/structural risk management. Avoids parameter explosion/overfitting. |
+| **No Trade = NULL** | **Keep** | Matches "Selective Classification" (abstention) logic. Prevents "forcing" trades where no edge/fill exists. |
+| **Downstream** | **Verify** | Ensure your PnL aggregator treats NULL as "0 change in equity" but **does not** increment the "Total Trades" counter. This preserves the accuracy of your Win Rate and Expectancy calculations. |
+
+**Final Recommendation:** Proceed with **Option A** and your **E3 No Fill logic**. If the trade count drops too low due to the No Fill logic, do not loosen the fill criteria; instead, extend the backtest period to capture more market regimes.
+
+
+

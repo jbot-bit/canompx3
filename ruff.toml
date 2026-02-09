@@ -1,0 +1,21 @@
+# Ruff linter config — bug-catching rules only, no style nits
+line-length = 120
+target-version = "py313"
+
+[lint]
+# F = pyflakes (unused imports, undefined names, unreachable code)
+# E = pycodestyle errors (syntax issues, not style)
+# W = pycodestyle warnings (whitespace issues that cause bugs)
+select = ["F", "E", "W"]
+# Ignore style-only rules that create noisy diffs
+ignore = [
+    "E402",  # module-level import not at top (required: sys.path.insert before imports)
+    "E501",  # line too long (handled by line-length setting)
+    "W291",  # trailing whitespace
+    "W292",  # no newline at end of file
+    "W293",  # whitespace before ':'
+    "E731",  # lambda assignment (common pattern in this codebase)
+]
+
+[lint.per-file-ignores]
+"tests/*" = ["F401", "F811"]  # unused imports + redefined names OK in tests (fixtures)

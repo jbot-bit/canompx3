@@ -24,11 +24,9 @@ Options:
     --batch-size N        Rows per DBN read batch (default: 50000)
 """
 
-import os
 import sys
 import re
 import json
-import hashlib
 import argparse
 import traceback
 from pathlib import Path
@@ -572,8 +570,6 @@ def main():
 
     # Accumulator for trading days
     trading_day_buffer = {}  # trading_day -> list of (ts_utc, source_symbol, o, h, l, c, v)
-    current_chunk_start = None
-    current_chunk_end = None
 
     # Date filters with MINIMUM DATE ENFORCEMENT
     start_filter = date.fromisoformat(args.start) if args.start else MINIMUM_START_DATE

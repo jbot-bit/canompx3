@@ -16,7 +16,6 @@ Usage:
 import sys
 import random
 from pathlib import Path
-from datetime import date, datetime, timezone
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -333,7 +332,7 @@ def _print_audit_summary(results: dict):
     print(f"  Resampling errors: {results['resampling_errors']}")
 
     e3 = results["e3_stats"]
-    print(f"\n  E3 Sub-bar Fill Verification:")
+    print("\n  E3 Sub-bar Fill Verification:")
     print(f"    E3 outcomes total:    {e3['e3_total']}")
     print(f"    5m showed fill:       {e3['e3_5m_fill']}")
     if e3["e3_5m_fill"] > 0:

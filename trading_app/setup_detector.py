@@ -19,8 +19,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
 
-from pipeline.paths import GOLD_DB_PATH
-from trading_app.config import ALL_FILTERS, StrategyFilter
+from trading_app.config import StrategyFilter
 
 
 def detect_setups(

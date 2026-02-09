@@ -139,7 +139,7 @@ def build_5m_bars(con: duckdb.DuckDBPyConnection, symbol: str,
 
     if dry_run:
         # Count how many 5m bars would be built
-        count_result = con.execute(f"""
+        count_result = con.execute("""
             SELECT COUNT(DISTINCT (EXTRACT(EPOCH FROM ts_utc)::BIGINT / 300 * 300))
             FROM bars_1m
             WHERE symbol = ?

@@ -90,7 +90,7 @@ def get_asset_config(instrument: str) -> dict:
 
     if config["minimum_start_date"] is None:
         print(f"FATAL: No minimum_start_date configured for instrument '{instrument}'")
-        print(f"       Set minimum_start_date in pipeline/asset_configs.py after validating data coverage")
+        print("       Set minimum_start_date in pipeline/asset_configs.py after validating data coverage")
         sys.exit(1)
 
     return config
