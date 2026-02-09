@@ -515,45 +515,46 @@ def check_entry_models_sync() -> list[str]:
 
 
 def check_nested_isolation() -> list[str]:
-    """Check that trading_app/nested/ never imports from production modules.
+    """Check that trading_app/nested/ and trading_app/regime/ never import from production modules.
 
-    One-way dependency rule for nested subpackage:
-      nested CAN import from: pipeline/, trading_app/config.py, trading_app/entry_rules.py,
+    One-way dependency rule for nested/regime subpackages:
+      CAN import from: pipeline/, trading_app/config.py, trading_app/entry_rules.py,
         trading_app/outcome_builder.py (for compute_single_outcome, RR_TARGETS, etc.),
         trading_app/strategy_discovery.py (for compute_metrics, _load_daily_features, etc.),
         trading_app/strategy_validator.py (for validate_strategy)
-      nested NEVER imports from: trading_app/db_manager.py (production schema)
+      NEVER imports from: trading_app/db_manager.py (production schema)
     """
     violations = []
 
-    nested_dir = TRADING_APP_DIR / "nested"
-    if not nested_dir.exists():
-        return violations
-
     # Forbidden: importing init_trading_app_schema or verify_trading_app_schema
-    # (nested has its own schema module)
+    # (nested/regime have their own schema modules)
     forbidden_patterns = [
         re.compile(r'from\s+trading_app\.db_manager\s+import'),
         re.compile(r'import\s+trading_app\.db_manager'),
     ]
 
-    for fpath in nested_dir.glob("*.py"):
-        if fpath.name == "__init__.py":
+    for subdir_name in ["nested", "regime"]:
+        subdir = TRADING_APP_DIR / subdir_name
+        if not subdir.exists():
             continue
 
-        content = fpath.read_text(encoding='utf-8')
-        lines = content.splitlines()
-
-        for line_num, line in enumerate(lines, 1):
-            stripped = line.strip()
-            if stripped.startswith('#'):
+        for fpath in subdir.glob("*.py"):
+            if fpath.name == "__init__.py":
                 continue
-            for pattern in forbidden_patterns:
-                if pattern.search(line):
-                    violations.append(
-                        f"  nested/{fpath.name}:{line_num}: Imports from db_manager "
-                        f"(nested must use own schema): {stripped[:80]}"
-                    )
+
+            content = fpath.read_text(encoding='utf-8')
+            lines = content.splitlines()
+
+            for line_num, line in enumerate(lines, 1):
+                stripped = line.strip()
+                if stripped.startswith('#'):
+                    continue
+                for pattern in forbidden_patterns:
+                    if pattern.search(line):
+                        violations.append(
+                            f"  {subdir_name}/{fpath.name}:{line_num}: Imports from db_manager "
+                            f"({subdir_name} must use own schema): {stripped[:80]}"
+                        )
 
     return violations
 
@@ -595,43 +596,44 @@ def check_entry_price_sanity() -> list[str]:
 
 
 def check_nested_production_writes() -> list[str]:
-    """Check that nested/*.py never writes to production tables.
+    """Check that nested/*.py and regime/*.py never write to production tables.
 
     Production tables: orb_outcomes, experimental_strategies, validated_setups.
-    Nested code must only write to nested_outcomes, nested_strategies, nested_validated.
+    Nested/regime code must only write to their own tables.
     """
     violations = []
-
-    nested_dir = TRADING_APP_DIR / "nested"
-    if not nested_dir.exists():
-        return violations
 
     production_tables = ["orb_outcomes", "experimental_strategies", "validated_setups"]
     write_keywords = ["INSERT", "DELETE", "UPDATE", "DROP"]
 
-    for fpath in nested_dir.glob("*.py"):
-        if fpath.name == "__init__.py":
+    for subdir_name in ["nested", "regime"]:
+        subdir = TRADING_APP_DIR / subdir_name
+        if not subdir.exists():
             continue
 
-        content = fpath.read_text(encoding='utf-8')
-        lines = content.splitlines()
-
-        for line_num, line in enumerate(lines, 1):
-            stripped = line.strip()
-            if stripped.startswith('#'):
+        for fpath in subdir.glob("*.py"):
+            if fpath.name == "__init__.py":
                 continue
 
-            for table in production_tables:
-                for keyword in write_keywords:
-                    pattern = re.compile(
-                        rf'{keyword}\s+(?:OR\s+REPLACE\s+)?(?:INTO\s+|FROM\s+)?{table}\b',
-                        re.IGNORECASE,
-                    )
-                    if pattern.search(line):
-                        violations.append(
-                            f"  nested/{fpath.name}:{line_num}: SQL write to production table "
-                            f"'{table}': {stripped[:80]}"
+            content = fpath.read_text(encoding='utf-8')
+            lines = content.splitlines()
+
+            for line_num, line in enumerate(lines, 1):
+                stripped = line.strip()
+                if stripped.startswith('#'):
+                    continue
+
+                for table in production_tables:
+                    for keyword in write_keywords:
+                        pattern = re.compile(
+                            rf'{keyword}\s+(?:OR\s+REPLACE\s+)?(?:INTO\s+|FROM\s+)?{table}\b',
+                            re.IGNORECASE,
                         )
+                        if pattern.search(line):
+                            violations.append(
+                                f"  {subdir_name}/{fpath.name}:{line_num}: SQL write to production table "
+                                f"'{table}': {stripped[:80]}"
+                            )
 
     return violations
 
@@ -646,6 +648,7 @@ def check_schema_query_consistency_trading_app(trading_app_dir: Path) -> list[st
         PIPELINE_DIR / "init_db.py",
         trading_app_dir / "db_manager.py",
         trading_app_dir / "nested" / "schema.py",
+        trading_app_dir / "regime" / "schema.py",
     ]
     for sf in schema_files:
         if sf.exists():
