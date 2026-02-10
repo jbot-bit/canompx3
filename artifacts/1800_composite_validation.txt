@@ -1,0 +1,111 @@
+======================================================================
+  1800 COMPOSITE STRATEGY VALIDATION
+  Mandate: Honesty over outcome
+======================================================================
+
+--- SUMMARY ---
+  4 HONESTY FLAG(S):
+    [!] SMALL SAMPLE: N=40 (< 50)
+    [!] REGIME CONCENTRATION: 76% of PnL from 2025-2026
+    [!] OOS DEGRADATION: 2025 OOS ExpR < 50% of IS
+    [!] PRE-2024 VIABILITY: 1.5 trades/year before 2024
+
+  VERDICT: CAUTION -- edge exists but multiple flags raised
+
+--- RAW METRICS (AGREE trades, G6+ filter, excl 2021) ---
+  Trades (N):        40
+  WR at RR1.0:       75.0%
+  WR at RR2.0:       60.0%
+  Total R (2-lot):   +41.11R
+  ExpR per trade:    +1.03R (risking 2R)
+  ExpR per R risked: +0.51R
+  Sharpe:            0.51
+  Max Drawdown:      +4.24R
+  Profit Factor:     2.93
+  Classification:    REGIME
+
+--- STRESS TEST ---
+  Base  friction: N=40, ExpR/trade=+1.03R, ExpR/R=+0.51R, Sharpe=0.51
+  1.5x  friction: N=40, ExpR/trade=+0.91R, ExpR/R=+0.46R, Sharpe=0.46
+  2.0x  friction: N=40, ExpR/trade=+0.80R, ExpR/R=+0.40R, Sharpe=0.42
+  Breakeven friction multiplier: 7.75x
+
+--- WALK-FORWARD (Expanding Window) ---
+  Train [2022, 2023] -> Test 2024:
+    IS:  N=3, ExpR=+1.59R, Sharpe=1.01
+    OOS: N=2, ExpR=+2.58R, Sharpe=10.69
+  Train [2022, 2023, 2024] -> Test 2025:
+    IS:  N=5, ExpR=+1.99R, Sharpe=1.60
+    OOS: N=25, ExpR=+0.78R, Sharpe=0.36
+  Train [2022, 2023, 2024, 2025] -> Test 2026:
+    IS:  N=30, ExpR=+0.98R, Sharpe=0.48
+    OOS: N=10, ExpR=+1.17R, Sharpe=0.57
+
+--- LEAVE-ONE-YEAR-OUT ---
+  Leave out 2022:
+    IS:  N=38, ExpR=+0.95R
+    OOS: N=2, ExpR=+2.49R
+  Leave out 2023:
+    IS:  N=39, ExpR=+1.06R
+    OOS: N=1, ExpR=-0.22R
+  Leave out 2024:
+    IS:  N=38, ExpR=+0.95R
+    OOS: N=2, ExpR=+2.58R
+  Leave out 2025:
+    IS:  N=15, ExpR=+1.44R
+    OOS: N=25, ExpR=+0.78R
+
+--- REGIME ANALYSIS ---
+  PnL from 2025-2026: 75.8% (+31.19R of +41.11R)
+
+  Year-by-Year:
+    2022: N=2, WR1=100.0%, WR2=100.0%, Total=+4.99R, ExpR=+2.49R
+    2023: N=1, WR1=100.0%, WR2=0.0%, Total=-0.22R, ExpR=-0.22R
+    2024: N=2, WR1=100.0%, WR2=100.0%, Total=+5.17R, ExpR=+2.58R
+    2025: N=25, WR1=68.0%, WR2=56.0%, Total=+19.48R, ExpR=+0.78R
+    2026: N=10, WR1=80.0%, WR2=60.0%, Total=+11.70R, ExpR=+1.17R
+
+  ORB Size Buckets:
+    6-8pt   : N=22, ExpR=+0.63R, WR2=50.0%
+    8-10pt  : N=6, ExpR=+1.05R, WR2=66.7%
+    10+pt   : N=12, ExpR=+1.75R, WR2=75.0%
+
+--- DIRECTION SPLIT ---
+  LONG edge share: 61.3%
+  LONG  : N=25, WR1=76.0%, WR2=60.0%, Total=+25.21R, ExpR=+1.01R
+  SHORT : N=15, WR1=73.3%, WR2=60.0%, Total=+15.90R, ExpR=+1.06R
+
+--- COMPARISON MATRIX ---
+  Variant                       N   ExpR/trade     ExpR/R   Sharpe    MaxDD       PF
+  ------------------------- ----- ------------ ---------- -------- -------- --------
+  A: Baseline RR2.0            48       +0.49R     +0.25R     0.36   +3.31R     2.08
+  B: +AGREE RR2.0              40       +0.66R     +0.33R     0.48   +3.00R     2.64
+  C: Split RR1+2               48       +0.71R     +0.36R     0.33   +7.52R     2.03
+  D: AGREE+Split               40       +1.03R     +0.51R     0.51   +4.24R     2.93
+
+--- HONEST ASSESSMENT ---
+
+  STRENGTHS:
+    + High per-R expectancy (+0.51R)
+    + Cash register leg (RR1.0) has 75.0% WR
+    + Survives 7.8x friction stress test
+    + Profit factor 2.93
+
+  WEAKNESSES:
+    - Only 40 trades -- REGIME classification, not CORE
+    - 76% of PnL concentrated in 2025-2026
+    - Only 1.5 trades/year before 2024 -- thin history
+
+  RISKS:
+    - 15m AGREE is a new filter concept not in the validated grid
+    - Split targets double contract count (execution complexity)
+    - ORB regime shift could eliminate G6+ opportunities
+
+  UNKNOWNS:
+    - Fill-bar exit granularity (R1) not yet applied to orb_outcomes
+    - 2016-2020 outcomes not built -- would extend backtest history
+    - Volume filter interaction not tested
+
+======================================================================
+  END OF VALIDATION REPORT
+======================================================================
