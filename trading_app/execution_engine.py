@@ -121,13 +121,16 @@ class ExecutionEngine:
 
     Processes 1-minute bars, detects ORB formations, confirm signals,
     and manages trade lifecycle through entry to exit.
+
+    Optionally accepts a MarketState for context-aware strategy scoring.
     """
 
     def __init__(self, portfolio: Portfolio, cost_spec: CostSpec,
-                 risk_manager=None):
+                 risk_manager=None, market_state=None):
         self.portfolio = portfolio
         self.cost_spec = cost_spec
         self.risk_manager = risk_manager  # Optional RiskManager for position limits
+        self.market_state = market_state  # Optional MarketState for scoring
 
         # State
         self.trading_day: date | None = None
@@ -178,6 +181,10 @@ class ExecutionEngine:
         ts = bar["ts_utc"]
         self._bar_count += 1
         self._last_bar = bar
+
+        # Update market state timestamp if available
+        if self.market_state is not None:
+            self.market_state.current_ts = ts
 
         # Phase 1: Update ORB ranges
         for label, orb in self.orbs.items():
@@ -299,6 +306,15 @@ class ExecutionEngine:
             if filt is not None:
                 row = {f"orb_{orb.label}_size": orb.size}
                 if not filt.matches_row(row, orb.label):
+                    continue
+
+            # Check market state scoring (if available)
+            if self.market_state is not None:
+                from trading_app.scoring import MIN_SCORE_THRESHOLD
+                score = self.market_state.strategy_scores.get(
+                    strategy.strategy_id
+                )
+                if score is not None and score < MIN_SCORE_THRESHOLD:
                     continue
 
             # Check if already have a trade for this strategy today

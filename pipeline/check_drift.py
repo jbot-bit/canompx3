@@ -805,6 +805,51 @@ def check_all_imports_resolve() -> list[str]:
     return violations
 
 
+def check_market_state_readonly() -> list[str]:
+    """Check that market_state.py, scoring.py, cascade_table.py never write to DB.
+
+    These modules are read-only consumers. Any SQL write keyword is a violation.
+    """
+    violations = []
+    write_keywords = ["INSERT", "UPDATE", "DELETE", "DROP", "CREATE"]
+
+    readonly_files = [
+        TRADING_APP_DIR / "market_state.py",
+        TRADING_APP_DIR / "scoring.py",
+        TRADING_APP_DIR / "cascade_table.py",
+    ]
+
+    for fpath in readonly_files:
+        if not fpath.exists():
+            continue
+
+        content = fpath.read_text(encoding='utf-8')
+        lines = content.splitlines()
+
+        for line_num, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith('#'):
+                continue
+            # Skip string-only lines (docstrings, comments in strings)
+            if stripped.startswith(('"""', "'''", '"', "'")):
+                continue
+
+            for keyword in write_keywords:
+                # Match SQL write keywords followed by whitespace (avoids
+                # matching variable names like 'update_signals')
+                pattern = re.compile(
+                    rf'\b{keyword}\s+(?:OR\s+REPLACE\s+)?(?:INTO|FROM|TABLE|INDEX)\b',
+                    re.IGNORECASE,
+                )
+                if pattern.search(line):
+                    violations.append(
+                        f"  {fpath.name}:{line_num}: SQL write keyword "
+                        f"'{keyword}': {stripped[:80]}"
+                    )
+
+    return violations
+
+
 def main():
     print("=" * 60)
     print("PIPELINE DRIFT CHECK")
@@ -1032,6 +1077,18 @@ def main():
     # Check 19: Timezone hygiene (no pytz, no hardcoded UTC+10)
     print("Check 19: Timezone hygiene...")
     v = check_timezone_hygiene()
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 20: MarketState/scoring/cascade read-only guard
+    print("Check 20: MarketState read-only SQL guard...")
+    v = check_market_state_readonly()
     if v:
         print("  FAILED:")
         for line in v:

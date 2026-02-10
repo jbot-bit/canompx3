@@ -142,9 +142,13 @@ def replay_historical(
     start_date: date | None = None,
     end_date: date | None = None,
     risk_limits: RiskLimits | None = None,
+    use_market_state: bool = False,
 ) -> ReplayResult:
     """
     Feed historical bars_1m through ExecutionEngine + RiskManager.
+
+    When use_market_state=True, builds a MarketState per day for
+    context-aware strategy scoring.
 
     Returns ReplayResult with journal entries and daily summaries.
     """
@@ -164,8 +168,18 @@ def replay_historical(
             end_date=end_date or date.max,
         )
 
+    # Pre-build cascade table if using market state
+    cascade_table = None
+    if use_market_state:
+        from trading_app.cascade_table import build_cascade_table
+        cascade_table = build_cascade_table(db_path)
+
     risk_mgr = RiskManager(risk_limits)
-    engine = ExecutionEngine(portfolio, cost_spec, risk_manager=risk_mgr)
+
+    # MarketState built per-day below; engine gets it on day start
+    market_state = None
+    engine = ExecutionEngine(portfolio, cost_spec, risk_manager=risk_mgr,
+                             market_state=market_state)
 
     con = duckdb.connect(str(db_path), read_only=True)
     try:
@@ -184,6 +198,18 @@ def replay_historical(
             bars = _get_bars_for_day(con, instrument, td)
             if not bars:
                 continue
+
+            # Build market state for this day (if enabled)
+            if use_market_state:
+                from trading_app.market_state import MarketState
+                market_state = MarketState.from_trading_day(
+                    td, db_path, cascade_table=cascade_table,
+                    visible_sessions=set(),  # nothing resolved yet
+                )
+                market_state.score_strategies(portfolio.strategies)
+                engine.market_state = market_state
+            else:
+                engine.market_state = None
 
             engine.on_trading_day_start(td)
             risk_mgr.daily_reset(td)
@@ -262,6 +288,12 @@ def replay_historical(
                                 day_summary.scratches += 1
                                 result.total_scratches += 1
 
+                        # Reveal resolved ORB outcome in market state
+                        if market_state is not None:
+                            orb_label = _orb_from_strategy(event.strategy_id)
+                            _reveal_outcome(market_state, orb_label, trade,
+                                            cascade_table, portfolio)
+
             # End of day
             eod_events = engine.on_trading_day_end()
             for event in eod_events:
@@ -321,6 +353,26 @@ def _find_completed_trade(engine: ExecutionEngine, strategy_id: str):
         if trade.strategy_id == strategy_id:
             return trade
     return None
+
+
+def _reveal_outcome(market_state, orb_label: str, trade, cascade_table, portfolio) -> None:
+    """Reveal a resolved ORB outcome in the market state and re-score.
+
+    Called after a trade exits (TP/SL/EOD) so later sessions can see
+    the outcome without lookahead.
+    """
+    orb = market_state.orbs.get(orb_label)
+    if orb is None:
+        return
+    # Determine outcome from trade result
+    if trade and trade.pnl_r is not None:
+        if trade.pnl_r > 0:
+            orb.outcome = "win"
+        else:
+            orb.outcome = "loss"
+    # Re-derive cross-session signals and re-score
+    market_state.update_signals(cascade_table)
+    market_state.score_strategies(portfolio.strategies)
 
 
 # =========================================================================

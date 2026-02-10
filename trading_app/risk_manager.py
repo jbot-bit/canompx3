@@ -63,6 +63,7 @@ class RiskManager:
         orb_label: str,
         active_trades: list,
         daily_pnl_r: float,
+        market_state=None,
     ) -> tuple[bool, str]:
         """
         Check all risk limits before allowing a new entry.
@@ -72,6 +73,7 @@ class RiskManager:
             orb_label: ORB label for the trade
             active_trades: Currently open trades (list of objects with .orb_label)
             daily_pnl_r: Current daily PnL in R-multiples
+            market_state: Optional MarketState for context signals
 
         Returns:
             (allowed, reason) — reason is "" if allowed, explanation if rejected
@@ -104,6 +106,13 @@ class RiskManager:
             self._warnings.append(
                 f"drawdown_warning: daily PnL {daily_pnl_r:.2f}R <= {self.limits.drawdown_warning_r}R"
             )
+
+        # Check 6: Chop awareness (warn only, does not block)
+        if market_state is not None and hasattr(market_state, 'signals'):
+            if market_state.signals.chop_detected:
+                self._warnings.append(
+                    f"chop_warning: chop detected for {strategy_id} on {orb_label}"
+                )
 
         return True, ""
 
