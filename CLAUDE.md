@@ -49,6 +49,7 @@ Raw data files contain GC (full-size Gold futures) which has ~40-70% more 1-minu
 | `risk_manager.py` | 137 | Circuit breaker, max concurrent/daily limits |
 | `execution_spec.py` | 84 | ExecutionSpec dataclass with entry_model field |
 | `setup_detector.py` | 84 | Filter daily_features by conditions |
+| `strategy_fitness.py` | 350 | 3-layer fitness: structural + rolling regime + decay monitoring |
 
 ### Nested ORB Research (`trading_app/nested/`)
 

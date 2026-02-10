@@ -13,7 +13,7 @@ Usage:
 import sys
 import json
 from pathlib import Path
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, replace
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -656,6 +656,48 @@ def estimate_daily_capital(
         "max_concurrent_risk_dollars": round(max_concurrent_risk, 2),
         "worst_case_daily_loss_dollars": round(worst_case, 2),
     }
+
+
+# =========================================================================
+# Fitness-weighted portfolio
+# =========================================================================
+
+# Weight multipliers by fitness status
+FITNESS_WEIGHTS = {
+    "FIT": 1.0,
+    "WATCH": 0.5,
+    "DECAY": 0.0,
+    "STALE": 0.0,
+}
+
+
+def fitness_weighted_portfolio(portfolio: Portfolio, fitness_report) -> Portfolio:
+    """
+    Adjust portfolio weights based on fitness scores.
+
+    FIT: weight=1.0, WATCH: weight=0.5, DECAY: weight=0.0, STALE: weight=0.0
+
+    Returns new Portfolio with adjusted weights. Does NOT modify input.
+    fitness_report must have a .scores list with .strategy_id and .fitness_status.
+    """
+    score_map = {s.strategy_id: s.fitness_status for s in fitness_report.scores}
+
+    adjusted = []
+    for strat in portfolio.strategies:
+        status = score_map.get(strat.strategy_id, "STALE")
+        new_weight = FITNESS_WEIGHTS.get(status, 0.0)
+        adjusted.append(replace(strat, weight=new_weight))
+
+    return Portfolio(
+        name=portfolio.name,
+        instrument=portfolio.instrument,
+        strategies=adjusted,
+        account_equity=portfolio.account_equity,
+        risk_per_trade_pct=portfolio.risk_per_trade_pct,
+        max_concurrent_positions=portfolio.max_concurrent_positions,
+        max_daily_loss_r=portfolio.max_daily_loss_r,
+        max_per_orb_positions=portfolio.max_per_orb_positions,
+    )
 
 
 # =========================================================================
