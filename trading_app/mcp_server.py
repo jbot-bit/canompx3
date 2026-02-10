@@ -29,6 +29,12 @@ from trading_app.strategy_fitness import compute_fitness, compute_portfolio_fitn
 
 DB_PATH = str(GOLD_DB_PATH)
 
+# Hard server-side row cap (defense-in-depth over sql_adapter's 1000)
+MAX_MCP_ROWS = 5000
+
+# Only these parameter keys are forwarded to SQLAdapter. Anything else is rejected.
+_ALLOWED_PARAMS = {"orb_label", "entry_model", "filter_type", "min_sample_size", "limit"}
+
 
 # ---------------------------------------------------------------------------
 # Warnings (lightweight copy from query_agent._generate_warnings)
@@ -89,13 +95,22 @@ def _query_trading_db(
     min_sample_size: int | None = None,
     limit: int = 50,
 ) -> dict:
-    """Run a pre-approved SQL query against the trading database."""
+    """Run a pre-approved SQL query against the trading database.
+
+    Guardrails:
+    - Template must be a valid QueryTemplate enum value (no raw SQL).
+    - Only allowlisted parameter keys are forwarded (rejects unknown params).
+    - Limit is server-side capped at MAX_MCP_ROWS.
+    - SQLAdapter opens DuckDB with read_only=True (no writes possible).
+    """
+    # G1: Template must be a valid enum member
     try:
         qt = QueryTemplate(template)
     except ValueError:
         valid = [t.value for t in QueryTemplate]
         return {"error": f"Unknown template '{template}'. Valid: {valid}"}
 
+    # G2: Build params from allowlisted keys only
     params = {}
     if orb_label is not None:
         params["orb_label"] = orb_label
@@ -105,15 +120,22 @@ def _query_trading_db(
         params["filter_type"] = filter_type
     if min_sample_size is not None:
         params["min_sample_size"] = min_sample_size
-    params["limit"] = limit
+
+    # G3: Server-side row cap
+    params["limit"] = min(int(limit), MAX_MCP_ROWS)
 
     intent = QueryIntent(template=qt, parameters=params)
 
+    # G4: SQLAdapter enforces read_only=True on every connection
     adapter = SQLAdapter(DB_PATH)
     try:
         df = adapter.execute(intent)
     except Exception as e:
         return {"error": str(e)}
+
+    # G5: Truncate result if it somehow exceeds cap
+    if len(df) > MAX_MCP_ROWS:
+        df = df.head(MAX_MCP_ROWS)
 
     warnings = _generate_warnings(df)
 
@@ -201,7 +223,7 @@ def _build_server():
             entry_model: Entry model filter. One of: E1, E2, E3.
             filter_type: ORB size filter. Examples: ORB_G4, ORB_G6, NO_FILTER.
             min_sample_size: Minimum number of trades.
-            limit: Max rows to return (default 50, max 1000).
+            limit: Max rows to return (default 50, server cap 5000).
 
         Returns:
             Dict with 'columns', 'rows', 'row_count', and 'warnings' keys.
