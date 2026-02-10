@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "gold-db": {
+      "type": "stdio",
+      "command": "python",
+      "args": [
+        "trading_app/mcp_server.py"
+      ],
+      "env": {}
+    }
+  }
+}
