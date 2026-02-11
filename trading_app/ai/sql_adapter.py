@@ -239,6 +239,9 @@ class SQLAdapter:
         if template == QueryTemplate.GAP_ANALYSIS:
             return self._execute_gap_analysis()
 
+        if template == QueryTemplate.REGIME_COMPARE:
+            return self._execute_regime_compare(params)
+
         sql, bind_params = self._build_query(template, params)
 
         con = duckdb.connect(self.db_path, read_only=True)
@@ -302,6 +305,49 @@ class SQLAdapter:
         con = duckdb.connect(self.db_path, read_only=True)
         try:
             result = con.execute(sql).fetchdf()
+            return result.head(MAX_RESULT_ROWS)
+        finally:
+            con.close()
+
+    def _execute_regime_compare(self, params: dict) -> pd.DataFrame:
+        """Execute regime compare with table-qualified column names.
+
+        Fixes ambiguous column reference when both r. and v. tables have
+        orb_label, entry_model, filter_type.
+        """
+        sql_template = _TEMPLATES[QueryTemplate.REGIME_COMPARE]
+        where_parts = []
+        bind_params = []
+
+        # Qualify with r. prefix to avoid ambiguity
+        if "orb_label" in params:
+            _validate_orb_label(params["orb_label"])
+            where_parts.append("AND r.orb_label = ?")
+            bind_params.append(params["orb_label"])
+
+        if "entry_model" in params:
+            _validate_entry_model(params["entry_model"])
+            where_parts.append("AND r.entry_model = ?")
+            bind_params.append(params["entry_model"])
+
+        if "filter_type" in params:
+            _validate_filter_type(params["filter_type"])
+            where_parts.append("AND r.filter_type = ?")
+            bind_params.append(params["filter_type"])
+
+        if "min_sample_size" in params:
+            where_parts.append("AND r.sample_size >= ?")
+            bind_params.append(int(params["min_sample_size"]))
+
+        where_clause = "\n        ".join(where_parts)
+        sql = sql_template.replace("{where_clauses}", where_clause)
+
+        limit = min(int(params.get("limit", 50)), MAX_RESULT_ROWS)
+        bind_params.append(limit)
+
+        con = duckdb.connect(self.db_path, read_only=True)
+        try:
+            result = con.execute(sql, bind_params).fetchdf()
             return result.head(MAX_RESULT_ROWS)
         finally:
             con.close()

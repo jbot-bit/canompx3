@@ -1,10 +1,11 @@
 """
 MCP server for the Gold Trading Database.
 
-Exposes 3 read-only tools via stdio (fastmcp):
+Exposes 4 read-only tools via stdio (fastmcp):
   - list_available_queries: discover what query templates exist
   - query_trading_db: run a pre-approved SQL template
   - get_strategy_fitness: FIT/WATCH/DECAY/STALE status
+  - get_canonical_context: load grounding docs for AI context
 
 Usage:
     claude mcp add gold-db --scope project -- python trading_app/mcp_server.py
@@ -151,8 +152,13 @@ def _get_strategy_fitness(
     strategy_id: str | None = None,
     instrument: str = "MGC",
     rolling_months: int = 18,
+    summary_only: bool = False,
 ) -> dict:
-    """Get fitness status for strategies."""
+    """Get fitness status for strategies.
+
+    When summary_only=True, returns only status counts and non-FIT strategies
+    (avoids 150K+ character payloads that blow up MCP context).
+    """
     db_path = GOLD_DB_PATH
     as_of = date.today()
 
@@ -170,12 +176,33 @@ def _get_strategy_fitness(
         db_path=db_path, instrument=instrument,
         as_of_date=as_of, rolling_months=rolling_months,
     )
+
+    if summary_only:
+        # Return only summary + non-FIT strategies (compact)
+        non_fit = [
+            asdict(s) for s in report.scores
+            if s.fitness_status != "FIT"
+        ]
+        return {
+            "as_of_date": report.as_of_date.isoformat(),
+            "summary": report.summary,
+            "strategy_count": len(report.scores),
+            "non_fit_strategies": non_fit,
+            "non_fit_count": len(non_fit),
+        }
+
     return {
         "as_of_date": report.as_of_date.isoformat(),
         "summary": report.summary,
         "strategy_count": len(report.scores),
         "scores": [asdict(s) for s in report.scores],
     }
+
+
+def _get_canonical_context() -> dict:
+    """Load canonical grounding documents for AI context."""
+    from trading_app.ai.corpus import load_corpus
+    return load_corpus()
 
 
 # ---------------------------------------------------------------------------
@@ -240,6 +267,7 @@ def _build_server():
         strategy_id: str | None = None,
         instrument: str = "MGC",
         rolling_months: int = 18,
+        summary_only: bool = False,
     ) -> dict:
         """Get fitness status (FIT/WATCH/DECAY/STALE) for strategies.
 
@@ -251,14 +279,24 @@ def _build_server():
                          If None, returns fitness for ALL validated strategies.
             instrument: Instrument symbol (default 'MGC').
             rolling_months: Rolling window in months (default 18).
+            summary_only: If True, return only summary + non-FIT strategies (compact).
 
         Returns:
             Dict with fitness scores and summary counts.
         """
         return _get_strategy_fitness(
             strategy_id=strategy_id, instrument=instrument,
-            rolling_months=rolling_months,
+            rolling_months=rolling_months, summary_only=summary_only,
         )
+
+    @mcp.tool()
+    def get_canonical_context() -> dict:
+        """Load canonical grounding documents (cost model, logic rules, config).
+
+        Returns the full text of critical project documents for AI context.
+        Use this to ground your analysis in the project's actual trading rules.
+        """
+        return _get_canonical_context()
 
     return mcp
 
