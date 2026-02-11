@@ -13,7 +13,7 @@ Usage:
 import sys
 import json
 from pathlib import Path
-from dataclasses import dataclass, asdict, replace
+from dataclasses import dataclass, asdict, field, replace
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -78,6 +78,7 @@ class Portfolio:
     max_concurrent_positions: int
     max_daily_loss_r: float
     max_per_orb_positions: int = 1
+    corr_lookup: dict[tuple[str, str], float] = field(default_factory=dict)
 
     def to_json(self) -> str:
         """Serialize portfolio to JSON."""
@@ -414,6 +415,19 @@ def build_portfolio(
             source=s.get("source", "baseline"),
         ))
 
+    # Build corr_lookup for RiskManager (flat dict from selected strategies only)
+    lookup: dict[tuple[str, str], float] = {}
+    if corr is not None:
+        selected_ids = {s["strategy_id"] for s in selected}
+        for sid_a in selected_ids:
+            for sid_b in selected_ids:
+                if sid_a >= sid_b:
+                    continue
+                if sid_a in corr.columns and sid_b in corr.columns:
+                    val = corr.loc[sid_a, sid_b]
+                    if pd.notna(val):
+                        lookup[(sid_a, sid_b)] = float(val)
+
     return Portfolio(
         name=name,
         instrument=instrument,
@@ -422,6 +436,7 @@ def build_portfolio(
         risk_per_trade_pct=risk_per_trade_pct,
         max_concurrent_positions=max_concurrent_positions,
         max_daily_loss_r=max_daily_loss_r,
+        corr_lookup=lookup,
     )
 
 
@@ -789,6 +804,7 @@ def main():
     parser.add_argument("--include-nested", action="store_true", help="Include nested ORB strategies")
     parser.add_argument("--include-rolling", action="store_true", help="Include rolling-validated strategies")
     parser.add_argument("--rolling-train-months", type=int, default=12, help="Rolling training window months")
+    parser.add_argument("--max-correlation", type=float, default=0.85, help="Max pairwise correlation (0-1)")
     parser.add_argument("--output", type=str, default=None, help="Output JSON file path")
     args = parser.parse_args()
 
@@ -801,6 +817,7 @@ def main():
         risk_per_trade_pct=args.risk_pct,
         max_concurrent_positions=args.max_concurrent,
         max_daily_loss_r=args.max_daily_loss,
+        max_correlation=args.max_correlation,
         include_nested=args.include_nested,
         include_rolling=args.include_rolling,
         rolling_train_months=args.rolling_train_months,

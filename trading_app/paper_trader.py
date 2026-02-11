@@ -143,6 +143,8 @@ def replay_historical(
     end_date: date | None = None,
     risk_limits: RiskLimits | None = None,
     use_market_state: bool = False,
+    live_session_costs: bool = False,
+    max_correlation: float = 0.85,
 ) -> ReplayResult:
     """
     Feed historical bars_1m through ExecutionEngine + RiskManager.
@@ -160,7 +162,8 @@ def replay_historical(
     cost_spec = get_cost_spec(instrument)
 
     if portfolio is None:
-        portfolio = build_portfolio(db_path=db_path, instrument=instrument)
+        portfolio = build_portfolio(db_path=db_path, instrument=instrument,
+                                    max_correlation=max_correlation)
 
     if not portfolio.strategies:
         return ReplayResult(
@@ -174,12 +177,13 @@ def replay_historical(
         from trading_app.cascade_table import build_cascade_table
         cascade_table = build_cascade_table(db_path)
 
-    risk_mgr = RiskManager(risk_limits)
+    risk_mgr = RiskManager(risk_limits, corr_lookup=portfolio.corr_lookup)
 
     # MarketState built per-day below; engine gets it on day start
     market_state = None
     engine = ExecutionEngine(portfolio, cost_spec, risk_manager=risk_mgr,
-                             market_state=market_state)
+                             market_state=market_state,
+                             live_session_costs=live_session_costs)
 
     con = duckdb.connect(str(db_path), read_only=True)
     try:
@@ -391,6 +395,9 @@ def main():
     parser.add_argument("--max-strategies", type=int, default=20, help="Max portfolio strategies")
     parser.add_argument("--max-daily-loss", type=float, default=-5.0, help="Max daily loss (R)")
     parser.add_argument("--max-concurrent", type=int, default=3, help="Max concurrent positions")
+    parser.add_argument("--max-correlation", type=float, default=0.85, help="Max pairwise correlation (0-1)")
+    parser.add_argument("--live-session-costs", action="store_true",
+                        help="Use session-adjusted slippage (0900=1.3x, 2300=0.8x)")
     args = parser.parse_args()
 
     risk_limits = RiskLimits(
@@ -403,6 +410,8 @@ def main():
         start_date=args.start,
         end_date=args.end,
         risk_limits=risk_limits,
+        live_session_costs=args.live_session_costs,
+        max_correlation=args.max_correlation,
     )
 
     print(f"\nReplay complete: {result.start_date} to {result.end_date}")
