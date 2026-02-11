@@ -704,3 +704,98 @@ class TestCorrelationWeightedConcurrent:
         allowed, reason = rm.can_enter("strat_new", "1800", active, 0.0)
         assert not allowed
         assert "max_concurrent" in reason
+
+
+# ============================================================================
+# 8. Live session costs: engine produces different win PnL by session
+# ============================================================================
+
+class TestLiveSessionCosts:
+
+    def test_win_pnl_differs_with_session_costs(self):
+        """Engine with live_session_costs=True produces different win PnL
+        than one without, because session slippage differs from base."""
+        strategy = _make_strategy(
+            entry_model="E2", confirm_bars=1, rr_target=2.0,
+            orb_label="0900",
+            strategy_id="MGC_0900_E2_RR2.0_CB1_NO_FILTER",
+        )
+        portfolio = _make_portfolio([strategy])
+
+        engine_flat = ExecutionEngine(portfolio, _cost(), live_session_costs=False)
+        engine_live = ExecutionEngine(portfolio, _cost(), live_session_costs=True)
+
+        # Use 0900 ORB window: 23:00-23:05 UTC
+        orb_base = datetime(2024, 1, 4, 23, 0, tzinfo=timezone.utc)
+        td = date(2024, 1, 5)
+
+        for eng in (engine_flat, engine_live):
+            eng.on_trading_day_start(td)
+            for i in range(5):
+                eng.on_bar(_bar(orb_base + timedelta(minutes=i),
+                                2700, 2705, 2695, 2702))
+            # Break long
+            break_ts = orb_base + timedelta(minutes=5)
+            eng.on_bar(_bar(break_ts, 2704, 2710, 2703, 2706))
+            # Confirm bar
+            eng.on_bar(_bar(break_ts + timedelta(minutes=1),
+                            2707, 2712, 2706, 2710))
+            # Win: target hit (RR2.0 on 10pt risk = 20pt gain)
+            eng.on_bar(_bar(break_ts + timedelta(minutes=2),
+                            2710, 2730, 2709, 2728))
+
+        flat_pnl = engine_flat.daily_pnl_r
+        live_pnl = engine_live.daily_pnl_r
+
+        # Both should be positive wins
+        assert flat_pnl > 0, f"Flat engine should win, got {flat_pnl}"
+        assert live_pnl > 0, f"Live engine should win, got {live_pnl}"
+        # 0900 has 1.3x slippage => higher friction => lower R-multiple
+        assert live_pnl < flat_pnl, (
+            f"0900 live (1.3x slippage) should produce lower R than flat: "
+            f"live={live_pnl}, flat={flat_pnl}"
+        )
+
+    def test_scratch_uses_session_costs(self):
+        """Scratch PnL in live mode uses session-adjusted costs."""
+        strategy = _make_strategy(
+            entry_model="E2", confirm_bars=1, rr_target=2.0,
+            orb_label="0900",
+            strategy_id="MGC_0900_E2_RR2.0_CB1_NO_FILTER",
+        )
+        portfolio = _make_portfolio([strategy])
+
+        engine_flat = ExecutionEngine(portfolio, _cost(), live_session_costs=False)
+        engine_live = ExecutionEngine(portfolio, _cost(), live_session_costs=True)
+
+        orb_base = datetime(2024, 1, 4, 23, 0, tzinfo=timezone.utc)
+        td = date(2024, 1, 5)
+
+        for eng in (engine_flat, engine_live):
+            eng.on_trading_day_start(td)
+            for i in range(5):
+                eng.on_bar(_bar(orb_base + timedelta(minutes=i),
+                                2700, 2705, 2695, 2702))
+            # Break long
+            break_ts = orb_base + timedelta(minutes=5)
+            eng.on_bar(_bar(break_ts, 2704, 2710, 2703, 2706))
+            # Confirm bar
+            eng.on_bar(_bar(break_ts + timedelta(minutes=1),
+                            2707, 2712, 2706, 2710))
+            # Mid-trade bar, no stop/target — trade stays open
+            eng.on_bar(_bar(break_ts + timedelta(minutes=2),
+                            2710, 2714, 2708, 2712))
+            # EOD scratch
+            eng.on_trading_day_end()
+
+        flat_pnl = engine_flat.daily_pnl_r
+        live_pnl = engine_live.daily_pnl_r
+
+        # Both should be positive (price moved in our direction)
+        assert flat_pnl > 0
+        assert live_pnl > 0
+        # 0900 session costs are higher => lower scratch PnL
+        assert live_pnl < flat_pnl, (
+            f"Scratch with 0900 session costs should be lower: "
+            f"live={live_pnl}, flat={flat_pnl}"
+        )

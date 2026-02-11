@@ -346,6 +346,7 @@ def build_portfolio(
     include_nested: bool = False,
     include_rolling: bool = False,
     rolling_train_months: int = 12,
+    max_correlation: float = 0.85,
 ) -> Portfolio:
     """
     Build a diversified portfolio from validated strategies.
@@ -390,7 +391,7 @@ def build_portfolio(
     # Diversify selection
     selected = diversify_strategies(
         candidates, max_strategies, max_per_orb,
-        corr_matrix=corr, max_correlation=0.85,
+        corr_matrix=corr, max_correlation=max_correlation,
     )
 
     # Convert to PortfolioStrategy objects

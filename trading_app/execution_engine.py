@@ -678,7 +678,12 @@ class ExecutionEngine:
                 4,
             )
         else:
-            trade.pnl_r = -1.0
+            # Precise loss R-multiple under session-adjusted costs
+            loss_points = -risk_points
+            trade.pnl_r = round(
+                to_r_multiple(cost, trade.entry_price, trade.stop_price, loss_points),
+                4,
+            )
 
         self.daily_pnl_r += trade.pnl_r
         self.completed_trades.append(trade)
