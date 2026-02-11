@@ -81,13 +81,14 @@ def find_double_break_entry(
         break_ts_utc = break_ts.astimezone(UTC_TZ)
 
     # Determine reversal direction
-    if break_dir == "bull":
-        # First break was up (bull), it failed -> we go SHORT
+    # NOTE: daily_features stores break_dir as "long"/"short", not "bull"/"bear"
+    if break_dir == "long":
+        # First break was up (long), it failed -> we go SHORT
         # Entry when price crosses below orb_low
         entry_price = orb_low
         direction = "short"
-    elif break_dir == "bear":
-        # First break was down (bear), it failed -> we go LONG
+    elif break_dir == "short":
+        # First break was down (short), it failed -> we go LONG
         # Entry when price crosses above orb_high
         entry_price = orb_high
         direction = "long"
@@ -115,23 +116,35 @@ def find_double_break_entry(
 
         # Track fakeout extreme (before entry is found)
         if entry_bar_idx is None:
-            if break_dir == "bull":
-                # Fakeout extreme = highest high during failed bull break
-                if fakeout_extreme is None or bar["high"] > fakeout_extreme:
-                    fakeout_extreme = bar["high"]
-                # Check if price crosses below orb_low (reversal entry)
+            if break_dir == "long":
+                # Fakeout extreme = highest high during failed long break
+                # Check for reversal FIRST -- if this bar triggers entry,
+                # don't include its high in fakeout extreme (Bug 3 fix)
                 if bar["low"] <= entry_price:
                     entry_bar_idx = i
+                else:
+                    # Only update fakeout extreme for non-entry bars
+                    if fakeout_extreme is None or bar["high"] > fakeout_extreme:
+                        fakeout_extreme = bar["high"]
             else:
-                # Fakeout extreme = lowest low during failed bear break
-                if fakeout_extreme is None or bar["low"] < fakeout_extreme:
-                    fakeout_extreme = bar["low"]
-                # Check if price crosses above orb_high (reversal entry)
+                # Fakeout extreme = lowest low during failed short break
                 if bar["high"] >= entry_price:
                     entry_bar_idx = i
+                else:
+                    if fakeout_extreme is None or bar["low"] < fakeout_extreme:
+                        fakeout_extreme = bar["low"]
 
-    if entry_bar_idx is None or fakeout_extreme is None:
+    if entry_bar_idx is None:
         return None
+
+    # If entry happened on the first bar after break (no prior fakeout bars),
+    # use the entry bar's extreme as fakeout extreme
+    if fakeout_extreme is None:
+        entry_bar = bars.iloc[entry_bar_idx]
+        if break_dir == "long":
+            fakeout_extreme = entry_bar["high"]
+        else:
+            fakeout_extreme = entry_bar["low"]
 
     # Compute stop from fakeout extreme
     if direction == "short":

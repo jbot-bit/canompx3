@@ -185,8 +185,8 @@ class TestFindDoubleBreakEntry:
         """Create bars DataFrame with timestamps."""
         return pd.DataFrame(data, columns=["ts_utc", "open", "high", "low", "close", "volume"])
 
-    def test_bull_break_reversal_to_short(self):
-        """Bull break fails -> reversal entry is SHORT at orb_low."""
+    def test_long_break_reversal_to_short(self):
+        """Long break fails -> reversal entry is SHORT at orb_low."""
         break_ts = pd.Timestamp("2025-01-01 00:00:00", tz="UTC")
         bars = self._make_bars_with_ts([
             # Before break_ts - should be skipped (Gate A)
@@ -199,17 +199,17 @@ class TestFindDoubleBreakEntry:
         ])
 
         result = find_double_break_entry(
-            bars, break_ts, "bull", orb_high=105, orb_low=95
+            bars, break_ts, "long", orb_high=105, orb_low=95
         )
 
         assert result is not None
         assert result["direction"] == "short"
         assert result["entry_price"] == 95  # orb_low
-        assert result["fakeout_extreme"] == 108  # Highest high during bull fakeout
+        assert result["fakeout_extreme"] == 108  # Highest high during long fakeout
         assert result["stop_price"] == 108
 
-    def test_bear_break_reversal_to_long(self):
-        """Bear break fails -> reversal entry is LONG at orb_high."""
+    def test_short_break_reversal_to_long(self):
+        """Short break fails -> reversal entry is LONG at orb_high."""
         break_ts = pd.Timestamp("2025-01-01 00:00:00", tz="UTC")
         bars = self._make_bars_with_ts([
             (pd.Timestamp("2025-01-01 00:05:00", tz="UTC"), 100, 101, 88, 90, 10),  # Fakeout low = 88
@@ -219,13 +219,13 @@ class TestFindDoubleBreakEntry:
         ])
 
         result = find_double_break_entry(
-            bars, break_ts, "bear", orb_high=105, orb_low=95
+            bars, break_ts, "short", orb_high=105, orb_low=95
         )
 
         assert result is not None
         assert result["direction"] == "long"
         assert result["entry_price"] == 105  # orb_high
-        assert result["fakeout_extreme"] == 88  # Lowest low during bear fakeout
+        assert result["fakeout_extreme"] == 88  # Lowest low during short fakeout
         assert result["stop_price"] == 88
 
     def test_gate_a_no_same_bar_fill(self):
@@ -237,7 +237,7 @@ class TestFindDoubleBreakEntry:
         ])
 
         result = find_double_break_entry(
-            bars, break_ts, "bull", orb_high=105, orb_low=95
+            bars, break_ts, "long", orb_high=105, orb_low=95
         )
         assert result is None
 
@@ -252,7 +252,7 @@ class TestFindDoubleBreakEntry:
         ])
 
         result = find_double_break_entry(
-            bars, break_ts, "bull", orb_high=105, orb_low=95
+            bars, break_ts, "long", orb_high=105, orb_low=95
         )
 
         # Risk = |95 - 105.5| = 10.5 pts, which is above floor
@@ -266,7 +266,7 @@ class TestFindDoubleBreakEntry:
         ])
 
         result2 = find_double_break_entry(
-            bars2, break_ts, "bull", orb_high=105, orb_low=95
+            bars2, break_ts, "long", orb_high=105, orb_low=95
         )
         # Fakeout extreme = max(95.3, 95.2) = 95.3
         # Risk = |95 - 95.3| = 0.3 pts < 1.0 min floor -> should be None
@@ -281,7 +281,7 @@ class TestFindDoubleBreakEntry:
         ])
 
         result = find_double_break_entry(
-            bars, break_ts, "bull", orb_high=105, orb_low=95
+            bars, break_ts, "long", orb_high=105, orb_low=95
         )
         assert result is None  # Price never drops below orb_low
 
@@ -292,7 +292,7 @@ class TestFindDoubleBreakEntry:
 
 class TestPrepareGapData:
     def test_atr_computed(self):
-        """ATR_20 should be rolling 20-day mean of true range."""
+        """ATR_20 should be rolling 20-day mean of true range, shifted by 1 (no lookahead)."""
         n = 30
         dates = [date(2025, 1, 1) + timedelta(days=i) for i in range(n)]
         df = pd.DataFrame({
@@ -306,10 +306,10 @@ class TestPrepareGapData:
 
         result = prepare_gap_data(df)
 
-        # First 19 rows should be NaN (need 20 for rolling)
-        assert pd.isna(result.iloc[18]["atr_20"])
-        # Row 19 onwards should be 5.0
-        assert result.iloc[19]["atr_20"] == pytest.approx(5.0)
+        # Rolling(20) fills at index 19, but shift(1) pushes it to index 20
+        assert pd.isna(result.iloc[19]["atr_20"])
+        # Row 20 onwards should be 5.0 (uses prior 20 days' data)
+        assert result.iloc[20]["atr_20"] == pytest.approx(5.0)
 
     def test_prev_close_shift(self):
         df = pd.DataFrame({

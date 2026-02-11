@@ -63,9 +63,10 @@ def prepare_gap_data(features: pd.DataFrame) -> pd.DataFrame:
     # True range per day (simplified: daily_high - daily_low)
     df["true_range"] = df["daily_high"] - df["daily_low"]
 
-    # Rolling 20-day mean of true range
+    # Rolling 20-day mean of true range, shifted by 1 to avoid lookahead
+    # ATR must use only PRIOR days' data (today's high/low unknown at open)
     df = df.sort_values("trading_day")
-    df["atr_20"] = df["true_range"].rolling(window=20, min_periods=20).mean()
+    df["atr_20"] = df["true_range"].rolling(window=20, min_periods=20).mean().shift(1)
 
     # Previous day's close
     df["prev_close"] = df["daily_close"].shift(1)
