@@ -240,8 +240,13 @@ class ExecutionEngine:
                             mtm_points = last_close - trade.entry_price
                         else:
                             mtm_points = trade.entry_price - last_close
+                        cost = self.cost_spec
+                        if self._live_session_costs:
+                            cost = get_session_cost_spec(
+                                self.portfolio.instrument, trade.orb_label,
+                            )
                         trade.pnl_r = round(
-                            to_r_multiple(self.cost_spec, trade.entry_price,
+                            to_r_multiple(cost, trade.entry_price,
                                           trade.stop_price, mtm_points),
                             4,
                         )
