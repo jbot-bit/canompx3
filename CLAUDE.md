@@ -51,6 +51,7 @@ Raw data files contain GC (full-size Gold futures) which has ~40-70% more 1-minu
 | `setup_detector.py` | 84 | Filter daily_features by conditions |
 | `strategy_fitness.py` | 350 | 3-layer fitness: structural + rolling regime + decay monitoring |
 | `rolling_portfolio.py` | ~300 | Rolling window stability scoring + family aggregation |
+| `live_config.py` | ~200 | Declarative live portfolio: core (always-on) + regime-gated strategies |
 
 ### Nested ORB Research (`trading_app/nested/`)
 
@@ -62,6 +63,22 @@ Raw data files contain GC (full-size Gold futures) which has ~40-70% more 1-minu
 | `validator.py` | 180 | Validation on nested tables |
 | `compare.py` | 261 | A/B comparison tool (baseline vs nested) |
 | `audit_outcomes.py` | 389 | Independent outcome verification |
+
+### Research Archive (`research/`)
+
+Completed research scripts, moved from `scripts/`. Not part of production pipeline.
+
+| File | Purpose |
+|------|---------|
+| `analyze_adx_filter.py` | ADX trend filter overlay analysis |
+| `analyze_double_break.py` | Double-break reversal entry research |
+| `analyze_first_half_hour.py` | First-half-hour momentum analysis |
+| `analyze_gap_fade.py` | Overnight gap fade strategy |
+| `analyze_overlay_filters.py` | Combined overlay filter comparison |
+| `analyze_prior_day_hl.py` | Prior day high/low level research |
+| `analyze_rsi_reversion.py` | RSI mean-reversion analysis |
+| `analyze_session_fade.py` | Session fade strategy research |
+| `analyze_vwap_pullback.py` | VWAP pullback entry analysis |
 
 ### Root Scripts
 
@@ -225,6 +242,8 @@ python trading_app/outcome_builder.py --instrument MGC --start 2021-02-05 --end 
 python trading_app/strategy_discovery.py --instrument MGC
 python trading_app/strategy_validator.py --instrument MGC --min-sample 50
 python trading_app/paper_trader.py --instrument MGC --start 2025-01-01 --end 2025-12-31
+python -m trading_app.live_config --db-path C:/db/gold.db     # Show live portfolio
+python -m trading_app.live_config --db-path C:/db/gold.db --output live_portfolio.json
 ```
 
 ### Nested ORB Research

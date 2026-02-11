@@ -26,11 +26,16 @@ pipeline/
   paths.py
   run_pipeline.py
 scripts/
+  _alt_strategy_utils.py
   backup_db.py
   check_root_hygiene.py
   gen_repo_map.py
+  rolling_eval.py
+  rolling_eval_parallel.py
   run_backfill_overnight.py
   run_parallel_ingest.py
+  walk_forward_0900.py
+  walk_forward_0900_rolling.py
 tests/
   tests/test_pipeline/
     __init__.py
@@ -49,12 +54,7 @@ tests/
   tests/test_trading_app/
     tests/test_trading_app/test_ai/
       __init__.py
-      test_cli.py
-      test_corpus.py
-      test_grounding.py
-      test_query_agent.py
-      test_sql_adapter.py
-... and 77 more entries
+... and 95 more entries
 ```
 
 ## Module Index
@@ -64,30 +64,35 @@ tests/
 | `pipeline/asset_configs.py` | 84 | Per-asset configuration for the multi-instrument ingestion pipeline. | get_asset_config, list_instruments, list_available_instruments |
 | `pipeline/audit_bars_coverage.py` | 334 | Independent bars coverage audit. | build_sample, audit_day, query_db_count, query_db_source_symbols, main |
 | `pipeline/build_bars_5m.py` | 269 | Build bars_5m from bars_1m (deterministic aggregation). | build_5m_bars, verify_5m_integrity, main |
-| `pipeline/build_daily_features.py` | 612 | Build daily_features from bars_1m and bars_5m. | compute_trading_day, compute_trading_day_utc_range, get_trading_days_in_range, get_bars_for_trading_day, compute_orb_range |
+| `pipeline/build_daily_features.py` | 657 | Build daily_features from bars_1m and bars_5m. | compute_trading_day, compute_trading_day_utc_range, get_trading_days_in_range, get_bars_for_trading_day, compute_orb_range |
 | `pipeline/check_db.py` | 74 | Check database contents and integrity. | check_db |
-| `pipeline/check_drift.py` | 890 | Drift detection for the multi-instrument pipeline. | check_hardcoded_mgc_sql, check_apply_iterrows, check_non_bars1m_writes, check_schema_query_consistency, check_import_cycles |
-| `pipeline/cost_model.py` | 133 | Cost model for futures instruments. | CostSpec, get_cost_spec, list_validated_instruments, risk_in_dollars, reward_in_dollars |
+| `pipeline/check_drift.py` | 830 | Drift detection for the multi-instrument pipeline. | check_hardcoded_mgc_sql, check_apply_iterrows, check_non_bars1m_writes, check_schema_query_consistency, check_import_cycles |
+| `pipeline/cost_model.py` | 160 | Cost model for futures instruments. | CostSpec, get_session_cost_spec, get_cost_spec, list_validated_instruments, risk_in_dollars |
 | `pipeline/dashboard.py` | 638 | Pipeline Dashboard — generates a self-contained HTML report. | collect_db_metrics, collect_checkpoint_progress, collect_file_inventory, collect_guardrail_status, collect_contract_history |
 | `pipeline/health_check.py` | 125 | Pipeline health check — quick CLI that checks everything at once. | check_python_deps, check_database, check_dbn_files, check_drift, check_tests |
 | `pipeline/ingest_dbn.py` | 377 | Generic multi-instrument DBN ingestion into bars_1m table. | main |
 | `pipeline/ingest_dbn_daily.py` | 388 | Ingest daily DBN files into bars_1m table. | load_symbology, discover_daily_files, main |
 | `pipeline/ingest_dbn_mgc.py` | 592 | Ingest MGC DBN file into bars_1m table. | CheckpointManager, validate_chunk, validate_timestamp_utc, parse_expiry, choose_front_contract |
-| `pipeline/init_db.py` | 147 | Initialize the DuckDB database schema for MGC data pipeline. | init_db, main |
-| `pipeline/paths.py` | 12 | Canonical paths for the MGC data pipeline. |  |
+| `pipeline/init_db.py` | 156 | Initialize the DuckDB database schema for MGC data pipeline. | init_db, main |
+| `pipeline/paths.py` | 11 | Canonical paths for the MGC data pipeline. |  |
 | `pipeline/run_pipeline.py` | 206 | Pipeline runner: orchestrates ingest -> build_5m -> build_features -> audit. | step_ingest, step_build_5m, step_build_features, step_audit, main |
 | `trading_app/__init__.py` | 9 | Trading application for MGC ORB-based strategy backtesting and validation. |  |
 | `trading_app/ai/cli.py` | 92 | Command-line interface for AI queries. | main |
 | `trading_app/ai/corpus.py` | 88 | Load canonical grounding documents for AI query context. | load_corpus, get_corpus_file_paths, get_schema_definitions, get_db_stats |
 | `trading_app/ai/grounding.py` | 105 | Prompt engineering for canonical grounding. | build_grounding_prompt, build_interpretation_prompt |
 | `trading_app/ai/query_agent.py` | 163 | Main AI query interface | QueryResult, QueryAgent |
-| `trading_app/ai/sql_adapter.py` | 254 | Safe, read-only query executor with pre-approved SQL templates. | QueryTemplate, QueryIntent, SQLAdapter |
-| `trading_app/analysis/asia_session_analyzer.py` | 551 | Deep 0900 Asia Session Analysis + Cross-Session Intelligence. | section_a_regime_deep_dive, section_b_cross_session, section_c_mfe_analysis, section_d_direction_grid, section_e_reversal_trades |
-| `trading_app/config.py` | 187 | Strategy configuration: filters, entry models, and grid parameters. | StrategyFilter, NoFilter, OrbSizeFilter, DirectionFilter, CompoundFilter |
+| `trading_app/ai/sql_adapter.py` | 398 | Safe, read-only query executor with pre-approved SQL templates. | QueryTemplate, QueryIntent, SQLAdapter |
+| `trading_app/ai/strategy_matcher.py` | 317 | Strategy reverse-engineering: match a trade log's flip behavior to known stra... | load_trade_log, load_bars_5m, compute_indicators, family_a_signals, family_b_signals |
+| `trading_app/analysis/asia_session_analyzer.py` | 549 | Deep 0900 Asia Session Analysis + Cross-Session Intelligence. | section_a_regime_deep_dive, section_b_cross_session, section_c_mfe_analysis, section_d_direction_grid, section_e_reversal_trades |
+| `trading_app/cascade_table.py` | 90 | Cross-session conditional probability table. | build_cascade_table, lookup_cascade |
+| `trading_app/config.py` | 144 | Strategy configuration: filters, entry models, and grid parameters. | StrategyFilter, NoFilter, OrbSizeFilter, VolumeFilter, classify_strategy |
 | `trading_app/db_manager.py` | 237 | Database schema manager for trading_app tables. | init_trading_app_schema, verify_trading_app_schema, main |
 | `trading_app/entry_rules.py` | 212 | Entry detection logic with confirm_bars support and multiple entry models. | ConfirmResult, EntrySignal, detect_confirm, resolve_entry, detect_entry_with_confirm_bars |
-| `trading_app/execution_engine.py` | 525 | Execution engine for live/replay bar-by-bar strategy execution. | TradeState, TradeEvent, LiveORB, ActiveTrade, ExecutionEngine |
+| `trading_app/execution_engine.py` | 550 | Execution engine for live/replay bar-by-bar strategy execution. | TradeState, TradeEvent, LiveORB, ActiveTrade, ExecutionEngine |
 | `trading_app/execution_spec.py` | 66 | Execution specification dataclass. | ExecutionSpec |
+| `trading_app/live_config.py` | 231 | Declarative live portfolio configuration. | LiveStrategySpec, build_live_portfolio, main |
+| `trading_app/market_state.py` | 238 | Market state: single shared object describing current market context. | OrbSnapshot, SessionSignals, RegimeContext, MarketState |
+| `trading_app/mcp_server.py` | 231 | MCP server for the Gold Trading Database. |  |
 | `trading_app/nested/__init__.py` | 5 | Nested ORB research track — isolated parallel experiment. |  |
 | `trading_app/nested/audit_outcomes.py` | 308 | Spot-check audit for nested_outcomes: independently reconstructs outcomes | audit_nested_outcomes, main |
 | `trading_app/nested/builder.py` | 424 | Build nested ORB outcomes: wider ORB range (15/30 min) with 5-minute entry bars. | resample_to_5m, build_nested_outcomes, main |
@@ -96,33 +101,41 @@ tests/
 | `trading_app/nested/schema.py` | 233 | Schema for nested ORB tables (isolated from production tables). | init_nested_schema, verify_nested_schema, main |
 | `trading_app/nested/validator.py` | 144 | Validate nested ORB strategies and promote to nested_validated. | run_nested_validation, main |
 | `trading_app/outcome_builder.py` | 367 | Pre-compute outcomes for all RR targets x confirm_bars combinations. | compute_single_outcome, build_outcomes, main |
-| `trading_app/paper_trader.py` | 284 | Historical replay and paper trading. | JournalEntry, DaySummary, ReplayResult, replay_historical, main |
-| `trading_app/portfolio.py` | 550 | Portfolio construction from validated strategies. | PortfolioStrategy, Portfolio, compute_position_size, compute_position_size_prop, load_validated_strategies |
+| `trading_app/paper_trader.py` | 331 | Historical replay and paper trading. | JournalEntry, DaySummary, ReplayResult, replay_historical, main |
+| `trading_app/portfolio.py` | 657 | Portfolio construction from validated strategies. | PortfolioStrategy, Portfolio, compute_position_size, compute_position_size_prop, load_validated_strategies |
 | `trading_app/regime/__init__.py` | 5 | Regime discovery — run strategy analysis on date-bounded subsets. |  |
 | `trading_app/regime/compare.py` | 197 | Side-by-side comparison: regime run vs full-period results. | run_comparison, main |
 | `trading_app/regime/discovery.py` | 191 | Grid search over strategy variants for a date-bounded regime. | run_regime_discovery, main |
 | `trading_app/regime/schema.py` | 186 | Schema for regime discovery tables (isolated from production tables). | init_regime_schema, verify_regime_schema, main |
 | `trading_app/regime/validator.py` | 150 | Validate regime strategies and promote to regime_validated. | run_regime_validation, main |
-| `trading_app/risk_manager.py` | 108 | Risk management for live/replay trading. | RiskLimits, RiskManager |
+| `trading_app/risk_manager.py` | 131 | Risk management for live/replay trading. | RiskLimits, RiskManager |
+| `trading_app/rolling_portfolio.py` | 411 | Rolling portfolio aggregator: load rolling window results, compute | FamilyResult, make_family_id, load_rolling_results, load_all_rolling_run_labels, load_rolling_degraded_counts |
+| `trading_app/scoring.py` | 55 | Hypothesis-driven strategy scoring engine. | ScoringWeights, score_strategy |
 | `trading_app/setup_detector.py` | 62 | Filter trading days by market conditions. | detect_setups |
 | `trading_app/strategy_discovery.py` | 407 | Grid search over strategy variants and save results to experimental_strategies. | compute_metrics, make_strategy_id, run_discovery, main |
+| `trading_app/strategy_fitness.py` | 386 | Strategy fitness assessment: rolling regime fitness + decay monitoring. | FitnessScore, FitnessReport, classify_fitness, compute_fitness, compute_portfolio_fitness |
 | `trading_app/strategy_validator.py` | 232 | 6-phase strategy validation per CANONICAL_LOGIC.txt section 9. | validate_strategy, run_validation, main |
 | `trading_app/validate_1800_composite.py` | 418 | Validate composite 1800 E3 strategy: 15m AGREE filter + split targets. | load_composite_data, compute_composite_metrics, stress_test_pnl, find_breakeven_multiplier, walk_forward_expanding |
 | `trading_app/validate_1800_workhorse.py` | 471 | 1800 Workhorse Strategy Stress Test: 5 variants side-by-side. | load_workhorse_data, compute_metrics, stress_test_pnl, find_breakeven_multiplier, walk_forward_expanding |
 | `trading_app/view_strategies.py` | 216 | Strategy Viewer CLI — browse, filter, and export validated strategies. | fetch_strategies, fetch_summary, fetch_total_count, format_table, format_summary |
 | `trading_app/walk_forward.py` | 300 | Walk-forward out-of-sample evaluation for validated strategies. | FoldResult, WalkForwardResult, build_folds, evaluate_fold, walk_forward_eval |
+| `scripts/_alt_strategy_utils.py` | 158 | Shared utilities for alternative strategy analysis scripts. | load_daily_features, load_bars_for_day, compute_walk_forward_windows, compute_strategy_metrics, resolve_bar_outcome |
 | `scripts/backup_db.py` | 43 | Database backup — copies gold.db to backups/ with date stamp. | backup_db, main |
 | `scripts/check_root_hygiene.py` | 44 | Check that the project root contains only allowed files and directories. | main |
 | `scripts/gen_repo_map.py` | 220 | Auto-generate REPO_MAP.md from Python source using the ast module. | generate_repo_map, main |
-| `scripts/run_backfill_overnight.py` | 93 | Overnight Backfill Runner - Crash-proof wrapper for ingest_dbn_mgc.py | log, run_ingest, main |
+| `scripts/rolling_eval.py` | 274 | Rolling window evaluation of ORB breakout strategies. | generate_rolling_windows, compute_double_break_pct, mark_degraded_by_double_break, run_rolling_evaluation, main |
+| `scripts/rolling_eval_parallel.py` | 202 | Parallel rolling window evaluation — uses all CPU cores. | merge_results_to_main, main |
+| `scripts/run_backfill_overnight.py` | 92 | Overnight Backfill Runner - Crash-proof wrapper for ingest_dbn_mgc.py | log, run_ingest, main |
 | `scripts/run_parallel_ingest.py` | 181 | Parallel re-ingest: GC bars into gold.db. | ingest_year, merge_all, build_downstream, verify, cleanup |
+| `scripts/walk_forward_0900.py` | 268 | Walk-forward analysis for 0900 ORB strategies. | load_0900_data, compute_stats, find_best_strategy, find_worst_strategy, get_oos_trades |
+| `scripts/walk_forward_0900_rolling.py` | 197 | Rolling walk-forward analysis for 0900 ORB strategies. | load_0900_data, compute_stats, find_best_combo, em_label, main |
 | `tests/conftest.py` | 91 | Shared test fixtures for the MGC data pipeline. | tmp_db, sample_bars_1m, sample_bars_1m_bad |
-| `tests/test_app_sync.py` | 308 | Mandatory sync validation between DB schema, config.py, and pipeline constants. | TestOrbLabelsSync, TestAllFiltersSync, TestGridParamsSync, TestEntryModelsSync, TestStrategyClassificationSync |
+| `tests/test_app_sync.py` | 305 | Mandatory sync validation between DB schema, config.py, and pipeline constants. | TestOrbLabelsSync, TestAllFiltersSync, TestGridParamsSync, TestEntryModelsSync, TestStrategyClassificationSync |
 | `tests/test_pipeline/test_build_bars_5m.py` | 99 | Tests for pipeline.build_bars_5m aggregation and integrity checks. | TestBuild5mBars, TestVerify5mIntegrity |
 | `tests/test_pipeline/test_build_daily_features.py` | 555 | Tests for pipeline/build_daily_features.py — staged daily features builder. | TestTradingDay, TestOrbRanges, TestBreakDetection, TestSessionStats, TestRSI |
 | `tests/test_pipeline/test_check_drift.py` | 183 | Tests for pipeline.check_drift drift detection rules. | TestHardcodedMgcSql, TestApplyIterrows, TestNonBars1mWrites, TestPipelineNeverImportsTradingApp, TestTradingAppConnectionLeaks |
 | `tests/test_pipeline/test_contract_selection.py` | 75 | Tests for pipeline.ingest_dbn_mgc contract selection functions. | TestParseExpiry, TestChooseFrontContract |
-| `tests/test_pipeline/test_cost_model.py` | 137 | Tests for pipeline/cost_model.py — futures instrument cost model. | TestCostSpec, TestGetCostSpec, TestRiskReward, TestRMultiple, TestStressTest |
+| `tests/test_pipeline/test_cost_model.py` | 179 | Tests for pipeline/cost_model.py — futures instrument cost model. | TestCostSpec, TestGetCostSpec, TestRiskReward, TestRMultiple, TestStressTest |
 | `tests/test_pipeline/test_ingest_daily.py` | 107 | Tests for pipeline.ingest_dbn_daily module. | TestDailyFilePattern, TestDiscoverDailyFiles, TestGcOutrightFilter, TestCheckpointRoundtrip |
 | `tests/test_pipeline/test_paths.py` | 25 | Tests for pipeline.paths path constants. | TestPaths |
 | `tests/test_pipeline/test_rsi_edge_cases.py` | 52 | Tests for RSI edge cases — avg_loss near zero after smoothing (T6). | TestWildersRsiEdgeCases |
@@ -137,13 +150,16 @@ tests/
 | `tests/test_trading_app/test_ai/test_grounding.py` | 60 | Tests for trading_app.ai.grounding. | mock_corpus, mock_schema, TestBuildGroundingPrompt, TestBuildInterpretationPrompt |
 | `tests/test_trading_app/test_ai/test_query_agent.py` | 124 | Tests for trading_app.ai.query_agent. | TestGenerateWarnings, TestQueryResult, TestQueryAgentInit, TestQueryAgentIntentExtraction |
 | `tests/test_trading_app/test_ai/test_sql_adapter.py` | 114 | Tests for trading_app.ai.sql_adapter. | TestQueryTemplate, TestParameterValidation, TestSQLAdapterBuildQuery, TestAvailableTemplates |
-| `tests/test_trading_app/test_config.py` | 252 | Tests for trading_app.config filter definitions. | TestNoFilter, TestOrbSizeFilter, TestAllFilters, TestVolumeFilter, TestDirectionFilter |
+| `tests/test_trading_app/test_alt_analysis.py` | 274 | Tests for alternative strategy analysis scripts (double break, gap fade). | TestComputeStrategyMetrics, TestComputeWalkForwardWindows, TestAddMonths, TestResolveBarOutcome, TestFindDoubleBreakEntry |
+| `tests/test_trading_app/test_config.py` | 155 | Tests for trading_app.config filter definitions. | TestNoFilter, TestOrbSizeFilter, TestAllFilters, TestVolumeFilter |
 | `tests/test_trading_app/test_db_manager.py` | 127 | Tests for trading_app.db_manager schema management. | db_path, TestInitSchema, TestVerifySchema |
-| `tests/test_trading_app/test_engine_risk_integration.py` | 414 | Integration tests: ExecutionEngine + RiskManager. | TestOnTradeEntry, TestOnTradeExit, TestScratchExit, TestReject, TestCircuitBreaker |
+| `tests/test_trading_app/test_engine_risk_integration.py` | 552 | Integration tests: ExecutionEngine + RiskManager. | TestOnTradeEntry, TestOnTradeExit, TestScratchExit, TestReject, TestCircuitBreaker |
 | `tests/test_trading_app/test_entry_rules.py` | 535 | Tests for trading_app.entry_rules confirm bars detection and entry models. | TestConfirmBars1, TestConfirmBars2, TestConfirmBars3, TestEdgeCases, TestDetectConfirm |
-| `tests/test_trading_app/test_execution_engine.py` | 345 | Tests for trading_app.execution_engine module. | TestORBDetection, TestEntry, TestExit, TestPnL, TestDailySummary |
+| `tests/test_trading_app/test_execution_engine.py` | 425 | Tests for trading_app.execution_engine module. | TestORBDetection, TestEntry, TestExit, TestPnL, TestDailySummary |
 | `tests/test_trading_app/test_execution_spec.py` | 88 | Tests for trading_app.execution_spec. | TestExecutionSpecCreation, TestExecutionSpecSerialization |
 | `tests/test_trading_app/test_integration.py` | 183 | End-to-end integration test for the trading_app pipeline. | pipeline_20day, TestPipelineFull, TestIdempotent, TestRejection |
+| `tests/test_trading_app/test_market_state.py` | 225 | Tests for MarketState, scoring, and cascade_table (all DB-free). | FakeStrategy, TestVisibleSessions, TestSignals, TestScoring, TestCascadeLookup |
+| `tests/test_trading_app/test_mcp_server.py` | 113 | Tests for trading_app.mcp_server (no DB required). | TestListAvailableQueries, TestQueryTradingDb, TestGuardrails, TestGenerateWarnings |
 | `tests/test_trading_app/test_nested/test_audit_outcomes.py` | 75 | Tests for nested/audit_outcomes._outcomes_match() (T2). | TestOutcomesMatchExact, TestOutcomesMatchTolerance, TestOutcomesMatchMismatch, TestOutcomesMatchEdgeCases |
 | `tests/test_trading_app/test_nested/test_builder.py` | 221 | Tests for trading_app.nested.builder — resample_to_5m, E3 sub-bar verification, | TestResampleTo5m, TestE3SubBarFillVerification, TestOutcomeResolutionDifference, TestConfirmBarsOn5m |
 | `tests/test_trading_app/test_nested/test_discovery.py` | 116 | Tests for trading_app.nested.discovery — strategy ID format, grid iteration, | TestNestedStrategyId, TestEntryResolution, TestTableIsolation |
@@ -153,14 +169,16 @@ tests/
 | `tests/test_trading_app/test_outcome_builder.py` | 521 | Tests for trading_app.outcome_builder module. | TestComputeSingleOutcome, TestEntryModelE1, TestEntryModelE2, TestEntryModelE3, TestBuildOutcomes |
 | `tests/test_trading_app/test_outcome_builder_utc.py` | 84 | Tests for outcome_builder UTC normalization of break_ts (T7). | TestBreakTsUtcNormalization |
 | `tests/test_trading_app/test_paper_trader.py` | 203 | Tests for trading_app.paper_trader module. | TestHelpers, shared_replay, TestReplay, TestRiskIntegration, TestCLI |
-| `tests/test_trading_app/test_portfolio.py` | 783 | Tests for trading_app.portfolio module. | TestPositionSizing, TestDiversification, TestBuildPortfolio, TestSerialization, TestCapitalEstimation |
+| `tests/test_trading_app/test_portfolio.py` | 849 | Tests for trading_app.portfolio module. | TestPositionSizing, TestDiversification, TestBuildPortfolio, TestSerialization, TestCapitalEstimation |
 | `tests/test_trading_app/test_portfolio_volume_filter.py` | 94 | Tests for Portfolio build_strategy_daily_series with VolumeFilter (T9). | TestVolumeFilterMatchesRow, TestOrbSizeFilterMatchesRow, TestOverlayEligibilityLogic, TestAllFiltersSync |
 | `tests/test_trading_app/test_regime/test_discovery.py` | 196 | Tests for trading_app.regime.discovery -- regime strategy discovery. | regime_db, TestRegimeDiscovery |
 | `tests/test_trading_app/test_regime/test_schema.py` | 149 | Tests for trading_app.regime.schema -- table creation and column verification. | tmp_db, TestInitRegimeSchema, TestRegimeStrategiesColumns, TestRegimeValidatedColumns, TestVerifyRegimeSchema |
 | `tests/test_trading_app/test_regime/test_validator.py` | 136 | Tests for trading_app.regime.validator -- regime strategy validation. | validated_db, TestRegimeValidation |
 | `tests/test_trading_app/test_risk_manager.py` | 188 | Tests for trading_app.risk_manager module. | TestRiskLimits, TestCircuitBreaker, TestMaxConcurrent, TestMaxPerOrb, TestMaxDailyTrades |
+| `tests/test_trading_app/test_rolling_portfolio.py` | 378 | Tests for rolling portfolio: window generation, stability scoring, | TestWindowGeneration, TestStabilityScoring, TestAggregatePerformance, TestDoubleBreak, TestDayOfWeekConcentration |
 | `tests/test_trading_app/test_setup_detector.py` | 105 | Tests for trading_app.setup_detector module. | TestDetectSetups |
 | `tests/test_trading_app/test_strategy_discovery.py` | 248 | Tests for trading_app.strategy_discovery module. | TestComputeMetrics, TestMakeStrategyId, TestComputeRelativeVolumes, TestCLI |
+| `tests/test_trading_app/test_strategy_fitness.py` | 534 | Tests for trading_app.strategy_fitness module. | TestClassifyFitness, TestRollingMetrics, TestRecentTradeSharpe, TestRollingWindowStart, TestSharpeDelta |
 | `tests/test_trading_app/test_strategy_validator.py` | 280 | Tests for trading_app.strategy_validator module. | TestValidateStrategy, TestRunValidation, TestCLI |
 | `tests/test_trading_app/test_walk_forward.py` | 131 | Tests for trading_app.walk_forward module. | TestBuildFolds, TestEvaluateFold |
 
@@ -179,9 +197,12 @@ tests/
 - `pipeline/run_pipeline.py` -> pipeline
 - `trading_app/ai/grounding.py` -> trading_app
 - `trading_app/ai/query_agent.py` -> trading_app
-- `trading_app/analysis/asia_session_analyzer.py` -> pipeline, trading_app
+- `trading_app/ai/strategy_matcher.py` -> pipeline
+- `trading_app/analysis/asia_session_analyzer.py` -> pipeline
 - `trading_app/db_manager.py` -> pipeline
 - `trading_app/execution_engine.py` -> pipeline, trading_app
+- `trading_app/live_config.py` -> pipeline, trading_app
+- `trading_app/mcp_server.py` -> pipeline, trading_app
 - `trading_app/nested/audit_outcomes.py` -> pipeline, trading_app
 - `trading_app/nested/builder.py` -> pipeline, trading_app
 - `trading_app/nested/compare.py` -> pipeline
@@ -195,27 +216,24 @@ tests/
 - `trading_app/regime/discovery.py` -> pipeline, trading_app
 - `trading_app/regime/schema.py` -> pipeline
 - `trading_app/regime/validator.py` -> pipeline, trading_app
+- `trading_app/rolling_portfolio.py` -> pipeline
 - `trading_app/setup_detector.py` -> trading_app
 - `trading_app/strategy_discovery.py` -> pipeline, trading_app
+- `trading_app/strategy_fitness.py` -> pipeline, trading_app
 - `trading_app/strategy_validator.py` -> pipeline, trading_app
 - `trading_app/validate_1800_composite.py` -> pipeline
 - `trading_app/validate_1800_workhorse.py` -> pipeline
 - `trading_app/view_strategies.py` -> pipeline
 - `trading_app/walk_forward.py` -> pipeline, trading_app
+- `scripts/_alt_strategy_utils.py` -> pipeline
+- `scripts/rolling_eval.py` -> pipeline, trading_app
+- `scripts/rolling_eval_parallel.py` -> pipeline, scripts, trading_app
+- `scripts/walk_forward_0900.py` -> pipeline
+- `scripts/walk_forward_0900_rolling.py` -> pipeline
 - `tests/test_app_sync.py` -> pipeline, trading_app
 - `tests/test_pipeline/test_build_bars_5m.py` -> pipeline
 - `tests/test_pipeline/test_build_daily_features.py` -> pipeline
-- `tests/test_pipeline/test_check_drift.py` -> pipeline
-- `tests/test_pipeline/test_contract_selection.py` -> pipeline
-- `tests/test_pipeline/test_cost_model.py` -> pipeline
-- `tests/test_pipeline/test_ingest_daily.py` -> pipeline
-- `tests/test_pipeline/test_paths.py` -> pipeline
-- `tests/test_pipeline/test_rsi_edge_cases.py` -> pipeline
-- `tests/test_pipeline/test_schema.py` -> pipeline
-- `tests/test_pipeline/test_trading_days.py` -> pipeline
-- `tests/test_pipeline/test_validation.py` -> pipeline
-- `tests/test_trader_logic.py` -> pipeline, trading_app
-... and 30 more edges
+... and 45 more edges
 
 ## CLI Entry Points
 
@@ -232,15 +250,15 @@ tests/
 - `python pipeline/init_db.py` -- (no argparse description)
 - `python pipeline/run_pipeline.py` -- (no argparse description)
 - `python trading_app/ai/cli.py` -- (no argparse description)
+- `python trading_app/ai/strategy_matcher.py` -- (no argparse description)
 - `python trading_app/analysis/asia_session_analyzer.py` -- (no argparse description)
 - `python trading_app/db_manager.py` -- (no argparse description)
+- `python trading_app/live_config.py` -- (no argparse description)
+- `python trading_app/mcp_server.py` -- (no argparse description)
 - `python trading_app/nested/audit_outcomes.py` -- (no argparse description)
 - `python trading_app/nested/builder.py` -- (no argparse description)
 - `python trading_app/nested/compare.py` -- (no argparse description)
 - `python trading_app/nested/discovery.py` -- (no argparse description)
 - `python trading_app/nested/schema.py` -- (no argparse description)
 - `python trading_app/nested/validator.py` -- (no argparse description)
-- `python trading_app/outcome_builder.py` -- (no argparse description)
-- `python trading_app/paper_trader.py` -- (no argparse description)
-- `python trading_app/portfolio.py` -- (no argparse description)
-... and 15 more entry points
+... and 24 more entry points
