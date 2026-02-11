@@ -73,6 +73,42 @@ COST_SPECS = {
 }
 
 
+# =============================================================================
+# SESSION-AWARE SLIPPAGE (live execution only — backtest uses flat costs)
+# =============================================================================
+
+SESSION_SLIPPAGE_MULT = {
+    "0900": 1.3,   # 23:00 UTC — thin Asian session
+    "1000": 1.2,   # 00:00 UTC — thin early Asian
+    "1100": 1.0,   # 01:00 UTC — moderate
+    "1800": 0.9,   # 08:00 UTC — pre-London, decent liquidity
+    "2300": 0.8,   # 13:00 UTC — NY session, best liquidity
+    "0030": 1.1,   # 14:30 UTC — moderate NY
+}
+
+
+def get_session_cost_spec(instrument: str, orb_label: str) -> CostSpec:
+    """CostSpec with session-adjusted slippage for live execution.
+
+    Applies a multiplier to the base slippage based on the session's
+    typical liquidity. Backtest should NOT use this — use get_cost_spec()
+    with 1.5x stress test instead.
+    """
+    base = get_cost_spec(instrument)
+    mult = SESSION_SLIPPAGE_MULT.get(orb_label, 1.0)
+    if mult == 1.0:
+        return base
+    return CostSpec(
+        instrument=base.instrument,
+        point_value=base.point_value,
+        commission_rt=base.commission_rt,
+        spread_doubled=base.spread_doubled,
+        slippage=round(base.slippage * mult, 2),
+        tick_size=base.tick_size,
+        min_ticks_floor=base.min_ticks_floor,
+    )
+
+
 def get_cost_spec(instrument: str) -> CostSpec:
     """
     Return the CostSpec for the given instrument.

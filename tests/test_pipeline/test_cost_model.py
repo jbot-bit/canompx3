@@ -13,6 +13,8 @@ import pytest
 from pipeline.cost_model import (
     CostSpec,
     get_cost_spec,
+    get_session_cost_spec,
+    SESSION_SLIPPAGE_MULT,
     list_validated_instruments,
     risk_in_dollars,
     reward_in_dollars,
@@ -183,3 +185,53 @@ class TestStressTest:
         stressed = stress_test_costs(spec)
         assert stressed.tick_size == spec.tick_size
         assert stressed.min_ticks_floor == spec.min_ticks_floor
+
+
+class TestSessionSlippage:
+    """Tests for session-aware slippage (Phase 3 risk hardening)."""
+
+    def test_0900_slippage_higher_than_base(self):
+        """0900 (thin Asian) should have higher slippage than base."""
+        base = get_cost_spec("MGC")
+        session = get_session_cost_spec("MGC", "0900")
+        assert session.slippage > base.slippage
+        assert session.slippage == pytest.approx(base.slippage * 1.3)
+
+    def test_2300_slippage_lower_than_base(self):
+        """2300 (NY session) should have lower slippage than base."""
+        base = get_cost_spec("MGC")
+        session = get_session_cost_spec("MGC", "2300")
+        assert session.slippage < base.slippage
+        assert session.slippage == pytest.approx(base.slippage * 0.8)
+
+    def test_unknown_session_returns_base(self):
+        """Unknown session label returns unmodified base spec."""
+        base = get_cost_spec("MGC")
+        session = get_session_cost_spec("MGC", "9999")
+        assert session.slippage == base.slippage
+        assert session is base  # Same object when mult == 1.0
+
+    def test_1100_returns_base_spec(self):
+        """1100 has mult 1.0, should return base spec directly."""
+        base = get_cost_spec("MGC")
+        session = get_session_cost_spec("MGC", "1100")
+        assert session is base
+
+    def test_total_friction_changes(self):
+        """Session slippage changes total_friction correctly."""
+        base = get_cost_spec("MGC")
+        session = get_session_cost_spec("MGC", "0900")
+        # Only slippage changes; commission + spread stay same
+        expected_friction = base.commission_rt + base.spread_doubled + round(base.slippage * 1.3, 2)
+        assert session.total_friction == pytest.approx(expected_friction)
+
+    def test_point_value_preserved(self):
+        """Session cost spec preserves point value and tick size."""
+        session = get_session_cost_spec("MGC", "0900")
+        assert session.point_value == 10.0
+        assert session.tick_size == 0.10
+
+    def test_all_sessions_have_multiplier(self):
+        """All 6 ORB sessions should be in SESSION_SLIPPAGE_MULT."""
+        for label in ["0900", "1000", "1100", "1800", "2300", "0030"]:
+            assert label in SESSION_SLIPPAGE_MULT

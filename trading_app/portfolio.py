@@ -279,6 +279,8 @@ def diversify_strategies(
     max_strategies: int,
     max_per_orb: int = 5,
     max_per_entry_model: int | None = None,
+    corr_matrix: pd.DataFrame | None = None,
+    max_correlation: float = 0.85,
 ) -> list[dict]:
     """
     Select a diversified subset of strategies.
@@ -287,7 +289,8 @@ def diversify_strategies(
     1. Highest ExpR first
     2. Enforce max per ORB label
     3. Enforce max per entry model (if set)
-    4. Stop at max_strategies
+    4. Reject candidates too correlated (>= max_correlation) with any already-selected strategy
+    5. Stop at max_strategies
     """
     selected = []
     orb_counts = {}
@@ -308,6 +311,19 @@ def diversify_strategies(
         if max_per_entry_model is not None:
             if em_counts.get(em, 0) >= max_per_entry_model:
                 continue
+
+        # Check correlation with already-selected strategies
+        if corr_matrix is not None:
+            sid = s["strategy_id"]
+            if sid in corr_matrix.columns:
+                too_correlated = any(
+                    sel["strategy_id"] in corr_matrix.columns
+                    and pd.notna(corr_matrix.loc[sid, sel["strategy_id"]])
+                    and abs(corr_matrix.loc[sid, sel["strategy_id"]]) >= max_correlation
+                    for sel in selected
+                )
+                if too_correlated:
+                    continue
 
         selected.append(s)
         orb_counts[orb] = orb_counts.get(orb, 0) + 1
@@ -363,8 +379,19 @@ def build_portfolio(
             max_daily_loss_r=max_daily_loss_r,
         )
 
+    # Compute correlation matrix for diversification filtering
+    corr = None
+    if len(candidates) > 1:
+        strategy_ids = [c["strategy_id"] for c in candidates]
+        corr = correlation_matrix(db_path, strategy_ids, min_overlap_days=100)
+        if corr.empty:
+            corr = None
+
     # Diversify selection
-    selected = diversify_strategies(candidates, max_strategies, max_per_orb)
+    selected = diversify_strategies(
+        candidates, max_strategies, max_per_orb,
+        corr_matrix=corr, max_correlation=0.85,
+    )
 
     # Convert to PortfolioStrategy objects
     strategies = []

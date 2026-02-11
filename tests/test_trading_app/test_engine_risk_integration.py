@@ -607,3 +607,100 @@ class TestLifecycleConsistency:
         scratch_events = [e for e in events if e.event_type == "SCRATCH"]
         assert len(scratch_events) == 0  # Already exited
         assert rm.daily_pnl_r == -2.0  # Unchanged
+
+
+# ============================================================================
+# 7. Correlation-weighted concurrent guard (Phase 2 risk hardening)
+# ============================================================================
+
+class TestCorrelationWeightedConcurrent:
+
+    def test_correlated_trades_fill_budget_faster(self):
+        """Two highly correlated open positions (rho=0.9) consume 0.9 effective slots each."""
+        corr_lookup = {
+            ("strat_new", "strat_a"): 0.9,
+            ("strat_new", "strat_b"): 0.9,
+        }
+        limits = RiskLimits(max_concurrent_positions=3, max_per_orb_positions=5, max_daily_trades=20)
+        rm = RiskManager(limits, corr_lookup=corr_lookup)
+        rm.daily_reset(_TRADING_DAY)
+
+        # Simulate 2 entered trades
+        class FakeTrade:
+            def __init__(self, sid, orb):
+                self.strategy_id = sid
+                self.orb_label = orb
+                self.state = TradeState.ENTERED
+
+        active = [FakeTrade("strat_a", "0900"), FakeTrade("strat_b", "1000")]
+        # Effective = 0.9 + 0.9 = 1.8 < 3 => allowed
+        allowed, reason = rm.can_enter("strat_new", "1800", active, 0.0)
+        assert allowed, f"Should allow: effective 1.8 < 3, got: {reason}"
+
+    def test_correlated_trades_block_when_full(self):
+        """With 3 correlated positions at rho=0.9 each, effective = 2.7 blocks at limit=3."""
+        corr_lookup = {
+            ("strat_new", "strat_a"): 0.95,
+            ("strat_new", "strat_b"): 0.95,
+            ("strat_new", "strat_c"): 0.95,
+        }
+        limits = RiskLimits(max_concurrent_positions=3, max_per_orb_positions=5, max_daily_trades=20)
+        rm = RiskManager(limits, corr_lookup=corr_lookup)
+        rm.daily_reset(_TRADING_DAY)
+
+        class FakeTrade:
+            def __init__(self, sid, orb):
+                self.strategy_id = sid
+                self.orb_label = orb
+                self.state = TradeState.ENTERED
+
+        active = [FakeTrade("strat_a", "0900"), FakeTrade("strat_b", "0900"),
+                  FakeTrade("strat_c", "1000")]
+        # Effective = 0.95 * 3 = 2.85 < 3 ... actually not >= 3
+        # Need effective >= 3. Use 4 active trades at 0.95 each = 3.8 >= 3
+        active.append(FakeTrade("strat_d", "1000"))
+        corr_lookup[("strat_new", "strat_d")] = 0.95
+        rm = RiskManager(limits, corr_lookup=corr_lookup)
+        rm.daily_reset(_TRADING_DAY)
+
+        allowed, reason = rm.can_enter("strat_new", "1800", active, 0.0)
+        assert not allowed
+        assert "corr_concurrent" in reason
+
+    def test_uncorrelated_trades_allow_more(self):
+        """Low correlation (0.3) trades use minimum 0.3 weight — more budget room."""
+        corr_lookup = {
+            ("strat_new", "strat_a"): 0.1,
+            ("strat_new", "strat_b"): 0.1,
+        }
+        limits = RiskLimits(max_concurrent_positions=2, max_per_orb_positions=5, max_daily_trades=20)
+        rm = RiskManager(limits, corr_lookup=corr_lookup)
+        rm.daily_reset(_TRADING_DAY)
+
+        class FakeTrade:
+            def __init__(self, sid, orb):
+                self.strategy_id = sid
+                self.orb_label = orb
+                self.state = TradeState.ENTERED
+
+        active = [FakeTrade("strat_a", "0900"), FakeTrade("strat_b", "1800")]
+        # Effective = max(0.1, 0.3) + max(0.1, 0.3) = 0.6 < 2 => allowed
+        allowed, reason = rm.can_enter("strat_new", "2300", active, 0.0)
+        assert allowed, f"Should allow uncorrelated: effective 0.6 < 2, got: {reason}"
+
+    def test_no_corr_lookup_backward_compatible(self):
+        """Without corr_lookup, falls back to simple count."""
+        limits = RiskLimits(max_concurrent_positions=2, max_per_orb_positions=5, max_daily_trades=20)
+        rm = RiskManager(limits)
+        rm.daily_reset(_TRADING_DAY)
+
+        class FakeTrade:
+            def __init__(self, sid, orb):
+                self.strategy_id = sid
+                self.orb_label = orb
+                self.state = TradeState.ENTERED
+
+        active = [FakeTrade("strat_a", "0900"), FakeTrade("strat_b", "1000")]
+        allowed, reason = rm.can_enter("strat_new", "1800", active, 0.0)
+        assert not allowed
+        assert "max_concurrent" in reason

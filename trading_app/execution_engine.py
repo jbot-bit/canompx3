@@ -25,7 +25,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 
-from pipeline.cost_model import CostSpec, to_r_multiple
+from pipeline.cost_model import CostSpec, to_r_multiple, get_session_cost_spec
 from trading_app.config import ALL_FILTERS
 from trading_app.portfolio import Portfolio, PortfolioStrategy
 
@@ -126,11 +126,13 @@ class ExecutionEngine:
     """
 
     def __init__(self, portfolio: Portfolio, cost_spec: CostSpec,
-                 risk_manager=None, market_state=None):
+                 risk_manager=None, market_state=None,
+                 live_session_costs: bool = False):
         self.portfolio = portfolio
         self.cost_spec = cost_spec
         self.risk_manager = risk_manager  # Optional RiskManager for position limits
         self.market_state = market_state  # Optional MarketState for scoring
+        self._live_session_costs = live_session_costs  # Use session-adjusted slippage
 
         # State
         self.trading_day: date | None = None
@@ -657,10 +659,17 @@ class ExecutionEngine:
 
         risk_points = abs(trade.entry_price - trade.stop_price)
 
+        # Use session-adjusted costs for live P&L (backtest uses flat cost_spec)
+        cost = self.cost_spec
+        if self._live_session_costs:
+            cost = get_session_cost_spec(
+                self.portfolio.instrument, trade.orb_label,
+            )
+
         if outcome == "win":
             pnl_points = risk_points * trade.strategy.rr_target
             trade.pnl_r = round(
-                to_r_multiple(self.cost_spec, trade.entry_price, trade.stop_price, pnl_points),
+                to_r_multiple(cost, trade.entry_price, trade.stop_price, pnl_points),
                 4,
             )
         else:

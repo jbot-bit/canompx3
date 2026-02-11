@@ -41,8 +41,10 @@ class RiskManager:
     5. Drawdown warning (allows entry, logs warning)
     """
 
-    def __init__(self, limits: RiskLimits):
+    def __init__(self, limits: RiskLimits,
+                 corr_lookup: dict[tuple[str, str], float] | None = None):
         self.limits = limits
+        self._corr_lookup = corr_lookup or {}
         self.daily_pnl_r: float = 0.0
         self.daily_trade_count: int = 0
         self.trading_day: date | None = None
@@ -83,10 +85,24 @@ class RiskManager:
             self._halted = True
             return False, f"circuit_breaker: daily PnL {daily_pnl_r:.2f}R <= {self.limits.max_daily_loss_r}R"
 
-        # Check 2: Max concurrent positions
-        entered_count = sum(1 for t in active_trades if hasattr(t, 'state') and t.state.value == "ENTERED")
-        if entered_count >= self.limits.max_concurrent_positions:
-            return False, f"max_concurrent: {entered_count} >= {self.limits.max_concurrent_positions}"
+        # Check 2: Max concurrent positions (correlation-weighted if available)
+        entered = [t for t in active_trades if hasattr(t, 'state') and t.state.value == "ENTERED"]
+        if self._corr_lookup and entered:
+            effective = sum(
+                max(
+                    self._corr_lookup.get(
+                        (strategy_id, t.strategy_id),
+                        self._corr_lookup.get((t.strategy_id, strategy_id), 0.5),
+                    ),
+                    0.3,
+                )
+                for t in entered
+            )
+            if effective >= self.limits.max_concurrent_positions:
+                return False, f"corr_concurrent: effective {effective:.1f} >= {self.limits.max_concurrent_positions}"
+        else:
+            if len(entered) >= self.limits.max_concurrent_positions:
+                return False, f"max_concurrent: {len(entered)} >= {self.limits.max_concurrent_positions}"
 
         # Check 3: Max per ORB
         orb_count = sum(

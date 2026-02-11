@@ -957,6 +957,81 @@ class TestNestedIntegration:
             assert orig.source == loaded_s.source
 
 
+class TestCorrelationFilter:
+    """Tests for correlation-aware diversification (Phase 1 risk hardening)."""
+
+    def test_correlated_cb_variants_rejected(self):
+        """CB1 + CB2 on same ORB/filter at rho >= 0.85 should keep only the first."""
+        candidates = [
+            _make_strategy(strategy_id="s_cb1", orb_label="0900", confirm_bars=1, expectancy_r=0.30),
+            _make_strategy(strategy_id="s_cb2", orb_label="0900", confirm_bars=2, expectancy_r=0.28),
+            _make_strategy(strategy_id="s_cb3", orb_label="0900", confirm_bars=3, expectancy_r=0.26),
+        ]
+        # Fake correlation matrix: cb1-cb2 = 0.95, cb1-cb3 = 0.90, cb2-cb3 = 0.92
+        import pandas as pd
+        ids = ["s_cb1", "s_cb2", "s_cb3"]
+        corr = pd.DataFrame(
+            [[1.0, 0.95, 0.90], [0.95, 1.0, 0.92], [0.90, 0.92, 1.0]],
+            index=ids, columns=ids,
+        )
+        selected = diversify_strategies(
+            candidates, max_strategies=10, corr_matrix=corr, max_correlation=0.85,
+        )
+        # Only the first (highest ExpR) should survive
+        assert len(selected) == 1
+        assert selected[0]["strategy_id"] == "s_cb1"
+
+    def test_uncorrelated_strategies_pass(self):
+        """Strategies from different sessions with low correlation pass through."""
+        candidates = [
+            _make_strategy(strategy_id="s_0900", orb_label="0900", expectancy_r=0.30),
+            _make_strategy(strategy_id="s_1800", orb_label="1800", expectancy_r=0.25),
+            _make_strategy(strategy_id="s_2300", orb_label="2300", expectancy_r=0.20),
+        ]
+        import pandas as pd
+        ids = ["s_0900", "s_1800", "s_2300"]
+        corr = pd.DataFrame(
+            [[1.0, 0.15, 0.10], [0.15, 1.0, 0.20], [0.10, 0.20, 1.0]],
+            index=ids, columns=ids,
+        )
+        selected = diversify_strategies(
+            candidates, max_strategies=10, corr_matrix=corr, max_correlation=0.85,
+        )
+        assert len(selected) == 3
+
+    def test_none_corr_matrix_backward_compatible(self):
+        """corr_matrix=None gives identical behavior to old code."""
+        candidates = [
+            _make_strategy(strategy_id=f"s{i}", orb_label="0900", expectancy_r=0.30 - i*0.01)
+            for i in range(5)
+        ]
+        selected = diversify_strategies(candidates, max_strategies=10, corr_matrix=None)
+        assert len(selected) == 5
+
+    def test_empty_candidates_with_corr_matrix(self):
+        """Empty candidates with corr_matrix doesn't crash."""
+        import pandas as pd
+        corr = pd.DataFrame()
+        selected = diversify_strategies([], max_strategies=10, corr_matrix=corr)
+        assert selected == []
+
+    def test_nan_correlation_does_not_block(self):
+        """NaN correlation (insufficient overlap) should not block selection."""
+        candidates = [
+            _make_strategy(strategy_id="s_a", orb_label="0900", expectancy_r=0.30),
+            _make_strategy(strategy_id="s_b", orb_label="0900", expectancy_r=0.25),
+        ]
+        import pandas as pd
+        corr = pd.DataFrame(
+            [[1.0, float("nan")], [float("nan"), 1.0]],
+            index=["s_a", "s_b"], columns=["s_a", "s_b"],
+        )
+        selected = diversify_strategies(
+            candidates, max_strategies=10, corr_matrix=corr, max_correlation=0.85,
+        )
+        assert len(selected) == 2
+
+
 class TestCLI:
     def test_help(self):
         import subprocess
