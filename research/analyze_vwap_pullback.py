@@ -106,10 +106,12 @@ def resample_to_5m(bars_1m: pd.DataFrame) -> pd.DataFrame:
     vwap_1m = compute_vwap(df)
     df["vwap"] = vwap_1m
 
-    # Create 5m bucket
+    # Create 5m bucket using UTC epoch seconds
     ts = df["ts_utc"]
     if ts.dt.tz is not None:
-        epoch = ts.astype("int64") // 10**9
+        # Convert to UTC first, then get epoch
+        ts_utc = ts.dt.tz_convert("UTC")
+        epoch = (ts_utc - pd.Timestamp("1970-01-01", tz="UTC")) // pd.Timedelta("1s")
     else:
         epoch = (ts - pd.Timestamp("1970-01-01")) // pd.Timedelta("1s")
 

@@ -24,8 +24,8 @@ from scripts._alt_strategy_utils import (
     compute_walk_forward_windows,
     resolve_bar_outcome,
 )
-from scripts.analyze_double_break import find_double_break_entry
-from scripts.analyze_gap_fade import prepare_gap_data
+from research.analyze_double_break import find_double_break_entry
+from research.analyze_gap_fade import prepare_gap_data
 from trading_app.ai.sql_adapter import QueryTemplate, SQLAdapter
 
 

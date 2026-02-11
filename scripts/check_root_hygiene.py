@@ -11,7 +11,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 ALLOWED_DIRS = {
-    "pipeline", "trading_app", "tests", "scripts", "docs", "artifacts", "backups",
+    "pipeline", "trading_app", "tests", "scripts", "research", "docs", "artifacts", "backups",
     "DB", ".git", ".github", ".githooks", ".claude", "__pycache__",
     "llm-code-scanner", "plugins",
     # Virtual environments

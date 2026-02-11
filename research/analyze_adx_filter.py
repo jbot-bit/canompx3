@@ -150,14 +150,14 @@ def get_adx_at_break_time(
     """Compute ADX_14 value at the time of ORB break.
 
     Uses all 5m bars up to and including the break bar.
+    Requires 2*period+1 bars of warmup (typically loaded from prev day + current).
     """
     if bars_5m.empty or len(bars_5m) < 2 * period + 1:
         return None
 
-    # Find the bar at or just before break_ts
     ts_col = bars_5m["ts_utc"]
 
-    # Handle timezone
+    # Handle timezone for comparison
     if break_ts.tzinfo is None:
         break_ts_cmp = break_ts
     else:
@@ -179,12 +179,42 @@ def get_adx_at_break_time(
     return float(last_adx) if not np.isnan(last_adx) else None
 
 
+def load_bars_5m_with_warmup(db_path: Path, trading_day: date) -> pd.DataFrame:
+    """Load 5m bars for current + previous trading day (for ADX warmup).
+
+    ADX(14) needs ~29 bars of warmup. A single session might only have 3-4 bars
+    before the ORB break, so we include the previous day's bars.
+    """
+    from pipeline.build_daily_features import compute_trading_day_utc_range
+    from datetime import timedelta
+
+    # Get range for prev trading day + current
+    # Go back 2 calendar days to be safe (handles weekends)
+    prev_day = trading_day - timedelta(days=3)
+    start_utc, _ = compute_trading_day_utc_range(prev_day)
+    _, end_utc = compute_trading_day_utc_range(trading_day)
+
+    con = duckdb.connect(str(db_path), read_only=True)
+    try:
+        df = con.execute("""
+            SELECT ts_utc, open, high, low, close, volume
+            FROM bars_5m
+            WHERE symbol = 'MGC'
+              AND ts_utc >= ? AND ts_utc < ?
+            ORDER BY ts_utc
+        """, [start_utc, end_utc]).fetchdf()
+    finally:
+        con.close()
+    return df
+
+
 def load_orb_outcomes_with_adx(db_path: Path, start: date, end: date) -> pd.DataFrame:
     """Load ORB outcomes and compute ADX at break time for each.
 
-    Returns DataFrame with orb_outcomes columns plus adx_at_break.
+    Uses bars from prev+current day for ADX warmup.
+    Joins ORB size from daily_features for size filtering.
+    Returns DataFrame with orb_outcomes columns plus adx_at_break and orb_size.
     """
-    # Load daily features for break_ts and size info
     con = duckdb.connect(str(db_path), read_only=True)
     try:
         features = con.execute("""
@@ -197,12 +227,11 @@ def load_orb_outcomes_with_adx(db_path: Path, start: date, end: date) -> pd.Data
             ORDER BY trading_day
         """, [start, end]).fetchdf()
 
-        # Load orb_outcomes for the same period
         outcomes = con.execute("""
             SELECT trading_day, orb_label, entry_model, rr_target,
-                   cb_bars, filter_type, pnl_r, outcome
+                   confirm_bars, pnl_r, outcome
             FROM orb_outcomes
-            WHERE instrument = 'MGC'
+            WHERE symbol = 'MGC'
               AND trading_day BETWEEN ? AND ?
         """, [start, end]).fetchdf()
     finally:
@@ -211,8 +240,7 @@ def load_orb_outcomes_with_adx(db_path: Path, start: date, end: date) -> pd.Data
     if features.empty or outcomes.empty:
         return pd.DataFrame()
 
-    # Compute ADX at break time for each (day, orb_label)
-    adx_map = {}  # (trading_day, orb_label) -> adx_value
+    adx_map = {}
     total = len(features)
 
     for idx, (_, row) in enumerate(features.iterrows()):
@@ -227,7 +255,8 @@ def load_orb_outcomes_with_adx(db_path: Path, start: date, end: date) -> pd.Data
         else:
             td_date = td
 
-        bars_5m = load_bars_5m_for_day(db_path, td_date)
+        # Load with warmup (prev day's bars for ADX to converge)
+        bars_5m = load_bars_5m_with_warmup(db_path, td_date)
         if bars_5m.empty:
             continue
 
@@ -242,10 +271,23 @@ def load_orb_outcomes_with_adx(db_path: Path, start: date, end: date) -> pd.Data
 
     print(f"    ADX computed for {len(adx_map)} (day, session) pairs")
 
-    # Merge ADX into outcomes
     outcomes["trading_day_str"] = outcomes["trading_day"].astype(str).str[:10]
     outcomes["adx_at_break"] = outcomes.apply(
         lambda r: adx_map.get((r["trading_day_str"], r["orb_label"])), axis=1
+    )
+
+    # Join ORB size from daily_features for size filtering
+    features["trading_day_str"] = features["trading_day"].astype(str).str[:10]
+    size_map = {}
+    for _, row in features.iterrows():
+        td_str = row["trading_day_str"]
+        for orb_label in ORB_LABELS:
+            sz = row[f"orb_{orb_label}_size"]
+            if not pd.isna(sz):
+                size_map[(td_str, orb_label)] = sz
+
+    outcomes["orb_size"] = outcomes.apply(
+        lambda r: size_map.get((r["trading_day_str"], r["orb_label"])), axis=1
     )
 
     return outcomes
@@ -292,69 +334,88 @@ def run_walk_forward(
         if train_data.empty:
             continue
 
-        # Find best (orb_label, size_filter, rr, entry_model, adx_threshold) on training
+        # Find best (orb_label, entry_model, rr, size_filter, adx_threshold) on training
         best_combo = None
         best_sharpe = -999.0
 
         for orb_label in ORB_LABELS:
             ol_train = train_data[train_data["orb_label"] == orb_label]
-            for filt_name, filt_thresh in SIZE_FILTERS.items():
-                sf_train = ol_train[ol_train["filter_type"].isin(
-                    [f"ORB_{filt_name}", filt_name]
-                )] if False else ol_train  # Filter by ORB size from features
-                # Actually filter by checking orb_size -- but outcomes don't have it
-                # Use the filter_type column in outcomes if available, or use CB1 as proxy
-                # Simpler: just filter by orb_label and use all outcomes, filter by ADX
-                for em in ENTRY_MODELS:
-                    em_train = ol_train[ol_train["entry_model"] == em]
-                    for rr in RR_TARGETS:
-                        rr_train = em_train[em_train["rr_target"] == rr]
-                        # Use CB1 only (avoid overlap)
-                        cb_train = rr_train[rr_train["cb_bars"] == 1]
-                        if cb_train.empty:
+            for em in ENTRY_MODELS:
+                em_train = ol_train[ol_train["entry_model"] == em]
+                for rr in RR_TARGETS:
+                    rr_train = em_train[em_train["rr_target"] == rr]
+                    # Use CB1 only (avoid overlap between CB levels)
+                    cb_train = rr_train[rr_train["confirm_bars"] == 1]
+                    if cb_train.empty:
+                        continue
+
+                    for sf_name, sf_min in SIZE_FILTERS.items():
+                        sf_train = cb_train[cb_train["orb_size"] >= sf_min]
+                        if len(sf_train) < 10:
                             continue
 
+                        # Test: size filter ALONE (no ADX) as baseline
+                        sf_stats = compute_strategy_metrics(sf_train["pnl_r"].values)
+                        if sf_stats and sf_stats["sharpe"] > best_sharpe:
+                            best_sharpe = sf_stats["sharpe"]
+                            best_combo = (orb_label, em, rr, sf_name, None)  # None = no ADX
+
+                        # Test: size filter + ADX overlay
                         for adx_thresh in ADX_THRESHOLDS:
-                            filtered = cb_train[cb_train["adx_at_break"] >= adx_thresh]
-                            if len(filtered) < 15:
+                            filtered = sf_train[sf_train["adx_at_break"] >= adx_thresh]
+                            if len(filtered) < 10:
                                 continue
                             stats = compute_strategy_metrics(filtered["pnl_r"].values)
                             if stats and stats["sharpe"] > best_sharpe:
                                 best_sharpe = stats["sharpe"]
-                                best_combo = (orb_label, em, rr, adx_thresh)
+                                best_combo = (orb_label, em, rr, sf_name, adx_thresh)
 
         if best_combo is None:
             continue
 
-        orb_label, em, rr, adx_thresh = best_combo
+        orb_label, em, rr, sf_name, adx_thresh = best_combo
 
-        # Apply to OOS
+        # Apply to OOS: first size filter, then optional ADX
         oos_base = test_data[
             (test_data["orb_label"] == orb_label)
             & (test_data["entry_model"] == em)
             & (test_data["rr_target"] == rr)
-            & (test_data["cb_bars"] == 1)
+            & (test_data["confirm_bars"] == 1)
         ]
-        oos_filtered = oos_base[oos_base["adx_at_break"] >= adx_thresh]
+        sf_min = SIZE_FILTERS[sf_name]
+        oos_sized = oos_base[oos_base["orb_size"] >= sf_min]
 
-        if oos_filtered.empty:
+        if adx_thresh is not None:
+            oos_final = oos_sized[oos_sized["adx_at_break"] >= adx_thresh]
+            combo_label = f"{orb_label}_{em}_RR{rr}_{sf_name}_ADX{adx_thresh}"
+        else:
+            oos_final = oos_sized
+            combo_label = f"{orb_label}_{em}_RR{rr}_{sf_name}_noADX"
+
+        if oos_final.empty:
             continue
 
-        oos_f_stats = compute_strategy_metrics(oos_filtered["pnl_r"].values)
-        oos_u_stats = compute_strategy_metrics(oos_base["pnl_r"].values) if not oos_base.empty else None
+        # Drop NaN pnl_r before computing metrics
+        final_pnls = oos_final["pnl_r"].dropna().values
+        sized_pnls = oos_sized["pnl_r"].dropna().values
 
-        oos_filtered_pnls.extend(oos_filtered["pnl_r"].values)
-        oos_unfiltered_pnls.extend(oos_base["pnl_r"].values)
-        oos_filtered_dates.extend(oos_filtered["trading_day_date"].values)
+        oos_f_stats = compute_strategy_metrics(final_pnls)
+        oos_sized_stats = compute_strategy_metrics(sized_pnls) if len(sized_pnls) > 0 else None
+
+        oos_filtered_pnls.extend(final_pnls)
+        oos_unfiltered_pnls.extend(sized_pnls)
+        final_valid = oos_final.dropna(subset=["pnl_r"])
+        oos_filtered_dates.extend(final_valid["trading_day_date"].values)
 
         window_results.append({
             "test_start": str(w["test_start"]),
             "test_end": str(w["test_end"]),
-            "selected": f"{orb_label}_{em}_RR{rr}_ADX{adx_thresh}",
+            "selected": combo_label,
             "train_sharpe": best_sharpe,
-            "oos_filtered": oos_f_stats,
-            "oos_unfiltered": oos_u_stats,
-            "filter_rate": 1 - len(oos_filtered) / len(oos_base) if len(oos_base) > 0 else 0,
+            "oos_final": oos_f_stats,
+            "oos_size_only": oos_sized_stats,
+            "adx_applied": adx_thresh is not None,
+            "filter_rate": 1 - len(oos_final) / len(oos_sized) if len(oos_sized) > 0 else 0,
         })
 
     combined_filtered = None
@@ -425,25 +486,35 @@ def main():
     print("ADX TREND FILTER OVERLAY ANALYSIS")
     print(sep)
     print()
-    print("Tests: Does ADX > threshold improve ORB breakout OOS performance?")
-    print(f"Grid: {len(ADX_THRESHOLDS)} ADX thresholds x {len(ORB_LABELS)} ORBs x "
-          f"{len(ENTRY_MODELS)} EMs x {len(RR_TARGETS)} RR = "
-          f"{len(ADX_THRESHOLDS) * len(ORB_LABELS) * len(ENTRY_MODELS) * len(RR_TARGETS)} combos")
-    print(f"ADX thresholds tested: {ADX_THRESHOLDS}")
+    print("Tests: Does ADX > threshold improve G2/G4-filtered ORB breakout OOS performance?")
+    n_combos = (len(ORB_LABELS) * len(ENTRY_MODELS) * len(RR_TARGETS) * len(SIZE_FILTERS)
+                * (1 + len(ADX_THRESHOLDS)))  # +1 for size-only baseline
+    print(f"Grid: {len(ORB_LABELS)} ORBs x {len(ENTRY_MODELS)} EMs x {len(RR_TARGETS)} RR x "
+          f"{len(SIZE_FILTERS)} size filters x (1 baseline + {len(ADX_THRESHOLDS)} ADX) = {n_combos} combos")
+    print(f"Size filters: {list(SIZE_FILTERS.keys())}, ADX thresholds: {ADX_THRESHOLDS}")
     print()
 
     print("--- WALK-FORWARD ANALYSIS ---")
     result = run_walk_forward(args.db_path, args.train_months)
 
     if result["windows"]:
+        adx_wins = 0
+        size_wins = 0
         for w in result["windows"]:
-            f = w["oos_filtered"]
-            u = w["oos_unfiltered"]
+            f = w["oos_final"]
+            u = w["oos_size_only"]
             if f:
-                filt_pct = w["filter_rate"]
-                print(f"  {w['test_start']} to {w['test_end']}: {w['selected']}, "
-                      f"Filtered N={f['n']} (rejected {filt_pct:.0%}), "
-                      f"ExpR={f['expr']:+.3f} vs unfilt={u['expr']:+.3f if u else 'N/A'}")
+                u_expr = f"{u['expr']:+.3f}" if u else "N/A"
+                adx_tag = " [+ADX]" if w["adx_applied"] else " [size only]"
+                print(f"  {w['test_start']} to {w['test_end']}: {w['selected']}{adx_tag}, "
+                      f"N={f['n']}, ExpR={f['expr']:+.3f} vs size-only={u_expr}")
+                if w["adx_applied"]:
+                    adx_wins += 1
+                else:
+                    size_wins += 1
+
+        print(f"\n  Walk-forward selected ADX in {adx_wins}/{adx_wins+size_wins} windows "
+              f"({size_wins} windows chose size-only)")
 
         if result["combined_filtered"]:
             cf = result["combined_filtered"]
