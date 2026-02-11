@@ -27,6 +27,7 @@ class QueryTemplate(str, Enum):
     CORRELATION = "correlation"
     DOUBLE_BREAK_STATS = "double_break_stats"
     GAP_ANALYSIS = "gap_analysis"
+    ROLLING_STABILITY = "rolling_stability"
 
 
 @dataclass
@@ -213,6 +214,25 @@ _TEMPLATES = {
         GROUP BY year
         ORDER BY year
     """,
+    QueryTemplate.ROLLING_STABILITY: """
+        SELECT
+            rv.orb_label,
+            rv.entry_model,
+            rv.filter_type,
+            COUNT(DISTINCT rv.run_label) as windows_passed,
+            AVG(rv.expectancy_r) as avg_expr,
+            AVG(rv.sharpe_ratio) as avg_sharpe,
+            AVG(rv.sample_size) as avg_sample,
+            MIN(rv.sample_size) as min_sample,
+            AVG(rv.win_rate) as avg_wr,
+            AVG(rv.max_drawdown_r) as avg_max_dd
+        FROM regime_validated rv
+        WHERE rv.run_label LIKE 'rolling_%'
+        {where_clauses}
+        GROUP BY rv.orb_label, rv.entry_model, rv.filter_type
+        ORDER BY windows_passed DESC, avg_sharpe DESC
+        LIMIT ?
+    """,
 }
 
 
@@ -241,6 +261,9 @@ class SQLAdapter:
 
         if template == QueryTemplate.REGIME_COMPARE:
             return self._execute_regime_compare(params)
+
+        if template == QueryTemplate.ROLLING_STABILITY:
+            return self._execute_rolling_stability(params)
 
         sql, bind_params = self._build_query(template, params)
 
@@ -352,6 +375,44 @@ class SQLAdapter:
         finally:
             con.close()
 
+    def _execute_rolling_stability(self, params: dict) -> pd.DataFrame:
+        """Execute rolling stability query with rv.-qualified WHERE clauses."""
+        sql_template = _TEMPLATES[QueryTemplate.ROLLING_STABILITY]
+        where_parts = []
+        bind_params = []
+
+        if "orb_label" in params:
+            _validate_orb_label(params["orb_label"])
+            where_parts.append("AND rv.orb_label = ?")
+            bind_params.append(params["orb_label"])
+
+        if "entry_model" in params:
+            _validate_entry_model(params["entry_model"])
+            where_parts.append("AND rv.entry_model = ?")
+            bind_params.append(params["entry_model"])
+
+        if "filter_type" in params:
+            _validate_filter_type(params["filter_type"])
+            where_parts.append("AND rv.filter_type = ?")
+            bind_params.append(params["filter_type"])
+
+        if "min_sample_size" in params:
+            where_parts.append("AND rv.sample_size >= ?")
+            bind_params.append(int(params["min_sample_size"]))
+
+        where_clause = "\n        ".join(where_parts)
+        sql = sql_template.replace("{where_clauses}", where_clause)
+
+        limit = min(int(params.get("limit", 50)), MAX_RESULT_ROWS)
+        bind_params.append(limit)
+
+        con = duckdb.connect(self.db_path, read_only=True)
+        try:
+            result = con.execute(sql, bind_params).fetchdf()
+            return result.head(MAX_RESULT_ROWS)
+        finally:
+            con.close()
+
     def _build_query(self, template: QueryTemplate, params: dict) -> tuple[str, list]:
         """Build parameterized SQL from template and parameters."""
         sql_template = _TEMPLATES[template]
@@ -409,6 +470,7 @@ class SQLAdapter:
             QueryTemplate.CORRELATION: "Top strategies by Sharpe for correlation analysis",
             QueryTemplate.DOUBLE_BREAK_STATS: "Double-break frequency by year for an ORB session",
             QueryTemplate.GAP_ANALYSIS: "Overnight gap statistics by year",
+            QueryTemplate.ROLLING_STABILITY: "Rolling window stability: which strategy families pass across 12/18-month windows",
         }
         return [
             {"template": t.value, "description": descriptions.get(t, "")}

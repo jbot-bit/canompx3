@@ -17,7 +17,7 @@ from trading_app.mcp_server import (
 class TestListAvailableQueries:
     def test_returns_all_templates(self):
         result = _list_available_queries()
-        assert len(result) == 12
+        assert len(result) == 13
         names = {t["template"] for t in result}
         assert "strategy_lookup" in names
         assert "table_counts" in names

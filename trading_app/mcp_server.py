@@ -247,7 +247,7 @@ def _build_server():
                       One of: strategy_lookup, performance_stats, validated_summary,
                       yearly_breakdown, trade_history, schema_info, table_counts,
                       orb_size_dist, regime_compare, correlation,
-                      double_break_stats, gap_analysis.
+                      double_break_stats, gap_analysis, rolling_stability.
             orb_label: ORB session filter. One of: 0900, 1000, 1100, 1800, 2300, 0030.
             entry_model: Entry model filter. One of: E1, E2, E3.
             filter_type: ORB size filter. Examples: ORB_G4, ORB_G6, NO_FILTER.
