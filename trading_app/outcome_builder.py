@@ -237,8 +237,8 @@ def compute_single_outcome(
     if not any_hit.any():
         # No target or stop hit — scratch
         result["outcome"] = "scratch"
-        max_favorable_points = float(np.max(favorable))
-        max_adverse_points = float(np.max(adverse))
+        max_favorable_points = max(float(np.max(favorable)), 0.0)
+        max_adverse_points = max(float(np.max(adverse)), 0.0)
     else:
         first_hit_idx = int(np.argmax(any_hit))
         # Use .iloc to preserve tz-aware timestamp (not .values which strips tz)
@@ -265,9 +265,9 @@ def compute_single_outcome(
             result["exit_price"] = stop_price
             result["pnl_r"] = -1.0
 
-        # MAE/MFE up to and including the exit bar
-        max_favorable_points = float(np.max(favorable[: first_hit_idx + 1]))
-        max_adverse_points = float(np.max(adverse[: first_hit_idx + 1]))
+        # MAE/MFE up to and including the exit bar (clamped >= 0)
+        max_favorable_points = max(float(np.max(favorable[: first_hit_idx + 1])), 0.0)
+        max_adverse_points = max(float(np.max(adverse[: first_hit_idx + 1])), 0.0)
 
     # MAE/MFE in R
     result["mae_r"] = round(

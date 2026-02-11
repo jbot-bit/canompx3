@@ -492,6 +492,118 @@ class TestArmedAtBarGuard:
         assert len(entered) == 1
 
 
+class TestFillBarExitEngine:
+    """Fill-bar exit must be checked for E1 and E3 (matches outcome_builder)."""
+
+    def _build_orb(self, engine, ts_base):
+        """Build ORB: high=2705, low=2695."""
+        for i in range(5):
+            engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
+
+    def test_e1_fill_bar_target_hit(self):
+        """E1: if fill bar hits target, trade should exit as win on same bar."""
+        strategy = _make_strategy(
+            entry_model="E1", confirm_bars=1, rr_target=1.0,
+            strategy_id="MGC_2300_E1_RR1.0_CB1_NO_FILTER",
+        )
+        engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
+        engine.on_trading_day_start(date(2024, 1, 5))
+
+        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        self._build_orb(engine, ts_base)
+
+        # Break bar (long): close > 2705
+        engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
+        # E1 now ARMED, will enter on next bar's open
+
+        # Fill bar: open=2708, entry=2708, stop=2695, risk=13, target=2708+13=2721
+        # bar high=2725 >= 2721 -> target hit on fill bar
+        events = engine.on_bar(
+            _bar(ts_base + timedelta(minutes=6), 2708, 2725, 2707, 2720)
+        )
+        entry_events = [e for e in events if e.event_type == "ENTRY"]
+        exit_events = [e for e in events if e.event_type == "EXIT"]
+        assert len(entry_events) == 1
+        assert len(exit_events) == 1, "Fill bar should detect target hit"
+        assert "win" in exit_events[0].reason
+
+    def test_e1_fill_bar_stop_hit(self):
+        """E1: if fill bar hits stop, trade should exit as loss on same bar."""
+        strategy = _make_strategy(
+            entry_model="E1", confirm_bars=1, rr_target=2.0,
+            strategy_id="MGC_2300_E1_RR2.0_CB1_NO_FILTER",
+        )
+        engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
+        engine.on_trading_day_start(date(2024, 1, 5))
+
+        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        self._build_orb(engine, ts_base)
+
+        # Break bar (long): close > 2705
+        engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
+
+        # Fill bar: open=2708, stop=2695, bar low=2694 <= 2695 -> stop hit
+        events = engine.on_bar(
+            _bar(ts_base + timedelta(minutes=6), 2708, 2710, 2694, 2696)
+        )
+        entry_events = [e for e in events if e.event_type == "ENTRY"]
+        exit_events = [e for e in events if e.event_type == "EXIT"]
+        assert len(entry_events) == 1
+        assert len(exit_events) == 1, "Fill bar should detect stop hit"
+        assert "loss" in exit_events[0].reason
+
+    def test_e1_fill_bar_ambiguous_is_loss(self):
+        """E1: if fill bar hits BOTH stop and target, resolve as loss."""
+        strategy = _make_strategy(
+            entry_model="E1", confirm_bars=1, rr_target=1.0,
+            strategy_id="MGC_2300_E1_RR1.0_CB1_NO_FILTER",
+        )
+        engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
+        engine.on_trading_day_start(date(2024, 1, 5))
+
+        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        self._build_orb(engine, ts_base)
+
+        # Break bar (long)
+        engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
+
+        # Fill bar: open=2708, stop=2695, target=2708+13=2721
+        # high=2725 >= 2721 AND low=2694 <= 2695 -> both hit -> LOSS
+        events = engine.on_bar(
+            _bar(ts_base + timedelta(minutes=6), 2708, 2725, 2694, 2700)
+        )
+        exit_events = [e for e in events if e.event_type == "EXIT"]
+        assert len(exit_events) == 1, "Ambiguous fill bar should exit as loss"
+        assert "loss" in exit_events[0].reason
+
+    def test_e3_fill_bar_target_hit(self):
+        """E3: if retrace bar also hits target, trade exits as win."""
+        strategy = _make_strategy(
+            entry_model="E3", confirm_bars=1, rr_target=1.0,
+            strategy_id="MGC_2300_E3_RR1.0_CB1_NO_FILTER",
+        )
+        engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
+        engine.on_trading_day_start(date(2024, 1, 5))
+
+        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        self._build_orb(engine, ts_base)
+
+        # Break bar (long)
+        engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
+
+        # E3 retrace bar: low=2704 <= orb_high(2705) -> fills at 2705
+        # entry=2705, stop=2695, risk=10, target=2705+10=2715
+        # high=2716 >= 2715 -> target hit on fill bar
+        events = engine.on_bar(
+            _bar(ts_base + timedelta(minutes=6), 2708, 2716, 2704, 2712)
+        )
+        entry_events = [e for e in events if e.event_type == "ENTRY"]
+        exit_events = [e for e in events if e.event_type == "EXIT"]
+        assert len(entry_events) == 1
+        assert len(exit_events) == 1, "E3 fill bar should detect target hit"
+        assert "win" in exit_events[0].reason
+
+
 class TestCLI:
     def test_import(self):
         """Module imports without error."""

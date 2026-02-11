@@ -538,8 +538,8 @@ class ExecutionEngine:
                         contracts=trade.contracts,
                         reason="confirm_bars_met_E1",
                     ))
-                    # Don't check exit on fill bar — match backtester behavior
-                    continue
+                    # Fall through to exit check — fill bar may hit stop/target
+                    # (matches outcome_builder _check_fill_bar_exit behavior)
 
                 elif trade.entry_model == "E3":
                     # E3: check if bar retraces to ORB level
@@ -613,8 +613,9 @@ class ExecutionEngine:
                             contracts=trade.contracts,
                             reason="retrace_fill_E3",
                         ))
-                        # Don't check exit on the fill bar for E3
-                        continue
+                        # Fall through to exit check — fill bar may hit target
+                        # (E3 stop on fill bar is impossible: entry_rules rejects
+                        # fills when stop breached on retrace bar)
 
             if trade.state != TradeState.ENTERED:
                 continue
