@@ -293,12 +293,17 @@ def main():
     parser.add_argument("--min-sample", type=int, default=20,
                         help="Min sample size per window (relaxed for short windows)")
     parser.add_argument("--stress-multiplier", type=float, default=1.5)
+    parser.add_argument("--db-path", type=str, default=None,
+                        help="Path to gold.db (default: project gold.db)")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--output", type=str, default=None,
                         help="Write results JSON to this path")
     args = parser.parse_args()
 
+    db_path = Path(args.db_path) if args.db_path else None
+
     results = run_rolling_evaluation(
+        db_path=db_path,
         instrument=args.instrument,
         train_months_list=args.train_months,
         test_start=args.test_start,
