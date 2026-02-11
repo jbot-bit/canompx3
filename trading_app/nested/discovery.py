@@ -150,10 +150,9 @@ def run_nested_discovery(
             print(f"  {sum(len(v) for v in outcomes_by_key.values())} outcome rows loaded")
 
             # Grid iteration
-            total_combos = (
-                len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS)
-                * len(ALL_FILTERS) * len(ENTRY_MODELS)
-            )
+            e1e2_combos = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * len(ALL_FILTERS) * 2
+            e3_combos = len(ORB_LABELS) * len(RR_TARGETS) * 1 * len(ALL_FILTERS)
+            total_combos = e1e2_combos + e3_combos
             combo_idx = 0
             insert_batch = []
 
@@ -164,6 +163,8 @@ def run_nested_discovery(
                     for em in ENTRY_MODELS:
                         for rr_target in RR_TARGETS:
                             for cb in CONFIRM_BARS_OPTIONS:
+                                if em == "E3" and cb > 1:
+                                    continue
                                 combo_idx += 1
 
                                 if not matching_day_set:

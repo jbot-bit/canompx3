@@ -171,10 +171,11 @@ class TestGridParamsSync:
         assert len(CONFIRM_BARS_OPTIONS) == len(set(CONFIRM_BARS_OPTIONS))
 
     def test_grid_size(self):
-        """Total grid size matches expected formula."""
-        expected = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * len(ALL_FILTERS) * len(ENTRY_MODELS)
-        # 6 ORBs * 6 RRs * 5 CBs * 13 filters * 3 models = 7020
-        assert expected == 6 * 6 * 5 * 13 * 3
+        """Total grid size matches expected formula (E3 uses CB1 only)."""
+        e1e2 = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * len(ALL_FILTERS) * 2
+        e3 = len(ORB_LABELS) * len(RR_TARGETS) * 1 * len(ALL_FILTERS)
+        expected = e1e2 + e3
+        assert expected == 5148
 
 
 class TestEntryModelsSync:
@@ -249,17 +250,19 @@ class TestStrategyIdSync:
         assert parts[2] == "E2"
 
     def test_all_grid_ids_unique(self):
-        """Every combination in the full grid produces a unique ID."""
+        """Every combination in the full grid produces a unique ID (E3 CB1 only)."""
         ids = set()
         for orb in ORB_LABELS:
             for em in ENTRY_MODELS:
                 for rr in RR_TARGETS:
                     for cb in CONFIRM_BARS_OPTIONS:
+                        if em == "E3" and cb > 1:
+                            continue
                         for fk in ALL_FILTERS:
                             sid = make_strategy_id("MGC", orb, em, rr, cb, fk)
                             assert sid not in ids, f"Duplicate ID: {sid}"
                             ids.add(sid)
-        assert len(ids) == 7020
+        assert len(ids) == 5148
 
 
 # ============================================================================

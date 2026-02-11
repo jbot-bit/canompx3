@@ -46,8 +46,9 @@ RR_TARGETS = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0]
 # CONFIRM_BARS_OPTIONS: How many consecutive 1-min closes outside ORB
 #   before confirming a breakout signal and triggering entry.
 #   CB1 = fastest entry, more fakeouts
-#   CB5 = most confirmation, may miss momentum (but best for E3 retrace)
-#   Optimal: CB2 for 0900/1000 E1, CB5 for 1800 E3
+#   CB5 = most confirmation, may miss momentum
+#   NOTE: E3 (limit-at-ORB) always uses CB1 — higher CBs produce identical
+#   entry prices (always ORB level) with 93-96% outcome overlap.
 CONFIRM_BARS_OPTIONS = [1, 2, 3, 4, 5]
 
 
@@ -374,6 +375,8 @@ def build_outcomes(
                 for rr_target in RR_TARGETS:
                     for cb in CONFIRM_BARS_OPTIONS:
                         for em in ENTRY_MODELS:
+                            if em == "E3" and cb > 1:
+                                continue
                             outcome = compute_single_outcome(
                                 bars_df=bars_df,
                                 break_ts=break_ts,
