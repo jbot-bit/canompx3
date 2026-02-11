@@ -43,7 +43,7 @@ class TestQueryTemplate:
             assert "SELECT" in sql.upper(), f"Template {t.value} is not a SELECT"
 
     def test_template_count(self):
-        assert len(QueryTemplate) == 10
+        assert len(QueryTemplate) == 12
 
 
 class TestParameterValidation:

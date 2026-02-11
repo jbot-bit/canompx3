@@ -25,6 +25,8 @@ class QueryTemplate(str, Enum):
     ORB_SIZE_DIST = "orb_size_dist"
     REGIME_COMPARE = "regime_compare"
     CORRELATION = "correlation"
+    DOUBLE_BREAK_STATS = "double_break_stats"
+    GAP_ANALYSIS = "gap_analysis"
 
 
 @dataclass
@@ -182,6 +184,35 @@ _TEMPLATES = {
         ORDER BY sharpe_ratio DESC
         LIMIT ?
     """,
+    QueryTemplate.DOUBLE_BREAK_STATS: """
+        SELECT
+            EXTRACT(YEAR FROM trading_day) as year,
+            COUNT(*) as total_days,
+            SUM(CASE WHEN orb_{orb_label}_double_break THEN 1 ELSE 0 END) as double_break_days,
+            ROUND(AVG(CASE WHEN orb_{orb_label}_double_break THEN 1.0 ELSE 0.0 END) * 100, 1) as db_pct,
+            AVG(orb_{orb_label}_size) as avg_orb_size
+        FROM daily_features
+        WHERE orb_minutes = 5
+          AND orb_{orb_label}_size IS NOT NULL
+        GROUP BY year
+        ORDER BY year
+    """,
+    QueryTemplate.GAP_ANALYSIS: """
+        SELECT
+            EXTRACT(YEAR FROM trading_day) as year,
+            COUNT(*) as days,
+            AVG(gap_open_points) as avg_gap,
+            AVG(ABS(gap_open_points)) as avg_abs_gap,
+            MIN(gap_open_points) as min_gap,
+            MAX(gap_open_points) as max_gap,
+            COUNT(CASE WHEN ABS(gap_open_points) > 1.0 THEN 1 END) as gaps_over_1pt,
+            COUNT(CASE WHEN ABS(gap_open_points) > 2.0 THEN 1 END) as gaps_over_2pt
+        FROM daily_features
+        WHERE orb_minutes = 5
+          AND gap_open_points IS NOT NULL
+        GROUP BY year
+        ORDER BY year
+    """,
 }
 
 
@@ -201,6 +232,12 @@ class SQLAdapter:
 
         if template == QueryTemplate.ORB_SIZE_DIST:
             return self._execute_orb_size_dist(params)
+
+        if template == QueryTemplate.DOUBLE_BREAK_STATS:
+            return self._execute_double_break_stats(params)
+
+        if template == QueryTemplate.GAP_ANALYSIS:
+            return self._execute_gap_analysis()
 
         sql, bind_params = self._build_query(template, params)
 
@@ -236,6 +273,31 @@ class SQLAdapter:
 
         # Build SQL with validated orb_label embedded (safe -- validated against allowlist)
         sql = _TEMPLATES[QueryTemplate.ORB_SIZE_DIST].replace("{orb_label}", orb_label)
+
+        con = duckdb.connect(self.db_path, read_only=True)
+        try:
+            result = con.execute(sql).fetchdf()
+            return result.head(MAX_RESULT_ROWS)
+        finally:
+            con.close()
+
+    def _execute_double_break_stats(self, params: dict) -> pd.DataFrame:
+        """Execute double-break stats query with validated ORB label."""
+        orb_label = _validate_orb_label(params.get("orb_label", "0900"))
+
+        # Safe: orb_label validated against allowlist
+        sql = _TEMPLATES[QueryTemplate.DOUBLE_BREAK_STATS].replace("{orb_label}", orb_label)
+
+        con = duckdb.connect(self.db_path, read_only=True)
+        try:
+            result = con.execute(sql).fetchdf()
+            return result.head(MAX_RESULT_ROWS)
+        finally:
+            con.close()
+
+    def _execute_gap_analysis(self) -> pd.DataFrame:
+        """Execute gap analysis query (no dynamic params)."""
+        sql = _TEMPLATES[QueryTemplate.GAP_ANALYSIS]
 
         con = duckdb.connect(self.db_path, read_only=True)
         try:
@@ -299,6 +361,8 @@ class SQLAdapter:
             QueryTemplate.ORB_SIZE_DIST: "Distribution of ORB sizes for a session",
             QueryTemplate.REGIME_COMPARE: "Compare regime (2025-only) vs full-period strategies",
             QueryTemplate.CORRELATION: "Top strategies by Sharpe for correlation analysis",
+            QueryTemplate.DOUBLE_BREAK_STATS: "Double-break frequency by year for an ORB session",
+            QueryTemplate.GAP_ANALYSIS: "Overnight gap statistics by year",
         }
         return [
             {"template": t.value, "description": descriptions.get(t, "")}

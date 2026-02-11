@@ -190,7 +190,8 @@ def _build_server():
         "gold-db",
         instructions=(
             "Gold (MGC) trading database. 10 years of futures data, "
-            "313 validated ORB breakout strategies. All queries are read-only."
+            "313 validated ORB breakout strategies. Includes double-break "
+            "frequency and gap analysis queries. All queries are read-only."
         ),
     )
 
@@ -218,7 +219,8 @@ def _build_server():
             template: Query template name (use list_available_queries to see options).
                       One of: strategy_lookup, performance_stats, validated_summary,
                       yearly_breakdown, trade_history, schema_info, table_counts,
-                      orb_size_dist, regime_compare, correlation.
+                      orb_size_dist, regime_compare, correlation,
+                      double_break_stats, gap_analysis.
             orb_label: ORB session filter. One of: 0900, 1000, 1100, 1800, 2300, 0030.
             entry_model: Entry model filter. One of: E1, E2, E3.
             filter_type: ORB size filter. Examples: ORB_G4, ORB_G6, NO_FILTER.
