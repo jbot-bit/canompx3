@@ -57,7 +57,7 @@ class PortfolioStrategy:
     sharpe_ratio: float | None
     max_drawdown_r: float | None
     median_risk_points: float | None
-    source: str = "baseline"  # "baseline" or "nested"
+    source: str = "baseline"  # "baseline", "nested", or "rolling"
     weight: float = 1.0
     max_contracts: int = 1
 
@@ -196,11 +196,15 @@ def load_validated_strategies(
     instrument: str,
     min_expectancy_r: float = 0.10,
     include_nested: bool = False,
+    include_rolling: bool = False,
+    rolling_train_months: int = 12,
 ) -> list[dict]:
     """Load validated strategies from DB, filtered by minimum ExpR.
 
     When include_nested=True, also loads nested_validated strategies and
     marks each with source='baseline' or source='nested'.
+    When include_rolling=True, also loads rolling-validated strategies
+    (source='rolling') from the rolling portfolio aggregator.
     """
     con = duckdb.connect(str(db_path), read_only=True)
     try:
@@ -251,6 +255,19 @@ def load_validated_strategies(
                 # Append nested results
                 for row in nested_rows:
                     results.append(dict(zip(cols, row)))
+
+        # Load rolling-validated strategies if requested
+        if include_rolling:
+            from trading_app.rolling_portfolio import load_rolling_validated_strategies
+            rolling_results = load_rolling_validated_strategies(
+                db_path, instrument, rolling_train_months,
+                min_expectancy_r=min_expectancy_r,
+            )
+            # Deduplicate: don't add rolling strategies already in baseline/nested
+            existing_ids = {r["strategy_id"] for r in results}
+            for r in rolling_results:
+                if r["strategy_id"] not in existing_ids:
+                    results.append(r)
 
         return results
     finally:
@@ -311,12 +328,16 @@ def build_portfolio(
     max_concurrent_positions: int = 3,
     max_daily_loss_r: float = 5.0,
     include_nested: bool = False,
+    include_rolling: bool = False,
+    rolling_train_months: int = 12,
 ) -> Portfolio:
     """
     Build a diversified portfolio from validated strategies.
 
     Args:
         include_nested: If True, also includes nested_validated strategies.
+        include_rolling: If True, also includes rolling-validated strategies.
+        rolling_train_months: Training window size for rolling evaluation.
 
     Returns Portfolio with selected strategies and risk parameters.
     """
@@ -325,7 +346,10 @@ def build_portfolio(
 
     # Load and filter candidates
     candidates = load_validated_strategies(
-        db_path, instrument, min_expectancy_r, include_nested=include_nested
+        db_path, instrument, min_expectancy_r,
+        include_nested=include_nested,
+        include_rolling=include_rolling,
+        rolling_train_months=rolling_train_months,
     )
 
     if not candidates:
@@ -405,7 +429,7 @@ def build_strategy_daily_series(
     try:
         placeholders = ", ".join(["?"] * len(strategy_ids))
 
-        # Step 1: Load strategy parameters from BOTH baseline and nested
+        # Step 1: Load strategy parameters from baseline, nested, and rolling
         baseline_strats = con.execute(f"""
             SELECT strategy_id, instrument, orb_label, orb_minutes,
                    entry_model, rr_target, confirm_bars, filter_type,
@@ -414,7 +438,7 @@ def build_strategy_daily_series(
             WHERE strategy_id IN ({placeholders})
         """, strategy_ids).fetchdf()
 
-        # Check if nested tables exist
+        # Check if nested/rolling tables exist
         tables = _get_table_names(con)
         nested_strats = pd.DataFrame()
         if "nested_validated" in tables:
@@ -426,8 +450,24 @@ def build_strategy_daily_series(
                 WHERE strategy_id IN ({placeholders})
             """, strategy_ids).fetchdf()
 
-        # Combine baseline and nested
-        strats = pd.concat([baseline_strats, nested_strats], ignore_index=True)
+        # Rolling strategies: pick from regime_validated (deduplicate by strategy_id)
+        rolling_strats = pd.DataFrame()
+        if "regime_validated" in tables:
+            rolling_strats = con.execute(f"""
+                SELECT DISTINCT ON (strategy_id)
+                       strategy_id, instrument, orb_label, orb_minutes,
+                       entry_model, rr_target, confirm_bars, filter_type,
+                       'rolling' as source
+                FROM regime_validated
+                WHERE strategy_id IN ({placeholders})
+                  AND run_label LIKE 'rolling_%'
+                ORDER BY strategy_id, run_label DESC
+            """, strategy_ids).fetchdf()
+
+        # Combine all sources (deduplicate: baseline wins over rolling)
+        strats = pd.concat([baseline_strats, nested_strats, rolling_strats],
+                           ignore_index=True)
+        strats = strats.drop_duplicates(subset=["strategy_id"], keep="first")
         if strats.empty:
             return pd.DataFrame(), {}
 
@@ -719,6 +759,8 @@ def main():
     parser.add_argument("--max-concurrent", type=int, default=3, help="Max concurrent positions")
     parser.add_argument("--max-daily-loss", type=float, default=5.0, help="Max daily loss (R)")
     parser.add_argument("--include-nested", action="store_true", help="Include nested ORB strategies")
+    parser.add_argument("--include-rolling", action="store_true", help="Include rolling-validated strategies")
+    parser.add_argument("--rolling-train-months", type=int, default=12, help="Rolling training window months")
     parser.add_argument("--output", type=str, default=None, help="Output JSON file path")
     args = parser.parse_args()
 
@@ -732,6 +774,8 @@ def main():
         max_concurrent_positions=args.max_concurrent,
         max_daily_loss_r=args.max_daily_loss,
         include_nested=args.include_nested,
+        include_rolling=args.include_rolling,
+        rolling_train_months=args.rolling_train_months,
     )
 
     summary = portfolio.summary()

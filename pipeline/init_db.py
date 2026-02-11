@@ -77,27 +77,29 @@ ORB_LABELS = ["0900", "1000", "1100", "1800", "2300", "0030"]
 def _build_daily_features_ddl() -> str:
     """Generate CREATE TABLE DDL for daily_features.
 
-    Columns per ORB (8 each):
-      orb_{label}_high      - ORB range high
-      orb_{label}_low       - ORB range low
-      orb_{label}_size      - high - low (points)
-      orb_{label}_break_dir - 'long', 'short', or NULL (no break)
-      orb_{label}_break_ts  - timestamp of first break (1m close outside range)
-      orb_{label}_outcome   - outcome at RR=1.0 ('win', 'loss', 'scratch', NULL)
-      orb_{label}_mae_r     - max adverse excursion in R (NULL until cost model)
-      orb_{label}_mfe_r     - max favorable excursion in R (NULL until cost model)
+    Columns per ORB (9 each):
+      orb_{label}_high         - ORB range high
+      orb_{label}_low          - ORB range low
+      orb_{label}_size         - high - low (points)
+      orb_{label}_break_dir    - 'long', 'short', or NULL (no break)
+      orb_{label}_break_ts     - timestamp of first break (1m close outside range)
+      orb_{label}_outcome      - outcome at RR=1.0 ('win', 'loss', 'scratch', NULL)
+      orb_{label}_mae_r        - max adverse excursion in R (NULL until cost model)
+      orb_{label}_mfe_r        - max favorable excursion in R (NULL until cost model)
+      orb_{label}_double_break - True if BOTH ORB high and low were breached
     """
     orb_cols = []
     for label in ORB_LABELS:
         orb_cols.extend([
-            f"    orb_{label}_high      DOUBLE,",
-            f"    orb_{label}_low       DOUBLE,",
-            f"    orb_{label}_size      DOUBLE,",
-            f"    orb_{label}_break_dir TEXT,",
-            f"    orb_{label}_break_ts  TIMESTAMPTZ,",
-            f"    orb_{label}_outcome   TEXT,",
-            f"    orb_{label}_mae_r     DOUBLE,",
-            f"    orb_{label}_mfe_r     DOUBLE,",
+            f"    orb_{label}_high         DOUBLE,",
+            f"    orb_{label}_low          DOUBLE,",
+            f"    orb_{label}_size         DOUBLE,",
+            f"    orb_{label}_break_dir    TEXT,",
+            f"    orb_{label}_break_ts     TIMESTAMPTZ,",
+            f"    orb_{label}_outcome      TEXT,",
+            f"    orb_{label}_mae_r        DOUBLE,",
+            f"    orb_{label}_mfe_r        DOUBLE,",
+            f"    orb_{label}_double_break BOOLEAN,",
         ])
     orb_block = "\n".join(orb_cols)
 
@@ -119,7 +121,16 @@ CREATE TABLE IF NOT EXISTS daily_features (
     -- RSI (Wilder's 14-period on 5m closes, computed at first ORB)
     rsi_14_at_0900    DOUBLE,
 
-    -- ORB columns (6 ORBs x 8 columns = 48)
+    -- Daily OHLC (from all 1m bars in the trading day)
+    daily_open        DOUBLE,
+    daily_high        DOUBLE,
+    daily_low         DOUBLE,
+    daily_close       DOUBLE,
+
+    -- Overnight gap: today's open - previous day's close (positive = gap up)
+    gap_open_points   DOUBLE,
+
+    -- ORB columns (6 ORBs x 9 columns = 54)
 {orb_block}
 
     PRIMARY KEY (symbol, trading_day, orb_minutes)

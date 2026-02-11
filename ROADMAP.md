@@ -144,6 +144,19 @@ Hypothesis: wider ORB range (15/30m) + 5m entry bars reduces noise and improves 
 
 ---
 
+## Rolling Window Evaluation — DONE (2026-02-11)
+
+- `scripts/rolling_eval.py` — 38-window rolling evaluation (12m + 18m training)
+- `trading_app/rolling_portfolio.py` — stability scoring + family aggregation
+- `tests/test_trading_app/test_rolling_portfolio.py` — unit tests
+- Results in `docs/strategy/rolling_eval_results.json`, `rolling_families_12m.json`, `rolling_families_18m.json`
+- New daily_features columns: `daily_open/high/low/close`, `gap_open_points`, 6x `orb_*_double_break`
+- Portfolio integration: `--include-rolling` CLI flag in portfolio.py
+- **Key finding**: Only 2 STABLE families (1000_E2_G2, 1000_E1_G2); 0900 G3+ are TRANSITIONING; 1800/2300/1100/0030 AUTO-DEGRADED by double-break
+- 836 tests pass, 20 drift checks pass
+
+---
+
 ## Phase 8: Remaining Work — TODO
 
 ### 8a. Fill-Bar Granularity (R1) — DONE (2026-02-09)
@@ -161,10 +174,11 @@ Hypothesis: wider ORB range (15/30m) + 5m entry bars reduces noise and improves 
 - Alert on: drawdown exceeding historical, win rate divergence, ORB size regime shift
 - Dashboard for live strategy status
 
-### 8c. orb_outcomes Backfill 2016-2020 — TODO
+### 8c. orb_outcomes Backfill 2016-2020 — IN PROGRESS
 - orb_outcomes currently covers 2021-2026 only (689,310 rows)
 - 2016-2020 data exists in bars_1m/bars_5m/daily_features but outcomes not yet built
 - Would enable 10-year validation instead of 5-year
+- After backfill: re-run rolling_eval.py with wider test range for 10-year stability scores
 
 ---
 

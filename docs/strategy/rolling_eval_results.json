@@ -1,0 +1,766 @@
+{
+  "12m": [
+    {
+      "run_label": "rolling_12m_2024_07",
+      "train_months": 12,
+      "train_start": "2023-07-01",
+      "train_end": "2024-06-30",
+      "test_start": "2024-07-01",
+      "test_end": "2024-07-31",
+      "strategies_discovered": 6930,
+      "strategies_passed": 0,
+      "strategies_rejected": 2250,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.494,
+        "1000": 0.622,
+        "1100": 0.763,
+        "1800": 0.821,
+        "2300": 0.767,
+        "0030": 0.763
+      }
+    },
+    {
+      "run_label": "rolling_12m_2024_08",
+      "train_months": 12,
+      "train_start": "2023-08-01",
+      "train_end": "2024-07-31",
+      "test_start": "2024-08-01",
+      "test_end": "2024-08-31",
+      "strategies_discovered": 6930,
+      "strategies_passed": 0,
+      "strategies_rejected": 2250,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.502,
+        "1000": 0.624,
+        "1100": 0.764,
+        "1800": 0.826,
+        "2300": 0.776,
+        "0030": 0.772
+      }
+    },
+    {
+      "run_label": "rolling_12m_2024_09",
+      "train_months": 12,
+      "train_start": "2023-09-01",
+      "train_end": "2024-08-31",
+      "test_start": "2024-09-01",
+      "test_end": "2024-09-30",
+      "strategies_discovered": 6930,
+      "strategies_passed": 0,
+      "strategies_rejected": 2250,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.518,
+        "1000": 0.634,
+        "1100": 0.767,
+        "1800": 0.818,
+        "2300": 0.783,
+        "0030": 0.76
+      }
+    },
+    {
+      "run_label": "rolling_12m_2024_10",
+      "train_months": 12,
+      "train_start": "2023-10-01",
+      "train_end": "2024-09-30",
+      "test_start": "2024-10-01",
+      "test_end": "2024-10-31",
+      "strategies_discovered": 6930,
+      "strategies_passed": 6,
+      "strategies_rejected": 2244,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.541,
+        "1000": 0.622,
+        "1100": 0.771,
+        "1800": 0.822,
+        "2300": 0.771,
+        "0030": 0.756
+      }
+    },
+    {
+      "run_label": "rolling_12m_2024_11",
+      "train_months": 12,
+      "train_start": "2023-11-01",
+      "train_end": "2024-10-31",
+      "test_start": "2024-11-01",
+      "test_end": "2024-11-30",
+      "strategies_discovered": 6930,
+      "strategies_passed": 5,
+      "strategies_rejected": 2245,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.56,
+        "1000": 0.62,
+        "1100": 0.78,
+        "1800": 0.819,
+        "2300": 0.741,
+        "0030": 0.749
+      }
+    },
+    {
+      "run_label": "rolling_12m_2024_12",
+      "train_months": 12,
+      "train_start": "2023-12-01",
+      "train_end": "2024-11-30",
+      "test_start": "2024-12-01",
+      "test_end": "2024-12-31",
+      "strategies_discovered": 7020,
+      "strategies_passed": 29,
+      "strategies_rejected": 2311,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.549,
+        "1000": 0.622,
+        "1100": 0.76,
+        "1800": 0.822,
+        "2300": 0.729,
+        "0030": 0.74
+      }
+    },
+    {
+      "run_label": "rolling_12m_2025_01",
+      "train_months": 12,
+      "train_start": "2024-01-01",
+      "train_end": "2024-12-31",
+      "test_start": "2025-01-01",
+      "test_end": "2025-01-31",
+      "strategies_discovered": 7020,
+      "strategies_passed": 50,
+      "strategies_rejected": 2290,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.538,
+        "1000": 0.639,
+        "1100": 0.761,
+        "1800": 0.838,
+        "2300": 0.707,
+        "0030": 0.737
+      }
+    },
+    {
+      "run_label": "rolling_12m_2025_02",
+      "train_months": 12,
+      "train_start": "2024-02-01",
+      "train_end": "2025-01-31",
+      "test_start": "2025-02-01",
+      "test_end": "2025-02-28",
+      "strategies_discovered": 7020,
+      "strategies_passed": 23,
+      "strategies_rejected": 2317,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.541,
+        "1000": 0.643,
+        "1100": 0.753,
+        "1800": 0.83,
+        "2300": 0.71,
+        "0030": 0.757
+      }
+    },
+    {
+      "run_label": "rolling_12m_2025_03",
+      "train_months": 12,
+      "train_start": "2024-03-01",
+      "train_end": "2025-02-28",
+      "test_start": "2025-03-01",
+      "test_end": "2025-03-31",
+      "strategies_discovered": 7020,
+      "strategies_passed": 25,
+      "strategies_rejected": 2315,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.538,
+        "1000": 0.626,
+        "1100": 0.767,
+        "1800": 0.833,
+        "2300": 0.709,
+        "0030": 0.74
+      }
+    },
+    {
+      "run_label": "rolling_12m_2025_04",
+      "train_months": 12,
+      "train_start": "2024-04-01",
+      "train_end": "2025-03-31",
+      "test_start": "2025-04-01",
+      "test_end": "2025-04-30",
+      "strategies_discovered": 7020,
+      "strategies_passed": 2,
+      "strategies_rejected": 2338,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.544,
+        "1000": 0.607,
+        "1100": 0.761,
+        "1800": 0.834,
+        "2300": 0.714,
+        "0030": 0.718
+      }
+    },
+    {
+      "run_label": "rolling_12m_2025_05",
+      "train_months": 12,
+      "train_start": "2024-05-01",
+      "train_end": "2025-04-30",
+      "test_start": "2025-05-01",
+      "test_end": "2025-05-31",
+      "strategies_discovered": 7020,
+      "strategies_passed": 232,
+      "strategies_rejected": 2108,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.554,
+        "1000": 0.616,
+        "1100": 0.756,
+        "1800": 0.826,
+        "2300": 0.713,
+        "0030": 0.721
+      }
+    },
+    {
+      "run_label": "rolling_12m_2025_06",
+      "train_months": 12,
+      "train_start": "2024-06-01",
+      "train_end": "2025-05-31",
+      "test_start": "2025-06-01",
+      "test_end": "2025-06-30",
+      "strategies_discovered": 7020,
+      "strategies_passed": 416,
+      "strategies_rejected": 1924,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.55,
+        "1000": 0.61,
+        "1100": 0.751,
+        "1800": 0.825,
+        "2300": 0.739,
+        "0030": 0.743
+      }
+    },
+    {
+      "run_label": "rolling_12m_2025_07",
+      "train_months": 12,
+      "train_start": "2024-07-01",
+      "train_end": "2025-06-30",
+      "test_start": "2025-07-01",
+      "test_end": "2025-07-31",
+      "strategies_discovered": 6966,
+      "strategies_passed": 517,
+      "strategies_rejected": 1823,
+      "strategies_degraded_double_break": 4626,
+      "double_break_pct": {
+        "0900": 0.54,
+        "1000": 0.582,
+        "1100": 0.771,
+        "1800": 0.845,
+        "2300": 0.733,
+        "0030": 0.752
+      }
+    },
+    {
+      "run_label": "rolling_12m_2025_08",
+      "train_months": 12,
+      "train_start": "2024-08-01",
+      "train_end": "2025-07-31",
+      "test_start": "2025-08-01",
+      "test_end": "2025-08-31",
+      "strategies_discovered": 6966,
+      "strategies_passed": 415,
+      "strategies_rejected": 1925,
+      "strategies_degraded_double_break": 4626,
+      "double_break_pct": {
+        "0900": 0.536,
+        "1000": 0.561,
+        "1100": 0.76,
+        "1800": 0.837,
+        "2300": 0.725,
+        "0030": 0.744
+      }
+    },
+    {
+      "run_label": "rolling_12m_2025_09",
+      "train_months": 12,
+      "train_start": "2024-09-01",
+      "train_end": "2025-08-31",
+      "test_start": "2025-09-01",
+      "test_end": "2025-09-30",
+      "strategies_discovered": 6966,
+      "strategies_passed": 423,
+      "strategies_rejected": 1917,
+      "strategies_degraded_double_break": 4626,
+      "double_break_pct": {
+        "0900": 0.526,
+        "1000": 0.543,
+        "1100": 0.751,
+        "1800": 0.84,
+        "2300": 0.72,
+        "0030": 0.755
+      }
+    },
+    {
+      "run_label": "rolling_12m_2025_10",
+      "train_months": 12,
+      "train_start": "2024-10-01",
+      "train_end": "2025-09-30",
+      "test_start": "2025-10-01",
+      "test_end": "2025-10-31",
+      "strategies_discovered": 6966,
+      "strategies_passed": 437,
+      "strategies_rejected": 1903,
+      "strategies_degraded_double_break": 4626,
+      "double_break_pct": {
+        "0900": 0.512,
+        "1000": 0.549,
+        "1100": 0.752,
+        "1800": 0.833,
+        "2300": 0.736,
+        "0030": 0.752
+      }
+    },
+    {
+      "run_label": "rolling_12m_2025_11",
+      "train_months": 12,
+      "train_start": "2024-11-01",
+      "train_end": "2025-10-31",
+      "test_start": "2025-11-01",
+      "test_end": "2025-11-30",
+      "strategies_discovered": 7020,
+      "strategies_passed": 273,
+      "strategies_rejected": 2067,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.506,
+        "1000": 0.533,
+        "1100": 0.748,
+        "1800": 0.818,
+        "2300": 0.74,
+        "0030": 0.767
+      }
+    },
+    {
+      "run_label": "rolling_12m_2025_12",
+      "train_months": 12,
+      "train_start": "2024-12-01",
+      "train_end": "2025-11-30",
+      "test_start": "2025-12-01",
+      "test_end": "2025-12-31",
+      "strategies_discovered": 7020,
+      "strategies_passed": 271,
+      "strategies_rejected": 2069,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.496,
+        "1000": 0.52,
+        "1100": 0.755,
+        "1800": 0.812,
+        "2300": 0.742,
+        "0030": 0.794
+      }
+    },
+    {
+      "run_label": "rolling_12m_2026_01",
+      "train_months": 12,
+      "train_start": "2025-01-01",
+      "train_end": "2025-12-31",
+      "test_start": "2026-01-01",
+      "test_end": "2026-01-31",
+      "strategies_discovered": 7020,
+      "strategies_passed": 410,
+      "strategies_rejected": 1930,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.504,
+        "1000": 0.498,
+        "1100": 0.764,
+        "1800": 0.805,
+        "2300": 0.735,
+        "0030": 0.806
+      }
+    }
+  ],
+  "18m": [
+    {
+      "run_label": "rolling_18m_2024_07",
+      "train_months": 18,
+      "train_start": "2023-01-01",
+      "train_end": "2024-06-30",
+      "test_start": "2024-07-01",
+      "test_end": "2024-07-31",
+      "strategies_discovered": 6930,
+      "strategies_passed": 0,
+      "strategies_rejected": 2250,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.487,
+        "1000": 0.596,
+        "1100": 0.771,
+        "1800": 0.818,
+        "2300": 0.745,
+        "0030": 0.722
+      }
+    },
+    {
+      "run_label": "rolling_18m_2024_08",
+      "train_months": 18,
+      "train_start": "2023-02-01",
+      "train_end": "2024-07-31",
+      "test_start": "2024-08-01",
+      "test_end": "2024-08-31",
+      "strategies_discovered": 6930,
+      "strategies_passed": 0,
+      "strategies_rejected": 2250,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.508,
+        "1000": 0.608,
+        "1100": 0.773,
+        "1800": 0.827,
+        "2300": 0.749,
+        "0030": 0.734
+      }
+    },
+    {
+      "run_label": "rolling_18m_2024_09",
+      "train_months": 18,
+      "train_start": "2023-03-01",
+      "train_end": "2024-08-31",
+      "test_start": "2024-09-01",
+      "test_end": "2024-09-30",
+      "strategies_discovered": 6930,
+      "strategies_passed": 0,
+      "strategies_rejected": 2250,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.526,
+        "1000": 0.607,
+        "1100": 0.769,
+        "1800": 0.82,
+        "2300": 0.748,
+        "0030": 0.73
+      }
+    },
+    {
+      "run_label": "rolling_18m_2024_10",
+      "train_months": 18,
+      "train_start": "2023-04-01",
+      "train_end": "2024-09-30",
+      "test_start": "2024-10-01",
+      "test_end": "2024-10-31",
+      "strategies_discovered": 6930,
+      "strategies_passed": 1,
+      "strategies_rejected": 2249,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.536,
+        "1000": 0.604,
+        "1100": 0.778,
+        "1800": 0.835,
+        "2300": 0.739,
+        "0030": 0.731
+      }
+    },
+    {
+      "run_label": "rolling_18m_2024_11",
+      "train_months": 18,
+      "train_start": "2023-05-01",
+      "train_end": "2024-10-31",
+      "test_start": "2024-11-01",
+      "test_end": "2024-11-30",
+      "strategies_discovered": 6930,
+      "strategies_passed": 1,
+      "strategies_rejected": 2249,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.538,
+        "1000": 0.619,
+        "1100": 0.777,
+        "1800": 0.834,
+        "2300": 0.724,
+        "0030": 0.737
+      }
+    },
+    {
+      "run_label": "rolling_18m_2024_12",
+      "train_months": 18,
+      "train_start": "2023-06-01",
+      "train_end": "2024-11-30",
+      "test_start": "2024-12-01",
+      "test_end": "2024-12-31",
+      "strategies_discovered": 7020,
+      "strategies_passed": 16,
+      "strategies_rejected": 2324,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.541,
+        "1000": 0.631,
+        "1100": 0.774,
+        "1800": 0.835,
+        "2300": 0.73,
+        "0030": 0.735
+      }
+    },
+    {
+      "run_label": "rolling_18m_2025_01",
+      "train_months": 18,
+      "train_start": "2023-07-01",
+      "train_end": "2024-12-31",
+      "test_start": "2025-01-01",
+      "test_end": "2025-01-31",
+      "strategies_discovered": 7020,
+      "strategies_passed": 36,
+      "strategies_rejected": 2304,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.519,
+        "1000": 0.633,
+        "1100": 0.763,
+        "1800": 0.838,
+        "2300": 0.732,
+        "0030": 0.74
+      }
+    },
+    {
+      "run_label": "rolling_18m_2025_02",
+      "train_months": 18,
+      "train_start": "2023-08-01",
+      "train_end": "2025-01-31",
+      "test_start": "2025-02-01",
+      "test_end": "2025-02-28",
+      "strategies_discovered": 7020,
+      "strategies_passed": 9,
+      "strategies_rejected": 2331,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.511,
+        "1000": 0.636,
+        "1100": 0.763,
+        "1800": 0.828,
+        "2300": 0.738,
+        "0030": 0.748
+      }
+    },
+    {
+      "run_label": "rolling_18m_2025_03",
+      "train_months": 18,
+      "train_start": "2023-09-01",
+      "train_end": "2025-02-28",
+      "test_start": "2025-03-01",
+      "test_end": "2025-03-31",
+      "strategies_discovered": 7020,
+      "strategies_passed": 46,
+      "strategies_rejected": 2294,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.514,
+        "1000": 0.628,
+        "1100": 0.769,
+        "1800": 0.832,
+        "2300": 0.744,
+        "0030": 0.744
+      }
+    },
+    {
+      "run_label": "rolling_18m_2025_04",
+      "train_months": 18,
+      "train_start": "2023-10-01",
+      "train_end": "2025-03-31",
+      "test_start": "2025-04-01",
+      "test_end": "2025-04-30",
+      "strategies_discovered": 7020,
+      "strategies_passed": 92,
+      "strategies_rejected": 2248,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.516,
+        "1000": 0.62,
+        "1100": 0.764,
+        "1800": 0.821,
+        "2300": 0.746,
+        "0030": 0.738
+      }
+    },
+    {
+      "run_label": "rolling_18m_2025_05",
+      "train_months": 18,
+      "train_start": "2023-11-01",
+      "train_end": "2025-04-30",
+      "test_start": "2025-05-01",
+      "test_end": "2025-05-31",
+      "strategies_discovered": 7020,
+      "strategies_passed": 375,
+      "strategies_rejected": 1965,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.524,
+        "1000": 0.603,
+        "1100": 0.766,
+        "1800": 0.818,
+        "2300": 0.738,
+        "0030": 0.738
+      }
+    },
+    {
+      "run_label": "rolling_18m_2025_06",
+      "train_months": 18,
+      "train_start": "2023-12-01",
+      "train_end": "2025-05-31",
+      "test_start": "2025-06-01",
+      "test_end": "2025-06-30",
+      "strategies_discovered": 7020,
+      "strategies_passed": 524,
+      "strategies_rejected": 1816,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.529,
+        "1000": 0.6,
+        "1100": 0.756,
+        "1800": 0.818,
+        "2300": 0.74,
+        "0030": 0.748
+      }
+    },
+    {
+      "run_label": "rolling_18m_2025_07",
+      "train_months": 18,
+      "train_start": "2024-01-01",
+      "train_end": "2025-06-30",
+      "test_start": "2025-07-01",
+      "test_end": "2025-07-31",
+      "strategies_discovered": 7020,
+      "strategies_passed": 488,
+      "strategies_rejected": 1852,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.53,
+        "1000": 0.596,
+        "1100": 0.767,
+        "1800": 0.832,
+        "2300": 0.738,
+        "0030": 0.762
+      }
+    },
+    {
+      "run_label": "rolling_18m_2025_08",
+      "train_months": 18,
+      "train_start": "2024-02-01",
+      "train_end": "2025-07-31",
+      "test_start": "2025-08-01",
+      "test_end": "2025-08-31",
+      "strategies_discovered": 7020,
+      "strategies_passed": 451,
+      "strategies_rejected": 1889,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.542,
+        "1000": 0.582,
+        "1100": 0.755,
+        "1800": 0.835,
+        "2300": 0.736,
+        "0030": 0.767
+      }
+    },
+    {
+      "run_label": "rolling_18m_2025_09",
+      "train_months": 18,
+      "train_start": "2024-03-01",
+      "train_end": "2025-08-31",
+      "test_start": "2025-09-01",
+      "test_end": "2025-09-30",
+      "strategies_discovered": 7020,
+      "strategies_passed": 513,
+      "strategies_rejected": 1827,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.541,
+        "1000": 0.574,
+        "1100": 0.755,
+        "1800": 0.829,
+        "2300": 0.731,
+        "0030": 0.76
+      }
+    },
+    {
+      "run_label": "rolling_18m_2025_10",
+      "train_months": 18,
+      "train_start": "2024-04-01",
+      "train_end": "2025-09-30",
+      "test_start": "2025-10-01",
+      "test_end": "2025-10-31",
+      "strategies_discovered": 7020,
+      "strategies_passed": 518,
+      "strategies_rejected": 1822,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.547,
+        "1000": 0.565,
+        "1100": 0.758,
+        "1800": 0.838,
+        "2300": 0.735,
+        "0030": 0.746
+      }
+    },
+    {
+      "run_label": "rolling_18m_2025_11",
+      "train_months": 18,
+      "train_start": "2024-05-01",
+      "train_end": "2025-10-31",
+      "test_start": "2025-11-01",
+      "test_end": "2025-11-30",
+      "strategies_discovered": 7020,
+      "strategies_passed": 294,
+      "strategies_rejected": 2046,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.555,
+        "1000": 0.577,
+        "1100": 0.756,
+        "1800": 0.823,
+        "2300": 0.726,
+        "0030": 0.754
+      }
+    },
+    {
+      "run_label": "rolling_18m_2025_12",
+      "train_months": 18,
+      "train_start": "2024-06-01",
+      "train_end": "2025-11-30",
+      "test_start": "2025-12-01",
+      "test_end": "2025-12-31",
+      "strategies_discovered": 7020,
+      "strategies_passed": 366,
+      "strategies_rejected": 1974,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.535,
+        "1000": 0.568,
+        "1100": 0.755,
+        "1800": 0.821,
+        "2300": 0.733,
+        "0030": 0.77
+      }
+    },
+    {
+      "run_label": "rolling_18m_2026_01",
+      "train_months": 18,
+      "train_start": "2024-07-01",
+      "train_end": "2025-12-31",
+      "test_start": "2026-01-01",
+      "test_end": "2026-01-31",
+      "strategies_discovered": 7020,
+      "strategies_passed": 477,
+      "strategies_rejected": 1863,
+      "strategies_degraded_double_break": 4680,
+      "double_break_pct": {
+        "0900": 0.525,
+        "1000": 0.551,
+        "1100": 0.763,
+        "1800": 0.827,
+        "2300": 0.711,
+        "0030": 0.769
+      }
+    }
+  ]
+}

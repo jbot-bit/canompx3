@@ -307,6 +307,40 @@ def detect_break(bars_df: pd.DataFrame, trading_day: date,
     return {"break_dir": None, "break_ts": None}
 
 
+def detect_double_break(bars_df: pd.DataFrame, trading_day: date,
+                         orb_label: str, orb_minutes: int,
+                         orb_high: float | None,
+                         orb_low: float | None) -> bool | None:
+    """
+    Detect if BOTH the ORB high and low were breached during the session.
+
+    A "double break" means price hit both sides of the ORB range after the
+    ORB closed. This is a regime signal -- high double-break frequency
+    indicates choppy/mean-reverting conditions where single-direction
+    breakout strategies degrade.
+
+    Returns True if both boundaries breached, False if only one or none,
+    None if ORB data is missing.
+    """
+    if orb_high is None or orb_low is None:
+        return None
+
+    window_start, window_end = _break_detection_window(
+        trading_day, orb_label, orb_minutes
+    )
+
+    mask = (bars_df['ts_utc'] >= window_start) & (bars_df['ts_utc'] < window_end)
+    window_bars = bars_df[mask]
+
+    if window_bars.empty:
+        return None
+
+    hit_high = (window_bars['high'] >= orb_high).any()
+    hit_low = (window_bars['low'] <= orb_low).any()
+
+    return bool(hit_high and hit_low)
+
+
 # =============================================================================
 # MODULE 4: SESSION STATS
 # =============================================================================
@@ -583,6 +617,21 @@ def build_features_for_day(con: duckdb.DuckDBPyConnection, symbol: str,
         "bar_count_1m": len(bars_df),
     }
 
+    # Daily OHLC from all 1m bars
+    if not bars_df.empty:
+        row["daily_open"] = float(bars_df.iloc[0]["open"])
+        row["daily_high"] = float(bars_df["high"].max())
+        row["daily_low"] = float(bars_df["low"].min())
+        row["daily_close"] = float(bars_df.iloc[-1]["close"])
+    else:
+        row["daily_open"] = None
+        row["daily_high"] = None
+        row["daily_low"] = None
+        row["daily_close"] = None
+
+    # gap_open_points computed in orchestrator (needs previous day's close)
+    row["gap_open_points"] = None
+
     # Module 4: Session stats
     session_stats = compute_session_stats(bars_df, trading_day)
     row.update(session_stats)
@@ -616,6 +665,12 @@ def build_features_for_day(con: duckdb.DuckDBPyConnection, symbol: str,
         row[f"orb_{label}_outcome"] = outcome["outcome"]
         row[f"orb_{label}_mae_r"] = outcome["mae_r"]
         row[f"orb_{label}_mfe_r"] = outcome["mfe_r"]
+
+        # Double-break detection (regime signal)
+        row[f"orb_{label}_double_break"] = detect_double_break(
+            bars_df, trading_day, label, orb_minutes,
+            orb["high"], orb["low"],
+        )
 
     return row
 
@@ -661,6 +716,13 @@ def build_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
 
         if (i + 1) % 50 == 0:
             print(f"  Processed {i + 1}/{len(trading_days)} trading days...")
+
+    # Post-pass: compute gap_open_points (today's open - yesterday's close)
+    for i in range(1, len(rows)):
+        prev_close = rows[i - 1].get("daily_close")
+        today_open = rows[i].get("daily_open")
+        if prev_close is not None and today_open is not None:
+            rows[i]["gap_open_points"] = round(today_open - prev_close, 4)
 
     # Convert to DataFrame for bulk insert
     features_df = pd.DataFrame(rows)

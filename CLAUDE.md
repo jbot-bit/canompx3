@@ -50,6 +50,7 @@ Raw data files contain GC (full-size Gold futures) which has ~40-70% more 1-minu
 | `execution_spec.py` | 84 | ExecutionSpec dataclass with entry_model field |
 | `setup_detector.py` | 84 | Filter daily_features by conditions |
 | `strategy_fitness.py` | 350 | 3-layer fitness: structural + rolling regime + decay monitoring |
+| `rolling_portfolio.py` | ~300 | Rolling window stability scoring + family aggregation |
 
 ### Nested ORB Research (`trading_app/nested/`)
 
@@ -126,7 +127,9 @@ Databento DBN files (.dbn.zst)
 - `bar_count_1m`: INTEGER (bars in trading day)
 - Session stats: `session_{asia,london,ny}_{high,low}` (DOUBLE)
 - RSI: `rsi_14_at_0900` (DOUBLE, Wilder's 14-period on 5m closes)
-- 6 ORBs x 8 columns each: `orb_{0900,1000,1100,1800,2300,0030}_{high,low,size,break_dir,break_ts,outcome,mae_r,mfe_r}`
+- Daily OHLC: `daily_open`, `daily_high`, `daily_low`, `daily_close` (DOUBLE)
+- Overnight gap: `gap_open_points` (DOUBLE, today's open - previous day's close)
+- 6 ORBs x 9 columns each: `orb_{0900,1000,1100,1800,2300,0030}_{high,low,size,break_dir,break_ts,outcome,mae_r,mfe_r,double_break}`
 - Built by `pipeline/build_daily_features.py` (idempotent, configurable --orb-minutes)
 
 **orb_outcomes** (pre-computed trade outcomes):
