@@ -41,11 +41,11 @@ Raw data files contain GC (full-size Gold futures) which has ~40-70% more 1-minu
 | `execution_engine.py` | 666 | Bar-by-bar state machine (ARMED → CONFIRMING → ENTERED → EXITED) |
 | `portfolio.py` | 609 | Diversified strategy selection, position sizing, correlation |
 | `outcome_builder.py` | 379 | Pre-compute outcomes for RR x CB x EM grid |
-| `strategy_discovery.py` | 513 | Bulk-load grid search across 6,480 combos |
+| `strategy_discovery.py` | 513 | Bulk-load grid search across 2,808 combos |
 | `strategy_validator.py` | 303 | 6-phase validation + risk floor + stress test |
 | `paper_trader.py` | 369 | Historical replay with journal + risk management |
 | `db_manager.py` | 296 | Schema for 4 trading_app tables |
-| `entry_rules.py` | 275 | detect_confirm + resolve_entry (E1/E2/E3) |
+| `entry_rules.py` | 275 | detect_confirm + resolve_entry (E1/E3) |
 | `risk_manager.py` | 137 | Circuit breaker, max concurrent/daily limits |
 | `execution_spec.py` | 84 | ExecutionSpec dataclass with entry_model field |
 | `setup_detector.py` | 84 | Filter daily_features by conditions |
@@ -93,6 +93,7 @@ Completed research scripts, moved from `scripts/`. Not part of production pipeli
 | `CANONICAL_LOGIC.txt` | Trading logic specification (R-multiples, entry rules, cost model) |
 | `CANONICAL_backfill_dbn_mgc_rules.txt` | Ingestion rules (fail-closed, chunked, checkpointed) |
 | `CANONICAL_backfill_dbn_mgc_rules_addon.txt` | Advanced ingestion patterns |
+| `TRADING_RULES.md` | Single source of truth for all trading rules and research findings |
 
 ### Data Files (gitignored)
 
@@ -117,7 +118,7 @@ Databento DBN files (.dbn.zst)
 
   → trading_app/outcome_builder.py (pre-compute all trade outcomes)
   → gold.db:orb_outcomes (689,310 outcomes)
-  → trading_app/strategy_discovery.py (grid search 6,480 combos)
+  → trading_app/strategy_discovery.py (grid search 2,808 combos)
   → gold.db:experimental_strategies
   → trading_app/strategy_validator.py (6-phase validation)
   → gold.db:validated_setups (312 strategies)
@@ -155,7 +156,7 @@ Databento DBN files (.dbn.zst)
 - Used by strategy_discovery.py for bulk backtesting
 
 **experimental_strategies** (grid search results):
-- 6,480 strategy combos (6 ORBs x 6 RRs x 5 CBs x 13 filters x 3 EMs)
+- 2,808 strategy combos (E1: 6 ORBs x 6 RRs x 5 CBs x 13 filters = 2,340 + E3: 6x6x1x13 = 468)
 - Metrics: sample_size, win_rate, expectancy_r, sharpe_ratio, max_drawdown_r, yearly_results
 
 **validated_setups** (strategies passing validation):
