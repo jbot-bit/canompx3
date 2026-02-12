@@ -39,6 +39,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from pipeline.cost_model import get_cost_spec, to_r_multiple
 from pipeline.paths import GOLD_DB_PATH
 from scripts._alt_strategy_utils import (
+    annualize_sharpe,
     compute_strategy_metrics,
     compute_walk_forward_windows,
     save_results,
@@ -346,11 +347,13 @@ def _resolve_5m(bars, entry, stop, target, direction, start_idx):
 def run_walk_forward(
     db_path: Path,
     train_months: int = 12,
-    test_start: date = date(2018, 1, 1),
+    test_start: date = date(2024, 8, 1),
     test_end: date = date(2026, 2, 1),
 ) -> dict:
     """Run walk-forward analysis for VWAP pullback strategy."""
-    full_start = date(2016, 1, 1)
+    # Only load data needed for training + OOS (train_months before test_start)
+    from scripts._alt_strategy_utils import _add_months
+    full_start = _add_months(test_start, -(train_months + 2))  # +2 months buffer for ATR warmup
 
     print("  Computing all VWAP pullback outcomes...")
     outcomes_df = compute_vwap_outcomes(db_path, full_start, test_end)
@@ -433,6 +436,9 @@ def run_walk_forward(
         all_pnls = np.array(oos_all_pnls)
         all_dates = np.array(oos_all_dates)
         combined_oos = compute_strategy_metrics(all_pnls)
+        # Annualize: OOS period length in years
+        oos_years = (test_end - test_start).days / 365.25
+        annualize_sharpe(combined_oos, oos_years)
 
         low_vol_mask = all_dates < np.datetime64(REGIME_BOUNDARY)
         high_vol_mask = ~low_vol_mask
@@ -482,6 +488,10 @@ def main():
     parser.add_argument("--db-path", type=Path, default=GOLD_DB_PATH)
     parser.add_argument("--train-months", type=int, default=12)
     parser.add_argument("--output", type=Path, default=None)
+    parser.add_argument("--start", type=date.fromisoformat, default=None,
+                        help="OOS start date (YYYY-MM-DD), default 2024-08-01")
+    parser.add_argument("--end", type=date.fromisoformat, default=None,
+                        help="OOS end date (YYYY-MM-DD), default 2026-02-01")
     args = parser.parse_args()
 
     sep = "=" * 80
@@ -500,7 +510,12 @@ def main():
     print()
 
     print("--- WALK-FORWARD ANALYSIS ---")
-    result = run_walk_forward(args.db_path, args.train_months)
+    wf_kwargs = {"train_months": args.train_months}
+    if args.start:
+        wf_kwargs["test_start"] = args.start
+    if args.end:
+        wf_kwargs["test_end"] = args.end
+    result = run_walk_forward(args.db_path, **wf_kwargs)
 
     if result["windows"]:
         for w in result["windows"]:
@@ -513,8 +528,10 @@ def main():
 
         if result["combined_oos"]:
             c = result["combined_oos"]
+            sha = c.get('sharpe_ann')
+            sha_str = f", ShANN={sha:.3f}" if sha is not None else ""
             print(f"\n  COMBINED OOS: N={c['n']}, WR={c['wr']:.0%}, "
-                  f"ExpR={c['expr']:+.3f}, Sharpe={c['sharpe']:.3f}, "
+                  f"ExpR={c['expr']:+.3f}, Sharpe={c['sharpe']:.3f}{sha_str}, "
                   f"MaxDD={c['maxdd']:+.1f}R, Total={c['total']:+.1f}R")
 
         if result["regime_split"]:

@@ -116,7 +116,16 @@ def compute_strategy_metrics(pnls: np.ndarray) -> dict | None:
     return {
         "n": n, "wr": wr, "expr": expr, "sharpe": sharpe,
         "maxdd": maxdd, "total": total,
+        "sharpe_ann": None,  # Populated by caller when trades_per_year is known
     }
+
+
+def annualize_sharpe(stats: dict, years: float) -> dict:
+    """Add sharpe_ann to stats dict. years = OOS period length in years."""
+    if stats and stats["n"] > 0 and years > 0:
+        trades_per_year = stats["n"] / years
+        stats["sharpe_ann"] = stats["sharpe"] * np.sqrt(trades_per_year)
+    return stats
 
 
 def resolve_bar_outcome(

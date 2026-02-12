@@ -197,7 +197,7 @@ def compute_gap_fade_outcomes(
 def run_walk_forward(
     db_path: Path,
     train_months: int = 12,
-    test_start: date = date(2023, 1, 1),
+    test_start: date = date(2024, 8, 1),
     test_end: date = date(2026, 2, 1),
 ) -> dict:
     """Run walk-forward analysis for gap fade strategy."""
@@ -293,7 +293,7 @@ def run_walk_forward(
 
 def run_full_period_analysis(
     db_path: Path,
-    start: date = date(2022, 1, 1),
+    start: date = date(2024, 8, 1),
     end: date = date(2026, 2, 1),
 ) -> dict:
     """Run full-period grid search + day-of-week analysis."""
@@ -347,6 +347,10 @@ def main():
     parser.add_argument("--db-path", type=Path, default=GOLD_DB_PATH)
     parser.add_argument("--train-months", type=int, default=12)
     parser.add_argument("--output", type=Path, default=None)
+    parser.add_argument("--start", type=date.fromisoformat, default=None,
+                        help="Start date (YYYY-MM-DD), default 2024-08-01")
+    parser.add_argument("--end", type=date.fromisoformat, default=None,
+                        help="End date (YYYY-MM-DD), default 2026-02-01")
     parser.add_argument("--full-period-only", action="store_true",
                         help="Skip walk-forward, just run full-period grid search")
     args = parser.parse_args()
@@ -364,7 +368,12 @@ def main():
 
     if args.full_period_only:
         print("--- FULL PERIOD GRID SEARCH ---")
-        result = run_full_period_analysis(args.db_path)
+        fp_kwargs = {}
+        if args.start:
+            fp_kwargs["start"] = args.start
+        if args.end:
+            fp_kwargs["end"] = args.end
+        result = run_full_period_analysis(args.db_path, **fp_kwargs)
 
         if result["grid"]:
             print(f"  Grid results ({len(result['grid'])} combos):")
@@ -387,7 +396,12 @@ def main():
 
     else:
         print("--- WALK-FORWARD ANALYSIS ---")
-        result = run_walk_forward(args.db_path, args.train_months)
+        wf_kwargs = {"train_months": args.train_months}
+        if args.start:
+            wf_kwargs["test_start"] = args.start
+        if args.end:
+            wf_kwargs["test_end"] = args.end
+        result = run_walk_forward(args.db_path, **wf_kwargs)
 
         if result["windows"]:
             for w in result["windows"]:

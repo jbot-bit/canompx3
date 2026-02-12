@@ -285,6 +285,34 @@ Rolling eval: TRANSITIONING (score 0.42-0.54). Excellent when vol is high, negat
 | Ease Day filter (close vs typical) | All WORSE standalone. EASE+G4 1000 BEAT on tiny N=66-73, noise. | Ever |
 | V-Box CLEAR filter (E1 momentum) | 0900 E1 G4: CLEAR +0.019 Sharpe, 98% trades CLEAR. Filters nothing. | As E1 filter |
 
+### Profit Factor Screen (2026-02-12)
+
+**Method**: Recomputed metrics from `orb_outcomes` for 2024-02-12 to 2026-02-04 (2 years).
+Screened for PF 1.5-2.0, ShANN 0.8-1.5, WR <= 75%, N >= 30.
+
+**Result**: 26 "strategies" matched -- but they are **4 trade families, not 26 independent edges.**
+
+**Family-level results (honest reporting -- averaged across all RR/CB variants that passed):**
+
+| Family | Unique Days | Avg N | Avg WR | Avg PF | Avg ExpR | Avg ShANN | Regime |
+|--------|------------|-------|--------|--------|----------|-----------|--------|
+| 0900 E1 G5 | ~88 | 87 | 39% | 1.56 | +0.34R | 1.32 | High vol only |
+| 0900 E1 G6 | ~64 | 64 | 39% | 1.59 | +0.36R | 1.19 | High vol only |
+| 0900 E1 G8 | ~41 | 41 | 42% | 1.64 | +0.38R | 1.03 | High vol only |
+| 1800 E1+E3 G6 | ~47 | 47 | 51% | 1.63 | +0.32R | 1.12 | High vol only |
+
+**Critical findings:**
+1. **98% of trades are from 2025-2026.** The 2-year window IS the hot streak. G6 at 0900 produced 1-8 eligible days/year in 2016-2024, then 50 in 2025.
+2. **Tighter filters look better but are less trustworthy.** G8 (N=41) has best per-trade PF but widest confidence interval. G5 (N=88) is the most honest signal.
+3. **All 4 families are one trade idea:** ORB breakout on high-vol expansion days. The filter level, RR, and CB are parameter knobs, not independent edges.
+4. **Minimum Track Record Length**: Sharpe 1.0 needs ~3 years to be statistically significant. With 2 years of hot data, the confidence interval is too wide to bet the house.
+
+**Honest log:**
+- Strategies relying on G6+ filters are dormant in low volatility (2016-2024).
+- Effectiveness is 100% correlated to Volatility Expansion (2025-2026).
+- Unique Trade Count is low (~4 families), indicating one market behavior (High Vol Breakout), not multiple edges.
+- Do NOT optimize 2021/2024 to be profitable. That is iterated out-of-sample overfitting.
+
 ### Pending / Inconclusive
 | Idea | Status | Notes |
 |------|--------|-------|
@@ -294,6 +322,8 @@ Rolling eval: TRANSITIONING (score 0.42-0.54). Excellent when vol is high, negat
 | RSI directional confirmation | Low confidence | RSI 60+ LONG = +0.81R but N=24. Monitor. |
 | Percentage-based ORB filter | Not tested | 0.15% of price approximates G5. Auto-adapts to price level. |
 | E3 V-Box Inversion (retest into HVN) | 0900 E3 G4: CHOP +0.503 ExpR (Sharpe 0.357) vs CLEAR -0.094. N=127 CHOP. | Future E3-specific retest strategy. Retrace INTO high-volume node = high fill probability + high WR. |
+| ATR regime on/off switch | NOT BUILT | See Regime Switch section below. |
+| Low-vol counterbalance strategy | NOT RESEARCHED | Mean-reversion partner for the High Vol Breakout system. |
 
 ### EOD Exit Tournament (2026-02-12)
 
@@ -395,6 +425,67 @@ Do not try to "fix" choppy years -- accept this requires a trending regime.
 
 ---
 
+## Reporting Rules
+
+### Family-Level Reporting (MANDATORY)
+
+**Never cite the performance of a single parameter variant.** Always report the family average.
+
+A "family" = one unique combination of `(session, entry_model, filter_level)`. All RR/CB variants within a family share 85-100% of the same trade days. They are parameter knobs on one trade idea, not independent strategies.
+
+**Correct**: "The 0900 E1 G5 family averages +0.34R ExpR across RR/CB variants."
+**Wrong**: "MGC_0900_E1_RR3.0_CB2_ORB_G6 has +0.39R ExpR."
+
+If the family average is robust, the edge is real. If only one specific RR/CB combo works, it's noise.
+
+**Dedup rule**: When counting strategies, group by `(session, EM, filter_level)` first. Report unique family count, not parameter variant count. 334 validated strategies = ~12 families. 26 PF-screen matches = 4 families.
+
+### Regime On/Off Switch (NOT YET BUILT)
+
+The G5/G6 breakout families bleed in low-vol regimes and print in high-vol regimes. They need an automatic on/off switch.
+
+**Concept**: Pre-trade check using rolling ATR or rolling median ORB size:
+- `IF rolling_ATR(20) < threshold THEN NO TRADE` for G5+ families
+- This prevents the 2021/2024 bleed without overfitting entry logic
+- The G4+ ORB size filter is a per-DAY vol check. ATR adds a per-REGIME vol check (are we in an expansion period at all?).
+
+**What we already have (implicit regime switches):**
+- ORB size filter (G4/G5/G6): per-day volatility gate. Works, but dormant for months in quiet regimes.
+- Strategy fitness (`strategy_fitness.py`): 3-layer structural + rolling + decay check. Already gates the live portfolio.
+- `live_config.py` regime tier: 0900 is gated by `high_vol` fitness status.
+
+**What's missing:**
+- ~~No ATR column in `daily_features`.~~ DONE (2026-02-12). `atr_20` column added and backfilled.
+- No rolling median ORB size. Can compute from `orb_XXXX_size`.
+- No explicit "regime OFF" state that prevents all G5+ trading for weeks/months.
+- No low-vol counterbalance strategy in the portfolio (mean-reversion partner).
+
+**ATR(20) by year — the regime map:**
+
+| Year | ATR(20) | Med 0900 ORB | G4+ Days | G6+ Days | G4% | G6% |
+|------|---------|-------------|----------|----------|-----|-----|
+| 2016 | 17.4 | 0.60 | 7 | 1 | 2.6% | 0.4% |
+| 2017 | 12.0 | 0.60 | 2 | 1 | 0.7% | 0.3% |
+| 2018 | 11.5 | 0.40 | 1 | 1 | 0.3% | 0.3% |
+| 2019 | 14.8 | 0.50 | 2 | 0 | 0.7% | 0.0% |
+| 2020 | 30.6 | 1.20 | 25 | 9 | 8.6% | 3.1% |
+| 2021 | 22.6 | 0.70 | 13 | 8 | 4.5% | 2.7% |
+| 2022 | 24.3 | 0.90 | 11 | 7 | 3.8% | 2.4% |
+| 2023 | 22.7 | 0.90 | 6 | 1 | 2.1% | 0.3% |
+| 2024 | 30.9 | 1.00 | 11 | 5 | 3.8% | 1.7% |
+| **2025** | **57.1** | **2.50** | **83** | **50** | **28.4%** | **17.1%** |
+| **2026** | **110.3** | **14.80** | **24** | **20** | **100%** | **83.3%** |
+
+**Structural breakpoints visible:**
+- ATR < 20: Dormant. 0-2 G4+ days/year. ORB breakout strategies are OFF.
+- ATR 20-30: Marginal. 6-25 G4+ days/year. Enough for G4 but not G6.
+- ATR > 30: Active. G4+ days appear regularly. This is where the edge lives.
+- ATR > 50: Expansion. G6+ days become frequent. PF screen strategies activate.
+
+**Priority**: Backtest `ATR(20) > 30` as regime gate. Do NOT optimize the threshold.
+
+---
+
 ## Regime Warnings
 
 ### The 2025 Shift
@@ -454,3 +545,39 @@ This is why small ORBs lose -- friction eats the edge.
 | `artifacts/EARLY_EXIT_RULES.md` | Early exit research with per-session breakdowns |
 | `trading_app/live_config.py` | Declarative live portfolio (code) |
 | `trading_app/config.py` | Filter definitions, entry models (code) |
+
+---
+
+## Alternative Strategies Research (Feb 2026) -- ALL NO-GO
+
+Tested 4 non-ORB strategies for diversification. Walk-forward OOS on 18 months (Aug 2024 - Feb 2026). Scripts in `research/`, artifacts in `artifacts/`.
+
+### Gap Fade (Mean Reversion)
+- **NO-GO.** Gold doesn't gap enough. Only 5-17 qualifying trades at best threshold (0.4x ATR). Walk-forward produced zero qualifying windows. Dead on arrival.
+
+### VWAP Pullback (Trend Continuation)
+- **NO-GO.** Abundant signals (642 OOS trades) but no edge. ExpR=-0.012R, ShANN=-0.33. Negative in both low-vol and high-vol regimes. VWAP pullbacks in gold are noise.
+
+### Value Area Breakout (Volume Profile)
+- **NO-GO after audit.** Initial OOS looked promising (N=365, ExpR=+0.085, ShANN=1.41) but:
+  - First 5 months (Aug-Dec 2024): **-8.2R**. Edge only appeared in high-vol 2025. Regime-dependent, not structural.
+  - Only 50% of walk-forward windows positive (coin flip).
+  - Half the total profit came from 2 outlier months (Sep 2025: +16.2R alone).
+  - After $8.40 RT friction: net edge = $10.50/trade on $222 risk. Profit/MaxDD ratio < 1.
+  - Value Area Reversion mode was separately negative (N=82, ExpR=-0.024R).
+
+### Concretum Bands (Dynamic Volatility Breakout)
+- **NO-GO after audit.** Initial OOS looked strong (N=338, ExpR=+0.084, ShANN=1.14, regime-stable) but:
+  - **It's ORB in a hat.** BM=0.5 sigma triggers on 89% of trading days -- same days ORB trades. Not a diversifier.
+  - Only 61% of windows positive. Half the profit from 2 outlier months.
+  - Parameter instability: switched from BM0.5 to BM2.0 in late 2025.
+  - After friction: net edge = $7.80/trade. MaxDD=$2,934 vs total profit=$2,640. You lose more in drawdown than you make.
+
+### Why They All Failed
+1. **ORB breakout IS the edge in gold.** Alternative entry methods (VWAP, volume profile, volatility bands) don't find new edge -- they either replicate ORB or find nothing.
+2. **Gap Fade requires gapping markets.** Gold is too continuous (23h/day trading) for meaningful gaps.
+3. **ShANN can lie.** High trade frequency inflates annualized Sharpe even when per-trade edge is thin. Always check: (a) leave-one-out stability, (b) friction-adjusted dollars, (c) % positive windows.
+4. **Regime-dependent results are not tradeable** unless you have a reliable regime detector. "Works in 2025" is not a strategy.
+
+### Key Takeaway
+Stop looking for alternative entries. The diversification path is **more instruments** (MNQ, other futures) or **overlay filters** (regime detection on existing ORB), not new strategy types on the same instrument.
