@@ -482,7 +482,25 @@ The G5/G6 breakout families bleed in low-vol regimes and print in high-vol regim
 - ATR > 30: Active. G4+ days appear regularly. This is where the edge lives.
 - ATR > 50: Expansion. G6+ days become frequent. PF screen strategies activate.
 
-**Priority**: Backtest `ATR(20) > 30` as regime gate. Do NOT optimize the threshold.
+**ATR Regime Gate Backtest Results (2026-02-12):**
+
+Tested ATR(20) thresholds [0, 20, 25, 30, 35, 40] across 8 families, 10 years data.
+Fixed variant set (no survivorship bias). Family-level averages across RR/CB variants.
+
+| Finding | Detail |
+|---------|--------|
+| **0900 families: ATR >= 25 helps** | G4: +4.28R, G5: +1.51R, G6: +0.47R. Consistent across threshold range. |
+| **1000 families: ATR gating is UNRELIABLE** | Non-monotonic. G4: +1.83R at 25, then -3.25R at 30. Noise, not signal. |
+| **1800 families: still negative/marginal** | E3 G4 stays negative at all thresholds. E3 G6 marginal improvement. |
+| **ATR threshold frequency** | >= 20: 55.9%, >= 25: 35.6%, >= 30: 22.1%, >= 40: 12.3% of days |
+
+**Honest caveats:**
+- Selecting ATR >= 25 from 6 tested values IS mild optimization. Do not treat as precise.
+- ATR gating is correlated with 2025-2026 regime. It identifies the regime, does NOT prove causation.
+- 48 cells tested (6 thresholds x 8 families). ~60% showing improvement is borderline random.
+- The ONLY robust signal: 0900 families improve consistently across ALL thresholds >= 25.
+
+**Decision**: Apply ATR >= 25 gate to 0900 families ONLY. Do NOT gate 1000 or 1800.
 
 ---
 

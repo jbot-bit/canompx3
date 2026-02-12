@@ -131,7 +131,7 @@ class TestInitDb:
         for col in ['session_asia_high', 'session_asia_low',
                      'session_london_high', 'session_london_low',
                      'session_ny_high', 'session_ny_low',
-                     'rsi_14_at_0900']:
+                     'rsi_14_at_0900', 'atr_20']:
             assert col in cols, f"Missing session column: {col}"
 
     def test_idempotent_without_force(self, tmp_path):

@@ -147,6 +147,7 @@ Databento DBN files (.dbn.zst)
 - RSI: `rsi_14_at_0900` (DOUBLE, Wilder's 14-period on 5m closes)
 - Daily OHLC: `daily_open`, `daily_high`, `daily_low`, `daily_close` (DOUBLE)
 - Overnight gap: `gap_open_points` (DOUBLE, today's open - previous day's close)
+- Volatility: `atr_20` (DOUBLE, 20-day SMA of True Range — regime detection)
 - 6 ORBs x 9 columns each: `orb_{0900,1000,1100,1800,2300,0030}_{high,low,size,break_dir,break_ts,outcome,mae_r,mfe_r,double_break}`
 - Built by `pipeline/build_daily_features.py` (idempotent, configurable --orb-minutes)
 

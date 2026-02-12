@@ -629,8 +629,9 @@ def build_features_for_day(con: duckdb.DuckDBPyConnection, symbol: str,
         row["daily_low"] = None
         row["daily_close"] = None
 
-    # gap_open_points computed in orchestrator (needs previous day's close)
+    # gap_open_points and atr_20 computed in orchestrator (needs previous day's data)
     row["gap_open_points"] = None
+    row["atr_20"] = None
 
     # Module 4: Session stats
     session_stats = compute_session_stats(bars_df, trading_day)
@@ -717,12 +718,40 @@ def build_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
         if (i + 1) % 50 == 0:
             print(f"  Processed {i + 1}/{len(trading_days)} trading days...")
 
-    # Post-pass: compute gap_open_points (today's open - yesterday's close)
-    for i in range(1, len(rows)):
-        prev_close = rows[i - 1].get("daily_close")
+    # Post-pass: compute gap_open_points and ATR(20)
+    # Both need previous day data, so computed after all rows are built.
+    #
+    # True Range = max(H - L, |H - prevClose|, |L - prevClose|)
+    # ATR(20) = simple moving average of last 20 True Range values
+    # First 20 rows get partial averages (best available), row 0 gets H-L only.
+    true_ranges = []
+    for i in range(len(rows)):
+        prev_close = rows[i - 1].get("daily_close") if i > 0 else None
         today_open = rows[i].get("daily_open")
+        today_high = rows[i].get("daily_high")
+        today_low = rows[i].get("daily_low")
+
+        # gap_open_points (existing logic)
         if prev_close is not None and today_open is not None:
             rows[i]["gap_open_points"] = round(today_open - prev_close, 4)
+
+        # True Range
+        if today_high is not None and today_low is not None:
+            hl = today_high - today_low
+            if prev_close is not None:
+                tr = max(hl, abs(today_high - prev_close), abs(today_low - prev_close))
+            else:
+                tr = hl  # first row: no prev close, use H-L
+            true_ranges.append(tr)
+        else:
+            true_ranges.append(None)
+
+        # ATR(20) = SMA of last 20 True Range values (skip Nones)
+        lookback = [v for v in true_ranges[max(0, i - 19):i + 1] if v is not None]
+        if lookback:
+            rows[i]["atr_20"] = round(sum(lookback) / len(lookback), 4)
+        else:
+            rows[i]["atr_20"] = None
 
     # Convert to DataFrame for bulk insert
     features_df = pd.DataFrame(rows)

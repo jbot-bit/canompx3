@@ -130,6 +130,11 @@ CREATE TABLE IF NOT EXISTS daily_features (
     -- Overnight gap: today's open - previous day's close (positive = gap up)
     gap_open_points   DOUBLE,
 
+    -- ATR(20): 20-day simple moving average of True Range
+    -- True Range = max(H-L, |H-prevClose|, |L-prevClose|)
+    -- Used as regime filter (vol expansion/contraction detection)
+    atr_20            DOUBLE,
+
     -- ORB columns (6 ORBs x 9 columns = 54)
 {orb_block}
 
