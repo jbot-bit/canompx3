@@ -503,7 +503,7 @@ def check_entry_models_sync() -> list[str]:
     try:
         from trading_app.config import ENTRY_MODELS
 
-        expected = ["E1", "E2", "E3"]
+        expected = ["E1", "E3"]
         if ENTRY_MODELS != expected:
             violations.append(
                 f"  ENTRY_MODELS = {ENTRY_MODELS}, expected {expected}"
@@ -850,6 +850,40 @@ def check_market_state_readonly() -> list[str]:
     return violations
 
 
+def check_sharpe_ann_presence() -> list[str]:
+    """Check that sharpe_ann is computed in discovery and shown in view_strategies.
+
+    Prevents regression where someone removes annualized Sharpe from the
+    pipeline, leaving only per-trade Sharpe (which is meaningless without
+    trade frequency context).
+    """
+    violations = []
+
+    # Check 1: strategy_discovery.py must compute sharpe_ann in return dict
+    discovery_path = TRADING_APP_DIR / "strategy_discovery.py"
+    if discovery_path.exists():
+        content = discovery_path.read_text(encoding='utf-8')
+        if '"sharpe_ann"' not in content:
+            violations.append(
+                "  strategy_discovery.py: Missing 'sharpe_ann' in compute_metrics return dict"
+            )
+        if '"trades_per_year"' not in content:
+            violations.append(
+                "  strategy_discovery.py: Missing 'trades_per_year' in compute_metrics return dict"
+            )
+
+    # Check 2: view_strategies.py must show sharpe_ann in user-facing output
+    view_path = TRADING_APP_DIR / "view_strategies.py"
+    if view_path.exists():
+        content = view_path.read_text(encoding='utf-8')
+        if 'sharpe_ann' not in content:
+            violations.append(
+                "  view_strategies.py: Missing 'sharpe_ann' in user-facing output"
+            )
+
+    return violations
+
+
 def main():
     print("=" * 60)
     print("PIPELINE DRIFT CHECK")
@@ -1089,6 +1123,18 @@ def main():
     # Check 20: MarketState/scoring/cascade read-only guard
     print("Check 20: MarketState read-only SQL guard...")
     v = check_market_state_readonly()
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 21: Analytical honesty guard (sharpe_ann presence)
+    print("Check 21: Analytical honesty guard (sharpe_ann)...")
+    v = check_sharpe_ann_presence()
     if v:
         print("  FAILED:")
         for line in v:

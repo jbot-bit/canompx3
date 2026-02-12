@@ -6,7 +6,6 @@ before confirming an entry signal. This filters fakeout breaks.
 
 Entry Models:
   - E1 (Market-On-Confirm): Enter at next bar OPEN after confirm bar
-  - E2 (Market-On-Confirm-Close): Enter at confirm bar CLOSE
   - E3 (Limit-At-ORB): Enter at ORB level if price retraces after confirm
 
 Rules (CANONICAL_LOGIC.txt section 8):
@@ -125,7 +124,7 @@ def resolve_entry(
     Args:
         bars_df: Full bars DataFrame (same one passed to detect_confirm)
         confirm: ConfirmResult from detect_confirm()
-        entry_model: "E1", "E2", or "E3"
+        entry_model: "E1" or "E3"
         scan_window_end: End of trading day / scan window
 
     Returns:
@@ -141,8 +140,6 @@ def resolve_entry(
 
     if entry_model == "E1":
         return _resolve_e1(bars_df, confirm, stop_price, scan_window_end)
-    elif entry_model == "E2":
-        return _resolve_e2(confirm, stop_price)
     elif entry_model == "E3":
         return _resolve_e3(bars_df, confirm, stop_price, scan_window_end)
     else:
@@ -176,18 +173,6 @@ def _resolve_e1(
         triggered=True, entry_ts=entry_ts, entry_price=entry_price,
         stop_price=stop_price, entry_model="E1",
         confirm_bar_ts=confirm.confirm_bar_ts,
-    )
-
-
-def _resolve_e2(
-    confirm: ConfirmResult,
-    stop_price: float,
-) -> EntrySignal:
-    """E2: Market-On-Confirm-Close. Entry = confirm bar CLOSE."""
-    return EntrySignal(
-        triggered=True, entry_ts=confirm.confirm_bar_ts,
-        entry_price=confirm.confirm_bar_close, stop_price=stop_price,
-        entry_model="E2", confirm_bar_ts=confirm.confirm_bar_ts,
     )
 
 
@@ -266,7 +251,7 @@ def detect_entry_with_confirm_bars(
     """
     Detect entry after N consecutive closes outside ORB.
 
-    Wrapper that calls detect_confirm() + resolve_entry() for E1/E2/E3.
+    Wrapper that calls detect_confirm() + resolve_entry() for E1/E3.
     """
     confirm = detect_confirm(
         bars_df, orb_break_ts, orb_high, orb_low,

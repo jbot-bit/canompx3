@@ -249,7 +249,7 @@ def _build_server():
                       orb_size_dist, regime_compare, correlation,
                       double_break_stats, gap_analysis, rolling_stability.
             orb_label: ORB session filter. One of: 0900, 1000, 1100, 1800, 2300, 0030.
-            entry_model: Entry model filter. One of: E1, E2, E3.
+            entry_model: Entry model filter. One of: E1, E3.
             filter_type: ORB size filter. Examples: ORB_G4, ORB_G6, NO_FILTER.
             min_sample_size: Minimum number of trades.
             limit: Max rows to return (default 50, server cap 5000).

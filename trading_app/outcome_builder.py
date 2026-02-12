@@ -68,7 +68,6 @@ def _check_fill_bar_exit(
     Returns outcome dict if exit detected on fill bar, None otherwise.
     For E1: entry is at bar open, so full bar OHLC is post-fill.
     For E3: entry is intra-bar at ORB level, check bar OHLC against levels.
-    For E2: caller should not invoke (bar close = fill point).
     """
     fill_bar = bars_df[bars_df["ts_utc"] == pd.Timestamp(entry_ts)]
     if fill_bar.empty:
@@ -192,16 +191,14 @@ def compute_single_outcome(
     result["stop_price"] = stop_price
     result["target_price"] = target_price
 
-    # Check fill bar for immediate exit (E1, E3 only)
-    # E2 fills at bar close — no post-fill price action on that bar
-    if entry_model != "E2":
-        fill_exit = _check_fill_bar_exit(
-            bars_df, entry_ts, entry_price, stop_price, target_price,
-            break_dir, entry_model, cost_spec, rr_target,
-        )
-        if fill_exit is not None:
-            result.update(fill_exit)
-            return result
+    # Check fill bar for immediate exit (E1 and E3)
+    fill_exit = _check_fill_bar_exit(
+        bars_df, entry_ts, entry_price, stop_price, target_price,
+        break_dir, entry_model, cost_spec, rr_target,
+    )
+    if fill_exit is not None:
+        result.update(fill_exit)
+        return result
 
     # Scan bars forward from entry to determine outcome
     post_entry = bars_df[

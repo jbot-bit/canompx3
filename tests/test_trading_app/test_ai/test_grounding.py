@@ -13,7 +13,7 @@ def mock_corpus():
     return {
         "CANONICAL_LOGIC": "R-multiple = (pnl * 10 - 8.40) / risk",
         "TRADE_MANAGEMENT_RULES": "30-min kill rule for 1800 E3",
-        "CONFIG": 'ENTRY_MODELS = ["E1", "E2", "E3"]\nCORE_MIN_SAMPLES = 100',
+        "CONFIG": 'ENTRY_MODELS = ["E1", "E3"]\nCORE_MIN_SAMPLES = 100',
         "COST_MODEL": "total_friction = 8.40\npoint_value = 10.0",
     }
 

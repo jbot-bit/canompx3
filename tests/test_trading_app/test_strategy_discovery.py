@@ -18,7 +18,9 @@ from trading_app.strategy_discovery import (
     run_discovery,
     _compute_relative_volumes,
 )
-from trading_app.config import ENTRY_MODELS, ALL_FILTERS, VolumeFilter
+from trading_app.config import (
+    ENTRY_MODELS, ALL_FILTERS, VolumeFilter,
+)
 from pipeline.cost_model import get_cost_spec
 
 
@@ -116,7 +118,7 @@ class TestComputeMetrics:
             {"trading_day": date(2024, 1, 1), "outcome": "scratch", "pnl_r": None, "mae_r": 0.1, "mfe_r": 0.1, "entry_price": None, "stop_price": None},
         ]
         m = compute_metrics(outcomes, _cost())
-        assert m["sample_size"] == 1
+        assert m["sample_size"] == 0  # scratches excluded from sample_size
         assert m["win_rate"] is None
 
     def test_risk_stats_computed(self):
@@ -128,6 +130,69 @@ class TestComputeMetrics:
         m = compute_metrics(outcomes, _cost())
         assert m["median_risk_points"] == pytest.approx(14.0, abs=0.01)  # median of 13, 15
         assert m["avg_risk_points"] == pytest.approx(14.0, abs=0.01)  # avg of 13, 15
+
+    def test_sharpe_ann_computed(self):
+        """sharpe_ann = sharpe_ratio * sqrt(trades_per_year)."""
+        outcomes = [
+            {"trading_day": date(2024, 1, i), "outcome": "win", "pnl_r": 2.0, "mae_r": 0.5, "mfe_r": 2.0, "entry_price": 2703.0, "stop_price": 2690.0}
+            for i in range(1, 6)
+        ] + [
+            {"trading_day": date(2024, 6, i), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2703.0, "stop_price": 2690.0}
+            for i in range(1, 4)
+        ] + [
+            {"trading_day": date(2025, 3, i), "outcome": "win", "pnl_r": 1.5, "mae_r": 0.5, "mfe_r": 1.5, "entry_price": 2703.0, "stop_price": 2690.0}
+            for i in range(1, 4)
+        ]
+        m = compute_metrics(outcomes, _cost())
+        assert m["sharpe_ann"] is not None
+        assert m["trades_per_year"] == pytest.approx(11 / 2, abs=0.1)  # 11 trades / 2 years
+        # Identity: sharpe_ann = sharpe_ratio * sqrt(trades_per_year)
+        expected = m["sharpe_ratio"] * (m["trades_per_year"] ** 0.5)
+        assert m["sharpe_ann"] == pytest.approx(expected, abs=0.01)
+
+    def test_sharpe_ann_none_when_no_variance(self):
+        """If all trades have identical pnl_r, sharpe_ratio is None -> sharpe_ann is None."""
+        outcomes = [
+            {"trading_day": date(2024, 1, i), "outcome": "win", "pnl_r": 1.0, "mae_r": 0.5, "mfe_r": 1.0, "entry_price": 2703.0, "stop_price": 2690.0}
+            for i in range(1, 5)
+        ]
+        m = compute_metrics(outcomes, _cost())
+        assert m["sharpe_ratio"] is None  # zero variance
+        assert m["sharpe_ann"] is None
+
+    def test_trades_per_year_in_empty(self):
+        """Empty outcomes returns trades_per_year=0, sharpe_ann=None."""
+        m = compute_metrics([], _cost())
+        assert m["trades_per_year"] == 0
+        assert m["sharpe_ann"] is None
+
+    def test_sharpe_ann_single_year(self):
+        """sharpe_ann works when all trades are in a single year."""
+        outcomes = [
+            {"trading_day": date(2024, 1, 1), "outcome": "win", "pnl_r": 2.0, "mae_r": 0.5, "mfe_r": 2.0, "entry_price": 2703.0, "stop_price": 2690.0},
+            {"trading_day": date(2024, 3, 1), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2703.0, "stop_price": 2690.0},
+            {"trading_day": date(2024, 6, 1), "outcome": "win", "pnl_r": 1.5, "mae_r": 0.5, "mfe_r": 1.5, "entry_price": 2703.0, "stop_price": 2690.0},
+        ]
+        m = compute_metrics(outcomes, _cost())
+        assert m["trades_per_year"] == 3.0  # 3 trades / 1 year
+        assert m["sharpe_ann"] is not None
+        # With 1 year: sharpe_ann = sharpe_ratio * sqrt(3)
+        expected = m["sharpe_ratio"] * (3.0 ** 0.5)
+        assert m["sharpe_ann"] == pytest.approx(expected, abs=0.01)
+
+    def test_sharpe_ann_negative(self):
+        """Negative sharpe_ann when strategy is losing."""
+        outcomes = [
+            {"trading_day": date(2024, 1, 1), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2703.0, "stop_price": 2690.0},
+            {"trading_day": date(2024, 1, 2), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2703.0, "stop_price": 2690.0},
+            {"trading_day": date(2024, 1, 3), "outcome": "win", "pnl_r": 2.0, "mae_r": 0.5, "mfe_r": 2.0, "entry_price": 2703.0, "stop_price": 2690.0},
+            {"trading_day": date(2025, 1, 1), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2703.0, "stop_price": 2690.0},
+        ]
+        m = compute_metrics(outcomes, _cost())
+        assert m["sharpe_ratio"] < 0
+        assert m["sharpe_ann"] < 0
+        expected = m["sharpe_ratio"] * (m["trades_per_year"] ** 0.5)
+        assert m["sharpe_ann"] == pytest.approx(expected, abs=0.01)
 
 
 # ============================================================================
@@ -145,7 +210,7 @@ class TestMakeStrategyId:
         s1 = make_strategy_id("MGC", "0900", "E1", 2.0, 1, "NO_FILTER")
         s2 = make_strategy_id("MGC", "0900", "E1", 2.0, 2, "NO_FILTER")
         s3 = make_strategy_id("MGC", "1000", "E1", 2.0, 1, "NO_FILTER")
-        s4 = make_strategy_id("MGC", "0900", "E2", 2.0, 1, "NO_FILTER")
+        s4 = make_strategy_id("MGC", "0900", "E3", 2.0, 1, "NO_FILTER")
         assert len({s1, s2, s3, s4}) == 4
 
     def test_entry_model_in_id(self):

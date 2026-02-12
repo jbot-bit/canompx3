@@ -35,16 +35,16 @@ class TestExecutionSpecCreation:
             ExecutionSpec(confirm_bars=-1)
 
     def test_valid_entry_models(self):
-        for em in ["E1", "E2", "E3"]:
+        for em in ["E1", "E3"]:
             spec = ExecutionSpec(confirm_bars=1, entry_model=em)
             assert spec.entry_model == em
 
     def test_invalid_entry_model(self):
-        with pytest.raises(ValueError, match="entry_model must be E1/E2/E3"):
+        with pytest.raises(ValueError, match="entry_model must be E1/E3"):
             ExecutionSpec(confirm_bars=1, entry_model="E4")
 
     def test_invalid_entry_model_legacy(self):
-        with pytest.raises(ValueError, match="entry_model must be E1/E2/E3"):
+        with pytest.raises(ValueError, match="entry_model must be E1/E3"):
             ExecutionSpec(confirm_bars=1, entry_model="E_LEGACY")
 
     def test_valid_order_types(self):
@@ -86,12 +86,12 @@ class TestExecutionSpecSerialization:
         assert data["entry_model"] == "E1"
 
     def test_from_json(self):
-        spec = ExecutionSpec(confirm_bars=2, order_type="limit", entry_model="E2")
+        spec = ExecutionSpec(confirm_bars=2, order_type="limit", entry_model="E3")
         json_str = spec.to_json()
         restored = ExecutionSpec.from_json(json_str)
         assert restored.confirm_bars == 2
         assert restored.order_type == "limit"
-        assert restored.entry_model == "E2"
+        assert restored.entry_model == "E3"
 
     def test_roundtrip(self):
         spec = ExecutionSpec(confirm_bars=3, entry_model="E3", order_type="stop", benchmark="vwap")

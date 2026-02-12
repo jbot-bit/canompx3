@@ -70,6 +70,15 @@ COST_SPECS = {
         tick_size=0.10,
         min_ticks_floor=10,
     ),
+    "MNQ": CostSpec(
+        instrument="MNQ",
+        point_value=2.0,
+        commission_rt=1.24,
+        spread_doubled=0.50,
+        slippage=1.00,
+        tick_size=0.25,
+        min_ticks_floor=10,
+    ),
 }
 
 
@@ -77,13 +86,26 @@ COST_SPECS = {
 # SESSION-AWARE SLIPPAGE (live execution only — backtest uses flat costs)
 # =============================================================================
 
+# Per-instrument session slippage multipliers (live execution only)
+# Keys: instrument -> orb_label -> multiplier
+# Fallback: instrument not found -> use 1.0 for all sessions
 SESSION_SLIPPAGE_MULT = {
-    "0900": 1.3,   # 23:00 UTC — thin Asian session
-    "1000": 1.2,   # 00:00 UTC — thin early Asian
-    "1100": 1.0,   # 01:00 UTC — moderate
-    "1800": 0.9,   # 08:00 UTC — pre-London, decent liquidity
-    "2300": 0.8,   # 13:00 UTC — NY session, best liquidity
-    "0030": 1.1,   # 14:30 UTC — moderate NY
+    "MGC": {
+        "0900": 1.3,   # 23:00 UTC -- thin Asian session
+        "1000": 1.2,   # 00:00 UTC -- thin early Asian
+        "1100": 1.0,   # 01:00 UTC -- moderate
+        "1800": 0.9,   # 08:00 UTC -- pre-London, decent liquidity
+        "2300": 0.8,   # 13:00 UTC -- NY session, best liquidity
+        "0030": 1.1,   # 14:30 UTC -- moderate NY
+    },
+    "MNQ": {
+        "0900": 1.0,   # 23:00 UTC -- NQ liquid even in Asian
+        "1000": 1.0,   # 00:00 UTC -- early Asian
+        "1100": 0.9,   # 01:00 UTC -- moderate
+        "1800": 0.9,   # 08:00 UTC -- pre-London
+        "2300": 0.8,   # 13:00 UTC -- NY session, best liquidity
+        "0030": 0.9,   # 14:30 UTC -- moderate NY
+    },
 }
 
 
@@ -91,11 +113,12 @@ def get_session_cost_spec(instrument: str, orb_label: str) -> CostSpec:
     """CostSpec with session-adjusted slippage for live execution.
 
     Applies a multiplier to the base slippage based on the session's
-    typical liquidity. Backtest should NOT use this — use get_cost_spec()
+    typical liquidity. Backtest should NOT use this -- use get_cost_spec()
     with 1.5x stress test instead.
     """
     base = get_cost_spec(instrument)
-    mult = SESSION_SLIPPAGE_MULT.get(orb_label, 1.0)
+    inst_mults = SESSION_SLIPPAGE_MULT.get(instrument.upper(), {})
+    mult = inst_mults.get(orb_label, 1.0)
     if mult == 1.0:
         return base
     return CostSpec(

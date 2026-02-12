@@ -42,11 +42,11 @@ ASSET_CONFIGS = {
         "schema_required": "ohlcv-1m",
     },
     "MNQ": {
-        "dbn_path": None,
+        "dbn_path": PROJECT_ROOT / "DB" / "MNQ_DB" / "glbx-mdp3-20240204-20260203.ohlcv-1m.dbn.zst",
         "symbol": "MNQ",
         "outright_pattern": re.compile(r'^MNQ[FGHJKMNQUVXZ]\d{1,2}$'),
         "prefix_len": 3,
-        "minimum_start_date": None,
+        "minimum_start_date": date(2024, 2, 4),
         "schema_required": "ohlcv-1m",
     },
     "NQ": {

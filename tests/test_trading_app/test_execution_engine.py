@@ -28,10 +28,10 @@ def _cost():
 
 def _make_strategy(**overrides):
     base = dict(
-        strategy_id="MGC_2300_E2_RR2.0_CB1_NO_FILTER",
+        strategy_id="MGC_2300_E1_RR2.0_CB1_NO_FILTER",
         instrument="MGC",
         orb_label="2300",
-        entry_model="E2",
+        entry_model="E1",
         rr_target=2.0,
         confirm_bars=1,
         filter_type="NO_FILTER",
@@ -145,18 +145,6 @@ class TestEntry:
         )
         return ts_base, events
 
-    def test_e2_immediate_entry_cb1(self):
-        """E2 with CB1: enters immediately on break bar."""
-        strategy = _make_strategy(entry_model="E2", confirm_bars=1)
-        engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
-        engine.on_trading_day_start(date(2024, 1, 5))
-
-        ts_base, events = self._run_to_break(engine)
-
-        entry_events = [e for e in events if e.event_type == "ENTRY"]
-        assert len(entry_events) == 1
-        assert entry_events[0].price == 2706.0  # Confirm bar close
-
     def test_e1_enters_next_bar(self):
         """E1 with CB1: enters at next bar's open."""
         strategy = _make_strategy(entry_model="E1", confirm_bars=1,
@@ -218,7 +206,7 @@ class TestExit:
 
     def test_target_hit(self):
         """Trade exits at target price."""
-        strategy = _make_strategy(entry_model="E2", confirm_bars=1, rr_target=2.0)
+        strategy = _make_strategy(entry_model="E1", confirm_bars=1, rr_target=2.0)
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
@@ -227,13 +215,15 @@ class TestExit:
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
 
-        # Break + E2 entry at close=2706
+        # Break bar: confirms + arms E1
         engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
-        # Entry=2706, stop=2695, risk=11, target=2706+22=2728
+
+        # E1 fill bar: entry at open=2708, stop=2695, risk=13, target=2708+26=2734
+        engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2708, 2712, 2707, 2710))
 
         # Target hit bar
         events = engine.on_bar(
-            _bar(ts_base + timedelta(minutes=6), 2710, 2730, 2709, 2725)
+            _bar(ts_base + timedelta(minutes=7), 2710, 2740, 2709, 2735)
         )
         exit_events = [e for e in events if e.event_type == "EXIT"]
         assert len(exit_events) == 1
@@ -241,7 +231,7 @@ class TestExit:
 
     def test_stop_hit(self):
         """Trade exits at stop price."""
-        strategy = _make_strategy(entry_model="E2", confirm_bars=1, rr_target=2.0)
+        strategy = _make_strategy(entry_model="E1", confirm_bars=1, rr_target=2.0)
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
@@ -249,11 +239,15 @@ class TestExit:
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
 
+        # Break bar
         engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
+
+        # E1 fill bar: entry at open=2708, no stop/target on this bar
+        engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2708, 2712, 2707, 2710))
 
         # Stop hit: low <= 2695
         events = engine.on_bar(
-            _bar(ts_base + timedelta(minutes=6), 2704, 2706, 2694, 2695)
+            _bar(ts_base + timedelta(minutes=7), 2704, 2706, 2694, 2695)
         )
         exit_events = [e for e in events if e.event_type == "EXIT"]
         assert len(exit_events) == 1
@@ -261,7 +255,7 @@ class TestExit:
 
     def test_ambiguous_bar_is_loss(self):
         """Bar hitting both target and stop = conservative loss."""
-        strategy = _make_strategy(entry_model="E2", confirm_bars=1, rr_target=2.0)
+        strategy = _make_strategy(entry_model="E1", confirm_bars=1, rr_target=2.0)
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
@@ -270,9 +264,12 @@ class TestExit:
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
         engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
 
-        # Huge bar: hits both target (2728) and stop (2695)
+        # E1 fill bar: entry at open=2708, no exit on this bar
+        engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2708, 2712, 2707, 2710))
+
+        # Huge bar: hits both target (2708+26=2734) and stop (2695)
         events = engine.on_bar(
-            _bar(ts_base + timedelta(minutes=6), 2710, 2735, 2690, 2720)
+            _bar(ts_base + timedelta(minutes=7), 2710, 2740, 2690, 2720)
         )
         exit_events = [e for e in events if e.event_type == "EXIT"]
         assert len(exit_events) == 1
@@ -280,7 +277,7 @@ class TestExit:
 
     def test_session_end_scratch(self):
         """Open position at session end = scratch."""
-        strategy = _make_strategy(entry_model="E2", confirm_bars=1)
+        strategy = _make_strategy(entry_model="E1", confirm_bars=1)
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
@@ -288,6 +285,8 @@ class TestExit:
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
         engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
+        # E1 fill bar
+        engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2708, 2712, 2707, 2710))
 
         # No target/stop hit — session ends
         events = engine.on_trading_day_end()
@@ -303,15 +302,19 @@ class TestPnL:
 
     def test_win_pnl_uses_to_r_multiple(self):
         """Win PnL must use to_r_multiple (friction deducted from PnL)."""
-        strategy = _make_strategy(entry_model="E2", confirm_bars=1, rr_target=2.0)
+        strategy = _make_strategy(entry_model="E1", confirm_bars=1, rr_target=2.0)
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
         ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
+        # Break bar
         engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
-        engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2710, 2730, 2709, 2725))
+        # E1 fill bar: entry=2708, stop=2695, risk=13, target=2708+26=2734
+        engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2708, 2712, 2707, 2710))
+        # Target hit
+        engine.on_bar(_bar(ts_base + timedelta(minutes=7), 2710, 2740, 2709, 2735))
 
         wins = [t for t in engine.completed_trades if t.pnl_r is not None and t.pnl_r > 0]
         assert len(wins) == 1
@@ -319,15 +322,19 @@ class TestPnL:
 
     def test_loss_pnl_is_minus_one(self):
         """Loss PnL = exactly -1.0R."""
-        strategy = _make_strategy(entry_model="E2", confirm_bars=1, rr_target=2.0)
+        strategy = _make_strategy(entry_model="E1", confirm_bars=1, rr_target=2.0)
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
         ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
+        # Break bar
         engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
-        engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2704, 2706, 2694, 2695))
+        # E1 fill bar: entry=2708, no exit on this bar
+        engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2708, 2712, 2707, 2710))
+        # Stop hit
+        engine.on_bar(_bar(ts_base + timedelta(minutes=7), 2704, 2706, 2694, 2695))
 
         losses = [t for t in engine.completed_trades if t.pnl_r is not None and t.pnl_r < 0]
         assert len(losses) == 1
@@ -335,7 +342,7 @@ class TestPnL:
 
     def test_daily_pnl_accumulates(self):
         """Daily PnL tracks cumulative R."""
-        strategy = _make_strategy(entry_model="E2", confirm_bars=1, rr_target=2.0)
+        strategy = _make_strategy(entry_model="E1", confirm_bars=1, rr_target=2.0)
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
@@ -343,7 +350,10 @@ class TestPnL:
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
         engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
-        engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2704, 2706, 2694, 2695))
+        # E1 fill bar
+        engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2708, 2712, 2707, 2710))
+        # Stop hit
+        engine.on_bar(_bar(ts_base + timedelta(minutes=7), 2704, 2706, 2694, 2695))
 
         summary = engine.get_daily_summary()
         assert summary["daily_pnl_r"] == -1.0
@@ -356,7 +366,7 @@ class TestPnL:
 class TestDailySummary:
 
     def test_summary_counts(self):
-        strategy = _make_strategy(entry_model="E2", confirm_bars=1, rr_target=2.0)
+        strategy = _make_strategy(entry_model="E1", confirm_bars=1, rr_target=2.0)
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
@@ -386,7 +396,7 @@ class TestFilters:
         """Strategy with G4 filter rejects ORBs < 4pt."""
         strategy = _make_strategy(
             filter_type="ORB_G4",
-            strategy_id="MGC_2300_E2_RR2.0_CB1_ORB_G4",
+            strategy_id="MGC_2300_E1_RR2.0_CB1_ORB_G4",
         )
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))

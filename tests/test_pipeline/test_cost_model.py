@@ -232,6 +232,79 @@ class TestSessionSlippage:
         assert session.tick_size == 0.10
 
     def test_all_sessions_have_multiplier(self):
-        """All 6 ORB sessions should be in SESSION_SLIPPAGE_MULT."""
+        """All 6 ORB sessions should be in SESSION_SLIPPAGE_MULT for MGC."""
+        mgc_mults = SESSION_SLIPPAGE_MULT["MGC"]
         for label in ["0900", "1000", "1100", "1800", "2300", "0030"]:
-            assert label in SESSION_SLIPPAGE_MULT
+            assert label in mgc_mults
+
+    def test_all_sessions_have_multiplier_mnq(self):
+        """All 6 ORB sessions should be in SESSION_SLIPPAGE_MULT for MNQ."""
+        mnq_mults = SESSION_SLIPPAGE_MULT["MNQ"]
+        for label in ["0900", "1000", "1100", "1800", "2300", "0030"]:
+            assert label in mnq_mults
+
+
+class TestMNQCostSpec:
+    """MNQ cost model tests -- mirrors MGC tests."""
+
+    def test_mnq_total_friction(self):
+        """MNQ total friction = $1.24 + $0.50 + $1.00 = $2.74."""
+        spec = get_cost_spec("MNQ")
+        assert spec.total_friction == pytest.approx(2.74)
+
+    def test_mnq_point_value(self):
+        spec = get_cost_spec("MNQ")
+        assert spec.point_value == 2.0
+
+    def test_mnq_friction_in_points(self):
+        """$2.74 / $2 per point = 1.37 points."""
+        spec = get_cost_spec("MNQ")
+        assert spec.friction_in_points == pytest.approx(1.37)
+
+    def test_mnq_tick_size(self):
+        spec = get_cost_spec("MNQ")
+        assert spec.tick_size == 0.25
+
+    def test_mnq_min_risk_floor_points(self):
+        """min_risk_floor = 10 ticks * 0.25 = 2.5 points."""
+        spec = get_cost_spec("MNQ")
+        assert spec.min_risk_floor_points == pytest.approx(2.5)
+
+    def test_mnq_min_risk_floor_dollars(self):
+        """min_risk_floor_dollars = 2.5 points * $2 = $5.00."""
+        spec = get_cost_spec("MNQ")
+        assert spec.min_risk_floor_dollars == pytest.approx(5.0)
+
+    def test_mnq_case_insensitive(self):
+        spec = get_cost_spec("mnq")
+        assert spec.instrument == "MNQ"
+
+    def test_mnq_in_validated_list(self):
+        instruments = list_validated_instruments()
+        assert "MNQ" in instruments
+
+    def test_mnq_risk_in_dollars(self):
+        """Long: entry=20000, stop=19990, risk=10pts*$2+$2.74=$22.74."""
+        spec = get_cost_spec("MNQ")
+        risk = risk_in_dollars(spec, entry=20000.0, stop=19990.0)
+        assert risk == pytest.approx(22.74)
+
+    def test_mnq_realized_rr(self):
+        """10pt risk, 20pt target (theoretical RR=2)."""
+        spec = get_cost_spec("MNQ")
+        rr = realized_rr(spec, entry=20000.0, stop=19990.0, target=20020.0)
+        # reward = 20*2 - 2.74 = 37.26, risk = 10*2 + 2.74 = 22.74
+        assert rr == pytest.approx(37.26 / 22.74)
+
+    def test_mnq_stress_test(self):
+        """Stress test at +50% increases friction."""
+        spec = get_cost_spec("MNQ")
+        stressed = stress_test_costs(spec, multiplier=1.5)
+        assert stressed.total_friction == pytest.approx(2.74 * 1.5)
+
+    def test_mnq_session_2300_lower_slippage(self):
+        """2300 (NY) session has lower slippage for MNQ."""
+        base = get_cost_spec("MNQ")
+        session = get_session_cost_spec("MNQ", "2300")
+        assert session.slippage < base.slippage
+        assert session.slippage == pytest.approx(base.slippage * 0.8)

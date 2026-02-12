@@ -209,8 +209,8 @@ class TestBuildPortfolio:
     def test_builds_from_db(self, tmp_path):
         strategies = [
             _make_strategy(strategy_id=f"MGC_2300_E1_RR2.0_CB5_NO_FILTER"),
-            _make_strategy(strategy_id=f"MGC_1800_E2_RR1.5_CB4_ORB_G4",
-                           orb_label="1800", entry_model="E2", expectancy_r=0.25),
+            _make_strategy(strategy_id=f"MGC_1800_E3_RR1.5_CB4_ORB_G4",
+                           orb_label="1800", entry_model="E3", expectancy_r=0.25),
         ]
         db_path = _setup_db(tmp_path, strategies)
         portfolio = build_portfolio(db_path=db_path, instrument="MGC")
@@ -267,7 +267,7 @@ class TestSerialization:
     def test_summary_correct(self, tmp_path):
         strategies = [
             _make_strategy(strategy_id="s1", orb_label="2300", entry_model="E1"),
-            _make_strategy(strategy_id="s2", orb_label="1800", entry_model="E2",
+            _make_strategy(strategy_id="s2", orb_label="1800", entry_model="E3",
                            expectancy_r=0.20, win_rate=0.50),
         ]
         db_path = _setup_db(tmp_path, strategies)
@@ -278,7 +278,7 @@ class TestSerialization:
         assert summary["orb_distribution"]["2300"] == 1
         assert summary["orb_distribution"]["1800"] == 1
         assert summary["entry_model_distribution"]["E1"] == 1
-        assert summary["entry_model_distribution"]["E2"] == 1
+        assert summary["entry_model_distribution"]["E3"] == 1
         assert summary["avg_expectancy_r"] == pytest.approx(0.25, abs=0.01)
 
     def test_empty_summary(self):

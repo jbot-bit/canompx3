@@ -274,7 +274,7 @@ class TestRiskManagerChopWarning:
         state = MarketState()
         state.signals.chop_detected = True
 
-        allowed, reason = rm.can_enter(
+        allowed, reason, _ = rm.can_enter(
             "S1", "1100", [], 0.0, market_state=state
         )
         assert allowed is True
@@ -288,7 +288,7 @@ class TestRiskManagerChopWarning:
         state = MarketState()
         state.signals.chop_detected = False
 
-        allowed, _ = rm.can_enter(
+        allowed, _, _ = rm.can_enter(
             "S1", "1100", [], 0.0, market_state=state
         )
         assert allowed is True

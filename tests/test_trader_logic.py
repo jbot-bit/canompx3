@@ -85,15 +85,6 @@ class TestEntryPriceReachable:
             # E1 entry = open of bar after confirm
             assert result["entry_price"] == 2703.0
 
-    def test_e2_entry_is_confirm_close(self):
-        """E2 entry_price must equal the confirm bar's close."""
-        result = compute_single_outcome(
-            STANDARD_BARS, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-            2.0, 1, TD_END, _cost(), "E2",
-        )
-        if result["entry_price"] is not None:
-            assert result["entry_price"] == 2701.0
-
     def test_e3_entry_is_orb_level(self):
         """E3 entry must be at ORB level (long=orb_high, short=orb_low)."""
         result = compute_single_outcome(
@@ -113,12 +104,6 @@ class TestEntryTimingCausality:
         if signal.triggered:
             assert signal.entry_ts > confirm.confirm_bar_ts
 
-    def test_e2_entry_at_confirm(self):
-        confirm = detect_confirm(STANDARD_BARS, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, TD_END)
-        signal = resolve_entry(STANDARD_BARS, confirm, "E2", TD_END)
-        if signal.triggered:
-            assert signal.entry_ts == confirm.confirm_bar_ts
-
     def test_e3_entry_after_confirm(self):
         confirm = detect_confirm(STANDARD_BARS, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, TD_END)
         signal = resolve_entry(STANDARD_BARS, confirm, "E3", TD_END)
@@ -137,15 +122,6 @@ class TestRiskPhysicallyCorrect:
         )
         if result["entry_price"] is not None:
             assert result["entry_price"] >= ORB_HIGH
-
-    def test_e2_long_entry_above_orb(self):
-        """E2 long: entry_price > orb_high (confirm close is above by definition)."""
-        result = compute_single_outcome(
-            STANDARD_BARS, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-            2.0, 1, TD_END, _cost(), "E2",
-        )
-        if result["entry_price"] is not None:
-            assert result["entry_price"] > ORB_HIGH
 
     def test_e3_risk_equals_orb_size(self):
         """E3: risk = |orb_high - orb_low| (entry at ORB level, stop at opposite)."""
@@ -209,13 +185,13 @@ class TestWinLossPnl:
                 (2703, 2705, 2689, 2690, 100),  # hits stop at 2690
             ],
         )
-        for em in ["E2"]:  # E2 always fills on confirm
-            result = compute_single_outcome(
-                loss_bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-                2.0, 1, TD_END, _cost(), em,
-            )
-            if result["outcome"] == "loss":
-                assert result["pnl_r"] == -1.0, f"Loss not -1.0R for {em}"
+        # E1 fills at bar 1 open=2703, bar 1 low=2689 < stop=2690 -> fill-bar stop
+        result = compute_single_outcome(
+            loss_bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
+            2.0, 1, TD_END, _cost(), "E1",
+        )
+        if result["outcome"] == "loss":
+            assert result["pnl_r"] == -1.0, "Loss not -1.0R for E1"
 
 
 class TestCostModelApplied:
@@ -238,7 +214,7 @@ class TestEntryModelDifference:
     """Check 10: Different entry models produce different entry prices."""
 
     def test_models_differ(self):
-        """E1, E2, E3 should produce different entry_prices for the same setup."""
+        """E1, E3 should produce different entry_prices for the same setup."""
         prices = {}
         for em in ENTRY_MODELS:
             result = compute_single_outcome(
@@ -300,12 +276,12 @@ class TestLossPnlExact:
             BREAK_TS,
             [
                 (2698, 2701, 2695, 2701, 100),
-                (2701, 2703, 2688, 2690, 100),  # hits stop
+                (2701, 2703, 2688, 2690, 100),  # E1 fills at open=2701, low=2688 < stop=2690
             ],
         )
         result = compute_single_outcome(
             loss_bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-            2.0, 1, TD_END, _cost(), "E2",
+            2.0, 1, TD_END, _cost(), "E1",
         )
         if result["outcome"] == "loss":
             assert result["pnl_r"] == -1.0
@@ -618,26 +594,6 @@ class TestFillBarExits:
         assert result["outcome"] == "loss"
         assert result["pnl_r"] == -1.0
         assert result["exit_ts"] == result["entry_ts"]
-
-    def test_e2_fill_bar_unchanged(self):
-        """E2 entry: fill bar is NOT checked (entry at bar close)."""
-        # ORB 2700-2690, long, RR=2.0. E2 entry at confirm bar close=2701.
-        # Risk = 11. Target = 2723. Stop = 2690.
-        # Bar 0 (confirm/fill): low=2695 > stop, high=2701 < target.
-        # Bar 1: target hit. Should be "win" (fill bar not checked for E2).
-        bars = _make_bars(
-            BREAK_TS,
-            [
-                (2698, 2701, 2695, 2701, 100),  # bar 0: confirm (E2 fill bar)
-                (2701, 2725, 2700, 2724, 100),  # bar 1: target hit
-            ],
-        )
-        result = compute_single_outcome(
-            bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-            2.0, 1, TD_END, _cost(), "E2",
-        )
-        assert result["outcome"] == "win"
-        assert result["exit_ts"] > result["entry_ts"]
 
 
 # ============================================================================

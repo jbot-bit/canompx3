@@ -60,28 +60,6 @@ class TestConfirmBars1:
         result = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, WINDOW_END)
         assert result.confirmed is False
 
-    def test_e2_entry_at_confirm_close(self):
-        """E2 wrapper: entry_price = confirm bar close, stop = opposite ORB."""
-        bars = _make_bars([2351.0], BREAK_TS)
-        signal = detect_entry_with_confirm_bars(
-            bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, WINDOW_END,
-            entry_model="E2",
-        )
-        assert signal.triggered is True
-        assert signal.entry_price == 2351.0  # confirm bar close
-        assert signal.stop_price == ORB_LOW
-
-    def test_e2_short_entry(self):
-        """E2 short: entry at confirm close, stop at orb_high."""
-        bars = _make_bars([2339.0], BREAK_TS)
-        signal = detect_entry_with_confirm_bars(
-            bars, BREAK_TS, ORB_HIGH, ORB_LOW, "short", 1, WINDOW_END,
-            entry_model="E2",
-        )
-        assert signal.triggered is True
-        assert signal.entry_price == 2339.0
-        assert signal.stop_price == ORB_HIGH
-
 
 class TestConfirmBars2:
     """confirm_bars=2: Require 2 consecutive closes outside ORB."""
@@ -202,7 +180,7 @@ class TestDetectConfirm:
 
 
 # ============================================================================
-# resolve_entry E1/E2/E3 tests
+# resolve_entry E1/E3 tests
 # ============================================================================
 
 class TestResolveEntryE1:
@@ -231,35 +209,6 @@ class TestResolveEntryE1:
         signal = resolve_entry(bars, confirm, "E1", WINDOW_END)
         assert signal.triggered is True
         assert signal.entry_price == 2338.0  # open of next bar
-        assert signal.stop_price == ORB_HIGH
-
-
-class TestResolveEntryE2:
-    """E2: Market-On-Confirm-Close. Confirm bar CLOSE."""
-
-    def test_e2_long_uses_confirm_close(self):
-        bars = _make_bars([2351.0, 2352.0], BREAK_TS)
-        confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, WINDOW_END)
-        signal = resolve_entry(bars, confirm, "E2", WINDOW_END)
-        assert signal.triggered is True
-        assert signal.entry_model == "E2"
-        assert signal.entry_price == 2351.0  # confirm bar close
-        assert signal.entry_ts == confirm.confirm_bar_ts
-
-    def test_e2_always_fills(self):
-        """E2 always fills if confirm happens (even with just 1 bar)."""
-        bars = _make_bars([2351.0], BREAK_TS)
-        confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, WINDOW_END)
-        signal = resolve_entry(bars, confirm, "E2", WINDOW_END)
-        assert signal.triggered is True
-        assert signal.entry_price == 2351.0
-
-    def test_e2_short(self):
-        bars = _make_bars([2339.0], BREAK_TS)
-        confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "short", 1, WINDOW_END)
-        signal = resolve_entry(bars, confirm, "E2", WINDOW_END)
-        assert signal.triggered is True
-        assert signal.entry_price == 2339.0
         assert signal.stop_price == ORB_HIGH
 
 

@@ -43,8 +43,8 @@ class ExecutionSpec:
         if not (1 <= self.confirm_bars <= 5):
             raise ValueError(f"confirm_bars must be 1-5, got {self.confirm_bars}")
 
-        if self.entry_model not in ["E1", "E2", "E3"]:
-            raise ValueError(f"entry_model must be E1/E2/E3, got {self.entry_model}")
+        if self.entry_model not in ["E1", "E3"]:
+            raise ValueError(f"entry_model must be E1/E3, got {self.entry_model}")
 
         if self.order_type not in ["market", "limit", "stop"]:
             raise ValueError(

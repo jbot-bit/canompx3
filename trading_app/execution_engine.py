@@ -127,7 +127,7 @@ class ExecutionEngine:
 
     def __init__(self, portfolio: Portfolio, cost_spec: CostSpec,
                  risk_manager=None, market_state=None,
-                 live_session_costs: bool = False):
+                 live_session_costs: bool = True): # Changed default to True
         self.portfolio = portfolio
         self.cost_spec = cost_spec
         self.risk_manager = risk_manager  # Optional RiskManager for position limits
@@ -407,10 +407,6 @@ class ExecutionEngine:
             new_trades.append(trade)
             return events
 
-        elif trade.entry_model == "E2":
-            entry_price = confirm_bar["close"]
-            entry_ts = confirm_bar["ts_utc"]
-
         elif trade.entry_model == "E3":
             # E3: will enter on retrace
             trade.stop_price = stop_price
@@ -422,63 +418,6 @@ class ExecutionEngine:
 
         else:
             return events
-
-        # Execute entry (E2 enters immediately)
-        risk_points = abs(entry_price - stop_price)
-        if risk_points <= 0:
-            trade.state = TradeState.EXITED
-            self.completed_trades.append(trade)
-            return events
-
-        # Risk manager check BEFORE entry
-        if self.risk_manager is not None:
-            can_enter, reason = self.risk_manager.can_enter(
-                strategy_id=trade.strategy_id,
-                orb_label=trade.orb_label,
-                active_trades=self.active_trades,
-                daily_pnl_r=self.daily_pnl_r,
-            )
-            if not can_enter:
-                trade.state = TradeState.EXITED
-                self.completed_trades.append(trade)
-                events.append(TradeEvent(
-                    event_type="REJECT",
-                    strategy_id=trade.strategy_id,
-                    timestamp=confirm_bar["ts_utc"],
-                    price=entry_price,
-                    direction=trade.direction,
-                    contracts=trade.contracts,
-                    reason=f"risk_rejected: {reason}",
-                ))
-                return events
-
-        if trade.direction == "long":
-            target_price = entry_price + risk_points * trade.strategy.rr_target
-        else:
-            target_price = entry_price - risk_points * trade.strategy.rr_target
-
-        trade.entry_price = entry_price
-        trade.entry_ts = entry_ts
-        trade.stop_price = stop_price
-        trade.target_price = target_price
-        trade.state = TradeState.ENTERED
-        self.daily_trade_count += 1
-        if self.risk_manager is not None:
-            self.risk_manager.on_trade_entry()
-
-        new_trades.append(trade)
-
-        events.append(TradeEvent(
-            event_type="ENTRY",
-            strategy_id=trade.strategy_id,
-            timestamp=entry_ts,
-            price=entry_price,
-            direction=trade.direction,
-            contracts=trade.contracts,
-            reason=f"confirm_bars_met_{trade.entry_model}",
-        ))
-
-        return events
 
     def _check_exits(self, bar: dict) -> list[TradeEvent]:
         """Check entered trades for target/stop hits."""
@@ -502,8 +441,9 @@ class ExecutionEngine:
                         continue
 
                     # Risk manager check BEFORE entry
+                    suggested_contract_factor = 1.0 # Default
                     if self.risk_manager is not None:
-                        can_enter, reason = self.risk_manager.can_enter(
+                        can_enter, reason, suggested_contract_factor = self.risk_manager.can_enter(
                             strategy_id=trade.strategy_id,
                             orb_label=trade.orb_label,
                             active_trades=self.active_trades,
@@ -522,6 +462,9 @@ class ExecutionEngine:
                                 reason=f"risk_rejected: {reason}",
                             ))
                             continue
+                    
+                    # Apply suggested contract factor
+                    trade.contracts = max(1, int(trade.contracts * suggested_contract_factor))
 
                     if trade.direction == "long":
                         target_price = entry_price + risk_points * trade.strategy.rr_target
@@ -577,8 +520,9 @@ class ExecutionEngine:
                             continue
 
                         # Risk manager check BEFORE entry
+                        suggested_contract_factor = 1.0 # Default
                         if self.risk_manager is not None:
-                            can_enter, reason = self.risk_manager.can_enter(
+                            can_enter, reason, suggested_contract_factor = self.risk_manager.can_enter(
                                 strategy_id=trade.strategy_id,
                                 orb_label=trade.orb_label,
                                 active_trades=self.active_trades,
@@ -597,6 +541,9 @@ class ExecutionEngine:
                                     reason=f"risk_rejected: {reason}",
                                 ))
                                 continue
+                        
+                        # Apply suggested contract factor
+                        trade.contracts = max(1, int(trade.contracts * suggested_contract_factor))
 
                         if trade.direction == "long":
                             target_price = entry_price + risk_points * trade.strategy.rr_target

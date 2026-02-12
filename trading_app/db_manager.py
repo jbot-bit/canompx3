@@ -100,6 +100,10 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 median_risk_points DOUBLE,
                 avg_risk_points   DOUBLE,
 
+                -- Annualized metrics
+                trades_per_year   DOUBLE,
+                sharpe_ann        DOUBLE,
+
                 -- Yearly breakdown (JSON)
                 yearly_results    TEXT,
 
@@ -137,6 +141,8 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 -- Performance
                 sharpe_ratio      DOUBLE,
                 max_drawdown_r    DOUBLE,
+                trades_per_year   DOUBLE,
+                sharpe_ann        DOUBLE,
                 yearly_results    TEXT,
 
                 -- Execution spec (JSON)
@@ -243,6 +249,7 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
                 "filter_type", "filter_params", "sample_size", "win_rate",
                 "avg_win_r", "avg_loss_r", "expectancy_r", "sharpe_ratio",
                 "max_drawdown_r", "median_risk_points", "avg_risk_points",
+                "trades_per_year", "sharpe_ann",
                 "yearly_results", "validation_status",
                 "validation_notes"
             }
@@ -251,6 +258,31 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
             missing = expected_cols - actual_cols
             if missing:
                 violations.append(f"experimental_strategies missing columns: {missing}")
+
+        # Check validated_setups schema
+        if "validated_setups" in existing_tables:
+            result = con.execute("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'validated_setups'
+            """).fetchall()
+
+            expected_cols = {
+                "strategy_id", "promoted_at", "promoted_from",
+                "instrument", "orb_label", "orb_minutes", "rr_target",
+                "confirm_bars", "entry_model", "filter_type", "filter_params",
+                "sample_size", "win_rate", "expectancy_r",
+                "years_tested", "all_years_positive", "stress_test_passed",
+                "sharpe_ratio", "max_drawdown_r",
+                "trades_per_year", "sharpe_ann",
+                "yearly_results", "execution_spec", "status",
+                "retired_at", "retirement_reason"
+            }
+            actual_cols = {row[0] for row in result}
+
+            missing = expected_cols - actual_cols
+            if missing:
+                violations.append(f"validated_setups missing columns: {missing}")
 
         all_valid = len(violations) == 0
         return all_valid, violations

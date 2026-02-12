@@ -296,6 +296,8 @@ Static analysis that catches:
 17. Nested production table write guard (blocks SQL writes to orb_outcomes etc.)
 18. Schema-query table name mismatches (trading_app/)
 19. Timezone hygiene (blocks pytz imports and hardcoded timedelta(hours=10))
+20. MarketState/scoring/cascade read-only SQL guard
+21. Analytical honesty guard (sharpe_ann in discovery + view_strategies)
 
 ### 3. Claude Code Hooks
 Auto-run checks when editing pipeline files:
@@ -412,6 +414,19 @@ strict filters (G6/G8) are EXPECTED behavior, not bugs.
 - E1 for momentum sessions (0900/1000), E3 for retrace sessions (1800/2300)
 - ORB size is THE edge: <4pt = house wins, 4-10pt = breakeven+, >10pt = strong
 - 2021 is structurally different (tiny ORBs) — exclude from validation
+
+### Annualized Sharpe
+- Per-trade Sharpe alone is MEANINGLESS without trade frequency
+- Annualized Sharpe = per_trade_sharpe * sqrt(trades_per_year)
+- Minimum bar: ShANN >= 0.5 with 150+ trades/year
+- Strong: ShANN >= 0.8
+- Institutional: ShANN >= 1.0
+
+### Filter Deduplication
+- Many filter variants (G2/G3/G4/NO_FILTER) produce the SAME trade set
+- Always report unique trade count: group by (session, EM, RR, CB)
+- Only G4+ filters meaningfully filter (>5% filter rate)
+- G2/G3 on most sessions = cosmetic label, not real filtering
 
 ---
 

@@ -35,10 +35,10 @@ def _cost():
 
 def _make_strategy(**overrides):
     base = {
-        "strategy_id": "MGC_0900_E2_RR2.0_CB1_NO_FILTER",
+        "strategy_id": "MGC_0900_E1_RR2.0_CB1_NO_FILTER",
         "instrument": "MGC",
         "orb_label": "0900",
-        "entry_model": "E2",
+        "entry_model": "E1",
         "rr_target": 2.0,
         "confirm_bars": 1,
         "filter_type": "NO_FILTER",

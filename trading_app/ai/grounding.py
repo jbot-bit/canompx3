@@ -40,7 +40,6 @@ You MUST ground all answers in the canonical documents below.
 === GLOSSARY ===
 - ORB: Opening Range Breakout (first 5min high-low after session open)
 - E1: Market at next bar open after confirm (momentum entry)
-- E2: Market at confirm bar close
 - E3: Limit order at ORB level waiting for retrace (better price, may not fill)
 - CB1-CB5: Confirm bars (consecutive 1m closes outside ORB)
 - RR1.0-RR4.0: Risk/Reward ratio target

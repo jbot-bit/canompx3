@@ -35,8 +35,8 @@ class TestNestedStrategyId:
         assert sid == "NESTED_MGC_1800_30m_E3_RR2.0_CB5_ORB_G5"
 
     def test_format_no_filter(self):
-        sid = make_nested_strategy_id("MGC", "1000", 15, "E2", 1.0, 1, "NO_FILTER")
-        assert sid == "NESTED_MGC_1000_15m_E2_RR1.0_CB1_NO_FILTER"
+        sid = make_nested_strategy_id("MGC", "1000", 15, "E1", 1.0, 1, "NO_FILTER")
+        assert sid == "NESTED_MGC_1000_15m_E1_RR1.0_CB1_NO_FILTER"
 
     def test_nested_prefix_distinguishes_from_baseline(self):
         """Nested IDs start with NESTED_, baseline IDs don't."""

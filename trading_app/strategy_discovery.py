@@ -50,6 +50,8 @@ def compute_metrics(outcomes: list[dict], cost_spec) -> dict:
             "max_drawdown_r": None,
             "median_risk_points": None,
             "avg_risk_points": None,
+            "trades_per_year": 0,
+            "sharpe_ann": None,
             "yearly_results": "{}",
         }
 
@@ -70,6 +72,8 @@ def compute_metrics(outcomes: list[dict], cost_spec) -> dict:
             "max_drawdown_r": None,
             "median_risk_points": None,
             "avg_risk_points": None,
+            "trades_per_year": 0,
+            "sharpe_ann": None,
             "yearly_results": "{}",
         }
 
@@ -127,6 +131,15 @@ def compute_metrics(outcomes: list[dict], cost_spec) -> dict:
         ) if year_data["trades"] > 0 else 0.0
         year_data["total_r"] = round(year_data["total_r"], 4)
 
+    # Annualized Sharpe = per_trade_sharpe * sqrt(trades_per_year)
+    years_span = len(yearly) if yearly else 0
+    trades_per_year = (n_traded / years_span) if years_span > 0 else 0
+    sharpe_ann = (
+        sharpe_ratio * (trades_per_year ** 0.5)
+        if sharpe_ratio is not None and trades_per_year > 0
+        else None
+    )
+
     # Risk stats (from entry_price and stop_price)
     risk_points_list = [
         abs(o["entry_price"] - o["stop_price"])
@@ -155,6 +168,8 @@ def compute_metrics(outcomes: list[dict], cost_spec) -> dict:
         "max_drawdown_r": round(max_dd, 4),
         "median_risk_points": round(median_risk, 4) if median_risk is not None else None,
         "avg_risk_points": round(avg_risk, 4) if avg_risk is not None else None,
+        "trades_per_year": round(trades_per_year, 1),
+        "sharpe_ann": round(sharpe_ann, 4) if sharpe_ann is not None else None,
         "yearly_results": json.dumps(yearly),
     }
 
@@ -175,7 +190,7 @@ def make_strategy_id(
     Components:
       instrument  - Trading instrument (MGC = Micro Gold Futures)
       orb_label   - ORB session time in Brisbane local (0900, 1000, 1800, etc.)
-      entry_model - E1 (next bar open), E2 (confirm close), E3 (limit retrace)
+      entry_model - E1 (next bar open), E3 (limit retrace)
       RR          - Risk/Reward target (1.0 to 4.0)
       CB          - Confirm bars required (1 to 5)
       filter_type - ORB size filter (NO_FILTER, ORB_G4, ORB_L3, etc.)
@@ -396,9 +411,9 @@ def run_discovery(
 
         # ---- Grid iteration (pure Python, no DB reads) ----
         total_strategies = 0
-        e1e2_combos = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * len(ALL_FILTERS) * 2  # E1, E2
+        e1_combos = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * len(ALL_FILTERS)  # E1
         e3_combos = len(ORB_LABELS) * len(RR_TARGETS) * 1 * len(ALL_FILTERS)  # E3, CB1 only
-        total_combos = e1e2_combos + e3_combos
+        total_combos = e1_combos + e3_combos
         combo_idx = 0
         insert_batch = []
 
@@ -438,6 +453,7 @@ def run_discovery(
                                     metrics["expectancy_r"], metrics["sharpe_ratio"],
                                     metrics["max_drawdown_r"],
                                     metrics["median_risk_points"], metrics["avg_risk_points"],
+                                    metrics["trades_per_year"], metrics["sharpe_ann"],
                                     metrics["yearly_results"],
                                 ])
 
@@ -451,8 +467,9 @@ def run_discovery(
                                             sample_size, win_rate, avg_win_r, avg_loss_r,
                                             expectancy_r, sharpe_ratio, max_drawdown_r,
                                             median_risk_points, avg_risk_points,
+                                            trades_per_year, sharpe_ann,
                                             yearly_results)
-                                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                                         insert_batch,
                                     )
                                     insert_batch = []
@@ -472,8 +489,9 @@ def run_discovery(
                     sample_size, win_rate, avg_win_r, avg_loss_r,
                     expectancy_r, sharpe_ratio, max_drawdown_r,
                     median_risk_points, avg_risk_points,
+                    trades_per_year, sharpe_ann,
                     yearly_results)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 insert_batch,
             )
 
@@ -501,9 +519,14 @@ def main():
     parser.add_argument("--end", type=date.fromisoformat, help="End date")
     parser.add_argument("--orb-minutes", type=int, default=5, help="ORB duration")
     parser.add_argument("--dry-run", action="store_true", help="No DB writes")
+    parser.add_argument("--db", type=str, default=None,
+                        help="Database path (default: gold.db)")
     args = parser.parse_args()
 
+    db_path = Path(args.db) if args.db else None
+
     run_discovery(
+        db_path=db_path,
         instrument=args.instrument,
         start_date=args.start,
         end_date=args.end,

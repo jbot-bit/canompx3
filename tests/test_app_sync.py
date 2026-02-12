@@ -172,17 +172,17 @@ class TestGridParamsSync:
 
     def test_grid_size(self):
         """Total grid size matches expected formula (E3 uses CB1 only)."""
-        e1e2 = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * len(ALL_FILTERS) * 2
+        e1 = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * len(ALL_FILTERS)
         e3 = len(ORB_LABELS) * len(RR_TARGETS) * 1 * len(ALL_FILTERS)
-        expected = e1e2 + e3
-        assert expected == 5148
+        expected = e1 + e3
+        assert expected == 2808
 
 
 class TestEntryModelsSync:
     """ENTRY_MODELS must be consistent."""
 
     def test_entry_models_exact(self):
-        assert ENTRY_MODELS == ["E1", "E2", "E3"]
+        assert ENTRY_MODELS == ["E1", "E3"]
 
     def test_entry_models_no_duplicates(self):
         assert len(ENTRY_MODELS) == len(set(ENTRY_MODELS))
@@ -243,11 +243,11 @@ class TestStrategyIdSync:
 
     def test_parseable(self):
         """Strategy ID can be parsed back to components."""
-        sid = make_strategy_id("MGC", "0900", "E2", 2.0, 1, "ORB_L4")
-        parts = sid.split("_", 3)  # MGC, 0900, E2, RR2.0_CB1_ORB_L4
+        sid = make_strategy_id("MGC", "0900", "E3", 2.0, 1, "ORB_L4")
+        parts = sid.split("_", 3)  # MGC, 0900, E3, RR2.0_CB1_ORB_L4
         assert parts[0] == "MGC"
         assert parts[1] == "0900"
-        assert parts[2] == "E2"
+        assert parts[2] == "E3"
 
     def test_all_grid_ids_unique(self):
         """Every combination in the full grid produces a unique ID (E3 CB1 only)."""
@@ -262,7 +262,7 @@ class TestStrategyIdSync:
                             sid = make_strategy_id("MGC", orb, em, rr, cb, fk)
                             assert sid not in ids, f"Duplicate ID: {sid}"
                             ids.add(sid)
-        assert len(ids) == 5148
+        assert len(ids) == 2808
 
 
 # ============================================================================

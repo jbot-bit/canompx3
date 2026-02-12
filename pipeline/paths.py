@@ -9,8 +9,9 @@ from pathlib import Path
 # Project root
 PROJECT_ROOT = Path(__file__).parent.parent
 
-# Database
-GOLD_DB_PATH = PROJECT_ROOT / "gold.db"
+# Database — override via DUCKDB_PATH env var for local-disk ingestion
+import os as _os
+GOLD_DB_PATH = Path(_os.environ["DUCKDB_PATH"]) if "DUCKDB_PATH" in _os.environ else PROJECT_ROOT / "gold.db"
 
 # Data directories
 DBN_DIR = PROJECT_ROOT / "dbn"

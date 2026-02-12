@@ -46,7 +46,7 @@ MAX_RESULT_ROWS = 1000
 VALID_ORB_LABELS = {"0900", "1000", "1100", "1800", "2300", "0030"}
 
 # Valid entry models
-VALID_ENTRY_MODELS = {"E1", "E2", "E3"}
+VALID_ENTRY_MODELS = {"E1", "E3"}
 
 # Valid filter types (subset for validation)
 VALID_FILTER_PREFIXES = {"NO_FILTER", "ORB_G", "ORB_L", "VOL_"}

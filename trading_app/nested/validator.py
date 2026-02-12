@@ -94,9 +94,11 @@ def run_nested_validation(
                     except (json.JSONDecodeError, TypeError):
                         yearly_data = {}
 
-                    years_tested = len(yearly_data)
+                    included = {y: d for y, d in yearly_data.items()
+                                if int(y) not in (exclude_years or set())}
+                    years_tested = len(included)
                     all_positive = all(
-                        d.get("avg_r", 0) > 0 for d in yearly_data.values()
+                        d.get("avg_r", 0) > 0 for d in included.values()
                     )
 
                     con.execute(

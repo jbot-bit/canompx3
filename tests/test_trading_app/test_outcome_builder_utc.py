@@ -38,7 +38,7 @@ class TestBreakTsUtcNormalization:
             bars_df=bars, break_ts=break_ts,
             orb_high=2705.0, orb_low=2695.0, break_dir="long",
             rr_target=1.0, confirm_bars=1, trading_day_end=td_end,
-            cost_spec=COST_SPEC, entry_model="E2",
+            cost_spec=COST_SPEC, entry_model="E1",
         )
         # Should produce some result (entry or no-entry)
         assert isinstance(result, dict)
@@ -58,7 +58,7 @@ class TestBreakTsUtcNormalization:
             bars_df=bars, break_ts=break_ts,
             orb_high=2705.0, orb_low=2695.0, break_dir="long",
             rr_target=1.0, confirm_bars=1, trading_day_end=td_end,
-            cost_spec=COST_SPEC, entry_model="E2",
+            cost_spec=COST_SPEC, entry_model="E1",
         )
         assert isinstance(result, dict)
 
@@ -72,7 +72,7 @@ class TestBreakTsUtcNormalization:
             bars_df=bars, break_ts=break_ts,
             orb_high=2705.0, orb_low=2695.0, break_dir="long",
             rr_target=1.0, confirm_bars=1, trading_day_end=td_end,
-            cost_spec=COST_SPEC, entry_model="E2",
+            cost_spec=COST_SPEC, entry_model="E1",
         )
         assert isinstance(result, dict)
 
@@ -89,7 +89,7 @@ class TestBreakTsUtcNormalization:
             bars_df=bars, break_ts=break_ts,
             orb_high=2705.0, orb_low=2695.0, break_dir="long",
             rr_target=1.0, confirm_bars=1, trading_day_end=td_end,
-            cost_spec=COST_SPEC, entry_model="E2",
+            cost_spec=COST_SPEC, entry_model="E1",
         )
         assert result["outcome"] is None
         assert result["entry_ts"] is None

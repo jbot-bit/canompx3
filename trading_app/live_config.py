@@ -26,6 +26,7 @@ from trading_app.portfolio import Portfolio, PortfolioStrategy
 from trading_app.rolling_portfolio import (
     load_rolling_validated_strategies,
     STABLE_THRESHOLD,
+    DEFAULT_LOOKBACK_WINDOWS,
 )
 from trading_app.strategy_fitness import compute_fitness
 
@@ -58,7 +59,6 @@ class LiveStrategySpec:
 #   expansion energy, turns on when ORB sizes indicate trending conditions.
 LIVE_PORTFOLIO = [
     # CORE: 1000 session, G3 filter (smallest validated filter for 1000)
-    LiveStrategySpec("1000_E2_ORB_G3", "core", "1000", "E2", "ORB_G3", None),
     LiveStrategySpec("1000_E1_ORB_G3", "core", "1000", "E1", "ORB_G3", None),
     # REGIME: 0900 session, G4 filter (high-vol overlay)
     LiveStrategySpec("0900_E1_ORB_G4", "regime", "0900", "E1", "ORB_G4", "high_vol"),
@@ -112,7 +112,7 @@ def build_live_portfolio(
     rolling_train_months: int = 12,
     account_equity: float = 25000.0,
     risk_per_trade_pct: float = 2.0,
-) -> Portfolio:
+) -> tuple[Portfolio, list[str]]:
     """
     Build the live portfolio from LIVE_PORTFOLIO spec.
 
@@ -133,6 +133,7 @@ def build_live_portfolio(
             db_path, instrument, rolling_train_months,
             min_weighted_score=STABLE_THRESHOLD,
             min_expectancy_r=0.05,
+            lookback_windows=DEFAULT_LOOKBACK_WINDOWS,
         )
 
         for spec in core_specs:
@@ -205,7 +206,7 @@ def build_live_portfolio(
                     fitness_note = f"GATED OFF ({fitness.fitness_status}: {fitness.fitness_notes})"
                 else:
                     fitness_note = "FIT -- gate OPEN"
-            except (ValueError, Exception) as e:
+            except (ValueError, duckdb.Error) as e:
                 weight = 0.0
                 fitness_note = f"GATED OFF (fitness error: {e})"
 

@@ -33,8 +33,6 @@ TRADING DAY:
 ENTRY MODELS (defined below as ENTRY_MODELS):
   E1 (Market-On-Next-Bar) - Enter at OPEN of the bar AFTER confirm bar.
      Fill rate ~100%. Best for momentum ORBs (0900, 1000).
-  E2 (Market-On-Confirm-Close) - Enter at CLOSE of the confirm bar itself.
-     Fill rate 100%. Similar to E1 but slightly worse fill on average.
   E3 (Limit-At-ORB) - Place limit order at ORB level after confirm.
      Fills only if price retraces to ORB level (~96-97% on G5+ days).
      Best for retrace ORBs (1800, 2300) where price spikes then pulls back.
@@ -59,8 +57,10 @@ ORB SIZE FILTERS:
   NO_FILTER: Trade all days regardless of ORB size.
     ALL no-filter strategies have negative expectancy. Do not trade.
 
-GRID (7,020 strategy combinations):
-  6 ORBs x 6 RRs x 5 CBs x 13 filters x 3 entry models = 7,020
+GRID (2,808 strategy combinations):
+  E1: 6 ORBs x 6 RRs x 5 CBs x 13 filters = 2,340
+  E3: 6 ORBs x 6 RRs x 1 CB x 13 filters = 468 (E3 always CB1)
+  Total = 2,808
 
 ==========================================================================
 """
@@ -175,10 +175,10 @@ ALL_FILTERS: dict[str, StrategyFilter] = {
 
 # Entry models: realistic fill assumptions for backtesting
 # E1 = Market at next bar open after confirm (momentum entry)
-# E2 = Market at confirm bar close (immediate entry)
 # E3 = Limit order at ORB level, waiting for retrace (better price, may not fill)
+# E2 was removed: identical to E1 on 1-minute bars (same days, same N, same WR)
 # See entry_rules.py for implementation: detect_confirm() + resolve_entry()
-ENTRY_MODELS = ["E1", "E2", "E3"]
+ENTRY_MODELS = ["E1", "E3"]
 
 # =========================================================================
 # Strategy classification thresholds (FIX5 rules)

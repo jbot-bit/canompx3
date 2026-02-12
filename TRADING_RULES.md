@@ -203,6 +203,22 @@ Abstain when volume is abnormally low. Fail-closed: missing data = ineligible.
 - **ADX+VWAP combined**: Best in high-vol (+0.431 ExpR) but NO-GO overall (low-vol negative)
 - **All overlays are regime amplifiers, not edge generators**
 
+### Filter Deduplication Rules
+Many filter variants produce the SAME trade set. Always report both counts.
+
+**Key findings:**
+- MNQ: 57 "strategies" = 16 unique trades (group by session, EM, RR, CB)
+- G2/G3 pass 99%+ of days on most sessions -- they don't change the trade, just the label
+- G8 genuinely filters 1100 session (29% cut), barely filters 1800 (4% cut)
+- Some strategies are negative unfiltered -- filter IS the edge there
+- Only G4+ filters meaningfully filter (>5% filter rate)
+
+**Annualized Sharpe (ShANN):**
+- Per-trade Sharpe is MEANINGLESS without trade frequency context
+- ShANN = per_trade_sharpe * sqrt(trades_per_year)
+- Minimum bar: ShANN >= 0.5 with 150+ trades/year
+- Strong: ShANN >= 0.8 | Institutional: ShANN >= 1.0
+
 ---
 
 ## Live Portfolio Configuration
@@ -252,6 +268,7 @@ Rolling eval: TRANSITIONING (score 0.42-0.54). Excellent when vol is high, negat
 | Nested 15m ORB for 1000 | +0.208R premium, 90% pairs improve | VALIDATED |
 | 1000 session most stable (rolling) | Score 0.68-0.83, 13-16/19 windows | VALIDATED |
 | CB1-CB5 identical for E3 | 100% same entry price, 93-96% same outcome | PROVEN |
+| IB 120m direction alignment | Opposed=3% WR (structural). Cross-validated 0900+1000. | VALIDATED |
 
 ### Confirmed NO-GOs
 | Idea | Evidence | Do NOT revisit |
@@ -264,6 +281,9 @@ Rolling eval: TRANSITIONING (score 0.42-0.54). Excellent when vol is high, negat
 | Gap fade | Avg gap 0.80pt, insufficient signal | Ever |
 | Systematic retrace dwell | Kills winners at 1000; neutral/harmful pooled | As systematic rule |
 | ADX all-regime overlay | Low-vol ExpR negative | Unless regime-gated |
+| Inside Day filter | All WORSE vs G4 baseline on 0900/1000. N=17-27 on compound. | Ever |
+| Ease Day filter (close vs typical) | All WORSE standalone. EASE+G4 1000 BEAT on tiny N=66-73, noise. | Ever |
+| V-Box CLEAR filter (E1 momentum) | 0900 E1 G4: CLEAR +0.019 Sharpe, 98% trades CLEAR. Filters nothing. | As E1 filter |
 
 ### Pending / Inconclusive
 | Idea | Status | Notes |
@@ -273,6 +293,105 @@ Rolling eval: TRANSITIONING (score 0.42-0.54). Excellent when vol is high, negat
 | 30m nested ORB | NOT BUILT | 15m done, 30m not yet populated |
 | RSI directional confirmation | Low confidence | RSI 60+ LONG = +0.81R but N=24. Monitor. |
 | Percentage-based ORB filter | Not tested | 0.15% of price approximates G5. Auto-adapts to price level. |
+| E3 V-Box Inversion (retest into HVN) | 0900 E3 G4: CHOP +0.503 ExpR (Sharpe 0.357) vs CLEAR -0.094. N=127 CHOP. | Future E3-specific retest strategy. Retrace INTO high-volume node = high fill probability + high WR. |
+
+### EOD Exit Tournament (2026-02-12)
+
+Tested: replace fixed RR target with time-based exit (stop still active). Mark-to-market at cutoff.
+
+**Method**: For each trade, scan bars from entry. Stop takes priority. If not stopped by cutoff, exit at bar close. PnL via canonical `to_r_multiple()`. All RR targets pooled (1.5/2.0/2.5), G4+, E1+E3.
+
+**Session results (Sharpe delta vs fixed RR baseline):**
+
+| Session | EM | fixed_rr | 1h | 2h | 4h | 7h | Winner |
+|---------|-----|----------|------|------|------|------|--------|
+| 0900 | E1 | **0.112** | -0.035 | +0.001 | +0.002 | +0.036 | Fixed RR |
+| 0900 | E3 | **0.121** | +0.004 | +0.068 | +0.074 | +0.044 | Fixed RR |
+| 1000 | E1 | +0.029 | +0.047 | +0.013 | +0.013 | **+0.078** | 7h runner |
+| 1000 | E3 | +0.036 | -0.054 | +0.012 | +0.008 | +0.038 | ~Same |
+| 1800 | E1 | -0.043 | -0.035 | -0.011 | -0.058 | -0.069 | All negative |
+| 1800 | E3 | -0.013 | -0.040 | -0.058 | -0.119 | -0.101 | All negative |
+
+**1000 E1 7h Runner deep-dive (CB2 RR2.0 G4+, N=138):**
+
+| Metric | Fixed RR | 7h Runner |
+|--------|----------|-----------|
+| N | 138 | 138 |
+| WR | 38.4% | 29.7% |
+| ExpR | +0.031 | +0.200 |
+| Sharpe | 0.024 | 0.093 |
+| MaxDD | -13.5R | -18.4R |
+| TotalR | +4.3 | +27.6 |
+| Exit dist | - | 68% stopped, 31% time exit |
+
+**CRITICAL: Regime-dependent.** Yearly Sharpe delta (7h minus fixed):
+
+| Year | N | Fixed Sharpe | 7h Sharpe | Delta |
+|------|---|-------------|-----------|-------|
+| 2020 | 14 | +0.372 | -0.055 | -0.428 |
+| 2024 | 5 | +1.067 | +0.042 | -1.025 |
+| 2025 | 93 | -0.035 | +0.057 | +0.092 |
+| 2026 | 21 | -0.067 | +0.260 | +0.327 |
+
+16/17 trades with >3R are from 2025-2026 (gold $3200-5200, trending hard).
+
+**Verdict:**
+- **0900**: Fixed RR wins. Do not change exit logic.
+- **1000 7h runner**: Real edge in trending regime (2025+). LOSES in choppy regime (2020, 2024). **REGIME OVERLAY ONLY** -- not a universal replacement.
+- **1800**: All exit types negative. Confirmed dead for E1.
+- **1h/2h/4h**: No consistent improvement anywhere. Dead.
+
+### IB Direction Alignment (2026-02-12)
+
+**Initial Balance (IB)** = high/low of first N minutes after session open.
+After IB forms, the first break of IB high or IB low determines IB direction.
+If IB direction matches ORB break direction = **aligned**. Otherwise = **opposed**.
+
+**Setup**: E1 CB2 RR2.0 G4+, IB=120m (fixed, no per-session optimization).
+
+**Core finding**: Opposed trades have ~3% WR on 7h hold. This is mechanical --
+if the wider market structure (IB) breaks against your ORB trade, you lose.
+
+**Cross-validation** (0900 was BLIND test -- same 120m IB, zero re-optimization):
+
+| Session | Group | N | WR | ExpR | Sharpe | MaxDD | TotalR |
+|---------|-------|---|-----|------|--------|-------|--------|
+| 1000 | All fixed RR | 138 | 38.4% | +0.031 | 0.024 | -13.6 | +4.3 |
+| 1000 | Aligned 7h | 83 | 47.0% | +0.896 | 0.361 | -6.4 | +74.4 |
+| 1000 | Opposed 7h | 54 | 3.7% | -0.860 | -1.158 | -45.4 | -46.4 |
+| 0900 | All fixed RR | 148 | 45.3% | +0.229 | 0.169 | -7.5 | +33.8 |
+| 0900 | Aligned 7h | 84 | 60.7% | +0.858 | 0.435 | -5.7 | +72.1 |
+| 0900 | Opposed 7h | 63 | 3.2% | -0.876 | -1.198 | -46.7 | -55.2 |
+
+**Blended strategy** (aligned=7h hold, opposed=fixed RR):
+
+| Session | Fixed Sharpe | Blended Sharpe | Delta |
+|---------|-------------|----------------|-------|
+| 1000 | 0.024 | 0.174 | +0.150 |
+| 0900 | 0.169 | 0.144 | -0.025 |
+
+**Key findings**:
+1. **Direction alignment is structural**: works on both sessions, ~3% opposed WR on both
+2. **As a FILTER** (only trade aligned): strong on both (Sharpe 0.36+ aligned-only)
+3. **As a HOLD/EXIT switch**: helps at 1000 (weak baseline), neutral at 0900 (strong baseline)
+4. **Kill switch (opposite IB side)**: redundant with standard stop -- IB range contains stop level
+5. **Signal wait**: median 138m after entry (2+ hours to know alignment)
+
+**Yearly stability (1000 blended)**:
+
+| Year | N | Aligned | Opposed | Fixed | Blended | Best |
+|------|---|---------|---------|-------|---------|------|
+| 2020 | 14 | 9 | 5 | 0.372 | 0.188 | fixed |
+| 2024 | 5 | 3 | 2 | 1.067 | 0.611 | fixed |
+| 2025 | 93 | 50 | 42 | -0.035 | 0.129 | blended |
+| 2026 | 21 | 17 | 4 | -0.067 | 0.302 | blended |
+
+**Regime dependence**: Blended wins in trending markets (2025-2026), fixed wins in choppy (2020).
+Do not try to "fix" choppy years -- accept this requires a trending regime.
+
+**Slippage**: Already in cost model ($8.40 RT friction per trade). Verified: `to_r_multiple()` deducts friction.
+
+**Scripts**: `scripts/analyze_ib_alignment_v2.py` (canonical), `scripts/audit_ib_single_break.py` (audit trail).
 
 ---
 

@@ -216,9 +216,11 @@ def run_validation(
                     except (json.JSONDecodeError, TypeError):
                         yearly_data = {}
 
-                    years_tested = len(yearly_data)
+                    included = {y: d for y, d in yearly_data.items()
+                                if int(y) not in (exclude_years or set())}
+                    years_tested = len(included)
                     all_positive = all(
-                        d.get("avg_r", 0) > 0 for d in yearly_data.values()
+                        d.get("avg_r", 0) > 0 for d in included.values()
                     )
 
                     con.execute(
@@ -228,8 +230,10 @@ def run_validation(
                             filter_type, filter_params,
                             sample_size, win_rate, expectancy_r,
                             years_tested, all_years_positive, stress_test_passed,
-                            sharpe_ratio, max_drawdown_r, yearly_results, status)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            sharpe_ratio, max_drawdown_r,
+                            trades_per_year, sharpe_ann,
+                            yearly_results, status)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         [
                             strategy_id, strategy_id,
                             row_dict["instrument"], row_dict["orb_label"],
@@ -243,6 +247,8 @@ def run_validation(
                             years_tested, all_positive, True,
                             row_dict.get("sharpe_ratio"),
                             row_dict.get("max_drawdown_r"),
+                            row_dict.get("trades_per_year"),
+                            row_dict.get("sharpe_ann"),
                             yearly, "active",
                         ],
                     )
@@ -282,11 +288,15 @@ def main():
     parser.add_argument("--min-years-positive-pct", type=float, default=1.0,
                         help="Fraction of included years that must be positive (0.0-1.0, default 1.0)")
     parser.add_argument("--dry-run", action="store_true", help="No DB writes")
+    parser.add_argument("--db", type=str, default=None,
+                        help="Database path (default: gold.db)")
     args = parser.parse_args()
 
     exclude = set(args.exclude_years) if args.exclude_years else None
+    db_path = Path(args.db) if args.db else None
 
     run_validation(
+        db_path=db_path,
         instrument=args.instrument,
         min_sample=args.min_sample,
         stress_multiplier=args.stress_multiplier,

@@ -35,6 +35,10 @@ TRANSITIONING_THRESHOLD = 0.3
 # Sample size for full weight in stability scoring
 FULL_WEIGHT_SAMPLE = 50
 
+# Default lookback: only use the N most recent rolling windows for scoring.
+# ~2 years of monthly windows. None = use all windows.
+DEFAULT_LOOKBACK_WINDOWS = 24
+
 
 @dataclass
 class FamilyResult:
@@ -65,9 +69,11 @@ def load_rolling_results(
     db_path: Path,
     train_months: int,
     instrument: str = "MGC",
+    run_labels: list[str] | None = None,
 ) -> list[dict]:
     """Load all regime_validated rows with rolling_{train_months}m_ prefix.
 
+    If run_labels is provided, only include rows whose run_label is in the set.
     Returns list of dicts with strategy parameters and metrics.
     """
     prefix = f"rolling_{train_months}m_%"
@@ -90,7 +96,11 @@ def load_rolling_results(
         """, [prefix, instrument]).fetchall()
 
         cols = [desc[0] for desc in con.description]
-        return [dict(zip(cols, row)) for row in rows]
+        results = [dict(zip(cols, row)) for row in rows]
+        if run_labels is not None:
+            label_set = set(run_labels)
+            results = [r for r in results if r["run_label"] in label_set]
+        return results
 
     finally:
         con.close()
@@ -100,8 +110,12 @@ def load_all_rolling_run_labels(
     db_path: Path,
     train_months: int,
     instrument: str = "MGC",
+    lookback_windows: int | None = None,
 ) -> list[str]:
-    """Load distinct run_labels from regime_strategies for this train_months."""
+    """Load distinct run_labels from regime_strategies for this train_months.
+
+    If lookback_windows is provided, return only the last N labels (most recent).
+    """
     prefix = f"rolling_{train_months}m_%"
 
     con = duckdb.connect(str(db_path), read_only=True)
@@ -113,7 +127,10 @@ def load_all_rolling_run_labels(
               AND instrument = ?
             ORDER BY run_label
         """, [prefix, instrument]).fetchall()
-        return [r[0] for r in rows]
+        labels = [r[0] for r in rows]
+        if lookback_windows is not None:
+            labels = labels[-lookback_windows:]
+        return labels
     finally:
         con.close()
 
@@ -122,9 +139,11 @@ def load_rolling_degraded_counts(
     db_path: Path,
     train_months: int,
     instrument: str = "MGC",
+    run_labels: list[str] | None = None,
 ) -> dict[str, dict[str, int]]:
     """Load count of auto-degraded strategies per run_label and orb_label.
 
+    If run_labels is provided, only count degraded windows in that set.
     Returns: {family_id: count_of_degraded_windows}
     """
     prefix = f"rolling_{train_months}m_%"
@@ -139,6 +158,10 @@ def load_rolling_degraded_counts(
               AND validation_notes LIKE 'Auto-degraded%'
             GROUP BY run_label, orb_label, entry_model, filter_type
         """, [prefix, instrument]).fetchall()
+
+        if run_labels is not None:
+            label_set = set(run_labels)
+            rows = [r for r in rows if r[0] in label_set]
 
         # Count degraded windows per family
         degraded_windows = defaultdict(set)
@@ -370,14 +393,25 @@ def load_rolling_validated_strategies(
     train_months: int,
     min_weighted_score: float = STABLE_THRESHOLD,
     min_expectancy_r: float = 0.10,
+    lookback_windows: int | None = DEFAULT_LOOKBACK_WINDOWS,
 ) -> list[dict]:
     """Load strategies from STABLE rolling families for portfolio integration.
 
+    If lookback_windows is set, only the N most recent rolling windows are used
+    for stability scoring. Default is DEFAULT_LOOKBACK_WINDOWS (~2 years).
+    Pass None to use all available windows.
+
     Returns list of dicts matching the format expected by portfolio.py.
     """
-    validated = load_rolling_results(db_path, train_months, instrument)
-    all_labels = load_all_rolling_run_labels(db_path, train_months, instrument)
-    degraded = load_rolling_degraded_counts(db_path, train_months, instrument)
+    all_labels = load_all_rolling_run_labels(
+        db_path, train_months, instrument, lookback_windows
+    )
+    validated = load_rolling_results(
+        db_path, train_months, instrument, run_labels=all_labels
+    )
+    degraded = load_rolling_degraded_counts(
+        db_path, train_months, instrument, run_labels=all_labels
+    )
 
     families = aggregate_rolling_performance(validated, all_labels, degraded)
 
@@ -488,19 +522,27 @@ def main():
                         help="Minimum weighted stability score for portfolio inclusion")
     parser.add_argument("--report", action="store_true",
                         help="Print detailed report")
+    parser.add_argument("--lookback-windows", type=int, default=DEFAULT_LOOKBACK_WINDOWS,
+                        help=f"Only use the N most recent windows for scoring "
+                             f"(default: {DEFAULT_LOOKBACK_WINDOWS}). "
+                             f"Use 0 for all windows.")
     parser.add_argument("--output", type=str, default=None,
                         help="Write results JSON to this path")
     args = parser.parse_args()
 
     db_path = GOLD_DB_PATH
+    lookback = args.lookback_windows if args.lookback_windows > 0 else None
 
-    print(f"Loading rolling results (train_months={args.train_months})...")
-    validated = load_rolling_results(db_path, args.train_months, args.instrument)
+    print(f"Loading rolling results (train_months={args.train_months}, "
+          f"lookback_windows={lookback or 'all'})...")
     all_labels = load_all_rolling_run_labels(
-        db_path, args.train_months, args.instrument
+        db_path, args.train_months, args.instrument, lookback
+    )
+    validated = load_rolling_results(
+        db_path, args.train_months, args.instrument, run_labels=all_labels
     )
     degraded_counts = load_rolling_degraded_counts(
-        db_path, args.train_months, args.instrument
+        db_path, args.train_months, args.instrument, run_labels=all_labels
     )
 
     print(f"  {len(validated)} validated strategies across {len(all_labels)} windows")
