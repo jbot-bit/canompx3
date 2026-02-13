@@ -504,57 +504,6 @@ class TestEarlyExitSkipInHold7h:
 
 class TestIBAlreadyOpposed:
 
-    def test_1000_entry_rejected_when_ib_already_opposed(self):
-        """If IB has already broken opposed when 1000 trade tries to enter, reject it.
-
-        Scenario: IB breaks LONG first (close > IB high after 01:00),
-        then ORB breaks SHORT later (close < ORB low). The short trade
-        should be rejected because IB already broke long (opposed).
-        """
-        strategy = _make_strategy()
-        engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
-        engine.on_trading_day_start(date(2024, 1, 5))
-
-        td = date(2024, 1, 5)
-        prev_day = td - timedelta(days=1)
-
-        # Feed IB bars (23:00-00:00 UTC) — tight range
-        ib_ts = datetime(prev_day.year, prev_day.month, prev_day.day,
-                         23, 0, tzinfo=timezone.utc)
-        for i in range(60):
-            engine.on_bar(_bar(ib_ts + timedelta(minutes=i), 2705, 2710, 2702, 2706))
-
-        # Build 1000 ORB (00:00-00:05 UTC): high=2710, low=2700
-        ts_base = datetime(td.year, td.month, td.day, 0, 0, tzinfo=timezone.utc)
-        for i in range(5):
-            engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2702, 2710, 2700, 2705))
-
-        # Feed bars 00:05-01:00 to complete IB, staying within ORB range
-        t = ts_base + timedelta(minutes=5)
-        ib_end = datetime(td.year, td.month, td.day, 1, 0, tzinfo=timezone.utc)
-        while t < ib_end:
-            engine.on_bar(_bar(t, 2704, 2708, 2702, 2705))
-            t += timedelta(minutes=1)
-
-        # Complete IB
-        engine.on_bar(_bar(ib_end, 2705, 2708, 2702, 2706))
-        assert engine.ib.complete
-
-        # IB range: high=2710 (from ORB bars), low=2700 (from ORB bars)
-        # Break IB long: close > 2710
-        engine.on_bar(_bar(ib_end + timedelta(minutes=1), 2712, 2715, 2710, 2712))
-        assert engine.ib.break_dir == "long"
-        # ORB also breaks long here (close=2712 > ORB high=2710)
-        # So this ORB break arms a LONG trade. But we want a SHORT trade.
-        # Since ORB already broke long, it won't break short.
-        # The "IB already opposed" scenario for 1000 E1 CB1 is structurally
-        # impossible: IB contains ORB, so IB breaks after ORB, and the first
-        # IB break must be in the same direction as the ORB break.
-
-        # Instead, test this via unit-level: directly set IB state and verify
-        # the rejection code path works.
-        pass
-
     def test_1000_entry_rejected_when_ib_already_opposed_unit(self):
         """Unit test: verify rejection code path when IB is pre-resolved opposed.
 
