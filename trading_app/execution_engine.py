@@ -26,7 +26,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 
 from pipeline.cost_model import CostSpec, to_r_multiple, get_session_cost_spec
-from trading_app.config import ALL_FILTERS
+from trading_app.config import ALL_FILTERS, EARLY_EXIT_MINUTES
 from trading_app.portfolio import Portfolio, PortfolioStrategy
 
 
@@ -106,6 +106,9 @@ class ActiveTrade:
     stop_price: float | None = None
     target_price: float | None = None
     contracts: int = 1
+
+    # Timed early exit
+    early_exit_checked: bool = False
 
     # Outcome tracking
     exit_ts: datetime | None = None
@@ -592,6 +595,20 @@ class ExecutionEngine:
             if adverse > trade.mae_points:
                 trade.mae_points = adverse
 
+            # Timed early exit: kill losers at N minutes after fill
+            threshold = EARLY_EXIT_MINUTES.get(trade.orb_label)
+            if threshold and not trade.early_exit_checked:
+                elapsed = (bar["ts_utc"] - trade.entry_ts).total_seconds() / 60.0
+                if elapsed >= threshold:
+                    trade.early_exit_checked = True
+                    if trade.direction == "long":
+                        mtm = bar["close"] - trade.entry_price
+                    else:
+                        mtm = trade.entry_price - bar["close"]
+                    if mtm < 0:
+                        self._exit_trade(trade, bar, "early_exit", bar["close"], events)
+                        continue
+
             if hit_target and hit_stop:
                 # Ambiguous bar — conservative loss
                 self._exit_trade(trade, bar, "loss", trade.stop_price, events)
@@ -624,6 +641,15 @@ class ExecutionEngine:
                 to_r_multiple(cost, trade.entry_price, trade.stop_price, pnl_points),
                 4,
             )
+        elif outcome == "early_exit":
+            if trade.direction == "long":
+                mtm_points = exit_price - trade.entry_price
+            else:
+                mtm_points = trade.entry_price - exit_price
+            trade.pnl_r = round(
+                to_r_multiple(cost, trade.entry_price, trade.stop_price, mtm_points),
+                4,
+            )
         else:
             # Precise loss R-multiple under session-adjusted costs
             loss_points = -risk_points
@@ -644,5 +670,5 @@ class ExecutionEngine:
             price=exit_price,
             direction=trade.direction,
             contracts=trade.contracts,
-            reason=f"{outcome}_{'target' if outcome == 'win' else 'stop'}_hit",
+            reason=f"{outcome}_timed" if outcome == "early_exit" else f"{outcome}_{'target' if outcome == 'win' else 'stop'}_hit",
         ))

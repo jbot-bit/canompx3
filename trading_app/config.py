@@ -180,6 +180,22 @@ ALL_FILTERS: dict[str, StrategyFilter] = {
 # See entry_rules.py for implementation: detect_confirm() + resolve_entry()
 ENTRY_MODELS = ["E1", "E3"]
 
+# Timed early exit: kill losers at N minutes after fill.
+# Research (artifacts/EARLY_EXIT_RULES.md, G4+ filter):
+#   0900: 15 min -> +26% Sharpe, 38% tighter MaxDD (only 24% recover)
+#   1000: 30 min -> 3.7x Sharpe, 35% tighter MaxDD (only 12-18% recover)
+#   Other sessions: no benefit
+# Rule: At N minutes after fill, if bar close vs entry is negative, exit at bar close.
+# None = no early exit for that session.
+EARLY_EXIT_MINUTES: dict[str, int | None] = {
+    "0900": 15,
+    "1000": 30,
+    "1100": None,
+    "1800": None,
+    "2300": None,
+    "0030": None,
+}
+
 # =========================================================================
 # Strategy classification thresholds (FIX5 rules)
 # =========================================================================

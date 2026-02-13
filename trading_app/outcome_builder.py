@@ -30,7 +30,7 @@ from pipeline.cost_model import get_cost_spec, pnl_points_to_r, to_r_multiple
 from pipeline.init_db import ORB_LABELS
 from pipeline.build_daily_features import compute_trading_day_utc_range
 from trading_app.entry_rules import detect_entry_with_confirm_bars
-from trading_app.config import ENTRY_MODELS
+from trading_app.config import ENTRY_MODELS, EARLY_EXIT_MINUTES
 from trading_app.db_manager import init_trading_app_schema
 
 # Grid parameters — see trading_app/config.py for full documentation
@@ -138,6 +138,7 @@ def compute_single_outcome(
     trading_day_end: datetime,
     cost_spec,
     entry_model: str = "E1",
+    orb_label: str | None = None,
 ) -> dict:
     """
     Compute outcome for a single (rr_target, confirm_bars, entry_model) combination.
@@ -216,8 +217,12 @@ def compute_single_outcome(
         )
         return result
 
+    # --- Timed early exit: kill losers at N minutes after fill ---
+    early_exit_threshold = EARLY_EXIT_MINUTES.get(orb_label) if orb_label else None
+
     highs = post_entry["high"].values
     lows = post_entry["low"].values
+    closes = post_entry["close"].values
 
     if break_dir == "long":
         hit_target = highs >= target_price
@@ -229,6 +234,38 @@ def compute_single_outcome(
         hit_stop = highs >= stop_price
         favorable = entry_price - lows
         adverse = highs - entry_price
+
+    if early_exit_threshold is not None:
+        elapsed = (post_entry["ts_utc"] - pd.Timestamp(entry_ts)).dt.total_seconds().values / 60.0
+        threshold_mask = elapsed >= early_exit_threshold
+        if threshold_mask.any():
+            threshold_idx = int(np.argmax(threshold_mask))
+            # Check if stop or target hit BEFORE the threshold bar
+            any_prior_hit = (hit_target[:threshold_idx] | hit_stop[:threshold_idx])
+            if not any_prior_hit.any():
+                # Check MTM at threshold bar close
+                if break_dir == "long":
+                    mtm_points = float(closes[threshold_idx] - entry_price)
+                else:
+                    mtm_points = float(entry_price - closes[threshold_idx])
+                if mtm_points < 0:
+                    # Early exit: loser at threshold
+                    result["outcome"] = "early_exit"
+                    result["exit_ts"] = post_entry.iloc[threshold_idx]["ts_utc"].to_pydatetime()
+                    result["exit_price"] = float(closes[threshold_idx])
+                    result["pnl_r"] = round(
+                        to_r_multiple(cost_spec, entry_price, stop_price, mtm_points), 4
+                    )
+                    max_favorable_points = max(float(np.max(favorable[:threshold_idx + 1])), 0.0)
+                    max_adverse_points = max(float(np.max(adverse[:threshold_idx + 1])), 0.0)
+                    result["mae_r"] = round(
+                        pnl_points_to_r(cost_spec, entry_price, stop_price, max_adverse_points), 4
+                    )
+                    result["mfe_r"] = round(
+                        pnl_points_to_r(cost_spec, entry_price, stop_price, max_favorable_points), 4
+                    )
+                    return result
+                # MTM >= 0 at threshold -> winner, fall through to normal scan
 
     any_hit = hit_target | hit_stop
 
@@ -385,6 +422,7 @@ def build_outcomes(
                                 trading_day_end=td_end,
                                 cost_spec=cost_spec,
                                 entry_model=em,
+                                orb_label=orb_label,
                             )
 
                             day_batch.append([
