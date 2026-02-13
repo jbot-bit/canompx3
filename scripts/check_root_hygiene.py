@@ -40,9 +40,14 @@ ALLOWED_FILES = {
 
 
 def main() -> None:
+    # Windows reserved device names (nul, con, prn, etc.) — undeletable, skip them
+    WIN_DEVICES = {"nul", "con", "prn", "aux"} | {f"com{i}" for i in range(1, 10)} | {f"lpt{i}" for i in range(1, 10)}
+
     unexpected = []
     for entry in sorted(PROJECT_ROOT.iterdir()):
         name = entry.name
+        if name.lower() in WIN_DEVICES and not entry.is_file() and not entry.is_dir():
+            continue
         if entry.is_dir() and name in ALLOWED_DIRS:
             continue
         if entry.is_file() and name in ALLOWED_FILES:

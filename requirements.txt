@@ -1,0 +1,12 @@
+# Top-level dependencies for MGC data pipeline
+# Pin to exact versions for reproducibility
+databento==0.70.0
+duckdb==1.4.4
+pandas==2.3.3
+numpy==2.2.6
+pyarrow==23.0.0
+zstandard==0.25.0
+pytest==8.3.4
+pytest-xdist==3.8.0
+pytest-cov==6.1.1
+ruff==0.11.6
