@@ -57,6 +57,14 @@ ASSET_CONFIGS = {
         "minimum_start_date": date(2021, 7, 11),
         "schema_required": "ohlcv-1m",
     },
+    "MES": {
+        "dbn_path": Path(r"C:\db\MES_DB"),
+        "symbol": "MES",
+        "outright_pattern": re.compile(r'^MES[FGHJKMNQUVXZ]\d{1,2}$'),
+        "prefix_len": 3,
+        "minimum_start_date": date(2024, 2, 12),
+        "schema_required": "ohlcv-1m",
+    },
     "NQ": {
         "dbn_path": None,
         "symbol": "NQ",

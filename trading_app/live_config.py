@@ -71,7 +71,7 @@ HOT_MIN_STABILITY = 0.6
 # EXIT MODES (see config.py SESSION_EXIT_MODE):
 #   0900 = fixed_target (set and forget, no IB logic)
 #   1000 = ib_conditional (IB aligned=hold 7h, opposed=kill at market)
-#   1100 = PERMANENTLY OFF (removed from ORB_WINDOWS_UTC, hard exclusion)
+#   1100 = OFF for breakout (shelved, removed from ORB_WINDOWS_UTC for now)
 #   1800/2300/0030 = fixed_target
 #
 # Updated 2026-02-13: Added HOT tier from rolling eval results.

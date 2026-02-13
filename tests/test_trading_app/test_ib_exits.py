@@ -5,7 +5,7 @@ Covers:
 - LiveIB formation and break detection
 - 1000 session IB-conditional exits (pending/aligned/opposed)
 - 0900 session always uses fixed target (no IB logic)
-- 1100 exclusion from ORB_WINDOWS_UTC
+- 1100 shelved (not in ORB_WINDOWS_UTC for now)
 - Hold-7h timeout
 """
 
@@ -26,7 +26,9 @@ from trading_app.execution_engine import (
     TradeState,
     ORB_WINDOWS_UTC,
 )
-from trading_app.config import SESSION_EXIT_MODE, IB_DURATION_MINUTES, HOLD_HOURS
+from trading_app.config import (
+    SESSION_EXIT_MODE, IB_DURATION_MINUTES, HOLD_HOURS, ORB_DURATION_MINUTES,
+)
 from trading_app.portfolio import Portfolio, PortfolioStrategy
 from pipeline.cost_model import get_cost_spec
 
@@ -193,11 +195,11 @@ class TestLiveIB:
 class Test1100Exclusion:
 
     def test_1100_not_in_orb_windows(self):
-        """1100 session must not be in ORB_WINDOWS_UTC."""
+        """1100 session shelved for breakout — not in ORB_WINDOWS_UTC."""
         assert "1100" not in ORB_WINDOWS_UTC
 
     def test_1100_not_in_session_exit_mode(self):
-        """1100 session must not be in SESSION_EXIT_MODE."""
+        """1100 session shelved — not in SESSION_EXIT_MODE."""
         assert "1100" not in SESSION_EXIT_MODE
 
     def test_engine_does_not_create_1100_orb(self):
@@ -242,15 +244,14 @@ class TestIBConditionalExits:
                                    orb_high=2710.0, orb_low=2700.0):
         """Build 1000 ORB, trigger long break, and enter E1 trade.
 
-        1000 ORB window: 00:00-00:05 UTC on trading day.
+        1000 ORB window: 00:00 to 00:00+ORB_DURATION UTC on trading day.
+        Uses session-specific duration from config (variable aperture).
         Returns the timestamp base for further bar generation.
         """
+        orb_dur = ORB_DURATION_MINUTES.get("1000", 5)
         ts_base = datetime(td.year, td.month, td.day, 0, 0, tzinfo=timezone.utc)
 
         # Feed IB bars before the 1000 window (23:00-00:00 UTC)
-        ib_start = datetime(td.year - (1 if td.month == 1 and td.day == 1 else 0),
-                            td.month, td.day, 0, 0, tzinfo=timezone.utc) - timedelta(hours=1)
-        # Just feed a few IB bars to establish range
         prev_day = td - timedelta(days=1)
         ib_ts = datetime(prev_day.year, prev_day.month, prev_day.day,
                          23, 0, tzinfo=timezone.utc)
@@ -258,17 +259,17 @@ class TestIBConditionalExits:
             engine.on_bar(_bar(ib_ts + timedelta(minutes=i),
                                2700, 2720, 2680, 2705))
 
-        # Build 1000 ORB (00:00-00:05 UTC)
-        for i in range(5):
+        # Build 1000 ORB (00:00 to 00:00+orb_dur UTC)
+        for i in range(orb_dur):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i),
                                orb_low, orb_high, orb_low, orb_low + 5))
 
-        # Break bar at 00:05: close > ORB high
-        engine.on_bar(_bar(ts_base + timedelta(minutes=5),
+        # Break bar at orb_dur: close > ORB high
+        engine.on_bar(_bar(ts_base + timedelta(minutes=orb_dur),
                            orb_high - 1, orb_high + 5, orb_high - 2, orb_high + 1))
 
-        # E1 fill bar at 00:06
-        fill_bar = _bar(ts_base + timedelta(minutes=6),
+        # E1 fill bar at orb_dur+1
+        fill_bar = _bar(ts_base + timedelta(minutes=orb_dur + 1),
                         orb_high + 2, orb_high + 5, orb_high + 1, orb_high + 3)
         engine.on_bar(fill_bar)
 
@@ -299,7 +300,7 @@ class TestIBConditionalExits:
         # IB completes at 01:00 UTC (23:00 + 120 min)
         # Feed bars to complete IB
         ib_end = datetime(2024, 1, 5, 1, 0, tzinfo=timezone.utc)
-        t = ts_base + timedelta(minutes=7)
+        t = ts_base + timedelta(minutes=ORB_DURATION_MINUTES.get("1000", 5) + 2)
         while t < ib_end:
             engine.on_bar(_bar(t, 2710, 2715, 2705, 2712))
             t += timedelta(minutes=1)
@@ -330,7 +331,7 @@ class TestIBConditionalExits:
 
         # Feed bars to complete IB
         ib_end = datetime(2024, 1, 5, 1, 0, tzinfo=timezone.utc)
-        t = ts_base + timedelta(minutes=7)
+        t = ts_base + timedelta(minutes=ORB_DURATION_MINUTES.get("1000", 5) + 2)
         while t < ib_end:
             engine.on_bar(_bar(t, 2710, 2715, 2705, 2712))
             t += timedelta(minutes=1)
@@ -375,7 +376,7 @@ class TestIBConditionalExits:
 
         # Complete IB and break aligned
         ib_end = datetime(2024, 1, 5, 1, 0, tzinfo=timezone.utc)
-        t = ts_base + timedelta(minutes=7)
+        t = ts_base + timedelta(minutes=ORB_DURATION_MINUTES.get("1000", 5) + 2)
         while t < ib_end:
             engine.on_bar(_bar(t, 2710, 2715, 2705, 2712))
             t += timedelta(minutes=1)
@@ -414,7 +415,7 @@ class TestIBConditionalExits:
 
         # Complete IB and break aligned
         ib_end = datetime(2024, 1, 5, 1, 0, tzinfo=timezone.utc)
-        t = ts_base + timedelta(minutes=7)
+        t = ts_base + timedelta(minutes=ORB_DURATION_MINUTES.get("1000", 5) + 2)
         while t < ib_end:
             engine.on_bar(_bar(t, 2710, 2715, 2705, 2712))
             t += timedelta(minutes=1)
@@ -456,13 +457,14 @@ class TestEarlyExitSkipInHold7h:
             engine.on_bar(_bar(ib_ts + timedelta(minutes=i), 2700, 2720, 2680, 2705))
 
         ts_base = datetime(td.year, td.month, td.day, 0, 0, tzinfo=timezone.utc)
-        # Build 1000 ORB (00:00-00:05)
-        for i in range(5):
+        orb_dur = ORB_DURATION_MINUTES.get("1000", 5)
+        # Build 1000 ORB (00:00 to 00:00+orb_dur)
+        for i in range(orb_dur):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2710, 2700, 2705))
         # Break long
-        engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2709, 2715, 2708, 2711))
+        engine.on_bar(_bar(ts_base + timedelta(minutes=orb_dur), 2709, 2715, 2708, 2711))
         # E1 fill
-        engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2712, 2715, 2711, 2713))
+        engine.on_bar(_bar(ts_base + timedelta(minutes=orb_dur + 1), 2712, 2715, 2711, 2713))
 
         entered = [t for t in engine.active_trades if t.state == TradeState.ENTERED]
         assert len(entered) == 1
@@ -470,7 +472,7 @@ class TestEarlyExitSkipInHold7h:
 
         # Complete IB and break aligned (long)
         ib_end = datetime(td.year, td.month, td.day, 1, 0, tzinfo=timezone.utc)
-        t = ts_base + timedelta(minutes=7)
+        t = ts_base + timedelta(minutes=ORB_DURATION_MINUTES.get("1000", 5) + 2)
         while t < ib_end:
             engine.on_bar(_bar(t, 2710, 2715, 2705, 2712))
             t += timedelta(minutes=1)
@@ -526,7 +528,8 @@ class TestIBAlreadyOpposed:
             engine.on_bar(_bar(ib_ts + timedelta(minutes=i), 2705, 2710, 2702, 2706))
 
         ts_base = datetime(td.year, td.month, td.day, 0, 0, tzinfo=timezone.utc)
-        for i in range(5):
+        orb_dur = ORB_DURATION_MINUTES.get("1000", 5)
+        for i in range(orb_dur):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2702, 2710, 2700, 2705))
 
         # Force IB to be complete and broken SHORT (simulating the scenario)
@@ -537,11 +540,11 @@ class TestIBAlreadyOpposed:
         engine.ib.break_ts = ts_base + timedelta(minutes=50)
 
         # Trigger ORB LONG break (close > 2710)
-        events = engine.on_bar(_bar(ts_base + timedelta(minutes=5),
+        events = engine.on_bar(_bar(ts_base + timedelta(minutes=orb_dur),
                                     2709, 2715, 2708, 2711))
 
         # E1 armed on break bar — fills on next bar
-        next_events = engine.on_bar(_bar(ts_base + timedelta(minutes=6),
+        next_events = engine.on_bar(_bar(ts_base + timedelta(minutes=orb_dur + 1),
                                          2712, 2715, 2711, 2713))
 
         reject_events = [e for e in next_events if e.event_type == "REJECT"]

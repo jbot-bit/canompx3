@@ -26,9 +26,10 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 
 from pipeline.cost_model import CostSpec, to_r_multiple, get_session_cost_spec
+from pipeline.dst import DYNAMIC_ORB_RESOLVERS
 from trading_app.config import (
     ALL_FILTERS, EARLY_EXIT_MINUTES, SESSION_EXIT_MODE,
-    IB_DURATION_MINUTES, HOLD_HOURS,
+    IB_DURATION_MINUTES, HOLD_HOURS, ORB_DURATION_MINUTES,
 )
 from trading_app.portfolio import Portfolio, PortfolioStrategy
 
@@ -39,13 +40,14 @@ from trading_app.portfolio import Portfolio, PortfolioStrategy
 # =========================================================================
 
 ORB_WINDOWS_UTC = {
-    # label: (start_hour_utc, start_minute, duration_minutes)
-    "0900": (23, 0, 5),   # 09:00 Brisbane = 23:00 UTC
-    "1000": (0, 0, 5),    # 10:00 Brisbane = 00:00 UTC
-    # 1100 PERMANENTLY OFF for breakout (structurally mean-reverting, 74% double-break)
-    "1800": (8, 0, 5),    # 18:00 Brisbane = 08:00 UTC
-    "2300": (13, 0, 5),   # 23:00 Brisbane = 13:00 UTC
-    "0030": (14, 30, 5),  # 00:30 Brisbane = 14:30 UTC
+    # label: (start_hour_utc, start_minute)
+    # Duration is session-specific — looked up from config.ORB_DURATION_MINUTES
+    "0900": (23, 0),      # 09:00 Brisbane = 23:00 UTC  (5m ORB)
+    "1000": (0, 0),       # 10:00 Brisbane = 00:00 UTC  (15m ORB — variable aperture)
+    # 1100 OFF for breakout (shelved — 74% double-break, may revisit with fade/reversal)
+    "1800": (8, 0),       # 18:00 Brisbane = 08:00 UTC  (5m ORB)
+    "2300": (13, 0),      # 23:00 Brisbane = 13:00 UTC  (5m ORB)
+    "0030": (14, 30),     # 00:30 Brisbane = 14:30 UTC  (5m ORB)
 }
 
 
@@ -218,13 +220,42 @@ class ExecutionEngine:
 
         # Initialize ORB windows for this trading day
         # Trading day in UTC: starts at 23:00 UTC on prev calendar day
-        for label, (hour, minute, duration) in ORB_WINDOWS_UTC.items():
+        # Duration is session-specific (variable aperture from config)
+
+        # Fixed sessions: static UTC offsets from Brisbane time
+        for label, (hour, minute) in ORB_WINDOWS_UTC.items():
+            duration = ORB_DURATION_MINUTES.get(label, 5)
             if hour >= 23:
                 base_date = prev_day
             else:
                 base_date = trading_day
             start = datetime(base_date.year, base_date.month, base_date.day,
                              hour, minute, tzinfo=timezone.utc)
+            end = start + timedelta(minutes=duration)
+            self.orbs[label] = LiveORB(
+                label=label,
+                window_start_utc=start,
+                window_end_utc=end,
+            )
+
+        # Dynamic sessions: DST-aware, resolved per-day
+        from zoneinfo import ZoneInfo
+        _brisbane = ZoneInfo("Australia/Brisbane")
+        _utc = ZoneInfo("UTC")
+        for label, resolver in DYNAMIC_ORB_RESOLVERS.items():
+            # Only create ORB if we have strategies for this session
+            if not any(s.orb_label == label for s in self.portfolio.strategies):
+                continue
+            bris_h, bris_m = resolver(trading_day)
+            duration = ORB_DURATION_MINUTES.get(label, 5)
+            # Determine Brisbane calendar date (before 09:00 = next day)
+            if bris_h < 9:
+                cal_date = trading_day + timedelta(days=1)
+            else:
+                cal_date = trading_day
+            local_start = datetime(cal_date.year, cal_date.month, cal_date.day,
+                                   bris_h, bris_m, 0, tzinfo=_brisbane)
+            start = local_start.astimezone(_utc).replace(tzinfo=timezone.utc)
             end = start + timedelta(minutes=duration)
             self.orbs[label] = LiveORB(
                 label=label,

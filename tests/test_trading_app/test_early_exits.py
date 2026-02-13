@@ -94,7 +94,11 @@ class TestEarlyExitConfig:
         assert "1100" not in EARLY_EXIT_MINUTES
 
     def test_all_active_sessions_present(self):
-        assert set(EARLY_EXIT_MINUTES.keys()) == {"0900", "1000", "1800", "2300", "0030"}
+        expected = {
+            "0900", "1000", "1800", "2300", "0030",
+            "US_EQUITY_OPEN", "US_DATA_OPEN", "LONDON_OPEN",
+        }
+        assert set(EARLY_EXIT_MINUTES.keys()) == expected
 
 
 # ============================================================================

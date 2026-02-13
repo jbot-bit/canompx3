@@ -71,7 +71,19 @@ CREATE TABLE IF NOT EXISTS bars_5m (
 # The ORB is the high-low range of the first 5 minutes (configurable).
 # A "break" occurs when a 1-min bar closes above orb_high (long) or
 # below orb_low (short). See pipeline/build_daily_features.py for logic.
-ORB_LABELS = ["0900", "1000", "1100", "1800", "2300", "0030"]
+ORB_LABELS_FIXED = ["0900", "1000", "1100", "1800", "2300", "0030"]
+
+# Dynamic sessions: DST-aware windows that track specific market events
+# regardless of daylight saving time changes. Resolved per-day by
+# pipeline/dst.py resolvers.
+#
+#   US_EQUITY_OPEN  - NYSE cash open at 09:30 ET (MES, MNQ)
+#   US_DATA_OPEN    - US economic data release at 08:30 ET (MGC)
+#   LONDON_OPEN     - London metals open at 08:00 London time (MGC)
+ORB_LABELS_DYNAMIC = ["US_EQUITY_OPEN", "US_DATA_OPEN", "LONDON_OPEN"]
+
+# Combined label list — used by schema generation and feature builders
+ORB_LABELS = ORB_LABELS_FIXED + ORB_LABELS_DYNAMIC
 
 
 def _build_daily_features_ddl() -> str:
@@ -135,7 +147,13 @@ CREATE TABLE IF NOT EXISTS daily_features (
     -- Used as regime filter (vol expansion/contraction detection)
     atr_20            DOUBLE,
 
-    -- ORB columns (6 ORBs x 9 columns = 54)
+    -- DST flags: whether US/UK was in daylight saving time on this trading day.
+    -- Used by dynamic sessions (US_EQUITY_OPEN, US_DATA_OPEN, LONDON_OPEN)
+    -- to verify correct window resolution.
+    us_dst            BOOLEAN,
+    uk_dst            BOOLEAN,
+
+    -- ORB columns (9 fixed + 3 dynamic = 12 sessions x 9 columns = 108)
 {orb_block}
 
     PRIMARY KEY (symbol, trading_day, orb_minutes)

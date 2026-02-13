@@ -54,7 +54,10 @@ from trading_app.db_manager import (
 class TestOrbLabelsSync:
     """ORB_LABELS must be consistent across all modules."""
 
-    EXPECTED_ORB_LABELS = ["0900", "1000", "1100", "1800", "2300", "0030"]
+    EXPECTED_ORB_LABELS = [
+        "0900", "1000", "1100", "1800", "2300", "0030",
+        "US_EQUITY_OPEN", "US_DATA_OPEN", "LONDON_OPEN",
+    ]
 
     def test_orb_labels_exact(self):
         """ORB_LABELS matches expected values exactly."""
@@ -66,13 +69,14 @@ class TestOrbLabelsSync:
 
     def test_daily_features_columns_match_orb_labels(self):
         """daily_features DDL has columns for every ORB label and no extras."""
-        orb_col_pattern = re.compile(r'orb_(\d{4})_\w+')
+        # Match both fixed (4-digit) and dynamic (alpha) ORB column prefixes
+        orb_col_pattern = re.compile(r'orb_([A-Za-z0-9_]+?)_(?:high|low|size|break_dir|break_ts|outcome|mae_r|mfe_r|double_break)\b')
         found_labels = set()
         for match in orb_col_pattern.finditer(DAILY_FEATURES_SCHEMA):
             found_labels.add(match.group(1))
 
         assert found_labels == set(ORB_LABELS), (
-            f"DDL ORB columns {sorted(found_labels)} != ORB_LABELS {ORB_LABELS}"
+            f"DDL ORB columns {sorted(found_labels)} != ORB_LABELS {sorted(ORB_LABELS)}"
         )
 
 
@@ -171,11 +175,17 @@ class TestGridParamsSync:
         assert len(CONFIRM_BARS_OPTIONS) == len(set(CONFIRM_BARS_OPTIONS))
 
     def test_grid_size(self):
-        """Total grid size matches expected formula (E3 uses CB1 only)."""
+        """Total grid size matches expected formula (E3 uses CB1 only).
+
+        9 ORBs (6 fixed + 3 dynamic) x 6 RRs x 5 CBs x 13 filters x 2 EMs
+        E1: 9 x 6 x 5 x 13 = 3510
+        E3: 9 x 6 x 1 x 13 = 702  (E3 always CB1)
+        Total: 4212
+        """
         e1 = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * len(ALL_FILTERS)
         e3 = len(ORB_LABELS) * len(RR_TARGETS) * 1 * len(ALL_FILTERS)
         expected = e1 + e3
-        assert expected == 2808
+        assert expected == 4212
 
 
 class TestEntryModelsSync:
@@ -262,7 +272,7 @@ class TestStrategyIdSync:
                             sid = make_strategy_id("MGC", orb, em, rr, cb, fk)
                             assert sid not in ids, f"Duplicate ID: {sid}"
                             ids.add(sid)
-        assert len(ids) == 2808
+        assert len(ids) == 4212
 
 
 # ============================================================================

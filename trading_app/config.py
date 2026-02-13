@@ -6,7 +6,8 @@ TERMINOLOGY & DEFINITIONS
 ==========================================================================
 
 ORB (Opening Range Breakout):
-  The high-low range of the first 5 minutes after a session opens.
+  The high-low range formed in the first N minutes after a session opens.
+  Duration is session-specific (see ORB_DURATION_MINUTES below).
   When price breaks above the ORB high or below the ORB low, it signals
   a potential directional move. All times are Australia/Brisbane (UTC+10).
 
@@ -14,7 +15,7 @@ ORB SESSIONS (defined in pipeline/init_db.py as ORB_LABELS):
   0900 - Brisbane market open (23:00 UTC prev day). Primary US-session ORB.
          Largest ORBs in current regime. Best edge with E1 momentum entry.
   1000 - 1 hour after Brisbane open (00:00 UTC). Secondary US-session ORB.
-         Strong long bias; short side is negative expectancy.
+         Uses 15m ORB (variable aperture). Strong long bias; IB-conditional exits.
   1100 - 2 hours after Brisbane open (01:00 UTC). Inconsistent edge.
   1800 - GLOBEX open / London close (08:00 UTC). Best with E3 retrace entry.
          Price often spikes through ORB then retraces, rewarding limit orders.
@@ -180,6 +181,39 @@ ALL_FILTERS: dict[str, StrategyFilter] = {
 # See entry_rules.py for implementation: detect_confirm() + resolve_entry()
 ENTRY_MODELS = ["E1", "E3"]
 
+# =========================================================================
+# Variable Aperture: session-specific ORB duration (minutes)
+# =========================================================================
+# Research (scripts/analyze_mgc_15m_orb.py, 2026-02-13):
+#   0900: 5m is OPTIMAL (ExpR +0.399, Sharpe 0.248). 15m/30m destroy edge.
+#   1000: 15m BETTER than 5m (ExpR +0.206, Sharpe 0.122, N=133 at G6+).
+#         5m baseline near-zero at G6+. 15m gives 2x trades + better edge.
+#   1100: OFF for breakout (shelved — may revisit with fade/reversal model).
+#   1800: 5m is OPTIMAL (ExpR +0.227, Sharpe 0.198). 15m/30m crush edge.
+#   2300: All negative at all windows.
+#   0030: All negative at all windows.
+ORB_DURATION_MINUTES: dict[str, int] = {
+    "0900": 5,
+    "1000": 15,
+    "1800": 5,
+    "2300": 5,
+    "0030": 5,
+    # Dynamic sessions (DST-aware, resolved per-day by pipeline/dst.py)
+    "US_EQUITY_OPEN": 5,   # NYSE cash open 09:30 ET (MES, MNQ)
+    "US_DATA_OPEN": 5,     # Econ data release 08:30 ET (MGC)
+    "LONDON_OPEN": 5,      # London metals 08:00 LT (MGC)
+}
+
+# =========================================================================
+# Tradeable instruments (research-validated)
+# =========================================================================
+# MCL (Micro Crude Oil): PERMANENTLY NO-GO for breakout strategies.
+#   Tested: 5m/15m/30m ORBs, all sessions, NYMEX-focused, breakout + fade.
+#   Oil is structurally mean-reverting (47-80% double break). No edge exists.
+#   See memory/mcl_research.md for full scientific validation.
+# MNQ (Micro Nasdaq): WEAK edge (~half MGC). Only 2 years data. Held lightly.
+TRADEABLE_INSTRUMENTS = ["MGC"]
+
 # Timed early exit: kill losers at N minutes after fill.
 # Research (artifacts/EARLY_EXIT_RULES.md, G4+ filter):
 #   0900: 15 min -> +26% Sharpe, 38% tighter MaxDD (only 24% recover)
@@ -193,6 +227,10 @@ EARLY_EXIT_MINUTES: dict[str, int | None] = {
     "1800": None,
     "2300": None,
     "0030": None,
+    # Dynamic sessions: no early exit until validated
+    "US_EQUITY_OPEN": None,
+    "US_DATA_OPEN": None,
+    "LONDON_OPEN": None,
 }
 
 # Session exit modes: how each session manages target/stop after entry.
@@ -204,6 +242,10 @@ SESSION_EXIT_MODE: dict[str, str] = {
     "1800": "fixed_target",
     "2300": "fixed_target",
     "0030": "fixed_target",
+    # Dynamic sessions: fixed_target until IB research is done
+    "US_EQUITY_OPEN": "fixed_target",
+    "US_DATA_OPEN": "fixed_target",
+    "LONDON_OPEN": "fixed_target",
 }
 
 # IB (Initial Balance) = first 120 minutes from 09:00 Brisbane (23:00 UTC).

@@ -35,6 +35,7 @@ from pipeline.paths import GOLD_DB_PATH
 from pipeline.asset_configs import get_asset_config, list_instruments
 from pipeline.init_db import ORB_LABELS
 from pipeline.cost_model import get_cost_spec, pnl_points_to_r, CostSpec
+from pipeline.dst import is_us_dst, is_uk_dst, DYNAMIC_ORB_RESOLVERS
 
 # =============================================================================
 # CONSTANTS
@@ -180,6 +181,10 @@ def _orb_utc_window(trading_day: date, orb_label: str,
 
     The ORB starts at the local Brisbane time and lasts orb_minutes.
 
+    For fixed sessions (0900, 1000, etc.), the Brisbane hour is constant.
+    For dynamic sessions (US_EQUITY_OPEN, US_DATA_OPEN, LONDON_OPEN),
+    the Brisbane hour is resolved per-day based on DST via pipeline/dst.py.
+
     Example: 0900 ORB with 5 min duration on trading_day 2024-01-05
       local start = 2024-01-05 09:00 Brisbane
       local end   = 2024-01-05 09:05 Brisbane
@@ -192,7 +197,10 @@ def _orb_utc_window(trading_day: date, orb_label: str,
       local start = 2024-01-06 00:30 Brisbane (next calendar day)
       UTC start   = 2024-01-05 14:30 UTC
     """
-    hour, minute = ORB_TIMES_LOCAL[orb_label]
+    if orb_label in DYNAMIC_ORB_RESOLVERS:
+        hour, minute = DYNAMIC_ORB_RESOLVERS[orb_label](trading_day)
+    else:
+        hour, minute = ORB_TIMES_LOCAL[orb_label]
 
     # Determine the Brisbane calendar date for this ORB time
     # Trading day 09:00 Brisbane starts at calendar_date = trading_day
@@ -250,21 +258,28 @@ def _break_detection_window(trading_day: date, orb_label: str,
     Return the [start, end) UTC window for break detection.
 
     Start: end of ORB window.
-    End: start of next ORB window, or end of trading day if last ORB.
+    End: start of next ORB window (by UTC time), or end of trading day
+         if this is the last ORB of the day.
 
-    ORB order within a trading day (Brisbane times):
-      0900, 1000, 1100, 1800, 2300, 0030
+    With dynamic sessions, ORB ordering is determined by actual UTC start
+    time (which varies with DST), not by list position.
     """
-    _, orb_end = _orb_utc_window(trading_day, orb_label, orb_minutes)
+    orb_start, orb_end = _orb_utc_window(trading_day, orb_label, orb_minutes)
 
-    # Find the next ORB in sequence
-    orb_idx = ORB_LABELS.index(orb_label)
-    if orb_idx < len(ORB_LABELS) - 1:
-        next_label = ORB_LABELS[orb_idx + 1]
-        next_start, _ = _orb_utc_window(trading_day, next_label, orb_minutes)
+    # Collect all ORB start times, find the next one after our end
+    next_start = None
+    for label in ORB_LABELS:
+        if label == orb_label:
+            continue
+        other_start, _ = _orb_utc_window(trading_day, label, orb_minutes)
+        if other_start >= orb_end:
+            if next_start is None or other_start < next_start:
+                next_start = other_start
+
+    if next_start is not None:
         return orb_end, next_start
     else:
-        # Last ORB (0030) — window until end of trading day
+        # Last ORB of the day — window until end of trading day
         _, td_end = compute_trading_day_utc_range(trading_day)
         return orb_end, td_end
 
@@ -616,6 +631,10 @@ def build_features_for_day(con: duckdb.DuckDBPyConnection, symbol: str,
         "orb_minutes": orb_minutes,
         "bar_count_1m": len(bars_df),
     }
+
+    # DST flags for this trading day
+    row["us_dst"] = is_us_dst(trading_day)
+    row["uk_dst"] = is_uk_dst(trading_day)
 
     # Daily OHLC from all 1m bars
     if not bars_df.empty:

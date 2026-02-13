@@ -79,6 +79,15 @@ COST_SPECS = {
         tick_size=0.25,
         min_ticks_floor=10,
     ),
+    "MES": CostSpec(
+        instrument="MES",
+        point_value=5.0,         # $5 per index point
+        commission_rt=1.24,      # Micro contract RT commission
+        spread_doubled=1.25,     # 0.25pt spread * $5 * 2 sides (tick = 0.25)
+        slippage=1.25,           # 0.25pt slippage * $5 * 2 sides
+        tick_size=0.25,          # $0.25/point minimum increment
+        min_ticks_floor=10,      # 2.5pt = $12.50 minimum risk
+    ),
     "MCL": CostSpec(
         instrument="MCL",
         point_value=100.0,       # 100 barrels * $1/barrel per point
@@ -109,6 +118,14 @@ SESSION_SLIPPAGE_MULT = {
     },
     "MNQ": {
         "0900": 1.0,   # 23:00 UTC -- NQ liquid even in Asian
+        "1000": 1.0,   # 00:00 UTC -- early Asian
+        "1100": 0.9,   # 01:00 UTC -- moderate
+        "1800": 0.9,   # 08:00 UTC -- pre-London
+        "2300": 0.8,   # 13:00 UTC -- NY session, best liquidity
+        "0030": 0.9,   # 14:30 UTC -- moderate NY
+    },
+    "MES": {
+        "0900": 1.0,   # 23:00 UTC -- ES/MES liquid 24h
         "1000": 1.0,   # 00:00 UTC -- early Asian
         "1100": 0.9,   # 01:00 UTC -- moderate
         "1800": 0.9,   # 08:00 UTC -- pre-London
