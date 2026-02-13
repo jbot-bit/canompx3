@@ -49,6 +49,14 @@ ASSET_CONFIGS = {
         "minimum_start_date": date(2024, 2, 4),
         "schema_required": "ohlcv-1m",
     },
+    "MCL": {
+        "dbn_path": PROJECT_ROOT / "DB" / "MCL_DB",
+        "symbol": "MCL",
+        "outright_pattern": re.compile(r'^MCL[FGHJKMNQUVXZ]\d{1,2}$'),
+        "prefix_len": 3,
+        "minimum_start_date": date(2021, 7, 11),
+        "schema_required": "ohlcv-1m",
+    },
     "NQ": {
         "dbn_path": None,
         "symbol": "NQ",
