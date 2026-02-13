@@ -68,6 +68,12 @@ HOT_MIN_STABILITY = 0.6
 # TIER 3 (REGIME): Gated by strategy_fitness. Full-period validated but
 #   may be regime-dependent. Only trade when fitness = FIT.
 #
+# EXIT MODES (see config.py SESSION_EXIT_MODE):
+#   0900 = fixed_target (set and forget, no IB logic)
+#   1000 = ib_conditional (IB aligned=hold 7h, opposed=kill at market)
+#   1100 = PERMANENTLY OFF (removed from ORB_WINDOWS_UTC, hard exclusion)
+#   1800/2300/0030 = fixed_target
+#
 # Updated 2026-02-13: Added HOT tier from rolling eval results.
 # G4 families pass 8-9/10 recent windows with +0.25-0.31R ExpR.
 # G3/G4 failed 10-year validation (57-67% years positive) but are

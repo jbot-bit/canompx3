@@ -101,17 +101,28 @@ Example: 10pt ORB, RR2.0 = 20pt target, 10pt stop.
 **Full-period stats (E1 CB2 RR2.5 G4+):** N=125, WR=40%, TotalR=+38.2, AvgR=+0.31
 **Rolling eval:** TRANSITIONING (score 0.42-0.54, passes 9-11/19 windows). High ExpR but inconsistent.
 
-### 1000 Asia Mid-Morning — Momentum (LONG ONLY)
+### 1000 Asia Mid-Morning — Momentum (LONG ONLY) + IB-Conditional Exit
 
 | Parameter | Value |
 |-----------|-------|
 | Entry model | **E1** (market on next bar) |
 | Filter | **G3+** (CORE tier, smallest stable filter for 1000) |
-| RR target | **2.5** |
+| RR target | **2.5** (fixed target while IB pending) |
 | Confirm bars | **CB2** |
 | Direction | **LONG ONLY.** 1000 short is negative (WR=30%, AvgR=-0.04). |
 | Early exit | **Kill losers at 30 minutes.** Only 12% of 30-min losers eventually win. 3.7x Sharpe improvement. |
+| Exit mode | **IB-conditional** (see below) |
 | Do NOT | Kill at 10 min (too early, actively harmful). |
+
+**IB-Conditional Exit (1000 only):**
+1. On entry, trade starts in `ib_pending` mode with fixed target active.
+2. IB = 120 minutes from 0900 (23:00 UTC). After IB forms, detect first break of IB high or low.
+3. **IB aligned** (breaks same direction as ORB trade): cancel fixed target, hold for 7 hours. Stop still active.
+4. **IB opposed** (breaks opposite direction): exit at market immediately.
+5. **IB not yet broken**: keep fixed target active (limbo defense -- don't sit naked).
+6. Opposed kill is **regime insurance** (stop usually fires before IB breaks, saving ~0R), not active alpha.
+
+Config: `SESSION_EXIT_MODE["1000"] = "ib_conditional"`, `IB_DURATION_MINUTES = 120`, `HOLD_HOURS = 7`.
 
 **Rolling eval:** STABLE (score 0.68-0.83, passes 13-16/19 windows). The MOST stable family.
 **Nested 15m ORB:** 1000 is the ONLY session where 15m ORB beats 5m (+0.208R premium, 90% of pairs improve).
@@ -226,18 +237,29 @@ Many filter variants produce the SAME trade set. Always report both counts.
 *Source: `trading_app/live_config.py`*
 
 ### Tier 1: CORE (always on)
+| Family | Session | EM | Filter | Exit Mode | Gate |
+|--------|---------|-----|--------|-----------|------|
+| 0900_E1_ORB_G5 | 0900 | E1 | G5+ | Fixed target | None (always trade) |
+| 1000_E1_ORB_G5 | 1000 | E1 | G5+ | IB-conditional | None (always trade) |
+
+G5 is the minimum filter that survives 10-year yearly robustness (80%+ years positive).
+
+### Tier 2: HOT (rolling-eval gated)
 | Family | Session | EM | Filter | Gate |
 |--------|---------|-----|--------|------|
-| 1000_E1_ORB_G3 | 1000 | E1 | G3+ | None (always trade) |
+| 0900_E1_ORB_G4 | 0900 | E1 | G4+ | Rolling stability >= 0.6 |
+| 0900_E3_ORB_G4 | 0900 | E3 | G4+ | Rolling stability >= 0.6 |
+| 1000_E1_ORB_G4 | 1000 | E1 | G4+ | Rolling stability >= 0.6 |
 
-Rolling eval: STABLE (score 0.68-0.83). Positive in 13-16 of 19 windows.
+G4 families pass 8-9/10 recent windows but fail 10-year validation (57-67% years positive). Auto-disabled when regime shifts.
 
-### Tier 2: REGIME (fitness-gated)
+### Tier 3: REGIME (fitness-gated)
 | Family | Session | EM | Filter | Gate |
 |--------|---------|-----|--------|------|
-| 0900_E1_ORB_G4 | 0900 | E1 | G4+ | high_vol (must be FIT) |
+| 0900_E1_ORB_G6 | 0900 | E1 | G6+ | high_vol (must be FIT) |
+| 1800_E3_ORB_G6 | 1800 | E3 | G6+ | high_vol (must be FIT) |
 
-Rolling eval: TRANSITIONING (score 0.42-0.54). Excellent when vol is high, negative when low.
+Rolling eval: TRANSITIONING. Excellent when vol is high, negative when low.
 
 ### Portfolio Parameters
 - Max concurrent positions: 3
@@ -269,6 +291,9 @@ Rolling eval: TRANSITIONING (score 0.42-0.54). Excellent when vol is high, negat
 | 1000 session most stable (rolling) | Score 0.68-0.83, 13-16/19 windows | VALIDATED |
 | CB1-CB5 identical for E3 | 100% same entry price, 93-96% same outcome | PROVEN |
 | IB 120m direction alignment | Opposed=3% WR (structural). Cross-validated 0900+1000. | VALIDATED |
+| 1000 IB-conditional exit | Aligned=hold 7h, opposed=kill. Implemented in execution_engine.py. | DEPLOYED |
+| 0900 = fixed target (no IB) | IB blended Sharpe -0.025 vs fixed. Fixed wins. | PROVEN |
+| 1100 permanent exclusion | 74% double-break, all signals failed. Hard exclusion in code. | DEPLOYED |
 
 ### Confirmed NO-GOs
 | Idea | Evidence | Do NOT revisit |
@@ -280,15 +305,18 @@ Rolling eval: TRANSITIONING (score 0.42-0.54). Excellent when vol is high, negat
 | Session fade (Asia->London) | N=777, ExpR=-0.162 | Ever |
 | Gap fade | Avg gap 0.80pt, insufficient signal | Ever |
 | Systematic retrace dwell | Kills winners at 1000; neutral/harmful pooled | As systematic rule |
+| Pyramiding (adding to winners) | Never tested -- structural NO-GO. Adding to correlated intraday positions increases tail risk without new signal. | Ever |
 | ADX all-regime overlay | Low-vol ExpR negative | Unless regime-gated |
 | Inside Day filter | All WORSE vs G4 baseline on 0900/1000. N=17-27 on compound. | Ever |
 | Ease Day filter (close vs typical) | All WORSE standalone. EASE+G4 1000 BEAT on tiny N=66-73, noise. | Ever |
 | V-Box CLEAR filter (E1 momentum) | 0900 E1 G4: CLEAR +0.019 Sharpe, 98% trades CLEAR. Filters nothing. | As E1 filter |
 | 1100 early exit (30m time stop) | ExpR -0.051 -> -0.028 (still negative). MaxDD 25% tighter. Kills 21 winners per 129 cuts. | Unless edge found |
 
-### 1100 Session Status: SHELVED (2026-02-13)
+### 1100 Session Status: PERMANENTLY OFF for breakout (2026-02-13)
 
-**Status**: No tradeable edge in current regime. Shelved, not permanent NO-GO.
+**Status**: No tradeable edge. Permanently excluded from breakout trading.
+Hard exclusion in execution_engine.py (removed from ORB_WINDOWS_UTC),
+portfolio.py, and strategy_fitness.py SQL WHERE clauses.
 
 **Research conducted**:
 1. **Zero-lookahead signals**: Tested 0900 alignment, gap direction, prior day trend, ATR regime, 0900 ORB size. **None produced actionable signal.** Best split (G8+ aligned vs opposed) has N=42/56 -- too thin, yearly inconsistent.
@@ -298,7 +326,7 @@ Rolling eval: TRANSITIONING (score 0.42-0.54). Excellent when vol is high, negat
 
 **Root cause**: 1100 has 74% double-break rate (structurally mean-reverting). Breakout strategy fights session structure. The problem isn't fat-tail losers -- it's insufficient winners.
 
-**Revisit conditions**: New regime with lower double-break rate, or new entry model (fade/reversal) that exploits mean-reversion.
+**Revisit conditions**: Only with a fade/reversal model that exploits mean-reversion. Do NOT revisit with breakout logic.
 
 **Hypotheses tested and failed**:
 - 0900 break direction alignment: No signal (yearly inconsistent, G8+ N too thin)
