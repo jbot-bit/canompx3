@@ -18,6 +18,8 @@ from trading_app.portfolio import (
     Portfolio,
     compute_position_size,
     compute_position_size_prop,
+    compute_vol_scalar,
+    compute_position_size_vol_scaled,
     load_validated_strategies,
     diversify_strategies,
     build_portfolio,
@@ -148,6 +150,62 @@ class TestPositionSizing:
     def test_prop_firm_zero_drawdown(self):
         contracts = compute_position_size_prop(0.0, 2.0, 10.0, _cost())
         assert contracts == 0
+
+
+class TestVolScalar:
+
+    def test_median_atr_equals_current(self):
+        """When ATR == median, scalar = 1.0."""
+        assert compute_vol_scalar(25.0, 25.0) == pytest.approx(1.0)
+
+    def test_high_atr_reduces_size(self):
+        """ATR double median -> scalar = 0.5 (half size)."""
+        assert compute_vol_scalar(50.0, 25.0) == pytest.approx(0.5)
+
+    def test_low_atr_increases_size(self):
+        """ATR half median -> scalar = 1.5 (capped at max)."""
+        assert compute_vol_scalar(12.5, 25.0) == pytest.approx(1.5)
+
+    def test_clamped_at_max(self):
+        """Very low ATR clamped at max_scalar."""
+        assert compute_vol_scalar(1.0, 100.0, max_scalar=2.0) == pytest.approx(2.0)
+
+    def test_clamped_at_min(self):
+        """Very high ATR clamped at min_scalar."""
+        assert compute_vol_scalar(1000.0, 25.0, min_scalar=0.25) == pytest.approx(0.25)
+
+    def test_zero_atr_returns_one(self):
+        assert compute_vol_scalar(0.0, 25.0) == 1.0
+
+    def test_zero_median_returns_one(self):
+        assert compute_vol_scalar(25.0, 0.0) == 1.0
+
+
+class TestVolScaledPositionSizing:
+
+    def test_scalar_one_matches_base(self):
+        """vol_scalar=1.0 should give same result as compute_position_size."""
+        base = compute_position_size(25000.0, 2.0, 10.0, _cost())
+        scaled = compute_position_size_vol_scaled(25000.0, 2.0, 10.0, _cost(), 1.0)
+        assert scaled == base
+
+    def test_high_vol_fewer_contracts(self):
+        """High ATR -> scalar 0.5 -> fewer contracts."""
+        base = compute_position_size(25000.0, 2.0, 10.0, _cost())
+        scaled = compute_position_size_vol_scaled(25000.0, 2.0, 10.0, _cost(), 0.5)
+        assert scaled < base
+
+    def test_low_vol_more_contracts(self):
+        """Low ATR -> scalar 1.5 -> more contracts."""
+        base = compute_position_size(25000.0, 2.0, 10.0, _cost())
+        scaled = compute_position_size_vol_scaled(25000.0, 2.0, 10.0, _cost(), 1.5)
+        assert scaled > base
+
+    def test_zero_scalar(self):
+        assert compute_position_size_vol_scaled(25000.0, 2.0, 10.0, _cost(), 0.0) == 0
+
+    def test_zero_risk(self):
+        assert compute_position_size_vol_scaled(25000.0, 2.0, 0.0, _cost(), 1.0) == 0
 
 
 # ============================================================================

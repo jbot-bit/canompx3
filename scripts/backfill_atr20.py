@@ -82,7 +82,7 @@ def backfill_atr20(db_path: Path, dry_run: bool = False) -> int:
                     true_ranges.append(None)
 
                 # ATR(20) = SMA of last 20 TRs
-                lookback = [v for v in true_ranges[max(0, i - 19):i + 1] if v is not None]
+                lookback = [v for v in true_ranges[max(0, i - 20):i] if v is not None]
                 if lookback:
                     atr_val = round(sum(lookback) / len(lookback), 4)
                 else:

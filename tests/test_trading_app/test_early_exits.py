@@ -86,11 +86,15 @@ class TestEarlyExitConfig:
         assert EARLY_EXIT_MINUTES["1000"] == 30
 
     def test_other_sessions_none(self):
-        for label in ["1100", "1800", "2300", "0030"]:
+        for label in ["1800", "2300", "0030"]:
             assert EARLY_EXIT_MINUTES[label] is None, f"{label} should be None"
 
-    def test_all_six_sessions_present(self):
-        assert set(EARLY_EXIT_MINUTES.keys()) == {"0900", "1000", "1100", "1800", "2300", "0030"}
+    def test_1100_not_in_early_exit(self):
+        """1100 permanently off -- not in EARLY_EXIT_MINUTES."""
+        assert "1100" not in EARLY_EXIT_MINUTES
+
+    def test_all_active_sessions_present(self):
+        assert set(EARLY_EXIT_MINUTES.keys()) == {"0900", "1000", "1800", "2300", "0030"}
 
 
 # ============================================================================

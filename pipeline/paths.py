@@ -9,9 +9,21 @@ from pathlib import Path
 # Project root
 PROJECT_ROOT = Path(__file__).parent.parent
 
-# Database — override via DUCKDB_PATH env var for local-disk ingestion
+# Database — resolution order:
+#   1. DUCKDB_PATH env var (explicit override)
+#   2. local_db/gold.db (NTFS junction to C:\db — fast local disk, not OneDrive-synced)
+#   3. gold.db (project root fallback — OneDrive path, slow for writes)
 import os as _os
-GOLD_DB_PATH = Path(_os.environ["DUCKDB_PATH"]) if "DUCKDB_PATH" in _os.environ else PROJECT_ROOT / "gold.db"
+
+def _resolve_db_path() -> Path:
+    if "DUCKDB_PATH" in _os.environ:
+        return Path(_os.environ["DUCKDB_PATH"])
+    local = PROJECT_ROOT / "local_db" / "gold.db"
+    if local.exists():
+        return local
+    return PROJECT_ROOT / "gold.db"
+
+GOLD_DB_PATH = _resolve_db_path()
 
 # Data directories
 DBN_DIR = PROJECT_ROOT / "dbn"

@@ -1,6 +1,7 @@
 # Database
 gold.db
 gold.db.wal
+local_db/
 
 # Data files (large, not for VCS)
 DB/
@@ -46,6 +47,21 @@ pipeline/checkpoints/
 nul
 Thumbs.db
 Desktop.ini
+
+# Obsidian
+.obsidian/
+
+# External tools (separate repos)
+openclaw/
+llm-code-scanner/
+
+# TradingView exports
+*.xlsx
+COMEX_*.csv
+DT_V2_*.csv
+
+# MNQ scratch
+MNQ db/
 
 # Misc
 backfill_overnight.log

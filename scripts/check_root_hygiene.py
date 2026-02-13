@@ -18,15 +18,20 @@ ALLOWED_DIRS = {
     ".venv", "venv",
     # Tool caches
     ".pytest_cache", ".ruff_cache",
+    # Gitignored but may exist locally
+    ".obsidian", "openclaw", "MNQ db", "local_db",
+    # UI
+    "ui",
 }
 
 ALLOWED_FILES = {
     "CLAUDE.md", "MARKET_PLAYBOOK.md", "ROADMAP.md", "REPO_MAP.md", "README.md",
+    "TRADING_RULES.md", "TRADING_PLAN.md",
     "CANONICAL_LOGIC.txt", "CANONICAL_backfill_dbn_mgc_rules.txt",
     "CANONICAL_backfill_dbn_mgc_rules_addon.txt",
     "pyproject.toml", "requirements.txt", "ruff.toml", ".gitignore", ".ENV",
     "gold.db", "dashboard.html", "pipeline-explorer.html",
-    "Canompx3.code-workspace",
+    "Canompx3.code-workspace", ".mcp.json", "portfolio_report.json",
     # Data archives
     "GOLD_DB_FULLSIZE.zip",
     # Logs

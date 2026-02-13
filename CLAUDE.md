@@ -13,6 +13,28 @@ Raw data files contain GC (full-size Gold futures) which has ~40-70% more 1-minu
 
 ---
 
+## Document Authority
+
+| Document | Status | Scope | Conflict Rule |
+|----------|--------|-------|---------------|
+| `CLAUDE.md` | **AUTHORITY** | Code structure, commands, guardrails, AI behavior | Wins for all code decisions |
+| `TRADING_RULES.md` | **AUTHORITY** | Trading rules, research findings, NO-GOs | Wins for all trading logic |
+| `TRADING_PLAN.md` | Live | Current positions, sizing, session logic | Operational (changes frequently) |
+| `CANONICAL_LOGIC.txt` | Frozen | Cost model, R-multiples, entry rules | Read-only spec; code in config.py is the live version |
+| `CANONICAL_backfill_*.txt` | Frozen | Ingestion logic spec | Read-only spec; code in ingest_dbn_mgc.py is live |
+| `ROADMAP.md` | Live | Planned features, phase status | Updated on phase completion |
+| `REPO_MAP.md` | Auto-generated | Module index, CLI entry points | Never hand-edit; `python scripts/gen_repo_map.py` |
+| `MARKET_PLAYBOOK.md` | Reference | Session playbooks, market structure | Supplements TRADING_RULES.md |
+| `docs/ai-context/GEMINI.md` | External AI | Context for Gemini | Not authoritative for Claude |
+| `docs/ai-context/LOCAL_MODEL_CONTEXT.md` | External AI | Context for local models | Not authoritative for Claude |
+
+**Conflict resolution:** If two documents disagree:
+- Code behavior -> CLAUDE.md wins
+- Trading logic -> TRADING_RULES.md wins
+- CANONICAL_*.txt are frozen specs; the live code is truth
+
+---
+
 ## What Exists (Current State)
 
 ### Pipeline Code (`pipeline/`)
@@ -101,6 +123,36 @@ Completed research scripts, moved from `scripts/`. Not part of production pipeli
 - `DB/gold_db_fullsize_2016-2021/` — 1,557 daily `.dbn.zst` files (2016-02-01 to 2021-02-03)
 - `gold.db` — DuckDB database (created by `init_db.py`, ~10 years of data)
 
+### Database Location & Workflow (CRITICAL)
+
+There is **ONE database** (`gold.db`), but it may exist in two locations:
+
+| Location | Purpose | When to use |
+|----------|---------|-------------|
+| `<project>/gold.db` | Master copy (OneDrive-synced) | Read-only queries, dashboard, fitness checks |
+| `C:\db\gold.db` | Working copy (local disk) | **ALL heavy write operations** |
+
+**Why?** OneDrive sync conflicts with DuckDB write locks, causing 10x slowdown and lock errors.
+
+**Workflow for heavy jobs** (discovery, validation, rolling eval, outcome_builder):
+```bash
+# 1. Copy master to working location
+cmd /c copy "C:\Users\joshd\OneDrive\Desktop\Canompx3\gold.db" "C:\db\gold.db"
+
+# 2. Run job against working copy (use --db-path or DUCKDB_PATH env var)
+set DUCKDB_PATH=C:\db\gold.db
+python trading_app/strategy_discovery.py --instrument MGC
+
+# 3. Copy results back to master
+cmd /c copy "C:\db\gold.db" "C:\Users\joshd\OneDrive\Desktop\Canompx3\gold.db"
+```
+
+**Rules:**
+- NEVER run two write processes against the same DuckDB file simultaneously
+- NEVER run long write jobs against the OneDrive path
+- `pipeline/paths.py` reads `DUCKDB_PATH` env var — set it to override the default path
+- After copying back, the master is up-to-date and both copies are identical
+
 ---
 
 ## Architecture
@@ -117,11 +169,11 @@ Databento DBN files (.dbn.zst)
   → gold.db:daily_features (one row per trading day per orb_minutes)
 
   → trading_app/outcome_builder.py (pre-compute all trade outcomes)
-  → gold.db:orb_outcomes (689,310 outcomes)
-  → trading_app/strategy_discovery.py (grid search 2,808 combos)
-  → gold.db:experimental_strategies
+  → gold.db:orb_outcomes (1,380,330 outcomes — 10 years)
+  → trading_app/strategy_discovery.py (grid search 5,148 combos per instrument)
+  → gold.db:experimental_strategies (MGC 2,808 + MNQ 2,952)
   → trading_app/strategy_validator.py (6-phase validation)
-  → gold.db:validated_setups (312 strategies)
+  → gold.db:validated_setups (MGC 37 + MNQ 173 — as of 2026-02-13)
 ```
 
 ### Database Schema (DuckDB)

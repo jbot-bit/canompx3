@@ -38,30 +38,55 @@ from trading_app.strategy_fitness import compute_fitness
 @dataclass(frozen=True)
 class LiveStrategySpec:
     """Declarative specification for a live strategy family."""
-    family_id: str          # e.g. "1000_E2_ORB_G2"
-    tier: str               # "core" or "regime"
+    family_id: str          # e.g. "1000_E1_ORB_G4"
+    tier: str               # "core", "regime", or "hot"
     orb_label: str
     entry_model: str
     filter_type: str
     regime_gate: str | None  # None = always-on, "high_vol" = fitness must be FIT
+                             # "rolling" = must be STABLE in recent rolling eval
+
+
+# Lookback for HOT tier rolling stability check (recent months only).
+HOT_LOOKBACK_WINDOWS = 10
+
+# Minimum rolling stability score for HOT tier to be active.
+HOT_MIN_STABILITY = 0.6
 
 
 # The live portfolio: what we actually trade.
 #
-# TIER 1 (CORE): Always on. Both full-period validated AND present in
-#   rolling eval windows. 1000 session, G3 filter -- the smallest ORB size
-#   that passes full-period validation at 1000. G3 = ORB >= 3 points.
+# TIER 1 (CORE): Always on. Full-period validated (80%+ years positive,
+#   10-year robustness). G5 is the minimum that survives yearly robustness.
 #
-# TIER 2 (REGIME): Gated by strategy_fitness. Full-period validated but
-#   TRANSITIONING in rolling eval (score 0.42-0.54). Excellent in high-vol
-#   regimes (2025+), negative in low-vol. Only trade when fitness = FIT.
-#   This is the volatility regime switch -- turns off when market lacks
-#   expansion energy, turns on when ORB sizes indicate trending conditions.
+# TIER 2 (HOT): Rolling-eval gated. These families have strong recent-regime
+#   performance (STABLE in last 10 rolling windows) and positive full-period
+#   ExpR, but fail the strict 10-year yearly robustness test. Gated on:
+#   must be STABLE (>=0.6 weighted score) in recent rolling windows.
+#   Auto-disabled when the regime shifts.
+#
+# TIER 3 (REGIME): Gated by strategy_fitness. Full-period validated but
+#   may be regime-dependent. Only trade when fitness = FIT.
+#
+# Updated 2026-02-13: Added HOT tier from rolling eval results.
+# G4 families pass 8-9/10 recent windows with +0.25-0.31R ExpR.
+# G3/G4 failed 10-year validation (57-67% years positive) but are
+# the strongest current-regime performers.
 LIVE_PORTFOLIO = [
-    # CORE: 1000 session, G3 filter (smallest validated filter for 1000)
-    LiveStrategySpec("1000_E1_ORB_G3", "core", "1000", "E1", "ORB_G3", None),
-    # REGIME: 0900 session, G4 filter (high-vol overlay)
-    LiveStrategySpec("0900_E1_ORB_G4", "regime", "0900", "E1", "ORB_G4", "high_vol"),
+    # --- CORE: always on, full-period validated ---
+    LiveStrategySpec("0900_E1_ORB_G5", "core", "0900", "E1", "ORB_G5", None),
+    LiveStrategySpec("1000_E1_ORB_G5", "core", "1000", "E1", "ORB_G5", None),
+
+    # --- HOT: rolling-eval gated, current regime performers ---
+    # 0900 G4: 8-9/10 windows, ExpR +0.28R, Sharpe 0.18 (recent regime)
+    LiveStrategySpec("0900_E1_ORB_G4", "hot", "0900", "E1", "ORB_G4", "rolling"),
+    LiveStrategySpec("0900_E3_ORB_G4", "hot", "0900", "E3", "ORB_G4", "rolling"),
+    # 1000 G4: 8-9/10 windows, ExpR +0.19R (recent regime)
+    LiveStrategySpec("1000_E1_ORB_G4", "hot", "1000", "E1", "ORB_G4", "rolling"),
+
+    # --- REGIME: fitness-gated, full-period validated ---
+    LiveStrategySpec("0900_E1_ORB_G6", "regime", "0900", "E1", "ORB_G6", "high_vol"),
+    LiveStrategySpec("1800_E3_ORB_G6", "regime", "1800", "E3", "ORB_G6", "high_vol"),
 ]
 
 
@@ -104,6 +129,98 @@ def _load_best_regime_variant(
         return dict(zip(cols, rows[0]))
     finally:
         con.close()
+
+
+def _load_best_experimental_variant(
+    db_path: Path,
+    instrument: str,
+    orb_label: str,
+    entry_model: str,
+    filter_type: str,
+) -> dict | None:
+    """Load the best RR/CB variant from experimental_strategies.
+
+    Used for HOT tier families that haven't passed full-period validation
+    but are STABLE in recent rolling windows.
+    """
+    con = duckdb.connect(str(db_path), read_only=True)
+    try:
+        rows = con.execute("""
+            SELECT strategy_id, instrument, orb_label, entry_model,
+                   rr_target, confirm_bars, filter_type,
+                   expectancy_r, win_rate, sample_size,
+                   sharpe_ratio, max_drawdown_r,
+                   median_risk_points
+            FROM experimental_strategies
+            WHERE instrument = ?
+              AND orb_label = ?
+              AND entry_model = ?
+              AND filter_type = ?
+              AND expectancy_r > 0
+            ORDER BY sharpe_ratio DESC NULLS LAST
+            LIMIT 1
+        """, [instrument, orb_label, entry_model, filter_type]).fetchall()
+
+        if not rows:
+            return None
+
+        cols = [desc[0] for desc in con.description]
+        return dict(zip(cols, rows[0]))
+    finally:
+        con.close()
+
+
+def _check_rolling_stability(
+    db_path: Path,
+    instrument: str,
+    orb_label: str,
+    entry_model: str,
+    filter_type: str,
+    train_months: int = 12,
+    lookback_windows: int = HOT_LOOKBACK_WINDOWS,
+    min_stability: float = HOT_MIN_STABILITY,
+) -> tuple[float, str]:
+    """Check rolling stability for a family over recent windows.
+
+    Returns (stability_score, note_string).
+    """
+    from trading_app.rolling_portfolio import (
+        load_all_rolling_run_labels,
+        load_rolling_results,
+        load_rolling_degraded_counts,
+        aggregate_rolling_performance,
+        make_family_id,
+    )
+
+    all_labels = load_all_rolling_run_labels(
+        db_path, train_months, instrument, lookback_windows
+    )
+    if not all_labels:
+        return 0.0, "no rolling windows found"
+
+    validated = load_rolling_results(
+        db_path, train_months, instrument, run_labels=all_labels
+    )
+    degraded = load_rolling_degraded_counts(
+        db_path, train_months, instrument, run_labels=all_labels
+    )
+    families = aggregate_rolling_performance(validated, all_labels, degraded)
+
+    target_fid = make_family_id(orb_label, entry_model, filter_type)
+    for fam in families:
+        if fam.family_id == target_fid:
+            if fam.weighted_stability >= min_stability:
+                return fam.weighted_stability, (
+                    f"STABLE ({fam.weighted_stability:.3f}, "
+                    f"{fam.windows_passed}/{fam.windows_total} windows)"
+                )
+            else:
+                return fam.weighted_stability, (
+                    f"NOT STABLE ({fam.weighted_stability:.3f}, "
+                    f"{fam.windows_passed}/{fam.windows_total} windows)"
+                )
+
+    return 0.0, "family not found in rolling results"
 
 
 def build_live_portfolio(
@@ -180,6 +297,55 @@ def build_live_portfolio(
                 f"CORE: {spec.family_id} -> {match['strategy_id']} "
                 f"(ExpR={match['expectancy_r']:+.3f}, source={source}, weight=1.0)"
             )
+
+    # --- HOT tier: from experimental_strategies + rolling stability gate ---
+    hot_specs = [s for s in LIVE_PORTFOLIO if s.tier == "hot"]
+    for spec in hot_specs:
+        variant = _load_best_experimental_variant(
+            db_path, instrument,
+            spec.orb_label, spec.entry_model, spec.filter_type,
+        )
+
+        if variant is None:
+            notes.append(f"WARN: {spec.family_id} -- no experimental variant with positive ExpR")
+            continue
+
+        # Check rolling stability gate
+        weight = 1.0
+        stability_note = "no gate"
+        if spec.regime_gate == "rolling":
+            stability_score, stability_note = _check_rolling_stability(
+                db_path, instrument,
+                spec.orb_label, spec.entry_model, spec.filter_type,
+                train_months=rolling_train_months,
+            )
+            if stability_score < HOT_MIN_STABILITY:
+                weight = 0.0
+                stability_note = f"GATED OFF ({stability_note})"
+            else:
+                stability_note = f"ACTIVE ({stability_note})"
+
+        strategies.append(PortfolioStrategy(
+            strategy_id=variant["strategy_id"],
+            instrument=variant["instrument"],
+            orb_label=variant["orb_label"],
+            entry_model=variant["entry_model"],
+            rr_target=variant["rr_target"],
+            confirm_bars=variant["confirm_bars"],
+            filter_type=variant["filter_type"],
+            expectancy_r=variant["expectancy_r"],
+            win_rate=variant["win_rate"],
+            sample_size=variant["sample_size"],
+            sharpe_ratio=variant.get("sharpe_ratio"),
+            max_drawdown_r=variant.get("max_drawdown_r"),
+            median_risk_points=variant.get("median_risk_points"),
+            source="hot_rolling",
+            weight=weight,
+        ))
+        notes.append(
+            f"HOT: {spec.family_id} -> {variant['strategy_id']} "
+            f"(ExpR={variant['expectancy_r']:+.3f}, weight={weight}, {stability_note})"
+        )
 
     # --- REGIME tier: from validated_setups + fitness gate ---
     regime_specs = [s for s in LIVE_PORTFOLIO if s.tier == "regime"]

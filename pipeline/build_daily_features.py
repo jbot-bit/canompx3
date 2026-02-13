@@ -747,7 +747,7 @@ def build_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
             true_ranges.append(None)
 
         # ATR(20) = SMA of last 20 True Range values (skip Nones)
-        lookback = [v for v in true_ranges[max(0, i - 19):i + 1] if v is not None]
+        lookback = [v for v in true_ranges[max(0, i - 20):i] if v is not None]
         if lookback:
             rows[i]["atr_20"] = round(sum(lookback) / len(lookback), 4)
         else:

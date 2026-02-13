@@ -51,6 +51,9 @@ VALID_ENTRY_MODELS = {"E1", "E3"}
 # Valid filter types (subset for validation)
 VALID_FILTER_PREFIXES = {"NO_FILTER", "ORB_G", "ORB_L", "VOL_"}
 
+# Valid instruments
+VALID_INSTRUMENTS = {"MGC", "MNQ"}
+
 def _validate_orb_label(label: str) -> str:
     """Validate and return ORB label."""
     if label not in VALID_ORB_LABELS:
@@ -72,6 +75,13 @@ def _validate_filter_type(ft: str) -> str:
     return ft
 
 
+def _validate_instrument(inst: str) -> str:
+    """Validate and return instrument."""
+    if inst not in VALID_INSTRUMENTS:
+        raise ValueError(f"Invalid instrument '{inst}'. Valid: {sorted(VALID_INSTRUMENTS)}")
+    return inst
+
+
 # SQL templates -- all SELECT-only, parameterized
 _TEMPLATES = {
     QueryTemplate.STRATEGY_LOOKUP: """
@@ -80,6 +90,7 @@ _TEMPLATES = {
                expectancy_r, sharpe_ratio, max_drawdown_r
         FROM validated_setups
         WHERE LOWER(status) = 'active'
+        {instrument_clause}
         {where_clauses}
         ORDER BY expectancy_r DESC
         LIMIT ?
@@ -93,6 +104,7 @@ _TEMPLATES = {
                MIN(max_drawdown_r) as worst_drawdown
         FROM validated_setups
         WHERE LOWER(status) = 'active'
+        {instrument_clause}
         {where_clauses}
         GROUP BY orb_label, entry_model, filter_type
         ORDER BY avg_expectancy_r DESC
@@ -104,6 +116,7 @@ _TEMPLATES = {
                AVG(sharpe_ratio) as avg_sharpe
         FROM validated_setups
         WHERE LOWER(status) = 'active'
+        {instrument_clause}
         GROUP BY orb_label
         ORDER BY orb_label
     """,
@@ -114,6 +127,7 @@ _TEMPLATES = {
                yearly_results
         FROM validated_setups
         WHERE LOWER(status) = 'active'
+        {instrument_clause}
         {where_clauses}
         ORDER BY expectancy_r DESC
         LIMIT ?
@@ -123,7 +137,8 @@ _TEMPLATES = {
                rr_target, confirm_bars, entry_price, stop_price,
                target_price, pnl_r, outcome
         FROM orb_outcomes
-        WHERE symbol = 'MGC'
+        WHERE 1=1
+        {instrument_clause_symbol}
         {where_clauses}
         ORDER BY trading_day DESC
         LIMIT ?
@@ -182,6 +197,7 @@ _TEMPLATES = {
                expectancy_r, sharpe_ratio
         FROM validated_setups
         WHERE LOWER(status) = 'active'
+        {instrument_clause}
         ORDER BY sharpe_ratio DESC
         LIMIT ?
     """,
@@ -257,7 +273,7 @@ class SQLAdapter:
             return self._execute_double_break_stats(params)
 
         if template == QueryTemplate.GAP_ANALYSIS:
-            return self._execute_gap_analysis()
+            return self._execute_gap_analysis(params)
 
         if template == QueryTemplate.REGIME_COMPARE:
             return self._execute_regime_compare(params)
@@ -300,9 +316,15 @@ class SQLAdapter:
         # Build SQL with validated orb_label embedded (safe -- validated against allowlist)
         sql = _TEMPLATES[QueryTemplate.ORB_SIZE_DIST].replace("{orb_label}", orb_label)
 
+        bind_params = []
+        if "instrument" in params:
+            inst = _validate_instrument(params["instrument"])
+            sql += "\n        AND symbol = ?"
+            bind_params.append(inst)
+
         con = duckdb.connect(self.db_path, read_only=True)
         try:
-            result = con.execute(sql).fetchdf()
+            result = con.execute(sql, bind_params).fetchdf()
             return result.head(MAX_RESULT_ROWS)
         finally:
             con.close()
@@ -314,20 +336,32 @@ class SQLAdapter:
         # Safe: orb_label validated against allowlist
         sql = _TEMPLATES[QueryTemplate.DOUBLE_BREAK_STATS].replace("{orb_label}", orb_label)
 
+        bind_params = []
+        if "instrument" in params:
+            inst = _validate_instrument(params["instrument"])
+            sql += "\n        AND symbol = ?"
+            bind_params.append(inst)
+
         con = duckdb.connect(self.db_path, read_only=True)
         try:
-            result = con.execute(sql).fetchdf()
+            result = con.execute(sql, bind_params).fetchdf()
             return result.head(MAX_RESULT_ROWS)
         finally:
             con.close()
 
-    def _execute_gap_analysis(self) -> pd.DataFrame:
-        """Execute gap analysis query (no dynamic params)."""
+    def _execute_gap_analysis(self, params: dict) -> pd.DataFrame:
+        """Execute gap analysis query."""
         sql = _TEMPLATES[QueryTemplate.GAP_ANALYSIS]
+
+        bind_params = []
+        if "instrument" in params:
+            inst = _validate_instrument(params["instrument"])
+            sql += "\n        AND symbol = ?"
+            bind_params.append(inst)
 
         con = duckdb.connect(self.db_path, read_only=True)
         try:
-            result = con.execute(sql).fetchdf()
+            result = con.execute(sql, bind_params).fetchdf()
             return result.head(MAX_RESULT_ROWS)
         finally:
             con.close()
@@ -341,6 +375,11 @@ class SQLAdapter:
         sql_template = _TEMPLATES[QueryTemplate.REGIME_COMPARE]
         where_parts = []
         bind_params = []
+
+        if "instrument" in params:
+            _validate_instrument(params["instrument"])
+            where_parts.append("AND r.instrument = ?")
+            bind_params.append(params["instrument"])
 
         # Qualify with r. prefix to avoid ambiguity
         if "orb_label" in params:
@@ -381,6 +420,11 @@ class SQLAdapter:
         where_parts = []
         bind_params = []
 
+        if "instrument" in params:
+            _validate_instrument(params["instrument"])
+            where_parts.append("AND rv.instrument = ?")
+            bind_params.append(params["instrument"])
+
         if "orb_label" in params:
             _validate_orb_label(params["orb_label"])
             where_parts.append("AND rv.orb_label = ?")
@@ -418,6 +462,22 @@ class SQLAdapter:
         sql_template = _TEMPLATES[template]
         where_parts = []
         bind_params = []
+
+        # Instrument filtering (uses 'instrument' column on most tables, 'symbol' on orb_outcomes)
+        instrument_clause = ""
+        instrument_clause_symbol = ""
+        if "instrument" in params:
+            inst = _validate_instrument(params["instrument"])
+            instrument_clause = "AND instrument = ?"
+            instrument_clause_symbol = "AND symbol = ?"
+            # Determine which placeholder this template uses
+            if "{instrument_clause_symbol}" in sql_template:
+                bind_params.append(inst)
+            elif "{instrument_clause}" in sql_template:
+                bind_params.append(inst)
+
+        sql_template = sql_template.replace("{instrument_clause}", instrument_clause)
+        sql_template = sql_template.replace("{instrument_clause_symbol}", instrument_clause_symbol)
 
         # Build WHERE clauses from parameters
         if "orb_label" in params:

@@ -51,6 +51,8 @@ class JournalEntry:
     exit_price: float | None = None
     outcome: str | None = None
     pnl_r: float | None = None
+    exit_mode: str | None = None
+    ib_alignment: str | None = None
     risk_rejected: bool = False
     risk_reason: str = ""
 
@@ -280,6 +282,8 @@ def replay_historical(
                                     je.pnl_r = trade.pnl_r
                                     je.stop_price = trade.stop_price
                                     je.target_price = trade.target_price
+                                    je.exit_mode = trade.exit_mode
+                                    je.ib_alignment = trade.ib_alignment
                                     break
 
                             if trade.pnl_r > 0:

@@ -408,6 +408,7 @@ def compute_portfolio_fitness(
         rows = con.execute(
             """SELECT strategy_id FROM validated_setups
                WHERE instrument = ? AND LOWER(status) = 'active'
+                 AND orb_label != '1100'
                ORDER BY strategy_id""",
             [instrument],
         ).fetchall()

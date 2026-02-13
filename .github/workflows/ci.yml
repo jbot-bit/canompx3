@@ -27,5 +27,25 @@ jobs:
       - name: Drift check (19 static analysis checks)
         run: python pipeline/check_drift.py
 
+      - name: Check file encoding (UTF-8)
+        run: |
+          python -c "
+          from pathlib import Path
+          bad = []
+          for ext in ('*.md', '*.txt', '*.py'):
+              for f in Path('.').rglob(ext):
+                  if '.venv' in f.parts or 'openclaw' in f.parts or 'llm-code-scanner' in f.parts:
+                      continue
+                  try:
+                      f.read_text(encoding='utf-8')
+                  except (UnicodeDecodeError, ValueError):
+                      bad.append(str(f))
+          if bad:
+              print('Non-UTF-8 files found:')
+              for b in bad: print(f'  {b}')
+              raise SystemExit(1)
+          print('All tracked text files are UTF-8.')
+          "
+
       - name: Tier 1 - All tests (no gold.db needed)
         run: python -m pytest tests/ -v --ignore=tests/test_trader_logic.py -n auto --dist loadscope --cov=pipeline --cov=trading_app --cov-report=term-missing

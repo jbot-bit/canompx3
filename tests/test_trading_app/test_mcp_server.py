@@ -119,7 +119,7 @@ class TestGuardrails:
 
     def test_allowed_params_whitelist(self):
         """Only known parameter keys are in the allowlist."""
-        assert _ALLOWED_PARAMS == {"orb_label", "entry_model", "filter_type", "min_sample_size", "limit"}
+        assert _ALLOWED_PARAMS == {"orb_label", "entry_model", "filter_type", "min_sample_size", "limit", "instrument"}
 
 
 class TestGenerateWarnings:

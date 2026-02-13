@@ -188,6 +188,57 @@ def compute_position_size_prop(
     return int(contracts)
 
 
+def compute_vol_scalar(
+    atr_20: float,
+    median_atr_20: float,
+    max_scalar: float = 1.5,
+    min_scalar: float = 0.5,
+) -> float:
+    """
+    Turtle-style volatility scalar for position sizing.
+
+    scalar = median_atr / current_atr
+    - ATR above median -> scalar < 1.0 (smaller position)
+    - ATR below median -> scalar > 1.0 (larger position)
+    - Clamped to [min_scalar, max_scalar] to prevent extremes.
+
+    Pass the result to compute_position_size_vol_scaled().
+    """
+    if atr_20 <= 0 or median_atr_20 <= 0:
+        return 1.0
+    raw = median_atr_20 / atr_20
+    return max(min_scalar, min(raw, max_scalar))
+
+
+def compute_position_size_vol_scaled(
+    account_equity: float,
+    risk_per_trade_pct: float,
+    risk_points: float,
+    cost_spec: CostSpec,
+    vol_scalar: float = 1.0,
+) -> int:
+    """
+    Position sizing with volatility normalization.
+
+    Same as compute_position_size but applies vol_scalar to available risk.
+    High ATR -> vol_scalar < 1 -> fewer contracts.
+    Low ATR  -> vol_scalar > 1 -> more contracts (up to cap).
+    """
+    if risk_points <= 0 or vol_scalar <= 0:
+        return 0
+
+    risk_dollars = risk_points * cost_spec.point_value
+    available_risk = account_equity * (risk_per_trade_pct / 100.0) * vol_scalar
+
+    if risk_dollars <= 0:
+        return 0
+
+    contracts = available_risk / risk_dollars
+    if contracts < 1.0:
+        return 0
+    return int(contracts)
+
+
 # =========================================================================
 # Portfolio construction
 # =========================================================================
@@ -222,6 +273,7 @@ def load_validated_strategies(
             WHERE vs.instrument = ?
               AND LOWER(vs.status) = 'active'
               AND vs.expectancy_r >= ?
+              AND vs.orb_label != '1100'
             ORDER BY vs.expectancy_r DESC
         """, [instrument, min_expectancy_r]).fetchall()
 
@@ -245,6 +297,7 @@ def load_validated_strategies(
                     WHERE nv.instrument = ?
                       AND LOWER(nv.status) = 'active'
                       AND nv.expectancy_r >= ?
+                      AND nv.orb_label != '1100'
                     ORDER BY nv.expectancy_r DESC
                 """, [instrument, min_expectancy_r]).fetchall()
 

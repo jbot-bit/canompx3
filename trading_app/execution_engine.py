@@ -26,7 +26,10 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 
 from pipeline.cost_model import CostSpec, to_r_multiple, get_session_cost_spec
-from trading_app.config import ALL_FILTERS, EARLY_EXIT_MINUTES
+from trading_app.config import (
+    ALL_FILTERS, EARLY_EXIT_MINUTES, SESSION_EXIT_MODE,
+    IB_DURATION_MINUTES, HOLD_HOURS,
+)
 from trading_app.portfolio import Portfolio, PortfolioStrategy
 
 
@@ -39,7 +42,7 @@ ORB_WINDOWS_UTC = {
     # label: (start_hour_utc, start_minute, duration_minutes)
     "0900": (23, 0, 5),   # 09:00 Brisbane = 23:00 UTC
     "1000": (0, 0, 5),    # 10:00 Brisbane = 00:00 UTC
-    "1100": (1, 0, 5),    # 11:00 Brisbane = 01:00 UTC
+    # 1100 PERMANENTLY OFF for breakout (structurally mean-reverting, 74% double-break)
     "1800": (8, 0, 5),    # 18:00 Brisbane = 08:00 UTC
     "2300": (13, 0, 5),   # 23:00 Brisbane = 13:00 UTC
     "0030": (14, 30, 5),  # 00:30 Brisbane = 14:30 UTC
@@ -85,6 +88,49 @@ class LiveORB:
 
 
 @dataclass
+class LiveIB:
+    """Initial Balance (first 120 minutes from 09:00 Brisbane = 23:00 UTC).
+
+    Tracks IB high/low during formation, then detects first break after IB ends.
+    Used by 1000 session for IB-conditional exit logic.
+    """
+    window_start_utc: datetime
+    window_end_utc: datetime
+    high: float | None = None
+    low: float | None = None
+    complete: bool = False
+    break_dir: str | None = None
+    break_ts: datetime | None = None
+
+    def update(self, bar: dict) -> None:
+        """Update IB range from a bar during formation period."""
+        ts = bar["ts_utc"]
+        if not self.complete and self.window_start_utc <= ts < self.window_end_utc:
+            if self.high is None or bar["high"] > self.high:
+                self.high = bar["high"]
+            if self.low is None or bar["low"] < self.low:
+                self.low = bar["low"]
+        if not self.complete and ts >= self.window_end_utc:
+            self.complete = True
+
+    def check_break(self, bar: dict) -> str | None:
+        """Check if bar breaks IB after formation. Returns 'long'/'short'/None."""
+        if not self.complete or self.break_dir is not None:
+            return None
+        if self.high is None or self.low is None:
+            return None
+        if bar["close"] > self.high:
+            self.break_dir = "long"
+            self.break_ts = bar["ts_utc"]
+            return "long"
+        elif bar["close"] < self.low:
+            self.break_dir = "short"
+            self.break_ts = bar["ts_utc"]
+            return "short"
+        return None
+
+
+@dataclass
 class ActiveTrade:
     """A trade being tracked through its lifecycle."""
     strategy_id: str
@@ -106,6 +152,10 @@ class ActiveTrade:
     stop_price: float | None = None
     target_price: float | None = None
     contracts: int = 1
+
+    # IB-conditional exit mode (1000 session)
+    exit_mode: str = "fixed_target"   # "fixed_target" | "ib_pending" | "hold_7h"
+    ib_alignment: str | None = None   # "aligned" | "opposed" | None
 
     # Timed early exit
     early_exit_checked: bool = False
@@ -140,6 +190,7 @@ class ExecutionEngine:
         # State
         self.trading_day: date | None = None
         self.orbs: dict[str, LiveORB] = {}
+        self.ib: LiveIB | None = None
         self.active_trades: list[ActiveTrade] = []
         self.completed_trades: list[ActiveTrade] = []
         self.daily_pnl_r: float = 0.0
@@ -158,9 +209,15 @@ class ExecutionEngine:
         self._bar_count = 0
         self._last_bar = None
 
+        # Initialize IB tracker (23:00 UTC to 01:00 UTC = 09:00-11:00 Brisbane)
+        prev_day = trading_day - timedelta(days=1)
+        ib_start = datetime(prev_day.year, prev_day.month, prev_day.day,
+                            23, 0, tzinfo=timezone.utc)
+        ib_end = ib_start + timedelta(minutes=IB_DURATION_MINUTES)
+        self.ib = LiveIB(window_start_utc=ib_start, window_end_utc=ib_end)
+
         # Initialize ORB windows for this trading day
         # Trading day in UTC: starts at 23:00 UTC on prev calendar day
-        prev_day = trading_day - timedelta(days=1)
         for label, (hour, minute, duration) in ORB_WINDOWS_UTC.items():
             if hour >= 23:
                 base_date = prev_day
@@ -214,6 +271,13 @@ class ExecutionEngine:
                     orb.break_dir = "short"
                     orb.break_ts = ts
                     events.extend(self._arm_strategies(orb, bar))
+
+        # Phase 2.5: Update IB and check IB-conditional exits
+        if self.ib is not None:
+            self.ib.update(bar)
+            ib_break = self.ib.check_break(bar)
+            if ib_break is not None:
+                events.extend(self._process_ib_break(ib_break, bar))
 
         # Phase 3: Process confirming trades
         events.extend(self._process_confirming(bar))
@@ -422,6 +486,25 @@ class ExecutionEngine:
         else:
             return events
 
+    def _process_ib_break(self, ib_break_dir: str, bar: dict) -> list[TradeEvent]:
+        """Process IB break for trades in ib_pending mode."""
+        events = []
+        for trade in self.active_trades:
+            if trade.state != TradeState.ENTERED or trade.exit_mode != "ib_pending":
+                continue
+
+            if ib_break_dir == trade.direction:
+                # Aligned: unlock hold mode, remove fixed target
+                trade.exit_mode = "hold_7h"
+                trade.ib_alignment = "aligned"
+                trade.target_price = None
+            else:
+                # Opposed: exit at market (bar close)
+                trade.ib_alignment = "opposed"
+                self._exit_trade(trade, bar, "ib_opposed", bar["close"], events)
+
+        return events
+
     def _check_exits(self, bar: dict) -> list[TradeEvent]:
         """Check entered trades for target/stop hits."""
         events = []
@@ -478,6 +561,32 @@ class ExecutionEngine:
                     trade.entry_ts = entry_ts
                     trade.target_price = target_price
                     trade.state = TradeState.ENTERED
+                    # Set exit mode based on session
+                    session_mode = SESSION_EXIT_MODE.get(trade.orb_label, "fixed_target")
+                    if session_mode == "ib_conditional":
+                        if self.ib is not None and self.ib.break_dir is not None:
+                            # IB already resolved before entry
+                            if self.ib.break_dir == trade.direction:
+                                trade.exit_mode = "hold_7h"
+                                trade.ib_alignment = "aligned"
+                                trade.target_price = None
+                            else:
+                                # IB already opposed — reject entry
+                                trade.ib_alignment = "opposed"
+                                trade.state = TradeState.EXITED
+                                self.completed_trades.append(trade)
+                                events.append(TradeEvent(
+                                    event_type="REJECT",
+                                    strategy_id=trade.strategy_id,
+                                    timestamp=entry_ts,
+                                    price=entry_price,
+                                    direction=trade.direction,
+                                    contracts=trade.contracts,
+                                    reason="ib_already_opposed",
+                                ))
+                                continue
+                        else:
+                            trade.exit_mode = "ib_pending"
                     self.daily_trade_count += 1
                     if self.risk_manager is not None:
                         self.risk_manager.on_trade_entry()
@@ -557,6 +666,31 @@ class ExecutionEngine:
                         trade.entry_ts = bar["ts_utc"]
                         trade.target_price = target_price
                         trade.state = TradeState.ENTERED
+                        # Set exit mode based on session
+                        session_mode = SESSION_EXIT_MODE.get(trade.orb_label, "fixed_target")
+                        if session_mode == "ib_conditional":
+                            if self.ib is not None and self.ib.break_dir is not None:
+                                if self.ib.break_dir == trade.direction:
+                                    trade.exit_mode = "hold_7h"
+                                    trade.ib_alignment = "aligned"
+                                    trade.target_price = None
+                                else:
+                                    # IB already opposed — reject entry
+                                    trade.ib_alignment = "opposed"
+                                    trade.state = TradeState.EXITED
+                                    self.completed_trades.append(trade)
+                                    events.append(TradeEvent(
+                                        event_type="REJECT",
+                                        strategy_id=trade.strategy_id,
+                                        timestamp=bar["ts_utc"],
+                                        price=entry_price,
+                                        direction=trade.direction,
+                                        contracts=trade.contracts,
+                                        reason="ib_already_opposed",
+                                    ))
+                                    continue
+                            else:
+                                trade.exit_mode = "ib_pending"
                         self.daily_trade_count += 1
                         if self.risk_manager is not None:
                             self.risk_manager.on_trade_entry()
@@ -577,17 +711,23 @@ class ExecutionEngine:
             if trade.state != TradeState.ENTERED:
                 continue
 
-            # Check target/stop
+            # Check stop (always active)
             if trade.direction == "long":
-                hit_target = bar["high"] >= trade.target_price
                 hit_stop = bar["low"] <= trade.stop_price
                 favorable = bar["high"] - trade.entry_price
                 adverse = trade.entry_price - bar["low"]
             else:
-                hit_target = bar["low"] <= trade.target_price
                 hit_stop = bar["high"] >= trade.stop_price
                 favorable = trade.entry_price - bar["low"]
                 adverse = bar["high"] - trade.entry_price
+
+            # Check target (only if target_price is set — hold_7h has no target)
+            hit_target = False
+            if trade.target_price is not None:
+                if trade.direction == "long":
+                    hit_target = bar["high"] >= trade.target_price
+                else:
+                    hit_target = bar["low"] <= trade.target_price
 
             # Track MAE/MFE
             if favorable > trade.mfe_points:
@@ -595,9 +735,17 @@ class ExecutionEngine:
             if adverse > trade.mae_points:
                 trade.mae_points = adverse
 
+            # Hold-7h time cutoff: exit at bar close after HOLD_HOURS
+            if trade.exit_mode == "hold_7h" and trade.entry_ts is not None:
+                elapsed_hours = (bar["ts_utc"] - trade.entry_ts).total_seconds() / 3600.0
+                if elapsed_hours >= HOLD_HOURS:
+                    self._exit_trade(trade, bar, "hold_timeout", bar["close"], events)
+                    continue
+
             # Timed early exit: kill losers at N minutes after fill
+            # Skip for hold_7h — aligned trades should run, not get killed early
             threshold = EARLY_EXIT_MINUTES.get(trade.orb_label)
-            if threshold and not trade.early_exit_checked:
+            if threshold and not trade.early_exit_checked and trade.exit_mode != "hold_7h":
                 elapsed = (bar["ts_utc"] - trade.entry_ts).total_seconds() / 60.0
                 if elapsed >= threshold:
                     trade.early_exit_checked = True
@@ -641,7 +789,8 @@ class ExecutionEngine:
                 to_r_multiple(cost, trade.entry_price, trade.stop_price, pnl_points),
                 4,
             )
-        elif outcome == "early_exit":
+        elif outcome in ("early_exit", "hold_timeout", "ib_opposed"):
+            # Mark-to-market exit at bar close
             if trade.direction == "long":
                 mtm_points = exit_price - trade.entry_price
             else:
@@ -663,6 +812,18 @@ class ExecutionEngine:
         if self.risk_manager is not None:
             self.risk_manager.on_trade_exit(trade.pnl_r)
 
+        # Build reason string
+        if outcome == "early_exit":
+            reason = "early_exit_timed"
+        elif outcome == "hold_timeout":
+            reason = "hold_timeout_7h"
+        elif outcome == "ib_opposed":
+            reason = "ib_opposed_kill"
+        elif outcome == "win":
+            reason = "win_target_hit"
+        else:
+            reason = "loss_stop_hit"
+
         events.append(TradeEvent(
             event_type="EXIT",
             strategy_id=trade.strategy_id,
@@ -670,5 +831,5 @@ class ExecutionEngine:
             price=exit_price,
             direction=trade.direction,
             contracts=trade.contracts,
-            reason=f"{outcome}_timed" if outcome == "early_exit" else f"{outcome}_{'target' if outcome == 'win' else 'stop'}_hit",
+            reason=reason,
         ))

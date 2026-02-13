@@ -147,7 +147,7 @@ class TestEdgeCases:
         assert signal.entry_model == "E1"
         # E1: entry is bar AFTER 2nd confirm bar (index 2 = minute 7)
         expected_ts = BREAK_TS.replace(second=0, minute=7)
-        assert signal.entry_ts.replace(tzinfo=timezone.utc) == expected_ts
+        assert signal.entry_ts == expected_ts
 
 
 # ============================================================================

@@ -401,8 +401,8 @@ def build_nested_outcomes(
                                     outcome_str = "scratch"
                                     max_fav = float(np.max(favorable))
                                     max_adv = float(np.max(adverse))
-                                    mae_r = round(pnl_points_to_r(cost_spec, entry_price, stop_price, -max_adv), 4)
-                                    mfe_r = round(pnl_points_to_r(cost_spec, entry_price, stop_price, max_fav), 4)
+                                    mae_r = round(pnl_points_to_r(cost_spec, entry_price, stop_price, max(max_adv, 0.0)), 4)
+                                    mfe_r = round(pnl_points_to_r(cost_spec, entry_price, stop_price, max(max_fav, 0.0)), 4)
                                     day_batch.append([
                                         trading_day, symbol, orb_label, orb_minutes,
                                         ENTRY_RESOLUTION,
@@ -416,8 +416,8 @@ def build_nested_outcomes(
                                     exit_ts_val = post_entry.iloc[first_hit_idx]["ts_utc"].to_pydatetime()
                                     max_fav = float(np.max(favorable[:first_hit_idx + 1]))
                                     max_adv = float(np.max(adverse[:first_hit_idx + 1]))
-                                    mae_r = round(pnl_points_to_r(cost_spec, entry_price, stop_price, -max_adv), 4)
-                                    mfe_r = round(pnl_points_to_r(cost_spec, entry_price, stop_price, max_fav), 4)
+                                    mae_r = round(pnl_points_to_r(cost_spec, entry_price, stop_price, max(max_adv, 0.0)), 4)
+                                    mfe_r = round(pnl_points_to_r(cost_spec, entry_price, stop_price, max(max_fav, 0.0)), 4)
 
                                     if hit_target[first_hit_idx] and hit_stop[first_hit_idx]:
                                         outcome_str = "loss"

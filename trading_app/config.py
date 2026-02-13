@@ -190,11 +190,29 @@ ENTRY_MODELS = ["E1", "E3"]
 EARLY_EXIT_MINUTES: dict[str, int | None] = {
     "0900": 15,
     "1000": 30,
-    "1100": None,
     "1800": None,
     "2300": None,
     "0030": None,
 }
+
+# Session exit modes: how each session manages target/stop after entry.
+# "fixed_target" = set-and-forget (target + stop, no modification)
+# "ib_conditional" = IB-aware (hold target until IB resolves, then adapt)
+SESSION_EXIT_MODE: dict[str, str] = {
+    "0900": "fixed_target",
+    "1000": "ib_conditional",
+    "1800": "fixed_target",
+    "2300": "fixed_target",
+    "0030": "fixed_target",
+}
+
+# IB (Initial Balance) = first 120 minutes from 09:00 Brisbane (23:00 UTC).
+# Used by 1000 session for IB-conditional exits.
+IB_DURATION_MINUTES = 120
+
+# Hold duration when IB breaks aligned with trade direction (1000 session).
+# Trade holds with stop only (no target) for this many hours after entry.
+HOLD_HOURS = 7
 
 # =========================================================================
 # Strategy classification thresholds (FIX5 rules)

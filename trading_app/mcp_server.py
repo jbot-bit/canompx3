@@ -34,7 +34,7 @@ DB_PATH = str(GOLD_DB_PATH)
 MAX_MCP_ROWS = 5000
 
 # Only these parameter keys are forwarded to SQLAdapter. Anything else is rejected.
-_ALLOWED_PARAMS = {"orb_label", "entry_model", "filter_type", "min_sample_size", "limit"}
+_ALLOWED_PARAMS = {"orb_label", "entry_model", "filter_type", "min_sample_size", "limit", "instrument"}
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +94,7 @@ def _query_trading_db(
     entry_model: str | None = None,
     filter_type: str | None = None,
     min_sample_size: int | None = None,
+    instrument: str = "MGC",
     limit: int = 50,
 ) -> dict:
     """Run a pre-approved SQL query against the trading database.
@@ -121,6 +122,8 @@ def _query_trading_db(
         params["filter_type"] = filter_type
     if min_sample_size is not None:
         params["min_sample_size"] = min_sample_size
+    if instrument is not None:
+        params["instrument"] = instrument
 
     # G3: Server-side row cap
     params["limit"] = min(int(limit), MAX_MCP_ROWS)
@@ -216,9 +219,10 @@ def _build_server():
     mcp = FastMCP(
         "gold-db",
         instructions=(
-            "Gold (MGC) trading database. 10 years of futures data, "
-            "313 validated ORB breakout strategies. Includes double-break "
-            "frequency and gap analysis queries. All queries are read-only."
+            "Gold futures trading database. 10 years MGC + 2 years MNQ data. "
+            "507 validated ORB breakout strategies (334 MGC, 173 MNQ). "
+            "Use instrument parameter to filter by instrument (default MGC). "
+            "All queries are read-only."
         ),
     )
 
@@ -238,6 +242,7 @@ def _build_server():
         entry_model: str | None = None,
         filter_type: str | None = None,
         min_sample_size: int | None = None,
+        instrument: str = "MGC",
         limit: int = 50,
     ) -> dict:
         """Run a pre-approved SQL query against the trading database.
@@ -252,6 +257,7 @@ def _build_server():
             entry_model: Entry model filter. One of: E1, E3.
             filter_type: ORB size filter. Examples: ORB_G4, ORB_G6, NO_FILTER.
             min_sample_size: Minimum number of trades.
+            instrument: Instrument filter (default MGC). One of: MGC, MNQ.
             limit: Max rows to return (default 50, server cap 5000).
 
         Returns:
@@ -259,7 +265,8 @@ def _build_server():
         """
         return _query_trading_db(
             template=template, orb_label=orb_label, entry_model=entry_model,
-            filter_type=filter_type, min_sample_size=min_sample_size, limit=limit,
+            filter_type=filter_type, min_sample_size=min_sample_size,
+            instrument=instrument, limit=limit,
         )
 
     @mcp.tool()
