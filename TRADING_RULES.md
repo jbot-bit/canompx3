@@ -284,6 +284,49 @@ Rolling eval: TRANSITIONING (score 0.42-0.54). Excellent when vol is high, negat
 | Inside Day filter | All WORSE vs G4 baseline on 0900/1000. N=17-27 on compound. | Ever |
 | Ease Day filter (close vs typical) | All WORSE standalone. EASE+G4 1000 BEAT on tiny N=66-73, noise. | Ever |
 | V-Box CLEAR filter (E1 momentum) | 0900 E1 G4: CLEAR +0.019 Sharpe, 98% trades CLEAR. Filters nothing. | As E1 filter |
+| 1100 early exit (30m time stop) | ExpR -0.051 -> -0.028 (still negative). MaxDD 25% tighter. Kills 21 winners per 129 cuts. | Unless edge found |
+
+### 1100 Session Status: SHELVED (2026-02-13)
+
+**Status**: No tradeable edge in current regime. Shelved, not permanent NO-GO.
+
+**Research conducted**:
+1. **Zero-lookahead signals**: Tested 0900 alignment, gap direction, prior day trend, ATR regime, 0900 ORB size. **None produced actionable signal.** Best split (G8+ aligned vs opposed) has N=42/56 -- too thin, yearly inconsistent.
+2. **Timed early exit (15/20/30/45/60m)**: 30m is best threshold. Cuts 37% of trades, saves 0.078R/cut. ExpR improves from -0.051 to -0.028 -- **still negative**. MaxDD improves 25%. Not enough to flip session positive.
+3. **Midday reversal to Asia open**: Only 12-16% of trades cross back through Asia open by 12:30. No systematic reversal pattern.
+4. **MTM trajectory**: 73% of trades underwater at 11:15 (CB4 chase cost). Winners recover by 11:30, losers never do. But killing losers doesn't generate enough savings vs winners killed.
+
+**Root cause**: 1100 has 74% double-break rate (structurally mean-reverting). Breakout strategy fights session structure. The problem isn't fat-tail losers -- it's insufficient winners.
+
+**Revisit conditions**: New regime with lower double-break rate, or new entry model (fade/reversal) that exploits mean-reversion.
+
+**Hypotheses tested and failed**:
+- 0900 break direction alignment: No signal (yearly inconsistent, G8+ N too thin)
+- Gap direction alignment: Mild (+0.036 vs -0.049 ExpR at RR2.0), Sharpe 0.027 = noise
+- Prior day trend alignment: Reversed (opposed does better)
+- ATR regime split: Tiny (+0.019 vs -0.034), not actionable
+- 0900 ORB size as trend proxy: Zero signal
+- 0900 IB (120m) direction alignment: DOES NOT TRANSFER to 1100. Opposed WR 27.9% (vs 3% on 0900/1000). Reason: IB range ends at 11:00 = 1100 ORB start, so IB and ORB measure same price action (71% same direction). Not independent signals.
+- Timed early exit 30m: MaxDD -25% but ExpR still negative (-0.028). Kills 21 winners per 129 cuts.
+- Midday reversal to Asia open: Only 12-16% cross back. No systematic reversal.
+
+**Scripts**: `scripts/analyze_1100_zero_lookahead.py`, `scripts/analyze_1100_midday_reversal.py`, `scripts/backtest_1100_early_exit.py`, `scripts/analyze_1100_ib_alignment.py`.
+
+### Timed Early Exit Research (2026-02-13)
+
+**Rule**: At N minutes after fill, if bar close vs entry is negative, exit at bar close.
+
+| Session | Threshold | Sharpe Delta | MaxDD Delta | Status |
+|---------|-----------|-------------|-------------|--------|
+| 0900 | 15 min | **+26%** | **-38%** | IMPLEMENTED |
+| 1000 | 30 min | **+270%** (3.7x) | **-35%** | IMPLEMENTED |
+| 1100 | 30 min | +34% (still negative) | -25% | NOT IMPLEMENTED |
+| 1800 | any | No benefit | - | NOT IMPLEMENTED |
+| 2300 | any | No benefit | - | NOT IMPLEMENTED |
+| 0030 | any | No benefit | - | NOT IMPLEMENTED |
+
+Config: `trading_app/config.py` -> `EARLY_EXIT_MINUTES` (0900=15, 1000=30, others=None).
+Scripts: `scripts/backtest_1100_early_exit.py`, `scripts/analyze_1100_zero_lookahead.py`, `scripts/analyze_1100_midday_reversal.py`.
 
 ### Profit Factor Screen (2026-02-12)
 
@@ -322,7 +365,7 @@ Screened for PF 1.5-2.0, ShANN 0.8-1.5, WR <= 75%, N >= 30.
 | RSI directional confirmation | Low confidence | RSI 60+ LONG = +0.81R but N=24. Monitor. |
 | Percentage-based ORB filter | Not tested | 0.15% of price approximates G5. Auto-adapts to price level. |
 | E3 V-Box Inversion (retest into HVN) | 0900 E3 G4: CHOP +0.503 ExpR (Sharpe 0.357) vs CLEAR -0.094. N=127 CHOP. | Future E3-specific retest strategy. Retrace INTO high-volume node = high fill probability + high WR. |
-| ATR regime on/off switch | NOT BUILT | See Regime Switch section below. |
+| ATR regime on/off switch | **NO-GO** as pre-trade filter. Fails robustness (threshold-sensitive, family-inconsistent, inflated by prior lookahead). ATR kept for **position sizing only** (Turtle-style vol normalization). See Regime Switch section. |
 | Low-vol counterbalance strategy | NOT RESEARCHED | Mean-reversion partner for the High Vol Breakout system. |
 
 ### EOD Exit Tournament (2026-02-12)
@@ -482,25 +525,32 @@ The G5/G6 breakout families bleed in low-vol regimes and print in high-vol regim
 - ATR > 30: Active. G4+ days appear regularly. This is where the edge lives.
 - ATR > 50: Expansion. G6+ days become frequent. PF screen strategies activate.
 
-**ATR Regime Gate Backtest Results (2026-02-12):**
+**ATR Regime Gate Backtest Results (2026-02-13, lag-fixed ATR):**
 
 Tested ATR(20) thresholds [0, 20, 25, 30, 35, 40] across 8 families, 10 years data.
 Fixed variant set (no survivorship bias). Family-level averages across RR/CB variants.
+ATR(20) is now lag-fixed (excludes current day's True Range -- no lookahead).
 
 | Finding | Detail |
 |---------|--------|
-| **0900 families: ATR >= 25 helps** | G4: +4.28R, G5: +1.51R, G6: +0.47R. Consistent across threshold range. |
-| **1000 families: ATR gating is UNRELIABLE** | Non-monotonic. G4: +1.83R at 25, then -3.25R at 30. Noise, not signal. |
-| **1800 families: still negative/marginal** | E3 G4 stays negative at all thresholds. E3 G6 marginal improvement. |
+| **0900_G4: ATR >= 25 marginal** | +2.87R at 25, but -1.05R at 30. Threshold-sensitive = fragile. |
+| **0900_G5: ATR gating HURTS** | Negative at 25 (-0.29R), 30 (-1.68R). Only helps at 35 (+2.06R). |
+| **0900_G6: ATR gating HURTS** | Negative at most thresholds. +1.41R only at 35. |
+| **1000_G3: ATR >= 30 helps** | +4.55R. But ShANN only goes from 0.009 to 0.073 -- still untradeable. |
+| **1000_G4: ATR gating HURTS** | Monotonically worse: -2.25R at 30, -7.36R at 40. |
+| **1800 families: mixed** | E3 G4 stays negative at all thresholds. G6 improves but N drops to 44-50. |
 | **ATR threshold frequency** | >= 20: 55.9%, >= 25: 35.6%, >= 30: 22.1%, >= 40: 12.3% of days |
 
 **Honest caveats:**
-- Selecting ATR >= 25 from 6 tested values IS mild optimization. Do not treat as precise.
-- ATR gating is correlated with 2025-2026 regime. It identifies the regime, does NOT prove causation.
-- 48 cells tested (6 thresholds x 8 families). ~60% showing improvement is borderline random.
-- The ONLY robust signal: 0900 families improve consistently across ALL thresholds >= 25.
+- Previous results (2026-02-12) used ATR with lookahead (included current day's TR). Lag-fixed results are weaker.
+- Selecting per-family thresholds from 6 values IS curve fitting. No single threshold works across families.
+- 48 cells tested (6 thresholds x 8 families). Improvements are threshold-sensitive and non-robust.
+- ATR >= 30 excludes 78% of trading days -- massive opportunity cost on positive-ExpR strategies.
 
-**Decision**: Apply ATR >= 25 gate to 0900 families ONLY. Do NOT gate 1000 or 1800.
+**Decision (2026-02-13): NO hard ATR pre-trade gate.**
+- DISCARDED: The ATR >= 25/30 gate fails robustness. Results are threshold-sensitive, family-inconsistent, and were inflated by lookahead in prior testing.
+- KEEP ATR for POSITION SIZING: Turtle-style vol normalization (`compute_vol_scalar` + `compute_position_size_vol_scaled` in portfolio.py). High ATR = smaller size, low ATR = larger size. Normalizes risk without deleting trades.
+- KEEP Rolling Fitness: `strategy_fitness.py` + `live_config.py` regime tier remains the regime gate. Multi-layer assessment (structural + rolling + decay) is more principled than a single ATR cutoff.
 
 ---
 
