@@ -17,6 +17,7 @@ import duckdb
 import numpy as np
 
 from pipeline.paths import GOLD_DB_PATH
+from pipeline.asset_configs import get_enabled_sessions
 
 DB = GOLD_DB_PATH
 con = duckdb.connect(str(DB), read_only=True)
@@ -46,7 +47,7 @@ for instrument in ["MGC", "MNQ"]:
     # Higher RR = longer hold = higher potential MFE
     # So use RR4.0 to get the longest hold window and truest MFE
 
-    for orb in ["0900", "1000", "1100", "1800", "2300", "0030"]:
+    for orb in sorted(get_enabled_sessions(instrument)):
         df = con.execute("""
             SELECT mfe_r, pnl_r, entry_price, stop_price,
                    o.trading_day,

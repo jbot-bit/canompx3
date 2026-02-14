@@ -76,7 +76,7 @@ def find_best_combo(data, min_trades=10, metric="sharpe"):
 
 
 def em_label(em):
-    return "E1/E2" if em == "E1" else "E3"
+    return "E1" if em == "E1" else "E3"
 
 
 def main():

@@ -19,7 +19,7 @@ ALLOWED_DIRS = {
     # Tool caches
     ".pytest_cache", ".ruff_cache",
     # Gitignored but may exist locally
-    ".obsidian", "openclaw", "MNQ db", "local_db",
+    ".obsidian", "openclaw", "MNQ db", "local_db", "memory", "reports",
     # UI
     "ui",
 }
@@ -29,7 +29,7 @@ ALLOWED_FILES = {
     "TRADING_RULES.md", "TRADING_PLAN.md",
     "CANONICAL_LOGIC.txt", "CANONICAL_backfill_dbn_mgc_rules.txt",
     "CANONICAL_backfill_dbn_mgc_rules_addon.txt",
-    "pyproject.toml", "requirements.txt", "ruff.toml", ".gitignore", ".ENV",
+    "pyproject.toml", "requirements.txt", "ruff.toml", ".gitignore", ".ENV", "conftest.py",
     "gold.db", "dashboard.html", "pipeline-explorer.html",
     "Canompx3.code-workspace", ".mcp.json", "portfolio_report.json",
     # Data archives
@@ -48,9 +48,18 @@ def main() -> None:
         name = entry.name
         if name.lower() in WIN_DEVICES and not entry.is_file() and not entry.is_dir():
             continue
-        if entry.is_dir() and name in ALLOWED_DIRS:
+        try:
+            is_dir = entry.is_dir()
+            is_file = entry.is_file()
+        except OSError:
+            # WinError 448: untrusted mount point (e.g. local_db symlink)
+            if name in ALLOWED_DIRS or name in ALLOWED_FILES:
+                continue
+            unexpected.append(name)
             continue
-        if entry.is_file() and name in ALLOWED_FILES:
+        if is_dir and name in ALLOWED_DIRS:
+            continue
+        if is_file and name in ALLOWED_FILES:
             continue
         unexpected.append(name)
 

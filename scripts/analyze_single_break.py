@@ -14,6 +14,7 @@ import duckdb
 import numpy as np
 
 from pipeline.paths import GOLD_DB_PATH
+from pipeline.asset_configs import get_enabled_sessions
 
 DB = GOLD_DB_PATH
 con = duckdb.connect(str(DB), read_only=True)
@@ -21,8 +22,6 @@ con = duckdb.connect(str(DB), read_only=True)
 END = date(2026, 2, 4)
 START_18M = END - timedelta(days=18 * 30)
 START_12M = END - timedelta(days=365)
-
-SESSIONS = ["0900", "1000", "1100", "1800", "2300", "0030"]
 
 for instrument in ["MGC", "MNQ"]:
     ct = con.execute("SELECT COUNT(*) FROM daily_features WHERE symbol = ?", [instrument]).fetchone()[0]
@@ -38,7 +37,7 @@ for instrument in ["MGC", "MNQ"]:
         print(f"  {'Session':>8s} {'Break':>6s} {'Single':>7s} {'Dbl':>5s} {'Sgl%':>6s} {'Dbl%':>6s} | {'Sgl MFE':>8s} {'Dbl MFE':>8s} {'Sgl WR@2R':>10s} {'Dbl WR@2R':>10s}")
         print(f"  {'-' * 90}")
 
-        for orb in SESSIONS:
+        for orb in sorted(get_enabled_sessions(instrument)):
             row = con.execute(f"""
                 SELECT
                     COUNT(*) as total,

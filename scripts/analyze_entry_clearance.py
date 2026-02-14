@@ -194,14 +194,11 @@ def report_session(df: pd.DataFrame, session: str):
     prior_label = " + ".join(prior)
 
     # Group by (entry_model, rr_target)
-    for em in ["E1", "E2", "E3"]:
+    for em in ["E1", "E3"]:
         for rr in [1.0, 1.5, 2.0, 2.5, 3.0]:
             if em == "E3":
                 subset = df[(df["entry_model"] == em) & (df["rr_target"] == rr)
                             & (df["confirm_bars"] == 1)]
-            elif em == "E2":
-                subset = df[(df["entry_model"] == em) & (df["rr_target"] == rr)
-                            & (df["confirm_bars"] == 2)]
             else:  # E1
                 subset = df[(df["entry_model"] == em) & (df["rr_target"] == rr)
                             & (df["confirm_bars"] == 2)]
@@ -329,14 +326,11 @@ def run_analysis(db_path: Path, start: date, end: date):
         report_session(df, session)
 
         # Collect summary data
-        for em in ["E1", "E2", "E3"]:
+        for em in ["E1", "E3"]:
             for rr in [1.0, 1.5, 2.0, 2.5, 3.0]:
                 if em == "E3":
                     subset = df[(df["entry_model"] == em) & (df["rr_target"] == rr)
                                 & (df["confirm_bars"] == 1)]
-                elif em == "E2":
-                    subset = df[(df["entry_model"] == em) & (df["rr_target"] == rr)
-                                & (df["confirm_bars"] == 2)]
                 else:
                     subset = df[(df["entry_model"] == em) & (df["rr_target"] == rr)
                                 & (df["confirm_bars"] == 2)]

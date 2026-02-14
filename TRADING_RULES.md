@@ -677,3 +677,37 @@ Tested 4 non-ORB strategies for diversification. Walk-forward OOS on 18 months (
 
 ### Key Takeaway
 Stop looking for alternative entries. The diversification path is **more instruments** (MNQ, other futures) or **overlay filters** (regime detection on existing ORB), not new strategy types on the same instrument.
+
+---
+
+## Overlay Filter Research (Feb 2026) -- ALL NO-GO
+
+Tested 3 overlay/conditional filters on MGC ORB breakouts. Read-only analysis on 2yr data (2024-2026). Scripts in `scripts/analyze_*.py`.
+
+### Volume Confirmation (Break Bar Volume Ratio)
+- **NO-GO.** Volume at breakout bar relative to ORB window median does NOT predict follow-through.
+- Tested 0900, 1000, 1800 sessions. E1 CB2 and E3 CB1 across RR1.5-3.0.
+- All buckets (surge >=1.5x, normal 0.8-1.5x, weak <0.8x, strong >=2.0x): negative ExpR everywhere.
+- MFE comparison: surge trades show marginally higher mean MFE but insufficient to overcome losses.
+- Script: `scripts/analyze_volume_confirmation.py`
+
+### Session Cascade (Prior Session Range as Predictor)
+- **NO-GO.** Prior session range does NOT predict later session breakout quality.
+- London range → 1800: all negative across all terciles and entry types.
+- London range → 2300: all negative.
+- Asia range (0900+1000) → 1800/2300: all negative.
+- LONDON_OPEN ORB size → 1800: all negative.
+- **Marginal signal**: CME_OPEN ORB size "wide" tercile (>3.5pt) → 1000 E1 CB2 RR4.0: ExpR=+0.264, N=150, Total=+39.6R. However: (a) no G4+ ORB size filter applied, (b) only 2yr CME_OPEN data, (c) unfiltered baseline already negative. Not actionable without further validation.
+- Script: `scripts/analyze_session_cascade.py`
+
+### Multi-Day Trend Alignment (2d/3d Close Trend)
+- **NO-GO for established sessions.** 2-3 day close trend direction does NOT improve ORB breakout edge.
+- 0900, 1000, 1800, 2300: aligned/counter splits show no meaningful separation. All baselines negative.
+- Gap alignment (break direction vs overnight gap direction): no improvement.
+- **CME_OPEN G4+ with 2d alignment**: E3 CB1 shows positive ExpR (+0.272 to +0.379 across RR targets) but N=30-40 (REGIME class, not tradeable standalone). Interesting as a conditional signal but insufficient sample size.
+- Script: `scripts/analyze_multiday_trend.py`
+
+### Why Overlays Don't Work on ORB
+1. **ORB size IS the filter.** G4+ already captures the regime (volatility expansion days). Additional overlays add noise, not signal.
+2. **Volume, trend, and prior session range are orthogonal to ORB edge.** The breakout isn't stronger because volume surged or because the prior day trended -- it's stronger because the ORB was large enough to indicate genuine directional interest.
+3. **CME_OPEN is the only exception** but with REGIME-class sample sizes only. Monitor as data grows.

@@ -19,8 +19,11 @@ def _resolve_db_path() -> Path:
     if "DUCKDB_PATH" in _os.environ:
         return Path(_os.environ["DUCKDB_PATH"])
     local = PROJECT_ROOT / "local_db" / "gold.db"
-    if local.exists():
-        return local
+    try:
+        if local.exists():
+            return local
+    except OSError:
+        pass  # WinError 448: untrusted mount point (sandbox/CI)
     return PROJECT_ROOT / "gold.db"
 
 GOLD_DB_PATH = _resolve_db_path()

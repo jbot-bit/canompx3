@@ -232,13 +232,15 @@ class TestSessionSlippage:
         assert session.tick_size == 0.10
 
     def test_all_sessions_have_multiplier(self):
-        """All 6 ORB sessions should be in SESSION_SLIPPAGE_MULT for MGC."""
+        """Fixed ORB sessions should be in SESSION_SLIPPAGE_MULT for MGC.
+        Dynamic sessions (CME_OPEN, LONDON_OPEN, etc.) fall back to mult=1.0."""
         mgc_mults = SESSION_SLIPPAGE_MULT["MGC"]
         for label in ["0900", "1000", "1100", "1800", "2300", "0030"]:
             assert label in mgc_mults
 
     def test_all_sessions_have_multiplier_mnq(self):
-        """All 6 ORB sessions should be in SESSION_SLIPPAGE_MULT for MNQ."""
+        """Fixed ORB sessions should be in SESSION_SLIPPAGE_MULT for MNQ.
+        Dynamic sessions (CME_OPEN, US_EQUITY_OPEN, etc.) fall back to mult=1.0."""
         mnq_mults = SESSION_SLIPPAGE_MULT["MNQ"]
         for label in ["0900", "1000", "1100", "1800", "2300", "0030"]:
             assert label in mnq_mults

@@ -62,7 +62,7 @@ def find_best_strategy(data, metric="sharpe", min_trades=30):
     best_combo = None
     best_stats = None
 
-    for em in ["E1", "E3"]:  # E1 represents E1/E2 family
+    for em in ["E1", "E3"]:
         em_data = data[data["entry_model"] == em]
         for rr in sorted(data["rr_target"].unique()):
             for cb in sorted(data["confirm_bars"].unique()):
@@ -118,7 +118,7 @@ def get_oos_trades(data, combo):
 
 
 def em_label(em):
-    return "E1/E2" if em == "E1" else "E3"
+    return "E1" if em == "E1" else "E3"
 
 
 def main():
@@ -139,7 +139,7 @@ def main():
     print("  Test:  single calendar year of UNSEEN data")
     print("  Select: best Sharpe from training period ONLY")
     print("  Min 30 training trades to qualify")
-    print("  E1/E2 grouped (use E1 as representative)")
+    print("  E1 and E3 entry models (E2 removed)")
     print("  2021 excluded from training (structurally different)")
     print()
 
