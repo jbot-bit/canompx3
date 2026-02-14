@@ -6,6 +6,8 @@ Creates and manages:
 - experimental_strategies: Backtest results awaiting validation
 - validated_setups: Production-ready strategies
 - validated_setups_archive: Historical audit trail
+- strategy_trade_days: Ground truth post-filter trade days
+- edge_families: Strategy clustering by trade-day hash
 """
 
 import sys
@@ -33,6 +35,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
     try:
         if force:
             print("WARN: Force mode: Dropping existing trading_app tables...")
+            con.execute("DROP TABLE IF EXISTS edge_families")
             con.execute("DROP TABLE IF EXISTS strategy_trade_days")
             con.execute("DROP TABLE IF EXISTS validated_setups_archive")
             con.execute("DROP TABLE IF EXISTS validated_setups")
@@ -149,6 +152,10 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 -- Execution spec (JSON)
                 execution_spec    TEXT,
 
+                -- Edge family membership
+                family_hash       TEXT,
+                is_family_head    BOOLEAN     DEFAULT FALSE,
+
                 -- Status
                 status            TEXT        NOT NULL,
                 retired_at        TIMESTAMPTZ,
@@ -192,6 +199,23 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
             ON strategy_trade_days(trading_day)
         """)
 
+        # Table 6: edge_families (strategy clustering by trade-day hash)
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS edge_families (
+                family_hash       TEXT        PRIMARY KEY,
+                instrument        TEXT        NOT NULL,
+                member_count      INTEGER     NOT NULL,
+                trade_day_count   INTEGER     NOT NULL,
+                head_strategy_id  TEXT        NOT NULL,
+                head_expectancy_r DOUBLE,
+                head_sharpe_ann   DOUBLE,
+                created_at        TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+
+                FOREIGN KEY (head_strategy_id)
+                    REFERENCES validated_setups(strategy_id)
+            )
+        """)
+
         con.commit()
         print("Trading app schema initialized successfully")
 
@@ -219,6 +243,7 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
             "validated_setups",
             "validated_setups_archive",
             "strategy_trade_days",
+            "edge_families",
         ]
 
         # Check tables exist
@@ -294,8 +319,9 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
                 "years_tested", "all_years_positive", "stress_test_passed",
                 "sharpe_ratio", "max_drawdown_r",
                 "trades_per_year", "sharpe_ann",
-                "yearly_results", "execution_spec", "status",
-                "retired_at", "retirement_reason"
+                "yearly_results", "execution_spec",
+                "family_hash", "is_family_head",
+                "status", "retired_at", "retirement_reason"
             }
             actual_cols = {row[0] for row in result}
 

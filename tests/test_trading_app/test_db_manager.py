@@ -50,6 +50,8 @@ class TestInitSchema:
         assert "experimental_strategies" in table_names
         assert "validated_setups" in table_names
         assert "validated_setups_archive" in table_names
+        assert "strategy_trade_days" in table_names
+        assert "edge_families" in table_names
 
     def test_idempotent(self, db_path):
         """Running twice doesn't crash."""
@@ -159,3 +161,69 @@ class TestVerifySchema:
         assert valid is False
         # Should find missing tables
         assert any("experimental_strategies" in v for v in violations)
+
+
+class TestEdgeFamiliesSchema:
+    """Test edge_families table and family columns on validated_setups."""
+
+    def test_edge_families_columns(self, db_path):
+        init_trading_app_schema(db_path=db_path)
+
+        con = duckdb.connect(str(db_path), read_only=True)
+        cols = con.execute("""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'edge_families'
+        """).fetchall()
+        col_names = {c[0] for c in cols}
+        con.close()
+
+        expected = {
+            "family_hash", "instrument", "member_count",
+            "trade_day_count", "head_strategy_id",
+            "head_expectancy_r", "head_sharpe_ann",
+        }
+        assert expected.issubset(col_names)
+
+    def test_validated_setups_family_columns(self, db_path):
+        init_trading_app_schema(db_path=db_path)
+
+        con = duckdb.connect(str(db_path), read_only=True)
+        cols = con.execute("""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'validated_setups'
+        """).fetchall()
+        col_names = {c[0] for c in cols}
+        con.close()
+
+        assert "family_hash" in col_names
+        assert "is_family_head" in col_names
+
+    def test_edge_families_pk(self, db_path):
+        init_trading_app_schema(db_path=db_path)
+
+        con = duckdb.connect(str(db_path))
+        con.execute("""
+            INSERT INTO validated_setups
+            (strategy_id, instrument, orb_label, orb_minutes, rr_target,
+             confirm_bars, entry_model, filter_type, sample_size,
+             win_rate, expectancy_r, years_tested, all_years_positive,
+             stress_test_passed, status)
+            VALUES ('test_s1', 'MGC', '0900', 5, 2.0, 2, 'E1', 'ORB_G5',
+                    100, 0.55, 0.30, 3, TRUE, TRUE, 'active')
+        """)
+        con.execute("""
+            INSERT INTO edge_families
+            (family_hash, instrument, member_count, trade_day_count,
+             head_strategy_id, head_expectancy_r, head_sharpe_ann)
+            VALUES ('abc123', 'MGC', 3, 100, 'test_s1', 0.30, 1.2)
+        """)
+        con.commit()
+
+        with pytest.raises(duckdb.ConstraintException):
+            con.execute("""
+                INSERT INTO edge_families
+                (family_hash, instrument, member_count, trade_day_count,
+                 head_strategy_id, head_expectancy_r, head_sharpe_ann)
+                VALUES ('abc123', 'MGC', 1, 50, 'test_s1', 0.20, 0.8)
+            """)
+        con.close()
