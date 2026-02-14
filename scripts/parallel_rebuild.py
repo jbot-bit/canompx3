@@ -171,6 +171,45 @@ def _run_step(
 
 
 # ---------------------------------------------------------------------------
+# Pre-clear: remove FK-dependent tables before daily_features rebuild
+# ---------------------------------------------------------------------------
+def _clear_downstream_tables(db_path: Path, instrument: str) -> None:
+    """Delete orb_outcomes, strategies, and validated for this instrument.
+
+    Required before daily_features rebuild because orb_outcomes has a FK
+    to daily_features. Without this, DELETE FROM daily_features fails.
+    Only operates on the per-instrument copy, never the master.
+    """
+    con = duckdb.connect(str(db_path))
+    try:
+        # FK-safe order: child -> parent
+        con.execute(
+            "DELETE FROM validated_setups_archive "
+            "WHERE original_strategy_id IN "
+            "(SELECT strategy_id FROM validated_setups WHERE instrument = ?)",
+            [instrument],
+        )
+        con.execute(
+            "DELETE FROM validated_setups WHERE instrument = ?", [instrument],
+        )
+        con.execute(
+            "DELETE FROM experimental_strategies WHERE instrument = ?",
+            [instrument],
+        )
+        n = con.execute(
+            "SELECT COUNT(*) FROM orb_outcomes WHERE symbol = ?", [instrument],
+        ).fetchone()[0]
+        con.execute(
+            "DELETE FROM orb_outcomes WHERE symbol = ?", [instrument],
+        )
+        con.commit()
+        if n > 0:
+            print(f"  [{instrument}] Cleared {n:,} orb_outcomes (FK pre-clear)")
+    finally:
+        con.close()
+
+
+# ---------------------------------------------------------------------------
 # Per-instrument pipeline (runs in a thread, calls subprocesses)
 # ---------------------------------------------------------------------------
 def run_instrument(
@@ -186,6 +225,10 @@ def run_instrument(
     """
     results: dict[str, int] = {}
     log_path = log_dir / f"{instrument}.log"
+
+    # Pre-clear: if rebuilding features, clear downstream FK-dependent tables
+    if "features" in steps:
+        _clear_downstream_tables(db_path, instrument)
 
     for step in steps:
         print(f"\n>>> Starting {instrument}/{step}")
