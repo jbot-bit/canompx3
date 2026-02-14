@@ -40,6 +40,10 @@ ASSET_CONFIGS = {
         "prefix_len": 3,
         "minimum_start_date": date(2019, 1, 1),
         "schema_required": "ohlcv-1m",
+        "enabled_sessions": [
+            "0900", "1000", "1100", "1800", "2300",
+            "CME_OPEN", "LONDON_OPEN",
+        ],
     },
     "MNQ": {
         "dbn_path": PROJECT_ROOT / "DB" / "MNQ_DB" / "glbx-mdp3-20240204-20260203.ohlcv-1m.dbn.zst",
@@ -48,6 +52,10 @@ ASSET_CONFIGS = {
         "prefix_len": 3,
         "minimum_start_date": date(2024, 2, 4),
         "schema_required": "ohlcv-1m",
+        "enabled_sessions": [
+            "0900", "1000", "1100", "1800", "0030",
+            "CME_OPEN", "US_EQUITY_OPEN",
+        ],
     },
     "MCL": {
         "dbn_path": PROJECT_ROOT / "DB" / "MCL_DB",
@@ -56,6 +64,10 @@ ASSET_CONFIGS = {
         "prefix_len": 3,
         "minimum_start_date": date(2021, 7, 11),
         "schema_required": "ohlcv-1m",
+        "enabled_sessions": [
+            "0900", "1000", "1100", "1800", "2300",
+            "CME_OPEN", "LONDON_OPEN",
+        ],
     },
     "MES": {
         "dbn_path": Path(r"C:\db\MES_DB"),
@@ -64,6 +76,10 @@ ASSET_CONFIGS = {
         "prefix_len": 3,
         "minimum_start_date": date(2024, 2, 12),
         "schema_required": "ohlcv-1m",
+        "enabled_sessions": [
+            "0900", "1000", "1100", "1800", "0030",
+            "CME_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN",
+        ],
     },
     "NQ": {
         "dbn_path": None,
@@ -72,6 +88,7 @@ ASSET_CONFIGS = {
         "prefix_len": 2,
         "minimum_start_date": None,
         "schema_required": "ohlcv-1m",
+        "enabled_sessions": [],
     },
 }
 
@@ -115,6 +132,14 @@ def get_asset_config(instrument: str) -> dict:
 def list_instruments() -> list[str]:
     """Return sorted list of all configured instrument names."""
     return sorted(ASSET_CONFIGS.keys())
+
+
+def get_enabled_sessions(instrument: str) -> list[str]:
+    """Return enabled session labels for an instrument. Fail-closed."""
+    config = ASSET_CONFIGS.get(instrument.upper())
+    if config is None:
+        return []
+    return config.get("enabled_sessions", [])
 
 
 def list_available_instruments() -> list[str]:
