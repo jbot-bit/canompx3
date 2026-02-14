@@ -133,7 +133,21 @@ def compute_metrics(outcomes: list[dict], cost_spec) -> dict:
         year_data["total_r"] = round(year_data["total_r"], 4)
 
     # Annualized Sharpe = per_trade_sharpe * sqrt(trades_per_year)
-    years_span = len(yearly) if yearly else 0
+    # Use actual date span (not count of distinct calendar years)
+    if traded:
+        trading_days = [o["trading_day"] for o in traded]
+        min_day = min(trading_days)
+        max_day = max(trading_days)
+        if hasattr(min_day, "toordinal"):
+            span_days = (max_day - min_day).days + 1
+        else:
+            from datetime import date as _date
+            min_day = _date.fromisoformat(str(min_day)[:10])
+            max_day = _date.fromisoformat(str(max_day)[:10])
+            span_days = (max_day - min_day).days + 1
+        years_span = max(span_days / 365.25, 0.25)  # floor at 3 months
+    else:
+        years_span = 0
     trades_per_year = (n_traded / years_span) if years_span > 0 else 0
     sharpe_ann = (
         sharpe_ratio * (trades_per_year ** 0.5)
@@ -462,6 +476,7 @@ def run_discovery(
                                     metrics["median_risk_points"], metrics["avg_risk_points"],
                                     metrics["trades_per_year"], metrics["sharpe_ann"],
                                     metrics["yearly_results"],
+                                    None, None,  # Reset validation_status/notes
                                 ])
 
                                 # Flush batch every 500 rows
@@ -475,8 +490,9 @@ def run_discovery(
                                             expectancy_r, sharpe_ratio, max_drawdown_r,
                                             median_risk_points, avg_risk_points,
                                             trades_per_year, sharpe_ann,
-                                            yearly_results)
-                                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                            yearly_results,
+                                            validation_status, validation_notes)
+                                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                                         insert_batch,
                                     )
                                     insert_batch = []
@@ -497,8 +513,9 @@ def run_discovery(
                     expectancy_r, sharpe_ratio, max_drawdown_r,
                     median_risk_points, avg_risk_points,
                     trades_per_year, sharpe_ann,
-                    yearly_results)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    yearly_results,
+                    validation_status, validation_notes)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 insert_batch,
             )
 

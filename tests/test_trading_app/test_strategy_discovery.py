@@ -145,7 +145,9 @@ class TestComputeMetrics:
         ]
         m = compute_metrics(outcomes, _cost())
         assert m["sharpe_ann"] is not None
-        assert m["trades_per_year"] == pytest.approx(11 / 2, abs=0.1)  # 11 trades / 2 years
+        # Date range: 2024-01-01 to 2025-03-03 = 428 days ≈ 1.17 years
+        span_years = ((date(2025, 3, 3) - date(2024, 1, 1)).days + 1) / 365.25
+        assert m["trades_per_year"] == pytest.approx(11 / span_years, abs=0.5)
         # Identity: sharpe_ann = sharpe_ratio * sqrt(trades_per_year)
         expected = m["sharpe_ratio"] * (m["trades_per_year"] ** 0.5)
         assert m["sharpe_ann"] == pytest.approx(expected, abs=0.01)
@@ -174,10 +176,12 @@ class TestComputeMetrics:
             {"trading_day": date(2024, 6, 1), "outcome": "win", "pnl_r": 1.5, "mae_r": 0.5, "mfe_r": 1.5, "entry_price": 2703.0, "stop_price": 2690.0},
         ]
         m = compute_metrics(outcomes, _cost())
-        assert m["trades_per_year"] == 3.0  # 3 trades / 1 year
+        # Date range: 2024-01-01 to 2024-06-01 = 153 days ≈ 0.42 years
+        span_years = ((date(2024, 6, 1) - date(2024, 1, 1)).days + 1) / 365.25
+        expected_tpy = 3 / span_years
+        assert m["trades_per_year"] == pytest.approx(expected_tpy, abs=0.5)
         assert m["sharpe_ann"] is not None
-        # With 1 year: sharpe_ann = sharpe_ratio * sqrt(3)
-        expected = m["sharpe_ratio"] * (3.0 ** 0.5)
+        expected = m["sharpe_ratio"] * (m["trades_per_year"] ** 0.5)
         assert m["sharpe_ann"] == pytest.approx(expected, abs=0.01)
 
     def test_sharpe_ann_negative(self):
