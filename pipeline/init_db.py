@@ -57,30 +57,33 @@ CREATE TABLE IF NOT EXISTS bars_5m (
 );
 """
 
-# ORB labels: 5-minute Opening Range Breakout windows at these local times.
+# ORB labels: Opening Range Breakout windows at these local times.
 # All times are Australia/Brisbane (UTC+10, no DST).
 #
-# Session mapping and UTC equivalents:
-#   0900 Brisbane = 23:00 UTC (prev day) — US equity close / CME open
-#   1000 Brisbane = 00:00 UTC             — 1hr after CME open
-#   1100 Brisbane = 01:00 UTC             — 2hr after CME open
-#   1800 Brisbane = 08:00 UTC             — GLOBEX/London open
-#   2300 Brisbane = 13:00 UTC             — Overnight/NY afternoon
-#   0030 Brisbane = 14:30 UTC             — Late overnight
+# Fixed session mapping (data-proven market event identities):
+#   0900 Brisbane = 23:00 UTC — CME open in winter / 1hr after in summer
+#   1000 Brisbane = 00:00 UTC — Tokyo 9AM JST (no DST)
+#   1100 Brisbane = 01:00 UTC — ~Singapore/Shanghai open (no DST)
+#   1130 Brisbane = 01:30 UTC — HK/SG equity open 9:30 AM HKT (no DST)
+#   1800 Brisbane = 08:00 UTC — London metals in winter / 1hr after summer
+#   2300 Brisbane = 13:00 UTC — ~8AM ET winter / ~9AM ET summer
+#   0030 Brisbane = 14:30 UTC — NYSE 9:30 ET in winter / 1hr after summer
 #
-# The ORB is the high-low range of the first 5 minutes (configurable).
+# The ORB is the high-low range of the first N minutes (configurable).
 # A "break" occurs when a 1-min bar closes above orb_high (long) or
 # below orb_low (short). See pipeline/build_daily_features.py for logic.
-ORB_LABELS_FIXED = ["0900", "1000", "1100", "1800", "2300", "0030"]
+ORB_LABELS_FIXED = ["0900", "1000", "1100", "1130", "1800", "2300", "0030"]
 
 # Dynamic sessions: DST-aware windows that track specific market events
 # regardless of daylight saving time changes. Resolved per-day by
-# pipeline/dst.py resolvers.
+# pipeline/dst.py resolvers. See pipeline/dst.py SESSION_CATALOG for
+# the master registry including aliases and event descriptions.
 #
+#   CME_OPEN        - CME Globex electronic open at 5:00 PM CT
 #   US_EQUITY_OPEN  - NYSE cash open at 09:30 ET (MES, MNQ)
 #   US_DATA_OPEN    - US economic data release at 08:30 ET (MGC)
 #   LONDON_OPEN     - London metals open at 08:00 London time (MGC)
-ORB_LABELS_DYNAMIC = ["US_EQUITY_OPEN", "US_DATA_OPEN", "LONDON_OPEN"]
+ORB_LABELS_DYNAMIC = ["CME_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "LONDON_OPEN"]
 
 # Combined label list — used by schema generation and feature builders
 ORB_LABELS = ORB_LABELS_FIXED + ORB_LABELS_DYNAMIC
@@ -153,7 +156,7 @@ CREATE TABLE IF NOT EXISTS daily_features (
     us_dst            BOOLEAN,
     uk_dst            BOOLEAN,
 
-    -- ORB columns (9 fixed + 3 dynamic = 12 sessions x 9 columns = 108)
+    -- ORB columns (7 fixed + 4 dynamic = 11 sessions x 9 columns = 99)
 {orb_block}
 
     PRIMARY KEY (symbol, trading_day, orb_minutes)

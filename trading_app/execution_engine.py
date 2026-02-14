@@ -45,6 +45,7 @@ ORB_WINDOWS_UTC = {
     "0900": (23, 0),      # 09:00 Brisbane = 23:00 UTC  (5m ORB)
     "1000": (0, 0),       # 10:00 Brisbane = 00:00 UTC  (15m ORB — variable aperture)
     # 1100 OFF for breakout (shelved — 74% double-break, may revisit with fade/reversal)
+    "1130": (1, 30),      # 11:30 Brisbane = 01:30 UTC  (5m ORB — HK/SG equity open)
     "1800": (8, 0),       # 18:00 Brisbane = 08:00 UTC  (5m ORB)
     "2300": (13, 0),      # 23:00 Brisbane = 13:00 UTC  (5m ORB)
     "0030": (14, 30),     # 00:30 Brisbane = 14:30 UTC  (5m ORB)

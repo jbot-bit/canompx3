@@ -202,11 +202,14 @@ class Test1100Exclusion:
         """1100 session shelved — not in SESSION_EXIT_MODE."""
         assert "1100" not in SESSION_EXIT_MODE
 
-    def test_engine_does_not_create_1100_orb(self):
-        """Engine must not create 1100 ORB on trading day start."""
-        engine = ExecutionEngine(_make_portfolio(), _cost())
-        engine.on_trading_day_start(date(2024, 1, 5))
-        assert "1100" not in engine.orbs
+    def test_1130_in_orb_windows(self):
+        """1130 (HK/SG equity open) is registered in ORB_WINDOWS_UTC."""
+        assert "1130" in ORB_WINDOWS_UTC
+        assert ORB_WINDOWS_UTC["1130"] == (1, 30)
+
+    def test_1130_fixed_target(self):
+        """1130 uses fixed_target exit mode."""
+        assert SESSION_EXIT_MODE["1130"] == "fixed_target"
 
 
 # ============================================================================

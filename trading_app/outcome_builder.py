@@ -28,6 +28,7 @@ import pandas as pd
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.cost_model import get_cost_spec, pnl_points_to_r, to_r_multiple
 from pipeline.init_db import ORB_LABELS
+from pipeline.asset_configs import get_enabled_sessions
 from pipeline.build_daily_features import compute_trading_day_utc_range
 from trading_app.entry_rules import detect_entry_with_confirm_bars
 from trading_app.config import ENTRY_MODELS, EARLY_EXIT_MINUTES
@@ -350,12 +351,18 @@ def build_outcomes(
             params.append(end_date)
         date_filter = " ".join(date_clauses)
 
+        # Determine which sessions to build outcomes for
+        sessions = get_enabled_sessions(instrument)
+        if not sessions:
+            sessions = ORB_LABELS  # fallback: all sessions
+        print(f"  Sessions: {len(sessions)} enabled for {instrument}")
+
         # Fetch all daily_features rows
         query = f"""
             SELECT trading_day, symbol, orb_minutes,
                    {', '.join(
                        f'orb_{lbl}_high, orb_{lbl}_low, orb_{lbl}_break_dir, orb_{lbl}_break_ts'
-                       for lbl in ORB_LABELS
+                       for lbl in sessions
                    )}
             FROM daily_features
             WHERE symbol = ? AND orb_minutes = ?
@@ -395,7 +402,7 @@ def build_outcomes(
 
             day_batch = []
 
-            for orb_label in ORB_LABELS:
+            for orb_label in sessions:
                 break_dir = row_dict.get(f"orb_{orb_label}_break_dir")
                 break_ts = row_dict.get(f"orb_{orb_label}_break_ts")
                 orb_high = row_dict.get(f"orb_{orb_label}_high")

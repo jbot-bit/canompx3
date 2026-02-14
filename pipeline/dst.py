@@ -6,6 +6,7 @@ trading day, and resolves dynamic ORB session times to Brisbane local
 hours accordingly.
 
 Dynamic sessions track specific market events regardless of DST:
+  CME_OPEN        - CME Globex electronic open at 5:00 PM CT
   US_EQUITY_OPEN  - NYSE cash open at 09:30 ET (MES, MNQ)
   US_DATA_OPEN    - Economic data releases at 08:30 ET (MGC)
   LONDON_OPEN     - London metals open at 08:00 London time (MGC)
@@ -18,6 +19,7 @@ from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 _US_EASTERN = ZoneInfo("America/New_York")
+_US_CHICAGO = ZoneInfo("America/Chicago")
 _UK_LONDON = ZoneInfo("Europe/London")
 _BRISBANE = ZoneInfo("Australia/Brisbane")
 _UTC = ZoneInfo("UTC")
@@ -48,6 +50,19 @@ def is_uk_dst(trading_day: date) -> bool:
     dt = datetime(trading_day.year, trading_day.month, trading_day.day,
                   12, 0, 0, tzinfo=_UK_LONDON)
     return dt.utcoffset().total_seconds() == 1 * 3600
+
+
+def cme_open_brisbane(trading_day: date) -> tuple[int, int]:
+    """CME Globex electronic open (5:00 PM CT) in Brisbane local time.
+
+    Returns (hour, minute) in Australia/Brisbane.
+      Summer (CDT): 5PM CT = 22:00 UTC = 08:00 AEST
+      Winter (CST): 5PM CT = 23:00 UTC = 09:00 AEST
+    """
+    ct_open = datetime(trading_day.year, trading_day.month, trading_day.day,
+                       17, 0, 0, tzinfo=_US_CHICAGO)
+    bris = ct_open.astimezone(_BRISBANE)
+    return (bris.hour, bris.minute)
 
 
 def us_equity_open_brisbane(trading_day: date) -> tuple[int, int]:
@@ -89,9 +104,159 @@ def london_open_brisbane(trading_day: date) -> tuple[int, int]:
     return (bris.hour, bris.minute)
 
 
-# Registry for dynamic ORB resolvers
-DYNAMIC_ORB_RESOLVERS = {
-    "US_EQUITY_OPEN": us_equity_open_brisbane,
-    "US_DATA_OPEN": us_data_open_brisbane,
-    "LONDON_OPEN": london_open_brisbane,
+# =========================================================================
+# SESSION CATALOG: master registry of all ORB sessions
+# =========================================================================
+# Three entry types:
+#   "dynamic" - DST-aware, resolver function per-day
+#   "fixed"   - constant Brisbane time, no resolver needed
+#   "alias"   - maps to existing ORB label, NO separate column
+
+SESSION_CATALOG = {
+    # Dynamic sessions (DST-aware, resolver per-day)
+    "CME_OPEN": {
+        "type": "dynamic",
+        "resolver": cme_open_brisbane,
+        "break_group": "cme",
+        "event": "CME Globex electronic open 5:00 PM CT",
+    },
+    "US_EQUITY_OPEN": {
+        "type": "dynamic",
+        "resolver": us_equity_open_brisbane,
+        "break_group": "us",
+        "event": "NYSE cash open 9:30 AM ET",
+    },
+    "US_DATA_OPEN": {
+        "type": "dynamic",
+        "resolver": us_data_open_brisbane,
+        "break_group": "us",
+        "event": "US economic data release 8:30 AM ET",
+    },
+    "LONDON_OPEN": {
+        "type": "dynamic",
+        "resolver": london_open_brisbane,
+        "break_group": "london",
+        "event": "London metals open 8:00 AM London",
+    },
+    # Fixed sessions (constant UTC, no DST)
+    #
+    # break_group: sessions in the same group share a break-window boundary.
+    # Break detection extends to the start of the next GROUP, not the next
+    # label. This prevents adding a nearby session (e.g., 1130) from silently
+    # shrinking an existing session's break window (e.g., 1100).
+    "0900": {
+        "type": "fixed",
+        "brisbane": (9, 0),
+        "break_group": "cme",
+        "event": "23:00 UTC -- CME open in winter / 1hr after in summer",
+    },
+    "1000": {
+        "type": "fixed",
+        "brisbane": (10, 0),
+        "break_group": "asia",
+        "event": "00:00 UTC -- Tokyo 9AM JST (no DST)",
+    },
+    "1100": {
+        "type": "fixed",
+        "brisbane": (11, 0),
+        "break_group": "asia",
+        "event": "01:00 UTC -- ~Singapore/Shanghai open (no DST)",
+    },
+    "1130": {
+        "type": "fixed",
+        "brisbane": (11, 30),
+        "break_group": "asia",
+        "event": "01:30 UTC -- HK/SG equity open 9:30 AM HKT (no DST)",
+    },
+    "1800": {
+        "type": "fixed",
+        "brisbane": (18, 0),
+        "break_group": "london",
+        "event": "08:00 UTC -- London metals in winter / 1hr after summer",
+    },
+    "2300": {
+        "type": "fixed",
+        "brisbane": (23, 0),
+        "break_group": "us",
+        "event": "13:00 UTC -- ~8AM ET winter / ~9AM ET summer",
+    },
+    "0030": {
+        "type": "fixed",
+        "brisbane": (0, 30),
+        "break_group": "us",
+        "event": "14:30 UTC -- NYSE 9:30 ET in winter / 1hr after summer",
+    },
+    # Aliases (map to existing ORB label -- NO separate column)
+    "TOKYO_OPEN": {
+        "type": "alias",
+        "maps_to": "1000",
+        "event": "Tokyo Stock Exchange 9:00 AM JST = 00:00 UTC = 10:00 AEST",
+    },
+    "HK_SG_OPEN": {
+        "type": "alias",
+        "maps_to": "1130",
+        "event": "HKEX/SGX 9:30 AM HKT = 01:30 UTC = 11:30 AEST",
+    },
 }
+
+
+def get_break_group(orb_label: str) -> str | None:
+    """Return the break_group for an ORB label.
+
+    Returns None if label not in catalog or is an alias.
+    """
+    entry = SESSION_CATALOG.get(orb_label)
+    if entry is None or entry["type"] == "alias":
+        return None
+    return entry.get("break_group")
+
+# Only non-alias dynamic sessions get resolvers
+DYNAMIC_ORB_RESOLVERS = {
+    label: entry["resolver"]
+    for label, entry in SESSION_CATALOG.items()
+    if entry["type"] == "dynamic"
+}
+
+
+def validate_catalog():
+    """Fail-closed: verify no two non-alias sessions PERMANENTLY collide.
+
+    Checks both a winter and summer date. A collision is only an error if
+    two sessions resolve to the same time on ALL test dates. Seasonal
+    overlaps (e.g., CME_OPEN = 0900 in winter but diverges in summer) are
+    expected and acceptable -- that's why dynamic sessions exist.
+
+    Raises ValueError if any permanent collision is found.
+    """
+    test_dates = [date(2025, 1, 15), date(2025, 7, 15)]  # winter + summer
+
+    # Collect collisions per date
+    collisions_per_date = []
+    for td in test_dates:
+        times = {}
+        date_collisions = set()
+        for label, entry in SESSION_CATALOG.items():
+            if entry["type"] == "alias":
+                continue
+            if entry["type"] == "dynamic":
+                h, m = entry["resolver"](td)
+            else:
+                h, m = entry["brisbane"]
+            key = (h, m)
+            if key in times:
+                pair = tuple(sorted([label, times[key]]))
+                date_collisions.add(pair)
+            times[key] = label
+        collisions_per_date.append(date_collisions)
+
+    # Permanent collisions: pairs that collide on ALL test dates
+    if collisions_per_date:
+        permanent = collisions_per_date[0]
+        for dc in collisions_per_date[1:]:
+            permanent = permanent & dc
+
+        if permanent:
+            pairs = ", ".join(f"{a}+{b}" for a, b in sorted(permanent))
+            raise ValueError(
+                f"Permanent collision (same time on all test dates): {pairs}"
+            )

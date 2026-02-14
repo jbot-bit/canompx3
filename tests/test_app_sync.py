@@ -41,6 +41,7 @@ from trading_app.config import (
 )
 from trading_app.outcome_builder import RR_TARGETS, CONFIRM_BARS_OPTIONS
 from trading_app.strategy_discovery import make_strategy_id
+from pipeline.asset_configs import ASSET_CONFIGS, get_enabled_sessions
 from trading_app.db_manager import (
     init_trading_app_schema,
     verify_trading_app_schema,
@@ -55,8 +56,8 @@ class TestOrbLabelsSync:
     """ORB_LABELS must be consistent across all modules."""
 
     EXPECTED_ORB_LABELS = [
-        "0900", "1000", "1100", "1800", "2300", "0030",
-        "US_EQUITY_OPEN", "US_DATA_OPEN", "LONDON_OPEN",
+        "0900", "1000", "1100", "1130", "1800", "2300", "0030",
+        "CME_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "LONDON_OPEN",
     ]
 
     def test_orb_labels_exact(self):
@@ -177,15 +178,15 @@ class TestGridParamsSync:
     def test_grid_size(self):
         """Total grid size matches expected formula (E3 uses CB1 only).
 
-        9 ORBs (6 fixed + 3 dynamic) x 6 RRs x 5 CBs x 13 filters x 2 EMs
-        E1: 9 x 6 x 5 x 13 = 3510
-        E3: 9 x 6 x 1 x 13 = 702  (E3 always CB1)
-        Total: 4212
+        11 ORBs (7 fixed + 4 dynamic) x 6 RRs x 5 CBs x 13 filters x 2 EMs
+        E1: 11 x 6 x 5 x 13 = 4290
+        E3: 11 x 6 x 1 x 13 = 858  (E3 always CB1)
+        Total: 5148
         """
         e1 = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * len(ALL_FILTERS)
         e3 = len(ORB_LABELS) * len(RR_TARGETS) * 1 * len(ALL_FILTERS)
         expected = e1 + e3
-        assert expected == 4212
+        assert expected == 5148
 
 
 class TestEntryModelsSync:
@@ -272,7 +273,7 @@ class TestStrategyIdSync:
                             sid = make_strategy_id("MGC", orb, em, rr, cb, fk)
                             assert sid not in ids, f"Duplicate ID: {sid}"
                             ids.add(sid)
-        assert len(ids) == 4212
+        assert len(ids) == 5148
 
 
 # ============================================================================
@@ -418,3 +419,48 @@ class TestImportSync:
         import trading_app.strategy_discovery as sd
         source = inspect.getsource(sd)
         assert 'ENTRY_MODELS' in source
+
+    def test_market_state_imports_orb_labels(self):
+        """market_state imports ORB_LABELS from init_db (not hardcoded)."""
+        import inspect
+        import trading_app.market_state as ms
+        source = inspect.getsource(ms)
+        assert 'from pipeline.init_db import ORB_LABELS' in source
+
+
+# ============================================================================
+# 7. Enabled sessions validation
+# ============================================================================
+
+class TestEnabledSessionsSync:
+    """Every enabled_sessions label must exist in ORB_LABELS."""
+
+    def test_all_enabled_sessions_in_orb_labels(self):
+        orb_set = set(ORB_LABELS)
+        for instrument, config in ASSET_CONFIGS.items():
+            sessions = config.get("enabled_sessions", [])
+            for s in sessions:
+                assert s in orb_set, (
+                    f"{instrument} enabled_sessions has '{s}' which is not in ORB_LABELS"
+                )
+
+    def test_no_alias_in_enabled_sessions(self):
+        from pipeline.dst import SESSION_CATALOG
+        aliases = {
+            label for label, entry in SESSION_CATALOG.items()
+            if entry["type"] == "alias"
+        }
+        for instrument, config in ASSET_CONFIGS.items():
+            sessions = config.get("enabled_sessions", [])
+            for s in sessions:
+                assert s not in aliases, (
+                    f"{instrument} enabled_sessions has alias '{s}' -- use the canonical label"
+                )
+
+    def test_get_enabled_sessions_returns_list(self):
+        for instrument in ASSET_CONFIGS:
+            result = get_enabled_sessions(instrument)
+            assert isinstance(result, list)
+
+    def test_get_enabled_sessions_unknown_returns_empty(self):
+        assert get_enabled_sessions("UNKNOWN") == []

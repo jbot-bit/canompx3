@@ -35,7 +35,7 @@ from pipeline.paths import GOLD_DB_PATH
 from pipeline.asset_configs import get_asset_config, list_instruments
 from pipeline.init_db import ORB_LABELS
 from pipeline.cost_model import get_cost_spec, pnl_points_to_r, CostSpec
-from pipeline.dst import is_us_dst, is_uk_dst, DYNAMIC_ORB_RESOLVERS
+from pipeline.dst import is_us_dst, is_uk_dst, DYNAMIC_ORB_RESOLVERS, get_break_group
 
 # =============================================================================
 # CONSTANTS
@@ -64,6 +64,7 @@ ORB_TIMES_LOCAL = {
     "0900": (9, 0),
     "1000": (10, 0),
     "1100": (11, 0),
+    "1130": (11, 30),   # HK/SG equity open 9:30 AM HKT
     "1800": (18, 0),
     "2300": (23, 0),
     "0030": (0, 30),
@@ -258,28 +259,38 @@ def _break_detection_window(trading_day: date, orb_label: str,
     Return the [start, end) UTC window for break detection.
 
     Start: end of ORB window.
-    End: start of next ORB window (by UTC time), or end of trading day
-         if this is the last ORB of the day.
+    End: start of next ORB window in a DIFFERENT break_group (by UTC time),
+         or end of trading day if this is the last group of the day.
+
+    Break groups (defined in pipeline/dst.py SESSION_CATALOG) prevent adding
+    a nearby session from silently shrinking an existing session's break
+    window. Sessions in the same group (e.g., 1000/1100/1130 in "asia")
+    all extend their break windows to the same boundary (e.g., 1800 "london").
 
     With dynamic sessions, ORB ordering is determined by actual UTC start
     time (which varies with DST), not by list position.
     """
     orb_start, orb_end = _orb_utc_window(trading_day, orb_label, orb_minutes)
+    my_group = get_break_group(orb_label)
 
-    # Collect all ORB start times, find the next one after our end
-    next_start = None
+    # Find the earliest ORB start in a DIFFERENT group that's after our end
+    next_group_start = None
     for label in ORB_LABELS:
         if label == orb_label:
             continue
+        other_group = get_break_group(label)
+        # Only consider labels in a different group as boundaries
+        if my_group is not None and other_group == my_group:
+            continue
         other_start, _ = _orb_utc_window(trading_day, label, orb_minutes)
         if other_start >= orb_end:
-            if next_start is None or other_start < next_start:
-                next_start = other_start
+            if next_group_start is None or other_start < next_group_start:
+                next_group_start = other_start
 
-    if next_start is not None:
-        return orb_end, next_start
+    if next_group_start is not None:
+        return orb_end, next_group_start
     else:
-        # Last ORB of the day — window until end of trading day
+        # Last group of the day — window until end of trading day
         _, td_end = compute_trading_day_utc_range(trading_day)
         return orb_end, td_end
 

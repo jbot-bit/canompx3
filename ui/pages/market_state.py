@@ -16,6 +16,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.paths import GOLD_DB_PATH
+from pipeline.init_db import ORB_LABELS
 from ui.db_reader import get_daily_features
 
 
@@ -64,7 +65,7 @@ def _load_and_display(selected_date: date, orb_minutes: int):
 
     # ORB snapshots table
     st.subheader("ORB Snapshots")
-    orb_labels = ["0900", "1000", "1100", "1800", "2300", "0030"]
+    orb_labels = ORB_LABELS
     orb_rows = []
     for label in orb_labels:
         prefix = f"orb_{label}_"

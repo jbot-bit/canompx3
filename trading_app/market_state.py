@@ -22,13 +22,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
 
-
-
-# =========================================================================
-# ORB session labels (ordered by time of day in Brisbane)
-# =========================================================================
-
-ORB_LABELS = ["0900", "1000", "1100", "1800", "2300", "0030"]
+from pipeline.init_db import ORB_LABELS
 
 # Session ordering for cascade logic: which sessions come before which
 SESSION_ORDER = {label: i for i, label in enumerate(ORB_LABELS)}
@@ -136,23 +130,21 @@ class MarketState:
         con = duckdb.connect(str(db_path), read_only=True)
         try:
             # Load daily_features for this day
-            row = con.execute("""
+            # Build ORB column list dynamically from ORB_LABELS
+            orb_cols = []
+            for lbl in ORB_LABELS:
+                orb_cols.extend([
+                    f"orb_{lbl}_high", f"orb_{lbl}_low", f"orb_{lbl}_size",
+                    f"orb_{lbl}_break_dir", f"orb_{lbl}_break_ts", f"orb_{lbl}_outcome",
+                ])
+            orb_select = ", ".join(orb_cols)
+
+            row = con.execute(f"""
                 SELECT rsi_14_at_0900,
                        session_asia_high, session_asia_low,
                        session_london_high, session_london_low,
                        session_ny_high, session_ny_low,
-                       orb_0900_high, orb_0900_low, orb_0900_size,
-                       orb_0900_break_dir, orb_0900_break_ts, orb_0900_outcome,
-                       orb_1000_high, orb_1000_low, orb_1000_size,
-                       orb_1000_break_dir, orb_1000_break_ts, orb_1000_outcome,
-                       orb_1100_high, orb_1100_low, orb_1100_size,
-                       orb_1100_break_dir, orb_1100_break_ts, orb_1100_outcome,
-                       orb_1800_high, orb_1800_low, orb_1800_size,
-                       orb_1800_break_dir, orb_1800_break_ts, orb_1800_outcome,
-                       orb_2300_high, orb_2300_low, orb_2300_size,
-                       orb_2300_break_dir, orb_2300_break_ts, orb_2300_outcome,
-                       orb_0030_high, orb_0030_low, orb_0030_size,
-                       orb_0030_break_dir, orb_0030_break_ts, orb_0030_outcome
+                       {orb_select}
                 FROM daily_features
                 WHERE symbol = 'MGC'
                   AND trading_day = ?
@@ -175,7 +167,7 @@ class MarketState:
                 if low_val is not None:
                     state.session_lows[name] = low_val
 
-            # ORB snapshots (6 ORBs, 6 columns each, starting at index 7)
+            # ORB snapshots (9 ORBs, 6 columns each, starting at index 7)
             for j, label in enumerate(ORB_LABELS):
                 base = 7 + j * 6
                 orb_high = row[base]

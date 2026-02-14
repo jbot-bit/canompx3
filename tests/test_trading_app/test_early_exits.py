@@ -93,10 +93,18 @@ class TestEarlyExitConfig:
         """1100 permanently off -- not in EARLY_EXIT_MINUTES."""
         assert "1100" not in EARLY_EXIT_MINUTES
 
+    def test_1130_has_no_early_exit(self):
+        """1130 has no early exit configured."""
+        assert EARLY_EXIT_MINUTES["1130"] is None
+
+    def test_cme_open_has_no_early_exit(self):
+        """CME_OPEN has no early exit configured."""
+        assert EARLY_EXIT_MINUTES["CME_OPEN"] is None
+
     def test_all_active_sessions_present(self):
         expected = {
-            "0900", "1000", "1800", "2300", "0030",
-            "US_EQUITY_OPEN", "US_DATA_OPEN", "LONDON_OPEN",
+            "0900", "1000", "1130", "1800", "2300", "0030",
+            "CME_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "LONDON_OPEN",
         }
         assert set(EARLY_EXIT_MINUTES.keys()) == expected
 

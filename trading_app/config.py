@@ -58,10 +58,10 @@ ORB SIZE FILTERS:
   NO_FILTER: Trade all days regardless of ORB size.
     ALL no-filter strategies have negative expectancy. Do not trade.
 
-GRID (2,808 strategy combinations):
-  E1: 6 ORBs x 6 RRs x 5 CBs x 13 filters = 2,340
-  E3: 6 ORBs x 6 RRs x 1 CB x 13 filters = 468 (E3 always CB1)
-  Total = 2,808
+GRID (5,148 strategy combinations, full grid before ENABLED_SESSIONS filtering):
+  E1: 11 ORBs x 6 RRs x 5 CBs x 13 filters = 4,290
+  E3: 11 ORBs x 6 RRs x 1 CB x 13 filters = 858 (E3 always CB1)
+  Total = 5,148
 
 ==========================================================================
 """
@@ -195,10 +195,12 @@ ENTRY_MODELS = ["E1", "E3"]
 ORB_DURATION_MINUTES: dict[str, int] = {
     "0900": 5,
     "1000": 15,
+    "1130": 5,              # HK/SG equity open 9:30 AM HKT
     "1800": 5,
     "2300": 5,
     "0030": 5,
     # Dynamic sessions (DST-aware, resolved per-day by pipeline/dst.py)
+    "CME_OPEN": 5,         # CME Globex electronic open 5:00 PM CT
     "US_EQUITY_OPEN": 5,   # NYSE cash open 09:30 ET (MES, MNQ)
     "US_DATA_OPEN": 5,     # Econ data release 08:30 ET (MGC)
     "LONDON_OPEN": 5,      # London metals 08:00 LT (MGC)
@@ -224,10 +226,12 @@ TRADEABLE_INSTRUMENTS = ["MGC"]
 EARLY_EXIT_MINUTES: dict[str, int | None] = {
     "0900": 15,
     "1000": 30,
+    "1130": None,
     "1800": None,
     "2300": None,
     "0030": None,
     # Dynamic sessions: no early exit until validated
+    "CME_OPEN": None,
     "US_EQUITY_OPEN": None,
     "US_DATA_OPEN": None,
     "LONDON_OPEN": None,
@@ -239,10 +243,12 @@ EARLY_EXIT_MINUTES: dict[str, int | None] = {
 SESSION_EXIT_MODE: dict[str, str] = {
     "0900": "fixed_target",
     "1000": "ib_conditional",
+    "1130": "fixed_target",
     "1800": "fixed_target",
     "2300": "fixed_target",
     "0030": "fixed_target",
     # Dynamic sessions: fixed_target until IB research is done
+    "CME_OPEN": "fixed_target",
     "US_EQUITY_OPEN": "fixed_target",
     "US_DATA_OPEN": "fixed_target",
     "LONDON_OPEN": "fixed_target",

@@ -43,7 +43,8 @@ class QueryIntent:
 MAX_RESULT_ROWS = 1000
 
 # Valid ORB labels for parameter validation
-VALID_ORB_LABELS = {"0900", "1000", "1100", "1800", "2300", "0030"}
+VALID_ORB_LABELS = {"0900", "1000", "1100", "1130", "1800", "2300", "0030",
+                     "CME_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "LONDON_OPEN"}
 
 # Valid entry models
 VALID_ENTRY_MODELS = {"E1", "E3"}
