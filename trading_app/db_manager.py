@@ -33,6 +33,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
     try:
         if force:
             print("WARN: Force mode: Dropping existing trading_app tables...")
+            con.execute("DROP TABLE IF EXISTS strategy_trade_days")
             con.execute("DROP TABLE IF EXISTS validated_setups_archive")
             con.execute("DROP TABLE IF EXISTS validated_setups")
             con.execute("DROP TABLE IF EXISTS experimental_strategies")
@@ -174,6 +175,23 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
             )
         """)
 
+        # Table 5: strategy_trade_days (ground truth post-filter trade days)
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS strategy_trade_days (
+                strategy_id       TEXT        NOT NULL,
+                trading_day       DATE        NOT NULL,
+                PRIMARY KEY (strategy_id, trading_day)
+            )
+        """)
+        con.execute("""
+            CREATE INDEX IF NOT EXISTS idx_std_strategy
+            ON strategy_trade_days(strategy_id)
+        """)
+        con.execute("""
+            CREATE INDEX IF NOT EXISTS idx_std_day
+            ON strategy_trade_days(trading_day)
+        """)
+
         con.commit()
         print("Trading app schema initialized successfully")
 
@@ -200,6 +218,7 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
             "experimental_strategies",
             "validated_setups",
             "validated_setups_archive",
+            "strategy_trade_days",
         ]
 
         # Check tables exist
