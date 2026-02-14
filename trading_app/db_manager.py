@@ -209,6 +209,14 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 head_strategy_id  TEXT        NOT NULL,
                 head_expectancy_r DOUBLE,
                 head_sharpe_ann   DOUBLE,
+
+                -- Robustness metrics
+                robustness_status   TEXT      DEFAULT 'PENDING',
+                cv_expectancy       DOUBLE,
+                median_expectancy_r DOUBLE,
+                avg_sharpe_ann      DOUBLE,
+                min_member_trades   INTEGER,
+
                 created_at        TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
 
                 FOREIGN KEY (head_strategy_id)

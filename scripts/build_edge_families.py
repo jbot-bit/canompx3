@@ -2,7 +2,9 @@
 Build edge families by hashing strategy trade-day lists.
 
 Groups validated strategies that share identical post-filter trade-day
-patterns. Elects a cluster head (best ExpR) per family.
+patterns. Elects cluster head by MEDIAN ExpR (not max — avoids Winner's
+Curse). Applies robustness filter: N>=5 = ROBUST, small families
+whitelisted only if ShANN>=0.8 AND CV<0.3 AND min_trades>=100.
 
 Usage:
     python scripts/build_edge_families.py --instrument MGC --db-path C:/db/gold.db
@@ -11,6 +13,7 @@ Usage:
 
 import sys
 import hashlib
+import statistics
 from pathlib import Path
 from collections import defaultdict
 
@@ -22,6 +25,12 @@ import duckdb
 # Force unbuffered stdout (Windows cp1252 buffering issue)
 sys.stdout.reconfigure(line_buffering=True)
 
+# Robustness thresholds (Duke Protocol #3c)
+MIN_FAMILY_SIZE = 5
+WHITELIST_MIN_SHANN = 0.8
+WHITELIST_MAX_CV = 0.3
+WHITELIST_MIN_TRADES = 100
+
 
 def compute_family_hash(days: list) -> str:
     """Compute deterministic MD5 hash of sorted trade-day list."""
@@ -29,21 +38,86 @@ def compute_family_hash(days: list) -> str:
     return hashlib.md5(day_str.encode()).hexdigest()
 
 
+def classify_family(member_count, avg_shann, cv_expr, min_trades):
+    """Classify family robustness status.
+
+    ROBUST: N>=5 members (parameter-stable edge)
+    WHITELISTED: N<5 but strong metrics (structurally small family)
+    PURGED: fragile / noise / flagpole
+    """
+    if member_count >= MIN_FAMILY_SIZE:
+        return "ROBUST"
+    if (avg_shann is not None and avg_shann >= WHITELIST_MIN_SHANN
+            and cv_expr is not None and cv_expr < WHITELIST_MAX_CV
+            and min_trades is not None and min_trades >= WHITELIST_MIN_TRADES):
+        return "WHITELISTED"
+    return "PURGED"
+
+
+def _elect_median_head(members):
+    """Elect head as strategy closest to median ExpR.
+
+    Avoids Winner's Curse (selecting max = selection bias).
+    Tiebreak: lower strategy_id (deterministic).
+    """
+    exprs = [m[1] or 0 for m in members]
+    med = statistics.median(exprs)
+
+    # Find member closest to median
+    best = None
+    best_dist = float("inf")
+    for sid, expr, shann, sample in members:
+        dist = abs((expr or 0) - med)
+        if dist < best_dist or (dist == best_dist and (best is None or sid < best[0])):
+            best = (sid, expr, shann, sample)
+            best_dist = dist
+
+    return best, med
+
+
 def _migrate_columns(con):
     """Add family_hash and is_family_head columns if missing (existing DB migration)."""
-    cols = {
+    # validated_setups columns
+    vs_cols = {
         r[0]
         for r in con.execute(
             "SELECT column_name FROM information_schema.columns "
             "WHERE table_name = 'validated_setups'"
         ).fetchall()
     }
-    if "family_hash" not in cols:
+    if "family_hash" not in vs_cols:
         con.execute("ALTER TABLE validated_setups ADD COLUMN family_hash TEXT")
-    if "is_family_head" not in cols:
+    if "is_family_head" not in vs_cols:
         con.execute(
             "ALTER TABLE validated_setups ADD COLUMN is_family_head BOOLEAN DEFAULT FALSE"
         )
+
+    # edge_families robustness columns
+    ef_tables = {
+        r[0]
+        for r in con.execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
+        ).fetchall()
+    }
+    if "edge_families" in ef_tables:
+        ef_cols = {
+            r[0]
+            for r in con.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = 'edge_families'"
+            ).fetchall()
+        }
+        for col, typ, default in [
+            ("robustness_status", "TEXT", "'PENDING'"),
+            ("cv_expectancy", "DOUBLE", None),
+            ("median_expectancy_r", "DOUBLE", None),
+            ("avg_sharpe_ann", "DOUBLE", None),
+            ("min_member_trades", "INTEGER", None),
+        ]:
+            if col not in ef_cols:
+                dflt = f" DEFAULT {default}" if default else ""
+                con.execute(f"ALTER TABLE edge_families ADD COLUMN {col} {typ}{dflt}")
+
     con.commit()
 
 
@@ -57,7 +131,7 @@ def build_edge_families(db_path: str, instrument: str) -> int:
     try:
         _migrate_columns(con)
 
-        # Ensure edge_families table exists
+        # Ensure edge_families table exists (with robustness columns)
         con.execute("""
             CREATE TABLE IF NOT EXISTS edge_families (
                 family_hash       TEXT        PRIMARY KEY,
@@ -67,13 +141,18 @@ def build_edge_families(db_path: str, instrument: str) -> int:
                 head_strategy_id  TEXT        NOT NULL,
                 head_expectancy_r DOUBLE,
                 head_sharpe_ann   DOUBLE,
+                robustness_status   TEXT      DEFAULT 'PENDING',
+                cv_expectancy       DOUBLE,
+                median_expectancy_r DOUBLE,
+                avg_sharpe_ann      DOUBLE,
+                min_member_trades   INTEGER,
                 created_at        TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
             )
         """)
 
-        # 1. Load validated strategies
+        # 1. Load validated strategies (include sample_size for min_trades)
         strategies = con.execute("""
-            SELECT strategy_id, expectancy_r, sharpe_ann
+            SELECT strategy_id, expectancy_r, sharpe_ann, sample_size
             FROM validated_setups
             WHERE instrument = ? AND LOWER(status) = 'active'
             ORDER BY strategy_id
@@ -86,8 +165,8 @@ def build_edge_families(db_path: str, instrument: str) -> int:
             return 0
 
         # 2. Compute hash per strategy
-        hash_map = {}  # strategy_id -> family_hash
-        for sid, expr, shann in strategies:
+        hash_map = {}
+        for sid, expr, shann, sample in strategies:
             days = con.execute("""
                 SELECT trading_day FROM strategy_trade_days
                 WHERE strategy_id = ?
@@ -95,13 +174,12 @@ def build_edge_families(db_path: str, instrument: str) -> int:
             """, [sid]).fetchall()
 
             day_list = [r[0] for r in days]
-            h = compute_family_hash(day_list)
-            hash_map[sid] = h
+            hash_map[sid] = compute_family_hash(day_list)
 
-        # 3. Group by hash
-        families = defaultdict(list)  # hash -> [(sid, expr, shann)]
-        for sid, expr, shann in strategies:
-            families[hash_map[sid]].append((sid, expr, shann))
+        # 3. Group by hash -> [(sid, expr, shann, sample_size)]
+        families = defaultdict(list)
+        for sid, expr, shann, sample in strategies:
+            families[hash_map[sid]].append((sid, expr, shann, sample))
 
         print(f"  {len(strategies)} strategies -> {len(families)} unique families")
 
@@ -117,13 +195,34 @@ def build_edge_families(db_path: str, instrument: str) -> int:
             WHERE instrument = ?
         """, [instrument])
 
-        # 6. For each family: elect head, insert edge_families, update validated_setups
-        for family_hash, members in families.items():
-            # Head = best ExpR (among members)
-            members_sorted = sorted(members, key=lambda m: m[1] or 0, reverse=True)
-            head_sid, head_expr, head_shann = members_sorted[0]
+        # 6. For each family: compute metrics, elect median head, classify
+        status_counts = defaultdict(int)
 
-            # Trade day count (all members share the same days, pick any)
+        for family_hash, members in families.items():
+            # Compute family metrics
+            exprs = [m[1] or 0 for m in members]
+            shanns = [m[2] for m in members if m[2] is not None]
+            samples = [m[3] for m in members if m[3] is not None]
+
+            med_expr = statistics.median(exprs)
+            avg_shann = statistics.mean(shanns) if shanns else None
+            min_trades = min(samples) if samples else None
+
+            if len(exprs) > 1:
+                std_expr = statistics.stdev(exprs)
+                mean_expr = statistics.mean(exprs)
+                cv_expr = std_expr / mean_expr if mean_expr > 0 else None
+            else:
+                cv_expr = None  # Singletons have no CV
+
+            # Elect head by MEDIAN (not max)
+            (head_sid, head_expr, head_shann, _), _ = _elect_median_head(members)
+
+            # Classify robustness
+            status = classify_family(len(members), avg_shann, cv_expr, min_trades)
+            status_counts[status] += 1
+
+            # Trade day count
             trade_day_count = con.execute("""
                 SELECT COUNT(*) FROM strategy_trade_days
                 WHERE strategy_id = ?
@@ -133,15 +232,18 @@ def build_edge_families(db_path: str, instrument: str) -> int:
             con.execute("""
                 INSERT INTO edge_families
                 (family_hash, instrument, member_count, trade_day_count,
-                 head_strategy_id, head_expectancy_r, head_sharpe_ann)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                 head_strategy_id, head_expectancy_r, head_sharpe_ann,
+                 robustness_status, cv_expectancy, median_expectancy_r,
+                 avg_sharpe_ann, min_member_trades)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, [
                 family_hash, instrument, len(members), trade_day_count,
                 head_sid, head_expr, head_shann,
+                status, cv_expr, med_expr, avg_shann, min_trades,
             ])
 
-            # Tag all members with family_hash
-            for sid, _, _ in members:
+            # Tag all members
+            for sid, _, _, _ in members:
                 is_head = sid == head_sid
                 con.execute("""
                     UPDATE validated_setups
@@ -158,6 +260,8 @@ def build_edge_families(db_path: str, instrument: str) -> int:
         print(f"  Family sizes: max={size_dist[0]}, "
               f"median={size_dist[len(size_dist)//2]}, "
               f"singletons={size_dist.count(1)}")
+        for status in ["ROBUST", "WHITELISTED", "PURGED"]:
+            print(f"  {status}: {status_counts[status]} families")
 
         return len(families)
 
@@ -169,7 +273,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Build edge families from strategy trade-day hashes"
+        description="Build edge families with robustness filter"
     )
     parser.add_argument("--instrument", help="Instrument symbol")
     parser.add_argument(
