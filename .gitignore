@@ -63,5 +63,8 @@ DT_V2_*.csv
 # MNQ scratch
 MNQ db/
 
+# Reports (generated analysis output)
+reports/
+
 # Misc
 backfill_overnight.log
