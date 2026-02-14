@@ -7,12 +7,14 @@ using DuckDB ATTACH.
 
 Architecture:
     1. COPY: master DB -> C:\\db\\rebuild\\gold_{instrument}.db per instrument
-    2. BUILD: parallel subprocesses (each instrument sequential: outcome -> discovery -> validation)
+    2. BUILD: parallel subprocesses per instrument, sequential steps:
+       features -> outcome -> discovery -> validation
     3. MERGE: ATTACH each copy to master, DELETE+INSERT per instrument (FK-safe order)
     4. CLEANUP: remove temp copies (unless --keep-copies)
 
 Usage:
     python scripts/parallel_rebuild.py --all
+    python scripts/parallel_rebuild.py --all --steps features outcome discovery validation
     python scripts/parallel_rebuild.py --instruments MGC MNQ
     python scripts/parallel_rebuild.py --instruments MGC --steps outcome discovery
     python scripts/parallel_rebuild.py --merge-only --instruments MGC MNQ
@@ -26,6 +28,7 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import date
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -41,7 +44,7 @@ import duckdb
 # ---------------------------------------------------------------------------
 DEFAULT_MASTER = Path(r"C:\db\gold.db")
 REBUILD_DIR = Path(r"C:\db\rebuild")
-ALL_STEPS = ["outcome", "discovery", "validation"]
+ALL_STEPS = ["features", "outcome", "discovery", "validation"]
 
 
 # ---------------------------------------------------------------------------
@@ -57,13 +60,40 @@ def _stream_pipe(pipe, prefix: str, log_file) -> None:
     pipe.close()
 
 
+def _get_instrument_date_range(instrument: str) -> tuple[str, str]:
+    """Return (start_date, end_date) strings for an instrument.
+
+    Uses minimum_start_date from asset_configs. End date is today.
+    """
+    from pipeline.asset_configs import ASSET_CONFIGS
+
+    config = ASSET_CONFIGS.get(instrument.upper(), {})
+    start = config.get("minimum_start_date", date(2016, 1, 1))
+    end = date.today()
+    return start.isoformat(), end.isoformat()
+
+
 def _build_command(
     step: str, instrument: str, db_path: Path, extra: dict,
 ) -> list[str]:
     """Build the CLI command for a single pipeline step."""
     py = sys.executable
 
-    if step == "outcome":
+    if step == "features":
+        # build_daily_features has no --db; uses DUCKDB_PATH env var
+        start_dt = extra.get("start")
+        end_dt = extra.get("end")
+        if not start_dt or not end_dt:
+            start_dt, end_dt = _get_instrument_date_range(instrument)
+        cmd = [
+            py, str(PROJECT_ROOT / "pipeline" / "build_daily_features.py"),
+            "--instrument", instrument,
+            "--start", start_dt,
+            "--end", end_dt,
+            "--orb-minutes", str(extra.get("orb_minutes", 5)),
+        ]
+
+    elif step == "outcome":
         # outcome_builder has no --db; uses DUCKDB_PATH env var
         cmd = [
             py, str(PROJECT_ROOT / "trading_app" / "outcome_builder.py"),
@@ -187,8 +217,10 @@ def merge_instrument(
     """Merge one instrument's results back into the master DB.
 
     Uses DuckDB ATTACH (read-only on source) and respects FK ordering:
-      Delete: archive -> validated -> experimental -> outcomes
-      Insert: outcomes -> experimental -> validated
+      Delete (child -> parent):
+        archive -> validated -> experimental -> outcomes -> daily_features
+      Insert (parent -> child):
+        daily_features -> outcomes -> experimental -> validated
     """
     print(f"\n  Merging {instrument} into {master_db.name}...")
 
@@ -221,7 +253,30 @@ def merge_instrument(
                 "DELETE FROM orb_outcomes WHERE symbol = ?", [instrument],
             )
 
+        if "features" in steps:
+            # orb_outcomes FK -> daily_features, so outcomes must be deleted first
+            # (handled above if "outcome" in steps; if not, delete outcomes too)
+            if "outcome" not in steps:
+                con.execute(
+                    "DELETE FROM orb_outcomes WHERE symbol = ?", [instrument],
+                )
+            con.execute(
+                "DELETE FROM daily_features WHERE symbol = ?", [instrument],
+            )
+
         # --- INSERT in FK-safe order (parent -> child) ---
+
+        if "features" in steps:
+            n = con.execute(
+                "SELECT COUNT(*) FROM src.daily_features WHERE symbol = ?",
+                [instrument],
+            ).fetchone()[0]
+            con.execute(
+                "INSERT INTO daily_features "
+                "SELECT * FROM src.daily_features WHERE symbol = ?",
+                [instrument],
+            )
+            print(f"    daily_features: {n:,} rows")
 
         if "outcome" in steps:
             n = con.execute(
@@ -278,8 +333,8 @@ def main() -> None:
         epilog="""\
 Examples:
   python scripts/parallel_rebuild.py --all
-  python scripts/parallel_rebuild.py --instruments MGC MNQ
-  python scripts/parallel_rebuild.py --instruments MGC --steps outcome discovery
+  python scripts/parallel_rebuild.py --all --steps features outcome discovery validation
+  python scripts/parallel_rebuild.py --instruments MGC MNQ --steps outcome discovery
   python scripts/parallel_rebuild.py --merge-only --instruments MGC MNQ
   python scripts/parallel_rebuild.py --all --keep-copies --dry-run
 """,
