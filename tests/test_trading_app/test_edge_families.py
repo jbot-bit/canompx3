@@ -180,17 +180,21 @@ class TestRobustnessClassification:
 
     def test_classify_whitelisted(self):
         from scripts.build_edge_families import classify_family
-        # N<5 but strong: ShANN>=0.8, CV<0.3, trades>=100
+        # N in [3,4], ShANN>=0.8, CV<=0.5, trades>=50
         assert classify_family(3, 0.9, 0.2, 150) == "WHITELISTED"
-        assert classify_family(1, 1.5, 0.0, 200) == "WHITELISTED"  # CV=0 ok (singleton)
+        assert classify_family(4, 1.5, 0.5, 50) == "WHITELISTED"   # CV=0.5 boundary
+        assert classify_family(3, 0.8, 0.0, 50) == "WHITELISTED"   # ShANN=0.8 boundary
 
     def test_classify_purged(self):
         from scripts.build_edge_families import classify_family
-        # Fails any whitelist criterion
-        assert classify_family(2, 0.5, 0.2, 100) == "PURGED"  # ShANN too low
-        assert classify_family(3, 0.9, 0.4, 100) == "PURGED"  # CV too high
-        assert classify_family(4, 0.9, 0.2, 50) == "PURGED"   # trades too low
-        assert classify_family(1, None, None, 50) == "PURGED"  # missing metrics
+        # N<=2 always PURGED (below WHITELIST_MIN_MEMBERS)
+        assert classify_family(1, 1.5, 0.0, 200) == "PURGED"   # singleton
+        assert classify_family(2, 1.5, 0.1, 200) == "PURGED"   # pair
+        # N>=3 but fails a metric
+        assert classify_family(3, 0.5, 0.2, 100) == "PURGED"   # ShANN too low
+        assert classify_family(3, 0.9, 0.6, 100) == "PURGED"   # CV too high (>0.5)
+        assert classify_family(4, 0.9, 0.2, 30) == "PURGED"    # trades too low (<50)
+        assert classify_family(3, None, None, 50) == "PURGED"   # missing metrics
 
     def test_singleton_purged_in_fixture(self, db_path):
         from scripts.build_edge_families import build_edge_families
@@ -204,13 +208,7 @@ class TestRobustnessClassification:
         """).fetchone()
         con.close()
 
-        # s3 is singleton with ShANN=1.5, but CV=None -> WHITELISTED
-        # Actually: singleton CV is None, which fails cv < 0.3 check
-        # Wait: classify_family checks cv_expr is not None and cv_expr < 0.3
-        # For singleton, cv=None -> fails whitelist -> PURGED?
-        # But s3 has ShANN=1.5 and trades=150...
-        # Let's check: cv_expr is None for singletons (can't compute std of 1)
-        # None < 0.3 -> condition fails -> PURGED
+        # s3 is singleton (N=1) -> always PURGED (below WHITELIST_MIN_MEMBERS=3)
         assert family[0] == "PURGED"
 
     def test_robustness_columns_populated(self, db_path):
@@ -221,7 +219,7 @@ class TestRobustnessClassification:
         con = duckdb.connect(str(db_path), read_only=True)
         families = con.execute("""
             SELECT robustness_status, cv_expectancy, median_expectancy_r,
-                   avg_sharpe_ann, min_member_trades
+                   avg_sharpe_ann, min_member_trades, trade_tier
             FROM edge_families ORDER BY member_count DESC
         """).fetchall()
         con.close()
@@ -233,6 +231,44 @@ class TestRobustnessClassification:
         assert f2[2] == 0.375     # median of [0.30, 0.45]
         assert f2[3] is not None  # avg ShANN
         assert f2[4] == 100       # min(100, 120)
+        assert f2[5] == "CORE"    # min_trades=100 >= CORE threshold
+
+
+class TestTradeTier:
+    """Trade tier classification: CORE / REGIME / INVALID."""
+
+    def test_classify_core(self):
+        from scripts.build_edge_families import classify_trade_tier
+        assert classify_trade_tier(100) == "CORE"
+        assert classify_trade_tier(500) == "CORE"
+
+    def test_classify_regime(self):
+        from scripts.build_edge_families import classify_trade_tier
+        assert classify_trade_tier(30) == "REGIME"
+        assert classify_trade_tier(99) == "REGIME"
+
+    def test_classify_invalid(self):
+        from scripts.build_edge_families import classify_trade_tier
+        assert classify_trade_tier(29) == "INVALID"
+        assert classify_trade_tier(0) == "INVALID"
+        assert classify_trade_tier(None) == "INVALID"
+
+    def test_trade_tier_in_fixture(self, db_path):
+        from scripts.build_edge_families import build_edge_families
+
+        build_edge_families(str(db_path), "MGC")
+
+        con = duckdb.connect(str(db_path), read_only=True)
+        families = con.execute("""
+            SELECT member_count, min_member_trades, trade_tier
+            FROM edge_families ORDER BY member_count DESC
+        """).fetchall()
+        con.close()
+
+        # 2-member family: min(100, 120) = 100 -> CORE
+        assert families[0] == (2, 100, "CORE")
+        # Singleton: 150 trades -> CORE
+        assert families[1] == (1, 150, "CORE")
 
 
 class TestBuildEdgeFamilies:

@@ -3,8 +3,8 @@ Build edge families by hashing strategy trade-day lists.
 
 Groups validated strategies that share identical post-filter trade-day
 patterns. Elects cluster head by MEDIAN ExpR (not max — avoids Winner's
-Curse). Applies robustness filter: N>=5 = ROBUST, small families
-whitelisted only if ShANN>=0.8 AND CV<0.3 AND min_trades>=100.
+Curse). Applies robustness filter: N>=5 = ROBUST, N in [3,4] whitelisted
+if ShANN>=0.8 AND CV<=0.5 AND min_trades>=50. Trade tier: CORE/REGIME/INVALID.
 
 Usage:
     python scripts/build_edge_families.py --instrument MGC --db-path C:/db/gold.db
@@ -27,9 +27,14 @@ sys.stdout.reconfigure(line_buffering=True)
 
 # Robustness thresholds (Duke Protocol #3c)
 MIN_FAMILY_SIZE = 5
+WHITELIST_MIN_MEMBERS = 3   # N>=3 to avoid "one lucky sibling" at higher CV
 WHITELIST_MIN_SHANN = 0.8
-WHITELIST_MAX_CV = 0.3
-WHITELIST_MIN_TRADES = 100
+WHITELIST_MAX_CV = 0.5
+WHITELIST_MIN_TRADES = 50
+
+# Trade tier thresholds (from config.py classification)
+CORE_MIN_TRADES = 100
+REGIME_MIN_TRADES = 30
 
 
 def compute_family_hash(days: list) -> str:
@@ -42,16 +47,33 @@ def classify_family(member_count, avg_shann, cv_expr, min_trades):
     """Classify family robustness status.
 
     ROBUST: N>=5 members (parameter-stable edge)
-    WHITELISTED: N<5 but strong metrics (structurally small family)
-    PURGED: fragile / noise / flagpole
+    WHITELISTED: N in [3,4] with strong metrics (structurally small family)
+    PURGED: N<=2, or N in [3,4] with weak metrics
     """
     if member_count >= MIN_FAMILY_SIZE:
         return "ROBUST"
-    if (avg_shann is not None and avg_shann >= WHITELIST_MIN_SHANN
-            and cv_expr is not None and cv_expr < WHITELIST_MAX_CV
+    if (member_count >= WHITELIST_MIN_MEMBERS
+            and avg_shann is not None and avg_shann >= WHITELIST_MIN_SHANN
+            and cv_expr is not None and cv_expr <= WHITELIST_MAX_CV
             and min_trades is not None and min_trades >= WHITELIST_MIN_TRADES):
         return "WHITELISTED"
     return "PURGED"
+
+
+def classify_trade_tier(min_trades):
+    """Classify family trade tier by minimum member trade count.
+
+    CORE: min_trades >= 100 (standalone portfolio weight)
+    REGIME: 30 <= min_trades < 100 (conditional overlay / signal only)
+    INVALID: min_trades < 30 (not tradeable)
+    """
+    if min_trades is None:
+        return "INVALID"
+    if min_trades >= CORE_MIN_TRADES:
+        return "CORE"
+    if min_trades >= REGIME_MIN_TRADES:
+        return "REGIME"
+    return "INVALID"
 
 
 def _elect_median_head(members):
@@ -113,6 +135,7 @@ def _migrate_columns(con):
             ("median_expectancy_r", "DOUBLE", None),
             ("avg_sharpe_ann", "DOUBLE", None),
             ("min_member_trades", "INTEGER", None),
+            ("trade_tier", "TEXT", "'PENDING'"),
         ]:
             if col not in ef_cols:
                 dflt = f" DEFAULT {default}" if default else ""
@@ -146,6 +169,7 @@ def build_edge_families(db_path: str, instrument: str) -> int:
                 median_expectancy_r DOUBLE,
                 avg_sharpe_ann      DOUBLE,
                 min_member_trades   INTEGER,
+                trade_tier          TEXT      DEFAULT 'PENDING',
                 created_at        TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -218,8 +242,9 @@ def build_edge_families(db_path: str, instrument: str) -> int:
             # Elect head by MEDIAN (not max)
             (head_sid, head_expr, head_shann, _), _ = _elect_median_head(members)
 
-            # Classify robustness
+            # Classify robustness + trade tier
             status = classify_family(len(members), avg_shann, cv_expr, min_trades)
+            tier = classify_trade_tier(min_trades)
             status_counts[status] += 1
 
             # Trade day count
@@ -234,12 +259,12 @@ def build_edge_families(db_path: str, instrument: str) -> int:
                 (family_hash, instrument, member_count, trade_day_count,
                  head_strategy_id, head_expectancy_r, head_sharpe_ann,
                  robustness_status, cv_expectancy, median_expectancy_r,
-                 avg_sharpe_ann, min_member_trades)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 avg_sharpe_ann, min_member_trades, trade_tier)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, [
                 family_hash, instrument, len(members), trade_day_count,
                 head_sid, head_expr, head_shann,
-                status, cv_expr, med_expr, avg_shann, min_trades,
+                status, cv_expr, med_expr, avg_shann, min_trades, tier,
             ])
 
             # Tag all members
@@ -261,7 +286,7 @@ def build_edge_families(db_path: str, instrument: str) -> int:
               f"median={size_dist[len(size_dist)//2]}, "
               f"singletons={size_dist.count(1)}")
         for status in ["ROBUST", "WHITELISTED", "PURGED"]:
-            print(f"  {status}: {status_counts[status]} families")
+            print(f"  {status}: {status_counts.get(status, 0)} families")
 
         return len(families)
 
