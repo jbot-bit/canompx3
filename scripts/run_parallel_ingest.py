@@ -8,10 +8,16 @@ IMPORTANT: Year ranges overlap by 2 days to handle Brisbane trading day
 boundaries (bars from Dec 31 file can belong to Jan 1 trading day).
 The merge uses INSERT OR REPLACE so overlapping rows are deduplicated.
 
+SAFETY: merge_bars_only() ONLY touches bars_1m. Trading tables
+(validated_setups, experimental_strategies, etc.) are never dropped.
+Use --force-rebuild for full schema reset (requires explicit confirmation).
+
 Usage:
     python scripts/run_parallel_ingest.py
+    python scripts/run_parallel_ingest.py --force-rebuild
 """
 
+import argparse
 import subprocess
 import sys
 import time
@@ -66,42 +72,36 @@ def ingest_year(start: str, end: str) -> str:
     return f"OK {year_label}: {count:,} rows"
 
 
-def merge_all():
-    """Merge all temp DBs into gold.db using ATTACH."""
-    print("\n=== MERGING ===")
+def merge_bars_only(db_path: Path = None, temp_dbs: list[Path] = None):
+    """Merge temp DBs into gold.db — bars_1m ONLY. Never touches trading tables."""
+    if db_path is None:
+        db_path = GOLD_DB
 
-    sys.path.insert(0, str(PROJECT_ROOT))
-    from pipeline.init_db import init_db
+    print("\n=== MERGING (bars_1m only) ===")
 
-    # Wipe everything — pipeline tables AND trading_app tables
-    con = duckdb.connect(str(GOLD_DB))
-    for table in ["validated_setups_archive", "validated_setups",
-                   "experimental_strategies", "orb_outcomes"]:
-        con.execute(f"DROP TABLE IF EXISTS {table}")
-    con.close()
-
-    # Recreate pipeline schema
-    init_db(GOLD_DB, force=True)
-
-    con = duckdb.connect(str(GOLD_DB))
+    con = duckdb.connect(str(db_path))
     total = 0
 
-    for start, _ in YEAR_RANGES:
-        year_label = start[:4]
-        temp_db = PROJECT_ROOT / f"temp_{year_label}.db"
+    if temp_dbs is None:
+        temp_dbs = []
+        for start, _ in YEAR_RANGES:
+            year_label = start[:4]
+            p = PROJECT_ROOT / f"temp_{year_label}.db"
+            if p.exists():
+                temp_dbs.append(p)
+
+    for temp_db in temp_dbs:
         if not temp_db.exists():
-            print(f"  SKIP {year_label}")
+            print(f"  SKIP {temp_db.stem}")
             continue
 
-        alias = f"y{year_label}"
+        alias = f"y{temp_db.stem.replace('temp_', '')}"
         con.execute(f"ATTACH '{temp_db}' AS {alias} (READ_ONLY)")
-
-        # INSERT OR REPLACE handles overlap dedup
         con.execute(f"INSERT OR REPLACE INTO bars_1m SELECT * FROM {alias}.bars_1m")
         count = con.execute(f"SELECT COUNT(*) FROM {alias}.bars_1m").fetchone()[0]
         con.execute(f"DETACH {alias}")
         total += count
-        print(f"  {year_label}: {count:,} rows merged")
+        print(f"  {temp_db.stem}: {count:,} rows merged")
 
     con.commit()
 
@@ -119,9 +119,6 @@ def merge_all():
 
     if nulls > 0:
         print("  WARNING: NULL source_symbols found!")
-    prefixes = [r[0] for r in sources]
-    if prefixes != ["GC"]:
-        print(f"  WARNING: Expected ['GC'], got {prefixes}")
 
     con.close()
 
@@ -206,6 +203,28 @@ def cleanup():
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Parallel GC re-ingest")
+    parser.add_argument(
+        "--force-rebuild", action="store_true",
+        help="DROP ALL tables including trading_app before ingest (DANGEROUS)",
+    )
+    args = parser.parse_args()
+
+    if args.force_rebuild:
+        print("WARNING: --force-rebuild will DROP ALL tables including:")
+        print("  validated_setups, experimental_strategies, orb_outcomes,")
+        print("  strategy_trade_days, edge_families, validated_setups_archive")
+        confirm = input("Type 'yes-destroy-everything' to confirm: ")
+        if confirm != "yes-destroy-everything":
+            print("Aborted.")
+            sys.exit(1)
+        sys.path.insert(0, str(PROJECT_ROOT))
+        from pipeline.init_db import init_db
+        from trading_app.db_manager import init_trading_app_schema
+        init_db(GOLD_DB, force=True)
+        init_trading_app_schema(db_path=GOLD_DB, force=True)
+        print("Schema reset complete.\n")
+
     t0 = time.time()
     print("=== PARALLEL GC RE-INGEST ===")
     print(f"  {len(YEAR_RANGES)} parallel workers (overlapping boundaries)")
@@ -225,8 +244,8 @@ def main():
             except Exception as e:
                 print(f"  FAILED {year}: {e}")
 
-    # Merge
-    merge_all()
+    # Safe merge (bars_1m only)
+    merge_bars_only()
 
     # Build downstream
     build_downstream()

@@ -6,6 +6,8 @@ Fails if anyone reintroduces:
 1. Hardcoded 'MGC' SQL literals in generic pipeline code (ingest_dbn.py, run_pipeline.py)
 2. .apply() or .iterrows() usage in ingest scripts (performance anti-pattern)
 3. Any writes to tables other than bars_1m in ingest scripts
+   (covers: ingest_dbn.py, ingest_dbn_mgc.py, ingest_dbn_daily.py,
+    scripts/run_parallel_ingest.py)
 
 FAIL-CLOSED: Any violation exits with code 1.
 
@@ -20,6 +22,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 PIPELINE_DIR = PROJECT_ROOT / "pipeline"
 TRADING_APP_DIR = PROJECT_ROOT / "trading_app"
+SCRIPTS_DIR = PROJECT_ROOT / "scripts"
 
 # =============================================================================
 # FILES TO CHECK
@@ -38,12 +41,15 @@ GENERIC_FILES = [
 INGEST_FILES = [
     PIPELINE_DIR / "ingest_dbn.py",
     PIPELINE_DIR / "ingest_dbn_mgc.py",
+    PIPELINE_DIR / "ingest_dbn_daily.py",
 ]
 
 # Ingest files: must NOT write to any table other than bars_1m
 INGEST_WRITE_FILES = [
     PIPELINE_DIR / "ingest_dbn.py",
     PIPELINE_DIR / "ingest_dbn_mgc.py",
+    PIPELINE_DIR / "ingest_dbn_daily.py",
+    SCRIPTS_DIR / "run_parallel_ingest.py",
 ]
 
 
