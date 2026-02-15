@@ -27,7 +27,6 @@ sys.stdout.reconfigure(line_buffering=True)
 import duckdb
 
 from pipeline.paths import GOLD_DB_PATH
-from pipeline.cost_model import get_cost_spec
 from trading_app.strategy_discovery import compute_metrics
 from trading_app.db_manager import has_edge_families
 
@@ -186,8 +185,7 @@ def report_instrument(db_path, instrument, include_purged=False):
         traded = [t for t in trades if t["outcome"] in ("win", "loss")]
 
         # Per-trade stats via compute_metrics
-        cost_spec = get_cost_spec(instrument)
-        per_trade = compute_metrics(traded, cost_spec)
+        per_trade = compute_metrics(traded)
 
         # Daily ledger
         daily_returns, overlap_count = _compute_daily_ledger(traded)
@@ -203,7 +201,7 @@ def report_instrument(db_path, instrument, include_purged=False):
 
         per_orb = {}
         for orb_label in sorted(orb_groups.keys()):
-            orb_metrics = compute_metrics(orb_groups[orb_label], cost_spec)
+            orb_metrics = compute_metrics(orb_groups[orb_label])
             per_orb[orb_label] = {
                 "trades": orb_metrics["sample_size"],
                 "expectancy_r": orb_metrics["expectancy_r"],

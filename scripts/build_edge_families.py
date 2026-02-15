@@ -12,7 +12,6 @@ Usage:
 """
 
 import sys
-import hashlib
 import statistics
 from pathlib import Path
 from collections import defaultdict
@@ -21,6 +20,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
+
+from trading_app.db_manager import compute_trade_day_hash
 
 # Force unbuffered stdout (Windows cp1252 buffering issue)
 sys.stdout.reconfigure(line_buffering=True)
@@ -37,10 +38,7 @@ CORE_MIN_TRADES = 100
 REGIME_MIN_TRADES = 30
 
 
-def compute_family_hash(days: list) -> str:
-    """Compute deterministic MD5 hash of sorted trade-day list."""
-    day_str = ",".join(str(d) for d in sorted(days))
-    return hashlib.md5(day_str.encode()).hexdigest()
+compute_family_hash = compute_trade_day_hash  # public alias for backward compat
 
 
 def classify_family(member_count, avg_shann, cv_expr, min_trades):

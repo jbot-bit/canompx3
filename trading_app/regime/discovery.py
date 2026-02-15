@@ -19,7 +19,6 @@ sys.path.insert(0, str(PROJECT_ROOT))
 import duckdb
 
 from pipeline.paths import GOLD_DB_PATH
-from pipeline.cost_model import get_cost_spec
 from pipeline.init_db import ORB_LABELS
 from trading_app.config import ALL_FILTERS, ENTRY_MODELS
 from trading_app.outcome_builder import RR_TARGETS, CONFIRM_BARS_OPTIONS
@@ -55,8 +54,6 @@ def run_regime_discovery(
     """
     if db_path is None:
         db_path = GOLD_DB_PATH
-
-    cost_spec = get_cost_spec(instrument)
 
     con = duckdb.connect(str(db_path))
     try:
@@ -133,7 +130,7 @@ def run_regime_discovery(
                             if not outcomes:
                                 continue
 
-                            metrics = compute_metrics(outcomes, cost_spec)
+                            metrics = compute_metrics(outcomes)
                             strategy_id = make_strategy_id(
                                 instrument, orb_label, em, rr_target, cb, filter_key,
                             )

@@ -302,7 +302,6 @@ def run_validation(
                     confirm_bars=row_dict["confirm_bars"],
                     filter_type=row_dict.get("filter_type", "NO_FILTER"),
                     orb_minutes=row_dict.get("orb_minutes", 5),
-                    cost_spec=cost_spec,
                     test_window_months=wf_test_months,
                     min_train_months=wf_min_train_months,
                     min_trades_per_window=wf_min_trades,

@@ -21,12 +21,6 @@ from trading_app.strategy_discovery import (
 from trading_app.config import (
     ENTRY_MODELS, ALL_FILTERS, VolumeFilter,
 )
-from pipeline.cost_model import get_cost_spec
-
-
-def _cost():
-    return get_cost_spec("MGC")
-
 
 # ============================================================================
 # compute_metrics tests
@@ -45,7 +39,7 @@ class TestComputeMetrics:
             for i in range(8, 11)
         ]
 
-        m = compute_metrics(outcomes, _cost())
+        m = compute_metrics(outcomes)
         assert m["win_rate"] == pytest.approx(7 / 10, abs=0.001)
 
     def test_expectancy(self):
@@ -57,7 +51,7 @@ class TestComputeMetrics:
             {"trading_day": date(2024, 1, 4), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2703.0, "stop_price": 2690.0},
         ]
 
-        m = compute_metrics(outcomes, _cost())
+        m = compute_metrics(outcomes)
         assert m["expectancy_r"] == pytest.approx(0.75, abs=0.01)
 
     def test_sharpe_ratio(self):
@@ -66,7 +60,7 @@ class TestComputeMetrics:
             {"trading_day": date(2024, 1, i), "outcome": "win", "pnl_r": 1.0, "mae_r": 0.5, "mfe_r": 1.0, "entry_price": 2703.0, "stop_price": 2690.0}
             for i in range(1, 5)
         ]
-        m = compute_metrics(outcomes, _cost())
+        m = compute_metrics(outcomes)
         assert m["sharpe_ratio"] is None
 
     def test_sharpe_ratio_valid(self):
@@ -75,7 +69,7 @@ class TestComputeMetrics:
             {"trading_day": date(2024, 1, 1), "outcome": "win", "pnl_r": 2.0, "mae_r": 0.5, "mfe_r": 2.0, "entry_price": 2703.0, "stop_price": 2690.0},
             {"trading_day": date(2024, 1, 2), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2703.0, "stop_price": 2690.0},
         ]
-        m = compute_metrics(outcomes, _cost())
+        m = compute_metrics(outcomes)
         assert m["sharpe_ratio"] is not None
         assert abs(m["sharpe_ratio"]) < 1.0
 
@@ -87,7 +81,7 @@ class TestComputeMetrics:
             {"trading_day": date(2024, 1, 3), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2703.0, "stop_price": 2690.0},
             {"trading_day": date(2024, 1, 4), "outcome": "win", "pnl_r": 2.0, "mae_r": 0.5, "mfe_r": 2.0, "entry_price": 2703.0, "stop_price": 2690.0},
         ]
-        m = compute_metrics(outcomes, _cost())
+        m = compute_metrics(outcomes)
         assert m["max_drawdown_r"] == pytest.approx(2.0, abs=0.01)
 
     def test_yearly_breakdown(self):
@@ -97,7 +91,7 @@ class TestComputeMetrics:
             {"trading_day": date(2024, 6, 1), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2703.0, "stop_price": 2690.0},
             {"trading_day": date(2025, 1, 1), "outcome": "win", "pnl_r": 1.5, "mae_r": 0.5, "mfe_r": 1.5, "entry_price": 2703.0, "stop_price": 2690.0},
         ]
-        m = compute_metrics(outcomes, _cost())
+        m = compute_metrics(outcomes)
         yearly = json.loads(m["yearly_results"])
         assert "2024" in yearly
         assert "2025" in yearly
@@ -106,7 +100,7 @@ class TestComputeMetrics:
 
     def test_empty_outcomes(self):
         """Empty list returns zeroed metrics."""
-        m = compute_metrics([], _cost())
+        m = compute_metrics([])
         assert m["sample_size"] == 0
         assert m["win_rate"] is None
         assert m["median_risk_points"] is None
@@ -117,7 +111,7 @@ class TestComputeMetrics:
         outcomes = [
             {"trading_day": date(2024, 1, 1), "outcome": "scratch", "pnl_r": None, "mae_r": 0.1, "mfe_r": 0.1, "entry_price": None, "stop_price": None},
         ]
-        m = compute_metrics(outcomes, _cost())
+        m = compute_metrics(outcomes)
         assert m["sample_size"] == 0  # scratches excluded from sample_size
         assert m["win_rate"] is None
 
@@ -127,7 +121,7 @@ class TestComputeMetrics:
             {"trading_day": date(2024, 1, 1), "outcome": "win", "pnl_r": 2.0, "mae_r": 0.5, "mfe_r": 2.0, "entry_price": 2703.0, "stop_price": 2690.0},
             {"trading_day": date(2024, 1, 2), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2705.0, "stop_price": 2690.0},
         ]
-        m = compute_metrics(outcomes, _cost())
+        m = compute_metrics(outcomes)
         assert m["median_risk_points"] == pytest.approx(14.0, abs=0.01)  # median of 13, 15
         assert m["avg_risk_points"] == pytest.approx(14.0, abs=0.01)  # avg of 13, 15
 
@@ -143,7 +137,7 @@ class TestComputeMetrics:
             {"trading_day": date(2025, 3, i), "outcome": "win", "pnl_r": 1.5, "mae_r": 0.5, "mfe_r": 1.5, "entry_price": 2703.0, "stop_price": 2690.0}
             for i in range(1, 4)
         ]
-        m = compute_metrics(outcomes, _cost())
+        m = compute_metrics(outcomes)
         assert m["sharpe_ann"] is not None
         # Date range: 2024-01-01 to 2025-03-03 = 428 days ≈ 1.17 years
         span_years = ((date(2025, 3, 3) - date(2024, 1, 1)).days + 1) / 365.25
@@ -158,13 +152,13 @@ class TestComputeMetrics:
             {"trading_day": date(2024, 1, i), "outcome": "win", "pnl_r": 1.0, "mae_r": 0.5, "mfe_r": 1.0, "entry_price": 2703.0, "stop_price": 2690.0}
             for i in range(1, 5)
         ]
-        m = compute_metrics(outcomes, _cost())
+        m = compute_metrics(outcomes)
         assert m["sharpe_ratio"] is None  # zero variance
         assert m["sharpe_ann"] is None
 
     def test_trades_per_year_in_empty(self):
         """Empty outcomes returns trades_per_year=0, sharpe_ann=None."""
-        m = compute_metrics([], _cost())
+        m = compute_metrics([])
         assert m["trades_per_year"] == 0
         assert m["sharpe_ann"] is None
 
@@ -175,7 +169,7 @@ class TestComputeMetrics:
             {"trading_day": date(2024, 3, 1), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2703.0, "stop_price": 2690.0},
             {"trading_day": date(2024, 6, 1), "outcome": "win", "pnl_r": 1.5, "mae_r": 0.5, "mfe_r": 1.5, "entry_price": 2703.0, "stop_price": 2690.0},
         ]
-        m = compute_metrics(outcomes, _cost())
+        m = compute_metrics(outcomes)
         # Date range: 2024-01-01 to 2024-06-01 = 153 days ≈ 0.42 years
         span_years = ((date(2024, 6, 1) - date(2024, 1, 1)).days + 1) / 365.25
         expected_tpy = 3 / span_years
@@ -192,7 +186,7 @@ class TestComputeMetrics:
             {"trading_day": date(2024, 1, 3), "outcome": "win", "pnl_r": 2.0, "mae_r": 0.5, "mfe_r": 2.0, "entry_price": 2703.0, "stop_price": 2690.0},
             {"trading_day": date(2025, 1, 1), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2703.0, "stop_price": 2690.0},
         ]
-        m = compute_metrics(outcomes, _cost())
+        m = compute_metrics(outcomes)
         assert m["sharpe_ratio"] < 0
         assert m["sharpe_ann"] < 0
         expected = m["sharpe_ratio"] * (m["trades_per_year"] ** 0.5)
@@ -419,7 +413,7 @@ class TestComputeMetricsScratchCounts:
             + [self._make_outcome(i, "loss", -1.0) for i in range(11, 16)]
             + [self._make_outcome(i, "scratch") for i in range(16, 19)]
         )
-        m = compute_metrics(outcomes, _cost())
+        m = compute_metrics(outcomes)
         assert m["sample_size"] == 15
         assert m["entry_signals"] == 18
         assert m["scratch_count"] == 3
@@ -432,7 +426,7 @@ class TestComputeMetricsScratchCounts:
             + [self._make_outcome(i, "loss", -1.0) for i in range(11, 16)]
             + [self._make_outcome(i, "early_exit", -0.5) for i in range(16, 18)]
         )
-        m = compute_metrics(outcomes, _cost())
+        m = compute_metrics(outcomes)
         assert m["sample_size"] == 15
         assert m["entry_signals"] == 17
         assert m["scratch_count"] == 0
@@ -445,11 +439,63 @@ class TestComputeMetricsScratchCounts:
             + [self._make_outcome(i, "loss", -1.0) for i in range(5, 11)]
             + [self._make_outcome(i, "scratch") for i in range(11, 16)]
         )
-        m = compute_metrics(outcomes, _cost())
+        m = compute_metrics(outcomes)
         assert m["win_rate"] == pytest.approx(0.4, abs=0.001)
         assert m["sample_size"] == 10
         assert m["entry_signals"] == 15
         assert m["scratch_count"] == 5
+
+
+class TestZeroSampleNotWritten:
+    """B2: All-scratch/early_exit outcomes should not produce strategy rows."""
+
+    def test_zero_sample_strategies_not_written(self, tmp_path):
+        """All-scratch outcomes should not produce a strategy row."""
+        db_path = tmp_path / "test_b2.db"
+        con = duckdb.connect(str(db_path))
+
+        # Create minimal schema
+        from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA, DAILY_FEATURES_SCHEMA
+        con.execute(BARS_1M_SCHEMA)
+        con.execute(BARS_5M_SCHEMA)
+        con.execute(DAILY_FEATURES_SCHEMA)
+        con.close()
+
+        from trading_app.db_manager import init_trading_app_schema
+        init_trading_app_schema(db_path=db_path)
+
+        con = duckdb.connect(str(db_path))
+        # Insert daily_features rows with ORB breaks
+        for i in range(1, 11):
+            con.execute(
+                """INSERT INTO daily_features (trading_day, symbol, orb_minutes,
+                    orb_0900_high, orb_0900_low, orb_0900_size, orb_0900_break_dir)
+                   VALUES (?, 'MGC', 5, 2710.0, 2700.0, 10.0, 'long')""",
+                [date(2024, 1, i)],
+            )
+        # Insert orb_outcomes that are ALL scratches
+        for i in range(1, 11):
+            con.execute(
+                """INSERT INTO orb_outcomes
+                    (trading_day, symbol, orb_minutes, orb_label, entry_model,
+                     rr_target, confirm_bars, outcome, pnl_r, mae_r, mfe_r)
+                   VALUES (?, 'MGC', 5, '0900', 'E1', 2.0, 1, 'scratch', 0.0, 0.1, 0.1)""",
+                [date(2024, 1, i)],
+            )
+        con.commit()
+        con.close()
+
+        # Run discovery
+        count = run_discovery(
+            db_path=db_path, instrument="MGC",
+            start_date=date(2024, 1, 1), end_date=date(2024, 1, 31),
+        )
+
+        # Verify no strategies were written (all had sample_size=0)
+        con = duckdb.connect(str(db_path), read_only=True)
+        rows = con.execute("SELECT COUNT(*) FROM experimental_strategies").fetchone()[0]
+        con.close()
+        assert rows == 0, f"Expected 0 strategies but got {rows}"
 
 
 # ============================================================================
@@ -461,7 +507,8 @@ class TestDedup:
 
     def test_dedup_identifies_identical_trade_sets(self):
         """3 strategies with same trade days -> 1 canonical + 2 aliases."""
-        from trading_app.strategy_discovery import _mark_canonical, _compute_trade_day_hash
+        from trading_app.strategy_discovery import _mark_canonical
+        from trading_app.db_manager import compute_trade_day_hash as _compute_trade_day_hash
 
         days = [date(2024, 1, i) for i in range(1, 11)]
         day_hash = _compute_trade_day_hash(days)
@@ -489,7 +536,8 @@ class TestDedup:
 
     def test_dedup_preserves_different_trade_sets(self):
         """2 strategies with different trade days -> both canonical."""
-        from trading_app.strategy_discovery import _mark_canonical, _compute_trade_day_hash
+        from trading_app.strategy_discovery import _mark_canonical
+        from trading_app.db_manager import compute_trade_day_hash as _compute_trade_day_hash
 
         days1 = [date(2024, 1, i) for i in range(1, 6)]
         days2 = [date(2024, 1, i) for i in range(6, 11)]

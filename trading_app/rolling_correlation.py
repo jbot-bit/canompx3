@@ -14,6 +14,7 @@ Usage:
 """
 
 import argparse
+import math
 import sys
 from datetime import date
 from itertools import combinations
@@ -154,6 +155,8 @@ def compute_rolling_correlation(
                     corr = None
                 else:
                     corr = float(np.corrcoef(arr_a, arr_b)[0, 1])
+                    if math.isnan(corr):
+                        corr = None
 
             results.append({
                 "window_end": window_end,

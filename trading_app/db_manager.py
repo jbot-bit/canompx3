@@ -20,6 +20,16 @@ import duckdb
 from pipeline.paths import GOLD_DB_PATH
 
 
+def compute_trade_day_hash(days: list) -> str:
+    """Compute deterministic MD5 hash of sorted trade-day list.
+
+    Canonical implementation — used by strategy_discovery and build_edge_families.
+    """
+    import hashlib
+    day_str = ",".join(str(d) for d in sorted(days))
+    return hashlib.md5(day_str.encode()).hexdigest()
+
+
 def init_trading_app_schema(db_path: Path | None = None, force: bool = False) -> None:
     """
     Create trading_app tables if they don't exist.

@@ -12,7 +12,6 @@ Usage:
 
 import sys
 import json
-import hashlib
 from pathlib import Path
 from collections import defaultdict
 from datetime import date, timezone
@@ -23,11 +22,10 @@ sys.path.insert(0, str(PROJECT_ROOT))
 import duckdb
 
 from pipeline.paths import GOLD_DB_PATH
-from pipeline.cost_model import get_cost_spec
 from pipeline.init_db import ORB_LABELS
 from pipeline.asset_configs import get_enabled_sessions
 from trading_app.config import ALL_FILTERS, ENTRY_MODELS, VolumeFilter
-from trading_app.db_manager import init_trading_app_schema
+from trading_app.db_manager import init_trading_app_schema, compute_trade_day_hash
 from trading_app.outcome_builder import RR_TARGETS, CONFIRM_BARS_OPTIONS
 
 # Force unbuffered stdout
@@ -50,14 +48,12 @@ _INSERT_SQL = """INSERT OR REPLACE INTO experimental_strategies
      yearly_results,
      entry_signals, scratch_count, early_exit_count,
      trade_day_hash, is_canonical, canonical_strategy_id,
-     validation_status, validation_notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+     validation_status, validation_notes,
+     created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+            COALESCE(?, CURRENT_TIMESTAMP))"""
 
 
-def _compute_trade_day_hash(days: list) -> str:
-    """Compute MD5 hash of sorted trade-day list (same as build_edge_families)."""
-    day_str = ",".join(str(d) for d in sorted(days))
-    return hashlib.md5(day_str.encode()).hexdigest()
 
 
 def _mark_canonical(strategies: list[dict]) -> None:
@@ -87,7 +83,7 @@ def _mark_canonical(strategies: list[dict]) -> None:
             alias["canonical_strategy_id"] = head["strategy_id"]
 
 
-def compute_metrics(outcomes: list[dict], cost_spec) -> dict:
+def compute_metrics(outcomes: list[dict]) -> dict:
     """
     Compute performance metrics from a list of outcome rows.
 
@@ -463,13 +459,11 @@ def run_discovery(
     if db_path is None:
         db_path = GOLD_DB_PATH
 
-    cost_spec = get_cost_spec(instrument)
+    if not dry_run:
+        init_trading_app_schema(db_path=db_path)
 
     con = duckdb.connect(str(db_path))
     try:
-        if not dry_run:
-            init_trading_app_schema(db_path=db_path)
-
         # Determine which sessions to search
         sessions = get_enabled_sessions(instrument)
         if not sessions:
@@ -520,12 +514,14 @@ def run_discovery(
                             if not outcomes:
                                 continue
 
-                            metrics = compute_metrics(outcomes, cost_spec)
+                            metrics = compute_metrics(outcomes)
+                            if metrics["sample_size"] == 0:
+                                continue
                             strategy_id = make_strategy_id(
                                 instrument, orb_label, em, rr_target, cb, filter_key,
                             )
                             trade_days = sorted({o["trading_day"] for o in outcomes})
-                            trade_day_hash = _compute_trade_day_hash(trade_days)
+                            trade_day_hash = compute_trade_day_hash(trade_days)
 
                             all_strategies.append({
                                 "strategy_id": strategy_id,
@@ -553,6 +549,14 @@ def run_discovery(
 
         # ---- Batch write ----
         if not dry_run:
+            # Preserve existing created_at timestamps (INSERT OR REPLACE = DELETE+INSERT)
+            existing_created = {}
+            rows = con.execute(
+                "SELECT strategy_id, created_at FROM experimental_strategies WHERE instrument = ?",
+                [instrument],
+            ).fetchall()
+            existing_created = {r[0]: r[1] for r in rows}
+
             insert_batch = []
             for s in all_strategies:
                 m = s["metrics"]
@@ -572,6 +576,7 @@ def run_discovery(
                     s["trade_day_hash"], s["is_canonical"],
                     s["canonical_strategy_id"],
                     None, None,  # Reset validation_status/notes
+                    existing_created.get(s["strategy_id"]),  # Preserve or DEFAULT
                 ])
 
                 if len(insert_batch) >= 500:

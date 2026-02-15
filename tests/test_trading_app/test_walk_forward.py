@@ -11,8 +11,6 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from trading_app.walk_forward import build_folds, evaluate_fold, WalkForwardResult, FoldResult
-from pipeline.cost_model import get_cost_spec
-
 
 # ============================================================================
 # build_folds tests
@@ -111,10 +109,6 @@ class TestBuildFolds:
 class TestEvaluateFold:
     """Tests for fold evaluation."""
 
-    @staticmethod
-    def _cost():
-        return get_cost_spec("MGC")
-
     def test_metrics_on_subset_days(self):
         """Changing the test day subset changes the result deterministically."""
         outcomes = [
@@ -128,16 +122,16 @@ class TestEvaluateFold:
         all_eligible = {date(2024, 1, 2), date(2024, 6, 3), date(2024, 9, 4)}
 
         # Full set
-        m_full = evaluate_fold(outcomes, all_eligible, all_eligible, self._cost())
+        m_full = evaluate_fold(outcomes, all_eligible, all_eligible)
         assert m_full["sample_size"] == 3
 
         # Subset: only Jan
-        m_jan = evaluate_fold(outcomes, all_eligible, {date(2024, 1, 2)}, self._cost())
+        m_jan = evaluate_fold(outcomes, all_eligible, {date(2024, 1, 2)})
         assert m_jan["sample_size"] == 1
         assert m_jan["win_rate"] == 1.0
 
         # Subset: only Jun
-        m_jun = evaluate_fold(outcomes, all_eligible, {date(2024, 6, 3)}, self._cost())
+        m_jun = evaluate_fold(outcomes, all_eligible, {date(2024, 6, 3)})
         assert m_jun["sample_size"] == 1
         assert m_jun["win_rate"] == 0.0
 
@@ -153,12 +147,12 @@ class TestEvaluateFold:
         eligible = {date(2024, 1, 2)}
         test_days = {date(2024, 1, 2), date(2024, 6, 3)}
 
-        m = evaluate_fold(outcomes, eligible, test_days, self._cost())
+        m = evaluate_fold(outcomes, eligible, test_days)
         assert m["sample_size"] == 1  # Only the eligible day
 
     def test_empty_outcomes(self):
         """No outcomes in test window returns zeroed metrics."""
-        m = evaluate_fold([], set(), {date(2024, 1, 2)}, self._cost())
+        m = evaluate_fold([], set(), {date(2024, 1, 2)})
         assert m["sample_size"] == 0
         assert m["win_rate"] is None
 
@@ -174,6 +168,6 @@ class TestEvaluateFold:
         # Test fold is only 2024 — the 2023 win must not be included
         test_days = {date(2024, 1, 2)}
 
-        m = evaluate_fold(outcomes, eligible, test_days, self._cost())
+        m = evaluate_fold(outcomes, eligible, test_days)
         assert m["sample_size"] == 1
         assert m["win_rate"] == 0.0  # Only the 2024 loss

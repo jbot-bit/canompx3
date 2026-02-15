@@ -24,7 +24,6 @@ sys.stdout.reconfigure(line_buffering=True)
 import duckdb
 
 from pipeline.paths import GOLD_DB_PATH
-from pipeline.cost_model import get_cost_spec
 from trading_app.config import ALL_FILTERS, ENTRY_MODELS
 from trading_app.outcome_builder import RR_TARGETS, CONFIRM_BARS_OPTIONS
 from trading_app.strategy_discovery import (
@@ -74,8 +73,6 @@ def main():
     db_path = Path(args.db) if args.db else GOLD_DB_PATH
     instrument = args.instrument
     orb_minutes = 5
-    cost_spec = get_cost_spec(instrument)
-
     print(f"Database: {db_path}")
     print(f"Window: {START_DATE} to {END_DATE} (~{YEARS_SPAN} years)")
     print(f"Sessions: {TARGET_SESSIONS}")
@@ -159,7 +156,7 @@ def main():
                             if len(outcomes) < args.min_trades:
                                 continue
 
-                            metrics = compute_metrics(outcomes, cost_spec)
+                            metrics = compute_metrics(outcomes)
                             n = metrics["sample_size"]
                             if n < args.min_trades:
                                 continue

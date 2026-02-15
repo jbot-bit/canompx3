@@ -82,14 +82,14 @@ Databento .dbn.zst files
 **Workflow for heavy jobs:**
 ```bash
 # 1. Copy to working location
-cmd /c copy "C:\Users\joshd\OneDrive\Desktop\Canompx3\gold.db" "C:\db\gold.db"
+cp "C:\Users\joshd\OneDrive\Desktop\Canompx3\gold.db" "C:\db\gold.db"
 
 # 2. Run against working copy
-set DUCKDB_PATH=C:\db\gold.db
+export DUCKDB_PATH=C:/db/gold.db
 python trading_app/strategy_discovery.py --instrument MGC
 
-# 3. Copy back
-cmd /c copy "C:\db\gold.db" "C:\Users\joshd\OneDrive\Desktop\Canompx3\gold.db"
+# 3. Copy back (cmd /c copy silently fails to OneDrive — use cp)
+cp "C:\db\gold.db" "C:\Users\joshd\OneDrive\Desktop\Canompx3\gold.db"
 ```
 
 **Rules:**
@@ -110,6 +110,7 @@ python pipeline/init_db.py --force            # Drop + recreate (DESTROYS DATA)
 python pipeline/ingest_dbn.py --instrument MGC --start 2024-01-01 --end 2024-12-31
 python pipeline/ingest_dbn.py --instrument MGC --resume
 python pipeline/run_pipeline.py --instrument MGC --start 2024-01-01 --end 2024-12-31
+python scripts/run_parallel_ingest.py --instrument MGC --db-path C:/db/gold.db
 
 # Features
 python pipeline/build_bars_5m.py --instrument MGC --start 2024-01-01 --end 2024-12-31

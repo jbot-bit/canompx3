@@ -28,7 +28,6 @@ sys.path.insert(0, str(PROJECT_ROOT))
 import duckdb
 
 from pipeline.paths import GOLD_DB_PATH
-from pipeline.cost_model import get_cost_spec
 from pipeline.init_db import ORB_LABELS
 from trading_app.config import ALL_FILTERS, VolumeFilter
 from trading_app.strategy_discovery import compute_metrics
@@ -292,8 +291,6 @@ def _compute_fitness_with_con(
     if params is None:
         raise ValueError(f"Strategy '{strategy_id}' not found in validated_setups")
 
-    cost_spec = get_cost_spec(params["instrument"])
-
     # Layer 1: Full-period stats (from validated_setups)
     full_exp_r = params.get("expectancy_r", 0.0) or 0.0
     full_sharpe = params.get("sharpe_ratio")
@@ -319,7 +316,7 @@ def _compute_fitness_with_con(
         o for o in all_outcomes
         if rolling_start <= o["trading_day"] <= as_of_date
     ]
-    rolling_metrics = compute_metrics(rolling_outcomes, cost_spec)
+    rolling_metrics = compute_metrics(rolling_outcomes)
 
     # Raw rolling values for classification (before nulling)
     raw_rolling_exp_r = rolling_metrics["expectancy_r"]

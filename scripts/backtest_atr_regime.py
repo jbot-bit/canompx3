@@ -36,7 +36,6 @@ sys.stdout.reconfigure(line_buffering=True)
 import duckdb
 
 from pipeline.paths import GOLD_DB_PATH
-from pipeline.cost_model import get_cost_spec
 from trading_app.config import ALL_FILTERS, ENTRY_MODELS
 from trading_app.outcome_builder import RR_TARGETS, CONFIRM_BARS_OPTIONS
 from trading_app.strategy_discovery import (
@@ -62,11 +61,11 @@ ATR_THRESHOLDS = [0, 20, 25, 30, 35, 40]  # 0 = no gate (baseline)
 TARGET_SESSIONS = sorted(set(f["session"] for f in FAMILIES))
 
 
-def compute_family_metrics(outcomes_list, cost_spec, years_span):
+def compute_family_metrics(outcomes_list, years_span):
     """Compute metrics for a list of outcome dicts."""
     if not outcomes_list:
         return None
-    m = compute_metrics(outcomes_list, cost_spec)
+    m = compute_metrics(outcomes_list)
     n = m["sample_size"]
     if n == 0:
         return None
@@ -100,8 +99,6 @@ def main():
     db_path = Path(args.db) if args.db else GOLD_DB_PATH
     instrument = args.instrument
     orb_minutes = 5
-    cost_spec = get_cost_spec(instrument)
-
     print(f"Database: {db_path}")
     print(f"Instrument: {instrument}")
     print(f"ATR thresholds: {ATR_THRESHOLDS}")
@@ -226,7 +223,7 @@ def main():
                                         if o["trading_day"] in matching_days]
                     if not variant_outcomes:
                         continue
-                    vm = compute_family_metrics(variant_outcomes, cost_spec, years_span)
+                    vm = compute_family_metrics(variant_outcomes, years_span)
                     if vm:
                         variant_metrics.append(vm)
 

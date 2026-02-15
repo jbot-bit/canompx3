@@ -57,7 +57,6 @@ def run_walkforward(
     confirm_bars: int,
     filter_type: str,
     orb_minutes: int,
-    cost_spec,
     test_window_months: int = 6,
     min_train_months: int = 12,
     min_trades_per_window: int = 15,
@@ -121,7 +120,7 @@ def run_walkforward(
             if window_start <= o["trading_day"] < window_end
         ]
 
-        metrics = compute_metrics(test_outcomes, cost_spec)
+        metrics = compute_metrics(test_outcomes)
         test_n = metrics["sample_size"]
         test_exp_r = metrics["expectancy_r"]
 

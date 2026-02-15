@@ -25,11 +25,6 @@ from trading_app.strategy_fitness import (
     _load_strategy_outcomes,
 )
 from trading_app.strategy_discovery import compute_metrics
-from pipeline.cost_model import get_cost_spec
-
-
-def _cost():
-    return get_cost_spec("MGC")
 
 
 def _setup_fitness_db(tmp_path, strategies=None, outcomes=None, features=None):
@@ -275,13 +270,13 @@ class TestRollingMetrics:
         outcomes = _make_outcomes(start_year=2023, end_year=2025, trades_per_year=30)
         # Only keep 2025 outcomes (simulate rolling window filter)
         rolling = [o for o in outcomes if o["trading_day"].year == 2025]
-        metrics = compute_metrics(rolling, _cost())
+        metrics = compute_metrics(rolling)
         assert metrics["sample_size"] == 30
         assert metrics["win_rate"] is not None
 
     def test_rolling_metrics_empty(self):
         """No trades in window -> None metrics."""
-        metrics = compute_metrics([], _cost())
+        metrics = compute_metrics([])
         assert metrics["sample_size"] == 0
         assert metrics["win_rate"] is None
         assert metrics["expectancy_r"] is None

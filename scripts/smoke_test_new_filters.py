@@ -34,7 +34,6 @@ from trading_app.strategy_discovery import (
     _load_outcomes_bulk,
     compute_metrics,
 )
-from pipeline.cost_model import get_cost_spec
 from trading_app.outcome_builder import RR_TARGETS, CONFIRM_BARS_OPTIONS
 
 # Force unbuffered stdout
@@ -65,8 +64,6 @@ MIN_SHARPE_UPLIFT = 0.0  # must beat G4 baseline
 
 
 def run_smoke_test(db_path: Path):
-    cost = get_cost_spec("MGC")
-
     con = duckdb.connect(str(db_path), read_only=True)
     try:
         # --- Load & enrich ---
@@ -166,7 +163,7 @@ def run_smoke_test(db_path: Path):
                         if not filtered:
                             continue
 
-                        m = compute_metrics(filtered, cost)
+                        m = compute_metrics(filtered)
                         if m["sample_size"] == 0:
                             continue
 

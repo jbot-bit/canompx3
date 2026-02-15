@@ -7,7 +7,6 @@ from pathlib import Path
 import duckdb
 import pytest
 
-from pipeline.cost_model import get_cost_spec
 from trading_app.walkforward import (
     WalkForwardResult,
     _add_months,
@@ -103,11 +102,6 @@ _WF_BASE = dict(
 # ========================================================================
 
 @pytest.fixture
-def cost_spec():
-    return get_cost_spec("MGC")
-
-
-@pytest.fixture
 def con(tmp_path):
     """Temp DuckDB with schema ready."""
     path = tmp_path / "test.db"
@@ -144,7 +138,7 @@ class TestAddMonths:
 
 class TestWalkForward:
 
-    def test_basic_pass(self, con, cost_spec):
+    def test_basic_pass(self, con):
         """4 years of consistently positive data -> should pass."""
         # 2020-2023: 3 trades/month, 67% WR, RR2.0 => ExpR ~ +1.0
         # 12m train => test windows start 2021-01-10
@@ -154,7 +148,7 @@ class TestWalkForward:
 
         result = run_walkforward(
             con=con, strategy_id="TEST_PASS", instrument="MGC",
-            cost_spec=cost_spec, **_WF_BASE,
+            **_WF_BASE,
         )
 
         assert result.passed is True
@@ -164,7 +158,7 @@ class TestWalkForward:
         assert result.total_oos_trades >= 45
         assert result.rejection_reason is None
 
-    def test_basic_fail_negative_oos(self, con, cost_spec):
+    def test_basic_fail_negative_oos(self, con):
         """Strong train, negative test periods -> should fail."""
         # 2020: positive (train)
         train = _monthly_outcomes(2020, 2020)
@@ -174,13 +168,13 @@ class TestWalkForward:
 
         result = run_walkforward(
             con=con, strategy_id="TEST_NEG_OOS", instrument="MGC",
-            cost_spec=cost_spec, **_WF_BASE,
+            **_WF_BASE,
         )
 
         assert result.passed is False
         assert result.agg_oos_exp_r <= 0
 
-    def test_insufficient_windows(self, con, cost_spec):
+    def test_insufficient_windows(self, con):
         """Only 18 months of data -> 1 test window -> should fail."""
         outcomes = []
         for m_offset in range(18):
@@ -195,14 +189,14 @@ class TestWalkForward:
 
         result = run_walkforward(
             con=con, strategy_id="TEST_SHORT", instrument="MGC",
-            cost_spec=cost_spec, **_WF_BASE,
+            **_WF_BASE,
         )
 
         assert result.passed is False
         assert result.n_valid_windows < 3
         assert "Insufficient valid windows" in result.rejection_reason
 
-    def test_thin_filter_skips_empty_windows(self, con, cost_spec):
+    def test_thin_filter_skips_empty_windows(self, con):
         """Data gap creates empty windows -> n_valid < n_total."""
         # 2020 (train) + gap 2021-2022 + 2023 (test)
         data = _monthly_outcomes(2020, 2020) + _monthly_outcomes(2023, 2023)
@@ -210,12 +204,12 @@ class TestWalkForward:
 
         result = run_walkforward(
             con=con, strategy_id="TEST_THIN", instrument="MGC",
-            cost_spec=cost_spec, **_WF_BASE,
+            **_WF_BASE,
         )
 
         assert result.n_total_windows > result.n_valid_windows
 
-    def test_min_trades_per_window(self, con, cost_spec):
+    def test_min_trades_per_window(self, con):
         """1 trade/month = 6 per 6m window < 15 min -> all invalid."""
         outcomes = _monthly_outcomes(2020, 2023, trades_per_month=1,
                                      win_pattern=[True])
@@ -223,14 +217,14 @@ class TestWalkForward:
 
         result = run_walkforward(
             con=con, strategy_id="TEST_FEW", instrument="MGC",
-            cost_spec=cost_spec, min_trades_per_window=15, **_WF_BASE,
+            min_trades_per_window=15, **_WF_BASE,
         )
 
         assert result.passed is False
         assert result.n_valid_windows == 0
         assert "Insufficient valid windows" in result.rejection_reason
 
-    def test_exact_threshold(self, con, cost_spec):
+    def test_exact_threshold(self, con):
         """pct_positive exactly 0.60 (3/5 windows positive) -> pass."""
         # 12m train (2020) + 5 test windows (30 months, 2021-01 to 2023-06)
         # Windows 1-3: positive (67% WR), windows 4-5: negative (all loss)
@@ -259,7 +253,7 @@ class TestWalkForward:
 
         result = run_walkforward(
             con=con, strategy_id="TEST_60PCT", instrument="MGC",
-            cost_spec=cost_spec, **_WF_BASE,
+            **_WF_BASE,
         )
 
         assert result.n_valid_windows == 5
@@ -269,7 +263,7 @@ class TestWalkForward:
         assert result.agg_oos_exp_r > 0
         assert result.passed is True
 
-    def test_jsonl_output(self, con, cost_spec, tmp_path):
+    def test_jsonl_output(self, con, tmp_path):
         """JSONL file created with valid JSON, appends on second run."""
         outcomes = _monthly_outcomes(2020, 2023)
         _insert_outcomes(con, outcomes)
@@ -277,7 +271,7 @@ class TestWalkForward:
 
         result = run_walkforward(
             con=con, strategy_id="TEST_JSONL", instrument="MGC",
-            cost_spec=cost_spec, **_WF_BASE,
+            **_WF_BASE,
         )
         append_walkforward_result(result, output_path)
         append_walkforward_result(result, output_path)
@@ -293,7 +287,7 @@ class TestWalkForward:
             assert "windows" in record
             assert "params" in record
 
-    def test_respects_filter(self, con, cost_spec):
+    def test_respects_filter(self, con):
         """Different filters on same outcomes -> different results."""
         # Create outcomes for 4 years
         outcomes = _monthly_outcomes(2020, 2023)
@@ -311,19 +305,18 @@ class TestWalkForward:
 
         result_no_filter = run_walkforward(
             con=con, strategy_id="TEST_NF", instrument="MGC",
-            cost_spec=cost_spec, **_WF_BASE,
+            **_WF_BASE,
         )
         result_g5 = run_walkforward(
             con=con, strategy_id="TEST_G5", instrument="MGC",
             orb_label="0900", entry_model="E1", rr_target=2.0,
             confirm_bars=1, filter_type="ORB_G5", orb_minutes=5,
-            cost_spec=cost_spec,
         )
 
         # G5 filter keeps only even-month trades (50% of data)
         assert result_g5.total_oos_trades < result_no_filter.total_oos_trades
 
-    def test_cost_deduction(self, con, cost_spec):
+    def test_cost_deduction(self, con):
         """Verify metrics match manual calculation from pnl_r values."""
         # Create 4 years: alternating win(+1.5R) and loss(-1.0R)
         # ExpR = 0.5 * 1.5 - 0.5 * 1.0 = 0.25
@@ -341,7 +334,7 @@ class TestWalkForward:
 
         result = run_walkforward(
             con=con, strategy_id="TEST_COST", instrument="MGC",
-            cost_spec=cost_spec, **_WF_BASE,
+            **_WF_BASE,
         )
 
         # 67% WR * 1.5 - 33% WR * 1.0 = 1.0 - 0.33 = 0.67
@@ -351,8 +344,6 @@ class TestWalkForward:
 
     def test_mnq_tight_windows(self, con):
         """2-year MNQ data -> only 2 test windows -> fails min_windows=3."""
-        mnq_cost = get_cost_spec("MNQ")
-
         # 24 months of MNQ data (2024-02 to 2026-01)
         outcomes = []
         for m_offset in range(24):
@@ -372,7 +363,7 @@ class TestWalkForward:
             con=con, strategy_id="MNQ_TEST", instrument="MNQ",
             orb_label="0900", entry_model="E1", rr_target=2.0,
             confirm_bars=1, filter_type="NO_FILTER", orb_minutes=5,
-            cost_spec=mnq_cost, min_valid_windows=3,
+            min_valid_windows=3,
         )
 
         # 2yr data, 12m train => 2 test windows max
@@ -385,6 +376,6 @@ class TestWalkForward:
             con=con, strategy_id="MNQ_TEST_2W", instrument="MNQ",
             orb_label="0900", entry_model="E1", rr_target=2.0,
             confirm_bars=1, filter_type="NO_FILTER", orb_minutes=5,
-            cost_spec=mnq_cost, min_valid_windows=2,
+            min_valid_windows=2,
         )
         assert result2.n_valid_windows >= 2

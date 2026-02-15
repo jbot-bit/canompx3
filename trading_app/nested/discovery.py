@@ -19,7 +19,6 @@ sys.path.insert(0, str(PROJECT_ROOT))
 import duckdb
 
 from pipeline.paths import GOLD_DB_PATH
-from pipeline.cost_model import get_cost_spec
 from pipeline.init_db import ORB_LABELS
 from trading_app.config import ALL_FILTERS, ENTRY_MODELS
 from trading_app.outcome_builder import RR_TARGETS, CONFIRM_BARS_OPTIONS
@@ -116,8 +115,6 @@ def run_nested_discovery(
     if orb_minutes_list is None:
         orb_minutes_list = [15, 30]
 
-    cost_spec = get_cost_spec(instrument)
-
     con = duckdb.connect(str(db_path))
     try:
         if not dry_run:
@@ -181,7 +178,7 @@ def run_nested_discovery(
                                 if not outcomes:
                                     continue
 
-                                metrics = compute_metrics(outcomes, cost_spec)
+                                metrics = compute_metrics(outcomes)
                                 strategy_id = make_nested_strategy_id(
                                     instrument, orb_label, orb_minutes,
                                     em, rr_target, cb, filter_key,

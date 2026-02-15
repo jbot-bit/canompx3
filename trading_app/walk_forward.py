@@ -22,7 +22,6 @@ sys.path.insert(0, str(PROJECT_ROOT))
 import duckdb
 
 from pipeline.paths import GOLD_DB_PATH
-from pipeline.cost_model import get_cost_spec
 from pipeline.init_db import ORB_LABELS
 from trading_app.config import ALL_FILTERS, VolumeFilter
 from trading_app.strategy_discovery import compute_metrics
@@ -104,7 +103,6 @@ def evaluate_fold(
     outcomes: list[dict],
     eligible_days: set[date],
     test_days: set[date],
-    cost_spec,
 ) -> dict:
     """
     Compute metrics for a strategy on test-fold days only.
@@ -116,7 +114,7 @@ def evaluate_fold(
         o for o in outcomes
         if o["trading_day"] in test_days and o["trading_day"] in eligible_days
     ]
-    return compute_metrics(test_outcomes, cost_spec)
+    return compute_metrics(test_outcomes)
 
 
 def walk_forward_eval(
@@ -138,7 +136,6 @@ def walk_forward_eval(
     if db_path is None:
         db_path = GOLD_DB_PATH
 
-    cost_spec = get_cost_spec(instrument)
     con = duckdb.connect(str(db_path), read_only=True)
 
     try:
@@ -247,7 +244,7 @@ def walk_forward_eval(
                 # Assertion: no leakage
                 assert not (train_set & test_set), "LEAKAGE: train/test overlap!"
 
-                metrics = evaluate_fold(strat_outcomes, eligible, test_set, cost_spec)
+                metrics = evaluate_fold(strat_outcomes, eligible, test_set)
 
                 fold_r = FoldResult(
                     fold_idx=fi + 1,
@@ -273,7 +270,7 @@ def walk_forward_eval(
                 all_oos_outcomes.extend(oos)
 
             # Aggregate OOS metrics
-            agg = compute_metrics(all_oos_outcomes, cost_spec)
+            agg = compute_metrics(all_oos_outcomes)
             wf_result.oos_trade_count = agg["sample_size"]
             wf_result.oos_win_rate = agg["win_rate"]
             wf_result.oos_expectancy_r = agg["expectancy_r"]
