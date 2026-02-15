@@ -33,6 +33,9 @@ from scripts._alt_strategy_utils import compute_strategy_metrics, annualize_shar
 DB_PATH = Path(r"C:\db\gold.db")
 SPEC = get_cost_spec("MGC")
 
+# Screen on recent data first; expand to full dataset only if signal found
+SCREEN_START = "2024-01-01"
+
 # Range expansion thresholds (fraction of ATR_20)
 THRESHOLDS = [0.50, 0.75, 1.00, 1.25, 1.50]
 
@@ -48,8 +51,9 @@ def load_daily_data(db_path: Path) -> pd.DataFrame:
             WHERE symbol = 'MGC'
               AND orb_minutes = 5
               AND atr_20 IS NOT NULL
+              AND trading_day >= ?
             ORDER BY trading_day
-        """).fetchdf()
+        """, [SCREEN_START]).fetchdf()
     finally:
         con.close()
     print(f"{len(df):,} days loaded.")
@@ -57,7 +61,7 @@ def load_daily_data(db_path: Path) -> pd.DataFrame:
 
 
 def load_1m_bars_bulk(db_path: Path) -> pd.DataFrame:
-    """Load all 1m bars for MGC."""
+    """Load 1m bars for MGC (screened date range)."""
     print("Loading 1m bars...", end=" ", flush=True)
     con = duckdb.connect(str(db_path), read_only=True)
     try:
@@ -65,8 +69,9 @@ def load_1m_bars_bulk(db_path: Path) -> pd.DataFrame:
             SELECT ts_utc, open, high, low, close, volume
             FROM bars_1m
             WHERE symbol = 'MGC'
+              AND ts_utc >= ?::TIMESTAMPTZ
             ORDER BY ts_utc
-        """).fetchdf()
+        """, [f"{SCREEN_START} 00:00:00+00"]).fetchdf()
     finally:
         con.close()
     print(f"{len(df):,} bars loaded.")
@@ -74,19 +79,12 @@ def load_1m_bars_bulk(db_path: Path) -> pd.DataFrame:
 
 
 def assign_trading_day(ts_utc: pd.Series) -> pd.Series:
-    """Assign trading day: 09:00 Brisbane (23:00 UTC prev day) boundary.
-
-    Bars at or after 23:00 UTC belong to the NEXT calendar day's trading session.
-    Bars before 23:00 UTC belong to the current calendar day's trading session.
-    """
-    # Convert to UTC if needed
+    """Assign trading day: 09:00 Brisbane (23:00 UTC prev day) boundary."""
     if ts_utc.dt.tz is not None:
         utc_ts = ts_utc.dt.tz_convert("UTC")
     else:
         utc_ts = ts_utc.dt.tz_localize("UTC")
 
-    # Trading day boundary: 23:00 UTC
-    # If hour >= 23, trading_day = next calendar day
     dates = utc_ts.dt.date
     hours = utc_ts.dt.hour
     trading_days = pd.Series(dates, index=ts_utc.index)
@@ -95,7 +93,6 @@ def assign_trading_day(ts_utc: pd.Series) -> pd.Series:
     trading_days[mask_next] = trading_days[mask_next].apply(
         lambda d: d + timedelta(days=1)
     )
-
     return trading_days
 
 
@@ -103,99 +100,84 @@ def analyze_range_expansion(bars: pd.DataFrame, daily: pd.DataFrame) -> pd.DataF
     """For each day, track when range hits ATR thresholds and what happens after."""
     print("\nAnalyzing range expansion patterns...")
 
-    # Prepare bars
     if bars["ts_utc"].dt.tz is not None:
         bars["ts_utc"] = bars["ts_utc"].dt.tz_convert("UTC")
     else:
         bars["ts_utc"] = bars["ts_utc"].dt.tz_localize("UTC")
 
     bars["trading_day"] = assign_trading_day(bars["ts_utc"])
-    bars["hour_utc"] = bars["ts_utc"].dt.hour
-    bars["minute_utc"] = bars["ts_utc"].dt.minute
 
-    # Create ATR lookup
+    # Pre-group bars by trading day for O(1) lookup
+    print("  Pre-grouping bars by trading day...", flush=True)
+    grouped = {td: grp.sort_values("ts_utc") for td, grp in bars.groupby("trading_day")}
+
     daily["trading_day_date"] = pd.to_datetime(daily["trading_day"]).dt.date
     atr_lookup = dict(zip(daily["trading_day_date"], daily["atr_20"]))
 
     results = []
-    trading_days = sorted(bars["trading_day"].unique())
+    trading_days = sorted(grouped.keys())
     total_days = len(trading_days)
 
     for i, td in enumerate(trading_days):
-        if i % 500 == 0:
+        if i % 100 == 0:
             print(f"  Processing day {i+1}/{total_days}...", flush=True)
 
         atr = atr_lookup.get(td)
         if atr is None or atr <= 0:
             continue
 
-        day_bars = bars[bars["trading_day"] == td].sort_values("ts_utc")
-        if len(day_bars) < 60:  # Skip thin days
+        day_bars = grouped[td]
+        if len(day_bars) < 60:
             continue
 
-        # Track cumulative high/low
+        # Vectorized cumulative range
         cum_high = day_bars["high"].cummax().values
         cum_low = day_bars["low"].cummin().values
         cum_range = cum_high - cum_low
+        close_vals = day_bars["close"].values
+        ts_vals = day_bars["ts_utc"].values
 
         for threshold in THRESHOLDS:
             target_range = threshold * atr
 
-            # Find first bar where cumulative range exceeds threshold
             exceed_mask = cum_range >= target_range
             if not exceed_mask.any():
                 continue
 
             first_idx = np.argmax(exceed_mask)
-            trigger_bar = day_bars.iloc[first_idx]
-            trigger_ts = trigger_bar["ts_utc"]
-            trigger_close = trigger_bar["close"]
+            trigger_close = close_vals[first_idx]
+            trigger_ts = ts_vals[first_idx]
 
-            # Determine expansion direction at trigger point
-            # Is the range expanding because of a new high or new low?
             bar_high = cum_high[first_idx]
             bar_low = cum_low[first_idx]
-
-            # How far is current price from the midpoint of the range?
             range_mid = (bar_high + bar_low) / 2
             direction = "up" if trigger_close > range_mid else "down"
 
-            # Remaining bars after trigger
-            remaining = day_bars.iloc[first_idx + 1:]
-            if len(remaining) < 5:
+            if first_idx + 6 > len(day_bars):
                 continue
 
-            # Session close
-            session_close = remaining.iloc[-1]["close"]
+            session_close = close_vals[-1]
 
-            # Continuation = price continues in expansion direction
             if direction == "up":
                 continuation = session_close > trigger_close
                 move_after = session_close - trigger_close
             else:
                 continuation = session_close < trigger_close
-                move_after = trigger_close - session_close  # Positive = continuation
+                move_after = trigger_close - session_close
 
-            # Compute R-multiple: risk = distance from trigger to session open (VWAP proxy)
-            # Use 1R = half the range at trigger point as the risk (realistic stop)
             risk_pts = max(target_range * 0.5, SPEC.tick_size * SPEC.min_ticks_floor)
-
-            # If we enter at trigger in the expansion direction:
-            # PnL = move in expansion direction minus friction
-            pnl_pts = move_after  # Already signed for continuation direction
-            pnl_dollars = pnl_pts * SPEC.point_value - SPEC.total_friction
+            pnl_dollars = move_after * SPEC.point_value - SPEC.total_friction
             risk_dollars = risk_pts * SPEC.point_value + SPEC.total_friction
             pnl_r = pnl_dollars / risk_dollars
 
-            # Hours into session
-            day_start_ts = day_bars.iloc[0]["ts_utc"]
-            hours_in = (trigger_ts - day_start_ts).total_seconds() / 3600
+            day_start_ts = ts_vals[0]
+            hours_in = (pd.Timestamp(trigger_ts) - pd.Timestamp(day_start_ts)).total_seconds() / 3600
 
             results.append({
                 "trading_day": td,
                 "threshold": threshold,
                 "direction": direction,
-                "trigger_hour_utc": trigger_ts.hour if hasattr(trigger_ts, "hour") else pd.Timestamp(trigger_ts).hour,
+                "trigger_hour_utc": pd.Timestamp(trigger_ts).hour,
                 "hours_in_session": hours_in,
                 "range_at_trigger": cum_range[first_idx],
                 "atr_20": atr,
@@ -204,7 +186,7 @@ def analyze_range_expansion(bars: pd.DataFrame, daily: pd.DataFrame) -> pd.DataF
                 "move_after_pts": move_after,
                 "continuation": continuation,
                 "pnl_r": pnl_r,
-                "remaining_bars": len(remaining),
+                "remaining_bars": len(day_bars) - first_idx - 1,
                 "year": td.year if hasattr(td, "year") else pd.Timestamp(td).year,
             })
 
@@ -291,7 +273,6 @@ def print_reversal_analysis(data: pd.DataFrame) -> None:
         n = len(subset)
         reversal_pct = (~subset["continuation"]).sum() / n * 100
 
-        # Fade PnL = negative of continuation move (we go opposite)
         fade_pnl = -subset["pnl_r"].values
         fade_stats = compute_strategy_metrics(fade_pnl)
         if fade_stats is None:
@@ -317,7 +298,6 @@ def print_timing_analysis(data: pd.DataFrame) -> None:
         print(f"    Mean hours into session: {subset['hours_in_session'].mean():.1f}")
         print(f"    Median hours: {subset['hours_in_session'].median():.1f}")
 
-        # Early (first 4 hours) vs late (after 4 hours)
         early = subset[subset["hours_in_session"] <= 4]
         late = subset[subset["hours_in_session"] > 4]
 
@@ -354,7 +334,7 @@ def print_year_breakdown(data: pd.DataFrame) -> None:
 
 def main():
     print("=" * 110)
-    print("GOLD (MGC) RANGE EXPANSION ANALYSIS")
+    print(f"GOLD (MGC) RANGE EXPANSION ANALYSIS  [screening: {SCREEN_START}+]")
     print("=" * 110)
     print()
 
@@ -373,11 +353,10 @@ def main():
     print_year_breakdown(events)
 
     print("\n" + "=" * 110)
-    print("STATISTICAL SIGNIFICANCE NOTES")
+    print("NOTES")
     print("=" * 110)
+    print(f"  - Screening period: {SCREEN_START}+ (expand to full 10yr only if signal found)")
     print("  - Min N=30 for any conclusion (marked with * if N >= 100)")
-    print("  - Continuation vs reversal is a coin flip at ~50% for most thresholds")
-    print("  - Early expansions tend to continue more (momentum); late ones mean-revert")
     print("  - Risk model: 0.5 * threshold_range as stop distance")
     print(f"  - Friction: ${SPEC.total_friction:.2f}/RT ({SPEC.friction_in_points:.2f} pts)")
 

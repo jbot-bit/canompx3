@@ -711,3 +711,30 @@ Tested 3 overlay/conditional filters on MGC ORB breakouts. Read-only analysis on
 1. **ORB size IS the filter.** G4+ already captures the regime (volatility expansion days). Additional overlays add noise, not signal.
 2. **Volume, trend, and prior session range are orthogonal to ORB edge.** The breakout isn't stronger because volume surged or because the prior day trended -- it's stronger because the ORB was large enough to indicate genuine directional interest.
 3. **CME_OPEN is the only exception** but with REGIME-class sample sizes only. Monitor as data grows.
+
+## Non-ORB Structural Research (Feb 2026) -- ALL NO-GO
+
+Three structural approaches tested on 2024-2026 screen (MGC, $8.40 RT friction):
+
+### Time-of-Day Returns
+- **NO-GO.** Buy-at-hour-open, sell-at-hour-close for all 24 UTC hours. Every hour has negative ExpR after friction ($8.40 RT on 2pt assumed risk). Marginal bullish bias at hours 4 and 20 UTC but t-stats < 2.0 when risk-adjusted. No systematic intraday directional bias in gold.
+- Script: `research/analyze_time_of_day_returns.py`
+
+### Range Expansion (ATR Threshold Continuation)
+- **NO-GO.** When daily range exceeds 50-150% of ATR_20, does price continue? Weak signal: 54% continuation at 75% threshold (barely above coin flip). ExpR=+0.12R for up-direction only, but inconsistent year-over-year (2024: 58%, 2025: 50%). No tradeable edge after friction.
+- Script: `research/analyze_range_expansion.py`
+
+### Opening Drive (First 15/30/60 Min Direction)
+- **NO-GO as a standalone trade.** Alignment (first X min direction predicts session close) is statistically real:
+  - London 60m: 66.4% alignment (t=+7.54, p<0.001)
+  - NY 60m: 66.6% alignment (t=+7.69, p<0.001)
+  - Strong drives (>11% ATR) align 72-84%
+- BUT **every single ExpR is negative** (best: NY 30m at -0.03R). The continuation magnitude doesn't cover friction. Market tends to continue but not by enough to trade profitably.
+- Up-drives slightly better than down-drives. Asia 0900 up-drive 15m shows +0.39R but this is directional bias ("buy gold"), not repeatable structure.
+- Year-over-year alignment is consistent (55-70% across 2024/2025/2026), confirming the pattern is real but not exploitable.
+- Script: `research/analyze_opening_drive.py`
+
+### Why Non-ORB Approaches Fail
+1. **No defined risk structure.** ORB provides a natural stop (other side of the box). Hourly/drive/expansion entries lack a structural stop, forcing arbitrary risk levels that inflate friction-to-reward ratio.
+2. **Friction is the killer.** $8.40 RT on a $10/pt contract means you need 0.84+ pts of genuine edge per trade. Loose directional bets produce 0.1-0.3pt raw edge -- insufficient.
+3. **ORB size filters pre-select volatility regimes.** G4+ ORBs (>= $40 range) naturally occur on expansion days. Non-ORB approaches try to detect the same thing less efficiently.

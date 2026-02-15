@@ -33,6 +33,9 @@ from scripts._alt_strategy_utils import compute_strategy_metrics
 DB_PATH = Path(r"C:\db\gold.db")
 SPEC = get_cost_spec("MGC")
 
+# Screen on recent data first; expand to full dataset only if signal found
+SCREEN_START = "2024-01-01"
+
 # Session definitions (UTC hours)
 def get_session(hour_utc: int) -> str:
     """Classify UTC hour into session."""
@@ -47,7 +50,7 @@ def get_session(hour_utc: int) -> str:
 
 
 def load_5m_bars(db_path: Path) -> pd.DataFrame:
-    """Load all 5m bars for MGC."""
+    """Load 5m bars for MGC (screened date range)."""
     print("Loading 5m bars...", end=" ", flush=True)
     con = duckdb.connect(str(db_path), read_only=True)
     try:
@@ -55,8 +58,9 @@ def load_5m_bars(db_path: Path) -> pd.DataFrame:
             SELECT ts_utc, open, high, low, close, volume
             FROM bars_5m
             WHERE symbol = 'MGC'
+              AND ts_utc >= ?::TIMESTAMPTZ
             ORDER BY ts_utc
-        """).fetchdf()
+        """, [f"{SCREEN_START} 00:00:00+00"]).fetchdf()
     finally:
         con.close()
     print(f"{len(df):,} bars loaded.")
@@ -74,8 +78,9 @@ def load_atr(db_path: Path) -> pd.DataFrame:
             WHERE symbol = 'MGC'
               AND orb_minutes = 5
               AND atr_20 IS NOT NULL
+              AND trading_day >= ?
             ORDER BY trading_day
-        """).fetchdf()
+        """, [SCREEN_START]).fetchdf()
     finally:
         con.close()
     print(f"{len(df):,} days with ATR.")

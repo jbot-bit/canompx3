@@ -21,7 +21,7 @@ Read-only: does NOT write to the database.
 """
 
 import sys
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import duckdb
@@ -39,6 +39,9 @@ from scripts._alt_strategy_utils import compute_strategy_metrics, annualize_shar
 DB_PATH = Path(r"C:\db\gold.db")
 SPEC = get_cost_spec("MGC")
 
+# Screen on recent data first; expand to full dataset only if signal found
+SCREEN_START = "2024-01-01"
+
 # Session definitions: name -> (start_hour_utc, duration_hours)
 # These are fixed UTC hours; DST nuances are small for gold
 SESSIONS = {
@@ -52,7 +55,7 @@ DRIVE_WINDOWS = [15, 30, 60]
 
 
 def load_1m_bars(db_path: Path) -> pd.DataFrame:
-    """Load all 1m bars for MGC."""
+    """Load 1m bars for MGC (screened date range)."""
     print("Loading 1m bars...", end=" ", flush=True)
     con = duckdb.connect(str(db_path), read_only=True)
     try:
@@ -60,8 +63,9 @@ def load_1m_bars(db_path: Path) -> pd.DataFrame:
             SELECT ts_utc, open, high, low, close, volume
             FROM bars_1m
             WHERE symbol = 'MGC'
+              AND ts_utc >= ?::TIMESTAMPTZ
             ORDER BY ts_utc
-        """).fetchdf()
+        """, [f"{SCREEN_START} 00:00:00+00"]).fetchdf()
     finally:
         con.close()
     print(f"{len(df):,} bars loaded.")
@@ -79,8 +83,9 @@ def load_atr(db_path: Path) -> pd.DataFrame:
             WHERE symbol = 'MGC'
               AND orb_minutes = 5
               AND atr_20 IS NOT NULL
+              AND trading_day >= ?
             ORDER BY trading_day
-        """).fetchdf()
+        """, [SCREEN_START]).fetchdf()
     finally:
         con.close()
     print(f"{len(df):,} days with ATR.")
@@ -88,7 +93,10 @@ def load_atr(db_path: Path) -> pd.DataFrame:
 
 
 def analyze_opening_drive(bars: pd.DataFrame, atr_df: pd.DataFrame) -> pd.DataFrame:
-    """Analyze opening drive for each session and window."""
+    """Analyze opening drive for each session and window.
+
+    Vectorized: pre-computes epoch seconds for fast slicing via searchsorted.
+    """
     print("\nAnalyzing opening drives...")
 
     # Ensure UTC
@@ -97,16 +105,21 @@ def analyze_opening_drive(bars: pd.DataFrame, atr_df: pd.DataFrame) -> pd.DataFr
     else:
         bars["ts_utc"] = bars["ts_utc"].dt.tz_localize("UTC")
 
-    bars["date"] = bars["ts_utc"].dt.date
-    bars["hour"] = bars["ts_utc"].dt.hour
-    bars["minute"] = bars["ts_utc"].dt.minute
+    # Pre-compute epoch for fast range lookups
+    # DuckDB returns datetime64[us] (microseconds), so divide by 10**6
+    epoch = bars["ts_utc"].astype(np.int64) // 10**6
+    epoch_vals = epoch.values
+    open_vals = bars["open"].values
+    close_vals = bars["close"].values
+    high_vals = bars["high"].values
+    low_vals = bars["low"].values
 
     # Build ATR lookup
     atr_df["td"] = pd.to_datetime(atr_df["trading_day"]).dt.date
     atr_lookup = dict(zip(atr_df["td"], atr_df["atr_20"]))
 
     # Get unique dates
-    all_dates = sorted(bars["date"].unique())
+    all_dates = sorted(bars["ts_utc"].dt.date.unique())
     print(f"  Date range: {all_dates[0]} to {all_dates[-1]} ({len(all_dates):,} unique dates)")
 
     results = []
@@ -120,35 +133,32 @@ def analyze_opening_drive(bars: pd.DataFrame, atr_df: pd.DataFrame) -> pd.DataFr
         session_count = 0
 
         for day_idx, cal_date in enumerate(all_dates):
-            if day_idx % 500 == 0 and day_idx > 0:
+            if day_idx % 1000 == 0 and day_idx > 0:
                 print(f"    Day {day_idx}/{len(all_dates)}...", flush=True)
 
-            # Session start time for this date
-            session_start = pd.Timestamp(
-                year=cal_date.year, month=cal_date.month, day=cal_date.day,
-                hour=start_h, minute=0, tz="UTC"
-            )
-            session_end = session_start + pd.Timedelta(hours=dur_h)
+            # Session start/end as epoch seconds
+            session_start_dt = datetime(cal_date.year, cal_date.month, cal_date.day,
+                                        start_h, 0, 0, tzinfo=timezone.utc)
+            session_start_ep = int(session_start_dt.timestamp())
+            session_end_ep = session_start_ep + dur_h * 3600
 
-            # Get session bars
-            mask = (bars["ts_utc"] >= session_start) & (bars["ts_utc"] < session_end)
-            session_bars = bars.loc[mask].sort_values("ts_utc")
+            # Binary search for session bars
+            i_start = np.searchsorted(epoch_vals, session_start_ep, side="left")
+            i_end = np.searchsorted(epoch_vals, session_end_ep, side="left")
 
-            if len(session_bars) < 30:  # Need enough bars
+            if i_end - i_start < 30:
                 continue
 
-            session_open = session_bars.iloc[0]["open"]
-            session_close = session_bars.iloc[-1]["close"]
+            session_open = open_vals[i_start]
+            session_close = close_vals[i_end - 1]
             session_return = session_close - session_open
 
-            # Skip flat sessions
             if abs(session_return) < 0.01:
                 continue
 
             session_direction = "up" if session_return > 0 else "down"
 
             # Determine trading day for ATR lookup
-            # For Asia (23:00 UTC): trading day = next calendar day
             if start_h == 23:
                 trading_day = cal_date + timedelta(days=1)
             else:
@@ -161,18 +171,17 @@ def analyze_opening_drive(bars: pd.DataFrame, atr_df: pd.DataFrame) -> pd.DataFr
             session_count += 1
 
             for window_min in DRIVE_WINDOWS:
-                # Get bars within the drive window
-                window_end = session_start + pd.Timedelta(minutes=window_min)
-                drive_mask = (bars["ts_utc"] >= session_start) & (bars["ts_utc"] < window_end)
-                drive_bars = bars.loc[drive_mask].sort_values("ts_utc")
+                window_end_ep = session_start_ep + window_min * 60
+                i_win_end = np.searchsorted(epoch_vals, window_end_ep, side="left")
 
-                if len(drive_bars) < max(5, window_min // 5):  # Need reasonable coverage
+                n_drive = i_win_end - i_start
+                if n_drive < max(5, window_min // 5):
                     continue
 
-                drive_open = drive_bars.iloc[0]["open"]
-                drive_close = drive_bars.iloc[-1]["close"]
+                drive_open = open_vals[i_start]
+                drive_close = close_vals[i_win_end - 1]
                 drive_return = drive_close - drive_open
-                drive_range = drive_bars["high"].max() - drive_bars["low"].min()
+                drive_range = high_vals[i_start:i_win_end].max() - low_vals[i_start:i_win_end].min()
 
                 if abs(drive_return) < 0.01:
                     continue
@@ -180,21 +189,17 @@ def analyze_opening_drive(bars: pd.DataFrame, atr_df: pd.DataFrame) -> pd.DataFr
                 drive_direction = "up" if drive_return > 0 else "down"
                 aligned = drive_direction == session_direction
 
-                # Conditional trade: buy at drive close if up, sell if down
-                # PnL = session close - drive close (if up) or drive close - session close (if down)
                 if drive_direction == "up":
                     trade_pnl_pts = session_close - drive_close
                 else:
                     trade_pnl_pts = drive_close - session_close
 
-                # Convert to R: risk = drive range (natural stop)
                 risk_pts = max(drive_range, SPEC.tick_size * SPEC.min_ticks_floor)
                 pnl_dollars = trade_pnl_pts * SPEC.point_value - SPEC.total_friction
                 risk_dollars = risk_pts * SPEC.point_value + SPEC.total_friction
                 pnl_r = pnl_dollars / risk_dollars
 
-                # Also compute raw hold PnL (just hold from drive close to session close)
-                hold_pnl_pts = session_close - drive_close  # Always long perspective
+                hold_pnl_pts = session_close - drive_close
 
                 results.append({
                     "date": cal_date,
@@ -214,7 +219,7 @@ def analyze_opening_drive(bars: pd.DataFrame, atr_df: pd.DataFrame) -> pd.DataFr
                     "risk_pts": risk_pts,
                     "atr_20": atr,
                     "year": trading_day.year if hasattr(trading_day, "year") else pd.Timestamp(trading_day).year,
-                    "remaining_bars": len(session_bars) - len(drive_bars),
+                    "remaining_bars": (i_end - i_start) - n_drive,
                 })
 
         print(f"    {session_count:,} valid sessions found.")
@@ -418,7 +423,7 @@ def print_best_setups(data: pd.DataFrame) -> None:
 
 def main():
     print("=" * 110)
-    print("GOLD (MGC) OPENING DRIVE ANALYSIS")
+    print(f"GOLD (MGC) OPENING DRIVE ANALYSIS  [screening: {SCREEN_START}+]")
     print("=" * 110)
     print()
 
