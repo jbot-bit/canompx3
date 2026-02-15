@@ -88,10 +88,11 @@ class TestOrbLabelsSync:
 class TestAllFiltersSync:
     """ALL_FILTERS keys must match filter_type inside each filter."""
 
+    # L-filters removed from grid (negative ExpR, 0/1024 validated). Classes retained for reference.
+    # G2/G3 removed (99%+ pass rate on most sessions = cosmetic, not real filtering)
     EXPECTED_FILTER_KEYS = {
         "NO_FILTER",
-        "ORB_L2", "ORB_L3", "ORB_L4", "ORB_L6", "ORB_L8",
-        "ORB_G2", "ORB_G3", "ORB_G4", "ORB_G5", "ORB_G6", "ORB_G8",
+        "ORB_G4", "ORB_G5", "ORB_G6", "ORB_G8",
         "VOL_RV12_N20",
     }
 
@@ -178,15 +179,15 @@ class TestGridParamsSync:
     def test_grid_size(self):
         """Total grid size matches expected formula (E3 uses CB1 only).
 
-        11 ORBs (7 fixed + 4 dynamic) x 6 RRs x 5 CBs x 13 filters x 2 EMs
-        E1: 11 x 6 x 5 x 13 = 4290
-        E3: 11 x 6 x 1 x 13 = 858  (E3 always CB1)
-        Total: 5148
+        11 ORBs (7 fixed + 4 dynamic) x 6 RRs x 5 CBs x 6 filters x 2 EMs
+        E1: 11 x 6 x 5 x 6 = 1980
+        E3: 11 x 6 x 1 x 6 = 396  (E3 always CB1)
+        Total: 2376
         """
         e1 = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * len(ALL_FILTERS)
         e3 = len(ORB_LABELS) * len(RR_TARGETS) * 1 * len(ALL_FILTERS)
         expected = e1 + e3
-        assert expected == 5148
+        assert expected == 2376
 
 
 class TestEntryModelsSync:
@@ -273,7 +274,7 @@ class TestStrategyIdSync:
                             sid = make_strategy_id("MGC", orb, em, rr, cb, fk)
                             assert sid not in ids, f"Duplicate ID: {sid}"
                             ids.add(sid)
-        assert len(ids) == 5148
+        assert len(ids) == 2376
 
 
 # ============================================================================
@@ -322,7 +323,10 @@ class TestSchemaSync:
             "filter_params", "sample_size", "win_rate", "avg_win_r",
             "avg_loss_r", "expectancy_r", "sharpe_ratio", "max_drawdown_r",
             "median_risk_points", "avg_risk_points",
-            "yearly_results", "validation_status", "validation_notes",
+            "yearly_results",
+            "entry_signals", "scratch_count", "early_exit_count",
+            "trade_day_hash", "is_canonical", "canonical_strategy_id",
+            "validation_status", "validation_notes",
         }
         missing = required - cols
         assert not missing, f"Missing columns in experimental_strategies: {missing}"

@@ -58,10 +58,10 @@ ORB SIZE FILTERS:
   NO_FILTER: Trade all days regardless of ORB size.
     ALL no-filter strategies have negative expectancy. Do not trade.
 
-GRID (5,148 strategy combinations, full grid before ENABLED_SESSIONS filtering):
-  E1: 11 ORBs x 6 RRs x 5 CBs x 13 filters = 4,290
-  E3: 11 ORBs x 6 RRs x 1 CB x 13 filters = 858 (E3 always CB1)
-  Total = 5,148
+GRID (2,376 strategy combinations, full grid before ENABLED_SESSIONS filtering):
+  E1: 11 ORBs x 6 RRs x 5 CBs x 6 filters = 1,980
+  E3: 11 ORBs x 6 RRs x 1 CB x 6 filters = 396 (E3 always CB1)
+  Total = 2,376
 
 ==========================================================================
 """
@@ -167,10 +167,16 @@ MGC_VOLUME_FILTERS = {
     ),
 }
 
+# Filters included in discovery grid (active filters only)
+# L-filters removed from grid (negative ExpR, 0/1024 validated). Classes retained for reference.
+# G2/G3 removed (99%+ pass rate on most sessions = cosmetic, not real filtering)
+_GRID_SIZE_FILTERS = {k: v for k, v in MGC_ORB_SIZE_FILTERS.items()
+                      if k in ("G4", "G5", "G6", "G8")}
+
 # Master filter registry (all filters by filter_type key)
 ALL_FILTERS: dict[str, StrategyFilter] = {
     "NO_FILTER": NoFilter(),
-    **{f"ORB_{k}": v for k, v in MGC_ORB_SIZE_FILTERS.items()},
+    **{f"ORB_{k}": v for k, v in _GRID_SIZE_FILTERS.items()},
     **MGC_VOLUME_FILTERS,
 }
 

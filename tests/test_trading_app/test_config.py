@@ -118,14 +118,21 @@ class TestAllFilters:
     def test_contains_no_filter(self):
         assert "NO_FILTER" in ALL_FILTERS
 
-    def test_contains_all_size_filters(self):
-        for key in ["ORB_L2", "ORB_L3", "ORB_L4", "ORB_L6", "ORB_L8",
-                     "ORB_G2", "ORB_G3", "ORB_G4", "ORB_G5", "ORB_G6", "ORB_G8"]:
+    def test_contains_grid_size_filters(self):
+        for key in ["ORB_G4", "ORB_G5", "ORB_G6", "ORB_G8"]:
             assert key in ALL_FILTERS, f"{key} missing from ALL_FILTERS"
 
+    def test_l_filters_excluded_from_grid(self):
+        for key in ["ORB_L2", "ORB_L3", "ORB_L4", "ORB_L6", "ORB_L8"]:
+            assert key not in ALL_FILTERS, f"{key} should not be in ALL_FILTERS"
+
+    def test_g2_g3_excluded_from_grid(self):
+        for key in ["ORB_G2", "ORB_G3"]:
+            assert key not in ALL_FILTERS, f"{key} should not be in ALL_FILTERS"
+
     def test_total_count(self):
-        # NO_FILTER + 5 L-filters + 6 G-filters + 1 VOL-filter = 13
-        assert len(ALL_FILTERS) == 13
+        # NO_FILTER + 4 G-filters (G4,G5,G6,G8) + 1 VOL-filter = 6
+        assert len(ALL_FILTERS) == 6
 
     def test_contains_volume_filter(self):
         assert "VOL_RV12_N20" in ALL_FILTERS
