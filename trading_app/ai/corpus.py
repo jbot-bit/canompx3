@@ -12,10 +12,10 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 
 # Canonical documents to load (path relative to project root, priority label)
 CORPUS_FILES = {
-    "CANONICAL_LOGIC": {
-        "path": "CANONICAL_LOGIC.txt",
+    "TRADING_RULES": {
+        "path": "TRADING_RULES.md",
         "priority": "CRITICAL",
-        "description": "R-multiples, cost model, validation rules",
+        "description": "Trading rules, sessions, filters, cost model, R-multiples",
     },
     "TRADE_MANAGEMENT_RULES": {
         "path": "artifacts/TRADE_MANAGEMENT_RULES.md",
