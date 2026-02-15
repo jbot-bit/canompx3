@@ -8,13 +8,20 @@
 
 set -e
 
+# Activate venv if present (for ruff/python/pytest)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -f "$SCRIPT_DIR/.venv/Scripts/activate" ]; then
+    source "$SCRIPT_DIR/.venv/Scripts/activate"
+elif [ -f "$SCRIPT_DIR/.venv/bin/activate" ]; then
+    source "$SCRIPT_DIR/.venv/bin/activate"
+fi
+
 echo "=== PRE-COMMIT CHECKS ==="
 echo ""
 
 # 0. Ruff lint check (~1 second)
 echo "[0/3] Ruff lint..."
-ruff check pipeline/ trading_app/ > /dev/null 2>&1
-if [ $? -ne 0 ]; then
+if ! ruff check pipeline/ trading_app/ > /dev/null 2>&1; then
     echo "BLOCKED: Lint errors detected."
     ruff check pipeline/ trading_app/
     exit 1
@@ -23,8 +30,7 @@ echo "  PASSED"
 
 # 1. Drift check (~2 seconds)
 echo "[1/3] Drift check..."
-python pipeline/check_drift.py > /dev/null 2>&1
-if [ $? -ne 0 ]; then
+if ! python pipeline/check_drift.py > /dev/null 2>&1; then
     echo "BLOCKED: Drift detected."
     python pipeline/check_drift.py
     exit 1

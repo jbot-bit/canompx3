@@ -42,6 +42,7 @@ pipeline/checkpoints/
 
 # Claude Code
 .claude/
+memory/
 
 # Windows junk
 nul
