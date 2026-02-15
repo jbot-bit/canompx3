@@ -77,7 +77,8 @@ Raw data files contain GC (full-size Gold futures) which has ~40-70% more 1-minu
 | `portfolio.py` | 918 | Diversified strategy selection, position sizing, family dedup |
 | `outcome_builder.py` | 729 | Pre-compute outcomes for RR x CB x EM grid |
 | `strategy_discovery.py` | 563 | Bulk-load grid search across 5,148 combos per instrument |
-| `strategy_validator.py` | 312 | 6-phase validation + risk floor + stress test |
+| `strategy_validator.py` | 345 | 7-phase validation (incl. Phase 4b walk-forward) + risk floor + stress test |
+| `walkforward.py` | 175 | Anchored walk-forward OOS validation (Phase 4b gate) |
 | `paper_trader.py` | 433 | Historical replay with journal + risk management |
 | `db_manager.py` | 411 | Schema for 6 trading_app tables + family head helpers |
 | `entry_rules.py` | 260 | detect_confirm + resolve_entry (E1/E3) |
@@ -189,7 +190,7 @@ Databento DBN files (.dbn.zst)
   → gold.db:orb_outcomes (MGC 133K + MNQ 126K + MCL 126K + MES 145K)
   → trading_app/strategy_discovery.py (grid search 5,148 combos per instrument)
   → gold.db:experimental_strategies (MGC 3,276 + MNQ 2,664 + MCL 1,800 + MES 3,744)
-  → trading_app/strategy_validator.py (6-phase validation)
+  → trading_app/strategy_validator.py (7-phase validation incl. Phase 4b walk-forward)
   → gold.db:validated_setups (MGC 216 + MNQ 610 + MCL 0 + MES 198)
   → scripts/build_edge_families.py (cluster by trade-day hash)
   → gold.db:edge_families (215 families from 1,024 validated strategies)
@@ -328,6 +329,8 @@ python pipeline/dashboard.py --output report.html      # Custom output path
 python trading_app/outcome_builder.py --instrument MGC --start 2021-02-05 --end 2026-02-04
 python trading_app/strategy_discovery.py --instrument MGC
 python trading_app/strategy_validator.py --instrument MGC --min-sample 50
+python trading_app/strategy_validator.py --instrument MGC --no-walkforward
+python trading_app/strategy_validator.py --instrument MNQ --wf-min-windows 2  # relaxed for 2yr data
 python trading_app/paper_trader.py --instrument MGC --start 2025-01-01 --end 2025-12-31
 python -m trading_app.live_config --db-path C:/db/gold.db     # Show live portfolio
 python -m trading_app.live_config --db-path C:/db/gold.db --output live_portfolio.json

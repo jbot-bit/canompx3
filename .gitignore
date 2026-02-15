@@ -67,5 +67,8 @@ MNQ db/
 # Reports (generated analysis output)
 reports/
 
+# Walk-forward results (JSONL output)
+data/
+
 # Misc
 backfill_overnight.log

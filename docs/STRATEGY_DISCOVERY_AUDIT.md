@@ -318,11 +318,11 @@ ASSET_CONFIGS = {
 
 ## Validation Pipeline
 
-### 6-Phase Validation (strategy_validator.py)
+### 7-Phase Validation (strategy_validator.py + walkforward.py)
 
 **Entry:** Experimental strategies (3,276 MGC candidates)
-**Exit:** Validated strategies (216 MGC active, promoted to validated_setups)
-**File:** `/trading_app/strategy_validator.py` (312 lines)
+**Exit:** Validated strategies (promoted to validated_setups)
+**Files:** `/trading_app/strategy_validator.py`, `/trading_app/walkforward.py`
 
 ### Phase 1: Sample Size Gate
 ```
@@ -382,6 +382,30 @@ else:
 ```
 
 **Rationale:** Real trading has gaps, slippage, correlation jumps. Test if edge survives +50% friction.
+
+### Phase 4b: Walk-Forward OOS Validation
+```
+# Anchored expanding walk-forward with 6-month non-overlapping test windows
+# Minimum 12 months training before first test window
+
+for each test window:
+    test_outcomes = filtered outcomes in [window_start, window_end)
+    compute test_n, test_exp_r
+
+valid_windows = windows where test_n >= min_trades_per_window (15)
+
+Pass rule (ALL 4, fail-closed):
+  1. n_valid >= min_valid_windows (3)
+  2. pct_positive >= min_pct_positive (60%)
+  3. agg_oos_exp_r > 0 (trade-weighted)
+  4. total_oos_trades >= min_trades * min_windows (45)
+```
+
+**Key behaviors:**
+- MNQ/MES (2yr data): ~2 windows, fails min_windows=3. Use `--wf-min-windows 2` or `--no-walkforward`
+- G6/G8 filters: few trades per window, most windows invalid. Correctly identifies as untestable OOS
+- Results logged to `data/walkforward_results.jsonl` (JSONL, append-only, gitignored)
+- Disable with `--no-walkforward` CLI flag
 
 ### Phase 5 (Optional): Sharpe Ratio Gate
 ```
@@ -780,9 +804,10 @@ For each candidate (ordered by ExpR DESC):
 - **Flexibility:** Can re-run discovery with different filters on same outcomes
 
 ### 3. Multi-Phase Validation
-- **Rigor:** 6 gates catch fragile strategies (low sample, negative years, slippage-sensitive)
+- **Rigor:** 7 gates catch fragile strategies (low sample, negative years, slippage-sensitive)
 - **Stress Testing:** +50% friction gate filters unrealistic winners
 - **Yearly Robustness:** Rejects "lucky year" strategies (must be positive all years)
+- **Walk-Forward OOS:** Phase 4b anchored walk-forward rejects strategies with concentrated performance
 
 ### 4. Filter Architecture
 - **Modularity:** New filters can be added by subclassing StrategyFilter
