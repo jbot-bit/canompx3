@@ -890,6 +890,30 @@ def check_sharpe_ann_presence() -> list[str]:
     return violations
 
 
+def check_ingest_authority_notice() -> list[str]:
+    """Check #22: ingest_dbn_mgc.py must have deprecation notice in __main__ block."""
+    path = PIPELINE_DIR / "ingest_dbn_mgc.py"
+    if not path.exists():
+        return []
+    text = path.read_text(encoding="utf-8", errors="replace")
+
+    main_idx = text.find('if __name__ == "__main__"')
+    if main_idx == -1:
+        main_idx = text.find("if __name__ == '__main__'")
+    if main_idx == -1:
+        return []  # No __main__ block — library-only, fine
+
+    main_block = text[main_idx:]
+    required = [
+        'print("NOTE: For multi-instrument support, prefer:")',
+        'print("  python pipeline/ingest_dbn.py --instrument MGC")',
+    ]
+    missing = [s for s in required if s not in main_block]
+    if missing:
+        return [f"  {path.name}: Missing deprecation notice in __main__: {missing}"]
+    return []
+
+
 def main():
     print("=" * 60)
     print("PIPELINE DRIFT CHECK")
@@ -1141,6 +1165,18 @@ def main():
     # Check 21: Analytical honesty guard (sharpe_ann presence)
     print("Check 21: Analytical honesty guard (sharpe_ann)...")
     v = check_sharpe_ann_presence()
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 22: Ingest authority notice (deprecation in ingest_dbn_mgc.py)
+    print("Check 22: Ingest authority notice (ingest_dbn_mgc.py deprecation)...")
+    v = check_ingest_authority_notice()
     if v:
         print("  FAILED:")
         for line in v:

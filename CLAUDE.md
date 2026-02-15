@@ -47,18 +47,81 @@ Raw data files contain GC (full-size Gold futures) which has ~40-70% more 1-minu
 
 ---
 
+## The Machine
+
+```
++-----------------------------------------------------------+
+|  LAYER 1: DATA PIPELINE                    pipeline/      |
+|                                                           |
+|  Raw DBN --> bars_1m --> bars_5m --> daily_features        |
+|                                                           |
+|  Authority:  ingest_dbn.py (monolithic files)             |
+|              ingest_dbn_daily.py (daily files)             |
+|  Library:    ingest_dbn_mgc.py (validation gates)         |
+|  Builders:   build_bars_5m.py, build_daily_features.py    |
+|  Config:     asset_configs.py, dst.py, init_db.py         |
++-----------------------------------------------------------+
+|  LAYER 2: STRATEGY ENGINE              trading_app/       |
+|                                                           |
+|  daily_features --> orb_outcomes --> strategies            |
+|                 --> validated_setups --> edge_families      |
+|                                                           |
+|  Authority:  outcome_builder.py -> strategy_discovery.py  |
+|              -> strategy_validator.py                     |
+|  Support:    config.py, entry_rules.py, walkforward.py    |
+|  Families:   build_edge_families.py (scripts/)            |
++-----------------------------------------------------------+
+|  LAYER 3: LIVE EXECUTION              trading_app/        |
+|                                                           |
+|  validated_setups --> portfolio --> paper_trader            |
+|                  --> live_config --> execution_engine       |
+|                                                           |
+|  Authority:  live_config.py (what to trade)               |
+|              portfolio.py (sizing + dedup)                 |
+|  Execution:  execution_engine.py, paper_trader.py         |
+|  Safety:     risk_manager.py                              |
++-----------------------------------------------------------+
+|  ORCHESTRATORS                                            |
+|                                                           |
+|  run_pipeline.py        L1 only (ingest -> features)      |
++-----------------------------------------------------------+
+|  SCRIPTS (scripts/)                                       |
+|                                                           |
+|  Convenience:  ingest_mcl/mnq.py (copy DB + pipeline)     |
+|  Rebuild:      run_parallel_ingest.py (parallel years)    |
+|  One-off:      ingest_mnq_fast/mes.py (vectorized)        |
+|  Analytics:    report_edge_portfolio.py                    |
++-----------------------------------------------------------+
+```
+
+### User Decision Points
+
+| Decision | Where | Auto-flowable? |
+|----------|-------|----------------|
+| Instrument | `--instrument` CLI flag | No |
+| Date range | `--start/--end` CLI flags | No |
+| DB location | `DUCKDB_PATH` / `--db-path` | No (OneDrive vs local) |
+| Validation thresholds | `--min-sample`, `--wf-min-windows` | Defaults exist, user overrides |
+| Portfolio composition | `live_config.py` edits | No |
+| Regime gates | `live_config.py` edits | No |
+
+Everything else auto-flows through the layers.
+
+---
+
 ## What Exists (Current State)
 
 ### Pipeline Code (`pipeline/`)
 
 | File | LOC | Purpose |
 |------|-----|---------|
-| `ingest_dbn_mgc.py` | 925 | MGC-specific DBN ingestion with 7 validation gates |
-| `ingest_dbn.py` | 525 | Generic multi-instrument wrapper |
+| `ingest_dbn_mgc.py` | 920 | Validation library (shared by all ingest paths -- not a CLI) |
+| `ingest_dbn.py` | 525 | Generic multi-instrument wrapper (monolithic DBN files) |
+| `ingest_dbn_daily.py` | 602 | Daily .dbn.zst file ingestion (any instrument) |
 | `build_bars_5m.py` | 352 | Deterministic 5m bar aggregation from 1m bars |
 | `build_daily_features.py` | 1012 | Daily features builder (11 ORBs, sessions, RSI, outcomes) |
 | `run_pipeline.py` | 284 | Pipeline orchestrator (ingest → 5m → features → audit) |
-| `check_drift.py` | 1160 | Static analysis drift detector (21 checks) |
+| `check_drift.py` | 1202 | Static analysis drift detector (22 checks) |
 | `init_db.py` | 251 | Database schema initialization |
 | `cost_model.py` | 278 | Canonical cost model (multi-instrument friction, R-multiples, stress test) |
 | `dashboard.py` | 786 | Self-contained HTML report generator (7 panels) |
@@ -124,6 +187,11 @@ Completed research scripts, moved from `scripts/`. Not part of production pipeli
 | `build_edge_families.py` | Cluster validated strategies by trade-day hash |
 | `backfill_strategy_trade_days.py` | Populate strategy_trade_days ground truth table |
 | `run_backfill_overnight.py` | Crash-recovery retry wrapper |
+| `ingest_mcl.py` | Convenience: copy DB + run MCL pipeline |
+| `ingest_mnq.py` | Convenience: copy DB + run MNQ pipeline |
+| `ingest_mes.py` | Convenience: copy DB + run MES pipeline |
+| `ingest_mnq_fast.py` | One-off: vectorized MNQ ingest |
+| `run_parallel_ingest.py` | Rebuild: parallel year-range ingestion |
 
 ### Reference Documents
 
@@ -179,7 +247,7 @@ cmd /c copy "C:\db\gold.db" "C:\Users\joshd\OneDrive\Desktop\Canompx3\gold.db"
 
 ```
 Databento DBN files (.dbn.zst)
-  → pipeline/ingest_dbn_mgc.py (validate, filter outrights, choose front contract)
+  → pipeline/ingest_dbn.py / ingest_dbn_daily.py (validate, filter outrights, choose front contract)
   → gold.db:bars_1m (1-minute OHLCV, UTC timestamps)
   → pipeline/build_bars_5m.py (deterministic aggregation)
   → gold.db:bars_5m (5-minute OHLCV, fully rebuildable)
@@ -283,12 +351,15 @@ python pipeline/check_db.py             # Inspect database contents
 ### Ingestion
 
 ```bash
-# Ingest MGC DBN into bars_1m
-python pipeline/ingest_dbn_mgc.py --start 2024-01-01 --end 2024-12-31
-python pipeline/ingest_dbn_mgc.py --resume          # Resume from checkpoint
-python pipeline/ingest_dbn_mgc.py --dry-run          # Validate only
+# Monolithic DBN file (any instrument)
+python pipeline/ingest_dbn.py --instrument MGC --start 2024-01-01 --end 2024-12-31
+python pipeline/ingest_dbn.py --instrument MGC --resume
 
-# Full pipeline (ingest → 5m → audit)
+# Daily .dbn.zst files (any instrument)
+python pipeline/ingest_dbn_daily.py --instrument MGC --start 2021-02-05 --end 2026-02-04
+python pipeline/ingest_dbn_daily.py --instrument MCL --data-dir DB/MCL_DAILY/
+
+# Full pipeline (ingest -> 5m -> audit)
 python pipeline/run_pipeline.py --instrument MGC --start 2024-01-01 --end 2024-12-31
 ```
 
@@ -310,7 +381,7 @@ python pipeline/build_daily_features.py --instrument MGC --start 2024-01-01 --en
 ### Guardrails
 
 ```bash
-python pipeline/check_drift.py                        # Drift detection (21 checks)
+python pipeline/check_drift.py                        # Drift detection (22 checks)
 python -m pytest tests/ -v                             # Full test suite (1,072 tests)
 python -m pytest tests/ -x -q                          # Fast test run (stop on first fail)
 python pipeline/health_check.py                        # All-in-one health check
@@ -364,7 +435,7 @@ Runs automatically before every commit:
 - Syntax validation on changed files
 Setup: `git config core.hooksPath .githooks`
 
-### 2. Drift Detection (`pipeline/check_drift.py` — 21 checks)
+### 2. Drift Detection (`pipeline/check_drift.py` — 22 checks)
 Static analysis that catches:
 1. Hardcoded 'MGC' SQL in generic pipeline code
 2. `.apply()`/`.iterrows()` on large data (performance anti-pattern)
@@ -387,6 +458,7 @@ Static analysis that catches:
 19. Timezone hygiene (blocks pytz imports and hardcoded timedelta(hours=10))
 20. MarketState/scoring/cascade read-only SQL guard
 21. Analytical honesty guard (sharpe_ann in discovery + view_strategies)
+22. Ingest authority notice (deprecation in ingest_dbn_mgc.py __main__)
 
 ### 3. Claude Code Hooks
 Auto-run checks when editing pipeline files:

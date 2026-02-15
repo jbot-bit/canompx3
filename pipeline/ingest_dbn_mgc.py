@@ -2,6 +2,8 @@
 """
 Ingest MGC DBN file into bars_1m table.
 
+ROLE: [L1 Library] Validation gates. All ingest paths import from here. Do not run directly.
+
 CANONICAL COMPLIANCE (CANONICAL_backfill_dbn_mgc_rules.txt):
 - FAIL-CLOSED: Any validation failure aborts entire backfill
 - CHUNKED: Uses store.to_df(count=N) iterator, never full load
@@ -11,17 +13,9 @@ CANONICAL COMPLIANCE (CANONICAL_backfill_dbn_mgc_rules.txt):
 - INTEGRITY GATED: Verifies no duplicates/NULLs after each merge
 - BARS_1M ONLY: Does NOT touch bars_5m or any derived tables
 
-Usage:
-    python pipeline/ingest_dbn_mgc.py [options]
-
-Options:
-    --start YYYY-MM-DD    Start date (inclusive)
-    --end YYYY-MM-DD      End date (inclusive)
-    --resume              Resume from checkpoint
-    --retry-failed        Retry failed chunks
-    --dry-run             Validate only, no DB writes
-    --chunk-days N        Trading days per commit (default: 7)
-    --batch-size N        Rows per DBN read batch (default: 50000)
+Usage (DEPRECATED -- prefer ingest_dbn.py or ingest_dbn_daily.py):
+    python pipeline/ingest_dbn.py --instrument MGC [options]
+    python pipeline/ingest_dbn_daily.py --instrument MGC --start ... --end ...
 """
 
 import sys
@@ -918,4 +912,7 @@ def main():
 
 
 if __name__ == "__main__":
+    print("NOTE: For multi-instrument support, prefer:")
+    print("  python pipeline/ingest_dbn.py --instrument MGC")
+    print()
     main()
