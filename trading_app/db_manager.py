@@ -111,6 +111,16 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 -- Yearly breakdown (JSON)
                 yearly_results    TEXT,
 
+                -- Entry signal counts (sample_size = wins + losses only)
+                entry_signals     INTEGER,
+                scratch_count     INTEGER,
+                early_exit_count  INTEGER,
+
+                -- Trade-day hash dedup
+                trade_day_hash    TEXT,
+                is_canonical      BOOLEAN     DEFAULT TRUE,
+                canonical_strategy_id TEXT,
+
                 -- Validation status
                 validation_status TEXT,
                 validation_notes  TEXT
@@ -303,8 +313,10 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
                 "avg_win_r", "avg_loss_r", "expectancy_r", "sharpe_ratio",
                 "max_drawdown_r", "median_risk_points", "avg_risk_points",
                 "trades_per_year", "sharpe_ann",
-                "yearly_results", "validation_status",
-                "validation_notes"
+                "yearly_results",
+                "entry_signals", "scratch_count", "early_exit_count",
+                "trade_day_hash", "is_canonical", "canonical_strategy_id",
+                "validation_status", "validation_notes"
             }
             actual_cols = {row[0] for row in result}
 

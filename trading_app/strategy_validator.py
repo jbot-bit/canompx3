@@ -1,5 +1,5 @@
 """
-6-phase strategy validation per CANONICAL_LOGIC.txt section 9.
+7-phase strategy validation per CANONICAL_LOGIC.txt section 9.
 
 Validates strategies from experimental_strategies and promotes passing
 ones to validated_setups. Rejected strategies get validation_notes.
@@ -9,11 +9,13 @@ Phases:
   2. Post-cost expectancy > 0
   3. Yearly robustness (positive in ALL years)
   4. Stress test (ExpR > 0 at +50% costs)
+  4b. Walk-forward OOS validation (anchored expanding, 6m test windows)
   5. Sharpe ratio (optional quality filter)
   6. Max drawdown (optional risk filter)
 
 Usage:
     python trading_app/strategy_validator.py --instrument MGC
+    python trading_app/strategy_validator.py --instrument MGC --no-walkforward
     python trading_app/strategy_validator.py --instrument MGC --min-sample 100 --dry-run
 """
 
@@ -29,6 +31,7 @@ import duckdb
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.cost_model import get_cost_spec, stress_test_costs
 from trading_app.db_manager import init_trading_app_schema
+from trading_app.walkforward import run_walkforward, append_walkforward_result
 
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)
@@ -156,6 +159,13 @@ def run_validation(
     exclude_years: set[int] | None = None,
     min_years_positive_pct: float = 1.0,
     dry_run: bool = False,
+    enable_walkforward: bool = True,
+    wf_test_months: int = 6,
+    wf_min_train_months: int = 12,
+    wf_min_trades: int = 15,
+    wf_min_windows: int = 3,
+    wf_min_pct_positive: float = 0.60,
+    wf_output_path: str = "data/walkforward_results.jsonl",
 ) -> tuple[int, int]:
     """
     Validate all experimental_strategies and promote passing ones.
@@ -198,6 +208,31 @@ def run_validation(
                 exclude_years=exclude_years,
                 min_years_positive_pct=min_years_positive_pct,
             )
+
+            # Phase 4b: Walk-forward gate
+            if status == "PASSED" and enable_walkforward:
+                wf_result = run_walkforward(
+                    con=con,
+                    strategy_id=strategy_id,
+                    instrument=instrument,
+                    orb_label=row_dict["orb_label"],
+                    entry_model=row_dict.get("entry_model", "E1"),
+                    rr_target=row_dict["rr_target"],
+                    confirm_bars=row_dict["confirm_bars"],
+                    filter_type=row_dict.get("filter_type", "NO_FILTER"),
+                    orb_minutes=row_dict.get("orb_minutes", 5),
+                    cost_spec=cost_spec,
+                    test_window_months=wf_test_months,
+                    min_train_months=wf_min_train_months,
+                    min_trades_per_window=wf_min_trades,
+                    min_valid_windows=wf_min_windows,
+                    min_pct_positive=wf_min_pct_positive,
+                )
+                if not dry_run:
+                    append_walkforward_result(wf_result, wf_output_path)
+                if not wf_result.passed:
+                    status = "REJECTED"
+                    notes = f"Phase 4b: {wf_result.rejection_reason}"
 
             if not dry_run:
                 # Update experimental_strategies
@@ -290,6 +325,19 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="No DB writes")
     parser.add_argument("--db", type=str, default=None,
                         help="Database path (default: gold.db)")
+    # Walk-forward (Phase 4b)
+    parser.add_argument("--no-walkforward", action="store_true",
+                        help="Disable walk-forward validation (Phase 4b)")
+    parser.add_argument("--wf-test-months", type=int, default=6,
+                        help="Walk-forward test window months (default: 6)")
+    parser.add_argument("--wf-min-train-months", type=int, default=12,
+                        help="Walk-forward min training months (default: 12)")
+    parser.add_argument("--wf-min-trades", type=int, default=15,
+                        help="Walk-forward min trades per window (default: 15)")
+    parser.add_argument("--wf-min-windows", type=int, default=3,
+                        help="Walk-forward min valid windows (default: 3)")
+    parser.add_argument("--wf-min-pct-positive", type=float, default=0.60,
+                        help="Walk-forward min pct positive windows (default: 0.60)")
     args = parser.parse_args()
 
     exclude = set(args.exclude_years) if args.exclude_years else None
@@ -305,6 +353,12 @@ def main():
         exclude_years=exclude,
         min_years_positive_pct=args.min_years_positive_pct,
         dry_run=args.dry_run,
+        enable_walkforward=not args.no_walkforward,
+        wf_test_months=args.wf_test_months,
+        wf_min_train_months=args.wf_min_train_months,
+        wf_min_trades=args.wf_min_trades,
+        wf_min_windows=args.wf_min_windows,
+        wf_min_pct_positive=args.wf_min_pct_positive,
     )
 
 

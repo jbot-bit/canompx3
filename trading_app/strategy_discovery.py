@@ -36,47 +36,50 @@ def compute_metrics(outcomes: list[dict], cost_spec) -> dict:
     """
     Compute performance metrics from a list of outcome rows.
 
+    sample_size = wins + losses ONLY (scratches/early_exits excluded).
+    entry_signals = wins + losses + scratches + early_exits (total entries).
+    win_rate denominator = wins + losses.
+
     Returns dict with: sample_size, win_rate, avg_win_r, avg_loss_r,
     expectancy_r, sharpe_ratio, max_drawdown_r, median_risk_points,
-    avg_risk_points, yearly_results.
+    avg_risk_points, yearly_results, entry_signals, scratch_count,
+    early_exit_count.
     """
+    _empty = {
+        "sample_size": 0,
+        "win_rate": None,
+        "avg_win_r": None,
+        "avg_loss_r": None,
+        "expectancy_r": None,
+        "sharpe_ratio": None,
+        "max_drawdown_r": None,
+        "median_risk_points": None,
+        "avg_risk_points": None,
+        "trades_per_year": 0,
+        "sharpe_ann": None,
+        "yearly_results": "{}",
+        "entry_signals": 0,
+        "scratch_count": 0,
+        "early_exit_count": 0,
+    }
     if not outcomes:
-        return {
-            "sample_size": 0,
-            "win_rate": None,
-            "avg_win_r": None,
-            "avg_loss_r": None,
-            "expectancy_r": None,
-            "sharpe_ratio": None,
-            "max_drawdown_r": None,
-            "median_risk_points": None,
-            "avg_risk_points": None,
-            "trades_per_year": 0,
-            "sharpe_ann": None,
-            "yearly_results": "{}",
-        }
+        return dict(_empty)
 
-    # Split wins/losses (scratches excluded from W/L stats)
+    # Split wins/losses (scratches/early_exits excluded from W/L stats)
     wins = [o for o in outcomes if o["outcome"] == "win"]
     losses = [o for o in outcomes if o["outcome"] == "loss"]
+    scratches = [o for o in outcomes if o["outcome"] == "scratch"]
+    early_exits = [o for o in outcomes if o["outcome"] == "early_exit"]
     traded = [o for o in outcomes if o["outcome"] in ("win", "loss")]
 
     n_traded = len(traded)
+    entry_signals = len(wins) + len(losses) + len(scratches) + len(early_exits)
     if n_traded == 0:
-        return {
-            "sample_size": 0,
-            "win_rate": None,
-            "avg_win_r": None,
-            "avg_loss_r": None,
-            "expectancy_r": None,
-            "sharpe_ratio": None,
-            "max_drawdown_r": None,
-            "median_risk_points": None,
-            "avg_risk_points": None,
-            "trades_per_year": 0,
-            "sharpe_ann": None,
-            "yearly_results": "{}",
-        }
+        result = dict(_empty)
+        result["entry_signals"] = entry_signals
+        result["scratch_count"] = len(scratches)
+        result["early_exit_count"] = len(early_exits)
+        return result
 
     win_rate = len(wins) / n_traded
     loss_rate = 1.0 - win_rate
@@ -186,6 +189,9 @@ def compute_metrics(outcomes: list[dict], cost_spec) -> dict:
         "trades_per_year": round(trades_per_year, 1),
         "sharpe_ann": round(sharpe_ann, 4) if sharpe_ann is not None else None,
         "yearly_results": json.dumps(yearly),
+        "entry_signals": entry_signals,
+        "scratch_count": len(scratches),
+        "early_exit_count": len(early_exits),
     }
 
 
@@ -476,6 +482,8 @@ def run_discovery(
                                     metrics["median_risk_points"], metrics["avg_risk_points"],
                                     metrics["trades_per_year"], metrics["sharpe_ann"],
                                     metrics["yearly_results"],
+                                    metrics["entry_signals"], metrics["scratch_count"],
+                                    metrics["early_exit_count"],
                                     None, None,  # Reset validation_status/notes
                                 ])
 
@@ -491,8 +499,9 @@ def run_discovery(
                                             median_risk_points, avg_risk_points,
                                             trades_per_year, sharpe_ann,
                                             yearly_results,
+                                            entry_signals, scratch_count, early_exit_count,
                                             validation_status, validation_notes)
-                                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                                         insert_batch,
                                     )
                                     insert_batch = []

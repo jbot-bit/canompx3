@@ -284,7 +284,8 @@ class TestRunValidation:
         """Passing strategy appears in validated_setups."""
         db_path = self._setup_db(tmp_path, [_make_row()])
 
-        passed, rejected = run_validation(db_path=db_path, instrument="MGC")
+        passed, rejected = run_validation(db_path=db_path, instrument="MGC",
+                                          enable_walkforward=False)
         assert passed == 1
         assert rejected == 0
 
@@ -318,7 +319,8 @@ class TestRunValidation:
     def test_entry_model_in_validated_setups(self, tmp_path):
         """entry_model column is populated in validated_setups."""
         db_path = self._setup_db(tmp_path, [_make_row()])
-        run_validation(db_path=db_path, instrument="MGC")
+        run_validation(db_path=db_path, instrument="MGC",
+                       enable_walkforward=False)
 
         con = duckdb.connect(str(db_path), read_only=True)
         em = con.execute("SELECT entry_model FROM validated_setups").fetchone()[0]
