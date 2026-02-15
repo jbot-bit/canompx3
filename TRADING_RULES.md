@@ -7,22 +7,38 @@ For deep-dive data, see linked reference documents.
 
 ## Glossary
 
-### Sessions (ORB Labels)
+### Sessions (ORB Labels — 11 total)
+
+**Fixed sessions (7):**
 | Code | Plain English | Time (Brisbane) | Time (UTC) |
 |------|--------------|-----------------|------------|
 | 0900 | Asia open | 9:00 AM | 23:00 prev day |
 | 1000 | Asia mid-morning | 10:00 AM | 00:00 |
 | 1100 | Asia late morning | 11:00 AM | 01:00 |
+| 1130 | Asia late morning 2 | 11:30 AM | 01:30 |
 | 1800 | Evening session | 6:00 PM | 08:00 |
 | 2300 | Late night session | 11:00 PM | 13:00 |
 | 0030 | After midnight | 12:30 AM | 14:30 |
+
+**Dynamic sessions (4, DST-aware — times shift with daylight saving):**
+| Code | Plain English | Reference TZ |
+|------|--------------|-------------|
+| CME_OPEN | CME daily open | 5:00 PM CT |
+| US_EQUITY_OPEN | US equity open | 9:30 AM ET |
+| US_DATA_OPEN | US economic data | 8:30 AM ET |
+| LONDON_OPEN | London open | 8:00 AM UK |
+
+**Aliases (no separate columns):** TOKYO_OPEN → 1000, HK_SG_OPEN → 1130
+**Module:** `pipeline/dst.py` (SESSION_CATALOG + resolvers)
+**Per-asset enabled sessions:** `pipeline/asset_configs.py`
 
 ### Entry Models
 | Code | How It Works |
 |------|-------------|
 | E1 | Price breaks ORB + confirm bars close outside. Enter at NEXT bar's open. Fastest. |
-| E2 | Same as E1 but enter at confirm bar's closing price. Rarely used. |
 | E3 | Price breaks ORB + confirm bars close outside. LIMIT ORDER at ORB edge, wait for retrace. Better price, ~3% miss rate on G5+ days. |
+
+*Note: E2 (enter at confirm bar close) was removed from the grid — identical to E1 on 1m bars.*
 
 ### Confirm Bars (CB)
 CB1-CB5 = 1-5 consecutive 1-minute bars must close outside the ORB. If ANY bar closes back inside, count resets. For E3, CB1-CB5 produce identical entry prices (same limit order). Pick one CB per session.
@@ -50,6 +66,10 @@ Example: 10pt ORB, RR2.0 = 20pt target, 10pt stop.
 | Sharpe | Risk-adjusted return. Above 0.15 = decent. |
 | MaxDD | Maximum drawdown in R. Worst peak-to-trough. |
 | MGC | Micro Gold futures. $10/point, $8.40 RT friction. |
+| MNQ | Micro Nasdaq futures. $2/point, $2.74 RT friction. |
+| MES | Micro S&P 500 futures. $1.25/point, $2.10 RT friction. |
+| MCL | Micro Crude Oil futures. NO EDGE (0/540 validated). |
+| Edge family | Group of strategies with identical trade days. 1 head per family. |
 
 ### Reading a Strategy ID
 `MGC_1800_E3_RR2.0_CB2_ORB_G4` = Micro Gold, 6PM session, limit retrace entry, 2:1 target, 2 confirm bars, ORB >= 4pt filter.
@@ -601,8 +621,7 @@ Gold volatility has changed dramatically:
 ### Rolling Evaluation Summary
 | Family | Score | Windows Passed | Status |
 |--------|-------|----------------|--------|
-| 1000_E2_G2 | 0.83 | 16/19 | STABLE |
-| 1000_E1_G2 | 0.68-0.78 | 13-15/19 | STABLE |
+| 1000_E1_G2 | 0.68-0.83 | 13-16/19 | STABLE |
 | 0900_G3+ families | 0.42-0.54 | 9-11/19 | TRANSITIONING |
 | 1800/2300/1100/0030 | <0.30 | AUTO-DEGRADED | Double-break >67% |
 

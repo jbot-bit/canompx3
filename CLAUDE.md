@@ -4,12 +4,24 @@ This file provides guidance to Claude Code when working with this repository.
 
 ## Project Overview
 
-Gold (MGC) Data Pipeline — builds a clean, replayable local dataset for Micro Gold futures (MGC) trading research and backtesting from Databento DBN files.
+Multi-instrument futures data pipeline — builds clean, replayable local datasets for ORB breakout trading research and backtesting from Databento DBN files. Supports MGC (Micro Gold), MNQ (Micro Nasdaq), MCL (Micro Crude), MES (Micro S&P 500).
 
-**CRITICAL: Price Data Source**
+**CRITICAL: Price Data Source (MGC)**
 Raw data files contain GC (full-size Gold futures) which has ~40-70% more 1-minute bars than MGC. The pipeline ingests **GC bars** for accurate ORB construction, stores them under `symbol='MGC'` (prices are identical — same underlying, same exchange), and uses the **MGC cost model** ($10/point, $8.40 RT friction) for all trading math. The `source_symbol` column records the actual GC contract used (e.g., GCJ1, GCG5).
 
-**Target ORBs**: 09:00, 10:00, 11:00 (primary), 18:00, 23:00, 00:30 (secondary)
+**Instruments & Cost Models:**
+| Instrument | $/point | RT Friction | Data Coverage |
+|------------|---------|-------------|---------------|
+| MGC | $10 | $8.40 | 2016-02-01 to 2026-02-14 (10yr) |
+| MNQ | $2 | $2.74 | 2024-02-04 to 2026-02-14 (2yr) |
+| MCL | $1 | $2.10 | 2021-07-11 to 2026-02-14 (NO EDGE) |
+| MES | $1.25 | $2.10 | 2024-02-12 to 2026-02-14 (2yr) |
+
+**ORB Sessions (11 total):**
+- Fixed: 0900, 1000, 1100, 1130, 1800, 2300, 0030
+- Dynamic (DST-aware): CME_OPEN, US_EQUITY_OPEN, US_DATA_OPEN, LONDON_OPEN
+- Aliases: TOKYO_OPEN → 1000, HK_SG_OPEN → 1130
+- Per-asset enabled sessions configured in `pipeline/asset_configs.py`
 
 ---
 
@@ -44,36 +56,37 @@ Raw data files contain GC (full-size Gold futures) which has ~40-70% more 1-minu
 | `ingest_dbn_mgc.py` | 925 | MGC-specific DBN ingestion with 7 validation gates |
 | `ingest_dbn.py` | 525 | Generic multi-instrument wrapper |
 | `build_bars_5m.py` | 352 | Deterministic 5m bar aggregation from 1m bars |
-| `build_daily_features.py` | 891 | Daily features builder (ORBs, sessions, RSI, outcomes) |
+| `build_daily_features.py` | 1012 | Daily features builder (11 ORBs, sessions, RSI, outcomes) |
 | `run_pipeline.py` | 284 | Pipeline orchestrator (ingest → 5m → features → audit) |
-| `check_drift.py` | 1048 | Static analysis drift detector (19 checks) |
-| `init_db.py` | 214 | Database schema initialization |
-| `cost_model.py` | 185 | Canonical cost model (MGC friction, R-multiples, stress test) |
-| `dashboard.py` | 635 | Self-contained HTML report generator (7 panels) |
-| `asset_configs.py` | 111 | Per-instrument config (MGC, MNQ, NQ) |
-| `health_check.py` | 100 | Quick all-in-one health check CLI |
-| `check_db.py` | 84 | Database inspection tool |
-| `paths.py` | 23 | Canonical path constants |
+| `check_drift.py` | 1160 | Static analysis drift detector (21 checks) |
+| `init_db.py` | 251 | Database schema initialization |
+| `cost_model.py` | 278 | Canonical cost model (multi-instrument friction, R-multiples, stress test) |
+| `dashboard.py` | 786 | Self-contained HTML report generator (7 panels) |
+| `asset_configs.py` | 151 | Per-instrument config (MGC, MNQ, MCL, MES) + enabled sessions |
+| `dst.py` | 262 | DST detection + dynamic session resolvers (SESSION_CATALOG) |
+| `health_check.py` | 152 | Quick all-in-one health check CLI |
+| `check_db.py` | 102 | Database inspection tool |
+| `paths.py` | 39 | Canonical path constants |
 
 ### Trading App (`trading_app/`)
 
 | File | LOC | Purpose |
 |------|-----|---------|
-| `config.py` | 214 | 12 ORB size filters + NO_FILTER + VolumeFilter, ENTRY_MODELS |
-| `execution_engine.py` | 666 | Bar-by-bar state machine (ARMED → CONFIRMING → ENTERED → EXITED) |
-| `portfolio.py` | 609 | Diversified strategy selection, position sizing, correlation |
-| `outcome_builder.py` | 379 | Pre-compute outcomes for RR x CB x EM grid |
-| `strategy_discovery.py` | 513 | Bulk-load grid search across 2,808 combos |
-| `strategy_validator.py` | 303 | 6-phase validation + risk floor + stress test |
-| `paper_trader.py` | 369 | Historical replay with journal + risk management |
-| `db_manager.py` | 296 | Schema for 4 trading_app tables |
-| `entry_rules.py` | 275 | detect_confirm + resolve_entry (E1/E3) |
-| `risk_manager.py` | 137 | Circuit breaker, max concurrent/daily limits |
+| `config.py` | 296 | 12 ORB size filters + NO_FILTER + VolumeFilter, ENTRY_MODELS |
+| `execution_engine.py` | 867 | Bar-by-bar state machine (ARMED → CONFIRMING → ENTERED → EXITED) |
+| `portfolio.py` | 918 | Diversified strategy selection, position sizing, family dedup |
+| `outcome_builder.py` | 729 | Pre-compute outcomes for RR x CB x EM grid |
+| `strategy_discovery.py` | 563 | Bulk-load grid search across 5,148 combos per instrument |
+| `strategy_validator.py` | 312 | 6-phase validation + risk floor + stress test |
+| `paper_trader.py` | 433 | Historical replay with journal + risk management |
+| `db_manager.py` | 411 | Schema for 6 trading_app tables + family head helpers |
+| `entry_rules.py` | 260 | detect_confirm + resolve_entry (E1/E3) |
+| `risk_manager.py` | 172 | Circuit breaker, max concurrent/daily limits |
 | `execution_spec.py` | 84 | ExecutionSpec dataclass with entry_model field |
-| `setup_detector.py` | 84 | Filter daily_features by conditions |
-| `strategy_fitness.py` | 350 | 3-layer fitness: structural + rolling regime + decay monitoring |
-| `rolling_portfolio.py` | ~300 | Rolling window stability scoring + family aggregation |
-| `live_config.py` | ~200 | Declarative live portfolio: core (always-on) + regime-gated strategies |
+| `setup_detector.py` | 83 | Filter daily_features by conditions |
+| `strategy_fitness.py` | 524 | 3-layer fitness: structural + rolling regime + decay monitoring |
+| `rolling_portfolio.py` | 569 | Rolling window stability scoring + family aggregation |
+| `live_config.py` | 477 | Declarative live portfolio: core (always-on) + regime-gated strategies |
 
 ### Nested ORB Research (`trading_app/nested/`)
 
@@ -102,10 +115,13 @@ Completed research scripts, moved from `scripts/`. Not part of production pipeli
 | `analyze_session_fade.py` | Session fade strategy research |
 | `analyze_vwap_pullback.py` | VWAP pullback entry analysis |
 
-### Root Scripts
+### Scripts (`scripts/`)
 
 | File | Purpose |
 |------|---------|
+| `report_edge_portfolio.py` | Edge family portfolio report (per-trade + daily ledger stats) |
+| `build_edge_families.py` | Cluster validated strategies by trade-day hash |
+| `backfill_strategy_trade_days.py` | Populate strategy_trade_days ground truth table |
 | `run_backfill_overnight.py` | Crash-recovery retry wrapper |
 
 ### Reference Documents
@@ -116,6 +132,7 @@ Completed research scripts, moved from `scripts/`. Not part of production pipeli
 | `CANONICAL_backfill_dbn_mgc_rules.txt` | Ingestion rules (fail-closed, chunked, checkpointed) |
 | `CANONICAL_backfill_dbn_mgc_rules_addon.txt` | Advanced ingestion patterns |
 | `TRADING_RULES.md` | Single source of truth for all trading rules and research findings |
+| `docs/STRATEGY_DISCOVERY_AUDIT.md` | Comprehensive strategy discovery system audit |
 
 ### Data Files (gitignored)
 
@@ -169,11 +186,13 @@ Databento DBN files (.dbn.zst)
   → gold.db:daily_features (one row per trading day per orb_minutes)
 
   → trading_app/outcome_builder.py (pre-compute all trade outcomes)
-  → gold.db:orb_outcomes (1,380,330 outcomes — 10 years)
+  → gold.db:orb_outcomes (MGC 133K + MNQ 126K + MCL 126K + MES 145K)
   → trading_app/strategy_discovery.py (grid search 5,148 combos per instrument)
-  → gold.db:experimental_strategies (MGC 2,808 + MNQ 2,952)
+  → gold.db:experimental_strategies (MGC 3,276 + MNQ 2,664 + MCL 1,800 + MES 3,744)
   → trading_app/strategy_validator.py (6-phase validation)
-  → gold.db:validated_setups (MGC 37 + MNQ 173 — as of 2026-02-13)
+  → gold.db:validated_setups (MGC 216 + MNQ 610 + MCL 0 + MES 198)
+  → scripts/build_edge_families.py (cluster by trade-day hash)
+  → gold.db:edge_families (215 families from 1,024 validated strategies)
 ```
 
 ### Database Schema (DuckDB)
@@ -200,21 +219,35 @@ Databento DBN files (.dbn.zst)
 - Daily OHLC: `daily_open`, `daily_high`, `daily_low`, `daily_close` (DOUBLE)
 - Overnight gap: `gap_open_points` (DOUBLE, today's open - previous day's close)
 - Volatility: `atr_20` (DOUBLE, 20-day SMA of True Range — regime detection)
-- 6 ORBs x 9 columns each: `orb_{0900,1000,1100,1800,2300,0030}_{high,low,size,break_dir,break_ts,outcome,mae_r,mfe_r,double_break}`
+- 11 ORBs x 9 columns each: `orb_{0900,1000,1100,1130,1800,2300,0030,CME_OPEN,US_EQUITY_OPEN,US_DATA_OPEN,LONDON_OPEN}_{high,low,size,break_dir,break_ts,outcome,mae_r,mfe_r,double_break}`
+- 118 columns total (base features + 11 ORB sessions x 9 cols)
 - Built by `pipeline/build_daily_features.py` (idempotent, configurable --orb-minutes)
 
 **orb_outcomes** (pre-computed trade outcomes):
 - One row per (day, ORB, RR, CB, entry_model) combination
-- 689,310 rows (2021-2026 data)
+- Per-instrument: MGC 133K, MNQ 126K, MCL 126K, MES 145K (2yr outcome windows)
 - Used by strategy_discovery.py for bulk backtesting
 
 **experimental_strategies** (grid search results):
-- 2,808 strategy combos (E1: 6 ORBs x 6 RRs x 5 CBs x 13 filters = 2,340 + E3: 6x6x1x13 = 468)
+- 5,148 combos full grid (E1: 11 ORBs x 6 RRs x 5 CBs x 13 filters = 4,290 + E3: 11x6x1x13 = 858)
+- Per-asset: MGC 3,276 | MNQ 2,664 | MCL 1,800 | MES 3,744
 - Metrics: sample_size, win_rate, expectancy_r, sharpe_ratio, max_drawdown_r, yearly_results
 
 **validated_setups** (strategies passing validation):
-- 312 validated strategies (post-cost, stress-tested, yearly robust)
+- 1,024 validated strategies (MGC 216, MNQ 610, MES 198, MCL 0)
 - Only G4+ ORB size filters have positive ExpR
+- Columns: `family_hash` (TEXT), `is_family_head` (BOOLEAN)
+
+**strategy_trade_days** (ground truth post-filter trade days):
+- One row per (strategy_id, trading_day) — all entry days (win+loss+early_exit+scratch)
+- 332,390 rows across all instruments
+- Used by edge family clustering (MD5 hash of sorted trade days)
+
+**edge_families** (strategy clustering by trade-day hash):
+- 215 unique families from 1,024 validated strategies
+- Per-instrument: MGC 48, MNQ 119, MES 48
+- Head election: median expectancy_r within each family
+- Robustness status: ROBUST, PURGED, WHITELISTED
 
 ### Time & Calendar Model (CRITICAL)
 
@@ -276,8 +309,8 @@ python pipeline/build_daily_features.py --instrument MGC --start 2024-01-01 --en
 ### Guardrails
 
 ```bash
-python pipeline/check_drift.py                        # Drift detection (19 checks)
-python -m pytest tests/ -v                             # Full test suite (655 tests)
+python pipeline/check_drift.py                        # Drift detection (21 checks)
+python -m pytest tests/ -v                             # Full test suite (1,072 tests)
 python -m pytest tests/ -x -q                          # Fast test run (stop on first fail)
 python pipeline/health_check.py                        # All-in-one health check
 ```
@@ -312,7 +345,7 @@ python -m trading_app.nested.compare --instrument MGC
 ### Testing
 
 ```bash
-python -m pytest tests/ -v                             # All 655 tests
+python -m pytest tests/ -v                             # All 1,072 tests
 python -m pytest tests/test_trading_app/ -v            # Trading app tests only
 python -m pytest tests/ -x -q                          # Fast run (stop on first fail)
 ```
@@ -328,7 +361,7 @@ Runs automatically before every commit:
 - Syntax validation on changed files
 Setup: `git config core.hooksPath .githooks`
 
-### 2. Drift Detection (`pipeline/check_drift.py` — 19 checks)
+### 2. Drift Detection (`pipeline/check_drift.py` — 21 checks)
 Static analysis that catches:
 1. Hardcoded 'MGC' SQL in generic pipeline code
 2. `.apply()`/`.iterrows()` on large data (performance anti-pattern)
