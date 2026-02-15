@@ -12,7 +12,9 @@ Usage:
 
 import sys
 import json
+import hashlib
 from pathlib import Path
+from collections import defaultdict
 from datetime import date, timezone
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -30,6 +32,59 @@ from trading_app.outcome_builder import RR_TARGETS, CONFIRM_BARS_OPTIONS
 
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)
+
+# Filter specificity ranking: higher = more specific = preferred as canonical
+_FILTER_SPECIFICITY = {
+    "ORB_G8": 5, "ORB_G6": 4, "ORB_G5": 3, "ORB_G4": 2,
+    "VOL_RV12_N20": 1, "NO_FILTER": 0,
+}
+
+_INSERT_SQL = """INSERT OR REPLACE INTO experimental_strategies
+    (strategy_id, instrument, orb_label, orb_minutes,
+     rr_target, confirm_bars, entry_model,
+     filter_type, filter_params,
+     sample_size, win_rate, avg_win_r, avg_loss_r,
+     expectancy_r, sharpe_ratio, max_drawdown_r,
+     median_risk_points, avg_risk_points,
+     trades_per_year, sharpe_ann,
+     yearly_results,
+     entry_signals, scratch_count, early_exit_count,
+     trade_day_hash, is_canonical, canonical_strategy_id,
+     validation_status, validation_notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+
+
+def _compute_trade_day_hash(days: list) -> str:
+    """Compute MD5 hash of sorted trade-day list (same as build_edge_families)."""
+    day_str = ",".join(str(d) for d in sorted(days))
+    return hashlib.md5(day_str.encode()).hexdigest()
+
+
+def _mark_canonical(strategies: list[dict]) -> None:
+    """Mark canonical vs alias within each dedup group.
+
+    Groups by (instrument, orb_label, entry_model, rr_target, confirm_bars, trade_day_hash).
+    Within each group, the strategy with highest filter specificity is canonical;
+    ties broken by filter_key alphabetically.
+    """
+    groups = defaultdict(list)
+    for s in strategies:
+        key = (s["instrument"], s["orb_label"], s["entry_model"],
+               s["rr_target"], s["confirm_bars"], s["trade_day_hash"])
+        groups[key].append(s)
+
+    for group in groups.values():
+        # Sort by specificity descending, then filter_key for determinism
+        group.sort(key=lambda s: (
+            -_FILTER_SPECIFICITY.get(s["filter_key"], -1),
+            s["filter_key"],
+        ))
+        head = group[0]
+        head["is_canonical"] = True
+        head["canonical_strategy_id"] = head["strategy_id"]
+        for alias in group[1:]:
+            alias["is_canonical"] = False
+            alias["canonical_strategy_id"] = head["strategy_id"]
 
 
 def compute_metrics(outcomes: list[dict], cost_spec) -> dict:
@@ -437,12 +492,12 @@ def run_discovery(
         print(f"  {sum(len(v) for v in outcomes_by_key.values())} outcome rows loaded")
 
         # ---- Grid iteration (pure Python, no DB reads) ----
-        total_strategies = 0
+        # Collect all strategies in memory first, then dedup before writing
+        all_strategies = []  # list of (strategy_id, filter_key, trade_days, row_data)
         e1_combos = len(sessions) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * len(ALL_FILTERS)  # E1
         e3_combos = len(sessions) * len(RR_TARGETS) * 1 * len(ALL_FILTERS)  # E3, CB1 only
         total_combos = e1_combos + e3_combos
         combo_idx = 0
-        insert_batch = []
 
         for filter_key, strategy_filter in ALL_FILTERS.items():
             for orb_label in sessions:
@@ -469,69 +524,68 @@ def run_discovery(
                             strategy_id = make_strategy_id(
                                 instrument, orb_label, em, rr_target, cb, filter_key,
                             )
+                            trade_days = sorted({o["trading_day"] for o in outcomes})
+                            trade_day_hash = _compute_trade_day_hash(trade_days)
 
-                            if not dry_run:
-                                insert_batch.append([
-                                    strategy_id, instrument, orb_label, orb_minutes,
-                                    rr_target, cb, em, filter_key,
-                                    strategy_filter.to_json(),
-                                    metrics["sample_size"], metrics["win_rate"],
-                                    metrics["avg_win_r"], metrics["avg_loss_r"],
-                                    metrics["expectancy_r"], metrics["sharpe_ratio"],
-                                    metrics["max_drawdown_r"],
-                                    metrics["median_risk_points"], metrics["avg_risk_points"],
-                                    metrics["trades_per_year"], metrics["sharpe_ann"],
-                                    metrics["yearly_results"],
-                                    metrics["entry_signals"], metrics["scratch_count"],
-                                    metrics["early_exit_count"],
-                                    None, None,  # Reset validation_status/notes
-                                ])
-
-                                # Flush batch every 500 rows
-                                if len(insert_batch) >= 500:
-                                    con.executemany(
-                                        """INSERT OR REPLACE INTO experimental_strategies
-                                           (strategy_id, instrument, orb_label, orb_minutes,
-                                            rr_target, confirm_bars, entry_model,
-                                            filter_type, filter_params,
-                                            sample_size, win_rate, avg_win_r, avg_loss_r,
-                                            expectancy_r, sharpe_ratio, max_drawdown_r,
-                                            median_risk_points, avg_risk_points,
-                                            trades_per_year, sharpe_ann,
-                                            yearly_results,
-                                            entry_signals, scratch_count, early_exit_count,
-                                            validation_status, validation_notes)
-                                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                                        insert_batch,
-                                    )
-                                    insert_batch = []
-
-                            total_strategies += 1
+                            all_strategies.append({
+                                "strategy_id": strategy_id,
+                                "instrument": instrument,
+                                "orb_label": orb_label,
+                                "orb_minutes": orb_minutes,
+                                "rr_target": rr_target,
+                                "confirm_bars": cb,
+                                "entry_model": em,
+                                "filter_key": filter_key,
+                                "filter_params": strategy_filter.to_json(),
+                                "metrics": metrics,
+                                "trade_day_hash": trade_day_hash,
+                            })
 
                 if combo_idx % 500 == 0:
-                    print(f"  Progress: {combo_idx}/{total_combos} combos, {total_strategies} strategies")
+                    print(f"  Progress: {combo_idx}/{total_combos} combos, {len(all_strategies)} strategies")
 
-        # Flush remaining batch
-        if insert_batch and not dry_run:
-            con.executemany(
-                """INSERT OR REPLACE INTO experimental_strategies
-                   (strategy_id, instrument, orb_label, orb_minutes,
-                    rr_target, confirm_bars, entry_model,
-                    filter_type, filter_params,
-                    sample_size, win_rate, avg_win_r, avg_loss_r,
-                    expectancy_r, sharpe_ratio, max_drawdown_r,
-                    median_risk_points, avg_risk_points,
-                    trades_per_year, sharpe_ann,
-                    yearly_results,
-                    validation_status, validation_notes)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                insert_batch,
-            )
+        # ---- Dedup: mark canonical vs alias within each group ----
+        print(f"Dedup: {len(all_strategies)} strategies, computing canonical...")
+        _mark_canonical(all_strategies)
+        n_canonical = sum(1 for s in all_strategies if s["is_canonical"])
+        n_alias = len(all_strategies) - n_canonical
+        print(f"  {n_canonical} canonical, {n_alias} aliases")
 
+        # ---- Batch write ----
         if not dry_run:
+            insert_batch = []
+            for s in all_strategies:
+                m = s["metrics"]
+                insert_batch.append([
+                    s["strategy_id"], s["instrument"], s["orb_label"],
+                    s["orb_minutes"], s["rr_target"], s["confirm_bars"],
+                    s["entry_model"], s["filter_key"], s["filter_params"],
+                    m["sample_size"], m["win_rate"],
+                    m["avg_win_r"], m["avg_loss_r"],
+                    m["expectancy_r"], m["sharpe_ratio"],
+                    m["max_drawdown_r"],
+                    m["median_risk_points"], m["avg_risk_points"],
+                    m["trades_per_year"], m["sharpe_ann"],
+                    m["yearly_results"],
+                    m["entry_signals"], m["scratch_count"],
+                    m["early_exit_count"],
+                    s["trade_day_hash"], s["is_canonical"],
+                    s["canonical_strategy_id"],
+                    None, None,  # Reset validation_status/notes
+                ])
+
+                if len(insert_batch) >= 500:
+                    con.executemany(_INSERT_SQL, insert_batch)
+                    insert_batch = []
+
+            if insert_batch:
+                con.executemany(_INSERT_SQL, insert_batch)
             con.commit()
 
-        print(f"Done: {total_strategies} strategies from {total_combos} combos")
+        total_strategies = len(all_strategies)
+        print(f"Discovered {total_strategies} strategies "
+              f"({n_canonical} canonical, {n_alias} aliases) "
+              f"from {total_combos} combos")
         if dry_run:
             print("  (DRY RUN -- no data written)")
 

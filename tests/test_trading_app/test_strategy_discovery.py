@@ -398,6 +398,214 @@ class TestComputeRelativeVolumes:
         assert vol_count == 5  # only the 5 high-volume days
 
 
+class TestComputeMetricsScratchCounts:
+    """Tests for entry_signals, scratch_count, early_exit_count in compute_metrics."""
+
+    def _make_outcome(self, day_num, outcome, pnl_r=1.0):
+        return {
+            "trading_day": date(2024, 1, day_num),
+            "outcome": outcome,
+            "pnl_r": pnl_r if outcome in ("win", "loss", "early_exit") else 0.0,
+            "mae_r": 0.5,
+            "mfe_r": 1.0,
+            "entry_price": 2703.0,
+            "stop_price": 2690.0,
+        }
+
+    def test_sample_size_excludes_scratches(self):
+        """10W, 5L, 3 scratches -> sample_size=15, entry_signals=18."""
+        outcomes = (
+            [self._make_outcome(i, "win", 2.0) for i in range(1, 11)]
+            + [self._make_outcome(i, "loss", -1.0) for i in range(11, 16)]
+            + [self._make_outcome(i, "scratch") for i in range(16, 19)]
+        )
+        m = compute_metrics(outcomes, _cost())
+        assert m["sample_size"] == 15
+        assert m["entry_signals"] == 18
+        assert m["scratch_count"] == 3
+        assert m["early_exit_count"] == 0
+
+    def test_sample_size_excludes_early_exits(self):
+        """10W, 5L, 2 early_exits -> sample_size=15, entry_signals=17."""
+        outcomes = (
+            [self._make_outcome(i, "win", 2.0) for i in range(1, 11)]
+            + [self._make_outcome(i, "loss", -1.0) for i in range(11, 16)]
+            + [self._make_outcome(i, "early_exit", -0.5) for i in range(16, 18)]
+        )
+        m = compute_metrics(outcomes, _cost())
+        assert m["sample_size"] == 15
+        assert m["entry_signals"] == 17
+        assert m["scratch_count"] == 0
+        assert m["early_exit_count"] == 2
+
+    def test_win_rate_uses_clean_sample(self):
+        """4W, 6L, 5 scratches -> win_rate=0.40."""
+        outcomes = (
+            [self._make_outcome(i, "win", 2.0) for i in range(1, 5)]
+            + [self._make_outcome(i, "loss", -1.0) for i in range(5, 11)]
+            + [self._make_outcome(i, "scratch") for i in range(11, 16)]
+        )
+        m = compute_metrics(outcomes, _cost())
+        assert m["win_rate"] == pytest.approx(0.4, abs=0.001)
+        assert m["sample_size"] == 10
+        assert m["entry_signals"] == 15
+        assert m["scratch_count"] == 5
+
+
+# ============================================================================
+# Dedup tests
+# ============================================================================
+
+class TestDedup:
+    """Tests for trade-day hash dedup (_mark_canonical, _compute_trade_day_hash)."""
+
+    def test_dedup_identifies_identical_trade_sets(self):
+        """3 strategies with same trade days -> 1 canonical + 2 aliases."""
+        from trading_app.strategy_discovery import _mark_canonical, _compute_trade_day_hash
+
+        days = [date(2024, 1, i) for i in range(1, 11)]
+        day_hash = _compute_trade_day_hash(days)
+
+        strategies = [
+            {"strategy_id": f"MGC_0900_E1_RR2.0_CB1_ORB_{f}",
+             "instrument": "MGC", "orb_label": "0900",
+             "entry_model": "E1", "rr_target": 2.0, "confirm_bars": 1,
+             "filter_key": f"ORB_{f}", "trade_day_hash": day_hash,
+             "metrics": {"expectancy_r": 0.5}}
+            for f in ["G4", "G5", "G6"]
+        ]
+
+        _mark_canonical(strategies)
+        canonical = [s for s in strategies if s["is_canonical"]]
+        aliases = [s for s in strategies if not s["is_canonical"]]
+
+        assert len(canonical) == 1
+        assert len(aliases) == 2
+        # G6 is highest specificity among G4, G5, G6
+        assert canonical[0]["filter_key"] == "ORB_G6"
+        # Aliases point to canonical
+        for a in aliases:
+            assert a["canonical_strategy_id"] == canonical[0]["strategy_id"]
+
+    def test_dedup_preserves_different_trade_sets(self):
+        """2 strategies with different trade days -> both canonical."""
+        from trading_app.strategy_discovery import _mark_canonical, _compute_trade_day_hash
+
+        days1 = [date(2024, 1, i) for i in range(1, 6)]
+        days2 = [date(2024, 1, i) for i in range(6, 11)]
+
+        strategies = [
+            {"strategy_id": "MGC_0900_E1_RR2.0_CB1_ORB_G4",
+             "instrument": "MGC", "orb_label": "0900",
+             "entry_model": "E1", "rr_target": 2.0, "confirm_bars": 1,
+             "filter_key": "ORB_G4", "trade_day_hash": _compute_trade_day_hash(days1),
+             "metrics": {"expectancy_r": 0.5}},
+            {"strategy_id": "MGC_0900_E1_RR2.0_CB1_ORB_G8",
+             "instrument": "MGC", "orb_label": "0900",
+             "entry_model": "E1", "rr_target": 2.0, "confirm_bars": 1,
+             "filter_key": "ORB_G8", "trade_day_hash": _compute_trade_day_hash(days2),
+             "metrics": {"expectancy_r": 0.8}},
+        ]
+
+        _mark_canonical(strategies)
+        canonical = [s for s in strategies if s["is_canonical"]]
+        assert len(canonical) == 2
+
+
+# ============================================================================
+# Validator alias skipping
+# ============================================================================
+
+class TestValidatorSkipsAliases:
+    """Test that strategy_validator skips non-canonical (alias) strategies."""
+
+    def _setup_db(self, tmp_path, strategies):
+        """Create temp DB with schema + strategies."""
+        db_path = tmp_path / "test.db"
+        con = duckdb.connect(str(db_path))
+        from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA, DAILY_FEATURES_SCHEMA
+        con.execute(BARS_1M_SCHEMA)
+        con.execute(BARS_5M_SCHEMA)
+        con.execute(DAILY_FEATURES_SCHEMA)
+        con.close()
+
+        from trading_app.db_manager import init_trading_app_schema
+        init_trading_app_schema(db_path=db_path)
+
+        con = duckdb.connect(str(db_path))
+        for s in strategies:
+            cols = list(s.keys())
+            placeholders = ", ".join(["?"] * len(cols))
+            col_str = ", ".join(cols)
+            con.execute(
+                f"INSERT INTO experimental_strategies ({col_str}) VALUES ({placeholders})",
+                list(s.values()),
+            )
+        con.commit()
+        con.close()
+        return db_path
+
+    def _make_row(self, **overrides):
+        base = {
+            "strategy_id": "MGC_0900_E1_RR2.0_CB1_ORB_G4",
+            "instrument": "MGC",
+            "orb_label": "0900",
+            "orb_minutes": 5,
+            "rr_target": 2.0,
+            "confirm_bars": 1,
+            "entry_model": "E1",
+            "filter_type": "ORB_G4",
+            "filter_params": "{}",
+            "sample_size": 150,
+            "win_rate": 0.55,
+            "avg_win_r": 1.8,
+            "avg_loss_r": 1.0,
+            "expectancy_r": 0.54,
+            "sharpe_ratio": 0.3,
+            "max_drawdown_r": 5.0,
+            "median_risk_points": 10.0,
+            "avg_risk_points": 10.5,
+            "yearly_results": json.dumps({
+                "2022": {"trades": 50, "wins": 28, "total_r": 10.0, "win_rate": 0.56, "avg_r": 0.2},
+                "2023": {"trades": 50, "wins": 27, "total_r": 8.0, "win_rate": 0.54, "avg_r": 0.16},
+                "2024": {"trades": 50, "wins": 28, "total_r": 9.0, "win_rate": 0.56, "avg_r": 0.18},
+            }),
+            "is_canonical": True,
+        }
+        base.update(overrides)
+        return base
+
+    def test_validator_skips_aliases(self, tmp_path):
+        """Alias row is skipped without error, status set to SKIPPED."""
+        from trading_app.strategy_validator import run_validation
+
+        canonical = self._make_row(is_canonical=True)
+        alias = self._make_row(
+            strategy_id="MGC_0900_E1_RR2.0_CB1_NO_FILTER",
+            filter_type="NO_FILTER",
+            is_canonical=False,
+            canonical_strategy_id="MGC_0900_E1_RR2.0_CB1_ORB_G4",
+        )
+        db_path = self._setup_db(tmp_path, [canonical, alias])
+
+        passed, rejected = run_validation(
+            db_path=db_path, instrument="MGC", enable_walkforward=False
+        )
+
+        # Canonical passes validation, alias is skipped
+        assert passed == 1
+        assert rejected == 0
+
+        # Verify alias got SKIPPED status
+        con = duckdb.connect(str(db_path), read_only=True)
+        alias_status = con.execute(
+            "SELECT validation_status FROM experimental_strategies WHERE strategy_id = ?",
+            ["MGC_0900_E1_RR2.0_CB1_NO_FILTER"],
+        ).fetchone()[0]
+        con.close()
+        assert alias_status == "SKIPPED"
+
+
 class TestCLI:
     def test_help(self):
         import subprocess
