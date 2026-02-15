@@ -9,12 +9,21 @@
 set -e
 
 # Activate venv if present (for ruff/python/pytest)
+# Prefer venv/ (project standard) over .venv/
+# Save PATH before activate to prevent Git Bash utilities from disappearing
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-if [ -f "$SCRIPT_DIR/.venv/Scripts/activate" ]; then
-    source "$SCRIPT_DIR/.venv/Scripts/activate"
+_SAVED_PATH="$PATH"
+if [ -f "$SCRIPT_DIR/venv/Scripts/activate" ]; then
+    source "$SCRIPT_DIR/venv/Scripts/activate" 2>/dev/null
+elif [ -f "$SCRIPT_DIR/venv/bin/activate" ]; then
+    source "$SCRIPT_DIR/venv/bin/activate" 2>/dev/null
+elif [ -f "$SCRIPT_DIR/.venv/Scripts/activate" ]; then
+    source "$SCRIPT_DIR/.venv/Scripts/activate" 2>/dev/null
 elif [ -f "$SCRIPT_DIR/.venv/bin/activate" ]; then
-    source "$SCRIPT_DIR/.venv/bin/activate"
+    source "$SCRIPT_DIR/.venv/bin/activate" 2>/dev/null
 fi
+# Restore Git Bash utilities (tail, grep, etc.) that activate may have removed
+export PATH="$PATH:$_SAVED_PATH"
 
 echo "=== PRE-COMMIT CHECKS ==="
 echo ""

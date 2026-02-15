@@ -12,7 +12,7 @@ import duckdb
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from trading_app.strategy_validator import validate_strategy, run_validation
+from trading_app.strategy_validator import validate_strategy, classify_regime, run_validation
 from pipeline.cost_model import get_cost_spec
 
 
@@ -56,12 +56,13 @@ class TestValidateStrategy:
 
     def test_all_phases_pass(self):
         """Strategy that passes all phases."""
-        status, notes = validate_strategy(_make_row(), _cost())
+        status, notes, waivers = validate_strategy(_make_row(), _cost())
         assert status == "PASSED"
+        assert waivers == []
 
     def test_reject_low_sample(self):
         """Sample < 30 -> REJECT."""
-        status, notes = validate_strategy(
+        status, notes, _ = validate_strategy(
             _make_row(sample_size=20), _cost()
         )
         assert status == "REJECTED"
@@ -70,7 +71,7 @@ class TestValidateStrategy:
 
     def test_warn_medium_sample(self):
         """30 <= sample < 100 -> PASS with warning."""
-        status, notes = validate_strategy(
+        status, notes, _ = validate_strategy(
             _make_row(sample_size=50), _cost()
         )
         assert status == "PASSED"
@@ -78,7 +79,7 @@ class TestValidateStrategy:
 
     def test_reject_negative_expectancy(self):
         """ExpR <= 0 -> REJECT."""
-        status, notes = validate_strategy(
+        status, notes, _ = validate_strategy(
             _make_row(expectancy_r=-0.1), _cost()
         )
         assert status == "REJECTED"
@@ -86,7 +87,7 @@ class TestValidateStrategy:
 
     def test_reject_zero_expectancy(self):
         """ExpR == 0 -> REJECT."""
-        status, notes = validate_strategy(
+        status, notes, _ = validate_strategy(
             _make_row(expectancy_r=0.0), _cost()
         )
         assert status == "REJECTED"
@@ -99,7 +100,7 @@ class TestValidateStrategy:
             "2023": {"trades": 50, "wins": 20, "total_r": -5.0, "avg_r": -0.1},
             "2024": {"trades": 50, "wins": 28, "total_r": 10.0, "avg_r": 0.2},
         })
-        status, notes = validate_strategy(
+        status, notes, _ = validate_strategy(
             _make_row(yearly_results=yearly), _cost()
         )
         assert status == "REJECTED"
@@ -108,7 +109,7 @@ class TestValidateStrategy:
 
     def test_reject_no_yearly_data(self):
         """No yearly data -> REJECT."""
-        status, notes = validate_strategy(
+        status, notes, _ = validate_strategy(
             _make_row(yearly_results="{}"), _cost()
         )
         assert status == "REJECTED"
@@ -122,13 +123,13 @@ class TestValidateStrategy:
             "2023": {"trades": 50, "wins": 27, "total_r": 8.0, "avg_r": 0.16},
         })
         # Fails without exclusion
-        status, _ = validate_strategy(
+        status, _, _ = validate_strategy(
             _make_row(yearly_results=yearly), _cost()
         )
         assert status == "REJECTED"
 
         # Passes with 2021 excluded
-        status, _ = validate_strategy(
+        status, _, _ = validate_strategy(
             _make_row(yearly_results=yearly), _cost(), exclude_years={2021}
         )
         assert status == "PASSED"
@@ -143,13 +144,13 @@ class TestValidateStrategy:
             "2025": {"trades": 50, "wins": 30, "total_r": 12.0, "avg_r": 0.24},
         })
         # Fails at 100%
-        status, _ = validate_strategy(
+        status, _, _ = validate_strategy(
             _make_row(yearly_results=yearly), _cost(), min_years_positive_pct=1.0
         )
         assert status == "REJECTED"
 
         # Passes at 80% (4/5 = 80%)
-        status, _ = validate_strategy(
+        status, _, _ = validate_strategy(
             _make_row(yearly_results=yearly), _cost(), min_years_positive_pct=0.8
         )
         assert status == "PASSED"
@@ -159,7 +160,7 @@ class TestValidateStrategy:
         yearly = json.dumps({
             "2022": {"trades": 50, "wins": 28, "total_r": 10.0, "avg_r": 0.2},
         })
-        status, notes = validate_strategy(
+        status, notes, _ = validate_strategy(
             _make_row(yearly_results=yearly), _cost(), exclude_years={2022}
         )
         assert status == "REJECTED"
@@ -167,7 +168,7 @@ class TestValidateStrategy:
 
     def test_reject_stress_test(self):
         """Marginal ExpR that fails stress test -> REJECT."""
-        status, notes = validate_strategy(
+        status, notes, _ = validate_strategy(
             _make_row(expectancy_r=0.01), _cost()
         )
         assert status == "REJECTED"
@@ -175,14 +176,14 @@ class TestValidateStrategy:
 
     def test_pass_stress_test_high_exp(self):
         """High ExpR survives stress test."""
-        status, notes = validate_strategy(
+        status, notes, _ = validate_strategy(
             _make_row(expectancy_r=0.8), _cost()
         )
         assert status == "PASSED"
 
     def test_reject_low_sharpe(self):
         """Sharpe below threshold -> REJECT when threshold set."""
-        status, notes = validate_strategy(
+        status, notes, _ = validate_strategy(
             _make_row(sharpe_ratio=0.1), _cost(), min_sharpe=0.5
         )
         assert status == "REJECTED"
@@ -190,7 +191,7 @@ class TestValidateStrategy:
 
     def test_reject_high_drawdown(self):
         """Drawdown above threshold -> REJECT when threshold set."""
-        status, notes = validate_strategy(
+        status, notes, _ = validate_strategy(
             _make_row(max_drawdown_r=15.0), _cost(), max_drawdown=10.0
         )
         assert status == "REJECTED"
@@ -199,13 +200,13 @@ class TestValidateStrategy:
     def test_stress_test_uses_outcome_risk(self):
         """Stress test uses median_risk_points when available."""
         # With large risk, stress delta is small -> passes
-        status, _ = validate_strategy(
+        status, _, _ = validate_strategy(
             _make_row(expectancy_r=0.10, median_risk_points=20.0), _cost()
         )
         assert status == "PASSED"
 
         # With tiny risk, stress delta is large -> rejects
-        status, notes = validate_strategy(
+        status, notes, _ = validate_strategy(
             _make_row(expectancy_r=0.10, median_risk_points=0.5), _cost()
         )
         assert status == "REJECTED"
@@ -213,7 +214,7 @@ class TestValidateStrategy:
 
     def test_stress_test_falls_back_to_avg_risk(self):
         """Stress test uses avg_risk_points when median is None."""
-        status, _ = validate_strategy(
+        status, _, _ = validate_strategy(
             _make_row(expectancy_r=0.10, median_risk_points=None, avg_risk_points=20.0), _cost()
         )
         assert status == "PASSED"
@@ -222,12 +223,12 @@ class TestValidateStrategy:
         """Stress test uses tick-based floor when both risk stats are None."""
         # tick floor = 10 * 0.10 = 1.0 point, risk $ = 10.0
         # stress delta = (8.40 * 0.5) / 10.0 = 0.42R -> needs ExpR > 0.42
-        status, _ = validate_strategy(
+        status, _, _ = validate_strategy(
             _make_row(expectancy_r=0.50, median_risk_points=None, avg_risk_points=None), _cost()
         )
         assert status == "PASSED"
 
-        status, notes = validate_strategy(
+        status, notes, _ = validate_strategy(
             _make_row(expectancy_r=0.10, median_risk_points=None, avg_risk_points=None), _cost()
         )
         assert status == "REJECTED"
@@ -235,18 +236,141 @@ class TestValidateStrategy:
 
     def test_optional_phases_skipped_by_default(self):
         """Without min_sharpe/max_drawdown, phases 5/6 are skipped."""
-        status, notes = validate_strategy(
+        status, notes, _ = validate_strategy(
             _make_row(sharpe_ratio=0.01, max_drawdown_r=50.0), _cost()
         )
         assert status == "PASSED"
 
     def test_validation_notes_contain_reason(self):
         """Rejection notes explain which phase failed."""
-        status, notes = validate_strategy(
+        status, notes, _ = validate_strategy(
             _make_row(sample_size=10), _cost()
         )
         assert "Phase 1" in notes
         assert "10" in notes
+
+
+def _yearly(years_data: dict) -> str:
+    """Build yearly_results JSON from {year: (trades, avg_r)} dict."""
+    return json.dumps({
+        str(y): {"trades": t, "wins": max(1, int(t * 0.5)), "total_r": t * avg_r,
+                 "win_rate": 0.5, "avg_r": avg_r}
+        for y, (t, avg_r) in years_data.items()
+    })
+
+
+class TestRegimeWaivers:
+    """Tests for DORMANT regime waiver logic in Phase 3."""
+
+    def test_regime_classify_dormant(self):
+        """ATR < 20 -> DORMANT."""
+        assert classify_regime(15.0) == "DORMANT"
+        assert classify_regime(0.0) == "DORMANT"
+        assert classify_regime(19.9) == "DORMANT"
+
+    def test_regime_classify_marginal(self):
+        """20 <= ATR < 30 -> MARGINAL."""
+        assert classify_regime(20.0) == "MARGINAL"
+        assert classify_regime(25.0) == "MARGINAL"
+        assert classify_regime(29.9) == "MARGINAL"
+
+    def test_regime_classify_active(self):
+        """ATR >= 30 -> ACTIVE."""
+        assert classify_regime(30.0) == "ACTIVE"
+        assert classify_regime(35.0) == "ACTIVE"
+        assert classify_regime(110.0) == "ACTIVE"
+
+    def test_dormant_year_waived(self):
+        """Negative DORMANT year with <= 5 trades is waived."""
+        yearly = _yearly({2022: (50, 0.2), 2023: (50, 0.1), 2017: (2, -0.02)})
+        atr = {2022: 25.0, 2023: 28.0, 2017: 12.0}
+        status, notes, waivers = validate_strategy(
+            _make_row(yearly_results=yearly), _cost(),
+            atr_by_year=atr, enable_regime_waivers=True,
+        )
+        assert status == "PASSED"
+        assert waivers == [2017]
+        assert "DORMANT" in notes
+
+    def test_marginal_year_not_waived(self):
+        """Negative MARGINAL year is NOT waived."""
+        yearly = _yearly({2022: (50, 0.2), 2023: (50, 0.1), 2021: (2, -0.02)})
+        atr = {2022: 25.0, 2023: 28.0, 2021: 25.0}
+        status, notes, waivers = validate_strategy(
+            _make_row(yearly_results=yearly), _cost(),
+            atr_by_year=atr, enable_regime_waivers=True,
+        )
+        assert status == "REJECTED"
+        assert "Phase 3" in notes
+        assert waivers == []
+
+    def test_dormant_high_trades_not_waived(self):
+        """DORMANT year with > 5 trades is NOT waived."""
+        yearly = _yearly({2022: (50, 0.2), 2023: (50, 0.1), 2017: (8, -0.1)})
+        atr = {2022: 25.0, 2023: 28.0, 2017: 15.0}
+        status, notes, waivers = validate_strategy(
+            _make_row(yearly_results=yearly), _cost(),
+            atr_by_year=atr, enable_regime_waivers=True,
+        )
+        assert status == "REJECTED"
+        assert "Phase 3" in notes
+        assert waivers == []
+
+    def test_all_years_waived_fails(self):
+        """All years requiring waiver -> REJECTED (no clean positive year)."""
+        yearly = _yearly({2017: (2, -0.02), 2018: (1, -0.05)})
+        atr = {2017: 12.0, 2018: 11.0}
+        status, notes, waivers = validate_strategy(
+            _make_row(yearly_results=yearly), _cost(),
+            atr_by_year=atr, enable_regime_waivers=True,
+        )
+        assert status == "REJECTED"
+        assert "clean positive year" in notes
+        assert waivers == []
+
+    def test_no_regime_waivers_flag(self):
+        """enable_regime_waivers=False uses strict logic (rejects)."""
+        yearly = _yearly({2022: (50, 0.2), 2023: (50, 0.1), 2017: (2, -0.02)})
+        atr = {2022: 25.0, 2023: 28.0, 2017: 12.0}
+        status, notes, waivers = validate_strategy(
+            _make_row(yearly_results=yearly), _cost(),
+            atr_by_year=atr, enable_regime_waivers=False,
+        )
+        assert status == "REJECTED"
+        assert "Phase 3" in notes
+        assert waivers == []
+
+    def test_waiver_metadata_recorded(self):
+        """Returned waivers list and notes contain waiver details."""
+        yearly = _yearly({2022: (50, 0.2), 2023: (50, 0.1),
+                          2017: (2, -0.02), 2018: (3, -0.01)})
+        atr = {2022: 25.0, 2023: 28.0, 2017: 12.0, 2018: 14.0}
+        status, notes, waivers = validate_strategy(
+            _make_row(yearly_results=yearly), _cost(),
+            atr_by_year=atr, enable_regime_waivers=True,
+        )
+        assert status == "PASSED"
+        assert waivers == [2017, 2018]
+        assert "Year 2017 waived" in notes
+        assert "Year 2018 waived" in notes
+        assert "mean_atr=12.0" in notes
+        assert "mean_atr=14.0" in notes
+
+    def test_mixed_years_some_waived(self):
+        """Mix of DORMANT-waivable and ACTIVE-negative -> REJECTED."""
+        yearly = _yearly({
+            2022: (50, 0.2), 2023: (50, 0.1),
+            2017: (2, -0.02),   # DORMANT, waivable
+            2020: (30, -0.05),  # ACTIVE, not waivable
+        })
+        atr = {2022: 25.0, 2023: 28.0, 2017: 12.0, 2020: 30.6}
+        status, notes, waivers = validate_strategy(
+            _make_row(yearly_results=yearly), _cost(),
+            atr_by_year=atr, enable_regime_waivers=True,
+        )
+        assert status == "REJECTED"
+        assert "2020" in notes
+        assert waivers == []
 
 
 class TestRunValidation:

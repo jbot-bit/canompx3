@@ -7,7 +7,7 @@ ones to validated_setups. Rejected strategies get validation_notes.
 Phases:
   1. Sample size (reject < 30, warn < 100)
   2. Post-cost expectancy > 0
-  3. Yearly robustness (positive in ALL years)
+  3. Yearly robustness (positive in ALL years; DORMANT regime waivers available)
   4. Stress test (ExpR > 0 at +50% costs)
   4b. Walk-forward OOS validation (anchored expanding, 6m test windows)
   5. Sharpe ratio (optional quality filter)
@@ -37,11 +37,22 @@ from trading_app.walkforward import run_walkforward, append_walkforward_result
 sys.stdout.reconfigure(line_buffering=True)
 
 
+def classify_regime(atr_20: float) -> str:
+    """Classify market regime from mean ATR(20)."""
+    if atr_20 < 20.0:
+        return "DORMANT"
+    elif atr_20 < 30.0:
+        return "MARGINAL"
+    return "ACTIVE"
+
+
 def validate_strategy(row: dict, cost_spec, stress_multiplier: float = 1.5,
                       min_sample: int = 30, min_sharpe: float | None = None,
                       max_drawdown: float | None = None,
                       exclude_years: set[int] | None = None,
-                      min_years_positive_pct: float = 1.0) -> tuple[str, str]:
+                      min_years_positive_pct: float = 1.0,
+                      atr_by_year: dict[int, float] | None = None,
+                      enable_regime_waivers: bool = True) -> tuple[str, str, list[int]]:
     """
     Run 6-phase validation on a single strategy row.
 
@@ -55,9 +66,14 @@ def validate_strategy(row: dict, cost_spec, stress_multiplier: float = 1.5,
         exclude_years: Years to exclude from Phase 3 yearly check
         min_years_positive_pct: Fraction of included years that must be
             positive (0.0-1.0). Default 1.0 = ALL years must be positive.
+        atr_by_year: Mean ATR(20) per year for regime classification.
+            Pre-fetched in run_validation(), None disables waivers.
+        enable_regime_waivers: If True (default), grant DORMANT waivers
+            for negative years with mean ATR < 20 and <= 5 trades.
 
     Returns:
-        (status, notes): "PASSED" or "REJECTED", with explanation.
+        (status, notes, regime_waivers): "PASSED" or "REJECTED", with
+        explanation, plus list of waived years (empty if none).
     """
     notes = []
     if exclude_years is None:
@@ -66,14 +82,14 @@ def validate_strategy(row: dict, cost_spec, stress_multiplier: float = 1.5,
     # Phase 1: Sample size
     sample = row.get("sample_size") or 0
     if sample < min_sample:
-        return "REJECTED", f"Phase 1: Sample size {sample} < {min_sample}"
+        return "REJECTED", f"Phase 1: Sample size {sample} < {min_sample}", []
     if sample < 100:
         notes.append(f"Phase 1 WARN: sample={sample} (< 100)")
 
     # Phase 2: Post-cost expectancy
     exp_r = row.get("expectancy_r")
     if exp_r is None or exp_r <= 0:
-        return "REJECTED", f"Phase 2: ExpR={exp_r} <= 0"
+        return "REJECTED", f"Phase 2: ExpR={exp_r} <= 0", []
 
     # Phase 3: Yearly robustness
     yearly_json = row.get("yearly_results", "{}")
@@ -83,25 +99,62 @@ def validate_strategy(row: dict, cost_spec, stress_multiplier: float = 1.5,
         yearly = {}
 
     if not yearly:
-        return "REJECTED", "Phase 3: No yearly data"
+        return "REJECTED", "Phase 3: No yearly data", []
 
     included_years = {y: d for y, d in yearly.items() if int(y) not in exclude_years}
     if not included_years:
-        return "REJECTED", "Phase 3: No yearly data after exclusions"
+        return "REJECTED", "Phase 3: No yearly data after exclusions", []
 
-    positive_count = sum(1 for d in included_years.values() if d.get("avg_r", 0) > 0)
-    total_included = len(included_years)
-    pct_positive = positive_count / total_included
+    neg_years = {y: d for y, d in included_years.items() if d.get("avg_r", 0) <= 0}
+    pos_count = len(included_years) - len(neg_years)
+    regime_waivers = []
 
-    if pct_positive < min_years_positive_pct:
-        neg_years = [y for y, d in included_years.items() if d.get("avg_r", 0) <= 0]
-        return "REJECTED", (
-            f"Phase 3: {positive_count}/{total_included} years positive "
-            f"({pct_positive:.0%} < {min_years_positive_pct:.0%}), "
-            f"negative: {', '.join(sorted(neg_years))}"
-        )
+    if neg_years:
+        # NOTE: When regime waivers are active, they supersede min_years_positive_pct.
+        # Waiver path requires ALL negative years to be DORMANT-waivable (or reject).
+        # The pct threshold only applies in strict mode (waivers disabled/no ATR data).
+        if enable_regime_waivers and atr_by_year:
+            waived = []
+            for y, d in neg_years.items():
+                yr_int = int(y)
+                mean_atr = atr_by_year.get(yr_int)
+                trades = d.get("trades", 0)
+                if mean_atr is not None and classify_regime(mean_atr) == "DORMANT" and trades <= 5:
+                    waived.append(yr_int)
 
-    # Phase 4: Stress test
+            unwaived_neg = [y for y in neg_years if int(y) not in waived]
+
+            if unwaived_neg:
+                return "REJECTED", (
+                    f"Phase 3: {len(unwaived_neg)} year(s) negative and not waivable: "
+                    f"{', '.join(sorted(unwaived_neg))}"
+                ), []
+
+            if pos_count == 0:
+                return "REJECTED", (
+                    "Phase 3: All years require DORMANT waiver, "
+                    "need at least 1 clean positive year"
+                ), []
+
+            regime_waivers = sorted(waived)
+            for yr in regime_waivers:
+                y_str = str(yr)
+                d = neg_years[y_str]
+                notes.append(
+                    f"Year {yr} waived: DORMANT regime "
+                    f"(mean_atr={atr_by_year[yr]:.1f}, trades={d.get('trades', 0)})"
+                )
+        else:
+            # Original strict logic
+            pct_positive = pos_count / len(included_years)
+            if pct_positive < min_years_positive_pct:
+                neg_list = sorted(neg_years.keys())
+                return "REJECTED", (
+                    f"Phase 3: {pos_count}/{len(included_years)} years positive "
+                    f"({pct_positive:.0%} < {min_years_positive_pct:.0%}), "
+                    f"negative: {', '.join(neg_list)}"
+                ), []
+
     # Phase 4: Stress test — "ExpR > 0 at +50% costs"
     # Compute extra friction per trade in R-multiples.
     # delta_r = extra_cost_dollars / risk_dollars
@@ -129,24 +182,24 @@ def validate_strategy(row: dict, cost_spec, stress_multiplier: float = 1.5,
     stress_exp = exp_r - extra_cost_per_trade_r
 
     if stress_exp <= 0:
-        return "REJECTED", f"Phase 4: Stress ExpR={stress_exp:.4f} <= 0 (base={exp_r}, delta_r={extra_cost_per_trade_r:.4f}, risk_pts={strategy_risk_points:.2f})"
+        return "REJECTED", f"Phase 4: Stress ExpR={stress_exp:.4f} <= 0 (base={exp_r}, delta_r={extra_cost_per_trade_r:.4f}, risk_pts={strategy_risk_points:.2f})", []
 
     # Phase 5: Sharpe ratio (optional)
     if min_sharpe is not None:
         sharpe = row.get("sharpe_ratio")
         if sharpe is None or sharpe < min_sharpe:
-            return "REJECTED", f"Phase 5: Sharpe={sharpe} < {min_sharpe}"
+            return "REJECTED", f"Phase 5: Sharpe={sharpe} < {min_sharpe}", []
 
     # Phase 6: Max drawdown (optional)
     if max_drawdown is not None:
         dd = row.get("max_drawdown_r")
         if dd is not None and dd > max_drawdown:
-            return "REJECTED", f"Phase 6: MaxDD={dd}R > {max_drawdown}R"
+            return "REJECTED", f"Phase 6: MaxDD={dd}R > {max_drawdown}R", []
 
     status = "PASSED"
     if notes:
-        return status, "; ".join(notes)
-    return status, "All phases passed"
+        return status, "; ".join(notes), regime_waivers
+    return status, "All phases passed", regime_waivers
 
 
 def run_validation(
@@ -166,6 +219,7 @@ def run_validation(
     wf_min_windows: int = 3,
     wf_min_pct_positive: float = 0.60,
     wf_output_path: str = "data/walkforward_results.jsonl",
+    enable_regime_waivers: bool = True,
 ) -> tuple[int, int]:
     """
     Validate all experimental_strategies and promote passing ones.
@@ -192,14 +246,39 @@ def run_validation(
         ).fetchall()
         col_names = [desc[0] for desc in con.description]
 
+        # Pre-fetch ATR by year for regime waivers (one query total)
+        atr_by_year = {}
+        if enable_regime_waivers:
+            atr_rows = con.execute("""
+                SELECT EXTRACT(YEAR FROM trading_day) as yr, AVG(atr_20) as mean_atr
+                FROM daily_features
+                WHERE symbol = ? AND orb_minutes = 5 AND atr_20 IS NOT NULL
+                GROUP BY yr
+            """, [instrument]).fetchall()
+            atr_by_year = {int(r[0]): r[1] for r in atr_rows}
+
         passed = 0
         rejected = 0
+        skipped_aliases = 0
 
         for row in rows:
             row_dict = dict(zip(col_names, row))
             strategy_id = row_dict["strategy_id"]
 
-            status, notes = validate_strategy(
+            # Skip aliases (non-canonical strategies)
+            if row_dict.get("is_canonical") is False:
+                skipped_aliases += 1
+                if not dry_run:
+                    con.execute(
+                        """UPDATE experimental_strategies
+                           SET validation_status = 'SKIPPED',
+                               validation_notes = 'Alias (non-canonical)'
+                           WHERE strategy_id = ?""",
+                        [strategy_id],
+                    )
+                continue
+
+            status, notes, regime_waivers = validate_strategy(
                 row_dict, cost_spec,
                 stress_multiplier=stress_multiplier,
                 min_sample=min_sample,
@@ -207,6 +286,8 @@ def run_validation(
                 max_drawdown=max_drawdown,
                 exclude_years=exclude_years,
                 min_years_positive_pct=min_years_positive_pct,
+                atr_by_year=atr_by_year if enable_regime_waivers else None,
+                enable_regime_waivers=enable_regime_waivers,
             )
 
             # Phase 4b: Walk-forward gate
@@ -267,8 +348,9 @@ def run_validation(
                             years_tested, all_years_positive, stress_test_passed,
                             sharpe_ratio, max_drawdown_r,
                             trades_per_year, sharpe_ann,
-                            yearly_results, status)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            yearly_results, status,
+                            regime_waivers, regime_waiver_count)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         [
                             strategy_id, strategy_id,
                             row_dict["instrument"], row_dict["orb_label"],
@@ -285,6 +367,8 @@ def run_validation(
                             row_dict.get("trades_per_year"),
                             row_dict.get("sharpe_ann"),
                             yearly, "active",
+                            json.dumps(regime_waivers) if regime_waivers else None,
+                            len(regime_waivers),
                         ],
                     )
 
@@ -296,7 +380,8 @@ def run_validation(
         if not dry_run:
             con.commit()
 
-        print(f"Validation complete: {passed} PASSED, {rejected} REJECTED "
+        print(f"Validation complete: {passed} PASSED, {rejected} REJECTED, "
+              f"{skipped_aliases} aliases skipped "
               f"(of {len(rows)} strategies)")
         if dry_run:
             print("  (DRY RUN — no data written)")
@@ -338,6 +423,8 @@ def main():
                         help="Walk-forward min valid windows (default: 3)")
     parser.add_argument("--wf-min-pct-positive", type=float, default=0.60,
                         help="Walk-forward min pct positive windows (default: 0.60)")
+    parser.add_argument("--no-regime-waivers", action="store_true",
+                        help="Disable DORMANT regime waivers (strict all-years-positive)")
     args = parser.parse_args()
 
     exclude = set(args.exclude_years) if args.exclude_years else None
@@ -359,6 +446,7 @@ def main():
         wf_min_trades=args.wf_min_trades,
         wf_min_windows=args.wf_min_windows,
         wf_min_pct_positive=args.wf_min_pct_positive,
+        enable_regime_waivers=not args.no_regime_waivers,
     )
 
 

@@ -166,6 +166,10 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 family_hash       TEXT,
                 is_family_head    BOOLEAN     DEFAULT FALSE,
 
+                -- Regime waivers (Phase 3)
+                regime_waivers    TEXT,
+                regime_waiver_count INTEGER DEFAULT 0,
+
                 -- Status
                 status            TEXT        NOT NULL,
                 retired_at        TIMESTAMPTZ,
@@ -234,6 +238,16 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                     REFERENCES validated_setups(strategy_id)
             )
         """)
+
+        # Migration: add regime waiver columns (for existing DBs)
+        for col, typedef in [
+            ("regime_waivers", "TEXT"),
+            ("regime_waiver_count", "INTEGER DEFAULT 0"),
+        ]:
+            try:
+                con.execute(f"ALTER TABLE validated_setups ADD COLUMN {col} {typedef}")
+            except duckdb.CatalogException:
+                pass  # column already exists
 
         con.commit()
         print("Trading app schema initialized successfully")
@@ -342,6 +356,7 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
                 "trades_per_year", "sharpe_ann",
                 "yearly_results", "execution_spec",
                 "family_hash", "is_family_head",
+                "regime_waivers", "regime_waiver_count",
                 "status", "retired_at", "retirement_reason"
             }
             actual_cols = {row[0] for row in result}

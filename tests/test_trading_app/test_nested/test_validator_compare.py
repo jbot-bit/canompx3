@@ -40,21 +40,21 @@ class TestValidateStrategy:
         return base
 
     def test_passes_valid_strategy(self):
-        status, notes = validate_strategy(self._make_row(), COST_SPEC)
+        status, notes, _ = validate_strategy(self._make_row(), COST_SPEC)
         assert status == "PASSED"
 
     def test_rejects_small_sample(self):
-        status, notes = validate_strategy(self._make_row(sample_size=10), COST_SPEC, min_sample=30)
+        status, notes, _ = validate_strategy(self._make_row(sample_size=10), COST_SPEC, min_sample=30)
         assert status == "REJECTED"
         assert "Sample size" in notes
 
     def test_rejects_negative_expectancy(self):
-        status, notes = validate_strategy(self._make_row(expectancy_r=-0.1), COST_SPEC)
+        status, notes, _ = validate_strategy(self._make_row(expectancy_r=-0.1), COST_SPEC)
         assert status == "REJECTED"
         assert "ExpR" in notes
 
     def test_rejects_zero_expectancy(self):
-        status, notes = validate_strategy(self._make_row(expectancy_r=0.0), COST_SPEC)
+        status, notes, _ = validate_strategy(self._make_row(expectancy_r=0.0), COST_SPEC)
         assert status == "REJECTED"
 
     def test_exclude_years(self):
@@ -65,7 +65,7 @@ class TestValidateStrategy:
             "2024": {"avg_r": 0.15, "count": 40},
         }))
         # With 2021 excluded, all remaining years positive
-        status, _ = validate_strategy(row, COST_SPEC, exclude_years={2021})
+        status, _, _ = validate_strategy(row, COST_SPEC, exclude_years={2021})
         assert status == "PASSED"
 
     def test_min_years_positive_pct(self):
@@ -76,10 +76,10 @@ class TestValidateStrategy:
             "2025": {"avg_r": 0.3, "count": 45},
         }))
         # 3/4 years positive = 75%. With min_years_positive_pct=0.8, should reject
-        status, _ = validate_strategy(row, COST_SPEC, min_years_positive_pct=0.8)
+        status, _, _ = validate_strategy(row, COST_SPEC, min_years_positive_pct=0.8)
         assert status == "REJECTED"
         # With 0.7, should pass
-        status, _ = validate_strategy(row, COST_SPEC, min_years_positive_pct=0.7)
+        status, _, _ = validate_strategy(row, COST_SPEC, min_years_positive_pct=0.7)
         assert status == "PASSED"
 
 

@@ -68,7 +68,7 @@ def run_nested_validation(
             row_dict = dict(zip(col_names, row))
             strategy_id = row_dict["strategy_id"]
 
-            status, notes = validate_strategy(
+            status, notes, _ = validate_strategy(
                 row_dict, cost_spec,
                 stress_multiplier=stress_multiplier,
                 min_sample=min_sample,
