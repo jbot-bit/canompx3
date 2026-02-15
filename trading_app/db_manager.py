@@ -345,6 +345,35 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
         con.close()
 
 
+def get_family_head_ids(
+    con: duckdb.DuckDBPyConnection,
+    instrument: str,
+    exclude_purged: bool = True,
+) -> set[str]:
+    """Return strategy_ids of family heads from edge_families (source of truth).
+
+    Uses edge_families.head_strategy_id rather than validated_setups.is_family_head
+    to avoid denormalization drift.
+
+    Args:
+        exclude_purged: If True (default), excludes PURGED families.
+    """
+    purge_filter = " AND robustness_status != 'PURGED'" if exclude_purged else ""
+    rows = con.execute(f"""
+        SELECT head_strategy_id FROM edge_families
+        WHERE instrument = ?{purge_filter}
+    """, [instrument]).fetchall()
+    return {r[0] for r in rows}
+
+
+def has_edge_families(con: duckdb.DuckDBPyConnection) -> bool:
+    """Check if edge_families table exists (for graceful degradation)."""
+    tables = con.execute(
+        "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
+    ).fetchall()
+    return "edge_families" in {r[0] for r in tables}
+
+
 def main():
     """CLI entry point."""
     import argparse

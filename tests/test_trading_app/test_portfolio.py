@@ -1090,6 +1090,76 @@ class TestCorrelationFilter:
         assert len(selected) == 2
 
 
+class TestFamilyHeadsOnly:
+    """Tests for family_heads_only dedup in load_validated_strategies."""
+
+    def test_returns_only_heads(self, tmp_path):
+        """With family_heads_only=True, only head strategies are returned."""
+        strategies = [
+            _make_strategy(strategy_id="MGC_0900_E1_RR2.0_CB2_ORB_G5",
+                           orb_label="0900", expectancy_r=0.30),
+            _make_strategy(strategy_id="MGC_0900_E1_RR2.5_CB2_ORB_G5",
+                           orb_label="0900", expectancy_r=0.25),
+            _make_strategy(strategy_id="MGC_0900_E1_RR2.0_CB2_ORB_G8",
+                           orb_label="0900", expectancy_r=0.40),
+        ]
+        db_path = _setup_db(tmp_path, strategies)
+
+        # Create edge_families: s1 is head of family A, s3 is head of family B
+        con = duckdb.connect(str(db_path))
+        con.execute("""
+            INSERT INTO edge_families
+            (family_hash, instrument, member_count, trade_day_count,
+             head_strategy_id, head_expectancy_r)
+            VALUES
+            ('hash_a', 'MGC', 2, 100, 'MGC_0900_E1_RR2.0_CB2_ORB_G5', 0.30),
+            ('hash_b', 'MGC', 1, 50, 'MGC_0900_E1_RR2.0_CB2_ORB_G8', 0.40)
+        """)
+        con.commit()
+        con.close()
+
+        # With flag: only 2 heads
+        results = load_validated_strategies(
+            db_path, "MGC", 0.10, family_heads_only=True,
+        )
+        ids = {r["strategy_id"] for r in results}
+        assert ids == {
+            "MGC_0900_E1_RR2.0_CB2_ORB_G5",
+            "MGC_0900_E1_RR2.0_CB2_ORB_G8",
+        }
+
+    def test_without_flag_returns_all(self, tmp_path):
+        """Without family_heads_only, all 3 strategies are returned."""
+        strategies = [
+            _make_strategy(strategy_id="MGC_0900_E1_RR2.0_CB2_ORB_G5",
+                           orb_label="0900", expectancy_r=0.30),
+            _make_strategy(strategy_id="MGC_0900_E1_RR2.5_CB2_ORB_G5",
+                           orb_label="0900", expectancy_r=0.25),
+            _make_strategy(strategy_id="MGC_0900_E1_RR2.0_CB2_ORB_G8",
+                           orb_label="0900", expectancy_r=0.40),
+        ]
+        db_path = _setup_db(tmp_path, strategies)
+
+        results = load_validated_strategies(db_path, "MGC", 0.10)
+        assert len(results) == 3
+
+    def test_graceful_without_edge_families(self, tmp_path):
+        """family_heads_only=True with no edge_families table returns all."""
+        strategies = [_make_strategy()]
+        db_path = _setup_db(tmp_path, strategies)
+
+        # Drop edge_families table
+        con = duckdb.connect(str(db_path))
+        con.execute("DROP TABLE IF EXISTS edge_families")
+        con.commit()
+        con.close()
+
+        results = load_validated_strategies(
+            db_path, "MGC", 0.10, family_heads_only=True,
+        )
+        assert len(results) == 1
+
+
 class TestCLI:
     def test_help(self):
         import subprocess

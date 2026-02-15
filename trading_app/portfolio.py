@@ -250,6 +250,7 @@ def load_validated_strategies(
     include_nested: bool = False,
     include_rolling: bool = False,
     rolling_train_months: int = 12,
+    family_heads_only: bool = False,
 ) -> list[dict]:
     """Load validated strategies from DB, filtered by minimum ExpR.
 
@@ -257,9 +258,18 @@ def load_validated_strategies(
     marks each with source='baseline' or source='nested'.
     When include_rolling=True, also loads rolling-validated strategies
     (source='rolling') from the rolling portfolio aggregator.
+    When family_heads_only=True, restricts to family head strategies from
+    edge_families table. Falls back to unfiltered if edge_families doesn't exist.
     """
     con = duckdb.connect(str(db_path), read_only=True)
     try:
+        # Resolve family head filter (post-filter in Python to avoid SQL interpolation)
+        head_ids = None
+        if family_heads_only:
+            from trading_app.db_manager import has_edge_families, get_family_head_ids
+            if has_edge_families(con):
+                head_ids = get_family_head_ids(con, instrument)
+
         # Load baseline strategies
         baseline_rows = con.execute("""
             SELECT vs.strategy_id, vs.instrument, vs.orb_label, vs.entry_model,
@@ -322,6 +332,10 @@ def load_validated_strategies(
             for r in rolling_results:
                 if r["strategy_id"] not in existing_ids:
                     results.append(r)
+
+        # Apply family head filter (Python-side to avoid SQL interpolation)
+        if head_ids is not None:
+            results = [r for r in results if r["strategy_id"] in head_ids]
 
         return results
     finally:
@@ -401,6 +415,7 @@ def build_portfolio(
     include_rolling: bool = False,
     rolling_train_months: int = 12,
     max_correlation: float = 0.85,
+    family_heads_only: bool = False,
 ) -> Portfolio:
     """
     Build a diversified portfolio from validated strategies.
@@ -421,6 +436,7 @@ def build_portfolio(
         include_nested=include_nested,
         include_rolling=include_rolling,
         rolling_train_months=rolling_train_months,
+        family_heads_only=family_heads_only,
     )
 
     if not candidates:
@@ -858,6 +874,8 @@ def main():
     parser.add_argument("--include-rolling", action="store_true", help="Include rolling-validated strategies")
     parser.add_argument("--rolling-train-months", type=int, default=12, help="Rolling training window months")
     parser.add_argument("--max-correlation", type=float, default=0.85, help="Max pairwise correlation (0-1)")
+    parser.add_argument("--family-heads-only", action="store_true",
+                        help="Only include family head strategies (1 per edge family)")
     parser.add_argument("--output", type=str, default=None, help="Output JSON file path")
     args = parser.parse_args()
 
@@ -874,6 +892,7 @@ def main():
         include_nested=args.include_nested,
         include_rolling=args.include_rolling,
         rolling_train_months=args.rolling_train_months,
+        family_heads_only=args.family_heads_only,
     )
 
     summary = portfolio.summary()
