@@ -230,3 +230,30 @@ class TestConfigFilterSync:
         assert len(ALL_FILTERS) > 0
         violations = check_config_filter_sync()
         assert len(violations) == 0
+
+
+class TestClaudeMdSizeCap:
+    """Tests for check 23: CLAUDE.md size cap."""
+
+    def test_real_claude_md_exists_and_under_cap(self):
+        """Verify actual CLAUDE.md is under 12KB."""
+        from pipeline.check_drift import check_claude_md_size_cap
+        violations = check_claude_md_size_cap()
+        assert len(violations) == 0
+
+    def test_catches_oversized_file(self, tmp_path, monkeypatch):
+        """Oversized CLAUDE.md triggers violation."""
+        from pipeline import check_drift
+        monkeypatch.setattr(check_drift, "PROJECT_ROOT", tmp_path)
+        (tmp_path / "CLAUDE.md").write_text("x" * 13000)
+        violations = check_drift.check_claude_md_size_cap()
+        assert len(violations) == 1
+        assert "12KB" in violations[0]
+
+    def test_passes_small_file(self, tmp_path, monkeypatch):
+        """Small CLAUDE.md passes."""
+        from pipeline import check_drift
+        monkeypatch.setattr(check_drift, "PROJECT_ROOT", tmp_path)
+        (tmp_path / "CLAUDE.md").write_text("small")
+        violations = check_drift.check_claude_md_size_cap()
+        assert len(violations) == 0

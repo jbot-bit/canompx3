@@ -914,6 +914,17 @@ def check_ingest_authority_notice() -> list[str]:
     return []
 
 
+def check_claude_md_size_cap() -> list[str]:
+    """Check #23: CLAUDE.md must stay under 12KB."""
+    path = PROJECT_ROOT / "CLAUDE.md"
+    if not path.exists():
+        return [f"  CLAUDE.md not found at {path}"]
+    size = path.stat().st_size
+    if size > 12288:
+        return [f"  CLAUDE.md exceeds 12KB size cap ({size / 1024:.1f}KB). Compact before committing."]
+    return []
+
+
 def main():
     print("=" * 60)
     print("PIPELINE DRIFT CHECK")
@@ -1177,6 +1188,18 @@ def main():
     # Check 22: Ingest authority notice (deprecation in ingest_dbn_mgc.py)
     print("Check 22: Ingest authority notice (ingest_dbn_mgc.py deprecation)...")
     v = check_ingest_authority_notice()
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 23: CLAUDE.md size cap
+    print("Check 23: CLAUDE.md size cap...")
+    v = check_claude_md_size_cap()
     if v:
         print("  FAILED:")
         for line in v:
