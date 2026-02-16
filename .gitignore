@@ -66,6 +66,7 @@ MNQ db/
 
 # Reports (generated analysis output)
 reports/
+outputs/
 
 # Walk-forward results (JSONL output)
 data/

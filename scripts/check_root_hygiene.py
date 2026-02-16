@@ -15,7 +15,9 @@ ALLOWED_DIRS = {
     "DB", ".git", ".github", ".githooks", ".claude", "__pycache__",
     "llm-code-scanner", "plugins",
     # Virtual environments
-    ".venv", "venv",
+    ".venv",
+    # Generated outputs
+    "outputs",
     # Tool caches
     ".pytest_cache", ".ruff_cache",
     # Gitignored but may exist locally
@@ -29,9 +31,9 @@ ALLOWED_FILES = {
     "TRADING_RULES.md", "TRADING_PLAN.md",
     "CANONICAL_LOGIC.txt", "CANONICAL_backfill_dbn_mgc_rules.txt",
     "CANONICAL_backfill_dbn_mgc_rules_addon.txt",
-    "pyproject.toml", "requirements.txt", "ruff.toml", ".gitignore", ".ENV", "conftest.py",
+    "pyproject.toml", "requirements.txt", "ruff.toml", ".gitignore", ".env", "conftest.py",
     "gold.db", "dashboard.html", "pipeline-explorer.html",
-    "Canompx3.code-workspace", ".mcp.json", "portfolio_report.json",
+    "Canompx3.code-workspace", ".mcp.json",
     # Data archives
     "GOLD_DB_FULLSIZE.zip",
     # Logs

@@ -9,15 +9,11 @@
 set -e
 
 # Activate venv if present (for ruff/python/pytest)
-# Prefer venv/ (project standard) over .venv/
+# Prefer .venv/ (project standard)
 # Save PATH before activate to prevent Git Bash utilities from disappearing
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 _SAVED_PATH="$PATH"
-if [ -f "$SCRIPT_DIR/venv/Scripts/activate" ]; then
-    source "$SCRIPT_DIR/venv/Scripts/activate" 2>/dev/null
-elif [ -f "$SCRIPT_DIR/venv/bin/activate" ]; then
-    source "$SCRIPT_DIR/venv/bin/activate" 2>/dev/null
-elif [ -f "$SCRIPT_DIR/.venv/Scripts/activate" ]; then
+if [ -f "$SCRIPT_DIR/.venv/Scripts/activate" ]; then
     source "$SCRIPT_DIR/.venv/Scripts/activate" 2>/dev/null
 elif [ -f "$SCRIPT_DIR/.venv/bin/activate" ]; then
     source "$SCRIPT_DIR/.venv/bin/activate" 2>/dev/null
@@ -30,9 +26,13 @@ echo ""
 
 # 0. Ruff lint check (~1 second)
 echo "[0/3] Ruff lint..."
-if ! ruff check pipeline/ trading_app/ > /dev/null 2>&1; then
+RUFF="ruff"
+if [ -f "$SCRIPT_DIR/.venv/Scripts/ruff.exe" ]; then
+    RUFF="$SCRIPT_DIR/.venv/Scripts/ruff.exe"
+fi
+if ! "$RUFF" check pipeline/ trading_app/ > /dev/null 2>&1; then
     echo "BLOCKED: Lint errors detected."
-    ruff check pipeline/ trading_app/
+    "$RUFF" check pipeline/ trading_app/
     exit 1
 fi
 echo "  PASSED"
