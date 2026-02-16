@@ -34,7 +34,7 @@ from pipeline.paths import GOLD_DB_PATH
 
 PYTHON = sys.executable
 
-# Default temp directory for rebuild (NOT OneDrive-synced)
+# Default temp directory for rebuild (scratch disk)
 TEMP_DIR = Path(os.environ.get("REBUILD_DIR", "C:/db/rebuild"))
 
 # Overlap by 2 days at boundaries to handle Brisbane trading day crossover

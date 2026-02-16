@@ -72,29 +72,20 @@ Databento .dbn.zst files
 
 ## Database Location & Workflow (CRITICAL)
 
-**ONE database** (`gold.db`), two locations:
+**ONE database** (`gold.db`) at `<project>/gold.db` — local disk, no cloud sync.
 
-| Location | Purpose |
-|----------|---------|
-| `<project>/gold.db` | Master copy (OneDrive-synced) — read-only queries |
-| `C:\db\gold.db` | Working copy — **ALL heavy write operations** |
-
-**Workflow for heavy jobs:**
+For long-running jobs, you can optionally use `C:\db\gold.db` as a scratch copy:
 ```bash
-# 1. Copy to working location
-cp "C:\Users\joshd\OneDrive\Desktop\Canompx3\gold.db" "C:\db\gold.db"
-
-# 2. Run against working copy
+# Optional: copy to scratch location for crash safety
+cp "C:\canodrive\canompx3\gold.db" "C:\db\gold.db"
 export DUCKDB_PATH=C:/db/gold.db
 python trading_app/strategy_discovery.py --instrument MGC
-
-# 3. Copy back (cmd /c copy silently fails to OneDrive — use cp)
-cp "C:\db\gold.db" "C:\Users\joshd\OneDrive\Desktop\Canompx3\gold.db"
+# Copy back when done
+cp "C:\db\gold.db" "C:\canodrive\canompx3\gold.db"
 ```
 
 **Rules:**
 - NEVER run two write processes against the same DuckDB file simultaneously
-- NEVER run long write jobs against the OneDrive path
 - `pipeline/paths.py` reads `DUCKDB_PATH` env var to override default path
 
 ---

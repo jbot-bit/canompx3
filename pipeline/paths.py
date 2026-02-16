@@ -11,8 +11,8 @@ PROJECT_ROOT = Path(__file__).parent.parent
 
 # Database — resolution order:
 #   1. DUCKDB_PATH env var (explicit override)
-#   2. local_db/gold.db (NTFS junction to C:\db — fast local disk, not OneDrive-synced)
-#   3. gold.db (project root fallback — OneDrive path, slow for writes)
+#   2. local_db/gold.db (NTFS junction to C:\db — alternative local path)
+#   3. gold.db (project root fallback)
 import os as _os
 
 def _resolve_db_path() -> Path:

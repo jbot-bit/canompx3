@@ -899,7 +899,7 @@ def main():
     if not args.db_path.exists():
         print(f"ERROR: database not found at {args.db_path}")
         print(f"Copy master to working location first:")
-        print(f'  cmd /c copy "C:\\Users\\joshd\\OneDrive\\Desktop\\Canompx3\\gold.db" "C:\\db\\gold.db"')
+        print(f'  cp "C:\\canodrive\\canompx3\\gold.db" "C:\\db\\gold.db"')
         sys.exit(1)
 
     run(args.db_path, args.start, args.end)

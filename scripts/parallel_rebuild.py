@@ -436,8 +436,8 @@ Examples:
     # -- Validate master DB --
     if not args.master.exists():
         print(f"FATAL: Master DB not found: {args.master}")
-        print(f"  Copy from OneDrive first:")
-        print(f'  cmd /c copy "C:\\Users\\joshd\\OneDrive\\Desktop\\Canompx3\\gold.db" "{args.master}"')
+        print(f"  Copy from project first:")
+        print(f'  cp "C:\\canodrive\\canompx3\\gold.db" "{args.master}"')
         sys.exit(1)
 
     master_mb = args.master.stat().st_size / (1024 * 1024)
@@ -577,9 +577,9 @@ Examples:
 
     if merged:
         print(f"\nMaster DB updated: {args.master}")
-        print(f"Remember to copy back to OneDrive:")
-        print(f'  cmd /c copy "{args.master}" '
-              f'"C:\\Users\\joshd\\OneDrive\\Desktop\\Canompx3\\gold.db"')
+        print(f"Remember to copy back to project:")
+        print(f'  cp "{args.master}" '
+              f'"C:\\canodrive\\canompx3\\gold.db"')
 
 
 if __name__ == "__main__":

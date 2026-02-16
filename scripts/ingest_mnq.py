@@ -2,16 +2,16 @@
 """
 MNQ Ingestion Pipeline - Full ingest + build on local disk.
 
-Copies gold.db to C:\\db\\ (off OneDrive), runs the full pipeline,
+Copies gold.db to C:\\db\\, runs the full pipeline,
 then copies the result back. Crash-safe: if interrupted, re-run
 with --resume to continue from checkpoint.
 
 Steps:
-  1. Copy gold.db from OneDrive to C:\\db\\gold.db
+  1. Copy gold.db from project to C:\\db\\gold.db
   2. Ingest MNQ bars_1m from DBN
   3. Build bars_5m
   4. Build daily_features
-  5. Copy gold.db back to OneDrive
+  5. Copy gold.db back to project
 
 Usage:
     python scripts/ingest_mnq.py
@@ -35,7 +35,7 @@ START_DATE = "2024-02-04"
 END_DATE = "2026-02-03"
 CHUNK_DAYS = 7
 
-ONEDRIVE_DB = PROJECT_ROOT / "gold.db"
+MASTER_DB = PROJECT_ROOT / "gold.db"
 LOCAL_DB = Path(r"C:\db\gold.db")
 LOCAL_DB_DIR = LOCAL_DB.parent
 
@@ -79,12 +79,12 @@ def main():
     parser.add_argument("--resume", action="store_true", help="Resume from checkpoint")
     parser.add_argument("--dry-run", action="store_true", help="Validate only")
     parser.add_argument("--skip-copy", action="store_true", help="DB already at C:\\db\\")
-    parser.add_argument("--no-copy-back", action="store_true", help="Skip copy back to OneDrive")
+    parser.add_argument("--no-copy-back", action="store_true", help="Skip copy back to project")
     args = parser.parse_args()
 
     log("=" * 60)
     log(f"MNQ INGESTION PIPELINE")
-    log(f"  Source DB: {ONEDRIVE_DB}")
+    log(f"  Source DB: {MASTER_DB}")
     log(f"  Local DB:  {LOCAL_DB}")
     log(f"  Date range: {START_DATE} to {END_DATE}")
     log(f"  Resume: {args.resume}")
@@ -94,16 +94,16 @@ def main():
     # Step 1: Copy DB to local disk
     if not args.skip_copy and not args.dry_run:
         LOCAL_DB_DIR.mkdir(parents=True, exist_ok=True)
-        if ONEDRIVE_DB.exists():
+        if MASTER_DB.exists():
             log(f"Copying gold.db to {LOCAL_DB} ...")
             t0 = time.time()
-            shutil.copy2(str(ONEDRIVE_DB), str(LOCAL_DB))
+            shutil.copy2(str(MASTER_DB), str(LOCAL_DB))
             sz_gb = LOCAL_DB.stat().st_size / (1024**3)
             log(f"  Copied ({sz_gb:.2f} GB, {time.time() - t0:.0f}s)")
         elif LOCAL_DB.exists():
-            log(f"OneDrive DB not found, using existing {LOCAL_DB}")
+            log(f"Master DB not found, using existing {LOCAL_DB}")
         else:
-            log("FATAL: No gold.db found at OneDrive or local path")
+            log("FATAL: No gold.db found at master or local path")
             sys.exit(1)
 
     # Step 2: Ingest bars_1m
@@ -151,11 +151,11 @@ def main():
         log("ABORT: daily_features build failed")
         sys.exit(rc)
 
-    # Step 5: Copy DB back to OneDrive
+    # Step 5: Copy DB back to project
     if not args.no_copy_back:
-        log(f"Copying gold.db back to {ONEDRIVE_DB} ...")
+        log(f"Copying gold.db back to {MASTER_DB} ...")
         t0 = time.time()
-        shutil.copy2(str(LOCAL_DB), str(ONEDRIVE_DB))
+        shutil.copy2(str(LOCAL_DB), str(MASTER_DB))
         log(f"  Copied back ({time.time() - t0:.0f}s)")
 
     log("=" * 60)
