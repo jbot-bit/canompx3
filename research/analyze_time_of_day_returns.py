@@ -6,7 +6,7 @@ Question: Which hours have systematic directional bias in gold?
 
 For each hour (0-23 UTC):
   - Compute mean/median hourly return and stddev
-  - Group by session (Asia 23:00-06:00 UTC, London 07:00-13:00, NY 13:00-21:00)
+  - Group by approximate session (fixed UTC windows, not DST-aware)
   - Break into terciles by ATR regime (low/med/high vol)
   - Use 5m bars for efficiency
   - Hourly return = close of last 5m bar in hour vs close of first 5m bar in hour

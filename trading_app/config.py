@@ -22,10 +22,10 @@ ORB SESSIONS (defined in pipeline/init_db.py as ORB_LABELS):
   2300 - Overnight session (13:00 UTC). Only works with G8+ (very large ORBs).
   0030 - Late overnight (14:30 UTC). No edge found; negative across all settings.
 
-TRADING SESSIONS (defined in pipeline/build_daily_features.py):
-  Asia:   09:00-17:00 Brisbane (23:00-07:00 UTC)
-  London: 18:00-23:00 Brisbane (08:00-13:00 UTC)
-  NY:     23:00-02:00 Brisbane (13:00-16:00 UTC, crosses midnight local)
+TRADING SESSIONS:
+  Fixed session stat windows are in pipeline/build_daily_features.py.
+  DST-aware session times (US_EQUITY_OPEN, LONDON_OPEN, etc.) are in
+  pipeline/dst.py SESSION_CATALOG — those track actual market opens.
 
 TRADING DAY:
   Runs 09:00 Brisbane to next 09:00 Brisbane (~1,440 minutes).

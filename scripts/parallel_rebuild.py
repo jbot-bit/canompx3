@@ -437,7 +437,7 @@ Examples:
     if not args.master.exists():
         print(f"FATAL: Master DB not found: {args.master}")
         print(f"  Copy from project first:")
-        print(f'  cp "C:\\canodrive\\canompx3\\gold.db" "{args.master}"')
+        print(f'  cp "C:\\Users\\joshd\\canompx3\\gold.db" "{args.master}"')
         sys.exit(1)
 
     master_mb = args.master.stat().st_size / (1024 * 1024)
@@ -579,7 +579,7 @@ Examples:
         print(f"\nMaster DB updated: {args.master}")
         print(f"Remember to copy back to project:")
         print(f'  cp "{args.master}" '
-              f'"C:\\canodrive\\canompx3\\gold.db"')
+              f'"C:\\Users\\joshd\\canompx3\\gold.db"')
 
 
 if __name__ == "__main__":

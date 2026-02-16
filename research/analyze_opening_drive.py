@@ -453,7 +453,7 @@ def main():
     print("  - Risk = drive range (high-low of the window), realistic stop placement.")
     print("  - Min N=30 for any conclusion. Significance tested vs 50% null hypothesis.")
     print(f"  - Cost model: {SPEC.instrument}, ${SPEC.total_friction:.2f}/RT ({SPEC.friction_in_points:.2f} pts)")
-    print("  - Sessions: Asia(09:00 Brisbane/23:00 UTC), London(18:00 Brisbane/08:00 UTC), NY(23:00 Brisbane/13:00 UTC)")
+    print("  - Sessions: fixed Brisbane-time windows (not DST-aware). See pipeline/dst.py for actual market opens.")
 
     print("\n[Done]")
 

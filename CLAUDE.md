@@ -77,11 +77,11 @@ Databento .dbn.zst files
 For long-running jobs, you can optionally use `C:\db\gold.db` as a scratch copy:
 ```bash
 # Optional: copy to scratch location for crash safety
-cp "C:\canodrive\canompx3\gold.db" "C:\db\gold.db"
+cp "C:\Users\joshd\canompx3\gold.db" "C:\db\gold.db"
 export DUCKDB_PATH=C:/db/gold.db
 python trading_app/strategy_discovery.py --instrument MGC
 # Copy back when done
-cp "C:\db\gold.db" "C:\canodrive\canompx3\gold.db"
+cp "C:\db\gold.db" "C:\Users\joshd\canompx3\gold.db"
 ```
 
 **Rules:**

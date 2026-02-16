@@ -6,7 +6,7 @@ Staged build (each stage is gated):
   1. Trading day assignment (09:00 Brisbane boundary)
   2. ORB ranges (6 ORBs, configurable duration)
   3. Break detection (first 1m close outside ORB)
-  4. Session stats (Asia/London/NY high-low)
+  4. Session stats (fixed-window high-low for session range features)
   5. RSI (Wilder's 14-period on 5m closes)
   6. Outcome at RR=1.0
 
@@ -70,12 +70,13 @@ ORB_TIMES_LOCAL = {
     "0030": (0, 30),
 }
 
-# Session windows (Brisbane local times, hour ranges)
-# Asia: 09:00-17:00, London: 18:00-23:00, NY: 23:00-02:00
+# Session stat windows: FIXED Brisbane-time approximations for computing
+# session range features (high/low). These do NOT track actual market opens
+# which shift with DST. For DST-aware session times, see pipeline/dst.py.
 SESSION_WINDOWS = {
-    "asia":   (9, 0, 17, 0),    # 09:00 - 17:00
-    "london": (18, 0, 23, 0),   # 18:00 - 23:00
-    "ny":     (23, 0, 2, 0),    # 23:00 - 02:00 (crosses midnight)
+    "asia":   (9, 0, 17, 0),
+    "london": (18, 0, 23, 0),
+    "ny":     (23, 0, 2, 0),    # crosses midnight
 }
 
 # Valid ORB durations in minutes
@@ -375,10 +376,9 @@ def _session_utc_window(trading_day: date, session: str) -> tuple[datetime, date
     """
     Compute the [start, end) UTC window for a session on a trading day.
 
-    Sessions are defined in Brisbane local time:
-      Asia:   09:00-17:00
-      London: 18:00-23:00
-      NY:     23:00-02:00 (crosses midnight)
+    Fixed Brisbane-time windows for session range stats.
+    These are approximations — actual market opens shift with DST.
+    See pipeline/dst.py for DST-aware times.
     """
     start_h, start_m, end_h, end_m = SESSION_WINDOWS[session]
 
@@ -410,7 +410,10 @@ def _session_utc_window(trading_day: date, session: str) -> tuple[datetime, date
 def compute_session_stats(bars_df: pd.DataFrame,
                            trading_day: date) -> dict:
     """
-    Compute session high/low for Asia, London, NY.
+    Compute session range stats using fixed Brisbane-time windows.
+
+    These are approximate session ranges for features, NOT DST-aware.
+    For actual market open times, see pipeline/dst.py SESSION_CATALOG.
 
     Returns dict with keys:
       session_asia_high, session_asia_low,

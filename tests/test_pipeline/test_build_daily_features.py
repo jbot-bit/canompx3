@@ -268,7 +268,7 @@ class TestBreakDetection:
 class TestSessionStats:
 
     def test_asia_session_window(self):
-        """Asia session: 09:00-17:00 Brisbane = 23:00 prev - 07:00 UTC."""
+        """Fixed Asia stat window: 09:00-17:00 Brisbane (not DST-aware)."""
         start, end = _session_utc_window(date(2024, 1, 5), "asia")
         # 09:00 Brisbane = 23:00 UTC Jan 4
         assert start == datetime(2024, 1, 4, 23, 0, 0, tzinfo=UTC_TZ)
@@ -276,15 +276,13 @@ class TestSessionStats:
         assert end == datetime(2024, 1, 5, 7, 0, 0, tzinfo=UTC_TZ)
 
     def test_london_session_window(self):
-        """London session: 18:00-23:00 Brisbane = 08:00-13:00 UTC."""
+        """Fixed London stat window: 18:00-23:00 Brisbane (not DST-aware)."""
         start, end = _session_utc_window(date(2024, 1, 5), "london")
         assert start == datetime(2024, 1, 5, 8, 0, 0, tzinfo=UTC_TZ)
         assert end == datetime(2024, 1, 5, 13, 0, 0, tzinfo=UTC_TZ)
 
     def test_ny_session_window(self):
-        """NY session: 23:00-02:00 Brisbane = 13:00-16:00 UTC.
-        23:00 Brisbane = 13:00 UTC same day.
-        02:00 Brisbane (next cal day) = 16:00 UTC same day."""
+        """Fixed NY stat window: 23:00-02:00 Brisbane (not DST-aware)."""
         start, end = _session_utc_window(date(2024, 1, 5), "ny")
         assert start == datetime(2024, 1, 5, 13, 0, 0, tzinfo=UTC_TZ)
         assert end == datetime(2024, 1, 5, 16, 0, 0, tzinfo=UTC_TZ)
