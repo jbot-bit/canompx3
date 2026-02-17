@@ -262,3 +262,107 @@ Secondary modules (cascade_table.py, live_config.py, validate_1800_*.py, market_
 ### Verdict: PASS
 
 All core trading_app modules comply with CLAUDE.md, TRADING_RULES.md, and FIX5 rules. Pre-computed outcomes pattern correct. Grid search properly excludes double-breaks and applies session-aware filters. Validation implements all 7 phases including walk-forward. DST regime split computed and stored correctly. Classification thresholds match documentation. No violations found.
+
+## 4. Test Coverage
+
+### Test File Inventory
+
+| Directory | Files | Description |
+|-----------|-------|-------------|
+| `tests/` | 4 | conftest.py, test_app_sync.py, test_integration_l1_l2.py, test_trader_logic.py |
+| `tests/test_pipeline/` | 14 | Pipeline modules: schema, validation, DST, bars, features, drift, paths |
+| `tests/test_trading_app/` | 22 | Trading app: config, discovery, validator, portfolio, entry rules, DB manager |
+| `tests/test_trading_app/test_ai/` | 5 | AI query agent: cli, corpus, grounding, query agent, SQL adapter |
+| `tests/test_trading_app/test_nested/` | 5 | Nested ORB: builder, discovery, schema, audit outcomes, resample |
+| `tests/test_trading_app/test_regime/` | 3 | Regime analysis: discovery, schema, validator |
+| `tests/test_research/` | 1 | Alt strategy utilities |
+| **Total** | **66** | |
+
+### CLAUDE.md Rule: No Unbuilt Feature References
+
+- Searched for references to unbuilt features (live_trading, position_sizing, multi_instrument_portfolio, signal_aggregation): **NONE FOUND**. PASS.
+- No tests reference ROADMAP planned features, placeholder functionality, or TODO-gated behavior. PASS.
+- All tests exercise existing, documented behavior. PASS.
+
+### DST Test Coverage (test_dst.py)
+
+Comprehensive DST test coverage found in `tests/test_pipeline/test_dst.py` (448 lines):
+
+| Area | Tests | Status |
+|------|-------|--------|
+| `is_us_dst()` transition detection | 11 tests across 2024-2026 | PASS |
+| `is_uk_dst()` transition detection | 7 tests across 2024-2025 | PASS |
+| CME_OPEN resolver (Brisbane times) | 5 tests (summer, winter, transitions) | PASS |
+| US_EQUITY_OPEN resolver | 4 tests | PASS |
+| US_DATA_OPEN resolver | 4 tests | PASS |
+| LONDON_OPEN resolver | 5 tests | PASS |
+| US_POST_EQUITY resolver | 6 tests | PASS |
+| DYNAMIC_ORB_RESOLVERS registry | 2 tests (completeness + return types) | PASS |
+| SESSION_CATALOG validation | 9 tests (keys, aliases, break groups, collisions) | PASS |
+| Break window grouping | 2 tests (asia group, us group) | PASS |
+| Seasonal shift verification | 4 tests (all resolvers shift between seasons) | PASS |
+
+**DST contamination rules from CLAUDE.md are well-covered.** Tests verify all 6 dynamic resolvers return different values for summer vs winter, SESSION_CATALOG structure is valid, break groups prevent window shrinkage, and aliases map correctly. PASS.
+
+### Validation Gate Test Coverage
+
+CLAUDE.md documents 7 ingestion gates and 4 aggregation gates.
+
+**Ingestion gates tested (test_validation.py):**
+- OHLCV sanity (`validate_chunk`): 10 tests — NaN, infinite, negative, zero price, high<low, negative volume, zero volume, missing column, empty DF. PASS.
+- UTC timestamp validation (`validate_timestamp_utc`): 4 tests — UTC passes, naive fails, wrong TZ fails, null timestamp fails. PASS.
+- Other gates (DBN schema, outright filter, PK safety, merge integrity, honesty): Not unit-tested in isolation, but tested through integration in `test_full_pipeline.py` and `test_ingest_daily.py`. **PARTIAL** — individual gate functions aren't exported for direct testing; they run as part of the ingestion flow.
+
+**Aggregation gates tested (test_idempotency.py, test_build_bars_5m.py):**
+- No duplicates: Tested via `test_no_duplicate_rows`. PASS.
+- Alignment: Tested via `test_row_count_matches_buckets`. PASS.
+- OHLCV sanity: Tested via aggregation correctness tests. PASS.
+- Volume non-negative: Covered by aggregation tests (input volume is non-negative). PASS.
+
+**Coverage gap:** Ingestion gates 1 (DBN schema), 3 (outright filter), 5 (PK safety), 6 (merge integrity), and 7 (honesty) are not individually unit-tested. They are exercised through integration tests but would benefit from dedicated unit tests. **Minor gap — not a violation** (CLAUDE.md says "build guardrails for what exists" but doesn't mandate per-gate unit tests).
+
+### Additional Test Coverage
+
+| Feature | Test File | Status |
+|---------|-----------|--------|
+| Schema creation (init_db) | test_schema.py | 7 tests, ORB columns verified for all 13 labels. PASS. |
+| Drift detection rules | test_check_drift.py | 22+ tests for all drift check functions. PASS. |
+| Strategy validation (7 phases) | test_strategy_validator.py | 25+ tests including regime waivers, integration. PASS. |
+| Config filters (ORB size, volume) | test_config.py | 38+ tests for NoFilter, OrbSizeFilter, VolumeFilter, ALL_FILTERS. PASS. |
+| DB manager schema | test_db_manager.py | 11 tests for schema creation, idempotency, verification. PASS. |
+| Cost model | test_cost_model.py | Tests R-multiple calculations. PASS. |
+| Contract selection | test_contract_selection.py | Tests front contract logic. PASS. |
+| GC→MGC mapping | test_gc_mgc_mapping.py | Tests source_symbol handling. PASS. |
+| RSI edge cases | test_rsi_edge_cases.py | Tests Wilder's RSI. PASS. |
+| Trading day assignment | test_trading_days.py | Tests 09:00 Brisbane boundary. PASS. |
+| Path resolution | test_paths.py | Tests DUCKDB_PATH env var. PASS. |
+| Timezone transitions | test_timezone_transitions.py | Tests DST boundary dates. PASS. |
+| Idempotent 5m build | test_idempotency.py | 3 tests for double-run identity. PASS. |
+
+### Hardcoded Path Check
+
+- Searched for `OneDrive`, `C:\db`, `C:\canodrive`, `C:\Users` in tests/: **One hit** in `test_check_drift.py:190` — this is a **test case** that deliberately writes a hardcoded path to verify the drift check catches it. This is correct behavior (testing the detection rule). PASS.
+
+### sys.path.insert Check
+
+- Found one instance: `tests/test_trading_app/test_portfolio.py:12` uses `sys.path.insert(0, ...)`.
+- **Assessment:** This is a legacy pattern — the project has `pip install -e .` available. However, the CLAUDE.md rule about sys.path hacks applies to production/research scripts, not test files. The test still works correctly. **Minor observation — not a violation.** Would be cleaner to remove it since pytest should find the package via the installed editable package.
+
+### Test Suite Execution
+
+**NOTE:** Python execution blocked by Windows sandbox permissions. Test suite could not be run in this iteration. Previous Ralph activity logs note test_app_sync.py passes in isolation; prior iterations confirm 1177 tests pass. Must be verified manually or in a non-sandboxed session.
+
+### Verdict: PASS
+
+Test suite provides comprehensive coverage of CLAUDE.md documented behavior:
+- DST contamination rules thoroughly tested (52+ tests in test_dst.py)
+- All drift detection rules have dedicated tests
+- Schema, validation gates, idempotency all tested
+- No references to unbuilt features
+- No hardcoded paths (only test data for drift check tests)
+- Classification thresholds and FIX5 rules verified through config and validator tests
+
+**Minor gaps (non-blocking):**
+1. Some ingestion gates lack individual unit tests (covered by integration tests)
+2. One `sys.path.insert` in test_portfolio.py (legacy, not a violation)
+3. Test execution could not be verified due to sandbox permissions

@@ -104,3 +104,20 @@ Task: Full codebase audit against CLAUDE.md authority
 
 **Output:** `ralph-audit-report.md` section "## 3. Trading App Modules"
 
+## 2026-02-18 04:30 UTC — Task 4: Audit tests/ for coverage gaps and compliance
+
+**What:** Reviewed all 66 test files across 7 directories against CLAUDE.md rules.
+
+**Checks performed:**
+- Test file inventory: 66 files across tests/, test_pipeline/, test_trading_app/, test_ai/, test_nested/, test_regime/, test_research/
+- Unbuilt feature references: NONE FOUND — no tests reference ROADMAP planned features
+- DST test coverage: 52+ tests in test_dst.py covering all 6 resolvers, SESSION_CATALOG, break groups, seasonal shifts
+- Validation gate coverage: OHLCV and UTC gates individually tested; other ingestion gates covered by integration tests
+- Hardcoded paths: Only in test_check_drift.py as deliberate test data (correct behavior)
+- sys.path.insert: One instance in test_portfolio.py (legacy, not a violation)
+- Schema/config/validator tests: Comprehensive coverage of FIX5 thresholds, 7-phase validation, drift detection
+
+**Caveat:** Python execution blocked by sandbox — test suite could not be run. Prior iterations confirm 1177 tests pass.
+
+**Output:** `ralph-audit-report.md` section "## 4. Test Coverage"
+
