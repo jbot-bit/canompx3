@@ -169,12 +169,90 @@ Hypothesis: wider ORB range (15/30m) + 5m entry bars reduces noise and improves 
 - **NOTE:** orb_outcomes (689K rows) needs full rebuild to apply new logic to stored data
 - See `AUDIT_FINDINGS.md` for original finding
 
-### 8b. Monitoring & Alerting (Phase 6e) — TODO
+### 8b. Multi-Instrument Discovery Grid Update — TODO
+
+Based on hypothesis test results (Feb 2026, `scripts/tools/hypothesis_test.py`).
+Two confirmed findings require config.py + discovery changes:
+
+**Change 1: MES 1000 band filters (H2 confirmed)**
+- Add `G4_L12` and `G5_L12` band filters to MES 1000 discovery grid
+- `OrbSizeFilter(min_size=4.0, max_size=12.0)` — class already supports `max_size`
+- Do NOT apply cap to MES 0900 (12pt+ is the best zone there)
+- Requires: instrument+session-aware filter dispatch in `config.py`
+
+**Change 2: LONG-ONLY direction filter for 1000 session (H5 confirmed)**
+- New `DirectionFilter` class in `config.py` (filter_type="DIR_LONG" / "DIR_SHORT")
+- `matches_row()` checks `orb_{label}_break_dir` column in daily_features
+- Add to grid for 1000 session only, all instruments
+- MGC 1000 shorts are negative (-0.09 avgR). MNQ shorts near-zero (+0.03).
+- Requires: new filter class + grid builder update in strategy_discovery.py
+
+**Implementation sequence:**
+1. Add `DirectionFilter` class to `config.py`
+2. Add band filter entries (G4_L12, G5_L12) to filter registry
+3. Create `get_filters_for_instrument(instrument, session)` dispatch function
+4. Update `strategy_discovery.py` to call dispatch instead of `ALL_FILTERS`
+5. Update `_FILTER_SPECIFICITY` to rank new filters
+6. Re-run discovery for MES only (band filters)
+7. Re-run discovery for MGC, MNQ, MES 1000 only (direction filter)
+8. Re-run validator on new strategies
+9. Update `live_config.py` if new validated edges emerge
+
+**Files touched:**
+- `trading_app/config.py` — new filter classes + dispatch
+- `trading_app/strategy_discovery.py` — grid builder + specificity
+- `trading_app/strategy_validator.py` — no changes expected
+- `tests/test_app_sync.py` — add sync tests for new filters
+
+### 8c. Research Priority Stack (Feb 2026 Birds-Eye Review) — TODO
+
+Six high-leverage research items identified by cross-referencing all findings. Ordered by expected impact.
+
+**P1. Cross-Instrument Correlation + Multi-Instrument Portfolio**
+- Data exists (MGC/MNQ/MES edges confirmed). Portfolio allocator does NOT.
+- Key question: MGC 1000 LONG vs MNQ 1000 LONG same-day correlation?
+- If uncorrelated → free diversification. If correlated → reduce position overlap.
+- live_config.py is MGC-only. This is the biggest single lever for total R.
+- Script: `research/research_cross_instrument_portfolio.py` (to build)
+- Depends on: 8b (direction filter) ideally done first but not blocking
+
+**P2. Calendar Effect Scan (Day-of-Week, FOMC, NFP, Opex)**
+- Zero calendar research exists despite 689K pre-computed outcomes.
+- Test: day-of-week x session x instrument on avgR and WR.
+- Test: FOMC announcement days, NFP first-Friday, monthly/quarterly opex.
+- Could yield instant new filter with no code changes (just a flag in daily_features).
+- Script: `research/research_calendar_effects.py` (to build)
+
+**P3. Signal Stacking (Size + Direction + Concordance + Volume)**
+- Every filter tested independently. Never tested: what happens when ALL fire?
+- Concordance is independent of size (20% overlap proven). Stacking could yield avgR > 1.0.
+- Goal: identify high-conviction day profile for 2-3x position sizing.
+- Script: `research/research_signal_stacking.py` (to build)
+
+**P4. E3 x Direction Interaction**
+- H5 direction test used E1 only. E3 (retrace entry) could behave differently.
+- If 1000 LONG bias is structural flow → E3 LONG = buying the dip in a session that wants to go up.
+- Could be highest-quality single trade in entire system.
+- Script: extend `hypothesis_test.py` or new `research/research_e3_direction.py`
+
+**P5. Time-to-Target (Winner Speed Profiling)**
+- We know MFE/MAE but not temporal signature of winners.
+- If 80% of winners hit target in 2 hours, 7-hour hold is dead exposure.
+- Fast winners under specific filters = more turns = more total R per year.
+- Script: `research/research_winner_speed.py` (to build)
+
+**P6. Regime Hedging via Multi-Instrument Allocation**
+- ORB sizes 15x larger 2025 vs 2021. Current system is gold-vol-dependent.
+- When gold cools, G5+ days drop to 5/year. System becomes unfundable on MGC alone.
+- MNQ/MES vol is uncorrelated with gold vol. Multi-instrument portfolio is natural hedge.
+- Depends on: P1 (cross-instrument portfolio) being built first.
+
+### 8d. Monitoring & Alerting (Phase 6e) — TODO
 - Strategy performance tracking (live vs backtest drift detection)
 - Alert on: drawdown exceeding historical, win rate divergence, ORB size regime shift
 - Dashboard for live strategy status
 
-### 8c. orb_outcomes Backfill 2016-2020 — IN PROGRESS
+### 8e. orb_outcomes Backfill 2016-2020 — IN PROGRESS
 - orb_outcomes currently covers 2021-2026 only (689,310 rows)
 - 2016-2020 data exists in bars_1m/bars_5m/daily_features but outcomes not yet built
 - Would enable 10-year validation instead of 5-year

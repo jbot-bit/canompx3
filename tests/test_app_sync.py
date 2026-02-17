@@ -33,6 +33,10 @@ from trading_app.config import (
     NoFilter,
     OrbSizeFilter,
     VolumeFilter,
+    DirectionFilter,
+    get_filters_for_grid,
+    DIR_LONG,
+    DIR_SHORT,
     MGC_ORB_SIZE_FILTERS,
     MGC_VOLUME_FILTERS,
     StrategyFilter,
@@ -145,6 +149,66 @@ class TestAllFiltersSync:
                 continue
             assert filt.min_rel_vol > 0, f"{key} min_rel_vol must be positive"
             assert filt.lookback_days > 0, f"{key} lookback_days must be positive"
+
+# ============================================================================
+# 2b. DirectionFilter sync
+# ============================================================================
+
+class TestDirectionFilterSync:
+    """DirectionFilter must correctly filter by breakout direction."""
+
+    def test_dir_long_filter_type(self):
+        assert DIR_LONG.filter_type == "DIR_LONG"
+
+    def test_dir_short_filter_type(self):
+        assert DIR_SHORT.filter_type == "DIR_SHORT"
+
+    def test_matches_long(self):
+        row = {"orb_1000_break_dir": "long"}
+        assert DIR_LONG.matches_row(row, "1000") is True
+        assert DIR_SHORT.matches_row(row, "1000") is False
+
+    def test_matches_short(self):
+        row = {"orb_1000_break_dir": "short"}
+        assert DIR_SHORT.matches_row(row, "1000") is True
+        assert DIR_LONG.matches_row(row, "1000") is False
+
+    def test_missing_dir_fails_closed(self):
+        assert DIR_LONG.matches_row({}, "1000") is False
+        assert DIR_SHORT.matches_row({}, "1000") is False
+
+
+# ============================================================================
+# 2c. get_filters_for_grid session-aware dispatch
+# ============================================================================
+
+class TestGetFiltersForGrid:
+    """get_filters_for_grid must return correct filter sets per instrument+session."""
+
+    def test_mes_1000_includes_band_and_dir(self):
+        filters = get_filters_for_grid("MES", "1000")
+        assert "ORB_G4_L12" in filters
+        assert "ORB_G5_L12" in filters
+        assert "DIR_LONG" in filters
+
+    def test_mgc_0900_excludes_extras(self):
+        filters = get_filters_for_grid("MGC", "0900")
+        assert "ORB_G4_L12" not in filters
+        assert "DIR_LONG" not in filters
+        assert filters == ALL_FILTERS
+
+    def test_mgc_1000_has_dir_no_band(self):
+        filters = get_filters_for_grid("MGC", "1000")
+        assert "DIR_LONG" in filters
+        assert "ORB_G4_L12" not in filters
+
+    def test_base_filters_always_present(self):
+        for inst in ("MGC", "MES", "MNQ"):
+            for sess in ("0900", "1000"):
+                filters = get_filters_for_grid(inst, sess)
+                assert "NO_FILTER" in filters
+                assert "ORB_G4" in filters
+
 
 # ============================================================================
 # 3. RR_TARGETS, CONFIRM_BARS_OPTIONS, ENTRY_MODELS consistency

@@ -59,11 +59,12 @@ Before calling any parameterized finding "real," test:
 Every statistical finding MUST have a structural market reason (mechanism) for WHY it works. Without a mechanism, it is a "statistical artifact until proven otherwise."
 
 **Good mechanisms (structural, likely to persist):**
-- Friction eats small ORBs → size filter works (cost structure)
+- Friction eats small ORBs → size filter works (cost structure). **This is THE primary edge in the project — confirmed across all instruments Feb 2026.**
 - Double-break = chop, no directional conviction → exclude (market microstructure)
 - All 3 instruments breaking same direction = macro flow day → concordance (institutional behavior)
 - Large gold ORB at 2300 = active overnight session → equity vol at 0030 (cross-market information flow)
 - 1000 shorts fail because Asian session has upward bias from physical demand (market structure)
+- Large ORB = institutional participation, real conviction → breakout has energy behind it (market microstructure)
 
 **Bad mechanisms (unlikely to persist or not mechanisms at all):**
 - "The numbers show it works" (that's not a mechanism)
@@ -186,6 +187,14 @@ RSI, MACD, Bollinger Bands, moving average crossovers, Stochastics. These are th
 
 ### Validated and Deployed
 See `TRADING_RULES.md` → Confirmed Edges table.
+
+### Cross-Instrument Stress Test Finding (Feb 2026)
+**ORB size is the primary edge across ALL instruments.** Not sessions, not parameters, not entry models. Stress test (`scripts/tools/stress_test.py`) on 11 top edges:
+- MES/MGC: ALL edges die without size filter. Regime-dependent, parameter-fragile.
+- MNQ 0900: SURVIVED. Positive all 3 years, bidirectional, all real neighbors profitable.
+- Mechanism: friction as % of risk (arithmetic, not statistical).
+- **Research priority:** Map optimal ORB size threshold per session per instrument. The threshold is NOT universal — MNQ (low friction) may profit from smaller ORBs than MGC (high friction).
+- Tool: `scripts/tools/orb_size_deep_dive.py`
 
 ### Awaiting 10-Year Outcome Rebuild
 These findings are in-sample only (579 days, Feb 2024 - Feb 2026). Do NOT act on them until validated on full dataset:

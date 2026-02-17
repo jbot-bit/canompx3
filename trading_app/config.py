@@ -137,6 +137,19 @@ class VolumeFilter(StrategyFilter):
         return rel_vol >= self.min_rel_vol
 
 
+@dataclass(frozen=True)
+class DirectionFilter(StrategyFilter):
+    """Filter by breakout direction (long/short only)."""
+
+    direction: str = "long"  # "long" or "short"
+
+    def matches_row(self, row: dict, orb_label: str) -> bool:
+        break_dir = row.get(f"orb_{orb_label}_break_dir")
+        if break_dir is None:
+            return False  # fail-closed
+        return break_dir == self.direction
+
+
 # =========================================================================
 # PREDEFINED FILTER SETS — full ORB size spectrum
 # =========================================================================
@@ -167,6 +180,26 @@ MGC_VOLUME_FILTERS = {
     ),
 }
 
+# Direction filters (H5: 1000 session shorts are noise; long-only doubles avgR)
+DIR_LONG = DirectionFilter(
+    filter_type="DIR_LONG", description="Long breakouts only", direction="long"
+)
+DIR_SHORT = DirectionFilter(
+    filter_type="DIR_SHORT", description="Short breakouts only", direction="short"
+)
+
+# MES 1000 band filters (H2: MES 1000 ORBs >= 12pt are toxic)
+_MES_1000_BAND_FILTERS = {
+    "ORB_G4_L12": OrbSizeFilter(
+        filter_type="ORB_G4_L12", description="ORB size >= 4 and < 12 points",
+        min_size=4.0, max_size=12.0,
+    ),
+    "ORB_G5_L12": OrbSizeFilter(
+        filter_type="ORB_G5_L12", description="ORB size >= 5 and < 12 points",
+        min_size=5.0, max_size=12.0,
+    ),
+}
+
 # Filters included in discovery grid (active filters only)
 # L-filters removed from grid (negative ExpR, 0/1024 validated). Classes retained for reference.
 # G2/G3 removed (99%+ pass rate on most sessions = cosmetic, not real filtering)
@@ -179,6 +212,21 @@ ALL_FILTERS: dict[str, StrategyFilter] = {
     **{f"ORB_{k}": v for k, v in _GRID_SIZE_FILTERS.items()},
     **MGC_VOLUME_FILTERS,
 }
+
+def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFilter]:
+    """Return session-aware filter set for discovery grid.
+
+    - Session "1000" on any instrument: adds DIR_LONG (H5 confirmed)
+    - MES + "1000": also adds G4_L12, G5_L12 band filters (H2 confirmed)
+    - All other combos: returns ALL_FILTERS unchanged
+    """
+    filters = dict(ALL_FILTERS)
+    if session == "1000":
+        filters["DIR_LONG"] = DIR_LONG
+    if instrument == "MES" and session == "1000":
+        filters.update(_MES_1000_BAND_FILTERS)
+    return filters
+
 
 # Entry models: realistic fill assumptions for backtesting
 # E1 = Market at next bar open after confirm (momentum entry)

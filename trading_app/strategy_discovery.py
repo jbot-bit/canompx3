@@ -26,7 +26,7 @@ import duckdb
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.init_db import ORB_LABELS
 from pipeline.asset_configs import get_enabled_sessions
-from trading_app.config import ALL_FILTERS, ENTRY_MODELS, VolumeFilter
+from trading_app.config import get_filters_for_grid, ENTRY_MODELS, VolumeFilter
 from trading_app.db_manager import init_trading_app_schema, compute_trade_day_hash
 from trading_app.outcome_builder import RR_TARGETS, CONFIRM_BARS_OPTIONS
 
@@ -35,7 +35,8 @@ sys.stdout.reconfigure(line_buffering=True)
 
 # Filter specificity ranking: higher = more specific = preferred as canonical
 _FILTER_SPECIFICITY = {
-    "ORB_G8": 5, "ORB_G6": 4, "ORB_G5": 3, "ORB_G4": 2,
+    "ORB_G8": 5, "ORB_G6": 4, "ORB_G5_L12": 4, "ORB_G5": 3, "ORB_G4_L12": 3,
+    "ORB_G4": 2, "DIR_LONG": 2, "DIR_SHORT": 2,
     "VOL_RV12_N20": 1, "NO_FILTER": 0,
 }
 
@@ -472,11 +473,16 @@ def run_discovery(
         features = _load_daily_features(con, instrument, orb_minutes, start_date, end_date)
         logger.info(f"  {len(features)} daily_features rows loaded")
 
+        # Build union of all session-specific filters for bulk pre-computation
+        all_grid_filters: dict = {}
+        for s in sessions:
+            all_grid_filters.update(get_filters_for_grid(instrument, s))
+
         logger.info("Computing relative volumes for volume filters...")
-        _compute_relative_volumes(con, features, instrument, sessions, ALL_FILTERS)
+        _compute_relative_volumes(con, features, instrument, sessions, all_grid_filters)
 
         logger.info("Building filter/ORB day sets...")
-        filter_days = _build_filter_day_sets(features, sessions, ALL_FILTERS)
+        filter_days = _build_filter_day_sets(features, sessions, all_grid_filters)
 
         logger.info("Loading outcomes (bulk)...")
         outcomes_by_key = _load_outcomes_bulk(con, instrument, orb_minutes, sessions, ENTRY_MODELS)
@@ -485,13 +491,16 @@ def run_discovery(
         # ---- Grid iteration (pure Python, no DB reads) ----
         # Collect all strategies in memory first, then dedup before writing
         all_strategies = []  # list of (strategy_id, filter_key, trade_days, row_data)
-        e1_combos = len(sessions) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * len(ALL_FILTERS)  # E1
-        e3_combos = len(sessions) * len(RR_TARGETS) * 1 * len(ALL_FILTERS)  # E3, CB1 only
-        total_combos = e1_combos + e3_combos
+        total_combos = 0
+        for s in sessions:
+            nf = len(get_filters_for_grid(instrument, s))
+            total_combos += nf * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS)  # E1
+            total_combos += nf * len(RR_TARGETS) * 1                          # E3
         combo_idx = 0
 
-        for filter_key, strategy_filter in ALL_FILTERS.items():
-            for orb_label in sessions:
+        for orb_label in sessions:
+            session_filters = get_filters_for_grid(instrument, orb_label)
+            for filter_key, strategy_filter in session_filters.items():
                 matching_day_set = filter_days[(filter_key, orb_label)]
 
                 for em in ENTRY_MODELS:

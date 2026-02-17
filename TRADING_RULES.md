@@ -79,7 +79,7 @@ Example: 10pt ORB, RR2.0 = 20pt target, 10pt stop.
 ## Edge Summary
 
 ### What Works
-1. **ORB size filter is THE edge.** Below 4pt, house wins. Above 4pt, you start winning. Above 6pt, strong edge.
+1. **ORB size IS the edge — not sessions, not parameters.** Cross-instrument stress test (Feb 2026) proved this: strip the size filter and ALL edges die. CB, RR, entry model are refinements on top of the one thing that matters: was the ORB big enough? See "ORB Size = The Edge" section below.
 2. **E1 momentum for 0900/1000.** Fast entry captures breakout energy.
 3. **E3 retrace for 1800/2300.** GLOBEX open spikes then pulls back; limit entry catches the pullback.
 4. **Kill losers early** at 0900 (15 min) and 1000 (30 min). Proven Sharpe improvement.
@@ -216,8 +216,21 @@ Trades still open at 4 hours: WR=56%, AvgR=+0.43R. Let stop/target work.
 
 ## Filters
 
-### ORB Size (THE Edge)
-Win rate by 0900 ORB size (E1 RR2.5 CB2):
+### ORB Size = The Edge (CONFIRMED Feb 2026)
+
+**This is the single most important finding in the project.**
+
+Cross-instrument stress test (`scripts/tools/stress_test.py`) tested 11 top edges across MES, MGC, and MNQ. Results:
+- **ALL 6 MES/MGC edges: DID NOT SURVIVE.** Failed size filter, YoY stability, and parameter sensitivity.
+- **ALL 5 MNQ 0900 edges: SURVIVED or MOSTLY SURVIVED.** Positive all 3 years, bidirectional, ALL real parameter neighbors profitable.
+
+The pattern across ALL instruments: strip the ORB size filter → edge dies. Small ORBs lose, large ORBs win. CB, RR, and entry model are second-order refinements. The size filter IS the strategy.
+
+**Mechanism:** Friction as % of risk. A 2pt ORB has 42% friction (MGC). A 6pt ORB has 14%. Small ORBs don't have enough room for price to move beyond friction + noise. Large ORBs give the breakout space to work. This is arithmetic, not statistics — it persists as long as cost structure exists.
+
+**Implication:** Stop chasing parameter combos. The G5+/G6+ gates are not "nice to have" — they ARE the strategy. Future research should focus on optimal size thresholds per session per instrument, not on CB/RR/EM tuning.
+
+Win rate by 0900 ORB size (E1 RR2.5 CB2, MGC):
 
 | ORB Size | N | WR | AvgR |
 |----------|---|-----|------|
@@ -229,19 +242,73 @@ Win rate by 0900 ORB size (E1 RR2.5 CB2):
 
 **G4+ maximizes total R. G5+/G6+ maximize per-trade edge.** No validated strategy exists without G4+.
 
+**Deep Dive Results (Feb 2026)** — `scripts/tools/orb_size_deep_dive.py`:
+
+Instrument-specific optimal gates (maximizing total R):
+| Instrument | Session | Optimal Gate | Notes |
+|-----------|---------|-------------|-------|
+| MNQ | 0900 | G4+ | Deep dive suggested G3+ but hypothesis test (H1) disproved: 3-4pt band adds only 9 trades. |
+| MNQ | 1000 | G4+ | Same — G3 band is 3 trades, all losses. |
+| MES | 0900 | G3+ (NO cap) | Hypothesis test (H2) showed 12pt+ is BEST zone on 0900 (N=7, WR=85.7%). Do NOT cap. |
+| MES | 1000 | G4+ with L12 cap | Hypothesis test (H2) confirmed: 12pt+ is TOXIC (N=9, avgR=-0.68). Band G4-L12 improves both avgR and totR. |
+| MGC | 0900 | G5+ | Confirmed. Highest total R at G5. |
+| MGC | 1000 | G5+ | Confirmed. |
+| MGC | 1800 | G8+ | Only very large ORBs work in evening. |
+| MGC | 2300 | G12+ or DEAD | Kill for MGC — consider removing from enabled sessions. |
+
+Friction hypothesis (partially disproven):
+- Theory: higher friction instruments need bigger ORBs. WRONG in absolute terms.
+- MGC has LOWEST friction (0.84pt) but needs BIGGEST gate (G5+).
+- MNQ has higher friction (1.37pt) but works from G4+.
+- Reason: "points" mean different things. 5pt on MGC = 0.17% of price. 5pt on MNQ = 0.024%.
+- TESTED & REJECTED: Percentage-based filter (H3) and ORB/ATR ratio (H4) do not beat instrument-specific fixed gates. See `docs/RESEARCH_ARCHIVE.md`.
+
+Direction bias — hypothesis test confirmed for 1000 session (H5):
+- **1000 session: LONG-ONLY confirmed across all 3 instruments.** MGC shorts are negative (-0.09 avgR). MNQ shorts near zero (+0.03). LONG-ONLY doubles avgR.
+- 0900 session: Both directions work. Difference too small to justify halving N. Keep bidirectional.
+- 1800 session: Dead regardless of direction. No filter rescues it.
+
+MES 1000 upper cap (hypothesis test H2 confirmed):
+- 12pt+ ORBs on S&P 1000 session are TOXIC (N=9, avgR=-0.68, WR=11.1%). Mean-reversion trap.
+- Band filter G4-L12 beats uncapped G4+ on BOTH avgR (+0.36 vs +0.28) AND totR (+40.3 vs +34.2).
+- Band filter G5-L12 is best per-trade: avgR=+0.52, N=67.
+- **Exception:** MES 0900 12pt+ is the BEST zone (avgR=+1.47). Do NOT apply cap to 0900.
+
+**Hypothesis test results:** `scripts/tools/hypothesis_test.py` — full results in `docs/RESEARCH_ARCHIVE.md`.
+| Hypothesis | Verdict | Action |
+|-----------|---------|--------|
+| H1: G3 for MNQ | NO-GO | Band 3-4pt adds 9 trades (noise). Stick with G4+. |
+| H2: MES 12pt cap | PASS (1000 only) | Add G4-L12, G5-L12 to MES 1000 grid. Do NOT cap 0900. |
+| H3: % of price filter | NO-GO | Not better than tuned fixed gates. |
+| H4: ORB/ATR ratio | HARD NO-GO | Scale mismatch — ORBs are 5-15% of daily ATR. |
+| H5: Direction filter | PASS (1000) | Add LONG-ONLY for 1000 across MGC, MNQ, MES. |
+
 ### Volume Filter (Relative Volume)
 `rel_vol = break_bar_volume / median(same UTC minute, 20 prior days)`
 Fail-closed: missing data = ineligible. 0900 rejects 34.7% of days. Config: `VOL_RV12_N20`.
 
-### Direction Filter
-1000: LONG ONLY. Short breakouts negative (WR=30%, AvgR=-0.04).
-0900: both positive, long stronger (+0.50 vs +0.23 AvgR).
+### Direction Filter (Hypothesis Test H5 — confirmed Feb 2026)
+**1000 session: LONG ONLY across all instruments.**
+
+| Instrument | LONG avgR | LONG N | SHORT avgR | SHORT N | BOTH avgR |
+|-----------|----------|--------|-----------|---------|----------|
+| MGC | +0.66 | 38 | -0.09 | 27 | +0.35 |
+| MNQ | +0.26 | 178 | +0.03 | 203 | +0.14 |
+| MES | +0.19 | 81 | +0.06 | 106 | +0.12 |
+
+MGC 1000 shorts are actively negative. MNQ 1000 shorts are near-zero noise. LONG-ONLY doubles avgR for all three.
+
+**0900 session: KEEP BIDIRECTIONAL.** Both directions positive. Difference too small (MGC: +0.87 LONG vs +0.63 SHORT) to justify halving trade count.
+
+**1800 session: Dead regardless of direction.** MES 1800 is -0.23 LONG, -0.15 SHORT. No direction filter rescues a dead session.
 
 ### Filter Deduplication Rules
 Many filter variants produce the SAME trade set.
 
-- G2/G3 pass 99%+ of days on most sessions — cosmetic label, not real filtering
-- Only G4+ filters meaningfully filter (>5% filter rate)
+- G2/G3 pass 99%+ of days on MGC — cosmetic label, not real filtering for gold
+- G3 on MNQ was hypothesized as real but **disproved (H1)**: 3-4pt band adds only 9 trades on 0900, all other sessions negative. G3 is cosmetic on MNQ too (different reason: instrument lives at 12pt+).
+- For MGC: only G4+ filters meaningfully filter (>5% filter rate)
+- For MNQ/MES: G4+ is the minimum meaningful gate
 - Always group by `(session, EM, RR, CB)` and count unique trades
 
 ### Annualized Sharpe (ShANN)

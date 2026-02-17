@@ -10,7 +10,8 @@ Supplements `TRADING_RULES.md`. Raw numbers preserved for reproducibility.
 ## Table of Contents
 
 1. [Cross-Instrument Lead-Lag (MGC x MES x MNQ)](#cross-instrument-lead-lag)
-2. [Alternative Strategy NO-GOs](#alternative-strategy-no-gos)
+2. [Hypothesis Test: Multi-Instrument Filter Optimization (Feb 2026)](#hypothesis-test-multi-instrument-filter-optimization)
+3. [Alternative Strategy NO-GOs](#alternative-strategy-no-gos)
 
 ---
 
@@ -150,6 +151,122 @@ python research/research_concordance_stacking.py
 ```
 
 If 0900/1100 concordance still shows monotonic degradation on the new 220+ days, proceed to option 2 (build ConcordanceFilter in config.py).
+
+---
+
+## Hypothesis Test: Multi-Instrument Filter Optimization
+
+**Date:** 2026-02-17
+**Script:** `scripts/tools/hypothesis_test.py`
+**Data:** orb_outcomes + daily_features, all instruments, full history
+**Status:** COMPLETED — 2 of 5 hypotheses passed, actionable changes identified
+
+### Background
+
+The ORB Size Deep Dive revealed that fixed-point gates (G4, G5, G6, G8) mean completely different things across instruments. A 5pt ORB on MNQ (~21,000 index) is 0.024% of price. A 5pt ORB on MGC (~$2,700 gold) is 0.19% — eight times bigger in relative terms. This prompted testing 5 alternative filter approaches.
+
+### H1: G3 (>=3pt) filter for MNQ — NO-GO
+
+**Question:** Does lowering the MNQ gate from G4 to G3 add real new edge?
+
+The BAND 3-4pt rows show trades that G3 would add that G4 doesn't already capture:
+
+| Session | N (3-4pt band) | avgR | WR |
+|---------|---------------|------|----|
+| 0900 | 9 | +0.59 | 66.7% |
+| 1000 | 3 | -1.00 | 0.0% |
+| 1100 | 12 | -0.59 | 16.7% |
+| 1800 | 1 | -1.00 | 0.0% |
+
+N=9 on 0900 is statistical noise. 1000/1100/1800 bands are actively toxic. MNQ ORBs rarely fall in the 3-4pt range (the instrument lives at 12pt+), so G3 is cosmetic for MNQ too — just for different reasons than MGC. **Stick with G4+ for MNQ.**
+
+### H2: Band filter for MES (cap at 12pt) — PASS (1000 session only)
+
+**Question:** Does capping MES ORBs at 12pt rescue edges by excluding toxic large-ORB days?
+
+**MES 0900 — Cap HURTS:**
+
+| Filter | N | avgR | totR |
+|--------|---|------|------|
+| G4+ no cap | 93 | +0.34 | +32.0 |
+| G4-L12 capped | 86 | +0.25 | +21.7 |
+| 12pt+ only | 7 | +1.47 | +10.3 |
+
+The 12pt+ zone on 0900 is the BEST zone (WR=85.7%). Do NOT cap 0900.
+
+**MES 1000 — Cap HELPS:**
+
+| Filter | N | avgR | totR |
+|--------|---|------|------|
+| G4+ no cap | 121 | +0.28 | +34.2 |
+| G4-L12 capped | 112 | +0.36 | +40.3 |
+| G5-L12 capped | 67 | +0.52 | +34.7 |
+| 12pt+ only | 9 | -0.68 | -6.1 |
+
+Toxic zone confirmed on 1000 (WR=11.1%, avgR=-0.68). Capping at 12pt improves both avgR AND totR at every gate level. **Add band filters (G4-L12, G5-L12) to MES 1000 discovery grid.**
+
+### H3: Percentage-based ORB filter — NO-GO (as primary)
+
+**Question:** Does a universal % threshold (ORB size / price) work across instruments?
+
+At 0.10%, all instruments show positive avgR, but comparison to fixed-point baselines:
+
+| Instrument | Fixed gate | N | avgR | % filter (0.10%) | N | avgR |
+|-----------|-----------|---|------|------------------|---|------|
+| MGC 0900 | G5+ | 56 | +0.77 | >= 0.10% | 70 | +0.52 |
+| MNQ 0900 | G4+ | 278 | +0.08 | >= 0.10% | 66 | +0.27 |
+| MES 0900 | G3+ | 131 | +0.17 | >= 0.10% | 37 | +0.52 |
+
+Fixed gates are already better (MGC) or have far more trades (MNQ, MES). At 0.15%, MES 1000 goes negative. **Not better than instrument-specific fixed gates. Do not add to discovery grid.**
+
+### H4: ORB/ATR(20) ratio filter — HARD NO-GO
+
+**Question:** Does normalizing ORB size to ATR(20) adapt to volatility regime?
+
+| Instrument | 0.20x ATR | N | Baseline (fixed) | N |
+|-----------|-----------|---|------------------|---|
+| MGC 0900 | +0.30 | 9 | +0.77 (G5+) | 56 |
+| MNQ 0900 | -0.41 | 5 | +0.10 (G4+) | 278 |
+| MES 0900 | +0.73 | 5 | +0.17 (G3+) | 131 |
+
+ORBs are inherently ~5-15% of daily ATR (one hour vs full day). Even the lowest threshold (0.20x) yields single-digit samples. **Scale mismatch is structural. Kill this hypothesis entirely.**
+
+### H5: Direction filter by time-of-day — PASS (1000 session)
+
+**Question:** Does filtering LONG-ONLY on Asia sessions and SHORT-ONLY on US sessions improve edge?
+
+**1000 session (the clear winner):**
+
+| Instrument | LONG avgR | LONG N | SHORT avgR | SHORT N | BOTH avgR | BOTH N |
+|-----------|----------|--------|-----------|---------|----------|--------|
+| MGC | +0.66 | 38 | -0.09 | 27 | +0.35 | 65 |
+| MNQ | +0.26 | 178 | +0.03 | 203 | +0.14 | 381 |
+| MES | +0.19 | 81 | +0.06 | 106 | +0.12 | 194 |
+
+MGC 1000 shorts are NEGATIVE (-0.09 avgR). LONG-ONLY doubles avgR AND improves total R (+25.1 vs +22.5). MNQ 1000 LONG-ONLY nearly doubles avgR with N=178 (statistically robust).
+
+**0900 session — NOT worth it.** Differences exist (MGC LONG +0.87 vs SHORT +0.63) but too small to justify halving trade count. Both directions work at 0900.
+
+**1800 session — Dead regardless.** MES 1800: LONG=-0.23, SHORT=-0.15. No direction filter rescues a dead session.
+
+**Action:** Add LONG-ONLY as a direction filter for 1000 session across MGC, MNQ, MES in discovery grid.
+
+### Summary Scorecard
+
+| Hypothesis | Verdict | Action |
+|-----------|---------|--------|
+| H1: G3 for MNQ | NO-GO | Stick with G4+. Band 3-4pt adds 9 trades. |
+| H2: MES 12pt cap | PASS (1000 only) | Add band G4-L12, G5-L12 to MES 1000 grid. Do NOT cap 0900. |
+| H3: % of price | NO-GO (primary) | Not better than tuned fixed gates. |
+| H4: ORB/ATR ratio | HARD NO-GO | Scale mismatch is structural. |
+| H5: Direction | PASS (1000) | Add LONG-ONLY for 1000 across all instruments. |
+
+### Caveats
+
+1. All tests use E1 (breakout) entry model only. E3 (retrace) may show different patterns for band/direction filters.
+2. MES 0900 12pt+ zone (N=7, WR=85.7%) is suspiciously perfect — likely regime-specific. Monitor.
+3. Direction filter halves N. MGC 1000 LONG N=38 is below REGIME threshold (50). Needs more data.
+4. MNQ samples are post-Feb 2024 only (shorter history than MGC).
 
 ---
 
