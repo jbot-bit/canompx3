@@ -11,7 +11,12 @@ Supplements `TRADING_RULES.md`. Raw numbers preserved for reproducibility.
 
 1. [Cross-Instrument Lead-Lag (MGC x MES x MNQ)](#cross-instrument-lead-lag)
 2. [Hypothesis Test: Multi-Instrument Filter Optimization (Feb 2026)](#hypothesis-test-multi-instrument-filter-optimization)
-3. [Alternative Strategy NO-GOs](#alternative-strategy-no-gos)
+3. [Cross-Instrument Portfolio Analysis (P1) — NO-GO for 1000 LONG Stacking](#cross-instrument-portfolio-analysis-p1)
+4. [DST Edge Audit — Preliminary Findings](#dst-edge-audit)
+5. [DST Contamination Audit — Full Scope](#dst-contamination-audit)
+6. [24-Hour ORB Time Scan with DST Split](#24-hour-orb-time-scan)
+7. [DST Strategy Revalidation — All Affected Sessions](#dst-strategy-revalidation)
+8. [Alternative Strategy NO-GOs](#alternative-strategy-no-gos)
 
 ---
 
@@ -267,6 +272,271 @@ MGC 1000 shorts are NEGATIVE (-0.09 avgR). LONG-ONLY doubles avgR AND improves t
 2. MES 0900 12pt+ zone (N=7, WR=85.7%) is suspiciously perfect — likely regime-specific. Monitor.
 3. Direction filter halves N. MGC 1000 LONG N=38 is below REGIME threshold (50). Needs more data.
 4. MNQ samples are post-Feb 2024 only (shorter history than MGC).
+
+---
+
+## Cross-Instrument Portfolio Analysis (P1)
+
+**Date:** 2026-02-17
+**Script:** `research/research_cross_instrument_portfolio.py`
+**Status:** COMPLETED — NO-GO for 1000 LONG stacking
+
+### Question
+
+Does combining MGC + MNQ + MES at the 1000 session (LONG-ONLY direction filter) improve portfolio risk-adjusted returns via diversification?
+
+### Key Results
+
+**Daily R Correlation at 1000 LONG-ONLY:**
+
+| Pair | Correlation | N (overlapping days) | Interpretation |
+|------|------------|---------------------|----------------|
+| MNQ / MES | +0.83 | ~200+ | Effectively the SAME trade |
+| MGC / MNQ | +0.40 to +0.44 | ~200+ | Moderate — NOT the diversification freebie hoped for |
+| MGC / MES | +0.40 to +0.44 | ~200+ | Same as above |
+
+**Portfolio Sharpe Impact:**
+Adding MNQ and/or MES to MGC at 1000 LONG-ONLY WORSENS portfolio Sharpe. The equity micros add correlated drawdown without enough independent edge to compensate.
+
+### Verdict: NO-GO
+
+Do NOT run both MNQ and MES at 1000 LONG-ONLY. Pick ONE equity micro per session if needed, but stacking all three instruments on the same session-direction signal provides no diversification benefit.
+
+### Implications for P6 (Regime Hedging)
+
+The original P6 hypothesis assumed MNQ/MES vol is uncorrelated with gold vol, making multi-instrument allocation a natural hedge. P1 partially disproved this: at the 1000 session where all three have confirmed LONG-ONLY edges, correlation is too high to diversify. True portfolio diversification requires a genuinely uncorrelated asset class (bonds, FX, ags).
+
+### Next Steps
+
+User plans to identify a truly uncorrelated micro futures product for proper portfolio diversification. Candidates to investigate: micro bonds (2YY, 10Y), micro FX (M6E, M6A), micro ags (MYM soybean?).
+
+---
+
+## DST Edge Audit
+
+**Date:** 2026-02-17
+**Script:** `research/research_dst_edge_audit.py`
+**Status:** COMPLETED — preliminary findings, full 24-hour time scan pending
+
+### Question
+
+Fixed sessions (0900, 1800, 0030) drift ±1 hour vs actual market opens during DST. Does this misalignment degrade edge quality? Should we switch to dynamic (DST-aware) sessions?
+
+### Section 2: Winter vs Summer Edge Split (0900 session)
+
+| Instrument | Winter avgR | Summer avgR | Delta | Verdict |
+|-----------|------------|------------|-------|---------|
+| MGC | Higher | Lower | +0.18R | Winter >> Summer |
+| MES | Higher | Lower | +0.35R | Winter >> Summer |
+| MNQ | Higher | Lower | +0.09R | ~Equal, KEEP FIXED |
+
+Winter = when fixed 0900 perfectly aligns with actual Asia open. Summer = 1 hour off. All instruments show winter advantage, but MNQ is robust to the shift.
+
+### Section 3: Fixed vs Dynamic Head-to-Head (matched days)
+
+| Instrument | Fixed avgR advantage | Verdict |
+|-----------|---------------------|---------|
+| MGC 0900 | +0.13R | Fixed beats dynamic |
+| MES 0900 | +0.14R | Fixed beats dynamic |
+| MGC 1800 | No overlapping days | Inconclusive |
+
+### The Apparent Paradox
+
+Winter edges are stronger (suggesting the actual market event timing matters), BUT on matched days, fixed sessions slightly outperform dynamic. Multiple possible explanations — DO NOT over-conclude:
+
+1. **Pre-positioning theory:** Fixed-time ORB captures calm buildup before the event. Plausible but unproven.
+2. **Two independent opportunities:** In summer, both the event time (0800) AND the fixed time (0900) may have separate edge. Winter conflates them because they're the same time.
+3. **Sample size caution:** Head-to-head only has summer days (winter = identical times), so N is halved.
+4. **We haven't tested the full clock:** Only 11 of 96 possible 15-min slots have been evaluated. There may be better times we've never looked at.
+
+### Preliminary Verdicts (subject to revision after full time scan)
+
+1. **Do NOT rule out dynamic sessions.** The +0.13R advantage is small and summer-only.
+2. **Winter is genuinely better** — feed into P2 (calendar effect scan) as a seasonality signal.
+3. **MNQ is most DST-robust** — only +0.09R gap, consistent edge year-round.
+4. **MGC 1800 inconclusive** — no E3 data, no overlapping days.
+5. **NEXT STEP: Full 24-hour ORB time scan** (`research/research_orb_time_scan.py`) to test ALL 96 possible start times across the trading day. This will reveal whether our 11 sessions are actually optimal or if we're missing hidden opportunities.
+
+---
+
+## DST Contamination Audit
+
+**Date:** 2026-02-17
+**Status:** AUDIT COMPLETE — remediation in progress
+
+### Discovery
+
+The DST edge audit (above) revealed a deeper systemic issue: four of our seven fixed sessions align with specific market events in one DST regime but miss by 1 hour in the other. Every metric ever computed on these sessions is a blended average of two different market contexts.
+
+### Affected Sessions
+
+| Session | Winter (std time) alignment | Summer (DST) alignment | Shift source |
+|---------|---------------------------|----------------------|-------------|
+| 0900 | = CME Globex open (5PM CST = 23:00 UTC = 09:00 Bris) | CME opened 1hr earlier at 0800 Bris (5PM CDT = 22:00 UTC) | US DST |
+| 1800 | = London metals open (8AM GMT = 08:00 UTC = 18:00 Bris) | London opened 1hr earlier at 1700 Bris (8AM BST = 07:00 UTC) | UK DST |
+| 0030 | = US equity open (9:30AM EST = 14:30 UTC = 00:30 Bris) | US equity opened 1hr earlier at 2330 Bris (9:30AM EDT = 13:30 UTC) | US DST |
+| 2300 | ≈ US data release (8:30AM EST = 13:30 UTC ≈ 23:30 Bris) | US data released 1hr earlier at 2230 Bris (8:30AM EDT = 12:30 UTC) | US DST |
+
+### Clean Sessions (no contamination)
+
+| Session | Why clean |
+|---------|----------|
+| 1000 | = Tokyo Stock Exchange open (9:00 AM JST). Japan has NO DST. Permanently aligned. |
+| 1100 | = Singapore open. Singapore has NO DST. Permanently aligned. |
+| 1130 | = HK/Shanghai equity open. Neither has DST. Permanently aligned. |
+| CME_OPEN | Dynamic session — `dst.py` resolver adjusts per-day via `zoneinfo`. |
+| LONDON_OPEN | Dynamic session — resolver adjusts per-day. |
+| US_EQUITY_OPEN | Dynamic session — resolver adjusts per-day. |
+| US_DATA_OPEN | Dynamic session — resolver adjusts per-day. |
+
+### Scope of Contamination
+
+Everything downstream of `daily_features` for sessions 0900/1800/0030/2300 is contaminated:
+- `daily_features` ORB columns for those sessions
+- `orb_outcomes` rows for those sessions
+- `experimental_strategies` discovered at those sessions
+- `validated_setups` for those sessions
+- `edge_families` containing those sessions
+- All TRADING_RULES.md stats for 0900/1800/2300 session playbooks
+- Hypothesis tests H1-H5 (used 0900 data for H1, H2)
+- Cross-instrument portfolio analysis (partially — 1000 results are clean)
+
+**NOT contaminated:** Raw bar data (bars_1m, bars_5m) is UTC and correct. The ORB computation itself is correct — it computes the ORB at the stated clock time. The problem is interpretation: the stated clock time maps to different market events depending on DST.
+
+### Remediation Plan
+
+1. ✅ 24-hour ORB time scan with winter/summer split — DONE (`research/research_orb_time_scan.py`)
+2. Add winter/summer split to `strategy_validator.py` for sessions 0900/1800/0030/2300
+3. Re-validate all strategies at affected sessions with split visible
+4. Flag strategies where edge is >80% driven by one DST regime
+5. For regime-dependent edges: determine if clock time or market event has edge, decide fixed vs dynamic
+6. Update TRADING_RULES.md session playbooks with clean split numbers
+7. Rule: ALL future research touching 0900/1800/0030/2300 MUST split by DST regime
+
+### Key Implication
+
+If a strategy at 0900 shows +0.30 avgR blended but is actually +0.48R winter / +0.12R summer, the real question is: is the winter edge because 0900 = CME open in winter? If so, you should trade CME_OPEN year-round (dynamic), not 0900 (fixed). The blended number hides this completely.
+
+Conversely, if 0900 shows +0.30 blended and is +0.33W / +0.27S (stable), then the clock time itself has edge regardless of what market event it aligns with. In that case, keep the fixed session.
+
+The time scan showed both patterns exist across different instruments and times.
+
+---
+
+## 24-Hour ORB Time Scan
+
+**Date:** 2026-02-17
+**Script:** `research/research_orb_time_scan.py`
+**Status:** COMPLETED with DST winter/summer split on all 96 candidate times
+
+### Method
+
+Scanned every 15-minute increment (96 slots) across the 23-hour CME trading day. For each slot, computed 5-minute ORB, applied G4+ filter, measured break rate and RR2.0 outcomes using E1 entry. Split all results by US DST regime (winter = EST, summer = EDT).
+
+### DST Stability Verdicts
+
+| Verdict | Meaning |
+|---------|---------|
+| STBL | \|winter - summer\| <= 0.10R, both N >= 10. Reliable edge. |
+| W>> | Winter avgR much better than summer. Edge may be event-aligned (winter = aligned). |
+| S>> | Summer avgR much better than winter. Edge may be event-avoidance (summer = misaligned). |
+| LOW-N | One regime has fewer than 10 trades. Cannot assess stability. |
+
+### MGC Findings
+
+- **09:30 STABLE** (+0.14W / +0.18S) — NOT our current 0900 session. 30 min later.
+- **19:00 STABLE** (+0.43W / +0.48S) — NOT our current 1800 session. 1 hour later. Strongest stable edge. May be the actual edge we're capturing at 1800 but offset.
+- **10:00 STABLE** (+0.15W / +0.08S) — Tokyo open, confirmed clean.
+- **22:45 WINTER-DOMINANT** (+0.69W / +0.04S) — nearly all winter edge.
+- **18:00 LOW-N for winter** — caveat: scan splits by US DST, but 1800 should use UK DST. UK and US DST overlap mostly but not perfectly (2-4 week gaps at transitions).
+- 9 of top 20 are STABLE.
+
+### MNQ Findings
+
+- **10:00 perfectly STABLE** (+0.21W / +0.21S) — most balanced edge in entire scan.
+- **10:45 WINTER-DOMINANT** (+0.33W / +0.11S) — still positive in summer but weaker.
+- Most DST-robust instrument overall: 10/20 stable.
+
+### MES Findings — MAJOR RED FLAGS
+
+- **10:00 STABLE** (+0.23W / +0.22S) — the ONE reliable time for MES.
+- **WARNING: 4 top-20 times have edge that DIES in winter** (09:45, 10:15, 12:15, 12:30 — all summer-only edges).
+- **MES 0900 winter is ACTIVELY HARMFUL** (-0.21W avgR) — winter is when 0900 = CME open exactly. The alignment with the market event makes MES WORSE. Summer (misaligned) is better (-0.01S, nearly flat).
+- 10:45 winter-dominant (+0.35W / +0.10S).
+- MES top-ranked times in aggregate (like 10:30) are summer-dominated and may be fragile.
+
+### Key Insights
+
+1. **1000 is the anchor across all instruments.** DST-stable, clean (Japan no DST), confirmed edge. Build the portfolio around this time.
+
+2. **Our current session times may not be optimal.** MGC 19:00 (STBL, +0.43/+0.48) looks better than our 18:00. MGC 09:30 (STBL) looks better than 09:00. These are different times that we've never explicitly tested as sessions.
+
+3. **Market event alignment can HURT, not help.** MES 0900 in winter (= CME open exactly) is negative avgR. The noise at the event kills breakouts. This contradicts the assumption that "aligning with the event = better."
+
+4. **Winter-dominant edges may be event-driven.** MGC 22:45 at +0.69W / +0.04S is likely US-data-release-driven. When the fixed time aligns with the event (winter), it fires. When misaligned (summer), it's noise.
+
+5. **The 1800 LOW-N issue:** The scan uses US DST as the split variable, but 1800's relevant DST is UK-based. US and UK DST overlap ~90% but diverge by 2-4 weeks at spring/fall transitions. A UK-DST-specific split would give cleaner results for 1800. This is a known limitation, not a bug.
+
+6. **"Secret ORBs" confirmed:** Times like 19:00, 09:30, 10:45 don't correspond to any named market event but have real, stable edge. The market has positioning flow patterns at clock times that aren't driven by exchange opens.
+
+### Next Steps
+
+1. Strategy revalidation with DST split (`research/PROMPT_dst_strategy_revalidation.md`) — quantify how many existing validated strategies are regime-dependent.
+2. Consider adding 09:30 and/or 19:00 as new sessions based on stable edge evidence.
+3. For 1800: run a UK-DST-specific split to get clean numbers.
+4. For MES: seriously question whether 0900 should be traded at all given winter = negative avgR.
+
+---
+
+## DST Strategy Revalidation
+
+**Date:** 2026-02-17
+**Script:** `research/research_dst_strategy_revalidation.py`
+**Output:** `research/output/dst_strategy_revalidation.csv`
+**Status:** COMPLETED — 1272 strategies analyzed. No validated strategies broken.
+
+### Method
+
+Re-validated all strategies at sessions 0900/1800/0030/2300 by splitting trade days into winter (standard time) and summer (DST). Used correct reference timezone per session: US Eastern for 0900/0030/2300, UK London for 1800.
+
+### Verdict Summary (1272 strategies)
+
+| Verdict | Count | % | Meaning |
+|---------|-------|---|---------|
+| STABLE | 275 | 22% | Edge survives in both regimes. Trustworthy. |
+| WINTER-DOMINANT | 155 | 12% | Stronger in winter, still positive in summer. |
+| SUMMER-DOMINANT | 130 | 10% | Stronger in summer, still positive in winter. |
+| SUMMER-ONLY | 10 | 1% | Edge DIES completely in winter. RED FLAG. |
+| UNSTABLE | 48 | 4% | Large split between regimes. Caution. |
+| LOW-N | 654 | 51% | Cannot assess — too few trades in one regime. |
+
+### RED FLAGS: 10 Strategies Where Edge Dies
+
+All 10 are **MES 0900 E1** — experimental (never validated). Edge dies in winter (when 0900 = CME open exactly), lives only in summer (when 0900 is 1 hour after CME open). Confirms time scan finding that MES at the CME open is toxic.
+
+No validated strategies have broken edges. All production strategies survive both regimes.
+
+### MGC 1800 Validated Strategies (UK DST split)
+
+| Strategy | Combined avgR | Winter avgR (N) | Summer avgR (N) | Verdict |
+|----------|--------------|-----------------|-----------------|---------|
+| E1 RR2.0 CB1 G5 | +1.56 | +1.59 (15) | +1.54 (13) | **STABLE** ✅ |
+| E3 RR2.0 CB1 G5 | +1.53 | +1.57 (15) | +1.48 (11) | **STABLE** ✅ |
+| E3 RR2.5 CB1 G5 | +1.71 | +1.57 (15) | +1.90 (11) | UNSTABLE (still positive both) |
+
+The two primary 1800 plays are DST-stable. Edge is genuine year-round.
+
+### MNQ 1800 — Winter Monster (Unvalidated)
+
+Multiple MNQ 1800 strategies showing avgR +1.3 to +2.5 with Sharpe 2-25 in winter only (N=47-52). Needs scrutiny — many identical trade-day hashes across filter levels suggests same underlying trades counted multiple times. Investigate before acting on these numbers.
+
+### Key Conclusions
+
+1. **No production strategies are broken by DST.** All validated setups survive both regimes.
+2. **MES 0900 confirmed toxic in winter.** All 10 edge-dies strategies are MES at the CME open. Do NOT validate MES 0900 strategies without DST split.
+3. **MGC 1800 is genuinely stable.** UK DST split confirms edge in both GMT and BST periods.
+4. **51% of strategies are LOW-N** — cannot be assessed. This is expected given that splitting by DST halves the sample size.
+5. **MNQ 1800 winter edge needs investigation** — could be seasonal opportunity or data artifact.
 
 ---
 

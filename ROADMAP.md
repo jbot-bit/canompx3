@@ -208,16 +208,45 @@ Two confirmed findings require config.py + discovery changes:
 
 Six high-leverage research items identified by cross-referencing all findings. Ordered by expected impact.
 
-**P1. Cross-Instrument Correlation + Multi-Instrument Portfolio**
-- Data exists (MGC/MNQ/MES edges confirmed). Portfolio allocator does NOT.
-- Key question: MGC 1000 LONG vs MNQ 1000 LONG same-day correlation?
-- If uncorrelated → free diversification. If correlated → reduce position overlap.
-- live_config.py is MGC-only. This is the biggest single lever for total R.
-- Script: `research/research_cross_instrument_portfolio.py` (to build)
-- Depends on: 8b (direction filter) ideally done first but not blocking
+**P1. Cross-Instrument Correlation + Multi-Instrument Portfolio — DONE (NO-GO for 1000 LONG stacking)**
+- Script: `research/research_cross_instrument_portfolio.py` — COMPLETED Feb 2026
+- Result: MNQ/MES daily R correlation at 1000 = +0.83 (effectively same trade)
+- MGC/equity correlation at 1000 = +0.40 to +0.44 (moderate, not the diversification freebie hoped for)
+- Adding MNQ+MES to MGC at 1000 LONG worsens portfolio Sharpe — DO NOT STACK
+- Action: pick ONE equity micro (MNQ or MES) per session, don't run both
+- Next: find a truly uncorrelated asset class (bonds, FX, ags) for real portfolio diversification
+
+**DST Edge Audit — DONE (fully remediated Feb 2026)**
+- Script: `research/research_dst_edge_audit.py` — COMPLETED Feb 2026
+- Initial finding: fixed slightly outperformed dynamic on summer-only matched days (+0.13R MGC, +0.14R MES)
+- Winter edges stronger across all instruments (MES +0.35R, MGC +0.18R, MNQ +0.09R)
+- Full remediation DONE: validator split, volume analysis, revalidation, doc updates. See DST REMEDIATION section above.
+- Winter seasonality signal feeds into P2 (calendar effects)
+
+**DST CONTAMINATION REMEDIATION — DONE (Feb 2026)**
+- Sessions 0900/1800/0030/2300 blend two market contexts. 1000/1100/1130 and dynamic sessions are CLEAN.
+- 2300 special case: NEVER aligned with US data release. Winter = 30min before, Summer = 30min after. DST flips context.
+- Step 1: ✅ 24-hour ORB time scan with winter/summer split (`research/research_orb_time_scan.py`) — DONE
+  - 1000 is the anchor (STBL all instruments). MGC 19:00 STBL. MES 0900 winter = NEGATIVE.
+- Step 1b: ✅ Strategy revalidation with DST split (`research/research_dst_strategy_revalidation.py`) — DONE
+  - 1272 strategies: 275 STABLE, 155 WINTER-DOM, 130 SUMMER-DOM, 10 SUMMER-ONLY, 48 UNSTABLE, 654 LOW-N.
+  - NO validated strategies broken. Red flags: MES 0900 E1 experimental only.
+  - CSV: `research/output/dst_strategy_revalidation.csv`
+- Step 2: ✅ Winter/summer split baked into `strategy_validator.py` — DONE
+  - DST columns (`dst_winter_n`, `dst_winter_avg_r`, `dst_summer_n`, `dst_summer_avg_r`, `dst_verdict`) on `experimental_strategies` and `validated_setups`.
+  - Auto-migration in `db_manager.py:init_trading_app_schema()`.
+  - `classify_dst_verdict()` in `pipeline/dst.py`.
+- Step 3: ✅ Volume analysis confirms event-driven edges (`research/research_volume_dst_analysis.py`) — DONE
+  - 0900: 63% volume drop summer. 2300: +76-90% summer. 1800: 31% winter premium (MGC).
+  - Findings: `research/output/volume_dst_findings.md`, CSV: `research/output/volume_dst_analysis.csv`
+- Step 4: ✅ TRADING_RULES.md session playbooks updated with DST split numbers — DONE
+- Step 5: ✅ New session candidates evaluated — ALL REJECTED (insufficient G4+ frequency or too much overlap)
+- Step 6: ⬜ Migrate DST columns to production gold.db (only on scratch copy currently)
+- Rule: ALL future research touching 0900/1800/0030/2300 MUST split by DST regime
 
 **P2. Calendar Effect Scan (Day-of-Week, FOMC, NFP, Opex)**
 - Zero calendar research exists despite 689K pre-computed outcomes.
+- NEW: DST audit showed winter >> summer (+0.18-0.35R). Include season/month as a variable.
 - Test: day-of-week x session x instrument on avgR and WR.
 - Test: FOMC announcement days, NFP first-Friday, monthly/quarterly opex.
 - Could yield instant new filter with no code changes (just a flag in daily_features).
@@ -241,11 +270,13 @@ Six high-leverage research items identified by cross-referencing all findings. O
 - Fast winners under specific filters = more turns = more total R per year.
 - Script: `research/research_winner_speed.py` (to build)
 
-**P6. Regime Hedging via Multi-Instrument Allocation**
+**P6. Regime Hedging via Multi-Instrument Allocation — REVISED (P1 findings change approach)**
 - ORB sizes 15x larger 2025 vs 2021. Current system is gold-vol-dependent.
 - When gold cools, G5+ days drop to 5/year. System becomes unfundable on MGC alone.
-- MNQ/MES vol is uncorrelated with gold vol. Multi-instrument portfolio is natural hedge.
-- Depends on: P1 (cross-instrument portfolio) being built first.
+- P1 showed MNQ/MES correlation = +0.83 at 1000 (NOT the free hedge expected).
+- MGC/equity correlation = +0.40-0.44 (moderate). MNQ OR MES adds some diversification but not enough.
+- Revised plan: need truly uncorrelated asset (bonds micro? FX micro? ags?) for real regime hedge.
+- Depends on: user selecting candidate asset + data acquisition.
 
 ### 8d. Monitoring & Alerting (Phase 6e) — TODO
 - Strategy performance tracking (live vs backtest drift detection)

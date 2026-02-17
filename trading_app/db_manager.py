@@ -130,6 +130,13 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 is_canonical      BOOLEAN     DEFAULT TRUE,
                 canonical_strategy_id TEXT,
 
+                -- DST regime split (Feb 2026)
+                dst_winter_n      INTEGER,
+                dst_winter_avg_r  DOUBLE,
+                dst_summer_n      INTEGER,
+                dst_summer_avg_r  DOUBLE,
+                dst_verdict       TEXT,
+
                 -- Validation status
                 validation_status TEXT,
                 validation_notes  TEXT
@@ -178,6 +185,13 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 -- Regime waivers (Phase 3)
                 regime_waivers    TEXT,
                 regime_waiver_count INTEGER DEFAULT 0,
+
+                -- DST regime split (Feb 2026)
+                dst_winter_n      INTEGER,
+                dst_winter_avg_r  DOUBLE,
+                dst_summer_n      INTEGER,
+                dst_summer_avg_r  DOUBLE,
+                dst_verdict       TEXT,
 
                 -- Status
                 status            TEXT        NOT NULL,
@@ -258,6 +272,21 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
             except duckdb.CatalogException:
                 pass  # column already exists
 
+        # Migration: add DST regime split columns (Feb 2026)
+        dst_cols = [
+            ("dst_winter_n", "INTEGER"),
+            ("dst_winter_avg_r", "DOUBLE"),
+            ("dst_summer_n", "INTEGER"),
+            ("dst_summer_avg_r", "DOUBLE"),
+            ("dst_verdict", "TEXT"),
+        ]
+        for table in ["experimental_strategies", "validated_setups"]:
+            for col, typedef in dst_cols:
+                try:
+                    con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typedef}")
+                except duckdb.CatalogException:
+                    pass  # column already exists
+
         con.commit()
         logger.info("Trading app schema initialized successfully")
 
@@ -334,6 +363,8 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
                 "yearly_results",
                 "entry_signals", "scratch_count", "early_exit_count",
                 "trade_day_hash", "is_canonical", "canonical_strategy_id",
+                "dst_winter_n", "dst_winter_avg_r",
+                "dst_summer_n", "dst_summer_avg_r", "dst_verdict",
                 "validation_status", "validation_notes"
             }
             actual_cols = {row[0] for row in result}
@@ -361,6 +392,8 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
                 "yearly_results", "execution_spec",
                 "family_hash", "is_family_head",
                 "regime_waivers", "regime_waiver_count",
+                "dst_winter_n", "dst_winter_avg_r",
+                "dst_summer_n", "dst_summer_avg_r", "dst_verdict",
                 "status", "retired_at", "retirement_reason"
             }
             actual_cols = {row[0] for row in result}

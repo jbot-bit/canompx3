@@ -26,6 +26,9 @@ import duckdb
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.init_db import ORB_LABELS
 from pipeline.asset_configs import get_enabled_sessions
+from pipeline.dst import (
+    DST_AFFECTED_SESSIONS, is_winter_for_session, classify_dst_verdict,
+)
 from trading_app.config import get_filters_for_grid, ENTRY_MODELS, VolumeFilter
 from trading_app.db_manager import init_trading_app_schema, compute_trade_day_hash
 from trading_app.outcome_builder import RR_TARGETS, CONFIRM_BARS_OPTIONS
@@ -51,9 +54,12 @@ _INSERT_SQL = """INSERT OR REPLACE INTO experimental_strategies
      yearly_results,
      entry_signals, scratch_count, early_exit_count,
      trade_day_hash, is_canonical, canonical_strategy_id,
+     dst_winter_n, dst_winter_avg_r, dst_summer_n, dst_summer_avg_r, dst_verdict,
      validation_status, validation_notes,
      created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
+            ?, ?,
             COALESCE(?, CURRENT_TIMESTAMP))"""
 
 def _mark_canonical(strategies: list[dict]) -> None:
@@ -243,6 +249,55 @@ def compute_metrics(outcomes: list[dict]) -> dict:
         "scratch_count": len(scratches),
         "early_exit_count": len(early_exits),
     }
+
+def compute_dst_split_from_outcomes(outcomes: list[dict], orb_label: str) -> dict:
+    """Compute winter/summer split metrics from in-memory outcome list.
+
+    Returns dict with: winter_n, winter_avg_r, summer_n, summer_avg_r, verdict.
+    Returns verdict='CLEAN' for non-affected sessions.
+    """
+    if orb_label not in DST_AFFECTED_SESSIONS:
+        return {
+            "winter_n": None, "winter_avg_r": None,
+            "summer_n": None, "summer_avg_r": None,
+            "verdict": "CLEAN",
+        }
+
+    winter_rs = []
+    summer_rs = []
+
+    for o in outcomes:
+        if o["outcome"] not in ("win", "loss"):
+            continue
+        td = o["trading_day"]
+        if hasattr(td, 'date'):
+            td = td.date()
+        elif not isinstance(td, date):
+            td = date.fromisoformat(str(td)[:10])
+
+        is_w = is_winter_for_session(td, orb_label)
+        if is_w is None:
+            continue
+        if is_w:
+            winter_rs.append(o["pnl_r"])
+        else:
+            summer_rs.append(o["pnl_r"])
+
+    winter_n = len(winter_rs)
+    summer_n = len(summer_rs)
+    winter_avg_r = sum(winter_rs) / winter_n if winter_n > 0 else None
+    summer_avg_r = sum(summer_rs) / summer_n if summer_n > 0 else None
+
+    verdict = classify_dst_verdict(winter_avg_r, summer_avg_r, winter_n, summer_n)
+
+    return {
+        "winter_n": winter_n,
+        "winter_avg_r": round(winter_avg_r, 4) if winter_avg_r is not None else None,
+        "summer_n": summer_n,
+        "summer_avg_r": round(summer_avg_r, 4) if summer_avg_r is not None else None,
+        "verdict": verdict,
+    }
+
 
 def make_strategy_id(
     instrument: str,
@@ -529,6 +584,9 @@ def run_discovery(
                             trade_days = sorted({o["trading_day"] for o in outcomes})
                             trade_day_hash = compute_trade_day_hash(trade_days)
 
+                            # Compute DST regime split for affected sessions
+                            dst_split = compute_dst_split_from_outcomes(outcomes, orb_label)
+
                             all_strategies.append({
                                 "strategy_id": strategy_id,
                                 "instrument": instrument,
@@ -541,6 +599,7 @@ def run_discovery(
                                 "filter_params": strategy_filter.to_json(),
                                 "metrics": metrics,
                                 "trade_day_hash": trade_day_hash,
+                                "dst_split": dst_split,
                             })
 
                 if combo_idx % 500 == 0:
@@ -566,6 +625,7 @@ def run_discovery(
             insert_batch = []
             for s in all_strategies:
                 m = s["metrics"]
+                dst = s["dst_split"]
                 insert_batch.append([
                     s["strategy_id"], s["instrument"], s["orb_label"],
                     s["orb_minutes"], s["rr_target"], s["confirm_bars"],
@@ -581,6 +641,9 @@ def run_discovery(
                     m["early_exit_count"],
                     s["trade_day_hash"], s["is_canonical"],
                     s["canonical_strategy_id"],
+                    dst["winter_n"], dst["winter_avg_r"],
+                    dst["summer_n"], dst["summer_avg_r"],
+                    dst["verdict"],
                     None, None,  # Reset validation_status/notes
                     existing_created.get(s["strategy_id"]),  # Preserve or DEFAULT
                 ])

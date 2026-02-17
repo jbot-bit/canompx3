@@ -32,6 +32,8 @@ For research deep-dives and data tables, see `docs/RESEARCH_ARCHIVE.md`.
 **Module:** `pipeline/dst.py` (SESSION_CATALOG + resolvers)
 **Per-asset enabled sessions:** `pipeline/asset_configs.py`
 
+**DST Audit (Feb 2026):** Fixed sessions 0900/1800/0030 drift ±1 hour vs actual market opens during DST (US ~Mar-Nov, UK ~Mar-Oct). Dynamic sessions track the real event. Initial audit showed fixed slightly outperformed dynamic on matched summer days (+0.13R MGC, +0.14R MES), and winter edges are stronger (MES +0.35R, MGC +0.18R, MNQ +0.09R). **CAUTION: do NOT rule out dynamic sessions or event-time ORBs.** In winter, fixed = event time (identical), so the comparison is summer-only. Both fixed AND event times may have independent edge — and there may be undiscovered profitable times at other clock positions. A full 24-hour ORB time scan (`research/research_orb_time_scan.py`) is pending to answer this definitively. Full results: `docs/RESEARCH_ARCHIVE.md`.
+
 ### Entry Models
 | Code | How It Works |
 |------|-------------|
@@ -106,14 +108,42 @@ Example: 10pt ORB, RR2.0 = 20pt target, 10pt stop.
 | Multi-day trend alignment | No improvement on established sessions. |
 | Alt strategies (Gap Fade, VWAP Pullback, Value Area, Concretum) | ALL NO-GO. ORB breakout IS the edge in gold. |
 | Non-ORB structural (Time-of-day, Range Expansion, Opening Drive) | ALL NO-GO. No risk structure, friction kills. |
+| Cross-instrument 1000 LONG portfolio (MGC+MNQ+MES) | NO-GO for diversification. MNQ/MES correlation = +0.83 (same trade). MGC/equity = +0.40-0.44 (moderate, not free). Adding MNQ+MES to 1000 LONG worsens Sharpe. Pick ONE equity micro, don't stack. Need truly uncorrelated asset for portfolio diversification. |
 
 > **Key insight**: Gold trends intraday more than it mean-reverts. The only confirmed edges are momentum breakouts with size filters. Full research details: `docs/RESEARCH_ARCHIVE.md`.
+
+---
+
+## DST CONTAMINATION WARNING (Feb 2026)
+
+**Stats below for sessions 0900, 1800, 0030, 2300 are BLENDED winter+summer averages.** Three sessions (0900/1800/0030) align with their market event in winter but miss by 1 hour in summer. 2300 is a special case — it NEVER aligns with the US data release but DST flips which side it sits on.
+
+| Session | Winter (std time) | Summer (DST) | Shift |
+|---------|------------------|--------------|-------|
+| 0900 | = CME open exactly | CME opened 1hr ago (at 0800) | US DST |
+| 1800 | = London open exactly | London opened 1hr ago (at 1700) | UK DST |
+| 0030 | = US equity open exactly | Equity opened 1hr ago (at 2330) | US DST |
+| 2300 | 30min BEFORE US data (data at 23:30) | 30min AFTER US data (data at 22:30) | US DST |
+
+**2300 detail:** 2300 Bris = 13:00 UTC always. US data 8:30 ET = 13:30 UTC winter / 12:30 UTC summer. Winter = pre-positioning (less volume). Summer = post-data reaction (+76-90% volume). Edge is WINTER-DOM on MGC G8+ — the quieter pre-data window produces better breakouts.
+
+**Sessions 1000, 1100, 1130 are CLEAN** — Asia has no DST. Dynamic sessions are also clean (resolvers adjust).
+
+**Remediation status (Feb 2026 — DONE):**
+- ✅ Winter/summer split baked into `strategy_validator.py` (DST columns on both strategy tables)
+- ✅ 1272 strategies re-validated: 275 STABLE, 155 WINTER-DOM, 130 SUMMER-DOM, 10 SUMMER-ONLY. No validated strategies broken.
+- ✅ Volume analysis confirms event-driven edges (`research/output/volume_dst_findings.md`)
+- ✅ 24-hour ORB time scan with winter/summer split (`research/research_orb_time_scan.py`)
+- ✅ Red flags: all 10 are MES 0900 E1 experimental (never in production). MGC 1800 confirmed STABLE.
+- Rule: ALL future research at 0900/1800/0030/2300 MUST split by DST regime and report both halves.
 
 ---
 
 ## Session Playbook
 
 ### 0900 Asia Open — Momentum Breakout
+**⚠️ DST-AFFECTED: Winter = CME open exactly. Summer = 1hr after CME open (63% volume drop).**
+**DST revalidation (Feb 2026 — DONE):** MGC 0900 validated strategies are mostly STABLE or WINTER-DOMINANT. **MES 0900 is TOXIC in winter** — all 10 red-flag strategies (edge dies in one regime) are MES 0900 E1. Winter = when 0900 aligns with CME open exactly. The event alignment hurts MES breakouts. Volume analysis confirms 0900's edge is the CME open event (63% volume drop in summer when CME opens at 0800 instead).
 
 | Parameter | Value |
 |-----------|-------|
@@ -155,6 +185,8 @@ Config: `SESSION_EXIT_MODE["1000"] = "ib_conditional"`, `IB_DURATION_MINUTES = 1
 **Nested 15m ORB:** 1000 is the ONLY session where 15m ORB beats 5m (+0.208R premium, 90% of pairs improve).
 
 ### 1800 Evening — Retrace Entry (GLOBEX Open)
+**⚠️ DST-AFFECTED: Winter = London open exactly. Summer = 1hr after London open. MGC volume 31% higher in winter.**
+**DST revalidation (Feb 2026 — DONE):** MGC 1800 validated strategies confirmed **STABLE** using UK DST split. E1 RR2.0 CB1 G5: +1.59W(15) / +1.54S(13). E3 RR2.0 CB1 G5: +1.57W(15) / +1.48S(11). Edge is genuine year-round. London is the primary gold market — MGC shows the strongest London-open sensitivity.
 
 | Parameter | Value |
 |-----------|-------|
@@ -171,6 +203,7 @@ Config: `SESSION_EXIT_MODE["1000"] = "ib_conditional"`, `IB_DURATION_MINUTES = 1
 **Rolling eval:** AUTO-DEGRADED (81% double-break rate). Only works in trending regimes.
 
 ### 2300 Late Night — Retrace Entry
+**⚠️ DST-AFFECTED: Winter = 30min pre-US-data (quieter, fewer trades). Summer = 30min post-US-data (higher volume). DST revalidation (Feb 2026): MGC 2300 validated strategies are WINTER-DOM. 4 validated strategies (all G8+). Edge works in the pre-data positioning window.**
 
 | Parameter | Value |
 |-----------|-------|
