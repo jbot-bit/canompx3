@@ -24,6 +24,14 @@ export PATH="$PATH:$_SAVED_PATH"
 echo "=== PRE-COMMIT CHECKS ==="
 echo ""
 
+# Resolve python — prefer venv to avoid Windows Store redirect
+PYTHON="python"
+if [ -f "$SCRIPT_DIR/.venv/Scripts/python.exe" ]; then
+    PYTHON="$SCRIPT_DIR/.venv/Scripts/python.exe"
+elif [ -f "$SCRIPT_DIR/.venv/bin/python" ]; then
+    PYTHON="$SCRIPT_DIR/.venv/bin/python"
+fi
+
 # 0. Ruff lint check (~1 second)
 echo "[0/3] Ruff lint..."
 RUFF="ruff"
@@ -39,16 +47,16 @@ echo "  PASSED"
 
 # 1. Drift check (~2 seconds)
 echo "[1/3] Drift check..."
-if ! python pipeline/check_drift.py > /dev/null 2>&1; then
+if ! "$PYTHON" pipeline/check_drift.py > /dev/null 2>&1; then
     echo "BLOCKED: Drift detected."
-    python pipeline/check_drift.py
+    "$PYTHON" pipeline/check_drift.py
     exit 1
 fi
 echo "  PASSED"
 
 # 2. Fast tests — all Tier 1 tests except slow integration/paper_trader
 echo "[2/3] Fast tests..."
-python -m pytest tests/ --ignore=tests/test_trader_logic.py --ignore=tests/test_trading_app/test_integration.py --ignore=tests/test_trading_app/test_paper_trader.py -x -q -n auto --dist loadscope 2>&1 | tail -5
+"$PYTHON" -m pytest tests/ --ignore=tests/test_trader_logic.py --ignore=tests/test_trading_app/test_integration.py --ignore=tests/test_trading_app/test_paper_trader.py -x -q -n auto --dist loadscope 2>&1 | tail -5
 if [ ${PIPESTATUS[0]} -ne 0 ]; then
     echo "BLOCKED: Tests failed."
     exit 1
@@ -59,10 +67,10 @@ echo "[3/3] Syntax check..."
 STAGED_PY=$(git diff --cached --name-only --diff-filter=ACM | grep '\.py$' || true)
 if [ -n "$STAGED_PY" ]; then
     for f in $STAGED_PY; do
-        python -m py_compile "$f" 2>/dev/null
+        "$PYTHON" -m py_compile "$f" 2>/dev/null
         if [ $? -ne 0 ]; then
             echo "BLOCKED: Syntax error in $f"
-            python -m py_compile "$f"
+            "$PYTHON" -m py_compile "$f"
             exit 1
         fi
     done

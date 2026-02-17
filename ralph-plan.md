@@ -27,7 +27,7 @@ Full codebase audit against CLAUDE.md authority. Reviews each module area for co
     "id": 2,
     "category": "verification",
     "description": "Audit pipeline/ modules against CLAUDE.md architecture rules",
-    "passes": false,
+    "passes": true,
     "steps": [
       "Step 1: Read pipeline/ingest_dbn.py, pipeline/build_bars_5m.py, pipeline/build_daily_features.py",
       "Step 2: Verify fail-closed principle: validation failures abort immediately",
@@ -45,7 +45,7 @@ Full codebase audit against CLAUDE.md authority. Reviews each module area for co
     "id": 3,
     "category": "verification",
     "description": "Audit trading_app/ modules against CLAUDE.md and TRADING_RULES.md",
-    "passes": false,
+    "passes": true,
     "steps": [
       "Step 1: Read trading_app/outcome_builder.py — verify pre-computed outcomes pattern",
       "Step 2: Read trading_app/strategy_discovery.py — verify grid search, DST split compliance",
