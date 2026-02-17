@@ -21,6 +21,7 @@ Usage:
 
 import sys
 import json
+from datetime import date
 from pathlib import Path
 
 from pipeline.log import get_logger
@@ -32,11 +33,152 @@ import duckdb
 
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.cost_model import get_cost_spec, stress_test_costs
+from pipeline.dst import (
+    DST_AFFECTED_SESSIONS,
+    is_winter_for_session, classify_dst_verdict,
+)
 from trading_app.db_manager import init_trading_app_schema
 from trading_app.walkforward import run_walkforward, append_walkforward_result
 
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)
+
+def _parse_orb_size_bounds(filter_type: str, filter_params: str | None) -> tuple[float | None, float | None]:
+    """Extract min_size/max_size from filter_type or filter_params JSON.
+
+    Returns (min_size, max_size). Either may be None.
+    """
+    # Try filter_params JSON first (most reliable)
+    if filter_params:
+        try:
+            params = json.loads(filter_params) if isinstance(filter_params, str) else filter_params
+            min_s = params.get("min_size")
+            max_s = params.get("max_size")
+            if min_s is not None or max_s is not None:
+                return (float(min_s) if min_s else None, float(max_s) if max_s else None)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+
+    # Fallback: parse from filter_type string (ORB_G5 -> min=5, ORB_G4_L12 -> min=4/max=12)
+    if filter_type and filter_type.startswith("ORB_G"):
+        rest = filter_type[5:]  # after "ORB_G"
+        if "_L" in rest:
+            parts = rest.split("_L")
+            try:
+                return (float(parts[0]), float(parts[1]))
+            except (ValueError, IndexError):
+                pass
+        else:
+            try:
+                return (float(rest), None)
+            except ValueError:
+                pass
+
+    return (None, None)
+
+
+def compute_dst_split(con, strategy_id: str, instrument: str, orb_label: str,
+                      entry_model: str, rr_target: float, confirm_bars: int,
+                      filter_type: str, filter_params: str | None = None,
+                      orb_minutes: int = 5) -> dict:
+    """Compute winter/summer split metrics for a strategy at a DST-affected session.
+
+    Queries orb_outcomes joined with daily_features to apply the ORB size filter,
+    then tags each trading day as winter or summer and computes separate metrics.
+
+    CRITICAL: The daily_features JOIN must include orb_minutes to avoid duplicate
+    rows (daily_features has rows for orb_minutes 5, 15, 30).  Without this filter,
+    each outcome joins to 3 daily_features rows, inflating counts ~3-5x.
+
+    Returns dict with keys: winter_n, winter_avg_r, summer_n, summer_avg_r, verdict.
+    Returns verdict='CLEAN' for non-affected sessions.
+    """
+    if orb_label not in DST_AFFECTED_SESSIONS:
+        return {
+            "winter_n": None, "winter_avg_r": None,
+            "summer_n": None, "summer_avg_r": None,
+            "verdict": "CLEAN",
+        }
+
+    # Build ORB size filter clause from strategy's filter
+    min_size, max_size = _parse_orb_size_bounds(filter_type, filter_params)
+    size_col = f"orb_{orb_label}_size"
+    dbl_col = f"orb_{orb_label}_double_break"
+
+    # Build query with daily_features join for filter + double-break exclusion
+    size_clauses = []
+    size_params = []
+    if min_size is not None:
+        size_clauses.append(f"df.{size_col} >= ?")
+        size_params.append(min_size)
+    if max_size is not None:
+        size_clauses.append(f"df.{size_col} < ?")
+        size_params.append(max_size)
+
+    size_where = (" AND " + " AND ".join(size_clauses)) if size_clauses else ""
+
+    rows = con.execute(f"""
+        SELECT o.trading_day, o.pnl_r
+        FROM orb_outcomes o
+        JOIN daily_features df
+          ON o.trading_day = df.trading_day
+          AND df.symbol = ?
+          AND df.orb_minutes = ?
+        WHERE o.symbol = ?
+          AND o.orb_label = ?
+          AND o.entry_model = ?
+          AND o.rr_target = ?
+          AND o.confirm_bars = ?
+          AND o.outcome IN ('win', 'loss')
+          AND NOT COALESCE(df.{dbl_col}, false)
+          {size_where}
+        ORDER BY o.trading_day
+    """, [instrument, orb_minutes, instrument, orb_label,
+          entry_model, rr_target, confirm_bars] + size_params).fetchall()
+
+    if not rows:
+        return {
+            "winter_n": 0, "winter_avg_r": None,
+            "summer_n": 0, "summer_avg_r": None,
+            "verdict": "LOW-N",
+        }
+
+    # Split by DST regime
+    winter_rs = []
+    summer_rs = []
+
+    for trading_day, pnl_r in rows:
+        # trading_day may come back as date or datetime
+        if hasattr(trading_day, 'date'):
+            td = trading_day.date()
+        elif isinstance(trading_day, date):
+            td = trading_day
+        else:
+            td = date.fromisoformat(str(trading_day))
+
+        is_w = is_winter_for_session(td, orb_label)
+        if is_w is None:
+            continue  # Should not happen for affected sessions
+        if is_w:
+            winter_rs.append(pnl_r)
+        else:
+            summer_rs.append(pnl_r)
+
+    winter_n = len(winter_rs)
+    summer_n = len(summer_rs)
+    winter_avg_r = sum(winter_rs) / winter_n if winter_n > 0 else None
+    summer_avg_r = sum(summer_rs) / summer_n if summer_n > 0 else None
+
+    verdict = classify_dst_verdict(winter_avg_r, summer_avg_r, winter_n, summer_n)
+
+    return {
+        "winter_n": winter_n,
+        "winter_avg_r": round(winter_avg_r, 4) if winter_avg_r is not None else None,
+        "summer_n": summer_n,
+        "summer_avg_r": round(summer_avg_r, 4) if summer_avg_r is not None else None,
+        "verdict": verdict,
+    }
+
 
 def classify_regime(atr_20: float) -> str:
     """Classify market regime from mean ATR(20)."""
@@ -312,13 +454,57 @@ def run_validation(
                     status = "REJECTED"
                     notes = f"Phase 4b: {wf_result.rejection_reason}"
 
+            # DST regime split (INFO phase — does not reject, adds visibility)
+            # Prefer discovery-computed values (correct for ALL filter types
+            # including VolumeFilter which compute_dst_split cannot replicate).
+            # Only recompute if discovery left them NULL.
+            if row_dict.get("dst_verdict") is not None:
+                dst_split = {
+                    "winter_n": row_dict.get("dst_winter_n"),
+                    "winter_avg_r": row_dict.get("dst_winter_avg_r"),
+                    "summer_n": row_dict.get("dst_summer_n"),
+                    "summer_avg_r": row_dict.get("dst_summer_avg_r"),
+                    "verdict": row_dict.get("dst_verdict"),
+                }
+            else:
+                dst_split = compute_dst_split(
+                    con, strategy_id, instrument,
+                    orb_label=row_dict["orb_label"],
+                    entry_model=row_dict.get("entry_model", "E1"),
+                    rr_target=row_dict["rr_target"],
+                    confirm_bars=row_dict["confirm_bars"],
+                    filter_type=row_dict.get("filter_type", "NO_FILTER"),
+                    filter_params=row_dict.get("filter_params"),
+                    orb_minutes=row_dict.get("orb_minutes", 5),
+                )
+
+            # Log DST info for affected sessions
+            if dst_split["verdict"] not in ("CLEAN", None):
+                w_r = dst_split["winter_avg_r"]
+                s_r = dst_split["summer_avg_r"]
+                w_str = f"{w_r:+.3f}" if w_r is not None else "N/A"
+                s_str = f"{s_r:+.3f}" if s_r is not None else "N/A"
+                logger.info(
+                    f"  DST split [{strategy_id}]: "
+                    f"W={w_str}({dst_split['winter_n']}) "
+                    f"S={s_str}({dst_split['summer_n']}) "
+                    f"-> {dst_split['verdict']}"
+                )
+
             if not dry_run:
-                # Update experimental_strategies
+                # Update experimental_strategies (include DST columns)
                 con.execute(
                     """UPDATE experimental_strategies
-                       SET validation_status = ?, validation_notes = ?
+                       SET validation_status = ?, validation_notes = ?,
+                           dst_winter_n = ?, dst_winter_avg_r = ?,
+                           dst_summer_n = ?, dst_summer_avg_r = ?,
+                           dst_verdict = ?
                        WHERE strategy_id = ?""",
-                    [status, notes, strategy_id],
+                    [status, notes,
+                     dst_split["winter_n"], dst_split["winter_avg_r"],
+                     dst_split["summer_n"], dst_split["summer_avg_r"],
+                     dst_split["verdict"],
+                     strategy_id],
                 )
 
                 if status == "PASSED":
@@ -346,8 +532,11 @@ def run_validation(
                             sharpe_ratio, max_drawdown_r,
                             trades_per_year, sharpe_ann,
                             yearly_results, status,
-                            regime_waivers, regime_waiver_count)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            regime_waivers, regime_waiver_count,
+                            dst_winter_n, dst_winter_avg_r,
+                            dst_summer_n, dst_summer_avg_r,
+                            dst_verdict)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         [
                             strategy_id, strategy_id,
                             row_dict["instrument"], row_dict["orb_label"],
@@ -366,6 +555,9 @@ def run_validation(
                             yearly, "active",
                             json.dumps(regime_waivers) if regime_waivers else None,
                             len(regime_waivers),
+                            dst_split["winter_n"], dst_split["winter_avg_r"],
+                            dst_split["summer_n"], dst_split["summer_avg_r"],
+                            dst_split["verdict"],
                         ],
                     )
 
