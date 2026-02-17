@@ -1,6 +1,75 @@
 # Ralph Audit Report
 
 Generated: 2026-02-18
+Finalized: 2026-02-18T04:04Z (Brisbane) / 2026-02-17T18:04Z (UTC)
+Commit count at time of audit: 119 (branch: main)
+
+---
+
+## Summary
+
+### Overall Verdict: PASS (with minor findings)
+
+The canompx3 codebase is compliant with CLAUDE.md, TRADING_RULES.md, and RESEARCH_RULES.md across all seven audit areas. No critical violations were found. The architecture is sound: fail-closed, idempotent, one-way dependency, proper timezone handling, and comprehensive security posture.
+
+### Per-Area Verdicts
+
+| # | Area | Verdict | Notes |
+|---|------|---------|-------|
+| 1 | Uncommitted Changes | **PASS** | All 5 files reviewed, consistent with CLAUDE.md and TRADING_RULES.md |
+| 2 | Pipeline Modules | **PASS** | 8 modules reviewed, all architecture rules upheld |
+| 3 | Trading App Modules | **PASS** | 5 core modules reviewed, FIX5 + DST rules compliant |
+| 4 | Test Coverage | **PASS** | 66 test files, no unbuilt feature refs, DST coverage comprehensive |
+| 5 | Scripts & Infrastructure | **PASS** | ~40 files reviewed, no stale paths, pre-commit + CI correct |
+| 6 | Documentation Consistency | **PASS** | Data flow diagram correct, DST section matches code |
+| 7 | Security & Guardrails | **PASS** | No SQL injection, no command injection, no committed credentials |
+
+### Critical Findings (Immediate Attention)
+
+None. No critical violations found across any audit area.
+
+### Findings Requiring Action (Before Next Major Release)
+
+1. **REPO_MAP.md is stale** (Task 6, Finding 4) — Missing `pipeline/dst.py`, wrong generator path in header, stale LOC counts. Fix: run `python scripts/tools/gen_repo_map.py`.
+2. **TRADING_RULES.md session count outdated** (Task 6, Finding 2) — Says "11 sessions (4 dynamic)" but code has 13 sessions (6 dynamic). Missing US_POST_EQUITY and CME_CLOSE from dynamic sessions table.
+3. **CLAUDE.md missing US_POST_EQUITY** (Task 6, Finding 1) — Clean sessions list names 5 dynamic sessions; code has 6. Add US_POST_EQUITY.
+4. **Telegram bot token hardcoded** (Task 5/7) — `scripts/infra/telegram_feed.py` has token in source. File is untracked (not committed). Move to `.env` before committing.
+
+### Minor Observations (Nice-to-Fix)
+
+1. **ui/db_reader.py f-string SQL** — Read-only connections, local-only UI, but could use parameterized queries for defense-in-depth.
+2. **sys.path.insert in 2 files** — `scripts/tools/hypothesis_test.py` and `tests/test_trading_app/test_portfolio.py`. Legacy pattern; works but `pip install -e .` is cleaner.
+3. **walk_forward.py vs walkforward.py** — Two similarly named files; only `walkforward.py` is imported. Potential dead code.
+4. **ROADMAP.md Phase 3 stale counts** — "4 tables" (now 6), "6-phase validation" (now 7-phase). Cosmetic.
+5. **Ingestion gates partial unit test coverage** — Gates 1/3/5/6/7 tested via integration but lack dedicated unit tests.
+6. **Secondary modules use try/finally** — Core write paths use `with` context managers (correct); some secondary read-only modules use `try/finally` + `.close()` (adequate but less Pythonic).
+
+### Areas Fully Compliant
+
+- **Fail-closed principle** — All pipeline and trading_app modules abort on validation failure
+- **Idempotent operations** — INSERT OR REPLACE / DELETE+INSERT throughout
+- **One-way dependency** — pipeline/ never imports from trading_app/ (grep-verified)
+- **Timezone hygiene** — All DB timestamps UTC, Brisbane conversions use zoneinfo
+- **DST contamination rules** — Split by regime for affected sessions, dynamic resolvers correct
+- **FIX5 trade day invariant** — Outcomes universal, filters applied at discovery layer
+- **Classification thresholds** — CORE>=100, REGIME 30-99, INVALID<30 (matches CLAUDE.md)
+- **Pre-commit hook** — 4-stage fail-closed pipeline (ruff, drift, tests, syntax)
+- **CI pipeline** — Drift check + full test suite on push/PR
+- **.gitignore coverage** — All sensitive files covered (.env, gold.db, credentials, caches)
+- **No SQL injection** — Parameterized queries in production; hardcoded identifiers only
+- **No command injection** — All subprocess calls use list-form args
+- **No committed credentials** — .env gitignored, no secrets in tracked files
+- **Connection management** — Core paths use context managers, enforced by drift check
+- **GC→MGC source_symbol** — Original contract preserved correctly
+- **Validation gates** — 7 ingestion + 4 aggregation gates operational
+- **DST test coverage** — 52+ tests covering all 6 dynamic resolvers
+- **Double-break exclusion** — Enforced in discovery grid search
+
+### Caveats
+
+Python execution was blocked by Windows sandbox permissions throughout this audit. Drift check (`pipeline/check_drift.py`) and test suite (`pytest tests/`) could not be run directly. All findings are based on static code review and prior execution results (1177 tests passing, 23 drift checks passing as of latest committed code). Manual verification recommended.
+
+---
 
 ## 1. Uncommitted Changes
 
