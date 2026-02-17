@@ -23,6 +23,9 @@ import sys
 import json
 from pathlib import Path
 
+from pipeline.log import get_logger
+logger = get_logger(__name__)
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 import duckdb
@@ -227,8 +230,7 @@ def run_validation(
 
     cost_spec = get_cost_spec(instrument)
 
-    con = duckdb.connect(str(db_path))
-    try:
+    with duckdb.connect(str(db_path)) as con:
         if not dry_run:
             init_trading_app_schema(db_path=db_path)
 
@@ -375,16 +377,13 @@ def run_validation(
         if not dry_run:
             con.commit()
 
-        print(f"Validation complete: {passed} PASSED, {rejected} REJECTED, "
-              f"{skipped_aliases} aliases skipped "
-              f"(of {len(rows)} strategies)")
+        logger.info(f"Validation complete: {passed} PASSED, {rejected} REJECTED, "
+                    f"{skipped_aliases} aliases skipped "
+                    f"(of {len(rows)} strategies)")
         if dry_run:
-            print("  (DRY RUN — no data written)")
+            logger.info("  (DRY RUN — no data written)")
 
         return passed, rejected
-
-    finally:
-        con.close()
 
 def main():
     import argparse

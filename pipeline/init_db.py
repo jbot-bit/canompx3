@@ -22,6 +22,9 @@ import duckdb
 # Add project root to path
 from pipeline.paths import GOLD_DB_PATH
 
+from pipeline.log import get_logger
+logger = get_logger(__name__)
+
 # =============================================================================
 # SCHEMA DEFINITIONS (CANONICAL - matches CLAUDE.md)
 # =============================================================================
@@ -165,72 +168,71 @@ def init_db(db_path: Path, force: bool = False):
     """Initialize database with schema."""
 
     print("=" * 60)
-    print("DATABASE INITIALIZATION")
+    logger.info("DATABASE INITIALIZATION")
     print("=" * 60)
     print()
-    print(f"Database path: {db_path}")
-    print(f"Force recreate: {force}")
+    logger.info(f"Database path: {db_path}")
+    logger.info(f"Force recreate: {force}")
     print()
 
     # Connect to database (creates file if doesn't exist)
-    con = duckdb.connect(str(db_path))
+    with duckdb.connect(str(db_path)) as con:
 
-    if force:
-        print("FORCE MODE: Dropping ALL tables...")
-        # Drop trading_app tables first (FK dependencies on daily_features)
-        for t in ["validated_setups_archive", "validated_setups",
-                   "experimental_strategies", "orb_outcomes"]:
-            con.execute(f"DROP TABLE IF EXISTS {t}")
-        # Drop pipeline tables
-        con.execute("DROP TABLE IF EXISTS daily_features")
-        con.execute("DROP TABLE IF EXISTS bars_5m")
-        con.execute("DROP TABLE IF EXISTS bars_1m")
-        print("  All tables dropped (pipeline + trading_app).")
+        if force:
+            logger.info("FORCE MODE: Dropping ALL tables...")
+            # Drop trading_app tables first (FK dependencies on daily_features)
+            for t in ["validated_setups_archive", "validated_setups",
+                       "experimental_strategies", "orb_outcomes"]:
+                con.execute(f"DROP TABLE IF EXISTS {t}")
+            # Drop pipeline tables
+            con.execute("DROP TABLE IF EXISTS daily_features")
+            con.execute("DROP TABLE IF EXISTS bars_5m")
+            con.execute("DROP TABLE IF EXISTS bars_1m")
+            logger.info("  All tables dropped (pipeline + trading_app).")
+            print()
+
+        # Create tables
+        logger.info("Creating tables...")
+
+        con.execute(BARS_1M_SCHEMA)
+        logger.info("  bars_1m: created (or already exists)")
+
+        con.execute(BARS_5M_SCHEMA)
+        logger.info("  bars_5m: created (or already exists)")
+
+        con.execute(DAILY_FEATURES_SCHEMA)
+        logger.info("  daily_features: created (or already exists)")
+
+        con.commit()
         print()
 
-    # Create tables
-    print("Creating tables...")
+        # Verify schema
+        logger.info("Verifying schema...")
 
-    con.execute(BARS_1M_SCHEMA)
-    print("  bars_1m: created (or already exists)")
+        tables = con.execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
+        ).fetchall()
+        table_names = [t[0] for t in tables]
 
-    con.execute(BARS_5M_SCHEMA)
-    print("  bars_5m: created (or already exists)")
+        logger.info(f"  Tables found: {table_names}")
 
-    con.execute(DAILY_FEATURES_SCHEMA)
-    print("  daily_features: created (or already exists)")
+        # Check columns for each table
+        for table_name in ['bars_1m', 'bars_5m', 'daily_features']:
+            if table_name in table_names:
+                cols = con.execute(
+                    f"SELECT column_name, data_type FROM information_schema.columns WHERE table_name = '{table_name}'"
+                ).fetchall()
+                logger.info(f"  {table_name} columns ({len(cols)}): {[c[0] for c in cols]}")
 
-    con.commit()
-    print()
-
-    # Verify schema
-    print("Verifying schema...")
-
-    tables = con.execute(
-        "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
-    ).fetchall()
-    table_names = [t[0] for t in tables]
-
-    print(f"  Tables found: {table_names}")
-
-    # Check columns for each table
-    for table_name in ['bars_1m', 'bars_5m', 'daily_features']:
-        if table_name in table_names:
-            cols = con.execute(
-                f"SELECT column_name, data_type FROM information_schema.columns WHERE table_name = '{table_name}'"
-            ).fetchall()
-            print(f"  {table_name} columns ({len(cols)}): {[c[0] for c in cols]}")
-
-    con.close()
 
     print()
     print("=" * 60)
-    print("INITIALIZATION COMPLETE")
+    logger.info("INITIALIZATION COMPLETE")
     print("=" * 60)
     print()
-    print("Next steps:")
-    print("  1. Run ingestion: python OHLCV_MGC_FULL/ingest_dbn_mgc.py")
-    print("  2. Check database: python pipeline/check_db.py")
+    logger.info("Next steps:")
+    logger.info("  1. Run ingestion: python OHLCV_MGC_FULL/ingest_dbn_mgc.py")
+    logger.info("  2. Check database: python pipeline/check_db.py")
 
 def main():
     parser = argparse.ArgumentParser(description="Initialize DuckDB schema")

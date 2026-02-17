@@ -35,6 +35,9 @@ from pipeline.init_db import ORB_LABELS
 from pipeline.cost_model import get_cost_spec, pnl_points_to_r, CostSpec
 from pipeline.dst import is_us_dst, is_uk_dst, DYNAMIC_ORB_RESOLVERS, get_break_group
 
+from pipeline.log import get_logger
+logger = get_logger(__name__)
+
 # =============================================================================
 # CONSTANTS
 # =============================================================================
@@ -706,22 +709,22 @@ def build_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
     # Load cost model (optional — only if instrument is validated)
     try:
         cost_spec = get_cost_spec(symbol)
-        print(f"  Cost model: {symbol} (friction={cost_spec.total_friction:.2f})")
+        logger.info(f"  Cost model: {symbol} (friction={cost_spec.total_friction:.2f})")
     except ValueError:
         cost_spec = None
-        print(f"  Cost model: not available for {symbol} (MAE/MFE will be NULL)")
+        logger.info(f"  Cost model: not available for {symbol} (MAE/MFE will be NULL)")
 
     # Get trading days with data
     trading_days = get_trading_days_in_range(con, symbol, start_date, end_date)
-    print(f"  Trading days with data: {len(trading_days)}")
+    logger.info(f"  Trading days with data: {len(trading_days)}")
 
     if not trading_days:
-        print("  No trading days found. Nothing to build.")
+        logger.info("  No trading days found. Nothing to build.")
         return 0
 
     if dry_run:
-        print(f"  DRY RUN: Would build {len(trading_days)} daily_features rows")
-        print(f"  Date range: {trading_days[0]} to {trading_days[-1]}")
+        logger.info(f"  DRY RUN: Would build {len(trading_days)} daily_features rows")
+        logger.info(f"  Date range: {trading_days[0]} to {trading_days[-1]}")
         return len(trading_days)
 
     # Build features for each trading day
@@ -731,7 +734,7 @@ def build_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
         rows.append(row)
 
         if (i + 1) % 50 == 0:
-            print(f"  Processed {i + 1}/{len(trading_days)} trading days...")
+            logger.info(f"  Processed {i + 1}/{len(trading_days)} trading days...")
 
     # Post-pass: compute gap_open_points and ATR(20)
     # Both need previous day data, so computed after all rows are built.
@@ -793,7 +796,7 @@ def build_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
         """, [symbol, start_date, end_date, orb_minutes])
 
         if delete_count > 0:
-            print(f"  Deleted {delete_count:,} existing daily_features rows")
+            logger.info(f"  Deleted {delete_count:,} existing daily_features rows")
 
         # Insert new rows — use explicit column list for safety
         col_names = ", ".join(features_df.columns)
@@ -804,12 +807,12 @@ def build_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
 
         con.execute("COMMIT")
 
-        print(f"  Inserted {len(rows):,} daily_features rows")
+        logger.info(f"  Inserted {len(rows):,} daily_features rows")
         return len(rows)
 
     except Exception as e:
         con.execute("ROLLBACK")
-        print(f"FATAL: Exception during daily_features build: {e}")
+        logger.error(f"FATAL: Exception during daily_features build: {e}")
         raise
 
 # =============================================================================
@@ -924,31 +927,29 @@ def main():
     end_date = date.fromisoformat(args.end)
 
     if args.orb_minutes not in VALID_ORB_MINUTES:
-        print(f"FATAL: Invalid --orb-minutes {args.orb_minutes}. Must be one of {VALID_ORB_MINUTES}")
+        logger.error(f"FATAL: Invalid --orb-minutes {args.orb_minutes}. Must be one of {VALID_ORB_MINUTES}")
         sys.exit(1)
 
     start_time = datetime.now()
 
     print("=" * 60)
-    print(f"BUILD DAILY_FEATURES ({symbol})")
+    logger.info(f"BUILD DAILY_FEATURES ({symbol})")
     print("=" * 60)
     print()
-    print(f"Instrument: {symbol}")
-    print(f"Date range: {start_date} to {end_date}")
-    print(f"ORB duration: {args.orb_minutes} minutes")
-    print(f"Database: {GOLD_DB_PATH}")
-    print(f"Dry run: {args.dry_run}")
+    logger.info(f"Instrument: {symbol}")
+    logger.info(f"Date range: {start_date} to {end_date}")
+    logger.info(f"ORB duration: {args.orb_minutes} minutes")
+    logger.info(f"Database: {GOLD_DB_PATH}")
+    logger.info(f"Dry run: {args.dry_run}")
     print()
 
     if not GOLD_DB_PATH.exists():
-        print(f"FATAL: Database not found: {GOLD_DB_PATH}")
+        logger.error(f"FATAL: Database not found: {GOLD_DB_PATH}")
         sys.exit(1)
 
-    con = duckdb.connect(str(GOLD_DB_PATH))
-
-    try:
+    with duckdb.connect(str(GOLD_DB_PATH)) as con:
         # Build
-        print("Building daily features...")
+        logger.info("Building daily features...")
         row_count = build_daily_features(
             con, symbol, start_date, end_date, args.orb_minutes, args.dry_run
         )
@@ -956,39 +957,36 @@ def main():
 
         # Verify (skip for dry run)
         if not args.dry_run and row_count > 0:
-            print("Verifying integrity...")
+            logger.info("Verifying integrity...")
             ok, failures = verify_daily_features(con, symbol, start_date, end_date)
 
             if not ok:
-                print("FATAL: Integrity verification FAILED:")
+                logger.error("FATAL: Integrity verification FAILED:")
                 for f in failures:
-                    print(f"  - {f}")
+                    logger.info(f"  - {f}")
                 sys.exit(1)
 
-            print("  No duplicates: PASSED [OK]")
-            print("  Bar counts: PASSED [OK]")
-            print("  ORB sizes: PASSED [OK]")
-            print("  Break directions: PASSED [OK]")
-            print("  Outcomes: PASSED [OK]")
+            logger.info("  No duplicates: PASSED [OK]")
+            logger.info("  Bar counts: PASSED [OK]")
+            logger.info("  ORB sizes: PASSED [OK]")
+            logger.info("  Break directions: PASSED [OK]")
+            logger.info("  Outcomes: PASSED [OK]")
             print()
-            print("ALL INTEGRITY CHECKS PASSED [OK]")
+            logger.info("ALL INTEGRITY CHECKS PASSED [OK]")
         elif args.dry_run:
-            print("Integrity check skipped (dry run)")
+            logger.info("Integrity check skipped (dry run)")
         print()
 
         elapsed = datetime.now() - start_time
 
         print("=" * 60)
-        print(f"SUMMARY: {row_count:,} daily_features rows "
-              f"{'(would be) ' if args.dry_run else ''}built")
-        print(f"ORB duration: {args.orb_minutes}m")
-        print(f"Wall time: {elapsed}")
+        logger.info(f"SUMMARY: {row_count:,} daily_features rows "
+                    f"{'(would be) ' if args.dry_run else ''}built")
+        logger.info(f"ORB duration: {args.orb_minutes}m")
+        logger.info(f"Wall time: {elapsed}")
         print("=" * 60)
 
         sys.exit(0)
-
-    finally:
-        con.close()
 
 if __name__ == "__main__":
     main()

@@ -20,6 +20,9 @@ import argparse
 import sys
 from pathlib import Path
 
+from pipeline.log import get_logger
+logger = get_logger(__name__)
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 import duckdb
@@ -81,8 +84,7 @@ def fetch_strategies(db_path: Path, orb: str | None = None,
                      direction: str | None = None,
                      limit: int = 20) -> pd.DataFrame:
     """Query validated_setups with optional filters. All inputs parameterized."""
-    con = duckdb.connect(str(db_path), read_only=True)
-    try:
+    with duckdb.connect(str(db_path), read_only=True) as con:
         if not _has_table(con, "validated_setups"):
             return pd.DataFrame()
 
@@ -124,15 +126,11 @@ def fetch_strategies(db_path: Path, orb: str | None = None,
         """
         params.append(limit)
         df = con.execute(sql, params).fetchdf()
-    finally:
-        con.close()
-
     return df
 
 def fetch_summary(db_path: Path) -> pd.DataFrame:
     """Session-level summary of validated strategies with unique trade counts."""
-    con = duckdb.connect(str(db_path), read_only=True)
-    try:
+    with duckdb.connect(str(db_path), read_only=True) as con:
         if not _has_table(con, "validated_setups"):
             return pd.DataFrame()
 
@@ -152,27 +150,19 @@ def fetch_summary(db_path: Path) -> pd.DataFrame:
             GROUP BY orb_label
             ORDER BY count DESC
         """).fetchdf()
-    finally:
-        con.close()
-
     return df
 
 def fetch_total_count(db_path: Path) -> int:
     """Total active validated strategies."""
-    con = duckdb.connect(str(db_path), read_only=True)
-    try:
+    with duckdb.connect(str(db_path), read_only=True) as con:
         if not _has_table(con, "validated_setups"):
             return 0
         return con.execute(
             "SELECT COUNT(*) FROM validated_setups WHERE status = 'active'"
         ).fetchone()[0]
-    finally:
-        con.close()
-
 def fetch_unique_trade_count(db_path: Path) -> int:
     """Count unique trade families (by session/EM/RR/CB identity)."""
-    con = duckdb.connect(str(db_path), read_only=True)
-    try:
+    with duckdb.connect(str(db_path), read_only=True) as con:
         if not _has_table(con, "validated_setups"):
             return 0
         return con.execute("""
@@ -181,14 +171,10 @@ def fetch_unique_trade_count(db_path: Path) -> int:
                          CAST(confirm_bars AS TEXT))
             FROM validated_setups WHERE status = 'active'
         """).fetchone()[0]
-    finally:
-        con.close()
-
 def fetch_families(db_path: Path, orb: str | None = None,
                    entry: str | None = None) -> pd.DataFrame:
     """Group strategies by trade identity (session, EM, RR, CB). Parameterized."""
-    con = duckdb.connect(str(db_path), read_only=True)
-    try:
+    with duckdb.connect(str(db_path), read_only=True) as con:
         if not _has_table(con, "validated_setups"):
             return pd.DataFrame()
 
@@ -215,9 +201,6 @@ def fetch_families(db_path: Path, orb: str | None = None,
             GROUP BY orb_label, entry_model, rr_target, confirm_bars
             ORDER BY best_shann DESC NULLS LAST
         """, params).fetchdf()
-    finally:
-        con.close()
-
     return df
 
 def format_table(df: pd.DataFrame) -> str:
@@ -330,7 +313,7 @@ def main():
 
     db_path = Path(args.db) if args.db else GOLD_DB_PATH
     if not db_path.exists():
-        print(f"Database not found: {db_path}")
+        logger.info(f"Database not found: {db_path}")
         sys.exit(1)
 
     total = fetch_total_count(db_path)
@@ -338,19 +321,19 @@ def main():
     sort_col = SORT_COLUMNS[args.sort]
 
     if args.summary:
-        print(f"\n=== Validated Strategies: {total} active ({unique} unique trades) ===\n")
+        logger.info(f"\n=== Validated Strategies: {total} active ({unique} unique trades) ===\n")
         summary_df = fetch_summary(db_path)
-        print(format_summary(summary_df))
+        logger.info(format_summary(summary_df))
         return
 
     if args.family:
-        print(f"\n=== {unique} unique trades ({total} strategy variants) ===\n")
+        logger.info(f"\n=== {unique} unique trades ({total} strategy variants) ===\n")
         families_df = fetch_families(db_path, orb=args.orb, entry=args.entry)
-        print(format_families(families_df))
+        logger.info(format_families(families_df))
 
         summary_df = fetch_summary(db_path)
         if not summary_df.empty:
-            print(format_summary(summary_df))
+            logger.info(format_summary(summary_df))
         return
 
     # Build filter description
@@ -367,25 +350,25 @@ def main():
         filters.append(f"ExpR>={args.min_expr}")
     filter_desc = f" [{', '.join(filters)}]" if filters else ""
 
-    print(f"\n=== Validated Strategies: {total} active ({unique} unique trades){filter_desc} ===")
-    print(f"Showing top {args.top} by {sort_col}\n")
+    logger.info(f"\n=== Validated Strategies: {total} active ({unique} unique trades){filter_desc} ===")
+    logger.info(f"Showing top {args.top} by {sort_col}\n")
 
     df = fetch_strategies(
         db_path, orb=args.orb, entry=args.entry,
         filter_type=args.filter_type, min_expr=args.min_expr,
         sort_col=sort_col, direction=args.direction, limit=args.top,
     )
-    print(format_table(df))
+    logger.info(format_table(df))
 
     summary_df = fetch_summary(db_path)
     if not summary_df.empty:
-        print(format_summary(summary_df))
+        logger.info(format_summary(summary_df))
 
     # CSV export
     if args.output and not df.empty:
         output_path = PROJECT_ROOT / args.output
         df.to_csv(output_path, index=False)
-        print(f"Exported {len(df)} strategies to {output_path}")
+        logger.info(f"Exported {len(df)} strategies to {output_path}")
 
 if __name__ == "__main__":
     main()

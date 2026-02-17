@@ -13,6 +13,9 @@ Creates and manages:
 import sys
 from pathlib import Path
 
+from pipeline.log import get_logger
+logger = get_logger(__name__)
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 import duckdb
@@ -38,10 +41,9 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
     if db_path is None:
         db_path = GOLD_DB_PATH
 
-    con = duckdb.connect(str(db_path))
-    try:
+    with duckdb.connect(str(db_path)) as con:
         if force:
-            print("WARN: Force mode: Dropping existing trading_app tables...")
+            logger.warning("WARN: Force mode: Dropping existing trading_app tables...")
             con.execute("DROP TABLE IF EXISTS edge_families")
             con.execute("DROP TABLE IF EXISTS strategy_trade_days")
             con.execute("DROP TABLE IF EXISTS validated_setups_archive")
@@ -257,10 +259,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 pass  # column already exists
 
         con.commit()
-        print("Trading app schema initialized successfully")
-
-    finally:
-        con.close()
+        logger.info("Trading app schema initialized successfully")
 
 def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[str]]:
     """
@@ -272,10 +271,9 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
     if db_path is None:
         db_path = GOLD_DB_PATH
 
-    con = duckdb.connect(str(db_path), read_only=True)
-    violations = []
+    with duckdb.connect(str(db_path), read_only=True) as con:
+        violations = []
 
-    try:
         expected_tables = [
             "orb_outcomes",
             "experimental_strategies",
@@ -374,9 +372,6 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
         all_valid = len(violations) == 0
         return all_valid, violations
 
-    finally:
-        con.close()
-
 def get_family_head_ids(
     con: duckdb.DuckDBPyConnection,
     instrument: str,
@@ -426,12 +421,12 @@ def main():
     if args.verify:
         all_valid, violations = verify_trading_app_schema()
         if all_valid:
-            print("All trading_app tables verified")
+            logger.info("All trading_app tables verified")
             sys.exit(0)
         else:
-            print("Schema verification failed:")
+            logger.info("Schema verification failed:")
             for v in violations:
-                print(f"  - {v}")
+                logger.info(f"  - {v}")
             sys.exit(1)
     else:
         init_trading_app_schema(force=args.force)

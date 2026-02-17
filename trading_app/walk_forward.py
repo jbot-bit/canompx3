@@ -16,6 +16,9 @@ from pathlib import Path
 from datetime import date
 from dataclasses import dataclass, field, asdict
 
+from pipeline.log import get_logger
+logger = get_logger(__name__)
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 import duckdb
@@ -130,9 +133,7 @@ def walk_forward_eval(
     if db_path is None:
         db_path = GOLD_DB_PATH
 
-    con = duckdb.connect(str(db_path), read_only=True)
-
-    try:
+    with duckdb.connect(str(db_path), read_only=True) as con:
         # Load all trading days
         all_days = [
             r[0] for r in con.execute(
@@ -141,17 +142,17 @@ def walk_forward_eval(
                 [instrument, orb_minutes],
             ).fetchall()
         ]
-        print(f"Loaded {len(all_days)} trading days ({all_days[0]} to {all_days[-1]})")
+        logger.info(f"Loaded {len(all_days)} trading days ({all_days[0]} to {all_days[-1]})")
 
         # Build folds
         folds = build_folds(all_days, train_years, test_years)
-        print(f"Built {len(folds)} walk-forward folds (train={train_years}y, test={test_years}y)")
+        logger.info(f"Built {len(folds)} walk-forward folds (train={train_years}y, test={test_years}y)")
         for i, (train, test) in enumerate(folds):
-            print(f"  Fold {i+1}: Train {train[0]}-{train[-1]} ({len(train)}d), "
-                  f"Test {test[0]}-{test[-1]} ({len(test)}d)")
+            logger.info(f"  Fold {i+1}: Train {train[0]}-{train[-1]} ({len(train)}d), "
+                        f"Test {test[0]}-{test[-1]} ({len(test)}d)")
 
         if not folds:
-            print("ERROR: No valid folds. Need more data or smaller windows.")
+            logger.error("ERROR: No valid folds. Need more data or smaller windows.")
             return []
 
         # Load daily_features for eligibility
@@ -190,8 +191,8 @@ def walk_forward_eval(
         vol_skipped = [s for s in strat_dicts if s["filter_type"].startswith("VOL_")]
         strat_dicts = [s for s in strat_dicts if not s["filter_type"].startswith("VOL_")]
         if vol_skipped:
-            print(f"Skipping {len(vol_skipped)} volume-filter strategies (fold-boundary leakage)")
-        print(f"Evaluating {len(strat_dicts)} strategies across {len(folds)} folds")
+            logger.info(f"Skipping {len(vol_skipped)} volume-filter strategies (fold-boundary leakage)")
+        logger.info(f"Evaluating {len(strat_dicts)} strategies across {len(folds)} folds")
 
         # Load all outcomes (bulk)
         all_outcomes = con.execute(
@@ -274,19 +275,16 @@ def walk_forward_eval(
             results.append(wf_result)
 
             if (si + 1) % 50 == 0:
-                print(f"  Evaluated {si + 1}/{len(strat_dicts)} strategies")
+                logger.info(f"  Evaluated {si + 1}/{len(strat_dicts)} strategies")
 
-        print(f"Done: {len(results)} strategies evaluated")
+        logger.info(f"Done: {len(results)} strategies evaluated")
 
         # Summary
         passed = [r for r in results if r.oos_trade_count >= min_oos_trades
                   and r.oos_expectancy_r is not None and r.oos_expectancy_r > 0]
-        print(f"OOS positive ExpR with >= {min_oos_trades} trades: {len(passed)}/{len(results)}")
+        logger.info(f"OOS positive ExpR with >= {min_oos_trades} trades: {len(passed)}/{len(results)}")
 
         return results
-
-    finally:
-        con.close()
 
 def write_artifacts(results: list[WalkForwardResult], output_dir: Path):
     """Write walk-forward results to CSV files."""
@@ -307,7 +305,7 @@ def write_artifacts(results: list[WalkForwardResult], output_dir: Path):
                 r.oos_trade_count, r.oos_win_rate, r.oos_expectancy_r,
                 r.oos_sharpe_ratio, r.oos_max_drawdown_r,
             ])
-    print(f"Written: {summary_path}")
+    logger.info(f"Written: {summary_path}")
 
     # Per-fold CSV
     folds_path = output_dir / "walk_forward_folds.csv"
@@ -327,13 +325,13 @@ def write_artifacts(results: list[WalkForwardResult], output_dir: Path):
                     fold.trade_count, fold.win_rate, fold.expectancy_r,
                     fold.sharpe_ratio, fold.max_drawdown_r,
                 ])
-    print(f"Written: {folds_path}")
+    logger.info(f"Written: {folds_path}")
 
     # JSON (machine-readable)
     json_path = output_dir / "walk_forward_results.json"
     with open(json_path, "w") as f:
         json.dump([asdict(r) for r in results], f, indent=2, default=str)
-    print(f"Written: {json_path}")
+    logger.info(f"Written: {json_path}")
 
 def main():
     import argparse

@@ -20,6 +20,9 @@ from datetime import datetime
 
 from pipeline.asset_configs import list_instruments
 
+from pipeline.log import get_logger
+logger = get_logger(__name__)
+
 PROJECT_ROOT = Path(__file__).parent.parent
 
 # =============================================================================
@@ -42,7 +45,7 @@ def step_ingest(instrument: str, args) -> int:
 def step_build_5m(instrument: str, args) -> int:
     """Rebuild bars_5m from bars_1m."""
     if not args.start or not args.end:
-        print("FATAL: --start and --end required for bars_5m")
+        logger.error("FATAL: --start and --end required for bars_5m")
         return 1
     cmd = [
         sys.executable,
@@ -56,7 +59,7 @@ def step_build_5m(instrument: str, args) -> int:
 def step_build_features(instrument: str, args) -> int:
     """Rebuild daily_features."""
     if not args.start or not args.end:
-        print("FATAL: --start and --end required for daily_features")
+        logger.error("FATAL: --start and --end required for daily_features")
         return 1
     cmd = [
         sys.executable,
@@ -75,7 +78,7 @@ def step_audit(instrument: str, args) -> int:
 def step_build_outcomes(instrument: str, args) -> int:
     """Pre-compute orb_outcomes."""
     if not args.start or not args.end:
-        print("FATAL: --start and --end required for outcomes")
+        logger.error("FATAL: --start and --end required for outcomes")
         return 1
     cmd = [
         sys.executable,
@@ -181,17 +184,17 @@ def main():
     # Execute
     start_time = datetime.now()
     print("=" * 70)
-    print(f"FULL PIPELINE: {instrument}")
+    logger.info(f"FULL PIPELINE: {instrument}")
     print("=" * 70)
-    print(f"  Date range: {args.start or 'default'} to {args.end or 'default'}")
-    print(f"  DB path: {args.db_path or 'default (DUCKDB_PATH or project/gold.db)'}")
-    print(f"  Steps: {' -> '.join(s[0] for s in steps)}")
+    logger.info(f"  Date range: {args.start or 'default'} to {args.end or 'default'}")
+    logger.info(f"  DB path: {args.db_path or 'default (DUCKDB_PATH or project/gold.db)'}")
+    logger.info(f"  Steps: {' -> '.join(s[0] for s in steps)}")
     print()
 
     results = []
     for i, (name, desc, func) in enumerate(steps, 1):
         print("-" * 70)
-        print(f"STEP {i}/{len(steps)}: {name} - {desc}")
+        logger.info(f"STEP {i}/{len(steps)}: {name} - {desc}")
         print("-" * 70)
 
         step_start = datetime.now()
@@ -201,23 +204,23 @@ def main():
         results.append({"step": i, "name": name, "rc": rc, "elapsed": elapsed})
 
         if rc != 0:
-            print(f"\nFATAL: {name} failed (exit {rc}). Pipeline halted.")
+            logger.error(f"\nFATAL: {name} failed (exit {rc}). Pipeline halted.")
             break
 
-        print(f"  {name}: PASSED ({elapsed})\n")
+        logger.info(f"  {name}: PASSED ({elapsed})\n")
 
     # Summary
     print("\n" + "=" * 70)
-    print("PIPELINE SUMMARY")
+    logger.info("PIPELINE SUMMARY")
     print("=" * 70)
     total = datetime.now() - start_time
     for r in results:
         status = "PASSED" if r["rc"] == 0 else f"FAILED (exit {r['rc']})"
-        print(f"  {r['name']}: {status} ({r['elapsed']})")
+        logger.info(f"  {r['name']}: {status} ({r['elapsed']})")
 
     all_ok = all(r["rc"] == 0 for r in results)
-    print(f"\nTotal: {total}")
-    print("SUCCESS" if all_ok else "FAILED")
+    logger.info(f"\nTotal: {total}")
+    logger.info("SUCCESS" if all_ok else "FAILED")
     sys.exit(0 if all_ok else 1)
 
 if __name__ == "__main__":

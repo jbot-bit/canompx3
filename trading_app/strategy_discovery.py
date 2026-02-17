@@ -16,6 +16,9 @@ from pathlib import Path
 from collections import defaultdict
 from datetime import date, timezone
 
+from pipeline.log import get_logger
+logger = get_logger(__name__)
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 import duckdb
@@ -450,28 +453,27 @@ def run_discovery(
     if not dry_run:
         init_trading_app_schema(db_path=db_path)
 
-    con = duckdb.connect(str(db_path))
-    try:
+    with duckdb.connect(str(db_path)) as con:
         # Determine which sessions to search
         sessions = get_enabled_sessions(instrument)
         if not sessions:
             sessions = ORB_LABELS  # fallback: all sessions
-        print(f"Sessions: {len(sessions)} enabled for {instrument}")
+        logger.info(f"Sessions: {len(sessions)} enabled for {instrument}")
 
         # ---- Bulk load phase (all DB reads happen here) ----
-        print("Loading daily features...")
+        logger.info("Loading daily features...")
         features = _load_daily_features(con, instrument, orb_minutes, start_date, end_date)
-        print(f"  {len(features)} daily_features rows loaded")
+        logger.info(f"  {len(features)} daily_features rows loaded")
 
-        print("Computing relative volumes for volume filters...")
+        logger.info("Computing relative volumes for volume filters...")
         _compute_relative_volumes(con, features, instrument, sessions, ALL_FILTERS)
 
-        print("Building filter/ORB day sets...")
+        logger.info("Building filter/ORB day sets...")
         filter_days = _build_filter_day_sets(features, sessions, ALL_FILTERS)
 
-        print("Loading outcomes (bulk)...")
+        logger.info("Loading outcomes (bulk)...")
         outcomes_by_key = _load_outcomes_bulk(con, instrument, orb_minutes, sessions, ENTRY_MODELS)
-        print(f"  {sum(len(v) for v in outcomes_by_key.values())} outcome rows loaded")
+        logger.info(f"  {sum(len(v) for v in outcomes_by_key.values())} outcome rows loaded")
 
         # ---- Grid iteration (pure Python, no DB reads) ----
         # Collect all strategies in memory first, then dedup before writing
@@ -526,14 +528,14 @@ def run_discovery(
                             })
 
                 if combo_idx % 500 == 0:
-                    print(f"  Progress: {combo_idx}/{total_combos} combos, {len(all_strategies)} strategies")
+                    logger.info(f"  Progress: {combo_idx}/{total_combos} combos, {len(all_strategies)} strategies")
 
         # ---- Dedup: mark canonical vs alias within each group ----
-        print(f"Dedup: {len(all_strategies)} strategies, computing canonical...")
+        logger.info(f"Dedup: {len(all_strategies)} strategies, computing canonical...")
         _mark_canonical(all_strategies)
         n_canonical = sum(1 for s in all_strategies if s["is_canonical"])
         n_alias = len(all_strategies) - n_canonical
-        print(f"  {n_canonical} canonical, {n_alias} aliases")
+        logger.info(f"  {n_canonical} canonical, {n_alias} aliases")
 
         # ---- Batch write ----
         if not dry_run:
@@ -576,16 +578,13 @@ def run_discovery(
             con.commit()
 
         total_strategies = len(all_strategies)
-        print(f"Discovered {total_strategies} strategies "
-              f"({n_canonical} canonical, {n_alias} aliases) "
-              f"from {total_combos} combos")
+        logger.info(f"Discovered {total_strategies} strategies "
+                    f"({n_canonical} canonical, {n_alias} aliases) "
+                    f"from {total_combos} combos")
         if dry_run:
-            print("  (DRY RUN -- no data written)")
+            logger.info("  (DRY RUN -- no data written)")
 
         return total_strategies
-
-    finally:
-        con.close()
 
 def main():
     import argparse

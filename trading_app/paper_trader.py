@@ -16,6 +16,9 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 
+from pipeline.log import get_logger
+logger = get_logger(__name__)
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 sys.stdout.reconfigure(line_buffering=True)
@@ -180,8 +183,7 @@ def replay_historical(
                              market_state=market_state,
                              live_session_costs=live_session_costs)
 
-    con = duckdb.connect(str(db_path), read_only=True)
-    try:
+    with duckdb.connect(str(db_path), read_only=True) as con:
         if start_date is None or end_date is None:
             all_days = _get_trading_days(con, instrument, date(2000, 1, 1), date(2100, 1, 1))
             if not all_days:
@@ -321,15 +323,12 @@ def replay_historical(
             result.total_pnl_r += engine.daily_pnl_r
 
             if (i + 1) % 50 == 0:
-                print(f"  Replayed {i + 1}/{len(trading_days)} days, "
-                      f"{result.total_wins + result.total_losses + result.total_scratches} trades, "
-                      f"PnL: {result.total_pnl_r:.2f}R")
+                logger.info(f"  Replayed {i + 1}/{len(trading_days)} days, "
+                            f"{result.total_wins + result.total_losses + result.total_scratches} trades, "
+                            f"PnL: {result.total_pnl_r:.2f}R")
 
         result.total_trades = result.total_wins + result.total_losses + result.total_scratches
         return result
-
-    finally:
-        con.close()
 
 # =========================================================================
 # Helpers
@@ -406,15 +405,15 @@ def main():
         max_correlation=args.max_correlation,
     )
 
-    print(f"\nReplay complete: {result.start_date} to {result.end_date}")
-    print(f"  Days: {result.days_processed}")
-    print(f"  Trades: {result.total_trades} (W:{result.total_wins} L:{result.total_losses} S:{result.total_scratches})")
-    print(f"  Total PnL: {result.total_pnl_r:.2f}R")
-    print(f"  Risk rejections: {result.total_risk_rejections}")
+    logger.info(f"\nReplay complete: {result.start_date} to {result.end_date}")
+    logger.info(f"  Days: {result.days_processed}")
+    logger.info(f"  Trades: {result.total_trades} (W:{result.total_wins} L:{result.total_losses} S:{result.total_scratches})")
+    logger.info(f"  Total PnL: {result.total_pnl_r:.2f}R")
+    logger.info(f"  Risk rejections: {result.total_risk_rejections}")
 
     if result.total_wins + result.total_losses > 0:
         wr = result.total_wins / (result.total_wins + result.total_losses)
-        print(f"  Win rate: {wr:.1%}")
+        logger.info(f"  Win rate: {wr:.1%}")
 
 if __name__ == "__main__":
     main()

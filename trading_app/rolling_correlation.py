@@ -115,12 +115,8 @@ def compute_rolling_correlation(
     if len(strategy_ids) < 2:
         return []
 
-    con = duckdb.connect(str(db_path), read_only=True)
-    try:
+    with duckdb.connect(str(db_path), read_only=True) as con:
         pnl = _load_strategy_pnl(con, strategy_ids)
-    finally:
-        con.close()
-
     # Build unified sorted calendar of all trading days across all strategies
     all_days_set: set[date] = set()
     for daily in pnl.values():
@@ -189,12 +185,8 @@ def compute_drawdown_correlation(
     if len(strategy_ids) < 2:
         return {}
 
-    con = duckdb.connect(str(db_path), read_only=True)
-    try:
+    with duckdb.connect(str(db_path), read_only=True) as con:
         pnl = _load_strategy_pnl(con, strategy_ids)
-    finally:
-        con.close()
-
     # Compute drawdown day sets for each strategy
     dd_days: dict[str, set[date]] = {}
     for sid in strategy_ids:
@@ -255,12 +247,8 @@ def compute_co_loss_pct(
     if len(strategy_ids) < 2:
         return {}
 
-    con = duckdb.connect(str(db_path), read_only=True)
-    try:
+    with duckdb.connect(str(db_path), read_only=True) as con:
         pnl = _load_strategy_pnl(con, strategy_ids)
-    finally:
-        con.close()
-
     results = {}
     for id_a, id_b in combinations(strategy_ids, 2):
         pnl_a = pnl.get(id_a, {})
@@ -379,16 +367,12 @@ if __name__ == "__main__":
         sys.exit(1)
 
     # Load validated family heads for this instrument
-    con = duckdb.connect(str(db), read_only=True)
-    try:
+    with duckdb.connect(str(db), read_only=True) as con:
         heads = con.execute(
             "SELECT strategy_id FROM validated_setups "
             "WHERE instrument = ? AND is_family_head = TRUE",
             [args.instrument],
         ).fetchall()
-    finally:
-        con.close()
-
     strategy_ids = [r[0] for r in heads]
     if len(strategy_ids) < 2:
         print(f"Need >= 2 family heads for correlation analysis, got {len(strategy_ids)}")

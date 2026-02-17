@@ -15,6 +15,9 @@ import json
 from pathlib import Path
 from dataclasses import dataclass, asdict, field, replace
 
+from pipeline.log import get_logger
+logger = get_logger(__name__)
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 sys.stdout.reconfigure(line_buffering=True)
@@ -252,8 +255,7 @@ def load_validated_strategies(
     When family_heads_only=True, restricts to family head strategies from
     edge_families table. Falls back to unfiltered if edge_families doesn't exist.
     """
-    con = duckdb.connect(str(db_path), read_only=True)
-    try:
+    with duckdb.connect(str(db_path), read_only=True) as con:
         # Resolve family head filter (post-filter in Python to avoid SQL interpolation)
         head_ids = None
         if family_heads_only:
@@ -329,9 +331,6 @@ def load_validated_strategies(
             results = [r for r in results if r["strategy_id"] in head_ids]
 
         return results
-    finally:
-        con.close()
-
 def diversify_strategies(
     candidates: list[dict],
     max_strategies: int,
@@ -524,8 +523,7 @@ def build_strategy_daily_series(
     if not strategy_ids:
         return pd.DataFrame(), {}
 
-    con = duckdb.connect(str(db_path), read_only=True)
-    try:
+    with duckdb.connect(str(db_path), read_only=True) as con:
         placeholders = ", ".join(["?"] * len(strategy_ids))
 
         # Step 1: Load strategy parameters from baseline, nested, and rolling
@@ -701,9 +699,6 @@ def build_strategy_daily_series(
         result = pd.DataFrame(series_dict, index=all_days)
         result.index.name = "trading_day"
         return result, stats
-
-    finally:
-        con.close()
 
 def correlation_matrix(
     db_path: Path,
@@ -881,19 +876,19 @@ def main():
     cost_spec = get_cost_spec(args.instrument)
     capital = estimate_daily_capital(portfolio, cost_spec)
 
-    print(f"Portfolio: {portfolio.name}")
-    print(f"  Strategies: {summary.get('strategy_count', 0)}")
+    logger.info(f"Portfolio: {portfolio.name}")
+    logger.info(f"  Strategies: {summary.get('strategy_count', 0)}")
     if summary.get("strategy_count", 0) > 0:
-        print(f"  ORB distribution: {summary['orb_distribution']}")
-        print(f"  Entry model distribution: {summary['entry_model_distribution']}")
-        print(f"  Avg ExpR: {summary['avg_expectancy_r']:.3f}")
-        print(f"  Avg WR: {summary['avg_win_rate']:.1%}")
-        print(f"  Capital estimates: {capital}")
+        logger.info(f"  ORB distribution: {summary['orb_distribution']}")
+        logger.info(f"  Entry model distribution: {summary['entry_model_distribution']}")
+        logger.info(f"  Avg ExpR: {summary['avg_expectancy_r']:.3f}")
+        logger.info(f"  Avg WR: {summary['avg_win_rate']:.1%}")
+        logger.info(f"  Capital estimates: {capital}")
 
     if args.output:
         output_path = Path(args.output)
         output_path.write_text(portfolio.to_json())
-        print(f"  Written to {output_path}")
+        logger.info(f"  Written to {output_path}")
 
 if __name__ == "__main__":
     main()

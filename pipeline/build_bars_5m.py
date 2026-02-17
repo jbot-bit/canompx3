@@ -35,6 +35,9 @@ import duckdb
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.asset_configs import get_asset_config, list_instruments
 
+from pipeline.log import get_logger
+logger = get_logger(__name__)
+
 def build_5m_bars(con: duckdb.DuckDBPyConnection, symbol: str,
                   start_date: date, end_date: date, dry_run: bool) -> int:
     """
@@ -61,10 +64,10 @@ def build_5m_bars(con: duckdb.DuckDBPyConnection, symbol: str,
         AND ts_utc < ?::TIMESTAMPTZ
     """
     source_count = con.execute(count_query, [symbol, start_ts, end_ts]).fetchone()[0]
-    print(f"  Source bars_1m rows: {source_count:,}")
+    logger.info(f"  Source bars_1m rows: {source_count:,}")
 
     if source_count == 0:
-        print("  No source data found. Nothing to build.")
+        logger.info("  No source data found. Nothing to build.")
         return 0
 
     # Build 5m bars using SQL (fully deterministic, no Python loops)
@@ -143,7 +146,7 @@ def build_5m_bars(con: duckdb.DuckDBPyConnection, symbol: str,
             AND ts_utc >= ?::TIMESTAMPTZ
             AND ts_utc < ?::TIMESTAMPTZ
         """, [symbol, start_ts, end_ts]).fetchone()[0]
-        print(f"  DRY RUN: Would build {count_result:,} bars_5m rows")
+        logger.info(f"  DRY RUN: Would build {count_result:,} bars_5m rows")
         return count_result
 
     # IDEMPOTENT: Delete existing rows for this range, then insert
@@ -166,7 +169,7 @@ def build_5m_bars(con: duckdb.DuckDBPyConnection, symbol: str,
         """, [symbol, start_ts, end_ts])
 
         if delete_count > 0:
-            print(f"  Deleted {delete_count:,} existing bars_5m rows")
+            logger.info(f"  Deleted {delete_count:,} existing bars_5m rows")
 
         # Insert rebuilt rows
         con.execute(f"""
@@ -184,12 +187,12 @@ def build_5m_bars(con: duckdb.DuckDBPyConnection, symbol: str,
 
         con.execute("COMMIT")
 
-        print(f"  Inserted {new_count:,} bars_5m rows")
+        logger.info(f"  Inserted {new_count:,} bars_5m rows")
         return new_count
 
     except Exception as e:
         con.execute("ROLLBACK")
-        print(f"FATAL: Exception during bars_5m build: {e}")
+        logger.error(f"FATAL: Exception during bars_5m build: {e}")
         raise
 
 def verify_5m_integrity(con: duckdb.DuckDBPyConnection, symbol: str,
@@ -284,63 +287,58 @@ def main():
     start_time = datetime.now()
 
     print("=" * 60)
-    print(f"BUILD BARS_5M ({symbol})")
+    logger.info(f"BUILD BARS_5M ({symbol})")
     print("=" * 60)
     print()
-    print(f"Instrument: {symbol}")
-    print(f"Date range: {start_date} to {end_date}")
-    print(f"Database: {GOLD_DB_PATH}")
-    print(f"Dry run: {args.dry_run}")
+    logger.info(f"Instrument: {symbol}")
+    logger.info(f"Date range: {start_date} to {end_date}")
+    logger.info(f"Database: {GOLD_DB_PATH}")
+    logger.info(f"Dry run: {args.dry_run}")
     print()
 
     if not GOLD_DB_PATH.exists():
-        print(f"FATAL: Database not found: {GOLD_DB_PATH}")
+        logger.error(f"FATAL: Database not found: {GOLD_DB_PATH}")
         sys.exit(1)
 
-    con = duckdb.connect(str(GOLD_DB_PATH))
-
-    try:
+    with duckdb.connect(str(GOLD_DB_PATH)) as con:
         # Build
-        print("Building 5-minute bars...")
+        logger.info("Building 5-minute bars...")
         row_count = build_5m_bars(con, symbol, start_date, end_date, args.dry_run)
         print()
 
         # Verify (skip for dry run)
         if not args.dry_run and row_count > 0:
-            print("Verifying integrity...")
+            logger.info("Verifying integrity...")
             ok, failures = verify_5m_integrity(con, symbol, start_date, end_date)
 
             if not ok:
-                print("FATAL: Integrity verification FAILED:")
+                logger.error("FATAL: Integrity verification FAILED:")
                 for f in failures:
-                    print(f"  - {f}")
+                    logger.info(f"  - {f}")
                 sys.exit(1)
 
-            print("  No duplicates: PASSED [OK]")
-            print("  5-minute alignment: PASSED [OK]")
-            print("  OHLCV sanity: PASSED [OK]")
-            print("  Volume non-negative: PASSED [OK]")
+            logger.info("  No duplicates: PASSED [OK]")
+            logger.info("  5-minute alignment: PASSED [OK]")
+            logger.info("  OHLCV sanity: PASSED [OK]")
+            logger.info("  Volume non-negative: PASSED [OK]")
             print()
-            print("ALL INTEGRITY CHECKS PASSED [OK]")
+            logger.info("ALL INTEGRITY CHECKS PASSED [OK]")
         elif args.dry_run:
-            print("Integrity check skipped (dry run)")
+            logger.info("Integrity check skipped (dry run)")
         print()
 
         elapsed = datetime.now() - start_time
 
         print("=" * 60)
-        print(f"SUMMARY: {row_count:,} bars_5m rows {'(would be) ' if args.dry_run else ''}built")
-        print(f"Wall time: {elapsed}")
+        logger.info(f"SUMMARY: {row_count:,} bars_5m rows {'(would be) ' if args.dry_run else ''}built")
+        logger.info(f"Wall time: {elapsed}")
         print("=" * 60)
 
         if args.dry_run:
             print()
-            print("DRY RUN COMPLETE. No changes made.")
+            logger.info("DRY RUN COMPLETE. No changes made.")
 
         sys.exit(0)
-
-    finally:
-        con.close()
 
 if __name__ == "__main__":
     main()

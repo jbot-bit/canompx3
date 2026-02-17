@@ -22,6 +22,9 @@ from pathlib import Path
 from datetime import date
 from dataclasses import dataclass, asdict
 
+from pipeline.log import get_logger
+logger = get_logger(__name__)
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 import duckdb
@@ -368,14 +371,10 @@ def compute_fitness(
     if as_of_date is None:
         as_of_date = date.today()
 
-    con = duckdb.connect(str(db_path), read_only=True)
-    try:
+    with duckdb.connect(str(db_path), read_only=True) as con:
         return _compute_fitness_with_con(
             con, strategy_id, as_of_date, rolling_months, min_rolling_trades,
         )
-    finally:
-        con.close()
-
 def compute_portfolio_fitness(
     db_path: Path | None = None,
     instrument: str = "MGC",
@@ -388,8 +387,7 @@ def compute_portfolio_fitness(
     if as_of_date is None:
         as_of_date = date.today()
 
-    con = duckdb.connect(str(db_path), read_only=True)
-    try:
+    with duckdb.connect(str(db_path), read_only=True) as con:
         rows = con.execute(
             """SELECT strategy_id FROM validated_setups
                WHERE instrument = ? AND LOWER(status) = 'active'
@@ -408,10 +406,7 @@ def compute_portfolio_fitness(
                 )
                 scores.append(score)
             except Exception as e:
-                print(f"  WARN: Failed to compute fitness for {sid}: {e}")
-    finally:
-        con.close()
-
+                logger.warning(f"  WARN: Failed to compute fitness for {sid}: {e}")
     summary = {"fit": 0, "watch": 0, "decay": 0, "stale": 0}
     for s in scores:
         key = s.fitness_status.lower()
@@ -480,26 +475,26 @@ def main():
             rolling_months=args.rolling_months,
         )
         if args.format == "json":
-            print(json.dumps(asdict(score), indent=2, default=str))
+            logger.info(json.dumps(asdict(score), indent=2, default=str))
         else:
-            print(f"Strategy: {score.strategy_id}")
-            print(f"  Status: {score.fitness_status}")
-            print(f"  Full-period: ExpR={score.full_period_exp_r:.4f}, Sharpe={score.full_period_sharpe}, N={score.full_period_sample}")
-            print(f"  Rolling ({score.rolling_window_months}mo): ExpR={score.rolling_exp_r}, Sharpe={score.rolling_sharpe}, WR={score.rolling_win_rate}, N={score.rolling_sample}")
-            print(f"  Recent Sharpe: 30-trade={score.recent_sharpe_30}, 60-trade={score.recent_sharpe_60}")
-            print(f"  Sharpe Delta: 30={score.sharpe_delta_30}, 60={score.sharpe_delta_60}")
-            print(f"  Notes: {score.fitness_notes}")
+            logger.info(f"Strategy: {score.strategy_id}")
+            logger.info(f"  Status: {score.fitness_status}")
+            logger.info(f"  Full-period: ExpR={score.full_period_exp_r:.4f}, Sharpe={score.full_period_sharpe}, N={score.full_period_sample}")
+            logger.info(f"  Rolling ({score.rolling_window_months}mo): ExpR={score.rolling_exp_r}, Sharpe={score.rolling_sharpe}, WR={score.rolling_win_rate}, N={score.rolling_sample}")
+            logger.info(f"  Recent Sharpe: 30-trade={score.recent_sharpe_30}, 60-trade={score.recent_sharpe_60}")
+            logger.info(f"  Sharpe Delta: 30={score.sharpe_delta_30}, 60={score.sharpe_delta_60}")
+            logger.info(f"  Notes: {score.fitness_notes}")
     else:
-        print(f"Computing fitness for all validated {args.instrument} strategies...")
+        logger.info(f"Computing fitness for all validated {args.instrument} strategies...")
         report = compute_portfolio_fitness(
             instrument=args.instrument,
             as_of_date=args.as_of,
             rolling_months=args.rolling_months,
         )
         if args.format == "json":
-            print(_format_json(report))
+            logger.info(_format_json(report))
         else:
-            print(_format_table(report))
+            logger.info(_format_table(report))
 
 if __name__ == "__main__":
     main()

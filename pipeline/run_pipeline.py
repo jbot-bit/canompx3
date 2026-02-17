@@ -31,6 +31,9 @@ from datetime import datetime
 
 from pipeline.asset_configs import list_instruments
 
+from pipeline.log import get_logger
+logger = get_logger(__name__)
+
 # Project root for resolving script paths
 PROJECT_ROOT = Path(__file__).parent.parent
 
@@ -61,7 +64,7 @@ def step_ingest(instrument: str, args) -> int:
     if args.batch_size != 50000:
         cmd.append(f"--batch-size={args.batch_size}")
 
-    print(f"  Command: {' '.join(cmd)}")
+    logger.info(f"  Command: {' '.join(cmd)}")
     print()
 
     result = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
@@ -70,7 +73,7 @@ def step_ingest(instrument: str, args) -> int:
 def step_build_5m(instrument: str, args) -> int:
     """Step 2: Rebuild bars_5m from bars_1m. Delegates to pipeline/build_bars_5m.py."""
     if not args.start or not args.end:
-        print("FATAL: --start and --end are required for bars_5m build")
+        logger.error("FATAL: --start and --end are required for bars_5m build")
         return 1
 
     cmd = [
@@ -84,7 +87,7 @@ def step_build_5m(instrument: str, args) -> int:
     if args.dry_run:
         cmd.append("--dry-run")
 
-    print(f"  Command: {' '.join(cmd)}")
+    logger.info(f"  Command: {' '.join(cmd)}")
     print()
 
     result = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
@@ -93,7 +96,7 @@ def step_build_5m(instrument: str, args) -> int:
 def step_build_features(instrument: str, args) -> int:
     """Step 3: Rebuild daily_features from bars_1m/bars_5m."""
     if not args.start or not args.end:
-        print("FATAL: --start and --end are required for daily_features build")
+        logger.error("FATAL: --start and --end are required for daily_features build")
         return 1
 
     cmd = [
@@ -111,7 +114,7 @@ def step_build_features(instrument: str, args) -> int:
     orb_minutes = getattr(args, 'orb_minutes', 5)
     cmd.append(f"--orb-minutes={orb_minutes}")
 
-    print(f"  Command: {' '.join(cmd)}")
+    logger.info(f"  Command: {' '.join(cmd)}")
     print()
 
     result = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
@@ -124,7 +127,7 @@ def step_audit(instrument: str, args) -> int:
         str(PROJECT_ROOT / "pipeline" / "check_db.py"),
     ]
 
-    print(f"  Command: {' '.join(cmd)}")
+    logger.info(f"  Command: {' '.join(cmd)}")
     print()
 
     result = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
@@ -169,14 +172,14 @@ def main():
     start_time = datetime.now()
 
     print("=" * 70)
-    print("PIPELINE RUNNER")
+    logger.info("PIPELINE RUNNER")
     print("=" * 70)
     print()
-    print(f"Instrument: {instrument}")
-    print(f"Date range: {args.start or 'default'} to {args.end or 'default'}")
-    print(f"Resume: {args.resume}")
-    print(f"Retry failed: {args.retry_failed}")
-    print(f"Dry run: {args.dry_run}")
+    logger.info(f"Instrument: {instrument}")
+    logger.info(f"Date range: {args.start or 'default'} to {args.end or 'default'}")
+    logger.info(f"Resume: {args.resume}")
+    logger.info(f"Retry failed: {args.retry_failed}")
+    logger.info(f"Dry run: {args.dry_run}")
     print()
 
     # =========================================================================
@@ -210,7 +213,7 @@ def main():
 
     for i, (name, desc, step_func) in enumerate(PIPELINE_STEPS, 1):
         print("-" * 70)
-        print(f"STEP {i}/{len(PIPELINE_STEPS)}: {name} - {desc}")
+        logger.info(f"STEP {i}/{len(PIPELINE_STEPS)}: {name} - {desc}")
         print("-" * 70)
         print()
 
@@ -228,13 +231,13 @@ def main():
 
         if returncode != 0:
             print()
-            print(f"FATAL: Step {i} ({name}) failed with exit code {returncode}")
-            print("ABORT: Pipeline halted (FAIL-CLOSED)")
+            logger.error(f"FATAL: Step {i} ({name}) failed with exit code {returncode}")
+            logger.info("ABORT: Pipeline halted (FAIL-CLOSED)")
             print()
             break
 
         print()
-        print(f"  Step {i} ({name}): PASSED [OK] ({step_elapsed})")
+        logger.info(f"  Step {i} ({name}): PASSED [OK] ({step_elapsed})")
         print()
 
     # =========================================================================
@@ -242,7 +245,7 @@ def main():
     # =========================================================================
     print()
     print("=" * 70)
-    print("PIPELINE SUMMARY")
+    logger.info("PIPELINE SUMMARY")
     print("=" * 70)
     print()
 
@@ -253,23 +256,23 @@ def main():
 
     for r in results:
         status = "PASSED" if r['returncode'] == 0 else f"FAILED (exit {r['returncode']})"
-        print(f"  Step {r['step']}: {r['name']} - {status} ({r['elapsed']})")
+        logger.info(f"  Step {r['step']}: {r['name']} - {status} ({r['elapsed']})")
 
     if steps_run < steps_total:
         for i in range(steps_run + 1, steps_total + 1):
             name = PIPELINE_STEPS[i - 1][0]
-            print(f"  Step {i}: {name} - SKIPPED (prior step failed)")
+            logger.info(f"  Step {i}: {name} - SKIPPED (prior step failed)")
 
     print()
-    print(f"Steps completed: {steps_run}/{steps_total}")
-    print(f"Total wall time: {total_elapsed}")
+    logger.info(f"Steps completed: {steps_run}/{steps_total}")
+    logger.info(f"Total wall time: {total_elapsed}")
     print()
 
     if all_passed:
-        print("SUCCESS: All pipeline steps completed.")
+        logger.info("SUCCESS: All pipeline steps completed.")
         sys.exit(0)
     else:
-        print("FAILED: Pipeline did not complete. See step failures above.")
+        logger.info("FAILED: Pipeline did not complete. See step failures above.")
         sys.exit(1)
 
 if __name__ == "__main__":

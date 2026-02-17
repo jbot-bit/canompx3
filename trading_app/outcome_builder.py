@@ -15,6 +15,9 @@ import time
 from pathlib import Path
 from datetime import date, datetime
 
+from pipeline.log import get_logger
+logger = get_logger(__name__)
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 # Force unbuffered stdout
@@ -520,8 +523,7 @@ def build_outcomes(
 
     cost_spec = get_cost_spec(instrument)
 
-    con = duckdb.connect(str(db_path))
-    try:
+    with duckdb.connect(str(db_path)) as con:
         # Ensure trading_app tables exist
         if not dry_run:
             init_trading_app_schema(db_path=db_path)
@@ -541,7 +543,7 @@ def build_outcomes(
         sessions = get_enabled_sessions(instrument)
         if not sessions:
             sessions = ORB_LABELS  # fallback: all sessions
-        print(f"  Sessions: {len(sessions)} enabled for {instrument}")
+        logger.info(f"  Sessions: {len(sessions)} enabled for {instrument}")
 
         # Fetch all daily_features rows
         query = f"""
@@ -571,7 +573,7 @@ def build_outcomes(
         global_start, _ = compute_trading_day_utc_range(first_day)
         _, global_end = compute_trading_day_utc_range(last_day)
 
-        print(f"  Loading bars_1m for {instrument} ({global_start.date()} to {global_end.date()})...")
+        logger.info(f"  Loading bars_1m for {instrument} ({global_start.date()} to {global_end.date()})...")
         all_bars_df = con.execute(
             """
             SELECT ts_utc, open, high, low, close, volume
@@ -586,7 +588,7 @@ def build_outcomes(
         if not all_bars_df.empty:
             all_bars_df["ts_utc"] = pd.to_datetime(all_bars_df["ts_utc"], utc=True)
         all_ts = all_bars_df["ts_utc"].values  # numpy datetime64 array for searchsorted
-        print(f"  Loaded {len(all_bars_df):,} bars into memory")
+        logger.info(f"  Loaded {len(all_bars_df):,} bars into memory")
 
         for day_idx, row in enumerate(rows):
             row_dict = dict(zip(col_names, row))
@@ -688,14 +690,11 @@ def build_outcomes(
             con.commit()
 
         elapsed = time.monotonic() - t0
-        print(f"Done: {total_written} outcomes for {total_days} trading days in {elapsed:.1f}s")
+        logger.info(f"Done: {total_written} outcomes for {total_days} trading days in {elapsed:.1f}s")
         if dry_run:
-            print("  (DRY RUN — no data written)")
+            logger.info("  (DRY RUN — no data written)")
 
         return total_written
-
-    finally:
-        con.close()
 
 def main():
     import argparse
