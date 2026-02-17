@@ -149,3 +149,37 @@ Task: Full codebase audit against CLAUDE.md authority
 
 **Output:** `ralph-audit-report.md` section "## 5. Scripts and Infrastructure"
 
+## 2026-02-18 05:15 UTC — Task 6: Cross-reference documentation consistency
+
+**What:** Cross-referenced CLAUDE.md, TRADING_RULES.md, ROADMAP.md, and REPO_MAP.md against actual code.
+
+**Documents reviewed:**
+- `CLAUDE.md` — data flow diagram, DST contamination section, key commands, document authority table
+- `TRADING_RULES.md` — session glossary, dynamic session count, filter definitions
+- `ROADMAP.md` — phase status vs actual code modules
+- `REPO_MAP.md` — freshness, completeness, generator path
+- `pipeline/dst.py` — SESSION_CATALOG, DST_CLEAN_SESSIONS, dynamic resolvers
+- `pipeline/init_db.py` — ORB_LABELS_FIXED, ORB_LABELS_DYNAMIC
+- `pipeline/asset_configs.py` — enabled_sessions per instrument
+- `trading_app/config.py` — filters, entry models, thresholds
+- `trading_app/strategy_validator.py` — docstring (7-phase)
+- `trading_app/db_manager.py` — 6 tables
+
+**Findings (4 issues):**
+1. **CLAUDE.md** missing `US_POST_EQUITY` from clean sessions list (5 listed, 6 exist)
+2. **TRADING_RULES.md** says "11 sessions (4 dynamic)" — actual is 13 (6 dynamic), missing US_POST_EQUITY and CME_CLOSE
+3. **REPO_MAP.md** is STALE — missing `pipeline/dst.py`, wrong generator path in header, stale LOC counts
+4. **ROADMAP.md** Phase 3 has stale counts (4 tables → 6, 6-phase → 7-phase) — cosmetic
+
+**Checks that passed:**
+- CLAUDE.md data flow diagram matches actual module paths and outputs
+- DST contamination rules match dst.py implementation (0900/1800/0030/2300 + clean sessions)
+- Document authority table — no conflicts between docs
+- All 14 key commands point to existing scripts
+- ROADMAP phase statuses are accurate (phases all correctly marked DONE/TODO)
+- P8b partially implemented (DirectionFilter, band filters, dispatch function exist in config.py)
+
+**Caveat:** Python execution blocked by sandbox — could not regenerate REPO_MAP.md. Must be done manually.
+
+**Output:** `ralph-audit-report.md` section "## 6. Documentation Consistency"
+
