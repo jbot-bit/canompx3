@@ -123,6 +123,7 @@ def load_all_rolling_run_labels(
         if lookback_windows is not None:
             labels = labels[-lookback_windows:]
         return labels
+
 def load_rolling_degraded_counts(
     db_path: Path,
     train_months: int,
@@ -430,6 +431,7 @@ def load_rolling_validated_strategies(
                 results.append(dict(zip(cols, rows[0])))
 
         return results
+
 def print_report(families: list[FamilyResult]) -> None:
     """Print a human-readable report of rolling evaluation results."""
     stable = [f for f in families if f.classification == "STABLE"]

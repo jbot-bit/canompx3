@@ -196,6 +196,7 @@ def verify_regime_schema(db_path: Path | None = None) -> tuple[bool, list[str]]:
 
         return len(violations) == 0, violations
 
+
 def main():
     import argparse
 
