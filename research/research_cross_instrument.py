@@ -23,8 +23,6 @@ Usage:
 import sys
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-
 import duckdb
 import numpy as np
 import pandas as pd
@@ -751,9 +749,8 @@ def main():
     print("CROSS-INSTRUMENT LEAD-LAG RESEARCH")
     print("=" * 60)
 
-    con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
-    df = load_features(con)
-    con.close()
+    with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
+        df = load_features(con)
 
     instruments_found = sorted(df["symbol"].unique())
     print(f"Instruments: {instruments_found}")

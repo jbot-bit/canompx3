@@ -10,6 +10,7 @@ Multi-instrument futures data pipeline — builds clean, replayable local datase
 Raw data contains GC (full-size Gold) which has better 1m bar coverage than MGC. Pipeline ingests GC bars, stores under `symbol='MGC'` (same price, same exchange), uses MGC cost model. The `source_symbol` column records the actual GC contract.
 
 **For instruments, cost models, sessions, entry models, and all trading logic → see `TRADING_RULES.md`.**
+**For research methodology, statistical standards, and market structure knowledge → see `RESEARCH_RULES.md`.**
 
 ---
 
@@ -19,6 +20,7 @@ Raw data contains GC (full-size Gold) which has better 1m bar coverage than MGC.
 |----------|-------|---------------|
 | `CLAUDE.md` | Code structure, commands, guardrails, AI behavior | Wins for code decisions |
 | `TRADING_RULES.md` | Trading rules, sessions, filters, research findings, NO-GOs | Wins for trading logic |
+| `RESEARCH_RULES.md` | Research methodology, statistical standards, trading lens, market structure | Wins for research/analysis decisions |
 | `ROADMAP.md` | Planned features, phase status | Updated on phase completion |
 | `REPO_MAP.md` | Module index, file inventory | Auto-generated (`python scripts/tools/gen_repo_map.py`) — never hand-edit |
 | `docs/STRATEGY_DISCOVERY_AUDIT.md` | Strategy discovery system deep-dive | Reference only |
@@ -28,6 +30,7 @@ Raw data contains GC (full-size Gold) which has better 1m bar coverage than MGC.
 **Conflict resolution:**
 - Code behavior → CLAUDE.md wins
 - Trading logic → TRADING_RULES.md wins
+- Research methodology → RESEARCH_RULES.md wins
 - File inventory → REPO_MAP.md (not this file)
 - CANONICAL_*.txt are frozen; the live code is truth
 
