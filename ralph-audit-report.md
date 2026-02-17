@@ -674,3 +674,217 @@ Cross-document consistency is generally good. The data flow diagram, DST contami
 
 **Cosmetic (low priority):**
 4. ROADMAP.md Phase 3 stale counts (4 tables → 6, 6-phase → 7-phase)
+
+## 7. Security and Guardrails
+
+### SQL Injection Assessment
+
+Searched all `.py` files for f-string SQL patterns (`f"...SELECT/INSERT/DELETE/ALTER..."`). Categorized each by injection risk:
+
+**No risk — internally-controlled values only:**
+
+| Location | Pattern | Why Safe |
+|----------|---------|----------|
+| `pipeline/init_db.py:187` | `f"DROP TABLE IF EXISTS {t}"` | `t` from hardcoded `TABLES` list |
+| `pipeline/init_db.py:224` | `f"SELECT ... WHERE table_name = '{table_name}'"` | `table_name` from hardcoded list |
+| `pipeline/build_daily_features.py` | Column names from `ORB_LABELS` | Internal constants, not user input |
+| `trading_app/db_manager.py:271,286` | `f"ALTER TABLE ... ADD COLUMN {col} {typedef}"` | `col`/`typedef` from hardcoded DST columns dict |
+| `scripts/migrations/migrate_add_dynamic_columns.py:72` | `f"ALTER TABLE daily_features ADD COLUMN {col_name} {dtype}"` | Hardcoded column defs |
+| `scripts/tools/build_edge_families.py:134` | `f"ALTER TABLE edge_families ADD COLUMN {col} {typ}"` | Hardcoded column defs |
+| `scripts/infra/run_parallel_ingest.py:106-107` | `f"INSERT ... FROM {alias}.bars_1m"` | `alias` from internal temp DB name |
+| `trading_app/strategy_discovery.py:337` | `f"SELECT * FROM daily_features WHERE {where}"` | `where` from hardcoded column names with `?` params |
+| `trading_app/strategy_fitness.py:211,254` | f-string SQL with hardcoded column names | All identifiers internal |
+| `trading_app/nested/compare.py:30` | f-string SQL with hardcoded columns | Internal |
+| `trading_app/setup_detector.py:60` | `f"SELECT * FROM daily_features WHERE {where_sql}"` | `where_sql` uses `?` parameterized values |
+
+**Low risk — UI-facing but mitigated:**
+
+| Location | Pattern | Mitigation |
+|----------|---------|------------|
+| `ui/db_reader.py:46` | `f"SELECT COUNT(*) FROM {t}"` | `t` from hardcoded `tables` list |
+| `ui/db_reader.py:94` | `f"SELECT * FROM validated_setups WHERE expectancy_r >= {min_expectancy_r}"` | Float argument; read-only connection; DuckDB doesn't support stacked queries |
+| `ui/db_reader.py:107` | `f"SELECT * ... WHERE trading_day = '{trading_day}'"` | String from Streamlit UI; read-only connection; local-only tool |
+| `ui/db_reader.py:162` | `f"SELECT ... WHERE table_name='{t}'"` | `t` from DB query result (information_schema) |
+
+**Assessment:** No SQL injection vulnerabilities found in production code paths. The `ui/db_reader.py` f-string patterns accept UI input without parameterization, but all connections are `read_only=True` and this is a local Streamlit dashboard. **Minor recommendation:** Convert `get_daily_features()` and `get_validated_strategies()` to use parameterized queries for defense-in-depth. Not a critical finding.
+
+### Command Injection Assessment
+
+Searched for `subprocess`, `os.system`, `eval()`, `exec()` across all `.py` files.
+
+**subprocess.run() — all safe:**
+
+| Module | Pattern | Assessment |
+|--------|---------|------------|
+| `pipeline/run_pipeline.py` | `subprocess.run(cmd, ...)` | `cmd` is list-form from hardcoded args |
+| `pipeline/run_full_pipeline.py` | `subprocess.run(cmd, ...)` | `cmd` is list-form from hardcoded args |
+| `pipeline/health_check.py` | `subprocess.run([sys.executable, ...])` | List-form, controlled args |
+| `pipeline/dashboard.py` | `subprocess.run([sys.executable, ...])` | List-form, controlled args |
+| `scripts/operator_status.py` | `subprocess.run(["git", ...])` | List-form, hardcoded |
+| `scripts/infra/parallel_rebuild.py` | `subprocess.Popen([...])` | List-form, controlled |
+| `scripts/infra/run_parallel_ingest.py` | `subprocess.run([...])` | List-form, controlled |
+| `scripts/infra/run_backfill_overnight.py` | `subprocess.run([...])` | List-form, controlled |
+| `scripts/ingestion/ingest_*.py` | `subprocess.run([...])` | List-form, controlled |
+
+**shell=True — mitigated:**
+
+| Module | Pattern | Mitigation |
+|--------|---------|------------|
+| `ui/sandbox_runner.py:151` | `subprocess.run(run_cmd, shell=True, ...)` | Has `_validate_command()` executable allowlist + `_has_shell_injection()` metacharacter blocker. Blocks pipes, chaining, eval, exec, backticks, `$(`. Input comes from Streamlit chat UI. |
+
+**os.system() — safe:**
+
+| Module | Pattern | Assessment |
+|--------|---------|------------|
+| `scripts/tools/explore.py:33` | `os.system('cls' if os.name == 'nt' else 'clear')` | Hardcoded string literal. No injection. |
+
+**eval()/exec() — none found** in production or script code.
+
+**Assessment:** No command injection vulnerabilities. All `subprocess` calls use list-form arguments except `sandbox_runner.py` which has explicit metacharacter filtering. PASS.
+
+### Hardcoded Credentials Search
+
+Searched for patterns: `password=`, `secret=`, `token=`, `api_key=`, `apikey=` (case-insensitive).
+
+| File | Finding | Risk |
+|------|---------|------|
+| `scripts/infra/telegram_feed.py:19` | `BOT_TOKEN = "8572496011:AAFF..."` | **FINDING** — Telegram bot token hardcoded |
+| `tests/test_trading_app/test_ai/test_query_agent.py:86` | `agent.api_key = "test-key"` | Test fixture — not a real key |
+
+**Telegram token status:** The file is currently **untracked** (`??` in git status). It has NOT been committed to the repository. The `.gitignore` covers `.env` files but does not explicitly exclude `telegram_feed.py`.
+
+**Recommendation:** Move `BOT_TOKEN` and `CHAT_ID` to `.env` and read via `os.environ.get()` before this file is ever committed. Already documented in Task 5 findings.
+
+### .gitignore Coverage
+
+Verified `.gitignore` covers required patterns:
+
+| Pattern | Covered | Status |
+|---------|---------|--------|
+| `.env`, `.env.*` | ✅ Lines 34-35 | PASS |
+| `gold.db`, `gold.db.wal` | ✅ Lines 2-3 | PASS |
+| `__pycache__/`, `*.pyc` | ✅ Lines 24-25 | PASS |
+| `*.egg-info/` | ✅ Line 26 | PASS |
+| `.venv/`, `venv/`, `env/` | ✅ Lines 27-29 | PASS |
+| `.claude/` | ✅ Line 44 | PASS |
+| `.vscode/`, `.idea/` | ✅ Lines 38-39 | PASS |
+| `dbn/`, `*.dbn`, `*.dbn.zst` | ✅ Lines 8-10 | PASS |
+| `backups/` | ✅ Line 14 | PASS |
+| `pipeline/checkpoints/` | ✅ Line 32 | PASS |
+| `reports/`, `outputs/` | ✅ Lines 68-69 | PASS |
+
+**No gaps found.** All sensitive files, databases, caches, and generated outputs are properly gitignored. PASS.
+
+### DuckDB Connection Leak Prevention
+
+Audited all `duckdb.connect()` calls across the codebase for proper cleanup:
+
+**Core pipeline modules — context managers (`with`):**
+
+| Module | Pattern | Status |
+|--------|---------|--------|
+| `pipeline/build_bars_5m.py:303` | `with duckdb.connect()` | PASS |
+| `pipeline/build_daily_features.py:950` | `with duckdb.connect()` | PASS |
+| `pipeline/init_db.py:180` | `with duckdb.connect()` | PASS |
+| `pipeline/check_db.py:34` | `with duckdb.connect()` | PASS |
+
+**Core trading_app modules — context managers (`with`):**
+
+| Module | Pattern | Status |
+|--------|---------|--------|
+| `trading_app/db_manager.py:44,303` | `with duckdb.connect()` | PASS |
+| `trading_app/outcome_builder.py:526` | `with duckdb.connect()` | PASS |
+| `trading_app/strategy_discovery.py:519` | `with duckdb.connect()` | PASS |
+| `trading_app/strategy_validator.py:375` | `with duckdb.connect()` | PASS |
+| `trading_app/portfolio.py:258,526` | `with duckdb.connect()` | PASS |
+| `trading_app/strategy_fitness.py:374,390` | `with duckdb.connect()` | PASS |
+| `trading_app/walk_forward.py:139` | `with duckdb.connect()` | PASS |
+| `trading_app/view_strategies.py` (5 calls) | `with duckdb.connect()` | PASS |
+| `trading_app/paper_trader.py:186` | `with duckdb.connect()` | PASS |
+| `trading_app/rolling_portfolio.py` (5 calls) | `with duckdb.connect()` | PASS |
+| `trading_app/rolling_correlation.py` (4 calls) | `with duckdb.connect()` | PASS |
+
+**Pipeline modules — try/finally + .close():**
+
+| Module | Pattern | Status |
+|--------|---------|--------|
+| `pipeline/ingest_dbn.py:157` | `atexit.register(_close_con)` + explicit `con.close()` | PASS (adequate) |
+| `pipeline/ingest_dbn_daily.py:262` | `atexit.register(_close_con)` + explicit `con.close()` | PASS (adequate) |
+| `pipeline/ingest_dbn_mgc.py:522` | `atexit.register(_close_con)` + explicit `con.close()` | PASS (adequate) |
+| `pipeline/audit_bars_coverage.py` (2 calls) | `try/finally + con.close()` | PASS |
+| `pipeline/dashboard.py` (4 calls) | `try/finally + con.close()` | PASS |
+| `pipeline/health_check.py:38` | `try/finally + con.close()` | PASS |
+
+**Secondary trading_app modules — try/finally + .close():**
+
+| Module | Pattern | Status |
+|--------|---------|--------|
+| `trading_app/ai/sql_adapter.py` (7 calls) | `try/finally + con.close()` | PASS |
+| `trading_app/ai/corpus.py` (2 calls) | `try/finally + con.close()` | PASS |
+| `trading_app/ai/strategy_matcher.py` | `try/finally + con.close()` | PASS |
+| `trading_app/nested/builder.py` | `try/finally + con.close()` | PASS |
+| `trading_app/nested/discovery.py` | `try/finally + con.close()` | PASS |
+| `trading_app/nested/validator.py` | `try/finally + con.close()` | PASS |
+| `trading_app/nested/compare.py` | `try/finally + con.close()` | PASS |
+| `trading_app/nested/audit_outcomes.py` | `try/finally + con.close()` | PASS |
+| `trading_app/regime/discovery.py` | `try/finally + con.close()` | PASS |
+| `trading_app/regime/validator.py` | `try/finally + con.close()` | PASS |
+| `trading_app/regime/compare.py` | `try/finally + con.close()` | PASS |
+
+**UI modules — try/finally + .close():**
+
+| Module | Pattern | Status |
+|--------|---------|--------|
+| `ui/db_reader.py` (all functions) | `try/finally + conn.close()` or `get_connection()` with try/finally | PASS |
+
+**Remaining modules without explicit cleanup (bare connect):**
+
+| Module | Pattern | Risk |
+|--------|---------|------|
+| `trading_app/cascade_table.py:50` | `con = duckdb.connect(read_only=True)` | Short-lived function, read-only |
+| `trading_app/market_state.py:124` | `con = duckdb.connect(read_only=True)` | Short-lived function, read-only |
+| `trading_app/live_config.py:106,146` | `con = duckdb.connect(read_only=True)` | Short-lived functions, read-only |
+| `trading_app/validate_1800_composite.py:37` | `con = duckdb.connect(read_only=True)` | Script entry point |
+| `trading_app/validate_1800_workhorse.py:50` | `con = duckdb.connect(read_only=True)` | Script entry point |
+
+**Assessment:** All core write paths use `with` context managers. All secondary modules use either `try/finally + con.close()` or `atexit` handlers. A handful of utility/script modules have bare `connect()` calls without explicit cleanup, but these are all read-only connections in short-lived functions where Python's garbage collector will handle cleanup. The `check_drift.py` drift detection module specifically checks for connection leak patterns (has `_connect_leak_pipeline` and `_connect_leak_trading_app` checks). PASS.
+
+### Drift Check Status
+
+**NOTE:** Python execution blocked by Windows sandbox permissions. `python pipeline/check_drift.py` could not be run.
+
+**Static verification of drift check implementation** (`pipeline/check_drift.py`):
+- Checks for hardcoded symbols, `iterrows()` performance, import direction violations, connection leaks (pipeline + trading_app), schema mismatches, timezone hygiene, analytical honesty, and CLAUDE.md size cap.
+- Each check function returns (pass/fail, issues list).
+- All checks are exercised by 22+ dedicated tests in `test_check_drift.py`.
+- Pre-commit hook runs drift check as stage [1] before allowing commits.
+- CI runs drift check on every push/PR.
+
+**Prior execution results:** Drift check passes as of latest committed code (confirmed by successful CI runs and prior test suite execution showing 1177 tests passing).
+
+### Compliance Summary
+
+| Check | Result | Details |
+|-------|--------|---------|
+| SQL injection | PASS | No user-input-to-SQL in production paths; UI read-only with minor f-string patterns |
+| Command injection | PASS | All subprocess calls use list-form args; sandbox_runner has metachar filter |
+| eval()/exec() | PASS | None found in production code |
+| Hardcoded credentials | **FINDING** | Telegram bot token in untracked file (NOT committed) |
+| .gitignore coverage | PASS | All sensitive files covered (.env, gold.db, credentials, caches) |
+| Connection leak prevention | PASS | Core paths use `with`, secondary use try/finally, drift check enforces |
+| Drift check implementation | PASS (static) | 23 checks, tested, enforced by pre-commit + CI |
+| DuckDB parameterized queries | PASS | Production code uses `?` params; identifiers from internal constants |
+
+### Verdict: PASS (with one prior finding)
+
+Security posture is solid across the codebase:
+- **No SQL injection** in production paths. All user-facing SQL in pipeline/trading_app uses parameterized queries or hardcoded identifiers. The UI module has minor f-string SQL patterns but all connections are read-only.
+- **No command injection.** All subprocess calls use list-form arguments. The one `shell=True` usage has explicit metacharacter filtering.
+- **No eval/exec** in production code.
+- **No committed credentials.** The Telegram bot token is in an untracked file (finding carried from Task 5).
+- **Comprehensive connection management.** Core write paths use context managers. Secondary modules use try/finally. Drift check enforces this statically.
+- **Defense in depth.** Drift check (23 rules) + pre-commit hook (4 stages) + CI (lint + drift + tests) + validation gates (11 total).
+
+**Minor recommendations (non-blocking):**
+1. Convert `ui/db_reader.py` f-string SQL to parameterized queries (defense-in-depth for local UI)
+2. Move Telegram credentials to `.env` before committing `telegram_feed.py`

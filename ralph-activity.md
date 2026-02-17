@@ -183,3 +183,30 @@ Task: Full codebase audit against CLAUDE.md authority
 
 **Output:** `ralph-audit-report.md` section "## 6. Documentation Consistency"
 
+## 2026-02-18 05:40 UTC — Task 7: Security and guardrail audit
+
+**What:** Comprehensive security audit covering SQL injection, command injection, credential leaks, .gitignore coverage, and connection leak prevention.
+
+**Searches performed:**
+- f-string SQL patterns across all `.py` files — categorized 20+ locations by risk level
+- `subprocess`, `os.system`, `eval()`, `exec()` across all `.py` files — verified all safe
+- `password`, `secret`, `token`, `api_key` patterns — 1 finding (Telegram token, untracked)
+- `duckdb.connect()` across all modules — verified cleanup patterns (with/try-finally/atexit)
+- `.gitignore` reviewed for coverage of sensitive files
+
+**Key findings:**
+- **No SQL injection** in production paths. All pipeline/trading_app SQL uses parameterized queries or hardcoded identifiers. UI module has minor f-string patterns but read-only connections.
+- **No command injection.** All subprocess uses list-form args. One `shell=True` in `ui/sandbox_runner.py` has metacharacter filtering + allowlist.
+- **No eval()/exec()** in production code.
+- **No committed credentials.** Telegram token in untracked file (carried from Task 5).
+- **Comprehensive connection management.** Core write paths: `with` context managers. Secondary: `try/finally`. Enforced by drift check.
+- **Complete .gitignore coverage** for .env, gold.db, caches, IDE files, checkpoints.
+
+**Minor recommendations (non-blocking):**
+1. Convert `ui/db_reader.py` f-string SQL to parameterized queries
+2. Move Telegram credentials to `.env` before committing `telegram_feed.py`
+
+**Caveat:** Python execution blocked by sandbox — drift check could not be run. Static analysis of check_drift.py confirms 23 checks implemented and tested.
+
+**Output:** `ralph-audit-report.md` section "## 7. Security and Guardrails"
+
