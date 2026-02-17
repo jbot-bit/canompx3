@@ -20,7 +20,7 @@ Raw data contains GC (full-size Gold) which has better 1m bar coverage than MGC.
 | `CLAUDE.md` | Code structure, commands, guardrails, AI behavior | Wins for code decisions |
 | `TRADING_RULES.md` | Trading rules, sessions, filters, research findings, NO-GOs | Wins for trading logic |
 | `ROADMAP.md` | Planned features, phase status | Updated on phase completion |
-| `REPO_MAP.md` | Module index, file inventory | Auto-generated (`python scripts/gen_repo_map.py`) — never hand-edit |
+| `REPO_MAP.md` | Module index, file inventory | Auto-generated (`python scripts/tools/gen_repo_map.py`) — never hand-edit |
 | `docs/STRATEGY_DISCOVERY_AUDIT.md` | Strategy discovery system deep-dive | Reference only |
 | `docs/RESEARCH_ARCHIVE.md` | Research findings, NO-GO archive, alternative strategy results | Supplements TRADING_RULES.md |
 | `CANONICAL_*.txt` | Frozen specs | Read-only; live code is truth |
@@ -52,7 +52,7 @@ Databento .dbn.zst files
   → gold.db:experimental_strategies
   → trading_app/strategy_validator.py (multi-phase validation + walk-forward)
   → gold.db:validated_setups
-  → scripts/build_edge_families.py (cluster by trade-day hash)
+  → scripts/tools/build_edge_families.py (cluster by trade-day hash)
   → gold.db:edge_families
 ```
 
@@ -101,7 +101,7 @@ python pipeline/init_db.py --force            # Drop + recreate (DESTROYS DATA)
 python pipeline/ingest_dbn.py --instrument MGC --start 2024-01-01 --end 2024-12-31
 python pipeline/ingest_dbn.py --instrument MGC --resume
 python pipeline/run_pipeline.py --instrument MGC --start 2024-01-01 --end 2024-12-31
-python scripts/run_parallel_ingest.py --instrument MGC --db-path C:/db/gold.db
+python scripts/infra/run_parallel_ingest.py --instrument MGC --db-path C:/db/gold.db
 
 # Features
 python pipeline/build_bars_5m.py --instrument MGC --start 2024-01-01 --end 2024-12-31
@@ -122,7 +122,7 @@ python pipeline/health_check.py              # All-in-one health check
 
 # Reports
 python pipeline/dashboard.py                 # Generate dashboard.html
-python scripts/report_edge_portfolio.py      # Edge family portfolio report
+python scripts/reports/report_edge_portfolio.py      # Edge family portfolio report
 ```
 
 ---

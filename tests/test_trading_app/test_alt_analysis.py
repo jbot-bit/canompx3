@@ -18,7 +18,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.cost_model import get_cost_spec
-from scripts._alt_strategy_utils import (
+from research._alt_strategy_utils import (
     _add_months,
     compute_strategy_metrics,
     compute_walk_forward_windows,

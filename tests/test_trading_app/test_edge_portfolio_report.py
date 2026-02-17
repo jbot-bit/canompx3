@@ -111,7 +111,7 @@ def db_path(tmp_path):
 class TestReportInstrument:
 
     def test_correct_trade_count(self, db_path):
-        from scripts.report_edge_portfolio import report_instrument
+        from scripts.reports.report_edge_portfolio import report_instrument
 
         result = report_instrument(db_path, "MGC")
         assert result is not None
@@ -120,7 +120,7 @@ class TestReportInstrument:
 
     def test_overlap_detection(self, db_path):
         """Jan 2 has both 0900 and 1800 trades -> 1 multi-session day."""
-        from scripts.report_edge_portfolio import report_instrument
+        from scripts.reports.report_edge_portfolio import report_instrument
 
         result = report_instrument(db_path, "MGC")
         assert result["multi_session_days"] == 1
@@ -128,7 +128,7 @@ class TestReportInstrument:
         assert result["unique_days"] == 4
 
     def test_per_orb_breakdown(self, db_path):
-        from scripts.report_edge_portfolio import report_instrument
+        from scripts.reports.report_edge_portfolio import report_instrument
 
         result = report_instrument(db_path, "MGC")
         assert "0900" in result["per_orb"]
@@ -137,7 +137,7 @@ class TestReportInstrument:
         assert result["per_orb"]["1800"]["trades"] == 2
 
     def test_yearly_breakdown(self, db_path):
-        from scripts.report_edge_portfolio import report_instrument
+        from scripts.reports.report_edge_portfolio import report_instrument
 
         result = report_instrument(db_path, "MGC")
         assert 2024 in result["yearly"]
@@ -145,14 +145,14 @@ class TestReportInstrument:
 
     def test_no_families_returns_none(self, db_path):
         """Instrument with no families returns None."""
-        from scripts.report_edge_portfolio import report_instrument
+        from scripts.reports.report_edge_portfolio import report_instrument
 
         result = report_instrument(db_path, "MNQ")
         assert result is None
 
     def test_no_edge_families_table_returns_none(self, tmp_path):
         """If edge_families table doesn't exist, returns None."""
-        from scripts.report_edge_portfolio import report_instrument
+        from scripts.reports.report_edge_portfolio import report_instrument
 
         path = tmp_path / "empty.db"
         con = duckdb.connect(str(path))
@@ -167,7 +167,7 @@ class TestDailyLedger:
 
     def test_two_trades_same_day_sum(self):
         """Two trades on same day sum to one daily return."""
-        from scripts.report_edge_portfolio import _compute_daily_ledger
+        from scripts.reports.report_edge_portfolio import _compute_daily_ledger
 
         trades = [
             {"trading_day": date(2024, 1, 2), "pnl_r": 2.0},
@@ -183,7 +183,7 @@ class TestDailyLedger:
         assert by_day[date(2024, 1, 3)] == pytest.approx(-1.0)
 
     def test_no_trades_empty(self):
-        from scripts.report_edge_portfolio import _compute_daily_ledger
+        from scripts.reports.report_edge_portfolio import _compute_daily_ledger
 
         daily_returns, overlap = _compute_daily_ledger([])
         assert daily_returns == []
@@ -194,7 +194,7 @@ class TestPortfolioStats:
 
     def test_positive_sharpe(self):
         """Mostly positive daily returns should yield positive Sharpe."""
-        from scripts.report_edge_portfolio import _compute_portfolio_stats
+        from scripts.reports.report_edge_portfolio import _compute_portfolio_stats
 
         # Vary returns to get nonzero std (constant returns -> std=0 -> Sharpe=None)
         daily_returns = [
@@ -207,7 +207,7 @@ class TestPortfolioStats:
         assert stats["total_r"] > 0
 
     def test_empty_returns(self):
-        from scripts.report_edge_portfolio import _compute_portfolio_stats
+        from scripts.reports.report_edge_portfolio import _compute_portfolio_stats
 
         stats = _compute_portfolio_stats([])
         assert stats["trading_days"] == 0
@@ -216,7 +216,7 @@ class TestPortfolioStats:
 
     def test_max_dd_computed(self):
         """Max DD should capture peak-to-trough."""
-        from scripts.report_edge_portfolio import _compute_portfolio_stats
+        from scripts.reports.report_edge_portfolio import _compute_portfolio_stats
 
         daily_returns = [
             (date(2024, 1, 1), 5.0),   # cumulative = 5, peak = 5
@@ -232,7 +232,7 @@ class TestPurgedFilter:
 
     def test_purged_excluded_by_default(self, tmp_path):
         """PURGED families excluded unless --include-purged."""
-        from scripts.report_edge_portfolio import report_instrument
+        from scripts.reports.report_edge_portfolio import report_instrument
 
         path = tmp_path / "purge_test.db"
         con = duckdb.connect(str(path))

@@ -7,7 +7,7 @@ Fails if anyone reintroduces:
 2. .apply() or .iterrows() usage in ingest scripts (performance anti-pattern)
 3. Any writes to tables other than bars_1m in ingest scripts
    (covers: ingest_dbn.py, ingest_dbn_mgc.py, ingest_dbn_daily.py,
-    scripts/run_parallel_ingest.py)
+    scripts/infra/run_parallel_ingest.py)
 
 FAIL-CLOSED: Any violation exits with code 1.
 
@@ -49,7 +49,7 @@ INGEST_WRITE_FILES = [
     PIPELINE_DIR / "ingest_dbn.py",
     PIPELINE_DIR / "ingest_dbn_mgc.py",
     PIPELINE_DIR / "ingest_dbn_daily.py",
-    SCRIPTS_DIR / "run_parallel_ingest.py",
+    SCRIPTS_DIR / "infra" / "run_parallel_ingest.py",
 ]
 
 
@@ -317,7 +317,11 @@ def check_hardcoded_paths(pipeline_dir: Path) -> list[str]:
 
 
 def check_connection_leaks(pipeline_dir: Path) -> list[str]:
-    """Check that duckdb.connect() calls have proper cleanup."""
+    """Check that duckdb.connect() calls have proper cleanup.
+
+    Improved: counts connect() vs close() calls. If connect > close
+    AND no finally/atexit/with-statement, flags it.
+    """
     violations = []
 
     for fpath in pipeline_dir.glob("*.py"):
@@ -326,20 +330,22 @@ def check_connection_leaks(pipeline_dir: Path) -> list[str]:
 
         content = fpath.read_text(encoding='utf-8')
 
-        # Count duckdb.connect() calls
         connect_count = len(re.findall(r'duckdb\.connect\(', content))
         if connect_count == 0:
             continue
 
-        # Check for cleanup mechanisms
-        has_close = 'con.close()' in content or '.close()' in content
+        close_count = len(re.findall(r'\.close\(\)', content))
         has_finally = 'finally:' in content
         has_atexit = 'atexit' in content
         has_with = 'with duckdb' in content
 
-        if not (has_close or has_finally or has_atexit or has_with):
+        if has_finally or has_atexit or has_with:
+            continue
+
+        if close_count < connect_count:
             violations.append(
-                f"  {fpath.name}: {connect_count} duckdb.connect() calls but no close/finally/atexit/with"
+                f"  {fpath.name}: {connect_count} duckdb.connect() calls but only "
+                f"{close_count} .close() calls and no finally/atexit/with"
             )
 
     return violations
@@ -382,7 +388,11 @@ def check_pipeline_never_imports_trading_app(pipeline_dir: Path) -> list[str]:
 
 
 def check_trading_app_connection_leaks(trading_app_dir: Path) -> list[str]:
-    """Check that duckdb.connect() calls in trading_app/ have proper cleanup."""
+    """Check that duckdb.connect() calls in trading_app/ have proper cleanup.
+
+    Improved: counts connect() vs close() calls. If connect > close
+    AND no finally/atexit/with-statement, flags it.
+    """
     violations = []
 
     if not trading_app_dir.exists():
@@ -398,15 +408,18 @@ def check_trading_app_connection_leaks(trading_app_dir: Path) -> list[str]:
         if connect_count == 0:
             continue
 
-        has_close = 'con.close()' in content or '.close()' in content
+        close_count = len(re.findall(r'\.close\(\)', content))
         has_finally = 'finally:' in content
         has_atexit = 'atexit' in content
         has_with = 'with duckdb' in content
 
-        if not (has_close or has_finally or has_atexit or has_with):
+        if has_finally or has_atexit or has_with:
+            continue
+
+        if close_count < connect_count:
             violations.append(
-                f"  {fpath.name}: {connect_count} duckdb.connect() calls "
-                f"but no close/finally/atexit/with"
+                f"  {fpath.name}: {connect_count} duckdb.connect() calls but only "
+                f"{close_count} .close() calls and no finally/atexit/with"
             )
 
     return violations
@@ -487,6 +500,11 @@ def check_config_filter_sync() -> list[str]:
     """Check that ALL_FILTERS keys match filter_type inside each filter."""
     violations = []
 
+    # Ensure project root is on sys.path so trading_app is importable
+    root_str = str(PROJECT_ROOT)
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
+
     try:
         from trading_app.config import ALL_FILTERS
 
@@ -495,9 +513,8 @@ def check_config_filter_sync() -> list[str]:
                 violations.append(
                     f"  ALL_FILTERS['{key}'].filter_type = '{filt.filter_type}' (mismatch)"
                 )
-    except ImportError:
-        # trading_app may not exist yet
-        pass
+    except ImportError as e:
+        violations.append(f"  Cannot import trading_app.config.ALL_FILTERS: {e}")
 
     return violations
 
@@ -505,6 +522,10 @@ def check_config_filter_sync() -> list[str]:
 def check_entry_models_sync() -> list[str]:
     """Check that ENTRY_MODELS constant matches expected values."""
     violations = []
+
+    root_str = str(PROJECT_ROOT)
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
 
     try:
         from trading_app.config import ENTRY_MODELS
@@ -514,8 +535,8 @@ def check_entry_models_sync() -> list[str]:
             violations.append(
                 f"  ENTRY_MODELS = {ENTRY_MODELS}, expected {expected}"
             )
-    except ImportError:
-        pass
+    except ImportError as e:
+        violations.append(f"  Cannot import trading_app.config.ENTRY_MODELS: {e}")
 
     return violations
 
@@ -914,6 +935,88 @@ def check_ingest_authority_notice() -> list[str]:
     return []
 
 
+def check_validation_gate_existence() -> list[str]:
+    """Check #24: Verify critical validation gate functions still exist.
+
+    If someone deletes a gate function, this fires. Simple static grep per file.
+    """
+    violations = []
+
+    gate_map = {
+        PIPELINE_DIR / "ingest_dbn_mgc.py": [
+            "def validate_chunk(",
+            "def validate_timestamp_utc(",
+            "def check_pk_safety(",
+            "def check_merge_integrity(",
+            "def run_final_gates(",
+        ],
+        PIPELINE_DIR / "build_bars_5m.py": [
+            "def verify_5m_integrity(",
+        ],
+        PIPELINE_DIR / "ingest_dbn.py": [
+            "FAIL-CLOSED",
+        ],
+    }
+
+    for fpath, required_strings in gate_map.items():
+        if not fpath.exists():
+            violations.append(f"  {fpath.name}: File not found (gate source missing)")
+            continue
+
+        content = fpath.read_text(encoding='utf-8')
+        for gate in required_strings:
+            if gate not in content:
+                violations.append(
+                    f"  {fpath.name}: Missing gate '{gate}'"
+                )
+
+    return violations
+
+
+def check_naive_datetime() -> list[str]:
+    """Check #25: Block deprecated naive datetime constructors.
+
+    Catches:
+    - datetime.utcnow() (deprecated in 3.12, returns naive UTC)
+    - datetime.utcfromtimestamp() (same issue)
+
+    NOTE: datetime.now() is NOT flagged — it's used legitimately for
+    wall-clock elapsed timing throughout the codebase. The dangerous
+    pattern is utcnow() which implies UTC intent but returns naive.
+    """
+    violations = []
+
+    dangerous_patterns = [
+        (re.compile(r'datetime\.utcnow\(\)'), 'datetime.utcnow()'),
+        (re.compile(r'datetime\.utcfromtimestamp\('), 'datetime.utcfromtimestamp()'),
+    ]
+
+    for base_dir in [PIPELINE_DIR, TRADING_APP_DIR]:
+        if not base_dir.exists():
+            continue
+
+        for fpath in base_dir.rglob("*.py"):
+            if fpath.name in ("__init__.py", "check_drift.py"):
+                continue
+
+            content = fpath.read_text(encoding='utf-8')
+            lines = content.splitlines()
+
+            for line_num, line in enumerate(lines, 1):
+                stripped = line.strip()
+                if stripped.startswith('#'):
+                    continue
+
+                for pattern, label in dangerous_patterns:
+                    if pattern.search(line):
+                        violations.append(
+                            f"  {fpath.name}:{line_num}: {label} is deprecated "
+                            f"(use datetime.now(timezone.utc)): {stripped[:80]}"
+                        )
+
+    return violations
+
+
 def check_claude_md_size_cap() -> list[str]:
     """Check #23: CLAUDE.md must stay under 12KB."""
     path = PROJECT_ROOT / "CLAUDE.md"
@@ -1200,6 +1303,30 @@ def main():
     # Check 23: CLAUDE.md size cap
     print("Check 23: CLAUDE.md size cap...")
     v = check_claude_md_size_cap()
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 24: Validation gate existence
+    print("Check 24: Validation gate existence...")
+    v = check_validation_gate_existence()
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 25: Naive datetime detection
+    print("Check 25: Naive datetime detection...")
+    v = check_naive_datetime()
     if v:
         print("  FAILED:")
         for line in v:

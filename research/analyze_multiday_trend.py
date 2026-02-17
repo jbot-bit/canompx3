@@ -33,7 +33,7 @@ sys.stdout.reconfigure(line_buffering=True)
 
 from pipeline.asset_configs import get_enabled_sessions
 from pipeline.cost_model import get_cost_spec
-from scripts._alt_strategy_utils import compute_strategy_metrics, annualize_sharpe
+from research._alt_strategy_utils import compute_strategy_metrics, annualize_sharpe
 
 
 def load_data(db_path: Path, instrument: str, orb_minutes: int = 5) -> pd.DataFrame:

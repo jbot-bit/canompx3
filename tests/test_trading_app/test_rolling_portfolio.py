@@ -17,7 +17,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from scripts.rolling_eval import generate_rolling_windows, DOUBLE_BREAK_THRESHOLD
+from scripts.infra.rolling_eval import generate_rolling_windows, DOUBLE_BREAK_THRESHOLD
 from trading_app.rolling_portfolio import (
     make_family_id,
     _window_weight,

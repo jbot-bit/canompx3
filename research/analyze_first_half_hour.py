@@ -41,7 +41,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.cost_model import get_cost_spec, to_r_multiple
 from pipeline.paths import GOLD_DB_PATH
-from scripts._alt_strategy_utils import (
+from research._alt_strategy_utils import (
     compute_strategy_metrics,
     compute_walk_forward_windows,
     save_results,

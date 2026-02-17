@@ -103,7 +103,7 @@ class TestMedianElection:
     """Head elected by median ExpR, not max (Winner's Curse avoidance)."""
 
     def test_median_head_not_max(self, db_path):
-        from scripts.build_edge_families import build_edge_families
+        from scripts.tools.build_edge_families import build_edge_families
 
         build_edge_families(str(db_path), "MGC")
 
@@ -122,7 +122,7 @@ class TestMedianElection:
         assert family[2] == 0.375  # median stored
 
     def test_singleton_head_is_itself(self, db_path):
-        from scripts.build_edge_families import build_edge_families
+        from scripts.tools.build_edge_families import build_edge_families
 
         build_edge_families(str(db_path), "MGC")
 
@@ -138,7 +138,7 @@ class TestMedianElection:
         assert family[2] == 0.60  # median of 1 = itself
 
     def test_elect_median_head_function(self):
-        from scripts.build_edge_families import _elect_median_head
+        from scripts.tools.build_edge_families import _elect_median_head
 
         # 5 members: ExpR = [0.10, 0.20, 0.30, 0.40, 0.50]
         # Median = 0.30, closest = member with 0.30
@@ -155,7 +155,7 @@ class TestMedianElection:
         assert med == 0.30
 
     def test_elect_median_tiebreak_by_id(self):
-        from scripts.build_edge_families import _elect_median_head
+        from scripts.tools.build_edge_families import _elect_median_head
 
         # 2 members equidistant from median -> lower strategy_id wins
         # Use 0.25 and 0.75 so median=0.50 and both are exactly 0.25 away
@@ -173,20 +173,20 @@ class TestRobustnessClassification:
     """Family robustness tagging per Duke Protocol #3c."""
 
     def test_classify_robust(self):
-        from scripts.build_edge_families import classify_family
+        from scripts.tools.build_edge_families import classify_family
         assert classify_family(5, 1.0, 0.2, 200) == "ROBUST"
         assert classify_family(10, 0.3, 0.5, 50) == "ROBUST"  # N>=5 always ROBUST
         assert classify_family(21, None, None, None) == "ROBUST"
 
     def test_classify_whitelisted(self):
-        from scripts.build_edge_families import classify_family
+        from scripts.tools.build_edge_families import classify_family
         # N in [3,4], ShANN>=0.8, CV<=0.5, trades>=50
         assert classify_family(3, 0.9, 0.2, 150) == "WHITELISTED"
         assert classify_family(4, 1.5, 0.5, 50) == "WHITELISTED"   # CV=0.5 boundary
         assert classify_family(3, 0.8, 0.0, 50) == "WHITELISTED"   # ShANN=0.8 boundary
 
     def test_classify_purged(self):
-        from scripts.build_edge_families import classify_family
+        from scripts.tools.build_edge_families import classify_family
         # N<=2 always PURGED (below WHITELIST_MIN_MEMBERS)
         assert classify_family(1, 1.5, 0.0, 200) == "PURGED"   # singleton
         assert classify_family(2, 1.5, 0.1, 200) == "PURGED"   # pair
@@ -197,7 +197,7 @@ class TestRobustnessClassification:
         assert classify_family(3, None, None, 50) == "PURGED"   # missing metrics
 
     def test_singleton_purged_in_fixture(self, db_path):
-        from scripts.build_edge_families import build_edge_families
+        from scripts.tools.build_edge_families import build_edge_families
 
         build_edge_families(str(db_path), "MGC")
 
@@ -212,7 +212,7 @@ class TestRobustnessClassification:
         assert family[0] == "PURGED"
 
     def test_robustness_columns_populated(self, db_path):
-        from scripts.build_edge_families import build_edge_families
+        from scripts.tools.build_edge_families import build_edge_families
 
         build_edge_families(str(db_path), "MGC")
 
@@ -238,23 +238,23 @@ class TestTradeTier:
     """Trade tier classification: CORE / REGIME / INVALID."""
 
     def test_classify_core(self):
-        from scripts.build_edge_families import classify_trade_tier
+        from scripts.tools.build_edge_families import classify_trade_tier
         assert classify_trade_tier(100) == "CORE"
         assert classify_trade_tier(500) == "CORE"
 
     def test_classify_regime(self):
-        from scripts.build_edge_families import classify_trade_tier
+        from scripts.tools.build_edge_families import classify_trade_tier
         assert classify_trade_tier(30) == "REGIME"
         assert classify_trade_tier(99) == "REGIME"
 
     def test_classify_invalid(self):
-        from scripts.build_edge_families import classify_trade_tier
+        from scripts.tools.build_edge_families import classify_trade_tier
         assert classify_trade_tier(29) == "INVALID"
         assert classify_trade_tier(0) == "INVALID"
         assert classify_trade_tier(None) == "INVALID"
 
     def test_trade_tier_in_fixture(self, db_path):
-        from scripts.build_edge_families import build_edge_families
+        from scripts.tools.build_edge_families import build_edge_families
 
         build_edge_families(str(db_path), "MGC")
 
@@ -275,7 +275,7 @@ class TestBuildEdgeFamilies:
     """Integration: core family building still works."""
 
     def test_groups_by_hash(self, db_path):
-        from scripts.build_edge_families import build_edge_families
+        from scripts.tools.build_edge_families import build_edge_families
 
         build_edge_families(str(db_path), "MGC")
 
@@ -290,7 +290,7 @@ class TestBuildEdgeFamilies:
         assert families[1][1] == 1
 
     def test_validated_setups_tagged(self, db_path):
-        from scripts.build_edge_families import build_edge_families
+        from scripts.tools.build_edge_families import build_edge_families
 
         build_edge_families(str(db_path), "MGC")
 
@@ -317,7 +317,7 @@ class TestBuildEdgeFamilies:
         assert by_id["MGC_0900_E1_RR2.0_CB2_ORB_G8"][1] is True
 
     def test_trade_day_count(self, db_path):
-        from scripts.build_edge_families import build_edge_families
+        from scripts.tools.build_edge_families import build_edge_families
 
         build_edge_families(str(db_path), "MGC")
 
@@ -332,7 +332,7 @@ class TestBuildEdgeFamilies:
         assert families[1] == (1, 2)
 
     def test_idempotent(self, db_path):
-        from scripts.build_edge_families import build_edge_families
+        from scripts.tools.build_edge_families import build_edge_families
 
         build_edge_families(str(db_path), "MGC")
         build_edge_families(str(db_path), "MGC")
@@ -344,7 +344,7 @@ class TestBuildEdgeFamilies:
         assert count == 2
 
     def test_no_strategies_returns_zero(self, db_path):
-        from scripts.build_edge_families import build_edge_families
+        from scripts.tools.build_edge_families import build_edge_families
 
         result = build_edge_families(str(db_path), "MCL")
         assert result == 0

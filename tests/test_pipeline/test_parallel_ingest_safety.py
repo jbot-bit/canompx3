@@ -34,7 +34,7 @@ def test_merge_does_not_drop_trading_tables(tmp_path):
     con.close()
 
     # Import and run the safe merge
-    from scripts.run_parallel_ingest import merge_bars_only
+    from scripts.infra.run_parallel_ingest import merge_bars_only
     merge_bars_only(db_path=db_path, temp_dbs=[])
 
     # Trading table must survive
@@ -46,7 +46,7 @@ def test_merge_does_not_drop_trading_tables(tmp_path):
 
 def test_merge_bars_only_has_no_force_rebuild_param():
     """merge_bars_only() must NOT have a force_rebuild parameter."""
-    from scripts.run_parallel_ingest import merge_bars_only
+    from scripts.infra.run_parallel_ingest import merge_bars_only
     sig = inspect.signature(merge_bars_only)
     assert "force_rebuild" not in sig.parameters, \
         "merge_bars_only() should not have force_rebuild — that's in main()"
@@ -54,6 +54,6 @@ def test_merge_bars_only_has_no_force_rebuild_param():
 
 def test_no_merge_all_function():
     """The old merge_all() function must be gone."""
-    import scripts.run_parallel_ingest as mod
+    import scripts.infra.run_parallel_ingest as mod
     assert not hasattr(mod, "merge_all"), \
         "merge_all() still exists — must be replaced by merge_bars_only()"

@@ -24,7 +24,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts._alt_strategy_utils import (
+from research._alt_strategy_utils import (
     annualize_sharpe,
     compute_strategy_metrics,
 )

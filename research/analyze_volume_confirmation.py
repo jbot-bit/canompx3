@@ -41,7 +41,7 @@ from pipeline.dst import (
     cme_open_brisbane, us_equity_open_brisbane,
     us_data_open_brisbane, london_open_brisbane,
 )
-from scripts._alt_strategy_utils import compute_strategy_metrics
+from research._alt_strategy_utils import compute_strategy_metrics
 
 
 def load_outcomes_with_entry_ts(db_path: Path, instrument: str, session: str) -> pd.DataFrame:

@@ -34,7 +34,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 sys.stdout.reconfigure(line_buffering=True)
 
-from scripts._alt_strategy_utils import compute_strategy_metrics, annualize_sharpe
+from research._alt_strategy_utils import compute_strategy_metrics, annualize_sharpe
 
 
 def load_features(db_path: Path, instrument: str = "MGC") -> pd.DataFrame:
