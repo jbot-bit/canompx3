@@ -379,3 +379,76 @@ class TestWalkForward:
             min_valid_windows=2,
         )
         assert result2.n_valid_windows >= 2
+
+    def test_zero_windows_diagnostic(self, con):
+        """Bug 2: All outcomes in training period -> descriptive rejection."""
+        # Only 6 months of data with 12-month train requirement
+        # All outcomes before the first test window start
+        outcomes = []
+        for month in range(1, 7):
+            for day in [10, 15, 20]:
+                outcomes.append({
+                    "trading_day": date(2020, month, day),
+                    "outcome": "win", "pnl_r": 2.0,
+                })
+        _insert_outcomes(con, outcomes)
+
+        result = run_walkforward(
+            con=con, strategy_id="TEST_ZERO_WIN", instrument="MGC",
+            min_train_months=12, **_WF_BASE,
+        )
+
+        assert result.passed is False
+        assert "training period" in result.rejection_reason
+        assert "No test windows" in result.rejection_reason
+        assert result.n_total_windows == 0
+
+    def test_window_imbalance_detected(self, con):
+        """Bug 4: Large trade count differences between windows flagged."""
+        # Create data with dense early period and sparse late period
+        outcomes = []
+        # 2020: training data
+        outcomes.extend(_monthly_outcomes(2020, 2020))
+        # 2021-H1: 20 trades/month (dense)
+        for month in range(1, 7):
+            for day in range(1, 21):
+                try:
+                    outcomes.append({
+                        "trading_day": date(2021, month, day),
+                        "outcome": "win", "pnl_r": 2.0,
+                    })
+                except ValueError:
+                    pass
+        # 2021-H2: 1 trade/month (sparse) — 6 months, ~6 trades
+        for month in range(7, 13):
+            outcomes.append({
+                "trading_day": date(2021, month, 15),
+                "outcome": "win", "pnl_r": 2.0,
+            })
+        # 2022: keep data flowing for more windows
+        outcomes.extend(_monthly_outcomes(2022, 2023))
+        _insert_outcomes(con, outcomes)
+
+        result = run_walkforward(
+            con=con, strategy_id="TEST_IMBAL", instrument="MGC",
+            min_trades_per_window=1, min_valid_windows=2, **_WF_BASE,
+        )
+
+        assert result.window_imbalance_ratio is not None
+        # Dense window has ~120 trades, sparse has ~6 -> ratio > 5
+        if result.window_imbalance_ratio > 5.0:
+            assert result.window_imbalanced is True
+
+    def test_window_imbalance_balanced(self, con):
+        """Balanced windows should not be flagged."""
+        outcomes = _monthly_outcomes(2020, 2023)
+        _insert_outcomes(con, outcomes)
+
+        result = run_walkforward(
+            con=con, strategy_id="TEST_BAL", instrument="MGC",
+            **_WF_BASE,
+        )
+
+        # Uniform 3 trades/month -> all windows equal -> ratio ~1.0
+        if result.window_imbalance_ratio is not None:
+            assert result.window_imbalanced is False

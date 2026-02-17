@@ -35,6 +35,8 @@ class WalkForwardResult:
     rejection_reason: str | None
     windows: list[dict]
     params: dict
+    window_imbalance_ratio: float | None = None
+    window_imbalanced: bool = False
 
 
 def _add_months(d: date, months: int) -> date:
@@ -145,6 +147,19 @@ def run_walkforward(
 
         window_start = window_end
 
+    if not windows:
+        return WalkForwardResult(
+            strategy_id=strategy_id, instrument=instrument,
+            n_total_windows=0, n_valid_windows=0, n_positive_windows=0,
+            pct_positive=0.0, agg_oos_exp_r=0.0, total_oos_trades=0,
+            passed=False,
+            rejection_reason=(
+                f"All {len(outcomes)} outcomes in training period "
+                f"({min_train_months}mo). No test windows."
+            ),
+            windows=[], params=params,
+        )
+
     # Aggregate valid windows (test_n >= threshold)
     valid_windows = [w for w in windows if w["test_n"] >= min_trades_per_window]
     n_valid = len(valid_windows)
@@ -164,6 +179,14 @@ def run_walkforward(
         ) / total_oos_trades
     else:
         agg_oos_exp_r = 0.0
+
+    # Window imbalance detection
+    window_counts = [w["test_n"] for w in valid_windows if w["test_n"] > 0]
+    window_imbalance_ratio = None
+    window_imbalanced = False
+    if len(window_counts) >= 2:
+        window_imbalance_ratio = round(max(window_counts) / max(min(window_counts), 1), 1)
+        window_imbalanced = window_imbalance_ratio > 5.0
 
     # Pass rule (ALL 4 required, fail-closed)
     oos_trade_floor = min_trades_per_window * min_valid_windows
@@ -207,6 +230,8 @@ def run_walkforward(
         total_oos_trades=total_oos_trades,
         passed=passed, rejection_reason=rejection_reason,
         windows=windows, params=params,
+        window_imbalance_ratio=window_imbalance_ratio,
+        window_imbalanced=window_imbalanced,
     )
 
 

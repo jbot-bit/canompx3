@@ -46,6 +46,7 @@ class FoldResult:
     expectancy_r: float | None
     sharpe_ratio: float | None
     max_drawdown_r: float | None
+    sparse: bool = False
 
 @dataclass
 class WalkForwardResult:
@@ -58,6 +59,8 @@ class WalkForwardResult:
     oos_expectancy_r: float | None = None
     oos_sharpe_ratio: float | None = None
     oos_max_drawdown_r: float | None = None
+    fold_imbalance_ratio: float | None = None
+    fold_imbalanced: bool = False
 
 def build_folds(
     trading_days: list[date],
@@ -241,6 +244,7 @@ def walk_forward_eval(
 
                 metrics = evaluate_fold(strat_outcomes, eligible, test_set)
 
+                trade_count = metrics["sample_size"]
                 fold_r = FoldResult(
                     fold_idx=fi + 1,
                     train_start=train_days[0],
@@ -249,11 +253,12 @@ def walk_forward_eval(
                     test_end=test_days[-1],
                     train_days=len(train_days),
                     test_days=len(test_days),
-                    trade_count=metrics["sample_size"],
+                    trade_count=trade_count,
                     win_rate=metrics["win_rate"],
                     expectancy_r=metrics["expectancy_r"],
                     sharpe_ratio=metrics["sharpe_ratio"],
                     max_drawdown_r=metrics["max_drawdown_r"],
+                    sparse=trade_count < 15,
                 )
                 wf_result.folds.append(fold_r)
 
@@ -271,6 +276,12 @@ def walk_forward_eval(
             wf_result.oos_expectancy_r = agg["expectancy_r"]
             wf_result.oos_sharpe_ratio = agg["sharpe_ratio"]
             wf_result.oos_max_drawdown_r = agg["max_drawdown_r"]
+
+            # Fold imbalance detection
+            counts = [f.trade_count for f in wf_result.folds if f.trade_count > 0]
+            if len(counts) >= 2:
+                wf_result.fold_imbalance_ratio = round(max(counts) / max(min(counts), 1), 1)
+                wf_result.fold_imbalanced = wf_result.fold_imbalance_ratio > 5.0
 
             results.append(wf_result)
 

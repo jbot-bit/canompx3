@@ -13,6 +13,7 @@ Analysis:
 
 import argparse
 import json
+import math
 import sys
 from datetime import date
 from pathlib import Path
@@ -30,6 +31,17 @@ from research._alt_strategy_utils import (
 
 ARTIFACTS_DIR = PROJECT_ROOT / "artifacts"
 REGIME_BOUNDARY = date(2025, 1, 1)
+
+
+def _sanitize(obj):
+    """Replace NaN/inf with None for valid JSON."""
+    if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+        return None
+    if isinstance(obj, dict):
+        return {k: _sanitize(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize(v) for v in obj]
+    return obj
 
 def load_orb_daily_pnl(db_path: Path, start: date, end: date) -> pd.DataFrame:
     """Load ORB strategy daily P&L from validated_setups + orb_outcomes.
@@ -235,7 +247,7 @@ def main():
         path = args.output
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w") as f:
-            json.dump(output_data, f, indent=2, default=str)
+            json.dump(_sanitize(output_data), f, indent=2, default=str)
         print(f"\nResults saved to {path}")
 
     print()

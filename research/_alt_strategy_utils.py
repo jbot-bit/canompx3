@@ -96,7 +96,9 @@ def compute_strategy_metrics(pnls: np.ndarray) -> dict | None:
     """Compute trading stats from array of R-multiples.
 
     Returns dict with n, wr, expr, sharpe, maxdd, total or None if empty.
+    NaN values are stripped before computation.
     """
+    pnls = pnls[~np.isnan(pnls)]
     n = len(pnls)
     if n == 0:
         return None

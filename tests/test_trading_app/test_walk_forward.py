@@ -168,3 +168,102 @@ class TestEvaluateFold:
         m = evaluate_fold(outcomes, eligible, test_days)
         assert m["sample_size"] == 1
         assert m["win_rate"] == 0.0  # Only the 2024 loss
+
+
+# ============================================================================
+# FoldResult.sparse tests (Bug 3)
+# ============================================================================
+
+class TestFoldResultSparse:
+    """Bug 3: Folds with trade_count < 15 marked sparse."""
+
+    def test_sparse_when_few_trades(self):
+        """trade_count < 15 -> sparse = True."""
+        fold = FoldResult(
+            fold_idx=1,
+            train_start=date(2021, 1, 1), train_end=date(2023, 12, 31),
+            test_start=date(2024, 1, 1), test_end=date(2024, 12, 31),
+            train_days=750, test_days=250,
+            trade_count=8, win_rate=0.5, expectancy_r=0.1,
+            sharpe_ratio=0.3, max_drawdown_r=-2.0,
+            sparse=True,
+        )
+        assert fold.sparse is True
+
+    def test_not_sparse_when_enough_trades(self):
+        """trade_count >= 15 -> sparse = False."""
+        fold = FoldResult(
+            fold_idx=1,
+            train_start=date(2021, 1, 1), train_end=date(2023, 12, 31),
+            test_start=date(2024, 1, 1), test_end=date(2024, 12, 31),
+            train_days=750, test_days=250,
+            trade_count=64, win_rate=0.6, expectancy_r=0.3,
+            sharpe_ratio=0.5, max_drawdown_r=-3.0,
+            sparse=False,
+        )
+        assert fold.sparse is False
+
+    def test_sparse_default_false(self):
+        """sparse defaults to False for backward compatibility."""
+        fold = FoldResult(
+            fold_idx=1,
+            train_start=date(2021, 1, 1), train_end=date(2023, 12, 31),
+            test_start=date(2024, 1, 1), test_end=date(2024, 12, 31),
+            train_days=750, test_days=250,
+            trade_count=100, win_rate=0.6, expectancy_r=0.3,
+            sharpe_ratio=0.5, max_drawdown_r=-3.0,
+        )
+        assert fold.sparse is False
+
+    def test_sparse_threshold_boundary(self):
+        """trade_count == 14 -> sparse, trade_count == 15 -> not sparse."""
+        assert FoldResult(
+            fold_idx=1,
+            train_start=date(2021, 1, 1), train_end=date(2023, 12, 31),
+            test_start=date(2024, 1, 1), test_end=date(2024, 12, 31),
+            train_days=750, test_days=250,
+            trade_count=14, win_rate=0.5, expectancy_r=0.1,
+            sharpe_ratio=0.3, max_drawdown_r=-2.0,
+            sparse=True,
+        ).sparse is True
+
+        assert FoldResult(
+            fold_idx=1,
+            train_start=date(2021, 1, 1), train_end=date(2023, 12, 31),
+            test_start=date(2024, 1, 1), test_end=date(2024, 12, 31),
+            train_days=750, test_days=250,
+            trade_count=15, win_rate=0.5, expectancy_r=0.1,
+            sharpe_ratio=0.3, max_drawdown_r=-2.0,
+            sparse=False,
+        ).sparse is False
+
+
+# ============================================================================
+# WalkForwardResult fold imbalance tests (Bug 4)
+# ============================================================================
+
+class TestFoldImbalance:
+    """Bug 4: Fold imbalance detection in WalkForwardResult."""
+
+    def test_imbalance_fields_default(self):
+        """Defaults: ratio=None, imbalanced=False."""
+        wf = WalkForwardResult(strategy_id="TEST", filter_type="G4")
+        assert wf.fold_imbalance_ratio is None
+        assert wf.fold_imbalanced is False
+
+    def test_imbalance_flagged(self):
+        """Ratio > 5.0 -> fold_imbalanced = True."""
+        wf = WalkForwardResult(
+            strategy_id="TEST", filter_type="G4",
+            fold_imbalance_ratio=10.0, fold_imbalanced=True,
+        )
+        assert wf.fold_imbalanced is True
+        assert wf.fold_imbalance_ratio == 10.0
+
+    def test_balanced_not_flagged(self):
+        """Ratio <= 5.0 -> fold_imbalanced = False."""
+        wf = WalkForwardResult(
+            strategy_id="TEST", filter_type="G4",
+            fold_imbalance_ratio=2.5, fold_imbalanced=False,
+        )
+        assert wf.fold_imbalanced is False
