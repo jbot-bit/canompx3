@@ -595,6 +595,17 @@ def build_outcomes(
             trading_day = row_dict["trading_day"]
             symbol = row_dict["symbol"]
 
+            # Skip days already computed (checkpoint/resume)
+            if not dry_run:
+                existing = con.execute(
+                    "SELECT COUNT(*) FROM orb_outcomes WHERE trading_day = ? AND symbol = ? AND orb_minutes = ?",
+                    [trading_day, symbol, orb_minutes],
+                ).fetchone()[0]
+                if existing > 0:
+                    if (day_idx + 1) % 100 == 0:
+                        logger.info(f"  Skipping {trading_day} ({existing} outcomes exist)")
+                    continue
+
             # Partition bars for this trading day using binary search (O(log n))
             td_start, td_end = compute_trading_day_utc_range(trading_day)
             start_idx = int(np.searchsorted(all_ts, pd.Timestamp(td_start).asm8, side="left"))
@@ -673,7 +684,7 @@ def build_outcomes(
                     day_batch,
                 )
 
-            if (day_idx + 1) % 50 == 0:
+            if (day_idx + 1) % 10 == 0:
                 if not dry_run:
                     con.commit()
                 elapsed = time.monotonic() - t0
@@ -685,6 +696,13 @@ def build_outcomes(
                     f"{elapsed:.0f}s elapsed, ~{remaining:.0f}s remaining)",
                     flush=True,
                 )
+                # Write heartbeat for external monitoring
+                if not dry_run:
+                    heartbeat_path = Path(db_path).parent / "outcome_builder.heartbeat"
+                    heartbeat_path.write_text(
+                        f"{datetime.now().isoformat()} | {instrument} | "
+                        f"{day_idx + 1}/{total_days} | {trading_day}\n"
+                    )
 
         if not dry_run:
             con.commit()

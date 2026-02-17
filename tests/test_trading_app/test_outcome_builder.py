@@ -615,6 +615,164 @@ class TestBuildOutcomes:
         con.close()
         assert models == {"E1", "E3"}
 
+class TestCheckpointResume:
+    """Tests for checkpoint/resume crash resilience."""
+
+    def _setup_db(self, tmp_path):
+        """Reuse the same setup as TestBuildOutcomes."""
+        db_path = tmp_path / "test.db"
+        con = duckdb.connect(str(db_path))
+
+        from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA, DAILY_FEATURES_SCHEMA
+        con.execute(BARS_1M_SCHEMA)
+        con.execute(BARS_5M_SCHEMA)
+        con.execute(DAILY_FEATURES_SCHEMA)
+
+        from trading_app.db_manager import init_trading_app_schema
+        con.close()
+        init_trading_app_schema(db_path=db_path)
+
+        con = duckdb.connect(str(db_path))
+
+        base_ts = datetime(2024, 1, 4, 23, 0, tzinfo=timezone.utc)
+        bars = []
+        price = 2700.0
+        for i in range(300):
+            ts = base_ts + timedelta(minutes=i)
+            o = price + i * 0.1
+            h = o + 2
+            l = o - 1
+            c = o + 1
+            bars.append((ts.isoformat(), "MGC", "GCG4", o, h, l, c, 100))
+
+        con.executemany(
+            """INSERT INTO bars_1m (ts_utc, symbol, source_symbol, open, high, low, close, volume)
+               VALUES (?::TIMESTAMPTZ, ?, ?, ?, ?, ?, ?, ?)""",
+            bars,
+        )
+
+        orb_high = 2700.0 + 4 * 0.1 + 2
+        orb_low = 2700.0 - 1
+        con.execute(
+            """INSERT INTO daily_features
+               (trading_day, symbol, orb_minutes, bar_count_1m,
+                orb_0900_high, orb_0900_low, orb_0900_break_dir, orb_0900_break_ts)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?::TIMESTAMPTZ)""",
+            [
+                date(2024, 1, 5), "MGC", 5, 300,
+                orb_high, orb_low, "long",
+                (base_ts + timedelta(minutes=6)).isoformat(),
+            ],
+        )
+        con.commit()
+        con.close()
+
+        return db_path
+
+    def test_second_run_skips_computed_days(self, tmp_path):
+        """Second run returns 0 new outcomes because all days are already computed."""
+        db_path = self._setup_db(tmp_path)
+
+        count1 = build_outcomes(
+            db_path=db_path, instrument="MGC",
+            start_date=date(2024, 1, 1), end_date=date(2024, 12, 31),
+        )
+        assert count1 > 0
+
+        count2 = build_outcomes(
+            db_path=db_path, instrument="MGC",
+            start_date=date(2024, 1, 1), end_date=date(2024, 12, 31),
+        )
+        assert count2 == 0
+
+        # Row count unchanged
+        con = duckdb.connect(str(db_path), read_only=True)
+        actual = con.execute("SELECT COUNT(*) FROM orb_outcomes").fetchone()[0]
+        con.close()
+        assert actual == count1
+
+    def _setup_db_multi_day(self, tmp_path, num_days=11):
+        """Create a temp DB with schema + data for multiple trading days."""
+        db_path = tmp_path / "test.db"
+        con = duckdb.connect(str(db_path))
+
+        from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA, DAILY_FEATURES_SCHEMA
+        con.execute(BARS_1M_SCHEMA)
+        con.execute(BARS_5M_SCHEMA)
+        con.execute(DAILY_FEATURES_SCHEMA)
+
+        from trading_app.db_manager import init_trading_app_schema
+        con.close()
+        init_trading_app_schema(db_path=db_path)
+
+        con = duckdb.connect(str(db_path))
+
+        for day_offset in range(num_days):
+            td = date(2024, 1, 5 + day_offset)
+            base_ts = datetime(2024, 1, 4 + day_offset, 23, 0, tzinfo=timezone.utc)
+            bars = []
+            price = 2700.0
+            for i in range(60):
+                ts = base_ts + timedelta(minutes=i)
+                o = price + i * 0.1
+                h = o + 2
+                l = o - 1
+                c = o + 1
+                bars.append((ts.isoformat(), "MGC", "GCG4", o, h, l, c, 100))
+
+            con.executemany(
+                """INSERT INTO bars_1m (ts_utc, symbol, source_symbol, open, high, low, close, volume)
+                   VALUES (?::TIMESTAMPTZ, ?, ?, ?, ?, ?, ?, ?)""",
+                bars,
+            )
+
+            orb_high = 2700.0 + 4 * 0.1 + 2
+            orb_low = 2700.0 - 1
+            con.execute(
+                """INSERT INTO daily_features
+                   (trading_day, symbol, orb_minutes, bar_count_1m,
+                    orb_0900_high, orb_0900_low, orb_0900_break_dir, orb_0900_break_ts)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?::TIMESTAMPTZ)""",
+                [
+                    td, "MGC", 5, 60,
+                    orb_high, orb_low, "long",
+                    (base_ts + timedelta(minutes=6)).isoformat(),
+                ],
+            )
+
+        con.commit()
+        con.close()
+        return db_path
+
+    def test_heartbeat_file_created(self, tmp_path):
+        """Heartbeat file is written during non-dry-run build with 10+ days."""
+        db_path = self._setup_db_multi_day(tmp_path, num_days=11)
+
+        build_outcomes(
+            db_path=db_path, instrument="MGC",
+            start_date=date(2024, 1, 1), end_date=date(2024, 12, 31),
+        )
+
+        heartbeat_path = tmp_path / "outcome_builder.heartbeat"
+        assert heartbeat_path.exists()
+        content = heartbeat_path.read_text()
+        assert "MGC" in content
+        assert "/" in content  # progress format: "10/11"
+
+    def test_heartbeat_not_created_on_dry_run(self, tmp_path):
+        """Heartbeat file is NOT written during dry-run."""
+        db_path = self._setup_db(tmp_path)
+
+        build_outcomes(
+            db_path=db_path, instrument="MGC",
+            start_date=date(2024, 1, 1), end_date=date(2024, 12, 31),
+            dry_run=True,
+        )
+
+        heartbeat_path = tmp_path / "outcome_builder.heartbeat"
+        assert not heartbeat_path.exists()
+
+
 class TestCLI:
     """Test CLI --help doesn't crash."""
 
