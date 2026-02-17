@@ -15,6 +15,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 import duckdb
+from contextlib import nullcontext
 from pipeline.paths import GOLD_DB_PATH
 
 def init_nested_schema(
@@ -33,10 +34,8 @@ def init_nested_schema(
     if db_path is None:
         db_path = GOLD_DB_PATH
 
-    owns_con = con is None
-    if owns_con:
-        con = duckdb.connect(str(db_path))
-    try:
+    cm = duckdb.connect(str(db_path)) if con is None else nullcontext(con)
+    with cm as con:
         if force:
             print("WARN: Force mode: Dropping existing nested tables...")
             con.execute("DROP TABLE IF EXISTS nested_validated")
@@ -166,19 +165,15 @@ def init_nested_schema(
         con.commit()
         print("Nested ORB schema initialized successfully")
 
-    finally:
-        if owns_con:
-            con.close()
 
 def verify_nested_schema(db_path: Path | None = None) -> tuple[bool, list[str]]:
     """Verify all nested tables exist with correct schema."""
     if db_path is None:
         db_path = GOLD_DB_PATH
 
-    con = duckdb.connect(str(db_path), read_only=True)
-    violations = []
+    with duckdb.connect(str(db_path), read_only=True) as con:
+        violations = []
 
-    try:
         result = con.execute("""
             SELECT table_name
             FROM information_schema.tables
@@ -255,9 +250,6 @@ def verify_nested_schema(db_path: Path | None = None) -> tuple[bool, list[str]]:
                 violations.append(f"nested_validated missing columns: {missing}")
 
         return len(violations) == 0, violations
-
-    finally:
-        con.close()
 
 def main():
     import argparse

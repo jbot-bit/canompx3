@@ -337,7 +337,12 @@ def check_connection_leaks(pipeline_dir: Path) -> list[str]:
         close_count = len(re.findall(r'\.close\(\)', content))
         has_finally = 'finally:' in content
         has_atexit = 'atexit' in content
-        has_with = 'with duckdb' in content
+        # Also recognise wrapper helpers that return duckdb.connect() and are
+        # called via ``with _connect(...) as con:``
+        has_with = 'with duckdb' in content or (
+            bool(re.search(r'return\s+duckdb\.connect\(', content))
+            and bool(re.search(r'\bwith\s+\w+\(', content))
+        )
 
         if has_finally or has_atexit or has_with:
             continue
@@ -411,7 +416,12 @@ def check_trading_app_connection_leaks(trading_app_dir: Path) -> list[str]:
         close_count = len(re.findall(r'\.close\(\)', content))
         has_finally = 'finally:' in content
         has_atexit = 'atexit' in content
-        has_with = 'with duckdb' in content
+        # Also recognise wrapper helpers that return duckdb.connect() and are
+        # called via ``with _connect(...) as con:``
+        has_with = 'with duckdb' in content or (
+            bool(re.search(r'return\s+duckdb\.connect\(', content))
+            and bool(re.search(r'\bwith\s+\w+\(', content))
+        )
 
         if has_finally or has_atexit or has_with:
             continue
