@@ -33,7 +33,6 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.build_daily_features import compute_trading_day_utc_range
 from pipeline.cost_model import get_cost_spec, to_r_multiple
@@ -49,7 +48,6 @@ MIN_ORB_SIZE = 4.0
 RR_TARGET = 2.0
 CONFIRM_BARS = 2
 HOLD_HOURS = 7
-
 
 def compute_ib(bars: pd.DataFrame, ib_minutes: int) -> dict | None:
     """IB = high/low of first N minutes starting at 00:00 UTC."""
@@ -72,7 +70,6 @@ def compute_ib(bars: pd.DataFrame, ib_minutes: int) -> dict | None:
         "ib_size": float(ib_bars["high"].max() - ib_bars["low"].min()),
         "ib_end": ib_end,
     }
-
 
 def get_first_ib_break(bars: pd.DataFrame, ib: dict) -> dict:
     """Find the FIRST bar that breaks above IB high or below IB low.
@@ -100,7 +97,6 @@ def get_first_ib_break(bars: pd.DataFrame, ib: dict) -> dict:
 
     return {"ib_break_dir": None, "ib_break_ts": None}
 
-
 def compute_pnl_with_stop(
     bars: pd.DataFrame, entry_ts, entry_price: float,
     stop_price: float, is_long: bool, cutoff_hours: int,
@@ -127,7 +123,6 @@ def compute_pnl_with_stop(
 
     pnl = (last_close - entry_price) if is_long else (entry_price - last_close)
     return to_r_multiple(spec, entry_price, stop_price, pnl)
-
 
 # ---------------------------------------------------------------------------
 # Main
@@ -172,7 +167,6 @@ def load_data(db_path: Path, start: date, end: date):
     con.close()
     print(f"  Done\n")
     return df, bars_cache
-
 
 def process_trades(df, bars_cache, ib_minutes: int) -> pd.DataFrame:
     """Classify trades for a given IB duration. Returns DataFrame."""
@@ -233,7 +227,6 @@ def process_trades(df, bars_cache, ib_minutes: int) -> pd.DataFrame:
         })
 
     return pd.DataFrame(results)
-
 
 def run(db_path: Path, start: date, end: date):
     df, bars_cache = load_data(db_path, start, end)
@@ -449,7 +442,6 @@ def run(db_path: Path, start: date, end: date):
 
     print()
 
-
 def main():
     parser = argparse.ArgumentParser(description="IB Direction Alignment")
     parser.add_argument("--db-path", type=Path, default=Path("C:/db/gold.db"))
@@ -462,7 +454,6 @@ def main():
         global IB_MINUTES_OPTIONS
         IB_MINUTES_OPTIONS = [int(x.strip()) for x in args.ib_minutes.split(",")]
     run(args.db_path, args.start, args.end)
-
 
 if __name__ == "__main__":
     main()

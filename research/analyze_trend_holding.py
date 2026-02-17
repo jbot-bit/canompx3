@@ -26,7 +26,6 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.build_daily_features import compute_trading_day_utc_range
 from pipeline.cost_model import get_cost_spec, to_r_multiple
@@ -54,7 +53,6 @@ SESSION_IB_CONFIG = {
 
 SPEC = get_cost_spec("MGC")
 
-
 # ---------------------------------------------------------------------------
 # IB computation
 # ---------------------------------------------------------------------------
@@ -77,7 +75,6 @@ def compute_ib(ts, highs, lows, anchor_utc_hour, duration_minutes):
         "ib_end": ib_end,
     }
 
-
 def find_ib_break(ts, highs, lows, ib):
     """Find first IB break after ib_end. Returns (direction, break_ts, break_idx)."""
     post_idx = np.flatnonzero(ts >= ib["ib_end"])
@@ -91,7 +88,6 @@ def find_ib_break(ts, highs, lows, ib):
         if bl:
             return "short", ts[i], i
     return None, None, None
-
 
 # ---------------------------------------------------------------------------
 # Strategy simulations
@@ -124,7 +120,6 @@ def sim_fixed_target(ts, highs, lows, closes, entry_idx, entry_price,
     c = closes[-1]
     pnl = (c - entry_price) if is_long else (entry_price - c)
     return to_r_multiple(SPEC, entry_price, stop_price, pnl), "eod"
-
 
 def sim_exploit(ts, highs, lows, closes, entry_idx, entry_price,
                 stop_price, target_price, is_long, cutoff_ts,
@@ -214,7 +209,6 @@ def sim_exploit(ts, highs, lows, closes, entry_idx, entry_price,
     pnl = (c - entry_price) if is_long else (entry_price - c)
     phase = "limbo" if not alignment_known else (alignment or "unknown")
     return to_r_multiple(SPEC, entry_price, stop_price, pnl), "eod", phase
-
 
 def sim_pyramid(ts, highs, lows, closes, entry_idx, entry_price,
                 stop_price, target_price, is_long, cutoff_ts,
@@ -333,7 +327,6 @@ def sim_pyramid(ts, highs, lows, closes, entry_idx, entry_price,
     phase = "limbo" if not alignment_known else (alignment or "unknown")
     return pnl1 + pnl2, "eod", phase, 2 if pyramided else 1
 
-
 # ---------------------------------------------------------------------------
 # Process session
 # ---------------------------------------------------------------------------
@@ -448,7 +441,6 @@ def process_session(db_path, session_label, start, end):
 
     return pd.DataFrame(results)
 
-
 # ---------------------------------------------------------------------------
 # Reporting
 # ---------------------------------------------------------------------------
@@ -456,7 +448,6 @@ def process_session(db_path, session_label, start, end):
 def fmt_row(label, m):
     return (f"  {label:22s} {m['n']:>5d} {m['wr']:>7.1%} {m['expr']:>+8.4f} "
             f"{m['sharpe']:>8.4f} {m['maxdd']:>8.2f} {m['total']:>+8.1f}")
-
 
 def print_report(pdf, session_label):
     if len(pdf) == 0:
@@ -570,7 +561,6 @@ def print_report(pdf, session_label):
             print(f"    WR={m['wr']:.1%}  ExpR={m['expr']:+.3f}R  "
                   f"Total={m['total']:+.1f}R  MaxDD={m['maxdd']:.2f}R")
 
-
 def run_checks(pdf, session_label):
     print(f"\n  Integrity checks ({session_label}):")
     ok = total = 0
@@ -618,7 +608,6 @@ def run_checks(pdf, session_label):
 
     print(f"    {ok}/{total} passed")
 
-
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -648,7 +637,6 @@ def run(db_path, start, end):
     print("- If Exploit LOSES to Fixed: IB signal is real but not exploitable")
     print("- Check yearly: must work across regimes, not just 2025")
 
-
 def main():
     parser = argparse.ArgumentParser(description="Honest IB Exploit Backtest")
     parser.add_argument("--db-path", type=Path, default=Path("C:/db/gold.db"))
@@ -656,7 +644,6 @@ def main():
     parser.add_argument("--end", type=date.fromisoformat, default=date(2026, 2, 4))
     args = parser.parse_args()
     run(args.db_path, args.start, args.end)
-
 
 if __name__ == "__main__":
     main()

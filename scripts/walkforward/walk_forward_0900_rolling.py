@@ -9,13 +9,11 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
 import numpy as np
 import pandas as pd
 from pipeline.paths import GOLD_DB_PATH
-
 
 def load_0900_data():
     """Load all 0900 outcomes joined with daily_features."""
@@ -35,7 +33,6 @@ def load_0900_data():
     df["orb_size"] = df["orb_0900_size"]
     return df
 
-
 def compute_stats(pnls):
     """Compute trading stats from array of R-multiples."""
     n = len(pnls)
@@ -50,7 +47,6 @@ def compute_stats(pnls):
     maxdd = (cumul - peak).min()
     total = pnls.sum()
     return {"n": n, "wr": wr, "expr": expr, "sharpe": sharpe, "maxdd": maxdd, "total": total}
-
 
 def find_best_combo(data, min_trades=10, metric="sharpe"):
     """Find best (em, rr, cb) from data. Lower min_trades for rolling windows."""
@@ -74,10 +70,8 @@ def find_best_combo(data, min_trades=10, metric="sharpe"):
 
     return best_combo, best_stats
 
-
 def em_label(em):
     return "E1" if em == "E1" else "E3"
-
 
 def main():
     df = load_0900_data()
@@ -256,7 +250,6 @@ def main():
     print(sep)
     print("DONE")
     print(sep)
-
 
 if __name__ == "__main__":
     main()

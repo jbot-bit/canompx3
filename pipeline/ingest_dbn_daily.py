@@ -38,7 +38,6 @@ import duckdb
 import databento as db
 
 # Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from pipeline.paths import DAILY_DBN_DIR, GOLD_DB_PATH
 from pipeline.asset_configs import get_asset_config
@@ -67,7 +66,6 @@ CHECKPOINT_DIR = Path(__file__).parent / "checkpoints"
 
 # Daily file pattern
 DAILY_FILE_PATTERN = re.compile(r'glbx-mdp3-(\d{8})\.ohlcv-1m\.dbn\.zst')
-
 
 # =============================================================================
 # INSTRUMENT-SPECIFIC CONFIG
@@ -103,7 +101,6 @@ def get_ingest_config(instrument: str) -> dict:
             "data_dir": config["dbn_path"],
         }
 
-
 # =============================================================================
 # SYMBOLOGY MAPPING
 # =============================================================================
@@ -135,7 +132,6 @@ def load_symbology(data_dir: Path) -> dict:
 
     return id_to_name
 
-
 def discover_daily_files(data_dir: Path, start_date: date, end_date: date) -> list[tuple[date, Path]]:
     """
     Discover and sort daily DBN files within date range.
@@ -158,7 +154,6 @@ def discover_daily_files(data_dir: Path, start_date: date, end_date: date) -> li
 
     files.sort(key=lambda x: x[0])
     return files
-
 
 # =============================================================================
 # MAIN INGESTION
@@ -596,7 +591,6 @@ def main():
     print()
     print(f"SUCCESS: {symbol} daily ingestion complete and validated.")
     sys.exit(0)
-
 
 if __name__ == "__main__":
     main()

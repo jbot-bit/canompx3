@@ -15,15 +15,12 @@ Usage:
     engine.on_trading_day_end()
 """
 
-import sys
 from pathlib import Path
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from enum import Enum
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
-
 
 from pipeline.cost_model import CostSpec, to_r_multiple, get_session_cost_spec
 from pipeline.dst import DYNAMIC_ORB_RESOLVERS
@@ -32,7 +29,6 @@ from trading_app.config import (
     IB_DURATION_MINUTES, HOLD_HOURS, ORB_DURATION_MINUTES,
 )
 from trading_app.portfolio import Portfolio, PortfolioStrategy
-
 
 # =========================================================================
 # ORB time windows (UTC offsets from Brisbane 09:00 trading day start)
@@ -51,13 +47,11 @@ ORB_WINDOWS_UTC = {
     "0030": (14, 30),     # 00:30 Brisbane = 14:30 UTC  (5m ORB)
 }
 
-
 class TradeState(Enum):
     ARMED = "ARMED"
     CONFIRMING = "CONFIRMING"
     ENTERED = "ENTERED"
     EXITED = "EXITED"
-
 
 @dataclass
 class TradeEvent:
@@ -69,7 +63,6 @@ class TradeEvent:
     direction: str
     contracts: int
     reason: str
-
 
 @dataclass
 class LiveORB:
@@ -88,7 +81,6 @@ class LiveORB:
         if self.high is not None and self.low is not None:
             return self.high - self.low
         return None
-
 
 @dataclass
 class LiveIB:
@@ -132,7 +124,6 @@ class LiveIB:
             return "short"
         return None
 
-
 @dataclass
 class ActiveTrade:
     """A trade being tracked through its lifecycle."""
@@ -169,7 +160,6 @@ class ActiveTrade:
     pnl_r: float | None = None
     mae_points: float = 0.0
     mfe_points: float = 0.0
-
 
 class ExecutionEngine:
     """

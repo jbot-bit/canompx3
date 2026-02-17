@@ -22,12 +22,10 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
 import numpy as np
 from pipeline.paths import GOLD_DB_PATH
-
 
 def run_analysis(db_path=None):
     if db_path is None:
@@ -286,7 +284,6 @@ def run_analysis(db_path=None):
         delta = aln_expr - opp_expr if aln_n > 0 and opp_n > 0 else 0
         print(f"  {year:<6} {aln_n:>6} {aln_wr:>6.1%} {aln_expr:>+9.3f} {opp_n:>6} {opp_wr:>6.1%} {opp_expr:>+9.3f} {delta:>+7.3f}")
 
-
 def _print_stats(label, group):
     n = len(group)
     if n == 0:
@@ -304,7 +301,6 @@ def _print_stats(label, group):
     dd = (cum - peak).min()
     print(f"    {label:<20} N={n:>4}  WR={wr:>5.1%}  ExpR={expr:>+.3f}  "
           f"Sharpe={sharpe:>+.3f}  TotalR={total_r:>+.1f}  MaxDD={dd:>+.1f}")
-
 
 if __name__ == "__main__":
     import argparse

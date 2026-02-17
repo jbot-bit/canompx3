@@ -16,7 +16,6 @@ from pathlib import Path
 import duckdb
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.init_db import ORB_LABELS
 
@@ -32,7 +31,6 @@ ORB_COLUMN_DEFS = [
     ("mfe_r", "DOUBLE"),
     ("double_break", "BOOLEAN"),
 ]
-
 
 def migrate(db_path: Path, dry_run: bool = False) -> int:
     """Add missing ORB columns to daily_features.
@@ -96,7 +94,6 @@ def migrate(db_path: Path, dry_run: bool = False) -> int:
     finally:
         con.close()
 
-
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Add missing ORB columns to daily_features",
@@ -114,7 +111,6 @@ def main() -> None:
         sys.exit(1)
 
     migrate(args.db_path, dry_run=args.dry_run)
-
 
 if __name__ == "__main__":
     main()

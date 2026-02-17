@@ -4,25 +4,18 @@ Read-only database helper for the Streamlit dashboard.
 All connections use read_only=True to prevent accidental writes.
 """
 
-import sys
 from pathlib import Path
 
 import duckdb
 import pandas as pd
 
-# Add project root to path for imports
-PROJECT_ROOT = Path(__file__).parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.paths import GOLD_DB_PATH
-
 
 def get_connection(db_path: Path | None = None) -> duckdb.DuckDBPyConnection:
     """Open a read-only DuckDB connection."""
     path = db_path or GOLD_DB_PATH
     return duckdb.connect(str(path), read_only=True)
-
 
 def query_df(sql: str, db_path: Path | None = None) -> pd.DataFrame:
     """Execute a SELECT query and return a DataFrame.
@@ -38,7 +31,6 @@ def query_df(sql: str, db_path: Path | None = None) -> pd.DataFrame:
         return conn.execute(sql).fetchdf()
     finally:
         conn.close()
-
 
 def get_table_counts(db_path: Path | None = None) -> dict[str, int]:
     """Return row counts for all known tables."""
@@ -58,7 +50,6 @@ def get_table_counts(db_path: Path | None = None) -> dict[str, int]:
         return counts
     finally:
         conn.close()
-
 
 def get_date_ranges(db_path: Path | None = None) -> dict[str, dict]:
     """Return min/max dates for key tables."""
@@ -93,7 +84,6 @@ def get_date_ranges(db_path: Path | None = None) -> dict[str, dict]:
     finally:
         conn.close()
 
-
 def get_validated_strategies(
     db_path: Path | None = None,
     min_expectancy_r: float = 0.0,
@@ -105,7 +95,6 @@ def get_validated_strategies(
         ORDER BY expectancy_r DESC
     """
     return query_df(sql, db_path)
-
 
 def get_daily_features(
     trading_day: str,
@@ -124,7 +113,6 @@ def get_daily_features(
         return None
     return df.iloc[0].to_dict()
 
-
 def get_bars_per_day(db_path: Path | None = None) -> pd.DataFrame:
     """Return bar count per trading day for coverage analysis."""
     sql = """
@@ -134,7 +122,6 @@ def get_bars_per_day(db_path: Path | None = None) -> pd.DataFrame:
         ORDER BY trading_day
     """
     return query_df(sql, db_path)
-
 
 def get_contract_timeline(db_path: Path | None = None) -> pd.DataFrame:
     """Return source_symbol usage over time (contract rolls)."""
@@ -150,7 +137,6 @@ def get_contract_timeline(db_path: Path | None = None) -> pd.DataFrame:
     """
     return query_df(sql, db_path)
 
-
 def get_gap_days(db_path: Path | None = None) -> pd.DataFrame:
     """Find trading days with unusually low bar counts (potential gaps)."""
     sql = """
@@ -161,7 +147,6 @@ def get_gap_days(db_path: Path | None = None) -> pd.DataFrame:
         ORDER BY trading_day
     """
     return query_df(sql, db_path)
-
 
 def get_schema_summary(db_path: Path | None = None) -> str:
     """Return a text summary of DB tables and columns for AI context."""

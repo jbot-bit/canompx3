@@ -18,7 +18,6 @@ import pandas as pd
 import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 sys.stdout.reconfigure(line_buffering=True)
 
@@ -29,7 +28,6 @@ from research._alt_strategy_utils import (
 
 SPEC = get_cost_spec("MGC")
 UTC = ZoneInfo("UTC")
-
 
 def compute_all_reversal_outcomes(db_path, features, orb_label="0900"):
     """Pre-compute all double-break reversal outcomes with ORB-size stop."""
@@ -124,7 +122,6 @@ def compute_all_reversal_outcomes(db_path, features, orb_label="0900"):
 
     return pd.DataFrame(outcomes)
 
-
 def run_walk_forward(df, train_months=12):
     """Run walk-forward on pre-computed outcomes."""
     FILTERS = {"G3": 3.0, "G4": 4.0, "G5": 5.0, "G6": 6.0}
@@ -201,7 +198,6 @@ def run_walk_forward(df, train_months=12):
 
     return windows, oos_trades, selections
 
-
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="Walk-forward: 0900 DB reversal")
@@ -277,7 +273,6 @@ def main():
 
     print(f"\n{sep}")
     print("DONE")
-
 
 if __name__ == "__main__":
     main()

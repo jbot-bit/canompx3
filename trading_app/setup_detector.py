@@ -10,17 +10,14 @@ Usage:
     setups = detect_setups(con, filter, "0900", "MGC", start, end)
 """
 
-import sys
 from pathlib import Path
 from datetime import date
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
 
 from trading_app.config import StrategyFilter
-
 
 def detect_setups(
     con: duckdb.DuckDBPyConnection,

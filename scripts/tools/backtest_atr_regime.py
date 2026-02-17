@@ -29,7 +29,6 @@ from datetime import date
 from collections import defaultdict
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 sys.stdout.reconfigure(line_buffering=True)
 
@@ -60,7 +59,6 @@ ATR_THRESHOLDS = [0, 20, 25, 30, 35, 40]  # 0 = no gate (baseline)
 
 TARGET_SESSIONS = sorted(set(f["session"] for f in FAMILIES))
 
-
 def compute_family_metrics(outcomes_list, years_span):
     """Compute metrics for a list of outcome dicts."""
     if not outcomes_list:
@@ -87,7 +85,6 @@ def compute_family_metrics(outcomes_list, years_span):
         "total_r": round(total_r, 2),
         "tpy": round(tpy, 1),
     }
-
 
 def main():
     import argparse
@@ -277,7 +274,6 @@ def main():
 
     finally:
         con.close()
-
 
 if __name__ == "__main__":
     main()

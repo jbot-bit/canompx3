@@ -28,7 +28,6 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 # Project imports
 # ---------------------------------------------------------------------------
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.dst import (
@@ -43,7 +42,6 @@ from pipeline.dst import (
 MINUTES_PER_DAY = 1440
 ROLLING_WINDOW = 61  # +/-30 minutes centered
 REPORTS_DIR = Path(__file__).resolve().parent.parent.parent / "reports"
-
 
 # ---------------------------------------------------------------------------
 # Peak detection (no scipy)
@@ -65,7 +63,6 @@ def find_peaks(z_scores: np.ndarray, min_height: float = 3.0,
                     peaks.append(i)
     return peaks
 
-
 # ---------------------------------------------------------------------------
 # Circular rolling baseline
 # ---------------------------------------------------------------------------
@@ -83,7 +80,6 @@ def circular_rolling(arr: np.ndarray, window: int) -> tuple[np.ndarray, np.ndarr
     # Avoid division by zero
     rolling_std = np.where(rolling_std < 1e-9, 1e-9, rolling_std)
     return rolling_mean, rolling_std
-
 
 # ---------------------------------------------------------------------------
 # Build volume profiles
@@ -125,7 +121,6 @@ def load_bars(con: duckdb.DuckDBPyConnection, instrument: str) -> pd.DataFrame:
     df["is_uk_summer"] = df["trading_day"].map(uk_dst_map)
     return df
 
-
 def build_profile(df: pd.DataFrame, mask: pd.Series | None = None) -> np.ndarray:
     """Return median volume per minute_utc (0-1439). NaN for missing."""
     subset = df if mask is None else df[mask]
@@ -137,7 +132,6 @@ def build_profile(df: pd.DataFrame, mask: pd.Series | None = None) -> np.ndarray
         profile[int(minute_utc)] = vol
     return profile
 
-
 def build_day_count(df: pd.DataFrame, mask: pd.Series | None = None) -> np.ndarray:
     """Return number of distinct trading days per minute_utc."""
     subset = df if mask is None else df[mask]
@@ -148,7 +142,6 @@ def build_day_count(df: pd.DataFrame, mask: pd.Series | None = None) -> np.ndarr
     for minute_utc, n in grouped.items():
         counts[int(minute_utc)] = n
     return counts
-
 
 # ---------------------------------------------------------------------------
 # Year-by-year stability
@@ -183,7 +176,6 @@ def compute_stability_and_years(df: pd.DataFrame, spike_minutes: list[int],
 
     return stability, years_active
 
-
 # ---------------------------------------------------------------------------
 # Winter/summer shift detection
 # ---------------------------------------------------------------------------
@@ -196,7 +188,6 @@ def _circular_shift(a: int, b: int) -> int:
         diff += MINUTES_PER_DAY
     return diff
 
-
 def _nearest_peak(target: int, peaks: list[int], max_dist: int = 90) -> int | None:
     """Find the peak nearest to target (circular), within max_dist."""
     best = None
@@ -207,7 +198,6 @@ def _nearest_peak(target: int, peaks: list[int], max_dist: int = 90) -> int | No
             best_dist = dist
             best = p
     return best
-
 
 def detect_shift_for_spike(
     minute_utc: int,
@@ -271,7 +261,6 @@ def detect_shift_for_spike(
 
     return winter_min, summer_min, shift, shift_type
 
-
 # ---------------------------------------------------------------------------
 # Map spikes to SESSION_CATALOG
 # ---------------------------------------------------------------------------
@@ -279,7 +268,6 @@ def minute_utc_to_brisbane(minute_utc: int) -> tuple[int, int]:
     """Convert minute-of-day in UTC to (hour, minute) in Brisbane."""
     brisbane_min = (minute_utc + 600) % MINUTES_PER_DAY
     return brisbane_min // 60, brisbane_min % 60
-
 
 def match_to_catalog(minute_utc: int, tolerance: int = 5) -> tuple[str | None, str | None]:
     """Match a UTC spike minute to SESSION_CATALOG entries.
@@ -318,7 +306,6 @@ def match_to_catalog(minute_utc: int, tolerance: int = 5) -> tuple[str | None, s
                     break
 
     return matched_dynamic, matched_fixed
-
 
 # ---------------------------------------------------------------------------
 # Analysis pipeline
@@ -463,7 +450,6 @@ def analyze_instrument(con: duckdb.DuckDBPyConnection, instrument: str,
         "catalog_coverage": catalog_coverage,
     }
 
-
 # ---------------------------------------------------------------------------
 # Console output
 # ---------------------------------------------------------------------------
@@ -523,7 +509,6 @@ def print_report(result: dict, min_z: float) -> None:
             print(f"    {sp['time_utc']} UTC ({sp['time_brisbane']} Brisbane) "
                   f"z={sp['z_score_all']:.1f}, stability={sp['stability']:.2f}")
 
-
 # ---------------------------------------------------------------------------
 # JSON output
 # ---------------------------------------------------------------------------
@@ -534,7 +519,6 @@ def save_json(result: dict, output_dir: Path) -> Path:
     with open(path, "w") as f:
         json.dump(result, f, indent=2, default=str)
     return path
-
 
 # ---------------------------------------------------------------------------
 # Main
@@ -591,7 +575,6 @@ def main():
             print(f"\n  JSON saved: {path}")
 
     con.close()
-
 
 if __name__ == "__main__":
     main()

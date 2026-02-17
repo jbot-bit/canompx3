@@ -30,8 +30,6 @@ import pandas as pd
 import duckdb
 import databento as db
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-
 from pipeline.asset_configs import get_asset_config
 from pipeline.ingest_dbn_mgc import (
     validate_chunk,
@@ -48,10 +46,8 @@ DB_PATH = Path(r"C:\db\gold.db")
 START_DATE = date(2024, 2, 4)
 END_DATE = date(2026, 2, 3)
 
-
 def log(msg: str):
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
-
 
 def compute_trading_days_fast(ts_index: pd.DatetimeIndex) -> np.ndarray:
     """Vectorized trading day computation (09:00 Brisbane boundary)."""
@@ -64,7 +60,6 @@ def compute_trading_days_fast(ts_index: pd.DatetimeIndex) -> np.ndarray:
     mask = hours < 9
     result[mask] = np.array([d - timedelta(days=1) for d in result[mask]])
     return result
-
 
 def main():
     import argparse
@@ -308,7 +303,6 @@ def main():
         con.close()
 
     sys.exit(0)
-
 
 if __name__ == "__main__":
     main()

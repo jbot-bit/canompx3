@@ -24,8 +24,6 @@ from datetime import date, datetime, timezone, timedelta
 import pytest
 import duckdb
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA, DAILY_FEATURES_SCHEMA
 from pipeline.build_bars_5m import build_5m_bars
 from pipeline.build_daily_features import build_daily_features
@@ -33,7 +31,6 @@ from trading_app.db_manager import init_trading_app_schema
 from trading_app.outcome_builder import build_outcomes
 from trading_app.strategy_discovery import run_discovery
 from trading_app.strategy_validator import run_validation
-
 
 # =============================================================================
 # SYNTHETIC DATA GENERATORS
@@ -118,7 +115,6 @@ def _insert_bars_1m(con, n_days=30, instrument="MGC", start_year=2024,
     con.commit()
     return trading_days
 
-
 def _create_l1_db(tmp_path, n_days=30, instrument="MGC", base_price=2700.0):
     """Create a temp DB with bars_1m only -- L1 pipeline builds the rest."""
     db_path = tmp_path / "l1_integration.db"
@@ -139,7 +135,6 @@ def _create_l1_db(tmp_path, n_days=30, instrument="MGC", base_price=2700.0):
 
     return db_path, trading_days
 
-
 def _run_l1_pipeline(db_path, instrument="MGC", start_date=None, end_date=None):
     """Run L1 pipeline: build_5m -> build_daily_features. Returns (bars_5m_count, features_count)."""
     if start_date is None:
@@ -157,7 +152,6 @@ def _run_l1_pipeline(db_path, instrument="MGC", start_date=None, end_date=None):
         con.close()
 
     return bars_5m_count, features_count
-
 
 def _run_l2_pipeline(db_path, instrument="MGC", start_date=None, end_date=None,
                      min_sample=5):
@@ -182,7 +176,6 @@ def _run_l2_pipeline(db_path, instrument="MGC", start_date=None, end_date=None,
     )
     return outcome_count, strategy_count, passed, rejected
 
-
 # =============================================================================
 # SHARED FIXTURES
 # =============================================================================
@@ -194,7 +187,6 @@ def l1_pipeline_db(tmp_path_factory):
     db_path, trading_days = _create_l1_db(tmp_dir, n_days=30)
     bars_5m_count, features_count = _run_l1_pipeline(db_path)
     return db_path, trading_days, bars_5m_count, features_count
-
 
 @pytest.fixture(scope="class")
 def full_pipeline_db(tmp_path_factory):
@@ -216,7 +208,6 @@ def full_pipeline_db(tmp_path_factory):
         "passed": passed,
         "rejected": rejected,
     }
-
 
 @pytest.fixture(scope="class")
 def multi_instrument_db(tmp_path_factory):
@@ -254,7 +245,6 @@ def multi_instrument_db(tmp_path_factory):
         "mgc_l2": mgc_l2,  # (outcomes, strategies, passed, rejected)
         "mnq_l2": mnq_l2,
     }
-
 
 # =============================================================================
 # Test A: L1 Pipeline Integration (bars_1m -> bars_5m -> daily_features)
@@ -346,7 +336,6 @@ class TestL1Pipeline:
         con.close()
 
         assert bad_rows == 0
-
 
 # =============================================================================
 # Test B: Full L1 -> L2 End-to-End
@@ -467,7 +456,6 @@ class TestFullL1L2:
         assert feature_count > 0, "No daily_features for tracing"
         assert outcome_count > 0, "No outcomes matching strategy params"
 
-
 # =============================================================================
 # Test C: Multi-Instrument Isolation
 # =============================================================================
@@ -568,7 +556,6 @@ class TestMultiInstrument:
 
         assert mgc_avg < 5000, f"MGC avg price {mgc_avg} unexpectedly high"
         assert mnq_avg > 10000, f"MNQ avg price {mnq_avg} unexpectedly low"
-
 
 # =============================================================================
 # Test D: Idempotency Across Full Pipeline

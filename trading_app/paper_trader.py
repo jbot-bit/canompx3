@@ -17,7 +17,6 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 sys.stdout.reconfigure(line_buffering=True)
 
@@ -28,7 +27,6 @@ from pipeline.cost_model import get_cost_spec
 from trading_app.portfolio import Portfolio, build_portfolio
 from trading_app.execution_engine import ExecutionEngine
 from trading_app.risk_manager import RiskManager, RiskLimits
-
 
 # =========================================================================
 # Data classes
@@ -56,7 +54,6 @@ class JournalEntry:
     risk_rejected: bool = False
     risk_reason: str = ""
 
-
 @dataclass
 class DaySummary:
     """Summary for one trading day."""
@@ -68,7 +65,6 @@ class DaySummary:
     scratches: int = 0
     daily_pnl_r: float = 0.0
     risk_rejections: int = 0
-
 
 @dataclass
 class ReplayResult:
@@ -85,7 +81,6 @@ class ReplayResult:
     journal: list[JournalEntry] = field(default_factory=list)
     day_summaries: list[DaySummary] = field(default_factory=list)
 
-
 # =========================================================================
 # Trading day detection
 # =========================================================================
@@ -99,7 +94,6 @@ def _get_trading_days(con, instrument: str, start_date: date, end_date: date) ->
         [instrument, start_date, end_date],
     ).fetchall()
     return [r[0] for r in rows]
-
 
 def _get_bars_for_day(con, instrument: str, trading_day: date) -> list[dict]:
     """
@@ -131,7 +125,6 @@ def _get_bars_for_day(con, instrument: str, trading_day: date) -> list[dict]:
         }
         for r in rows
     ]
-
 
 # =========================================================================
 # Historical replay
@@ -338,7 +331,6 @@ def replay_historical(
     finally:
         con.close()
 
-
 # =========================================================================
 # Helpers
 # =========================================================================
@@ -348,12 +340,10 @@ def _orb_from_strategy(strategy_id: str) -> str:
     parts = strategy_id.split("_")
     return parts[1] if len(parts) > 1 else ""
 
-
 def _entry_model_from_strategy(strategy_id: str) -> str:
     """Extract entry model from strategy ID."""
     parts = strategy_id.split("_")
     return parts[2] if len(parts) > 2 else ""
-
 
 def _find_completed_trade(engine: ExecutionEngine, strategy_id: str):
     """Find the most recent completed trade for a strategy."""
@@ -361,7 +351,6 @@ def _find_completed_trade(engine: ExecutionEngine, strategy_id: str):
         if trade.strategy_id == strategy_id:
             return trade
     return None
-
 
 def _reveal_outcome(market_state, orb_label: str, trade, cascade_table, portfolio) -> None:
     """Reveal a resolved ORB outcome in the market state and re-score.
@@ -381,7 +370,6 @@ def _reveal_outcome(market_state, orb_label: str, trade, cascade_table, portfoli
     # Re-derive cross-session signals and re-score
     market_state.update_signals(cascade_table)
     market_state.score_strategies(portfolio.strategies)
-
 
 # =========================================================================
 # CLI
@@ -427,7 +415,6 @@ def main():
     if result.total_wins + result.total_losses > 0:
         wr = result.total_wins / (result.total_wins + result.total_losses)
         print(f"  Win rate: {wr:.1%}")
-
 
 if __name__ == "__main__":
     main()

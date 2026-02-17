@@ -24,7 +24,6 @@ from datetime import date
 from dateutil.relativedelta import relativedelta
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 sys.stdout.reconfigure(line_buffering=True)
 
@@ -39,7 +38,6 @@ from trading_app.regime.schema import init_regime_schema
 # Double-break threshold: if >= this fraction of break-days had double
 # breaks, single-direction breakout strategies are auto-DEGRADED.
 DOUBLE_BREAK_THRESHOLD = 0.67
-
 
 def generate_rolling_windows(
     train_months: int,
@@ -84,7 +82,6 @@ def generate_rolling_windows(
 
     return windows
 
-
 def compute_double_break_pct(
     db_path: Path,
     train_start: date,
@@ -120,7 +117,6 @@ def compute_double_break_pct(
         return result
     finally:
         con.close()
-
 
 def mark_degraded_by_double_break(
     db_path: Path,
@@ -158,7 +154,6 @@ def mark_degraded_by_double_break(
         return total
     finally:
         con.close()
-
 
 def run_rolling_evaluation(
     db_path: Path | None = None,
@@ -275,7 +270,6 @@ def run_rolling_evaluation(
 
     return all_results
 
-
 def main():
     import argparse
 
@@ -338,7 +332,6 @@ def main():
         output_path = Path(args.output)
         output_path.write_text(json.dumps(results, indent=2))
         print(f"\nResults written to {output_path}")
-
 
 if __name__ == "__main__":
     main()

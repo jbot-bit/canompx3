@@ -21,8 +21,6 @@ import sys
 from datetime import date
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-
 import duckdb
 
 from trading_app.config import ALL_FILTERS, InsideDayFilter, EaseDayFilter
@@ -61,7 +59,6 @@ COMPARE_FILTERS = {
 # Decision thresholds
 MIN_SAMPLE = 50
 MIN_SHARPE_UPLIFT = 0.0  # must beat G4 baseline
-
 
 def run_smoke_test(db_path: Path):
     con = duckdb.connect(str(db_path), read_only=True)
@@ -205,13 +202,11 @@ def run_smoke_test(db_path: Path):
     finally:
         con.close()
 
-
 def main():
     parser = argparse.ArgumentParser(description="Smoke test new filters")
     parser.add_argument("--db-path", type=Path, default=Path("C:/db/gold.db"))
     args = parser.parse_args()
     run_smoke_test(args.db_path)
-
 
 if __name__ == "__main__":
     main()

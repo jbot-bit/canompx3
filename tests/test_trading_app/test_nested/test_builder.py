@@ -11,12 +11,9 @@ import pytest
 import pandas as pd
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-
 from trading_app.nested.builder import resample_to_5m, _verify_e3_sub_bar_fill
 from trading_app.outcome_builder import compute_single_outcome
 from pipeline.cost_model import get_cost_spec
-
 
 # ============================================================================
 # HELPERS
@@ -24,7 +21,6 @@ from pipeline.cost_model import get_cost_spec
 
 def _cost():
     return get_cost_spec("MGC")
-
 
 def _make_bars(start_ts, prices, interval_minutes=1):
     """Create bars_df from list of (open, high, low, close, volume) tuples."""
@@ -41,7 +37,6 @@ def _make_bars(start_ts, prices, interval_minutes=1):
         })
         ts = ts + timedelta(minutes=interval_minutes)
     return pd.DataFrame(rows)
-
 
 # ============================================================================
 # resample_to_5m tests
@@ -136,7 +131,6 @@ class TestResampleTo5m:
         assert result.iloc[0]["open"] == 100
         assert result.iloc[0]["volume"] == 50
 
-
 # ============================================================================
 # E3 sub-bar fill verification tests
 # ============================================================================
@@ -201,7 +195,6 @@ class TestE3SubBarFillVerification:
             [(2700, 2705, 2698, 2702, 10)],
         )
         assert _verify_e3_sub_bar_fill(bars, entry_ts, 2700.0, "long") is False
-
 
 # ============================================================================
 # 5m outcome differs from 1m outcome
@@ -281,7 +274,6 @@ class TestOutcomeResolutionDifference:
 
         # Different outcomes prove resolution matters
         assert result_1m["outcome"] != result_5m["outcome"]
-
 
 # ============================================================================
 # Confirm bars on 5m bars

@@ -12,13 +12,11 @@ Usage:
     print(state.strategy_scores)
 """
 
-import sys
 from pathlib import Path
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
 
@@ -26,7 +24,6 @@ from pipeline.init_db import ORB_LABELS
 
 # Session ordering for cascade logic: which sessions come before which
 SESSION_ORDER = {label: i for i, label in enumerate(ORB_LABELS)}
-
 
 # =========================================================================
 # Data classes
@@ -44,7 +41,6 @@ class OrbSnapshot:
     complete: bool = False
     outcome: str | None = None  # "win", "loss", None (pending/no trade)
 
-
 @dataclass
 class SessionSignals:
     """Cross-session intelligence derived from today's outcomes."""
@@ -54,7 +50,6 @@ class SessionSignals:
     continuation: bool = False
     cascade_wr: float | None = None
 
-
 @dataclass
 class RegimeContext:
     """Current regime vs full-period performance deltas."""
@@ -62,7 +57,6 @@ class RegimeContext:
     start_date: date | None = None
     end_date: date | None = None
     deltas: dict[str, float] = field(default_factory=dict)
-
 
 @dataclass
 class MarketState:
@@ -294,7 +288,6 @@ class MarketState:
 
         self.strategy_scores = scores
         return scores
-
 
 # =========================================================================
 # Internal helpers

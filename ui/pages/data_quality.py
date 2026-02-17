@@ -4,15 +4,10 @@ Data Quality page.
 Row counts, date coverage, bar distribution, gap days, contract timeline.
 """
 
-import sys
-from pathlib import Path
 
 import plotly.express as px
 import streamlit as st
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
 from ui.db_reader import (
     get_table_counts,
@@ -22,16 +17,13 @@ from ui.db_reader import (
     get_contract_timeline,
 )
 
-
 @st.cache_data(ttl=300)
 def _cached_bars_per_day():
     return get_bars_per_day()
 
-
 @st.cache_data(ttl=300)
 def _cached_contract_timeline():
     return get_contract_timeline()
-
 
 def render():
     st.header("Data Quality")

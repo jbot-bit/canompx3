@@ -28,13 +28,11 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 sys.stdout.reconfigure(line_buffering=True)
 
 from pipeline.asset_configs import get_enabled_sessions
 from pipeline.cost_model import get_cost_spec
 from research._alt_strategy_utils import compute_strategy_metrics, annualize_sharpe
-
 
 def load_data(db_path: Path, instrument: str, orb_minutes: int = 5) -> pd.DataFrame:
     """Load daily_features with lagged daily closes for trend computation."""
@@ -74,7 +72,6 @@ def load_data(db_path: Path, instrument: str, orb_minutes: int = 5) -> pd.DataFr
 
     return df
 
-
 def load_outcomes(db_path: Path, instrument: str, session: str) -> pd.DataFrame:
     """Load orb_outcomes for a session, E1 CB2 only (standard baseline)."""
     con = duckdb.connect(str(db_path), read_only=True)
@@ -101,7 +98,6 @@ def load_outcomes(db_path: Path, instrument: str, session: str) -> pd.DataFrame:
     result["trading_day"] = pd.to_datetime(result["trading_day"])
     return result
 
-
 def fmt(m: dict, extra: str = "") -> str:
     if m is None or m["n"] == 0:
         return "N=0"
@@ -110,7 +106,6 @@ def fmt(m: dict, extra: str = "") -> str:
     if extra:
         s += f"  {extra}"
     return s
-
 
 def analyze_session(features: pd.DataFrame, outcomes: pd.DataFrame,
                     session: str, instrument: str):
@@ -218,7 +213,6 @@ def analyze_session(features: pd.DataFrame, outcomes: pd.DataFrame,
             if len(gap_counter) >= 10:
                 print(f"    Gap Counter:           {fmt(compute_strategy_metrics(gap_counter['pnl_r'].values))}")
 
-
 def main():
     parser = argparse.ArgumentParser(description="Multi-day trend alignment analysis")
     parser.add_argument("--db-path", type=Path, default=Path("C:/db/gold.db"))
@@ -264,7 +258,6 @@ def main():
     print(f"\n{'=' * 90}")
     print("DONE")
     print("=" * 90)
-
 
 if __name__ == "__main__":
     main()

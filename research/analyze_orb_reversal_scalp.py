@@ -27,7 +27,6 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.build_daily_features import compute_trading_day_utc_range
 from pipeline.cost_model import get_cost_spec
@@ -42,7 +41,6 @@ DEFAULT_MIN_ORB_SIZE = 4.0
 
 COST_SPEC = get_cost_spec("MGC")
 FRICTION_POINTS = COST_SPEC.friction_in_points  # 0.84 points
-
 
 # ---------------------------------------------------------------------------
 # Data loading
@@ -118,7 +116,6 @@ def load_outcomes(db_path: Path, sessions: list[str], min_orb_size: float,
     print(f"Loaded {len(df)} unique trade entries ({df['trading_day'].nunique()} days)")
     return df
 
-
 def load_bars_for_day(db_path: Path, trading_day: date) -> pd.DataFrame:
     """Load 1-minute bars for one trading day."""
     start_utc, end_utc = compute_trading_day_utc_range(trading_day)
@@ -136,7 +133,6 @@ def load_bars_for_day(db_path: Path, trading_day: date) -> pd.DataFrame:
     if not df.empty:
         df["ts_utc"] = pd.to_datetime(df["ts_utc"], utc=True)
     return df
-
 
 # ---------------------------------------------------------------------------
 # Reversal scalp simulation
@@ -299,7 +295,6 @@ def simulate_reversal_scalp(
 
     return results
 
-
 # ---------------------------------------------------------------------------
 # Reporting
 # ---------------------------------------------------------------------------
@@ -443,7 +438,6 @@ def print_report(all_results: list[dict], check_minutes: list[int],
         print(f"  {s['label']:20s}  N={s['n']:<4d}  WR={s['wr']:5.1f}%  "
               f"Avg=${s['avg']:+7.1f}  Total=${s['total']:+,.0f}")
 
-
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -540,7 +534,6 @@ def main():
     print(f"Done: {len(all_results)} entries processed in {elapsed:.1f}s")
 
     print_report(all_results, check_minutes, args.start, args.end, args.min_orb_size)
-
 
 if __name__ == "__main__":
     main()

@@ -21,17 +21,13 @@ import pytest
 import pandas as pd
 import duckdb
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from trading_app.outcome_builder import compute_single_outcome
 from trading_app.entry_rules import detect_confirm, resolve_entry
 from trading_app.config import ENTRY_MODELS
 from pipeline.cost_model import get_cost_spec, pnl_points_to_r, to_r_multiple, risk_in_dollars
 
-
 def _cost():
     return get_cost_spec("MGC")
-
 
 def _make_bars(start_ts, prices, interval_minutes=1):
     """Create bars_df from (open, high, low, close, volume) tuples."""
@@ -49,7 +45,6 @@ def _make_bars(start_ts, prices, interval_minutes=1):
         ts = ts + timedelta(minutes=interval_minutes)
     return pd.DataFrame(rows)
 
-
 # Standard test scenario: long break, ORB 2690-2700
 ORB_HIGH = 2700.0
 ORB_LOW = 2690.0
@@ -66,7 +61,6 @@ STANDARD_BARS = _make_bars(
         (2730, 2740, 2725, 2735, 100),  # bar 3: continue
     ],
 )
-
 
 # ============================================================================
 # TRADER LOGIC CHECKS (1-10)
@@ -94,7 +88,6 @@ class TestEntryPriceReachable:
         if result["entry_price"] is not None:
             assert result["entry_price"] == ORB_HIGH
 
-
 class TestEntryTimingCausality:
     """Check 2: Entry must be after signal (causal ordering)."""
 
@@ -109,7 +102,6 @@ class TestEntryTimingCausality:
         signal = resolve_entry(STANDARD_BARS, confirm, "E3", TD_END)
         if signal.triggered:
             assert signal.entry_ts > confirm.confirm_bar_ts
-
 
 class TestRiskPhysicallyCorrect:
     """Check 3: Risk makes physical sense for each entry model."""
@@ -132,7 +124,6 @@ class TestRiskPhysicallyCorrect:
         if result["entry_price"] is not None:
             risk = abs(result["entry_price"] - result["stop_price"])
             assert risk == pytest.approx(ORB_HIGH - ORB_LOW, abs=0.01)
-
 
 class TestStopStructuralSense:
     """Check 5: Stop is at the opposite ORB level."""
@@ -161,7 +152,6 @@ class TestStopStructuralSense:
             )
             if result["stop_price"] is not None:
                 assert result["stop_price"] == ORB_HIGH, f"Failed for {em}"
-
 
 class TestWinLossPnl:
     """Check 8: Win PnL > 0, loss PnL < 0."""
@@ -193,7 +183,6 @@ class TestWinLossPnl:
         if result["outcome"] == "loss":
             assert result["pnl_r"] == -1.0, "Loss not -1.0R for E1"
 
-
 class TestCostModelApplied:
     """Check 9: Costs reduce wins. pnl_r < rr_target for wins."""
 
@@ -208,7 +197,6 @@ class TestCostModelApplied:
                     f"Win pnl_r={result['pnl_r']} >= RR=2.0 for {em} "
                     f"(costs should reduce wins)"
                 )
-
 
 class TestEntryModelDifference:
     """Check 10: Different entry models produce different entry prices."""
@@ -231,7 +219,6 @@ class TestEntryModelDifference:
                 f"Entry models produced identical prices: {prices}"
             )
 
-
 # ============================================================================
 # MATH LOGIC CHECKS (11-20)
 # ============================================================================
@@ -248,7 +235,6 @@ class TestRiskMath:
             if result["entry_price"] is not None and result["stop_price"] is not None:
                 risk = abs(result["entry_price"] - result["stop_price"])
                 assert risk > 0, f"Zero risk for {em}"
-
 
 class TestTargetMath:
     """Check 13: target_price = entry + risk * RR * direction."""
@@ -267,7 +253,6 @@ class TestTargetMath:
                     f"expected {expected_target}"
                 )
 
-
 class TestLossPnlExact:
     """Check 18: Losses should be exactly -1.0R (stop hit)."""
 
@@ -285,7 +270,6 @@ class TestLossPnlExact:
         )
         if result["outcome"] == "loss":
             assert result["pnl_r"] == -1.0
-
 
 class TestMaeMfeBounds:
     """Check 19: MAE/MFE bounds.
@@ -316,7 +300,6 @@ class TestMaeMfeBounds:
             if result["outcome"] == "win" and result["mfe_r"] is not None:
                 assert result["mfe_r"] > 0, f"Win with non-positive MFE for {em}"
 
-
 class TestE3NoSameBarFill:
     """Check 6: E3 exit must be on or after fill bar."""
 
@@ -339,7 +322,6 @@ class TestE3NoSameBarFill:
             assert result["exit_ts"] >= result["entry_ts"], (
                 "E3 exit must be on or after entry bar"
             )
-
 
 class TestAmbiguousBarConservativeLoss:
     """Both target and stop hit on same bar -> conservative loss."""
@@ -365,7 +347,6 @@ class TestAmbiguousBarConservativeLoss:
                 target = result["target_price"]
                 if entry is not None and target is not None:
                     pass  # specific check depends on bar range vs targets
-
 
 class TestWinRMultipleExact:
     """Check 11: Win pnl_r must equal to_r_multiple (friction deducted from PnL).
@@ -416,7 +397,6 @@ class TestWinRMultipleExact:
                 assert wrong_r != correct_r, "Functions should differ when friction > 0"
                 # And pnl_r should match the CORRECT one
                 assert result["pnl_r"] == pytest.approx(correct_r, abs=0.0001)
-
 
 # ============================================================================
 # FILL-BAR EXIT TESTS (R1)
@@ -595,7 +575,6 @@ class TestFillBarExits:
         assert result["pnl_r"] == -1.0
         assert result["exit_ts"] == result["entry_ts"]
 
-
 # ============================================================================
 # RANDOMIZED SPOT-CHECK TESTS (against real gold.db data)
 # ============================================================================
@@ -609,7 +588,6 @@ import random
 GOLD_DB = Path(__file__).parent.parent / "gold.db"
 SAMPLE_SIZE = 50  # rows per test — enough to catch errors, fast enough for CI
 
-
 def _skip_if_no_db():
     """Skip test if gold.db not present or locked (CI or builder running)."""
     if not GOLD_DB.exists():
@@ -619,7 +597,6 @@ def _skip_if_no_db():
         test_con.close()
     except Exception:
         pytest.skip("gold.db locked by another process")
-
 
 def _sample_outcomes(con, n=SAMPLE_SIZE, where_extra=""):
     """Pull n random outcome rows with win/loss result."""
@@ -635,7 +612,6 @@ def _sample_outcomes(con, n=SAMPLE_SIZE, where_extra=""):
             "confirm_bars", "entry_model", "outcome", "pnl_r", "mae_r", "mfe_r",
             "entry_price", "stop_price", "target_price", "exit_price"]
     return [dict(zip(cols, r)) for r in rows]
-
 
 class TestRandomOutcomeMath:
     """Sample random real outcomes and recompute all stored values."""
@@ -865,7 +841,6 @@ class TestRandomOutcomeMath:
         finally:
             con.close()
 
-
 class TestRandomStrategyMath:
     """Sample random strategies and recompute stored metrics from outcomes."""
 
@@ -1085,7 +1060,6 @@ class TestRandomStrategyMath:
                 )
         finally:
             con.close()
-
 
 class TestRandomWalkForwardIntegrity:
     """Verify walk-forward results match independent recomputation."""

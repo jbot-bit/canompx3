@@ -14,7 +14,6 @@ from pathlib import Path
 from collections import defaultdict
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
 
@@ -28,7 +27,6 @@ from trading_app.db_manager import init_trading_app_schema
 
 # Force unbuffered stdout (Windows cp1252 buffering issue)
 sys.stdout.reconfigure(line_buffering=True)
-
 
 def backfill_trade_days(db_path: str, instrument: str) -> int:
     """
@@ -184,7 +182,6 @@ def backfill_trade_days(db_path: str, instrument: str) -> int:
     finally:
         con.close()
 
-
 def main():
     import argparse
 
@@ -218,7 +215,6 @@ def main():
         print(f"Grand total: {total:,} trade-day rows across all instruments")
     else:
         backfill_trade_days(args.db_path, args.instrument)
-
 
 if __name__ == "__main__":
     main()

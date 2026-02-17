@@ -10,11 +10,8 @@ from datetime import date
 import pytest
 import duckdb
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-
 from trading_app.regime.schema import init_regime_schema
 from trading_app.regime.validator import run_regime_validation
-
 
 @pytest.fixture
 def validated_db(tmp_path):
@@ -61,7 +58,6 @@ def validated_db(tmp_path):
     con.commit()
     con.close()
     return db_path
-
 
 class TestRegimeValidation:
 

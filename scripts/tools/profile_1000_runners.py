@@ -24,8 +24,6 @@ from pathlib import Path
 from datetime import date, timedelta
 from collections import defaultdict
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-
 import duckdb
 import numpy as np
 import pandas as pd
@@ -38,7 +36,6 @@ sys.stdout.reconfigure(line_buffering=True)
 
 CHECKPOINTS = [15, 30, 60, 120]
 THRESHOLDS = [0.0, 0.3, 0.5, 0.75, 1.0]
-
 
 def run(db_path: Path, start: date, end: date):
     spec = get_cost_spec("MGC")
@@ -324,7 +321,6 @@ def run(db_path: Path, start: date, end: date):
             print(f"  7h only:  ExpR={m7['expr']:+.4f} Sharpe={m7['sharpe']:.4f} Total={m7['total']:+.1f}")
             print(f"  Adaptive: ExpR={ma['expr']:+.4f} Sharpe={ma['sharpe']:.4f} Total={ma['total']:+.1f}")
 
-
 def main():
     parser = argparse.ArgumentParser(description="Profile 1000 runner days")
     parser.add_argument("--db-path", type=Path, default=Path("C:/db/gold.db"))
@@ -332,7 +328,6 @@ def main():
     parser.add_argument("--end", type=date.fromisoformat, default=date(2026, 2, 4))
     args = parser.parse_args()
     run(args.db_path, args.start, args.end)
-
 
 if __name__ == "__main__":
     main()

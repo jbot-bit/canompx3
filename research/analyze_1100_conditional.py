@@ -28,12 +28,10 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.cost_model import get_cost_spec, to_r_multiple
 
 COST_SPEC = get_cost_spec("MGC")
-
 
 # ---------------------------------------------------------------------------
 # Data loading
@@ -95,7 +93,6 @@ def load_data(db_path: Path, start: date, end: date) -> pd.DataFrame:
     print(f"Loaded {len(df)} 1100 outcomes ({df['trading_day'].nunique()} days)")
     return df
 
-
 def load_earlier_outcomes(db_path: Path, start: date, end: date,
                           session: str) -> pd.DataFrame:
     """Load outcomes for an earlier session to check if they won/lost."""
@@ -125,7 +122,6 @@ def load_earlier_outcomes(db_path: Path, start: date, end: date,
     df = df[~((df["entry_model"] == "E3") & (df["confirm_bars"] > 1))].copy()
     return df
 
-
 # ---------------------------------------------------------------------------
 # Analysis helpers
 # ---------------------------------------------------------------------------
@@ -144,13 +140,11 @@ def metrics(pnls: np.ndarray) -> dict:
     return {"n": n, "wr": wr, "expr": expr, "sharpe": sharpe,
             "maxdd": maxdd, "total": float(pnls.sum())}
 
-
 def fmt(m: dict) -> str:
     if m["n"] == 0:
         return "N=0"
     return (f"N={m['n']:<4d}  WR={m['wr']*100:5.1f}%  ExpR={m['expr']:+.3f}  "
             f"Sharpe={m['sharpe']:.3f}  MaxDD={m['maxdd']:.1f}R  Total={m['total']:+.1f}R")
-
 
 def analyze_group(df: pd.DataFrame, label: str, condition_col: str = None):
     """Analyze a dataframe, optionally grouped by a condition column."""
@@ -164,7 +158,6 @@ def analyze_group(df: pd.DataFrame, label: str, condition_col: str = None):
         pnls = df["pnl_r"].values
         m = metrics(pnls)
         print(f"  {label:30s}  {fmt(m)}")
-
 
 # ---------------------------------------------------------------------------
 # Main analysis
@@ -366,7 +359,6 @@ def run_analysis(db_path: Path, start: date, end: date):
             if len(lost_opposite) > 0:
                 analyze_group(lost_opposite, "0900 LOST + 1100 opposite")
 
-
 def main():
     parser = argparse.ArgumentParser(description="1100 conditional analysis")
     parser.add_argument("--db-path", type=Path, default=Path("C:/db/gold.db"))
@@ -375,7 +367,6 @@ def main():
     args = parser.parse_args()
 
     run_analysis(args.db_path, args.start, args.end)
-
 
 if __name__ == "__main__":
     main()

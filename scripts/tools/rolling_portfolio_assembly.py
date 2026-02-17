@@ -33,7 +33,6 @@ import pandas as pd
 from dateutil.relativedelta import relativedelta
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.build_daily_features import compute_trading_day_utc_range
 from pipeline.cost_model import get_cost_spec, to_r_multiple
@@ -68,7 +67,6 @@ STEP_MONTHS = 1
 STABLE_SHARPE = 0.10
 DEGRADED_SHARPE = 0.0
 
-
 # ---------------------------------------------------------------------------
 # IB functions (from analyze_trend_holding.py)
 # ---------------------------------------------------------------------------
@@ -90,7 +88,6 @@ def compute_ib(ts, highs, lows, anchor_utc_hour, duration_minutes):
         "ib_end": ib_end,
     }
 
-
 def find_ib_break(ts, highs, lows, ib):
     post_idx = np.flatnonzero(ts >= ib["ib_end"])
     for i in post_idx:
@@ -103,7 +100,6 @@ def find_ib_break(ts, highs, lows, ib):
         if bl:
             return "short", ts[i], i
     return None, None, None
-
 
 # ---------------------------------------------------------------------------
 # Target unlock simulation (1000 exploit)
@@ -174,7 +170,6 @@ def sim_exploit(ts, highs, lows, closes, entry_idx, entry_price,
     c = closes[-1]
     pnl = (c - entry_price) if is_long else (entry_price - c)
     return to_r_multiple(SPEC, entry_price, stop_price, pnl), "eod"
-
 
 # ---------------------------------------------------------------------------
 # Load and simulate
@@ -268,7 +263,6 @@ def load_and_simulate(db_path, session_label, start, end):
 
     return pd.DataFrame(rows)
 
-
 # ---------------------------------------------------------------------------
 # Rolling window analysis
 # ---------------------------------------------------------------------------
@@ -306,7 +300,6 @@ def rolling_windows(trade_df, strategy_col, data_start, data_end):
 
     return windows
 
-
 def classify_windows(windows, n_recent=6):
     """Classify strategy based on recent window performance."""
     if len(windows) == 0:
@@ -323,7 +316,6 @@ def classify_windows(windows, n_recent=6):
         return "TRANSITIONING", n_positive, n_total
     else:
         return "DEGRADED", n_positive, n_total
-
 
 # ---------------------------------------------------------------------------
 # Report + TRADING_PLAN.md generation
@@ -494,7 +486,6 @@ def run(db_path, start, end):
     plan_path.write_text(plan_text)
     print(f"\n  Written to {plan_path}")
 
-
 def main():
     parser = argparse.ArgumentParser(description="Rolling Portfolio Assembly")
     parser.add_argument("--db-path", type=Path, default=Path("C:/db/gold.db"))
@@ -502,7 +493,6 @@ def main():
     parser.add_argument("--end", type=date.fromisoformat, default=date(2026, 2, 4))
     args = parser.parse_args()
     run(args.db_path, args.start, args.end)
-
 
 if __name__ == "__main__":
     main()

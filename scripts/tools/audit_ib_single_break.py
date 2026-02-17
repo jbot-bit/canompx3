@@ -28,7 +28,6 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.build_daily_features import compute_trading_day_utc_range
 from pipeline.cost_model import get_cost_spec, to_r_multiple
@@ -53,7 +52,6 @@ VOL_LOOKBACK = 10
 # So first useful checkpoint is IB_MINUTES from session start = ~53 min after entry.
 # We check at these minutes-after-entry marks:
 CHECKPOINTS_AFTER_ENTRY = [60, 90, 120, 180, 240]
-
 
 # ---------------------------------------------------------------------------
 # Core functions
@@ -81,7 +79,6 @@ def compute_ib(bars: pd.DataFrame) -> dict | None:
         "ib_start": ib_start,
         "ib_end": ib_end,
     }
-
 
 def classify_at_checkpoint(
     bars: pd.DataFrame,
@@ -120,7 +117,6 @@ def classify_at_checkpoint(
     else:
         return "no_break"
 
-
 def classify_final(bars: pd.DataFrame, ib: dict) -> str:
     """Classify using ALL post-IB bars (the look-ahead version)."""
     ib_high = ib["ib_high"]
@@ -139,7 +135,6 @@ def classify_final(bars: pd.DataFrame, ib: dict) -> str:
         return "double_break"
     else:
         return "no_break"
-
 
 def compute_hold_pnl(
     bars: pd.DataFrame, entry_ts, entry_price: float,
@@ -167,7 +162,6 @@ def compute_hold_pnl(
 
     pnl = (last_close - entry_price) if is_long else (entry_price - last_close)
     return to_r_multiple(spec, entry_price, stop_price, pnl)
-
 
 def compute_fixed_exit_pnl(
     bars: pd.DataFrame, entry_ts, entry_price: float,
@@ -200,7 +194,6 @@ def compute_fixed_exit_pnl(
             return to_r_multiple(spec, entry_price, stop_price, pnl)
 
     return None  # no resolution
-
 
 # ---------------------------------------------------------------------------
 # Main
@@ -518,7 +511,6 @@ def run(db_path: Path, start: date, end: date):
 
     print()
 
-
 def main():
     parser = argparse.ArgumentParser(description="Audit IB Single Break")
     parser.add_argument("--db-path", type=Path, default=Path("C:/db/gold.db"))
@@ -526,7 +518,6 @@ def main():
     parser.add_argument("--end", type=date.fromisoformat, default=date(2026, 2, 4))
     args = parser.parse_args()
     run(args.db_path, args.start, args.end)
-
 
 if __name__ == "__main__":
     main()

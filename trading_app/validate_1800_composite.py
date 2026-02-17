@@ -13,13 +13,11 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 sys.stdout.reconfigure(line_buffering=True)
 
 import duckdb
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.cost_model import get_cost_spec, stress_test_costs
-
 
 # ---------------------------------------------------------------------------
 # Config
@@ -30,7 +28,6 @@ CONFIRM_BARS = 4
 MIN_ORB_SIZE = 6.0  # G6+ filter
 EXCLUDE_YEAR = 2021  # structurally different regime
 ARTIFACT_PATH = PROJECT_ROOT / "artifacts" / "1800_composite_validation.txt"
-
 
 # ---------------------------------------------------------------------------
 # Step 1: Data Assembly
@@ -107,7 +104,6 @@ def load_composite_data(db_path: Path) -> list[dict]:
 
     return merged.to_dict("records")
 
-
 # ---------------------------------------------------------------------------
 # Step 2: Metrics Computation
 # ---------------------------------------------------------------------------
@@ -175,7 +171,6 @@ def compute_composite_metrics(rows: list[dict], label: str = "") -> dict:
         "yearly": yearly,
     }
 
-
 # ---------------------------------------------------------------------------
 # Step 3: Stress Testing
 # ---------------------------------------------------------------------------
@@ -217,7 +212,6 @@ def stress_test_pnl(rows: list[dict], multiplier: float) -> list[dict]:
 
     return stressed
 
-
 def find_breakeven_multiplier(rows: list[dict]) -> float:
     """Binary search for friction multiplier where ExpR = 0."""
     lo, hi = 1.0, 10.0
@@ -233,7 +227,6 @@ def find_breakeven_multiplier(rows: list[dict]) -> float:
         else:
             hi = mid
     return (lo + hi) / 2
-
 
 # ---------------------------------------------------------------------------
 # Step 4: Walk-Forward OOS
@@ -254,7 +247,6 @@ def walk_forward_expanding(rows: list[dict]) -> list[dict]:
         results.append({"fold": fold, "is": m_train, "oos": m_test})
     return results
 
-
 def leave_one_year_out(rows: list[dict]) -> list[dict]:
     """Leave-one-year-out cross-validation (2022-2025)."""
     results = []
@@ -265,7 +257,6 @@ def leave_one_year_out(rows: list[dict]) -> list[dict]:
         m_test = compute_composite_metrics(test, f"OOS {leave_out}")
         results.append({"leave_out": leave_out, "is": m_train, "oos": m_test})
     return results
-
 
 # ---------------------------------------------------------------------------
 # Step 5: Regime Analysis
@@ -302,7 +293,6 @@ def regime_analysis(rows: list[dict]) -> dict:
         "recent_r": recent_r,
     }
 
-
 # ---------------------------------------------------------------------------
 # Step 6: Direction Split
 # ---------------------------------------------------------------------------
@@ -318,7 +308,6 @@ def direction_split(rows: list[dict]) -> dict:
     pct_long = (long_r / total_r * 100) if total_r != 0 else 0
 
     return {"long": m_long, "short": m_short, "pct_long": pct_long}
-
 
 # ---------------------------------------------------------------------------
 # Step 7: Comparison Matrix (4 variants)
@@ -343,21 +332,17 @@ def build_comparison(all_rows: list[dict]) -> dict:
 
     return {"A": m_a, "B": m_b, "C": m_c, "D": m_d}
 
-
 # ---------------------------------------------------------------------------
 # Step 8: Report
 # ---------------------------------------------------------------------------
 def fmt_pct(v, decimals=1):
     return f"{v*100:.{decimals}f}%" if v is not None else "N/A"
 
-
 def fmt_r(v, decimals=2):
     return f"{v:+.{decimals}f}R" if v is not None else "N/A"
 
-
 def fmt_f(v, decimals=2):
     return f"{v:.{decimals}f}" if v is not None else "N/A"
-
 
 def generate_report(
     all_rows, agree_rows, metrics, stress_results, wf_results, loo_results,
@@ -533,7 +518,6 @@ def generate_report(
 
     return "\n".join(lines)
 
-
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -585,7 +569,6 @@ def main():
     ARTIFACT_PATH.parent.mkdir(parents=True, exist_ok=True)
     ARTIFACT_PATH.write_text(report, encoding="utf-8")
     print(f"\nReport saved to: {ARTIFACT_PATH}")
-
 
 if __name__ == "__main__":
     main()

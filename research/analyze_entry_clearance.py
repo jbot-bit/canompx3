@@ -33,10 +33,8 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from research._alt_strategy_utils import compute_strategy_metrics
-
 
 # Session ordering within a trading day (09:00 Brisbane boundary)
 SESSION_ORDER = ["0900", "1000", "1100", "1800", "2300", "0030"]
@@ -54,7 +52,6 @@ PRIOR_SESSIONS = {
 SIZE_TIERS = {"G2": 2.0, "G4": 4.0, "G6": 6.0, "G8": 8.0}
 
 DOW_NAMES = {1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri"}
-
 
 # ---------------------------------------------------------------------------
 # Data loading
@@ -156,7 +153,6 @@ def load_data(db_path: Path, session: str, start: date, end: date) -> pd.DataFra
     print(f"Loaded {len(df)} {session} outcomes ({df['trading_day'].nunique()} days)")
     return df
 
-
 # ---------------------------------------------------------------------------
 # Reporting
 # ---------------------------------------------------------------------------
@@ -171,7 +167,6 @@ def fmt(m: dict, db_rate: float = None) -> str:
         s += f"  DB={db_rate*100:.0f}%"
     return s
 
-
 def db_rate(df: pd.DataFrame) -> float:
     """Compute double-break rate for a subset."""
     valid = df["double_break"].notna()
@@ -179,14 +174,12 @@ def db_rate(df: pd.DataFrame) -> float:
         return 0.0
     return float(df.loc[valid, "double_break"].astype(bool).mean())
 
-
 def report_subset(df: pd.DataFrame, label: str):
     """Print one-line metrics for a subset."""
     pnls = df["pnl_r"].values
     m = compute_strategy_metrics(pnls)
     dbr = db_rate(df)
     print(f"  {label:30s}  {fmt(m, dbr)}")
-
 
 def report_session(df: pd.DataFrame, session: str):
     """Full report for one session."""
@@ -279,7 +272,6 @@ def report_session(df: pd.DataFrame, session: str):
                 if len(deep) >= 3:
                     report_subset(deep, "CHOP deep inside (<-2pt)")
 
-
 # ---------------------------------------------------------------------------
 # Summary table
 # ---------------------------------------------------------------------------
@@ -303,7 +295,6 @@ def print_summary(all_results: dict):
                     print(f"{session:<8} {em:<4} {rr:<5.1f} {tag:<8} "
                           f"{m['n']:>5d} {m['wr']*100:>5.1f}% {m['expr']:>+6.3f} "
                           f"{m['sharpe']:>7.3f} {m['maxdd']:>6.1f}R {dbr*100:>4.0f}%")
-
 
 # ---------------------------------------------------------------------------
 # Main
@@ -354,7 +345,6 @@ def run_analysis(db_path: Path, start: date, end: date):
 
     print_summary(all_results)
 
-
 def main():
     parser = argparse.ArgumentParser(
         description="Entry Price Clearance Filter analysis")
@@ -370,7 +360,6 @@ def main():
     print(f"Prior levels are CUMULATIVE (MAX/MIN of ALL earlier sessions)")
 
     run_analysis(args.db_path, args.start, args.end)
-
 
 if __name__ == "__main__":
     main()

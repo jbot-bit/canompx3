@@ -17,13 +17,11 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 sys.stdout.reconfigure(line_buffering=True)
 
 import duckdb
 from pipeline.paths import GOLD_DB_PATH
-
 
 def backfill_atr20(db_path: Path, dry_run: bool = False) -> int:
     """Backfill atr_20 for all rows in daily_features. Returns rows updated."""
@@ -138,7 +136,6 @@ def backfill_atr20(db_path: Path, dry_run: bool = False) -> int:
     finally:
         con.close()
 
-
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="Backfill ATR(20) in daily_features")
@@ -149,7 +146,6 @@ def main():
     db_path = Path(args.db) if args.db else GOLD_DB_PATH
     print(f"Database: {db_path}")
     backfill_atr20(db_path, dry_run=args.dry_run)
-
 
 if __name__ == "__main__":
     main()

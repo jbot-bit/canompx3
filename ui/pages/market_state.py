@@ -4,21 +4,15 @@ Market State Viewer page.
 Pick a date to see ORB snapshots, session signals, and strategy scores.
 """
 
-import sys
 from datetime import date
-from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.init_db import ORB_LABELS
 from ui.db_reader import get_daily_features
-
 
 def render():
     st.header("Market State Viewer")
@@ -41,7 +35,6 @@ def render():
     if "last_ms_date" in st.session_state and st.session_state.last_ms_date != selected_date:
         _load_and_display(selected_date, orb_minutes)
     st.session_state.last_ms_date = selected_date
-
 
 def _load_and_display(selected_date: date, orb_minutes: int):
     """Load MarketState and daily_features for display."""

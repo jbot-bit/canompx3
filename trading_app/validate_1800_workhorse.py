@@ -20,13 +20,11 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 sys.stdout.reconfigure(line_buffering=True)
 
 import duckdb
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.cost_model import get_cost_spec, stress_test_costs
-
 
 # ---------------------------------------------------------------------------
 # Config
@@ -43,7 +41,6 @@ VARIANTS = [
     {"id": "W4", "label": "E3 CB4 RR2.0 G5+ AGREE", "cb": 4, "min_orb": 5.0, "agree": True},
     {"id": "W5", "label": "E3 CB4 RR2.0 G6+", "cb": 4, "min_orb": 6.0, "agree": False},
 ]
-
 
 # ---------------------------------------------------------------------------
 # Data Loading
@@ -109,7 +106,6 @@ def load_workhorse_data(db_path: Path) -> dict:
 
     return result
 
-
 # ---------------------------------------------------------------------------
 # Metrics
 # ---------------------------------------------------------------------------
@@ -170,7 +166,6 @@ def compute_metrics(rows: list[dict], label: str = "") -> dict:
         "yearly": yearly,
     }
 
-
 # ---------------------------------------------------------------------------
 # Stress Testing
 # ---------------------------------------------------------------------------
@@ -198,7 +193,6 @@ def stress_test_pnl(rows: list[dict], multiplier: float) -> list[dict]:
         stressed.append(new_row)
     return stressed
 
-
 def find_breakeven_multiplier(rows: list[dict]) -> float:
     """Binary search for friction multiplier where ExpR = 0."""
     lo, hi = 1.0, 10.0
@@ -213,7 +207,6 @@ def find_breakeven_multiplier(rows: list[dict]) -> float:
         else:
             hi = mid
     return (lo + hi) / 2
-
 
 # ---------------------------------------------------------------------------
 # Walk-Forward
@@ -236,7 +229,6 @@ def walk_forward_expanding(rows: list[dict]) -> list[dict]:
         })
     return results
 
-
 def leave_one_year_out(rows: list[dict]) -> list[dict]:
     """Leave-one-year-out cross-validation."""
     results = []
@@ -250,21 +242,17 @@ def leave_one_year_out(rows: list[dict]) -> list[dict]:
         })
     return results
 
-
 # ---------------------------------------------------------------------------
 # Formatting helpers
 # ---------------------------------------------------------------------------
 def fmt_pct(v, decimals=1):
     return f"{v*100:.{decimals}f}%" if v is not None else "N/A"
 
-
 def fmt_r(v, decimals=2):
     return f"{v:+.{decimals}f}R" if v is not None else "N/A"
 
-
 def fmt_f(v, decimals=2):
     return f"{v:.{decimals}f}" if v is not None else "N/A"
-
 
 def classify(n):
     if n >= 100:
@@ -272,7 +260,6 @@ def classify(n):
     if n >= 30:
         return "REGIME"
     return "INVALID"
-
 
 # ---------------------------------------------------------------------------
 # Report Generation
@@ -572,7 +559,6 @@ def generate_report(variant_data: dict) -> str:
 
     return "\n".join(lines)
 
-
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -591,7 +577,6 @@ def main():
     ARTIFACT_PATH.parent.mkdir(parents=True, exist_ok=True)
     ARTIFACT_PATH.write_text(report, encoding="utf-8")
     print(f"\nReport saved to: {ARTIFACT_PATH}")
-
 
 if __name__ == "__main__":
     main()

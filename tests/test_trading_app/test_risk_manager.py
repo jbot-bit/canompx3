@@ -10,10 +10,7 @@ from enum import Enum
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 from trading_app.risk_manager import RiskLimits, RiskManager
-
 
 # --- Minimal stubs for active trades ---
 
@@ -22,20 +19,16 @@ class _State(Enum):
     ARMED = "ARMED"
     EXITED = "EXITED"
 
-
 @dataclass
 class _FakeTrade:
     orb_label: str
     state: _State = _State.ENTERED
 
-
 def _entered(orb="2300"):
     return _FakeTrade(orb_label=orb, state=_State.ENTERED)
 
-
 def _armed(orb="2300"):
     return _FakeTrade(orb_label=orb, state=_State.ARMED)
-
 
 # ============================================================================
 # RiskLimits Tests
@@ -66,7 +59,6 @@ class TestRiskLimits:
         )
         assert limits.max_daily_loss_r == -3.0
         assert limits.max_concurrent_positions == 5
-
 
 # ============================================================================
 # Circuit Breaker Tests
@@ -128,7 +120,6 @@ class TestCircuitBreaker:
         rm.on_trade_exit(-3.0)  # total: -6.0
         assert rm.is_halted()
 
-
 # ============================================================================
 # Max Concurrent Tests
 # ============================================================================
@@ -161,7 +152,6 @@ class TestMaxConcurrent:
         allowed, _, _ = rm.can_enter("s3", "0030", trades, 0.0)
         assert allowed
 
-
 # ============================================================================
 # Max Per ORB Tests
 # ============================================================================
@@ -192,7 +182,6 @@ class TestMaxPerOrb:
         trades = [_entered("2300")]
         allowed, _, _ = rm.can_enter("s2", "2300", trades, 0.0)
         assert allowed
-
 
 # ============================================================================
 # Max Daily Trades Tests
@@ -235,7 +224,6 @@ class TestMaxDailyTrades:
         allowed, _, _ = rm.can_enter("s1", "2300", [], 0.0)
         assert allowed
 
-
 # ============================================================================
 # Drawdown Warning Tests
 # ============================================================================
@@ -257,7 +245,6 @@ class TestDrawdownWarning:
 
         rm.can_enter("s1", "2300", [], -2.0)
         assert len(rm.warnings) == 0
-
 
 # ============================================================================
 # Status and Daily Reset Tests

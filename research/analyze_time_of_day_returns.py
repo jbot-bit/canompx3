@@ -25,7 +25,6 @@ import pandas as pd
 sys.stdout.reconfigure(line_buffering=True)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.cost_model import get_cost_spec
 from research._alt_strategy_utils import compute_strategy_metrics
@@ -48,7 +47,6 @@ def get_session(hour_utc: int) -> str:
     else:
         return "Off-hours"
 
-
 def load_5m_bars(db_path: Path) -> pd.DataFrame:
     """Load 5m bars for MGC (screened date range)."""
     print("Loading 5m bars...", end=" ", flush=True)
@@ -65,7 +63,6 @@ def load_5m_bars(db_path: Path) -> pd.DataFrame:
         con.close()
     print(f"{len(df):,} bars loaded.")
     return df
-
 
 def load_atr(db_path: Path) -> pd.DataFrame:
     """Load ATR_20 from daily_features."""
@@ -85,7 +82,6 @@ def load_atr(db_path: Path) -> pd.DataFrame:
         con.close()
     print(f"{len(df):,} days with ATR.")
     return df
-
 
 def compute_hourly_returns(bars: pd.DataFrame) -> pd.DataFrame:
     """Compute hourly returns from 5m bars.
@@ -121,7 +117,6 @@ def compute_hourly_returns(bars: pd.DataFrame) -> pd.DataFrame:
     print(f"  {len(hourly):,} hourly observations across {hourly['date'].nunique():,} days.")
     return hourly
 
-
 def merge_atr_regimes(hourly: pd.DataFrame, atr_df: pd.DataFrame) -> pd.DataFrame:
     """Merge ATR and assign tercile regimes."""
     atr_df = atr_df.copy()
@@ -140,7 +135,6 @@ def merge_atr_regimes(hourly: pd.DataFrame, atr_df: pd.DataFrame) -> pd.DataFram
 
     print(f"  ATR terciles: Low <= {tercile_edges[0]:.1f}, Med <= {tercile_edges[1]:.1f}, High > {tercile_edges[1]:.1f}")
     return merged
-
 
 def print_hourly_stats(data: pd.DataFrame) -> None:
     """Print stats for each hour."""
@@ -168,7 +162,6 @@ def print_hourly_stats(data: pd.DataFrame) -> None:
 
         print(f"{hour:>4} {session:<10} {n:>7,} {mean_r:>+8.3f} {median_r:>+8.3f} {std_r:>8.3f} {up_pct:>5.1f}% {t_stat:>+7.2f} {signif:>6}")
 
-
 def print_session_summary(data: pd.DataFrame) -> None:
     """Print aggregated session stats."""
     print("\n" + "=" * 100)
@@ -189,7 +182,6 @@ def print_session_summary(data: pd.DataFrame) -> None:
 
         print(f"\n  {session_name} (N={n:,}):")
         print(f"    Mean: {mean_r:+.4f} pts | Std: {std_r:.4f} | Up%: {up_pct:.1f}% | Total: {total:+.1f} pts")
-
 
 def print_regime_breakdown(data: pd.DataFrame) -> None:
     """Print hourly stats broken down by ATR regime."""
@@ -219,7 +211,6 @@ def print_regime_breakdown(data: pd.DataFrame) -> None:
             session = get_session(hour)
 
             print(f"{hour:>4} {session:<10} {n:>7,} {mean_r:>+8.3f} {median_r:>+8.3f} {std_r:>8.3f} {up_pct:>5.1f}% {t_stat:>+7.2f}")
-
 
 def print_expr_if_trading(data: pd.DataFrame) -> None:
     """Compute ExpR if you buy at hour open and sell at hour close, using cost model."""
@@ -254,7 +245,6 @@ def print_expr_if_trading(data: pd.DataFrame) -> None:
         session = get_session(hour)
         print(f"{hour:>4} {session:<10} {stats['n']:>7,} {stats['wr']*100:>5.1f}% {stats['expr']:>+8.4f} {stats['sharpe']:>+8.4f} {stats['maxdd']:>+8.2f} {stats['total']:>+9.2f}")
 
-
 def print_best_worst_hours(data: pd.DataFrame) -> None:
     """Print the most biased hours."""
     print("\n" + "=" * 100)
@@ -283,7 +273,6 @@ def print_best_worst_hours(data: pd.DataFrame) -> None:
     print("\n  Bottom 5 (weakest bias):")
     for hour, session, n, mean_r, std_r, t_stat in results[-5:]:
         print(f"  Hour {hour:02d} UTC ({session}): mean={mean_r:+.4f} pts, t={t_stat:+.2f} (N={n:,})")
-
 
 def main():
     print("=" * 100)
@@ -331,7 +320,6 @@ def main():
         print(row)
 
     print("\n[Done]")
-
 
 if __name__ == "__main__":
     main()

@@ -30,7 +30,6 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.build_daily_features import compute_trading_day_utc_range
 from pipeline.cost_model import get_cost_spec, to_r_multiple
@@ -58,7 +57,6 @@ ALL_RULE_KEYS = (
     + [f"rule3_T{str(t).replace('.', '')}" for t in RULE3_MFE_TRIGGERS]
     + [f"rule4_K{k}" for k in RULE4_BAR_COUNTS]
 )
-
 
 # ---------------------------------------------------------------------------
 # Data loading
@@ -133,7 +131,6 @@ def load_outcomes(db_path: Path, sessions: list[str], entry_models: list[str],
     print(f"Loaded {len(df)} trades ({df['trading_day'].nunique()} days)")
     return df
 
-
 def load_bars_for_day(db_path: Path, trading_day: date) -> pd.DataFrame:
     """Load 1-minute bars for one trading day."""
     start_utc, end_utc = compute_trading_day_utc_range(trading_day)
@@ -151,7 +148,6 @@ def load_bars_for_day(db_path: Path, trading_day: date) -> pd.DataFrame:
     if not df.empty:
         df["ts_utc"] = pd.to_datetime(df["ts_utc"], utc=True)
     return df
-
 
 # ---------------------------------------------------------------------------
 # Per-trade replay
@@ -310,7 +306,6 @@ def replay_trade_with_exits(
 
     return results
 
-
 # ---------------------------------------------------------------------------
 # Aggregation
 # ---------------------------------------------------------------------------
@@ -331,7 +326,6 @@ def compute_metrics(pnls: np.ndarray) -> dict:
     total = float(pnls.sum())
     return {"n": n, "wr": wr, "expr": expr, "sharpe": sharpe,
             "maxdd": maxdd, "total": total}
-
 
 def aggregate_results(all_results: list[dict]) -> dict:
     """Group results by (session, entry_model) and compute metrics per rule."""
@@ -379,7 +373,6 @@ def aggregate_results(all_results: list[dict]) -> dict:
 
     return report
 
-
 # ---------------------------------------------------------------------------
 # Reporting
 # ---------------------------------------------------------------------------
@@ -400,7 +393,6 @@ def fmt_metrics(m: dict, triggered: bool = False) -> str:
         trig_str += "]"
         parts.append(trig_str)
     return "  ".join(parts)
-
 
 def print_report(report: dict, start: date, end: date, min_orb_size: float):
     """Print the structured report."""
@@ -490,7 +482,6 @@ def print_report(report: dict, start: date, end: date, min_orb_size: float):
             f"ExpR {imp['delta_expr']:+.3f}, "
             f"{imp['triggered_pct']:.0f}% triggered"
         )
-
 
 # ---------------------------------------------------------------------------
 # Main
@@ -625,7 +616,6 @@ def main():
     # Aggregate and report
     report = aggregate_results(all_results)
     print_report(report, args.start, args.end, args.min_orb_size)
-
 
 if __name__ == "__main__":
     main()

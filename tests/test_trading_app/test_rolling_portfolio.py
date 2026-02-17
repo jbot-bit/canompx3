@@ -15,8 +15,6 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 from scripts.infra.rolling_eval import generate_rolling_windows, DOUBLE_BREAK_THRESHOLD
 from trading_app.rolling_portfolio import (
     make_family_id,
@@ -34,11 +32,9 @@ from trading_app.rolling_portfolio import (
 )
 from pipeline.build_daily_features import detect_double_break
 
-
 # =========================================================================
 # Window generation tests
 # =========================================================================
-
 
 class TestWindowGeneration:
     """Test rolling window date range generation."""
@@ -105,11 +101,9 @@ class TestWindowGeneration:
         )
         assert len(windows) == 1
 
-
 # =========================================================================
 # Stability scoring tests
 # =========================================================================
-
 
 class TestStabilityScoring:
     """Test sample-size-weighted stability scoring."""
@@ -140,7 +134,6 @@ class TestStabilityScoring:
     def test_classify_degraded(self):
         assert classify_stability(0.2) == "DEGRADED"
         assert classify_stability(0.0) == "DEGRADED"
-
 
 class TestAggregatePerformance:
     """Test family-level aggregation of rolling results."""
@@ -216,11 +209,9 @@ class TestAggregatePerformance:
         results = aggregate_rolling_performance([], [], {})
         assert results == []
 
-
 # =========================================================================
 # Double-break tests
 # =========================================================================
-
 
 class TestDoubleBreak:
     """Test double-break detection logic."""
@@ -294,11 +285,9 @@ class TestDoubleBreak:
     def test_threshold_constant(self):
         assert DOUBLE_BREAK_THRESHOLD == 0.67
 
-
 # =========================================================================
 # Day-of-week concentration tests
 # =========================================================================
-
 
 class TestDayOfWeekConcentration:
     """Test day-of-week concentration detection."""
@@ -317,11 +306,9 @@ class TestDayOfWeekConcentration:
         concentration = max(day_total_r.values()) / total_abs_r
         assert concentration > 0.5
 
-
 # =========================================================================
 # Portfolio integration tests (with in-memory DB)
 # =========================================================================
-
 
 def _setup_rolling_db(tmp_path):
     """Create a temp DB with regime schema and seed rolling data."""
@@ -384,7 +371,6 @@ def _setup_rolling_db(tmp_path):
     con.commit()
     con.close()
     return db_path
-
 
 class TestPortfolioIntegration:
     """Test that rolling strategies integrate into portfolio system."""
@@ -451,11 +437,9 @@ class TestPortfolioIntegration:
         assert "1800_E3_ORB_G6" in counts
         assert counts["1800_E3_ORB_G6"] == 1
 
-
 # =========================================================================
 # Family ID tests
 # =========================================================================
-
 
 class TestFamilyId:
 
@@ -465,11 +449,9 @@ class TestFamilyId:
     def test_no_filter(self):
         assert make_family_id("1800", "E3", "NO_FILTER") == "1800_E3_NO_FILTER"
 
-
 # =========================================================================
 # Edge cases
 # =========================================================================
-
 
 class TestEdgeCases:
 

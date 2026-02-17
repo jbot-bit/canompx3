@@ -31,7 +31,6 @@ import pandas as pd
 sys.stdout.reconfigure(line_buffering=True)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.cost_model import get_cost_spec
 from research._alt_strategy_utils import compute_strategy_metrics, annualize_sharpe
@@ -53,7 +52,6 @@ SESSIONS = {
 # Drive windows in minutes
 DRIVE_WINDOWS = [15, 30, 60]
 
-
 def load_1m_bars(db_path: Path) -> pd.DataFrame:
     """Load 1m bars for MGC (screened date range)."""
     print("Loading 1m bars...", end=" ", flush=True)
@@ -70,7 +68,6 @@ def load_1m_bars(db_path: Path) -> pd.DataFrame:
         con.close()
     print(f"{len(df):,} bars loaded.")
     return df
-
 
 def load_atr(db_path: Path) -> pd.DataFrame:
     """Load ATR_20 from daily_features."""
@@ -90,7 +87,6 @@ def load_atr(db_path: Path) -> pd.DataFrame:
         con.close()
     print(f"{len(df):,} days with ATR.")
     return df
-
 
 def analyze_opening_drive(bars: pd.DataFrame, atr_df: pd.DataFrame) -> pd.DataFrame:
     """Analyze opening drive for each session and window.
@@ -226,7 +222,6 @@ def analyze_opening_drive(bars: pd.DataFrame, atr_df: pd.DataFrame) -> pd.DataFr
 
     return pd.DataFrame(results)
 
-
 def print_alignment_summary(data: pd.DataFrame) -> None:
     """Print alignment rates for each session/window combo."""
     print("\n" + "=" * 110)
@@ -251,7 +246,6 @@ def print_alignment_summary(data: pd.DataFrame) -> None:
             signif = "***" if abs(t_stat) > 2.576 else "**" if abs(t_stat) > 1.96 else "*" if abs(t_stat) > 1.645 else ""
 
             print(f"{session:<15} {window:>5}m {n:>7,} {align_rate*100:>7.1f}% {t_stat:>+8.2f} {signif:>6}")
-
 
 def print_conditional_pnl(data: pd.DataFrame) -> None:
     """Print PnL if trading in drive direction."""
@@ -283,7 +277,6 @@ def print_conditional_pnl(data: pd.DataFrame) -> None:
             sha_str = f"{sha:>+7.2f}" if sha is not None else "   N/A"
 
             print(f"{session:<15} {window:>5}m {stats['n']:>7,} {stats['wr']*100:>5.1f}% {stats['expr']:>+8.4f} {stats['sharpe']:>+8.4f} {stats['maxdd']:>+8.2f} {stats['total']:>+9.2f} {sha_str}")
-
 
 def print_direction_breakdown(data: pd.DataFrame) -> None:
     """Break down by drive direction (up vs down)."""
@@ -318,7 +311,6 @@ def print_direction_breakdown(data: pd.DataFrame) -> None:
 
                 print(f"  {window:>5}m {direction:>5} {n:>7,} {align_pct:>7.1f}% {stats['wr']*100:>5.1f}% {stats['expr']:>+8.4f} {mean_move:>+10.3f}")
 
-
 def print_drive_strength(data: pd.DataFrame) -> None:
     """Does a STRONGER opening drive predict better?"""
     print("\n" + "=" * 110)
@@ -349,7 +341,6 @@ def print_drive_strength(data: pd.DataFrame) -> None:
             print(f"    Medium (|drive| <= {t2:.1f}% ATR): N={len(medium):>5}, Align={medium['aligned'].mean()*100:.1f}%, ExpR={medium['pnl_r'].mean():+.4f}")
             print(f"    Strong (|drive| >  {t2:.1f}% ATR): N={len(strong):>5}, Align={strong['aligned'].mean()*100:.1f}%, ExpR={strong['pnl_r'].mean():+.4f}")
 
-
 def print_year_consistency(data: pd.DataFrame) -> None:
     """Year-by-year alignment rates."""
     print("\n" + "=" * 110)
@@ -378,7 +369,6 @@ def print_year_consistency(data: pd.DataFrame) -> None:
                 else:
                     row += f"{'---':>10}"
             print(row)
-
 
 def print_best_setups(data: pd.DataFrame) -> None:
     """Print the best session/window combinations."""
@@ -420,7 +410,6 @@ def print_best_setups(data: pd.DataFrame) -> None:
     print("    50% alignment = no predictive power (coin flip)")
     print("    <45% alignment = contrarian signal (fade the opening drive)")
 
-
 def main():
     print("=" * 110)
     print(f"GOLD (MGC) OPENING DRIVE ANALYSIS  [screening: {SCREEN_START}+]")
@@ -456,7 +445,6 @@ def main():
     print("  - Sessions: fixed Brisbane-time windows (not DST-aware). See pipeline/dst.py for actual market opens.")
 
     print("\n[Done]")
-
 
 if __name__ == "__main__":
     main()

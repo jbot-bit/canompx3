@@ -9,10 +9,7 @@ from pathlib import Path
 import pytest
 import duckdb
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-
 from trading_app.nested.schema import init_nested_schema, verify_nested_schema
-
 
 @pytest.fixture
 def tmp_db(tmp_path):
@@ -32,7 +29,6 @@ def tmp_db(tmp_path):
     con.commit()
     con.close()
     return db_path
-
 
 class TestInitNestedSchema:
     """Tests for init_nested_schema()."""
@@ -99,7 +95,6 @@ class TestInitNestedSchema:
         finally:
             con.close()
 
-
 class TestNestedOutcomesColumns:
     """Verify nested_outcomes has the expected columns including entry_resolution."""
 
@@ -144,7 +139,6 @@ class TestNestedOutcomesColumns:
         finally:
             con.close()
 
-
 class TestNestedStrategiesColumns:
     """Verify nested_strategies has entry_resolution."""
 
@@ -165,7 +159,6 @@ class TestNestedStrategiesColumns:
         finally:
             con.close()
 
-
 class TestVerifyNestedSchema:
     """Tests for verify_nested_schema()."""
 
@@ -180,7 +173,6 @@ class TestVerifyNestedSchema:
         ok, violations = verify_nested_schema(db_path=tmp_db)
         assert not ok
         assert len(violations) >= 3  # All 3 tables missing
-
 
 class TestNestedDoesNotTouchProduction:
     """Verify nested schema does not modify production tables."""

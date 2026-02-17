@@ -17,7 +17,6 @@ from datetime import date
 from dataclasses import dataclass, field, asdict
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
 
@@ -28,7 +27,6 @@ from trading_app.strategy_discovery import compute_metrics
 
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)
-
 
 @dataclass
 class FoldResult:
@@ -46,7 +44,6 @@ class FoldResult:
     sharpe_ratio: float | None
     max_drawdown_r: float | None
 
-
 @dataclass
 class WalkForwardResult:
     """Aggregated walk-forward evaluation for a single strategy."""
@@ -58,7 +55,6 @@ class WalkForwardResult:
     oos_expectancy_r: float | None = None
     oos_sharpe_ratio: float | None = None
     oos_max_drawdown_r: float | None = None
-
 
 def build_folds(
     trading_days: list[date],
@@ -98,7 +94,6 @@ def build_folds(
 
     return folds
 
-
 def evaluate_fold(
     outcomes: list[dict],
     eligible_days: set[date],
@@ -115,7 +110,6 @@ def evaluate_fold(
         if o["trading_day"] in test_days and o["trading_day"] in eligible_days
     ]
     return compute_metrics(test_outcomes)
-
 
 def walk_forward_eval(
     db_path: Path | None = None,
@@ -294,7 +288,6 @@ def walk_forward_eval(
     finally:
         con.close()
 
-
 def write_artifacts(results: list[WalkForwardResult], output_dir: Path):
     """Write walk-forward results to CSV files."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -342,7 +335,6 @@ def write_artifacts(results: list[WalkForwardResult], output_dir: Path):
         json.dump([asdict(r) for r in results], f, indent=2, default=str)
     print(f"Written: {json_path}")
 
-
 def main():
     import argparse
 
@@ -375,7 +367,6 @@ def main():
     if results:
         output_dir = Path(args.output_dir) if args.output_dir else PROJECT_ROOT / "artifacts" / "walk_forward"
         write_artifacts(results, output_dir)
-
 
 if __name__ == "__main__":
     main()

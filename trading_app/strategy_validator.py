@@ -24,7 +24,6 @@ import json
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
 
@@ -36,7 +35,6 @@ from trading_app.walkforward import run_walkforward, append_walkforward_result
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)
 
-
 def classify_regime(atr_20: float) -> str:
     """Classify market regime from mean ATR(20)."""
     if atr_20 < 20.0:
@@ -44,7 +42,6 @@ def classify_regime(atr_20: float) -> str:
     elif atr_20 < 30.0:
         return "MARGINAL"
     return "ACTIVE"
-
 
 def validate_strategy(row: dict, cost_spec, stress_multiplier: float = 1.5,
                       min_sample: int = 30, min_sharpe: float | None = None,
@@ -200,7 +197,6 @@ def validate_strategy(row: dict, cost_spec, stress_multiplier: float = 1.5,
     if notes:
         return status, "; ".join(notes), regime_waivers
     return status, "All phases passed", regime_waivers
-
 
 def run_validation(
     db_path: Path | None = None,
@@ -390,7 +386,6 @@ def run_validation(
     finally:
         con.close()
 
-
 def main():
     import argparse
 
@@ -447,7 +442,6 @@ def main():
         wf_min_pct_positive=args.wf_min_pct_positive,
         enable_regime_waivers=not args.no_regime_waivers,
     )
-
 
 if __name__ == "__main__":
     main()

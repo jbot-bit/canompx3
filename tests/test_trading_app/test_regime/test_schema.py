@@ -8,10 +8,7 @@ from pathlib import Path
 import pytest
 import duckdb
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-
 from trading_app.regime.schema import init_regime_schema, verify_regime_schema
-
 
 @pytest.fixture
 def tmp_db(tmp_path):
@@ -21,7 +18,6 @@ def tmp_db(tmp_path):
     con.commit()
     con.close()
     return db_path
-
 
 class TestInitRegimeSchema:
     """Tests for init_regime_schema()."""
@@ -97,7 +93,6 @@ class TestInitRegimeSchema:
         assert "regime_strategies" in tables
         con.close()
 
-
 class TestRegimeStrategiesColumns:
     """Verify regime_strategies has expected columns."""
 
@@ -123,7 +118,6 @@ class TestRegimeStrategiesColumns:
         finally:
             con.close()
 
-
 class TestRegimeValidatedColumns:
     """Verify regime_validated has expected columns."""
 
@@ -148,7 +142,6 @@ class TestRegimeValidatedColumns:
         finally:
             con.close()
 
-
 class TestVerifyRegimeSchema:
     """Tests for verify_regime_schema()."""
 
@@ -162,7 +155,6 @@ class TestVerifyRegimeSchema:
         ok, violations = verify_regime_schema(db_path=tmp_db)
         assert not ok
         assert len(violations) >= 2  # Both tables missing
-
 
 class TestRegimeDoesNotTouchProduction:
     """Verify regime schema does not modify production tables."""

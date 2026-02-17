@@ -12,8 +12,6 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 import duckdb
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA, DAILY_FEATURES_SCHEMA
 from pipeline.cost_model import get_cost_spec
 from trading_app.db_manager import init_trading_app_schema
@@ -28,10 +26,8 @@ from trading_app.paper_trader import (
     _entry_model_from_strategy,
 )
 
-
 def _cost():
     return get_cost_spec("MGC")
-
 
 def _make_strategy(**overrides):
     base = {
@@ -52,7 +48,6 @@ def _make_strategy(**overrides):
     base.update(overrides)
     return PortfolioStrategy(**base)
 
-
 def _make_portfolio(strategies):
     return Portfolio(
         name="test",
@@ -63,7 +58,6 @@ def _make_portfolio(strategies):
         max_concurrent_positions=3,
         max_daily_loss_r=5.0,
     )
-
 
 def _setup_replay_db(tmp_path, n_days=5):
     """
@@ -157,7 +151,6 @@ def _setup_replay_db(tmp_path, n_days=5):
     con.close()
     return db_path
 
-
 # ============================================================================
 # Helpers Tests (no DB needed)
 # ============================================================================
@@ -169,7 +162,6 @@ class TestHelpers:
 
     def test_entry_model_from_strategy(self):
         assert _entry_model_from_strategy("MGC_2300_E1_RR2.0_CB5_NO_FILTER") == "E1"
-
 
 # ============================================================================
 # Replay Tests — shared class fixture (runs replay ONCE)
@@ -190,7 +182,6 @@ def shared_replay(tmp_path_factory):
         end_date=date(2024, 1, 15),
     )
     return result, db_path, strategy
-
 
 class TestReplay:
 
@@ -230,7 +221,6 @@ class TestReplay:
         day_pnl_sum = sum(ds.daily_pnl_r for ds in result.day_summaries)
         assert abs(result.total_pnl_r - day_pnl_sum) < 0.01
 
-
 # ============================================================================
 # Risk Integration Tests (needs own fixture for custom risk limits)
 # ============================================================================
@@ -253,7 +243,6 @@ class TestRiskIntegration:
             risk_limits=limits,
         )
         assert result.days_processed > 0
-
 
 # ============================================================================
 # CLI Tests

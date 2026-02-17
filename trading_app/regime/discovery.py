@@ -14,7 +14,6 @@ from pathlib import Path
 from datetime import date
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
 
@@ -34,7 +33,6 @@ from trading_app.regime.schema import init_regime_schema
 
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)
-
 
 def run_regime_discovery(
     db_path: Path | None = None,
@@ -206,7 +204,6 @@ def run_regime_discovery(
     finally:
         con.close()
 
-
 def main():
     import argparse
 
@@ -232,7 +229,6 @@ def main():
         orb_minutes=args.orb_minutes,
         dry_run=args.dry_run,
     )
-
 
 if __name__ == "__main__":
     main()

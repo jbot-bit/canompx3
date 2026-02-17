@@ -6,9 +6,6 @@ import inspect
 import pytest
 import duckdb
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
-
 def test_merge_does_not_drop_trading_tables(tmp_path):
     """merge_bars_only() must NOT drop trading_app tables."""
     db_path = tmp_path / "test.db"
@@ -43,14 +40,12 @@ def test_merge_does_not_drop_trading_tables(tmp_path):
     con.close()
     assert count == 1, "merge_bars_only() destroyed trading_app data!"
 
-
 def test_merge_bars_only_has_no_force_rebuild_param():
     """merge_bars_only() must NOT have a force_rebuild parameter."""
     from scripts.infra.run_parallel_ingest import merge_bars_only
     sig = inspect.signature(merge_bars_only)
     assert "force_rebuild" not in sig.parameters, \
         "merge_bars_only() should not have force_rebuild — that's in main()"
-
 
 def test_no_merge_all_function():
     """The old merge_all() function must be gone."""

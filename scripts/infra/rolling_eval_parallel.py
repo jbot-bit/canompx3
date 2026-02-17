@@ -18,7 +18,6 @@ from datetime import date
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 sys.stdout.reconfigure(line_buffering=True)
 
@@ -32,7 +31,6 @@ from pipeline.paths import GOLD_DB_PATH
 from trading_app.regime.schema import init_regime_schema
 from trading_app.regime.discovery import run_regime_discovery
 from trading_app.regime.validator import run_regime_validation
-
 
 def _process_window(args: dict) -> dict:
     """Process a single rolling window in an isolated DB copy."""
@@ -116,7 +114,6 @@ def _process_window(args: dict) -> dict:
             "tmp_db": None,
         }
 
-
 def merge_results_to_main(main_db: Path, tmp_dbs: list[Path], run_labels: list[str]):
     """Merge regime_strategies and regime_validated from temp DBs into main."""
     import duckdb
@@ -151,7 +148,6 @@ def merge_results_to_main(main_db: Path, tmp_dbs: list[Path], run_labels: list[s
         con.commit()
     finally:
         con.close()
-
 
 def main():
     import argparse
@@ -257,7 +253,6 @@ def main():
         output_data = {"completed": completed, "errors": errors}
         Path(args.output).write_text(json.dumps(output_data, indent=2))
         print(f"\nResults written to {args.output}")
-
 
 if __name__ == "__main__":
     main()

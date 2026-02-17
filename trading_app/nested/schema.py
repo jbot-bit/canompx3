@@ -13,11 +13,9 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
 from pipeline.paths import GOLD_DB_PATH
-
 
 def init_nested_schema(
     db_path: Path | None = None,
@@ -172,7 +170,6 @@ def init_nested_schema(
         if owns_con:
             con.close()
 
-
 def verify_nested_schema(db_path: Path | None = None) -> tuple[bool, list[str]]:
     """Verify all nested tables exist with correct schema."""
     if db_path is None:
@@ -262,7 +259,6 @@ def verify_nested_schema(db_path: Path | None = None) -> tuple[bool, list[str]]:
     finally:
         con.close()
 
-
 def main():
     import argparse
 
@@ -283,7 +279,6 @@ def main():
             sys.exit(1)
     else:
         init_nested_schema(force=args.force)
-
 
 if __name__ == "__main__":
     main()

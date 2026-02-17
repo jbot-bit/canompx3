@@ -35,7 +35,6 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.cost_model import get_cost_spec, to_r_multiple
 from pipeline.paths import GOLD_DB_PATH
@@ -57,7 +56,6 @@ SPEC = get_cost_spec("MGC")
 ORB_LABELS = ["0900", "1000", "1800"]
 RR_TARGETS = [1.0, 1.5, 2.0, 2.5, 3.0]
 SIZE_FILTERS = {"G2": 2.0, "G3": 3.0, "G4": 4.0, "G5": 5.0, "G6": 6.0}
-
 
 def find_double_break_entry(
     bars: pd.DataFrame,
@@ -166,7 +164,6 @@ def find_double_break_entry(
         "risk_points": risk_points,
     }
 
-
 def compute_double_break_outcomes(
     db_path: Path,
     features: pd.DataFrame,
@@ -270,7 +267,6 @@ def compute_double_break_outcomes(
             })
 
     return outcomes
-
 
 def run_walk_forward(
     db_path: Path,
@@ -376,7 +372,6 @@ def run_walk_forward(
         "combined_oos": combined_oos,
     }
 
-
 def run_full_period_analysis(
     db_path: Path,
     orb_label: str,
@@ -408,7 +403,6 @@ def run_full_period_analysis(
                 })
 
     return {"orb_label": orb_label, "grid": grid_results}
-
 
 def main():
     parser = argparse.ArgumentParser(description="Double Break strategy analysis")
@@ -482,7 +476,6 @@ def main():
     print(sep)
     print("DONE")
     print(sep)
-
 
 if __name__ == "__main__":
     main()

@@ -9,8 +9,6 @@ from pathlib import Path
 import pytest
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 from trading_app.view_strategies import (
     _safe_float,
     _fmt_signed,
@@ -18,7 +16,6 @@ from trading_app.view_strategies import (
     format_families,
     format_summary,
 )
-
 
 # ============================================================================
 # _safe_float tests
@@ -40,7 +37,6 @@ class TestSafeFloat:
     def test_negative(self):
         assert _safe_float(-2.3) == -2.3
 
-
 # ============================================================================
 # _fmt_signed tests
 # ============================================================================
@@ -60,7 +56,6 @@ class TestFmtSigned:
 
     def test_nan(self):
         assert _fmt_signed(float("nan")) == "N/A"
-
 
 # ============================================================================
 # format_table tests
@@ -139,7 +134,6 @@ class TestFormatTable:
         assert "+0.85" in result
         assert "50" in result
 
-
 # ============================================================================
 # format_families tests
 # ============================================================================
@@ -167,7 +161,6 @@ class TestFormatFamilies:
         assert "nan" not in result.lower() or "shann" in result.lower()
         assert "N/A" in result
 
-
 # ============================================================================
 # format_summary tests
 # ============================================================================
@@ -192,7 +185,6 @@ class TestFormatSummary:
         result = format_summary(df)
         assert "N/A" in result
         assert "nan" not in result.replace("ShANN", "")
-
 
 # ============================================================================
 # CLI test

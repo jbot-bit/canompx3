@@ -15,7 +15,6 @@ import pandas as pd
 import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.cost_model import get_cost_spec
 from research._alt_strategy_utils import (
@@ -27,7 +26,6 @@ from research._alt_strategy_utils import (
 from research.analyze_double_break import find_double_break_entry
 from research.analyze_gap_fade import prepare_gap_data
 from trading_app.ai.sql_adapter import QueryTemplate, SQLAdapter
-
 
 # =============================================================================
 # _alt_strategy_utils tests
@@ -65,7 +63,6 @@ class TestComputeStrategyMetrics:
         stats = compute_strategy_metrics(pnls)
         assert stats["sharpe"] > 0
 
-
 class TestComputeWalkForwardWindows:
     def test_generates_windows(self):
         windows = compute_walk_forward_windows(
@@ -95,7 +92,6 @@ class TestComputeWalkForwardWindows:
         )
         assert len(windows) == 0
 
-
 class TestAddMonths:
     def test_forward(self):
         assert _add_months(date(2024, 1, 15), 3) == date(2024, 4, 15)
@@ -111,7 +107,6 @@ class TestAddMonths:
         result = _add_months(date(2024, 1, 31), 1)
         assert result.month == 2
         assert result.day == 29  # 2024 is leap year
-
 
 class TestResolveBarOutcome:
     def _make_bars(self, data):
@@ -174,7 +169,6 @@ class TestResolveBarOutcome:
         ])
         result = resolve_bar_outcome(bars, 100, 95, 105, "long", 1)
         assert result is None
-
 
 # =============================================================================
 # Double break analysis tests
@@ -285,7 +279,6 @@ class TestFindDoubleBreakEntry:
         )
         assert result is None  # Price never drops below orb_low
 
-
 # =============================================================================
 # Gap fade analysis tests
 # =============================================================================
@@ -338,7 +331,6 @@ class TestPrepareGapData:
 
         result = prepare_gap_data(df)
         assert result.iloc[0]["dow"] == 0  # Monday
-
 
 # =============================================================================
 # MCP template tests

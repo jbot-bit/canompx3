@@ -7,7 +7,6 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
 import numpy as np
@@ -16,7 +15,6 @@ from pipeline.paths import GOLD_DB_PATH
 from pipeline.cost_model import get_cost_spec, stress_test_costs
 
 spec = get_cost_spec("MGC")
-
 
 def load_0900_data():
     """Load all 0900 outcomes joined with daily_features for filter eligibility."""
@@ -36,7 +34,6 @@ def load_0900_data():
     df["orb_size"] = df["orb_0900_size"]
     return df
 
-
 def compute_stats(pnls):
     """Compute trading stats from array of R-multiples."""
     n = len(pnls)
@@ -54,7 +51,6 @@ def compute_stats(pnls):
         "n": n, "wr": wr, "expr": expr, "sharpe": sharpe,
         "maxdd": maxdd, "total": total,
     }
-
 
 def find_best_strategy(data, metric="sharpe", min_trades=30):
     """Find best (em, rr, cb) combo by metric. Returns (combo, stats) or (None, None)."""
@@ -81,7 +77,6 @@ def find_best_strategy(data, metric="sharpe", min_trades=30):
 
     return best_combo, best_stats
 
-
 def find_worst_strategy(data, metric="sharpe", min_trades=30):
     """Find worst combo by metric."""
     worst_val = 999
@@ -107,7 +102,6 @@ def find_worst_strategy(data, metric="sharpe", min_trades=30):
 
     return worst_combo, worst_stats
 
-
 def get_oos_trades(data, combo):
     """Get OOS trades for a specific (em, rr, cb) combo."""
     em, rr, cb = combo
@@ -116,10 +110,8 @@ def get_oos_trades(data, combo):
            (data["confirm_bars"] == cb)
     return data[mask]["pnl_r"].values
 
-
 def em_label(em):
     return "E1" if em == "E1" else "E3"
-
 
 def main():
     df = load_0900_data()
@@ -349,7 +341,6 @@ def main():
     print(sep)
     print("DONE")
     print(sep)
-
 
 if __name__ == "__main__":
     main()

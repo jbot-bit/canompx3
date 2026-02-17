@@ -32,7 +32,6 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.cost_model import get_cost_spec, to_r_multiple
 from pipeline.paths import GOLD_DB_PATH
@@ -57,7 +56,6 @@ TIME_FILTERS = {
 }
 SIGMA_LOOKBACK = 14  # Days for sigma calc
 
-
 def prepare_sigma_data(features: pd.DataFrame) -> pd.DataFrame:
     """Add sigma (stddev of daily_close - daily_open) to features."""
     df = features.copy()
@@ -70,7 +68,6 @@ def prepare_sigma_data(features: pd.DataFrame) -> pd.DataFrame:
     df["sigma"] = df["co_range"].rolling(window=SIGMA_LOOKBACK, min_periods=SIGMA_LOOKBACK).std().shift(1)
 
     return df
-
 
 def compute_concretum_outcomes(
     db_path: Path,
@@ -206,7 +203,6 @@ def compute_concretum_outcomes(
 
     return all_outcomes
 
-
 def _resolve_1m(bars, entry, stop, target, direction, start_idx):
     """Resolve outcome on 1m bars."""
     is_long = direction == "long"
@@ -229,7 +225,6 @@ def _resolve_1m(bars, entry, stop, target, direction, start_idx):
             pnl = target - entry if is_long else entry - target
             return {"outcome": "win", "pnl_points": pnl, "exit_bar_idx": i}
     return None
-
 
 def run_walk_forward(
     db_path: Path,
@@ -342,7 +337,6 @@ def run_walk_forward(
         "regime_split": regime_split,
     }
 
-
 def main():
     parser = argparse.ArgumentParser(description="Concretum Bands strategy analysis")
     parser.add_argument("--db-path", type=Path, default=GOLD_DB_PATH)
@@ -411,7 +405,6 @@ def main():
     print(sep)
     print("DONE")
     print(sep)
-
 
 if __name__ == "__main__":
     main()

@@ -12,8 +12,6 @@ import pytest
 import pandas as pd
 import duckdb
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 from trading_app.outcome_builder import (
     compute_single_outcome,
     build_outcomes,
@@ -24,14 +22,12 @@ from trading_app.config import ENTRY_MODELS
 from trading_app.entry_rules import EntrySignal
 from pipeline.cost_model import get_cost_spec
 
-
 # ============================================================================
 # HELPERS
 # ============================================================================
 
 def _cost():
     return get_cost_spec("MGC")
-
 
 def _make_bars(start_ts, prices, interval_minutes=1):
     """
@@ -51,7 +47,6 @@ def _make_bars(start_ts, prices, interval_minutes=1):
         })
         ts = ts + timedelta(minutes=interval_minutes)
     return pd.DataFrame(rows)
-
 
 # ============================================================================
 # compute_single_outcome tests (E1: next bar open entry)
@@ -371,7 +366,6 @@ class TestComputeSingleOutcome:
         assert r2["entry_ts"] is not None
         assert r2["entry_ts"] > r1["entry_ts"]
 
-
 # ============================================================================
 # Entry model specific tests
 # ============================================================================
@@ -403,7 +397,6 @@ class TestEntryModelE1:
         assert result["stop_price"] == orb_low
         # Risk = 2703 - 2690 = 13 points
         assert result["target_price"] == pytest.approx(2703.0 + 13.0 * 2.0, abs=0.01)
-
 
 class TestEntryModelE3:
     """E3: limit at ORB level with retrace."""
@@ -455,7 +448,6 @@ class TestEntryModelE3:
 
         assert result["outcome"] is None
         assert result["entry_price"] is None
-
 
 # ============================================================================
 # build_outcomes integration tests (with temp DB)
@@ -622,7 +614,6 @@ class TestBuildOutcomes:
         ).fetchall()}
         con.close()
         assert models == {"E1", "E3"}
-
 
 class TestCLI:
     """Test CLI --help doesn't crash."""

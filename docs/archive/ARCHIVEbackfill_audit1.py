@@ -21,7 +21,6 @@ from pathlib import Path
 
 # Add project root to path
 PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
 from datetime import date, timedelta, datetime
@@ -30,10 +29,8 @@ from pipeline.paths import GOLD_DB_PATH
 
 TZ_LOCAL = ZoneInfo("Australia/Brisbane")
 
-
 def get_connection(db_path: str = GOLD_DB_PATH) -> duckdb.DuckDBPyConnection:
     return duckdb.connect(db_path, read_only=True)
-
 
 def audit_bars_1m(conn: duckdb.DuckDBPyConnection, symbol: str = "MGC") -> dict:
     """Audit bars_1m table for coverage and gaps."""
@@ -84,7 +81,6 @@ def audit_bars_1m(conn: duckdb.DuckDBPyConnection, symbol: str = "MGC") -> dict:
         "dates_with_data": dates_with_data,
     }
 
-
 def audit_bars_5m(conn: duckdb.DuckDBPyConnection, symbol: str = "MGC") -> dict:
     """Audit bars_5m table for coverage."""
 
@@ -112,7 +108,6 @@ def audit_bars_5m(conn: duckdb.DuckDBPyConnection, symbol: str = "MGC") -> dict:
         "total_bars": sum(dates_with_data.values()),
         "dates_with_data": dates_with_data,
     }
-
 
 def audit_daily_features(conn: duckdb.DuckDBPyConnection, instrument: str = "MGC") -> dict:
     """Audit daily_features table for coverage."""
@@ -159,7 +154,6 @@ def audit_daily_features(conn: duckdb.DuckDBPyConnection, instrument: str = "MGC
         "session_coverage": session_coverage,
         "dates": set(dates),
     }
-
 
 def audit_dbn_file(dbn_path: Path) -> dict:
     """Audit a DBN file for date coverage."""
@@ -210,7 +204,6 @@ def audit_dbn_file(dbn_path: Path) -> dict:
         "symbols": symbols,
     }
 
-
 def compare_coverage(bars_1m: dict, bars_5m: dict, daily_features: dict) -> list:
     """Compare coverage between tables and identify discrepancies."""
 
@@ -242,7 +235,6 @@ def compare_coverage(bars_1m: dict, bars_5m: dict, daily_features: dict) -> list
         issues.append(f"Days with bars_1m but no bars_5m: {len(bars_1m_no_5m)}")
 
     return issues
-
 
 def print_report(bars_1m: dict, bars_5m: dict, daily_features: dict, issues: list):
     """Print the audit report."""
@@ -330,7 +322,6 @@ def print_report(bars_1m: dict, bars_5m: dict, daily_features: dict, issues: lis
             print(f"  Data is current (last: {last_bar_date})")
 
     print()
-
 
 def main():
     import argparse
@@ -420,7 +411,6 @@ def main():
 
     # Return exit code based on issues
     return 1 if issues else 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

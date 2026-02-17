@@ -31,11 +31,9 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 sys.stdout.reconfigure(line_buffering=True)
 
 from research._alt_strategy_utils import compute_strategy_metrics, annualize_sharpe
-
 
 def load_features(db_path: Path, instrument: str = "MGC") -> pd.DataFrame:
     """Load daily_features with session stats."""
@@ -76,7 +74,6 @@ def load_features(db_path: Path, instrument: str = "MGC") -> pd.DataFrame:
 
     return df
 
-
 def load_outcomes(db_path: Path, instrument: str, session: str) -> pd.DataFrame:
     """Load outcomes for a target session."""
     con = duckdb.connect(str(db_path), read_only=True)
@@ -101,13 +98,11 @@ def load_outcomes(db_path: Path, instrument: str, session: str) -> pd.DataFrame:
     result["trading_day"] = pd.to_datetime(result["trading_day"])
     return result
 
-
 def fmt(m: dict) -> str:
     if m is None or m["n"] == 0:
         return "N=0"
     return (f"N={m['n']:<5d}  WR={m['wr']*100:5.1f}%  ExpR={m['expr']:+.3f}  "
             f"Sharpe={m['sharpe']:.3f}  MaxDD={m['maxdd']:.1f}R  Total={m['total']:+.1f}R")
-
 
 def analyze_cascade(features: pd.DataFrame, outcomes: pd.DataFrame,
                     target_session: str, predictor_col: str, predictor_name: str):
@@ -166,7 +161,6 @@ def analyze_cascade(features: pd.DataFrame, outcomes: pd.DataFrame,
                     print(f"      <0.5 ATR:    {fmt(compute_strategy_metrics(low_atr['pnl_r'].values))}")
                 if len(high_atr) >= 5:
                     print(f"      >=0.5 ATR:   {fmt(compute_strategy_metrics(high_atr['pnl_r'].values))}")
-
 
 def main():
     parser = argparse.ArgumentParser(description="Session cascade analysis")
@@ -229,7 +223,6 @@ def main():
     print(f"\n{'=' * 90}")
     print("DONE")
     print("=" * 90)
-
 
 if __name__ == "__main__":
     main()

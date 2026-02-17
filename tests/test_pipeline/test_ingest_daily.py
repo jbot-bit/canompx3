@@ -11,7 +11,6 @@ from pathlib import Path
 from datetime import date
 
 import sys
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from pipeline.ingest_dbn_daily import (
     discover_daily_files,
@@ -21,7 +20,6 @@ from pipeline.ingest_dbn_mgc import (
     CheckpointManager,
     GC_OUTRIGHT_PATTERN,
 )
-
 
 class TestDailyFilePattern:
     """Tests for the daily file name regex."""
@@ -38,7 +36,6 @@ class TestDailyFilePattern:
 
     def test_rejects_wrong_schema(self):
         assert DAILY_FILE_PATTERN.match("glbx-mdp3-20210205.trades.dbn.zst") is None
-
 
 class TestDiscoverDailyFiles:
     """Tests for discover_daily_files()."""
@@ -73,7 +70,6 @@ class TestDiscoverDailyFiles:
         files = discover_daily_files(tmp_path, date(2024, 1, 1), date(2024, 12, 31))
         assert len(files) == 1
 
-
 class TestGcOutrightFilter:
     """Tests for the GC outright contract pattern."""
 
@@ -93,7 +89,6 @@ class TestGcOutrightFilter:
     def test_rejects_non_futures(self):
         assert GC_OUTRIGHT_PATTERN.match("GC") is None
         assert GC_OUTRIGHT_PATTERN.match("GCX") is None
-
 
 class TestCheckpointRoundtrip:
     """Tests for checkpoint write + read + resume logic."""

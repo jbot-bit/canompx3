@@ -14,7 +14,6 @@ Families:
   D: Chop-avoidance wrapper (ATR filter on top of A/B/C)
 """
 
-import sys
 from pathlib import Path
 from datetime import timedelta
 from dataclasses import dataclass
@@ -22,12 +21,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
 from pipeline.paths import GOLD_DB_PATH
-
 
 # ---------------------------------------------------------------------------
 # Data loading
@@ -45,7 +39,6 @@ def load_trade_log(path: str | Path) -> pd.DataFrame:
     entries["trade_num"] = entries["Trade #"]
     entries["price"] = entries["Price USD"]
     return entries[["trade_num", "ts", "direction", "price"]].reset_index(drop=True)
-
 
 def load_bars_5m(start: str, end: str, db_path: Path | None = None) -> pd.DataFrame:
     """Load 5m bars from DB for the given date range."""
@@ -65,7 +58,6 @@ def load_bars_5m(start: str, end: str, db_path: Path | None = None) -> pd.DataFr
         return df
     finally:
         con.close()
-
 
 # ---------------------------------------------------------------------------
 # Indicator computation
@@ -107,7 +99,6 @@ def compute_indicators(bars: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
-
 # ---------------------------------------------------------------------------
 # Candidate strategy families
 # ---------------------------------------------------------------------------
@@ -118,7 +109,6 @@ def family_a_signals(df: pd.DataFrame, fast: int, slow: int) -> pd.Series:
     direction[df[f"ma_{fast}"] > df[f"ma_{slow}"]] = "long"
     return direction
 
-
 def family_b_signals(df: pd.DataFrame, rsi_len: int, ma_len: int) -> pd.Series:
     """Family B: RSI vs RSI-MA crossover."""
     col_rsi = f"rsi_{rsi_len}"
@@ -126,7 +116,6 @@ def family_b_signals(df: pd.DataFrame, rsi_len: int, ma_len: int) -> pd.Series:
     direction = pd.Series("short", index=df.index)
     direction[df[col_rsi] > df[col_ma]] = "long"
     return direction
-
 
 def family_c_signals(
     df: pd.DataFrame, trend_ma: int, rsi_len: int, rsi_long_thresh: float, rsi_short_thresh: float,
@@ -147,7 +136,6 @@ def family_c_signals(
     direction = direction.ffill().fillna("short")
     return direction
 
-
 def extract_flips(direction: pd.Series, timestamps: pd.Series) -> pd.DataFrame:
     """Extract flip points from a direction series.
 
@@ -161,7 +149,6 @@ def extract_flips(direction: pd.Series, timestamps: pd.Series) -> pd.DataFrame:
         "direction": direction[changed].values,
     })
     return flips.reset_index(drop=True)
-
 
 # ---------------------------------------------------------------------------
 # Scoring
@@ -179,7 +166,6 @@ class MatchScore:
     total_real_flips: int
     matched_count: int
     composite: float           # weighted score
-
 
 def score_candidate(
     real_flips: pd.DataFrame,
@@ -264,7 +250,6 @@ def score_candidate(
         "composite": round(composite, 4),
     }
 
-
 # ---------------------------------------------------------------------------
 # Grid search
 # ---------------------------------------------------------------------------
@@ -328,7 +313,6 @@ def run_grid_search(
     results.sort(key=lambda x: x.composite, reverse=True)
     return results
 
-
 def apply_chop_filter(
     bars_with_indicators: pd.DataFrame,
     base_direction: pd.Series,
@@ -345,13 +329,12 @@ def apply_chop_filter(
     filtered = filtered.ffill().fillna("short")
     return filtered
 
-
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
 def main():
-    trade_log_path = PROJECT_ROOT / "DT_V2_COMEX_MINI_MGC1!_2026-02-10.csv"
+    trade_log_path = Path(__file__).resolve().parent.parent.parent / "DT_V2_COMEX_MINI_MGC1!_2026-02-10.csv"
 
     print("Loading trade log...")
     real_flips = load_trade_log(trade_log_path)
@@ -422,7 +405,6 @@ def main():
                 f"False={score['false_flip_rate']:.1%} Score={score['composite']:.4f} "
                 f"(flips: {score['total_candidate_flips']})"
             )
-
 
 if __name__ == "__main__":
     main()

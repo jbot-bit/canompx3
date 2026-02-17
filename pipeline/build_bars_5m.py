@@ -26,17 +26,14 @@ Usage:
 
 import sys
 import argparse
-from pathlib import Path
 from datetime import datetime, date
 
 import duckdb
 
 # Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.asset_configs import get_asset_config, list_instruments
-
 
 def build_5m_bars(con: duckdb.DuckDBPyConnection, symbol: str,
                   start_date: date, end_date: date, dry_run: bool) -> int:
@@ -195,7 +192,6 @@ def build_5m_bars(con: duckdb.DuckDBPyConnection, symbol: str,
         print(f"FATAL: Exception during bars_5m build: {e}")
         raise
 
-
 def verify_5m_integrity(con: duckdb.DuckDBPyConnection, symbol: str,
                         start_date: date, end_date: date) -> tuple[bool, list[str]]:
     """
@@ -264,7 +260,6 @@ def verify_5m_integrity(con: duckdb.DuckDBPyConnection, symbol: str,
         failures.append(f"Negative volume: {vol_bad}")
 
     return len(failures) == 0, failures
-
 
 def main():
     parser = argparse.ArgumentParser(
@@ -346,7 +341,6 @@ def main():
 
     finally:
         con.close()
-
 
 if __name__ == "__main__":
     main()

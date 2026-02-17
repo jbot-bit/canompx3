@@ -9,11 +9,8 @@ from datetime import date
 import pytest
 import duckdb
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 from trading_app.setup_detector import detect_setups
 from trading_app.config import NoFilter, OrbSizeFilter
-
 
 def _setup_db(tmp_path, days_data):
     """Create temp DB with daily_features rows."""
@@ -34,7 +31,6 @@ def _setup_db(tmp_path, days_data):
     con.commit()
     con.close()
     return db_path
-
 
 class TestDetectSetups:
     """Tests for detect_setups()."""

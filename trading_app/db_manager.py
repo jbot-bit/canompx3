@@ -14,11 +14,9 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
 from pipeline.paths import GOLD_DB_PATH
-
 
 def compute_trade_day_hash(days: list) -> str:
     """Compute deterministic MD5 hash of sorted trade-day list.
@@ -28,7 +26,6 @@ def compute_trade_day_hash(days: list) -> str:
     import hashlib
     day_str = ",".join(str(d) for d in sorted(days))
     return hashlib.md5(day_str.encode()).hexdigest()
-
 
 def init_trading_app_schema(db_path: Path | None = None, force: bool = False) -> None:
     """
@@ -265,7 +262,6 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
     finally:
         con.close()
 
-
 def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[str]]:
     """
     Verify all trading_app tables exist with correct schema.
@@ -381,7 +377,6 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
     finally:
         con.close()
 
-
 def get_family_head_ids(
     con: duckdb.DuckDBPyConnection,
     instrument: str,
@@ -402,14 +397,12 @@ def get_family_head_ids(
     """, [instrument]).fetchall()
     return {r[0] for r in rows}
 
-
 def has_edge_families(con: duckdb.DuckDBPyConnection) -> bool:
     """Check if edge_families table exists (for graceful degradation)."""
     tables = con.execute(
         "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
     ).fetchall()
     return "edge_families" in {r[0] for r in tables}
-
 
 def main():
     """CLI entry point."""
@@ -442,7 +435,6 @@ def main():
             sys.exit(1)
     else:
         init_trading_app_schema(force=args.force)
-
 
 if __name__ == "__main__":
     main()

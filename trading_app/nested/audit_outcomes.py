@@ -18,7 +18,6 @@ import random
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)
@@ -33,7 +32,6 @@ from pipeline.build_daily_features import compute_trading_day_utc_range
 from trading_app.outcome_builder import compute_single_outcome, RR_TARGETS, CONFIRM_BARS_OPTIONS
 from trading_app.config import ENTRY_MODELS
 from trading_app.nested.builder import resample_to_5m, _verify_e3_sub_bar_fill
-
 
 def audit_nested_outcomes(
     db_path: Path | None = None,
@@ -111,7 +109,6 @@ def audit_nested_outcomes(
 
     finally:
         con.close()
-
 
 def _audit_single_day(con, trading_day, instrument, orb_minutes, cost_spec, results):
     """Audit all nested outcomes for a single trading day."""
@@ -276,7 +273,6 @@ def _audit_single_day(con, trading_day, instrument, orb_minutes, cost_spec, resu
         print(f"  {trading_day}: {day_matched}/{day_checked} match "
               f"({day_matched/day_checked*100:.1f}%)")
 
-
 def _outcomes_match(stored: dict, recomputed: dict) -> bool:
     """Compare stored vs recomputed outcome, allowing for float tolerance."""
     # Outcome string must match exactly
@@ -310,7 +306,6 @@ def _outcomes_match(stored: dict, recomputed: dict) -> bool:
         return False  # one None, other not
 
     return True
-
 
 def _print_audit_summary(results: dict):
     """Print formatted audit summary."""
@@ -361,7 +356,6 @@ def _print_audit_summary(results: dict):
 
     print("=" * 70)
 
-
 def main():
     import argparse
 
@@ -382,7 +376,6 @@ def main():
         seed=args.seed,
         orb_minutes_list=args.orb_minutes,
     )
-
 
 if __name__ == "__main__":
     main()

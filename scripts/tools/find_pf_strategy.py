@@ -16,7 +16,6 @@ from pathlib import Path
 from datetime import date
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)
@@ -46,7 +45,6 @@ MAX_SHANN = 1.5
 MAX_WR = 0.75
 MIN_TRADES = 30
 
-
 def compute_profit_factor(outcomes: list[dict]) -> float | None:
     """Profit factor = gross_wins / gross_losses."""
     gross_wins = sum(o["pnl_r"] for o in outcomes if o["pnl_r"] is not None and o["pnl_r"] > 0)
@@ -54,7 +52,6 @@ def compute_profit_factor(outcomes: list[dict]) -> float | None:
     if gross_losses == 0:
         return None  # infinite or undefined
     return gross_wins / gross_losses
-
 
 def main():
     import argparse
@@ -239,7 +236,6 @@ def main():
 
     finally:
         con.close()
-
 
 if __name__ == "__main__":
     main()

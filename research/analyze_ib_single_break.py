@@ -37,7 +37,6 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.build_daily_features import compute_trading_day_utc_range
 from pipeline.cost_model import get_cost_spec, to_r_multiple
@@ -59,7 +58,6 @@ DEFAULT_CB = 2
 HOLD_HOURS = 7                # Runner hold duration
 VOL_MULTIPLIER = 1.30         # Breakout bar volume > 130% of rolling avg
 VOL_LOOKBACK = 10             # Rolling average lookback bars
-
 
 # ---------------------------------------------------------------------------
 # IB computation
@@ -97,7 +95,6 @@ def compute_ib(bars: pd.DataFrame, ib_minutes: int) -> dict | None:
         "ib_start": ib_start,
         "ib_end": ib_end,
     }
-
 
 def classify_day(
     bars: pd.DataFrame,
@@ -172,7 +169,6 @@ def classify_day(
         "pre_break_volumes": pre_break_volumes,
     }
 
-
 def check_volume_filter(classification: dict) -> bool:
     """Check if breakout bar volume > 130% of 10-bar rolling avg."""
     vol = classification["break_bar_volume"]
@@ -183,7 +179,6 @@ def check_volume_filter(classification: dict) -> bool:
     if avg_vol <= 0:
         return False
     return vol > avg_vol * VOL_MULTIPLIER
-
 
 def compute_7h_pnl(
     bars: pd.DataFrame,
@@ -223,7 +218,6 @@ def compute_7h_pnl(
     # Ran out of bars
     pnl_pts = (last_close - entry_price) if is_long else (entry_price - last_close)
     return to_r_multiple(spec, entry_price, stop_price, pnl_pts)
-
 
 # ---------------------------------------------------------------------------
 # Main analysis
@@ -473,7 +467,6 @@ def run(db_path: Path, ib_minutes: int, min_orb_size: float,
 
     print()
 
-
 def main():
     parser = argparse.ArgumentParser(description="IB Single Break Runner Detection")
     parser.add_argument("--db-path", type=Path, default=Path("C:/db/gold.db"))
@@ -483,7 +476,6 @@ def main():
     parser.add_argument("--end", type=date.fromisoformat, default=date(2026, 2, 4))
     args = parser.parse_args()
     run(args.db_path, args.ib_minutes, args.min_orb_size, args.start, args.end)
-
 
 if __name__ == "__main__":
     main()

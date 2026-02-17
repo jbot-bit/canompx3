@@ -26,7 +26,6 @@ import pandas as pd
 # Project imports
 # ---------------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.cost_model import get_cost_spec, to_r_multiple
 from pipeline.build_daily_features import compute_trading_day_utc_range
@@ -65,7 +64,6 @@ CB_VALUES = [1, 2]
 # Weekday names
 WEEKDAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri"]
 
-
 # ---------------------------------------------------------------------------
 # Data loading
 # ---------------------------------------------------------------------------
@@ -86,7 +84,6 @@ def load_trading_days(db_path: Path) -> list[date]:
     finally:
         con.close()
     return [r[0] for r in rows]
-
 
 def load_session_bars(db_path: Path, trading_day: date) -> pd.DataFrame:
     """Load MCL 1m bars from 13:00 UTC to 23:00 UTC for the given calendar day.
@@ -116,7 +113,6 @@ def load_session_bars(db_path: Path, trading_day: date) -> pd.DataFrame:
         con.close()
     return df
 
-
 # ---------------------------------------------------------------------------
 # ORB computation
 # ---------------------------------------------------------------------------
@@ -142,7 +138,6 @@ def compute_orb(bars: pd.DataFrame, orb_minutes: int) -> dict | None:
         "orb_range": orb_range,
         "orb_end_idx": orb_minutes,  # first bar AFTER ORB window
     }
-
 
 # ---------------------------------------------------------------------------
 # Breakout simulation (E1 with CB confirm)
@@ -216,7 +211,6 @@ def simulate_breakout(
             confirm_count_short = 0
 
     return trades
-
 
 # ---------------------------------------------------------------------------
 # Fade simulation (mean-reversion)
@@ -303,7 +297,6 @@ def simulate_fade(
 
     return trades
 
-
 # ---------------------------------------------------------------------------
 # Trade resolution
 # ---------------------------------------------------------------------------
@@ -360,7 +353,6 @@ def _resolve_trade(
     return _build_trade(entry_price, last_close, pnl_points, risk_points,
                         direction, "eod", orb_range)
 
-
 def _build_trade(
     entry_price: float,
     exit_price: float,
@@ -392,7 +384,6 @@ def _build_trade(
         "orb_range": orb_range,
     }
 
-
 # ---------------------------------------------------------------------------
 # Metrics formatting
 # ---------------------------------------------------------------------------
@@ -413,13 +404,11 @@ def format_metrics(label: str, gross_pnls: np.ndarray, net_pnls: np.ndarray,
         f"{net['sharpe']:6.3f}  {net['maxdd']:6.1f}  {net['total']:+6.1f}"
     )
 
-
 def print_header():
     """Print results table header."""
     print(f"{'Variant':<28s} {'N':>4s}  {'WR':>5s}   {'GrossExpR':>7s}  "
           f"{'NetExpR':>7s}  {'Sharpe':>6s}  {'MaxDD':>6s}  {'TotalR':>6s}")
     print("-" * 90)
-
 
 def print_weekday_breakdown(trades_by_weekday: dict[int, list[dict]], label: str):
     """Print per-weekday results for the given trade list."""
@@ -435,7 +424,6 @@ def print_weekday_breakdown(trades_by_weekday: dict[int, list[dict]], label: str
         expr = float(net_pnls.mean())
         tag = "  <-- EIA day" if wd == 2 else ""
         print(f"  {WEEKDAY_NAMES[wd]}  N={n:<4d}  WR={wr:5.1f}%  ExpR={expr:+.3f}{tag}")
-
 
 # ---------------------------------------------------------------------------
 # Main
@@ -624,7 +612,6 @@ def main():
     print("DONE. Review net ExpR and Sharpe to identify viable variants.")
     print("Wednesday (EIA inventory report day) may show different behavior.")
     print()
-
 
 if __name__ == "__main__":
     main()

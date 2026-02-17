@@ -23,8 +23,6 @@ from datetime import date
 import pytest
 import duckdb
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from pipeline.init_db import ORB_LABELS, DAILY_FEATURES_SCHEMA
 from trading_app.config import (
     ALL_FILTERS,
@@ -46,7 +44,6 @@ from trading_app.db_manager import (
     init_trading_app_schema,
     verify_trading_app_schema,
 )
-
 
 # ============================================================================
 # 1. ORB_LABELS consistency
@@ -79,7 +76,6 @@ class TestOrbLabelsSync:
         assert found_labels == set(ORB_LABELS), (
             f"DDL ORB columns {sorted(found_labels)} != ORB_LABELS {sorted(ORB_LABELS)}"
         )
-
 
 # ============================================================================
 # 2. ALL_FILTERS registry consistency
@@ -150,7 +146,6 @@ class TestAllFiltersSync:
             assert filt.min_rel_vol > 0, f"{key} min_rel_vol must be positive"
             assert filt.lookback_days > 0, f"{key} lookback_days must be positive"
 
-
 # ============================================================================
 # 3. RR_TARGETS, CONFIRM_BARS_OPTIONS, ENTRY_MODELS consistency
 # ============================================================================
@@ -189,7 +184,6 @@ class TestGridParamsSync:
         expected = e1 + e3
         assert expected == 2376
 
-
 class TestEntryModelsSync:
     """ENTRY_MODELS must be consistent."""
 
@@ -201,7 +195,6 @@ class TestEntryModelsSync:
 
     def test_entry_models_are_strings(self):
         assert all(isinstance(em, str) for em in ENTRY_MODELS)
-
 
 # ============================================================================
 # 3b. Strategy classification sync (FIX5 rules)
@@ -241,7 +234,6 @@ class TestStrategyClassificationSync:
         assert classify_strategy(REGIME_MIN_SAMPLES) == "REGIME"
         assert classify_strategy(REGIME_MIN_SAMPLES - 1) == "INVALID"
 
-
 # ============================================================================
 # 4. Strategy ID format consistency
 # ============================================================================
@@ -275,7 +267,6 @@ class TestStrategyIdSync:
                             assert sid not in ids, f"Duplicate ID: {sid}"
                             ids.add(sid)
         assert len(ids) == 2376
-
 
 # ============================================================================
 # 5. DB schema column sync
@@ -387,7 +378,6 @@ class TestSchemaSync:
         missing = required - cols
         assert not missing, f"Missing columns in orb_outcomes: {missing}"
 
-
 # ============================================================================
 # 6. Cross-module import sync
 # ============================================================================
@@ -430,7 +420,6 @@ class TestImportSync:
         import trading_app.market_state as ms
         source = inspect.getsource(ms)
         assert 'from pipeline.init_db import ORB_LABELS' in source
-
 
 # ============================================================================
 # 7. Enabled sessions validation

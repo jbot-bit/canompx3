@@ -12,8 +12,6 @@ from datetime import date
 import pytest
 import duckdb
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 from trading_app.strategy_fitness import (
     classify_fitness,
     FitnessScore,
@@ -25,7 +23,6 @@ from trading_app.strategy_fitness import (
     _load_strategy_outcomes,
 )
 from trading_app.strategy_discovery import compute_metrics
-
 
 def _setup_fitness_db(tmp_path, strategies=None, outcomes=None, features=None):
     """
@@ -159,7 +156,6 @@ def _setup_fitness_db(tmp_path, strategies=None, outcomes=None, features=None):
     con.close()
     return db_path
 
-
 def _make_outcomes(start_year=2023, end_year=2025, trades_per_year=40,
                    win_rate=0.50, win_pnl=1.8, loss_pnl=-1.0, **overrides):
     """Generate synthetic outcome rows spanning multiple years."""
@@ -181,7 +177,6 @@ def _make_outcomes(start_year=2023, end_year=2025, trades_per_year=40,
             outcomes.append(row)
     return outcomes
 
-
 def _make_features(start_year=2023, end_year=2025, trades_per_year=40,
                    orb_size=10.0, **overrides):
     """Generate daily_features rows matching outcome days."""
@@ -198,7 +193,6 @@ def _make_features(start_year=2023, end_year=2025, trades_per_year=40,
             }
             features.append(row)
     return features
-
 
 # =========================================================================
 # Classification tests
@@ -258,7 +252,6 @@ class TestClassifyFitness:
         )
         assert status == "FIT"
 
-
 # =========================================================================
 # Rolling metrics tests
 # =========================================================================
@@ -281,7 +274,6 @@ class TestRollingMetrics:
         assert metrics["win_rate"] is None
         assert metrics["expectancy_r"] is None
         assert metrics["sharpe_ratio"] is None
-
 
 # =========================================================================
 # Recent trade Sharpe tests
@@ -323,7 +315,6 @@ class TestRecentTradeSharpe:
         sharpe_20 = _recent_trade_sharpe(all_outcomes, 20)
         assert sharpe_20 is None  # all same pnl -> std=0 -> None
 
-
 # =========================================================================
 # Rolling window date math
 # =========================================================================
@@ -342,7 +333,6 @@ class TestRollingWindowStart:
         # March 31 - 1 month should be Feb 28 (2025 is not a leap year)
         result = _rolling_window_start(date(2025, 3, 31), 1)
         assert result == date(2025, 2, 28)
-
 
 # =========================================================================
 # Sharpe delta tests
@@ -363,7 +353,6 @@ class TestSharpeDelta:
         full = 0.25
         delta = None if recent is None else recent - full
         assert delta is None
-
 
 # =========================================================================
 # Integration tests
@@ -495,7 +484,6 @@ class TestComputeFitnessIntegration:
         assert score.fitness_status == "WATCH"
         assert "Thin data" in score.fitness_notes
 
-
     def test_orb_size_filter_excludes_small_days(self, tmp_path):
         """ORB_G4 filter excludes days with orb_size < 4.0."""
         strategy_id = "MGC_0900_E1_RR2.0_CB2_ORB_G4"
@@ -544,7 +532,6 @@ class TestComputeFitnessIntegration:
         # The 20 small-ORB (size=2.0 < 4.0) should be excluded
         assert score.rolling_sample == 20
 
-
 class TestFitnessReportSummary:
 
     def test_fitness_report_summary_counts(self, tmp_path):
@@ -582,7 +569,6 @@ class TestFitnessReportSummary:
         total = sum(report.summary.values())
         assert total == 3
         assert set(report.summary.keys()) == {"fit", "watch", "decay", "stale"}
-
 
 # =========================================================================
 # Portfolio integration test

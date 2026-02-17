@@ -15,7 +15,6 @@ from pathlib import Path
 from dataclasses import dataclass
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 sys.stdout.reconfigure(line_buffering=True)
 
@@ -29,7 +28,6 @@ from trading_app.rolling_portfolio import (
     DEFAULT_LOOKBACK_WINDOWS,
 )
 from trading_app.strategy_fitness import compute_fitness
-
 
 # =========================================================================
 # Live portfolio specification
@@ -46,13 +44,11 @@ class LiveStrategySpec:
     regime_gate: str | None  # None = always-on, "high_vol" = fitness must be FIT
                              # "rolling" = must be STABLE in recent rolling eval
 
-
 # Lookback for HOT tier rolling stability check (recent months only).
 HOT_LOOKBACK_WINDOWS = 10
 
 # Minimum rolling stability score for HOT tier to be active.
 HOT_MIN_STABILITY = 0.6
-
 
 # The live portfolio: what we actually trade.
 #
@@ -95,7 +91,6 @@ LIVE_PORTFOLIO = [
     LiveStrategySpec("1800_E3_ORB_G6", "regime", "1800", "E3", "ORB_G6", "high_vol"),
 ]
 
-
 # =========================================================================
 # Portfolio builder
 # =========================================================================
@@ -136,7 +131,6 @@ def _load_best_regime_variant(
     finally:
         con.close()
 
-
 def _load_best_experimental_variant(
     db_path: Path,
     instrument: str,
@@ -174,7 +168,6 @@ def _load_best_experimental_variant(
         return dict(zip(cols, rows[0]))
     finally:
         con.close()
-
 
 def _check_rolling_stability(
     db_path: Path,
@@ -227,7 +220,6 @@ def _check_rolling_stability(
                 )
 
     return 0.0, "family not found in rolling results"
-
 
 def build_live_portfolio(
     db_path: Path | None = None,
@@ -414,7 +406,6 @@ def build_live_portfolio(
         max_daily_loss_r=5.0,
     ), notes
 
-
 # =========================================================================
 # CLI
 # =========================================================================
@@ -471,7 +462,6 @@ def main():
         output_path = Path(args.output)
         output_path.write_text(portfolio.to_json())
         print(f"\nWritten to {output_path}")
-
 
 if __name__ == "__main__":
     main()

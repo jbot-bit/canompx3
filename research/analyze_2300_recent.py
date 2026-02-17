@@ -9,8 +9,6 @@ import sys
 from datetime import date, timedelta
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
 import duckdb
 import numpy as np
 import pandas as pd
@@ -27,7 +25,6 @@ COST = {
     "MGC": {"pv": 10.0, "friction": 8.40},
     "MNQ": {"pv": 2.0, "friction": 2.74},
 }
-
 
 def analyze(instrument, start, end, window_name):
     cost = COST[instrument]
@@ -160,7 +157,6 @@ def analyze(instrument, start, end, window_name):
         # Count positives
         pos = sum(1 for r in results if r[6] > 0)
         print(f"  Net-positive: {pos}/{len(results)}")
-
 
 for instrument in ["MGC", "MNQ"]:
     for wname, start in WINDOWS.items():

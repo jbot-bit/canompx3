@@ -20,8 +20,6 @@ import pandas as pd
 import duckdb
 import databento as db
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-
 from pipeline.ingest_dbn_mgc import (
     validate_chunk,
     validate_timestamp_utc,
@@ -41,10 +39,8 @@ DATA_DIR = Path(r"C:\db\MES_DB")
 START_DATE = date(2024, 2, 12)
 END_DATE = date(2026, 2, 11)
 
-
 def log(msg: str):
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
-
 
 def compute_trading_days_fast(ts_index: pd.DatetimeIndex) -> np.ndarray:
     """Vectorized trading day computation (09:00 Brisbane boundary)."""
@@ -57,7 +53,6 @@ def compute_trading_days_fast(ts_index: pd.DatetimeIndex) -> np.ndarray:
     mask = hours < 9
     result[mask] = np.array([d - timedelta(days=1) for d in result[mask]])
     return result
-
 
 def main():
     import re
@@ -331,7 +326,6 @@ def main():
     log("MES PIPELINE COMPLETE")
     log("=" * 60)
     sys.exit(0)
-
 
 if __name__ == "__main__":
     main()

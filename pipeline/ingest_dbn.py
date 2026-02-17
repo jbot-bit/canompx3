@@ -38,7 +38,6 @@ import duckdb
 import databento as db
 
 # Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.asset_configs import get_asset_config, list_instruments
@@ -55,7 +54,6 @@ from pipeline.ingest_dbn_mgc import (
 
 # Checkpoint directory (shared, files are named per-source)
 CHECKPOINT_DIR = Path(__file__).parent / "checkpoints"
-
 
 def main():
     parser = argparse.ArgumentParser(
@@ -519,7 +517,6 @@ def main():
     print()
     print("SUCCESS: Backfill complete and validated.")
     sys.exit(0)
-
 
 if __name__ == "__main__":
     main()

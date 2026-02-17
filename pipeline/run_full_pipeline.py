@@ -18,12 +18,9 @@ import argparse
 from pathlib import Path
 from datetime import datetime
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from pipeline.asset_configs import list_instruments
 
 PROJECT_ROOT = Path(__file__).parent.parent
-
 
 # =============================================================================
 # STEP FUNCTIONS
@@ -42,7 +39,6 @@ def step_ingest(instrument: str, args) -> int:
         cmd.append(f"--end={args.end}")
     return subprocess.run(cmd, cwd=str(PROJECT_ROOT)).returncode
 
-
 def step_build_5m(instrument: str, args) -> int:
     """Rebuild bars_5m from bars_1m."""
     if not args.start or not args.end:
@@ -56,7 +52,6 @@ def step_build_5m(instrument: str, args) -> int:
         f"--end={args.end}",
     ]
     return subprocess.run(cmd, cwd=str(PROJECT_ROOT)).returncode
-
 
 def step_build_features(instrument: str, args) -> int:
     """Rebuild daily_features."""
@@ -72,12 +67,10 @@ def step_build_features(instrument: str, args) -> int:
     ]
     return subprocess.run(cmd, cwd=str(PROJECT_ROOT)).returncode
 
-
 def step_audit(instrument: str, args) -> int:
     """Database integrity check."""
     cmd = [sys.executable, str(PROJECT_ROOT / "pipeline" / "check_db.py")]
     return subprocess.run(cmd, cwd=str(PROJECT_ROOT)).returncode
-
 
 def step_build_outcomes(instrument: str, args) -> int:
     """Pre-compute orb_outcomes."""
@@ -93,7 +86,6 @@ def step_build_outcomes(instrument: str, args) -> int:
     ]
     return subprocess.run(cmd, cwd=str(PROJECT_ROOT)).returncode
 
-
 def step_discover(instrument: str, args) -> int:
     """Grid search experimental_strategies."""
     cmd = [
@@ -104,7 +96,6 @@ def step_discover(instrument: str, args) -> int:
     if args.db_path:
         cmd.append(f"--db={args.db_path}")
     return subprocess.run(cmd, cwd=str(PROJECT_ROOT)).returncode
-
 
 def step_validate(instrument: str, args) -> int:
     """Strategy validation."""
@@ -117,7 +108,6 @@ def step_validate(instrument: str, args) -> int:
     if args.db_path:
         cmd.append(f"--db={args.db_path}")
     return subprocess.run(cmd, cwd=str(PROJECT_ROOT)).returncode
-
 
 # =============================================================================
 # STEP REGISTRY
@@ -133,7 +123,6 @@ FULL_PIPELINE_STEPS = [
     ("validate", "Strategy validation", step_validate),
 ]
 
-
 # =============================================================================
 # HELPERS
 # =============================================================================
@@ -146,7 +135,6 @@ def get_steps_from(steps, skip_to: str):
     idx = names.index(skip_to)
     return steps[idx:]
 
-
 def print_dry_run(steps, instrument: str):
     """Print planned steps without executing."""
     print(f"DRY RUN: Full pipeline for {instrument}")
@@ -155,7 +143,6 @@ def print_dry_run(steps, instrument: str):
         print(f"  Step {i}: {name} - {desc}")
     print()
     print("No steps executed (dry run).")
-
 
 # =============================================================================
 # MAIN
@@ -232,7 +219,6 @@ def main():
     print(f"\nTotal: {total}")
     print("SUCCESS" if all_ok else "FAILED")
     sys.exit(0 if all_ok else 1)
-
 
 if __name__ == "__main__":
     main()

@@ -34,7 +34,6 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.cost_model import get_cost_spec, to_r_multiple
 from pipeline.paths import GOLD_DB_PATH
@@ -59,7 +58,6 @@ VWAP_PROXIMITY = 0.2  # Touch VWAP within this fraction of ATR
 
 REGIME_BOUNDARY = date(2025, 1, 1)
 
-
 def load_bars_1m_for_day(db_path: Path, trading_day: date) -> pd.DataFrame:
     """Load 1-minute bars for one trading day."""
     from pipeline.build_daily_features import compute_trading_day_utc_range
@@ -78,7 +76,6 @@ def load_bars_1m_for_day(db_path: Path, trading_day: date) -> pd.DataFrame:
         con.close()
     return df
 
-
 def compute_vwap(bars_1m: pd.DataFrame) -> np.ndarray:
     """Compute cumulative VWAP from bars.
 
@@ -95,7 +92,6 @@ def compute_vwap(bars_1m: pd.DataFrame) -> np.ndarray:
     cum_vol = np.cumsum(vol)
     vwap = cum_tp_vol / cum_vol
     return vwap
-
 
 def resample_to_5m(bars_1m: pd.DataFrame) -> pd.DataFrame:
     """Resample 1m bars to 5m bars with VWAP."""
@@ -129,7 +125,6 @@ def resample_to_5m(bars_1m: pd.DataFrame) -> pd.DataFrame:
     ).reset_index(drop=True)
 
     return grouped
-
 
 def find_vwap_pullback_signals(
     bars_5m: pd.DataFrame, atr: float, trend_length: int, time_filter: tuple
@@ -210,7 +205,6 @@ def find_vwap_pullback_signals(
                     below_count = 0
 
     return signals
-
 
 def compute_vwap_outcomes(db_path: Path, start: date, end: date) -> pd.DataFrame:
     """Compute VWAP pullback outcomes for all days."""
@@ -319,7 +313,6 @@ def compute_vwap_outcomes(db_path: Path, start: date, end: date) -> pd.DataFrame
         return pd.DataFrame()
     return pd.DataFrame(all_outcomes)
 
-
 def _resolve_5m(bars, entry, stop, target, direction, start_idx):
     """Resolve outcome on 5m bars."""
     is_long = direction == "long"
@@ -342,7 +335,6 @@ def _resolve_5m(bars, entry, stop, target, direction, start_idx):
             pnl = target - entry if is_long else entry - target
             return {"outcome": "win", "pnl_points": pnl, "exit_bar_idx": i}
     return None
-
 
 def run_walk_forward(
     db_path: Path,
@@ -453,7 +445,6 @@ def run_walk_forward(
         "regime_split": regime_split,
     }
 
-
 def _print_go_no_go(combined: dict | None, regime_split: dict | None) -> None:
     print()
     print("--- GO/NO-GO EVALUATION ---")
@@ -481,7 +472,6 @@ def _print_go_no_go(combined: dict | None, regime_split: dict | None) -> None:
 
     verdict = "GO" if all_pass else "NO-GO"
     print(f"\n  VERDICT: {verdict}")
-
 
 def main():
     parser = argparse.ArgumentParser(description="VWAP Momentum Pullback analysis")
@@ -556,7 +546,6 @@ def main():
     print(sep)
     print("DONE")
     print(sep)
-
 
 if __name__ == "__main__":
     main()

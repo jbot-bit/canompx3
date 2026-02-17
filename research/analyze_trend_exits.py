@@ -30,7 +30,6 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.build_daily_features import compute_trading_day_utc_range
 from pipeline.cost_model import get_cost_spec, to_r_multiple
@@ -61,7 +60,6 @@ SESSION_CLOSE_HOURS = [4, 8, 12, 24]
 
 SPEC = get_cost_spec("MGC")
 
-
 # ---------------------------------------------------------------------------
 # IB computation (same as analyze_trend_holding.py)
 # ---------------------------------------------------------------------------
@@ -84,7 +82,6 @@ def compute_ib(ts, highs, lows, anchor_utc_hour, duration_minutes):
         "ib_end": ib_end,
     }
 
-
 def find_ib_break(ts, highs, lows, ib):
     """Find first IB break after ib_end. Returns (direction, break_ts, break_idx)."""
     post_idx = np.flatnonzero(ts >= ib["ib_end"])
@@ -98,7 +95,6 @@ def find_ib_break(ts, highs, lows, ib):
         if bl:
             return "short", ts[i], i
     return None, None, None
-
 
 # ---------------------------------------------------------------------------
 # VWAP computation
@@ -117,7 +113,6 @@ def compute_running_vwap(prices, volumes):
     vwap[mask] = cum_pv[mask] / cum_v[mask]
     return vwap
 
-
 # ---------------------------------------------------------------------------
 # Exit simulations
 # ---------------------------------------------------------------------------
@@ -126,7 +121,6 @@ def _exit_pnl_r(entry_price, stop_price, exit_price, is_long):
     """Compute pnl_r from exit price."""
     pnl_pts = (exit_price - entry_price) if is_long else (entry_price - exit_price)
     return to_r_multiple(SPEC, entry_price, stop_price, pnl_pts)
-
 
 def sim_fixed_target(ts, highs, lows, closes, entry_idx, entry_price,
                      stop_price, target_price, is_long, cutoff_ts):
@@ -148,7 +142,6 @@ def sim_fixed_target(ts, highs, lows, closes, entry_idx, entry_price,
             return _exit_pnl_r(entry_price, stop_price, closes[i], is_long), "time"
     return _exit_pnl_r(entry_price, stop_price, closes[-1], is_long), "eod"
 
-
 def sim_hold_7h(ts, highs, lows, closes, entry_idx, entry_price,
                 stop_price, is_long, cutoff_ts):
     """Hold with stop only for 7 hours. No target. Returns (pnl_r, exit_reason)."""
@@ -163,7 +156,6 @@ def sim_hold_7h(ts, highs, lows, closes, entry_idx, entry_price,
         if ts[i] >= cutoff_ts:
             return _exit_pnl_r(entry_price, stop_price, closes[i], is_long), "time_7h"
     return _exit_pnl_r(entry_price, stop_price, closes[-1], is_long), "eod"
-
 
 def sim_vwap_trail(ts, highs, lows, closes, volumes, vwap, entry_idx,
                    entry_price, stop_price, is_long, session_end_ts):
@@ -212,7 +204,6 @@ def sim_vwap_trail(ts, highs, lows, closes, volumes, vwap, entry_idx,
 
     return _exit_pnl_r(entry_price, stop_price, closes[-1], is_long), "eod"
 
-
 def sim_session_close(ts, highs, lows, closes, entry_idx, entry_price,
                       stop_price, is_long, cutoff_ts):
     """Hold until session close with stop. Returns (pnl_r, exit_reason)."""
@@ -227,7 +218,6 @@ def sim_session_close(ts, highs, lows, closes, entry_idx, entry_price,
         if ts[i] >= cutoff_ts:
             return _exit_pnl_r(entry_price, stop_price, closes[i], is_long), "session_close"
     return _exit_pnl_r(entry_price, stop_price, closes[-1], is_long), "eod"
-
 
 def sim_atr_trail(ts, highs, lows, closes, entry_idx, entry_price,
                   stop_price, is_long, atr_value, session_end_ts):
@@ -277,7 +267,6 @@ def sim_atr_trail(ts, highs, lows, closes, entry_idx, entry_price,
 
     return _exit_pnl_r(entry_price, stop_price, closes[-1], is_long), "eod"
 
-
 def sim_chandelier(ts, highs, lows, closes, entry_idx, entry_price,
                    stop_price, is_long, atr_value, session_end_ts):
     """Chandelier exit: ATR trail anchored to highest HIGH (longs) or lowest LOW (shorts).
@@ -324,7 +313,6 @@ def sim_chandelier(ts, highs, lows, closes, entry_idx, entry_price,
             return _exit_pnl_r(entry_price, stop_price, c, is_long), "session_close"
 
     return _exit_pnl_r(entry_price, stop_price, closes[-1], is_long), "eod"
-
 
 # ---------------------------------------------------------------------------
 # Wrapper: run all exits with IB gating
@@ -445,7 +433,6 @@ def simulate_all_exits(ts, highs, lows, closes, volumes, vwap,
 
     return results, alignment
 
-
 def _check_stop_before(ts, highs, lows, entry_idx, entry_price,
                        stop_price, is_long, ib_break_idx):
     """Check if original stop was hit before IB break. Returns bar index or None."""
@@ -457,7 +444,6 @@ def _check_stop_before(ts, highs, lows, entry_idx, entry_price,
         if not is_long and highs[i] >= stop_price:
             return i
     return None
-
 
 def _check_limbo_resolution(ts, highs, lows, closes, entry_idx, entry_price,
                             stop_price, target_price, is_long, ib_break_idx):
@@ -480,7 +466,6 @@ def _check_limbo_resolution(ts, highs, lows, closes, entry_idx, entry_price,
         if not is_long and lo <= target_price:
             return _exit_pnl_r(entry_price, stop_price, target_price, is_long), "limbo_target"
     return None
-
 
 # ---------------------------------------------------------------------------
 # Process session
@@ -630,7 +615,6 @@ def process_session(db_path, session_label, start, end):
 
     return pd.DataFrame(results)
 
-
 # ---------------------------------------------------------------------------
 # Reporting
 # ---------------------------------------------------------------------------
@@ -647,12 +631,10 @@ EXIT_METHODS = [
     ("Chandelier 1.5x", "chandelier_pnl"),
 ]
 
-
 def fmt_row(label, m):
     """Format one metrics row."""
     return (f"  {label:22s} {m['n']:>5d} {m['wr']:>7.1%} {m['expr']:>+8.4f} "
             f"{m['sharpe']:>8.4f} {m['maxdd']:>8.2f} {m['total']:>+8.1f}")
-
 
 def print_comparison_table(pdf, title, methods=None):
     """Print a comparison table of all exit methods."""
@@ -673,7 +655,6 @@ def print_comparison_table(pdf, title, methods=None):
         m = compute_strategy_metrics(pdf[col].values)
         if m:
             print(fmt_row(label, m))
-
 
 def print_report(pdf, session_label):
     """Print full report for one session."""
@@ -785,7 +766,6 @@ def print_report(pdf, session_label):
         if best_label:
             print(f"    {subset_name:10s}: {best_label} (ExpR={best_expr:+.4f})")
 
-
 def run_integrity_checks(pdf, session_label):
     """Run basic integrity checks."""
     print(f"\n  Integrity checks ({session_label}):")
@@ -843,7 +823,6 @@ def run_integrity_checks(pdf, session_label):
 
     print(f"    {ok}/{total} passed")
 
-
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -887,7 +866,6 @@ def run(db_path, start, end):
     print("  - MaxDD must not be materially worse than Fixed RR")
     print("  - If no trail method wins: fixed target is the correct exit")
 
-
 def main():
     parser = argparse.ArgumentParser(
         description="Alternative Exit Methods for IB-Aligned Trades")
@@ -903,7 +881,6 @@ def main():
         sys.exit(1)
 
     run(args.db_path, args.start, args.end)
-
 
 if __name__ == "__main__":
     main()

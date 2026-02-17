@@ -19,14 +19,12 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
 import numpy as np
 import pandas as pd
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.cost_model import get_cost_spec, to_r_multiple
-
 
 def run_backtest(db_path=None):
     if db_path is None:
@@ -325,10 +323,8 @@ def run_backtest(db_path=None):
         _print_comparison("Baseline", baseline_sub)
         _print_comparison(f"Exit {best_t}m", exit_sub)
 
-
 def _clean_pnl(pnl_list):
     return np.array([float(p) for p in pnl_list if p is not None and not np.isnan(float(p))])
-
 
 def _sharpe(pnl_list):
     arr = _clean_pnl(pnl_list)
@@ -336,12 +332,10 @@ def _sharpe(pnl_list):
         return 0
     return arr.mean() / arr.std()
 
-
 def _compare_header():
     print(f"  {'Label':<14} {'N':>5} {'EarlyX':>6} {'WR':>6} {'ExpR':>7} "
           f"{'Sharpe':>7} {'TotalR':>8} {'MaxDD':>7}")
     print("  " + "-" * 62)
-
 
 def _print_comparison(label, records):
     n = len(records)
@@ -362,7 +356,6 @@ def _print_comparison(label, records):
     dd = (cum - peak).min()
     print(f"  {label:<14} {len(pnl):>5} {n_early:>6} {wr:>5.1%} {expr:>+7.3f} "
           f"{sharpe:>+7.3f} {total_r:>+8.1f} {dd:>+7.1f}")
-
 
 def _yearly_comparison(baseline, exit_data, threshold):
     if not baseline:
@@ -395,7 +388,6 @@ def _yearly_comparison(baseline, exit_data, threshold):
         print(f"  {year:<6} {len(b_pnl):>4} {n_early:>6} "
               f"{b_wr:>6.1%} {e_wr:>6.1%} "
               f"{b_expr:>+9.3f} {e_expr:>+9.3f} {delta:>+7.3f}")
-
 
 if __name__ == "__main__":
     import argparse

@@ -17,7 +17,6 @@ from collections import defaultdict
 from datetime import date, timezone
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
 
@@ -53,9 +52,6 @@ _INSERT_SQL = """INSERT OR REPLACE INTO experimental_strategies
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
             COALESCE(?, CURRENT_TIMESTAMP))"""
 
-
-
-
 def _mark_canonical(strategies: list[dict]) -> None:
     """Mark canonical vs alias within each dedup group.
 
@@ -81,7 +77,6 @@ def _mark_canonical(strategies: list[dict]) -> None:
         for alias in group[1:]:
             alias["is_canonical"] = False
             alias["canonical_strategy_id"] = head["strategy_id"]
-
 
 def compute_metrics(outcomes: list[dict]) -> dict:
     """
@@ -245,7 +240,6 @@ def compute_metrics(outcomes: list[dict]) -> dict:
         "early_exit_count": len(early_exits),
     }
 
-
 def make_strategy_id(
     instrument: str,
     orb_label: str,
@@ -269,7 +263,6 @@ def make_strategy_id(
     """
     return f"{instrument}_{orb_label}_{entry_model}_RR{rr_target}_CB{confirm_bars}_{filter_type}"
 
-
 def _load_daily_features(con, instrument, orb_minutes, start_date, end_date):
     """Load all daily_features rows once into a list of dicts."""
     params = [instrument, orb_minutes]
@@ -288,7 +281,6 @@ def _load_daily_features(con, instrument, orb_minutes, start_date, end_date):
     cols = [desc[0] for desc in con.description]
     return [dict(zip(cols, r)) for r in rows]
 
-
 def _build_filter_day_sets(features, orb_labels, all_filters):
     """Pre-compute matching day sets for every (filter, orb) combo."""
     result = {}
@@ -303,7 +295,6 @@ def _build_filter_day_sets(features, orb_labels, all_filters):
             result[(filter_key, orb_label)] = days
     return result
 
-
 def _ts_minute_key(ts):
     """Normalize a timestamp to UTC (year, month, day, hour, minute) tuple.
 
@@ -313,7 +304,6 @@ def _ts_minute_key(ts):
     """
     utc_ts = ts.astimezone(timezone.utc) if ts.tzinfo is not None else ts
     return (utc_ts.year, utc_ts.month, utc_ts.day, utc_ts.hour, utc_ts.minute)
-
 
 def _compute_relative_volumes(con, features, instrument, orb_labels, all_filters):
     """
@@ -400,7 +390,6 @@ def _compute_relative_volumes(con, features, instrument, orb_labels, all_filters
 
             row[f"rel_vol_{orb_label}"] = break_vol / baseline
 
-
 def _load_outcomes_bulk(con, instrument, orb_minutes, orb_labels, entry_models):
     """
     Load all non-NULL outcomes in one query per (orb, entry_model).
@@ -438,7 +427,6 @@ def _load_outcomes_bulk(con, instrument, orb_minutes, orb_labels, entry_models):
                 })
 
     return grouped
-
 
 def run_discovery(
     db_path: Path | None = None,
@@ -599,7 +587,6 @@ def run_discovery(
     finally:
         con.close()
 
-
 def main():
     import argparse
 
@@ -625,7 +612,6 @@ def main():
         orb_minutes=args.orb_minutes,
         dry_run=args.dry_run,
     )
-
 
 if __name__ == "__main__":
     main()

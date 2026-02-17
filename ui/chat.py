@@ -8,15 +8,10 @@ Uses Ollama (qwen2.5-coder:7b) with SOP-compliant system prompt.
 """
 
 import re
-import sys
 from datetime import date
-from pathlib import Path
 
 import streamlit as st
 
-PROJECT_ROOT = Path(__file__).parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
 from ui.db_reader import get_schema_summary, get_table_counts, get_date_ranges, query_df
 from ui.sandbox_runner import run_sandboxed, promote_sandbox, discard_sandbox
@@ -25,7 +20,6 @@ from ui.sandbox_runner import run_sandboxed, promote_sandbox, discard_sandbox
 QUERY_PATTERN = re.compile(r"\[QUERY:(.*?)\]", re.DOTALL)
 SUGGEST_CMD_PATTERN = re.compile(r"\[SUGGEST_CMD:(.*?)\]", re.DOTALL)
 MARKET_STATE_PATTERN = re.compile(r"\[MARKET_STATE:(\d{4}-\d{2}-\d{2})\]")
-
 
 def _build_system_prompt() -> str:
     """Build the system prompt with SOP rules + schema context."""
@@ -87,7 +81,6 @@ You can use these tags in your responses. The dashboard will parse and execute t
 - Main DB: {PROJECT_ROOT / 'gold.db'}
 """
 
-
 def _try_ollama_chat(messages: list[dict]) -> tuple[str | None, bool]:
     """Call Ollama and return (response_text, is_error).
 
@@ -107,7 +100,6 @@ def _try_ollama_chat(messages: list[dict]) -> tuple[str | None, bool]:
     except Exception as e:
         return f"Ollama error: {e}", True
 
-
 def _process_queries(text: str) -> list[tuple[str, object]]:
     """Find and execute [QUERY:...] tags. Returns list of (sql, result_df_or_error)."""
     results = []
@@ -120,16 +112,13 @@ def _process_queries(text: str) -> list[tuple[str, object]]:
             results.append((sql, str(e)))
     return results
 
-
 def _extract_suggestions(text: str) -> list[str]:
     """Extract [SUGGEST_CMD:...] commands."""
     return [m.group(1).strip() for m in SUGGEST_CMD_PATTERN.finditer(text)]
 
-
 def _extract_market_states(text: str) -> list[str]:
     """Extract [MARKET_STATE:date] dates."""
     return [m.group(1) for m in MARKET_STATE_PATTERN.finditer(text)]
-
 
 def _clean_tags(text: str) -> str:
     """Remove structured tags from display text (they're rendered separately)."""
@@ -137,7 +126,6 @@ def _clean_tags(text: str) -> str:
     text = SUGGEST_CMD_PATTERN.sub("", text)
     text = MARKET_STATE_PATTERN.sub("", text)
     return text.strip()
-
 
 def init_chat_state():
     """Initialize chat session state."""
@@ -149,7 +137,6 @@ def init_chat_state():
         st.session_state.pending_commands = []
     if "sandbox_active" not in st.session_state:
         st.session_state.sandbox_active = False
-
 
 def render_chat():
     """Render the AI chat in the sidebar."""
@@ -225,7 +212,6 @@ def render_chat():
         _handle_user_message(user_input)
         st.rerun()
 
-
 def _handle_user_message(user_input: str):
     """Process a user message through Ollama and parse the response."""
     st.session_state.chat_messages.append({"role": "user", "content": user_input})
@@ -278,7 +264,6 @@ def _handle_user_message(user_input: str):
     for date_str in market_dates:
         _load_market_state(date_str)
 
-
 def _execute_suggested_command(command: str):
     """Execute a suggested command through the sandbox runner."""
     exit_code, output, was_sandboxed = run_sandboxed(command)
@@ -294,7 +279,6 @@ def _execute_suggested_command(command: str):
         "content": f"Ran: {command}",
     })
     st.session_state.pending_commands = []
-
 
 def _load_market_state(date_str: str):
     """Load MarketState for a date and add to chat."""

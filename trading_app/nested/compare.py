@@ -15,7 +15,6 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
 
@@ -24,7 +23,6 @@ from pipeline.init_db import ORB_LABELS
 
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)
-
 
 def _load_strategies(con, table_name, instrument, min_sample=0):
     """Load strategies from a table, filtered by instrument and min sample."""
@@ -41,7 +39,6 @@ def _load_strategies(con, table_name, instrument, min_sample=0):
     cols = [desc[0] for desc in con.description]
     return [dict(zip(cols, r)) for r in rows]
 
-
 def _make_comparison_key(row):
     """Create a comparison key for matching baseline vs nested strategies."""
     return (
@@ -51,7 +48,6 @@ def _make_comparison_key(row):
         row["confirm_bars"],
         row["filter_type"],
     )
-
 
 def run_comparison(
     db_path: Path | None = None,
@@ -186,7 +182,6 @@ def run_comparison(
     finally:
         con.close()
 
-
 def _print_report(results: dict):
     """Print a formatted comparison report."""
     print("\n" + "=" * 80)
@@ -237,7 +232,6 @@ def _print_report(results: dict):
 
     print("\n" + "=" * 80)
 
-
 def main():
     import argparse
 
@@ -255,7 +249,6 @@ def main():
         min_sample=args.min_sample,
         orb_minutes_list=args.orb_minutes,
     )
-
 
 if __name__ == "__main__":
     main()

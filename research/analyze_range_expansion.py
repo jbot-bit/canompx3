@@ -25,7 +25,6 @@ import pandas as pd
 sys.stdout.reconfigure(line_buffering=True)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.cost_model import get_cost_spec
 from research._alt_strategy_utils import compute_strategy_metrics, annualize_sharpe
@@ -38,7 +37,6 @@ SCREEN_START = "2024-01-01"
 
 # Range expansion thresholds (fraction of ATR_20)
 THRESHOLDS = [0.50, 0.75, 1.00, 1.25, 1.50]
-
 
 def load_daily_data(db_path: Path) -> pd.DataFrame:
     """Load daily_features with ATR_20 for MGC."""
@@ -59,7 +57,6 @@ def load_daily_data(db_path: Path) -> pd.DataFrame:
     print(f"{len(df):,} days loaded.")
     return df
 
-
 def load_1m_bars_bulk(db_path: Path) -> pd.DataFrame:
     """Load 1m bars for MGC (screened date range)."""
     print("Loading 1m bars...", end=" ", flush=True)
@@ -77,7 +74,6 @@ def load_1m_bars_bulk(db_path: Path) -> pd.DataFrame:
     print(f"{len(df):,} bars loaded.")
     return df
 
-
 def assign_trading_day(ts_utc: pd.Series) -> pd.Series:
     """Assign trading day: 09:00 Brisbane (23:00 UTC prev day) boundary."""
     if ts_utc.dt.tz is not None:
@@ -94,7 +90,6 @@ def assign_trading_day(ts_utc: pd.Series) -> pd.Series:
         lambda d: d + timedelta(days=1)
     )
     return trading_days
-
 
 def analyze_range_expansion(bars: pd.DataFrame, daily: pd.DataFrame) -> pd.DataFrame:
     """For each day, track when range hits ATR thresholds and what happens after."""
@@ -194,7 +189,6 @@ def analyze_range_expansion(bars: pd.DataFrame, daily: pd.DataFrame) -> pd.DataF
     print(f"  {len(results_df):,} expansion events found.")
     return results_df
 
-
 def print_threshold_summary(data: pd.DataFrame) -> None:
     """Print summary for each expansion threshold."""
     print("\n" + "=" * 110)
@@ -219,7 +213,6 @@ def print_threshold_summary(data: pd.DataFrame) -> None:
         mean_hr = subset["hours_in_session"].mean()
 
         print(f"{thresh:>7.0%} {n:>7,} {cont_pct:>6.1f}% {mean_move:>+10.3f} {med_move:>+10.3f} {n_up:>7,} {n_dn:>7,} {mean_hr:>8.1f}")
-
 
 def print_pnl_if_trading(data: pd.DataFrame) -> None:
     """Print ExpR for continuation trade at each threshold."""
@@ -253,7 +246,6 @@ def print_pnl_if_trading(data: pd.DataFrame) -> None:
             sig = "*" if len(subset) >= 100 else ""
             print(f"{thresh:>7.0%} {direction:>5} {stats['n']:>7,}{sig} {stats['wr']*100:>5.1f}% {stats['expr']:>+8.4f} {stats['sharpe']:>+8.4f} {stats['maxdd']:>+8.2f} {stats['total']:>+9.2f}")
 
-
 def print_reversal_analysis(data: pd.DataFrame) -> None:
     """After large expansion, does the market reverse?"""
     print("\n" + "=" * 110)
@@ -282,7 +274,6 @@ def print_reversal_analysis(data: pd.DataFrame) -> None:
 
         print(f"{thresh:>7.0%} {n:>7,} {reversal_pct:>6.1f}% {mean_rev:>+12.3f} {fade_stats['wr']*100:>7.1f}% {fade_stats['expr']:>+10.4f}")
 
-
 def print_timing_analysis(data: pd.DataFrame) -> None:
     """When does expansion happen? Early vs late in session."""
     print("\n" + "=" * 110)
@@ -308,7 +299,6 @@ def print_timing_analysis(data: pd.DataFrame) -> None:
             cont_l = late["continuation"].sum() / len(late) * 100
             print(f"    Late (>4h):  N={len(late):,}, Cont%={cont_l:.1f}%, MeanMove={late['move_after_pts'].mean():+.3f}")
 
-
 def print_year_breakdown(data: pd.DataFrame) -> None:
     """Year-by-year consistency check."""
     print("\n" + "=" * 110)
@@ -330,7 +320,6 @@ def print_year_breakdown(data: pd.DataFrame) -> None:
             else:
                 row += f"{'---':>10}"
         print(row)
-
 
 def main():
     print("=" * 110)
@@ -361,7 +350,6 @@ def main():
     print(f"  - Friction: ${SPEC.total_friction:.2f}/RT ({SPEC.friction_in_points:.2f} pts)")
 
     print("\n[Done]")
-
 
 if __name__ == "__main__":
     main()

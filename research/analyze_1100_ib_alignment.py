@@ -21,14 +21,12 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
 import numpy as np
 import pandas as pd
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.cost_model import get_cost_spec
-
 
 def run_analysis(db_path=None):
     if db_path is None:
@@ -293,10 +291,8 @@ def run_analysis(db_path=None):
         print(f"  {year:<6} {len(a_pnl):>6} {a_wr:>6.1%} {a_expr:>+9.3f} "
               f"{len(o_pnl):>6} {o_wr:>6.1%} {o_expr:>+9.3f} {delta:>+7.3f}")
 
-
 def _clean(series):
     return np.array([float(x) for x in series if x is not None and not np.isnan(float(x))])
-
 
 def _print_stats(label, group):
     pnl = _clean(group['pnl_r'])
@@ -314,7 +310,6 @@ def _print_stats(label, group):
     dd = (cum - peak).min()
     print(f"    {label:<20} N={n:>4}  WR={wr:>5.1%}  ExpR={expr:>+.3f}  "
           f"Sharpe={sharpe:>+.3f}  TotalR={total_r:>+.1f}  MaxDD={dd:>+.1f}")
-
 
 if __name__ == "__main__":
     import argparse

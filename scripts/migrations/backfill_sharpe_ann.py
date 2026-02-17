@@ -16,11 +16,9 @@ import argparse
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
 from pipeline.paths import GOLD_DB_PATH
-
 
 def backfill(db_path: Path, dry_run: bool = False) -> int:
     con = duckdb.connect(str(db_path))
@@ -92,7 +90,6 @@ def backfill(db_path: Path, dry_run: bool = False) -> int:
         return len(updates)
     finally:
         con.close()
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Backfill sharpe_ann columns")

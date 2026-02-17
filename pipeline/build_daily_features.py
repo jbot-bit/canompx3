@@ -20,7 +20,6 @@ Usage:
 
 import sys
 import argparse
-from pathlib import Path
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -29,7 +28,6 @@ import pandas as pd
 import numpy as np
 
 # Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.asset_configs import get_asset_config, list_instruments
@@ -82,7 +80,6 @@ SESSION_WINDOWS = {
 # Valid ORB durations in minutes
 VALID_ORB_MINUTES = [5, 15, 30]
 
-
 # =============================================================================
 # MODULE 1: TRADING DAY ASSIGNMENT
 # =============================================================================
@@ -104,7 +101,6 @@ def compute_trading_day(ts_utc: pd.Timestamp) -> date:
     shifted = ts_bris - timedelta(hours=TRADING_DAY_START_HOUR_LOCAL)
     return shifted.date()
 
-
 def compute_trading_day_utc_range(trading_day: date) -> tuple[datetime, datetime]:
     """
     Return the [start, end) UTC range for a given trading day.
@@ -122,7 +118,6 @@ def compute_trading_day_utc_range(trading_day: date) -> tuple[datetime, datetime
 
     end_utc = start_utc + timedelta(hours=24)
     return start_utc, end_utc
-
 
 def get_trading_days_in_range(con: duckdb.DuckDBPyConnection, symbol: str,
                                start_date: date, end_date: date) -> list[date]:
@@ -143,7 +138,6 @@ def get_trading_days_in_range(con: duckdb.DuckDBPyConnection, symbol: str,
     """
     rows = con.execute(query, [symbol, start_date, end_date]).fetchall()
     return [r[0] for r in rows]
-
 
 def get_bars_for_trading_day(con: duckdb.DuckDBPyConnection, symbol: str,
                               trading_day: date) -> pd.DataFrame:
@@ -170,7 +164,6 @@ def get_bars_for_trading_day(con: duckdb.DuckDBPyConnection, symbol: str,
         df['ts_utc'] = pd.to_datetime(df['ts_utc'], utc=True)
 
     return df
-
 
 # =============================================================================
 # MODULE 2: ORB RANGES
@@ -226,7 +219,6 @@ def _orb_utc_window(trading_day: date, orb_label: str,
 
     return utc_start, utc_end
 
-
 def compute_orb_range(bars_df: pd.DataFrame, trading_day: date,
                        orb_label: str, orb_minutes: int) -> dict:
     """
@@ -248,7 +240,6 @@ def compute_orb_range(bars_df: pd.DataFrame, trading_day: date,
     size = high - low
 
     return {"high": high, "low": low, "size": size}
-
 
 # =============================================================================
 # MODULE 3: BREAK DETECTION
@@ -295,7 +286,6 @@ def _break_detection_window(trading_day: date, orb_label: str,
         _, td_end = compute_trading_day_utc_range(trading_day)
         return orb_end, td_end
 
-
 def detect_break(bars_df: pd.DataFrame, trading_day: date,
                   orb_label: str, orb_minutes: int,
                   orb_high: float, orb_low: float) -> dict:
@@ -333,7 +323,6 @@ def detect_break(bars_df: pd.DataFrame, trading_day: date,
 
     return {"break_dir": None, "break_ts": None}
 
-
 def detect_double_break(bars_df: pd.DataFrame, trading_day: date,
                          orb_label: str, orb_minutes: int,
                          orb_high: float | None,
@@ -366,7 +355,6 @@ def detect_double_break(bars_df: pd.DataFrame, trading_day: date,
     hit_low = (window_bars['low'] <= orb_low).any()
 
     return bool(hit_high and hit_low)
-
 
 # =============================================================================
 # MODULE 4: SESSION STATS
@@ -406,7 +394,6 @@ def _session_utc_window(trading_day: date, session: str) -> tuple[datetime, date
 
     return local_start.astimezone(UTC_TZ), local_end.astimezone(UTC_TZ)
 
-
 def compute_session_stats(bars_df: pd.DataFrame,
                            trading_day: date) -> dict:
     """
@@ -436,7 +423,6 @@ def compute_session_stats(bars_df: pd.DataFrame,
             result[f"session_{session}_low"] = float(session_bars['low'].min())
 
     return result
-
 
 # =============================================================================
 # MODULE 5: RSI (Wilder's 14-period on 5m closes)
@@ -481,7 +467,6 @@ def compute_rsi_at_0900(con: duckdb.DuckDBPyConnection, symbol: str,
     # Compute RSI with Wilder's smoothing
     return _wilders_rsi(closes, period=14)
 
-
 def _wilders_rsi(closes: np.ndarray, period: int = 14) -> float | None:
     """
     Compute RSI using Wilder's smoothing method.
@@ -514,7 +499,6 @@ def _wilders_rsi(closes: np.ndarray, period: int = 14) -> float | None:
     rs = avg_gain / avg_loss
     rsi = 100.0 - (100.0 / (1.0 + rs))
     return round(rsi, 4)
-
 
 # =============================================================================
 # MODULE 6: OUTCOME AT RR=1.0
@@ -622,7 +606,6 @@ def compute_outcome(bars_df: pd.DataFrame, trading_day: date,
 
     return result
 
-
 # =============================================================================
 # ORCHESTRATOR: BUILD ONE TRADING DAY
 # =============================================================================
@@ -707,7 +690,6 @@ def build_features_for_day(con: duckdb.DuckDBPyConnection, symbol: str,
         )
 
     return row
-
 
 # =============================================================================
 # MAIN BUILD FUNCTION
@@ -830,7 +812,6 @@ def build_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
         print(f"FATAL: Exception during daily_features build: {e}")
         raise
 
-
 # =============================================================================
 # VERIFICATION
 # =============================================================================
@@ -913,7 +894,6 @@ def verify_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
             failures.append(f"Invalid outcome for {label}: {bad_outcome}")
 
     return len(failures) == 0, failures
-
 
 # =============================================================================
 # CLI MAIN
@@ -1009,7 +989,6 @@ def main():
 
     finally:
         con.close()
-
 
 if __name__ == "__main__":
     main()

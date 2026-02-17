@@ -15,8 +15,6 @@ from datetime import date, datetime, timezone, timedelta
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 from trading_app.execution_engine import (
     ExecutionEngine,
     LiveIB,
@@ -32,10 +30,8 @@ from trading_app.config import (
 from trading_app.portfolio import Portfolio, PortfolioStrategy
 from pipeline.cost_model import get_cost_spec
 
-
 def _cost():
     return get_cost_spec("MGC")
-
 
 def _make_strategy(**overrides):
     base = dict(
@@ -56,7 +52,6 @@ def _make_strategy(**overrides):
     base.update(overrides)
     return PortfolioStrategy(**base)
 
-
 def _make_portfolio(strategies=None, **overrides):
     if strategies is None:
         strategies = [_make_strategy()]
@@ -72,11 +67,9 @@ def _make_portfolio(strategies=None, **overrides):
     defaults.update(overrides)
     return Portfolio(**defaults)
 
-
 def _bar(ts, o, h, l, c, v=100):
     return {"ts_utc": ts, "open": float(o), "high": float(h),
             "low": float(l), "close": float(c), "volume": int(v)}
-
 
 # ============================================================================
 # LiveIB Unit Tests
@@ -187,7 +180,6 @@ class TestLiveIB:
         result = ib.check_break(_bar(start + timedelta(minutes=60), 2708, 2715, 2707, 2711))
         assert result is None
 
-
 # ============================================================================
 # 1100 Exclusion Tests
 # ============================================================================
@@ -211,7 +203,6 @@ class Test1100Exclusion:
         """1130 uses fixed_target exit mode."""
         assert SESSION_EXIT_MODE["1130"] == "fixed_target"
 
-
 # ============================================================================
 # Config Tests
 # ============================================================================
@@ -234,7 +225,6 @@ class TestConfig:
 
     def test_hold_hours(self):
         assert HOLD_HOURS == 7
-
 
 # ============================================================================
 # IB-Conditional Exit Integration Tests
@@ -437,7 +427,6 @@ class TestIBConditionalExits:
         assert len(exit_events) == 1
         assert "loss" in exit_events[0].reason
 
-
 # ============================================================================
 # Early Exit Skip in hold_7h Mode
 # ============================================================================
@@ -502,7 +491,6 @@ class TestEarlyExitSkipInHold7h:
             "Early exit must be skipped in hold_7h mode"
         )
 
-
 # ============================================================================
 # IB Already Opposed at Entry Time
 # ============================================================================
@@ -557,7 +545,6 @@ class TestIBAlreadyOpposed:
         assert "ib_already_opposed" in reject_events[0].reason
         assert len(entry_events) == 0, "No entry should happen"
 
-
 # ============================================================================
 # 0900 Session (Fixed Target, No IB Logic)
 # ============================================================================
@@ -595,7 +582,6 @@ class Test0900FixedTarget:
         assert len(entered) == 1
         assert entered[0].exit_mode == "fixed_target"
         assert entered[0].target_price is not None  # Target active
-
 
 # ============================================================================
 # IB Initialization Tests

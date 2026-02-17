@@ -35,7 +35,6 @@ import pandas as pd
 # Project setup
 # ---------------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 sys.stdout.reconfigure(line_buffering=True)
 
 from pipeline.cost_model import get_cost_spec, CostSpec
@@ -51,7 +50,6 @@ SPEC = get_cost_spec(INSTRUMENT)  # $100/point, $5.24 friction, tick=0.01
 ORB_LABELS = ["0900", "1000", "1100", "1800", "2300", "0030"]
 MCL_START = date(2021, 7, 11)
 MCL_END = date(2026, 2, 10)
-
 
 # ============================================================================
 # DATA LOADING HELPERS
@@ -73,7 +71,6 @@ def load_mcl_features(db_path: Path, orb_minutes: int = 5) -> pd.DataFrame:
         con.close()
     return df
 
-
 def load_mcl_bars_for_day(db_path: Path, trading_day: date) -> pd.DataFrame:
     """Load 1m bars for one MCL trading day."""
     start_utc, end_utc = compute_trading_day_utc_range(trading_day)
@@ -92,7 +89,6 @@ def load_mcl_bars_for_day(db_path: Path, trading_day: date) -> pd.DataFrame:
         df['ts_utc'] = pd.to_datetime(df['ts_utc'], utc=True)
     return df
 
-
 def load_mcl_outcomes(db_path: Path) -> pd.DataFrame:
     """Load orb_outcomes for MCL."""
     con = duckdb.connect(str(db_path), read_only=True)
@@ -106,7 +102,6 @@ def load_mcl_outcomes(db_path: Path) -> pd.DataFrame:
     finally:
         con.close()
     return df
-
 
 def load_all_mcl_bars(db_path: Path) -> pd.DataFrame:
     """Load ALL MCL 1m bars (used for VWAP and time-of-day strategies)."""
@@ -126,7 +121,6 @@ def load_all_mcl_bars(db_path: Path) -> pd.DataFrame:
     if not df.empty:
         df['ts_utc'] = pd.to_datetime(df['ts_utc'], utc=True)
     return df
-
 
 # ============================================================================
 # SHARED HELPERS
@@ -160,14 +154,12 @@ def resolve_bar_outcome(bars: pd.DataFrame, entry_price: float,
             return {"outcome": "win", "pnl_points": pnl, "exit_idx": i}
     return None
 
-
 def pnl_to_r_gross(entry: float, stop: float, pnl_points: float) -> float:
     """Convert pnl_points to R-multiple WITHOUT friction (gross)."""
     risk_pts = abs(entry - stop)
     if risk_pts <= 0:
         return 0.0
     return pnl_points / risk_pts
-
 
 def pnl_to_r_net(entry: float, stop: float, pnl_points: float) -> float:
     """Convert pnl_points to R-multiple WITH friction (net)."""
@@ -176,7 +168,6 @@ def pnl_to_r_net(entry: float, stop: float, pnl_points: float) -> float:
         return 0.0
     pnl_dollars = pnl_points * SPEC.point_value - SPEC.total_friction
     return pnl_dollars / risk_dollars
-
 
 def print_metrics(label: str, gross_pnls: np.ndarray, net_pnls: np.ndarray):
     """Print a formatted metrics line for one strategy variant."""
@@ -195,7 +186,6 @@ def print_metrics(label: str, gross_pnls: np.ndarray, net_pnls: np.ndarray):
           f"NetExpR={n['expr']:+.3f}  NetSh={n_sha:+.2f}  "
           f"MaxDD={n['maxdd']:.1f}R  TotalR={n['total']:.1f}")
 
-
 def orb_utc_hour(orb_label: str) -> tuple[int, int]:
     """Return (hour, minute) in UTC for an ORB label."""
     # Brisbane = UTC+10
@@ -206,7 +196,6 @@ def orb_utc_hour(orb_label: str) -> tuple[int, int]:
     lh, lm = local_times[orb_label]
     utc_h = (lh - 10) % 24
     return utc_h, lm
-
 
 # ============================================================================
 # STRATEGY 1: ORB FADE
@@ -357,7 +346,6 @@ def run_orb_fade(db_path: Path, features: pd.DataFrame):
                         })
 
     return results_summary
-
 
 # ============================================================================
 # STRATEGY 2: DOUBLE-BREAK FADE
@@ -539,7 +527,6 @@ def run_double_break_fade(db_path: Path, features: pd.DataFrame):
 
     return results_summary
 
-
 # ============================================================================
 # STRATEGY 3: RANGE COMPRESSION (small ORB delayed breakout)
 # ============================================================================
@@ -713,7 +700,6 @@ def run_range_compression(db_path: Path, features: pd.DataFrame):
 
     return results_summary
 
-
 # ============================================================================
 # STRATEGY 4: SESSION FADE
 # ============================================================================
@@ -854,7 +840,6 @@ def run_session_fade(db_path: Path, features: pd.DataFrame):
 
     return results_summary
 
-
 # ============================================================================
 # STRATEGY 5: VWAP REVERSION
 # ============================================================================
@@ -979,7 +964,6 @@ def run_vwap_reversion(db_path: Path, features: pd.DataFrame):
                     })
 
     return results_summary
-
 
 # ============================================================================
 # STRATEGY 6: TIME-OF-DAY DIRECTIONAL BIAS
@@ -1128,7 +1112,6 @@ def run_time_of_day(db_path: Path):
 
     return results_summary
 
-
 # ============================================================================
 # SUMMARY TABLE
 # ============================================================================
@@ -1180,7 +1163,6 @@ def print_summary_table(all_results: list[dict]):
               f"MaxDD={best['maxdd']:.1f}R")
         if sha < 0.5:
             print("  WARNING: Best Sharpe_ann < 0.5 -- likely not tradeable.")
-
 
 # ============================================================================
 # MAIN
@@ -1304,7 +1286,6 @@ def main():
 
     # Final summary
     print_summary_table(all_results)
-
 
 if __name__ == "__main__":
     main()

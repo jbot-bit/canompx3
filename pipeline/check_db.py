@@ -7,14 +7,11 @@ Usage:
 """
 
 import sys
-from pathlib import Path
 
 import duckdb
 
 # Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
 from pipeline.paths import GOLD_DB_PATH
-
 
 def check_db():
     """Display database summary statistics."""
@@ -96,7 +93,6 @@ def check_db():
         print()
 
     con.close()
-
 
 if __name__ == "__main__":
     check_db()

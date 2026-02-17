@@ -14,16 +14,13 @@ Options:
     --force    Drop existing tables and recreate (WARNING: destroys data)
 """
 
-import sys
 import argparse
 from pathlib import Path
 
 import duckdb
 
 # Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
 from pipeline.paths import GOLD_DB_PATH
-
 
 # =============================================================================
 # SCHEMA DEFINITIONS (CANONICAL - matches CLAUDE.md)
@@ -87,7 +84,6 @@ ORB_LABELS_DYNAMIC = ["CME_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "LONDON_OPEN
 
 # Combined label list — used by schema generation and feature builders
 ORB_LABELS = ORB_LABELS_FIXED + ORB_LABELS_DYNAMIC
-
 
 def _build_daily_features_ddl() -> str:
     """Generate CREATE TABLE DDL for daily_features.
@@ -163,9 +159,7 @@ CREATE TABLE IF NOT EXISTS daily_features (
 );
 """
 
-
 DAILY_FEATURES_SCHEMA = _build_daily_features_ddl()
-
 
 def init_db(db_path: Path, force: bool = False):
     """Initialize database with schema."""
@@ -238,14 +232,12 @@ def init_db(db_path: Path, force: bool = False):
     print("  1. Run ingestion: python OHLCV_MGC_FULL/ingest_dbn_mgc.py")
     print("  2. Check database: python pipeline/check_db.py")
 
-
 def main():
     parser = argparse.ArgumentParser(description="Initialize DuckDB schema")
     parser.add_argument("--force", action="store_true", help="Drop and recreate tables")
     args = parser.parse_args()
 
     init_db(GOLD_DB_PATH, force=args.force)
-
 
 if __name__ == "__main__":
     main()

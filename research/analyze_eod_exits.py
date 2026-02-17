@@ -32,7 +32,6 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.build_daily_features import compute_trading_day_utc_range
 from pipeline.cost_model import get_cost_spec, to_r_multiple
@@ -56,7 +55,6 @@ DEFAULT_CB = 2
 FOUR_HOURS = timedelta(hours=4)
 
 EXIT_TYPES = ["fixed_rr", "session_eod", "time_4h"]
-
 
 # ---------------------------------------------------------------------------
 # Data loading
@@ -115,7 +113,6 @@ def load_outcomes(db_path: Path, sessions: list[str], entry_models: list[str],
     print(f"Loaded {len(df)} trades ({df['trading_day'].nunique()} days)")
     return df
 
-
 def load_bars_for_day(db_path: Path, trading_day: date) -> pd.DataFrame:
     """Load 1-minute bars for one trading day."""
     start_utc, end_utc = compute_trading_day_utc_range(trading_day)
@@ -133,7 +130,6 @@ def load_bars_for_day(db_path: Path, trading_day: date) -> pd.DataFrame:
     if not df.empty:
         df["ts_utc"] = pd.to_datetime(df["ts_utc"], utc=True)
     return df
-
 
 # ---------------------------------------------------------------------------
 # Exit computation
@@ -190,7 +186,6 @@ def compute_exits(
 
     return results
 
-
 def _scan_with_stop_and_time_exit(
     bars_df: pd.DataFrame,
     entry_idx: int,
@@ -228,7 +223,6 @@ def _scan_with_stop_and_time_exit(
     # Ran out of bars: mark-to-market at last available close
     pnl_pts = (last_close - entry_price) if is_long else (entry_price - last_close)
     return to_r_multiple(cost_spec, entry_price, stop_price, pnl_pts)
-
 
 # ---------------------------------------------------------------------------
 # Main analysis
@@ -281,7 +275,6 @@ def run_analysis(db_path: Path, sessions: list[str], entry_models: list[str],
 
     return dict(results)
 
-
 def print_results(results: dict) -> None:
     """Print formatted comparison table."""
     print("\n" + "=" * 80)
@@ -304,7 +297,6 @@ def print_results(results: dict) -> None:
             print(f"  {exit_type:<15} {m['n']:>6} {m['wr']:>7.3f} {m['expr']:>7.3f} "
                   f"{m['sharpe']:>7.3f} {m['maxdd']:>8.2f} {m['total']:>8.1f}")
 
-
 def run_walk_forward(results: dict) -> None:
     """Walk-forward: for each (session, em), select best exit in train window."""
     print("\n" + "=" * 80)
@@ -313,7 +305,6 @@ def run_walk_forward(results: dict) -> None:
     print("Note: Full walk-forward requires per-trade date tagging.")
     print("For now, the in-sample comparison above shows relative performance.")
     print("Run with --walk-forward after adding trade-level date support.")
-
 
 # ---------------------------------------------------------------------------
 # CLI
@@ -347,7 +338,6 @@ def main():
     )
     print_results(results)
     run_walk_forward(results)
-
 
 if __name__ == "__main__":
     main()

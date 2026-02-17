@@ -15,11 +15,9 @@ import pandas as pd
 
 # Ensure project root is importable
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.cost_model import CostSpec, get_cost_spec, to_r_multiple
 from pipeline.paths import GOLD_DB_PATH
-
 
 def load_daily_features(db_path: Path, start: date, end: date,
                         orb_minutes: int = 5) -> pd.DataFrame:
@@ -37,7 +35,6 @@ def load_daily_features(db_path: Path, start: date, end: date,
     finally:
         con.close()
     return df
-
 
 def load_bars_for_day(db_path: Path, trading_day: date) -> pd.DataFrame:
     """Load 1-minute bars for one trading day (09:00 Brisbane boundary).
@@ -59,7 +56,6 @@ def load_bars_for_day(db_path: Path, trading_day: date) -> pd.DataFrame:
     finally:
         con.close()
     return df
-
 
 def compute_walk_forward_windows(
     test_start: date,
@@ -96,7 +92,6 @@ def compute_walk_forward_windows(
 
     return windows
 
-
 def compute_strategy_metrics(pnls: np.ndarray) -> dict | None:
     """Compute trading stats from array of R-multiples.
 
@@ -119,14 +114,12 @@ def compute_strategy_metrics(pnls: np.ndarray) -> dict | None:
         "sharpe_ann": None,  # Populated by caller when trades_per_year is known
     }
 
-
 def annualize_sharpe(stats: dict, years: float) -> dict:
     """Add sharpe_ann to stats dict. years = OOS period length in years."""
     if stats and stats["n"] > 0 and years > 0:
         trades_per_year = stats["n"] / years
         stats["sharpe_ann"] = stats["sharpe"] * np.sqrt(trades_per_year)
     return stats
-
 
 def resolve_bar_outcome(
     bars: pd.DataFrame,
@@ -187,14 +180,12 @@ def resolve_bar_outcome(
 
     return None  # No resolution within session
 
-
 def save_results(results: dict, path: Path) -> None:
     """Save results dict to JSON file."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w") as f:
         json.dump(results, f, indent=2, default=str)
     print(f"Results saved to {path}")
-
 
 def _add_months(d: date, months: int) -> date:
     """Add months to a date, clamping to valid day."""

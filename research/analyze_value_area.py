@@ -35,7 +35,6 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.cost_model import get_cost_spec, to_r_multiple
 from pipeline.paths import GOLD_DB_PATH
@@ -60,7 +59,6 @@ TIME_FILTERS = {
 }
 VALUE_AREA_PCT = 0.70  # 70% of volume
 VOLUME_BREAKOUT_MULT = 1.5  # Volume must exceed 1.5x average
-
 
 def compute_volume_profile(bars_1m: pd.DataFrame, bin_size: float) -> dict | None:
     """Compute volume profile from 1m bars.
@@ -138,7 +136,6 @@ def compute_volume_profile(bars_1m: pd.DataFrame, bin_size: float) -> dict | Non
         "avg_bar_volume": total_vol / len(bars_1m),
     }
 
-
 def find_reversion_signals(
     bars_1m: pd.DataFrame,
     prior_profile: dict,
@@ -212,7 +209,6 @@ def find_reversion_signals(
 
     return signals
 
-
 def find_breakout_signals(
     bars_1m: pd.DataFrame,
     prior_profile: dict,
@@ -280,7 +276,6 @@ def find_breakout_signals(
             break
 
     return signals
-
 
 def compute_value_area_outcomes(
     db_path: Path,
@@ -459,7 +454,6 @@ def compute_value_area_outcomes(
 
     return all_outcomes
 
-
 def _resolve_1m(bars, entry, stop, target, direction, start_idx):
     """Resolve outcome on 1m bars."""
     is_long = direction == "long"
@@ -483,7 +477,6 @@ def _resolve_1m(bars, entry, stop, target, direction, start_idx):
             pnl = target - entry if is_long else entry - target
             return {"outcome": "win", "pnl_points": pnl, "exit_bar_idx": i}
     return None
-
 
 def run_walk_forward(
     db_path: Path,
@@ -602,7 +595,6 @@ def run_walk_forward(
 
     return results
 
-
 def main():
     parser = argparse.ArgumentParser(description="Value Area (Volume Profile) strategy analysis")
     parser.add_argument("--db-path", type=Path, default=GOLD_DB_PATH)
@@ -666,7 +658,6 @@ def main():
     print(sep)
     print("DONE")
     print(sep)
-
 
 if __name__ == "__main__":
     main()

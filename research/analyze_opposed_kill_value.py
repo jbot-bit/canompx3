@@ -17,13 +17,11 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
 from datetime import date, datetime, timedelta, timezone
 
 from pipeline.paths import GOLD_DB_PATH
-
 
 def analyze_opposed_kill(db_path: Path = GOLD_DB_PATH, instrument: str = "MGC"):
     """Analyze 1000 session opposed IB breaks vs stop-loss outcomes."""
@@ -261,7 +259,6 @@ def analyze_opposed_kill(db_path: Path = GOLD_DB_PATH, instrument: str = "MGC"):
 
     finally:
         con.close()
-
 
 if __name__ == "__main__":
     analyze_opposed_kill()

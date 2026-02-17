@@ -23,7 +23,6 @@ from datetime import date
 from dataclasses import dataclass, asdict
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
 
@@ -37,7 +36,6 @@ _VALID_ORB_LABELS = set(ORB_LABELS)
 
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)
-
 
 # =========================================================================
 # Data classes
@@ -66,7 +64,6 @@ class FitnessScore:
     fitness_status: str
     fitness_notes: str
 
-
 @dataclass(frozen=True)
 class FitnessReport:
     """Fitness report for all strategies in a portfolio."""
@@ -74,14 +71,12 @@ class FitnessReport:
     scores: list[FitnessScore]
     summary: dict
 
-
 # =========================================================================
 # Classification
 # =========================================================================
 
 MIN_ROLLING_FIT = 15
 MIN_ROLLING_WATCH = 10
-
 
 def classify_fitness(
     rolling_exp_r: float | None,
@@ -115,7 +110,6 @@ def classify_fitness(
 
     return "FIT", "Positive rolling ExpR with stable recent Sharpe"
 
-
 # =========================================================================
 # Core metric computation
 # =========================================================================
@@ -143,7 +137,6 @@ def _recent_trade_sharpe(outcomes: list[dict], n_trades: int) -> float | None:
 
     return mean_r / std_r
 
-
 def _rolling_window_start(as_of: date, months: int) -> date:
     """Compute start date for rolling window (as_of - N months)."""
     year = as_of.year
@@ -156,7 +149,6 @@ def _rolling_window_start(as_of: date, months: int) -> date:
     max_day = calendar.monthrange(year, month)[1]
     day = min(as_of.day, max_day)
     return date(year, month, day)
-
 
 # =========================================================================
 # Data loading
@@ -179,7 +171,6 @@ def _load_strategy_params(con, strategy_id: str) -> dict | None:
 
     cols = [desc[0] for desc in con.description]
     return dict(zip(cols, row))
-
 
 def _load_strategy_outcomes(
     con,
@@ -270,7 +261,6 @@ def _load_strategy_outcomes(
             eligible_days.add(td)
 
     return [o for o in all_outcomes if o["trading_day"] in eligible_days]
-
 
 # =========================================================================
 # Fitness computation
@@ -365,7 +355,6 @@ def _compute_fitness_with_con(
         fitness_notes=notes,
     )
 
-
 def compute_fitness(
     strategy_id: str,
     db_path: Path | None = None,
@@ -386,7 +375,6 @@ def compute_fitness(
         )
     finally:
         con.close()
-
 
 def compute_portfolio_fitness(
     db_path: Path | None = None,
@@ -435,7 +423,6 @@ def compute_portfolio_fitness(
         summary=summary,
     )
 
-
 # =========================================================================
 # CLI
 # =========================================================================
@@ -464,7 +451,6 @@ def _format_table(report: FitnessReport) -> str:
     lines.append(f"Summary: {report.summary}")
     return "\n".join(lines)
 
-
 def _format_json(report: FitnessReport) -> str:
     """Format fitness report as JSON."""
     data = {
@@ -473,7 +459,6 @@ def _format_json(report: FitnessReport) -> str:
         "scores": [asdict(s) for s in report.scores],
     }
     return json.dumps(data, indent=2, default=str)
-
 
 def main():
     import argparse
@@ -515,7 +500,6 @@ def main():
             print(_format_json(report))
         else:
             print(_format_table(report))
-
 
 if __name__ == "__main__":
     main()

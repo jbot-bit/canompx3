@@ -26,7 +26,6 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 # Reuse canonical pipeline logic — no copies, single source of truth
 # ---------------------------------------------------------------------------
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from pipeline.paths import GOLD_DB_PATH, DAILY_DBN_DIR, PROJECT_ROOT
 from pipeline.ingest_dbn_mgc import (
@@ -54,7 +53,6 @@ DATA_DIRS = [
     PROJECT_ROOT / "DB" / "gold_db_fullsize_2016-2021",   # 2016-2021
 ]
 
-
 # ---------------------------------------------------------------------------
 # Trading day helpers (match build_daily_features logic exactly)
 # ---------------------------------------------------------------------------
@@ -69,7 +67,6 @@ def _trading_day_utc_range(trading_day: date) -> tuple[datetime, datetime]:
     end_utc = start_utc + timedelta(hours=24)
     return start_utc, end_utc
 
-
 def _calendar_dates_for_trading_day(trading_day: date) -> list[date]:
     """
     A trading day spans 09:00 Bris on `trading_day` to 09:00 Bris next day.
@@ -78,7 +75,6 @@ def _calendar_dates_for_trading_day(trading_day: date) -> list[date]:
     contain bars that belong to this trading day.
     """
     return [trading_day - timedelta(days=1), trading_day]
-
 
 # ---------------------------------------------------------------------------
 # File discovery across both data directories
@@ -99,7 +95,6 @@ def _build_file_index() -> dict[date, Path]:
             index[file_date] = fpath
     return index
 
-
 # ---------------------------------------------------------------------------
 # Sampling tiers
 # ---------------------------------------------------------------------------
@@ -116,7 +111,6 @@ def _sample_boundary(con, n: int = 10) -> list[tuple[date, str]]:
         return [(d, "boundary") for d in days]
     selected = days[:half] + days[-half:]
     return [(d, "boundary") for d in selected]
-
 
 def _sample_roll(con, n: int = 10) -> list[tuple[date, str]]:
     """Days where source_symbol changes (futures roll dates)."""
@@ -146,7 +140,6 @@ def _sample_roll(con, n: int = 10) -> list[tuple[date, str]]:
     selected = [roll_days[int(i * step)] for i in range(n)]
     return [(d, "roll") for d in selected]
 
-
 def _sample_anomaly(con, n: int = 10) -> list[tuple[date, str]]:
     """Days with lowest bar_count_1m (potential missing-data days)."""
     rows = con.execute(
@@ -156,7 +149,6 @@ def _sample_anomaly(con, n: int = 10) -> list[tuple[date, str]]:
         [n],
     ).fetchall()
     return [(r[0], "anomaly") for r in rows]
-
 
 def _sample_random(con, already: set[date], n: int = 30,
                    seed: int | None = None) -> list[tuple[date, str]]:
@@ -172,7 +164,6 @@ def _sample_random(con, already: set[date], n: int = 30,
     count = min(n, len(pool))
     selected = rng.sample(pool, count)
     return [(d, "random") for d in sorted(selected)]
-
 
 def build_sample(con, random_count: int = 30,
                  seed: int | None = None) -> list[tuple[date, str]]:
@@ -197,7 +188,6 @@ def build_sample(con, random_count: int = 30,
 
     sample.sort(key=lambda x: x[0])
     return sample
-
 
 # ---------------------------------------------------------------------------
 # Per-day audit: read raw files, reproduce pipeline logic, count bars
@@ -276,7 +266,6 @@ def audit_day(trading_day: date, file_index: dict[date, Path]) -> dict:
     result["front_contract"] = front
     return result
 
-
 def query_db_count(con, trading_day: date) -> int:
     """Count bars_1m rows for a trading day via the same UTC-range logic."""
     start_utc, end_utc = _trading_day_utc_range(trading_day)
@@ -287,7 +276,6 @@ def query_db_count(con, trading_day: date) -> int:
     ).fetchone()
     return row[0] if row else 0
 
-
 def query_db_source_symbols(con, trading_day: date) -> list[str]:
     """Return distinct source_symbols for a trading day (detects roll days)."""
     start_utc, end_utc = _trading_day_utc_range(trading_day)
@@ -297,7 +285,6 @@ def query_db_source_symbols(con, trading_day: date) -> list[str]:
         [start_utc, end_utc],
     ).fetchall()
     return [r[0] for r in rows]
-
 
 # ---------------------------------------------------------------------------
 # Main
@@ -447,7 +434,6 @@ def main():
     # Exit code: 0 if no hard failures or errors, 1 otherwise
     # (WARNs are expected and don't fail the audit)
     sys.exit(0 if fails == 0 and errors == 0 else 1)
-
 
 if __name__ == "__main__":
     main()

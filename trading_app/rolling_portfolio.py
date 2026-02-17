@@ -18,7 +18,6 @@ from dataclasses import dataclass, asdict
 from collections import defaultdict
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 sys.stdout.reconfigure(line_buffering=True)
 
@@ -26,7 +25,6 @@ import duckdb
 import numpy as np
 
 from pipeline.paths import GOLD_DB_PATH
-
 
 # Stability thresholds (weighted score)
 STABLE_THRESHOLD = 0.6
@@ -38,7 +36,6 @@ FULL_WEIGHT_SAMPLE = 50
 # Default lookback: only use the N most recent rolling windows for scoring.
 # ~2 years of monthly windows. None = use all windows.
 DEFAULT_LOOKBACK_WINDOWS = 24
-
 
 @dataclass
 class FamilyResult:
@@ -59,11 +56,9 @@ class FamilyResult:
     day_of_week_stats: dict | None = None
     day_of_week_concentration: float | None = None
 
-
 def make_family_id(orb_label: str, entry_model: str, filter_type: str) -> str:
     """Create a family-level identifier (ignores RR/CB params)."""
     return f"{orb_label}_{entry_model}_{filter_type}"
-
 
 def load_rolling_results(
     db_path: Path,
@@ -105,7 +100,6 @@ def load_rolling_results(
     finally:
         con.close()
 
-
 def load_all_rolling_run_labels(
     db_path: Path,
     train_months: int,
@@ -133,7 +127,6 @@ def load_all_rolling_run_labels(
         return labels
     finally:
         con.close()
-
 
 def load_rolling_degraded_counts(
     db_path: Path,
@@ -174,14 +167,12 @@ def load_rolling_degraded_counts(
     finally:
         con.close()
 
-
 def _window_weight(sample_size: int) -> float:
     """Compute weight for a window based on its sample size.
 
     50+ trades = 1.0 weight, 20 trades = 0.4, linear scale.
     """
     return min(sample_size / FULL_WEIGHT_SAMPLE, 1.0)
-
 
 def classify_stability(weighted_score: float) -> str:
     """STABLE / TRANSITIONING / DEGRADED based on weighted stability score."""
@@ -190,7 +181,6 @@ def classify_stability(weighted_score: float) -> str:
     elif weighted_score >= TRANSITIONING_THRESHOLD:
         return "TRANSITIONING"
     return "DEGRADED"
-
 
 def aggregate_rolling_performance(
     validated: list[dict],
@@ -270,7 +260,6 @@ def aggregate_rolling_performance(
     # Sort by weighted stability descending
     results.sort(key=lambda r: r.weighted_stability, reverse=True)
     return results
-
 
 def compute_day_of_week_stats(
     db_path: Path,
@@ -386,7 +375,6 @@ def compute_day_of_week_stats(
     finally:
         con.close()
 
-
 def load_rolling_validated_strategies(
     db_path: Path,
     instrument: str,
@@ -459,7 +447,6 @@ def load_rolling_validated_strategies(
     finally:
         con.close()
 
-
 def print_report(families: list[FamilyResult]) -> None:
     """Print a human-readable report of rolling evaluation results."""
     stable = [f for f in families if f.classification == "STABLE"]
@@ -507,7 +494,6 @@ def print_report(families: list[FamilyResult]) -> None:
             print(f"  Double-break auto-degraded: {len(db_degraded)}")
         # Don't print every degraded family -- just summary
         print(f"  Total: {len(degraded)} families")
-
 
 def main():
     import argparse
@@ -563,7 +549,6 @@ def main():
         output_data = [asdict(f) for f in families]
         output_path.write_text(json.dumps(output_data, indent=2))
         print(f"\nResults written to {output_path}")
-
 
 if __name__ == "__main__":
     main()

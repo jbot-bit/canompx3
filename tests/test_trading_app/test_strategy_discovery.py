@@ -10,8 +10,6 @@ from datetime import date, datetime, timezone
 import pytest
 import duckdb
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 from trading_app.strategy_discovery import (
     compute_metrics,
     make_strategy_id,
@@ -192,7 +190,6 @@ class TestComputeMetrics:
         expected = m["sharpe_ratio"] * (m["trades_per_year"] ** 0.5)
         assert m["sharpe_ann"] == pytest.approx(expected, abs=0.01)
 
-
 # ============================================================================
 # make_strategy_id tests
 # ============================================================================
@@ -216,7 +213,6 @@ class TestMakeStrategyId:
             sid = make_strategy_id("MGC", "0900", em, 2.0, 1, "NO_FILTER")
             assert f"_{em}_" in sid
 
-
 # ============================================================================
 # CLI test
 # ============================================================================
@@ -237,7 +233,6 @@ def _make_bars_1m_table(con):
             PRIMARY KEY (symbol, ts_utc)
         )
     """)
-
 
 class TestComputeRelativeVolumes:
     """Tests for _compute_relative_volumes relative volume enrichment."""
@@ -391,7 +386,6 @@ class TestComputeRelativeVolumes:
         assert vol_count < nf_count
         assert vol_count == 5  # only the 5 high-volume days
 
-
 class TestComputeMetricsScratchCounts:
     """Tests for entry_signals, scratch_count, early_exit_count in compute_metrics."""
 
@@ -445,7 +439,6 @@ class TestComputeMetricsScratchCounts:
         assert m["entry_signals"] == 15
         assert m["scratch_count"] == 5
 
-
 class TestZeroSampleNotWritten:
     """B2: All-scratch/early_exit outcomes should not produce strategy rows."""
 
@@ -496,7 +489,6 @@ class TestZeroSampleNotWritten:
         rows = con.execute("SELECT COUNT(*) FROM experimental_strategies").fetchone()[0]
         con.close()
         assert rows == 0, f"Expected 0 strategies but got {rows}"
-
 
 # ============================================================================
 # Dedup tests
@@ -558,7 +550,6 @@ class TestDedup:
         _mark_canonical(strategies)
         canonical = [s for s in strategies if s["is_canonical"]]
         assert len(canonical) == 2
-
 
 # ============================================================================
 # Validator alias skipping
@@ -652,7 +643,6 @@ class TestValidatorSkipsAliases:
         ).fetchone()[0]
         con.close()
         assert alias_status == "SKIPPED"
-
 
 class TestCLI:
     def test_help(self):

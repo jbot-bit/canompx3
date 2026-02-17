@@ -9,10 +9,7 @@ from datetime import date
 import pytest
 import duckdb
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 from trading_app.db_manager import init_trading_app_schema
-
 
 @pytest.fixture
 def db_path(tmp_path):
@@ -107,7 +104,6 @@ def db_path(tmp_path):
     con.close()
     return path
 
-
 class TestReportInstrument:
 
     def test_correct_trade_count(self, db_path):
@@ -162,7 +158,6 @@ class TestReportInstrument:
         result = report_instrument(path, "MGC")
         assert result is None
 
-
 class TestDailyLedger:
 
     def test_two_trades_same_day_sum(self):
@@ -188,7 +183,6 @@ class TestDailyLedger:
         daily_returns, overlap = _compute_daily_ledger([])
         assert daily_returns == []
         assert overlap == 0
-
 
 class TestPortfolioStats:
 
@@ -226,7 +220,6 @@ class TestPortfolioStats:
         ]
         stats = _compute_portfolio_stats(daily_returns)
         assert stats["max_dd_r"] == pytest.approx(5.0)
-
 
 class TestPurgedFilter:
 

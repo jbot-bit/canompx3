@@ -12,14 +12,11 @@ Usage:
     print(entry)  # {"1000_wr": 0.52, "n": 148}
 """
 
-import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
-
 
 def build_cascade_table(
     db_path: Path | str,
@@ -97,7 +94,6 @@ def build_cascade_table(
         con.close()
 
     return table
-
 
 def lookup_cascade(
     table: dict,

@@ -12,7 +12,6 @@ from pathlib import Path
 
 import duckdb
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
 from pipeline.paths import GOLD_DB_PATH, DAILY_DBN_DIR
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -29,7 +28,6 @@ def check_python_deps() -> tuple[bool, str]:
     if missing:
         return False, f"{version}, missing: {', '.join(missing)}"
     return True, f"{version}, all deps installed"
-
 
 def check_database() -> tuple[bool, str]:
     """Check gold.db exists and has data."""
@@ -51,7 +49,6 @@ def check_database() -> tuple[bool, str]:
         f"{bars_5m:,} bars_5m, {daily_feat:,} daily_features)"
     )
 
-
 def check_dbn_files() -> tuple[bool, str]:
     """Check DBN files are present."""
     if not DAILY_DBN_DIR.exists():
@@ -60,7 +57,6 @@ def check_dbn_files() -> tuple[bool, str]:
     if count == 0:
         return False, "No .dbn.zst files found"
     return True, f"{count:,} DBN files present"
-
 
 def check_drift() -> tuple[bool, str]:
     """Run drift detection."""
@@ -78,7 +74,6 @@ def check_drift() -> tuple[bool, str]:
     except Exception as e:
         return False, f"Drift detection error: {e}"
 
-
 def check_tests() -> tuple[bool, str]:
     """Run test suite."""
     try:
@@ -94,7 +89,6 @@ def check_tests() -> tuple[bool, str]:
         return proc.returncode == 0, f"Tests: exit code {proc.returncode}"
     except Exception as e:
         return False, f"Tests error: {e}"
-
 
 def check_git_hooks() -> tuple[bool, str]:
     """Check git hooks are configured."""
@@ -115,7 +109,6 @@ def check_git_hooks() -> tuple[bool, str]:
         return False, f"Git hooks: core.hooksPath is '{hooks_path}', expected '.githooks'"
     except Exception:
         return False, "Git hooks: cannot read git config"
-
 
 def main():
     print("=" * 50)
@@ -146,7 +139,6 @@ def main():
     else:
         print("SOME CHECKS FAILED")
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()

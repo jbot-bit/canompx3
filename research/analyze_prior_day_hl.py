@@ -33,7 +33,6 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.cost_model import get_cost_spec, to_r_multiple
 from pipeline.paths import GOLD_DB_PATH
@@ -54,7 +53,6 @@ STOP_MULTIPLIERS = [0.5, 1.0, 1.5]  # fraction of ATR_20
 
 REGIME_BOUNDARY = date(2025, 1, 1)
 
-
 def prepare_prior_day_data(features: pd.DataFrame) -> pd.DataFrame:
     """Add previous day H/L and ATR_20 to features."""
     df = features.copy()
@@ -69,7 +67,6 @@ def prepare_prior_day_data(features: pd.DataFrame) -> pd.DataFrame:
     df["atr_20"] = df["true_range"].rolling(window=20, min_periods=20).mean().shift(1)
 
     return df
-
 
 def compute_prior_day_hl_outcomes(
     db_path: Path,
@@ -185,7 +182,6 @@ def compute_prior_day_hl_outcomes(
 
     return outcomes
 
-
 def _find_touch_bar(
     bars: pd.DataFrame, level: float, direction: str
 ) -> int | None:
@@ -203,7 +199,6 @@ def _find_touch_bar(
             if bars.iloc[i]["low"] <= level:
                 return i
     return None
-
 
 def run_walk_forward(
     db_path: Path,
@@ -323,7 +318,6 @@ def run_walk_forward(
         "regime_split": regime_split,
     }
 
-
 def run_full_period_analysis(
     db_path: Path,
     start: date = date(2017, 1, 1),
@@ -363,7 +357,6 @@ def run_full_period_analysis(
 
     return {"grid": grid_results}
 
-
 def _print_go_no_go(combined_oos: dict | None, regime_split: dict | None) -> None:
     """Print GO/NO-GO evaluation."""
     print()
@@ -393,7 +386,6 @@ def _print_go_no_go(combined_oos: dict | None, regime_split: dict | None) -> Non
 
     verdict = "GO" if all_pass else "NO-GO"
     print(f"\n  VERDICT: {verdict}")
-
 
 def main():
     parser = argparse.ArgumentParser(description="Prior Day H/L Fade analysis")
@@ -477,7 +469,6 @@ def main():
     print(sep)
     print("DONE")
     print(sep)
-
 
 if __name__ == "__main__":
     main()

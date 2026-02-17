@@ -11,8 +11,6 @@ Read-only. No DB writes. Uses existing orb_outcomes MFE_R column.
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
 import duckdb
 import numpy as np
 

@@ -35,7 +35,6 @@ from pathlib import Path
 # Project root & imports
 # ---------------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
 
@@ -45,7 +44,6 @@ import duckdb
 DEFAULT_MASTER = Path(r"C:\db\gold.db")
 REBUILD_DIR = Path(r"C:\db\rebuild")
 ALL_STEPS = ["features", "outcome", "discovery", "validation"]
-
 
 # ---------------------------------------------------------------------------
 # Subprocess helpers
@@ -59,7 +57,6 @@ def _stream_pipe(pipe, prefix: str, log_file) -> None:
             log_file.write(msg)
     pipe.close()
 
-
 def _get_instrument_date_range(instrument: str) -> tuple[str, str]:
     """Return (start_date, end_date) strings for an instrument.
 
@@ -71,7 +68,6 @@ def _get_instrument_date_range(instrument: str) -> tuple[str, str]:
     start = config.get("minimum_start_date", date(2016, 1, 1))
     end = date.today()
     return start.isoformat(), end.isoformat()
-
 
 def _build_command(
     step: str, instrument: str, db_path: Path, extra: dict,
@@ -132,7 +128,6 @@ def _build_command(
 
     return cmd
 
-
 def _run_step(
     instrument: str, step: str, db_path: Path, extra: dict, log_path: Path,
 ) -> int:
@@ -168,7 +163,6 @@ def _run_step(
         log.write(f"\n--- {label} exit code: {proc.returncode} ---\n")
 
     return proc.returncode
-
 
 # ---------------------------------------------------------------------------
 # Pre-clear: remove FK-dependent tables before daily_features rebuild
@@ -208,7 +202,6 @@ def _clear_downstream_tables(db_path: Path, instrument: str) -> None:
     finally:
         con.close()
 
-
 # ---------------------------------------------------------------------------
 # Per-instrument pipeline (runs in a thread, calls subprocesses)
 # ---------------------------------------------------------------------------
@@ -246,7 +239,6 @@ def run_instrument(
             print(f"  OK: {instrument}/{step} ({elapsed:.0f}s)")
 
     return results
-
 
 # ---------------------------------------------------------------------------
 # Merge: ATTACH temp DB, DELETE+INSERT per instrument
@@ -364,7 +356,6 @@ def merge_instrument(
 
     finally:
         con.close()
-
 
 # ---------------------------------------------------------------------------
 # Main
@@ -580,7 +571,6 @@ Examples:
         print(f"Remember to copy back to project:")
         print(f'  cp "{args.master}" '
               f'"C:\\Users\\joshd\\canompx3\\gold.db"')
-
 
 if __name__ == "__main__":
     main()

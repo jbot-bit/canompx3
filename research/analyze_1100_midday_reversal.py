@@ -22,13 +22,11 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
 import numpy as np
 import pandas as pd
 from pipeline.paths import GOLD_DB_PATH
-
 
 def run_analysis(db_path=None):
     if db_path is None:
@@ -245,7 +243,6 @@ def run_analysis(db_path=None):
             mtm = valid[col]
             print(f"    {label}: Mean={mtm.mean():>+.2f}  Median={mtm.median():>+.2f}  "
                   f"+ve={( mtm > 0).mean():.0%}")
-
 
 if __name__ == "__main__":
     import argparse

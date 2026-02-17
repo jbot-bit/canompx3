@@ -15,14 +15,11 @@ from datetime import date, datetime, timezone, timedelta
 import pytest
 import duckdb
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA, DAILY_FEATURES_SCHEMA
 from trading_app.db_manager import init_trading_app_schema
 from trading_app.outcome_builder import build_outcomes
 from trading_app.strategy_discovery import run_discovery
 from trading_app.strategy_validator import run_validation
-
 
 def _create_test_db(tmp_path, n_days=20, start_year=2024):
     """
@@ -101,7 +98,6 @@ def _create_test_db(tmp_path, n_days=20, start_year=2024):
     con.close()
     return db_path
 
-
 # =============================================================================
 # Shared class-scoped fixtures (run pipeline ONCE per class)
 # =============================================================================
@@ -124,7 +120,6 @@ def pipeline_20day(tmp_path_factory):
         db_path=db_path, instrument="MGC", min_sample=5,
     )
     return db_path, outcome_count, strategy_count, passed, rejected
-
 
 # =============================================================================
 # TestPipelineFull: 5 tests share 1 pipeline run (was 3 separate runs)
@@ -195,7 +190,6 @@ class TestPipelineFull:
                 assert "wins" in year_data
                 assert "total_r" in year_data
 
-
 # =============================================================================
 # TestIdempotent: must run pipeline twice, needs own DB
 # =============================================================================
@@ -222,7 +216,6 @@ class TestIdempotent:
 
         assert outcomes1 == outcomes2
         assert strats1 == strats2
-
 
 # =============================================================================
 # TestRejection: needs high min_sample on small data

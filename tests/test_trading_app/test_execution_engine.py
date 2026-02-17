@@ -8,8 +8,6 @@ from datetime import date, datetime, timezone, timedelta
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 from trading_app.execution_engine import (
     ExecutionEngine,
     LiveORB,
@@ -21,10 +19,8 @@ from trading_app.execution_engine import (
 from trading_app.portfolio import Portfolio, PortfolioStrategy
 from pipeline.cost_model import get_cost_spec
 
-
 def _cost():
     return get_cost_spec("MGC")
-
 
 def _make_strategy(**overrides):
     base = dict(
@@ -45,7 +41,6 @@ def _make_strategy(**overrides):
     base.update(overrides)
     return PortfolioStrategy(**base)
 
-
 def _make_portfolio(strategies=None, **overrides):
     if strategies is None:
         strategies = [_make_strategy()]
@@ -61,11 +56,9 @@ def _make_portfolio(strategies=None, **overrides):
     defaults.update(overrides)
     return Portfolio(**defaults)
 
-
 def _bar(ts, o, h, l, c, v=100):
     return {"ts_utc": ts, "open": float(o), "high": float(h),
             "low": float(l), "close": float(c), "volume": int(v)}
-
 
 # ============================================================================
 # ORB Detection Tests
@@ -126,7 +119,6 @@ class TestORBDetection:
 
         engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2702, 2704, 2696, 2700))
         assert engine.orbs["2300"].break_dir is None
-
 
 # ============================================================================
 # Entry Tests
@@ -196,7 +188,6 @@ class TestEntry:
             _bar(ts_base + timedelta(minutes=6), 2708, 2715, 2706, 2712)
         )
         assert len([e for e in no_retrace if e.event_type == "ENTRY"]) == 0
-
 
 # ============================================================================
 # Exit Tests
@@ -293,7 +284,6 @@ class TestExit:
         scratch_events = [e for e in events if e.event_type == "SCRATCH"]
         assert len(scratch_events) == 1
 
-
 # ============================================================================
 # PnL Tests
 # ============================================================================
@@ -358,7 +348,6 @@ class TestPnL:
         summary = engine.get_daily_summary()
         assert summary["daily_pnl_r"] == -1.0
 
-
 # ============================================================================
 # Daily Summary Tests
 # ============================================================================
@@ -384,7 +373,6 @@ class TestDailySummary:
         engine.on_trading_day_start(date(2024, 1, 6))
         assert engine.daily_pnl_r == 0.0
         assert engine.daily_trade_count == 0
-
 
 # ============================================================================
 # Filter Tests
@@ -412,7 +400,6 @@ class TestFilters:
         )
         entry_events = [e for e in events if e.event_type == "ENTRY"]
         assert len(entry_events) == 0  # Filtered out
-
 
 # ============================================================================
 # CLI Tests
@@ -500,7 +487,6 @@ class TestArmedAtBarGuard:
         # Trade should now be ENTERED
         entered = [t for t in engine.active_trades if t.state == TradeState.ENTERED]
         assert len(entered) == 1
-
 
 class TestFillBarExitEngine:
     """Fill-bar exit must be checked for E1 and E3 (matches outcome_builder)."""
@@ -612,7 +598,6 @@ class TestFillBarExitEngine:
         assert len(entry_events) == 1
         assert len(exit_events) == 1, "E3 fill bar should detect target hit"
         assert "win" in exit_events[0].reason
-
 
 class TestCLI:
     def test_import(self):

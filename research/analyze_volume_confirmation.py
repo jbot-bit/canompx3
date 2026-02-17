@@ -32,7 +32,6 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 sys.stdout.reconfigure(line_buffering=True)
 
 from pipeline.asset_configs import get_enabled_sessions
@@ -42,7 +41,6 @@ from pipeline.dst import (
     us_data_open_brisbane, london_open_brisbane,
 )
 from research._alt_strategy_utils import compute_strategy_metrics
-
 
 def load_outcomes_with_entry_ts(db_path: Path, instrument: str, session: str) -> pd.DataFrame:
     """Load outcomes that have entry timestamps."""
@@ -68,7 +66,6 @@ def load_outcomes_with_entry_ts(db_path: Path, instrument: str, session: str) ->
         "mfe_r",
     ])
 
-
 _DYNAMIC_RESOLVERS = {
     "CME_OPEN": cme_open_brisbane,
     "US_EQUITY_OPEN": us_equity_open_brisbane,
@@ -77,7 +74,6 @@ _DYNAMIC_RESOLVERS = {
 }
 
 _BRISBANE = ZoneInfo("Australia/Brisbane")
-
 
 def _session_start_utc(session: str, trading_day) -> datetime | None:
     """Resolve session start to UTC datetime for a given trading day."""
@@ -93,7 +89,6 @@ def _session_start_utc(session: str, trading_day) -> datetime | None:
     local_dt = datetime.combine(td, datetime.min.time().replace(
         hour=hour, minute=minute), tzinfo=_BRISBANE)
     return local_dt.astimezone(timezone.utc)
-
 
 def compute_volume_ratio_for_day(con, instrument: str, trading_day, session: str,
                                   entry_ts, orb_minutes: int = 5) -> float | None:
@@ -149,13 +144,11 @@ def compute_volume_ratio_for_day(con, instrument: str, trading_day, session: str
     break_vol = break_bar[0]
     return break_vol / median_orb_vol
 
-
 def fmt(m: dict) -> str:
     if m is None or m["n"] == 0:
         return "N=0"
     return (f"N={m['n']:<5d}  WR={m['wr']*100:5.1f}%  ExpR={m['expr']:+.3f}  "
             f"Sharpe={m['sharpe']:.3f}  MaxDD={m['maxdd']:.1f}R  Total={m['total']:+.1f}R")
-
 
 def main():
     parser = argparse.ArgumentParser(description="Volume confirmation analysis")
@@ -276,7 +269,6 @@ def main():
     print(f"\n{'=' * 90}")
     print("DONE")
     print("=" * 90)
-
 
 if __name__ == "__main__":
     main()

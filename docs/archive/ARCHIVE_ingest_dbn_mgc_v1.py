@@ -42,7 +42,6 @@ import databento as db
 import pandas as pd
 
 # Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
 from pipeline.paths import GOLD_DB_PATH
 
 # =============================================================================
@@ -76,13 +75,11 @@ BAR_TIMESTAMP_CONVENTION = "OPEN"
 # Month codes: F(Jan) G(Feb) H(Mar) J(Apr) K(May) M(Jun) N(Jul) Q(Aug) U(Sep) V(Oct) X(Nov) Z(Dec)
 MGC_OUTRIGHT_PATTERN = re.compile(r'^MGC[FGHJKMNQUVXZ]\d{1,2}$')
 
-
 def is_outright_contract(symbol: str) -> bool:
     """Check if symbol is a valid MGC outright contract (not a spread)."""
     if not symbol:
         return False
     return bool(MGC_OUTRIGHT_PATTERN.match(str(symbol)))
-
 
 # =============================================================================
 # TRADING DAY LOGIC (backtestfix.txt requirement)
@@ -100,7 +97,6 @@ def get_trading_day(ts_utc: datetime) -> date:
     if ts_local.hour < 9:
         return (ts_local - timedelta(days=1)).date()
     return ts_local.date()
-
 
 # =============================================================================
 # DATA VALIDATION (backtestfix.txt requirement)
@@ -142,7 +138,6 @@ def validate_bar(row: pd.Series) -> tuple[bool, str]:
 
     return True, ""
 
-
 # =============================================================================
 # CONTRACT SELECTION
 # =============================================================================
@@ -157,7 +152,6 @@ def choose_front_contract(daily_volumes: dict) -> str | None:
     if not outrights:
         return None
     return max(outrights, key=outrights.get)
-
 
 # =============================================================================
 # MAIN INGESTION
@@ -177,7 +171,6 @@ def get_last_date_in_db(db_path: str, symbol: str) -> date | None:
     except Exception:
         pass
     return None
-
 
 def main():
     parser = argparse.ArgumentParser(description="Ingest MGC DBN file into bars_1m")
@@ -471,7 +464,6 @@ def main():
     print(f"  2. Build features: python pipeline/build_daily_features.py {date_range[0]} {date_range[1]} --instrument MGC")
 
     con.close()
-
 
 if __name__ == "__main__":
     main()

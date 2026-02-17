@@ -14,7 +14,6 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
 
@@ -23,7 +22,6 @@ from pipeline.init_db import ORB_LABELS
 
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)
-
 
 def run_comparison(
     db_path: Path | None = None,
@@ -160,7 +158,6 @@ def run_comparison(
     finally:
         con.close()
 
-
 def _print_report(comparisons: list[dict], run_label: str,
                   regime_only: set, full_only: set):
     """Print a formatted comparison report."""
@@ -227,7 +224,6 @@ def _print_report(comparisons: list[dict], run_label: str,
 
     print("\n" + "=" * 80)
 
-
 def main():
     import argparse
 
@@ -248,7 +244,6 @@ def main():
         min_sample=args.min_sample,
         output_path=args.output,
     )
-
 
 if __name__ == "__main__":
     main()

@@ -11,8 +11,6 @@ from datetime import date, datetime, timezone, timedelta
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 from trading_app.execution_engine import (
     ExecutionEngine,
     TradeEvent,
@@ -22,14 +20,12 @@ from trading_app.portfolio import Portfolio, PortfolioStrategy
 from trading_app.risk_manager import RiskLimits, RiskManager
 from pipeline.cost_model import get_cost_spec
 
-
 # ============================================================================
 # Helpers — mirrors existing test_execution_engine patterns
 # ============================================================================
 
 def _cost():
     return get_cost_spec("MGC")
-
 
 def _make_strategy(**overrides):
     base = dict(
@@ -50,7 +46,6 @@ def _make_strategy(**overrides):
     base.update(overrides)
     return PortfolioStrategy(**base)
 
-
 def _make_portfolio(strategies=None, **overrides):
     if strategies is None:
         strategies = [_make_strategy()]
@@ -66,16 +61,13 @@ def _make_portfolio(strategies=None, **overrides):
     defaults.update(overrides)
     return Portfolio(**defaults)
 
-
 def _bar(ts, o, h, l, c, v=100):
     return {"ts_utc": ts, "open": float(o), "high": float(h),
             "low": float(l), "close": float(c), "volume": int(v)}
 
-
 # 2300 ORB window is 13:00-13:05 UTC on the trading day.
 _ORB_BASE = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
 _TRADING_DAY = date(2024, 1, 5)
-
 
 def _build_orb(engine, orb_high=2705.0, orb_low=2695.0):
     """Feed 5 bars to build the 2300 ORB, then return the post-window timestamp."""
@@ -84,17 +76,14 @@ def _build_orb(engine, orb_high=2705.0, orb_low=2695.0):
                            2700, orb_high, orb_low, 2702))
     return _ORB_BASE + timedelta(minutes=5)
 
-
 def _break_long(engine, break_ts, close=2706.0):
     """Feed a bar that breaks the ORB high (long). Returns events."""
     return engine.on_bar(_bar(break_ts, 2704, 2710, 2703, close))
-
 
 def _fill_e1(engine, break_ts, o=2708, h=2715, l=2707, c=2712):
     """Feed the E1 fill bar (next bar after confirm). Returns events."""
     fill_ts = break_ts + timedelta(minutes=1)
     return engine.on_bar(_bar(fill_ts, o, h, l, c))
-
 
 # ============================================================================
 # 1. Engine calls risk_manager.on_trade_entry() on entry (E1, E3)
@@ -145,7 +134,6 @@ class TestOnTradeEntry:
         entry_events = [e for e in events if e.event_type == "ENTRY"]
         assert len(entry_events) == 1
         assert rm.daily_trade_count == 1
-
 
 # ============================================================================
 # 2. Engine calls risk_manager.on_trade_exit(pnl_r) on target/stop exit
@@ -221,7 +209,6 @@ class TestOnTradeExit:
         assert completed[0].pnl_r == -1.0
         assert rm.daily_pnl_r == completed[0].pnl_r
 
-
 # ============================================================================
 # 3. Engine calls risk_manager.on_trade_exit(pnl_r) on EOD scratch
 # ============================================================================
@@ -276,7 +263,6 @@ class TestScratchExit:
         assert len(completed) == 1
         assert completed[0].pnl_r > 0  # Price went up for a long
         assert rm.daily_pnl_r == completed[0].pnl_r
-
 
 # ============================================================================
 # 4. Engine emits REJECT when risk_manager.can_enter() returns False
@@ -349,7 +335,6 @@ class TestReject:
         assert len(entered) == 0
         assert engine.daily_trade_count == 0
 
-
 # ============================================================================
 # 5. Circuit breaker: after max_daily_loss_r exceeded, entries are rejected
 # ============================================================================
@@ -409,7 +394,6 @@ class TestCircuitBreaker:
         allowed, reason, _ = rm.can_enter("s1", "2300", [], 0.0)
         assert not allowed
         assert "circuit_breaker" in reason
-
 
 # ============================================================================
 # 6. Max concurrent: when limit reached, new entries are rejected
@@ -479,7 +463,6 @@ class TestMaxConcurrent:
         # After exit, concurrent count drops. RM should allow a new entry.
         allowed, _, _ = rm.can_enter("new_strat", "1800", [], engine.daily_pnl_r)
         assert allowed
-
 
 # ============================================================================
 # Lifecycle consistency: RM state matches engine state
@@ -586,7 +569,6 @@ class TestLifecycleConsistency:
         assert len(scratch_events) == 0  # Already exited
         assert rm.daily_pnl_r == -2.0  # Unchanged
 
-
 # ============================================================================
 # 7. Correlation-weighted concurrent guard (Phase 2 risk hardening)
 # ============================================================================
@@ -681,7 +663,6 @@ class TestCorrelationWeightedConcurrent:
         allowed, reason, _ = rm.can_enter("strat_new", "1800", active, 0.0)
         assert not allowed
         assert "max_concurrent" in reason
-
 
 # ============================================================================
 # 8. Live session costs: engine produces different win PnL by session

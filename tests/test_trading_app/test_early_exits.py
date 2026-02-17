@@ -13,8 +13,6 @@ import pytest
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 from trading_app.config import EARLY_EXIT_MINUTES
 from trading_app.outcome_builder import compute_single_outcome
 from trading_app.execution_engine import (
@@ -25,14 +23,12 @@ from trading_app.execution_engine import (
 from trading_app.portfolio import Portfolio, PortfolioStrategy
 from pipeline.cost_model import get_cost_spec
 
-
 # ============================================================================
 # Helpers
 # ============================================================================
 
 def _cost():
     return get_cost_spec("MGC")
-
 
 def _make_bars(closes, start_ts, freq_seconds=60):
     """Build bars DataFrame with realistic OHLCV from close prices."""
@@ -48,7 +44,6 @@ def _make_bars(closes, start_ts, freq_seconds=60):
         "close": closes,
         "volume": [100] * len(closes),
     })
-
 
 def _make_bars_ohlc(ohlc_rows, start_ts, freq_seconds=60):
     """Build bars from explicit (open, high, low, close) tuples."""
@@ -66,12 +61,10 @@ def _make_bars_ohlc(ohlc_rows, start_ts, freq_seconds=60):
         "volume": [100] * len(ohlc_rows),
     })
 
-
 ORB_HIGH = 2350.0
 ORB_LOW = 2340.0
 BREAK_TS = datetime(2024, 1, 15, 23, 5, tzinfo=timezone.utc)  # 0900 session
 DAY_END = datetime(2024, 1, 16, 23, 0, tzinfo=timezone.utc)
-
 
 # ============================================================================
 # Config Tests
@@ -107,7 +100,6 @@ class TestEarlyExitConfig:
             "CME_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "LONDON_OPEN",
         }
         assert set(EARLY_EXIT_MINUTES.keys()) == expected
-
 
 # ============================================================================
 # outcome_builder Tests
@@ -338,7 +330,6 @@ class TestOutcomeBuilderEarlyExit:
         assert result["mae_r"] >= 0
         assert result["mfe_r"] >= 0
 
-
 # ============================================================================
 # execution_engine Tests
 # ============================================================================
@@ -362,7 +353,6 @@ def _make_strategy(**overrides):
     base.update(overrides)
     return PortfolioStrategy(**base)
 
-
 def _make_portfolio(strategies=None, **overrides):
     if strategies is None:
         strategies = [_make_strategy()]
@@ -378,11 +368,9 @@ def _make_portfolio(strategies=None, **overrides):
     defaults.update(overrides)
     return Portfolio(**defaults)
 
-
 def _bar(ts, o, h, l, c, v=100):
     return {"ts_utc": ts, "open": float(o), "high": float(h),
             "low": float(l), "close": float(c), "volume": int(v)}
-
 
 class TestExecutionEngineEarlyExit:
 

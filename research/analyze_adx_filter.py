@@ -29,7 +29,6 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.cost_model import get_cost_spec, to_r_multiple
 from pipeline.paths import GOLD_DB_PATH
@@ -49,7 +48,6 @@ RR_TARGETS = [1.5, 2.0, 2.5]
 ENTRY_MODELS = ["E1", "E2"]
 
 REGIME_BOUNDARY = date(2025, 1, 1)
-
 
 def compute_adx(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray,
                 period: int = 14) -> np.ndarray:
@@ -124,7 +122,6 @@ def compute_adx(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray,
 
     return adx
 
-
 def load_bars_5m_for_day(db_path: Path, trading_day: date) -> pd.DataFrame:
     """Load 5-minute bars for one trading day."""
     from pipeline.build_daily_features import compute_trading_day_utc_range
@@ -142,7 +139,6 @@ def load_bars_5m_for_day(db_path: Path, trading_day: date) -> pd.DataFrame:
     finally:
         con.close()
     return df
-
 
 def get_adx_at_break_time(
     bars_5m: pd.DataFrame, break_ts: pd.Timestamp, period: int = 14
@@ -178,7 +174,6 @@ def get_adx_at_break_time(
     last_adx = adx_values[-1]
     return float(last_adx) if not np.isnan(last_adx) else None
 
-
 def load_bars_5m_with_warmup(db_path: Path, trading_day: date) -> pd.DataFrame:
     """Load 5m bars for current + previous trading day (for ADX warmup).
 
@@ -206,7 +201,6 @@ def load_bars_5m_with_warmup(db_path: Path, trading_day: date) -> pd.DataFrame:
     finally:
         con.close()
     return df
-
 
 def load_orb_outcomes_with_adx(db_path: Path, start: date, end: date) -> pd.DataFrame:
     """Load ORB outcomes and compute ADX at break time for each.
@@ -291,7 +285,6 @@ def load_orb_outcomes_with_adx(db_path: Path, start: date, end: date) -> pd.Data
     )
 
     return outcomes
-
 
 def run_walk_forward(
     db_path: Path,
@@ -443,7 +436,6 @@ def run_walk_forward(
         "regime_split": regime_split,
     }
 
-
 def _print_go_no_go(combined: dict | None, regime_split: dict | None) -> None:
     """Print GO/NO-GO evaluation."""
     print()
@@ -472,7 +464,6 @@ def _print_go_no_go(combined: dict | None, regime_split: dict | None) -> None:
 
     verdict = "GO" if all_pass else "NO-GO"
     print(f"\n  VERDICT: {verdict}")
-
 
 def main():
     parser = argparse.ArgumentParser(description="ADX Trend Filter overlay analysis")
@@ -551,7 +542,6 @@ def main():
     print(sep)
     print("DONE")
     print(sep)
-
 
 if __name__ == "__main__":
     main()

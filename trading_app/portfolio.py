@@ -16,7 +16,6 @@ from pathlib import Path
 from dataclasses import dataclass, asdict, field, replace
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 sys.stdout.reconfigure(line_buffering=True)
 
@@ -28,14 +27,12 @@ from pipeline.paths import GOLD_DB_PATH
 from pipeline.cost_model import get_cost_spec, CostSpec
 from trading_app.config import ALL_FILTERS, classify_strategy
 
-
 def _get_table_names(con: duckdb.DuckDBPyConnection) -> set[str]:
     """Return set of table names in the main schema."""
     rows = con.execute(
         "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
     ).fetchall()
     return {r[0] for r in rows}
-
 
 # =========================================================================
 # Data classes
@@ -65,7 +62,6 @@ class PortfolioStrategy:
     def classification(self) -> str:
         """CORE / REGIME / INVALID per FIX5 rules."""
         return classify_strategy(self.sample_size)
-
 
 @dataclass
 class Portfolio:
@@ -127,7 +123,6 @@ class Portfolio:
             "max_expectancy_r": max(exp_values),
         }
 
-
 # =========================================================================
 # Position sizing
 # =========================================================================
@@ -160,7 +155,6 @@ def compute_position_size(
         return 0  # Risk per contract exceeds budget — don't trade
     return int(contracts)
 
-
 def compute_position_size_prop(
     max_drawdown: float,
     risk_per_trade_pct: float,
@@ -187,7 +181,6 @@ def compute_position_size_prop(
         return 0  # Risk per contract exceeds budget — don't trade
     return int(contracts)
 
-
 def compute_vol_scalar(
     atr_20: float,
     median_atr_20: float,
@@ -208,7 +201,6 @@ def compute_vol_scalar(
         return 1.0
     raw = median_atr_20 / atr_20
     return max(min_scalar, min(raw, max_scalar))
-
 
 def compute_position_size_vol_scaled(
     account_equity: float,
@@ -237,7 +229,6 @@ def compute_position_size_vol_scaled(
     if contracts < 1.0:
         return 0
     return int(contracts)
-
 
 # =========================================================================
 # Portfolio construction
@@ -341,7 +332,6 @@ def load_validated_strategies(
     finally:
         con.close()
 
-
 def diversify_strategies(
     candidates: list[dict],
     max_strategies: int,
@@ -398,7 +388,6 @@ def diversify_strategies(
         em_counts[em] = em_counts.get(em, 0) + 1
 
     return selected
-
 
 def build_portfolio(
     db_path: Path | None = None,
@@ -508,11 +497,9 @@ def build_portfolio(
         corr_lookup=lookup,
     )
 
-
 # Minimum overlapping non-NaN days required for a meaningful correlation.
 # Pairs below this threshold get NaN correlation (insufficient evidence).
 MIN_OVERLAP_DAYS = 200
-
 
 def build_strategy_daily_series(
     db_path: Path,
@@ -718,7 +705,6 @@ def build_strategy_daily_series(
     finally:
         con.close()
 
-
 def correlation_matrix(
     db_path: Path,
     strategy_ids: list[str],
@@ -758,7 +744,6 @@ def correlation_matrix(
             # else: stays NaN (insufficient overlap)
 
     return corr
-
 
 # =========================================================================
 # Capital estimation
@@ -809,7 +794,6 @@ def estimate_daily_capital(
         "worst_case_daily_loss_dollars": round(worst_case, 2),
     }
 
-
 # =========================================================================
 # Fitness-weighted portfolio
 # =========================================================================
@@ -821,7 +805,6 @@ FITNESS_WEIGHTS = {
     "DECAY": 0.0,
     "STALE": 0.0,
 }
-
 
 def fitness_weighted_portfolio(portfolio: Portfolio, fitness_report) -> Portfolio:
     """
@@ -850,7 +833,6 @@ def fitness_weighted_portfolio(portfolio: Portfolio, fitness_report) -> Portfoli
         max_daily_loss_r=portfolio.max_daily_loss_r,
         max_per_orb_positions=portfolio.max_per_orb_positions,
     )
-
 
 # =========================================================================
 # CLI
@@ -912,7 +894,6 @@ def main():
         output_path = Path(args.output)
         output_path.write_text(portfolio.to_json())
         print(f"  Written to {output_path}")
-
 
 if __name__ == "__main__":
     main()

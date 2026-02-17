@@ -16,10 +16,8 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 JSONL_PATH = PROJECT_ROOT / "data" / "walkforward_results.jsonl"
-
 
 def load_results(jsonl_path, instrument=None):
     """Load JSONL, dedup by strategy_id (latest timestamp wins)."""
@@ -41,7 +39,6 @@ def load_results(jsonl_path, instrument=None):
                 latest[sid] = rec
     return latest
 
-
 def classify_windows(rec):
     """Count sparse and negative windows from window list."""
     min_trades = rec["params"].get("min_trades_per_window", 15)
@@ -53,7 +50,6 @@ def classify_windows(rec):
         elif not w["test_pass"]:
             negative += 1
     return sparse, negative
-
 
 def print_summary_table(results, detail=False):
     """Print formatted diagnostic table."""
@@ -137,7 +133,6 @@ def print_summary_table(results, detail=False):
     print(f"WF params: min_valid_windows={min_win}, "
           f"min_trades_per_window={min_trades}")
 
-
 def main():
     import argparse
 
@@ -165,7 +160,6 @@ def main():
     print()
 
     print_summary_table(results, detail=args.detail)
-
 
 if __name__ == "__main__":
     main()

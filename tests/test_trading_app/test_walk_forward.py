@@ -8,8 +8,6 @@ from datetime import date
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 from trading_app.walk_forward import build_folds, evaluate_fold, WalkForwardResult, FoldResult
 
 # ============================================================================
@@ -100,7 +98,6 @@ class TestBuildFolds:
         # Test years should be consecutive
         test_years = [f[1][0].year for f in folds]
         assert test_years == [2023, 2024, 2025]
-
 
 # ============================================================================
 # evaluate_fold tests

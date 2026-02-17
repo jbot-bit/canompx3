@@ -16,7 +16,6 @@ from pathlib import Path
 from datetime import date, datetime
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)
@@ -36,7 +35,6 @@ from trading_app.nested.schema import init_nested_schema
 
 # Entry resolution for nested ORB: always 5-minute bars
 ENTRY_RESOLUTION = 5
-
 
 def resample_to_5m(bars_1m_df: pd.DataFrame, after_ts: datetime) -> pd.DataFrame:
     """Resample post-ORB 1m bars to 5m OHLCV.
@@ -74,7 +72,6 @@ def resample_to_5m(bars_1m_df: pd.DataFrame, after_ts: datetime) -> pd.DataFrame
 
     bars_5m = bars_5m.rename(columns={"bucket": "ts_utc"})
     return bars_5m
-
 
 def _verify_e3_sub_bar_fill(
     bars_1m_df: pd.DataFrame,
@@ -115,7 +112,6 @@ def _verify_e3_sub_bar_fill(
     else:
         # Short E3: limit sell at orb_low. Need high >= entry_price
         return bool((bars_in_candle["high"].values >= entry_price).any())
-
 
 def build_nested_outcomes(
     db_path: Path | None = None,
@@ -484,7 +480,6 @@ def build_nested_outcomes(
     finally:
         con.close()
 
-
 def main():
     import argparse
 
@@ -528,7 +523,6 @@ def main():
         if results["n_mismatch"] > 0:
             print(f"\nWARNING: {results['n_mismatch']} audit mismatches found!")
             sys.exit(1)
-
 
 if __name__ == "__main__":
     main()

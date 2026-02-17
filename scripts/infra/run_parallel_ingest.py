@@ -28,7 +28,6 @@ from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.paths import GOLD_DB_PATH
 
@@ -45,7 +44,6 @@ YEAR_RANGES = [
     ("2023-12-30", "2025-01-02"),
     ("2024-12-30", "2026-12-31"),
 ]
-
 
 def ingest_year(idx: int, start: str, end: str) -> str:
     """Ingest one date range into a temp DB. Runs in subprocess."""
@@ -78,14 +76,12 @@ def ingest_year(idx: int, start: str, end: str) -> str:
 
     return f"OK {year_label}: {count:,} rows"
 
-
 def _find_temp_dbs() -> list[Path]:
     """Find temp DBs in TEMP_DIR matching indexed label pattern."""
     if not TEMP_DIR.exists():
         return []
     return sorted(p for p in TEMP_DIR.glob("temp_*.db")
                   if not p.name.endswith((".wal", ".tmp")))
-
 
 def merge_bars_only(db_path: Path = None, temp_dbs: list[Path] = None):
     """Merge temp DBs into gold.db -- bars_1m ONLY. Never touches trading tables."""
@@ -132,7 +128,6 @@ def merge_bars_only(db_path: Path = None, temp_dbs: list[Path] = None):
 
     con.close()
 
-
 def build_downstream(instrument: str, start: str, end: str, db_path: Path):
     """Build bars_5m and daily_features."""
     env = {**os.environ, "DUCKDB_PATH": str(db_path)}
@@ -156,7 +151,6 @@ def build_downstream(instrument: str, start: str, end: str, db_path: Path):
     if r.returncode != 0:
         print("FATAL: daily_features build failed")
         sys.exit(1)
-
 
 def verify(instrument: str, db_path: Path):
     """Final integrity checks."""
@@ -204,12 +198,10 @@ def verify(instrument: str, db_path: Path):
     else:
         print("\n  SOME CHECKS FAILED -- review above")
 
-
 def cleanup():
     """Remove temp DBs from TEMP_DIR."""
     for p in TEMP_DIR.glob("temp_*.db*"):
         p.unlink(missing_ok=True)
-
 
 def main():
     parser = argparse.ArgumentParser(description="Parallel GC re-ingest")
@@ -297,7 +289,6 @@ def main():
 
     elapsed = time.time() - t0
     print(f"\n=== DONE in {elapsed/60:.1f} minutes ===")
-
 
 if __name__ == "__main__":
     main()

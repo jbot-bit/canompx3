@@ -36,7 +36,6 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.build_daily_features import compute_trading_day_utc_range
 from pipeline.init_db import ORB_LABELS
@@ -70,7 +69,6 @@ SESSION_START_UTC = {
 }
 
 SIZE_TIERS = {"G2": 2.0, "G4": 4.0, "G6": 6.0, "G8": 8.0}
-
 
 # ---------------------------------------------------------------------------
 # V-Box computation
@@ -120,7 +118,6 @@ def compute_vbox_for_day(
         "vbox_volume": int(vbox_bar["volume"]),
     }
 
-
 def classify_trade(
     entry_price: float,
     break_dir: str,
@@ -138,7 +135,6 @@ def classify_trade(
     if break_dir == "short" and entry_price < vbox_low:
         return "CLEAR"
     return "CHOP"
-
 
 # ---------------------------------------------------------------------------
 # Data loading
@@ -191,7 +187,6 @@ def load_outcomes(db_path: Path, sessions: list[str],
     print(f"Loaded {len(df)} trades ({df['trading_day'].nunique()} days)")
     return df
 
-
 def load_bars_for_day(db_path: Path, trading_day: date) -> pd.DataFrame:
     """Load 1-minute bars for one trading day."""
     start_utc, end_utc = compute_trading_day_utc_range(trading_day)
@@ -209,7 +204,6 @@ def load_bars_for_day(db_path: Path, trading_day: date) -> pd.DataFrame:
     if not df.empty:
         df["ts_utc"] = pd.to_datetime(df["ts_utc"], utc=True)
     return df
-
 
 # ---------------------------------------------------------------------------
 # Main analysis
@@ -284,7 +278,6 @@ def run_analysis(db_path: Path, sessions: list[str],
 
     return dict(results)
 
-
 def print_results(results: dict) -> None:
     """Print formatted comparison table: CLEAR vs CHOP."""
     print("\n" + "=" * 80)
@@ -323,7 +316,6 @@ def print_results(results: dict) -> None:
                 print(f"  {'DELTA':<8} {'':>6} {'':>7} {delta_expr:>+7.3f} "
                       f"{delta_sharpe:>+7.3f}")
 
-
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -346,7 +338,6 @@ def main():
 
     results = run_analysis(args.db_path, sessions, args.min_orb_size, args.start, args.end)
     print_results(results)
-
 
 if __name__ == "__main__":
     main()

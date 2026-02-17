@@ -4,9 +4,6 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
-
 def test_step_registry_is_ordered():
     """Full pipeline steps must be in correct dependency order."""
     from pipeline.run_full_pipeline import FULL_PIPELINE_STEPS
@@ -18,14 +15,12 @@ def test_step_registry_is_ordered():
     ]
     assert step_names == expected_order
 
-
 def test_step_functions_are_callable():
     """Every step in the registry must be a callable."""
     from pipeline.run_full_pipeline import FULL_PIPELINE_STEPS
 
     for name, desc, func in FULL_PIPELINE_STEPS:
         assert callable(func), f"Step {name} is not callable"
-
 
 def test_dry_run_does_not_execute(capsys):
     """--dry-run should print plan without executing."""
@@ -37,7 +32,6 @@ def test_dry_run_does_not_execute(capsys):
     assert "discover" in captured.out
     assert "validate" in captured.out
 
-
 def test_skip_to_works():
     """--skip-to should skip steps before the named step."""
     from pipeline.run_full_pipeline import get_steps_from, FULL_PIPELINE_STEPS
@@ -47,14 +41,12 @@ def test_skip_to_works():
     assert names == ["build_outcomes", "discover", "validate"]
     assert "ingest" not in names
 
-
 def test_skip_to_invalid_raises():
     """--skip-to with invalid step name should raise ValueError."""
     from pipeline.run_full_pipeline import get_steps_from, FULL_PIPELINE_STEPS
 
     with pytest.raises(ValueError, match="Unknown step"):
         get_steps_from(FULL_PIPELINE_STEPS, "nonexistent_step")
-
 
 def test_skip_to_first_step_returns_all():
     """--skip-to with first step should return all steps."""

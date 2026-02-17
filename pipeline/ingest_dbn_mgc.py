@@ -34,7 +34,6 @@ import duckdb
 import databento as db
 
 # Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
 from pipeline.paths import GOLD_DB_PATH
 
 # =============================================================================
@@ -70,7 +69,6 @@ MONTH_CODES = 'FGHJKMNQUVXZ'  # Jan=F, Feb=G, ..., Dec=Z
 # MINIMUM DATE: Dataset now covers 2016-02-01 onward (GC data from Databento)
 # Two data directories: gold_db_fullsize_2016-2021 and GOLD_DB_FULLSIZE (2021+)
 MINIMUM_START_DATE = date(2016, 1, 1)
-
 
 # =============================================================================
 # CHECKPOINT SYSTEM (JSONL, APPEND-ONLY)
@@ -177,7 +175,6 @@ class CheckpointManager:
         if status in ('done', 'failed'):
             self.attempt_id += 1
 
-
 # =============================================================================
 # VALIDATION (VECTORIZED, FAIL-CLOSED)
 # =============================================================================
@@ -236,7 +233,6 @@ def validate_chunk(df: pd.DataFrame) -> tuple[bool, str, Optional[pd.DataFrame]]
 
     return True, "", None
 
-
 def validate_timestamp_utc(df: pd.DataFrame) -> tuple[bool, str]:
     """
     Explicitly verify timestamps are UTC.
@@ -258,7 +254,6 @@ def validate_timestamp_utc(df: pd.DataFrame) -> tuple[bool, str]:
         return False, "Null timestamps found"
 
     return True, ""
-
 
 # =============================================================================
 # CONTRACT SELECTION (DETERMINISTIC)
@@ -285,7 +280,6 @@ def parse_expiry(symbol: str, prefix_len: int = 3) -> tuple[int, int]:
         year += 1900
 
     return (year, month)
-
 
 def choose_front_contract(daily_volumes: dict, outright_pattern=None, prefix_len: int = 3, log_func=None) -> Optional[str]:
     """
@@ -329,7 +323,6 @@ def choose_front_contract(daily_volumes: dict, outright_pattern=None, prefix_len
         log_func(f"  TIEBREAK by lexicographic: {winner}")
     return winner
 
-
 # =============================================================================
 # TRADING DAY CALCULATION (VECTORIZED)
 # =============================================================================
@@ -355,7 +348,6 @@ def compute_trading_days(df: pd.DataFrame) -> pd.Series:
 
     return trading_days
 
-
 # =============================================================================
 # INTEGRITY GATES
 # =============================================================================
@@ -370,7 +362,6 @@ def check_pk_safety(df: pd.DataFrame, trading_day: date) -> tuple[bool, str]:
         dupes = df[df.index.duplicated(keep=False)]
         return False, f"Duplicate ts_utc found for trading day {trading_day}: {len(dupes)} rows"
     return True, ""
-
 
 def check_merge_integrity(con: duckdb.DuckDBPyConnection, chunk_start: str, chunk_end: str) -> tuple[bool, str]:
     """
@@ -402,7 +393,6 @@ def check_merge_integrity(con: duckdb.DuckDBPyConnection, chunk_start: str, chun
         return False, f"NULL source_symbol found after merge: {null_check} rows"
 
     return True, ""
-
 
 # =============================================================================
 # FINAL HONESTY GATES
@@ -448,7 +438,6 @@ def run_final_gates(con: duckdb.DuckDBPyConnection) -> tuple[bool, list[str]]:
         failures.append(f"NULL source_symbol found: {null_count} rows")
 
     return len(failures) == 0, failures
-
 
 # =============================================================================
 # MAIN INGESTION
@@ -909,7 +898,6 @@ def main():
     print()
     print("SUCCESS: Backfill complete and validated.")
     sys.exit(0)
-
 
 if __name__ == "__main__":
     print("NOTE: For multi-instrument support, prefer:")

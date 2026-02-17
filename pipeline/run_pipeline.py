@@ -28,13 +28,11 @@ from pathlib import Path
 from datetime import datetime
 
 # Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from pipeline.asset_configs import list_instruments
 
 # Project root for resolving script paths
 PROJECT_ROOT = Path(__file__).parent.parent
-
 
 # =============================================================================
 # PIPELINE STEP DEFINITIONS
@@ -69,7 +67,6 @@ def step_ingest(instrument: str, args) -> int:
     result = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
     return result.returncode
 
-
 def step_build_5m(instrument: str, args) -> int:
     """Step 2: Rebuild bars_5m from bars_1m. Delegates to pipeline/build_bars_5m.py."""
     if not args.start or not args.end:
@@ -92,7 +89,6 @@ def step_build_5m(instrument: str, args) -> int:
 
     result = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
     return result.returncode
-
 
 def step_build_features(instrument: str, args) -> int:
     """Step 3: Rebuild daily_features from bars_1m/bars_5m."""
@@ -121,7 +117,6 @@ def step_build_features(instrument: str, args) -> int:
     result = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
     return result.returncode
 
-
 def step_audit(instrument: str, args) -> int:
     """Step 4: Run database integrity check."""
     cmd = [
@@ -135,7 +130,6 @@ def step_audit(instrument: str, args) -> int:
     result = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
     return result.returncode
 
-
 # =============================================================================
 # PIPELINE STEPS REGISTRY (ordered)
 # =============================================================================
@@ -146,7 +140,6 @@ PIPELINE_STEPS = [
     ("build_features", "Rebuild daily_features from bars", step_build_features),
     ("audit", "Database integrity check", step_audit),
 ]
-
 
 # =============================================================================
 # MAIN
@@ -278,7 +271,6 @@ def main():
     else:
         print("FAILED: Pipeline did not complete. See step failures above.")
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()

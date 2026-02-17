@@ -33,7 +33,6 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.cost_model import get_cost_spec, to_r_multiple
 from pipeline.paths import GOLD_DB_PATH
@@ -60,7 +59,6 @@ TIME_FILTERS = {
 
 REGIME_BOUNDARY = date(2025, 1, 1)
 
-
 def load_bars_5m_for_day(db_path: Path, trading_day: date) -> pd.DataFrame:
     """Load 5-minute bars for one trading day (09:00 Brisbane boundary)."""
     from pipeline.build_daily_features import compute_trading_day_utc_range
@@ -78,7 +76,6 @@ def load_bars_5m_for_day(db_path: Path, trading_day: date) -> pd.DataFrame:
     finally:
         con.close()
     return df
-
 
 def compute_rsi(closes: np.ndarray, period: int) -> np.ndarray:
     """Compute Wilder's RSI on an array of close prices.
@@ -115,7 +112,6 @@ def compute_rsi(closes: np.ndarray, period: int) -> np.ndarray:
             rsi[i + 1] = 100.0 - (100.0 / (1.0 + rs))
 
     return rsi
-
 
 def compute_rsi_outcomes_for_day(
     bars_5m: pd.DataFrame,
@@ -236,7 +232,6 @@ def compute_rsi_outcomes_for_day(
 
     return outcomes
 
-
 def _resolve_5m_outcome(
     bars: pd.DataFrame,
     entry_price: float,
@@ -277,7 +272,6 @@ def _resolve_5m_outcome(
                     "exit_bar_idx": i, "pnl_points": pnl_points}
 
     return None
-
 
 def compute_all_rsi_outcomes(
     db_path: Path,
@@ -335,7 +329,6 @@ def compute_all_rsi_outcomes(
     if not all_outcomes:
         return pd.DataFrame()
     return pd.DataFrame(all_outcomes)
-
 
 def run_walk_forward(
     db_path: Path,
@@ -448,7 +441,6 @@ def run_walk_forward(
         "regime_split": regime_split,
     }
 
-
 def run_full_period_analysis(
     db_path: Path,
     start: date = date(2017, 1, 1),
@@ -480,7 +472,6 @@ def run_full_period_analysis(
 
     return {"grid": grid_results}
 
-
 def _print_go_no_go(combined_oos: dict | None, regime_split: dict | None) -> None:
     """Print GO/NO-GO evaluation."""
     print()
@@ -509,7 +500,6 @@ def _print_go_no_go(combined_oos: dict | None, regime_split: dict | None) -> Non
 
     verdict = "GO" if all_pass else "NO-GO"
     print(f"\n  VERDICT: {verdict}")
-
 
 def main():
     parser = argparse.ArgumentParser(description="RSI Extreme Mean Reversion analysis")
@@ -593,7 +583,6 @@ def main():
     print(sep)
     print("DONE")
     print(sep)
-
 
 if __name__ == "__main__":
     main()

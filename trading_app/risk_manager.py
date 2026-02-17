@@ -10,14 +10,11 @@ Usage:
     allowed, reason = rm.can_enter(trade, active_trades, daily_pnl_r)
 """
 
-import sys
 from pathlib import Path
 from dataclasses import dataclass
 from datetime import date
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
-
 
 @dataclass(frozen=True)
 class RiskLimits:
@@ -29,7 +26,6 @@ class RiskLimits:
     drawdown_warning_r: float = -3.0        # Log warning threshold (R)
     corr_threshold_for_reduction: float = 0.5 # Correlation above this triggers size reduction
     min_correlation_factor: float = 0.3     # Min assumed correlation if not in lookup, used in effective exposure calculation
-
 
 class RiskManager:
     """
@@ -139,8 +135,6 @@ class RiskManager:
                 )
 
         return True, "", suggested_contract_factor
-
-
 
     def on_trade_entry(self) -> None:
         """Record a new trade entry."""

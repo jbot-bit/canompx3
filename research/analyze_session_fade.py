@@ -33,7 +33,6 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.cost_model import get_cost_spec, to_r_multiple
 from pipeline.paths import GOLD_DB_PATH
@@ -58,7 +57,6 @@ LONDON_START_HOUR = 8
 LONDON_END_HOUR = 13
 
 REGIME_BOUNDARY = date(2025, 1, 1)
-
 
 def compute_session_fade_outcomes(
     db_path: Path,
@@ -174,7 +172,6 @@ def compute_session_fade_outcomes(
 
     return outcomes
 
-
 def _filter_london_bars(bars: pd.DataFrame) -> pd.DataFrame:
     """Filter bars to London session (08:00-13:00 UTC)."""
     if bars.empty:
@@ -195,7 +192,6 @@ def _filter_london_bars(bars: pd.DataFrame) -> pd.DataFrame:
     mask = (hours >= LONDON_START_HOUR) & (hours < LONDON_END_HOUR)
     return bars[mask].reset_index(drop=True)
 
-
 def _find_touch_bar(
     bars: pd.DataFrame, level: float, direction: str
 ) -> int | None:
@@ -210,14 +206,12 @@ def _find_touch_bar(
                 return i
     return None
 
-
 def _find_bar_by_ts(bars: pd.DataFrame, ts) -> int | None:
     """Find bar index matching a timestamp."""
     for i in range(len(bars)):
         if bars.iloc[i]["ts_utc"] == ts:
             return i
     return None
-
 
 def run_walk_forward(
     db_path: Path,
@@ -339,7 +333,6 @@ def run_walk_forward(
         "regime_split": regime_split,
     }
 
-
 def run_full_period_analysis(
     db_path: Path,
     start: date = date(2017, 1, 1),
@@ -381,7 +374,6 @@ def run_full_period_analysis(
 
     return {"grid": grid_results}
 
-
 def _print_go_no_go(combined_oos: dict | None, regime_split: dict | None) -> None:
     """Print GO/NO-GO evaluation."""
     print()
@@ -410,7 +402,6 @@ def _print_go_no_go(combined_oos: dict | None, regime_split: dict | None) -> Non
 
     verdict = "GO" if all_pass else "NO-GO"
     print(f"\n  VERDICT: {verdict}")
-
 
 def main():
     parser = argparse.ArgumentParser(description="Session Range Fade analysis")
@@ -496,7 +487,6 @@ def main():
     print(sep)
     print("DONE")
     print(sep)
-
 
 if __name__ == "__main__":
     main()

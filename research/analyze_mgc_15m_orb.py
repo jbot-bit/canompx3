@@ -27,7 +27,6 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 sys.stdout.reconfigure(line_buffering=True)
 
 from pipeline.cost_model import get_cost_spec, to_r_multiple
@@ -70,7 +69,6 @@ ORB_DURATIONS = [15, 30]  # minutes (5m loaded from baseline)
 START_DATE = date(2016, 2, 1)
 END_DATE = date(2026, 2, 4)
 
-
 # ---------------------------------------------------------------------------
 # ORB computation from bars_1m
 # ---------------------------------------------------------------------------
@@ -95,7 +93,6 @@ def compute_orb_from_bars(bars_df, trading_day, orb_label, orb_minutes):
     low = float(orb_bars["low"].min())
     size = high - low
     return high, low, size
-
 
 # ---------------------------------------------------------------------------
 # Break detection
@@ -133,7 +130,6 @@ def detect_first_break(bars_df, trading_day, orb_label, orb_minutes,
 
     return None, None
 
-
 # ---------------------------------------------------------------------------
 # Confirm bar detection (vectorized)
 # ---------------------------------------------------------------------------
@@ -167,7 +163,6 @@ def find_confirm_bar(bars_df, break_ts, orb_high, orb_low,
             run = 0
 
     return None, None
-
 
 # ---------------------------------------------------------------------------
 # E3 retrace detection
@@ -205,7 +200,6 @@ def find_e3_fill(bars_df, confirm_ts, orb_high, orb_low,
                 return pd.Timestamp(ts_vals[i], tz="UTC"), orb_low
 
     return None, None
-
 
 # ---------------------------------------------------------------------------
 # Bar-by-bar outcome resolution
@@ -281,7 +275,6 @@ def resolve_outcome(bars_df, entry_ts, entry_price, stop_price,
     return round(to_r_multiple(SPEC, entry_price, stop_price,
                                risk_points * rr_target_raw), 4)
 
-
 # ---------------------------------------------------------------------------
 # Single trade simulation
 # ---------------------------------------------------------------------------
@@ -345,7 +338,6 @@ def simulate_trade(bars_df, trading_day, orb_label, orb_minutes,
         target_price, break_dir, td_end
     )
 
-
 # ---------------------------------------------------------------------------
 # Load 5m baseline from orb_outcomes
 # ---------------------------------------------------------------------------
@@ -405,7 +397,6 @@ def load_5m_baseline(con, start_date, end_date):
                 results[key].append(pnl_r)
 
     return results
-
 
 # ---------------------------------------------------------------------------
 # Main
@@ -657,7 +648,6 @@ def main():
 
     print()
     print("Done.")
-
 
 if __name__ == "__main__":
     main()

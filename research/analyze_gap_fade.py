@@ -32,7 +32,6 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.cost_model import get_cost_spec, to_r_multiple
 from pipeline.paths import GOLD_DB_PATH
@@ -50,7 +49,6 @@ SPEC = get_cost_spec("MGC")
 # Grid dimensions
 GAP_THRESHOLDS = [0.2, 0.3, 0.4]  # fraction of ATR_20
 STOP_MULTIPLIERS = [0.5, 1.0, 1.5]  # fraction of ATR_20
-
 
 def prepare_gap_data(features: pd.DataFrame) -> pd.DataFrame:
     """Add ATR_20 and gap metrics to features dataframe.
@@ -82,7 +80,6 @@ def prepare_gap_data(features: pd.DataFrame) -> pd.DataFrame:
     df["dow"] = pd.to_datetime(df["trading_day"]).dt.dayofweek
 
     return df
-
 
 def compute_gap_fade_outcomes(
     db_path: Path,
@@ -193,7 +190,6 @@ def compute_gap_fade_outcomes(
 
     return outcomes
 
-
 def run_walk_forward(
     db_path: Path,
     train_months: int = 12,
@@ -290,7 +286,6 @@ def run_walk_forward(
         "combined_oos": combined_oos,
     }
 
-
 def run_full_period_analysis(
     db_path: Path,
     start: date = date(2024, 8, 1),
@@ -340,7 +335,6 @@ def run_full_period_analysis(
                 dow_analysis.append({"day": dow_names[dow], "dow": dow, **stats})
 
     return {"grid": grid_results, "dow_analysis": dow_analysis}
-
 
 def main():
     parser = argparse.ArgumentParser(description="Gap Fade strategy analysis")
@@ -427,7 +421,6 @@ def main():
     print(sep)
     print("DONE")
     print(sep)
-
 
 if __name__ == "__main__":
     main()

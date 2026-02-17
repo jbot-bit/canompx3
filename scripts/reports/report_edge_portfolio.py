@@ -20,7 +20,6 @@ from pathlib import Path
 from collections import defaultdict
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 sys.stdout.reconfigure(line_buffering=True)
 
@@ -32,7 +31,6 @@ from trading_app.db_manager import has_edge_families
 
 # ~252 trading days/year (standard futures approximation)
 TRADING_DAYS_PER_YEAR = 252
-
 
 def _load_head_trades(con, instrument, include_purged=False):
     """Load all trades for family heads, joined through edge_families.
@@ -67,7 +65,6 @@ def _load_head_trades(con, instrument, include_purged=False):
     cols = [desc[0] for desc in con.description]
     return [dict(zip(cols, r)) for r in rows]
 
-
 def _compute_daily_ledger(trades):
     """Build daily R-return series from flat trade list.
 
@@ -86,7 +83,6 @@ def _compute_daily_ledger(trades):
     overlap_count = sum(1 for c in daily_trade_count.values() if c > 1)
     daily_returns = sorted(daily_r.items())
     return daily_returns, overlap_count
-
 
 def _compute_portfolio_stats(daily_returns):
     """Compute portfolio-level stats from daily R-returns.
@@ -138,7 +134,6 @@ def _compute_portfolio_stats(daily_returns):
         "total_r": round(total_r, 4),
     }
 
-
 def _yearly_breakdown(trades):
     """Group trades by year, compute per-year summary."""
     yearly = defaultdict(lambda: {"trades": 0, "wins": 0, "total_r": 0.0})
@@ -150,7 +145,6 @@ def _yearly_breakdown(trades):
             yearly[year]["wins"] += 1
         yearly[year]["total_r"] += t["pnl_r"]
     return dict(sorted(yearly.items()))
-
 
 def report_instrument(db_path, instrument, include_purged=False):
     """Generate portfolio report for one instrument.
@@ -225,7 +219,6 @@ def report_instrument(db_path, instrument, include_purged=False):
     finally:
         con.close()
 
-
 def print_report(result):
     """Print formatted report to stdout."""
     if result is None:
@@ -278,7 +271,6 @@ def print_report(result):
         print(f"  {year}: {stats['trades']} trades, WR {wr:.1%}, {stats['total_r']:+.1f}R")
     print()
 
-
 def main():
     import argparse
 
@@ -315,7 +307,6 @@ def main():
             print_report(result)
         else:
             print(f"No edge families for {args.instrument}")
-
 
 if __name__ == "__main__":
     main()

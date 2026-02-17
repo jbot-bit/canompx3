@@ -21,7 +21,6 @@ import statistics
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)
@@ -41,23 +40,19 @@ COST_SPEC = get_cost_spec(INSTRUMENT)
 
 OUTPUT_DIR = PROJECT_ROOT / "artifacts"
 
-
 def _connect(db_path: Path | None = None) -> "duckdb.DuckDBPyConnection":
     p = db_path or GOLD_DB_PATH
     return duckdb.connect(str(p), read_only=True)
-
 
 def _fmt(val, decimals=2):
     if val is None:
         return "N/A"
     return f"{val:+.{decimals}f}" if isinstance(val, float) else str(val)
 
-
 def _pct(val, decimals=1):
     if val is None:
         return "N/A"
     return f"{val * 100:.{decimals}f}%"
-
 
 # =========================================================================
 # SECTION A: 0900 2025 Regime Deep Dive
@@ -150,7 +145,6 @@ def section_a_regime_deep_dive(con, year: int) -> list[str]:
         lines.append(f"  {label:>7}: {dist}  [total={total}]")
 
     return lines
-
 
 # =========================================================================
 # SECTION B: Cross-Session Cascade (0900 -> 1000 -> 1100)
@@ -266,7 +260,6 @@ def section_b_cross_session(con, year: int) -> list[str]:
 
     return lines
 
-
 # =========================================================================
 # SECTION C: MFE/MAE Path Analysis on 0900 Losses
 # =========================================================================
@@ -376,7 +369,6 @@ def section_c_mfe_analysis(con, year: int) -> list[str]:
 
     return lines
 
-
 # =========================================================================
 # SECTION D: Direction-Filtered Grid
 # =========================================================================
@@ -465,7 +457,6 @@ def section_d_direction_grid(con, year: int) -> list[str]:
             lines.append(f"  {rr:>4.1f}    0")
 
     return lines
-
 
 # =========================================================================
 # SECTION E: 1000/1100 as Reversal Trades
@@ -589,7 +580,6 @@ def section_e_reversal_trades(con, year: int) -> list[str]:
 
     return lines
 
-
 # =========================================================================
 # MAIN
 # =========================================================================
@@ -624,7 +614,6 @@ def run_analysis(year: int = DEFAULT_YEAR, db_path: Path | None = None) -> str:
     finally:
         con.close()
 
-
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="Deep 0900 Asia Session Analysis")
@@ -644,7 +633,6 @@ def main():
     out_file = OUTPUT_DIR / f"asia_session_analysis_{args.year}.txt"
     out_file.write_text(report, encoding="utf-8")
     print(f"\nReport saved to: {out_file}")
-
 
 if __name__ == "__main__":
     main()

@@ -26,13 +26,11 @@ from pathlib import Path
 import duckdb
 
 # Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
 from pipeline.paths import GOLD_DB_PATH, DAILY_DBN_DIR
 
 PROJECT_ROOT = Path(__file__).parent.parent
 CHECKPOINT_DIR = Path(__file__).parent / "checkpoints"
 ROADMAP_PATH = PROJECT_ROOT / "ROADMAP.md"
-
 
 # =============================================================================
 # DATA COLLECTORS
@@ -96,7 +94,6 @@ def collect_db_metrics(db_path: Path) -> dict:
 
     return result
 
-
 def collect_checkpoint_progress(cp_dir: Path) -> dict:
     """Parse JSONL checkpoint files for ingestion progress."""
     result = {
@@ -141,7 +138,6 @@ def collect_checkpoint_progress(cp_dir: Path) -> dict:
 
     return result
 
-
 def collect_file_inventory(dbn_dir: Path) -> dict:
     """Scan .dbn.zst files in the data directory."""
     result = {
@@ -166,7 +162,6 @@ def collect_file_inventory(dbn_dir: Path) -> dict:
         )
 
     return result
-
 
 def collect_guardrail_status() -> dict:
     """Run drift check and collect test results."""
@@ -220,7 +215,6 @@ def collect_guardrail_status() -> dict:
 
     return result
 
-
 def collect_contract_history(db_path: Path) -> list[dict]:
     """Get contract usage history from the database."""
     if not db_path.exists():
@@ -252,7 +246,6 @@ def collect_contract_history(db_path: Path) -> list[dict]:
         }
         for r in rows
     ]
-
 
 def collect_data_quality(db_path: Path) -> dict:
     """Run data quality checks on bars_1m."""
@@ -322,7 +315,6 @@ def collect_data_quality(db_path: Path) -> dict:
         con.close()
 
     return result
-
 
 def collect_strategy_metrics(db_path: Path) -> dict:
     """Query validated_setups + experimental_strategies for strategy panel."""
@@ -412,7 +404,6 @@ def collect_strategy_metrics(db_path: Path) -> dict:
 
     return result
 
-
 def collect_roadmap_status(roadmap_path: Path) -> list[dict]:
     """Parse ROADMAP.md for phase checklist."""
     phases = []
@@ -433,7 +424,6 @@ def collect_roadmap_status(roadmap_path: Path) -> list[dict]:
 
     return phases
 
-
 # =============================================================================
 # HTML RENDERERS
 # =============================================================================
@@ -444,7 +434,6 @@ def status_badge(ok: bool | None, text: str = "") -> str:
     if ok:
         return f'<span class="badge badge-ok">{text or "PASS"}</span>'
     return f'<span class="badge badge-fail">{text or "FAIL"}</span>'
-
 
 def render_ingestion_panel(cp: dict, inv: dict, db: dict) -> str:
     total_files = inv["total_files"]
@@ -475,7 +464,6 @@ def render_ingestion_panel(cp: dict, inv: dict, db: dict) -> str:
     </div>
     """
 
-
 def render_db_panel(db: dict) -> str:
     exists_badge = status_badge(db["exists"], "EXISTS" if db["exists"] else "MISSING")
     return f"""
@@ -495,7 +483,6 @@ def render_db_panel(db: dict) -> str:
       </table>
     </div>
     """
-
 
 def render_quality_panel(quality: dict) -> str:
     if not quality["has_data"]:
@@ -521,7 +508,6 @@ def render_quality_panel(quality: dict) -> str:
     </div>
     """
 
-
 def render_contract_panel(contracts: list[dict]) -> str:
     if not contracts:
         return '<div class="panel"><h2>Contract History</h2><p>No contract data.</p></div>'
@@ -546,7 +532,6 @@ def render_contract_panel(contracts: list[dict]) -> str:
       </table>
     </div>
     """
-
 
 def render_guardrails_panel(g: dict) -> str:
     drift_badge = status_badge(g["drift_passed"])
@@ -574,7 +559,6 @@ def render_guardrails_panel(g: dict) -> str:
     </div>
     """
 
-
 def render_roadmap_panel(phases: list[dict]) -> str:
     if not phases:
         return '<div class="panel"><h2>Development Roadmap</h2><p>ROADMAP.md not found.</p></div>'
@@ -595,7 +579,6 @@ def render_roadmap_panel(phases: list[dict]) -> str:
       {items_html}
     </div>
     """
-
 
 def render_strategy_panel(strats: dict) -> str:
     """Render validated strategies panel."""
@@ -654,7 +637,6 @@ def render_strategy_panel(strats: dict) -> str:
     </div>
     """
 
-
 def render_system_panel() -> str:
     return f"""
     <div class="panel">
@@ -668,7 +650,6 @@ def render_system_panel() -> str:
       </table>
     </div>
     """
-
 
 # =============================================================================
 # FULL DASHBOARD
@@ -710,7 +691,6 @@ li { padding: 2px 0; }
 .footer { margin-top: 20px; text-align: center; color: #484f58; font-size: 0.8em; }
 """
 
-
 def render_dashboard(db: dict, cp: dict, inv: dict, quality: dict,
                      contracts: list, guardrails: dict, roadmap: list,
                      strategies: dict | None = None) -> str:
@@ -739,7 +719,6 @@ def render_dashboard(db: dict, cp: dict, inv: dict, quality: dict,
   </div>
 </body>
 </html>"""
-
 
 def main():
     parser = argparse.ArgumentParser(description="Generate MGC Pipeline Dashboard")
@@ -780,7 +759,6 @@ def main():
     output_path.write_text(html, encoding="utf-8")
     print(f"\nDashboard written to: {output_path}")
     print(f"  Size: {len(html):,} bytes")
-
 
 if __name__ == "__main__":
     main()

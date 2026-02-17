@@ -10,14 +10,11 @@ from datetime import date
 import pytest
 import duckdb
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-
 from trading_app.nested.discovery import (
     make_nested_strategy_id,
     ENTRY_RESOLUTION,
 )
 from trading_app.nested.schema import init_nested_schema
-
 
 # ============================================================================
 # Strategy ID format tests
@@ -56,13 +53,11 @@ class TestNestedStrategyId:
         assert "30m" in sid_30
         assert sid_15 != sid_30
 
-
 class TestEntryResolution:
     """Verify the entry resolution constant."""
 
     def test_entry_resolution_is_5(self):
         assert ENTRY_RESOLUTION == 5
-
 
 # ============================================================================
 # Table isolation tests

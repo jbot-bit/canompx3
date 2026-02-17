@@ -36,7 +36,6 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.build_daily_features import compute_trading_day_utc_range
 from pipeline.cost_model import get_cost_spec, to_r_multiple
@@ -58,7 +57,6 @@ SESSION_UTC = {
     "0900": 23,   # 0900 Brisbane = 23:00 UTC previous day
     "1000": 0,    # 1000 Brisbane = 00:00 UTC
 }
-
 
 # ---------------------------------------------------------------------------
 # Core functions
@@ -86,7 +84,6 @@ def compute_ib(bars: pd.DataFrame, session_utc_hour: int) -> dict | None:
         "ib_end": ib_end,
     }
 
-
 def get_first_ib_break(bars: pd.DataFrame, ib: dict) -> dict:
     """Find FIRST bar that breaks IB high or IB low after IB forms."""
     post_ib = bars[bars["ts_utc"] >= ib["ib_end"]]
@@ -103,7 +100,6 @@ def get_first_ib_break(bars: pd.DataFrame, ib: dict) -> dict:
             return {"ib_break_dir": "short", "ib_break_ts": bar["ts_utc"]}
 
     return {"ib_break_dir": None, "ib_break_ts": None}
-
 
 def compute_aligned_hold_with_kill_switch(
     bars: pd.DataFrame,
@@ -160,7 +156,6 @@ def compute_aligned_hold_with_kill_switch(
     pnl = (last_close - entry_price) if is_long else (entry_price - last_close)
     return to_r_multiple(spec, entry_price, stop_price, pnl), "time_7h"
 
-
 def compute_vanilla_hold(
     bars: pd.DataFrame,
     entry_ts, entry_price: float, stop_price: float,
@@ -188,7 +183,6 @@ def compute_vanilla_hold(
 
     pnl = (last_close - entry_price) if is_long else (entry_price - last_close)
     return to_r_multiple(spec, entry_price, stop_price, pnl)
-
 
 # ---------------------------------------------------------------------------
 # Per-session processing
@@ -295,7 +289,6 @@ def process_session(
 
     return pd.DataFrame(results)
 
-
 def print_session_report(pdf: pd.DataFrame, session_label: str):
     """Print full report for one session."""
     if len(pdf) == 0:
@@ -394,7 +387,6 @@ def print_session_report(pdf: pd.DataFrame, session_label: str):
               f"{mf['sharpe']:>8.3f} {mv1['sharpe']:>8.3f} "
               f"{mv2['sharpe']:>8.3f}")
 
-
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -421,7 +413,6 @@ def run(db_path: Path, start: date, end: date):
     print("If 120m IB works at 1000 but fails at 0900 -> noise / p-hack.")
     print("The 0900 test was BLIND: same IB length, same parameters, no tuning.")
 
-
 def main():
     parser = argparse.ArgumentParser(description="IB Alignment v2 + Kill Switch")
     parser.add_argument("--db-path", type=Path, default=Path("C:/db/gold.db"))
@@ -429,7 +420,6 @@ def main():
     parser.add_argument("--end", type=date.fromisoformat, default=date(2026, 2, 4))
     args = parser.parse_args()
     run(args.db_path, args.start, args.end)
-
 
 if __name__ == "__main__":
     main()

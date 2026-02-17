@@ -17,8 +17,6 @@ from pathlib import Path
 import sys
 
 # Ensure pipeline is importable
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 
 @pytest.fixture
 def tmp_db(tmp_path):
@@ -61,7 +59,6 @@ def tmp_db(tmp_path):
     yield con
     con.close()
 
-
 @pytest.fixture
 def sample_bars_1m():
     """Valid MGC 1-minute bars (5 bars at 10:00-10:04 Brisbane = 00:00-00:04 UTC)."""
@@ -85,7 +82,6 @@ def sample_bars_1m():
     df.index.name = 'ts_event'
 
     return df
-
 
 @pytest.fixture
 def sample_bars_1m_bad():

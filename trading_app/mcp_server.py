@@ -11,14 +11,12 @@ Usage:
     claude mcp add gold-db --scope project -- python trading_app/mcp_server.py
 """
 
-import sys
 from dataclasses import asdict
 from datetime import date
 from pathlib import Path
 
 # Ensure project root is importable
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.ai.sql_adapter import (
@@ -36,7 +34,6 @@ MAX_MCP_ROWS = 5000
 # Only these parameter keys are forwarded to SQLAdapter. Anything else is rejected.
 _ALLOWED_PARAMS = {"orb_label", "entry_model", "filter_type", "min_sample_size", "limit", "instrument"}
 
-
 # ---------------------------------------------------------------------------
 # Warnings (lightweight copy from query_agent._generate_warnings)
 # ---------------------------------------------------------------------------
@@ -48,7 +45,6 @@ _WARNING_RULES = {
     "NO_FILTER": "NO_FILTER strategies have negative expectancy -- house wins.",
     "ORB_L": "L-filter (less-than) strategies have negative expectancy -- house wins.",
 }
-
 
 def _generate_warnings(df) -> list[str]:
     """Generate auto-warnings based on query result content."""
@@ -78,7 +74,6 @@ def _generate_warnings(df) -> list[str]:
 
     return warnings
 
-
 # ---------------------------------------------------------------------------
 # Core logic (plain functions, testable without MCP)
 # ---------------------------------------------------------------------------
@@ -86,7 +81,6 @@ def _generate_warnings(df) -> list[str]:
 def _list_available_queries() -> list[dict[str, str]]:
     """List all pre-approved query templates and their descriptions."""
     return SQLAdapter.available_templates()
-
 
 def _query_trading_db(
     template: str,
@@ -150,7 +144,6 @@ def _query_trading_db(
         "warnings": warnings,
     }
 
-
 def _get_strategy_fitness(
     strategy_id: str | None = None,
     instrument: str = "MGC",
@@ -201,12 +194,10 @@ def _get_strategy_fitness(
         "scores": [asdict(s) for s in report.scores],
     }
 
-
 def _get_canonical_context() -> dict:
     """Load canonical grounding documents for AI context."""
     from trading_app.ai.corpus import load_corpus
     return load_corpus()
-
 
 # ---------------------------------------------------------------------------
 # MCP server (thin wrappers around core logic)
@@ -306,7 +297,6 @@ def _build_server():
         return _get_canonical_context()
 
     return mcp
-
 
 if __name__ == "__main__":
     mcp = _build_server()

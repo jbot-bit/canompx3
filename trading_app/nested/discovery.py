@@ -14,7 +14,6 @@ from pathlib import Path
 from datetime import date
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
 
@@ -36,7 +35,6 @@ sys.stdout.reconfigure(line_buffering=True)
 # Nested entry resolution (always 5m)
 ENTRY_RESOLUTION = 5
 
-
 def make_nested_strategy_id(
     instrument: str,
     orb_label: str,
@@ -55,7 +53,6 @@ def make_nested_strategy_id(
         f"NESTED_{instrument}_{orb_label}_{orb_minutes}m_"
         f"{entry_model}_RR{rr_target}_CB{confirm_bars}_{filter_type}"
     )
-
 
 def _load_nested_outcomes_bulk(con, instrument, orb_minutes, entry_resolution,
                                orb_labels, entry_models):
@@ -95,7 +92,6 @@ def _load_nested_outcomes_bulk(con, instrument, orb_minutes, entry_resolution,
                 })
 
     return grouped
-
 
 def run_nested_discovery(
     db_path: Path | None = None,
@@ -251,7 +247,6 @@ def run_nested_discovery(
     finally:
         con.close()
 
-
 def main():
     import argparse
 
@@ -275,7 +270,6 @@ def main():
         orb_minutes_list=args.orb_minutes,
         dry_run=args.dry_run,
     )
-
 
 if __name__ == "__main__":
     main()

@@ -22,7 +22,6 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from research._alt_strategy_utils import (
     annualize_sharpe,
@@ -31,7 +30,6 @@ from research._alt_strategy_utils import (
 
 ARTIFACTS_DIR = PROJECT_ROOT / "artifacts"
 REGIME_BOUNDARY = date(2025, 1, 1)
-
 
 def load_orb_daily_pnl(db_path: Path, start: date, end: date) -> pd.DataFrame:
     """Load ORB strategy daily P&L from validated_setups + orb_outcomes.
@@ -88,14 +86,12 @@ def load_orb_daily_pnl(db_path: Path, start: date, end: date) -> pd.DataFrame:
     outcomes["trading_day"] = pd.to_datetime(outcomes["trading_day"]).dt.date
     return outcomes
 
-
 def load_alt_results(artifact_path: Path) -> dict | None:
     """Load JSON artifact from an alt strategy run."""
     if not artifact_path.exists():
         return None
     with open(artifact_path) as f:
         return json.load(f)
-
 
 def analyze_correlation(orb_df: pd.DataFrame, alt_name: str, alt_results: dict) -> dict:
     """Check if alt strategy wins when ORB loses."""
@@ -129,7 +125,6 @@ def analyze_correlation(orb_df: pd.DataFrame, alt_name: str, alt_results: dict) 
         "oos_total": combined["total"],
     }
 
-
 def compute_portfolio_uplift(orb_df: pd.DataFrame, alt_results: dict, alt_name: str) -> dict | None:
     """Simulate adding alt strategy to ORB portfolio (equal weight)."""
     if orb_df.empty:
@@ -148,7 +143,6 @@ def compute_portfolio_uplift(orb_df: pd.DataFrame, alt_results: dict, alt_name: 
 
     annualize_sharpe(orb_stats, oos_years)
     return result
-
 
 def main():
     parser = argparse.ArgumentParser(description="Cross-validate alt strategies vs ORB")
@@ -248,7 +242,6 @@ def main():
     print(sep)
     print("DONE")
     print(sep)
-
 
 if __name__ == "__main__":
     main()

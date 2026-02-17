@@ -33,7 +33,6 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.build_daily_features import compute_trading_day_utc_range
 from pipeline.cost_model import get_cost_spec
@@ -54,7 +53,6 @@ SIZE_FILTERS = {"G2": 2.0, "G4": 4.0}
 ADX_THRESHOLDS = [20, 25, 30, 35]
 
 REGIME_BOUNDARY = date(2025, 1, 1)
-
 
 # ---------------------------------------------------------------------------
 # ADX computation (copied from analyze_adx_filter.py)
@@ -123,7 +121,6 @@ def compute_adx(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray,
 
     return adx
 
-
 # ---------------------------------------------------------------------------
 # VWAP computation (adapted from analyze_vwap_pullback.py, works on any bars)
 # ---------------------------------------------------------------------------
@@ -139,7 +136,6 @@ def compute_vwap(bars: pd.DataFrame) -> np.ndarray:
     cum_tp_vol = np.cumsum(tp * vol)
     cum_vol = np.cumsum(vol)
     return cum_tp_vol / cum_vol
-
 
 # ---------------------------------------------------------------------------
 # Data loading — bulk pre-computation
@@ -163,7 +159,6 @@ def _load_bars_5m_with_warmup(db_path: Path, trading_day: date) -> pd.DataFrame:
     finally:
         con.close()
     return df
-
 
 def _get_adx_at_time(bars_5m: pd.DataFrame, break_ts: pd.Timestamp,
                      period: int = 14) -> float | None:
@@ -190,7 +185,6 @@ def _get_adx_at_time(bars_5m: pd.DataFrame, break_ts: pd.Timestamp,
     )
     last_adx = adx_values[-1]
     return float(last_adx) if not np.isnan(last_adx) else None
-
 
 def _get_vwap_at_time(bars_5m: pd.DataFrame, break_ts: pd.Timestamp,
                       session_start_utc: pd.Timestamp) -> float | None:
@@ -230,7 +224,6 @@ def _get_vwap_at_time(bars_5m: pd.DataFrame, break_ts: pd.Timestamp,
     vwap_arr = compute_vwap(session_bars)
     return float(vwap_arr[-1])
 
-
 def _get_close_at_time(bars_5m: pd.DataFrame, break_ts: pd.Timestamp) -> float | None:
     """Get the close price of the bar at or just before break_ts."""
     if bars_5m.empty:
@@ -250,7 +243,6 @@ def _get_close_at_time(bars_5m: pd.DataFrame, break_ts: pd.Timestamp) -> float |
         return None
     return float(bars_5m[mask].iloc[-1]["close"])
 
-
 def _session_open_utc(trading_day: date, orb_label: str) -> pd.Timestamp:
     """Return session open time in UTC for a given trading day and ORB label.
 
@@ -260,7 +252,6 @@ def _session_open_utc(trading_day: date, orb_label: str) -> pd.Timestamp:
     # Trading day boundary is 23:00 UTC previous calendar day
     prev_cal = trading_day - timedelta(days=1)
     return pd.Timestamp(prev_cal.isoformat() + "T23:00:00", tz="UTC")
-
 
 def load_all_overlay_data(db_path: Path, start: date, end: date) -> pd.DataFrame:
     """Load outcomes + daily_features + ADX + VWAP for all (day, session) pairs.
@@ -391,7 +382,6 @@ def load_all_overlay_data(db_path: Path, start: date, end: date) -> pd.DataFrame
     outcomes["trading_day_date"] = pd.to_datetime(outcomes["trading_day"]).dt.date
 
     return outcomes
-
 
 # ---------------------------------------------------------------------------
 # Walk-forward engine — runs one overlay configuration
@@ -527,7 +517,6 @@ def _run_single_walk_forward(
         "oos_dates": np.array(oos_dates) if oos_dates else np.array([]),
     }
 
-
 # ---------------------------------------------------------------------------
 # Session-level breakdown
 # ---------------------------------------------------------------------------
@@ -548,7 +537,6 @@ def _compute_per_session_stats(data: pd.DataFrame, config_name: str,
         else:
             session_stats[orb_label] = None
     return session_stats
-
 
 # ---------------------------------------------------------------------------
 # Main orchestrator
@@ -650,7 +638,6 @@ def run_overlay_comparison(
         "window_details": {k: v["window_results"] for k, v in results.items()},
     }
 
-
 # ---------------------------------------------------------------------------
 # Reporting
 # ---------------------------------------------------------------------------
@@ -662,7 +649,6 @@ def _fmt(stats: dict | None) -> str:
     return (f"N={stats['n']:>4}, WR={stats['wr']:>5.0%}, ExpR={stats['expr']:>+7.3f}, "
             f"Sharpe={stats['sharpe']:>+6.3f}, MaxDD={stats['maxdd']:>+6.1f}R, "
             f"Total={stats['total']:>+7.1f}R")
-
 
 def print_report(results: dict) -> None:
     """Print the comparison report."""
@@ -758,7 +744,6 @@ def print_report(results: dict) -> None:
     print()
     print(sep)
 
-
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -793,7 +778,6 @@ def main():
 
     print("DONE")
     print(sep)
-
 
 if __name__ == "__main__":
     main()

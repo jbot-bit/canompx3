@@ -10,15 +10,11 @@ from datetime import date
 import pytest
 import duckdb
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 from trading_app.strategy_validator import validate_strategy, classify_regime, run_validation
 from pipeline.cost_model import get_cost_spec
 
-
 def _cost():
     return get_cost_spec("MGC")
-
 
 def _make_row(**overrides):
     """Build a strategy row dict with sane defaults."""
@@ -49,7 +45,6 @@ def _make_row(**overrides):
     }
     base.update(overrides)
     return base
-
 
 class TestValidateStrategy:
     """Tests for the 6-phase validation function."""
@@ -249,7 +244,6 @@ class TestValidateStrategy:
         assert "Phase 1" in notes
         assert "10" in notes
 
-
 def _yearly(years_data: dict) -> str:
     """Build yearly_results JSON from {year: (trades, avg_r)} dict."""
     return json.dumps({
@@ -257,7 +251,6 @@ def _yearly(years_data: dict) -> str:
                  "win_rate": 0.5, "avg_r": avg_r}
         for y, (t, avg_r) in years_data.items()
     })
-
 
 class TestRegimeWaivers:
     """Tests for DORMANT regime waiver logic in Phase 3."""
@@ -372,7 +365,6 @@ class TestRegimeWaivers:
         assert "2020" in notes
         assert waivers == []
 
-
 class TestRunValidation:
     """Integration tests with temp DB."""
 
@@ -450,7 +442,6 @@ class TestRunValidation:
         em = con.execute("SELECT entry_model FROM validated_setups").fetchone()[0]
         con.close()
         assert em == "E1"
-
 
 class TestCLI:
     def test_help(self):

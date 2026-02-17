@@ -21,7 +21,6 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
 import pandas as pd
@@ -50,7 +49,6 @@ SORT_COLUMNS = {
 # Allowed sort columns (whitelist for SQL safety)
 _VALID_SORT_COLS = set(SORT_COLUMNS.values())
 
-
 def _safe_float(val) -> float | None:
     """Return float if valid, None if None/NaN/missing."""
     if val is None:
@@ -63,7 +61,6 @@ def _safe_float(val) -> float | None:
     except (TypeError, ValueError):
         return None
 
-
 def _fmt_signed(val, fmt=".2f") -> str:
     """Format a float with +/- sign, or N/A if None/NaN."""
     v = _safe_float(val)
@@ -71,14 +68,12 @@ def _fmt_signed(val, fmt=".2f") -> str:
         return "N/A"
     return f"+{v:{fmt}}" if v >= 0 else f"{v:{fmt}}"
 
-
 def _has_table(con, table_name: str) -> bool:
     """Check if a table exists in the database."""
     tables = [t[0] for t in con.execute(
         "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
     ).fetchall()]
     return table_name in tables
-
 
 def fetch_strategies(db_path: Path, orb: str | None = None,
                      entry: str | None = None, filter_type: str | None = None,
@@ -134,7 +129,6 @@ def fetch_strategies(db_path: Path, orb: str | None = None,
 
     return df
 
-
 def fetch_summary(db_path: Path) -> pd.DataFrame:
     """Session-level summary of validated strategies with unique trade counts."""
     con = duckdb.connect(str(db_path), read_only=True)
@@ -163,7 +157,6 @@ def fetch_summary(db_path: Path) -> pd.DataFrame:
 
     return df
 
-
 def fetch_total_count(db_path: Path) -> int:
     """Total active validated strategies."""
     con = duckdb.connect(str(db_path), read_only=True)
@@ -175,7 +168,6 @@ def fetch_total_count(db_path: Path) -> int:
         ).fetchone()[0]
     finally:
         con.close()
-
 
 def fetch_unique_trade_count(db_path: Path) -> int:
     """Count unique trade families (by session/EM/RR/CB identity)."""
@@ -191,7 +183,6 @@ def fetch_unique_trade_count(db_path: Path) -> int:
         """).fetchone()[0]
     finally:
         con.close()
-
 
 def fetch_families(db_path: Path, orb: str | None = None,
                    entry: str | None = None) -> pd.DataFrame:
@@ -229,7 +220,6 @@ def fetch_families(db_path: Path, orb: str | None = None,
 
     return df
 
-
 def format_table(df: pd.DataFrame) -> str:
     """Format strategy DataFrame as aligned terminal table."""
     if df.empty:
@@ -261,7 +251,6 @@ def format_table(df: pd.DataFrame) -> str:
 
     return "\n".join(lines) + "\n"
 
-
 def format_families(df: pd.DataFrame) -> str:
     """Format family DataFrame as aligned terminal table."""
     if df.empty:
@@ -289,7 +278,6 @@ def format_families(df: pd.DataFrame) -> str:
 
     return "\n".join(lines) + "\n"
 
-
 def format_summary(df: pd.DataFrame) -> str:
     """Format session summary with unique trade counts."""
     if df.empty:
@@ -309,7 +297,6 @@ def format_summary(df: pd.DataFrame) -> str:
             f"avg WR {row['avg_wr_pct']:.0f}%"
         )
     return "\n".join(lines) + "\n"
-
 
 def main():
     parser = argparse.ArgumentParser(
@@ -399,7 +386,6 @@ def main():
         output_path = PROJECT_ROOT / args.output
         df.to_csv(output_path, index=False)
         print(f"Exported {len(df)} strategies to {output_path}")
-
 
 if __name__ == "__main__":
     main()

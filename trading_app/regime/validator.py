@@ -13,7 +13,6 @@ import json
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
 
@@ -24,7 +23,6 @@ from trading_app.regime.schema import init_regime_schema
 
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)
-
 
 def run_regime_validation(
     db_path: Path | None = None,
@@ -150,7 +148,6 @@ def run_regime_validation(
     finally:
         con.close()
 
-
 def main():
     import argparse
 
@@ -181,7 +178,6 @@ def main():
         min_years_positive_pct=args.min_years_positive_pct,
         dry_run=args.dry_run,
     )
-
 
 if __name__ == "__main__":
     main()

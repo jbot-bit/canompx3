@@ -17,7 +17,6 @@ from pathlib import Path
 from collections import defaultdict
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
 
@@ -37,9 +36,7 @@ WHITELIST_MIN_TRADES = 50
 CORE_MIN_TRADES = 100
 REGIME_MIN_TRADES = 30
 
-
 compute_family_hash = compute_trade_day_hash  # public alias for backward compat
-
 
 def classify_family(member_count, avg_shann, cv_expr, min_trades):
     """Classify family robustness status.
@@ -57,7 +54,6 @@ def classify_family(member_count, avg_shann, cv_expr, min_trades):
         return "WHITELISTED"
     return "PURGED"
 
-
 def classify_trade_tier(min_trades):
     """Classify family trade tier by minimum member trade count.
 
@@ -72,7 +68,6 @@ def classify_trade_tier(min_trades):
     if min_trades >= REGIME_MIN_TRADES:
         return "REGIME"
     return "INVALID"
-
 
 def _elect_median_head(members):
     """Elect head as strategy closest to median ExpR.
@@ -93,7 +88,6 @@ def _elect_median_head(members):
             best_dist = dist
 
     return best, med
-
 
 def _migrate_columns(con):
     """Add family_hash and is_family_head columns if missing (existing DB migration)."""
@@ -140,7 +134,6 @@ def _migrate_columns(con):
                 con.execute(f"ALTER TABLE edge_families ADD COLUMN {col} {typ}{dflt}")
 
     con.commit()
-
 
 def build_edge_families(db_path: str, instrument: str) -> int:
     """
@@ -291,7 +284,6 @@ def build_edge_families(db_path: str, instrument: str) -> int:
     finally:
         con.close()
 
-
 def main():
     import argparse
 
@@ -318,7 +310,6 @@ def main():
         print(f"Grand total: {total} unique edge families")
     else:
         build_edge_families(args.db_path, args.instrument)
-
 
 if __name__ == "__main__":
     main()
