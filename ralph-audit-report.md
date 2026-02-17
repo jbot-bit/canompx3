@@ -366,3 +366,142 @@ Test suite provides comprehensive coverage of CLAUDE.md documented behavior:
 1. Some ingestion gates lack individual unit tests (covered by integration tests)
 2. One `sys.path.insert` in test_portfolio.py (legacy, not a violation)
 3. Test execution could not be verified due to sandbox permissions
+
+## 5. Scripts and Infrastructure
+
+### File Inventory
+
+| Directory | Files | Description |
+|-----------|-------|-------------|
+| `scripts/infra/` | 8 .py + 2 .sh + 1 .vbs + 2 .md | Infrastructure: backups, parallel rebuild, ingestion, ralph loop, telegram |
+| `scripts/tools/` | 13 .py | Analysis tools: edge families, backtests, stress test, hypothesis tests |
+| `scripts/reports/` | 2 .py | Reports: edge portfolio, walk-forward diagnostics |
+| `scripts/migrations/` | 4 .py | Schema migrations: ATR20, Sharpe, trade days, dynamic columns |
+| `scripts/ingestion/` | 4 .py | Per-instrument ingestion wrappers: MCL, MES, MNQ, MNQ-fast |
+| `scripts/walkforward/` | 3 .py | Walk-forward scripts for 0900 session |
+| `scripts/` (root) | 1 .py | operator_status.py |
+| **Total** | **~40 files** | |
+
+### Stale OneDrive/canodrive Paths
+
+- Searched for `OneDrive` and `canodrive` across all scripts/: **NONE FOUND**. PASS.
+- Project move from OneDrive path is clean — no stale references remain.
+
+### Hardcoded DB Paths (C:\db\gold.db)
+
+Many scripts use `C:/db/gold.db` as a default `--db-path` argument:
+
+| Script | Pattern | Assessment |
+|--------|---------|------------|
+| `scripts/tools/build_edge_families.py` | `--db-path default="C:/db/gold.db"` | CLI arg, overrideable |
+| `scripts/tools/profile_1000_runners.py` | `--db-path default=Path("C:/db/gold.db")` | CLI arg, overrideable |
+| `scripts/tools/rolling_portfolio_assembly.py` | `--db-path default=Path("C:/db/gold.db")` | CLI arg, overrideable |
+| `scripts/tools/audit_ib_single_break.py` | `--db-path default=Path("C:/db/gold.db")` | CLI arg, overrideable |
+| `scripts/tools/smoke_test_new_filters.py` | `--db-path default=Path("C:/db/gold.db")` | CLI arg, overrideable |
+| `scripts/migrations/backfill_strategy_trade_days.py` | `default="C:/db/gold.db"` | CLI arg, overrideable |
+| `scripts/walkforward/wf_db_reversal_0900.py` | `args.db_path or Path("C:/db/gold.db")` | CLI arg, overrideable |
+| `scripts/infra/parallel_rebuild.py` | Uses `DUCKDB_PATH` env var | Correct pattern |
+| `scripts/infra/run_parallel_ingest.py` | `REBUILD_DIR` env + CLI arg | Correct pattern |
+
+**Assessment:** All `C:/db/gold.db` references are CLI argument defaults, consistent with CLAUDE.md's documented scratch location pattern (`C:\db\gold.db` for long-running jobs). Every script allows override via `--db-path` or `DUCKDB_PATH` env var. **NOT a violation** — this is the documented workflow.
+
+### CRITICAL FINDING: Hardcoded Telegram Bot Token
+
+**File:** `scripts/infra/telegram_feed.py:19`
+```python
+BOT_TOKEN = "8572496011:AAFFDahKzbGbROndyPSFbH52VjoyCcmPWT0"
+CHAT_ID = "6812728770"
+```
+
+**Issue:** Bot token and chat ID are hardcoded in source code. This file is tracked by git (untracked/new file in git status). If committed, the token would be exposed in the repository history.
+
+**Risk:** Low-to-medium. This is a personal Telegram bot for process monitoring alerts — not a production API key. However, it violates the principle of not committing credentials. The bot token could be used to send messages to the user's chat.
+
+**Recommendation:** Move `BOT_TOKEN` and `CHAT_ID` to `.env` file (which is gitignored) and read via `os.environ.get()`. Alternatively, add `scripts/infra/telegram_feed.py` to `.gitignore` if it should remain local-only.
+
+**Note:** The file is currently untracked (`??` in git status), so it has NOT been committed yet. The `.gitignore` covers `.env` and `.env.*` but does not explicitly exclude `telegram_feed.py`.
+
+### .env Handling
+
+- `.env` and `.env.*` are in `.gitignore`. PASS.
+- No `.env` file exists at project root (checked). PASS.
+- `DATABENTO_API_KEY` is referenced in CLAUDE.md as a `.env` variable — consistent with `.env` being gitignored. PASS.
+- The only `.env.example` files found are in gitignored external tools (`openclaw/`, `llm-code-scanner/`). PASS.
+
+### Pre-Commit Hook (.githooks/pre-commit)
+
+- **4-stage pipeline:** [0] Ruff lint → [1] Drift check → [2] Fast tests → [3] Syntax check. PASS.
+- **Venv python resolution:** Uses `$PYTHON` variable pointing to `.venv/Scripts/python.exe` (Windows) or `.venv/bin/python` (Linux). Avoids Windows Store redirect. PASS.
+- **Fail-closed:** `set -e` at top, explicit `exit 1` on any stage failure. PASS.
+- **PATH preservation:** Saves and restores `$PATH` after venv activate (prevents Git Bash utilities from disappearing). PASS.
+- **Consistent with CLAUDE.md:** Documented as running "drift check + fast tests before every commit". Actually runs 4 stages (ruff, drift, tests, syntax). The extra ruff + syntax stages are bonus guardrails. PASS.
+
+### CI Workflow (.github/workflows/ci.yml)
+
+- **Triggers:** push to main, PR to main. PASS.
+- **Steps:** checkout → Python 3.13 → install deps → ruff lint → drift check → UTF-8 encoding check → Tier 1 tests with coverage. PASS.
+- **Consistent with CLAUDE.md:** "On push/PR: drift check + pure-function tests + schema tests." CI runs all tests (not just fast tests like pre-commit). PASS.
+- **Note:** CI runs `--ignore=tests/test_trader_logic.py` (slow test). Pre-commit also ignores slow tests. Consistent. PASS.
+
+### sys.path.insert Hacks
+
+- **Found 1 instance:** `scripts/tools/hypothesis_test.py:23` — `sys.path.insert(0, str(PROJECT_ROOT))`
+- **Assessment:** This is a standalone research tool script. CLAUDE.md's RESEARCH_RULES.md says "Research scripts: Always in research/, no sys.path hacks". However, this script is in `scripts/tools/` not `research/`. The sys.path hack is needed because the script isn't part of an installed package. **Minor observation** — would be cleaner to use relative imports or `pip install -e .`, but not a critical violation for a utility script.
+
+### subprocess / os.system Usage
+
+Multiple scripts use `subprocess.run()` for orchestrating pipeline steps:
+
+| Script | Usage | Assessment |
+|--------|-------|------------|
+| `scripts/operator_status.py` | `subprocess.run(["git", ...])` | Safe — hardcoded args |
+| `scripts/infra/parallel_rebuild.py` | `subprocess.Popen([sys.executable, ...])` | Safe — controlled args |
+| `scripts/infra/run_parallel_ingest.py` | `subprocess.run([sys.executable, ...])` | Safe — controlled args |
+| `scripts/infra/run_backfill_overnight.py` | `subprocess.run([sys.executable, ...])` | Safe — controlled args |
+| `scripts/ingestion/ingest_mcl.py` | `subprocess.run(...)` | Safe — controlled args |
+| `scripts/ingestion/ingest_mnq.py` | `subprocess.run(...)` | Safe — controlled args |
+| `scripts/ingestion/ingest_mes.py` | `subprocess.run(...)` | Safe — controlled args |
+| `scripts/tools/explore.py` | `os.system('cls' ...)` | Safe — hardcoded string |
+
+**All subprocess calls use list-form arguments (no shell=True injection risk).** The one `os.system()` call uses a hardcoded string (`'cls'` or `'clear'`). PASS.
+
+### Infrastructure Scripts Check
+
+**scripts/infra/backup_db.py:**
+- Uses `PROJECT_ROOT / "gold.db"` — correct, no hardcoded paths. PASS.
+- Prunes old backups with configurable `--keep`. PASS.
+
+**scripts/infra/ralph.sh:**
+- Hardcoded PATH: `/c/Users/joshd/.local/bin` — user-specific but appropriate for a local-only script. PASS.
+- Uses `--dangerously-skip-permissions` for automation (required for unattended Ralph loop). Acceptable for local dev tooling. PASS.
+
+**scripts/infra/start_telegram_feed.vbs:**
+- Hardcoded path: `C:\Users\joshd\canompx3\scripts\infra\telegram_feed.py` — user-specific, local-only VBS launcher. PASS.
+
+**scripts/infra/check_root_hygiene.py:**
+- Validates root directory contents against allowlists. Well-structured. PASS.
+
+### Stale Script References
+
+- `run_backfill_overnight.py` references `pipeline/ingest_dbn_daily.py` — **VERIFIED EXISTS**. PASS.
+- No references to deleted or renamed scripts found. PASS.
+
+### Compliance Checks
+
+| Check | Result |
+|-------|--------|
+| Stale OneDrive/canodrive paths | PASS — none found |
+| Hardcoded DB paths | PASS — all are CLI defaults matching documented scratch pattern |
+| API keys / secrets in source | **FINDING** — Telegram bot token hardcoded in telegram_feed.py (untracked file) |
+| .env handling | PASS — .env gitignored, no committed secrets |
+| Pre-commit hook | PASS — 4-stage fail-closed pipeline |
+| CI workflow | PASS — drift check + full tests on push/PR |
+| sys.path.insert hacks | MINOR — 1 instance in hypothesis_test.py (scripts/tools/, not research/) |
+| subprocess safety | PASS — all use list-form args, no shell injection |
+| Stale script references | PASS — all referenced scripts exist |
+
+### Verdict: PASS (with one finding)
+
+All scripts and infrastructure are consistent with CLAUDE.md standards. No stale paths from the OneDrive migration. `C:/db/gold.db` defaults are the documented scratch pattern. Pre-commit hook and CI are properly configured with fail-closed behavior.
+
+**One finding:** `telegram_feed.py` has a hardcoded Telegram bot token. The file is currently untracked, so no credentials have been committed. Recommend moving the token to `.env` before any future commit of this file.

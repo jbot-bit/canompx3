@@ -121,3 +121,31 @@ Task: Full codebase audit against CLAUDE.md authority
 
 **Output:** `ralph-audit-report.md` section "## 4. Test Coverage"
 
+## 2026-02-18 04:50 UTC — Task 5: Audit scripts/ and infrastructure
+
+**What:** Reviewed ~40 scripts across 6 subdirectories for stale paths, security issues, and CLAUDE.md compliance.
+
+**Files reviewed:**
+- `scripts/infra/` — backup_db.py, check_root_hygiene.py, parallel_rebuild.py, rolling_eval.py, rolling_eval_parallel.py, run_backfill_overnight.py, run_parallel_ingest.py, telegram_feed.py, ralph.sh, ralph-new-plan.sh, start_telegram_feed.vbs
+- `scripts/tools/` — build_edge_families.py, hypothesis_test.py, explore.py, stress_test.py, orb_size_deep_dive.py, profile_1000_runners.py, rolling_portfolio_assembly.py, audit_ib_single_break.py, smoke_test_new_filters.py, and others
+- `scripts/ingestion/` — ingest_mcl.py, ingest_mes.py, ingest_mnq.py, ingest_mnq_fast.py
+- `scripts/migrations/` — backfill_atr20.py, backfill_sharpe_ann.py, backfill_strategy_trade_days.py, migrate_add_dynamic_columns.py
+- `scripts/walkforward/` — wf_db_reversal_0900.py
+- `scripts/operator_status.py`
+- `.githooks/pre-commit`, `.github/workflows/ci.yml`, `.gitignore`
+
+**Checks performed:**
+- Stale OneDrive/canodrive paths: PASS — none found
+- Hardcoded DB paths: PASS — all are CLI defaults matching CLAUDE.md scratch pattern
+- API keys / secrets: **FINDING** — Telegram bot token hardcoded in telegram_feed.py (untracked)
+- .env handling: PASS — .env gitignored, no committed secrets
+- Pre-commit hook: PASS — 4-stage fail-closed pipeline
+- CI workflow: PASS — drift check + tests on push/PR
+- sys.path.insert: MINOR — 1 instance in hypothesis_test.py
+- subprocess safety: PASS — all use list-form args
+- Stale script references: PASS — all referenced scripts exist
+
+**Caveat:** Python execution blocked by sandbox — drift check and pytest not run.
+
+**Output:** `ralph-audit-report.md` section "## 5. Scripts and Infrastructure"
+
