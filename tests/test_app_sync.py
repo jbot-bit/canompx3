@@ -58,7 +58,8 @@ class TestOrbLabelsSync:
 
     EXPECTED_ORB_LABELS = [
         "0900", "1000", "1100", "1130", "1800", "2300", "0030",
-        "CME_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "LONDON_OPEN",
+        "CME_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "LONDON_OPEN", "US_POST_EQUITY",
+        "CME_CLOSE",
     ]
 
     def test_orb_labels_exact(self):
@@ -238,15 +239,15 @@ class TestGridParamsSync:
     def test_grid_size(self):
         """Total grid size matches expected formula (E3 uses CB1 only).
 
-        11 ORBs (7 fixed + 4 dynamic) x 6 RRs x 5 CBs x 6 filters x 2 EMs
-        E1: 11 x 6 x 5 x 6 = 1980
-        E3: 11 x 6 x 1 x 6 = 396  (E3 always CB1)
-        Total: 2376
+        13 ORBs (7 fixed + 6 dynamic) x 6 RRs x 5 CBs x 6 filters x 2 EMs
+        E1: 13 x 6 x 5 x 6 = 2340
+        E3: 13 x 6 x 1 x 6 = 468  (E3 always CB1)
+        Total: 2808
         """
         e1 = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * len(ALL_FILTERS)
         e3 = len(ORB_LABELS) * len(RR_TARGETS) * 1 * len(ALL_FILTERS)
         expected = e1 + e3
-        assert expected == 2376
+        assert expected == 2808
 
 class TestEntryModelsSync:
     """ENTRY_MODELS must be consistent."""
@@ -330,7 +331,7 @@ class TestStrategyIdSync:
                             sid = make_strategy_id("MGC", orb, em, rr, cb, fk)
                             assert sid not in ids, f"Duplicate ID: {sid}"
                             ids.add(sid)
-        assert len(ids) == 2376
+        assert len(ids) == 2808
 
 # ============================================================================
 # 5. DB schema column sync

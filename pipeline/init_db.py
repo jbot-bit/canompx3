@@ -83,7 +83,8 @@ ORB_LABELS_FIXED = ["0900", "1000", "1100", "1130", "1800", "2300", "0030"]
 #   US_EQUITY_OPEN  - NYSE cash open at 09:30 ET (MES, MNQ)
 #   US_DATA_OPEN    - US economic data release at 08:30 ET (MGC)
 #   LONDON_OPEN     - London metals open at 08:00 London time (MGC)
-ORB_LABELS_DYNAMIC = ["CME_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "LONDON_OPEN"]
+#   CME_CLOSE       - CME equity futures pre-close at 2:45 PM CT (MNQ, MES)
+ORB_LABELS_DYNAMIC = ["CME_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "LONDON_OPEN", "US_POST_EQUITY", "CME_CLOSE"]
 
 # Combined label list — used by schema generation and feature builders
 ORB_LABELS = ORB_LABELS_FIXED + ORB_LABELS_DYNAMIC
@@ -155,7 +156,7 @@ CREATE TABLE IF NOT EXISTS daily_features (
     us_dst            BOOLEAN,
     uk_dst            BOOLEAN,
 
-    -- ORB columns (7 fixed + 4 dynamic = 11 sessions x 9 columns = 99)
+    -- ORB columns (7 fixed + 6 dynamic = 13 sessions x 9 columns = 117)
 {orb_block}
 
     PRIMARY KEY (symbol, trading_day, orb_minutes)

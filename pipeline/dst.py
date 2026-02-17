@@ -10,6 +10,7 @@ Dynamic sessions track specific market events regardless of DST:
   US_EQUITY_OPEN  - NYSE cash open at 09:30 ET (MES, MNQ)
   US_DATA_OPEN    - Economic data releases at 08:30 ET (MGC)
   LONDON_OPEN     - London metals open at 08:00 London time (MGC)
+  CME_CLOSE       - CME equity futures pre-close at 2:45 PM CT (MNQ, MES)
 
 Uses zoneinfo (stdlib) for all timezone math -- correct for all years,
 handles edge cases automatically.
@@ -50,6 +51,90 @@ def is_uk_dst(trading_day: date) -> bool:
     dt = datetime(trading_day.year, trading_day.month, trading_day.day,
                   12, 0, 0, tzinfo=_UK_LONDON)
     return dt.utcoffset().total_seconds() == 1 * 3600
+
+
+# =========================================================================
+# DST REGIME HELPERS — for winter/summer split analysis
+# =========================================================================
+
+# Sessions affected by DST and which timezone governs them.
+# "US" = winter/summer split uses is_us_dst(). "UK" = uses is_uk_dst().
+#
+# Alignment notes (Brisbane = UTC+10, no DST):
+#   0900: Winter = CME open exactly. Summer = 1hr AFTER CME open.
+#   1800: Winter = London open exactly. Summer = 1hr AFTER London open.
+#   0030: Winter = US equity open exactly. Summer = 1hr AFTER equity open.
+#   2300: NEVER aligned with US data release (8:30 ET = 23:30 winter / 22:30 summer).
+#         Winter: 2300 = 30min BEFORE data release (pre-positioning).
+#         Summer: 2300 = 30min AFTER data release (reaction window).
+#         Volume confirms: summer +76-90% (data already out, market reacting).
+#         DST classification still correct — US DST flips which side of data event 2300 sits on.
+DST_AFFECTED_SESSIONS = {
+    "0900": "US",   # CME open shifts with US DST
+    "0030": "US",   # US equity open shifts with US DST
+    "2300": "US",   # US morning activity context shifts; winter=pre-data, summer=post-data
+    "1800": "UK",   # London open shifts with UK DST
+}
+
+# Sessions NOT affected (Asia has no DST; dynamic sessions self-adjust)
+DST_CLEAN_SESSIONS = {"1000", "1100", "1130",
+                       "CME_OPEN", "LONDON_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN",
+                       "US_POST_EQUITY", "CME_CLOSE"}
+
+
+def is_winter_for_session(trading_day: date, orb_label: str) -> bool | None:
+    """Classify a trading day as winter (True) or summer (False) for a given session.
+
+    Returns None if the session is not affected by DST (clean sessions).
+    Uses US Eastern for 0900/0030/2300, UK London for 1800.
+    """
+    dst_type = DST_AFFECTED_SESSIONS.get(orb_label)
+    if dst_type is None:
+        return None  # Clean session
+    if dst_type == "US":
+        return not is_us_dst(trading_day)  # winter = NOT DST
+    else:  # UK
+        return not is_uk_dst(trading_day)  # winter = NOT BST
+
+
+def classify_dst_verdict(winter_avg_r: float | None, summer_avg_r: float | None,
+                         winter_n: int, summer_n: int) -> str:
+    """Classify DST stability verdict for a strategy.
+
+    Verdicts:
+      STABLE:       |winter - summer| <= 0.10R AND both N >= 15
+      WINTER-DOM:   winter > summer + 0.10R AND winter N >= 15
+      SUMMER-DOM:   summer > winter + 0.10R AND summer N >= 15
+      WINTER-ONLY:  winter > 0 AND summer <= 0 AND both N >= 10
+      SUMMER-ONLY:  summer > 0 AND winter <= 0 AND both N >= 10
+      LOW-N:        either regime < 10 trades
+      UNSTABLE:     catch-all
+    """
+    if winter_n < 10 or summer_n < 10:
+        return "LOW-N"
+
+    if winter_avg_r is None or summer_avg_r is None:
+        return "LOW-N"
+
+    diff = abs(winter_avg_r - summer_avg_r)
+
+    # Check for edge dying in one regime
+    if winter_avg_r > 0 and summer_avg_r <= 0 and winter_n >= 10 and summer_n >= 10:
+        return "WINTER-ONLY"
+    if summer_avg_r > 0 and winter_avg_r <= 0 and winter_n >= 10 and summer_n >= 10:
+        return "SUMMER-ONLY"
+
+    # Stable
+    if diff <= 0.10 and winter_n >= 15 and summer_n >= 15:
+        return "STABLE"
+
+    # Dominant
+    if winter_avg_r > summer_avg_r + 0.10 and winter_n >= 15:
+        return "WINTER-DOM"
+    if summer_avg_r > winter_avg_r + 0.10 and summer_n >= 15:
+        return "SUMMER-DOM"
+
+    return "UNSTABLE"
 
 
 def cme_open_brisbane(trading_day: date) -> tuple[int, int]:
@@ -104,6 +189,32 @@ def london_open_brisbane(trading_day: date) -> tuple[int, int]:
     return (bris.hour, bris.minute)
 
 
+def us_post_equity_brisbane(trading_day: date) -> tuple[int, int]:
+    """US post-equity-open (10:00 AM ET) in Brisbane local time.
+
+    Returns (hour, minute) in Australia/Brisbane.
+      Summer (EDT): 10:00 ET = 14:00 UTC = 00:00 AEST (next cal day)
+      Winter (EST): 10:00 ET = 15:00 UTC = 01:00 AEST (next cal day)
+    """
+    et_time = datetime(trading_day.year, trading_day.month, trading_day.day,
+                       10, 0, 0, tzinfo=_US_EASTERN)
+    bris = et_time.astimezone(_BRISBANE)
+    return (bris.hour, bris.minute)
+
+
+def cme_close_brisbane(trading_day: date) -> tuple[int, int]:
+    """CME equity futures pre-close (2:45 PM CT) in Brisbane local time.
+
+    Returns (hour, minute) in Australia/Brisbane.
+      Summer (CDT): 2:45 PM CT = 19:45 UTC = 05:45 AEST
+      Winter (CST): 2:45 PM CT = 20:45 UTC = 06:45 AEST
+    """
+    ct_close = datetime(trading_day.year, trading_day.month, trading_day.day,
+                        14, 45, 0, tzinfo=_US_CHICAGO)
+    bris = ct_close.astimezone(_BRISBANE)
+    return (bris.hour, bris.minute)
+
+
 # =========================================================================
 # SESSION CATALOG: master registry of all ORB sessions
 # =========================================================================
@@ -137,6 +248,18 @@ SESSION_CATALOG = {
         "resolver": london_open_brisbane,
         "break_group": "london",
         "event": "London metals open 8:00 AM London",
+    },
+    "US_POST_EQUITY": {
+        "type": "dynamic",
+        "resolver": us_post_equity_brisbane,
+        "break_group": "us",
+        "event": "US post-equity-open 10:00 AM ET (~30min after NYSE cash open)",
+    },
+    "CME_CLOSE": {
+        "type": "dynamic",
+        "resolver": cme_close_brisbane,
+        "break_group": "us",
+        "event": "CME equity futures pre-close 2:45 PM CT",
     },
     # Fixed sessions (constant UTC, no DST)
     #
@@ -178,7 +301,7 @@ SESSION_CATALOG = {
         "type": "fixed",
         "brisbane": (23, 0),
         "break_group": "us",
-        "event": "13:00 UTC -- ~8AM ET winter / ~9AM ET summer",
+        "event": "13:00 UTC -- 30min pre-data(W) / 30min post-data(S), never aligned",
     },
     "0030": {
         "type": "fixed",

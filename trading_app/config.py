@@ -58,10 +58,10 @@ ORB SIZE FILTERS:
   NO_FILTER: Trade all days regardless of ORB size.
     ALL no-filter strategies have negative expectancy. Do not trade.
 
-GRID (2,376 strategy combinations, full grid before ENABLED_SESSIONS filtering):
-  E1: 11 ORBs x 6 RRs x 5 CBs x 6 filters = 1,980
-  E3: 11 ORBs x 6 RRs x 1 CB x 6 filters = 396 (E3 always CB1)
-  Total = 2,376
+GRID (2,808 strategy combinations, full grid before ENABLED_SESSIONS filtering):
+  E1: 13 ORBs x 6 RRs x 5 CBs x 6 filters = 2,340
+  E3: 13 ORBs x 6 RRs x 1 CB x 6 filters = 468 (E3 always CB1)
+  Total = 2,808
 
 ==========================================================================
 """
@@ -258,6 +258,8 @@ ORB_DURATION_MINUTES: dict[str, int] = {
     "US_EQUITY_OPEN": 5,   # NYSE cash open 09:30 ET (MES, MNQ)
     "US_DATA_OPEN": 5,     # Econ data release 08:30 ET (MGC)
     "LONDON_OPEN": 5,      # London metals 08:00 LT (MGC)
+    "US_POST_EQUITY": 5,   # US post-equity-open 10:00 AM ET
+    "CME_CLOSE": 5,        # CME equity futures pre-close 2:45 PM CT
 }
 
 # =========================================================================
@@ -289,6 +291,8 @@ EARLY_EXIT_MINUTES: dict[str, int | None] = {
     "US_EQUITY_OPEN": None,
     "US_DATA_OPEN": None,
     "LONDON_OPEN": None,
+    "US_POST_EQUITY": None,
+    "CME_CLOSE": None,
 }
 
 # Session exit modes: how each session manages target/stop after entry.
@@ -306,6 +310,8 @@ SESSION_EXIT_MODE: dict[str, str] = {
     "US_EQUITY_OPEN": "fixed_target",
     "US_DATA_OPEN": "fixed_target",
     "LONDON_OPEN": "fixed_target",
+    "US_POST_EQUITY": "fixed_target",
+    "CME_CLOSE": "fixed_target",
 }
 
 # IB (Initial Balance) = first 120 minutes from 09:00 Brisbane (23:00 UTC).

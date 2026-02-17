@@ -11,6 +11,7 @@ from pipeline.dst import (
     us_equity_open_brisbane,
     us_data_open_brisbane,
     london_open_brisbane,
+    us_post_equity_brisbane,
     DYNAMIC_ORB_RESOLVERS,
     SESSION_CATALOG,
     validate_catalog,
@@ -230,9 +231,10 @@ class TestLondonOpenBrisbane:
 class TestDynamicOrbResolvers:
     """DYNAMIC_ORB_RESOLVERS registry completeness."""
 
-    def test_has_all_four_sessions(self):
+    def test_has_all_dynamic_sessions(self):
         assert set(DYNAMIC_ORB_RESOLVERS.keys()) == {
             "CME_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "LONDON_OPEN",
+            "US_POST_EQUITY", "CME_CLOSE",
         }
 
     def test_resolvers_return_tuples(self):
@@ -375,6 +377,43 @@ class TestBreakWindowGrouping:
         # Both should end at next day 0900 Brisbane = 23:00 UTC
         # which is the end of the trading day
         assert window_end_2300 == window_end_0030
+
+
+# =========================================================================
+# US_POST_EQUITY resolver (10:00 AM ET, ~30min after NYSE cash open)
+# =========================================================================
+
+class TestUsPostEquityBrisbane:
+    """US post-equity-open 10:00 AM ET -> Brisbane local time."""
+
+    def test_winter_est(self):
+        # EST: 10:00 ET = 15:00 UTC = 01:00 AEST (next cal day)
+        h, m = us_post_equity_brisbane(date(2025, 1, 15))
+        assert (h, m) == (1, 0)
+
+    def test_summer_edt(self):
+        # EDT: 10:00 ET = 14:00 UTC = 00:00 AEST (next cal day)
+        h, m = us_post_equity_brisbane(date(2025, 7, 15))
+        assert (h, m) == (0, 0)
+
+    def test_transition_day_spring_2025(self):
+        # Mar 9 2025 is US DST start -- 10:00 EDT
+        h, m = us_post_equity_brisbane(date(2025, 3, 9))
+        assert (h, m) == (0, 0)
+
+    def test_transition_day_fall_2025(self):
+        # Nov 2 2025 is US DST end -- 10:00 EST
+        h, m = us_post_equity_brisbane(date(2025, 11, 2))
+        assert (h, m) == (1, 0)
+
+    def test_shifts_by_1h(self):
+        """US_POST_EQUITY shifts 1 hour between summer and winter."""
+        summer = us_post_equity_brisbane(date(2025, 7, 15))
+        winter = us_post_equity_brisbane(date(2025, 1, 15))
+        assert summer != winter
+
+    def test_break_group_is_us(self):
+        assert get_break_group("US_POST_EQUITY") == "us"
 
 
 # =========================================================================

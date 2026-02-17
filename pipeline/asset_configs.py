@@ -42,7 +42,7 @@ ASSET_CONFIGS = {
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
             "0900", "1000", "1100", "1800", "2300",
-            "CME_OPEN", "LONDON_OPEN",
+            "CME_OPEN", "LONDON_OPEN", "US_POST_EQUITY",
         ],
     },
     "MNQ": {
@@ -54,7 +54,7 @@ ASSET_CONFIGS = {
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
             "0900", "1000", "1100", "1800", "0030",
-            "CME_OPEN", "US_EQUITY_OPEN",
+            "CME_OPEN", "US_EQUITY_OPEN", "US_POST_EQUITY", "CME_CLOSE",
         ],
     },
     "MCL": {
@@ -78,7 +78,7 @@ ASSET_CONFIGS = {
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
             "0900", "1000", "1100", "1800", "0030",
-            "CME_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN",
+            "CME_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "US_POST_EQUITY", "CME_CLOSE",
         ],
     },
     "NQ": {
