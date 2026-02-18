@@ -250,7 +250,7 @@ def main():
     # =========================================================================
     # INITIALIZE CHECKPOINT (keyed by first file for identity)
     # =========================================================================
-    checkpoint_mgr = CheckpointManager(CHECKPOINT_DIR, daily_files[0][1])
+    checkpoint_mgr = CheckpointManager(CHECKPOINT_DIR, daily_files[0][1], db_path=db_path)
     print(f"Checkpoint file: {checkpoint_mgr.checkpoint_file}")
     print()
 

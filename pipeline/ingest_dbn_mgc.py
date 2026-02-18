@@ -77,12 +77,19 @@ MINIMUM_START_DATE = date(2016, 1, 1)
 class CheckpointManager:
     """Append-only JSONL checkpoint system."""
 
-    def __init__(self, checkpoint_dir: Path, source_file: Path):
+    def __init__(self, checkpoint_dir: Path, source_file: Path, db_path: Path = None):
         self.checkpoint_dir = checkpoint_dir
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-        # Checkpoint file named after source DBN
-        self.checkpoint_file = checkpoint_dir / f"checkpoint_{source_file.stem}.jsonl"
+        # Checkpoint file named after source DBN + DB path hash
+        # Different DBs get separate checkpoint files to prevent cross-contamination
+        if db_path is not None:
+            import hashlib
+            db_hash = hashlib.md5(str(db_path.resolve()).encode()).hexdigest()[:8]
+            self.checkpoint_file = checkpoint_dir / f"checkpoint_{source_file.stem}_{db_hash}.jsonl"
+        else:
+            # Backwards compatible: no db_path = old naming
+            self.checkpoint_file = checkpoint_dir / f"checkpoint_{source_file.stem}.jsonl"
 
         # Source file identity (for detecting file changes)
         self.source_identity = self._get_source_identity(source_file)
@@ -509,7 +516,7 @@ def main():
     # =========================================================================
     # INITIALIZE CHECKPOINT MANAGER
     # =========================================================================
-    checkpoint_mgr = CheckpointManager(CHECKPOINT_DIR, DBN_PATH)
+    checkpoint_mgr = CheckpointManager(CHECKPOINT_DIR, DBN_PATH, db_path=DB_PATH)
     print(f"Checkpoint file: {checkpoint_mgr.checkpoint_file}")
     print(f"Existing checkpoints: {len(checkpoint_mgr.checkpoints)}")
     print()

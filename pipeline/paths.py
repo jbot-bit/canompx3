@@ -28,6 +28,10 @@ def _resolve_db_path() -> Path:
 
 GOLD_DB_PATH = _resolve_db_path()
 
+if "DUCKDB_PATH" in _os.environ:
+    import sys as _sys
+    print(f"[DB] Using override: {_os.environ['DUCKDB_PATH']}", file=_sys.stderr)
+
 # Data directories
 DBN_DIR = PROJECT_ROOT / "dbn"
 OHLCV_DIR = PROJECT_ROOT / "OHLCV_MGC_FULL"

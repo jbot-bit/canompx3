@@ -8,6 +8,12 @@ import pytest
 from datetime import datetime, date, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+from pipeline.dst import (
+    cme_open_brisbane, us_equity_open_brisbane, us_data_open_brisbane,
+    london_open_brisbane, us_post_equity_brisbane, cme_close_brisbane,
+)
+from pipeline.build_daily_features import compute_trading_day_utc_range
+
 BRISBANE = ZoneInfo("Australia/Brisbane")
 UTC = timezone.utc
 
@@ -101,3 +107,90 @@ class TestUTCConversionConsistency:
         assert formula_start.year == 2024
         assert formula_start.month == 12
         assert formula_start.day == 31
+
+
+# All 6 resolvers keyed by name for parametrized tests
+ALL_RESOLVERS = {
+    "CME_OPEN": cme_open_brisbane,
+    "US_EQUITY_OPEN": us_equity_open_brisbane,
+    "US_DATA_OPEN": us_data_open_brisbane,
+    "LONDON_OPEN": london_open_brisbane,
+    "US_POST_EQUITY": us_post_equity_brisbane,
+    "CME_CLOSE": cme_close_brisbane,
+}
+
+# First trading day (Monday) after each 2025 DST transition
+# US spring forward: Sun Mar 9 → Mon Mar 10
+# UK spring forward: Sun Mar 30 → Mon Mar 31
+# UK fall back:      Sun Oct 26 → Mon Oct 27
+# US fall back:      Sun Nov 2  → Mon Nov 3
+TRANSITION_MONDAYS = [
+    date(2025, 3, 10),   # US spring forward
+    date(2025, 3, 31),   # UK spring forward
+    date(2025, 10, 27),  # UK fall back
+    date(2025, 11, 3),   # US fall back
+]
+
+
+class TestResolverOutputOnTransitionDays:
+    """Verify resolver outputs on the first trading day after DST transitions.
+
+    Gap identified in DST audit: test_timezone_transitions.py tested trading
+    day boundaries but never verified resolver output values near transitions.
+    """
+
+    @pytest.mark.parametrize("td", TRANSITION_MONDAYS,
+                             ids=["US_spring", "UK_spring", "UK_fall", "US_fall"])
+    @pytest.mark.parametrize("name", ALL_RESOLVERS.keys())
+    def test_resolver_within_trading_day(self, name, td):
+        """Every resolver output must fall within the trading day UTC window."""
+        resolver = ALL_RESOLVERS[name]
+        hour, minute = resolver(td)
+
+        # Convert to UTC
+        if hour < 9:
+            cal_date = td + timedelta(days=1)
+        else:
+            cal_date = td
+        local_dt = datetime(cal_date.year, cal_date.month, cal_date.day,
+                            hour, minute, tzinfo=BRISBANE)
+        utc_dt = local_dt.astimezone(UTC)
+
+        td_start, td_end = compute_trading_day_utc_range(td)
+        assert td_start <= utc_dt < td_end, (
+            f"{name} on {td}: resolved to {hour:02d}:{minute:02d} Brisbane = "
+            f"{utc_dt} UTC, outside [{td_start}, {td_end})"
+        )
+
+    @pytest.mark.parametrize("td", TRANSITION_MONDAYS,
+                             ids=["US_spring", "UK_spring", "UK_fall", "US_fall"])
+    def test_resolver_returns_valid_time(self, td):
+        """All resolvers return (hour, minute) with valid ranges."""
+        for name, resolver in ALL_RESOLVERS.items():
+            hour, minute = resolver(td)
+            assert 0 <= hour <= 23, f"{name}: hour={hour}"
+            assert 0 <= minute <= 59, f"{name}: minute={minute}"
+
+    def test_cme_open_shifts_after_us_spring(self):
+        """CME_OPEN should be (8,0) on first Monday after US spring forward."""
+        assert cme_open_brisbane(date(2025, 3, 10)) == (8, 0)
+
+    def test_cme_open_shifts_after_us_fall(self):
+        """CME_OPEN should be (9,0) on first Monday after US fall back."""
+        assert cme_open_brisbane(date(2025, 11, 3)) == (9, 0)
+
+    def test_london_open_shifts_after_uk_spring(self):
+        """LONDON_OPEN should be (17,0) on first Monday after UK spring forward."""
+        assert london_open_brisbane(date(2025, 3, 31)) == (17, 0)
+
+    def test_london_open_shifts_after_uk_fall(self):
+        """LONDON_OPEN should be (18,0) on first Monday after UK fall back."""
+        assert london_open_brisbane(date(2025, 10, 27)) == (18, 0)
+
+    def test_us_equity_shifts_after_us_spring(self):
+        """US_EQUITY_OPEN should be (23,30) after US spring forward."""
+        assert us_equity_open_brisbane(date(2025, 3, 10)) == (23, 30)
+
+    def test_us_equity_shifts_after_us_fall(self):
+        """US_EQUITY_OPEN should be (0,30) after US fall back."""
+        assert us_equity_open_brisbane(date(2025, 11, 3)) == (0, 30)

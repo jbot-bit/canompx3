@@ -7,7 +7,7 @@ For research deep-dives and data tables, see `docs/RESEARCH_ARCHIVE.md`.
 
 ## Glossary
 
-### Sessions (ORB Labels — 11 total)
+### Sessions (ORB Labels — 13 total)
 
 **Fixed sessions (7):**
 | Code | Plain English | Time (Brisbane) | Time (UTC) |
@@ -20,13 +20,15 @@ For research deep-dives and data tables, see `docs/RESEARCH_ARCHIVE.md`.
 | 2300 | Late night session | 11:00 PM | 13:00 |
 | 0030 | After midnight | 12:30 AM | 14:30 |
 
-**Dynamic sessions (4, DST-aware — times shift with daylight saving):**
+**Dynamic sessions (6, DST-aware — times shift with daylight saving):**
 | Code | Plain English | Reference TZ |
 |------|--------------|-------------|
 | CME_OPEN | CME daily open | 5:00 PM CT |
 | US_EQUITY_OPEN | US equity open | 9:30 AM ET |
 | US_DATA_OPEN | US economic data | 8:30 AM ET |
 | LONDON_OPEN | London open | 8:00 AM UK |
+| US_POST_EQUITY | US post-equity-open | 10:00 AM ET |
+| CME_CLOSE | CME equity pre-close | 2:45 PM CT |
 
 **Aliases:** TOKYO_OPEN → 1000, HK_SG_OPEN → 1130
 **Module:** `pipeline/dst.py` (SESSION_CATALOG + resolvers)

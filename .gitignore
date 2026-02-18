@@ -72,5 +72,12 @@ outputs/
 # Walk-forward results (JSONL output)
 data/
 
+# Session artifacts (accidental shell stubs, temp notes)
+bash
+cd
+git
+tasks.txt
+*.tmp
+
 # Misc
 backfill_overnight.log

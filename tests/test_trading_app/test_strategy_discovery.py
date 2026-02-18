@@ -386,8 +386,12 @@ class TestComputeRelativeVolumes:
         assert vol_count < nf_count
         assert vol_count == 5  # only the 5 high-volume days
 
-class TestDoubleBreakExclusion:
-    """Global double-break exclusion in _build_filter_day_sets."""
+class TestDoubleBreakNoExclusion:
+    """Double-break days are NOT excluded from _build_filter_day_sets (Feb 2026).
+
+    Double-break days are real losses in live trading — you can't predict
+    them in advance. Including them gives honest discovery metrics.
+    """
 
     def _make_feature(self, day_num, double_break):
         """Create a minimal feature row with break + double_break flag."""
@@ -398,51 +402,38 @@ class TestDoubleBreakExclusion:
             "orb_0900_double_break": double_break,
         }
 
-    def test_double_break_true_excluded(self):
-        """Days with double_break=True are excluded from all filters."""
+    def test_double_break_true_included(self):
+        """Days with double_break=True are included (not filtered)."""
         from trading_app.strategy_discovery import _build_filter_day_sets
 
         features = [self._make_feature(1, True), self._make_feature(2, False)]
         result = _build_filter_day_sets(features, ["0900"], {"NO_FILTER": ALL_FILTERS["NO_FILTER"]})
         days = result[("NO_FILTER", "0900")]
-        assert date(2024, 1, 1) not in days
+        assert date(2024, 1, 1) in days
         assert date(2024, 1, 2) in days
 
     def test_double_break_none_included(self):
-        """Days with double_break=None are included (fail-open)."""
+        """Days with double_break=None are included."""
         from trading_app.strategy_discovery import _build_filter_day_sets
 
         features = [self._make_feature(1, None)]
         result = _build_filter_day_sets(features, ["0900"], {"NO_FILTER": ALL_FILTERS["NO_FILTER"]})
         assert date(2024, 1, 1) in result[("NO_FILTER", "0900")]
 
-    def test_double_break_key_missing_included(self):
-        """Days missing the double_break key entirely are included (fail-open)."""
-        from trading_app.strategy_discovery import _build_filter_day_sets
-
-        features = [{
-            "trading_day": date(2024, 1, 1),
-            "orb_0900_break_dir": "long",
-            "orb_0900_size": 5.0,
-        }]
-        result = _build_filter_day_sets(features, ["0900"], {"NO_FILTER": ALL_FILTERS["NO_FILTER"]})
-        assert date(2024, 1, 1) in result[("NO_FILTER", "0900")]
-
-    def test_exclusion_applies_to_all_filters(self):
-        """Double-break exclusion is global — affects size filters too."""
+    def test_all_days_with_break_included(self):
+        """All days with a break direction are included regardless of double_break."""
         from trading_app.strategy_discovery import _build_filter_day_sets
 
         features = [
-            self._make_feature(1, True),   # double break, excluded
-            self._make_feature(2, False),  # single break, included
-            self._make_feature(3, False),  # single break, included
+            self._make_feature(1, True),   # double break
+            self._make_feature(2, False),  # single break
+            self._make_feature(3, False),  # single break
         ]
         filters = {"NO_FILTER": ALL_FILTERS["NO_FILTER"], "ORB_G4": ALL_FILTERS["ORB_G4"]}
         result = _build_filter_day_sets(features, ["0900"], filters)
 
-        assert len(result[("NO_FILTER", "0900")]) == 2
-        assert len(result[("ORB_G4", "0900")]) == 2
-        assert date(2024, 1, 1) not in result[("ORB_G4", "0900")]
+        assert len(result[("NO_FILTER", "0900")]) == 3
+        assert len(result[("ORB_G4", "0900")]) == 3
 
 
 class TestComputeMetricsScratchCounts:

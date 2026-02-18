@@ -10,7 +10,7 @@ from datetime import date
 import pytest
 import duckdb
 
-from trading_app.strategy_validator import validate_strategy, classify_regime, run_validation
+from trading_app.strategy_validator import validate_strategy, classify_regime, run_validation, _parse_orb_size_bounds
 from pipeline.cost_model import get_cost_spec
 
 def _cost():
@@ -442,6 +442,43 @@ class TestRunValidation:
         em = con.execute("SELECT entry_model FROM validated_setups").fetchone()[0]
         con.close()
         assert em == "E1"
+
+class TestParseOrbSizeBounds:
+    """Tests for _parse_orb_size_bounds pure function."""
+
+    def test_json_params_both(self):
+        assert _parse_orb_size_bounds("ORB_G5", '{"min_size": 5, "max_size": 12}') == (5.0, 12.0)
+
+    def test_json_params_min_only(self):
+        assert _parse_orb_size_bounds("ORB_G5", '{"min_size": 5}') == (5.0, None)
+
+    def test_json_params_zero_min(self):
+        """Zero is a valid bound, not None (the bug we fixed)."""
+        assert _parse_orb_size_bounds("ORB_G0", '{"min_size": 0, "max_size": 10}') == (0.0, 10.0)
+
+    def test_fallback_g_filter(self):
+        assert _parse_orb_size_bounds("ORB_G5", None) == (5.0, None)
+
+    def test_fallback_gl_filter(self):
+        assert _parse_orb_size_bounds("ORB_G4_L12", None) == (4.0, 12.0)
+
+    def test_no_filter(self):
+        assert _parse_orb_size_bounds("NONE", None) == (None, None)
+
+    def test_none_filter_type(self):
+        assert _parse_orb_size_bounds(None, None) == (None, None)
+
+
+class TestComputeDstSplit:
+    """Tests for compute_dst_split."""
+
+    def test_clean_session_returns_clean(self):
+        """Non-DST-affected sessions return verdict='CLEAN' without querying."""
+        from trading_app.strategy_validator import compute_dst_split
+        result = compute_dst_split(None, "test", "MGC", "1000", "E1", 2.0, 1, "NONE")
+        assert result["verdict"] == "CLEAN"
+        assert result["winter_n"] is None
+
 
 class TestCLI:
     def test_help(self):

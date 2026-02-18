@@ -145,7 +145,7 @@ def main():
     # =========================================================================
     # INITIALIZE CHECKPOINT MANAGER
     # =========================================================================
-    checkpoint_mgr = CheckpointManager(CHECKPOINT_DIR, dbn_path)
+    checkpoint_mgr = CheckpointManager(CHECKPOINT_DIR, dbn_path, db_path=GOLD_DB_PATH)
     print(f"Checkpoint file: {checkpoint_mgr.checkpoint_file}")
     print(f"Existing checkpoints: {len(checkpoint_mgr.checkpoints)}")
     print()

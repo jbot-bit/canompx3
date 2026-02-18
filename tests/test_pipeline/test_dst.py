@@ -12,6 +12,7 @@ from pipeline.dst import (
     us_data_open_brisbane,
     london_open_brisbane,
     us_post_equity_brisbane,
+    cme_close_brisbane,
     DYNAMIC_ORB_RESOLVERS,
     SESSION_CATALOG,
     validate_catalog,
@@ -329,6 +330,13 @@ class TestSessionCatalog:
     def test_get_break_group_unknown_returns_none(self):
         assert get_break_group("NONEXISTENT") is None
 
+    def test_dst_sets_cover_all_non_alias_sessions(self):
+        """Every non-alias session must be in either DST_AFFECTED or DST_CLEAN."""
+        from pipeline.dst import DST_AFFECTED_SESSIONS, DST_CLEAN_SESSIONS
+        non_alias = {k for k, v in SESSION_CATALOG.items() if v.get("type") != "alias"}
+        covered = set(DST_AFFECTED_SESSIONS.keys()) | DST_CLEAN_SESSIONS
+        assert covered == non_alias, f"Missing from DST sets: {non_alias - covered}, Extra: {covered - non_alias}"
+
 
 # =========================================================================
 # Break window grouping: verify 1100 is NOT truncated by 1130
@@ -414,6 +422,43 @@ class TestUsPostEquityBrisbane:
 
     def test_break_group_is_us(self):
         assert get_break_group("US_POST_EQUITY") == "us"
+
+
+# =========================================================================
+# CME_CLOSE resolver (2:45 PM CT, CME equity futures pre-close)
+# =========================================================================
+
+class TestCmeCloseBrisbane:
+    """CME equity futures pre-close 2:45 PM CT -> Brisbane local time."""
+
+    def test_winter_cst(self):
+        # CST: 2:45 PM CT = 20:45 UTC = 06:45 AEST
+        h, m = cme_close_brisbane(date(2025, 1, 15))
+        assert (h, m) == (6, 45)
+
+    def test_summer_cdt(self):
+        # CDT: 2:45 PM CT = 19:45 UTC = 05:45 AEST
+        h, m = cme_close_brisbane(date(2025, 7, 15))
+        assert (h, m) == (5, 45)
+
+    def test_transition_day_spring_2025(self):
+        # Mar 9 2025 is US DST start -- 2:45 PM CDT
+        h, m = cme_close_brisbane(date(2025, 3, 9))
+        assert (h, m) == (5, 45)
+
+    def test_transition_day_fall_2025(self):
+        # Nov 2 2025 is US DST end -- 2:45 PM CST
+        h, m = cme_close_brisbane(date(2025, 11, 2))
+        assert (h, m) == (6, 45)
+
+    def test_shifts_by_1h(self):
+        """CME_CLOSE shifts 1 hour between summer and winter."""
+        summer = cme_close_brisbane(date(2025, 7, 15))
+        winter = cme_close_brisbane(date(2025, 1, 15))
+        assert summer != winter
+
+    def test_break_group_is_us(self):
+        assert get_break_group("CME_CLOSE") == "us"
 
 
 # =========================================================================

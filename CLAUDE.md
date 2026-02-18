@@ -90,7 +90,7 @@ Databento .dbn.zst files
 - 1000 — Tokyo open. Japan has NO DST. Always aligned.
 - 1100 — Singapore open. No DST. Always aligned.
 - 1130 — HK/Shanghai open. No DST. Always aligned.
-- All dynamic sessions (CME_OPEN, LONDON_OPEN, US_EQUITY_OPEN, US_DATA_OPEN, CME_CLOSE) — resolvers adjust per-day.
+- All dynamic sessions (CME_OPEN, LONDON_OPEN, US_EQUITY_OPEN, US_DATA_OPEN, US_POST_EQUITY, CME_CLOSE) — resolvers adjust per-day.
 
 **What's contaminated:**
 - `daily_features` columns for 0900/1800/0030/2300 ORBs

@@ -97,6 +97,15 @@ COST_SPECS = {
         tick_size=0.01,          # $0.01/barrel minimum increment
         min_ticks_floor=10,      # $0.10 = $10 minimum risk
     ),
+    "SIL": CostSpec(
+        instrument="SIL",
+        point_value=1000.0,      # 1000 oz * $1/oz per point
+        commission_rt=1.24,      # Micro contract RT commission
+        spread_doubled=10.00,    # ~$0.005 spread * 1000 oz * 2 sides
+        slippage=10.00,          # ~$0.005 slippage * 1000 oz * 2 sides
+        tick_size=0.005,         # $0.005/oz minimum increment
+        min_ticks_floor=10,      # $0.05 = $50 minimum risk
+    ),
 }
 
 
@@ -138,6 +147,15 @@ SESSION_SLIPPAGE_MULT = {
         "1100": 1.0,   # 01:00 UTC -- moderate
         "1800": 0.9,   # 08:00 UTC -- pre-London, decent crude liquidity
         "2300": 0.8,   # 13:00 UTC -- NY/NYMEX session, best liquidity
+        "0030": 1.0,   # 14:30 UTC -- moderate NY
+    },
+    "SIL": {
+        # Defaults — update after volume analysis determines actual session list
+        "0900": 1.3,   # 23:00 UTC -- thin Asian session for silver
+        "1000": 1.2,   # 00:00 UTC -- early Asian
+        "1100": 1.0,   # 01:00 UTC -- moderate
+        "1800": 0.9,   # 08:00 UTC -- pre-London, decent liquidity
+        "2300": 0.8,   # 13:00 UTC -- NY/COMEX session, best liquidity
         "0030": 1.0,   # 14:30 UTC -- moderate NY
     },
 }

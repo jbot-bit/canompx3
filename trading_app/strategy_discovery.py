@@ -396,9 +396,11 @@ def _load_daily_features(con, instrument, orb_minutes, start_date, end_date):
 def _build_filter_day_sets(features, orb_labels, all_filters):
     """Pre-compute matching day sets for every (filter, orb) combo.
 
-    Global exclusion: double-break days (both ORB high and low breached)
-    are removed before any filter is applied.  Research shows avg pnl_r
-    = -0.570 on double-break days vs +0.068 single-break (MGC 0900, N=18K).
+    NOTE (Feb 2026): Double-break exclusion REMOVED. Double-break days are
+    real losses in live trading (you can't predict them in advance — the
+    opposite break stops you out after entry). Including them gives honest
+    discovery metrics. Walk-forward validation already loads unfiltered
+    outcomes, so validated strategies were always tested honestly.
     """
     result = {}
     for filter_key, strategy_filter in all_filters.items():
@@ -406,8 +408,6 @@ def _build_filter_day_sets(features, orb_labels, all_filters):
             days = set()
             for row in features:
                 if row.get(f"orb_{orb_label}_break_dir") is None:
-                    continue
-                if row.get(f"orb_{orb_label}_double_break"):
                     continue
                 if strategy_filter.matches_row(row, orb_label):
                     days.add(row["trading_day"])

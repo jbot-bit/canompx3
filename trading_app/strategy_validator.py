@@ -104,9 +104,9 @@ def compute_dst_split(con, strategy_id: str, instrument: str, orb_label: str,
     # Build ORB size filter clause from strategy's filter
     min_size, max_size = _parse_orb_size_bounds(filter_type, filter_params)
     size_col = f"orb_{orb_label}_size"
-    dbl_col = f"orb_{orb_label}_double_break"
 
-    # Build query with daily_features join for filter + double-break exclusion
+    # NOTE: Double-break exclusion removed (Feb 2026). Double-break days
+    # are real losses in live trading — including them gives honest metrics.
     size_clauses = []
     size_params = []
     if min_size is not None:
@@ -131,7 +131,6 @@ def compute_dst_split(con, strategy_id: str, instrument: str, orb_label: str,
           AND o.rr_target = ?
           AND o.confirm_bars = ?
           AND o.outcome IN ('win', 'loss')
-          AND NOT COALESCE(df.{dbl_col}, false)
           {size_where}
         ORDER BY o.trading_day
     """, [instrument, orb_minutes, instrument, orb_label,

@@ -81,6 +81,18 @@ ASSET_CONFIGS = {
             "CME_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "US_POST_EQUITY", "CME_CLOSE",
         ],
     },
+    "SIL": {
+        "dbn_path": PROJECT_ROOT / "DB" / "SL_DB",
+        "symbol": "SIL",
+        "outright_pattern": re.compile(r'^SI[FGHJKMNQUVXZ]\d{1,2}$'),
+        "prefix_len": 2,
+        "minimum_start_date": date(2024, 2, 18),
+        "schema_required": "ohlcv-1m",
+        "enabled_sessions": [
+            "1100", "2300", "0030",
+            "US_EQUITY_OPEN", "US_DATA_OPEN", "US_POST_EQUITY",
+        ],
+    },
     "NQ": {
         "dbn_path": None,
         "symbol": "NQ",
