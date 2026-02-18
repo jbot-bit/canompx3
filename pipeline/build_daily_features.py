@@ -33,7 +33,8 @@ from pipeline.paths import GOLD_DB_PATH
 from pipeline.asset_configs import get_asset_config, list_instruments
 from pipeline.init_db import ORB_LABELS
 from pipeline.cost_model import get_cost_spec, pnl_points_to_r, CostSpec
-from pipeline.dst import is_us_dst, is_uk_dst, DYNAMIC_ORB_RESOLVERS, get_break_group
+from pipeline.dst import (is_us_dst, is_uk_dst, DYNAMIC_ORB_RESOLVERS, get_break_group,
+                          DST_AFFECTED_SESSIONS, DST_CLEAN_SESSIONS)
 
 from pipeline.log import get_logger
 logger = get_logger(__name__)
@@ -82,6 +83,16 @@ SESSION_WINDOWS = {
 
 # Valid ORB durations in minutes
 VALID_ORB_MINUTES = [5, 15, 30]
+
+# FAIL-CLOSED: every ORB label must be classified as DST-affected or DST-clean.
+# Prevents silent contamination if a new session is added without DST classification.
+_dst_classified = set(DST_AFFECTED_SESSIONS.keys()) | DST_CLEAN_SESSIONS
+_unclassified = set(ORB_LABELS) - _dst_classified
+if _unclassified:
+    raise RuntimeError(
+        f"ORB labels not classified in DST_AFFECTED_SESSIONS or DST_CLEAN_SESSIONS: "
+        f"{sorted(_unclassified)}. Update pipeline/dst.py before building features."
+    )
 
 # =============================================================================
 # MODULE 1: TRADING DAY ASSIGNMENT
@@ -219,6 +230,14 @@ def _orb_utc_window(trading_day: date, orb_label: str,
 
     utc_start = local_start.astimezone(UTC_TZ)
     utc_end = local_end.astimezone(UTC_TZ)
+
+    # Fail-closed: ORB must fall within the trading day's UTC window
+    td_start, td_end = compute_trading_day_utc_range(trading_day)
+    if not (td_start <= utc_start < td_end):
+        raise ValueError(
+            f"ORB {orb_label} on {trading_day} resolved to {utc_start} UTC, "
+            f"outside trading day window [{td_start}, {td_end})"
+        )
 
     return utc_start, utc_end
 
@@ -432,13 +451,19 @@ def compute_session_stats(bars_df: pd.DataFrame,
 # =============================================================================
 
 def compute_rsi_at_0900(con: duckdb.DuckDBPyConnection, symbol: str,
-                         trading_day: date) -> float | None:
+                         trading_day: date,
+                         bars_5m_ts: np.ndarray | None = None,
+                         bars_5m_closes: np.ndarray | None = None) -> float | None:
     """
     Compute RSI-14 (Wilder's smoothing) on 5m closes, evaluated at 09:00 Brisbane.
 
     We need at least 14 prior 5m bars to compute RSI.
     We take the most recent 200 5m bars ending at or before 09:00 Brisbane (23:00 UTC)
     to ensure enough history for Wilder's smoothing to stabilize.
+
+    Args:
+        bars_5m_ts: Pre-loaded sorted timestamps (numpy datetime64). If None, queries DB.
+        bars_5m_closes: Pre-loaded close prices matching bars_5m_ts.
 
     Returns RSI value (0-100) or None if insufficient data.
     """
@@ -449,7 +474,18 @@ def compute_rsi_at_0900(con: duckdb.DuckDBPyConnection, symbol: str,
         tzinfo=BRISBANE_TZ
     ).astimezone(UTC_TZ)
 
-    # Fetch up to 200 bars ending at or before this timestamp
+    if bars_5m_ts is not None and bars_5m_closes is not None:
+        # Fast path: slice from pre-loaded arrays using binary search
+        end_idx = int(np.searchsorted(bars_5m_ts, pd.Timestamp(orb_0900_utc).asm8, side="right"))
+        start_idx = max(0, end_idx - 200)
+        closes = bars_5m_closes[start_idx:end_idx]
+
+        if len(closes) < 15:
+            return None
+
+        return _wilders_rsi(closes, period=14)
+
+    # Slow path: query DB (fallback)
     query = """
         SELECT ts_utc, close
         FROM bars_5m
@@ -616,14 +652,23 @@ def compute_outcome(bars_df: pd.DataFrame, trading_day: date,
 def build_features_for_day(con: duckdb.DuckDBPyConnection, symbol: str,
                             trading_day: date,
                             orb_minutes: int,
-                            cost_spec: CostSpec | None = None) -> dict:
+                            cost_spec: CostSpec | None = None,
+                            bars_df: pd.DataFrame | None = None,
+                            bars_5m_ts: np.ndarray | None = None,
+                            bars_5m_closes: np.ndarray | None = None) -> dict:
     """
     Build all daily_features columns for a single trading day.
 
+    Args:
+        bars_df: Pre-loaded 1m bars for this trading day. If None, queries DB (slow path).
+        bars_5m_ts: Pre-loaded sorted 5m timestamps for RSI. If None, queries DB.
+        bars_5m_closes: Pre-loaded 5m close prices matching bars_5m_ts.
+
     Returns a dict matching daily_features column names.
     """
-    # Fetch all 1m bars for this trading day
-    bars_df = get_bars_for_trading_day(con, symbol, trading_day)
+    # Use pre-loaded bars if available, otherwise fetch (slow path)
+    if bars_df is None:
+        bars_df = get_bars_for_trading_day(con, symbol, trading_day)
 
     row = {
         "trading_day": trading_day,
@@ -657,7 +702,10 @@ def build_features_for_day(con: duckdb.DuckDBPyConnection, symbol: str,
     row.update(session_stats)
 
     # Module 5: RSI at 0900
-    row["rsi_14_at_0900"] = compute_rsi_at_0900(con, symbol, trading_day)
+    row["rsi_14_at_0900"] = compute_rsi_at_0900(
+        con, symbol, trading_day,
+        bars_5m_ts=bars_5m_ts, bars_5m_closes=bars_5m_closes,
+    )
 
     # Modules 2, 3, 6: ORBs, breaks, outcomes
     for label in ORB_LABELS:
@@ -727,10 +775,64 @@ def build_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
         logger.info(f"  Date range: {trading_days[0]} to {trading_days[-1]}")
         return len(trading_days)
 
+    # Bulk-load all bars_1m for the date range (one query instead of ~1500)
+    range_start_utc, _ = compute_trading_day_utc_range(trading_days[0])
+    _, range_end_utc = compute_trading_day_utc_range(trading_days[-1])
+    logger.info(f"  Bulk-loading bars_1m ({range_start_utc.date()} to {range_end_utc.date()})...")
+
+    all_bars_df = con.execute("""
+        SELECT ts_utc, open, high, low, close, volume, source_symbol
+        FROM bars_1m
+        WHERE symbol = ?
+        AND ts_utc >= ?::TIMESTAMPTZ
+        AND ts_utc < ?::TIMESTAMPTZ
+        ORDER BY ts_utc ASC
+    """, [symbol, range_start_utc.isoformat(), range_end_utc.isoformat()]).fetchdf()
+
+    if not all_bars_df.empty:
+        all_bars_df['ts_utc'] = pd.to_datetime(all_bars_df['ts_utc'], utc=True)
+
+    # Pre-compute sorted timestamps for binary search (O(log n) per day)
+    all_ts = all_bars_df['ts_utc'].values if not all_bars_df.empty else np.array([])
+
+    logger.info(f"  Loaded {len(all_bars_df):,} bars for slicing")
+
+    # Bulk-load bars_5m for RSI computation (one query instead of ~1500)
+    # RSI needs up to 200 bars BEFORE the first trading day's 09:00, so extend lookback
+    rsi_lookback_start = range_start_utc - timedelta(days=10)  # ~200 5m bars ≈ ~3.5 days
+    logger.info("  Bulk-loading bars_5m for RSI...")
+
+    all_bars_5m_df = con.execute("""
+        SELECT ts_utc, close
+        FROM bars_5m
+        WHERE symbol = ?
+        AND ts_utc >= ?::TIMESTAMPTZ
+        AND ts_utc < ?::TIMESTAMPTZ
+        ORDER BY ts_utc ASC
+    """, [symbol, rsi_lookback_start.isoformat(), range_end_utc.isoformat()]).fetchdf()
+
+    if not all_bars_5m_df.empty:
+        all_bars_5m_df['ts_utc'] = pd.to_datetime(all_bars_5m_df['ts_utc'], utc=True)
+
+    bars_5m_ts = all_bars_5m_df['ts_utc'].values if not all_bars_5m_df.empty else np.array([])
+    bars_5m_closes = all_bars_5m_df['close'].astype(float).values if not all_bars_5m_df.empty else np.array([])
+
+    logger.info(f"  Loaded {len(all_bars_5m_df):,} 5m bars for RSI")
+
     # Build features for each trading day
     rows = []
     for i, td in enumerate(trading_days):
-        row = build_features_for_day(con, symbol, td, orb_minutes, cost_spec)
+        # Slice bars for this trading day using binary search
+        td_start, td_end = compute_trading_day_utc_range(td)
+        start_idx = int(np.searchsorted(all_ts, pd.Timestamp(td_start).asm8, side="left"))
+        end_idx = int(np.searchsorted(all_ts, pd.Timestamp(td_end).asm8, side="left"))
+        day_bars = all_bars_df.iloc[start_idx:end_idx]
+
+        row = build_features_for_day(
+            con, symbol, td, orb_minutes, cost_spec,
+            bars_df=day_bars,
+            bars_5m_ts=bars_5m_ts, bars_5m_closes=bars_5m_closes,
+        )
         rows.append(row)
 
         if (i + 1) % 50 == 0:
@@ -948,6 +1050,9 @@ def main():
         sys.exit(1)
 
     with duckdb.connect(str(GOLD_DB_PATH)) as con:
+        from pipeline.db_config import configure_connection
+        configure_connection(con, writing=True)
+
         # Build
         logger.info("Building daily features...")
         row_count = build_daily_features(

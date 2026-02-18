@@ -36,6 +36,7 @@ from datetime import datetime, date
 
 import duckdb
 import databento as db
+import pandas as pd
 
 # Add project root to path
 
@@ -155,6 +156,8 @@ def main():
     con = None
     if not args.dry_run:
         con = duckdb.connect(str(GOLD_DB_PATH))
+        from pipeline.db_config import configure_connection
+        configure_connection(con, writing=True)
         print(f"Database opened: {GOLD_DB_PATH}")
     else:
         print("DRY RUN: Database will not be modified")
@@ -342,14 +345,15 @@ def main():
                 try:
                     con.execute("BEGIN TRANSACTION")
 
-                    con.executemany(
-                        """
-                        INSERT OR REPLACE INTO bars_1m
-                        (ts_utc, symbol, source_symbol, open, high, low, close, volume)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        [(r[0], symbol, r[1], r[2], r[3], r[4], r[5], r[6]) for r in chunk_rows]
+                    chunk_df = pd.DataFrame(
+                        [(r[0], symbol, r[1], r[2], r[3], r[4], r[5], r[6]) for r in chunk_rows],
+                        columns=['ts_utc', 'symbol', 'source_symbol', 'open', 'high', 'low', 'close', 'volume'],
                     )
+                    con.execute("""
+                        INSERT OR REPLACE INTO bars_1m
+                        SELECT ts_utc, symbol, source_symbol, open, high, low, close, volume
+                        FROM chunk_df
+                    """)
 
                     int_ok, int_reason = check_merge_integrity(con, chunk_start, chunk_end)
                     if not int_ok:
@@ -411,14 +415,15 @@ def main():
 
                 try:
                     con.execute("BEGIN TRANSACTION")
-                    con.executemany(
-                        """
-                        INSERT OR REPLACE INTO bars_1m
-                        (ts_utc, symbol, source_symbol, open, high, low, close, volume)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        [(r[0], symbol, r[1], r[2], r[3], r[4], r[5], r[6]) for r in chunk_rows]
+                    chunk_df = pd.DataFrame(
+                        [(r[0], symbol, r[1], r[2], r[3], r[4], r[5], r[6]) for r in chunk_rows],
+                        columns=['ts_utc', 'symbol', 'source_symbol', 'open', 'high', 'low', 'close', 'volume'],
                     )
+                    con.execute("""
+                        INSERT OR REPLACE INTO bars_1m
+                        SELECT ts_utc, symbol, source_symbol, open, high, low, close, volume
+                        FROM chunk_df
+                    """)
 
                     int_ok, int_reason = check_merge_integrity(con, chunk_start, chunk_end)
                     if not int_ok:

@@ -22,6 +22,7 @@ logger = get_logger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 import duckdb
+import pandas as pd
 
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.init_db import ORB_LABELS
@@ -61,6 +62,58 @@ _INSERT_SQL = """INSERT OR REPLACE INTO experimental_strategies
             ?, ?, ?, ?, ?,
             ?, ?,
             COALESCE(?, CURRENT_TIMESTAMP))"""
+
+_BATCH_COLUMNS = [
+    'strategy_id', 'instrument', 'orb_label', 'orb_minutes',
+    'rr_target', 'confirm_bars', 'entry_model',
+    'filter_type', 'filter_params',
+    'sample_size', 'win_rate', 'avg_win_r', 'avg_loss_r',
+    'expectancy_r', 'sharpe_ratio', 'max_drawdown_r',
+    'median_risk_points', 'avg_risk_points',
+    'trades_per_year', 'sharpe_ann',
+    'yearly_results',
+    'entry_signals', 'scratch_count', 'early_exit_count',
+    'trade_day_hash', 'is_canonical', 'canonical_strategy_id',
+    'dst_winter_n', 'dst_winter_avg_r', 'dst_summer_n', 'dst_summer_avg_r', 'dst_verdict',
+    'validation_status', 'validation_notes',
+    'created_at',
+]
+
+
+def _flush_batch_df(con, insert_batch: list[list]) -> None:
+    """Flush a batch of strategy rows via DataFrame insert."""
+    batch_df = pd.DataFrame(insert_batch, columns=_BATCH_COLUMNS)  # noqa: F841
+    con.execute("""
+        INSERT OR REPLACE INTO experimental_strategies
+        (strategy_id, instrument, orb_label, orb_minutes,
+         rr_target, confirm_bars, entry_model,
+         filter_type, filter_params,
+         sample_size, win_rate, avg_win_r, avg_loss_r,
+         expectancy_r, sharpe_ratio, max_drawdown_r,
+         median_risk_points, avg_risk_points,
+         trades_per_year, sharpe_ann,
+         yearly_results,
+         entry_signals, scratch_count, early_exit_count,
+         trade_day_hash, is_canonical, canonical_strategy_id,
+         dst_winter_n, dst_winter_avg_r, dst_summer_n, dst_summer_avg_r, dst_verdict,
+         validation_status, validation_notes,
+         created_at)
+        SELECT strategy_id, instrument, orb_label, orb_minutes,
+               rr_target, confirm_bars, entry_model,
+               filter_type, filter_params,
+               sample_size, win_rate, avg_win_r, avg_loss_r,
+               expectancy_r, sharpe_ratio, max_drawdown_r,
+               median_risk_points, avg_risk_points,
+               trades_per_year, sharpe_ann,
+               yearly_results,
+               entry_signals, scratch_count, early_exit_count,
+               trade_day_hash, is_canonical, canonical_strategy_id,
+               dst_winter_n, dst_winter_avg_r, dst_summer_n, dst_summer_avg_r, dst_verdict,
+               validation_status, validation_notes,
+               COALESCE(created_at, CURRENT_TIMESTAMP)
+        FROM batch_df
+    """)
+
 
 def _mark_canonical(strategies: list[dict]) -> None:
     """Mark canonical vs alias within each dedup group.
@@ -517,6 +570,9 @@ def run_discovery(
         init_trading_app_schema(db_path=db_path)
 
     with duckdb.connect(str(db_path)) as con:
+        from pipeline.db_config import configure_connection
+        configure_connection(con, writing=True)
+
         # Determine which sessions to search
         sessions = get_enabled_sessions(instrument)
         if not sessions:
@@ -649,11 +705,11 @@ def run_discovery(
                 ])
 
                 if len(insert_batch) >= 500:
-                    con.executemany(_INSERT_SQL, insert_batch)
+                    _flush_batch_df(con, insert_batch)
                     insert_batch = []
 
             if insert_batch:
-                con.executemany(_INSERT_SQL, insert_batch)
+                _flush_batch_df(con, insert_batch)
             con.commit()
 
         total_strategies = len(all_strategies)

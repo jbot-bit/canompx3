@@ -1027,6 +1027,106 @@ def check_naive_datetime() -> list[str]:
     return violations
 
 
+def check_dst_session_coverage() -> list[str]:
+    """Check that all non-alias sessions are classified as DST-affected or DST-clean.
+
+    A developer could add a session to SESSION_CATALOG and forget to classify it,
+    causing silent DST contamination. This check catches that at pre-commit time.
+    """
+    violations = []
+
+    root_str = str(PROJECT_ROOT)
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
+
+    try:
+        from pipeline.dst import SESSION_CATALOG, DST_AFFECTED_SESSIONS, DST_CLEAN_SESSIONS
+
+        non_alias = {
+            label for label, entry in SESSION_CATALOG.items()
+            if entry["type"] != "alias"
+        }
+        classified = set(DST_AFFECTED_SESSIONS.keys()) | DST_CLEAN_SESSIONS
+        unclassified = non_alias - classified
+
+        if unclassified:
+            violations.append(
+                f"  Sessions in SESSION_CATALOG but not in DST_AFFECTED_SESSIONS or "
+                f"DST_CLEAN_SESSIONS: {sorted(unclassified)}"
+            )
+
+        # Also check for stale entries (in DST sets but not in catalog)
+        stale = classified - non_alias
+        if stale:
+            violations.append(
+                f"  Sessions in DST sets but not in SESSION_CATALOG: {sorted(stale)}"
+            )
+
+    except ImportError as e:
+        violations.append(f"  Cannot import pipeline.dst: {e}")
+
+    return violations
+
+
+def check_db_config_usage() -> list[str]:
+    """Check that every file calling duckdb.connect() also calls configure_connection().
+
+    Any DuckDB consumer that connects without configuring gets default PRAGMAs,
+    which means no memory cap, no temp directory, and slower inserts.
+    """
+    violations = []
+
+    # Files that are allowed to connect without configure_connection:
+    # - Infrastructure/utilities: check_drift, db_config, init_db, dashboard, health_check
+    # - Deprecated: ingest_dbn_mgc.py
+    # - Read-only consumers: market_state, cascade_table, view_strategies, etc.
+    # - Nested subpackages: trading_app/nested/, trading_app/regime/
+    # The 7 main write-path files are enforced (ingest_dbn, ingest_dbn_daily,
+    # build_bars_5m, build_daily_features, outcome_builder, strategy_discovery,
+    # strategy_validator).
+    EXEMPT = {
+        "check_drift.py", "db_config.py", "check_db.py",
+        "init_db.py", "dashboard.py", "health_check.py",
+        "__init__.py",
+        # Deprecated
+        "ingest_dbn_mgc.py",
+        # Pipeline utilities (read-only)
+        "audit_bars_coverage.py", "export_parquet.py",
+        # Trading app read-only consumers
+        "cascade_table.py", "db_manager.py", "live_config.py",
+        "market_state.py", "paper_trader.py", "portfolio.py",
+        "rolling_correlation.py", "rolling_portfolio.py",
+        "strategy_fitness.py", "view_strategies.py", "walk_forward.py",
+        "validate_1800_composite.py", "validate_1800_workhorse.py",
+        # Nested subpackages
+        "corpus.py", "sql_adapter.py", "strategy_matcher.py",
+        "asia_session_analyzer.py", "audit_outcomes.py",
+        "builder.py", "compare.py", "discovery.py",
+        "schema.py", "validator.py",
+    }
+
+    for base_dir in [PIPELINE_DIR, TRADING_APP_DIR]:
+        if not base_dir.exists():
+            continue
+
+        for fpath in base_dir.rglob("*.py"):
+            if fpath.name in EXEMPT:
+                continue
+
+            content = fpath.read_text(encoding='utf-8')
+
+            if 'duckdb.connect(' not in content:
+                continue
+
+            if 'configure_connection' not in content:
+                violations.append(
+                    f"  {fpath.name}: calls duckdb.connect() but never calls "
+                    f"configure_connection() (import from pipeline.db_config)"
+                )
+
+    return violations
+
+
 def check_claude_md_size_cap() -> list[str]:
     """Check #23: CLAUDE.md must stay under 12KB."""
     path = PROJECT_ROOT / "CLAUDE.md"
@@ -1337,6 +1437,30 @@ def main():
     # Check 25: Naive datetime detection
     print("Check 25: Naive datetime detection...")
     v = check_naive_datetime()
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 26: DST session coverage
+    print("Check 26: DST session coverage (all sessions classified)...")
+    v = check_dst_session_coverage()
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 27: DB config usage (all connect() calls must configure)
+    print("Check 27: DB config usage (configure_connection after connect)...")
+    v = check_db_config_usage()
     if v:
         print("  FAILED:")
         for line in v:

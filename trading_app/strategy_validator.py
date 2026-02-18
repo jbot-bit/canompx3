@@ -43,7 +43,7 @@ from trading_app.walkforward import run_walkforward, append_walkforward_result
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)
 
-def _parse_orb_size_bounds(filter_type: str, filter_params: str | None) -> tuple[float | None, float | None]:
+def _parse_orb_size_bounds(filter_type: str | None, filter_params: str | None) -> tuple[float | None, float | None]:
     """Extract min_size/max_size from filter_type or filter_params JSON.
 
     Returns (min_size, max_size). Either may be None.
@@ -55,7 +55,8 @@ def _parse_orb_size_bounds(filter_type: str, filter_params: str | None) -> tuple
             min_s = params.get("min_size")
             max_s = params.get("max_size")
             if min_s is not None or max_s is not None:
-                return (float(min_s) if min_s else None, float(max_s) if max_s else None)
+                return (float(min_s) if min_s is not None else None,
+                        float(max_s) if max_s is not None else None)
         except (json.JSONDecodeError, TypeError, ValueError):
             pass
 
@@ -373,6 +374,9 @@ def run_validation(
     cost_spec = get_cost_spec(instrument)
 
     with duckdb.connect(str(db_path)) as con:
+        from pipeline.db_config import configure_connection
+        configure_connection(con, writing=True)
+
         if not dry_run:
             init_trading_app_schema(db_path=db_path)
 

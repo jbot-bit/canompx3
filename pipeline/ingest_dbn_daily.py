@@ -260,6 +260,8 @@ def main():
     con = None
     if not args.dry_run:
         con = duckdb.connect(str(db_path))
+        from pipeline.db_config import configure_connection
+        configure_connection(con, writing=True)
         print(f"Database opened: {db_path}")
     else:
         print("DRY RUN: Database will not be modified")

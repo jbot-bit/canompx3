@@ -524,6 +524,9 @@ def build_outcomes(
     cost_spec = get_cost_spec(instrument)
 
     with duckdb.connect(str(db_path)) as con:
+        from pipeline.db_config import configure_connection
+        configure_connection(con, writing=True)
+
         # Ensure trading_app tables exist
         if not dry_run:
             init_trading_app_schema(db_path=db_path)
@@ -590,21 +593,27 @@ def build_outcomes(
         all_ts = all_bars_df["ts_utc"].values  # numpy datetime64 array for searchsorted
         logger.info(f"  Loaded {len(all_bars_df):,} bars into memory")
 
+        # Pre-load already-computed days for checkpoint/resume
+        computed_days = set()
+        if not dry_run:
+            computed_days = {
+                r[0] for r in con.execute(
+                    "SELECT DISTINCT trading_day FROM orb_outcomes "
+                    "WHERE symbol = ? AND orb_minutes = ?",
+                    [instrument, orb_minutes],
+                ).fetchall()
+            }
+            if computed_days:
+                logger.info(f"  Checkpoint: {len(computed_days)} days already computed, will skip")
+
         for day_idx, row in enumerate(rows):
             row_dict = dict(zip(col_names, row))
             trading_day = row_dict["trading_day"]
             symbol = row_dict["symbol"]
 
             # Skip days already computed (checkpoint/resume)
-            if not dry_run:
-                existing = con.execute(
-                    "SELECT COUNT(*) FROM orb_outcomes WHERE trading_day = ? AND symbol = ? AND orb_minutes = ?",
-                    [trading_day, symbol, orb_minutes],
-                ).fetchone()[0]
-                if existing > 0:
-                    if (day_idx + 1) % 100 == 0:
-                        logger.info(f"  Skipping {trading_day} ({existing} outcomes exist)")
-                    continue
+            if trading_day in computed_days:
+                continue
 
             # Partition bars for this trading day using binary search (O(log n))
             td_start, td_end = compute_trading_day_utc_range(trading_day)
@@ -671,18 +680,25 @@ def build_outcomes(
 
             # Batch insert all outcomes for this trading day
             if day_batch and not dry_run:
-                con.executemany(
-                    """
-                    INSERT OR REPLACE INTO orb_outcomes
-                    (trading_day, symbol, orb_label, orb_minutes,
-                     rr_target, confirm_bars, entry_model,
-                     entry_ts, entry_price, stop_price, target_price,
-                     outcome, exit_ts, exit_price, pnl_r,
-                     mae_r, mfe_r)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
+                batch_df = pd.DataFrame(  # noqa: F841 — used by DuckDB SQL below
                     day_batch,
+                    columns=[
+                        'trading_day', 'symbol', 'orb_label', 'orb_minutes',
+                        'rr_target', 'confirm_bars', 'entry_model',
+                        'entry_ts', 'entry_price', 'stop_price', 'target_price',
+                        'outcome', 'exit_ts', 'exit_price', 'pnl_r',
+                        'mae_r', 'mfe_r',
+                    ],
                 )
+                con.execute("""
+                    INSERT OR REPLACE INTO orb_outcomes
+                    SELECT trading_day, symbol, orb_label, orb_minutes,
+                           rr_target, confirm_bars, entry_model,
+                           entry_ts, entry_price, stop_price, target_price,
+                           outcome, exit_ts, exit_price, pnl_r,
+                           mae_r, mfe_r
+                    FROM batch_df
+                """)
 
             if (day_idx + 1) % 10 == 0:
                 if not dry_run:

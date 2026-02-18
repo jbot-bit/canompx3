@@ -301,6 +301,9 @@ def main():
         sys.exit(1)
 
     with duckdb.connect(str(GOLD_DB_PATH)) as con:
+        from pipeline.db_config import configure_connection
+        configure_connection(con, writing=True)
+
         # Build
         logger.info("Building 5-minute bars...")
         row_count = build_5m_bars(con, symbol, start_date, end_date, args.dry_run)
