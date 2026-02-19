@@ -11,12 +11,15 @@ Usage:
     claude mcp add gold-db --scope project -- python trading_app/mcp_server.py
 """
 
+import sys
 from dataclasses import asdict
 from datetime import date
 from pathlib import Path
 
-# Ensure project root is importable
+# Ensure project root is importable regardless of working directory
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.ai.sql_adapter import (

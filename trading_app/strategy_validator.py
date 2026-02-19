@@ -102,13 +102,13 @@ def _parse_skip_days(filter_params: str | None) -> list[int] | None:
         params = json.loads(filter_params) if isinstance(filter_params, str) else filter_params
         # Direct DayOfWeekSkipFilter
         sd = params.get("skip_days")
-        if sd:
+        if sd is not None and len(sd) > 0:
             return [int(d) for d in sd]
         # CompositeFilter: check overlay
         overlay = params.get("overlay")
         if isinstance(overlay, dict):
             sd = overlay.get("skip_days")
-            if sd:
+            if sd is not None and len(sd) > 0:
                 return [int(d) for d in sd]
     except (json.JSONDecodeError, TypeError, ValueError):
         pass

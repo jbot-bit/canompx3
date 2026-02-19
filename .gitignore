@@ -79,5 +79,17 @@ git
 tasks.txt
 *.tmp
 
+# Working/temp docs (prompts, plans, scratch notes)
+PLAN.md
+PLAN_*.md
+PROMPT_*.md
+E3_REBUILD_PROMPT.md
+DB_PERFORMANCE_PLAN.md
+*.docx
+orbresearch.txt
+
+# External repos cloned into project tree
+CodePilot/
+
 # Misc
 backfill_overnight.log
