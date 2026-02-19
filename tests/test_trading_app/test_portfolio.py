@@ -413,11 +413,16 @@ def _setup_db_with_outcomes(tmp_path, strategies, daily_features_rows, outcome_r
         om = df_row.get("orb_minutes", 5)
         s0900 = df_row.get("orb_0900_size")
         s2300 = df_row.get("orb_2300_size")
+        dow = df_row.get("day_of_week")
+        is_nfp = df_row.get("is_nfp_day", False)
+        is_opex = df_row.get("is_opex_day", False)
+        is_fri = df_row.get("is_friday", False)
         con.execute("""
             INSERT INTO daily_features (trading_day, symbol, orb_minutes,
-                bar_count_1m, orb_0900_size, orb_2300_size)
-            VALUES (?, ?, ?, 1440, ?, ?)
-        """, [td, sym, om, s0900, s2300])
+                bar_count_1m, orb_0900_size, orb_2300_size,
+                day_of_week, is_nfp_day, is_opex_day, is_friday)
+            VALUES (?, ?, ?, 1440, ?, ?, ?, ?, ?, ?)
+        """, [td, sym, om, s0900, s2300, dow, is_nfp, is_opex, is_fri])
 
     # Insert strategies
     for s in strategies:
@@ -488,6 +493,7 @@ def _make_daily_features_rows(n_days=300, start="2023-01-02", orb_minutes=5):
             "trading_day": d,
             "symbol": "MGC",
             "orb_minutes": orb_minutes,
+            "day_of_week": d.weekday(),
             # Vary sizes: 0900 always has data; 2300 has size that varies
             "orb_0900_size": (5.0 + (i % 10) * 0.5) * multiplier,  # 5m: 5.0 - 9.5
             "orb_2300_size": (3.0 + (i % 8) * 0.5) * multiplier,    # 5m: 3.0 - 6.5
@@ -643,6 +649,127 @@ class TestBuildStrategyDailySeries:
         series_df, stats = build_strategy_daily_series(db_path, [])
         assert series_df.empty
         assert stats == {}
+
+
+class TestCalendarOverlay:
+    """Calendar overlay (NFP/OPEX skip) in R-series builder."""
+
+    def test_nfp_day_nan_with_overlay(self, tmp_path):
+        """NFP day should be NaN when calendar_overlay is provided."""
+        from trading_app.config import CALENDAR_SKIP_NFP_OPEX
+        df_rows = _make_daily_features_rows(10)
+        # Mark day 3 as NFP
+        df_rows[3]["is_nfp_day"] = True
+
+        strat = _make_strategy(
+            strategy_id="MGC_0900_E1_RR2.0_CB5_NO_FILTER",
+            orb_label="0900", filter_type="NO_FILTER",
+        )
+        outcomes = [
+            {"trading_day": df_rows[3]["trading_day"], "orb_label": "0900",
+             "rr_target": 2.0, "confirm_bars": 5, "entry_model": "E1", "pnl_r": 1.5}
+        ]
+        db_path = _setup_db_with_outcomes(tmp_path, [strat], df_rows, outcomes)
+
+        # With overlay: NFP day should be NaN (skipped)
+        series_df, stats = build_strategy_daily_series(
+            db_path, [strat["strategy_id"]],
+            calendar_overlay=CALENDAR_SKIP_NFP_OPEX,
+        )
+        col = series_df[strat["strategy_id"]]
+        assert np.isnan(col.iloc[3]), "NFP day should be NaN with calendar overlay"
+        # Non-NFP eligible days should still be 0.0
+        assert col.iloc[0] == pytest.approx(0.0)
+
+    def test_nfp_day_zero_without_overlay(self, tmp_path):
+        """NFP day should be 0.0 (eligible) when NO calendar_overlay is provided."""
+        df_rows = _make_daily_features_rows(10)
+        df_rows[3]["is_nfp_day"] = True
+
+        strat = _make_strategy(
+            strategy_id="MGC_0900_E1_RR2.0_CB5_NO_FILTER",
+            orb_label="0900", filter_type="NO_FILTER",
+        )
+        db_path = _setup_db_with_outcomes(tmp_path, [strat], df_rows, [])
+
+        # Without overlay: NFP day should still be eligible (0.0)
+        series_df, stats = build_strategy_daily_series(
+            db_path, [strat["strategy_id"]],
+        )
+        col = series_df[strat["strategy_id"]]
+        assert col.iloc[3] == pytest.approx(0.0), "NFP day should be 0.0 without overlay"
+
+    def test_opex_day_nan_with_overlay(self, tmp_path):
+        """OPEX day should be NaN when calendar_overlay is provided."""
+        from trading_app.config import CALENDAR_SKIP_NFP_OPEX
+        df_rows = _make_daily_features_rows(10)
+        df_rows[5]["is_opex_day"] = True
+
+        strat = _make_strategy(
+            strategy_id="MGC_0900_E1_RR2.0_CB5_NO_FILTER",
+            orb_label="0900", filter_type="NO_FILTER",
+        )
+        db_path = _setup_db_with_outcomes(tmp_path, [strat], df_rows, [])
+
+        series_df, stats = build_strategy_daily_series(
+            db_path, [strat["strategy_id"]],
+            calendar_overlay=CALENDAR_SKIP_NFP_OPEX,
+        )
+        col = series_df[strat["strategy_id"]]
+        assert np.isnan(col.iloc[5]), "OPEX day should be NaN with calendar overlay"
+
+    def test_overlay_reduces_eligible_count(self, tmp_path):
+        """Calendar overlay should reduce eligible_days count in stats."""
+        from trading_app.config import CALENDAR_SKIP_NFP_OPEX
+        df_rows = _make_daily_features_rows(50)
+        # Mark 5 days as NFP
+        for i in [5, 15, 25, 35, 45]:
+            df_rows[i]["is_nfp_day"] = True
+
+        strat = _make_strategy(
+            strategy_id="MGC_0900_E1_RR2.0_CB5_NO_FILTER",
+            orb_label="0900", filter_type="NO_FILTER",
+        )
+        db_path = _setup_db_with_outcomes(tmp_path, [strat], df_rows, [])
+
+        # Without overlay
+        _, stats_no = build_strategy_daily_series(
+            db_path, [strat["strategy_id"]],
+        )
+        # With overlay
+        _, stats_cal = build_strategy_daily_series(
+            db_path, [strat["strategy_id"]],
+            calendar_overlay=CALENDAR_SKIP_NFP_OPEX,
+        )
+        assert stats_cal[strat["strategy_id"]]["eligible_days"] == (
+            stats_no[strat["strategy_id"]]["eligible_days"] - 5
+        )
+
+    def test_outcome_on_nfp_day_skipped(self, tmp_path):
+        """Outcome on an NFP day should be skipped (NaN) when overlay is active."""
+        from trading_app.config import CALENDAR_SKIP_NFP_OPEX
+        df_rows = _make_daily_features_rows(10)
+        df_rows[3]["is_nfp_day"] = True
+
+        strat = _make_strategy(
+            strategy_id="MGC_0900_E1_RR2.0_CB5_NO_FILTER",
+            orb_label="0900", filter_type="NO_FILTER",
+        )
+        # Outcome exists on the NFP day
+        outcomes = [
+            {"trading_day": df_rows[3]["trading_day"], "orb_label": "0900",
+             "rr_target": 2.0, "confirm_bars": 5, "entry_model": "E1", "pnl_r": 2.0}
+        ]
+        db_path = _setup_db_with_outcomes(tmp_path, [strat], df_rows, outcomes)
+
+        series_df, stats = build_strategy_daily_series(
+            db_path, [strat["strategy_id"]],
+            calendar_overlay=CALENDAR_SKIP_NFP_OPEX,
+        )
+        col = series_df[strat["strategy_id"]]
+        # NFP day outcome should NOT be overlaid
+        assert np.isnan(col.iloc[3]), "NFP day with outcome should still be NaN"
+        assert stats[strat["strategy_id"]]["overlays_skipped_ineligible"] >= 1
 
 
 class TestCorrelationMatrix:

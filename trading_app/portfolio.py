@@ -28,7 +28,7 @@ import pandas as pd
 
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.cost_model import get_cost_spec, CostSpec
-from trading_app.config import ALL_FILTERS, classify_strategy
+from trading_app.config import ALL_FILTERS, CalendarSkipFilter, classify_strategy
 
 def _get_table_names(con: duckdb.DuckDBPyConnection) -> set[str]:
     """Return set of table names in the main schema."""
@@ -414,6 +414,7 @@ def build_portfolio(
     rolling_train_months: int = 12,
     max_correlation: float = 0.85,
     family_heads_only: bool = False,
+    calendar_overlay: CalendarSkipFilter | None = None,
 ) -> Portfolio:
     """
     Build a diversified portfolio from validated strategies.
@@ -452,7 +453,10 @@ def build_portfolio(
     corr = None
     if len(candidates) > 1:
         strategy_ids = [c["strategy_id"] for c in candidates]
-        corr = correlation_matrix(db_path, strategy_ids, min_overlap_days=100)
+        corr = correlation_matrix(
+            db_path, strategy_ids, min_overlap_days=100,
+            calendar_overlay=calendar_overlay,
+        )
         if corr.empty:
             corr = None
 
@@ -533,6 +537,7 @@ MIN_OVERLAP_DAYS = 200
 def build_strategy_daily_series(
     db_path: Path,
     strategy_ids: list[str],
+    calendar_overlay: CalendarSkipFilter | None = None,
 ) -> tuple[pd.DataFrame, dict]:
     """
     Build per-strategy daily R-series on a shared calendar.
@@ -544,7 +549,10 @@ def build_strategy_daily_series(
     For each strategy:
       - Trade day with outcome -> actual pnl_r
       - Eligible day (filter passes) but no trade -> 0.0
-      - Ineligible day (filter fails) -> NaN
+      - Ineligible day (filter fails OR calendar skip) -> NaN
+
+    When calendar_overlay is provided, days matching the calendar filter
+    (e.g. NFP, OPEX) are marked ineligible to match live execution behavior.
 
     Returns:
       (series_df, stats): DataFrame indexed by trading_day with one column
@@ -609,7 +617,8 @@ def build_strategy_daily_series(
             df_om = con.execute("""
                 SELECT trading_day, day_of_week,
                        orb_0900_size, orb_1000_size, orb_1100_size,
-                       orb_1800_size, orb_2300_size, orb_0030_size
+                       orb_1800_size, orb_2300_size, orb_0030_size,
+                       is_nfp_day, is_opex_day, is_friday
                 FROM daily_features
                 WHERE symbol = ? AND orb_minutes = ?
                 ORDER BY trading_day
@@ -693,6 +702,16 @@ def build_strategy_daily_series(
                     axis=1,
                 ).values
 
+            # Apply calendar overlay (NFP/OPEX skip) — marks calendar-event
+            # days as ineligible, matching live ExecutionEngine behavior.
+            if calendar_overlay is not None:
+                for idx in range(len(df_rows)):
+                    if eligible_mask[idx]:
+                        row_dict = {k: (None if (isinstance(v, float) and np.isnan(v)) else v)
+                                    for k, v in df_rows.iloc[idx].items()}
+                        if not calendar_overlay.matches_row(row_dict, orb_label):
+                            eligible_mask[idx] = False
+
             # Start with NaN (ineligible), set eligible days to 0.0
             series = pd.Series(np.nan, index=all_days, name=sid)
             series.iloc[eligible_mask] = 0.0
@@ -738,6 +757,7 @@ def correlation_matrix(
     db_path: Path,
     strategy_ids: list[str],
     min_overlap_days: int = MIN_OVERLAP_DAYS,
+    calendar_overlay: CalendarSkipFilter | None = None,
 ) -> pd.DataFrame:
     """
     Compute daily R-series correlation between strategies.
@@ -748,7 +768,9 @@ def correlation_matrix(
 
     Returns symmetric correlation matrix (diagonal = 1.0).
     """
-    series_df, stats = build_strategy_daily_series(db_path, strategy_ids)
+    series_df, stats = build_strategy_daily_series(
+        db_path, strategy_ids, calendar_overlay=calendar_overlay,
+    )
 
     if series_df.empty:
         return pd.DataFrame()

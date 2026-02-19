@@ -87,8 +87,8 @@ LIVE_PORTFOLIO = [
     LiveStrategySpec("1000_E1_ORB_G4", "hot", "1000", "E1", "ORB_G4", "rolling"),
 
     # --- REGIME: fitness-gated, full-period validated ---
-    LiveStrategySpec("0900_E1_ORB_G6", "regime", "0900", "E1", "ORB_G6", "high_vol"),
-    LiveStrategySpec("1800_E3_ORB_G6", "regime", "1800", "E3", "ORB_G6", "high_vol"),
+    # 0900_E1_ORB_G6 removed 2026-02-19: zero rows in validated/experimental (G6 too strict)
+    # 1800_E3_ORB_G6 removed 2026-02-19: zero rows in validated/experimental (G6 too strict)
 ]
 
 # =========================================================================
