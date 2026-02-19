@@ -189,6 +189,13 @@ This hybrid uses the optimal resolution per session rather than one-size-fits-al
 5. **Post-build audit didn't run**: The builder froze during the auto-audit step.
    Outcomes have not been independently verified. Run audit before trading.
 
+6. **E3 CB5 strategies are artifacts**: Tables above reference "E3 CB5" combos
+   (e.g., E3 RR4.0 CB5 G3+). These were produced by a prior builder version that
+   allowed arbitrary CB values for E3. The current `outcome_builder.py` enforces
+   `E3 = CB1 only` (retrace entry doesn't benefit from multi-bar confirmation).
+   Treat E3 CB5 results as informational only — they cannot be reproduced with the
+   current codebase and should not be used for live trading decisions.
+
 ---
 
 ## Next Steps

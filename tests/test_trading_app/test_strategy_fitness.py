@@ -658,3 +658,64 @@ class TestFitnessWeightedPortfolio:
 
         # Original unchanged
         assert all(s.weight == 1.0 for s in portfolio.strategies)
+
+    def test_regime_classification_caps_fitness(self):
+        """REGIME (weight=0.5) with FIT status stays at 0.5, not 1.0."""
+        from trading_app.portfolio import Portfolio, PortfolioStrategy, fitness_weighted_portfolio
+
+        strats = [
+            PortfolioStrategy(
+                strategy_id="REGIME_FIT", instrument="MGC", orb_label="0900",
+                entry_model="E1", rr_target=2.0, confirm_bars=1,
+                filter_type="ORB_G5", expectancy_r=0.15, win_rate=0.45,
+                sample_size=60, sharpe_ratio=0.20, max_drawdown_r=3.0,
+                median_risk_points=4.0,
+                weight=0.5,  # REGIME classification weight
+            ),
+            PortfolioStrategy(
+                strategy_id="CORE_FIT", instrument="MGC", orb_label="1000",
+                entry_model="E1", rr_target=2.0, confirm_bars=1,
+                filter_type="ORB_G5", expectancy_r=0.20, win_rate=0.48,
+                sample_size=200, sharpe_ratio=0.25, max_drawdown_r=2.5,
+                median_risk_points=4.0,
+                weight=1.0,  # CORE classification weight
+            ),
+        ]
+        portfolio = Portfolio(
+            name="test", instrument="MGC", strategies=strats,
+            account_equity=25000.0, risk_per_trade_pct=2.0,
+            max_concurrent_positions=3, max_daily_loss_r=5.0,
+        )
+
+        scores = [
+            FitnessScore(
+                strategy_id="REGIME_FIT", full_period_exp_r=0.30,
+                full_period_sharpe=0.25, full_period_sample=60,
+                rolling_exp_r=0.25, rolling_sharpe=0.20, rolling_win_rate=0.48,
+                rolling_sample=25, rolling_window_months=18,
+                recent_sharpe_30=0.15, recent_sharpe_60=0.18,
+                sharpe_delta_30=0.0, sharpe_delta_60=0.0,
+                fitness_status="FIT", fitness_notes="",
+            ),
+            FitnessScore(
+                strategy_id="CORE_FIT", full_period_exp_r=0.35,
+                full_period_sharpe=0.30, full_period_sample=200,
+                rolling_exp_r=0.28, rolling_sharpe=0.22, rolling_win_rate=0.50,
+                rolling_sample=30, rolling_window_months=18,
+                recent_sharpe_30=0.20, recent_sharpe_60=0.22,
+                sharpe_delta_30=0.0, sharpe_delta_60=0.0,
+                fitness_status="FIT", fitness_notes="",
+            ),
+        ]
+        report = FitnessReport(
+            as_of_date=date(2025, 12, 31), scores=scores,
+            summary={"fit": 2, "watch": 0, "decay": 0, "stale": 0},
+        )
+
+        adjusted = fitness_weighted_portfolio(portfolio, report)
+        weight_map = {s.strategy_id: s.weight for s in adjusted.strategies}
+
+        # REGIME + FIT: min(1.0, 0.5) = 0.5 (classification caps fitness)
+        assert weight_map["REGIME_FIT"] == 0.5
+        # CORE + FIT: min(1.0, 1.0) = 1.0
+        assert weight_map["CORE_FIT"] == 1.0

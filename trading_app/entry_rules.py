@@ -16,10 +16,12 @@ Rules (CANONICAL_LOGIC.txt section 8):
 """
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
+
+from trading_app.config import E3_RETRACE_WINDOW_MINUTES
 
 
 @dataclass(frozen=True)
@@ -141,7 +143,13 @@ def resolve_entry(
     if entry_model == "E1":
         return _resolve_e1(bars_df, confirm, stop_price, scan_window_end)
     elif entry_model == "E3":
-        return _resolve_e3(bars_df, confirm, stop_price, scan_window_end)
+        # Cap retrace scan window if configured (stale fill prevention).
+        # See research/research_e3_fill_timing.py for the audit backing this.
+        effective_end = scan_window_end
+        if E3_RETRACE_WINDOW_MINUTES is not None and confirm.confirm_bar_ts is not None:
+            capped = confirm.confirm_bar_ts + timedelta(minutes=E3_RETRACE_WINDOW_MINUTES)
+            effective_end = min(scan_window_end, capped)
+        return _resolve_e3(bars_df, confirm, stop_price, effective_end)
     else:
         raise ValueError(f"Unknown entry_model: {entry_model}")
 

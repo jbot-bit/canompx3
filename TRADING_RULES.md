@@ -115,6 +115,7 @@ Example: 10pt ORB, RR2.0 = 20pt target, 10pt stop.
 | 1015 session (as 1000 replacement) | NO-GO. Negative delta vs 1000 across all instruments/filters. Direction bias INVERTED on equities: MNQ/MES shorts win at 1015, longs win at 1000. Mechanism: post-auction fade, not continuation. Feb 2026. |
 | Transition ORBs (dead-zone periods) | NO-GO. Dead zones lack volume for breakout follow-through. Established session opens dominate. Feb 2026. |
 | Wider ORB apertures (10-60min) | NO-GO. 5min aperture has highest per-trade avgR. Wider dilutes signal. Does NOT rescue DST-affected sessions. Feb 2026. |
+| SIL (Micro Silver) ORB breakout | NO-GO. 0 of 432 strategies validated. All sessions negative Sharpe. $20 round-trip cost punishing vs silver's average move. 0030 WINTER-DOM; 2300 E3 faint SUMMER-ONLY signal (S=+0.03–0.06) below threshold. Feb 2026. |
 
 > **Key insight**: Gold trends intraday more than it mean-reverts. The only confirmed edges are momentum breakouts with size filters. Full research details: `docs/RESEARCH_ARCHIVE.md`.
 
@@ -130,7 +131,7 @@ Three actionable calendar skip filters confirmed by `research/research_day_of_we
 
 **DOW at 1000:** Day-of-week has no significant stable effect. Best day rotates year to year. Do NOT filter.
 
-Calendar filters implemented in `pipeline/calendar_filters.py`. Integrated as portfolio-level overlays in `trading_app/config.py` (`CALENDAR_OVERLAYS`). CSVs: `research/output/day_of_week_*.csv`.
+Calendar filters implemented in `pipeline/calendar_filters.py`. Filter classes and `CALENDAR_OVERLAYS` defined in `trading_app/config.py`. **Infrastructure complete** (columns in `daily_features`, filter classes, tests) but **not yet wired** into `portfolio.py` / `paper_trader.py` execution. CSVs: `research/output/day_of_week_*.csv`.
 
 ---
 

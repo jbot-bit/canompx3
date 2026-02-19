@@ -539,6 +539,7 @@ def build_outcomes(
     end_date: date | None = None,
     orb_minutes: int = 5,
     dry_run: bool = False,
+    force: bool = False,
 ) -> int:
     """
     Build orb_outcomes for all RR targets x confirm_bars.
@@ -622,7 +623,7 @@ def build_outcomes(
 
         # Pre-load already-computed days for checkpoint/resume
         computed_days = set()
-        if not dry_run:
+        if not dry_run and not force:
             computed_days = {
                 r[0] for r in con.execute(
                     "SELECT DISTINCT trading_day FROM orb_outcomes "
@@ -771,6 +772,7 @@ def main():
     parser.add_argument("--end", type=date.fromisoformat, help="End date (YYYY-MM-DD)")
     parser.add_argument("--orb-minutes", type=int, default=5, help="ORB duration in minutes")
     parser.add_argument("--dry-run", action="store_true", help="Validate without writing")
+    parser.add_argument("--force", action="store_true", help="Rebuild all days (ignore checkpoint)")
     args = parser.parse_args()
 
     build_outcomes(
@@ -779,6 +781,7 @@ def main():
         end_date=args.end,
         orb_minutes=args.orb_minutes,
         dry_run=args.dry_run,
+        force=args.force,
     )
 
 if __name__ == "__main__":

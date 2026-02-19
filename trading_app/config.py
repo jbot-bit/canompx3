@@ -377,6 +377,11 @@ TRADEABLE_INSTRUMENTS = ["MGC"]
 #   Other sessions: no benefit
 # Rule: At N minutes after fill, if bar close vs entry is negative, exit at bar close.
 # None = no early exit for that session.
+# E3 retrace window: max minutes after confirm bar to wait for retrace fill.
+# None = unbounded (scan to trading day end). Value set from audit results.
+# See research/research_e3_fill_timing.py for the analysis backing this.
+E3_RETRACE_WINDOW_MINUTES: int | None = 60  # Audit: 4/12 sessions show stale inflation >0.1R
+
 EARLY_EXIT_MINUTES: dict[str, int | None] = {
     "0900": 15,
     "1000": 30,

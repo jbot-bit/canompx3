@@ -55,8 +55,8 @@ fi
 echo "  PASSED"
 
 # 2. Fast tests — all Tier 1 tests except slow integration/paper_trader
-# Use -n 4 (not -n auto/32): CLI subprocess tests spawn DuckDB processes that
-# race on Windows temp file locks under high parallelism.
+# Use -n 4 (not -n auto/32): reduces Windows resource pressure from parallel
+# DuckDB imports and test I/O. Higher counts cause intermittent failures.
 echo "[2/3] Fast tests..."
 "$PYTHON" -m pytest tests/ --ignore=tests/test_trader_logic.py --ignore=tests/test_trading_app/test_integration.py --ignore=tests/test_trading_app/test_paper_trader.py -x -q -n 4 --dist loadscope 2>&1 | tail -5
 if [ ${PIPESTATUS[0]} -ne 0 ]; then

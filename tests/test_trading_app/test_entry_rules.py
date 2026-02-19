@@ -611,3 +611,159 @@ class TestORBBoundaryE3Stop:
         signal = resolve_entry(bars, confirm, "E3", WINDOW_END)
         assert signal.triggered is True
         assert signal.entry_price == ORB_LOW
+
+
+# ============================================================================
+# E3 Retrace Window Cap tests
+# ============================================================================
+
+class TestE3RetraceWindowCap:
+    """E3 retrace window cap: E3_RETRACE_WINDOW_MINUTES limits how far after
+    confirm the retrace scan extends. Prevents stale fills hours after the break.
+    """
+
+    def test_retrace_within_window_fills(self, monkeypatch):
+        """Retrace at 30 min with 60 min cap -> fills."""
+        import trading_app.entry_rules as er
+        monkeypatch.setattr(er, "E3_RETRACE_WINDOW_MINUTES", 60)
+
+        # Confirm at bar 0 (minute 0). Retrace at bar 2 (minute 2, well within 60 min).
+        timestamps = [
+            BREAK_TS,
+            BREAK_TS + timedelta(minutes=1),
+            BREAK_TS + timedelta(minutes=2),
+        ]
+        bars = pd.DataFrame({
+            "ts_utc": timestamps,
+            "open": [ORB_HIGH + 1.0, ORB_HIGH + 2.0, ORB_HIGH + 0.5],
+            "high": [ORB_HIGH + 2.0, ORB_HIGH + 3.0, ORB_HIGH + 1.0],
+            "low": [ORB_HIGH + 0.5, ORB_HIGH + 1.0, ORB_HIGH],  # bar 2 retraces
+            "close": [ORB_HIGH + 1.0, ORB_HIGH + 2.0, ORB_HIGH + 0.5],
+            "volume": [100, 100, 100],
+        })
+        confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, WINDOW_END)
+        assert confirm.confirmed is True
+        signal = resolve_entry(bars, confirm, "E3", WINDOW_END)
+        assert signal.triggered is True
+        assert signal.entry_price == ORB_HIGH
+
+    def test_retrace_beyond_window_no_fill(self, monkeypatch):
+        """Retrace at 120 min with 60 min cap -> no fill (stale)."""
+        import trading_app.entry_rules as er
+        monkeypatch.setattr(er, "E3_RETRACE_WINDOW_MINUTES", 60)
+
+        # Confirm at bar 0. No retrace for 60 bars (60 min).
+        # Retrace at bar 120 (120 min after confirm) — beyond the cap.
+        timestamps = []
+        opens = []
+        highs = []
+        lows = []
+        closes = []
+        volumes = []
+
+        for i in range(130):
+            timestamps.append(BREAK_TS + timedelta(minutes=i))
+            if i == 0:
+                # Confirm bar
+                opens.append(ORB_HIGH + 1.0)
+                highs.append(ORB_HIGH + 2.0)
+                lows.append(ORB_HIGH + 0.5)
+                closes.append(ORB_HIGH + 1.0)
+            elif i < 120:
+                # No retrace — price stays high above ORB
+                opens.append(ORB_HIGH + 5.0)
+                highs.append(ORB_HIGH + 6.0)
+                lows.append(ORB_HIGH + 4.0)
+                closes.append(ORB_HIGH + 5.0)
+            else:
+                # Retrace bar at 120+ min
+                opens.append(ORB_HIGH + 1.0)
+                highs.append(ORB_HIGH + 2.0)
+                lows.append(ORB_HIGH - 0.5)  # retraces to ORB
+                closes.append(ORB_HIGH + 0.5)
+            volumes.append(100)
+
+        bars = pd.DataFrame({
+            "ts_utc": timestamps,
+            "open": opens,
+            "high": highs,
+            "low": lows,
+            "close": closes,
+            "volume": volumes,
+        })
+        confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, WINDOW_END)
+        assert confirm.confirmed is True
+        signal = resolve_entry(bars, confirm, "E3", WINDOW_END)
+        assert signal.triggered is False
+
+    def test_none_window_unbounded(self, monkeypatch):
+        """E3_RETRACE_WINDOW_MINUTES=None -> unbounded (original behavior)."""
+        import trading_app.entry_rules as er
+        monkeypatch.setattr(er, "E3_RETRACE_WINDOW_MINUTES", None)
+
+        # Retrace at bar 120 (2 hours after confirm). With None, this should fill.
+        timestamps = []
+        opens = []
+        highs = []
+        lows = []
+        closes = []
+        volumes = []
+
+        for i in range(130):
+            timestamps.append(BREAK_TS + timedelta(minutes=i))
+            if i == 0:
+                opens.append(ORB_HIGH + 1.0)
+                highs.append(ORB_HIGH + 2.0)
+                lows.append(ORB_HIGH + 0.5)
+                closes.append(ORB_HIGH + 1.0)
+            elif i < 120:
+                opens.append(ORB_HIGH + 5.0)
+                highs.append(ORB_HIGH + 6.0)
+                lows.append(ORB_HIGH + 4.0)
+                closes.append(ORB_HIGH + 5.0)
+            else:
+                opens.append(ORB_HIGH + 1.0)
+                highs.append(ORB_HIGH + 2.0)
+                lows.append(ORB_HIGH - 0.5)
+                closes.append(ORB_HIGH + 0.5)
+            volumes.append(100)
+
+        bars = pd.DataFrame({
+            "ts_utc": timestamps,
+            "open": opens,
+            "high": highs,
+            "low": lows,
+            "close": closes,
+            "volume": volumes,
+        })
+        confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, WINDOW_END)
+        assert confirm.confirmed is True
+        signal = resolve_entry(bars, confirm, "E3", WINDOW_END)
+        assert signal.triggered is True
+        assert signal.entry_price == ORB_HIGH
+
+    def test_cap_vs_trading_day_end_uses_earlier(self, monkeypatch):
+        """If trading day ends before the cap, the day end wins."""
+        import trading_app.entry_rules as er
+        monkeypatch.setattr(er, "E3_RETRACE_WINDOW_MINUTES", 600)  # 10 hours
+
+        # scan_window_end is only 3 min after BREAK_TS. Cap is 600 min.
+        # Day end is earlier, so retrace at minute 2 fills but minute 4 wouldn't.
+        short_window = BREAK_TS + timedelta(minutes=3)
+        timestamps = [
+            BREAK_TS,
+            BREAK_TS + timedelta(minutes=1),
+            BREAK_TS + timedelta(minutes=2),
+        ]
+        bars = pd.DataFrame({
+            "ts_utc": timestamps,
+            "open": [ORB_HIGH + 1.0, ORB_HIGH + 2.0, ORB_HIGH + 0.5],
+            "high": [ORB_HIGH + 2.0, ORB_HIGH + 3.0, ORB_HIGH + 1.0],
+            "low": [ORB_HIGH + 0.5, ORB_HIGH + 1.0, ORB_HIGH],
+            "close": [ORB_HIGH + 1.0, ORB_HIGH + 2.0, ORB_HIGH + 0.5],
+            "volume": [100, 100, 100],
+        })
+        confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, short_window)
+        assert confirm.confirmed is True
+        signal = resolve_entry(bars, confirm, "E3", short_window)
+        assert signal.triggered is True
