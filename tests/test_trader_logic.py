@@ -585,16 +585,22 @@ class TestFillBarExits:
 
 import random
 
-GOLD_DB = Path(__file__).parent.parent / "gold.db"
+from pipeline.paths import GOLD_DB_PATH
+GOLD_DB = GOLD_DB_PATH
 SAMPLE_SIZE = 50  # rows per test — enough to catch errors, fast enough for CI
 
 def _skip_if_no_db():
-    """Skip test if gold.db not present or locked (CI or builder running)."""
+    """Skip test if gold.db not present, locked, or missing orb_outcomes."""
     if not GOLD_DB.exists():
         pytest.skip("gold.db not available")
     try:
         test_con = duckdb.connect(str(GOLD_DB), read_only=True)
+        tables = {r[0] for r in test_con.execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+        ).fetchall()}
         test_con.close()
+        if "orb_outcomes" not in tables:
+            pytest.skip("gold.db has no orb_outcomes table")
     except Exception:
         pytest.skip("gold.db locked by another process")
 

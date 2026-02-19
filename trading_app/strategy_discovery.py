@@ -27,6 +27,7 @@ import pandas as pd
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.init_db import ORB_LABELS
 from pipeline.asset_configs import get_enabled_sessions
+from pipeline.cost_model import get_cost_spec
 from pipeline.dst import (
     DST_AFFECTED_SESSIONS, is_winter_for_session, classify_dst_verdict,
 )
@@ -51,6 +52,7 @@ _INSERT_SQL = """INSERT OR REPLACE INTO experimental_strategies
      sample_size, win_rate, avg_win_r, avg_loss_r,
      expectancy_r, sharpe_ratio, max_drawdown_r,
      median_risk_points, avg_risk_points,
+     median_risk_dollars, avg_risk_dollars, avg_win_dollars, avg_loss_dollars,
      trades_per_year, sharpe_ann,
      yearly_results,
      entry_signals, scratch_count, early_exit_count,
@@ -58,7 +60,8 @@ _INSERT_SQL = """INSERT OR REPLACE INTO experimental_strategies
      dst_winter_n, dst_winter_avg_r, dst_summer_n, dst_summer_avg_r, dst_verdict,
      validation_status, validation_notes,
      created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?,
             COALESCE(?, CURRENT_TIMESTAMP))"""
@@ -70,6 +73,7 @@ _BATCH_COLUMNS = [
     'sample_size', 'win_rate', 'avg_win_r', 'avg_loss_r',
     'expectancy_r', 'sharpe_ratio', 'max_drawdown_r',
     'median_risk_points', 'avg_risk_points',
+    'median_risk_dollars', 'avg_risk_dollars', 'avg_win_dollars', 'avg_loss_dollars',
     'trades_per_year', 'sharpe_ann',
     'yearly_results',
     'entry_signals', 'scratch_count', 'early_exit_count',
@@ -91,6 +95,7 @@ def _flush_batch_df(con, insert_batch: list[list]) -> None:
          sample_size, win_rate, avg_win_r, avg_loss_r,
          expectancy_r, sharpe_ratio, max_drawdown_r,
          median_risk_points, avg_risk_points,
+         median_risk_dollars, avg_risk_dollars, avg_win_dollars, avg_loss_dollars,
          trades_per_year, sharpe_ann,
          yearly_results,
          entry_signals, scratch_count, early_exit_count,
@@ -104,6 +109,7 @@ def _flush_batch_df(con, insert_batch: list[list]) -> None:
                sample_size, win_rate, avg_win_r, avg_loss_r,
                expectancy_r, sharpe_ratio, max_drawdown_r,
                median_risk_points, avg_risk_points,
+               median_risk_dollars, avg_risk_dollars, avg_win_dollars, avg_loss_dollars,
                trades_per_year, sharpe_ann,
                yearly_results,
                entry_signals, scratch_count, early_exit_count,
@@ -141,7 +147,7 @@ def _mark_canonical(strategies: list[dict]) -> None:
             alias["is_canonical"] = False
             alias["canonical_strategy_id"] = head["strategy_id"]
 
-def compute_metrics(outcomes: list[dict]) -> dict:
+def compute_metrics(outcomes: list[dict], cost_spec=None) -> dict:
     """
     Compute performance metrics from a list of outcome rows.
 
@@ -149,10 +155,17 @@ def compute_metrics(outcomes: list[dict]) -> dict:
     entry_signals = wins + losses + scratches + early_exits (total entries).
     win_rate denominator = wins + losses.
 
+    Args:
+        outcomes: List of outcome dicts from orb_outcomes.
+        cost_spec: Optional CostSpec for dollar calculations. If provided,
+            computes median_risk_dollars, avg_risk_dollars, avg_win_dollars,
+            avg_loss_dollars alongside R-multiple metrics.
+
     Returns dict with: sample_size, win_rate, avg_win_r, avg_loss_r,
     expectancy_r, sharpe_ratio, max_drawdown_r, median_risk_points,
-    avg_risk_points, yearly_results, entry_signals, scratch_count,
-    early_exit_count.
+    avg_risk_points, median_risk_dollars, avg_risk_dollars,
+    avg_win_dollars, avg_loss_dollars, yearly_results, entry_signals,
+    scratch_count, early_exit_count.
     """
     _empty = {
         "sample_size": 0,
@@ -164,6 +177,10 @@ def compute_metrics(outcomes: list[dict]) -> dict:
         "max_drawdown_r": None,
         "median_risk_points": None,
         "avg_risk_points": None,
+        "median_risk_dollars": None,
+        "avg_risk_dollars": None,
+        "avg_win_dollars": None,
+        "avg_loss_dollars": None,
         "trades_per_year": 0,
         "sharpe_ann": None,
         "yearly_results": "{}",
@@ -285,6 +302,19 @@ def compute_metrics(outcomes: list[dict]) -> dict:
         median_risk = None
         avg_risk = None
 
+    # Dollar aggregates (per-contract)
+    # risk_dollars = risk_points * point_value + total_friction
+    median_risk_dollars = None
+    avg_risk_dollars = None
+    avg_win_dollars = None
+    avg_loss_dollars = None
+    if cost_spec is not None and avg_risk is not None:
+        avg_risk_dollars = round(avg_risk * cost_spec.point_value + cost_spec.total_friction, 2)
+        avg_win_dollars = round(avg_win_r * avg_risk_dollars, 2)
+        avg_loss_dollars = round(avg_loss_r * avg_risk_dollars, 2)
+    if cost_spec is not None and median_risk is not None:
+        median_risk_dollars = round(median_risk * cost_spec.point_value + cost_spec.total_friction, 2)
+
     return {
         "sample_size": n_traded,
         "win_rate": round(win_rate, 4),
@@ -295,6 +325,10 @@ def compute_metrics(outcomes: list[dict]) -> dict:
         "max_drawdown_r": round(max_dd, 4),
         "median_risk_points": round(median_risk, 4) if median_risk is not None else None,
         "avg_risk_points": round(avg_risk, 4) if avg_risk is not None else None,
+        "median_risk_dollars": median_risk_dollars,
+        "avg_risk_dollars": avg_risk_dollars,
+        "avg_win_dollars": avg_win_dollars,
+        "avg_loss_dollars": avg_loss_dollars,
         "trades_per_year": round(trades_per_year, 1),
         "sharpe_ann": round(sharpe_ann, 4) if sharpe_ann is not None else None,
         "yearly_results": json.dumps(yearly),
@@ -600,6 +634,9 @@ def run_discovery(
         logger.info(f"  {sum(len(v) for v in outcomes_by_key.values())} outcome rows loaded")
 
         # ---- Grid iteration (pure Python, no DB reads) ----
+        # Cost spec for dollar calculations
+        cost_spec = get_cost_spec(instrument)
+
         # Collect all strategies in memory first, then dedup before writing
         all_strategies = []  # list of (strategy_id, filter_key, trade_days, row_data)
         total_combos = 0
@@ -631,7 +668,7 @@ def run_discovery(
                             if not outcomes:
                                 continue
 
-                            metrics = compute_metrics(outcomes)
+                            metrics = compute_metrics(outcomes, cost_spec=cost_spec)
                             if metrics["sample_size"] == 0:
                                 continue
                             strategy_id = make_strategy_id(
@@ -691,6 +728,8 @@ def run_discovery(
                     m["expectancy_r"], m["sharpe_ratio"],
                     m["max_drawdown_r"],
                     m["median_risk_points"], m["avg_risk_points"],
+                    m["median_risk_dollars"], m["avg_risk_dollars"],
+                    m["avg_win_dollars"], m["avg_loss_dollars"],
                     m["trades_per_year"], m["sharpe_ann"],
                     m["yearly_results"],
                     m["entry_signals"], m["scratch_count"],

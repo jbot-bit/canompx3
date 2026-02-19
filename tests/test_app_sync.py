@@ -192,11 +192,18 @@ class TestGetFiltersForGrid:
         assert "ORB_G5_L12" in filters
         assert "DIR_LONG" in filters
 
-    def test_mgc_0900_excludes_extras(self):
+    def test_mgc_0900_has_nofri_composites(self):
         filters = get_filters_for_grid("MGC", "0900")
         assert "ORB_G4_L12" not in filters
         assert "DIR_LONG" not in filters
-        assert filters == ALL_FILTERS
+        # DOW research: 0900 gets Friday-skip composites
+        assert "ORB_G4_NOFRI" in filters
+        assert "ORB_G5_NOFRI" in filters
+        assert "ORB_G6_NOFRI" in filters
+        assert "ORB_G8_NOFRI" in filters
+        # Base filters still present
+        for key in ALL_FILTERS:
+            assert key in filters
 
     def test_mgc_1000_has_dir_no_band(self):
         filters = get_filters_for_grid("MGC", "1000")

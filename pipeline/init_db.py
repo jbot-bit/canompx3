@@ -162,6 +162,12 @@ CREATE TABLE IF NOT EXISTS daily_features (
     is_opex_day       BOOLEAN,
     is_friday         BOOLEAN,
 
+    -- Day-of-week flags (Feb 2026 DOW research)
+    -- Used by DayOfWeekSkipFilter in discovery grid (session-specific composites).
+    is_monday         BOOLEAN,
+    is_tuesday        BOOLEAN,
+    day_of_week       INTEGER,    -- 0=Mon, 1=Tue, ..., 4=Fri (Python weekday convention)
+
     -- ORB columns (7 fixed + 6 dynamic = 13 sessions x 9 columns = 117)
 {orb_block}
 
@@ -214,6 +220,14 @@ def init_db(db_path: Path, force: bool = False):
         for col in ["is_nfp_day", "is_opex_day", "is_friday"]:
             try:
                 con.execute(f"ALTER TABLE daily_features ADD COLUMN {col} BOOLEAN")
+                logger.info(f"  Migration: added {col} column to daily_features")
+            except duckdb.CatalogException:
+                pass  # column already exists
+
+        # Migration: add DOW columns (Feb 2026 DOW research)
+        for col, typedef in [("is_monday", "BOOLEAN"), ("is_tuesday", "BOOLEAN"), ("day_of_week", "INTEGER")]:
+            try:
+                con.execute(f"ALTER TABLE daily_features ADD COLUMN {col} {typedef}")
                 logger.info(f"  Migration: added {col} column to daily_features")
             except duckdb.CatalogException:
                 pass  # column already exists

@@ -169,7 +169,9 @@ Hypothesis: wider ORB range (15/30m) + 5m entry bars reduces noise and improves 
 - **NOTE:** orb_outcomes (689K rows) needs full rebuild to apply new logic to stored data
 - See `AUDIT_FINDINGS.md` for original finding
 
-### 8b. Multi-Instrument Discovery Grid Update — TODO
+### 8b. Multi-Instrument Discovery Grid Update — DONE (Feb 2026)
+
+H2 band filters and H5 direction filter implemented in `config.py`. Discovery grid uses `get_filters_for_grid()` for session-aware filter dispatch. DirectionFilter class (lines 141-150), `_MES_1000_BAND_FILTERS` (lines 227-236), `get_filters_for_grid()` (lines 269-281).
 
 Based on hypothesis test results (Feb 2026, `scripts/tools/hypothesis_test.py`).
 Two confirmed findings require config.py + discovery changes:
@@ -241,16 +243,17 @@ Six high-leverage research items identified by cross-referencing all findings. O
   - Findings: `research/output/volume_dst_findings.md`, CSV: `research/output/volume_dst_analysis.csv`
 - Step 4: ✅ TRADING_RULES.md session playbooks updated with DST split numbers — DONE
 - Step 5: ✅ New session candidates evaluated — ALL REJECTED (insufficient G4+ frequency or too much overlap)
-- Step 6: ⬜ Migrate DST columns to production gold.db (only on scratch copy currently)
+- Step 6: ✅ Migrate DST columns to production gold.db — DONE (auto-migration in init_trading_app_schema())
 - Rule: ALL future research touching 0900/1800/0030/2300 MUST split by DST regime
 
-**P2. Calendar Effect Scan (Day-of-Week, FOMC, NFP, Opex)**
-- Zero calendar research exists despite 689K pre-computed outcomes.
-- NEW: DST audit showed winter >> summer (+0.18-0.35R). Include season/month as a variable.
-- Test: day-of-week x session x instrument on avgR and WR.
-- Test: FOMC announcement days, NFP first-Friday, monthly/quarterly opex.
-- Could yield instant new filter with no code changes (just a flag in daily_features).
-- Script: `research/research_calendar_effects.py` (to build)
+**P2. Calendar Effect Scan (Day-of-Week, FOMC, NFP, Opex) — DONE (Feb 2026)**
+- Script: `research/research_day_of_week.py` — COMPLETED
+- Output: `research/output/day_of_week_breakdown.csv`, `day_of_week_macro_overlay.csv`, `day_of_week_skip_filter.csv`
+- **NFP_SKIP:** First-Friday NFP days are toxic for breakout strategies. Actionable skip filter.
+- **OPEX_SKIP:** Monthly options expiration days degrade edge. Actionable skip filter.
+- **FRIDAY_SKIP (0900 only):** Friday 0900 underperforms other weekdays. Session-specific skip.
+- **DOW at 1000:** Day-of-week has no significant effect — noise. Do NOT filter.
+- Calendar filters implemented in `pipeline/calendar_filters.py` and integrated as portfolio-level overlays in `trading_app/config.py` (`CALENDAR_OVERLAYS`).
 
 **P3. Signal Stacking (Size + Direction + Concordance + Volume)**
 - Every filter tested independently. Never tested: what happens when ALL fire?

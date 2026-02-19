@@ -174,6 +174,23 @@ class CalendarSkipFilter(StrategyFilter):
 
 
 @dataclass(frozen=True)
+class DayOfWeekSkipFilter(StrategyFilter):
+    """Skip trading on specific days of the week.
+
+    Uses day_of_week column (0=Mon..6=Sun, Python weekday convention).
+    Fail-closed: missing day_of_week means day is ineligible.
+    """
+
+    skip_days: tuple[int, ...] = ()
+
+    def matches_row(self, row: dict, orb_label: str) -> bool:
+        dow = row.get("day_of_week")
+        if dow is None:
+            return False  # fail-closed
+        return dow not in self.skip_days
+
+
+@dataclass(frozen=True)
 class CompositeFilter(StrategyFilter):
     """Chain two filters: base AND overlay must both pass."""
 
@@ -261,21 +278,49 @@ ALL_FILTERS: dict[str, StrategyFilter] = {
 }
 
 # Calendar skip overlays (NOT in discovery grid — applied at portfolio/paper_trader level)
+# NOTE: Infrastructure complete (columns in daily_features, filter classes, tests) but
+# portfolio.py and paper_trader.py do not yet consume these flags. Wiring pending.
 CALENDAR_OVERLAYS: dict[str, CalendarSkipFilter] = {
     "CAL_SKIP_NFP_OPEX": CALENDAR_SKIP_NFP_OPEX,
     "CAL_SKIP_ALL_0900": CALENDAR_SKIP_ALL_0900,
 }
 
+# DOW skip filters (discovery grid composites, Feb 2026 research)
+_DOW_SKIP_FRIDAY = DayOfWeekSkipFilter(filter_type="DOW_NOFRI", description="Skip Friday", skip_days=(4,))
+_DOW_SKIP_MONDAY = DayOfWeekSkipFilter(filter_type="DOW_NOMON", description="Skip Monday", skip_days=(0,))
+_DOW_SKIP_TUESDAY = DayOfWeekSkipFilter(filter_type="DOW_NOTUE", description="Skip Tuesday", skip_days=(1,))
+
+# ORB-prefixed size filters for composite construction
+_GRID_SIZE_FILTERS_ORB = {f"ORB_{k}": v for k, v in _GRID_SIZE_FILTERS.items()}
+
+def _make_dow_composites(size_filters: dict[str, StrategyFilter], dow_filter: DayOfWeekSkipFilter, suffix: str) -> dict[str, CompositeFilter]:
+    """Build CompositeFilter(size + DOW skip) for each size filter."""
+    return {
+        f"{key}_{suffix}": CompositeFilter(
+            filter_type=f"{key}_{suffix}",
+            description=f"{filt.description} + {dow_filter.description}",
+            base=filt, overlay=dow_filter,
+        )
+        for key, filt in size_filters.items()
+    }
+
 def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFilter]:
     """Return session-aware filter set for discovery grid.
 
-    - Session "1000" on any instrument: adds DIR_LONG (H5 confirmed)
+    - Session "0900": adds DOW composite (skip Friday) for each G-filter
+    - Session "1800": adds DOW composite (skip Monday) for each G-filter
+    - Session "1000": adds DIR_LONG (H5) + DOW composite (skip Tuesday) for each G-filter
     - MES + "1000": also adds G4_L12, G5_L12 band filters (H2 confirmed)
     - All other combos: returns ALL_FILTERS unchanged
     """
     filters = dict(ALL_FILTERS)
+    if session == "0900":
+        filters.update(_make_dow_composites(_GRID_SIZE_FILTERS_ORB, _DOW_SKIP_FRIDAY, "NOFRI"))
+    if session == "1800":
+        filters.update(_make_dow_composites(_GRID_SIZE_FILTERS_ORB, _DOW_SKIP_MONDAY, "NOMON"))
     if session == "1000":
         filters["DIR_LONG"] = DIR_LONG
+        filters.update(_make_dow_composites(_GRID_SIZE_FILTERS_ORB, _DOW_SKIP_TUESDAY, "NOTUE"))
     if instrument == "MES" and session == "1000":
         filters.update(_MES_1000_BAND_FILTERS)
     return filters

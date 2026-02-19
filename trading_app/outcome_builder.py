@@ -28,7 +28,7 @@ import numpy as np
 import pandas as pd
 
 from pipeline.paths import GOLD_DB_PATH
-from pipeline.cost_model import get_cost_spec, pnl_points_to_r, to_r_multiple
+from pipeline.cost_model import get_cost_spec, pnl_points_to_r, to_r_multiple, risk_in_dollars
 from pipeline.init_db import ORB_LABELS
 from pipeline.asset_configs import get_enabled_sessions
 from pipeline.build_daily_features import compute_trading_day_utc_range
@@ -148,7 +148,9 @@ def _compute_outcomes_all_rr(
     null_result = {
         "entry_ts": None, "entry_price": None, "stop_price": None,
         "target_price": None, "outcome": None, "exit_ts": None,
-        "exit_price": None, "pnl_r": None, "mae_r": None, "mfe_r": None,
+        "exit_price": None, "pnl_r": None,
+        "risk_dollars": None, "pnl_dollars": None,
+        "mae_r": None, "mfe_r": None,
     }
 
     if not signal.triggered:
@@ -161,6 +163,9 @@ def _compute_outcomes_all_rr(
 
     if risk_points <= 0:
         return [dict(null_result) for _ in rr_targets]
+
+    # Per-contract dollar risk (same for all RR targets — risk is ORB-based)
+    _risk_dollars = round(risk_in_dollars(cost_spec, entry_price, stop_price), 2)
 
     # Pre-compute target prices for all RR targets
     if break_dir == "long":
@@ -210,7 +215,8 @@ def _compute_outcomes_all_rr(
             "entry_ts": entry_ts, "entry_price": entry_price,
             "stop_price": stop_price, "target_price": target_price,
             "outcome": None, "exit_ts": None, "exit_price": None,
-            "pnl_r": None, "mae_r": None, "mfe_r": None,
+            "pnl_r": None, "risk_dollars": _risk_dollars, "pnl_dollars": None,
+            "mae_r": None, "mfe_r": None,
         }
 
         # --- Fill bar check ---
@@ -246,6 +252,8 @@ def _compute_outcomes_all_rr(
                     pnl_points_to_r(cost_spec, entry_price, stop_price, max(adv_pts, 0.0)), 4)
                 result["mfe_r"] = round(
                     pnl_points_to_r(cost_spec, entry_price, stop_price, max(fav_pts, 0.0)), 4)
+                if result["pnl_r"] is not None:
+                    result["pnl_dollars"] = round(result["pnl_r"] * _risk_dollars, 2)
                 results.append(result)
                 continue
 
@@ -254,6 +262,7 @@ def _compute_outcomes_all_rr(
             result["outcome"] = "scratch"
             result["mae_r"] = round(pnl_points_to_r(cost_spec, entry_price, stop_price, 0.0), 4)
             result["mfe_r"] = round(pnl_points_to_r(cost_spec, entry_price, stop_price, 0.0), 4)
+            # pnl_dollars stays None for scratch (no trade)
             results.append(result)
             continue
 
@@ -283,6 +292,8 @@ def _compute_outcomes_all_rr(
                         pnl_points_to_r(cost_spec, entry_price, stop_price, max_adv), 4)
                     result["mfe_r"] = round(
                         pnl_points_to_r(cost_spec, entry_price, stop_price, max_fav), 4)
+                    if result["pnl_r"] is not None:
+                        result["pnl_dollars"] = round(result["pnl_r"] * _risk_dollars, 2)
                     results.append(result)
                     continue
 
@@ -314,6 +325,8 @@ def _compute_outcomes_all_rr(
             pnl_points_to_r(cost_spec, entry_price, stop_price, max_adv), 4)
         result["mfe_r"] = round(
             pnl_points_to_r(cost_spec, entry_price, stop_price, max_fav), 4)
+        if result["pnl_r"] is not None:
+            result["pnl_dollars"] = round(result["pnl_r"] * _risk_dollars, 2)
         results.append(result)
 
     return results
@@ -345,6 +358,8 @@ def compute_single_outcome(
         "exit_ts": None,
         "exit_price": None,
         "pnl_r": None,
+        "risk_dollars": None,
+        "pnl_dollars": None,
         "mae_r": None,
         "mfe_r": None,
     }
@@ -383,6 +398,10 @@ def compute_single_outcome(
     result["stop_price"] = stop_price
     result["target_price"] = target_price
 
+    # Per-contract dollar risk
+    _risk_dollars = round(risk_in_dollars(cost_spec, entry_price, stop_price), 2)
+    result["risk_dollars"] = _risk_dollars
+
     # Check fill bar for immediate exit (E1 and E3)
     fill_exit = _check_fill_bar_exit(
         bars_df, entry_ts, entry_price, stop_price, target_price,
@@ -390,6 +409,8 @@ def compute_single_outcome(
     )
     if fill_exit is not None:
         result.update(fill_exit)
+        if result["pnl_r"] is not None:
+            result["pnl_dollars"] = round(result["pnl_r"] * _risk_dollars, 2)
         return result
 
     # Scan bars forward from entry to determine outcome
@@ -455,6 +476,8 @@ def compute_single_outcome(
                     result["mfe_r"] = round(
                         pnl_points_to_r(cost_spec, entry_price, stop_price, max_favorable_points), 4
                     )
+                    if result["pnl_r"] is not None:
+                        result["pnl_dollars"] = round(result["pnl_r"] * _risk_dollars, 2)
                     return result
                 # MTM >= 0 at threshold -> winner, fall through to normal scan
 
@@ -502,6 +525,10 @@ def compute_single_outcome(
     result["mfe_r"] = round(
         pnl_points_to_r(cost_spec, entry_price, stop_price, max_favorable_points), 4
     )
+
+    # Dollar P&L
+    if result["pnl_r"] is not None:
+        result["pnl_dollars"] = round(result["pnl_r"] * _risk_dollars, 2)
 
     return result
 
@@ -674,6 +701,7 @@ def build_outcomes(
                                 outcome["stop_price"], outcome["target_price"],
                                 outcome["outcome"], outcome["exit_ts"],
                                 outcome["exit_price"], outcome["pnl_r"],
+                                outcome["risk_dollars"], outcome["pnl_dollars"],
                                 outcome["mae_r"], outcome["mfe_r"],
                             ])
                             total_written += 1
@@ -687,6 +715,7 @@ def build_outcomes(
                         'rr_target', 'confirm_bars', 'entry_model',
                         'entry_ts', 'entry_price', 'stop_price', 'target_price',
                         'outcome', 'exit_ts', 'exit_price', 'pnl_r',
+                        'risk_dollars', 'pnl_dollars',
                         'mae_r', 'mfe_r',
                     ],
                 )
@@ -696,6 +725,7 @@ def build_outcomes(
                            rr_target, confirm_bars, entry_model,
                            entry_ts, entry_price, stop_price, target_price,
                            outcome, exit_ts, exit_price, pnl_r,
+                           risk_dollars, pnl_dollars,
                            mae_r, mfe_r
                     FROM batch_df
                 """)

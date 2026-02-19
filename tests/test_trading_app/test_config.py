@@ -10,9 +10,12 @@ from trading_app.config import (
     NoFilter,
     OrbSizeFilter,
     VolumeFilter,
+    DayOfWeekSkipFilter,
+    CompositeFilter,
     ALL_FILTERS,
     MGC_ORB_SIZE_FILTERS,
     MGC_VOLUME_FILTERS,
+    get_filters_for_grid,
 )
 
 
@@ -207,3 +210,85 @@ class TestVolumeFilter:
         assert isinstance(f, VolumeFilter)
         assert f.min_rel_vol == 1.2
         assert f.lookback_days == 20
+
+
+class TestDayOfWeekSkipFilter:
+    """DayOfWeekSkipFilter skips specified weekdays, fail-closed on missing data."""
+
+    def test_skips_correct_day(self):
+        """skip_days=(4,) rejects Friday (day_of_week=4)."""
+        f = DayOfWeekSkipFilter(filter_type="TEST", description="test", skip_days=(4,))
+        assert f.matches_row({"day_of_week": 4}, "0900") is False
+
+    def test_allows_other_days(self):
+        """skip_days=(4,) allows Monday (day_of_week=0)."""
+        f = DayOfWeekSkipFilter(filter_type="TEST", description="test", skip_days=(4,))
+        assert f.matches_row({"day_of_week": 0}, "0900") is True
+        assert f.matches_row({"day_of_week": 1}, "0900") is True
+        assert f.matches_row({"day_of_week": 3}, "0900") is True
+
+    def test_fail_closed_missing(self):
+        """Missing day_of_week returns False (fail-closed)."""
+        f = DayOfWeekSkipFilter(filter_type="TEST", description="test", skip_days=(4,))
+        assert f.matches_row({}, "0900") is False
+
+    def test_fail_closed_none(self):
+        """None day_of_week returns False (fail-closed)."""
+        f = DayOfWeekSkipFilter(filter_type="TEST", description="test", skip_days=(4,))
+        assert f.matches_row({"day_of_week": None}, "0900") is False
+
+    def test_multiple_skip_days(self):
+        """Can skip multiple days."""
+        f = DayOfWeekSkipFilter(filter_type="TEST", description="test", skip_days=(0, 4))
+        assert f.matches_row({"day_of_week": 0}, "0900") is False
+        assert f.matches_row({"day_of_week": 4}, "0900") is False
+        assert f.matches_row({"day_of_week": 2}, "0900") is True
+
+    def test_frozen(self):
+        f = DayOfWeekSkipFilter(filter_type="TEST", description="test", skip_days=(4,))
+        with pytest.raises(AttributeError):
+            f.filter_type = "CHANGED"
+
+    def test_to_json_roundtrip(self):
+        f = DayOfWeekSkipFilter(filter_type="DOW_NOFRI", description="Skip Friday", skip_days=(4,))
+        data = json.loads(f.to_json())
+        assert data["filter_type"] == "DOW_NOFRI"
+        assert data["skip_days"] == [4]
+
+
+class TestDowComposites:
+    """DOW composites in get_filters_for_grid."""
+
+    def test_0900_has_nofri(self):
+        filters = get_filters_for_grid("MGC", "0900")
+        for key in ["ORB_G4_NOFRI", "ORB_G5_NOFRI", "ORB_G6_NOFRI", "ORB_G8_NOFRI"]:
+            assert key in filters, f"{key} missing from 0900 grid"
+            assert isinstance(filters[key], CompositeFilter)
+
+    def test_1800_has_nomon(self):
+        filters = get_filters_for_grid("MGC", "1800")
+        for key in ["ORB_G4_NOMON", "ORB_G5_NOMON", "ORB_G6_NOMON", "ORB_G8_NOMON"]:
+            assert key in filters, f"{key} missing from 1800 grid"
+            assert isinstance(filters[key], CompositeFilter)
+
+    def test_1000_has_notue_and_dir_long(self):
+        filters = get_filters_for_grid("MGC", "1000")
+        for key in ["ORB_G4_NOTUE", "ORB_G5_NOTUE", "ORB_G6_NOTUE", "ORB_G8_NOTUE"]:
+            assert key in filters, f"{key} missing from 1000 grid"
+        assert "DIR_LONG" in filters
+
+    def test_1100_no_dow(self):
+        filters = get_filters_for_grid("MGC", "1100")
+        dow_keys = [k for k in filters if "NOFRI" in k or "NOMON" in k or "NOTUE" in k]
+        assert dow_keys == [], f"1100 should have no DOW composites, got {dow_keys}"
+
+    def test_composite_matches_row_correctly(self):
+        """Composite(G4 + skip Friday) rejects Friday even with big ORB."""
+        filters = get_filters_for_grid("MGC", "0900")
+        comp = filters["ORB_G4_NOFRI"]
+        # Big ORB on Friday -> rejected
+        assert comp.matches_row({"orb_0900_size": 6.0, "day_of_week": 4}, "0900") is False
+        # Big ORB on Monday -> accepted
+        assert comp.matches_row({"orb_0900_size": 6.0, "day_of_week": 0}, "0900") is True
+        # Small ORB on Monday -> rejected (base filter fails)
+        assert comp.matches_row({"orb_0900_size": 2.0, "day_of_week": 0}, "0900") is False

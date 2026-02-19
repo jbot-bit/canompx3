@@ -486,6 +486,22 @@ def build_portfolio(
             source=s.get("source", "baseline"),
         ))
 
+    # Classification-aware weight adjustment (FIX5)
+    # CORE (>=100): weight=1.0 (default), REGIME (30-99): weight=0.5, INVALID (<30): excluded
+    classified = []
+    for strat in strategies:
+        cls = strat.classification
+        if cls == "INVALID":
+            logger.info("Excluding INVALID strategy %s (sample_size=%d)",
+                        strat.strategy_id, strat.sample_size)
+            continue
+        if cls == "REGIME":
+            strat = replace(strat, weight=0.5)
+            logger.info("REGIME strategy %s: weight reduced to 0.5 (sample_size=%d)",
+                        strat.strategy_id, strat.sample_size)
+        classified.append(strat)
+    strategies = classified
+
     # Build corr_lookup for RiskManager (flat dict from selected strategies only)
     lookup: dict[tuple[str, str], float] = {}
     if corr is not None:
@@ -832,6 +848,10 @@ def fitness_weighted_portfolio(portfolio: Portfolio, fitness_report) -> Portfoli
 
     FIT: weight=1.0, WATCH: weight=0.5, DECAY: weight=0.0, STALE: weight=0.0
 
+    Classification weight (CORE=1.0, REGIME=0.5) is preserved as a cap:
+    final weight = min(fitness_weight, classification_weight).
+    A REGIME strategy with FIT status gets 0.5, not 1.0.
+
     Returns new Portfolio with adjusted weights. Does NOT modify input.
     fitness_report must have a .scores list with .strategy_id and .fitness_status.
     """
@@ -840,7 +860,9 @@ def fitness_weighted_portfolio(portfolio: Portfolio, fitness_report) -> Portfoli
     adjusted = []
     for strat in portfolio.strategies:
         status = score_map.get(strat.strategy_id, "STALE")
-        new_weight = FITNESS_WEIGHTS.get(status, 0.0)
+        fitness_weight = FITNESS_WEIGHTS.get(status, 0.0)
+        # Classification weight caps fitness weight (REGIME=0.5 cap)
+        new_weight = min(fitness_weight, strat.weight)
         adjusted.append(replace(strat, weight=new_weight))
 
     return Portfolio(

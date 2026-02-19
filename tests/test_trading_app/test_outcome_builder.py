@@ -776,12 +776,10 @@ class TestCheckpointResume:
 class TestCLI:
     """Test CLI --help doesn't crash."""
 
-    def test_help(self):
-        import subprocess
-        r = subprocess.run(
-            [sys.executable, "trading_app/outcome_builder.py", "--help"],
-            capture_output=True, text=True,
-            cwd=str(Path(__file__).parent.parent.parent),
-        )
-        assert r.returncode == 0
-        assert "instrument" in r.stdout
+    def test_help(self, monkeypatch, capsys):
+        monkeypatch.setattr("sys.argv", ["outcome_builder", "--help"])
+        with pytest.raises(SystemExit) as exc_info:
+            from trading_app.outcome_builder import main
+            main()
+        assert exc_info.value.code == 0
+        assert "instrument" in capsys.readouterr().out

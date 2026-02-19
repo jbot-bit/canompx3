@@ -1,5 +1,5 @@
 """
-Calendar-based skip filters: NFP, OPEX, Friday.
+Calendar-based skip filters: NFP, OPEX, Friday, day-of-week.
 
 Pure date functions — no timezone logic, no DB access.
 These flags are deterministic from the trading day date alone.
@@ -12,6 +12,11 @@ OPEX (Options Expiration): Third Friday of each month.
 
 Friday: Position-squaring mechanism at 0900 session specifically.
   Not a universal skip — only applies to session 0900.
+
+Day-of-week (DOW): Session-specific skip rules from DOW research (Feb 2026).
+  0900: Skip Friday (position-squaring kills follow-through).
+  1800: Skip Monday (thin London open, no follow-through).
+  1000: Skip Tuesday (consistently weakest day at Tokyo session).
 """
 
 from datetime import date
@@ -34,3 +39,18 @@ def is_opex_day(d: date) -> bool:
 def is_friday(d: date) -> bool:
     """True if d is a Friday."""
     return d.weekday() == 4
+
+
+def is_monday(d: date) -> bool:
+    """True if d is a Monday."""
+    return d.weekday() == 0
+
+
+def is_tuesday(d: date) -> bool:
+    """True if d is a Tuesday."""
+    return d.weekday() == 1
+
+
+def day_of_week(d: date) -> int:
+    """Return Python weekday: 0=Monday, 1=Tuesday, ..., 4=Friday, 5=Saturday, 6=Sunday."""
+    return d.weekday()

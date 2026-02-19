@@ -74,6 +74,10 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 exit_price        DOUBLE,
                 pnl_r             DOUBLE,
 
+                -- Dollar amounts (per-contract)
+                risk_dollars      DOUBLE,
+                pnl_dollars       DOUBLE,
+
                 -- Excursions
                 mae_r             DOUBLE,
                 mfe_r             DOUBLE,
@@ -112,6 +116,12 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 max_drawdown_r    DOUBLE,
                 median_risk_points DOUBLE,
                 avg_risk_points   DOUBLE,
+
+                -- Dollar aggregates (per-contract)
+                median_risk_dollars DOUBLE,
+                avg_risk_dollars  DOUBLE,
+                avg_win_dollars   DOUBLE,
+                avg_loss_dollars  DOUBLE,
 
                 -- Annualized metrics
                 trades_per_year   DOUBLE,
@@ -174,6 +184,12 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 trades_per_year   DOUBLE,
                 sharpe_ann        DOUBLE,
                 yearly_results    TEXT,
+
+                -- Dollar aggregates (per-contract)
+                median_risk_dollars DOUBLE,
+                avg_risk_dollars  DOUBLE,
+                avg_win_dollars   DOUBLE,
+                avg_loss_dollars  DOUBLE,
 
                 -- Execution spec (JSON)
                 execution_spec    TEXT,
@@ -287,6 +303,44 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 except duckdb.CatalogException:
                     pass  # column already exists
 
+        # Migration: add DOW columns on daily_features (Feb 2026 DOW research)
+        for col, typedef in [("is_monday", "BOOLEAN"), ("is_tuesday", "BOOLEAN"), ("day_of_week", "INTEGER")]:
+            try:
+                con.execute(f"ALTER TABLE daily_features ADD COLUMN {col} {typedef}")
+            except duckdb.CatalogException:
+                pass
+        # Backfill day_of_week from trading_day for existing rows
+        con.execute("""
+            UPDATE daily_features
+            SET day_of_week = EXTRACT(ISODOW FROM trading_day::DATE) - 1,
+                is_monday = (EXTRACT(ISODOW FROM trading_day::DATE) = 1),
+                is_tuesday = (EXTRACT(ISODOW FROM trading_day::DATE) = 2)
+            WHERE day_of_week IS NULL
+        """)
+
+        # Migration: add dollar columns (Feb 2026)
+        for col, typedef in [
+            ("risk_dollars", "DOUBLE"),
+            ("pnl_dollars", "DOUBLE"),
+        ]:
+            try:
+                con.execute(f"ALTER TABLE orb_outcomes ADD COLUMN {col} {typedef}")
+            except duckdb.CatalogException:
+                pass  # column already exists
+
+        dollar_agg_cols = [
+            ("median_risk_dollars", "DOUBLE"),
+            ("avg_risk_dollars", "DOUBLE"),
+            ("avg_win_dollars", "DOUBLE"),
+            ("avg_loss_dollars", "DOUBLE"),
+        ]
+        for table in ["experimental_strategies", "validated_setups"]:
+            for col, typedef in dollar_agg_cols:
+                try:
+                    con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typedef}")
+                except duckdb.CatalogException:
+                    pass  # column already exists
+
         con.commit()
         logger.info("Trading app schema initialized successfully")
 
@@ -337,7 +391,8 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
                 "trading_day", "symbol", "orb_label", "orb_minutes",
                 "rr_target", "confirm_bars", "entry_model", "entry_ts",
                 "entry_price", "stop_price", "target_price", "outcome",
-                "exit_ts", "exit_price", "pnl_r", "mae_r", "mfe_r"
+                "exit_ts", "exit_price", "pnl_r", "mae_r", "mfe_r",
+                "risk_dollars", "pnl_dollars"
             }
             actual_cols = {row[0] for row in result}
 

@@ -57,12 +57,25 @@ def _parse_orb_size_bounds(filter_type: str | None, filter_params: str | None) -
             if min_s is not None or max_s is not None:
                 return (float(min_s) if min_s is not None else None,
                         float(max_s) if max_s is not None else None)
+            # CompositeFilter: size bounds are in params["base"]
+            base = params.get("base")
+            if isinstance(base, dict):
+                min_s = base.get("min_size")
+                max_s = base.get("max_size")
+                if min_s is not None or max_s is not None:
+                    return (float(min_s) if min_s is not None else None,
+                            float(max_s) if max_s is not None else None)
         except (json.JSONDecodeError, TypeError, ValueError):
             pass
 
     # Fallback: parse from filter_type string (ORB_G5 -> min=5, ORB_G4_L12 -> min=4/max=12)
     if filter_type and filter_type.startswith("ORB_G"):
         rest = filter_type[5:]  # after "ORB_G"
+        # Strip DOW skip suffixes for composite filter_types (e.g. ORB_G4_NOFRI)
+        for dow_suffix in ("_NOFRI", "_NOMON", "_NOTUE"):
+            if rest.endswith(dow_suffix):
+                rest = rest[:-len(dow_suffix)]
+                break
         if "_L" in rest:
             parts = rest.split("_L")
             try:
@@ -76,6 +89,30 @@ def _parse_orb_size_bounds(filter_type: str | None, filter_params: str | None) -
                 pass
 
     return (None, None)
+
+
+def _parse_skip_days(filter_params: str | None) -> list[int] | None:
+    """Extract skip_days from filter_params JSON (DayOfWeekSkipFilter or CompositeFilter overlay).
+
+    Returns list of weekday ints to exclude, or None if no DOW filter.
+    """
+    if not filter_params:
+        return None
+    try:
+        params = json.loads(filter_params) if isinstance(filter_params, str) else filter_params
+        # Direct DayOfWeekSkipFilter
+        sd = params.get("skip_days")
+        if sd:
+            return [int(d) for d in sd]
+        # CompositeFilter: check overlay
+        overlay = params.get("overlay")
+        if isinstance(overlay, dict):
+            sd = overlay.get("skip_days")
+            if sd:
+                return [int(d) for d in sd]
+    except (json.JSONDecodeError, TypeError, ValueError):
+        pass
+    return None
 
 
 def compute_dst_split(con, strategy_id: str, instrument: str, orb_label: str,
@@ -115,6 +152,13 @@ def compute_dst_split(con, strategy_id: str, instrument: str, orb_label: str,
     if max_size is not None:
         size_clauses.append(f"df.{size_col} < ?")
         size_params.append(max_size)
+
+    # DOW skip filter (CompositeFilter with DayOfWeekSkipFilter overlay)
+    skip_days = _parse_skip_days(filter_params)
+    if skip_days:
+        placeholders = ", ".join("?" * len(skip_days))
+        size_clauses.append(f"df.day_of_week NOT IN ({placeholders})")
+        size_params.extend(skip_days)
 
     size_where = (" AND " + " AND ".join(size_clauses)) if size_clauses else ""
 
@@ -535,11 +579,13 @@ def run_validation(
                             sharpe_ratio, max_drawdown_r,
                             trades_per_year, sharpe_ann,
                             yearly_results, status,
+                            median_risk_dollars, avg_risk_dollars,
+                            avg_win_dollars, avg_loss_dollars,
                             regime_waivers, regime_waiver_count,
                             dst_winter_n, dst_winter_avg_r,
                             dst_summer_n, dst_summer_avg_r,
                             dst_verdict)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         [
                             strategy_id, strategy_id,
                             row_dict["instrument"], row_dict["orb_label"],
@@ -556,6 +602,10 @@ def run_validation(
                             row_dict.get("trades_per_year"),
                             row_dict.get("sharpe_ann"),
                             yearly, "active",
+                            row_dict.get("median_risk_dollars"),
+                            row_dict.get("avg_risk_dollars"),
+                            row_dict.get("avg_win_dollars"),
+                            row_dict.get("avg_loss_dollars"),
                             json.dumps(regime_waivers) if regime_waivers else None,
                             len(regime_waivers),
                             dst_split["winter_n"], dst_split["winter_avg_r"],

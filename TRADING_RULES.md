@@ -112,8 +112,25 @@ Example: 10pt ORB, RR2.0 = 20pt target, 10pt stop.
 | Non-ORB structural (Time-of-day, Range Expansion, Opening Drive) | ALL NO-GO. No risk structure, friction kills. |
 | Cross-instrument 1000 LONG portfolio (MGC+MNQ+MES) | NO-GO for diversification. MNQ/MES correlation = +0.83 (same trade). MGC/equity = +0.40-0.44 (moderate, not free). Adding MNQ+MES to 1000 LONG worsens Sharpe. Pick ONE equity micro, don't stack. Need truly uncorrelated asset for portfolio diversification. |
 | Crabel contraction/expansion (NR4/NR7 on session ORB history) | Expansion ratio = proxy for absolute size (confound r=0.35-0.86), adds zero within size bands. NR-contraction 2/24 tests significant = chance. Feb 2026. |
+| 1015 session (as 1000 replacement) | NO-GO. Negative delta vs 1000 across all instruments/filters. Direction bias INVERTED on equities: MNQ/MES shorts win at 1015, longs win at 1000. Mechanism: post-auction fade, not continuation. Feb 2026. |
+| Transition ORBs (dead-zone periods) | NO-GO. Dead zones lack volume for breakout follow-through. Established session opens dominate. Feb 2026. |
+| Wider ORB apertures (10-60min) | NO-GO. 5min aperture has highest per-trade avgR. Wider dilutes signal. Does NOT rescue DST-affected sessions. Feb 2026. |
 
 > **Key insight**: Gold trends intraday more than it mean-reverts. The only confirmed edges are momentum breakouts with size filters. Full research details: `docs/RESEARCH_ARCHIVE.md`.
+
+### Calendar Effects (P2 — Feb 2026)
+
+Three actionable calendar skip filters confirmed by `research/research_day_of_week.py`. Mechanisms are structural and stable across years.
+
+**NFP_SKIP (Universal):** First-Friday Non-Farm Payrolls days are toxic for all instruments and sessions. MES 1000 G6+ delta = -0.75R. Random spike from 8:30 ET release destroys ORB signal. Skip all NFP days.
+
+**OPEX_SKIP (Universal):** Third-Friday options expiration days degrade edge. Strongest at 0900 for MNQ (-0.28 delta) and MGC (-0.50 delta). Options pinning kills follow-through. Skip all OPEX days.
+
+**FRIDAY_SKIP (0900 only):** Friday 0900 underperforms other weekdays. MNQ G4+ Friday avgR = -0.376 vs +0.067 non-Friday. MGC G5+ Friday avgR = -0.292. Mechanism: weekend position-squaring. Do NOT apply to 1000 — all days are positive there.
+
+**DOW at 1000:** Day-of-week has no significant stable effect. Best day rotates year to year. Do NOT filter.
+
+Calendar filters implemented in `pipeline/calendar_filters.py`. Integrated as portfolio-level overlays in `trading_app/config.py` (`CALENDAR_OVERLAYS`). CSVs: `research/output/day_of_week_*.csv`.
 
 ---
 

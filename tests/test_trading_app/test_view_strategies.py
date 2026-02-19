@@ -191,15 +191,14 @@ class TestFormatSummary:
 # ============================================================================
 
 class TestCLI:
-    def test_help(self):
-        import subprocess
-        r = subprocess.run(
-            [sys.executable, "trading_app/view_strategies.py", "--help"],
-            capture_output=True, text=True,
-            cwd=str(Path(__file__).parent.parent.parent),
-        )
-        assert r.returncode == 0
-        assert "--family" in r.stdout
-        assert "--db" in r.stdout
-        assert "--sort" in r.stdout
-        assert "sharpe_ann" in r.stdout
+    def test_help(self, monkeypatch, capsys):
+        monkeypatch.setattr("sys.argv", ["view_strategies", "--help"])
+        with pytest.raises(SystemExit) as exc_info:
+            from trading_app.view_strategies import main
+            main()
+        assert exc_info.value.code == 0
+        out = capsys.readouterr().out
+        assert "--family" in out
+        assert "--db" in out
+        assert "--sort" in out
+        assert "sharpe_ann" in out

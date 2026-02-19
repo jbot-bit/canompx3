@@ -3,7 +3,7 @@
 Research findings, NO-GO archive, and alternative strategy results.
 Supplements `TRADING_RULES.md`. Raw numbers preserved for reproducibility.
 
-**Last Updated:** 2026-02-17
+**Last Updated:** 2026-02-19
 
 ---
 
@@ -18,6 +18,11 @@ Supplements `TRADING_RULES.md`. Raw numbers preserved for reproducibility.
 7. [DST Strategy Revalidation — All Affected Sessions](#dst-strategy-revalidation)
 8. [Alternative Strategy NO-GOs](#alternative-strategy-no-gos)
 9. [Edge Structure Analysis (Feb 2026)](#edge-structure-analysis-feb-2026)
+10. [1015 vs 1000 Session Analysis — NO-GO](#1015-vs-1000-session-analysis)
+11. [Transition ORB Scan — NO-GO](#transition-orb-scan)
+12. [Day-of-Week and Macro Calendar Effects (P2)](#day-of-week-and-macro-calendar-effects)
+13. [Band Sensitivity Analysis](#band-sensitivity-analysis)
+14. [Multi-Aperture ORB Scan](#multi-aperture-orb-scan)
 
 ---
 
@@ -627,3 +632,214 @@ Implication: ORB sizes between nearby sessions are positively correlated (not in
    - **Genuinely failed:** MGC 1100 G6-G8 — baseline avgR already negative (-0.06) with N=76. Not a data problem.
    - **Promising but boundary-unstable:** MES 1000 G4-G6 — avgR positive in 47/48 shift cells, baseline +0.345, N=89. Only failed on >50% drop criterion at extreme shifts. Best candidate for 10-year rebuild.
    - **Data-limited (N<20 in band cells):** MES 1245 (N=9), MNQ 2300 winter (N=10), MNQ 2300 summer (N=16, all positive), MGC 1900 (N=31 but band cells shrink below 20). Cannot rule out or confirm — need the 10-year rebuild.
+
+---
+
+## 1015 vs 1000 Session Analysis
+
+**Date:** 2026-02-18
+**Script:** `research/research_1015_vs_1000.py`
+**Output:** `research/output/1015_vs_1000_head_to_head.csv`, `1015_vs_1000_opening_noise.csv`
+**Status:** COMPLETED — NO-GO as 1000 replacement
+
+### Question
+
+Does a 15-minute delay (1015 vs 1000) capture post-auction intent instead of opening noise, improving edge quality?
+
+### Method
+
+Head-to-head comparison at 1015 vs 1000 across MNQ, MES, MGC. All filters (G3+ through G12+, band filters). DST split. Overlap analysis to determine if these are the same trades. Direction analysis (LONG vs SHORT) at both times.
+
+### Key Results — Head-to-Head
+
+1015 does NOT beat 1000. Delta is negative across nearly every instrument/filter combination:
+
+| Instrument | Filter | 1000 avgR | 1015 avgR | Delta | N (1000/1015) |
+|-----------|--------|----------|----------|-------|---------------|
+| MNQ | G4+ | +0.209 | +0.193 | -0.015 | 516/514 |
+| MES | G4+ | +0.221 | +0.119 | -0.103 | 390/339 |
+| MES | G5+ | +0.229 | +0.111 | -0.118 | 324/271 |
+| MGC | G5+ | +0.110 | +0.020 | -0.091 | 401/225 |
+| MGC | G6+ | +0.131 | -0.085 | -0.216 | 278/145 |
+
+MES and MGC show consistent degradation at 1015. MNQ is nearly flat (difference is noise).
+
+### KEY FINDING: Direction Bias Inversion
+
+1015 direction bias is INVERTED on equities. MNQ/MES shorts win at 1015 while longs win at 1000. Gold keeps long bias at both times.
+
+**Mechanism:** Tokyo open equity longs are absorbed in first 15 min, then market rolls over. 1015 catches post-auction fade, not continuation. This is a structurally different trade — not a better version of the same trade.
+
+### Overlap Analysis
+
+| Instrument | G4+ shared breaks | Interpretation |
+|-----------|------------------|----------------|
+| MNQ | 100% | Identical break days |
+| MES | 80% at G4+, 49% at G8+ | Diverges at larger ORBs |
+| MGC | 46% at G4+ | Different trades entirely |
+
+### Verdict: NO-GO
+
+Do NOT replace 1000 with 1015. The 15-minute delay captures a different market dynamic (fade, not continuation) and underperforms on a pure avgR basis. Potentially interesting as a separate SHORT fade strategy (not built, not prioritized).
+
+---
+
+## Transition ORB Scan
+
+**Date:** 2026-02-18
+**Script:** `research/research_transition_orb.py`
+**Output:** `research/output/transition_orb_scan.csv`
+**Status:** COMPLETED — NO-GO
+
+### Question
+
+Do dead-zone / one-sided transition periods (one major market closing, another not yet open) produce ORBs with better follow-through due to directional conviction without counter-pressure?
+
+### Method
+
+Scanned ORBs every 15 min across the full trading day (0900-0830 Brisbane). Classified each time slot by market dominance regime (DEAD-ZONE, HANDOFF, ASIA-ONLY, OVERLAP, etc.). Computed avgR, WR, N, median MFE proxy at each slot with volume overlay. G4+ and G8+ filters. DST split.
+
+### Key Results
+
+Dead-zone slots (e.g., 0800 Brisbane — US closed, Asia not open) are NOT productive. The hypothesis that one-sided order flow creates cleaner breakouts was not supported.
+
+Established session opens (1000, 1100) continue to dominate. The volume and liquidity at session opens is necessary for breakout follow-through — dead zones lack the participation needed for momentum.
+
+### Verdict: NO-GO
+
+No actionable transition ORBs found. Dead-zone periods lack sufficient volume for reliable breakout follow-through. Stick with established session opens.
+
+---
+
+## Day-of-Week and Macro Calendar Effects
+
+**Date:** 2026-02-18
+**Script:** `research/research_day_of_week.py`
+**Output:** `research/output/day_of_week_breakdown.csv`, `day_of_week_macro_overlay.csv`, `day_of_week_skip_filter.csv`
+**Status:** COMPLETED — Three actionable filters identified
+
+### Questions
+
+Q1: Day-of-week breakdown for every session x instrument x filter.
+Q2: Skip-day filter simulation (what if we skip the worst days?).
+Q3: FOMC/NFP/opex day overlay — do macro events explain the pattern?
+
+### Day-of-Week Findings
+
+**1000 session:** Day-of-week has NO significant stable effect. The "best day" rotates year to year. Do NOT filter by DOW at 1000.
+
+**0900 session — Friday is POISON:**
+
+| Instrument | Filter | Friday avgR | Friday N | Non-Friday avgR | Mechanism |
+|-----------|--------|------------|----------|----------------|-----------|
+| MNQ | G4+ | -0.376 | 101 | +0.067 | Weekend position-squaring |
+| MNQ | G6+ | -0.376 | 101 | +0.078 | Weekend position-squaring |
+| MGC | G5+ | -0.292 | 58 | +0.186 | Weekend position-squaring |
+| MGC | G6+ | -0.235 | 38 | +0.073 | Weekend position-squaring |
+
+Stable across years. Mechanism: Friday pre-weekend position squaring kills ORB follow-through at the CME open session.
+
+### Macro Event Findings
+
+**NFP (Non-Farm Payrolls, first Friday of month) — UNIVERSALLY TOXIC:**
+
+| Instrument | Session | Filter | NFP avgR | Non-NFP avgR | Delta |
+|-----------|---------|--------|---------|-------------|-------|
+| MES | 1000 | G6+ | -0.512 | +0.238 | -0.749 |
+| MNQ | 1100 | G6+ | -0.427 | +0.035 | -0.462 |
+| MNQ | 1000 | G4+ | -0.139 | +0.224 | -0.363 |
+| MGC | 0900 | G6+ | -0.739 | -0.026 | -0.713 |
+
+Mechanism: Random spike from NFP release at 8:30 ET destroys ORB signal. The breakout direction is noise on NFP days.
+
+**OPEX (Options Expiration, third Friday of month):**
+
+| Instrument | Session | Filter | OPEX avgR | Non-OPEX avgR | Delta |
+|-----------|---------|--------|----------|--------------|-------|
+| MNQ | 0900 | G4+ | -0.250 | +0.029 | -0.279 |
+| MNQ | 0900 | G6+ | -0.250 | +0.031 | -0.281 |
+| MGC | 0900 | G4+ | -0.400 | +0.098 | -0.498 |
+
+Mechanism: Options pinning kills follow-through as market makers defend strikes.
+
+**FOMC:** Mixed — helps some sessions (MES 1800 delta = +1.11), hurts others. Not actionable as a universal filter.
+
+### Actionable Filters
+
+1. **NFP_SKIP:** Skip first-Friday NFP days. Universal across instruments/sessions. Strongest signal.
+2. **OPEX_SKIP:** Skip third-Friday OPEX days. Strongest at 0900 for MNQ and MGC.
+3. **FRIDAY_SKIP (0900 only):** Skip all Fridays at 0900. Do NOT apply to 1000 (all days positive there).
+
+Calendar filters implemented in `pipeline/calendar_filters.py` and integrated as portfolio-level overlays in `trading_app/config.py` (`CALENDAR_OVERLAYS`).
+
+---
+
+## Band Sensitivity Analysis
+
+**Date:** 2026-02-18
+**Script:** `research/research_band_sensitivity.py`
+**Output:** `research/output/band_sensitivity_results.csv`
+**Status:** COMPLETED — Mostly inconclusive due to data limitations
+
+### Question
+
+Do the band filter boundaries (G4-G6, G6-G8) identified in the edge structure analysis survive ±20% boundary shifts? Are they real sweet spots or curve-fitted artifacts?
+
+### Method
+
+For each band filter candidate (6 total), shifted both lower and upper boundaries independently by -20%, -10%, 0%, +10%, +20% (25 combinations per candidate). Survival criteria per RESEARCH_RULES.md: (1) avgR stays positive across all shifts, (2) N >= 20 in all shifts, (3) avgR doesn't drop >50% from baseline, (4) band must beat uncapped floor by >0.05 avgR.
+
+### Results
+
+184 rows tested across 6 candidates. Results split three ways:
+
+**Genuinely failed:**
+- MGC 1100 G6-G8 — Baseline avgR already negative (-0.06), N=76. Not a data problem — the band simply has no edge.
+
+**Promising but boundary-unstable:**
+- MES 1000 G4-G6 — avgR positive in 47/48 shift cells, baseline +0.345, N=89. Failed only on >50% drop criterion at extreme shifts. Best candidate for validation with longer data history.
+
+**Data-limited (N<20 in band cells):**
+- MES 1245 (N=9), MNQ 2300 winter (N=10), MNQ 2300 summer (N=16, all positive), MGC 1900 (N=31 but band cells shrink below 20). Cannot rule out or confirm.
+
+### Verdict
+
+Band filters are INCONCLUSIVE — mostly data-limited, not disproven. MES 1000 G4-G6 is the only candidate with sufficient data, and it nearly passed. Revisit after 10-year data rebuild expands sample sizes.
+
+---
+
+## Multi-Aperture ORB Scan
+
+**Date:** 2026-02-18
+**Script:** `research/research_aperture_scan.py`
+**Output:** `research/output/aperture_scan_results.csv`
+**Status:** COMPLETED — 5-minute aperture confirmed optimal
+
+### Question
+
+Does a wider ORB formation window (10/15/20/30/45/60 min instead of 5 min) improve edge quality? Could wider apertures capture the actual market event even when DST-affected fixed sessions drift by 1 hour?
+
+### Method
+
+Tested 7 aperture widths (5/10/15/20/30/45/60 min) across 4 instruments (MGC, MNQ, MES, MCL) and 4 sessions (0900/1000/1100/1800/2300). G4+ filter. Benjamini-Hochberg FDR correction. Sensitivity testing (±2min perturbation). DST splits. Every aperture compared to 5min baseline (delta_avgR).
+
+### Key Results
+
+**5-minute aperture has highest per-trade avgR** across nearly all combinations:
+
+| Instrument | Session | 5min avgR | 15min avgR | 30min avgR | 60min avgR |
+|-----------|---------|----------|-----------|-----------|-----------|
+| MGC | 0900 | +0.444 | +0.269 | +0.180 | +0.155 |
+| MGC | 1000 | +0.266 | +0.234 | +0.143 | +0.140 |
+| MES | 1000 | +0.301 | +0.240 | +0.162 | +0.075 |
+| MNQ | 1000 | +0.215 | +0.136 | +0.112 | +0.069 |
+
+Wider apertures consistently degrade avgR. The tradeoff: more trades (wider window catches more G4+ days) but lower quality per trade.
+
+**Wider apertures do NOT rescue DST-affected sessions.** MGC 1800 at 5min = +0.129 avgR; at 60min = +0.034. The extra width dilutes signal rather than capturing the drifted event.
+
+**Sensitivity:** Most apertures beyond 5min are ROBUST to ±2min perturbation (they change slowly). The 5min baseline itself is often SKIP (fragile to small changes) because the 5min window is a sharp filter.
+
+### Verdict
+
+5-minute aperture is optimal for per-trade quality. Wider apertures add trades but reduce avgR — the dilution is not worth it. Wider apertures do NOT solve the DST alignment problem. No pipeline change needed.

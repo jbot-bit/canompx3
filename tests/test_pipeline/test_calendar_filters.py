@@ -6,7 +6,7 @@ from datetime import date
 
 import pytest
 
-from pipeline.calendar_filters import is_nfp_day, is_opex_day, is_friday
+from pipeline.calendar_filters import is_nfp_day, is_opex_day, is_friday, is_monday, is_tuesday, day_of_week
 from trading_app.config import (
     CalendarSkipFilter, CompositeFilter, OrbSizeFilter, NoFilter,
 )
@@ -33,6 +33,7 @@ class TestIsNfpDay:
         date(2024, 11, 1),  # Nov 2024
         date(2024, 12, 6),  # Dec 2024
         date(2025, 1, 3),   # Jan 2025
+        date(2025, 8, 1),   # Aug 2025 — first day of month IS a Friday
         date(2026, 2, 6),   # Feb 2026
     ])
     def test_known_nfp_dates(self, d):
@@ -111,6 +112,55 @@ class TestIsFriday:
         assert not is_friday(date(2024, 1, 6))   # Saturday
         assert not is_friday(date(2024, 1, 7))   # Sunday
         assert not is_friday(date(2024, 1, 8))   # Monday
+
+
+# =============================================================================
+# Day-of-week functions (Feb 2026 DOW research)
+# =============================================================================
+
+class TestIsMonday:
+
+    def test_monday(self):
+        assert is_monday(date(2024, 1, 8))   # Monday
+
+    def test_not_monday(self):
+        assert not is_monday(date(2024, 1, 9))   # Tuesday
+        assert not is_monday(date(2024, 1, 5))   # Friday
+        assert not is_monday(date(2024, 1, 7))   # Sunday
+
+
+class TestIsTuesday:
+
+    def test_tuesday(self):
+        assert is_tuesday(date(2024, 1, 9))   # Tuesday
+
+    def test_not_tuesday(self):
+        assert not is_tuesday(date(2024, 1, 8))   # Monday
+        assert not is_tuesday(date(2024, 1, 10))  # Wednesday
+        assert not is_tuesday(date(2024, 1, 5))   # Friday
+
+
+class TestDayOfWeek:
+
+    def test_full_week_cycle(self):
+        """Mon=0, Tue=1, Wed=2, Thu=3, Fri=4, Sat=5, Sun=6."""
+        # 2024-01-08 is Monday
+        assert day_of_week(date(2024, 1, 8)) == 0   # Mon
+        assert day_of_week(date(2024, 1, 9)) == 1   # Tue
+        assert day_of_week(date(2024, 1, 10)) == 2  # Wed
+        assert day_of_week(date(2024, 1, 11)) == 3  # Thu
+        assert day_of_week(date(2024, 1, 12)) == 4  # Fri
+        assert day_of_week(date(2024, 1, 13)) == 5  # Sat
+        assert day_of_week(date(2024, 1, 14)) == 6  # Sun
+
+    def test_consistent_with_is_functions(self):
+        """day_of_week must agree with is_monday/is_tuesday/is_friday."""
+        for day_offset in range(7):
+            d = date(2024, 1, 8 + day_offset)  # Mon Jan 8 through Sun Jan 14
+            dow = day_of_week(d)
+            assert is_monday(d) == (dow == 0)
+            assert is_tuesday(d) == (dow == 1)
+            assert is_friday(d) == (dow == 4)
 
 
 # =============================================================================
