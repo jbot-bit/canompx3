@@ -11,10 +11,12 @@ from trading_app.config import (
     OrbSizeFilter,
     VolumeFilter,
     DayOfWeekSkipFilter,
+    DoubleBreakFilter,
     CompositeFilter,
     ALL_FILTERS,
     MGC_ORB_SIZE_FILTERS,
     MGC_VOLUME_FILTERS,
+    NO_DBL_BREAK,
     get_filters_for_grid,
 )
 
@@ -134,8 +136,9 @@ class TestAllFilters:
             assert key not in ALL_FILTERS, f"{key} should not be in ALL_FILTERS"
 
     def test_total_count(self):
-        # NO_FILTER + 4 G-filters + 1 VOL-filter + 12 DOW composites (3 DOW x 4 G) = 18
-        assert len(ALL_FILTERS) == 18
+        # NO_FILTER + 4 G-filters + 1 VOL-filter + 12 DOW composites (3 DOW x 4 G)
+        # + 1 NO_DBL_BREAK + 4 NODBL composites = 23
+        assert len(ALL_FILTERS) == 23
 
     def test_contains_volume_filter(self):
         assert "VOL_RV12_N20" in ALL_FILTERS
@@ -277,12 +280,17 @@ class TestDowComposites:
             assert key in filters, f"{key} missing from 1000 grid"
         assert "DIR_LONG" in filters
 
-    def test_1100_no_dow(self):
-        """1100 gets only BASE_GRID_FILTERS — no DOW composites, no DIR_LONG."""
+    def test_1100_has_nodbl_no_dow(self):
+        """1100 gets NODBL composites but no DOW composites, no DIR_LONG."""
         filters = get_filters_for_grid("MGC", "1100")
         dow_keys = [k for k in filters if "NOFRI" in k or "NOMON" in k or "NOTUE" in k]
         assert dow_keys == [], f"1100 should have no DOW composites, got {dow_keys}"
         assert "DIR_LONG" not in filters
+        # Must have NO_DBL_BREAK + 4 NODBL composites
+        assert "NO_DBL_BREAK" in filters
+        for key in ["ORB_G4_NODBL", "ORB_G5_NODBL", "ORB_G6_NODBL", "ORB_G8_NODBL"]:
+            assert key in filters, f"{key} missing from 1100 grid"
+            assert isinstance(filters[key], CompositeFilter)
 
     def test_composite_matches_row_correctly(self):
         """Composite(G4 + skip Friday) rejects Friday even with big ORB."""
@@ -294,3 +302,60 @@ class TestDowComposites:
         assert comp.matches_row({"orb_0900_size": 6.0, "day_of_week": 0}, "0900") is True
         # Small ORB on Monday -> rejected (base filter fails)
         assert comp.matches_row({"orb_0900_size": 2.0, "day_of_week": 0}, "0900") is False
+
+
+class TestDoubleBreakFilter:
+    """DoubleBreakFilter skips double-break days (mean-reversion regime)."""
+
+    def test_skips_double_break_day(self):
+        """matches_row returns False when orb had double-break."""
+        f = NO_DBL_BREAK
+        assert f.matches_row({"orb_1100_double_break": True}, "1100") is False
+
+    def test_passes_clean_day(self):
+        """matches_row returns True when orb did NOT double-break."""
+        f = NO_DBL_BREAK
+        assert f.matches_row({"orb_1100_double_break": False}, "1100") is True
+
+    def test_passes_missing_data(self):
+        """Missing double_break column → pass-through (fail-open)."""
+        f = NO_DBL_BREAK
+        assert f.matches_row({}, "1100") is True
+
+    def test_passes_none_data(self):
+        """None double_break value → pass-through (fail-open)."""
+        f = NO_DBL_BREAK
+        assert f.matches_row({"orb_1100_double_break": None}, "1100") is True
+
+    def test_uses_correct_orb_label(self):
+        """Filter reads the column for the specific orb_label."""
+        f = NO_DBL_BREAK
+        row = {"orb_0900_double_break": True, "orb_1100_double_break": False}
+        assert f.matches_row(row, "0900") is False
+        assert f.matches_row(row, "1100") is True
+
+    def test_1100_gets_nodbl_composites(self):
+        """get_filters_for_grid('MGC', '1100') has NO_DBL_BREAK + 4 NODBL composites."""
+        filters = get_filters_for_grid("MGC", "1100")
+        assert "NO_DBL_BREAK" in filters
+        assert isinstance(filters["NO_DBL_BREAK"], DoubleBreakFilter)
+        for key in ["ORB_G4_NODBL", "ORB_G5_NODBL", "ORB_G6_NODBL", "ORB_G8_NODBL"]:
+            assert key in filters
+
+    def test_other_sessions_no_nodbl(self):
+        """0900/1000/1800 do NOT get NODBL filters."""
+        for session in ("0900", "1000", "1800"):
+            filters = get_filters_for_grid("MGC", session)
+            nodbl_keys = [k for k in filters if "NODBL" in k or k == "NO_DBL_BREAK"]
+            assert nodbl_keys == [], f"{session} should have no NODBL filters, got {nodbl_keys}"
+
+    def test_frozen(self):
+        f = NO_DBL_BREAK
+        with pytest.raises(AttributeError):
+            f.filter_type = "CHANGED"
+
+    def test_to_json_roundtrip(self):
+        f = NO_DBL_BREAK
+        data = json.loads(f.to_json())
+        assert data["filter_type"] == "NO_DBL_BREAK"
+        assert data["exclude"] is True

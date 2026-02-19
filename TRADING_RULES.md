@@ -357,6 +357,24 @@ MGC 1000 shorts are actively negative. MNQ 1000 shorts are near-zero noise. LONG
 
 **1800 session: Dead regardless of direction.** MES 1800 is -0.23 LONG, -0.15 SHORT. No direction filter rescues a dead session.
 
+### Double-Break Filter (discovery grid — 1100 session)
+
+**Regime classifier:** Same-session double-break (both ORB high and low breached during
+the full session) signals a mean-reversion day. ORB breakout is a momentum strategy.
+Running momentum on mean-reversion days is structurally wrong.
+
+- `NO_DBL_BREAK` = skip days where `orb_{label}_double_break` is True
+- Applied as an optional discovery grid filter, not a blanket exclusion
+- Composites: `ORB_G4_NODBL` through `ORB_G8_NODBL` (size + no-double-break)
+- Currently wired for 1100 session only via `get_filters_for_grid()`
+- Implementation: `build_daily_features.py:detect_double_break()` computes the flag
+
+**Important:** `double_break` is computed over the FULL session (post-entry information).
+As a discovery-level filter it classifies day types for research, but cannot be used as
+a real-time pre-entry signal. Strategies validated with this filter trade on days where
+the session's historical double-break rate is low — a structural property, not a
+per-trade prediction.
+
 ### Filter Deduplication Rules
 Many filter variants produce the SAME trade set.
 

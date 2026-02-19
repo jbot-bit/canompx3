@@ -191,6 +191,24 @@ class DayOfWeekSkipFilter(StrategyFilter):
 
 
 @dataclass(frozen=True)
+class DoubleBreakFilter(StrategyFilter):
+    """Skip days where the ORB had a double-break (both sides breached).
+
+    Double-break = mean-reversion regime. ORB breakout = momentum strategy.
+    Filtering these out selects clean momentum days only.
+    """
+    exclude: bool = True
+
+    def matches_row(self, row: dict, orb_label: str) -> bool:
+        db = row.get(f"orb_{orb_label}_double_break")
+        if db is None:
+            return True  # missing data → pass-through
+        if self.exclude:
+            return not db
+        return db
+
+
+@dataclass(frozen=True)
 class CompositeFilter(StrategyFilter):
     """Chain two filters: base AND overlay must both pass."""
 
@@ -238,6 +256,13 @@ DIR_LONG = DirectionFilter(
 )
 DIR_SHORT = DirectionFilter(
     filter_type="DIR_SHORT", description="Short breakouts only", direction="short"
+)
+
+# Double-break filter (regime classifier: momentum vs mean-reversion)
+NO_DBL_BREAK = DoubleBreakFilter(
+    filter_type="NO_DBL_BREAK",
+    description="Skip double-break days (clean momentum only)",
+    exclude=True,
 )
 
 # MES 1000 band filters (H2: MES 1000 ORBs >= 12pt are toxic)
@@ -295,6 +320,22 @@ def _make_dow_composites(
     }
 
 
+def _make_dbl_composites(
+    size_filters: dict[str, StrategyFilter],
+    dbl_filter: DoubleBreakFilter,
+    suffix: str,
+) -> dict[str, CompositeFilter]:
+    """Build CompositeFilter(size + double-break skip) for each size filter."""
+    return {
+        f"{key}_{suffix}": CompositeFilter(
+            filter_type=f"{key}_{suffix}",
+            description=f"{filt.description} + {dbl_filter.description}",
+            base=filt, overlay=dbl_filter,
+        )
+        for key, filt in size_filters.items()
+    }
+
+
 # Base discovery grid filters — no session-specific DOW composites.
 # get_filters_for_grid() starts from this so sessions that don't declare a
 # DOW rule (e.g. 1100, 2300, 0030) never inherit composites from other sessions.
@@ -305,14 +346,17 @@ BASE_GRID_FILTERS: dict[str, StrategyFilter] = {
     **MGC_VOLUME_FILTERS,
 }
 
-# Master filter registry — base + all DOW composites across all active sessions.
+# Master filter registry — base + all DOW composites + double-break composites.
 # Portfolio.py looks up filters by filter_type key from this registry.
-# Count: 1 (NO_FILTER) + 4 (ORB G4/G5/G6/G8) + 1 (VOL) + 12 (DOW composites) = 18
+# Count: 1 (NO_FILTER) + 4 (ORB G4/G5/G6/G8) + 1 (VOL) + 12 (DOW composites)
+#        + 1 (NO_DBL_BREAK) + 4 (NODBL composites) = 23
 ALL_FILTERS: dict[str, StrategyFilter] = {
     **BASE_GRID_FILTERS,
     **_make_dow_composites(_GRID_SIZE_FILTERS_ORB, _DOW_SKIP_FRIDAY,  "NOFRI"),
     **_make_dow_composites(_GRID_SIZE_FILTERS_ORB, _DOW_SKIP_MONDAY,  "NOMON"),
     **_make_dow_composites(_GRID_SIZE_FILTERS_ORB, _DOW_SKIP_TUESDAY, "NOTUE"),
+    "NO_DBL_BREAK": NO_DBL_BREAK,
+    **_make_dbl_composites(_GRID_SIZE_FILTERS_ORB, NO_DBL_BREAK, "NODBL"),
 }
 
 # Calendar skip overlays (NOT in discovery grid — applied at portfolio/paper_trader level)
@@ -346,6 +390,9 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
         filters.update(_make_dow_composites(_GRID_SIZE_FILTERS_ORB, _DOW_SKIP_TUESDAY, "NOTUE"))
     if instrument == "MES" and session == "1000":
         filters.update(_MES_1000_BAND_FILTERS)
+    if session == "1100":
+        filters["NO_DBL_BREAK"] = NO_DBL_BREAK
+        filters.update(_make_dbl_composites(_GRID_SIZE_FILTERS_ORB, NO_DBL_BREAK, "NODBL"))
     return filters
 
 
@@ -363,13 +410,14 @@ ENTRY_MODELS = ["E1", "E3"]
 #   0900: 5m is OPTIMAL (ExpR +0.399, Sharpe 0.248). 15m/30m destroy edge.
 #   1000: 15m BETTER than 5m (ExpR +0.206, Sharpe 0.122, N=133 at G6+).
 #         5m baseline near-zero at G6+. 15m gives 2x trades + better edge.
-#   1100: OFF for breakout (shelved — may revisit with fade/reversal model).
+#   1100: 5m ORB; double-break filter applied in discovery.
 #   1800: 5m is OPTIMAL (ExpR +0.227, Sharpe 0.198). 15m/30m crush edge.
 #   2300: All negative at all windows.
 #   0030: All negative at all windows.
 ORB_DURATION_MINUTES: dict[str, int] = {
     "0900": 5,
     "1000": 15,
+    "1100": 5,              # Double-break filter applied in discovery
     "1130": 5,              # HK/SG equity open 9:30 AM HKT
     "1800": 5,
     "2300": 5,
@@ -408,6 +456,7 @@ E3_RETRACE_WINDOW_MINUTES: int | None = 60  # Audit: 4/12 sessions show stale in
 EARLY_EXIT_MINUTES: dict[str, int | None] = {
     "0900": 15,
     "1000": 30,
+    "1100": None,
     "1130": None,
     "1800": None,
     "2300": None,
@@ -427,6 +476,7 @@ EARLY_EXIT_MINUTES: dict[str, int | None] = {
 SESSION_EXIT_MODE: dict[str, str] = {
     "0900": "fixed_target",
     "1000": "ib_conditional",
+    "1100": "fixed_target",
     "1130": "fixed_target",
     "1800": "fixed_target",
     "2300": "fixed_target",

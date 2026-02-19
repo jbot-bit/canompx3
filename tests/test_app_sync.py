@@ -92,6 +92,7 @@ class TestAllFiltersSync:
 
     # Base: NO_FILTER + 4 G-filters + 1 VOL-filter
     # DOW composites: 3 variants (NOFRI, NOMON, NOTUE) x 4 G-filters = 12
+    # Double-break: 1 (NO_DBL_BREAK) + 4 NODBL composites = 5
     EXPECTED_FILTER_KEYS = {
         "NO_FILTER",
         "ORB_G4", "ORB_G5", "ORB_G6", "ORB_G8",
@@ -100,6 +101,9 @@ class TestAllFiltersSync:
         "ORB_G4_NOFRI", "ORB_G5_NOFRI", "ORB_G6_NOFRI", "ORB_G8_NOFRI",
         "ORB_G4_NOMON", "ORB_G5_NOMON", "ORB_G6_NOMON", "ORB_G8_NOMON",
         "ORB_G4_NOTUE", "ORB_G5_NOTUE", "ORB_G6_NOTUE", "ORB_G8_NOTUE",
+        # Double-break composites (1100 session regime filter)
+        "NO_DBL_BREAK",
+        "ORB_G4_NODBL", "ORB_G5_NODBL", "ORB_G6_NODBL", "ORB_G8_NODBL",
     }
 
     def test_expected_keys(self):
@@ -140,10 +144,12 @@ class TestAllFiltersSync:
 
     def test_size_filters_have_thresholds(self):
         """Every ORB size filter (or composite with size base) has thresholds."""
-        from trading_app.config import CompositeFilter
+        from trading_app.config import CompositeFilter, DoubleBreakFilter
         for key, filt in ALL_FILTERS.items():
             if key == "NO_FILTER" or isinstance(filt, VolumeFilter):
                 continue
+            if isinstance(filt, DoubleBreakFilter):
+                continue  # standalone double-break filter, not a size filter
             if isinstance(filt, CompositeFilter):
                 # Composite: base should be OrbSizeFilter with thresholds
                 assert isinstance(filt.base, OrbSizeFilter), (

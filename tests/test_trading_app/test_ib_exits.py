@@ -190,9 +190,9 @@ class Test1100Exclusion:
         """1100 session shelved for breakout — not in ORB_WINDOWS_UTC."""
         assert "1100" not in ORB_WINDOWS_UTC
 
-    def test_1100_not_in_session_exit_mode(self):
-        """1100 session shelved — not in SESSION_EXIT_MODE."""
-        assert "1100" not in SESSION_EXIT_MODE
+    def test_1100_fixed_target(self):
+        """1100 session uses fixed_target exit mode (discovery-enabled, not yet in execution)."""
+        assert SESSION_EXIT_MODE["1100"] == "fixed_target"
 
     def test_1130_in_orb_windows(self):
         """1130 (HK/SG equity open) is registered in ORB_WINDOWS_UTC."""
