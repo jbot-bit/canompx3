@@ -57,6 +57,10 @@ class PortfolioStrategy:
     sharpe_ratio: float | None
     max_drawdown_r: float | None
     median_risk_points: float | None
+    median_risk_dollars: float | None = None
+    avg_risk_dollars: float | None = None
+    avg_win_dollars: float | None = None
+    avg_loss_dollars: float | None = None
     source: str = "baseline"  # "baseline", "nested", or "rolling"
     weight: float = 1.0
     max_contracts: int = 1
@@ -269,7 +273,10 @@ def load_validated_strategies(
                    vs.rr_target, vs.confirm_bars, vs.filter_type,
                    vs.expectancy_r, vs.win_rate, vs.sample_size,
                    vs.sharpe_ratio, vs.max_drawdown_r,
-                   es.median_risk_points, 'baseline' as source
+                   es.median_risk_points,
+                   vs.median_risk_dollars, vs.avg_risk_dollars,
+                   vs.avg_win_dollars, vs.avg_loss_dollars,
+                   'baseline' as source
             FROM validated_setups vs
             LEFT JOIN experimental_strategies es
               ON vs.strategy_id = es.strategy_id
@@ -293,7 +300,10 @@ def load_validated_strategies(
                            nv.rr_target, nv.confirm_bars, nv.filter_type,
                            nv.expectancy_r, nv.win_rate, nv.sample_size,
                            nv.sharpe_ratio, nv.max_drawdown_r,
-                           ns.median_risk_points, 'nested' as source
+                           ns.median_risk_points,
+                           NULL as median_risk_dollars, NULL as avg_risk_dollars,
+                           NULL as avg_win_dollars, NULL as avg_loss_dollars,
+                           'nested' as source
                     FROM nested_validated nv
                     LEFT JOIN nested_strategies ns
                       ON nv.strategy_id = ns.strategy_id
@@ -469,6 +479,10 @@ def build_portfolio(
             sharpe_ratio=s.get("sharpe_ratio"),
             max_drawdown_r=s.get("max_drawdown_r"),
             median_risk_points=s.get("median_risk_points"),
+            median_risk_dollars=s.get("median_risk_dollars"),
+            avg_risk_dollars=s.get("avg_risk_dollars"),
+            avg_win_dollars=s.get("avg_win_dollars"),
+            avg_loss_dollars=s.get("avg_loss_dollars"),
             source=s.get("source", "baseline"),
         ))
 
@@ -766,16 +780,27 @@ def estimate_daily_capital(
     est_trades_per_day = len(portfolio.strategies) * 0.4
 
     # Max concurrent risk = max_concurrent * max_risk_per_trade
-    risk_points_list = [
-        s.median_risk_points for s in portfolio.strategies
-        if s.median_risk_points is not None and s.median_risk_points > 0
+    # Prefer stored dollar values; fall back to computing from points
+    risk_dollars_list = [
+        s.median_risk_dollars for s in portfolio.strategies
+        if s.median_risk_dollars is not None and s.median_risk_dollars > 0
     ]
-    avg_risk_points = (
-        sum(risk_points_list) / len(risk_points_list)
-        if risk_points_list
-        else cost_spec.min_risk_floor_points
-    )
-    risk_per_trade_dollars = avg_risk_points * cost_spec.point_value + cost_spec.total_friction
+    if risk_dollars_list:
+        risk_per_trade_dollars = sum(risk_dollars_list) / len(risk_dollars_list)
+        # Back-compute avg_risk_points for reporting
+        avg_risk_points = (risk_per_trade_dollars - cost_spec.total_friction) / cost_spec.point_value
+    else:
+        # Fallback: compute from points (legacy path)
+        risk_points_list = [
+            s.median_risk_points for s in portfolio.strategies
+            if s.median_risk_points is not None and s.median_risk_points > 0
+        ]
+        avg_risk_points = (
+            sum(risk_points_list) / len(risk_points_list)
+            if risk_points_list
+            else cost_spec.min_risk_floor_points
+        )
+        risk_per_trade_dollars = avg_risk_points * cost_spec.point_value + cost_spec.total_friction
     max_concurrent_risk = portfolio.max_concurrent_positions * risk_per_trade_dollars
 
     # Worst case daily loss

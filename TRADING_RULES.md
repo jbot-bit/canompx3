@@ -111,6 +111,7 @@ Example: 10pt ORB, RR2.0 = 20pt target, 10pt stop.
 | Alt strategies (Gap Fade, VWAP Pullback, Value Area, Concretum) | ALL NO-GO. ORB breakout IS the edge in gold. |
 | Non-ORB structural (Time-of-day, Range Expansion, Opening Drive) | ALL NO-GO. No risk structure, friction kills. |
 | Cross-instrument 1000 LONG portfolio (MGC+MNQ+MES) | NO-GO for diversification. MNQ/MES correlation = +0.83 (same trade). MGC/equity = +0.40-0.44 (moderate, not free). Adding MNQ+MES to 1000 LONG worsens Sharpe. Pick ONE equity micro, don't stack. Need truly uncorrelated asset for portfolio diversification. |
+| Crabel contraction/expansion (NR4/NR7 on session ORB history) | Expansion ratio = proxy for absolute size (confound r=0.35-0.86), adds zero within size bands. NR-contraction 2/24 tests significant = chance. Feb 2026. |
 
 > **Key insight**: Gold trends intraday more than it mean-reverts. The only confirmed edges are momentum breakouts with size filters. Full research details: `docs/RESEARCH_ARCHIVE.md`.
 
@@ -479,6 +480,7 @@ This is why small ORBs lose — friction eats the edge.
 | Percentage-based ORB filter | Not tested | 0.15% of price ≈ G5. Auto-adapts to price level. |
 | E3 V-Box Inversion | Promising | CHOP +0.503 ExpR (N=127). Future E3-specific retest. |
 | Low-vol counterbalance | NOT RESEARCHED | Mean-reversion partner for High Vol Breakout system. |
+| Band filters (G4-G6, G6-G8 ranges) | INCONCLUSIVE | Q2 edge structure showed timing matters within size bands (avgR spread 0.884). Sensitivity test (±20% shifts): MGC 1100 G6-G8 genuinely failed (baseline avgR negative, N=76). MES 1000 G4-G6 promising (avgR positive 47/48 shifts, baseline +0.345, N=89) but boundary-unstable. 4 other candidates data-limited (N<20 in band cells). Revisit after 10-year rebuild. Feb 2026. |
 
 ---
 

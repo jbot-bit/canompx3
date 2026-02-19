@@ -17,6 +17,7 @@ Supplements `TRADING_RULES.md`. Raw numbers preserved for reproducibility.
 6. [24-Hour ORB Time Scan with DST Split](#24-hour-orb-time-scan)
 7. [DST Strategy Revalidation — All Affected Sessions](#dst-strategy-revalidation)
 8. [Alternative Strategy NO-GOs](#alternative-strategy-no-gos)
+9. [Edge Structure Analysis (Feb 2026)](#edge-structure-analysis-feb-2026)
 
 ---
 
@@ -558,3 +559,71 @@ Summary table in `TRADING_RULES.md` under "What Doesn't Work (Confirmed NO-GOs)"
 | ADX Overlay | `research/analyze_adx_filter.py` | NO-GO. Low-vol ExpR negative. |
 | Volume Confirmation | `research/analyze_volume_confirmation.py` | NO-GO. Volume at break does not predict. |
 | MCL (Micro Crude) breakout | `research/analyze_mcl_comprehensive.py` | PERMANENT NO-GO. Oil is structurally mean-reverting (47-80% double break). |
+| Crabel Contraction/Expansion (session-level) | `research/research_contraction_expansion.py` | NO-GO. Expansion ratio is proxy for absolute ORB size (confound r=0.35-0.86). Within size bands: 2/72 significant < 3.6 expected by chance. NR-contraction: 2/24 significant = chance. |
+
+---
+
+## Edge Structure Analysis (Feb 2026)
+
+**Date:** 2026-02-18
+**Scripts:** `research/research_edge_structure.py`, `research/research_overlap_analysis.py`
+**Data:** MGC (3,114 days), MNQ (625 days), MES (626 days). Feb 2020 - Feb 2026.
+**Status:** COMPLETED
+**Output:** `research/output/edge_structure_window_sensitivity.csv`, `edge_structure_size_distribution.csv`, `edge_structure_size_correlation.csv`
+
+### Background
+
+Phase 0A overlap analysis found ALL 11 candidate session pairs fall in GREY-ZONE: 95-100% shared break-days but R-correlation only 0.03-0.24. Same days breaking, different outcomes. Three structural questions were tested.
+
+### Q1: Break Window Sensitivity
+
+**Question:** Is the 100% shared-break overlap an artifact of the 240-min window?
+**Method:** 3 CLEAN pairs (MNQ 1000v1015, MNQ 1130v1245, MES 1000v1015), tested at 30/60/120/180/240/360 min windows.
+
+**Result: REAL OVERLAP.** Even at 30-min window, shared break stays 98-99%.
+
+| Pair | 30min | 60min | 240min |
+|------|-------|-------|--------|
+| MNQ 1000v1015 | 99.2% | 100% | 100% |
+| MNQ 1130v1245 | 98.4% | 100% | 100% |
+| MES 1000v1015 | 98.1% | 100% | 100% |
+
+Implication: nearby sessions genuinely break on the same days. This is not a window artifact.
+
+### Q2: ORB Size Distribution by Time
+
+**Question:** Does the edge come from WHEN you trade or HOW BIG the ORB is?
+**Method:** All 16 sessions x 3 instruments, size-band avgR (G4-G6, G6-G8, G8+), DST split.
+
+**Result: TIME MATTERS TOO.** At the same G6-G8 size band, avgR spread = 0.884 across sessions.
+
+Top/bottom at G6-G8 (N>=20):
+- MGC: 1900 ALL +0.652 (N=40) vs 0900 SUMMER -0.232 (N=61)
+- MNQ: 2300 WINTER +0.444 (N=27) vs 1645 SUMMER -0.207 (N=61)
+- MES: 1245 ALL +0.294 (N=85) vs 1545 WINTER -0.190 (N=24)
+
+Implication: at the SAME ORB size, session timing produces structurally different follow-through. Size is necessary but not sufficient.
+
+### Q3: ORB Size Correlation Between Low-R-Corr Pairs
+
+**Question:** Are different outcomes from different ORB sizes (risk structure) or noise?
+**Method:** Pairs from overlap_analysis.csv with |r|<0.3 AND shared>90%. Pearson r on paired ORB sizes.
+
+**Result: MODERATE CORRELATION.** Average orb_size_r = +0.50, mean |size_diff| = 10.73, concordance = 64.4%.
+
+Implication: ORB sizes between nearby sessions are positively correlated (not independent, not identical). The different outcomes are not fully explained by different sizes — timing contributes independently.
+
+### Caveats
+
+- IN-SAMPLE analysis (~500 MNQ/MES days, ~3100 MGC days)
+- E1 entry, CB1, 5min aperture, RR2.0 only
+- No walk-forward validation
+- DST-affected sessions split by regime (no blended numbers)
+
+### Combined Verdict
+
+1. **Adding new pipeline sessions is LOW PRIORITY.** Q1 shows they break on the same days. Q3 shows moderate size correlation. The theoretical diversification benefit is limited.
+2. **Band filters are INCONCLUSIVE — mostly data-limited, not disproven.** `research/research_band_sensitivity.py` tested 6 candidates with ±20% boundary shifts (184 rows, `research/output/band_sensitivity_results.csv`). Results split three ways:
+   - **Genuinely failed:** MGC 1100 G6-G8 — baseline avgR already negative (-0.06) with N=76. Not a data problem.
+   - **Promising but boundary-unstable:** MES 1000 G4-G6 — avgR positive in 47/48 shift cells, baseline +0.345, N=89. Only failed on >50% drop criterion at extreme shifts. Best candidate for 10-year rebuild.
+   - **Data-limited (N<20 in band cells):** MES 1245 (N=9), MNQ 2300 winter (N=10), MNQ 2300 summer (N=16, all positive), MGC 1900 (N=31 but band cells shrink below 20). Cannot rule out or confirm — need the 10-year rebuild.

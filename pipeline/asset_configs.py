@@ -74,7 +74,7 @@ ASSET_CONFIGS = {
         "symbol": "MES",
         "outright_pattern": re.compile(r'^MES[FGHJKMNQUVXZ]\d{1,2}$'),
         "prefix_len": 3,
-        "minimum_start_date": date(2024, 2, 12),
+        "minimum_start_date": date(2019, 2, 12),
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
             "0900", "1000", "1100", "1800", "0030",

@@ -112,7 +112,7 @@ Databento .dbn.zst files
 - ✅ Revalidation: 1272 strategies — 275 STABLE, 155 WINTER-DOM, 130 SUMMER-DOM. No validated broken. CSV: `research/output/dst_strategy_revalidation.csv`.
 - ✅ Volume analysis: event-driven edges confirmed. `research/output/volume_dst_findings.md`.
 - ✅ Time scan: `research/research_orb_time_scan.py`. New candidates all rejected.
-- ⬜ Migrate DST columns to production gold.db (only on scratch copy currently).
+- ✅ DST columns live in production gold.db (942 validated_setups, 464 with DST splits; 12,996 experimental, 2,304 with DST splits).
 
 **937 validated strategies exist** across all instruments. 2300: 4 (MGC G8+). 0030: 44 (MES 31, MNQ 13). Do NOT deprecate.
 

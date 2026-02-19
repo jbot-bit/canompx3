@@ -156,6 +156,12 @@ CREATE TABLE IF NOT EXISTS daily_features (
     us_dst            BOOLEAN,
     uk_dst            BOOLEAN,
 
+    -- Calendar skip flags (deterministic from date, no parameter search)
+    -- Used as portfolio overlay filters, not in discovery grid.
+    is_nfp_day        BOOLEAN,
+    is_opex_day       BOOLEAN,
+    is_friday         BOOLEAN,
+
     -- ORB columns (7 fixed + 6 dynamic = 13 sessions x 9 columns = 117)
 {orb_block}
 
@@ -203,6 +209,14 @@ def init_db(db_path: Path, force: bool = False):
 
         con.execute(DAILY_FEATURES_SCHEMA)
         logger.info("  daily_features: created (or already exists)")
+
+        # Migration: add calendar skip flag columns (Feb 2026)
+        for col in ["is_nfp_day", "is_opex_day", "is_friday"]:
+            try:
+                con.execute(f"ALTER TABLE daily_features ADD COLUMN {col} BOOLEAN")
+                logger.info(f"  Migration: added {col} column to daily_features")
+            except duckdb.CatalogException:
+                pass  # column already exists
 
         con.commit()
         print()

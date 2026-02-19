@@ -21,6 +21,7 @@ Usage (DEPRECATED -- prefer ingest_dbn.py or ingest_dbn_daily.py):
 import sys
 import re
 import json
+import hashlib
 import argparse
 import traceback
 from pathlib import Path
@@ -84,7 +85,6 @@ class CheckpointManager:
         # Checkpoint file named after source DBN + DB path hash
         # Different DBs get separate checkpoint files to prevent cross-contamination
         if db_path is not None:
-            import hashlib
             db_hash = hashlib.md5(str(db_path.resolve()).encode()).hexdigest()[:8]
             self.checkpoint_file = checkpoint_dir / f"checkpoint_{source_file.stem}_{db_hash}.jsonl"
         else:

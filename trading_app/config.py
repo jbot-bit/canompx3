@@ -150,6 +150,41 @@ class DirectionFilter(StrategyFilter):
         return break_dir == self.direction
 
 
+@dataclass(frozen=True)
+class CalendarSkipFilter(StrategyFilter):
+    """Skip trading on calendar event days (NFP, OPEX, Friday).
+
+    Portfolio overlay — not part of discovery grid.
+    All three flags are pre-computed in daily_features.
+    """
+
+    skip_nfp: bool = True
+    skip_opex: bool = True
+    skip_friday_session: str | None = None  # e.g. "0900" or None
+
+    def matches_row(self, row: dict, orb_label: str) -> bool:
+        if self.skip_nfp and row.get("is_nfp_day"):
+            return False
+        if self.skip_opex and row.get("is_opex_day"):
+            return False
+        if self.skip_friday_session and orb_label == self.skip_friday_session:
+            if row.get("is_friday"):
+                return False
+        return True
+
+
+@dataclass(frozen=True)
+class CompositeFilter(StrategyFilter):
+    """Chain two filters: base AND overlay must both pass."""
+
+    base: StrategyFilter
+    overlay: StrategyFilter
+
+    def matches_row(self, row: dict, orb_label: str) -> bool:
+        return (self.base.matches_row(row, orb_label)
+                and self.overlay.matches_row(row, orb_label))
+
+
 # =========================================================================
 # PREDEFINED FILTER SETS — full ORB size spectrum
 # =========================================================================
@@ -206,11 +241,29 @@ _MES_1000_BAND_FILTERS = {
 _GRID_SIZE_FILTERS = {k: v for k, v in MGC_ORB_SIZE_FILTERS.items()
                       if k in ("G4", "G5", "G6", "G8")}
 
-# Master filter registry (all filters by filter_type key)
+# Calendar skip filters (portfolio overlay, not in discovery grid)
+CALENDAR_SKIP_NFP_OPEX = CalendarSkipFilter(
+    filter_type="CAL_SKIP_NFP_OPEX",
+    description="Skip NFP + OPEX days",
+    skip_nfp=True, skip_opex=True, skip_friday_session=None,
+)
+CALENDAR_SKIP_ALL_0900 = CalendarSkipFilter(
+    filter_type="CAL_SKIP_ALL_0900",
+    description="Skip NFP + OPEX + Friday@0900",
+    skip_nfp=True, skip_opex=True, skip_friday_session="0900",
+)
+
+# Master filter registry (discovery grid filters by filter_type key)
 ALL_FILTERS: dict[str, StrategyFilter] = {
     "NO_FILTER": NoFilter(),
     **{f"ORB_{k}": v for k, v in _GRID_SIZE_FILTERS.items()},
     **MGC_VOLUME_FILTERS,
+}
+
+# Calendar skip overlays (NOT in discovery grid — applied at portfolio/paper_trader level)
+CALENDAR_OVERLAYS: dict[str, CalendarSkipFilter] = {
+    "CAL_SKIP_NFP_OPEX": CALENDAR_SKIP_NFP_OPEX,
+    "CAL_SKIP_ALL_0900": CALENDAR_SKIP_ALL_0900,
 }
 
 def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFilter]:

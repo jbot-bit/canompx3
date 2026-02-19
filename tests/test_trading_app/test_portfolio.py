@@ -1160,6 +1160,47 @@ class TestFamilyHeadsOnly:
         assert len(results) == 1
 
 
+class TestClassificationWeights:
+    """FIX5: CORE=1.0, REGIME=0.5, INVALID=excluded."""
+
+    def test_core_gets_weight_1(self, tmp_path):
+        strats = [_make_strategy(sample_size=200)]
+        db_path = _setup_db(tmp_path, strats)
+        pf = build_portfolio(db_path=db_path, instrument="MGC")
+        assert len(pf.strategies) == 1
+        assert pf.strategies[0].weight == 1.0
+        assert pf.strategies[0].classification == "CORE"
+
+    def test_regime_gets_weight_half(self, tmp_path):
+        strats = [_make_strategy(sample_size=50)]
+        db_path = _setup_db(tmp_path, strats)
+        pf = build_portfolio(db_path=db_path, instrument="MGC")
+        assert len(pf.strategies) == 1
+        assert pf.strategies[0].weight == 0.5
+        assert pf.strategies[0].classification == "REGIME"
+
+    def test_invalid_excluded(self, tmp_path):
+        strats = [_make_strategy(sample_size=20)]
+        db_path = _setup_db(tmp_path, strats)
+        pf = build_portfolio(db_path=db_path, instrument="MGC")
+        assert len(pf.strategies) == 0
+
+    def test_mixed_portfolio_weights(self, tmp_path):
+        strats = [
+            _make_strategy(strategy_id="CORE_1", sample_size=200, orb_label="1000"),
+            _make_strategy(strategy_id="REGIME_1", sample_size=60, orb_label="1800"),
+            _make_strategy(strategy_id="INVALID_1", sample_size=15, orb_label="2300"),
+        ]
+        db_path = _setup_db(tmp_path, strats)
+        pf = build_portfolio(db_path=db_path, instrument="MGC")
+        ids = {s.strategy_id: s for s in pf.strategies}
+        assert "CORE_1" in ids
+        assert ids["CORE_1"].weight == 1.0
+        assert "REGIME_1" in ids
+        assert ids["REGIME_1"].weight == 0.5
+        assert "INVALID_1" not in ids
+
+
 class TestCLI:
     def test_help(self):
         import subprocess

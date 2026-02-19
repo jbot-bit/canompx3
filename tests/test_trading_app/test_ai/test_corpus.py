@@ -54,10 +54,10 @@ class TestSchemaDefinitions:
 
     @pytest.fixture
     def db_path(self):
-        p = PROJECT_ROOT / "gold.db"
-        if not p.exists():
+        from pipeline.paths import GOLD_DB_PATH
+        if not GOLD_DB_PATH.exists():
             pytest.skip("gold.db not available")
-        return str(p)
+        return str(GOLD_DB_PATH)
 
     def test_get_schema_definitions(self, db_path):
         from trading_app.ai.corpus import get_schema_definitions

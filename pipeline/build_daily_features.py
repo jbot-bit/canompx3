@@ -35,6 +35,7 @@ from pipeline.init_db import ORB_LABELS
 from pipeline.cost_model import get_cost_spec, pnl_points_to_r, CostSpec
 from pipeline.dst import (is_us_dst, is_uk_dst, DYNAMIC_ORB_RESOLVERS, get_break_group,
                           DST_AFFECTED_SESSIONS, DST_CLEAN_SESSIONS)
+from pipeline.calendar_filters import is_nfp_day, is_opex_day, is_friday
 
 from pipeline.log import get_logger
 logger = get_logger(__name__)
@@ -680,6 +681,11 @@ def build_features_for_day(con: duckdb.DuckDBPyConnection, symbol: str,
     # DST flags for this trading day
     row["us_dst"] = is_us_dst(trading_day)
     row["uk_dst"] = is_uk_dst(trading_day)
+
+    # Calendar skip flags (deterministic from date)
+    row["is_nfp_day"] = is_nfp_day(trading_day)
+    row["is_opex_day"] = is_opex_day(trading_day)
+    row["is_friday"] = is_friday(trading_day)
 
     # Daily OHLC from all 1m bars
     if not bars_df.empty:
