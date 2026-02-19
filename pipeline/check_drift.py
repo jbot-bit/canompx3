@@ -1138,6 +1138,50 @@ def check_claude_md_size_cap() -> list[str]:
     return []
 
 
+def check_discovery_session_aware_filters() -> list[str]:
+    """Check #28: Discovery scripts must use get_filters_for_grid(), not iterate ALL_FILTERS.
+
+    Grid-search files (strategy_discovery.py, nested/discovery.py, regime/discovery.py)
+    must use the session-aware get_filters_for_grid() instead of iterating ALL_FILTERS
+    directly. Iterating ALL_FILTERS applies DOW composites to sessions that lack
+    research justification.
+
+    Allowed: ALL_FILTERS lookups by key (e.g., ALL_FILTERS.get(filter_type))
+    Forbidden: ALL_FILTERS.items() or len(ALL_FILTERS) in discovery grid loops
+    """
+    violations = []
+    discovery_files = [
+        TRADING_APP_DIR / "strategy_discovery.py",
+        TRADING_APP_DIR / "nested" / "discovery.py",
+        TRADING_APP_DIR / "regime" / "discovery.py",
+    ]
+
+    # Pattern: iterating or sizing ALL_FILTERS (grid misuse)
+    iter_pattern = re.compile(r'\bALL_FILTERS\.(items|values|keys)\(\)')
+    len_pattern = re.compile(r'\blen\(ALL_FILTERS\)')
+
+    for fpath in discovery_files:
+        if not fpath.exists():
+            continue
+        content = fpath.read_text(encoding='utf-8')
+        lines = content.splitlines()
+
+        for line_num, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith('#'):
+                continue
+            for pat, desc in [(iter_pattern, "iterates ALL_FILTERS"),
+                              (len_pattern, "uses len(ALL_FILTERS)")]:
+                if pat.search(line):
+                    violations.append(
+                        f"  {fpath.relative_to(PROJECT_ROOT)}:{line_num}: "
+                        f"{desc} — use get_filters_for_grid() instead: "
+                        f"{stripped[:80]}"
+                    )
+
+    return violations
+
+
 def main():
     print("=" * 60)
     print("PIPELINE DRIFT CHECK")
@@ -1461,6 +1505,18 @@ def main():
     # Check 27: DB config usage (all connect() calls must configure)
     print("Check 27: DB config usage (configure_connection after connect)...")
     v = check_db_config_usage()
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 28: Discovery files must use session-aware filters
+    print("Check 28: Discovery scripts use get_filters_for_grid (not ALL_FILTERS)...")
+    v = check_discovery_session_aware_filters()
     if v:
         print("  FAILED:")
         for line in v:

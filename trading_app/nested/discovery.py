@@ -19,7 +19,7 @@ import duckdb
 
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.init_db import ORB_LABELS
-from trading_app.config import ALL_FILTERS, ENTRY_MODELS
+from trading_app.config import get_filters_for_grid, ENTRY_MODELS
 from trading_app.outcome_builder import RR_TARGETS, CONFIRM_BARS_OPTIONS
 from trading_app.strategy_discovery import (
     compute_metrics,
@@ -130,11 +130,16 @@ def run_nested_discovery(
                 print(f"  No daily_features for orb_minutes={orb_minutes}. Skipping.")
                 continue
 
+            # Build union of all session-specific filters for bulk pre-computation
+            all_grid_filters: dict = {}
+            for s in ORB_LABELS:
+                all_grid_filters.update(get_filters_for_grid(instrument, s))
+
             print("Computing relative volumes for volume filters...")
-            _compute_relative_volumes(con, features, instrument, ORB_LABELS, ALL_FILTERS)
+            _compute_relative_volumes(con, features, instrument, ORB_LABELS, all_grid_filters)
 
             print("Building filter/ORB day sets...")
-            filter_days = _build_filter_day_sets(features, ORB_LABELS, ALL_FILTERS)
+            filter_days = _build_filter_day_sets(features, ORB_LABELS, all_grid_filters)
 
             print("Loading nested outcomes (bulk)...")
             outcomes_by_key = _load_nested_outcomes_bulk(
@@ -142,15 +147,18 @@ def run_nested_discovery(
             )
             print(f"  {sum(len(v) for v in outcomes_by_key.values())} outcome rows loaded")
 
-            # Grid iteration
-            e1e2_combos = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * len(ALL_FILTERS) * 2
-            e3_combos = len(ORB_LABELS) * len(RR_TARGETS) * 1 * len(ALL_FILTERS)
-            total_combos = e1e2_combos + e3_combos
+            # Grid iteration (session-aware: each session gets only its justified filters)
+            total_combos = 0
+            for s in ORB_LABELS:
+                nf = len(get_filters_for_grid(instrument, s))
+                total_combos += nf * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * 2  # E1+E2
+                total_combos += nf * len(RR_TARGETS) * 1                              # E3
             combo_idx = 0
             insert_batch = []
 
-            for filter_key, strategy_filter in ALL_FILTERS.items():
-                for orb_label in ORB_LABELS:
+            for orb_label in ORB_LABELS:
+                session_filters = get_filters_for_grid(instrument, orb_label)
+                for filter_key, strategy_filter in session_filters.items():
                     matching_day_set = filter_days[(filter_key, orb_label)]
 
                     for em in ENTRY_MODELS:
