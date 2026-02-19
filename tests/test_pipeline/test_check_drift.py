@@ -257,3 +257,92 @@ class TestClaudeMdSizeCap:
         (tmp_path / "CLAUDE.md").write_text("small")
         violations = check_drift.check_claude_md_size_cap()
         assert len(violations) == 0
+
+
+class TestDiscoverySessionAwareFilters:
+    """Tests for check 28: discovery scripts must use get_filters_for_grid, not ALL_FILTERS."""
+
+    def _patch(self, monkeypatch, check_drift, tmp_path):
+        """Patch both TRADING_APP_DIR and PROJECT_ROOT to tmp_path so
+        fpath.relative_to(PROJECT_ROOT) works in violation messages."""
+        monkeypatch.setattr(check_drift, "TRADING_APP_DIR", tmp_path)
+        monkeypatch.setattr(check_drift, "PROJECT_ROOT", tmp_path)
+
+    def test_catches_all_filters_items(self, tmp_path, monkeypatch):
+        """ALL_FILTERS.items() in strategy_discovery.py triggers a violation."""
+        from pipeline import check_drift
+        (tmp_path / "strategy_discovery.py").write_text(
+            "for filter_key, filt in ALL_FILTERS.items():\n    pass\n"
+        )
+        self._patch(monkeypatch, check_drift, tmp_path)
+        violations = check_drift.check_discovery_session_aware_filters()
+        assert len(violations) == 1
+        assert "iterates ALL_FILTERS" in violations[0]
+
+    def test_catches_all_filters_values(self, tmp_path, monkeypatch):
+        """ALL_FILTERS.values() in a discovery file triggers a violation."""
+        from pipeline import check_drift
+        (tmp_path / "strategy_discovery.py").write_text(
+            "for filt in ALL_FILTERS.values():\n    pass\n"
+        )
+        self._patch(monkeypatch, check_drift, tmp_path)
+        violations = check_drift.check_discovery_session_aware_filters()
+        assert len(violations) == 1
+        assert "iterates ALL_FILTERS" in violations[0]
+
+    def test_catches_len_all_filters(self, tmp_path, monkeypatch):
+        """len(ALL_FILTERS) in a discovery file triggers a violation."""
+        from pipeline import check_drift
+        (tmp_path / "strategy_discovery.py").write_text(
+            "total_combos = len(ALL_FILTERS) * len(RR_TARGETS)\n"
+        )
+        self._patch(monkeypatch, check_drift, tmp_path)
+        violations = check_drift.check_discovery_session_aware_filters()
+        assert len(violations) == 1
+        assert "len(ALL_FILTERS)" in violations[0]
+
+    def test_passes_all_filters_get(self, tmp_path, monkeypatch):
+        """ALL_FILTERS.get() is a registry lookup — not a grid iteration."""
+        from pipeline import check_drift
+        (tmp_path / "strategy_discovery.py").write_text(
+            "filt = ALL_FILTERS.get(strategy.filter_type)\n"
+        )
+        self._patch(monkeypatch, check_drift, tmp_path)
+        violations = check_drift.check_discovery_session_aware_filters()
+        assert len(violations) == 0
+
+    def test_passes_commented_out(self, tmp_path, monkeypatch):
+        """Commented-out ALL_FILTERS.items() is not a violation."""
+        from pipeline import check_drift
+        (tmp_path / "strategy_discovery.py").write_text(
+            "# for k, v in ALL_FILTERS.items():  # old pattern\n"
+        )
+        self._patch(monkeypatch, check_drift, tmp_path)
+        violations = check_drift.check_discovery_session_aware_filters()
+        assert len(violations) == 0
+
+    def test_passes_missing_file(self, tmp_path, monkeypatch):
+        """Missing discovery file is silently skipped."""
+        from pipeline import check_drift
+        self._patch(monkeypatch, check_drift, tmp_path)
+        violations = check_drift.check_discovery_session_aware_filters()
+        assert len(violations) == 0
+
+    def test_catches_nested_discovery(self, tmp_path, monkeypatch):
+        """Violation in nested/discovery.py is detected."""
+        from pipeline import check_drift
+        nested = tmp_path / "nested"
+        nested.mkdir()
+        (nested / "discovery.py").write_text(
+            "for k, v in ALL_FILTERS.items():\n    pass\n"
+        )
+        self._patch(monkeypatch, check_drift, tmp_path)
+        violations = check_drift.check_discovery_session_aware_filters()
+        assert len(violations) == 1
+        assert "nested" in violations[0]
+
+    def test_real_discovery_files_pass(self):
+        """Current codebase discovery scripts are clean."""
+        from pipeline.check_drift import check_discovery_session_aware_filters
+        violations = check_discovery_session_aware_filters()
+        assert len(violations) == 0
