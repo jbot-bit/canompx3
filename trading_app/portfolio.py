@@ -607,7 +607,8 @@ def build_strategy_daily_series(
         for om in unique_om:
             om_int = int(om)
             df_om = con.execute("""
-                SELECT trading_day, orb_0900_size, orb_1000_size, orb_1100_size,
+                SELECT trading_day, day_of_week,
+                       orb_0900_size, orb_1000_size, orb_1100_size,
                        orb_1800_size, orb_2300_size, orb_0030_size
                 FROM daily_features
                 WHERE symbol = ? AND orb_minutes = ?
@@ -677,17 +678,20 @@ def build_strategy_daily_series(
             if filt is None:
                 continue
 
-            size_col = f"orb_{orb_label}_size"
             if ftype == "NO_FILTER":
                 eligible_mask = np.ones(len(df_rows), dtype=bool)
             else:
-                sizes = df_rows[size_col].values
-                eligible_mask = np.array([
-                    filt.matches_row({size_col: s}, orb_label)
-                    if s is not None and not (isinstance(s, float) and np.isnan(s))
-                    else False
-                    for s in sizes
-                ])
+                # Pass the full row dict so CompositeFilter (e.g. size + DOW)
+                # can access all columns (orb_size, day_of_week, etc.).
+                # Convert NaN to None to preserve fail-closed filter semantics.
+                eligible_mask = df_rows.apply(
+                    lambda row: filt.matches_row(
+                        {k: (None if (isinstance(v, float) and np.isnan(v)) else v)
+                         for k, v in row.items()},
+                        orb_label,
+                    ),
+                    axis=1,
+                ).values
 
             # Start with NaN (ineligible), set eligible days to 0.0
             series = pd.Series(np.nan, index=all_days, name=sid)

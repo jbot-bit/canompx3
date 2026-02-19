@@ -98,6 +98,25 @@ def _get_trading_days(con, instrument: str, start_date: date, end_date: date) ->
     ).fetchall()
     return [r[0] for r in rows]
 
+
+def _get_daily_features_row(con, instrument: str, trading_day: date) -> dict | None:
+    """Fetch calendar-relevant columns from daily_features for one day."""
+    row = con.execute(
+        """SELECT is_nfp_day, is_opex_day, is_friday, day_of_week
+           FROM daily_features
+           WHERE symbol = ? AND trading_day = ?
+           LIMIT 1""",
+        [instrument, trading_day],
+    ).fetchone()
+    if row is None:
+        return None
+    return {
+        "is_nfp_day": row[0],
+        "is_opex_day": row[1],
+        "is_friday": row[2],
+        "day_of_week": row[3],
+    }
+
 def _get_bars_for_day(con, instrument: str, trading_day: date) -> list[dict]:
     """
     Fetch 1-minute bars for a trading day.
@@ -212,7 +231,8 @@ def replay_historical(
             else:
                 engine.market_state = None
 
-            engine.on_trading_day_start(td)
+            df_row = _get_daily_features_row(con, instrument, td)
+            engine.on_trading_day_start(td, daily_features_row=df_row)
             risk_mgr.daily_reset(td)
 
             day_summary = DaySummary(trading_day=td)

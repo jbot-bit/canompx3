@@ -27,6 +27,7 @@ from pipeline.dst import DYNAMIC_ORB_RESOLVERS
 from trading_app.config import (
     ALL_FILTERS, EARLY_EXIT_MINUTES, SESSION_EXIT_MODE,
     IB_DURATION_MINUTES, HOLD_HOURS, ORB_DURATION_MINUTES,
+    CalendarSkipFilter, CALENDAR_SKIP_NFP_OPEX,
 )
 from trading_app.portfolio import Portfolio, PortfolioStrategy
 
@@ -173,12 +174,14 @@ class ExecutionEngine:
 
     def __init__(self, portfolio: Portfolio, cost_spec: CostSpec,
                  risk_manager=None, market_state=None,
-                 live_session_costs: bool = True): # Changed default to True
+                 live_session_costs: bool = True,
+                 calendar_overlay: CalendarSkipFilter | None = CALENDAR_SKIP_NFP_OPEX):
         self.portfolio = portfolio
         self.cost_spec = cost_spec
         self.risk_manager = risk_manager  # Optional RiskManager for position limits
         self.market_state = market_state  # Optional MarketState for scoring
         self._live_session_costs = live_session_costs  # Use session-adjusted slippage
+        self.calendar_overlay = calendar_overlay  # NFP/OPEX skip overlay
 
         # State
         self.trading_day: date | None = None
@@ -190,8 +193,10 @@ class ExecutionEngine:
         self.daily_trade_count: int = 0
         self._bar_count: int = 0
         self._last_bar: dict | None = None  # Track last bar for scratch mark-to-market
+        self._daily_features_row: dict | None = None  # Calendar filter data
 
-    def on_trading_day_start(self, trading_day: date) -> None:
+    def on_trading_day_start(self, trading_day: date,
+                             daily_features_row: dict | None = None) -> None:
         """Reset state for a new trading day."""
         self.trading_day = trading_day
         self.orbs = {}
@@ -201,6 +206,7 @@ class ExecutionEngine:
         self.daily_trade_count = 0
         self._bar_count = 0
         self._last_bar = None
+        self._daily_features_row = daily_features_row
 
         # Initialize IB tracker (23:00 UTC to 01:00 UTC = 09:00-11:00 Brisbane)
         prev_day = trading_day - timedelta(days=1)
@@ -403,6 +409,13 @@ class ExecutionEngine:
                 row = {f"orb_{orb.label}_size": orb.size}
                 if not filt.matches_row(row, orb.label):
                     continue
+
+            # Check calendar overlay (NFP/OPEX skip)
+            if (self.calendar_overlay is not None
+                    and self._daily_features_row is not None
+                    and not self.calendar_overlay.matches_row(
+                        self._daily_features_row, orb.label)):
+                continue
 
             # Check market state scoring (if available)
             if self.market_state is not None:

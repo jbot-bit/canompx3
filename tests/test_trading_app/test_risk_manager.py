@@ -277,3 +277,94 @@ class TestStatus:
         assert status["daily_trade_count"] == 0
         assert status["halted"] is False
         assert status["warnings"] == 0
+
+# ============================================================================
+# Multi-Day Equity Drawdown Tests
+# ============================================================================
+
+class TestEquityDrawdown:
+
+    def test_cumulative_pnl_tracks_across_days(self):
+        rm = RiskManager(RiskLimits(max_equity_drawdown_r=-10.0))
+        rm.daily_reset(date(2024, 1, 5))
+        rm.on_trade_exit(2.0)
+        rm.on_trade_exit(1.0)
+        rm.daily_reset(date(2024, 1, 6))
+        rm.on_trade_exit(-1.5)
+
+        assert rm.cumulative_pnl_r == pytest.approx(1.5)
+        assert rm.equity_high_water_r == pytest.approx(3.0)
+
+    def test_drawdown_halts_when_breached(self):
+        rm = RiskManager(RiskLimits(max_equity_drawdown_r=-5.0))
+        rm.daily_reset(date(2024, 1, 5))
+        rm.on_trade_exit(3.0)  # HWM = 3.0
+        rm.daily_reset(date(2024, 1, 6))
+        rm.on_trade_exit(-4.0)  # cum = -1.0, DD = -4.0 from peak 3.0
+        assert not rm._equity_halted
+
+        rm.on_trade_exit(-4.5)  # cum = -5.5, DD = -8.5 from peak 3.0
+        assert rm._equity_halted
+
+    def test_equity_halt_blocks_can_enter(self):
+        rm = RiskManager(RiskLimits(max_equity_drawdown_r=-3.0))
+        rm.daily_reset(date(2024, 1, 5))
+        rm.on_trade_exit(1.0)  # HWM = 1.0
+        rm.on_trade_exit(-4.5)  # cum = -3.5, DD = -4.5 from peak
+        assert rm._equity_halted
+
+        rm.daily_reset(date(2024, 1, 6))
+        allowed, reason, _ = rm.can_enter("s1", "2300", [], 0.0)
+        assert not allowed
+        assert "equity_drawdown" in reason
+
+    def test_equity_halt_persists_across_daily_reset(self):
+        rm = RiskManager(RiskLimits(max_equity_drawdown_r=-2.0))
+        rm.daily_reset(date(2024, 1, 5))
+        rm.on_trade_exit(-2.5)  # DD = -2.5 from peak 0.0
+        assert rm._equity_halted
+
+        rm.daily_reset(date(2024, 1, 6))
+        assert rm._equity_halted
+        assert rm.is_halted()
+
+    def test_equity_reset_clears_halt(self):
+        rm = RiskManager(RiskLimits(max_equity_drawdown_r=-2.0))
+        rm.daily_reset(date(2024, 1, 5))
+        rm.on_trade_exit(-3.0)
+        assert rm._equity_halted
+
+        rm.equity_reset()
+        assert not rm._equity_halted
+        assert rm.cumulative_pnl_r == 0.0
+        assert rm.equity_high_water_r == 0.0
+
+    def test_disabled_when_none(self):
+        rm = RiskManager(RiskLimits(max_equity_drawdown_r=None, max_daily_loss_r=-100.0))
+        rm.daily_reset(date(2024, 1, 5))
+        rm.on_trade_exit(-50.0)
+        assert not rm._equity_halted
+        allowed, _, _ = rm.can_enter("s1", "2300", [], rm.daily_pnl_r)
+        assert allowed
+
+    def test_hwm_updates_on_new_peak(self):
+        rm = RiskManager(RiskLimits(max_equity_drawdown_r=-10.0))
+        rm.daily_reset(date(2024, 1, 5))
+        rm.on_trade_exit(5.0)
+        assert rm.equity_high_water_r == pytest.approx(5.0)
+        rm.on_trade_exit(-2.0)
+        assert rm.equity_high_water_r == pytest.approx(5.0)
+        rm.on_trade_exit(3.0)  # cum = 6.0
+        assert rm.equity_high_water_r == pytest.approx(6.0)
+
+    def test_get_status_includes_equity(self):
+        rm = RiskManager(RiskLimits(max_equity_drawdown_r=-10.0))
+        rm.daily_reset(date(2024, 1, 5))
+        rm.on_trade_exit(5.0)
+        rm.on_trade_exit(-2.0)
+
+        status = rm.get_status()
+        assert status["cumulative_pnl_r"] == pytest.approx(3.0)
+        assert status["equity_high_water_r"] == pytest.approx(5.0)
+        assert status["equity_drawdown_r"] == pytest.approx(-2.0)
+        assert status["equity_halted"] is False

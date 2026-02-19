@@ -134,8 +134,8 @@ class TestAllFilters:
             assert key not in ALL_FILTERS, f"{key} should not be in ALL_FILTERS"
 
     def test_total_count(self):
-        # NO_FILTER + 4 G-filters (G4,G5,G6,G8) + 1 VOL-filter = 6
-        assert len(ALL_FILTERS) == 6
+        # NO_FILTER + 4 G-filters + 1 VOL-filter + 12 DOW composites (3 DOW x 4 G) = 18
+        assert len(ALL_FILTERS) == 18
 
     def test_contains_volume_filter(self):
         assert "VOL_RV12_N20" in ALL_FILTERS
@@ -278,9 +278,11 @@ class TestDowComposites:
         assert "DIR_LONG" in filters
 
     def test_1100_no_dow(self):
+        """1100 gets only BASE_GRID_FILTERS — no DOW composites, no DIR_LONG."""
         filters = get_filters_for_grid("MGC", "1100")
         dow_keys = [k for k in filters if "NOFRI" in k or "NOMON" in k or "NOTUE" in k]
         assert dow_keys == [], f"1100 should have no DOW composites, got {dow_keys}"
+        assert "DIR_LONG" not in filters
 
     def test_composite_matches_row_correctly(self):
         """Composite(G4 + skip Friday) rejects Friday even with big ORB."""

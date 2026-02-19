@@ -757,3 +757,91 @@ class TestLiveSessionCosts:
             f"Scratch with 0900 session costs should be lower: "
             f"live={live_pnl}, flat={flat_pnl}"
         )
+
+# ============================================================================
+# 9. Calendar overlay: NFP/OPEX day skipping in engine
+# ============================================================================
+
+from trading_app.config import CALENDAR_SKIP_NFP_OPEX, CalendarSkipFilter
+
+class TestCalendarOverlay:
+
+    def test_nfp_day_blocks_entry(self):
+        """On an NFP day, the calendar overlay should prevent strategy arming."""
+        strategy = _make_strategy(entry_model="E1", confirm_bars=1)
+        engine = ExecutionEngine(
+            _make_portfolio([strategy]), _cost(),
+            calendar_overlay=CALENDAR_SKIP_NFP_OPEX,
+        )
+        nfp_row = {"is_nfp_day": True, "is_opex_day": False, "is_friday": False, "day_of_week": 4}
+        engine.on_trading_day_start(_TRADING_DAY, daily_features_row=nfp_row)
+
+        break_ts = _build_orb(engine)
+        events = _break_long(engine, break_ts)
+        # No strategy should arm on NFP day
+        assert len(engine.active_trades) == 0
+        # Fill bar should produce nothing
+        events = _fill_e1(engine, break_ts)
+        entry_events = [e for e in events if e.event_type == "ENTRY"]
+        assert len(entry_events) == 0
+
+    def test_opex_day_blocks_entry(self):
+        """On an OPEX day, the calendar overlay should prevent strategy arming."""
+        strategy = _make_strategy(entry_model="E1", confirm_bars=1)
+        engine = ExecutionEngine(
+            _make_portfolio([strategy]), _cost(),
+            calendar_overlay=CALENDAR_SKIP_NFP_OPEX,
+        )
+        opex_row = {"is_nfp_day": False, "is_opex_day": True, "is_friday": True, "day_of_week": 4}
+        engine.on_trading_day_start(_TRADING_DAY, daily_features_row=opex_row)
+
+        break_ts = _build_orb(engine)
+        events = _break_long(engine, break_ts)
+        assert len(engine.active_trades) == 0
+
+    def test_normal_day_allows_entry(self):
+        """On a normal day (not NFP/OPEX), the calendar overlay allows trading."""
+        strategy = _make_strategy(entry_model="E1", confirm_bars=1)
+        engine = ExecutionEngine(
+            _make_portfolio([strategy]), _cost(),
+            calendar_overlay=CALENDAR_SKIP_NFP_OPEX,
+        )
+        normal_row = {"is_nfp_day": False, "is_opex_day": False, "is_friday": False, "day_of_week": 2}
+        engine.on_trading_day_start(_TRADING_DAY, daily_features_row=normal_row)
+
+        break_ts = _build_orb(engine)
+        _break_long(engine, break_ts)
+        events = _fill_e1(engine, break_ts)
+        entry_events = [e for e in events if e.event_type == "ENTRY"]
+        assert len(entry_events) == 1
+
+    def test_no_overlay_allows_nfp_day(self):
+        """With calendar_overlay=None, NFP day is not blocked."""
+        strategy = _make_strategy(entry_model="E1", confirm_bars=1)
+        engine = ExecutionEngine(
+            _make_portfolio([strategy]), _cost(),
+            calendar_overlay=None,
+        )
+        nfp_row = {"is_nfp_day": True, "is_opex_day": False, "is_friday": False, "day_of_week": 4}
+        engine.on_trading_day_start(_TRADING_DAY, daily_features_row=nfp_row)
+
+        break_ts = _build_orb(engine)
+        _break_long(engine, break_ts)
+        events = _fill_e1(engine, break_ts)
+        entry_events = [e for e in events if e.event_type == "ENTRY"]
+        assert len(entry_events) == 1
+
+    def test_no_daily_features_row_allows_entry(self):
+        """When daily_features_row is None (no data), overlay is skipped."""
+        strategy = _make_strategy(entry_model="E1", confirm_bars=1)
+        engine = ExecutionEngine(
+            _make_portfolio([strategy]), _cost(),
+            calendar_overlay=CALENDAR_SKIP_NFP_OPEX,
+        )
+        engine.on_trading_day_start(_TRADING_DAY)  # No daily_features_row
+
+        break_ts = _build_orb(engine)
+        _break_long(engine, break_ts)
+        events = _fill_e1(engine, break_ts)
+        entry_events = [e for e in events if e.event_type == "ENTRY"]
+        assert len(entry_events) == 1

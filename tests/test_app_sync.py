@@ -26,6 +26,7 @@ import duckdb
 from pipeline.init_db import ORB_LABELS, DAILY_FEATURES_SCHEMA
 from trading_app.config import (
     ALL_FILTERS,
+    BASE_GRID_FILTERS,
     ENTRY_MODELS,
     CORE_MIN_SAMPLES,
     REGIME_MIN_SAMPLES,
@@ -89,12 +90,16 @@ class TestOrbLabelsSync:
 class TestAllFiltersSync:
     """ALL_FILTERS keys must match filter_type inside each filter."""
 
-    # L-filters removed from grid (negative ExpR, 0/1024 validated). Classes retained for reference.
-    # G2/G3 removed (99%+ pass rate on most sessions = cosmetic, not real filtering)
+    # Base: NO_FILTER + 4 G-filters + 1 VOL-filter
+    # DOW composites: 3 variants (NOFRI, NOMON, NOTUE) x 4 G-filters = 12
     EXPECTED_FILTER_KEYS = {
         "NO_FILTER",
         "ORB_G4", "ORB_G5", "ORB_G6", "ORB_G8",
         "VOL_RV12_N20",
+        # DOW composites (registered globally for portfolio.py lookups)
+        "ORB_G4_NOFRI", "ORB_G5_NOFRI", "ORB_G6_NOFRI", "ORB_G8_NOFRI",
+        "ORB_G4_NOMON", "ORB_G5_NOMON", "ORB_G6_NOMON", "ORB_G8_NOMON",
+        "ORB_G4_NOTUE", "ORB_G5_NOTUE", "ORB_G6_NOTUE", "ORB_G8_NOTUE",
     }
 
     def test_expected_keys(self):
@@ -134,14 +139,24 @@ class TestAllFiltersSync:
             hash(filt)
 
     def test_size_filters_have_thresholds(self):
-        """Every ORB size filter has at least min_size or max_size set."""
+        """Every ORB size filter (or composite with size base) has thresholds."""
+        from trading_app.config import CompositeFilter
         for key, filt in ALL_FILTERS.items():
             if key == "NO_FILTER" or isinstance(filt, VolumeFilter):
                 continue
-            assert isinstance(filt, OrbSizeFilter), f"{key} should be OrbSizeFilter"
-            assert filt.min_size is not None or filt.max_size is not None, (
-                f"{key} has neither min_size nor max_size"
-            )
+            if isinstance(filt, CompositeFilter):
+                # Composite: base should be OrbSizeFilter with thresholds
+                assert isinstance(filt.base, OrbSizeFilter), (
+                    f"{key} composite base should be OrbSizeFilter"
+                )
+                assert filt.base.min_size is not None or filt.base.max_size is not None, (
+                    f"{key} composite base has neither min_size nor max_size"
+                )
+            else:
+                assert isinstance(filt, OrbSizeFilter), f"{key} should be OrbSizeFilter"
+                assert filt.min_size is not None or filt.max_size is not None, (
+                    f"{key} has neither min_size nor max_size"
+                )
 
     def test_volume_filters_have_params(self):
         """Every volume filter has min_rel_vol and lookback_days set."""
@@ -201,8 +216,8 @@ class TestGetFiltersForGrid:
         assert "ORB_G5_NOFRI" in filters
         assert "ORB_G6_NOFRI" in filters
         assert "ORB_G8_NOFRI" in filters
-        # Base filters still present
-        for key in ALL_FILTERS:
+        # Base filters still present (ALL_FILTERS includes DOW composites; check base only)
+        for key in BASE_GRID_FILTERS:
             assert key in filters
 
     def test_mgc_1000_has_dir_no_band(self):
@@ -244,15 +259,19 @@ class TestGridParamsSync:
         assert len(CONFIRM_BARS_OPTIONS) == len(set(CONFIRM_BARS_OPTIONS))
 
     def test_grid_size(self):
-        """Total grid size matches expected formula (E3 uses CB1 only).
+        """Total base grid size matches expected formula (E3 uses CB1 only).
 
-        13 ORBs (7 fixed + 6 dynamic) x 6 RRs x 5 CBs x 6 filters x 2 EMs
-        E1: 13 x 6 x 5 x 6 = 2340
-        E3: 13 x 6 x 1 x 6 = 468  (E3 always CB1)
-        Total: 2808
+        Base grid uses 6 core filters (NO_FILTER + G4/G5/G6/G8 + VOL).
+        Session-specific DOW composites are added by get_filters_for_grid()
+        per-session, expanding the grid contextually.
+
+        13 ORBs x 6 RRs x 5 CBs x 6 base filters = 2340 (E1)
+        13 ORBs x 6 RRs x 1 CB x 6 base filters = 468  (E3, always CB1)
+        Total base: 2808
         """
-        e1 = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * len(ALL_FILTERS)
-        e3 = len(ORB_LABELS) * len(RR_TARGETS) * 1 * len(ALL_FILTERS)
+        BASE_FILTER_COUNT = 6  # NO_FILTER + ORB_G4/G5/G6/G8 + VOL_RV12_N20
+        e1 = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * BASE_FILTER_COUNT
+        e3 = len(ORB_LABELS) * len(RR_TARGETS) * 1 * BASE_FILTER_COUNT
         expected = e1 + e3
         assert expected == 2808
 
@@ -326,7 +345,12 @@ class TestStrategyIdSync:
         assert parts[2] == "E3"
 
     def test_all_grid_ids_unique(self):
-        """Every combination in the full grid produces a unique ID (E3 CB1 only)."""
+        """Every combination in the base grid produces a unique ID (E3 CB1 only).
+
+        Uses BASE_GRID_FILTERS (6 entries) not ALL_FILTERS (18 entries).
+        Session-specific DOW composites expand the grid per-session via
+        get_filters_for_grid(); the base grid is the common denominator.
+        """
         ids = set()
         for orb in ORB_LABELS:
             for em in ENTRY_MODELS:
@@ -334,7 +358,7 @@ class TestStrategyIdSync:
                     for cb in CONFIRM_BARS_OPTIONS:
                         if em == "E3" and cb > 1:
                             continue
-                        for fk in ALL_FILTERS:
+                        for fk in BASE_GRID_FILTERS:
                             sid = make_strategy_id("MGC", orb, em, rr, cb, fk)
                             assert sid not in ids, f"Duplicate ID: {sid}"
                             ids.add(sid)

@@ -19,7 +19,7 @@ import duckdb
 
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.init_db import ORB_LABELS
-from trading_app.config import ALL_FILTERS, ENTRY_MODELS
+from trading_app.config import get_filters_for_grid, ENTRY_MODELS
 from trading_app.outcome_builder import RR_TARGETS, CONFIRM_BARS_OPTIONS
 from trading_app.strategy_discovery import (
     compute_metrics,
@@ -78,11 +78,17 @@ def run_regime_discovery(
             print("  No daily_features found. Exiting.")
             return 0
 
+        # Build session-aware filter sets (session 1100/2300/0030 get base only)
+        session_filters = {orb: get_filters_for_grid(instrument, orb) for orb in ORB_LABELS}
+        union_filters: dict = {}
+        for sf in session_filters.values():
+            union_filters.update(sf)
+
         print("Computing relative volumes for volume filters...")
-        _compute_relative_volumes(con, features, instrument, ORB_LABELS, ALL_FILTERS)
+        _compute_relative_volumes(con, features, instrument, ORB_LABELS, union_filters)
 
         print("Building filter/ORB day sets...")
-        filter_days = _build_filter_day_sets(features, ORB_LABELS, ALL_FILTERS)
+        filter_days = _build_filter_day_sets(features, ORB_LABELS, union_filters)
 
         # Build the set of days covered by daily_features (for outcome filtering)
         feature_day_set = {row["trading_day"] for row in features}
@@ -93,16 +99,17 @@ def run_regime_discovery(
         )
         print(f"  {sum(len(v) for v in outcomes_by_key.values())} outcome rows loaded")
 
-        # ---- Grid iteration ----
+        # ---- Grid iteration (session-aware: only session-appropriate filters per ORB) ----
         total_strategies = 0
-        e1e2_combos = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * len(ALL_FILTERS) * 2
-        e3_combos = len(ORB_LABELS) * len(RR_TARGETS) * 1 * len(ALL_FILTERS)
-        total_combos = e1e2_combos + e3_combos
+        total_combos = sum(
+            len(sf) * len(RR_TARGETS) * (len(CONFIRM_BARS_OPTIONS) * 2 + 1)
+            for sf in session_filters.values()
+        )
         combo_idx = 0
         insert_batch = []
 
-        for filter_key, strategy_filter in ALL_FILTERS.items():
-            for orb_label in ORB_LABELS:
+        for orb_label in ORB_LABELS:
+            for filter_key, strategy_filter in session_filters[orb_label].items():
                 matching_day_set = filter_days[(filter_key, orb_label)]
 
                 for em in ENTRY_MODELS:

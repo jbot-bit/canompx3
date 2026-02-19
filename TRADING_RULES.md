@@ -116,6 +116,7 @@ Example: 10pt ORB, RR2.0 = 20pt target, 10pt stop.
 | Transition ORBs (dead-zone periods) | NO-GO. Dead zones lack volume for breakout follow-through. Established session opens dominate. Feb 2026. |
 | Wider ORB apertures (10-60min) | NO-GO. 5min aperture has highest per-trade avgR. Wider dilutes signal. Does NOT rescue DST-affected sessions. Feb 2026. |
 | SIL (Micro Silver) ORB breakout | NO-GO. 0 of 432 strategies validated. All sessions negative Sharpe. $20 round-trip cost punishing vs silver's average move. 0030 WINTER-DOM; 2300 E3 faint SUMMER-ONLY signal (S=+0.03–0.06) below threshold. Feb 2026. |
+| E3 retrace timing optimization (delay buckets) | NO-GO. Break-anchored delay (0-240 min, G4+, RR2.0) tested across MGC+MES × 5 sessions. Zero cells survived CORE/PRELIMINARY sample + BH FDR correction with positive avg_r. MGC/2300 0-2 min bucket N=521 avg_r=-0.55R (p~0); 30+ min N=290 avg_r=-0.40R (p~0). Edge in production E3 derives from confirm bars + size/session filters — not delay timing. Do not test confirm-bar-offset variants; that is micro-optimization. Allocate research capital elsewhere. Feb 2026. |
 
 > **Key insight**: Gold trends intraday more than it mean-reverts. The only confirmed edges are momentum breakouts with size filters. Full research details: `docs/RESEARCH_ARCHIVE.md`.
 

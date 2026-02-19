@@ -26,6 +26,7 @@ class RiskLimits:
     drawdown_warning_r: float = -3.0        # Log warning threshold (R)
     corr_threshold_for_reduction: float = 0.5 # Correlation above this triggers size reduction
     min_correlation_factor: float = 0.3     # Min assumed correlation if not in lookup, used in effective exposure calculation
+    max_equity_drawdown_r: float | None = None  # Multi-day drawdown limit (R from peak). None = disabled.
 
 class RiskManager:
     """
@@ -48,9 +49,18 @@ class RiskManager:
         self.trading_day: date | None = None
         self._halted: bool = False
         self._warnings: list[str] = []
+        # Multi-day equity tracking (persists across daily_reset)
+        self.cumulative_pnl_r: float = 0.0
+        self.equity_high_water_r: float = 0.0
+        self._equity_halted: bool = False
 
     def daily_reset(self, trading_day: date) -> None:
-        """Reset all daily counters for a new trading day."""
+        """Reset daily counters for a new trading day.
+
+        Multi-day equity tracking (cumulative_pnl_r, equity_high_water_r,
+        _equity_halted) persists across resets. Use equity_reset() to
+        start a fresh simulation.
+        """
         self.daily_pnl_r = 0.0
         self.daily_trade_count = 0
         self.trading_day = trading_day
@@ -67,6 +77,11 @@ class RiskManager:
     ) -> tuple[bool, str, float]: # Added float to return type
 
         suggested_contract_factor = 1.0
+
+        # Check 0: Multi-day equity drawdown
+        if self._equity_halted:
+            drawdown = self.cumulative_pnl_r - self.equity_high_water_r
+            return False, f"equity_drawdown: {drawdown:.2f}R from peak (limit {self.limits.max_equity_drawdown_r}R)", 0.0
 
         # Check 1: Circuit breaker
         if self._halted or daily_pnl_r <= self.limits.max_daily_loss_r:
@@ -145,10 +160,25 @@ class RiskManager:
         self.daily_pnl_r += pnl_r
         if self.daily_pnl_r <= self.limits.max_daily_loss_r:
             self._halted = True
+        # Multi-day equity tracking
+        self.cumulative_pnl_r += pnl_r
+        if self.cumulative_pnl_r > self.equity_high_water_r:
+            self.equity_high_water_r = self.cumulative_pnl_r
+        if (self.limits.max_equity_drawdown_r is not None
+                and not self._equity_halted):
+            drawdown = self.cumulative_pnl_r - self.equity_high_water_r
+            if drawdown <= self.limits.max_equity_drawdown_r:
+                self._equity_halted = True
+
+    def equity_reset(self) -> None:
+        """Reset multi-day equity tracking. Call at start of a new simulation."""
+        self.cumulative_pnl_r = 0.0
+        self.equity_high_water_r = 0.0
+        self._equity_halted = False
 
     def is_halted(self) -> bool:
-        """True if circuit breaker has been triggered."""
-        return self._halted
+        """True if daily circuit breaker or equity drawdown limit has been triggered."""
+        return self._halted or self._equity_halted
 
     @property
     def warnings(self) -> list[str]:
@@ -163,4 +193,8 @@ class RiskManager:
             "daily_trade_count": self.daily_trade_count,
             "halted": self._halted,
             "warnings": len(self._warnings),
+            "cumulative_pnl_r": round(self.cumulative_pnl_r, 4),
+            "equity_high_water_r": round(self.equity_high_water_r, 4),
+            "equity_drawdown_r": round(self.cumulative_pnl_r - self.equity_high_water_r, 4),
+            "equity_halted": self._equity_halted,
         }
