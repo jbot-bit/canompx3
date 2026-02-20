@@ -27,9 +27,9 @@ Do not schedule active delivery work against SIL until explicitly re-opened.
 
 ## Phase 3: Trading App — DONE
 
-- `trading_app/config.py` — 12 ORB size filters + NO_FILTER, ENTRY_MODELS (E1/E2/E3)
+- `trading_app/config.py` — 12 ORB size filters + NO_FILTER, ENTRY_MODELS (E0/E1/E3)
 - `trading_app/execution_spec.py` — ExecutionSpec dataclass with entry_model field (17 tests)
-- `trading_app/entry_rules.py` — detect_confirm + resolve_entry E1/E2/E3 (30 tests)
+- `trading_app/entry_rules.py` — detect_confirm + resolve_entry E0/E1/E3 (30 tests)
 - `trading_app/db_manager.py` — 4 trading_app tables with entry_model column (8 tests)
 - `trading_app/outcome_builder.py` — pre-compute outcomes for 6 RR x 5 CB x 3 EM grid (14 tests)
 - `trading_app/setup_detector.py` — filter daily_features by conditions (7 tests)
@@ -48,13 +48,14 @@ Do not schedule active delivery work against SIL until explicitly re-opened.
 ## Phase 5: Expanded Scan — DONE
 
 - Grid: 6 ORBs x 6 RRs x 5 CBs x 13 filters x 3 EMs = 6,480 combos (post-5b expansion)
-- orb_outcomes: 689,310 rows | experimental: 6,480 | validated: 312
+- orb_outcomes: 689,310 rows | experimental: 6,480 | validated: 312 (original scan)
+- **Current state (Feb 2026):** 2,149 validated (431 MGC, 1,665 MNQ, 53 MES) → 554 edge families (211 ROBUST, 76 WHITELISTED, 20 SINGLETON)
 - Edge requires G4+ ORB size filter (NO_FILTER and L-filters ALL negative ExpR)
 - MARKET_PLAYBOOK.md: comprehensive empirical findings
 
 ## Phase 5b: Entry Model Fix + Risk Floor + Win PnL Fix — DONE
 
-- 3 entry models: E1 (next bar open), E2 (confirm close), E3 (limit-at-ORB retrace)
+- 3 entry models: E1 (next bar open), E3 (limit-at-ORB retrace), E0 (limit on confirm bar itself)
 - entry_rules.py: ConfirmResult + detect_confirm() + resolve_entry() + _resolve_e1/e2/e3
 - Risk floor: tick-based (10 ticks * 0.10 = 1.0pt) + outcome-based (median/avg_risk_points)
 - Win PnL bug fix: changed pnl_points_to_r -> to_r_multiple (friction was missing from wins)

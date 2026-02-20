@@ -54,7 +54,7 @@ research/
     analyze_mcl_comprehensive.py
     analyze_mcl_nymex.py
     analyze_mfe_distribution.py
-... and 278 more entries
+... and 336 more entries
 ```
 
 ## Module Index
@@ -64,22 +64,22 @@ research/
 | `pipeline/asset_configs.py` | 135 | Per-asset configuration for the multi-instrument ingestion pipeline. | get_asset_config, list_instruments, get_enabled_sessions, list_available_instruments |
 | `pipeline/audit_bars_coverage.py` | 333 | Independent bars coverage audit. | build_sample, audit_day, query_db_count, query_db_source_symbols, main |
 | `pipeline/build_bars_5m.py` | 268 | Build bars_5m from bars_1m (deterministic aggregation). | build_5m_bars, verify_5m_integrity, main |
-| `pipeline/build_daily_features.py` | 778 | Build daily_features from bars_1m and bars_5m. | compute_trading_day, compute_trading_day_utc_range, get_trading_days_in_range, get_bars_for_trading_day, compute_orb_range |
-| `pipeline/calendar_filters.py` | 25 | Calendar-based skip filters: NFP, OPEX, Friday. | is_nfp_day, is_opex_day, is_friday |
+| `pipeline/build_daily_features.py` | 849 | Build daily_features from bars_1m and bars_5m. | compute_trading_day, compute_trading_day_utc_range, get_trading_days_in_range, get_bars_for_trading_day, compute_orb_range |
+| `pipeline/calendar_filters.py` | 38 | Calendar-based skip filters: NFP, OPEX, Friday, day-of-week. | is_nfp_day, is_opex_day, is_friday, is_monday, is_tuesday |
 | `pipeline/check_db.py` | 73 | Check database contents and integrity. | check_db |
-| `pipeline/check_drift.py` | 1115 | Drift detection for the multi-instrument pipeline. | check_hardcoded_mgc_sql, check_apply_iterrows, check_non_bars1m_writes, check_schema_query_consistency, check_import_cycles |
+| `pipeline/check_drift.py` | 1160 | Drift detection for the multi-instrument pipeline. | check_hardcoded_mgc_sql, check_apply_iterrows, check_non_bars1m_writes, check_schema_query_consistency, check_import_cycles |
 | `pipeline/cost_model.py` | 231 | Cost model for futures instruments. | CostSpec, get_session_cost_spec, get_cost_spec, list_validated_instruments, risk_in_dollars |
 | `pipeline/dashboard.py` | 637 | Pipeline Dashboard — generates a self-contained HTML report. | collect_db_metrics, collect_checkpoint_progress, collect_file_inventory, collect_guardrail_status, collect_contract_history |
 | `pipeline/db_config.py` | 11 | Standard DuckDB connection tuning | configure_connection |
-| `pipeline/dst.py` | 288 | DST detection and dynamic session resolvers. | is_us_dst, is_uk_dst, is_winter_for_session, classify_dst_verdict, cme_open_brisbane |
+| `pipeline/dst.py` | 306 | DST detection and dynamic session resolvers. | is_us_dst, is_uk_dst, validate_dow_filter_alignment, is_winter_for_session, classify_dst_verdict |
 | `pipeline/export_parquet.py` | 114 | Export DuckDB tables to Parquet files for read-independent analysis. | export_table, export_all, main |
 | `pipeline/health_check.py` | 124 | Pipeline health check — quick CLI that checks everything at once. | check_python_deps, check_database, check_dbn_files, check_drift, check_tests |
 | `pipeline/ingest_dbn.py` | 381 | Generic multi-instrument DBN ingestion into bars_1m table. | main |
 | `pipeline/ingest_dbn_daily.py` | 428 | Ingest daily DBN files into bars_1m table (multi-instrument). | get_ingest_config, load_symbology, discover_daily_files, main |
 | `pipeline/ingest_dbn_mgc.py` | 593 | Ingest MGC DBN file into bars_1m table. | CheckpointManager, validate_chunk, validate_timestamp_utc, parse_expiry, choose_front_contract |
-| `pipeline/init_db.py` | 177 | Initialize the DuckDB database schema for MGC data pipeline. | init_db, main |
+| `pipeline/init_db.py` | 223 | Initialize the DuckDB database schema for MGC data pipeline. | init_db, main |
 | `pipeline/log.py` | 14 | Shared logging configuration for pipeline and trading_app modules. | get_logger |
-| `pipeline/paths.py` | 25 | Canonical paths for the MGC data pipeline. |  |
+| `pipeline/paths.py` | 30 | Canonical paths for the MGC data pipeline. |  |
 | `pipeline/run_full_pipeline.py` | 176 | Full pipeline: ingest -> bars_5m -> features -> audit -> outcomes -> discover... | step_ingest, step_build_5m, step_build_features, step_audit, step_build_outcomes |
 | `pipeline/run_pipeline.py` | 207 | Pipeline runner: orchestrates ingest -> build_5m -> build_features -> audit. | step_ingest, step_build_5m, step_build_features, step_audit, main |
 | `trading_app/__init__.py` | 9 | Trading application for MGC ORB-based strategy backtesting and validation. |  |
@@ -91,42 +91,42 @@ research/
 | `trading_app/ai/strategy_matcher.py` | 313 | Strategy reverse-engineering: match a trade log's flip behavior to known stra... | load_trade_log, load_bars_5m, compute_indicators, family_a_signals, family_b_signals |
 | `trading_app/analysis/asia_session_analyzer.py` | 548 | Deep 0900 Asia Session Analysis + Cross-Session Intelligence. | section_a_regime_deep_dive, section_b_cross_session, section_c_mfe_analysis, section_d_direction_grid, section_e_reversal_trades |
 | `trading_app/cascade_table.py` | 88 | Cross-session conditional probability table. | build_cascade_table, lookup_cascade |
-| `trading_app/config.py` | 269 | Strategy configuration: filters, entry models, and grid parameters. | StrategyFilter, NoFilter, OrbSizeFilter, VolumeFilter, DirectionFilter |
-| `trading_app/db_manager.py` | 420 | Database schema manager for trading_app tables. | compute_trade_day_hash, init_trading_app_schema, verify_trading_app_schema, get_family_head_ids, has_edge_families |
-| `trading_app/entry_rules.py` | 199 | Entry detection logic with confirm_bars support and multiple entry models. | ConfirmResult, EntrySignal, detect_confirm, resolve_entry, detect_entry_with_confirm_bars |
-| `trading_app/execution_engine.py` | 678 | Execution engine for live/replay bar-by-bar strategy execution. | TradeState, TradeEvent, LiveORB, LiveIB, ActiveTrade |
+| `trading_app/config.py` | 470 | Strategy configuration: filters, entry models, and grid parameters. | StrategyFilter, NoFilter, OrbSizeFilter, VolumeFilter, DirectionFilter |
+| `trading_app/db_manager.py` | 432 | Database schema manager for trading_app tables. | compute_trade_day_hash, init_trading_app_schema, verify_trading_app_schema, get_family_head_ids, has_edge_families |
+| `trading_app/entry_rules.py` | 249 | Entry detection logic with confirm_bars support and multiple entry models. | ConfirmResult, EntrySignal, detect_confirm, resolve_entry, detect_entry_with_confirm_bars |
+| `trading_app/execution_engine.py` | 696 | Execution engine for live/replay bar-by-bar strategy execution. | TradeState, TradeEvent, LiveORB, LiveIB, ActiveTrade |
 | `trading_app/execution_spec.py` | 66 | Execution specification dataclass. | ExecutionSpec |
-| `trading_app/live_config.py` | 361 | Declarative live portfolio configuration. | LiveStrategySpec, build_live_portfolio, main |
+| `trading_app/live_config.py` | 359 | Declarative live portfolio configuration. | LiveStrategySpec, build_live_portfolio, main |
 | `trading_app/market_state.py` | 232 | Market state: single shared object describing current market context. | OrbSnapshot, SessionSignals, RegimeContext, MarketState |
-| `trading_app/mcp_server.py` | 236 | MCP server for the Gold Trading Database. |  |
+| `trading_app/mcp_server.py` | 239 | MCP server for the Gold Trading Database. |  |
 | `trading_app/nested/__init__.py` | 5 | Nested ORB research track — isolated parallel experiment. |  |
 | `trading_app/nested/audit_outcomes.py` | 307 | Spot-check audit for nested_outcomes: independently reconstructs outcomes | audit_nested_outcomes, main |
 | `trading_app/nested/builder.py` | 427 | Build nested ORB outcomes: wider ORB range (15/30 min) with 5-minute entry bars. | resample_to_5m, build_nested_outcomes, main |
 | `trading_app/nested/compare.py` | 198 | A/B comparison: baseline (5m ORB + 1m entry) vs nested (15m/30m ORB + 5m entry). | run_comparison, main |
-| `trading_app/nested/discovery.py` | 226 | Grid search over nested ORB strategy variants. | make_nested_strategy_id, run_nested_discovery, main |
+| `trading_app/nested/discovery.py` | 232 | Grid search over nested ORB strategy variants. | make_nested_strategy_id, run_nested_discovery, main |
 | `trading_app/nested/schema.py` | 225 | Schema for nested ORB tables (isolated from production tables). | init_nested_schema, verify_nested_schema, main |
 | `trading_app/nested/validator.py` | 145 | Validate nested ORB strategies and promote to nested_validated. | run_nested_validation, main |
-| `trading_app/outcome_builder.py` | 634 | Pre-compute outcomes for all RR targets x confirm_bars combinations. | compute_single_outcome, build_outcomes, main |
-| `trading_app/paper_trader.py` | 333 | Historical replay and paper trading. | JournalEntry, DaySummary, ReplayResult, replay_historical, main |
-| `trading_app/portfolio.py` | 745 | Portfolio construction from validated strategies. | PortfolioStrategy, Portfolio, compute_position_size, compute_position_size_prop, compute_vol_scalar |
+| `trading_app/outcome_builder.py` | 646 | Pre-compute outcomes for all RR targets x confirm_bars combinations. | compute_single_outcome, build_outcomes, main |
+| `trading_app/paper_trader.py` | 361 | Historical replay and paper trading. | JournalEntry, DaySummary, ReplayResult, replay_historical, main |
+| `trading_app/portfolio.py` | 784 | Portfolio construction from validated strategies. | PortfolioStrategy, Portfolio, compute_position_size, compute_position_size_prop, compute_vol_scalar |
 | `trading_app/regime/__init__.py` | 5 | Regime discovery — run strategy analysis on date-bounded subsets. |  |
 | `trading_app/regime/compare.py` | 196 | Side-by-side comparison: regime run vs full-period results. | run_comparison, main |
-| `trading_app/regime/discovery.py` | 189 | Grid search over strategy variants for a date-bounded regime. | run_regime_discovery, main |
+| `trading_app/regime/discovery.py` | 194 | Grid search over strategy variants for a date-bounded regime. | run_regime_discovery, main |
 | `trading_app/regime/schema.py` | 178 | Schema for regime discovery tables (isolated from production tables). | init_regime_schema, verify_regime_schema, main |
 | `trading_app/regime/validator.py` | 151 | Validate regime strategies and promote to regime_validated. | run_regime_validation, main |
-| `trading_app/risk_manager.py` | 123 | Risk management for live/replay trading. | RiskLimits, RiskManager |
+| `trading_app/risk_manager.py` | 151 | Risk management for live/replay trading. | RiskLimits, RiskManager |
 | `trading_app/rolling_correlation.py` | 318 | Rolling and tail-aware correlation metrics for strategy portfolios. | compute_rolling_correlation, compute_drawdown_correlation, compute_co_loss_pct, summarize_correlation_risk |
 | `trading_app/rolling_portfolio.py` | 433 | Rolling portfolio aggregator: load rolling window results, compute | FamilyResult, make_family_id, load_rolling_results, load_all_rolling_run_labels, load_rolling_degraded_counts |
 | `trading_app/scoring.py` | 55 | Hypothesis-driven strategy scoring engine. | ScoringWeights, score_strategy |
 | `trading_app/setup_detector.py` | 60 | Filter trading days by market conditions. | detect_setups |
-| `trading_app/strategy_discovery.py` | 654 | Grid search over strategy variants and save results to experimental_strategies. | compute_metrics, compute_dst_split_from_outcomes, make_strategy_id, run_discovery, main |
-| `trading_app/strategy_fitness.py` | 380 | Strategy fitness assessment: rolling regime fitness + decay monitoring. | FitnessScore, FitnessReport, classify_fitness, compute_fitness, compute_portfolio_fitness |
-| `trading_app/strategy_validator.py` | 530 | 7-phase strategy validation per CANONICAL_LOGIC.txt section 9. | compute_dst_split, classify_regime, validate_strategy, run_validation, main |
+| `trading_app/strategy_discovery.py` | 710 | Grid search over strategy variants and save results to experimental_strategies. | compute_metrics, compute_dst_split_from_outcomes, make_strategy_id, parse_dst_regime, run_discovery |
+| `trading_app/strategy_fitness.py` | 395 | Strategy fitness assessment: rolling regime fitness + decay monitoring. | FitnessScore, FitnessReport, classify_fitness, compute_fitness, compute_portfolio_fitness |
+| `trading_app/strategy_validator.py` | 583 | 7-phase strategy validation per CANONICAL_LOGIC.txt section 9. | compute_dst_split, classify_regime, validate_strategy, run_validation, main |
 | `trading_app/validate_1800_composite.py` | 417 | Validate composite 1800 E3 strategy: 15m AGREE filter + split targets. | load_composite_data, compute_composite_metrics, stress_test_pnl, find_breakeven_multiplier, walk_forward_expanding |
 | `trading_app/validate_1800_workhorse.py` | 470 | 1800 Workhorse Strategy Stress Test: 5 variants side-by-side. | load_workhorse_data, compute_metrics, stress_test_pnl, find_breakeven_multiplier, walk_forward_expanding |
 | `trading_app/view_strategies.py` | 321 | Strategy Viewer CLI — browse, filter, and export validated strategies. | fetch_strategies, fetch_summary, fetch_total_count, fetch_unique_trade_count, fetch_families |
 | `trading_app/walk_forward.py` | 304 | Walk-forward out-of-sample evaluation for validated strategies. | FoldResult, WalkForwardResult, build_folds, evaluate_fold, walk_forward_eval |
-| `trading_app/walkforward.py` | 204 | Walk-forward validation for ORB breakout strategies (Phase 4b). | WalkForwardResult, run_walkforward, append_walkforward_result |
+| `trading_app/walkforward.py` | 209 | Walk-forward validation for ORB breakout strategies (Phase 4b). | WalkForwardResult, run_walkforward, append_walkforward_result |
 | `scripts/infra/backup_db.py` | 43 | Database backup — copies gold.db to backups/ with date stamp. | backup_db, main |
 | `scripts/infra/check_root_hygiene.py` | 59 | Check that the project root contains only allowed files and directories. | main |
 | `scripts/infra/parallel_rebuild.py` | 454 | Parallel per-instrument pipeline rebuild using isolated DB copies. | run_instrument, merge_instrument, main |
@@ -152,7 +152,7 @@ research/
 | `scripts/tools/backfill_dollar_columns.py` | 106 | Backfill dollar columns on existing orb_outcomes, experimental_strategies, | backfill_dollar_columns, main |
 | `scripts/tools/backtest_1100_early_exit.py` | 302 | Backtest: 1100 timed early exit at multiple thresholds. | run_backtest |
 | `scripts/tools/backtest_atr_regime.py` | 225 | Backtest ATR(20) as a regime on/off switch for ORB breakout families. | compute_family_metrics, main |
-| `scripts/tools/build_edge_families.py` | 244 | Build edge families by hashing strategy trade-day lists. | classify_family, classify_trade_tier, build_edge_families, main |
+| `scripts/tools/build_edge_families.py` | 275 | Build edge families by hashing strategy trade-day lists. | classify_family, classify_trade_tier, build_edge_families, main |
 | `scripts/tools/build_mes_outcomes_fast.py` | 185 | Fast MES outcome builder -- parallel, preloaded bars. | log, process_single_day, main |
 | `scripts/tools/build_outcomes_fast.py` | 211 | Fast parallel outcome builder for MNQ (or any instrument). | process_single_day, main |
 | `scripts/tools/convert_connections.py` | 184 |  | get_indent, convert_try_finally, convert_bare_close, process_file, main |
@@ -180,7 +180,7 @@ research/
 | `research/archive/analyze_2300_recent.py` | 135 | Honest 2300 session analysis -- MGC + MNQ, 12m and 18m windows. | analyze |
 | `research/archive/analyze_adx_filter.py` | 436 | ADX Trend Filter overlay analysis for ORB breakout strategies. | compute_adx, load_bars_5m_for_day, get_adx_at_break_time, load_bars_5m_with_warmup, load_orb_outcomes_with_adx |
 | `research/archive/analyze_concretum_bands.py` | 336 | Concretum Bands (Dynamic Volatility Breakout) strategy analysis. | prepare_sigma_data, compute_concretum_outcomes, run_walk_forward, main |
-... and 118 more modules
+... and 140 more modules
 
 ## Cross-Package Dependencies
 
@@ -202,6 +202,7 @@ research/
 - `trading_app/ai/strategy_matcher.py` -> pipeline
 - `trading_app/analysis/asia_session_analyzer.py` -> pipeline
 - `trading_app/db_manager.py` -> pipeline
+- `trading_app/entry_rules.py` -> trading_app
 - `trading_app/execution_engine.py` -> pipeline, trading_app
 - `trading_app/live_config.py` -> pipeline, trading_app
 - `trading_app/market_state.py` -> pipeline
@@ -232,8 +233,7 @@ research/
 - `scripts/infra/rolling_eval.py` -> pipeline, trading_app
 - `scripts/infra/rolling_eval_parallel.py` -> pipeline, scripts, trading_app
 - `scripts/infra/run_parallel_ingest.py` -> pipeline
-- `scripts/infra/scratch_ingest.py` -> pipeline
-... and 129 more edges
+... and 145 more edges
 
 ## CLI Entry Points
 
@@ -261,4 +261,4 @@ research/
 - `python trading_app/nested/builder.py` -- (no argparse description)
 - `python trading_app/nested/compare.py` -- (no argparse description)
 - `python trading_app/nested/discovery.py` -- (no argparse description)
-... and 114 more entry points
+... and 132 more entry points

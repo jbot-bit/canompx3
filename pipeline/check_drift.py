@@ -935,11 +935,14 @@ def check_ingest_authority_notice() -> list[str]:
         return []  # No __main__ block — library-only, fine
 
     main_block = text[main_idx:]
-    required = [
-        'print("NOTE: For multi-instrument support, prefer:")',
-        'print("  python pipeline/ingest_dbn.py --instrument MGC")',
+    # Accept either print() or logger.info() for the deprecation notice
+    required_pairs = [
+        ('print("NOTE: For multi-instrument support, prefer:")',
+         'logger.info("NOTE: For multi-instrument support, prefer:")'),
+        ('print("  python pipeline/ingest_dbn.py --instrument MGC")',
+         'logger.info("  python pipeline/ingest_dbn.py --instrument MGC")'),
     ]
-    missing = [s for s in required if s not in main_block]
+    missing = [p for p, lg in required_pairs if p not in main_block and lg not in main_block]
     if missing:
         return [f"  {path.name}: Missing deprecation notice in __main__: {missing}"]
     return []

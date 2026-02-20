@@ -86,7 +86,7 @@ Databento .dbn.zst files
 
 **2300 NOTE:** 2300 Brisbane (13:00 UTC) never catches the US data release (8:30 ET). DST flips which side: pre-data in winter, post-data in summer. Summer has 76-90% MORE volume. Winter/summer split is meaningful; `"US"` classification in `dst.py` is correct.
 
-**Clean sessions (no DST issue):** 1000/1100/1130 (Asia, no DST). All dynamic sessions (resolvers adjust per-day).
+**Clean sessions (no DST issue):** 1000/1100/1130 (Asia, no DST). All dynamic sessions: CME_OPEN, US_EQUITY_OPEN, US_DATA_OPEN, LONDON_OPEN, US_POST_EQUITY, CME_CLOSE (resolvers adjust per-day).
 
 **Contaminated:** All daily_features/orb_outcomes/experimental_strategies/validated_setups/edge_families for 0900/1800/0030/2300. All pre-Feb 2026 blended research findings for those sessions.
 
