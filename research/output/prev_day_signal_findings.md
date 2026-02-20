@@ -1,7 +1,7 @@
 # Prior-Day Outcome Signal — Research Findings
 **Date:** Feb 2026
 **Script:** `research/research_prev_day_signal.py`
-**Status:** PROMISING HYPOTHESIS (REGIME-grade, BH-survives at G4+)
+**Stress test:** Full RR × CB × EM × G grid (105 cells, BH FDR q=0.10)
 
 ---
 
@@ -9,104 +9,134 @@
 
 **Hypothesis:** Yesterday's same-session ORB outcome (WIN/LOSS/SCRATCH) — known before today's session opens — predicts today's pnl_r.
 
-**Data:** orb_outcomes joined with daily_features via daily LAG on `orb_{session}_outcome`.
-`prev_outcome` = yesterday's outcome for the same session. NULL = no break yesterday (those rows excluded).
-**Filter:** Current day must pass G4+ (orb_size >= 4.0 pts) — same filter as validated strategies.
-**Entry config:** E1 RR matching best validated config per session (see SESSION_CONFIGS in script).
-**BH correction:** q=0.10 across all 18 qualifying tests.
+**Data:** `daily_features` LAG on `orb_0900_outcome` → prev_outcome is TRUE prior knowledge (includes null = no break yesterday).
+**Filter:** Current day passes G4+ (orb_size >= 4.0 pts). Current day has a break.
+**BH correction:** q=0.10 across all tests in each run.
 
 ---
 
-## Single Survivor — MGC 0900 prev=WIN
+## Phase 1: Initial 18-test pass (E1 only, per-session representative config)
+
+One survivor: **MGC 0900 E1 RR2.5 CB2 G4+ prev=WIN → +0.472R** (t=2.88, p=0.005, p_bh=0.093)
+Direction held at G6+ (+0.499R) but BH failed (N dropped to 40). Grade: REGIME.
+
+---
+
+## Phase 2: Full stress grid (105 cells, RR × CB × EM × G)
+
+### BH SURVIVOR: E0 CB1 G4+ MGC 0900 prev=LOSS
 
 | Metric | Value |
 |--------|-------|
-| N (prev=win bucket) | 72 |
-| avgR | +0.472R |
-| Baseline MGC 0900 | +0.283R |
-| Incremental lift | +0.189R |
-| t-stat | +2.88 |
-| p (raw) | 0.005 |
-| p_bh (BH-adjusted) | 0.093 |
+| N | 49 |
+| avgR | **+0.585R** |
+| t-stat | +3.34 |
+| p (raw) | 0.0016 |
+| p_bh | **0.0877** |
 | BH survival at q=0.10 | **YES** |
-| Grade | REGIME (N=72) |
+| Grade | REGIME (N=49) |
 
-### Year-by-year (qualifying years, N >= 5)
+### Cross-RR robustness (all E0 CB1 G4+ prev=LOSS)
+
+| RR | N | avgR | t | p_raw | 3/3 yrs pos? |
+|----|---|------|---|-------|-------------|
+| 1.5 | 49 | +0.346 | +2.41 | 0.020 | YES |
+| **2.0** | **49** | **+0.585** | **+3.34** | **0.0016** | **YES** |
+| 2.5 | 49 | +0.502 | +2.40 | 0.021 | YES |
+| 3.0 | 48 | +0.499 | +2.09 | 0.042 | YES |
+| 4.0 | 47 | +0.297 | +1.07 | 0.288 | 2/3 |
+
+**Sweet spot: RR1.5–3.0 all positive and consistent. RR4.0 weakens (too ambitious for a failed-break pattern).**
+
+### Cross-entry-model at CB1 prev=LOSS (RR2.0 and RR2.5)
+
+| EM | RR | N | avgR | t | p |
+|----|-----|---|------|---|---|
+| E0 | 2.0 | 49 | +0.585 | +3.34 | 0.0016 |
+| E3 | 2.5 | 46 | +0.558 | +2.62 | 0.012 |
+| E3 | 3.0 | 45 | +0.547 | +2.24 | 0.030 |
+| E3 | 2.0 | 46 | +0.419 | +2.33 | 0.024 |
+| E0 | 2.5 | 49 | +0.502 | +2.40 | 0.021 |
+| E1 | 2.0 | 52 | +0.314 | +1.86 | 0.068 |
+| E1 | 2.5 | 52 | +0.254 | +1.31 | 0.196 |
+
+**E0 and E3 (precise-price entries, limit at ORB edge or retrace) both positive at CB1 prev=LOSS. E1 (next-bar open = gap-in) is substantially weaker. Signal is about fill quality, not just direction.**
+
+### Year-by-year (E0 RR2.0 CB1 G4+ prev=LOSS)
 
 | Year | N | avgR | p |
 |------|---|------|---|
-| 2020 | 9 | +0.787 | 0.161 |
-| 2025 | 36 | +0.333 | 0.149 |
-| 2026 | 12 | +0.624 | 0.176 |
+| 2020 | 6 | +0.173 | 0.729 |
+| 2025 | 24 | +0.734 | **0.008** |
+| 2026 | 9 | +0.678 | 0.194 |
 
-3/3 qualifying years positive (100%). Per-year N is small — individual years not significant.
+3/3 qualifying years positive. **Warning:** Most calendar years have N<5 (excluded). 2025 dominates sample (49% of N). Per-year significance: only 2025 individually significant.
 
-### G6+ robustness check
+### Baseline decomposition (E0 CB1 G4+ MGC 0900)
 
-| Filter | N | avgR | p_raw | BH survives |
-|--------|---|------|-------|-------------|
-| G4+ | 72 | +0.472 | 0.005 | YES (p_bh=0.093) |
-| G6+ | 40 | +0.499 | 0.030 | NO (p_bh=0.42, N too small) |
+| Condition | N | avgR |
+|-----------|---|------|
+| Baseline (all prev) | 148 | +0.273 |
+| prev=win | 72 | +0.259 (≈ baseline) |
+| **prev=loss** | **49** | **+0.585 (>2× baseline)** |
+| prev=no_break | 26 | **-0.225 (BELOW baseline)** |
 
-Direction preserved at G6+ (+0.499R). BH failure at G6+ is sample-size limited, not signal reversal.
-
-### Mechanism (hypothesis)
-
-Gold at the CME evening open (0900 Brisbane = 5pm CME) is a momentum-driven session. A G4+ ORB breakout that HIT the target yesterday signals sustained directional conviction in gold — the same institutional players tend to maintain direction across consecutive sessions. This is consistent with gold's documented trending behavior.
+**The separation is striking:** prev=loss far outperforms baseline. prev=no_break underperforms. prev=win is flat vs baseline.
 
 ---
 
-## Near-misses (did NOT survive BH)
+## Mechanism (hypothesis)
 
-| Cell | N | avgR | p_raw | p_bh | Direction |
-|------|---|------|-------|------|-----------|
-| MES 0900 prev=win | 211 | -0.183 | 0.016 | 0.093 | REVERSION (worse after win) |
-| MNQ 0900 prev=win | 213 | -0.181 | 0.022 | 0.093 | REVERSION (worse after win) |
+**E0 CB1** = limit fill exactly at the ORB edge on the break bar (CB1 always fills — break bar crosses edge, immediate limit hit). This is the fastest, most aggressive entry at the exact level.
 
-**Note:** MES/MNQ 0900 baselines are already negative (-0.077R, -0.063R). The reversion signal (worse after win) exists directionally but:
-1. Doesn't survive BH
-2. Those sessions aren't in the live portfolio anyway
-3. Action: none
+**prev=LOSS** = yesterday's aggressive entry at the ORB edge failed to reach the target (e.g., broke G4+, filled immediately at ORB edge, then stopped out).
+
+**Combined signal:** Yesterday's fast break FAILED. Today a new fast break occurs. The interpretation:
+- Market tried to break a direction yesterday → rejected before target
+- Today the market is retrying with accumulated pressure from the failed attempt
+- "Failed breakout → fresh breakout" = second-attempt breakouts tend to be stronger in trending markets (gold at the CME evening open is a momentum session)
+
+The E0/E3 > E1 asymmetry reinforces this: the signal works best when you get a PRECISE price at the ORB edge, not when you chase at the next bar open. The edge is about conviction at the exact level, not just directional momentum.
+
+**Side finding — prev=no_break:**
+When there was NO break at MGC 0900 yesterday, today's break underperforms baseline (N=26, -0.225R to -0.380R). Hypothesis: no-break days represent low-conviction sessions; consecutive low-conviction → today's break is also weak. NOT BH-significant (N=26). Track as observation.
 
 ---
 
-## Full results (G4+)
+## What the original E1 CB2 prev=WIN result means
 
-| Cell | N | avgR | t | p_raw |
-|------|---|------|---|-------|
-| MGC_0900_prev=win | 72 | +0.472 | +2.88 | **0.005** |
-| MES_0900_prev=win | 211 | -0.183 | -2.44 | 0.016 |
-| MNQ_0900_prev=win | 213 | -0.181 | -2.31 | 0.022 |
-| MNQ_1100_prev=win | 264 | +0.136 | +1.62 | 0.106 |
-| MGC_0900_prev=loss | 52 | +0.309 | +1.64 | 0.108 |
-| MNQ_1000_prev=win | 205 | +0.175 | +1.59 | 0.114 |
-| MGC_1000_prev=loss | 36 | +0.376 | +1.54 | 0.132 |
-| All others | — | — | — | >0.25 |
+In the 18-test pass (Phase 1), E1 CB2 prev=WIN survived BH at m=18 (p_bh=0.093).
+In the 105-test pass (Phase 2), it is rank 2 but does NOT survive BH at the stricter m=105 threshold.
+
+Both findings point to the same underlying session characteristic: MGC 0900 has predictable pattern continuation from prior session. The prev=LOSS signal is STRONGER (lower p) and uses a more natural mechanism (failed-break momentum). The prev=WIN signal may be a weaker secondary effect.
 
 ---
 
 ## Verdict
 
-**SURVIVED:** MGC 0900 prev=WIN
-**Status:** PROMISING HYPOTHESIS
-**Action:** WATCH. Do NOT add as mandatory filter.
+| Finding | Grade | BH (Phase 2) | Action |
+|---------|-------|--------------|--------|
+| E0 CB1 MGC 0900 prev=LOSS → +0.585R | REGIME (N=49) | SURVIVES (p_bh=0.088) | **WATCH** |
+| E0/E3 CB1 prev=LOSS cross-EM consistency | — | Not separately tested | Supports mechanism |
+| E1 CB2 MGC 0900 prev=WIN → +0.472R | REGIME (N=72) | Does not survive at m=105 | **WATCH** |
+| prev=no_break → -0.225R | — | N<30, not tested | Observation only |
+
+**Label: PROMISING HYPOTHESIS**
 
 **Caveats:**
-- REGIME-grade only (N=72). Needs N>150 to qualify as CORE.
-- Year-by-year N is tiny (max 36 in a single year). Insufficient for per-year significance.
-- 2025 dominates sample (N=36 = 50% of total). 2026 developing.
-- ±20% parameter test (G6+): direction stable but BH fails due to N.
+- Both signals are REGIME-grade (N < 100). Not CORE.
+- Most calendar years have N < 5 per year (excluded from year-by-year). 2025 dominates.
+- 2025 alone: N=24 trades. If 2025 is anomalous, the whole signal weakens.
+- ±20% RR test: PASSES (RR1.5–3.0 all consistent). Filter test: E0 vs E3 both work, E1 weaker.
+- Not actionable as a mandatory filter. Too few data points to gate live trades.
 
-**Re-evaluate when:** 2026 data accumulates (expect ~15-20 more qualifying days) and total N approaches 90+.
-
-**What it would mean if confirmed:**
-Optional overlay for MGC 0900 strategies: weight trades higher or take best opportunity only when prior session was a WIN. Could add ~+0.19R per trade on ~48% of eligible trade days. Not large enough to merit a dedicated filter, but worth tracking.
+**Re-evaluate when:** Total N (prev=LOSS, E0 CB1 G4+) exceeds 80 (expect ~20-25 more in next 12 months).
 
 ---
 
 ## What did NOT work
 
-- All other session × instrument × prev_outcome combos: NO survivors after BH
-- MES 1000, MGC 1000, MNQ 1000, MNQ 1800, MGC 1800, MNQ 1100 prev=loss: all noise (p > 0.13)
-- "Scratch" buckets: uniformly N < 30 (most sessions don't produce scratch outcomes with G4+ filter)
-- The prior-day outcome is NOT a reliable universal entry signal
+- MES/MNQ 0900 prev=WIN: reversion (both sessions are losers anyway)
+- All other session × instrument × prev_outcome combos: noise (p > 0.10 after BH)
+- Scratch buckets: N < 30 uniformly
+- E1 CB2 prev=WIN at m=105: doesn't survive stricter BH threshold
