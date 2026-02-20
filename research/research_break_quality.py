@@ -539,7 +539,8 @@ def simulate_exit_rules(
       1. C3 (1000 only): slow break -> no entry (pnl_r = 0)
       2. C5 (1000 only): entry bar reverses -> exit at entry bar close
       3. C9 (all sessions): MFE at bar 30 < threshold -> exit at bar30 close
-      4. C8 (all sessions): held 30 bars clean + losing -> break-even (pnl_r = 0)
+      4. C8 (NO-GO, corrected Feb 2026): corrected delta +0.018R at best after
+         accounting for winners scratched while trade open (Case B). Not deployed.
 
     Rules are applied sequentially; a trade modified by an earlier rule
     is excluded from later rules.
