@@ -590,7 +590,34 @@ GOLD_DB = GOLD_DB_PATH
 SAMPLE_SIZE = 50  # rows per test — enough to catch errors, fast enough for CI
 
 def _skip_if_no_db():
-    """Skip test if gold.db not present, locked, or missing orb_outcomes."""
+    """Skip test if gold.db not present, locked, or missing orb_outcomes.
+
+    Database Availability Requirements:
+    ------------------------------------
+    These tests validate trader logic against real production data from gold.db.
+
+    When gold.db is expected to exist:
+    - After running the full pipeline for at least one instrument (MGC, MNQ, MCL, MES)
+    - After running outcome_builder.py to populate orb_outcomes table
+    - In CI environments: gold.db should be pre-built or skipped gracefully
+
+    How to create gold.db:
+    1. Initialize database: `python pipeline/init_db.py`
+    2. Ingest data: `python pipeline/ingest_dbn.py --instrument MGC --start 2024-01-01 --end 2024-12-31`
+    3. Build features: `python pipeline/build_bars_5m.py --instrument MGC`
+    4. Build outcomes: `python trading_app/outcome_builder.py --instrument MGC`
+
+    Why tests require it:
+    - Randomized spot-checks sample real outcomes to detect silent corruption
+    - Synthetic fixtures cannot catch real-world edge cases (gaps, halts, outliers)
+    - Validates that stored metrics match independent recomputation from raw data
+
+    How DUCKDB_PATH env var affects behavior:
+    - Default: gold.db read from <project>/gold.db
+    - Override: Set DUCKDB_PATH=C:/db/gold.db to use alternate location
+    - Tests respect GOLD_DB_PATH from pipeline.paths, which reads DUCKDB_PATH env var
+    - Useful for scratch copies during long-running operations
+    """
     if not GOLD_DB.exists():
         pytest.skip("gold.db not available")
     try:

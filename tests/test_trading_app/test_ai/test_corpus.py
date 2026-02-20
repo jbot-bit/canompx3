@@ -54,6 +54,34 @@ class TestSchemaDefinitions:
 
     @pytest.fixture
     def db_path(self):
+        """Provide path to gold.db for schema extraction tests.
+
+        Database Availability Requirements:
+        ------------------------------------
+        These tests require gold.db to extract live schema definitions and database stats
+        for the AI corpus builder.
+
+        When gold.db is expected to exist:
+        - After running `python pipeline/init_db.py` (creates empty schema)
+        - After running the full pipeline for at least one instrument
+        - In development environments with local data
+
+        How to create gold.db:
+        1. Initialize database: `python pipeline/init_db.py`
+        2. (Optional) Ingest data: `python pipeline/ingest_dbn.py --instrument MGC`
+        3. (Optional) Build features: `python pipeline/build_bars_5m.py --instrument MGC`
+
+        Why tests require it:
+        - Validates that get_schema_definitions() correctly extracts CREATE TABLE statements
+        - Ensures get_db_stats() returns accurate row counts per table
+        - Confirms AI corpus builder can access live schema for prompt context
+
+        How DUCKDB_PATH env var affects behavior:
+        - Default: gold.db read from <project>/gold.db (via pipeline.paths.GOLD_DB_PATH)
+        - Override: Set DUCKDB_PATH=C:/db/gold.db to use alternate location
+        - This fixture respects the override via GOLD_DB_PATH import
+        - Tests remain portable across different DB locations
+        """
         from pipeline.paths import GOLD_DB_PATH
         if not GOLD_DB_PATH.exists():
             pytest.skip("gold.db not available")
