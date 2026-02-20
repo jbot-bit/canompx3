@@ -30,6 +30,7 @@ from pipeline.cost_model import get_cost_spec
 from trading_app.portfolio import Portfolio, build_portfolio
 from trading_app.execution_engine import ExecutionEngine
 from trading_app.risk_manager import RiskManager, RiskLimits
+from trading_app.config import ATR_VELOCITY_OVERLAY
 
 # =========================================================================
 # Data classes
@@ -208,7 +209,8 @@ def replay_historical(
     market_state = None
     engine = ExecutionEngine(portfolio, cost_spec, risk_manager=risk_mgr,
                              market_state=market_state,
-                             live_session_costs=live_session_costs)
+                             live_session_costs=live_session_costs,
+                             atr_velocity_overlay=ATR_VELOCITY_OVERLAY)
 
     with duckdb.connect(str(db_path), read_only=True) as con:
         if start_date is None or end_date is None:
