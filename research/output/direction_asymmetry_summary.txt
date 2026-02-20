@@ -1,0 +1,111 @@
+======================================================================
+DIRECTION ASYMMETRY: BH-SIGNIFICANT FINDINGS (q < 0.10)
+Config: E1/CB1/RR2.5/G4.0+
+======================================================================
+AVOID  MES CME_CLOSE short | N=  89 | avgR=-0.599 | WR=12.4% | p_bh=0.0001 | Δ=-0.065
+AVOID  MES CME_CLOSE long  | N=  89 | avgR=-0.470 | WR=16.9% | p_bh=0.0084 | Δ=+0.065
+AVOID  MGC 2300 long  | N= 158 | avgR=-0.293 | WR=22.8% | p_bh=0.0578 | Δ=-0.119
+AVOID  MNQ US_POST_EQUITY long  | N= 234 | avgR=-0.276 | WR=21.4% | p_bh=0.0462 | Δ=-0.139
+AVOID  MNQ 1100 short | N= 236 | avgR=-0.247 | WR=23.7% | p_bh=0.0578 | Δ=-0.230
+
+----------------------------------------------------------------------
+ALL SUBGROUPS (sorted by avgR, N >= 30)
+----------------------------------------------------------------------
+  MES CME_CLOSE       short | N=  89 | avgR=-0.599 | WR=12.4% | p=0.0000 | p_bh=0.0001 ** BH-SIG **
+  MES CME_CLOSE       long  | N=  89 | avgR=-0.470 | WR=16.9% | p=0.0003 | p_bh=0.0084 ** BH-SIG **
+  MGC CME_OPEN        short | N=  34 | avgR=-0.337 | WR=20.6% | p=0.1468 | p_bh=0.4018 
+  MES CME_OPEN        long  | N=  66 | avgR=-0.331 | WR=21.2% | p=0.0424 | p_bh=0.2412 
+  MGC 2300            long  | N= 158 | avgR=-0.293 | WR=22.8% | p=0.0055 | p_bh=0.0578 ** BH-SIG **
+  MNQ US_POST_EQUITY  long  | N= 234 | avgR=-0.276 | WR=21.4% | p=0.0027 | p_bh=0.0462 ** BH-SIG **
+  MNQ CME_CLOSE       short | N= 128 | avgR=-0.255 | WR=22.7% | p=0.0388 | p_bh=0.2412 
+  MES 1100            short | N=  47 | avgR=-0.254 | WR=23.4% | p=0.2097 | p_bh=0.5192 
+  MNQ 1100            short | N= 236 | avgR=-0.247 | WR=23.7% | p=0.0056 | p_bh=0.0578 ** BH-SIG **
+  MES CME_OPEN        short | N=  74 | avgR=-0.235 | WR=24.3% | p=0.1410 | p_bh=0.4018 
+  MNQ CME_CLOSE       long  | N= 167 | avgR=-0.232 | WR=23.4% | p=0.0328 | p_bh=0.2412 
+  MES US_DATA_OPEN    long  | N= 141 | avgR=-0.228 | WR=24.1% | p=0.0510 | p_bh=0.2412 
+  MES 1800            long  | N= 132 | avgR=-0.198 | WR=25.8% | p=0.0985 | p_bh=0.3203 
+  MES 1800            short | N=  92 | avgR=-0.185 | WR=26.1% | p=0.2026 | p_bh=0.5192 
+  MES US_POST_EQUITY  long  | N= 209 | avgR=-0.183 | WR=25.4% | p=0.0620 | p_bh=0.2687 
+  MNQ 0900            long  | N= 234 | avgR=-0.177 | WR=18.8% | p=0.0217 | p_bh=0.1883 
+  MES US_EQUITY_OPEN  long  | N= 228 | avgR=-0.159 | WR=25.9% | p=0.0941 | p_bh=0.3203 
+  MNQ CME_OPEN        long  | N=  90 | avgR=-0.153 | WR=25.6% | p=0.3198 | p_bh=0.6934 
+  MES 0900            long  | N=  95 | avgR=-0.147 | WR=18.9% | p=0.2214 | p_bh=0.5234 
+  MGC 1800            short | N=  56 | avgR=-0.146 | WR=26.8% | p=0.4458 | p_bh=0.7478 
+  MNQ 0030            long  | N= 236 | avgR=-0.144 | WR=25.4% | p=0.1321 | p_bh=0.4018 
+  MGC LONDON_OPEN     short | N=  65 | avgR=-0.126 | WR=27.7% | p=0.4787 | p_bh=0.7511 
+  MES 0900            short | N=  86 | avgR=-0.104 | WR=19.8% | p=0.4085 | p_bh=0.7478 
+  MNQ US_EQUITY_OPEN  long  | N= 209 | avgR=-0.086 | WR=26.8% | p=0.4116 | p_bh=0.7478 
+  MNQ 1000            short | N= 274 | avgR=-0.079 | WR=24.1% | p=0.3200 | p_bh=0.6934 
+  MGC LONDON_OPEN     long  | N=  93 | avgR=-0.065 | WR=30.1% | p=0.6653 | p_bh=0.8238 
+  MNQ 1800            long  | N= 259 | avgR=-0.064 | WR=28.6% | p=0.4893 | p_bh=0.7511 
+  MES 0030            long  | N= 205 | avgR=-0.056 | WR=29.3% | p=0.5858 | p_bh=0.8016 
+  MGC 2300            short | N= 147 | avgR=-0.045 | WR=30.6% | p=0.7031 | p_bh=0.8503 
+  MES 1100            long  | N=  66 | avgR=-0.043 | WR=30.3% | p=0.8143 | p_bh=0.9211 
+  MGC 1800            long  | N=  80 | avgR=-0.032 | WR=31.2% | p=0.8424 | p_bh=0.9211 
+  MNQ CME_OPEN        short | N= 116 | avgR=-0.030 | WR=29.3% | p=0.8315 | p_bh=0.9211 
+  MGC 1100            short | N= 147 | avgR=-0.017 | WR=31.3% | p=0.8856 | p_bh=0.9211 
+  MES US_EQUITY_OPEN  short | N= 239 | avgR=-0.006 | WR=30.5% | p=0.9542 | p_bh=0.9542 
+  MNQ US_POST_EQUITY  short | N= 222 | avgR=+0.009 | WR=29.7% | p=0.9278 | p_bh=0.9460 
+  MNQ 0900            short | N= 233 | avgR=+0.012 | WR=23.6% | p=0.8823 | p_bh=0.9211 
+  MNQ 1000            long  | N= 238 | avgR=+0.017 | WR=26.9% | p=0.8517 | p_bh=0.9211 
+  MGC 0900            short | N=  50 | avgR=+0.040 | WR=24.0% | p=0.8243 | p_bh=0.9211 
+  MES 0030            short | N= 210 | avgR=+0.054 | WR=32.9% | p=0.6037 | p_bh=0.8049 
+  MGC 1100            long  | N= 149 | avgR=+0.055 | WR=33.6% | p=0.6514 | p_bh=0.8238 
+  MES 1000            short | N=  84 | avgR=+0.072 | WR=29.8% | p=0.6336 | p_bh=0.8237 
+  MNQ 0030            short | N= 231 | avgR=+0.072 | WR=31.6% | p=0.4911 | p_bh=0.7511 
+  MES US_DATA_OPEN    short | N= 140 | avgR=+0.075 | WR=33.6% | p=0.5586 | p_bh=0.8016 
+  MNQ US_EQUITY_OPEN  short | N= 231 | avgR=+0.081 | WR=31.6% | p=0.4409 | p_bh=0.7478 
+  MNQ 1800            short | N= 254 | avgR=+0.084 | WR=33.1% | p=0.3856 | p_bh=0.7478 
+  MES US_POST_EQUITY  short | N= 211 | avgR=+0.087 | WR=33.7% | p=0.4111 | p_bh=0.7478 
+  MES 1000            long  | N=  87 | avgR=+0.093 | WR=27.6% | p=0.5077 | p_bh=0.7543 
+  MGC 1000            short | N=  64 | avgR=+0.097 | WR=31.2% | p=0.5706 | p_bh=0.8016 
+  MGC 1000            long  | N=  76 | avgR=+0.124 | WR=31.6% | p=0.4436 | p_bh=0.7478 
+  MNQ 1100            long  | N= 264 | avgR=+0.188 | WR=37.5% | p=0.0486 | p_bh=0.2412 
+  MGC 0900            long  | N=  72 | avgR=+0.305 | WR=34.7% | p=0.0696 | p_bh=0.2783 
+  MGC CME_OPEN        long  | N=  50 | avgR=+0.401 | WR=44.0% | p=0.0825 | p_bh=0.3065 
+
+----------------------------------------------------------------------
+WORST SUBGROUPS (avgR < -0.20, sorted by avgR)
+----------------------------------------------------------------------
+  MES CME_CLOSE short: avgR=-0.599 WR=12.4% N=89 (BH-SIG)
+  MES CME_CLOSE long : avgR=-0.470 WR=16.9% N=89 (BH-SIG)
+  MGC CME_OPEN short: avgR=-0.337 WR=20.6% N=34 (not-sig)
+  MES CME_OPEN long : avgR=-0.331 WR=21.2% N=66 (not-sig)
+  MGC 2300 long : avgR=-0.293 WR=22.8% N=158 (BH-SIG)
+  MNQ US_POST_EQUITY long : avgR=-0.276 WR=21.4% N=234 (BH-SIG)
+  MNQ CME_CLOSE short: avgR=-0.255 WR=22.7% N=128 (not-sig)
+  MES 1100 short: avgR=-0.254 WR=23.4% N=47 (not-sig)
+  MNQ 1100 short: avgR=-0.247 WR=23.7% N=236 (BH-SIG)
+  MES CME_OPEN short: avgR=-0.235 WR=24.3% N=74 (not-sig)
+  MNQ CME_CLOSE long : avgR=-0.232 WR=23.4% N=167 (not-sig)
+  MES US_DATA_OPEN long : avgR=-0.228 WR=24.1% N=141 (not-sig)
+
+----------------------------------------------------------------------
+ASYMMETRY (LONG - SHORT avgR, sessions with both >= 30 trades)
+----------------------------------------------------------------------
+  MES 0030           : LONG=-0.056 SHORT=+0.054 asymmetry=-0.110
+  MES 0900           : LONG=-0.147 SHORT=-0.104 asymmetry=-0.043
+  MES 1000           : LONG=+0.093 SHORT=+0.072 asymmetry=+0.022
+  MES 1100           : LONG=-0.043 SHORT=-0.254 asymmetry=+0.211
+  MES 1800           : LONG=-0.198 SHORT=-0.185 asymmetry=-0.013
+  MES CME_CLOSE      : LONG=-0.470 SHORT=-0.599 asymmetry=+0.129
+  MES CME_OPEN       : LONG=-0.331 SHORT=-0.235 asymmetry=-0.096
+  MES US_DATA_OPEN   : LONG=-0.228 SHORT=+0.075 asymmetry=-0.303 **
+  MES US_EQUITY_OPEN : LONG=-0.159 SHORT=-0.006 asymmetry=-0.153
+  MES US_POST_EQUITY : LONG=-0.183 SHORT=+0.087 asymmetry=-0.269
+  MGC 0900           : LONG=+0.305 SHORT=+0.040 asymmetry=+0.265
+  MGC 1000           : LONG=+0.124 SHORT=+0.097 asymmetry=+0.027
+  MGC 1100           : LONG=+0.055 SHORT=-0.017 asymmetry=+0.073
+  MGC 1800           : LONG=-0.032 SHORT=-0.146 asymmetry=+0.114
+  MGC 2300           : LONG=-0.293 SHORT=-0.045 asymmetry=-0.247
+  MGC CME_OPEN       : LONG=+0.401 SHORT=-0.337 asymmetry=+0.738 **
+  MGC LONDON_OPEN    : LONG=-0.065 SHORT=-0.126 asymmetry=+0.061
+  MNQ 0030           : LONG=-0.144 SHORT=+0.072 asymmetry=-0.216
+  MNQ 0900           : LONG=-0.177 SHORT=+0.012 asymmetry=-0.190
+  MNQ 1000           : LONG=+0.017 SHORT=-0.079 asymmetry=+0.096
+  MNQ 1100           : LONG=+0.188 SHORT=-0.247 asymmetry=+0.435 **
+  MNQ 1800           : LONG=-0.064 SHORT=+0.084 asymmetry=-0.148
+  MNQ CME_CLOSE      : LONG=-0.232 SHORT=-0.255 asymmetry=+0.023
+  MNQ CME_OPEN       : LONG=-0.153 SHORT=-0.030 asymmetry=-0.123
+  MNQ US_EQUITY_OPEN : LONG=-0.086 SHORT=+0.081 asymmetry=-0.167
+  MNQ US_POST_EQUITY : LONG=-0.276 SHORT=+0.009 asymmetry=-0.286

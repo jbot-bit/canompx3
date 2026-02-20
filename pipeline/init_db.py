@@ -154,6 +154,24 @@ CREATE TABLE IF NOT EXISTS daily_features (
     -- Used as regime filter (vol expansion/contraction detection)
     atr_20            DOUBLE,
 
+    -- ATR Velocity regime (Feb 2026 — research_avoid_crosscheck.py)
+    -- atr_vel_ratio  = atr_20 / avg(prior 5 days atr_20). Prior-days only, no look-ahead.
+    -- atr_vel_regime = 'Expanding' (>1.05), 'Contracting' (<0.95), 'Stable' (else), NULL (<5 prior days)
+    -- Used by ATRVelocityFilter to skip sessions when vol is actively de-volatilizing.
+    atr_vel_ratio     DOUBLE,
+    atr_vel_regime    TEXT,
+
+    -- Per-session ORB compression tier (Feb 2026 — research_avoid_crosscheck.py)
+    -- z-score of (orb_size/atr_20) vs rolling prior-20-day mean/std. Prior-days only.
+    -- 'Compressed' (z < -0.5), 'Neutral' (-0.5..0.5), 'Expanded' (z > 0.5), NULL (<5 prior days)
+    -- Used by ATRVelocityFilter: Contracting+Neutral/Compressed = skip.
+    orb_0900_compression_z    DOUBLE,
+    orb_0900_compression_tier TEXT,
+    orb_1000_compression_z    DOUBLE,
+    orb_1000_compression_tier TEXT,
+    orb_1800_compression_z    DOUBLE,
+    orb_1800_compression_tier TEXT,
+
     -- DST flags: whether US/UK was in daylight saving time on this trading day.
     -- Used by dynamic sessions (US_EQUITY_OPEN, US_DATA_OPEN, LONDON_OPEN)
     -- to verify correct window resolution.
@@ -230,6 +248,23 @@ def init_db(db_path: Path, force: bool = False):
 
         # Migration: add DOW columns (Feb 2026 DOW research)
         for col, typedef in [("is_monday", "BOOLEAN"), ("is_tuesday", "BOOLEAN"), ("day_of_week", "INTEGER")]:
+            try:
+                con.execute(f"ALTER TABLE daily_features ADD COLUMN {col} {typedef}")
+                logger.info(f"  Migration: added {col} column to daily_features")
+            except duckdb.CatalogException:
+                pass  # column already exists
+
+        # Migration: add ATR velocity + compression tier columns (Feb 2026)
+        for col, typedef in [
+            ("atr_vel_ratio",             "DOUBLE"),
+            ("atr_vel_regime",            "TEXT"),
+            ("orb_0900_compression_z",    "DOUBLE"),
+            ("orb_0900_compression_tier", "TEXT"),
+            ("orb_1000_compression_z",    "DOUBLE"),
+            ("orb_1000_compression_tier", "TEXT"),
+            ("orb_1800_compression_z",    "DOUBLE"),
+            ("orb_1800_compression_tier", "TEXT"),
+        ]:
             try:
                 con.execute(f"ALTER TABLE daily_features ADD COLUMN {col} {typedef}")
                 logger.info(f"  Migration: added {col} column to daily_features")

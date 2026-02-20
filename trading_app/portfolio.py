@@ -28,7 +28,7 @@ import pandas as pd
 
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.cost_model import get_cost_spec, CostSpec
-from trading_app.config import ALL_FILTERS, CalendarSkipFilter, classify_strategy
+from trading_app.config import ALL_FILTERS, ATRVelocityFilter, CalendarSkipFilter, classify_strategy
 
 def _get_table_names(con: duckdb.DuckDBPyConnection) -> set[str]:
     """Return set of table names in the main schema."""
@@ -415,6 +415,7 @@ def build_portfolio(
     max_correlation: float = 0.85,
     family_heads_only: bool = False,
     calendar_overlay: CalendarSkipFilter | None = None,
+    atr_velocity_overlay: ATRVelocityFilter | None = None,
 ) -> Portfolio:
     """
     Build a diversified portfolio from validated strategies.
@@ -456,6 +457,7 @@ def build_portfolio(
         corr = correlation_matrix(
             db_path, strategy_ids, min_overlap_days=100,
             calendar_overlay=calendar_overlay,
+            atr_velocity_overlay=atr_velocity_overlay,
         )
         if corr.empty:
             corr = None
@@ -538,6 +540,7 @@ def build_strategy_daily_series(
     db_path: Path,
     strategy_ids: list[str],
     calendar_overlay: CalendarSkipFilter | None = None,
+    atr_velocity_overlay: ATRVelocityFilter | None = None,
 ) -> tuple[pd.DataFrame, dict]:
     """
     Build per-strategy daily R-series on a shared calendar.
@@ -618,7 +621,11 @@ def build_strategy_daily_series(
                 SELECT trading_day, day_of_week,
                        orb_0900_size, orb_1000_size, orb_1100_size,
                        orb_1800_size, orb_2300_size, orb_0030_size,
-                       is_nfp_day, is_opex_day, is_friday
+                       is_nfp_day, is_opex_day, is_friday,
+                       atr_vel_regime,
+                       orb_0900_compression_tier,
+                       orb_1000_compression_tier,
+                       orb_1800_compression_tier
                 FROM daily_features
                 WHERE symbol = ? AND orb_minutes = ?
                 ORDER BY trading_day
@@ -712,6 +719,15 @@ def build_strategy_daily_series(
                         if not calendar_overlay.matches_row(row_dict, orb_label):
                             eligible_mask[idx] = False
 
+            # Apply ATR velocity overlay (Contracting×Neutral/Compressed skip).
+            if atr_velocity_overlay is not None:
+                for idx in range(len(df_rows)):
+                    if eligible_mask[idx]:
+                        row_dict = {k: (None if (isinstance(v, float) and np.isnan(v)) else v)
+                                    for k, v in df_rows.iloc[idx].items()}
+                        if not atr_velocity_overlay.matches_row(row_dict, orb_label):
+                            eligible_mask[idx] = False
+
             # Start with NaN (ineligible), set eligible days to 0.0
             series = pd.Series(np.nan, index=all_days, name=sid)
             series.iloc[eligible_mask] = 0.0
@@ -758,6 +774,7 @@ def correlation_matrix(
     strategy_ids: list[str],
     min_overlap_days: int = MIN_OVERLAP_DAYS,
     calendar_overlay: CalendarSkipFilter | None = None,
+    atr_velocity_overlay: ATRVelocityFilter | None = None,
 ) -> pd.DataFrame:
     """
     Compute daily R-series correlation between strategies.
@@ -770,6 +787,7 @@ def correlation_matrix(
     """
     series_df, stats = build_strategy_daily_series(
         db_path, strategy_ids, calendar_overlay=calendar_overlay,
+        atr_velocity_overlay=atr_velocity_overlay,
     )
 
     if series_df.empty:

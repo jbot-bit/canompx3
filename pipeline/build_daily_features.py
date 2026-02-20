@@ -722,9 +722,14 @@ def build_features_for_day(con: duckdb.DuckDBPyConnection, symbol: str,
         row["daily_low"] = None
         row["daily_close"] = None
 
-    # gap_open_points and atr_20 computed in orchestrator (needs previous day's data)
+    # gap_open_points, atr_20, atr velocity and compression computed in post-pass
     row["gap_open_points"] = None
     row["atr_20"] = None
+    row["atr_vel_ratio"] = None
+    row["atr_vel_regime"] = None
+    for _sl in ["0900", "1000", "1800"]:
+        row[f"orb_{_sl}_compression_z"] = None
+        row[f"orb_{_sl}_compression_tier"] = None
 
     # Module 4: Session stats
     session_stats = compute_session_stats(bars_df, trading_day)
@@ -897,12 +902,63 @@ def build_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
         else:
             true_ranges.append(None)
 
-        # ATR(20) = SMA of last 20 True Range values (skip Nones)
+        # ATR(20) = SMA of last 20 True Range values, prior days only (no look-ahead)
         lookback = [v for v in true_ranges[max(0, i - 20):i] if v is not None]
         if lookback:
             rows[i]["atr_20"] = round(sum(lookback) / len(lookback), 4)
         else:
             rows[i]["atr_20"] = None
+
+        # ATR Velocity: today's ATR_20 vs 5-day prior average.
+        # Uses ROWS [i-5 .. i-1] — prior days only, no look-ahead.
+        atr_today = rows[i]["atr_20"]
+        prior_atrs = [
+            rows[j]["atr_20"] for j in range(max(0, i - 5), i)
+            if rows[j].get("atr_20") is not None
+        ]
+        if atr_today is not None and len(prior_atrs) >= 5:
+            avg_5d = sum(prior_atrs) / len(prior_atrs)
+            if avg_5d > 0:
+                vel = atr_today / avg_5d
+                rows[i]["atr_vel_ratio"] = round(vel, 4)
+                if vel > 1.05:
+                    rows[i]["atr_vel_regime"] = "Expanding"
+                elif vel < 0.95:
+                    rows[i]["atr_vel_regime"] = "Contracting"
+                else:
+                    rows[i]["atr_vel_regime"] = "Stable"
+
+        # Per-session ORB compression z-score (prior 20 days, no look-ahead).
+        # Compression = rolling z-score of (orb_size / atr_20).
+        # Requires ≥5 prior days to be meaningful.
+        if atr_today is not None and atr_today > 0:
+            for sess_label in ["0900", "1000", "1800"]:
+                size_col = f"orb_{sess_label}_size"
+                size_today = rows[i].get(size_col)
+                if size_today is None:
+                    continue
+                ratio_today = size_today / atr_today
+                prior_ratios = []
+                for j in range(max(0, i - 20), i):
+                    s = rows[j].get(size_col)
+                    a = rows[j].get("atr_20")
+                    if s is not None and a is not None and a > 0:
+                        prior_ratios.append(s / a)
+                if len(prior_ratios) < 5:
+                    continue
+                mean_r = sum(prior_ratios) / len(prior_ratios)
+                variance = sum((x - mean_r) ** 2 for x in prior_ratios) / len(prior_ratios)
+                std_r = variance ** 0.5
+                if std_r <= 0:
+                    continue
+                z = (ratio_today - mean_r) / std_r
+                rows[i][f"orb_{sess_label}_compression_z"] = round(z, 4)
+                if z < -0.5:
+                    rows[i][f"orb_{sess_label}_compression_tier"] = "Compressed"
+                elif z > 0.5:
+                    rows[i][f"orb_{sess_label}_compression_tier"] = "Expanded"
+                else:
+                    rows[i][f"orb_{sess_label}_compression_tier"] = "Neutral"
 
     # Convert to DataFrame for bulk insert
     features_df = pd.DataFrame(rows)

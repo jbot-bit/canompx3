@@ -117,6 +117,7 @@ Example: 10pt ORB, RR2.0 = 20pt target, 10pt stop.
 | Wider ORB apertures (10-60min) | NO-GO. 5min aperture has highest per-trade avgR. Wider dilutes signal. Does NOT rescue DST-affected sessions. Feb 2026. |
 | SIL (Micro Silver) ORB breakout | NO-GO. 0 of 432 strategies validated. All sessions negative Sharpe. $20 round-trip cost punishing vs silver's average move. 0030 WINTER-DOM; 2300 E3 faint SUMMER-ONLY signal (S=+0.03–0.06) below threshold. Feb 2026. |
 | E3 retrace timing optimization (delay buckets) | NO-GO. Break-anchored delay (0-240 min, G4+, RR2.0) tested across MGC+MES × 5 sessions. Zero cells survived CORE/PRELIMINARY sample + BH FDR correction with positive avg_r. MGC/2300 0-2 min bucket N=521 avg_r=-0.55R (p~0); 30+ min N=290 avg_r=-0.40R (p~0). Edge in production E3 derives from confirm bars + size/session filters — not delay timing. Do not test confirm-bar-offset variants; that is micro-optimization. Allocate research capital elsewhere. Feb 2026. |
+| **MES 1800 E3** | **NO-GO (MES-specific).** Year-by-year (2019–2025): 7/8 years both winter and summer negative. 2021 winter -0.332R, 2022 winter -0.281R, 2024 winter -0.676R. 2023 winter barely positive (+0.045R) — one outlier. Zero MES 1800 E3 strategies survive validation. **MGC and MNQ E3 1800 are NOT affected** (10 and 42 active strategies respectively). Do not attempt MES 1800 E3. Mechanism: MES 1800 (London open) has 81% double-break rate; E3 retrace entry on a mean-reversion session is structurally wrong. Feb 2026. |
 
 > **Key insight**: Gold trends intraday more than it mean-reverts. The only confirmed edges are momentum breakouts with size filters. Full research details: `docs/RESEARCH_ARCHIVE.md`.
 
@@ -503,6 +504,33 @@ A "family" = one unique combination of `(session, entry_model, filter_level)`. A
 - **KEEP rolling fitness:** `strategy_fitness.py` + `live_config.py` regime tier = the regime gate.
 - Full ATR research: `docs/RESEARCH_ARCHIVE.md`.
 
+### ATR Velocity + ORB Compression AVOID Signal (2026-02-20 — VALIDATED)
+
+**Signal:** Skip when ATR is **Contracting** AND ORB compression is **Neutral or Compressed**.
+- `atr_vel_ratio = atr_20 / mean(prior 5 days atr_20)`. Contracting = ratio < 0.95.
+- `orb_compression_z` = z-score of (orb_size/atr_20) vs rolling prior 20-day mean/std. Compressed = z < -0.5, Neutral = -0.5..0.5.
+- Both computed from prior days only — **no look-ahead**.
+
+**Cross-instrument scan results:**
+- Contracting×Neutral: 9/9 sessions 100% directional (all negative). Median delta = -0.372R.
+- Contracting×Compressed: 10/10 sessions 100% directional (all negative). Median delta = -0.362R.
+- BH-corrected anchor: MES 1000 E0 Contracting×Neutral p_bh=0.0022. 5/5 years negative.
+
+**Two-condition rule (apply to 0900 and 1000 sessions):** Skip when `atr_vel_regime == "Contracting"` AND `orb_{label}_compression_tier` in `{"Neutral", "Compressed"}`. Expanding is allowed even during contracting (MES 1000 Contracting×Expanded = +0.149R).
+
+**Exceptions:**
+- MNQ 1800: positive in Contracting regime — explicitly excluded from filter.
+- Sessions 1100, 1130, 2300, 0030: not wired (insufficient data or borderline delta).
+- Warm-up period (< 5 prior ATR days): fail-open → trade is allowed.
+
+**Mechanism:** Contracting ATR = volatility de-volatilizing. ORB in neutral/compressed zone = no expansion catalyst. Market lacks energy to follow through on the breakout. Expanded ORB even in contracting ATR = compressed spring still has local tension.
+
+**Implementation:**
+- `ATRVelocityFilter` class in `trading_app/config.py`. `ATR_VELOCITY_OVERLAY = ATRVelocityFilter()`.
+- Columns in `daily_features`: `atr_vel_ratio`, `atr_vel_regime`, `orb_{0900/1000/1800}_compression_z`, `orb_{0900/1000/1800}_compression_tier`.
+- Wired into: `ExecutionEngine` (live), `build_strategy_daily_series()` + `correlation_matrix()` + `build_portfolio()` in `portfolio.py` (backtesting).
+- Script: `research/research_avoid_crosscheck.py`.
+
 ---
 
 ## Cost Model
@@ -538,6 +566,8 @@ This is why small ORBs lose — friction eats the edge.
 | Idea | Status | Notes |
 |------|--------|-------|
 | **Time-based exit gate** | **NEXT STEP** | Winner speed confirms T80 ≤ 45m at RR1.0 and 90-170m at RR2.5-3.0. Sessions held for 480m carry 300-450m of dead exposure. Next: does pnl_r on positions still open past T80 justify continued hold? Script: `research/research_winner_speed.py`. Full data: `research/output/winner_speed_summary.csv`. |
+| **MNQ 0030 winter > summer pattern** | WATCH (2-year data) | Scan (Feb 2026) found W=+0.946R S=-0.332R on E0 CB4 G6 (N=21). Broader E1 G8+ shows 2024 W=+0.391 → 2025 W=+0.115 (declining). Mechanism plausible: winter 0030 Bris = 14:30 UTC = 9:30 AM EST = US equity open. Summer 0030 = 1hr post-open (momentum dissipated). NOT ready to trade — MNQ only has 2 years of data, declining trend. Revisit after 2026 winter season. |
+| **MES 1800 E0 (winter-ish)** | WATCH (inconsistent) | Sole validated MES 1800 strategy: E0 CB2 G4 RR2.5. Aggregate W=+0.200R (N=98), S=-0.043R (N=112). Year-by-year: 2022 winter was -0.064R (summer +0.101R), 2024 winter -0.237R (summer +0.304R) — pattern reverses. Not stable enough to trade as winter-only. Monitor 2026 season. |
 | **C3 cross-session** | INVESTIGATE | 0900 delta=+0.257R, 1800 delta=+0.232R. Not BH-validated. Deployed 1000-only for now. |
 | **C9 (bar-30 exit rule)** | NO-GO | Bar-30 close avg = +0.017R at 1000 (expected -0.42 to -0.67R). Bar-30 position is near-neutral; forced exit would sacrifice residual wins. Do not implement. |
 | **C5 (entry bar continues filter)** | PROMISING | True avg +0.360R vs False -0.113R at 1000 (delta +0.473R, N=64/78). Not yet wired as pre-trade filter. |

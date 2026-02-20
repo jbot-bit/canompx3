@@ -191,6 +191,51 @@ class DayOfWeekSkipFilter(StrategyFilter):
 
 
 @dataclass(frozen=True)
+class ATRVelocityFilter(StrategyFilter):
+    """Skip sessions when ATR is actively contracting AND ORB compression is Neutral or Compressed.
+
+    Research (Feb 2026 — research_avoid_crosscheck.py):
+      Contracting×Neutral:   9/9 sessions 100% negative, median avgR=-0.372R
+      Contracting×Compressed: 10/10 sessions 100% negative, median avgR=-0.362R
+      MES 1000 anchor: 5/5 years negative, BH-sig p=0.0022
+      MGC 1000 E1: 10/10 years (2016-2025) negative
+
+    Signal is fully pre-entry — both atr_vel_regime and compression_tier are
+    computed from prior-days data and known at ORB close (10:05 AM).
+
+    Logic: skip when BOTH conditions hold:
+      1. atr_vel_regime == 'Contracting'  (today ATR < 95% of prior-5-day avg)
+      2. orb_{label}_compression_tier in ('Neutral', 'Compressed')
+         (Expanded is OK — Contracting+Expanded has mixed/weaker signal)
+
+    Applied to: sessions 0900 and 1000 (where the signal is confirmed).
+    NOT applied to: 1800, 1100, 0030, 2300 (insufficient evidence or exception).
+    Exception: MNQ 1800 is positive in the contracting regime — explicitly excluded
+               by default apply_to_sessions.
+
+    Fail-open: missing data (warm-up period) → trade is allowed.
+    """
+    filter_type: str = "ATR_VEL"
+    description: str = "Skip Contracting ATR × Neutral/Compressed ORB sessions"
+    apply_to_sessions: tuple[str, ...] = ("0900", "1000")
+
+    def matches_row(self, row: dict, orb_label: str) -> bool:
+        if orb_label not in self.apply_to_sessions:
+            return True  # not a monitored session — allow trade
+        vel_regime = row.get("atr_vel_regime")
+        if vel_regime != "Contracting":
+            return True  # only skip on contracting ATR
+        comp_tier = row.get(f"orb_{orb_label}_compression_tier")
+        if comp_tier is None:
+            return True  # warm-up: no rolling data yet — fail-open
+        return comp_tier == "Expanded"  # Neutral/Compressed → skip; Expanded → allow
+
+
+# Default ATR velocity overlay — applied as portfolio-level overlay.
+ATR_VELOCITY_OVERLAY = ATRVelocityFilter()
+
+
+@dataclass(frozen=True)
 class DoubleBreakFilter(StrategyFilter):
     """Skip days where the ORB had a double-break (both sides breached).
 
@@ -464,6 +509,8 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
     - Session "1800": adds DOW composite (skip Monday) for each G-filter
     - Session "1000": adds DIR_LONG (H5) + DOW composite (skip Tuesday) for each G-filter
     - MES + "1000": also adds G4_L12, G5_L12 band filters (H2 confirmed)
+    - MNQ + "1100": adds DIR_LONG (Feb 2026 raw-verified: SHORT avgR=-0.247 p=0.006,
+      N=236, 2yrs consistent; LONG avgR=+0.187; asymmetry +0.434R)
     - All other combos: returns BASE_GRID_FILTERS unchanged
     """
     from pipeline.dst import validate_dow_filter_alignment
@@ -491,6 +538,10 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
         filters.update(_make_dow_composites(_GRID_SIZE_FILTERS_ORB, _DOW_SKIP_TUESDAY, "NOTUE"))
     if instrument == "MES" and session == "1000":
         filters.update(_MES_1000_BAND_FILTERS)
+    if instrument == "MNQ" and session == "1100":
+        # Feb 2026: SHORT is systematic AVOID (N=236, avgR=-0.247, p=0.006, raw-verified).
+        # LONG is positive (+0.187). Wire long-only to block short discovery.
+        filters["DIR_LONG"] = DIR_LONG
     # REMOVED (Feb 2026): NO_DBL_BREAK / NODBL composites for 1100.
     # double_break column is LOOK-AHEAD — computed over full session AFTER
     # trade entry. Cannot be used as a pre-entry filter. All 6 validated

@@ -175,13 +175,15 @@ class ExecutionEngine:
     def __init__(self, portfolio: Portfolio, cost_spec: CostSpec,
                  risk_manager=None, market_state=None,
                  live_session_costs: bool = True,
-                 calendar_overlay: CalendarSkipFilter | None = CALENDAR_SKIP_NFP_OPEX):
+                 calendar_overlay: CalendarSkipFilter | None = CALENDAR_SKIP_NFP_OPEX,
+                 atr_velocity_overlay=None):
         self.portfolio = portfolio
         self.cost_spec = cost_spec
         self.risk_manager = risk_manager  # Optional RiskManager for position limits
         self.market_state = market_state  # Optional MarketState for scoring
         self._live_session_costs = live_session_costs  # Use session-adjusted slippage
         self.calendar_overlay = calendar_overlay  # NFP/OPEX skip overlay
+        self.atr_velocity_overlay = atr_velocity_overlay  # Contracting ATR skip overlay
 
         # State
         self.trading_day: date | None = None
@@ -414,6 +416,13 @@ class ExecutionEngine:
             if (self.calendar_overlay is not None
                     and self._daily_features_row is not None
                     and not self.calendar_overlay.matches_row(
+                        self._daily_features_row, orb.label)):
+                continue
+
+            # Check ATR velocity overlay (Contracting×Neutral/Compressed skip)
+            if (self.atr_velocity_overlay is not None
+                    and self._daily_features_row is not None
+                    and not self.atr_velocity_overlay.matches_row(
                         self._daily_features_row, orb.label)):
                 continue
 
