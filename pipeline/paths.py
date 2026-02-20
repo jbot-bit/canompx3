@@ -9,8 +9,15 @@ from pathlib import Path
 # Project root
 PROJECT_ROOT = Path(__file__).parent.parent
 
+# Load .env from project root (populates DUCKDB_PATH and API keys into os.environ)
+try:
+    from dotenv import load_dotenv as _load_dotenv
+    _load_dotenv(PROJECT_ROOT / ".env", override=False)
+except ImportError:
+    pass  # python-dotenv not installed — rely on shell env
+
 # Database — resolution order:
-#   1. DUCKDB_PATH env var (explicit override)
+#   1. DUCKDB_PATH env var (explicit override, or from .env)
 #   2. local_db/gold.db (NTFS junction to C:\db — alternative local path)
 #   3. gold.db (project root fallback)
 import os as _os
