@@ -1,0 +1,305 @@
+
+====================================================================================================
+  BREAK QUALITY RESEARCH — Post-Break Candle Behavior
+  DB: C:\db\gold.db | Instruments: ['MGC'] | Sessions: ['0900', '1000', '1800']
+  Filter: G4+ | Entry: E1 | RR: 2.0 | CB: 2
+====================================================================================================
+
+====================================================================================================
+  MGC 0900
+====================================================================================================
+  Loading bar data for 150 break-days...
+  150 trades analyzed in 2.0s
+  Baseline: N=150, avgR=+0.200, WR=34.7%, totR=+30.0
+
+  C4: Entry bar engulfs back inside ORB?
+                                   N     avgR      WR      totR   Sharpe
+    -----------------------------------------------------------------
+         Entry bar INSIDE ORB     39   +0.118  30.8%      +4.6     1.76
+        Entry bar OUTSIDE ORB    111   +0.228  36.0%     +25.3     3.08
+                        Delta          -0.110
+    Signal: 0.110R separation ~ notable | p=0.5911
+
+  C5: Does entry bar continue in break direction?
+                                   N     avgR      WR      totR   Sharpe
+    -----------------------------------------------------------------
+          Entry bar CONTINUES     69   +0.375  44.9%     +25.9     4.69
+           Entry bar REVERSES     81   +0.050  25.9%      +4.1     0.78
+                        Delta          +0.325
+    Signal: 0.325R separation >> ACTIONABLE | p=0.0894 *
+
+  C6: Any close back inside ORB within 1 bar(s)?
+                                   N     avgR      WR      totR   Sharpe
+    -----------------------------------------------------------------
+     Close inside ORB <=1bars     36   +0.023  25.0%      +0.8     0.36
+        Stays outside <=1bars    114   +0.256  37.7%     +29.1     3.43
+                        Delta          -0.233
+    Signal: 0.233R separation << ACTIONABLE | p=0.2553
+
+  C6: Any close back inside ORB within 3 bar(s)?
+                                   N     avgR      WR      totR   Sharpe
+    -----------------------------------------------------------------
+     Close inside ORB <=3bars     54   -0.018  24.1%      -0.9    -0.28
+        Stays outside <=3bars     96   +0.322  40.6%     +30.9     4.24
+                        Delta          -0.340
+    Signal: 0.340R separation << ACTIONABLE | p=0.0683 *
+
+  C6: Any close back inside ORB within 5 bar(s)?
+                                   N     avgR      WR      totR   Sharpe
+    -----------------------------------------------------------------
+     Close inside ORB <=5bars     70   -0.119  20.0%      -8.3    -1.96
+        Stays outside <=5bars     80   +0.479  47.5%     +38.3     6.20
+                        Delta          -0.597
+    Signal: 0.597R separation << ACTIONABLE | p=0.0011 ***
+
+  C6: Any close back inside ORB within 10 bar(s)?
+                                   N     avgR      WR      totR   Sharpe
+    -----------------------------------------------------------------
+    Close inside ORB <=10bars     79   -0.126  19.0%      -9.9    -2.12
+       Stays outside <=10bars     71   +0.562  52.1%     +39.9     7.15
+                        Delta          -0.688
+    Signal: 0.688R separation << ACTIONABLE | p=0.0002 ***
+
+  C6: Any close back inside ORB within 15 bar(s)?
+                                   N     avgR      WR      totR   Sharpe
+    -----------------------------------------------------------------
+    Close inside ORB <=15bars     87   -0.146  17.2%     -12.7    -2.58
+       Stays outside <=15bars     63   +0.678  58.7%     +42.7     8.41
+                        Delta          -0.824
+    Signal: 0.824R separation << ACTIONABLE | p=0.0000 ***
+
+  C6: Any close back inside ORB within 30 bar(s)?
+                                   N     avgR      WR      totR   Sharpe
+    -----------------------------------------------------------------
+    Close inside ORB <=30bars    101   -0.131  18.8%     -13.3    -2.21
+       Stays outside <=30bars     49   +0.882  67.3%     +43.2    11.35
+                        Delta          -1.013
+    Signal: 1.013R separation << ACTIONABLE | p=0.0000 ***
+
+  C7: When does price first close back inside ORB?
+    Never returned:   N=  13  avgR=+1.730  WR=100.0%
+    Returned (any):   N= 137  avgR=+0.055  WR=28.5%
+    Delta (never-returned): +1.675
+
+    Outcome by when price first re-entered ORB:
+          First re-entry     N     avgR      WR
+    ---------------------------------------------
+                 bar 1-3    54   -0.018  24.1%
+                bar 4-10    25   -0.360   8.0%
+               bar 11-30    22   -0.151  18.2%
+               bar 31-60    12   -0.198  25.0%
+              bar 61-999    24   +0.963  70.8%
+
+  C6 EXIT SIMULATION (trigger within <=3 bars):
+    Triggered trades:     N=54
+    Not triggered:        N=96
+
+    If you EXIT at trigger bar close:
+      Avg exit pnl_r:     -0.243R
+      Avg hold pnl_r:     -0.018R  (actual outcome)
+      Avg improvement:    -0.225R  (per triggered trade)
+      % trades exit beats hold: 65%
+
+    Exit pnl_r distribution (actual close price):
+      p10=-0.525  p25=-0.348  p50=-0.166  p75=-0.099  p90=-0.062
+
+    Exit price breakdown:
+      Exit < -0.5R  (big loss, worse than stop): N=  8 (15%), avg_exit=-0.637R, avg_hold=-0.311R
+      Exit -0.5R to 0  (small loss): N= 46 (85%), avg_exit=-0.174R, avg_hold=+0.033R
+
+    Portfolio EV comparison (full 150 trades):
+      EV (never exit early):   +0.200R
+      EV (always exit on C6):  +0.119R
+      Net effect:              -0.081R per trade ** EXIT HURTS
+
+  C6 EXIT SIMULATION (trigger within <=5 bars):
+    Triggered trades:     N=70
+    Not triggered:        N=80
+
+    If you EXIT at trigger bar close:
+      Avg exit pnl_r:     -0.263R
+      Avg hold pnl_r:     -0.119R  (actual outcome)
+      Avg improvement:    -0.144R  (per triggered trade)
+      % trades exit beats hold: 67%
+
+    Exit pnl_r distribution (actual close price):
+      p10=-0.543  p25=-0.360  p50=-0.169  p75=-0.101  p90=-0.065
+
+    Exit price breakdown:
+      Exit < -0.5R  (big loss, worse than stop): N= 11 (16%), avg_exit=-0.704R, avg_hold=-0.499R
+      Exit -0.5R to 0  (small loss): N= 59 (84%), avg_exit=-0.181R, avg_hold=-0.048R
+
+    Portfolio EV comparison (full 150 trades):
+      EV (never exit early):   +0.200R
+      EV (always exit on C6):  +0.132R
+      Net effect:              -0.067R per trade ** EXIT HURTS
+
+  C8: Held cleanly outside ORB for 30+ bars?
+                                   N     avgR      WR      totR   Sharpe
+    -----------------------------------------------------------------
+        Clean outside 30 bars     49   +0.882  67.3%     +43.2    11.35
+      Reversed within 30 bars    101   -0.131  18.8%     -13.3    -2.21
+                        Delta          +1.013
+    Signal: 1.013R separation >> ACTIONABLE | p=0.0000 ***
+
+  C8b: Within 'held 30 clean' — did it EVENTUALLY return inside?
+                                     N     avgR      WR
+    --------------------------------------------------
+    Held 30 then returned inside    36   +0.576  55.6%
+         Held 30, never returned    13   +1.730 100.0%
+    Delta (never-returned minus returned): +1.154 ** ACTIONABLE
+
+  C8c: Case B — return inside ORB happened WHILE TRADE STILL OPEN
+    Total Case B: N=19 (13% of all trades)
+    Winners (C8 would scratch): N=6, avgR=+1.725
+    Losers  (C8 would save):   N=13, avgR=-1.000
+    Net C8 Case B impact: +0.018R/trade (positive = C8 helps on this group)
+
+  C9: Max favorable excursion in first 10 bars (R)
+                       Bucket      N     avgR      WR      totR
+    -------------------------------------------------------
+             (-0.655, 0.0975]     38   -0.391   7.9%     -14.9  --
+              (0.0975, 0.322]     37   -0.011  18.9%      -0.4
+               (0.322, 0.689]     37   +0.499  48.6%     +18.5  ++
+               (0.689, 7.705]     38   +0.705  63.2%     +26.8  ++
+
+  C9: Max favorable excursion in first 30 bars (R)
+                       Bucket      N     avgR      WR      totR
+    -------------------------------------------------------
+              (-0.655, 0.188]     38   -0.462   2.6%     -17.6  --
+               (0.188, 0.575]     37   -0.200  13.5%      -7.4  --
+               (0.575, 1.031]     37   +0.529  51.4%     +19.6  ++
+               (1.031, 7.869]     38   +0.931  71.1%     +35.4  ++
+
+  C10: Volume ratio (post-entry mean / break bar) — dropoff = <1.0
+                       Bucket      N     avgR      WR      totR
+    -------------------------------------------------------
+               (0.0942, 0.49]     38   -0.001  23.7%      -0.0
+                (0.49, 0.788]     37   +0.319  35.1%     +11.8  ++
+               (0.788, 1.252]     37   +0.188  35.1%      +6.9  ++
+               (1.252, 5.522]     38   +0.296  44.7%     +11.3  ++
+
+  C1: Confirm bar break distance (in R)
+                       Bucket      N     avgR      WR      totR
+    -------------------------------------------------------
+    (0.009500000000000001, 0.0653]     38   +0.070  28.9%      +2.6
+              (0.0653, 0.161]     37   +0.397  40.5%     +14.7  ++
+                (0.161, 0.28]     37   +0.034  29.7%      +1.3
+                 (0.28, 0.95]     38   +0.299  39.5%     +11.4  ++
+
+  C2: Confirm bar wick-back ratio
+                       Bucket      N     avgR      WR      totR
+    -------------------------------------------------------
+              (-0.001, 0.123]     38   -0.077  23.7%      -2.9
+               (0.123, 0.257]     37   +0.255  37.8%      +9.4  ++
+               (0.257, 0.494]     37   +0.397  37.8%     +14.7  ++
+                 (0.494, 1.0]     38   +0.231  39.5%      +8.8  ++
+
+  C3: Break speed (minutes to confirm)
+                       Bucket      N     avgR      WR      totR
+    -------------------------------------------------------
+               (0.999, 145.0]    150   +0.200  34.7%     +30.0  ++
+
+  BONUS: Entry bar close distance from ORB (in R)
+                       Bucket      N     avgR      WR      totR
+    -------------------------------------------------------
+                (-0.312, 0.0]     39   +0.118  30.8%      +4.6
+                 (0.0, 0.159]     36   +0.011  25.0%      +0.4
+               (0.159, 0.351]     37   +0.359  40.5%     +13.3  ++
+               (0.351, 2.066]     38   +0.307  42.1%     +11.7  ++
+
+====================================================================================================
+  VALIDITY TESTING — MGC 0900
+====================================================================================================
+
+  [C3] Pre-entry: Break speed < 3 min
+    Fast (<=3m): N=128, avgR=+0.237
+    Slow (>3m):  N=22, avgR=-0.020
+    Delta: +0.257R | p=0.2729
+
+  C3 Sensitivity Sweep (break speed cutoff):
+        Cutoff  N_fast  avgR_fast  N_slow  avgR_slow    Delta       p
+    -----------------------------------------------------------------
+        <=1min     123     +0.244      27     -0.002   +0.246  0.2837
+        <=2min     123     +0.244      27     -0.002   +0.246  0.2837
+        <=3min     128     +0.237      22     -0.020   +0.257  0.2729
+        <=5min     131     +0.218      19     +0.070   +0.148  0.5626
+        <=7min     132     +0.215      18     +0.089   +0.126  0.6369
+       <=10min     135     +0.199      15     +0.203   -0.004  0.9900
+
+  Year-by-year: C3 break speed < 3 min
+      Year  N_on   avgR_on  N_off  avgR_off    Delta
+    ----------------------------------------------------
+      2025    63    +0.311     13    -0.211   +0.522 **
+    Consistent direction: 100% of years (1/1)
+
+  C5 (re-test p-value): Entry bar direction
+                                   N     avgR      WR      totR   Sharpe
+    -----------------------------------------------------------------
+                    Continues     69   +0.375  44.9%     +25.9     4.69
+                     Reverses     81   +0.050  25.9%      +4.1     0.78
+                        Delta          +0.325
+    Signal: 0.325R separation >> ACTIONABLE | p=0.0894 *
+
+  Year-by-year: C5 entry bar direction (True = continues)
+      Year  N_on   avgR_on  N_off  avgR_off    Delta
+    ----------------------------------------------------
+      2025    35    +0.437     41    +0.039   +0.399 **
+      2026    13    +0.236      9    +0.580   -0.344 **
+    Consistent direction: 50% of years (1/2)
+
+  C8 (re-test p-value): Held 30 bars outside ORB
+                                   N     avgR      WR      totR   Sharpe
+    -----------------------------------------------------------------
+                Held 30 clean     49   +0.882  67.3%     +43.2    11.35
+                 Reversed <30    101   -0.131  18.8%     -13.3    -2.21
+                        Delta          +1.013
+    Signal: 1.013R separation >> ACTIONABLE | p=0.0000 ***
+
+  Year-by-year: C8 held 30 bars clean
+      Year  N_on   avgR_on  N_off  avgR_off    Delta
+    ----------------------------------------------------
+      2025    25    +0.945     51    -0.132   +1.078 **
+      2026     9    +0.973     13    -0.037   +1.010 **
+    Consistent direction: 100% of years (2/2)
+
+  [C9] MFE at 30 bars: bottom quartile (cutoff=0.188R)
+    Bottom Q (MFE <= 0.188R): N=38, avgR=-0.462, WR=3%
+    Top 3Q  (MFE >  0.188R): N=112,  avgR=+0.424, WR=46%
+    Delta: -0.886R | p=0.0000
+    Sensitivity p50 cutoff (0.575R): delta=-1.065R | p=0.0000
+
+  Year-by-year: C9 MFE<30bar bottom quartile
+      Year  N_on   avgR_on  N_off  avgR_off    Delta
+    ----------------------------------------------------
+      2025    16    -0.521     60    +0.420   -0.942 **
+    Consistent direction: 0% of years (0/1)
+
+  BH CORRECTION SUMMARY (MGC 0900) — 4 tests, alpha=0.05:
+                                           Signal    delta    p_raw  BH-pass Type
+    ------------------------------------------------------------------------------------------
+                        C3 speed<3min (pre-entry)   +0.257   0.2729        no  pre-entry
+                           C5 entry-bar direction   +0.325   0.0894 *        no  post-fill 1-bar
+                            C8 held 30 bars clean   +1.013   0.0000 **   YES ***  post-hoc (30bar look-ahead)
+             C9 MFE<30bar p25 (30-bar look-ahead)   -0.886   0.0000 **   YES ***  post-entry 30-bar look-ahead
+
+================================================================================
+  EXIT RULE SIMULATION — MGC 0900
+================================================================================
+  Baseline: N=150  EV=+0.200R  totR=+30.0
+
+  C9 kill-switch (MFE_30 < 0.33R -- exit at bar30 close):
+Traceback (most recent call last):
+  File "C:\Users\joshd\canompx3\research\research_break_quality.py", line 1061, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\joshd\canompx3\research\research_break_quality.py", line 1010, in main
+    simulate_exit_rules(cdf, session, instrument)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshd\canompx3\research\research_break_quality.py", line 609, in simulate_exit_rules
+    print(f"    Triggered N={n_c9} ({n_c9/n:.0%})  old avgR={old_ev:+.3f}R \u2192 new {new_ev:+.3f}R")
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2192' in position 43: character maps to <undefined>
