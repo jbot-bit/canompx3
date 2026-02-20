@@ -531,8 +531,8 @@ This is why small ORBs lose — friction eats the edge.
 | Nested 15m ORB for 1000 | +0.208R premium, 90% pairs improve | VALIDATED |
 | IB 120m direction alignment | Opposed=3% WR. Cross-validated 0900+1000. | DEPLOYED |
 | 1100 permanent exclusion | 74% double-break, all signals failed | DEPLOYED |
-| **C8: Breakeven stop after 30-bar clean hold** | N=28 at MGC 1000 (14 losses, avg -0.84R → 0R). Fires if 30 post-entry bars close outside ORB with no stop hit, then price returns inside ORB. Improvement: +0.42R/trade on affected set. All sessions. | **DEPLOYED in outcome_builder.py** |
-| **C3: Skip slow breaks at 1000 (>3 min confirm)** | Fast (≤3 min) avg +0.213R vs slow (>3 min) -0.339R at 1000 (delta=+0.552R). 0900/1800 show positive delta too but not BH-validated cross-session. | **DEPLOYED in outcome_builder.py (1000 only)** |
+| **C3: Skip slow breaks at 1000 (>3 min confirm)** | Fast (<=3 min) avg +0.213R vs slow (>3 min) -0.339R at 1000 (delta=+0.552R, p=0.020, BH-sig). Portfolio delta: +0.069R/trade. Pre-entry, clean mechanism. | **DEPLOYED in outcome_builder.py (1000 only)** |
+| **C8: Breakeven stop after 30-bar clean hold** | REVERTED. Corrected simulation (Feb 2026) shows +0.018R at 0900, ~0.000R at 1000, +0.017R at 1800 — noise level. Original +0.053-0.089R estimate was artifact: simulation used pnl_r < 0 filter but ignored Case B (winners scratched while trade still open). ~6 winners (avg +1.7R) scratched per session, nearly offsetting losers saved. | **NO-GO — removed from outcome_builder.py** |
 
 ## Pending / Inconclusive
 | Idea | Status | Notes |

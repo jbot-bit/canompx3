@@ -210,26 +210,6 @@ def _compute_outcomes_all_rr(
             pe_favorable = entry_price - pe_lows
             pe_adverse = pe_highs - entry_price
 
-        # C8: breakeven stop after 30 bars held cleanly outside ORB.
-        # If price held above orb_high (long) / below orb_low (short) for 30 bars
-        # with no stop hit, then later returns inside the ORB → scratch at entry (0R).
-        # Converts avg -0.84R losses to 0R; verified N=14 losses at MGC 1000.
-        _C8_BARS = 30
-        if break_dir == "long":
-            _pe_outside_orb = pe_closes > orb_high
-            _pe_inside_orb = pe_closes <= orb_high
-        else:
-            _pe_outside_orb = pe_closes < orb_low
-            _pe_inside_orb = pe_closes >= orb_low
-
-        c8_scratch_idx = None
-        if (len(post_entry) > _C8_BARS
-                and bool(_pe_outside_orb[:_C8_BARS].all())
-                and not bool(pe_hit_stop[:_C8_BARS].any())):
-            _after_30 = _pe_inside_orb[_C8_BARS:]
-            if _after_30.any():
-                c8_scratch_idx = _C8_BARS + int(np.argmax(_after_30))
-
         # Early exit: shared threshold detection
         early_exit_threshold = EARLY_EXIT_MINUTES.get(orb_label) if orb_label else None
         threshold_idx = None
@@ -328,28 +308,6 @@ def _compute_outcomes_all_rr(
                         result["pnl_dollars"] = round(result["pnl_r"] * _risk_dollars, 2)
                     results.append(result)
                     continue
-
-        # --- C8: breakeven stop if price returns inside ORB after 30 clean bars ---
-        # Fires only if: 30 bars held outside ORB, no stop hit in those 30 bars,
-        # AND return-inside-ORB happens BEFORE any normal stop/target hit.
-        # Note: if early_exit fired above (mtm < 0 at bar 30), we never reach here.
-        if c8_scratch_idx is not None:
-            any_std = pe_hit_target | pe_hit_stop
-            std_first = int(np.argmax(any_std)) if any_std.any() else None
-            if std_first is None or c8_scratch_idx < std_first:
-                c8_exit_ts = post_entry.iloc[c8_scratch_idx]["ts_utc"].to_pydatetime()
-                max_fav = max(float(np.max(pe_favorable[:c8_scratch_idx + 1])), 0.0)
-                max_adv = max(float(np.max(pe_adverse[:c8_scratch_idx + 1])), 0.0)
-                result.update(
-                    outcome="scratch", exit_ts=c8_exit_ts,
-                    exit_price=entry_price, pnl_r=0.0, pnl_dollars=0.0,
-                )
-                result["mae_r"] = round(
-                    pnl_points_to_r(cost_spec, entry_price, stop_price, max_adv), 4)
-                result["mfe_r"] = round(
-                    pnl_points_to_r(cost_spec, entry_price, stop_price, max_fav), 4)
-                results.append(result)
-                continue
 
         # --- Standard target/stop scan ---
         any_hit = pe_hit_target | pe_hit_stop
