@@ -1121,16 +1121,14 @@ def main():
 
     start_time = datetime.now()
 
-    print("=" * 60)
+    logger.info("=" * 60)
     logger.info(f"BUILD DAILY_FEATURES ({symbol})")
-    print("=" * 60)
-    print()
+    logger.info("=" * 60)
     logger.info(f"Instrument: {symbol}")
     logger.info(f"Date range: {start_date} to {end_date}")
     logger.info(f"ORB duration: {args.orb_minutes} minutes")
     logger.info(f"Database: {GOLD_DB_PATH}")
     logger.info(f"Dry run: {args.dry_run}")
-    print()
 
     if not GOLD_DB_PATH.exists():
         logger.error(f"FATAL: Database not found: {GOLD_DB_PATH}")
@@ -1145,7 +1143,6 @@ def main():
         row_count = build_daily_features(
             con, symbol, start_date, end_date, args.orb_minutes, args.dry_run
         )
-        print()
 
         # Verify (skip for dry run)
         if not args.dry_run and row_count > 0:
@@ -1163,20 +1160,18 @@ def main():
             logger.info("  ORB sizes: PASSED [OK]")
             logger.info("  Break directions: PASSED [OK]")
             logger.info("  Outcomes: PASSED [OK]")
-            print()
             logger.info("ALL INTEGRITY CHECKS PASSED [OK]")
         elif args.dry_run:
             logger.info("Integrity check skipped (dry run)")
-        print()
 
         elapsed = datetime.now() - start_time
 
-        print("=" * 60)
+        logger.info("=" * 60)
         logger.info(f"SUMMARY: {row_count:,} daily_features rows "
                     f"{'(would be) ' if args.dry_run else ''}built")
         logger.info(f"ORB duration: {args.orb_minutes}m")
         logger.info(f"Wall time: {elapsed}")
-        print("=" * 60)
+        logger.info("=" * 60)
 
         sys.exit(0)
 

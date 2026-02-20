@@ -286,15 +286,13 @@ def main():
 
     start_time = datetime.now()
 
-    print("=" * 60)
+    logger.info("=" * 60)
     logger.info(f"BUILD BARS_5M ({symbol})")
-    print("=" * 60)
-    print()
+    logger.info("=" * 60)
     logger.info(f"Instrument: {symbol}")
     logger.info(f"Date range: {start_date} to {end_date}")
     logger.info(f"Database: {GOLD_DB_PATH}")
     logger.info(f"Dry run: {args.dry_run}")
-    print()
 
     if not GOLD_DB_PATH.exists():
         logger.error(f"FATAL: Database not found: {GOLD_DB_PATH}")
@@ -307,7 +305,6 @@ def main():
         # Build
         logger.info("Building 5-minute bars...")
         row_count = build_5m_bars(con, symbol, start_date, end_date, args.dry_run)
-        print()
 
         # Verify (skip for dry run)
         if not args.dry_run and row_count > 0:
@@ -324,21 +321,18 @@ def main():
             logger.info("  5-minute alignment: PASSED [OK]")
             logger.info("  OHLCV sanity: PASSED [OK]")
             logger.info("  Volume non-negative: PASSED [OK]")
-            print()
             logger.info("ALL INTEGRITY CHECKS PASSED [OK]")
         elif args.dry_run:
             logger.info("Integrity check skipped (dry run)")
-        print()
 
         elapsed = datetime.now() - start_time
 
-        print("=" * 60)
+        logger.info("=" * 60)
         logger.info(f"SUMMARY: {row_count:,} bars_5m rows {'(would be) ' if args.dry_run else ''}built")
         logger.info(f"Wall time: {elapsed}")
-        print("=" * 60)
+        logger.info("=" * 60)
 
         if args.dry_run:
-            print()
             logger.info("DRY RUN COMPLETE. No changes made.")
 
         sys.exit(0)

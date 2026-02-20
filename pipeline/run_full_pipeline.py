@@ -141,10 +141,8 @@ def get_steps_from(steps, skip_to: str):
 def print_dry_run(steps, instrument: str):
     """Print planned steps without executing."""
     print(f"DRY RUN: Full pipeline for {instrument}")
-    print()
     for i, (name, desc, _) in enumerate(steps, 1):
         print(f"  Step {i}: {name} - {desc}")
-    print()
     print("No steps executed (dry run).")
 
 # =============================================================================
@@ -183,19 +181,18 @@ def main():
 
     # Execute
     start_time = datetime.now()
-    print("=" * 70)
+    logger.info("=" * 70)
     logger.info(f"FULL PIPELINE: {instrument}")
-    print("=" * 70)
+    logger.info("=" * 70)
     logger.info(f"  Date range: {args.start or 'default'} to {args.end or 'default'}")
     logger.info(f"  DB path: {args.db_path or 'default (DUCKDB_PATH or project/gold.db)'}")
     logger.info(f"  Steps: {' -> '.join(s[0] for s in steps)}")
-    print()
 
     results = []
     for i, (name, desc, func) in enumerate(steps, 1):
-        print("-" * 70)
+        logger.info("-" * 70)
         logger.info(f"STEP {i}/{len(steps)}: {name} - {desc}")
-        print("-" * 70)
+        logger.info("-" * 70)
 
         step_start = datetime.now()
         rc = func(instrument, args)
@@ -210,9 +207,9 @@ def main():
         logger.info(f"  {name}: PASSED ({elapsed})\n")
 
     # Summary
-    print("\n" + "=" * 70)
+    logger.info("\n" + "=" * 70)
     logger.info("PIPELINE SUMMARY")
-    print("=" * 70)
+    logger.info("=" * 70)
     total = datetime.now() - start_time
     for r in results:
         status = "PASSED" if r["rc"] == 0 else f"FAILED (exit {r['rc']})"

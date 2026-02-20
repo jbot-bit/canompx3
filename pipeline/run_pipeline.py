@@ -65,7 +65,6 @@ def step_ingest(instrument: str, args) -> int:
         cmd.append(f"--batch-size={args.batch_size}")
 
     logger.info(f"  Command: {' '.join(cmd)}")
-    print()
 
     result = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
     return result.returncode
@@ -88,7 +87,6 @@ def step_build_5m(instrument: str, args) -> int:
         cmd.append("--dry-run")
 
     logger.info(f"  Command: {' '.join(cmd)}")
-    print()
 
     result = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
     return result.returncode
@@ -115,7 +113,6 @@ def step_build_features(instrument: str, args) -> int:
     cmd.append(f"--orb-minutes={orb_minutes}")
 
     logger.info(f"  Command: {' '.join(cmd)}")
-    print()
 
     result = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
     return result.returncode
@@ -128,7 +125,6 @@ def step_audit(instrument: str, args) -> int:
     ]
 
     logger.info(f"  Command: {' '.join(cmd)}")
-    print()
 
     result = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
     return result.returncode
@@ -171,39 +167,33 @@ def main():
 
     start_time = datetime.now()
 
-    print("=" * 70)
+    logger.info("=" * 70)
     logger.info("PIPELINE RUNNER")
-    print("=" * 70)
-    print()
+    logger.info("=" * 70)
     logger.info(f"Instrument: {instrument}")
     logger.info(f"Date range: {args.start or 'default'} to {args.end or 'default'}")
     logger.info(f"Resume: {args.resume}")
     logger.info(f"Retry failed: {args.retry_failed}")
     logger.info(f"Dry run: {args.dry_run}")
-    print()
 
     # =========================================================================
     # DRY RUN: Show plan and exit
     # =========================================================================
     if args.dry_run:
         print("DRY RUN: Showing planned pipeline steps")
-        print()
         for i, (name, desc, _) in enumerate(PIPELINE_STEPS, 1):
             print(f"  Step {i}: {name} - {desc}")
-        print()
         print("No steps executed (dry run).")
-        print()
 
         # Still validate that the instrument config is loadable
-        print("Validating instrument config...")
+        logger.info("Validating instrument config...")
         from pipeline.asset_configs import get_asset_config
         config = get_asset_config(instrument)
-        print(f"  Config loaded for {instrument} [OK]")
-        print(f"  DBN: {config['dbn_path']}")
-        print(f"  Pattern: {config['outright_pattern'].pattern}")
-        print(f"  Min start: {config['minimum_start_date']}")
-        print()
-        print("DRY RUN COMPLETE.")
+        logger.info(f"  Config loaded for {instrument} [OK]")
+        logger.info(f"  DBN: {config['dbn_path']}")
+        logger.info(f"  Pattern: {config['outright_pattern'].pattern}")
+        logger.info(f"  Min start: {config['minimum_start_date']}")
+        logger.info("DRY RUN COMPLETE.")
         sys.exit(0)
 
     # =========================================================================
@@ -212,10 +202,9 @@ def main():
     results = []
 
     for i, (name, desc, step_func) in enumerate(PIPELINE_STEPS, 1):
-        print("-" * 70)
+        logger.info("-" * 70)
         logger.info(f"STEP {i}/{len(PIPELINE_STEPS)}: {name} - {desc}")
-        print("-" * 70)
-        print()
+        logger.info("-" * 70)
 
         step_start = datetime.now()
         returncode = step_func(instrument, args)
@@ -230,24 +219,18 @@ def main():
         })
 
         if returncode != 0:
-            print()
             logger.error(f"FATAL: Step {i} ({name}) failed with exit code {returncode}")
             logger.info("ABORT: Pipeline halted (FAIL-CLOSED)")
-            print()
             break
 
-        print()
         logger.info(f"  Step {i} ({name}): PASSED [OK] ({step_elapsed})")
-        print()
 
     # =========================================================================
     # PIPELINE SUMMARY
     # =========================================================================
-    print()
-    print("=" * 70)
+    logger.info("=" * 70)
     logger.info("PIPELINE SUMMARY")
-    print("=" * 70)
-    print()
+    logger.info("=" * 70)
 
     total_elapsed = datetime.now() - start_time
     all_passed = all(r['returncode'] == 0 for r in results)
@@ -263,10 +246,8 @@ def main():
             name = PIPELINE_STEPS[i - 1][0]
             logger.info(f"  Step {i}: {name} - SKIPPED (prior step failed)")
 
-    print()
     logger.info(f"Steps completed: {steps_run}/{steps_total}")
     logger.info(f"Total wall time: {total_elapsed}")
-    print()
 
     if all_passed:
         logger.info("SUCCESS: All pipeline steps completed.")

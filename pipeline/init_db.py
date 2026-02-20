@@ -202,13 +202,11 @@ DAILY_FEATURES_SCHEMA = _build_daily_features_ddl()
 def init_db(db_path: Path, force: bool = False):
     """Initialize database with schema."""
 
-    print("=" * 60)
+    logger.info("=" * 60)
     logger.info("DATABASE INITIALIZATION")
-    print("=" * 60)
-    print()
+    logger.info("=" * 60)
     logger.info(f"Database path: {db_path}")
     logger.info(f"Force recreate: {force}")
-    print()
 
     # Connect to database (creates file if doesn't exist)
     with duckdb.connect(str(db_path)) as con:
@@ -224,7 +222,6 @@ def init_db(db_path: Path, force: bool = False):
             con.execute("DROP TABLE IF EXISTS bars_5m")
             con.execute("DROP TABLE IF EXISTS bars_1m")
             logger.info("  All tables dropped (pipeline + trading_app).")
-            print()
 
         # Create tables
         logger.info("Creating tables...")
@@ -272,7 +269,6 @@ def init_db(db_path: Path, force: bool = False):
                 pass  # column already exists
 
         con.commit()
-        print()
 
         # Verify schema
         logger.info("Verifying schema...")
@@ -293,11 +289,9 @@ def init_db(db_path: Path, force: bool = False):
                 logger.info(f"  {table_name} columns ({len(cols)}): {[c[0] for c in cols]}")
 
 
-    print()
-    print("=" * 60)
+    logger.info("=" * 60)
     logger.info("INITIALIZATION COMPLETE")
-    print("=" * 60)
-    print()
+    logger.info("=" * 60)
     logger.info("Next steps:")
     logger.info("  1. Run ingestion: python OHLCV_MGC_FULL/ingest_dbn_mgc.py")
     logger.info("  2. Check database: python pipeline/check_db.py")

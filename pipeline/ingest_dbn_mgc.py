@@ -37,6 +37,9 @@ import databento as db
 # Add project root to path
 from pipeline.paths import GOLD_DB_PATH
 
+from pipeline.log import get_logger
+logger = get_logger(__name__)
+
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
@@ -466,60 +469,55 @@ def main():
     # =========================================================================
     # STARTUP: Log config snapshot
     # =========================================================================
-    print("=" * 70)
-    print("MGC DBN INGESTION (CANONICAL COMPLIANT)")
-    print("=" * 70)
-    print()
-    print("CONFIG SNAPSHOT:")
-    print(f"  DBN file: {DBN_PATH}")
-    print(f"  Database: {DB_PATH}")
-    print(f"  Checkpoint dir: {CHECKPOINT_DIR}")
-    print(f"  Start filter: {args.start or 'None'}")
-    print(f"  End filter: {args.end or 'None'}")
-    print(f"  Resume: {args.resume}")
-    print(f"  Retry failed: {args.retry_failed}")
-    print(f"  Dry run: {args.dry_run}")
-    print(f"  Chunk days: {args.chunk_days}")
-    print(f"  Batch size: {args.batch_size}")
-    print()
+    logger.info("=" * 70)
+    logger.info("MGC DBN INGESTION (CANONICAL COMPLIANT)")
+    logger.info("=" * 70)
+    logger.info("CONFIG SNAPSHOT:")
+    logger.info(f"  DBN file: {DBN_PATH}")
+    logger.info(f"  Database: {DB_PATH}")
+    logger.info(f"  Checkpoint dir: {CHECKPOINT_DIR}")
+    logger.info(f"  Start filter: {args.start or 'None'}")
+    logger.info(f"  End filter: {args.end or 'None'}")
+    logger.info(f"  Resume: {args.resume}")
+    logger.info(f"  Retry failed: {args.retry_failed}")
+    logger.info(f"  Dry run: {args.dry_run}")
+    logger.info(f"  Chunk days: {args.chunk_days}")
+    logger.info(f"  Batch size: {args.batch_size}")
 
     # =========================================================================
     # VERIFY DBN FILE EXISTS
     # =========================================================================
     if not DBN_PATH.exists():
-        print(f"FATAL: DBN file not found: {DBN_PATH}")
+        logger.warning(f"FATAL: DBN file not found: {DBN_PATH}")
         sys.exit(1)
 
     file_size_gb = DBN_PATH.stat().st_size / (1024**3)
-    print(f"DBN file size: {file_size_gb:.2f} GB")
+    logger.info(f"DBN file size: {file_size_gb:.2f} GB")
 
     # =========================================================================
     # OPEN DBN AND VERIFY SCHEMA (FAIL-CLOSED)
     # =========================================================================
-    print()
-    print("Opening DBN file...")
+    logger.info("Opening DBN file...")
     store = db.DBNStore.from_file(DBN_PATH)
 
-    print(f"  Schema: {store.schema}")
-    print(f"  Dataset: {store.dataset}")
-    print(f"  Date range: {store.start} to {store.end}")
+    logger.info(f"  Schema: {store.schema}")
+    logger.info(f"  Dataset: {store.dataset}")
+    logger.info(f"  Date range: {store.start} to {store.end}")
 
     # DBN CONTENT GATE: Must be ohlcv-1m
     if store.schema != 'ohlcv-1m':
-        print(f"FATAL: DBN schema is '{store.schema}', expected 'ohlcv-1m'")
-        print("ABORT: Schema verification failed (FAIL-CLOSED)")
+        logger.warning(f"FATAL: DBN schema is '{store.schema}', expected 'ohlcv-1m'")
+        logger.warning("ABORT: Schema verification failed (FAIL-CLOSED)")
         sys.exit(1)
 
-    print("  Schema verified: ohlcv-1m [OK]")
-    print()
+    logger.info("  Schema verified: ohlcv-1m [OK]")
 
     # =========================================================================
     # INITIALIZE CHECKPOINT MANAGER
     # =========================================================================
     checkpoint_mgr = CheckpointManager(CHECKPOINT_DIR, DBN_PATH, db_path=DB_PATH)
-    print(f"Checkpoint file: {checkpoint_mgr.checkpoint_file}")
-    print(f"Existing checkpoints: {len(checkpoint_mgr.checkpoints)}")
-    print()
+    logger.info(f"Checkpoint file: {checkpoint_mgr.checkpoint_file}")
+    logger.info(f"Existing checkpoints: {len(checkpoint_mgr.checkpoints)}")
 
     # =========================================================================
     # OPEN DATABASE
@@ -527,10 +525,9 @@ def main():
     con = None
     if not args.dry_run:
         con = duckdb.connect(str(DB_PATH))
-        print(f"Database opened: {DB_PATH}")
+        logger.info(f"Database opened: {DB_PATH}")
     else:
-        print("DRY RUN: Database will not be modified")
-    print()
+        logger.info("DRY RUN: Database will not be modified")
 
     # Ensure connection is closed on ALL exit paths (including sys.exit)
     import atexit
@@ -545,8 +542,7 @@ def main():
     # =========================================================================
     # PHASE 1-4: EXTRACT, VALIDATE, TRANSFORM, AGGREGATE
     # =========================================================================
-    print("Processing DBN in chunks...")
-    print()
+    logger.info("Processing DBN in chunks...")
 
     stats = {
         'chunks_done': 0,
@@ -567,14 +563,12 @@ def main():
 
     # ENFORCE MINIMUM DATE (GC data available from 2016-02-01 onward)
     if start_filter < MINIMUM_START_DATE:
-        print(f"WARNING: Requested start {start_filter} is before MINIMUM_START_DATE {MINIMUM_START_DATE}")
-        print(f"         GC data coverage starts {MINIMUM_START_DATE}")
-        print(f"         FORCING start to {MINIMUM_START_DATE}")
-        print()
+        logger.warning(f"WARNING: Requested start {start_filter} is before MINIMUM_START_DATE {MINIMUM_START_DATE}")
+        logger.info(f"         GC data coverage starts {MINIMUM_START_DATE}")
+        logger.info(f"         FORCING start to {MINIMUM_START_DATE}")
         start_filter = MINIMUM_START_DATE
 
-    print(f"EFFECTIVE DATE RANGE: {start_filter} to {end_filter or 'end of file'}")
-    print()
+    logger.info(f"EFFECTIVE DATE RANGE: {start_filter} to {end_filter or 'end of file'}")
 
     batch_num = 0
     skipped_batches = 0
@@ -592,11 +586,11 @@ def main():
         if batch_max_date < start_filter:
             skipped_batches += 1
             if skipped_batches % 20 == 1:
-                print(f"  FAST-FORWARD: Batch {batch_num} ends at {batch_max_date}, skipping (target: {start_filter})...", flush=True)
+                logger.info(f"  FAST-FORWARD: Batch {batch_num} ends at {batch_max_date}, skipping (target: {start_filter})...")
             continue
 
         if skipped_batches > 0:
-            print(f"  FAST-FORWARD COMPLETE: Skipped {skipped_batches} batches of pre-{start_filter} data", flush=True)
+            logger.info(f"  FAST-FORWARD COMPLETE: Skipped {skipped_batches} batches of pre-{start_filter} data")
             skipped_batches = 0  # Reset so we don't print again
 
         # =====================================================================
@@ -607,8 +601,8 @@ def main():
 
         ts_valid, ts_reason = validate_timestamp_utc(chunk_df)
         if not ts_valid:
-            print(f"FATAL: Timestamp validation failed: {ts_reason}")
-            print("ABORT: Timestamp verification gate failed (FAIL-CLOSED)")
+            logger.warning(f"FATAL: Timestamp validation failed: {ts_reason}")
+            logger.warning("ABORT: Timestamp verification gate failed (FAIL-CLOSED)")
             traceback.print_exc()
             sys.exit(1)
 
@@ -627,11 +621,11 @@ def main():
         # =====================================================================
         valid, reason, bad_rows = validate_chunk(chunk_df)
         if not valid:
-            print(f"FATAL: OHLCV validation failed: {reason}")
+            logger.warning(f"FATAL: OHLCV validation failed: {reason}")
             if bad_rows is not None:
-                print("Offending rows:")
-                print(bad_rows.to_string())
-            print("ABORT: Validation gate failed (FAIL-CLOSED)")
+                logger.info("Offending rows:")
+                logger.info(bad_rows.to_string())
+            logger.warning("ABORT: Validation gate failed (FAIL-CLOSED)")
             traceback.print_exc()
             sys.exit(1)
 
@@ -668,8 +662,8 @@ def main():
             # PK SAFETY: Check for duplicate timestamps
             pk_ok, pk_reason = check_pk_safety(front_df, tday)
             if not pk_ok:
-                print(f"FATAL: PK safety check failed: {pk_reason}")
-                print("ABORT: Primary key safety gate failed (FAIL-CLOSED)")
+                logger.warning(f"FATAL: PK safety check failed: {pk_reason}")
+                logger.warning("ABORT: Primary key safety gate failed (FAIL-CLOSED)")
                 sys.exit(1)
 
             # Sort by timestamp (monotonic requirement)
@@ -703,7 +697,7 @@ def main():
 
             # Check if should process this chunk
             if args.resume and not checkpoint_mgr.should_process_chunk(chunk_start, chunk_end, args.retry_failed):
-                print(f"  SKIP: Chunk {chunk_start} to {chunk_end} (already done)")
+                logger.info(f"  SKIP: Chunk {chunk_start} to {chunk_end} (already done)")
                 stats['chunks_skipped'] += 1
                 # Remove from buffer
                 for d in chunk_days:
@@ -739,8 +733,8 @@ def main():
                     if not int_ok:
                         con.execute("ROLLBACK")
                         checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, 'failed', error=int_reason)
-                        print(f"FATAL: Integrity gate failed: {int_reason}")
-                        print("ABORT: Merge integrity gate failed (FAIL-CLOSED)")
+                        logger.warning(f"FATAL: Integrity gate failed: {int_reason}")
+                        logger.warning("ABORT: Merge integrity gate failed (FAIL-CLOSED)")
                         sys.exit(1)
 
                     # COMMIT
@@ -753,12 +747,12 @@ def main():
                     stats['rows_written'] += len(chunk_rows)
                     stats['trading_days_processed'] += len(chunk_days)
 
-                    print(f"  DONE: Chunk {chunk_start} to {chunk_end}: {len(chunk_rows):,} rows, {len(chunk_days)} days")
+                    logger.info(f"  DONE: Chunk {chunk_start} to {chunk_end}: {len(chunk_rows):,} rows, {len(chunk_days)} days")
 
                 except Exception as e:
                     con.execute("ROLLBACK")
                     checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, 'failed', error=str(e))
-                    print(f"FATAL: Exception during merge: {e}")
+                    logger.warning(f"FATAL: Exception during merge: {e}")
                     traceback.print_exc()
                     sys.exit(1)
 
@@ -767,7 +761,7 @@ def main():
                 stats['chunks_done'] += 1
                 stats['rows_written'] += len(chunk_rows)
                 stats['trading_days_processed'] += len(chunk_days)
-                print(f"  DRY RUN: Chunk {chunk_start} to {chunk_end}: {len(chunk_rows):,} rows")
+                logger.info(f"  DRY RUN: Chunk {chunk_start} to {chunk_end}: {len(chunk_rows):,} rows")
 
             # Remove processed days from buffer
             for d in chunk_days:
@@ -776,7 +770,7 @@ def main():
 
         # Progress indicator
         if batch_num % 20 == 0:
-            print(f"  Batch {batch_num}: {stats['rows_written']:,} rows written, {stats['trading_days_processed']} trading days")
+            logger.info(f"  Batch {batch_num}: {stats['rows_written']:,} rows written, {stats['trading_days_processed']} trading days")
 
     # =========================================================================
     # PROCESS REMAINING BUFFER
@@ -814,7 +808,7 @@ def main():
                     if not int_ok:
                         con.execute("ROLLBACK")
                         checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, 'failed', error=int_reason)
-                        print(f"FATAL: Final chunk integrity failed: {int_reason}")
+                        logger.warning(f"FATAL: Final chunk integrity failed: {int_reason}")
                         sys.exit(1)
 
                     con.execute("COMMIT")
@@ -824,71 +818,65 @@ def main():
                     stats['rows_written'] += len(chunk_rows)
                     stats['trading_days_processed'] += len(sorted_days)
 
-                    print(f"  DONE: Final chunk {chunk_start} to {chunk_end}: {len(chunk_rows):,} rows")
+                    logger.info(f"  DONE: Final chunk {chunk_start} to {chunk_end}: {len(chunk_rows):,} rows")
 
                 except Exception as e:
                     con.execute("ROLLBACK")
                     checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, 'failed', error=str(e))
-                    print(f"FATAL: Final chunk exception: {e}")
+                    logger.warning(f"FATAL: Final chunk exception: {e}")
                     traceback.print_exc()
                     sys.exit(1)
             elif args.dry_run:
                 stats['chunks_done'] += 1
                 stats['rows_written'] += len(chunk_rows)
                 stats['trading_days_processed'] += len(sorted_days)
-                print(f"  DRY RUN: Final chunk {chunk_start} to {chunk_end}: {len(chunk_rows):,} rows")
+                logger.info(f"  DRY RUN: Final chunk {chunk_start} to {chunk_end}: {len(chunk_rows):,} rows")
         else:
             stats['chunks_skipped'] += 1
-            print(f"  SKIP: Final chunk {chunk_start} to {chunk_end} (already done)")
+            logger.info(f"  SKIP: Final chunk {chunk_start} to {chunk_end} (already done)")
 
     # =========================================================================
     # FINAL HONESTY GATES
     # =========================================================================
-    print()
-    print("=" * 70)
-    print("FINAL HONESTY GATES")
-    print("=" * 70)
+    logger.info("=" * 70)
+    logger.info("FINAL HONESTY GATES")
+    logger.info("=" * 70)
 
     if not args.dry_run and con:
         gates_passed, failures = run_final_gates(con)
 
         if not gates_passed:
-            print("FATAL: Final honesty gates FAILED:")
+            logger.warning("FATAL: Final honesty gates FAILED:")
             for f in failures:
-                print(f"  - {f}")
-            print()
-            print("BACKFILL DECLARED INVALID")
+                logger.info(f"  - {f}")
+            logger.info("BACKFILL DECLARED INVALID")
             con.close()
             sys.exit(1)
 
-        print("  ts_utc type check: PASSED [OK]")
-        print("  No duplicate (symbol, ts_utc): PASSED [OK]")
-        print("  No NULL source_symbol: PASSED [OK]")
-        print()
-        print("ALL HONESTY GATES PASSED [OK]")
+        logger.info("  ts_utc type check: PASSED [OK]")
+        logger.info("  No duplicate (symbol, ts_utc): PASSED [OK]")
+        logger.info("  No NULL source_symbol: PASSED [OK]")
+        logger.info("ALL HONESTY GATES PASSED [OK]")
     else:
-        print("  Skipped (dry run)")
+        logger.info("  Skipped (dry run)")
 
     # =========================================================================
     # FINAL SUMMARY
     # =========================================================================
-    print()
-    print("=" * 70)
-    print("INGESTION SUMMARY")
-    print("=" * 70)
-    print()
+    logger.info("=" * 70)
+    logger.info("INGESTION SUMMARY")
+    logger.info("=" * 70)
 
     end_time = datetime.now()
     elapsed = end_time - start_time
 
-    print(f"Chunks done: {stats['chunks_done']}")
-    print(f"Chunks failed: {stats['chunks_failed']}")
-    print(f"Chunks skipped: {stats['chunks_skipped']}")
-    print(f"Trading days processed: {stats['trading_days_processed']}")
-    print(f"Total rows written: {stats['rows_written']:,}")
-    print(f"Unique contracts used: {len(stats['contracts_used'])}")
-    print(f"Wall time: {elapsed}")
-    print()
+    logger.info(f"Chunks done: {stats['chunks_done']}")
+    logger.info(f"Chunks failed: {stats['chunks_failed']}")
+    logger.info(f"Chunks skipped: {stats['chunks_skipped']}")
+    logger.info(f"Trading days processed: {stats['trading_days_processed']}")
+    logger.info(f"Total rows written: {stats['rows_written']:,}")
+    logger.info(f"Unique contracts used: {len(stats['contracts_used'])}")
+    logger.info(f"Wall time: {elapsed}")
 
     if not args.dry_run and con:
         # Get actual DB stats
@@ -897,17 +885,15 @@ def main():
             "SELECT MIN(DATE(ts_utc)), MAX(DATE(ts_utc)) FROM bars_1m WHERE symbol = 'MGC'"
         ).fetchone()
 
-        print(f"Database rows (MGC): {count:,}")
-        print(f"Date range in DB: {date_range[0]} to {date_range[1]}")
+        logger.info(f"Database rows (MGC): {count:,}")
+        logger.info(f"Date range in DB: {date_range[0]} to {date_range[1]}")
 
         con.close()
 
-    print()
-    print("SUCCESS: Backfill complete and validated.")
+    logger.info("SUCCESS: Backfill complete and validated.")
     sys.exit(0)
 
 if __name__ == "__main__":
-    print("NOTE: For multi-instrument support, prefer:")
-    print("  python pipeline/ingest_dbn.py --instrument MGC")
-    print()
+    logger.info("NOTE: For multi-instrument support, prefer:")
+    logger.info("  python pipeline/ingest_dbn.py --instrument MGC")
     main()

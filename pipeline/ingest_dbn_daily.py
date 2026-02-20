@@ -54,6 +54,9 @@ from pipeline.ingest_dbn_mgc import (
     MINIMUM_START_DATE,
 )
 
+from pipeline.log import get_logger
+logger = get_logger(__name__)
+
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
@@ -116,7 +119,7 @@ def load_symbology(data_dir: Path) -> dict:
     """
     symb_path = data_dir / "symbology.json"
     if not symb_path.exists():
-        print(f"FATAL: symbology.json not found in {data_dir}")
+        logger.warning(f"FATAL: symbology.json not found in {data_dir}")
         sys.exit(1)
 
     with open(symb_path, 'r') as f:
@@ -195,29 +198,27 @@ def main():
     # =========================================================================
     # STARTUP
     # =========================================================================
-    print("=" * 70)
-    print(f"{symbol} DAILY DBN INGESTION (CANONICAL COMPLIANT)")
-    print("=" * 70)
-    print()
-    print("CONFIG SNAPSHOT:")
-    print(f"  Instrument: {symbol}")
-    print(f"  Data dir: {data_dir}")
-    print(f"  Database: {db_path}")
-    print(f"  Outright pattern: {outright_regex}")
-    print(f"  Prefix len: {prefix_len}")
-    print(f"  Minimum start: {minimum_start_date}")
-    print(f"  Start: {args.start or 'earliest'}")
-    print(f"  End: {args.end or 'latest'}")
-    print(f"  Resume: {args.resume}")
-    print(f"  Dry run: {args.dry_run}")
-    print(f"  Chunk days: {args.chunk_days}")
-    print()
+    logger.info("=" * 70)
+    logger.info(f"{symbol} DAILY DBN INGESTION (CANONICAL COMPLIANT)")
+    logger.info("=" * 70)
+    logger.info("CONFIG SNAPSHOT:")
+    logger.info(f"  Instrument: {symbol}")
+    logger.info(f"  Data dir: {data_dir}")
+    logger.info(f"  Database: {db_path}")
+    logger.info(f"  Outright pattern: {outright_regex}")
+    logger.info(f"  Prefix len: {prefix_len}")
+    logger.info(f"  Minimum start: {minimum_start_date}")
+    logger.info(f"  Start: {args.start or 'earliest'}")
+    logger.info(f"  End: {args.end or 'latest'}")
+    logger.info(f"  Resume: {args.resume}")
+    logger.info(f"  Dry run: {args.dry_run}")
+    logger.info(f"  Chunk days: {args.chunk_days}")
 
     # =========================================================================
     # VERIFY DATA DIRECTORY
     # =========================================================================
     if not data_dir.exists():
-        print(f"FATAL: Data directory not found: {data_dir}")
+        logger.warning(f"FATAL: Data directory not found: {data_dir}")
         sys.exit(1)
 
     # NOTE: Symbology mapping is NOT needed -- Databento's to_df() already
@@ -232,27 +233,25 @@ def main():
 
     # Enforce minimum date
     if start_filter < minimum_start_date:
-        print(f"WARNING: Start {start_filter} before minimum_start_date {minimum_start_date}")
-        print(f"         Forcing start to {minimum_start_date}")
+        logger.warning(f"WARNING: Start {start_filter} before minimum_start_date {minimum_start_date}")
+        logger.info(f"         Forcing start to {minimum_start_date}")
         start_filter = minimum_start_date
 
     daily_files = discover_daily_files(data_dir, start_filter, end_filter)
-    print(f"Found {len(daily_files)} daily files in range {start_filter} to {end_filter}")
+    logger.info(f"Found {len(daily_files)} daily files in range {start_filter} to {end_filter}")
     if daily_files:
-        print(f"  First: {daily_files[0][0]} ({daily_files[0][1].name})")
-        print(f"  Last:  {daily_files[-1][0]} ({daily_files[-1][1].name})")
-    print()
+        logger.info(f"  First: {daily_files[0][0]} ({daily_files[0][1].name})")
+        logger.info(f"  Last:  {daily_files[-1][0]} ({daily_files[-1][1].name})")
 
     if not daily_files:
-        print("No files to process.")
+        logger.info("No files to process.")
         sys.exit(0)
 
     # =========================================================================
     # INITIALIZE CHECKPOINT (keyed by first file for identity)
     # =========================================================================
     checkpoint_mgr = CheckpointManager(CHECKPOINT_DIR, daily_files[0][1], db_path=db_path)
-    print(f"Checkpoint file: {checkpoint_mgr.checkpoint_file}")
-    print()
+    logger.info(f"Checkpoint file: {checkpoint_mgr.checkpoint_file}")
 
     # =========================================================================
     # OPEN DATABASE
@@ -262,10 +261,9 @@ def main():
         con = duckdb.connect(str(db_path))
         from pipeline.db_config import configure_connection
         configure_connection(con, writing=True)
-        print(f"Database opened: {db_path}")
+        logger.info(f"Database opened: {db_path}")
     else:
-        print("DRY RUN: Database will not be modified")
-    print()
+        logger.info("DRY RUN: Database will not be modified")
 
     import atexit
     def _close_con():
@@ -292,13 +290,12 @@ def main():
     # Buffer: accumulate DataFrames per trading day (vectorized, no iterrows)
     trading_day_buffer = {}  # trading_day -> list of DataFrames
 
-    print(f"Processing {len(daily_files)} files...")
+    logger.info(f"Processing {len(daily_files)} files...")
     for file_idx, (file_date, fpath) in enumerate(daily_files):
         # Progress every 10 files
         if (file_idx + 1) % 10 == 0 or file_idx == 0:
             pct = (file_idx + 1) / len(daily_files) * 100
-            print(f"  [{pct:5.1f}%] File {file_idx + 1}/{len(daily_files)} "
-                  f"({file_date}) -- {stats['rows_written']:,} rows written")
+            logger.info(f"  [{pct:5.1f}%] File {file_idx + 1}/{len(daily_files)} ({file_date}) -- {stats['rows_written']:,} rows written")
 
         try:
             # Open daily DBN file
@@ -306,7 +303,7 @@ def main():
 
             # Verify schema
             if store.schema != 'ohlcv-1m':
-                print(f"FATAL: {fpath.name} schema is '{store.schema}', expected 'ohlcv-1m'")
+                logger.warning(f"FATAL: {fpath.name} schema is '{store.schema}', expected 'ohlcv-1m'")
                 sys.exit(1)
 
             # Read all bars from this daily file (daily files are small, ~1K-3K rows)
@@ -332,14 +329,14 @@ def main():
 
             ts_valid, ts_reason = validate_timestamp_utc(chunk_df)
             if not ts_valid:
-                print(f"FATAL: {fpath.name} timestamp validation failed: {ts_reason}")
+                logger.warning(f"FATAL: {fpath.name} timestamp validation failed: {ts_reason}")
                 sys.exit(1)
 
             valid, reason, bad_rows = validate_chunk(chunk_df)
             if not valid:
-                print(f"FATAL: {fpath.name} OHLCV validation failed: {reason}")
+                logger.warning(f"FATAL: {fpath.name} OHLCV validation failed: {reason}")
                 if bad_rows is not None:
-                    print(bad_rows.to_string())
+                    logger.info(bad_rows.to_string())
                 sys.exit(1)
 
             # =================================================================
@@ -366,7 +363,7 @@ def main():
 
                 pk_ok, pk_reason = check_pk_safety(front_df, tday)
                 if not pk_ok:
-                    print(f"FATAL: PK safety failed for {fpath.name}: {pk_reason}")
+                    logger.warning(f"FATAL: PK safety failed for {fpath.name}: {pk_reason}")
                     sys.exit(1)
 
                 # Build insert-ready DataFrame (vectorized, no iterrows)
@@ -383,7 +380,7 @@ def main():
             stats['files_processed'] += 1
 
         except Exception as e:
-            print(f"ERROR processing {fpath.name}: {e}")
+            logger.warning(f"ERROR processing {fpath.name}: {e}")
             stats['files_failed'] += 1
             continue
 
@@ -436,7 +433,7 @@ def main():
                         checkpoint_mgr.write_checkpoint(
                             chunk_start, chunk_end, 'failed', error=int_reason
                         )
-                        print(f"FATAL: Integrity failed: {int_reason}")
+                        logger.warning(f"FATAL: Integrity failed: {int_reason}")
                         sys.exit(1)
 
                     con.execute("COMMIT")
@@ -448,22 +445,21 @@ def main():
                     stats['rows_written'] += n_rows
                     stats['trading_days_processed'] += len(chunk_days_list)
 
-                    print(f"  DONE: {chunk_start} to {chunk_end}: "
-                          f"{n_rows:,} rows, {len(chunk_days_list)} days")
+                    logger.info(f"  DONE: {chunk_start} to {chunk_end}: {n_rows:,} rows, {len(chunk_days_list)} days")
 
                 except Exception as e:
                     con.execute("ROLLBACK")
                     checkpoint_mgr.write_checkpoint(
                         chunk_start, chunk_end, 'failed', error=str(e)
                     )
-                    print(f"FATAL: Exception during merge: {e}")
+                    logger.warning(f"FATAL: Exception during merge: {e}")
                     sys.exit(1)
             else:
                 stats['chunks_done'] += 1
                 stats['rows_written'] += n_rows
                 stats['trading_days_processed'] += len(chunk_days_list)
                 if n_rows:
-                    print(f"  DRY RUN: {chunk_start} to {chunk_end}: {n_rows:,} rows")
+                    logger.info(f"  DRY RUN: {chunk_start} to {chunk_end}: {n_rows:,} rows")
 
             for d in chunk_days_list:
                 del trading_day_buffer[d]
@@ -504,7 +500,7 @@ def main():
                         checkpoint_mgr.write_checkpoint(
                             chunk_start, chunk_end, 'failed', error=int_reason
                         )
-                        print(f"FATAL: Final chunk integrity failed: {int_reason}")
+                        logger.warning(f"FATAL: Final chunk integrity failed: {int_reason}")
                         sys.exit(1)
 
                     con.execute("COMMIT")
@@ -516,67 +512,61 @@ def main():
                     stats['rows_written'] += n_rows
                     stats['trading_days_processed'] += len(sorted_days)
 
-                    print(f"  DONE: Final {chunk_start} to {chunk_end}: "
-                          f"{n_rows:,} rows")
+                    logger.info(f"  DONE: Final {chunk_start} to {chunk_end}: {n_rows:,} rows")
 
                 except Exception as e:
                     con.execute("ROLLBACK")
                     checkpoint_mgr.write_checkpoint(
                         chunk_start, chunk_end, 'failed', error=str(e)
                     )
-                    print(f"FATAL: Final chunk exception: {e}")
+                    logger.warning(f"FATAL: Final chunk exception: {e}")
                     sys.exit(1)
             elif args.dry_run:
                 stats['chunks_done'] += 1
                 stats['rows_written'] += n_rows
                 stats['trading_days_processed'] += len(sorted_days)
-                print(f"  DRY RUN: Final {chunk_start} to {chunk_end}: {n_rows:,} rows")
+                logger.info(f"  DRY RUN: Final {chunk_start} to {chunk_end}: {n_rows:,} rows")
 
     # =========================================================================
     # FINAL GATES
     # =========================================================================
-    print()
-    print("=" * 70)
-    print("FINAL HONESTY GATES")
-    print("=" * 70)
+    logger.info("=" * 70)
+    logger.info("FINAL HONESTY GATES")
+    logger.info("=" * 70)
 
     if not args.dry_run and con:
         gates_passed, failures = run_final_gates(con)
         if not gates_passed:
-            print("FATAL: Final honesty gates FAILED:")
+            logger.warning("FATAL: Final honesty gates FAILED:")
             for f in failures:
-                print(f"  - {f}")
+                logger.info(f"  - {f}")
             con.close()
             sys.exit(1)
 
-        print("  ts_utc type check: PASSED [OK]")
-        print("  No duplicate (symbol, ts_utc): PASSED [OK]")
-        print("  No NULL source_symbol: PASSED [OK]")
-        print()
-        print("ALL HONESTY GATES PASSED [OK]")
+        logger.info("  ts_utc type check: PASSED [OK]")
+        logger.info("  No duplicate (symbol, ts_utc): PASSED [OK]")
+        logger.info("  No NULL source_symbol: PASSED [OK]")
+        logger.info("ALL HONESTY GATES PASSED [OK]")
     else:
-        print("  Skipped (dry run)")
+        logger.info("  Skipped (dry run)")
 
     # =========================================================================
     # SUMMARY
     # =========================================================================
-    print()
-    print("=" * 70)
-    print("INGESTION SUMMARY")
-    print("=" * 70)
-    print()
+    logger.info("=" * 70)
+    logger.info("INGESTION SUMMARY")
+    logger.info("=" * 70)
 
     elapsed = datetime.now() - start_time
-    print(f"Instrument: {symbol}")
-    print(f"Files processed: {stats['files_processed']}")
-    print(f"Files skipped: {stats['files_skipped']}")
-    print(f"Files failed: {stats['files_failed']}")
-    print(f"Chunks committed: {stats['chunks_done']}")
-    print(f"Trading days: {stats['trading_days_processed']}")
-    print(f"Total rows: {stats['rows_written']:,}")
-    print(f"Unique contracts: {len(stats['contracts_used'])}")
-    print(f"Wall time: {elapsed}")
-    print()
+    logger.info(f"Instrument: {symbol}")
+    logger.info(f"Files processed: {stats['files_processed']}")
+    logger.info(f"Files skipped: {stats['files_skipped']}")
+    logger.info(f"Files failed: {stats['files_failed']}")
+    logger.info(f"Chunks committed: {stats['chunks_done']}")
+    logger.info(f"Trading days: {stats['trading_days_processed']}")
+    logger.info(f"Total rows: {stats['rows_written']:,}")
+    logger.info(f"Unique contracts: {len(stats['contracts_used'])}")
+    logger.info(f"Wall time: {elapsed}")
 
     if not args.dry_run and con:
         count = con.execute(
@@ -586,12 +576,11 @@ def main():
             "SELECT MIN(DATE(ts_utc)), MAX(DATE(ts_utc)) FROM bars_1m WHERE symbol = ?",
             [symbol]
         ).fetchone()
-        print(f"Database rows ({symbol}): {count:,}")
-        print(f"Date range: {date_range[0]} to {date_range[1]}")
+        logger.info(f"Database rows ({symbol}): {count:,}")
+        logger.info(f"Date range: {date_range[0]} to {date_range[1]}")
         con.close()
 
-    print()
-    print(f"SUCCESS: {symbol} daily ingestion complete and validated.")
+    logger.info(f"SUCCESS: {symbol} daily ingestion complete and validated.")
     sys.exit(0)
 
 if __name__ == "__main__":
