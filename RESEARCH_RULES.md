@@ -133,6 +133,8 @@ This format already exists in the research scripts. Maintain it.
 5. **NEVER speculate on WHY a session-specific pattern exists unless you have evidence.** Record the empirical fact. "0900 and 1100 show concordance benefit, 1000 and 1800 do not" is the correct statement. "Early sessions work because X" is speculation.
 6. **NEVER call 3 data points a trend.** 5 is barely suggestive. 10+ with a mechanism is a trend.
 7. **NEVER assume stationarity.** If gold returns to $1800, most current G5+ filters become untradeable (< 5 qualifying days per year).
+8. **NEVER simulate exit rules using post-resolution observations.** If a condition (e.g., "price returned inside ORB") can occur AFTER the trade already hit its stop or target, it is not actionable as an exit trigger. Simulations must verify the trigger fires while the trade is still open. The C8 break-even stop was overestimated 5x (Feb 2026) because the simulation counted post-exit price returns as if they were live-trade events. Always use `_while_open` or equivalent temporal guards.
+9. **NEVER report blended results for DST-contaminated sessions.** Sessions 0900/1800/0030/2300 MUST split by DST regime (per CLAUDE.md). Blended averages across DST halves can mask regime-specific failures or inflate effects that only exist in one half. This compounds with other errors — the C8 overestimate survived initial review because blended numbers looked plausible.
 
 ### Indicators That Are Guilty Until Proven Innocent
 RSI, MACD, Bollinger Bands, moving average crossovers, Stochastics. These are the most over-fitted indicators in existence. Any finding based on these requires:
@@ -224,6 +226,8 @@ All research scripts go in `research/` directory. Never in `scripts/` or project
 
 # 2. Zero-lookahead compliance
 # All features computed from data available at decision time
+# Exit rule simulations: trigger must fire WHILE TRADE IS OPEN
+# (not post-resolution — see NO-GO rule #8)
 
 # 3. Honest summary section at end of output
 # SURVIVED / DID NOT SURVIVE / CAVEATS / NEXT STEPS
