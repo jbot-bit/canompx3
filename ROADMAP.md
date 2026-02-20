@@ -4,6 +4,15 @@ Features planned but NOT YET BUILT. Move items to CLAUDE.md as they are implemen
 
 ---
 
+## Project Status Notes
+
+### SIL (Silver) Onboarding Initiative — PAUSED / ARCHIVED (2026-02-20)
+
+Per owner decision, SIL onboarding + Volume Session Analysis Tool planning is paused and archived.
+Do not schedule active delivery work against SIL until explicitly re-opened.
+
+---
+
 ## Phase 1: Daily Features Pipeline — DONE
 
 - `pipeline/build_daily_features.py` — BUILT (6 staged modules, 42 tests)
@@ -255,11 +264,21 @@ Six high-leverage research items identified by cross-referencing all findings. O
 - **DOW at 1000:** Day-of-week has no significant effect — noise. Do NOT filter.
 - Calendar filters implemented in `pipeline/calendar_filters.py` and integrated as portfolio-level overlays in `trading_app/config.py` (`CALENDAR_OVERLAYS`).
 
-**P3. Signal Stacking (Size + Direction + Concordance + Volume)**
-- Every filter tested independently. Never tested: what happens when ALL fire?
-- Concordance is independent of size (20% overlap proven). Stacking could yield avgR > 1.0.
-- Goal: identify high-conviction day profile for 2-3x position sizing.
-- Script: `research/research_signal_stacking.py` (to build)
+**P3. Signal Stacking (Size + Direction + Concordance + Volume) — DONE (Feb 2026)**
+- Script: `research/research_signal_stacking.py` — COMPLETED
+- Output: `research/output/signal_stacking_*.{csv,md}`
+- Reference: E3/CB1/RR2.0 fixed (avoids Bailey Rule). In-sample only.
+- **MES 0030 summer G4/G5 L4 (size+dir+conc+vol): SURVIVED BH FDR** — avgR=+0.42/+0.41, N=136/124, p_bh=0.023/0.028 [PRELIMINARY]
+  - Mechanism: in US DST summer, 0030 bar is POST equity open (equity opened at 2330 Bris).
+    Vol spike + MES/MNQ concordance = institutional follow-through from already-open US market.
+  - Caveat: E3 reference only. Not yet tested at E1 (the production entry for 0030).
+- **MGC 1000 G5 L4** — avgR=+0.545, N=37 (REGIME), p_bh=0.16 — interesting but small N.
+- **MGC 0900 winter G4/G5 L3-L5** — avgR=+0.35–+0.37 (REGIME), not BH-significant.
+- **184/216 cells positive** but only 2 survived BH — individual filters already capture most of the edge.
+- **TODO (implement):**
+  1. Test MES 0030 summer L4 at E1 entry (production entry for 0030) — if still positive, wire as position-size overlay
+  2. Add `conc_tier` + `rel_vol` columns to live portfolio overlay (not a new strategy — 2x size on qualifying days)
+  3. Re-test MGC 1000 G5 L4 at a 2-year window once N grows to PRELIMINARY threshold
 
 **P4. E3 x Direction Interaction**
 - H5 direction test used E1 only. E3 (retrace entry) could behave differently.

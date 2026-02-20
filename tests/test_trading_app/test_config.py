@@ -11,12 +11,12 @@ from trading_app.config import (
     OrbSizeFilter,
     VolumeFilter,
     DayOfWeekSkipFilter,
-    DoubleBreakFilter,
+    BreakSpeedFilter,
+    BreakBarContinuesFilter,
     CompositeFilter,
     ALL_FILTERS,
     MGC_ORB_SIZE_FILTERS,
     MGC_VOLUME_FILTERS,
-    NO_DBL_BREAK,
     get_filters_for_grid,
 )
 
@@ -136,9 +136,11 @@ class TestAllFilters:
             assert key not in ALL_FILTERS, f"{key} should not be in ALL_FILTERS"
 
     def test_total_count(self):
-        # NO_FILTER + 4 G-filters + 1 VOL-filter + 12 DOW composites (3 DOW x 4 G)
-        # + 1 NO_DBL_BREAK + 4 NODBL composites = 23
-        assert len(ALL_FILTERS) == 23
+        # NO_FILTER + 4 G-filters + 1 VOL-filter = 6
+        # + 12 DOW composites (3 DOW x 4 G)
+        # + 12 break quality composites (3 BRK x 4 G: FAST5, FAST10, CONT)
+        # = 30
+        assert len(ALL_FILTERS) == 30
 
     def test_contains_volume_filter(self):
         assert "VOL_RV12_N20" in ALL_FILTERS
@@ -215,6 +217,86 @@ class TestVolumeFilter:
         assert f.lookback_days == 20
 
 
+class TestBreakSpeedFilter:
+    """BreakSpeedFilter matches by break delay from ORB end."""
+
+    def test_matches_fast_break(self):
+        f = BreakSpeedFilter(filter_type="TEST", description="test", max_delay_min=5.0)
+        assert f.matches_row({"orb_0900_break_delay_min": 2.0}, "0900") is True
+
+    def test_rejects_slow_break(self):
+        f = BreakSpeedFilter(filter_type="TEST", description="test", max_delay_min=5.0)
+        assert f.matches_row({"orb_0900_break_delay_min": 10.0}, "0900") is False
+
+    def test_at_boundary_matches(self):
+        """Exactly at max_delay_min should match (<=)."""
+        f = BreakSpeedFilter(filter_type="TEST", description="test", max_delay_min=5.0)
+        assert f.matches_row({"orb_0900_break_delay_min": 5.0}, "0900") is True
+
+    def test_fail_closed_missing(self):
+        """Missing break_delay_min -> ineligible (fail-closed)."""
+        f = BreakSpeedFilter(filter_type="TEST", description="test", max_delay_min=5.0)
+        assert f.matches_row({}, "0900") is False
+
+    def test_fail_closed_none(self):
+        """None break_delay_min (no break) -> ineligible (fail-closed)."""
+        f = BreakSpeedFilter(filter_type="TEST", description="test", max_delay_min=5.0)
+        assert f.matches_row({"orb_0900_break_delay_min": None}, "0900") is False
+
+    def test_uses_correct_orb_label(self):
+        f = BreakSpeedFilter(filter_type="TEST", description="test", max_delay_min=5.0)
+        row = {"orb_0900_break_delay_min": 10.0, "orb_1000_break_delay_min": 2.0}
+        assert f.matches_row(row, "0900") is False
+        assert f.matches_row(row, "1000") is True
+
+    def test_zero_delay_matches(self):
+        """Break on the first bar after ORB (delay=0) is the fastest."""
+        f = BreakSpeedFilter(filter_type="TEST", description="test", max_delay_min=5.0)
+        assert f.matches_row({"orb_0900_break_delay_min": 0.0}, "0900") is True
+
+    def test_frozen(self):
+        f = BreakSpeedFilter(filter_type="TEST", description="test")
+        with pytest.raises(AttributeError):
+            f.max_delay_min = 10.0
+
+
+class TestBreakBarContinuesFilter:
+    """BreakBarContinuesFilter matches by break bar direction relative to break."""
+
+    def test_matches_continuation(self):
+        f = BreakBarContinuesFilter(filter_type="TEST", description="test", require_continues=True)
+        assert f.matches_row({"orb_0900_break_bar_continues": True}, "0900") is True
+
+    def test_rejects_reversal(self):
+        f = BreakBarContinuesFilter(filter_type="TEST", description="test", require_continues=True)
+        assert f.matches_row({"orb_0900_break_bar_continues": False}, "0900") is False
+
+    def test_fail_closed_missing(self):
+        f = BreakBarContinuesFilter(filter_type="TEST", description="test", require_continues=True)
+        assert f.matches_row({}, "0900") is False
+
+    def test_fail_closed_none(self):
+        f = BreakBarContinuesFilter(filter_type="TEST", description="test", require_continues=True)
+        assert f.matches_row({"orb_0900_break_bar_continues": None}, "0900") is False
+
+    def test_uses_correct_orb_label(self):
+        f = BreakBarContinuesFilter(filter_type="TEST", description="test", require_continues=True)
+        row = {"orb_0900_break_bar_continues": False, "orb_1000_break_bar_continues": True}
+        assert f.matches_row(row, "0900") is False
+        assert f.matches_row(row, "1000") is True
+
+    def test_inverse_mode(self):
+        """require_continues=False selects reversal candles."""
+        f = BreakBarContinuesFilter(filter_type="TEST", description="test", require_continues=False)
+        assert f.matches_row({"orb_0900_break_bar_continues": False}, "0900") is True
+        assert f.matches_row({"orb_0900_break_bar_continues": True}, "0900") is False
+
+    def test_frozen(self):
+        f = BreakBarContinuesFilter(filter_type="TEST", description="test")
+        with pytest.raises(AttributeError):
+            f.require_continues = False
+
+
 class TestDayOfWeekSkipFilter:
     """DayOfWeekSkipFilter skips specified weekdays, fail-closed on missing data."""
 
@@ -280,17 +362,18 @@ class TestDowComposites:
             assert key in filters, f"{key} missing from 1000 grid"
         assert "DIR_LONG" in filters
 
-    def test_1100_has_nodbl_no_dow(self):
-        """1100 gets NODBL composites but no DOW composites, no DIR_LONG."""
+    def test_1100_has_base_only(self):
+        """1100 gets base grid only — no DOW, no DIR_LONG, no NODBL.
+
+        NODBL removed Feb 2026: double_break is look-ahead (computed over
+        full session after trade entry). See config.py comment.
+        """
         filters = get_filters_for_grid("MGC", "1100")
         dow_keys = [k for k in filters if "NOFRI" in k or "NOMON" in k or "NOTUE" in k]
         assert dow_keys == [], f"1100 should have no DOW composites, got {dow_keys}"
         assert "DIR_LONG" not in filters
-        # Must have NO_DBL_BREAK + 4 NODBL composites
-        assert "NO_DBL_BREAK" in filters
-        for key in ["ORB_G4_NODBL", "ORB_G5_NODBL", "ORB_G6_NODBL", "ORB_G8_NODBL"]:
-            assert key in filters, f"{key} missing from 1100 grid"
-            assert isinstance(filters[key], CompositeFilter)
+        nodbl_keys = [k for k in filters if "NODBL" in k or k == "NO_DBL_BREAK"]
+        assert nodbl_keys == [], f"1100 should have no NODBL filters, got {nodbl_keys}"
 
     def test_composite_matches_row_correctly(self):
         """Composite(G4 + skip Friday) rejects Friday even with big ORB."""
@@ -304,58 +387,72 @@ class TestDowComposites:
         assert comp.matches_row({"orb_0900_size": 2.0, "day_of_week": 0}, "0900") is False
 
 
-class TestDoubleBreakFilter:
-    """DoubleBreakFilter skips double-break days (mean-reversion regime)."""
+class TestDoubleBreakFilterRemoved:
+    """NODBL filters removed Feb 2026 — double_break is look-ahead.
 
-    def test_skips_double_break_day(self):
-        """matches_row returns False when orb had double-break."""
-        f = NO_DBL_BREAK
-        assert f.matches_row({"orb_1100_double_break": True}, "1100") is False
+    The DoubleBreakFilter class still exists in config.py (not deleted yet)
+    but is no longer wired into any discovery grid or ALL_FILTERS registry.
+    """
 
-    def test_passes_clean_day(self):
-        """matches_row returns True when orb did NOT double-break."""
-        f = NO_DBL_BREAK
-        assert f.matches_row({"orb_1100_double_break": False}, "1100") is True
-
-    def test_passes_missing_data(self):
-        """Missing double_break column → pass-through (fail-open)."""
-        f = NO_DBL_BREAK
-        assert f.matches_row({}, "1100") is True
-
-    def test_passes_none_data(self):
-        """None double_break value → pass-through (fail-open)."""
-        f = NO_DBL_BREAK
-        assert f.matches_row({"orb_1100_double_break": None}, "1100") is True
-
-    def test_uses_correct_orb_label(self):
-        """Filter reads the column for the specific orb_label."""
-        f = NO_DBL_BREAK
-        row = {"orb_0900_double_break": True, "orb_1100_double_break": False}
-        assert f.matches_row(row, "0900") is False
-        assert f.matches_row(row, "1100") is True
-
-    def test_1100_gets_nodbl_composites(self):
-        """get_filters_for_grid('MGC', '1100') has NO_DBL_BREAK + 4 NODBL composites."""
-        filters = get_filters_for_grid("MGC", "1100")
-        assert "NO_DBL_BREAK" in filters
-        assert isinstance(filters["NO_DBL_BREAK"], DoubleBreakFilter)
-        for key in ["ORB_G4_NODBL", "ORB_G5_NODBL", "ORB_G6_NODBL", "ORB_G8_NODBL"]:
-            assert key in filters
-
-    def test_other_sessions_no_nodbl(self):
-        """0900/1000/1800 do NOT get NODBL filters."""
-        for session in ("0900", "1000", "1800"):
+    def test_no_session_gets_nodbl(self):
+        """No session gets NODBL filters in the discovery grid."""
+        for session in ("0900", "1000", "1100", "1800", "2300", "0030"):
             filters = get_filters_for_grid("MGC", session)
             nodbl_keys = [k for k in filters if "NODBL" in k or k == "NO_DBL_BREAK"]
-            assert nodbl_keys == [], f"{session} should have no NODBL filters, got {nodbl_keys}"
+            assert nodbl_keys == [], f"{session} has NODBL filters: {nodbl_keys}"
 
-    def test_frozen(self):
-        f = NO_DBL_BREAK
-        with pytest.raises(AttributeError):
-            f.filter_type = "CHANGED"
+    def test_all_filters_no_nodbl(self):
+        """ALL_FILTERS registry has no NODBL entries."""
+        nodbl_keys = [k for k in ALL_FILTERS if "NODBL" in k or k == "NO_DBL_BREAK"]
+        assert nodbl_keys == [], f"ALL_FILTERS has NODBL: {nodbl_keys}"
 
-    def test_to_json_roundtrip(self):
-        f = NO_DBL_BREAK
-        data = json.loads(f.to_json())
-        assert data["filter_type"] == "NO_DBL_BREAK"
-        assert data["exclude"] is True
+
+class TestBreakQualityComposites:
+    """Break quality composites (FAST5, FAST10, CONT) in get_filters_for_grid."""
+
+    def test_momentum_sessions_have_break_quality(self):
+        """0900, 1000, 1800 get break quality composites."""
+        for session in ("0900", "1000", "1800"):
+            filters = get_filters_for_grid("MGC", session)
+            for suffix in ("FAST5", "FAST10", "CONT"):
+                for g in ("G4", "G5", "G6", "G8"):
+                    key = f"ORB_{g}_{suffix}"
+                    assert key in filters, f"{key} missing from {session} grid"
+                    assert isinstance(filters[key], CompositeFilter)
+
+    def test_non_momentum_sessions_no_break_quality(self):
+        """1100, 2300, 0030 do NOT get break quality composites."""
+        for session in ("1100", "2300", "0030"):
+            filters = get_filters_for_grid("MGC", session)
+            bq_keys = [k for k in filters if "FAST5" in k or "FAST10" in k or "CONT" in k]
+            assert bq_keys == [], f"{session} has break quality filters: {bq_keys}"
+
+    def test_fast5_composite_matches_row(self):
+        """Composite(G4 + FAST5) requires both big ORB and fast break."""
+        filters = get_filters_for_grid("MGC", "0900")
+        comp = filters["ORB_G4_FAST5"]
+        # Big ORB + fast break -> accepted
+        assert comp.matches_row(
+            {"orb_0900_size": 5.0, "orb_0900_break_delay_min": 2.0}, "0900"
+        ) is True
+        # Big ORB + slow break -> rejected
+        assert comp.matches_row(
+            {"orb_0900_size": 5.0, "orb_0900_break_delay_min": 20.0}, "0900"
+        ) is False
+        # Small ORB + fast break -> rejected (base filter fails)
+        assert comp.matches_row(
+            {"orb_0900_size": 2.0, "orb_0900_break_delay_min": 2.0}, "0900"
+        ) is False
+
+    def test_cont_composite_matches_row(self):
+        """Composite(G4 + CONT) requires both big ORB and conviction candle."""
+        filters = get_filters_for_grid("MGC", "0900")
+        comp = filters["ORB_G4_CONT"]
+        # Big ORB + continues -> accepted
+        assert comp.matches_row(
+            {"orb_0900_size": 5.0, "orb_0900_break_bar_continues": True}, "0900"
+        ) is True
+        # Big ORB + reversal -> rejected
+        assert comp.matches_row(
+            {"orb_0900_size": 5.0, "orb_0900_break_bar_continues": False}, "0900"
+        ) is False

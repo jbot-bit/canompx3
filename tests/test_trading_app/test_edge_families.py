@@ -187,8 +187,11 @@ class TestRobustnessClassification:
 
     def test_classify_purged(self):
         from scripts.tools.build_edge_families import classify_family
-        # N<=2 always PURGED (below WHITELIST_MIN_MEMBERS)
-        assert classify_family(1, 1.5, 0.0, 200) == "PURGED"   # singleton
+        # N=1 with quality bar -> SINGLETON; without -> PURGED
+        assert classify_family(1, 1.5, 0.0, 200) == "SINGLETON"  # high ShANN + trades
+        assert classify_family(1, 0.5, 0.0, 200) == "PURGED"     # ShANN too low
+        assert classify_family(1, 1.5, 0.0, 50) == "PURGED"      # trades too low
+        # N=2 always PURGED (below WHITELIST_MIN_MEMBERS, not singleton)
         assert classify_family(2, 1.5, 0.1, 200) == "PURGED"   # pair
         # N>=3 but fails a metric
         assert classify_family(3, 0.5, 0.2, 100) == "PURGED"   # ShANN too low
@@ -208,8 +211,8 @@ class TestRobustnessClassification:
         """).fetchone()
         con.close()
 
-        # s3 is singleton (N=1) -> always PURGED (below WHITELIST_MIN_MEMBERS=3)
-        assert family[0] == "PURGED"
+        # s3 is singleton (N=1) with ShANN=1.5 and 150 trades -> SINGLETON tier
+        assert family[0] == "SINGLETON"
 
     def test_robustness_columns_populated(self, db_path):
         from scripts.tools.build_edge_families import build_edge_families
@@ -226,7 +229,7 @@ class TestRobustnessClassification:
 
         # 2-member family
         f2 = families[0]
-        assert f2[0] in ("ROBUST", "WHITELISTED", "PURGED")
+        assert f2[0] in ("ROBUST", "WHITELISTED", "SINGLETON", "PURGED")
         assert f2[1] is not None  # CV computed for 2+ members
         assert f2[2] == 0.375     # median of [0.30, 0.45]
         assert f2[3] is not None  # avg ShANN

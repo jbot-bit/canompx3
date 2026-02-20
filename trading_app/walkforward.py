@@ -64,12 +64,17 @@ def run_walkforward(
     min_trades_per_window: int = 15,
     min_valid_windows: int = 3,
     min_pct_positive: float = 0.60,
+    dst_regime: str | None = None,
 ) -> WalkForwardResult:
     """
     Anchored walk-forward validation on existing orb_outcomes.
 
     Loads filtered outcomes, splits into non-overlapping test windows,
     and evaluates OOS performance consistency.
+
+    Args:
+        dst_regime: If 'winter' or 'summer', restrict DST-affected sessions to
+            that regime only (matches the _W/_S strategy_id suffix from discovery).
 
     Pass rule (ALL 4 required, fail-closed):
       1. n_valid >= min_valid_windows
@@ -95,6 +100,7 @@ def run_walkforward(
         rr_target=rr_target,
         confirm_bars=confirm_bars,
         filter_type=filter_type,
+        dst_regime=dst_regime,
     )
 
     if not outcomes:

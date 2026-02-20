@@ -394,11 +394,14 @@ def make_strategy_id(
     rr_target: float,
     confirm_bars: int,
     filter_type: str,
+    dst_regime: str | None = None,
 ) -> str:
     """Generate deterministic strategy ID.
 
-    Format: {instrument}_{orb_label}_{entry_model}_RR{rr}_CB{cb}_{filter_type}
+    Format: {instrument}_{orb_label}_{entry_model}_RR{rr}_CB{cb}_{filter_type}[_W|_S]
     Example: MGC_0900_E1_RR2.5_CB2_ORB_G4
+             MGC_0900_E1_RR2.5_CB2_ORB_G4_W  (winter-only)
+             MGC_0900_E1_RR2.5_CB2_ORB_G4_S  (summer-only)
 
     Components:
       instrument  - Trading instrument (MGC = Micro Gold Futures)
@@ -407,8 +410,23 @@ def make_strategy_id(
       RR          - Risk/Reward target (1.0 to 4.0)
       CB          - Confirm bars required (1 to 5)
       filter_type - ORB size filter (NO_FILTER, ORB_G4, ORB_L3, etc.)
+      _W/_S       - DST regime suffix (winter/summer); omitted for blended/clean sessions
     """
-    return f"{instrument}_{orb_label}_{entry_model}_RR{rr_target}_CB{confirm_bars}_{filter_type}"
+    base = f"{instrument}_{orb_label}_{entry_model}_RR{rr_target}_CB{confirm_bars}_{filter_type}"
+    if dst_regime == "winter":
+        return f"{base}_W"
+    if dst_regime == "summer":
+        return f"{base}_S"
+    return base
+
+
+def parse_dst_regime(strategy_id: str) -> str | None:
+    """Extract DST regime from strategy_id suffix (_W or _S), or None if blended/clean."""
+    if strategy_id.endswith("_W"):
+        return "winter"
+    if strategy_id.endswith("_S"):
+        return "summer"
+    return None
 
 def _load_daily_features(con, instrument, orb_minutes, start_date, end_date):
     """Load all daily_features rows once into a list of dicts."""
@@ -589,6 +607,7 @@ def run_discovery(
     end_date: date | None = None,
     orb_minutes: int = 5,
     dry_run: bool = False,
+    dst_regime: str | None = None,
 ) -> int:
     """
     Grid search over all strategy variants.
@@ -596,8 +615,16 @@ def run_discovery(
     Bulk-loads data upfront (1 features query + 18 outcome queries),
     then iterates the grid in Python with no further DB reads.
 
+    Args:
+        dst_regime: If 'winter' or 'summer', restrict DST-affected sessions
+            (0900/1800/0030/2300) to that regime only. Produces strategy IDs
+            with _W or _S suffix. Clean sessions (1000/1100 etc.) are unaffected.
+            If None (default), produces blended strategies (existing behaviour).
+
     Returns count of strategies written.
     """
+    if dst_regime not in (None, "winter", "summer"):
+        raise ValueError(f"dst_regime must be 'winter', 'summer', or None; got {dst_regime!r}")
     if db_path is None:
         db_path = GOLD_DB_PATH
 
@@ -666,20 +693,53 @@ def run_discovery(
                             all_outcomes = outcomes_by_key.get((orb_label, em, rr_target, cb), [])
                             outcomes = [o for o in all_outcomes if o["trading_day"] in matching_day_set]
 
+                            # Apply DST regime filter for affected sessions
+                            session_is_dst_affected = orb_label in DST_AFFECTED_SESSIONS
+                            if dst_regime is not None and session_is_dst_affected:
+                                want_winter = (dst_regime == "winter")
+                                outcomes = [
+                                    o for o in outcomes
+                                    if is_winter_for_session(o["trading_day"], orb_label) == want_winter
+                                ]
+
                             if not outcomes:
                                 continue
 
                             metrics = compute_metrics(outcomes, cost_spec=cost_spec)
                             if metrics["sample_size"] == 0:
                                 continue
+
+                            # Determine effective regime for strategy_id suffix:
+                            # use dst_regime if this session is DST-affected, else no suffix
+                            effective_regime = dst_regime if session_is_dst_affected else None
                             strategy_id = make_strategy_id(
                                 instrument, orb_label, em, rr_target, cb, filter_key,
+                                dst_regime=effective_regime,
                             )
                             trade_days = sorted({o["trading_day"] for o in outcomes})
                             trade_day_hash = compute_trade_day_hash(trade_days)
 
-                            # Compute DST regime split for affected sessions
-                            dst_split = compute_dst_split_from_outcomes(outcomes, orb_label)
+                            # Compute DST split metadata:
+                            # For regime-specific strategies, split is degenerate (one regime only).
+                            # For blended strategies, compute the full winter/summer breakdown.
+                            if dst_regime is not None and session_is_dst_affected:
+                                # All outcomes are already one regime; set split fields explicitly
+                                n = len([o for o in outcomes if o.get("outcome") not in ("scratch", "early_exit")])
+                                avg_r = metrics["expectancy_r"]
+                                if dst_regime == "winter":
+                                    dst_split = {
+                                        "winter_n": n, "winter_avg_r": avg_r,
+                                        "summer_n": 0, "summer_avg_r": None,
+                                        "verdict": "WINTER-ONLY",
+                                    }
+                                else:
+                                    dst_split = {
+                                        "winter_n": 0, "winter_avg_r": None,
+                                        "summer_n": n, "summer_avg_r": avg_r,
+                                        "verdict": "SUMMER-ONLY",
+                                    }
+                            else:
+                                dst_split = compute_dst_split_from_outcomes(outcomes, orb_label)
 
                             all_strategies.append({
                                 "strategy_id": strategy_id,
@@ -774,6 +834,12 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="No DB writes")
     parser.add_argument("--db", type=str, default=None,
                         help="Database path (default: gold.db)")
+    parser.add_argument(
+        "--dst-regime", choices=["winter", "summer"], default=None,
+        help="Restrict DST-affected sessions (0900/1800/0030/2300) to one regime. "
+             "Produces _W or _S strategy IDs. Clean sessions unaffected. "
+             "Run twice (--dst-regime winter AND --dst-regime summer) to replace all blended strategies.",
+    )
     args = parser.parse_args()
 
     db_path = Path(args.db) if args.db else None
@@ -785,6 +851,7 @@ def main():
         end_date=args.end,
         orb_minutes=args.orb_minutes,
         dry_run=args.dry_run,
+        dst_regime=args.dst_regime,
     )
 
 if __name__ == "__main__":

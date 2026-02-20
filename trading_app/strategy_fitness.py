@@ -31,6 +31,7 @@ import duckdb
 
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.init_db import ORB_LABELS
+from pipeline.dst import DST_AFFECTED_SESSIONS, is_winter_for_session
 from trading_app.config import ALL_FILTERS, VolumeFilter
 from trading_app.strategy_discovery import compute_metrics
 
@@ -186,12 +187,17 @@ def _load_strategy_outcomes(
     filter_type: str,
     start_date: date | None = None,
     end_date: date | None = None,
+    dst_regime: str | None = None,
 ) -> list[dict]:
     """
     Load filtered outcomes for a strategy from orb_outcomes + daily_features.
 
     Applies the strategy's filter_type to ensure only eligible days are included.
     Reuses filter logic from config.ALL_FILTERS.
+
+    Args:
+        dst_regime: If 'winter' or 'summer', restrict DST-affected sessions to
+            that regime only. Ignored for clean sessions (1000/1100 etc.).
     """
     # Load outcomes
     params = [instrument, orb_minutes, orb_label, entry_model, rr_target, confirm_bars]
@@ -221,14 +227,24 @@ def _load_strategy_outcomes(
     if not all_outcomes:
         return []
 
+    def _apply_dst(outcomes: list[dict]) -> list[dict]:
+        """Apply DST regime filter if requested for a DST-affected session."""
+        if dst_regime is None or orb_label not in DST_AFFECTED_SESSIONS:
+            return outcomes
+        want_winter = (dst_regime == "winter")
+        return [
+            o for o in outcomes
+            if is_winter_for_session(o["trading_day"], orb_label) == want_winter
+        ]
+
     # Apply filter: load daily_features and check eligibility
     filt = ALL_FILTERS.get(filter_type)
     if filt is None:
-        return all_outcomes  # unknown filter = pass-through
+        return _apply_dst(all_outcomes)  # unknown filter = pass-through
 
     # For NO_FILTER, skip the expensive daily_features check
     if filter_type == "NO_FILTER":
-        return all_outcomes
+        return _apply_dst(all_outcomes)
 
     # VolumeFilter requires pre-computed rel_vol data from bars_1m which is
     # expensive to compute here. Fail-closed: return empty (strategy = STALE).
@@ -251,7 +267,7 @@ def _load_strategy_outcomes(
         feat_params.append(end_date)
 
     feat_rows = con.execute(
-        f"""SELECT trading_day, orb_{orb_label}_size as orb_size
+        f"""SELECT trading_day, orb_{orb_label}_size as orb_size, day_of_week
             FROM daily_features
             WHERE {' AND '.join(feat_where)}""",
         feat_params,
@@ -259,11 +275,12 @@ def _load_strategy_outcomes(
 
     eligible_days = set()
     size_col = f"orb_{orb_label}_size"
-    for td, orb_size in feat_rows:
-        if filt.matches_row({size_col: orb_size}, orb_label):
+    for td, orb_size, dow in feat_rows:
+        if filt.matches_row({size_col: orb_size, "day_of_week": dow}, orb_label):
             eligible_days.add(td)
 
-    return [o for o in all_outcomes if o["trading_day"] in eligible_days]
+    filtered = [o for o in all_outcomes if o["trading_day"] in eligible_days]
+    return _apply_dst(filtered)
 
 # =========================================================================
 # Fitness computation

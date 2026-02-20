@@ -31,6 +31,8 @@ WHITELIST_MIN_MEMBERS = 3   # N>=3 to avoid "one lucky sibling" at higher CV
 WHITELIST_MIN_SHANN = 0.8
 WHITELIST_MAX_CV = 0.5
 WHITELIST_MIN_TRADES = 50
+SINGLETON_MIN_TRADES = 100  # N=1 family: isolated edge quality bar
+SINGLETON_MIN_SHANN  = 1.0  # N=1 family: minimum Sharpe to survive
 
 # Trade tier thresholds (from config.py classification)
 CORE_MIN_TRADES = 100
@@ -41,9 +43,10 @@ compute_family_hash = compute_trade_day_hash  # public alias for backward compat
 def classify_family(member_count, avg_shann, cv_expr, min_trades):
     """Classify family robustness status.
 
-    ROBUST: N>=5 members (parameter-stable edge)
+    ROBUST:      N>=5 (parameter-stable across 5+ combos)
     WHITELISTED: N in [3,4] with strong metrics (structurally small family)
-    PURGED: N<=2, or N in [3,4] with weak metrics
+    SINGLETON:   N=1 with quality bar (isolated edge, not overfit)
+    PURGED:      everything else
     """
     if member_count >= MIN_FAMILY_SIZE:
         return "ROBUST"
@@ -52,6 +55,10 @@ def classify_family(member_count, avg_shann, cv_expr, min_trades):
             and cv_expr is not None and cv_expr <= WHITELIST_MAX_CV
             and min_trades is not None and min_trades >= WHITELIST_MIN_TRADES):
         return "WHITELISTED"
+    if (member_count == 1
+            and min_trades is not None and min_trades >= SINGLETON_MIN_TRADES
+            and avg_shann is not None and avg_shann >= SINGLETON_MIN_SHANN):
+        return "SINGLETON"
     return "PURGED"
 
 def classify_trade_tier(min_trades):
@@ -165,12 +172,14 @@ def build_edge_families(db_path: str, instrument: str) -> int:
             )
         """)
 
-        # 1. Load validated strategies (include sample_size for min_trades)
+        # 1. Load validated strategies; JOIN experimental_strategies for pre-computed hash
         strategies = con.execute("""
-            SELECT strategy_id, expectancy_r, sharpe_ann, sample_size
-            FROM validated_setups
-            WHERE instrument = ? AND LOWER(status) = 'active'
-            ORDER BY strategy_id
+            SELECT vs.strategy_id, vs.expectancy_r, vs.sharpe_ann, vs.sample_size,
+                   es.trade_day_hash
+            FROM validated_setups vs
+            LEFT JOIN experimental_strategies es ON vs.strategy_id = es.strategy_id
+            WHERE vs.instrument = ? AND LOWER(vs.status) = 'active'
+            ORDER BY vs.strategy_id
         """, [instrument]).fetchall()
 
         print(f"Building edge families for {len(strategies)} {instrument} strategies")
@@ -179,22 +188,31 @@ def build_edge_families(db_path: str, instrument: str) -> int:
             print(f"No active strategies for {instrument}")
             return 0
 
-        # 2. Compute hash per strategy
+        # 2. Resolve hash per strategy: use pre-computed hash from experimental_strategies
+        #    (100% populated for --no-walkforward runs); fall back to strategy_trade_days
+        #    for legacy walk-forward strategies that didn't store trade_day_hash.
         hash_map = {}
-        for sid, expr, shann, sample in strategies:
-            days = con.execute("""
-                SELECT trading_day FROM strategy_trade_days
-                WHERE strategy_id = ?
-                ORDER BY trading_day
-            """, [sid]).fetchall()
+        fallback_count = 0
+        for sid, expr, shann, sample, precomputed_hash in strategies:
+            if precomputed_hash:
+                hash_map[sid] = precomputed_hash
+            else:
+                days = con.execute("""
+                    SELECT trading_day FROM strategy_trade_days
+                    WHERE strategy_id = ? ORDER BY trading_day
+                """, [sid]).fetchall()
+                hash_map[sid] = compute_family_hash([r[0] for r in days])
+                fallback_count += 1
 
-            day_list = [r[0] for r in days]
-            hash_map[sid] = compute_family_hash(day_list)
+        if fallback_count:
+            print(f"  WARNING: {fallback_count} strategies used strategy_trade_days fallback")
 
-        # 3. Group by hash -> [(sid, expr, shann, sample_size)]
+        # 3. Group by instrument-prefixed hash -> [(sid, expr, shann, sample_size)]
+        #    Prefix prevents cross-instrument PRIMARY KEY collisions as coverage expands.
         families = defaultdict(list)
-        for sid, expr, shann, sample in strategies:
-            families[hash_map[sid]].append((sid, expr, shann, sample))
+        for sid, expr, shann, sample, _ in strategies:
+            family_key = f"{instrument}_{hash_map[sid]}"
+            families[family_key].append((sid, expr, shann, sample))
 
         print(f"  {len(strategies)} strategies -> {len(families)} unique families")
 
@@ -238,11 +256,15 @@ def build_edge_families(db_path: str, instrument: str) -> int:
             tier = classify_trade_tier(min_trades)
             status_counts[status] += 1
 
-            # Trade day count
+            # Trade day count — strategy_trade_days may be absent for --no-walkforward runs;
+            # fall back to head strategy's sample_size from validated_setups.
             trade_day_count = con.execute("""
-                SELECT COUNT(*) FROM strategy_trade_days
-                WHERE strategy_id = ?
+                SELECT COUNT(*) FROM strategy_trade_days WHERE strategy_id = ?
             """, [head_sid]).fetchone()[0]
+
+            if trade_day_count == 0:
+                head_sample = next(m[3] for m in members if m[0] == head_sid) or 0
+                trade_day_count = head_sample
 
             # Insert edge family
             con.execute("""
@@ -267,16 +289,33 @@ def build_edge_families(db_path: str, instrument: str) -> int:
                     WHERE strategy_id = ?
                 """, [family_hash, is_head, sid])
 
+        # 7. Fail gates — abort before commit if data quality checks fail
+        total_fam = len(families)
+        singleton_count = status_counts.get("SINGLETON", 0)
+        max_members = max(len(m) for m in families.values()) if families else 0
+
+        if max_members > 100:
+            raise RuntimeError(
+                f"ABORT: Mega-family detected — max_members={max_members} > 100. "
+                "Possible hash collision or fallback to empty hash."
+            )
+        if total_fam > 50 and singleton_count / total_fam > 0.50:
+            raise RuntimeError(
+                f"ABORT: SINGLETON rate {singleton_count}/{total_fam} "
+                f"({100 * singleton_count // total_fam}%) exceeds 50% guard. "
+                "Review singleton thresholds."
+            )
+
         con.commit()
 
-        # 7. Summary
+        # 8. Summary
         size_dist = sorted(
             [len(m) for m in families.values()], reverse=True
         )
         print(f"  Family sizes: max={size_dist[0]}, "
               f"median={size_dist[len(size_dist)//2]}, "
               f"singletons={size_dist.count(1)}")
-        for status in ["ROBUST", "WHITELISTED", "PURGED"]:
+        for status in ["ROBUST", "WHITELISTED", "SINGLETON", "PURGED"]:
             print(f"  {status}: {status_counts.get(status, 0)} families")
 
         return len(families)

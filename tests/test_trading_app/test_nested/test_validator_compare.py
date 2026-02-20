@@ -30,10 +30,10 @@ class TestValidateStrategy:
             "sharpe_ratio": 0.5,
             "max_drawdown_r": -8.0,
             "yearly_results": json.dumps({
-                "2022": {"avg_r": 0.1, "count": 30},
-                "2023": {"avg_r": 0.2, "count": 35},
-                "2024": {"avg_r": 0.15, "count": 40},
-                "2025": {"avg_r": 0.3, "count": 45},
+                "2022": {"avg_r": 0.1, "trades": 30},
+                "2023": {"avg_r": 0.2, "trades": 35},
+                "2024": {"avg_r": 0.15, "trades": 40},
+                "2025": {"avg_r": 0.3, "trades": 45},
             }),
         }
         base.update(overrides)
@@ -59,10 +59,10 @@ class TestValidateStrategy:
 
     def test_exclude_years(self):
         row = self._make_row(yearly_results=json.dumps({
-            "2021": {"avg_r": -0.5, "count": 20},
-            "2022": {"avg_r": 0.1, "count": 30},
-            "2023": {"avg_r": 0.2, "count": 35},
-            "2024": {"avg_r": 0.15, "count": 40},
+            "2021": {"avg_r": -0.5, "trades": 20},
+            "2022": {"avg_r": 0.1, "trades": 30},
+            "2023": {"avg_r": 0.2, "trades": 35},
+            "2024": {"avg_r": 0.15, "trades": 40},
         }))
         # With 2021 excluded, all remaining years positive
         status, _, _ = validate_strategy(row, COST_SPEC, exclude_years={2021})
@@ -70,10 +70,10 @@ class TestValidateStrategy:
 
     def test_min_years_positive_pct(self):
         row = self._make_row(yearly_results=json.dumps({
-            "2022": {"avg_r": 0.1, "count": 30},
-            "2023": {"avg_r": -0.1, "count": 35},
-            "2024": {"avg_r": 0.15, "count": 40},
-            "2025": {"avg_r": 0.3, "count": 45},
+            "2022": {"avg_r": 0.1, "trades": 30},
+            "2023": {"avg_r": -0.1, "trades": 35},
+            "2024": {"avg_r": 0.15, "trades": 40},
+            "2025": {"avg_r": 0.3, "trades": 45},
         }))
         # 3/4 years positive = 75%. With min_years_positive_pct=0.8, should reject
         status, _, _ = validate_strategy(row, COST_SPEC, min_years_positive_pct=0.8)

@@ -39,6 +39,7 @@ from pipeline.dst import (
 )
 from trading_app.db_manager import init_trading_app_schema
 from trading_app.walkforward import run_walkforward, append_walkforward_result
+from trading_app.strategy_discovery import parse_dst_regime
 
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)
@@ -237,6 +238,7 @@ def validate_strategy(row: dict, cost_spec, stress_multiplier: float = 1.5,
                       max_drawdown: float | None = None,
                       exclude_years: set[int] | None = None,
                       min_years_positive_pct: float = 1.0,
+                      min_trades_per_year: int = 1,
                       atr_by_year: dict[int, float] | None = None,
                       enable_regime_waivers: bool = True) -> tuple[str, str, list[int]]:
     """
@@ -252,6 +254,8 @@ def validate_strategy(row: dict, cost_spec, stress_multiplier: float = 1.5,
         exclude_years: Years to exclude from Phase 3 yearly check
         min_years_positive_pct: Fraction of included years that must be
             positive (0.0-1.0). Default 1.0 = ALL years must be positive.
+        min_trades_per_year: Minimum trades for a year to count in Phase 3.
+            Years below this are excluded. Default 1 = include all years.
         atr_by_year: Mean ATR(20) per year for regime classification.
             Pre-fetched in run_validation(), None disables waivers.
         enable_regime_waivers: If True (default), grant DORMANT waivers
@@ -287,7 +291,11 @@ def validate_strategy(row: dict, cost_spec, stress_multiplier: float = 1.5,
     if not yearly:
         return "REJECTED", "Phase 3: No yearly data", []
 
-    included_years = {y: d for y, d in yearly.items() if int(y) not in exclude_years}
+    included_years = {
+        y: d for y, d in yearly.items()
+        if int(y) not in exclude_years
+        and d.get("trades", 0) >= min_trades_per_year
+    }
     if not included_years:
         return "REJECTED", "Phase 3: No yearly data after exclusions", []
 
@@ -396,6 +404,7 @@ def run_validation(
     max_drawdown: float | None = None,
     exclude_years: set[int] | None = None,
     min_years_positive_pct: float = 1.0,
+    min_trades_per_year: int = 1,
     dry_run: bool = False,
     enable_walkforward: bool = True,
     wf_test_months: int = 6,
@@ -473,9 +482,13 @@ def run_validation(
                 max_drawdown=max_drawdown,
                 exclude_years=exclude_years,
                 min_years_positive_pct=min_years_positive_pct,
+                min_trades_per_year=min_trades_per_year,
                 atr_by_year=atr_by_year if enable_regime_waivers else None,
                 enable_regime_waivers=enable_regime_waivers,
             )
+
+            # Determine DST regime from strategy_id suffix (_W/_S)
+            strat_dst_regime = parse_dst_regime(strategy_id)
 
             # Phase 4b: Walk-forward gate
             if status == "PASSED" and enable_walkforward:
@@ -494,6 +507,7 @@ def run_validation(
                     min_trades_per_window=wf_min_trades,
                     min_valid_windows=wf_min_windows,
                     min_pct_positive=wf_min_pct_positive,
+                    dst_regime=strat_dst_regime,
                 )
                 if not dry_run:
                     append_walkforward_result(wf_result, wf_output_path)
@@ -502,9 +516,10 @@ def run_validation(
                     notes = f"Phase 4b: {wf_result.rejection_reason}"
 
             # DST regime split (INFO phase — does not reject, adds visibility)
-            # Prefer discovery-computed values (correct for ALL filter types
-            # including VolumeFilter which compute_dst_split cannot replicate).
-            # Only recompute if discovery left them NULL.
+            # For regime-specific strategies (_W/_S), the split is already degenerate
+            # (one regime only); use the stored values from discovery.
+            # For blended strategies, prefer discovery-computed values; only recompute
+            # if discovery left them NULL.
             if row_dict.get("dst_verdict") is not None:
                 dst_split = {
                     "winter_n": row_dict.get("dst_winter_n"),
@@ -513,7 +528,8 @@ def run_validation(
                     "summer_avg_r": row_dict.get("dst_summer_avg_r"),
                     "verdict": row_dict.get("dst_verdict"),
                 }
-            else:
+            elif strat_dst_regime is None:
+                # Only recompute for blended strategies missing split data
                 dst_split = compute_dst_split(
                     con, strategy_id, instrument,
                     orb_label=row_dict["orb_label"],
@@ -524,9 +540,12 @@ def run_validation(
                     filter_params=row_dict.get("filter_params"),
                     orb_minutes=row_dict.get("orb_minutes", 5),
                 )
+            else:
+                dst_split = {"winter_n": None, "winter_avg_r": None,
+                             "summer_n": None, "summer_avg_r": None, "verdict": None}
 
-            # Log DST info for affected sessions
-            if dst_split["verdict"] not in ("CLEAN", None):
+            # Log DST info for affected blended sessions (regime-specific already logged by suffix)
+            if strat_dst_regime is None and dst_split["verdict"] not in ("CLEAN", None):
                 w_r = dst_split["winter_avg_r"]
                 s_r = dst_split["summer_avg_r"]
                 w_str = f"{w_r:+.3f}" if w_r is not None else "N/A"
@@ -645,6 +664,8 @@ def main():
                         help="Years to exclude from Phase 3 (e.g. --exclude-years 2021)")
     parser.add_argument("--min-years-positive-pct", type=float, default=1.0,
                         help="Fraction of included years that must be positive (0.0-1.0, default 1.0)")
+    parser.add_argument("--min-trades-per-year", type=int, default=1,
+                        help="Min trades for a year to count in Phase 3 robustness check (default 1)")
     parser.add_argument("--dry-run", action="store_true", help="No DB writes")
     parser.add_argument("--db", type=str, default=None,
                         help="Database path (default: gold.db)")
@@ -677,6 +698,7 @@ def main():
         max_drawdown=args.max_drawdown,
         exclude_years=exclude,
         min_years_positive_pct=args.min_years_positive_pct,
+        min_trades_per_year=args.min_trades_per_year,
         dry_run=args.dry_run,
         enable_walkforward=not args.no_walkforward,
         wf_test_months=args.wf_test_months,

@@ -84,28 +84,13 @@ Databento .dbn.zst files
 | 0030 | = US equity open (9:30AM EST = 14:30 UTC = 00:30 Bris) | US equity opened at 2330 Bris (9:30AM EDT = 13:30 UTC) | US DST |
 | 2300 | 30min BEFORE US data (8:30 EST = 13:30 UTC; 2300 = 13:00 UTC) | 30min AFTER US data (8:30 EDT = 12:30 UTC; 2300 = 13:00 UTC) | US DST |
 
-**2300 NOTE:** Unlike 0900/1800/0030 which align with their event in winter, 2300 Brisbane (13:00 UTC) NEVER catches the US data release (8:30 ET). It's always 30min off — but DST flips which side: pre-data in winter, post-data in summer. Volume data confirms: summer has 76-90% MORE volume (data already released, market reacting). The winter/summer split is still meaningful and the `"US"` classification in `dst.py` is correct.
+**2300 NOTE:** 2300 Brisbane (13:00 UTC) never catches the US data release (8:30 ET). DST flips which side: pre-data in winter, post-data in summer. Summer has 76-90% MORE volume. Winter/summer split is meaningful; `"US"` classification in `dst.py` is correct.
 
-**Which sessions are CLEAN (no DST issue):**
-- 1000 — Tokyo open. Japan has NO DST. Always aligned.
-- 1100 — Singapore open. No DST. Always aligned.
-- 1130 — HK/Shanghai open. No DST. Always aligned.
-- All dynamic sessions (CME_OPEN, LONDON_OPEN, US_EQUITY_OPEN, US_DATA_OPEN, US_POST_EQUITY, CME_CLOSE) — resolvers adjust per-day.
+**Clean sessions (no DST issue):** 1000/1100/1130 (Asia, no DST). All dynamic sessions (resolvers adjust per-day).
 
-**What's contaminated:**
-- `daily_features` columns for 0900/1800/0030/2300 ORBs
-- `orb_outcomes` rows for those sessions
-- `experimental_strategies` and `validated_setups` for those sessions
-- `edge_families` containing those sessions
-- ALL research findings about 0900/1800 in TRADING_RULES.md
-- Hypothesis tests (H1-H5) that used those sessions
-- Cross-instrument portfolio analysis at those sessions
+**Contaminated:** All daily_features/orb_outcomes/experimental_strategies/validated_setups/edge_families for 0900/1800/0030/2300. All pre-Feb 2026 blended research findings for those sessions.
 
-**What's NOT contaminated:**
-- Everything at 1000, 1100, 1130 (Asia sessions — no DST anywhere)
-- Dynamic session results (CME_OPEN, LONDON_OPEN, etc.)
-- Pipeline data integrity (bars_1m, bars_5m are raw UTC data — correct)
-- The ORB computation itself is correct — it computes the ORB at the stated clock time. The issue is that the stated clock time maps to different market events depending on DST.
+**Not contaminated:** 1000/1100/1130 results. Dynamic session results. Raw bars_1m/bars_5m (correct UTC data). ORB computation is correct — the clock time maps to different market events depending on DST, that's the issue.
 
 **DST remediation status (Feb 2026 — DONE):**
 - ✅ Validator split: DST columns on both strategy tables, auto-migrated by `init_trading_app_schema()`.
@@ -117,6 +102,10 @@ Databento .dbn.zst files
 **937 validated strategies exist** across all instruments. 2300: 4 (MGC G8+). 0030: 44 (MES 31, MNQ 13). Do NOT deprecate.
 
 **Rule for all future research:** ANY analysis touching sessions 0900/1800/0030/2300 MUST split by DST regime (US for 0900/0030/2300; UK for 1800) and report both halves. Blended numbers are misleading.
+
+### DOW Alignment (Feb 2026 — VERIFIED)
+
+`day_of_week` uses Brisbane trading day. For most sessions Brisbane DOW = exchange DOW. Exception: **0030** (crosses midnight Brisbane → Brisbane DOW = US DOW + 1). Brisbane-Friday at 0030 = US Thursday. All three active DOW filters (NOFRI@0900, NOMON@1800, NOTUE@1000) are correctly aligned. Runtime guard: `validate_dow_filter_alignment()` in `pipeline/dst.py` prevents DOW filters on misaligned sessions. Investigation: `research/research_dow_alignment.py`. Full mapping: `TRADING_RULES.md` § DOW Alignment.
 
 ---
 

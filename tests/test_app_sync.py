@@ -90,9 +90,11 @@ class TestOrbLabelsSync:
 class TestAllFiltersSync:
     """ALL_FILTERS keys must match filter_type inside each filter."""
 
-    # Base: NO_FILTER + 4 G-filters + 1 VOL-filter
+    # Base: NO_FILTER + 4 G-filters + 1 VOL-filter = 6
     # DOW composites: 3 variants (NOFRI, NOMON, NOTUE) x 4 G-filters = 12
-    # Double-break: 1 (NO_DBL_BREAK) + 4 NODBL composites = 5
+    # Break quality composites: 3 variants (FAST5, FAST10, CONT) x 4 G-filters = 12
+    # Total: 6 + 12 + 12 = 30
+    # NOTE: NODBL removed Feb 2026 — double_break is look-ahead
     EXPECTED_FILTER_KEYS = {
         "NO_FILTER",
         "ORB_G4", "ORB_G5", "ORB_G6", "ORB_G8",
@@ -101,9 +103,10 @@ class TestAllFiltersSync:
         "ORB_G4_NOFRI", "ORB_G5_NOFRI", "ORB_G6_NOFRI", "ORB_G8_NOFRI",
         "ORB_G4_NOMON", "ORB_G5_NOMON", "ORB_G6_NOMON", "ORB_G8_NOMON",
         "ORB_G4_NOTUE", "ORB_G5_NOTUE", "ORB_G6_NOTUE", "ORB_G8_NOTUE",
-        # Double-break composites (1100 session regime filter)
-        "NO_DBL_BREAK",
-        "ORB_G4_NODBL", "ORB_G5_NODBL", "ORB_G6_NODBL", "ORB_G8_NODBL",
+        # Break quality composites (Feb 2026 research: break speed + conviction)
+        "ORB_G4_FAST5", "ORB_G5_FAST5", "ORB_G6_FAST5", "ORB_G8_FAST5",
+        "ORB_G4_FAST10", "ORB_G5_FAST10", "ORB_G6_FAST10", "ORB_G8_FAST10",
+        "ORB_G4_CONT", "ORB_G5_CONT", "ORB_G6_CONT", "ORB_G8_CONT",
     }
 
     def test_expected_keys(self):
@@ -144,12 +147,10 @@ class TestAllFiltersSync:
 
     def test_size_filters_have_thresholds(self):
         """Every ORB size filter (or composite with size base) has thresholds."""
-        from trading_app.config import CompositeFilter, DoubleBreakFilter
+        from trading_app.config import CompositeFilter
         for key, filt in ALL_FILTERS.items():
             if key == "NO_FILTER" or isinstance(filt, VolumeFilter):
                 continue
-            if isinstance(filt, DoubleBreakFilter):
-                continue  # standalone double-break filter, not a size filter
             if isinstance(filt, CompositeFilter):
                 # Composite: base should be OrbSizeFilter with thresholds
                 assert isinstance(filt.base, OrbSizeFilter), (
@@ -271,21 +272,22 @@ class TestGridParamsSync:
         Session-specific DOW composites are added by get_filters_for_grid()
         per-session, expanding the grid contextually.
 
-        13 ORBs x 6 RRs x 5 CBs x 6 base filters = 2340 (E1)
+        13 ORBs x 6 RRs x 5 CBs x 6 base filters = 2340 (E0, all CB options)
+        13 ORBs x 6 RRs x 5 CBs x 6 base filters = 2340 (E1, all CB options)
         13 ORBs x 6 RRs x 1 CB x 6 base filters = 468  (E3, always CB1)
-        Total base: 2808
+        Total base: 5148
         """
         BASE_FILTER_COUNT = 6  # NO_FILTER + ORB_G4/G5/G6/G8 + VOL_RV12_N20
-        e1 = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * BASE_FILTER_COUNT
+        e0_e1 = 2 * len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * BASE_FILTER_COUNT
         e3 = len(ORB_LABELS) * len(RR_TARGETS) * 1 * BASE_FILTER_COUNT
-        expected = e1 + e3
-        assert expected == 2808
+        expected = e0_e1 + e3
+        assert expected == 5148
 
 class TestEntryModelsSync:
     """ENTRY_MODELS must be consistent."""
 
     def test_entry_models_exact(self):
-        assert ENTRY_MODELS == ["E1", "E3"]
+        assert ENTRY_MODELS == ["E0", "E1", "E3"]
 
     def test_entry_models_no_duplicates(self):
         assert len(ENTRY_MODELS) == len(set(ENTRY_MODELS))
@@ -368,7 +370,7 @@ class TestStrategyIdSync:
                             sid = make_strategy_id("MGC", orb, em, rr, cb, fk)
                             assert sid not in ids, f"Duplicate ID: {sid}"
                             ids.add(sid)
-        assert len(ids) == 2808
+        assert len(ids) == 5148
 
 # ============================================================================
 # 5. DB schema column sync

@@ -82,6 +82,52 @@ DST_CLEAN_SESSIONS = {"1000", "1100", "1130",
                        "US_POST_EQUITY", "CME_CLOSE"}
 
 
+# =========================================================================
+# DOW ALIGNMENT — Brisbane DOW vs Exchange-Timezone DOW
+# =========================================================================
+# For each fixed session, whether the Brisbane calendar day matches the
+# exchange's calendar day.  Determines if a DayOfWeekSkipFilter targeting
+# e.g. "Friday" actually skips the exchange's Friday session.
+#
+# Investigation: research/research_dow_alignment.py (Feb 2026)
+#
+# Result: all sessions EXCEPT 0030 are aligned.
+#   0900: Brisbane-Fri = CME Friday (5PM Thu CT = start of CME Fri session) ✓
+#   1000: Brisbane DOW = Tokyo DOW (no DST, same calendar day) ✓
+#   1100: Brisbane DOW = Singapore DOW (no DST) ✓
+#   1130: Brisbane DOW = HK DOW (no DST) ✓
+#   1800: Brisbane DOW = London DOW (both morning same calendar day) ✓
+#   2300: Brisbane DOW = US DOW (13:00 UTC = US morning same day) ✓
+#   0030: Brisbane DOW = US DOW + 1 (00:30 Bris = 14:30 UTC PREV day) ✗
+#
+# The 0030 mismatch: Brisbane 00:30 crosses midnight from the previous UTC
+# day.  Brisbane-Friday 00:30 = UTC Thursday 14:30 = US Thursday 9:30 AM.
+# So Brisbane-Friday at 0030 is the US THURSDAY equity open.
+# Any DOW filter for 0030 must account for this -1 day offset.
+
+DOW_ALIGNED_SESSIONS = {"0900", "1000", "1100", "1130", "1800", "2300"}
+DOW_MISALIGNED_SESSIONS = {
+    "0030": -1,  # Brisbane DOW = exchange DOW + 1 (i.e. exchange is 1 day behind)
+}
+
+
+def validate_dow_filter_alignment(session: str, skip_days: tuple[int, ...]) -> None:
+    """Fail-closed guard: prevent DOW filters on sessions with known misalignment.
+
+    Raises ValueError if a DOW skip filter is applied to a session where
+    Brisbane DOW != exchange DOW, unless the caller has explicitly handled
+    the offset (not yet implemented — 0030 has no DOW filters currently).
+    """
+    offset = DOW_MISALIGNED_SESSIONS.get(session)
+    if offset is not None and skip_days:
+        raise ValueError(
+            f"DOW filter with skip_days={skip_days} applied to session '{session}' "
+            f"which has a Brisbane→Exchange DOW offset of {offset} day(s). "
+            f"Brisbane-Friday at {session} = US Thursday (not US Friday). "
+            f"Either use exchange-adjusted DOW or remove the filter."
+        )
+
+
 def is_winter_for_session(trading_day: date, orb_label: str) -> bool | None:
     """Classify a trading day as winter (True) or summer (False) for a given session.
 

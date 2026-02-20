@@ -180,8 +180,12 @@ def build_day_arrays(bars_df):
     return all_days, highs, lows, closes
 
 
-def scan_session(highs, lows, closes, bris_h, bris_m):
-    """Return per-day results for all break-days (no size filter)."""
+def scan_session(highs, lows, closes, bris_h, bris_m, rr=None):
+    """Return per-day results for all break-days (no size filter).
+
+    rr: reward-to-risk target (defaults to module-level RR_TARGET).
+    """
+    rr = rr if rr is not None else RR_TARGET
     n_days = highs.shape[0]
     start_min = ((bris_h - 9) % 24) * 60 + bris_m
     orb_mins = [start_min + i for i in range(APERTURE_MIN)]
@@ -217,7 +221,7 @@ def scan_session(highs, lows, closes, bris_h, bris_m):
         if break_dir is None:
             continue
 
-        target = entry + (RR_TARGET if break_dir == "long" else -RR_TARGET) * os_val
+        target = entry + (rr if break_dir == "long" else -rr) * os_val
         stop = ol if break_dir == "long" else oh
         max_om = min(break_at + 1 + OUTCOME_WINDOW, 1440)
         outcome_r, last_close = None, entry
@@ -229,11 +233,11 @@ def scan_session(highs, lows, closes, bris_h, bris_m):
             if break_dir == "long":
                 if l <= stop and h >= target: outcome_r = -1.0; break
                 if l <= stop: outcome_r = -1.0; break
-                if h >= target: outcome_r = RR_TARGET; break
+                if h >= target: outcome_r = rr; break
             else:
                 if h >= stop and l <= target: outcome_r = -1.0; break
                 if h >= stop: outcome_r = -1.0; break
-                if l <= target: outcome_r = RR_TARGET; break
+                if l <= target: outcome_r = rr; break
         if outcome_r is None:
             outcome_r = ((last_close - entry) / os_val if break_dir == "long"
                          else (entry - last_close) / os_val)
@@ -484,6 +488,182 @@ def q3_macro_overlay(data_cache):
 
 
 # =========================================================================
+# Q3b: BH FDR correction across all Q3 event overlay tests
+# =========================================================================
+
+def _bh_reject(p_values: np.ndarray, alpha: float = 0.05) -> np.ndarray:
+    """Benjamini-Hochberg FDR correction. Returns bool array (True = reject null)."""
+    m = len(p_values)
+    if m == 0:
+        return np.array([], dtype=bool)
+    order = np.argsort(p_values)
+    sorted_p = p_values[order]
+    thresholds = (np.arange(1, m + 1) / m) * alpha
+    below = sorted_p <= thresholds
+    if not np.any(below):
+        return np.zeros(m, dtype=bool)
+    max_k = int(np.where(below)[0][-1])
+    reject = np.zeros(m, dtype=bool)
+    reject[order[: max_k + 1]] = True
+    return reject
+
+
+def _collect_event_stats(data_cache, rr: float, n_perm: int, rng: np.random.Generator
+                         ) -> list[dict]:
+    """Run Q3-style event overlay for a given RR target and return per-combo stats."""
+    fomc_dates = build_fomc_dates()
+    nfp_dates = build_nfp_dates()
+    opex_dates = build_opex_dates()
+    event_map = [("FOMC", fomc_dates), ("NFP", nfp_dates), ("OPEX", opex_dates)]
+    q3_filters = [("G4+", 4.0, None), ("G6+", 6.0, None)]
+
+    rows = []
+    for instrument in INSTRUMENTS:
+        if instrument not in data_cache:
+            continue
+        all_days, highs, lows, closes = data_cache[instrument]
+
+        for session in SESSIONS:
+            bh, bm = int(session[:2]), int(session[2:])
+            per_day = scan_session(highs, lows, closes, bh, bm, rr=rr)
+
+            for fname, flo, fhi in q3_filters:
+                filtered = {
+                    di: r for di, r in per_day.items()
+                    if r["orb_size"] >= flo and (fhi is None or r["orb_size"] < fhi)
+                }
+                if len(filtered) < 30:
+                    continue
+
+                outcomes = np.array([r["outcome_r"] for r in filtered.values()])
+                days = [all_days[di] for di in filtered]
+
+                for event_name, event_dates in event_map:
+                    labels = np.array([td in event_dates for td in days])
+                    on = outcomes[labels]
+                    off = outcomes[~labels]
+
+                    if len(on) < 5:
+                        continue
+
+                    obs_delta = float(np.mean(on) - np.mean(off))
+
+                    # Permutation test (two-tailed)
+                    n_on = len(on)
+                    perm_deltas = np.empty(n_perm)
+                    for i in range(n_perm):
+                        perm = rng.permutation(len(outcomes))
+                        perm_deltas[i] = np.mean(outcomes[perm[:n_on]]) - np.mean(outcomes[perm[n_on:]])
+                    p_raw = float(np.mean(np.abs(perm_deltas) >= abs(obs_delta)))
+
+                    rows.append({
+                        "instrument": instrument,
+                        "session": session,
+                        "filter": fname,
+                        "event": event_name,
+                        "on_n": int(len(on)),
+                        "off_n": int(len(off)),
+                        "on_avgR": float(np.mean(on)),
+                        "off_avgR": float(np.mean(off)),
+                        "delta": obs_delta,
+                        "p_raw": p_raw,
+                    })
+    return rows
+
+
+def q3b_fdr_correction(data_cache, n_perm: int = 1000, alpha: float = 0.05):
+    """
+    Part Q3b: Permutation test + Benjamini-Hochberg FDR correction across all
+    Q3 event overlay tests (instrument × session × filter × event).
+
+    Primary analysis at RR2.0; sensitivity check at RR1.5 and RR2.5.
+    Saves results to research/output/day_of_week_q3b_fdr.csv.
+    """
+    print(f"\n{'=' * 100}")
+    print(f"  Q3b: PERMUTATION TEST + BENJAMINI-HOCHBERG FDR CORRECTION")
+    print(f"  n_perm={n_perm} | alpha={alpha} | primary RR=2.0 | sensitivity RR=1.5, 2.5")
+    print(f"{'=' * 100}")
+
+    rng = np.random.default_rng(42)
+
+    # --- Primary analysis at RR 2.0 ---
+    print(f"\n  Running permutation tests at RR2.0...")
+    t0 = time.time()
+    primary = _collect_event_stats(data_cache, rr=2.0, n_perm=n_perm, rng=rng)
+    print(f"  {len(primary)} combos tested in {time.time() - t0:.1f}s")
+
+    if not primary:
+        print("  No combos passed min-N gates. Skipping Q3b.")
+        return []
+
+    # Apply BH across all primary tests
+    p_arr = np.array([r["p_raw"] for r in primary])
+    bh_reject = _bh_reject(p_arr, alpha=alpha)
+    for i, row in enumerate(primary):
+        row["survives_bh"] = bool(bh_reject[i])
+
+    n_survive = int(np.sum(bh_reject))
+    print(f"\n  BH correction: {len(primary)} tests, {n_survive} survive at FDR={alpha}")
+
+    # --- Sensitivity at RR1.5 and RR2.5 ---
+    sens_index: dict[tuple, dict] = {}
+    for rr_label, rr_val in [("rr15", 1.5), ("rr25", 2.5)]:
+        print(f"  Running sensitivity tests at RR{rr_val}...")
+        sens_rows = _collect_event_stats(data_cache, rr=rr_val, n_perm=n_perm, rng=rng)
+        for r in sens_rows:
+            key = (r["instrument"], r["session"], r["filter"], r["event"])
+            sens_index.setdefault(key, {})[rr_label] = {
+                "delta": r["delta"], "p_raw": r["p_raw"],
+            }
+
+    # Merge sensitivity into primary rows
+    for row in primary:
+        key = (row["instrument"], row["session"], row["filter"], row["event"])
+        for rr_label in ("rr15", "rr25"):
+            sens = sens_index.get(key, {}).get(rr_label, {})
+            row[f"delta_{rr_label}"] = sens.get("delta", None)
+            row[f"p_raw_{rr_label}"] = sens.get("p_raw", None)
+
+        # Sensitivity consistent = all three deltas same sign
+        deltas = [row["delta"], row.get("delta_rr15"), row.get("delta_rr25")]
+        deltas = [d for d in deltas if d is not None]
+        row["sensitivity_consistent"] = (
+            all(d > 0 for d in deltas) or all(d < 0 for d in deltas)
+        ) if len(deltas) == 3 else None
+
+    # --- Print survivors ---
+    survivors = [r for r in primary if r["survives_bh"]]
+    if survivors:
+        print(f"\n  SURVIVORS (BH-corrected p<{alpha}):")
+        print(f"  {'Combo':<45} {'N_on':>5} {'delta_RR20':>10} {'p_raw':>7} "
+              f"{'d_RR15':>8} {'d_RR25':>8} {'consistent':>11}")
+        print(f"  {'-' * 100}")
+        for r in sorted(survivors, key=lambda x: x["p_raw"]):
+            combo = f"{r['instrument']} {r['session']} {r['filter']} {r['event']}"
+            d15 = f"{r['delta_rr15']:+.3f}" if r.get("delta_rr15") is not None else "  n/a"
+            d25 = f"{r['delta_rr25']:+.3f}" if r.get("delta_rr25") is not None else "  n/a"
+            cons = str(r["sensitivity_consistent"])
+            print(f"  {combo:<45} {r['on_n']:5d} {r['delta']:+10.3f} "
+                  f"{r['p_raw']:7.4f} {d15:>8} {d25:>8} {cons:>11}")
+    else:
+        print(f"\n  NO signals survive BH correction at FDR={alpha}.")
+        print(f"  Strongest raw signal:")
+        best = min(primary, key=lambda x: x["p_raw"])
+        print(f"    {best['instrument']} {best['session']} {best['filter']} {best['event']}: "
+              f"delta={best['delta']:+.3f} p_raw={best['p_raw']:.4f}")
+
+    # --- Near-misses (p_raw < 0.10, didn't survive BH) ---
+    near_miss = [r for r in primary if not r["survives_bh"] and r["p_raw"] < 0.10]
+    if near_miss:
+        print(f"\n  Near-misses (p_raw<0.10, didn't survive BH):")
+        for r in sorted(near_miss, key=lambda x: x["p_raw"])[:10]:
+            combo = f"{r['instrument']} {r['session']} {r['filter']} {r['event']}"
+            print(f"    {combo:<45} delta={r['delta']:+.3f}  p_raw={r['p_raw']:.4f}")
+
+    return primary
+
+
+# =========================================================================
 # Consistency check: is the pattern stable across years?
 # =========================================================================
 
@@ -589,6 +769,7 @@ def main():
         q2_rows = q2_skip_filter(data_cache, q1_rows)
         q3_rows = q3_macro_overlay(data_cache)
         q4_yearly_stability(data_cache)
+        q3b_rows = q3b_fdr_correction(data_cache)
 
         # Save CSVs
         out = Path("research/output")
@@ -603,6 +784,9 @@ def main():
         if q3_rows:
             pd.DataFrame(q3_rows).to_csv(out / "day_of_week_macro_overlay.csv",
                                           index=False, float_format="%.4f")
+        if q3b_rows:
+            pd.DataFrame(q3b_rows).to_csv(out / "day_of_week_q3b_fdr.csv",
+                                           index=False, float_format="%.4f")
 
         print(f"\n  CSVs saved to research/output/day_of_week_*.csv")
         print(f"  Total: {time.time() - t_total:.1f}s")

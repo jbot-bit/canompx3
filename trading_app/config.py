@@ -209,6 +209,47 @@ class DoubleBreakFilter(StrategyFilter):
 
 
 @dataclass(frozen=True)
+class BreakSpeedFilter(StrategyFilter):
+    """Filter by break delay: minutes from ORB end to first break.
+
+    Fast breaks (low delay) indicate momentum / conviction.
+    Slow breaks indicate grinding / indecision.
+
+    Uses orb_{label}_break_delay_min from daily_features.
+    Fail-closed: missing data means day is ineligible.
+    """
+
+    max_delay_min: float = 5.0
+
+    def matches_row(self, row: dict, orb_label: str) -> bool:
+        delay = row.get(f"orb_{orb_label}_break_delay_min")
+        if delay is None:
+            return False  # fail-closed: no break or no data
+        return delay <= self.max_delay_min
+
+
+@dataclass(frozen=True)
+class BreakBarContinuesFilter(StrategyFilter):
+    """Filter by break bar direction: does the break bar close in the break direction?
+
+    A break bar that closes as a green candle (for longs) or red candle
+    (for shorts) shows conviction. A reversal candle at the break point
+    = weak breakout.
+
+    Uses orb_{label}_break_bar_continues from daily_features.
+    Fail-closed: missing data means day is ineligible.
+    """
+
+    require_continues: bool = True
+
+    def matches_row(self, row: dict, orb_label: str) -> bool:
+        continues = row.get(f"orb_{orb_label}_break_bar_continues")
+        if continues is None:
+            return False  # fail-closed
+        return continues == self.require_continues
+
+
+@dataclass(frozen=True)
 class CompositeFilter(StrategyFilter):
     """Chain two filters: base AND overlay must both pass."""
 
@@ -249,6 +290,25 @@ MGC_VOLUME_FILTERS = {
         lookback_days=20,
     ),
 }
+
+# Break quality filters (research: break_quality_deep, Feb 2026)
+# Break speed: fast breaks (<= N min from ORB end) select momentum days
+_BREAK_SPEED_FAST5 = BreakSpeedFilter(
+    filter_type="BRK_FAST5",
+    description="Break within 5 min of ORB end",
+    max_delay_min=5.0,
+)
+_BREAK_SPEED_FAST10 = BreakSpeedFilter(
+    filter_type="BRK_FAST10",
+    description="Break within 10 min of ORB end",
+    max_delay_min=10.0,
+)
+# Break bar conviction: break bar closes in break direction
+_BREAK_BAR_CONTINUES = BreakBarContinuesFilter(
+    filter_type="BRK_CONT",
+    description="Break bar continues in break direction",
+    require_continues=True,
+)
 
 # Direction filters (H5: 1000 session shorts are noise; long-only doubles avgR)
 DIR_LONG = DirectionFilter(
@@ -336,6 +396,22 @@ def _make_dbl_composites(
     }
 
 
+def _make_break_quality_composites(
+    size_filters: dict[str, StrategyFilter],
+    bq_filter: StrategyFilter,
+    suffix: str,
+) -> dict[str, CompositeFilter]:
+    """Build CompositeFilter(size + break quality) for each size filter."""
+    return {
+        f"{key}_{suffix}": CompositeFilter(
+            filter_type=f"{key}_{suffix}",
+            description=f"{filt.description} + {bq_filter.description}",
+            base=filt, overlay=bq_filter,
+        )
+        for key, filt in size_filters.items()
+    }
+
+
 # Base discovery grid filters — no session-specific DOW composites.
 # get_filters_for_grid() starts from this so sessions that don't declare a
 # DOW rule (e.g. 1100, 2300, 0030) never inherit composites from other sessions.
@@ -346,17 +422,17 @@ BASE_GRID_FILTERS: dict[str, StrategyFilter] = {
     **MGC_VOLUME_FILTERS,
 }
 
-# Master filter registry — base + all DOW composites + double-break composites.
+# Master filter registry — base + all DOW composites + break quality composites.
 # Portfolio.py looks up filters by filter_type key from this registry.
-# Count: 1 (NO_FILTER) + 4 (ORB G4/G5/G6/G8) + 1 (VOL) + 12 (DOW composites)
-#        + 1 (NO_DBL_BREAK) + 4 (NODBL composites) = 23
+# Count: 1 (NO_FILTER) + 4 (ORB G4-G8) + 1 (VOL) + 12 (DOW) + 8 (BRK_FAST5/CONT) = 26
 ALL_FILTERS: dict[str, StrategyFilter] = {
     **BASE_GRID_FILTERS,
     **_make_dow_composites(_GRID_SIZE_FILTERS_ORB, _DOW_SKIP_FRIDAY,  "NOFRI"),
     **_make_dow_composites(_GRID_SIZE_FILTERS_ORB, _DOW_SKIP_MONDAY,  "NOMON"),
     **_make_dow_composites(_GRID_SIZE_FILTERS_ORB, _DOW_SKIP_TUESDAY, "NOTUE"),
-    "NO_DBL_BREAK": NO_DBL_BREAK,
-    **_make_dbl_composites(_GRID_SIZE_FILTERS_ORB, NO_DBL_BREAK, "NODBL"),
+    **_make_break_quality_composites(_GRID_SIZE_FILTERS_ORB, _BREAK_SPEED_FAST5, "FAST5"),
+    **_make_break_quality_composites(_GRID_SIZE_FILTERS_ORB, _BREAK_SPEED_FAST10, "FAST10"),
+    **_make_break_quality_composites(_GRID_SIZE_FILTERS_ORB, _BREAK_BAR_CONTINUES, "CONT"),
 }
 
 # Calendar skip overlays (NOT in discovery grid — applied at portfolio/paper_trader level)
@@ -374,34 +450,63 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
     only added when a session has a research basis for them. Sessions without a
     declared DOW rule (1100, 2300, 0030) return the plain base set.
 
+    DOW alignment guard: All DOW filters are validated against the canonical
+    Brisbane→Exchange DOW mapping (pipeline/dst.py). Sessions where Brisbane
+    DOW != exchange DOW (currently only 0030) will raise ValueError if a
+    DOW filter is applied — prevents silent misalignment.
+
+    Break quality filters (Feb 2026 research):
+    - Sessions "0900", "1000", "1800": adds break speed + conviction composites
+      for each G-filter. Research basis: break_quality_deep.py showed fast breaks
+      and conviction candles predict success on momentum sessions.
+
     - Session "0900": adds DOW composite (skip Friday) for each G-filter
     - Session "1800": adds DOW composite (skip Monday) for each G-filter
     - Session "1000": adds DIR_LONG (H5) + DOW composite (skip Tuesday) for each G-filter
     - MES + "1000": also adds G4_L12, G5_L12 band filters (H2 confirmed)
     - All other combos: returns BASE_GRID_FILTERS unchanged
     """
+    from pipeline.dst import validate_dow_filter_alignment
+
     filters = dict(BASE_GRID_FILTERS)
+
+    # Break quality composites for momentum sessions (0900, 1000, 1800)
+    if session in ("0900", "1000", "1800"):
+        filters.update(_make_break_quality_composites(
+            _GRID_SIZE_FILTERS_ORB, _BREAK_SPEED_FAST5, "FAST5"))
+        filters.update(_make_break_quality_composites(
+            _GRID_SIZE_FILTERS_ORB, _BREAK_SPEED_FAST10, "FAST10"))
+        filters.update(_make_break_quality_composites(
+            _GRID_SIZE_FILTERS_ORB, _BREAK_BAR_CONTINUES, "CONT"))
+
     if session == "0900":
+        validate_dow_filter_alignment(session, _DOW_SKIP_FRIDAY.skip_days)
         filters.update(_make_dow_composites(_GRID_SIZE_FILTERS_ORB, _DOW_SKIP_FRIDAY, "NOFRI"))
     if session == "1800":
+        validate_dow_filter_alignment(session, _DOW_SKIP_MONDAY.skip_days)
         filters.update(_make_dow_composites(_GRID_SIZE_FILTERS_ORB, _DOW_SKIP_MONDAY, "NOMON"))
     if session == "1000":
+        validate_dow_filter_alignment(session, _DOW_SKIP_TUESDAY.skip_days)
         filters["DIR_LONG"] = DIR_LONG
         filters.update(_make_dow_composites(_GRID_SIZE_FILTERS_ORB, _DOW_SKIP_TUESDAY, "NOTUE"))
     if instrument == "MES" and session == "1000":
         filters.update(_MES_1000_BAND_FILTERS)
-    if session == "1100":
-        filters["NO_DBL_BREAK"] = NO_DBL_BREAK
-        filters.update(_make_dbl_composites(_GRID_SIZE_FILTERS_ORB, NO_DBL_BREAK, "NODBL"))
+    # REMOVED (Feb 2026): NO_DBL_BREAK / NODBL composites for 1100.
+    # double_break column is LOOK-AHEAD — computed over full session AFTER
+    # trade entry. Cannot be used as a pre-entry filter. All 6 validated
+    # strategies using NODBL were artifacts of hindsight bias.
+    # See research: cross-session context (0900 dbl resolved + 1000 early dbl)
+    # is the legitimate version of this idea.
     return filters
 
 
 # Entry models: realistic fill assumptions for backtesting
+# E0 = Limit at ORB level ON the confirm bar itself (always fills for CB1; partial for CB2+)
 # E1 = Market at next bar open after confirm (momentum entry)
-# E3 = Limit order at ORB level, waiting for retrace (better price, may not fill)
+# E3 = Limit order at ORB level, waiting for retrace after confirm (may not fill)
 # E2 was removed: identical to E1 on 1-minute bars (same days, same N, same WR)
 # See entry_rules.py for implementation: detect_confirm() + resolve_entry()
-ENTRY_MODELS = ["E1", "E3"]
+ENTRY_MODELS = ["E0", "E1", "E3"]
 
 # =========================================================================
 # Variable Aperture: session-specific ORB duration (minutes)

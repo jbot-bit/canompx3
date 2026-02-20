@@ -134,6 +134,29 @@ Three actionable calendar skip filters confirmed by `research/research_day_of_we
 
 Calendar filters implemented in `pipeline/calendar_filters.py`. Filter classes and `CALENDAR_OVERLAYS` defined in `trading_app/config.py`. **Infrastructure complete** (columns in `daily_features`, filter classes, tests) but **not yet wired** into `portfolio.py` / `paper_trader.py` execution. CSVs: `research/output/day_of_week_*.csv`.
 
+### DOW Alignment: Brisbane DOW vs Exchange DOW (Feb 2026)
+
+The `day_of_week` column uses the Brisbane trading day. For sessions before midnight Brisbane (0900–2300), Brisbane DOW = exchange DOW. For sessions after midnight Brisbane (0030), Brisbane DOW ≠ exchange DOW.
+
+**Investigation:** `research/research_dow_alignment.py`. Canonical mapping in `pipeline/dst.py` (`DOW_ALIGNED_SESSIONS`, `DOW_MISALIGNED_SESSIONS`).
+
+| Session | Brisbane DOW = Exchange DOW? | Detail |
+|---------|------------------------------|--------|
+| 0900 | ✓ ALIGNED | Bris-Fri 0900 = UTC Thu 23:00 = CME Fri session (5PM Thu CT = start of CME Fri) |
+| 1000 | ✓ ALIGNED | Bris-DOW = Tokyo DOW (no DST, UTC+9 same calendar day) |
+| 1100 | ✓ ALIGNED | Bris-DOW = Singapore DOW (no DST) |
+| 1130 | ✓ ALIGNED | Bris-DOW = HK DOW (no DST) |
+| 1800 | ✓ ALIGNED | Bris-DOW = London DOW (08:00 UTC = London morning same day) |
+| 2300 | ✓ ALIGNED | Bris-DOW = US DOW (13:00 UTC = US morning same day) |
+| 0030 | ✗ MISALIGNED (-1) | Bris-Fri 00:30 = UTC Thu 14:30 = US Thursday 9:30 AM |
+
+**Implication for 0030:** Brisbane-Friday at 0030 is the US THURSDAY equity open. Any DOW research at 0030 using Brisbane DOW is offset by -1 day relative to the US calendar. Currently harmless (0030 has no DOW filter in grid), but MUST be accounted for if DOW filters are ever added. `validate_dow_filter_alignment()` in `dst.py` enforces this at runtime.
+
+**All three active DOW filters are correctly aligned:**
+- NOFRI@0900 → skips CME Friday ✓
+- NOMON@1800 → skips London Monday ✓
+- NOTUE@1000 → skips Tokyo Tuesday ✓
+
 ---
 
 ## DST CONTAMINATION WARNING (Feb 2026)
@@ -508,10 +531,16 @@ This is why small ORBs lose — friction eats the edge.
 | Nested 15m ORB for 1000 | +0.208R premium, 90% pairs improve | VALIDATED |
 | IB 120m direction alignment | Opposed=3% WR. Cross-validated 0900+1000. | DEPLOYED |
 | 1100 permanent exclusion | 74% double-break, all signals failed | DEPLOYED |
+| **C8: Breakeven stop after 30-bar clean hold** | N=28 at MGC 1000 (14 losses, avg -0.84R → 0R). Fires if 30 post-entry bars close outside ORB with no stop hit, then price returns inside ORB. Improvement: +0.42R/trade on affected set. All sessions. | **DEPLOYED in outcome_builder.py** |
+| **C3: Skip slow breaks at 1000 (>3 min confirm)** | Fast (≤3 min) avg +0.213R vs slow (>3 min) -0.339R at 1000 (delta=+0.552R). 0900/1800 show positive delta too but not BH-validated cross-session. | **DEPLOYED in outcome_builder.py (1000 only)** |
 
 ## Pending / Inconclusive
 | Idea | Status | Notes |
 |------|--------|-------|
+| **Time-based exit gate** | **NEXT STEP** | Winner speed confirms T80 ≤ 45m at RR1.0 and 90-170m at RR2.5-3.0. Sessions held for 480m carry 300-450m of dead exposure. Next: does pnl_r on positions still open past T80 justify continued hold? Script: `research/research_winner_speed.py`. Full data: `research/output/winner_speed_summary.csv`. |
+| **C3 cross-session** | INVESTIGATE | 0900 delta=+0.257R, 1800 delta=+0.232R. Not BH-validated. Deployed 1000-only for now. |
+| **C9 (bar-30 exit rule)** | NO-GO | Bar-30 close avg = +0.017R at 1000 (expected -0.42 to -0.67R). Bar-30 position is near-neutral; forced exit would sacrifice residual wins. Do not implement. |
+| **C5 (entry bar continues filter)** | PROMISING | True avg +0.360R vs False -0.113R at 1000 (delta +0.473R, N=64/78). Not yet wired as pre-trade filter. |
 | 30m nested ORB | NOT BUILT | 15m done, 30m not yet populated |
 | RSI directional confirmation | Low confidence | RSI 60+ LONG = +0.81R but N=24. Monitor. |
 | Percentage-based ORB filter | Not tested | 0.15% of price ≈ G5. Auto-adapts to price level. |

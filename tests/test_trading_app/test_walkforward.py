@@ -44,7 +44,8 @@ def _create_tables(con):
             orb_minutes INTEGER,
             trading_day DATE,
             orb_0900_size DOUBLE,
-            orb_0900_break_dir VARCHAR
+            orb_0900_break_dir VARCHAR,
+            day_of_week INTEGER
         )
     """)
 
@@ -298,9 +299,10 @@ class TestWalkForward:
             for month in range(1, 13):
                 size = 6.0 if month % 2 == 0 else 3.0
                 for day in [10, 15, 20]:
+                    d = date(year, month, day)
                     con.execute(
-                        "INSERT INTO daily_features VALUES (?,?,?,?,?)",
-                        ["MGC", 5, date(year, month, day), size, "long"],
+                        "INSERT INTO daily_features VALUES (?,?,?,?,?,?)",
+                        ["MGC", 5, d, size, "long", d.weekday()],
                     )
 
         result_no_filter = run_walkforward(

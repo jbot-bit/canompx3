@@ -318,14 +318,25 @@ def detect_break(bars_df: pd.DataFrame, trading_day: date,
     Break long: close > orb_high
     Break short: close < orb_low
 
-    Returns dict: break_dir ('long'/'short'/None), break_ts (datetime/None)
+    Returns dict with keys:
+      break_dir ('long'/'short'/None)
+      break_ts (datetime/None)
+      break_delay_min (float/None) - minutes from ORB end to first break
+      break_bar_continues (bool/None) - break bar closes in break direction
     """
+    no_break = {
+        "break_dir": None, "break_ts": None,
+        "break_delay_min": None, "break_bar_continues": None,
+    }
+
     if orb_high is None or orb_low is None:
-        return {"break_dir": None, "break_ts": None}
+        return no_break
 
     window_start, window_end = _break_detection_window(
         trading_day, orb_label, orb_minutes
     )
+    # window_start = ORB end time (start of break detection window)
+    orb_end = window_start
 
     # Filter bars in break detection window
     mask = (bars_df['ts_utc'] >= window_start) & (bars_df['ts_utc'] < window_end)
@@ -333,18 +344,27 @@ def detect_break(bars_df: pd.DataFrame, trading_day: date,
 
     for _, bar in window_bars.iterrows():
         close = float(bar['close'])
+        bar_open = float(bar['open'])
+        bar_ts = bar['ts_utc'].to_pydatetime()
+
         if close > orb_high:
+            delay = (bar_ts - orb_end).total_seconds() / 60.0
             return {
                 "break_dir": "long",
-                "break_ts": bar['ts_utc'].to_pydatetime(),
+                "break_ts": bar_ts,
+                "break_delay_min": delay,
+                "break_bar_continues": close > bar_open,  # green candle = continuation
             }
         elif close < orb_low:
+            delay = (bar_ts - orb_end).total_seconds() / 60.0
             return {
                 "break_dir": "short",
-                "break_ts": bar['ts_utc'].to_pydatetime(),
+                "break_ts": bar_ts,
+                "break_delay_min": delay,
+                "break_bar_continues": close < bar_open,  # red candle = continuation
             }
 
-    return {"break_dir": None, "break_ts": None}
+    return no_break
 
 def detect_double_break(bars_df: pd.DataFrame, trading_day: date,
                          orb_label: str, orb_minutes: int,
@@ -731,6 +751,8 @@ def build_features_for_day(con: duckdb.DuckDBPyConnection, symbol: str,
         )
         row[f"orb_{label}_break_dir"] = brk["break_dir"]
         row[f"orb_{label}_break_ts"] = brk["break_ts"]
+        row[f"orb_{label}_break_delay_min"] = brk["break_delay_min"]
+        row[f"orb_{label}_break_bar_continues"] = brk["break_bar_continues"]
 
         # Module 6: Outcome + MAE/MFE
         outcome = compute_outcome(

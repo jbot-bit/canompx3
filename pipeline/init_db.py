@@ -92,29 +92,33 @@ ORB_LABELS = ORB_LABELS_FIXED + ORB_LABELS_DYNAMIC
 def _build_daily_features_ddl() -> str:
     """Generate CREATE TABLE DDL for daily_features.
 
-    Columns per ORB (9 each):
-      orb_{label}_high         - ORB range high
-      orb_{label}_low          - ORB range low
-      orb_{label}_size         - high - low (points)
-      orb_{label}_break_dir    - 'long', 'short', or NULL (no break)
-      orb_{label}_break_ts     - timestamp of first break (1m close outside range)
-      orb_{label}_outcome      - outcome at RR=1.0 ('win', 'loss', 'scratch', NULL)
-      orb_{label}_mae_r        - max adverse excursion in R (NULL until cost model)
-      orb_{label}_mfe_r        - max favorable excursion in R (NULL until cost model)
-      orb_{label}_double_break - True if BOTH ORB high and low were breached
+    Columns per ORB (11 each):
+      orb_{label}_high              - ORB range high
+      orb_{label}_low               - ORB range low
+      orb_{label}_size              - high - low (points)
+      orb_{label}_break_dir         - 'long', 'short', or NULL (no break)
+      orb_{label}_break_ts          - timestamp of first break (1m close outside range)
+      orb_{label}_break_delay_min   - minutes from ORB end to first break (NULL if no break)
+      orb_{label}_break_bar_continues - break bar closes in break direction (True/False/NULL)
+      orb_{label}_outcome           - outcome at RR=1.0 ('win', 'loss', 'scratch', NULL)
+      orb_{label}_mae_r             - max adverse excursion in R (NULL until cost model)
+      orb_{label}_mfe_r             - max favorable excursion in R (NULL until cost model)
+      orb_{label}_double_break      - True if BOTH ORB high and low were breached
     """
     orb_cols = []
     for label in ORB_LABELS:
         orb_cols.extend([
-            f"    orb_{label}_high         DOUBLE,",
-            f"    orb_{label}_low          DOUBLE,",
-            f"    orb_{label}_size         DOUBLE,",
-            f"    orb_{label}_break_dir    TEXT,",
-            f"    orb_{label}_break_ts     TIMESTAMPTZ,",
-            f"    orb_{label}_outcome      TEXT,",
-            f"    orb_{label}_mae_r        DOUBLE,",
-            f"    orb_{label}_mfe_r        DOUBLE,",
-            f"    orb_{label}_double_break BOOLEAN,",
+            f"    orb_{label}_high              DOUBLE,",
+            f"    orb_{label}_low               DOUBLE,",
+            f"    orb_{label}_size              DOUBLE,",
+            f"    orb_{label}_break_dir         TEXT,",
+            f"    orb_{label}_break_ts          TIMESTAMPTZ,",
+            f"    orb_{label}_break_delay_min   DOUBLE,",
+            f"    orb_{label}_break_bar_continues BOOLEAN,",
+            f"    orb_{label}_outcome           TEXT,",
+            f"    orb_{label}_mae_r             DOUBLE,",
+            f"    orb_{label}_mfe_r             DOUBLE,",
+            f"    orb_{label}_double_break      BOOLEAN,",
         ])
     orb_block = "\n".join(orb_cols)
 
