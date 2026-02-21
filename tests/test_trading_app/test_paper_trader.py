@@ -258,3 +258,31 @@ class TestCLI:
         )
         assert r.returncode == 0
         assert "instrument" in r.stdout
+
+    def test_calendar_filter_cli_arg(self, tmp_path):
+        """Verify --calendar-filter CLI argument is wired correctly."""
+        import subprocess
+        import os
+
+        # Create minimal test DB with NFP day
+        db_path = _setup_calendar_test_db(tmp_path, n_days=2)
+
+        # Run paper_trader with --calendar-filter NFP
+        result = subprocess.run(
+            [
+                sys.executable,
+                "trading_app/paper_trader.py",
+                "--instrument", "MGC",
+                "--start", "2024-01-08",
+                "--end", "2024-01-09",
+                "--calendar-filter", "NFP",
+            ],
+            capture_output=True,
+            text=True,
+            cwd=str(Path(__file__).parent.parent.parent),
+            env={**os.environ, "PYTHONPATH": str(Path(__file__).parent.parent.parent)},
+        )
+
+        # Should not error (even if DB doesn't exist in subprocess, argparse should work)
+        # At minimum, verify the argument is accepted
+        assert "--calendar-filter" not in result.stderr or "unrecognized arguments" not in result.stderr

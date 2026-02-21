@@ -30,7 +30,7 @@ from pipeline.cost_model import get_cost_spec
 from trading_app.portfolio import Portfolio, build_portfolio
 from trading_app.execution_engine import ExecutionEngine
 from trading_app.risk_manager import RiskManager, RiskLimits
-from trading_app.config import ATR_VELOCITY_OVERLAY
+from trading_app.config import ATR_VELOCITY_OVERLAY, CalendarSkipFilter
 
 # =========================================================================
 # Data classes
@@ -171,6 +171,7 @@ def replay_historical(
     use_market_state: bool = False,
     live_session_costs: bool = False,
     max_correlation: float = 0.85,
+    calendar_overlay: CalendarSkipFilter | None = None,
 ) -> ReplayResult:
     """
     Feed historical bars_1m through ExecutionEngine + RiskManager.
@@ -189,7 +190,8 @@ def replay_historical(
 
     if portfolio is None:
         portfolio = build_portfolio(db_path=db_path, instrument=instrument,
-                                    max_correlation=max_correlation)
+                                    max_correlation=max_correlation,
+                                    calendar_overlay=calendar_overlay)
 
     if not portfolio.strategies:
         return ReplayResult(
@@ -421,6 +423,14 @@ def main():
                         help="Use session-adjusted slippage (0900=1.3x, 2300=0.8x)")
     args = parser.parse_args()
 
+    # Convert CLI calendar filter to CalendarSkipFilter object
+    calendar_overlay = None
+    if args.calendar_filter == "NFP":
+        calendar_overlay = CalendarSkipFilter(skip_nfp=True, skip_opex=False)
+    elif args.calendar_filter == "OPEX":
+        calendar_overlay = CalendarSkipFilter(skip_nfp=False, skip_opex=True)
+    # "NONE" keeps calendar_overlay=None
+
     risk_limits = RiskLimits(
         max_daily_loss_r=args.max_daily_loss,
         max_concurrent_positions=args.max_concurrent,
@@ -433,6 +443,7 @@ def main():
         risk_limits=risk_limits,
         live_session_costs=args.live_session_costs,
         max_correlation=args.max_correlation,
+        calendar_overlay=calendar_overlay,
     )
 
     logger.info(f"\nReplay complete: {result.start_date} to {result.end_date}")
