@@ -26,6 +26,7 @@ from pipeline.build_daily_features import (
     compute_session_stats,
     compute_overnight_stats,
     classify_day_type,
+    compute_garch_forecast,
     _wilders_rsi,
     compute_outcome,
     build_features_for_day,
@@ -440,6 +441,29 @@ class TestClassifyDayType:
     def test_none_on_zero_range(self):
         """Returns None when high == low."""
         assert classify_day_type(100.0, 100.0, 100.0, 100.0, 4.0) is None
+
+
+# =============================================================================
+# MODULE 4c: GARCH Forecast
+# =============================================================================
+
+class TestGarchForecast:
+
+    def test_garch_returns_none_on_insufficient_data(self):
+        """GARCH returns None with fewer than 252 closes."""
+        closes = [2350.0 + i for i in range(100)]
+        result = compute_garch_forecast(closes)
+        assert result is None
+
+    def test_garch_returns_none_on_empty(self):
+        """GARCH returns None on empty input."""
+        assert compute_garch_forecast([]) is None
+
+    def test_garch_returns_none_on_constant_prices(self):
+        """GARCH returns None when all prices are identical (zero variance)."""
+        closes = [2350.0] * 300
+        result = compute_garch_forecast(closes)
+        assert result is None
 
 
 # =============================================================================

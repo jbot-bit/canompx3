@@ -10,3 +10,4 @@ pytest==8.3.4
 pytest-xdist==3.8.0
 pytest-cov==6.1.1
 ruff==0.11.6
+arch==8.0.0

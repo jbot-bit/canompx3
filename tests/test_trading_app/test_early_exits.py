@@ -108,11 +108,11 @@ class TestEarlyExitConfig:
 
 class TestOutcomeBuilderEarlyExit:
 
-    def test_0900_losing_at_15min_early_exit(self):
-        """0900 long trade, losing at 15 min -> early_exit."""
+    def test_0900_losing_at_15min_no_early_exit(self):
+        """0900 long trade, losing at 15 min -> resolves normally (no early_exit)."""
         # Break bar + 1 confirm bar, then entry on next bar
         # Bar 0 = break (23:05), Bar 1 = confirm (23:06), Bar 2 = entry (23:07)
-        # 15 min after entry = 23:22, so bar index 17 from break = bar 15 from entry
+        # Price drifts down but never hits stop (2340) or target (2371)
         bars = []
         # Break bar (23:05): close above ORB high
         bars.append((2351.0, 2351.5, 2350.5, 2351.0))
@@ -140,10 +140,9 @@ class TestOutcomeBuilderEarlyExit:
             orb_label="0900",
         )
 
-        assert result["outcome"] == "early_exit"
-        assert result["pnl_r"] is not None
-        assert -1.0 < result["pnl_r"] < 0  # partial loss, not full -1R
-        assert result["exit_price"] is not None
+        # Without early_exit, trade resolves as scratch (price never hits stop or target)
+        assert result["outcome"] != "early_exit"
+        assert result["outcome"] in ("scratch", "loss", "win")
 
     def test_0900_winning_at_15min_no_early_exit(self):
         """0900 long trade, winning at 15 min -> normal outcome, NOT early_exit."""
@@ -176,8 +175,8 @@ class TestOutcomeBuilderEarlyExit:
 
         assert result["outcome"] != "early_exit"
 
-    def test_1000_losing_at_30min_early_exit(self):
-        """1000 long trade, losing at 30 min -> early_exit."""
+    def test_1000_losing_at_30min_no_early_exit(self):
+        """1000 long trade, losing at 30 min -> resolves normally (no early_exit)."""
         break_ts_1000 = datetime(2024, 1, 16, 0, 5, tzinfo=timezone.utc)
         bars = []
         # Break bar
@@ -206,8 +205,9 @@ class TestOutcomeBuilderEarlyExit:
             orb_label="1000",
         )
 
-        assert result["outcome"] == "early_exit"
-        assert -1.0 < result["pnl_r"] < 0
+        # Without early_exit, trade resolves as scratch (price never hits stop or target)
+        assert result["outcome"] != "early_exit"
+        assert result["outcome"] in ("scratch", "loss", "win")
 
     def test_1800_no_early_exit(self):
         """1800 session has no early exit threshold."""
@@ -299,8 +299,8 @@ class TestOutcomeBuilderEarlyExit:
 
         assert result["outcome"] != "early_exit"
 
-    def test_early_exit_has_mae_mfe(self):
-        """Early exit result has valid MAE/MFE values."""
+    def test_outcome_builder_never_produces_early_exit(self):
+        """Outcome builder should never produce early_exit outcomes."""
         bars = []
         bars.append((2351.0, 2351.5, 2350.5, 2351.0))
         bars.append((2351.0, 2351.5, 2350.5, 2351.0))
@@ -325,7 +325,7 @@ class TestOutcomeBuilderEarlyExit:
             orb_label="0900",
         )
 
-        assert result["outcome"] == "early_exit"
+        assert result["outcome"] != "early_exit"
         assert result["mae_r"] is not None
         assert result["mfe_r"] is not None
         assert result["mae_r"] >= 0

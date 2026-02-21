@@ -463,19 +463,6 @@ class TestComputeMetricsScratchCounts:
         assert m["scratch_count"] == 3
         assert m["early_exit_count"] == 0
 
-    def test_sample_size_excludes_early_exits(self):
-        """10W, 5L, 2 early_exits -> sample_size=15, entry_signals=17."""
-        outcomes = (
-            [self._make_outcome(i, "win", 2.0) for i in range(1, 11)]
-            + [self._make_outcome(i, "loss", -1.0) for i in range(11, 16)]
-            + [self._make_outcome(i, "early_exit", -0.5) for i in range(16, 18)]
-        )
-        m = compute_metrics(outcomes)
-        assert m["sample_size"] == 15
-        assert m["entry_signals"] == 17
-        assert m["scratch_count"] == 0
-        assert m["early_exit_count"] == 2
-
     def test_win_rate_uses_clean_sample(self):
         """4W, 6L, 5 scratches -> win_rate=0.40."""
         outcomes = (

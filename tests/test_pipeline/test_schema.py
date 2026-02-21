@@ -134,6 +134,19 @@ class TestInitDb:
                      'rsi_14_at_0900', 'atr_20']:
             assert col in cols, f"Missing session column: {col}"
 
+    def test_daily_features_has_garch_columns(self, tmp_path):
+        db_path = tmp_path / "test.db"
+        init_db(db_path, force=False)
+
+        con = duckdb.connect(str(db_path))
+        cols = [c[0] for c in con.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'daily_features'"
+        ).fetchall()]
+        con.close()
+
+        assert "garch_forecast_vol" in cols, "Missing garch_forecast_vol column"
+        assert "garch_atr_ratio" in cols, "Missing garch_atr_ratio column"
+
     def test_idempotent_without_force(self, tmp_path):
         db_path = tmp_path / "test.db"
 

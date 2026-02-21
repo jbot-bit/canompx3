@@ -223,6 +223,13 @@ CREATE TABLE IF NOT EXISTS daily_features (
     -- NOTE: look-ahead relative to intraday entry — research only, not a live filter
     day_type            TEXT,
 
+    -- GARCH(1,1) forward volatility forecast (Feb 2026)
+    -- 1-step-ahead conditional vol from trailing 252 daily close-to-close log returns.
+    -- garch_atr_ratio = garch_forecast_vol / atr_20 (regime comparison signal).
+    -- NULL during warm-up (<252 prior closes) or fit failure. Research only.
+    garch_forecast_vol  DOUBLE,
+    garch_atr_ratio     DOUBLE,
+
     -- ORB columns (7 fixed + 6 dynamic = 13 sessions x 9 columns = 117)
 {orb_block}
 
@@ -346,6 +353,17 @@ def init_db(db_path: Path, force: bool = False):
             ("overnight_took_pdh",      "BOOLEAN"),
             ("overnight_took_pdl",      "BOOLEAN"),
             ("day_type",                "TEXT"),
+        ]:
+            try:
+                con.execute(f"ALTER TABLE daily_features ADD COLUMN {col} {typedef}")
+                logger.info(f"  Migration: added {col} column to daily_features")
+            except duckdb.CatalogException:
+                pass  # column already exists
+
+        # Migration: add GARCH forecast columns (Feb 2026)
+        for col, typedef in [
+            ("garch_forecast_vol",  "DOUBLE"),
+            ("garch_atr_ratio",     "DOUBLE"),
         ]:
             try:
                 con.execute(f"ALTER TABLE daily_features ADD COLUMN {col} {typedef}")

@@ -564,6 +564,39 @@ def classify_day_type(
     return "BALANCED"
 
 
+def compute_garch_forecast(daily_closes: list[float], min_obs: int = 252) -> float | None:
+    """
+    Fit GARCH(1,1) on trailing daily close-to-close log returns.
+    Returns 1-step-ahead annualized conditional volatility forecast.
+
+    Returns None if:
+      - Fewer than min_obs closes
+      - All returns are zero (constant prices)
+      - Model fails to converge
+    """
+    if len(daily_closes) < min_obs:
+        return None
+
+    closes = np.array(daily_closes, dtype=float)
+    log_returns = np.diff(np.log(closes)) * 100  # percentage for numerical stability
+
+    if np.all(log_returns == 0):
+        return None
+
+    try:
+        from arch import arch_model
+        model = arch_model(log_returns, vol="Garch", p=1, q=1, dist="Normal", mean="Zero")
+        result = model.fit(disp="off", show_warning=False)
+        forecast = result.forecast(horizon=1)
+        cond_var = forecast.variance.iloc[-1, 0]
+        # Undo percentage scaling, annualize
+        daily_vol = (cond_var ** 0.5) / 100
+        annual_vol = daily_vol * (252 ** 0.5)
+        return round(float(annual_vol), 6)
+    except Exception:
+        return None
+
+
 # =============================================================================
 # MODULE 5: RSI (Wilder's 14-period on 5m closes)
 # =============================================================================
@@ -824,6 +857,8 @@ def build_features_for_day(con: duckdb.DuckDBPyConnection, symbol: str,
     row["atr_20"] = None
     row["atr_vel_ratio"] = None
     row["atr_vel_regime"] = None
+    row["garch_forecast_vol"] = None
+    row["garch_atr_ratio"] = None
     for _sl in ["0900", "1000", "1800"]:
         row[f"orb_{_sl}_compression_z"] = None
         row[f"orb_{_sl}_compression_tier"] = None
@@ -1084,6 +1119,23 @@ def build_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
                     rows[i][f"orb_{sess_label}_compression_tier"] = "Expanded"
                 else:
                     rows[i][f"orb_{sess_label}_compression_tier"] = "Neutral"
+
+        # GARCH(1,1) forward vol forecast from trailing daily closes.
+        # Uses rows[0..i-1] daily_close values — prior days only, no look-ahead.
+        prior_closes = [
+            rows[j]["daily_close"] for j in range(i)
+            if rows[j].get("daily_close") is not None
+        ]
+        garch_vol = compute_garch_forecast(prior_closes)
+        if garch_vol is not None:
+            rows[i]["garch_forecast_vol"] = garch_vol
+            # Convert annualized vol to implied daily ATR-equivalent points,
+            # then ratio against ATR-20 for apples-to-apples comparison.
+            # garch_atr_ratio ~1.0 means GARCH agrees with ATR; >1 = GARCH sees more vol.
+            last_close = prior_closes[-1] if prior_closes else None
+            if atr_today is not None and atr_today > 0 and last_close is not None:
+                implied_daily_atr = (garch_vol / (252 ** 0.5)) * last_close
+                rows[i]["garch_atr_ratio"] = round(implied_daily_atr / atr_today, 4)
 
         # Prior day reference levels + gap_type + liquidity sweep labels + day_type.
         # All use rows[i-1] for prior-day data — no look-ahead.

@@ -40,7 +40,7 @@ START_DATE = date(2024, 2, 12)
 END_DATE = date(2026, 2, 11)
 RR_TARGETS = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0]
 CONFIRM_BARS_OPTIONS = [1, 2, 3, 4, 5]
-EARLY_EXIT_MINUTES = {"0900": 15, "1000": 30}
+
 
 
 def log(msg: str):
