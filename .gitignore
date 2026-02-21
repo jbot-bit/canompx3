@@ -35,6 +35,9 @@ pipeline/checkpoints/
 .env
 .env.*
 
+# Serena (project-local state, memories, index)
+.serena/
+
 # IDE
 .vscode/
 .idea/
