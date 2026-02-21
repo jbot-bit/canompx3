@@ -89,6 +89,26 @@ ORB_LABELS_DYNAMIC = ["CME_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "LONDON_OPEN
 # Combined label list — used by schema generation and feature builders
 ORB_LABELS = ORB_LABELS_FIXED + ORB_LABELS_DYNAMIC
 
+PROSPECTIVE_SIGNALS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS prospective_signals (
+    signal_id        VARCHAR NOT NULL,
+    trading_day      DATE NOT NULL,
+    symbol           VARCHAR NOT NULL,
+    session          INTEGER NOT NULL,
+    prev_day_outcome VARCHAR NOT NULL,
+    orb_size         DOUBLE,
+    entry_model      VARCHAR NOT NULL,
+    confirm_bars     INTEGER NOT NULL,
+    rr_target        DOUBLE NOT NULL,
+    outcome          VARCHAR,
+    pnl_r            DOUBLE,
+    is_prospective   BOOLEAN NOT NULL,
+    freeze_date      DATE NOT NULL,
+    created_at       TIMESTAMP DEFAULT current_timestamp,
+    PRIMARY KEY (signal_id, trading_day)
+);
+"""
+
 def _build_daily_features_ddl() -> str:
     """Generate CREATE TABLE DDL for daily_features.
 
@@ -255,7 +275,8 @@ def init_db(db_path: Path, force: bool = False):
             logger.info("FORCE MODE: Dropping ALL tables...")
             # Drop trading_app tables first (FK dependencies on daily_features)
             for t in ["validated_setups_archive", "validated_setups",
-                       "experimental_strategies", "orb_outcomes"]:
+                       "experimental_strategies", "orb_outcomes",
+                       "prospective_signals"]:
                 con.execute(f"DROP TABLE IF EXISTS {t}")
             # Drop pipeline tables
             con.execute("DROP TABLE IF EXISTS daily_features")
@@ -370,6 +391,9 @@ def init_db(db_path: Path, force: bool = False):
                 logger.info(f"  Migration: added {col} column to daily_features")
             except duckdb.CatalogException:
                 pass  # column already exists
+
+        con.execute(PROSPECTIVE_SIGNALS_SCHEMA)
+        logger.info("  prospective_signals: created (or already exists)")
 
         con.commit()
 

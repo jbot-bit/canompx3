@@ -147,6 +147,35 @@ class TestInitDb:
         assert "garch_forecast_vol" in cols, "Missing garch_forecast_vol column"
         assert "garch_atr_ratio" in cols, "Missing garch_atr_ratio column"
 
+    def test_creates_prospective_signals_table(self, tmp_path):
+        db_path = tmp_path / "test.db"
+        init_db(db_path, force=False)
+
+        con = duckdb.connect(str(db_path))
+        tables = [t[0] for t in con.execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
+        ).fetchall()]
+        con.close()
+
+        assert "prospective_signals" in tables
+
+    def test_prospective_signals_columns(self, tmp_path):
+        db_path = tmp_path / "test.db"
+        init_db(db_path, force=False)
+
+        con = duckdb.connect(str(db_path))
+        cols = [c[0] for c in con.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'prospective_signals'"
+        ).fetchall()]
+        con.close()
+
+        expected = ["signal_id", "trading_day", "symbol", "session",
+                    "prev_day_outcome", "orb_size", "entry_model",
+                    "confirm_bars", "rr_target", "outcome", "pnl_r",
+                    "is_prospective", "freeze_date", "created_at"]
+        for col in expected:
+            assert col in cols, f"Missing column: {col}"
+
     def test_idempotent_without_force(self, tmp_path):
         db_path = tmp_path / "test.db"
 
