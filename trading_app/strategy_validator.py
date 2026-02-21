@@ -469,6 +469,7 @@ def run_validation(
     wf_min_pct_positive: float = 0.60,
     wf_output_path: str = "data/walkforward_results.jsonl",
     enable_regime_waivers: bool = True,
+    workers: int | None = None,
 ) -> tuple[int, int]:
     """
     Validate all experimental_strategies and promote passing ones.
@@ -785,6 +786,8 @@ def main():
                         help="Walk-forward min pct positive windows (default: 0.60)")
     parser.add_argument("--no-regime-waivers", action="store_true",
                         help="Disable DORMANT regime waivers (strict all-years-positive)")
+    parser.add_argument("--workers", type=int, default=None,
+                        help="Parallel workers for walkforward (default: min(8, cpu_count-1), 1=serial)")
     args = parser.parse_args()
 
     exclude = set(args.exclude_years) if args.exclude_years else None
@@ -808,6 +811,7 @@ def main():
         wf_min_windows=args.wf_min_windows,
         wf_min_pct_positive=args.wf_min_pct_positive,
         enable_regime_waivers=not args.no_regime_waivers,
+        workers=args.workers,
     )
 
 if __name__ == "__main__":
