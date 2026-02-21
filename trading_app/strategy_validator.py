@@ -794,6 +794,17 @@ def run_validation(
             from pipeline.db_config import configure_connection
             configure_connection(con, writing=True)
 
+            # Purge stale validated_setups for this instrument before writing.
+            # edge_families has FK to validated_setups, so delete it first.
+            con.execute(
+                "DELETE FROM edge_families WHERE instrument = ?",
+                [instrument],
+            )
+            con.execute(
+                "DELETE FROM validated_setups WHERE instrument = ?",
+                [instrument],
+            )
+
             for sr in serial_results:
                 rd = sr["row_dict"]
                 sid = rd["strategy_id"]

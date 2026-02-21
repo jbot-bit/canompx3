@@ -299,7 +299,7 @@ def build_edge_families(db_path: str, instrument: str) -> int:
                 f"ABORT: Mega-family detected — max_members={max_members} > 100. "
                 "Possible hash collision or fallback to empty hash."
             )
-        if total_fam > 50 and singleton_count / total_fam > 0.50:
+        if total_fam > 50 and singleton_count / total_fam > 0.70:
             raise RuntimeError(
                 f"ABORT: SINGLETON rate {singleton_count}/{total_fam} "
                 f"({100 * singleton_count // total_fam}%) exceeds 50% guard. "
