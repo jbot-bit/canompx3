@@ -21,6 +21,7 @@ Usage:
 
 import sys
 import json
+import time
 from datetime import date
 from pathlib import Path
 
@@ -449,6 +450,99 @@ def validate_strategy(row: dict, cost_spec, stress_multiplier: float = 1.5,
     if notes:
         return status, "; ".join(notes), regime_waivers
     return status, "All phases passed", regime_waivers
+
+def _walkforward_worker(
+    strategy_id: str,
+    instrument: str,
+    orb_label: str,
+    entry_model: str,
+    rr_target: float,
+    confirm_bars: int,
+    filter_type: str,
+    filter_params: str | None,
+    orb_minutes: int,
+    db_path_str: str,
+    wf_params: dict,
+    dst_regime: str | None,
+    dst_verdict_from_discovery: str | None,
+    dst_cols_from_discovery: dict | None,
+) -> dict:
+    """Worker function for parallel walkforward. Runs in a subprocess.
+
+    Opens its own read-only DuckDB connection. Returns a plain dict
+    (must be serialization-safe — no connection objects, no DataFrames).
+    """
+    t0 = time.monotonic()
+
+    import duckdb
+    from pipeline.db_config import configure_connection
+    from trading_app.walkforward import run_walkforward
+
+    result = {
+        "strategy_id": strategy_id,
+        "wf_result": None,
+        "dst_split": None,
+        "wf_duration_s": 0.0,
+        "error": None,
+    }
+
+    try:
+        with duckdb.connect(db_path_str, read_only=True) as con:
+            configure_connection(con, writing=False)
+
+            # Phase 4b: Walk-forward
+            wf_result = run_walkforward(
+                con=con,
+                strategy_id=strategy_id,
+                instrument=instrument,
+                orb_label=orb_label,
+                entry_model=entry_model,
+                rr_target=rr_target,
+                confirm_bars=confirm_bars,
+                filter_type=filter_type,
+                orb_minutes=orb_minutes,
+                test_window_months=wf_params["test_window_months"],
+                min_train_months=wf_params["min_train_months"],
+                min_trades_per_window=wf_params["min_trades"],
+                min_valid_windows=wf_params["min_windows"],
+                min_pct_positive=wf_params["min_pct_positive"],
+                dst_regime=dst_regime,
+            )
+            result["wf_result"] = {
+                "passed": wf_result.passed,
+                "rejection_reason": wf_result.rejection_reason,
+                "as_dict": {
+                    k: v for k, v in wf_result.__dict__.items()
+                },
+            }
+
+            # DST split (recompute only for blended strategies missing data)
+            if dst_verdict_from_discovery is not None:
+                result["dst_split"] = dst_cols_from_discovery
+            elif dst_regime is None:
+                dst_split = compute_dst_split(
+                    con, strategy_id, instrument,
+                    orb_label=orb_label,
+                    entry_model=entry_model,
+                    rr_target=rr_target,
+                    confirm_bars=confirm_bars,
+                    filter_type=filter_type,
+                    filter_params=filter_params,
+                    orb_minutes=orb_minutes,
+                )
+                result["dst_split"] = dst_split
+            else:
+                result["dst_split"] = {
+                    "winter_n": None, "winter_avg_r": None,
+                    "summer_n": None, "summer_avg_r": None,
+                    "verdict": None,
+                }
+
+    except Exception as e:
+        result["error"] = f"{type(e).__name__}: {e}"
+
+    result["wf_duration_s"] = time.monotonic() - t0
+    return result
 
 def run_validation(
     db_path: Path | None = None,
