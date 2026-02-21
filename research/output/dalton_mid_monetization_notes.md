@@ -1,0 +1,45 @@
+# Dalton Monetization: Mid vs Far vs Split
+
+- Variant: close_A_B
+- Anchors: 0900, 1000, 1100
+- Symbols: MGC, MES, MNQ
+- Bin size: 0.5
+- Stop buffer: 0.1 x VA width
+
+## Summary
+- MES 0900 FAR: N=38, WR=34.2%, avgR=-0.3504, totalR=-13.3, maxDD=13.84
+- MES 0900 MID: N=38, WR=44.7%, avgR=-0.1618, totalR=-6.1, maxDD=9.93
+- MES 0900 SPLIT70: N=38, WR=36.8%, avgR=-0.2184, totalR=-8.3, maxDD=10.80
+- MES 0900 SPLIT70_BE: N=38, WR=39.5%, avgR=-0.1989, totalR=-7.6, maxDD=10.73
+- MGC 0900 FAR: N=50, WR=38.0%, avgR=+0.0042, totalR=+0.2, maxDD=9.36
+- MGC 0900 MID: N=50, WR=32.0%, avgR=-0.2482, totalR=-12.4, maxDD=13.27
+- MGC 0900 SPLIT70: N=50, WR=34.0%, avgR=-0.1724, totalR=-8.6, maxDD=10.14
+- MGC 0900 SPLIT70_BE: N=50, WR=34.0%, avgR=-0.1813, totalR=-9.1, maxDD=10.64
+- MNQ 0900 FAR: N=8, WR=50.0%, avgR=-0.1453, totalR=-1.2, maxDD=3.00
+- MNQ 0900 MID: N=8, WR=12.5%, avgR=-0.3442, totalR=-2.8, maxDD=2.72
+- MNQ 0900 SPLIT70: N=8, WR=25.0%, avgR=-0.2846, totalR=-2.3, maxDD=2.48
+- MNQ 0900 SPLIT70_BE: N=8, WR=12.5%, avgR=-0.3280, totalR=-2.6, maxDD=2.56
+- MES 1000 FAR: N=59, WR=32.2%, avgR=-0.2039, totalR=-12.0, maxDD=18.50
+- MES 1000 MID: N=59, WR=42.4%, avgR=+0.0276, totalR=+1.6, maxDD=9.67
+- MES 1000 SPLIT70: N=59, WR=45.8%, avgR=-0.0418, totalR=-2.5, maxDD=10.21
+- MES 1000 SPLIT70_BE: N=59, WR=39.0%, avgR=-0.0147, totalR=-0.9, maxDD=9.46
+- MGC 1000 FAR: N=61, WR=36.1%, avgR=+0.0391, totalR=+2.4, maxDD=5.17
+- MGC 1000 MID: N=61, WR=39.3%, avgR=-0.1900, totalR=-11.6, maxDD=12.83
+- MGC 1000 SPLIT70: N=61, WR=36.1%, avgR=-0.1213, totalR=-7.4, maxDD=9.64
+- MGC 1000 SPLIT70_BE: N=61, WR=37.7%, avgR=-0.1605, totalR=-9.8, maxDD=11.85
+- MNQ 1000 FAR: N=4, WR=50.0%, avgR=+0.0589, totalR=+0.2, maxDD=1.00
+- MNQ 1000 MID: N=4, WR=75.0%, avgR=+0.0314, totalR=+0.1, maxDD=0.00
+- MNQ 1000 SPLIT70: N=4, WR=75.0%, avgR=+0.0397, totalR=+0.2, maxDD=0.00
+- MNQ 1000 SPLIT70_BE: N=4, WR=75.0%, avgR=+0.0147, totalR=+0.1, maxDD=0.00
+- MES 1100 FAR: N=50, WR=44.0%, avgR=-0.0045, totalR=-0.2, maxDD=6.00
+- MES 1100 MID: N=50, WR=38.0%, avgR=-0.1858, totalR=-9.3, maxDD=9.27
+- MES 1100 SPLIT70: N=50, WR=32.0%, avgR=-0.1314, totalR=-6.6, maxDD=6.32
+- MES 1100 SPLIT70_BE: N=50, WR=38.0%, avgR=-0.1534, totalR=-7.7, maxDD=7.46
+- MGC 1100 FAR: N=98, WR=37.8%, avgR=-0.1352, totalR=-13.3, maxDD=16.06
+- MGC 1100 MID: N=98, WR=32.7%, avgR=-0.2498, totalR=-24.5, maxDD=25.09
+- MGC 1100 SPLIT70: N=98, WR=38.8%, avgR=-0.2154, totalR=-21.1, maxDD=22.38
+- MGC 1100 SPLIT70_BE: N=98, WR=31.6%, avgR=-0.2454, totalR=-24.1, maxDD=25.16
+- MNQ 1100 FAR: N=6, WR=33.3%, avgR=-0.2767, totalR=-1.7, maxDD=3.00
+- MNQ 1100 MID: N=6, WR=16.7%, avgR=-0.3497, totalR=-2.1, maxDD=2.22
+- MNQ 1100 SPLIT70: N=6, WR=16.7%, avgR=-0.3278, totalR=-2.0, maxDD=2.45
+- MNQ 1100 SPLIT70_BE: N=6, WR=16.7%, avgR=-0.2450, totalR=-1.5, maxDD=2.17
