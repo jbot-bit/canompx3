@@ -73,6 +73,7 @@ Example: 10pt ORB, RR2.0 = 20pt target, 10pt stop.
 | MNQ | Micro Nasdaq futures. $2/point, $2.74 RT friction. |
 | MES | Micro S&P 500 futures. $1.25/point, $2.10 RT friction. |
 | MCL | Micro Crude Oil futures. NO EDGE (0 validated). |
+| M6E | Micro EUR/USD futures. 12,500 EUR contract. $12,500/point. $3.74 RT friction (~3 pips). Quarterly cycle (H/M/U/Z). Tick: 0.00005 = $0.625/tick. Size filters in pips (M6E_G4/G6/G8). **ORB breakout NO-GO** (0/2064 validated, Feb 2026). Data in DB for other research. |
 | Edge family | Group of strategies with identical trade days. 1 head per family. |
 
 ### Reading a Strategy ID
@@ -116,6 +117,7 @@ Example: 10pt ORB, RR2.0 = 20pt target, 10pt stop.
 | Transition ORBs (dead-zone periods) | NO-GO. Dead zones lack volume for breakout follow-through. Established session opens dominate. Feb 2026. |
 | Wider ORB apertures (10-60min) | NO-GO. 5min aperture has highest per-trade avgR. Wider dilutes signal. Does NOT rescue DST-affected sessions. Feb 2026. |
 | SIL (Micro Silver) ORB breakout | NO-GO. 0 of 432 strategies validated. All sessions negative Sharpe. $20 round-trip cost punishing vs silver's average move. 0030 WINTER-DOM; 2300 E3 faint SUMMER-ONLY signal (S=+0.03–0.06) below threshold. Feb 2026. |
+| M6E (Micro EUR/USD) ORB breakout | NO-GO. 0 of 2064 strategies validated (1463 trading days, 2021-02-21 to 2026-02-18). Best session 1000 avg ExpR=-0.176; best single strategy ExpR=+0.132 N=63 with chaotic year-by-year (3/6 negative). All 8 sessions negative on average. Mechanism: EUR/USD is a 24hr macro-driven market — no consistent intraday breakout structure at fixed session opens. Data and schema remain in DB for future non-ORB research. Feb 2026. |
 | E3 retrace timing optimization (delay buckets) | NO-GO. Break-anchored delay (0-240 min, G4+, RR2.0) tested across MGC+MES × 5 sessions. Zero cells survived CORE/PRELIMINARY sample + BH FDR correction with positive avg_r. MGC/2300 0-2 min bucket N=521 avg_r=-0.55R (p~0); 30+ min N=290 avg_r=-0.40R (p~0). Edge in production E3 derives from confirm bars + size/session filters — not delay timing. Do not test confirm-bar-offset variants; that is micro-optimization. Allocate research capital elsewhere. Feb 2026. |
 | **MES 1800 E3** | **NO-GO (MES-specific).** Year-by-year (2019–2025): 7/8 years both winter and summer negative. 2021 winter -0.332R, 2022 winter -0.281R, 2024 winter -0.676R. 2023 winter barely positive (+0.045R) — one outlier. Zero MES 1800 E3 strategies survive validation. **MGC and MNQ E3 1800 are NOT affected** (10 and 42 active strategies respectively). Do not attempt MES 1800 E3. Mechanism: MES 1800 (London open) has 81% double-break rate; E3 retrace entry on a mean-reversion session is structurally wrong. Feb 2026. |
 

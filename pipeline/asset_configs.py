@@ -53,8 +53,9 @@ ASSET_CONFIGS = {
         "minimum_start_date": date(2024, 2, 4),
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
-            "0900", "1000", "1100", "1800", "0030",
-            "CME_OPEN", "US_EQUITY_OPEN", "US_POST_EQUITY", "CME_CLOSE",
+            "0900", "1000", "1100", "0030",
+            "CME_OPEN", "LONDON_OPEN", "US_EQUITY_OPEN", "US_POST_EQUITY", "CME_CLOSE",
+            # 1800 removed — use LONDON_OPEN (DST-aware) instead
         ],
     },
     "MCL": {
@@ -77,8 +78,25 @@ ASSET_CONFIGS = {
         "minimum_start_date": date(2019, 2, 12),
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
-            "0900", "1000", "1100", "1800", "0030",
-            "CME_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "US_POST_EQUITY", "CME_CLOSE",
+            "0900", "1000", "1100", "0030",
+            "CME_OPEN", "LONDON_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "US_POST_EQUITY", "CME_CLOSE",
+            # 1800 removed — use LONDON_OPEN (DST-aware) instead
+        ],
+    },
+    "M2K": {
+        # Source data is RTY (E-mini Russell 2000, $50/pt) — same price, stored as symbol='M2K'.
+        # Identical pattern to GC→MGC, 6E→M6E. Cost model uses M2K micro specs ($5/pt).
+        # Quarterly cycle only: H/M/U/Z.
+        "dbn_path": PROJECT_ROOT / "DB" / "M2K_DB",
+        "symbol": "M2K",
+        "outright_pattern": re.compile(r'^RTY[HMUZ]\d{1,2}$'),
+        "prefix_len": 3,
+        "minimum_start_date": date(2021, 2, 21),
+        "schema_required": "ohlcv-1m",
+        "enabled_sessions": [
+            "0900", "1000", "1100", "0030",
+            "CME_OPEN", "LONDON_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "US_POST_EQUITY", "CME_CLOSE",
+            # 1800 removed — use LONDON_OPEN (DST-aware) instead
         ],
     },
     "SIL": {
@@ -91,6 +109,29 @@ ASSET_CONFIGS = {
         "enabled_sessions": [
             "1100", "2300", "0030",
             "US_EQUITY_OPEN", "US_DATA_OPEN", "US_POST_EQUITY",
+        ],
+    },
+    "M6E": {
+        # Micro EUR/USD futures. Source data is 6E (full-size, 125,000 EUR) — same
+        # price, stored as symbol='M6E', source_symbol='6EH25' etc. Identical pattern
+        # to GC→MGC (see CLAUDE.md). Cost model uses M6E micro contract specs.
+        # Quarterly cycle only: H/M/U/Z (Mar/Jun/Sep/Dec).
+        # Sessions prioritise FX events: London open + US data release are primary.
+        # Asia sessions (1000/1100) are WATCH-ONLY until data confirms breakout edge.
+        "dbn_path": PROJECT_ROOT / "DB" / "M6E_DB",
+        "symbol": "M6E",
+        "outright_pattern": re.compile(r'^6E[HMUZ]\d{1,2}$'),
+        "prefix_len": 2,
+        "minimum_start_date": date(2021, 2, 21),
+        "schema_required": "ohlcv-1m",
+        "enabled_sessions": [
+            "1000", "1100",         # Asia — watch-only; AU/NZ/EU data sometimes moves FX
+            "1800",                 # Fixed London open (for DST split analysis)
+            "LONDON_OPEN",          # Dynamic London open (best FX session)
+            "US_DATA_OPEN",         # Dynamic 8:30 ET data release (major FX mover)
+            "US_EQUITY_OPEN",       # Dynamic 9:30 ET
+            "0030",                 # Fixed US equity open (for DST split analysis)
+            "US_POST_EQUITY",       # Dynamic 10:00 ET
         ],
     },
     "NQ": {

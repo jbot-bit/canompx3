@@ -408,6 +408,17 @@ _DOW_SKIP_TUESDAY = DayOfWeekSkipFilter(filter_type="DOW_NOTUE", description="Sk
 # ORB-prefixed size filters for composite construction
 _GRID_SIZE_FILTERS_ORB = {f"ORB_{k}": v for k, v in _GRID_SIZE_FILTERS.items()}
 
+# M6E (Micro EUR/USD) pip-scaled size filters.
+# MGC point filters (G4=4.0 points) are meaningless for EUR/USD (price ~1.0800).
+# A 5-min EUR/USD ORB = 5-30 pips = 0.0005-0.0030 in native price units.
+# Filter thresholds scaled to maintain similar friction/ORB ratio to MGC G4/G6/G8.
+# M6E round-trip cost ~3 pips; G4 (4 pips) is the minimum viable ORB size.
+_M6E_SIZE_FILTERS: dict[str, OrbSizeFilter] = {
+    "M6E_G4": OrbSizeFilter(filter_type="M6E_G4", description="ORB size >= 0.0004 (4 pips)", min_size=0.0004),
+    "M6E_G6": OrbSizeFilter(filter_type="M6E_G6", description="ORB size >= 0.0006 (6 pips)", min_size=0.0006),
+    "M6E_G8": OrbSizeFilter(filter_type="M6E_G8", description="ORB size >= 0.0008 (8 pips)", min_size=0.0008),
+}
+
 
 def _make_dow_composites(
     size_filters: dict[str, StrategyFilter],
@@ -467,11 +478,12 @@ BASE_GRID_FILTERS: dict[str, StrategyFilter] = {
     **MGC_VOLUME_FILTERS,
 }
 
-# Master filter registry — base + all DOW composites + break quality composites.
+# Master filter registry — base + all DOW composites + break quality composites + M6E.
 # Portfolio.py looks up filters by filter_type key from this registry.
-# Count: 1 (NO_FILTER) + 4 (ORB G4-G8) + 1 (VOL) + 12 (DOW) + 8 (BRK_FAST5/CONT) = 26
+# Count: 1 (NO_FILTER) + 4 (ORB G4-G8) + 1 (VOL) + 12 (DOW) + 8 (BRK_FAST5/CONT) + 3 (M6E) = 29
 ALL_FILTERS: dict[str, StrategyFilter] = {
     **BASE_GRID_FILTERS,
+    **_M6E_SIZE_FILTERS,
     **_make_dow_composites(_GRID_SIZE_FILTERS_ORB, _DOW_SKIP_FRIDAY,  "NOFRI"),
     **_make_dow_composites(_GRID_SIZE_FILTERS_ORB, _DOW_SKIP_MONDAY,  "NOMON"),
     **_make_dow_composites(_GRID_SIZE_FILTERS_ORB, _DOW_SKIP_TUESDAY, "NOTUE"),
@@ -514,6 +526,16 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
     - All other combos: returns BASE_GRID_FILTERS unchanged
     """
     from pipeline.dst import validate_dow_filter_alignment
+
+    # M6E (EUR/USD): pip-scaled filters only. MGC point filters (G4=4.0) are
+    # meaningless for EUR/USD — every trade would trivially pass them.
+    # No DOW composites yet; add only after first discovery pass identifies sessions
+    # with breakout edge. FX DOW alignment also needs separate verification.
+    if instrument == "M6E":
+        return {
+            "NO_FILTER": NoFilter(),
+            **_M6E_SIZE_FILTERS,
+        }
 
     filters = dict(BASE_GRID_FILTERS)
 

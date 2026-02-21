@@ -139,8 +139,9 @@ class TestAllFilters:
         # NO_FILTER + 4 G-filters + 1 VOL-filter = 6
         # + 12 DOW composites (3 DOW x 4 G)
         # + 12 break quality composites (3 BRK x 4 G: FAST5, FAST10, CONT)
-        # = 30
-        assert len(ALL_FILTERS) == 30
+        # + 3 M6E pip-scaled size filters (M6E_G4/G6/G8)
+        # = 33
+        assert len(ALL_FILTERS) == 33
 
     def test_contains_volume_filter(self):
         assert "VOL_RV12_N20" in ALL_FILTERS

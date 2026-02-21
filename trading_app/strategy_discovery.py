@@ -59,12 +59,14 @@ _INSERT_SQL = """INSERT OR REPLACE INTO experimental_strategies
      trade_day_hash, is_canonical, canonical_strategy_id,
      dst_winter_n, dst_winter_avg_r, dst_summer_n, dst_summer_avg_r, dst_verdict,
      validation_status, validation_notes,
-     created_at)
+     created_at,
+     p_value, sharpe_ann_adj, autocorr_lag1)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?,
-            COALESCE(?, CURRENT_TIMESTAMP))"""
+            COALESCE(?, CURRENT_TIMESTAMP),
+            ?, ?, ?)"""
 
 _BATCH_COLUMNS = [
     'strategy_id', 'instrument', 'orb_label', 'orb_minutes',
@@ -81,6 +83,8 @@ _BATCH_COLUMNS = [
     'dst_winter_n', 'dst_winter_avg_r', 'dst_summer_n', 'dst_summer_avg_r', 'dst_verdict',
     'validation_status', 'validation_notes',
     'created_at',
+    # Audit metrics (F-04, F-11)
+    'p_value', 'sharpe_ann_adj', 'autocorr_lag1',
 ]
 
 
@@ -102,7 +106,8 @@ def _flush_batch_df(con, insert_batch: list[list]) -> None:
          trade_day_hash, is_canonical, canonical_strategy_id,
          dst_winter_n, dst_winter_avg_r, dst_summer_n, dst_summer_avg_r, dst_verdict,
          validation_status, validation_notes,
-         created_at)
+         created_at,
+         p_value, sharpe_ann_adj, autocorr_lag1)
         SELECT strategy_id, instrument, orb_label, orb_minutes,
                rr_target, confirm_bars, entry_model,
                filter_type, filter_params,
@@ -116,7 +121,8 @@ def _flush_batch_df(con, insert_batch: list[list]) -> None:
                trade_day_hash, is_canonical, canonical_strategy_id,
                dst_winter_n, dst_winter_avg_r, dst_summer_n, dst_summer_avg_r, dst_verdict,
                validation_status, validation_notes,
-               COALESCE(created_at, CURRENT_TIMESTAMP)
+               COALESCE(created_at, CURRENT_TIMESTAMP),
+               p_value, sharpe_ann_adj, autocorr_lag1
         FROM batch_df
     """)
 
@@ -146,6 +152,99 @@ def _mark_canonical(strategies: list[dict]) -> None:
         for alias in group[1:]:
             alias["is_canonical"] = False
             alias["canonical_strategy_id"] = head["strategy_id"]
+
+def _t_test_pvalue(t_stat: float, df: int) -> float:
+    """Two-tailed p-value from Student's t-distribution (no scipy needed).
+
+    Uses the regularized incomplete beta function relationship:
+      p = I_x(a, b)  where x = df/(df + t^2), a = df/2, b = 0.5
+
+    For large df (>100), uses normal approximation.
+    Returns two-tailed p-value.
+    """
+    import math
+
+    if df <= 0:
+        return 1.0
+
+    t_abs = abs(t_stat)
+
+    # Normal approximation for large df
+    if df > 100:
+        # Two-tailed p-value from normal distribution
+        p = math.erfc(t_abs / math.sqrt(2))
+        return max(p, 1e-16)
+
+    # Regularized incomplete beta function via continued fraction
+    x = df / (df + t_abs * t_abs)
+    a = df / 2.0
+    b = 0.5
+
+    # Regularized incomplete beta function via continued fraction
+    # (Numerical Recipes betacf pattern — includes critical d₁ init term)
+    def _betainc(x_val, a_val, b_val):
+        """Regularized incomplete beta function I_x(a, b)."""
+        if x_val <= 0:
+            return 0.0
+        if x_val >= 1:
+            return 1.0
+
+        # Symmetry relation for better convergence when x is large
+        if x_val > (a_val + 1.0) / (a_val + b_val + 2.0):
+            return 1.0 - _betainc(1.0 - x_val, b_val, a_val)
+
+        # Log-beta prefactor
+        log_beta = math.lgamma(a_val) + math.lgamma(b_val) - math.lgamma(a_val + b_val)
+        front = math.exp(
+            a_val * math.log(x_val) + b_val * math.log(1.0 - x_val) - log_beta
+        ) / a_val
+
+        # Continued fraction (Numerical Recipes betacf)
+        TINY = 1e-30
+        qab = a_val + b_val
+        qap = a_val + 1.0
+        qam = a_val - 1.0
+        c = 1.0
+        d = 1.0 - qab * x_val / qap  # Critical d₁ initialization
+        if abs(d) < TINY:
+            d = TINY
+        d = 1.0 / d
+        h = d
+        for m in range(1, 200):
+            m2 = 2 * m
+            # Even step
+            aa = m * (b_val - m) * x_val / ((qam + m2) * (a_val + m2))
+            d = 1.0 + aa * d
+            if abs(d) < TINY:
+                d = TINY
+            c = 1.0 + aa / c
+            if abs(c) < TINY:
+                c = TINY
+            d = 1.0 / d
+            h *= d * c
+
+            # Odd step
+            aa = -(a_val + m) * (qab + m) * x_val / ((a_val + m2) * (qap + m2))
+            d = 1.0 + aa * d
+            if abs(d) < TINY:
+                d = TINY
+            c = 1.0 + aa / c
+            if abs(c) < TINY:
+                c = TINY
+            d = 1.0 / d
+            delta = d * c
+            h *= delta
+
+            if abs(delta - 1.0) < 1e-10:
+                break
+
+        return min(1.0, front * h)
+
+    # I_x(df/2, 1/2) gives the CDF
+    p_one_tail = _betainc(x, a, b) / 2.0
+    p_two_tail = 2.0 * p_one_tail
+    return max(min(p_two_tail, 1.0), 1e-16)
+
 
 def compute_metrics(outcomes: list[dict], cost_spec=None) -> dict:
     """
@@ -183,6 +282,9 @@ def compute_metrics(outcomes: list[dict], cost_spec=None) -> dict:
         "avg_loss_dollars": None,
         "trades_per_year": 0,
         "sharpe_ann": None,
+        "sharpe_ann_adj": None,
+        "autocorr_lag1": None,
+        "p_value": None,
         "yearly_results": "{}",
         "entry_signals": 0,
         "scratch_count": 0,
@@ -284,6 +386,38 @@ def compute_metrics(outcomes: list[dict], cost_spec=None) -> dict:
         else None
     )
 
+    # FIX (F-11): Lo (2002) autocorrelation-adjusted annualized Sharpe.
+    # Raw sharpe_ann assumes iid returns. If returns are positively
+    # autocorrelated, this inflates the annualized figure. Compute lag-1
+    # autocorrelation and apply the adjustment factor q = 1 + 2*rho_1.
+    # sharpe_ann_adj = sharpe_ann / sqrt(q)
+    # Store both: sharpe_ann (backward-compatible) + sharpe_ann_adj (honest).
+    sharpe_ann_adj = None
+    autocorr_lag1 = None
+    if sharpe_ann is not None and len(r_values) >= 10:
+        # Lag-1 autocorrelation of R-multiples
+        n_r = len(r_values)
+        r_demeaned = [r - mean_r for r in r_values]
+        numerator = sum(r_demeaned[i] * r_demeaned[i + 1] for i in range(n_r - 1))
+        denominator = sum(d * d for d in r_demeaned)
+        if denominator > 0:
+            autocorr_lag1 = numerator / denominator
+            # Lo (2002): q = 1 + 2 * rho_1 (first-order approximation)
+            # Clamp q to [0.1, 10] to prevent extreme adjustments from noisy estimates
+            q = max(0.1, min(10.0, 1.0 + 2.0 * autocorr_lag1))
+            sharpe_ann_adj = sharpe_ann / (q ** 0.5)
+
+    # FIX (F-04): One-sample t-test p-value for H0: mean(pnl_r) = 0.
+    # This tests whether the strategy's edge is statistically distinguishable
+    # from random. Uses Welch's t-statistic: t = mean / (std / sqrt(n)).
+    # P-value computed from the Student's t-distribution via regularized
+    # incomplete beta function (no scipy dependency).
+    p_value = None
+    if len(r_values) >= 5 and sharpe_ratio is not None:
+        t_stat = mean_r / (std_r / (len(r_values) ** 0.5)) if std_r > 0 else None
+        if t_stat is not None:
+            p_value = _t_test_pvalue(t_stat, len(r_values) - 1)
+
     # Risk stats (from entry_price and stop_price)
     risk_points_list = [
         abs(o["entry_price"] - o["stop_price"])
@@ -332,6 +466,9 @@ def compute_metrics(outcomes: list[dict], cost_spec=None) -> dict:
         "avg_loss_dollars": avg_loss_dollars,
         "trades_per_year": round(trades_per_year, 1),
         "sharpe_ann": round(sharpe_ann, 4) if sharpe_ann is not None else None,
+        "sharpe_ann_adj": round(sharpe_ann_adj, 4) if sharpe_ann_adj is not None else None,
+        "autocorr_lag1": round(autocorr_lag1, 4) if autocorr_lag1 is not None else None,
+        "p_value": round(p_value, 6) if p_value is not None else None,
         "yearly_results": json.dumps(yearly),
         "entry_signals": entry_signals,
         "scratch_count": len(scratches),
@@ -562,9 +699,15 @@ def _compute_relative_volumes(con, features, instrument, orb_labels, all_filters
 
             row[f"rel_vol_{orb_label}"] = break_vol / baseline
 
-def _load_outcomes_bulk(con, instrument, orb_minutes, orb_labels, entry_models):
+def _load_outcomes_bulk(con, instrument, orb_minutes, orb_labels, entry_models,
+                        holdout_date=None):
     """
     Load all non-NULL outcomes in one query per (orb, entry_model).
+
+    Args:
+        holdout_date: If set, only load outcomes with trading_day < holdout_date.
+            This implements true temporal holdout (F-02 audit fix) — discovery
+            only sees pre-holdout data, leaving post-holdout for OOS validation.
 
     Returns dict keyed by (orb_label, entry_model, rr_target, confirm_bars)
     with value = list of outcome dicts.
@@ -572,17 +715,21 @@ def _load_outcomes_bulk(con, instrument, orb_minutes, orb_labels, entry_models):
     grouped = {}
     for orb_label in orb_labels:
         for em in entry_models:
-            rows = con.execute(
-                """SELECT trading_day, rr_target, confirm_bars,
+            sql = """SELECT trading_day, rr_target, confirm_bars,
                           outcome, pnl_r, mae_r, mfe_r,
                           entry_price, stop_price
                    FROM orb_outcomes
                    WHERE symbol = ? AND orb_minutes = ?
                      AND orb_label = ? AND entry_model = ?
-                     AND outcome IS NOT NULL
-                   ORDER BY trading_day""",
-                [instrument, orb_minutes, orb_label, em],
-            ).fetchall()
+                     AND outcome IS NOT NULL"""
+            params = [instrument, orb_minutes, orb_label, em]
+
+            if holdout_date is not None:
+                sql += "\n                     AND trading_day < ?"
+                params.append(holdout_date)
+
+            sql += "\n                   ORDER BY trading_day"
+            rows = con.execute(sql, params).fetchall()
 
             for r in rows:
                 key = (orb_label, em, r[1], r[2])  # (orb, em, rr, cb)
@@ -608,6 +755,7 @@ def run_discovery(
     orb_minutes: int = 5,
     dry_run: bool = False,
     dst_regime: str | None = None,
+    holdout_date: date | None = None,
 ) -> int:
     """
     Grid search over all strategy variants.
@@ -620,6 +768,10 @@ def run_discovery(
             (0900/1800/0030/2300) to that regime only. Produces strategy IDs
             with _W or _S suffix. Clean sessions (1000/1100 etc.) are unaffected.
             If None (default), produces blended strategies (existing behaviour).
+        holdout_date: If set, discovery only uses outcomes with trading_day <
+            holdout_date. This creates a true temporal holdout (F-02 audit fix)
+            for OOS validation. Use with strategy_validator.py --oos-start to
+            test discovered strategies on post-holdout data.
 
     Returns count of strategies written.
     """
@@ -642,8 +794,14 @@ def run_discovery(
         logger.info(f"Sessions: {len(sessions)} enabled for {instrument}")
 
         # ---- Bulk load phase (all DB reads happen here) ----
+        # When holdout_date is set, cap end_date to holdout_date to prevent
+        # feature leakage (e.g., relative volume computed with future data)
+        effective_end = end_date
+        if holdout_date is not None:
+            if effective_end is None or holdout_date < effective_end:
+                effective_end = holdout_date
         logger.info("Loading daily features...")
-        features = _load_daily_features(con, instrument, orb_minutes, start_date, end_date)
+        features = _load_daily_features(con, instrument, orb_minutes, start_date, effective_end)
         logger.info(f"  {len(features)} daily_features rows loaded")
 
         # Build union of all session-specific filters for bulk pre-computation
@@ -658,7 +816,12 @@ def run_discovery(
         filter_days = _build_filter_day_sets(features, sessions, all_grid_filters)
 
         logger.info("Loading outcomes (bulk)...")
-        outcomes_by_key = _load_outcomes_bulk(con, instrument, orb_minutes, sessions, ENTRY_MODELS)
+        if holdout_date is not None:
+            logger.info(f"  HOLDOUT MODE: only using outcomes before {holdout_date}")
+        outcomes_by_key = _load_outcomes_bulk(
+            con, instrument, orb_minutes, sessions, ENTRY_MODELS,
+            holdout_date=holdout_date,
+        )
         logger.info(f"  {sum(len(v) for v in outcomes_by_key.values())} outcome rows loaded")
 
         # ---- Grid iteration (pure Python, no DB reads) ----
@@ -802,6 +965,8 @@ def run_discovery(
                     dst["verdict"],
                     None, None,  # Reset validation_status/notes
                     existing_created.get(s["strategy_id"]),  # Preserve or DEFAULT
+                    # Audit metrics (F-04, F-11)
+                    m.get("p_value"), m.get("sharpe_ann_adj"), m.get("autocorr_lag1"),
                 ])
 
                 if len(insert_batch) >= 500:
@@ -840,6 +1005,12 @@ def main():
              "Produces _W or _S strategy IDs. Clean sessions unaffected. "
              "Run twice (--dst-regime winter AND --dst-regime summer) to replace all blended strategies.",
     )
+    parser.add_argument(
+        "--holdout-date", type=date.fromisoformat, default=None,
+        help="Temporal holdout cutoff (YYYY-MM-DD). Discovery only uses outcomes "
+             "BEFORE this date. Use with validator --oos-start for true OOS testing. "
+             "Example: --holdout-date 2025-01-01 discovers on pre-2025 data.",
+    )
     args = parser.parse_args()
 
     db_path = Path(args.db) if args.db else None
@@ -852,6 +1023,7 @@ def main():
         orb_minutes=args.orb_minutes,
         dry_run=args.dry_run,
         dst_regime=args.dst_regime,
+        holdout_date=args.holdout_date,
     )
 
 if __name__ == "__main__":

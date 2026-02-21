@@ -52,43 +52,55 @@ HOT_MIN_STABILITY = 0.6
 
 # The live portfolio: what we actually trade.
 #
-# TIER 1 (CORE): Always on. Full-period validated (80%+ years positive,
-#   10-year robustness). G5 is the minimum that survives yearly robustness.
+# TIER 1 (CORE): Always on. Full-period validated (75%+ years positive,
+#   ROBUST edge family = 5+ parameter-stable members).
+#   Specs are instrument-agnostic: run with --instrument MGC/MNQ/MES.
+#   If a spec has no match for an instrument, it emits WARN and skips.
 #
-# TIER 2 (HOT): Rolling-eval gated. These families have strong recent-regime
-#   performance (STABLE in last 10 rolling windows) and positive full-period
-#   ExpR, but fail the strict 10-year yearly robustness test. Gated on:
-#   must be STABLE (>=0.6 weighted score) in recent rolling windows.
-#   Auto-disabled when the regime shifts.
+# TIER 2 (HOT): Rolling-eval gated. Must be STABLE (>=0.6) in recent
+#   rolling windows. NOTE: gated off until rolling_portfolio.py is
+#   re-run after edge families rebuild (Feb 2026).
 #
-# TIER 3 (REGIME): Gated by strategy_fitness. Full-period validated but
-#   may be regime-dependent. Only trade when fitness = FIT.
+# TIER 3 (REGIME): Fitness-gated. Full-period validated but regime-dependent.
+#   Only trade when strategy_fitness = FIT.
 #
 # EXIT MODES (see config.py SESSION_EXIT_MODE):
-#   0900 = fixed_target (set and forget, no IB logic)
+#   0900 = fixed_target
 #   1000 = ib_conditional (IB aligned=hold 7h, opposed=kill at market)
-#   1100 = OFF for breakout (shelved, removed from ORB_WINDOWS_UTC for now)
 #   1800/2300/0030 = fixed_target
 #
-# Updated 2026-02-13: Added HOT tier from rolling eval results.
-# G4 families pass 8-9/10 recent windows with +0.25-0.31R ExpR.
-# G3/G4 failed 10-year validation (57-67% years positive) but are
-# the strongest current-regime performers.
+# Updated 2026-02-21: Added E0 entry model (validated Feb 2026).
+#   E0 = limit fill at ORB edge on the confirm bar itself.
+#   Top ROBUST CORE families by instrument (head_sharpe_ann):
+#     MNQ: 0900 E0 ORB_G5 (Sharpe 2.94, N=305), 1000 E0 ORB_G5 (Sharpe 2.84, N=406)
+#     MES: 1000 E0 ORB_G5_L12 (Sharpe 1.54), 1000 E0 ORB_G4_L12 (Sharpe 1.46)
+#     MGC: 1000 E0 ORB_G4 (Sharpe 1.35, N=118), 1800 E0 ORB_G4_NOMON (Sharpe 0.43)
 LIVE_PORTFOLIO = [
-    # --- CORE: always on, full-period validated ---
+    # --- CORE: always on, full-period validated ROBUST families ---
+
+    # 0900 session (MGC + MNQ dominant; MES secondary)
+    # E0 validated Feb 2026 — limit at ORB edge, best fill price
+    LiveStrategySpec("0900_E0_ORB_G5", "core", "0900", "E0", "ORB_G5", None),
+    LiveStrategySpec("0900_E0_ORB_G4", "core", "0900", "E0", "ORB_G4", None),
+    # E1 kept as fallback for instruments where E0 doesn't reach ROBUST threshold
     LiveStrategySpec("0900_E1_ORB_G5", "core", "0900", "E1", "ORB_G5", None),
+
+    # 1000 session (universal — positive for MGC, MNQ, MES)
+    LiveStrategySpec("1000_E0_ORB_G5", "core", "1000", "E0", "ORB_G5", None),
+    LiveStrategySpec("1000_E0_ORB_G4", "core", "1000", "E0", "ORB_G4", None),
     LiveStrategySpec("1000_E1_ORB_G5", "core", "1000", "E1", "ORB_G5", None),
 
-    # --- HOT: rolling-eval gated, current regime performers ---
-    # 0900 G4: 8-9/10 windows, ExpR +0.28R, Sharpe 0.18 (recent regime)
-    LiveStrategySpec("0900_E1_ORB_G4", "hot", "0900", "E1", "ORB_G4", "rolling"),
-    LiveStrategySpec("0900_E3_ORB_G4", "hot", "0900", "E3", "ORB_G4", "rolling"),
-    # 1000 G4: 8-9/10 windows, ExpR +0.19R (recent regime)
-    LiveStrategySpec("1000_E1_ORB_G4", "hot", "1000", "E1", "ORB_G4", "rolling"),
+    # 1800 session (MGC-specific; MNQ marginal)
+    LiveStrategySpec("1800_E0_ORB_G4_NOMON", "core", "1800", "E0", "ORB_G4_NOMON", None),
 
-    # --- REGIME: fitness-gated, full-period validated ---
-    # 0900_E1_ORB_G6 removed 2026-02-19: zero rows in validated/experimental (G6 too strict)
-    # 1800_E3_ORB_G6 removed 2026-02-19: zero rows in validated/experimental (G6 too strict)
+    # --- HOT: rolling-eval gated ---
+    # TODO: Re-run rolling_portfolio.py after edge families rebuild to refresh gates.
+    # All HOT entries are currently gated off ("family not found in rolling results").
+    LiveStrategySpec("0900_E0_ORB_G4_NOFRI", "hot", "0900", "E0", "ORB_G4_NOFRI", "rolling"),
+    LiveStrategySpec("1000_E0_ORB_G5_L12", "hot", "1000", "E0", "ORB_G5_L12", "rolling"),
+
+    # --- REGIME: fitness-gated ---
+    # (none currently active — add as fitness monitoring matures)
 ]
 
 # =========================================================================

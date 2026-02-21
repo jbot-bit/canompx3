@@ -306,11 +306,11 @@ Six high-leverage research items identified by cross-referencing all findings. O
 - Alert on: drawdown exceeding historical, win rate divergence, ORB size regime shift
 - Dashboard for live strategy status
 
-### 8e. orb_outcomes Backfill 2016-2020 — IN PROGRESS
-- orb_outcomes currently covers 2021-2026 only (689,310 rows)
-- 2016-2020 data exists in bars_1m/bars_5m/daily_features but outcomes not yet built
-- Would enable 10-year validation instead of 5-year
-- After backfill: re-run rolling_eval.py with wider test range for 10-year stability scores
+### 8e. orb_outcomes Backfill 2016-2020 — DONE (Feb 2026)
+- MGC: 2016-02-01 to 2026-02-04, ~1.32M rows, E0/E1/E3 all present
+- MES: 2019-02-12 to 2026-02-11, ~1.07M rows, E0/E1/E3 all present
+- 10-year validation window now available for MGC
+- TODO (separate task): re-run rolling_eval.py with 10-year range for stability scores
 
 ---
 

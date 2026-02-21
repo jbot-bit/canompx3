@@ -92,18 +92,22 @@ ORB_LABELS = ORB_LABELS_FIXED + ORB_LABELS_DYNAMIC
 def _build_daily_features_ddl() -> str:
     """Generate CREATE TABLE DDL for daily_features.
 
-    Columns per ORB (11 each):
+    Columns per ORB (14 each):
       orb_{label}_high              - ORB range high
       orb_{label}_low               - ORB range low
       orb_{label}_size              - high - low (points)
+      orb_{label}_volume            - total contracts traded during ORB window
       orb_{label}_break_dir         - 'long', 'short', or NULL (no break)
       orb_{label}_break_ts          - timestamp of first break (1m close outside range)
       orb_{label}_break_delay_min   - minutes from ORB end to first break (NULL if no break)
       orb_{label}_break_bar_continues - break bar closes in break direction (True/False/NULL)
+      orb_{label}_break_bar_volume  - volume on the bar that broke the ORB (NULL if no break)
       orb_{label}_outcome           - outcome at RR=1.0 ('win', 'loss', 'scratch', NULL)
       orb_{label}_mae_r             - max adverse excursion in R (NULL until cost model)
       orb_{label}_mfe_r             - max favorable excursion in R (NULL until cost model)
       orb_{label}_double_break      - True if BOTH ORB high and low were breached
+      rel_vol_{label}               - break_bar_volume / rolling 20-session median (NULL if no break
+                                      or < 5 prior break-days). Relative volume signal.
     """
     orb_cols = []
     for label in ORB_LABELS:
@@ -111,14 +115,17 @@ def _build_daily_features_ddl() -> str:
             f"    orb_{label}_high              DOUBLE,",
             f"    orb_{label}_low               DOUBLE,",
             f"    orb_{label}_size              DOUBLE,",
+            f"    orb_{label}_volume            BIGINT,",
             f"    orb_{label}_break_dir         TEXT,",
             f"    orb_{label}_break_ts          TIMESTAMPTZ,",
             f"    orb_{label}_break_delay_min   DOUBLE,",
             f"    orb_{label}_break_bar_continues BOOLEAN,",
+            f"    orb_{label}_break_bar_volume  BIGINT,",
             f"    orb_{label}_outcome           TEXT,",
             f"    orb_{label}_mae_r             DOUBLE,",
             f"    orb_{label}_mfe_r             DOUBLE,",
             f"    orb_{label}_double_break      BOOLEAN,",
+            f"    rel_vol_{label}               DOUBLE,",
         ])
     orb_block = "\n".join(orb_cols)
 
@@ -189,6 +196,32 @@ CREATE TABLE IF NOT EXISTS daily_features (
     is_monday         BOOLEAN,
     is_tuesday        BOOLEAN,
     day_of_week       INTEGER,    -- 0=Mon, 1=Tue, ..., 4=Fri (Python weekday convention)
+
+    -- Prior day reference levels (post-pass: requires prior row)
+    prev_day_high       DOUBLE,
+    prev_day_low        DOUBLE,
+    prev_day_close      DOUBLE,
+    prev_day_range      DOUBLE,
+    prev_day_direction  TEXT,
+    gap_type            TEXT,
+
+    -- Pre-session activity (same-day: Asia window + pre-1000 window)
+    overnight_high           DOUBLE,
+    overnight_low            DOUBLE,
+    overnight_range          DOUBLE,
+    pre_1000_high            DOUBLE,
+    pre_1000_low             DOUBLE,
+
+    -- Liquidity sweep labels (post-pass: needs prev_day_high/low)
+    took_pdh_before_1000     BOOLEAN,
+    took_pdl_before_1000     BOOLEAN,
+    overnight_took_pdh       BOOLEAN,
+    overnight_took_pdl       BOOLEAN,
+
+    -- Retrospective day type (post-pass: needs atr_20)
+    -- 'TREND_UP' / 'TREND_DOWN' / 'BALANCED' / 'REVERSAL_UP' / 'REVERSAL_DOWN' / 'NON_TREND'
+    -- NOTE: look-ahead relative to intraday entry — research only, not a live filter
+    day_type            TEXT,
 
     -- ORB columns (7 fixed + 6 dynamic = 13 sessions x 9 columns = 117)
 {orb_block}
@@ -261,6 +294,58 @@ def init_db(db_path: Path, force: bool = False):
             ("orb_1000_compression_tier", "TEXT"),
             ("orb_1800_compression_z",    "DOUBLE"),
             ("orb_1800_compression_tier", "TEXT"),
+        ]:
+            try:
+                con.execute(f"ALTER TABLE daily_features ADD COLUMN {col} {typedef}")
+                logger.info(f"  Migration: added {col} column to daily_features")
+            except duckdb.CatalogException:
+                pass  # column already exists
+
+        # Migration: add break_delay_min + break_bar_continues (were in DDL but never migrated)
+        # 13 sessions × 2 columns = 26 columns
+        for label in ORB_LABELS:
+            for col, typedef in [
+                (f"orb_{label}_break_delay_min",   "DOUBLE"),
+                (f"orb_{label}_break_bar_continues", "BOOLEAN"),
+            ]:
+                try:
+                    con.execute(f"ALTER TABLE daily_features ADD COLUMN {col} {typedef}")
+                    logger.info(f"  Migration: added {col} column to daily_features")
+                except duckdb.CatalogException:
+                    pass  # column already exists
+
+        # Migration: add per-session volume + relative volume columns (Feb 2026)
+        # 13 sessions × 3 columns = 39 new columns
+        for label in ORB_LABELS:
+            for col, typedef in [
+                (f"orb_{label}_volume",           "BIGINT"),
+                (f"orb_{label}_break_bar_volume", "BIGINT"),
+                (f"rel_vol_{label}",              "DOUBLE"),
+            ]:
+                try:
+                    con.execute(f"ALTER TABLE daily_features ADD COLUMN {col} {typedef}")
+                    logger.info(f"  Migration: added {col} column to daily_features")
+                except duckdb.CatalogException:
+                    pass  # column already exists
+
+        # Migration: add Market Profile context columns (Feb 2026)
+        for col, typedef in [
+            ("prev_day_high",           "DOUBLE"),
+            ("prev_day_low",            "DOUBLE"),
+            ("prev_day_close",          "DOUBLE"),
+            ("prev_day_range",          "DOUBLE"),
+            ("prev_day_direction",      "TEXT"),
+            ("gap_type",                "TEXT"),
+            ("overnight_high",          "DOUBLE"),
+            ("overnight_low",           "DOUBLE"),
+            ("overnight_range",         "DOUBLE"),
+            ("pre_1000_high",           "DOUBLE"),
+            ("pre_1000_low",            "DOUBLE"),
+            ("took_pdh_before_1000",    "BOOLEAN"),
+            ("took_pdl_before_1000",    "BOOLEAN"),
+            ("overnight_took_pdh",      "BOOLEAN"),
+            ("overnight_took_pdl",      "BOOLEAN"),
+            ("day_type",                "TEXT"),
         ]:
             try:
                 con.execute(f"ALTER TABLE daily_features ADD COLUMN {col} {typedef}")

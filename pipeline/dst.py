@@ -153,8 +153,9 @@ def classify_dst_verdict(winter_avg_r: float | None, summer_avg_r: float | None,
       SUMMER-DOM:   summer > winter + 0.10R AND summer N >= 15
       WINTER-ONLY:  winter > 0 AND summer <= 0 AND both N >= 10
       SUMMER-ONLY:  summer > 0 AND winter <= 0 AND both N >= 10
+      BOTH-POS:     both halves positive but N too small for DOM/STABLE (e.g. summer N 10-14)
       LOW-N:        either regime < 10 trades
-      UNSTABLE:     catch-all
+      UNSTABLE:     one or both halves negative and no cleaner label applies
     """
     if winter_n < 10 or summer_n < 10:
         return "LOW-N"
@@ -179,6 +180,10 @@ def classify_dst_verdict(winter_avg_r: float | None, summer_avg_r: float | None,
         return "WINTER-DOM"
     if summer_avg_r > winter_avg_r + 0.10 and summer_n >= 15:
         return "SUMMER-DOM"
+
+    # Both halves profitable but couldn't reach STABLE/DOM thresholds (small N in one regime)
+    if winter_avg_r > 0 and summer_avg_r > 0:
+        return "BOTH-POS"
 
     return "UNSTABLE"
 

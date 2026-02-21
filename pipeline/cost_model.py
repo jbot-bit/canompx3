@@ -106,6 +106,24 @@ COST_SPECS = {
         tick_size=0.005,         # $0.005/oz minimum increment
         min_ticks_floor=10,      # $0.05 = $50 minimum risk
     ),
+    "M6E": CostSpec(
+        instrument="M6E",
+        point_value=12500.0,     # Micro EUR/USD: 12,500 EUR × $1 per EUR per point
+        commission_rt=1.24,      # IB micro futures RT commission
+        spread_doubled=1.25,     # ~1 tick ($0.625) each side (tick = 0.00005)
+        slippage=1.25,           # ~1 tick ($0.625) each side (measured from actual data)
+        tick_size=0.00005,       # Minimum price increment (half-pip for EUR/USD)
+        min_ticks_floor=10,      # 10 ticks = 0.0005 = 5 pips minimum risk
+    ),
+    "M2K": CostSpec(
+        instrument="M2K",
+        point_value=5.0,         # Micro E-mini Russell 2000: $5 per index point
+        commission_rt=1.24,      # IB micro futures RT commission
+        spread_doubled=1.00,     # ~1 tick ($0.50) each side (tick = 0.10pt = $0.50)
+        slippage=1.00,           # ~1 tick ($0.50) each side
+        tick_size=0.10,          # Minimum price increment (0.10 index points)
+        min_ticks_floor=10,      # 10 ticks = 1.0pt = $5 minimum risk
+    ),
 }
 
 
@@ -157,6 +175,29 @@ SESSION_SLIPPAGE_MULT = {
         "1800": 0.9,   # 08:00 UTC -- pre-London, decent liquidity
         "2300": 0.8,   # 13:00 UTC -- NY/COMEX session, best liquidity
         "0030": 1.0,   # 14:30 UTC -- moderate NY
+    },
+    "M6E": {
+        # EUR/USD liquidity peaks at London open and tapers through US session
+        "1000": 1.3,          # 00:00 UTC -- thin Asian FX; EUR/USD less active pre-London
+        "1100": 1.2,          # 01:00 UTC -- early Asian; slight improvement
+        "1800": 0.8,          # 08:00 UTC -- London open; best EUR/USD liquidity
+        "0030": 1.0,          # 14:30 UTC -- US equity open; decent EUR/USD flow
+        "LONDON_OPEN": 0.8,   # Dynamic London open; peak FX liquidity
+        "US_DATA_OPEN": 1.5,  # 08:30 ET data release; wide spreads during news
+        "US_EQUITY_OPEN": 1.0,  # 09:30 ET; solid EUR/USD depth
+        "US_POST_EQUITY": 1.0,  # 10:00 ET; moderate
+    },
+    "M2K": {
+        # Russell 2000 micro — same equity session structure as MES/MNQ
+        "0900": 1.1,   # 23:00 UTC -- thin Asian (RTY less liquid than ES overnight)
+        "1000": 1.1,   # 00:00 UTC -- early Asian
+        "1100": 1.0,   # 01:00 UTC -- moderate
+        "1800": 1.0,   # 08:00 UTC -- pre-NY, picking up
+        "0030": 0.9,   # 14:30 UTC -- US equity open, peak Russell liquidity
+        "US_EQUITY_OPEN": 0.9,   # Dynamic 9:30 ET; best M2K liquidity
+        "US_DATA_OPEN": 1.3,     # 08:30 ET data; wider spreads during release
+        "US_POST_EQUITY": 0.9,   # 10:00 ET; solid
+        "CME_CLOSE": 1.0,        # 2:45 PM ET; moderate
     },
 }
 

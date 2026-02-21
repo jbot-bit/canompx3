@@ -24,6 +24,8 @@ from pipeline.build_daily_features import (
     compute_orb_range,
     detect_break,
     compute_session_stats,
+    compute_overnight_stats,
+    classify_day_type,
     _wilders_rsi,
     compute_outcome,
     build_features_for_day,
@@ -323,6 +325,121 @@ class TestSessionStats:
         assert result["session_asia_high"] == 2352.0
         assert result["session_london_high"] is None
         assert result["session_ny_high"] is None
+
+
+# =============================================================================
+# MODULE 4b: Overnight Stats + Day Type
+# =============================================================================
+
+class TestOvernightStats:
+
+    def test_overnight_keys_present(self):
+        """compute_overnight_stats returns all required keys."""
+        result = compute_overnight_stats(pd.DataFrame(), date(2024, 1, 5))
+        assert set(result.keys()) == {
+            "overnight_high", "overnight_low", "overnight_range",
+            "pre_1000_high", "pre_1000_low",
+        }
+
+    def test_overnight_all_none_on_empty_bars(self):
+        """All None when no bars."""
+        result = compute_overnight_stats(pd.DataFrame(), date(2024, 1, 5))
+        assert result["overnight_high"] is None
+        assert result["overnight_low"] is None
+        assert result["overnight_range"] is None
+        assert result["pre_1000_high"] is None
+        assert result["pre_1000_low"] is None
+
+    def test_overnight_range_from_asia_bars(self):
+        """overnight_high/low computed from Asia session window bars only."""
+        # Asia window: 23:00 UTC Jan 4 to 07:00 UTC Jan 5 (09:00-17:00 Brisbane)
+        bars = _make_bars(
+            timestamps=[
+                _ts(2024, 1, 4, 23, 30),  # Asia
+                _ts(2024, 1, 5, 3, 0),    # Asia
+                _ts(2024, 1, 5, 10, 0),   # NY session (outside Asia)
+            ],
+            opens=[2350, 2355, 2380],
+            highs=[2355, 2360, 2390],
+            lows=[2348, 2352, 2378],
+            closes=[2352, 2358, 2385],
+        )
+        result = compute_overnight_stats(bars, date(2024, 1, 5))
+        assert result["overnight_high"] == 2360.0
+        assert result["overnight_low"] == 2348.0
+        assert result["overnight_range"] == 2360.0 - 2348.0
+
+    def test_pre_1000_excludes_1000_bars(self):
+        """pre_1000_* uses bars before 10:00 Brisbane (00:00 UTC Jan 5)."""
+        # 1000 Brisbane = 00:00 UTC (Brisbane is UTC+10)
+        # pre_1000 = bars in [trading_day_start, 00:00 UTC Jan 5)
+        bars = _make_bars(
+            timestamps=[
+                _ts(2024, 1, 4, 23, 0),   # 09:00 Brisbane — included
+                _ts(2024, 1, 4, 23, 30),  # 09:30 Brisbane — included
+                _ts(2024, 1, 5, 0, 0),    # 10:00 Brisbane — excluded (start of ORB)
+            ],
+            opens=[2350, 2355, 2370],
+            highs=[2356, 2360, 2380],
+            lows=[2348, 2353, 2368],
+            closes=[2354, 2358, 2375],
+        )
+        result = compute_overnight_stats(bars, date(2024, 1, 5))
+        # pre_1000 should only see the first two bars
+        assert result["pre_1000_high"] == 2360.0
+        assert result["pre_1000_low"] == 2348.0
+
+
+class TestClassifyDayType:
+
+    def test_trend_up(self):
+        """Wide range, closed in top 30% = TREND_UP."""
+        # range=5, atr=4 → range_pct=1.25. close at 4.8/5=0.96 → TREND_UP
+        assert classify_day_type(100.0, 105.0, 100.0, 104.8, 4.0) == "TREND_UP"
+
+    def test_trend_down(self):
+        """Wide range, closed in bottom 30% = TREND_DOWN."""
+        # range=5, atr=4 → range_pct=1.25. close at 0.2/5=0.04 → TREND_DOWN
+        assert classify_day_type(105.0, 105.0, 100.0, 100.2, 4.0) == "TREND_DOWN"
+
+    def test_non_trend(self):
+        """Range < 50% of ATR = NON_TREND."""
+        # range=1.5, atr=4 → range_pct=0.375 < 0.5 → NON_TREND
+        assert classify_day_type(100.0, 101.0, 99.5, 100.2, 4.0) == "NON_TREND"
+
+    def test_balanced(self):
+        """Medium range, closed in middle = BALANCED."""
+        # range=4, atr=4 → range_pct=1.0. close at 2/4=0.5 → not TREND, not reversal
+        assert classify_day_type(100.0, 104.0, 100.0, 102.0, 4.0) == "BALANCED"
+
+    def test_reversal_up(self):
+        """Opened low, closed high (medium range) = REVERSAL_UP."""
+        # range=4, atr=4 → range_pct=1.0
+        # close_pct = 2.5/4 = 0.625 (in 0.3-0.7 range, avoids TREND checks)
+        # open=100.5 < lower_40pct=101.6, close=102.5 > upper_60pct=102.4
+        assert classify_day_type(100.5, 104.0, 100.0, 102.5, 4.0) == "REVERSAL_UP"
+
+    def test_reversal_down(self):
+        """Opened high, closed low (medium range) = REVERSAL_DOWN."""
+        # close_pct = 1.5/4 = 0.375 (in 0.3-0.7 range, avoids TREND checks)
+        # open=103.5 > upper_60pct=102.4, close=101.5 < lower_40pct=101.6
+        assert classify_day_type(103.5, 104.0, 100.0, 101.5, 4.0) == "REVERSAL_DOWN"
+
+    def test_none_on_any_missing_input(self):
+        """Returns None when any parameter is None."""
+        assert classify_day_type(None, 105.0, 100.0, 104.0, 4.0) is None
+        assert classify_day_type(100.0, None, 100.0, 104.0, 4.0) is None
+        assert classify_day_type(100.0, 105.0, None, 104.0, 4.0) is None
+        assert classify_day_type(100.0, 105.0, 100.0, None, 4.0) is None
+        assert classify_day_type(100.0, 105.0, 100.0, 104.0, None) is None
+
+    def test_none_on_zero_atr(self):
+        """Returns None when atr_20 is zero."""
+        assert classify_day_type(100.0, 105.0, 100.0, 104.0, 0.0) is None
+
+    def test_none_on_zero_range(self):
+        """Returns None when high == low."""
+        assert classify_day_type(100.0, 100.0, 100.0, 100.0, 4.0) is None
 
 
 # =============================================================================

@@ -518,8 +518,11 @@ class TestC3SlowBreakFilter:
         # compute_single_outcome doesn't run C3. This tests the lower-level function.
         # The test below tests _compute_outcomes_all_rr directly with 1000 label.
 
-    def test_c3_via_all_rr_skips_slow_1000(self):
-        """_compute_outcomes_all_rr with orb_label='1000' and slow break → null."""
+    def test_c3_slow_break_still_produces_outcome(self):
+        """After F-03 audit: C3 moved to strategy discovery layer.
+        outcome_builder no longer filters slow breaks — it returns outcomes
+        for all triggered signals. Break speed filtering is now handled by
+        BreakSpeedFilter in config.py during strategy discovery."""
         bars, break_ts, orb_high, orb_low = self._make_signal_for_c3()
         signal = detect_entry_with_confirm_bars(
             bars_df=bars,
@@ -531,7 +534,7 @@ class TestC3SlowBreakFilter:
             detection_window_end=DAY_END,
             entry_model="E1",
         )
-        assert signal.triggered, "Signal must trigger before C3 filter is applied"
+        assert signal.triggered, "Signal must trigger"
         results = _compute_outcomes_all_rr(
             bars_df=bars,
             signal=signal,
@@ -542,13 +545,13 @@ class TestC3SlowBreakFilter:
             trading_day_end=DAY_END,
             cost_spec=_mgc(),
             entry_model="E1",
-            orb_label="1000",  # C3 applies here
+            orb_label="1000",
             break_ts=break_ts,
         )
         assert len(results) == 1
-        assert results[0]["pnl_r"] is None, (
-            "C3: slow break at 1000 (confirm > 3min after break) must produce null — "
-            f"got pnl_r={results[0]['pnl_r']}"
+        assert results[0]["pnl_r"] is not None, (
+            "Post F-03: outcome_builder must return outcomes for slow breaks "
+            "(filtering is now at strategy discovery layer)"
         )
 
     def test_c3_does_not_apply_to_0900(self):

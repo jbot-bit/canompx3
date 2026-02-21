@@ -93,7 +93,8 @@ class TestAllFiltersSync:
     # Base: NO_FILTER + 4 G-filters + 1 VOL-filter = 6
     # DOW composites: 3 variants (NOFRI, NOMON, NOTUE) x 4 G-filters = 12
     # Break quality composites: 3 variants (FAST5, FAST10, CONT) x 4 G-filters = 12
-    # Total: 6 + 12 + 12 = 30
+    # M6E pip-scaled size filters: M6E_G4/G6/G8 = 3
+    # Total: 6 + 12 + 12 + 3 = 33
     # NOTE: NODBL removed Feb 2026 — double_break is look-ahead
     EXPECTED_FILTER_KEYS = {
         "NO_FILTER",
@@ -107,6 +108,8 @@ class TestAllFiltersSync:
         "ORB_G4_FAST5", "ORB_G5_FAST5", "ORB_G6_FAST5", "ORB_G8_FAST5",
         "ORB_G4_FAST10", "ORB_G5_FAST10", "ORB_G6_FAST10", "ORB_G8_FAST10",
         "ORB_G4_CONT", "ORB_G5_CONT", "ORB_G6_CONT", "ORB_G8_CONT",
+        # M6E (EUR/USD) pip-scaled size filters — MGC point filters meaningless for FX
+        "M6E_G4", "M6E_G6", "M6E_G8",
     }
 
     def test_expected_keys(self):

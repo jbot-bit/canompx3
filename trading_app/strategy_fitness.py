@@ -256,7 +256,12 @@ def _load_strategy_outcomes(
     if orb_label not in _VALID_ORB_LABELS:
         raise ValueError(f"Invalid orb_label '{orb_label}' for SQL column lookup")
 
-    # Load daily features for the relevant date range
+    # Load daily features for the relevant date range.
+    # FIX (F-10): Select ALL columns that any filter.matches_row() may need,
+    # not just orb_size + day_of_week. Composite filters (DOW, break quality,
+    # ATR velocity) need break_delay_min, break_bar_continues, compression_tier,
+    # atr_vel_regime, break_dir etc. Using SELECT * is safe here — daily_features
+    # has a bounded column set and we're already loading the full date range.
     feat_params = [instrument, orb_minutes]
     feat_where = ["symbol = ?", "orb_minutes = ?"]
     if start_date:
@@ -267,17 +272,18 @@ def _load_strategy_outcomes(
         feat_params.append(end_date)
 
     feat_rows = con.execute(
-        f"""SELECT trading_day, orb_{orb_label}_size as orb_size, day_of_week
+        f"""SELECT *
             FROM daily_features
             WHERE {' AND '.join(feat_where)}""",
         feat_params,
     ).fetchall()
+    feat_cols = [desc[0] for desc in con.description]
 
     eligible_days = set()
-    size_col = f"orb_{orb_label}_size"
-    for td, orb_size, dow in feat_rows:
-        if filt.matches_row({size_col: orb_size, "day_of_week": dow}, orb_label):
-            eligible_days.add(td)
+    for feat_row in feat_rows:
+        row_dict = dict(zip(feat_cols, feat_row))
+        if filt.matches_row(row_dict, orb_label):
+            eligible_days.add(row_dict["trading_day"])
 
     filtered = [o for o in all_outcomes if o["trading_day"] in eligible_days]
     return _apply_dst(filtered)

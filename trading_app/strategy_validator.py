@@ -44,6 +44,61 @@ from trading_app.strategy_discovery import parse_dst_regime
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)
 
+
+# =========================================================================
+# FDR correction (F-01: Multiple comparison adjustment)
+# =========================================================================
+
+def benjamini_hochberg(p_values: list[tuple[str, float]], alpha: float = 0.05) -> dict[str, dict]:
+    """Apply Benjamini-Hochberg FDR correction to a set of p-values.
+
+    Addresses the Bailey Rule: when testing thousands of strategies, some will
+    appear profitable by chance. BH controls the False Discovery Rate — the
+    expected proportion of false positives among all rejections.
+
+    Args:
+        p_values: List of (strategy_id, raw_p_value) tuples. Strategies with
+            None p-values are excluded from correction.
+        alpha: FDR significance level (default 0.05 = 5% expected false discoveries).
+
+    Returns:
+        Dict keyed by strategy_id with:
+          - raw_p: original p-value
+          - adjusted_p: BH-adjusted p-value
+          - fdr_significant: True if adjusted_p < alpha
+          - fdr_rank: rank position (1 = smallest p-value)
+
+    Reference: Benjamini & Hochberg (1995), "Controlling the False Discovery
+    Rate: a Practical and Powerful Approach to Multiple Testing."
+    """
+    # Filter out None p-values
+    valid = [(sid, p) for sid, p in p_values if p is not None]
+    if not valid:
+        return {}
+
+    # Sort by p-value ascending
+    valid.sort(key=lambda x: x[1])
+    m = len(valid)
+
+    results = {}
+    # BH procedure: adjusted_p[i] = min(p[i] * m / rank, 1.0)
+    # Enforce monotonicity: adjusted_p[i] = min(adjusted_p[i], adjusted_p[i+1])
+    prev_adj = 1.0
+    for rank_idx in range(m - 1, -1, -1):
+        sid, raw_p = valid[rank_idx]
+        rank = rank_idx + 1  # 1-indexed rank
+        adj_p = min(raw_p * m / rank, 1.0)
+        adj_p = min(adj_p, prev_adj)  # monotonicity
+        prev_adj = adj_p
+        results[sid] = {
+            "raw_p": raw_p,
+            "adjusted_p": round(adj_p, 6),
+            "fdr_significant": adj_p < alpha,
+            "fdr_rank": rank,
+        }
+
+    return results
+
 def _parse_orb_size_bounds(filter_type: str | None, filter_params: str | None) -> tuple[float | None, float | None]:
     """Extract min_size/max_size from filter_type or filter_params JSON.
 
@@ -456,6 +511,7 @@ def run_validation(
         passed = 0
         rejected = 0
         skipped_aliases = 0
+        passed_strategy_ids = []  # Track passed strategies for FDR post-processing
 
         for row in rows:
             row_dict = dict(zip(col_names, row))
@@ -635,8 +691,53 @@ def run_validation(
 
             if status == "PASSED":
                 passed += 1
+                passed_strategy_ids.append(strategy_id)
             else:
                 rejected += 1
+
+        # ---- FDR correction (F-01): Benjamini-Hochberg post-processing ----
+        # Collect p-values for ALL canonical strategies (not just passed) to
+        # compute the correction across the full multiple-testing universe.
+        # Then flag each passed strategy with fdr_significant.
+        if passed_strategy_ids and not dry_run:
+            logger.info("Computing FDR correction (Benjamini-Hochberg)...")
+            all_p_values = con.execute(
+                """SELECT strategy_id, p_value FROM experimental_strategies
+                   WHERE instrument = ?
+                   AND is_canonical = TRUE
+                   AND p_value IS NOT NULL""",
+                [instrument],
+            ).fetchall()
+            p_value_list = [(r[0], r[1]) for r in all_p_values]
+            fdr_results = benjamini_hochberg(p_value_list, alpha=0.05)
+
+            n_fdr_sig = 0
+            n_fdr_insig = 0
+            for sid in passed_strategy_ids:
+                fdr = fdr_results.get(sid)
+                if fdr is not None:
+                    # Update validated_setups with FDR info
+                    con.execute(
+                        """UPDATE validated_setups
+                           SET fdr_significant = ?,
+                               fdr_adjusted_p = ?
+                           WHERE strategy_id = ?""",
+                        [fdr["fdr_significant"], fdr["adjusted_p"], sid],
+                    )
+                    if fdr["fdr_significant"]:
+                        n_fdr_sig += 1
+                    else:
+                        n_fdr_insig += 1
+
+            logger.info(
+                f"  FDR results: {n_fdr_sig} significant, {n_fdr_insig} not significant "
+                f"(of {len(passed_strategy_ids)} passed, from {len(p_value_list)} tested)"
+            )
+            if n_fdr_insig > 0:
+                logger.info(
+                    f"  WARNING: {n_fdr_insig} validated strategies do NOT survive "
+                    f"FDR correction — potential false positives"
+                )
 
         if not dry_run:
             con.commit()

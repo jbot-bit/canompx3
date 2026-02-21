@@ -102,6 +102,7 @@ def _check_fill_bar_exit(
         result["exit_ts"] = exit_ts_val
         result["exit_price"] = stop_price
         result["pnl_r"] = -1.0
+        result["ambiguous_bar"] = True
     elif hit_target:
         risk_points = abs(entry_price - stop_price)
         result["outcome"] = "win"
@@ -152,21 +153,20 @@ def _compute_outcomes_all_rr(
         "exit_price": None, "pnl_r": None,
         "risk_dollars": None, "pnl_dollars": None,
         "mae_r": None, "mfe_r": None,
+        "ambiguous_bar": False,
     }
 
     if not signal.triggered:
         return [dict(null_result) for _ in rr_targets]
 
-    # C3: at 1000 session only, reject slow breaks (confirm > 3 min after break_ts).
-    # Data-verified: fast breaks (<=3 min) avg +0.213R vs slow (>3 min) -0.339R at 1000.
-    # Note: 0900/1800 also show positive delta but not yet BH-validated cross-session.
-    if (orb_label == "1000" and break_ts is not None
-            and signal.confirm_bar_ts is not None):
-        break_speed_min = (
-            pd.Timestamp(signal.confirm_bar_ts) - pd.Timestamp(break_ts)
-        ).total_seconds() / 60
-        if break_speed_min > 3:
-            return [dict(null_result) for _ in rr_targets]
+    # F-03 AUDIT FIX (Feb 2026): Removed hardcoded C3 break speed filter.
+    # Previously rejected slow 1000-session breaks (confirm > 3 min after break_ts)
+    # here in outcome computation. This embedded a research finding into outcomes,
+    # making it invisible as a strategy parameter and preventing comparison.
+    # Break speed filtering is now handled properly via BreakSpeedFilter in config.py
+    # during strategy discovery.
+    # IMPORTANT: orb_outcomes must be REBUILT for session 1000 after this change
+    # to include previously-excluded slow breaks.
 
     entry_price = signal.entry_price
     stop_price = signal.stop_price
@@ -249,7 +249,8 @@ def _compute_outcomes_all_rr(
                 exit_ts_val = fill_row["ts_utc"].to_pydatetime()
                 if hit_tgt and hit_stp:
                     result.update(outcome="loss", exit_ts=exit_ts_val,
-                                  exit_price=stop_price, pnl_r=-1.0)
+                                  exit_price=stop_price, pnl_r=-1.0,
+                                  ambiguous_bar=True)
                 elif hit_tgt:
                     result.update(
                         outcome="win", exit_ts=exit_ts_val,
@@ -320,7 +321,8 @@ def _compute_outcomes_all_rr(
             exit_ts_val = post_entry.iloc[first_hit_idx]["ts_utc"].to_pydatetime()
             if pe_hit_target[first_hit_idx] and pe_hit_stop[first_hit_idx]:
                 result.update(outcome="loss", exit_ts=exit_ts_val,
-                              exit_price=stop_price, pnl_r=-1.0)
+                              exit_price=stop_price, pnl_r=-1.0,
+                              ambiguous_bar=True)
             elif pe_hit_target[first_hit_idx]:
                 result.update(
                     outcome="win", exit_ts=exit_ts_val, exit_price=target_price,
@@ -374,6 +376,7 @@ def compute_single_outcome(
         "pnl_dollars": None,
         "mae_r": None,
         "mfe_r": None,
+        "ambiguous_bar": False,
     }
 
     # Detect entry with confirm bars
@@ -511,6 +514,7 @@ def compute_single_outcome(
             result["exit_ts"] = exit_ts_val
             result["exit_price"] = stop_price
             result["pnl_r"] = -1.0
+            result["ambiguous_bar"] = True
         elif hit_target[first_hit_idx]:
             result["outcome"] = "win"
             result["exit_ts"] = exit_ts_val
@@ -717,6 +721,7 @@ def build_outcomes(
                                 outcome["exit_price"], outcome["pnl_r"],
                                 outcome["risk_dollars"], outcome["pnl_dollars"],
                                 outcome["mae_r"], outcome["mfe_r"],
+                                outcome.get("ambiguous_bar", False),
                             ])
                             total_written += 1
 
@@ -731,6 +736,7 @@ def build_outcomes(
                         'outcome', 'exit_ts', 'exit_price', 'pnl_r',
                         'risk_dollars', 'pnl_dollars',
                         'mae_r', 'mfe_r',
+                        'ambiguous_bar',
                     ],
                 )
                 con.execute("""
@@ -740,7 +746,7 @@ def build_outcomes(
                            entry_ts, entry_price, stop_price, target_price,
                            outcome, exit_ts, exit_price, pnl_r,
                            risk_dollars, pnl_dollars,
-                           mae_r, mfe_r
+                           mae_r, mfe_r, ambiguous_bar
                     FROM batch_df
                 """)
 

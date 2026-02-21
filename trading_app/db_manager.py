@@ -341,6 +341,40 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 except duckdb.CatalogException:
                     pass  # column already exists
 
+        # Migration: add statistical honesty columns (Feb 2026 audit fixes)
+        # F-04: p_value on experimental_strategies (t-test H0: mean_pnl_r = 0)
+        # F-11: sharpe_ann_adj + autocorr_lag1 on experimental_strategies
+        # F-01: fdr_significant + fdr_adjusted_p on validated_setups
+        audit_exp_cols = [
+            ("p_value", "DOUBLE"),
+            ("sharpe_ann_adj", "DOUBLE"),
+            ("autocorr_lag1", "DOUBLE"),
+        ]
+        for col, typedef in audit_exp_cols:
+            try:
+                con.execute(f"ALTER TABLE experimental_strategies ADD COLUMN {col} {typedef}")
+            except duckdb.CatalogException:
+                pass  # column already exists
+
+        audit_val_cols = [
+            ("fdr_significant", "BOOLEAN"),
+            ("fdr_adjusted_p", "DOUBLE"),
+            ("p_value", "DOUBLE"),
+            ("sharpe_ann_adj", "DOUBLE"),
+        ]
+        for col, typedef in audit_val_cols:
+            try:
+                con.execute(f"ALTER TABLE validated_setups ADD COLUMN {col} {typedef}")
+            except duckdb.CatalogException:
+                pass  # column already exists
+
+        # Migration: add ambiguous_bar tracking (F-05 audit fix)
+        # Flags outcomes where both target and stop hit in same 1m bar
+        try:
+            con.execute("ALTER TABLE orb_outcomes ADD COLUMN ambiguous_bar BOOLEAN DEFAULT FALSE")
+        except duckdb.CatalogException:
+            pass  # column already exists
+
         con.commit()
         logger.info("Trading app schema initialized successfully")
 

@@ -245,9 +245,10 @@ def _orb_utc_window(trading_day: date, orb_label: str,
 def compute_orb_range(bars_df: pd.DataFrame, trading_day: date,
                        orb_label: str, orb_minutes: int) -> dict:
     """
-    Compute ORB high/low/size for a single ORB on a single trading day.
+    Compute ORB high/low/size/volume for a single ORB on a single trading day.
 
-    Returns dict with keys: high, low, size (or all None if no bars in window).
+    Returns dict with keys: high, low, size, volume (or all None if no bars in window).
+    volume = total contracts traded during the ORB window.
     """
     utc_start, utc_end = _orb_utc_window(trading_day, orb_label, orb_minutes)
 
@@ -256,13 +257,14 @@ def compute_orb_range(bars_df: pd.DataFrame, trading_day: date,
     orb_bars = bars_df[mask]
 
     if orb_bars.empty:
-        return {"high": None, "low": None, "size": None}
+        return {"high": None, "low": None, "size": None, "volume": None}
 
     high = float(orb_bars['high'].max())
     low = float(orb_bars['low'].min())
     size = high - low
+    volume = int(orb_bars['volume'].sum())
 
-    return {"high": high, "low": low, "size": size}
+    return {"high": high, "low": low, "size": size, "volume": volume}
 
 # =============================================================================
 # MODULE 3: BREAK DETECTION
@@ -327,6 +329,7 @@ def detect_break(bars_df: pd.DataFrame, trading_day: date,
     no_break = {
         "break_dir": None, "break_ts": None,
         "break_delay_min": None, "break_bar_continues": None,
+        "break_bar_volume": None,
     }
 
     if orb_high is None or orb_low is None:
@@ -354,6 +357,7 @@ def detect_break(bars_df: pd.DataFrame, trading_day: date,
                 "break_ts": bar_ts,
                 "break_delay_min": delay,
                 "break_bar_continues": close > bar_open,  # green candle = continuation
+                "break_bar_volume": int(bar['volume']),
             }
         elif close < orb_low:
             delay = (bar_ts - orb_end).total_seconds() / 60.0
@@ -362,6 +366,7 @@ def detect_break(bars_df: pd.DataFrame, trading_day: date,
                 "break_ts": bar_ts,
                 "break_delay_min": delay,
                 "break_bar_continues": close < bar_open,  # red candle = continuation
+                "break_bar_volume": int(bar['volume']),
             }
 
     return no_break
@@ -466,6 +471,98 @@ def compute_session_stats(bars_df: pd.DataFrame,
             result[f"session_{session}_low"] = float(session_bars['low'].min())
 
     return result
+
+
+def compute_overnight_stats(bars_df: pd.DataFrame, trading_day: date) -> dict:
+    """
+    Compute overnight (Asia session) and pre-1000 session stats.
+
+    overnight_*: Asia session window (09:00-17:00 Brisbane = first 8h of trading day).
+    pre_1000_*:  Bars from trading day start to 10:00 Brisbane (hour before 1000 ORB).
+
+    These are pre-entry for the 1000 session — no look-ahead.
+    """
+    result: dict = {
+        "overnight_high": None, "overnight_low": None, "overnight_range": None,
+        "pre_1000_high": None, "pre_1000_low": None,
+    }
+
+    if bars_df.empty:
+        return result
+
+    # Overnight: Asia session window (SESSION_WINDOWS["asia"] = 09:00-17:00 Brisbane)
+    asia_start, asia_end = _session_utc_window(trading_day, "asia")
+    asia_mask = (bars_df['ts_utc'] >= asia_start) & (bars_df['ts_utc'] < asia_end)
+    asia_bars = bars_df[asia_mask]
+
+    if not asia_bars.empty:
+        result["overnight_high"] = float(asia_bars['high'].max())
+        result["overnight_low"]  = float(asia_bars['low'].min())
+        result["overnight_range"] = round(result["overnight_high"] - result["overnight_low"], 4)
+
+    # Pre-1000: all bars from trading day start up to (but not including) 10:00 Brisbane
+    # _orb_utc_window(day, "1000", 5)[0] = start of the 1000 ORB window = 10:00 Brisbane
+    pre_1000_start = _orb_utc_window(trading_day, "1000", 5)[0]
+    td_start, _ = compute_trading_day_utc_range(trading_day)
+    pre_mask = (bars_df['ts_utc'] >= td_start) & (bars_df['ts_utc'] < pre_1000_start)
+    pre_bars = bars_df[pre_mask]
+
+    if not pre_bars.empty:
+        result["pre_1000_high"] = float(pre_bars['high'].max())
+        result["pre_1000_low"]  = float(pre_bars['low'].min())
+
+    return result
+
+
+def classify_day_type(
+    daily_open: float | None,
+    daily_high: float | None,
+    daily_low: float | None,
+    daily_close: float | None,
+    atr_20: float | None,
+) -> str | None:
+    """
+    Classify the retrospective day type using daily OHLC and ATR.
+
+    Returns one of:
+      'TREND_UP'      — wide range, closed in top 30%
+      'TREND_DOWN'    — wide range, closed in bottom 30%
+      'REVERSAL_UP'   — opened low, closed high (medium range)
+      'REVERSAL_DOWN' — opened high, closed low (medium range)
+      'BALANCED'      — medium range, no clear direction
+      'NON_TREND'     — tight range (< 50% of ATR)
+      None            — insufficient data
+
+    NOTE: This is LOOK-AHEAD relative to intraday entry. For research only.
+    Do NOT use as a live trading filter.
+    """
+    if None in (daily_open, daily_high, daily_low, daily_close, atr_20):
+        return None
+    if atr_20 <= 0:
+        return None
+
+    day_range = daily_high - daily_low
+    if day_range <= 0:
+        return None
+
+    range_pct = day_range / atr_20
+    close_pct = (daily_close - daily_low) / day_range  # 0=closed at low, 1=at high
+
+    if range_pct < 0.5:
+        return "NON_TREND"
+    if close_pct >= 0.7:
+        return "TREND_UP"
+    if close_pct <= 0.3:
+        return "TREND_DOWN"
+    # Medium range — check reversal pattern
+    lower_40pct = daily_low + day_range * 0.4
+    upper_60pct = daily_low + day_range * 0.6
+    if daily_open < lower_40pct and daily_close > upper_60pct:
+        return "REVERSAL_UP"
+    if daily_open > upper_60pct and daily_close < lower_40pct:
+        return "REVERSAL_DOWN"
+    return "BALANCED"
+
 
 # =============================================================================
 # MODULE 5: RSI (Wilder's 14-period on 5m closes)
@@ -722,7 +819,7 @@ def build_features_for_day(con: duckdb.DuckDBPyConnection, symbol: str,
         row["daily_low"] = None
         row["daily_close"] = None
 
-    # gap_open_points, atr_20, atr velocity and compression computed in post-pass
+    # gap_open_points, atr_20, atr velocity, compression, and rel_vol computed in post-pass
     row["gap_open_points"] = None
     row["atr_20"] = None
     row["atr_vel_ratio"] = None
@@ -730,10 +827,36 @@ def build_features_for_day(con: duckdb.DuckDBPyConnection, symbol: str,
     for _sl in ["0900", "1000", "1800"]:
         row[f"orb_{_sl}_compression_z"] = None
         row[f"orb_{_sl}_compression_tier"] = None
+    # rel_vol initialised here; computed in post-pass after all days are processed
+    for _sl in ORB_LABELS:
+        row[f"rel_vol_{_sl}"] = None
+
+    # Market Profile context columns — overnight/pre-session computed below;
+    # prev_day_*, sweep labels, gap_type, day_type computed in post-pass
+    row["overnight_high"]        = None
+    row["overnight_low"]         = None
+    row["overnight_range"]       = None
+    row["pre_1000_high"]         = None
+    row["pre_1000_low"]          = None
+    row["prev_day_high"]         = None
+    row["prev_day_low"]          = None
+    row["prev_day_close"]        = None
+    row["prev_day_range"]        = None
+    row["prev_day_direction"]    = None
+    row["gap_type"]              = None
+    row["took_pdh_before_1000"]  = None
+    row["took_pdl_before_1000"]  = None
+    row["overnight_took_pdh"]    = None
+    row["overnight_took_pdl"]    = None
+    row["day_type"]              = None
 
     # Module 4: Session stats
     session_stats = compute_session_stats(bars_df, trading_day)
     row.update(session_stats)
+
+    # Module 4b: Overnight + pre-session stats (pre-entry for 1000 session)
+    overnight_stats = compute_overnight_stats(bars_df, trading_day)
+    row.update(overnight_stats)
 
     # Module 5: RSI at 0900
     row["rsi_14_at_0900"] = compute_rsi_at_0900(
@@ -748,6 +871,7 @@ def build_features_for_day(con: duckdb.DuckDBPyConnection, symbol: str,
         row[f"orb_{label}_high"] = orb["high"]
         row[f"orb_{label}_low"] = orb["low"]
         row[f"orb_{label}_size"] = orb["size"]
+        row[f"orb_{label}_volume"] = orb["volume"]
 
         # Module 3: Break detection
         brk = detect_break(
@@ -758,6 +882,7 @@ def build_features_for_day(con: duckdb.DuckDBPyConnection, symbol: str,
         row[f"orb_{label}_break_ts"] = brk["break_ts"]
         row[f"orb_{label}_break_delay_min"] = brk["break_delay_min"]
         row[f"orb_{label}_break_bar_continues"] = brk["break_bar_continues"]
+        row[f"orb_{label}_break_bar_volume"] = brk["break_bar_volume"]
 
         # Module 6: Outcome + MAE/MFE
         outcome = compute_outcome(
@@ -959,6 +1084,89 @@ def build_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
                     rows[i][f"orb_{sess_label}_compression_tier"] = "Expanded"
                 else:
                     rows[i][f"orb_{sess_label}_compression_tier"] = "Neutral"
+
+        # Prior day reference levels + gap_type + liquidity sweep labels + day_type.
+        # All use rows[i-1] for prior-day data — no look-ahead.
+        prev_high  = rows[i - 1].get("daily_high")  if i > 0 else None
+        prev_low   = rows[i - 1].get("daily_low")   if i > 0 else None
+        prev_close = rows[i - 1].get("daily_close") if i > 0 else None
+        prev_open  = rows[i - 1].get("daily_open")  if i > 0 else None
+
+        rows[i]["prev_day_high"]  = prev_high
+        rows[i]["prev_day_low"]   = prev_low
+        rows[i]["prev_day_close"] = prev_close
+
+        if prev_high is not None and prev_low is not None:
+            rows[i]["prev_day_range"] = round(prev_high - prev_low, 4)
+        if prev_close is not None and prev_open is not None:
+            rows[i]["prev_day_direction"] = "bull" if prev_close >= prev_open else "bear"
+
+        # gap_type: classify gap_open_points relative to prior range
+        gap_pts    = rows[i].get("gap_open_points")
+        prev_range = rows[i].get("prev_day_range")
+        if gap_pts is not None and prev_range is not None and prev_range > 0:
+            threshold = 0.1 * prev_range
+            if gap_pts > threshold:
+                rows[i]["gap_type"] = "gap_up"
+            elif gap_pts < -threshold:
+                rows[i]["gap_type"] = "gap_down"
+            else:
+                rows[i]["gap_type"] = "inside"
+        elif gap_pts is not None:
+            rows[i]["gap_type"] = "none"
+
+        # Liquidity sweep labels — compare pre-session high/low to prior day high/low
+        pre_1000_high  = rows[i].get("pre_1000_high")
+        pre_1000_low   = rows[i].get("pre_1000_low")
+        overnight_high = rows[i].get("overnight_high")
+        overnight_low  = rows[i].get("overnight_low")
+
+        if pre_1000_high is not None and prev_high is not None:
+            rows[i]["took_pdh_before_1000"] = bool(pre_1000_high > prev_high)
+        if pre_1000_low is not None and prev_low is not None:
+            rows[i]["took_pdl_before_1000"] = bool(pre_1000_low < prev_low)
+        if overnight_high is not None and prev_high is not None:
+            rows[i]["overnight_took_pdh"] = bool(overnight_high > prev_high)
+        if overnight_low is not None and prev_low is not None:
+            rows[i]["overnight_took_pdl"] = bool(overnight_low < prev_low)
+
+        # Retrospective day type (atr_20 already computed in this loop pass)
+        rows[i]["day_type"] = classify_day_type(
+            rows[i].get("daily_open"),
+            rows[i].get("daily_high"),
+            rows[i].get("daily_low"),
+            rows[i].get("daily_close"),
+            rows[i].get("atr_20"),
+        )
+
+    # Post-pass: relative volume per session.
+    #
+    # rel_vol_{label} = break_bar_volume / median(break_bar_volume, last 20 break-days
+    #                   for the same session label).
+    #
+    # Only defined on days where a break occurred (break_bar_volume is not None).
+    # Compared against the same session's own prior breaks — controls for the
+    # fact that 0900 gold is structurally thinner than 2300 gold without needing
+    # same-minute cross-day lookups.
+    #
+    # Minimum lookback: 5 break-days (returns None during warm-up).
+    # No look-ahead: only rows[0..i-1] are used when computing rows[i].
+    for label in ORB_LABELS:
+        bvol_col = f"orb_{label}_break_bar_volume"
+        rel_col = f"rel_vol_{label}"
+        prior_break_vols: list[int] = []
+
+        for i in range(len(rows)):
+            bvol = rows[i].get(bvol_col)
+            if bvol is not None:
+                # Compute rel_vol BEFORE appending today (no look-ahead)
+                if len(prior_break_vols) >= 5:
+                    window = prior_break_vols[-20:]
+                    median_vol = float(sorted(window)[len(window) // 2])
+                    if median_vol > 0:
+                        rows[i][rel_col] = round(bvol / median_vol, 4)
+                # Append today's break volume for future rows
+                prior_break_vols.append(bvol)
 
     # Convert to DataFrame for bulk insert
     features_df = pd.DataFrame(rows)
