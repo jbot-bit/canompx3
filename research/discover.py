@@ -182,16 +182,16 @@ def scan_session(con, instrument, session, entry_model='E1', rr=2.0, cb=2,
                 't': round(float(t_stat), 4), 'p': round(float(p), 6),
             })
 
-    # -- 2. Prior-day signal (prev trading day outcome for same session) --
-    for signal in ['win', 'loss']:
+    # -- 2. Prior-day direction (prev_day_direction column: 'up' or 'down') --
+    for direction in ['up', 'down']:
         arr = get_pnl_array(con, instrument, session, entry_model, rr, cb, size_min,
-                            f"AND d.prev_day_{session}_outcome = '{signal}'")
+                            f"AND d.prev_day_direction = '{direction}'")
         other = get_pnl_array(con, instrument, session, entry_model, rr, cb, size_min,
-                              f"AND d.prev_day_{session}_outcome IS NOT NULL AND d.prev_day_{session}_outcome != '{signal}'")
+                              f"AND d.prev_day_direction IS NOT NULL AND d.prev_day_direction != '{direction}'")
         if len(arr) >= 20 and len(other) >= 20:
             t_stat, p = stats.ttest_ind(arr, other, equal_var=False)
             results.append({
-                'name': f'prev_day_{signal}', 'type': 'prior_day',
+                'name': f'prev_day_{direction}', 'type': 'prior_day',
                 'n_true': int(len(arr)), 'mean_true': round(float(np.mean(arr)), 4),
                 'n_false': int(len(other)), 'mean_false': round(float(np.mean(other)), 4),
                 'delta': round(float(np.mean(arr) - np.mean(other)), 4),
@@ -214,18 +214,18 @@ def scan_session(con, instrument, session, entry_model='E1', rr=2.0, cb=2,
                 't': round(float(t_stat), 4), 'p': round(float(p), 6),
             })
 
-    # -- 4. ATR regime (compressed spring) --
-    low_atr = get_pnl_array(con, instrument, session, entry_model, rr, cb, size_min,
-                            "AND d.atr_20 IS NOT NULL AND d.atr_20 < d.atr_20_sma50")
-    high_atr = get_pnl_array(con, instrument, session, entry_model, rr, cb, size_min,
-                             "AND d.atr_20 IS NOT NULL AND d.atr_20 >= d.atr_20_sma50")
-    if len(low_atr) >= 20 and len(high_atr) >= 20:
-        t_stat, p = stats.ttest_ind(low_atr, high_atr, equal_var=False)
+    # -- 4. ATR regime (compressed spring — atr_vel_regime) --
+    contracting = get_pnl_array(con, instrument, session, entry_model, rr, cb, size_min,
+                                "AND d.atr_vel_regime = 'Contracting'")
+    not_contracting = get_pnl_array(con, instrument, session, entry_model, rr, cb, size_min,
+                                    "AND d.atr_vel_regime IS NOT NULL AND d.atr_vel_regime != 'Contracting'")
+    if len(contracting) >= 20 and len(not_contracting) >= 20:
+        t_stat, p = stats.ttest_ind(contracting, not_contracting, equal_var=False)
         results.append({
-            'name': 'ATR_below_sma50', 'type': 'regime',
-            'n_true': int(len(low_atr)), 'mean_true': round(float(np.mean(low_atr)), 4),
-            'n_false': int(len(high_atr)), 'mean_false': round(float(np.mean(high_atr)), 4),
-            'delta': round(float(np.mean(low_atr) - np.mean(high_atr)), 4),
+            'name': 'ATR_contracting', 'type': 'regime',
+            'n_true': int(len(contracting)), 'mean_true': round(float(np.mean(contracting)), 4),
+            'n_false': int(len(not_contracting)), 'mean_false': round(float(np.mean(not_contracting)), 4),
+            'delta': round(float(np.mean(contracting) - np.mean(not_contracting)), 4),
             't': round(float(t_stat), 4), 'p': round(float(p), 6),
         })
 
