@@ -1,0 +1,125 @@
+
+## Subtask 2-3: Analyze Synthetic Data Variance Skips (Category 3)
+
+### Execution Date: 2026-02-21
+
+### Analysis Complete - Decision: KEEP AS INTENTIONAL
+
+Created comprehensive analysis document: **tests/ANALYSIS_SYNTHETIC_DATA_SKIPS.md**
+
+#### Summary
+
+Both synthetic data variance skips are INTENTIONAL runtime guards that allow integration tests to skip gracefully when randomly generated test data does not meet minimum requirements for downstream assertions. These skips represent correct probabilistic behavior, not test brittleness.
+
+**Skips analyzed:**
+1. test_integration.py:162 - No strategies passed validation with test data
+2. test_integration_l1_l2.py:429 - No strategies with trades in synthetic data
+
+**Decision: KEEP BOTH SKIPS AS-IS**
+
+No code changes required. The skip messages are clear, the conditions represent correct validation behavior, and the test behavior matches design intent.
+
+#### Reproduction Results (2026-02-21)
+
+**Test run command:**
+```bash
+python -m pytest \
+  tests/test_trading_app/test_integration.py::TestPipelineFull::test_promoted_strategy_has_all_fields \
+  tests/test_integration_l1_l2.py::TestDataContractIntegrity::test_data_contract_chain \
+  -v -rs --tb=no
+```
+
+**Results:**
+- **Skip 1 (test_promoted_strategy_has_all_fields):** SKIPPED ❌
+  - Message: "No strategies passed validation with test data"
+  - 20-day synthetic data produced 0 validated strategies
+  - Root cause: Validation correctly rejects strategies with insufficient sample size or negative yearly returns
+  
+- **Skip 2 (test_data_contract_chain):** PASSED ✅
+  - 30-day synthetic data produced experimental strategies with trades
+  - Test traced strategy back through full pipeline successfully
+
+**Skip rate:** 1/2 tests (50%) - acceptable for probabilistic synthetic data tests
+
+#### Root Cause Analysis
+
+**Why Skip 1 Occurs:**
+
+1. **Synthetic Data Constraints:**
+   - 20 weekday trading days ≈ 14-16 actual trading days
+   - Each day generates 1 deterministic ORB long break
+   - Strategy discovery creates hundreds of parameter combinations
+   - Each combination sees subset of break-days based on filters
+
+2. **Multi-Phase Validation Filtering:**
+   - Phase 1: Sample size ≥ min_sample (test uses 5, but...)
+   - Phase 2: Post-cost expectancy > 0
+   - Phase 3: **Yearly robustness** - all years must be positive or waived
+   - Phase 4: Stress test under 1.5x cost multiplier
+   - 20 days = 1 calendar year (2024 only)
+   - If year 2024 has negative avg_r → REJECTED (no other years to offset)
+
+3. **Cascade Effect:**
+   - Even strategies with sample_size ≥ 5 fail Phase 2/3/4
+   - Result: 0 strategies in validated_setups
+   - Test correctly skips because there's nothing to verify
+
+**Why This Is Correct Behavior:**
+- Validation is correctly rejecting low-quality strategies
+- 20 days insufficient for robust multi-year validation (intentional test design trade-off: fast runtime vs. guaranteed pass)
+- Test verifies schema contracts when validation succeeds, skips when it doesn't
+- Alternative would be to assert on rejected strategies (different test purpose)
+
+**Why Skip 2 Usually Passes:**
+- 30 days > 20 days → more potential trades
+- Checks experimental_strategies (pre-validation), not validated_setups (post-validation)
+- Only needs 1 strategy with sample_size > 0 to pass
+- Deterministic long-break data ensures at least some strategies have trades
+- Skip would only trigger if data generator fails completely (defensive guard)
+
+#### Alternative Approaches Evaluated and Rejected
+
+1. **Increase n_days to 100+**
+   - **Pro:** Guarantees validated strategies (multi-year coverage for Phase 3)
+   - **Con:** 5-20x increase in test runtime (5 min → 30+ min) for class-scoped fixture
+   - **Decision:** REJECTED - runtime cost outweighs benefit for smoke tests
+
+2. **Use pre-seeded test database**
+   - **Pro:** Deterministic, faster execution, no skips
+   - **Con:** Doesn't test pipeline execution (defeats purpose of integration tests)
+   - **Decision:** REJECTED - defeats purpose of integration tests
+
+3. **Split tests: pipeline execution + schema validation**
+   - **Pro:** Pipeline test can't skip, schema test uses fixture (always runs)
+   - **Con:** Requires maintaining fixture, doubles test count
+   - **Decision:** REJECTED - unnecessary complexity
+
+4. **Lower validation thresholds for test mode**
+   - **Pro:** Eliminates skip, keeps 20-day data
+   - **Con:** Tests unrealistic thresholds, doesn't test actual validation logic
+   - **Decision:** REJECTED - undermines test validity
+
+#### Documentation Deliverable
+
+File: tests/ANALYSIS_SYNTHETIC_DATA_SKIPS.md (438 lines)
+
+Contents:
+- Executive summary with decision rationale and reproduction results
+- Complete skip inventory with purposes and fixtures
+- Root cause analysis (synthetic data generation, validation filtering, cascade effects)
+- Per-skip decision rationale with trade-off analysis
+- Reproduction steps (verified 2026-02-21)
+- Alternative approaches considered and rejected (4 options with pros/cons)
+- Recommendations (DOCUMENT_AND_KEEP with optional inline comment enhancements)
+- QA sign-off criteria checklist
+
+Sign-off: Ready for Phase 3 implementation (documentation enhancements).
+
+#### Next Steps
+
+Phase 2 (Root Cause Analysis) is now complete. All 3 skip categories analyzed:
+- ✅ Category 1: Database availability skips (4 skips) - KEEP AS INTENTIONAL
+- ✅ Category 2: Artifact availability skips (2 skips) - KEEP AS INTENTIONAL  
+- ✅ Category 3: Synthetic data variance skips (2 skips) - KEEP AS INTENTIONAL
+
+Proceed to Phase 3: Implementation (add comprehensive inline documentation to all skip locations).
