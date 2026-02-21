@@ -27,6 +27,7 @@ Raw data contains GC (full-size Gold) which has better 1m bar coverage than MGC.
 | `docs/RESEARCH_ARCHIVE.md` | Research findings, NO-GO archive, alternative strategy results | Supplements TRADING_RULES.md |
 | `docs/DST_CONTAMINATION.md` | DST session contamination detail, remediation status | Reference for DST work |
 | `docs/DOW_ALIGNMENT.md` | Day-of-week alignment verification | Reference for DOW filters |
+| `docs/MONOREPO_ARCHITECTURE.md` | Service overview, shared resources, inter-service deps | Reference for monorepo structure |
 | `CANONICAL_*.txt` | Frozen specs | Read-only; live code is truth |
 
 **Conflict resolution:**
@@ -106,61 +107,39 @@ cp "C:\db\gold.db" "C:\Users\joshd\canompx3\gold.db"
 ## Key Commands
 
 ```bash
+# Guardrails (run frequently)
+python pipeline/check_drift.py               # Drift detection (28+ checks)
+python -m pytest tests/ -x -q                # Fast test suite
+python pipeline/health_check.py              # All-in-one health check
+
 # Database
 python pipeline/init_db.py                    # Create schema
 python pipeline/init_db.py --force            # Drop + recreate (DESTROYS DATA)
 
-# Ingestion
+# Pipeline (typical flow: ingest → 5m bars → daily features)
 python pipeline/ingest_dbn.py --instrument MGC --start 2024-01-01 --end 2024-12-31
 python pipeline/ingest_dbn.py --instrument MGC --resume
 python pipeline/run_pipeline.py --instrument MGC --start 2024-01-01 --end 2024-12-31
-python scripts/infra/run_parallel_ingest.py --instrument MGC --db-path C:/db/gold.db
-
-# Features
 python pipeline/build_bars_5m.py --instrument MGC --start 2024-01-01 --end 2024-12-31
 python pipeline/build_daily_features.py --instrument MGC --start 2024-01-01 --end 2024-12-31
 
 # Trading App
-python trading_app/outcome_builder.py --instrument MGC --start 2021-02-05 --end 2026-02-04
-python trading_app/strategy_discovery.py --instrument MGC
-python trading_app/strategy_validator.py --instrument MGC --min-sample 50
 python trading_app/paper_trader.py --instrument MGC --start 2025-01-01 --end 2025-12-31
 python -m trading_app.live_config --db-path C:/db/gold.db
-
-# Guardrails
-python pipeline/check_drift.py               # Drift detection
-python -m pytest tests/ -v                    # Full test suite
-python -m pytest tests/ -x -q                # Stop on first failure
-python pipeline/health_check.py              # All-in-one health check
-
-# Reports
 python pipeline/dashboard.py                 # Generate dashboard.html
 python scripts/reports/report_edge_portfolio.py      # Edge family portfolio report
 ```
+
+For outcome rebuild, validation, and edge family workflows, use slash commands:
+`/validate-instrument MGC`, `/rebuild-outcomes MGC`, `/health-check`
+
+See `.claude/rules/` for contextual rules on daily_features JOINs, pipeline patterns, and validation workflows.
 
 ---
 
 ## Guardrails
 
-### 1. Pre-Commit Hook (`.githooks/pre-commit`)
-Runs drift check + fast tests before every commit.
-Setup: `git config core.hooksPath .githooks`
-
-### 2. Drift Detection (`pipeline/check_drift.py`)
-Static analysis catching: hardcoded symbols, performance anti-patterns, import direction violations, connection leaks, schema mismatches, timezone hygiene, analytical honesty, CLAUDE.md size cap. Run `python pipeline/check_drift.py` to see current check count and results.
-
-### 3. Claude Code Hooks
-- Pipeline file edit → drift check
-- Schema edit → schema test
-- Any .py edit → test suite
-
-### 4. GitHub Actions CI (`.github/workflows/ci.yml`)
-On push/PR: drift check + pure-function tests + schema tests.
-
-### 5. Validation Gates (Built Into Pipeline)
-- **Ingestion:** 7 gates (DBN schema, UTC proof, outright filter, OHLCV sanity, PK safety, merge integrity, honesty gates)
-- **5m Aggregation:** 4 gates (no dupes, alignment, OHLCV sanity, volume non-negative)
-- **Checkpoint:** JSONL append-only, supports `--resume` and `--retry-failed`
+Five layers enforce quality: pre-commit hook (`.githooks/pre-commit`), drift detection (`pipeline/check_drift.py` — 28+ static checks), Claude Code hooks (auto-run drift/tests on file edits), GitHub Actions CI, and built-in pipeline validation gates (7 ingestion gates, 4 aggregation gates). Setup: `git config core.hooksPath .githooks`
 
 ---
 

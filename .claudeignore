@@ -1,0 +1,28 @@
+# Database files
+gold.db
+*.duckdb
+
+# Raw data files
+*.dbn.zst
+data/
+
+# Build artifacts and caches
+__pycache__/
+*.pyc
+*.pyo
+tmp/
+.mypy_cache/
+
+# Research outputs (large CSVs, not code)
+research/output/
+
+# Worktrees
+.claude/worktrees/
+
+# Generated/temporary files
+outcome_builder.heartbeat
+audit_report.js
+dashboard.html
+
+# Environment
+.env

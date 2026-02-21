@@ -41,8 +41,10 @@ pipeline/checkpoints/
 *.swp
 *.swo
 
-# Claude Code
-.claude/
+# Claude Code (ignore internals, track rules/commands)
+.claude/*
+!.claude/rules/
+!.claude/commands/
 memory/
 
 # Windows junk
