@@ -39,7 +39,7 @@ from pipeline.dst import (
     is_winter_for_session, classify_dst_verdict,
 )
 from trading_app.db_manager import init_trading_app_schema
-from trading_app.walkforward import run_walkforward, append_walkforward_result
+from trading_app.walkforward import append_walkforward_result
 from trading_app.strategy_discovery import parse_dst_regime
 
 # Force unbuffered stdout
@@ -570,11 +570,19 @@ def run_validation(
 
     Returns (passed_count, rejected_count).
     """
+    import os
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+
     if db_path is None:
         db_path = GOLD_DB_PATH
 
     cost_spec = get_cost_spec(instrument)
 
+    if workers is None:
+        workers = min(8, max(1, (os.cpu_count() or 2) - 1))
+    use_parallel = workers > 1 and enable_walkforward
+
+    # ── Phase A: Load strategies + serial cull (phases 1-5) ──────────
     with duckdb.connect(str(db_path)) as con:
         from pipeline.db_config import configure_connection
         configure_connection(con, writing=True)
@@ -582,7 +590,6 @@ def run_validation(
         if not dry_run:
             init_trading_app_schema(db_path=db_path)
 
-        # Fetch unvalidated strategies
         rows = con.execute(
             """SELECT * FROM experimental_strategies
                WHERE instrument = ?
@@ -592,7 +599,6 @@ def run_validation(
         ).fetchall()
         col_names = [desc[0] for desc in con.description]
 
-        # Pre-fetch ATR by year for regime waivers (one query total)
         atr_by_year = {}
         if enable_regime_waivers:
             atr_rows = con.execute("""
@@ -603,113 +609,209 @@ def run_validation(
             """, [instrument]).fetchall()
             atr_by_year = {int(r[0]): r[1] for r in atr_rows}
 
-        passed = 0
-        rejected = 0
-        skipped_aliases = 0
-        passed_strategy_ids = []  # Track passed strategies for FDR post-processing
+    # Connection closed — DuckDB requires no write connection open
+    # while worker processes open read-only connections.
 
-        for row in rows:
-            row_dict = dict(zip(col_names, row))
-            strategy_id = row_dict["strategy_id"]
+    passed = 0
+    rejected = 0
+    skipped_aliases = 0
+    passed_strategy_ids = []
 
-            # Skip aliases (non-canonical strategies)
-            if row_dict.get("is_canonical") is False:
-                skipped_aliases += 1
-                if not dry_run:
+    serial_results = []  # Each: {row_dict, status, notes, regime_waivers, dst_split}
+    wf_candidates = []   # Survivors needing walkforward
+
+    for row in rows:
+        row_dict = dict(zip(col_names, row))
+        strategy_id = row_dict["strategy_id"]
+
+        if row_dict.get("is_canonical") is False:
+            skipped_aliases += 1
+            serial_results.append({
+                "row_dict": row_dict, "status": "SKIPPED",
+                "notes": "Alias (non-canonical)", "regime_waivers": [],
+                "dst_split": {"winter_n": None, "winter_avg_r": None,
+                              "summer_n": None, "summer_avg_r": None, "verdict": None},
+            })
+            continue
+
+        status, notes, regime_waivers = validate_strategy(
+            row_dict, cost_spec,
+            stress_multiplier=stress_multiplier,
+            min_sample=min_sample,
+            min_sharpe=min_sharpe,
+            max_drawdown=max_drawdown,
+            exclude_years=exclude_years,
+            min_years_positive_pct=min_years_positive_pct,
+            min_trades_per_year=min_trades_per_year,
+            atr_by_year=atr_by_year if enable_regime_waivers else None,
+            enable_regime_waivers=enable_regime_waivers,
+        )
+
+        strat_dst_regime = parse_dst_regime(strategy_id)
+
+        if status == "PASSED" and enable_walkforward:
+            wf_candidates.append({
+                "row_dict": row_dict, "status": status, "notes": notes,
+                "regime_waivers": regime_waivers,
+                "strat_dst_regime": strat_dst_regime,
+            })
+        else:
+            dst_split = {"winter_n": None, "winter_avg_r": None,
+                         "summer_n": None, "summer_avg_r": None, "verdict": None}
+            serial_results.append({
+                "row_dict": row_dict, "status": status, "notes": notes,
+                "regime_waivers": regime_waivers, "dst_split": dst_split,
+            })
+            if status == "PASSED":
+                passed += 1
+                passed_strategy_ids.append(strategy_id)
+            else:
+                rejected += 1
+
+    logger.info(
+        f"Phase A complete: {len(wf_candidates)} survivors for walkforward, "
+        f"{rejected} rejected, {skipped_aliases} aliases skipped "
+        f"(of {len(rows)} strategies)"
+    )
+
+    # ── Phase B: Parallel walkforward for survivors ──────────────────
+    wf_results_map = {}  # strategy_id -> worker result dict
+
+    if wf_candidates:
+        wf_params = {
+            "test_window_months": wf_test_months,
+            "min_train_months": wf_min_train_months,
+            "min_trades": wf_min_trades,
+            "min_windows": wf_min_windows,
+            "min_pct_positive": wf_min_pct_positive,
+        }
+
+        wall_start = time.monotonic()
+        total_wf_duration = 0.0
+
+        def _build_worker_kwargs(cand):
+            rd = cand["row_dict"]
+            return dict(
+                strategy_id=rd["strategy_id"],
+                instrument=instrument,
+                orb_label=rd["orb_label"],
+                entry_model=rd.get("entry_model", "E1"),
+                rr_target=rd["rr_target"],
+                confirm_bars=rd["confirm_bars"],
+                filter_type=rd.get("filter_type", "NO_FILTER"),
+                filter_params=rd.get("filter_params"),
+                orb_minutes=rd.get("orb_minutes", 5),
+                db_path_str=str(db_path),
+                wf_params=wf_params,
+                dst_regime=cand["strat_dst_regime"],
+                dst_verdict_from_discovery=rd.get("dst_verdict"),
+                dst_cols_from_discovery={
+                    "winter_n": rd.get("dst_winter_n"),
+                    "winter_avg_r": rd.get("dst_winter_avg_r"),
+                    "summer_n": rd.get("dst_summer_n"),
+                    "summer_avg_r": rd.get("dst_summer_avg_r"),
+                    "verdict": rd.get("dst_verdict"),
+                } if rd.get("dst_verdict") is not None else None,
+            )
+
+        if use_parallel:
+            logger.info(f"Starting parallel walkforward with {workers} workers for {len(wf_candidates)} strategies...")
+
+            with ProcessPoolExecutor(max_workers=workers) as executor:
+                future_to_sid = {}
+                for cand in wf_candidates:
+                    kwargs = _build_worker_kwargs(cand)
+                    future = executor.submit(_walkforward_worker, **kwargs)
+                    future_to_sid[future] = kwargs["strategy_id"]
+
+                for future in as_completed(future_to_sid):
+                    sid = future_to_sid[future]
+                    try:
+                        result = future.result()
+                        wf_results_map[sid] = result
+                        total_wf_duration += result.get("wf_duration_s", 0)
+                    except Exception as e:
+                        logger.error(f"Worker exception for {sid}: {e}")
+                        wf_results_map[sid] = {
+                            "strategy_id": sid, "wf_result": None,
+                            "dst_split": None, "error": str(e),
+                            "wf_duration_s": 0,
+                        }
+        else:
+            # Serial fallback (--workers 1 or walkforward disabled already handled)
+            logger.info(f"Running walkforward serially for {len(wf_candidates)} strategies...")
+            for cand in wf_candidates:
+                kwargs = _build_worker_kwargs(cand)
+                result = _walkforward_worker(**kwargs)
+                wf_results_map[kwargs["strategy_id"]] = result
+                total_wf_duration += result.get("wf_duration_s", 0)
+
+        wall_elapsed = time.monotonic() - wall_start
+        speedup = total_wf_duration / wall_elapsed if wall_elapsed > 0 else 1.0
+        logger.info(
+            f"Walkforward complete: wall={wall_elapsed:.1f}s, "
+            f"sum(worker)={total_wf_duration:.1f}s, "
+            f"speedup={speedup:.1f}x ({workers} workers)"
+        )
+
+        # Merge walkforward results into serial_results
+        for cand in wf_candidates:
+            rd = cand["row_dict"]
+            sid = rd["strategy_id"]
+            wr = wf_results_map.get(sid, {})
+
+            status = cand["status"]
+            notes = cand["notes"]
+
+            if wr.get("error"):
+                status = "REJECTED"
+                notes = f"Phase 4b: Worker error: {wr['error']}"
+            elif wr.get("wf_result") and not wr["wf_result"]["passed"]:
+                status = "REJECTED"
+                notes = f"Phase 4b: {wr['wf_result']['rejection_reason']}"
+
+            dst_split = wr.get("dst_split") or {
+                "winter_n": None, "winter_avg_r": None,
+                "summer_n": None, "summer_avg_r": None, "verdict": None,
+            }
+
+            serial_results.append({
+                "row_dict": rd, "status": status, "notes": notes,
+                "regime_waivers": cand["regime_waivers"],
+                "dst_split": dst_split,
+                "wf_result_dict": wr.get("wf_result"),
+            })
+
+            if status == "PASSED":
+                passed += 1
+                passed_strategy_ids.append(sid)
+            else:
+                rejected += 1
+
+    # ── Phase C: Batch write all results ─────────────────────────────
+    if not dry_run:
+        with duckdb.connect(str(db_path)) as con:
+            from pipeline.db_config import configure_connection
+            configure_connection(con, writing=True)
+
+            for sr in serial_results:
+                rd = sr["row_dict"]
+                sid = rd["strategy_id"]
+                status = sr["status"]
+                notes = sr["notes"]
+                dst_split = sr["dst_split"]
+
+                if status == "SKIPPED":
                     con.execute(
                         """UPDATE experimental_strategies
                            SET validation_status = 'SKIPPED',
                                validation_notes = 'Alias (non-canonical)'
                            WHERE strategy_id = ?""",
-                        [strategy_id],
+                        [sid],
                     )
-                continue
+                    continue
 
-            status, notes, regime_waivers = validate_strategy(
-                row_dict, cost_spec,
-                stress_multiplier=stress_multiplier,
-                min_sample=min_sample,
-                min_sharpe=min_sharpe,
-                max_drawdown=max_drawdown,
-                exclude_years=exclude_years,
-                min_years_positive_pct=min_years_positive_pct,
-                min_trades_per_year=min_trades_per_year,
-                atr_by_year=atr_by_year if enable_regime_waivers else None,
-                enable_regime_waivers=enable_regime_waivers,
-            )
-
-            # Determine DST regime from strategy_id suffix (_W/_S)
-            strat_dst_regime = parse_dst_regime(strategy_id)
-
-            # Phase 4b: Walk-forward gate
-            if status == "PASSED" and enable_walkforward:
-                wf_result = run_walkforward(
-                    con=con,
-                    strategy_id=strategy_id,
-                    instrument=instrument,
-                    orb_label=row_dict["orb_label"],
-                    entry_model=row_dict.get("entry_model", "E1"),
-                    rr_target=row_dict["rr_target"],
-                    confirm_bars=row_dict["confirm_bars"],
-                    filter_type=row_dict.get("filter_type", "NO_FILTER"),
-                    orb_minutes=row_dict.get("orb_minutes", 5),
-                    test_window_months=wf_test_months,
-                    min_train_months=wf_min_train_months,
-                    min_trades_per_window=wf_min_trades,
-                    min_valid_windows=wf_min_windows,
-                    min_pct_positive=wf_min_pct_positive,
-                    dst_regime=strat_dst_regime,
-                )
-                if not dry_run:
-                    append_walkforward_result(wf_result, wf_output_path)
-                if not wf_result.passed:
-                    status = "REJECTED"
-                    notes = f"Phase 4b: {wf_result.rejection_reason}"
-
-            # DST regime split (INFO phase — does not reject, adds visibility)
-            # For regime-specific strategies (_W/_S), the split is already degenerate
-            # (one regime only); use the stored values from discovery.
-            # For blended strategies, prefer discovery-computed values; only recompute
-            # if discovery left them NULL.
-            if row_dict.get("dst_verdict") is not None:
-                dst_split = {
-                    "winter_n": row_dict.get("dst_winter_n"),
-                    "winter_avg_r": row_dict.get("dst_winter_avg_r"),
-                    "summer_n": row_dict.get("dst_summer_n"),
-                    "summer_avg_r": row_dict.get("dst_summer_avg_r"),
-                    "verdict": row_dict.get("dst_verdict"),
-                }
-            elif strat_dst_regime is None:
-                # Only recompute for blended strategies missing split data
-                dst_split = compute_dst_split(
-                    con, strategy_id, instrument,
-                    orb_label=row_dict["orb_label"],
-                    entry_model=row_dict.get("entry_model", "E1"),
-                    rr_target=row_dict["rr_target"],
-                    confirm_bars=row_dict["confirm_bars"],
-                    filter_type=row_dict.get("filter_type", "NO_FILTER"),
-                    filter_params=row_dict.get("filter_params"),
-                    orb_minutes=row_dict.get("orb_minutes", 5),
-                )
-            else:
-                dst_split = {"winter_n": None, "winter_avg_r": None,
-                             "summer_n": None, "summer_avg_r": None, "verdict": None}
-
-            # Log DST info for affected blended sessions (regime-specific already logged by suffix)
-            if strat_dst_regime is None and dst_split["verdict"] not in ("CLEAN", None):
-                w_r = dst_split["winter_avg_r"]
-                s_r = dst_split["summer_avg_r"]
-                w_str = f"{w_r:+.3f}" if w_r is not None else "N/A"
-                s_str = f"{s_r:+.3f}" if s_r is not None else "N/A"
-                logger.info(
-                    f"  DST split [{strategy_id}]: "
-                    f"W={w_str}({dst_split['winter_n']}) "
-                    f"S={s_str}({dst_split['summer_n']}) "
-                    f"-> {dst_split['verdict']}"
-                )
-
-            if not dry_run:
-                # Update experimental_strategies (include DST columns)
+                # Update experimental_strategies
                 con.execute(
                     """UPDATE experimental_strategies
                        SET validation_status = ?, validation_notes = ?,
@@ -718,15 +820,14 @@ def run_validation(
                            dst_verdict = ?
                        WHERE strategy_id = ?""",
                     [status, notes,
-                     dst_split["winter_n"], dst_split["winter_avg_r"],
-                     dst_split["summer_n"], dst_split["summer_avg_r"],
-                     dst_split["verdict"],
-                     strategy_id],
+                     dst_split.get("winter_n"), dst_split.get("winter_avg_r"),
+                     dst_split.get("summer_n"), dst_split.get("summer_avg_r"),
+                     dst_split.get("verdict"),
+                     sid],
                 )
 
                 if status == "PASSED":
-                    # Promote to validated_setups
-                    yearly = row_dict.get("yearly_results", "{}")
+                    yearly = rd.get("yearly_results", "{}")
                     try:
                         yearly_data = json.loads(yearly) if isinstance(yearly, str) else yearly
                     except (json.JSONDecodeError, TypeError):
@@ -738,6 +839,7 @@ def run_validation(
                     all_positive = all(
                         d.get("avg_r", 0) > 0 for d in included.values()
                     )
+                    regime_waivers = sr["regime_waivers"]
 
                     con.execute(
                         """INSERT OR REPLACE INTO validated_setups
@@ -757,93 +859,94 @@ def run_validation(
                             dst_verdict)
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         [
-                            strategy_id, strategy_id,
-                            row_dict["instrument"], row_dict["orb_label"],
-                            row_dict["orb_minutes"], row_dict["rr_target"],
-                            row_dict["confirm_bars"], row_dict.get("entry_model", "E1"),
-                            row_dict.get("filter_type", ""),
-                            row_dict.get("filter_params", ""),
-                            row_dict.get("sample_size", 0),
-                            row_dict.get("win_rate", 0),
-                            row_dict.get("expectancy_r", 0),
+                            sid, sid,
+                            rd["instrument"], rd["orb_label"],
+                            rd["orb_minutes"], rd["rr_target"],
+                            rd["confirm_bars"], rd.get("entry_model", "E1"),
+                            rd.get("filter_type", ""),
+                            rd.get("filter_params", ""),
+                            rd.get("sample_size", 0),
+                            rd.get("win_rate", 0),
+                            rd.get("expectancy_r", 0),
                             years_tested, all_positive, True,
-                            row_dict.get("sharpe_ratio"),
-                            row_dict.get("max_drawdown_r"),
-                            row_dict.get("trades_per_year"),
-                            row_dict.get("sharpe_ann"),
+                            rd.get("sharpe_ratio"),
+                            rd.get("max_drawdown_r"),
+                            rd.get("trades_per_year"),
+                            rd.get("sharpe_ann"),
                             yearly, "active",
-                            row_dict.get("median_risk_dollars"),
-                            row_dict.get("avg_risk_dollars"),
-                            row_dict.get("avg_win_dollars"),
-                            row_dict.get("avg_loss_dollars"),
+                            rd.get("median_risk_dollars"),
+                            rd.get("avg_risk_dollars"),
+                            rd.get("avg_win_dollars"),
+                            rd.get("avg_loss_dollars"),
                             json.dumps(regime_waivers) if regime_waivers else None,
                             len(regime_waivers),
-                            dst_split["winter_n"], dst_split["winter_avg_r"],
-                            dst_split["summer_n"], dst_split["summer_avg_r"],
-                            dst_split["verdict"],
+                            dst_split.get("winter_n"), dst_split.get("winter_avg_r"),
+                            dst_split.get("summer_n"), dst_split.get("summer_avg_r"),
+                            dst_split.get("verdict"),
                         ],
                     )
 
-            if status == "PASSED":
-                passed += 1
-                passed_strategy_ids.append(strategy_id)
-            else:
-                rejected += 1
+            # Write walkforward JSONL (batch)
+            from trading_app.walkforward import WalkForwardResult
+            for sr in serial_results:
+                wfr = sr.get("wf_result_dict")
+                if wfr and wfr.get("as_dict"):
+                    wd = wfr["as_dict"]
+                    wf_obj = WalkForwardResult(**{
+                        k: v for k, v in wd.items()
+                        if k in WalkForwardResult.__dataclass_fields__
+                    })
+                    append_walkforward_result(wf_obj, wf_output_path)
 
-        # ---- FDR correction (F-01): Benjamini-Hochberg post-processing ----
-        # Collect p-values for ALL canonical strategies (not just passed) to
-        # compute the correction across the full multiple-testing universe.
-        # Then flag each passed strategy with fdr_significant.
-        if passed_strategy_ids and not dry_run:
-            logger.info("Computing FDR correction (Benjamini-Hochberg)...")
-            all_p_values = con.execute(
-                """SELECT strategy_id, p_value FROM experimental_strategies
-                   WHERE instrument = ?
-                   AND is_canonical = TRUE
-                   AND p_value IS NOT NULL""",
-                [instrument],
-            ).fetchall()
-            p_value_list = [(r[0], r[1]) for r in all_p_values]
-            fdr_results = benjamini_hochberg(p_value_list, alpha=0.05)
+            # FDR correction (unchanged)
+            if passed_strategy_ids:
+                logger.info("Computing FDR correction (Benjamini-Hochberg)...")
+                all_p_values = con.execute(
+                    """SELECT strategy_id, p_value FROM experimental_strategies
+                       WHERE instrument = ?
+                       AND is_canonical = TRUE
+                       AND p_value IS NOT NULL""",
+                    [instrument],
+                ).fetchall()
+                p_value_list = [(r[0], r[1]) for r in all_p_values]
+                fdr_results = benjamini_hochberg(p_value_list, alpha=0.05)
 
-            n_fdr_sig = 0
-            n_fdr_insig = 0
-            for sid in passed_strategy_ids:
-                fdr = fdr_results.get(sid)
-                if fdr is not None:
-                    # Update validated_setups with FDR info
-                    con.execute(
-                        """UPDATE validated_setups
-                           SET fdr_significant = ?,
-                               fdr_adjusted_p = ?
-                           WHERE strategy_id = ?""",
-                        [fdr["fdr_significant"], fdr["adjusted_p"], sid],
-                    )
-                    if fdr["fdr_significant"]:
-                        n_fdr_sig += 1
-                    else:
-                        n_fdr_insig += 1
+                n_fdr_sig = 0
+                n_fdr_insig = 0
+                for sid in passed_strategy_ids:
+                    fdr = fdr_results.get(sid)
+                    if fdr is not None:
+                        con.execute(
+                            """UPDATE validated_setups
+                               SET fdr_significant = ?,
+                                   fdr_adjusted_p = ?
+                               WHERE strategy_id = ?""",
+                            [fdr["fdr_significant"], fdr["adjusted_p"], sid],
+                        )
+                        if fdr["fdr_significant"]:
+                            n_fdr_sig += 1
+                        else:
+                            n_fdr_insig += 1
 
-            logger.info(
-                f"  FDR results: {n_fdr_sig} significant, {n_fdr_insig} not significant "
-                f"(of {len(passed_strategy_ids)} passed, from {len(p_value_list)} tested)"
-            )
-            if n_fdr_insig > 0:
                 logger.info(
-                    f"  WARNING: {n_fdr_insig} validated strategies do NOT survive "
-                    f"FDR correction — potential false positives"
+                    f"  FDR results: {n_fdr_sig} significant, {n_fdr_insig} not significant "
+                    f"(of {len(passed_strategy_ids)} passed, from {len(p_value_list)} tested)"
                 )
+                if n_fdr_insig > 0:
+                    logger.info(
+                        f"  WARNING: {n_fdr_insig} validated strategies do NOT survive "
+                        f"FDR correction — potential false positives"
+                    )
 
-        if not dry_run:
             con.commit()
 
-        logger.info(f"Validation complete: {passed} PASSED, {rejected} REJECTED, "
-                    f"{skipped_aliases} aliases skipped "
-                    f"(of {len(rows)} strategies)")
-        if dry_run:
-            logger.info("  (DRY RUN — no data written)")
+    logger.info(f"Validation complete: {passed} PASSED, {rejected} REJECTED, "
+                f"{skipped_aliases} aliases skipped "
+                f"(of {len(rows)} strategies)")
+    if dry_run:
+        logger.info("  (DRY RUN — no data written)")
 
-        return passed, rejected
+    return passed, rejected
 
 def main():
     import argparse
