@@ -213,9 +213,9 @@ def _build_server():
     mcp = FastMCP(
         "gold-db",
         instructions=(
-            "Gold futures trading database. 10 years MGC + 2 years MNQ data. "
-            "507 validated ORB breakout strategies (334 MGC, 173 MNQ). "
-            "Use instrument parameter to filter by instrument (default MGC). "
+            "Futures trading database. MGC (10yr), MNQ (2yr), MES (5yr), M2K (5yr). "
+            "3,108 validated ORB breakout strategies across all instruments. "
+            "Use instrument parameter to filter (default MGC). Supports E0/E1/E3 entry models. "
             "All queries are read-only."
         ),
     )
@@ -248,10 +248,10 @@ def _build_server():
                       orb_size_dist, regime_compare, correlation,
                       double_break_stats, gap_analysis, rolling_stability.
             orb_label: ORB session filter. One of: 0900, 1000, 1100, 1800, 2300, 0030.
-            entry_model: Entry model filter. One of: E1, E3.
+            entry_model: Entry model filter. One of: E0, E1, E3.
             filter_type: ORB size filter. Examples: ORB_G4, ORB_G6, NO_FILTER.
             min_sample_size: Minimum number of trades.
-            instrument: Instrument filter (default MGC). One of: MGC, MNQ.
+            instrument: Instrument filter (default MGC). One of: MGC, MNQ, MES, M2K.
             limit: Max rows to return (default 50, server cap 5000).
 
         Returns:

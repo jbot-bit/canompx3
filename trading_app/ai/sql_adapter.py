@@ -48,13 +48,13 @@ VALID_ORB_LABELS = {"0900", "1000", "1100", "1130", "1800", "2300", "0030",
                      "US_POST_EQUITY", "CME_CLOSE"}
 
 # Valid entry models
-VALID_ENTRY_MODELS = {"E1", "E3"}
+VALID_ENTRY_MODELS = {"E0", "E1", "E3"}
 
 # Valid filter types (subset for validation)
 VALID_FILTER_PREFIXES = {"NO_FILTER", "ORB_G", "ORB_L", "VOL_"}
 
 # Valid instruments
-VALID_INSTRUMENTS = {"MGC", "MNQ"}
+VALID_INSTRUMENTS = {"MGC", "MNQ", "MES", "M2K"}
 
 def _validate_orb_label(label: str) -> str:
     """Validate and return ORB label."""
