@@ -30,6 +30,9 @@ from trading_app.config import (
     CalendarSkipFilter, CALENDAR_SKIP_NFP_OPEX,
 )
 from trading_app.portfolio import Portfolio, PortfolioStrategy
+from pipeline.log import get_logger
+
+logger = get_logger(__name__)
 
 # =========================================================================
 # ORB time windows (UTC offsets from Brisbane 09:00 trading day start)
@@ -417,6 +420,18 @@ class ExecutionEngine:
                     and self._daily_features_row is not None
                     and not self.calendar_overlay.matches_row(
                         self._daily_features_row, orb.label)):
+                # Determine skip reason for audit trail
+                skip_reason = []
+                if self.calendar_overlay.skip_nfp and self._daily_features_row.get("is_nfp_day"):
+                    skip_reason.append("NFP")
+                if self.calendar_overlay.skip_opex and self._daily_features_row.get("is_opex_day"):
+                    skip_reason.append("OPEX")
+                if (self.calendar_overlay.skip_friday_session == orb.label
+                        and self._daily_features_row.get("is_friday")):
+                    skip_reason.append(f"Friday-{orb.label}")
+
+                logger.info(f"Calendar skip: {strategy.strategy_id} on {self.trading_day} "
+                            f"({orb.label}) — {', '.join(skip_reason)}")
                 continue
 
             # Check ATR velocity overlay (Contracting×Neutral/Compressed skip)
