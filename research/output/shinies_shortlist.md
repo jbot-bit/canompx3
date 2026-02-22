@@ -15,6 +15,14 @@ Last updated: 2026-02-22
 - 2025 OOS uplift: `+0.2018` (`N_on=78`)
 - Status: **KEEP (gain-first top contender)**
 
+### A0x) M6E_US_EQUITY_OPEN -> MES_US_EQUITY_OPEN (asymmetry challenger)
+- Strategy slice: `E0 / CB1 / RR3.0`
+- Variant: `same_short_fast15`
+- avg_on: `+0.3290`
+- uplift (ON-OFF): `+0.3004`
+- 2025 OOS uplift: `+0.7567` (`N_on=177 total; lower frequency`)
+- Status: **WATCH (higher gain, lower frequency than base A0)**
+
 ### A1) M6E_US_EQUITY_OPEN -> M2K_US_POST_EQUITY
 - Strategy slice: `E1 / CB5 / RR1.5`
 - Baseline avgR: `-0.0601`
