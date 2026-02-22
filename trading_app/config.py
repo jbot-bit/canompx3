@@ -389,6 +389,11 @@ _MES_1000_BAND_FILTERS = {
 _GRID_SIZE_FILTERS = {k: v for k, v in MGC_ORB_SIZE_FILTERS.items()
                       if k in ("G4", "G5", "G6", "G8")}
 
+# MGC-specific: G4/G5 removed (Feb 2026 regime shift research).
+# ATR 31→105, G4 passes 87.5% of days = meaningless filter.
+_MGC_GRID_SIZE_FILTERS = {k: v for k, v in MGC_ORB_SIZE_FILTERS.items()
+                          if k in ("G6", "G8")}
+
 # Calendar skip filters (portfolio overlay, not in discovery grid)
 CALENDAR_SKIP_NFP_OPEX = CalendarSkipFilter(
     filter_type="CAL_SKIP_NFP_OPEX",
@@ -538,27 +543,39 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
             **_M6E_SIZE_FILTERS,
         }
 
-    filters = dict(BASE_GRID_FILTERS)
+    # MGC: G6 minimum (Feb 2026 regime shift — G4/G5 pass 85%+ of days, meaningless).
+    # Other instruments: standard G4-G8 grid.
+    if instrument == "MGC":
+        size_filters = _MGC_GRID_SIZE_FILTERS
+        size_filters_orb = {f"ORB_{k}": v for k, v in size_filters.items()}
+        filters: dict[str, StrategyFilter] = {
+            "NO_FILTER": NoFilter(),
+            **size_filters_orb,
+            **MGC_VOLUME_FILTERS,
+        }
+    else:
+        size_filters_orb = _GRID_SIZE_FILTERS_ORB
+        filters = dict(BASE_GRID_FILTERS)
 
     # Break quality composites for momentum sessions (0900, 1000, 1800)
     if session in ("0900", "1000", "1800"):
         filters.update(_make_break_quality_composites(
-            _GRID_SIZE_FILTERS_ORB, _BREAK_SPEED_FAST5, "FAST5"))
+            size_filters_orb, _BREAK_SPEED_FAST5, "FAST5"))
         filters.update(_make_break_quality_composites(
-            _GRID_SIZE_FILTERS_ORB, _BREAK_SPEED_FAST10, "FAST10"))
+            size_filters_orb, _BREAK_SPEED_FAST10, "FAST10"))
         filters.update(_make_break_quality_composites(
-            _GRID_SIZE_FILTERS_ORB, _BREAK_BAR_CONTINUES, "CONT"))
+            size_filters_orb, _BREAK_BAR_CONTINUES, "CONT"))
 
     if session == "0900":
         validate_dow_filter_alignment(session, _DOW_SKIP_FRIDAY.skip_days)
-        filters.update(_make_dow_composites(_GRID_SIZE_FILTERS_ORB, _DOW_SKIP_FRIDAY, "NOFRI"))
+        filters.update(_make_dow_composites(size_filters_orb, _DOW_SKIP_FRIDAY, "NOFRI"))
     if session == "1800":
         validate_dow_filter_alignment(session, _DOW_SKIP_MONDAY.skip_days)
-        filters.update(_make_dow_composites(_GRID_SIZE_FILTERS_ORB, _DOW_SKIP_MONDAY, "NOMON"))
+        filters.update(_make_dow_composites(size_filters_orb, _DOW_SKIP_MONDAY, "NOMON"))
     if session == "1000":
         validate_dow_filter_alignment(session, _DOW_SKIP_TUESDAY.skip_days)
         filters["DIR_LONG"] = DIR_LONG
-        filters.update(_make_dow_composites(_GRID_SIZE_FILTERS_ORB, _DOW_SKIP_TUESDAY, "NOTUE"))
+        filters.update(_make_dow_composites(size_filters_orb, _DOW_SKIP_TUESDAY, "NOTUE"))
     if instrument == "MES" and session == "1000":
         filters.update(_MES_1000_BAND_FILTERS)
     if instrument == "MNQ" and session == "1100":
@@ -621,9 +638,10 @@ ORB_DURATION_MINUTES: dict[str, int] = {
 TRADEABLE_INSTRUMENTS = ["MGC"]
 
 # Timed early exit: kill losers at N minutes after fill.
-# Research (artifacts/EARLY_EXIT_RULES.md, G4+ filter):
-#   0900: 15 min -> +26% Sharpe, 38% tighter MaxDD (only 24% recover)
-#   1000: 30 min -> 3.7x Sharpe, 35% tighter MaxDD (only 12-18% recover)
+# Research (artifacts/EARLY_EXIT_RULES.md, P5b winner speed profiling):
+#   0900: 15 min -> +26% Sharpe, 38% tighter MaxDD (T80=38m, only 24% recover)
+#   1000: 30 min -> 3.7x Sharpe, 35% tighter MaxDD (T80=32m, only 12-18% recover)
+#   1800: 30 min -> T80=36m, avg_r_after=-0.339R (worst dead-chop penalty)
 #   Other sessions: no benefit
 # Rule: At N minutes after fill, if bar close vs entry is negative, exit at bar close.
 # None = no early exit for that session.
@@ -637,7 +655,7 @@ EARLY_EXIT_MINUTES: dict[str, int | None] = {
     "1000": 30,
     "1100": None,
     "1130": None,
-    "1800": None,
+    "1800": 30,  # P5b: T80=36m, avg_r_after=-0.339R (worst dead-chop)
     "2300": None,
     "0030": None,
     # Dynamic sessions: no early exit until validated

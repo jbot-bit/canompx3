@@ -78,8 +78,12 @@ class TestEarlyExitConfig:
     def test_1000_is_30_minutes(self):
         assert EARLY_EXIT_MINUTES["1000"] == 30
 
+    def test_1800_is_30_minutes(self):
+        """P5b: T80=36m, avg_r_after=-0.339R (worst dead-chop penalty)."""
+        assert EARLY_EXIT_MINUTES["1800"] == 30
+
     def test_other_sessions_none(self):
-        for label in ["1800", "2300", "0030"]:
+        for label in ["2300", "0030"]:
             assert EARLY_EXIT_MINUTES[label] is None, f"{label} should be None"
 
     def test_1100_has_no_early_exit(self):
