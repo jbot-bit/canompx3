@@ -8,6 +8,7 @@ import pytest
 from research.lib.audit import assert_no_inflation
 from research.lib.db import connect_db, query_df
 from research.lib.io import format_stats_table, output_dir, write_csv, write_markdown
+from research.lib.query import SAFE_JOIN, outcomes_query, session_col, with_dst_split
 from research.lib.stats import (
     bh_fdr,
     compute_metrics,
@@ -307,3 +308,112 @@ class TestFormatStatsTable:
     def test_empty_dict(self):
         table = format_stats_table({})
         assert "|" in table  # still has header
+
+
+# ── query.py ─────────────────────────────────────────────────────────────
+
+
+class TestSafeJoin:
+    """SAFE_JOIN constant contains canonical triple-join."""
+
+    def test_contains_three_join_columns(self):
+        assert "o.trading_day = d.trading_day" in SAFE_JOIN
+        assert "o.symbol = d.symbol" in SAFE_JOIN
+        assert "o.orb_minutes = d.orb_minutes" in SAFE_JOIN
+
+
+class TestSessionCol:
+    """session_col() builds column name from orb_label + stem."""
+
+    def test_basic(self):
+        assert session_col("1000", "size") == "orb_1000_size"
+
+    def test_break_dir(self):
+        assert session_col("0900", "break_dir") == "orb_0900_break_dir"
+
+
+class TestOutcomesQuery:
+    """outcomes_query() builds safe SQL with triple-join."""
+
+    def test_basic_query(self):
+        sql = outcomes_query("MGC", "1000", "E0")
+        assert "o.trading_day = d.trading_day" in sql
+        assert "o.symbol = d.symbol" in sql
+        assert "o.orb_minutes = d.orb_minutes" in sql
+        assert "'MGC'" in sql
+        assert "'1000'" in sql
+        assert "'E0'" in sql
+
+    def test_extra_cols(self):
+        sql = outcomes_query("MGC", "1000", "E0", extra_cols=["d.atr_5d"])
+        assert "d.atr_5d" in sql
+
+    def test_filters(self):
+        sql = outcomes_query("MGC", "1000", "E0",
+                             filters=["d.orb_1000_size >= 4"])
+        assert "d.orb_1000_size >= 4" in sql
+
+    def test_date_range(self):
+        sql = outcomes_query("MGC", "1000", "E0",
+                             date_range=("2021-01-01", "2025-12-31"))
+        assert "2021-01-01" in sql
+        assert "2025-12-31" in sql
+
+    def test_selects_pnl_r(self):
+        sql = outcomes_query("MGC", "1000", "E0")
+        assert "o.pnl_r" in sql
+
+    def test_filters_null_pnl(self):
+        sql = outcomes_query("MGC", "1000", "E0")
+        assert "o.pnl_r IS NOT NULL" in sql
+
+
+class TestWithDstSplit:
+    """with_dst_split() wraps base SQL with DST ON/OFF filters."""
+
+    def test_us_regime(self):
+        base = "SELECT * FROM t"
+        on_sql, off_sql = with_dst_split(base, session="0900", regime_source="US")
+        assert "us_dst" in on_sql
+        assert "us_dst" in off_sql
+        assert "= TRUE" in on_sql or "= true" in on_sql.lower()
+        assert "= FALSE" in off_sql or "= false" in off_sql.lower()
+
+    def test_uk_regime(self):
+        base = "SELECT * FROM t"
+        on_sql, off_sql = with_dst_split(base, session="1800", regime_source="UK")
+        assert "uk_dst" in on_sql
+        assert "uk_dst" in off_sql
+
+
+# ── __init__.py re-exports ───────────────────────────────────────────────
+
+
+class TestTopLevelImports:
+    """research.lib re-exports commonly used functions."""
+
+    def test_stats_available(self):
+        from research.lib import ttest_1s, bh_fdr, compute_metrics
+        assert callable(ttest_1s)
+        assert callable(bh_fdr)
+        assert callable(compute_metrics)
+
+    def test_db_available(self):
+        from research.lib import connect_db, query_df
+        assert callable(connect_db)
+        assert callable(query_df)
+
+    def test_query_available(self):
+        from research.lib import outcomes_query, session_col, SAFE_JOIN
+        assert callable(outcomes_query)
+        assert callable(session_col)
+        assert isinstance(SAFE_JOIN, str)
+
+    def test_audit_available(self):
+        from research.lib import assert_no_inflation
+        assert callable(assert_no_inflation)
+
+    def test_io_available(self):
+        from research.lib import output_dir, write_csv, write_markdown, format_stats_table
+        assert callable(output_dir)
+        assert callable(write_csv)
