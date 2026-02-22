@@ -278,9 +278,10 @@ def compute_drawdown(daily_returns, start_date, end_date):
     cum = 0.0
     peak = 0.0
     max_dd = 0.0
-    dd_start = None
+    dd_start = all_bdays[0].date() if len(all_bdays) > 0 else None
     max_dd_start = None
     max_dd_end = None
+    max_dd_trough = None
     worst_day = 0.0
     worst_day_date = None
     current_streak = 0
@@ -295,10 +296,11 @@ def compute_drawdown(daily_returns, start_date, end_date):
             worst_day = r
             worst_day_date = day_date
 
+        # Losing streak: only count actual negative days (zero-return days break streak)
         if r < 0:
             current_streak += 1
             max_streak = max(max_streak, current_streak)
-        elif r > 0:
+        else:
             current_streak = 0
 
         if cum > peak:
@@ -311,6 +313,27 @@ def compute_drawdown(daily_returns, start_date, end_date):
             max_dd_start = dd_start
             max_dd_end = day_date
 
+    # Compute recovery time: scan forward from max DD trough to find when equity returns to peak
+    recovery_days = None
+    if max_dd_end is not None and max_dd > 0:
+        trough_idx = None
+        for i, day in enumerate(all_bdays):
+            if day.date() == max_dd_end:
+                trough_idx = i
+                break
+        if trough_idx is not None:
+            peak_at_trough = 0.0
+            cum_scan = 0.0
+            for day in all_bdays[:trough_idx + 1]:
+                cum_scan += return_map.get(day.date(), 0.0)
+            trough_cum = cum_scan
+            target = trough_cum + max_dd  # The peak level before drawdown
+            for day in all_bdays[trough_idx + 1:]:
+                cum_scan += return_map.get(day.date(), 0.0)
+                if cum_scan >= target:
+                    recovery_days = (day.date() - max_dd_end).days
+                    break
+
     dd_duration = None
     if max_dd_start and max_dd_end:
         dd_duration = (max_dd_end - max_dd_start).days
@@ -320,6 +343,7 @@ def compute_drawdown(daily_returns, start_date, end_date):
         "max_dd_start": max_dd_start,
         "max_dd_end": max_dd_end,
         "max_dd_duration_days": dd_duration,
+        "recovery_days": recovery_days,
         "longest_losing_streak": max_streak,
         "worst_single_day": round(worst_day, 4),
         "worst_single_day_date": worst_day_date,
@@ -365,9 +389,13 @@ def print_portfolio_metrics(daily_returns, all_trades, daily_trade_count,
     if dd["max_dd_start"] and dd["max_dd_end"]:
         print(f"    Period:          {dd['max_dd_start']} to {dd['max_dd_end']} "
               f"({dd['max_dd_duration_days']} cal days)")
+        if dd["recovery_days"] is not None:
+            print(f"    Recovery:        {dd['recovery_days']} cal days from trough")
+        else:
+            print(f"    Recovery:        not yet recovered")
     print(f"  Worst single day:  {dd['worst_single_day']:+.2f}R"
           + (f" ({dd['worst_single_day_date']})" if dd["worst_single_day_date"] else ""))
-    print(f"  Longest losing streak: {dd['longest_losing_streak']} consecutive days")
+    print(f"  Longest losing streak: {dd['longest_losing_streak']} consecutive negative days")
 
 
 def print_yearly_breakdown(all_trades):
@@ -566,11 +594,61 @@ def main():
         start_date = min(all_days)
         end_date = max(all_days)
 
+        # ── Full History View ─────────────────────────────────────
+        print()
+        print("#" * 80)
+        print("  VIEW 1: FULL HISTORY (each instrument from its earliest data)")
+        print("#" * 80)
+
         print_portfolio_metrics(daily_returns, all_trades, daily_trade_count, start_date, end_date)
         print_yearly_breakdown(all_trades)
         print_instrument_contribution(all_trades)
         print_correlation_matrix(trades_by_slot, slots)
         print_concurrent_exposure(daily_trade_count, start_date, end_date)
+
+        # ── Common Period View ────────────────────────────────────
+        # Find date range where ALL instruments have at least one trade
+        instruments_in_portfolio = set(t["instrument"] for t in all_trades)
+        if len(instruments_in_portfolio) > 1:
+            inst_first_day = {}
+            inst_last_day = {}
+            for t in all_trades:
+                inst = t["instrument"]
+                day = t["trading_day"]
+                if inst not in inst_first_day or day < inst_first_day[inst]:
+                    inst_first_day[inst] = day
+                if inst not in inst_last_day or day > inst_last_day[inst]:
+                    inst_last_day[inst] = day
+
+            common_start = max(inst_first_day.values())
+            common_end = min(inst_last_day.values())
+
+            if common_start < common_end:
+                print()
+                print("#" * 80)
+                print("  VIEW 2: COMMON PERIOD (all instruments present)")
+                print(f"  (Latest instrument start: {common_start}, "
+                      f"earliest instrument end: {common_end})")
+                print("#" * 80)
+
+                # Filter trades to common period
+                common_trades_by_slot = {}
+                for sid, trades in trades_by_slot.items():
+                    filtered = [t for t in trades
+                                if common_start <= t["trading_day"] <= common_end]
+                    if filtered:
+                        common_trades_by_slot[sid] = filtered
+
+                c_daily, c_all, c_counts = build_daily_equity(common_trades_by_slot)
+                if c_all:
+                    print_portfolio_metrics(c_daily, c_all, c_counts,
+                                            common_start, common_end)
+                    print_yearly_breakdown(c_all)
+                    print_instrument_contribution(c_all)
+            else:
+                print("\n  (Common period: no overlapping date range for all instruments)")
+        else:
+            print("\n  (Common period: only one instrument in portfolio, skipping)")
     finally:
         con.close()
 

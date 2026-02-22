@@ -173,3 +173,55 @@ class TestComputeDrawdown:
         dd = compute_drawdown(daily, start, end)
         assert dd["worst_single_day"] == pytest.approx(-5.0)
         assert dd["worst_single_day_date"] == dt.date(2024, 1, 2)
+
+    def test_zero_days_break_losing_streak(self):
+        """Zero-return days should NOT extend a losing streak."""
+        # Mon-Fri: loss, 0, 0, 0, loss — should be streak of 1, not 5
+        start = dt.date(2024, 1, 1)
+        end = dt.date(2024, 1, 5)
+        daily = [
+            (dt.date(2024, 1, 1), -1.0),
+            # Jan 2-4: zero-return days (no trades)
+            (dt.date(2024, 1, 5), -1.0),
+        ]
+        dd = compute_drawdown(daily, start, end)
+        assert dd["longest_losing_streak"] == 1
+
+    def test_recovery_time(self):
+        """Recovery time is computed from trough to when equity returns to peak."""
+        start = dt.date(2024, 1, 1)
+        end = dt.date(2024, 1, 5)
+        daily = [
+            (dt.date(2024, 1, 1), 3.0),   # cum=3, peak=3
+            (dt.date(2024, 1, 2), -2.0),   # cum=1, dd=2
+            (dt.date(2024, 1, 3), -1.0),   # cum=0, dd=3 (trough)
+            (dt.date(2024, 1, 4), 2.0),    # cum=2, recovering
+            (dt.date(2024, 1, 5), 1.0),    # cum=3, recovered!
+        ]
+        dd = compute_drawdown(daily, start, end)
+        assert dd["recovery_days"] == (dt.date(2024, 1, 5) - dt.date(2024, 1, 3)).days
+
+    def test_no_recovery(self):
+        """If equity never returns to peak, recovery_days is None."""
+        start = dt.date(2024, 1, 1)
+        end = dt.date(2024, 1, 3)
+        daily = [
+            (dt.date(2024, 1, 1), 3.0),
+            (dt.date(2024, 1, 2), -2.0),
+            (dt.date(2024, 1, 3), -1.0),
+        ]
+        dd = compute_drawdown(daily, start, end)
+        assert dd["recovery_days"] is None
+
+    def test_dd_start_when_equity_starts_negative(self):
+        """Portfolio that starts losing should still track drawdown start."""
+        start = dt.date(2024, 1, 1)
+        end = dt.date(2024, 1, 3)
+        daily = [
+            (dt.date(2024, 1, 1), -2.0),
+            (dt.date(2024, 1, 2), -1.0),
+            (dt.date(2024, 1, 3), 1.0),
+        ]
+        dd = compute_drawdown(daily, start, end)
+        assert dd["max_dd_r"] == pytest.approx(3.0)
+        assert dd["max_dd_start"] is not None
