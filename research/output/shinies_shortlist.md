@@ -6,6 +6,15 @@ Last updated: 2026-02-22
 
 ## A) Keep / Promote candidates
 
+### A0) M6E_US_EQUITY_OPEN -> MES_US_EQUITY_OPEN
+- Strategy slice: `E0 / CB1 / RR3.0`
+- Baseline avgR: `+0.0736`
+- Filter ON avgR: `+0.2767`
+- Uplift (ON-OFF): `+0.3014`
+- Yearly uplift positive: `5/6`
+- 2025 OOS uplift: `+0.2018` (`N_on=78`)
+- Status: **KEEP (gain-first top contender)**
+
 ### A1) M6E_US_EQUITY_OPEN -> M2K_US_POST_EQUITY
 - Strategy slice: `E1 / CB5 / RR1.5`
 - Baseline avgR: `-0.0601`

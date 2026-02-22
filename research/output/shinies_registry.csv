@@ -1,4 +1,5 @@
 id,leader,follower,entry_model,confirm_bars,rr_target,status,last_verified,avg_r_on,uplift_on_off,oos_2025_uplift,notes
+A0,M6E_US_EQUITY_OPEN,MES_US_EQUITY_OPEN,E0,1,3.0,KEEP,2026-02-22,0.2767,0.3014,0.2018,Gain-first top contender (baseline already positive)
 A1,M6E_US_EQUITY_OPEN,M2K_US_POST_EQUITY,E1,5,1.5,KEEP,2026-02-22,0.0814,0.2879,0.4401,Top shiny candidate
 A2,MES_US_DATA_OPEN,M2K_US_DATA_OPEN,E0,1,1.5,KEEP,2026-02-22,0.0409,0.2100,0.1851,Strong candidate
 A3,MES_1000,M2K_US_POST_EQUITY,E1,5,1.5,KEEP,2026-02-22,0.0345,0.1997,0.2801,Backup/borderline promote
