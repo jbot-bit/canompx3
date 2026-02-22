@@ -20,7 +20,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 import duckdb
 
+from pipeline.paths import GOLD_DB_PATH
 from trading_app.db_manager import compute_trade_day_hash
+from trading_app.config import CORE_MIN_SAMPLES, REGIME_MIN_SAMPLES
 
 # Force unbuffered stdout (Windows cp1252 buffering issue)
 sys.stdout.reconfigure(line_buffering=True)
@@ -34,9 +36,9 @@ WHITELIST_MIN_TRADES = 50
 SINGLETON_MIN_TRADES = 100  # N=1 family: isolated edge quality bar
 SINGLETON_MIN_SHANN  = 1.0  # N=1 family: minimum Sharpe to survive
 
-# Trade tier thresholds (from config.py classification)
-CORE_MIN_TRADES = 100
-REGIME_MIN_TRADES = 30
+# Trade tier thresholds — imported from config.py (single source of truth)
+CORE_MIN_TRADES = CORE_MIN_SAMPLES
+REGIME_MIN_TRADES = REGIME_MIN_SAMPLES
 
 compute_family_hash = compute_trade_day_hash  # public alias for backward compat
 
@@ -331,7 +333,7 @@ def main():
     )
     parser.add_argument("--instrument", help="Instrument symbol")
     parser.add_argument(
-        "--db-path", default="C:/db/gold.db", help="Database path"
+        "--db-path", default=str(GOLD_DB_PATH), help="Database path"
     )
     parser.add_argument(
         "--all", action="store_true", help="Run for all instruments"

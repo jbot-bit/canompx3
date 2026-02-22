@@ -1100,7 +1100,7 @@ def check_db_config_usage() -> list[str]:
         "market_state.py", "paper_trader.py", "portfolio.py",
         "rolling_correlation.py", "rolling_portfolio.py",
         "strategy_fitness.py", "view_strategies.py",
-        "validate_1800_composite.py", "validate_1800_workhorse.py",
+        # validate_1800_*.py moved to research/archive/ (I12 audit cleanup)
         # Nested subpackages
         "corpus.py", "sql_adapter.py", "strategy_matcher.py",
         "asia_session_analyzer.py", "audit_outcomes.py",

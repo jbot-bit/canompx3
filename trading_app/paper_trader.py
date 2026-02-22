@@ -93,7 +93,8 @@ def _get_trading_days(con, instrument: str, start_date: date, end_date: date) ->
     """Get trading days from daily_features."""
     rows = con.execute(
         """SELECT DISTINCT trading_day FROM daily_features
-           WHERE symbol = ? AND trading_day >= ? AND trading_day <= ?
+           WHERE symbol = ? AND orb_minutes = 5
+             AND trading_day >= ? AND trading_day <= ?
            ORDER BY trading_day""",
         [instrument, start_date, end_date],
     ).fetchall()
@@ -109,7 +110,7 @@ def _get_daily_features_row(con, instrument: str, trading_day: date) -> dict | N
                   orb_1000_compression_tier,
                   orb_1800_compression_tier
            FROM daily_features
-           WHERE symbol = ? AND trading_day = ?
+           WHERE symbol = ? AND orb_minutes = 5 AND trading_day = ?
            LIMIT 1""",
         [instrument, trading_day],
     ).fetchone()

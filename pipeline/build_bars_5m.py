@@ -26,7 +26,7 @@ Usage:
 
 import sys
 import argparse
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 import duckdb
 
@@ -54,7 +54,7 @@ def build_5m_bars(con: duckdb.DuckDBPyConnection, symbol: str,
     # Convert dates to UTC timestamps for filtering bars_1m
     # start_date 00:00 UTC to end_date+1 00:00 UTC (exclusive upper bound)
     start_ts = f"{start_date}T00:00:00+00:00"
-    end_ts = f"{end_date + __import__('datetime').timedelta(days=1)}T00:00:00+00:00"
+    end_ts = f"{end_date + timedelta(days=1)}T00:00:00+00:00"
 
     # Count source rows first
     count_query = """
@@ -209,7 +209,7 @@ def verify_5m_integrity(con: duckdb.DuckDBPyConnection, symbol: str,
     failures = []
 
     start_ts = f"{start_date}T00:00:00+00:00"
-    end_ts = f"{end_date + __import__('datetime').timedelta(days=1)}T00:00:00+00:00"
+    end_ts = f"{end_date + timedelta(days=1)}T00:00:00+00:00"
 
     # Check 1: duplicates
     dupe_count = con.execute("""

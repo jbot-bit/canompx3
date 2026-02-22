@@ -23,6 +23,7 @@ from pathlib import Path
 
 import duckdb
 
+from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import ALL_FILTERS, InsideDayFilter, EaseDayFilter
 from trading_app.strategy_discovery import (
     _load_daily_features,
@@ -204,7 +205,7 @@ def run_smoke_test(db_path: Path):
 
 def main():
     parser = argparse.ArgumentParser(description="Smoke test new filters")
-    parser.add_argument("--db-path", type=Path, default=Path("C:/db/gold.db"))
+    parser.add_argument("--db-path", type=Path, default=GOLD_DB_PATH)
     args = parser.parse_args()
     run_smoke_test(args.db_path)
 

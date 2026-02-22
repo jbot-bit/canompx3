@@ -9,9 +9,8 @@ import pytest
 from trading_app.ai.query_agent import (
     QueryResult,
     _generate_warnings,
-    _CORE_MIN,
-    _REGIME_MIN,
 )
+from trading_app.config import CORE_MIN_SAMPLES as _CORE_MIN, REGIME_MIN_SAMPLES as _REGIME_MIN
 
 
 class TestGenerateWarnings:

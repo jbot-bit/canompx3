@@ -304,16 +304,19 @@ def compute_day_of_week_stats(
                         if filt.matches_row({size_col: s}, fam.orb_label):
                             eligible_days.add(_to_date(td))
 
-            # Get trade outcomes filtered to eligible days
+            # Get trade outcomes filtered to eligible days.
+            # orb_outcomes has ~30 rows per day per family (rr_target × confirm_bars),
+            # so we aggregate to one avg pnl_r per trading_day to avoid DOW inflation.
             rows = con.execute("""
                 SELECT DAYOFWEEK(oo.trading_day) as dow,
                        oo.trading_day,
-                       oo.pnl_r
+                       AVG(oo.pnl_r) as avg_pnl_r
                 FROM orb_outcomes oo
                 WHERE oo.symbol = ?
                   AND oo.orb_label = ?
                   AND oo.entry_model = ?
                   AND oo.pnl_r IS NOT NULL
+                GROUP BY oo.trading_day
             """, [instrument, fam.orb_label, fam.entry_model]).fetchall()
 
             # Filter to eligible days only

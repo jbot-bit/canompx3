@@ -215,7 +215,7 @@ def collect_guardrail_status() -> dict:
 
     return result
 
-def collect_contract_history(db_path: Path) -> list[dict]:
+def collect_contract_history(db_path: Path, instrument: str = "MGC") -> list[dict]:
     """Get contract usage history from the database."""
     if not db_path.exists():
         return []
@@ -229,10 +229,10 @@ def collect_contract_history(db_path: Path) -> list[dict]:
                    MAX(DATE(ts_utc)) as last_date,
                    SUM(volume) as total_volume
             FROM bars_1m
-            WHERE symbol = 'MGC'
+            WHERE symbol = ?
             GROUP BY source_symbol
             ORDER BY first_date
-        """).fetchall()
+        """, [instrument]).fetchall()
     finally:
         con.close()
 

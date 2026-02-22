@@ -17,6 +17,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 import duckdb
 
+from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import ALL_FILTERS, VolumeFilter
 from trading_app.strategy_discovery import (
     _build_filter_day_sets,
@@ -194,8 +195,8 @@ def main():
     )
     parser.add_argument(
         "--db-path",
-        default="C:/db/gold.db",
-        help="Database path (default: C:/db/gold.db)",
+        default=str(GOLD_DB_PATH),
+        help="Database path",
     )
     parser.add_argument(
         "--all",

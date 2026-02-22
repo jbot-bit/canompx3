@@ -345,10 +345,10 @@ def detect_break(bars_df: pd.DataFrame, trading_day: date,
     mask = (bars_df['ts_utc'] >= window_start) & (bars_df['ts_utc'] < window_end)
     window_bars = bars_df[mask].sort_values('ts_utc')
 
-    for _, bar in window_bars.iterrows():
-        close = float(bar['close'])
-        bar_open = float(bar['open'])
-        bar_ts = bar['ts_utc'].to_pydatetime()
+    for bar in window_bars.itertuples():
+        close = float(bar.close)
+        bar_open = float(bar.open)
+        bar_ts = bar.ts_utc.to_pydatetime()
 
         if close > orb_high:
             delay = (bar_ts - orb_end).total_seconds() / 60.0
@@ -357,7 +357,7 @@ def detect_break(bars_df: pd.DataFrame, trading_day: date,
                 "break_ts": bar_ts,
                 "break_delay_min": delay,
                 "break_bar_continues": close > bar_open,  # green candle = continuation
-                "break_bar_volume": int(bar['volume']),
+                "break_bar_volume": int(bar.volume),
             }
         elif close < orb_low:
             delay = (bar_ts - orb_end).total_seconds() / 60.0
@@ -366,7 +366,7 @@ def detect_break(bars_df: pd.DataFrame, trading_day: date,
                 "break_ts": bar_ts,
                 "break_delay_min": delay,
                 "break_bar_continues": close < bar_open,  # red candle = continuation
-                "break_bar_volume": int(bar['volume']),
+                "break_bar_volume": int(bar.volume),
             }
 
     return no_break
@@ -753,9 +753,9 @@ def compute_outcome(bars_df: pd.DataFrame, trading_day: date,
     max_adverse_points = 0.0   # worst excursion against us
     max_favorable_points = 0.0  # best excursion for us
 
-    for _, bar in post_break.iterrows():
-        bar_high = float(bar['high'])
-        bar_low = float(bar['low'])
+    for bar in post_break.itertuples():
+        bar_high = float(bar.high)
+        bar_low = float(bar.low)
 
         # Track excursions
         if break_dir == "long":

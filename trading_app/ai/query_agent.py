@@ -20,6 +20,7 @@ from trading_app.ai.sql_adapter import (
     QueryTemplate,
     SQLAdapter,
 )
+from trading_app.config import generate_strategy_warnings
 
 
 @dataclass
@@ -34,47 +35,9 @@ class QueryResult:
     grounding_refs: list[str] = field(default_factory=list)
 
 
-# Auto-warning rules
-_WARNING_RULES = {
-    "NO_FILTER": "NO_FILTER strategies have negative expectancy -- house wins.",
-    "ORB_L": "L-filter (less-than) strategies have negative expectancy -- house wins.",
-}
-
-# Classification thresholds (mirror config.py)
-_CORE_MIN = 100
-_REGIME_MIN = 30
-
-
 def _generate_warnings(df: pd.DataFrame) -> list[str]:
-    """Generate auto-warnings based on data content."""
-    warnings = []
-    if df is None or df.empty:
-        return warnings
-
-    # Check for dangerous filter types
-    if "filter_type" in df.columns:
-        filter_types = df["filter_type"].unique()
-        for ft in filter_types:
-            if ft == "NO_FILTER":
-                warnings.append(_WARNING_RULES["NO_FILTER"])
-            elif str(ft).startswith("ORB_L"):
-                warnings.append(_WARNING_RULES["ORB_L"])
-
-    # Check sample sizes
-    if "sample_size" in df.columns:
-        small = df[df["sample_size"] < _REGIME_MIN]
-        if len(small) > 0:
-            warnings.append(
-                f"{len(small)} result(s) have sample_size < {_REGIME_MIN} (INVALID -- not tradeable)."
-            )
-        regime = df[(df["sample_size"] >= _REGIME_MIN) & (df["sample_size"] < _CORE_MIN)]
-        if len(regime) > 0:
-            warnings.append(
-                f"{len(regime)} result(s) have sample_size {_REGIME_MIN}-{_CORE_MIN - 1} "
-                f"(REGIME -- conditional overlay only, not standalone)."
-            )
-
-    return list(set(warnings))
+    """Generate auto-warnings — delegates to shared implementation in config.py."""
+    return generate_strategy_warnings(df)
 
 
 class QueryAgent:

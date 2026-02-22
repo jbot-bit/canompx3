@@ -18,25 +18,26 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 from pipeline.cost_model import CostSpec, get_cost_spec, to_r_multiple
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.walkforward import _add_months
 
 def load_daily_features(db_path: Path, start: date, end: date,
-                        orb_minutes: int = 5) -> pd.DataFrame:
+                        orb_minutes: int = 5, symbol: str = "MGC") -> pd.DataFrame:
     """Load daily_features for a date range."""
     con = duckdb.connect(str(db_path), read_only=True)
     try:
         df = con.execute("""
             SELECT *
             FROM daily_features
-            WHERE symbol = 'MGC'
+            WHERE symbol = ?
               AND orb_minutes = ?
               AND trading_day BETWEEN ? AND ?
             ORDER BY trading_day
-        """, [orb_minutes, start, end]).fetchdf()
+        """, [symbol, orb_minutes, start, end]).fetchdf()
     finally:
         con.close()
     return df
 
-def load_bars_for_day(db_path: Path, trading_day: date) -> pd.DataFrame:
+def load_bars_for_day(db_path: Path, trading_day: date, symbol: str = "MGC") -> pd.DataFrame:
     """Load 1-minute bars for one trading day (09:00 Brisbane boundary).
 
     Trading day boundary: 23:00 UTC previous calendar day to 23:00 UTC trading day.
@@ -49,10 +50,10 @@ def load_bars_for_day(db_path: Path, trading_day: date) -> pd.DataFrame:
         df = con.execute("""
             SELECT ts_utc, open, high, low, close, volume
             FROM bars_1m
-            WHERE symbol = 'MGC'
+            WHERE symbol = ?
               AND ts_utc >= ? AND ts_utc < ?
             ORDER BY ts_utc
-        """, [start_utc, end_utc]).fetchdf()
+        """, [symbol, start_utc, end_utc]).fetchdf()
     finally:
         con.close()
     return df
@@ -189,12 +190,5 @@ def save_results(results: dict, path: Path) -> None:
         json.dump(results, f, indent=2, default=str)
     print(f"Results saved to {path}")
 
-def _add_months(d: date, months: int) -> date:
-    """Add months to a date, clamping to valid day."""
-    month = d.month + months
-    year = d.year + (month - 1) // 12
-    month = (month - 1) % 12 + 1
-    import calendar
-    max_day = calendar.monthrange(year, month)[1]
-    day = min(d.day, max_day)
-    return date(year, month, day)
+
+# _add_months imported from trading_app.walkforward (canonical implementation)

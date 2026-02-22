@@ -729,3 +729,46 @@ def classify_strategy(sample_size: int) -> str:
 # orb_outcomes contains ALL break-days regardless of filter.
 # Overlay must ONLY write pnl_r on eligible days (series == 0.0).
 # Low trade counts under strict filters (G6/G8) are EXPECTED, not bugs.
+
+
+# =========================================================================
+# Shared warning generation for AI query interfaces
+# =========================================================================
+
+_WARNING_RULES = {
+    "NO_FILTER": "NO_FILTER strategies have negative expectancy -- house wins.",
+    "ORB_L": "L-filter (less-than) strategies have negative expectancy -- house wins.",
+}
+
+
+def generate_strategy_warnings(df) -> list[str]:
+    """Generate auto-warnings based on query result content.
+
+    Used by mcp_server and query_agent to flag dangerous filter types
+    and insufficient sample sizes.
+    """
+    warnings: list[str] = []
+    if df is None or (hasattr(df, "empty") and df.empty):
+        return warnings
+
+    if "filter_type" in df.columns:
+        for ft in df["filter_type"].unique():
+            if ft == "NO_FILTER":
+                warnings.append(_WARNING_RULES["NO_FILTER"])
+            elif str(ft).startswith("ORB_L"):
+                warnings.append(_WARNING_RULES["ORB_L"])
+
+    if "sample_size" in df.columns:
+        small = (df["sample_size"] < REGIME_MIN_SAMPLES).sum()
+        if small > 0:
+            warnings.append(
+                f"{small} result(s) have sample_size < {REGIME_MIN_SAMPLES} (INVALID -- not tradeable)."
+            )
+        regime = ((df["sample_size"] >= REGIME_MIN_SAMPLES) & (df["sample_size"] < CORE_MIN_SAMPLES)).sum()
+        if regime > 0:
+            warnings.append(
+                f"{regime} result(s) have sample_size {REGIME_MIN_SAMPLES}-{CORE_MIN_SAMPLES - 1} "
+                f"(REGIME -- conditional overlay only, not standalone)."
+            )
+
+    return list(set(warnings))

@@ -74,7 +74,7 @@ ASSET_CONFIGS = {
         ],
     },
     "MES": {
-        "dbn_path": Path(r"C:\db\MES_DB"),
+        "dbn_path": PROJECT_ROOT / "DB" / "MES_DB",
         "symbol": "MES",
         "outright_pattern": re.compile(r'^MES[FGHJKMNQUVXZ]\d{1,2}$'),
         "prefix_len": 3,

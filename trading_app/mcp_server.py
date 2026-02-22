@@ -28,6 +28,7 @@ from trading_app.ai.sql_adapter import (
     SQLAdapter,
 )
 from trading_app.strategy_fitness import compute_fitness, compute_portfolio_fitness
+from trading_app.config import CORE_MIN_SAMPLES, REGIME_MIN_SAMPLES, generate_strategy_warnings
 
 DB_PATH = str(GOLD_DB_PATH)
 
@@ -38,44 +39,15 @@ MAX_MCP_ROWS = 5000
 _ALLOWED_PARAMS = {"orb_label", "entry_model", "filter_type", "min_sample_size", "limit", "instrument"}
 
 # ---------------------------------------------------------------------------
-# Warnings (lightweight copy from query_agent._generate_warnings)
+# Warnings — thresholds imported from config.py (single source of truth)
 # ---------------------------------------------------------------------------
 
-_CORE_MIN = 100
-_REGIME_MIN = 30
-
-_WARNING_RULES = {
-    "NO_FILTER": "NO_FILTER strategies have negative expectancy -- house wins.",
-    "ORB_L": "L-filter (less-than) strategies have negative expectancy -- house wins.",
-}
+_CORE_MIN = CORE_MIN_SAMPLES
+_REGIME_MIN = REGIME_MIN_SAMPLES
 
 def _generate_warnings(df) -> list[str]:
-    """Generate auto-warnings based on query result content."""
-    warnings: list[str] = []
-    if df is None or df.empty:
-        return warnings
-
-    if "filter_type" in df.columns:
-        for ft in df["filter_type"].unique():
-            if ft == "NO_FILTER":
-                warnings.append(_WARNING_RULES["NO_FILTER"])
-            elif str(ft).startswith("ORB_L"):
-                warnings.append(_WARNING_RULES["ORB_L"])
-
-    if "sample_size" in df.columns:
-        small = (df["sample_size"] < _REGIME_MIN).sum()
-        if small > 0:
-            warnings.append(
-                f"{small} result(s) have sample_size < {_REGIME_MIN} (INVALID -- not tradeable)."
-            )
-        regime = ((df["sample_size"] >= _REGIME_MIN) & (df["sample_size"] < _CORE_MIN)).sum()
-        if regime > 0:
-            warnings.append(
-                f"{regime} result(s) have sample_size {_REGIME_MIN}-{_CORE_MIN - 1} "
-                f"(REGIME -- conditional overlay only, not standalone)."
-            )
-
-    return warnings
+    """Generate auto-warnings — delegates to shared implementation in config.py."""
+    return generate_strategy_warnings(df)
 
 # ---------------------------------------------------------------------------
 # Core logic (plain functions, testable without MCP)

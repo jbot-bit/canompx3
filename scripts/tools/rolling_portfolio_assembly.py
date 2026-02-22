@@ -36,6 +36,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 from pipeline.build_daily_features import compute_trading_day_utc_range
 from pipeline.cost_model import get_cost_spec, to_r_multiple
+from pipeline.paths import GOLD_DB_PATH
 from research._alt_strategy_utils import compute_strategy_metrics
 
 sys.stdout.reconfigure(line_buffering=True)
@@ -488,7 +489,7 @@ def run(db_path, start, end):
 
 def main():
     parser = argparse.ArgumentParser(description="Rolling Portfolio Assembly")
-    parser.add_argument("--db-path", type=Path, default=Path("C:/db/gold.db"))
+    parser.add_argument("--db-path", type=Path, default=GOLD_DB_PATH)
     parser.add_argument("--start", type=date.fromisoformat, default=date(2016, 2, 1))
     parser.add_argument("--end", type=date.fromisoformat, default=date(2026, 2, 4))
     args = parser.parse_args()
