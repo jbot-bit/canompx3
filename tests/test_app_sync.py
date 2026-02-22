@@ -221,17 +221,17 @@ class TestGetFiltersForGrid:
         filters = get_filters_for_grid("MGC", "0900")
         assert "ORB_G4_L12" not in filters
         assert "DIR_LONG" not in filters
-        # MGC regime shift (Feb 2026): G4/G5 removed, G6 minimum.
-        # DOW research: 0900 gets Friday-skip composites (only G6/G8).
-        assert "ORB_G4_NOFRI" not in filters
-        assert "ORB_G5_NOFRI" not in filters
+        # MGC G4/G5 restored (Feb 2026 correction: G4 passes 7.2% of 0900
+        # days, not 87.5% as originally claimed). All G filters get NOFRI.
+        assert "ORB_G4_NOFRI" in filters
+        assert "ORB_G5_NOFRI" in filters
         assert "ORB_G6_NOFRI" in filters
         assert "ORB_G8_NOFRI" in filters
-        # MGC uses own size filter set (G6/G8), not BASE_GRID_FILTERS
         assert "NO_FILTER" in filters
+        assert "ORB_G4" in filters
+        assert "ORB_G5" in filters
         assert "ORB_G6" in filters
         assert "ORB_G8" in filters
-        assert "ORB_G4" not in filters
 
     def test_mgc_1000_has_dir_no_band(self):
         filters = get_filters_for_grid("MGC", "1000")
