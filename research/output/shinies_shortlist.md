@@ -43,6 +43,15 @@ Last updated: 2026-02-22
 - 2025 OOS uplift: `+0.1644`
 - Status: **KEEP (frequency-qualified common-ground candidate)**
 
+### B2) MES 1000 (single-asset filter)
+- Strategy slice: `E0 / CB1 / RR2.5`
+- Filter: `fast_le_15` (break_delay <= 15m)
+- Estimated usable frequency: `~164 signals/year` (`N_on=1311`)
+- avg_on: `+0.0111`
+- uplift (ON-OFF): `+0.1245`
+- 2025 OOS uplift: `+0.3414` (`N_test_on=210`)
+- Status: **KEEP (high-frequency common-ground filter)**
+
 ## C) Explicitly not kept
 
 ### Relay-chain hypothesis (M6E + MES -> M2K_US_POST_EQUITY)
