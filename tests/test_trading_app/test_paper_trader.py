@@ -264,9 +264,6 @@ class TestCLI:
         import subprocess
         import os
 
-        # Create minimal test DB with NFP day
-        db_path = _setup_calendar_test_db(tmp_path, n_days=2)
-
         # Run paper_trader with --calendar-filter NFP
         result = subprocess.run(
             [
