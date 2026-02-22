@@ -25,11 +25,15 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = "gold.db"
 PAIRS_SOURCE = PROJECT_ROOT / "research" / "output" / "fast_lead_lag_extended_summary.csv"
 
-TOP_PAIRS = 12
+TOP_PAIRS = 30
 MIN_PAIR_ON = 120
 MIN_BASE = 300
 MIN_ON = 80
 MIN_OFF = 80
+MIN_TEST_ON = 40
+MIN_TEST_OFF = 40
+MIN_TRAIN_ON = 80
+MIN_TRAIN_OFF = 80
 
 
 def safe_label(label: str) -> str:
@@ -43,9 +47,30 @@ def parse_pair(tag: str) -> tuple[str, str]:
     return sym, sess
 
 
+def is_valid_pair_tag(tag: str) -> bool:
+    if not isinstance(tag, str):
+        return False
+    if "_" not in tag:
+        return False
+    sym, sess = tag.split("_", 1)
+    if not sym or not sess:
+        return False
+    if not re.fullmatch(r"[A-Za-z0-9]+", sym):
+        return False
+    if not re.fullmatch(r"[A-Za-z0-9_]+", sess):
+        return False
+    return True
+
+
 def load_top_pairs() -> pd.DataFrame:
     s = pd.read_csv(PAIRS_SOURCE)
+    s = s.dropna(subset=["leader", "follower", "n_on", "uplift_on_vs_off", "avg_r_on"]).copy()
+    s["leader"] = s["leader"].astype(str)
+    s["follower"] = s["follower"].astype(str)
+    s = s[s["leader"].map(is_valid_pair_tag) & s["follower"].map(is_valid_pair_tag)]
     s = s[(s["n_on"] >= MIN_PAIR_ON)].copy()
+    s = s.drop_duplicates(subset=["leader", "follower"])
+
     # old-style: chase uplift + strong avg_on
     s = s.sort_values(["uplift_on_vs_off", "avg_r_on"], ascending=False).head(TOP_PAIRS)
     return s[["leader", "follower", "n_on", "n_base", "uplift_on_vs_off", "avg_r_on"]]
@@ -136,17 +161,32 @@ def aggregate(ydf: pd.DataFrame) -> pd.DataFrame:
             if (float(r.sum_on) / int(r.n_on)) - (float(r.sum_off) / int(r.n_off)) > 0:
                 years_pos += 1
 
-        # quick OOS 2025 if available
+        # quick OOS 2025 + train uplift
         g2025 = g[g["y"] == 2025]
         gtrain = g[g["y"] < 2025]
         test_uplift = np.nan
+        train_uplift = np.nan
+        n_test_on = 0
+        n_test_off = 0
+
+        if not gtrain.empty:
+            n_on_tr = int(gtrain["n_on"].sum())
+            n_off_tr = int(gtrain["n_off"].sum())
+            if n_on_tr >= MIN_TRAIN_ON and n_off_tr >= MIN_TRAIN_OFF:
+                train_uplift = (float(gtrain["sum_on"].sum()) / n_on_tr) - (float(gtrain["sum_off"].sum()) / n_off_tr)
+
         if not g2025.empty:
             n_on_25 = int(g2025["n_on"].sum())
             n_off_25 = int(g2025["n_off"].sum())
-            if n_on_25 >= 40 and n_off_25 >= 40:
+            n_test_on = n_on_25
+            n_test_off = n_off_25
+            if n_on_25 >= MIN_TEST_ON and n_off_25 >= MIN_TEST_OFF:
                 test_uplift = (float(g2025["sum_on"].sum()) / n_on_25) - (float(g2025["sum_off"].sum()) / n_off_25)
 
-        years_covered = max(1, int(g["y"].nunique()))
+        # frequency normalization: use full historical years (prefer <=2025 to avoid partial current year distortion)
+        years_set = set(int(v) for v in g["y"].dropna().tolist())
+        full_years = sorted([y for y in years_set if y <= 2025])
+        years_covered = len(full_years) if full_years else max(1, len(years_set))
         signals_per_year = n_on / years_covered
 
         rows.append(
@@ -167,7 +207,10 @@ def aggregate(ydf: pd.DataFrame) -> pd.DataFrame:
                 "years_pos": years_pos,
                 "years_total": years_total,
                 "years_pos_ratio": (years_pos / years_total) if years_total else np.nan,
+                "train_uplift": train_uplift,
                 "test2025_uplift": test_uplift,
+                "n_test_on": n_test_on,
+                "n_test_off": n_test_off,
             }
         )
 
@@ -210,7 +253,10 @@ def main() -> int:
         & (all_df["uplift"] >= 0.18)
         & (all_df["years_total"] >= 3)
         & (all_df["years_pos_ratio"] >= 0.6)
+        & (all_df["train_uplift"].fillna(-999) >= 0)
         & (all_df["test2025_uplift"].fillna(-999) >= 0)
+        & (all_df["n_test_on"] >= MIN_TEST_ON)
+        & (all_df["n_test_off"] >= MIN_TEST_OFF)
     ].copy().sort_values(["avg_on", "uplift"], ascending=False)
     topgain.to_csv(p_top, index=False)
 
@@ -230,7 +276,7 @@ def main() -> int:
 
     for r in topgain.head(20).itertuples(index=False):
         lines.append(
-            f"- {r.leader}->{r.follower} {r.entry_model}/CB{r.confirm_bars}/RR{r.rr_target}: avg_on={r.avg_on:+.4f}, Δ={r.uplift:+.4f}, sig/yr={r.signals_per_year:.1f}, years+={r.years_pos}/{r.years_total}, test2025Δ={r.test2025_uplift:+.4f}"
+            f"- {r.leader}->{r.follower} {r.entry_model}/CB{r.confirm_bars}/RR{r.rr_target}: avg_on={r.avg_on:+.4f}, Δ={r.uplift:+.4f}, sig/yr={r.signals_per_year:.1f}, years+={r.years_pos}/{r.years_total}, trainΔ={r.train_uplift:+.4f}, test2025Δ={r.test2025_uplift:+.4f}, Ntest={int(r.n_test_on)}/{int(r.n_test_off)}"
         )
 
     lines.append("")

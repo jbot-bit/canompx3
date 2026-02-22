@@ -1,1 +1,1 @@
-leader,follower,symbol,session,entry_model,confirm_bars,rr_target,n_base,n_on,signals_per_year,avg_on,avg_off,uplift,years_pos,years_total,years_pos_ratio,test2025_uplift
+leader,follower,symbol,session,entry_model,confirm_bars,rr_target,n_base,n_on,signals_per_year,avg_on,avg_off,uplift,years_pos,years_total,years_pos_ratio,train_uplift,test2025_uplift,n_test_on,n_test_off
