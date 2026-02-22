@@ -346,22 +346,39 @@ class TestDowComposites:
     """DOW composites in get_filters_for_grid."""
 
     def test_0900_has_nofri(self):
+        # MGC uses G6/G8 only (G4/G5 pass 85%+ of days — regime shift Feb 2026)
         filters = get_filters_for_grid("MGC", "0900")
-        for key in ["ORB_G4_NOFRI", "ORB_G5_NOFRI", "ORB_G6_NOFRI", "ORB_G8_NOFRI"]:
-            assert key in filters, f"{key} missing from 0900 grid"
+        for key in ["ORB_G6_NOFRI", "ORB_G8_NOFRI"]:
+            assert key in filters, f"{key} missing from MGC 0900 grid"
             assert isinstance(filters[key], CompositeFilter)
+        # Non-MGC instruments still get full G4-G8
+        mnq_filters = get_filters_for_grid("MNQ", "0900")
+        for key in ["ORB_G4_NOFRI", "ORB_G5_NOFRI", "ORB_G6_NOFRI", "ORB_G8_NOFRI"]:
+            assert key in mnq_filters, f"{key} missing from MNQ 0900 grid"
+            assert isinstance(mnq_filters[key], CompositeFilter)
 
     def test_1800_has_nomon(self):
+        # MGC uses G6/G8 only
         filters = get_filters_for_grid("MGC", "1800")
-        for key in ["ORB_G4_NOMON", "ORB_G5_NOMON", "ORB_G6_NOMON", "ORB_G8_NOMON"]:
-            assert key in filters, f"{key} missing from 1800 grid"
+        for key in ["ORB_G6_NOMON", "ORB_G8_NOMON"]:
+            assert key in filters, f"{key} missing from MGC 1800 grid"
             assert isinstance(filters[key], CompositeFilter)
+        # Non-MGC instruments still get full G4-G8
+        mnq_filters = get_filters_for_grid("MNQ", "1800")
+        for key in ["ORB_G4_NOMON", "ORB_G5_NOMON", "ORB_G6_NOMON", "ORB_G8_NOMON"]:
+            assert key in mnq_filters, f"{key} missing from MNQ 1800 grid"
+            assert isinstance(mnq_filters[key], CompositeFilter)
 
     def test_1000_has_notue_and_dir_long(self):
+        # MGC uses G6/G8 only
         filters = get_filters_for_grid("MGC", "1000")
-        for key in ["ORB_G4_NOTUE", "ORB_G5_NOTUE", "ORB_G6_NOTUE", "ORB_G8_NOTUE"]:
-            assert key in filters, f"{key} missing from 1000 grid"
+        for key in ["ORB_G6_NOTUE", "ORB_G8_NOTUE"]:
+            assert key in filters, f"{key} missing from MGC 1000 grid"
         assert "DIR_LONG" in filters
+        # Non-MGC instruments still get full G4-G8
+        mnq_filters = get_filters_for_grid("MNQ", "1000")
+        for key in ["ORB_G4_NOTUE", "ORB_G5_NOTUE", "ORB_G6_NOTUE", "ORB_G8_NOTUE"]:
+            assert key in mnq_filters, f"{key} missing from MNQ 1000 grid"
 
     def test_1100_has_base_only(self):
         """1100 gets base grid only — no DOW, no DIR_LONG, no NODBL.
@@ -377,14 +394,14 @@ class TestDowComposites:
         assert nodbl_keys == [], f"1100 should have no NODBL filters, got {nodbl_keys}"
 
     def test_composite_matches_row_correctly(self):
-        """Composite(G4 + skip Friday) rejects Friday even with big ORB."""
+        """Composite(G6 + skip Friday) rejects Friday even with big ORB."""
         filters = get_filters_for_grid("MGC", "0900")
-        comp = filters["ORB_G4_NOFRI"]
-        # Big ORB on Friday -> rejected
-        assert comp.matches_row({"orb_0900_size": 6.0, "day_of_week": 4}, "0900") is False
+        comp = filters["ORB_G6_NOFRI"]
+        # Big ORB on Friday -> rejected (DOW filter fails)
+        assert comp.matches_row({"orb_0900_size": 8.0, "day_of_week": 4}, "0900") is False
         # Big ORB on Monday -> accepted
-        assert comp.matches_row({"orb_0900_size": 6.0, "day_of_week": 0}, "0900") is True
-        # Small ORB on Monday -> rejected (base filter fails)
+        assert comp.matches_row({"orb_0900_size": 8.0, "day_of_week": 0}, "0900") is True
+        # Small ORB on Monday -> rejected (base G6 filter fails)
         assert comp.matches_row({"orb_0900_size": 2.0, "day_of_week": 0}, "0900") is False
 
 
@@ -413,12 +430,21 @@ class TestBreakQualityComposites:
 
     def test_momentum_sessions_have_break_quality(self):
         """0900, 1000, 1800 get break quality composites."""
+        # MGC: G6/G8 only (regime shift Feb 2026)
         for session in ("0900", "1000", "1800"):
             filters = get_filters_for_grid("MGC", session)
             for suffix in ("FAST5", "FAST10", "CONT"):
+                for g in ("G6", "G8"):
+                    key = f"ORB_{g}_{suffix}"
+                    assert key in filters, f"{key} missing from MGC {session} grid"
+                    assert isinstance(filters[key], CompositeFilter)
+        # Non-MGC: full G4-G8
+        for session in ("0900", "1000", "1800"):
+            filters = get_filters_for_grid("MNQ", session)
+            for suffix in ("FAST5", "FAST10", "CONT"):
                 for g in ("G4", "G5", "G6", "G8"):
                     key = f"ORB_{g}_{suffix}"
-                    assert key in filters, f"{key} missing from {session} grid"
+                    assert key in filters, f"{key} missing from MNQ {session} grid"
                     assert isinstance(filters[key], CompositeFilter)
 
     def test_non_momentum_sessions_no_break_quality(self):
@@ -429,31 +455,31 @@ class TestBreakQualityComposites:
             assert bq_keys == [], f"{session} has break quality filters: {bq_keys}"
 
     def test_fast5_composite_matches_row(self):
-        """Composite(G4 + FAST5) requires both big ORB and fast break."""
+        """Composite(G6 + FAST5) requires both big ORB and fast break."""
         filters = get_filters_for_grid("MGC", "0900")
-        comp = filters["ORB_G4_FAST5"]
+        comp = filters["ORB_G6_FAST5"]
         # Big ORB + fast break -> accepted
         assert comp.matches_row(
-            {"orb_0900_size": 5.0, "orb_0900_break_delay_min": 2.0}, "0900"
+            {"orb_0900_size": 8.0, "orb_0900_break_delay_min": 2.0}, "0900"
         ) is True
         # Big ORB + slow break -> rejected
         assert comp.matches_row(
-            {"orb_0900_size": 5.0, "orb_0900_break_delay_min": 20.0}, "0900"
+            {"orb_0900_size": 8.0, "orb_0900_break_delay_min": 20.0}, "0900"
         ) is False
-        # Small ORB + fast break -> rejected (base filter fails)
+        # Small ORB + fast break -> rejected (base G6 filter fails)
         assert comp.matches_row(
             {"orb_0900_size": 2.0, "orb_0900_break_delay_min": 2.0}, "0900"
         ) is False
 
     def test_cont_composite_matches_row(self):
-        """Composite(G4 + CONT) requires both big ORB and conviction candle."""
+        """Composite(G6 + CONT) requires both big ORB and conviction candle."""
         filters = get_filters_for_grid("MGC", "0900")
-        comp = filters["ORB_G4_CONT"]
+        comp = filters["ORB_G6_CONT"]
         # Big ORB + continues -> accepted
         assert comp.matches_row(
-            {"orb_0900_size": 5.0, "orb_0900_break_bar_continues": True}, "0900"
+            {"orb_0900_size": 8.0, "orb_0900_break_bar_continues": True}, "0900"
         ) is True
         # Big ORB + reversal -> rejected
         assert comp.matches_row(
-            {"orb_0900_size": 5.0, "orb_0900_break_bar_continues": False}, "0900"
+            {"orb_0900_size": 8.0, "orb_0900_break_bar_continues": False}, "0900"
         ) is False
