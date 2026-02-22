@@ -82,6 +82,25 @@ Last updated: 2026-02-22
 - Outcome: no meaningful practical improvement for core high-frequency deployment; gains were either tiny or came with major frequency loss.
 - Decision: **NO-GO for default deployment** (keep as optional research path only).
 
+## E) Cross-strategy add-ons (new)
+
+These are overlays to improve trade quality on existing KEEP strategies.
+
+### E1) Follower volume-impulse overlay (`OV_f_vol60`)
+- Definition: keep only trades where follower breakout bar volume impulse is in top 40% (>= q60) of that strategy context.
+- Works best on: `A0, A2, B1, B2` (large positive avgR deltas)
+- Typical retention: ~40%
+- Intent: gain-first quality mode.
+
+### E2) Follower fast-break overlay (`OV_f_fast15`)
+- Definition: keep only trades with follower break delay <= 15 minutes.
+- Improved all applicable tested strategies in this pass (subset with valid sample), with high retention (~86%).
+- Intent: practical quality uplift without crushing frequency.
+
+### E3) Strategy-specific caveat
+- `A1` and `A3` did not show strong additive gains from these universal overlays in current tests.
+- Keep base logic for those unless future challenger beats baseline.
+
 ## Notes
 - These are saved as current best candidates for future hardening.
 - Not production-promoted yet.
