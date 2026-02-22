@@ -1,0 +1,7 @@
+id,status,category,rule_frozen,forward_n,target_n,forward_avg_r,forward_uplift,forward_dd_delta_pct,weekly_neg_streak,decision
+A0,IN_GATE,gain-first,yes,0,60,,,,0,
+A1,IN_GATE,gain-first,yes,0,60,,,,0,
+A2,IN_GATE,gain-first,yes,0,60,,,,0,
+A3,IN_GATE,gain-first,yes,0,60,,,,0,
+B1,IN_GATE,frequency,yes,0,100,,,,0,
+B2,IN_GATE,frequency-probation,yes,0,100,,,,0,
