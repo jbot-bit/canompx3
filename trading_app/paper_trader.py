@@ -102,30 +102,22 @@ def _get_trading_days(con, instrument: str, start_date: date, end_date: date) ->
 
 
 def _get_daily_features_row(con, instrument: str, trading_day: date) -> dict | None:
-    """Fetch calendar and regime filter columns from daily_features for one day."""
-    row = con.execute(
-        """SELECT is_nfp_day, is_opex_day, is_friday, day_of_week,
-                  atr_vel_regime,
-                  orb_0900_compression_tier,
-                  orb_1000_compression_tier,
-                  orb_1800_compression_tier
-           FROM daily_features
+    """Fetch all daily_features columns for one day (orb_minutes=5).
+
+    Returns a full dict so composite filters (DOW, break speed, break bar
+    continues) get the columns they need without manual SELECT maintenance.
+    """
+    result = con.execute(
+        """SELECT * FROM daily_features
            WHERE symbol = ? AND orb_minutes = 5 AND trading_day = ?
            LIMIT 1""",
         [instrument, trading_day],
-    ).fetchone()
+    )
+    row = result.fetchone()
     if row is None:
         return None
-    return {
-        "is_nfp_day":                 row[0],
-        "is_opex_day":                row[1],
-        "is_friday":                  row[2],
-        "day_of_week":                row[3],
-        "atr_vel_regime":             row[4],
-        "orb_0900_compression_tier":  row[5],
-        "orb_1000_compression_tier":  row[6],
-        "orb_1800_compression_tier":  row[7],
-    }
+    columns = [desc[0] for desc in result.description]
+    return dict(zip(columns, row))
 
 def _get_bars_for_day(con, instrument: str, trading_day: date) -> list[dict]:
     """
@@ -238,6 +230,7 @@ def replay_historical(
                 market_state = MarketState.from_trading_day(
                     td, db_path, cascade_table=cascade_table,
                     visible_sessions=set(),  # nothing resolved yet
+                    instrument=instrument,
                 )
                 market_state.score_strategies(portfolio.strategies)
                 engine.market_state = market_state

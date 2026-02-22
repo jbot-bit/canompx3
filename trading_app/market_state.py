@@ -104,6 +104,7 @@ class MarketState:
         orb_minutes: int = 5,
         cascade_table: dict | None = None,
         visible_sessions: set[str] | None = None,
+        instrument: str = "MGC",
     ) -> "MarketState":
         """Build MarketState from DB for a given day (historical replay).
 
@@ -118,6 +119,7 @@ class MarketState:
                 at replay start and add labels as trade outcomes resolve
                 (TP/SL/EOD) to prevent lookahead.  ``None`` (default) means
                 all outcomes are visible (post-hoc analysis mode).
+            instrument: Symbol to query from daily_features (default MGC).
         """
         state = cls(trading_day=trading_day)
 
@@ -140,10 +142,10 @@ class MarketState:
                        session_ny_high, session_ny_low,
                        {orb_select}
                 FROM daily_features
-                WHERE symbol = 'MGC'
+                WHERE symbol = ?
                   AND trading_day = ?
                   AND orb_minutes = ?
-            """, [trading_day, orb_minutes]).fetchone()
+            """, [instrument, trading_day, orb_minutes]).fetchone()
 
             if row is None:
                 return state

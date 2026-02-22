@@ -408,10 +408,14 @@ class ExecutionEngine:
             if strategy.orb_label != orb.label:
                 continue
 
-            # Check ORB size filter
+            # Check strategy filter (size, DOW, break speed, etc.)
             filt = ALL_FILTERS.get(strategy.filter_type)
             if filt is not None:
-                row = {f"orb_{orb.label}_size": orb.size}
+                # Build full row: daily_features + ORB runtime data
+                row = {}
+                if self._daily_features_row is not None:
+                    row.update(self._daily_features_row)
+                row[f"orb_{orb.label}_size"] = orb.size
                 if not filt.matches_row(row, orb.label):
                     continue
 
@@ -525,7 +529,98 @@ class ExecutionEngine:
         stop_price = orb.low if trade.direction == "long" else orb.high
 
         # Resolve entry price based on model
-        if trade.entry_model == "E1":
+        if trade.entry_model == "E0":
+            # E0: Limit-On-Confirm — fill at ORB edge ON the confirm bar.
+            # For longs, limit buy at orb_high; for shorts, limit sell at orb_low.
+            # No fill if confirm bar gapped fully past the ORB edge.
+            if trade.direction == "long":
+                entry_price = orb.high
+                if confirm_bar["low"] > orb.high:
+                    return events  # Gapped past — no fill
+            else:
+                entry_price = orb.low
+                if confirm_bar["high"] < orb.low:
+                    return events  # Gapped past — no fill
+
+            risk_points = abs(entry_price - stop_price)
+            if risk_points <= 0:
+                return events
+
+            # Risk manager check
+            suggested_contract_factor = 1.0
+            if self.risk_manager is not None:
+                can_enter, reason, suggested_contract_factor = self.risk_manager.can_enter(
+                    strategy_id=trade.strategy_id,
+                    orb_label=trade.orb_label,
+                    active_trades=self.active_trades,
+                    daily_pnl_r=self.daily_pnl_r,
+                )
+                if not can_enter:
+                    events.append(TradeEvent(
+                        event_type="REJECT",
+                        strategy_id=trade.strategy_id,
+                        timestamp=confirm_bar["ts_utc"],
+                        price=entry_price,
+                        direction=trade.direction,
+                        contracts=trade.contracts,
+                        reason=f"risk_rejected: {reason}",
+                    ))
+                    return events
+
+            trade.contracts = max(1, int(trade.contracts * suggested_contract_factor))
+
+            if trade.direction == "long":
+                target_price = entry_price + risk_points * trade.strategy.rr_target
+            else:
+                target_price = entry_price - risk_points * trade.strategy.rr_target
+
+            trade.entry_price = entry_price
+            trade.entry_ts = confirm_bar["ts_utc"]
+            trade.stop_price = stop_price
+            trade.target_price = target_price
+            trade.state = TradeState.ENTERED
+
+            # Session exit mode (IB conditional, hold, etc.)
+            session_mode = SESSION_EXIT_MODE.get(trade.orb_label, "fixed_target")
+            if session_mode == "ib_conditional":
+                if self.ib is not None and self.ib.break_dir is not None:
+                    if self.ib.break_dir == trade.direction:
+                        trade.exit_mode = "hold_7h"
+                        trade.ib_alignment = "aligned"
+                        trade.target_price = None
+                    else:
+                        trade.ib_alignment = "opposed"
+                        trade.state = TradeState.EXITED
+                        events.append(TradeEvent(
+                            event_type="REJECT",
+                            strategy_id=trade.strategy_id,
+                            timestamp=confirm_bar["ts_utc"],
+                            price=entry_price,
+                            direction=trade.direction,
+                            contracts=trade.contracts,
+                            reason="ib_already_opposed",
+                        ))
+                        return events
+                else:
+                    trade.exit_mode = "ib_pending"
+
+            self.daily_trade_count += 1
+            if self.risk_manager is not None:
+                self.risk_manager.on_trade_entry()
+
+            new_trades.append(trade)
+            events.append(TradeEvent(
+                event_type="ENTRY",
+                strategy_id=trade.strategy_id,
+                timestamp=confirm_bar["ts_utc"],
+                price=entry_price,
+                direction=trade.direction,
+                contracts=trade.contracts,
+                reason="confirm_bars_met_E0",
+            ))
+            return events
+
+        elif trade.entry_model == "E1":
             # E1: will enter on NEXT bar's open
             trade.stop_price = stop_price
             trade.state = TradeState.ARMED
