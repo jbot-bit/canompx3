@@ -51,8 +51,9 @@ RR TARGETS (RR1.0-RR4.0, defined in outcome_builder.py):
 
 ORB SIZE FILTERS:
   G-filters (Greater-than): Only trade when ORB size >= N points.
-    G4+ is the minimum for positive expectancy. G5/G6 increase per-trade
-    edge but reduce trade count. G8+ only useful for 2300.
+    G4+ is the minimum for positive expectancy on MES/MNQ. G5/G6 increase
+    per-trade edge but reduce trade count. G8+ only useful for 2300.
+    MGC: G6 minimum (Feb 2026 regime shift — ATR 31→105, G4 passes 87.5%).
   L-filters (Less-than): Only trade when ORB size < N points.
     ALL L-filter strategies have negative expectancy. Do not trade.
   NO_FILTER: Trade all days regardless of ORB size.

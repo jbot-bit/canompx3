@@ -42,7 +42,10 @@ ASSET_CONFIGS = {
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
             "0900", "1000", "1100", "1800", "2300",
-            "CME_OPEN", "LONDON_OPEN", "US_POST_EQUITY",
+            "LONDON_OPEN", "US_POST_EQUITY",
+            # CME_OPEN removed (Feb 2026 session correlation research):
+            # r=0.75 with 0900. Never trade both — 0900 has 103 validated
+            # strategies vs CME_OPEN's 14. Keeping 0900, dropping CME_OPEN.
         ],
     },
     "MNQ": {
