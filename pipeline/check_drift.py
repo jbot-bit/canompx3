@@ -1099,7 +1099,7 @@ def check_db_config_usage() -> list[str]:
         "cascade_table.py", "db_manager.py", "live_config.py",
         "market_state.py", "paper_trader.py", "portfolio.py",
         "rolling_correlation.py", "rolling_portfolio.py",
-        "strategy_fitness.py", "view_strategies.py", "walk_forward.py",
+        "strategy_fitness.py", "view_strategies.py",
         "validate_1800_composite.py", "validate_1800_workhorse.py",
         # Nested subpackages
         "corpus.py", "sql_adapter.py", "strategy_matcher.py",
