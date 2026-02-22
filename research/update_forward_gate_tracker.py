@@ -8,6 +8,7 @@ Applies frozen presets per strategy id.
 from __future__ import annotations
 
 from pathlib import Path
+from datetime import datetime
 import re
 import duckdb
 import pandas as pd
@@ -17,6 +18,8 @@ ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = ROOT / "gold.db"
 REG_PATH = ROOT / "research" / "output" / "shinies_registry.csv"
 TRACKER_PATH = ROOT / "research" / "output" / "forward_gate_tracker.csv"
+STATUS_LATEST_PATH = ROOT / "research" / "output" / "forward_gate_status_latest.md"
+STATUS_SNAPSHOTS_DIR = ROOT / "research" / "output"
 
 # frozen presets
 PRESET = {
@@ -198,7 +201,44 @@ def main():
     con.close()
 
     tracker.to_csv(TRACKER_PATH, index=False)
+
+    now = datetime.now()
+    stamp = now.strftime("%Y-%m-%d %H:%M:%S")
+    date_tag = now.strftime("%Y-%m-%d")
+
+    lines = []
+    lines.append("# Forward Gate Status (latest)")
+    lines.append("")
+    lines.append(f"Updated: {stamp}")
+    lines.append("")
+
+    pending = tracker[tracker["decision"] == "PENDING"]
+    promote = tracker[tracker["decision"] == "PROMOTE"]
+    kill = tracker[tracker["decision"] == "KILL"]
+    lines.append(f"- Pending: {len(pending)}")
+    lines.append(f"- Promote: {len(promote)}")
+    lines.append(f"- Kill: {len(kill)}")
+    lines.append("")
+    lines.append("## Table")
+    lines.append("")
+    lines.append("| id | n/target | forward_avg_r | forward_uplift | dd_delta_pct | decision |")
+    lines.append("|---|---:|---:|---:|---:|---|")
+
+    for _, r in tracker.iterrows():
+        n_target = f"{int(r['forward_n'])}/{int(r['target_n'])}"
+        favg = "" if pd.isna(r["forward_avg_r"]) else f"{float(r['forward_avg_r']):+.4f}"
+        fupl = "" if pd.isna(r["forward_uplift"]) else f"{float(r['forward_uplift']):+.4f}"
+        fdd = "" if pd.isna(r["forward_dd_delta_pct"]) else f"{float(r['forward_dd_delta_pct']):+.2f}%"
+        lines.append(f"| {r['id']} | {n_target} | {favg} | {fupl} | {fdd} | {r['decision']} |")
+
+    STATUS_LATEST_PATH.write_text("\n".join(lines), encoding="utf-8")
+
+    snap_path = STATUS_SNAPSHOTS_DIR / f"forward_gate_status_{date_tag}.md"
+    snap_path.write_text("\n".join(lines), encoding="utf-8")
+
     print(tracker.to_string(index=False))
+    print(f"\nWrote: {STATUS_LATEST_PATH}")
+    print(f"Wrote: {snap_path}")
 
 
 if __name__ == "__main__":

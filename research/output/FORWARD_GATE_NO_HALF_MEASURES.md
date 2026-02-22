@@ -30,3 +30,9 @@ Candidates in gate:
 - Run forward-only shadow logging
 - Weekly scorecard only (no parameter edits)
 - At gate end: PROMOTE or KILL only (no WATCH limbo)
+
+## Automation (active)
+- Manual run: `research\\run_forward_gate.cmd`
+- Python updater: `python research/update_forward_gate_tracker.py`
+- Latest status file: `research/output/forward_gate_status_latest.md`
+- Daily scheduled task: `canompx3-forward-gate` (Windows Task Scheduler)
