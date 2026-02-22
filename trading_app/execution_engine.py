@@ -556,6 +556,8 @@ class ExecutionEngine:
                     daily_pnl_r=self.daily_pnl_r,
                 )
                 if not can_enter:
+                    trade.state = TradeState.EXITED
+                    self.completed_trades.append(trade)
                     events.append(TradeEvent(
                         event_type="REJECT",
                         strategy_id=trade.strategy_id,
@@ -591,6 +593,7 @@ class ExecutionEngine:
                     else:
                         trade.ib_alignment = "opposed"
                         trade.state = TradeState.EXITED
+                        self.completed_trades.append(trade)
                         events.append(TradeEvent(
                             event_type="REJECT",
                             strategy_id=trade.strategy_id,
