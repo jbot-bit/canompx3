@@ -12,6 +12,7 @@ Usage:
     python scripts/reports/report_edge_portfolio.py --all
     python scripts/reports/report_edge_portfolio.py --all --db-path C:/db/gold.db
     python scripts/reports/report_edge_portfolio.py --all --include-purged
+    python scripts/reports/report_edge_portfolio.py --all --slots
 """
 
 import sys
@@ -271,6 +272,120 @@ def print_report(result):
         print(f"  {year}: {stats['trades']} trades, WR {wr:.1%}, {stats['total_r']:+.1f}R")
     print()
 
+def session_slots(db_path, instrument=None):
+    """Collapse edge families to one representative per instrument+session.
+
+    Elects best family per (instrument, orb_label) by Sharpe (breaks ties
+    with trade count). No new table — query-only view over edge_families.
+
+    Returns list of dicts sorted by instrument then ExpR descending.
+    """
+    con = duckdb.connect(str(db_path), read_only=True)
+    try:
+        if not has_edge_families(con):
+            return []
+
+        inst_filter = "AND ef.instrument = ?" if instrument else ""
+        params = [instrument] if instrument else []
+
+        rows = con.execute(f"""
+            WITH slot_ranked AS (
+                SELECT ef.instrument,
+                       vs.orb_label AS session,
+                       ef.family_hash,
+                       ef.head_strategy_id,
+                       ef.head_expectancy_r,
+                       ef.head_sharpe_ann,
+                       ef.trade_day_count,
+                       ef.member_count,
+                       ef.robustness_status,
+                       ef.trade_tier,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY ef.instrument, vs.orb_label
+                           ORDER BY ef.head_sharpe_ann DESC,
+                                    ef.trade_day_count DESC
+                       ) AS rn
+                FROM edge_families ef
+                JOIN validated_setups vs ON ef.head_strategy_id = vs.strategy_id
+                WHERE ef.robustness_status IN ('ROBUST', 'WHITELISTED', 'SINGLETON')
+                  {inst_filter}
+            ),
+            slot_counts AS (
+                SELECT ef.instrument,
+                       vs.orb_label AS session,
+                       COUNT(*) AS competing_families
+                FROM edge_families ef
+                JOIN validated_setups vs ON ef.head_strategy_id = vs.strategy_id
+                WHERE ef.robustness_status IN ('ROBUST', 'WHITELISTED', 'SINGLETON')
+                  {inst_filter}
+                GROUP BY 1, 2
+            )
+            SELECT sr.instrument, sr.session, sr.head_strategy_id,
+                   sr.head_expectancy_r, sr.head_sharpe_ann,
+                   sr.trade_day_count, sr.trade_tier,
+                   sr.robustness_status, sr.member_count,
+                   sc.competing_families
+            FROM slot_ranked sr
+            JOIN slot_counts sc
+              ON sr.instrument = sc.instrument AND sr.session = sc.session
+            WHERE sr.rn = 1
+            ORDER BY sr.instrument, sr.head_expectancy_r DESC
+        """, params * 2).fetchall()  # params used twice (slot_ranked + slot_counts)
+
+        cols = [
+            "instrument", "session", "head_strategy_id",
+            "head_expectancy_r", "head_sharpe_ann",
+            "trade_day_count", "trade_tier",
+            "robustness_status", "member_count",
+            "competing_families",
+        ]
+        return [dict(zip(cols, r)) for r in rows]
+    finally:
+        con.close()
+
+
+def print_session_slots(slots):
+    """Print collapsed session slot view."""
+    if not slots:
+        print("No session slots found (no non-PURGED edge families).")
+        return
+
+    # Group by instrument
+    by_inst = defaultdict(list)
+    for s in slots:
+        by_inst[s["instrument"]].append(s)
+
+    total_slots = 0
+    total_families = 0
+    total_trades = 0
+
+    for inst in sorted(by_inst.keys()):
+        inst_slots = by_inst[inst]
+        inst_families = sum(s["competing_families"] for s in inst_slots)
+        print(f"=== {inst} Session Slots "
+              f"({len(inst_slots)} sessions from {inst_families} families) ===")
+
+        for s in inst_slots:
+            tier_tag = f"[{s['trade_tier']}]" if s["trade_tier"] != "CORE" else ""
+            print(
+                f"  {s['session']:>18}: {s['head_strategy_id']:<52s}"
+                f"  ExpR={s['head_expectancy_r']:+.3f}"
+                f"  ShANN={s['head_sharpe_ann']:.2f}"
+                f"  N={s['trade_day_count']:>4}"
+                f"  ({s['competing_families']} fam)"
+                f"  {tier_tag}"
+            )
+
+        total_slots += len(inst_slots)
+        total_families += inst_families
+        total_trades += sum(s["trade_day_count"] for s in inst_slots)
+        print()
+
+    print(f"--- Summary: {total_slots} slots from {total_families} families, "
+          f"~{total_trades:,} total trades ---")
+    print()
+
+
 def main():
     import argparse
 
@@ -286,12 +401,25 @@ def main():
         "--include-purged", action="store_true",
         help="Include PURGED families (default: ROBUST + WHITELISTED only)",
     )
+    parser.add_argument(
+        "--slots", action="store_true",
+        help="Show session slots view (one representative per instrument+session)",
+    )
     args = parser.parse_args()
 
     if not args.all and not args.instrument:
         parser.error("Either --instrument or --all is required")
 
     db_path = Path(args.db_path) if args.db_path else GOLD_DB_PATH
+
+    # Session slots mode
+    if args.slots:
+        if args.all:
+            slots = session_slots(db_path)
+        else:
+            slots = session_slots(db_path, args.instrument)
+        print_session_slots(slots)
+        return
 
     if args.all:
         for inst in ["MGC", "MNQ", "MES"]:

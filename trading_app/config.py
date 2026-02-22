@@ -389,10 +389,12 @@ _MES_1000_BAND_FILTERS = {
 _GRID_SIZE_FILTERS = {k: v for k, v in MGC_ORB_SIZE_FILTERS.items()
                       if k in ("G4", "G5", "G6", "G8")}
 
-# MGC-specific: G4/G5 removed (Feb 2026 regime shift research).
-# ATR 31→105, G4 passes 87.5% of days = meaningless filter.
+# MGC-specific: G4/G5 restored (Feb 2026 correction).
+# Original removal claimed "G4 passes 87.5%" but actual 0900 pass rate is 7.2%.
+# The 87.5% figure was likely about 1000 session (15m ORB = larger ranges).
+# G4 strategies are the best MGC performers (ExpR +0.44-0.54, all validated).
 _MGC_GRID_SIZE_FILTERS = {k: v for k, v in MGC_ORB_SIZE_FILTERS.items()
-                          if k in ("G6", "G8")}
+                          if k in ("G4", "G5", "G6", "G8")}
 
 # Calendar skip filters (portfolio overlay, not in discovery grid)
 CALENDAR_SKIP_NFP_OPEX = CalendarSkipFilter(
@@ -543,8 +545,8 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
             **_M6E_SIZE_FILTERS,
         }
 
-    # MGC: G6 minimum (Feb 2026 regime shift — G4/G5 pass 85%+ of days, meaningless).
-    # Other instruments: standard G4-G8 grid.
+    # MGC: same G4-G8 grid as other instruments (G4 passes only 7.2% of 0900 days).
+    # Break quality composites are built from MGC-specific size filters below.
     if instrument == "MGC":
         size_filters = _MGC_GRID_SIZE_FILTERS
         size_filters_orb = {f"ORB_{k}": v for k, v in size_filters.items()}
