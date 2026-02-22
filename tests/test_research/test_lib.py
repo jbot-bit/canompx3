@@ -372,18 +372,28 @@ class TestWithDstSplit:
     """with_dst_split() wraps base SQL with DST ON/OFF filters."""
 
     def test_us_regime(self):
-        base = "SELECT * FROM t"
+        base = "SELECT o.pnl_r, d.us_dst FROM t"
         on_sql, off_sql = with_dst_split(base, session="0900", regime_source="US")
-        assert "us_dst" in on_sql
-        assert "us_dst" in off_sql
-        assert "= TRUE" in on_sql or "= true" in on_sql.lower()
-        assert "= FALSE" in off_sql or "= false" in off_sql.lower()
+        # Outer query uses unqualified column name (CTE strips table prefixes)
+        assert "WHERE us_dst = TRUE" in on_sql
+        assert "WHERE us_dst = FALSE" in off_sql
 
     def test_uk_regime(self):
-        base = "SELECT * FROM t"
+        base = "SELECT o.pnl_r, d.uk_dst FROM t"
         on_sql, off_sql = with_dst_split(base, session="1800", regime_source="UK")
-        assert "uk_dst" in on_sql
-        assert "uk_dst" in off_sql
+        assert "WHERE uk_dst = TRUE" in on_sql
+        assert "WHERE uk_dst = FALSE" in off_sql
+
+    def test_raises_if_dst_column_missing(self):
+        base = "SELECT o.pnl_r FROM t"
+        with pytest.raises(ValueError, match="DST column"):
+            with_dst_split(base, session="0900", regime_source="US")
+
+    def test_works_with_outcomes_query(self):
+        sql = outcomes_query("MGC", "0900", "E1", extra_cols=["d.us_dst"])
+        on_sql, off_sql = with_dst_split(sql, session="0900", regime_source="US")
+        assert "WHERE us_dst = TRUE" in on_sql
+        assert "WITH base AS" in on_sql
 
 
 # ── __init__.py re-exports ───────────────────────────────────────────────

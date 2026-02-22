@@ -79,8 +79,15 @@ def with_dst_split(
     MANDATORY per CLAUDE.md: any analysis touching DST-sensitive sessions
     MUST split by regime and report both halves.
     """
-    col = "d.us_dst" if regime_source.upper() == "US" else "d.uk_dst"
-    # Wrap base_sql as CTE to add DST filter
-    on_sql = f"WITH base AS ({base_sql})\nSELECT * FROM base WHERE {col} = TRUE"
-    off_sql = f"WITH base AS ({base_sql})\nSELECT * FROM base WHERE {col} = FALSE"
+    col_qualified = "d.us_dst" if regime_source.upper() == "US" else "d.uk_dst"
+    col_name = "us_dst" if regime_source.upper() == "US" else "uk_dst"
+    # Ensure DST column is in the base query (caller must include it in extra_cols).
+    if col_qualified not in base_sql and col_name not in base_sql:
+        raise ValueError(
+            f"DST column '{col_qualified}' not found in base SQL. "
+            f"Add it to extra_cols: extra_cols=['{col_qualified}']"
+        )
+    # Wrap base_sql as CTE — use unqualified column name since CTE strips table prefixes.
+    on_sql = f"WITH base AS ({base_sql})\nSELECT * FROM base WHERE {col_name} = TRUE"
+    off_sql = f"WITH base AS ({base_sql})\nSELECT * FROM base WHERE {col_name} = FALSE"
     return on_sql, off_sql

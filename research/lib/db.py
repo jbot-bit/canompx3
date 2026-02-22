@@ -27,13 +27,13 @@ def connect_db(read_only: bool = True):
         con.close()
 
 
-def query_df(sql: str, params=None) -> pd.DataFrame:
+def query_df(sql: str, params: list | None = None) -> pd.DataFrame:
     """Execute SQL and return a DataFrame. Opens and closes connection automatically.
 
     Usage:
         df = query_df("SELECT * FROM orb_outcomes WHERE symbol = ?", ["MGC"])
     """
     with connect_db() as con:
-        if params:
+        if params is not None:
             return con.execute(sql, params).fetchdf()
         return con.execute(sql).fetchdf()

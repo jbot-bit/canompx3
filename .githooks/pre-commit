@@ -9,11 +9,15 @@
 set -e
 
 # Activate venv if present (for ruff/python/pytest)
-# Prefer .venv/ (project standard)
+# Try venv/ first (active dev environment), fall back to .venv/
 # Save PATH before activate to prevent Git Bash utilities from disappearing
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 _SAVED_PATH="$PATH"
-if [ -f "$SCRIPT_DIR/.venv/Scripts/activate" ]; then
+if [ -f "$SCRIPT_DIR/venv/Scripts/activate" ]; then
+    source "$SCRIPT_DIR/venv/Scripts/activate" 2>/dev/null
+elif [ -f "$SCRIPT_DIR/venv/bin/activate" ]; then
+    source "$SCRIPT_DIR/venv/bin/activate" 2>/dev/null
+elif [ -f "$SCRIPT_DIR/.venv/Scripts/activate" ]; then
     source "$SCRIPT_DIR/.venv/Scripts/activate" 2>/dev/null
 elif [ -f "$SCRIPT_DIR/.venv/bin/activate" ]; then
     source "$SCRIPT_DIR/.venv/bin/activate" 2>/dev/null
@@ -24,9 +28,13 @@ export PATH="$PATH:$_SAVED_PATH"
 echo "=== PRE-COMMIT CHECKS ==="
 echo ""
 
-# Resolve python — prefer venv to avoid Windows Store redirect
+# Resolve python — prefer venv/ (active dev env), fall back to .venv/
 PYTHON="python"
-if [ -f "$SCRIPT_DIR/.venv/Scripts/python.exe" ]; then
+if [ -f "$SCRIPT_DIR/venv/Scripts/python.exe" ]; then
+    PYTHON="$SCRIPT_DIR/venv/Scripts/python.exe"
+elif [ -f "$SCRIPT_DIR/venv/bin/python" ]; then
+    PYTHON="$SCRIPT_DIR/venv/bin/python"
+elif [ -f "$SCRIPT_DIR/.venv/Scripts/python.exe" ]; then
     PYTHON="$SCRIPT_DIR/.venv/Scripts/python.exe"
 elif [ -f "$SCRIPT_DIR/.venv/bin/python" ]; then
     PYTHON="$SCRIPT_DIR/.venv/bin/python"
@@ -35,7 +43,9 @@ fi
 # 0. Ruff lint check (~1 second)
 echo "[0/3] Ruff lint..."
 RUFF="ruff"
-if [ -f "$SCRIPT_DIR/.venv/Scripts/ruff.exe" ]; then
+if [ -f "$SCRIPT_DIR/venv/Scripts/ruff.exe" ]; then
+    RUFF="$SCRIPT_DIR/venv/Scripts/ruff.exe"
+elif [ -f "$SCRIPT_DIR/.venv/Scripts/ruff.exe" ]; then
     RUFF="$SCRIPT_DIR/.venv/Scripts/ruff.exe"
 fi
 if ! "$RUFF" check pipeline/ trading_app/ > /dev/null 2>&1; then
@@ -58,8 +68,10 @@ echo "  PASSED"
 # Use -n 4 (not -n auto/32): reduces Windows resource pressure from parallel
 # DuckDB imports and test I/O. Higher counts cause intermittent failures.
 echo "[2/3] Fast tests..."
-"$PYTHON" -m pytest "$SCRIPT_DIR/tests/" --ignore="$SCRIPT_DIR/tests/test_trader_logic.py" --ignore="$SCRIPT_DIR/tests/test_trading_app/test_integration.py" --ignore="$SCRIPT_DIR/tests/test_trading_app/test_paper_trader.py" --ignore="$SCRIPT_DIR/tests/test_tools/" -x -q -n 4 --dist loadscope 2>&1 | tail -5
-if [ ${PIPESTATUS[0]} -ne 0 ]; then
+TEST_OUTPUT=$("$PYTHON" -m pytest "$SCRIPT_DIR/tests/" --ignore="$SCRIPT_DIR/tests/test_trader_logic.py" --ignore="$SCRIPT_DIR/tests/test_trading_app/test_integration.py" --ignore="$SCRIPT_DIR/tests/test_trading_app/test_paper_trader.py" --ignore="$SCRIPT_DIR/tests/test_tools/" -x -q -n 4 --dist loadscope 2>&1) || true
+TEST_EXIT=${PIPESTATUS[0]:-$?}
+echo "$TEST_OUTPUT" | tail -5
+if [ "$TEST_EXIT" -ne 0 ]; then
     echo "BLOCKED: Tests failed."
     exit 1
 fi
