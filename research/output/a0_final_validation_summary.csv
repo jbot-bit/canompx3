@@ -1,0 +1,2 @@
+strategy,wf_years,n_test_selected_total,avg_selected,avg_base,uplift,wr_selected,pos_avg_ratio,pos_uplift_ratio,median_test_avg,worst_test_avg,dd_selected,dd_base,stress_slip_0_05,stress_slip_0_10,stress_trim_top5_avg,verdict
+A0 M6E_USEO -> MES_USEO E0/CB1/RR3.0 base_plus_both,5,133,0.5853992481203008,0.22893567073170734,0.3564635773885934,0.42857142857142855,1.0,1.0,0.5467192307692308,0.43946399999999997,8.0,18.7545,0.5353992481203007,0.4853992481203008,0.4598793650793651,PROMOTE
