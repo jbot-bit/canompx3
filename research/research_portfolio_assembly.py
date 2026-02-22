@@ -213,6 +213,308 @@ def print_slot_inventory(slots, trades_by_slot):
     print()
 
 
+def build_daily_equity(trades_by_slot):
+    """Build combined daily equity curve from all slot trades.
+
+    Returns:
+        daily_returns: sorted list of (date, total_r) for days with trades
+        all_trades: flat list of all trades across slots
+        daily_trade_count: dict day -> number of trades that day
+    """
+    daily_r = defaultdict(float)
+    daily_trade_count = defaultdict(int)
+    all_trades = []
+
+    for strategy_id, trades in trades_by_slot.items():
+        for t in trades:
+            day = t["trading_day"]
+            daily_r[day] += t["pnl_r"]
+            daily_trade_count[day] += 1
+            all_trades.append(t)
+
+    daily_returns = sorted(daily_r.items())
+    return daily_returns, all_trades, dict(daily_trade_count)
+
+
+def count_trading_days(start_date, end_date):
+    """Count weekdays (Mon-Fri) between two dates inclusive."""
+    dates = pd.bdate_range(start=start_date, end=end_date)
+    return len(dates)
+
+
+def compute_honest_sharpe(daily_returns, start_date, end_date):
+    """Compute Sharpe including zero-return days.
+
+    Unlike per-trade Sharpe, this includes ALL weekdays as 0R returns.
+    Prevents Sharpe inflation from idle capital.
+
+    Returns (sharpe_daily, sharpe_ann, n_total_days).
+    """
+    all_bdays = pd.bdate_range(start=start_date, end=end_date)
+    return_map = dict(daily_returns)
+
+    full_series = [return_map.get(day.date(), 0.0) for day in all_bdays]
+
+    n = len(full_series)
+    if n <= 1:
+        return None, None, n
+
+    total_r = sum(full_series)
+    mean_d = total_r / n
+    variance = sum((v - mean_d) ** 2 for v in full_series) / (n - 1)
+    std_d = variance ** 0.5
+
+    sharpe_d = mean_d / std_d if std_d > 0 else None
+    sharpe_ann = sharpe_d * sqrt(TRADING_DAYS_PER_YEAR) if sharpe_d else None
+
+    return sharpe_d, sharpe_ann, n
+
+
+def compute_drawdown(daily_returns, start_date, end_date):
+    """Compute drawdown stats on the full daily series (with zeros)."""
+    all_bdays = pd.bdate_range(start=start_date, end=end_date)
+    return_map = dict(daily_returns)
+
+    cum = 0.0
+    peak = 0.0
+    max_dd = 0.0
+    dd_start = None
+    max_dd_start = None
+    max_dd_end = None
+    worst_day = 0.0
+    worst_day_date = None
+    current_streak = 0
+    max_streak = 0
+
+    for day in all_bdays:
+        day_date = day.date()
+        r = return_map.get(day_date, 0.0)
+        cum += r
+
+        if r < worst_day:
+            worst_day = r
+            worst_day_date = day_date
+
+        if r < 0:
+            current_streak += 1
+            max_streak = max(max_streak, current_streak)
+        elif r > 0:
+            current_streak = 0
+
+        if cum > peak:
+            peak = cum
+            dd_start = day_date
+
+        dd = peak - cum
+        if dd > max_dd:
+            max_dd = dd
+            max_dd_start = dd_start
+            max_dd_end = day_date
+
+    dd_duration = None
+    if max_dd_start and max_dd_end:
+        dd_duration = (max_dd_end - max_dd_start).days
+
+    return {
+        "max_dd_r": round(max_dd, 4),
+        "max_dd_start": max_dd_start,
+        "max_dd_end": max_dd_end,
+        "max_dd_duration_days": dd_duration,
+        "longest_losing_streak": max_streak,
+        "worst_single_day": round(worst_day, 4),
+        "worst_single_day_date": worst_day_date,
+    }
+
+
+def print_portfolio_metrics(daily_returns, all_trades, daily_trade_count,
+                            start_date, end_date):
+    """Section 3: Portfolio metrics."""
+    n_trades = len(all_trades)
+    n_wins = sum(1 for t in all_trades if t["outcome"] == "win")
+    wr = n_wins / n_trades if n_trades > 0 else 0
+    total_r = sum(t["pnl_r"] for t in all_trades)
+
+    active_days = len(daily_returns)
+    total_bdays = count_trading_days(start_date, end_date)
+    avg_trades_per_day = n_trades / active_days if active_days > 0 else 0
+    active_pct = active_days / total_bdays if total_bdays > 0 else 0
+
+    sharpe_d, sharpe_ann, n_full = compute_honest_sharpe(
+        daily_returns, start_date, end_date
+    )
+    dd = compute_drawdown(daily_returns, start_date, end_date)
+
+    print("=" * 80)
+    print("  PORTFOLIO METRICS (honest Sharpe — includes zero-return days)")
+    print("=" * 80)
+    print(f"  Date range:        {start_date} to {end_date}")
+    print(f"  Business days:     {total_bdays:,} (Sharpe denominator)")
+    print(f"  Active days:       {active_days:,} ({active_pct:.1%} of business days)")
+    print(f"  Total trades:      {n_trades:,}")
+    print(f"  Win rate:          {wr:.1%}")
+    print(f"  Total R:           {total_r:+.1f}")
+    print(f"  Avg trades/day:    {avg_trades_per_day:.1f} (on active days)")
+    print()
+    if sharpe_ann is not None:
+        print(f"  Sharpe (daily):    {sharpe_d:.4f}")
+        print(f"  Sharpe (ann):      {sharpe_ann:.2f}")
+    else:
+        print("  Sharpe:            N/A")
+    print()
+    print(f"  Max drawdown:      {dd['max_dd_r']:.2f}R")
+    if dd["max_dd_start"] and dd["max_dd_end"]:
+        print(f"    Period:          {dd['max_dd_start']} to {dd['max_dd_end']} "
+              f"({dd['max_dd_duration_days']} cal days)")
+    print(f"  Worst single day:  {dd['worst_single_day']:+.2f}R"
+          + (f" ({dd['worst_single_day_date']})" if dd["worst_single_day_date"] else ""))
+    print(f"  Longest losing streak: {dd['longest_losing_streak']} consecutive days")
+
+
+def print_yearly_breakdown(all_trades):
+    """Section 4: Per-year breakdown."""
+    yearly = defaultdict(lambda: {"trades": 0, "wins": 0, "total_r": 0.0, "days": set()})
+
+    for t in all_trades:
+        td = t["trading_day"]
+        year = td.year if hasattr(td, "year") else int(str(td)[:4])
+        yearly[year]["trades"] += 1
+        if t["outcome"] == "win":
+            yearly[year]["wins"] += 1
+        yearly[year]["total_r"] += t["pnl_r"]
+        yearly[year]["days"].add(td)
+
+    print()
+    print("=" * 80)
+    print("  PER-YEAR BREAKDOWN")
+    print("=" * 80)
+    print(f"  {'Year':>6} {'Trades':>7} {'WR':>7} {'TotalR':>9} {'Days':>6} {'R/Day':>7}")
+    print(f"  {'----':>6} {'------':>7} {'---':>7} {'------':>9} {'----':>6} {'-----':>7}")
+
+    for year in sorted(yearly.keys()):
+        y = yearly[year]
+        wr = y["wins"] / y["trades"] if y["trades"] > 0 else 0
+        n_days = len(y["days"])
+        r_per_day = y["total_r"] / n_days if n_days > 0 else 0
+        print(f"  {year:>6} {y['trades']:>7} {wr:>6.1%} "
+              f"{y['total_r']:>+8.1f}R {n_days:>6} {r_per_day:>+6.3f}")
+
+
+def print_instrument_contribution(all_trades):
+    """Section 7: Per-instrument contribution."""
+    by_inst = defaultdict(lambda: {"trades": 0, "wins": 0, "total_r": 0.0})
+
+    for t in all_trades:
+        inst = t["instrument"]
+        by_inst[inst]["trades"] += 1
+        if t["outcome"] == "win":
+            by_inst[inst]["wins"] += 1
+        by_inst[inst]["total_r"] += t["pnl_r"]
+
+    total_r = sum(v["total_r"] for v in by_inst.values())
+
+    print()
+    print("=" * 80)
+    print("  PER-INSTRUMENT CONTRIBUTION")
+    print("=" * 80)
+    print(f"  {'Inst':>6} {'Trades':>7} {'WR':>7} {'TotalR':>9} {'% of R':>8}")
+    print(f"  {'----':>6} {'------':>7} {'---':>7} {'------':>9} {'------':>8}")
+
+    for inst in sorted(by_inst.keys()):
+        v = by_inst[inst]
+        wr = v["wins"] / v["trades"] if v["trades"] > 0 else 0
+        pct = v["total_r"] / total_r if total_r != 0 else 0
+        print(f"  {inst:>6} {v['trades']:>7} {wr:>6.1%} "
+              f"{v['total_r']:>+8.1f}R {pct:>7.1%}")
+
+
+def print_correlation_matrix(trades_by_slot, slots):
+    """Section 5: Pairwise correlation between slots."""
+    MIN_OVERLAP = 30
+
+    slot_daily = {}
+    for slot in slots:
+        sid = slot["head_strategy_id"]
+        label = f"{slot['instrument']}_{slot['session']}"
+        daily = {}
+        for t in trades_by_slot.get(sid, []):
+            day = t["trading_day"]
+            daily[day] = daily.get(day, 0.0) + t["pnl_r"]
+        if daily:
+            slot_daily[label] = daily
+
+    labels = sorted(slot_daily.keys())
+
+    print()
+    print("=" * 80)
+    print(f"  SLOT CORRELATION (pairs with >= {MIN_OVERLAP} overlapping days)")
+    print("=" * 80)
+
+    corr_pairs = []
+    for i in range(len(labels)):
+        for j in range(i + 1, len(labels)):
+            a_daily = slot_daily[labels[i]]
+            b_daily = slot_daily[labels[j]]
+            overlap = sorted(set(a_daily) & set(b_daily))
+            if len(overlap) < MIN_OVERLAP:
+                continue
+            a_vals = [a_daily[d] for d in overlap]
+            b_vals = [b_daily[d] for d in overlap]
+            if np.std(a_vals) == 0 or np.std(b_vals) == 0:
+                continue
+            r = float(np.corrcoef(a_vals, b_vals)[0, 1])
+            corr_pairs.append((labels[i], labels[j], r, len(overlap)))
+
+    if not corr_pairs:
+        print("  No pairs with sufficient overlap.")
+        return
+
+    corr_pairs.sort(key=lambda x: -abs(x[2]))
+    for a, b, r, n in corr_pairs:
+        flag = " <-- HIGH" if abs(r) > 0.3 else ""
+        print(f"  {a:>22} x {b:<22} r={r:+.3f} (N={n:>3}){flag}")
+
+    high = sum(1 for _, _, r, _ in corr_pairs if abs(r) > 0.3)
+    print(f"\n  {len(corr_pairs)} pairs, {high} with |r| > 0.3")
+
+
+def print_concurrent_exposure(daily_trade_count, start_date, end_date):
+    """Section 6: Concurrent exposure analysis."""
+    all_bdays = pd.bdate_range(start=start_date, end=end_date)
+
+    exposure_dist = defaultdict(int)
+    max_exposure = 0
+    max_exposure_date = None
+
+    for day in all_bdays:
+        day_date = day.date()
+        n = daily_trade_count.get(day_date, 0)
+        exposure_dist[n] += 1
+        if n > max_exposure:
+            max_exposure = n
+            max_exposure_date = day_date
+
+    total_bdays = len(all_bdays)
+
+    print()
+    print("=" * 80)
+    print("  CONCURRENT EXPOSURE")
+    print("=" * 80)
+
+    for n_slots in sorted(exposure_dist.keys()):
+        count = exposure_dist[n_slots]
+        pct = count / total_bdays
+        bar = "#" * int(pct * 40)
+        print(f"  {n_slots:>2} slots: {count:>5} days ({pct:>5.1%}) {bar}")
+
+    active_days = sum(c for n, c in exposure_dist.items() if n > 0)
+    active_trades = sum(n * c for n, c in exposure_dist.items())
+    avg_on_active = active_trades / active_days if active_days > 0 else 0
+
+    print(f"\n  Max exposure:      {max_exposure} slots on {max_exposure_date}")
+    print(f"  Max single-day R:  {max_exposure}R at risk (if all lose)")
+    print(f"  Avg slots/active day: {avg_on_active:.1f}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Portfolio Assembly Research Report"
@@ -253,6 +555,22 @@ def main():
     try:
         trades_by_slot = load_slot_trades(con, slots)
         print_slot_inventory(slots, trades_by_slot)
+
+        # Build combined equity curve
+        daily_returns, all_trades, daily_trade_count = build_daily_equity(trades_by_slot)
+        if not all_trades:
+            print("\nNo trades found across any slots.")
+            return
+
+        all_days = [t["trading_day"] for t in all_trades]
+        start_date = min(all_days)
+        end_date = max(all_days)
+
+        print_portfolio_metrics(daily_returns, all_trades, daily_trade_count, start_date, end_date)
+        print_yearly_breakdown(all_trades)
+        print_instrument_contribution(all_trades)
+        print_correlation_matrix(trades_by_slot, slots)
+        print_concurrent_exposure(daily_trade_count, start_date, end_date)
     finally:
         con.close()
 
