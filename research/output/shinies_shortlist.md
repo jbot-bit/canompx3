@@ -1,33 +1,45 @@
 # Shinies Shortlist (saved for later hardening)
 
-Source runs:
-- `research/research_lead_lag_best_wide_grid.py`
-- commit: `fcfebec`
+Purpose: keep only candidates worth revisiting for implementation.
 
-## 1) PROMOTE CANDIDATE
-**Leader -> Follower:** `M6E_US_EQUITY_OPEN -> M2K_US_POST_EQUITY`
+Last updated: 2026-02-22
+
+## A) Keep / Promote candidates
+
+### A1) M6E_US_EQUITY_OPEN -> M2K_US_POST_EQUITY
 - Strategy slice: `E1 / CB5 / RR1.5`
-- avg_on: `+0.0814`
-- uplift (on-off): `+0.2879`
-- yearly positives: `4/5`
-- test uplift: `+0.3214`
+- Baseline avgR: `-0.0601`
+- Filter ON avgR: `+0.0814`
+- Uplift (ON-OFF): `+0.2879`
+- Yearly uplift positive: `5/6`
+- 2025 OOS uplift: `+0.4401` (`N_on=104`)
+- Status: **KEEP (top shiny)**
 
-## 2) PROMOTE CANDIDATE
-**Leader -> Follower:** `MES_US_DATA_OPEN -> M2K_US_DATA_OPEN`
+### A2) MES_US_DATA_OPEN -> M2K_US_DATA_OPEN
 - Strategy slice: `E0 / CB1 / RR1.5`
-- avg_on: `+0.0409`
-- uplift (on-off): `+0.2100`
-- yearly positives: `5/5`
-- test uplift: `+0.1851`
+- Baseline avgR: `-0.0557`
+- Filter ON avgR: `+0.0409`
+- Uplift (ON-OFF): `+0.2100`
+- Yearly uplift positive: `5/6`
+- 2025 OOS uplift: `+0.1851` (`N_on=107`)
+- Status: **KEEP (strong)**
 
-## 3) HOLD / PROMOTE BORDERLINE
-**Leader -> Follower:** `MES_1000 -> M2K_US_POST_EQUITY`
+### A3) MES_1000 -> M2K_US_POST_EQUITY
 - Strategy slice: `E1 / CB5 / RR1.5`
-- avg_on: `+0.0345`
-- uplift (on-off): `+0.1997`
-- yearly positives: `5/5`
-- test uplift: `+0.1618`
+- Baseline avgR: `-0.0624`
+- Filter ON avgR: `+0.0345`
+- Uplift (ON-OFF): `+0.1997`
+- Yearly uplift positive: `5/6`
+- 2025 OOS uplift: `+0.2801` (`N_on=91`)
+- Status: **KEEP (backup / borderline promote)**
+
+## B) Explicitly not kept
+
+### Relay-chain hypothesis (M6E + MES -> M2K_US_POST_EQUITY)
+- Result: did not beat single-leader filter enough for promotion.
+- Status: **KILL (for now)**
 
 ## Notes
-- These are saved as current best candidates.
-- Not production-promoted yet; hardening/verification pass pending.
+- These are saved as current best candidates for future hardening.
+- Not production-promoted yet.
+- Promotion later requires strict DD + stability + implementation checks.
