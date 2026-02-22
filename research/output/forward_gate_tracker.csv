@@ -1,7 +1,7 @@
 id,status,category,rule_frozen,forward_n,target_n,forward_avg_r,forward_uplift,forward_dd_delta_pct,weekly_neg_streak,decision
-A0,IN_GATE,gain-first,yes,0,60,,,,0,
-A1,IN_GATE,gain-first,yes,0,60,,,,0,
-A2,IN_GATE,gain-first,yes,0,60,,,,0,
-A3,IN_GATE,gain-first,yes,0,60,,,,0,
-B1,IN_GATE,frequency,yes,0,100,,,,0,
-B2,IN_GATE,frequency-probation,yes,0,100,,,,0,
+A0,IN_GATE,gain-first,yes,3,60,0.282167,0.008233,-50.0,0,PENDING
+A1,IN_GATE,gain-first,yes,11,60,0.262427,0.0,0.0,0,PENDING
+A2,IN_GATE,gain-first,yes,2,60,-1.0,-0.773367,-67.75,0,PENDING
+A3,IN_GATE,gain-first,yes,3,60,-0.1989,0.222238,-73.492,0,PENDING
+B1,IN_GATE,frequency,yes,7,100,0.658457,0.417016,-75.0,0,PENDING
+B2,IN_GATE,frequency-probation,yes,10,100,0.37989,0.292157,-57.143,0,PENDING
