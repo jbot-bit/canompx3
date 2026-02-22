@@ -228,7 +228,7 @@ class TestConnectDb:
         db = tmp_path / "test.db"
         duckdb.connect(str(db)).close()
         monkeypatch.setattr("research.lib.db.GOLD_DB_PATH", db)
-        with connect_db() as c:
+        with connect_db():
             pass
         # Connection should be closed -- no way to query
         # (DuckDB doesn't expose .closed, so just verify no exception in block)
