@@ -58,6 +58,13 @@ Last updated: 2026-02-22
 - Result: did not beat single-leader filter enough for promotion.
 - Status: **KILL (for now)**
 
+## D) Rejected overlays (tested)
+
+### BQS false-breakout overlays on shinies
+- Tested variants: `veto_D`, `BQS>=3`, `strict_all4` across A1/A2/A3/B1/B2.
+- Outcome: no meaningful practical improvement for core high-frequency deployment; gains were either tiny or came with major frequency loss.
+- Decision: **NO-GO for default deployment** (keep as optional research path only).
+
 ## Notes
 - These are saved as current best candidates for future hardening.
 - Not production-promoted yet.
