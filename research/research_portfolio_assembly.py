@@ -114,7 +114,7 @@ def load_slot_trades(con, slots):
                         overlay=BreakSpeedFilter(
                             filter_type=f"BRK_FAST{int(l_val)}",
                             description=f"Break delay <= {l_val} min",
-                            max_delay_minutes=l_val,
+                            max_delay_min=l_val,
                         ),
                     )
                 else:
@@ -265,7 +265,7 @@ def compute_honest_sharpe(daily_returns, start_date, end_date):
     std_d = variance ** 0.5
 
     sharpe_d = mean_d / std_d if std_d > 0 else None
-    sharpe_ann = sharpe_d * sqrt(TRADING_DAYS_PER_YEAR) if sharpe_d else None
+    sharpe_ann = sharpe_d * sqrt(TRADING_DAYS_PER_YEAR) if sharpe_d is not None else None
 
     return sharpe_d, sharpe_ann, n
 
@@ -281,7 +281,6 @@ def compute_drawdown(daily_returns, start_date, end_date):
     dd_start = all_bdays[0].date() if len(all_bdays) > 0 else None
     max_dd_start = None
     max_dd_end = None
-    max_dd_trough = None
     worst_day = 0.0
     worst_day_date = None
     current_streak = 0
@@ -322,7 +321,6 @@ def compute_drawdown(daily_returns, start_date, end_date):
                 trough_idx = i
                 break
         if trough_idx is not None:
-            peak_at_trough = 0.0
             cum_scan = 0.0
             for day in all_bdays[:trough_idx + 1]:
                 cum_scan += return_map.get(day.date(), 0.0)
@@ -358,8 +356,10 @@ def print_portfolio_metrics(daily_returns, all_trades, daily_trade_count,
     wr = n_wins / n_trades if n_trades > 0 else 0
     total_r = sum(t["pnl_r"] for t in all_trades)
 
-    active_days = len(daily_returns)
-    total_bdays = count_trading_days(start_date, end_date)
+    # Count active days as business days with trades (excludes weekend Brisbane dates)
+    bday_set = set(d.date() for d in pd.bdate_range(start=start_date, end=end_date))
+    active_days = sum(1 for day, _ in daily_returns if day in bday_set)
+    total_bdays = len(bday_set)
     avg_trades_per_day = n_trades / active_days if active_days > 0 else 0
     active_pct = active_days / total_bdays if total_bdays > 0 else 0
 
@@ -399,8 +399,11 @@ def print_portfolio_metrics(daily_returns, all_trades, daily_trade_count,
 
 
 def print_yearly_breakdown(all_trades):
-    """Section 4: Per-year breakdown."""
-    yearly = defaultdict(lambda: {"trades": 0, "wins": 0, "total_r": 0.0, "days": set()})
+    """Section 4: Per-year breakdown with per-year honest Sharpe."""
+    import datetime as dt
+
+    yearly = defaultdict(lambda: {"trades": 0, "wins": 0, "total_r": 0.0,
+                                  "days": set(), "daily_r": defaultdict(float)})
 
     for t in all_trades:
         td = t["trading_day"]
@@ -410,21 +413,32 @@ def print_yearly_breakdown(all_trades):
             yearly[year]["wins"] += 1
         yearly[year]["total_r"] += t["pnl_r"]
         yearly[year]["days"].add(td)
+        yearly[year]["daily_r"][td] += t["pnl_r"]
 
     print()
     print("=" * 80)
     print("  PER-YEAR BREAKDOWN")
     print("=" * 80)
-    print(f"  {'Year':>6} {'Trades':>7} {'WR':>7} {'TotalR':>9} {'Days':>6} {'R/Day':>7}")
-    print(f"  {'----':>6} {'------':>7} {'---':>7} {'------':>9} {'----':>6} {'-----':>7}")
+    print(f"  {'Year':>6} {'Trades':>7} {'WR':>7} {'TotalR':>9} {'Days':>6} "
+          f"{'R/Day':>7} {'ShANN':>7}")
+    print(f"  {'----':>6} {'------':>7} {'---':>7} {'------':>9} {'----':>6} "
+          f"{'-----':>7} {'-----':>7}")
 
     for year in sorted(yearly.keys()):
         y = yearly[year]
         wr = y["wins"] / y["trades"] if y["trades"] > 0 else 0
         n_days = len(y["days"])
         r_per_day = y["total_r"] / n_days if n_days > 0 else 0
+
+        # Compute honest Sharpe for this year
+        year_start = dt.date(year, 1, 1)
+        year_end = dt.date(year, 12, 31)
+        daily_list = sorted(y["daily_r"].items())
+        _, sharpe_ann, _ = compute_honest_sharpe(daily_list, year_start, year_end)
+        sharpe_str = f"{sharpe_ann:>6.2f}" if sharpe_ann is not None else "   N/A"
+
         print(f"  {year:>6} {y['trades']:>7} {wr:>6.1%} "
-              f"{y['total_r']:>+8.1f}R {n_days:>6} {r_per_day:>+6.3f}")
+              f"{y['total_r']:>+8.1f}R {n_days:>6} {r_per_day:>+6.3f} {sharpe_str}")
 
 
 def print_instrument_contribution(all_trades):
@@ -645,6 +659,8 @@ def main():
                                             common_start, common_end)
                     print_yearly_breakdown(c_all)
                     print_instrument_contribution(c_all)
+                    print_correlation_matrix(common_trades_by_slot, slots)
+                    print_concurrent_exposure(c_counts, common_start, common_end)
             else:
                 print("\n  (Common period: no overlapping date range for all instruments)")
         else:
