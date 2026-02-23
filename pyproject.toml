@@ -15,5 +15,5 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short -n auto --dist loadscope"
+addopts = "-v --tb=short -n 8 --dist loadscope"
 norecursedirs = ["local_db", ".venv", "DB", "*.egg-info"]
