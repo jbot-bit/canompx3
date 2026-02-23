@@ -1,95 +1,121 @@
 # PROP PLAYS — Manual Trading Playbook
-_$2K trailing DD constraint. 1 trade per session window. No automation needed._
+_Apex Trader Funding — Tradovate FULL accounts. 1 trade per session window._
 _Last updated: 2026-02-23_
 
 ---
 
-## The Rules
+## Confirmed Apex Rules (verified)
 
-- **Max trailing DD: $2,000** (treat floor as $0 until $3K+ ahead)
-- **1 micro contract per trade** — no scaling yet
-- **1 instrument per session window** — when multiple slots fire at the same time, pick ONE
-- Stop for the day if down 3R. Stop trading if portfolio DD hits $1,800.
+- **News/events**: No blackout. Can trade ORB at equity open normally. ✅
+- **Consistency rule**: No single day's profit can exceed **30% of total profit balance** when requesting a payout
+- **Static 100K**: $625 max DD — **DO NOT USE**. System max DD is $1,900. It will blow.
+- **Platform**: Tradovate native on FULL accounts ✅
+- **Daily DD**: None on FULL accounts ✅ (important for ORB trading)
+- **Scaling plan**: None ✅
+
+---
+
+## Account Decision
+
+| Account | DD | Fee | Contracts | Net/mo | Safety | Verdict |
+|---|---|---|---|---|---|---|
+| FULL 25K | $1,500 trail | $187 | 0ct | — | -27% | KILL — DD < system max |
+| **FULL 50K** | **$2,500 trail** | **$197** | **1ct** | **$263** | **24%** | **START HERE** |
+| FULL 100K | $3,000 trail | $297 | 1ct | $163 | 37% | Higher safety but fee hurts net |
+| **FULL 150K** | **$5,000 trail** | **$397** | **2ct** | **$523** | **24%** | **GRADUATE TO THIS** |
+| FULL 250K | $6,500 trail | $397 | 3ct | $983 | 12% | Safety margin too tight |
+| FULL 300K | $7,500 trail | $397 | 4ct | $1,443 | -1% | Will blow historically |
+| Static 100K | $625 hard | $297 | — | — | -204% | KILL — confirmed trap |
+| MFF Pro 150K | $4,500 EOD | $477 | 2ct | $443 | 16% | EOD better mechanics but fee kills it |
+
+**Path: Start FULL 50K → validate live for 2-3 months → add FULL 150K once funded**
+
+System baseline: max DD $1,900 (1 micro) / $3,800 (2 micros) | ~$460/month realistic per contract
+
+---
+
+## Consistency Rule — Payout Timing
+
+30% rule means first payout takes longer than you'd expect.
+
+- Single biggest trade (MGC_0900 at 2.5R): $185 → need $617 total before payout
+- Typical best day (2-3 wins at 1ct): ~$200–350 → need $667–1,167 total
+- At $460/month realistic: **first payout ~2–3 months in** at 1 contract
+
+Not a blocker — you keep trading while the rule resolves itself. Just don't expect a withdrawal in week 1.
+
+---
+
+## Trailing DD — How to Think About It
+
+With trailing DD, the floor **rises as you profit** but never falls. This means:
+
+- If you make $500, your floor rises $500 — buffer shrinks temporarily
+- If a trade briefly floats +$200 unrealized then stops out at -$100, floor rose $200 AND balance fell $100 = $300 buffer lost on one trade
+
+**How to protect yourself:**
+- Trade conservatively early (treat floor as $0 until $1K+ ahead)
+- Don't let open profits run too far on losing trades — exit cleanly at target or stop
+- Adaptive rule: if portfolio DD hits $1,500, go to half-size until it recovers
 
 ---
 
 ## Manual Session Schedule (Brisbane time)
 
-Slots sorted by time. When there's a clash — pick the highest ExpR.
+One pick per window. When slots clash — pick highest ExpR.
 
 ### Morning (Brisbane)
 
 | Time (BRIS) | Trade | ExpR | WR% | RR | Note |
 |---|---|---|---|---|---|
-| **9:00am** | **MGC_1800** | **+0.333** | **49%** | **2.0** | Gold ORB. Solo — no clash. Set alarm. |
+| **9:00am** | **MGC_1800** | **+0.333** | **49%** | **2.0** | Gold ORB. Solo. Set alarm. |
 
 ### Afternoon (Brisbane)
 
 | Time (BRIS) | Trade | ExpR | WR% | RR | Note |
 |---|---|---|---|---|---|
-| **11:30am** | **MNQ_0030** | **+0.201** | **42%** | **2.0** | NQ ORB. Solo. Arvo session. |
+| **11:30am** | **MNQ_0030** | **+0.201** | **42%** | **2.0** | NQ ORB. Solo. |
 
 ### Night / US Session (Brisbane — main cluster)
 
 | Time (BRIS) | Trade | ExpR | WR% | RR | Note |
 |---|---|---|---|---|---|
-| 11:30pm | MNQ_CME_OPEN | +0.130 | 61% | 1.0 | NQ pre-CME. Solo. OK to skip if tired. |
-| **12:00am** | **MGC_0900** | **+0.443** | **46%** | **2.5** | **Gold NY open ORB. Solo. Best risk-adj.** |
-| **12:30am** | **MES_US_EQUITY_OPEN** | **+0.585** | **43%** | **1.5** | **A0 — only validated slot. Skip MNQ/M2K.** |
-| **1:00am** | **MGC_1000** | **+0.311** | **50%** | **2.0** | Gold 10am ET. Pick over MES_1000/MNQ_1000. |
-| 1:30am | ~~MES_US_POST_EQUITY~~ | +0.077 | 59% | 1.0 | Weakest slot. Skip for now. |
-| **2:00am** | **MNQ_1100** | **+0.249** | **47%** | **2.0** | NQ 11am ET. Solo — easy to watch. |
-| **3:00am** | **MES_CME_CLOSE** | **+0.206** | **70%** | **1.0** | CME afternoon close. Pick over MNQ_CME_CLOSE. |
+| 11:30pm | MNQ_CME_OPEN | +0.130 | 61% | 1.0 | Solo. OK to skip if tired. |
+| **12:00am** | **MGC_0900** | **+0.443** | **46%** | **2.5** | Gold NY open. Solo. Best risk-adj. |
+| **12:30am** | **MES_US_EQUITY_OPEN** | **+0.585** | **43%** | **1.5** | A0 — only validated slot. Skip MNQ/M2K. |
+| **1:00am** | **MGC_1000** | **+0.311** | **50%** | **2.0** | Pick over MES_1000/MNQ_1000. |
+| 1:30am | ~~MES_US_POST_EQUITY~~ | +0.077 | 59% | 1.0 | Too weak. Skip. |
+| **2:00am** | **MNQ_1100** | **+0.249** | **47%** | **2.0** | Solo. Easy to watch. |
+| **3:00am** | **MES_CME_CLOSE** | **+0.206** | **70%** | **1.0** | Pick over MNQ_CME_CLOSE. |
 
 ### Evening (Brisbane — optional)
 
 | Time (BRIS) | Trade | ExpR | WR% | RR | Note |
 |---|---|---|---|---|---|
-| 6:00pm | MNQ_LONDON_OPEN | +0.092 | 59% | 1.0 | Weakest. Skip unless bored. |
+| 6:00pm | MNQ_LONDON_OPEN | +0.092 | 59% | 1.0 | Weakest. Skip unless nothing else on. |
 
 ---
 
 ## Realistic Daily Plans
 
-You don't need to trade every session. Pick what fits your schedule.
+### Option A — Morning (light, 2 sessions)
+- 9:00am MGC_1800
+- 11:30am MNQ_0030
+- ~$115/month realistic at 1ct
 
-### Option A — Morning Person (light)
-Trade 2–3 sessions, done by noon.
-- ✅ 9:00am MGC_1800
-- ✅ 11:30am MNQ_0030
-- Done. ~2 trades/day average.
+### Option B — US Session cluster (night owl)
+- 12:00am MGC_0900
+- 12:30am MES_US_EQUITY_OPEN (A0)
+- 1:00am MGC_1000
+- 2:00am MNQ_1100
+- 3:00am MES_CME_CLOSE
+- ~$240/month realistic at 1ct
 
-### Option B — Night Owl (US session only)
-Sit the US open cluster. 12:00am–3:00am.
-- ✅ 12:00am MGC_0900
-- ✅ 12:30am MES_US_EQUITY_OPEN (A0)
-- ✅ 1:00am MGC_1000
-- ✅ 2:00am MNQ_1100
-- ✅ 3:00am MES_CME_CLOSE
-- ~3–4 trades/night. This is the high-value cluster.
+### Option C — Hybrid (best balance)
+- 9:00am + 11:30am + 12:00am + 12:30am
+- ~$210/month realistic at 1ct
 
-### Option C — Hybrid (most realistic)
-Morning session + US open.
-- ✅ 9:00am MGC_1800
-- ✅ 11:30am MNQ_0030
-- ✅ 12:00am MGC_0900
-- ✅ 12:30am MES_US_EQUITY_OPEN (A0)
-- ~3–4 trades/day. Best bang for time.
-
----
-
-## Income Expectation by Plan
-
-All figures backtested. Apply ~35% haircut for live reality.
-
-| Plan | Slots active | Backtest $/mo | Realistic $/mo |
-|---|---|---|---|
-| Option A (morning only) | 2 | ~$180 | ~$115 |
-| Option B (US session) | 5 | ~$370 | ~$240 |
-| Option C (hybrid) | 4–5 | ~$320 | ~$210 |
-| Full 15 slots (automated) | 15 | $465 | ~$300 |
-
-Max DD stays under $1,100 for all configs (46% safety margin on $2K limit).
+Full 15-slot coverage: ~$460/month at 1ct (automated or very disciplined manual)
 
 ---
 
@@ -99,43 +125,46 @@ Max DD stays under $1,100 for all configs (46% safety margin on $2K limit).
 |---|---|
 | Normal | Trade your plan |
 | Down 3R in a day | Stop for the day |
-| Portfolio DD hits $1,000 | Go half-size next week, review |
-| Portfolio DD hits $1,500 | Stop, reassess — something's wrong |
-| Portfolio DD hits $2,000 | Account blown / eval failed |
+| Portfolio DD hits $1,000 | Reduce to half-size, review |
+| Portfolio DD hits $1,500 | Stop trading, reassess |
+| Portfolio DD hits $2,000 | Hard stop — protect the account |
 
 ---
 
-## Validation Status (be honest about this)
+## Correlated Pairs (count as 1 risk unit if both fire)
 
-Only one slot is formally validated:
+- MES_1000 + MNQ_1000 (r=0.59) — already resolved by picking MGC_1000 at 1am
+- MES_CME_CLOSE + MNQ_CME_CLOSE (r=0.55) — pick MES
+- MES_US_POST_EQUITY + MNQ_US_POST_EQUITY (r=0.54) — skipped (weak)
+
+---
+
+## Scaling Path
+
+1. **FULL 50K eval**: Trade Option B or C (US session). 1 micro. Prove it works live.
+2. **Funded on 50K**: Continue same plan. First payout ~2-3 months.
+3. **Once $500+ ahead on 50K**: Open FULL 150K eval alongside. Start building track record.
+4. **Funded on 150K**: Graduate to 2 micros per slot. ~$523/month net.
+5. **Never**: Scale contracts until 3+ months of positive live P&L on current size.
+
+---
+
+## Validation Status
 
 | Slot | Status |
 |---|---|
-| **MES_US_EQUITY_OPEN (A0)** | ✅ PROMOTE — passed no-leakage WF + stress + falsification |
-| All other slots | ⚠️ Backtested — in forward gate, need 60+ live trades each |
+| **MES_US_EQUITY_OPEN (A0)** | PROMOTE — passed no-leakage WF + stress + falsification |
+| All other slots | Backtested — forward gate needs 60+ live trades each |
 
-**What this means:** The income projections assume all slots perform as in backtest. Some may not. A0 is the one you can trust most. The others are best-effort based on solid backtesting but not yet falsification-verified.
-
----
-
-## How to Execute an ORB Trade (reminder)
-
-1. **Set alarm** for the session start time
-2. **Identify the ORB range** — high and low of the opening period (e.g., 5-min ORB = first 5 candles)
-3. **Wait for the break** — price closes outside the range
-4. **Check filter** — volume/gap condition must be met (see filter column above)
-5. **Enter on confirmation bar** — next candle after break, in the direction of break
-6. **Stop** at opposite side of ORB range (= 1R)
-7. **Target** at RR × stop distance (e.g., RR 2.0 = 2× the stop)
-8. **Log the trade** — date, slot, entry, stop, target, outcome
+Only A0 is fully validated. Other slots are strong backtests. Add them to live trading as they accumulate forward gate evidence.
 
 ---
 
-## What to Add Next
+## Research Merge Status
 
-As more slots pass the forward gate (60+ live trades each), add them to this playbook. Check `research/output/forward_gate_status_latest.md` for current status.
+All research is in this workspace. One terminal. No merge needed.
+- `research/output/a0_final_validation_report.md` — A0 PROMOTE verdict
+- `research/output/forward_gate_status_latest.md` — live forward gate tracker
+- `PROP_PLAYS.md` — this file
 
-Priority for validation:
-1. MGC_0900 — highest ExpR after A0, worth fast-tracking
-2. MGC_1000 — solid, solo slot
-3. MNQ_1100 — good ExpR, no clashes
+Next: A0 execution-latency test (+1/+2 bar delay) to confirm edge survives real entry conditions.
