@@ -35,6 +35,12 @@ class CostSpec:
     tick_size: float = 0.10   # Minimum price increment (points)
     min_ticks_floor: int = 10 # Minimum risk in ticks for stress test
 
+    def __post_init__(self):
+        if self.point_value <= 0:
+            raise ValueError(f"point_value must be positive, got {self.point_value}")
+        if self.tick_size <= 0:
+            raise ValueError(f"tick_size must be positive, got {self.tick_size}")
+
     @property
     def total_friction(self) -> float:
         """Total round-trip friction in dollars."""

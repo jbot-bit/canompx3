@@ -312,7 +312,8 @@ class CompositeFilter(StrategyFilter):
 # =========================================================================
 
 MGC_ORB_SIZE_FILTERS = {
-    # "Less than" filters — smaller ORBs
+    # "Less than" filters — DEAD: not in discovery grid (negative ExpR, 0/1024 validated).
+    # Retained for reference and test coverage only.
     "L2": OrbSizeFilter(filter_type="ORB_L2", description="ORB size < 2 points", max_size=2.0),
     "L3": OrbSizeFilter(filter_type="ORB_L3", description="ORB size < 3 points", max_size=3.0),
     "L4": OrbSizeFilter(filter_type="ORB_L4", description="ORB size < 4 points", max_size=4.0),

@@ -402,6 +402,101 @@ class TestFilters:
         assert len(entry_events) == 0  # Filtered out
 
 # ============================================================================
+# Confirm Count Direction Tests
+# ============================================================================
+
+class TestConfirmCountDirection:
+    """Confirm count initialization must be directional.
+
+    The break bar's confirm_count should only be 1 if the close is beyond
+    the ORB edge in the break direction. This test locks in the invariant
+    so that a non-directional check (close > high OR close < low) can never
+    regress.
+
+    Note: For CB≥2, the break bar is processed TWICE on the same on_bar()
+    call — once in _arm_strategies (sets confirm_count=1) and again in
+    _process_confirming (increments to 2). This is by design: the break bar
+    IS a confirming bar. For CB1, the trade is immediately entered and
+    never reaches _process_confirming.
+    """
+
+    def test_long_break_cb3_needs_two_more_bars(self):
+        """Long break with CB3: break bar counts as 2, needs 1 more confirm bar."""
+        strategy = _make_strategy(
+            entry_model="E1", confirm_bars=3,
+            strategy_id="MGC_2300_E1_RR2.0_CB3_NO_FILTER",
+        )
+        engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
+        engine.on_trading_day_start(date(2024, 1, 5))
+
+        # Build ORB: high=2705, low=2695
+        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        for i in range(5):
+            engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
+
+        # Break bar: close=2706 > orb_high=2705 → long break
+        # _arm_strategies sets confirm_count=1, _process_confirming increments to 2
+        engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
+
+        # With CB3, trade should still be CONFIRMING (2 < 3)
+        assert len(engine.active_trades) == 1
+        trade = engine.active_trades[0]
+        assert trade.direction == "long"
+        assert trade.confirm_count == 2
+
+        # One more confirming bar should complete it (2+1=3 >= CB3)
+        engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2708, 2712, 2706, 2709))
+        # Trade should now be ARMED (confirm complete)
+        assert len([t for t in engine.active_trades if t.state == TradeState.CONFIRMING]) == 0
+
+    def test_long_break_reversal_bar_resets_confirm(self):
+        """If bar after break closes inside ORB, confirm_count resets to 0."""
+        strategy = _make_strategy(
+            entry_model="E1", confirm_bars=3,
+            strategy_id="MGC_2300_E1_RR2.0_CB3_NO_FILTER",
+        )
+        engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
+        engine.on_trading_day_start(date(2024, 1, 5))
+
+        # Build ORB: high=2705, low=2695
+        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        for i in range(5):
+            engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
+
+        # Break bar: close=2706 > orb_high=2705 → long, confirm_count=2
+        engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
+
+        # Next bar closes INSIDE ORB range → resets confirm_count to 0
+        engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2704, 2706, 2700, 2703))
+
+        assert len(engine.active_trades) == 1
+        trade = engine.active_trades[0]
+        assert trade.confirm_count == 0, "Reversal bar should reset confirm_count"
+
+    def test_short_break_confirm_count_directional(self):
+        """Short break: confirm counted only when close < orb.low."""
+        strategy = _make_strategy(
+            entry_model="E1", confirm_bars=3,
+            strategy_id="MGC_2300_E1_RR2.0_CB3_NO_FILTER",
+        )
+        engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
+        engine.on_trading_day_start(date(2024, 1, 5))
+
+        # Build ORB: high=2705, low=2695
+        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        for i in range(5):
+            engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
+
+        # Break bar: close=2694 < orb_low=2695 → short break, confirm_count=2
+        engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2696, 2698, 2692, 2694))
+
+        assert len(engine.active_trades) == 1
+        trade = engine.active_trades[0]
+        assert trade.direction == "short"
+        assert trade.confirm_count == 2
+
+
+# ============================================================================
 # CLI Tests
 # ============================================================================
 

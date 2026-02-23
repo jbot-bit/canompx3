@@ -93,6 +93,8 @@ cd
 git
 tasks.txt
 *.tmp
+_tmp_*.py
+tmp_*.py
 
 # Working/temp docs (prompts, plans, scratch notes)
 PLAN.md

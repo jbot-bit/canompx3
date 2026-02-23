@@ -49,7 +49,7 @@ Do not schedule active delivery work against SIL until explicitly re-opened.
 
 - Grid: 6 ORBs x 6 RRs x 5 CBs x 13 filters x 3 EMs = 6,480 combos (post-5b expansion)
 - orb_outcomes: 689,310 rows | experimental: 6,480 | validated: 312 (original scan)
-- **Current state (Feb 2026):** 2,149 validated (431 MGC, 1,665 MNQ, 53 MES) → 554 edge families (211 ROBUST, 76 WHITELISTED, 20 SINGLETON)
+- **Current state (Feb 2026):** 999 validated (318 MGC, 507 MNQ, 137 MES, 37 M2K; 490 E0 + 457 E1 + 52 E3) → 331 edge families
 - Edge requires G4+ ORB size filter (NO_FILTER and L-filters ALL negative ExpR)
 - MARKET_PLAYBOOK.md: comprehensive empirical findings
 
@@ -61,7 +61,7 @@ Do not schedule active delivery work against SIL until explicitly re-opened.
 - Win PnL bug fix: changed pnl_points_to_r -> to_r_multiple (friction was missing from wins)
 - test_trader_logic.py: 24 trader/math sanity checks
 - Grid expanded: 6 ORBs x 6 RRs x 5 CBs x 12 filters x 3 EMs = 6,480 combos
-- DB rebuild COMPLETE: 689,310 outcomes, 6,480 strategies, 312 validated
+- DB rebuild COMPLETE: 689,310 outcomes, 25,266 strategies, 999 validated
 - Validator: exclude_years + min_years_positive_pct params added
 
 ## Phase 6: Live Trading Preparation — DONE (6a-6d), 6e TODO

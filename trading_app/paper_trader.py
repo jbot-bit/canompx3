@@ -32,6 +32,17 @@ from trading_app.execution_engine import ExecutionEngine
 from trading_app.risk_manager import RiskManager, RiskLimits
 from trading_app.config import ATR_VELOCITY_OVERLAY, CalendarSkipFilter
 
+# Explicit mapping from execution engine exit reasons to journal outcomes.
+# Fallback: split on "_" and take first token.
+_EXIT_OUTCOME_MAP = {
+    "win_target_hit": "win",
+    "loss_stop_hit": "loss",
+    "early_exit_timed": "early_exit",
+    "hold_timeout_7h": "hold_timeout",
+    "ib_opposed_kill": "ib_opposed",
+    "session_end": "scratch",
+}
+
 # =========================================================================
 # Data classes
 # =========================================================================
@@ -289,11 +300,17 @@ def replay_historical(
                                     and not je.risk_rejected):
                                 je.exit_ts = event.timestamp
                                 je.exit_price = event.price
-                                je.outcome = event.reason.split("_")[0] if "_" in event.reason else event.reason
+                                je.outcome = _EXIT_OUTCOME_MAP.get(
+                                    event.reason,
+                                    event.reason.split("_")[0] if "_" in event.reason else event.reason
+                                )
                                 break
 
                         # Update PnL tracking from completed trade
                         trade = _find_completed_trade(engine, event.strategy_id)
+                        if trade is None:
+                            logger.warning(f"No completed trade for {event.event_type} event: "
+                                           f"strategy={event.strategy_id}, day={td}")
                         if trade and trade.pnl_r is not None:
                             for je in reversed(result.journal):
                                 if (je.strategy_id == event.strategy_id
@@ -331,6 +348,9 @@ def replay_historical(
                     result.total_scratches += 1
                     # Get actual mark-to-market PnL from engine's completed trade
                     trade = _find_completed_trade(engine, event.strategy_id)
+                    if trade is None:
+                        logger.warning(f"No completed trade for EOD SCRATCH: "
+                                       f"strategy={event.strategy_id}, day={td}")
                     scratch_pnl = trade.pnl_r if (trade and trade.pnl_r is not None) else 0.0
                     for je in reversed(result.journal):
                         if (je.strategy_id == event.strategy_id

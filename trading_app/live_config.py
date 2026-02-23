@@ -94,7 +94,7 @@ LIVE_PORTFOLIO = [
     LiveStrategySpec("1800_E0_ORB_G4_NOMON", "core", "1800", "E0", "ORB_G4_NOMON", None),
 
     # --- HOT: rolling-eval gated ---
-    # TODO: Re-run rolling_portfolio.py after edge families rebuild to refresh gates.
+    # Auto-activates when stability >= HOT_MIN_STABILITY after rolling_portfolio.py re-run.
     # All HOT entries are currently gated off ("family not found in rolling results").
     LiveStrategySpec("0900_E0_ORB_G4_NOFRI", "hot", "0900", "E0", "ORB_G4_NOFRI", "rolling"),
     LiveStrategySpec("1000_E0_ORB_G5_L12", "hot", "1000", "E0", "ORB_G5_L12", "rolling"),
@@ -247,6 +247,10 @@ def build_live_portfolio(
     Regime tier: loads best variant from validated_setups, then checks
     strategy_fitness -- weight=0.0 if not FIT.
     """
+    _VALID_INSTRUMENTS = {"MGC", "MNQ", "MES", "M2K"}
+    if instrument not in _VALID_INSTRUMENTS:
+        raise ValueError(f"Unknown instrument '{instrument}'. Valid: {sorted(_VALID_INSTRUMENTS)}")
+
     if db_path is None:
         db_path = GOLD_DB_PATH
 
@@ -430,7 +434,8 @@ def main():
     )
     parser.add_argument("--db-path", type=Path, default=None,
                         help="Path to gold.db")
-    parser.add_argument("--instrument", default="MGC")
+    parser.add_argument("--instrument", default="MGC",
+                        choices=["MGC", "MNQ", "MES", "M2K"])
     parser.add_argument("--rolling-train-months", type=int, default=12)
     parser.add_argument("--output", type=str, default=None,
                         help="Write portfolio JSON to this path")

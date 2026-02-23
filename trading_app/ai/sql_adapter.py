@@ -125,6 +125,7 @@ def _orb_size_filter_sql(filter_type: str | None, orb_label: str) -> str | None:
         return None
     _validate_filter_type(filter_type)
     # orb_label validated against allowlist -- safe for f-string
+    # [1,20] is a security guard, not a business rule. Current grid uses G4-G8 (max 8pt).
     if filter_type.startswith("ORB_G"):
         threshold = int(filter_type[5:])
         if not (1 <= threshold <= 20):
