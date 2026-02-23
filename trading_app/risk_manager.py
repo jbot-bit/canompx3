@@ -99,9 +99,7 @@ class RiskManager:
                     self._corr_lookup.get((t.strategy_id, strategy_id), None)
                 )
                 if corr_val is None:
-                    # If correlation is not found, assume a default (e.g., limits.default_correlation_assumption)
-                    # For now, let's use a conservative default if not found
-                    corr_val = 0.5 # Placeholder, will be replaced with configurable default
+                    corr_val = self.limits.min_correlation_factor
                 
                 # Use max of corr_val and limits.min_correlation_factor to avoid over-discounting strong negative correlations
                 effective_exposure += max(corr_val, self.limits.min_correlation_factor) 

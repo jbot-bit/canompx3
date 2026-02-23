@@ -283,6 +283,38 @@ class TestDefaultEntryModel:
             )
 
 
+class TestE0CB2PlusGuard:
+    """E0 + CB>1 is look-ahead bias — must always return no-fill."""
+
+    def test_e0_cb2_returns_no_fill(self):
+        bars = _make_bars([2351.0, 2351.0], BREAK_TS)
+        signal = detect_entry_with_confirm_bars(
+            bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 2, WINDOW_END,
+            entry_model="E0",
+        )
+        assert signal.triggered is False
+        assert signal.entry_model == "E0"
+
+    def test_e0_cb3_returns_no_fill(self):
+        bars = _make_bars([2351.0, 2351.0, 2351.0], BREAK_TS)
+        signal = detect_entry_with_confirm_bars(
+            bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 3, WINDOW_END,
+            entry_model="E0",
+        )
+        assert signal.triggered is False
+
+    def test_e0_cb1_still_works(self):
+        """E0 CB1 must still produce fills (not affected by guard)."""
+        # close=2350.5 > ORB_HIGH=2350 (confirms CB1), low=2350.0 touches ORB edge
+        bars = _make_bars([2350.5], BREAK_TS)
+        signal = detect_entry_with_confirm_bars(
+            bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, WINDOW_END,
+            entry_model="E0",
+        )
+        assert signal.triggered is True
+        assert signal.entry_price == ORB_HIGH
+
+
 class TestE3StopBeforeFill:
     """E3 must not fill if stop is breached before or on the retrace bar."""
 

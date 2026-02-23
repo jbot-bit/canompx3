@@ -609,7 +609,9 @@ def build_outcomes(
                 # Optimized: detect entry ONCE per (session, EM, CB),
                 # then compute all 6 RR targets with shared bar slicing.
                 for em in ENTRY_MODELS:
-                    cb_options = [1] if em == "E3" else CONFIRM_BARS_OPTIONS
+                    # E3: retrace entry always uses CB1 (higher CBs produce identical outcomes).
+                    # E0: limit-on-confirm only valid for CB1 (CB2+ is look-ahead).
+                    cb_options = [1] if em in ("E0", "E3") else CONFIRM_BARS_OPTIONS
                     for cb in cb_options:
                         signal = detect_entry_with_confirm_bars(
                             bars_df=bars_df,

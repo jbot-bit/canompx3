@@ -1222,6 +1222,33 @@ def check_validated_filters_registered() -> list[str]:
     return violations
 
 
+def check_e0_cb1_only() -> list[str]:
+    """Check #30: E0 entry model must be restricted to CB1 only.
+
+    E0 (limit-on-confirm) fills on the confirm bar itself. For CB2+, the confirm
+    bar has already closed by the time you know it's the confirm bar — filling on
+    it is look-ahead. outcome_builder.py must restrict E0 to cb_options=[1].
+    """
+    violations = []
+    ob_file = TRADING_APP_DIR / "outcome_builder.py"
+    if not ob_file.exists():
+        return violations
+
+    content = ob_file.read_text(encoding="utf-8")
+
+    # Verify E0 is in the same branch as E3 for cb_options = [1]
+    # Expected pattern: em in ("E0", "E3") or em in {"E0", "E3"}
+    if 'em in ("E0", "E3")' not in content and 'em in {"E0", "E3"}' not in content:
+        # Also accept reversed order
+        if 'em in ("E3", "E0")' not in content and 'em in {"E3", "E0"}' not in content:
+            violations.append(
+                "  outcome_builder.py: E0 must be restricted to cb_options=[1] "
+                "(same as E3). E0+CB2+ is look-ahead bias."
+            )
+
+    return violations
+
+
 def main():
     print("=" * 60)
     print("PIPELINE DRIFT CHECK")
@@ -1569,6 +1596,18 @@ def main():
     # Check 29: All filter_types in validated_setups must be in ALL_FILTERS
     print("Check 29: All validated filter_types registered in ALL_FILTERS...")
     v = check_validated_filters_registered()
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 30: E0 entry model restricted to CB1 only
+    print("Check 30: E0 restricted to CB1 (no look-ahead CB2+ fills)...")
+    v = check_e0_cb1_only()
     if v:
         print("  FAILED:")
         for line in v:

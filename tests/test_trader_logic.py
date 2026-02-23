@@ -612,7 +612,7 @@ def _sample_outcomes(con, n=SAMPLE_SIZE, where_extra=""):
         f"entry_price, stop_price, target_price, exit_price "
         f"FROM orb_outcomes "
         f"WHERE symbol = 'MGC' AND outcome IN ('win','loss') {where_extra} "
-        f"ORDER BY RANDOM() LIMIT {n}"
+        f"ORDER BY trading_day, orb_label, entry_model LIMIT {n}"
     ).fetchall()
     cols = ["trading_day", "symbol", "orb_label", "orb_minutes", "rr_target",
             "confirm_bars", "entry_model", "outcome", "pnl_r", "mae_r", "mfe_r",
@@ -729,7 +729,7 @@ class TestRandomOutcomeMath:
                 "  AND o.symbol = d.symbol AND o.orb_minutes = d.orb_minutes "
                 "WHERE o.symbol = 'MGC' AND o.outcome IN ('win','loss') "
                 "  AND o.orb_label IN ('0900','1000','1800','2300') "
-                "ORDER BY RANDOM() LIMIT 50"
+                "ORDER BY o.trading_day, o.orb_label, o.entry_model LIMIT 50"
             ).fetchall()
             cols = ["trading_day", "orb_label", "entry_model", "entry_price",
                     "stop_price", "outcome",
@@ -775,7 +775,7 @@ class TestRandomOutcomeMath:
                 "WHERE o.symbol = 'MGC' AND o.entry_model = 'E1' "
                 "  AND o.outcome IN ('win','loss') "
                 "  AND o.orb_label IN ('0900','1000','1800','2300') "
-                "ORDER BY RANDOM() LIMIT 50"
+                "ORDER BY o.trading_day, o.orb_label LIMIT 50"
             ).fetchall()
             cols = ["trading_day", "orb_label", "entry_price", "stop_price",
                     "orb_0900_high", "orb_0900_low",
@@ -821,7 +821,7 @@ class TestRandomOutcomeMath:
                 "WHERE o.symbol = 'MGC' AND o.entry_model = 'E3' "
                 "  AND o.outcome IN ('win','loss') "
                 "  AND o.orb_label IN ('0900','1000','1800','2300') "
-                "ORDER BY RANDOM() LIMIT 50"
+                "ORDER BY o.trading_day, o.orb_label LIMIT 50"
             ).fetchall()
             cols = ["trading_day", "orb_label", "entry_price", "stop_price",
                     "orb_0900_high", "orb_0900_low",
@@ -860,7 +860,7 @@ class TestRandomStrategyMath:
                 "confirm_bars, filter_type, win_rate, sample_size, expectancy_r "
                 "FROM experimental_strategies "
                 "WHERE instrument = 'MGC' AND sample_size >= 20 "
-                "ORDER BY RANDOM() LIMIT 30"
+                "ORDER BY strategy_id LIMIT 30"
             ).fetchall()
             strat_cols = ["strategy_id", "orb_label", "entry_model", "rr_target",
                           "confirm_bars", "filter_type", "win_rate", "sample_size",
@@ -932,7 +932,7 @@ class TestRandomStrategyMath:
                 "confirm_bars, filter_type, win_rate, sample_size, expectancy_r "
                 "FROM experimental_strategies "
                 "WHERE instrument = 'MGC' AND sample_size >= 20 "
-                "ORDER BY RANDOM() LIMIT 30"
+                "ORDER BY strategy_id LIMIT 30"
             ).fetchall()
             strat_cols = ["strategy_id", "orb_label", "entry_model", "rr_target",
                           "confirm_bars", "filter_type", "win_rate", "sample_size",
@@ -1005,7 +1005,7 @@ class TestRandomStrategyMath:
                 "confirm_bars, filter_type, max_drawdown_r "
                 "FROM experimental_strategies "
                 "WHERE instrument = 'MGC' AND sample_size >= 20 "
-                "ORDER BY RANDOM() LIMIT 30"
+                "ORDER BY strategy_id LIMIT 30"
             ).fetchall()
             strat_cols = ["strategy_id", "orb_label", "entry_model", "rr_target",
                           "confirm_bars", "filter_type", "max_drawdown_r"]

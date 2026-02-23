@@ -468,7 +468,11 @@ class ExecutionEngine:
                 direction=orb.break_dir,
                 state=TradeState.CONFIRMING,
                 confirm_needed=strategy.confirm_bars,
-                confirm_count=1 if bar["close"] > orb.high or bar["close"] < orb.low else 0,
+                confirm_count=(
+                    1 if (orb.break_dir == "long" and bar["close"] > orb.high)
+                    or (orb.break_dir == "short" and bar["close"] < orb.low)
+                    else 0
+                ),
                 bars_since_break=[bar],
             )
 

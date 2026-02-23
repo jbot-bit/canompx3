@@ -316,6 +316,14 @@ def detect_entry_with_confirm_bars(
 
     Wrapper that calls detect_confirm() + resolve_entry() for E1/E3.
     """
+    # E0 + CB>1 is look-ahead: by the time CB2+ confirms, the confirm bar has
+    # already closed — you can't retroactively fill a limit on it.
+    if entry_model == "E0" and confirm_bars > 1:
+        return EntrySignal(
+            triggered=False, entry_ts=None, entry_price=None,
+            stop_price=None, entry_model="E0", confirm_bar_ts=None,
+        )
+
     confirm = detect_confirm(
         bars_df, orb_break_ts, orb_high, orb_low,
         break_dir, confirm_bars, detection_window_end,
