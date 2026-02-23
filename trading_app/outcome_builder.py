@@ -622,6 +622,29 @@ def build_outcomes(
             params.append(end_date)
         date_filter = " ".join(date_clauses)
 
+        # --force: delete ALL existing outcomes for this instrument to prevent
+        # stale rows from disabled sessions or changed grid parameters.
+        if force and not dry_run:
+            if start_date or end_date:
+                # Date-bounded force: only delete the date range
+                del_clauses = ["DELETE FROM orb_outcomes WHERE symbol = ? AND orb_minutes = ?"]
+                del_params: list = [instrument, orb_minutes]
+                if start_date:
+                    del_clauses.append("AND trading_day >= ?")
+                    del_params.append(start_date)
+                if end_date:
+                    del_clauses.append("AND trading_day <= ?")
+                    del_params.append(end_date)
+                con.execute(" ".join(del_clauses), del_params)
+            else:
+                # Full force: delete everything for this instrument
+                con.execute(
+                    "DELETE FROM orb_outcomes WHERE symbol = ? AND orb_minutes = ?",
+                    [instrument, orb_minutes],
+                )
+            con.commit()
+            logger.info(f"  Force: deleted existing outcomes for {instrument}")
+
         # Determine which sessions to build outcomes for
         sessions = get_enabled_sessions(instrument)
         if not sessions:
