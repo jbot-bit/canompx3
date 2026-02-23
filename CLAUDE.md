@@ -133,7 +133,24 @@ python scripts/reports/report_edge_portfolio.py      # Edge family portfolio rep
 For outcome rebuild, validation, and edge family workflows, use slash commands:
 `/validate-instrument MGC`, `/rebuild-outcomes MGC`, `/health-check`
 
-See `.claude/rules/` for contextual rules on daily_features JOINs, pipeline patterns, and validation workflows.
+See `.claude/rules/` for contextual rules on daily_features JOINs, pipeline patterns, validation workflows, and MCP usage.
+
+---
+
+## MCP Server (gold-db)
+
+The `gold-db` MCP server (`trading_app/mcp_server.py`) exposes 4 read-only tools for querying the trading database. **ALWAYS prefer these over raw SQL against gold.db** — they apply correct filters, enforce read-only, and handle edge cases.
+
+| Tool | When to Use |
+|------|-------------|
+| `list_available_queries` | Discover available query templates (call first if unsure) |
+| `query_trading_db` | Run any of 18 pre-approved SQL templates — strategy lookups, performance stats, trade history, schema info. Params: `template`, `orb_label`, `entry_model`, `filter_type`, `instrument`, `limit`. Row cap 5000. |
+| `get_strategy_fitness` | Rolling regime assessment (FIT/WATCH/DECAY/STALE). Use for "is it still working?" questions. **Always use `summary_only=True` for portfolio-wide calls** (full output >150K chars). |
+| `get_canonical_context` | Load grounding docs (cost model, trading rules, config) before complex analysis |
+
+**Decision framework:** See `.claude/rules/mcp-usage.md` for intent→tool mapping.
+
+**AI Query CLI:** `python -m trading_app.ai.cli "question"` is a standalone CLI that uses the Anthropic API for intent extraction. Redundant when using Claude Code + MCP, but available for non-Claude-Code use cases.
 
 ---
 

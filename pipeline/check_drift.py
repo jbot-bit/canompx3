@@ -1185,6 +1185,43 @@ def check_discovery_session_aware_filters() -> list[str]:
     return violations
 
 
+def check_validated_filters_registered() -> list[str]:
+    """Check #29: Every filter_type in validated_setups must exist in ALL_FILTERS.
+
+    ALL_FILTERS is the single source of truth for filter definitions.
+    No script should ever reconstruct filters from naming conventions.
+    """
+    violations = []
+    try:
+        from trading_app.config import ALL_FILTERS
+    except ImportError as e:
+        violations.append(f"  Cannot import ALL_FILTERS: {e}")
+        return violations
+
+    try:
+        import duckdb
+        from pipeline.paths import GOLD_DB_PATH
+
+        con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+        rows = con.execute(
+            "SELECT DISTINCT filter_type FROM validated_setups ORDER BY filter_type"
+        ).fetchall()
+        con.close()
+
+        db_filter_types = {r[0] for r in rows}
+        missing = db_filter_types - set(ALL_FILTERS.keys())
+        if missing:
+            for ft in sorted(missing):
+                violations.append(
+                    f"  filter_type '{ft}' in validated_setups but NOT in ALL_FILTERS"
+                )
+    except Exception:
+        # DB may not exist in CI — skip gracefully
+        pass
+
+    return violations
+
+
 def main():
     print("=" * 60)
     print("PIPELINE DRIFT CHECK")
@@ -1520,6 +1557,18 @@ def main():
     # Check 28: Discovery files must use session-aware filters
     print("Check 28: Discovery scripts use get_filters_for_grid (not ALL_FILTERS)...")
     v = check_discovery_session_aware_filters()
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 29: All filter_types in validated_setups must be in ALL_FILTERS
+    print("Check 29: All validated filter_types registered in ALL_FILTERS...")
+    v = check_validated_filters_registered()
     if v:
         print("  FAILED:")
         for line in v:

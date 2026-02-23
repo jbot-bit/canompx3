@@ -191,10 +191,15 @@ def _build_server():
     mcp = FastMCP(
         "gold-db",
         instructions=(
-            "Futures trading database. MGC (10yr), MNQ (2yr), MES (5yr), M2K (5yr). "
-            "3,108 validated ORB breakout strategies across all instruments. "
-            "Use instrument parameter to filter (default MGC). Supports E0/E1/E3 entry models. "
-            "All queries are read-only."
+            "Gold futures trading database with 4 instruments: MGC (10yr), MNQ (2yr), MES (5yr), M2K (5yr). "
+            "735 FDR-validated ORB breakout strategies. "
+            "WORKFLOW: (1) list_available_queries to discover templates, "
+            "(2) query_trading_db for strategy lookups/comparisons/raw outcomes, "
+            "(3) get_strategy_fitness for rolling regime assessment (FIT/WATCH/DECAY/STALE), "
+            "(4) get_canonical_context to load trading rules before complex analysis. "
+            "Use instrument parameter to filter (default MGC). "
+            "For recent performance, use get_strategy_fitness with rolling_months. "
+            "NEVER query orb_outcomes directly without filters — use templates."
         ),
     )
 
