@@ -1,6 +1,7 @@
 """Tests for trading_app.ai.sql_adapter."""
 
 import pytest
+import pandas as pd
 
 from trading_app.ai.sql_adapter import (
     QueryTemplate,
@@ -9,9 +10,16 @@ from trading_app.ai.sql_adapter import (
     MAX_RESULT_ROWS,
     VALID_ORB_LABELS,
     VALID_ENTRY_MODELS,
+    VALID_RR_TARGETS,
+    VALID_CONFIRM_BARS,
     _validate_orb_label,
     _validate_entry_model,
     _validate_filter_type,
+    _validate_rr_target,
+    _validate_confirm_bars,
+    _orb_size_filter_sql,
+    _compute_group_stats,
+    _DST_SESSION_MAP,
     _TEMPLATES,
 )
 
@@ -43,7 +51,7 @@ class TestQueryTemplate:
             assert "SELECT" in sql.upper(), f"Template {t.value} is not a SELECT"
 
     def test_template_count(self):
-        assert len(QueryTemplate) == 13
+        assert len(QueryTemplate) == 18
 
 
 class TestParameterValidation:
@@ -140,3 +148,177 @@ class TestAvailableTemplates:
         for t in templates:
             assert "template" in t
             assert "description" in t
+
+
+class TestNewParameterValidation:
+    """Test rr_target and confirm_bars validation."""
+
+    def test_valid_rr_targets(self):
+        for rr in VALID_RR_TARGETS:
+            assert _validate_rr_target(rr) == rr
+
+    def test_rr_target_from_string(self):
+        assert _validate_rr_target("2.0") == 2.0
+
+    def test_invalid_rr_target_raises(self):
+        with pytest.raises(ValueError, match="Invalid rr_target"):
+            _validate_rr_target(0.5)
+
+    def test_valid_confirm_bars(self):
+        for cb in VALID_CONFIRM_BARS:
+            assert _validate_confirm_bars(cb) == cb
+
+    def test_confirm_bars_from_string(self):
+        assert _validate_confirm_bars("2") == 2
+
+    def test_invalid_confirm_bars_raises(self):
+        with pytest.raises(ValueError, match="Invalid confirm_bars"):
+            _validate_confirm_bars(5)
+
+
+class TestOrbSizeFilterSQL:
+    """Test ORB size filter SQL generation."""
+
+    def test_no_filter_returns_none(self):
+        assert _orb_size_filter_sql("NO_FILTER", "0900") is None
+
+    def test_none_returns_none(self):
+        assert _orb_size_filter_sql(None, "0900") is None
+
+    def test_orb_g4(self):
+        result = _orb_size_filter_sql("ORB_G4", "1000")
+        assert result == "d.orb_1000_size >= 4"
+
+    def test_orb_g6(self):
+        result = _orb_size_filter_sql("ORB_G6", "0900")
+        assert result == "d.orb_0900_size >= 6"
+
+    def test_orb_l8(self):
+        result = _orb_size_filter_sql("ORB_L8", "1000")
+        assert result == "d.orb_1000_size < 8"
+
+    def test_vol_filter_returns_none(self):
+        """VOL_ filters aren't translatable to SQL — silently skipped."""
+        assert _orb_size_filter_sql("VOL_RV12_N20", "0900") is None
+
+    def test_invalid_prefix_raises(self):
+        with pytest.raises(ValueError, match="Invalid filter_type"):
+            _orb_size_filter_sql("HACKED", "0900")
+
+
+class TestComputeGroupStats:
+    """Test stats computation helper."""
+
+    def test_empty_dataframe(self):
+        df = pd.DataFrame(columns=["pnl_r", "outcome"])
+        stats = _compute_group_stats(df)
+        assert stats["N"] == 0
+        assert stats["win_rate"] is None
+
+    def test_all_wins(self):
+        df = pd.DataFrame({
+            "pnl_r": [1.0, 1.0, 1.0],
+            "outcome": ["win", "win", "win"],
+        })
+        stats = _compute_group_stats(df)
+        assert stats["N"] == 3
+        assert stats["win_rate"] == 100.0
+        assert stats["avg_pnl_r"] == 1.0
+
+    def test_mixed_outcomes(self):
+        df = pd.DataFrame({
+            "pnl_r": [2.0, -1.0, 2.0, -1.0],
+            "outcome": ["win", "loss", "win", "loss"],
+        })
+        stats = _compute_group_stats(df)
+        assert stats["N"] == 4
+        assert stats["win_rate"] == 50.0
+        assert stats["avg_pnl_r"] == 0.5
+        assert stats["sharpe"] is not None
+
+    def test_constant_pnl_sharpe_none(self):
+        """Zero std dev → sharpe is None."""
+        df = pd.DataFrame({
+            "pnl_r": [1.0, 1.0, 1.0],
+            "outcome": ["win", "win", "win"],
+        })
+        stats = _compute_group_stats(df)
+        # std of constant series is 0 → sharpe None
+        assert stats["sharpe"] is None
+
+
+class TestDSTSessionMap:
+    """Test DST session mapping."""
+
+    def test_dst_sensitive_sessions(self):
+        assert _DST_SESSION_MAP["0900"] == "us_dst"
+        assert _DST_SESSION_MAP["0030"] == "us_dst"
+        assert _DST_SESSION_MAP["2300"] == "us_dst"
+        assert _DST_SESSION_MAP["1800"] == "uk_dst"
+
+    def test_non_dst_sessions_absent(self):
+        assert "1000" not in _DST_SESSION_MAP
+        assert "1100" not in _DST_SESSION_MAP
+
+
+class TestBuildOutcomesBase:
+    """Test SAFE_JOIN query builder (no DB needed)."""
+
+    def _make_adapter(self):
+        adapter = SQLAdapter.__new__(SQLAdapter)
+        adapter.db_path = "dummy.db"
+        return adapter
+
+    def test_basic_query(self):
+        adapter = self._make_adapter()
+        sql, bind = adapter._build_outcomes_base(
+            {"instrument": "MGC", "orb_label": "0900"}
+        )
+        assert "orb_outcomes o" in sql
+        assert "daily_features d" in sql
+        assert "o.orb_minutes = d.orb_minutes" in sql
+        assert bind == ["MGC", "0900"]
+
+    def test_all_params(self):
+        adapter = self._make_adapter()
+        sql, bind = adapter._build_outcomes_base({
+            "instrument": "MNQ", "orb_label": "1000",
+            "entry_model": "E0", "rr_target": 2.0, "confirm_bars": 1,
+            "filter_type": "ORB_G4",
+        })
+        assert "o.entry_model = ?" in sql
+        assert "o.rr_target = ?" in sql
+        assert "o.confirm_bars = ?" in sql
+        assert "d.orb_1000_size >= 4" in sql
+        assert bind == ["MNQ", "1000", "E0", 2.0, 1]
+
+    def test_missing_orb_label_raises(self):
+        adapter = self._make_adapter()
+        with pytest.raises(ValueError, match="orb_label is required"):
+            adapter._build_outcomes_base({"instrument": "MGC"})
+
+    def test_extra_cols(self):
+        adapter = self._make_adapter()
+        sql, _ = adapter._build_outcomes_base(
+            {"orb_label": "0900"}, extra_cols="o.entry_model"
+        )
+        assert "o.entry_model" in sql
+
+
+class TestNewTemplatesSafeJoin:
+    """Verify all new templates use the SAFE_JOIN pattern."""
+
+    def test_outcomes_templates_have_safe_join(self):
+        """All 5 new templates must join on trading_day + symbol + orb_minutes."""
+        new_templates = [
+            QueryTemplate.OUTCOMES_STATS,
+            QueryTemplate.ENTRY_MODEL_COMPARE,
+            QueryTemplate.DOW_BREAKDOWN,
+            QueryTemplate.DST_SPLIT,
+            QueryTemplate.FILTER_COMPARE,
+        ]
+        for t in new_templates:
+            sql = _TEMPLATES[t]
+            assert "o.trading_day = d.trading_day" in sql, f"{t.value}: missing trading_day join"
+            assert "o.symbol = d.symbol" in sql, f"{t.value}: missing symbol join"
+            assert "o.orb_minutes = d.orb_minutes" in sql, f"{t.value}: missing orb_minutes join"

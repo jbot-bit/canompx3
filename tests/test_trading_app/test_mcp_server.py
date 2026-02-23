@@ -17,7 +17,7 @@ from trading_app.mcp_server import (
 class TestListAvailableQueries:
     def test_returns_all_templates(self):
         result = _list_available_queries()
-        assert len(result) == 13
+        assert len(result) == 18
         names = {t["template"] for t in result}
         assert "strategy_lookup" in names
         assert "table_counts" in names
@@ -79,6 +79,25 @@ class TestQueryTradingDb:
         assert call_args.parameters["min_sample_size"] == 50
         assert call_args.parameters["limit"] == 10
 
+    @patch("trading_app.mcp_server.SQLAdapter")
+    def test_new_params_forwarded(self, mock_cls):
+        """rr_target and confirm_bars are forwarded to SQLAdapter."""
+        mock_adapter = MagicMock()
+        mock_adapter.execute.return_value = pd.DataFrame()
+        mock_cls.return_value = mock_adapter
+
+        _query_trading_db(
+            template="outcomes_stats",
+            orb_label="0900",
+            rr_target=2.0,
+            confirm_bars=1,
+        )
+
+        call_args = mock_adapter.execute.call_args[0][0]
+        assert call_args.template.value == "outcomes_stats"
+        assert call_args.parameters["rr_target"] == 2.0
+        assert call_args.parameters["confirm_bars"] == 1
+
 
 class TestGuardrails:
     """Guardrail enforcement tests."""
@@ -119,7 +138,7 @@ class TestGuardrails:
 
     def test_allowed_params_whitelist(self):
         """Only known parameter keys are in the allowlist."""
-        assert _ALLOWED_PARAMS == {"orb_label", "entry_model", "filter_type", "min_sample_size", "limit", "instrument"}
+        assert _ALLOWED_PARAMS == {"orb_label", "entry_model", "filter_type", "min_sample_size", "limit", "instrument", "rr_target", "confirm_bars"}
 
 
 class TestGenerateWarnings:

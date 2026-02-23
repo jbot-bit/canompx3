@@ -36,7 +36,7 @@ DB_PATH = str(GOLD_DB_PATH)
 MAX_MCP_ROWS = 5000
 
 # Only these parameter keys are forwarded to SQLAdapter. Anything else is rejected.
-_ALLOWED_PARAMS = {"orb_label", "entry_model", "filter_type", "min_sample_size", "limit", "instrument"}
+_ALLOWED_PARAMS = {"orb_label", "entry_model", "filter_type", "min_sample_size", "limit", "instrument", "rr_target", "confirm_bars"}
 
 # ---------------------------------------------------------------------------
 # Warnings — thresholds imported from config.py (single source of truth)
@@ -65,6 +65,8 @@ def _query_trading_db(
     min_sample_size: int | None = None,
     instrument: str = "MGC",
     limit: int = 50,
+    rr_target: float | None = None,
+    confirm_bars: int | None = None,
 ) -> dict:
     """Run a pre-approved SQL query against the trading database.
 
@@ -93,6 +95,10 @@ def _query_trading_db(
         params["min_sample_size"] = min_sample_size
     if instrument is not None:
         params["instrument"] = instrument
+    if rr_target is not None:
+        params["rr_target"] = rr_target
+    if confirm_bars is not None:
+        params["confirm_bars"] = confirm_bars
 
     # G3: Server-side row cap
     params["limit"] = min(int(limit), MAX_MCP_ROWS)
@@ -210,21 +216,28 @@ def _build_server():
         min_sample_size: int | None = None,
         instrument: str = "MGC",
         limit: int = 50,
+        rr_target: float | None = None,
+        confirm_bars: int | None = None,
     ) -> dict:
         """Run a pre-approved SQL query against the trading database.
 
         Args:
             template: Query template name (use list_available_queries to see options).
-                      One of: strategy_lookup, performance_stats, validated_summary,
-                      yearly_breakdown, trade_history, schema_info, table_counts,
-                      orb_size_dist, regime_compare, correlation,
-                      double_break_stats, gap_analysis, rolling_stability.
+                      Validated strategies: strategy_lookup, performance_stats,
+                      validated_summary, yearly_breakdown, trade_history.
+                      Raw outcomes: outcomes_stats, entry_model_compare,
+                      dow_breakdown, dst_split, filter_compare.
+                      Infrastructure: schema_info, table_counts, orb_size_dist,
+                      regime_compare, correlation, double_break_stats,
+                      gap_analysis, rolling_stability.
             orb_label: ORB session filter. One of: 0900, 1000, 1100, 1800, 2300, 0030.
             entry_model: Entry model filter. One of: E0, E1, E3.
             filter_type: ORB size filter. Examples: ORB_G4, ORB_G6, NO_FILTER.
             min_sample_size: Minimum number of trades.
             instrument: Instrument filter (default MGC). One of: MGC, MNQ, MES, M2K.
             limit: Max rows to return (default 50, server cap 5000).
+            rr_target: Risk-reward target (raw outcomes templates). One of: 1.0, 1.5, 2.0, 2.5, 3.0.
+            confirm_bars: Confirmation bars (raw outcomes templates). One of: 1, 2, 3.
 
         Returns:
             Dict with 'columns', 'rows', 'row_count', and 'warnings' keys.
@@ -233,6 +246,7 @@ def _build_server():
             template=template, orb_label=orb_label, entry_model=entry_model,
             filter_type=filter_type, min_sample_size=min_sample_size,
             instrument=instrument, limit=limit,
+            rr_target=rr_target, confirm_bars=confirm_bars,
         )
 
     @mcp.tool()
