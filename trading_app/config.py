@@ -486,9 +486,9 @@ BASE_GRID_FILTERS: dict[str, StrategyFilter] = {
     **MGC_VOLUME_FILTERS,
 }
 
-# Master filter registry — base + all DOW composites + break quality composites + M6E.
-# Portfolio.py looks up filters by filter_type key from this registry.
-# Count: 1 (NO_FILTER) + 4 (ORB G4-G8) + 1 (VOL) + 12 (DOW) + 8 (BRK_FAST5/CONT) + 3 (M6E) = 29
+# Master filter registry — COMPLETE source of truth for all filter types.
+# Every filter_type in validated_setups MUST be in this dict.
+# New scripts look up filters here — no guessing from naming conventions.
 ALL_FILTERS: dict[str, StrategyFilter] = {
     **BASE_GRID_FILTERS,
     **_M6E_SIZE_FILTERS,
@@ -498,6 +498,11 @@ ALL_FILTERS: dict[str, StrategyFilter] = {
     **_make_break_quality_composites(_GRID_SIZE_FILTERS_ORB, _BREAK_SPEED_FAST5, "FAST5"),
     **_make_break_quality_composites(_GRID_SIZE_FILTERS_ORB, _BREAK_SPEED_FAST10, "FAST10"),
     **_make_break_quality_composites(_GRID_SIZE_FILTERS_ORB, _BREAK_BAR_CONTINUES, "CONT"),
+    # Direction filters (session-specific but must be registered for portfolio lookups)
+    "DIR_LONG": DIR_LONG,
+    "DIR_SHORT": DIR_SHORT,
+    # MES 1000 band filters (H2: ORBs >= 12pt are toxic)
+    **_MES_1000_BAND_FILTERS,
 }
 
 # Calendar skip overlays (NOT in discovery grid — applied at portfolio/paper_trader level)

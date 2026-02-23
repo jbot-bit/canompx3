@@ -140,8 +140,10 @@ class TestAllFilters:
         # + 12 DOW composites (3 DOW x 4 G)
         # + 12 break quality composites (3 BRK x 4 G: FAST5, FAST10, CONT)
         # + 3 M6E pip-scaled size filters (M6E_G4/G6/G8)
-        # = 33
-        assert len(ALL_FILTERS) == 33
+        # + 2 direction filters (DIR_LONG, DIR_SHORT)
+        # + 2 MES 1000 band filters (ORB_G4_L12, ORB_G5_L12)
+        # = 37
+        assert len(ALL_FILTERS) == 37
 
     def test_contains_volume_filter(self):
         assert "VOL_RV12_N20" in ALL_FILTERS

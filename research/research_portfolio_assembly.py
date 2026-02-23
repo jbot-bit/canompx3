@@ -14,7 +14,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.config import ALL_FILTERS, VolumeFilter
+from trading_app.config import ALL_FILTERS, VolumeFilter  # noqa: F401 — VolumeFilter used in isinstance check
 from trading_app.strategy_discovery import (
     _build_filter_day_sets,
     _compute_relative_volumes,
@@ -81,45 +81,13 @@ def load_slot_trades(con, slots):
         orb_labels = sorted(orb_labels)
         needed_filters = {k: v for k, v in ALL_FILTERS.items() if k in filter_types}
 
-        # Handle filters not in ALL_FILTERS (e.g. DIR_LONG, ORB_G4_L12)
+        # Fail-closed: ALL filter types must be in ALL_FILTERS (single source of truth)
         missing = filter_types - set(needed_filters.keys())
         if missing:
-            from trading_app.config import DirectionFilter, OrbSizeFilter, CompositeFilter, BreakSpeedFilter
-            for ft in missing:
-                if ft == "DIR_LONG":
-                    needed_filters[ft] = DirectionFilter(
-                        filter_type="DIR_LONG",
-                        description="Long breaks only",
-                        direction="long",
-                    )
-                elif ft == "DIR_SHORT":
-                    needed_filters[ft] = DirectionFilter(
-                        filter_type="DIR_SHORT",
-                        description="Short breaks only",
-                        direction="short",
-                    )
-                elif ft.startswith("ORB_G") and "_L" in ft:
-                    # e.g. ORB_G4_L12 = G4 base + max break delay 12
-                    parts = ft.split("_")
-                    g_val = float(parts[1][1:])
-                    l_val = float(parts[2][1:])
-                    needed_filters[ft] = CompositeFilter(
-                        filter_type=ft,
-                        description=f"ORB >= {g_val} + delay <= {l_val}",
-                        base=OrbSizeFilter(
-                            filter_type=f"ORB_G{int(g_val)}",
-                            description=f"ORB size >= {g_val}",
-                            min_size=g_val,
-                        ),
-                        overlay=BreakSpeedFilter(
-                            filter_type=f"BRK_FAST{int(l_val)}",
-                            description=f"Break delay <= {l_val} min",
-                            max_delay_min=l_val,
-                        ),
-                    )
-                else:
-                    print(f"  WARNING: Unknown filter type '{ft}', using NO_FILTER fallback")
-                    needed_filters[ft] = ALL_FILTERS["NO_FILTER"]
+            raise ValueError(
+                f"Filter types {missing} for {instrument} not in ALL_FILTERS. "
+                f"Add them to trading_app/config.py ALL_FILTERS dict."
+            )
 
         # Load daily features (canonical: orb_minutes=5)
         features = _load_daily_features(con, instrument, 5, None, None)
@@ -430,9 +398,10 @@ def print_yearly_breakdown(all_trades):
         n_days = len(y["days"])
         r_per_day = y["total_r"] / n_days if n_days > 0 else 0
 
-        # Compute honest Sharpe for this year
-        year_start = dt.date(year, 1, 1)
-        year_end = dt.date(year, 12, 31)
+        # Compute honest Sharpe for this year (clip to actual data range)
+        year_days = sorted(y["days"])
+        year_start = year_days[0]
+        year_end = year_days[-1]
         daily_list = sorted(y["daily_r"].items())
         _, sharpe_ann, _ = compute_honest_sharpe(daily_list, year_start, year_end)
         sharpe_str = f"{sharpe_ann:>6.2f}" if sharpe_ann is not None else "   N/A"

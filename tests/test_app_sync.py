@@ -94,7 +94,9 @@ class TestAllFiltersSync:
     # DOW composites: 3 variants (NOFRI, NOMON, NOTUE) x 4 G-filters = 12
     # Break quality composites: 3 variants (FAST5, FAST10, CONT) x 4 G-filters = 12
     # M6E pip-scaled size filters: M6E_G4/G6/G8 = 3
-    # Total: 6 + 12 + 12 + 3 = 33
+    # Direction filters: DIR_LONG/DIR_SHORT = 2
+    # MES 1000 band filters: ORB_G4_L12/ORB_G5_L12 = 2
+    # Total: 6 + 12 + 12 + 3 + 2 + 2 = 37
     # NOTE: NODBL removed Feb 2026 — double_break is look-ahead
     EXPECTED_FILTER_KEYS = {
         "NO_FILTER",
@@ -110,6 +112,10 @@ class TestAllFiltersSync:
         "ORB_G4_CONT", "ORB_G5_CONT", "ORB_G6_CONT", "ORB_G8_CONT",
         # M6E (EUR/USD) pip-scaled size filters — MGC point filters meaningless for FX
         "M6E_G4", "M6E_G6", "M6E_G8",
+        # Direction filters (session-specific, registered for portfolio lookups)
+        "DIR_LONG", "DIR_SHORT",
+        # MES 1000 band filters (ORB size between min and max points)
+        "ORB_G4_L12", "ORB_G5_L12",
     }
 
     def test_expected_keys(self):
@@ -150,9 +156,9 @@ class TestAllFiltersSync:
 
     def test_size_filters_have_thresholds(self):
         """Every ORB size filter (or composite with size base) has thresholds."""
-        from trading_app.config import CompositeFilter
+        from trading_app.config import CompositeFilter, DirectionFilter
         for key, filt in ALL_FILTERS.items():
-            if key == "NO_FILTER" or isinstance(filt, VolumeFilter):
+            if key == "NO_FILTER" or isinstance(filt, (VolumeFilter, DirectionFilter)):
                 continue
             if isinstance(filt, CompositeFilter):
                 # Composite: base should be OrbSizeFilter with thresholds
