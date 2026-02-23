@@ -773,6 +773,160 @@ class TestCheckpointResume:
         assert not heartbeat_path.exists()
 
 
+class TestTimeStop:
+    """Tests for T80 conditional time-stop annotation."""
+
+    def test_keys_present_with_threshold_session(self):
+        """compute_single_outcome returns ts_* keys for session with time-stop."""
+        orb_high, orb_low = 2700.0, 2690.0
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
+        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
+        bars = _make_bars(
+            datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
+            [(2698, 2701, 2695, 2701, 100),
+             (2703, 2710, 2700, 2710, 100),
+             (2718, 2735, 2717, 2730, 100)],
+        )
+        result = compute_single_outcome(
+            bars_df=bars, break_ts=break_ts, orb_high=orb_high, orb_low=orb_low,
+            break_dir="long", rr_target=2.0, confirm_bars=1,
+            trading_day_end=td_end, cost_spec=_cost(), entry_model="E1",
+            orb_label="1000",
+        )
+        assert "ts_outcome" in result
+        assert "ts_pnl_r" in result
+        assert "ts_exit_ts" in result
+
+    def test_no_threshold_session_leaves_ts_null(self):
+        """Session with no time-stop (1100) -> ts_* = None."""
+        orb_high, orb_low = 2700.0, 2690.0
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
+        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
+        bars = _make_bars(
+            datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
+            [(2698, 2701, 2695, 2701, 100),
+             (2703, 2710, 2700, 2710, 100),
+             (2718, 2735, 2717, 2730, 100)],
+        )
+        result = compute_single_outcome(
+            bars_df=bars, break_ts=break_ts, orb_high=orb_high, orb_low=orb_low,
+            break_dir="long", rr_target=2.0, confirm_bars=1,
+            trading_day_end=td_end, cost_spec=_cost(), entry_model="E1",
+            orb_label="1100",
+        )
+        assert result["ts_outcome"] is None
+        assert result["ts_pnl_r"] is None
+        assert result["ts_exit_ts"] is None
+
+    def test_loss_after_threshold_gets_time_stopped(self):
+        """Trade that loses after 30+ min at 1000 gets ts_outcome=time_stop."""
+        orb_high, orb_low = 2700.0, 2690.0
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
+        td_end = datetime(2024, 1, 5, 8, 0, tzinfo=timezone.utc)
+
+        # Bar 0: confirm close above ORB high
+        # Bar 1: E1 entry at open=2703, stop=2690, risk=13
+        # Bars 2-40: price drifts below entry but above stop
+        # Bar 61: hits stop
+        bar_data = [
+            (2698, 2701, 2695, 2701, 100),  # confirm
+            (2703, 2705, 2698, 2700, 100),  # entry bar
+        ]
+        for i in range(58):
+            price = 2700 - i * 0.1
+            bar_data.append((price, price + 1, price - 1, price, 100))
+        bar_data.append((2691, 2692, 2688, 2689, 100))  # hits stop
+
+        bars = _make_bars(datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc), bar_data)
+        result = compute_single_outcome(
+            bars_df=bars, break_ts=break_ts, orb_high=orb_high, orb_low=orb_low,
+            break_dir="long", rr_target=2.0, confirm_bars=1,
+            trading_day_end=td_end, cost_spec=_cost(), entry_model="E1",
+            orb_label="1000",
+        )
+        # Baseline: full stop loss
+        assert result["outcome"] == "loss"
+        assert result["pnl_r"] == -1.0
+        # Time-stop: fires at ~30m with partial loss (better than -1R)
+        assert result["ts_outcome"] == "time_stop"
+        assert result["ts_pnl_r"] < 0
+        assert result["ts_pnl_r"] > -1.0
+
+    def test_win_before_threshold_ts_matches_baseline(self):
+        """Trade that wins before T80 -> ts_* matches baseline."""
+        orb_high, orb_low = 2700.0, 2690.0
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
+        td_end = datetime(2024, 1, 5, 8, 0, tzinfo=timezone.utc)
+
+        # Quick win: target hit on bar 2 (2 min after entry, well before 30m)
+        bars = _make_bars(
+            datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
+            [
+                (2698, 2701, 2695, 2701, 100),  # confirm
+                (2703, 2710, 2700, 2710, 100),  # entry bar
+                (2710, 2720, 2709, 2718, 100),
+                (2718, 2735, 2717, 2730, 100),  # hits target for RR2
+            ],
+        )
+        result = compute_single_outcome(
+            bars_df=bars, break_ts=break_ts, orb_high=orb_high, orb_low=orb_low,
+            break_dir="long", rr_target=2.0, confirm_bars=1,
+            trading_day_end=td_end, cost_spec=_cost(), entry_model="E1",
+            orb_label="1000",
+        )
+        assert result["outcome"] == "win"
+        assert result["ts_outcome"] == "win"
+        assert result["ts_pnl_r"] == result["pnl_r"]
+
+    def test_positive_at_threshold_keeps_running(self):
+        """Trade above entry at threshold bar but not at target -> keeps running."""
+        orb_high, orb_low = 2700.0, 2690.0
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
+        td_end = datetime(2024, 1, 5, 8, 0, tzinfo=timezone.utc)
+
+        # Bar 0: confirm. Bar 1: entry at 2703, stop=2690, risk=13
+        # Bars 2-40: price above entry (positive MTM) but below target (2729 for RR2)
+        # Eventually scratches (no hit)
+        bar_data = [
+            (2698, 2701, 2695, 2701, 100),  # confirm
+            (2703, 2706, 2700, 2705, 100),  # entry bar
+        ]
+        for _ in range(58):
+            bar_data.append((2706, 2710, 2704, 2707, 100))  # positive but below target
+
+        bars = _make_bars(datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc), bar_data)
+        result = compute_single_outcome(
+            bars_df=bars, break_ts=break_ts, orb_high=orb_high, orb_low=orb_low,
+            break_dir="long", rr_target=2.0, confirm_bars=1,
+            trading_day_end=td_end, cost_spec=_cost(), entry_model="E1",
+            orb_label="1000",
+        )
+        # Baseline: scratch (no hit)
+        assert result["outcome"] == "scratch"
+        # Time-stop: positive at threshold bar -> keeps running, ts = baseline
+        assert result["ts_outcome"] == "scratch"
+        assert result["ts_pnl_r"] == result["pnl_r"]
+
+    def test_schema_has_time_stop_columns(self, tmp_path):
+        """Schema migration adds ts_outcome, ts_pnl_r, ts_exit_ts."""
+        from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA, DAILY_FEATURES_SCHEMA
+        from trading_app.db_manager import init_trading_app_schema
+        db_path = tmp_path / "test.db"
+        with duckdb.connect(str(db_path)) as con:
+            con.execute(BARS_1M_SCHEMA)
+            con.execute(BARS_5M_SCHEMA)
+            con.execute(DAILY_FEATURES_SCHEMA)
+        init_trading_app_schema(db_path=db_path)
+        with duckdb.connect(str(db_path)) as con:
+            cols = {r[0] for r in con.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = 'orb_outcomes'"
+            ).fetchall()}
+        assert "ts_outcome" in cols
+        assert "ts_pnl_r" in cols
+        assert "ts_exit_ts" in cols
+
+
 class TestCLI:
     """Test CLI --help doesn't crash."""
 

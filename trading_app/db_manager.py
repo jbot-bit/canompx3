@@ -375,6 +375,19 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
         except duckdb.CatalogException:
             pass  # column already exists
 
+        # Migration: add time-stop columns (T80 conditional exit)
+        # Stores outcome/pnl_r/exit_ts if EARLY_EXIT_MINUTES time-stop fires.
+        # NULL = no time-stop configured for this session.
+        for col, typedef in [
+            ("ts_outcome", "VARCHAR"),
+            ("ts_pnl_r", "DOUBLE"),
+            ("ts_exit_ts", "TIMESTAMPTZ"),
+        ]:
+            try:
+                con.execute(f"ALTER TABLE orb_outcomes ADD COLUMN {col} {typedef}")
+            except duckdb.CatalogException:
+                pass  # column already exists
+
         con.commit()
         logger.info("Trading app schema initialized successfully")
 
@@ -426,7 +439,8 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
                 "rr_target", "confirm_bars", "entry_model", "entry_ts",
                 "entry_price", "stop_price", "target_price", "outcome",
                 "exit_ts", "exit_price", "pnl_r", "mae_r", "mfe_r",
-                "risk_dollars", "pnl_dollars"
+                "risk_dollars", "pnl_dollars", "ambiguous_bar",
+                "ts_outcome", "ts_pnl_r", "ts_exit_ts",
             }
             actual_cols = {row[0] for row in result}
 
