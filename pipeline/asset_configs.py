@@ -74,6 +74,9 @@ ASSET_CONFIGS = {
         ],
     },
     "MES": {
+        # Source data: ES (E-mini S&P 500, $50/pt) pre-Feb 2024, then native MES ($5/pt).
+        # Same price on same exchange. Identical pattern to GC→MGC, RTY→M2K.
+        # Cost model uses MES micro specs ($5/pt).
         "dbn_path": PROJECT_ROOT / "DB" / "MES_DB",
         "symbol": "MES",
         "outright_pattern": re.compile(r'^MES[FGHJKMNQUVXZ]\d{1,2}$'),
@@ -103,6 +106,8 @@ ASSET_CONFIGS = {
         ],
     },
     "SIL": {
+        # Source data is SI (full-size Silver, $5000/pt) — same price, stored as symbol='SIL'.
+        # Identical pattern to GC→MGC, 6E→M6E, RTY→M2K. Cost model uses SIL micro specs ($1000/pt).
         "dbn_path": PROJECT_ROOT / "DB" / "SL_DB",
         "symbol": "SIL",
         "outright_pattern": re.compile(r'^SI[FGHJKMNQUVXZ]\d{1,2}$'),

@@ -46,7 +46,11 @@ def tracker_db(tmp_path):
             confirm_bars INT,
             rr_target DOUBLE,
             outcome VARCHAR,
-            pnl_r DOUBLE
+            pnl_r DOUBLE,
+            ambiguous_bar BOOLEAN DEFAULT FALSE,
+            ts_outcome VARCHAR,
+            ts_pnl_r DOUBLE,
+            ts_exit_ts TIMESTAMPTZ
         )
     """)
 

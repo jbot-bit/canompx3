@@ -46,6 +46,10 @@ def _create_test_db(tmp_path: Path) -> Path:
             entry_model       TEXT NOT NULL,
             outcome           TEXT,
             pnl_r             DOUBLE,
+            ambiguous_bar     BOOLEAN DEFAULT FALSE,
+            ts_outcome        TEXT,
+            ts_pnl_r          DOUBLE,
+            ts_exit_ts        TIMESTAMPTZ,
             PRIMARY KEY (symbol, trading_day, orb_label, orb_minutes,
                          rr_target, confirm_bars, entry_model)
         )

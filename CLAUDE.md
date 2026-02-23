@@ -6,8 +6,18 @@ Guidance for Claude Code working with this repository.
 
 Multi-instrument futures data pipeline — builds clean, replayable local datasets for ORB breakout trading research and backtesting from Databento DBN files. Supports MGC (Micro Gold), MNQ (Micro Nasdaq), MCL (Micro Crude), MES (Micro S&P 500).
 
-**CRITICAL: Price Data Source (MGC)**
-Raw data contains GC (full-size Gold) which has better 1m bar coverage than MGC. Pipeline ingests GC bars, stores under `symbol='MGC'` (same price, same exchange), uses MGC cost model. The `source_symbol` column records the actual GC contract.
+**CRITICAL: Price Data Sources (Full-Size → Micro Mapping)**
+Several instruments use full-size contract data for better 1m bar coverage. Full-size and micro contracts trade at identical prices on the same exchange — only the multiplier differs. Pipeline stores under the micro symbol; `source_symbol` records the actual contract.
+
+| Stored Symbol | Source Contracts | Reason | Cost Model |
+|--------------|-----------------|--------|------------|
+| MGC | GC (full gold) | Better 1m coverage than MGC | MGC ($10/pt) |
+| MES | ES (pre-Feb 2024), then native MES | ES has data back to 2019 | MES ($5/pt) |
+| M2K | RTY (E-mini Russell) | RTY has better coverage | M2K ($5/pt) |
+| M6E | 6E (full EUR/USD) | 6E has better coverage | M6E ($12,500/pt) |
+| SIL | SI (full silver) | SI has better coverage | SIL ($1,000/pt) |
+| MNQ | MNQ (native micro) | No mapping needed | MNQ ($2/pt) |
+| MCL | MCL (native micro) | No mapping needed | MCL ($100/pt) |
 
 **For instruments, cost models, sessions, entry models, and all trading logic → see `TRADING_RULES.md`.**
 **For research methodology, statistical standards, and market structure knowledge → see `RESEARCH_RULES.md`.**

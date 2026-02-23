@@ -1285,7 +1285,11 @@ class TestDailyFeaturesJoinCardinality:
                 trading_day DATE,
                 symbol TEXT,
                 orb_minutes INTEGER,
-                pnl_r DOUBLE
+                pnl_r DOUBLE,
+                ambiguous_bar BOOLEAN DEFAULT FALSE,
+                ts_outcome TEXT,
+                ts_pnl_r DOUBLE,
+                ts_exit_ts TIMESTAMPTZ
             )
         """)
         # 1 trading day, 3 orb_minutes each
@@ -1295,7 +1299,7 @@ class TestDailyFeaturesJoinCardinality:
                 [orb_min]
             )
         # orb_outcomes only has orb_minutes=5
-        con.execute("INSERT INTO orb_outcomes VALUES ('2024-01-05', 'MGC', 5, 0.5)")
+        con.execute("INSERT INTO orb_outcomes (trading_day, symbol, orb_minutes, pnl_r) VALUES ('2024-01-05', 'MGC', 5, 0.5)")
 
         # BAD join (missing orb_minutes): should return 3 rows (tripled)
         bad_count = con.execute("""

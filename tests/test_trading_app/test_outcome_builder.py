@@ -798,7 +798,7 @@ class TestTimeStop:
         assert "ts_exit_ts" in result
 
     def test_no_threshold_session_leaves_ts_null(self):
-        """Session with no time-stop (1100) -> ts_* = None."""
+        """Session with no time-stop (2300) -> ts_* = None."""
         orb_high, orb_low = 2700.0, 2690.0
         break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
         td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
@@ -812,7 +812,7 @@ class TestTimeStop:
             bars_df=bars, break_ts=break_ts, orb_high=orb_high, orb_low=orb_low,
             break_dir="long", rr_target=2.0, confirm_bars=1,
             trading_day_end=td_end, cost_spec=_cost(), entry_model="E1",
-            orb_label="1100",
+            orb_label="2300",
         )
         assert result["ts_outcome"] is None
         assert result["ts_pnl_r"] is None

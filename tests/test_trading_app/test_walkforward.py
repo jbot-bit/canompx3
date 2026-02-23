@@ -34,6 +34,10 @@ def _create_tables(con):
             pnl_r DOUBLE,
             mae_r DOUBLE,
             mfe_r DOUBLE,
+            ambiguous_bar BOOLEAN DEFAULT FALSE,
+            ts_outcome VARCHAR,
+            ts_pnl_r DOUBLE,
+            ts_exit_ts TIMESTAMPTZ,
             entry_price DOUBLE,
             stop_price DOUBLE
         )
@@ -54,7 +58,11 @@ def _insert_outcomes(con, rows):
     """Insert outcome rows (dicts with at minimum trading_day, outcome, pnl_r)."""
     for o in rows:
         con.execute(
-            "INSERT INTO orb_outcomes VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO orb_outcomes "
+            "(symbol, orb_minutes, orb_label, entry_model, rr_target, "
+            "confirm_bars, trading_day, outcome, pnl_r, mae_r, mfe_r, "
+            "entry_price, stop_price) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             [
                 o.get("symbol", "MGC"), o.get("orb_minutes", 5),
                 o.get("orb_label", "0900"), o.get("entry_model", "E1"),

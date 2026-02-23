@@ -659,20 +659,25 @@ TRADEABLE_INSTRUMENTS = ["MGC"]
 E3_RETRACE_WINDOW_MINUTES: int | None = 60  # Audit: 4/12 sessions show stale inflation >0.1R
 
 EARLY_EXIT_MINUTES: dict[str, int | None] = {
-    "0900": 15,
-    "1000": 30,
-    "1100": None,
+    # T80 = time by which 80% of winners hit target. Trades past T80 are net
+    # negative (P5b, BH FDR confirmed). At threshold: if MTM < 0, exit.
+    # Values from research/research_winner_speed.py (Feb 2026).
+    # Per-session (not per-instrument). Where instruments differ, uses max
+    # T80 (more patient) to avoid cutting slower instruments' winners.
+    "0900": 38,   # MGC T80=38m (N=908, avg_r_after=-0.300R)
+    "1000": 39,   # MGC T80=32m, MES T80=39m → use 39 (patient)
+    "1100": 31,   # MES T80=31m
     "1130": None,
-    "1800": 30,  # P5b: T80=36m, avg_r_after=-0.339R (worst dead-chop)
+    "1800": 36,   # MGC T80=36m (avg_r_after=-0.339R, worst dead-chop)
     "2300": None,
     "0030": None,
-    # Dynamic sessions: no early exit until validated
+    # Dynamic sessions: no T80 data yet
     "CME_OPEN": None,
     "US_EQUITY_OPEN": None,
     "US_DATA_OPEN": None,
     "LONDON_OPEN": None,
     "US_POST_EQUITY": None,
-    "CME_CLOSE": None,
+    "CME_CLOSE": 16,  # MES T80=16m (short session, fast-resolve)
 }
 
 # Session exit modes: how each session manages target/stop after entry.

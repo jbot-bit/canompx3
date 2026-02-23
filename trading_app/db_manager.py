@@ -82,6 +82,14 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 mae_r             DOUBLE,
                 mfe_r             DOUBLE,
 
+                -- Ambiguous bar (high AND low cross target AND stop)
+                ambiguous_bar     BOOLEAN DEFAULT FALSE,
+
+                -- Time-stop conditional outcomes (pre-computed by outcome_builder)
+                ts_outcome        TEXT,
+                ts_pnl_r          DOUBLE,
+                ts_exit_ts        TIMESTAMPTZ,
+
                 PRIMARY KEY (symbol, trading_day, orb_label, orb_minutes, rr_target, confirm_bars, entry_model),
                 FOREIGN KEY (symbol, trading_day, orb_minutes)
                     REFERENCES daily_features(symbol, trading_day, orb_minutes)

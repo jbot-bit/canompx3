@@ -93,7 +93,8 @@ class TestInitSchema:
             "trading_day", "symbol", "orb_label", "orb_minutes",
             "rr_target", "confirm_bars", "entry_model", "entry_ts",
             "entry_price", "stop_price", "target_price", "outcome",
-            "exit_ts", "exit_price", "pnl_r", "mae_r", "mfe_r"
+            "exit_ts", "exit_price", "pnl_r", "mae_r", "mfe_r",
+            "ambiguous_bar", "ts_outcome", "ts_pnl_r", "ts_exit_ts",
         }
         assert expected.issubset(col_names)
 
@@ -151,6 +152,8 @@ class TestVerifySchema:
                 outcome TEXT, exit_ts TIMESTAMPTZ,
                 exit_price DOUBLE, pnl_r DOUBLE,
                 mae_r DOUBLE, mfe_r DOUBLE,
+                ambiguous_bar BOOLEAN DEFAULT FALSE,
+                ts_outcome TEXT, ts_pnl_r DOUBLE, ts_exit_ts TIMESTAMPTZ,
                 PRIMARY KEY (symbol, trading_day, orb_label, orb_minutes, rr_target, confirm_bars, entry_model)
             )
         """)

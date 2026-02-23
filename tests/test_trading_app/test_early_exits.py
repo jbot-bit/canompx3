@@ -72,23 +72,29 @@ DAY_END = datetime(2024, 1, 16, 23, 0, tzinfo=timezone.utc)
 
 class TestEarlyExitConfig:
 
-    def test_0900_is_15_minutes(self):
-        assert EARLY_EXIT_MINUTES["0900"] == 15
+    def test_0900_t80(self):
+        """P5b: MGC T80=38m (N=908, avg_r_after=-0.300R)."""
+        assert EARLY_EXIT_MINUTES["0900"] == 38
 
-    def test_1000_is_30_minutes(self):
-        assert EARLY_EXIT_MINUTES["1000"] == 30
+    def test_1000_t80(self):
+        """P5b: MGC T80=32m, MES T80=39m → use 39 (patient)."""
+        assert EARLY_EXIT_MINUTES["1000"] == 39
 
-    def test_1800_is_30_minutes(self):
-        """P5b: T80=36m, avg_r_after=-0.339R (worst dead-chop penalty)."""
-        assert EARLY_EXIT_MINUTES["1800"] == 30
+    def test_1100_t80(self):
+        """P5b: MES T80=31m."""
+        assert EARLY_EXIT_MINUTES["1100"] == 31
+
+    def test_1800_t80(self):
+        """P5b: MGC T80=36m, avg_r_after=-0.339R (worst dead-chop penalty)."""
+        assert EARLY_EXIT_MINUTES["1800"] == 36
+
+    def test_cme_close_t80(self):
+        """P5b: MES T80=16m (short session, fast-resolve)."""
+        assert EARLY_EXIT_MINUTES["CME_CLOSE"] == 16
 
     def test_other_sessions_none(self):
         for label in ["2300", "0030"]:
             assert EARLY_EXIT_MINUTES[label] is None, f"{label} should be None"
-
-    def test_1100_has_no_early_exit(self):
-        """1100 has no early exit configured (no research basis yet)."""
-        assert EARLY_EXIT_MINUTES["1100"] is None
 
     def test_1130_has_no_early_exit(self):
         """1130 has no early exit configured."""
@@ -379,8 +385,8 @@ def _bar(ts, o, h, l, c, v=100):
 
 class TestExecutionEngineEarlyExit:
 
-    def test_early_exit_fires_at_15min_0900(self):
-        """0900 E1 trade losing at 15 min -> early_exit event."""
+    def test_early_exit_fires_at_t80_0900(self):
+        """0900 E1 trade losing at T80 (38m) -> early_exit event."""
         strategy = _make_strategy(orb_label="0900")
         portfolio = _make_portfolio(strategies=[strategy])
         engine = ExecutionEngine(portfolio, _cost(), live_session_costs=False)
@@ -403,15 +409,15 @@ class TestExecutionEngineEarlyExit:
         events = engine.on_bar(_bar(fill_ts, 2352, 2353, 2351, 2352))
         assert any(e.event_type == "ENTRY" for e in events)
 
-        # Feed bars for 15 minutes, gradually losing
-        for i in range(1, 20):
+        # Feed bars for 45 minutes (past T80=38m), gradually losing
+        for i in range(1, 45):
             ts = fill_ts + timedelta(minutes=i)
-            price = 2352.0 - i * 0.3  # drifting down
+            price = 2352.0 - i * 0.1  # drifting down slowly
             events = engine.on_bar(_bar(ts, price + 0.1, price + 0.3, price - 0.3, price))
             if any(e.event_type == "EXIT" and e.reason == "early_exit_timed" for e in events):
                 break
         else:
-            pytest.fail("Early exit event not fired within 20 bars")
+            pytest.fail("Early exit event not fired within 45 bars (T80=38m)")
 
         exit_event = [e for e in events if e.reason == "early_exit_timed"][0]
         assert exit_event.event_type == "EXIT"
@@ -500,9 +506,10 @@ class TestExecutionEngineEarlyExit:
         fill_ts = base + timedelta(minutes=6)
         engine.on_bar(_bar(fill_ts, 2352, 2353, 2351, 2352))
 
-        for i in range(1, 20):
+        # Feed bars past T80=38m, gradually losing (but not hitting stop)
+        for i in range(1, 45):
             ts = fill_ts + timedelta(minutes=i)
-            price = 2352.0 - i * 0.3
+            price = 2352.0 - i * 0.1  # slow drift, stays above stop
             engine.on_bar(_bar(ts, price + 0.1, price + 0.3, price - 0.3, price))
 
         # Check PnL on the completed trade

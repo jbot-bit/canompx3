@@ -55,6 +55,10 @@ def regime_db(tmp_path):
             pnl_r DOUBLE,
             mae_r DOUBLE,
             mfe_r DOUBLE,
+            ambiguous_bar BOOLEAN DEFAULT FALSE,
+            ts_outcome TEXT,
+            ts_pnl_r DOUBLE,
+            ts_exit_ts TIMESTAMPTZ,
             PRIMARY KEY (symbol, trading_day, orb_label, orb_minutes,
                          rr_target, confirm_bars, entry_model),
             FOREIGN KEY (symbol, trading_day, orb_minutes)
