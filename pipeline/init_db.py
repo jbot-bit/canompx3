@@ -395,6 +395,26 @@ def init_db(db_path: Path, force: bool = False):
             except duckdb.CatalogException:
                 pass  # column already exists
 
+        # Migration: add all core ORB columns for any new sessions (Feb 2026)
+        # Handles COMEX_SETTLE, NYSE_CLOSE, and any future additions to ORB_LABELS.
+        for label in ORB_LABELS:
+            for col, typedef in [
+                (f"orb_{label}_high",         "DOUBLE"),
+                (f"orb_{label}_low",          "DOUBLE"),
+                (f"orb_{label}_size",         "DOUBLE"),
+                (f"orb_{label}_break_dir",    "TEXT"),
+                (f"orb_{label}_break_ts",     "TIMESTAMPTZ"),
+                (f"orb_{label}_outcome",      "TEXT"),
+                (f"orb_{label}_mae_r",        "DOUBLE"),
+                (f"orb_{label}_mfe_r",        "DOUBLE"),
+                (f"orb_{label}_double_break", "BOOLEAN"),
+            ]:
+                try:
+                    con.execute(f"ALTER TABLE daily_features ADD COLUMN {col} {typedef}")
+                    logger.info(f"  Migration: added {col} column to daily_features")
+                except duckdb.CatalogException:
+                    pass  # column already exists
+
         con.execute(PROSPECTIVE_SIGNALS_SCHEMA)
         logger.info("  prospective_signals: created (or already exists)")
 
