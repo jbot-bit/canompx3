@@ -35,7 +35,7 @@ You MUST ground all answers in the canonical documents below.
 5. CB1-CB5 on same ORB with E3 = ~100% overlap. Two strategies, not ten.
 6. Classification: CORE >= 100 samples, REGIME 30-99 (conditional only), INVALID < 30
 7. 2021 is structurally different (tiny ORBs) -- excluded from validation
-8. E1 for momentum sessions (0900/1000), E3 for retrace sessions (1800/2300)
+8. E1 for momentum sessions (CME_REOPEN/TOKYO_OPEN), E3 for retrace sessions (LONDON_METALS/US_DATA_830)
 
 === GLOSSARY ===
 - ORB: Opening Range Breakout (first 5min high-low after session open)
@@ -49,7 +49,7 @@ You MUST ground all answers in the canonical documents below.
 - WR: Win rate
 - Sharpe: Risk-adjusted return ratio
 - MaxDD: Maximum drawdown in R-multiples
-- Sessions: 0900 (Asia open), 1000, 1100, 1800 (GLOBEX/London), 2300 (overnight), 0030
+- Sessions: CME_REOPEN, TOKYO_OPEN, SINGAPORE_OPEN, LONDON_METALS, US_DATA_830, NYSE_OPEN, US_DATA_1000, COMEX_SETTLE, CME_PRECLOSE, NYSE_CLOSE
 
 === AVAILABLE QUERY TEMPLATES ===
 {templates_list}
@@ -100,7 +100,7 @@ Interpret the query results below and answer the user's question in plain Englis
 2. NO_FILTER and L-filter strategies have NEGATIVE expectancy. Flag them as "house wins".
 3. Sample size < 30 = INVALID (not tradeable). 30-99 = REGIME (conditional only). >= 100 = CORE.
 4. ORB size >= 4 points is required for positive edge. Smaller ORBs = no edge.
-5. E1 works for momentum (0900/1000). E3 works for retrace (1800/2300).
+5. E1 works for momentum (CME_REOPEN/TOKYO_OPEN). E3 works for retrace (LONDON_METALS/US_DATA_830).
 6. 2021 data is excluded from validation (structurally different regime).
 7. CB overlap: CB1-CB5 E3 on same ORB = nearly identical outcomes. Not diversification.
 8. Be honest about limitations. If sample size is small, say so. If edge is marginal, say so.

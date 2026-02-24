@@ -284,7 +284,7 @@ def load_validated_strategies(
             WHERE vs.instrument = ?
               AND LOWER(vs.status) = 'active'
               AND vs.expectancy_r >= ?
-              AND vs.orb_label != '1100'
+              AND vs.orb_label != 'SINGAPORE_OPEN'
             ORDER BY vs.expectancy_r DESC
         """, [instrument, min_expectancy_r]).fetchall()
 
@@ -311,7 +311,7 @@ def load_validated_strategies(
                     WHERE nv.instrument = ?
                       AND LOWER(nv.status) = 'active'
                       AND nv.expectancy_r >= ?
-                      AND nv.orb_label != '1100'
+                      AND nv.orb_label != 'SINGAPORE_OPEN'
                     ORDER BY nv.expectancy_r DESC
                 """, [instrument, min_expectancy_r]).fetchall()
 

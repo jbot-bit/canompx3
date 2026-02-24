@@ -1,5 +1,5 @@
 """
-Deep 0900 Asia Session Analysis + Cross-Session Intelligence.
+Deep CME_REOPEN Asia Session Analysis + Cross-Session Intelligence.
 
 Standalone research script -- queries gold.db read-only and outputs
 a structured report to stdout + artifacts/asia_session_analysis_2025.txt.
@@ -55,12 +55,12 @@ def _pct(val, decimals=1):
     return f"{val * 100:.{decimals}f}%"
 
 # =========================================================================
-# SECTION A: 0900 2025 Regime Deep Dive
+# SECTION A: CME_REOPEN 2025 Regime Deep Dive
 # =========================================================================
 def section_a_regime_deep_dive(con, year: int) -> list[str]:
     lines = []
     lines.append("=" * 72)
-    lines.append(f"SECTION A: 0900 {year} Regime Deep Dive")
+    lines.append(f"SECTION A: CME_REOPEN {year} Regime Deep Dive")
     lines.append("=" * 72)
 
     # A1: Top regime strategies for 0900
@@ -72,7 +72,7 @@ def section_a_regime_deep_dive(con, year: int) -> list[str]:
                    filter_type, sample_size, win_rate,
                    expectancy_r, sharpe_ratio, max_drawdown_r
             FROM regime_strategies
-            WHERE orb_label = '0900'
+            WHERE orb_label = 'CME_REOPEN'
               AND expectancy_r IS NOT NULL
               AND sample_size >= 20
             ORDER BY expectancy_r DESC
@@ -104,12 +104,12 @@ def section_a_regime_deep_dive(con, year: int) -> list[str]:
                   ON o.trading_day = d.trading_day AND d.symbol = '{INSTRUMENT}'
                   AND d.orb_minutes = {ORB_MINUTES}
                 WHERE o.symbol = '{INSTRUMENT}'
-                  AND o.orb_label = '0900'
+                  AND o.orb_label = 'CME_REOPEN'
                   AND o.entry_model = 'E1'
                   AND o.confirm_bars = 2
                   AND o.rr_target = 2.5
-                  AND d.orb_0900_size >= 4.0
-                  AND UPPER(d.orb_0900_break_dir) = '{direction}'
+                  AND d.orb_CME_REOPEN_size >= 4.0
+                  AND UPPER(d.orb_CME_REOPEN_break_dir) = '{direction}'
                   {date_filter}
                 ORDER BY o.trading_day
             """).fetchall()
@@ -136,7 +136,7 @@ def section_a_regime_deep_dive(con, year: int) -> list[str]:
             row = con.execute(f"""
                 SELECT COUNT(*) FROM daily_features
                 WHERE symbol = '{INSTRUMENT}' AND orb_minutes = {ORB_MINUTES}
-                  AND orb_0900_size >= {lo} AND orb_0900_size < {hi}
+                  AND orb_CME_REOPEN_size >= {lo} AND orb_CME_REOPEN_size < {hi}
                   {date_filter}
             """).fetchone()
             counts.append((bkt, row[0]))
@@ -164,24 +164,24 @@ def section_b_cross_session(con, year: int) -> list[str]:
         SELECT
             o9.outcome AS o900_outcome,
             o10.outcome AS o1000_outcome,
-            CASE WHEN UPPER(d.orb_0900_break_dir) = UPPER(d.orb_1000_break_dir)
+            CASE WHEN UPPER(d.orb_CME_REOPEN_break_dir) = UPPER(d.orb_TOKYO_OPEN_break_dir)
                  THEN 'same' ELSE 'opposite' END AS dir_rel,
             COUNT(*) AS cnt
         FROM orb_outcomes o9
         JOIN orb_outcomes o10
           ON o9.trading_day = o10.trading_day AND o10.symbol = o9.symbol
-          AND o10.orb_label = '1000' AND o10.entry_model = 'E1'
+          AND o10.orb_label = 'TOKYO_OPEN' AND o10.entry_model = 'E1'
           AND o10.confirm_bars = 2 AND o10.rr_target = 2.5
         JOIN daily_features d
           ON o9.trading_day = d.trading_day AND d.symbol = '{INSTRUMENT}'
           AND d.orb_minutes = {ORB_MINUTES}
         WHERE o9.symbol = '{INSTRUMENT}'
-          AND o9.orb_label = '0900'
+          AND o9.orb_label = 'CME_REOPEN'
           AND o9.entry_model = 'E1'
           AND o9.confirm_bars = 2
           AND o9.rr_target = 2.5
-          AND d.orb_0900_size >= 4.0
-          AND d.orb_1000_size >= 4.0
+          AND d.orb_CME_REOPEN_size >= 4.0
+          AND d.orb_TOKYO_OPEN_size >= 4.0
           {date_filter}
         GROUP BY o9.outcome, o10.outcome, dir_rel
         ORDER BY o9.outcome, o10.outcome, dir_rel
@@ -202,20 +202,20 @@ def section_b_cross_session(con, year: int) -> list[str]:
             FROM orb_outcomes o9
             JOIN orb_outcomes o10
               ON o9.trading_day = o10.trading_day AND o10.symbol = o9.symbol
-              AND o10.orb_label = '1000' AND o10.entry_model = 'E1'
+              AND o10.orb_label = 'TOKYO_OPEN' AND o10.entry_model = 'E1'
               AND o10.confirm_bars = 2 AND o10.rr_target = 2.5
             JOIN daily_features d
               ON o9.trading_day = d.trading_day AND d.symbol = '{INSTRUMENT}'
               AND d.orb_minutes = {ORB_MINUTES}
             WHERE o9.symbol = '{INSTRUMENT}'
-              AND o9.orb_label = '0900'
+              AND o9.orb_label = 'CME_REOPEN'
               AND o9.entry_model = 'E1'
               AND o9.confirm_bars = 2
               AND o9.rr_target = 2.5
               AND o9.outcome = 'loss'
-              AND UPPER(d.orb_0900_break_dir) != UPPER(d.orb_1000_break_dir)
-              AND d.orb_0900_size >= 4.0
-              AND d.orb_1000_size >= 4.0
+              AND UPPER(d.orb_CME_REOPEN_break_dir) != UPPER(d.orb_TOKYO_OPEN_break_dir)
+              AND d.orb_CME_REOPEN_size >= 4.0
+              AND d.orb_TOKYO_OPEN_size >= 4.0
               {period_filter}
             GROUP BY o10.outcome
         """).fetchall()
@@ -232,24 +232,24 @@ def section_b_cross_session(con, year: int) -> list[str]:
         FROM orb_outcomes o9
         JOIN orb_outcomes o10
           ON o9.trading_day = o10.trading_day AND o10.symbol = o9.symbol
-          AND o10.orb_label = '1000' AND o10.entry_model = 'E1'
+          AND o10.orb_label = 'TOKYO_OPEN' AND o10.entry_model = 'E1'
           AND o10.confirm_bars = 2 AND o10.rr_target = 2.5
         JOIN orb_outcomes o11
           ON o9.trading_day = o11.trading_day AND o11.symbol = o9.symbol
-          AND o11.orb_label = '1100' AND o11.entry_model = 'E1'
+          AND o11.orb_label = 'SINGAPORE_OPEN' AND o11.entry_model = 'E1'
           AND o11.confirm_bars = 2 AND o11.rr_target = 2.5
         JOIN daily_features d
           ON o9.trading_day = d.trading_day AND d.symbol = '{INSTRUMENT}'
           AND d.orb_minutes = {ORB_MINUTES}
         WHERE o9.symbol = '{INSTRUMENT}'
-          AND o9.orb_label = '0900'
+          AND o9.orb_label = 'CME_REOPEN'
           AND o9.entry_model = 'E1'
           AND o9.confirm_bars = 2
           AND o9.rr_target = 2.5
           AND o9.outcome = 'loss'
           AND o10.outcome = 'loss'
-          AND d.orb_0900_size >= 4.0
-          AND d.orb_1000_size >= 4.0
+          AND d.orb_CME_REOPEN_size >= 4.0
+          AND d.orb_TOKYO_OPEN_size >= 4.0
           {date_filter}
         GROUP BY o11.outcome
     """).fetchall()
@@ -282,12 +282,12 @@ def section_c_mfe_analysis(con, year: int) -> list[str]:
               ON o.trading_day = d.trading_day AND d.symbol = '{INSTRUMENT}'
               AND d.orb_minutes = {ORB_MINUTES}
             WHERE o.symbol = '{INSTRUMENT}'
-              AND o.orb_label = '0900'
+              AND o.orb_label = 'CME_REOPEN'
               AND o.entry_model = 'E1'
               AND o.confirm_bars = 2
               AND o.rr_target = {rr}
               AND o.outcome = 'loss'
-              AND d.orb_0900_size >= 4.0
+              AND d.orb_CME_REOPEN_size >= 4.0
               AND o.mfe_r IS NOT NULL
               {date_filter}
         """).fetchall()
@@ -314,13 +314,13 @@ def section_c_mfe_analysis(con, year: int) -> list[str]:
               ON o.trading_day = d.trading_day AND d.symbol = '{INSTRUMENT}'
               AND d.orb_minutes = {ORB_MINUTES}
             WHERE o.symbol = '{INSTRUMENT}'
-              AND o.orb_label = '0900'
+              AND o.orb_label = 'CME_REOPEN'
               AND o.entry_model = 'E1'
               AND o.confirm_bars = 2
               AND o.rr_target = 2.5
               AND o.outcome = 'loss'
-              AND d.orb_0900_size >= 4.0
-              AND UPPER(d.orb_0900_break_dir) = '{direction}'
+              AND d.orb_CME_REOPEN_size >= 4.0
+              AND UPPER(d.orb_CME_REOPEN_break_dir) = '{direction}'
               AND o.mfe_r IS NOT NULL
               {date_filter}
         """).fetchall()
@@ -347,12 +347,12 @@ def section_c_mfe_analysis(con, year: int) -> list[str]:
               ON o.trading_day = d.trading_day AND d.symbol = '{INSTRUMENT}'
               AND d.orb_minutes = {ORB_MINUTES}
             WHERE o.symbol = '{INSTRUMENT}'
-              AND o.orb_label = '0900'
+              AND o.orb_label = 'CME_REOPEN'
               AND o.entry_model = 'E1'
               AND o.confirm_bars = 2
               AND o.rr_target = {rr}
               AND o.outcome = 'loss'
-              AND d.orb_0900_size >= 4.0
+              AND d.orb_CME_REOPEN_size >= 4.0
               AND o.mfe_r IS NOT NULL
               {date_filter}
         """).fetchall()
@@ -388,7 +388,7 @@ def section_d_direction_grid(con, year: int) -> list[str]:
     for rr in [2.0, 2.5, 3.0]:
         for min_size, flabel in [(4.0, "G4+"), (6.0, "G6+")]:
             for direction, dlabel in [(None, "both"), ("LONG", "LONG"), ("SHORT", "SHORT")]:
-                dir_clause = f"AND UPPER(d.orb_0900_break_dir) = '{direction}'" if direction else ""
+                dir_clause = f"AND UPPER(d.orb_CME_REOPEN_break_dir) = '{direction}'" if direction else ""
                 outcomes = con.execute(f"""
                     SELECT o.trading_day, o.outcome, o.pnl_r,
                            o.entry_price, o.stop_price
@@ -397,11 +397,11 @@ def section_d_direction_grid(con, year: int) -> list[str]:
                       ON o.trading_day = d.trading_day AND d.symbol = '{INSTRUMENT}'
                       AND d.orb_minutes = {ORB_MINUTES}
                     WHERE o.symbol = '{INSTRUMENT}'
-                      AND o.orb_label = '0900'
+                      AND o.orb_label = 'CME_REOPEN'
                       AND o.entry_model = 'E1'
                       AND o.confirm_bars = 2
                       AND o.rr_target = {rr}
-                      AND d.orb_0900_size >= {min_size}
+                      AND d.orb_CME_REOPEN_size >= {min_size}
                       {dir_clause}
                       {date_filter}
                     ORDER BY o.trading_day
@@ -438,12 +438,12 @@ def section_d_direction_grid(con, year: int) -> list[str]:
               ON o.trading_day = d.trading_day AND d.symbol = '{INSTRUMENT}'
               AND d.orb_minutes = {ORB_MINUTES}
             WHERE o.symbol = '{INSTRUMENT}'
-              AND o.orb_label = '0900'
+              AND o.orb_label = 'CME_REOPEN'
               AND o.entry_model = 'E3'
               AND o.confirm_bars = 2
               AND o.rr_target = {rr}
-              AND d.orb_0900_size >= 6.0
-              AND UPPER(d.orb_0900_break_dir) = 'LONG'
+              AND d.orb_CME_REOPEN_size >= 6.0
+              AND UPPER(d.orb_CME_REOPEN_break_dir) = 'LONG'
               {date_filter}
         """).fetchall()
         n = len(outcomes)
@@ -479,19 +479,19 @@ def section_e_reversal_trades(con, year: int) -> list[str]:
                 FROM orb_outcomes o9
                 JOIN orb_outcomes o10
                   ON o9.trading_day = o10.trading_day AND o10.symbol = o9.symbol
-                  AND o10.orb_label = '1000' AND o10.entry_model = 'E1'
+                  AND o10.orb_label = 'TOKYO_OPEN' AND o10.entry_model = 'E1'
                   AND o10.confirm_bars = 2 AND o10.rr_target = {rr_1000}
                 JOIN daily_features d
                   ON o9.trading_day = d.trading_day AND d.symbol = '{INSTRUMENT}'
                   AND d.orb_minutes = {ORB_MINUTES}
                 WHERE o9.symbol = '{INSTRUMENT}'
-                  AND o9.orb_label = '0900'
+                  AND o9.orb_label = 'CME_REOPEN'
                   AND o9.entry_model = 'E1'
                   AND o9.confirm_bars = 2
                   AND o9.rr_target = 2.5
                   AND o9.outcome = '{o900_cond}'
-                  AND d.orb_0900_size >= 4.0
-                  AND d.orb_1000_size >= 4.0
+                  AND d.orb_CME_REOPEN_size >= 4.0
+                  AND d.orb_TOKYO_OPEN_size >= 4.0
                   {date_filter}
             """).fetchall()
             n = len(cond_rows)
@@ -515,20 +515,20 @@ def section_e_reversal_trades(con, year: int) -> list[str]:
                 FROM orb_outcomes o9
                 JOIN orb_outcomes o10
                   ON o9.trading_day = o10.trading_day AND o10.symbol = o9.symbol
-                  AND o10.orb_label = '1000' AND o10.entry_model = 'E1'
+                  AND o10.orb_label = 'TOKYO_OPEN' AND o10.entry_model = 'E1'
                   AND o10.confirm_bars = {cb} AND o10.rr_target = {rr}
                 JOIN daily_features d
                   ON o9.trading_day = d.trading_day AND d.symbol = '{INSTRUMENT}'
                   AND d.orb_minutes = {ORB_MINUTES}
                 WHERE o9.symbol = '{INSTRUMENT}'
-                  AND o9.orb_label = '0900'
+                  AND o9.orb_label = 'CME_REOPEN'
                   AND o9.entry_model = 'E1'
                   AND o9.confirm_bars = 2
                   AND o9.rr_target = 2.5
                   AND o9.outcome = 'loss'
-                  AND UPPER(d.orb_0900_break_dir) != UPPER(d.orb_1000_break_dir)
-                  AND d.orb_0900_size >= 4.0
-                  AND d.orb_1000_size >= 4.0
+                  AND UPPER(d.orb_CME_REOPEN_break_dir) != UPPER(d.orb_TOKYO_OPEN_break_dir)
+                  AND d.orb_CME_REOPEN_size >= 4.0
+                  AND d.orb_TOKYO_OPEN_size >= 4.0
                   {date_filter}
             """).fetchall()
             n = len(rev_rows)
@@ -549,24 +549,24 @@ def section_e_reversal_trades(con, year: int) -> list[str]:
                 FROM orb_outcomes o9
                 JOIN orb_outcomes o10
                   ON o9.trading_day = o10.trading_day AND o10.symbol = o9.symbol
-                  AND o10.orb_label = '1000' AND o10.entry_model = 'E1'
+                  AND o10.orb_label = 'TOKYO_OPEN' AND o10.entry_model = 'E1'
                   AND o10.confirm_bars = 2 AND o10.rr_target = 2.5
                 JOIN orb_outcomes o11
                   ON o9.trading_day = o11.trading_day AND o11.symbol = o9.symbol
-                  AND o11.orb_label = '1100' AND o11.entry_model = 'E1'
+                  AND o11.orb_label = 'SINGAPORE_OPEN' AND o11.entry_model = 'E1'
                   AND o11.confirm_bars = 2 AND o11.rr_target = {rr}
                 JOIN daily_features d
                   ON o9.trading_day = d.trading_day AND d.symbol = '{INSTRUMENT}'
                   AND d.orb_minutes = {ORB_MINUTES}
                 WHERE o9.symbol = '{INSTRUMENT}'
-                  AND o9.orb_label = '0900'
+                  AND o9.orb_label = 'CME_REOPEN'
                   AND o9.entry_model = 'E1'
                   AND o9.confirm_bars = 2
                   AND o9.rr_target = 2.5
                   AND o9.outcome = 'loss'
                   AND o10.outcome = 'loss'
-                  AND d.orb_0900_size >= 4.0
-                  AND d.orb_1000_size >= 4.0
+                  AND d.orb_CME_REOPEN_size >= 4.0
+                  AND d.orb_TOKYO_OPEN_size >= 4.0
                   {pf}
             """).fetchall()
             n = len(chop_rows)
@@ -616,7 +616,7 @@ def run_analysis(year: int = DEFAULT_YEAR, db_path: Path | None = None) -> str:
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="Deep 0900 Asia Session Analysis")
+    parser = argparse.ArgumentParser(description="Deep CME_REOPEN Asia Session Analysis")
     parser.add_argument("--year", type=int, default=DEFAULT_YEAR,
                         help=f"Focus year (default: {DEFAULT_YEAR})")
     parser.add_argument("--db-path", type=str, default=None,
