@@ -142,3 +142,39 @@ SURVIVED SCRUTINY / DID NOT SURVIVE / CAVEATS / NEXT STEPS format.
 
 **Conservative estimate:** ~500-800 valid tests after filtering sessions with insufficient data.
 **BH FDR at 0.05:** With 700 tests, expect ~35 false positives. Need p < 0.007 to survive FDR.
+
+---
+
+## Results (2026-02-24)
+
+### Phase 1: Daily-Level Strategies
+- **Script:** `research/research_non_orb_daily.py`
+- **Tests:** 157 valid (N>=30)
+- **FDR survivors:** 0
+- Multi-Day Momentum: uniformly negative across all instruments
+- Vol Expansion Fade: best signal MES ATR>1.8 (N=35, p=0.009) but REGIME-only and not FDR-significant
+- Cross-Instrument Vol: promising direction (MGC→M2K) but not FDR-significant
+
+### Phase 2: Intraday Strategies (1m bar scanning)
+- **Script:** `research/research_non_orb_intraday.py`
+- **Tests:** 383 valid (N>=30), 756 total
+- **FDR survivors:** 0
+- **Runtime:** 17.8 minutes across 7 instruments
+- Failed Breakout Fade: uniformly negative (avg -0.28R). Confirms ORB momentum is real.
+- Late-Session Reversal: barely triggers. Only 14 tests reached N>=30.
+- VWAP Reversion: confirmed ANTI-EDGE. p=1.0 everywhere (168 tests). Fading VWAP systematically loses.
+
+### Combined Results
+- **540 valid tests across 6 archetypes × 7 instruments**
+- **0 FDR survivors**
+- **Verdict: DID NOT SURVIVE SCRUTINY**
+
+### Key Findings
+1. ORB breakout momentum is REAL — fading failed breaks is systematically negative (-0.28R avg)
+2. Micro futures TREND during sessions — VWAP reversion is an anti-edge (p=1.0)
+3. Gold is the worst for mean reversion (strongest trending behavior)
+4. Multi-day momentum doesn't work at 1-5 day holds with ATR stops
+5. Only SIL 0030 Failed Breakout Fade showed weak positive signal (+0.22R, N=34, p=0.14) — needs 3+ years
+
+### Conclusion
+The ORB breakout system is the correct strategy class for these instruments. Diversification should come from ORB session/configuration expansion, portfolio construction, and regime overlays — not from mean-reversion alternatives.

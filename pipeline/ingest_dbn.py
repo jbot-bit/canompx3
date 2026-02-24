@@ -28,11 +28,12 @@ Options:
     --batch-size N        Rows per DBN read batch (default: 50000)
 """
 
+import re
 import sys
 import argparse
 import traceback
 from pathlib import Path
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 import duckdb
 import databento as db
@@ -58,6 +59,53 @@ logger = get_logger(__name__)
 
 # Checkpoint directory (shared, files are named per-source)
 CHECKPOINT_DIR = Path(__file__).parent / "checkpoints"
+
+
+def _parse_dbn_filename_date(filepath: Path) -> date | None:
+    """Extract date from Databento filename like glbx-mdp3-20210204.ohlcv-1m.dbn.zst."""
+    m = re.search(r'(\d{8})', filepath.name)
+    if m:
+        try:
+            return date(int(m.group(1)[:4]), int(m.group(1)[4:6]), int(m.group(1)[6:8]))
+        except ValueError:
+            return None
+    return None
+
+
+def iter_dbn_chunks(dbn_path: Path, batch_size: int, start_filter: date | None = None, end_filter: date | None = None):
+    """
+    Yield DataFrames from either a single DBN file or a directory of daily files.
+
+    For directories: iterates over .dbn.zst files sorted by filename date,
+    skipping files entirely outside the [start_filter, end_filter] range.
+    """
+    if dbn_path.is_dir():
+        dbn_files = sorted(dbn_path.glob("*.dbn.zst"))
+        if not dbn_files:
+            logger.warning(f"FATAL: No .dbn.zst files found in {dbn_path}")
+            sys.exit(1)
+
+        logger.info(f"Directory mode: {len(dbn_files)} .dbn.zst files")
+
+        for i, f in enumerate(dbn_files):
+            # Fast-skip files outside date range using filename date
+            file_date = _parse_dbn_filename_date(f)
+            if file_date:
+                if start_filter and file_date < start_filter - timedelta(days=1):
+                    continue
+                if end_filter and file_date > end_filter + timedelta(days=1):
+                    continue
+
+            store = db.DBNStore.from_file(f)
+            for chunk_df in store.to_df(count=batch_size):
+                yield chunk_df
+
+            if (i + 1) % 100 == 0:
+                logger.info(f"  Directory progress: {i + 1}/{len(dbn_files)} files processed")
+    else:
+        store = db.DBNStore.from_file(dbn_path)
+        for chunk_df in store.to_df(count=batch_size):
+            yield chunk_df
 
 def main():
     parser = argparse.ArgumentParser(
@@ -115,31 +163,52 @@ def main():
     logger.info(f"  Batch size: {args.batch_size}")
 
     # =========================================================================
-    # VERIFY DBN FILE EXISTS (already checked by get_asset_config, belt+suspenders)
+    # VERIFY DBN FILE/DIRECTORY EXISTS (already checked by get_asset_config, belt+suspenders)
     # =========================================================================
     if not dbn_path.exists():
-        logger.warning(f"FATAL: DBN file not found: {dbn_path}")
+        logger.warning(f"FATAL: DBN path not found: {dbn_path}")
         sys.exit(1)
 
-    file_size_gb = dbn_path.stat().st_size / (1024**3)
-    logger.info(f"DBN file size: {file_size_gb:.2f} GB")
+    is_directory = dbn_path.is_dir()
 
-    # =========================================================================
-    # OPEN DBN AND VERIFY SCHEMA (FAIL-CLOSED)
-    # =========================================================================
-    logger.info("Opening DBN file...")
-    store = db.DBNStore.from_file(dbn_path)
+    if is_directory:
+        dbn_files = sorted(dbn_path.glob("*.dbn.zst"))
+        if not dbn_files:
+            logger.warning(f"FATAL: No .dbn.zst files in directory: {dbn_path}")
+            sys.exit(1)
+        total_size_gb = sum(f.stat().st_size for f in dbn_files) / (1024**3)
+        logger.info(f"DBN directory: {len(dbn_files)} files, {total_size_gb:.2f} GB total")
 
-    logger.info(f"  Schema: {store.schema}")
-    logger.info(f"  Dataset: {store.dataset}")
-    logger.info(f"  Date range: {store.start} to {store.end}")
+        # Verify schema from first file
+        logger.info("Verifying schema from first file...")
+        test_store = db.DBNStore.from_file(dbn_files[0])
+        logger.info(f"  Schema: {test_store.schema}")
+        logger.info(f"  Dataset: {test_store.dataset}")
+        first_date = _parse_dbn_filename_date(dbn_files[0])
+        last_date = _parse_dbn_filename_date(dbn_files[-1])
+        logger.info(f"  File date range: {first_date} to {last_date}")
 
-    if store.schema != schema_required:
-        logger.warning(f"FATAL: DBN schema is '{store.schema}', expected '{schema_required}'")
-        logger.warning("ABORT: Schema verification failed (FAIL-CLOSED)")
-        sys.exit(1)
+        if test_store.schema != schema_required:
+            logger.warning(f"FATAL: DBN schema is '{test_store.schema}', expected '{schema_required}'")
+            logger.warning("ABORT: Schema verification failed (FAIL-CLOSED)")
+            sys.exit(1)
+        logger.info(f"  Schema verified: {schema_required} [OK]")
+    else:
+        file_size_gb = dbn_path.stat().st_size / (1024**3)
+        logger.info(f"DBN file size: {file_size_gb:.2f} GB")
 
-    logger.info(f"  Schema verified: {schema_required} [OK]")
+        logger.info("Opening DBN file...")
+        store = db.DBNStore.from_file(dbn_path)
+
+        logger.info(f"  Schema: {store.schema}")
+        logger.info(f"  Dataset: {store.dataset}")
+        logger.info(f"  Date range: {store.start} to {store.end}")
+
+        if store.schema != schema_required:
+            logger.warning(f"FATAL: DBN schema is '{store.schema}', expected '{schema_required}'")
+            logger.warning("ABORT: Schema verification failed (FAIL-CLOSED)")
+            sys.exit(1)
+        logger.info(f"  Schema verified: {schema_required} [OK]")
 
     # =========================================================================
     # INITIALIZE CHECKPOINT MANAGER
@@ -203,7 +272,7 @@ def main():
     batch_num = 0
     skipped_batches = 0
 
-    for chunk_df in store.to_df(count=args.batch_size):
+    for chunk_df in iter_dbn_chunks(dbn_path, args.batch_size, start_filter, end_filter):
         batch_num += 1
 
         chunk_df = chunk_df.reset_index()

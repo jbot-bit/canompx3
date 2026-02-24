@@ -143,13 +143,19 @@ ASSET_CONFIGS = {
         ],
     },
     "NQ": {
-        "dbn_path": None,
-        "symbol": "NQ",
+        # Source data: NQ (E-mini Nasdaq-100, $20/pt) for 2021-2024 backfill.
+        # Same price as MNQ on same exchange. Stored as symbol='MNQ', source_symbol='NQH22' etc.
+        # Identical pattern to GC→MGC, ES→MES, RTY→M2K.
+        "dbn_path": PROJECT_ROOT / "DB" / "NQ_DB_2021-2024",
+        "symbol": "MNQ",
         "outright_pattern": re.compile(r'^NQ[FGHJKMNQUVXZ]\d{1,2}$'),
         "prefix_len": 2,
-        "minimum_start_date": None,
+        "minimum_start_date": date(2021, 2, 4),
         "schema_required": "ohlcv-1m",
-        "enabled_sessions": [],
+        "enabled_sessions": [
+            "0900", "1000", "1100", "0030",
+            "CME_OPEN", "LONDON_OPEN", "US_EQUITY_OPEN", "US_POST_EQUITY", "CME_CLOSE",
+        ],
     },
 }
 
