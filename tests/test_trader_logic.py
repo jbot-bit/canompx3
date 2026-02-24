@@ -720,23 +720,23 @@ class TestRandomOutcomeMath:
             rows = con.execute(
                 "SELECT o.trading_day, o.orb_label, o.entry_model, o.entry_price, "
                 "o.stop_price, o.outcome, "
-                "d.orb_0900_high, d.orb_0900_low, "
-                "d.orb_1000_high, d.orb_1000_low, "
-                "d.orb_1800_high, d.orb_1800_low, "
-                "d.orb_2300_high, d.orb_2300_low "
+                "d.orb_CME_REOPEN_high, d.orb_CME_REOPEN_low, "
+                "d.orb_TOKYO_OPEN_high, d.orb_TOKYO_OPEN_low, "
+                "d.orb_LONDON_METALS_high, d.orb_LONDON_METALS_low, "
+                "d.orb_US_DATA_830_high, d.orb_US_DATA_830_low "
                 "FROM orb_outcomes o "
                 "JOIN daily_features d ON o.trading_day = d.trading_day "
                 "  AND o.symbol = d.symbol AND o.orb_minutes = d.orb_minutes "
                 "WHERE o.symbol = 'MGC' AND o.outcome IN ('win','loss') "
-                "  AND o.orb_label IN ('0900','1000','1800','2300') "
+                "  AND o.orb_label IN ('CME_REOPEN','TOKYO_OPEN','LONDON_METALS','US_DATA_830') "
                 "ORDER BY o.trading_day, o.orb_label, o.entry_model LIMIT 50"
             ).fetchall()
             cols = ["trading_day", "orb_label", "entry_model", "entry_price",
                     "stop_price", "outcome",
-                    "orb_0900_high", "orb_0900_low",
-                    "orb_1000_high", "orb_1000_low",
-                    "orb_1800_high", "orb_1800_low",
-                    "orb_2300_high", "orb_2300_low"]
+                    "orb_CME_REOPEN_high", "orb_CME_REOPEN_low",
+                    "orb_TOKYO_OPEN_high", "orb_TOKYO_OPEN_low",
+                    "orb_LONDON_METALS_high", "orb_LONDON_METALS_low",
+                    "orb_US_DATA_830_high", "orb_US_DATA_830_low"]
             for r in [dict(zip(cols, row)) for row in rows]:
                 orb = r["orb_label"]
                 orb_high = r[f"orb_{orb}_high"]
@@ -765,23 +765,23 @@ class TestRandomOutcomeMath:
         try:
             rows = con.execute(
                 "SELECT o.trading_day, o.orb_label, o.entry_price, o.stop_price, "
-                "d.orb_0900_high, d.orb_0900_low, "
-                "d.orb_1000_high, d.orb_1000_low, "
-                "d.orb_1800_high, d.orb_1800_low, "
-                "d.orb_2300_high, d.orb_2300_low "
+                "d.orb_CME_REOPEN_high, d.orb_CME_REOPEN_low, "
+                "d.orb_TOKYO_OPEN_high, d.orb_TOKYO_OPEN_low, "
+                "d.orb_LONDON_METALS_high, d.orb_LONDON_METALS_low, "
+                "d.orb_US_DATA_830_high, d.orb_US_DATA_830_low "
                 "FROM orb_outcomes o "
                 "JOIN daily_features d ON o.trading_day = d.trading_day "
                 "  AND o.symbol = d.symbol AND o.orb_minutes = d.orb_minutes "
                 "WHERE o.symbol = 'MGC' AND o.entry_model = 'E1' "
                 "  AND o.outcome IN ('win','loss') "
-                "  AND o.orb_label IN ('0900','1000','1800','2300') "
+                "  AND o.orb_label IN ('CME_REOPEN','TOKYO_OPEN','LONDON_METALS','US_DATA_830') "
                 "ORDER BY o.trading_day, o.orb_label LIMIT 50"
             ).fetchall()
             cols = ["trading_day", "orb_label", "entry_price", "stop_price",
-                    "orb_0900_high", "orb_0900_low",
-                    "orb_1000_high", "orb_1000_low",
-                    "orb_1800_high", "orb_1800_low",
-                    "orb_2300_high", "orb_2300_low"]
+                    "orb_CME_REOPEN_high", "orb_CME_REOPEN_low",
+                    "orb_TOKYO_OPEN_high", "orb_TOKYO_OPEN_low",
+                    "orb_LONDON_METALS_high", "orb_LONDON_METALS_low",
+                    "orb_US_DATA_830_high", "orb_US_DATA_830_low"]
             for r in [dict(zip(cols, row)) for row in rows]:
                 orb = r["orb_label"]
                 orb_high = r[f"orb_{orb}_high"]
@@ -811,23 +811,23 @@ class TestRandomOutcomeMath:
         try:
             rows = con.execute(
                 "SELECT o.trading_day, o.orb_label, o.entry_price, o.stop_price, "
-                "d.orb_0900_high, d.orb_0900_low, "
-                "d.orb_1000_high, d.orb_1000_low, "
-                "d.orb_1800_high, d.orb_1800_low, "
-                "d.orb_2300_high, d.orb_2300_low "
+                "d.orb_CME_REOPEN_high, d.orb_CME_REOPEN_low, "
+                "d.orb_TOKYO_OPEN_high, d.orb_TOKYO_OPEN_low, "
+                "d.orb_LONDON_METALS_high, d.orb_LONDON_METALS_low, "
+                "d.orb_US_DATA_830_high, d.orb_US_DATA_830_low "
                 "FROM orb_outcomes o "
                 "JOIN daily_features d ON o.trading_day = d.trading_day "
                 "  AND o.symbol = d.symbol AND o.orb_minutes = d.orb_minutes "
                 "WHERE o.symbol = 'MGC' AND o.entry_model = 'E3' "
                 "  AND o.outcome IN ('win','loss') "
-                "  AND o.orb_label IN ('0900','1000','1800','2300') "
+                "  AND o.orb_label IN ('CME_REOPEN','TOKYO_OPEN','LONDON_METALS','US_DATA_830') "
                 "ORDER BY o.trading_day, o.orb_label LIMIT 50"
             ).fetchall()
             cols = ["trading_day", "orb_label", "entry_price", "stop_price",
-                    "orb_0900_high", "orb_0900_low",
-                    "orb_1000_high", "orb_1000_low",
-                    "orb_1800_high", "orb_1800_low",
-                    "orb_2300_high", "orb_2300_low"]
+                    "orb_CME_REOPEN_high", "orb_CME_REOPEN_low",
+                    "orb_TOKYO_OPEN_high", "orb_TOKYO_OPEN_low",
+                    "orb_LONDON_METALS_high", "orb_LONDON_METALS_low",
+                    "orb_US_DATA_830_high", "orb_US_DATA_830_low"]
             for r in [dict(zip(cols, row)) for row in rows]:
                 orb = r["orb_label"]
                 orb_high = r[f"orb_{orb}_high"]
