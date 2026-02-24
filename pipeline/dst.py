@@ -79,7 +79,8 @@ DST_AFFECTED_SESSIONS = {
 # Sessions NOT affected (Asia has no DST; dynamic sessions self-adjust)
 DST_CLEAN_SESSIONS = {"1000", "1100", "1130",
                        "CME_OPEN", "LONDON_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN",
-                       "US_POST_EQUITY", "CME_CLOSE"}
+                       "US_POST_EQUITY", "CME_CLOSE",
+                       "COMEX_SETTLE", "NYSE_CLOSE"}
 
 
 # =========================================================================
@@ -266,6 +267,32 @@ def cme_close_brisbane(trading_day: date) -> tuple[int, int]:
     return (bris.hour, bris.minute)
 
 
+def comex_settle_brisbane(trading_day: date) -> tuple[int, int]:
+    """COMEX gold settlement (01:30 PM ET) in Brisbane local time.
+
+    Returns (hour, minute) in Australia/Brisbane.
+      Summer (EDT): 01:30 PM ET = 17:30 UTC = 03:30 AEST (next cal day)
+      Winter (EST): 01:30 PM ET = 18:30 UTC = 04:30 AEST (next cal day)
+    """
+    et_settle = datetime(trading_day.year, trading_day.month, trading_day.day,
+                         13, 30, 0, tzinfo=_US_EASTERN)
+    bris = et_settle.astimezone(_BRISBANE)
+    return (bris.hour, bris.minute)
+
+
+def nyse_close_brisbane(trading_day: date) -> tuple[int, int]:
+    """NYSE closing bell (04:00 PM ET) in Brisbane local time.
+
+    Returns (hour, minute) in Australia/Brisbane.
+      Summer (EDT): 04:00 PM ET = 20:00 UTC = 06:00 AEST (next cal day)
+      Winter (EST): 04:00 PM ET = 21:00 UTC = 07:00 AEST (next cal day)
+    """
+    et_close = datetime(trading_day.year, trading_day.month, trading_day.day,
+                        16, 0, 0, tzinfo=_US_EASTERN)
+    bris = et_close.astimezone(_BRISBANE)
+    return (bris.hour, bris.minute)
+
+
 # =========================================================================
 # SESSION CATALOG: master registry of all ORB sessions
 # =========================================================================
@@ -311,6 +338,18 @@ SESSION_CATALOG = {
         "resolver": cme_close_brisbane,
         "break_group": "us",
         "event": "CME equity futures pre-close 2:45 PM CT",
+    },
+    "COMEX_SETTLE": {
+        "type": "dynamic",
+        "resolver": comex_settle_brisbane,
+        "break_group": "us",
+        "event": "COMEX gold settlement 1:30 PM ET",
+    },
+    "NYSE_CLOSE": {
+        "type": "dynamic",
+        "resolver": nyse_close_brisbane,
+        "break_group": "us",
+        "event": "NYSE closing bell 4:00 PM ET",
     },
     # Fixed sessions (constant UTC, no DST)
     #

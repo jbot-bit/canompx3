@@ -1,0 +1,23 @@
+{
+  "planPath": "docs/plans/2026-02-24-session-architecture-overhaul-plan.md",
+  "tasks": [
+    {"id": 1, "subject": "Task 1: Add COMEX_SETTLE and NYSE_CLOSE resolver functions", "status": "pending", "phase": 1},
+    {"id": 2, "subject": "Task 2: Add US_DATA_1000 resolver function", "status": "pending", "phase": 1, "blockedBy": [1]},
+    {"id": 3, "subject": "Task 3: Register new sessions in SESSION_CATALOG", "status": "pending", "phase": 1, "blockedBy": [1, 2]},
+    {"id": 4, "subject": "Task 4: Add new ORB columns to build_daily_features.py", "status": "pending", "phase": 1, "blockedBy": [3]},
+    {"id": 5, "subject": "Task 5: Add new sessions to outcome_builder.py", "status": "pending", "phase": 1, "blockedBy": [4]},
+    {"id": 6, "subject": "Task 6: Rebuild daily_features and outcomes for new sessions", "status": "pending", "phase": 1, "blockedBy": [5]},
+    {"id": 7, "subject": "Task 7: Run discovery + validation on new sessions", "status": "pending", "phase": 1, "blockedBy": [6]},
+    {"id": 8, "subject": "Task 8: Summer comparison — fixed vs dynamic performance", "status": "pending", "phase": 2, "blockedBy": [7]},
+    {"id": 9, "subject": "Task 9: Create migration script for DB tables", "status": "pending", "phase": 3, "blockedBy": [8]},
+    {"id": 10, "subject": "Task 10: Update SESSION_CATALOG to event-based names", "status": "pending", "phase": 3, "blockedBy": [9]},
+    {"id": 11, "subject": "Task 11: Update config.py session references", "status": "pending", "phase": 3, "blockedBy": [10]},
+    {"id": 12, "subject": "Task 12: Update build_daily_features.py column names", "status": "pending", "phase": 3, "blockedBy": [10]},
+    {"id": 13, "subject": "Task 13: Run migration script", "status": "pending", "phase": 3, "blockedBy": [9, 10, 11, 12]},
+    {"id": 14, "subject": "Task 14: Full rebuild — outcomes, discovery, validation", "status": "pending", "phase": 3, "blockedBy": [13]},
+    {"id": 15, "subject": "Task 15: Build edge families with new names", "status": "pending", "phase": 3, "blockedBy": [14]},
+    {"id": 16, "subject": "Task 16: Update docs (PROP_PLAYS, TRADING_RULES, REPO_MAP)", "status": "pending", "phase": 4, "blockedBy": [15]},
+    {"id": 17, "subject": "Task 17: Final validation — drift checks, tests, cleanup", "status": "pending", "phase": 4, "blockedBy": [16]}
+  ],
+  "lastUpdated": "2026-02-24T22:50:00+10:00"
+}

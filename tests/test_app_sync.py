@@ -60,7 +60,7 @@ class TestOrbLabelsSync:
     EXPECTED_ORB_LABELS = [
         "0900", "1000", "1100", "1130", "1800", "2300", "0030",
         "CME_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "LONDON_OPEN", "US_POST_EQUITY",
-        "CME_CLOSE",
+        "CME_CLOSE", "COMEX_SETTLE", "NYSE_CLOSE",
     ]
 
     def test_orb_labels_exact(self):
@@ -288,16 +288,16 @@ class TestGridParamsSync:
         Session-specific DOW composites are added by get_filters_for_grid()
         per-session, expanding the grid contextually.
 
-        13 ORBs x 6 RRs x 5 CBs x 6 base filters = 2340 (E0, all CB options)
-        13 ORBs x 6 RRs x 5 CBs x 6 base filters = 2340 (E1, all CB options)
-        13 ORBs x 6 RRs x 1 CB x 6 base filters = 468  (E3, always CB1)
-        Total base: 5148
+        15 ORBs x 6 RRs x 5 CBs x 6 base filters = 2700 (E0, all CB options)
+        15 ORBs x 6 RRs x 5 CBs x 6 base filters = 2700 (E1, all CB options)
+        15 ORBs x 6 RRs x 1 CB x 6 base filters = 540  (E3, always CB1)
+        Total base: 5940
         """
         BASE_FILTER_COUNT = 6  # NO_FILTER + ORB_G4/G5/G6/G8 + VOL_RV12_N20
         e0_e1 = 2 * len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * BASE_FILTER_COUNT
         e3 = len(ORB_LABELS) * len(RR_TARGETS) * 1 * BASE_FILTER_COUNT
         expected = e0_e1 + e3
-        assert expected == 5148
+        assert expected == 5940
 
 class TestEntryModelsSync:
     """ENTRY_MODELS must be consistent."""
@@ -386,7 +386,7 @@ class TestStrategyIdSync:
                             sid = make_strategy_id("MGC", orb, em, rr, cb, fk)
                             assert sid not in ids, f"Duplicate ID: {sid}"
                             ids.add(sid)
-        assert len(ids) == 5148
+        assert len(ids) == 5940
 
 # ============================================================================
 # 5. DB schema column sync

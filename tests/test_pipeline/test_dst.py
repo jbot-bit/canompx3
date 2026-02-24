@@ -13,6 +13,8 @@ from pipeline.dst import (
     london_open_brisbane,
     us_post_equity_brisbane,
     cme_close_brisbane,
+    comex_settle_brisbane,    # NEW
+    nyse_close_brisbane,      # NEW
     DYNAMIC_ORB_RESOLVERS,
     SESSION_CATALOG,
     validate_catalog,
@@ -236,7 +238,12 @@ class TestDynamicOrbResolvers:
         assert set(DYNAMIC_ORB_RESOLVERS.keys()) == {
             "CME_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "LONDON_OPEN",
             "US_POST_EQUITY", "CME_CLOSE",
+            "COMEX_SETTLE", "NYSE_CLOSE",
         }
+
+    def test_new_sessions_in_resolvers(self):
+        assert "COMEX_SETTLE" in DYNAMIC_ORB_RESOLVERS
+        assert "NYSE_CLOSE" in DYNAMIC_ORB_RESOLVERS
 
     def test_resolvers_return_tuples(self):
         td = date(2024, 6, 15)
@@ -329,6 +336,14 @@ class TestSessionCatalog:
 
     def test_get_break_group_unknown_returns_none(self):
         assert get_break_group("NONEXISTENT") is None
+
+    def test_new_sessions_in_catalog(self):
+        assert "COMEX_SETTLE" in SESSION_CATALOG
+        assert "NYSE_CLOSE" in SESSION_CATALOG
+        assert SESSION_CATALOG["COMEX_SETTLE"]["type"] == "dynamic"
+        assert SESSION_CATALOG["NYSE_CLOSE"]["type"] == "dynamic"
+        assert SESSION_CATALOG["COMEX_SETTLE"]["break_group"] == "us"
+        assert SESSION_CATALOG["NYSE_CLOSE"]["break_group"] == "us"
 
     def test_dst_sets_cover_all_non_alias_sessions(self):
         """Every non-alias session must be in either DST_AFFECTED or DST_CLEAN."""
@@ -489,4 +504,65 @@ class TestSeasonalShift:
         summer = london_open_brisbane(date(2024, 7, 15))
         winter = london_open_brisbane(date(2024, 1, 15))
         # Summer = 17:00, winter = 18:00 -- 1 hour difference
+        assert summer != winter
+
+
+# =========================================================================
+# COMEX_SETTLE resolver (COMEX gold settlement 1:30 PM ET)
+# =========================================================================
+
+class TestComexSettleBrisbane:
+    """COMEX gold settlement at 1:30 PM ET."""
+
+    def test_winter_est(self):
+        # 1:30 PM EST = 18:30 UTC = 04:30 Brisbane (next day)
+        h, m = comex_settle_brisbane(date(2026, 1, 15))
+        assert (h, m) == (4, 30)
+
+    def test_summer_edt(self):
+        # 1:30 PM EDT = 17:30 UTC = 03:30 Brisbane (next day)
+        h, m = comex_settle_brisbane(date(2025, 7, 15))
+        assert (h, m) == (3, 30)
+
+    def test_spring_transition(self):
+        # Mar 8 2026 is US spring-forward
+        h, m = comex_settle_brisbane(date(2026, 3, 7))  # still EST
+        assert (h, m) == (4, 30)
+        h, m = comex_settle_brisbane(date(2026, 3, 9))  # now EDT
+        assert (h, m) == (3, 30)
+
+    def test_shifts_by_1h(self):
+        """COMEX_SETTLE shifts 1 hour between summer and winter."""
+        summer = comex_settle_brisbane(date(2025, 7, 15))
+        winter = comex_settle_brisbane(date(2025, 1, 15))
+        assert summer != winter
+
+
+# =========================================================================
+# NYSE_CLOSE resolver (NYSE closing bell 4:00 PM ET)
+# =========================================================================
+
+class TestNyseCloseBrisbane:
+    """NYSE closing bell at 4:00 PM ET."""
+
+    def test_winter_est(self):
+        # 4:00 PM EST = 21:00 UTC = 07:00 Brisbane (next day)
+        h, m = nyse_close_brisbane(date(2026, 1, 15))
+        assert (h, m) == (7, 0)
+
+    def test_summer_edt(self):
+        # 4:00 PM EDT = 20:00 UTC = 06:00 Brisbane (next day)
+        h, m = nyse_close_brisbane(date(2025, 7, 15))
+        assert (h, m) == (6, 0)
+
+    def test_spring_transition(self):
+        h, m = nyse_close_brisbane(date(2026, 3, 7))  # EST
+        assert (h, m) == (7, 0)
+        h, m = nyse_close_brisbane(date(2026, 3, 9))  # EDT
+        assert (h, m) == (6, 0)
+
+    def test_shifts_by_1h(self):
+        """NYSE_CLOSE shifts 1 hour between summer and winter."""
+        summer = nyse_close_brisbane(date(2025, 7, 15))
+        winter = nyse_close_brisbane(date(2025, 1, 15))
         assert summer != winter

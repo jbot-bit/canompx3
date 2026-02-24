@@ -109,6 +109,7 @@ class TestEarlyExitConfig:
             "0900", "1000", "1100", "1130", "1800", "2300", "0030",
             "CME_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "LONDON_OPEN",
             "US_POST_EQUITY", "CME_CLOSE",
+            "COMEX_SETTLE", "NYSE_CLOSE",
         }
         assert set(EARLY_EXIT_MINUTES.keys()) == expected
 

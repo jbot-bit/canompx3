@@ -43,6 +43,7 @@ ASSET_CONFIGS = {
         "enabled_sessions": [
             "0900", "1000", "1100", "1800", "2300",
             "LONDON_OPEN", "US_POST_EQUITY",
+            "COMEX_SETTLE",
             # CME_OPEN removed (Feb 2026 session correlation research):
             # r=0.75 with 0900. Never trade both — 0900 has 103 validated
             # strategies vs CME_OPEN's 14. Keeping 0900, dropping CME_OPEN.
@@ -58,6 +59,7 @@ ASSET_CONFIGS = {
         "enabled_sessions": [
             "0900", "1000", "1100", "0030",
             "CME_OPEN", "LONDON_OPEN", "US_EQUITY_OPEN", "US_POST_EQUITY", "CME_CLOSE",
+            "NYSE_CLOSE",
             # 1800 removed — use LONDON_OPEN (DST-aware) instead
         ],
     },
@@ -86,6 +88,7 @@ ASSET_CONFIGS = {
         "enabled_sessions": [
             "0900", "1000", "1100", "0030",
             "CME_OPEN", "LONDON_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "US_POST_EQUITY", "CME_CLOSE",
+            "NYSE_CLOSE",
             # 1800 removed — use LONDON_OPEN (DST-aware) instead
         ],
     },
@@ -102,6 +105,7 @@ ASSET_CONFIGS = {
         "enabled_sessions": [
             "0900", "1000", "1100", "0030",
             "CME_OPEN", "LONDON_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "US_POST_EQUITY", "CME_CLOSE",
+            "NYSE_CLOSE",
             # 1800 removed — use LONDON_OPEN (DST-aware) instead
         ],
     },
@@ -155,6 +159,7 @@ ASSET_CONFIGS = {
         "enabled_sessions": [
             "0900", "1000", "1100", "0030",
             "CME_OPEN", "LONDON_OPEN", "US_EQUITY_OPEN", "US_POST_EQUITY", "CME_CLOSE",
+            "NYSE_CLOSE",
         ],
     },
 }

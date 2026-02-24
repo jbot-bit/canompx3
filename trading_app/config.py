@@ -633,6 +633,8 @@ ORB_DURATION_MINUTES: dict[str, int] = {
     "LONDON_OPEN": 5,      # London metals 08:00 LT (MGC)
     "US_POST_EQUITY": 5,   # US post-equity-open 10:00 AM ET
     "CME_CLOSE": 5,        # CME equity futures pre-close 2:45 PM CT
+    "COMEX_SETTLE": 5,     # COMEX gold settlement 1:30 PM ET
+    "NYSE_CLOSE": 5,       # NYSE closing bell 4:00 PM ET
 }
 
 # =========================================================================
@@ -678,6 +680,8 @@ EARLY_EXIT_MINUTES: dict[str, int | None] = {
     "LONDON_OPEN": None,
     "US_POST_EQUITY": None,
     "CME_CLOSE": 16,  # MES T80=16m (short session, fast-resolve)
+    "COMEX_SETTLE": None,  # New session — no T80 data yet
+    "NYSE_CLOSE": None,    # New session — no T80 data yet
 }
 
 # Session exit modes: how each session manages target/stop after entry.
@@ -698,6 +702,8 @@ SESSION_EXIT_MODE: dict[str, str] = {
     "LONDON_OPEN": "fixed_target",
     "US_POST_EQUITY": "fixed_target",
     "CME_CLOSE": "fixed_target",
+    "COMEX_SETTLE": "fixed_target",   # Default until research says otherwise
+    "NYSE_CLOSE": "fixed_target",     # Default until research says otherwise
 }
 
 # IB (Initial Balance) = first 120 minutes from 09:00 Brisbane (23:00 UTC).
