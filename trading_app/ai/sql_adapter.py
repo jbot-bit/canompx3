@@ -50,7 +50,7 @@ MAX_RESULT_ROWS = 1000
 # Valid ORB labels for parameter validation
 VALID_ORB_LABELS = {"0900", "1000", "1100", "1130", "1800", "2300", "0030",
                      "CME_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "LONDON_OPEN",
-                     "US_POST_EQUITY", "CME_CLOSE"}
+                     "US_POST_EQUITY", "CME_CLOSE", "COMEX_SETTLE", "NYSE_CLOSE"}
 
 # Valid entry models
 VALID_ENTRY_MODELS = {"E0", "E1", "E3"}
