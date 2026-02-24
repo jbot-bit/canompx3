@@ -45,6 +45,17 @@ SESSION_RENAME_MAP = {
     "CME_CLOSE": "CME_PRECLOSE",
 }
 
+# When a fixed session and a dynamic session both map to the same new name,
+# DELETE the fixed session's data first (dynamic has correct DST alignment).
+# Format: fixed_to_delete -> dynamic_to_rename
+MERGE_DELETE_FIXED = {
+    "0900": "CME_OPEN",       # Both -> CME_REOPEN; keep CME_OPEN data
+    "1800": "LONDON_OPEN",    # Both -> LONDON_METALS; keep LONDON_OPEN data
+    "2300": "US_DATA_OPEN",   # Both -> US_DATA_830; keep US_DATA_OPEN data
+    "0030": "US_EQUITY_OPEN", # Both -> NYSE_OPEN; keep US_EQUITY_OPEN data
+    "1130": None,             # -> SINGAPORE_OPEN; 1100 exists, 1130 dropped
+}
+
 # For strategy_id replacement, order matters to avoid partial matches.
 # Process longer names first so e.g. _US_EQUITY_OPEN_ is replaced before
 # a shorter suffix like _CME_OPEN_ could match a substring.
@@ -133,8 +144,53 @@ def _count_rows(con: duckdb.DuckDBPyConnection, table: str, col: str, val: str) 
 # -----------------------------------------------------------------------
 # Step 1: orb_outcomes -- DELETE 1130, then UPDATE orb_label
 # -----------------------------------------------------------------------
+def _delete_merge_conflicts(con: duckdb.DuckDBPyConnection, table: str,
+                            col: str, dry_run: bool) -> None:
+    """Delete fixed session rows that would collide with dynamic session renames.
+
+    When both a fixed session (e.g. 0900) and its dynamic counterpart (CME_OPEN)
+    map to the same new name (CME_REOPEN), we must delete the fixed session's
+    data first. The dynamic session's data is kept because it has correct DST
+    alignment during summer months.
+    """
+    for fixed_label in MERGE_DELETE_FIXED:
+        n = _count_rows(con, table, col, fixed_label)
+        if n > 0:
+            logger.info("  DELETE %s '%s' (merge conflict): %d rows", col, fixed_label, n)
+            if not dry_run:
+                con.execute(f'DELETE FROM "{table}" WHERE "{col}" = ?', [fixed_label])
+        else:
+            logger.info("  DELETE %s '%s': 0 (nothing to delete)", col, fixed_label)
+
+
+def _delete_strategy_id_merge_conflicts(con: duckdb.DuckDBPyConnection, table: str,
+                                         column: str, dry_run: bool) -> None:
+    """Delete rows with fixed-session strategy_ids that would collide after rename.
+
+    Same logic as _delete_merge_conflicts but matches on strategy_id patterns
+    (e.g. '%_0030_%') instead of exact orb_label values. This prevents PK
+    collisions when both _0030_ and _US_EQUITY_OPEN_ strategy_ids get renamed
+    to _NYSE_OPEN_.
+    """
+    for fixed_label in MERGE_DELETE_FIXED:
+        pattern = f"%_{fixed_label}_%"
+        n = con.execute(
+            f'SELECT COUNT(*) FROM "{table}" WHERE "{column}" LIKE ?', [pattern]
+        ).fetchone()[0]
+        if n > 0:
+            logger.info("  DELETE %s LIKE '%%_%s_%%' (merge conflict): %d rows",
+                        column, fixed_label, n)
+            if not dry_run:
+                con.execute(
+                    f'DELETE FROM "{table}" WHERE "{column}" LIKE ?', [pattern]
+                )
+        else:
+            logger.info("  DELETE %s LIKE '%%_%s_%%': 0 (nothing to delete)",
+                        column, fixed_label)
+
+
 def migrate_orb_outcomes(con: duckdb.DuckDBPyConnection, dry_run: bool) -> None:
-    """Rename orb_label in orb_outcomes. Delete 1130 data first."""
+    """Rename orb_label in orb_outcomes. Delete merge conflicts first."""
     table = "orb_outcomes"
     if not _table_exists(con, table):
         logger.info("  [SKIP] %s does not exist", table)
@@ -142,18 +198,12 @@ def migrate_orb_outcomes(con: duckdb.DuckDBPyConnection, dry_run: bool) -> None:
 
     logger.info("--- %s ---", table)
 
-    # 1a. Delete 1130 rows to avoid PK collision with 1100 -> SINGAPORE_OPEN
-    n_1130 = _count_rows(con, table, "orb_label", "1130")
-    if n_1130 > 0:
-        logger.info("  DELETE 1130 rows: %d", n_1130)
-        if not dry_run:
-            con.execute(f"DELETE FROM {table} WHERE orb_label = '1130'")
-    else:
-        logger.info("  DELETE 1130 rows: 0 (nothing to delete)")
+    # 1a. Delete all fixed sessions that would collide (0900, 1800, 2300, 0030, 1130)
+    _delete_merge_conflicts(con, table, "orb_label", dry_run)
 
-    # 1b. Rename remaining labels
+    # 1b. Rename remaining labels (only dynamic sessions left for merge pairs)
     for old, new in SESSION_RENAME_MAP.items():
-        if old == "1130":
+        if old in MERGE_DELETE_FIXED:
             continue  # already deleted
         n = _count_rows(con, table, "orb_label", old)
         if n > 0:
@@ -179,18 +229,12 @@ def migrate_experimental_strategies(con: duckdb.DuckDBPyConnection, dry_run: boo
 
     logger.info("--- %s ---", table)
 
-    # 2a. Delete 1130 rows
-    n_1130 = _count_rows(con, table, "orb_label", "1130")
-    if n_1130 > 0:
-        logger.info("  DELETE 1130 rows: %d", n_1130)
-        if not dry_run:
-            con.execute(f"DELETE FROM {table} WHERE orb_label = '1130'")
-    else:
-        logger.info("  DELETE 1130 rows: 0 (nothing to delete)")
+    # 2a. Delete merge-conflict fixed sessions (0900, 1800, 2300, 0030, 1130)
+    _delete_merge_conflicts(con, table, "orb_label", dry_run)
 
-    # 2b. Rename orb_label
+    # 2b. Rename orb_label (skip deleted fixed sessions)
     for old, new in SESSION_RENAME_MAP.items():
-        if old == "1130":
+        if old in MERGE_DELETE_FIXED:
             continue
         n = _count_rows(con, table, "orb_label", old)
         if n > 0:
@@ -223,18 +267,12 @@ def migrate_validated_setups(con: duckdb.DuckDBPyConnection, dry_run: bool) -> N
 
     logger.info("--- %s ---", table)
 
-    # 3a. Delete 1130 rows
-    n_1130 = _count_rows(con, table, "orb_label", "1130")
-    if n_1130 > 0:
-        logger.info("  DELETE 1130 rows: %d", n_1130)
-        if not dry_run:
-            con.execute(f"DELETE FROM {table} WHERE orb_label = '1130'")
-    else:
-        logger.info("  DELETE 1130 rows: 0 (nothing to delete)")
+    # 3a. Delete merge-conflict fixed sessions
+    _delete_merge_conflicts(con, table, "orb_label", dry_run)
 
-    # 3b. Rename orb_label
+    # 3b. Rename orb_label (skip deleted fixed sessions)
     for old, new in SESSION_RENAME_MAP.items():
-        if old == "1130":
+        if old in MERGE_DELETE_FIXED:
             continue
         n = _count_rows(con, table, "orb_label", old)
         if n > 0:
@@ -266,6 +304,8 @@ def migrate_validated_setups_archive(con: duckdb.DuckDBPyConnection, dry_run: bo
         return
 
     logger.info("--- %s ---", table)
+    # Delete fixed-session rows to avoid PK collisions after rename
+    _delete_strategy_id_merge_conflicts(con, table, "original_strategy_id", dry_run)
     _rename_strategy_ids(con, table, "original_strategy_id", dry_run, label="original_strategy_id")
 
 
@@ -273,13 +313,19 @@ def migrate_validated_setups_archive(con: duckdb.DuckDBPyConnection, dry_run: bo
 # Step 5: strategy_trade_days -- UPDATE strategy_id
 # -----------------------------------------------------------------------
 def migrate_strategy_trade_days(con: duckdb.DuckDBPyConnection, dry_run: bool) -> None:
-    """Rename strategy_id in strategy_trade_days."""
+    """Rename strategy_id in strategy_trade_days.
+
+    Must delete fixed-session strategy_ids first to avoid PK collisions when
+    both _0030_ and _US_EQUITY_OPEN_ get renamed to _NYSE_OPEN_.
+    """
     table = "strategy_trade_days"
     if not _table_exists(con, table):
         logger.info("  [SKIP] %s does not exist", table)
         return
 
     logger.info("--- %s ---", table)
+    # Delete fixed-session rows that would collide with dynamic session renames
+    _delete_strategy_id_merge_conflicts(con, table, "strategy_id", dry_run)
     _rename_strategy_ids(con, table, "strategy_id", dry_run)
 
 
@@ -294,6 +340,8 @@ def migrate_edge_families(con: duckdb.DuckDBPyConnection, dry_run: bool) -> None
         return
 
     logger.info("--- %s ---", table)
+    # Delete fixed-session rows to avoid PK collisions after rename
+    _delete_strategy_id_merge_conflicts(con, table, "head_strategy_id", dry_run)
     _rename_strategy_ids(con, table, "head_strategy_id", dry_run, label="head_strategy_id")
 
 
@@ -309,18 +357,12 @@ def migrate_nested_outcomes(con: duckdb.DuckDBPyConnection, dry_run: bool) -> No
 
     logger.info("--- %s ---", table)
 
-    # Delete 1130 rows
-    n_1130 = _count_rows(con, table, "orb_label", "1130")
-    if n_1130 > 0:
-        logger.info("  DELETE 1130 rows: %d", n_1130)
-        if not dry_run:
-            con.execute(f"DELETE FROM {table} WHERE orb_label = '1130'")
-    else:
-        logger.info("  DELETE 1130 rows: 0 (nothing to delete)")
+    # Delete merge-conflict fixed sessions
+    _delete_merge_conflicts(con, table, "orb_label", dry_run)
 
-    # Rename orb_label
+    # Rename orb_label (skip deleted fixed sessions)
     for old, new in SESSION_RENAME_MAP.items():
-        if old == "1130":
+        if old in MERGE_DELETE_FIXED:
             continue
         n = _count_rows(con, table, "orb_label", old)
         if n > 0:
@@ -345,15 +387,10 @@ def migrate_nested_strategies(con: duckdb.DuckDBPyConnection, dry_run: bool) -> 
         return
 
     logger.info("--- %s ---", table)
-    # Delete 1130
-    n_1130 = _count_rows(con, table, "orb_label", "1130")
-    if n_1130 > 0:
-        logger.info("  DELETE 1130 rows: %d", n_1130)
-        if not dry_run:
-            con.execute(f"DELETE FROM {table} WHERE orb_label = '1130'")
+    _delete_merge_conflicts(con, table, "orb_label", dry_run)
 
     for old, new in SESSION_RENAME_MAP.items():
-        if old == "1130":
+        if old in MERGE_DELETE_FIXED:
             continue
         n = _count_rows(con, table, "orb_label", old)
         if n > 0:
@@ -375,15 +412,10 @@ def migrate_nested_validated(con: duckdb.DuckDBPyConnection, dry_run: bool) -> N
         return
 
     logger.info("--- %s ---", table)
-    # Delete 1130
-    n_1130 = _count_rows(con, table, "orb_label", "1130")
-    if n_1130 > 0:
-        logger.info("  DELETE 1130 rows: %d", n_1130)
-        if not dry_run:
-            con.execute(f"DELETE FROM {table} WHERE orb_label = '1130'")
+    _delete_merge_conflicts(con, table, "orb_label", dry_run)
 
     for old, new in SESSION_RENAME_MAP.items():
-        if old == "1130":
+        if old in MERGE_DELETE_FIXED:
             continue
         n = _count_rows(con, table, "orb_label", old)
         if n > 0:
@@ -427,12 +459,16 @@ def migrate_daily_features_columns(con: duckdb.DuckDBPyConnection, dry_run: bool
     renames: list[tuple[str, str]] = []
     drops: list[str] = []
 
-    # Determine which fixed labels map to which new labels (excluding 1130 merge)
-    # Process 1130 columns separately as DROPs
+    # Fixed sessions whose columns should be DROPPED (not renamed) because
+    # a dynamic equivalent also exists and maps to the same new name.
+    # Their data is redundant (and DST-contaminated in summer).
+    fixed_to_drop = set(MERGE_DELETE_FIXED.keys())  # 0900, 1800, 2300, 0030, 1130
+
+    # Remaining labels get RENAMED
     label_renames = {}
     for old, new in SESSION_RENAME_MAP.items():
-        if old == "1130":
-            continue  # 1130 columns will be DROPPED
+        if old in fixed_to_drop:
+            continue  # columns will be DROPPED
         label_renames[old] = new
 
     # Plan renames for orb_{label}_* columns
@@ -460,18 +496,19 @@ def migrate_daily_features_columns(con: duckdb.DuckDBPyConnection, dry_run: bool
     if "rsi_14_at_0900" in existing_cols and "rsi_14_at_CME_REOPEN" not in existing_cols:
         renames.append(("rsi_14_at_0900", "rsi_14_at_CME_REOPEN"))
 
-    # Plan DROPs for 1130 columns (after 1100 rename is done)
-    for suffix in ORB_COLUMN_SUFFIXES:
-        col_1130 = f"orb_1130_{suffix}"
-        if col_1130 in existing_cols:
-            drops.append(col_1130)
-    for csuf in COMPRESSION_SUFFIXES:
-        col_1130 = f"orb_1130_{csuf}"
-        if col_1130 in existing_cols:
-            drops.append(col_1130)
-    rv_1130 = "rel_vol_1130"
-    if rv_1130 in existing_cols:
-        drops.append(rv_1130)
+    # Plan DROPs for all fixed session columns (0900, 1800, 2300, 0030, 1130)
+    for fixed_label in fixed_to_drop:
+        for suffix in ORB_COLUMN_SUFFIXES:
+            col = f"orb_{fixed_label}_{suffix}"
+            if col in existing_cols:
+                drops.append(col)
+        for csuf in COMPRESSION_SUFFIXES:
+            col = f"orb_{fixed_label}_{csuf}"
+            if col in existing_cols:
+                drops.append(col)
+        rv = f"rel_vol_{fixed_label}"
+        if rv in existing_cols:
+            drops.append(rv)
 
     # Execute renames
     if renames:
@@ -574,34 +611,62 @@ def migrate(db_path: str, dry_run: bool = False) -> None:
             # We rely on con.commit() at the end for all-or-nothing semantics
             pass
 
-        # --- Row-level renames ---
-        # Order matters: delete/rename in child tables before parent tables
-        # to respect foreign key constraints.
+        # --- Remove FK constraints by recreating tables ---
+        # DuckDB doesn't support ALTER TABLE DROP CONSTRAINT.
+        # Workaround: CREATE TABLE ... AS SELECT *, then DROP+RENAME.
+        # Must process leaf tables first, then their parents.
+        # FK tree:
+        #   edge_families -> validated_setups -> experimental_strategies
+        #   validated_setups_archive -> validated_setups
+        #   nested_validated -> nested_strategies
+        #   orb_outcomes -> daily_features (blocks ALTER TABLE RENAME COLUMN)
+        #   nested_outcomes -> daily_features
+        fk_tables = [
+            "edge_families",              # leaf: FK -> validated_setups
+            "validated_setups_archive",    # leaf: FK -> validated_setups
+            "validated_setups",            # mid:  FK -> experimental_strategies
+            "nested_validated",            # leaf: FK -> nested_strategies
+            "orb_outcomes",               # leaf: FK -> daily_features (needed for col rename)
+            "nested_outcomes",            # leaf: FK -> daily_features
+        ]
+        if not dry_run:
+            for tbl in fk_tables:
+                if _table_exists(con, tbl):
+                    logger.info("  Recreating %s without FK constraints...", tbl)
+                    con.execute(f'CREATE TABLE {tbl}_tmp AS SELECT * FROM {tbl}')
+                    con.execute(f'DROP TABLE {tbl}')
+                    con.execute(f'ALTER TABLE {tbl}_tmp RENAME TO {tbl}')
+                    logger.info("    Done (%s FK-free)", tbl)
 
-        # 1. orb_outcomes (child of daily_features via FK)
+        # --- Row-level renames (FK-free) ---
+
+        # 1. orb_outcomes
         migrate_orb_outcomes(con, dry_run)
 
-        # 2. nested_outcomes (child of daily_features via FK, if exists)
+        # 2. nested_outcomes
         migrate_nested_outcomes(con, dry_run)
 
         # 3. experimental_strategies
         migrate_experimental_strategies(con, dry_run)
 
-        # 4. validated_setups_archive (FK to validated_setups)
+        # 4. validated_setups_archive
         migrate_validated_setups_archive(con, dry_run)
 
-        # 5. validated_setups (FK to experimental_strategies)
+        # 5. validated_setups (now FK-free)
         migrate_validated_setups(con, dry_run)
 
         # 6. strategy_trade_days
         migrate_strategy_trade_days(con, dry_run)
 
-        # 7. edge_families (FK to validated_setups)
+        # 7. edge_families (now FK-free)
         migrate_edge_families(con, dry_run)
 
-        # 8. nested_strategies + nested_validated (if they exist)
+        # 8. nested_strategies + nested_validated
         migrate_nested_strategies(con, dry_run)
         migrate_nested_validated(con, dry_run)
+
+        # NOTE: FK constraints are NOT re-added here. The full rebuild in
+        # Task 15 (init_db.py --force) will recreate tables with proper FKs.
 
         # --- Column renames on daily_features ---
         # 9. daily_features columns (RENAME + DROP for 1130)
