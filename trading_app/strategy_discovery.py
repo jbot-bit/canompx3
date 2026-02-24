@@ -532,13 +532,14 @@ def make_strategy_id(
     confirm_bars: int,
     filter_type: str,
     dst_regime: str | None = None,
+    orb_minutes: int = 5,
 ) -> str:
     """Generate deterministic strategy ID.
 
-    Format: {instrument}_{orb_label}_{entry_model}_RR{rr}_CB{cb}_{filter_type}[_W|_S]
-    Example: MGC_0900_E1_RR2.5_CB2_ORB_G4
-             MGC_0900_E1_RR2.5_CB2_ORB_G4_W  (winter-only)
-             MGC_0900_E1_RR2.5_CB2_ORB_G4_S  (summer-only)
+    Format: {instrument}_{orb_label}_{entry_model}_RR{rr}_CB{cb}_{filter_type}[_O{min}][_W|_S]
+    Example: MGC_0900_E1_RR2.5_CB2_ORB_G4          (5m default — no suffix)
+             MGC_0900_E1_RR2.5_CB2_ORB_G4_O15      (15m ORB)
+             MGC_0900_E1_RR2.5_CB2_ORB_G4_O30_W    (30m ORB, winter-only)
 
     Components:
       instrument  - Trading instrument (MGC = Micro Gold Futures)
@@ -547,9 +548,12 @@ def make_strategy_id(
       RR          - Risk/Reward target (1.0 to 4.0)
       CB          - Confirm bars required (1 to 5)
       filter_type - ORB size filter (NO_FILTER, ORB_G4, ORB_L3, etc.)
+      _O{min}     - ORB duration suffix; omitted for default 5m
       _W/_S       - DST regime suffix (winter/summer); omitted for blended/clean sessions
     """
     base = f"{instrument}_{orb_label}_{entry_model}_RR{rr_target}_CB{confirm_bars}_{filter_type}"
+    if orb_minutes != 5:
+        base = f"{base}_O{orb_minutes}"
     if dst_regime == "winter":
         return f"{base}_W"
     if dst_regime == "summer":
@@ -878,6 +882,7 @@ def run_discovery(
                             strategy_id = make_strategy_id(
                                 instrument, orb_label, em, rr_target, cb, filter_key,
                                 dst_regime=effective_regime,
+                                orb_minutes=orb_minutes,
                             )
                             trade_days = sorted({o["trading_day"] for o in outcomes})
                             trade_day_hash = compute_trade_day_hash(trade_days)

@@ -213,6 +213,32 @@ class TestMakeStrategyId:
             sid = make_strategy_id("MGC", "0900", em, 2.0, 1, "NO_FILTER")
             assert f"_{em}_" in sid
 
+    def test_orb_minutes_default_no_suffix(self):
+        sid = make_strategy_id("MGC", "0900", "E1", 2.0, 1, "NO_FILTER")
+        assert "_O" not in sid
+
+    def test_orb_minutes_5_no_suffix(self):
+        sid = make_strategy_id("MGC", "0900", "E1", 2.0, 1, "NO_FILTER", orb_minutes=5)
+        assert sid == "MGC_0900_E1_RR2.0_CB1_NO_FILTER"
+
+    def test_orb_minutes_15_suffix(self):
+        sid = make_strategy_id("MGC", "0900", "E1", 2.0, 1, "ORB_G4", orb_minutes=15)
+        assert sid == "MGC_0900_E1_RR2.0_CB1_ORB_G4_O15"
+
+    def test_orb_minutes_30_suffix(self):
+        sid = make_strategy_id("MGC", "0900", "E1", 2.0, 1, "ORB_G4", orb_minutes=30)
+        assert sid == "MGC_0900_E1_RR2.0_CB1_ORB_G4_O30"
+
+    def test_orb_minutes_with_dst_suffix_order(self):
+        sid = make_strategy_id("MGC", "0900", "E1", 2.0, 1, "ORB_G4",
+                               dst_regime="winter", orb_minutes=15)
+        assert sid == "MGC_0900_E1_RR2.0_CB1_ORB_G4_O15_W"
+
+    def test_orb_minutes_15_vs_5_different(self):
+        s5 = make_strategy_id("MGC", "0900", "E1", 2.0, 1, "ORB_G4", orb_minutes=5)
+        s15 = make_strategy_id("MGC", "0900", "E1", 2.0, 1, "ORB_G4", orb_minutes=15)
+        assert s5 != s15
+
 # ============================================================================
 # CLI test
 # ============================================================================

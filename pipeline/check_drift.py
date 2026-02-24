@@ -1249,6 +1249,41 @@ def check_e0_cb1_only() -> list[str]:
     return violations
 
 
+def check_orb_minutes_in_strategy_id() -> list[str]:
+    """Check #31: Non-5m strategies must have _O{minutes} suffix in strategy_id.
+
+    make_strategy_id() appends _O15 or _O30 when orb_minutes != 5.
+    This prevents PK collisions between 5m and 15m/30m strategies in
+    experimental_strategies (strategy_id is PK).
+    """
+    violations = []
+    discovery_file = TRADING_APP_DIR / "strategy_discovery.py"
+    if not discovery_file.exists():
+        return violations
+
+    content = discovery_file.read_text(encoding="utf-8")
+
+    # Verify make_strategy_id accepts orb_minutes parameter
+    if "orb_minutes" not in content.split("def make_strategy_id")[1].split("def ")[0]:
+        violations.append(
+            "  strategy_discovery.py: make_strategy_id() must accept orb_minutes parameter"
+        )
+
+    # Verify the call site passes orb_minutes
+    # Look for make_strategy_id call that includes orb_minutes=
+    call_section = content.split("strategy_id = make_strategy_id(")
+    if len(call_section) >= 2:
+        # Check the main discovery loop call (not all calls need it — 5m callers use default)
+        main_call = call_section[1].split(")")[0]
+        if "orb_minutes=" not in main_call and "orb_minutes =" not in main_call:
+            violations.append(
+                "  strategy_discovery.py: main discovery call to make_strategy_id() "
+                "must pass orb_minutes= to prevent PK collisions"
+            )
+
+    return violations
+
+
 def main():
     print("=" * 60)
     print("PIPELINE DRIFT CHECK")
@@ -1608,6 +1643,18 @@ def main():
     # Check 30: E0 entry model restricted to CB1 only
     print("Check 30: E0 restricted to CB1 (no look-ahead CB2+ fills)...")
     v = check_e0_cb1_only()
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 31: Non-5m strategy IDs include orb_minutes suffix
+    print("Check 31: Non-5m strategy IDs include _O{minutes} suffix...")
+    v = check_orb_minutes_in_strategy_id()
     if v:
         print("  FAILED:")
         for line in v:
