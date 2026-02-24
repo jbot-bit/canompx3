@@ -47,7 +47,7 @@ def make_nested_strategy_id(
     """Generate deterministic nested strategy ID.
 
     Format: NESTED_{instrument}_{orb}_{minutes}m_{em}_RR{rr}_CB{cb}_{filter}
-    Example: NESTED_MGC_0900_15m_E1_RR2.5_CB2_ORB_G4
+    Example: NESTED_MGC_CME_REOPEN_15m_E1_RR2.5_CB2_ORB_G4
     """
     return (
         f"NESTED_{instrument}_{orb_label}_{orb_minutes}m_"

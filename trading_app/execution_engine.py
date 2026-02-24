@@ -84,7 +84,7 @@ class LiveIB:
     """Initial Balance (first 120 minutes from 09:00 Brisbane = 23:00 UTC).
 
     Tracks IB high/low during formation, then detects first break after IB ends.
-    Used by 1000 session for IB-conditional exit logic.
+    Used by TOKYO_OPEN session for IB-conditional exit logic.
     """
     window_start_utc: datetime
     window_end_utc: datetime
@@ -144,7 +144,7 @@ class ActiveTrade:
     target_price: float | None = None
     contracts: int = 1
 
-    # IB-conditional exit mode (1000 session)
+    # IB-conditional exit mode (TOKYO_OPEN session)
     exit_mode: str = "fixed_target"   # "fixed_target" | "ib_pending" | "hold_7h"
     ib_alignment: str | None = None   # "aligned" | "opposed" | None
 

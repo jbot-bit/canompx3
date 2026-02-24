@@ -43,7 +43,7 @@ from trading_app.db_manager import init_trading_app_schema
 #   Risk = |entry_price - stop_price| where stop = opposite ORB level.
 #   RR1.0 = target at 1x risk (high WR, low edge per trade)
 #   RR4.0 = target at 4x risk (low WR, needs big moves)
-#   Optimal: RR2.5 for 0900/1000, RR2.0 for 1800, RR1.5 for 2300
+#   Optimal: RR2.5 for CME_REOPEN/TOKYO_OPEN, RR2.0 for LONDON_METALS, RR1.5 for US_DATA_830
 RR_TARGETS = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0]
 
 # CONFIRM_BARS_OPTIONS: How many consecutive 1-min closes outside ORB
@@ -241,7 +241,7 @@ def _compute_outcomes_all_rr(
     # making it invisible as a strategy parameter and preventing comparison.
     # Break speed filtering is now handled properly via BreakSpeedFilter in config.py
     # during strategy discovery.
-    # IMPORTANT: orb_outcomes must be REBUILT for session 1000 after this change
+    # IMPORTANT: orb_outcomes must be REBUILT for session TOKYO_OPEN after this change
     # to include previously-excluded slow breaks.
 
     entry_price = signal.entry_price

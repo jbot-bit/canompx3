@@ -78,7 +78,7 @@ def run_regime_discovery(
             print("  No daily_features found. Exiting.")
             return 0
 
-        # Build session-aware filter sets (session 1100/2300/0030 get base only)
+        # Build session-aware filter sets (session SINGAPORE_OPEN/US_DATA_830/NYSE_OPEN get base only)
         session_filters = {orb: get_filters_for_grid(instrument, orb) for orb in ORB_LABELS}
         union_filters: dict = {}
         for sf in session_filters.values():

@@ -25,7 +25,7 @@ ORB SESSIONS (defined in pipeline/init_db.py as ORB_LABELS):
 
 TRADING SESSIONS:
   Fixed session stat windows are in pipeline/build_daily_features.py.
-  DST-aware session times (US_EQUITY_OPEN, LONDON_OPEN, etc.) are in
+  DST-aware session times (NYSE_OPEN, LONDON_METALS, etc.) are in
   pipeline/dst.py SESSION_CATALOG — those track actual market opens.
 
 TRADING DAY:
@@ -34,26 +34,26 @@ TRADING DAY:
 
 ENTRY MODELS (defined below as ENTRY_MODELS):
   E1 (Market-On-Next-Bar) - Enter at OPEN of the bar AFTER confirm bar.
-     Fill rate ~100%. Best for momentum ORBs (0900, 1000).
+     Fill rate ~100%. Best for momentum ORBs (CME_REOPEN, TOKYO_OPEN).
   E3 (Limit-At-ORB) - Place limit order at ORB level after confirm.
      Fills only if price retraces to ORB level (~96-97% on G5+ days).
-     Best for retrace ORBs (1800, 2300) where price spikes then pulls back.
+     Best for retrace ORBs (LONDON_METALS, US_DATA_830) where price spikes then pulls back.
 
 CONFIRM BARS (CB1-CB5, defined in outcome_builder.py):
   Number of consecutive 1-minute bars closing outside the ORB range
   required before entry is confirmed. Higher CB = more confirmation but
   worse entry price (market has moved further).
-  CB2 optimal for 0900/1000 momentum; CB5 optimal for 1800 E3 retrace.
+  CB2 optimal for CME_REOPEN/TOKYO_OPEN momentum; CB5 optimal for LONDON_METALS E3 retrace.
 
 RR TARGETS (RR1.0-RR4.0, defined in outcome_builder.py):
   Risk/Reward ratio. Target distance = entry risk * RR target.
   Risk = |entry_price - stop_price| where stop = opposite ORB level.
-  RR2.5 optimal for 0900/1000; RR2.0 for 1800; RR1.5 for 2300.
+  RR2.5 optimal for CME_REOPEN/TOKYO_OPEN; RR2.0 for LONDON_METALS; RR1.5 for US_DATA_830.
 
 ORB SIZE FILTERS:
   G-filters (Greater-than): Only trade when ORB size >= N points.
     G4+ is the minimum for positive expectancy on MES/MNQ. G5/G6 increase
-    per-trade edge but reduce trade count. G8+ only useful for 2300.
+    per-trade edge but reduce trade count. G8+ only useful for US_DATA_830.
     MGC: G6 minimum (Feb 2026 regime shift — ATR 31→105, G4 passes 87.5%).
   L-filters (Less-than): Only trade when ORB size < N points.
     ALL L-filter strategies have negative expectancy. Do not trade.
@@ -162,7 +162,7 @@ class CalendarSkipFilter(StrategyFilter):
 
     skip_nfp: bool = True
     skip_opex: bool = True
-    skip_friday_session: str | None = None  # e.g. "0900" or None
+    skip_friday_session: str | None = None  # e.g. "CME_REOPEN" or None
 
     def matches_row(self, row: dict, orb_label: str) -> bool:
         if self.skip_nfp and row.get("is_nfp_day"):
@@ -199,8 +199,8 @@ class ATRVelocityFilter(StrategyFilter):
     Research (Feb 2026 — research_avoid_crosscheck.py):
       Contracting×Neutral:   9/9 sessions 100% negative, median avgR=-0.372R
       Contracting×Compressed: 10/10 sessions 100% negative, median avgR=-0.362R
-      MES 1000 anchor: 5/5 years negative, BH-sig p=0.0022
-      MGC 1000 E1: 10/10 years (2016-2025) negative
+      MES TOKYO_OPEN anchor: 5/5 years negative, BH-sig p=0.0022
+      MGC TOKYO_OPEN E1: 10/10 years (2016-2025) negative
 
     Signal is fully pre-entry — both atr_vel_regime and compression_tier are
     computed from prior-days data and known at ORB close (10:05 AM).
@@ -210,9 +210,9 @@ class ATRVelocityFilter(StrategyFilter):
       2. orb_{label}_compression_tier in ('Neutral', 'Compressed')
          (Expanded is OK — Contracting+Expanded has mixed/weaker signal)
 
-    Applied to: sessions 0900 and 1000 (where the signal is confirmed).
-    NOT applied to: 1800, 1100, 0030, 2300 (insufficient evidence or exception).
-    Exception: MNQ 1800 is positive in the contracting regime — explicitly excluded
+    Applied to: sessions CME_REOPEN and TOKYO_OPEN (where the signal is confirmed).
+    NOT applied to: LONDON_METALS, SINGAPORE_OPEN, NYSE_OPEN, US_DATA_830 (insufficient evidence or exception).
+    Exception: MNQ LONDON_METALS is positive in the contracting regime — explicitly excluded
                by default apply_to_sessions.
 
     Fail-open: missing data (warm-up period) → trade is allowed.
@@ -392,8 +392,8 @@ _GRID_SIZE_FILTERS = {k: v for k, v in MGC_ORB_SIZE_FILTERS.items()
                       if k in ("G4", "G5", "G6", "G8")}
 
 # MGC-specific: G4/G5 restored (Feb 2026 correction).
-# Original removal claimed "G4 passes 87.5%" but actual 0900 pass rate is 7.2%.
-# The 87.5% figure was likely about 1000 session (15m ORB = larger ranges).
+# Original removal claimed "G4 passes 87.5%" but actual CME_REOPEN pass rate is 7.2%.
+# The 87.5% figure was likely about TOKYO_OPEN session (15m ORB = larger ranges).
 # G4 strategies are the best MGC performers (ExpR +0.44-0.54, all validated).
 _MGC_GRID_SIZE_FILTERS = {k: v for k, v in MGC_ORB_SIZE_FILTERS.items()
                           if k in ("G4", "G5", "G6", "G8")}
@@ -480,7 +480,7 @@ def _make_break_quality_composites(
 
 # Base discovery grid filters — no session-specific DOW composites.
 # get_filters_for_grid() starts from this so sessions that don't declare a
-# DOW rule (e.g. 1100, 2300, 0030) never inherit composites from other sessions.
+# DOW rule (e.g. SINGAPORE_OPEN, US_DATA_830, NYSE_OPEN) never inherit composites from other sessions.
 # Exported (no underscore) so sync tests can assert base-grid invariants.
 BASE_GRID_FILTERS: dict[str, StrategyFilter] = {
     "NO_FILTER": NoFilter(),
@@ -520,23 +520,23 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
 
     Starts from BASE_GRID_FILTERS so that session-specific DOW composites are
     only added when a session has a research basis for them. Sessions without a
-    declared DOW rule (1100, 2300, 0030) return the plain base set.
+    declared DOW rule (SINGAPORE_OPEN, US_DATA_830, NYSE_OPEN) return the plain base set.
 
     DOW alignment guard: All DOW filters are validated against the canonical
     Brisbane→Exchange DOW mapping (pipeline/dst.py). Sessions where Brisbane
-    DOW != exchange DOW (currently only 0030) will raise ValueError if a
+    DOW != exchange DOW (currently only NYSE_OPEN/0030) will raise ValueError if a
     DOW filter is applied — prevents silent misalignment.
 
     Break quality filters (Feb 2026 research):
-    - Sessions "0900", "1000", "1800": adds break speed + conviction composites
+    - Sessions CME_REOPEN, TOKYO_OPEN, LONDON_METALS: adds break speed + conviction composites
       for each G-filter. Research basis: break_quality_deep.py showed fast breaks
       and conviction candles predict success on momentum sessions.
 
-    - Session "0900": adds DOW composite (skip Friday) for each G-filter
-    - Session "1800": adds DOW composite (skip Monday) for each G-filter
-    - Session "1000": adds DIR_LONG (H5) + DOW composite (skip Tuesday) for each G-filter
-    - MES + "1000": also adds G4_L12, G5_L12 band filters (H2 confirmed)
-    - MNQ + "1100": adds DIR_LONG (Feb 2026 raw-verified: SHORT avgR=-0.247 p=0.006,
+    - Session CME_REOPEN: adds DOW composite (skip Friday) for each G-filter
+    - Session LONDON_METALS: adds DOW composite (skip Monday) for each G-filter
+    - Session TOKYO_OPEN: adds DIR_LONG (H5) + DOW composite (skip Tuesday) for each G-filter
+    - MES + TOKYO_OPEN: also adds G4_L12, G5_L12 band filters (H2 confirmed)
+    - MNQ + SINGAPORE_OPEN: adds DIR_LONG (Feb 2026 raw-verified: SHORT avgR=-0.247 p=0.006,
       N=236, 2yrs consistent; LONG avgR=+0.187; asymmetry +0.434R)
     - All other combos: returns BASE_GRID_FILTERS unchanged
     """
@@ -610,13 +610,13 @@ ENTRY_MODELS = ["E0", "E1", "E3"]
 # Variable Aperture: session-specific ORB duration (minutes)
 # =========================================================================
 # Research (scripts/analyze_mgc_15m_orb.py, 2026-02-13):
-#   0900: 5m is OPTIMAL (ExpR +0.399, Sharpe 0.248). 15m/30m destroy edge.
-#   1000: 15m BETTER than 5m (ExpR +0.206, Sharpe 0.122, N=133 at G6+).
+#   CME_REOPEN: 5m is OPTIMAL (ExpR +0.399, Sharpe 0.248). 15m/30m destroy edge.
+#   TOKYO_OPEN: 15m BETTER than 5m (ExpR +0.206, Sharpe 0.122, N=133 at G6+).
 #         5m baseline near-zero at G6+. 15m gives 2x trades + better edge.
-#   1100: 5m ORB; double-break filter applied in discovery.
-#   1800: 5m is OPTIMAL (ExpR +0.227, Sharpe 0.198). 15m/30m crush edge.
-#   2300: All negative at all windows.
-#   0030: All negative at all windows.
+#   SINGAPORE_OPEN: 5m ORB; double-break filter applied in discovery.
+#   LONDON_METALS: 5m is OPTIMAL (ExpR +0.227, Sharpe 0.198). 15m/30m crush edge.
+#   US_DATA_830: All negative at all windows.
+#   NYSE_OPEN: All negative at all windows.
 ORB_DURATION_MINUTES: dict[str, int] = {
     "CME_REOPEN": 5,       # CME Globex electronic reopen 5:00 PM CT
     "TOKYO_OPEN": 15,      # Tokyo Stock Exchange open 9:00 AM JST (15m ORB)
@@ -642,9 +642,9 @@ TRADEABLE_INSTRUMENTS = ["MGC"]
 
 # Timed early exit: kill losers at N minutes after fill.
 # Research (artifacts/EARLY_EXIT_RULES.md, P5b winner speed profiling):
-#   0900: 15 min -> +26% Sharpe, 38% tighter MaxDD (T80=38m, only 24% recover)
-#   1000: 30 min -> 3.7x Sharpe, 35% tighter MaxDD (T80=32m, only 12-18% recover)
-#   1800: 30 min -> T80=36m, avg_r_after=-0.339R (worst dead-chop penalty)
+#   CME_REOPEN: 15 min -> +26% Sharpe, 38% tighter MaxDD (T80=38m, only 24% recover)
+#   TOKYO_OPEN: 30 min -> 3.7x Sharpe, 35% tighter MaxDD (T80=32m, only 12-18% recover)
+#   LONDON_METALS: 30 min -> T80=36m, avg_r_after=-0.339R (worst dead-chop penalty)
 #   Other sessions: no benefit
 # Rule: At N minutes after fill, if bar close vs entry is negative, exit at bar close.
 # None = no early exit for that session.

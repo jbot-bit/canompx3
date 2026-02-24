@@ -117,7 +117,7 @@ def validate_dow_filter_alignment(session: str, skip_days: tuple[int, ...]) -> N
 
     Raises ValueError if a DOW skip filter is applied to a session where
     Brisbane DOW != exchange DOW, unless the caller has explicitly handled
-    the offset (not yet implemented — 0030 has no DOW filters currently).
+    the offset (not yet implemented — NYSE_OPEN/0030 has no DOW filters currently).
     """
     offset = DOW_MISALIGNED_SESSIONS.get(session)
     if offset is not None and skip_days:
@@ -133,7 +133,7 @@ def is_winter_for_session(trading_day: date, orb_label: str) -> bool | None:
     """Classify a trading day as winter (True) or summer (False) for a given session.
 
     Returns None if the session is not affected by DST (clean sessions).
-    Uses US Eastern for 0900/0030/2300, UK London for 1800.
+    Uses US Eastern for CME_REOPEN/NYSE_OPEN/US_DATA_830, UK London for LONDON_METALS.
     """
     dst_type = DST_AFFECTED_SESSIONS.get(orb_label)
     if dst_type is None:
@@ -402,7 +402,7 @@ def validate_catalog():
 
     Checks both a winter and summer date. A collision is only an error if
     two sessions resolve to the same time on ALL test dates. Seasonal
-    overlaps (e.g., CME_OPEN = 0900 in winter but diverges in summer) are
+    overlaps (e.g., CME_REOPEN = 0900 in winter but diverges in summer) are
     expected and acceptable -- that's why dynamic sessions exist.
 
     Raises ValueError if any permanent collision is found.

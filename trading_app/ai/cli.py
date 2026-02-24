@@ -2,7 +2,7 @@
 Command-line interface for AI queries.
 
 Usage:
-    python -m trading_app.ai.cli "Show me all CORE strategies for 0900 session"
+    python -m trading_app.ai.cli "Show me all CORE strategies for CME_REOPEN session"
     python -m trading_app.ai.cli --export-csv top10.csv "Top 10 by Sharpe"
     python -m trading_app.ai.cli --show-intent "What columns are in orb_outcomes?"
 """

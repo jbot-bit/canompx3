@@ -185,19 +185,19 @@ def _orb_utc_window(trading_day: date, orb_label: str,
 
     The ORB starts at the local Brisbane time and lasts orb_minutes.
 
-    For fixed sessions (0900, 1000, etc.), the Brisbane hour is constant.
-    For dynamic sessions (US_EQUITY_OPEN, US_DATA_OPEN, LONDON_OPEN),
+    For fixed sessions (CME_REOPEN, TOKYO_OPEN, etc.), the Brisbane hour is constant.
+    For dynamic sessions (NYSE_OPEN, US_DATA_830, LONDON_METALS),
     the Brisbane hour is resolved per-day based on DST via pipeline/dst.py.
 
-    Example: 0900 ORB with 5 min duration on trading_day 2024-01-05
+    Example: CME_REOPEN ORB with 5 min duration on trading_day 2024-01-05
       local start = 2024-01-05 09:00 Brisbane
       local end   = 2024-01-05 09:05 Brisbane
       UTC start   = 2024-01-04 23:00 UTC
       UTC end     = 2024-01-04 23:05 UTC
 
-    Special case: 0030 ORB belongs to the SAME trading day but is
+    Special case: NYSE_OPEN (0030) ORB belongs to the SAME trading day but is
     at 00:30 the NEXT calendar day in Brisbane.
-      trading_day 2024-01-05, 0030 ORB:
+      trading_day 2024-01-05, NYSE_OPEN ORB:
       local start = 2024-01-06 00:30 Brisbane (next calendar day)
       UTC start   = 2024-01-05 14:30 UTC
     """
@@ -275,8 +275,8 @@ def _break_detection_window(trading_day: date, orb_label: str,
 
     Break groups (defined in pipeline/dst.py SESSION_CATALOG) prevent adding
     a nearby session from silently shrinking an existing session's break
-    window. Sessions in the same group (e.g., 1000/1100/1130 in "asia")
-    all extend their break windows to the same boundary (e.g., 1800 "london").
+    window. Sessions in the same group (e.g., TOKYO_OPEN/SINGAPORE_OPEN/1130 in "asia")
+    all extend their break windows to the same boundary (e.g., LONDON_METALS "london").
 
     With dynamic sessions, ORB ordering is determined by actual UTC start
     time (which varies with DST), not by list position.
@@ -469,12 +469,12 @@ def compute_session_stats(bars_df: pd.DataFrame,
 
 def compute_overnight_stats(bars_df: pd.DataFrame, trading_day: date) -> dict:
     """
-    Compute overnight (Asia session) and pre-1000 session stats.
+    Compute overnight (Asia session) and pre-TOKYO_OPEN session stats.
 
     overnight_*: Asia session window (09:00-17:00 Brisbane = first 8h of trading day).
-    pre_1000_*:  Bars from trading day start to 10:00 Brisbane (hour before 1000 ORB).
+    pre_1000_*:  Bars from trading day start to 10:00 Brisbane (hour before TOKYO_OPEN ORB).
 
-    These are pre-entry for the 1000 session — no look-ahead.
+    These are pre-entry for the TOKYO_OPEN session — no look-ahead.
     """
     result: dict = {
         "overnight_high": None, "overnight_low": None, "overnight_range": None,

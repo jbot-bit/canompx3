@@ -537,9 +537,9 @@ def make_strategy_id(
     """Generate deterministic strategy ID.
 
     Format: {instrument}_{orb_label}_{entry_model}_RR{rr}_CB{cb}_{filter_type}[_O{min}][_W|_S]
-    Example: MGC_0900_E1_RR2.5_CB2_ORB_G4          (5m default — no suffix)
-             MGC_0900_E1_RR2.5_CB2_ORB_G4_O15      (15m ORB)
-             MGC_0900_E1_RR2.5_CB2_ORB_G4_O30_W    (30m ORB, winter-only)
+    Example: MGC_CME_REOPEN_E1_RR2.5_CB2_ORB_G4          (5m default — no suffix)
+             MGC_CME_REOPEN_E1_RR2.5_CB2_ORB_G4_O15      (15m ORB)
+             MGC_CME_REOPEN_E1_RR2.5_CB2_ORB_G4_O30_W    (30m ORB, winter-only)
 
     Components:
       instrument  - Trading instrument (MGC = Micro Gold Futures)
@@ -769,8 +769,8 @@ def run_discovery(
 
     Args:
         dst_regime: If 'winter' or 'summer', restrict DST-affected sessions
-            (0900/1800/0030/2300) to that regime only. Produces strategy IDs
-            with _W or _S suffix. Clean sessions (1000/1100 etc.) are unaffected.
+            (CME_REOPEN/LONDON_METALS/NYSE_OPEN/US_DATA_830) to that regime only. Produces strategy IDs
+            with _W or _S suffix. Clean sessions (TOKYO_OPEN/SINGAPORE_OPEN etc.) are unaffected.
             If None (default), produces blended strategies (existing behaviour).
         holdout_date: If set, discovery only uses outcomes with trading_day <
             holdout_date. This creates a true temporal holdout (F-02 audit fix)
@@ -1006,7 +1006,7 @@ def main():
                         help="Database path (default: gold.db)")
     parser.add_argument(
         "--dst-regime", choices=["winter", "summer"], default=None,
-        help="Restrict DST-affected sessions (0900/1800/0030/2300) to one regime. "
+        help="Restrict DST-affected sessions (CME_REOPEN/LONDON_METALS/NYSE_OPEN/US_DATA_830) to one regime. "
              "Produces _W or _S strategy IDs. Clean sessions unaffected. "
              "Run twice (--dst-regime winter AND --dst-regime summer) to replace all blended strategies.",
     )

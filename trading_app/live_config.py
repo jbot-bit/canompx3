@@ -36,7 +36,7 @@ from trading_app.strategy_fitness import compute_fitness
 @dataclass(frozen=True)
 class LiveStrategySpec:
     """Declarative specification for a live strategy family."""
-    family_id: str          # e.g. "1000_E1_ORB_G4"
+    family_id: str          # e.g. "TOKYO_OPEN_E1_ORB_G4"
     tier: str               # "core", "regime", or "hot"
     orb_label: str
     entry_model: str
@@ -65,16 +65,16 @@ HOT_MIN_STABILITY = 0.6
 #   Only trade when strategy_fitness = FIT.
 #
 # EXIT MODES (see config.py SESSION_EXIT_MODE):
-#   0900 = fixed_target
-#   1000 = ib_conditional (IB aligned=hold 7h, opposed=kill at market)
-#   1800/2300/0030 = fixed_target
+#   CME_REOPEN = fixed_target
+#   TOKYO_OPEN = ib_conditional (IB aligned=hold 7h, opposed=kill at market)
+#   LONDON_METALS/US_DATA_830/NYSE_OPEN = fixed_target
 #
 # Updated 2026-02-21: Added E0 entry model (validated Feb 2026).
 #   E0 = limit fill at ORB edge on the confirm bar itself.
 #   Top ROBUST CORE families by instrument (head_sharpe_ann):
-#     MNQ: 0900 E0 ORB_G5 (Sharpe 2.94, N=305), 1000 E0 ORB_G5 (Sharpe 2.84, N=406)
-#     MES: 1000 E0 ORB_G5_L12 (Sharpe 1.54), 1000 E0 ORB_G4_L12 (Sharpe 1.46)
-#     MGC: 1000 E0 ORB_G4 (Sharpe 1.35, N=118), 1800 E0 ORB_G4_NOMON (Sharpe 0.43)
+#     MNQ: CME_REOPEN E0 ORB_G5 (Sharpe 2.94, N=305), TOKYO_OPEN E0 ORB_G5 (Sharpe 2.84, N=406)
+#     MES: TOKYO_OPEN E0 ORB_G5_L12 (Sharpe 1.54), TOKYO_OPEN E0 ORB_G4_L12 (Sharpe 1.46)
+#     MGC: TOKYO_OPEN E0 ORB_G4 (Sharpe 1.35, N=118), LONDON_METALS E0 ORB_G4_NOMON (Sharpe 0.43)
 LIVE_PORTFOLIO = [
     # --- CORE: always on, full-period validated ROBUST families ---
 

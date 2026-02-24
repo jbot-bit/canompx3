@@ -748,7 +748,7 @@ class SQLAdapter:
     def _execute_dst_split(self, params: dict) -> pd.DataFrame:
         """DST on vs off performance split.
 
-        Per CLAUDE.md: US DST for 0900/0030/2300, UK DST for 1800.
+        Per CLAUDE.md: US DST for CME_REOPEN/NYSE_OPEN/US_DATA_830, UK DST for LONDON_METALS.
         """
         if "orb_label" not in params:
             raise ValueError("orb_label is required for dst_split")

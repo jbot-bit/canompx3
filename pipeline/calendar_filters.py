@@ -10,13 +10,13 @@ NFP (Non-Farm Payrolls): Released on the first Friday of each month.
 OPEX (Options Expiration): Third Friday of each month.
   Options pinning kills follow-through. Negative expectancy on MNQ.
 
-Friday: Position-squaring mechanism at 0900 session specifically.
-  Not a universal skip — only applies to session 0900.
+Friday: Position-squaring mechanism at CME_REOPEN session specifically.
+  Not a universal skip — only applies to session CME_REOPEN.
 
 Day-of-week (DOW): Session-specific skip rules from DOW research (Feb 2026).
-  0900: Skip Friday (position-squaring kills follow-through).
-  1800: Skip Monday (thin London open, no follow-through).
-  1000: Skip Tuesday (consistently weakest day at Tokyo session).
+  CME_REOPEN: Skip Friday (position-squaring kills follow-through).
+  LONDON_METALS: Skip Monday (thin London open, no follow-through).
+  TOKYO_OPEN: Skip Tuesday (consistently weakest day at Tokyo session).
 """
 
 from datetime import date

@@ -452,7 +452,7 @@ def main():
     parser.add_argument("--max-concurrent", type=int, default=3, help="Max concurrent positions")
     parser.add_argument("--max-correlation", type=float, default=0.85, help="Max pairwise correlation (0-1)")
     parser.add_argument("--live-session-costs", action="store_true",
-                        help="Use session-adjusted slippage (0900=1.3x, 2300=0.8x)")
+                        help="Use session-adjusted slippage (CME_REOPEN=1.3x, US_DATA_830=0.8x)")
     parser.add_argument("--calendar-filter", choices=["NFP", "OPEX", "NONE"],
                         default="NONE", help="Calendar overlay filter")
     args = parser.parse_args()
