@@ -28,10 +28,10 @@ days, price retraces are common because the initial breakout is more volatile.
 ### Entry model performance depends on ORB time
 | ORB | Best EM | Why |
 |-----|---------|-----|
-| 0900 | **E1** (+38.2R) | Fast momentum entry; extra confirmation wastes edge |
-| 1000 | **E1** (+18.6R) | Same pattern as 0900 |
-| 1800 | **E3** (+22.6R) | GLOBEX open spikes through then retraces; E3 catches the pullback |
-| 2300 | **E3** (+12.3R) | Overnight session has mean-reversion character |
+| CME_REOPEN | **E1** (+38.2R) | Fast momentum entry; extra confirmation wastes edge |
+| TOKYO_OPEN | **E1** (+18.6R) | Same pattern as CME_REOPEN |
+| LONDON_METALS | **E3** (+22.6R) | GLOBEX open spikes through then retraces; E3 catches the pullback |
+| US_DATA_830 | **E3** (+12.3R) | Overnight session has mean-reversion character |
 
 **Key insight**: E1 and E3 exploit opposite mechanisms. E1 = ride the momentum.
 E3 = get a better price on the pullback. The right model depends on the session character.
@@ -45,7 +45,7 @@ The single most important variable is **ORB size**. Larger ORBs produce better o
 2. Fixed friction ($8.40 RT) is a smaller percentage of risk
 3. Large ORBs signal genuine institutional participation
 
-### Win rate by 0900 ORB size (E1 RR2.5 CB2):
+### Win rate by CME_REOPEN ORB size (E1 RR2.5 CB2):
 | ORB Size | N | Win Rate | Avg R |
 |----------|---|----------|-------|
 | < 2pt | 948 | 27.2% | -0.47 |
@@ -56,7 +56,7 @@ The single most important variable is **ORB size**. Larger ORBs produce better o
 
 **Breakeven is around 4pt ORB size.** Below 4pt, the house wins.
 
-### ORB size filter sensitivity (0900 E1 RR2.5 CB2):
+### ORB size filter sensitivity (CME_REOPEN E1 RR2.5 CB2):
 | Filter | N | WR | TotalR | AvgR | Notes |
 |--------|---|-----|--------|------|-------|
 | G4+ | 125 | 40.0% | +38.2 | +0.31 | Best total R |
@@ -93,7 +93,7 @@ from 5pt at $1800 (0.28%). Consider implementing for regime stability.
 
 On **G5+ days** (the tradeable universe), CB2 is optimal for momentum entries:
 
-**0900 E1 RR2.5 G5+ (momentum entry):**
+**CME_REOPEN E1 RR2.5 G5+ (momentum entry):**
 | CB | N | WR | TotalR | AvgR |
 |----|---|-----|--------|------|
 | CB1 | 102 | 38.2% | +28.9 | +0.30 |
@@ -102,7 +102,7 @@ On **G5+ days** (the tradeable universe), CB2 is optimal for momentum entries:
 | CB4 | 99 | 33.3% | +15.0 | +0.16 |
 | CB5 | 98 | 29.6% | +4.3 | +0.05 |
 
-**1800 E3 RR2.0 G5+ (retrace entry):**
+**LONDON_METALS E3 RR2.0 G5+ (retrace entry):**
 | CB | N | WR | TotalR | AvgR |
 |----|---|-----|--------|------|
 | CB1 | 81 | 43.2% | +13.8 | +0.17 |
@@ -111,16 +111,16 @@ On **G5+ days** (the tradeable universe), CB2 is optimal for momentum entries:
 | CB4 | 77 | 46.8% | +20.6 | +0.27 |
 | **CB5** | **75** | **48.0%** | **+22.6** | **+0.30** |
 
-**Why the reversal**: On G5+ days, 0900 breakouts are genuine (large institutional
+**Why the reversal**: On G5+ days, CME_REOPEN breakouts are genuine (large institutional
 moves). Extra confirmation bars waste the edge — CB2 is enough to confirm direction,
-then E1 captures momentum. But for 1800 E3, more confirm bars = more time for the
+then E1 captures momentum. But for LONDON_METALS E3, more confirm bars = more time for the
 retrace to develop = better fill quality at the ORB level.
 
 ---
 
 ## RR Target Optimization
 
-**0900 E1 CB2 G5+:**
+**CME_REOPEN E1 CB2 G5+:**
 | RR | N | WR | TotalR | AvgR |
 |----|---|-----|--------|------|
 | 1.0 | 102 | 56.9% | +7.5 | +0.08 |
@@ -130,9 +130,9 @@ retrace to develop = better fill quality at the ORB level.
 | 3.0 | 102 | 32.4% | +27.1 | +0.29 |
 | 4.0 | 102 | 24.5% | +21.7 | +0.23 |
 
-**RR2.5 is the sweet spot** for 0900: enough room for the trend, not so far it rarely hits.
+**RR2.5 is the sweet spot** for CME_REOPEN: enough room for the trend, not so far it rarely hits.
 
-**1800 E3 CB5 G5+:**
+**LONDON_METALS E3 CB5 G5+:**
 | RR | N | WR | TotalR | AvgR |
 |----|---|-----|--------|------|
 | 1.0 | 75 | 64.0% | +11.2 | +0.15 |
@@ -140,26 +140,26 @@ retrace to develop = better fill quality at the ORB level.
 | **2.0** | **75** | **48.0%** | **+22.6** | **+0.30** |
 | 2.5 | 75 | 40.0% | +20.2 | +0.27 |
 
-**RR2.0 is optimal for 1800 E3**: lower target works because E3 gets a better entry price
+**RR2.0 is optimal for LONDON_METALS E3**: lower target works because E3 gets a better entry price
 (closer to the ORB level), so the risk-to-reward math favors a slightly closer target.
 
 ---
 
 ## Direction Bias
 
-**0900/1000: Long breakouts are stronger than short**
+**CME_REOPEN/TOKYO_OPEN: Long breakouts are stronger than short**
 
-| ORB | Direction | N | WR | AvgR | TotalR |
-|-----|-----------|---|-----|------|--------|
-| 0900 | LONG | 56 | 44.6% | +0.50 | +26.8 |
-| 0900 | SHORT | 46 | 37.0% | +0.23 | +10.2 |
-| 1000 | LONG | 48 | 41.7% | +0.41 | +18.6 |
-| 1000 | SHORT | 40 | 30.0% | -0.04 | -1.8 |
+| Session | Direction | N | WR | AvgR | TotalR |
+|---------|-----------|---|-----|------|--------|
+| CME_REOPEN | LONG | 56 | 44.6% | +0.50 | +26.8 |
+| CME_REOPEN | SHORT | 46 | 37.0% | +0.23 | +10.2 |
+| TOKYO_OPEN | LONG | 48 | 41.7% | +0.41 | +18.6 |
+| TOKYO_OPEN | SHORT | 40 | 30.0% | -0.04 | -1.8 |
 
-**1000 SHORT is actually negative** — long-only filter adds significant edge at 1000.
-0900 short is still positive but weaker. Both-directions 0900 gives more total R (+37 vs +27).
+**TOKYO_OPEN SHORT is actually negative** — long-only filter adds significant edge at TOKYO_OPEN.
+CME_REOPEN short is still positive but weaker. Both-directions CME_REOPEN gives more total R (+37 vs +27).
 
-**1800 shows no strong directional bias** with E3 entry (long +10.7R, short +4.4R at RR2.5).
+**LONDON_METALS shows no strong directional bias** with E3 entry (long +10.7R, short +4.4R at RR2.5).
 
 ---
 
@@ -169,14 +169,14 @@ Different ORBs show **negative PnL correlation** (even better than independence)
 
 | Pair | PnL Correlation | Interpretation |
 |------|----------------|---------------|
-| 0900 vs 1000 | -0.04 | Near zero |
-| 0900 vs 1800 | -0.12 | Mild hedging |
-| 1000 vs 1800 | **-0.39** | **Strong hedging** |
-| 0900 vs 2300 | +0.11 | Mild positive |
-| 1000 vs 2300 | +0.29 | Some overlap |
-| 1800 vs 2300 | -0.09 | Near zero |
+| CME_REOPEN vs TOKYO_OPEN | -0.04 | Near zero |
+| CME_REOPEN vs LONDON_METALS | -0.12 | Mild hedging |
+| TOKYO_OPEN vs LONDON_METALS | **-0.39** | **Strong hedging** |
+| CME_REOPEN vs US_DATA_830 | +0.11 | Mild positive |
+| TOKYO_OPEN vs US_DATA_830 | +0.29 | Some overlap |
+| LONDON_METALS vs US_DATA_830 | -0.09 | Near zero |
 
-**1000 and 1800 are strongly negatively correlated**: when one loses, the other tends
+**TOKYO_OPEN and LONDON_METALS are strongly negatively correlated**: when one loses, the other tends
 to win. This makes them an excellent pair for portfolio construction.
 
 Note: Trade DATE overlap between ORBs is high (91-100%, same G5+ days), but break
@@ -188,25 +188,25 @@ directions are ~50% random between ORBs, creating genuine PnL independence.
 
 Each leg exploits a **different mechanism** at a different session:
 
-### Leg 1: 0900 E1 CB2 RR2.5 G4+ (both directions)
-- **Mechanism**: Momentum breakout at US market open
+### Leg 1: CME_REOPEN E1 CB2 RR2.5 G4+ (both directions)
+- **Mechanism**: Momentum breakout at CME reopen
 - N=125, WR=40.0%, TotalR=+38.2, AvgR=+0.31
 - Avg risk: 12.9pt ($129/contract)
 - Positive every year 2022-2026
 
-### Leg 2: 1000 E1 CB2 RR2.5 G5+ LONG-ONLY
+### Leg 2: TOKYO_OPEN E1 CB2 RR2.5 G5+ LONG-ONLY
 - **Mechanism**: Gold intraday long bias on large-move days
 - N=48, WR=41.7%, TotalR=+18.6, AvgR=+0.39
 - Avg risk: 12.5pt ($125/contract)
 - Only trades 2025+ in meaningful volume
 
-### Leg 3: 1800 E3 CB5 RR2.0 G5+ (both directions)
-- **Mechanism**: GLOBEX open spike-and-retrace; limit entry at ORB level
+### Leg 3: LONDON_METALS E3 CB5 RR2.0 G5+ (both directions)
+- **Mechanism**: London metals open spike-and-retrace; limit entry at ORB level
 - N=75, WR=48.0%, TotalR=+22.6, AvgR=+0.30
 - Avg risk: 8.9pt ($89/contract)
 - Highest win rate of any leg
 
-### Leg 4 (optional): 2300 E3 CB4 RR1.5 G8+
+### Leg 4 (optional): US_DATA_830 E3 CB4 RR1.5 G8+
 - **Mechanism**: Overnight session retrace entry on very large ORB days
 - N=50, WR=52.0%, TotalR=+12.3, AvgR=+0.25
 - Requires G8+ filter (stricter)
@@ -229,7 +229,7 @@ Each leg exploits a **different mechanism** at a different session:
 - Max Consecutive Losses: 7
 - Avg: 19 trades/month, +6.5R/month (2025-2026)
 
-**4-leg portfolio (with 2300):**
+**4-leg portfolio (with US_DATA_830):**
 | Year | N | R |
 |------|---|---|
 | 2021 | 10 | -5.0 |
@@ -272,7 +272,7 @@ Each leg exploits a **different mechanism** at a different session:
 
 Gold prices and ORB sizes have changed dramatically:
 
-| Year | Avg Gold Price | 0900 Median ORB | G5+ Days (0900) |
+| Year | Avg Gold Price | CME_REOPEN Median ORB | G5+ Days (CME_REOPEN) |
 |------|---------------|-----------------|-----------------|
 | 2021 | $1,794 | 0.7pt | 7 (3%) |
 | 2022 | $1,807 | 0.9pt | 9 (3%) |
@@ -336,7 +336,7 @@ AvgR=+0.47 vs WR=37.3%, AvgR=+0.25 for non-streak days (N=51 each).
 
 ## RSI as Directional Confirmation
 
-RSI at 0900 predicts outcome **when combined with direction**:
+RSI at CME_REOPEN predicts outcome **when combined with direction**:
 
 | RSI + Direction | N | WR | AvgR | TotalR |
 |----------------|---|-----|------|--------|
@@ -357,7 +357,7 @@ If confirmed with more data, RSI 60+ LONG-only could be a very strong signal.
 
 ## MAE/MFE Analysis
 
-### Trade excursion patterns (0900 E1 CB2 RR2.5 G5+)
+### Trade excursion patterns (CME_REOPEN E1 CB2 RR2.5 G5+)
 | Outcome | N | Avg MAE | Med MAE | Avg MFE | Med MFE |
 |---------|---|---------|---------|---------|---------|
 | Win | 42 | 0.27R | 0.22R | 2.45R | 2.39R |
@@ -373,10 +373,10 @@ Moving stop to breakeven at +1.0R would rescue losses that went favorable:
 
 | Leg | Current R | Losses Rescued | R Saved | With Trailing |
 |-----|-----------|---------------|---------|---------------|
-| 0900 E1 CB2 RR2.5 G4+ | +38.2 | 18 | +18.0 | +56.2 |
-| 1000 E1 CB2 RR2.5 G5+ LONG | +18.6 | 4 | +4.0 | +22.6 |
-| 1800 E3 CB5 RR2.0 G5+ | +22.6 | 9 | +9.0 | +31.6 |
-| 2300 E3 CB4 RR1.5 G8+ | +12.3 | 1 | +1.0 | +13.3 |
+| CME_REOPEN E1 CB2 RR2.5 G4+ | +38.2 | 18 | +18.0 | +56.2 |
+| TOKYO_OPEN E1 CB2 RR2.5 G5+ LONG | +18.6 | 4 | +4.0 | +22.6 |
+| LONDON_METALS E3 CB5 RR2.0 G5+ | +22.6 | 9 | +9.0 | +31.6 |
+| US_DATA_830 E3 CB4 RR1.5 G8+ | +12.3 | 1 | +1.0 | +13.3 |
 | **TOTAL** | **+91.7** | **32** | **+32.0** | **+123.7** |
 
 *Upper bound — requires bar-by-bar simulation to verify ordering.

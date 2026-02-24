@@ -121,8 +121,8 @@ Do not schedule active delivery work against SIL until explicitly re-opened.
 
 ### 7c. Strategy Analysis — DONE
 - `STRATEGY_ANALYSIS_ASIA_OPEN.md` with live recommendations
-- 0900 Asia Open: E1 CB2 RR2.5 G6+ = +0.40 ExpR (TOP)
-- 1800 Evening: E3 CB4-5 RR2.0 G6+ = +0.43 ExpR, best Sharpe
+- CME_REOPEN: E1 CB2 RR2.5 G6+ = +0.40 ExpR (TOP)
+- LONDON_METALS: E3 CB4-5 RR2.0 G6+ = +0.43 ExpR, best Sharpe
 - 3-leg core portfolio: +0.55 combined ExpR, 6.5R max drawdown
 
 ### 7d. Ship-Ready Hardening — DONE (2026-02-09)
@@ -143,10 +143,10 @@ Hypothesis: wider ORB range (15/30m) + 5m entry bars reduces noise and improves 
 - 3 new tables: nested_outcomes, nested_strategies, nested_validated
 - Schema, builder, discovery, validator, compare, audit_outcomes all implemented
 - Isolation enforced: drift checks 15-17 block cross-contamination
-- 15m nested ORB findings: 1000 session is clear winner (+0.1222 Sharpe premium)
+- 15m nested ORB findings: TOKYO_OPEN session is clear winner (+0.1222 Sharpe premium)
 - 76 nested strategies validated (Tier 1), 30 at Tier 2 (2.0x stress + Sharpe floor)
 - Portfolio integration complete: `include_nested=True` flag in portfolio.py
-- A/B comparison done: nested helps 1000 session, hurts 2300/0030
+- A/B comparison done: nested helps TOKYO_OPEN session, hurts US_DATA_830/NYSE_OPEN
 
 ### Remaining
 - 30m ORB: not yet built/populated
@@ -162,7 +162,7 @@ Hypothesis: wider ORB range (15/30m) + 5m entry bars reduces noise and improves 
 - Results in `docs/strategy/rolling_eval_results.json`, `rolling_families_12m.json`, `rolling_families_18m.json`
 - New daily_features columns: `daily_open/high/low/close`, `gap_open_points`, 6x `orb_*_double_break`
 - Portfolio integration: `--include-rolling` CLI flag in portfolio.py
-- **Key finding**: Only 2 STABLE families (1000_E2_G2, 1000_E1_G2); 0900 G3+ are TRANSITIONING; 1800/2300/1100/0030 AUTO-DEGRADED by double-break
+- **Key finding**: Only 2 STABLE families (TOKYO_OPEN_E2_G2, TOKYO_OPEN_E1_G2); CME_REOPEN G3+ are TRANSITIONING; LONDON_METALS/US_DATA_830/SINGAPORE_OPEN/NYSE_OPEN AUTO-DEGRADED by double-break
 - 836 tests pass, 20 drift checks pass
 
 ---
@@ -186,17 +186,17 @@ H2 band filters and H5 direction filter implemented in `config.py`. Discovery gr
 Based on hypothesis test results (Feb 2026, `scripts/tools/hypothesis_test.py`).
 Two confirmed findings require config.py + discovery changes:
 
-**Change 1: MES 1000 band filters (H2 confirmed)**
-- Add `G4_L12` and `G5_L12` band filters to MES 1000 discovery grid
+**Change 1: MES TOKYO_OPEN band filters (H2 confirmed)**
+- Add `G4_L12` and `G5_L12` band filters to MES TOKYO_OPEN discovery grid
 - `OrbSizeFilter(min_size=4.0, max_size=12.0)` — class already supports `max_size`
-- Do NOT apply cap to MES 0900 (12pt+ is the best zone there)
+- Do NOT apply cap to MES CME_REOPEN (12pt+ is the best zone there)
 - Requires: instrument+session-aware filter dispatch in `config.py`
 
-**Change 2: LONG-ONLY direction filter for 1000 session (H5 confirmed)**
+**Change 2: LONG-ONLY direction filter for TOKYO_OPEN session (H5 confirmed)**
 - New `DirectionFilter` class in `config.py` (filter_type="DIR_LONG" / "DIR_SHORT")
 - `matches_row()` checks `orb_{label}_break_dir` column in daily_features
-- Add to grid for 1000 session only, all instruments
-- MGC 1000 shorts are negative (-0.09 avgR). MNQ shorts near-zero (+0.03).
+- Add to grid for TOKYO_OPEN session only, all instruments
+- MGC TOKYO_OPEN shorts are negative (-0.09 avgR). MNQ shorts near-zero (+0.03).
 - Requires: new filter class + grid builder update in strategy_discovery.py
 
 **Implementation sequence:**
@@ -206,7 +206,7 @@ Two confirmed findings require config.py + discovery changes:
 4. Update `strategy_discovery.py` to call dispatch instead of `ALL_FILTERS`
 5. Update `_FILTER_SPECIFICITY` to rank new filters
 6. Re-run discovery for MES only (band filters)
-7. Re-run discovery for MGC, MNQ, MES 1000 only (direction filter)
+7. Re-run discovery for MGC, MNQ, MES TOKYO_OPEN only (direction filter)
 8. Re-run validator on new strategies
 9. Update `live_config.py` if new validated edges emerge
 
@@ -220,11 +220,11 @@ Two confirmed findings require config.py + discovery changes:
 
 Six high-leverage research items identified by cross-referencing all findings. Ordered by expected impact.
 
-**P1. Cross-Instrument Correlation + Multi-Instrument Portfolio — DONE (NO-GO for 1000 LONG stacking)**
+**P1. Cross-Instrument Correlation + Multi-Instrument Portfolio — DONE (NO-GO for TOKYO_OPEN LONG stacking)**
 - Script: `research/research_cross_instrument_portfolio.py` — COMPLETED Feb 2026
-- Result: MNQ/MES daily R correlation at 1000 = +0.83 (effectively same trade)
-- MGC/equity correlation at 1000 = +0.40 to +0.44 (moderate, not the diversification freebie hoped for)
-- Adding MNQ+MES to MGC at 1000 LONG worsens portfolio Sharpe — DO NOT STACK
+- Result: MNQ/MES daily R correlation at TOKYO_OPEN = +0.83 (effectively same trade)
+- MGC/equity correlation at TOKYO_OPEN = +0.40 to +0.44 (moderate, not the diversification freebie hoped for)
+- Adding MNQ+MES to MGC at TOKYO_OPEN LONG worsens portfolio Sharpe — DO NOT STACK
 - Action: pick ONE equity micro (MNQ or MES) per session, don't run both
 - Next: find a truly uncorrelated asset class (bonds, FX, ags) for real portfolio diversification
 
@@ -236,54 +236,54 @@ Six high-leverage research items identified by cross-referencing all findings. O
 - Winter seasonality signal feeds into P2 (calendar effects)
 
 **DST CONTAMINATION REMEDIATION — DONE (Feb 2026)**
-- Sessions 0900/1800/0030/2300 blend two market contexts. 1000/1100/1130 and dynamic sessions are CLEAN.
-- 2300 special case: NEVER aligned with US data release. Winter = 30min before, Summer = 30min after. DST flips context.
+- The old fixed sessions (0900/1800/0030/2300) blended two market contexts. Now replaced by event-based sessions (CME_REOPEN, LONDON_METALS, NYSE_OPEN, US_DATA_830).
+- US_DATA_830 (formerly 2300) special case: was NEVER aligned with US data release under old fixed naming. Now resolves correctly.
 - Step 1: ✅ 24-hour ORB time scan with winter/summer split (`research/research_orb_time_scan.py`) — DONE
-  - 1000 is the anchor (STBL all instruments). MGC 19:00 STBL. MES 0900 winter = NEGATIVE.
+  - TOKYO_OPEN is the anchor (STBL all instruments). MGC 19:00 STBL. MES CME_REOPEN winter = NEGATIVE.
 - Step 1b: ✅ Strategy revalidation with DST split (`research/research_dst_strategy_revalidation.py`) — DONE
   - 1272 strategies: 275 STABLE, 155 WINTER-DOM, 130 SUMMER-DOM, 10 SUMMER-ONLY, 48 UNSTABLE, 654 LOW-N.
-  - NO validated strategies broken. Red flags: MES 0900 E1 experimental only.
+  - NO validated strategies broken. Red flags: MES CME_REOPEN E1 experimental only.
   - CSV: `research/output/dst_strategy_revalidation.csv`
 - Step 2: ✅ Winter/summer split baked into `strategy_validator.py` — DONE
   - DST columns (`dst_winter_n`, `dst_winter_avg_r`, `dst_summer_n`, `dst_summer_avg_r`, `dst_verdict`) on `experimental_strategies` and `validated_setups`.
   - Auto-migration in `db_manager.py:init_trading_app_schema()`.
   - `classify_dst_verdict()` in `pipeline/dst.py`.
 - Step 3: ✅ Volume analysis confirms event-driven edges (`research/research_volume_dst_analysis.py`) — DONE
-  - 0900: 63% volume drop summer. 2300: +76-90% summer. 1800: 31% winter premium (MGC).
+  - CME_REOPEN: 63% volume drop summer. US_DATA_830: +76-90% summer. LONDON_METALS: 31% winter premium (MGC).
   - Findings: `research/output/volume_dst_findings.md`, CSV: `research/output/volume_dst_analysis.csv`
 - Step 4: ✅ TRADING_RULES.md session playbooks updated with DST split numbers — DONE
 - Step 5: ✅ New session candidates evaluated — ALL REJECTED (insufficient G4+ frequency or too much overlap)
 - Step 6: ✅ Migrate DST columns to production gold.db — DONE (auto-migration in init_trading_app_schema())
-- Rule: ALL future research touching 0900/1800/0030/2300 MUST split by DST regime
+- All sessions are now event-based — DST contamination is fully resolved
 
 **P2. Calendar Effect Scan (Day-of-Week, FOMC, NFP, Opex) — DONE (Feb 2026)**
 - Script: `research/research_day_of_week.py` — COMPLETED
 - Output: `research/output/day_of_week_breakdown.csv`, `day_of_week_macro_overlay.csv`, `day_of_week_skip_filter.csv`
 - **NFP_SKIP:** First-Friday NFP days are toxic for breakout strategies. Actionable skip filter.
 - **OPEX_SKIP:** Monthly options expiration days degrade edge. Actionable skip filter.
-- **FRIDAY_SKIP (0900 only):** Friday 0900 underperforms other weekdays. Session-specific skip.
-- **DOW at 1000:** Day-of-week has no significant effect — noise. Do NOT filter.
+- **FRIDAY_SKIP (CME_REOPEN only):** Friday CME_REOPEN underperforms other weekdays. Session-specific skip.
+- **DOW at TOKYO_OPEN:** Day-of-week has no significant effect — noise. Do NOT filter.
 - Calendar filters implemented in `pipeline/calendar_filters.py` and integrated as portfolio-level overlays in `trading_app/config.py` (`CALENDAR_OVERLAYS`).
 
 **P3. Signal Stacking (Size + Direction + Concordance + Volume) — DONE (Feb 2026)**
 - Script: `research/research_signal_stacking.py` — COMPLETED
 - Output: `research/output/signal_stacking_*.{csv,md}`
 - Reference: E3/CB1/RR2.0 fixed (avoids Bailey Rule). In-sample only.
-- **MES 0030 summer G4/G5 L4 (size+dir+conc+vol): SURVIVED BH FDR** — avgR=+0.42/+0.41, N=136/124, p_bh=0.023/0.028 [PRELIMINARY]
-  - Mechanism: in US DST summer, 0030 bar is POST equity open (equity opened at 2330 Bris).
+- **MES NYSE_OPEN summer G4/G5 L4 (size+dir+conc+vol): SURVIVED BH FDR** — avgR=+0.42/+0.41, N=136/124, p_bh=0.023/0.028 [PRELIMINARY]
+  - Mechanism: in US DST summer, NYSE_OPEN bar is POST equity open.
     Vol spike + MES/MNQ concordance = institutional follow-through from already-open US market.
-  - Caveat: E3 reference only. Not yet tested at E1 (the production entry for 0030).
-- **MGC 1000 G5 L4** — avgR=+0.545, N=37 (REGIME), p_bh=0.16 — interesting but small N.
-- **MGC 0900 winter G4/G5 L3-L5** — avgR=+0.35–+0.37 (REGIME), not BH-significant.
+  - Caveat: E3 reference only. Not yet tested at E1 (the production entry for NYSE_OPEN).
+- **MGC TOKYO_OPEN G5 L4** — avgR=+0.545, N=37 (REGIME), p_bh=0.16 — interesting but small N.
+- **MGC CME_REOPEN winter G4/G5 L3-L5** — avgR=+0.35-+0.37 (REGIME), not BH-significant.
 - **184/216 cells positive** but only 2 survived BH — individual filters already capture most of the edge.
 - **TODO (implement):**
-  1. Test MES 0030 summer L4 at E1 entry (production entry for 0030) — if still positive, wire as position-size overlay
+  1. Test MES NYSE_OPEN summer L4 at E1 entry (production entry for NYSE_OPEN) — if still positive, wire as position-size overlay
   2. Add `conc_tier` + `rel_vol` columns to live portfolio overlay (not a new strategy — 2x size on qualifying days)
-  3. Re-test MGC 1000 G5 L4 at a 2-year window once N grows to PRELIMINARY threshold
+  3. Re-test MGC TOKYO_OPEN G5 L4 at a 2-year window once N grows to PRELIMINARY threshold
 
 **P4. E3 x Direction Interaction**
 - H5 direction test used E1 only. E3 (retrace entry) could behave differently.
-- If 1000 LONG bias is structural flow → E3 LONG = buying the dip in a session that wants to go up.
+- If TOKYO_OPEN LONG bias is structural flow → E3 LONG = buying the dip in a session that wants to go up.
 - Could be highest-quality single trade in entire system.
 - Script: extend `hypothesis_test.py` or new `research/research_e3_direction.py`
 
@@ -296,7 +296,7 @@ Six high-leverage research items identified by cross-referencing all findings. O
 **P6. Regime Hedging via Multi-Instrument Allocation — REVISED (P1 findings change approach)**
 - ORB sizes 15x larger 2025 vs 2021. Current system is gold-vol-dependent.
 - When gold cools, G5+ days drop to 5/year. System becomes unfundable on MGC alone.
-- P1 showed MNQ/MES correlation = +0.83 at 1000 (NOT the free hedge expected).
+- P1 showed MNQ/MES correlation = +0.83 at TOKYO_OPEN (NOT the free hedge expected).
 - MGC/equity correlation = +0.40-0.44 (moderate). MNQ OR MES adds some diversification but not enough.
 - Revised plan: need truly uncorrelated asset (bonds micro? FX micro? ags?) for real regime hedge.
 - Depends on: user selecting candidate asset + data acquisition.

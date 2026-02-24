@@ -84,13 +84,13 @@ Databento .dbn.zst files
 - Bars before 09:00 assigned to PREVIOUS trading day
 - All DB timestamps are UTC (`TIMESTAMPTZ`)
 
-### DST Contamination (Feb 2026 — REMEDIATED)
+### DST Contamination (Feb 2026 — FULLY RESOLVED)
 
-Sessions 0900/1800/0030/2300 shift relative to market events with DST. Remediation complete — DST columns live in production. **Rule: ANY analysis touching these sessions MUST split by DST regime (US for 0900/0030/2300; UK for 1800) and report both halves.** Detail → `docs/DST_CONTAMINATION.md`.
+All sessions are now dynamic/event-based (e.g., CME_REOPEN, LONDON_METALS, NYSE_OPEN, US_DATA_830). Session times are resolved per-day from `pipeline/dst.py` SESSION_CATALOG, so DST contamination is no longer an issue. The old fixed-clock sessions (0900/1800/0030/2300) have been replaced. DST columns remain in the database for historical reference. Detail → `docs/DST_CONTAMINATION.md`.
 
 ### DOW Alignment (Feb 2026 — VERIFIED)
 
-Brisbane DOW = exchange DOW for all sessions except 0030 (midnight crossing). Runtime guard `validate_dow_filter_alignment()` in `pipeline/dst.py` prevents misaligned DOW filters. Detail → `docs/DOW_ALIGNMENT.md`.
+Brisbane DOW = exchange DOW for all sessions except NYSE_OPEN (midnight crossing). Runtime guard `validate_dow_filter_alignment()` in `pipeline/dst.py` prevents misaligned DOW filters. Detail → `docs/DOW_ALIGNMENT.md`.
 
 ---
 

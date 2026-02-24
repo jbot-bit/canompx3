@@ -15,8 +15,8 @@ When the user asks about trading data, match their intent to the right tool:
 - **WARNING:** Never call `get_strategy_fitness()` for all strategies WITHOUT `summary_only=True` — output exceeds 150K chars and blows up context.
 
 ### Strategy Lookups & Comparisons
-- "Show me all strategies for session 0900" / "What's validated for MNQ?"
-  → `query_trading_db(template="validated_summary", orb_label="0900")` or filter by instrument
+- "Show me all strategies for session CME_REOPEN" / "What's validated for MNQ?"
+  → `query_trading_db(template="validated_summary", orb_label="CME_REOPEN")` or filter by instrument
 - "Compare E0 vs E1" / "Which entry model is best?"
   → `query_trading_db(template="performance_stats", ...)` with varying `entry_model`
 - "Full details on strategy X"

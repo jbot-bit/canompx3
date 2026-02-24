@@ -4,7 +4,7 @@
 
 ## Summary
 
-`day_of_week` uses Brisbane trading day. For most sessions Brisbane DOW = exchange DOW. Exception: **0030** (crosses midnight Brisbane → Brisbane DOW = US DOW + 1). Brisbane-Friday at 0030 = US Thursday.
+`day_of_week` uses Brisbane trading day. For most sessions Brisbane DOW = exchange DOW. Exception: **NYSE_OPEN** (crosses midnight Brisbane → Brisbane DOW = US DOW + 1). Brisbane-Friday at NYSE_OPEN = US Thursday.
 
 ## Active DOW Filters
 
@@ -12,9 +12,9 @@ All three active DOW filters are correctly aligned:
 
 | Filter | Session | Meaning |
 |--------|---------|---------|
-| NOFRI | 0900 | Skip Brisbane Friday (= exchange Friday) |
-| NOMON | 1800 | Skip Brisbane Monday (= exchange Monday) |
-| NOTUE | 1000 | Skip Brisbane Tuesday (= exchange Tuesday) |
+| NOFRI | CME_REOPEN | Skip Brisbane Friday (= exchange Friday) |
+| NOMON | LONDON_METALS | Skip Brisbane Monday (= exchange Monday) |
+| NOTUE | TOKYO_OPEN | Skip Brisbane Tuesday (= exchange Tuesday) |
 
 ## Runtime Guard
 

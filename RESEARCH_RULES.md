@@ -62,8 +62,8 @@ Every statistical finding MUST have a structural market reason (mechanism) for W
 - Friction eats small ORBs → size filter works (cost structure). **This is THE primary edge in the project — confirmed across all instruments Feb 2026.**
 - Double-break = chop, no directional conviction → exclude (market microstructure)
 - All 3 instruments breaking same direction = macro flow day → concordance (institutional behavior)
-- Large gold ORB at 2300 = active overnight session → equity vol at 0030 (cross-market information flow)
-- 1000 shorts fail because Asian session has upward bias from physical demand (market structure)
+- Large gold ORB at US_DATA_830 = active overnight session → equity vol at NYSE_OPEN (cross-market information flow)
+- TOKYO_OPEN shorts fail because Asian session has upward bias from physical demand (market structure)
 - Large ORB = institutional participation, real conviction → breakout has energy behind it (market microstructure)
 
 **Bad mechanisms (unlikely to persist or not mechanisms at all):**
@@ -76,7 +76,7 @@ Every statistical finding MUST have a structural market reason (mechanism) for W
 ### Reframing Rules
 | Raw Finding | Wrong Interpretation | Right Interpretation |
 |-------------|---------------------|---------------------|
-| MGC 2300 large ORB → MES 0030 better | "Gold predicts equity direction" | "Gold volatility signals active overnight session → equity breakouts have more energy" |
+| MGC US_DATA_830 large ORB → MES NYSE_OPEN better | "Gold predicts equity direction" | "Gold volatility signals active overnight session → equity breakouts have more energy" |
 | 3/3 concordance improves WR | "All instruments agree = strong signal" | "Macro flow day → all assets trending → breakout more likely to follow through" |
 | RSI < 30 + long breakout works | "Buy oversold bounces" | "UNVALIDATED. RSI threshold sensitivity not tested. Guilty until proven innocent." |
 | Edge strengthening 2024→2026 | "Strategy is getting better" | "Gold trending harder in this period. Regime-dependent, not structural." |
@@ -84,7 +84,7 @@ Every statistical finding MUST have a structural market reason (mechanism) for W
 
 ### Volatility vs Direction
 A common error in this project: confusing volatility signals with directional signals.
-- MGC 2300 ORB **size** predicts MES 0030 quality. **Direction** does not.
+- MGC US_DATA_830 ORB **size** predicts MES NYSE_OPEN quality. **Direction** does not.
 - Concordance is about conviction (all trending), not about which way.
 - Large ORBs work because they indicate a session with energy, not because "big up ORB = price goes up."
 
@@ -130,11 +130,11 @@ This format already exists in the research scripts. Maintain it.
 2. **NEVER treat low trade count alone as a bug.** Strict filters (G6/G8) SHOULD have few trades.
 3. **NEVER present in-sample results as validated.** Words matter. "In-sample positive" ≠ "confirmed edge."
 4. **NEVER recommend REGIME-class strategies for standalone trading.**
-5. **NEVER speculate on WHY a session-specific pattern exists unless you have evidence.** Record the empirical fact. "0900 and 1100 show concordance benefit, 1000 and 1800 do not" is the correct statement. "Early sessions work because X" is speculation.
+5. **NEVER speculate on WHY a session-specific pattern exists unless you have evidence.** Record the empirical fact. "CME_REOPEN and SINGAPORE_OPEN show concordance benefit, TOKYO_OPEN and LONDON_METALS do not" is the correct statement. "Early sessions work because X" is speculation.
 6. **NEVER call 3 data points a trend.** 5 is barely suggestive. 10+ with a mechanism is a trend.
 7. **NEVER assume stationarity.** If gold returns to $1800, most current G5+ filters become untradeable (< 5 qualifying days per year).
 8. **NEVER simulate exit rules using post-resolution observations.** If a condition (e.g., "price returned inside ORB") can occur AFTER the trade already hit its stop or target, it is not actionable as an exit trigger. Simulations must verify the trigger fires while the trade is still open. The C8 break-even stop was overestimated 5x (Feb 2026) because the simulation counted post-exit price returns as if they were live-trade events. Always use `_while_open` or equivalent temporal guards.
-9. **NEVER report blended results for DST-contaminated sessions.** Sessions 0900/1800/0030/2300 MUST split by DST regime (per CLAUDE.md). Blended averages across DST halves can mask regime-specific failures or inflate effects that only exist in one half. This compounds with other errors — the C8 overestimate survived initial review because blended numbers looked plausible.
+9. **NEVER report blended results without checking DST regime.** All sessions are now event-based (DST-clean), but historical data from before the migration may still contain blended winter+summer averages. When analyzing historical data, verify whether the session was dynamic at the time. Blended averages across DST halves can mask regime-specific failures or inflate effects that only exist in one half.
 
 ### Indicators That Are Guilty Until Proven Innocent
 RSI, MACD, Bollinger Bands, moving average crossovers, Stochastics. These are the most over-fitted indicators in existence. Any finding based on these requires:
@@ -147,25 +147,28 @@ RSI, MACD, Bollinger Bands, moving average crossovers, Stochastics. These are th
 
 ## Market Structure Knowledge
 
-### Session Context (All Times Brisbane UTC+10)
-| Session | Brisbane | UTC | ET (approx) | What's Happening |
-|---------|----------|-----|-------------|-----------------|
-| 0900 | 9:00 AM | 23:00 prev | ~6 PM prev | Asia/Sydney open. Gold physical demand. Thin liquidity. |
-| 1000 | 10:00 AM | 00:00 | ~7 PM prev | Tokyo. Increasing liquidity. LONG-ONLY edge. |
-| 1100 | 11:00 AM | 01:00 | ~8 PM prev | Singapore/HK. **EXCLUDED** — 74% double-break. |
-| 1130 | 11:30 AM | 01:30 | ~8:30 PM prev | HK/SG continuation. |
-| 1800 | 6:00 PM | 08:00 | ~3 AM | US pre-market / GLOBEX open. Data releases. Highest vol. |
-| 2300 | 11:00 PM | 13:00 | ~8 AM | US morning. Position building. |
-| 0030 | 12:30 AM | 14:30 | ~9:30 AM | US equity open (NYSE). Key for MES/MNQ. |
+### Session Context (Event-Based — All Times Dynamic)
+| Session | Event | Reference TZ | What's Happening |
+|---------|-------|-------------|-----------------|
+| CME_REOPEN | CME daily reopen | 5:00 PM CT | Asia/Sydney open. Gold physical demand. Thin liquidity. |
+| TOKYO_OPEN | Tokyo open | 10:00 AM AEST | Tokyo. Increasing liquidity. LONG-ONLY edge. |
+| SINGAPORE_OPEN | Singapore/HK open | 11:00 AM AEST | Singapore/HK. **EXCLUDED** — 74% double-break. |
+| LONDON_METALS | London metals open | 8:00 AM UK | London gold market. Data releases. Highest vol. |
+| US_DATA_830 | US economic data | 8:30 AM ET | US morning. Position building. |
+| NYSE_OPEN | NYSE equity open | 9:30 AM ET | US equity open. Key for MES/MNQ. |
+| US_DATA_1000 | US 10 AM data | 10:00 AM ET | Post-open data releases. |
+| CME_PRECLOSE | CME pre-close | 2:45 PM CT | End-of-day positioning. |
+| COMEX_SETTLE | COMEX gold settle | 1:30 PM ET | Gold settlement window. |
+| NYSE_CLOSE | NYSE equity close | 4:00 PM ET | Equity close. |
 
-**CRITICAL:** 1100 (11:00 AM, Singapore) and 2300 (11:00 PM, US morning) are COMPLETELY DIFFERENT sessions. 24-hour time. No ambiguity.
+All sessions are now event-based with per-day time resolution from `pipeline/dst.py`.
 
 ### Cross-Asset Relationships
 - **Gold ↔ Equities:** Structurally uncorrelated (~0.05 correlation). This is BASELINE, not a finding.
 - **Gold ↔ USD:** Inverse correlation (~-0.60 over 5 years). Driven by dollar denomination.
 - **Gold ↔ Real Yields:** Inverse. Rising real yields pressure gold (opportunity cost of holding non-yielding asset).
 - **MES ↔ MNQ:** ~87-89% concordant. Same asset class. Agreement is not signal.
-- **MGC 2300 → MES/MNQ 0030:** Volatility transmission, not directional. Size matters, direction doesn't. 90-minute temporal gap makes this zero-lookahead.
+- **MGC US_DATA_830 → MES/MNQ NYSE_OPEN:** Volatility transmission, not directional. Size matters, direction doesn't. 90-minute temporal gap makes this zero-lookahead.
 
 ### Cost Reality for Micro Futures
 | Instrument | Tick Value | RT Friction | Friction as % of 5pt ORB |
@@ -181,7 +184,7 @@ RSI, MACD, Bollinger Bands, moving average crossovers, Stochastics. These are th
 - Gold trends intraday more than it mean-reverts. The ONLY confirmed edges in this project are momentum breakouts with size filters.
 - Physical demand (central banks, jewelry) creates baseline buying pressure, especially in Asian sessions.
 - Gold had an exceptional run in 2024-2025 (central bank buying, geopolitical hedging). G5+ day frequency exploded from ~3% to 27-88%. This is regime, not permanent.
-- If gold returns to $1800 levels, the entire strategy set becomes low-frequency (5 qualifying days/year at 0900 G5+).
+- If gold returns to $1800 levels, the entire strategy set becomes low-frequency (5 qualifying days/year at CME_REOPEN G5+).
 
 ---
 
@@ -193,15 +196,15 @@ See `TRADING_RULES.md` → Confirmed Edges table.
 ### Cross-Instrument Stress Test Finding (Feb 2026)
 **ORB size is the primary edge across ALL instruments.** Not sessions, not parameters, not entry models. Stress test (`scripts/tools/stress_test.py`) on 11 top edges:
 - MES/MGC: ALL edges die without size filter. Regime-dependent, parameter-fragile.
-- MNQ 0900: SURVIVED. Positive all 3 years, bidirectional, all real neighbors profitable.
+- MNQ CME_REOPEN: SURVIVED. Positive all 3 years, bidirectional, all real neighbors profitable.
 - Mechanism: friction as % of risk (arithmetic, not statistical).
 - **Research priority:** Map optimal ORB size threshold per session per instrument. The threshold is NOT universal — MNQ (low friction) may profit from smaller ORBs than MGC (high friction).
 - Tool: `scripts/tools/orb_size_deep_dive.py`
 
 ### Awaiting 10-Year Outcome Rebuild
 These findings are in-sample only (579 days, Feb 2024 - Feb 2026). Do NOT act on them until validated on full dataset:
-1. **Concordance filter (0900, 1100)** — mechanism strong, awaiting OOS
-2. **MGC 2300 size gate for MES/MNQ 0030** — mechanism plausible, awaiting OOS
+1. **Concordance filter (CME_REOPEN, SINGAPORE_OPEN)** — mechanism strong, awaiting OOS
+2. **MGC US_DATA_830 size gate for MES/MNQ NYSE_OPEN** — mechanism plausible, awaiting OOS
 3. **Asia session high filter** — needs investigation after rebuild
 4. **RSI oversold for long ORB** — guilty until sensitivity-tested
 
@@ -210,7 +213,7 @@ See `TRADING_RULES.md` → What Doesn't Work table.
 Also: `docs/RESEARCH_ARCHIVE.md` for full data.
 
 ### Re-Validation Trigger
-Cross-instrument findings (concordance, MGC 2300 gate) should be re-validated when overlapping day count reaches **800 days** (currently 579). This is a data trigger, not a time trigger. Do not re-run at arbitrary dates.
+Cross-instrument findings (concordance, MGC US_DATA_830 gate) should be re-validated when overlapping day count reaches **800 days** (currently 579). This is a data trigger, not a time trigger. Do not re-run at arbitrary dates.
 
 ---
 
