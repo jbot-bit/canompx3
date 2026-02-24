@@ -81,8 +81,8 @@ def _create_test_db(tmp_path, n_days=20, start_year=2024):
         con.execute(
             """INSERT OR REPLACE INTO daily_features
                (trading_day, symbol, orb_minutes, bar_count_1m,
-                orb_0900_high, orb_0900_low, orb_0900_size,
-                orb_0900_break_dir, orb_0900_break_ts)
+                orb_CME_REOPEN_high, orb_CME_REOPEN_low, orb_CME_REOPEN_size,
+                orb_CME_REOPEN_break_dir, orb_CME_REOPEN_break_ts)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::TIMESTAMPTZ)""",
             [
                 trading_day, "MGC", 5, 200,

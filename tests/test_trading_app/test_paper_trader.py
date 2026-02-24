@@ -31,9 +31,9 @@ def _cost():
 
 def _make_strategy(**overrides):
     base = {
-        "strategy_id": "MGC_0900_E1_RR2.0_CB1_NO_FILTER",
+        "strategy_id": "MGC_CME_REOPEN_E1_RR2.0_CB1_NO_FILTER",
         "instrument": "MGC",
-        "orb_label": "0900",
+        "orb_label": "CME_REOPEN",
         "entry_model": "E1",
         "rr_target": 2.0,
         "confirm_bars": 1,
@@ -134,8 +134,8 @@ def _setup_replay_db(tmp_path, n_days=5):
         con.execute(
             """INSERT OR REPLACE INTO daily_features
                (trading_day, symbol, orb_minutes, bar_count_1m,
-                orb_0900_high, orb_0900_low, orb_0900_size,
-                orb_0900_break_dir, orb_0900_break_ts)
+                orb_CME_REOPEN_high, orb_CME_REOPEN_low, orb_CME_REOPEN_size,
+                orb_CME_REOPEN_break_dir, orb_CME_REOPEN_break_ts)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::TIMESTAMPTZ)""",
             [
                 trading_day, "MGC", 5, len(bars),
@@ -158,10 +158,13 @@ def _setup_replay_db(tmp_path, n_days=5):
 class TestHelpers:
 
     def test_orb_from_strategy(self):
-        assert _orb_from_strategy("MGC_2300_E1_RR2.0_CB5_NO_FILTER") == "2300"
+        assert _orb_from_strategy("MGC_US_DATA_830_E1_RR2.0_CB5_NO_FILTER") == "US_DATA_830"
+        assert _orb_from_strategy("MGC_CME_REOPEN_E0_RR2.0_CB1_ORB_G5") == "CME_REOPEN"
+        assert _orb_from_strategy("MGC_TOKYO_OPEN_E1_RR2.5_CB2_NO_FILTER") == "TOKYO_OPEN"
 
     def test_entry_model_from_strategy(self):
-        assert _entry_model_from_strategy("MGC_2300_E1_RR2.0_CB5_NO_FILTER") == "E1"
+        assert _entry_model_from_strategy("MGC_US_DATA_830_E1_RR2.0_CB5_NO_FILTER") == "E1"
+        assert _entry_model_from_strategy("MGC_CME_REOPEN_E0_RR2.0_CB1_ORB_G5") == "E0"
 
 # ============================================================================
 # Replay Tests — shared class fixture (runs replay ONCE)

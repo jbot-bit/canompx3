@@ -57,37 +57,32 @@ CREATE TABLE IF NOT EXISTS bars_5m (
 );
 """
 
-# ORB labels: Opening Range Breakout windows at these local times.
-# All times are Australia/Brisbane (UTC+10, no DST).
-#
-# Fixed session mapping (data-proven market event identities):
-#   0900 Brisbane = 23:00 UTC — CME open in winter / 1hr after in summer
-#   1000 Brisbane = 00:00 UTC — Tokyo 9AM JST (no DST)
-#   1100 Brisbane = 01:00 UTC — ~Singapore/Shanghai open (no DST)
-#   1130 Brisbane = 01:30 UTC — HK/SG equity open 9:30 AM HKT (no DST)
-#   1800 Brisbane = 08:00 UTC — London metals in winter / 1hr after summer
-#   2300 Brisbane = 13:00 UTC — ~8AM ET winter / ~9AM ET summer
-#   0030 Brisbane = 14:30 UTC — NYSE 9:30 ET in winter / 1hr after summer
+# ORB labels: Opening Range Breakout windows at event-based session times.
+# All sessions are dynamic (DST-aware), resolved per-day by pipeline/dst.py.
 #
 # The ORB is the high-low range of the first N minutes (configurable).
 # A "break" occurs when a 1-min bar closes above orb_high (long) or
 # below orb_low (short). See pipeline/build_daily_features.py for logic.
-ORB_LABELS_FIXED = ["0900", "1000", "1100", "1130", "1800", "2300", "0030"]
+ORB_LABELS_FIXED = []
 
-# Dynamic sessions: DST-aware windows that track specific market events
-# regardless of daylight saving time changes. Resolved per-day by
-# pipeline/dst.py resolvers. See pipeline/dst.py SESSION_CATALOG for
-# the master registry including aliases and event descriptions.
+# All 10 sessions are dynamic (DST-aware, resolver per-day).
+# See pipeline/dst.py SESSION_CATALOG for the master registry.
 #
-#   CME_OPEN        - CME Globex electronic open at 5:00 PM CT
-#   US_EQUITY_OPEN  - NYSE cash open at 09:30 ET (MES, MNQ)
-#   US_DATA_OPEN    - US economic data release at 08:30 ET (MGC)
-#   LONDON_OPEN     - London metals open at 08:00 London time (MGC)
-#   US_POST_EQUITY  - US post-equity-open at 10:00 AM ET
-#   CME_CLOSE       - CME equity futures pre-close at 2:45 PM CT (MNQ, MES)
+#   CME_REOPEN      - CME Globex electronic reopen at 5:00 PM CT
+#   TOKYO_OPEN      - Tokyo Stock Exchange open at 9:00 AM JST
+#   SINGAPORE_OPEN  - SGX/HKEX open at 9:00 AM SGT
+#   LONDON_METALS   - London metals AM session at 8:00 AM London
+#   US_DATA_830     - US economic data release at 8:30 AM ET
+#   NYSE_OPEN       - NYSE cash open at 9:30 AM ET
+#   US_DATA_1000    - US 10:00 AM data (ISM/CC) + post-equity-open flow
 #   COMEX_SETTLE    - COMEX gold settlement at 1:30 PM ET (MGC)
-#   NYSE_CLOSE      - NYSE closing bell at 4:00 PM ET (MES, MNQ, M2K)
-ORB_LABELS_DYNAMIC = ["CME_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "LONDON_OPEN", "US_POST_EQUITY", "CME_CLOSE", "COMEX_SETTLE", "NYSE_CLOSE"]
+#   CME_PRECLOSE    - CME equity futures pre-settlement at 2:45 PM CT
+#   NYSE_CLOSE      - NYSE closing bell at 4:00 PM ET
+ORB_LABELS_DYNAMIC = [
+    "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
+    "US_DATA_830", "NYSE_OPEN", "US_DATA_1000", "COMEX_SETTLE",
+    "CME_PRECLOSE", "NYSE_CLOSE",
+]
 
 # Combined label list — used by schema generation and feature builders
 ORB_LABELS = ORB_LABELS_FIXED + ORB_LABELS_DYNAMIC
@@ -195,12 +190,12 @@ CREATE TABLE IF NOT EXISTS daily_features (
     -- z-score of (orb_size/atr_20) vs rolling prior-20-day mean/std. Prior-days only.
     -- 'Compressed' (z < -0.5), 'Neutral' (-0.5..0.5), 'Expanded' (z > 0.5), NULL (<5 prior days)
     -- Used by ATRVelocityFilter: Contracting+Neutral/Compressed = skip.
-    orb_0900_compression_z    DOUBLE,
-    orb_0900_compression_tier TEXT,
-    orb_1000_compression_z    DOUBLE,
-    orb_1000_compression_tier TEXT,
-    orb_1800_compression_z    DOUBLE,
-    orb_1800_compression_tier TEXT,
+    orb_CME_REOPEN_compression_z    DOUBLE,
+    orb_CME_REOPEN_compression_tier TEXT,
+    orb_TOKYO_OPEN_compression_z    DOUBLE,
+    orb_TOKYO_OPEN_compression_tier TEXT,
+    orb_LONDON_METALS_compression_z    DOUBLE,
+    orb_LONDON_METALS_compression_tier TEXT,
 
     -- DST flags: whether US/UK was in daylight saving time on this trading day.
     -- Used by dynamic sessions (US_EQUITY_OPEN, US_DATA_OPEN, LONDON_OPEN)
@@ -319,12 +314,12 @@ def init_db(db_path: Path, force: bool = False):
         for col, typedef in [
             ("atr_vel_ratio",             "DOUBLE"),
             ("atr_vel_regime",            "TEXT"),
-            ("orb_0900_compression_z",    "DOUBLE"),
-            ("orb_0900_compression_tier", "TEXT"),
-            ("orb_1000_compression_z",    "DOUBLE"),
-            ("orb_1000_compression_tier", "TEXT"),
-            ("orb_1800_compression_z",    "DOUBLE"),
-            ("orb_1800_compression_tier", "TEXT"),
+            ("orb_CME_REOPEN_compression_z",    "DOUBLE"),
+            ("orb_CME_REOPEN_compression_tier", "TEXT"),
+            ("orb_TOKYO_OPEN_compression_z",    "DOUBLE"),
+            ("orb_TOKYO_OPEN_compression_tier", "TEXT"),
+            ("orb_LONDON_METALS_compression_z",    "DOUBLE"),
+            ("orb_LONDON_METALS_compression_tier", "TEXT"),
         ]:
             try:
                 con.execute(f"ALTER TABLE daily_features ADD COLUMN {col} {typedef}")

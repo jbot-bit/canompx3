@@ -7,7 +7,7 @@ backtests to specific market regimes.
 
 Usage:
     from trading_app.setup_detector import detect_setups
-    setups = detect_setups(con, filter, "0900", "MGC", start, end)
+    setups = detect_setups(con, filter, "CME_REOPEN", "MGC", start, end)
 """
 
 from pathlib import Path
@@ -34,7 +34,7 @@ def detect_setups(
     Args:
         con: Open DuckDB connection
         strategy_filter: Filter to apply to each row
-        orb_label: ORB label (e.g., "0900", "1000")
+        orb_label: ORB label (e.g., "CME_REOPEN", "TOKYO_OPEN")
         instrument: Instrument symbol
         orb_minutes: ORB duration
         start_date: Optional start date filter

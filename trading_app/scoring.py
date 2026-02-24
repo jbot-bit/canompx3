@@ -53,13 +53,13 @@ def score_strategy(strategy, state, weights: ScoringWeights | None = None) -> fl
         score += delta * weights.regime_delta
 
     # Cross-session signals
-    if state.signals.chop_detected and strategy.orb_label in ("1100",):
+    if state.signals.chop_detected and strategy.orb_label in ("SINGAPORE_OPEN",):
         score += weights.chop_penalty
 
-    if state.signals.reversal_active and strategy.orb_label == "1000":
+    if state.signals.reversal_active and strategy.orb_label == "TOKYO_OPEN":
         score += weights.reversal_bonus
 
-    if state.signals.continuation and strategy.orb_label in ("1000", "1100"):
+    if state.signals.continuation and strategy.orb_label in ("TOKYO_OPEN", "SINGAPORE_OPEN"):
         score += weights.continuation_bonus
 
     # Cascade win rate adjustment

@@ -224,9 +224,9 @@ class MarketState:
         """Recompute cross-session signals after an ORB outcome is known.
 
         Detects:
-          - reversal: 0900 loss + 1000 opposite-direction break
-          - chop: 0900 + 1000 both losses
-          - continuation: 0900 win + 1000 same-direction break
+          - reversal: CME_REOPEN loss + TOKYO_OPEN opposite-direction break
+          - chop: CME_REOPEN + TOKYO_OPEN both losses
+          - continuation: CME_REOPEN win + TOKYO_OPEN same-direction break
         """
         self.signals = SessionSignals()
 
@@ -236,35 +236,35 @@ class MarketState:
             if orb and orb.outcome:
                 self.signals.prior_outcomes[label] = orb.outcome
 
-        orb_0900 = self.orbs.get("0900")
-        orb_1000 = self.orbs.get("1000")
+        orb_cme_reopen = self.orbs.get("CME_REOPEN")
+        orb_tokyo_open = self.orbs.get("TOKYO_OPEN")
 
-        if orb_0900 and orb_1000 and orb_0900.outcome and orb_1000.break_dir:
+        if orb_cme_reopen and orb_tokyo_open and orb_cme_reopen.outcome and orb_tokyo_open.break_dir:
             # Determine direction relationship
             same_dir = (
-                orb_0900.break_dir is not None
-                and orb_0900.break_dir.upper() == orb_1000.break_dir.upper()
+                orb_cme_reopen.break_dir is not None
+                and orb_cme_reopen.break_dir.upper() == orb_tokyo_open.break_dir.upper()
             )
 
-            if orb_0900.outcome == "loss" and not same_dir:
+            if orb_cme_reopen.outcome == "loss" and not same_dir:
                 self.signals.reversal_active = True
 
-            if orb_0900.outcome == "loss" and orb_1000.outcome == "loss":
+            if orb_cme_reopen.outcome == "loss" and orb_tokyo_open.outcome == "loss":
                 self.signals.chop_detected = True
 
-            if orb_0900.outcome == "win" and same_dir:
+            if orb_cme_reopen.outcome == "win" and same_dir:
                 self.signals.continuation = True
 
         # Look up cascade win rate from pre-computed table
-        if cascade_table and orb_0900 and orb_0900.outcome and orb_1000:
+        if cascade_table and orb_cme_reopen and orb_cme_reopen.outcome and orb_tokyo_open:
             dir_relation = "same" if (
-                orb_0900.break_dir and orb_1000.break_dir
-                and orb_0900.break_dir.upper() == orb_1000.break_dir.upper()
+                orb_cme_reopen.break_dir and orb_tokyo_open.break_dir
+                and orb_cme_reopen.break_dir.upper() == orb_tokyo_open.break_dir.upper()
             ) else "opposite"
-            key = ("0900", orb_0900.outcome, dir_relation)
+            key = ("CME_REOPEN", orb_cme_reopen.outcome, dir_relation)
             entry = cascade_table.get(key)
             if entry:
-                self.signals.cascade_wr = entry.get("1000_wr")
+                self.signals.cascade_wr = entry.get("TOKYO_OPEN_wr")
 
     def score_strategies(self, strategies: list, weights=None) -> dict[str, float]:
         """Score each strategy given current context.

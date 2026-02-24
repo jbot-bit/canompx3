@@ -494,7 +494,7 @@ class TestBuildOutcomes:
         con.execute(
             """INSERT INTO daily_features
                (trading_day, symbol, orb_minutes, bar_count_1m,
-                orb_0900_high, orb_0900_low, orb_0900_break_dir, orb_0900_break_ts)
+                orb_CME_REOPEN_high, orb_CME_REOPEN_low, orb_CME_REOPEN_break_dir, orb_CME_REOPEN_break_ts)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?::TIMESTAMPTZ)""",
             [
                 date(2024, 1, 5), "MGC", 5, 300,
@@ -586,7 +586,7 @@ class TestBuildOutcomes:
         con.execute(
             """INSERT INTO daily_features
                (trading_day, symbol, orb_minutes, bar_count_1m,
-                orb_0900_high, orb_0900_low)
+                orb_CME_REOPEN_high, orb_CME_REOPEN_low)
                VALUES (?, ?, ?, ?, ?, ?)""",
             [date(2024, 1, 5), "MGC", 5, 100, 2700.0, 2690.0],
         )
@@ -656,7 +656,7 @@ class TestCheckpointResume:
         con.execute(
             """INSERT INTO daily_features
                (trading_day, symbol, orb_minutes, bar_count_1m,
-                orb_0900_high, orb_0900_low, orb_0900_break_dir, orb_0900_break_ts)
+                orb_CME_REOPEN_high, orb_CME_REOPEN_low, orb_CME_REOPEN_break_dir, orb_CME_REOPEN_break_ts)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?::TIMESTAMPTZ)""",
             [
                 date(2024, 1, 5), "MGC", 5, 300,
@@ -731,7 +731,7 @@ class TestCheckpointResume:
             con.execute(
                 """INSERT INTO daily_features
                    (trading_day, symbol, orb_minutes, bar_count_1m,
-                    orb_0900_high, orb_0900_low, orb_0900_break_dir, orb_0900_break_ts)
+                    orb_CME_REOPEN_high, orb_CME_REOPEN_low, orb_CME_REOPEN_break_dir, orb_CME_REOPEN_break_ts)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?::TIMESTAMPTZ)""",
                 [
                     td, "MGC", 5, 60,
@@ -791,7 +791,7 @@ class TestTimeStop:
             bars_df=bars, break_ts=break_ts, orb_high=orb_high, orb_low=orb_low,
             break_dir="long", rr_target=2.0, confirm_bars=1,
             trading_day_end=td_end, cost_spec=_cost(), entry_model="E1",
-            orb_label="1000",
+            orb_label="TOKYO_OPEN",
         )
         assert "ts_outcome" in result
         assert "ts_pnl_r" in result
@@ -812,7 +812,7 @@ class TestTimeStop:
             bars_df=bars, break_ts=break_ts, orb_high=orb_high, orb_low=orb_low,
             break_dir="long", rr_target=2.0, confirm_bars=1,
             trading_day_end=td_end, cost_spec=_cost(), entry_model="E1",
-            orb_label="2300",
+            orb_label="US_DATA_830",
         )
         assert result["ts_outcome"] is None
         assert result["ts_pnl_r"] is None
@@ -842,7 +842,7 @@ class TestTimeStop:
             bars_df=bars, break_ts=break_ts, orb_high=orb_high, orb_low=orb_low,
             break_dir="long", rr_target=2.0, confirm_bars=1,
             trading_day_end=td_end, cost_spec=_cost(), entry_model="E1",
-            orb_label="1000",
+            orb_label="TOKYO_OPEN",
         )
         # Baseline: full stop loss
         assert result["outcome"] == "loss"
@@ -872,7 +872,7 @@ class TestTimeStop:
             bars_df=bars, break_ts=break_ts, orb_high=orb_high, orb_low=orb_low,
             break_dir="long", rr_target=2.0, confirm_bars=1,
             trading_day_end=td_end, cost_spec=_cost(), entry_model="E1",
-            orb_label="1000",
+            orb_label="TOKYO_OPEN",
         )
         assert result["outcome"] == "win"
         assert result["ts_outcome"] == "win"
@@ -899,7 +899,7 @@ class TestTimeStop:
             bars_df=bars, break_ts=break_ts, orb_high=orb_high, orb_low=orb_low,
             break_dir="long", rr_target=2.0, confirm_bars=1,
             trading_day_end=td_end, cost_spec=_cost(), entry_model="E1",
-            orb_label="1000",
+            orb_label="TOKYO_OPEN",
         )
         # Baseline: scratch (no hit)
         assert result["outcome"] == "scratch"

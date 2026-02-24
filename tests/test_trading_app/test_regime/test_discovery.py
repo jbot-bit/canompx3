@@ -19,21 +19,9 @@ def regime_db(tmp_path):
     db_path = tmp_path / "test.db"
     con = duckdb.connect(str(db_path))
 
-    # Minimal daily_features
-    con.execute("""
-        CREATE TABLE daily_features (
-            symbol TEXT NOT NULL,
-            trading_day DATE NOT NULL,
-            orb_minutes INTEGER NOT NULL,
-            bar_count_1m INTEGER,
-            orb_0900_high DOUBLE,
-            orb_0900_low DOUBLE,
-            orb_0900_size DOUBLE,
-            orb_0900_break_dir TEXT,
-            orb_0900_break_ts TIMESTAMPTZ,
-            PRIMARY KEY (symbol, trading_day, orb_minutes)
-        )
-    """)
+    # Use production schema for daily_features
+    from pipeline.init_db import DAILY_FEATURES_SCHEMA
+    con.execute(DAILY_FEATURES_SCHEMA)
 
     # Minimal orb_outcomes
     con.execute("""
@@ -77,7 +65,7 @@ def regime_db(tmp_path):
         con.execute(
             """INSERT INTO daily_features
                (symbol, trading_day, orb_minutes, bar_count_1m,
-                orb_0900_high, orb_0900_low, orb_0900_size, orb_0900_break_dir)
+                orb_CME_REOPEN_high, orb_CME_REOPEN_low, orb_CME_REOPEN_size, orb_CME_REOPEN_break_dir)
                VALUES (?, ?, 5, 1400, ?, ?, ?, 'long')""",
             ['MGC', day, orb_high, orb_low, orb_size],
         )
@@ -90,7 +78,7 @@ def regime_db(tmp_path):
                 rr_target, confirm_bars, entry_model,
                 entry_price, stop_price, target_price,
                 outcome, pnl_r, mae_r, mfe_r)
-               VALUES (?, 'MGC', '0900', 5, 2.0, 2, 'E1',
+               VALUES (?, 'MGC', 'CME_REOPEN', 5, 2.0, 2, 'E1',
                        2701.0, 2698.0, 2707.0, ?, ?, -0.3, 1.2)""",
             [day, outcome, pnl_r],
         )

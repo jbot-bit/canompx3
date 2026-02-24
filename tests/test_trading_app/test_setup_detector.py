@@ -39,18 +39,18 @@ class TestDetectSetups:
         """NoFilter returns all days with a break."""
         days = [
             {"trading_day": date(2024, 1, 1), "symbol": "MGC", "orb_minutes": 5,
-             "orb_0900_high": 2700.0, "orb_0900_low": 2690.0,
-             "orb_0900_break_dir": "long", "orb_0900_size": 10.0},
+             "orb_CME_REOPEN_high": 2700.0, "orb_CME_REOPEN_low": 2690.0,
+             "orb_CME_REOPEN_break_dir": "long", "orb_CME_REOPEN_size": 10.0},
             {"trading_day": date(2024, 1, 2), "symbol": "MGC", "orb_minutes": 5,
-             "orb_0900_high": 2705.0, "orb_0900_low": 2695.0,
-             "orb_0900_break_dir": "short", "orb_0900_size": 10.0},
+             "orb_CME_REOPEN_high": 2705.0, "orb_CME_REOPEN_low": 2695.0,
+             "orb_CME_REOPEN_break_dir": "short", "orb_CME_REOPEN_size": 10.0},
             {"trading_day": date(2024, 1, 3), "symbol": "MGC", "orb_minutes": 5,
-             "orb_0900_high": 2710.0, "orb_0900_low": 2700.0},  # no break
+             "orb_CME_REOPEN_high": 2710.0, "orb_CME_REOPEN_low": 2700.0},  # no break
         ]
         db_path = _setup_db(tmp_path, days)
 
         con = duckdb.connect(str(db_path), read_only=True)
-        results = detect_setups(con, NoFilter(), "0900", "MGC")
+        results = detect_setups(con, NoFilter(), "CME_REOPEN", "MGC")
         con.close()
 
         assert len(results) == 2
@@ -61,17 +61,17 @@ class TestDetectSetups:
         """OrbSizeFilter restricts by ORB size."""
         days = [
             {"trading_day": date(2024, 1, 1), "symbol": "MGC", "orb_minutes": 5,
-             "orb_0900_high": 2700.0, "orb_0900_low": 2697.0,
-             "orb_0900_break_dir": "long", "orb_0900_size": 3.0},
+             "orb_CME_REOPEN_high": 2700.0, "orb_CME_REOPEN_low": 2697.0,
+             "orb_CME_REOPEN_break_dir": "long", "orb_CME_REOPEN_size": 3.0},
             {"trading_day": date(2024, 1, 2), "symbol": "MGC", "orb_minutes": 5,
-             "orb_0900_high": 2700.0, "orb_0900_low": 2692.0,
-             "orb_0900_break_dir": "long", "orb_0900_size": 8.0},
+             "orb_CME_REOPEN_high": 2700.0, "orb_CME_REOPEN_low": 2692.0,
+             "orb_CME_REOPEN_break_dir": "long", "orb_CME_REOPEN_size": 8.0},
         ]
         db_path = _setup_db(tmp_path, days)
 
         con = duckdb.connect(str(db_path), read_only=True)
         f = OrbSizeFilter(filter_type="L4", description="<4", max_size=4.0)
-        results = detect_setups(con, f, "0900", "MGC")
+        results = detect_setups(con, f, "CME_REOPEN", "MGC")
         con.close()
 
         assert len(results) == 1
@@ -81,17 +81,17 @@ class TestDetectSetups:
         """Start/end dates restrict results."""
         days = [
             {"trading_day": date(2024, 1, 1), "symbol": "MGC", "orb_minutes": 5,
-             "orb_0900_break_dir": "long", "orb_0900_high": 2700.0, "orb_0900_low": 2690.0},
+             "orb_CME_REOPEN_break_dir": "long", "orb_CME_REOPEN_high": 2700.0, "orb_CME_REOPEN_low": 2690.0},
             {"trading_day": date(2024, 6, 1), "symbol": "MGC", "orb_minutes": 5,
-             "orb_0900_break_dir": "long", "orb_0900_high": 2700.0, "orb_0900_low": 2690.0},
+             "orb_CME_REOPEN_break_dir": "long", "orb_CME_REOPEN_high": 2700.0, "orb_CME_REOPEN_low": 2690.0},
             {"trading_day": date(2024, 12, 1), "symbol": "MGC", "orb_minutes": 5,
-             "orb_0900_break_dir": "long", "orb_0900_high": 2700.0, "orb_0900_low": 2690.0},
+             "orb_CME_REOPEN_break_dir": "long", "orb_CME_REOPEN_high": 2700.0, "orb_CME_REOPEN_low": 2690.0},
         ]
         db_path = _setup_db(tmp_path, days)
 
         con = duckdb.connect(str(db_path), read_only=True)
         results = detect_setups(
-            con, NoFilter(), "0900", "MGC",
+            con, NoFilter(), "CME_REOPEN", "MGC",
             start_date=date(2024, 3, 1), end_date=date(2024, 9, 1),
         )
         con.close()
@@ -103,15 +103,15 @@ class TestDetectSetups:
         """Filter that matches nothing returns empty list."""
         days = [
             {"trading_day": date(2024, 1, 1), "symbol": "MGC", "orb_minutes": 5,
-             "orb_0900_break_dir": "long", "orb_0900_high": 2700.0, "orb_0900_low": 2690.0,
-             "orb_0900_size": 10.0},
+             "orb_CME_REOPEN_break_dir": "long", "orb_CME_REOPEN_high": 2700.0, "orb_CME_REOPEN_low": 2690.0,
+             "orb_CME_REOPEN_size": 10.0},
         ]
         db_path = _setup_db(tmp_path, days)
 
         con = duckdb.connect(str(db_path), read_only=True)
         # max_size=1 excludes the 10-point ORB
         f = OrbSizeFilter(filter_type="TINY", description="tiny", max_size=1.0)
-        results = detect_setups(con, f, "0900", "MGC")
+        results = detect_setups(con, f, "CME_REOPEN", "MGC")
         con.close()
 
         assert len(results) == 0
@@ -121,7 +121,7 @@ class TestDetectSetups:
         db_path = _setup_db(tmp_path, [])
 
         con = duckdb.connect(str(db_path), read_only=True)
-        results = detect_setups(con, NoFilter(), "0900", "MGC")
+        results = detect_setups(con, NoFilter(), "CME_REOPEN", "MGC")
         con.close()
 
         assert results == []

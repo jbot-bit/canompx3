@@ -1,7 +1,8 @@
 """
 Tests for timed early exit logic (kill losers).
 
-Research: 0900 at 15 min, 1000 at 30 min. Other sessions: no early exit.
+Research: CME_REOPEN at 38m, TOKYO_OPEN at 39m, SINGAPORE_OPEN at 31m,
+LONDON_METALS at 36m, CME_PRECLOSE at 16m. Other sessions: no early exit.
 Rule: At N minutes after fill, if bar close vs entry is negative, exit at bar close.
 """
 
@@ -63,7 +64,7 @@ def _make_bars_ohlc(ohlc_rows, start_ts, freq_seconds=60):
 
 ORB_HIGH = 2350.0
 ORB_LOW = 2340.0
-BREAK_TS = datetime(2024, 1, 15, 23, 5, tzinfo=timezone.utc)  # 0900 session
+BREAK_TS = datetime(2024, 1, 15, 23, 5, tzinfo=timezone.utc)  # CME_REOPEN session
 DAY_END = datetime(2024, 1, 16, 23, 0, tzinfo=timezone.utc)
 
 # ============================================================================
@@ -72,44 +73,35 @@ DAY_END = datetime(2024, 1, 16, 23, 0, tzinfo=timezone.utc)
 
 class TestEarlyExitConfig:
 
-    def test_0900_t80(self):
+    def test_cme_reopen_t80(self):
         """P5b: MGC T80=38m (N=908, avg_r_after=-0.300R)."""
-        assert EARLY_EXIT_MINUTES["0900"] == 38
+        assert EARLY_EXIT_MINUTES["CME_REOPEN"] == 38
 
-    def test_1000_t80(self):
-        """P5b: MGC T80=32m, MES T80=39m → use 39 (patient)."""
-        assert EARLY_EXIT_MINUTES["1000"] == 39
+    def test_tokyo_open_t80(self):
+        """P5b: MGC T80=32m, MES T80=39m -> use 39 (patient)."""
+        assert EARLY_EXIT_MINUTES["TOKYO_OPEN"] == 39
 
-    def test_1100_t80(self):
+    def test_singapore_open_t80(self):
         """P5b: MES T80=31m."""
-        assert EARLY_EXIT_MINUTES["1100"] == 31
+        assert EARLY_EXIT_MINUTES["SINGAPORE_OPEN"] == 31
 
-    def test_1800_t80(self):
+    def test_london_metals_t80(self):
         """P5b: MGC T80=36m, avg_r_after=-0.339R (worst dead-chop penalty)."""
-        assert EARLY_EXIT_MINUTES["1800"] == 36
+        assert EARLY_EXIT_MINUTES["LONDON_METALS"] == 36
 
-    def test_cme_close_t80(self):
+    def test_cme_preclose_t80(self):
         """P5b: MES T80=16m (short session, fast-resolve)."""
-        assert EARLY_EXIT_MINUTES["CME_CLOSE"] == 16
+        assert EARLY_EXIT_MINUTES["CME_PRECLOSE"] == 16
 
     def test_other_sessions_none(self):
-        for label in ["2300", "0030"]:
+        for label in ["US_DATA_830", "NYSE_OPEN"]:
             assert EARLY_EXIT_MINUTES[label] is None, f"{label} should be None"
-
-    def test_1130_has_no_early_exit(self):
-        """1130 has no early exit configured."""
-        assert EARLY_EXIT_MINUTES["1130"] is None
-
-    def test_cme_open_has_no_early_exit(self):
-        """CME_OPEN has no early exit configured."""
-        assert EARLY_EXIT_MINUTES["CME_OPEN"] is None
 
     def test_all_active_sessions_present(self):
         expected = {
-            "0900", "1000", "1100", "1130", "1800", "2300", "0030",
-            "CME_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "LONDON_OPEN",
-            "US_POST_EQUITY", "CME_CLOSE",
-            "COMEX_SETTLE", "NYSE_CLOSE",
+            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
+            "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
+            "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
         }
         assert set(EARLY_EXIT_MINUTES.keys()) == expected
 
@@ -119,19 +111,13 @@ class TestEarlyExitConfig:
 
 class TestOutcomeBuilderEarlyExit:
 
-    def test_0900_losing_at_15min_no_early_exit(self):
-        """0900 long trade, losing at 15 min -> resolves normally (no early_exit)."""
-        # Break bar + 1 confirm bar, then entry on next bar
-        # Bar 0 = break (23:05), Bar 1 = confirm (23:06), Bar 2 = entry (23:07)
-        # Price drifts down but never hits stop (2340) or target (2371)
+    def test_cme_reopen_losing_at_15min_no_early_exit(self):
+        """CME_REOPEN long trade, losing at 15 min -> resolves normally (no early_exit)."""
         bars = []
-        # Break bar (23:05): close above ORB high
         bars.append((2351.0, 2351.5, 2350.5, 2351.0))
-        # Confirm bar (23:06): close above ORB high
         bars.append((2351.0, 2351.5, 2350.5, 2351.0))
-        # Entry bar (23:07) and 20 more bars, gradually drifting down
         for i in range(21):
-            price = 2351.0 - i * 0.3  # slowly losing
+            price = 2351.0 - i * 0.3
             bars.append((price + 0.2, price + 0.5, price - 0.5, price))
 
         bars_df = _make_bars_ohlc(bars, BREAK_TS)
@@ -148,23 +134,19 @@ class TestOutcomeBuilderEarlyExit:
             trading_day_end=DAY_END,
             cost_spec=cost,
             entry_model="E1",
-            orb_label="0900",
+            orb_label="CME_REOPEN",
         )
 
-        # Without early_exit, trade resolves as scratch (price never hits stop or target)
         assert result["outcome"] != "early_exit"
         assert result["outcome"] in ("scratch", "loss", "win")
 
-    def test_0900_winning_at_15min_no_early_exit(self):
-        """0900 long trade, winning at 15 min -> normal outcome, NOT early_exit."""
+    def test_cme_reopen_winning_at_15min_no_early_exit(self):
+        """CME_REOPEN long trade, winning at 15 min -> normal outcome, NOT early_exit."""
         bars = []
-        # Break bar
         bars.append((2351.0, 2351.5, 2350.5, 2351.0))
-        # Confirm bar
         bars.append((2351.0, 2351.5, 2350.5, 2351.0))
-        # Entry bar and 20 more bars, gradually going up
         for i in range(21):
-            price = 2351.0 + i * 0.3  # slowly winning
+            price = 2351.0 + i * 0.3
             bars.append((price - 0.2, price + 0.5, price - 0.5, price))
 
         bars_df = _make_bars_ohlc(bars, BREAK_TS)
@@ -181,30 +163,27 @@ class TestOutcomeBuilderEarlyExit:
             trading_day_end=DAY_END,
             cost_spec=cost,
             entry_model="E1",
-            orb_label="0900",
+            orb_label="CME_REOPEN",
         )
 
         assert result["outcome"] != "early_exit"
 
-    def test_1000_losing_at_30min_no_early_exit(self):
-        """1000 long trade, losing at 30 min -> resolves normally (no early_exit)."""
-        break_ts_1000 = datetime(2024, 1, 16, 0, 5, tzinfo=timezone.utc)
+    def test_tokyo_open_losing_at_30min_no_early_exit(self):
+        """TOKYO_OPEN long trade, losing at 30 min -> resolves normally (no early_exit)."""
+        break_ts_tokyo = datetime(2024, 1, 16, 0, 5, tzinfo=timezone.utc)
         bars = []
-        # Break bar
         bars.append((2351.0, 2351.5, 2350.5, 2351.0))
-        # Confirm bar
         bars.append((2351.0, 2351.5, 2350.5, 2351.0))
-        # Entry bar + 35 more bars drifting down (need >= 30 min post-entry)
         for i in range(36):
-            price = 2351.0 - i * 0.15  # slowly losing
+            price = 2351.0 - i * 0.15
             bars.append((price + 0.1, price + 0.3, price - 0.3, price))
 
-        bars_df = _make_bars_ohlc(bars, break_ts_1000)
+        bars_df = _make_bars_ohlc(bars, break_ts_tokyo)
         cost = _cost()
 
         result = compute_single_outcome(
             bars_df=bars_df,
-            break_ts=break_ts_1000,
+            break_ts=break_ts_tokyo,
             orb_high=ORB_HIGH,
             orb_low=ORB_LOW,
             break_dir="long",
@@ -213,30 +192,28 @@ class TestOutcomeBuilderEarlyExit:
             trading_day_end=DAY_END,
             cost_spec=cost,
             entry_model="E1",
-            orb_label="1000",
+            orb_label="TOKYO_OPEN",
         )
 
-        # Without early_exit, trade resolves as scratch (price never hits stop or target)
         assert result["outcome"] != "early_exit"
         assert result["outcome"] in ("scratch", "loss", "win")
 
-    def test_1800_no_early_exit(self):
-        """1800 session has no early exit threshold."""
-        break_ts_1800 = datetime(2024, 1, 16, 8, 5, tzinfo=timezone.utc)
+    def test_london_metals_no_early_exit(self):
+        """LONDON_METALS session: outcome_builder does not apply early exit."""
+        break_ts_london = datetime(2024, 1, 16, 8, 5, tzinfo=timezone.utc)
         bars = []
         bars.append((2351.0, 2351.5, 2350.5, 2351.0))
         bars.append((2351.0, 2351.5, 2350.5, 2351.0))
-        # 20 bars drifting down — should NOT trigger early exit
         for i in range(21):
             price = 2351.0 - i * 0.3
             bars.append((price + 0.2, price + 0.5, price - 0.5, price))
 
-        bars_df = _make_bars_ohlc(bars, break_ts_1800)
+        bars_df = _make_bars_ohlc(bars, break_ts_london)
         cost = _cost()
 
         result = compute_single_outcome(
             bars_df=bars_df,
-            break_ts=break_ts_1800,
+            break_ts=break_ts_london,
             orb_high=ORB_HIGH,
             orb_low=ORB_LOW,
             break_dir="long",
@@ -245,21 +222,17 @@ class TestOutcomeBuilderEarlyExit:
             trading_day_end=DAY_END,
             cost_spec=cost,
             entry_model="E1",
-            orb_label="1800",
+            orb_label="LONDON_METALS",
         )
 
         assert result["outcome"] != "early_exit"
 
     def test_stop_hit_before_threshold_normal_loss(self):
-        """If stop is hit before the 15min threshold, normal loss NOT early_exit."""
+        """If stop is hit before the T80 threshold, normal loss NOT early_exit."""
         bars = []
-        # Break bar
         bars.append((2351.0, 2351.5, 2350.5, 2351.0))
-        # Confirm bar
         bars.append((2351.0, 2351.5, 2350.5, 2351.0))
-        # Entry bar at 2351 open, stop at 2340 (ORB low)
         bars.append((2351.0, 2351.5, 2350.5, 2351.0))
-        # Bar that crashes through stop (within 15 min)
         bars.append((2345.0, 2345.5, 2339.0, 2339.5))  # low 2339 < stop 2340
 
         bars_df = _make_bars_ohlc(bars, BREAK_TS)
@@ -276,7 +249,7 @@ class TestOutcomeBuilderEarlyExit:
             trading_day_end=DAY_END,
             cost_spec=cost,
             entry_model="E1",
-            orb_label="0900",
+            orb_label="CME_REOPEN",
         )
 
         assert result["outcome"] == "loss"
@@ -333,7 +306,7 @@ class TestOutcomeBuilderEarlyExit:
             trading_day_end=DAY_END,
             cost_spec=cost,
             entry_model="E1",
-            orb_label="0900",
+            orb_label="CME_REOPEN",
         )
 
         assert result["outcome"] != "early_exit"
@@ -348,9 +321,9 @@ class TestOutcomeBuilderEarlyExit:
 
 def _make_strategy(**overrides):
     base = dict(
-        strategy_id="MGC_0900_E1_RR2.0_CB1_ORB_G4",
+        strategy_id="MGC_CME_REOPEN_E1_RR2.0_CB1_ORB_G4",
         instrument="MGC",
-        orb_label="0900",
+        orb_label="CME_REOPEN",
         entry_model="E1",
         rr_target=2.0,
         confirm_bars=1,
@@ -386,14 +359,14 @@ def _bar(ts, o, h, l, c, v=100):
 
 class TestExecutionEngineEarlyExit:
 
-    def test_early_exit_fires_at_t80_0900(self):
-        """0900 E1 trade losing at T80 (38m) -> early_exit event."""
-        strategy = _make_strategy(orb_label="0900")
+    def test_early_exit_fires_at_t80_cme_reopen(self):
+        """CME_REOPEN E1 trade losing at T80 (38m) -> early_exit event."""
+        strategy = _make_strategy(orb_label="CME_REOPEN")
         portfolio = _make_portfolio(strategies=[strategy])
         engine = ExecutionEngine(portfolio, _cost(), live_session_costs=False)
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        # 0900 = 23:00 UTC prev day. ORB window 23:00-23:05
+        # CME_REOPEN = 23:00 UTC prev day. ORB window 23:00-23:05
         base = datetime(2024, 1, 4, 23, 0, tzinfo=timezone.utc)
 
         # Build ORB: 5 bars within window
@@ -424,8 +397,8 @@ class TestExecutionEngineEarlyExit:
         assert exit_event.event_type == "EXIT"
 
     def test_no_early_exit_when_winning(self):
-        """0900 E1 trade winning at 15 min -> no early exit."""
-        strategy = _make_strategy(orb_label="0900")
+        """CME_REOPEN E1 trade winning at 15 min -> no early exit."""
+        strategy = _make_strategy(orb_label="CME_REOPEN")
         portfolio = _make_portfolio(strategies=[strategy])
         engine = ExecutionEngine(portfolio, _cost(), live_session_costs=False)
         engine.on_trading_day_start(date(2024, 1, 5))
@@ -455,17 +428,17 @@ class TestExecutionEngineEarlyExit:
 
         assert len(early_exits) == 0
 
-    def test_no_early_exit_for_1800(self):
-        """1800 session has no early exit threshold."""
+    def test_no_early_exit_for_london_metals(self):
+        """LONDON_METALS session has early exit threshold (36m) but engine test."""
         strategy = _make_strategy(
-            strategy_id="MGC_1800_E1_RR2.0_CB1_NO_FILTER",
-            orb_label="1800",
+            strategy_id="MGC_LONDON_METALS_E1_RR2.0_CB1_NO_FILTER",
+            orb_label="LONDON_METALS",
         )
         portfolio = _make_portfolio(strategies=[strategy])
         engine = ExecutionEngine(portfolio, _cost(), live_session_costs=False)
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        # 1800 = 08:00 UTC. ORB window 08:00-08:05
+        # LONDON_METALS = 18:00 Brisbane = 08:00 UTC (winter). ORB window 08:00-08:05
         base = datetime(2024, 1, 5, 8, 0, tzinfo=timezone.utc)
 
         for i in range(5):
@@ -478,7 +451,7 @@ class TestExecutionEngineEarlyExit:
         fill_ts = base + timedelta(minutes=6)
         engine.on_bar(_bar(fill_ts, 2352, 2353, 2351, 2352))
 
-        # Losing for 20 bars — no early exit should fire
+        # Losing for 20 bars — before T80=36m, no early exit should fire
         early_exits = []
         for i in range(1, 20):
             ts = fill_ts + timedelta(minutes=i)
@@ -490,7 +463,7 @@ class TestExecutionEngineEarlyExit:
 
     def test_early_exit_pnl_is_partial_loss(self):
         """Early exit PnL should be between -1R and 0."""
-        strategy = _make_strategy(orb_label="0900")
+        strategy = _make_strategy(orb_label="CME_REOPEN")
         portfolio = _make_portfolio(strategies=[strategy])
         engine = ExecutionEngine(portfolio, _cost(), live_session_costs=False)
         engine.on_trading_day_start(date(2024, 1, 5))

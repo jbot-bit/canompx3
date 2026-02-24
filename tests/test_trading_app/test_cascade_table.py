@@ -19,23 +19,23 @@ def cascade_db(tmp_path):
             trading_day DATE,
             symbol VARCHAR,
             orb_minutes INTEGER,
-            orb_0900_outcome VARCHAR,
-            orb_0900_break_dir VARCHAR,
-            orb_1000_outcome VARCHAR,
-            orb_1000_break_dir VARCHAR,
-            orb_1100_outcome VARCHAR,
-            orb_1100_break_dir VARCHAR,
-            orb_1800_outcome VARCHAR,
-            orb_1800_break_dir VARCHAR,
-            orb_2300_outcome VARCHAR,
-            orb_2300_break_dir VARCHAR,
-            orb_0030_outcome VARCHAR,
-            orb_0030_break_dir VARCHAR
+            orb_CME_REOPEN_outcome VARCHAR,
+            orb_CME_REOPEN_break_dir VARCHAR,
+            orb_TOKYO_OPEN_outcome VARCHAR,
+            orb_TOKYO_OPEN_break_dir VARCHAR,
+            orb_SINGAPORE_OPEN_outcome VARCHAR,
+            orb_SINGAPORE_OPEN_break_dir VARCHAR,
+            orb_LONDON_METALS_outcome VARCHAR,
+            orb_LONDON_METALS_break_dir VARCHAR,
+            orb_US_DATA_830_outcome VARCHAR,
+            orb_US_DATA_830_break_dir VARCHAR,
+            orb_NYSE_OPEN_outcome VARCHAR,
+            orb_NYSE_OPEN_break_dir VARCHAR
         )
     """)
 
-    # Insert enough rows for 0900->1000 pair to pass the n>=5 threshold
-    # 6 rows: 0900 loss + same dir -> 1000 outcomes
+    # Insert enough rows for CME_REOPEN->TOKYO_OPEN pair to pass the n>=5 threshold
+    # 6 rows: CME_REOPEN loss + same dir -> TOKYO_OPEN outcomes
     for i in range(6):
         outcome_b = "win" if i < 4 else "loss"  # 4 wins, 2 losses = 66.7% WR
         con.execute("""
@@ -68,15 +68,15 @@ class TestBuildCascadeTable:
     def test_sufficient_sample_included(self, cascade_db):
         """Group with n>=5 should be in table."""
         table = build_cascade_table(cascade_db)
-        key = ("0900", "loss", "same")
+        key = ("CME_REOPEN", "loss", "same")
         assert key in table
         assert table[key]["n"] == 6
-        assert table[key]["1000_wr"] == pytest.approx(4 / 6, abs=1e-4)
+        assert table[key]["TOKYO_OPEN_wr"] == pytest.approx(4 / 6, abs=1e-4)
 
     def test_small_n_filtered(self, cascade_db):
         """Group with n<5 should NOT be in table."""
         table = build_cascade_table(cascade_db)
-        key = ("0900", "win", "same")
+        key = ("CME_REOPEN", "win", "same")
         assert key not in table
 
     def test_empty_db(self, tmp_path):
@@ -86,12 +86,12 @@ class TestBuildCascadeTable:
         con.execute("""
             CREATE TABLE daily_features (
                 trading_day DATE, symbol VARCHAR, orb_minutes INTEGER,
-                orb_0900_outcome VARCHAR, orb_0900_break_dir VARCHAR,
-                orb_1000_outcome VARCHAR, orb_1000_break_dir VARCHAR,
-                orb_1100_outcome VARCHAR, orb_1100_break_dir VARCHAR,
-                orb_1800_outcome VARCHAR, orb_1800_break_dir VARCHAR,
-                orb_2300_outcome VARCHAR, orb_2300_break_dir VARCHAR,
-                orb_0030_outcome VARCHAR, orb_0030_break_dir VARCHAR
+                orb_CME_REOPEN_outcome VARCHAR, orb_CME_REOPEN_break_dir VARCHAR,
+                orb_TOKYO_OPEN_outcome VARCHAR, orb_TOKYO_OPEN_break_dir VARCHAR,
+                orb_SINGAPORE_OPEN_outcome VARCHAR, orb_SINGAPORE_OPEN_break_dir VARCHAR,
+                orb_LONDON_METALS_outcome VARCHAR, orb_LONDON_METALS_break_dir VARCHAR,
+                orb_US_DATA_830_outcome VARCHAR, orb_US_DATA_830_break_dir VARCHAR,
+                orb_NYSE_OPEN_outcome VARCHAR, orb_NYSE_OPEN_break_dir VARCHAR
             )
         """)
         con.close()
@@ -101,16 +101,16 @@ class TestBuildCascadeTable:
 
 class TestLookupCascade:
     def test_found(self):
-        table = {("0900", "loss", "opposite"): {"1000_wr": 0.52, "n": 148}}
-        result = lookup_cascade(table, "0900", "loss", "opposite")
+        table = {("CME_REOPEN", "loss", "opposite"): {"TOKYO_OPEN_wr": 0.52, "n": 148}}
+        result = lookup_cascade(table, "CME_REOPEN", "loss", "opposite")
         assert result is not None
         assert result["n"] == 148
 
     def test_not_found(self):
-        table = {("0900", "loss", "opposite"): {"1000_wr": 0.52, "n": 148}}
-        result = lookup_cascade(table, "1000", "win", "same")
+        table = {("CME_REOPEN", "loss", "opposite"): {"TOKYO_OPEN_wr": 0.52, "n": 148}}
+        result = lookup_cascade(table, "TOKYO_OPEN", "win", "same")
         assert result is None
 
     def test_empty_table(self):
-        result = lookup_cascade({}, "0900", "loss", "same")
+        result = lookup_cascade({}, "CME_REOPEN", "loss", "same")
         assert result is None

@@ -28,6 +28,7 @@ import pandas as pd
 
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.cost_model import get_cost_spec, CostSpec
+from pipeline.init_db import ORB_LABELS
 from trading_app.config import ALL_FILTERS, ATRVelocityFilter, CalendarSkipFilter, classify_strategy
 
 def _get_table_names(con: duckdb.DuckDBPyConnection) -> set[str]:
@@ -617,15 +618,17 @@ def build_strategy_daily_series(
         all_days = None
         for om in unique_om:
             om_int = int(om)
-            df_om = con.execute("""
+            # Build dynamic column list from ORB_LABELS
+            _size_cols = ", ".join(f"orb_{lbl}_size" for lbl in ORB_LABELS)
+            # Compression tier only exists for momentum sessions
+            _COMPRESSION_SESSIONS = ["CME_REOPEN", "TOKYO_OPEN", "LONDON_METALS"]
+            _comp_cols = ", ".join(f"orb_{lbl}_compression_tier" for lbl in _COMPRESSION_SESSIONS)
+            df_om = con.execute(f"""
                 SELECT trading_day, day_of_week,
-                       orb_0900_size, orb_1000_size, orb_1100_size,
-                       orb_1800_size, orb_2300_size, orb_0030_size,
+                       {_size_cols},
                        is_nfp_day, is_opex_day, is_friday,
                        atr_vel_regime,
-                       orb_0900_compression_tier,
-                       orb_1000_compression_tier,
-                       orb_1800_compression_tier
+                       {_comp_cols}
                 FROM daily_features
                 WHERE symbol = ? AND orb_minutes = ?
                 ORDER BY trading_day

@@ -29,9 +29,9 @@ def _cost():
 
 def _make_strategy(**overrides):
     base = dict(
-        strategy_id="MGC_2300_E1_RR2.0_CB1_NO_FILTER",
+        strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_NO_FILTER",
         instrument="MGC",
-        orb_label="2300",
+        orb_label="US_DATA_830",
         entry_model="E1",
         rr_target=2.0,
         confirm_bars=1,
@@ -65,12 +65,12 @@ def _bar(ts, o, h, l, c, v=100):
     return {"ts_utc": ts, "open": float(o), "high": float(h),
             "low": float(l), "close": float(c), "volume": int(v)}
 
-# 2300 ORB window is 13:00-13:05 UTC on the trading day.
-_ORB_BASE = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+# US_DATA_830 ORB window: 8:30 AM ET = 13:30 UTC in winter (EST).
+_ORB_BASE = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
 _TRADING_DAY = date(2024, 1, 5)
 
 def _build_orb(engine, orb_high=2705.0, orb_low=2695.0):
-    """Feed 5 bars to build the 2300 ORB, then return the post-window timestamp."""
+    """Feed 5 bars to build the US_DATA_830 ORB, then return the post-window timestamp."""
     for i in range(5):
         engine.on_bar(_bar(_ORB_BASE + timedelta(minutes=i),
                            2700, orb_high, orb_low, 2702))
@@ -118,7 +118,7 @@ class TestOnTradeEntry:
 
         strategy = _make_strategy(
             entry_model="E3", confirm_bars=1,
-            strategy_id="MGC_2300_E3_RR2.0_CB1_NO_FILTER",
+            strategy_id="MGC_US_DATA_830_E3_RR2.0_CB1_NO_FILTER",
         )
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost(), risk_manager=rm)
         engine.on_trading_day_start(_TRADING_DAY)
@@ -297,7 +297,7 @@ class TestReject:
 
         strategy = _make_strategy(
             entry_model="E3", confirm_bars=1,
-            strategy_id="MGC_2300_E3_RR2.0_CB1_NO_FILTER",
+            strategy_id="MGC_US_DATA_830_E3_RR2.0_CB1_NO_FILTER",
         )
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost(), risk_manager=rm)
         engine.on_trading_day_start(_TRADING_DAY)
@@ -350,11 +350,11 @@ class TestCircuitBreaker:
         # Two E1 strategies on same ORB: both enter and both lose => -2.0R total
         strat_a = _make_strategy(
             entry_model="E1", confirm_bars=1, rr_target=2.0,
-            strategy_id="MGC_2300_E1_RR2.0_CB1_A",
+            strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_A",
         )
         strat_b = _make_strategy(
             entry_model="E1", confirm_bars=1, rr_target=2.0,
-            strategy_id="MGC_2300_E1_RR2.0_CB1_B",
+            strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_B",
         )
 
         engine = ExecutionEngine(
@@ -374,7 +374,7 @@ class TestCircuitBreaker:
         assert rm.is_halted()
 
         # RM should reject any new entry attempt
-        allowed, reason, _ = rm.can_enter("any_strategy", "1000", [], engine.daily_pnl_r)
+        allowed, reason, _ = rm.can_enter("any_strategy", "TOKYO_OPEN", [], engine.daily_pnl_r)
         assert not allowed
         assert "circuit_breaker" in reason
 
@@ -391,7 +391,7 @@ class TestCircuitBreaker:
         assert rm.is_halted()
 
         # Even with good PnL reported, halted persists
-        allowed, reason, _ = rm.can_enter("s1", "2300", [], 0.0)
+        allowed, reason, _ = rm.can_enter("s1", "US_DATA_830", [], 0.0)
         assert not allowed
         assert "circuit_breaker" in reason
 
@@ -413,11 +413,11 @@ class TestMaxConcurrent:
         # Two E1 strategies on same ORB: first enters, second gets rejected
         strat_a = _make_strategy(
             entry_model="E1", confirm_bars=1, rr_target=2.0,
-            strategy_id="MGC_2300_E1_RR2.0_CB1_A",
+            strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_A",
         )
         strat_b = _make_strategy(
             entry_model="E1", confirm_bars=1, rr_target=2.0,
-            strategy_id="MGC_2300_E1_RR2.0_CB1_B",
+            strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_B",
         )
 
         engine = ExecutionEngine(
@@ -461,7 +461,7 @@ class TestMaxConcurrent:
         engine.on_bar(_bar(break_ts + timedelta(minutes=2), 2704, 2706, 2694, 2695))
 
         # After exit, concurrent count drops. RM should allow a new entry.
-        allowed, _, _ = rm.can_enter("new_strat", "1800", [], engine.daily_pnl_r)
+        allowed, _, _ = rm.can_enter("new_strat", "LONDON_METALS", [], engine.daily_pnl_r)
         assert allowed
 
 # ============================================================================
@@ -494,11 +494,11 @@ class TestLifecycleConsistency:
         # Two E1 strategies, same ORB, both enter and lose
         strat_a = _make_strategy(
             entry_model="E1", confirm_bars=1, rr_target=2.0,
-            strategy_id="MGC_2300_E1_RR2.0_CB1_A",
+            strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_A",
         )
         strat_b = _make_strategy(
             entry_model="E1", confirm_bars=1, rr_target=2.0,
-            strategy_id="MGC_2300_E1_RR2.0_CB1_B",
+            strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_B",
         )
         engine = ExecutionEngine(
             _make_portfolio([strat_a, strat_b]), _cost(), risk_manager=rm,
@@ -540,11 +540,11 @@ class TestLifecycleConsistency:
 
         strat_a = _make_strategy(
             entry_model="E1", confirm_bars=1, rr_target=2.0,
-            strategy_id="MGC_2300_E1_RR2.0_CB1_A",
+            strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_A",
         )
         strat_b = _make_strategy(
             entry_model="E1", confirm_bars=1, rr_target=2.0,
-            strategy_id="MGC_2300_E1_RR2.0_CB1_B",
+            strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_B",
         )
 
         engine = ExecutionEngine(
@@ -592,9 +592,9 @@ class TestCorrelationWeightedConcurrent:
                 self.orb_label = orb
                 self.state = TradeState.ENTERED
 
-        active = [FakeTrade("strat_a", "0900"), FakeTrade("strat_b", "1000")]
+        active = [FakeTrade("strat_a", "CME_REOPEN"), FakeTrade("strat_b", "TOKYO_OPEN")]
         # Effective = 0.9 + 0.9 = 1.8 < 3 => allowed
-        allowed, reason, _ = rm.can_enter("strat_new", "1800", active, 0.0)
+        allowed, reason, _ = rm.can_enter("strat_new", "LONDON_METALS", active, 0.0)
         assert allowed, f"Should allow: effective 1.8 < 3, got: {reason}"
 
     def test_correlated_trades_block_when_full(self):
@@ -614,15 +614,15 @@ class TestCorrelationWeightedConcurrent:
                 self.orb_label = orb
                 self.state = TradeState.ENTERED
 
-        active = [FakeTrade("strat_a", "0900"), FakeTrade("strat_b", "0900"),
-                  FakeTrade("strat_c", "1000")]
+        active = [FakeTrade("strat_a", "CME_REOPEN"), FakeTrade("strat_b", "CME_REOPEN"),
+                  FakeTrade("strat_c", "TOKYO_OPEN")]
         # Need effective >= 3. Use 4 active trades at 0.95 each = 3.8 >= 3
-        active.append(FakeTrade("strat_d", "1000"))
+        active.append(FakeTrade("strat_d", "TOKYO_OPEN"))
         corr_lookup[("strat_new", "strat_d")] = 0.95
         rm = RiskManager(limits, corr_lookup=corr_lookup)
         rm.daily_reset(_TRADING_DAY)
 
-        allowed, reason, _ = rm.can_enter("strat_new", "1800", active, 0.0)
+        allowed, reason, _ = rm.can_enter("strat_new", "LONDON_METALS", active, 0.0)
         assert not allowed
         assert "corr_concurrent" in reason
 
@@ -642,9 +642,9 @@ class TestCorrelationWeightedConcurrent:
                 self.orb_label = orb
                 self.state = TradeState.ENTERED
 
-        active = [FakeTrade("strat_a", "0900"), FakeTrade("strat_b", "1800")]
+        active = [FakeTrade("strat_a", "CME_REOPEN"), FakeTrade("strat_b", "LONDON_METALS")]
         # Effective = max(0.1, 0.3) + max(0.1, 0.3) = 0.6 < 2 => allowed
-        allowed, reason, _ = rm.can_enter("strat_new", "2300", active, 0.0)
+        allowed, reason, _ = rm.can_enter("strat_new", "US_DATA_830", active, 0.0)
         assert allowed, f"Should allow uncorrelated: effective 0.6 < 2, got: {reason}"
 
     def test_no_corr_lookup_backward_compatible(self):
@@ -659,8 +659,8 @@ class TestCorrelationWeightedConcurrent:
                 self.orb_label = orb
                 self.state = TradeState.ENTERED
 
-        active = [FakeTrade("strat_a", "0900"), FakeTrade("strat_b", "1000")]
-        allowed, reason, _ = rm.can_enter("strat_new", "1800", active, 0.0)
+        active = [FakeTrade("strat_a", "CME_REOPEN"), FakeTrade("strat_b", "TOKYO_OPEN")]
+        allowed, reason, _ = rm.can_enter("strat_new", "LONDON_METALS", active, 0.0)
         assert not allowed
         assert "max_concurrent" in reason
 
@@ -675,15 +675,15 @@ class TestLiveSessionCosts:
         than one without, because session slippage differs from base."""
         strategy = _make_strategy(
             entry_model="E1", confirm_bars=1, rr_target=2.0,
-            orb_label="0900",
-            strategy_id="MGC_0900_E1_RR2.0_CB1_NO_FILTER",
+            orb_label="CME_REOPEN",
+            strategy_id="MGC_CME_REOPEN_E1_RR2.0_CB1_NO_FILTER",
         )
         portfolio = _make_portfolio([strategy])
 
         engine_flat = ExecutionEngine(portfolio, _cost(), live_session_costs=False)
         engine_live = ExecutionEngine(portfolio, _cost(), live_session_costs=True)
 
-        # Use 0900 ORB window: 23:00-23:05 UTC
+        # Use CME_REOPEN ORB window: 09:00 Brisbane = 23:00 UTC (prev day)
         orb_base = datetime(2024, 1, 4, 23, 0, tzinfo=timezone.utc)
         td = date(2024, 1, 5)
 
@@ -708,9 +708,9 @@ class TestLiveSessionCosts:
         # Both should be positive wins
         assert flat_pnl > 0, f"Flat engine should win, got {flat_pnl}"
         assert live_pnl > 0, f"Live engine should win, got {live_pnl}"
-        # 0900 has 1.3x slippage => higher friction => lower R-multiple
+        # CME_REOPEN has 1.3x slippage => higher friction => lower R-multiple
         assert live_pnl < flat_pnl, (
-            f"0900 live (1.3x slippage) should produce lower R than flat: "
+            f"CME_REOPEN live (1.3x slippage) should produce lower R than flat: "
             f"live={live_pnl}, flat={flat_pnl}"
         )
 
@@ -718,8 +718,8 @@ class TestLiveSessionCosts:
         """Scratch PnL in live mode uses session-adjusted costs."""
         strategy = _make_strategy(
             entry_model="E1", confirm_bars=1, rr_target=2.0,
-            orb_label="0900",
-            strategy_id="MGC_0900_E1_RR2.0_CB1_NO_FILTER",
+            orb_label="CME_REOPEN",
+            strategy_id="MGC_CME_REOPEN_E1_RR2.0_CB1_NO_FILTER",
         )
         portfolio = _make_portfolio([strategy])
 

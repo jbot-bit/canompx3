@@ -58,9 +58,9 @@ class TestOrbLabelsSync:
     """ORB_LABELS must be consistent across all modules."""
 
     EXPECTED_ORB_LABELS = [
-        "0900", "1000", "1100", "1130", "1800", "2300", "0030",
-        "CME_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "LONDON_OPEN", "US_POST_EQUITY",
-        "CME_CLOSE", "COMEX_SETTLE", "NYSE_CLOSE",
+        "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
+        "US_DATA_830", "NYSE_OPEN", "US_DATA_1000", "COMEX_SETTLE",
+        "CME_PRECLOSE", "NYSE_CLOSE",
     ]
 
     def test_orb_labels_exact(self):
@@ -146,8 +146,8 @@ class TestAllFiltersSync:
     def test_no_filter_matches_everything(self):
         """NoFilter.matches_row always returns True."""
         nf = ALL_FILTERS["NO_FILTER"]
-        assert nf.matches_row({}, "0900") is True
-        assert nf.matches_row({"anything": 42}, "2300") is True
+        assert nf.matches_row({}, "CME_REOPEN") is True
+        assert nf.matches_row({"anything": 42}, "US_DATA_830") is True
 
     def test_filters_are_frozen(self):
         """All filters are frozen (hashable, immutable)."""
@@ -196,18 +196,18 @@ class TestDirectionFilterSync:
         assert DIR_SHORT.filter_type == "DIR_SHORT"
 
     def test_matches_long(self):
-        row = {"orb_1000_break_dir": "long"}
-        assert DIR_LONG.matches_row(row, "1000") is True
-        assert DIR_SHORT.matches_row(row, "1000") is False
+        row = {"orb_TOKYO_OPEN_break_dir": "long"}
+        assert DIR_LONG.matches_row(row, "TOKYO_OPEN") is True
+        assert DIR_SHORT.matches_row(row, "TOKYO_OPEN") is False
 
     def test_matches_short(self):
-        row = {"orb_1000_break_dir": "short"}
-        assert DIR_SHORT.matches_row(row, "1000") is True
-        assert DIR_LONG.matches_row(row, "1000") is False
+        row = {"orb_TOKYO_OPEN_break_dir": "short"}
+        assert DIR_SHORT.matches_row(row, "TOKYO_OPEN") is True
+        assert DIR_LONG.matches_row(row, "TOKYO_OPEN") is False
 
     def test_missing_dir_fails_closed(self):
-        assert DIR_LONG.matches_row({}, "1000") is False
-        assert DIR_SHORT.matches_row({}, "1000") is False
+        assert DIR_LONG.matches_row({}, "TOKYO_OPEN") is False
+        assert DIR_SHORT.matches_row({}, "TOKYO_OPEN") is False
 
 
 # ============================================================================
@@ -217,17 +217,17 @@ class TestDirectionFilterSync:
 class TestGetFiltersForGrid:
     """get_filters_for_grid must return correct filter sets per instrument+session."""
 
-    def test_mes_1000_includes_band_and_dir(self):
-        filters = get_filters_for_grid("MES", "1000")
+    def test_mes_tokyo_open_includes_band_and_dir(self):
+        filters = get_filters_for_grid("MES", "TOKYO_OPEN")
         assert "ORB_G4_L12" in filters
         assert "ORB_G5_L12" in filters
         assert "DIR_LONG" in filters
 
-    def test_mgc_0900_has_nofri_composites(self):
-        filters = get_filters_for_grid("MGC", "0900")
+    def test_mgc_cme_reopen_has_nofri_composites(self):
+        filters = get_filters_for_grid("MGC", "CME_REOPEN")
         assert "ORB_G4_L12" not in filters
         assert "DIR_LONG" not in filters
-        # MGC G4/G5 restored (Feb 2026 correction: G4 passes 7.2% of 0900
+        # MGC G4/G5 restored (Feb 2026 correction: G4 passes 7.2% of CME_REOPEN
         # days, not 87.5% as originally claimed). All G filters get NOFRI.
         assert "ORB_G4_NOFRI" in filters
         assert "ORB_G5_NOFRI" in filters
@@ -239,14 +239,14 @@ class TestGetFiltersForGrid:
         assert "ORB_G6" in filters
         assert "ORB_G8" in filters
 
-    def test_mgc_1000_has_dir_no_band(self):
-        filters = get_filters_for_grid("MGC", "1000")
+    def test_mgc_tokyo_open_has_dir_no_band(self):
+        filters = get_filters_for_grid("MGC", "TOKYO_OPEN")
         assert "DIR_LONG" in filters
         assert "ORB_G4_L12" not in filters
 
     def test_base_filters_always_present(self):
         for inst in ("MGC", "MES", "MNQ"):
-            for sess in ("0900", "1000"):
+            for sess in ("CME_REOPEN", "TOKYO_OPEN"):
                 filters = get_filters_for_grid(inst, sess)
                 assert "NO_FILTER" in filters
                 if inst == "MGC":
@@ -288,16 +288,16 @@ class TestGridParamsSync:
         Session-specific DOW composites are added by get_filters_for_grid()
         per-session, expanding the grid contextually.
 
-        15 ORBs x 6 RRs x 5 CBs x 6 base filters = 2700 (E0, all CB options)
-        15 ORBs x 6 RRs x 5 CBs x 6 base filters = 2700 (E1, all CB options)
-        15 ORBs x 6 RRs x 1 CB x 6 base filters = 540  (E3, always CB1)
-        Total base: 5940
+        10 ORBs x 6 RRs x 5 CBs x 6 base filters = 1800 (E0, all CB options)
+        10 ORBs x 6 RRs x 5 CBs x 6 base filters = 1800 (E1, all CB options)
+        10 ORBs x 6 RRs x 1 CB x 6 base filters = 360  (E3, always CB1)
+        Total base: 3960
         """
         BASE_FILTER_COUNT = 6  # NO_FILTER + ORB_G4/G5/G6/G8 + VOL_RV12_N20
         e0_e1 = 2 * len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * BASE_FILTER_COUNT
         e3 = len(ORB_LABELS) * len(RR_TARGETS) * 1 * BASE_FILTER_COUNT
         expected = e0_e1 + e3
-        assert expected == 5940
+        assert expected == 3960
 
 class TestEntryModelsSync:
     """ENTRY_MODELS must be consistent."""
@@ -357,16 +357,14 @@ class TestStrategyIdSync:
     """Strategy IDs must be deterministic and parseable."""
 
     def test_format(self):
-        sid = make_strategy_id("MGC", "0900", "E1", 2.0, 1, "NO_FILTER")
-        assert sid == "MGC_0900_E1_RR2.0_CB1_NO_FILTER"
+        sid = make_strategy_id("MGC", "CME_REOPEN", "E1", 2.0, 1, "NO_FILTER")
+        assert sid == "MGC_CME_REOPEN_E1_RR2.0_CB1_NO_FILTER"
 
     def test_parseable(self):
         """Strategy ID can be parsed back to components."""
-        sid = make_strategy_id("MGC", "0900", "E3", 2.0, 1, "ORB_L4")
-        parts = sid.split("_", 3)  # MGC, 0900, E3, RR2.0_CB1_ORB_L4
-        assert parts[0] == "MGC"
-        assert parts[1] == "0900"
-        assert parts[2] == "E3"
+        sid = make_strategy_id("MGC", "CME_REOPEN", "E3", 2.0, 1, "ORB_L4")
+        # With multi-word session names, split by known prefix
+        assert sid.startswith("MGC_CME_REOPEN_E3_")
 
     def test_all_grid_ids_unique(self):
         """Every combination in the base grid produces a unique ID (E3 CB1 only).
@@ -386,7 +384,7 @@ class TestStrategyIdSync:
                             sid = make_strategy_id("MGC", orb, em, rr, cb, fk)
                             assert sid not in ids, f"Duplicate ID: {sid}"
                             ids.add(sid)
-        assert len(ids) == 5940
+        assert len(ids) == 3960
 
 # ============================================================================
 # 5. DB schema column sync

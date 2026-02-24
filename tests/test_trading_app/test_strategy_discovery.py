@@ -198,45 +198,45 @@ class TestMakeStrategyId:
     """Tests for strategy ID generation."""
 
     def test_format(self):
-        sid = make_strategy_id("MGC", "0900", "E1", 2.0, 1, "NO_FILTER")
-        assert sid == "MGC_0900_E1_RR2.0_CB1_NO_FILTER"
+        sid = make_strategy_id("MGC", "CME_REOPEN", "E1", 2.0, 1, "NO_FILTER")
+        assert sid == "MGC_CME_REOPEN_E1_RR2.0_CB1_NO_FILTER"
 
     def test_different_params_different_ids(self):
-        s1 = make_strategy_id("MGC", "0900", "E1", 2.0, 1, "NO_FILTER")
-        s2 = make_strategy_id("MGC", "0900", "E1", 2.0, 2, "NO_FILTER")
-        s3 = make_strategy_id("MGC", "1000", "E1", 2.0, 1, "NO_FILTER")
-        s4 = make_strategy_id("MGC", "0900", "E3", 2.0, 1, "NO_FILTER")
+        s1 = make_strategy_id("MGC", "CME_REOPEN", "E1", 2.0, 1, "NO_FILTER")
+        s2 = make_strategy_id("MGC", "CME_REOPEN", "E1", 2.0, 2, "NO_FILTER")
+        s3 = make_strategy_id("MGC", "TOKYO_OPEN", "E1", 2.0, 1, "NO_FILTER")
+        s4 = make_strategy_id("MGC", "CME_REOPEN", "E3", 2.0, 1, "NO_FILTER")
         assert len({s1, s2, s3, s4}) == 4
 
     def test_entry_model_in_id(self):
         for em in ENTRY_MODELS:
-            sid = make_strategy_id("MGC", "0900", em, 2.0, 1, "NO_FILTER")
+            sid = make_strategy_id("MGC", "CME_REOPEN", em, 2.0, 1, "NO_FILTER")
             assert f"_{em}_" in sid
 
     def test_orb_minutes_default_no_suffix(self):
-        sid = make_strategy_id("MGC", "0900", "E1", 2.0, 1, "NO_FILTER")
+        sid = make_strategy_id("MGC", "CME_REOPEN", "E1", 2.0, 1, "NO_FILTER")
         assert "_O" not in sid
 
     def test_orb_minutes_5_no_suffix(self):
-        sid = make_strategy_id("MGC", "0900", "E1", 2.0, 1, "NO_FILTER", orb_minutes=5)
-        assert sid == "MGC_0900_E1_RR2.0_CB1_NO_FILTER"
+        sid = make_strategy_id("MGC", "CME_REOPEN", "E1", 2.0, 1, "NO_FILTER", orb_minutes=5)
+        assert sid == "MGC_CME_REOPEN_E1_RR2.0_CB1_NO_FILTER"
 
     def test_orb_minutes_15_suffix(self):
-        sid = make_strategy_id("MGC", "0900", "E1", 2.0, 1, "ORB_G4", orb_minutes=15)
-        assert sid == "MGC_0900_E1_RR2.0_CB1_ORB_G4_O15"
+        sid = make_strategy_id("MGC", "CME_REOPEN", "E1", 2.0, 1, "ORB_G4", orb_minutes=15)
+        assert sid == "MGC_CME_REOPEN_E1_RR2.0_CB1_ORB_G4_O15"
 
     def test_orb_minutes_30_suffix(self):
-        sid = make_strategy_id("MGC", "0900", "E1", 2.0, 1, "ORB_G4", orb_minutes=30)
-        assert sid == "MGC_0900_E1_RR2.0_CB1_ORB_G4_O30"
+        sid = make_strategy_id("MGC", "CME_REOPEN", "E1", 2.0, 1, "ORB_G4", orb_minutes=30)
+        assert sid == "MGC_CME_REOPEN_E1_RR2.0_CB1_ORB_G4_O30"
 
     def test_orb_minutes_with_dst_suffix_order(self):
-        sid = make_strategy_id("MGC", "0900", "E1", 2.0, 1, "ORB_G4",
+        sid = make_strategy_id("MGC", "CME_REOPEN", "E1", 2.0, 1, "ORB_G4",
                                dst_regime="winter", orb_minutes=15)
-        assert sid == "MGC_0900_E1_RR2.0_CB1_ORB_G4_O15_W"
+        assert sid == "MGC_CME_REOPEN_E1_RR2.0_CB1_ORB_G4_O15_W"
 
     def test_orb_minutes_15_vs_5_different(self):
-        s5 = make_strategy_id("MGC", "0900", "E1", 2.0, 1, "ORB_G4", orb_minutes=5)
-        s15 = make_strategy_id("MGC", "0900", "E1", 2.0, 1, "ORB_G4", orb_minutes=15)
+        s5 = make_strategy_id("MGC", "CME_REOPEN", "E1", 2.0, 1, "ORB_G4", orb_minutes=5)
+        s15 = make_strategy_id("MGC", "CME_REOPEN", "E1", 2.0, 1, "ORB_G4", orb_minutes=15)
         assert s5 != s15
 
 # ============================================================================
@@ -292,16 +292,16 @@ class TestComputeRelativeVolumes:
         # Feature row: break at 23:05 on day 21
         features = [{
             "trading_day": date(2024, 1, 21),
-            "orb_0900_break_ts": datetime(2024, 1, 21, 23, 5, tzinfo=timezone.utc),
+            "orb_CME_REOPEN_break_ts": datetime(2024, 1, 21, 23, 5, tzinfo=timezone.utc),
         }]
 
-        _compute_relative_volumes(con, features, "MGC", ["0900"], ALL_FILTERS)
+        _compute_relative_volumes(con, features, "MGC", ["CME_REOPEN"], ALL_FILTERS)
         con.close()
 
         # Baseline = median of 100 (20 prior days at :05), break = 200
         # rel_vol = 200 / 100 = 2.0
-        assert "rel_vol_0900" in features[0]
-        assert features[0]["rel_vol_0900"] == pytest.approx(2.0, abs=0.01)
+        assert "rel_vol_CME_REOPEN" in features[0]
+        assert features[0]["rel_vol_CME_REOPEN"] == pytest.approx(2.0, abs=0.01)
 
     def test_fail_closed_no_baseline(self, tmp_path):
         """If no prior data exists at the break minute, rel_vol is NOT set."""
@@ -315,14 +315,14 @@ class TestComputeRelativeVolumes:
 
         features = [{
             "trading_day": date(2024, 6, 15),
-            "orb_0900_break_ts": datetime(2024, 6, 15, 23, 5, tzinfo=timezone.utc),
+            "orb_CME_REOPEN_break_ts": datetime(2024, 6, 15, 23, 5, tzinfo=timezone.utc),
         }]
 
-        _compute_relative_volumes(con, features, "MGC", ["0900"], ALL_FILTERS)
+        _compute_relative_volumes(con, features, "MGC", ["CME_REOPEN"], ALL_FILTERS)
         con.close()
 
         # No baseline -> fail-closed -> rel_vol not set
-        assert "rel_vol_0900" not in features[0]
+        assert "rel_vol_CME_REOPEN" not in features[0]
 
     def test_fail_closed_zero_volume_break_bar(self, tmp_path):
         """Break bar with volume=0 -> fail-closed."""
@@ -342,13 +342,13 @@ class TestComputeRelativeVolumes:
 
         features = [{
             "trading_day": date(2024, 3, 21),
-            "orb_0900_break_ts": datetime(2024, 3, 21, 23, 5, tzinfo=timezone.utc),
+            "orb_CME_REOPEN_break_ts": datetime(2024, 3, 21, 23, 5, tzinfo=timezone.utc),
         }]
 
-        _compute_relative_volumes(con, features, "MGC", ["0900"], ALL_FILTERS)
+        _compute_relative_volumes(con, features, "MGC", ["CME_REOPEN"], ALL_FILTERS)
         con.close()
 
-        assert "rel_vol_0900" not in features[0]
+        assert "rel_vol_CME_REOPEN" not in features[0]
 
     def test_no_volume_filters_skips(self, tmp_path):
         """If no VolumeFilter in all_filters, function returns immediately."""
@@ -359,13 +359,13 @@ class TestComputeRelativeVolumes:
 
         features = [{
             "trading_day": date(2024, 1, 21),
-            "orb_0900_break_ts": datetime(2024, 1, 21, 23, 5, tzinfo=timezone.utc),
+            "orb_CME_REOPEN_break_ts": datetime(2024, 1, 21, 23, 5, tzinfo=timezone.utc),
         }]
 
-        _compute_relative_volumes(con, features, "MGC", ["0900"], no_vol_filters)
+        _compute_relative_volumes(con, features, "MGC", ["CME_REOPEN"], no_vol_filters)
         con.close()
 
-        assert "rel_vol_0900" not in features[0]
+        assert "rel_vol_CME_REOPEN" not in features[0]
 
     def test_volume_filter_reduces_eligible_days(self, tmp_path):
         """VOL_RV12_N20 produces fewer eligible days than NO_FILTER."""
@@ -390,19 +390,19 @@ class TestComputeRelativeVolumes:
         for i in range(21, 31):
             features.append({
                 "trading_day": date(2024, 3, i),
-                "orb_0900_break_ts": datetime(2024, 3, i, 23, 5, tzinfo=timezone.utc),
-                "orb_0900_break_dir": "long",
-                "orb_0900_size": 5.0,
+                "orb_CME_REOPEN_break_ts": datetime(2024, 3, i, 23, 5, tzinfo=timezone.utc),
+                "orb_CME_REOPEN_break_dir": "long",
+                "orb_CME_REOPEN_size": 5.0,
             })
 
-        _compute_relative_volumes(con, features, "MGC", ["0900"], ALL_FILTERS)
+        _compute_relative_volumes(con, features, "MGC", ["CME_REOPEN"], ALL_FILTERS)
 
-        nf_days = _build_filter_day_sets(features, ["0900"], {"NO_FILTER": ALL_FILTERS["NO_FILTER"]})
-        vol_days = _build_filter_day_sets(features, ["0900"], {"VOL_RV12_N20": ALL_FILTERS["VOL_RV12_N20"]})
+        nf_days = _build_filter_day_sets(features, ["CME_REOPEN"], {"NO_FILTER": ALL_FILTERS["NO_FILTER"]})
+        vol_days = _build_filter_day_sets(features, ["CME_REOPEN"], {"VOL_RV12_N20": ALL_FILTERS["VOL_RV12_N20"]})
         con.close()
 
-        nf_count = len(nf_days[("NO_FILTER", "0900")])
-        vol_count = len(vol_days[("VOL_RV12_N20", "0900")])
+        nf_count = len(nf_days[("NO_FILTER", "CME_REOPEN")])
+        vol_count = len(vol_days[("VOL_RV12_N20", "CME_REOPEN")])
 
         # NO_FILTER: all 10 days with breaks
         assert nf_count == 10
@@ -423,9 +423,9 @@ class TestDoubleBreakNoExclusion:
         """Create a minimal feature row with break + double_break flag."""
         return {
             "trading_day": date(2024, 1, day_num),
-            "orb_0900_break_dir": "long",
-            "orb_0900_size": 5.0,
-            "orb_0900_double_break": double_break,
+            "orb_CME_REOPEN_break_dir": "long",
+            "orb_CME_REOPEN_size": 5.0,
+            "orb_CME_REOPEN_double_break": double_break,
         }
 
     def test_double_break_true_included(self):
@@ -433,8 +433,8 @@ class TestDoubleBreakNoExclusion:
         from trading_app.strategy_discovery import _build_filter_day_sets
 
         features = [self._make_feature(1, True), self._make_feature(2, False)]
-        result = _build_filter_day_sets(features, ["0900"], {"NO_FILTER": ALL_FILTERS["NO_FILTER"]})
-        days = result[("NO_FILTER", "0900")]
+        result = _build_filter_day_sets(features, ["CME_REOPEN"], {"NO_FILTER": ALL_FILTERS["NO_FILTER"]})
+        days = result[("NO_FILTER", "CME_REOPEN")]
         assert date(2024, 1, 1) in days
         assert date(2024, 1, 2) in days
 
@@ -443,8 +443,8 @@ class TestDoubleBreakNoExclusion:
         from trading_app.strategy_discovery import _build_filter_day_sets
 
         features = [self._make_feature(1, None)]
-        result = _build_filter_day_sets(features, ["0900"], {"NO_FILTER": ALL_FILTERS["NO_FILTER"]})
-        assert date(2024, 1, 1) in result[("NO_FILTER", "0900")]
+        result = _build_filter_day_sets(features, ["CME_REOPEN"], {"NO_FILTER": ALL_FILTERS["NO_FILTER"]})
+        assert date(2024, 1, 1) in result[("NO_FILTER", "CME_REOPEN")]
 
     def test_all_days_with_break_included(self):
         """All days with a break direction are included regardless of double_break."""
@@ -456,10 +456,10 @@ class TestDoubleBreakNoExclusion:
             self._make_feature(3, False),  # single break
         ]
         filters = {"NO_FILTER": ALL_FILTERS["NO_FILTER"], "ORB_G4": ALL_FILTERS["ORB_G4"]}
-        result = _build_filter_day_sets(features, ["0900"], filters)
+        result = _build_filter_day_sets(features, ["CME_REOPEN"], filters)
 
-        assert len(result[("NO_FILTER", "0900")]) == 3
-        assert len(result[("ORB_G4", "0900")]) == 3
+        assert len(result[("NO_FILTER", "CME_REOPEN")]) == 3
+        assert len(result[("ORB_G4", "CME_REOPEN")]) == 3
 
 
 class TestComputeMetricsScratchCounts:
@@ -525,7 +525,7 @@ class TestZeroSampleNotWritten:
         for i in range(1, 11):
             con.execute(
                 """INSERT INTO daily_features (trading_day, symbol, orb_minutes,
-                    orb_0900_high, orb_0900_low, orb_0900_size, orb_0900_break_dir)
+                    orb_CME_REOPEN_high, orb_CME_REOPEN_low, orb_CME_REOPEN_size, orb_CME_REOPEN_break_dir)
                    VALUES (?, 'MGC', 5, 2710.0, 2700.0, 10.0, 'long')""",
                 [date(2024, 1, i)],
             )
@@ -535,7 +535,7 @@ class TestZeroSampleNotWritten:
                 """INSERT INTO orb_outcomes
                     (trading_day, symbol, orb_minutes, orb_label, entry_model,
                      rr_target, confirm_bars, outcome, pnl_r, mae_r, mfe_r)
-                   VALUES (?, 'MGC', 5, '0900', 'E1', 2.0, 1, 'scratch', 0.0, 0.1, 0.1)""",
+                   VALUES (?, 'MGC', 5, 'CME_REOPEN', 'E1', 2.0, 1, 'scratch', 0.0, 0.1, 0.1)""",
                 [date(2024, 1, i)],
             )
         con.commit()
@@ -569,8 +569,8 @@ class TestDedup:
         day_hash = _compute_trade_day_hash(days)
 
         strategies = [
-            {"strategy_id": f"MGC_0900_E1_RR2.0_CB1_ORB_{f}",
-             "instrument": "MGC", "orb_label": "0900",
+            {"strategy_id": f"MGC_CME_REOPEN_E1_RR2.0_CB1_ORB_{f}",
+             "instrument": "MGC", "orb_label": "CME_REOPEN",
              "entry_model": "E1", "rr_target": 2.0, "confirm_bars": 1,
              "filter_key": f"ORB_{f}", "trade_day_hash": day_hash,
              "metrics": {"expectancy_r": 0.5}}
@@ -598,13 +598,13 @@ class TestDedup:
         days2 = [date(2024, 1, i) for i in range(6, 11)]
 
         strategies = [
-            {"strategy_id": "MGC_0900_E1_RR2.0_CB1_ORB_G4",
-             "instrument": "MGC", "orb_label": "0900",
+            {"strategy_id": "MGC_CME_REOPEN_E1_RR2.0_CB1_ORB_G4",
+             "instrument": "MGC", "orb_label": "CME_REOPEN",
              "entry_model": "E1", "rr_target": 2.0, "confirm_bars": 1,
              "filter_key": "ORB_G4", "trade_day_hash": _compute_trade_day_hash(days1),
              "metrics": {"expectancy_r": 0.5}},
-            {"strategy_id": "MGC_0900_E1_RR2.0_CB1_ORB_G8",
-             "instrument": "MGC", "orb_label": "0900",
+            {"strategy_id": "MGC_CME_REOPEN_E1_RR2.0_CB1_ORB_G8",
+             "instrument": "MGC", "orb_label": "CME_REOPEN",
              "entry_model": "E1", "rr_target": 2.0, "confirm_bars": 1,
              "filter_key": "ORB_G8", "trade_day_hash": _compute_trade_day_hash(days2),
              "metrics": {"expectancy_r": 0.8}},
@@ -649,9 +649,9 @@ class TestValidatorSkipsAliases:
 
     def _make_row(self, **overrides):
         base = {
-            "strategy_id": "MGC_0900_E1_RR2.0_CB1_ORB_G4",
+            "strategy_id": "MGC_CME_REOPEN_E1_RR2.0_CB1_ORB_G4",
             "instrument": "MGC",
-            "orb_label": "0900",
+            "orb_label": "CME_REOPEN",
             "orb_minutes": 5,
             "rr_target": 2.0,
             "confirm_bars": 1,
@@ -683,10 +683,10 @@ class TestValidatorSkipsAliases:
 
         canonical = self._make_row(is_canonical=True)
         alias = self._make_row(
-            strategy_id="MGC_0900_E1_RR2.0_CB1_NO_FILTER",
+            strategy_id="MGC_CME_REOPEN_E1_RR2.0_CB1_NO_FILTER",
             filter_type="NO_FILTER",
             is_canonical=False,
-            canonical_strategy_id="MGC_0900_E1_RR2.0_CB1_ORB_G4",
+            canonical_strategy_id="MGC_CME_REOPEN_E1_RR2.0_CB1_ORB_G4",
         )
         db_path = self._setup_db(tmp_path, [canonical, alias])
 
@@ -702,7 +702,7 @@ class TestValidatorSkipsAliases:
         con = duckdb.connect(str(db_path), read_only=True)
         alias_status = con.execute(
             "SELECT validation_status FROM experimental_strategies WHERE strategy_id = ?",
-            ["MGC_0900_E1_RR2.0_CB1_NO_FILTER"],
+            ["MGC_CME_REOPEN_E1_RR2.0_CB1_NO_FILTER"],
         ).fetchone()[0]
         con.close()
         assert alias_status == "SKIPPED"

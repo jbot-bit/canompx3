@@ -142,68 +142,76 @@ COST_SPECS = {
 # Fallback: instrument not found -> use 1.0 for all sessions
 SESSION_SLIPPAGE_MULT = {
     "MGC": {
-        "0900": 1.3,   # 23:00 UTC -- thin Asian session
-        "1000": 1.2,   # 00:00 UTC -- thin early Asian
-        "1100": 1.0,   # 01:00 UTC -- moderate
-        "1800": 0.9,   # 08:00 UTC -- pre-London, decent liquidity
-        "2300": 0.8,   # 13:00 UTC -- NY session, best liquidity
-        "0030": 1.1,   # 14:30 UTC -- moderate NY
+        "CME_REOPEN": 1.3,       # 23:00 UTC -- thin Asian session
+        "TOKYO_OPEN": 1.2,       # 00:00 UTC -- thin early Asian
+        "SINGAPORE_OPEN": 1.0,   # 01:00 UTC -- moderate
+        "LONDON_METALS": 0.9,    # 08:00 UTC -- pre-London, decent liquidity
+        "US_DATA_830": 0.8,      # 13:00 UTC -- NY session, best liquidity
+        "NYSE_OPEN": 1.1,        # 14:30 UTC -- moderate NY
+        "COMEX_SETTLE": 0.9,     # ~18:25 UTC -- settlement window
+        "CME_PRECLOSE": 1.0,     # ~19:45 UTC -- closing session
+        "NYSE_CLOSE": 1.0,       # ~20:00 UTC -- NYSE close
+        "US_DATA_1000": 0.9,     # ~14:00 UTC -- post-equity-open flow
     },
     "MNQ": {
-        "0900": 1.0,   # 23:00 UTC -- NQ liquid even in Asian
-        "1000": 1.0,   # 00:00 UTC -- early Asian
-        "1100": 0.9,   # 01:00 UTC -- moderate
-        "1800": 0.9,   # 08:00 UTC -- pre-London
-        "2300": 0.8,   # 13:00 UTC -- NY session, best liquidity
-        "0030": 0.9,   # 14:30 UTC -- moderate NY
+        "CME_REOPEN": 1.0,       # 23:00 UTC -- NQ liquid even in Asian
+        "TOKYO_OPEN": 1.0,       # 00:00 UTC -- early Asian
+        "SINGAPORE_OPEN": 0.9,   # 01:00 UTC -- moderate
+        "LONDON_METALS": 0.9,    # 08:00 UTC -- pre-London
+        "US_DATA_830": 0.8,      # 13:00 UTC -- NY session, best liquidity
+        "NYSE_OPEN": 0.9,        # 14:30 UTC -- moderate NY
+        "US_DATA_1000": 0.9,     # ~14:00 UTC -- post-equity-open flow
+        "CME_PRECLOSE": 1.0,     # ~19:45 UTC -- closing session
+        "NYSE_CLOSE": 0.9,       # ~20:00 UTC -- NYSE close
     },
     "MES": {
-        "0900": 1.0,   # 23:00 UTC -- ES/MES liquid 24h
-        "1000": 1.0,   # 00:00 UTC -- early Asian
-        "1100": 0.9,   # 01:00 UTC -- moderate
-        "1800": 0.9,   # 08:00 UTC -- pre-London
-        "2300": 0.8,   # 13:00 UTC -- NY session, best liquidity
-        "0030": 0.9,   # 14:30 UTC -- moderate NY
+        "CME_REOPEN": 1.0,       # 23:00 UTC -- ES/MES liquid 24h
+        "TOKYO_OPEN": 1.0,       # 00:00 UTC -- early Asian
+        "SINGAPORE_OPEN": 0.9,   # 01:00 UTC -- moderate
+        "LONDON_METALS": 0.9,    # 08:00 UTC -- pre-London
+        "US_DATA_830": 0.8,      # 13:00 UTC -- NY session, best liquidity
+        "NYSE_OPEN": 0.9,        # 14:30 UTC -- moderate NY
+        "US_DATA_1000": 0.9,     # ~14:00 UTC -- post-equity-open flow
+        "CME_PRECLOSE": 1.0,     # ~19:45 UTC -- closing session
+        "NYSE_CLOSE": 0.9,       # ~20:00 UTC -- NYSE close
     },
     "MCL": {
-        "0900": 1.2,   # 23:00 UTC -- thin Asian session for crude
-        "1000": 1.1,   # 00:00 UTC -- early Asian
-        "1100": 1.0,   # 01:00 UTC -- moderate
-        "1800": 0.9,   # 08:00 UTC -- pre-London, decent crude liquidity
-        "2300": 0.8,   # 13:00 UTC -- NY/NYMEX session, best liquidity
-        "0030": 1.0,   # 14:30 UTC -- moderate NY
+        "CME_REOPEN": 1.2,       # 23:00 UTC -- thin Asian session for crude
+        "TOKYO_OPEN": 1.1,       # 00:00 UTC -- early Asian
+        "SINGAPORE_OPEN": 1.0,   # 01:00 UTC -- moderate
+        "LONDON_METALS": 0.9,    # 08:00 UTC -- pre-London, decent crude liquidity
+        "US_DATA_830": 0.8,      # 13:00 UTC -- NY/NYMEX session, best liquidity
+        "NYSE_OPEN": 1.0,        # 14:30 UTC -- moderate NY
     },
     "SIL": {
         # Defaults — update after volume analysis determines actual session list
-        "0900": 1.3,   # 23:00 UTC -- thin Asian session for silver
-        "1000": 1.2,   # 00:00 UTC -- early Asian
-        "1100": 1.0,   # 01:00 UTC -- moderate
-        "1800": 0.9,   # 08:00 UTC -- pre-London, decent liquidity
-        "2300": 0.8,   # 13:00 UTC -- NY/COMEX session, best liquidity
-        "0030": 1.0,   # 14:30 UTC -- moderate NY
+        "CME_REOPEN": 1.3,       # 23:00 UTC -- thin Asian session for silver
+        "TOKYO_OPEN": 1.2,       # 00:00 UTC -- early Asian
+        "SINGAPORE_OPEN": 1.0,   # 01:00 UTC -- moderate
+        "LONDON_METALS": 0.9,    # 08:00 UTC -- pre-London, decent liquidity
+        "US_DATA_830": 0.8,      # 13:00 UTC -- NY/COMEX session, best liquidity
+        "NYSE_OPEN": 1.0,        # 14:30 UTC -- moderate NY
+        "COMEX_SETTLE": 0.9,     # ~18:25 UTC -- settlement window
     },
     "M6E": {
         # EUR/USD liquidity peaks at London open and tapers through US session
-        "1000": 1.3,          # 00:00 UTC -- thin Asian FX; EUR/USD less active pre-London
-        "1100": 1.2,          # 01:00 UTC -- early Asian; slight improvement
-        "1800": 0.8,          # 08:00 UTC -- London open; best EUR/USD liquidity
-        "0030": 1.0,          # 14:30 UTC -- US equity open; decent EUR/USD flow
-        "LONDON_OPEN": 0.8,   # Dynamic London open; peak FX liquidity
-        "US_DATA_OPEN": 1.5,  # 08:30 ET data release; wide spreads during news
-        "US_EQUITY_OPEN": 1.0,  # 09:30 ET; solid EUR/USD depth
-        "US_POST_EQUITY": 1.0,  # 10:00 ET; moderate
+        "TOKYO_OPEN": 1.3,        # 00:00 UTC -- thin Asian FX; EUR/USD less active pre-London
+        "SINGAPORE_OPEN": 1.2,    # 01:00 UTC -- early Asian; slight improvement
+        "LONDON_METALS": 0.8,     # 08:00 UTC -- London open; best EUR/USD liquidity
+        "NYSE_OPEN": 1.0,         # 14:30 UTC -- US equity open; decent EUR/USD flow
+        "US_DATA_830": 1.5,       # 08:30 ET data release; wide spreads during news
+        "US_DATA_1000": 1.0,      # 10:00 ET; moderate
     },
     "M2K": {
         # Russell 2000 micro — same equity session structure as MES/MNQ
-        "0900": 1.1,   # 23:00 UTC -- thin Asian (RTY less liquid than ES overnight)
-        "1000": 1.1,   # 00:00 UTC -- early Asian
-        "1100": 1.0,   # 01:00 UTC -- moderate
-        "1800": 1.0,   # 08:00 UTC -- pre-NY, picking up
-        "0030": 0.9,   # 14:30 UTC -- US equity open, peak Russell liquidity
-        "US_EQUITY_OPEN": 0.9,   # Dynamic 9:30 ET; best M2K liquidity
-        "US_DATA_OPEN": 1.3,     # 08:30 ET data; wider spreads during release
-        "US_POST_EQUITY": 0.9,   # 10:00 ET; solid
-        "CME_CLOSE": 1.0,        # 2:45 PM ET; moderate
+        "CME_REOPEN": 1.1,        # 23:00 UTC -- thin Asian (RTY less liquid than ES overnight)
+        "TOKYO_OPEN": 1.1,        # 00:00 UTC -- early Asian
+        "SINGAPORE_OPEN": 1.0,    # 01:00 UTC -- moderate
+        "LONDON_METALS": 1.0,     # 08:00 UTC -- pre-NY, picking up
+        "NYSE_OPEN": 0.9,         # 14:30 UTC -- US equity open, peak Russell liquidity
+        "US_DATA_830": 1.3,       # 08:30 ET data; wider spreads during release
+        "US_DATA_1000": 0.9,      # 10:00 ET; solid
+        "CME_PRECLOSE": 1.0,      # 2:45 PM ET; moderate
     },
 }
 

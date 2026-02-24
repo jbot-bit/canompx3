@@ -24,9 +24,9 @@ def _cost():
 
 def _make_strategy(**overrides):
     base = dict(
-        strategy_id="MGC_2300_E1_RR2.0_CB1_NO_FILTER",
+        strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_NO_FILTER",
         instrument="MGC",
-        orb_label="2300",
+        orb_label="US_DATA_830",
         entry_model="E1",
         rr_target=2.0,
         confirm_bars=1,
@@ -71,12 +71,12 @@ class TestORBDetection:
         engine = ExecutionEngine(_make_portfolio(), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        # 2300 ORB window: 13:00-13:05 UTC on trading day
-        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        # US_DATA_830 ORB window: 13:30-13:35 UTC (winter) on trading day
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
         engine.on_bar(_bar(ts_base, 2700, 2705, 2695, 2702))
         engine.on_bar(_bar(ts_base + timedelta(minutes=1), 2702, 2710, 2698, 2708))
 
-        orb = engine.orbs["2300"]
+        orb = engine.orbs["US_DATA_830"]
         assert orb.high == 2710.0
         assert orb.low == 2695.0
         assert not orb.complete  # Still within window
@@ -86,13 +86,13 @@ class TestORBDetection:
         engine = ExecutionEngine(_make_portfolio(), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
 
-        # Bar at 13:05 — window is over
+        # Bar at 13:35 — window is over
         engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2702, 2703, 2701, 2703))
-        assert engine.orbs["2300"].complete
+        assert engine.orbs["US_DATA_830"].complete
 
     def test_break_detection_long(self):
         """Close above ORB high triggers long break."""
@@ -100,25 +100,25 @@ class TestORBDetection:
         engine.on_trading_day_start(date(2024, 1, 5))
 
         # Build ORB
-        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
 
         # Bar after window with close > orb_high (2705)
         engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
-        assert engine.orbs["2300"].break_dir == "long"
+        assert engine.orbs["US_DATA_830"].break_dir == "long"
 
     def test_no_break_inside_range(self):
         """Close within ORB range = no break."""
         engine = ExecutionEngine(_make_portfolio(), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
 
         engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2702, 2704, 2696, 2700))
-        assert engine.orbs["2300"].break_dir is None
+        assert engine.orbs["US_DATA_830"].break_dir is None
 
 # ============================================================================
 # Entry Tests
@@ -128,7 +128,7 @@ class TestEntry:
 
     def _run_to_break(self, engine, orb_high=2705.0):
         """Helper: build ORB and trigger a long break."""
-        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
         # Break bar
@@ -140,7 +140,7 @@ class TestEntry:
     def test_e1_enters_next_bar(self):
         """E1 with CB1: enters at next bar's open."""
         strategy = _make_strategy(entry_model="E1", confirm_bars=1,
-                                  strategy_id="MGC_2300_E1_RR2.0_CB1_NO_FILTER")
+                                  strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_NO_FILTER")
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
@@ -159,7 +159,7 @@ class TestEntry:
     def test_e3_enters_on_retrace(self):
         """E3: enters at ORB level when price retraces."""
         strategy = _make_strategy(entry_model="E3", confirm_bars=1,
-                                  strategy_id="MGC_2300_E3_RR2.0_CB1_NO_FILTER")
+                                  strategy_id="MGC_US_DATA_830_E3_RR2.0_CB1_NO_FILTER")
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
@@ -177,7 +177,7 @@ class TestEntry:
     def test_e3_no_retrace_no_fill(self):
         """E3: no entry if price doesn't retrace."""
         strategy = _make_strategy(entry_model="E3", confirm_bars=1,
-                                  strategy_id="MGC_2300_E3_RR2.0_CB1_NO_FILTER")
+                                  strategy_id="MGC_US_DATA_830_E3_RR2.0_CB1_NO_FILTER")
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
@@ -201,7 +201,7 @@ class TestExit:
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
         # Build ORB: high=2705, low=2695
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
@@ -226,7 +226,7 @@ class TestExit:
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
 
@@ -250,7 +250,7 @@ class TestExit:
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
         engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
@@ -272,7 +272,7 @@ class TestExit:
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
         engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
@@ -296,7 +296,7 @@ class TestPnL:
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
         # Break bar
@@ -316,7 +316,7 @@ class TestPnL:
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
         # Break bar
@@ -336,7 +336,7 @@ class TestPnL:
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
         engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
@@ -384,13 +384,13 @@ class TestFilters:
         """Strategy with G4 filter rejects ORBs < 4pt."""
         strategy = _make_strategy(
             filter_type="ORB_G4",
-            strategy_id="MGC_2300_E1_RR2.0_CB1_ORB_G4",
+            strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_ORB_G4",
         )
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
         # ORB with small range: high=2702, low=2700 = 2pt < 4pt threshold
-        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2702, 2700, 2701))
 
@@ -424,13 +424,13 @@ class TestConfirmCountDirection:
         """Long break with CB3: break bar counts as 2, needs 1 more confirm bar."""
         strategy = _make_strategy(
             entry_model="E1", confirm_bars=3,
-            strategy_id="MGC_2300_E1_RR2.0_CB3_NO_FILTER",
+            strategy_id="MGC_US_DATA_830_E1_RR2.0_CB3_NO_FILTER",
         )
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
         # Build ORB: high=2705, low=2695
-        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
 
@@ -453,13 +453,13 @@ class TestConfirmCountDirection:
         """If bar after break closes inside ORB, confirm_count resets to 0."""
         strategy = _make_strategy(
             entry_model="E1", confirm_bars=3,
-            strategy_id="MGC_2300_E1_RR2.0_CB3_NO_FILTER",
+            strategy_id="MGC_US_DATA_830_E1_RR2.0_CB3_NO_FILTER",
         )
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
         # Build ORB: high=2705, low=2695
-        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
 
@@ -477,13 +477,13 @@ class TestConfirmCountDirection:
         """Short break: confirm counted only when close < orb.low."""
         strategy = _make_strategy(
             entry_model="E1", confirm_bars=3,
-            strategy_id="MGC_2300_E1_RR2.0_CB3_NO_FILTER",
+            strategy_id="MGC_US_DATA_830_E1_RR2.0_CB3_NO_FILTER",
         )
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
         # Build ORB: high=2705, low=2695
-        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
 
@@ -510,15 +510,15 @@ class TestArmedAtBarGuard:
     """
 
     def _build_orb_and_break(self, engine, ts_base):
-        """Build 2300 ORB (high=2705, low=2695) and trigger a long break.
+        """Build US_DATA_830 ORB (high=2705, low=2695) and trigger a long break.
 
         Returns (break_bar_ts, break_events).
         """
-        # 5 bars inside the ORB window (13:00-13:04 UTC)
+        # 5 bars inside the ORB window (13:30-13:34 UTC)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
 
-        # Bar at 13:05 — outside the window, close > orb_high => long break
+        # Bar at 13:35 — outside the window, close > orb_high => long break
         break_ts = ts_base + timedelta(minutes=5)
         events = engine.on_bar(
             _bar(break_ts, 2704, 2710, 2703, 2706)
@@ -530,12 +530,12 @@ class TestArmedAtBarGuard:
         strategy = _make_strategy(
             entry_model="E1",
             confirm_bars=1,
-            strategy_id="MGC_2300_E1_RR2.0_CB1_NO_FILTER",
+            strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_NO_FILTER",
         )
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
         break_ts, break_events = self._build_orb_and_break(engine, ts_base)
 
         # --- Bar N (break bar) assertions ---
@@ -558,12 +558,12 @@ class TestArmedAtBarGuard:
         strategy = _make_strategy(
             entry_model="E1",
             confirm_bars=1,
-            strategy_id="MGC_2300_E1_RR2.0_CB1_NO_FILTER",
+            strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_NO_FILTER",
         )
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
         _break_ts, break_events = self._build_orb_and_break(engine, ts_base)
 
         # Confirm ARMED, no ENTRY on bar N
@@ -595,12 +595,12 @@ class TestFillBarExitEngine:
         """E1: if fill bar hits target, trade should exit as win on same bar."""
         strategy = _make_strategy(
             entry_model="E1", confirm_bars=1, rr_target=1.0,
-            strategy_id="MGC_2300_E1_RR1.0_CB1_NO_FILTER",
+            strategy_id="MGC_US_DATA_830_E1_RR1.0_CB1_NO_FILTER",
         )
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
         self._build_orb(engine, ts_base)
 
         # Break bar (long): close > 2705
@@ -622,12 +622,12 @@ class TestFillBarExitEngine:
         """E1: if fill bar hits stop, trade should exit as loss on same bar."""
         strategy = _make_strategy(
             entry_model="E1", confirm_bars=1, rr_target=2.0,
-            strategy_id="MGC_2300_E1_RR2.0_CB1_NO_FILTER",
+            strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_NO_FILTER",
         )
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
         self._build_orb(engine, ts_base)
 
         # Break bar (long): close > 2705
@@ -647,12 +647,12 @@ class TestFillBarExitEngine:
         """E1: if fill bar hits BOTH stop and target, resolve as loss."""
         strategy = _make_strategy(
             entry_model="E1", confirm_bars=1, rr_target=1.0,
-            strategy_id="MGC_2300_E1_RR1.0_CB1_NO_FILTER",
+            strategy_id="MGC_US_DATA_830_E1_RR1.0_CB1_NO_FILTER",
         )
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
         self._build_orb(engine, ts_base)
 
         # Break bar (long)
@@ -671,12 +671,12 @@ class TestFillBarExitEngine:
         """E3: if retrace bar also hits target, trade exits as win."""
         strategy = _make_strategy(
             entry_model="E3", confirm_bars=1, rr_target=1.0,
-            strategy_id="MGC_2300_E3_RR1.0_CB1_NO_FILTER",
+            strategy_id="MGC_US_DATA_830_E3_RR1.0_CB1_NO_FILTER",
         )
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 0, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
         self._build_orb(engine, ts_base)
 
         # Break bar (long)

@@ -138,7 +138,7 @@ class TestStabilityScoring:
 class TestAggregatePerformance:
     """Test family-level aggregation of rolling results."""
 
-    def _make_validated(self, run_label, orb_label="0900", em="E1",
+    def _make_validated(self, run_label, orb_label="CME_REOPEN", em="E1",
                          ft="ORB_G4", rr=2.0, cb=2, sample=50,
                          exp_r=0.15, sharpe=0.1):
         return {
@@ -194,16 +194,16 @@ class TestAggregatePerformance:
         """Different families aggregated separately."""
         labels = ["rolling_12m_2025_01", "rolling_12m_2025_02"]
         validated = [
-            self._make_validated("rolling_12m_2025_01", orb_label="0900"),
-            self._make_validated("rolling_12m_2025_02", orb_label="0900"),
-            self._make_validated("rolling_12m_2025_01", orb_label="1800"),
+            self._make_validated("rolling_12m_2025_01", orb_label="CME_REOPEN"),
+            self._make_validated("rolling_12m_2025_02", orb_label="CME_REOPEN"),
+            self._make_validated("rolling_12m_2025_01", orb_label="LONDON_METALS"),
         ]
 
         results = aggregate_rolling_performance(validated, labels, {})
         assert len(results) == 2
         fam_ids = {r.family_id for r in results}
-        assert "0900_E1_ORB_G4" in fam_ids
-        assert "1800_E1_ORB_G4" in fam_ids
+        assert "CME_REOPEN_E1_ORB_G4" in fam_ids
+        assert "LONDON_METALS_E1_ORB_G4" in fam_ids
 
     def test_empty_windows_list(self):
         results = aggregate_rolling_performance([], [], {})
@@ -224,7 +224,7 @@ class TestDoubleBreak:
 
         bars = pd.DataFrame({
             "ts_utc": pd.to_datetime([
-                "2025-01-06 23:05:00",  # After 0900 ORB close
+                "2025-01-06 23:05:00",  # After CME_REOPEN ORB close
                 "2025-01-06 23:10:00",
                 "2025-01-06 23:15:00",
             ], utc=True),
@@ -236,7 +236,7 @@ class TestDoubleBreak:
         })
 
         result = detect_double_break(
-            bars, date(2025, 1, 7), "0900", 5, orb_high, orb_low
+            bars, date(2025, 1, 7), "CME_REOPEN", 5, orb_high, orb_low
         )
         assert result is True
 
@@ -258,13 +258,13 @@ class TestDoubleBreak:
         })
 
         result = detect_double_break(
-            bars, date(2025, 1, 7), "0900", 5, orb_high, orb_low
+            bars, date(2025, 1, 7), "CME_REOPEN", 5, orb_high, orb_low
         )
         assert result is False
 
     def test_missing_orb_data(self):
         bars = pd.DataFrame(columns=["ts_utc", "open", "high", "low", "close", "volume"])
-        result = detect_double_break(bars, date(2025, 1, 7), "0900", 5, None, None)
+        result = detect_double_break(bars, date(2025, 1, 7), "CME_REOPEN", 5, None, None)
         assert result is None
 
     def test_no_bars_in_window(self):
@@ -278,7 +278,7 @@ class TestDoubleBreak:
             "volume": [100],
         })
         result = detect_double_break(
-            bars, date(2025, 1, 7), "0900", 5, 2000.0, 1990.0
+            bars, date(2025, 1, 7), "CME_REOPEN", 5, 2000.0, 1990.0
         )
         assert result is None
 
@@ -343,7 +343,7 @@ def _setup_rolling_db(tmp_path):
              median_risk_points, avg_risk_points,
              validation_status, validation_notes, yearly_results,
              start_date, end_date)
-            VALUES (?, 'MGC_0900_E1_RR2.0_CB2_ORB_G4', 'MGC', '0900', 5,
+            VALUES (?, 'MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G4', 'MGC', 'CME_REOPEN', 5,
                     2.0, 2, 'E1', 'ORB_G4',
                     55, 0.45, 0.15, 0.12, 5.0, 3.5, 3.5,
                     'PASSED', '', '{}',
@@ -360,7 +360,7 @@ def _setup_rolling_db(tmp_path):
              years_tested, all_years_positive, stress_test_passed,
              sharpe_ratio, max_drawdown_r, yearly_results, status,
              start_date, end_date)
-            VALUES (?, 'MGC_0900_E1_RR2.0_CB2_ORB_G4', 'MGC', '0900', 5,
+            VALUES (?, 'MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G4', 'MGC', 'CME_REOPEN', 5,
                     2.0, 2, 'E1', 'ORB_G4',
                     55, 0.45, 0.15,
                     1, TRUE, TRUE,
@@ -424,8 +424,8 @@ class TestPortfolioIntegration:
              median_risk_points, avg_risk_points,
              validation_status, validation_notes, yearly_results,
              start_date, end_date)
-            VALUES ('rolling_12m_2025_01', 'MGC_1800_E3_RR2.0_CB4_ORB_G6',
-                    'MGC', '1800', 5, 2.0, 4, 'E3', 'ORB_G6',
+            VALUES ('rolling_12m_2025_01', 'MGC_LONDON_METALS_E3_RR2.0_CB4_ORB_G6',
+                    'MGC', 'LONDON_METALS', 5, 2.0, 4, 'E3', 'ORB_G6',
                     30, 0.40, 0.10, 0.05, 8.0, 4.0, 4.0,
                     'REJECTED', 'Auto-degraded: double-break >67% in training window',
                     '{}', '2024-01-01', '2024-12-31')
@@ -434,8 +434,8 @@ class TestPortfolioIntegration:
         con.close()
 
         counts = load_rolling_degraded_counts(db_path, train_months=12)
-        assert "1800_E3_ORB_G6" in counts
-        assert counts["1800_E3_ORB_G6"] == 1
+        assert "LONDON_METALS_E3_ORB_G6" in counts
+        assert counts["LONDON_METALS_E3_ORB_G6"] == 1
 
 # =========================================================================
 # Family ID tests
@@ -444,10 +444,10 @@ class TestPortfolioIntegration:
 class TestFamilyId:
 
     def test_basic_format(self):
-        assert make_family_id("0900", "E1", "ORB_G4") == "0900_E1_ORB_G4"
+        assert make_family_id("CME_REOPEN", "E1", "ORB_G4") == "CME_REOPEN_E1_ORB_G4"
 
     def test_no_filter(self):
-        assert make_family_id("1800", "E3", "NO_FILTER") == "1800_E3_NO_FILTER"
+        assert make_family_id("LONDON_METALS", "E3", "NO_FILTER") == "LONDON_METALS_E3_NO_FILTER"
 
 # =========================================================================
 # Edge cases
@@ -460,8 +460,8 @@ class TestEdgeCases:
         labels = ["rolling_12m_2025_01"]
         validated = [{
             "run_label": "rolling_12m_2025_01",
-            "strategy_id": "MGC_0900_E1_RR2.0_CB2_ORB_G4",
-            "orb_label": "0900",
+            "strategy_id": "MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G4",
+            "orb_label": "CME_REOPEN",
             "entry_model": "E1",
             "filter_type": "ORB_G4",
             "rr_target": 2.0,

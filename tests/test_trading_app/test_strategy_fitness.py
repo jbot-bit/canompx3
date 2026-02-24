@@ -54,7 +54,7 @@ def _setup_fitness_db(tmp_path, strategies=None, outcomes=None, features=None):
         for s in strategies:
             sid = s["strategy_id"]
             instrument = s.get("instrument", "MGC")
-            orb_label = s.get("orb_label", "0900")
+            orb_label = s.get("orb_label", "CME_REOPEN")
             orb_minutes = s.get("orb_minutes", 5)
             rr_target = s.get("rr_target", 2.0)
             confirm_bars = s.get("confirm_bars", 2)
@@ -106,15 +106,15 @@ def _setup_fitness_db(tmp_path, strategies=None, outcomes=None, features=None):
             con.execute(
                 """INSERT OR IGNORE INTO daily_features
                    (trading_day, symbol, orb_minutes, bar_count_1m,
-                    orb_0900_high, orb_0900_low, orb_0900_size,
-                    orb_0900_break_dir)
+                    orb_CME_REOPEN_high, orb_CME_REOPEN_low, orb_CME_REOPEN_size,
+                    orb_CME_REOPEN_break_dir)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 [
                     f["trading_day"], f.get("symbol", "MGC"),
                     f.get("orb_minutes", 5), f.get("bar_count_1m", 1400),
-                    f.get("orb_0900_high", 2355.0), f.get("orb_0900_low", 2345.0),
-                    f.get("orb_0900_size", 10.0),
-                    f.get("orb_0900_break_dir", "long"),
+                    f.get("orb_CME_REOPEN_high", 2355.0), f.get("orb_CME_REOPEN_low", 2345.0),
+                    f.get("orb_CME_REOPEN_size", 10.0),
+                    f.get("orb_CME_REOPEN_break_dir", "long"),
                 ],
             )
 
@@ -128,8 +128,8 @@ def _setup_fitness_db(tmp_path, strategies=None, outcomes=None, features=None):
             con.execute(
                 """INSERT OR IGNORE INTO daily_features
                    (trading_day, symbol, orb_minutes, bar_count_1m,
-                    orb_0900_high, orb_0900_low, orb_0900_size,
-                    orb_0900_break_dir)
+                    orb_CME_REOPEN_high, orb_CME_REOPEN_low, orb_CME_REOPEN_size,
+                    orb_CME_REOPEN_break_dir)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 [td, sym, om, 1400, 2355.0, 2345.0, 10.0, "long"],
             )
@@ -142,7 +142,7 @@ def _setup_fitness_db(tmp_path, strategies=None, outcomes=None, features=None):
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 [
                     td, sym,
-                    o.get("orb_label", "0900"), om,
+                    o.get("orb_label", "CME_REOPEN"), om,
                     o.get("rr_target", 2.0), o.get("confirm_bars", 2),
                     o.get("entry_model", "E1"),
                     o.get("entry_price", 2350.0), o.get("stop_price", 2340.0),
@@ -188,7 +188,7 @@ def _make_features(start_year=2023, end_year=2025, trades_per_year=40,
             td = date(year, month, day)
             row = {
                 "trading_day": td,
-                "orb_0900_size": orb_size,
+                "orb_CME_REOPEN_size": orb_size,
                 **overrides,
             }
             features.append(row)
@@ -366,7 +366,7 @@ class TestComputeFitnessIntegration:
         strategies = [{
             "strategy_id": strategy_id,
             "instrument": "MGC",
-            "orb_label": "0900",
+            "orb_label": "CME_REOPEN",
             "orb_minutes": 5,
             "rr_target": 2.0,
             "confirm_bars": 2,
@@ -508,12 +508,12 @@ class TestComputeFitnessIntegration:
         # Features: 2025 days have big ORBs, 2024 days have small ORBs
         big_features = [
             {"trading_day": date(2025, (i % 11) + 1, (i % 27) + 1),
-             "orb_0900_size": 10.0}
+             "orb_CME_REOPEN_size": 10.0}
             for i in range(20)
         ]
         small_features = [
             {"trading_day": date(2024, (i % 11) + 1, (i % 27) + 1),
-             "orb_0900_size": 2.0}
+             "orb_CME_REOPEN_size": 2.0}
             for i in range(20)
         ]
 
@@ -582,21 +582,21 @@ class TestFitnessWeightedPortfolio:
 
         strats = [
             PortfolioStrategy(
-                strategy_id="S1", instrument="MGC", orb_label="0900",
+                strategy_id="S1", instrument="MGC", orb_label="CME_REOPEN",
                 entry_model="E1", rr_target=2.0, confirm_bars=2,
                 filter_type="NO_FILTER", expectancy_r=0.30, win_rate=0.50,
                 sample_size=100, sharpe_ratio=0.25, max_drawdown_r=5.0,
                 median_risk_points=10.0, weight=1.0,
             ),
             PortfolioStrategy(
-                strategy_id="S2", instrument="MGC", orb_label="1000",
+                strategy_id="S2", instrument="MGC", orb_label="TOKYO_OPEN",
                 entry_model="E1", rr_target=2.5, confirm_bars=2,
                 filter_type="ORB_G4", expectancy_r=0.40, win_rate=0.55,
                 sample_size=80, sharpe_ratio=0.30, max_drawdown_r=4.0,
                 median_risk_points=12.0, weight=1.0,
             ),
             PortfolioStrategy(
-                strategy_id="S3", instrument="MGC", orb_label="1800",
+                strategy_id="S3", instrument="MGC", orb_label="LONDON_METALS",
                 entry_model="E3", rr_target=2.0, confirm_bars=5,
                 filter_type="ORB_G5", expectancy_r=0.35, win_rate=0.48,
                 sample_size=75, sharpe_ratio=0.20, max_drawdown_r=3.0,
@@ -665,7 +665,7 @@ class TestFitnessWeightedPortfolio:
 
         strats = [
             PortfolioStrategy(
-                strategy_id="REGIME_FIT", instrument="MGC", orb_label="0900",
+                strategy_id="REGIME_FIT", instrument="MGC", orb_label="CME_REOPEN",
                 entry_model="E1", rr_target=2.0, confirm_bars=1,
                 filter_type="ORB_G5", expectancy_r=0.15, win_rate=0.45,
                 sample_size=60, sharpe_ratio=0.20, max_drawdown_r=3.0,
@@ -673,7 +673,7 @@ class TestFitnessWeightedPortfolio:
                 weight=0.5,  # REGIME classification weight
             ),
             PortfolioStrategy(
-                strategy_id="CORE_FIT", instrument="MGC", orb_label="1000",
+                strategy_id="CORE_FIT", instrument="MGC", orb_label="TOKYO_OPEN",
                 entry_model="E1", rr_target=2.0, confirm_bars=1,
                 filter_type="ORB_G5", expectancy_r=0.20, win_rate=0.48,
                 sample_size=200, sharpe_ratio=0.25, max_drawdown_r=2.5,

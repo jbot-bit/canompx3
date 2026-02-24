@@ -40,15 +40,8 @@ logger = get_logger(__name__)
 # =========================================================================
 
 ORB_WINDOWS_UTC = {
-    # label: (start_hour_utc, start_minute)
-    # Duration is session-specific — looked up from config.ORB_DURATION_MINUTES
-    "0900": (23, 0),      # 09:00 Brisbane = 23:00 UTC  (5m ORB)
-    "1000": (0, 0),       # 10:00 Brisbane = 00:00 UTC  (15m ORB — variable aperture)
-    # 1100 OFF for breakout (shelved — 74% double-break, may revisit with fade/reversal)
-    "1130": (1, 30),      # 11:30 Brisbane = 01:30 UTC  (5m ORB — HK/SG equity open)
-    "1800": (8, 0),       # 18:00 Brisbane = 08:00 UTC  (5m ORB)
-    "2300": (13, 0),      # 23:00 Brisbane = 13:00 UTC  (5m ORB)
-    "0030": (14, 30),     # 00:30 Brisbane = 14:30 UTC  (5m ORB)
+    # All sessions are now dynamic (DST-aware), resolved per-day via DYNAMIC_ORB_RESOLVERS.
+    # This dict is kept empty for backward compatibility with tests that check membership.
 }
 
 class TradeState(Enum):

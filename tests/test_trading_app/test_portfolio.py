@@ -40,7 +40,7 @@ def _make_strategy(**overrides):
     base = {
         "strategy_id": "MGC_2300_E1_RR2.0_CB5_NO_FILTER",
         "instrument": "MGC",
-        "orb_label": "2300",
+        "orb_label": "US_DATA_830",
         "entry_model": "E1",
         "rr_target": 2.0,
         "confirm_bars": 5,
@@ -216,7 +216,7 @@ class TestDiversification:
 
     def test_max_strategies_enforced(self):
         # Use different orb_labels to avoid per-orb limit
-        orbs = ["0900", "1000", "1100", "1800", "2300", "0030"]
+        orbs = ["CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS", "US_DATA_830", "NYSE_OPEN"]
         candidates = [
             _make_strategy(strategy_id=f"s{i}", orb_label=orbs[i % len(orbs)])
             for i in range(50)
@@ -226,7 +226,7 @@ class TestDiversification:
 
     def test_max_per_orb_enforced(self):
         candidates = [
-            _make_strategy(strategy_id=f"s{i}", orb_label="2300")
+            _make_strategy(strategy_id=f"s{i}", orb_label="US_DATA_830")
             for i in range(20)
         ]
         selected = diversify_strategies(candidates, max_strategies=20, max_per_orb=3)
@@ -234,16 +234,16 @@ class TestDiversification:
 
     def test_diversifies_across_orbs(self):
         candidates = [
-            _make_strategy(strategy_id=f"s_2300_{i}", orb_label="2300", expectancy_r=0.30 - i*0.01)
+            _make_strategy(strategy_id=f"s_2300_{i}", orb_label="US_DATA_830", expectancy_r=0.30 - i*0.01)
             for i in range(5)
         ] + [
-            _make_strategy(strategy_id=f"s_1800_{i}", orb_label="1800", expectancy_r=0.25 - i*0.01)
+            _make_strategy(strategy_id=f"s_1800_{i}", orb_label="LONDON_METALS", expectancy_r=0.25 - i*0.01)
             for i in range(5)
         ]
         selected = diversify_strategies(candidates, max_strategies=6, max_per_orb=3)
         orbs = [s["orb_label"] for s in selected]
-        assert "2300" in orbs
-        assert "1800" in orbs
+        assert "US_DATA_830" in orbs
+        assert "LONDON_METALS" in orbs
 
     def test_empty_candidates(self):
         selected = diversify_strategies([], max_strategies=10)
@@ -268,7 +268,7 @@ class TestBuildPortfolio:
         strategies = [
             _make_strategy(strategy_id=f"MGC_2300_E1_RR2.0_CB5_NO_FILTER"),
             _make_strategy(strategy_id=f"MGC_1800_E3_RR1.5_CB4_ORB_G4",
-                           orb_label="1800", entry_model="E3", expectancy_r=0.25),
+                           orb_label="LONDON_METALS", entry_model="E3", expectancy_r=0.25),
         ]
         db_path = _setup_db(tmp_path, strategies)
         portfolio = build_portfolio(db_path=db_path, instrument="MGC")
@@ -324,8 +324,8 @@ class TestSerialization:
 
     def test_summary_correct(self, tmp_path):
         strategies = [
-            _make_strategy(strategy_id="s1", orb_label="2300", entry_model="E1"),
-            _make_strategy(strategy_id="s2", orb_label="1800", entry_model="E3",
+            _make_strategy(strategy_id="s1", orb_label="US_DATA_830", entry_model="E1"),
+            _make_strategy(strategy_id="s2", orb_label="LONDON_METALS", entry_model="E3",
                            expectancy_r=0.20, win_rate=0.50),
         ]
         db_path = _setup_db(tmp_path, strategies)
@@ -333,8 +333,8 @@ class TestSerialization:
         summary = portfolio.summary()
 
         assert summary["strategy_count"] == 2
-        assert summary["orb_distribution"]["2300"] == 1
-        assert summary["orb_distribution"]["1800"] == 1
+        assert summary["orb_distribution"]["US_DATA_830"] == 1
+        assert summary["orb_distribution"]["LONDON_METALS"] == 1
         assert summary["entry_model_distribution"]["E1"] == 1
         assert summary["entry_model_distribution"]["E3"] == 1
         assert summary["avg_expectancy_r"] == pytest.approx(0.25, abs=0.01)
@@ -388,7 +388,7 @@ def _setup_db_with_outcomes(tmp_path, strategies, daily_features_rows, outcome_r
     """Create a test DB with daily_features, orb_outcomes, and validated_setups.
 
     daily_features_rows: list of dicts with at minimum
-        {trading_day, symbol, orb_minutes, orb_0900_size, orb_2300_size, ...}
+        {trading_day, symbol, orb_minutes, orb_CME_REOPEN_size, orb_US_DATA_830_size, ...}
     outcome_rows: list of dicts with
         {trading_day, symbol, orb_label, orb_minutes, rr_target, confirm_bars,
          entry_model, pnl_r, outcome}
@@ -411,15 +411,15 @@ def _setup_db_with_outcomes(tmp_path, strategies, daily_features_rows, outcome_r
         td = df_row["trading_day"]
         sym = df_row.get("symbol", "MGC")
         om = df_row.get("orb_minutes", 5)
-        s0900 = df_row.get("orb_0900_size")
-        s2300 = df_row.get("orb_2300_size")
+        s0900 = df_row.get("orb_CME_REOPEN_size")
+        s2300 = df_row.get("orb_US_DATA_830_size")
         dow = df_row.get("day_of_week")
         is_nfp = df_row.get("is_nfp_day", False)
         is_opex = df_row.get("is_opex_day", False)
         is_fri = df_row.get("is_friday", False)
         con.execute("""
             INSERT INTO daily_features (trading_day, symbol, orb_minutes,
-                bar_count_1m, orb_0900_size, orb_2300_size,
+                bar_count_1m, orb_CME_REOPEN_size, orb_US_DATA_830_size,
                 day_of_week, is_nfp_day, is_opex_day, is_friday)
             VALUES (?, ?, ?, 1440, ?, ?, ?, ?, ?, ?)
         """, [td, sym, om, s0900, s2300, dow, is_nfp, is_opex, is_fri])
@@ -495,8 +495,8 @@ def _make_daily_features_rows(n_days=300, start="2023-01-02", orb_minutes=5):
             "orb_minutes": orb_minutes,
             "day_of_week": d.weekday(),
             # Vary sizes: 0900 always has data; 2300 has size that varies
-            "orb_0900_size": (5.0 + (i % 10) * 0.5) * multiplier,  # 5m: 5.0 - 9.5
-            "orb_2300_size": (3.0 + (i % 8) * 0.5) * multiplier,    # 5m: 3.0 - 6.5
+            "orb_CME_REOPEN_size": (5.0 + (i % 10) * 0.5) * multiplier,  # 5m: 5.0 - 9.5
+            "orb_US_DATA_830_size": (3.0 + (i % 8) * 0.5) * multiplier,    # 5m: 3.0 - 6.5
         })
         # Skip weekends (rough approximation)
         d += datetime.timedelta(days=1)
@@ -512,20 +512,20 @@ class TestBuildStrategyDailySeries:
         df_rows = _make_daily_features_rows(250)
         strat_a = _make_strategy(
             strategy_id="MGC_0900_E1_RR2.0_CB5_NO_FILTER",
-            orb_label="0900", filter_type="NO_FILTER",
+            orb_label="CME_REOPEN", filter_type="NO_FILTER",
         )
         strat_b = _make_strategy(
             strategy_id="MGC_2300_E1_RR2.0_CB5_NO_FILTER",
-            orb_label="2300", filter_type="NO_FILTER",
+            orb_label="US_DATA_830", filter_type="NO_FILTER",
         )
         # Trades for A on first 100 days, B on last 50
         outcomes_a = [
-            {"trading_day": df_rows[i]["trading_day"], "orb_label": "0900",
+            {"trading_day": df_rows[i]["trading_day"], "orb_label": "CME_REOPEN",
              "rr_target": 2.0, "confirm_bars": 5, "entry_model": "E1", "pnl_r": 0.5}
             for i in range(100)
         ]
         outcomes_b = [
-            {"trading_day": df_rows[200 + i]["trading_day"], "orb_label": "2300",
+            {"trading_day": df_rows[200 + i]["trading_day"], "orb_label": "US_DATA_830",
              "rr_target": 2.0, "confirm_bars": 5, "entry_model": "E1", "pnl_r": -1.0}
             for i in range(50)
         ]
@@ -546,11 +546,11 @@ class TestBuildStrategyDailySeries:
         df_rows = _make_daily_features_rows(50)
         strat = _make_strategy(
             strategy_id="MGC_0900_E1_RR2.0_CB5_NO_FILTER",
-            orb_label="0900", filter_type="NO_FILTER",
+            orb_label="CME_REOPEN", filter_type="NO_FILTER",
         )
         # Only trade on day 0
         outcomes = [
-            {"trading_day": df_rows[0]["trading_day"], "orb_label": "0900",
+            {"trading_day": df_rows[0]["trading_day"], "orb_label": "CME_REOPEN",
              "rr_target": 2.0, "confirm_bars": 5, "entry_model": "E1", "pnl_r": 1.5}
         ]
         db_path = _setup_db_with_outcomes(tmp_path, [strat], df_rows, outcomes)
@@ -566,10 +566,10 @@ class TestBuildStrategyDailySeries:
     def test_ineligible_day_is_nan(self, tmp_path):
         """Ineligible day (filter fails) should be NaN."""
         df_rows = _make_daily_features_rows(50)
-        # G8 filter: only days with orb_0900_size >= 8.0
+        # G8 filter: only days with orb_CME_REOPEN_size >= 8.0
         strat = _make_strategy(
             strategy_id="MGC_0900_E1_RR2.0_CB5_ORB_G8",
-            orb_label="0900", filter_type="ORB_G8",
+            orb_label="CME_REOPEN", filter_type="ORB_G8",
         )
         db_path = _setup_db_with_outcomes(tmp_path, [strat], df_rows, [])
         series_df, stats = build_strategy_daily_series(db_path, [strat["strategy_id"]])
@@ -577,7 +577,7 @@ class TestBuildStrategyDailySeries:
 
         # Check that ineligible days are NaN and eligible days are 0.0
         for i in range(min(50, len(col))):
-            size = df_rows[i]["orb_0900_size"]
+            size = df_rows[i]["orb_CME_REOPEN_size"]
             if size >= 8.0:
                 assert col.iloc[i] == pytest.approx(0.0), f"Day {i} size={size} should be 0.0"
             else:
@@ -588,10 +588,10 @@ class TestBuildStrategyDailySeries:
         df_rows = _make_daily_features_rows(100)
         strat = _make_strategy(
             strategy_id="MGC_0900_E1_RR2.0_CB5_NO_FILTER",
-            orb_label="0900", filter_type="NO_FILTER",
+            orb_label="CME_REOPEN", filter_type="NO_FILTER",
         )
         outcomes = [
-            {"trading_day": df_rows[i]["trading_day"], "orb_label": "0900",
+            {"trading_day": df_rows[i]["trading_day"], "orb_label": "CME_REOPEN",
              "rr_target": 2.0, "confirm_bars": 5, "entry_model": "E1", "pnl_r": 0.3}
             for i in range(30)
         ]
@@ -610,14 +610,14 @@ class TestBuildStrategyDailySeries:
         where orb_size < 8, those must remain NaN (not get pnl_r).
         """
         df_rows = _make_daily_features_rows(50)
-        # G8 filter: only days with orb_0900_size >= 8.0
+        # G8 filter: only days with orb_CME_REOPEN_size >= 8.0
         strat = _make_strategy(
             strategy_id="MGC_0900_E1_RR2.0_CB5_ORB_G8",
-            orb_label="0900", filter_type="ORB_G8",
+            orb_label="CME_REOPEN", filter_type="ORB_G8",
         )
         # Create outcomes on ALL days — including ineligible ones
         outcomes = [
-            {"trading_day": df_rows[i]["trading_day"], "orb_label": "0900",
+            {"trading_day": df_rows[i]["trading_day"], "orb_label": "CME_REOPEN",
              "rr_target": 2.0, "confirm_bars": 5, "entry_model": "E1", "pnl_r": 0.5}
             for i in range(50)
         ]
@@ -628,7 +628,7 @@ class TestBuildStrategyDailySeries:
 
         # Verify ineligible days remain NaN (not overwritten by pnl_r)
         for i in range(min(50, len(col))):
-            size = df_rows[i]["orb_0900_size"]
+            size = df_rows[i]["orb_CME_REOPEN_size"]
             if size < 8.0:
                 assert np.isnan(col.iloc[i]), (
                     f"Day {i} (size={size}) is ineligible for G8 but got {col.iloc[i]}; "
@@ -663,10 +663,10 @@ class TestCalendarOverlay:
 
         strat = _make_strategy(
             strategy_id="MGC_0900_E1_RR2.0_CB5_NO_FILTER",
-            orb_label="0900", filter_type="NO_FILTER",
+            orb_label="CME_REOPEN", filter_type="NO_FILTER",
         )
         outcomes = [
-            {"trading_day": df_rows[3]["trading_day"], "orb_label": "0900",
+            {"trading_day": df_rows[3]["trading_day"], "orb_label": "CME_REOPEN",
              "rr_target": 2.0, "confirm_bars": 5, "entry_model": "E1", "pnl_r": 1.5}
         ]
         db_path = _setup_db_with_outcomes(tmp_path, [strat], df_rows, outcomes)
@@ -688,7 +688,7 @@ class TestCalendarOverlay:
 
         strat = _make_strategy(
             strategy_id="MGC_0900_E1_RR2.0_CB5_NO_FILTER",
-            orb_label="0900", filter_type="NO_FILTER",
+            orb_label="CME_REOPEN", filter_type="NO_FILTER",
         )
         db_path = _setup_db_with_outcomes(tmp_path, [strat], df_rows, [])
 
@@ -707,7 +707,7 @@ class TestCalendarOverlay:
 
         strat = _make_strategy(
             strategy_id="MGC_0900_E1_RR2.0_CB5_NO_FILTER",
-            orb_label="0900", filter_type="NO_FILTER",
+            orb_label="CME_REOPEN", filter_type="NO_FILTER",
         )
         db_path = _setup_db_with_outcomes(tmp_path, [strat], df_rows, [])
 
@@ -728,7 +728,7 @@ class TestCalendarOverlay:
 
         strat = _make_strategy(
             strategy_id="MGC_0900_E1_RR2.0_CB5_NO_FILTER",
-            orb_label="0900", filter_type="NO_FILTER",
+            orb_label="CME_REOPEN", filter_type="NO_FILTER",
         )
         db_path = _setup_db_with_outcomes(tmp_path, [strat], df_rows, [])
 
@@ -753,11 +753,11 @@ class TestCalendarOverlay:
 
         strat = _make_strategy(
             strategy_id="MGC_0900_E1_RR2.0_CB5_NO_FILTER",
-            orb_label="0900", filter_type="NO_FILTER",
+            orb_label="CME_REOPEN", filter_type="NO_FILTER",
         )
         # Outcome exists on the NFP day
         outcomes = [
-            {"trading_day": df_rows[3]["trading_day"], "orb_label": "0900",
+            {"trading_day": df_rows[3]["trading_day"], "orb_label": "CME_REOPEN",
              "rr_target": 2.0, "confirm_bars": 5, "entry_model": "E1", "pnl_r": 2.0}
         ]
         db_path = _setup_db_with_outcomes(tmp_path, [strat], df_rows, outcomes)
@@ -779,20 +779,20 @@ class TestCorrelationMatrix:
         df_rows = _make_daily_features_rows(250)
         strat_a = _make_strategy(
             strategy_id="MGC_0900_E1_RR2.0_CB5_NO_FILTER",
-            orb_label="0900", filter_type="NO_FILTER",
+            orb_label="CME_REOPEN", filter_type="NO_FILTER",
         )
         strat_b = _make_strategy(
             strategy_id="MGC_2300_E1_RR2.0_CB5_NO_FILTER",
-            orb_label="2300", filter_type="NO_FILTER",
+            orb_label="US_DATA_830", filter_type="NO_FILTER",
         )
         outcomes_a = [
-            {"trading_day": df_rows[i]["trading_day"], "orb_label": "0900",
+            {"trading_day": df_rows[i]["trading_day"], "orb_label": "CME_REOPEN",
              "rr_target": 2.0, "confirm_bars": 5, "entry_model": "E1",
              "pnl_r": 0.5 if i % 2 == 0 else -1.0}
             for i in range(200)
         ]
         outcomes_b = [
-            {"trading_day": df_rows[i]["trading_day"], "orb_label": "2300",
+            {"trading_day": df_rows[i]["trading_day"], "orb_label": "US_DATA_830",
              "rr_target": 2.0, "confirm_bars": 5, "entry_model": "E1",
              "pnl_r": -1.0 if i % 2 == 0 else 0.5}
             for i in range(200)
@@ -808,15 +808,15 @@ class TestCorrelationMatrix:
     def test_overlap_guard_nan(self, tmp_path):
         """Pairs with insufficient overlap should get NaN correlation."""
         df_rows = _make_daily_features_rows(300)
-        # A trades on days with orb_0900_size >= 8 (sparse ~ 40% of days)
+        # A trades on days with orb_CME_REOPEN_size >= 8 (sparse ~ 40% of days)
         strat_a = _make_strategy(
             strategy_id="MGC_0900_E1_RR2.0_CB5_ORB_G8",
-            orb_label="0900", filter_type="ORB_G8",
+            orb_label="CME_REOPEN", filter_type="ORB_G8",
         )
-        # B trades on days with orb_2300_size >= 8 (also sparse)
+        # B trades on days with orb_US_DATA_830_size >= 8 (also sparse)
         strat_b = _make_strategy(
             strategy_id="MGC_2300_E1_RR2.0_CB5_ORB_G8",
-            orb_label="2300", filter_type="ORB_G8",
+            orb_label="US_DATA_830", filter_type="ORB_G8",
         )
         db_path = _setup_db_with_outcomes(
             tmp_path, [strat_a, strat_b], df_rows, [],
@@ -832,20 +832,20 @@ class TestCorrelationMatrix:
         df_rows = _make_daily_features_rows(250)
         strat_a = _make_strategy(
             strategy_id="MGC_0900_E1_RR2.0_CB5_NO_FILTER",
-            orb_label="0900", filter_type="NO_FILTER",
+            orb_label="CME_REOPEN", filter_type="NO_FILTER",
         )
         strat_b = _make_strategy(
             strategy_id="MGC_2300_E1_RR2.0_CB5_NO_FILTER",
-            orb_label="2300", filter_type="NO_FILTER",
+            orb_label="US_DATA_830", filter_type="NO_FILTER",
         )
         # Both trade every day -> both NO_FILTER -> all 250 days eligible -> 250 overlap
         outcomes_a = [
-            {"trading_day": df_rows[i]["trading_day"], "orb_label": "0900",
+            {"trading_day": df_rows[i]["trading_day"], "orb_label": "CME_REOPEN",
              "rr_target": 2.0, "confirm_bars": 5, "entry_model": "E1", "pnl_r": 0.3}
             for i in range(200)
         ]
         outcomes_b = [
-            {"trading_day": df_rows[i]["trading_day"], "orb_label": "2300",
+            {"trading_day": df_rows[i]["trading_day"], "orb_label": "US_DATA_830",
              "rr_target": 2.0, "confirm_bars": 5, "entry_model": "E1", "pnl_r": -0.5}
             for i in range(200)
         ]
@@ -863,21 +863,21 @@ class TestCorrelationMatrix:
         df_rows = _make_daily_features_rows(250)
         strat_a = _make_strategy(
             strategy_id="MGC_0900_E1_RR2.0_CB5_NO_FILTER",
-            orb_label="0900", filter_type="NO_FILTER",
+            orb_label="CME_REOPEN", filter_type="NO_FILTER",
         )
         strat_b = _make_strategy(
             strategy_id="MGC_2300_E1_RR2.0_CB5_NO_FILTER",
-            orb_label="2300", filter_type="NO_FILTER",
+            orb_label="US_DATA_830", filter_type="NO_FILTER",
         )
         # A wins when i is even, B wins when i is odd (anticorrelated)
         outcomes_a = [
-            {"trading_day": df_rows[i]["trading_day"], "orb_label": "0900",
+            {"trading_day": df_rows[i]["trading_day"], "orb_label": "CME_REOPEN",
              "rr_target": 2.0, "confirm_bars": 5, "entry_model": "E1",
              "pnl_r": 1.5 if i % 2 == 0 else -1.0}
             for i in range(200)
         ]
         outcomes_b = [
-            {"trading_day": df_rows[i]["trading_day"], "orb_label": "2300",
+            {"trading_day": df_rows[i]["trading_day"], "orb_label": "US_DATA_830",
              "rr_target": 2.0, "confirm_bars": 5, "entry_model": "E1",
              "pnl_r": -1.0 if i % 2 == 0 else 1.5}
             for i in range(200)
@@ -980,12 +980,12 @@ class TestNestedIntegration:
         """Union of baseline + nested strategies with median_risk_points from JOIN."""
         baseline = [_make_strategy(
             strategy_id="MGC_0900_E1_RR2.0_CB5_ORB_G4",
-            orb_label="0900", filter_type="ORB_G4",
+            orb_label="CME_REOPEN", filter_type="ORB_G4",
             median_risk_points=8.5,
         )]
         nested = [_make_strategy(
             strategy_id="N_MGC_0900_E1_RR2.0_CB5_ORB_G4",
-            orb_label="0900", filter_type="ORB_G4",
+            orb_label="CME_REOPEN", filter_type="ORB_G4",
             expectancy_r=0.25, median_risk_points=12.0,
         )]
         df_rows = _make_daily_features_rows(10)
@@ -1014,11 +1014,11 @@ class TestNestedIntegration:
         """Build portfolio with both baseline and nested strategies."""
         baseline = [_make_strategy(
             strategy_id="MGC_0900_E1_RR2.0_CB5_ORB_G4",
-            orb_label="0900", filter_type="ORB_G4",
+            orb_label="CME_REOPEN", filter_type="ORB_G4",
         )]
         nested = [_make_strategy(
             strategy_id="N_MGC_1000_E1_RR2.0_CB5_ORB_G4",
-            orb_label="1000", filter_type="ORB_G4",
+            orb_label="TOKYO_OPEN", filter_type="ORB_G4",
             expectancy_r=0.20,
         )]
         df_rows = _make_daily_features_rows(10)
@@ -1037,24 +1037,24 @@ class TestNestedIntegration:
 
         baseline = [_make_strategy(
             strategy_id="MGC_0900_E1_RR2.0_CB5_NO_FILTER",
-            orb_label="0900", filter_type="NO_FILTER",
+            orb_label="CME_REOPEN", filter_type="NO_FILTER",
         )]
         nested = [_make_strategy(
             strategy_id="N_MGC_0900_E1_RR2.0_CB5_NO_FILTER",
-            orb_label="0900", filter_type="NO_FILTER",
+            orb_label="CME_REOPEN", filter_type="NO_FILTER",
             expectancy_r=0.25,
         )]
 
         # Baseline outcomes on first 20 days
         outcomes_baseline = [
-            {"trading_day": df_rows_5m[i]["trading_day"], "orb_label": "0900",
+            {"trading_day": df_rows_5m[i]["trading_day"], "orb_label": "CME_REOPEN",
              "orb_minutes": 5, "rr_target": 2.0, "confirm_bars": 5,
              "entry_model": "E1", "pnl_r": 0.5}
             for i in range(20)
         ]
         # Nested outcomes on first 15 days
         outcomes_nested = [
-            {"trading_day": df_rows_15m[i]["trading_day"], "orb_label": "0900",
+            {"trading_day": df_rows_15m[i]["trading_day"], "orb_label": "CME_REOPEN",
              "orb_minutes": 15, "entry_resolution": 5,
              "rr_target": 2.0, "confirm_bars": 5, "entry_model": "E1", "pnl_r": 0.8}
             for i in range(15)
@@ -1088,14 +1088,14 @@ class TestNestedIntegration:
         # G6 = orb_size >= 6.0 -> eligible when i%10 >= 2 -> 80% eligible
         baseline = [_make_strategy(
             strategy_id="MGC_0900_E1_RR2.0_CB5_ORB_G6",
-            orb_label="0900", filter_type="ORB_G6",
+            orb_label="CME_REOPEN", filter_type="ORB_G6",
         )]
         # Nested: G8 filter on 15m ORBs (0900 sizes: 7.5-14.25, i.e. 1.5x)
         # G8 = orb_size >= 8.0 -> eligible when (5.0 + i%10*0.5)*1.5 >= 8.0
         # i.e. 5.0+x >= 5.33 -> x >= 0.33 -> i%10 >= 1 -> 90% eligible
         nested = [_make_strategy(
             strategy_id="N_MGC_0900_E1_RR2.0_CB5_ORB_G8",
-            orb_label="0900", filter_type="ORB_G8",
+            orb_label="CME_REOPEN", filter_type="ORB_G8",
             expectancy_r=0.20,
         )]
 
@@ -1122,11 +1122,11 @@ class TestNestedIntegration:
         """JSON roundtrip preserves source field for nested strategies."""
         baseline = [_make_strategy(
             strategy_id="MGC_0900_E1_RR2.0_CB5_ORB_G4",
-            orb_label="0900", filter_type="ORB_G4",
+            orb_label="CME_REOPEN", filter_type="ORB_G4",
         )]
         nested = [_make_strategy(
             strategy_id="N_MGC_1000_E1_RR2.0_CB5_ORB_G4",
-            orb_label="1000", filter_type="ORB_G4",
+            orb_label="TOKYO_OPEN", filter_type="ORB_G4",
             expectancy_r=0.20,
         )]
         df_rows = _make_daily_features_rows(10)
@@ -1148,9 +1148,9 @@ class TestCorrelationFilter:
     def test_correlated_cb_variants_rejected(self):
         """CB1 + CB2 on same ORB/filter at rho >= 0.85 should keep only the first."""
         candidates = [
-            _make_strategy(strategy_id="s_cb1", orb_label="0900", confirm_bars=1, expectancy_r=0.30),
-            _make_strategy(strategy_id="s_cb2", orb_label="0900", confirm_bars=2, expectancy_r=0.28),
-            _make_strategy(strategy_id="s_cb3", orb_label="0900", confirm_bars=3, expectancy_r=0.26),
+            _make_strategy(strategy_id="s_cb1", orb_label="CME_REOPEN", confirm_bars=1, expectancy_r=0.30),
+            _make_strategy(strategy_id="s_cb2", orb_label="CME_REOPEN", confirm_bars=2, expectancy_r=0.28),
+            _make_strategy(strategy_id="s_cb3", orb_label="CME_REOPEN", confirm_bars=3, expectancy_r=0.26),
         ]
         # Fake correlation matrix: cb1-cb2 = 0.95, cb1-cb3 = 0.90, cb2-cb3 = 0.92
         import pandas as pd
@@ -1169,9 +1169,9 @@ class TestCorrelationFilter:
     def test_uncorrelated_strategies_pass(self):
         """Strategies from different sessions with low correlation pass through."""
         candidates = [
-            _make_strategy(strategy_id="s_0900", orb_label="0900", expectancy_r=0.30),
-            _make_strategy(strategy_id="s_1800", orb_label="1800", expectancy_r=0.25),
-            _make_strategy(strategy_id="s_2300", orb_label="2300", expectancy_r=0.20),
+            _make_strategy(strategy_id="s_0900", orb_label="CME_REOPEN", expectancy_r=0.30),
+            _make_strategy(strategy_id="s_1800", orb_label="LONDON_METALS", expectancy_r=0.25),
+            _make_strategy(strategy_id="s_2300", orb_label="US_DATA_830", expectancy_r=0.20),
         ]
         import pandas as pd
         ids = ["s_0900", "s_1800", "s_2300"]
@@ -1187,7 +1187,7 @@ class TestCorrelationFilter:
     def test_none_corr_matrix_backward_compatible(self):
         """corr_matrix=None gives identical behavior to old code."""
         candidates = [
-            _make_strategy(strategy_id=f"s{i}", orb_label="0900", expectancy_r=0.30 - i*0.01)
+            _make_strategy(strategy_id=f"s{i}", orb_label="CME_REOPEN", expectancy_r=0.30 - i*0.01)
             for i in range(5)
         ]
         selected = diversify_strategies(candidates, max_strategies=10, corr_matrix=None)
@@ -1203,8 +1203,8 @@ class TestCorrelationFilter:
     def test_nan_correlation_does_not_block(self):
         """NaN correlation (insufficient overlap) should not block selection."""
         candidates = [
-            _make_strategy(strategy_id="s_a", orb_label="0900", expectancy_r=0.30),
-            _make_strategy(strategy_id="s_b", orb_label="0900", expectancy_r=0.25),
+            _make_strategy(strategy_id="s_a", orb_label="CME_REOPEN", expectancy_r=0.30),
+            _make_strategy(strategy_id="s_b", orb_label="CME_REOPEN", expectancy_r=0.25),
         ]
         import pandas as pd
         corr = pd.DataFrame(
@@ -1224,11 +1224,11 @@ class TestFamilyHeadsOnly:
         """With family_heads_only=True, only head strategies are returned."""
         strategies = [
             _make_strategy(strategy_id="MGC_0900_E1_RR2.0_CB2_ORB_G5",
-                           orb_label="0900", expectancy_r=0.30),
+                           orb_label="CME_REOPEN", expectancy_r=0.30),
             _make_strategy(strategy_id="MGC_0900_E1_RR2.5_CB2_ORB_G5",
-                           orb_label="0900", expectancy_r=0.25),
+                           orb_label="CME_REOPEN", expectancy_r=0.25),
             _make_strategy(strategy_id="MGC_0900_E1_RR2.0_CB2_ORB_G8",
-                           orb_label="0900", expectancy_r=0.40),
+                           orb_label="CME_REOPEN", expectancy_r=0.40),
         ]
         db_path = _setup_db(tmp_path, strategies)
 
@@ -1259,11 +1259,11 @@ class TestFamilyHeadsOnly:
         """Without family_heads_only, all 3 strategies are returned."""
         strategies = [
             _make_strategy(strategy_id="MGC_0900_E1_RR2.0_CB2_ORB_G5",
-                           orb_label="0900", expectancy_r=0.30),
+                           orb_label="CME_REOPEN", expectancy_r=0.30),
             _make_strategy(strategy_id="MGC_0900_E1_RR2.5_CB2_ORB_G5",
-                           orb_label="0900", expectancy_r=0.25),
+                           orb_label="CME_REOPEN", expectancy_r=0.25),
             _make_strategy(strategy_id="MGC_0900_E1_RR2.0_CB2_ORB_G8",
-                           orb_label="0900", expectancy_r=0.40),
+                           orb_label="CME_REOPEN", expectancy_r=0.40),
         ]
         db_path = _setup_db(tmp_path, strategies)
 
@@ -1314,9 +1314,9 @@ class TestClassificationWeights:
 
     def test_mixed_portfolio_weights(self, tmp_path):
         strats = [
-            _make_strategy(strategy_id="CORE_1", sample_size=200, orb_label="1000"),
-            _make_strategy(strategy_id="REGIME_1", sample_size=60, orb_label="1800"),
-            _make_strategy(strategy_id="INVALID_1", sample_size=15, orb_label="2300"),
+            _make_strategy(strategy_id="CORE_1", sample_size=200, orb_label="TOKYO_OPEN"),
+            _make_strategy(strategy_id="REGIME_1", sample_size=60, orb_label="LONDON_METALS"),
+            _make_strategy(strategy_id="INVALID_1", sample_size=15, orb_label="US_DATA_830"),
         ]
         db_path = _setup_db(tmp_path, strats)
         pf = build_portfolio(db_path=db_path, instrument="MGC")

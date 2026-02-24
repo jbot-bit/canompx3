@@ -190,17 +190,17 @@ class TestStressTest:
 class TestSessionSlippage:
     """Tests for session-aware slippage (Phase 3 risk hardening)."""
 
-    def test_0900_slippage_higher_than_base(self):
-        """0900 (thin Asian) should have higher slippage than base."""
+    def test_cme_reopen_slippage_higher_than_base(self):
+        """CME_REOPEN (thin Asian) should have higher slippage than base."""
         base = get_cost_spec("MGC")
-        session = get_session_cost_spec("MGC", "0900")
+        session = get_session_cost_spec("MGC", "CME_REOPEN")
         assert session.slippage > base.slippage
         assert session.slippage == pytest.approx(base.slippage * 1.3)
 
-    def test_2300_slippage_lower_than_base(self):
-        """2300 (NY session) should have lower slippage than base."""
+    def test_us_data_830_slippage_lower_than_base(self):
+        """US_DATA_830 (NY session) should have lower slippage than base."""
         base = get_cost_spec("MGC")
-        session = get_session_cost_spec("MGC", "2300")
+        session = get_session_cost_spec("MGC", "US_DATA_830")
         assert session.slippage < base.slippage
         assert session.slippage == pytest.approx(base.slippage * 0.8)
 
@@ -211,38 +211,38 @@ class TestSessionSlippage:
         assert session.slippage == base.slippage
         assert session is base  # Same object when mult == 1.0
 
-    def test_1100_returns_base_spec(self):
-        """1100 has mult 1.0, should return base spec directly."""
+    def test_singapore_open_returns_base_spec(self):
+        """SINGAPORE_OPEN has mult 1.0, should return base spec directly."""
         base = get_cost_spec("MGC")
-        session = get_session_cost_spec("MGC", "1100")
+        session = get_session_cost_spec("MGC", "SINGAPORE_OPEN")
         assert session is base
 
     def test_total_friction_changes(self):
         """Session slippage changes total_friction correctly."""
         base = get_cost_spec("MGC")
-        session = get_session_cost_spec("MGC", "0900")
+        session = get_session_cost_spec("MGC", "CME_REOPEN")
         # Only slippage changes; commission + spread stay same
         expected_friction = base.commission_rt + base.spread_doubled + round(base.slippage * 1.3, 2)
         assert session.total_friction == pytest.approx(expected_friction)
 
     def test_point_value_preserved(self):
         """Session cost spec preserves point value and tick size."""
-        session = get_session_cost_spec("MGC", "0900")
+        session = get_session_cost_spec("MGC", "CME_REOPEN")
         assert session.point_value == 10.0
         assert session.tick_size == 0.10
 
     def test_all_sessions_have_multiplier(self):
-        """Fixed ORB sessions should be in SESSION_SLIPPAGE_MULT for MGC.
-        Dynamic sessions (CME_OPEN, LONDON_OPEN, etc.) fall back to mult=1.0."""
+        """All ORB sessions should be in SESSION_SLIPPAGE_MULT for MGC."""
         mgc_mults = SESSION_SLIPPAGE_MULT["MGC"]
-        for label in ["0900", "1000", "1100", "1800", "2300", "0030"]:
+        for label in ["CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN",
+                       "LONDON_METALS", "US_DATA_830", "NYSE_OPEN"]:
             assert label in mgc_mults
 
     def test_all_sessions_have_multiplier_mnq(self):
-        """Fixed ORB sessions should be in SESSION_SLIPPAGE_MULT for MNQ.
-        Dynamic sessions (CME_OPEN, US_EQUITY_OPEN, etc.) fall back to mult=1.0."""
+        """All ORB sessions should be in SESSION_SLIPPAGE_MULT for MNQ."""
         mnq_mults = SESSION_SLIPPAGE_MULT["MNQ"]
-        for label in ["0900", "1000", "1100", "1800", "2300", "0030"]:
+        for label in ["CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN",
+                       "LONDON_METALS", "US_DATA_830", "NYSE_OPEN"]:
             assert label in mnq_mults
 
 
@@ -304,9 +304,9 @@ class TestMNQCostSpec:
         stressed = stress_test_costs(spec, multiplier=1.5)
         assert stressed.total_friction == pytest.approx(2.74 * 1.5)
 
-    def test_mnq_session_2300_lower_slippage(self):
-        """2300 (NY) session has lower slippage for MNQ."""
+    def test_mnq_session_us_data_830_lower_slippage(self):
+        """US_DATA_830 (NY) session has lower slippage for MNQ."""
         base = get_cost_spec("MNQ")
-        session = get_session_cost_spec("MNQ", "2300")
+        session = get_session_cost_spec("MNQ", "US_DATA_830")
         assert session.slippage < base.slippage
         assert session.slippage == pytest.approx(base.slippage * 0.8)

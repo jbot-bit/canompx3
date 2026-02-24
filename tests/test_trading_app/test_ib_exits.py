@@ -3,9 +3,8 @@ Tests for IB-conditional exit logic and LiveIB tracker.
 
 Covers:
 - LiveIB formation and break detection
-- 1000 session IB-conditional exits (pending/aligned/opposed)
-- 0900 session always uses fixed target (no IB logic)
-- 1100 shelved (not in ORB_WINDOWS_UTC for now)
+- TOKYO_OPEN session IB-conditional exits (pending/aligned/opposed)
+- CME_REOPEN session always uses fixed target (no IB logic)
 - Hold-7h timeout
 """
 
@@ -35,9 +34,9 @@ def _cost():
 
 def _make_strategy(**overrides):
     base = dict(
-        strategy_id="MGC_1000_E1_RR2.5_CB1_ORB_G5",
+        strategy_id="MGC_TOKYO_OPEN_E1_RR2.5_CB1_ORB_G5",
         instrument="MGC",
-        orb_label="1000",
+        orb_label="TOKYO_OPEN",
         entry_model="E1",
         rr_target=2.5,
         confirm_bars=1,
@@ -181,29 +180,6 @@ class TestLiveIB:
         assert result is None
 
 # ============================================================================
-# 1100 Exclusion Tests
-# ============================================================================
-
-class Test1100Exclusion:
-
-    def test_1100_not_in_orb_windows(self):
-        """1100 session shelved for breakout — not in ORB_WINDOWS_UTC."""
-        assert "1100" not in ORB_WINDOWS_UTC
-
-    def test_1100_fixed_target(self):
-        """1100 session uses fixed_target exit mode (discovery-enabled, not yet in execution)."""
-        assert SESSION_EXIT_MODE["1100"] == "fixed_target"
-
-    def test_1130_in_orb_windows(self):
-        """1130 (HK/SG equity open) is registered in ORB_WINDOWS_UTC."""
-        assert "1130" in ORB_WINDOWS_UTC
-        assert ORB_WINDOWS_UTC["1130"] == (1, 30)
-
-    def test_1130_fixed_target(self):
-        """1130 uses fixed_target exit mode."""
-        assert SESSION_EXIT_MODE["1130"] == "fixed_target"
-
-# ============================================================================
 # Config Tests
 # ============================================================================
 
@@ -214,11 +190,11 @@ class TestConfig:
         for label in ORB_WINDOWS_UTC:
             assert label in SESSION_EXIT_MODE
 
-    def test_1000_is_ib_conditional(self):
-        assert SESSION_EXIT_MODE["1000"] == "ib_conditional"
+    def test_tokyo_open_is_ib_conditional(self):
+        assert SESSION_EXIT_MODE["TOKYO_OPEN"] == "ib_conditional"
 
-    def test_0900_is_fixed_target(self):
-        assert SESSION_EXIT_MODE["0900"] == "fixed_target"
+    def test_cme_reopen_is_fixed_target(self):
+        assert SESSION_EXIT_MODE["CME_REOPEN"] == "fixed_target"
 
     def test_ib_duration(self):
         assert IB_DURATION_MINUTES == 120
@@ -231,20 +207,20 @@ class TestConfig:
 # ============================================================================
 
 class TestIBConditionalExits:
-    """Test 1000 session IB-conditional exit behavior in the execution engine."""
+    """Test TOKYO_OPEN session IB-conditional exit behavior in the execution engine."""
 
-    def _build_1000_orb_and_enter(self, engine, td=date(2024, 1, 5),
+    def _build_tokyo_open_orb_and_enter(self, engine, td=date(2024, 1, 5),
                                    orb_high=2710.0, orb_low=2700.0):
-        """Build 1000 ORB, trigger long break, and enter E1 trade.
+        """Build TOKYO_OPEN ORB, trigger long break, and enter E1 trade.
 
-        1000 ORB window: 00:00 to 00:00+ORB_DURATION UTC on trading day.
+        TOKYO_OPEN ORB window: 00:00 to 00:00+ORB_DURATION UTC on trading day.
         Uses session-specific duration from config (variable aperture).
         Returns the timestamp base for further bar generation.
         """
-        orb_dur = ORB_DURATION_MINUTES.get("1000", 5)
+        orb_dur = ORB_DURATION_MINUTES.get("TOKYO_OPEN", 5)
         ts_base = datetime(td.year, td.month, td.day, 0, 0, tzinfo=timezone.utc)
 
-        # Feed IB bars before the 1000 window (23:00-00:00 UTC)
+        # Feed IB bars before the TOKYO_OPEN window (23:00-00:00 UTC)
         prev_day = td - timedelta(days=1)
         ib_ts = datetime(prev_day.year, prev_day.month, prev_day.day,
                          23, 0, tzinfo=timezone.utc)
@@ -252,7 +228,7 @@ class TestIBConditionalExits:
             engine.on_bar(_bar(ib_ts + timedelta(minutes=i),
                                2700, 2720, 2680, 2705))
 
-        # Build 1000 ORB (00:00 to 00:00+orb_dur UTC)
+        # Build TOKYO_OPEN ORB (00:00 to 00:00+orb_dur UTC)
         for i in range(orb_dur):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i),
                                orb_low, orb_high, orb_low, orb_low + 5))
@@ -268,13 +244,13 @@ class TestIBConditionalExits:
 
         return ts_base
 
-    def test_1000_trade_starts_ib_pending(self):
-        """1000 trade enters in ib_pending mode when IB hasn't broken yet."""
+    def test_tokyo_open_trade_starts_ib_pending(self):
+        """TOKYO_OPEN trade enters in ib_pending mode when IB hasn't broken yet."""
         strategy = _make_strategy()
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = self._build_1000_orb_and_enter(engine)
+        ts_base = self._build_tokyo_open_orb_and_enter(engine)
 
         # Trade should be entered in ib_pending mode
         entered = [t for t in engine.active_trades if t.state == TradeState.ENTERED]
@@ -282,18 +258,18 @@ class TestIBConditionalExits:
         assert entered[0].exit_mode == "ib_pending"
         assert entered[0].ib_alignment is None
 
-    def test_1000_ib_aligned_switches_to_hold_7h(self):
+    def test_tokyo_open_ib_aligned_switches_to_hold_7h(self):
         """IB breaks aligned -> trade switches to hold_7h, target removed."""
         strategy = _make_strategy()
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = self._build_1000_orb_and_enter(engine)
+        ts_base = self._build_tokyo_open_orb_and_enter(engine)
 
         # IB completes at 01:00 UTC (23:00 + 120 min)
         # Feed bars to complete IB
         ib_end = datetime(2024, 1, 5, 1, 0, tzinfo=timezone.utc)
-        t = ts_base + timedelta(minutes=ORB_DURATION_MINUTES.get("1000", 5) + 2)
+        t = ts_base + timedelta(minutes=ORB_DURATION_MINUTES.get("TOKYO_OPEN", 5) + 2)
         while t < ib_end:
             engine.on_bar(_bar(t, 2710, 2715, 2705, 2712))
             t += timedelta(minutes=1)
@@ -314,17 +290,17 @@ class TestIBConditionalExits:
         assert entered[0].ib_alignment == "aligned"
         assert entered[0].target_price is None  # Target removed
 
-    def test_1000_ib_opposed_exits_at_market(self):
+    def test_tokyo_open_ib_opposed_exits_at_market(self):
         """IB breaks opposed -> trade exits at bar close."""
         strategy = _make_strategy()
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = self._build_1000_orb_and_enter(engine)
+        ts_base = self._build_tokyo_open_orb_and_enter(engine)
 
         # Feed bars to complete IB
         ib_end = datetime(2024, 1, 5, 1, 0, tzinfo=timezone.utc)
-        t = ts_base + timedelta(minutes=ORB_DURATION_MINUTES.get("1000", 5) + 2)
+        t = ts_base + timedelta(minutes=ORB_DURATION_MINUTES.get("TOKYO_OPEN", 5) + 2)
         while t < ib_end:
             engine.on_bar(_bar(t, 2710, 2715, 2705, 2712))
             t += timedelta(minutes=1)
@@ -345,13 +321,13 @@ class TestIBConditionalExits:
                      if t.ib_alignment == "opposed"]
         assert len(completed) == 1
 
-    def test_1000_ib_pending_keeps_fixed_target(self):
+    def test_tokyo_open_ib_pending_keeps_fixed_target(self):
         """While in ib_pending mode, fixed target and stop remain active."""
         strategy = _make_strategy()
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = self._build_1000_orb_and_enter(engine)
+        ts_base = self._build_tokyo_open_orb_and_enter(engine)
 
         entered = [t for t in engine.active_trades if t.state == TradeState.ENTERED]
         assert len(entered) == 1
@@ -365,11 +341,11 @@ class TestIBConditionalExits:
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = self._build_1000_orb_and_enter(engine)
+        ts_base = self._build_tokyo_open_orb_and_enter(engine)
 
         # Complete IB and break aligned
         ib_end = datetime(2024, 1, 5, 1, 0, tzinfo=timezone.utc)
-        t = ts_base + timedelta(minutes=ORB_DURATION_MINUTES.get("1000", 5) + 2)
+        t = ts_base + timedelta(minutes=ORB_DURATION_MINUTES.get("TOKYO_OPEN", 5) + 2)
         while t < ib_end:
             engine.on_bar(_bar(t, 2710, 2715, 2705, 2712))
             t += timedelta(minutes=1)
@@ -404,11 +380,11 @@ class TestIBConditionalExits:
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = self._build_1000_orb_and_enter(engine)
+        ts_base = self._build_tokyo_open_orb_and_enter(engine)
 
         # Complete IB and break aligned
         ib_end = datetime(2024, 1, 5, 1, 0, tzinfo=timezone.utc)
-        t = ts_base + timedelta(minutes=ORB_DURATION_MINUTES.get("1000", 5) + 2)
+        t = ts_base + timedelta(minutes=ORB_DURATION_MINUTES.get("TOKYO_OPEN", 5) + 2)
         while t < ib_end:
             engine.on_bar(_bar(t, 2710, 2715, 2705, 2712))
             t += timedelta(minutes=1)
@@ -439,7 +415,7 @@ class TestEarlyExitSkipInHold7h:
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        # Build and enter 1000 trade
+        # Build and enter TOKYO_OPEN trade
         td = date(2024, 1, 5)
         prev_day = td - timedelta(days=1)
         ib_ts = datetime(prev_day.year, prev_day.month, prev_day.day,
@@ -449,8 +425,8 @@ class TestEarlyExitSkipInHold7h:
             engine.on_bar(_bar(ib_ts + timedelta(minutes=i), 2700, 2720, 2680, 2705))
 
         ts_base = datetime(td.year, td.month, td.day, 0, 0, tzinfo=timezone.utc)
-        orb_dur = ORB_DURATION_MINUTES.get("1000", 5)
-        # Build 1000 ORB (00:00 to 00:00+orb_dur)
+        orb_dur = ORB_DURATION_MINUTES.get("TOKYO_OPEN", 5)
+        # Build TOKYO_OPEN ORB (00:00 to 00:00+orb_dur)
         for i in range(orb_dur):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2710, 2700, 2705))
         # Break long
@@ -464,7 +440,7 @@ class TestEarlyExitSkipInHold7h:
 
         # Complete IB and break aligned (long)
         ib_end = datetime(td.year, td.month, td.day, 1, 0, tzinfo=timezone.utc)
-        t = ts_base + timedelta(minutes=ORB_DURATION_MINUTES.get("1000", 5) + 2)
+        t = ts_base + timedelta(minutes=ORB_DURATION_MINUTES.get("TOKYO_OPEN", 5) + 2)
         while t < ib_end:
             engine.on_bar(_bar(t, 2710, 2715, 2705, 2712))
             t += timedelta(minutes=1)
@@ -497,10 +473,10 @@ class TestEarlyExitSkipInHold7h:
 
 class TestIBAlreadyOpposed:
 
-    def test_1000_entry_rejected_when_ib_already_opposed_unit(self):
+    def test_tokyo_open_entry_rejected_when_ib_already_opposed_unit(self):
         """Unit test: verify rejection code path when IB is pre-resolved opposed.
 
-        The IB-already-opposed scenario is structurally rare for 1000 E1 CB1
+        The IB-already-opposed scenario is structurally rare for TOKYO_OPEN E1 CB1
         (IB range contains ORB range, so IB breaks after ORB in same direction).
         But it CAN happen with higher CB or late ORB breaks. Test the code path
         directly by pre-setting IB state.
@@ -512,14 +488,14 @@ class TestIBAlreadyOpposed:
         td = date(2024, 1, 5)
         prev_day = td - timedelta(days=1)
 
-        # Build 1000 ORB normally
+        # Build TOKYO_OPEN ORB normally
         ib_ts = datetime(prev_day.year, prev_day.month, prev_day.day,
                          23, 0, tzinfo=timezone.utc)
         for i in range(60):
             engine.on_bar(_bar(ib_ts + timedelta(minutes=i), 2705, 2710, 2702, 2706))
 
         ts_base = datetime(td.year, td.month, td.day, 0, 0, tzinfo=timezone.utc)
-        orb_dur = ORB_DURATION_MINUTES.get("1000", 5)
+        orb_dur = ORB_DURATION_MINUTES.get("TOKYO_OPEN", 5)
         for i in range(orb_dur):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2702, 2710, 2700, 2705))
 
@@ -546,21 +522,21 @@ class TestIBAlreadyOpposed:
         assert len(entry_events) == 0, "No entry should happen"
 
 # ============================================================================
-# 0900 Session (Fixed Target, No IB Logic)
+# CME_REOPEN Session (Fixed Target, No IB Logic)
 # ============================================================================
 
-class Test0900FixedTarget:
+class TestCmeReopenFixedTarget:
 
-    def test_0900_always_fixed_target(self):
-        """0900 session trades always use fixed_target exit mode."""
+    def test_cme_reopen_always_fixed_target(self):
+        """CME_REOPEN session trades always use fixed_target exit mode."""
         strategy = _make_strategy(
-            strategy_id="MGC_0900_E1_RR2.5_CB1_ORB_G5",
-            orb_label="0900",
+            strategy_id="MGC_CME_REOPEN_E1_RR2.5_CB1_ORB_G5",
+            orb_label="CME_REOPEN",
         )
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        # 0900 ORB window: 23:00-23:05 UTC prev day
+        # CME_REOPEN ORB window: 23:00-23:05 UTC prev day (winter)
         prev_day = date(2024, 1, 4)
         ts_base = datetime(prev_day.year, prev_day.month, prev_day.day,
                            23, 0, tzinfo=timezone.utc)

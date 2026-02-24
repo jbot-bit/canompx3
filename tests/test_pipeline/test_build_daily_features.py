@@ -116,33 +116,33 @@ class TestOrbRanges:
 
     def test_0900_orb_window_5min(self):
         """0900 ORB on 2024-01-05: 23:00-23:05 UTC on 2024-01-04."""
-        start, end = _orb_utc_window(date(2024, 1, 5), "0900", 5)
+        start, end = _orb_utc_window(date(2024, 1, 5), "CME_REOPEN", 5)
         assert start == datetime(2024, 1, 4, 23, 0, 0, tzinfo=UTC_TZ)
         assert end == datetime(2024, 1, 4, 23, 5, 0, tzinfo=UTC_TZ)
 
     def test_0900_orb_window_15min(self):
         """0900 ORB with 15min duration."""
-        start, end = _orb_utc_window(date(2024, 1, 5), "0900", 15)
+        start, end = _orb_utc_window(date(2024, 1, 5), "CME_REOPEN", 15)
         assert start == datetime(2024, 1, 4, 23, 0, 0, tzinfo=UTC_TZ)
         assert end == datetime(2024, 1, 4, 23, 15, 0, tzinfo=UTC_TZ)
 
     def test_0900_orb_window_30min(self):
         """0900 ORB with 30min duration."""
-        start, end = _orb_utc_window(date(2024, 1, 5), "0900", 30)
+        start, end = _orb_utc_window(date(2024, 1, 5), "CME_REOPEN", 30)
         assert start == datetime(2024, 1, 4, 23, 0, 0, tzinfo=UTC_TZ)
         assert end == datetime(2024, 1, 4, 23, 30, 0, tzinfo=UTC_TZ)
 
     def test_1000_orb_window(self):
         """1000 ORB: 00:00-00:05 UTC on trading day."""
-        start, end = _orb_utc_window(date(2024, 1, 5), "1000", 5)
+        start, end = _orb_utc_window(date(2024, 1, 5), "TOKYO_OPEN", 5)
         assert start == datetime(2024, 1, 5, 0, 0, 0, tzinfo=UTC_TZ)
         assert end == datetime(2024, 1, 5, 0, 5, 0, tzinfo=UTC_TZ)
 
-    def test_0030_orb_window(self):
-        """0030 ORB: crosses midnight Brisbane, same trading day.
-        00:30 Brisbane = 14:30 UTC. But 0030 is after midnight Brisbane
-        so calendar day is trading_day + 1."""
-        start, end = _orb_utc_window(date(2024, 1, 5), "0030", 5)
+    def test_nyse_open_orb_window(self):
+        """NYSE_OPEN ORB: crosses midnight Brisbane, same trading day.
+        In winter (EST): 9:30 AM ET = 14:30 UTC = 00:30 Brisbane next day.
+        00:30 Brisbane is after midnight so calendar day is trading_day + 1."""
+        start, end = _orb_utc_window(date(2024, 1, 5), "NYSE_OPEN", 5)
         assert start == datetime(2024, 1, 5, 14, 30, 0, tzinfo=UTC_TZ)
         assert end == datetime(2024, 1, 5, 14, 35, 0, tzinfo=UTC_TZ)
 
@@ -155,7 +155,7 @@ class TestOrbRanges:
             lows=[2348, 2349, 2347, 2349, 2351],
             closes=[2351, 2350, 2349, 2352, 2354],
         )
-        result = compute_orb_range(bars, date(2024, 1, 5), "0900", 5)
+        result = compute_orb_range(bars, date(2024, 1, 5), "CME_REOPEN", 5)
         assert result["high"] == 2356.0
         assert result["low"] == 2347.0
         assert result["size"] == 9.0
@@ -166,7 +166,7 @@ class TestOrbRanges:
             timestamps=[_ts(2024, 1, 5, 1, 0)],  # outside 0900 window
             opens=[2350], highs=[2352], lows=[2349], closes=[2351],
         )
-        result = compute_orb_range(bars, date(2024, 1, 5), "0900", 5)
+        result = compute_orb_range(bars, date(2024, 1, 5), "CME_REOPEN", 5)
         assert result["high"] is None
         assert result["low"] is None
         assert result["size"] is None
@@ -180,7 +180,7 @@ class TestOrbRanges:
             lows=[2348, 2350],
             closes=[2351, 2352],
         )
-        result = compute_orb_range(bars, date(2024, 1, 5), "0900", 5)
+        result = compute_orb_range(bars, date(2024, 1, 5), "CME_REOPEN", 5)
         assert result["high"] == 2355.0
         assert result["low"] == 2348.0
         assert result["size"] == 7.0
@@ -207,7 +207,7 @@ class TestBreakDetection:
             lows=[2353, 2354, 2355],
             closes=[2354, 2356, 2357],  # 2356 > 2355 = break long
         )
-        result = detect_break(bars, date(2024, 1, 5), "0900", 5, 2355.0, 2348.0)
+        result = detect_break(bars, date(2024, 1, 5), "CME_REOPEN", 5, 2355.0, 2348.0)
         assert result["break_dir"] == "long"
         assert result["break_ts"] == _ts(2024, 1, 4, 23, 6).to_pydatetime()
 
@@ -223,7 +223,7 @@ class TestBreakDetection:
             lows=[2347, 2345],
             closes=[2349, 2347],  # 2347 < 2348 = break short
         )
-        result = detect_break(bars, date(2024, 1, 5), "0900", 5, 2355.0, 2348.0)
+        result = detect_break(bars, date(2024, 1, 5), "CME_REOPEN", 5, 2355.0, 2348.0)
         assert result["break_dir"] == "short"
 
     def test_no_break(self):
@@ -238,7 +238,7 @@ class TestBreakDetection:
             lows=[2349, 2349],
             closes=[2352, 2353],  # both within [2348, 2355]
         )
-        result = detect_break(bars, date(2024, 1, 5), "0900", 5, 2355.0, 2348.0)
+        result = detect_break(bars, date(2024, 1, 5), "CME_REOPEN", 5, 2355.0, 2348.0)
         assert result["break_dir"] is None
         assert result["break_ts"] is None
 
@@ -251,7 +251,7 @@ class TestBreakDetection:
             lows=[2353],
             closes=[2354],  # but closes inside range
         )
-        result = detect_break(bars, date(2024, 1, 5), "0900", 5, 2355.0, 2348.0)
+        result = detect_break(bars, date(2024, 1, 5), "CME_REOPEN", 5, 2355.0, 2348.0)
         assert result["break_dir"] is None
 
     def test_break_with_no_orb(self):
@@ -260,7 +260,7 @@ class TestBreakDetection:
             timestamps=[_ts(2024, 1, 4, 23, 5)],
             opens=[2354], highs=[2358], lows=[2353], closes=[2356],
         )
-        result = detect_break(bars, date(2024, 1, 5), "0900", 5, None, None)
+        result = detect_break(bars, date(2024, 1, 5), "CME_REOPEN", 5, None, None)
         assert result["break_dir"] is None
 
 
@@ -549,7 +549,7 @@ class TestOutcome:
             closes=[2353, 2357, 2360],
         )
         result = compute_outcome(
-            bars, date(2024, 1, 5), "0900", 5,
+            bars, date(2024, 1, 5), "CME_REOPEN", 5,
             orb_high=2350.0, orb_low=2340.0,
             break_dir="long",
             break_ts=_ts(2024, 1, 4, 23, 10).to_pydatetime(),
@@ -570,7 +570,7 @@ class TestOutcome:
             closes=[2349, 2341],
         )
         result = compute_outcome(
-            bars, date(2024, 1, 5), "0900", 5,
+            bars, date(2024, 1, 5), "CME_REOPEN", 5,
             orb_high=2350.0, orb_low=2340.0,
             break_dir="long",
             break_ts=_ts(2024, 1, 4, 23, 10).to_pydatetime(),
@@ -592,7 +592,7 @@ class TestOutcome:
             closes=[2336, 2330],
         )
         result = compute_outcome(
-            bars, date(2024, 1, 5), "0900", 5,
+            bars, date(2024, 1, 5), "CME_REOPEN", 5,
             orb_high=2350.0, orb_low=2340.0,
             break_dir="short",
             break_ts=_ts(2024, 1, 4, 23, 10).to_pydatetime(),
@@ -612,7 +612,7 @@ class TestOutcome:
             closes=[2352, 2353],
         )
         result = compute_outcome(
-            bars, date(2024, 1, 5), "0900", 5,
+            bars, date(2024, 1, 5), "CME_REOPEN", 5,
             orb_high=2350.0, orb_low=2340.0,
             break_dir="long",
             break_ts=_ts(2024, 1, 4, 23, 10).to_pydatetime(),
@@ -632,7 +632,7 @@ class TestOutcome:
             closes=[2350, 2345],
         )
         result = compute_outcome(
-            bars, date(2024, 1, 5), "0900", 5,
+            bars, date(2024, 1, 5), "CME_REOPEN", 5,
             orb_high=2350.0, orb_low=2340.0,
             break_dir="long",
             break_ts=_ts(2024, 1, 4, 23, 10).to_pydatetime(),
@@ -646,7 +646,7 @@ class TestOutcome:
             opens=[2350], highs=[2352], lows=[2348], closes=[2351],
         )
         result = compute_outcome(
-            bars, date(2024, 1, 5), "0900", 5,
+            bars, date(2024, 1, 5), "CME_REOPEN", 5,
             orb_high=2350.0, orb_low=2340.0,
             break_dir=None, break_ts=None,
         )
@@ -664,7 +664,7 @@ class TestOutcome:
             closes=[2351],
         )
         result = compute_outcome(
-            bars, date(2024, 1, 5), "0900", 5,
+            bars, date(2024, 1, 5), "CME_REOPEN", 5,
             orb_high=2350.0, orb_low=2340.0,
             break_dir="long",
             break_ts=_ts(2024, 1, 4, 23, 10).to_pydatetime(),
@@ -681,7 +681,7 @@ class TestOutcome:
             closes=[2353, 2360],
         )
         result = compute_outcome(
-            bars, date(2024, 1, 5), "0900", 5,
+            bars, date(2024, 1, 5), "CME_REOPEN", 5,
             orb_high=2350.0, orb_low=2340.0,
             break_dir="long",
             break_ts=_ts(2024, 1, 4, 23, 10).to_pydatetime(),
@@ -749,10 +749,10 @@ class TestBuildIntegration:
         assert row["bar_count_1m"] == 60
 
         # ORB 0900 should have data (bars start at 23:00 UTC = 09:00 Brisbane)
-        assert row["orb_0900_high"] is not None
-        assert row["orb_0900_low"] is not None
-        assert row["orb_0900_size"] is not None
-        assert row["orb_0900_size"] >= 0
+        assert row["orb_CME_REOPEN_high"] is not None
+        assert row["orb_CME_REOPEN_low"] is not None
+        assert row["orb_CME_REOPEN_size"] is not None
+        assert row["orb_CME_REOPEN_size"] >= 0
 
         # Session Asia should have data
         assert row["session_asia_high"] is not None
@@ -806,8 +806,8 @@ class TestBuildIntegration:
         assert row_15["orb_minutes"] == 15
 
         # 15-min ORB should have >= range as 5-min (more bars included)
-        if row_5["orb_0900_size"] is not None and row_15["orb_0900_size"] is not None:
-            assert row_15["orb_0900_size"] >= row_5["orb_0900_size"]
+        if row_5["orb_CME_REOPEN_size"] is not None and row_15["orb_CME_REOPEN_size"] is not None:
+            assert row_15["orb_CME_REOPEN_size"] >= row_5["orb_CME_REOPEN_size"]
 
     def test_different_orb_minutes_coexist_in_db(self, feature_db):
         """5m and 15m builds can coexist for the same day."""

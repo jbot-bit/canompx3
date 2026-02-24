@@ -5,12 +5,17 @@ Determines whether the US or UK is in Daylight Saving Time on a given
 trading day, and resolves dynamic ORB session times to Brisbane local
 hours accordingly.
 
-Dynamic sessions track specific market events regardless of DST:
-  CME_OPEN        - CME Globex electronic open at 5:00 PM CT
-  US_EQUITY_OPEN  - NYSE cash open at 09:30 ET (MES, MNQ)
-  US_DATA_OPEN    - Economic data releases at 08:30 ET (MGC)
-  LONDON_OPEN     - London metals open at 08:00 London time (MGC)
-  CME_CLOSE       - CME equity futures pre-close at 2:45 PM CT (MNQ, MES)
+All sessions are dynamic (DST-aware resolver per-day):
+  CME_REOPEN      - CME Globex electronic reopen at 5:00 PM CT
+  TOKYO_OPEN      - Tokyo Stock Exchange open at 9:00 AM JST
+  SINGAPORE_OPEN  - SGX/HKEX open at 9:00 AM SGT
+  LONDON_METALS   - London metals AM session at 8:00 AM London
+  US_DATA_830     - US economic data release at 8:30 AM ET
+  NYSE_OPEN       - NYSE cash open at 9:30 AM ET
+  US_DATA_1000    - US 10:00 AM data (ISM/CC) + post-equity-open flow
+  COMEX_SETTLE    - COMEX gold settlement at 1:30 PM ET
+  CME_PRECLOSE    - CME equity futures pre-settlement at 2:45 PM CT
+  NYSE_CLOSE      - NYSE closing bell at 4:00 PM ET
 
 Uses zoneinfo (stdlib) for all timezone math -- correct for all years,
 handles edge cases automatically.
@@ -60,55 +65,50 @@ def is_uk_dst(trading_day: date) -> bool:
 # Sessions affected by DST and which timezone governs them.
 # "US" = winter/summer split uses is_us_dst(). "UK" = uses is_uk_dst().
 #
-# Alignment notes (Brisbane = UTC+10, no DST):
-#   0900: Winter = CME open exactly. Summer = 1hr AFTER CME open.
-#   1800: Winter = London open exactly. Summer = 1hr AFTER London open.
-#   0030: Winter = US equity open exactly. Summer = 1hr AFTER equity open.
-#   2300: NEVER aligned with US data release (8:30 ET = 23:30 winter / 22:30 summer).
-#         Winter: 2300 = 30min BEFORE data release (pre-positioning).
-#         Summer: 2300 = 30min AFTER data release (reaction window).
-#         Volume confirms: summer +76-90% (data already out, market reacting).
-#         DST classification still correct — US DST flips which side of data event 2300 sits on.
-DST_AFFECTED_SESSIONS = {
-    "0900": "US",   # CME open shifts with US DST
-    "0030": "US",   # US equity open shifts with US DST
-    "2300": "US",   # US morning activity context shifts; winter=pre-data, summer=post-data
-    "1800": "UK",   # London open shifts with UK DST
-}
+# All sessions are now dynamic and handle DST internally via resolver functions.
+# No fixed sessions remain, so DST_AFFECTED_SESSIONS is empty.
+DST_AFFECTED_SESSIONS = {}
 
-# Sessions NOT affected (Asia has no DST; dynamic sessions self-adjust)
-DST_CLEAN_SESSIONS = {"1000", "1100", "1130",
-                       "CME_OPEN", "LONDON_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN",
-                       "US_POST_EQUITY", "CME_CLOSE",
-                       "COMEX_SETTLE", "NYSE_CLOSE"}
+# All sessions are dynamic (DST-aware resolvers) — all are "clean" by definition.
+DST_CLEAN_SESSIONS = {
+    "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
+    "US_DATA_830", "NYSE_OPEN", "US_DATA_1000", "COMEX_SETTLE",
+    "CME_PRECLOSE", "NYSE_CLOSE",
+}
 
 
 # =========================================================================
 # DOW ALIGNMENT — Brisbane DOW vs Exchange-Timezone DOW
 # =========================================================================
-# For each fixed session, whether the Brisbane calendar day matches the
+# For each session, whether the Brisbane calendar day matches the
 # exchange's calendar day.  Determines if a DayOfWeekSkipFilter targeting
 # e.g. "Friday" actually skips the exchange's Friday session.
 #
 # Investigation: research/research_dow_alignment.py (Feb 2026)
 #
-# Result: all sessions EXCEPT 0030 are aligned.
-#   0900: Brisbane-Fri = CME Friday (5PM Thu CT = start of CME Fri session) ✓
-#   1000: Brisbane DOW = Tokyo DOW (no DST, same calendar day) ✓
-#   1100: Brisbane DOW = Singapore DOW (no DST) ✓
-#   1130: Brisbane DOW = HK DOW (no DST) ✓
-#   1800: Brisbane DOW = London DOW (both morning same calendar day) ✓
-#   2300: Brisbane DOW = US DOW (13:00 UTC = US morning same day) ✓
-#   0030: Brisbane DOW = US DOW + 1 (00:30 Bris = 14:30 UTC PREV day) ✗
+# Result: all sessions EXCEPT NYSE_OPEN are aligned.
+#   CME_REOPEN: Brisbane-Fri = CME Friday (5PM Thu CT = start of CME Fri session) ✓
+#   TOKYO_OPEN: Brisbane DOW = Tokyo DOW (no DST, same calendar day) ✓
+#   SINGAPORE_OPEN: Brisbane DOW = Singapore DOW (no DST) ✓
+#   LONDON_METALS: Brisbane DOW = London DOW (both morning same calendar day) ✓
+#   US_DATA_830: Brisbane DOW = US DOW (13:00 UTC = US morning same day) ✓
+#   NYSE_OPEN: Brisbane DOW = US DOW + 1 (00:30 Bris = 14:30 UTC PREV day) ✗
+#   US_DATA_1000: Brisbane DOW = US DOW (01:00 Bris = 15:00 UTC same US day) ✓
+#   COMEX_SETTLE: Brisbane DOW = US DOW (next cal day, but same US trading day) ✓
+#   CME_PRECLOSE: Brisbane DOW = US DOW (same logic as COMEX_SETTLE) ✓
+#   NYSE_CLOSE: Brisbane DOW = US DOW (same logic) ✓
 #
-# The 0030 mismatch: Brisbane 00:30 crosses midnight from the previous UTC
+# The NYSE_OPEN mismatch: Brisbane 00:30 crosses midnight from the previous UTC
 # day.  Brisbane-Friday 00:30 = UTC Thursday 14:30 = US Thursday 9:30 AM.
-# So Brisbane-Friday at 0030 is the US THURSDAY equity open.
-# Any DOW filter for 0030 must account for this -1 day offset.
+# So Brisbane-Friday at NYSE_OPEN is the US THURSDAY equity open.
+# Any DOW filter for NYSE_OPEN must account for this -1 day offset.
 
-DOW_ALIGNED_SESSIONS = {"0900", "1000", "1100", "1130", "1800", "2300"}
+DOW_ALIGNED_SESSIONS = {
+    "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
+    "US_DATA_830", "US_DATA_1000", "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+}
 DOW_MISALIGNED_SESSIONS = {
-    "0030": -1,  # Brisbane DOW = exchange DOW + 1 (i.e. exchange is 1 day behind)
+    "NYSE_OPEN": -1,  # Brisbane DOW = exchange DOW + 1 (i.e. exchange is 1 day behind)
 }
 
 
@@ -267,6 +267,22 @@ def cme_close_brisbane(trading_day: date) -> tuple[int, int]:
     return (bris.hour, bris.minute)
 
 
+def tokyo_open_brisbane(trading_day: date) -> tuple[int, int]:
+    """Tokyo Stock Exchange open (9:00 AM JST) in Brisbane local time.
+
+    JST = UTC+9, Brisbane = UTC+10. Always 10:00 Brisbane. No DST.
+    """
+    return (10, 0)
+
+
+def singapore_open_brisbane(trading_day: date) -> tuple[int, int]:
+    """SGX/HKEX open (9:00 AM SGT) in Brisbane local time.
+
+    SGT = UTC+8, Brisbane = UTC+10. Always 11:00 Brisbane. No DST.
+    """
+    return (11, 0)
+
+
 def comex_settle_brisbane(trading_day: date) -> tuple[int, int]:
     """COMEX gold settlement (01:30 PM ET) in Brisbane local time.
 
@@ -296,48 +312,51 @@ def nyse_close_brisbane(trading_day: date) -> tuple[int, int]:
 # =========================================================================
 # SESSION CATALOG: master registry of all ORB sessions
 # =========================================================================
-# Three entry types:
-#   "dynamic" - DST-aware, resolver function per-day
-#   "fixed"   - constant Brisbane time, no resolver needed
-#   "alias"   - maps to existing ORB label, NO separate column
+# All sessions are dynamic (DST-aware, resolver function per-day).
+# No fixed sessions or aliases remain after the Feb 2026 event-based rename.
 
 SESSION_CATALOG = {
-    # Dynamic sessions (DST-aware, resolver per-day)
-    "CME_OPEN": {
+    "CME_REOPEN": {
         "type": "dynamic",
         "resolver": cme_open_brisbane,
         "break_group": "cme",
-        "event": "CME Globex electronic open 5:00 PM CT",
+        "event": "CME Globex electronic reopen 5:00 PM CT",
     },
-    "US_EQUITY_OPEN": {
+    "TOKYO_OPEN": {
         "type": "dynamic",
-        "resolver": us_equity_open_brisbane,
-        "break_group": "us",
-        "event": "NYSE cash open 9:30 AM ET",
+        "resolver": tokyo_open_brisbane,
+        "break_group": "asia",
+        "event": "Tokyo Stock Exchange open 9:00 AM JST",
     },
-    "US_DATA_OPEN": {
+    "SINGAPORE_OPEN": {
+        "type": "dynamic",
+        "resolver": singapore_open_brisbane,
+        "break_group": "asia",
+        "event": "SGX/HKEX open 9:00 AM SGT",
+    },
+    "LONDON_METALS": {
+        "type": "dynamic",
+        "resolver": london_open_brisbane,
+        "break_group": "london",
+        "event": "London metals AM session 8:00 AM London",
+    },
+    "US_DATA_830": {
         "type": "dynamic",
         "resolver": us_data_open_brisbane,
         "break_group": "us",
         "event": "US economic data release 8:30 AM ET",
     },
-    "LONDON_OPEN": {
+    "NYSE_OPEN": {
         "type": "dynamic",
-        "resolver": london_open_brisbane,
-        "break_group": "london",
-        "event": "London metals open 8:00 AM London",
+        "resolver": us_equity_open_brisbane,
+        "break_group": "us",
+        "event": "NYSE cash open 9:30 AM ET",
     },
-    "US_POST_EQUITY": {
+    "US_DATA_1000": {
         "type": "dynamic",
         "resolver": us_post_equity_brisbane,
         "break_group": "us",
-        "event": "US post-equity-open 10:00 AM ET (~30min after NYSE cash open)",
-    },
-    "CME_CLOSE": {
-        "type": "dynamic",
-        "resolver": cme_close_brisbane,
-        "break_group": "us",
-        "event": "CME equity futures pre-close 2:45 PM CT",
+        "event": "US 10:00 AM data (ISM/CC) + post-equity-open flow",
     },
     "COMEX_SETTLE": {
         "type": "dynamic",
@@ -345,70 +364,17 @@ SESSION_CATALOG = {
         "break_group": "us",
         "event": "COMEX gold settlement 1:30 PM ET",
     },
+    "CME_PRECLOSE": {
+        "type": "dynamic",
+        "resolver": cme_close_brisbane,
+        "break_group": "us",
+        "event": "CME equity futures pre-settlement 2:45 PM CT",
+    },
     "NYSE_CLOSE": {
         "type": "dynamic",
         "resolver": nyse_close_brisbane,
         "break_group": "us",
         "event": "NYSE closing bell 4:00 PM ET",
-    },
-    # Fixed sessions (constant UTC, no DST)
-    #
-    # break_group: sessions in the same group share a break-window boundary.
-    # Break detection extends to the start of the next GROUP, not the next
-    # label. This prevents adding a nearby session (e.g., 1130) from silently
-    # shrinking an existing session's break window (e.g., 1100).
-    "0900": {
-        "type": "fixed",
-        "brisbane": (9, 0),
-        "break_group": "cme",
-        "event": "23:00 UTC -- CME open in winter / 1hr after in summer",
-    },
-    "1000": {
-        "type": "fixed",
-        "brisbane": (10, 0),
-        "break_group": "asia",
-        "event": "00:00 UTC -- Tokyo 9AM JST (no DST)",
-    },
-    "1100": {
-        "type": "fixed",
-        "brisbane": (11, 0),
-        "break_group": "asia",
-        "event": "01:00 UTC -- ~Singapore/Shanghai open (no DST)",
-    },
-    "1130": {
-        "type": "fixed",
-        "brisbane": (11, 30),
-        "break_group": "asia",
-        "event": "01:30 UTC -- HK/SG equity open 9:30 AM HKT (no DST)",
-    },
-    "1800": {
-        "type": "fixed",
-        "brisbane": (18, 0),
-        "break_group": "london",
-        "event": "08:00 UTC -- London metals in winter / 1hr after summer",
-    },
-    "2300": {
-        "type": "fixed",
-        "brisbane": (23, 0),
-        "break_group": "us",
-        "event": "13:00 UTC -- 30min pre-data(W) / 30min post-data(S), never aligned",
-    },
-    "0030": {
-        "type": "fixed",
-        "brisbane": (0, 30),
-        "break_group": "us",
-        "event": "14:30 UTC -- NYSE 9:30 ET in winter / 1hr after summer",
-    },
-    # Aliases (map to existing ORB label -- NO separate column)
-    "TOKYO_OPEN": {
-        "type": "alias",
-        "maps_to": "1000",
-        "event": "Tokyo Stock Exchange 9:00 AM JST = 00:00 UTC = 10:00 AEST",
-    },
-    "HK_SG_OPEN": {
-        "type": "alias",
-        "maps_to": "1130",
-        "event": "HKEX/SGX 9:30 AM HKT = 01:30 UTC = 11:30 AEST",
     },
 }
 

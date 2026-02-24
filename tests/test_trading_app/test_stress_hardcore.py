@@ -13,17 +13,17 @@ Coverage:
   4. E0 gap fill logic (confirm bar gapped fully past ORB → no fill)
   5. E3 stop-before-retrace (stop hit before price retraces → no fill)
   6. Confirm bar reset (inside bar resets count)
-  7. C3 slow break filter (1000 session only; 0900 ignores it)
+  7. C3 slow break filter (TOKYO_OPEN session only; CME_REOPEN ignores it)
   8. pnl_r bounds invariant via random fuzz (must be in [-1.0, rr_target] or None)
   9. DST transition day correctness (spring forward / fall back)
-  10. DOW misalignment guard on 0030 (must raise)
+  10. DOW misalignment guard on NYSE_OPEN (must raise)
   11. Trading day boundary exact (23:00:00 UTC = start of next Brisbane day)
   12. DST verdict classify_dst_verdict boundary conditions
   13. Outlier ORB sizes (0.1 points, 1000 points)
   14. MAE/MFE invariants (win → mfe_r >= pnl_r; stop loss → mae_r >= 1.0 approx)
   15. No confirm with insufficient bars (CB5 with 4 bars → no entry)
   16. Unknown instrument → ValueError on cost spec
-  17. 2300 DST context: winter=pre-data, summer=post-data (documented claim verified)
+  17. US_DATA_830 DST context: dynamic resolver tracks 8:30 AM ET across DST transitions
   18. Session end boundary (bar at trading_day_end excluded from scan)
   19. Outlier: tiny ORB survives arithmetic without crashing
   20. Fuzz: entry_price always equals orb_high (long) or orb_low (short) for E0
@@ -512,7 +512,7 @@ class TestC3SlowBreakFilter:
             trading_day_end=DAY_END,
             cost_spec=_mgc(),
             entry_model="E1",
-            orb_label="1000",  # C3 applies
+            orb_label="TOKYO_OPEN",  # C3 applies
         )
         # C3 is inside _compute_outcomes_all_rr, not compute_single_outcome.
         # compute_single_outcome doesn't run C3. This tests the lower-level function.
@@ -545,7 +545,7 @@ class TestC3SlowBreakFilter:
             trading_day_end=DAY_END,
             cost_spec=_mgc(),
             entry_model="E1",
-            orb_label="1000",
+            orb_label="TOKYO_OPEN",
             break_ts=break_ts,
         )
         assert len(results) == 1
@@ -577,11 +577,11 @@ class TestC3SlowBreakFilter:
             trading_day_end=DAY_END,
             cost_spec=_mgc(),
             entry_model="E1",
-            orb_label="0900",  # C3 does NOT apply
+            orb_label="CME_REOPEN",  # C3 does NOT apply
             break_ts=break_ts,
         )
         assert results[0]["pnl_r"] is not None, (
-            "C3 must NOT filter at 0900 — only 1000"
+            "C3 must NOT filter at CME_REOPEN — only TOKYO_OPEN"
         )
 
 
@@ -742,15 +742,15 @@ class TestDOWMisalignmentGuard:
 
     def test_0030_dow_filter_raises(self):
         with pytest.raises(ValueError, match="DOW filter"):
-            validate_dow_filter_alignment("0030", (4,))  # Skip Friday
+            validate_dow_filter_alignment("NYSE_OPEN", (4,))  # Skip Friday
 
     def test_0030_monday_skip_also_raises(self):
         with pytest.raises(ValueError):
-            validate_dow_filter_alignment("0030", (0,))  # Skip Monday
+            validate_dow_filter_alignment("NYSE_OPEN", (0,))  # Skip Monday
 
     def test_0030_empty_skip_does_not_raise(self):
         """Empty skip tuple means no DOW filter — must not raise."""
-        validate_dow_filter_alignment("0030", ())  # Should be fine
+        validate_dow_filter_alignment("NYSE_OPEN", ())  # Should be fine
 
     def test_aligned_sessions_never_raise(self):
         """All sessions other than 0030 must never raise for any skip_days."""
@@ -1040,49 +1040,45 @@ class TestCostModelInstruments:
 # 17. 2300 SESSION — DST CONTEXT SHIFT
 # =============================================================================
 
-class TestSession2300DSTContext:
-    """2300 Brisbane = 13:00 UTC always.
-    US 8:30am ET data release = 13:30 UTC winter / 12:30 UTC summer.
-    Winter: 2300 is 30 min BEFORE data.
-    Summer: 2300 is 30 min AFTER data.
+class TestSessionUS_DATA_830DSTContext:
+    """US_DATA_830 session tracks 8:30 AM ET data release.
+    Dynamic resolver adjusts Brisbane time per DST regime:
+    Winter (EST): 8:30 ET = 13:30 UTC = 23:30 Brisbane
+    Summer (EDT): 8:30 ET = 12:30 UTC = 22:30 Brisbane
     Verified by checking DST utility functions."""
 
-    def test_winter_2300_is_before_data_release(self):
-        """In winter (EST): 8:30 ET = 13:30 UTC. 2300 Bris = 13:00 UTC = 30min before."""
+    def test_winter_us_data_is_2330_brisbane(self):
+        """In winter (EST): 8:30 ET = 13:30 UTC = 23:30 Brisbane."""
         winter_day = WINTER_DATE
         assert not is_us_dst(winter_day), "Winter day sanity check"
         h, m = us_data_open_brisbane(winter_day)
-        # Winter: 8:30 ET = 13:30 UTC = 23:30 Brisbane
         assert h == 23 and m == 30, (
             f"Winter US data release should be 23:30 Brisbane, got {h}:{m:02d}"
         )
-        # 2300 (23:00) is BEFORE 23:30 → pre-data positioning
 
-    def test_summer_2300_is_after_data_release(self):
-        """In summer (EDT): 8:30 ET = 12:30 UTC. 2300 Bris = 13:00 UTC = 30min after."""
+    def test_summer_us_data_is_2230_brisbane(self):
+        """In summer (EDT): 8:30 ET = 12:30 UTC = 22:30 Brisbane."""
         summer_day = SUMMER_DATE
         assert is_us_dst(summer_day), "Summer day sanity check"
         h, m = us_data_open_brisbane(summer_day)
-        # Summer: 8:30 EDT = 12:30 UTC = 22:30 Brisbane
         assert h == 22 and m == 30, (
             f"Summer US data release should be 22:30 Brisbane, got {h}:{m:02d}"
         )
-        # 2300 (23:00) is AFTER 22:30 → post-data reaction
 
-    def test_2300_classified_as_us_dst_affected(self):
-        assert "2300" in DST_AFFECTED_SESSIONS
-        assert DST_AFFECTED_SESSIONS["2300"] == "US"
+    def test_us_data_830_is_clean_session(self):
+        """All sessions are now dynamic — US_DATA_830 is classified as clean."""
+        assert "US_DATA_830" in DST_CLEAN_SESSIONS
+        assert "US_DATA_830" not in DST_AFFECTED_SESSIONS
+        # Dynamic sessions return None for is_winter_for_session
+        assert is_winter_for_session(WINTER_DATE, "US_DATA_830") is None
+        assert is_winter_for_session(SUMMER_DATE, "US_DATA_830") is None
 
-    def test_is_winter_for_2300(self):
-        assert is_winter_for_session(WINTER_DATE, "2300") is True
-        assert is_winter_for_session(SUMMER_DATE, "2300") is False
-
-    def test_1000_is_clean_session(self):
-        """1000 must be in clean sessions — Asia has no DST."""
-        assert "1000" in DST_CLEAN_SESSIONS
-        assert "1000" not in DST_AFFECTED_SESSIONS
-        assert is_winter_for_session(WINTER_DATE, "1000") is None
-        assert is_winter_for_session(SUMMER_DATE, "1000") is None
+    def test_tokyo_open_is_clean_session(self):
+        """TOKYO_OPEN must be in clean sessions — Asia has no DST."""
+        assert "TOKYO_OPEN" in DST_CLEAN_SESSIONS
+        assert "TOKYO_OPEN" not in DST_AFFECTED_SESSIONS
+        assert is_winter_for_session(WINTER_DATE, "TOKYO_OPEN") is None
+        assert is_winter_for_session(SUMMER_DATE, "TOKYO_OPEN") is None
 
 
 # =============================================================================
@@ -1246,16 +1242,17 @@ class TestDSTSessionCoverage:
             "This is a data integrity bug — a session can't be both."
         )
 
-    def test_known_affected_sessions_present(self):
-        for session in ("0900", "0030", "2300", "1800"):
-            assert session in DST_AFFECTED_SESSIONS, (
-                f"Session {session} must be in DST_AFFECTED_SESSIONS"
-            )
+    def test_no_affected_sessions_remain(self):
+        """All sessions are now dynamic — DST_AFFECTED_SESSIONS must be empty."""
+        assert len(DST_AFFECTED_SESSIONS) == 0, (
+            f"DST_AFFECTED_SESSIONS should be empty (all dynamic), got: {DST_AFFECTED_SESSIONS}"
+        )
 
     def test_known_clean_sessions_present(self):
-        for session in ("1000", "1100", "1130"):
+        for session in ("CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN",
+                         "LONDON_METALS", "US_DATA_830", "NYSE_OPEN"):
             assert session in DST_CLEAN_SESSIONS, (
-                f"Session {session} must be in DST_CLEAN_SESSIONS (Asia = no DST)"
+                f"Session {session} must be in DST_CLEAN_SESSIONS (all sessions are dynamic)"
             )
 
 

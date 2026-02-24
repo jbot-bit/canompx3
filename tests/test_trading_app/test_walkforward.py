@@ -65,7 +65,7 @@ def _insert_outcomes(con, rows):
             "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             [
                 o.get("symbol", "MGC"), o.get("orb_minutes", 5),
-                o.get("orb_label", "0900"), o.get("entry_model", "E1"),
+                o.get("orb_label", "CME_REOPEN"), o.get("entry_model", "E1"),
                 o.get("rr_target", 2.0), o.get("confirm_bars", 1),
                 o["trading_day"], o["outcome"], o["pnl_r"],
                 o.get("mae_r", -0.5), o.get("mfe_r", 2.0),
@@ -101,7 +101,7 @@ def _monthly_outcomes(year_start, year_end, trades_per_month=3,
 
 # Default WF params for compact test calls
 _WF_BASE = dict(
-    orb_label="0900", entry_model="E1", rr_target=2.0,
+    orb_label="CME_REOPEN", entry_model="E1", rr_target=2.0,
     confirm_bars=1, filter_type="NO_FILTER", orb_minutes=5,
 )
 
@@ -319,7 +319,7 @@ class TestWalkForward:
         )
         result_g5 = run_walkforward(
             con=con, strategy_id="TEST_G5", instrument="MGC",
-            orb_label="0900", entry_model="E1", rr_target=2.0,
+            orb_label="CME_REOPEN", entry_model="E1", rr_target=2.0,
             confirm_bars=1, filter_type="ORB_G5", orb_minutes=5,
         )
 
@@ -371,7 +371,7 @@ class TestWalkForward:
 
         result = run_walkforward(
             con=con, strategy_id="MNQ_TEST", instrument="MNQ",
-            orb_label="0900", entry_model="E1", rr_target=2.0,
+            orb_label="CME_REOPEN", entry_model="E1", rr_target=2.0,
             confirm_bars=1, filter_type="NO_FILTER", orb_minutes=5,
             min_valid_windows=3,
         )
@@ -384,7 +384,7 @@ class TestWalkForward:
         # With relaxed threshold, should pass
         result2 = run_walkforward(
             con=con, strategy_id="MNQ_TEST_2W", instrument="MNQ",
-            orb_label="0900", entry_model="E1", rr_target=2.0,
+            orb_label="CME_REOPEN", entry_model="E1", rr_target=2.0,
             confirm_bars=1, filter_type="NO_FILTER", orb_minutes=5,
             min_valid_windows=2,
         )

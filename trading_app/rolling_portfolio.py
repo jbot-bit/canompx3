@@ -28,6 +28,7 @@ import duckdb
 import numpy as np
 
 from pipeline.paths import GOLD_DB_PATH
+from pipeline.init_db import ORB_LABELS
 
 # Stability thresholds (weighted score)
 STABLE_THRESHOLD = 0.6
@@ -198,9 +199,12 @@ def aggregate_rolling_performance(
 
     results = []
     for fid, windows_data in family_windows.items():
-        # Parse family_id back
-        parts = fid.split("_", 2)
-        orb_label, entry_model, filter_type = parts[0], parts[1], parts[2]
+        # Parse family_id back — entry_model is always E0/E1/E3
+        parts = fid.split("_")
+        em_idx = next(i for i, p in enumerate(parts) if p in ("E0", "E1", "E3"))
+        orb_label = "_".join(parts[:em_idx])
+        entry_model = parts[em_idx]
+        filter_type = "_".join(parts[em_idx + 1:])
 
         # For each window, pick the best variant (highest ExpR)
         passing_windows = []
@@ -270,9 +274,9 @@ def compute_day_of_week_stats(
 
     with duckdb.connect(str(db_path), read_only=True) as con:
         # Pre-load daily_features for filter eligibility
-        df_features = con.execute("""
-            SELECT trading_day, orb_0900_size, orb_1000_size, orb_1100_size,
-                   orb_1800_size, orb_2300_size, orb_0030_size
+        _size_cols = ", ".join(f"orb_{lbl}_size" for lbl in ORB_LABELS)
+        df_features = con.execute(f"""
+            SELECT trading_day, {_size_cols}
             FROM daily_features
             WHERE symbol = ? AND orb_minutes = 5
         """, [instrument]).fetchdf()

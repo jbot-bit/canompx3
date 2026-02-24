@@ -78,26 +78,26 @@ HOT_MIN_STABILITY = 0.6
 LIVE_PORTFOLIO = [
     # --- CORE: always on, full-period validated ROBUST families ---
 
-    # 0900 session (MGC + MNQ dominant; MES secondary)
+    # CME_REOPEN session (MGC + MNQ dominant; MES secondary)
     # E0 validated Feb 2026 — limit at ORB edge, best fill price
-    LiveStrategySpec("0900_E0_ORB_G5", "core", "0900", "E0", "ORB_G5", None),
-    LiveStrategySpec("0900_E0_ORB_G4", "core", "0900", "E0", "ORB_G4", None),
+    LiveStrategySpec("CME_REOPEN_E0_ORB_G5", "core", "CME_REOPEN", "E0", "ORB_G5", None),
+    LiveStrategySpec("CME_REOPEN_E0_ORB_G4", "core", "CME_REOPEN", "E0", "ORB_G4", None),
     # E1 kept as fallback for instruments where E0 doesn't reach ROBUST threshold
-    LiveStrategySpec("0900_E1_ORB_G5", "core", "0900", "E1", "ORB_G5", None),
+    LiveStrategySpec("CME_REOPEN_E1_ORB_G5", "core", "CME_REOPEN", "E1", "ORB_G5", None),
 
-    # 1000 session (universal — positive for MGC, MNQ, MES)
-    LiveStrategySpec("1000_E0_ORB_G5", "core", "1000", "E0", "ORB_G5", None),
-    LiveStrategySpec("1000_E0_ORB_G4", "core", "1000", "E0", "ORB_G4", None),
-    LiveStrategySpec("1000_E1_ORB_G5", "core", "1000", "E1", "ORB_G5", None),
+    # TOKYO_OPEN session (universal — positive for MGC, MNQ, MES)
+    LiveStrategySpec("TOKYO_OPEN_E0_ORB_G5", "core", "TOKYO_OPEN", "E0", "ORB_G5", None),
+    LiveStrategySpec("TOKYO_OPEN_E0_ORB_G4", "core", "TOKYO_OPEN", "E0", "ORB_G4", None),
+    LiveStrategySpec("TOKYO_OPEN_E1_ORB_G5", "core", "TOKYO_OPEN", "E1", "ORB_G5", None),
 
-    # 1800 session (MGC-specific; MNQ marginal)
-    LiveStrategySpec("1800_E0_ORB_G4_NOMON", "core", "1800", "E0", "ORB_G4_NOMON", None),
+    # LONDON_METALS session (MGC-specific; MNQ marginal)
+    LiveStrategySpec("LONDON_METALS_E0_ORB_G4_NOMON", "core", "LONDON_METALS", "E0", "ORB_G4_NOMON", None),
 
     # --- HOT: rolling-eval gated ---
     # Auto-activates when stability >= HOT_MIN_STABILITY after rolling_portfolio.py re-run.
     # All HOT entries are currently gated off ("family not found in rolling results").
-    LiveStrategySpec("0900_E0_ORB_G4_NOFRI", "hot", "0900", "E0", "ORB_G4_NOFRI", "rolling"),
-    LiveStrategySpec("1000_E0_ORB_G5_L12", "hot", "1000", "E0", "ORB_G5_L12", "rolling"),
+    LiveStrategySpec("CME_REOPEN_E0_ORB_G4_NOFRI", "hot", "CME_REOPEN", "E0", "ORB_G4_NOFRI", "rolling"),
+    LiveStrategySpec("TOKYO_OPEN_E0_ORB_G5_L12", "hot", "TOKYO_OPEN", "E0", "ORB_G5_L12", "rolling"),
 
     # --- REGIME: fitness-gated ---
     # (none currently active — add as fitness monitoring matures)

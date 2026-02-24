@@ -8,8 +8,8 @@ Read-only consumer of the database -- never writes to DB.
 
 Usage:
     table = build_cascade_table(Path("gold.db"))
-    entry = table[("0900", "loss", "opposite")]
-    print(entry)  # {"1000_wr": 0.52, "n": 148}
+    entry = table[("CME_REOPEN", "loss", "opposite")]
+    print(entry)  # {"TOKYO_OPEN_wr": 0.52, "n": 148}
 """
 
 from pathlib import Path
@@ -29,8 +29,8 @@ def build_cascade_table(
 
     Returns nested dict keyed by (session_A_label, outcome_A, direction_relation):
       {
-        ("0900", "loss", "opposite"): {"1000_wr": 0.52, "n": 148},
-        ("0900", "win", "same"):      {"1000_wr": 0.61, "n": 203},
+        ("CME_REOPEN", "loss", "opposite"): {"TOKYO_OPEN_wr": 0.52, "n": 148},
+        ("CME_REOPEN", "win", "same"):      {"TOKYO_OPEN_wr": 0.61, "n": 203},
         ...
       }
 
@@ -39,11 +39,11 @@ def build_cascade_table(
     """
     # Session pairs to analyze: (earlier, later)
     pairs = [
-        ("0900", "1000"),
-        ("0900", "1100"),
-        ("1000", "1100"),
-        ("1800", "2300"),
-        ("2300", "0030"),
+        ("CME_REOPEN", "TOKYO_OPEN"),
+        ("CME_REOPEN", "SINGAPORE_OPEN"),
+        ("TOKYO_OPEN", "SINGAPORE_OPEN"),
+        ("LONDON_METALS", "US_DATA_830"),
+        ("US_DATA_830", "NYSE_OPEN"),
     ]
 
     table = {}

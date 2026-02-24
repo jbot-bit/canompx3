@@ -12,15 +12,16 @@ ORB (Opening Range Breakout):
   a potential directional move. All times are Australia/Brisbane (UTC+10).
 
 ORB SESSIONS (defined in pipeline/init_db.py as ORB_LABELS):
-  0900 - Brisbane market open (23:00 UTC prev day). Primary US-session ORB.
-         Largest ORBs in current regime. Best edge with E1 momentum entry.
-  1000 - 1 hour after Brisbane open (00:00 UTC). Secondary US-session ORB.
-         Uses 15m ORB (variable aperture). Strong long bias; IB-conditional exits.
-  1100 - 2 hours after Brisbane open (01:00 UTC). Inconsistent edge.
-  1800 - GLOBEX open / London close (08:00 UTC). Best with E3 retrace entry.
-         Price often spikes through ORB then retraces, rewarding limit orders.
-  2300 - Overnight session (13:00 UTC). Only works with G8+ (very large ORBs).
-  0030 - Late overnight (14:30 UTC). No edge found; negative across all settings.
+  CME_REOPEN     - CME Globex electronic reopen 5:00 PM CT. Primary ORB session.
+  TOKYO_OPEN     - Tokyo Stock Exchange open 9:00 AM JST. 15m ORB. Strong long bias.
+  SINGAPORE_OPEN - SGX/HKEX open 9:00 AM SGT. Inconsistent edge.
+  LONDON_METALS  - London metals AM session 8:00 AM London. Best with E3 retrace.
+  US_DATA_830    - US economic data release 8:30 AM ET.
+  NYSE_OPEN      - NYSE cash open 9:30 AM ET.
+  US_DATA_1000   - US 10:00 AM data (ISM/CC) + post-equity-open flow.
+  COMEX_SETTLE   - COMEX gold settlement 1:30 PM ET (MGC only).
+  CME_PRECLOSE   - CME equity futures pre-settlement 2:45 PM CT.
+  NYSE_CLOSE     - NYSE closing bell 4:00 PM ET.
 
 TRADING SESSIONS:
   Fixed session stat windows are in pipeline/build_daily_features.py.
@@ -218,7 +219,7 @@ class ATRVelocityFilter(StrategyFilter):
     """
     filter_type: str = "ATR_VEL"
     description: str = "Skip Contracting ATR × Neutral/Compressed ORB sessions"
-    apply_to_sessions: tuple[str, ...] = ("0900", "1000")
+    apply_to_sessions: tuple[str, ...] = ("CME_REOPEN", "TOKYO_OPEN")
 
     def matches_row(self, row: dict, orb_label: str) -> bool:
         if orb_label not in self.apply_to_sessions:
@@ -403,10 +404,10 @@ CALENDAR_SKIP_NFP_OPEX = CalendarSkipFilter(
     description="Skip NFP + OPEX days",
     skip_nfp=True, skip_opex=True, skip_friday_session=None,
 )
-CALENDAR_SKIP_ALL_0900 = CalendarSkipFilter(
-    filter_type="CAL_SKIP_ALL_0900",
-    description="Skip NFP + OPEX + Friday@0900",
-    skip_nfp=True, skip_opex=True, skip_friday_session="0900",
+CALENDAR_SKIP_ALL_CME_REOPEN = CalendarSkipFilter(
+    filter_type="CAL_SKIP_ALL_CME_REOPEN",
+    description="Skip NFP + OPEX + Friday@CME_REOPEN",
+    skip_nfp=True, skip_opex=True, skip_friday_session="CME_REOPEN",
 )
 
 # DOW skip filters (discovery grid composites, Feb 2026 research)
@@ -510,7 +511,7 @@ ALL_FILTERS: dict[str, StrategyFilter] = {
 # Wired into ExecutionEngine._arm_strategies via calendar_overlay param.
 CALENDAR_OVERLAYS: dict[str, CalendarSkipFilter] = {
     "CAL_SKIP_NFP_OPEX": CALENDAR_SKIP_NFP_OPEX,
-    "CAL_SKIP_ALL_0900": CALENDAR_SKIP_ALL_0900,
+    "CAL_SKIP_ALL_CME_REOPEN": CALENDAR_SKIP_ALL_CME_REOPEN,
 }
 
 
@@ -565,8 +566,8 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
         size_filters_orb = _GRID_SIZE_FILTERS_ORB
         filters = dict(BASE_GRID_FILTERS)
 
-    # Break quality composites for momentum sessions (0900, 1000, 1800)
-    if session in ("0900", "1000", "1800"):
+    # Break quality composites for momentum sessions (CME_REOPEN, TOKYO_OPEN, LONDON_METALS)
+    if session in ("CME_REOPEN", "TOKYO_OPEN", "LONDON_METALS"):
         filters.update(_make_break_quality_composites(
             size_filters_orb, _BREAK_SPEED_FAST5, "FAST5"))
         filters.update(_make_break_quality_composites(
@@ -574,28 +575,26 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
         filters.update(_make_break_quality_composites(
             size_filters_orb, _BREAK_BAR_CONTINUES, "CONT"))
 
-    if session == "0900":
+    if session == "CME_REOPEN":
         validate_dow_filter_alignment(session, _DOW_SKIP_FRIDAY.skip_days)
         filters.update(_make_dow_composites(size_filters_orb, _DOW_SKIP_FRIDAY, "NOFRI"))
-    if session == "1800":
+    if session == "LONDON_METALS":
         validate_dow_filter_alignment(session, _DOW_SKIP_MONDAY.skip_days)
         filters.update(_make_dow_composites(size_filters_orb, _DOW_SKIP_MONDAY, "NOMON"))
-    if session == "1000":
+    if session == "TOKYO_OPEN":
         validate_dow_filter_alignment(session, _DOW_SKIP_TUESDAY.skip_days)
         filters["DIR_LONG"] = DIR_LONG
         filters.update(_make_dow_composites(size_filters_orb, _DOW_SKIP_TUESDAY, "NOTUE"))
-    if instrument == "MES" and session == "1000":
+    if instrument == "MES" and session == "TOKYO_OPEN":
         filters.update(_MES_1000_BAND_FILTERS)
-    if instrument == "MNQ" and session == "1100":
+    if instrument == "MNQ" and session == "SINGAPORE_OPEN":
         # Feb 2026: SHORT is systematic AVOID (N=236, avgR=-0.247, p=0.006, raw-verified).
         # LONG is positive (+0.187). Wire long-only to block short discovery.
         filters["DIR_LONG"] = DIR_LONG
-    # REMOVED (Feb 2026): NO_DBL_BREAK / NODBL composites for 1100.
+    # REMOVED (Feb 2026): NO_DBL_BREAK / NODBL composites for SINGAPORE_OPEN.
     # double_break column is LOOK-AHEAD — computed over full session AFTER
     # trade entry. Cannot be used as a pre-entry filter. All 6 validated
     # strategies using NODBL were artifacts of hindsight bias.
-    # See research: cross-session context (0900 dbl resolved + 1000 early dbl)
-    # is the legitimate version of this idea.
     return filters
 
 
@@ -619,21 +618,15 @@ ENTRY_MODELS = ["E0", "E1", "E3"]
 #   2300: All negative at all windows.
 #   0030: All negative at all windows.
 ORB_DURATION_MINUTES: dict[str, int] = {
-    "0900": 5,
-    "1000": 15,
-    "1100": 5,              # Double-break filter applied in discovery
-    "1130": 5,              # HK/SG equity open 9:30 AM HKT
-    "1800": 5,
-    "2300": 5,
-    "0030": 5,
-    # Dynamic sessions (DST-aware, resolved per-day by pipeline/dst.py)
-    "CME_OPEN": 5,         # CME Globex electronic open 5:00 PM CT
-    "US_EQUITY_OPEN": 5,   # NYSE cash open 09:30 ET (MES, MNQ)
-    "US_DATA_OPEN": 5,     # Econ data release 08:30 ET (MGC)
-    "LONDON_OPEN": 5,      # London metals 08:00 LT (MGC)
-    "US_POST_EQUITY": 5,   # US post-equity-open 10:00 AM ET
-    "CME_CLOSE": 5,        # CME equity futures pre-close 2:45 PM CT
+    "CME_REOPEN": 5,       # CME Globex electronic reopen 5:00 PM CT
+    "TOKYO_OPEN": 15,      # Tokyo Stock Exchange open 9:00 AM JST (15m ORB)
+    "SINGAPORE_OPEN": 5,   # SGX/HKEX open 9:00 AM SGT
+    "LONDON_METALS": 5,    # London metals AM session 8:00 AM London
+    "US_DATA_830": 5,      # US economic data release 8:30 AM ET
+    "NYSE_OPEN": 5,        # NYSE cash open 9:30 AM ET
+    "US_DATA_1000": 5,     # US 10:00 AM data (ISM/CC) + post-equity-open flow
     "COMEX_SETTLE": 5,     # COMEX gold settlement 1:30 PM ET
+    "CME_PRECLOSE": 5,     # CME equity futures pre-settlement 2:45 PM CT
     "NYSE_CLOSE": 5,       # NYSE closing bell 4:00 PM ET
 }
 
@@ -666,44 +659,32 @@ EARLY_EXIT_MINUTES: dict[str, int | None] = {
     # Values from research/research_winner_speed.py (Feb 2026).
     # Per-session (not per-instrument). Where instruments differ, uses max
     # T80 (more patient) to avoid cutting slower instruments' winners.
-    "0900": 38,   # MGC T80=38m (N=908, avg_r_after=-0.300R)
-    "1000": 39,   # MGC T80=32m, MES T80=39m → use 39 (patient)
-    "1100": 31,   # MES T80=31m
-    "1130": None,
-    "1800": 36,   # MGC T80=36m (avg_r_after=-0.339R, worst dead-chop)
-    "2300": None,
-    "0030": None,
-    # Dynamic sessions: no T80 data yet
-    "CME_OPEN": None,
-    "US_EQUITY_OPEN": None,
-    "US_DATA_OPEN": None,
-    "LONDON_OPEN": None,
-    "US_POST_EQUITY": None,
-    "CME_CLOSE": 16,  # MES T80=16m (short session, fast-resolve)
-    "COMEX_SETTLE": None,  # New session — no T80 data yet
-    "NYSE_CLOSE": None,    # New session — no T80 data yet
+    "CME_REOPEN": 38,       # MGC T80=38m (N=908, avg_r_after=-0.300R)
+    "TOKYO_OPEN": 39,       # MGC T80=32m, MES T80=39m → use 39 (patient)
+    "SINGAPORE_OPEN": 31,   # MES T80=31m
+    "LONDON_METALS": 36,    # MGC T80=36m (avg_r_after=-0.339R, worst dead-chop)
+    "US_DATA_830": None,
+    "NYSE_OPEN": None,
+    "US_DATA_1000": None,
+    "COMEX_SETTLE": None,
+    "CME_PRECLOSE": 16,     # MES T80=16m (short session, fast-resolve)
+    "NYSE_CLOSE": None,
 }
 
 # Session exit modes: how each session manages target/stop after entry.
 # "fixed_target" = set-and-forget (target + stop, no modification)
 # "ib_conditional" = IB-aware (hold target until IB resolves, then adapt)
 SESSION_EXIT_MODE: dict[str, str] = {
-    "0900": "fixed_target",
-    "1000": "ib_conditional",
-    "1100": "fixed_target",
-    "1130": "fixed_target",
-    "1800": "fixed_target",
-    "2300": "fixed_target",
-    "0030": "fixed_target",
-    # Dynamic sessions: fixed_target until IB research is done
-    "CME_OPEN": "fixed_target",
-    "US_EQUITY_OPEN": "fixed_target",
-    "US_DATA_OPEN": "fixed_target",
-    "LONDON_OPEN": "fixed_target",
-    "US_POST_EQUITY": "fixed_target",
-    "CME_CLOSE": "fixed_target",
-    "COMEX_SETTLE": "fixed_target",   # Default until research says otherwise
-    "NYSE_CLOSE": "fixed_target",     # Default until research says otherwise
+    "CME_REOPEN": "fixed_target",
+    "TOKYO_OPEN": "ib_conditional",
+    "SINGAPORE_OPEN": "fixed_target",
+    "LONDON_METALS": "fixed_target",
+    "US_DATA_830": "fixed_target",
+    "NYSE_OPEN": "fixed_target",
+    "US_DATA_1000": "fixed_target",
+    "COMEX_SETTLE": "fixed_target",
+    "CME_PRECLOSE": "fixed_target",
+    "NYSE_CLOSE": "fixed_target",
 }
 
 # IB (Initial Balance) = first 120 minutes from 09:00 Brisbane (23:00 UTC).

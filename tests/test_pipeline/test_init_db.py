@@ -49,12 +49,16 @@ class TestSchemaConstants:
     def test_orb_labels_combined(self):
         assert ORB_LABELS == ORB_LABELS_FIXED + ORB_LABELS_DYNAMIC
 
-    def test_orb_labels_fixed_contains_core_sessions(self):
-        for session in ["0900", "1000", "1100", "1800", "2300", "0030"]:
-            assert session in ORB_LABELS_FIXED
+    def test_orb_labels_fixed_is_empty(self):
+        """After event-based rename, all sessions are dynamic."""
+        assert ORB_LABELS_FIXED == []
 
-    def test_orb_labels_dynamic_contains_dst_sessions(self):
-        for session in ["CME_OPEN", "LONDON_OPEN", "US_EQUITY_OPEN"]:
+    def test_orb_labels_dynamic_contains_all_sessions(self):
+        for session in [
+            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
+            "US_DATA_830", "NYSE_OPEN", "US_DATA_1000", "COMEX_SETTLE",
+            "CME_PRECLOSE", "NYSE_CLOSE",
+        ]:
             assert session in ORB_LABELS_DYNAMIC
 
 
@@ -113,6 +117,6 @@ class TestInitDb:
         ).fetchall()]
         con.close()
         # Check a few ORB-label-derived columns
-        assert "orb_0900_high" in cols
-        assert "orb_1000_outcome" in cols
+        assert "orb_CME_REOPEN_high" in cols
+        assert "orb_TOKYO_OPEN_outcome" in cols
         assert "orb_minutes" in cols

@@ -13,8 +13,10 @@ from pipeline.dst import (
     london_open_brisbane,
     us_post_equity_brisbane,
     cme_close_brisbane,
-    comex_settle_brisbane,    # NEW
-    nyse_close_brisbane,      # NEW
+    comex_settle_brisbane,
+    nyse_close_brisbane,
+    tokyo_open_brisbane,
+    singapore_open_brisbane,
     DYNAMIC_ORB_RESOLVERS,
     SESSION_CATALOG,
     validate_catalog,
@@ -105,7 +107,7 @@ class TestUkDst:
 
 
 # =========================================================================
-# CME_OPEN resolver (CME Globex 5:00 PM CT)
+# CME_REOPEN resolver (CME Globex 5:00 PM CT)
 # =========================================================================
 
 class TestCmeOpenBrisbane:
@@ -132,14 +134,62 @@ class TestCmeOpenBrisbane:
         assert (h, m) == (9, 0)
 
     def test_shifts_by_1h(self):
-        """CME_OPEN shifts 1 hour between summer and winter."""
+        """CME_REOPEN shifts 1 hour between summer and winter."""
         summer = cme_open_brisbane(date(2025, 7, 15))
         winter = cme_open_brisbane(date(2025, 1, 15))
         assert summer != winter
 
 
 # =========================================================================
-# US_EQUITY_OPEN resolver (NYSE 09:30 ET)
+# TOKYO_OPEN resolver (TSE 9:00 AM JST — fixed)
+# =========================================================================
+
+class TestTokyoOpenBrisbane:
+    """Tokyo Stock Exchange 9:00 AM JST -> Brisbane local time (always 10:00)."""
+
+    def test_winter(self):
+        # JST = UTC+9, Brisbane = UTC+10. 9:00 JST = 10:00 Brisbane.
+        h, m = tokyo_open_brisbane(date(2025, 1, 15))
+        assert (h, m) == (10, 0)
+
+    def test_summer(self):
+        # No DST in Japan or Brisbane. Always 10:00.
+        h, m = tokyo_open_brisbane(date(2025, 7, 15))
+        assert (h, m) == (10, 0)
+
+    def test_no_seasonal_shift(self):
+        """TOKYO_OPEN does NOT shift between summer and winter."""
+        summer = tokyo_open_brisbane(date(2025, 7, 15))
+        winter = tokyo_open_brisbane(date(2025, 1, 15))
+        assert summer == winter
+
+
+# =========================================================================
+# SINGAPORE_OPEN resolver (SGX 9:00 AM SGT — fixed)
+# =========================================================================
+
+class TestSingaporeOpenBrisbane:
+    """SGX/HKEX 9:00 AM SGT -> Brisbane local time (always 11:00)."""
+
+    def test_winter(self):
+        # SGT = UTC+8, Brisbane = UTC+10. 9:00 SGT = 11:00 Brisbane.
+        h, m = singapore_open_brisbane(date(2025, 1, 15))
+        assert (h, m) == (11, 0)
+
+    def test_summer(self):
+        # No DST in Singapore or Brisbane. Always 11:00.
+        h, m = singapore_open_brisbane(date(2025, 7, 15))
+        assert (h, m) == (11, 0)
+
+    def test_no_seasonal_shift(self):
+        """SINGAPORE_OPEN does NOT shift between summer and winter."""
+        summer = singapore_open_brisbane(date(2025, 7, 15))
+        winter = singapore_open_brisbane(date(2025, 1, 15))
+        assert summer == winter
+
+
+# =========================================================================
+# NYSE_OPEN resolver (NYSE 09:30 ET)
 # =========================================================================
 
 class TestUsEquityOpenBrisbane:
@@ -167,7 +217,7 @@ class TestUsEquityOpenBrisbane:
 
 
 # =========================================================================
-# US_DATA_OPEN resolver (Econ data 08:30 ET)
+# US_DATA_830 resolver (Econ data 08:30 ET)
 # =========================================================================
 
 class TestUsDataOpenBrisbane:
@@ -195,7 +245,7 @@ class TestUsDataOpenBrisbane:
 
 
 # =========================================================================
-# LONDON_OPEN resolver (08:00 London)
+# LONDON_METALS resolver (08:00 London)
 # =========================================================================
 
 class TestLondonOpenBrisbane:
@@ -236,14 +286,10 @@ class TestDynamicOrbResolvers:
 
     def test_has_all_dynamic_sessions(self):
         assert set(DYNAMIC_ORB_RESOLVERS.keys()) == {
-            "CME_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "LONDON_OPEN",
-            "US_POST_EQUITY", "CME_CLOSE",
-            "COMEX_SETTLE", "NYSE_CLOSE",
+            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
+            "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
+            "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
         }
-
-    def test_new_sessions_in_resolvers(self):
-        assert "COMEX_SETTLE" in DYNAMIC_ORB_RESOLVERS
-        assert "NYSE_CLOSE" in DYNAMIC_ORB_RESOLVERS
 
     def test_resolvers_return_tuples(self):
         td = date(2024, 6, 15)
@@ -262,36 +308,13 @@ class TestDynamicOrbResolvers:
 class TestSessionCatalog:
     """SESSION_CATALOG master registry validation."""
 
-    def test_all_non_alias_have_required_keys(self):
+    def test_all_entries_have_required_keys(self):
         for label, entry in SESSION_CATALOG.items():
             assert "type" in entry, f"{label} missing 'type'"
             assert "event" in entry, f"{label} missing 'event'"
             if entry["type"] == "dynamic":
                 assert "resolver" in entry, f"{label} missing 'resolver'"
                 assert callable(entry["resolver"]), f"{label} resolver not callable"
-            elif entry["type"] == "fixed":
-                assert "brisbane" in entry, f"{label} missing 'brisbane'"
-                h, m = entry["brisbane"]
-                assert 0 <= h <= 23 and 0 <= m <= 59, f"{label} invalid brisbane time"
-            elif entry["type"] == "alias":
-                assert "maps_to" in entry, f"{label} missing 'maps_to'"
-
-    def test_aliases_map_to_valid_orb_labels(self):
-        for label, entry in SESSION_CATALOG.items():
-            if entry["type"] == "alias":
-                assert entry["maps_to"] in ORB_LABELS, (
-                    f"Alias {label} maps to {entry['maps_to']} which is not in ORB_LABELS"
-                )
-
-    def test_no_alias_in_orb_labels(self):
-        aliases = {
-            label for label, entry in SESSION_CATALOG.items()
-            if entry["type"] == "alias"
-        }
-        for alias in aliases:
-            assert alias not in ORB_LABELS, (
-                f"Alias {alias} should NOT appear in ORB_LABELS"
-            )
 
     def test_validate_catalog_no_collisions(self):
         validate_catalog()
@@ -303,107 +326,102 @@ class TestSessionCatalog:
         }
         assert set(DYNAMIC_ORB_RESOLVERS.keys()) == dynamic_in_catalog
 
-    def test_all_non_alias_non_dynamic_are_fixed(self):
+    def test_all_entries_are_dynamic(self):
+        """After event-based rename, all sessions are dynamic (no fixed/alias)."""
         for label, entry in SESSION_CATALOG.items():
-            assert entry["type"] in ("dynamic", "fixed", "alias"), (
-                f"{label} has unknown type {entry['type']}"
+            assert entry["type"] == "dynamic", (
+                f"{label} has type {entry['type']}, expected 'dynamic'"
             )
 
-    def test_all_non_alias_have_break_group(self):
+    def test_all_have_break_group(self):
         for label, entry in SESSION_CATALOG.items():
-            if entry["type"] == "alias":
-                continue
             assert "break_group" in entry, f"{label} missing 'break_group'"
             assert isinstance(entry["break_group"], str), f"{label} break_group not str"
 
-    def test_break_groups_same_group_shares_boundary(self):
-        """1000, 1100, 1130 are all 'asia' -- same group."""
-        assert get_break_group("1000") == "asia"
-        assert get_break_group("1100") == "asia"
-        assert get_break_group("1130") == "asia"
+    def test_break_groups_asia(self):
+        """TOKYO_OPEN and SINGAPORE_OPEN are both 'asia' group."""
+        assert get_break_group("TOKYO_OPEN") == "asia"
+        assert get_break_group("SINGAPORE_OPEN") == "asia"
 
-    def test_break_groups_different_groups(self):
-        """0900/CME_OPEN are 'cme', 1800 is 'london', 2300/0030 are 'us'."""
-        assert get_break_group("0900") == "cme"
-        assert get_break_group("CME_OPEN") == "cme"
-        assert get_break_group("1800") == "london"
-        assert get_break_group("LONDON_OPEN") == "london"
-        assert get_break_group("2300") == "us"
-        assert get_break_group("0030") == "us"
+    def test_break_groups_cme(self):
+        """CME_REOPEN is 'cme' group."""
+        assert get_break_group("CME_REOPEN") == "cme"
 
-    def test_get_break_group_alias_returns_none(self):
-        assert get_break_group("TOKYO_OPEN") is None
+    def test_break_groups_london(self):
+        """LONDON_METALS is 'london' group."""
+        assert get_break_group("LONDON_METALS") == "london"
+
+    def test_break_groups_us(self):
+        """US sessions are all 'us' group."""
+        assert get_break_group("US_DATA_830") == "us"
+        assert get_break_group("NYSE_OPEN") == "us"
+        assert get_break_group("US_DATA_1000") == "us"
+        assert get_break_group("COMEX_SETTLE") == "us"
+        assert get_break_group("CME_PRECLOSE") == "us"
+        assert get_break_group("NYSE_CLOSE") == "us"
 
     def test_get_break_group_unknown_returns_none(self):
         assert get_break_group("NONEXISTENT") is None
 
-    def test_new_sessions_in_catalog(self):
-        assert "COMEX_SETTLE" in SESSION_CATALOG
-        assert "NYSE_CLOSE" in SESSION_CATALOG
-        assert SESSION_CATALOG["COMEX_SETTLE"]["type"] == "dynamic"
-        assert SESSION_CATALOG["NYSE_CLOSE"]["type"] == "dynamic"
-        assert SESSION_CATALOG["COMEX_SETTLE"]["break_group"] == "us"
-        assert SESSION_CATALOG["NYSE_CLOSE"]["break_group"] == "us"
+    def test_catalog_has_exactly_10_sessions(self):
+        assert len(SESSION_CATALOG) == 10
 
-    def test_dst_sets_cover_all_non_alias_sessions(self):
-        """Every non-alias session must be in either DST_AFFECTED or DST_CLEAN."""
+    def test_dst_sets_cover_all_sessions(self):
+        """Every session must be in either DST_AFFECTED or DST_CLEAN."""
         from pipeline.dst import DST_AFFECTED_SESSIONS, DST_CLEAN_SESSIONS
-        non_alias = {k for k, v in SESSION_CATALOG.items() if v.get("type") != "alias"}
+        all_sessions = set(SESSION_CATALOG.keys())
         covered = set(DST_AFFECTED_SESSIONS.keys()) | DST_CLEAN_SESSIONS
-        assert covered == non_alias, f"Missing from DST sets: {non_alias - covered}, Extra: {covered - non_alias}"
+        assert covered == all_sessions, f"Missing from DST sets: {all_sessions - covered}, Extra: {covered - all_sessions}"
 
 
 # =========================================================================
-# Break window grouping: verify 1100 is NOT truncated by 1130
+# Break window grouping: verify asia sessions share boundary
 # =========================================================================
 
 class TestBreakWindowGrouping:
     """Break detection windows use group boundaries, not next label."""
 
-    def test_1100_break_window_extends_past_1130(self):
-        """1100 and 1130 are in the same 'asia' group.
-        1100's break window should extend to the next DIFFERENT group,
-        NOT stop at 1130.
+    def test_asia_sessions_share_break_boundary(self):
+        """TOKYO_OPEN and SINGAPORE_OPEN are both 'asia' group.
+        Both should extend to the next DIFFERENT group (london).
 
-        On June 15 (summer), LONDON_OPEN (london group) resolves to
-        17:00 Brisbane = 07:00 UTC, which is BEFORE the fixed 1800
-        (08:00 UTC). So the boundary is 07:00 UTC.
+        On June 15 (summer), LONDON_METALS (london group) resolves to
+        17:00 Brisbane = 07:00 UTC.
         """
         from pipeline.build_daily_features import _break_detection_window
         td = date(2024, 6, 15)  # summer weekday
 
-        _, window_end_1100 = _break_detection_window(td, "1100", 5)
-        _, window_end_1130 = _break_detection_window(td, "1130", 5)
+        _, window_end_tokyo = _break_detection_window(td, "TOKYO_OPEN", 5)
+        _, window_end_singapore = _break_detection_window(td, "SINGAPORE_OPEN", 5)
 
         # Both should end at the same boundary (next group = london)
-        # In summer: LONDON_OPEN = 17:00 Brisbane = 07:00 UTC (earliest london group)
-        assert window_end_1100.hour == 7 and window_end_1100.minute == 0
-        assert window_end_1130.hour == 7 and window_end_1130.minute == 0
+        # In summer: LONDON_METALS = 17:00 Brisbane = 07:00 UTC
+        assert window_end_tokyo.hour == 7 and window_end_tokyo.minute == 0
+        assert window_end_singapore.hour == 7 and window_end_singapore.minute == 0
 
-        # 1100's window should be much longer than 25 minutes
-        orb_end_1100_start, _ = _break_detection_window(td, "1100", 5)
-        duration_minutes = (window_end_1100 - orb_end_1100_start).total_seconds() / 60
+        # TOKYO_OPEN's window should be much longer than 25 minutes
+        orb_end_tokyo_start, _ = _break_detection_window(td, "TOKYO_OPEN", 5)
+        duration_minutes = (window_end_tokyo - orb_end_tokyo_start).total_seconds() / 60
         assert duration_minutes > 60, (
-            f"1100 break window is only {duration_minutes:.0f} min, should be ~6 hours"
+            f"TOKYO_OPEN break window is only {duration_minutes:.0f} min, should be ~6 hours"
         )
 
-    def test_2300_and_0030_share_us_boundary(self):
-        """2300 and 0030 are both 'us' group.
-        Both should extend to next day's 0900 (cme group).
+    def test_us_sessions_share_boundary(self):
+        """US_DATA_830 and NYSE_OPEN are both 'us' group.
+        Both should extend to end of trading day (next cme group).
         """
         from pipeline.build_daily_features import _break_detection_window
         td = date(2024, 6, 15)
 
-        _, window_end_2300 = _break_detection_window(td, "2300", 5)
-        _, window_end_0030 = _break_detection_window(td, "0030", 5)
+        _, window_end_data = _break_detection_window(td, "US_DATA_830", 5)
+        _, window_end_nyse = _break_detection_window(td, "NYSE_OPEN", 5)
 
-        # Both should end at next day 0900 Brisbane = 23:00 UTC
-        # which is the end of the trading day
-        assert window_end_2300 == window_end_0030
+        # Both should end at end of trading day
+        assert window_end_data == window_end_nyse
 
 
 # =========================================================================
-# US_POST_EQUITY resolver (10:00 AM ET, ~30min after NYSE cash open)
+# US_DATA_1000 resolver (10:00 AM ET, ~30min after NYSE cash open)
 # =========================================================================
 
 class TestUsPostEquityBrisbane:
@@ -430,17 +448,17 @@ class TestUsPostEquityBrisbane:
         assert (h, m) == (1, 0)
 
     def test_shifts_by_1h(self):
-        """US_POST_EQUITY shifts 1 hour between summer and winter."""
+        """US_DATA_1000 shifts 1 hour between summer and winter."""
         summer = us_post_equity_brisbane(date(2025, 7, 15))
         winter = us_post_equity_brisbane(date(2025, 1, 15))
         assert summer != winter
 
     def test_break_group_is_us(self):
-        assert get_break_group("US_POST_EQUITY") == "us"
+        assert get_break_group("US_DATA_1000") == "us"
 
 
 # =========================================================================
-# CME_CLOSE resolver (2:45 PM CT, CME equity futures pre-close)
+# CME_PRECLOSE resolver (2:45 PM CT, CME equity futures pre-close)
 # =========================================================================
 
 class TestCmeCloseBrisbane:
@@ -467,13 +485,13 @@ class TestCmeCloseBrisbane:
         assert (h, m) == (6, 45)
 
     def test_shifts_by_1h(self):
-        """CME_CLOSE shifts 1 hour between summer and winter."""
+        """CME_PRECLOSE shifts 1 hour between summer and winter."""
         summer = cme_close_brisbane(date(2025, 7, 15))
         winter = cme_close_brisbane(date(2025, 1, 15))
         assert summer != winter
 
     def test_break_group_is_us(self):
-        assert get_break_group("CME_CLOSE") == "us"
+        assert get_break_group("CME_PRECLOSE") == "us"
 
 
 # =========================================================================
@@ -505,6 +523,18 @@ class TestSeasonalShift:
         winter = london_open_brisbane(date(2024, 1, 15))
         # Summer = 17:00, winter = 18:00 -- 1 hour difference
         assert summer != winter
+
+    def test_tokyo_no_shift(self):
+        """Tokyo does NOT shift (no DST in Japan or Brisbane)."""
+        summer = tokyo_open_brisbane(date(2025, 7, 15))
+        winter = tokyo_open_brisbane(date(2025, 1, 15))
+        assert summer == winter
+
+    def test_singapore_no_shift(self):
+        """Singapore does NOT shift (no DST in Singapore or Brisbane)."""
+        summer = singapore_open_brisbane(date(2025, 7, 15))
+        winter = singapore_open_brisbane(date(2025, 1, 15))
+        assert summer == winter
 
 
 # =========================================================================

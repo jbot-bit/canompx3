@@ -235,7 +235,7 @@ def _build_server():
                       Infrastructure: schema_info, table_counts, orb_size_dist,
                       regime_compare, correlation, double_break_stats,
                       gap_analysis, rolling_stability.
-            orb_label: ORB session filter. One of: 0900, 1000, 1100, 1800, 2300, 0030.
+            orb_label: ORB session filter. E.g.: CME_REOPEN, TOKYO_OPEN, LONDON_METALS, NYSE_OPEN.
             entry_model: Entry model filter. One of: E0, E1, E3.
             filter_type: ORB size filter. Examples: ORB_G4, ORB_G6, NO_FILTER.
             min_sample_size: Minimum number of trades.

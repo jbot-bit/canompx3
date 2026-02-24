@@ -41,12 +41,9 @@ ASSET_CONFIGS = {
         "minimum_start_date": date(2019, 1, 1),
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
-            "0900", "1000", "1100", "1800", "2300",
-            "LONDON_OPEN", "US_POST_EQUITY",
+            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
+            "US_DATA_830", "US_DATA_1000",
             "COMEX_SETTLE",
-            # CME_OPEN removed (Feb 2026 session correlation research):
-            # r=0.75 with 0900. Never trade both — 0900 has 103 validated
-            # strategies vs CME_OPEN's 14. Keeping 0900, dropping CME_OPEN.
         ],
     },
     "MNQ": {
@@ -57,10 +54,9 @@ ASSET_CONFIGS = {
         "minimum_start_date": date(2024, 2, 4),
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
-            "0900", "1000", "1100", "0030",
-            "CME_OPEN", "LONDON_OPEN", "US_EQUITY_OPEN", "US_POST_EQUITY", "CME_CLOSE",
+            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "NYSE_OPEN",
+            "LONDON_METALS", "US_DATA_1000", "CME_PRECLOSE",
             "NYSE_CLOSE",
-            # 1800 removed — use LONDON_OPEN (DST-aware) instead
         ],
     },
     "MCL": {
@@ -71,8 +67,8 @@ ASSET_CONFIGS = {
         "minimum_start_date": date(2021, 7, 11),
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
-            "0900", "1000", "1100", "1800", "2300",
-            "CME_OPEN", "LONDON_OPEN",
+            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
+            "US_DATA_830",
         ],
     },
     "MES": {
@@ -86,10 +82,9 @@ ASSET_CONFIGS = {
         "minimum_start_date": date(2019, 2, 12),
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
-            "0900", "1000", "1100", "0030",
-            "CME_OPEN", "LONDON_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "US_POST_EQUITY", "CME_CLOSE",
+            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "NYSE_OPEN",
+            "LONDON_METALS", "US_DATA_830", "US_DATA_1000", "CME_PRECLOSE",
             "NYSE_CLOSE",
-            # 1800 removed — use LONDON_OPEN (DST-aware) instead
         ],
     },
     "M2K": {
@@ -103,10 +98,9 @@ ASSET_CONFIGS = {
         "minimum_start_date": date(2021, 2, 21),
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
-            "0900", "1000", "1100", "0030",
-            "CME_OPEN", "LONDON_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "US_POST_EQUITY", "CME_CLOSE",
+            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "NYSE_OPEN",
+            "LONDON_METALS", "US_DATA_830", "US_DATA_1000", "CME_PRECLOSE",
             "NYSE_CLOSE",
-            # 1800 removed — use LONDON_OPEN (DST-aware) instead
         ],
     },
     "SIL": {
@@ -119,8 +113,8 @@ ASSET_CONFIGS = {
         "minimum_start_date": date(2024, 2, 18),
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
-            "1100", "2300", "0030",
-            "US_EQUITY_OPEN", "US_DATA_OPEN", "US_POST_EQUITY",
+            "SINGAPORE_OPEN", "US_DATA_830", "NYSE_OPEN",
+            "US_DATA_1000",
         ],
     },
     "M6E": {
@@ -137,13 +131,11 @@ ASSET_CONFIGS = {
         "minimum_start_date": date(2021, 2, 21),
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
-            "1000", "1100",         # Asia — watch-only; AU/NZ/EU data sometimes moves FX
-            "1800",                 # Fixed London open (for DST split analysis)
-            "LONDON_OPEN",          # Dynamic London open (best FX session)
-            "US_DATA_OPEN",         # Dynamic 8:30 ET data release (major FX mover)
-            "US_EQUITY_OPEN",       # Dynamic 9:30 ET
-            "0030",                 # Fixed US equity open (for DST split analysis)
-            "US_POST_EQUITY",       # Dynamic 10:00 ET
+            "TOKYO_OPEN", "SINGAPORE_OPEN",  # Asia — watch-only
+            "LONDON_METALS",        # London metals (best FX session)
+            "US_DATA_830",          # 8:30 ET data release (major FX mover)
+            "NYSE_OPEN",            # 9:30 ET
+            "US_DATA_1000",         # 10:00 ET
         ],
     },
     "NQ": {
@@ -157,8 +149,8 @@ ASSET_CONFIGS = {
         "minimum_start_date": date(2021, 2, 4),
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
-            "0900", "1000", "1100", "0030",
-            "CME_OPEN", "LONDON_OPEN", "US_EQUITY_OPEN", "US_POST_EQUITY", "CME_CLOSE",
+            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "NYSE_OPEN",
+            "LONDON_METALS", "US_DATA_1000", "CME_PRECLOSE",
             "NYSE_CLOSE",
         ],
     },

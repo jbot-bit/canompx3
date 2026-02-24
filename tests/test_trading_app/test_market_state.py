@@ -55,28 +55,28 @@ class TestVisibleSessions:
         """Outcomes for non-visible sessions are None."""
         state = _make_state(
             **{
-                "0900": {"outcome": "win", "high": 100.0, "low": 95.0, "size": 5.0, "complete": True},
-                "1800": {"outcome": "loss", "high": 200.0, "low": 195.0, "size": 5.0, "complete": True},
+                "CME_REOPEN": {"outcome": "win", "high": 100.0, "low": 95.0, "size": 5.0, "complete": True},
+                "LONDON_METALS": {"outcome": "loss", "high": 200.0, "low": 195.0, "size": 5.0, "complete": True},
             }
         )
         # Simulate visible_sessions masking (what from_trading_day does)
-        visible = {"0900"}
+        visible = {"CME_REOPEN"}
         for label, orb in state.orbs.items():
             if label not in visible:
                 orb.outcome = None
 
-        assert state.orbs["0900"].outcome == "win"
-        assert state.orbs["1800"].outcome is None
+        assert state.orbs["CME_REOPEN"].outcome == "win"
+        assert state.orbs["LONDON_METALS"].outcome is None
         # Structural fields remain
-        assert state.orbs["1800"].high == 200.0
-        assert state.orbs["1800"].size == 5.0
+        assert state.orbs["LONDON_METALS"].high == 200.0
+        assert state.orbs["LONDON_METALS"].size == 5.0
 
     def test_empty_visible_sessions_masks_all(self):
         """Empty set masks all outcomes."""
         state = _make_state(
             **{
-                "0900": {"outcome": "win", "high": 100.0, "low": 95.0, "size": 5.0},
-                "1000": {"outcome": "loss", "high": 100.0, "low": 95.0, "size": 5.0},
+                "CME_REOPEN": {"outcome": "win", "high": 100.0, "low": 95.0, "size": 5.0},
+                "TOKYO_OPEN": {"outcome": "loss", "high": 100.0, "low": 95.0, "size": 5.0},
             }
         )
         visible = set()
@@ -90,21 +90,21 @@ class TestVisibleSessions:
         """None (default) preserves all outcomes."""
         state = _make_state(
             **{
-                "0900": {"outcome": "win"},
-                "1800": {"outcome": "loss"},
+                "CME_REOPEN": {"outcome": "win"},
+                "LONDON_METALS": {"outcome": "loss"},
             }
         )
         # visible_sessions=None -> no masking
-        assert state.orbs["0900"].outcome == "win"
-        assert state.orbs["1800"].outcome == "loss"
+        assert state.orbs["CME_REOPEN"].outcome == "win"
+        assert state.orbs["LONDON_METALS"].outcome == "loss"
 
     def test_progressive_reveal(self):
         """Outcomes revealed one at a time as trades resolve."""
         state = _make_state(
             **{
-                "0900": {"outcome": "win", "high": 100.0, "low": 95.0, "size": 5.0,
+                "CME_REOPEN": {"outcome": "win", "high": 100.0, "low": 95.0, "size": 5.0,
                           "break_dir": "long", "complete": True},
-                "1000": {"outcome": "loss", "high": 100.0, "low": 95.0, "size": 5.0,
+                "TOKYO_OPEN": {"outcome": "loss", "high": 100.0, "low": 95.0, "size": 5.0,
                           "break_dir": "short", "complete": True},
             }
         )
@@ -112,15 +112,15 @@ class TestVisibleSessions:
         for orb in state.orbs.values():
             orb.outcome = None
 
-        # Reveal 0900
-        state.orbs["0900"].outcome = "win"
+        # Reveal CME_REOPEN
+        state.orbs["CME_REOPEN"].outcome = "win"
         state.update_signals()
-        assert state.signals.prior_outcomes == {"0900": "win"}
+        assert state.signals.prior_outcomes == {"CME_REOPEN": "win"}
 
-        # Reveal 1000
-        state.orbs["1000"].outcome = "loss"
+        # Reveal TOKYO_OPEN
+        state.orbs["TOKYO_OPEN"].outcome = "loss"
         state.update_signals()
-        assert "1000" in state.signals.prior_outcomes
+        assert "TOKYO_OPEN" in state.signals.prior_outcomes
 
 
 # =========================================================================
@@ -129,12 +129,12 @@ class TestVisibleSessions:
 
 class TestSignals:
     def test_reversal_detected(self):
-        """0900 loss + 1000 opposite direction = reversal."""
+        """CME_REOPEN loss + TOKYO_OPEN opposite direction = reversal."""
         state = _make_state(
             **{
-                "0900": {"outcome": "loss", "break_dir": "long", "complete": True,
+                "CME_REOPEN": {"outcome": "loss", "break_dir": "long", "complete": True,
                           "high": 100.0, "low": 95.0, "size": 5.0},
-                "1000": {"outcome": "win", "break_dir": "short", "complete": True,
+                "TOKYO_OPEN": {"outcome": "win", "break_dir": "short", "complete": True,
                           "high": 100.0, "low": 95.0, "size": 5.0},
             }
         )
@@ -143,12 +143,12 @@ class TestSignals:
         assert state.signals.chop_detected is False
 
     def test_chop_detected(self):
-        """0900 loss + 1000 loss = chop."""
+        """CME_REOPEN loss + TOKYO_OPEN loss = chop."""
         state = _make_state(
             **{
-                "0900": {"outcome": "loss", "break_dir": "long", "complete": True,
+                "CME_REOPEN": {"outcome": "loss", "break_dir": "long", "complete": True,
                           "high": 100.0, "low": 95.0, "size": 5.0},
-                "1000": {"outcome": "loss", "break_dir": "long", "complete": True,
+                "TOKYO_OPEN": {"outcome": "loss", "break_dir": "long", "complete": True,
                           "high": 100.0, "low": 95.0, "size": 5.0},
             }
         )
@@ -156,12 +156,12 @@ class TestSignals:
         assert state.signals.chop_detected is True
 
     def test_continuation_detected(self):
-        """0900 win + 1000 same direction = continuation."""
+        """CME_REOPEN win + TOKYO_OPEN same direction = continuation."""
         state = _make_state(
             **{
-                "0900": {"outcome": "win", "break_dir": "long", "complete": True,
+                "CME_REOPEN": {"outcome": "win", "break_dir": "long", "complete": True,
                           "high": 100.0, "low": 95.0, "size": 5.0},
-                "1000": {"outcome": "win", "break_dir": "long", "complete": True,
+                "TOKYO_OPEN": {"outcome": "win", "break_dir": "long", "complete": True,
                           "high": 100.0, "low": 95.0, "size": 5.0},
             }
         )
@@ -172,9 +172,9 @@ class TestSignals:
         """No signals when outcomes are not yet visible."""
         state = _make_state(
             **{
-                "0900": {"break_dir": "long", "complete": True,
+                "CME_REOPEN": {"break_dir": "long", "complete": True,
                           "high": 100.0, "low": 95.0, "size": 5.0},
-                "1000": {"break_dir": "short", "complete": True,
+                "TOKYO_OPEN": {"break_dir": "short", "complete": True,
                           "high": 100.0, "low": 95.0, "size": 5.0},
             }
         )
@@ -192,48 +192,48 @@ class TestSignals:
 class TestScoring:
     def test_orb_size_below_4_dampens(self):
         """ORB size < 4 applies 0.5x multiplier."""
-        state = _make_state(**{"0900": {"size": 2.0}})
-        strategy = FakeStrategy("S1", "0900", expectancy_r=0.4, win_rate=0.45)
+        state = _make_state(**{"CME_REOPEN": {"size": 2.0}})
+        strategy = FakeStrategy("S1", "CME_REOPEN", expectancy_r=0.4, win_rate=0.45)
         score = score_strategy(strategy, state)
         assert score == pytest.approx(0.4 * 0.5, abs=0.01)
 
     def test_orb_size_above_8_amplifies(self):
         """ORB size >= 8 applies 1.2x multiplier."""
-        state = _make_state(**{"0900": {"size": 10.0}})
-        strategy = FakeStrategy("S1", "0900", expectancy_r=0.4, win_rate=0.45)
+        state = _make_state(**{"CME_REOPEN": {"size": 10.0}})
+        strategy = FakeStrategy("S1", "CME_REOPEN", expectancy_r=0.4, win_rate=0.45)
         score = score_strategy(strategy, state)
         assert score == pytest.approx(0.4 * 1.2, abs=0.01)
 
     def test_orb_size_4_to_8_no_adjustment(self):
         """ORB size in [4, 8) = no adjustment."""
-        state = _make_state(**{"0900": {"size": 5.0}})
-        strategy = FakeStrategy("S1", "0900", expectancy_r=0.4, win_rate=0.45)
+        state = _make_state(**{"CME_REOPEN": {"size": 5.0}})
+        strategy = FakeStrategy("S1", "CME_REOPEN", expectancy_r=0.4, win_rate=0.45)
         score = score_strategy(strategy, state)
         assert score == pytest.approx(0.4, abs=0.01)
 
-    def test_chop_penalty_on_1100(self):
-        """Chop signal penalizes 1100 strategies."""
-        state = _make_state(**{"1100": {"size": 5.0}})
+    def test_chop_penalty_on_singapore_open(self):
+        """Chop signal penalizes SINGAPORE_OPEN strategies."""
+        state = _make_state(**{"SINGAPORE_OPEN": {"size": 5.0}})
         state.signals.chop_detected = True
-        strategy = FakeStrategy("S1", "1100", expectancy_r=0.4, win_rate=0.45)
+        strategy = FakeStrategy("S1", "SINGAPORE_OPEN", expectancy_r=0.4, win_rate=0.45)
         weights = ScoringWeights()
         score = score_strategy(strategy, state, weights)
         assert score < 0.4  # penalized
 
-    def test_reversal_bonus_on_1000(self):
-        """Reversal signal gives bonus to 1000 strategies."""
-        state = _make_state(**{"1000": {"size": 5.0}})
+    def test_reversal_bonus_on_tokyo_open(self):
+        """Reversal signal gives bonus to TOKYO_OPEN strategies."""
+        state = _make_state(**{"TOKYO_OPEN": {"size": 5.0}})
         state.signals.reversal_active = True
-        strategy = FakeStrategy("S1", "1000", expectancy_r=0.4, win_rate=0.45)
+        strategy = FakeStrategy("S1", "TOKYO_OPEN", expectancy_r=0.4, win_rate=0.45)
         weights = ScoringWeights()
         score = score_strategy(strategy, state, weights)
         assert score > 0.4  # boosted
 
     def test_regime_delta_adjustment(self):
         """Regime delta adjusts score."""
-        state = _make_state(**{"0900": {"size": 5.0}})
+        state = _make_state(**{"CME_REOPEN": {"size": 5.0}})
         state.regime = RegimeContext(label="2025", deltas={"S1": 0.2})
-        strategy = FakeStrategy("S1", "0900", expectancy_r=0.4, win_rate=0.45)
+        strategy = FakeStrategy("S1", "CME_REOPEN", expectancy_r=0.4, win_rate=0.45)
         weights = ScoringWeights()
         score = score_strategy(strategy, state, weights)
         expected = 0.4 + 0.2 * weights.regime_delta
@@ -246,18 +246,18 @@ class TestScoring:
 
 class TestCascadeLookup:
     def test_lookup_found(self):
-        table = {("0900", "loss", "opposite"): {"1000_wr": 0.52, "n": 148}}
-        result = lookup_cascade(table, "0900", "loss", "opposite")
+        table = {("CME_REOPEN", "loss", "opposite"): {"TOKYO_OPEN_wr": 0.52, "n": 148}}
+        result = lookup_cascade(table, "CME_REOPEN", "loss", "opposite")
         assert result is not None
-        assert result["1000_wr"] == 0.52
+        assert result["TOKYO_OPEN_wr"] == 0.52
 
     def test_lookup_missing_returns_none(self):
-        table = {("0900", "loss", "opposite"): {"1000_wr": 0.52, "n": 148}}
-        result = lookup_cascade(table, "0900", "win", "same")
+        table = {("CME_REOPEN", "loss", "opposite"): {"TOKYO_OPEN_wr": 0.52, "n": 148}}
+        result = lookup_cascade(table, "CME_REOPEN", "win", "same")
         assert result is None
 
     def test_lookup_empty_table(self):
-        result = lookup_cascade({}, "0900", "loss", "opposite")
+        result = lookup_cascade({}, "CME_REOPEN", "loss", "opposite")
         assert result is None
 
 
@@ -275,7 +275,7 @@ class TestRiskManagerChopWarning:
         state.signals.chop_detected = True
 
         allowed, reason, _ = rm.can_enter(
-            "S1", "1100", [], 0.0, market_state=state
+            "S1", "SINGAPORE_OPEN", [], 0.0, market_state=state
         )
         assert allowed is True
         assert any("chop_warning" in w for w in rm.warnings)
@@ -289,7 +289,7 @@ class TestRiskManagerChopWarning:
         state.signals.chop_detected = False
 
         allowed, _, _ = rm.can_enter(
-            "S1", "1100", [], 0.0, market_state=state
+            "S1", "SINGAPORE_OPEN", [], 0.0, market_state=state
         )
         assert allowed is True
         assert not any("chop_warning" in w for w in rm.warnings)

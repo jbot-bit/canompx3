@@ -281,31 +281,31 @@ class TestL1Pipeline:
         assert features_count == len(trading_days)
 
     def test_orb_columns_populated(self, l1_pipeline_db):
-        """ORB 0900 columns should be populated (our synthetic data targets this session)."""
+        """ORB CME_REOPEN columns should be populated (our synthetic data targets this session)."""
         db_path, _, _, _ = l1_pipeline_db
 
         con = duckdb.connect(str(db_path), read_only=True)
         rows = con.execute("""
-            SELECT orb_0900_high, orb_0900_low, orb_0900_size
+            SELECT orb_CME_REOPEN_high, orb_CME_REOPEN_low, orb_CME_REOPEN_size
             FROM daily_features
-            WHERE orb_0900_high IS NOT NULL
+            WHERE orb_CME_REOPEN_high IS NOT NULL
         """).fetchall()
         con.close()
 
-        assert len(rows) > 0, "No rows with populated ORB 0900 columns"
+        assert len(rows) > 0, "No rows with populated ORB CME_REOPEN columns"
         for high, low, size in rows:
             assert high > low
             assert size > 0
             assert abs(size - (high - low)) < 0.01
 
     def test_break_detected(self, l1_pipeline_db):
-        """Synthetic uptrend data should produce long breaks at 0900."""
+        """Synthetic uptrend data should produce long breaks at CME_REOPEN."""
         db_path, _, _, _ = l1_pipeline_db
 
         con = duckdb.connect(str(db_path), read_only=True)
         long_breaks = con.execute("""
             SELECT COUNT(*) FROM daily_features
-            WHERE orb_0900_break_dir = 'long'
+            WHERE orb_CME_REOPEN_break_dir = 'long'
         """).fetchone()[0]
         con.close()
 

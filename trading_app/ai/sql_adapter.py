@@ -48,9 +48,11 @@ class QueryIntent:
 MAX_RESULT_ROWS = 1000
 
 # Valid ORB labels for parameter validation
-VALID_ORB_LABELS = {"0900", "1000", "1100", "1130", "1800", "2300", "0030",
-                     "CME_OPEN", "US_EQUITY_OPEN", "US_DATA_OPEN", "LONDON_OPEN",
-                     "US_POST_EQUITY", "CME_CLOSE", "COMEX_SETTLE", "NYSE_CLOSE"}
+VALID_ORB_LABELS = {
+    "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
+    "US_DATA_830", "NYSE_OPEN", "US_DATA_1000", "COMEX_SETTLE",
+    "CME_PRECLOSE", "NYSE_CLOSE",
+}
 
 # Valid entry models
 VALID_ENTRY_MODELS = {"E0", "E1", "E3"}
@@ -108,11 +110,10 @@ def _validate_confirm_bars(cb) -> int:
     return cb
 
 
-# DST regime column per session (CLAUDE.md: US for 0900/0030/2300; UK for 1800)
-_DST_SESSION_MAP = {
-    "0900": "us_dst", "0030": "us_dst", "2300": "us_dst",
-    "1800": "uk_dst",
-}
+# DST regime column per session.
+# All sessions are now dynamic (DST-aware resolvers) — no fixed sessions remain.
+# DST split analysis is no longer applicable since sessions self-adjust.
+_DST_SESSION_MAP = {}
 
 
 def _orb_size_filter_sql(filter_type: str | None, orb_label: str) -> str | None:
@@ -456,7 +457,7 @@ class SQLAdapter:
 
     def _execute_orb_size_dist(self, params: dict) -> pd.DataFrame:
         """Execute ORB size distribution query with validated label."""
-        orb_label = _validate_orb_label(params.get("orb_label", "0900"))
+        orb_label = _validate_orb_label(params.get("orb_label", "CME_REOPEN"))
 
         # Build SQL with validated orb_label embedded (safe -- validated against allowlist)
         sql = _TEMPLATES[QueryTemplate.ORB_SIZE_DIST].replace("{orb_label}", orb_label)
@@ -476,7 +477,7 @@ class SQLAdapter:
 
     def _execute_double_break_stats(self, params: dict) -> pd.DataFrame:
         """Execute double-break stats query with validated ORB label."""
-        orb_label = _validate_orb_label(params.get("orb_label", "0900"))
+        orb_label = _validate_orb_label(params.get("orb_label", "CME_REOPEN"))
 
         # Safe: orb_label validated against allowlist
         sql = _TEMPLATES[QueryTemplate.DOUBLE_BREAK_STATS].replace("{orb_label}", orb_label)

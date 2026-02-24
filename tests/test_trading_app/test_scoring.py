@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from trading_app.scoring import score_strategy, ScoringWeights, MIN_SCORE_THRESHOLD
 
 
-def _make_strategy(expectancy_r=0.3, orb_label="1000", strategy_id="test_strat",
+def _make_strategy(expectancy_r=0.3, orb_label="TOKYO_OPEN", strategy_id="test_strat",
                    win_rate=0.50):
     return SimpleNamespace(
         expectancy_r=expectancy_r,
@@ -48,24 +48,24 @@ class TestScoreStrategy:
         # 0.3 + 0.1 * 0.3 (regime_delta weight) = 0.33
         assert score == pytest.approx(0.33, abs=1e-4)
 
-    def test_chop_penalty_on_1100(self):
-        """Chop detection penalizes 1100 session."""
-        strat = _make_strategy(orb_label="1100")
+    def test_chop_penalty_on_singapore_open(self):
+        """Chop detection penalizes SINGAPORE_OPEN session."""
+        strat = _make_strategy(orb_label="SINGAPORE_OPEN")
         state = _make_state(chop_detected=True)
         score = score_strategy(strat, state)
         # 0.3 + (-0.5) = -0.2
         assert score == pytest.approx(-0.2, abs=1e-4)
 
-    def test_chop_no_effect_on_0900(self):
-        """Chop detection does NOT penalize 0900 session."""
-        strat = _make_strategy(orb_label="0900")
+    def test_chop_no_effect_on_cme_reopen(self):
+        """Chop detection does NOT penalize CME_REOPEN session."""
+        strat = _make_strategy(orb_label="CME_REOPEN")
         state = _make_state(chop_detected=True)
         score = score_strategy(strat, state)
         assert score == pytest.approx(0.3, abs=1e-4)
 
-    def test_reversal_bonus_on_1000(self):
-        """Reversal signal boosts 1000."""
-        strat = _make_strategy(orb_label="1000")
+    def test_reversal_bonus_on_tokyo_open(self):
+        """Reversal signal boosts TOKYO_OPEN."""
+        strat = _make_strategy(orb_label="TOKYO_OPEN")
         state = _make_state(reversal_active=True)
         score = score_strategy(strat, state)
         # 0.3 + 0.3 = 0.6
@@ -73,18 +73,18 @@ class TestScoreStrategy:
 
     def test_orb_size_strong(self):
         """ORB size >= 8.0 gives 1.2x multiplier."""
-        strat = _make_strategy(orb_label="1000")
+        strat = _make_strategy(orb_label="TOKYO_OPEN")
         orb = SimpleNamespace(size=10.0)
-        state = _make_state(orbs={"1000": orb})
+        state = _make_state(orbs={"TOKYO_OPEN": orb})
         score = score_strategy(strat, state)
         # 0.3 * 1.2 = 0.36
         assert score == pytest.approx(0.36, abs=1e-4)
 
     def test_orb_size_weak(self):
         """ORB size < 4.0 gives 0.5x multiplier."""
-        strat = _make_strategy(orb_label="1000")
+        strat = _make_strategy(orb_label="TOKYO_OPEN")
         orb = SimpleNamespace(size=2.0)
-        state = _make_state(orbs={"1000": orb})
+        state = _make_state(orbs={"TOKYO_OPEN": orb})
         score = score_strategy(strat, state)
         # 0.3 * 0.5 = 0.15
         assert score == pytest.approx(0.15, abs=1e-4)
@@ -107,8 +107,8 @@ class TestScoreStrategy:
 
     def test_no_orb_no_crash(self):
         """Missing ORB for strategy's session doesn't crash."""
-        strat = _make_strategy(orb_label="0900")
-        state = _make_state(orbs={})  # no 0900 ORB
+        strat = _make_strategy(orb_label="CME_REOPEN")
+        state = _make_state(orbs={})  # no CME_REOPEN ORB
         score = score_strategy(strat, state)
         assert isinstance(score, float)
 

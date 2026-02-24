@@ -104,21 +104,21 @@ class TestSQLAdapterBuildQuery:
         adapter.db_path = "dummy.db"
         sql, params = adapter._build_query(
             QueryTemplate.STRATEGY_LOOKUP,
-            {"orb_label": "0900", "limit": 10},
+            {"orb_label": "CME_REOPEN", "limit": 10},
         )
         assert "SELECT" in sql
         assert "validated_setups" in sql
-        assert params == ["0900", 10]
+        assert params == ["CME_REOPEN", 10]
 
     def test_build_query_with_multiple_params(self):
         adapter = SQLAdapter.__new__(SQLAdapter)
         adapter.db_path = "dummy.db"
         sql, params = adapter._build_query(
             QueryTemplate.STRATEGY_LOOKUP,
-            {"orb_label": "1800", "entry_model": "E3", "filter_type": "ORB_G4", "limit": 20},
+            {"orb_label": "LONDON_METALS", "entry_model": "E3", "filter_type": "ORB_G4", "limit": 20},
         )
-        assert "0900" not in str(params)
-        assert "1800" in params
+        assert "CME_REOPEN" not in str(params)
+        assert "LONDON_METALS" in params
         assert "E3" in params
         assert "ORB_G4" in params
 
@@ -180,30 +180,30 @@ class TestOrbSizeFilterSQL:
     """Test ORB size filter SQL generation."""
 
     def test_no_filter_returns_none(self):
-        assert _orb_size_filter_sql("NO_FILTER", "0900") is None
+        assert _orb_size_filter_sql("NO_FILTER", "CME_REOPEN") is None
 
     def test_none_returns_none(self):
-        assert _orb_size_filter_sql(None, "0900") is None
+        assert _orb_size_filter_sql(None, "CME_REOPEN") is None
 
     def test_orb_g4(self):
-        result = _orb_size_filter_sql("ORB_G4", "1000")
-        assert result == "d.orb_1000_size >= 4"
+        result = _orb_size_filter_sql("ORB_G4", "TOKYO_OPEN")
+        assert result == "d.orb_TOKYO_OPEN_size >= 4"
 
     def test_orb_g6(self):
-        result = _orb_size_filter_sql("ORB_G6", "0900")
-        assert result == "d.orb_0900_size >= 6"
+        result = _orb_size_filter_sql("ORB_G6", "CME_REOPEN")
+        assert result == "d.orb_CME_REOPEN_size >= 6"
 
     def test_orb_l8(self):
-        result = _orb_size_filter_sql("ORB_L8", "1000")
-        assert result == "d.orb_1000_size < 8"
+        result = _orb_size_filter_sql("ORB_L8", "TOKYO_OPEN")
+        assert result == "d.orb_TOKYO_OPEN_size < 8"
 
     def test_vol_filter_returns_none(self):
         """VOL_ filters aren't translatable to SQL — silently skipped."""
-        assert _orb_size_filter_sql("VOL_RV12_N20", "0900") is None
+        assert _orb_size_filter_sql("VOL_RV12_N20", "CME_REOPEN") is None
 
     def test_invalid_prefix_raises(self):
         with pytest.raises(ValueError, match="Invalid filter_type"):
-            _orb_size_filter_sql("HACKED", "0900")
+            _orb_size_filter_sql("HACKED", "CME_REOPEN")
 
 
 class TestComputeGroupStats:
@@ -250,15 +250,15 @@ class TestComputeGroupStats:
 class TestDSTSessionMap:
     """Test DST session mapping."""
 
-    def test_dst_sensitive_sessions(self):
-        assert _DST_SESSION_MAP["0900"] == "us_dst"
-        assert _DST_SESSION_MAP["0030"] == "us_dst"
-        assert _DST_SESSION_MAP["2300"] == "us_dst"
-        assert _DST_SESSION_MAP["1800"] == "uk_dst"
+    def test_dst_map_empty(self):
+        """All sessions are now dynamic — DST map should be empty."""
+        assert len(_DST_SESSION_MAP) == 0
 
-    def test_non_dst_sessions_absent(self):
-        assert "1000" not in _DST_SESSION_MAP
-        assert "1100" not in _DST_SESSION_MAP
+    def test_all_sessions_absent_from_dst_map(self):
+        """No session should be in DST map since all are dynamic."""
+        assert "CME_REOPEN" not in _DST_SESSION_MAP
+        assert "TOKYO_OPEN" not in _DST_SESSION_MAP
+        assert "LONDON_METALS" not in _DST_SESSION_MAP
 
 
 class TestBuildOutcomesBase:
@@ -272,25 +272,25 @@ class TestBuildOutcomesBase:
     def test_basic_query(self):
         adapter = self._make_adapter()
         sql, bind = adapter._build_outcomes_base(
-            {"instrument": "MGC", "orb_label": "0900"}
+            {"instrument": "MGC", "orb_label": "CME_REOPEN"}
         )
         assert "orb_outcomes o" in sql
         assert "daily_features d" in sql
         assert "o.orb_minutes = d.orb_minutes" in sql
-        assert bind == ["MGC", "0900"]
+        assert bind == ["MGC", "CME_REOPEN"]
 
     def test_all_params(self):
         adapter = self._make_adapter()
         sql, bind = adapter._build_outcomes_base({
-            "instrument": "MNQ", "orb_label": "1000",
+            "instrument": "MNQ", "orb_label": "TOKYO_OPEN",
             "entry_model": "E0", "rr_target": 2.0, "confirm_bars": 1,
             "filter_type": "ORB_G4",
         })
         assert "o.entry_model = ?" in sql
         assert "o.rr_target = ?" in sql
         assert "o.confirm_bars = ?" in sql
-        assert "d.orb_1000_size >= 4" in sql
-        assert bind == ["MNQ", "1000", "E0", 2.0, 1]
+        assert "d.orb_TOKYO_OPEN_size >= 4" in sql
+        assert bind == ["MNQ", "TOKYO_OPEN", "E0", 2.0, 1]
 
     def test_missing_orb_label_raises(self):
         adapter = self._make_adapter()
@@ -300,7 +300,7 @@ class TestBuildOutcomesBase:
     def test_extra_cols(self):
         adapter = self._make_adapter()
         sql, _ = adapter._build_outcomes_base(
-            {"orb_label": "0900"}, extra_cols="o.entry_model"
+            {"orb_label": "CME_REOPEN"}, extra_cols="o.entry_model"
         )
         assert "o.entry_model" in sql
 

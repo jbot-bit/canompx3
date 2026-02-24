@@ -63,15 +63,9 @@ TRADING_DAY_START_HOUR_LOCAL = 9  # Brisbane hour
 #   00:30 Brisbane = 14:30 UTC (next day Brisbane, same trading day)
 #
 # ORB times are defined as (hour, minute) in Brisbane local time.
-ORB_TIMES_LOCAL = {
-    "0900": (9, 0),
-    "1000": (10, 0),
-    "1100": (11, 0),
-    "1130": (11, 30),   # HK/SG equity open 9:30 AM HKT
-    "1800": (18, 0),
-    "2300": (23, 0),
-    "0030": (0, 30),
-}
+# All sessions are now dynamic — resolved per-day by DYNAMIC_ORB_RESOLVERS.
+# This dict is empty; kept for backward compatibility with _orb_utc_window().
+ORB_TIMES_LOCAL = {}
 
 # Session stat windows: FIXED Brisbane-time approximations for computing
 # session range features (high/low). These do NOT track actual market opens
@@ -500,9 +494,9 @@ def compute_overnight_stats(bars_df: pd.DataFrame, trading_day: date) -> dict:
         result["overnight_low"]  = float(asia_bars['low'].min())
         result["overnight_range"] = round(result["overnight_high"] - result["overnight_low"], 4)
 
-    # Pre-1000: all bars from trading day start up to (but not including) 10:00 Brisbane
-    # _orb_utc_window(day, "1000", 5)[0] = start of the 1000 ORB window = 10:00 Brisbane
-    pre_1000_start = _orb_utc_window(trading_day, "1000", 5)[0]
+    # Pre-TOKYO_OPEN: all bars from trading day start up to (but not including) 10:00 Brisbane
+    # _orb_utc_window(day, "TOKYO_OPEN", 5)[0] = start of the TOKYO_OPEN ORB window = 10:00 Brisbane
+    pre_1000_start = _orb_utc_window(trading_day, "TOKYO_OPEN", 5)[0]
     td_start, _ = compute_trading_day_utc_range(trading_day)
     pre_mask = (bars_df['ts_utc'] >= td_start) & (bars_df['ts_utc'] < pre_1000_start)
     pre_bars = bars_df[pre_mask]
@@ -859,7 +853,7 @@ def build_features_for_day(con: duckdb.DuckDBPyConnection, symbol: str,
     row["atr_vel_regime"] = None
     row["garch_forecast_vol"] = None
     row["garch_atr_ratio"] = None
-    for _sl in ["0900", "1000", "1800"]:
+    for _sl in ["CME_REOPEN", "TOKYO_OPEN", "LONDON_METALS"]:
         row[f"orb_{_sl}_compression_z"] = None
         row[f"orb_{_sl}_compression_tier"] = None
     # rel_vol initialised here; computed in post-pass after all days are processed
@@ -1092,7 +1086,7 @@ def build_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
         # Compression = rolling z-score of (orb_size / atr_20).
         # Requires ≥5 prior days to be meaningful.
         if atr_today is not None and atr_today > 0:
-            for sess_label in ["0900", "1000", "1800"]:
+            for sess_label in ["CME_REOPEN", "TOKYO_OPEN", "LONDON_METALS"]:
                 size_col = f"orb_{sess_label}_size"
                 size_today = rows[i].get(size_col)
                 if size_today is None:
