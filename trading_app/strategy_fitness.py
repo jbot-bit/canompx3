@@ -190,14 +190,14 @@ def _enrich_relative_volumes(con, feat_dicts, instrument, orb_label, lookback_da
     for row in feat_dicts:
         break_ts = row.get(col)
         if break_ts is not None and hasattr(break_ts, "hour"):
-            utc_ts = break_ts.astimezone(timezone) if break_ts.tzinfo else break_ts
+            utc_ts = break_ts.astimezone(timezone.utc) if break_ts.tzinfo else break_ts
             unique_minutes.add(utc_ts.hour * 60 + utc_ts.minute)
 
     if not unique_minutes:
         return
 
     def _minute_key(ts):
-        utc = ts.astimezone(timezone) if ts.tzinfo else ts
+        utc = ts.astimezone(timezone.utc) if ts.tzinfo else ts
         return (utc.year, utc.month, utc.day, utc.hour, utc.minute)
 
     # Load historical volumes for each unique minute-of-day
@@ -221,7 +221,7 @@ def _enrich_relative_volumes(con, feat_dicts, instrument, orb_label, lookback_da
             continue
 
         break_key = _minute_key(break_ts)
-        utc_ts = break_ts.astimezone(timezone) if break_ts.tzinfo else break_ts
+        utc_ts = break_ts.astimezone(timezone.utc) if break_ts.tzinfo else break_ts
         mod = utc_ts.hour * 60 + utc_ts.minute
         history = minute_history.get(mod, [])
         if not history:
