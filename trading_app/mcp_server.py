@@ -267,7 +267,7 @@ def _build_server():
         using a 3-layer framework: structural edge, rolling regime, decay monitoring.
 
         Args:
-            strategy_id: Single strategy ID (e.g. 'MGC_0900_E1_RR2.5_CB2_ORB_G4').
+            strategy_id: Single strategy ID (e.g. 'MGC_CME_REOPEN_E1_RR2.5_CB2_ORB_G4').
                          If None, returns fitness for ALL validated strategies.
             instrument: Instrument symbol (default 'MGC').
             rolling_months: Rolling window in months (default 18).

@@ -9,7 +9,6 @@ from pipeline.init_db import (
     BARS_5M_SCHEMA,
     DAILY_FEATURES_SCHEMA,
     ORB_LABELS,
-    ORB_LABELS_FIXED,
     ORB_LABELS_DYNAMIC,
     init_db,
 )
@@ -46,12 +45,9 @@ class TestSchemaConstants:
         con.close()
         assert "daily_features" in tables
 
-    def test_orb_labels_combined(self):
-        assert ORB_LABELS == ORB_LABELS_FIXED + ORB_LABELS_DYNAMIC
-
-    def test_orb_labels_fixed_is_empty(self):
+    def test_orb_labels_equals_dynamic(self):
         """After event-based rename, all sessions are dynamic."""
-        assert ORB_LABELS_FIXED == []
+        assert ORB_LABELS == ORB_LABELS_DYNAMIC
 
     def test_orb_labels_dynamic_contains_all_sessions(self):
         for session in [

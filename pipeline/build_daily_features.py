@@ -64,8 +64,7 @@ TRADING_DAY_START_HOUR_LOCAL = 9  # Brisbane hour
 #
 # ORB times are defined as (hour, minute) in Brisbane local time.
 # All sessions are now dynamic — resolved per-day by DYNAMIC_ORB_RESOLVERS.
-# This dict is empty; kept for backward compatibility with _orb_utc_window().
-ORB_TIMES_LOCAL = {}
+# ORB_TIMES_LOCAL removed: was empty, replaced by explicit ValueError in _orb_utc_window().
 
 # Session stat windows: FIXED Brisbane-time approximations for computing
 # session range features (high/low). These do NOT track actual market opens
@@ -204,7 +203,7 @@ def _orb_utc_window(trading_day: date, orb_label: str,
     if orb_label in DYNAMIC_ORB_RESOLVERS:
         hour, minute = DYNAMIC_ORB_RESOLVERS[orb_label](trading_day)
     else:
-        hour, minute = ORB_TIMES_LOCAL[orb_label]
+        raise ValueError(f"Unknown ORB label '{orb_label}' — not in DYNAMIC_ORB_RESOLVERS")
 
     # Determine the Brisbane calendar date for this ORB time
     # Trading day 09:00 Brisbane starts at calendar_date = trading_day

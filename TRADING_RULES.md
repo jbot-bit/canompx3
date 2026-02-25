@@ -7,7 +7,7 @@ For research deep-dives and data tables, see `docs/RESEARCH_ARCHIVE.md`.
 
 ## Glossary
 
-### Sessions (ORB Labels — 15 total, all event-based)
+### Sessions (ORB Labels — 10 total, all event-based)
 
 All sessions are now dynamic/event-based. Times are resolved per-day from `pipeline/dst.py` SESSION_CATALOG, eliminating DST contamination.
 
@@ -32,10 +32,11 @@ All sessions are now dynamic/event-based. Times are resolved per-day from `pipel
 ### Entry Models
 | Code | How It Works |
 |------|-------------|
-| E1 | Price breaks ORB + confirm bars close outside. Enter at NEXT bar's open. Fastest. |
+| E0 | LIMIT at ORB edge ON the confirm bar itself. CB1 only (CB2+ is look-ahead). Best mechanical edge. |
+| E1 | Price breaks ORB + confirm bars close outside. Enter at NEXT bar's open. Fastest momentum capture. |
 | E3 | Price breaks ORB + confirm bars close outside. LIMIT ORDER at ORB edge, wait for retrace. Better price, ~3% miss rate on G5+ days. |
 
-*E2 removed — identical to E1 on 1m bars.*
+*E2 removed — identical to E1 on 1m bars. E0 CB2+ removed Feb 2026 (look-ahead bias, drift check #30 prevents regression).*
 
 ### Confirm Bars (CB)
 CB1-CB5 = 1-5 consecutive 1m bars must close outside ORB. If ANY bar closes back inside, count resets. For E3, CB1-CB5 produce identical entry prices (same limit order).

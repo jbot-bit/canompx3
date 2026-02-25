@@ -123,7 +123,7 @@ ASSET_CONFIGS = {
         # to GC→MGC (see CLAUDE.md). Cost model uses M6E micro contract specs.
         # Quarterly cycle only: H/M/U/Z (Mar/Jun/Sep/Dec).
         # Sessions prioritise FX events: London open + US data release are primary.
-        # Asia sessions (1000/1100) are WATCH-ONLY until data confirms breakout edge.
+        # Asia sessions (TOKYO_OPEN/SINGAPORE_OPEN) are WATCH-ONLY until data confirms breakout edge.
         "dbn_path": PROJECT_ROOT / "DB" / "M6E_DB",
         "symbol": "M6E",
         "outright_pattern": re.compile(r'^6E[HMUZ]\d{1,2}$'),

@@ -11,7 +11,7 @@ Answers: "Is this strategy still working in the current regime?"
 
 Usage:
     python trading_app/strategy_fitness.py --instrument MGC
-    python trading_app/strategy_fitness.py --strategy-id MGC_0900_E1_RR2.5_CB2_ORB_G4
+    python trading_app/strategy_fitness.py --strategy-id MGC_CME_REOPEN_E1_RR2.5_CB2_ORB_G4
     python trading_app/strategy_fitness.py --instrument MGC --rolling-months 12
     python trading_app/strategy_fitness.py --instrument MGC --format json
 """
@@ -19,7 +19,7 @@ Usage:
 import sys
 import json
 from pathlib import Path
-from datetime import date
+from datetime import date, timezone
 from dataclasses import dataclass, asdict
 
 from pipeline.log import get_logger
@@ -32,7 +32,7 @@ import duckdb
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.init_db import ORB_LABELS
 from pipeline.dst import DST_AFFECTED_SESSIONS, is_winter_for_session
-from trading_app.config import ALL_FILTERS, VolumeFilter
+from trading_app.config import ALL_FILTERS, VolumeFilter, EXCLUDED_FROM_FITNESS
 from trading_app.strategy_discovery import compute_metrics
 
 # Whitelist for SQL column interpolation safety
@@ -176,6 +176,81 @@ def _load_strategy_params(con, strategy_id: str) -> dict | None:
     cols = [desc[0] for desc in con.description]
     return dict(zip(cols, row))
 
+
+def _enrich_relative_volumes(con, feat_dicts, instrument, orb_label, lookback_days):
+    """Compute rel_vol_{orb_label} for daily_features row dicts using bars_1m.
+
+    Mirrors strategy_discovery._compute_relative_volumes() for a single orb_label.
+    Modifies feat_dicts in-place. Fail-closed: missing data = no rel_vol key.
+    """
+    import statistics
+
+    col = f"orb_{orb_label}_break_ts"
+    unique_minutes = set()
+    for row in feat_dicts:
+        break_ts = row.get(col)
+        if break_ts is not None and hasattr(break_ts, "hour"):
+            utc_ts = break_ts.astimezone(timezone) if break_ts.tzinfo else break_ts
+            unique_minutes.add(utc_ts.hour * 60 + utc_ts.minute)
+
+    if not unique_minutes:
+        return
+
+    def _minute_key(ts):
+        utc = ts.astimezone(timezone) if ts.tzinfo else ts
+        return (utc.year, utc.month, utc.day, utc.hour, utc.minute)
+
+    # Load historical volumes for each unique minute-of-day
+    minute_history = {}
+    for mod in sorted(unique_minutes):
+        h, m = divmod(mod, 60)
+        rows = con.execute(
+            """SELECT ts_utc, volume FROM bars_1m
+               WHERE symbol = ?
+               AND EXTRACT(HOUR FROM (ts_utc AT TIME ZONE 'UTC')) = ?
+               AND EXTRACT(MINUTE FROM (ts_utc AT TIME ZONE 'UTC')) = ?
+               ORDER BY ts_utc""",
+            [instrument, h, m],
+        ).fetchall()
+        minute_history[mod] = [(_minute_key(ts), vol) for ts, vol in rows]
+
+    # Compute relative volume for each row
+    for row in feat_dicts:
+        break_ts = row.get(col)
+        if break_ts is None:
+            continue
+
+        break_key = _minute_key(break_ts)
+        utc_ts = break_ts.astimezone(timezone) if break_ts.tzinfo else break_ts
+        mod = utc_ts.hour * 60 + utc_ts.minute
+        history = minute_history.get(mod, [])
+        if not history:
+            continue
+
+        idx = None
+        for j, (k, _) in enumerate(history):
+            if k == break_key:
+                idx = j
+                break
+        if idx is None:
+            continue
+
+        break_vol = history[idx][1]
+        if break_vol is None or break_vol == 0:
+            continue
+
+        start_idx = max(0, idx - lookback_days)
+        prior_vols = [v for _, v in history[start_idx:idx] if v > 0]
+        if not prior_vols:
+            continue
+
+        baseline = statistics.median(prior_vols)
+        if baseline <= 0:
+            continue
+
+        row[f"rel_vol_{orb_label}"] = break_vol / baseline
+
+
 def _load_strategy_outcomes(
     con,
     instrument: str,
@@ -246,12 +321,6 @@ def _load_strategy_outcomes(
     if filter_type == "NO_FILTER":
         return _apply_dst(all_outcomes)
 
-    # VolumeFilter requires pre-computed rel_vol data from bars_1m which is
-    # expensive to compute here. Fail-closed: return empty (strategy = STALE).
-    # This is safe because no validated strategies currently use VolumeFilter.
-    if isinstance(filt, VolumeFilter):
-        return []
-
     # Validate orb_label before f-string SQL interpolation
     if orb_label not in _VALID_ORB_LABELS:
         raise ValueError(f"Invalid orb_label '{orb_label}' for SQL column lookup")
@@ -278,10 +347,14 @@ def _load_strategy_outcomes(
         feat_params,
     ).fetchall()
     feat_cols = [desc[0] for desc in con.description]
+    feat_dicts = [dict(zip(feat_cols, r)) for r in feat_rows]
+
+    # VolumeFilter needs rel_vol enrichment from bars_1m
+    if isinstance(filt, VolumeFilter):
+        _enrich_relative_volumes(con, feat_dicts, instrument, orb_label, filt.lookback_days)
 
     eligible_days = set()
-    for feat_row in feat_rows:
-        row_dict = dict(zip(feat_cols, feat_row))
+    for row_dict in feat_dicts:
         if filt.matches_row(row_dict, orb_label):
             eligible_days.add(row_dict["trading_day"])
 
@@ -411,10 +484,14 @@ def compute_portfolio_fitness(
         as_of_date = date.today()
 
     with duckdb.connect(str(db_path), read_only=True) as con:
+        # Exclude sessions with no confirmed edge (see config.EXCLUDED_FROM_FITNESS)
+        exclusion_clause = " AND ".join(
+            f"orb_label != '{s}'" for s in sorted(EXCLUDED_FROM_FITNESS)
+        )
         rows = con.execute(
-            """SELECT strategy_id FROM validated_setups
+            f"""SELECT strategy_id FROM validated_setups
                WHERE instrument = ? AND LOWER(status) = 'active'
-                 AND orb_label != 'SINGAPORE_OPEN'
+                 AND {exclusion_clause}
                ORDER BY strategy_id""",
             [instrument],
         ).fetchall()

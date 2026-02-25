@@ -4,7 +4,7 @@ Guidance for Claude Code working with this repository.
 
 ## Project Overview
 
-Multi-instrument futures data pipeline — builds clean, replayable local datasets for ORB breakout trading research and backtesting from Databento DBN files. Supports MGC (Micro Gold), MNQ (Micro Nasdaq), MCL (Micro Crude), MES (Micro S&P 500).
+Multi-instrument futures data pipeline — builds clean, replayable local datasets for ORB breakout trading research and backtesting from Databento DBN files. Active instruments: MGC (Micro Gold), MNQ (Micro Nasdaq), MES (Micro S&P 500), M2K (Micro Russell). Dead for ORB: MCL, SIL, M6E.
 
 **CRITICAL: Price Data Sources (Full-Size → Micro Mapping)**
 Several instruments use full-size contract data for better 1m bar coverage. Full-size and micro contracts trade at identical prices on the same exchange — only the multiplier differs. Pipeline stores under the micro symbol; `source_symbol` records the actual contract.
@@ -75,7 +75,7 @@ Databento .dbn.zst files
 ### Key Design Principles
 - **Fail-closed:** Any validation failure aborts immediately
 - **Idempotent:** All operations safe to re-run (INSERT OR REPLACE / DELETE+INSERT)
-- **Pre-computed outcomes:** 689K rows computed once, reused for all discovery
+- **Pre-computed outcomes:** ~3M rows across 7 instruments, reused for all discovery
 - **One-way dependency:** pipeline/ → trading_app/ (never reversed)
 
 ### Time & Calendar Model
@@ -118,7 +118,7 @@ cp "C:\db\gold.db" "C:\Users\joshd\canompx3\gold.db"
 
 ```bash
 # Guardrails (run frequently)
-python pipeline/check_drift.py               # Drift detection (28+ checks)
+python pipeline/check_drift.py               # Drift detection (32 checks)
 python -m pytest tests/ -x -q                # Fast test suite
 python pipeline/health_check.py              # All-in-one health check
 
@@ -166,7 +166,7 @@ The `gold-db` MCP server (`trading_app/mcp_server.py`) exposes 4 read-only tools
 
 ## Guardrails
 
-Five layers enforce quality: pre-commit hook (`.githooks/pre-commit`), drift detection (`pipeline/check_drift.py` — 28+ static checks), Claude Code hooks (auto-run drift/tests on file edits), GitHub Actions CI, and built-in pipeline validation gates (7 ingestion gates, 4 aggregation gates). Setup: `git config core.hooksPath .githooks`
+Five layers enforce quality: pre-commit hook (`.githooks/pre-commit`), drift detection (`pipeline/check_drift.py` — 32 static checks), Claude Code hooks (auto-run drift/tests on file edits), GitHub Actions CI, and built-in pipeline validation gates (7 ingestion gates, 4 aggregation gates). Setup: `git config core.hooksPath .githooks`
 
 ---
 

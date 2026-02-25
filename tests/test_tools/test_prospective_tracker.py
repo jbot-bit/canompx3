@@ -30,8 +30,8 @@ def tracker_db(tmp_path):
             trading_day DATE,
             symbol VARCHAR,
             orb_minutes INT,
-            orb_0900_outcome VARCHAR,
-            orb_0900_size DOUBLE
+            orb_CME_REOPEN_outcome VARCHAR,
+            orb_CME_REOPEN_size DOUBLE
         )
     """)
 
@@ -60,7 +60,7 @@ def tracker_db(tmp_path):
             signal_id        VARCHAR NOT NULL,
             trading_day      DATE NOT NULL,
             symbol           VARCHAR NOT NULL,
-            session          INTEGER NOT NULL,
+            session          VARCHAR NOT NULL,
             prev_day_outcome VARCHAR NOT NULL,
             orb_size         DOUBLE,
             entry_model      VARCHAR NOT NULL,
@@ -91,13 +91,13 @@ def tracker_db(tmp_path):
 
     for day, df_outcome, orb_size, oo_outcome, pnl in days:
         con.execute("""
-            INSERT INTO daily_features (trading_day, symbol, orb_minutes, orb_0900_outcome, orb_0900_size)
+            INSERT INTO daily_features (trading_day, symbol, orb_minutes, orb_CME_REOPEN_outcome, orb_CME_REOPEN_size)
             VALUES (?, 'MGC', 5, ?, ?)
         """, [day, df_outcome, orb_size])
 
         con.execute("""
             INSERT INTO orb_outcomes (trading_day, symbol, orb_label, orb_minutes, entry_model, confirm_bars, rr_target, outcome, pnl_r)
-            VALUES (?, 'MGC', '0900', 5, 'E0', 1, 2.0, ?, ?)
+            VALUES (?, 'MGC', 'CME_REOPEN', 5, 'E0', 1, 2.0, ?, ?)
         """, [day, oo_outcome, pnl])
 
     con.commit()
@@ -106,7 +106,7 @@ def tracker_db(tmp_path):
 
 class TestFetchQualifyingDays:
     def test_finds_prev_loss_days(self, tracker_db):
-        sig = SIGNALS["MGC_0900_PREV_LOSS"]
+        sig = SIGNALS["MGC_CME_REOPEN_PREV_LOSS"]
         rows = fetch_qualifying_days(tracker_db, sig)
         # Only Day 3 qualifies: prev=loss (Day 2 was loss), orb_size=5.0 >= 4.0
         assert len(rows) == 1
@@ -114,7 +114,7 @@ class TestFetchQualifyingDays:
 
     def test_excludes_small_orb(self, tracker_db):
         """Day 5 has prev=win anyway, but also orb < 4.0."""
-        sig = SIGNALS["MGC_0900_PREV_LOSS"]
+        sig = SIGNALS["MGC_CME_REOPEN_PREV_LOSS"]
         rows = fetch_qualifying_days(tracker_db, sig)
         dates = [r[0] for r in rows]
         assert datetime.date(2025, 1, 5) not in dates
@@ -122,44 +122,44 @@ class TestFetchQualifyingDays:
 
 class TestPopulateSignal:
     def test_populates_table(self, tracker_db):
-        sig = SIGNALS["MGC_0900_PREV_LOSS"]
+        sig = SIGNALS["MGC_CME_REOPEN_PREV_LOSS"]
         freeze = datetime.date(2025, 1, 3)
-        n = populate_signal(tracker_db, "MGC_0900_PREV_LOSS", sig, freeze)
+        n = populate_signal(tracker_db, "MGC_CME_REOPEN_PREV_LOSS", sig, freeze)
         assert n == 1
 
         rows = tracker_db.execute(
-            "SELECT * FROM prospective_signals WHERE signal_id = 'MGC_0900_PREV_LOSS'"
+            "SELECT * FROM prospective_signals WHERE signal_id = 'MGC_CME_REOPEN_PREV_LOSS'"
         ).fetchall()
         assert len(rows) == 1
 
     def test_retrospective_tag(self, tracker_db):
-        sig = SIGNALS["MGC_0900_PREV_LOSS"]
+        sig = SIGNALS["MGC_CME_REOPEN_PREV_LOSS"]
         freeze = datetime.date(2025, 6, 1)  # after all data
-        populate_signal(tracker_db, "MGC_0900_PREV_LOSS", sig, freeze)
+        populate_signal(tracker_db, "MGC_CME_REOPEN_PREV_LOSS", sig, freeze)
 
         rows = tracker_db.execute(
-            "SELECT is_prospective FROM prospective_signals WHERE signal_id = 'MGC_0900_PREV_LOSS'"
+            "SELECT is_prospective FROM prospective_signals WHERE signal_id = 'MGC_CME_REOPEN_PREV_LOSS'"
         ).fetchall()
         assert all(r[0] == False for r in rows)
 
     def test_prospective_tag(self, tracker_db):
-        sig = SIGNALS["MGC_0900_PREV_LOSS"]
+        sig = SIGNALS["MGC_CME_REOPEN_PREV_LOSS"]
         freeze = datetime.date(2025, 1, 1)  # before all data
-        populate_signal(tracker_db, "MGC_0900_PREV_LOSS", sig, freeze)
+        populate_signal(tracker_db, "MGC_CME_REOPEN_PREV_LOSS", sig, freeze)
 
         rows = tracker_db.execute(
-            "SELECT is_prospective FROM prospective_signals WHERE signal_id = 'MGC_0900_PREV_LOSS'"
+            "SELECT is_prospective FROM prospective_signals WHERE signal_id = 'MGC_CME_REOPEN_PREV_LOSS'"
         ).fetchall()
         assert all(r[0] == True for r in rows)
 
     def test_idempotent(self, tracker_db):
-        sig = SIGNALS["MGC_0900_PREV_LOSS"]
+        sig = SIGNALS["MGC_CME_REOPEN_PREV_LOSS"]
         freeze = datetime.date(2025, 6, 1)
-        populate_signal(tracker_db, "MGC_0900_PREV_LOSS", sig, freeze)
-        populate_signal(tracker_db, "MGC_0900_PREV_LOSS", sig, freeze)
+        populate_signal(tracker_db, "MGC_CME_REOPEN_PREV_LOSS", sig, freeze)
+        populate_signal(tracker_db, "MGC_CME_REOPEN_PREV_LOSS", sig, freeze)
 
         rows = tracker_db.execute(
-            "SELECT COUNT(*) FROM prospective_signals WHERE signal_id = 'MGC_0900_PREV_LOSS'"
+            "SELECT COUNT(*) FROM prospective_signals WHERE signal_id = 'MGC_CME_REOPEN_PREV_LOSS'"
         ).fetchone()
         assert rows[0] == 1  # no duplicates
 

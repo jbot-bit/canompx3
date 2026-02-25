@@ -63,8 +63,6 @@ CREATE TABLE IF NOT EXISTS bars_5m (
 # The ORB is the high-low range of the first N minutes (configurable).
 # A "break" occurs when a 1-min bar closes above orb_high (long) or
 # below orb_low (short). See pipeline/build_daily_features.py for logic.
-ORB_LABELS_FIXED = []
-
 # All 10 sessions are dynamic (DST-aware, resolver per-day).
 # See pipeline/dst.py SESSION_CATALOG for the master registry.
 #
@@ -85,14 +83,14 @@ ORB_LABELS_DYNAMIC = [
 ]
 
 # Combined label list — used by schema generation and feature builders
-ORB_LABELS = ORB_LABELS_FIXED + ORB_LABELS_DYNAMIC
+ORB_LABELS = ORB_LABELS_DYNAMIC
 
 PROSPECTIVE_SIGNALS_SCHEMA = """
 CREATE TABLE IF NOT EXISTS prospective_signals (
     signal_id        VARCHAR NOT NULL,
     trading_day      DATE NOT NULL,
     symbol           VARCHAR NOT NULL,
-    session          INTEGER NOT NULL,
+    session          VARCHAR NOT NULL,
     prev_day_outcome VARCHAR NOT NULL,
     orb_size         DOUBLE,
     entry_model      VARCHAR NOT NULL,
@@ -198,7 +196,7 @@ CREATE TABLE IF NOT EXISTS daily_features (
     orb_LONDON_METALS_compression_tier TEXT,
 
     -- DST flags: whether US/UK was in daylight saving time on this trading day.
-    -- Used by dynamic sessions (US_EQUITY_OPEN, US_DATA_OPEN, LONDON_OPEN)
+    -- Used by dynamic sessions (NYSE_OPEN, US_DATA_830, LONDON_METALS)
     -- to verify correct window resolution.
     us_dst            BOOLEAN,
     uk_dst            BOOLEAN,

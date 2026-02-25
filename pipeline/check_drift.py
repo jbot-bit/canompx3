@@ -1284,6 +1284,49 @@ def check_orb_minutes_in_strategy_id() -> list[str]:
     return violations
 
 
+def check_orb_labels_session_catalog_sync() -> list[str]:
+    """Check #32: ORB_LABELS must match SESSION_CATALOG dynamic entries.
+
+    ORB_LABELS (init_db.py) drives schema generation (column names).
+    SESSION_CATALOG (dst.py) drives time resolution (per-day resolvers).
+    If a session exists in one but not the other:
+      - In ORB_LABELS only: schema has columns but build_daily_features raises ValueError
+      - In SESSION_CATALOG only: time resolved but no columns to store results (silent data loss)
+    """
+    violations = []
+
+    init_db_file = PIPELINE_DIR / "init_db.py"
+    dst_file = PIPELINE_DIR / "dst.py"
+
+    if not init_db_file.exists() or not dst_file.exists():
+        return violations
+
+    # Import both sources
+    try:
+        from pipeline.init_db import ORB_LABELS
+        from pipeline.dst import SESSION_CATALOG
+    except ImportError as e:
+        violations.append(f"  Cannot import for sync check: {e}")
+        return violations
+
+    orb_set = set(ORB_LABELS)
+    catalog_dynamic = {k for k, v in SESSION_CATALOG.items() if v.get("type") == "dynamic"}
+
+    in_orb_only = orb_set - catalog_dynamic
+    in_catalog_only = catalog_dynamic - orb_set
+
+    if in_orb_only:
+        violations.append(
+            f"  ORB_LABELS has sessions not in SESSION_CATALOG: {sorted(in_orb_only)}"
+        )
+    if in_catalog_only:
+        violations.append(
+            f"  SESSION_CATALOG has dynamic sessions not in ORB_LABELS: {sorted(in_catalog_only)}"
+        )
+
+    return violations
+
+
 def main():
     print("=" * 60)
     print("PIPELINE DRIFT CHECK")
@@ -1655,6 +1698,18 @@ def main():
     # Check 31: Non-5m strategy IDs include orb_minutes suffix
     print("Check 31: Non-5m strategy IDs include _O{minutes} suffix...")
     v = check_orb_minutes_in_strategy_id()
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 32: ORB_LABELS vs SESSION_CATALOG sync
+    print("Check 32: ORB_LABELS matches SESSION_CATALOG dynamic entries...")
+    v = check_orb_labels_session_catalog_sync()
     if v:
         print("  FAILED:")
         for line in v:

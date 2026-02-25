@@ -704,6 +704,12 @@ HOLD_HOURS = 7
 CORE_MIN_SAMPLES = 100
 REGIME_MIN_SAMPLES = 30
 
+# Sessions excluded from portfolio fitness monitoring.
+# SINGAPORE_OPEN: documented as "inconsistent edge" (see session list above).
+# No FDR-confirmed edges survived validation for this session.
+# Strategies exist in validated_setups but should not appear in fitness reports.
+EXCLUDED_FROM_FITNESS = {"SINGAPORE_OPEN"}
+
 
 def classify_strategy(sample_size: int) -> str:
     """Classify a strategy by sample size per FIX5 rules.

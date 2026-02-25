@@ -49,7 +49,7 @@ Do not schedule active delivery work against SIL until explicitly re-opened.
 
 - Grid: 6 ORBs x 6 RRs x 5 CBs x 13 filters x 3 EMs = 6,480 combos (post-5b expansion)
 - orb_outcomes: 689,310 rows | experimental: 6,480 | validated: 312 (original scan)
-- **Current state (Feb 2026):** 999 validated (318 MGC, 507 MNQ, 137 MES, 37 M2K; 490 E0 + 457 E1 + 52 E3) → 331 edge families
+- **Current state (Feb 25 2026):** 618 validated active (MGC: 232, MES: 138, MNQ: 217, M2K: 31) → 202 edge families. Post session-migration re-validation.
 - Edge requires G4+ ORB size filter (NO_FILTER and L-filters ALL negative ExpR)
 - MARKET_PLAYBOOK.md: comprehensive empirical findings
 
@@ -61,7 +61,7 @@ Do not schedule active delivery work against SIL until explicitly re-opened.
 - Win PnL bug fix: changed pnl_points_to_r -> to_r_multiple (friction was missing from wins)
 - test_trader_logic.py: 24 trader/math sanity checks
 - Grid expanded: 6 ORBs x 6 RRs x 5 CBs x 12 filters x 3 EMs = 6,480 combos
-- DB rebuild COMPLETE: 689,310 outcomes, 25,266 strategies, 999 validated
+- DB rebuild COMPLETE: ~3M outcomes (7 instruments), 618 validated active strategies
 - Validator: exclude_years + min_years_positive_pct params added
 
 ## Phase 6: Live Trading Preparation — DONE (6a-6d), 6e TODO
@@ -110,7 +110,7 @@ Do not schedule active delivery work against SIL until explicitly re-opened.
 - 5 critical bugs fixed (C1-C5), 6 important fixes (I1-I4, I6-I7)
 - 97 new tests across 10 coverage gaps (T1-T10)
 - 3 new drift checks (17-19)
-- **655 tests pass, 19 drift checks pass**
+- **1800 tests pass, 32 drift checks pass** (as of Feb 25 2026)
 - R1 (fill-bar granularity) logged as HIGH PRIORITY R&D task
 
 ### 7b. Independent Bars Coverage Audit — DONE
@@ -163,7 +163,7 @@ Hypothesis: wider ORB range (15/30m) + 5m entry bars reduces noise and improves 
 - New daily_features columns: `daily_open/high/low/close`, `gap_open_points`, 6x `orb_*_double_break`
 - Portfolio integration: `--include-rolling` CLI flag in portfolio.py
 - **Key finding**: Only 2 STABLE families (TOKYO_OPEN_E2_G2, TOKYO_OPEN_E1_G2); CME_REOPEN G3+ are TRANSITIONING; LONDON_METALS/US_DATA_830/SINGAPORE_OPEN/NYSE_OPEN AUTO-DEGRADED by double-break
-- 836 tests pass, 20 drift checks pass
+- 1800 tests pass, 32 drift checks pass (as of Feb 25 2026)
 
 ---
 

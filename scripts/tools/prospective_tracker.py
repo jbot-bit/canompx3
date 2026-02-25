@@ -27,10 +27,10 @@ logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 DEFAULT_FREEZE_DATE = datetime.date(2026, 2, 22)
 
 SIGNALS = {
-    "MGC_0900_PREV_LOSS": {
+    "MGC_CME_REOPEN_PREV_LOSS": {
         "symbol": "MGC",
-        "session": 900,
-        "orb_label": "0900",
+        "session": "CME_REOPEN",
+        "orb_label": "CME_REOPEN",
         "prev_outcome_filter": "loss",
         "entry_model": "E0",
         "confirm_bars": 1,

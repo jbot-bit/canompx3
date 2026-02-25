@@ -13,6 +13,7 @@ dbn/
 
 # Backups
 backups/
+gold.db.bak*
 
 # Generated tools
 pipeline-explorer.html
