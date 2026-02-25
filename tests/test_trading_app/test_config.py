@@ -30,7 +30,7 @@ class TestNoFilter:
 
     def test_matches_with_data(self):
         f = NoFilter()
-        row = {"orb_CME_REOPEN_size": 3.5, "rsi_14_at_0900": 45.0}
+        row = {"orb_CME_REOPEN_size": 3.5, "rsi_14_at_CME_REOPEN": 45.0}
         assert f.matches_row(row, "CME_REOPEN") is True
 
     def test_to_json_roundtrip(self):

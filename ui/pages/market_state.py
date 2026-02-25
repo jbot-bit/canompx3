@@ -51,8 +51,8 @@ def _load_and_display(selected_date: date, orb_minutes: int):
     with col1:
         st.metric("Bar Count (1m)", int(features.get("bar_count_1m", 0)))
     with col2:
-        rsi = features.get("rsi_14_at_0900")
-        st.metric("RSI-14 at 0900", f"{rsi:.1f}" if rsi is not None else "N/A")
+        rsi = features.get("rsi_14_at_CME_REOPEN")
+        st.metric("RSI-14 at CME_REOPEN", f"{rsi:.1f}" if rsi is not None else "N/A")
     with col3:
         st.metric("ORB Minutes", orb_minutes)
 

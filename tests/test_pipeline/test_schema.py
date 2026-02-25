@@ -131,7 +131,7 @@ class TestInitDb:
         for col in ['session_asia_high', 'session_asia_low',
                      'session_london_high', 'session_london_low',
                      'session_ny_high', 'session_ny_low',
-                     'rsi_14_at_0900', 'atr_20']:
+                     'rsi_14_at_CME_REOPEN', 'atr_20']:
             assert col in cols, f"Missing session column: {col}"
 
     def test_daily_features_has_garch_columns(self, tmp_path):

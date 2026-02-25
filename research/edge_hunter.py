@@ -191,17 +191,17 @@ for inst in INSTRUMENTS:
                 # 3. RSI at 0900 (known before all sessions)
                 rsi_rows = test_bucket_split(
                     "RSI14_0900", inst, sess, em, rr, cb, size_min,
-                    """CASE WHEN d.rsi_14_at_0900 < 30 THEN 'oversold'
-                        WHEN d.rsi_14_at_0900 < 50 THEN 'bearish'
-                        WHEN d.rsi_14_at_0900 < 70 THEN 'bullish'
+                    """CASE WHEN d.rsi_14_at_CME_REOPEN < 30 THEN 'oversold'
+                        WHEN d.rsi_14_at_CME_REOPEN < 50 THEN 'bearish'
+                        WHEN d.rsi_14_at_CME_REOPEN < 70 THEN 'bullish'
                         ELSE 'overbought' END""",
-                    "AND d.rsi_14_at_0900 IS NOT NULL")
+                    "AND d.rsi_14_at_CME_REOPEN IS NOT NULL")
                 if rsi_rows:
                     # Test extreme vs middle
                     extreme = get_pnl_array(inst, sess, em, rr, cb, size_min,
-                                            "AND (d.rsi_14_at_0900 < 30 OR d.rsi_14_at_0900 >= 70) AND d.rsi_14_at_0900 IS NOT NULL")
+                                            "AND (d.rsi_14_at_CME_REOPEN < 30 OR d.rsi_14_at_CME_REOPEN >= 70) AND d.rsi_14_at_CME_REOPEN IS NOT NULL")
                     middle = get_pnl_array(inst, sess, em, rr, cb, size_min,
-                                           "AND d.rsi_14_at_0900 >= 30 AND d.rsi_14_at_0900 < 70 AND d.rsi_14_at_0900 IS NOT NULL")
+                                           "AND d.rsi_14_at_CME_REOPEN >= 30 AND d.rsi_14_at_CME_REOPEN < 70 AND d.rsi_14_at_CME_REOPEN IS NOT NULL")
                     if len(extreme) >= 20 and len(middle) >= 20:
                         t, p = stats.ttest_ind(middle, extreme, equal_var=False)
                         results.append({

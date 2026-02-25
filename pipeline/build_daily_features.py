@@ -593,12 +593,12 @@ def compute_garch_forecast(daily_closes: list[float], min_obs: int = 252) -> flo
 # MODULE 5: RSI (Wilder's 14-period on 5m closes)
 # =============================================================================
 
-def compute_rsi_at_0900(con: duckdb.DuckDBPyConnection, symbol: str,
-                         trading_day: date,
-                         bars_5m_ts: np.ndarray | None = None,
-                         bars_5m_closes: np.ndarray | None = None) -> float | None:
+def compute_rsi_at_cme_reopen(con: duckdb.DuckDBPyConnection, symbol: str,
+                               trading_day: date,
+                               bars_5m_ts: np.ndarray | None = None,
+                               bars_5m_closes: np.ndarray | None = None) -> float | None:
     """
-    Compute RSI-14 (Wilder's smoothing) on 5m closes, evaluated at 09:00 Brisbane.
+    Compute RSI-14 (Wilder's smoothing) on 5m closes, evaluated at CME_REOPEN (09:00 Brisbane).
 
     We need at least 14 prior 5m bars to compute RSI.
     We take the most recent 200 5m bars ending at or before 09:00 Brisbane (23:00 UTC)
@@ -886,7 +886,7 @@ def build_features_for_day(con: duckdb.DuckDBPyConnection, symbol: str,
     row.update(overnight_stats)
 
     # Module 5: RSI at 0900
-    row["rsi_14_at_0900"] = compute_rsi_at_0900(
+    row["rsi_14_at_CME_REOPEN"] = compute_rsi_at_cme_reopen(
         con, symbol, trading_day,
         bars_5m_ts=bars_5m_ts, bars_5m_closes=bars_5m_closes,
     )

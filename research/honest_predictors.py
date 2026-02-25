@@ -130,11 +130,11 @@ run_test("ATR20 / 1100_ORB ratio -> 1100 outcome",
 
 # 8. RSI at 0900
 run_test("RSI14 at 0900 -> 1100 outcome",
-         """CASE WHEN d.rsi_14_at_0900 < 30 THEN 'a_oversold(<30)'
-            WHEN d.rsi_14_at_0900 < 50 THEN 'b_bearish(30-50)'
-            WHEN d.rsi_14_at_0900 < 70 THEN 'c_bullish(50-70)'
+         """CASE WHEN d.rsi_14_at_CME_REOPEN < 30 THEN 'a_oversold(<30)'
+            WHEN d.rsi_14_at_CME_REOPEN < 50 THEN 'b_bearish(30-50)'
+            WHEN d.rsi_14_at_CME_REOPEN < 70 THEN 'c_bullish(50-70)'
             ELSE 'd_overbought(70+)' END""",
-         "AND d.rsi_14_at_0900 IS NOT NULL")
+         "AND d.rsi_14_at_CME_REOPEN IS NOT NULL")
 
 # 9. Gap open
 run_test("Gap open -> 1100 outcome",

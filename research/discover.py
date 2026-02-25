@@ -230,7 +230,7 @@ def scan_session(con, instrument, session, entry_model='E1', rr=2.0, cb=2,
         })
 
     # -- 5. RSI regime --
-    for rsi_col in ['rsi_14_at_0900']:
+    for rsi_col in ['rsi_14_at_CME_REOPEN']:
         extreme = get_pnl_array(con, instrument, session, entry_model, rr, cb, size_min,
                                 f"AND (d.{rsi_col} < 30 OR d.{rsi_col} >= 70) AND d.{rsi_col} IS NOT NULL")
         middle = get_pnl_array(con, instrument, session, entry_model, rr, cb, size_min,

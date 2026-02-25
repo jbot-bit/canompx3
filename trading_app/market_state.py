@@ -136,7 +136,7 @@ class MarketState:
             orb_select = ", ".join(orb_cols)
 
             row = con.execute(f"""
-                SELECT rsi_14_at_0900,
+                SELECT rsi_14_at_CME_REOPEN,
                        session_asia_high, session_asia_low,
                        session_london_high, session_london_low,
                        session_ny_high, session_ny_low,

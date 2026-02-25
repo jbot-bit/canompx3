@@ -161,7 +161,7 @@ CREATE TABLE IF NOT EXISTS daily_features (
     session_ny_low      DOUBLE,
 
     -- RSI (Wilder's 14-period on 5m closes, computed at CME_REOPEN time)
-    rsi_14_at_0900    DOUBLE,  -- column name historical; value is at CME_REOPEN
+    rsi_14_at_CME_REOPEN  DOUBLE,
 
     -- Daily OHLC (from all 1m bars in the trading day)
     daily_open        DOUBLE,

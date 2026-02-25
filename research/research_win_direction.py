@@ -9,7 +9,7 @@ If yes → one-sided E0 limit order → potentially highest single-trade expecta
 PREDICTORS TESTED (all confirmed zero look-ahead — known before ORB forms):
   1. prev_break_dir     — yesterday's break direction (continuation vs reversal?)
   2. gap_open_points    — overnight gap direction
-  3. rsi_14_at_0900    — RSI state at session open (overbought/oversold bias?)
+  3. rsi_14_at_CME_REOPEN    — RSI state at session open (overbought/oversold bias?)
   4. atr_velocity       — today ATR / yesterday ATR (expanding = momentum?)
   5. asia_position      — close of Asia session relative to its midpoint
   6. london_position    — London session high/low midpoint vs Asia midpoint
@@ -54,7 +54,7 @@ def load_data(con) -> pd.DataFrame:
                 d.orb_0900_break_dir                          AS break_dir,
                 d.orb_0900_size                               AS orb_size,
                 d.gap_open_points,
-                d.rsi_14_at_0900,
+                d.rsi_14_at_CME_REOPEN,
                 d.atr_20,
                 d.session_asia_high,
                 d.session_asia_low,
@@ -142,8 +142,8 @@ def main():
     # 2. gap_open_points (continuous)
     tests.append(test_continuous(df["gap_open_points"], df["is_long"], "gap_open_points"))
 
-    # 3. rsi_14_at_0900 (continuous)
-    tests.append(test_continuous(df["rsi_14_at_0900"], df["is_long"], "rsi_14_at_0900"))
+    # 3. rsi_14_at_CME_REOPEN (continuous)
+    tests.append(test_continuous(df["rsi_14_at_CME_REOPEN"], df["is_long"], "rsi_14_at_CME_REOPEN"))
 
     # 4. atr_velocity (continuous)
     tests.append(test_continuous(df["atr_velocity"], df["is_long"], "atr_velocity"))
