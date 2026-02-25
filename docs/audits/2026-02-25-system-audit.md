@@ -9,7 +9,7 @@
 
 | Check | Result |
 |-------|--------|
-| Drift detection (31 checks) | ALL PASSED |
+| Drift detection (34 checks) | ALL PASSED |
 | Test suite (1801 items) | 1800 passed, 1 skipped |
 | Migration status (old session names) | CLEAN — 0 old names in DB |
 | Schema integrity (old columns) | CLEAN — 0 old columns in daily_features |
@@ -174,7 +174,7 @@ F-12 (drift check #32) ───────────────── stand
 - **Daily features JOIN rules:** 3-column join (trading_day, symbol, orb_minutes) documented in `.claude/rules/daily-features-joins.md` and enforced in MCP tools.
 - **Strategy pipeline:** 7-phase validation, FDR correction, regime waivers. 618 active validated strategies across 4 instruments.
 - **MCP server:** 4 read-only tools, template-only queries, row-capped at 5000, parameter-allowlisted.
-- **Drift detection:** 31 checks all passing (now 32 with F-12 addition).
+- **Drift detection:** 34 checks all passing (F-12 sync guard + F-30 enhanced E0 CB + F-33 stale session name blocker + F-34 sql_adapter validation sync).
 - **Test suite:** 1800 tests passing, 1 skipped.
 - **Execution engine:** T80 early exit wired, calendar filters, ATR velocity overlay functional.
 - **E0 CB1-only guard:** Drift check #30 prevents look-ahead CB2+ regression.

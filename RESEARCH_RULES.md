@@ -175,8 +175,9 @@ All sessions are now event-based with per-day time resolution from `pipeline/dst
 |-----------|-----------|-------------|--------------------------|
 | MGC | $1.00/tick | $8.40 | 16.8% |
 | MES | $1.25/tick | $3.74 | 14.96% |
-| MNQ | $2.00/point | $2.74 | 5.5% |
-| MCL | $1.00/tick | ~$3.00 | varies |
+| MNQ | $0.50/tick | $2.74 | 5.5% |
+| M2K | $0.50/tick | $3.24 | 12.96% |
+| MCL | $1.00/tick | $5.24 | varies |
 
 **Friction is why small ORBs lose.** A 2pt MGC ORB has 42% of its risk eaten by friction before the trade starts. This is the STRUCTURAL reason ORB size filtering works — it's not a statistical artifact, it's arithmetic.
 

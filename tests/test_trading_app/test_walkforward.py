@@ -47,8 +47,8 @@ def _create_tables(con):
             symbol VARCHAR,
             orb_minutes INTEGER,
             trading_day DATE,
-            orb_0900_size DOUBLE,
-            orb_0900_break_dir VARCHAR,
+            orb_CME_REOPEN_size DOUBLE,
+            orb_CME_REOPEN_break_dir VARCHAR,
             day_of_week INTEGER
         )
     """)

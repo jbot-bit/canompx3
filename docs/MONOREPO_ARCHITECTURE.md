@@ -277,7 +277,7 @@ cp C:/db/gold.db gold.db
 
 **Drift Detection:**
 - Tool: `pipeline/check_drift.py`
-- Checks: 28+ static analysis rules (hardcoded symbols, import cycles, schema sync, timezone hygiene, etc.)
+- Checks: 34 static analysis rules (hardcoded symbols, import cycles, schema sync, timezone hygiene, stale session names, E0 CB guard, etc.)
 - Run: `python pipeline/check_drift.py`
 
 **Documentation:**

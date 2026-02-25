@@ -10,14 +10,15 @@ Usage:
 """
 
 import json
+import os
 import sys
 import time
 import urllib.request
 import urllib.parse
 from pathlib import Path
 
-BOT_TOKEN = "8572496011:AAFFDahKzbGbROndyPSFbH52VjoyCcmPWT0"
-CHAT_ID = "6812728770"
+BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 HEARTBEAT_PATHS = [
     Path(r"C:\Users\joshd\canompx3\outcome_builder.heartbeat"),

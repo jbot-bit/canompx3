@@ -20,40 +20,40 @@ class TestVolumeFilterMatchesRow:
         )
 
     def test_above_threshold_eligible(self):
-        assert self._vf().matches_row({"rel_vol_0900": 1.5}, "0900") is True
+        assert self._vf().matches_row({"rel_vol_CME_REOPEN": 1.5}, "CME_REOPEN") is True
 
     def test_below_threshold_ineligible(self):
-        assert self._vf().matches_row({"rel_vol_0900": 0.8}, "0900") is False
+        assert self._vf().matches_row({"rel_vol_CME_REOPEN": 0.8}, "CME_REOPEN") is False
 
     def test_exactly_at_threshold(self):
-        assert self._vf().matches_row({"rel_vol_0900": 1.2}, "0900") is True
+        assert self._vf().matches_row({"rel_vol_CME_REOPEN": 1.2}, "CME_REOPEN") is True
 
     def test_missing_rel_vol_fail_closed(self):
-        assert self._vf().matches_row({}, "0900") is False
+        assert self._vf().matches_row({}, "CME_REOPEN") is False
 
     def test_none_rel_vol_fail_closed(self):
-        assert self._vf().matches_row({"rel_vol_0900": None}, "0900") is False
+        assert self._vf().matches_row({"rel_vol_CME_REOPEN": None}, "CME_REOPEN") is False
 
     def test_different_orb_labels(self):
         vf = self._vf()
-        row = {"rel_vol_0900": 2.0, "rel_vol_1800": 0.5}
-        assert vf.matches_row(row, "0900") is True
-        assert vf.matches_row(row, "1800") is False
+        row = {"rel_vol_CME_REOPEN": 2.0, "rel_vol_LONDON_METALS": 0.5}
+        assert vf.matches_row(row, "CME_REOPEN") is True
+        assert vf.matches_row(row, "LONDON_METALS") is False
 
 
 class TestOrbSizeFilterMatchesRow:
     def test_g4_above_threshold(self):
         filt = ALL_FILTERS["ORB_G4"]
-        assert filt.matches_row({"orb_0900_size": 5.0}, "0900") is True
+        assert filt.matches_row({"orb_CME_REOPEN_size": 5.0}, "CME_REOPEN") is True
 
     def test_g4_below_threshold(self):
         filt = ALL_FILTERS["ORB_G4"]
-        assert filt.matches_row({"orb_0900_size": 3.0}, "0900") is False
+        assert filt.matches_row({"orb_CME_REOPEN_size": 3.0}, "CME_REOPEN") is False
 
     def test_no_filter_always_true(self):
         filt = ALL_FILTERS["NO_FILTER"]
-        assert filt.matches_row({}, "0900") is True
-        assert filt.matches_row({"orb_0900_size": None}, "0900") is True
+        assert filt.matches_row({}, "CME_REOPEN") is True
+        assert filt.matches_row({"orb_CME_REOPEN_size": None}, "CME_REOPEN") is True
 
 
 class TestOverlayEligibilityLogic:

@@ -3,8 +3,8 @@
 Empirical findings from 1,460 trading days (2021-02-05 to 2026-02-04).
 Database now contains 2,922 trading days (2016-02-01 to 2026-02-04) but
 outcomes/strategies below are computed on the 2021-2026 slice.
-689,310 outcomes computed with realistic entry models (E1/E2/E3).
-312 strategies validated (post-cost, stress-tested, yearly robust).
+~3M outcomes computed across 7 instruments with entry models (E0/E1/E3).
+618 strategies validated active (post-cost, FDR-corrected, yearly robust).
 
 **IMPORTANT**: These findings supersede the earlier 252-strategy scan which had
 two bugs: entry at ORB level (unreachable price) and missing friction on wins.

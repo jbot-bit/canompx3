@@ -921,6 +921,7 @@ def fitness_weighted_portfolio(portfolio: Portfolio, fitness_report) -> Portfoli
         max_concurrent_positions=portfolio.max_concurrent_positions,
         max_daily_loss_r=portfolio.max_daily_loss_r,
         max_per_orb_positions=portfolio.max_per_orb_positions,
+        corr_lookup=portfolio.corr_lookup,
     )
 
 # =========================================================================

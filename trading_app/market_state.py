@@ -163,7 +163,7 @@ class MarketState:
                 if low_val is not None:
                     state.session_lows[name] = low_val
 
-            # ORB snapshots (9 ORBs, 6 columns each, starting at index 7)
+            # ORB snapshots (10 ORBs, 6 columns each, starting at index 7)
             for j, label in enumerate(ORB_LABELS):
                 base = 7 + j * 6
                 orb_high = row[base]
