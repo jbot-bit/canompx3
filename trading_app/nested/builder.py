@@ -284,7 +284,7 @@ def build_nested_outcomes(
                     entry_cache = {}
                     for cb in CONFIRM_BARS_OPTIONS:
                         for em in ENTRY_MODELS:
-                            if em == "E3" and cb > 1:
+                            if em in ("E0", "E3") and cb > 1:
                                 continue
                             signal = resolve_entry(
                                 bars_5m_df, confirm_cache[cb], em, td_end,
@@ -309,7 +309,7 @@ def build_nested_outcomes(
                     # sharing the same post-entry bars
                     for cb in CONFIRM_BARS_OPTIONS:
                         for em in ENTRY_MODELS:
-                            if em == "E3" and cb > 1:
+                            if em in ("E0", "E3") and cb > 1:
                                 continue
                             signal = entry_cache[(cb, em)]
 
