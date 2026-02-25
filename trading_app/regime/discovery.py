@@ -102,7 +102,7 @@ def run_regime_discovery(
         # ---- Grid iteration (session-aware: only session-appropriate filters per ORB) ----
         total_strategies = 0
         total_combos = sum(
-            len(sf) * len(RR_TARGETS) * (len(CONFIRM_BARS_OPTIONS) * 2 + 1)
+            len(sf) * len(RR_TARGETS) * (len(CONFIRM_BARS_OPTIONS) + 2)
             for sf in session_filters.values()
         )
         combo_idx = 0
@@ -115,7 +115,7 @@ def run_regime_discovery(
                 for em in ENTRY_MODELS:
                     for rr_target in RR_TARGETS:
                         for cb in CONFIRM_BARS_OPTIONS:
-                            if em == "E3" and cb > 1:
+                            if em in ("E0", "E3") and cb > 1:
                                 continue
                             combo_idx += 1
 

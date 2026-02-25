@@ -241,8 +241,7 @@ def _compute_outcomes_all_rr(
     # making it invisible as a strategy parameter and preventing comparison.
     # Break speed filtering is now handled properly via BreakSpeedFilter in config.py
     # during strategy discovery.
-    # IMPORTANT: orb_outcomes must be REBUILT for session TOKYO_OPEN after this change
-    # to include previously-excluded slow breaks.
+    # NOTE: Slow breaks are now included in outcomes (rebuild completed Feb 2026).
 
     entry_price = signal.entry_price
     stop_price = signal.stop_price

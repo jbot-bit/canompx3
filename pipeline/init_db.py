@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Initialize the DuckDB database schema for MGC data pipeline.
+Initialize the DuckDB database schema for multi-instrument data pipeline.
 
 Creates tables:
 - bars_1m: Primary 1-minute OHLCV data (raw data from Databento)
 - bars_5m: Derived 5-minute OHLCV data (aggregated from bars_1m)
-- daily_features: One row per trading day per instrument (ORBs, session stats, RSI)
+- daily_features: One row per (trading_day, symbol, orb_minutes) (ORBs, session stats, RSI)
 
 Usage:
     python pipeline/init_db.py [--force]
@@ -160,8 +160,8 @@ CREATE TABLE IF NOT EXISTS daily_features (
     session_ny_high     DOUBLE,
     session_ny_low      DOUBLE,
 
-    -- RSI (Wilder's 14-period on 5m closes, computed at first ORB)
-    rsi_14_at_0900    DOUBLE,
+    -- RSI (Wilder's 14-period on 5m closes, computed at CME_REOPEN time)
+    rsi_14_at_0900    DOUBLE,  -- column name historical; value is at CME_REOPEN
 
     -- Daily OHLC (from all 1m bars in the trading day)
     daily_open        DOUBLE,
@@ -246,7 +246,7 @@ CREATE TABLE IF NOT EXISTS daily_features (
     garch_forecast_vol  DOUBLE,
     garch_atr_ratio     DOUBLE,
 
-    -- ORB columns (7 fixed + 6 dynamic = 13 sessions x 9 columns = 117)
+    -- ORB columns (10 dynamic sessions x 14 columns = 140)
 {orb_block}
 
     PRIMARY KEY (symbol, trading_day, orb_minutes)
@@ -326,7 +326,7 @@ def init_db(db_path: Path, force: bool = False):
                 pass  # column already exists
 
         # Migration: add break_delay_min + break_bar_continues (were in DDL but never migrated)
-        # 13 sessions × 2 columns = 26 columns
+        # 10 sessions × 2 columns = 20 columns
         for label in ORB_LABELS:
             for col, typedef in [
                 (f"orb_{label}_break_delay_min",   "DOUBLE"),
@@ -339,7 +339,7 @@ def init_db(db_path: Path, force: bool = False):
                     pass  # column already exists
 
         # Migration: add per-session volume + relative volume columns (Feb 2026)
-        # 13 sessions × 3 columns = 39 new columns
+        # 10 sessions × 3 columns = 30 new columns
         for label in ORB_LABELS:
             for col, typedef in [
                 (f"orb_{label}_volume",           "BIGINT"),
@@ -436,8 +436,8 @@ def init_db(db_path: Path, force: bool = False):
     logger.info("INITIALIZATION COMPLETE")
     logger.info("=" * 60)
     logger.info("Next steps:")
-    logger.info("  1. Run ingestion: python OHLCV_MGC_FULL/ingest_dbn_mgc.py")
-    logger.info("  2. Check database: python pipeline/check_db.py")
+    logger.info("  1. Run ingestion: python pipeline/ingest_dbn.py --instrument MGC")
+    logger.info("  2. Check database: python pipeline/health_check.py")
 
 def main():
     parser = argparse.ArgumentParser(description="Initialize DuckDB schema")

@@ -358,7 +358,7 @@ _BREAK_BAR_CONTINUES = BreakBarContinuesFilter(
     require_continues=True,
 )
 
-# Direction filters (H5: 1000 session shorts are noise; long-only doubles avgR)
+# Direction filters (H5: TOKYO_OPEN session shorts are noise; long-only doubles avgR)
 DIR_LONG = DirectionFilter(
     filter_type="DIR_LONG", description="Long breakouts only", direction="long"
 )
@@ -373,7 +373,7 @@ NO_DBL_BREAK = DoubleBreakFilter(
     exclude=True,
 )
 
-# MES 1000 band filters (H2: MES 1000 ORBs >= 12pt are toxic)
+# MES TOKYO_OPEN band filters (H2: MES TOKYO_OPEN ORBs >= 12pt are toxic)
 _MES_1000_BAND_FILTERS = {
     "ORB_G4_L12": OrbSizeFilter(
         filter_type="ORB_G4_L12", description="ORB size >= 4 and < 12 points",
@@ -503,7 +503,7 @@ ALL_FILTERS: dict[str, StrategyFilter] = {
     # Direction filters (session-specific but must be registered for portfolio lookups)
     "DIR_LONG": DIR_LONG,
     "DIR_SHORT": DIR_SHORT,
-    # MES 1000 band filters (H2: ORBs >= 12pt are toxic)
+    # MES TOKYO_OPEN band filters (H2: ORBs >= 12pt are toxic)
     **_MES_1000_BAND_FILTERS,
 }
 
@@ -688,10 +688,10 @@ SESSION_EXIT_MODE: dict[str, str] = {
 }
 
 # IB (Initial Balance) = first 120 minutes from 09:00 Brisbane (23:00 UTC).
-# Used by 1000 session for IB-conditional exits.
+# Used by TOKYO_OPEN session for IB-conditional exits.
 IB_DURATION_MINUTES = 120
 
-# Hold duration when IB breaks aligned with trade direction (1000 session).
+# Hold duration when IB breaks aligned with trade direction (TOKYO_OPEN session).
 # Trade holds with stop only (no target) for this many hours after entry.
 HOLD_HOURS = 7
 

@@ -173,7 +173,7 @@ class TestNewParameterValidation:
 
     def test_invalid_confirm_bars_raises(self):
         with pytest.raises(ValueError, match="Invalid confirm_bars"):
-            _validate_confirm_bars(5)
+            _validate_confirm_bars(6)
 
 
 class TestOrbSizeFilterSQL:

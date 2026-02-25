@@ -65,7 +65,7 @@ Example: 10pt ORB, RR2.0 = 20pt target, 10pt stop.
 | MaxDD | Maximum drawdown in R. Worst peak-to-trough. |
 | MGC | Micro Gold futures. $10/point, $8.40 RT friction. |
 | MNQ | Micro Nasdaq futures. $2/point, $2.74 RT friction. |
-| MES | Micro S&P 500 futures. $1.25/point, $2.10 RT friction. |
+| MES | Micro S&P 500 futures. $5/point, $3.74 RT friction. |
 | MCL | Micro Crude Oil futures. NO EDGE (0 validated). |
 | M6E | Micro EUR/USD futures. 12,500 EUR contract. $12,500/point. $3.74 RT friction (~3 pips). Quarterly cycle (H/M/U/Z). Tick: 0.00005 = $0.625/tick. Size filters in pips (M6E_G4/G6/G8). **ORB breakout NO-GO** (0/2064 validated, Feb 2026). Data in DB for other research. |
 | Edge family | Group of strategies with identical trade days. 1 head per family. |

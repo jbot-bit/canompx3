@@ -4,11 +4,11 @@ Build daily_features from bars_1m and bars_5m.
 
 Staged build (each stage is gated):
   1. Trading day assignment (09:00 Brisbane boundary)
-  2. ORB ranges (6 ORBs, configurable duration)
+  2. ORB ranges (10 dynamic sessions, configurable duration)
   3. Break detection (first 1m close outside ORB)
-  4. Session stats (fixed-window high-low for session range features)
+  4. Session stats (dynamic-window high-low for session range features)
   5. RSI (Wilder's 14-period on 5m closes)
-  6. Outcome at RR=1.0
+  6. Overnight/pre-session stats, market profile, ATR velocity, compression, GARCH, rel volume
 
 Idempotent: DELETE existing daily_features rows for the date range, then INSERT.
 
@@ -184,9 +184,8 @@ def _orb_utc_window(trading_day: date, orb_label: str,
 
     The ORB starts at the local Brisbane time and lasts orb_minutes.
 
-    For fixed sessions (CME_REOPEN, TOKYO_OPEN, etc.), the Brisbane hour is constant.
-    For dynamic sessions (NYSE_OPEN, US_DATA_830, LONDON_METALS),
-    the Brisbane hour is resolved per-day based on DST via pipeline/dst.py.
+    All sessions are dynamic — the Brisbane hour is resolved per-day
+    based on DST via pipeline/dst.py DYNAMIC_ORB_RESOLVERS.
 
     Example: CME_REOPEN ORB with 5 min duration on trading_day 2024-01-05
       local start = 2024-01-05 09:00 Brisbane
@@ -194,7 +193,7 @@ def _orb_utc_window(trading_day: date, orb_label: str,
       UTC start   = 2024-01-04 23:00 UTC
       UTC end     = 2024-01-04 23:05 UTC
 
-    Special case: NYSE_OPEN (0030) ORB belongs to the SAME trading day but is
+    Special case: NYSE_OPEN ORB belongs to the SAME trading day but is
     at 00:30 the NEXT calendar day in Brisbane.
       trading_day 2024-01-05, NYSE_OPEN ORB:
       local start = 2024-01-06 00:30 Brisbane (next calendar day)
@@ -274,7 +273,7 @@ def _break_detection_window(trading_day: date, orb_label: str,
 
     Break groups (defined in pipeline/dst.py SESSION_CATALOG) prevent adding
     a nearby session from silently shrinking an existing session's break
-    window. Sessions in the same group (e.g., TOKYO_OPEN/SINGAPORE_OPEN/1130 in "asia")
+    window. Sessions in the same group (e.g., TOKYO_OPEN/SINGAPORE_OPEN in "asia")
     all extend their break windows to the same boundary (e.g., LONDON_METALS "london").
 
     With dynamic sessions, ORB ordering is determined by actual UTC start
@@ -1191,7 +1190,7 @@ def build_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
     #
     # Only defined on days where a break occurred (break_bar_volume is not None).
     # Compared against the same session's own prior breaks — controls for the
-    # fact that 0900 gold is structurally thinner than 2300 gold without needing
+    # fact that CME_REOPEN gold is structurally thinner than US_DATA_830 gold without needing
     # same-minute cross-day lookups.
     #
     # Minimum lookback: 5 break-days (returns None during warm-up).

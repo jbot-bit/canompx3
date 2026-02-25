@@ -1228,6 +1228,7 @@ def check_e0_cb1_only() -> list[str]:
     E0 (limit-on-confirm) fills on the confirm bar itself. For CB2+, the confirm
     bar has already closed by the time you know it's the confirm bar — filling on
     it is look-ahead. outcome_builder.py must restrict E0 to cb_options=[1].
+    Discovery scripts must skip E0+CB2+ in the grid iteration.
     """
     violations = []
     ob_file = TRADING_APP_DIR / "outcome_builder.py"
@@ -1244,6 +1245,31 @@ def check_e0_cb1_only() -> list[str]:
             violations.append(
                 "  outcome_builder.py: E0 must be restricted to cb_options=[1] "
                 "(same as E3). E0+CB2+ is look-ahead bias."
+            )
+
+    # Also verify discovery grid scripts skip E0+CB2+
+    discovery_files = [
+        TRADING_APP_DIR / "strategy_discovery.py",
+        TRADING_APP_DIR / "nested" / "discovery.py",
+        TRADING_APP_DIR / "regime" / "discovery.py",
+    ]
+    e0_skip_patterns = [
+        'em in ("E0", "E3") and cb > 1',
+        'em in {"E0", "E3"} and cb > 1',
+        'em in ("E3", "E0") and cb > 1',
+        'em in {"E3", "E0"} and cb > 1',
+    ]
+    for f in discovery_files:
+        if not f.exists():
+            continue
+        fc = f.read_text(encoding="utf-8")
+        # Only check files that iterate confirm_bars (have a grid loop)
+        if "CONFIRM_BARS" not in fc:
+            continue
+        if not any(p in fc for p in e0_skip_patterns):
+            violations.append(
+                f"  {f.relative_to(PROJECT_ROOT)}: Grid iteration must skip E0+CB2+ "
+                "(em in ('E0', 'E3') and cb > 1: continue)"
             )
 
     return violations
@@ -1323,6 +1349,91 @@ def check_orb_labels_session_catalog_sync() -> list[str]:
         violations.append(
             f"  SESSION_CATALOG has dynamic sessions not in ORB_LABELS: {sorted(in_catalog_only)}"
         )
+
+    return violations
+
+
+def check_stale_session_names_in_code() -> list[str]:
+    """Check #33: No old fixed-clock session names in Python source code.
+
+    Old names (0900, 1000, 1100, 1130, 1800, 2300, 0030) were replaced with
+    event-based names (CME_REOPEN, TOKYO_OPEN, etc.) in Feb 2026. Stale
+    references in code (not comments) could cause silent bugs.
+    Checks pipeline/ and trading_app/ Python files.
+    """
+    violations = []
+    # Patterns that indicate old session names used as identifiers/strings
+    # (not in comments — we check quoted strings and f-strings)
+    old_names_pattern = re.compile(
+        r"""['"](?:0900|1000|1100|1130|1800|2300|0030)['"]"""
+    )
+    # Directories to check
+    dirs = [PIPELINE_DIR, TRADING_APP_DIR]
+    # Files to skip (historical references are OK in these)
+    skip_files = {
+        "check_drift.py",  # This file (contains the pattern itself)
+    }
+    for d in dirs:
+        for py_file in sorted(d.rglob("*.py")):
+            if py_file.name in skip_files:
+                continue
+            content = py_file.read_text(encoding="utf-8")
+            for i, line in enumerate(content.splitlines(), 1):
+                stripped = line.lstrip()
+                # Skip comment-only lines
+                if stripped.startswith("#"):
+                    continue
+                if old_names_pattern.search(line):
+                    violations.append(
+                        f"  {py_file.relative_to(PROJECT_ROOT)}:{i}: "
+                        f"stale session name in code: {line.strip()[:80]}"
+                    )
+    return violations
+
+
+def check_sql_adapter_validation_sync() -> list[str]:
+    """Check #34: sql_adapter.py VALID_* sets must match outcome_builder.py grids.
+
+    VALID_RR_TARGETS and VALID_CONFIRM_BARS in sql_adapter.py gate which
+    queries the AI CLI accepts. If outcome_builder.py adds new grid values,
+    sql_adapter.py must be updated or legitimate queries get rejected.
+    """
+    violations = []
+    adapter_file = TRADING_APP_DIR / "ai" / "sql_adapter.py"
+    builder_file = TRADING_APP_DIR / "outcome_builder.py"
+    if not adapter_file.exists() or not builder_file.exists():
+        return violations
+
+    adapter_content = adapter_file.read_text(encoding="utf-8")
+    builder_content = builder_file.read_text(encoding="utf-8")
+
+    # Extract RR_TARGETS from outcome_builder.py
+    rr_match = re.search(r'RR_TARGETS\s*=\s*\[([\d.,\s]+)\]', builder_content)
+    cb_match = re.search(r'CONFIRM_BARS_OPTIONS\s*=\s*\[([\d,\s]+)\]', builder_content)
+
+    if rr_match:
+        builder_rr = {float(x.strip()) for x in rr_match.group(1).split(",") if x.strip()}
+        adapter_rr_match = re.search(r'VALID_RR_TARGETS\s*=\s*\{([^}]+)\}', adapter_content)
+        if adapter_rr_match:
+            adapter_rr = {float(x.strip()) for x in adapter_rr_match.group(1).split(",") if x.strip()}
+            missing = builder_rr - adapter_rr
+            if missing:
+                violations.append(
+                    f"  sql_adapter.py VALID_RR_TARGETS missing: {sorted(missing)} "
+                    f"(present in outcome_builder.py RR_TARGETS)"
+                )
+
+    if cb_match:
+        builder_cb = {int(x.strip()) for x in cb_match.group(1).split(",") if x.strip()}
+        adapter_cb_match = re.search(r'VALID_CONFIRM_BARS\s*=\s*\{([^}]+)\}', adapter_content)
+        if adapter_cb_match:
+            adapter_cb = {int(x.strip()) for x in adapter_cb_match.group(1).split(",") if x.strip()}
+            missing = builder_cb - adapter_cb
+            if missing:
+                violations.append(
+                    f"  sql_adapter.py VALID_CONFIRM_BARS missing: {sorted(missing)} "
+                    f"(present in outcome_builder.py CONFIRM_BARS_OPTIONS)"
+                )
 
     return violations
 
@@ -1710,6 +1821,30 @@ def main():
     # Check 32: ORB_LABELS vs SESSION_CATALOG sync
     print("Check 32: ORB_LABELS matches SESSION_CATALOG dynamic entries...")
     v = check_orb_labels_session_catalog_sync()
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 33: Stale session names in code
+    print("Check 33: No old fixed-clock session names in Python source...")
+    v = check_stale_session_names_in_code()
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 34: sql_adapter validation set sync
+    print("Check 34: sql_adapter VALID_* sets match outcome_builder grids...")
+    v = check_sql_adapter_validation_sync()
     if v:
         print("  FAILED:")
         for line in v:

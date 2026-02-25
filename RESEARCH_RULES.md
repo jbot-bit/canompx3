@@ -174,7 +174,7 @@ All sessions are now event-based with per-day time resolution from `pipeline/dst
 | Instrument | Tick Value | RT Friction | Friction as % of 5pt ORB |
 |-----------|-----------|-------------|--------------------------|
 | MGC | $1.00/tick | $8.40 | 16.8% |
-| MES | $1.25/point | $2.10 | 8.4% |
+| MES | $1.25/tick | $3.74 | 14.96% |
 | MNQ | $2.00/point | $2.74 | 5.5% |
 | MCL | $1.00/tick | ~$3.00 | varies |
 

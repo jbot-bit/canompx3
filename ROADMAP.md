@@ -110,7 +110,7 @@ Do not schedule active delivery work against SIL until explicitly re-opened.
 - 5 critical bugs fixed (C1-C5), 6 important fixes (I1-I4, I6-I7)
 - 97 new tests across 10 coverage gaps (T1-T10)
 - 3 new drift checks (17-19)
-- **1800 tests pass, 32 drift checks pass** (as of Feb 25 2026)
+- **1800 tests pass, 34 drift checks pass** (as of Feb 25 2026)
 - R1 (fill-bar granularity) logged as HIGH PRIORITY R&D task
 
 ### 7b. Independent Bars Coverage Audit — DONE
@@ -163,7 +163,7 @@ Hypothesis: wider ORB range (15/30m) + 5m entry bars reduces noise and improves 
 - New daily_features columns: `daily_open/high/low/close`, `gap_open_points`, 6x `orb_*_double_break`
 - Portfolio integration: `--include-rolling` CLI flag in portfolio.py
 - **Key finding**: Only 2 STABLE families (TOKYO_OPEN_E2_G2, TOKYO_OPEN_E1_G2); CME_REOPEN G3+ are TRANSITIONING; LONDON_METALS/US_DATA_830/SINGAPORE_OPEN/NYSE_OPEN AUTO-DEGRADED by double-break
-- 1800 tests pass, 32 drift checks pass (as of Feb 25 2026)
+- 1800 tests pass, 34 drift checks pass (as of Feb 25 2026)
 
 ---
 
@@ -176,7 +176,7 @@ Hypothesis: wider ORB range (15/30m) + 5m entry bars reduces noise and improves 
 - E2: skipped (entry at bar close, no post-fill action on that bar)
 - Ambiguous fill bar (both stop+target hit): conservative loss
 - 9 new tests in TestFillBarExits, 670 tests pass, 19/19 drift checks
-- **NOTE:** orb_outcomes (689K rows) needs full rebuild to apply new logic to stored data
+- **NOTE:** orb_outcomes rebuilt Feb 2026 with fill-bar logic applied. Current counts: ~3M rows across 7 instruments.
 - See `AUDIT_FINDINGS.md` for original finding
 
 ### 8b. Multi-Instrument Discovery Grid Update — DONE (Feb 2026)

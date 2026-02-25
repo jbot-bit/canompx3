@@ -543,8 +543,8 @@ def make_strategy_id(
 
     Components:
       instrument  - Trading instrument (MGC = Micro Gold Futures)
-      orb_label   - ORB session time in Brisbane local (0900, 1000, 1800, etc.)
-      entry_model - E1 (next bar open), E3 (limit retrace)
+      orb_label   - ORB session name (CME_REOPEN, TOKYO_OPEN, LONDON_METALS, etc.)
+      entry_model - E0 (limit at ORB edge), E1 (next bar open), E3 (limit retrace)
       RR          - Risk/Reward target (1.0 to 4.0)
       CB          - Confirm bars required (1 to 5)
       filter_type - ORB size filter (NO_FILTER, ORB_G4, ORB_L3, etc.)
@@ -837,8 +837,8 @@ def run_discovery(
         total_combos = 0
         for s in sessions:
             nf = len(get_filters_for_grid(instrument, s))
-            total_combos += nf * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS)  # E1
-            total_combos += nf * len(RR_TARGETS) * 1                          # E3
+            total_combos += nf * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS)  # E1 (all CBs)
+            total_combos += nf * len(RR_TARGETS) * 2                          # E0+E3 (CB1 only)
         combo_idx = 0
 
         for orb_label in sessions:
@@ -849,7 +849,7 @@ def run_discovery(
                 for em in ENTRY_MODELS:
                     for rr_target in RR_TARGETS:
                         for cb in CONFIRM_BARS_OPTIONS:
-                            if em == "E3" and cb > 1:
+                            if em in ("E0", "E3") and cb > 1:
                                 continue
                             combo_idx += 1
 

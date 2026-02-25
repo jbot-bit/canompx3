@@ -63,8 +63,8 @@ VALID_FILTER_PREFIXES = {"NO_FILTER", "ORB_G", "ORB_L", "VOL_"}
 # Valid instruments
 VALID_INSTRUMENTS = {"MGC", "MNQ", "MES", "M2K"}
 
-VALID_RR_TARGETS = {1.0, 1.5, 2.0, 2.5, 3.0}
-VALID_CONFIRM_BARS = {1, 2, 3}
+VALID_RR_TARGETS = {1.0, 1.5, 2.0, 2.5, 3.0, 4.0}
+VALID_CONFIRM_BARS = {1, 2, 3, 4, 5}
 
 def _validate_orb_label(label: str) -> str:
     """Validate and return ORB label."""
@@ -748,40 +748,13 @@ class SQLAdapter:
     def _execute_dst_split(self, params: dict) -> pd.DataFrame:
         """DST on vs off performance split.
 
-        Per CLAUDE.md: US DST for CME_REOPEN/NYSE_OPEN/US_DATA_830, UK DST for LONDON_METALS.
+        DEPRECATED: All sessions are now dynamic (DST-aware resolvers).
+        DST split analysis is no longer applicable since sessions self-adjust.
         """
-        if "orb_label" not in params:
-            raise ValueError("orb_label is required for dst_split")
-        orb_label = params["orb_label"]
-        dst_col = _DST_SESSION_MAP.get(orb_label)
-        if dst_col is None:
-            raise ValueError(
-                f"Session '{orb_label}' is not DST-sensitive. "
-                f"DST split applies to: {sorted(_DST_SESSION_MAP.keys())}"
-            )
-
-        sql, bind = self._build_outcomes_base(
-            params, extra_cols=f"d.{dst_col} AS dst_active"
+        raise ValueError(
+            "DST split is no longer applicable. All sessions are now dynamic "
+            "(DST-aware resolvers) and self-adjust per day. No fixed sessions remain."
         )
-
-        con = duckdb.connect(self.db_path, read_only=True)
-        try:
-            df = con.execute(sql, bind).fetchdf()
-        finally:
-            con.close()
-
-        if df.empty:
-            return pd.DataFrame(columns=["dst_regime", "N", "win_rate", "avg_pnl_r", "sharpe"])
-
-        rows = []
-        for val in sorted(df["dst_active"].unique()):
-            subset = df[df["dst_active"] == val]
-            stats = _compute_group_stats(subset)
-            stats["dst_regime"] = "on" if val else "off"
-            rows.append(stats)
-
-        result = pd.DataFrame(rows)
-        return result[["dst_regime", "N", "win_rate", "avg_pnl_r", "sharpe"]]
 
     def _execute_filter_compare(self, params: dict) -> pd.DataFrame:
         """Compare ORB size filter levels side-by-side.
@@ -904,7 +877,7 @@ class SQLAdapter:
             QueryTemplate.OUTCOMES_STATS: "Raw outcomes stats (N, win rate, ExpR, Sharpe, drawdown, MAE/MFE) for any slice",
             QueryTemplate.ENTRY_MODEL_COMPARE: "Side-by-side E0 vs E1 vs E3 comparison for same session",
             QueryTemplate.DOW_BREAKDOWN: "Day-of-week performance splits for a session",
-            QueryTemplate.DST_SPLIT: "DST on vs off performance (mandatory for DST-sensitive sessions)",
+            QueryTemplate.DST_SPLIT: "DEPRECATED: All sessions are now DST-clean (dynamic resolvers). No longer applicable.",
             QueryTemplate.FILTER_COMPARE: "Compare NO_FILTER vs G4 vs G5 vs G6 for same session",
         }
         return [

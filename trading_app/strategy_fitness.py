@@ -190,14 +190,14 @@ def _enrich_relative_volumes(con, feat_dicts, instrument, orb_label, lookback_da
     for row in feat_dicts:
         break_ts = row.get(col)
         if break_ts is not None and hasattr(break_ts, "hour"):
-            utc_ts = break_ts.astimezone(timezone.utc) if break_ts.tzinfo else break_ts
+            utc_ts = break_ts.astimezone(timezone.utc) if break_ts.tzinfo is not None else break_ts
             unique_minutes.add(utc_ts.hour * 60 + utc_ts.minute)
 
     if not unique_minutes:
         return
 
     def _minute_key(ts):
-        utc = ts.astimezone(timezone.utc) if ts.tzinfo else ts
+        utc = ts.astimezone(timezone.utc) if ts.tzinfo is not None else ts
         return (utc.year, utc.month, utc.day, utc.hour, utc.minute)
 
     # Load historical volumes for each unique minute-of-day
@@ -221,7 +221,7 @@ def _enrich_relative_volumes(con, feat_dicts, instrument, orb_label, lookback_da
             continue
 
         break_key = _minute_key(break_ts)
-        utc_ts = break_ts.astimezone(timezone.utc) if break_ts.tzinfo else break_ts
+        utc_ts = break_ts.astimezone(timezone.utc) if break_ts.tzinfo is not None else break_ts
         mod = utc_ts.hour * 60 + utc_ts.minute
         history = minute_history.get(mod, [])
         if not history:
@@ -272,7 +272,7 @@ def _load_strategy_outcomes(
 
     Args:
         dst_regime: If 'winter' or 'summer', restrict DST-affected sessions to
-            that regime only. Ignored for clean sessions (1000/1100 etc.).
+            that regime only. Ignored for clean sessions (TOKYO_OPEN/SINGAPORE_OPEN etc.).
     """
     # Load outcomes
     params = [instrument, orb_minutes, orb_label, entry_model, rr_target, confirm_bars]
@@ -471,6 +471,7 @@ def compute_fitness(
         return _compute_fitness_with_con(
             con, strategy_id, as_of_date, rolling_months, min_rolling_trades,
         )
+
 def compute_portfolio_fitness(
     db_path: Path | None = None,
     instrument: str = "MGC",

@@ -186,7 +186,7 @@ def section_b_cross_session(con, year: int) -> list[str]:
         GROUP BY o9.outcome, o10.outcome, dir_rel
         ORDER BY o9.outcome, o10.outcome, dir_rel
     """).fetchall()
-    lines.append(f"  {'0900':>8} {'1000':>8} {'DirRel':>10} {'Count':>6}")
+    lines.append(f"  {'CME_RE':>8} {'TOKYO':>8} {'DirRel':>10} {'Count':>6}")
     for r in cascade:
         o900 = r[0] or "N/A"
         o1000 = r[1] or "N/A"

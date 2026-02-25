@@ -349,7 +349,7 @@ else:
 **Friction:** From cost_model.py
 - MGC: $10/point × $8.40 RT friction = 0.84R per round-trip
 - MNQ: $2/point × $2.74 RT friction = 1.37R per RT
-- MES: $5/point × $2.10 RT friction = 0.42R per RT
+- MES: $5/point × $3.74 RT friction = 0.748R per RT
 
 ### Phase 3: Yearly Robustness
 ```
