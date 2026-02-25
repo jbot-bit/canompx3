@@ -2,7 +2,7 @@ Run the full project health check suite. No arguments needed.
 
 Run these checks:
 
-1. Drift detection (static analysis — 28+ checks):
+1. Drift detection (static analysis — 34 checks):
 ```bash
 python pipeline/check_drift.py
 ```

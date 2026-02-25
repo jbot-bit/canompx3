@@ -206,8 +206,8 @@ API service layer providing programmatic access to project resources.
 **Schema Ownership:**
 - `pipeline/init_db.py` creates base schema (bars_1m, bars_5m, daily_features)
 - `trading_app/db_manager.py` creates trading app schema (orb_outcomes, experimental_strategies, validated_setups, edge_families)
-- `trading_app/nested/schema.py` creates nested ORB schema (isolated)
-- `trading_app/regime/schema.py` creates regime schema (isolated)
+- `trading_app/nested/` modules handle 15m/30m ORB discovery (data stored in main orb_outcomes with orb_minutes=15/30, not separate tables)
+- `trading_app/regime/schema.py` creates regime schema (regime_strategies, regime_validated tables)
 
 **CRITICAL:** Never run two write processes against the same DuckDB file simultaneously. For long-running jobs, use scratch copy workflow:
 ```bash

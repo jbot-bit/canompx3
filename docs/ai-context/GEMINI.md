@@ -1,8 +1,8 @@
 # Project Overview
 
-This project is a sophisticated **Quantitative Trading System for Gold Futures (MGC)**, enhanced by an **LLM-powered Code Quality and Issue Detection Agent**.
+This project is a sophisticated **Quantitative Trading System for Micro Futures (MGC, MNQ, MES, M2K)**, enhanced by an **LLM-powered Code Quality and Issue Detection Agent**.
 
-The primary goal is to develop, test, and execute data-driven trading strategies, particularly focusing on Opening Range Breakout (ORB) patterns in Gold Futures (GC/MGC) markets. The system incorporates a robust data pipeline for ingestion and transformation, a comprehensive trading application with an execution engine and risk management, and a powerful LLM agent for continuous code quality assurance.
+The primary goal is to develop, test, and execute data-driven trading strategies, particularly focusing on Opening Range Breakout (ORB) patterns across multiple micro futures instruments. The system incorporates a robust data pipeline for ingestion and transformation, a comprehensive trading application with an execution engine and risk management, and a powerful LLM agent for continuous code quality assurance.
 
 ## Core Components:
 
@@ -14,7 +14,7 @@ The primary goal is to develop, test, and execute data-driven trading strategies
 2.  **Trading Application (`trading_app/`):**
     *   **Purpose:** Implements the core logic for defining, validating, and executing quantitative trading strategies. It processes market data bar-by-bar to detect trading opportunities, manage trade lifecycles, and apply risk controls.
     *   **Key Features:**
-        *   **Execution Engine (`trading_app/execution_engine.py`):** A state machine that handles bar-by-bar processing, ORB detection, signal confirmation, and trade entry/exit logic for various entry models (E1: Market-On-Next-Bar, E2: Market-On-Confirm-Close, E3: Limit-At-ORB Retrace).
+        *   **Execution Engine (`trading_app/execution_engine.py`):** A state machine that handles bar-by-bar processing, ORB detection, signal confirmation, and trade entry/exit logic for 3 entry models (E0: Limit-On-Confirm CB1 only — has 3 backtest biases, E1: Market-On-Next-Bar — honest baseline, E3: Limit-At-ORB Retrace).
         *   **Strategy Management:** Includes modules for strategy discovery, validation, portfolio construction, and risk management (`trading_app/risk_manager.py`).
         *   **Backtesting/Simulation:** Capabilities for historical replay (`trading_app/paper_trader.py`) to test strategies against past data.
 

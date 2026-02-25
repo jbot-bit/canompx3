@@ -111,7 +111,7 @@ No drift check verified that `ORB_LABELS` (in `init_db.py`, drives schema genera
 
 MEMORY.md values were from a snapshot taken during an earlier rebuild. The current counts reflect outcomes rebuilt after the session migration (which added new sessions like COMEX_SETTLE, NYSE_CLOSE and expanded NQ backfill for MNQ). Additionally, dead instruments remain: MCL (133K), M6E (510K), SIL (74K).
 
-Strategy count is 618 (not 999 per MEMORY.md) — this reflects post-migration re-validation with stricter criteria.
+Strategy count is 1,322 (post E0 CB2+ purge + re-validation: MGC 339, MES 273, MNQ 614, M2K 96). E0: 817, E1: 442, E3: 63.
 
 **Remediated:** MEMORY.md updated with current counts.
 
@@ -128,7 +128,7 @@ DB shows 67 active SINGAPORE_OPEN strategies. The exclusion rationale: SINGAPORE
 
 **F-13: Edge Family Status**
 
-202 edge families across 4 instruments (MGC: 74, MES: 55, MNQ: 56, M2K: 17). These correspond to the 618 validated strategies. The counts are internally consistent — edge families were rebuilt after migration.
+472 edge families across 4 instruments. These correspond to the 1,322 validated active strategies (MGC: 339, MES: 273, MNQ: 614, M2K: 96). Counts updated after E0 CB2+ purge (Feb 25) and subsequent re-validation.
 
 ### C. Session Time Configurations
 
@@ -172,7 +172,7 @@ F-12 (drift check #32) ───────────────── stand
 - **DST handling:** Fully resolved via `zoneinfo`. `DST_AFFECTED_SESSIONS = {}`.
 - **DOW alignment:** Runtime guard `validate_dow_filter_alignment()` catches misaligned DOW filters at strategy creation time.
 - **Daily features JOIN rules:** 3-column join (trading_day, symbol, orb_minutes) documented in `.claude/rules/daily-features-joins.md` and enforced in MCP tools.
-- **Strategy pipeline:** 7-phase validation, FDR correction, regime waivers. 618 active validated strategies across 4 instruments.
+- **Strategy pipeline:** 7-phase validation, FDR correction, regime waivers. 1,322 active validated strategies across 4 instruments (E0: 817, E1: 442, E3: 63).
 - **MCP server:** 4 read-only tools, template-only queries, row-capped at 5000, parameter-allowlisted.
 - **Drift detection:** 34 checks all passing (F-12 sync guard + F-30 enhanced E0 CB + F-33 stale session name blocker + F-34 sql_adapter validation sync).
 - **Test suite:** 1800 tests passing, 1 skipped.

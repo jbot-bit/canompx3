@@ -1,6 +1,6 @@
-# Canompx3 — Gold Futures ORB Trading Pipeline
+# Canompx3 — Multi-Instrument Futures ORB Trading Pipeline
 
-Self-contained data pipeline and backtesting engine for Opening Range Breakout (ORB) strategies on Gold futures (GC/MGC). 10 years of 1-minute bar data, 312 validated strategies, fully automated guardrails.
+Self-contained data pipeline and backtesting engine for Opening Range Breakout (ORB) strategies on micro futures (MGC, MNQ, MES, M2K). 10 years of 1-minute bar data, 1,322 validated strategies, 34 drift checks, fully automated guardrails.
 
 ## Quick Start
 

@@ -48,8 +48,7 @@ Do not schedule active delivery work against SIL until explicitly re-opened.
 ## Phase 5: Expanded Scan — DONE
 
 - Grid: 6 ORBs x 6 RRs x 5 CBs x 13 filters x 3 EMs = 6,480 combos (post-5b expansion)
-- orb_outcomes: 689,310 rows | experimental: 6,480 | validated: 312 (original scan)
-- **Current state (Feb 25 2026):** 618 validated active (MGC: 232, MES: 138, MNQ: 217, M2K: 31) → 202 edge families. Post session-migration re-validation.
+- **Current state (Feb 25 2026):** orb_outcomes: 5,807,946 rows (5/15/30m, 7 instruments) | experimental: 39,198 | validated active: 1,322 (MGC: 339, MES: 273, MNQ: 614, M2K: 96) → 472 edge families. E0: 817, E1: 442, E3: 63.
 - Edge requires G4+ ORB size filter (NO_FILTER and L-filters ALL negative ExpR)
 - MARKET_PLAYBOOK.md: comprehensive empirical findings
 
@@ -61,7 +60,7 @@ Do not schedule active delivery work against SIL until explicitly re-opened.
 - Win PnL bug fix: changed pnl_points_to_r -> to_r_multiple (friction was missing from wins)
 - test_trader_logic.py: 24 trader/math sanity checks
 - Grid expanded: 6 ORBs x 6 RRs x 5 CBs x 12 filters x 3 EMs = 6,480 combos
-- DB rebuild COMPLETE: ~3M outcomes (7 instruments), 618 validated active strategies
+- DB rebuild COMPLETE: ~5.8M outcomes (7 instruments, 5/15/30m ORB), 1,322 validated active strategies
 - Validator: exclude_years + min_years_positive_pct params added
 
 ## Phase 6: Live Trading Preparation — DONE (6a-6d), 6e TODO
@@ -78,7 +77,7 @@ Do not schedule active delivery work against SIL until explicitly re-opened.
 - `trading_app/execution_engine.py` — bar-by-bar state machine (19 tests + 20 integration tests)
 - State: ARMED -> CONFIRMING -> ENTERED -> EXITED
 - ORB detection, break detection, confirm bar counting
-- E1/E2/E3 entry model resolution with RiskManager fully wired
+- E0/E1/E3 entry model resolution with RiskManager fully wired
 - Target/stop/session-end exit handling
 - armed_at_bar guard: E1/E3 never fill on the confirm bar itself
 
@@ -139,18 +138,14 @@ Do not schedule active delivery work against SIL until explicitly re-opened.
 Hypothesis: wider ORB range (15/30m) + 5m entry bars reduces noise and improves edge.
 
 ### Results
-- 6 new modules in `trading_app/nested/` (~1,800 LOC)
-- 3 new tables: nested_outcomes, nested_strategies, nested_validated
-- Schema, builder, discovery, validator, compare, audit_outcomes all implemented
+- 7 modules in `trading_app/nested/` (schema, builder, discovery, validator, compare, audit_outcomes, __init__)
+- Nested outcomes stored in main `orb_outcomes` table with `orb_minutes` = 15 or 30 (no separate tables)
 - Isolation enforced: drift checks 15-17 block cross-contamination
 - 15m nested ORB findings: TOKYO_OPEN session is clear winner (+0.1222 Sharpe premium)
 - 76 nested strategies validated (Tier 1), 30 at Tier 2 (2.0x stress + Sharpe floor)
 - Portfolio integration complete: `include_nested=True` flag in portfolio.py
 - A/B comparison done: nested helps TOKYO_OPEN session, hurts US_DATA_830/NYSE_OPEN
-
-### Remaining
-- 30m ORB: not yet built/populated
-- Decision: merge feature/nested-orb to main when ready
+- **30m ORB: BUILT** — data populated in orb_outcomes + daily_features. Not yet validated.
 
 ---
 
@@ -176,7 +171,7 @@ Hypothesis: wider ORB range (15/30m) + 5m entry bars reduces noise and improves 
 - E2: skipped (entry at bar close, no post-fill action on that bar)
 - Ambiguous fill bar (both stop+target hit): conservative loss
 - 9 new tests in TestFillBarExits, 670 tests pass, 19/19 drift checks
-- **NOTE:** orb_outcomes rebuilt Feb 2026 with fill-bar logic applied. Current counts: ~3M rows across 7 instruments.
+- **NOTE:** orb_outcomes rebuilt Feb 2026 with fill-bar logic applied. Current counts: ~5.8M rows across 7 instruments (5/15/30m ORB apertures).
 - See `AUDIT_FINDINGS.md` for original finding
 
 ### 8b. Multi-Instrument Discovery Grid Update — DONE (Feb 2026)
@@ -307,8 +302,8 @@ Six high-leverage research items identified by cross-referencing all findings. O
 - Dashboard for live strategy status
 
 ### 8e. orb_outcomes Backfill 2016-2020 — DONE (Feb 2026)
-- MGC: 2016-02-01 to 2026-02-04, ~1.32M rows, E0/E1/E3 all present
-- MES: 2019-02-12 to 2026-02-11, ~1.07M rows, E0/E1/E3 all present
+- MGC: 2016-02-01 to 2026-02-04, 1,312,542 rows (5/15/30m), E0/E1/E3 all present
+- MES: 2019-02-12 to 2026-02-11, 1,763,286 rows (5/15/30m), E0/E1/E3 all present
 - 10-year validation window now available for MGC
 - TODO (separate task): re-run rolling_eval.py with 10-year range for stability scores
 

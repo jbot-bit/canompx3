@@ -2,9 +2,9 @@
 
 **Document Purpose:** Complete technical inventory of how strategies are discovered, searched, evaluated, and selected in the Canompx3 MGC trading pipeline. Designed for knowledge transfer and architectural brainstorming.
 
-**Last Updated:** 2026-02-15
+**Last Updated:** 2026-02-25
 **Scope:** Discovery, filtering, validation, fitness assessment, portfolio selection
-**Status:** Production system (1,072 tests passing, 21 drift checks passing)
+**Status:** Production system (1,800 tests passing, 34 drift checks passing)
 
 ---
 
@@ -37,17 +37,17 @@ Raw OHLCV bars (1m)
   ↓
 Daily features (ORBs, sessions, RSI)
   ↓
-Pre-computed outcomes (689K rows)
+Pre-computed outcomes (~5.8M rows, 5/15/30m, 7 instruments)
   ↓
-Grid search: 5,148 strategy combos
+Grid search: session-aware combos (3 EMs x filters x RR x CB)
   ↓
-Experimental strategies (3,276 candidates)
+Experimental strategies (39,198 candidates)
   ↓
 6-phase validation pipeline
   ↓
-Validated strategies (312 active)
+Validated strategies (1,322 active)
   ↓
-Edge family clustering (215 families)
+Edge family clustering (472 families)
   ↓
 Portfolio construction & fitness monitoring
 ```
@@ -55,26 +55,26 @@ Portfolio construction & fitness monitoring
 ### Discovery Approach
 
 **Exhaustive grid search** over fixed parameters:
-- **11 ORB sessions** (7 fixed + 4 dynamic DST-aware)
+- **10 ORB sessions** (all event-based/dynamic, per-day resolution from SESSION_CATALOG)
 - **6 risk/reward targets** [1.0, 1.5, 2.0, 2.5, 3.0, 4.0]
 - **5 confirm bar values** [1, 2, 3, 4, 5]
-- **13 ORB size filters** (NO_FILTER, L2-L8, G2-G8, VOL)
-- **2 entry models** [E1=next bar open, E3=limit retrace]
+- **13+ ORB size filters** (NO_FILTER, L-filters, G-filters, VOL, band filters, direction filters)
+- **3 entry models** [E0=limit on confirm (CB1 only), E1=next bar open, E3=limit retrace (CB1 only)]
 - **Per-instrument session gating** (enabled_sessions from asset_configs)
+- **Session-aware filter dispatch** via `get_filters_for_grid()` in config.py
 
-**Result:** E1 grid (4,290) + E3 grid (858, CB1 only) = **5,148 total combos**
+**Note on entry model biases:** E0 has 3 optimistic backtest biases (fill-on-touch, fakeout exclusion, fill-bar wins). E1 is the honest baseline with no biases. See TRADING_RULES.md Entry Model Bias Audit.
 
 ### Current State
 
 | Metric | Value | Notes |
 |--------|-------|-------|
-| MGC strategies | 3,276 | 7 enabled sessions, 2-year outcome window |
-| MNQ strategies | 2,664 | 7 enabled sessions, 2-year data only |
-| MES strategies | 3,744 | 8 enabled sessions, 2-year data only |
-| MCL strategies | 1,800 | 0 validated (NO EDGE) |
-| **Total validated** | **1,024** | MGC 216 + MNQ 610 + MES 198 |
-| **Edge families** | **215** | Unique trade-day patterns |
-| **Family heads** | **215** | Median ExpR heads (1 per family) |
+| orb_outcomes | 5,807,946 | 7 instruments × 5/15/30m ORB apertures |
+| experimental_strategies | 39,198 | All instruments, all sessions |
+| **Validated active** | **1,322** | MGC: 339, MES: 273, MNQ: 614, M2K: 96 |
+| **By entry model** | E0: 817, E1: 442, E3: 63 | E0 CB1 only (CB2+ purged Feb 2026) |
+| **Edge families** | **472** | Unique trade-day patterns |
+| Dead instruments | MCL, SIL, M6E | 0 validated for ORB breakout |
 
 ---
 
@@ -179,11 +179,11 @@ WHERE symbol = ? AND orb_minutes = ?
 
 **Grouped by:** (orb_label, entry_model, rr_target, confirm_bars)
 
-**Size:** 689,310 rows for MGC 2021-2026 (covers all RR targets × CBs for valid breaks)
+**Size:** ~5.8M rows across all instruments (5/15/30m ORB apertures) (covers all RR targets × CBs for valid breaks)
 
 ### Outcome Pre-Computation (outcome_builder.py)
 
-**Purpose:** Pre-compute orb_outcomes table (689K rows) once, reuse for all strategy discovery.
+**Purpose:** Pre-compute orb_outcomes table (~5.8M rows) once, reuse for all strategy discovery.
 
 **Approach:**
 ```
@@ -320,7 +320,7 @@ ASSET_CONFIGS = {
 
 ### 7-Phase Validation (strategy_validator.py + walkforward.py)
 
-**Entry:** Experimental strategies (3,276 MGC candidates)
+**Entry:** Experimental strategies (39,198 total across all instruments)
 **Exit:** Validated strategies (promoted to validated_setups)
 **Files:** `/trading_app/strategy_validator.py`, `/trading_app/walkforward.py`
 
@@ -497,7 +497,7 @@ class FitnessScore:
 
 ### From Validated Strategies to Portfolio (portfolio.py)
 
-**Input:** validated_setups table (312 MGC active)
+**Input:** validated_setups table (1,322 active across 4 instruments)
 **Output:** 10-20 diversified strategies with position sizing
 
 ### Selection Algorithm
@@ -641,7 +641,7 @@ Columns:
   - Exit: outcome ('win'/'loss'/'scratch'/'early_exit'/NULL)
   - exit_ts, exit_price, pnl_r
   - Excursions: mae_r, mfe_r
-Size: MGC 689K rows (all RR/CB combos for valid breaks)
+Size: MGC ~5.8M rows (all RR/CB combos for valid breaks)
 ```
 
 #### experimental_strategies (Discovery Output)
@@ -655,7 +655,7 @@ Columns:
   - Risk: max_drawdown_r, median_risk_points, avg_risk_points
   - Yearly: yearly_results (JSON)
   - Validation: validation_status (NULL/'pending'), validation_notes
-Size: MGC 3,276 rows, MNQ 2,664, MES 3,744
+Size: 39,198 rows total (MGC + MNQ + MES + M2K)
 ```
 
 #### validated_setups (Passed Validation)
@@ -799,7 +799,7 @@ For each candidate (ordered by ExpR DESC):
 - **Repeatability:** Same combo always produces same metrics (deterministic)
 
 ### 2. Pre-Computed Outcomes
-- **Efficiency:** 689K outcomes pre-computed once, reused for all discovery
+- **Efficiency:** ~5.8M outcomes pre-computed once, reused for all discovery
 - **Accuracy:** Outcomes computed at exact bar timestamps (no approximation)
 - **Flexibility:** Can re-run discovery with different filters on same outcomes
 
@@ -820,13 +820,13 @@ For each candidate (ordered by ExpR DESC):
 - **Overlap Guard:** Only counts days with sufficient overlap (>200 days) for correlation
 
 ### 6. Edge Family Clustering
-- **Deduplication:** 1,024 validated strategies collapse into 215 unique families
+- **Deduplication:** 1,322 validated strategies collapse into 472 unique families
 - **Head Election:** Median ExpR head avoids Winner's Curse bias
 - **Robustness Classification:** ROBUST/WHITELISTED/PURGED per Duke Protocol #3c
 
 ### 7. Comprehensive Testing
 - **1,072 tests** passing (all critical paths covered)
-- **21 drift checks** passing (architectural guardrails active)
+- **34 drift checks** passing (architectural guardrails active)
 - **Pre-commit hooks** enforce validation on every commit
 
 ### 8. Well-Documented Parameters
@@ -1167,8 +1167,8 @@ MCL: (ZERO EDGE — all sessions skipped)
 
 ### Critical Knowledge
 1. **Grid search** produces 5,148 strategy combos (E1 + E3 entry models)
-2. **Outcomes pre-computed** (689K rows) and reused for all discovery
-3. **Validation is rigorous:** 6-phase pipeline filters to 312 viable strategies (1,024 total)
+2. **Outcomes pre-computed** (~5.8M rows) and reused for all discovery
+3. **Validation is rigorous:** 6-phase pipeline filters to 1,322 viable active strategies across 4 instruments
 4. **Filtering creates redundancy:** Many combos produce identical trade sets
 5. **Sharpe annualization** requires frequency matching (must have trades_per_year >= 30 minimum)
 6. **Only confirmed edge:** Momentum breakouts (ORB > 4pt) + entry model selection
@@ -1223,4 +1223,4 @@ MCL: (ZERO EDGE — all sessions skipped)
 **Created:** 2026-02-15
 **For:** Knowledge transfer & architectural brainstorming
 **Scope:** Complete strategy discovery & search system
-**Status:** Production-ready (1,072 tests, 21 drift checks passing)
+**Status:** Production-ready (1,800 tests, 34 drift checks passing)

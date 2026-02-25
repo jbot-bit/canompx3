@@ -75,7 +75,7 @@ Databento .dbn.zst files
 ### Key Design Principles
 - **Fail-closed:** Any validation failure aborts immediately
 - **Idempotent:** All operations safe to re-run (INSERT OR REPLACE / DELETE+INSERT)
-- **Pre-computed outcomes:** ~3M rows across 7 instruments, reused for all discovery
+- **Pre-computed outcomes:** ~5.8M rows across 7 instruments (4 active + 3 dead), 5/15/30m ORB apertures, reused for all discovery
 - **One-way dependency:** pipeline/ → trading_app/ (never reversed)
 
 ### Time & Calendar Model

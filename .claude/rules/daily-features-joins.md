@@ -2,7 +2,7 @@
 
 ## The Triple-Join Trap
 `daily_features` has 3 rows per (trading_day, symbol) — one per `orb_minutes` (5, 15, 30).
-`orb_outcomes` only has `orb_minutes=5`.
+`orb_outcomes` also has `orb_minutes` = 5, 15, and 30 (nested ORB outcomes).
 
 **ALWAYS join on all three columns:**
 ```sql
