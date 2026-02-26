@@ -175,9 +175,11 @@ def build_edge_families(db_path: str, instrument: str) -> int:
         """)
 
         # 1. Load validated strategies; JOIN experimental_strategies for pre-computed hash
+        #    Include orb_minutes to prevent cross-duration family contamination
+        #    (5m and 15m strategies must NEVER share a family hash).
         strategies = con.execute("""
             SELECT vs.strategy_id, vs.expectancy_r, vs.sharpe_ann, vs.sample_size,
-                   es.trade_day_hash
+                   es.trade_day_hash, vs.orb_minutes
             FROM validated_setups vs
             LEFT JOIN experimental_strategies es ON vs.strategy_id = es.strategy_id
             WHERE vs.instrument = ? AND LOWER(vs.status) = 'active'
@@ -194,8 +196,10 @@ def build_edge_families(db_path: str, instrument: str) -> int:
         #    (100% populated for --no-walkforward runs); fall back to strategy_trade_days
         #    for legacy walk-forward strategies that didn't store trade_day_hash.
         hash_map = {}
+        orb_minutes_map = {}
         fallback_count = 0
-        for sid, expr, shann, sample, precomputed_hash in strategies:
+        for sid, expr, shann, sample, precomputed_hash, orb_min in strategies:
+            orb_minutes_map[sid] = orb_min or 5
             if precomputed_hash:
                 hash_map[sid] = precomputed_hash
             else:
@@ -209,11 +213,13 @@ def build_edge_families(db_path: str, instrument: str) -> int:
         if fallback_count:
             print(f"  WARNING: {fallback_count} strategies used strategy_trade_days fallback")
 
-        # 3. Group by instrument-prefixed hash -> [(sid, expr, shann, sample_size)]
-        #    Prefix prevents cross-instrument PRIMARY KEY collisions as coverage expands.
+        # 3. Group by instrument+orb_minutes-prefixed hash -> [(sid, expr, shann, sample_size)]
+        #    Prefix prevents cross-instrument and cross-duration PRIMARY KEY collisions.
+        #    Without orb_minutes prefix, a 5m and 15m strategy with identical trade days
+        #    would merge into one family — wrong (different ORB apertures).
         families = defaultdict(list)
-        for sid, expr, shann, sample, _ in strategies:
-            family_key = f"{instrument}_{hash_map[sid]}"
+        for sid, expr, shann, sample, _, orb_min in strategies:
+            family_key = f"{instrument}_{orb_min or 5}m_{hash_map[sid]}"
             families[family_key].append((sid, expr, shann, sample))
 
         print(f"  {len(strategies)} strategies -> {len(families)} unique families")

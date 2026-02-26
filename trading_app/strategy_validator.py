@@ -602,6 +602,10 @@ def run_validation(
 
         atr_by_year = {}
         if enable_regime_waivers:
+            # ATR is a daily stat — identical across all orb_minutes rows for the
+            # same (trading_day, symbol).  Filter to orb_minutes=5 to get exactly
+            # one row per day (avoids 3x inflation from 5/15/30m rows).
+            # Using 5 is safe: 5m daily_features always exist for all instruments.
             atr_rows = con.execute("""
                 SELECT EXTRACT(YEAR FROM trading_day) as yr, AVG(atr_20) as mean_atr
                 FROM daily_features
