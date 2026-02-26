@@ -97,7 +97,7 @@ def tracker_db(tmp_path):
 
         con.execute("""
             INSERT INTO orb_outcomes (trading_day, symbol, orb_label, orb_minutes, entry_model, confirm_bars, rr_target, outcome, pnl_r)
-            VALUES (?, 'MGC', 'CME_REOPEN', 5, 'E0', 1, 2.0, ?, ?)
+            VALUES (?, 'MGC', 'CME_REOPEN', 5, 'E2', 1, 2.0, ?, ?)
         """, [day, oo_outcome, pnl])
 
     con.commit()

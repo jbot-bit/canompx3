@@ -385,13 +385,13 @@ def _orb_from_strategy(strategy_id: str) -> str:
 
     Format: {INSTRUMENT}_{ORB_LABEL}_{ENTRY_MODEL}_RR{rr}_CB{cb}_{FILTER}
     ORB_LABEL can contain underscores (e.g., US_DATA_830, CME_REOPEN).
-    Entry model is always E0, E1, or E3.
+    Entry model is always E1, E2, or E3.
     """
     parts = strategy_id.split("_")
-    # Find the entry model token (E0, E1, E3) — everything between
+    # Find the entry model token (E1, E2, E3) — everything between
     # parts[0] (instrument) and that token is the ORB label.
     for i, p in enumerate(parts):
-        if p in ("E0", "E1", "E3") and i > 1:
+        if p in ("E1", "E2", "E3") and i > 1:
             return "_".join(parts[1:i])
     # Fallback: assume position 1 (legacy format)
     return parts[1] if len(parts) > 1 else ""
@@ -399,11 +399,11 @@ def _orb_from_strategy(strategy_id: str) -> str:
 def _entry_model_from_strategy(strategy_id: str) -> str:
     """Extract entry model from strategy ID.
 
-    Entry model is always E0, E1, or E3.
+    Entry model is always E1, E2, or E3.
     """
     parts = strategy_id.split("_")
     for p in parts:
-        if p in ("E0", "E1", "E3"):
+        if p in ("E1", "E2", "E3"):
             return p
     # Fallback: assume position 2 (legacy format)
     return parts[2] if len(parts) > 2 else ""

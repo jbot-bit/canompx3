@@ -526,18 +526,24 @@ class ExecutionEngine:
         stop_price = orb.low if trade.direction == "long" else orb.high
 
         # Resolve entry price based on model
-        if trade.entry_model == "E0":
-            # E0: Limit-On-Confirm — fill at ORB edge ON the confirm bar.
-            # For longs, limit buy at orb_high; for shorts, limit sell at orb_low.
-            # No fill if confirm bar gapped fully past the ORB edge.
+        if trade.entry_model == "E2":
+            # E2: Stop-Market — fill at ORB edge + slippage ON the confirm bar.
+            # The stop order triggers when the bar's range crosses the ORB level.
+            # For longs: bar high must exceed orb_high; fill = orb_high + slippage.
+            # For shorts: bar low must go below orb_low; fill = orb_low - slippage.
+            from trading_app.config import E2_SLIPPAGE_TICKS
+            from pipeline.cost_model import get_cost_spec as _get_cost_spec
+            tick_size = _get_cost_spec(trade.strategy.instrument).tick_size
+            slippage = E2_SLIPPAGE_TICKS * tick_size
+
             if trade.direction == "long":
-                entry_price = orb.high
-                if confirm_bar["low"] > orb.high:
-                    return events  # Gapped past — no fill
+                if confirm_bar["high"] <= orb.high:
+                    return events  # Bar didn't cross ORB level — no fill
+                entry_price = orb.high + slippage
             else:
-                entry_price = orb.low
-                if confirm_bar["high"] < orb.low:
-                    return events  # Gapped past — no fill
+                if confirm_bar["low"] >= orb.low:
+                    return events  # Bar didn't cross ORB level — no fill
+                entry_price = orb.low - slippage
 
             risk_points = abs(entry_price - stop_price)
             if risk_points <= 0:
@@ -616,7 +622,7 @@ class ExecutionEngine:
                 price=entry_price,
                 direction=trade.direction,
                 contracts=trade.contracts,
-                reason="confirm_bars_met_E0",
+                reason="stop_market_E2",
             ))
             return events
 

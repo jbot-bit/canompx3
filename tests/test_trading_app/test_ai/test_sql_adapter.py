@@ -283,14 +283,14 @@ class TestBuildOutcomesBase:
         adapter = self._make_adapter()
         sql, bind = adapter._build_outcomes_base({
             "instrument": "MNQ", "orb_label": "TOKYO_OPEN",
-            "entry_model": "E0", "rr_target": 2.0, "confirm_bars": 1,
+            "entry_model": "E2", "rr_target": 2.0, "confirm_bars": 1,
             "filter_type": "ORB_G4",
         })
         assert "o.entry_model = ?" in sql
         assert "o.rr_target = ?" in sql
         assert "o.confirm_bars = ?" in sql
         assert "d.orb_TOKYO_OPEN_size >= 4" in sql
-        assert bind == ["MNQ", "TOKYO_OPEN", "E0", 2.0, 1]
+        assert bind == ["MNQ", "TOKYO_OPEN", "E2", 2.0, 1]
 
     def test_missing_orb_label_raises(self):
         adapter = self._make_adapter()

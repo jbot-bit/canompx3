@@ -336,35 +336,35 @@ class TestOutcomesQuery:
     """outcomes_query() builds safe SQL with triple-join."""
 
     def test_basic_query(self):
-        sql = outcomes_query("MGC", "1000", "E0")
+        sql = outcomes_query("MGC", "1000", "E1")
         assert "o.trading_day = d.trading_day" in sql
         assert "o.symbol = d.symbol" in sql
         assert "o.orb_minutes = d.orb_minutes" in sql
         assert "'MGC'" in sql
         assert "'1000'" in sql
-        assert "'E0'" in sql
+        assert "'E1'" in sql
 
     def test_extra_cols(self):
-        sql = outcomes_query("MGC", "1000", "E0", extra_cols=["d.atr_5d"])
+        sql = outcomes_query("MGC", "1000", "E1", extra_cols=["d.atr_5d"])
         assert "d.atr_5d" in sql
 
     def test_filters(self):
-        sql = outcomes_query("MGC", "1000", "E0",
+        sql = outcomes_query("MGC", "1000", "E1",
                              filters=["d.orb_1000_size >= 4"])
         assert "d.orb_1000_size >= 4" in sql
 
     def test_date_range(self):
-        sql = outcomes_query("MGC", "1000", "E0",
+        sql = outcomes_query("MGC", "1000", "E1",
                              date_range=("2021-01-01", "2025-12-31"))
         assert "2021-01-01" in sql
         assert "2025-12-31" in sql
 
     def test_selects_pnl_r(self):
-        sql = outcomes_query("MGC", "1000", "E0")
+        sql = outcomes_query("MGC", "1000", "E1")
         assert "o.pnl_r" in sql
 
     def test_filters_null_pnl(self):
-        sql = outcomes_query("MGC", "1000", "E0")
+        sql = outcomes_query("MGC", "1000", "E1")
         assert "o.pnl_r IS NOT NULL" in sql
 
 

@@ -155,7 +155,7 @@ def run_nested_discovery(
             for s in ORB_LABELS:
                 nf = len(get_filters_for_grid(instrument, s))
                 total_combos += nf * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS)  # E1 (all CBs)
-                total_combos += nf * len(RR_TARGETS) * 2                        # E0+E3 (CB1 only)
+                total_combos += nf * len(RR_TARGETS) * 2                        # E2+E3 (CB1 only)
             combo_idx = 0
             insert_batch = []
 
@@ -167,7 +167,7 @@ def run_nested_discovery(
                     for em in ENTRY_MODELS:
                         for rr_target in RR_TARGETS:
                             for cb in CONFIRM_BARS_OPTIONS:
-                                if em in ("E0", "E3") and cb > 1:
+                                if em in ("E2", "E3") and cb > 1:
                                     continue
                                 combo_idx += 1
 

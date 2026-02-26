@@ -32,8 +32,8 @@ from pipeline.cost_model import get_cost_spec, pnl_points_to_r, to_r_multiple, r
 from pipeline.init_db import ORB_LABELS
 from pipeline.asset_configs import get_enabled_sessions
 from pipeline.build_daily_features import compute_trading_day_utc_range
-from trading_app.entry_rules import detect_entry_with_confirm_bars
-from trading_app.config import ENTRY_MODELS, EARLY_EXIT_MINUTES
+from trading_app.entry_rules import detect_entry_with_confirm_bars, detect_break_touch, _resolve_e2
+from trading_app.config import ENTRY_MODELS, EARLY_EXIT_MINUTES, E2_SLIPPAGE_TICKS
 from trading_app.db_manager import init_trading_app_schema
 
 # Grid parameters — see trading_app/config.py for full documentation
@@ -437,17 +437,27 @@ def compute_single_outcome(
 
     ts_threshold = EARLY_EXIT_MINUTES.get(orb_label)
 
-    # Detect entry with confirm bars
-    signal = detect_entry_with_confirm_bars(
-        bars_df=bars_df,
-        orb_break_ts=break_ts,
-        orb_high=orb_high,
-        orb_low=orb_low,
-        break_dir=break_dir,
-        confirm_bars=confirm_bars,
-        detection_window_end=trading_day_end,
-        entry_model=entry_model,
-    )
+    # Detect entry: E2 uses break-touch, E1/E3 use confirm bars
+    if entry_model == "E2":
+        touch = detect_break_touch(
+            bars_df, orb_high=orb_high, orb_low=orb_low,
+            break_dir=break_dir,
+            detection_window_start=break_ts,
+            detection_window_end=trading_day_end,
+        )
+        signal = _resolve_e2(touch, slippage_ticks=E2_SLIPPAGE_TICKS,
+                             tick_size=cost_spec.tick_size)
+    else:
+        signal = detect_entry_with_confirm_bars(
+            bars_df=bars_df,
+            orb_break_ts=break_ts,
+            orb_high=orb_high,
+            orb_low=orb_low,
+            break_dir=break_dir,
+            confirm_bars=confirm_bars,
+            detection_window_end=trading_day_end,
+            entry_model=entry_model,
+        )
 
     if not signal.triggered:
         return result
@@ -742,9 +752,46 @@ def build_outcomes(
                 # Optimized: detect entry ONCE per (session, EM, CB),
                 # then compute all 6 RR targets with shared bar slicing.
                 for em in ENTRY_MODELS:
+                    if em == "E2":
+                        # E2: stop-market at ORB level. Uses break-touch detection
+                        # (range crosses ORB, no close requirement) instead of confirm bars.
+                        touch = detect_break_touch(
+                            bars_df, orb_high=orb_high, orb_low=orb_low,
+                            break_dir=break_dir,
+                            detection_window_start=break_ts,
+                            detection_window_end=td_end,
+                        )
+                        signal = _resolve_e2(touch, slippage_ticks=E2_SLIPPAGE_TICKS,
+                                             tick_size=cost_spec.tick_size)
+                        cb = 1  # E2 is always CB1 in the grid
+                        outcomes = _compute_outcomes_all_rr(
+                            bars_df=bars_df, signal=signal,
+                            orb_high=orb_high, orb_low=orb_low,
+                            break_dir=break_dir, rr_targets=RR_TARGETS,
+                            trading_day_end=td_end, cost_spec=cost_spec,
+                            entry_model=em, orb_label=orb_label, break_ts=break_ts,
+                        )
+                        for rr_target, outcome in zip(RR_TARGETS, outcomes):
+                            day_batch.append([
+                                trading_day, symbol, orb_label, orb_minutes,
+                                rr_target, cb, em,
+                                outcome["entry_ts"], outcome["entry_price"],
+                                outcome["stop_price"], outcome["target_price"],
+                                outcome["outcome"], outcome["exit_ts"],
+                                outcome["exit_price"], outcome["pnl_r"],
+                                outcome["risk_dollars"], outcome["pnl_dollars"],
+                                outcome["mae_r"], outcome["mfe_r"],
+                                outcome.get("ambiguous_bar", False),
+                                outcome.get("ts_outcome"),
+                                outcome.get("ts_pnl_r"),
+                                outcome.get("ts_exit_ts"),
+                            ])
+                            total_written += 1
+                        continue  # Skip the confirm-based path below
+
+                    # E1/E3: confirm-based path
                     # E3: retrace entry always uses CB1 (higher CBs produce identical outcomes).
-                    # E0: limit-on-confirm only valid for CB1 (CB2+ is look-ahead).
-                    cb_options = [1] if em in ("E0", "E3") else CONFIRM_BARS_OPTIONS
+                    cb_options = [1] if em == "E3" else CONFIRM_BARS_OPTIONS
                     for cb in cb_options:
                         signal = detect_entry_with_confirm_bars(
                             bars_df=bars_df,

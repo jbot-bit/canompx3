@@ -540,7 +540,7 @@ def check_entry_models_sync() -> list[str]:
     try:
         from trading_app.config import ENTRY_MODELS
 
-        expected = ["E0", "E1", "E3"]
+        expected = ["E1", "E2", "E3"]
         if ENTRY_MODELS != expected:
             violations.append(
                 f"  ENTRY_MODELS = {ENTRY_MODELS}, expected {expected}"
@@ -1222,13 +1222,13 @@ def check_validated_filters_registered() -> list[str]:
     return violations
 
 
-def check_e0_cb1_only() -> list[str]:
-    """Check #30: E0 entry model must be restricted to CB1 only.
+def check_e2_e3_cb1_only() -> list[str]:
+    """Check #30: E2 and E3 entry models must be restricted to CB1 only.
 
-    E0 (limit-on-confirm) fills on the confirm bar itself. For CB2+, the confirm
-    bar has already closed by the time you know it's the confirm bar — filling on
-    it is look-ahead. outcome_builder.py must restrict E0 to cb_options=[1].
-    Discovery scripts must skip E0+CB2+ in the grid iteration.
+    E2 (stop-market) has no confirm bars concept — always CB1.
+    E3 (limit-at-ORB) always uses CB1 (higher CBs produce identical outcomes).
+    outcome_builder.py must restrict E2/E3 to cb_options=[1].
+    Discovery scripts must skip E2+CB2+ and E3+CB2+ in the grid iteration.
     """
     violations = []
     ob_file = TRADING_APP_DIR / "outcome_builder.py"
@@ -1237,27 +1237,23 @@ def check_e0_cb1_only() -> list[str]:
 
     content = ob_file.read_text(encoding="utf-8")
 
-    # Verify E0 is in the same branch as E3 for cb_options = [1]
-    # Expected pattern: em in ("E0", "E3") or em in {"E0", "E3"}
-    if 'em in ("E0", "E3")' not in content and 'em in {"E0", "E3"}' not in content:
-        # Also accept reversed order
-        if 'em in ("E3", "E0")' not in content and 'em in {"E3", "E0"}' not in content:
-            violations.append(
-                "  outcome_builder.py: E0 must be restricted to cb_options=[1] "
-                "(same as E3). E0+CB2+ is look-ahead bias."
-            )
+    # Verify E3 has cb_options = [1] in outcome_builder
+    if 'em == "E3"' not in content:
+        violations.append(
+            "  outcome_builder.py: E3 must be restricted to cb_options=[1]."
+        )
 
-    # Also verify discovery grid scripts skip E0+CB2+
+    # Also verify discovery grid scripts skip E2+CB2+ and E3+CB2+
     discovery_files = [
         TRADING_APP_DIR / "strategy_discovery.py",
         TRADING_APP_DIR / "nested" / "discovery.py",
         TRADING_APP_DIR / "regime" / "discovery.py",
     ]
-    e0_skip_patterns = [
-        'em in ("E0", "E3") and cb > 1',
-        'em in {"E0", "E3"} and cb > 1',
-        'em in ("E3", "E0") and cb > 1',
-        'em in {"E3", "E0"} and cb > 1',
+    e2_skip_patterns = [
+        'em in ("E2", "E3") and cb > 1',
+        'em in {"E2", "E3"} and cb > 1',
+        'em in ("E3", "E2") and cb > 1',
+        'em in {"E3", "E2"} and cb > 1',
     ]
     for f in discovery_files:
         if not f.exists():
@@ -1266,12 +1262,43 @@ def check_e0_cb1_only() -> list[str]:
         # Only check files that iterate confirm_bars (have a grid loop)
         if "CONFIRM_BARS" not in fc:
             continue
-        if not any(p in fc for p in e0_skip_patterns):
+        if not any(p in fc for p in e2_skip_patterns):
             violations.append(
-                f"  {f.relative_to(PROJECT_ROOT)}: Grid iteration must skip E0+CB2+ "
-                "(em in ('E0', 'E3') and cb > 1: continue)"
+                f"  {f.relative_to(PROJECT_ROOT)}: Grid iteration must skip E2+CB2+ "
+                "(em in ('E2', 'E3') and cb > 1: continue)"
             )
 
+    return violations
+
+
+def check_no_e0_in_db() -> list[str]:
+    """Check #35: No E0 rows should exist in any trading table.
+
+    E0 (limit-on-confirm) was purged Feb 2026. Replaced by E2 (stop-market).
+    NOTE: This check will fail until Phase C DB purge is complete. Commented
+    out in the main() runner until then.
+    """
+    violations = []
+    try:
+        import duckdb
+        from pipeline.paths import get_db_path
+        db_path = get_db_path()
+        if not Path(db_path).exists():
+            return violations
+        con = duckdb.connect(str(db_path), read_only=True)
+        try:
+            for table in ["orb_outcomes", "experimental_strategies", "validated_setups"]:
+                count = con.execute(
+                    f"SELECT COUNT(*) FROM {table} WHERE entry_model = 'E0'"
+                ).fetchone()[0]
+                if count > 0:
+                    violations.append(
+                        f"  {table}: {count} rows with entry_model='E0' (purged Feb 2026)"
+                    )
+        finally:
+            con.close()
+    except Exception:
+        pass  # DB may not exist in CI
     return violations
 
 
@@ -1794,9 +1821,9 @@ def main():
         print("  PASSED [OK]")
     print()
 
-    # Check 30: E0 entry model restricted to CB1 only
-    print("Check 30: E0 restricted to CB1 (no look-ahead CB2+ fills)...")
-    v = check_e0_cb1_only()
+    # Check 30: E2/E3 entry models restricted to CB1 only
+    print("Check 30: E2+E3 restricted to CB1 (no CB2+ for stop-market/retrace)...")
+    v = check_e2_e3_cb1_only()
     if v:
         print("  FAILED:")
         for line in v:
@@ -1853,6 +1880,18 @@ def main():
     else:
         print("  PASSED [OK]")
     print()
+
+    # Check 35: No E0 rows in DB (enable after Phase C DB purge)
+    # print("Check 35: No E0 rows in trading tables...")
+    # v = check_no_e0_in_db()
+    # if v:
+    #     print("  FAILED:")
+    #     for line in v:
+    #         print(line)
+    #     all_violations.extend(v)
+    # else:
+    #     print("  PASSED [OK]")
+    # print()
 
     # Summary
     print("=" * 60)

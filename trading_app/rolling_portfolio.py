@@ -199,9 +199,9 @@ def aggregate_rolling_performance(
 
     results = []
     for fid, windows_data in family_windows.items():
-        # Parse family_id back — entry_model is always E0/E1/E3
+        # Parse family_id back — entry_model is always E1/E2/E3
         parts = fid.split("_")
-        em_idx = next(i for i, p in enumerate(parts) if p in ("E0", "E1", "E3"))
+        em_idx = next(i for i, p in enumerate(parts) if p in ("E1", "E2", "E3"))
         orb_label = "_".join(parts[:em_idx])
         entry_model = parts[em_idx]
         filter_type = "_".join(parts[em_idx + 1:])

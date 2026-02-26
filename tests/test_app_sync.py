@@ -282,28 +282,28 @@ class TestGridParamsSync:
         assert len(CONFIRM_BARS_OPTIONS) == len(set(CONFIRM_BARS_OPTIONS))
 
     def test_grid_size(self):
-        """Total base grid size matches expected formula (E3 uses CB1 only).
+        """Total base grid size matches expected formula (E2+E3 use CB1 only).
 
         Base grid uses 6 core filters (NO_FILTER + G4/G5/G6/G8 + VOL).
         Session-specific DOW composites are added by get_filters_for_grid()
         per-session, expanding the grid contextually.
 
-        10 ORBs x 6 RRs x 5 CBs x 6 base filters = 1800 (E0, all CB options)
         10 ORBs x 6 RRs x 5 CBs x 6 base filters = 1800 (E1, all CB options)
+        10 ORBs x 6 RRs x 1 CB x 6 base filters = 360  (E2, always CB1)
         10 ORBs x 6 RRs x 1 CB x 6 base filters = 360  (E3, always CB1)
-        Total base: 3960
+        Total base: 2520
         """
         BASE_FILTER_COUNT = 6  # NO_FILTER + ORB_G4/G5/G6/G8 + VOL_RV12_N20
-        e0_e1 = 2 * len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * BASE_FILTER_COUNT
-        e3 = len(ORB_LABELS) * len(RR_TARGETS) * 1 * BASE_FILTER_COUNT
-        expected = e0_e1 + e3
-        assert expected == 3960
+        e1 = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * BASE_FILTER_COUNT
+        e2_e3 = 2 * len(ORB_LABELS) * len(RR_TARGETS) * 1 * BASE_FILTER_COUNT
+        expected = e1 + e2_e3
+        assert expected == 2520
 
 class TestEntryModelsSync:
     """ENTRY_MODELS must be consistent."""
 
     def test_entry_models_exact(self):
-        assert ENTRY_MODELS == ["E0", "E1", "E3"]
+        assert ENTRY_MODELS == ["E1", "E2", "E3"]
 
     def test_entry_models_no_duplicates(self):
         assert len(ENTRY_MODELS) == len(set(ENTRY_MODELS))
@@ -367,7 +367,7 @@ class TestStrategyIdSync:
         assert sid.startswith("MGC_CME_REOPEN_E3_")
 
     def test_all_grid_ids_unique(self):
-        """Every combination in the base grid produces a unique ID (E3 CB1 only).
+        """Every combination in the base grid produces a unique ID (E2+E3 CB1 only).
 
         Uses BASE_GRID_FILTERS (6 entries) not ALL_FILTERS (18 entries).
         Session-specific DOW composites expand the grid per-session via
@@ -378,13 +378,13 @@ class TestStrategyIdSync:
             for em in ENTRY_MODELS:
                 for rr in RR_TARGETS:
                     for cb in CONFIRM_BARS_OPTIONS:
-                        if em == "E3" and cb > 1:
+                        if em in ("E2", "E3") and cb > 1:
                             continue
                         for fk in BASE_GRID_FILTERS:
                             sid = make_strategy_id("MGC", orb, em, rr, cb, fk)
                             assert sid not in ids, f"Duplicate ID: {sid}"
                             ids.add(sid)
-        assert len(ids) == 3960
+        assert len(ids) == 2520
 
 # ============================================================================
 # 5. DB schema column sync

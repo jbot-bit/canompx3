@@ -287,7 +287,24 @@ def build_nested_outcomes(
                     entry_cache = {}
                     for cb in CONFIRM_BARS_OPTIONS:
                         for em in ENTRY_MODELS:
-                            if em in ("E0", "E3") and cb > 1:
+                            if em == "E2":
+                                # E2: stop-market uses break-touch, not confirm
+                                if cb > 1:
+                                    continue  # E2 always CB1
+                                from trading_app.entry_rules import detect_break_touch, _resolve_e2
+                                from trading_app.config import E2_SLIPPAGE_TICKS
+                                touch = detect_break_touch(
+                                    bars_5m_df, orb_high=orb_high, orb_low=orb_low,
+                                    break_dir=break_dir,
+                                    detection_window_start=break_ts,
+                                    detection_window_end=td_end,
+                                )
+                                signal = _resolve_e2(touch, slippage_ticks=E2_SLIPPAGE_TICKS,
+                                                     tick_size=cost_spec.tick_size)
+                                entry_cache[(cb, em)] = signal
+                                continue
+
+                            if em == "E3" and cb > 1:
                                 continue
                             signal = resolve_entry(
                                 bars_5m_df, confirm_cache[cb], em, td_end,
@@ -312,7 +329,7 @@ def build_nested_outcomes(
                     # sharing the same post-entry bars
                     for cb in CONFIRM_BARS_OPTIONS:
                         for em in ENTRY_MODELS:
-                            if em in ("E0", "E3") and cb > 1:
+                            if em in ("E2", "E3") and cb > 1:
                                 continue
                             signal = entry_cache[(cb, em)]
 

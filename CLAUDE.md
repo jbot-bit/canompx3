@@ -38,6 +38,8 @@ Several instruments use full-size contract data for better 1m bar coverage. Full
 | `docs/DST_CONTAMINATION.md` | DST session contamination detail, remediation status | Reference for DST work |
 | `docs/DOW_ALIGNMENT.md` | Day-of-week alignment verification | Reference for DOW filters |
 | `docs/MONOREPO_ARCHITECTURE.md` | Service overview, shared resources, inter-service deps | Reference for monorepo structure |
+| `docs/specs/*.md` | Feature specs pending implementation | **Check before building ANY feature** — if a spec exists, follow it exactly |
+| `docs/prompts/*.md` | Reusable audit prompts (entry models, pipeline data) | **Run before ANY refactor, schema change, or logic change** |
 | `CANONICAL_*.txt` | Frozen specs | Read-only; live code is truth |
 
 **Conflict resolution:**

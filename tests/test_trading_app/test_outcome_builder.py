@@ -613,7 +613,7 @@ class TestBuildOutcomes:
             "SELECT DISTINCT entry_model FROM orb_outcomes"
         ).fetchall()}
         con.close()
-        assert models == {"E0", "E1", "E3"}
+        assert models == {"E1", "E2", "E3"}
 
 class TestCheckpointResume:
     """Tests for checkpoint/resume crash resilience."""

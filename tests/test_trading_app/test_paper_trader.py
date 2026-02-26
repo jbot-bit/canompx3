@@ -159,12 +159,12 @@ class TestHelpers:
 
     def test_orb_from_strategy(self):
         assert _orb_from_strategy("MGC_US_DATA_830_E1_RR2.0_CB5_NO_FILTER") == "US_DATA_830"
-        assert _orb_from_strategy("MGC_CME_REOPEN_E0_RR2.0_CB1_ORB_G5") == "CME_REOPEN"
+        assert _orb_from_strategy("MGC_CME_REOPEN_E2_RR2.0_CB1_ORB_G5") == "CME_REOPEN"
         assert _orb_from_strategy("MGC_TOKYO_OPEN_E1_RR2.5_CB2_NO_FILTER") == "TOKYO_OPEN"
 
     def test_entry_model_from_strategy(self):
         assert _entry_model_from_strategy("MGC_US_DATA_830_E1_RR2.0_CB5_NO_FILTER") == "E1"
-        assert _entry_model_from_strategy("MGC_CME_REOPEN_E0_RR2.0_CB1_ORB_G5") == "E0"
+        assert _entry_model_from_strategy("MGC_CME_REOPEN_E2_RR2.0_CB1_ORB_G5") == "E2"
 
 # ============================================================================
 # Replay Tests — shared class fixture (runs replay ONCE)

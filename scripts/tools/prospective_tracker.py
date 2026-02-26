@@ -32,7 +32,7 @@ SIGNALS = {
         "session": "CME_REOPEN",
         "orb_label": "CME_REOPEN",
         "prev_outcome_filter": "loss",
-        "entry_model": "E0",
+        "entry_model": "E2",
         "confirm_bars": 1,
         "rr_target": 2.0,
         "min_orb_pts": 4.0,

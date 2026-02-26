@@ -10,7 +10,7 @@ Coverage:
   1. Exact ORB boundary (close == orb_high is NOT outside, must be strict >)
   2. Zero-risk guard (orb_high == orb_low → null result, no division by zero)
   3. Simultaneous stop+target (same bar) → conservative loss, always
-  4. E0 gap fill logic (confirm bar gapped fully past ORB → no fill)
+  4. E2 stop-market touch logic (bar range must cross ORB → fill with slippage)
   5. E3 stop-before-retrace (stop hit before price retraces → no fill)
   6. Confirm bar reset (inside bar resets count)
   7. C3 slow break filter (TOKYO_OPEN session only; CME_REOPEN ignores it)
@@ -26,7 +26,7 @@ Coverage:
   17. US_DATA_830 DST context: dynamic resolver tracks 8:30 AM ET across DST transitions
   18. Session end boundary (bar at trading_day_end excluded from scan)
   19. Outlier: tiny ORB survives arithmetic without crashing
-  20. Fuzz: entry_price always equals orb_high (long) or orb_low (short) for E0
+  20. Fuzz: entry_price includes slippage above/below ORB for E2
 """
 
 import random
@@ -261,46 +261,25 @@ class TestSimultaneousStopTarget:
 
 
 # =============================================================================
-# 4. E0 GAP FILL LOGIC — confirm bar gapped past ORB → no fill
+# 4. E2 STOP-MARKET TOUCH LOGIC — bar must cross ORB level to fill
 # =============================================================================
 
-class TestE0GapFill:
-    """E0 fills at ORB level ON confirm bar. If confirm bar's low > orb_high
-    (for long), the ORB level was never touched — no fill."""
+class TestE2StopMarketTouch:
+    """E2 uses detect_break_touch: fill when bar range crosses ORB level.
+    Entry price = ORB level + slippage (E2_SLIPPAGE_TICKS * tick_size).
+    Fakeout bars (touch ORB but close inside) DO fill."""
 
-    def test_e0_gap_past_orb_no_fill(self):
+    def test_e2_long_bar_touches_orb_fills_with_slippage(self):
+        """E2 long: bar high > orb_high fills at orb_high + slippage."""
+        from trading_app.config import E2_SLIPPAGE_TICKS
         orb_high, orb_low = 2700.0, 2690.0
-        # bar0: close=2700.0 = orb_high exactly → NOT outside (strict > fails), no confirm yet
-        # bar1: close=2710 > orb_high=2700 → CB1 confirm. But low=2705 > 2700 → bar gapped past ORB.
-        #   E0 limit order at 2700 was never touched → no fill.
-        bars = _bars(T0, [
-            (2699, 2700, 2698, 2700.0, 100),  # bar0: close==orb_high, NOT outside
-            (2705, 2712, 2705, 2710.0, 100),  # bar1: CB1 confirm, low=2705 > orb_high → no E0 fill
-            (2710, 2720, 2708, 2715.0, 100),
-        ])
-        result = compute_single_outcome(
-            bars_df=bars,
-            break_ts=T0,
-            orb_high=orb_high,
-            orb_low=orb_low,
-            break_dir="long",
-            rr_target=2.0,
-            confirm_bars=1,
-            trading_day_end=DAY_END,
-            cost_spec=_mgc(),
-            entry_model="E0",
-        )
-        assert result["entry_ts"] is None, (
-            "E0: confirm bar gapped past ORB (low > orb_high) — must NOT fill"
-        )
+        tick_size = _mgc().tick_size
+        expected_entry = orb_high + E2_SLIPPAGE_TICKS * tick_size
 
-    def test_e0_confirm_bar_touches_orb_fills(self):
-        """E0 fills if confirm bar's low <= orb_high (bar touched ORB level)."""
-        orb_high, orb_low = 2700.0, 2690.0
-        # confirm bar: low=2700 (touches ORB edge exactly) — E0 fills at 2700
+        # bar0: high > orb_high (touches ORB range) — E2 fills
         bars = _bars(T0, [
-            (2698, 2701, 2697, 2701.0, 100),  # bar0: confirm (close > orb_high)
-            (2700, 2710, 2700, 2705.0, 100),  # doesn't matter, confirm was bar0
+            (2698, 2701, 2697, 2701.0, 100),  # bar0: high=2701 > orb_high=2700 → touch
+            (2700, 2710, 2700, 2705.0, 100),
             (2705, 2720, 2704, 2715.0, 100),
         ])
         result = compute_single_outcome(
@@ -313,23 +292,47 @@ class TestE0GapFill:
             confirm_bars=1,
             trading_day_end=DAY_END,
             cost_spec=_mgc(),
-            entry_model="E0",
+            entry_model="E2",
         )
-        assert result["entry_ts"] is not None, "E0: bar touching ORB should fill"
-        assert result["entry_price"] == pytest.approx(orb_high), (
-            f"E0 long entry must be at orb_high={orb_high}, got {result['entry_price']}"
+        assert result["entry_ts"] is not None, "E2: bar touching ORB should fill"
+        assert result["entry_price"] == pytest.approx(expected_entry), (
+            f"E2 long entry must be at orb_high + slippage={expected_entry}, "
+            f"got {result['entry_price']}"
         )
 
-    def test_e0_short_gap_past_orb_no_fill(self):
-        """E0 short: confirm bar gapped below orb_low (high < orb_low) → no fill."""
+    def test_e2_long_no_touch_no_fill(self):
+        """E2 long: no bar touches orb_high → no fill."""
         orb_high, orb_low = 2700.0, 2690.0
-        # bar0: close=2690.0 = orb_low exactly → NOT outside for short (strict < fails), no confirm
-        # bar1: close=2682 < orb_low=2690 → CB1 confirm. But high=2685 < 2690 → gapped past ORB.
-        #   E0 limit order at 2690 was never touched → no fill.
+        # All highs below orb_high
         bars = _bars(T0, [
-            (2692, 2692, 2689, 2690.0, 100),  # bar0: close==orb_low, NOT outside for short
-            (2684, 2685, 2680, 2682.0, 100),  # bar1: CB1 confirm, high=2685 < orb_low=2690 → no E0 fill
-            (2682, 2683, 2675, 2676.0, 100),
+            (2695, 2699, 2694, 2698.0, 100),
+            (2696, 2698, 2695, 2697.0, 100),
+        ])
+        result = compute_single_outcome(
+            bars_df=bars,
+            break_ts=T0,
+            orb_high=orb_high,
+            orb_low=orb_low,
+            break_dir="long",
+            rr_target=2.0,
+            confirm_bars=1,
+            trading_day_end=DAY_END,
+            cost_spec=_mgc(),
+            entry_model="E2",
+        )
+        assert result["entry_ts"] is None, "E2: no bar touched ORB — must NOT fill"
+
+    def test_e2_short_bar_touches_orb_fills_with_slippage(self):
+        """E2 short: bar low < orb_low fills at orb_low - slippage."""
+        from trading_app.config import E2_SLIPPAGE_TICKS
+        orb_high, orb_low = 2700.0, 2690.0
+        tick_size = _mgc().tick_size
+        expected_entry = orb_low - E2_SLIPPAGE_TICKS * tick_size
+
+        bars = _bars(T0, [
+            (2692, 2693, 2689, 2691.0, 100),  # bar0: low=2689 < orb_low=2690 → touch
+            (2690, 2691, 2685, 2686.0, 100),
+            (2686, 2687, 2675, 2676.0, 100),
         ])
         result = compute_single_outcome(
             bars_df=bars,
@@ -341,10 +344,12 @@ class TestE0GapFill:
             confirm_bars=1,
             trading_day_end=DAY_END,
             cost_spec=_mgc(),
-            entry_model="E0",
+            entry_model="E2",
         )
-        assert result["entry_ts"] is None, (
-            "E0 short: confirm bar gapped below orb_low (high < orb_low) — must NOT fill"
+        assert result["entry_ts"] is not None, "E2 short: bar touching ORB should fill"
+        assert result["entry_price"] == pytest.approx(expected_entry), (
+            f"E2 short entry must be at orb_low - slippage={expected_entry}, "
+            f"got {result['entry_price']}"
         )
 
 
@@ -619,7 +624,7 @@ class TestPnlRBoundsInvariant:
         break_dir = rng.choice(["long", "short"])
         rr = rng.choice(RR_TARGETS)
         cb = rng.choice(CONFIRM_BARS_OPTIONS)
-        model = rng.choice(["E0", "E1", "E3"])
+        model = rng.choice(["E1", "E2", "E3"])
 
         result = compute_single_outcome(
             bars_df=bars,
@@ -1117,28 +1122,31 @@ class TestSessionEndBoundary:
 
 
 # =============================================================================
-# 19. OUTLIER: FUZZ E0 ENTRY PRICE INVARIANT
+# 19. OUTLIER: FUZZ E2 ENTRY PRICE INVARIANT
 # =============================================================================
 
-class TestE0EntryPriceInvariant:
-    """E0 must ALWAYS fill at exactly orb_high (long) or orb_low (short).
-    Never at a different price. This is the fundamental E0 guarantee."""
+class TestE2EntryPriceInvariant:
+    """E2 must ALWAYS fill at orb_high + slippage (long) or orb_low - slippage (short).
+    Never at a different price. This is the fundamental E2 stop-market guarantee."""
 
     @pytest.mark.parametrize("seed", range(30))
-    def test_e0_long_entry_always_at_orb_high(self, seed):
+    def test_e2_long_entry_always_at_orb_high_plus_slippage(self, seed):
+        from trading_app.config import E2_SLIPPAGE_TICKS
         rng = random.Random(seed + 2000)
         orb_high = round(2700.0 + rng.uniform(-50, 50), 1)
         orb_low = round(orb_high - rng.uniform(2, 30), 1)
+        tick_size = _mgc().tick_size
+        expected_entry = orb_high + E2_SLIPPAGE_TICKS * tick_size
 
-        # Construct a confirm bar that touches orb_high (low <= orb_high)
-        confirm_low = orb_high - rng.uniform(0.1, 3.0)
-        confirm_high = orb_high + rng.uniform(1.0, 10.0)
-        confirm_close = orb_high + rng.uniform(0.1, 5.0)
+        # Construct a bar that touches orb_high (high > orb_high)
+        touch_high = orb_high + rng.uniform(1.0, 10.0)
+        touch_low = orb_high - rng.uniform(0.1, 3.0)
+        touch_close = orb_high + rng.uniform(0.1, 5.0)
 
         bars = _bars(T0, [
-            (orb_high - 1, confirm_high, confirm_low, confirm_close, 100),  # confirm + E0 fill
-            (confirm_close, confirm_close + 5, confirm_close - 1, confirm_close + 3, 100),
-            (confirm_close + 3, confirm_close + 20, confirm_close + 2, confirm_close + 15, 100),
+            (orb_high - 1, touch_high, touch_low, touch_close, 100),  # touches ORB → E2 fill
+            (touch_close, touch_close + 5, touch_close - 1, touch_close + 3, 100),
+            (touch_close + 3, touch_close + 20, touch_close + 2, touch_close + 15, 100),
         ])
         result = compute_single_outcome(
             bars_df=bars,
@@ -1150,28 +1158,31 @@ class TestE0EntryPriceInvariant:
             confirm_bars=1,
             trading_day_end=DAY_END,
             cost_spec=_mgc(),
-            entry_model="E0",
+            entry_model="E2",
         )
         if result["entry_ts"] is not None:
-            assert result["entry_price"] == pytest.approx(orb_high, abs=1e-6), (
-                f"seed={seed}: E0 long entry must be at orb_high={orb_high}, "
+            assert result["entry_price"] == pytest.approx(expected_entry, abs=1e-6), (
+                f"seed={seed}: E2 long entry must be at orb_high+slippage={expected_entry}, "
                 f"got entry_price={result['entry_price']}"
             )
 
     @pytest.mark.parametrize("seed", range(30))
-    def test_e0_short_entry_always_at_orb_low(self, seed):
+    def test_e2_short_entry_always_at_orb_low_minus_slippage(self, seed):
+        from trading_app.config import E2_SLIPPAGE_TICKS
         rng = random.Random(seed + 3000)
         orb_low = round(2700.0 - rng.uniform(0, 50), 1)
         orb_high = round(orb_low + rng.uniform(2, 30), 1)
+        tick_size = _mgc().tick_size
+        expected_entry = orb_low - E2_SLIPPAGE_TICKS * tick_size
 
-        confirm_high = orb_low + rng.uniform(0.1, 3.0)
-        confirm_low = orb_low - rng.uniform(1.0, 10.0)
-        confirm_close = orb_low - rng.uniform(0.1, 5.0)
+        touch_high = orb_low + rng.uniform(0.1, 3.0)
+        touch_low = orb_low - rng.uniform(1.0, 10.0)
+        touch_close = orb_low - rng.uniform(0.1, 5.0)
 
         bars = _bars(T0, [
-            (orb_low + 1, confirm_high, confirm_low, confirm_close, 100),
-            (confirm_close, confirm_close + 1, confirm_close - 5, confirm_close - 3, 100),
-            (confirm_close - 3, confirm_close - 2, confirm_close - 20, confirm_close - 15, 100),
+            (orb_low + 1, touch_high, touch_low, touch_close, 100),
+            (touch_close, touch_close + 1, touch_close - 5, touch_close - 3, 100),
+            (touch_close - 3, touch_close - 2, touch_close - 20, touch_close - 15, 100),
         ])
         result = compute_single_outcome(
             bars_df=bars,
@@ -1183,11 +1194,11 @@ class TestE0EntryPriceInvariant:
             confirm_bars=1,
             trading_day_end=DAY_END,
             cost_spec=_mgc(),
-            entry_model="E0",
+            entry_model="E2",
         )
         if result["entry_ts"] is not None:
-            assert result["entry_price"] == pytest.approx(orb_low, abs=1e-6), (
-                f"seed={seed}: E0 short entry must be at orb_low={orb_low}, "
+            assert result["entry_price"] == pytest.approx(expected_entry, abs=1e-6), (
+                f"seed={seed}: E2 short entry must be at orb_low-slippage={expected_entry}, "
                 f"got entry_price={result['entry_price']}"
             )
 

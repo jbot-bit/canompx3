@@ -151,14 +151,14 @@ class TestLoadBestExperimentalVariant:
         con = duckdb.connect(str(live_config_db))
         con.execute("""
             INSERT INTO experimental_strategies VALUES (
-                'exp_test', 'MGC', '1000', 'E0', 2.0, 1, 'ORB_G5',
+                'exp_test', 'MGC', '1000', 'E2', 2.0, 1, 'ORB_G5',
                 0.25, 0.51, 200, 1.0, 4.0, 3.5
             )
         """)
         con.close()
 
         result = _load_best_experimental_variant(
-            live_config_db, "MGC", "1000", "E0", "ORB_G5"
+            live_config_db, "MGC", "1000", "E2", "ORB_G5"
         )
         assert result is not None
         assert result["expectancy_r"] == 0.25
@@ -168,14 +168,14 @@ class TestLoadBestExperimentalVariant:
         con = duckdb.connect(str(live_config_db))
         con.execute("""
             INSERT INTO experimental_strategies VALUES (
-                'neg_test', 'MGC', '1000', 'E0', 2.0, 1, 'ORB_G5',
+                'neg_test', 'MGC', '1000', 'E2', 2.0, 1, 'ORB_G5',
                 -0.10, 0.45, 200, -0.5, 5.0, 3.5
             )
         """)
         con.close()
 
         result = _load_best_experimental_variant(
-            live_config_db, "MGC", "1000", "E0", "ORB_G5"
+            live_config_db, "MGC", "1000", "E2", "ORB_G5"
         )
         assert result is None
 

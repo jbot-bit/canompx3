@@ -38,6 +38,7 @@ ENTRY MODELS (defined below as ENTRY_MODELS):
   E2 (Stop-Market) - Stop order at ORB level + N ticks slippage. Triggers on
      first bar whose range crosses the ORB level. No confirmation needed.
      Fakeouts included as trades. Industry-standard honest breakout entry (Crabel).
+     Always CB1 (no confirm bars concept — stop triggers on first touch).
   E3 (Limit-At-ORB) - Place limit order at ORB level after confirm.
      Fills only if price retraces to ORB level (~96-97% on G5+ days).
      Best for retrace ORBs (LONDON_METALS, US_DATA_830) where price spikes then pulls back.
@@ -64,9 +65,10 @@ ORB SIZE FILTERS:
     ALL no-filter strategies have negative expectancy. Do not trade.
 
 GRID (2,808 strategy combinations, full grid before ENABLED_SESSIONS filtering):
-  E1: 13 ORBs x 6 RRs x 5 CBs x 6 filters = 2,340
-  E3: 13 ORBs x 6 RRs x 1 CB x 6 filters = 468 (E3 always CB1)
-  Total = 2,808
+  E1: 10 ORBs x 6 RRs x 5 CBs x 6 filters = 1,800
+  E2: 10 ORBs x 6 RRs x 1 CB x 6 filters = 360 (E2 always CB1)
+  E3: 10 ORBs x 6 RRs x 1 CB x 6 filters = 360 (E3 always CB1)
+  Total = 2,520 (base grid; session-specific composites expand per-session)
 
 ==========================================================================
 """
@@ -602,11 +604,12 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
 
 
 # Entry models: realistic fill assumptions for backtesting
-# E0 = Limit at ORB level ON the confirm bar itself (DEPRECATED — to be replaced by E2)
-# E1 = Market at next bar open after confirm (momentum entry, conservative baseline)
+# E0 was purged Feb 2026: limit-on-confirm had 3 structural biases (fill-on-touch,
+#   fakeout exclusion, fill-bar wins). Won 33/33 combos = artifact. Replaced by E2.
+# E1 = Market at next bar open after confirm (momentum entry, honest baseline)
+# E2 = Stop-market at ORB level + slippage (industry-standard breakout entry, Crabel)
 # E3 = Limit order at ORB level, waiting for retrace after confirm (may not fill)
-# See docs/plans/2026-02-26-e2-entry-model-design.md for E2 design.
-ENTRY_MODELS = ["E0", "E1", "E3"]
+ENTRY_MODELS = ["E1", "E2", "E3"]
 
 # E2 stop-market slippage: number of ticks beyond ORB level for fill-through.
 # Default 1 = industry standard (fill-through-by-1-tick). Use 2 for stress testing.

@@ -79,25 +79,25 @@ LIVE_PORTFOLIO = [
     # --- CORE: always on, full-period validated ROBUST families ---
 
     # CME_REOPEN session (MGC + MNQ dominant; MES secondary)
-    # E0 validated Feb 2026 — limit at ORB edge, best fill price
-    LiveStrategySpec("CME_REOPEN_E0_ORB_G5", "core", "CME_REOPEN", "E0", "ORB_G5", None),
-    LiveStrategySpec("CME_REOPEN_E0_ORB_G4", "core", "CME_REOPEN", "E0", "ORB_G4", None),
-    # E1 kept as fallback for instruments where E0 doesn't reach ROBUST threshold
+    # E2 = stop-market at ORB level + slippage (replaces E0 Feb 2026)
+    LiveStrategySpec("CME_REOPEN_E2_ORB_G5", "core", "CME_REOPEN", "E2", "ORB_G5", None),
+    LiveStrategySpec("CME_REOPEN_E2_ORB_G4", "core", "CME_REOPEN", "E2", "ORB_G4", None),
+    # E1 kept as fallback for instruments where E2 doesn't reach ROBUST threshold
     LiveStrategySpec("CME_REOPEN_E1_ORB_G5", "core", "CME_REOPEN", "E1", "ORB_G5", None),
 
     # TOKYO_OPEN session (universal — positive for MGC, MNQ, MES)
-    LiveStrategySpec("TOKYO_OPEN_E0_ORB_G5", "core", "TOKYO_OPEN", "E0", "ORB_G5", None),
-    LiveStrategySpec("TOKYO_OPEN_E0_ORB_G4", "core", "TOKYO_OPEN", "E0", "ORB_G4", None),
+    LiveStrategySpec("TOKYO_OPEN_E2_ORB_G5", "core", "TOKYO_OPEN", "E2", "ORB_G5", None),
+    LiveStrategySpec("TOKYO_OPEN_E2_ORB_G4", "core", "TOKYO_OPEN", "E2", "ORB_G4", None),
     LiveStrategySpec("TOKYO_OPEN_E1_ORB_G5", "core", "TOKYO_OPEN", "E1", "ORB_G5", None),
 
     # LONDON_METALS session (MGC-specific; MNQ marginal)
-    LiveStrategySpec("LONDON_METALS_E0_ORB_G4_NOMON", "core", "LONDON_METALS", "E0", "ORB_G4_NOMON", None),
+    LiveStrategySpec("LONDON_METALS_E2_ORB_G4_NOMON", "core", "LONDON_METALS", "E2", "ORB_G4_NOMON", None),
 
     # --- HOT: rolling-eval gated ---
     # Auto-activates when stability >= HOT_MIN_STABILITY after rolling_portfolio.py re-run.
     # All HOT entries are currently gated off ("family not found in rolling results").
-    LiveStrategySpec("CME_REOPEN_E0_ORB_G4_NOFRI", "hot", "CME_REOPEN", "E0", "ORB_G4_NOFRI", "rolling"),
-    LiveStrategySpec("TOKYO_OPEN_E0_ORB_G5_L12", "hot", "TOKYO_OPEN", "E0", "ORB_G5_L12", "rolling"),
+    LiveStrategySpec("CME_REOPEN_E2_ORB_G4_NOFRI", "hot", "CME_REOPEN", "E2", "ORB_G4_NOFRI", "rolling"),
+    LiveStrategySpec("TOKYO_OPEN_E2_ORB_G5_L12", "hot", "TOKYO_OPEN", "E2", "ORB_G5_L12", "rolling"),
 
     # --- REGIME: fitness-gated ---
     # (none currently active — add as fitness monitoring matures)

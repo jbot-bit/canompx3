@@ -5,8 +5,10 @@ Confirm bars require N consecutive 1m closes outside the ORB range
 before confirming an entry signal. This filters fakeout breaks.
 
 Entry Models:
-  - E0 (Limit-On-Confirm): Enter at ORB level ON the confirm bar itself
   - E1 (Market-On-Confirm): Enter at next bar OPEN after confirm bar
+  - E2 (Stop-Market): Stop order at ORB level + slippage. Triggers on first
+    bar whose range crosses the ORB level. Uses detect_break_touch(), not this
+    confirm-based path. Fakeouts included as trades.
   - E3 (Limit-At-ORB): Enter at ORB level if price retraces after confirm
 
 Rules (CANONICAL_LOGIC.txt section 8):
@@ -15,11 +17,10 @@ Rules (CANONICAL_LOGIC.txt section 8):
   - confirm_bars=3+: Wait for Nth consecutive close outside ORB
   - Reset: If any bar closes back INSIDE ORB, count resets to 0
 
-E0 vs E3 distinction:
-  E0 fills on the CONFIRM bar (the Nth closing bar outside ORB).
-  E3 waits for a RETRACE bar AFTER the confirm bar.
-  For CB1, E0 essentially always fills (break bar must cross ORB edge).
-  For CB2+, E0 may not fill if the confirm bar gapped fully past ORB edge.
+E2 vs E1/E3 distinction:
+  E2 uses detect_break_touch() + _resolve_e2() — completely separate path.
+  E1/E3 use detect_confirm() + resolve_entry() — the confirm-based path.
+  E0 (limit-on-confirm) was purged Feb 2026 — 3 structural biases made it an artifact.
 """
 
 from dataclasses import dataclass
@@ -213,9 +214,7 @@ def resolve_entry(
 
     stop_price = confirm.orb_low if confirm.break_dir == "long" else confirm.orb_high
 
-    if entry_model == "E0":
-        return _resolve_e0(bars_df, confirm, stop_price)
-    elif entry_model == "E1":
+    if entry_model == "E1":
         return _resolve_e1(bars_df, confirm, stop_price, scan_window_end)
     elif entry_model == "E3":
         # Cap retrace scan window if configured (stale fill prevention).
@@ -255,52 +254,6 @@ def _resolve_e1(
     return EntrySignal(
         triggered=True, entry_ts=entry_ts, entry_price=entry_price,
         stop_price=stop_price, entry_model="E1",
-        confirm_bar_ts=confirm.confirm_bar_ts,
-    )
-
-
-def _resolve_e0(
-    bars_df: pd.DataFrame,
-    confirm: ConfirmResult,
-    stop_price: float,
-) -> EntrySignal:
-    """E0: Limit-On-Confirm. Entry at ORB edge ON the confirm bar itself.
-
-    A limit order sits at the ORB edge before the break. It fills as soon as
-    the confirm bar's range touches the ORB edge. For CB1, this essentially
-    always fills (the break bar must have crossed the ORB edge). For CB2+,
-    the confirm bar may have gapped fully past the ORB edge → no fill.
-    """
-    no_fill = EntrySignal(
-        triggered=False, entry_ts=None, entry_price=None, stop_price=None,
-        entry_model="E0", confirm_bar_ts=confirm.confirm_bar_ts,
-    )
-
-    confirm_bar = bars_df[bars_df["ts_utc"] == pd.Timestamp(confirm.confirm_bar_ts)]
-    if confirm_bar.empty:
-        return no_fill
-
-    bar = confirm_bar.iloc[0]
-    bar_high = float(bar["high"])
-    bar_low = float(bar["low"])
-
-    if confirm.break_dir == "long":
-        # Long: limit buy at orb_high — bar must have touched orb_high from below
-        if bar_low > confirm.orb_high:
-            return no_fill
-        entry_price = confirm.orb_high
-    else:
-        # Short: limit sell at orb_low — bar must have touched orb_low from above
-        if bar_high < confirm.orb_low:
-            return no_fill
-        entry_price = confirm.orb_low
-
-    return EntrySignal(
-        triggered=True,
-        entry_ts=confirm.confirm_bar_ts,
-        entry_price=entry_price,
-        stop_price=stop_price,
-        entry_model="E0",
         confirm_bar_ts=confirm.confirm_bar_ts,
     )
 
@@ -421,13 +374,9 @@ def detect_entry_with_confirm_bars(
 
     Wrapper that calls detect_confirm() + resolve_entry() for E1/E3.
     """
-    # E0 + CB>1 is look-ahead: by the time CB2+ confirms, the confirm bar has
-    # already closed — you can't retroactively fill a limit on it.
-    if entry_model == "E0" and confirm_bars > 1:
-        return EntrySignal(
-            triggered=False, entry_ts=None, entry_price=None,
-            stop_price=None, entry_model="E0", confirm_bar_ts=None,
-        )
+    # E2 uses detect_break_touch() + _resolve_e2(), not the confirm-based path.
+    if entry_model == "E2":
+        raise ValueError("E2 uses detect_break_touch(), not detect_entry_with_confirm_bars().")
 
     confirm = detect_confirm(
         bars_df, orb_break_ts, orb_high, orb_low,

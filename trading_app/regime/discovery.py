@@ -118,7 +118,7 @@ def run_regime_discovery(
                 for em in ENTRY_MODELS:
                     for rr_target in RR_TARGETS:
                         for cb in CONFIRM_BARS_OPTIONS:
-                            if em in ("E0", "E3") and cb > 1:
+                            if em in ("E2", "E3") and cb > 1:
                                 continue
                             combo_idx += 1
 
