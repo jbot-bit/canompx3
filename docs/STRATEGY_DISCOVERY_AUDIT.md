@@ -4,7 +4,7 @@
 
 **Last Updated:** 2026-02-25
 **Scope:** Discovery, filtering, validation, fitness assessment, portfolio selection
-**Status:** Production system (1,800 tests passing, 34 drift checks passing)
+**Status:** Production system (1,811 tests passing, 35 drift checks passing). Note: strategy counts in this doc are from Feb 25 snapshot (1,322 pre-E0-purge). Current state: 627 validated, 206 edge families.
 
 ---
 
@@ -37,7 +37,7 @@ Raw OHLCV bars (1m)
   ↓
 Daily features (ORBs, sessions, RSI)
   ↓
-Pre-computed outcomes (~5.8M rows, 5/15/30m, 7 instruments)
+Pre-computed outcomes (~6.1M rows, 5/15/30m, 7 instruments)
   ↓
 Grid search: session-aware combos (3 EMs x filters x RR x CB)
   ↓
@@ -179,11 +179,11 @@ WHERE symbol = ? AND orb_minutes = ?
 
 **Grouped by:** (orb_label, entry_model, rr_target, confirm_bars)
 
-**Size:** ~5.8M rows across all instruments (5/15/30m ORB apertures) (covers all RR targets × CBs for valid breaks)
+**Size:** ~6.1M rows across all instruments (5/15/30m ORB apertures) (covers all RR targets × CBs for valid breaks)
 
 ### Outcome Pre-Computation (outcome_builder.py)
 
-**Purpose:** Pre-compute orb_outcomes table (~5.8M rows) once, reuse for all strategy discovery.
+**Purpose:** Pre-compute orb_outcomes table (~6.1M rows) once, reuse for all strategy discovery.
 
 **Approach:**
 ```
@@ -641,7 +641,7 @@ Columns:
   - Exit: outcome ('win'/'loss'/'scratch'/'early_exit'/NULL)
   - exit_ts, exit_price, pnl_r
   - Excursions: mae_r, mfe_r
-Size: MGC ~5.8M rows (all RR/CB combos for valid breaks)
+Size: MGC ~6.1M rows (all RR/CB combos for valid breaks)
 ```
 
 #### experimental_strategies (Discovery Output)
@@ -799,7 +799,7 @@ For each candidate (ordered by ExpR DESC):
 - **Repeatability:** Same combo always produces same metrics (deterministic)
 
 ### 2. Pre-Computed Outcomes
-- **Efficiency:** ~5.8M outcomes pre-computed once, reused for all discovery
+- **Efficiency:** ~6.1M outcomes pre-computed once, reused for all discovery
 - **Accuracy:** Outcomes computed at exact bar timestamps (no approximation)
 - **Flexibility:** Can re-run discovery with different filters on same outcomes
 
@@ -826,7 +826,7 @@ For each candidate (ordered by ExpR DESC):
 
 ### 7. Comprehensive Testing
 - **1,072 tests** passing (all critical paths covered)
-- **34 drift checks** passing (architectural guardrails active)
+- **35 drift checks** passing (architectural guardrails active)
 - **Pre-commit hooks** enforce validation on every commit
 
 ### 8. Well-Documented Parameters
@@ -1167,7 +1167,7 @@ MCL: (ZERO EDGE — all sessions skipped)
 
 ### Critical Knowledge
 1. **Grid search** produces 5,148 strategy combos (E1 + E3 entry models)
-2. **Outcomes pre-computed** (~5.8M rows) and reused for all discovery
+2. **Outcomes pre-computed** (~6.1M rows) and reused for all discovery
 3. **Validation is rigorous:** 6-phase pipeline filters to 1,322 viable active strategies across 4 instruments
 4. **Filtering creates redundancy:** Many combos produce identical trade sets
 5. **Sharpe annualization** requires frequency matching (must have trades_per_year >= 30 minimum)
@@ -1223,4 +1223,4 @@ MCL: (ZERO EDGE — all sessions skipped)
 **Created:** 2026-02-15
 **For:** Knowledge transfer & architectural brainstorming
 **Scope:** Complete strategy discovery & search system
-**Status:** Production-ready (1,800 tests, 34 drift checks passing)
+**Status:** Production-ready (1,811 tests, 35 drift checks passing)

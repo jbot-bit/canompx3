@@ -52,7 +52,7 @@ All sessions are now dynamic/event-based. Times are resolved per-day from `pipel
 
 **E3 vs E1 (verified per-combo, not generalized):** E3 beats E1 in 20/33 combos at RR2.0 G4+, but 19 of those 20 are both negative (E3 just loses less). Only MGC CME_REOPEN has E3 positive AND beating E1 (+0.186 vs +0.137).
 
-**Post-swap results (Feb 26):** 600 validated strategies with honest entries (E1+E2+E3), down from 1,322 with dishonest E0. 113 FDR significant. MNQ leads with 79 FDR survivors.
+**Post-swap results (Feb 27):** 627 validated strategies with honest entries (E1+E2+E3), down from 1,322 with dishonest E0. 128 FDR significant. MNQ leads with 92 FDR survivors. 206 edge families (34 ROBUST, 38 WHITELISTED).
 
 ### Confirm Bars (CB)
 CB1-CB5 = 1-5 consecutive 1m bars must close outside ORB. If ANY bar closes back inside, count resets. For E3, CB1-CB5 produce identical entry prices (same limit order).

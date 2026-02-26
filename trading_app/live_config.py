@@ -72,7 +72,7 @@ HOT_MIN_STABILITY = 0.6
 # Updated 2026-02-26: E0 purged, replaced by E2 (stop-market at ORB level + slippage).
 #   E0 had 3 optimistic biases (fill-on-touch, fakeout exclusion, fill-bar wins) — PURGED.
 #   E2 = stop-market entry at ORB level + N ticks slippage. Industry standard for breakout backtesting.
-#   Portfolio needs rebuild with E2/E1/E3 validated strategies (600 total, down from 1,322).
+#   Portfolio needs rebuild with E2/E1/E3 validated strategies (627 total, down from 1,322).
 LIVE_PORTFOLIO = [
     # --- CORE: always on, full-period validated ROBUST families ---
 

@@ -77,7 +77,7 @@ Databento .dbn.zst files
 ### Key Design Principles
 - **Fail-closed:** Any validation failure aborts immediately
 - **Idempotent:** All operations safe to re-run (INSERT OR REPLACE / DELETE+INSERT)
-- **Pre-computed outcomes:** ~5.8M rows across 7 instruments (4 active + 3 dead), 5/15/30m ORB apertures, reused for all discovery
+- **Pre-computed outcomes:** ~6.1M rows across 7 instruments (4 active + 3 dead), 5/15/30m ORB apertures, reused for all discovery
 - **One-way dependency:** pipeline/ → trading_app/ (never reversed)
 
 ### Time & Calendar Model
@@ -120,7 +120,7 @@ cp "C:\db\gold.db" "C:\Users\joshd\canompx3\gold.db"
 
 ```bash
 # Guardrails (run frequently)
-python pipeline/check_drift.py               # Drift detection (34 checks)
+python pipeline/check_drift.py               # Drift detection (35 checks)
 python -m pytest tests/ -x -q                # Fast test suite
 python pipeline/health_check.py              # All-in-one health check
 
@@ -168,7 +168,7 @@ The `gold-db` MCP server (`trading_app/mcp_server.py`) exposes 4 read-only tools
 
 ## Guardrails
 
-Five layers enforce quality: pre-commit hook (`.githooks/pre-commit`), drift detection (`pipeline/check_drift.py` — 34 static checks), Claude Code hooks (auto-run drift/tests on file edits), GitHub Actions CI, and built-in pipeline validation gates (7 ingestion gates, 4 aggregation gates). Setup: `git config core.hooksPath .githooks`
+Five layers enforce quality: pre-commit hook (`.githooks/pre-commit`), drift detection (`pipeline/check_drift.py` — 35 static checks), Claude Code hooks (auto-run drift/tests on file edits), GitHub Actions CI, and built-in pipeline validation gates (7 ingestion gates, 4 aggregation gates). Setup: `git config core.hooksPath .githooks`
 
 ---
 

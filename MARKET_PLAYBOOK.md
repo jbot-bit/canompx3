@@ -3,9 +3,9 @@
 Empirical findings from 1,460 trading days (2021-02-05 to 2026-02-04).
 Database now contains 2,922 trading days (2016-02-01 to 2026-02-04) but
 outcomes/strategies below are computed on the 2021-2026 slice.
-~5.8M outcomes computed across 7 instruments (5/15/30m ORB) with entry models (E0/E1/E3).
-1,322 strategies validated active (post-cost, FDR-corrected, yearly robust).
-Entry model note: E0 has 3 optimistic backtest biases — see TRADING_RULES.md Entry Model Bias Audit.
+~6.1M outcomes computed across 7 instruments (5/15/30m ORB) with entry models (E1/E2/E3).
+627 strategies validated active (post-cost, FDR-corrected, yearly robust). E0 purged Feb 2026 (3 biases).
+Entry model note: E2 (stop-market) is dominant entry. See TRADING_RULES.md Entry Model Bias Audit.
 
 **IMPORTANT**: These findings supersede the earlier 252-strategy scan which had
 two bugs: entry at ORB level (unreachable price) and missing friction on wins.
@@ -455,7 +455,7 @@ point-based filter becomes less selective. Consider switching to percentage-base
 - MGC only had ~78% coverage — not enough for accurate ORBs
 - Prices are identical (same underlying, same exchange)
 
-### ~5.8M outcomes computed
+### ~6.1M outcomes computed
 - 7 instruments × 5/15/30m ORB apertures × 6 RRs × 5 CBs × 3 entry models
 - Entry models: E0 (limit on confirm bar, CB1 only — 3 backtest biases), E1 (next bar open — honest baseline), E3 (limit at ORB retrace)
 - All outcomes include realistic entry prices from actual bar data
