@@ -45,6 +45,21 @@ class ConfirmResult:
 
 
 @dataclass(frozen=True)
+class BreakTouchResult:
+    """Result of break-touch detection (range crosses ORB, no close requirement).
+
+    Used by E2 (stop-market) where a resting stop order triggers on any
+    intra-bar touch of the ORB level, regardless of where the bar closes.
+    """
+    touched: bool
+    touch_bar_ts: datetime | None
+    touch_bar_idx: int | None
+    orb_high: float
+    orb_low: float
+    break_dir: str
+
+
+@dataclass(frozen=True)
 class EntrySignal:
     """Result of entry detection with confirm_bars."""
 
@@ -119,6 +134,57 @@ def detect_confirm(
         )
 
     return no_confirm
+
+
+def detect_break_touch(
+    bars_df: pd.DataFrame,
+    orb_high: float,
+    orb_low: float,
+    break_dir: str,
+    detection_window_start: datetime,
+    detection_window_end: datetime,
+) -> BreakTouchResult:
+    """
+    Detect first bar whose range crosses the ORB level.
+
+    Unlike detect_confirm(), this does NOT require the bar to close outside
+    the ORB. A bar whose high > orb_high (long) or low < orb_low (short)
+    counts as a touch, even if it closes back inside (fakeout).
+
+    This is the detection path for E2 (stop-market), where a resting stop
+    order triggers on any intra-bar touch of the level.
+    """
+    no_touch = BreakTouchResult(
+        touched=False, touch_bar_ts=None, touch_bar_idx=None,
+        orb_high=orb_high, orb_low=orb_low, break_dir=break_dir,
+    )
+
+    if break_dir not in ("long", "short"):
+        raise ValueError(f"break_dir must be 'long' or 'short', got {break_dir}")
+
+    candidate_bars = bars_df[
+        (bars_df["ts_utc"] >= pd.Timestamp(detection_window_start))
+        & (bars_df["ts_utc"] < pd.Timestamp(detection_window_end))
+    ].sort_values("ts_utc")
+
+    if candidate_bars.empty:
+        return no_touch
+
+    if break_dir == "long":
+        touch_mask = candidate_bars["high"].values > orb_high
+    else:
+        touch_mask = candidate_bars["low"].values < orb_low
+
+    if not touch_mask.any():
+        return no_touch
+
+    idx = int(np.argmax(touch_mask))
+    ts = candidate_bars.iloc[idx]["ts_utc"].to_pydatetime()
+
+    return BreakTouchResult(
+        touched=True, touch_bar_ts=ts, touch_bar_idx=idx,
+        orb_high=orb_high, orb_low=orb_low, break_dir=break_dir,
+    )
 
 
 def resolve_entry(
@@ -298,6 +364,45 @@ def _resolve_e3(
         triggered=True, entry_ts=entry_ts, entry_price=entry_price,
         stop_price=stop_price, entry_model="E3",
         confirm_bar_ts=confirm.confirm_bar_ts,
+    )
+
+
+def _resolve_e2(
+    touch: BreakTouchResult,
+    slippage_ticks: int,
+    tick_size: float,
+) -> EntrySignal:
+    """E2: Stop-Market. Entry at ORB level + N ticks slippage.
+
+    A stop order sits at the ORB boundary before the break. It fills
+    the moment the bar's range crosses the level. Fill price includes
+    slippage (fill-through, not fill-on-touch).
+
+    Fakeout bars (close back inside ORB) ARE valid fills — the stop
+    triggered intra-bar regardless of where the bar closes.
+    """
+    if not touch.touched:
+        return EntrySignal(
+            triggered=False, entry_ts=None, entry_price=None,
+            stop_price=None, entry_model="E2", confirm_bar_ts=None,
+        )
+
+    slippage = slippage_ticks * tick_size
+
+    if touch.break_dir == "long":
+        entry_price = touch.orb_high + slippage
+        stop_price = touch.orb_low
+    else:
+        entry_price = touch.orb_low - slippage
+        stop_price = touch.orb_high
+
+    return EntrySignal(
+        triggered=True,
+        entry_ts=touch.touch_bar_ts,
+        entry_price=entry_price,
+        stop_price=stop_price,
+        entry_model="E2",
+        confirm_bar_ts=touch.touch_bar_ts,
     )
 
 

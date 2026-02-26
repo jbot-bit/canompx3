@@ -10,8 +10,11 @@ from trading_app.entry_rules import (
     detect_entry_with_confirm_bars,
     detect_confirm,
     resolve_entry,
+    detect_break_touch,
+    _resolve_e2,
     EntrySignal,
     ConfirmResult,
+    BreakTouchResult,
 )
 
 
@@ -799,3 +802,236 @@ class TestE3RetraceWindowCap:
         assert confirm.confirmed is True
         signal = resolve_entry(bars, confirm, "E3", short_window)
         assert signal.triggered is True
+
+
+# ============================================================================
+# detect_break_touch tests (E2 detection path)
+# ============================================================================
+
+def _make_touch_bars(
+    ohlc_list: list[tuple[float, float, float, float]],
+    start_ts: datetime,
+    freq_seconds: int = 60,
+) -> pd.DataFrame:
+    """Create a bars DataFrame from a list of (open, high, low, close) tuples."""
+    timestamps = [
+        pd.Timestamp(start_ts, tz="UTC") + pd.Timedelta(seconds=i * freq_seconds)
+        if start_ts.tzinfo is None
+        else pd.Timestamp(start_ts) + pd.Timedelta(seconds=i * freq_seconds)
+        for i in range(len(ohlc_list))
+    ]
+    return pd.DataFrame({
+        "ts_utc": timestamps,
+        "open": [t[0] for t in ohlc_list],
+        "high": [t[1] for t in ohlc_list],
+        "low": [t[2] for t in ohlc_list],
+        "close": [t[3] for t in ohlc_list],
+    })
+
+
+# Window for break-touch tests
+TOUCH_WINDOW_START = datetime(2024, 1, 1, 14, 0, tzinfo=timezone.utc)
+TOUCH_WINDOW_END = datetime(2024, 1, 1, 23, 0, tzinfo=timezone.utc)
+
+
+class TestDetectBreakTouch:
+    """Tests for detect_break_touch — E2 stop-market detection path."""
+
+    def test_long_touch_on_first_bar(self):
+        """Bar high crosses orb_high, closes back inside (fakeout). Should detect."""
+        bars = _make_touch_bars(
+            [(2345.0, 2351.0, 2344.0, 2346.0)],  # high > 2350, close < 2350 = fakeout
+            TOUCH_WINDOW_START,
+        )
+        result = detect_break_touch(
+            bars, ORB_HIGH, ORB_LOW, "long",
+            TOUCH_WINDOW_START, TOUCH_WINDOW_END,
+        )
+        assert result.touched is True
+        assert result.touch_bar_idx == 0
+        assert result.touch_bar_ts == TOUCH_WINDOW_START
+        assert result.break_dir == "long"
+
+    def test_long_no_touch(self):
+        """Bar high never reaches orb_high. No touch."""
+        bars = _make_touch_bars(
+            [(2345.0, 2349.0, 2343.0, 2347.0),  # high=2349 < 2350
+             (2346.0, 2348.0, 2344.0, 2346.0)],  # high=2348 < 2350
+            TOUCH_WINDOW_START,
+        )
+        result = detect_break_touch(
+            bars, ORB_HIGH, ORB_LOW, "long",
+            TOUCH_WINDOW_START, TOUCH_WINDOW_END,
+        )
+        assert result.touched is False
+        assert result.touch_bar_ts is None
+        assert result.touch_bar_idx is None
+
+    def test_short_touch_fakeout(self):
+        """Bar low crosses orb_low, closes above. Should detect."""
+        bars = _make_touch_bars(
+            [(2345.0, 2346.0, 2339.0, 2344.0)],  # low=2339 < 2340, close > 2340
+            TOUCH_WINDOW_START,
+        )
+        result = detect_break_touch(
+            bars, ORB_HIGH, ORB_LOW, "short",
+            TOUCH_WINDOW_START, TOUCH_WINDOW_END,
+        )
+        assert result.touched is True
+        assert result.touch_bar_idx == 0
+        assert result.break_dir == "short"
+
+    def test_touch_returns_first_bar(self):
+        """Multiple bars touch, returns FIRST (even if fakeout)."""
+        bars = _make_touch_bars(
+            [(2345.0, 2351.0, 2344.0, 2346.0),  # bar 0: fakeout touch
+             (2348.0, 2355.0, 2347.0, 2354.0)],  # bar 1: clean break
+            TOUCH_WINDOW_START,
+        )
+        result = detect_break_touch(
+            bars, ORB_HIGH, ORB_LOW, "long",
+            TOUCH_WINDOW_START, TOUCH_WINDOW_END,
+        )
+        assert result.touched is True
+        assert result.touch_bar_idx == 0
+        # Confirm it picked the first bar's timestamp, not the second
+        assert result.touch_bar_ts == TOUCH_WINDOW_START
+
+    def test_respects_window_start(self):
+        """Bars before detection_window_start are ignored."""
+        early_ts = TOUCH_WINDOW_START - timedelta(minutes=5)
+        bars = _make_touch_bars(
+            [(2345.0, 2355.0, 2344.0, 2346.0),  # bar 0: touches, but BEFORE window
+             (2345.0, 2348.0, 2344.0, 2346.0)],  # bar 1: no touch, inside window
+            early_ts,
+        )
+        # Bar 0 is at early_ts (before window), bar 1 is at early_ts + 1 min
+        # Still before TOUCH_WINDOW_START (early_ts + 5 min). Need bars IN the window.
+        # Let's set up properly: bar 0 at early_ts, bar 1 at early_ts+1m. Both before window.
+        # So no bars in window -> no touch.
+        result = detect_break_touch(
+            bars, ORB_HIGH, ORB_LOW, "long",
+            TOUCH_WINDOW_START, TOUCH_WINDOW_END,
+        )
+        assert result.touched is False
+
+    def test_respects_window_end(self):
+        """Bars at/after detection_window_end are ignored."""
+        # Put bar exactly at window end — should be excluded (< not <=)
+        window_end = TOUCH_WINDOW_START + timedelta(minutes=1)
+        bars = _make_touch_bars(
+            [(2345.0, 2348.0, 2344.0, 2346.0),   # bar 0: no touch, in window
+             (2345.0, 2355.0, 2344.0, 2354.0)],   # bar 1: touches, but AT window_end
+            TOUCH_WINDOW_START,
+        )
+        result = detect_break_touch(
+            bars, ORB_HIGH, ORB_LOW, "long",
+            TOUCH_WINDOW_START, window_end,
+        )
+        assert result.touched is False
+
+    def test_empty_bars(self):
+        """Empty DataFrame returns no touch."""
+        bars = pd.DataFrame(columns=["ts_utc", "open", "high", "low", "close"])
+        result = detect_break_touch(
+            bars, ORB_HIGH, ORB_LOW, "long",
+            TOUCH_WINDOW_START, TOUCH_WINDOW_END,
+        )
+        assert result.touched is False
+        assert result.touch_bar_ts is None
+
+    def test_invalid_break_dir(self):
+        """Raises ValueError for invalid break_dir."""
+        bars = _make_touch_bars(
+            [(2345.0, 2351.0, 2344.0, 2346.0)],
+            TOUCH_WINDOW_START,
+        )
+        with pytest.raises(ValueError, match="break_dir must be 'long' or 'short'"):
+            detect_break_touch(
+                bars, ORB_HIGH, ORB_LOW, "up",
+                TOUCH_WINDOW_START, TOUCH_WINDOW_END,
+            )
+
+
+# ============================================================================
+# _resolve_e2 tests (E2 stop-market entry resolution)
+# ============================================================================
+
+class TestResolveE2:
+    """Tests for _resolve_e2 — stop-market entry price with slippage."""
+
+    def test_long_entry_price_includes_slippage(self):
+        """Long: entry = orb_high + 1 tick * 0.10 = 2350.10, stop = 2340."""
+        touch = BreakTouchResult(
+            touched=True,
+            touch_bar_ts=datetime(2024, 1, 1, 14, 5),
+            touch_bar_idx=0,
+            orb_high=ORB_HIGH,
+            orb_low=ORB_LOW,
+            break_dir="long",
+        )
+        signal = _resolve_e2(touch, slippage_ticks=1, tick_size=0.10)
+        assert signal.triggered is True
+        assert signal.entry_model == "E2"
+        assert signal.entry_price == pytest.approx(2350.10)
+        assert signal.stop_price == ORB_LOW  # 2340
+
+    def test_short_entry_price_includes_slippage(self):
+        """Short: entry = orb_low - 1 tick * 0.10 = 2339.90, stop = 2350."""
+        touch = BreakTouchResult(
+            touched=True,
+            touch_bar_ts=datetime(2024, 1, 1, 14, 5),
+            touch_bar_idx=0,
+            orb_high=ORB_HIGH,
+            orb_low=ORB_LOW,
+            break_dir="short",
+        )
+        signal = _resolve_e2(touch, slippage_ticks=1, tick_size=0.10)
+        assert signal.triggered is True
+        assert signal.entry_price == pytest.approx(2339.90)
+        assert signal.stop_price == ORB_HIGH  # 2350
+
+    def test_stress_slippage_2_ticks(self):
+        """2 ticks slippage: entry = orb_high + 2 * 0.10 = 2350.20."""
+        touch = BreakTouchResult(
+            touched=True,
+            touch_bar_ts=datetime(2024, 1, 1, 14, 5),
+            touch_bar_idx=0,
+            orb_high=ORB_HIGH,
+            orb_low=ORB_LOW,
+            break_dir="long",
+        )
+        signal = _resolve_e2(touch, slippage_ticks=2, tick_size=0.10)
+        assert signal.triggered is True
+        assert signal.entry_price == pytest.approx(2350.20)
+
+    def test_no_touch_returns_no_fill(self):
+        """BreakTouchResult(touched=False) produces no fill."""
+        touch = BreakTouchResult(
+            touched=False,
+            touch_bar_ts=None,
+            touch_bar_idx=None,
+            orb_high=ORB_HIGH,
+            orb_low=ORB_LOW,
+            break_dir="long",
+        )
+        signal = _resolve_e2(touch, slippage_ticks=1, tick_size=0.10)
+        assert signal.triggered is False
+        assert signal.entry_price is None
+        assert signal.stop_price is None
+        assert signal.entry_model == "E2"
+
+    def test_mnq_tick_size(self):
+        """MNQ tick = 0.25: entry = orb_high + 1 * 0.25 = 2350.25."""
+        touch = BreakTouchResult(
+            touched=True,
+            touch_bar_ts=datetime(2024, 1, 1, 14, 5),
+            touch_bar_idx=0,
+            orb_high=ORB_HIGH,
+            orb_low=ORB_LOW,
+            break_dir="long",
+        )
+        signal = _resolve_e2(touch, slippage_ticks=1, tick_size=0.25)
+        assert signal.triggered is True
+        assert signal.entry_price == pytest.approx(2350.25)
+        assert signal.stop_price == ORB_LOW
