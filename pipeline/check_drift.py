@@ -1881,17 +1881,17 @@ def main():
         print("  PASSED [OK]")
     print()
 
-    # Check 35: No E0 rows in DB (enable after Phase C DB purge)
-    # print("Check 35: No E0 rows in trading tables...")
-    # v = check_no_e0_in_db()
-    # if v:
-    #     print("  FAILED:")
-    #     for line in v:
-    #         print(line)
-    #     all_violations.extend(v)
-    # else:
-    #     print("  PASSED [OK]")
-    # print()
+    # Check 35: No E0 rows in DB
+    print("Check 35: No E0 rows in trading tables...")
+    v = check_no_e0_in_db()
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
 
     # Summary
     print("=" * 60)
