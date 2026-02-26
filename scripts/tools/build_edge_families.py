@@ -345,7 +345,7 @@ def main():
 
     if args.all:
         total = 0
-        for inst in ["MGC", "MNQ", "MES", "MCL"]:
+        for inst in ["MGC", "MNQ", "MES", "M2K"]:
             total += build_edge_families(args.db_path, inst)
             print()
         print(f"Grand total: {total} unique edge families")

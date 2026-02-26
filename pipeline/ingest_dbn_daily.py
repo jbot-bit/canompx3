@@ -580,6 +580,13 @@ def main():
         logger.info(f"Date range: {date_range[0]} to {date_range[1]}")
         con.close()
 
+    if stats['files_failed'] > 0:
+        logger.error(
+            f"FAIL: {stats['files_failed']} file(s) failed during ingestion. "
+            "Data may be incomplete — do NOT proceed with downstream pipeline stages."
+        )
+        sys.exit(1)
+
     logger.info(f"SUCCESS: {symbol} daily ingestion complete and validated.")
     sys.exit(0)
 

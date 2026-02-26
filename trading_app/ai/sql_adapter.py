@@ -239,6 +239,7 @@ _TEMPLATES = {
         FROM daily_features
         WHERE orb_{orb_label}_size IS NOT NULL
         AND orb_minutes = 5
+        {instrument_filter}
         GROUP BY size_bucket
         ORDER BY MIN(orb_{orb_label}_size)
     """,
@@ -281,6 +282,7 @@ _TEMPLATES = {
         FROM daily_features
         WHERE orb_minutes = 5
           AND orb_{orb_label}_size IS NOT NULL
+          {instrument_filter}
         GROUP BY year
         ORDER BY year
     """,
@@ -297,6 +299,7 @@ _TEMPLATES = {
         FROM daily_features
         WHERE orb_minutes = 5
           AND gap_open_points IS NOT NULL
+          {instrument_filter}
         GROUP BY year
         ORDER BY year
     """,
@@ -465,8 +468,10 @@ class SQLAdapter:
         bind_params = []
         if "instrument" in params:
             inst = _validate_instrument(params["instrument"])
-            sql += "\n        AND symbol = ?"
+            sql = sql.replace("{instrument_filter}", "AND symbol = ?")
             bind_params.append(inst)
+        else:
+            sql = sql.replace("{instrument_filter}", "")
 
         con = duckdb.connect(self.db_path, read_only=True)
         try:
@@ -485,8 +490,10 @@ class SQLAdapter:
         bind_params = []
         if "instrument" in params:
             inst = _validate_instrument(params["instrument"])
-            sql += "\n        AND symbol = ?"
+            sql = sql.replace("{instrument_filter}", "AND symbol = ?")
             bind_params.append(inst)
+        else:
+            sql = sql.replace("{instrument_filter}", "")
 
         con = duckdb.connect(self.db_path, read_only=True)
         try:
@@ -502,8 +509,10 @@ class SQLAdapter:
         bind_params = []
         if "instrument" in params:
             inst = _validate_instrument(params["instrument"])
-            sql += "\n        AND symbol = ?"
+            sql = sql.replace("{instrument_filter}", "AND symbol = ?")
             bind_params.append(inst)
+        else:
+            sql = sql.replace("{instrument_filter}", "")
 
         con = duckdb.connect(self.db_path, read_only=True)
         try:

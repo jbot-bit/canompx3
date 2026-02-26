@@ -47,6 +47,9 @@ def run_regime_validation(
 
     con = duckdb.connect(str(db_path))
     try:
+        from pipeline.db_config import configure_connection
+        configure_connection(con, writing=True)
+
         if not dry_run:
             init_regime_schema(con=con)
 

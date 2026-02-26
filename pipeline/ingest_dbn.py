@@ -300,7 +300,6 @@ def main():
         if not ts_valid:
             logger.warning(f"FATAL: Timestamp validation failed: {ts_reason}")
             logger.warning("ABORT: Timestamp verification gate failed (FAIL-CLOSED)")
-            traceback.print_exc()
             sys.exit(1)
 
         # =================================================================
@@ -324,7 +323,6 @@ def main():
                 logger.info("Offending rows:")
                 logger.info(bad_rows.to_string())
             logger.warning("ABORT: Validation gate failed (FAIL-CLOSED)")
-            traceback.print_exc()
             sys.exit(1)
 
         # =================================================================

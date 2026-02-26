@@ -39,11 +39,23 @@ from trading_app.outcome_builder import RR_TARGETS, CONFIRM_BARS_OPTIONS
 sys.stdout.reconfigure(line_buffering=True)
 
 # Filter specificity ranking: higher = more specific = preferred as canonical
-_FILTER_SPECIFICITY = {
+_FILTER_SPECIFICITY_BASE = {
     "ORB_G8": 5, "ORB_G6": 4, "ORB_G5_L12": 4, "ORB_G5": 3, "ORB_G4_L12": 3,
     "ORB_G4": 2, "DIR_LONG": 2, "DIR_SHORT": 2,
     "VOL_RV12_N20": 1, "NO_FILTER": 0,
 }
+# Sorted longest-first so ORB_G5_L12 matches before ORB_G5
+_SPECIFICITY_PREFIXES = sorted(_FILTER_SPECIFICITY_BASE.items(), key=lambda x: -len(x[0]))
+
+
+def _get_filter_specificity(filter_key: str) -> int:
+    """Get specificity score. Composites (e.g. ORB_G4_NOFRI) inherit base + 1."""
+    if filter_key in _FILTER_SPECIFICITY_BASE:
+        return _FILTER_SPECIFICITY_BASE[filter_key]
+    for base, spec in _SPECIFICITY_PREFIXES:
+        if filter_key.startswith(base + "_"):
+            return spec + 1
+    return 0  # unknown defaults to same as NO_FILTER
 
 _INSERT_SQL = """INSERT OR REPLACE INTO experimental_strategies
     (strategy_id, instrument, orb_label, orb_minutes,
@@ -143,7 +155,7 @@ def _mark_canonical(strategies: list[dict]) -> None:
     for group in groups.values():
         # Sort by specificity descending, then filter_key for determinism
         group.sort(key=lambda s: (
-            -_FILTER_SPECIFICITY.get(s["filter_key"], -1),
+            -_get_filter_specificity(s["filter_key"]),
             s["filter_key"],
         ))
         head = group[0]

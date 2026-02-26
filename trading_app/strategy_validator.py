@@ -228,6 +228,7 @@ def compute_dst_split(con, strategy_id: str, instrument: str, orb_label: str,
           AND df.orb_minutes = ?
         WHERE o.symbol = ?
           AND o.orb_label = ?
+          AND o.orb_minutes = df.orb_minutes
           AND o.entry_model = ?
           AND o.rr_target = ?
           AND o.confirm_bars = ?
