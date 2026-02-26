@@ -69,7 +69,7 @@ def _check_fill_bar_exit(
 
     Returns outcome dict if exit detected on fill bar, None otherwise.
     For E1: entry is at bar open, so full bar OHLC is post-fill.
-    For E0/E3: entry is intra-bar at ORB level, check bar OHLC against levels.
+    For E2/E3: entry is intra-bar at ORB level, check bar OHLC against levels.
     """
     fill_bar = bars_df[bars_df["ts_utc"] == pd.Timestamp(entry_ts)]
     if fill_bar.empty:

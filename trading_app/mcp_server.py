@@ -236,7 +236,7 @@ def _build_server():
                       regime_compare, correlation, double_break_stats,
                       gap_analysis, rolling_stability.
             orb_label: ORB session filter. E.g.: CME_REOPEN, TOKYO_OPEN, LONDON_METALS, NYSE_OPEN.
-            entry_model: Entry model filter. One of: E0, E1, E3.
+            entry_model: Entry model filter. One of: E1, E2, E3.
             filter_type: ORB size filter. Examples: ORB_G4, ORB_G6, NO_FILTER.
             min_sample_size: Minimum number of trades.
             instrument: Instrument filter (default MGC). One of: MGC, MNQ, MES, M2K.

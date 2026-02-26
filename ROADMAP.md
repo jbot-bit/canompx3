@@ -27,9 +27,9 @@ Do not schedule active delivery work against SIL until explicitly re-opened.
 
 ## Phase 3: Trading App — DONE
 
-- `trading_app/config.py` — 12 ORB size filters + NO_FILTER, ENTRY_MODELS (E0/E1/E3)
+- `trading_app/config.py` — 12 ORB size filters + NO_FILTER, ENTRY_MODELS (E1/E2/E3)
 - `trading_app/execution_spec.py` — ExecutionSpec dataclass with entry_model field (17 tests)
-- `trading_app/entry_rules.py` — detect_confirm + resolve_entry E0/E1/E3 (30 tests)
+- `trading_app/entry_rules.py` — detect_confirm + detect_break_touch + resolve_entry E1/E2/E3 (43 tests)
 - `trading_app/db_manager.py` — 4 trading_app tables with entry_model column (8 tests)
 - `trading_app/outcome_builder.py` — pre-compute outcomes for 6 RR x 5 CB x 3 EM grid (14 tests)
 - `trading_app/setup_detector.py` — filter daily_features by conditions (7 tests)
@@ -48,14 +48,14 @@ Do not schedule active delivery work against SIL until explicitly re-opened.
 ## Phase 5: Expanded Scan — DONE
 
 - Grid: 6 ORBs x 6 RRs x 5 CBs x 13 filters x 3 EMs = 6,480 combos (post-5b expansion)
-- **Current state (Feb 25 2026):** orb_outcomes: 5,807,946 rows (5/15/30m, 7 instruments) | experimental: 39,198 | validated active: 1,322 (MGC: 339, MES: 273, MNQ: 614, M2K: 96) → 472 edge families. E0: 817, E1: 442, E3: 63.
+- **Current state (Feb 26 2026):** orb_outcomes rebuilt with E2 (E0 purged). Validated active: 600 (MGC: 227, MES: 92, MNQ: 253, M2K: 28) → 195 edge families. E2: ~158, E1: ~379, E3: ~63. 113 FDR significant.
 - Edge requires G4+ ORB size filter (NO_FILTER and L-filters ALL negative ExpR)
 - MARKET_PLAYBOOK.md: comprehensive empirical findings
 
 ## Phase 5b: Entry Model Fix + Risk Floor + Win PnL Fix — DONE
 
-- 3 entry models: E1 (next bar open), E3 (limit-at-ORB retrace), E0 (limit on confirm bar itself)
-- entry_rules.py: ConfirmResult + detect_confirm() + resolve_entry() + _resolve_e1/e2/e3
+- 3 entry models: E1 (next bar open, market), E2 (stop-market at ORB + slippage), E3 (limit retrace). E0 purged Feb 2026 (3 optimistic biases).
+- entry_rules.py: ConfirmResult + detect_confirm() + detect_break_touch() + resolve_entry() + _resolve_e1/_resolve_e2/_resolve_e3
 - Risk floor: tick-based (10 ticks * 0.10 = 1.0pt) + outcome-based (median/avg_risk_points)
 - Win PnL bug fix: changed pnl_points_to_r -> to_r_multiple (friction was missing from wins)
 - test_trader_logic.py: 24 trader/math sanity checks
@@ -77,7 +77,7 @@ Do not schedule active delivery work against SIL until explicitly re-opened.
 - `trading_app/execution_engine.py` — bar-by-bar state machine (19 tests + 20 integration tests)
 - State: ARMED -> CONFIRMING -> ENTERED -> EXITED
 - ORB detection, break detection, confirm bar counting
-- E0/E1/E3 entry model resolution with RiskManager fully wired
+- E1/E2/E3 entry model resolution with RiskManager fully wired
 - Target/stop/session-end exit handling
 - armed_at_bar guard: E1/E3 never fill on the confirm bar itself
 
@@ -302,8 +302,8 @@ Six high-leverage research items identified by cross-referencing all findings. O
 - Dashboard for live strategy status
 
 ### 8e. orb_outcomes Backfill 2016-2020 — DONE (Feb 2026)
-- MGC: 2016-02-01 to 2026-02-04, 1,312,542 rows (5/15/30m), E0/E1/E3 all present
-- MES: 2019-02-12 to 2026-02-11, 1,763,286 rows (5/15/30m), E0/E1/E3 all present
+- MGC: 2016-02-01 to 2026-02-04, E1/E2/E3 (E0 purged Feb 2026)
+- MES: 2019-02-12 to 2026-02-11, E1/E2/E3 (E0 purged Feb 2026)
 - 10-year validation window now available for MGC
 - TODO (separate task): re-run rolling_eval.py with 10-year range for stability scores
 

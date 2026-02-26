@@ -69,12 +69,10 @@ HOT_MIN_STABILITY = 0.6
 #   TOKYO_OPEN = ib_conditional (IB aligned=hold 7h, opposed=kill at market)
 #   LONDON_METALS/US_DATA_830/NYSE_OPEN = fixed_target
 #
-# Updated 2026-02-21: Added E0 entry model (validated Feb 2026).
-#   E0 = limit fill at ORB edge on the confirm bar itself.
-#   Top ROBUST CORE families by instrument (head_sharpe_ann):
-#     MNQ: CME_REOPEN E0 ORB_G5 (Sharpe 2.94, N=305), TOKYO_OPEN E0 ORB_G5 (Sharpe 2.84, N=406)
-#     MES: TOKYO_OPEN E0 ORB_G5_L12 (Sharpe 1.54), TOKYO_OPEN E0 ORB_G4_L12 (Sharpe 1.46)
-#     MGC: TOKYO_OPEN E0 ORB_G4 (Sharpe 1.35, N=118), LONDON_METALS E0 ORB_G4_NOMON (Sharpe 0.43)
+# Updated 2026-02-26: E0 purged, replaced by E2 (stop-market at ORB level + slippage).
+#   E0 had 3 optimistic biases (fill-on-touch, fakeout exclusion, fill-bar wins) — PURGED.
+#   E2 = stop-market entry at ORB level + N ticks slippage. Industry standard for breakout backtesting.
+#   Portfolio needs rebuild with E2/E1/E3 validated strategies (600 total, down from 1,322).
 LIVE_PORTFOLIO = [
     # --- CORE: always on, full-period validated ROBUST families ---
 

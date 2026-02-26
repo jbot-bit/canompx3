@@ -32,34 +32,36 @@ All sessions are now dynamic/event-based. Times are resolved per-day from `pipel
 ### Entry Models
 | Code | How It Works | Risk per Trade | Known Backtest Biases |
 |------|-------------|----------------|----------------------|
-| E0 | LIMIT at ORB edge ON the confirm bar itself. CB1 only (CB2+ is look-ahead). | 1.0x ORB width (exact boundary entry) | **3 optimistic biases:** (1) fill-on-touch instead of fill-through, (2) fakeout fills excluded (real limit fills on bars that touch then reverse), (3) fill-bar wins at RR1.0 (entry+target on same 1m bar). See Entry Model Bias Audit below. |
 | E1 | Price breaks ORB + confirm bars close outside. Enter at NEXT bar's open (market order). | **~1.18x ORB width** (15-22% overshoot past boundary). More dollars at risk per trade. | **None.** No fill assumptions. Industry standard entry. What you see is what you get. |
-| E3 | Price breaks ORB + confirm bars close outside. LIMIT ORDER at ORB edge, wait for retrace. Stop-breach guard prevents fill after stop hit. | 1.0x ORB width (exact boundary entry) | Same fill-on-touch bias as E0 but no fill-bar ambiguity (retrace is separate bar). Fewer fills than E1 but better entry price. |
+| E2 | STOP-MARKET at ORB level + N ticks slippage. Triggers on ANY bar whose range crosses the ORB level (including fakeouts). No confirmation bars needed. CB1 in grid for infrastructure reuse. | ~1.0x ORB width + slippage (E2_SLIPPAGE_TICKS=1) | **Minimal.** Includes fakeout fills (honest). Slippage is configurable. Conservative: requires strict crossing (high > orb_high), not touching. |
+| E3 | Price breaks ORB + confirm bars close outside. LIMIT ORDER at ORB edge, wait for retrace. Stop-breach guard prevents fill after stop hit. | 1.0x ORB width (exact boundary entry) | Fill-on-touch bias (no fill-bar ambiguity since retrace is separate bar). Fewer fills than E1 but better entry price. Adverse selection risk: strong runners never retrace. |
 
-*E2 removed — identical to E1 on 1m bars. E0 CB2+ removed Feb 2026 (look-ahead bias, drift check #30 prevents regression).*
+*E0 PURGED Feb 2026 — had 3 compounding optimistic biases (fill-on-touch, fakeout exclusion, fill-bar wins). Won 33/33 combos = artifact. Replaced by E2. See Entry Model Bias Audit below for historical record.*
 
-### Entry Model Bias Audit (Feb 2026)
+### Entry Model Bias Audit (Feb 2026) — Historical Record
 
-**E0 wins every instrument/session combo in backtests.** This is a structural artifact from its 3 optimistic biases, not evidence that E0 is universally superior. The biases:
+**E0 (PURGED) won every instrument/session combo in backtests.** This was a structural artifact from 3 optimistic biases, not evidence of universal superiority. E0 was fully replaced by E2 (stop-market) in Feb 2026. The biases:
 
-1. **Fill-on-touch (Low-Medium):** Industry standard backtesting fills limit orders 1 tick BEYOND the limit level ("fill through"). Our E0 fills on exact touch. Small impact at 1m resolution.
-2. **Fakeout fill exclusion (Medium):** A real limit order fills on ANY bar touching the boundary — including fakeout bars that touch then close back inside. Our backtest only counts fills where the break also confirms (bar closes outside ORB). This excludes fakeout losers and inflates WR/ExpR.
-3. **Fill-bar wins (Session-dependent):** E0 entry and target hit on the same 1m bar. Intra-bar sequence is unknown — the target may have been reached BEFORE the limit filled. Contamination: CME_PRECLOSE 12-16% of wins, NYSE_CLOSE 5-8%, SINGAPORE_OPEN 3-8%, TOKYO_OPEN 4-5%, CME_REOPEN 2-3%, NYSE_OPEN 0-1%. At RR2.0+, drops below 1% everywhere.
+1. **Fill-on-touch (Low-Medium):** Industry standard backtesting fills limit orders 1 tick BEYOND the limit level ("fill through"). E0 filled on exact touch. Small impact at 1m resolution.
+2. **Fakeout fill exclusion (Medium):** A real limit order fills on ANY bar touching the boundary — including fakeout bars that touch then close back inside. E0 only counted fills where the break also confirmed (bar closed outside ORB). This excluded fakeout losers and inflated WR/ExpR.
+3. **Fill-bar wins (Session-dependent):** E0 entry and target hit on the same 1m bar. Intra-bar sequence is unknown — the target may have been reached BEFORE the limit filled.
+
+**E2 (replacement):** Stop-market at ORB level + 1 tick slippage. Triggers on ANY touch (fakeouts included). No confirmation bars needed. Entry price = ORB boundary + slippage, which is the honest industry standard for breakout backtesting.
 
 **E1 chase distance:** Across all instruments/sessions, E1 enters 15-22% past the ORB boundary. Average risk = 1.18x ORB width. This is correctly accounted for in R-multiple computation (risk_points = |entry_price - stop_price|).
 
 **E3 vs E1 (verified per-combo, not generalized):** E3 beats E1 in 20/33 combos at RR2.0 G4+, but 19 of those 20 are both negative (E3 just loses less). Only MGC CME_REOPEN has E3 positive AND beating E1 (+0.186 vs +0.137).
 
-**At E1 (no biases), only MGC CME_REOPEN and MGC TOKYO_OPEN produce positive expectancy.** E0 opens up MES/MNQ/M2K through better entry pricing, but the backtest advantages may not survive live execution (queue priority, fakeout fills, partial fills).
+**Post-swap results (Feb 26):** 600 validated strategies with honest entries (E1+E2+E3), down from 1,322 with dishonest E0. 113 FDR significant. MNQ leads with 79 FDR survivors.
 
 ### Confirm Bars (CB)
 CB1-CB5 = 1-5 consecutive 1m bars must close outside ORB. If ANY bar closes back inside, count resets. For E3, CB1-CB5 produce identical entry prices (same limit order).
 
 ### Risk-Reward (RR)
 Target = RR × risk. Risk = |entry_price - stop_price|. Stop = other side of ORB.
-**For E0/E3:** entry = ORB boundary, risk = ORB size exactly.
+**For E2/E3:** entry = ORB boundary (+ slippage for E2), risk ≈ ORB size.
 **For E1:** entry = next bar open (past boundary), risk = ORB size + overshoot (~1.18x ORB). More dollars at risk per trade.
-Example (E0): 10pt ORB, RR2.0 = 20pt target, 10pt stop.
+Example (E2): 10pt ORB + 0.25pt slippage = 10.25pt risk, RR2.0 = 20.5pt target, 10.25pt stop.
 Example (E1): 10pt ORB + 2pt overshoot = 12pt risk, RR2.0 = 24pt target, 12pt stop.
 
 ### ORB Size Filters
@@ -97,7 +99,7 @@ Example (E1): 10pt ORB + 2pt overshoot = 12pt risk, RR2.0 = 24pt target, 12pt st
 
 ### What Works
 1. **ORB size IS the edge — not sessions, not parameters.** Cross-instrument stress test (Feb 2026) proved this: strip the size filter and ALL edges die. CB, RR, entry model are refinements on top of the one thing that matters: was the ORB big enough? See "ORB Size = The Edge" section below.
-2. **E1 is the honest baseline entry.** No backtest biases. Only MGC CME_REOPEN and MGC TOKYO_OPEN produce positive ExpR at E1. E0 opens up more combos but has 3 optimistic backtest biases (see Entry Model Bias Audit).
+2. **E1 is the honest conservative entry, E2 is the honest aggressive entry.** E1 has no backtest biases (market on next bar). E2 (stop-market at ORB level + slippage) is the industry standard for breakout backtesting — includes fakeout fills, uses configurable slippage. E0 was purged Feb 2026 (3 optimistic biases).
 3. **E3 retrace per-combo, not universal.** E3 beats E1 in 20/33 combos but 19/20 are both negative. Only MGC CME_REOPEN has E3 positive AND beating E1. LONDON_METALS E3 works for MGC (not MES).
 4. **Kill losers early** at CME_REOPEN (15 min) and TOKYO_OPEN (30 min). Proven Sharpe improvement.
 5. **Negative correlation between sessions** (TOKYO_OPEN vs LONDON_METALS: -0.39). Portfolio diversification is real.
@@ -515,7 +517,7 @@ A "family" = one unique combination of `(session, entry_model, filter_level)`. A
 **Cross-instrument scan results:**
 - Contracting×Neutral: 9/9 sessions 100% directional (all negative). Median delta = -0.372R.
 - Contracting×Compressed: 10/10 sessions 100% directional (all negative). Median delta = -0.362R.
-- BH-corrected anchor: MES TOKYO_OPEN E0 Contracting x Neutral p_bh=0.0022. 5/5 years negative.
+- BH-corrected anchor: MES TOKYO_OPEN Contracting x Neutral p_bh=0.0022. 5/5 years negative.
 
 **Two-condition rule (apply to CME_REOPEN and TOKYO_OPEN sessions):** Skip when `atr_vel_regime == "Contracting"` AND `orb_{label}_compression_tier` in `{"Neutral", "Compressed"}`. Expanding is allowed even during contracting (MES TOKYO_OPEN Contracting x Expanded = +0.149R).
 
@@ -567,12 +569,12 @@ This is why small ORBs lose — friction eats the edge.
 | Idea | Status | Notes |
 |------|--------|-------|
 | **Time-based exit gate** | **NEXT STEP** | Winner speed confirms T80 <= 45m at RR1.0 and 90-170m at RR2.5-3.0. Sessions held for 480m carry 300-450m of dead exposure. Next: does pnl_r on positions still open past T80 justify continued hold? Script: `research/research_winner_speed.py`. Full data: `research/output/winner_speed_summary.csv`. |
-| **MNQ NYSE_OPEN winter > summer pattern** | WATCH (2-year data) | Scan (Feb 2026) found W=+0.946R S=-0.332R on E0 CB4 G6 (N=21). Broader E1 G8+ shows 2024 W=+0.391 -> 2025 W=+0.115 (declining). Mechanism plausible: winter NYSE_OPEN Bris = 14:30 UTC = 9:30 AM EST = US equity open. Summer NYSE_OPEN = 1hr post-open (momentum dissipated). NOT ready to trade — MNQ only has 2 years of data, declining trend. Revisit after 2026 winter season. |
-| **MES LONDON_METALS E0 (winter-ish)** | WATCH (inconsistent) | Sole validated MES LONDON_METALS strategy: E0 CB2 G4 RR2.5. Aggregate W=+0.200R (N=98), S=-0.043R (N=112). Year-by-year: 2022 winter was -0.064R (summer +0.101R), 2024 winter -0.237R (summer +0.304R) — pattern reverses. Not stable enough to trade as winter-only. Monitor 2026 season. |
+| **MNQ NYSE_OPEN winter > summer pattern** | WATCH (2-year data) | Scan (Feb 2026) found W=+0.946R S=-0.332R on CB4 G6 (N=21). Broader E1 G8+ shows 2024 W=+0.391 -> 2025 W=+0.115 (declining). Mechanism plausible: winter NYSE_OPEN Bris = 14:30 UTC = 9:30 AM EST = US equity open. Summer NYSE_OPEN = 1hr post-open (momentum dissipated). NOT ready to trade — MNQ only has 2 years of data, declining trend. Revisit after 2026 winter season. |
+| **MES LONDON_METALS (winter-ish)** | WATCH (inconsistent) | Historical note: was E0 CB2 G4 RR2.5 — E0 now purged. Needs re-evaluation with E2. Monitor 2026 season. |
 | **C3 cross-session** | INVESTIGATE | CME_REOPEN delta=+0.257R, LONDON_METALS delta=+0.232R. Not BH-validated. Deployed TOKYO_OPEN-only for now. |
 | **C9 (bar-30 exit rule)** | NO-GO | Bar-30 close avg = +0.017R at TOKYO_OPEN (expected -0.42 to -0.67R). Bar-30 position is near-neutral; forced exit would sacrifice residual wins. Do not implement. |
 | **C5 (entry bar continues filter)** | PROMISING | True avg +0.360R vs False -0.113R at TOKYO_OPEN (delta +0.473R, N=64/78). Not yet wired as pre-trade filter. |
-| **Prior-day outcome signal: MGC CME_REOPEN E0 CB1 G4+ prev=LOSS** | **PROMISING HYPOTHESIS (REGIME)** | BH FDR survivor across 105-cell stress grid (RR x CB x EM x G) at q=0.10: **avgR=+0.585R, t=+3.34, p=0.0016, p_bh=0.088**. Baseline (all prev) = +0.273R; prev=LOSS >2x baseline. Grade: REGIME (N=49 — ~5-8 qualifying days/year x ~10 years). **Verification scorecard:** (1) Outlier-robust: remove best trade -> +0.556R. (2) DST-split: both halves positive (Winter +0.561R p=0.012, Summer +0.642R p=0.067). (3) Direction-agnostic: LONG +0.594R (p=0.029), SHORT +0.576R (p=0.028). (4) Year-by-year: 6/7 calendar years positive (86%), only 2016 negative (N=2). (5) Cross-RR: RR1.5-3.0 all consistent; RR4.0 weakens. (6) Cross-EM: E0 and E3 both positive (precise-price entries); E1 (next-bar open) substantially weaker — signal is about fill quality at the ORB edge, not just direction. **Mechanism:** "failed break -> fresh break" momentum. Yesterday's CB1 limit fill at ORB edge lost before target — accumulated directional pressure. Today's retry tends to follow through. Specific to CME gold evening open (momentum session). **Side finding:** prev=no_break -> -0.225R to -0.380R (N=26, not BH-sig). Low-conviction sessions beget weak breaks. **Script:** `research/research_prev_day_signal.py`. **Full findings:** `research/output/prev_day_signal_findings.md`. **Action: WATCH. NOT a live filter yet.** **Path to confirmation:** (a) Track every qualifying MGC CME_REOPEN day prospectively (prev=loss? G4+? E0 CB1 fill?). (b) Re-evaluate at N=100 (~2-3 years) -> upgrade to PRELIMINARY, consider 1.5x position-size overlay. (c) Re-evaluate at N=150+ -> full validation, wire as mandatory filter or size modifier. **NOTE: Do NOT build live tracker yet — mark TODO for front-end work.** |
+| **Prior-day outcome signal: MGC CME_REOPEN CB1 G4+ prev=LOSS** | **PROMISING HYPOTHESIS (REGIME)** | BH FDR survivor across 105-cell stress grid (RR x CB x EM x G) at q=0.10: **avgR=+0.585R, t=+3.34, p=0.0016, p_bh=0.088**. Baseline (all prev) = +0.273R; prev=LOSS >2x baseline. Grade: REGIME (N=49). Originally discovered under E0 — needs re-evaluation with E2/E1 entries. **Mechanism:** "failed break -> fresh break" momentum. **Action: WATCH. Needs E2 re-evaluation.** |
 | 30m nested ORB | BUILT | 30m data populated in orb_outcomes + daily_features. Not yet validated. |
 | RSI directional confirmation | Low confidence | RSI 60+ LONG = +0.81R but N=24. Monitor. |
 | Percentage-based ORB filter | Not tested | 0.15% of price ≈ G5. Auto-adapts to price level. |

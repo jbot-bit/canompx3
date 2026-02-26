@@ -700,7 +700,7 @@ class SQLAdapter:
         return pd.DataFrame([stats])
 
     def _execute_entry_model_compare(self, params: dict) -> pd.DataFrame:
-        """Side-by-side E0 vs E1 vs E3 comparison."""
+        """Side-by-side E1 vs E2 vs E3 comparison."""
         # Strip entry_model — we want all models
         params_all = {k: v for k, v in params.items() if k != "entry_model"}
         sql, bind = self._build_outcomes_base(params_all, extra_cols="o.entry_model")
@@ -884,7 +884,7 @@ class SQLAdapter:
             QueryTemplate.GAP_ANALYSIS: "Overnight gap statistics by year",
             QueryTemplate.ROLLING_STABILITY: "Rolling window stability: which strategy families pass across 12/18-month windows",
             QueryTemplate.OUTCOMES_STATS: "Raw outcomes stats (N, win rate, ExpR, Sharpe, drawdown, MAE/MFE) for any slice",
-            QueryTemplate.ENTRY_MODEL_COMPARE: "Side-by-side E0 vs E1 vs E3 comparison for same session",
+            QueryTemplate.ENTRY_MODEL_COMPARE: "Side-by-side E1 vs E2 vs E3 comparison for same session",
             QueryTemplate.DOW_BREAKDOWN: "Day-of-week performance splits for a session",
             QueryTemplate.DST_SPLIT: "DEPRECATED: All sessions are now DST-clean (dynamic resolvers). No longer applicable.",
             QueryTemplate.FILTER_COMPARE: "Compare NO_FILTER vs G4 vs G5 vs G6 for same session",
