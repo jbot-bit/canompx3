@@ -540,7 +540,7 @@ def check_entry_models_sync() -> list[str]:
     try:
         from trading_app.config import ENTRY_MODELS
 
-        expected = ["E1", "E2", "E3"]
+        expected = ["E0", "E1", "E3"]
         if ENTRY_MODELS != expected:
             violations.append(
                 f"  ENTRY_MODELS = {ENTRY_MODELS}, expected {expected}"

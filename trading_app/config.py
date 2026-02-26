@@ -602,13 +602,11 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
 
 
 # Entry models: realistic fill assumptions for backtesting
+# E0 = Limit at ORB level ON the confirm bar itself (DEPRECATED — to be replaced by E2)
 # E1 = Market at next bar open after confirm (momentum entry, conservative baseline)
-# E2 = Stop-market at ORB level + N ticks slippage (no confirm, fakeouts included)
 # E3 = Limit order at ORB level, waiting for retrace after confirm (may not fill)
-# E0 was PURGED (Feb 2026): 3 compounding optimistic biases (fill-on-touch,
-# fakeout exclusion, fill-bar wins). E0 won 33/33 combos = structural artifact.
-# See docs/plans/2026-02-26-e2-entry-model-design.md for full rationale.
-ENTRY_MODELS = ["E1", "E2", "E3"]
+# See docs/plans/2026-02-26-e2-entry-model-design.md for E2 design.
+ENTRY_MODELS = ["E0", "E1", "E3"]
 
 # E2 stop-market slippage: number of ticks beyond ORB level for fill-through.
 # Default 1 = industry standard (fill-through-by-1-tick). Use 2 for stress testing.
