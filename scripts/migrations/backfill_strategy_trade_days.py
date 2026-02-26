@@ -210,7 +210,7 @@ def main():
 
     if args.all:
         total = 0
-        for inst in ["MGC", "MNQ", "MES", "MCL"]:
+        for inst in ["MGC", "MNQ", "MES", "M2K"]:
             total += backfill_trade_days(args.db_path, inst)
             print()
         print(f"Grand total: {total:,} trade-day rows across all instruments")

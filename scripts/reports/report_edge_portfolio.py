@@ -422,7 +422,7 @@ def main():
         return
 
     if args.all:
-        for inst in ["MGC", "MNQ", "MES"]:
+        for inst in ["MGC", "MNQ", "MES", "M2K"]:
             result = report_instrument(db_path, inst, args.include_purged)
             if result is not None:
                 print_report(result)

@@ -48,7 +48,7 @@ def _get_strategy_params(con, strategy_id):
 def load_slot_trades(con, slots):
     """Load trades for each slot's head strategy using canonical filter logic.
 
-    Bypasses strategy_trade_days (incomplete for E0 strategies).
+    Bypasses strategy_trade_days (may be stale after rebuilds).
     Instead applies filters via daily_features using the same logic
     as strategy_discovery.py.
 
