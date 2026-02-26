@@ -42,7 +42,7 @@ ASSET_CONFIGS = {
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
             "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
-            "US_DATA_830", "US_DATA_1000",
+            "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
             "COMEX_SETTLE",
         ],
     },
@@ -55,7 +55,8 @@ ASSET_CONFIGS = {
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
             "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "NYSE_OPEN",
-            "LONDON_METALS", "US_DATA_1000", "CME_PRECLOSE",
+            "LONDON_METALS", "US_DATA_830", "US_DATA_1000",
+            "COMEX_SETTLE", "CME_PRECLOSE",
             "NYSE_CLOSE",
         ],
     },
@@ -83,7 +84,8 @@ ASSET_CONFIGS = {
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
             "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "NYSE_OPEN",
-            "LONDON_METALS", "US_DATA_830", "US_DATA_1000", "CME_PRECLOSE",
+            "LONDON_METALS", "US_DATA_830", "US_DATA_1000",
+            "COMEX_SETTLE", "CME_PRECLOSE",
             "NYSE_CLOSE",
         ],
     },
@@ -99,7 +101,8 @@ ASSET_CONFIGS = {
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
             "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "NYSE_OPEN",
-            "LONDON_METALS", "US_DATA_830", "US_DATA_1000", "CME_PRECLOSE",
+            "LONDON_METALS", "US_DATA_830", "US_DATA_1000",
+            "COMEX_SETTLE", "CME_PRECLOSE",
             "NYSE_CLOSE",
         ],
     },
@@ -150,7 +153,8 @@ ASSET_CONFIGS = {
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
             "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "NYSE_OPEN",
-            "LONDON_METALS", "US_DATA_1000", "CME_PRECLOSE",
+            "LONDON_METALS", "US_DATA_830", "US_DATA_1000",
+            "COMEX_SETTLE", "CME_PRECLOSE",
             "NYSE_CLOSE",
         ],
     },
