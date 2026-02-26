@@ -35,6 +35,9 @@ TRADING DAY:
 ENTRY MODELS (defined below as ENTRY_MODELS):
   E1 (Market-On-Next-Bar) - Enter at OPEN of the bar AFTER confirm bar.
      Fill rate ~100%. Best for momentum ORBs (CME_REOPEN, TOKYO_OPEN).
+  E2 (Stop-Market) - Stop order at ORB level + N ticks slippage. Triggers on
+     first bar whose range crosses the ORB level. No confirmation needed.
+     Fakeouts included as trades. Industry-standard honest breakout entry (Crabel).
   E3 (Limit-At-ORB) - Place limit order at ORB level after confirm.
      Fills only if price retraces to ORB level (~96-97% on G5+ days).
      Best for retrace ORBs (LONDON_METALS, US_DATA_830) where price spikes then pulls back.
@@ -599,12 +602,19 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
 
 
 # Entry models: realistic fill assumptions for backtesting
-# E0 = Limit at ORB level ON the confirm bar itself (always fills for CB1; partial for CB2+)
-# E1 = Market at next bar open after confirm (momentum entry)
+# E1 = Market at next bar open after confirm (momentum entry, conservative baseline)
+# E2 = Stop-market at ORB level + N ticks slippage (no confirm, fakeouts included)
 # E3 = Limit order at ORB level, waiting for retrace after confirm (may not fill)
-# E2 was removed: identical to E1 on 1-minute bars (same days, same N, same WR)
-# See entry_rules.py for implementation: detect_confirm() + resolve_entry()
-ENTRY_MODELS = ["E0", "E1", "E3"]
+# E0 was PURGED (Feb 2026): 3 compounding optimistic biases (fill-on-touch,
+# fakeout exclusion, fill-bar wins). E0 won 33/33 combos = structural artifact.
+# See docs/plans/2026-02-26-e2-entry-model-design.md for full rationale.
+ENTRY_MODELS = ["E1", "E2", "E3"]
+
+# E2 stop-market slippage: number of ticks beyond ORB level for fill-through.
+# Default 1 = industry standard (fill-through-by-1-tick). Use 2 for stress testing.
+# Tick sizes per instrument are in pipeline/cost_model.py CostSpec.tick_size.
+E2_SLIPPAGE_TICKS = 1
+E2_STRESS_TICKS = 2
 
 # =========================================================================
 # Variable Aperture: session-specific ORB duration (minutes)

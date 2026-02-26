@@ -288,22 +288,22 @@ class TestGridParamsSync:
         Session-specific DOW composites are added by get_filters_for_grid()
         per-session, expanding the grid contextually.
 
-        10 ORBs x 6 RRs x 5 CBs x 6 base filters = 1800 (E0, all CB options)
+        10 ORBs x 6 RRs x 5 CBs x 6 base filters = 1800 (E2, all CB options)
         10 ORBs x 6 RRs x 5 CBs x 6 base filters = 1800 (E1, all CB options)
         10 ORBs x 6 RRs x 1 CB x 6 base filters = 360  (E3, always CB1)
         Total base: 3960
         """
         BASE_FILTER_COUNT = 6  # NO_FILTER + ORB_G4/G5/G6/G8 + VOL_RV12_N20
-        e0_e1 = 2 * len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * BASE_FILTER_COUNT
+        e1_e2 = 2 * len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * BASE_FILTER_COUNT
         e3 = len(ORB_LABELS) * len(RR_TARGETS) * 1 * BASE_FILTER_COUNT
-        expected = e0_e1 + e3
+        expected = e1_e2 + e3
         assert expected == 3960
 
 class TestEntryModelsSync:
     """ENTRY_MODELS must be consistent."""
 
     def test_entry_models_exact(self):
-        assert ENTRY_MODELS == ["E0", "E1", "E3"]
+        assert ENTRY_MODELS == ["E1", "E2", "E3"]
 
     def test_entry_models_no_duplicates(self):
         assert len(ENTRY_MODELS) == len(set(ENTRY_MODELS))
