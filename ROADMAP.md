@@ -48,7 +48,7 @@ Do not schedule active delivery work against SIL until explicitly re-opened.
 ## Phase 5: Expanded Scan — DONE
 
 - Grid: 6 ORBs x 6 RRs x 5 CBs x 13 filters x 3 EMs = 6,480 combos (post-5b expansion)
-- **Current state (Feb 26 2026):** orb_outcomes rebuilt with E2 (E0 purged). Validated active: 600 (MGC: 227, MES: 92, MNQ: 253, M2K: 28) → 195 edge families. E2: ~158, E1: ~379, E3: ~63. 113 FDR significant.
+- **Current state (Feb 27 2026):** 15m/30m rebuilt + 5 new volume-validated sessions added (MGC NYSE_OPEN, MNQ US_DATA_830+COMEX_SETTLE, MES COMEX_SETTLE, M2K COMEX_SETTLE). Validated active: 627 → 206 edge families (34 ROBUST, 38 WHITELISTED). Full rebuild chain completed for all 4 instruments.
 - Edge requires G4+ ORB size filter (NO_FILTER and L-filters ALL negative ExpR)
 - MARKET_PLAYBOOK.md: comprehensive empirical findings
 
@@ -60,7 +60,7 @@ Do not schedule active delivery work against SIL until explicitly re-opened.
 - Win PnL bug fix: changed pnl_points_to_r -> to_r_multiple (friction was missing from wins)
 - test_trader_logic.py: 24 trader/math sanity checks
 - Grid expanded: 6 ORBs x 6 RRs x 5 CBs x 12 filters x 3 EMs = 6,480 combos
-- DB rebuild COMPLETE: ~5.8M outcomes (7 instruments, 5/15/30m ORB), 1,322 validated active strategies
+- DB rebuild COMPLETE: ~5.8M outcomes (7 instruments, 5/15/30m ORB), 1,224 validated active strategies (Feb 27 2026)
 - Validator: exclude_years + min_years_positive_pct params added
 
 ## Phase 6: Live Trading Preparation — DONE (6a-6d), 6e TODO
@@ -133,19 +133,18 @@ Do not schedule active delivery work against SIL until explicitly re-opened.
 
 ---
 
-## Nested ORB Research — DONE (feature/nested-orb branch, Phase 8)
+## Multi-Aperture ORB (5m/15m/30m) — DONE (Phase 8, validated Feb 27 2026)
 
-Hypothesis: wider ORB range (15/30m) + 5m entry bars reduces noise and improves edge.
+Wider ORB apertures (15m/30m) validated and integrated into production portfolio via standard pipeline.
 
 ### Results
-- 7 modules in `trading_app/nested/` (schema, builder, discovery, validator, compare, audit_outcomes, __init__)
-- Nested outcomes stored in main `orb_outcomes` table with `orb_minutes` = 15 or 30 (no separate tables)
+- 15m/30m outcomes rebuilt from scratch with E1/E2/E3 using standard pipeline (`--orb-minutes` parameter), NOT the nested/ pipeline (separate tables, 5m entry bars)
+- **1,224 total validated strategies:** 600 (5m) + 423 (15m) + 201 (30m) → 456 edge families
+- Portfolio: 15 CORE slots, Sharpe 3.92, Max DD 14.2R, +833R total, +211.6R/year
+- 15m/30m strategies won 6 session slots: M2K US_DATA_1000 30m, M2K NYSE_OPEN 30m, MES CME_PRECLOSE 15m, MNQ TOKYO_OPEN 15m, MNQ NYSE_OPEN 15m, MNQ SINGAPORE_OPEN 15m
+- **Key finding:** wider ORBs materially improve portfolio (Sharpe 3.57→3.92, Return/DD 8.8x→14.9x)
+- `trading_app/nested/` modules remain for reference but standard pipeline handles all apertures
 - Isolation enforced: drift checks 15-17 block cross-contamination
-- 15m nested ORB findings: TOKYO_OPEN session is clear winner (+0.1222 Sharpe premium)
-- 76 nested strategies validated (Tier 1), 30 at Tier 2 (2.0x stress + Sharpe floor)
-- Portfolio integration complete: `include_nested=True` flag in portfolio.py
-- A/B comparison done: nested helps TOKYO_OPEN session, hurts US_DATA_830/NYSE_OPEN
-- **30m ORB: BUILT** — data populated in orb_outcomes + daily_features. Not yet validated.
 
 ---
 

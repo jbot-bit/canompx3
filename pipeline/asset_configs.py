@@ -54,10 +54,9 @@ ASSET_CONFIGS = {
         "minimum_start_date": date(2024, 2, 4),
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
-            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "NYSE_OPEN",
-            "LONDON_METALS", "US_DATA_830", "US_DATA_1000",
-            "COMEX_SETTLE", "CME_PRECLOSE",
-            "NYSE_CLOSE",
+            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
+            "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
+            "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
         ],
     },
     "MCL": {
@@ -83,10 +82,9 @@ ASSET_CONFIGS = {
         "minimum_start_date": date(2019, 2, 12),
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
-            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "NYSE_OPEN",
-            "LONDON_METALS", "US_DATA_830", "US_DATA_1000",
-            "COMEX_SETTLE", "CME_PRECLOSE",
-            "NYSE_CLOSE",
+            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
+            "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
+            "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
         ],
     },
     "M2K": {
@@ -100,10 +98,9 @@ ASSET_CONFIGS = {
         "minimum_start_date": date(2021, 2, 21),
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
-            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "NYSE_OPEN",
-            "LONDON_METALS", "US_DATA_830", "US_DATA_1000",
-            "COMEX_SETTLE", "CME_PRECLOSE",
-            "NYSE_CLOSE",
+            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
+            "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
+            "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
         ],
     },
     "SIL": {
@@ -152,10 +149,9 @@ ASSET_CONFIGS = {
         "minimum_start_date": date(2021, 2, 4),
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
-            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "NYSE_OPEN",
-            "LONDON_METALS", "US_DATA_830", "US_DATA_1000",
-            "COMEX_SETTLE", "CME_PRECLOSE",
-            "NYSE_CLOSE",
+            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
+            "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
+            "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
         ],
     },
 }
