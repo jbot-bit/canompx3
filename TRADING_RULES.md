@@ -101,7 +101,7 @@ Example (E1): 10pt ORB + 2pt overshoot = 12pt risk, RR2.0 = 24pt target, 12pt st
 1. **ORB size IS the edge — not sessions, not parameters.** Cross-instrument stress test (Feb 2026) proved this: strip the size filter and ALL edges die. CB, RR, entry model are refinements on top of the one thing that matters: was the ORB big enough? See "ORB Size = The Edge" section below.
 2. **E1 is the honest conservative entry, E2 is the honest aggressive entry.** E1 has no backtest biases (market on next bar). E2 (stop-market at ORB level + slippage) is the industry standard for breakout backtesting — includes fakeout fills, uses configurable slippage. E0 was purged Feb 2026 (3 optimistic biases).
 3. **E3 retrace per-combo, not universal.** E3 beats E1 in 20/33 combos but 19/20 are both negative. Only MGC CME_REOPEN has E3 positive AND beating E1. LONDON_METALS E3 works for MGC (not MES).
-4. **Kill losers early** at CME_REOPEN (15 min) and TOKYO_OPEN (30 min). Proven Sharpe improvement.
+4. **Kill losers early** at CME_REOPEN and TOKYO_OPEN per T80 research. See `config.py:EARLY_EXIT_MINUTES` for exact session kill times.
 5. **Negative correlation between sessions** (TOKYO_OPEN vs LONDON_METALS: -0.39). Portfolio diversification is real.
 6. **TOKYO_OPEN LONG-ONLY.** Short breakouts at TOKYO_OPEN are negative. Filter to longs.
 
@@ -202,8 +202,8 @@ The `day_of_week` column uses the Brisbane trading day. For sessions before midn
 | RR target | **2.5** (sweet spot for CME_REOPEN) |
 | Confirm bars | **CB2** (optimal on G5+ days) |
 | Direction | Both (long stronger: +0.50R vs +0.23R short) |
-| Early exit | **Kill losers at 15 minutes.** Only 24% of 15-min losers eventually win. +26% Sharpe, -38% MaxDD. |
-| Do NOT | Use 30-min kill (too late, 41% still win). Use breakeven trail. |
+| Early exit | **Kill losers at T80 threshold** (see `config.py:EARLY_EXIT_MINUTES`). +26% Sharpe, -38% MaxDD. |
+| Do NOT | Use 30-min kill (tested, 41% of 30-min losers still win — too late). Use breakeven trail. |
 
 **Full-period stats (E1 CB2 RR2.5 G4+):** N=125, WR=40%, TotalR=+38.2, AvgR=+0.31
 **Rolling eval:** TRANSITIONING (score 0.42-0.54, passes 9-11/19 windows). High ExpR but inconsistent.
@@ -217,7 +217,7 @@ The `day_of_week` column uses the Brisbane trading day. For sessions before midn
 | RR target | **2.5** (fixed target while IB pending) |
 | Confirm bars | **CB2** |
 | Direction | **LONG ONLY.** TOKYO_OPEN short is negative (WR=30%, AvgR=-0.04). |
-| Early exit | **Kill losers at 30 minutes.** Only 12% of 30-min losers eventually win. 3.7x Sharpe improvement. |
+| Early exit | **Kill losers at T80 threshold** (see `config.py:EARLY_EXIT_MINUTES`). 3.7x Sharpe improvement. |
 | Exit mode | **Fixed target** (IB-conditional designed but disabled — not yet validated in outcome_builder) |
 | Do NOT | Kill at 10 min (too early, actively harmful). |
 
@@ -432,21 +432,22 @@ Many filter variants produce the SAME trade set.
 ### Tier 1: CORE (always on)
 | Family | Session | EM | Filter | Exit Mode | Gate |
 |--------|---------|-----|--------|-----------|------|
+| CME_REOPEN_E2_ORB_G5 | CME_REOPEN | E2 | G5+ | Fixed target | None |
+| CME_REOPEN_E2_ORB_G4 | CME_REOPEN | E2 | G4+ | Fixed target | None |
 | CME_REOPEN_E1_ORB_G5 | CME_REOPEN | E1 | G5+ | Fixed target | None |
+| TOKYO_OPEN_E2_ORB_G5 | TOKYO_OPEN | E2 | G5+ | Fixed target | None |
+| TOKYO_OPEN_E2_ORB_G4 | TOKYO_OPEN | E2 | G4+ | Fixed target | None |
 | TOKYO_OPEN_E1_ORB_G5 | TOKYO_OPEN | E1 | G5+ | Fixed target | None |
+| LONDON_METALS_E2_ORB_G4_NOMON | LONDON_METALS | E2 | G4_NOMON | Fixed target | None |
 
 ### Tier 2: HOT (rolling-eval gated)
 | Family | Session | EM | Filter | Gate |
 |--------|---------|-----|--------|------|
-| CME_REOPEN_E1_ORB_G4 | CME_REOPEN | E1 | G4+ | Rolling stability >= 0.6 |
-| CME_REOPEN_E3_ORB_G4 | CME_REOPEN | E3 | G4+ | Rolling stability >= 0.6 |
-| TOKYO_OPEN_E1_ORB_G4 | TOKYO_OPEN | E1 | G4+ | Rolling stability >= 0.6 |
+| CME_REOPEN_E2_ORB_G4_NOFRI | CME_REOPEN | E2 | G4_NOFRI | Rolling stability >= 0.6 |
+| TOKYO_OPEN_E2_ORB_G5_L12 | TOKYO_OPEN | E2 | G5_L12 | Rolling stability >= 0.6 |
 
 ### Tier 3: REGIME (fitness-gated)
-| Family | Session | EM | Filter | Gate |
-|--------|---------|-----|--------|------|
-| CME_REOPEN_E1_ORB_G6 | CME_REOPEN | E1 | G6+ | high_vol (must be FIT) |
-| LONDON_METALS_E3_ORB_G6 | LONDON_METALS | E3 | G6+ | high_vol (must be FIT) |
+*Currently empty. Pending portfolio re-assembly with current validated strategies.*
 
 ### Portfolio Parameters
 - Max concurrent positions: 3
@@ -561,8 +562,8 @@ This is why small ORBs lose — friction eats the edge.
 | Finding | Evidence | Status |
 |---------|----------|--------|
 | ORB size G4+ breakout | Walk-forward positive, validated strategies | DEPLOYED |
-| CME_REOPEN kill losers at 15 min | +26% Sharpe, -38% MaxDD | DEPLOYED |
-| TOKYO_OPEN kill losers at 30 min | 3.7x Sharpe, -35% MaxDD | DEPLOYED |
+| CME_REOPEN T80 early exit | +26% Sharpe, -38% MaxDD | DEPLOYED |
+| TOKYO_OPEN T80 early exit | 3.7x Sharpe, -35% MaxDD | DEPLOYED |
 | TOKYO_OPEN LONG-ONLY filter | Short WR=30%, AvgR=-0.04 | DEPLOYED |
 | LONDON_METALS E3 30-min check + retrace dwell | In-loss 24% WR; dwell >10min = 33% WR | DEPLOYED (discretionary) |
 | Nested 15m ORB for TOKYO_OPEN | +0.208R premium, 90% pairs improve | VALIDATED |
