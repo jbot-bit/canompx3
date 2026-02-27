@@ -1364,6 +1364,7 @@ def check_doc_stats_consistency() -> list[str]:
         ("TRADING_RULES.md", r"30m:\s*(\d[\d,]*)", "aperture_30m"),
         ("TRADING_RULES.md", r"(\d+)\s+ROBUST", "tier_robust"),
         ("TRADING_RULES.md", r"(\d+)\s+WHITELISTED", "tier_whitelisted"),
+        # ROADMAP.md: guard fires only if someone re-adds a count
         ("ROADMAP.md", r"([\d,]+)\s+validated\s+active", "validated_active"),
         ("README.md", r"([\d,]+)\s+validated\s+strateg", "validated_active"),
         ("README.md", r"(\d+)\s+drift\s+checks", "drift_check_count"),

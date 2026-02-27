@@ -23,7 +23,7 @@ Files to inspect (non-exhaustive — grep for more):
 - CANONICAL_*.txt → what frozen specs CLAIM
 ```
 
-For EACH entry model variant found (E0, E1, E3, or anything else):
+For EACH entry model variant found (E0, E1, E2, E3, or anything else):
 - [ ] Record exact file path + line number where it's defined
 - [ ] Record exact file path + line number where it's consumed
 - [ ] Record the trigger logic (what causes an entry)

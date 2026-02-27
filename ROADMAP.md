@@ -168,7 +168,7 @@ Wider ORB apertures (15m/30m) validated and integrated into production portfolio
 - E2: skipped (entry at bar close, no post-fill action on that bar)
 - Ambiguous fill bar (both stop+target hit): conservative loss
 - 9 new tests in TestFillBarExits, 670 tests pass, 19/19 drift checks
-- **NOTE:** orb_outcomes rebuilt Feb 2026 with fill-bar logic applied. Current counts: ~6.1M rows across 7 instruments (5/15/30m ORB apertures).
+- **NOTE:** orb_outcomes rebuilt Feb 2026 with fill-bar logic applied. Row count changes with rebuilds.
 - See `AUDIT_FINDINGS.md` for original finding
 
 ### 8b. Multi-Instrument Discovery Grid Update — DONE (Feb 2026)
