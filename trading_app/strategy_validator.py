@@ -774,6 +774,9 @@ def run_validation(
             elif wr.get("wf_result") and not wr["wf_result"]["passed"]:
                 status = "REJECTED"
                 notes = f"Phase 4b: {wr['wf_result']['rejection_reason']}"
+            elif not wr.get("wf_result") and not wr.get("error"):
+                status = "REJECTED"
+                notes = "Phase 4b: No walkforward result received"
 
             dst_split = wr.get("dst_split") or {
                 "winter_n": None, "winter_avg_r": None,
