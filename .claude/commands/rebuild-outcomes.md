@@ -22,4 +22,11 @@ python trading_app/strategy_validator.py --instrument $ARGUMENTS --min-sample 50
 python scripts/tools/build_edge_families.py --instrument $ARGUMENTS
 ```
 
-Important: Use scratch DB for long runs. Each step depends on the previous one completing successfully.
+5. Run mandatory audit gates:
+```bash
+python scripts/tools/audit_integrity.py
+python pipeline/check_drift.py
+python -m pytest tests/ -x -q
+```
+
+Important: Use scratch DB for long runs. Each step depends on the previous one completing successfully. Never skip the audit gates — see `docs/plans/2026-02-27-rebuild-audit-playbook.md`.

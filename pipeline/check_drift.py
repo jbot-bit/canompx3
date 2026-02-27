@@ -1281,8 +1281,8 @@ def check_no_e0_in_db() -> list[str]:
     violations = []
     try:
         import duckdb
-        from pipeline.paths import get_db_path
-        db_path = get_db_path()
+        from pipeline.paths import GOLD_DB_PATH
+        db_path = GOLD_DB_PATH
         if not Path(db_path).exists():
             return violations
         con = duckdb.connect(str(db_path), read_only=True)
@@ -1299,6 +1299,85 @@ def check_no_e0_in_db() -> list[str]:
             con.close()
     except Exception:
         pass  # DB may not exist in CI
+    return violations
+
+
+def check_doc_stats_consistency() -> list[str]:
+    """Check #36: Doc files must match ground-truth DB counts.
+
+    Parses key stats (validated active, FDR significant, edge families,
+    drift check count) from documentation and compares to gold.db.
+    Prevents narrative-math divergence after rebuilds.
+    """
+    violations = []
+
+    # Ground-truth from DB
+    try:
+        import duckdb
+        from pipeline.paths import GOLD_DB_PATH
+        db_path = GOLD_DB_PATH
+        if not Path(db_path).exists():
+            return violations  # Skip if no DB (CI)
+        con = duckdb.connect(str(db_path), read_only=True)
+        try:
+            validated_active = con.execute(
+                "SELECT COUNT(*) FROM validated_setups WHERE status = 'active'"
+            ).fetchone()[0]
+            fdr_significant = con.execute(
+                "SELECT COUNT(*) FROM validated_setups "
+                "WHERE status = 'active' AND fdr_significant"
+            ).fetchone()[0]
+            edge_families_count = con.execute(
+                "SELECT COUNT(*) FROM edge_families"
+            ).fetchone()[0]
+        finally:
+            con.close()
+    except Exception:
+        return violations  # DB may not exist in CI
+
+    # Count drift checks registered in main() — use print("Check N:") as
+    # the unique marker (only appears in main(), not in function docstrings).
+    this_file = Path(__file__)
+    this_content = this_file.read_text(encoding="utf-8")
+    drift_check_count = len(re.findall(r'print\("Check \d+:', this_content))
+
+    # Doc files to check: (file, regex, expected_key)
+    DOC_STATS_CHECKS = [
+        ("TRADING_RULES.md", r"([\d,]+)\s+validated\s+strateg", "validated_active"),
+        ("TRADING_RULES.md", r"(\d+)\s+FDR\s+significant", "fdr_significant"),
+        ("TRADING_RULES.md", r"(\d+)\s+edge\s+famil", "edge_families"),
+        ("ROADMAP.md", r"([\d,]+)\s+validated\s+active", "validated_active"),
+        ("README.md", r"([\d,]+)\s+validated\s+strateg", "validated_active"),
+        ("README.md", r"(\d+)\s+drift\s+checks", "drift_check_count"),
+        ("CLAUDE.md", r"(\d+)\s+(?:drift|static)\s+checks", "drift_check_count"),
+    ]
+
+    ground_truth = {
+        "validated_active": validated_active,
+        "fdr_significant": fdr_significant,
+        "edge_families": edge_families_count,
+        "drift_check_count": drift_check_count,
+    }
+
+    for filename, pattern, key in DOC_STATS_CHECKS:
+        filepath = PROJECT_ROOT / filename
+        if not filepath.exists():
+            continue
+        content = filepath.read_text(encoding="utf-8")
+        matches = re.findall(pattern, content)
+        if not matches:
+            continue  # No match — don't flag (doc may not mention this stat)
+        # Check first match only (headline/summary number).  Docs also
+        # mention per-session counts (e.g. "4 validated strategies") which
+        # are correct but not the total — checking all matches would
+        # false-positive on those.
+        doc_value = int(matches[0].replace(",", ""))
+        expected = ground_truth[key]
+        if doc_value != expected:
+            violations.append(
+                f"  {filename}: says {doc_value} {key} but DB has {expected}"
+            )
+
     return violations
 
 
@@ -1884,6 +1963,18 @@ def main():
     # Check 35: No E0 rows in DB
     print("Check 35: No E0 rows in trading tables...")
     v = check_no_e0_in_db()
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 36: Doc-stats consistency
+    print("Check 36: Doc stats match DB ground truth...")
+    v = check_doc_stats_consistency()
     if v:
         print("  FAILED:")
         for line in v:

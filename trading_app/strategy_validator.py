@@ -794,20 +794,33 @@ def run_validation(
                 rejected += 1
 
     # ── Phase C: Batch write all results ─────────────────────────────
-    if not dry_run:
+    processed_orb_minutes = sorted({
+        sr["row_dict"].get("orb_minutes", 5) for sr in serial_results
+    })
+    if not dry_run and processed_orb_minutes:
         with duckdb.connect(str(db_path)) as con:
             from pipeline.db_config import configure_connection
             configure_connection(con, writing=True)
 
-            # Purge stale validated_setups for this instrument before writing.
-            # edge_families has FK to validated_setups, so delete it first.
+            # Purge stale validated_setups for this instrument + processed
+            # apertures only.  edge_families has no orb_minutes column, so
+            # scope via head_strategy_id → validated_setups FK.
+            placeholders = ", ".join("?" * len(processed_orb_minutes))
             con.execute(
-                "DELETE FROM edge_families WHERE instrument = ?",
-                [instrument],
+                f"""DELETE FROM edge_families
+                    WHERE instrument = ?
+                    AND head_strategy_id IN (
+                        SELECT strategy_id FROM validated_setups
+                        WHERE instrument = ?
+                        AND orb_minutes IN ({placeholders})
+                    )""",
+                [instrument, instrument] + processed_orb_minutes,
             )
             con.execute(
-                "DELETE FROM validated_setups WHERE instrument = ?",
-                [instrument],
+                f"""DELETE FROM validated_setups
+                    WHERE instrument = ?
+                    AND orb_minutes IN ({placeholders})""",
+                [instrument] + processed_orb_minutes,
             )
 
             for sr in serial_results:

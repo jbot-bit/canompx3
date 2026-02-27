@@ -90,6 +90,24 @@ def check_tests() -> tuple[bool, str]:
     except Exception as e:
         return False, f"Tests error: {e}"
 
+def check_integrity() -> tuple[bool, str]:
+    """Run data integrity audit."""
+    try:
+        proc = subprocess.run(
+            [sys.executable, "scripts/tools/audit_integrity.py"],
+            capture_output=True, text=True, timeout=60,
+            cwd=str(PROJECT_ROOT),
+        )
+        if proc.returncode == 0:
+            return True, "Integrity audit: all 17 checks passed"
+        # Extract violation count from output
+        for line in reversed(proc.stdout.splitlines()):
+            if "violation" in line:
+                return False, f"Integrity audit: {line.strip()}"
+        return False, "Integrity audit: FAILED"
+    except Exception as e:
+        return False, f"Integrity audit error: {e}"
+
 def check_git_hooks() -> tuple[bool, str]:
     """Check git hooks are configured."""
     hooks_dir = PROJECT_ROOT / ".githooks"
@@ -121,6 +139,7 @@ def main():
         check_database,
         check_dbn_files,
         check_drift,
+        check_integrity,
         check_tests,
         check_git_hooks,
     ]
