@@ -1,6 +1,6 @@
 # Canompx3 — Multi-Instrument Futures ORB Trading Pipeline
 
-Self-contained data pipeline and backtesting engine for Opening Range Breakout (ORB) strategies on micro futures (MGC, MNQ, MES, M2K). 10 years of 1-minute bar data, 1,251 validated strategies across 5/15/30m ORB apertures, 36 drift checks, fully automated guardrails.
+Self-contained data pipeline and backtesting engine for Opening Range Breakout (ORB) strategies on micro futures (MGC, MNQ, MES, M2K). 10 years of 1-minute bar data, 1,251 validated strategies across 5/15/30m ORB apertures, 37 drift checks, fully automated guardrails.
 
 ## Quick Start
 
@@ -42,7 +42,7 @@ docs/               Plans, archives, analysis documents
 
 ```bash
 python trading_app/view_strategies.py --summary    # Strategy overview
-python pipeline/check_drift.py                     # 36 static analysis checks
+python pipeline/check_drift.py                     # 37 static analysis checks
 python -m pytest tests/ -x -q                      # Full test suite
 python pipeline/dashboard.py                       # Generate HTML dashboard
 python scripts/backup_db.py                        # Backup gold.db
@@ -58,7 +58,7 @@ See [ROADMAP.md](ROADMAP.md) for development phases and status.
 
 Every commit is gated by:
 1. **Ruff lint** -- catches unused imports, undefined names, unreachable code
-2. **36 drift checks** -- architecture isolation, config sync, timezone hygiene
+2. **37 drift checks** -- architecture isolation, config sync, timezone hygiene
 3. **600+ fast tests** -- pipeline, trading app, nested ORB
 4. **Syntax validation** -- on all staged .py files
 

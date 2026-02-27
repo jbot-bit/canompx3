@@ -1381,6 +1381,35 @@ def check_doc_stats_consistency() -> list[str]:
     return violations
 
 
+def check_stale_scratch_db() -> list[str]:
+    """Check #37: Scratch DB must not be older than canonical gold.db.
+
+    C:/db/gold.db is an optional scratch copy used for long-running jobs.
+    If it exists and is older than the canonical gold.db, someone forgot
+    to copy back or clean up — running against it risks time-alignment
+    errors and silent data corruption.
+    """
+    violations = []
+    scratch = Path("C:/db/gold.db")
+    if not scratch.exists():
+        return violations  # No scratch DB — nothing to check
+    canonical = PROJECT_ROOT / "gold.db"
+    if not canonical.exists():
+        return violations
+    scratch_mtime = scratch.stat().st_mtime
+    canonical_mtime = canonical.stat().st_mtime
+    if scratch_mtime < canonical_mtime:
+        from datetime import datetime
+        scratch_age = datetime.fromtimestamp(scratch_mtime).strftime("%Y-%m-%d %H:%M")
+        canon_age = datetime.fromtimestamp(canonical_mtime).strftime("%Y-%m-%d %H:%M")
+        violations.append(
+            f"  C:/db/gold.db is STALE (modified {scratch_age}, "
+            f"canonical gold.db modified {canon_age}). "
+            f"Delete it or copy canonical gold.db over it."
+        )
+    return violations
+
+
 def check_orb_minutes_in_strategy_id() -> list[str]:
     """Check #31: Non-5m strategies must have _O{minutes} suffix in strategy_id.
 
@@ -1975,6 +2004,18 @@ def main():
     # Check 36: Doc-stats consistency
     print("Check 36: Doc stats match DB ground truth...")
     v = check_doc_stats_consistency()
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 37: Stale scratch DB
+    print("Check 37: No stale scratch DB at C:/db/gold.db...")
+    v = check_stale_scratch_db()
     if v:
         print("  FAILED:")
         for line in v:
