@@ -63,7 +63,7 @@ class TestInitRegimeSchema:
             INSERT INTO regime_strategies
             (run_label, strategy_id, instrument, orb_label, orb_minutes,
              rr_target, confirm_bars, entry_model)
-            VALUES ('test', 'S1', 'MGC', '0900', 5, 2.0, 2, 'E1')
+            VALUES ('test', 'S1', 'MGC', 'CME_REOPEN', 5, 2.0, 2, 'E1')
         """)
         con.commit()
         count = con.execute("SELECT COUNT(*) FROM regime_strategies").fetchone()[0]

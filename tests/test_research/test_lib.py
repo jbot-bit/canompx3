@@ -326,45 +326,45 @@ class TestSessionCol:
     """session_col() builds column name from orb_label + stem."""
 
     def test_basic(self):
-        assert session_col("1000", "size") == "orb_1000_size"
+        assert session_col("TOKYO_OPEN", "size") == "orb_TOKYO_OPEN_size"
 
     def test_break_dir(self):
-        assert session_col("0900", "break_dir") == "orb_0900_break_dir"
+        assert session_col("CME_REOPEN", "break_dir") == "orb_CME_REOPEN_break_dir"
 
 
 class TestOutcomesQuery:
     """outcomes_query() builds safe SQL with triple-join."""
 
     def test_basic_query(self):
-        sql = outcomes_query("MGC", "1000", "E1")
+        sql = outcomes_query("MGC", "TOKYO_OPEN", "E1")
         assert "o.trading_day = d.trading_day" in sql
         assert "o.symbol = d.symbol" in sql
         assert "o.orb_minutes = d.orb_minutes" in sql
         assert "'MGC'" in sql
-        assert "'1000'" in sql
+        assert "'TOKYO_OPEN'" in sql
         assert "'E1'" in sql
 
     def test_extra_cols(self):
-        sql = outcomes_query("MGC", "1000", "E1", extra_cols=["d.atr_5d"])
+        sql = outcomes_query("MGC", "TOKYO_OPEN", "E1", extra_cols=["d.atr_5d"])
         assert "d.atr_5d" in sql
 
     def test_filters(self):
-        sql = outcomes_query("MGC", "1000", "E1",
-                             filters=["d.orb_1000_size >= 4"])
-        assert "d.orb_1000_size >= 4" in sql
+        sql = outcomes_query("MGC", "TOKYO_OPEN", "E1",
+                             filters=["d.orb_TOKYO_OPEN_size >= 4"])
+        assert "d.orb_TOKYO_OPEN_size >= 4" in sql
 
     def test_date_range(self):
-        sql = outcomes_query("MGC", "1000", "E1",
+        sql = outcomes_query("MGC", "TOKYO_OPEN", "E1",
                              date_range=("2021-01-01", "2025-12-31"))
         assert "2021-01-01" in sql
         assert "2025-12-31" in sql
 
     def test_selects_pnl_r(self):
-        sql = outcomes_query("MGC", "1000", "E1")
+        sql = outcomes_query("MGC", "TOKYO_OPEN", "E1")
         assert "o.pnl_r" in sql
 
     def test_filters_null_pnl(self):
-        sql = outcomes_query("MGC", "1000", "E1")
+        sql = outcomes_query("MGC", "TOKYO_OPEN", "E1")
         assert "o.pnl_r IS NOT NULL" in sql
 
 
@@ -373,25 +373,25 @@ class TestWithDstSplit:
 
     def test_us_regime(self):
         base = "SELECT o.pnl_r, d.us_dst FROM t"
-        on_sql, off_sql = with_dst_split(base, session="0900", regime_source="US")
+        on_sql, off_sql = with_dst_split(base, session="CME_REOPEN", regime_source="US")
         # Outer query uses unqualified column name (CTE strips table prefixes)
         assert "WHERE us_dst = TRUE" in on_sql
         assert "WHERE us_dst = FALSE" in off_sql
 
     def test_uk_regime(self):
         base = "SELECT o.pnl_r, d.uk_dst FROM t"
-        on_sql, off_sql = with_dst_split(base, session="1800", regime_source="UK")
+        on_sql, off_sql = with_dst_split(base, session="LONDON_METALS", regime_source="UK")
         assert "WHERE uk_dst = TRUE" in on_sql
         assert "WHERE uk_dst = FALSE" in off_sql
 
     def test_raises_if_dst_column_missing(self):
         base = "SELECT o.pnl_r FROM t"
         with pytest.raises(ValueError, match="DST column"):
-            with_dst_split(base, session="0900", regime_source="US")
+            with_dst_split(base, session="CME_REOPEN", regime_source="US")
 
     def test_works_with_outcomes_query(self):
-        sql = outcomes_query("MGC", "0900", "E1", extra_cols=["d.us_dst"])
-        on_sql, off_sql = with_dst_split(sql, session="0900", regime_source="US")
+        sql = outcomes_query("MGC", "CME_REOPEN", "E1", extra_cols=["d.us_dst"])
+        on_sql, off_sql = with_dst_split(sql, session="CME_REOPEN", regime_source="US")
         assert "WHERE us_dst = TRUE" in on_sql
         assert "WITH base AS" in on_sql
 

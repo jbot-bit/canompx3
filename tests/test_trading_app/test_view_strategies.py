@@ -69,8 +69,8 @@ class TestFormatTable:
     def test_with_nan_sharpe_ann(self):
         """NaN values in sharpe_ann/trades_per_year must display as N/A, not nan."""
         df = pd.DataFrame([{
-            "strategy_id": "MGC_0900_E1_RR2.0_CB1_ORB_G4",
-            "orb_label": "0900",
+            "strategy_id": "MGC_CME_REOPEN_E1_RR2.0_CB1_ORB_G4",
+            "orb_label": "CME_REOPEN",
             "entry_model": "E1",
             "confirm_bars": 1,
             "rr_target": 2.0,
@@ -92,8 +92,8 @@ class TestFormatTable:
     def test_with_none_sharpe_ann(self):
         """None values display as N/A."""
         df = pd.DataFrame([{
-            "strategy_id": "MGC_0900_E1_RR2.0_CB1_ORB_G4",
-            "orb_label": "0900",
+            "strategy_id": "MGC_CME_REOPEN_E1_RR2.0_CB1_ORB_G4",
+            "orb_label": "CME_REOPEN",
             "entry_model": "E1",
             "confirm_bars": 1,
             "rr_target": 2.0,
@@ -114,8 +114,8 @@ class TestFormatTable:
     def test_with_valid_sharpe_ann(self):
         """Valid sharpe_ann displays with sign."""
         df = pd.DataFrame([{
-            "strategy_id": "MGC_0900_E1_RR2.0_CB1_ORB_G4",
-            "orb_label": "0900",
+            "strategy_id": "MGC_CME_REOPEN_E1_RR2.0_CB1_ORB_G4",
+            "orb_label": "CME_REOPEN",
             "entry_model": "E1",
             "confirm_bars": 1,
             "rr_target": 2.0,
@@ -146,7 +146,7 @@ class TestFormatFamilies:
     def test_nan_best_shann(self):
         """NaN in best_shann must display as N/A."""
         df = pd.DataFrame([{
-            "orb_label": "0900",
+            "orb_label": "CME_REOPEN",
             "entry_model": "E1",
             "rr_target": 2.0,
             "confirm_bars": 1,
@@ -173,7 +173,7 @@ class TestFormatSummary:
     def test_nan_shann(self):
         """NaN in avg_shann/best_shann must display as N/A."""
         df = pd.DataFrame([{
-            "orb_label": "0900",
+            "orb_label": "CME_REOPEN",
             "count": 50,
             "unique_trades": 15,
             "avg_expr": 0.15,

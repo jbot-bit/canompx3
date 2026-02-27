@@ -65,7 +65,7 @@ class TestInitSchema:
         con = duckdb.connect(str(db_path))
         con.execute("""
             INSERT INTO experimental_strategies (strategy_id, instrument, orb_label, orb_minutes, rr_target, confirm_bars, entry_model)
-            VALUES ('test', 'MGC', '0900', 5, 2.0, 3, 'E1')
+            VALUES ('test', 'MGC', 'CME_REOPEN', 5, 2.0, 3, 'E1')
         """)
         con.commit()
         con.close()
@@ -111,7 +111,7 @@ class TestInitSchema:
 
         con.execute("""
             INSERT INTO orb_outcomes (symbol, trading_day, orb_label, orb_minutes, rr_target, confirm_bars, entry_model)
-            VALUES ('MGC', '2024-01-15', '0900', 5, 2.0, 3, 'E1')
+            VALUES ('MGC', '2024-01-15', 'CME_REOPEN', 5, 2.0, 3, 'E1')
         """)
         con.commit()
 
@@ -119,7 +119,7 @@ class TestInitSchema:
         with pytest.raises(duckdb.ConstraintException):
             con.execute("""
                 INSERT INTO orb_outcomes (symbol, trading_day, orb_label, orb_minutes, rr_target, confirm_bars, entry_model)
-                VALUES ('MGC', '2024-01-15', '0900', 5, 2.0, 3, 'E1')
+                VALUES ('MGC', '2024-01-15', 'CME_REOPEN', 5, 2.0, 3, 'E1')
             """)
 
         con.close()
@@ -211,7 +211,7 @@ class TestEdgeFamiliesSchema:
              confirm_bars, entry_model, filter_type, sample_size,
              win_rate, expectancy_r, years_tested, all_years_positive,
              stress_test_passed, status)
-            VALUES ('test_s1', 'MGC', '0900', 5, 2.0, 2, 'E1', 'ORB_G5',
+            VALUES ('test_s1', 'MGC', 'CME_REOPEN', 5, 2.0, 2, 'E1', 'ORB_G5',
                     100, 0.55, 0.30, 3, TRUE, TRUE, 'active')
         """)
         con.execute("""

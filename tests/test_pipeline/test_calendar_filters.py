@@ -177,69 +177,69 @@ class TestCalendarSkipFilter:
             filter_type="test", description="test",
             skip_nfp=True, skip_opex=False,
         )
-        assert not f.matches_row(self._row(nfp=True), "0900")
-        assert f.matches_row(self._row(nfp=False), "0900")
+        assert not f.matches_row(self._row(nfp=True), "CME_REOPEN")
+        assert f.matches_row(self._row(nfp=False), "CME_REOPEN")
 
     def test_opex_skip(self):
         f = CalendarSkipFilter(
             filter_type="test", description="test",
             skip_nfp=False, skip_opex=True,
         )
-        assert not f.matches_row(self._row(opex=True), "0900")
-        assert f.matches_row(self._row(opex=False), "0900")
+        assert not f.matches_row(self._row(opex=True), "CME_REOPEN")
+        assert f.matches_row(self._row(opex=False), "CME_REOPEN")
 
     def test_friday_session_specific(self):
         """Friday skip only blocks the specified session."""
         f = CalendarSkipFilter(
             filter_type="test", description="test",
-            skip_nfp=False, skip_opex=False, skip_friday_session="0900",
+            skip_nfp=False, skip_opex=False, skip_friday_session="CME_REOPEN",
         )
         row = self._row(friday=True)
-        # 0900 blocked on Friday
-        assert not f.matches_row(row, "0900")
-        # 1000 NOT blocked on Friday
-        assert f.matches_row(row, "1000")
-        # 1800 NOT blocked on Friday
-        assert f.matches_row(row, "1800")
+        # CME_REOPEN blocked on Friday
+        assert not f.matches_row(row, "CME_REOPEN")
+        # TOKYO_OPEN NOT blocked on Friday
+        assert f.matches_row(row, "TOKYO_OPEN")
+        # LONDON_METALS NOT blocked on Friday
+        assert f.matches_row(row, "LONDON_METALS")
 
     def test_friday_skip_no_effect_on_non_friday(self):
         f = CalendarSkipFilter(
             filter_type="test", description="test",
-            skip_nfp=False, skip_opex=False, skip_friday_session="0900",
+            skip_nfp=False, skip_opex=False, skip_friday_session="CME_REOPEN",
         )
         row = self._row(friday=False)
-        assert f.matches_row(row, "0900")
+        assert f.matches_row(row, "CME_REOPEN")
 
     def test_all_skips_combined(self):
         f = CalendarSkipFilter(
             filter_type="test", description="test",
-            skip_nfp=True, skip_opex=True, skip_friday_session="0900",
+            skip_nfp=True, skip_opex=True, skip_friday_session="CME_REOPEN",
         )
         # Normal day passes
-        assert f.matches_row(self._row(), "0900")
+        assert f.matches_row(self._row(), "CME_REOPEN")
         # NFP blocked
-        assert not f.matches_row(self._row(nfp=True), "0900")
+        assert not f.matches_row(self._row(nfp=True), "CME_REOPEN")
         # OPEX blocked
-        assert not f.matches_row(self._row(opex=True), "1800")
-        # Friday at 0900 blocked
-        assert not f.matches_row(self._row(friday=True), "0900")
-        # Friday at 1800 passes (only 0900 skipped)
-        assert f.matches_row(self._row(friday=True), "1800")
+        assert not f.matches_row(self._row(opex=True), "LONDON_METALS")
+        # Friday at CME_REOPEN blocked
+        assert not f.matches_row(self._row(friday=True), "CME_REOPEN")
+        # Friday at LONDON_METALS passes (only CME_REOPEN skipped)
+        assert f.matches_row(self._row(friday=True), "LONDON_METALS")
 
     def test_no_skips_passes_everything(self):
         f = CalendarSkipFilter(
             filter_type="test", description="test",
             skip_nfp=False, skip_opex=False, skip_friday_session=None,
         )
-        assert f.matches_row(self._row(nfp=True, opex=True, friday=True), "0900")
+        assert f.matches_row(self._row(nfp=True, opex=True, friday=True), "CME_REOPEN")
 
     def test_missing_flags_treated_as_false(self):
         """Rows without calendar flags should pass (fail-open for backwards compat)."""
         f = CalendarSkipFilter(
             filter_type="test", description="test",
-            skip_nfp=True, skip_opex=True, skip_friday_session="0900",
+            skip_nfp=True, skip_opex=True, skip_friday_session="CME_REOPEN",
         )
-        assert f.matches_row({}, "0900")
+        assert f.matches_row({}, "CME_REOPEN")
 
 
 # =============================================================================
@@ -260,8 +260,8 @@ class TestCompositeFilter:
             filter_type="COMP", description="comp",
             base=base, overlay=overlay,
         )
-        row = {"orb_0900_size": 5.0, "is_nfp_day": False, "is_opex_day": False}
-        assert composite.matches_row(row, "0900")
+        row = {"orb_CME_REOPEN_size": 5.0, "is_nfp_day": False, "is_opex_day": False}
+        assert composite.matches_row(row, "CME_REOPEN")
 
     def test_base_fails(self):
         base = OrbSizeFilter(
@@ -275,8 +275,8 @@ class TestCompositeFilter:
             filter_type="COMP", description="comp",
             base=base, overlay=overlay,
         )
-        row = {"orb_0900_size": 2.0, "is_nfp_day": False, "is_opex_day": False}
-        assert not composite.matches_row(row, "0900")
+        row = {"orb_CME_REOPEN_size": 2.0, "is_nfp_day": False, "is_opex_day": False}
+        assert not composite.matches_row(row, "CME_REOPEN")
 
     def test_overlay_fails(self):
         base = NoFilter()
@@ -289,7 +289,7 @@ class TestCompositeFilter:
             base=base, overlay=overlay,
         )
         row = {"is_nfp_day": True, "is_opex_day": False}
-        assert not composite.matches_row(row, "0900")
+        assert not composite.matches_row(row, "CME_REOPEN")
 
     def test_both_fail(self):
         base = OrbSizeFilter(
@@ -303,5 +303,5 @@ class TestCompositeFilter:
             filter_type="COMP", description="comp",
             base=base, overlay=overlay,
         )
-        row = {"orb_0900_size": 2.0, "is_nfp_day": True, "is_opex_day": False}
-        assert not composite.matches_row(row, "0900")
+        row = {"orb_CME_REOPEN_size": 2.0, "is_nfp_day": True, "is_opex_day": False}
+        assert not composite.matches_row(row, "CME_REOPEN")

@@ -57,12 +57,12 @@ def live_config_db(tmp_path):
 
 class TestLiveStrategySpec:
     def test_spec_is_frozen(self):
-        spec = LiveStrategySpec("fam1", "core", "1000", "E1", "ORB_G4", None)
+        spec = LiveStrategySpec("fam1", "core", "TOKYO_OPEN", "E1", "ORB_G4", None)
         with pytest.raises(AttributeError):
             spec.tier = "regime"
 
     def test_spec_fields(self):
-        spec = LiveStrategySpec("fam1", "core", "1000", "E1", "ORB_G4", "rolling")
+        spec = LiveStrategySpec("fam1", "core", "TOKYO_OPEN", "E1", "ORB_G4", "rolling")
         assert spec.family_id == "fam1"
         assert spec.regime_gate == "rolling"
 
@@ -87,23 +87,23 @@ class TestLoadBestRegimeVariant:
         con = duckdb.connect(str(live_config_db))
         con.execute("""
             INSERT INTO validated_setups VALUES (
-                'MGC_1000_E1_RR2.0_CB1_ORB_G4', 'MGC', '1000', 'E1',
+                'MGC_TOKYO_OPEN_E1_RR2.0_CB1_ORB_G4', 'MGC', 'TOKYO_OPEN', 'E1',
                 2.0, 1, 'ORB_G4', 0.35, 0.52, 150, 1.2, 3.5, 'active'
             )
         """)
         con.execute("""
             INSERT INTO experimental_strategies VALUES (
-                'MGC_1000_E1_RR2.0_CB1_ORB_G4', 'MGC', '1000', 'E1',
+                'MGC_TOKYO_OPEN_E1_RR2.0_CB1_ORB_G4', 'MGC', 'TOKYO_OPEN', 'E1',
                 2.0, 1, 'ORB_G4', 0.35, 0.52, 150, 1.2, 3.5, 4.2
             )
         """)
         con.close()
 
         result = _load_best_regime_variant(
-            live_config_db, "MGC", "1000", "E1", "ORB_G4"
+            live_config_db, "MGC", "TOKYO_OPEN", "E1", "ORB_G4"
         )
         assert result is not None
-        assert result["strategy_id"] == "MGC_1000_E1_RR2.0_CB1_ORB_G4"
+        assert result["strategy_id"] == "MGC_TOKYO_OPEN_E1_RR2.0_CB1_ORB_G4"
         assert result["sharpe_ratio"] == 1.2
 
     def test_not_found(self, live_config_db):
@@ -118,14 +118,14 @@ class TestLoadBestRegimeVariant:
         con = duckdb.connect(str(live_config_db))
         con.execute("""
             INSERT INTO validated_setups VALUES (
-                'test_inactive', 'MGC', '1000', 'E1',
+                'test_inactive', 'MGC', 'TOKYO_OPEN', 'E1',
                 2.0, 1, 'ORB_G4', 0.35, 0.52, 150, 1.2, 3.5, 'purged'
             )
         """)
         con.close()
 
         result = _load_best_regime_variant(
-            live_config_db, "MGC", "1000", "E1", "ORB_G4"
+            live_config_db, "MGC", "TOKYO_OPEN", "E1", "ORB_G4"
         )
         assert result is None
 
@@ -134,13 +134,13 @@ class TestLoadBestRegimeVariant:
         con = duckdb.connect(str(live_config_db))
         con.execute("""
             INSERT INTO validated_setups VALUES
-                ('low_sharpe', 'MGC', '1000', 'E1', 2.0, 1, 'ORB_G4', 0.30, 0.50, 100, 0.8, 4.0, 'active'),
-                ('high_sharpe', 'MGC', '1000', 'E1', 1.5, 2, 'ORB_G4', 0.40, 0.55, 120, 1.5, 3.0, 'active')
+                ('low_sharpe', 'MGC', 'TOKYO_OPEN', 'E1', 2.0, 1, 'ORB_G4', 0.30, 0.50, 100, 0.8, 4.0, 'active'),
+                ('high_sharpe', 'MGC', 'TOKYO_OPEN', 'E1', 1.5, 2, 'ORB_G4', 0.40, 0.55, 120, 1.5, 3.0, 'active')
         """)
         con.close()
 
         result = _load_best_regime_variant(
-            live_config_db, "MGC", "1000", "E1", "ORB_G4"
+            live_config_db, "MGC", "TOKYO_OPEN", "E1", "ORB_G4"
         )
         assert result["strategy_id"] == "high_sharpe"
 
@@ -151,14 +151,14 @@ class TestLoadBestExperimentalVariant:
         con = duckdb.connect(str(live_config_db))
         con.execute("""
             INSERT INTO experimental_strategies VALUES (
-                'exp_test', 'MGC', '1000', 'E2', 2.0, 1, 'ORB_G5',
+                'exp_test', 'MGC', 'TOKYO_OPEN', 'E2', 2.0, 1, 'ORB_G5',
                 0.25, 0.51, 200, 1.0, 4.0, 3.5
             )
         """)
         con.close()
 
         result = _load_best_experimental_variant(
-            live_config_db, "MGC", "1000", "E2", "ORB_G5"
+            live_config_db, "MGC", "TOKYO_OPEN", "E2", "ORB_G5"
         )
         assert result is not None
         assert result["expectancy_r"] == 0.25
@@ -168,19 +168,19 @@ class TestLoadBestExperimentalVariant:
         con = duckdb.connect(str(live_config_db))
         con.execute("""
             INSERT INTO experimental_strategies VALUES (
-                'neg_test', 'MGC', '1000', 'E2', 2.0, 1, 'ORB_G5',
+                'neg_test', 'MGC', 'TOKYO_OPEN', 'E2', 2.0, 1, 'ORB_G5',
                 -0.10, 0.45, 200, -0.5, 5.0, 3.5
             )
         """)
         con.close()
 
         result = _load_best_experimental_variant(
-            live_config_db, "MGC", "1000", "E2", "ORB_G5"
+            live_config_db, "MGC", "TOKYO_OPEN", "E2", "ORB_G5"
         )
         assert result is None
 
     def test_not_found(self, live_config_db):
         result = _load_best_experimental_variant(
-            live_config_db, "MNQ", "0900", "E1", "ORB_G4"
+            live_config_db, "MNQ", "CME_REOPEN", "E1", "ORB_G4"
         )
         assert result is None

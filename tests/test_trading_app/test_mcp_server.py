@@ -37,7 +37,7 @@ class TestQueryTradingDb:
     def test_valid_query_returns_data(self, mock_cls):
         mock_adapter = MagicMock()
         mock_adapter.execute.return_value = pd.DataFrame(
-            {"orb_label": ["0900"], "expectancy_r": [0.15]}
+            {"orb_label": ["CME_REOPEN"], "expectancy_r": [0.15]}
         )
         mock_cls.return_value = mock_adapter
 
@@ -52,7 +52,7 @@ class TestQueryTradingDb:
         mock_adapter.execute.side_effect = ValueError("bad param")
         mock_cls.return_value = mock_adapter
 
-        result = _query_trading_db(template="strategy_lookup", orb_label="0900")
+        result = _query_trading_db(template="strategy_lookup", orb_label="CME_REOPEN")
         assert "error" in result
         assert "bad param" in result["error"]
 
@@ -64,7 +64,7 @@ class TestQueryTradingDb:
 
         _query_trading_db(
             template="strategy_lookup",
-            orb_label="1800",
+            orb_label="LONDON_METALS",
             entry_model="E3",
             filter_type="ORB_G6",
             min_sample_size=50,
@@ -73,7 +73,7 @@ class TestQueryTradingDb:
 
         call_args = mock_adapter.execute.call_args[0][0]
         assert call_args.template.value == "strategy_lookup"
-        assert call_args.parameters["orb_label"] == "1800"
+        assert call_args.parameters["orb_label"] == "LONDON_METALS"
         assert call_args.parameters["entry_model"] == "E3"
         assert call_args.parameters["filter_type"] == "ORB_G6"
         assert call_args.parameters["min_sample_size"] == 50
@@ -88,7 +88,7 @@ class TestQueryTradingDb:
 
         _query_trading_db(
             template="outcomes_stats",
-            orb_label="0900",
+            orb_label="CME_REOPEN",
             rr_target=2.0,
             confirm_bars=1,
         )

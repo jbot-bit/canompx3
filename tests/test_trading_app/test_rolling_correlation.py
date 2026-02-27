@@ -83,7 +83,7 @@ def _create_test_db(tmp_path: Path) -> Path:
     return db_path
 
 
-def _insert_strategy(con, sid, instrument="MGC", orb_label="0900",
+def _insert_strategy(con, sid, instrument="MGC", orb_label="CME_REOPEN",
                      orb_minutes=5, rr_target=2.0, confirm_bars=1,
                      entry_model="E1", filter_type="ORB_G5"):
     """Insert a validated_setups row."""
@@ -131,19 +131,19 @@ def _populate_two_strategies(tmp_path, pnl_a_values, pnl_b_values,
     db_path = _create_test_db(tmp_path)
     con = duckdb.connect(str(db_path))
 
-    sid_a = "MGC_0900_E1_RR2.0_CB1_ORB_G5"
-    sid_b = "MGC_1000_E1_RR2.0_CB1_ORB_G5"
+    sid_a = "MGC_CME_REOPEN_E1_RR2.0_CB1_ORB_G5"
+    sid_b = "MGC_TOKYO_OPEN_E1_RR2.0_CB1_ORB_G5"
 
-    _insert_strategy(con, sid_a, orb_label="0900")
-    _insert_strategy(con, sid_b, orb_label="1000")
+    _insert_strategy(con, sid_a, orb_label="CME_REOPEN")
+    _insert_strategy(con, sid_b, orb_label="TOKYO_OPEN")
 
     for i, pnl in enumerate(pnl_a_values):
         td = start_date + timedelta(days=i)
-        _insert_pnl(con, sid_a, "MGC", "0900", 5, 2.0, 1, "E1", td, pnl)
+        _insert_pnl(con, sid_a, "MGC", "CME_REOPEN", 5, 2.0, 1, "E1", td, pnl)
 
     for i, pnl in enumerate(pnl_b_values):
         td = start_date + timedelta(days=i)
-        _insert_pnl(con, sid_b, "MGC", "1000", 5, 2.0, 1, "E1", td, pnl)
+        _insert_pnl(con, sid_b, "MGC", "TOKYO_OPEN", 5, 2.0, 1, "E1", td, pnl)
 
     con.commit()
     con.close()
@@ -197,18 +197,18 @@ class TestRollingCorrelation:
         db_path = _create_test_db(tmp_path)
         con = duckdb.connect(str(db_path))
 
-        sid_a = "MGC_0900_E1_RR2.0_CB1_ORB_G5"
-        sid_b = "MGC_1000_E1_RR2.0_CB1_ORB_G5"
-        _insert_strategy(con, sid_a, orb_label="0900")
-        _insert_strategy(con, sid_b, orb_label="1000")
+        sid_a = "MGC_CME_REOPEN_E1_RR2.0_CB1_ORB_G5"
+        sid_b = "MGC_TOKYO_OPEN_E1_RR2.0_CB1_ORB_G5"
+        _insert_strategy(con, sid_a, orb_label="CME_REOPEN")
+        _insert_strategy(con, sid_b, orb_label="TOKYO_OPEN")
 
         start = date(2024, 1, 1)
         for i in range(30):
             td = start + timedelta(days=i)
-            _insert_pnl(con, sid_a, "MGC", "0900", 5, 2.0, 1, "E1", td, 0.5)
+            _insert_pnl(con, sid_a, "MGC", "CME_REOPEN", 5, 2.0, 1, "E1", td, 0.5)
         for i in range(100, 130):
             td = start + timedelta(days=i)
-            _insert_pnl(con, sid_b, "MGC", "1000", 5, 2.0, 1, "E1", td, -0.5)
+            _insert_pnl(con, sid_b, "MGC", "TOKYO_OPEN", 5, 2.0, 1, "E1", td, -0.5)
 
         con.commit()
         con.close()
@@ -343,19 +343,19 @@ class TestCoLoss:
         db_path = _create_test_db(tmp_path)
         con = duckdb.connect(str(db_path))
 
-        sid_a = "MGC_0900_E1_RR2.0_CB1_ORB_G5"
-        sid_b = "MGC_1000_E1_RR2.0_CB1_ORB_G5"
-        _insert_strategy(con, sid_a, orb_label="0900")
-        _insert_strategy(con, sid_b, orb_label="1000")
+        sid_a = "MGC_CME_REOPEN_E1_RR2.0_CB1_ORB_G5"
+        sid_b = "MGC_TOKYO_OPEN_E1_RR2.0_CB1_ORB_G5"
+        _insert_strategy(con, sid_a, orb_label="CME_REOPEN")
+        _insert_strategy(con, sid_b, orb_label="TOKYO_OPEN")
 
         # A trades on odd days, B on even days
         start = date(2024, 1, 1)
         for i in range(0, 50, 2):
             td = start + timedelta(days=i)
-            _insert_pnl(con, sid_a, "MGC", "0900", 5, 2.0, 1, "E1", td, -1.0)
+            _insert_pnl(con, sid_a, "MGC", "CME_REOPEN", 5, 2.0, 1, "E1", td, -1.0)
         for i in range(1, 50, 2):
             td = start + timedelta(days=i)
-            _insert_pnl(con, sid_b, "MGC", "1000", 5, 2.0, 1, "E1", td, -1.0)
+            _insert_pnl(con, sid_b, "MGC", "TOKYO_OPEN", 5, 2.0, 1, "E1", td, -1.0)
 
         con.commit()
         con.close()

@@ -78,7 +78,7 @@ class TestInitNestedSchema:
             INSERT INTO nested_outcomes
             (trading_day, symbol, orb_label, orb_minutes, entry_resolution,
              rr_target, confirm_bars, entry_model)
-            VALUES ('2024-01-05', 'MGC', '0900', 15, 5, 2.0, 2, 'E1')
+            VALUES ('2024-01-05', 'MGC', 'CME_REOPEN', 15, 5, 2.0, 2, 'E1')
         """)
         con.commit()
         count = con.execute("SELECT COUNT(*) FROM nested_outcomes").fetchone()[0]

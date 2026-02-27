@@ -16,8 +16,8 @@ def db_path(tmp_path):
     """Create temp DB with full schema + test data for report.
 
     2 families, 2 heads:
-    - head_0900 (0900 E1 RR2.0 CB2 G5): trades on Jan 2,3,5
-    - head_1800 (1800 E3 RR1.5 CB1 G4): trades on Jan 2,6
+    - head_CME_REOPEN (CME_REOPEN E1 RR2.0 CB2 G5): trades on Jan 2,3,5
+    - head_LONDON_METALS (LONDON_METALS E3 RR1.5 CB1 G4): trades on Jan 2,6
     Day Jan 2 has multi-session overlap.
     """
     path = tmp_path / "test.db"
@@ -46,8 +46,8 @@ def db_path(tmp_path):
 
     # Insert validated_setups
     for sid, orb, em, rr, cb, filt, expr in [
-        ("MGC_0900_E1_RR2.0_CB2_ORB_G5", "0900", "E1", 2.0, 2, "ORB_G5", 0.30),
-        ("MGC_1800_E3_RR1.5_CB1_ORB_G4", "1800", "E3", 1.5, 1, "ORB_G4", 0.20),
+        ("MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G5", "CME_REOPEN", "E1", 2.0, 2, "ORB_G5", 0.30),
+        ("MGC_LONDON_METALS_E3_RR1.5_CB1_ORB_G4", "LONDON_METALS", "E3", 1.5, 1, "ORB_G4", 0.20),
     ]:
         con.execute("""
             INSERT INTO validated_setups
@@ -65,15 +65,15 @@ def db_path(tmp_path):
         (family_hash, instrument, member_count, trade_day_count,
          head_strategy_id, head_expectancy_r, robustness_status)
         VALUES
-        ('hash_0900', 'MGC', 5, 3, 'MGC_0900_E1_RR2.0_CB2_ORB_G5', 0.30, 'ROBUST'),
-        ('hash_1800', 'MGC', 5, 2, 'MGC_1800_E3_RR1.5_CB1_ORB_G4', 0.20, 'ROBUST')
+        ('hash_0900', 'MGC', 5, 3, 'MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G5', 0.30, 'ROBUST'),
+        ('hash_1800', 'MGC', 5, 2, 'MGC_LONDON_METALS_E3_RR1.5_CB1_ORB_G4', 0.20, 'ROBUST')
     """)
 
     # Insert strategy_trade_days
     for sid, days in [
-        ("MGC_0900_E1_RR2.0_CB2_ORB_G5",
+        ("MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G5",
          [date(2024, 1, 2), date(2024, 1, 3), date(2024, 1, 5)]),
-        ("MGC_1800_E3_RR1.5_CB1_ORB_G4",
+        ("MGC_LONDON_METALS_E3_RR1.5_CB1_ORB_G4",
          [date(2024, 1, 2), date(2024, 1, 6)]),
     ]:
         for d in days:
@@ -83,13 +83,13 @@ def db_path(tmp_path):
 
     # Insert orb_outcomes (matching trades)
     outcomes = [
-        # 0900 head: 3 trades (2 wins, 1 loss)
-        (date(2024, 1, 2), "0900", 5, 2.0, 2, "E1", "win", 2.0, 100.0, 98.0),
-        (date(2024, 1, 3), "0900", 5, 2.0, 2, "E1", "loss", -1.0, 100.0, 98.0),
-        (date(2024, 1, 5), "0900", 5, 2.0, 2, "E1", "win", 2.0, 100.0, 98.0),
-        # 1800 head: 2 trades (1 win, 1 loss)
-        (date(2024, 1, 2), "1800", 5, 1.5, 1, "E3", "win", 1.5, 100.0, 98.5),
-        (date(2024, 1, 6), "1800", 5, 1.5, 1, "E3", "loss", -1.0, 100.0, 98.5),
+        # CME_REOPEN head: 3 trades (2 wins, 1 loss)
+        (date(2024, 1, 2), "CME_REOPEN", 5, 2.0, 2, "E1", "win", 2.0, 100.0, 98.0),
+        (date(2024, 1, 3), "CME_REOPEN", 5, 2.0, 2, "E1", "loss", -1.0, 100.0, 98.0),
+        (date(2024, 1, 5), "CME_REOPEN", 5, 2.0, 2, "E1", "win", 2.0, 100.0, 98.0),
+        # LONDON_METALS head: 2 trades (1 win, 1 loss)
+        (date(2024, 1, 2), "LONDON_METALS", 5, 1.5, 1, "E3", "win", 1.5, 100.0, 98.5),
+        (date(2024, 1, 6), "LONDON_METALS", 5, 1.5, 1, "E3", "loss", -1.0, 100.0, 98.5),
     ]
     for td, orb, om, rr, cb, em, outcome, pnl, entry, stop in outcomes:
         con.execute("""
@@ -115,7 +115,7 @@ class TestReportInstrument:
         assert result["family_count"] == 2
 
     def test_overlap_detection(self, db_path):
-        """Jan 2 has both 0900 and 1800 trades -> 1 multi-session day."""
+        """Jan 2 has both CME_REOPEN and LONDON_METALS trades -> 1 multi-session day."""
         from scripts.reports.report_edge_portfolio import report_instrument
 
         result = report_instrument(db_path, "MGC")
@@ -127,10 +127,10 @@ class TestReportInstrument:
         from scripts.reports.report_edge_portfolio import report_instrument
 
         result = report_instrument(db_path, "MGC")
-        assert "0900" in result["per_orb"]
-        assert "1800" in result["per_orb"]
-        assert result["per_orb"]["0900"]["trades"] == 3
-        assert result["per_orb"]["1800"]["trades"] == 2
+        assert "CME_REOPEN" in result["per_orb"]
+        assert "LONDON_METALS" in result["per_orb"]
+        assert result["per_orb"]["CME_REOPEN"]["trades"] == 3
+        assert result["per_orb"]["LONDON_METALS"]["trades"] == 2
 
     def test_yearly_breakdown(self, db_path):
         from scripts.reports.report_edge_portfolio import report_instrument
@@ -257,9 +257,9 @@ class TestPurgedFilter:
              win_rate, expectancy_r, years_tested,
              all_years_positive, stress_test_passed, status)
             VALUES
-            ('s_robust', 'MGC', '0900', 5, 2.0, 2, 'E1', 'ORB_G5', 100,
+            ('s_robust', 'MGC', 'CME_REOPEN', 5, 2.0, 2, 'E1', 'ORB_G5', 100,
              0.55, 0.30, 3, TRUE, TRUE, 'active'),
-            ('s_purged', 'MGC', '1800', 5, 1.5, 1, 'E3', 'ORB_G4', 100,
+            ('s_purged', 'MGC', 'LONDON_METALS', 5, 1.5, 1, 'E3', 'ORB_G4', 100,
              0.55, 0.20, 3, TRUE, TRUE, 'active')
         """)
         con.execute("""
@@ -287,8 +287,8 @@ class TestPurgedFilter:
              confirm_bars, entry_model, outcome, pnl_r,
              entry_price, stop_price)
             VALUES
-            ('2024-01-02', 'MGC', '0900', 5, 2.0, 2, 'E1', 'win', 2.0, 100.0, 98.0),
-            ('2024-01-03', 'MGC', '1800', 5, 1.5, 1, 'E3', 'win', 1.5, 100.0, 98.5)
+            ('2024-01-02', 'MGC', 'CME_REOPEN', 5, 2.0, 2, 'E1', 'win', 2.0, 100.0, 98.0),
+            ('2024-01-03', 'MGC', 'LONDON_METALS', 5, 1.5, 1, 'E3', 'win', 1.5, 100.0, 98.5)
         """)
         con.commit()
         con.close()

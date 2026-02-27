@@ -36,9 +36,9 @@ def db_path(tmp_path):
     con = duckdb.connect(str(path))
 
     for sid, orb, rr, filt, expr, shann, sample in [
-        ("MGC_0900_E1_RR2.0_CB2_ORB_G5", "0900", 2.0, "ORB_G5", 0.30, 0.8, 100),
-        ("MGC_0900_E1_RR2.5_CB2_ORB_G5", "0900", 2.5, "ORB_G5", 0.45, 1.2, 120),
-        ("MGC_0900_E1_RR2.0_CB2_ORB_G8", "0900", 2.0, "ORB_G8", 0.60, 1.5, 150),
+        ("MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G5", "CME_REOPEN", 2.0, "ORB_G5", 0.30, 0.8, 100),
+        ("MGC_CME_REOPEN_E1_RR2.5_CB2_ORB_G5", "CME_REOPEN", 2.5, "ORB_G5", 0.45, 1.2, 120),
+        ("MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G8", "CME_REOPEN", 2.0, "ORB_G8", 0.60, 1.5, 150),
     ]:
         con.execute("""
             INSERT INTO validated_setups
@@ -52,8 +52,8 @@ def db_path(tmp_path):
 
     # s1 and s2: identical trade days
     for sid in [
-        "MGC_0900_E1_RR2.0_CB2_ORB_G5",
-        "MGC_0900_E1_RR2.5_CB2_ORB_G5",
+        "MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G5",
+        "MGC_CME_REOPEN_E1_RR2.5_CB2_ORB_G5",
     ]:
         for d in [date(2024, 1, 2), date(2024, 1, 3), date(2024, 1, 5)]:
             con.execute(
@@ -64,7 +64,7 @@ def db_path(tmp_path):
     for d in [date(2024, 1, 2), date(2024, 1, 5)]:
         con.execute(
             "INSERT INTO strategy_trade_days VALUES (?, ?)",
-            ["MGC_0900_E1_RR2.0_CB2_ORB_G8", d],
+            ["MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G8", d],
         )
 
     con.commit()
@@ -117,7 +117,7 @@ class TestMedianElection:
         """).fetchone()
         con.close()
 
-        assert family[0] == "MGC_0900_E1_RR2.0_CB2_ORB_G5"
+        assert family[0] == "MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G5"
         assert family[1] == 0.30
         assert family[2] == 0.375  # median stored
 
@@ -133,7 +133,7 @@ class TestMedianElection:
         """).fetchone()
         con.close()
 
-        assert family[0] == "MGC_0900_E1_RR2.0_CB2_ORB_G8"
+        assert family[0] == "MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G8"
         assert family[1] == 0.60
         assert family[2] == 0.60  # median of 1 = itself
 
@@ -310,14 +310,14 @@ class TestBuildEdgeFamilies:
 
         by_id = {r[0]: (r[1], r[2]) for r in rows}
         # s1 and s2 share hash
-        assert by_id["MGC_0900_E1_RR2.0_CB2_ORB_G5"][0] == by_id["MGC_0900_E1_RR2.5_CB2_ORB_G5"][0]
+        assert by_id["MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G5"][0] == by_id["MGC_CME_REOPEN_E1_RR2.5_CB2_ORB_G5"][0]
 
         # With median election: s1 (RR2.0, ExpR=0.30) is head (closer to median by tiebreak)
-        assert by_id["MGC_0900_E1_RR2.0_CB2_ORB_G5"][1] is True
-        assert by_id["MGC_0900_E1_RR2.5_CB2_ORB_G5"][1] is False
+        assert by_id["MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G5"][1] is True
+        assert by_id["MGC_CME_REOPEN_E1_RR2.5_CB2_ORB_G5"][1] is False
 
         # s3 is head of singleton
-        assert by_id["MGC_0900_E1_RR2.0_CB2_ORB_G8"][1] is True
+        assert by_id["MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G8"][1] is True
 
     def test_trade_day_count(self, db_path):
         from scripts.tools.build_edge_families import build_edge_families

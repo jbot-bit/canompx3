@@ -24,31 +24,31 @@ class TestNestedStrategyId:
     """Tests for make_nested_strategy_id() format."""
 
     def test_format_15m(self):
-        sid = make_nested_strategy_id("MGC", "0900", 15, "E1", 2.5, 2, "ORB_G4")
-        assert sid == "NESTED_MGC_0900_15m_E1_RR2.5_CB2_ORB_G4"
+        sid = make_nested_strategy_id("MGC", "CME_REOPEN", 15, "E1", 2.5, 2, "ORB_G4")
+        assert sid == "NESTED_MGC_CME_REOPEN_15m_E1_RR2.5_CB2_ORB_G4"
 
     def test_format_30m(self):
-        sid = make_nested_strategy_id("MGC", "1800", 30, "E3", 2.0, 5, "ORB_G5")
-        assert sid == "NESTED_MGC_1800_30m_E3_RR2.0_CB5_ORB_G5"
+        sid = make_nested_strategy_id("MGC", "LONDON_METALS", 30, "E3", 2.0, 5, "ORB_G5")
+        assert sid == "NESTED_MGC_LONDON_METALS_30m_E3_RR2.0_CB5_ORB_G5"
 
     def test_format_no_filter(self):
-        sid = make_nested_strategy_id("MGC", "1000", 15, "E1", 1.0, 1, "NO_FILTER")
-        assert sid == "NESTED_MGC_1000_15m_E1_RR1.0_CB1_NO_FILTER"
+        sid = make_nested_strategy_id("MGC", "TOKYO_OPEN", 15, "E1", 1.0, 1, "NO_FILTER")
+        assert sid == "NESTED_MGC_TOKYO_OPEN_15m_E1_RR1.0_CB1_NO_FILTER"
 
     def test_nested_prefix_distinguishes_from_baseline(self):
         """Nested IDs start with NESTED_, baseline IDs don't."""
-        nested_id = make_nested_strategy_id("MGC", "0900", 15, "E1", 2.5, 2, "ORB_G4")
+        nested_id = make_nested_strategy_id("MGC", "CME_REOPEN", 15, "E1", 2.5, 2, "ORB_G4")
         assert nested_id.startswith("NESTED_")
 
         # Baseline format for comparison (from strategy_discovery.make_strategy_id)
         from trading_app.strategy_discovery import make_strategy_id
-        baseline_id = make_strategy_id("MGC", "0900", "E1", 2.5, 2, "ORB_G4")
+        baseline_id = make_strategy_id("MGC", "CME_REOPEN", "E1", 2.5, 2, "ORB_G4")
         assert not baseline_id.startswith("NESTED_")
 
     def test_includes_orb_minutes(self):
         """Strategy ID embeds the ORB duration for disambiguation."""
-        sid_15 = make_nested_strategy_id("MGC", "0900", 15, "E1", 2.5, 2, "ORB_G4")
-        sid_30 = make_nested_strategy_id("MGC", "0900", 30, "E1", 2.5, 2, "ORB_G4")
+        sid_15 = make_nested_strategy_id("MGC", "CME_REOPEN", 15, "E1", 2.5, 2, "ORB_G4")
+        sid_30 = make_nested_strategy_id("MGC", "CME_REOPEN", 30, "E1", 2.5, 2, "ORB_G4")
         assert "15m" in sid_15
         assert "30m" in sid_30
         assert sid_15 != sid_30
@@ -112,7 +112,7 @@ class TestTableIsolation:
                 INSERT INTO nested_strategies
                 (strategy_id, instrument, orb_label, orb_minutes, entry_resolution,
                  rr_target, confirm_bars, entry_model)
-                VALUES ('NESTED_TEST', 'MGC', '0900', 15, 5, 2.5, 2, 'E1')
+                VALUES ('NESTED_TEST', 'MGC', 'CME_REOPEN', 15, 5, 2.5, 2, 'E1')
             """)
             con.commit()
 
@@ -139,13 +139,13 @@ class TestTableIsolation:
             con.execute("""
                 INSERT INTO experimental_strategies
                 (strategy_id, instrument, orb_label, orb_minutes, sample_size)
-                VALUES ('MGC_0900_E1_RR2.5_CB2_ORB_G4', 'MGC', '0900', 5, 100)
+                VALUES ('MGC_CME_REOPEN_E1_RR2.5_CB2_ORB_G4', 'MGC', 'CME_REOPEN', 5, 100)
             """)
             con.execute("""
                 INSERT INTO nested_strategies
                 (strategy_id, instrument, orb_label, orb_minutes, entry_resolution,
                  rr_target, confirm_bars, entry_model)
-                VALUES ('NESTED_MGC_0900_15m_E1_RR2.5_CB2_ORB_G4', 'MGC', '0900', 15, 5, 2.5, 2, 'E1')
+                VALUES ('NESTED_MGC_CME_REOPEN_15m_E1_RR2.5_CB2_ORB_G4', 'MGC', 'CME_REOPEN', 15, 5, 2.5, 2, 'E1')
             """)
             con.commit()
 

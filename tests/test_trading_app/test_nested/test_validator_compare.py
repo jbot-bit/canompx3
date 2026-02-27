@@ -15,9 +15,9 @@ COST_SPEC = get_cost_spec("MGC")
 class TestValidateStrategy:
     def _make_row(self, **overrides):
         base = {
-            "strategy_id": "TEST_MGC_0900_15m_E1_RR2.5_CB2_ORB_G4",
+            "strategy_id": "TEST_MGC_CME_REOPEN_15m_E1_RR2.5_CB2_ORB_G4",
             "instrument": "MGC",
-            "orb_label": "0900",
+            "orb_label": "CME_REOPEN",
             "orb_minutes": 15,
             "entry_resolution": 5,
             "rr_target": 2.5,
@@ -86,23 +86,23 @@ class TestValidateStrategy:
 class TestComparisonKey:
     def test_key_structure(self):
         row = {
-            "orb_label": "0900",
+            "orb_label": "CME_REOPEN",
             "entry_model": "E1",
             "rr_target": 2.5,
             "confirm_bars": 2,
             "filter_type": "ORB_G4",
         }
         key = _make_comparison_key(row)
-        assert key == ("0900", "E1", 2.5, 2, "ORB_G4")
+        assert key == ("CME_REOPEN", "E1", 2.5, 2, "ORB_G4")
 
     def test_same_strategy_different_orb_minutes_matches(self):
         baseline = {
-            "orb_label": "0900", "entry_model": "E1",
+            "orb_label": "CME_REOPEN", "entry_model": "E1",
             "rr_target": 2.5, "confirm_bars": 2, "filter_type": "ORB_G4",
             "orb_minutes": 5,
         }
         nested = {
-            "orb_label": "0900", "entry_model": "E1",
+            "orb_label": "CME_REOPEN", "entry_model": "E1",
             "rr_target": 2.5, "confirm_bars": 2, "filter_type": "ORB_G4",
             "orb_minutes": 15,
         }
@@ -110,11 +110,11 @@ class TestComparisonKey:
 
     def test_different_filter_does_not_match(self):
         a = {
-            "orb_label": "0900", "entry_model": "E1",
+            "orb_label": "CME_REOPEN", "entry_model": "E1",
             "rr_target": 2.5, "confirm_bars": 2, "filter_type": "ORB_G4",
         }
         b = {
-            "orb_label": "0900", "entry_model": "E1",
+            "orb_label": "CME_REOPEN", "entry_model": "E1",
             "rr_target": 2.5, "confirm_bars": 2, "filter_type": "ORB_G5",
         }
         assert _make_comparison_key(a) != _make_comparison_key(b)

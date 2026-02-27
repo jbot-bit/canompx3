@@ -19,9 +19,9 @@ def _cost():
 def _make_row(**overrides):
     """Build a strategy row dict with sane defaults."""
     base = {
-        "strategy_id": "MGC_0900_E1_RR2.0_CB1_NO_FILTER",
+        "strategy_id": "MGC_CME_REOPEN_E1_RR2.0_CB1_NO_FILTER",
         "instrument": "MGC",
-        "orb_label": "0900",
+        "orb_label": "CME_REOPEN",
         "orb_minutes": 5,
         "rr_target": 2.0,
         "confirm_bars": 1,
@@ -475,7 +475,7 @@ class TestComputeDstSplit:
     def test_clean_session_returns_clean(self):
         """Non-DST-affected sessions return verdict='CLEAN' without querying."""
         from trading_app.strategy_validator import compute_dst_split
-        result = compute_dst_split(None, "test", "MGC", "1000", "E1", 2.0, 1, "NONE")
+        result = compute_dst_split(None, "test", "MGC", "TOKYO_OPEN", "E1", 2.0, 1, "NONE")
         assert result["verdict"] == "CLEAN"
         assert result["winter_n"] is None
 

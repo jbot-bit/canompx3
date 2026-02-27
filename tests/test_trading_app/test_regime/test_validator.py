@@ -32,8 +32,8 @@ def validated_db(tmp_path):
             sample_size, win_rate, avg_win_r, avg_loss_r,
             expectancy_r, sharpe_ratio, max_drawdown_r,
             median_risk_points, avg_risk_points, yearly_results)
-           VALUES ('test', 'MGC_0900_E1_RR2.0_CB2_ORB_G4', '2025-01-01', '2025-12-31',
-                   'MGC', '0900', 5, 2.0, 2, 'E1', 'ORB_G4', '{}',
+           VALUES ('test', 'MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G4', '2025-01-01', '2025-12-31',
+                   'MGC', 'CME_REOPEN', 5, 2.0, 2, 'E1', 'ORB_G4', '{}',
                    30, 0.5, 1.5, 1.0, 0.25, 0.15, 2.5, 3.0, 3.2, ?)""",
         [yearly],
     )
@@ -49,8 +49,8 @@ def validated_db(tmp_path):
             sample_size, win_rate, avg_win_r, avg_loss_r,
             expectancy_r, sharpe_ratio, max_drawdown_r,
             median_risk_points, avg_risk_points, yearly_results)
-           VALUES ('test', 'MGC_0900_E1_RR2.0_CB2_NO_FILTER', '2025-01-01', '2025-12-31',
-                   'MGC', '0900', 5, 2.0, 2, 'E1', 'NO_FILTER', '{}',
+           VALUES ('test', 'MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER', '2025-01-01', '2025-12-31',
+                   'MGC', 'CME_REOPEN', 5, 2.0, 2, 'E1', 'NO_FILTER', '{}',
                    5, 0.2, 1.0, 1.0, -0.6, -0.3, 5.0, 3.0, 3.2, ?)""",
         [yearly_bad],
     )

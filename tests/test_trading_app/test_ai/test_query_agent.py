@@ -98,14 +98,14 @@ class TestQueryAgentIntentExtraction:
         """Mock Claude returning valid JSON intent."""
         mock_response = MagicMock()
         mock_response.content = [MagicMock(
-            text='{"template": "strategy_lookup", "parameters": {"orb_label": "0900"}, "explanation": "test"}'
+            text='{"template": "strategy_lookup", "parameters": {"orb_label": "CME_REOPEN"}, "explanation": "test"}'
         )]
         mock_agent.client.messages.create.return_value = mock_response
 
-        intent = mock_agent._extract_intent("show 0900 strategies")
+        intent = mock_agent._extract_intent("show CME_REOPEN strategies")
         assert intent is not None
         assert intent.template.value == "strategy_lookup"
-        assert intent.parameters["orb_label"] == "0900"
+        assert intent.parameters["orb_label"] == "CME_REOPEN"
 
     def test_extract_intent_null_template(self, mock_agent):
         """Mock Claude saying no template fits."""
@@ -148,7 +148,7 @@ class TestQueryAgentIntentExtraction:
 
         # Mock adapter execution
         mock_agent.adapter.execute.return_value = pd.DataFrame({
-            "orb_label": ["0900", "1000", "1800", "2300"],
+            "orb_label": ["CME_REOPEN", "TOKYO_OPEN", "LONDON_METALS", "US_DATA_830"],
             "count": [134, 75, 85, 18],
         })
 

@@ -12,7 +12,7 @@ from research.research_portfolio_assembly import (
 )
 
 
-def _trade(day, pnl_r, outcome="win", instrument="MGC", session="1000", sid="S1"):
+def _trade(day, pnl_r, outcome="win", instrument="MGC", session="TOKYO_OPEN", sid="S1"):
     return {
         "trading_day": day,
         "pnl_r": pnl_r,

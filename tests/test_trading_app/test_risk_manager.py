@@ -24,10 +24,10 @@ class _FakeTrade:
     orb_label: str
     state: _State = _State.ENTERED
 
-def _entered(orb="2300"):
+def _entered(orb="US_DATA_830"):
     return _FakeTrade(orb_label=orb, state=_State.ENTERED)
 
-def _armed(orb="2300"):
+def _armed(orb="US_DATA_830"):
     return _FakeTrade(orb_label=orb, state=_State.ARMED)
 
 # ============================================================================
@@ -70,7 +70,7 @@ class TestCircuitBreaker:
         rm = RiskManager(RiskLimits(max_daily_loss_r=-5.0))
         rm.daily_reset(date(2024, 1, 5))
 
-        allowed, reason, _ = rm.can_enter("s1", "2300", [], -5.0)
+        allowed, reason, _ = rm.can_enter("s1", "US_DATA_830", [], -5.0)
         assert not allowed
         assert "circuit_breaker" in reason
 
@@ -78,14 +78,14 @@ class TestCircuitBreaker:
         rm = RiskManager(RiskLimits(max_daily_loss_r=-5.0))
         rm.daily_reset(date(2024, 1, 5))
 
-        allowed, _, _ = rm.can_enter("s1", "2300", [], -6.0)
+        allowed, _, _ = rm.can_enter("s1", "US_DATA_830", [], -6.0)
         assert not allowed
 
     def test_allows_above_limit(self):
         rm = RiskManager(RiskLimits(max_daily_loss_r=-5.0))
         rm.daily_reset(date(2024, 1, 5))
 
-        allowed, reason, _ = rm.can_enter("s1", "2300", [], -4.9)
+        allowed, reason, _ = rm.can_enter("s1", "US_DATA_830", [], -4.9)
         assert allowed
         assert reason == ""
 
@@ -94,17 +94,17 @@ class TestCircuitBreaker:
         rm.daily_reset(date(2024, 1, 5))
 
         # Trigger halt
-        rm.can_enter("s1", "2300", [], -5.0)
+        rm.can_enter("s1", "US_DATA_830", [], -5.0)
         assert rm.is_halted()
 
         # Even with 0 PnL, still halted
-        allowed, _, _ = rm.can_enter("s2", "1800", [], 0.0)
+        allowed, _, _ = rm.can_enter("s2", "LONDON_METALS", [], 0.0)
         assert not allowed
 
     def test_halt_clears_on_daily_reset(self):
         rm = RiskManager(RiskLimits(max_daily_loss_r=-5.0))
         rm.daily_reset(date(2024, 1, 5))
-        rm.can_enter("s1", "2300", [], -5.0)
+        rm.can_enter("s1", "US_DATA_830", [], -5.0)
         assert rm.is_halted()
 
         rm.daily_reset(date(2024, 1, 6))
@@ -130,8 +130,8 @@ class TestMaxConcurrent:
         rm = RiskManager(RiskLimits(max_concurrent_positions=2))
         rm.daily_reset(date(2024, 1, 5))
 
-        trades = [_entered("2300"), _entered("1800")]
-        allowed, reason, _ = rm.can_enter("s3", "0030", trades, 0.0)
+        trades = [_entered("US_DATA_830"), _entered("LONDON_METALS")]
+        allowed, reason, _ = rm.can_enter("s3", "NYSE_OPEN", trades, 0.0)
         assert not allowed
         assert "max_concurrent" in reason
 
@@ -139,8 +139,8 @@ class TestMaxConcurrent:
         rm = RiskManager(RiskLimits(max_concurrent_positions=3))
         rm.daily_reset(date(2024, 1, 5))
 
-        trades = [_entered("2300"), _entered("1800")]
-        allowed, _, _ = rm.can_enter("s3", "0030", trades, 0.0)
+        trades = [_entered("US_DATA_830"), _entered("LONDON_METALS")]
+        allowed, _, _ = rm.can_enter("s3", "NYSE_OPEN", trades, 0.0)
         assert allowed
 
     def test_armed_trades_not_counted(self):
@@ -148,8 +148,8 @@ class TestMaxConcurrent:
         rm = RiskManager(RiskLimits(max_concurrent_positions=2))
         rm.daily_reset(date(2024, 1, 5))
 
-        trades = [_entered("2300"), _armed("1800")]
-        allowed, _, _ = rm.can_enter("s3", "0030", trades, 0.0)
+        trades = [_entered("US_DATA_830"), _armed("LONDON_METALS")]
+        allowed, _, _ = rm.can_enter("s3", "NYSE_OPEN", trades, 0.0)
         assert allowed
 
 # ============================================================================
@@ -162,8 +162,8 @@ class TestMaxPerOrb:
         rm = RiskManager(RiskLimits(max_per_orb_positions=1))
         rm.daily_reset(date(2024, 1, 5))
 
-        trades = [_entered("2300")]
-        allowed, reason, _ = rm.can_enter("s2", "2300", trades, 0.0)
+        trades = [_entered("US_DATA_830")]
+        allowed, reason, _ = rm.can_enter("s2", "US_DATA_830", trades, 0.0)
         assert not allowed
         assert "max_per_orb" in reason
 
@@ -171,16 +171,16 @@ class TestMaxPerOrb:
         rm = RiskManager(RiskLimits(max_per_orb_positions=1))
         rm.daily_reset(date(2024, 1, 5))
 
-        trades = [_entered("2300")]
-        allowed, _, _ = rm.can_enter("s2", "1800", trades, 0.0)
+        trades = [_entered("US_DATA_830")]
+        allowed, _, _ = rm.can_enter("s2", "LONDON_METALS", trades, 0.0)
         assert allowed
 
     def test_allows_two_per_orb(self):
         rm = RiskManager(RiskLimits(max_per_orb_positions=2))
         rm.daily_reset(date(2024, 1, 5))
 
-        trades = [_entered("2300")]
-        allowed, _, _ = rm.can_enter("s2", "2300", trades, 0.0)
+        trades = [_entered("US_DATA_830")]
+        allowed, _, _ = rm.can_enter("s2", "US_DATA_830", trades, 0.0)
         assert allowed
 
 # ============================================================================
@@ -197,7 +197,7 @@ class TestMaxDailyTrades:
         rm.on_trade_entry()
         rm.on_trade_entry()
 
-        allowed, reason, _ = rm.can_enter("s4", "0030", [], 0.0)
+        allowed, reason, _ = rm.can_enter("s4", "NYSE_OPEN", [], 0.0)
         assert not allowed
         assert "max_daily_trades" in reason
 
@@ -208,7 +208,7 @@ class TestMaxDailyTrades:
         rm.on_trade_entry()
         rm.on_trade_entry()
 
-        allowed, _, _ = rm.can_enter("s4", "0030", [], 0.0)
+        allowed, _, _ = rm.can_enter("s4", "NYSE_OPEN", [], 0.0)
         assert allowed
 
     def test_resets_on_new_day(self):
@@ -217,11 +217,11 @@ class TestMaxDailyTrades:
 
         rm.on_trade_entry()
         rm.on_trade_entry()
-        allowed, _, _ = rm.can_enter("s1", "2300", [], 0.0)
+        allowed, _, _ = rm.can_enter("s1", "US_DATA_830", [], 0.0)
         assert not allowed
 
         rm.daily_reset(date(2024, 1, 6))
-        allowed, _, _ = rm.can_enter("s1", "2300", [], 0.0)
+        allowed, _, _ = rm.can_enter("s1", "US_DATA_830", [], 0.0)
         assert allowed
 
 # ============================================================================
@@ -234,7 +234,7 @@ class TestDrawdownWarning:
         rm = RiskManager(RiskLimits(drawdown_warning_r=-3.0, max_daily_loss_r=-5.0))
         rm.daily_reset(date(2024, 1, 5))
 
-        allowed, _, _ = rm.can_enter("s1", "2300", [], -3.5)
+        allowed, _, _ = rm.can_enter("s1", "US_DATA_830", [], -3.5)
         assert allowed
         assert len(rm.warnings) == 1
         assert "drawdown_warning" in rm.warnings[0]
@@ -243,7 +243,7 @@ class TestDrawdownWarning:
         rm = RiskManager(RiskLimits(drawdown_warning_r=-3.0))
         rm.daily_reset(date(2024, 1, 5))
 
-        rm.can_enter("s1", "2300", [], -2.0)
+        rm.can_enter("s1", "US_DATA_830", [], -2.0)
         assert len(rm.warnings) == 0
 
 # ============================================================================
@@ -269,7 +269,7 @@ class TestStatus:
         rm.daily_reset(date(2024, 1, 5))
         rm.on_trade_entry()
         rm.on_trade_exit(-2.0)
-        rm.can_enter("s1", "2300", [], -3.5)  # triggers warning
+        rm.can_enter("s1", "US_DATA_830", [], -3.5)  # triggers warning
 
         rm.daily_reset(date(2024, 1, 6))
         status = rm.get_status()
@@ -314,7 +314,7 @@ class TestEquityDrawdown:
         assert rm._equity_halted
 
         rm.daily_reset(date(2024, 1, 6))
-        allowed, reason, _ = rm.can_enter("s1", "2300", [], 0.0)
+        allowed, reason, _ = rm.can_enter("s1", "US_DATA_830", [], 0.0)
         assert not allowed
         assert "equity_drawdown" in reason
 
@@ -344,7 +344,7 @@ class TestEquityDrawdown:
         rm.daily_reset(date(2024, 1, 5))
         rm.on_trade_exit(-50.0)
         assert not rm._equity_halted
-        allowed, _, _ = rm.can_enter("s1", "2300", [], rm.daily_pnl_r)
+        allowed, _, _ = rm.can_enter("s1", "US_DATA_830", [], rm.daily_pnl_r)
         assert allowed
 
     def test_hwm_updates_on_new_peak(self):
