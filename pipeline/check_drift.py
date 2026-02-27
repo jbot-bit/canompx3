@@ -1330,6 +1330,19 @@ def check_doc_stats_consistency() -> list[str]:
             edge_families_count = con.execute(
                 "SELECT COUNT(*) FROM edge_families"
             ).fetchone()[0]
+            # Per-aperture validated counts
+            aperture_rows = con.execute(
+                "SELECT orb_minutes, COUNT(*) FROM validated_setups "
+                "WHERE status = 'active' GROUP BY orb_minutes"
+            ).fetchall()
+            aperture_counts = {int(r[0]): r[1] for r in aperture_rows}
+            # Edge family robustness tiers
+            tier_rows = con.execute(
+                "SELECT robustness_status, COUNT(*) FROM edge_families "
+                "WHERE robustness_status IN ('ROBUST','WHITELISTED') "
+                "GROUP BY robustness_status"
+            ).fetchall()
+            tier_counts = {r[0]: r[1] for r in tier_rows}
         finally:
             con.close()
     except Exception:
@@ -1346,6 +1359,11 @@ def check_doc_stats_consistency() -> list[str]:
         ("TRADING_RULES.md", r"([\d,]+)\s+validated\s+strateg", "validated_active"),
         ("TRADING_RULES.md", r"(\d+)\s+FDR\s+significant", "fdr_significant"),
         ("TRADING_RULES.md", r"(\d+)\s+edge\s+famil", "edge_families"),
+        ("TRADING_RULES.md", r"5m:\s*(\d[\d,]*)", "aperture_5m"),
+        ("TRADING_RULES.md", r"15m:\s*(\d[\d,]*)", "aperture_15m"),
+        ("TRADING_RULES.md", r"30m:\s*(\d[\d,]*)", "aperture_30m"),
+        ("TRADING_RULES.md", r"(\d+)\s+ROBUST", "tier_robust"),
+        ("TRADING_RULES.md", r"(\d+)\s+WHITELISTED", "tier_whitelisted"),
         ("ROADMAP.md", r"([\d,]+)\s+validated\s+active", "validated_active"),
         ("README.md", r"([\d,]+)\s+validated\s+strateg", "validated_active"),
         ("README.md", r"(\d+)\s+drift\s+checks", "drift_check_count"),
@@ -1357,6 +1375,11 @@ def check_doc_stats_consistency() -> list[str]:
         "fdr_significant": fdr_significant,
         "edge_families": edge_families_count,
         "drift_check_count": drift_check_count,
+        "aperture_5m": aperture_counts.get(5, 0),
+        "aperture_15m": aperture_counts.get(15, 0),
+        "aperture_30m": aperture_counts.get(30, 0),
+        "tier_robust": tier_counts.get("ROBUST", 0),
+        "tier_whitelisted": tier_counts.get("WHITELISTED", 0),
     }
 
     for filename, pattern, key in DOC_STATS_CHECKS:
@@ -2025,14 +2048,16 @@ def main():
         print("  PASSED [OK]")
     print()
 
-    # Summary
+    # Summary — self-report check count so docs never need hardcoded numbers
+    this_content = Path(__file__).read_text(encoding="utf-8")
+    total_checks = len(re.findall(r'print\("Check \d+:', this_content))
     print("=" * 60)
     if all_violations:
-        print(f"DRIFT DETECTED: {len(all_violations)} violation(s)")
+        print(f"DRIFT DETECTED: {len(all_violations)} violation(s) across {total_checks} checks")
         print("=" * 60)
         sys.exit(1)
     else:
-        print("NO DRIFT DETECTED: All checks passed [OK]")
+        print(f"NO DRIFT DETECTED: All {total_checks} checks passed [OK]")
         print("=" * 60)
         sys.exit(0)
 

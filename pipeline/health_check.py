@@ -79,7 +79,7 @@ def check_tests() -> tuple[bool, str]:
     try:
         proc = subprocess.run(
             [sys.executable, "-m", "pytest", "tests/", "-x", "-q", "--tb=no"],
-            capture_output=True, text=True, timeout=60,
+            capture_output=True, text=True, timeout=300,
             cwd=str(PROJECT_ROOT),
         )
         # Parse "N passed" from output

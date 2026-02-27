@@ -31,7 +31,7 @@ python pipeline/dashboard.py
 pipeline/           Data pipeline (ingest, aggregate, features, validation)
 trading_app/        Trading engine (strategies, execution, portfolio, risk)
 trading_app/nested/ Nested ORB research (15m/30m ORB + 5m entry bars)
-tests/              655 tests (all passing)
+tests/              Comprehensive test suite
 scripts/            Utilities (backup, parallel ingest)
 docs/               Plans, archives, analysis documents
 .githooks/          Pre-commit hook (lint + drift + tests + syntax)
@@ -59,7 +59,7 @@ See [ROADMAP.md](ROADMAP.md) for development phases and status.
 Every commit is gated by:
 1. **Ruff lint** -- catches unused imports, undefined names, unreachable code
 2. **37 drift checks** -- architecture isolation, config sync, timezone hygiene
-3. **600+ fast tests** -- pipeline, trading app, nested ORB
+3. **Fast test suite** -- pipeline, trading app, nested ORB
 4. **Syntax validation** -- on all staged .py files
 
 CI runs the same checks on push/PR to main.

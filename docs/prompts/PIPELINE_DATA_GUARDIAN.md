@@ -19,7 +19,7 @@ Files to inspect:
 - pipeline/build_daily_features.py → feature computation, ORB calc, session windows
 - pipeline/dst.py → SESSION_CATALOG, dynamic session resolution
 - pipeline/paths.py → DB path resolution
-- pipeline/check_drift.py → all 35 drift checks
+- pipeline/check_drift.py → drift checks (self-reports count at runtime)
 - pipeline/health_check.py → health check logic
 - trading_app/outcome_builder.py → outcome computation from features
 - config.py → all thresholds, enums, valid values
@@ -67,7 +67,7 @@ For EACH table, trace the full lineage:
 **orb_outcomes:**
 - [ ] Source: daily_features + bars_1m
 - [ ] Writer: `outcome_builder.py`
-- [ ] Pre-computed: ~6.1M rows across instruments
+- [ ] Pre-computed outcomes table (count changes with rebuilds)
 - [ ] Contains ALL break-days regardless of filter
 - [ ] Verify: outcomes exist only for days where a break occurred
 - [ ] Row count sanity: outcomes per instrument per orb_minutes — are counts plausible?
@@ -117,6 +117,17 @@ For each of the 7 ingestion validation gates:
 - Does the idempotent DELETE+INSERT pattern actually prevent this?
 - Verify: `SELECT timestamp, symbol, COUNT(*) FROM bars_1m GROUP BY 1,2 HAVING COUNT(*) > 1`
 - Verdict: `NO_DUPLICATES` / `DUPLICATES_FOUND` (count and sample)
+
+**Charge 4: Write Scope Integrity (Downstream Tables)**
+For each table written by the trading app layer (validated_setups, edge_families, experimental_strategies):
+- Trace the DELETE scope in the writer function — what WHERE clause does it use?
+- Trace the INSERT scope — what rows are actually being written back?
+- If DELETE is broader than INSERT → `DATA_LOSS_RISK` (data silently lost)
+- Specific known vector: strategy_validator.py batch write DELETEs validated_setups.
+  Must scope to `processed_orb_minutes` only, not entire instrument.
+  (Feb 2026: instrument-wide DELETE with partial-aperture INSERT wiped 627 5m strategies)
+- Also check: build_edge_families.py, outcome_builder.py --force, parallel_rebuild.py
+- Verdict per table: `SCOPED` / `OVER_DELETE` / `UNDER_DELETE`
 
 ### 2B. Aggregation Integrity Trial
 
@@ -168,7 +179,7 @@ Sample 5 random outcomes. For each:
 ### 2D. Drift Check Completeness Trial
 
 **Charge 1: Coverage Gaps**
-- List all 35 drift checks from check_drift.py
+- List all drift checks from check_drift.py (run it to get current count)
 - For each data integrity issue type (duplicates, gaps, orphans, schema drift, count anomalies):
   - Is there a drift check that catches it?
   - If not → `UNCOVERED_RISK`
@@ -211,10 +222,12 @@ For each instrument, verify these ratios make sense:
 |----|----------|----------|----------|--------|----------|-----------|----------|
 
 Severity scale:
-- **CRITICAL**: Data corruption, missing validation gates, filter leakage, join violations
+- **CRITICAL**: Data corruption, missing validation gates, filter leakage, join violations, **write scope mismatch (DATA_LOSS_RISK)**
 - **HIGH**: Orphaned records, count anomalies, schema drift
 - **MEDIUM**: Undocumented behavior, missing drift checks
 - **LOW**: Cosmetic issues, non-blocking warnings
+
+> **Tag reference:** See SYSTEM_AUDIT.md "Consolidated Tag Vocabulary" for the canonical list of all verdict/severity tags used across all 3 audit docs.
 
 ### Section 4: Corrective Actions
 For each conviction:
@@ -236,7 +249,7 @@ Pipeline Health: X/10
   Referential Integrity: [PASS/FAIL] (orphan check)
   Join Safety:        [PASS/FAIL] (triple-join audit)
   Filter Containment: [PASS/FAIL] (filter leak check)
-  Drift Coverage:     [PASS/FAIL] (N of 34 verified)
+  Drift Coverage:     [PASS/FAIL] (N of total verified — run check_drift.py for count)
   Count Sanity:       [PASS/FAIL] (ratio checks)
   Time/Calendar:      [PASS/FAIL] (UTC + trading day)
   Schema Alignment:   [PASS/FAIL] (init_db vs actual)
@@ -248,10 +261,28 @@ Pipeline Health: X/10
 1. Use MCP tools (`query_trading_db`, `get_canonical_context`) for all DB queries — never raw SQL when a template exists
 2. For queries no template covers, write DuckDB-compatible SQL and document it for future template creation
 3. When code and data disagree, DATA reveals what actually happened — the code may have been correct at write time but broken by a later change
-4. Spot-checks must use RANDOM sampling (not cherry-picked examples)
+4. Spot-checks must use RANDOM sampling (not cherry-picked examples). **Seed enforcement:** use `ORDER BY hash(trading_day || symbol) LIMIT N` or `USING SAMPLE N ROWS (REPEATABLE (42))` in DuckDB — never `ORDER BY RANDOM()` which is non-reproducible. Record the seed/method used so another auditor can reproduce the same sample.
 5. Every claim must cite a file:line or query result — no "it appears that" or "it seems like"
 6. Flag `IMPLEMENTATION UNCLEAR — REQUIRES HUMAN DECISION` when intent is genuinely ambiguous
 7. NEVER trust row counts from documentation — query the actual database
 8. NEVER trust schema descriptions from documentation — query the actual schema
 9. NEVER assume idempotency works — verify with duplicate checks
 10. Treat every pipeline step as potentially broken until you've traced input → transformation → output
+11. **Mechanical execution only** — "I read the code and it looks correct" is NOT a passing verdict. Run the command, capture actual stdout, cite the output. If you cannot execute, mark `SKIPPED — NO EXECUTION ENVIRONMENT`, never `PASS`.
+12. **NEVER mark a check as PASS without stdout proof.** Reading source code is discovery, not verification. A pipeline step might look correct in code but produce wrong data.
+13. **Anti-hallucination:** If you find yourself writing "this likely passes" or "based on the code, this should work" — STOP. That is a `HALLUCINATED_PASS`. Execute or mark SKIPPED.
+
+## Experimental Isolation — Data Snooping Quarantine
+
+**This section prevents the most dangerous research sin: turning your test set into a training set.**
+
+When auditing or analyzing pipeline data, the agent MUST respect the boundary between in-sample (training/discovery) and out-of-sample (validation/walk-forward) data. Violating this boundary silently destroys the statistical validity of every strategy in the system.
+
+**Hard rules:**
+1. **NEVER summarize, extract features from, or optimize against data designated as out-of-sample or walk-forward holdout.** If `strategy_validator.py` splits data into windows for walk-forward testing, those holdout windows are sacred — do not read their contents to inform upstream decisions.
+2. **NEVER use validation results to retroactively tune discovery parameters.** If a strategy fails walk-forward, the correct response is to investigate the mechanism — NOT to adjust `config.py` thresholds until it passes.
+3. **When spot-checking outcomes (Pass 2A/2B/2C), sample from the FULL date range.** But if findings suggest parameter changes, those changes must be re-validated on data the agent has NOT already examined during this audit.
+4. **Flag any code path that allows discovery-phase logic to peek at validation-phase data** → `DATA_LEAK_RISK`. Example: if `strategy_discovery.py` can access walk-forward window boundaries from `strategy_validator.py`, that's a structural leak even if currently unused.
+5. **The agent performing this audit is itself a potential data snooping vector.** If you read outcome distributions, win rates, or P&L curves during the audit, you now carry implicit knowledge of the test set. Document in Section 6 (Health Score) what data ranges you inspected, so the human researcher knows which windows may need fresh out-of-sample validation.
+
+**Escalation:** If this audit discovers a structural data leak, escalate to `CRITICAL` severity and recommend re-running walk-forward validation from scratch on untainted data.

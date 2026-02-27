@@ -48,7 +48,7 @@ Do not schedule active delivery work against SIL until explicitly re-opened.
 ## Phase 5: Expanded Scan — DONE
 
 - Grid: 6 ORBs x 6 RRs x 5 CBs x 13 filters x 3 EMs = 6,480 combos (post-5b expansion)
-- **Current state (Feb 27 2026):** 15m/30m rebuilt + 5 new volume-validated sessions added (MGC NYSE_OPEN, MNQ US_DATA_830+COMEX_SETTLE, MES COMEX_SETTLE, M2K COMEX_SETTLE). Validated active: 627 → 206 edge families (34 ROBUST, 38 WHITELISTED). Full rebuild chain completed for all 4 instruments.
+- **Current state (Feb 27 2026):** 15m/30m rebuilt + 5 new volume-validated sessions added (MGC NYSE_OPEN, MNQ US_DATA_830+COMEX_SETTLE, MES COMEX_SETTLE, M2K COMEX_SETTLE). Full rebuild chain completed for all 4 instruments. Counts in TRADING_RULES.md.
 - Edge requires G4+ ORB size filter (NO_FILTER and L-filters ALL negative ExpR)
 - MARKET_PLAYBOOK.md: comprehensive empirical findings
 
@@ -60,7 +60,7 @@ Do not schedule active delivery work against SIL until explicitly re-opened.
 - Win PnL bug fix: changed pnl_points_to_r -> to_r_multiple (friction was missing from wins)
 - test_trader_logic.py: 24 trader/math sanity checks
 - Grid expanded: 6 ORBs x 6 RRs x 5 CBs x 12 filters x 3 EMs = 6,480 combos
-- DB rebuild COMPLETE: ~6.1M outcomes (7 instruments, 5/15/30m ORB), 1,251 validated active strategies (Feb 27 2026)
+- DB rebuild COMPLETE (Feb 27 2026): outcomes across 7 instruments (5/15/30m ORB). Validated strategy counts in TRADING_RULES.md.
 - Validator: exclude_years + min_years_positive_pct params added
 
 ## Phase 6: Live Trading Preparation — DONE (6a-6d), 6e TODO
@@ -109,7 +109,7 @@ Do not schedule active delivery work against SIL until explicitly re-opened.
 - 5 critical bugs fixed (C1-C5), 6 important fixes (I1-I4, I6-I7)
 - 97 new tests across 10 coverage gaps (T1-T10)
 - 3 new drift checks (17-19)
-- **1811 tests pass, 35 drift checks pass** (as of Feb 27 2026)
+- **All tests pass, all drift checks pass** (at phase completion)
 - R1 (fill-bar granularity) logged as HIGH PRIORITY R&D task
 
 ### 7b. Independent Bars Coverage Audit — DONE
@@ -139,8 +139,8 @@ Wider ORB apertures (15m/30m) validated and integrated into production portfolio
 
 ### Results
 - 15m/30m outcomes rebuilt from scratch with E1/E2/E3 using standard pipeline (`--orb-minutes` parameter), NOT the nested/ pipeline (separate tables, 5m entry bars)
-- **1,251 validated strategies** across 5/15/30m (5m: 627, 15m: 423, 30m: 201) → 467 edge families (67 ROBUST, 49 WHITELISTED)
-- 220 FDR significant. 5 new sessions added (MGC NYSE_OPEN, MNQ US_DATA_830+COMEX_SETTLE, MES+M2K COMEX_SETTLE)
+- Validated strategies across 5/15/30m apertures with edge families — counts in TRADING_RULES.md
+- 5 new sessions added (MGC NYSE_OPEN, MNQ US_DATA_830+COMEX_SETTLE, MES+M2K COMEX_SETTLE)
 - `trading_app/nested/` modules remain for reference but standard pipeline handles all apertures
 - Isolation enforced: drift checks 15-17 block cross-contamination
 
@@ -155,7 +155,7 @@ Wider ORB apertures (15m/30m) validated and integrated into production portfolio
 - New daily_features columns: `daily_open/high/low/close`, `gap_open_points`, 6x `orb_*_double_break`
 - Portfolio integration: `--include-rolling` CLI flag in portfolio.py
 - **Key finding**: Only 2 STABLE families (TOKYO_OPEN_E2_G2, TOKYO_OPEN_E1_G2); CME_REOPEN G3+ are TRANSITIONING; LONDON_METALS/US_DATA_830/SINGAPORE_OPEN/NYSE_OPEN AUTO-DEGRADED by double-break
-- 1811 tests pass, 35 drift checks pass (as of Feb 27 2026)
+- All tests pass, all drift checks pass (at phase completion)
 
 ---
 
