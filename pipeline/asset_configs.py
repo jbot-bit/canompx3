@@ -77,10 +77,28 @@ ASSET_CONFIGS = {
         # Source data: ES (E-mini S&P 500, $50/pt) pre-Feb 2024, then native MES ($5/pt).
         # Same price on same exchange. Identical pattern to GC→MGC, RTY→M2K.
         # Cost model uses MES micro specs ($5/pt).
-        "dbn_path": PROJECT_ROOT / "DB" / "MES_DB",
+        # dbn_path points to MES_DB_2019-2024 which contains both ES and MES contracts;
+        # this config's ^MES pattern selects only native MES outrights (2024 transition).
+        "dbn_path": PROJECT_ROOT / "DB" / "MES_DB_2019-2024",
         "symbol": "MES",
         "outright_pattern": re.compile(r'^MES[FGHJKMNQUVXZ]\d{1,2}$'),
         "prefix_len": 3,
+        "minimum_start_date": date(2019, 2, 12),
+        "schema_required": "ohlcv-1m",
+        "enabled_sessions": [
+            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
+            "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
+            "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+        ],
+    },
+    "ES": {
+        # Source data: ES (E-mini S&P 500, $50/pt) for 2019-2024 backfill.
+        # Same price as MES on same exchange. Stored as symbol='MES', source_symbol='ESH22' etc.
+        # Identical pattern to GC→MGC, NQ→MNQ, RTY→M2K.
+        "dbn_path": PROJECT_ROOT / "DB" / "MES_DB_2019-2024",
+        "symbol": "MES",
+        "outright_pattern": re.compile(r'^ES[FGHJKMNQUVXZ]\d{1,2}$'),
+        "prefix_len": 2,
         "minimum_start_date": date(2019, 2, 12),
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [

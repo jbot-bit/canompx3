@@ -141,3 +141,49 @@ class TestAssetConfigMgcPattern:
         """GC contracts have 2-char prefix before month code."""
         from pipeline.asset_configs import ASSET_CONFIGS
         assert ASSET_CONFIGS["MGC"]["prefix_len"] == 2
+
+
+class TestAssetConfigMesPattern:
+    """Verify MES and ES configs handle the ES→MES source data split."""
+
+    def test_mes_pattern_matches_mes_contracts(self):
+        """MES config must match native MES outrights (2024+)."""
+        from pipeline.asset_configs import ASSET_CONFIGS
+        pattern = ASSET_CONFIGS["MES"]["outright_pattern"]
+        for sym in ["MESM4", "MESZ4", "MESH25"]:
+            assert pattern.match(sym), f"MES pattern should match {sym}"
+
+    def test_mes_dbn_path_exists(self):
+        """MES config dbn_path must point to a non-empty directory."""
+        from pipeline.asset_configs import ASSET_CONFIGS
+        path = ASSET_CONFIGS["MES"]["dbn_path"]
+        assert path.exists(), f"MES dbn_path does not exist: {path}"
+
+    def test_es_config_exists(self):
+        """An ES config entry must exist for pre-2024 ES→MES mapping."""
+        from pipeline.asset_configs import ASSET_CONFIGS
+        assert "ES" in ASSET_CONFIGS, "ES config needed for pre-2024 data"
+
+    def test_es_pattern_matches_es_contracts(self):
+        """ES config must match ES outrights."""
+        from pipeline.asset_configs import ASSET_CONFIGS
+        pattern = ASSET_CONFIGS["ES"]["outright_pattern"]
+        for sym in ["ESH5", "ESM9", "ESZ24"]:
+            assert pattern.match(sym), f"ES pattern should match {sym}"
+
+    def test_es_pattern_rejects_mes_contracts(self):
+        """ES config must NOT match MES outrights."""
+        from pipeline.asset_configs import ASSET_CONFIGS
+        pattern = ASSET_CONFIGS["ES"]["outright_pattern"]
+        for sym in ["MESM4", "MESZ4"]:
+            assert not pattern.match(sym), f"ES pattern should not match {sym}"
+
+    def test_es_stores_as_mes_symbol(self):
+        """ES config must store data under MES symbol (same as NQ→MNQ)."""
+        from pipeline.asset_configs import ASSET_CONFIGS
+        assert ASSET_CONFIGS["ES"]["symbol"] == "MES"
+
+    def test_es_prefix_len_is_2(self):
+        """ES contracts have 2-char prefix (ES) before month code."""
+        from pipeline.asset_configs import ASSET_CONFIGS
+        assert ASSET_CONFIGS["ES"]["prefix_len"] == 2
