@@ -38,6 +38,7 @@ from pipeline.dst import (
     DST_AFFECTED_SESSIONS,
     is_winter_for_session, classify_dst_verdict,
 )
+from trading_app.config import CORE_MIN_SAMPLES, REGIME_MIN_SAMPLES
 from trading_app.db_manager import init_trading_app_schema
 from trading_app.walkforward import append_walkforward_result
 from trading_app.strategy_discovery import parse_dst_regime
@@ -291,7 +292,7 @@ def classify_regime(atr_20: float) -> str:
     return "ACTIVE"
 
 def validate_strategy(row: dict, cost_spec, stress_multiplier: float = 1.5,
-                      min_sample: int = 30, min_sharpe: float | None = None,
+                      min_sample: int = REGIME_MIN_SAMPLES, min_sharpe: float | None = None,
                       max_drawdown: float | None = None,
                       exclude_years: set[int] | None = None,
                       min_years_positive_pct: float = 1.0,
@@ -330,8 +331,8 @@ def validate_strategy(row: dict, cost_spec, stress_multiplier: float = 1.5,
     sample = row.get("sample_size") or 0
     if sample < min_sample:
         return "REJECTED", f"Phase 1: Sample size {sample} < {min_sample}", []
-    if sample < 100:
-        notes.append(f"Phase 1 WARN: sample={sample} (< 100)")
+    if sample < CORE_MIN_SAMPLES:
+        notes.append(f"Phase 1 WARN: sample={sample} (< {CORE_MIN_SAMPLES})")
 
     # Phase 2: Post-cost expectancy
     exp_r = row.get("expectancy_r")
@@ -548,7 +549,7 @@ def _walkforward_worker(
 def run_validation(
     db_path: Path | None = None,
     instrument: str = "MGC",
-    min_sample: int = 30,
+    min_sample: int = REGIME_MIN_SAMPLES,
     stress_multiplier: float = 1.5,
     min_sharpe: float | None = None,
     max_drawdown: float | None = None,
@@ -987,7 +988,7 @@ def main():
         description="Validate strategies and promote to validated_setups"
     )
     parser.add_argument("--instrument", default="MGC", help="Instrument symbol")
-    parser.add_argument("--min-sample", type=int, default=30, help="Min sample size")
+    parser.add_argument("--min-sample", type=int, default=REGIME_MIN_SAMPLES, help="Min sample size")
     parser.add_argument("--stress-multiplier", type=float, default=1.5, help="Cost stress multiplier")
     parser.add_argument("--min-sharpe", type=float, default=None, help="Min Sharpe ratio (optional)")
     parser.add_argument("--max-drawdown", type=float, default=None, help="Max drawdown in R (optional)")
