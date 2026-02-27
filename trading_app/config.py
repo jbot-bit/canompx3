@@ -687,7 +687,7 @@ EARLY_EXIT_MINUTES: dict[str, int | None] = {
 # "ib_conditional" = IB-aware (hold target until IB resolves, then adapt)
 SESSION_EXIT_MODE: dict[str, str] = {
     "CME_REOPEN": "fixed_target",
-    "TOKYO_OPEN": "ib_conditional",
+    "TOKYO_OPEN": "fixed_target",  # IB-conditional disabled — not validated in outcome_builder, creates parity gap
     "SINGAPORE_OPEN": "fixed_target",
     "LONDON_METALS": "fixed_target",
     "US_DATA_830": "fixed_target",

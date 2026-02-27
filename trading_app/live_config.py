@@ -66,7 +66,7 @@ HOT_MIN_STABILITY = 0.6
 #
 # EXIT MODES (see config.py SESSION_EXIT_MODE):
 #   CME_REOPEN = fixed_target
-#   TOKYO_OPEN = ib_conditional (IB aligned=hold 7h, opposed=kill at market)
+#   TOKYO_OPEN = fixed_target (IB-conditional disabled, pending research validation)
 #   LONDON_METALS/US_DATA_830/NYSE_OPEN = fixed_target
 #
 # Updated 2026-02-26: E0 purged, replaced by E2 (stop-market at ORB level + slippage).

@@ -218,10 +218,16 @@ The `day_of_week` column uses the Brisbane trading day. For sessions before midn
 | Confirm bars | **CB2** |
 | Direction | **LONG ONLY.** TOKYO_OPEN short is negative (WR=30%, AvgR=-0.04). |
 | Early exit | **Kill losers at 30 minutes.** Only 12% of 30-min losers eventually win. 3.7x Sharpe improvement. |
-| Exit mode | **IB-conditional** (see below) |
+| Exit mode | **Fixed target** (IB-conditional designed but disabled — not yet validated in outcome_builder) |
 | Do NOT | Kill at 10 min (too early, actively harmful). |
 
-**IB-Conditional Exit (TOKYO_OPEN only):**
+**IB-Conditional Exit (TOKYO_OPEN — DISABLED, pending research validation):**
+The IB-conditional exit mechanism is implemented in `execution_engine.py` but currently disabled
+(`SESSION_EXIT_MODE["TOKYO_OPEN"] = "fixed_target"`). The design was never validated in `outcome_builder.py`,
+creating a backtest-live parity gap. TOKYO_OPEN strategies execute with fixed target/stop + T80 early exit,
+matching validated metrics. IB logic is preserved for future research as a signal/filter, not an exit override.
+
+Original design (dormant):
 1. On entry, trade starts in `ib_pending` mode with fixed target active.
 2. IB = 120 minutes from CME_REOPEN. After IB forms, detect first break of IB high or low.
 3. **IB aligned** (breaks same direction as ORB trade): cancel fixed target, hold for 7 hours. Stop still active.
@@ -229,7 +235,7 @@ The `day_of_week` column uses the Brisbane trading day. For sessions before midn
 5. **IB not yet broken**: keep fixed target active (limbo defense).
 6. Opposed kill is **regime insurance** (stop usually fires before IB breaks), not active alpha.
 
-Config: `SESSION_EXIT_MODE["TOKYO_OPEN"] = "ib_conditional"`, `IB_DURATION_MINUTES = 120`, `HOLD_HOURS = 7`.
+Config: `SESSION_EXIT_MODE["TOKYO_OPEN"] = "fixed_target"`, `IB_DURATION_MINUTES = 120`, `HOLD_HOURS = 7` (dormant).
 
 **Rolling eval:** STABLE (score 0.68-0.83, passes 13-16/19 windows). The MOST stable family.
 **Nested 15m ORB:** TOKYO_OPEN is the ONLY session where 15m ORB beats 5m (+0.208R premium, 90% of pairs improve).
@@ -427,7 +433,7 @@ Many filter variants produce the SAME trade set.
 | Family | Session | EM | Filter | Exit Mode | Gate |
 |--------|---------|-----|--------|-----------|------|
 | CME_REOPEN_E1_ORB_G5 | CME_REOPEN | E1 | G5+ | Fixed target | None |
-| TOKYO_OPEN_E1_ORB_G5 | TOKYO_OPEN | E1 | G5+ | IB-conditional | None |
+| TOKYO_OPEN_E1_ORB_G5 | TOKYO_OPEN | E1 | G5+ | Fixed target | None |
 
 ### Tier 2: HOT (rolling-eval gated)
 | Family | Session | EM | Filter | Gate |

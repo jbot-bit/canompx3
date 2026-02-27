@@ -190,8 +190,8 @@ class TestConfig:
         for label in ORB_WINDOWS_UTC:
             assert label in SESSION_EXIT_MODE
 
-    def test_tokyo_open_is_ib_conditional(self):
-        assert SESSION_EXIT_MODE["TOKYO_OPEN"] == "ib_conditional"
+    def test_tokyo_open_is_fixed_target(self):
+        assert SESSION_EXIT_MODE["TOKYO_OPEN"] == "fixed_target"
 
     def test_cme_reopen_is_fixed_target(self):
         assert SESSION_EXIT_MODE["CME_REOPEN"] == "fixed_target"
@@ -206,6 +206,7 @@ class TestConfig:
 # IB-Conditional Exit Integration Tests
 # ============================================================================
 
+@pytest.mark.skip(reason="IB-conditional disabled pending research validation — TOKYO_OPEN now fixed_target")
 class TestIBConditionalExits:
     """Test TOKYO_OPEN session IB-conditional exit behavior in the execution engine."""
 
@@ -407,6 +408,7 @@ class TestIBConditionalExits:
 # Early Exit Skip in hold_7h Mode
 # ============================================================================
 
+@pytest.mark.skip(reason="IB-conditional disabled pending research validation — TOKYO_OPEN now fixed_target")
 class TestEarlyExitSkipInHold7h:
 
     def test_early_exit_skipped_in_hold_7h(self):
@@ -471,6 +473,7 @@ class TestEarlyExitSkipInHold7h:
 # IB Already Opposed at Entry Time
 # ============================================================================
 
+@pytest.mark.skip(reason="IB-conditional disabled pending research validation — TOKYO_OPEN now fixed_target")
 class TestIBAlreadyOpposed:
 
     def test_tokyo_open_entry_rejected_when_ib_already_opposed_unit(self):
