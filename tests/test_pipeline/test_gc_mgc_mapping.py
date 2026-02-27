@@ -6,7 +6,7 @@ contracts, but the pipeline stores bars under symbol='MGC' with the original
 GC contract in source_symbol.
 
 The GC→MGC mapping lives in ingest_dbn_mgc.py (legacy path).
-The multi-instrument asset_configs.py uses MGC pattern directly.
+The multi-instrument asset_configs.py uses the GC pattern (matching source data).
 """
 
 import re
@@ -118,3 +118,26 @@ class TestGcToMgcDataFlow:
         assert not GC_OUTRIGHT_PATTERN.match("MGCZ4")
         assert GC_OUTRIGHT_PATTERN.match("GCM4")
         assert GC_OUTRIGHT_PATTERN.match("GCZ4")
+
+
+class TestAssetConfigMgcPattern:
+    """Verify asset_configs.py MGC entry matches GC source data."""
+
+    def test_mgc_pattern_matches_gc_contracts(self):
+        """MGC config must match GC outrights (data source is full-size Gold)."""
+        from pipeline.asset_configs import ASSET_CONFIGS
+        pattern = ASSET_CONFIGS["MGC"]["outright_pattern"]
+        for sym in ["GCM4", "GCZ4", "GCG25", "GCQ5"]:
+            assert pattern.match(sym), f"MGC pattern should match {sym}"
+
+    def test_mgc_pattern_rejects_mgc_contracts(self):
+        """MGC config must NOT match MGC outrights (we use GC source data)."""
+        from pipeline.asset_configs import ASSET_CONFIGS
+        pattern = ASSET_CONFIGS["MGC"]["outright_pattern"]
+        for sym in ["MGCM4", "MGCZ4", "MGCG25"]:
+            assert not pattern.match(sym), f"MGC pattern should not match {sym}"
+
+    def test_mgc_prefix_len_is_2(self):
+        """GC contracts have 2-char prefix before month code."""
+        from pipeline.asset_configs import ASSET_CONFIGS
+        assert ASSET_CONFIGS["MGC"]["prefix_len"] == 2

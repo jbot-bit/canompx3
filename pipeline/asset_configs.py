@@ -7,7 +7,7 @@ Each asset defines:
 - symbol: Logical symbol stored in bars_1m.symbol
 - outright_pattern: Regex to match outright contracts (exclude spreads)
 - prefix_len: Number of chars in symbol prefix before month code
-  (MGC=3 -> MGCG5, NQ=2 -> NQH5, MNQ=3 -> MNQH5)
+  (GC=2 -> GCG5, NQ=2 -> NQH5, MNQ=3 -> MNQH5)
 - minimum_start_date: Earliest usable date (None if unknown/no DBN)
 - schema_required: Expected DBN schema (always ohlcv-1m)
 
@@ -34,10 +34,12 @@ MONTH_CODES = 'FGHJKMNQUVXZ'
 
 ASSET_CONFIGS = {
     "MGC": {
+        # Source data is GC (full-size Gold, $100/pt) — same price, stored as symbol='MGC'.
+        # Identical pattern to RTY→M2K, SI→SIL, 6E→M6E. Cost model uses MGC micro specs ($10/pt).
         "dbn_path": PROJECT_ROOT / "DB" / "GOLD_DB_FULLSIZE",
         "symbol": "MGC",
-        "outright_pattern": re.compile(r'^MGC[FGHJKMNQUVXZ]\d{1,2}$'),
-        "prefix_len": 3,
+        "outright_pattern": re.compile(r'^GC[FGHJKMNQUVXZ]\d{1,2}$'),
+        "prefix_len": 2,
         "minimum_start_date": date(2019, 1, 1),
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
