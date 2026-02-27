@@ -4,7 +4,7 @@ Empirical findings from 1,460 trading days (2021-02-05 to 2026-02-04).
 Database now contains 2,922 trading days (2016-02-01 to 2026-02-04) but
 outcomes/strategies below are computed on the 2021-2026 slice.
 ~6.1M outcomes computed across 7 instruments (5/15/30m ORB) with entry models (E1/E2/E3).
-627 strategies validated active (post-cost, FDR-corrected, yearly robust). E0 purged Feb 2026 (3 biases).
+1,251 strategies validated active across 5/15/30m ORB apertures (post-cost, FDR-corrected, yearly robust). E0 purged Feb 2026 (3 biases).
 Entry model note: E2 (stop-market) is dominant entry. See TRADING_RULES.md Entry Model Bias Audit.
 
 **IMPORTANT**: These findings supersede the earlier 252-strategy scan which had

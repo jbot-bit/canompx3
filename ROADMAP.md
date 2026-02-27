@@ -60,7 +60,7 @@ Do not schedule active delivery work against SIL until explicitly re-opened.
 - Win PnL bug fix: changed pnl_points_to_r -> to_r_multiple (friction was missing from wins)
 - test_trader_logic.py: 24 trader/math sanity checks
 - Grid expanded: 6 ORBs x 6 RRs x 5 CBs x 12 filters x 3 EMs = 6,480 combos
-- DB rebuild COMPLETE: ~6.1M outcomes (7 instruments, 5/15/30m ORB), 627 validated active strategies (Feb 27 2026)
+- DB rebuild COMPLETE: ~6.1M outcomes (7 instruments, 5/15/30m ORB), 1,251 validated active strategies (Feb 27 2026)
 - Validator: exclude_years + min_years_positive_pct params added
 
 ## Phase 6: Live Trading Preparation — DONE (6a-6d), 6e TODO
@@ -139,9 +139,8 @@ Wider ORB apertures (15m/30m) validated and integrated into production portfolio
 
 ### Results
 - 15m/30m outcomes rebuilt from scratch with E1/E2/E3 using standard pipeline (`--orb-minutes` parameter), NOT the nested/ pipeline (separate tables, 5m entry bars)
-- **627 validated strategies** (all 5m) → 206 edge families (34 ROBUST, 38 WHITELISTED)
-- 15m/30m outcomes and experimental strategies exist but zero survived validation
-- Portfolio assembly needs re-run with current 627 5m-only strategies
+- **1,251 validated strategies** across 5/15/30m (5m: 627, 15m: 423, 30m: 201) → 467 edge families (67 ROBUST, 49 WHITELISTED)
+- 220 FDR significant. 5 new sessions added (MGC NYSE_OPEN, MNQ US_DATA_830+COMEX_SETTLE, MES+M2K COMEX_SETTLE)
 - `trading_app/nested/` modules remain for reference but standard pipeline handles all apertures
 - Isolation enforced: drift checks 15-17 block cross-contamination
 
