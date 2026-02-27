@@ -252,7 +252,7 @@ def build_edge_families(db_path: str, instrument: str) -> int:
             if len(exprs) > 1:
                 std_expr = statistics.stdev(exprs)
                 mean_expr = statistics.mean(exprs)
-                cv_expr = std_expr / mean_expr if mean_expr > 0 else None
+                cv_expr = std_expr / mean_expr if mean_expr > 0 else float('inf')
             else:
                 cv_expr = None  # Singletons have no CV
 
