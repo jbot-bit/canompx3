@@ -58,7 +58,7 @@ VALID_ORB_LABELS = {
 VALID_ENTRY_MODELS = {"E1", "E2", "E3"}
 
 # Valid filter types (subset for validation)
-VALID_FILTER_PREFIXES = {"NO_FILTER", "ORB_G", "ORB_L", "VOL_"}
+VALID_FILTER_PREFIXES = {"NO_FILTER", "ORB_G", "ORB_L", "VOL_", "DIR_", "DOW_", "M6E_"}
 
 # Valid instruments
 VALID_INSTRUMENTS = {"MGC", "MNQ", "MES", "M2K"}
