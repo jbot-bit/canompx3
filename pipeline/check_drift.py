@@ -1470,6 +1470,11 @@ def check_old_session_names() -> list[str]:
         "scripts/tools/profile_1000_runners.py",
         "pipeline/check_drift.py",  # this file defines the old names
     }
+    # Active research scripts that were fixed — NOT frozen
+    active_research = {
+        "research/cross_validate_strategies.py",
+        "research/analyze_double_break.py",
+    }
 
     for py_file in sorted(PROJECT_ROOT.rglob("*.py")):
         rel = py_file.relative_to(PROJECT_ROOT).as_posix()
@@ -1477,9 +1482,9 @@ def check_old_session_names() -> list[str]:
         # Skip frozen directories
         if any(rel.startswith(d + "/") for d in frozen_dirs):
             continue
-        # Skip all research/ root-level scripts (one-off historical).
-        # Only research/lib/ is active code — subdirs won't match this.
-        if re.match(r"^research/[^/]+\.py$", rel):
+        # Skip research/ root-level scripts (one-off historical),
+        # EXCEPT active research scripts that were fixed.
+        if re.match(r"^research/[^/]+\.py$", rel) and rel not in active_research:
             continue
         # Skip explicitly frozen files
         if rel in frozen_files:
