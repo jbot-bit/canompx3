@@ -17,7 +17,7 @@ SAFE_JOIN = """\
 def session_col(orb_label: str, stem: str) -> str:
     """Build daily_features column name: orb_{label}_{stem}.
 
-    Example: session_col("1000", "size") -> "orb_1000_size"
+    Example: session_col("TOKYO_OPEN", "size") -> "orb_TOKYO_OPEN_size"
     """
     return f"orb_{orb_label}_{stem}"
 
@@ -36,9 +36,9 @@ def outcomes_query(
     extra_cols from the joined outcomes/features tables.
 
     Usage:
-        sql = outcomes_query("MGC", "1000", "E0",
+        sql = outcomes_query("MGC", "TOKYO_OPEN", "E1",
             extra_cols=["d.atr_5d"],
-            filters=["d.orb_1000_size >= 4"],
+            filters=["d.orb_TOKYO_OPEN_size >= 4"],
             date_range=("2021-01-01", "2025-12-31"),
         )
         df = query_df(sql)
@@ -73,7 +73,7 @@ def with_dst_split(
     """Wrap a base SQL query with DST regime filtering.
 
     Returns (dst_on_sql, dst_off_sql) -- summer and winter variants.
-    regime_source: "US" for 0900/0030/2300 sessions, "UK" for 1800.
+    regime_source: "US" for CME_REOPEN/NYSE_OPEN/US_DATA_830 sessions, "UK" for LONDON_METALS.
 
     DST columns (us_dst, uk_dst) live in daily_features.
     MANDATORY per CLAUDE.md: any analysis touching DST-sensitive sessions

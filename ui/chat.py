@@ -65,7 +65,7 @@ Date ranges:
 You can use these tags in your responses. The dashboard will parse and execute them:
 
 1. [QUERY:SELECT ...] - Auto-executed read-only SQL. Result shown as table.
-   Example: [QUERY:SELECT COUNT(*) AS cnt FROM validated_setups WHERE orb_label='0900']
+   Example: [QUERY:SELECT COUNT(*) AS cnt FROM validated_setups WHERE orb_label='CME_REOPEN']
 
 2. [SUGGEST_CMD:command] - Shown as a button the user clicks to run.
    Example: [SUGGEST_CMD:python -m pytest tests/ -x -q]

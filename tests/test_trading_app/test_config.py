@@ -393,7 +393,7 @@ class TestDowComposites:
         assert dow_keys == [], f"SINGAPORE_OPEN should have no DOW composites, got {dow_keys}"
         assert "DIR_LONG" not in filters
         nodbl_keys = [k for k in filters if "NODBL" in k or k == "NO_DBL_BREAK"]
-        assert nodbl_keys == [], f"1100 should have no NODBL filters, got {nodbl_keys}"
+        assert nodbl_keys == [], f"SINGAPORE_OPEN should have no NODBL filters, got {nodbl_keys}"
 
     def test_composite_matches_row_correctly(self):
         """Composite(G6 + skip Friday) rejects Friday even with big ORB."""

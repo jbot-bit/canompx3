@@ -3,9 +3,9 @@
 Rolling Portfolio Assembly -- final strategy allocation.
 
 Logic is LOCKED:
-  0900 = Fixed Target (2.0R)
-  1000 = Target Unlock (IB-aligned hold 7h, opposed kill)
-  1100 = Dead
+  CME_REOPEN = Fixed Target (2.0R)
+  TOKYO_OPEN = Target Unlock (IB-aligned hold 7h, opposed kill)
+  SINGAPORE_OPEN = Dead
   Pyramiding = OFF
 
 This script:
@@ -49,13 +49,13 @@ RR_TARGET = 2.0
 CONFIRM_BARS = 2
 HOLD_HOURS = 7
 
-SESSION_UTC = {"0900": 23, "1000": 0}
+SESSION_UTC = {"CME_REOPEN": 23, "TOKYO_OPEN": 0}
 MARKET_OPEN_UTC_HOUR = 23
 
 # IB config per session (locked from research)
 SESSION_IB = {
-    "0900": ("session", 120),
-    "1000": ("mktopen", 120),
+    "CME_REOPEN": ("session", 120),
+    "TOKYO_OPEN": ("mktopen", 120),
 }
 
 SPEC = get_cost_spec("MGC")
@@ -332,8 +332,8 @@ def run(db_path, start, end):
     session_results = {}
 
     for session, strategy_col, strategy_name in [
-        ("0900", "fixed_pnl", "Fixed Target"),
-        ("1000", "exploit_pnl", "Target Unlock"),
+        ("CME_REOPEN", "fixed_pnl", "Fixed Target"),
+        ("TOKYO_OPEN", "exploit_pnl", "Target Unlock"),
     ]:
         print(f"Processing {session} ({strategy_name})...")
         t0 = time.time()
@@ -408,8 +408,8 @@ def run(db_path, start, end):
         f"|---------|-------|--------|-----------|",
     ]
 
-    for session in ["0900", "1000", "1100"]:
-        if session == "1100":
+    for session in ["CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN"]:
+        if session == "SINGAPORE_OPEN":
             plan_lines.append(
                 f"| {session} | OFF | DEAD | 74% double-break, IB/ORB tautology |")
             continue
@@ -425,16 +425,16 @@ def run(db_path, start, end):
         f"",
     ])
 
-    for session in ["0900", "1000"]:
+    for session in ["CME_REOPEN", "TOKYO_OPEN"]:
         sr = session_results[session]
         cls = sr["classification"]
 
         if cls == "STABLE":
             sizing = "Normal (1.0x risk)"
-            if session == "1000":
+            if session == "TOKYO_OPEN":
                 sizing = "Half (0.5x risk) -- thinner edge, higher variance"
         elif cls == "TRANSITIONING":
-            sizing = "Half (0.5x risk)" if session == "0900" else "Quarter (0.25x risk)"
+            sizing = "Half (0.5x risk)" if session == "CME_REOPEN" else "Quarter (0.25x risk)"
         else:
             sizing = "OFF (0x) -- regime filter active"
 
@@ -459,7 +459,7 @@ def run(db_path, start, end):
         f"**OFF** -- destroyed value at both sessions. Intraday mean-reversion snap-back",
         f"kills the second unit. Do not revisit.",
         f"",
-        f"## 1000 Target Unlock Rules",
+        f"## TOKYO_OPEN Target Unlock Rules",
         f"",
         f"1. Entry: E1 CB2 G4+ (standard ORB break)",
         f"2. Limbo phase: Fixed target ({RR_TARGET}R) + stop active",

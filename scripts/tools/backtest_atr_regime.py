@@ -45,14 +45,14 @@ from trading_app.strategy_discovery import (
 
 # Families to test: the live/validated ones
 FAMILIES = [
-    {"session": "0900", "em": "E1", "filter": "ORB_G4"},
-    {"session": "0900", "em": "E1", "filter": "ORB_G5"},
-    {"session": "0900", "em": "E1", "filter": "ORB_G6"},
-    {"session": "1000", "em": "E1", "filter": "ORB_G3"},
-    {"session": "1000", "em": "E1", "filter": "ORB_G4"},
-    {"session": "1800", "em": "E3", "filter": "ORB_G4"},
-    {"session": "1800", "em": "E3", "filter": "ORB_G6"},
-    {"session": "1800", "em": "E1", "filter": "ORB_G6"},
+    {"session": "CME_REOPEN", "em": "E1", "filter": "ORB_G4"},
+    {"session": "CME_REOPEN", "em": "E1", "filter": "ORB_G5"},
+    {"session": "CME_REOPEN", "em": "E1", "filter": "ORB_G6"},
+    {"session": "TOKYO_OPEN", "em": "E1", "filter": "ORB_G3"},
+    {"session": "TOKYO_OPEN", "em": "E1", "filter": "ORB_G4"},
+    {"session": "LONDON_METALS", "em": "E3", "filter": "ORB_G4"},
+    {"session": "LONDON_METALS", "em": "E3", "filter": "ORB_G6"},
+    {"session": "LONDON_METALS", "em": "E1", "filter": "ORB_G6"},
 ]
 
 ATR_THRESHOLDS = [0, 20, 25, 30, 35, 40]  # 0 = no gate (baseline)

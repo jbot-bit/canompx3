@@ -7,7 +7,7 @@ Tests 5 hypotheses derived from the ORB Size Deep Dive (Feb 2026):
   2. Band filter for MES (G3 with 12pt upper cap)
   3. Percentage-based ORB filter (normalize across instruments)
   4. ORB/ATR ratio filter (volatility-adjusted size)
-  5. Direction filter (LONG-only Asia, SHORT-only US sessions)
+  5. Direction filter (LONG-only Asia sessions, SHORT-only US sessions)
 
 All tests use existing orb_outcomes + daily_features -- no pipeline rebuild needed.
 Run: python scripts/tools/hypothesis_test.py [--db-path PATH]
@@ -90,7 +90,7 @@ def test_h1_g3_for_mnq(con):
     print("  Current grid uses G4+ minimum. Deep dive showed MNQ profitable from G3+.")
     print("  Question: Does G3 add REAL new edge, or is it just noise?")
 
-    sessions = ["0900", "1000", "1100", "1800"]
+    sessions = ["CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS"]
     for sess in sessions:
         print_subheader(f"MNQ {sess}")
 
@@ -147,10 +147,10 @@ def test_h1_g3_for_mnq(con):
 # =========================================================================
 def test_h2_band_filter_mes(con):
     print_header("HYPOTHESIS 2: Band filter for MES (cap at 12pt)")
-    print("  Deep dive showed MES 1000 at 12pt+ crashes to -0.56 avg R.")
+    print("  Deep dive showed MES TOKYO_OPEN at 12pt+ crashes to -0.56 avg R.")
     print("  Question: Does capping at 12pt rescue MES edges?")
 
-    sessions = ["0900", "1000"]
+    sessions = ["CME_REOPEN", "TOKYO_OPEN"]
     for sess in sessions:
         print_subheader(f"MES {sess}")
 
@@ -213,7 +213,7 @@ def test_h3_percentage_filter(con):
     pct_thresholds = [0.05, 0.10, 0.15, 0.20, 0.30, 0.50]
 
     for sym in instruments:
-        print_subheader(f"{sym} -- 0900 session")
+        print_subheader(f"{sym} -- CME_REOPEN session")
 
         for pct in pct_thresholds:
             # Use (orb_high + orb_low) / 2 as price proxy for the ORB period
@@ -223,22 +223,22 @@ def test_h3_percentage_filter(con):
                 FROM orb_outcomes o
                 JOIN daily_features f ON o.trading_day = f.trading_day
                     AND o.symbol = f.symbol AND o.orb_minutes = f.orb_minutes
-                WHERE o.symbol = '{sym}' AND o.orb_label = '0900'
+                WHERE o.symbol = '{sym}' AND o.orb_label = 'CME_REOPEN'
                   AND o.outcome IN ('win', 'loss')
                   AND o.entry_model = 'E1' AND o.rr_target = 2.0 AND o.confirm_bars = 2
-                  AND f.orb_0900_size IS NOT NULL
-                  AND (f.orb_0900_high + f.orb_0900_low) > 0
-                  AND (f.orb_0900_size / ((f.orb_0900_high + f.orb_0900_low) / 2.0)) * 100.0 >= {pct}
+                  AND f.orb_CME_REOPEN_size IS NOT NULL
+                  AND (f.orb_CME_REOPEN_high + f.orb_CME_REOPEN_low) > 0
+                  AND (f.orb_CME_REOPEN_size / ((f.orb_CME_REOPEN_high + f.orb_CME_REOPEN_low) / 2.0)) * 100.0 >= {pct}
             """).fetchone()
             if row and row[0] > 0:
                 # Also show what point threshold this corresponds to
                 avg_pts = con.execute(f"""
-                    SELECT AVG(f.orb_0900_size) as avg_size
+                    SELECT AVG(f.orb_CME_REOPEN_size) as avg_size
                     FROM daily_features f
                     WHERE f.symbol = '{sym}'
-                      AND f.orb_0900_size IS NOT NULL
-                      AND (f.orb_0900_high + f.orb_0900_low) > 0
-                      AND (f.orb_0900_size / ((f.orb_0900_high + f.orb_0900_low) / 2.0)) * 100.0 >= {pct}
+                      AND f.orb_CME_REOPEN_size IS NOT NULL
+                      AND (f.orb_CME_REOPEN_high + f.orb_CME_REOPEN_low) > 0
+                      AND (f.orb_CME_REOPEN_size / ((f.orb_CME_REOPEN_high + f.orb_CME_REOPEN_low) / 2.0)) * 100.0 >= {pct}
                 """).fetchone()
                 equiv = f"(~{avg_pts[0]:.1f}pt avg)" if avg_pts and avg_pts[0] else ""
                 print_row(f">= {pct:.2f}% of price {equiv}", row[0], row[1], row[2], row[3])
@@ -250,7 +250,7 @@ def test_h3_percentage_filter(con):
     for pct in [0.10, 0.15, 0.20]:
         print(f"\n    At >= {pct:.2f}%:")
         for sym in instruments:
-            for sess in ["0900", "1000"]:
+            for sess in ["CME_REOPEN", "TOKYO_OPEN"]:
                 row = con.execute(f"""
                     SELECT COUNT(*) as n, AVG(o.pnl_r) as avg_r, SUM(o.pnl_r) as total_r
                     FROM orb_outcomes o
@@ -280,7 +280,7 @@ def test_h4_orb_atr_ratio(con):
     atr_thresholds = [0.20, 0.30, 0.40, 0.50, 0.60, 0.80]
 
     for sym in instruments:
-        print_subheader(f"{sym} -- 0900 session")
+        print_subheader(f"{sym} -- CME_REOPEN session")
 
         for ratio in atr_thresholds:
             row = con.execute(f"""
@@ -289,12 +289,12 @@ def test_h4_orb_atr_ratio(con):
                 FROM orb_outcomes o
                 JOIN daily_features f ON o.trading_day = f.trading_day
                     AND o.symbol = f.symbol AND o.orb_minutes = f.orb_minutes
-                WHERE o.symbol = '{sym}' AND o.orb_label = '0900'
+                WHERE o.symbol = '{sym}' AND o.orb_label = 'CME_REOPEN'
                   AND o.outcome IN ('win', 'loss')
                   AND o.entry_model = 'E1' AND o.rr_target = 2.0 AND o.confirm_bars = 2
                   AND f.atr_20 IS NOT NULL AND f.atr_20 > 0
-                  AND f.orb_0900_size IS NOT NULL
-                  AND (f.orb_0900_size / f.atr_20) >= {ratio}
+                  AND f.orb_CME_REOPEN_size IS NOT NULL
+                  AND (f.orb_CME_REOPEN_size / f.atr_20) >= {ratio}
             """).fetchone()
             if row and row[0] > 0:
                 print_row(f"ORB >= {ratio:.2f}x ATR(20)", row[0], row[1], row[2], row[3])
@@ -309,10 +309,10 @@ def test_h4_orb_atr_ratio(con):
             FROM orb_outcomes o
             JOIN daily_features f ON o.trading_day = f.trading_day
                 AND o.symbol = f.symbol AND o.orb_minutes = f.orb_minutes
-            WHERE o.symbol = '{sym}' AND o.orb_label = '0900'
+            WHERE o.symbol = '{sym}' AND o.orb_label = 'CME_REOPEN'
               AND o.outcome IN ('win', 'loss')
               AND o.entry_model = 'E1' AND o.rr_target = 2.0 AND o.confirm_bars = 2
-              AND f.orb_0900_size >= {best_gate}
+              AND f.orb_CME_REOPEN_size >= {best_gate}
         """).fetchone()
         if row and row[0] > 0:
             print_row(f"[BASELINE] G{best_gate}+ fixed points", row[0], row[1], row[2], row[3])
@@ -333,15 +333,15 @@ def test_h5_direction_filter(con):
 
         # Test combinations
         tests = [
-            ("0900", "long",  "0900 LONG-ONLY (Asia bias)"),
-            ("0900", "short", "0900 SHORT-ONLY"),
-            ("0900", None,    "0900 BOTH (baseline)"),
-            ("1000", "long",  "1000 LONG-ONLY"),
-            ("1000", "short", "1000 SHORT-ONLY (US bias)"),
-            ("1000", None,    "1000 BOTH (baseline)"),
-            ("1800", "long",  "1800 LONG-ONLY"),
-            ("1800", "short", "1800 SHORT-ONLY (London close bias)"),
-            ("1800", None,    "1800 BOTH (baseline)"),
+            ("CME_REOPEN", "long",  "CME_REOPEN LONG-ONLY (Asia bias)"),
+            ("CME_REOPEN", "short", "CME_REOPEN SHORT-ONLY"),
+            ("CME_REOPEN", None,    "CME_REOPEN BOTH (baseline)"),
+            ("TOKYO_OPEN", "long",  "TOKYO_OPEN LONG-ONLY"),
+            ("TOKYO_OPEN", "short", "TOKYO_OPEN SHORT-ONLY (US bias)"),
+            ("TOKYO_OPEN", None,    "TOKYO_OPEN BOTH (baseline)"),
+            ("LONDON_METALS", "long",  "LONDON_METALS LONG-ONLY"),
+            ("LONDON_METALS", "short", "LONDON_METALS SHORT-ONLY (London close bias)"),
+            ("LONDON_METALS", None,    "LONDON_METALS BOTH (baseline)"),
         ]
 
         best_gate = {"MGC": 5, "MNQ": 3, "MES": 3}[sym]

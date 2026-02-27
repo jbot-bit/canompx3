@@ -53,7 +53,7 @@ UTC_TZ = ZoneInfo("UTC")
 SPEC = get_cost_spec("MGC")
 
 # Grid dimensions
-ORB_LABELS = ["0900", "1000", "1800"]
+ORB_LABELS = ["CME_REOPEN", "TOKYO_OPEN", "LONDON_METALS"]
 RR_TARGETS = [1.0, 1.5, 2.0, 2.5, 3.0]
 SIZE_FILTERS = {"G2": 2.0, "G3": 3.0, "G4": 4.0, "G5": 5.0, "G6": 6.0}
 

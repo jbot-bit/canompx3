@@ -362,7 +362,7 @@ class TestComputeFitnessIntegration:
 
     def test_compute_fitness_end_to_end(self, tmp_path):
         """End-to-end fitness computation with in-memory DuckDB."""
-        strategy_id = "MGC_0900_E1_RR2.0_CB2_NO_FILTER"
+        strategy_id = "MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER"
         strategies = [{
             "strategy_id": strategy_id,
             "instrument": "MGC",
@@ -410,7 +410,7 @@ class TestComputeFitnessIntegration:
         BUG FIX: Previously, _load_strategy_outcomes was called without end_date,
         so _recent_trade_sharpe could include future outcomes.
         """
-        strategy_id = "MGC_0900_E1_RR2.0_CB2_NO_FILTER"
+        strategy_id = "MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER"
         strategies = [{
             "strategy_id": strategy_id,
             "filter_type": "NO_FILTER",
@@ -455,7 +455,7 @@ class TestComputeFitnessIntegration:
         BUG FIX: Previously, rolling_exp_r was nulled before classification,
         causing classify_fitness to return STALE instead of WATCH.
         """
-        strategy_id = "MGC_0900_E1_RR2.0_CB2_NO_FILTER"
+        strategy_id = "MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER"
         strategies = [{
             "strategy_id": strategy_id,
             "filter_type": "NO_FILTER",
@@ -486,7 +486,7 @@ class TestComputeFitnessIntegration:
 
     def test_orb_size_filter_excludes_small_days(self, tmp_path):
         """ORB_G4 filter excludes days with orb_size < 4.0."""
-        strategy_id = "MGC_0900_E1_RR2.0_CB2_ORB_G4"
+        strategy_id = "MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G4"
         strategies = [{
             "strategy_id": strategy_id,
             "filter_type": "ORB_G4",
@@ -539,7 +539,7 @@ class TestFitnessReportSummary:
         # Create 3 strategies with different expected outcomes
         strategies = [
             {
-                "strategy_id": f"MGC_0900_E1_RR2.0_CB2_NO_FILTER_{i}",
+                "strategy_id": f"MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER_{i}",
                 "filter_type": "NO_FILTER",
                 "sample_size": 100,
                 "expectancy_r": 0.30,

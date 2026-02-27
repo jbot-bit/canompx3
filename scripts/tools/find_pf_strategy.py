@@ -2,7 +2,7 @@
 Find strategies matching Profit Factor + Annualized Sharpe criteria.
 
 Recomputes metrics from raw orb_outcomes for a 2-year window,
-restricted to structural liquidity sessions (0900, 1000, 1800).
+restricted to structural liquidity sessions (CME_REOPEN, TOKYO_OPEN, LONDON_METALS).
 
 Usage:
     python scripts/find_pf_strategy.py
@@ -33,7 +33,7 @@ from trading_app.strategy_discovery import (
 )
 
 # --- Configuration ---
-TARGET_SESSIONS = ["0900", "1000", "1800"]
+TARGET_SESSIONS = ["CME_REOPEN", "TOKYO_OPEN", "LONDON_METALS"]
 START_DATE = date(2024, 2, 12)
 END_DATE = date(2026, 2, 4)
 YEARS_SPAN = 2.0  # for trades_per_year calc

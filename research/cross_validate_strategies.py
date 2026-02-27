@@ -56,15 +56,15 @@ def load_orb_daily_pnl(db_path: Path, start: date, end: date) -> pd.DataFrame:
                    expectancy_r, sharpe_ratio
             FROM validated_setups
             WHERE instrument = 'MGC'
-              AND orb_label = '0900'
+              AND orb_label = 'CME_REOPEN'
               AND LOWER(status) = 'active'
             ORDER BY sharpe_ratio DESC
             LIMIT 1
         """).fetchdf()
 
         if best.empty:
-            print("  WARNING: No validated 0900 strategy found, using default")
-            orb_label = "0900"
+            print("  WARNING: No validated CME_REOPEN strategy found, using default")
+            orb_label = "CME_REOPEN"
             rr_target = 2.0
             confirm_bars = 1
             entry_model = "E1"

@@ -1432,6 +1432,79 @@ def check_stale_scratch_db() -> list[str]:
     return violations
 
 
+def check_old_session_names() -> list[str]:
+    """Check #38: No old fixed-clock session names in active code.
+
+    Old names (0900, 1000, 1100, 1800, 2300, 0030) were replaced by
+    dynamic event-based names (CME_REOPEN, TOKYO_OPEN, etc.) in Feb 2026.
+    Active code must use the new names from pipeline/dst.py SESSION_CATALOG.
+
+    Frozen historical files are excluded — they document what was tested
+    at runtime and serve as immutable experimental records.
+    """
+    violations = []
+    # Old session name literals that should not appear in active code
+    old_names = {"0900", "1000", "1100", "1800", "2300", "0030"}
+    # Pattern: quoted string literals containing old session names
+    # Matches "0900", '0900', etc. as standalone values
+    pattern = re.compile(
+        r"""(?:["'])({names})(?:["'])""".format(names="|".join(old_names))
+    )
+
+    # Frozen file exclusions (never touch these)
+    frozen_dirs = {
+        "research/archive",
+        "scripts/walkforward",
+        "docs/archive",
+        ".venv",
+        "venv",
+        ".auto-claude",
+    }
+    frozen_files = {
+        "scripts/tools/migrate_session_names.py",
+        "scripts/tools/volume_session_analysis.py",
+        "scripts/tools/audit_ib_single_break.py",
+        "scripts/tools/audit_integrity.py",
+        "scripts/tools/backtest_1100_early_exit.py",
+        "scripts/tools/explore.py",
+        "scripts/tools/profile_1000_runners.py",
+        "pipeline/check_drift.py",  # this file defines the old names
+    }
+
+    for py_file in sorted(PROJECT_ROOT.rglob("*.py")):
+        rel = py_file.relative_to(PROJECT_ROOT).as_posix()
+
+        # Skip frozen directories
+        if any(rel.startswith(d + "/") for d in frozen_dirs):
+            continue
+        # Skip all research/ root-level scripts (one-off historical).
+        # Only research/lib/ is active code — subdirs won't match this.
+        if re.match(r"^research/[^/]+\.py$", rel):
+            continue
+        # Skip explicitly frozen files
+        if rel in frozen_files:
+            continue
+
+        try:
+            content = py_file.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, PermissionError):
+            continue
+
+        for i, line in enumerate(content.splitlines(), 1):
+            # Skip comments
+            stripped = line.lstrip()
+            if stripped.startswith("#"):
+                continue
+            matches = pattern.findall(line)
+            for m in matches:
+                violations.append(
+                    f"  {rel}:{i}: old session name '{m}' — "
+                    f"replace with new name from SESSION_CATALOG"
+                )
+
+    return violations
+
+
 def check_orb_minutes_in_strategy_id() -> list[str]:
     """Check #31: Non-5m strategies must have _O{minutes} suffix in strategy_id.
 
@@ -2038,6 +2111,18 @@ def main():
     # Check 37: Stale scratch DB
     print("Check 37: No stale scratch DB at C:/db/gold.db...")
     v = check_stale_scratch_db()
+    if v:
+        print("  FAILED:")
+        for line in v:
+            print(line)
+        all_violations.extend(v)
+    else:
+        print("  PASSED [OK]")
+    print()
+
+    # Check 38: Old session names in active code
+    print("Check 38: No old session names in active code...")
+    v = check_old_session_names()
     if v:
         print("  FAILED:")
         for line in v:
