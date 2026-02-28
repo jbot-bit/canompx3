@@ -380,7 +380,7 @@ def long_vs_short(con):
             ROUND(AVG(CASE WHEN o.outcome='win' THEN 100.0 ELSE 0.0 END), 1) as win_rate,
             ROUND(AVG(o.pnl_r), 4) as avg_pnl_r
         FROM orb_outcomes o
-        JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol
+        JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol AND o.orb_minutes = d.orb_minutes
         WHERE {where}
         GROUP BY direction
         ORDER BY direction

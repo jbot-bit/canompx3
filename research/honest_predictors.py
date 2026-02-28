@@ -13,7 +13,7 @@ con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
 
 BASE = """
     FROM orb_outcomes o
-    JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol
+    JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol AND o.orb_minutes = d.orb_minutes
     WHERE o.symbol = 'MGC' AND o.orb_label = '1100'
       AND o.entry_model = 'E1' AND o.rr_target = 2.5 AND o.confirm_bars = 2
       AND d.orb_1100_size >= 4.0
@@ -68,7 +68,7 @@ q = f"""
     WITH lagged AS (
         SELECT d.trading_day, d.symbol,
             LAG(d.orb_1100_double_break) OVER (PARTITION BY d.symbol ORDER BY d.trading_day) as prev_dbl
-        FROM daily_features d WHERE d.symbol = 'MGC'
+        FROM daily_features d WHERE d.symbol = 'MGC' AND d.orb_minutes = 5
     )
     SELECT l.prev_dbl as pred,
         COUNT(*) as n, AVG(o.pnl_r) as expr,
@@ -79,7 +79,7 @@ q = f"""
     GROUP BY 1 ORDER BY 1
 """.replace(BASE, f"""
     FROM orb_outcomes o
-    JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol
+    JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol AND o.orb_minutes = d.orb_minutes
     JOIN lagged l ON o.trading_day = l.trading_day AND o.symbol = l.symbol
     WHERE o.symbol = 'MGC' AND o.orb_label = '1100'
       AND o.entry_model = 'E1' AND o.rr_target = 2.5 AND o.confirm_bars = 2
@@ -91,14 +91,14 @@ rows = con.execute("""
     WITH lagged AS (
         SELECT d.trading_day, d.symbol,
             LAG(d.orb_1100_double_break) OVER (PARTITION BY d.symbol ORDER BY d.trading_day) as prev_dbl
-        FROM daily_features d WHERE d.symbol = 'MGC'
+        FROM daily_features d WHERE d.symbol = 'MGC' AND d.orb_minutes = 5
     )
     SELECT l.prev_dbl as pred,
         COUNT(*) as n, AVG(o.pnl_r) as expr,
         SUM(o.pnl_r) as totr,
         SUM(CASE WHEN o.outcome = 'win' THEN 1 ELSE 0 END)*100.0/COUNT(*) as wr
     FROM orb_outcomes o
-    JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol
+    JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol AND o.orb_minutes = d.orb_minutes
     JOIN lagged l ON o.trading_day = l.trading_day AND o.symbol = l.symbol
     WHERE o.symbol = 'MGC' AND o.orb_label = '1100'
       AND o.entry_model = 'E1' AND o.rr_target = 2.5 AND o.confirm_bars = 2
@@ -184,7 +184,7 @@ for target_sess in ['1100', '1800', 'LONDON_OPEN', '2300', '0030']:
             SUM(o.pnl_r) as totr,
             SUM(CASE WHEN o.outcome = 'win' THEN 1 ELSE 0 END)*100.0/COUNT(*) as wr
         FROM orb_outcomes o
-        JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol
+        JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol AND o.orb_minutes = d.orb_minutes
         WHERE o.symbol = 'MGC' AND o.orb_label = '{target_sess}'
           AND o.entry_model = 'E1' AND o.rr_target = 2.5 AND o.confirm_bars = 2
           AND d.{size_col} >= 4.0

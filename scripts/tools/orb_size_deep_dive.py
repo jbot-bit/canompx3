@@ -104,7 +104,7 @@ def section_1_size_heatmap(con):
                         ROUND(SUM(o.pnl_r), 1) as total_r,
                         ROUND(AVG(CASE WHEN o.outcome='win' THEN 100.0 ELSE 0.0 END), 1) as wr
                     FROM orb_outcomes o
-                    JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol
+                    JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol AND o.orb_minutes = d.orb_minutes
                     WHERE o.symbol = ? AND o.orb_label = ?
                       AND o.outcome IN ('win', 'loss')
                       AND d.{size_col} IS NOT NULL
@@ -159,7 +159,7 @@ def section_2_breakeven_finder(con):
                             ROUND(AVG(o.pnl_r), 4) as avg_r,
                             ROUND(SUM(o.pnl_r), 1) as total_r
                         FROM orb_outcomes o
-                        JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol
+                        JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol AND o.orb_minutes = d.orb_minutes
                         WHERE o.symbol = ? AND o.orb_label = ?
                           AND o.outcome IN ('win', 'loss')
                           AND d.{size_col} >= ?
@@ -170,7 +170,7 @@ def section_2_breakeven_finder(con):
                         below = con.execute(f"""
                             SELECT COUNT(*) as n, ROUND(AVG(o.pnl_r), 4) as avg_r
                             FROM orb_outcomes o
-                            JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol
+                            JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol AND o.orb_minutes = d.orb_minutes
                             WHERE o.symbol = ? AND o.orb_label = ?
                               AND o.outcome IN ('win', 'loss')
                               AND d.{size_col} < ?
@@ -236,7 +236,7 @@ def section_3_friction_theory(con):
                     row = con.execute(f"""
                         SELECT COUNT(*) as n, SUM(o.pnl_r) as total_r
                         FROM orb_outcomes o
-                        JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol
+                        JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol AND o.orb_minutes = d.orb_minutes
                         WHERE o.symbol = ? AND o.orb_label = ?
                           AND o.outcome IN ('win', 'loss')
                           AND d.{size_col} >= ?
@@ -318,7 +318,7 @@ def section_4_optimal_gate_per_session(con):
                                    ROUND(AVG(o.pnl_r), 4) as avg_r,
                                    ROUND(SUM(o.pnl_r), 1) as total_r
                             FROM orb_outcomes o
-                            JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol
+                            JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol AND o.orb_minutes = d.orb_minutes
                             WHERE o.symbol = ? AND o.orb_label = ?
                               AND o.outcome IN ('win', 'loss')
                               AND d.{size_col} >= ?
@@ -396,7 +396,7 @@ def section_5_size_vs_direction(con):
                         ROUND(AVG(o.pnl_r), 4) as avg_r,
                         ROUND(SUM(o.pnl_r), 1) as total_r
                     FROM orb_outcomes o
-                    JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol
+                    JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol AND o.orb_minutes = d.orb_minutes
                     WHERE o.symbol = ? AND o.orb_label = ?
                       AND o.outcome IN ('win', 'loss')
                       AND d.{dir_col} IS NOT NULL

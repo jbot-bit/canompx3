@@ -260,7 +260,7 @@ def load_outcomes(con, instrument, session):
         JOIN daily_features df
             ON oo.symbol = df.symbol
             AND oo.trading_day = df.trading_day
-            AND oo.orb_label = df.orb_label
+            AND oo.orb_minutes = df.orb_minutes
         WHERE oo.symbol = ?
           AND oo.orb_label = ?
           AND oo.entry_model = 'E1'

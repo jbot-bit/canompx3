@@ -161,6 +161,85 @@ def check_broad_except_success() -> list[str]:
 
 # ── Check 4: CLI arg drift (WARNING only) ────────────────────────────
 
+# ── Check 5: Triple-join guard (orb_minutes in daily_features JOIN) ──
+
+# Scan directories for SQL blocks
+TRIPLE_JOIN_SCAN_DIRS = [PROJECT_ROOT / "research", PROJECT_ROOT / "scripts" / "tools", PROJECT_ROOT / "trading_app"]
+
+# Files allowed to contain JOIN daily_features without literal orb_minutes
+# (they define SAFE_JOIN or use it via variable substitution)
+TRIPLE_JOIN_ALLOWLIST_FILES = {
+    "audit_behavioral.py",  # self
+    "query.py",             # defines SAFE_JOIN
+    "edge_hunter.py",       # defines SAFE_JOIN
+    "discover.py",          # uses SAFE_JOIN
+    "multi_instrument_scan.py",  # uses SAFE_JOIN
+    "regime_scan_0900.py",       # uses SAFE_JOIN
+    "research_break_quality_deep.py",  # intentional broken JOIN in audit function
+    "sql_adapter.py",       # docstring mentions JOIN; actual SQL is correct
+}
+TRIPLE_JOIN_ALLOWLIST_DIRS = {"archive", "tests"}
+
+# Regex to extract triple-quoted strings (""" or ''')
+TRIPLE_QUOTE_PATTERN = re.compile(r'(?:"""(.*?)"""|\'\'\'(.*?)\'\'\')', re.DOTALL)
+
+# Regex to detect SQL blocks (contain SQL keywords)
+SQL_KEYWORD_PATTERN = re.compile(r'\b(?:SELECT|INSERT|FROM|JOIN)\b', re.IGNORECASE)
+
+# Regex to detect JOIN daily_features
+JOIN_DF_PATTERN = re.compile(r'\bJOIN\s+daily_features\b', re.IGNORECASE)
+
+
+def _is_triple_join_allowlisted(filepath: Path) -> bool:
+    """Check if file is allowlisted for triple-join guard."""
+    if filepath.name in TRIPLE_JOIN_ALLOWLIST_FILES:
+        return True
+    for d in TRIPLE_JOIN_ALLOWLIST_DIRS:
+        try:
+            filepath.relative_to(PROJECT_ROOT / d)
+            return True
+        except ValueError:
+            pass
+    return False
+
+
+def check_triple_join_guard() -> list[str]:
+    """Detect JOIN daily_features without orb_minutes in the same SQL block.
+
+    Extracts triple-quoted strings, filters to SQL blocks, and checks
+    that any block containing JOIN daily_features also contains orb_minutes.
+    """
+    violations = []
+    for f in _python_files(TRIPLE_JOIN_SCAN_DIRS):
+        if f.resolve() == SELF_PATH or _is_triple_join_allowlisted(f):
+            continue
+        try:
+            text = f.read_text(encoding='utf-8')
+        except (UnicodeDecodeError, PermissionError):
+            continue
+
+        # Extract triple-quoted strings
+        for match in TRIPLE_QUOTE_PATTERN.finditer(text):
+            block = match.group(1) or match.group(2)
+            if not block:
+                continue
+            # Only check SQL blocks
+            if not SQL_KEYWORD_PATTERN.search(block):
+                continue
+            # Check for JOIN daily_features without orb_minutes
+            join_match = JOIN_DF_PATTERN.search(block)
+            if join_match and 'orb_minutes' not in block:
+                # Find approximate line number
+                line_num = text[:match.start()].count('\n') + 1
+                rel = f.relative_to(PROJECT_ROOT)
+                # Extract a short snippet of the JOIN for context
+                snippet = block[max(0, join_match.start() - 20):join_match.end() + 30].strip()
+                snippet = ' '.join(snippet.split())[:80]
+                violations.append(
+                    f"  {rel}:{line_num}: JOIN daily_features without orb_minutes: {snippet}"
+                )
+    return violations
+
 def check_cli_arg_drift() -> list[str]:
     """Detect new CLI args in recent diff with no matching docs/test reference.
 
@@ -214,6 +293,7 @@ CHECKS = [
     ("2. Hardcoded instrument lists", check_hardcoded_instrument_lists, False),
     ("3. Broad except returning success", check_broad_except_success, False),
     ("4. CLI arg drift (warning only)", check_cli_arg_drift, True),  # warning_only
+    ("5. Triple-join guard (orb_minutes in daily_features JOIN)", check_triple_join_guard, False),
 ]
 
 

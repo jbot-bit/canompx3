@@ -88,13 +88,13 @@ def compute_filtered_dst_split(con, instrument, orb_label, entry_model,
         JOIN daily_features df
             ON o.trading_day = df.trading_day
             AND o.symbol    = df.symbol
+            AND o.orb_minutes = df.orb_minutes
         WHERE o.symbol      = $1
           AND o.orb_label   = $2
           AND o.entry_model = $3
           AND o.rr_target   = $4
           AND o.confirm_bars = $5
           AND o.orb_minutes = $6
-          AND df.orb_minutes = $6
           AND o.outcome IN ('win', 'loss')
     """
     rows = con.execute(

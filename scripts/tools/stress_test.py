@@ -129,7 +129,7 @@ def test_1_no_size_filter(con, edge):
                 ROUND(AVG(o.pnl_r), 4) as avg_r,
                 ROUND(SUM(o.pnl_r), 2) as total_r
             FROM orb_outcomes o
-            JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol
+            JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol AND o.orb_minutes = d.orb_minutes
             WHERE o.symbol = ? AND o.orb_label = ? AND o.entry_model = ?
               AND o.confirm_bars = ? AND o.rr_target = ?
               AND o.outcome IN ('win', 'loss')
@@ -265,7 +265,6 @@ def test_3_parameter_sensitivity(con, edge):
     # Assess: how many neighbors are also positive?
     neighbor_count = 0
     positive_neighbors = 0
-    original_r = edge["avg_r"]
 
     for test_cb in cb_vals:
         for test_rr in rr_vals:
@@ -316,7 +315,7 @@ def test_4_long_vs_short(con, edge):
                 ROUND(AVG(o.pnl_r), 4) as avg_r,
                 ROUND(SUM(o.pnl_r), 2) as total_r
             FROM orb_outcomes o
-            JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol
+            JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol AND o.orb_minutes = d.orb_minutes
             WHERE o.symbol = ? AND o.orb_label = ? AND o.entry_model = ?
               AND o.confirm_bars = ? AND o.rr_target = ?
               AND o.outcome IN ('win', 'loss')
@@ -409,7 +408,6 @@ def render_verdict(edge, results):
     tests = list(results.items())
     passed = sum(1 for _, r in tests if r["pass"] is True)
     failed = sum(1 for _, r in tests if r["pass"] is False)
-    unknown = sum(1 for _, r in tests if r["pass"] is None)
     total = len(tests)
 
     label = f"{edge['symbol']} {edge['session']}/{edge['entry_model']}/CB{edge['cb']}/RR{edge['rr']}"
