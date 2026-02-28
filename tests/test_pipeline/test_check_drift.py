@@ -346,3 +346,66 @@ class TestDiscoverySessionAwareFilters:
         from pipeline.check_drift import check_discovery_session_aware_filters
         violations = check_discovery_session_aware_filters()
         assert len(violations) == 0
+
+
+class TestNoActiveE3:
+    """Tests for check #39: no active E3 strategies in validated_setups."""
+
+    def test_catches_active_e3(self, tmp_path, monkeypatch):
+        """Active E3 row triggers violation."""
+        import duckdb
+        from pipeline import check_drift
+        from pipeline.check_drift import check_no_active_e3
+
+        db_path = tmp_path / "test.db"
+        con = duckdb.connect(str(db_path))
+        con.execute("""
+            CREATE TABLE validated_setups (
+                strategy_id VARCHAR PRIMARY KEY,
+                instrument VARCHAR,
+                entry_model VARCHAR,
+                status VARCHAR,
+                retired_at TIMESTAMPTZ,
+                retirement_reason VARCHAR,
+                fdr_significant BOOLEAN
+            )
+        """)
+        con.execute("""
+            INSERT INTO validated_setups VALUES
+                ('E3_MGC_1', 'MGC', 'E3', 'active', NULL, NULL, FALSE)
+        """)
+        con.close()
+
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_no_active_e3()
+        assert len(violations) == 1
+        assert "active E3" in violations[0]
+
+    def test_passes_retired_e3(self, tmp_path, monkeypatch):
+        """Retired E3 row does not trigger violation."""
+        import duckdb
+        from pipeline import check_drift
+        from pipeline.check_drift import check_no_active_e3
+
+        db_path = tmp_path / "test.db"
+        con = duckdb.connect(str(db_path))
+        con.execute("""
+            CREATE TABLE validated_setups (
+                strategy_id VARCHAR PRIMARY KEY,
+                instrument VARCHAR,
+                entry_model VARCHAR,
+                status VARCHAR,
+                retired_at TIMESTAMPTZ,
+                retirement_reason VARCHAR,
+                fdr_significant BOOLEAN
+            )
+        """)
+        con.execute("""
+            INSERT INTO validated_setups VALUES
+                ('E3_MGC_1', 'MGC', 'E3', 'RETIRED', '2026-02-28', 'test', FALSE)
+        """)
+        con.close()
+
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_no_active_e3()
+        assert len(violations) == 0

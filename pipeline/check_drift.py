@@ -24,6 +24,9 @@ PIPELINE_DIR = PROJECT_ROOT / "pipeline"
 TRADING_APP_DIR = PROJECT_ROOT / "trading_app"
 SCRIPTS_DIR = PROJECT_ROOT / "scripts"
 
+# Module-level override for tests; production uses GOLD_DB_PATH from pipeline.paths
+GOLD_DB_PATH_FOR_CHECKS = None  # Set by tests; production uses GOLD_DB_PATH
+
 # =============================================================================
 # FILES TO CHECK
 # =============================================================================
@@ -1670,6 +1673,40 @@ def check_sql_adapter_validation_sync() -> list[str]:
     return violations
 
 
+def check_no_active_e3() -> list[str]:
+    """Check #39: No active E3 strategies in validated_setups.
+
+    E3 (retrace limit entry) was soft-retired Feb 2026: 0/50 FDR-significant,
+    no timeout mechanism (100% fill rate = late garbage included).
+    """
+    violations = []
+    try:
+        import duckdb
+
+        db_path = GOLD_DB_PATH_FOR_CHECKS
+        if db_path is None:
+            from pipeline.paths import GOLD_DB_PATH
+            db_path = GOLD_DB_PATH
+        if not Path(db_path).exists():
+            return violations  # Skip if no DB (CI)
+        con = duckdb.connect(str(db_path), read_only=True)
+        try:
+            count = con.execute(
+                "SELECT COUNT(*) FROM validated_setups "
+                "WHERE entry_model = 'E3' AND status = 'active'"
+            ).fetchone()[0]
+            if count > 0:
+                violations.append(
+                    f"  validated_setups: {count} active E3 strategies "
+                    f"(soft-retired Feb 2026)"
+                )
+        finally:
+            con.close()
+    except Exception:
+        pass  # DB may not exist in CI
+    return violations
+
+
 # =============================================================================
 # CHECK REGISTRY — single source of truth for all drift checks
 # =============================================================================
@@ -1753,6 +1790,8 @@ CHECKS = [
      check_stale_scratch_db),
     ("No old session names in active code",
      check_old_session_names),
+    ("No active E3 strategies (soft-retired Feb 2026)",
+     check_no_active_e3),
 ]
 
 
