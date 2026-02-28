@@ -41,7 +41,7 @@ elif [ -f "$SCRIPT_DIR/.venv/bin/python" ]; then
 fi
 
 # 0. Ruff lint check (~1 second)
-echo "[0/3] Ruff lint..."
+echo "[0/4] Ruff lint..."
 RUFF="ruff"
 if [ -f "$SCRIPT_DIR/venv/Scripts/ruff.exe" ]; then
     RUFF="$SCRIPT_DIR/venv/Scripts/ruff.exe"
@@ -56,7 +56,7 @@ fi
 echo "  PASSED"
 
 # 1. Drift check (~2 seconds)
-echo "[1/3] Drift check..."
+echo "[1/4] Drift check..."
 if ! "$PYTHON" pipeline/check_drift.py > /dev/null 2>&1; then
     echo "BLOCKED: Drift detected."
     "$PYTHON" pipeline/check_drift.py
@@ -67,7 +67,7 @@ echo "  PASSED"
 # 2. Fast tests — all Tier 1 tests except slow integration/paper_trader
 # Use -n 4 (not -n auto/32): reduces Windows resource pressure from parallel
 # DuckDB imports and test I/O. Higher counts cause intermittent failures.
-echo "[2/3] Fast tests..."
+echo "[2/4] Fast tests..."
 TEST_OUTPUT=$("$PYTHON" -m pytest "$SCRIPT_DIR/tests/" --ignore="$SCRIPT_DIR/tests/test_trader_logic.py" --ignore="$SCRIPT_DIR/tests/test_trading_app/test_integration.py" --ignore="$SCRIPT_DIR/tests/test_trading_app/test_paper_trader.py" --ignore="$SCRIPT_DIR/tests/test_tools/" -x -q -n 4 --dist loadscope 2>&1) || true
 TEST_EXIT=${PIPESTATUS[0]:-$?}
 echo "$TEST_OUTPUT" | tail -5
@@ -76,8 +76,17 @@ if [ "$TEST_EXIT" -ne 0 ]; then
     exit 1
 fi
 
-# 3. Syntax check on staged .py files
-echo "[3/3] Syntax check..."
+# 3. Behavioral audit (~1 second)
+echo "[3/4] Behavioral audit..."
+if ! "$PYTHON" scripts/tools/audit_behavioral.py > /dev/null 2>&1; then
+    echo "BLOCKED: Behavioral audit violations detected."
+    "$PYTHON" scripts/tools/audit_behavioral.py
+    exit 1
+fi
+echo "  PASSED"
+
+# 4. Syntax check on staged .py files
+echo "[4/4] Syntax check..."
 STAGED_PY=$(git diff --cached --name-only --diff-filter=ACM | grep '\.py$' || true)
 if [ -n "$STAGED_PY" ]; then
     for f in $STAGED_PY; do

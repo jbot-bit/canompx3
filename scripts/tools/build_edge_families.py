@@ -20,6 +20,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 import duckdb
 
+from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.db_manager import compute_trade_day_hash
 from trading_app.config import CORE_MIN_SAMPLES, REGIME_MIN_SAMPLES
@@ -351,7 +352,7 @@ def main():
 
     if args.all:
         total = 0
-        for inst in ["MGC", "MNQ", "MES", "M2K"]:
+        for inst in ACTIVE_ORB_INSTRUMENTS:
             total += build_edge_families(args.db_path, inst)
             print()
         print(f"Grand total: {total} unique edge families")

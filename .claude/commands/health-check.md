@@ -7,17 +7,22 @@ Run these checks:
 python pipeline/check_drift.py
 ```
 
-2. Data integrity audit (17 checks):
+2. Data integrity audit (check count self-reported at runtime):
 ```bash
 python scripts/tools/audit_integrity.py
 ```
 
-3. Fast test suite (stop on first failure):
+3. Behavioral audit (anti-pattern scanner):
+```bash
+python scripts/tools/audit_behavioral.py
+```
+
+4. Fast test suite (stop on first failure):
 ```bash
 python -m pytest tests/ -x -q
 ```
 
-4. Pipeline health check (runs all of the above + deps/DB/hooks):
+5. Pipeline health check (runs all of the above + deps/DB/hooks):
 ```bash
 python pipeline/health_check.py
 ```

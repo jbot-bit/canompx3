@@ -24,8 +24,11 @@ jobs:
       - name: Ruff lint check
         run: ruff check pipeline/ trading_app/
 
-      - name: Drift check (30 static analysis checks)
+      - name: Drift check (static analysis)
         run: python pipeline/check_drift.py
+
+      - name: Behavioral audit
+        run: python scripts/tools/audit_behavioral.py
 
       - name: Check file encoding (UTF-8)
         run: |
