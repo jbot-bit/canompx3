@@ -75,7 +75,9 @@ def run_stress_test(instrument: str | None = None):
             for mult in SLIPPAGE_MULTIPLIERS:
                 stressed = stress_test_costs(cost_spec, mult)
                 extra_friction = stressed.total_friction - base_friction
-                # extra_friction is in dollars; convert to R using avg_risk_dollars
+                # NOTE: stress_test_costs() scales ALL friction (commission + spread + slippage).
+                # This is a whole-friction stress test, not slippage-only.
+                # Conservative — real slippage-only stress would show less degradation.
 
                 adjusted_exp_r_list = []
                 for sid, orb_label, n, wr, exp_r, sharpe, avg_risk_d in strategies:
@@ -93,7 +95,8 @@ def run_stress_test(instrument: str | None = None):
                 pct_positive = sum(1 for e in adjusted_exp_r_list if e > 0) / len(adjusted_exp_r_list)
 
                 # Winrate doesn't change with slippage (same entry/exit, different accounting)
-                avg_wr = sum(s[3] for s in strategies if s[3]) / len(strategies)
+                valid_wrs = [s[3] for s in strategies if s[3] is not None]
+                avg_wr = sum(valid_wrs) / len(valid_wrs) if valid_wrs else 0
 
                 print(
                     f"  {mult:>10.1f}x | ${stressed.total_friction:>8.2f} | "
