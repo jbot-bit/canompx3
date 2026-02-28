@@ -1,41 +1,38 @@
 #!/usr/bin/env python3
 """
-Rolling Portfolio Assembly -- final strategy allocation.
+Rolling Portfolio Assembly -- multi-instrument strategy allocation.
 
-Logic is LOCKED:
-  CME_REOPEN = Fixed Target (2.0R)
-  TOKYO_OPEN = Target Unlock (IB-aligned hold 7h, opposed kill)
-  SINGAPORE_OPEN = Dead
-  Pyramiding = OFF
+For each instrument, identifies the best edge family per session (session slots),
+runs rolling 12-month window analysis, and classifies each slot as
+STABLE / TRANSITIONING / DEGRADED.
 
-This script:
-  1. Simulates both strategies across the full date range
-  2. Slices into rolling 12m windows (monthly step)
-  3. Computes per-window Sharpe for each session
-  4. Classifies STABLE / TRANSITIONING / DEGRADED
-  5. Outputs TRADING_PLAN.md with position sizing rules
+Position sizing follows classification:
+  STABLE = full size, TRANSITIONING = half, DEGRADED = off.
+
+Outputs TRADING_PLAN.md with per-instrument, per-session sizing rules.
 
 Read-only. No DB writes.
 
 Usage:
-    python scripts/rolling_portfolio_assembly.py --db-path C:/db/gold.db
+    python scripts/tools/rolling_portfolio_assembly.py                    # MGC only (default)
+    python scripts/tools/rolling_portfolio_assembly.py --instrument MNQ   # single instrument
+    python scripts/tools/rolling_portfolio_assembly.py --all              # all 4 instruments
 """
 
 import argparse
 import sys
 import time
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
-import duckdb
-import numpy as np
 import pandas as pd
+import duckdb
 from dateutil.relativedelta import relativedelta
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
-from pipeline.build_daily_features import compute_trading_day_utc_range
-from pipeline.cost_model import get_cost_spec, to_r_multiple
+from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+from pipeline.cost_model import get_cost_spec
 from pipeline.paths import GOLD_DB_PATH
 from research._alt_strategy_utils import compute_strategy_metrics
 
@@ -44,456 +41,426 @@ sys.stdout.reconfigure(line_buffering=True)
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-MIN_ORB_SIZE = 4.0
-RR_TARGET = 2.0
-CONFIRM_BARS = 2
-HOLD_HOURS = 7
-
-SESSION_UTC = {"CME_REOPEN": 23, "TOKYO_OPEN": 0}
-MARKET_OPEN_UTC_HOUR = 23
-
-# IB config per session (locked from research)
-SESSION_IB = {
-    "CME_REOPEN": ("session", 120),
-    "TOKYO_OPEN": ("mktopen", 120),
-}
-
-SPEC = get_cost_spec("MGC")
-
-# Rolling window
 WINDOW_MONTHS = 12
 STEP_MONTHS = 1
+MIN_WINDOW_TRADES = 5
 
 # Classification thresholds
 STABLE_SHARPE = 0.10
 DEGRADED_SHARPE = 0.0
 
-# ---------------------------------------------------------------------------
-# IB functions (from analyze_trend_holding.py)
-# ---------------------------------------------------------------------------
-
-def compute_ib(ts, highs, lows, anchor_utc_hour, duration_minutes):
-    hours = np.array([t.hour for t in ts])
-    minutes = np.array([t.minute for t in ts])
-    anchor_idx = np.flatnonzero((hours == anchor_utc_hour) & (minutes == 0))
-    if len(anchor_idx) == 0:
-        return None
-    ib_start = ts[anchor_idx[0]]
-    ib_end = ib_start + timedelta(minutes=duration_minutes)
-    ib_mask = (ts >= ib_start) & (ts < ib_end)
-    if ib_mask.sum() < max(10, duration_minutes // 12):
-        return None
-    return {
-        "ib_high": float(highs[ib_mask].max()),
-        "ib_low": float(lows[ib_mask].min()),
-        "ib_end": ib_end,
-    }
-
-def find_ib_break(ts, highs, lows, ib):
-    post_idx = np.flatnonzero(ts >= ib["ib_end"])
-    for i in post_idx:
-        bh = highs[i] > ib["ib_high"]
-        bl = lows[i] < ib["ib_low"]
-        if bh and bl:
-            return None, ts[i], i
-        if bh:
-            return "long", ts[i], i
-        if bl:
-            return "short", ts[i], i
-    return None, None, None
+SIZING = {
+    "STABLE": "Full (1.0x)",
+    "TRANSITIONING": "Half (0.5x)",
+    "DEGRADED": "OFF (0x)",
+}
 
 # ---------------------------------------------------------------------------
-# Target unlock simulation (1000 exploit)
+# Data loading — edge family session slots
 # ---------------------------------------------------------------------------
 
-def sim_exploit(ts, highs, lows, closes, entry_idx, entry_price,
-                stop_price, target_price, is_long, cutoff_ts,
-                ib_break_dir, ib_break_idx, orb_dir):
-    """Honest bar-by-bar: limbo target -> aligned hold / opposed kill."""
-    alignment_known = False
-    alignment = None
+def load_slot_data(db_path, instrument):
+    """Load session slot heads and their trade outcomes.
 
-    for i in range(entry_idx, len(ts)):
-        h, lo, c = highs[i], lows[i], closes[i]
+    A "session slot" is the best edge family per (instrument, session),
+    ranked by annualized Sharpe then trade count.
 
-        # Stop always active
-        if is_long and lo <= stop_price:
-            return to_r_multiple(SPEC, entry_price, stop_price,
-                                 stop_price - entry_price), "stop"
-        if not is_long and h >= stop_price:
-            return to_r_multiple(SPEC, entry_price, stop_price,
-                                 entry_price - stop_price), "stop"
-
-        if not alignment_known:
-            # Limbo: fixed target active
-            if is_long and h >= target_price:
-                return to_r_multiple(SPEC, entry_price, stop_price,
-                                     target_price - entry_price), "limbo_target"
-            if not is_long and lo <= target_price:
-                return to_r_multiple(SPEC, entry_price, stop_price,
-                                     entry_price - target_price), "limbo_target"
-
-            if ib_break_idx is not None and i >= ib_break_idx:
-                alignment_known = True
-                if ib_break_dir is None:
-                    alignment = "no_break"
-                elif ib_break_dir == orb_dir:
-                    alignment = "aligned"
-                else:
-                    alignment = "opposed"
-                    pnl = (c - entry_price) if is_long else (entry_price - c)
-                    return to_r_multiple(SPEC, entry_price, stop_price, pnl), "opposed_kill"
-                continue
-
-            if ts[i] >= cutoff_ts:
-                pnl = (c - entry_price) if is_long else (entry_price - c)
-                return to_r_multiple(SPEC, entry_price, stop_price, pnl), "limbo_time"
-            continue
-
-        # Post-alignment
-        if alignment == "aligned":
-            if ts[i] >= cutoff_ts:
-                pnl = (c - entry_price) if is_long else (entry_price - c)
-                return to_r_multiple(SPEC, entry_price, stop_price, pnl), "time_7h"
-            continue
-
-        # no_break: keep fixed target
-        if is_long and h >= target_price:
-            return to_r_multiple(SPEC, entry_price, stop_price,
-                                 target_price - entry_price), "nobreak_target"
-        if not is_long and lo <= target_price:
-            return to_r_multiple(SPEC, entry_price, stop_price,
-                                 entry_price - target_price), "nobreak_target"
-        if ts[i] >= cutoff_ts:
-            pnl = (c - entry_price) if is_long else (entry_price - c)
-            return to_r_multiple(SPEC, entry_price, stop_price, pnl), "nobreak_time"
-
-    c = closes[-1]
-    pnl = (c - entry_price) if is_long else (entry_price - c)
-    return to_r_multiple(SPEC, entry_price, stop_price, pnl), "eod"
-
-# ---------------------------------------------------------------------------
-# Load and simulate
-# ---------------------------------------------------------------------------
-
-def load_and_simulate(db_path, session_label, start, end):
-    """Run both fixed-target and exploit for all trades. Returns DataFrame."""
-    session_utc_hour = SESSION_UTC[session_label]
-    anchor, duration = SESSION_IB[session_label]
-    anchor_hour = session_utc_hour if anchor == "session" else MARKET_OPEN_UTC_HOUR
-
+    Returns:
+        slots: list of dicts with slot metadata
+        session_trades: dict[session -> DataFrame(trading_day, pnl_r)]
+    """
     con = duckdb.connect(str(db_path), read_only=True)
-    df = con.execute(f"""
-        SELECT o.trading_day, o.entry_ts, o.entry_price, o.stop_price,
-               o.target_price, o.pnl_r,
-               d.orb_{session_label}_break_dir
-        FROM orb_outcomes o
-        JOIN daily_features d
-            ON o.symbol = d.symbol AND o.trading_day = d.trading_day AND d.orb_minutes = 5
-        WHERE o.symbol = 'MGC' AND o.orb_minutes = 5
-          AND o.orb_label = ? AND o.entry_model = 'E1'
-          AND o.rr_target = ? AND o.confirm_bars = ?
-          AND o.entry_ts IS NOT NULL AND o.outcome IS NOT NULL
-          AND o.pnl_r IS NOT NULL AND d.orb_{session_label}_size >= ?
-          AND o.trading_day BETWEEN ? AND ?
-        ORDER BY o.trading_day
-    """, [session_label, RR_TARGET, CONFIRM_BARS, MIN_ORB_SIZE, start, end]).fetchdf()
-    df["entry_ts"] = pd.to_datetime(df["entry_ts"], utc=True)
+    try:
+        # Step 1: Find slot heads (best family per session)
+        slot_rows = con.execute("""
+            WITH ranked AS (
+                SELECT ef.instrument,
+                       vs.orb_label AS session,
+                       ef.head_strategy_id,
+                       ef.head_expectancy_r,
+                       ef.head_sharpe_ann,
+                       ef.trade_day_count,
+                       ef.trade_tier,
+                       ef.member_count,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY ef.instrument, vs.orb_label
+                           ORDER BY ef.head_sharpe_ann DESC,
+                                    ef.trade_day_count DESC
+                       ) AS rn
+                FROM edge_families ef
+                JOIN validated_setups vs ON ef.head_strategy_id = vs.strategy_id
+                WHERE ef.robustness_status IN ('ROBUST', 'WHITELISTED', 'SINGLETON')
+                  AND ef.instrument = ?
+            )
+            SELECT instrument, session, head_strategy_id,
+                   head_expectancy_r, head_sharpe_ann,
+                   trade_day_count, trade_tier, member_count
+            FROM ranked WHERE rn = 1
+            ORDER BY head_sharpe_ann DESC
+        """, [instrument]).fetchall()
 
-    # Bulk-load bars
-    unique_days = sorted(df["trading_day"].unique())
-    bars_cache = {}
-    for td in unique_days:
-        s, e = compute_trading_day_utc_range(td)
-        b = con.execute(
-            "SELECT ts_utc, high, low, close FROM bars_1m "
-            "WHERE symbol='MGC' AND ts_utc>=? AND ts_utc<? ORDER BY ts_utc",
-            [s, e],
-        ).fetchdf()
-        if not b.empty:
-            b["ts_utc"] = pd.to_datetime(b["ts_utc"], utc=True)
-            ts_raw = b["ts_utc"].values.astype("datetime64[ms]")
-            ts_py = np.array([pd.Timestamp(t).to_pydatetime().replace(tzinfo=None)
-                              for t in ts_raw])
-            bars_cache[td] = (ts_py, ts_raw,
-                              b["high"].values.astype(np.float64),
-                              b["low"].values.astype(np.float64),
-                              b["close"].values.astype(np.float64))
-    con.close()
+        slot_cols = [
+            "instrument", "session", "head_strategy_id",
+            "head_expectancy_r", "head_sharpe_ann",
+            "trade_day_count", "trade_tier", "member_count",
+        ]
+        slots = [dict(zip(slot_cols, r)) for r in slot_rows]
 
-    rows = []
-    for _, row in df.iterrows():
-        td = row["trading_day"]
-        if td not in bars_cache:
-            continue
+        if not slots:
+            return [], {}
 
-        ts_py, ts_raw, h_arr, l_arr, c_arr = bars_cache[td]
-        entry_ts_aware = row["entry_ts"].to_pydatetime()
-        entry_ts = entry_ts_aware.replace(tzinfo=None)
-        entry_p = float(row["entry_price"])
-        stop_p = float(row["stop_price"])
-        target_p = float(row["target_price"])
-        orb_dir = row[f"orb_{session_label}_break_dir"]
-        is_long = orb_dir == "long"
+        # Step 2: Load trades for all slot heads
+        strategy_ids = [s["head_strategy_id"] for s in slots]
+        placeholders = ", ".join(["?"] * len(strategy_ids))
 
-        entry_idx = int(np.searchsorted(ts_raw, np.datetime64(entry_ts_aware, "ms")))
-        if entry_idx >= len(ts_py):
-            continue
+        trade_df = con.execute(f"""
+            SELECT vs.orb_label AS session,
+                   oo.trading_day,
+                   oo.pnl_r
+            FROM validated_setups vs
+            JOIN strategy_trade_days std ON vs.strategy_id = std.strategy_id
+            JOIN orb_outcomes oo
+              ON oo.symbol = vs.instrument
+              AND oo.orb_label = vs.orb_label
+              AND oo.orb_minutes = vs.orb_minutes
+              AND oo.entry_model = vs.entry_model
+              AND oo.rr_target = vs.rr_target
+              AND oo.confirm_bars = vs.confirm_bars
+              AND oo.trading_day = std.trading_day
+            WHERE vs.strategy_id IN ({placeholders})
+              AND oo.outcome IN ('win', 'loss')
+              AND oo.pnl_r IS NOT NULL
+            ORDER BY vs.orb_label, oo.trading_day
+        """, strategy_ids).fetchdf()
 
-        cutoff = entry_ts + timedelta(hours=HOLD_HOURS)
+        # Group by session
+        session_trades = {}
+        if not trade_df.empty:
+            for session in trade_df["session"].unique():
+                mask = trade_df["session"] == session
+                sdf = trade_df[mask][["trading_day", "pnl_r"]].copy()
+                sdf = sdf.sort_values("trading_day").reset_index(drop=True)
+                session_trades[session] = sdf
 
-        # Fixed target: use stored pnl_r
-        fixed_pnl = float(row["pnl_r"])
+        return slots, session_trades
+    finally:
+        con.close()
 
-        # Exploit: simulate if we have IB
-        exploit_pnl = fixed_pnl  # default: same as fixed if no IB
-        ib = compute_ib(ts_py, h_arr, l_arr, anchor_hour, duration)
-        if ib is not None:
-            ib_dir, _, ib_break_idx = find_ib_break(ts_py, h_arr, l_arr, ib)
-            exploit_pnl, _ = sim_exploit(
-                ts_py, h_arr, l_arr, c_arr, entry_idx, entry_p, stop_p,
-                target_p, is_long, cutoff, ib_dir, ib_break_idx, orb_dir)
-
-        rows.append({
-            "trading_day": td,
-            "year": td.year if hasattr(td, "year") else int(str(td)[:4]),
-            "month": td.month if hasattr(td, "month") else int(str(td)[5:7]),
-            "fixed_pnl": fixed_pnl,
-            "exploit_pnl": exploit_pnl,
-        })
-
-    return pd.DataFrame(rows)
 
 # ---------------------------------------------------------------------------
 # Rolling window analysis
 # ---------------------------------------------------------------------------
 
-def rolling_windows(trade_df, strategy_col, data_start, data_end):
-    """Compute rolling 12m window metrics. Returns list of dicts."""
+def rolling_windows(trade_df, data_start, data_end):
+    """Compute rolling 12m window metrics."""
     windows = []
-    # First test window starts WINDOW_MONTHS after data start
-    first_test = date(data_start.year, data_start.month, 1) + relativedelta(months=WINDOW_MONTHS)
+    first_test = date(data_start.year, data_start.month, 1) + relativedelta(
+        months=WINDOW_MONTHS
+    )
     current = first_test
 
     while current <= data_end:
         w_start = current - relativedelta(months=WINDOW_MONTHS)
         w_end = current - relativedelta(days=1)
-        w_label = f"{w_start.isoformat()} to {w_end.isoformat()}"
-
-        mask = (trade_df["trading_day"] >= pd.Timestamp(w_start)) & (trade_df["trading_day"] <= pd.Timestamp(w_end))
+        mask = (trade_df["trading_day"] >= pd.Timestamp(w_start)) & (
+            trade_df["trading_day"] <= pd.Timestamp(w_end)
+        )
         window_trades = trade_df[mask]
 
-        if len(window_trades) >= 5:
-            pnls = window_trades[strategy_col].values
-            m = compute_strategy_metrics(pnls)
-            windows.append({
-                "start": w_start,
-                "end": w_end,
-                "label": w_label,
-                "n": m["n"],
-                "wr": m["wr"],
-                "expr": m["expr"],
-                "sharpe": m["sharpe"],
-                "total": m["total"],
-            })
+        if len(window_trades) >= MIN_WINDOW_TRADES:
+            m = compute_strategy_metrics(window_trades["pnl_r"].values)
+            if m is not None:
+                windows.append({
+                    "start": w_start,
+                    "end": w_end,
+                    "label": f"{w_start} to {w_end}",
+                    **m,
+                })
 
         current += relativedelta(months=STEP_MONTHS)
 
     return windows
 
+
 def classify_windows(windows, n_recent=6):
-    """Classify strategy based on recent window performance."""
-    if len(windows) == 0:
+    """Classify: STABLE / TRANSITIONING / DEGRADED."""
+    if not windows:
         return "DEGRADED", 0, 0
 
-    recent = windows[-n_recent:] if len(windows) >= n_recent else windows
+    recent = windows[-n_recent:]
     n_stable = sum(1 for w in recent if w["sharpe"] >= STABLE_SHARPE)
     n_positive = sum(1 for w in recent if w["sharpe"] > DEGRADED_SHARPE)
     n_total = len(recent)
 
     if n_stable >= n_total * 0.6:
         return "STABLE", n_stable, n_total
-    elif n_positive >= n_total * 0.5:
+    if n_positive >= n_total * 0.5:
         return "TRANSITIONING", n_positive, n_total
-    else:
-        return "DEGRADED", n_positive, n_total
+    return "DEGRADED", n_positive, n_total
+
 
 # ---------------------------------------------------------------------------
-# Report + TRADING_PLAN.md generation
+# Per-instrument processing
 # ---------------------------------------------------------------------------
 
-def run(db_path, start, end):
-    print("Rolling Portfolio Assembly")
-    print(f"Date range: {start} to {end}")
-    print(f"Window: {WINDOW_MONTHS}m rolling, {STEP_MONTHS}m step")
-    print(f"Classification: STABLE >= {STABLE_SHARPE} Sharpe in 60%+ of last 6 windows")
-    print()
+def process_instrument(db_path, instrument):
+    """Run rolling analysis on all session slots for an instrument."""
+    spec = get_cost_spec(instrument)
 
-    session_results = {}
+    print(f"\n{'='*80}")
+    print(f"  {instrument}  (${spec.point_value}/pt, ${spec.total_friction:.2f} RT)")
+    print(f"{'='*80}")
 
-    for session, strategy_col, strategy_name in [
-        ("CME_REOPEN", "fixed_pnl", "Fixed Target"),
-        ("TOKYO_OPEN", "exploit_pnl", "Target Unlock"),
-    ]:
-        print(f"Processing {session} ({strategy_name})...")
-        t0 = time.time()
-        tdf = load_and_simulate(db_path, session, start, end)
-        elapsed = time.time() - t0
-        print(f"  {len(tdf)} trades in {elapsed:.1f}s")
+    slots, session_trades = load_slot_data(db_path, instrument)
 
-        if len(tdf) == 0:
-            session_results[session] = {
+    if not slots:
+        print("  No active session slots.")
+        return {}
+
+    results = {}
+
+    for slot in slots:
+        session = slot["session"]
+        head_id = slot["head_strategy_id"]
+        tier = slot["trade_tier"]
+        tdf = session_trades.get(session, pd.DataFrame())
+
+        print(f"\n  {session} [{head_id}]")
+        print(f"  {len(tdf)} trades | tier={tier} | families={slot['member_count']}")
+
+        if tdf.empty:
+            results[session] = {
                 "classification": "DEGRADED",
-                "strategy": strategy_name,
+                "head_id": head_id,
+                "tier": tier,
                 "windows": [],
-                "tdf": tdf,
+                "n_pass": 0,
+                "n_total": 0,
+                "full_metrics": None,
+                "slot": slot,
             }
+            print("  >> DEGRADED (no trades)")
             continue
 
+        # Date range
         td_min = tdf["trading_day"].min()
         td_max = tdf["trading_day"].max()
-        # Convert pandas Timestamp to date if needed
-        if hasattr(td_min, "date"):
-            td_min = td_min.date() if callable(td_min.date) else td_min
-        if hasattr(td_max, "date"):
-            td_max = td_max.date() if callable(td_max.date) else td_max
-        windows = rolling_windows(tdf, strategy_col, td_min, td_max)
-        classification, n_pass, n_total = classify_windows(windows)
+        if hasattr(td_min, "date") and callable(td_min.date):
+            td_min = td_min.date()
+        if hasattr(td_max, "date") and callable(td_max.date):
+            td_max = td_max.date()
 
-        session_results[session] = {
+        windows = rolling_windows(tdf, td_min, td_max)
+        classification, n_pass, n_total = classify_windows(windows)
+        full_m = compute_strategy_metrics(tdf["pnl_r"].values)
+
+        results[session] = {
             "classification": classification,
-            "strategy": strategy_name,
+            "head_id": head_id,
+            "tier": tier,
             "windows": windows,
-            "tdf": tdf,
             "n_pass": n_pass,
             "n_total": n_total,
-            "strategy_col": strategy_col,
+            "full_metrics": full_m,
+            "slot": slot,
         }
 
-        # Print window details
-        print(f"\n  {'Window':28s} {'N':>4s} {'WR':>6s} {'ExpR':>8s} "
-              f"{'Sharpe':>8s} {'Total':>7s} {'Status':>12s}")
-        print(f"  {'-'*28} {'-'*4} {'-'*6} {'-'*8} {'-'*8} {'-'*7} {'-'*12}")
+        # Print window table
+        if windows:
+            print(
+                f"\n  {'Window':28s} {'N':>4s} {'WR':>6s} {'ExpR':>8s} "
+                f"{'Sharpe':>8s} {'Total':>7s} {'Status':>12s}"
+            )
+            print(
+                f"  {'-'*28} {'-'*4} {'-'*6} {'-'*8} {'-'*8} {'-'*7} {'-'*12}"
+            )
 
-        for w in windows:
-            status = "STABLE" if w["sharpe"] >= STABLE_SHARPE else (
-                "positive" if w["sharpe"] > 0 else "negative")
-            print(f"  {w['label']:28s} {w['n']:>4d} {w['wr']:>5.1%} "
-                  f"{w['expr']:>+8.4f} {w['sharpe']:>8.4f} {w['total']:>+7.1f} "
-                  f"{status:>12s}")
+            for w in windows:
+                status = (
+                    "STABLE"
+                    if w["sharpe"] >= STABLE_SHARPE
+                    else "positive" if w["sharpe"] > 0 else "negative"
+                )
+                print(
+                    f"  {w['label']:28s} {w['n']:>4d} {w['wr']:>5.1%} "
+                    f"{w['expr']:>+8.4f} {w['sharpe']:>8.4f} {w['total']:>+7.1f} "
+                    f"{status:>12s}"
+                )
 
-        # Summary
-        full_m = compute_strategy_metrics(tdf[strategy_col].values)
-        print(f"\n  FULL PERIOD: N={full_m['n']} WR={full_m['wr']:.1%} "
-              f"ExpR={full_m['expr']:+.4f} Sharpe={full_m['sharpe']:.4f} "
-              f"Total={full_m['total']:+.1f}")
-        print(f"  CLASSIFICATION: {classification} "
-              f"({n_pass}/{n_total} recent windows >= {STABLE_SHARPE} Sharpe)")
+        if full_m:
+            print(
+                f"\n  FULL: N={full_m['n']} WR={full_m['wr']:.1%} "
+                f"ExpR={full_m['expr']:+.4f} Sharpe={full_m['sharpe']:.4f} "
+                f"Total={full_m['total']:+.1f}"
+            )
+        print(f"  >> {classification} ({n_pass}/{n_total} recent windows)")
 
-    # --- Generate TRADING_PLAN.md ---
-    print(f"\n{'=' * 90}")
-    print("TRADING PLAN")
-    print(f"{'=' * 90}")
+    return results
 
-    plan_lines = [
+
+# ---------------------------------------------------------------------------
+# TRADING_PLAN.md
+# ---------------------------------------------------------------------------
+
+def generate_trading_plan(all_results):
+    """Write multi-instrument TRADING_PLAN.md."""
+    today = date.today().isoformat()
+
+    lines = [
         "# TRADING PLAN",
-        f"",
-        f"Generated: 2026-02-13",
-        f"Data: {start} to {end} | Cost model: MGC ($10/pt, $8.40 RT)",
-        f"Rolling window: {WINDOW_MONTHS}m | Classification threshold: Sharpe >= {STABLE_SHARPE}",
-        f"",
-        f"## Session Logic (LOCKED)",
-        f"",
-        f"| Session | Logic | Status | Rationale |",
-        f"|---------|-------|--------|-----------|",
+        "",
+        f"Generated: {today}",
+        (
+            f"Rolling window: {WINDOW_MONTHS}m | Classification: "
+            f"STABLE >= {STABLE_SHARPE} Sharpe in 60%+ of last 6 windows"
+        ),
+        "",
+        "## Portfolio Overview",
+        "",
+        (
+            "| Instrument | Session | Head Strategy | Status | Size "
+            "| N | ExpR | Sharpe(ann) |"
+        ),
+        (
+            "|-----------|---------|---------------|--------|------"
+            "|---|------|-------------|"
+        ),
     ]
 
-    for session in ["CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN"]:
-        if session == "SINGAPORE_OPEN":
-            plan_lines.append(
-                f"| {session} | OFF | DEAD | 74% double-break, IB/ORB tautology |")
+    total_slots = 0
+    active_slots = 0
+
+    for instrument in sorted(all_results.keys()):
+        for session in sorted(all_results[instrument].keys()):
+            sr = all_results[instrument][session]
+            cls = sr["classification"]
+            sizing = SIZING[cls]
+            head_id = sr["head_id"]
+            slot = sr.get("slot", {})
+            fm = sr.get("full_metrics") or {}
+            n = fm.get("n", 0)
+            expr = slot.get("head_expectancy_r", 0) or 0
+            sha = slot.get("head_sharpe_ann", 0) or 0
+            tier = sr.get("tier", "")
+            tier_tag = f" [{tier}]" if tier and tier != "CORE" else ""
+
+            lines.append(
+                f"| {instrument} | {session} | `{head_id}`{tier_tag} | "
+                f"{cls} | {sizing} | {n} | {expr:+.3f} | {sha:.2f} |"
+            )
+            total_slots += 1
+            if cls != "DEGRADED":
+                active_slots += 1
+
+    lines.extend(["", f"**Active: {active_slots}/{total_slots} session slots**", ""])
+
+    # Per-instrument detail
+    for instrument in sorted(all_results.keys()):
+        inst_results = all_results[instrument]
+        if not inst_results:
             continue
 
-        sr = session_results[session]
-        plan_lines.append(
-            f"| {session} | {sr['strategy']} | {sr['classification']} | "
-            f"{sr.get('n_pass', 0)}/{sr.get('n_total', 0)} recent windows pass |")
+        spec = get_cost_spec(instrument)
+        lines.extend([
+            f"## {instrument} (${spec.point_value}/pt, ${spec.total_friction:.2f} RT)",
+            "",
+        ])
 
-    plan_lines.extend([
-        f"",
-        f"## Position Sizing Rules",
-        f"",
+        for session in sorted(inst_results.keys()):
+            sr = inst_results[session]
+            cls = sr["classification"]
+            sizing = SIZING[cls]
+            lines.append(f"- **{session}**: {cls} -> {sizing}")
+            lines.append(f"  - Head: `{sr['head_id']}`")
+
+            fm = sr.get("full_metrics")
+            if fm:
+                lines.append(
+                    f"  - Full period: N={fm['n']} WR={fm['wr']:.1%} "
+                    f"ExpR={fm['expr']:+.4f} Sharpe={fm['sharpe']:.4f}"
+                )
+
+            if sr["windows"]:
+                recent = sr["windows"][-3:]
+                sharpes = ", ".join(f"{w['sharpe']:.3f}" for w in recent)
+                lines.append(f"  - Last 3 window Sharpes: {sharpes}")
+            lines.append("")
+
+    lines.extend([
+        "## Position Sizing Rules",
+        "",
+        "- **STABLE**: Full size (1.0x risk per trade)",
+        "- **TRANSITIONING**: Half size (0.5x risk per trade)",
+        "- **DEGRADED**: OFF — do not trade until 3 consecutive passing windows",
+        "",
+        "## Rolling Re-evaluation",
+        "",
+        "- Run monthly: `python scripts/tools/rolling_portfolio_assembly.py --all`",
+        "- STABLE -> TRANSITIONING: reduce size by 50%",
+        "- TRANSITIONING -> DEGRADED: turn OFF",
+        "- DEGRADED -> STABLE: requires 3 consecutive passing windows",
+        "",
     ])
 
-    for session in ["CME_REOPEN", "TOKYO_OPEN"]:
-        sr = session_results[session]
-        cls = sr["classification"]
+    plan_text = "\n".join(lines) + "\n"
 
-        if cls == "STABLE":
-            sizing = "Normal (1.0x risk)"
-            if session == "TOKYO_OPEN":
-                sizing = "Half (0.5x risk) -- thinner edge, higher variance"
-        elif cls == "TRANSITIONING":
-            sizing = "Half (0.5x risk)" if session == "CME_REOPEN" else "Quarter (0.25x risk)"
-        else:
-            sizing = "OFF (0x) -- regime filter active"
-
-        plan_lines.append(f"- **{session} ({sr['strategy']})**: {sizing}")
-        plan_lines.append(f"  - Classification: {cls}")
-
-        if sr["windows"]:
-            recent = sr["windows"][-3:]
-            recent_sharpes = [f"{w['sharpe']:.3f}" for w in recent]
-            plan_lines.append(f"  - Last 3 window Sharpes: {', '.join(recent_sharpes)}")
-
-        full_m = compute_strategy_metrics(sr["tdf"][sr["strategy_col"]].values) if len(sr["tdf"]) > 0 else None
-        if full_m:
-            plan_lines.append(
-                f"  - Full period: N={full_m['n']} WR={full_m['wr']:.1%} "
-                f"ExpR={full_m['expr']:+.3f} Sharpe={full_m['sharpe']:.3f}")
-
-    plan_lines.extend([
-        f"",
-        f"## Pyramiding",
-        f"",
-        f"**OFF** -- destroyed value at both sessions. Intraday mean-reversion snap-back",
-        f"kills the second unit. Do not revisit.",
-        f"",
-        f"## TOKYO_OPEN Target Unlock Rules",
-        f"",
-        f"1. Entry: E1 CB2 G4+ (standard ORB break)",
-        f"2. Limbo phase: Fixed target ({RR_TARGET}R) + stop active",
-        f"3. IB breaks ALIGNED: cancel target, hold {HOLD_HOURS}h with stop only",
-        f"4. IB breaks OPPOSED: exit at market immediately",
-        f"5. No IB break within {HOLD_HOURS}h: fixed target stays active",
-        f"6. IB definition: market open (0900 Brisbane) + 120min",
-        f"",
-        f"## Rolling Re-evaluation",
-        f"",
-        f"- Run monthly: `python scripts/rolling_portfolio_assembly.py --db-path C:/db/gold.db`",
-        f"- STABLE -> TRANSITIONING: reduce size by 50%",
-        f"- TRANSITIONING -> DEGRADED: turn OFF",
-        f"- DEGRADED -> STABLE: requires 3 consecutive passing windows before re-entry",
-    ])
-
-    plan_text = "\n".join(plan_lines) + "\n"
-
-    # Print to console
-    for line in plan_lines:
+    print(f"\n{'='*80}")
+    print("TRADING PLAN")
+    print(f"{'='*80}")
+    for line in lines:
         print(f"  {line}")
 
-    # Write TRADING_PLAN.md
     plan_path = PROJECT_ROOT / "TRADING_PLAN.md"
     plan_path.write_text(plan_text)
     print(f"\n  Written to {plan_path}")
 
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def run(db_path, instruments):
+    print("Rolling Portfolio Assembly")
+    print(f"Window: {WINDOW_MONTHS}m rolling, {STEP_MONTHS}m step")
+    print(f"Classification: STABLE >= {STABLE_SHARPE} Sharpe in 60%+ of last 6 windows")
+    print(f"Instruments: {', '.join(instruments)}")
+
+    all_results = {}
+    t0_all = time.time()
+
+    for instrument in instruments:
+        t0 = time.time()
+        all_results[instrument] = process_instrument(db_path, instrument)
+        print(f"\n  {instrument} complete in {time.time() - t0:.1f}s")
+
+    generate_trading_plan(all_results)
+    print(f"\nTotal: {time.time() - t0_all:.1f}s")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Rolling Portfolio Assembly")
     parser.add_argument("--db-path", type=Path, default=GOLD_DB_PATH)
-    parser.add_argument("--start", type=date.fromisoformat, default=date(2016, 2, 1))
-    parser.add_argument("--end", type=date.fromisoformat, default=date(2026, 2, 4))
+    parser.add_argument(
+        "--instrument",
+        type=str,
+        help="Single instrument (MGC/MNQ/MES/M2K)",
+    )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Process all active instruments",
+    )
     args = parser.parse_args()
-    run(args.db_path, args.start, args.end)
+
+    if args.instrument:
+        instruments = [args.instrument.upper()]
+    elif args.all:
+        instruments = sorted(ACTIVE_ORB_INSTRUMENTS)
+    else:
+        instruments = ["MGC"]
+
+    run(args.db_path, instruments)
+
 
 if __name__ == "__main__":
     main()
