@@ -74,7 +74,17 @@ GRID (2,808 strategy combinations, full grid before ENABLED_SESSIONS filtering):
 """
 
 from dataclasses import dataclass, asdict
+from datetime import date
 import json
+
+# Walk-forward start-date override per instrument.
+# Full-sample validation (Phase A) uses ALL data. Only WF window generation
+# starts from max(earliest_outcome, override_date).
+# Rationale: Gold tripled $1,300→$3,500+ (2016→2026). G4+ filters produce
+# <15 trades/window before 2022 = INVALID windows under anchored WF.
+WF_START_OVERRIDE: dict[str, date] = {
+    "MGC": date(2022, 1, 1),  # Gold <$1800 pre-2022 = tiny ORBs, G4+ windows invalid
+}
 
 
 @dataclass(frozen=True)

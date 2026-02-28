@@ -38,7 +38,7 @@ from pipeline.dst import (
     DST_AFFECTED_SESSIONS,
     is_winter_for_session, classify_dst_verdict,
 )
-from trading_app.config import CORE_MIN_SAMPLES, REGIME_MIN_SAMPLES
+from trading_app.config import CORE_MIN_SAMPLES, REGIME_MIN_SAMPLES, WF_START_OVERRIDE
 from trading_app.db_manager import init_trading_app_schema
 from trading_app.walkforward import append_walkforward_result
 from trading_app.strategy_discovery import parse_dst_regime
@@ -468,6 +468,7 @@ def _walkforward_worker(
     dst_regime: str | None,
     dst_verdict_from_discovery: str | None,
     dst_cols_from_discovery: dict | None,
+    wf_start_date: date | None = None,
 ) -> dict:
     """Worker function for parallel walkforward. Runs in a subprocess.
 
@@ -509,6 +510,7 @@ def _walkforward_worker(
                 min_valid_windows=wf_params["min_windows"],
                 min_pct_positive=wf_params["min_pct_positive"],
                 dst_regime=dst_regime,
+                wf_start_date=wf_start_date,
             )
             result["wf_result"] = {
                 "passed": wf_result.passed,
@@ -579,6 +581,7 @@ def run_validation(
         db_path = GOLD_DB_PATH
 
     cost_spec = get_cost_spec(instrument)
+    wf_start_date = WF_START_OVERRIDE.get(instrument)
 
     if workers is None:
         workers = min(8, max(1, (os.cpu_count() or 2) - 1))
@@ -711,6 +714,7 @@ def run_validation(
                 wf_params=wf_params,
                 dst_regime=cand["strat_dst_regime"],
                 dst_verdict_from_discovery=rd.get("dst_verdict"),
+                wf_start_date=wf_start_date,
                 dst_cols_from_discovery={
                     "winter_n": rd.get("dst_winter_n"),
                     "winter_avg_r": rd.get("dst_winter_avg_r"),

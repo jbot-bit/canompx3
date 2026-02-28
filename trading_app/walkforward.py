@@ -65,6 +65,7 @@ def run_walkforward(
     min_valid_windows: int = 3,
     min_pct_positive: float = 0.60,
     dst_regime: str | None = None,
+    wf_start_date: date | None = None,
 ) -> WalkForwardResult:
     """
     Anchored walk-forward validation on existing orb_outcomes.
@@ -117,8 +118,10 @@ def run_walkforward(
     latest = max(trading_days)
 
     # Generate non-overlapping test windows
+    # Apply per-instrument WF start override (skip regime-shifted early data)
+    anchor = max(earliest, wf_start_date) if wf_start_date else earliest
     windows = []
-    window_start = _add_months(earliest, min_train_months)
+    window_start = _add_months(anchor, min_train_months)
 
     while window_start <= latest:
         window_end = _add_months(window_start, test_window_months)

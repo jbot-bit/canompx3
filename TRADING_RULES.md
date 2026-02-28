@@ -52,7 +52,7 @@ All sessions are now dynamic/event-based. Times are resolved per-day from `pipel
 
 **E3 vs E1 (verified per-combo, not generalized):** E3 beats E1 in 20/33 combos at RR2.0 G4+, but 19 of those 20 are both negative (E3 just loses less). Only MGC CME_REOPEN has E3 positive AND beating E1 (+0.186 vs +0.137).
 
-**Post-swap results (Feb 28):** 1,103 validated strategies with honest entries (E1+E2) across 5/15/30m ORB apertures (5m: 596, 15m: 319, 30m: 188). 247 FDR significant. 480 edge families (46 ROBUST, 52 WHITELISTED). E3 soft-retired (0/50 FDR-sig, no timeout mechanism). MNQ 15m backfilled to full 5yr range — 98 weak strategies removed by longer history.
+**Post-rebuild results (Feb 28):** 835 validated strategies with honest entries (E1+E2) across 5/15/30m ORB apertures (5m: 328, 15m: 319, 30m: 188). 237 FDR significant. 402 edge families (24 ROBUST, 52 WHITELISTED). E3 soft-retired (0/50 FDR-sig, no timeout mechanism). Full rebuild with WF enabled for all instruments + MGC cost model $8.40→$5.74.
 
 ### Confirm Bars (CB)
 CB1-CB5 = 1-5 consecutive 1m bars must close outside ORB. If ANY bar closes back inside, count resets. For E3, CB1-CB5 produce identical entry prices (same limit order).
@@ -82,7 +82,7 @@ Example (E1): 10pt ORB + 2pt overshoot = 12pt risk, RR2.0 = 24pt target, 12pt st
 | ExpR | Expected R per trade (average). Positive = profitable. |
 | Sharpe | Risk-adjusted return. Above 0.15 = decent. |
 | MaxDD | Maximum drawdown in R. Worst peak-to-trough. |
-| MGC | Micro Gold futures. $10/point, $8.40 RT friction. |
+| MGC | Micro Gold futures. $10/point, $5.74 RT friction. |
 | MNQ | Micro Nasdaq futures. $2/point, $2.74 RT friction. |
 | MES | Micro S&P 500 futures. $5/point, $3.74 RT friction. |
 | M2K | Micro Russell 2000 futures. $5/point, $3.24 RT friction. Source: RTY (E-mini Russell) for better coverage. |
@@ -547,12 +547,12 @@ A "family" = one unique combination of `(session, entry_model, filter_level)`. A
 
 | Component | Amount |
 |-----------|--------|
-| Commission | $2.40/RT |
+| Commission | $1.74/RT |
 | Spread | $2.00/RT (1 tick × $10) |
-| Slippage | $4.00/RT |
-| **Total friction** | **$8.40/RT = 0.84pt** |
+| Slippage | $2.00/RT |
+| **Total friction** | **$5.74/RT = 0.574pt** |
 
-Friction as % of risk: 42% on 2pt ORB, 21% on 4pt, 14% on 6pt, 8.4% on 10pt.
+Friction as % of risk: 28.7% on 2pt ORB, 14.4% on 4pt, 9.6% on 6pt, 5.7% on 10pt.
 This is why small ORBs lose — friction eats the edge.
 
 ---

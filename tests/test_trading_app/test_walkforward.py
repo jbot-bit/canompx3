@@ -462,3 +462,75 @@ class TestWalkForward:
         # Uniform 3 trades/month -> all windows equal -> ratio ~1.0
         if result.window_imbalance_ratio is not None:
             assert result.window_imbalanced is False
+
+    # ================================================================
+    # WF start-date override tests
+    # ================================================================
+
+    def test_wf_start_date_override(self, con):
+        """wf_start_date shifts window anchor forward, skipping early data."""
+        # 2016-2025: 10 years of data
+        outcomes = _monthly_outcomes(2016, 2025)
+        _insert_outcomes(con, outcomes)
+
+        # With override=2022-01-01:
+        # anchor = max(2016-01-10, 2022-01-01) = 2022-01-01
+        # First test window starts: 2022-01-01 + 12mo = 2023-01-01
+        result = run_walkforward(
+            con=con, strategy_id="TEST_OVERRIDE", instrument="MGC",
+            wf_start_date=date(2022, 1, 1),
+            **_WF_BASE,
+        )
+
+        assert result.n_valid_windows >= 3
+        assert result.passed is True
+        # First window should start at or after 2023-01-01
+        first_window = result.windows[0]
+        assert first_window["window_start"] >= "2023-01-01"
+
+    def test_wf_start_date_none_unchanged(self, con):
+        """No override -> windows start from earliest data (backwards compat)."""
+        outcomes = _monthly_outcomes(2016, 2025)
+        _insert_outcomes(con, outcomes)
+
+        result = run_walkforward(
+            con=con, strategy_id="TEST_NO_OVERRIDE", instrument="MGC",
+            **_WF_BASE,
+        )
+
+        # Without override, first window starts 2017-01 (earliest + 12mo)
+        first_window = result.windows[0]
+        assert first_window["window_start"] >= "2017-01-01"
+        assert first_window["window_start"] < "2017-07-01"
+
+    def test_wf_start_date_after_latest(self, con):
+        """Override date after all data -> no windows, fail-closed."""
+        outcomes = _monthly_outcomes(2020, 2023)
+        _insert_outcomes(con, outcomes)
+
+        result = run_walkforward(
+            con=con, strategy_id="TEST_FUTURE_OVERRIDE", instrument="MGC",
+            wf_start_date=date(2030, 1, 1),
+            **_WF_BASE,
+        )
+
+        assert result.passed is False
+        assert result.n_total_windows == 0
+
+    def test_wf_start_date_before_earliest(self, con):
+        """Override before earliest data -> max() picks earliest, no change."""
+        outcomes = _monthly_outcomes(2020, 2023)
+        _insert_outcomes(con, outcomes)
+
+        result_with = run_walkforward(
+            con=con, strategy_id="TEST_EARLY_OVERRIDE", instrument="MGC",
+            wf_start_date=date(2015, 1, 1),
+            **_WF_BASE,
+        )
+        result_without = run_walkforward(
+            con=con, strategy_id="TEST_NO_OVERRIDE2", instrument="MGC",
+            **_WF_BASE,
+        )
+
+        assert result_with.n_total_windows == result_without.n_total_windows
+        assert result_with.n_valid_windows == result_without.n_valid_windows
