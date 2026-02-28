@@ -8,10 +8,12 @@ import sys
 sys.stdout.reconfigure(encoding='utf-8')
 
 import duckdb
-from pipeline.asset_configs import ASSET_CONFIGS
+from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS, ASSET_CONFIGS
 from pipeline.paths import GOLD_DB_PATH
 
-ACTIVE_INSTRUMENTS = ['MGC', 'MNQ', 'MES', 'M2K']
+ACTIVE_INSTRUMENTS = ACTIVE_ORB_INSTRUMENTS
+# SQL IN clause built from canonical source (never hardcode instrument lists)
+_SQL_IN = ", ".join(f"'{s}'" for s in ACTIVE_INSTRUMENTS)
 
 
 def _connect():
@@ -129,10 +131,10 @@ def check_experimental_by_orb_minutes(con) -> list[str]:
 def check_dead_instrument_contamination(con) -> list[str]:
     """11. No dead instruments in validated_setups."""
     violations = []
-    r = con.execute("""
+    r = con.execute(f"""
         SELECT instrument, COUNT(*) FROM validated_setups
         WHERE status = 'active'
-        AND instrument NOT IN ('MGC','MNQ','MES','M2K')
+        AND instrument NOT IN ({_SQL_IN})
         GROUP BY instrument
     """).fetchall()
     for inst, n in r:
@@ -220,17 +222,17 @@ CHECKS = [
 def _print_informational(con):
     """Print informational stats that don't produce violations."""
     print('\n--- 7. DAILY_FEATURES ROW COUNTS ---')
-    for row in con.execute("""
+    for row in con.execute(f"""
         SELECT symbol, orb_minutes, COUNT(*) as n FROM daily_features
-        WHERE symbol IN ('MGC','MNQ','MES','M2K')
+        WHERE symbol IN ({_SQL_IN})
         GROUP BY symbol, orb_minutes ORDER BY symbol, orb_minutes
     """).fetchall():
         print(f'  {row[0]} orb_{row[1]}m: {row[2]:,} rows')
 
     print('\n--- 8. OUTCOMES BY ORB_MINUTES ---')
-    for row in con.execute("""
+    for row in con.execute(f"""
         SELECT symbol, orb_minutes, COUNT(*) FROM orb_outcomes
-        WHERE symbol IN ('MGC','MNQ','MES','M2K')
+        WHERE symbol IN ({_SQL_IN})
         GROUP BY symbol, orb_minutes ORDER BY symbol, orb_minutes
     """).fetchall():
         print(f'  {row[0]} {row[1]}m: {row[2]:,}')
@@ -249,17 +251,17 @@ def _print_informational(con):
         print(f'    TOTAL {row[0]}m: {row[1]}')
 
     print('\n--- 10. EXPERIMENTAL STRATEGIES BY ORB_MINUTES ---')
-    for row in con.execute("""
+    for row in con.execute(f"""
         SELECT orb_minutes, instrument, COUNT(*) FROM experimental_strategies
-        WHERE instrument IN ('MGC','MNQ','MES','M2K')
+        WHERE instrument IN ({_SQL_IN})
         GROUP BY orb_minutes, instrument ORDER BY orb_minutes, instrument
     """).fetchall():
         print(f'  {row[0]}m {row[1]}: {row[2]:,}')
 
     print('\n--- 13. OUTCOME DATE RANGES ---')
-    for row in con.execute("""
+    for row in con.execute(f"""
         SELECT symbol, MIN(trading_day), MAX(trading_day), COUNT(DISTINCT trading_day)
-        FROM orb_outcomes WHERE symbol IN ('MGC','MNQ','MES','M2K')
+        FROM orb_outcomes WHERE symbol IN ({_SQL_IN})
         GROUP BY symbol ORDER BY symbol
     """).fetchall():
         print(f'  {row[0]}: {row[1]} to {row[2]} ({row[3]:,} days)')
@@ -316,7 +318,7 @@ def main():
         print('=' * 70)
         sys.exit(1)
     else:
-        print('INTEGRITY AUDIT PASSED: all 17 checks clean')
+        print(f'INTEGRITY AUDIT PASSED: all {len(CHECKS)} checks clean')
         print('=' * 70)
         sys.exit(0)
 

@@ -197,6 +197,17 @@ class TestOrbSizeFilterSQL:
         result = _orb_size_filter_sql("ORB_L8", "TOKYO_OPEN")
         assert result == "d.orb_TOKYO_OPEN_size < 8"
 
+    def test_band_filter_g4_l12(self):
+        """Band filter ORB_G4_L12 produces >= AND < clause."""
+        result = _orb_size_filter_sql("ORB_G4_L12", "TOKYO_OPEN")
+        assert "d.orb_TOKYO_OPEN_size >= 4" in result
+        assert "d.orb_TOKYO_OPEN_size < 12" in result
+
+    def test_band_filter_g5_l12(self):
+        result = _orb_size_filter_sql("ORB_G5_L12", "CME_REOPEN")
+        assert "d.orb_CME_REOPEN_size >= 5" in result
+        assert "d.orb_CME_REOPEN_size < 12" in result
+
     def test_vol_filter_returns_none(self):
         """VOL_ filters aren't translatable to SQL — silently skipped."""
         assert _orb_size_filter_sql("VOL_RV12_N20", "CME_REOPEN") is None
@@ -291,6 +302,16 @@ class TestBuildOutcomesBase:
         assert "o.confirm_bars = ?" in sql
         assert "d.orb_TOKYO_OPEN_size >= 4" in sql
         assert bind == ["MNQ", "TOKYO_OPEN", "E2", 2.0, 1]
+
+    def test_band_filter_in_outcomes(self):
+        """Band filter ORB_G4_L12 should work in _build_outcomes_base."""
+        adapter = self._make_adapter()
+        sql, bind = adapter._build_outcomes_base({
+            "instrument": "MGC", "orb_label": "TOKYO_OPEN",
+            "filter_type": "ORB_G4_L12",
+        })
+        assert "d.orb_TOKYO_OPEN_size >= 4" in sql
+        assert "d.orb_TOKYO_OPEN_size < 12" in sql
 
     def test_missing_orb_label_raises(self):
         adapter = self._make_adapter()

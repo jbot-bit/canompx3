@@ -11,6 +11,8 @@ from enum import Enum
 import duckdb
 import pandas as pd
 
+from pipeline.asset_configs import get_active_instruments
+
 
 class QueryTemplate(str, Enum):
     """Pre-approved query templates."""
@@ -60,8 +62,8 @@ VALID_ENTRY_MODELS = {"E1", "E2", "E3"}
 # Valid filter types (subset for validation)
 VALID_FILTER_PREFIXES = {"NO_FILTER", "ORB_G", "ORB_L", "VOL_", "DIR_", "DOW_", "M6E_"}
 
-# Valid instruments
-VALID_INSTRUMENTS = {"MGC", "MNQ", "MES", "M2K"}
+# Valid instruments (from canonical source — pipeline.asset_configs)
+VALID_INSTRUMENTS = set(get_active_instruments())
 
 VALID_RR_TARGETS = {1.0, 1.5, 2.0, 2.5, 3.0, 4.0}
 VALID_CONFIRM_BARS = {1, 2, 3, 4, 5}
@@ -119,24 +121,36 @@ _DST_SESSION_MAP = {}
 def _orb_size_filter_sql(filter_type: str | None, orb_label: str) -> str | None:
     """Convert ORB size filter_type to SQL WHERE clause on daily_features.
 
-    Only ORB_G{N}/ORB_L{N} filters translate to SQL.  Other filter types
-    (VOL_, DIR_) require Python-side evaluation and are silently skipped.
+    Handles simple filters (ORB_G4, ORB_L12) and band filters (ORB_G4_L12).
+    Other filter types (VOL_, DIR_) require Python-side evaluation and are
+    silently skipped.
     """
     if not filter_type or filter_type == "NO_FILTER":
         return None
     _validate_filter_type(filter_type)
     # orb_label validated against allowlist -- safe for f-string
     # [1,20] is a security guard, not a business rule. Current grid uses G4-G8 (max 8pt).
+    col = f"d.orb_{orb_label}_size"
+
     if filter_type.startswith("ORB_G"):
-        threshold = int(filter_type[5:])
+        rest = filter_type[5:]  # after "ORB_G"
+        if "_L" in rest:
+            # Band filter: ORB_G4_L12 -> >= 4 AND < 12
+            parts = rest.split("_L")
+            lo = int(parts[0])
+            hi = int(parts[1])
+            if not (1 <= lo <= 20) or not (1 <= hi <= 20):
+                raise ValueError(f"ORB band filter thresholds {lo}/{hi} out of range [1, 20]")
+            return f"{col} >= {lo} AND {col} < {hi}"
+        threshold = int(rest)
         if not (1 <= threshold <= 20):
             raise ValueError(f"ORB filter threshold {threshold} out of range [1, 20]")
-        return f"d.orb_{orb_label}_size >= {threshold}"
+        return f"{col} >= {threshold}"
     if filter_type.startswith("ORB_L"):
         threshold = int(filter_type[5:])
         if not (1 <= threshold <= 20):
             raise ValueError(f"ORB filter threshold {threshold} out of range [1, 20]")
-        return f"d.orb_{orb_label}_size < {threshold}"
+        return f"{col} < {threshold}"
     return None
 
 

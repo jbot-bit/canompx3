@@ -30,23 +30,37 @@ def check_python_deps() -> tuple[bool, str]:
     return True, f"{version}, all deps installed"
 
 def check_database() -> tuple[bool, str]:
-    """Check gold.db exists and has data."""
+    """Check gold.db exists and has data.
+
+    Fail-closed: only duckdb.IOException (lock contention) passes.
+    Missing tables, corrupt DB, or other errors return False.
+    """
     if not GOLD_DB_PATH.exists():
         return False, "gold.db does not exist"
     size_mb = round(GOLD_DB_PATH.stat().st_size / (1024 * 1024), 1)
     try:
         con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
-    except Exception:
+    except duckdb.IOException:
         return True, f"gold.db exists ({size_mb}MB, locked by another process)"
+    except Exception as e:
+        return False, f"gold.db exists ({size_mb}MB) but cannot open: {type(e).__name__}: {e}"
     try:
-        bars_1m = con.execute("SELECT COUNT(*) FROM bars_1m").fetchone()[0]
-        bars_5m = con.execute("SELECT COUNT(*) FROM bars_5m").fetchone()[0]
-        daily_feat = con.execute("SELECT COUNT(*) FROM daily_features").fetchone()[0]
+        counts = {}
+        errors = []
+        for table in ("bars_1m", "bars_5m", "daily_features"):
+            try:
+                counts[table] = con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            except duckdb.CatalogException:
+                errors.append(f"{table} missing")
+            except Exception as e:
+                errors.append(f"{table}: {type(e).__name__}")
+        if errors:
+            return False, f"gold.db ({size_mb}MB): {', '.join(errors)}"
     finally:
         con.close()
     return True, (
-        f"gold.db exists ({size_mb}MB, {bars_1m:,} bars_1m, "
-        f"{bars_5m:,} bars_5m, {daily_feat:,} daily_features)"
+        f"gold.db exists ({size_mb}MB, {counts['bars_1m']:,} bars_1m, "
+        f"{counts['bars_5m']:,} bars_5m, {counts['daily_features']:,} daily_features)"
     )
 
 def check_dbn_files() -> tuple[bool, str]:
@@ -67,9 +81,17 @@ def check_drift() -> tuple[bool, str]:
             cwd=str(PROJECT_ROOT),
         )
         if proc.returncode == 0:
-            # Count checks from output
+            # Count actual pass/fail from output
             passed = proc.stdout.count("PASSED [OK]")
-            return True, f"Drift detection: {passed}/{passed} passing"
+            failed = proc.stdout.count("FAILED:")
+            total = passed + failed
+            return True, f"Drift detection: {passed}/{total} passing"
+        # Non-zero exit: parse pass/fail counts for diagnostics
+        passed = proc.stdout.count("PASSED [OK]")
+        failed = proc.stdout.count("FAILED:")
+        total = passed + failed
+        if total > 0:
+            return False, f"Drift detection: {passed}/{total} passing ({failed} FAILED)"
         return False, "Drift detection: FAILED"
     except Exception as e:
         return False, f"Drift detection error: {e}"
@@ -99,7 +121,11 @@ def check_integrity() -> tuple[bool, str]:
             cwd=str(PROJECT_ROOT),
         )
         if proc.returncode == 0:
-            return True, "Integrity audit: all 17 checks passed"
+            # Parse dynamic check count from audit output
+            for line in reversed(proc.stdout.splitlines()):
+                if "checks clean" in line:
+                    return True, f"Integrity audit: {line.strip()}"
+            return True, "Integrity audit: passed"
         # Extract violation count from output
         for line in reversed(proc.stdout.splitlines()):
             if "violation" in line:

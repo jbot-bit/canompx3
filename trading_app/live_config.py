@@ -20,6 +20,7 @@ sys.stdout.reconfigure(line_buffering=True)
 
 import duckdb
 
+from pipeline.asset_configs import get_active_instruments
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.portfolio import Portfolio, PortfolioStrategy
 from trading_app.rolling_portfolio import (
@@ -245,9 +246,9 @@ def build_live_portfolio(
     Regime tier: loads best variant from validated_setups, then checks
     strategy_fitness -- weight=0.0 if not FIT.
     """
-    _VALID_INSTRUMENTS = {"MGC", "MNQ", "MES", "M2K"}
-    if instrument not in _VALID_INSTRUMENTS:
-        raise ValueError(f"Unknown instrument '{instrument}'. Valid: {sorted(_VALID_INSTRUMENTS)}")
+    valid_instruments = set(get_active_instruments())
+    if instrument not in valid_instruments:
+        raise ValueError(f"Unknown instrument '{instrument}'. Valid: {sorted(valid_instruments)}")
 
     if db_path is None:
         db_path = GOLD_DB_PATH
@@ -433,7 +434,7 @@ def main():
     parser.add_argument("--db-path", type=Path, default=None,
                         help="Path to gold.db")
     parser.add_argument("--instrument", default="MGC",
-                        choices=["MGC", "MNQ", "MES", "M2K"])
+                        choices=get_active_instruments())
     parser.add_argument("--rolling-train-months", type=int, default=12)
     parser.add_argument("--output", type=str, default=None,
                         help="Write portfolio JSON to this path")

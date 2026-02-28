@@ -98,16 +98,27 @@ def step_discover(instrument: str, args) -> int:
     ]
     if args.db_path:
         cmd.append(f"--db={args.db_path}")
+    if args.holdout_date:
+        cmd.append(f"--holdout-date={args.holdout_date}")
     return subprocess.run(cmd, cwd=str(PROJECT_ROOT)).returncode
 
 def step_validate(instrument: str, args) -> int:
-    """Strategy validation."""
+    """Strategy validation with canonical flags.
+
+    Matches the canonical command from CLAUDE.md / validation-workflow.md:
+      --min-sample 50 --no-regime-waivers --min-years-positive-pct 0.75
+    MNQ gets --no-walkforward (only 2 years of data, never has 3+ WF windows).
+    """
     cmd = [
         sys.executable,
         str(PROJECT_ROOT / "trading_app" / "strategy_validator.py"),
         f"--instrument={instrument}",
         "--min-sample=50",
+        "--no-regime-waivers",
+        "--min-years-positive-pct=0.75",
     ]
+    if instrument.upper() == "MNQ":
+        cmd.append("--no-walkforward")
     if args.db_path:
         cmd.append(f"--db={args.db_path}")
     return subprocess.run(cmd, cwd=str(PROJECT_ROOT)).returncode
@@ -162,6 +173,8 @@ def main():
                         help="Skip to named step (e.g. build_outcomes)")
     parser.add_argument("--db-path", type=str,
                         help="Database path (also sets DUCKDB_PATH env var)")
+    parser.add_argument("--holdout-date", type=str,
+                        help="OOS holdout date (YYYY-MM-DD), forwarded to strategy_discovery")
     args = parser.parse_args()
 
     instrument = args.instrument.upper()

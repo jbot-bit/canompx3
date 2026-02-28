@@ -1348,11 +1348,8 @@ def check_doc_stats_consistency() -> list[str]:
     except Exception:
         return violations  # DB may not exist in CI
 
-    # Count drift checks registered in main() — use print("Check N:") as
-    # the unique marker (only appears in main(), not in function docstrings).
-    this_file = Path(__file__)
-    this_content = this_file.read_text(encoding="utf-8")
-    drift_check_count = len(re.findall(r'print\("Check \d+:', this_content))
+    # Count drift checks from the CHECKS registry (single source of truth)
+    drift_check_count = len(CHECKS)
 
     # Doc files to check: (file, regex, expected_key)
     DOC_STATS_CHECKS = [
@@ -1673,6 +1670,92 @@ def check_sql_adapter_validation_sync() -> list[str]:
     return violations
 
 
+# =============================================================================
+# CHECK REGISTRY — single source of truth for all drift checks
+# =============================================================================
+# Each entry: (description, callable returning list[str] violations).
+# Check number is derived from position (1-indexed).
+
+CHECKS = [
+    ("Hardcoded 'MGC' SQL literals in generic pipeline code",
+     lambda: check_hardcoded_mgc_sql(GENERIC_FILES)),
+    (".apply() / .iterrows() in ingest scripts",
+     lambda: check_apply_iterrows(INGEST_FILES)),
+    ("Non-bars_1m writes in ingest scripts",
+     lambda: check_non_bars1m_writes(INGEST_WRITE_FILES)),
+    ("Schema-query table name consistency",
+     lambda: check_schema_query_consistency(PIPELINE_DIR)),
+    ("Import cycle prevention",
+     lambda: check_import_cycles(PIPELINE_DIR)),
+    ("Hardcoded absolute paths",
+     lambda: check_hardcoded_paths(PIPELINE_DIR)),
+    ("Connection leak detection",
+     lambda: check_connection_leaks(PIPELINE_DIR)),
+    ("Dashboard read-only enforcement",
+     lambda: check_dashboard_readonly(PIPELINE_DIR)),
+    ("Pipeline never imports trading_app (one-way dependency)",
+     lambda: check_pipeline_never_imports_trading_app(PIPELINE_DIR)),
+    ("Trading app connection leak detection",
+     lambda: check_trading_app_connection_leaks(TRADING_APP_DIR)),
+    ("Trading app hardcoded paths",
+     lambda: check_trading_app_hardcoded_paths(TRADING_APP_DIR)),
+    ("Config filter_type sync",
+     check_config_filter_sync),
+    ("ENTRY_MODELS sync",
+     check_entry_models_sync),
+    ("Entry price sanity",
+     check_entry_price_sanity),
+    ("Nested subpackage isolation",
+     check_nested_isolation),
+    ("All imports resolve",
+     check_all_imports_resolve),
+    ("Nested production table write guard",
+     check_nested_production_writes),
+    ("Trading app schema-query consistency",
+     lambda: check_schema_query_consistency_trading_app(TRADING_APP_DIR)),
+    ("Timezone hygiene",
+     check_timezone_hygiene),
+    ("MarketState read-only SQL guard",
+     check_market_state_readonly),
+    ("Analytical honesty guard (sharpe_ann)",
+     check_sharpe_ann_presence),
+    ("Ingest authority notice (ingest_dbn_mgc.py deprecation)",
+     check_ingest_authority_notice),
+    ("CLAUDE.md size cap",
+     check_claude_md_size_cap),
+    ("Validation gate existence",
+     check_validation_gate_existence),
+    ("Naive datetime detection",
+     check_naive_datetime),
+    ("DST session coverage (all sessions classified)",
+     check_dst_session_coverage),
+    ("DB config usage (configure_connection after connect)",
+     check_db_config_usage),
+    ("Discovery scripts use get_filters_for_grid (not ALL_FILTERS)",
+     check_discovery_session_aware_filters),
+    ("All validated filter_types registered in ALL_FILTERS",
+     check_validated_filters_registered),
+    ("E2+E3 restricted to CB1 (no CB2+ for stop-market/retrace)",
+     check_e2_e3_cb1_only),
+    ("Non-5m strategy IDs include _O{minutes} suffix",
+     check_orb_minutes_in_strategy_id),
+    ("ORB_LABELS matches SESSION_CATALOG dynamic entries",
+     check_orb_labels_session_catalog_sync),
+    ("No old fixed-clock session names in Python source",
+     check_stale_session_names_in_code),
+    ("sql_adapter VALID_* sets match outcome_builder grids",
+     check_sql_adapter_validation_sync),
+    ("No E0 rows in trading tables",
+     check_no_e0_in_db),
+    ("Doc stats match DB ground truth",
+     check_doc_stats_consistency),
+    ("No stale scratch DB at C:/db/gold.db",
+     check_stale_scratch_db),
+    ("No old session names in active code",
+     check_old_session_names),
+]
+
+
 def main():
     print("=" * 60)
     print("PIPELINE DRIFT CHECK")
@@ -1681,465 +1764,20 @@ def main():
 
     all_violations = []
 
-    # Check 1: Hardcoded 'MGC' SQL in generic files
-    print("Check 1: Hardcoded 'MGC' SQL literals in generic pipeline code...")
-    v = check_hardcoded_mgc_sql(GENERIC_FILES)
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
+    for i, (label, check_fn) in enumerate(CHECKS, 1):
+        print(f"Check {i}: {label}...")
+        v = check_fn()
+        if v:
+            print("  FAILED:")
+            for line in v:
+                print(line)
+            all_violations.extend(v)
+        else:
+            print("  PASSED [OK]")
+        print()
 
-    # Check 2: .apply() / .iterrows() in ingest scripts
-    print("Check 2: .apply() / .iterrows() in ingest scripts...")
-    v = check_apply_iterrows(INGEST_FILES)
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 3: Writes to non-bars_1m tables in ingest scripts
-    print("Check 3: Non-bars_1m writes in ingest scripts...")
-    v = check_non_bars1m_writes(INGEST_WRITE_FILES)
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 4: Schema-query table name consistency
-    print("Check 4: Schema-query table name consistency...")
-    v = check_schema_query_consistency(PIPELINE_DIR)
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 5: Import cycle prevention
-    print("Check 5: Import cycle prevention...")
-    v = check_import_cycles(PIPELINE_DIR)
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 6: Hardcoded absolute paths
-    print("Check 6: Hardcoded absolute paths...")
-    v = check_hardcoded_paths(PIPELINE_DIR)
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 7: Connection leak detection
-    print("Check 7: Connection leak detection...")
-    v = check_connection_leaks(PIPELINE_DIR)
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 8: Dashboard must be read-only
-    print("Check 8: Dashboard read-only enforcement...")
-    v = check_dashboard_readonly(PIPELINE_DIR)
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 9: pipeline/ must never import from trading_app/
-    print("Check 9: Pipeline never imports trading_app (one-way dependency)...")
-    v = check_pipeline_never_imports_trading_app(PIPELINE_DIR)
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 10: Connection leak detection in trading_app/
-    print("Check 10: Trading app connection leak detection...")
-    v = check_trading_app_connection_leaks(TRADING_APP_DIR)
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 11: Hardcoded paths in trading_app/
-    print("Check 11: Trading app hardcoded paths...")
-    v = check_trading_app_hardcoded_paths(TRADING_APP_DIR)
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 12: Config/DB sync — filter_type keys match filter objects
-    print("Check 12: Config filter_type sync...")
-    v = check_config_filter_sync()
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 13: ENTRY_MODELS sync
-    print("Check 13: ENTRY_MODELS sync...")
-    v = check_entry_models_sync()
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 14: Entry price sanity (no hardcoded ORB level in outcome_builder)
-    print("Check 14: Entry price sanity...")
-    v = check_entry_price_sanity()
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 15: Nested subpackage isolation (no db_manager imports)
-    print("Check 15: Nested subpackage isolation...")
-    v = check_nested_isolation()
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 16: All imports resolve (no typos, missing deps)
-    print("Check 16: All imports resolve...")
-    v = check_all_imports_resolve()
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 17: Nested code must never write to production tables
-    print("Check 17: Nested production table write guard...")
-    v = check_nested_production_writes()
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 18: Schema-query consistency in trading_app/
-    print("Check 18: Trading app schema-query consistency...")
-    v = check_schema_query_consistency_trading_app(TRADING_APP_DIR)
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 19: Timezone hygiene (no pytz, no hardcoded UTC+10)
-    print("Check 19: Timezone hygiene...")
-    v = check_timezone_hygiene()
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 20: MarketState/scoring/cascade read-only guard
-    print("Check 20: MarketState read-only SQL guard...")
-    v = check_market_state_readonly()
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 21: Analytical honesty guard (sharpe_ann presence)
-    print("Check 21: Analytical honesty guard (sharpe_ann)...")
-    v = check_sharpe_ann_presence()
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 22: Ingest authority notice (deprecation in ingest_dbn_mgc.py)
-    print("Check 22: Ingest authority notice (ingest_dbn_mgc.py deprecation)...")
-    v = check_ingest_authority_notice()
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 23: CLAUDE.md size cap
-    print("Check 23: CLAUDE.md size cap...")
-    v = check_claude_md_size_cap()
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 24: Validation gate existence
-    print("Check 24: Validation gate existence...")
-    v = check_validation_gate_existence()
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 25: Naive datetime detection
-    print("Check 25: Naive datetime detection...")
-    v = check_naive_datetime()
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 26: DST session coverage
-    print("Check 26: DST session coverage (all sessions classified)...")
-    v = check_dst_session_coverage()
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 27: DB config usage (all connect() calls must configure)
-    print("Check 27: DB config usage (configure_connection after connect)...")
-    v = check_db_config_usage()
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 28: Discovery files must use session-aware filters
-    print("Check 28: Discovery scripts use get_filters_for_grid (not ALL_FILTERS)...")
-    v = check_discovery_session_aware_filters()
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 29: All filter_types in validated_setups must be in ALL_FILTERS
-    print("Check 29: All validated filter_types registered in ALL_FILTERS...")
-    v = check_validated_filters_registered()
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 30: E2/E3 entry models restricted to CB1 only
-    print("Check 30: E2+E3 restricted to CB1 (no CB2+ for stop-market/retrace)...")
-    v = check_e2_e3_cb1_only()
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 31: Non-5m strategy IDs include orb_minutes suffix
-    print("Check 31: Non-5m strategy IDs include _O{minutes} suffix...")
-    v = check_orb_minutes_in_strategy_id()
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 32: ORB_LABELS vs SESSION_CATALOG sync
-    print("Check 32: ORB_LABELS matches SESSION_CATALOG dynamic entries...")
-    v = check_orb_labels_session_catalog_sync()
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 33: Stale session names in code
-    print("Check 33: No old fixed-clock session names in Python source...")
-    v = check_stale_session_names_in_code()
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 34: sql_adapter validation set sync
-    print("Check 34: sql_adapter VALID_* sets match outcome_builder grids...")
-    v = check_sql_adapter_validation_sync()
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 35: No E0 rows in DB
-    print("Check 35: No E0 rows in trading tables...")
-    v = check_no_e0_in_db()
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 36: Doc-stats consistency
-    print("Check 36: Doc stats match DB ground truth...")
-    v = check_doc_stats_consistency()
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 37: Stale scratch DB
-    print("Check 37: No stale scratch DB at C:/db/gold.db...")
-    v = check_stale_scratch_db()
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Check 38: Old session names in active code
-    print("Check 38: No old session names in active code...")
-    v = check_old_session_names()
-    if v:
-        print("  FAILED:")
-        for line in v:
-            print(line)
-        all_violations.extend(v)
-    else:
-        print("  PASSED [OK]")
-    print()
-
-    # Summary — self-report check count so docs never need hardcoded numbers
-    this_content = Path(__file__).read_text(encoding="utf-8")
-    total_checks = len(re.findall(r'print\("Check \d+:', this_content))
+    # Summary — len(CHECKS) is the single source of truth for check count
+    total_checks = len(CHECKS)
     print("=" * 60)
     if all_violations:
         print(f"DRIFT DETECTED: {len(all_violations)} violation(s) across {total_checks} checks")
