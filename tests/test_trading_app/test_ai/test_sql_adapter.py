@@ -208,9 +208,20 @@ class TestOrbSizeFilterSQL:
         assert "d.orb_CME_REOPEN_size >= 5" in result
         assert "d.orb_CME_REOPEN_size < 12" in result
 
-    def test_vol_filter_returns_none(self):
-        """VOL_ filters aren't translatable to SQL — silently skipped."""
-        assert _orb_size_filter_sql("VOL_RV12_N20", "CME_REOPEN") is None
+    def test_vol_filter_raises(self):
+        """VOL_ filters can't be applied in SQL — must fail-closed."""
+        with pytest.raises(ValueError, match="requires Python-side evaluation"):
+            _orb_size_filter_sql("VOL_RV12_N20", "CME_REOPEN")
+
+    def test_dir_filter_raises(self):
+        """DIR_ filters can't be applied in SQL — must fail-closed."""
+        with pytest.raises(ValueError, match="requires Python-side evaluation"):
+            _orb_size_filter_sql("DIR_LONG", "CME_REOPEN")
+
+    def test_composite_filter_raises(self):
+        """Composite ORB+DOW filters can't be applied in SQL — must fail-closed."""
+        with pytest.raises(ValueError, match="non-ORB component"):
+            _orb_size_filter_sql("ORB_G4_NOFRI", "CME_REOPEN")
 
     def test_invalid_prefix_raises(self):
         with pytest.raises(ValueError, match="Invalid filter_type"):

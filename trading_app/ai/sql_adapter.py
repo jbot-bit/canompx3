@@ -122,8 +122,9 @@ def _orb_size_filter_sql(filter_type: str | None, orb_label: str) -> str | None:
     """Convert ORB size filter_type to SQL WHERE clause on daily_features.
 
     Handles simple filters (ORB_G4, ORB_L12) and band filters (ORB_G4_L12).
-    Other filter types (VOL_, DIR_) require Python-side evaluation and are
-    silently skipped.
+    Returns None for NO_FILTER/None (no filtering needed).
+    Raises ValueError for non-ORB filters (VOL_, DIR_, DOW_, composites)
+    that require Python-side evaluation and cannot be applied in SQL.
     """
     if not filter_type or filter_type == "NO_FILTER":
         return None
@@ -142,7 +143,14 @@ def _orb_size_filter_sql(filter_type: str | None, orb_label: str) -> str | None:
             if not (1 <= lo <= 20) or not (1 <= hi <= 20):
                 raise ValueError(f"ORB band filter thresholds {lo}/{hi} out of range [1, 20]")
             return f"{col} >= {lo} AND {col} < {hi}"
-        threshold = int(rest)
+        try:
+            threshold = int(rest)
+        except ValueError:
+            raise ValueError(
+                f"Filter '{filter_type}' contains a non-ORB component that cannot "
+                f"be applied in SQL. Only pure ORB size filters (ORB_G4, ORB_L8, "
+                f"ORB_G4_L12) are supported in raw outcomes queries."
+            ) from None
         if not (1 <= threshold <= 20):
             raise ValueError(f"ORB filter threshold {threshold} out of range [1, 20]")
         return f"{col} >= {threshold}"
@@ -151,7 +159,12 @@ def _orb_size_filter_sql(filter_type: str | None, orb_label: str) -> str | None:
         if not (1 <= threshold <= 20):
             raise ValueError(f"ORB filter threshold {threshold} out of range [1, 20]")
         return f"{col} < {threshold}"
-    return None
+    # Non-ORB filter (VOL_, DIR_, DOW_) — fail-closed
+    raise ValueError(
+        f"Filter '{filter_type}' requires Python-side evaluation and cannot be "
+        f"applied in raw SQL outcomes queries. Only ORB size filters "
+        f"(ORB_G4, ORB_L8, ORB_G4_L12, NO_FILTER) are supported here."
+    )
 
 
 def _compute_group_stats(df: pd.DataFrame) -> dict:
@@ -661,7 +674,7 @@ class SQLAdapter:
             wheres.append("o.confirm_bars = ?")
             bind.append(_validate_confirm_bars(params["confirm_bars"]))
 
-        # ORB size filter (ORB_G{N}/ORB_L{N} only; others silently skipped)
+        # ORB size filter (raises ValueError for non-ORB filters)
         filter_sql = _orb_size_filter_sql(params.get("filter_type"), orb_label)
         if filter_sql:
             wheres.append(filter_sql)
