@@ -7,7 +7,7 @@ ROLE: [L1 Library] Validation gates. All ingest paths import from here. Do not r
 CANONICAL COMPLIANCE (CANONICAL_backfill_dbn_mgc_rules.txt):
 - FAIL-CLOSED: Any validation failure aborts entire backfill
 - CHUNKED: Uses store.to_df(count=N) iterator, never full load
-- VECTORIZED: No apply() or iterrows() over large data
+- MOSTLY VECTORIZED: Minimal apply() for outright filtering and trading day edge case
 - DETERMINISTIC: Stable tiebreak for equal-volume contracts
 - CHECKPOINTED: JSONL append-only checkpoint system
 - INTEGRITY GATED: Verifies no duplicates/NULLs after each merge
@@ -621,7 +621,7 @@ def main():
             sys.exit(1)
 
         # =====================================================================
-        # FILTER TO OUTRIGHTS FIRST (VECTORIZED)
+        # FILTER TO OUTRIGHTS FIRST (apply — small N per chunk)
         # (Spreads have negative prices which is valid for them, so filter before validation)
         # =====================================================================
         outright_mask = chunk_df['symbol'].apply(lambda s: bool(GC_OUTRIGHT_PATTERN.match(str(s))))
@@ -687,6 +687,7 @@ def main():
             if tday not in trading_day_buffer:
                 trading_day_buffer[tday] = []
 
+            # NOTE: iterrows() here — deprecated path. Multi-instrument version uses vectorized zip.
             for ts_utc, row in front_df.iterrows():
                 trading_day_buffer[tday].append((
                     ts_utc,

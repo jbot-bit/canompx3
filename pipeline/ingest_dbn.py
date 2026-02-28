@@ -8,7 +8,7 @@ Loads per-asset config from asset_configs.py. No monkey-patching.
 CANONICAL COMPLIANCE (preserved from ingest_dbn_mgc.py):
 - FAIL-CLOSED: Any validation failure aborts entire backfill
 - CHUNKED: Uses store.to_df(count=N) iterator, never full load
-- VECTORIZED: No apply() or iterrows() over large data
+- MOSTLY VECTORIZED: Minimal apply() for outright filtering; core ops are vectorized
 - DETERMINISTIC: Stable tiebreak for equal-volume contracts
 - CHECKPOINTED: JSONL append-only checkpoint system
 - INTEGRITY GATED: Verifies no duplicates/NULLs after each merge
@@ -303,7 +303,7 @@ def main():
             sys.exit(1)
 
         # =================================================================
-        # FILTER TO OUTRIGHTS (VECTORIZED, CONFIG-DRIVEN)
+        # FILTER TO OUTRIGHTS (CONFIG-DRIVEN, apply for regex match)
         # =================================================================
         outright_mask = chunk_df['symbol'].apply(
             lambda s: bool(outright_pattern.match(str(s)))
