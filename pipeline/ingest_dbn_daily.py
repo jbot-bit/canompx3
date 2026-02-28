@@ -11,9 +11,9 @@ Key difference from ingest_dbn_mgc.py:
 - Supports multiple instruments via --instrument flag
 - Reuses all validation functions from ingest_dbn_mgc.py
 
-Special case: MGC data contains GC (full-size Gold) outrights, stored as
-symbol='MGC'. This is because GC has better bar coverage. Other instruments
-(MCL, MNQ) use their own outrights directly.
+All instruments use asset_configs.py as source of truth for outright patterns,
+prefix lengths, and data directories. Some instruments use full-size contract
+data (e.g., GC for MGC, RTY for M2K) — see asset_configs.py for details.
 
 Usage:
     python pipeline/ingest_dbn_daily.py --instrument MGC --start 2021-02-05 --end 2026-02-04
@@ -39,7 +39,7 @@ import databento as db
 
 # Add project root to path
 
-from pipeline.paths import DAILY_DBN_DIR, GOLD_DB_PATH
+from pipeline.paths import GOLD_DB_PATH
 from pipeline.asset_configs import get_asset_config
 from pipeline.ingest_dbn_mgc import (
     validate_chunk,
@@ -50,8 +50,6 @@ from pipeline.ingest_dbn_mgc import (
     check_merge_integrity,
     run_final_gates,
     CheckpointManager,
-    GC_OUTRIGHT_PATTERN,
-    MINIMUM_START_DATE,
 )
 
 from pipeline.log import get_logger
@@ -78,31 +76,22 @@ def get_ingest_config(instrument: str) -> dict:
     """
     Return ingestion-specific config for an instrument.
 
-    MGC is a special case: data contains GC outrights (better bar coverage),
-    stored under symbol='MGC'. All other instruments use their own outrights.
+    All instruments (including MGC) now use asset_configs.py as source of truth.
+    The outright_pattern in asset_configs matches the actual source data contracts
+    (e.g., GC for MGC, RTY for M2K, ES for the ES backfill entry).
 
     Returns dict with keys: symbol, outright_pattern, prefix_len,
     minimum_start_date, data_dir.
     """
     config = get_asset_config(instrument)
 
-    if instrument.upper() == "MGC":
-        # MGC data source is GC outrights (2-char prefix: GC)
-        return {
-            "symbol": "MGC",
-            "outright_pattern": GC_OUTRIGHT_PATTERN,
-            "prefix_len": 2,
-            "minimum_start_date": MINIMUM_START_DATE,
-            "data_dir": DAILY_DBN_DIR,
-        }
-    else:
-        return {
-            "symbol": config["symbol"],
-            "outright_pattern": config["outright_pattern"],
-            "prefix_len": config["prefix_len"],
-            "minimum_start_date": config["minimum_start_date"],
-            "data_dir": config["dbn_path"],
-        }
+    return {
+        "symbol": config["symbol"],
+        "outright_pattern": config["outright_pattern"],
+        "prefix_len": config["prefix_len"],
+        "minimum_start_date": config["minimum_start_date"],
+        "data_dir": config["dbn_path"],
+    }
 
 # =============================================================================
 # SYMBOLOGY MAPPING
