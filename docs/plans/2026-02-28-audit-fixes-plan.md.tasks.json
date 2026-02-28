@@ -1,0 +1,10 @@
+{
+  "planPath": "docs/plans/2026-02-28-audit-fixes-plan.md",
+  "tasks": [
+    {"id": 1, "subject": "Phase A: E3 soft retirement (50 rows flagged)", "status": "pending"},
+    {"id": 2, "subject": "Phase B: Walk-forward soft gate columns", "status": "pending", "blockedBy": [1]},
+    {"id": 3, "subject": "Phase C: Data years drift check", "status": "pending", "blockedBy": [2]},
+    {"id": 4, "subject": "Phase D: E2 slippage stress research script", "status": "pending", "blockedBy": [3]}
+  ],
+  "lastUpdated": "2026-02-28T15:45:00+10:00"
+}
