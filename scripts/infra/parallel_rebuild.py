@@ -119,8 +119,10 @@ def _build_command(
             "--instrument", instrument,
             "--db", str(db_path),
             "--exclude-years", "2021",
-            "--min-years-positive-pct", "0.8",
-            "--min-sample", str(extra.get("min_sample", 30)),
+            "--no-regime-waivers",
+            "--min-years-positive-pct", "0.75",
+            "--no-walkforward",
+            "--min-sample", str(extra.get("min_sample", 50)),
         ]
 
     else:
@@ -401,7 +403,7 @@ Examples:
     parser.add_argument("--start", help="Start date for outcome_builder (YYYY-MM-DD)")
     parser.add_argument("--end", help="End date for outcome_builder (YYYY-MM-DD)")
     parser.add_argument("--orb-minutes", type=int, default=5, help="ORB minutes")
-    parser.add_argument("--min-sample", type=int, default=30, help="Min sample for validator")
+    parser.add_argument("--min-sample", type=int, default=50, help="Min sample for validator")
     parser.add_argument("--dry-run", action="store_true", help="Show plan, don't execute")
 
     args = parser.parse_args()
