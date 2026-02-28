@@ -348,6 +348,94 @@ class TestDiscoverySessionAwareFilters:
         assert len(violations) == 0
 
 
+class TestWfCoverage:
+    """Tests for check #40: WF coverage for MGC/MES."""
+
+    def test_warns_on_untested_mgc(self, tmp_path, monkeypatch, capsys):
+        """MGC with 1 NULL + 1 TRUE -> warning printed, but no blocking violation."""
+        import duckdb
+        from pipeline import check_drift
+        from pipeline.check_drift import check_wf_coverage
+
+        db_path = tmp_path / "test.db"
+        con = duckdb.connect(str(db_path))
+        con.execute("""
+            CREATE TABLE validated_setups (
+                strategy_id VARCHAR PRIMARY KEY,
+                instrument VARCHAR,
+                status VARCHAR,
+                wf_tested BOOLEAN
+            )
+        """)
+        con.execute("""
+            INSERT INTO validated_setups VALUES
+                ('MGC_1', 'MGC', 'active', TRUE),
+                ('MGC_2', 'MGC', 'active', NULL)
+        """)
+        con.close()
+
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_wf_coverage()
+        assert len(violations) == 0, "Soft gate must never block"
+        captured = capsys.readouterr()
+        assert "MGC" in captured.out
+        assert "1/2" in captured.out
+        assert "WARNING" in captured.out
+
+    def test_passes_all_tested(self, tmp_path, monkeypatch):
+        """MGC with 1 TRUE -> no violation."""
+        import duckdb
+        from pipeline import check_drift
+        from pipeline.check_drift import check_wf_coverage
+
+        db_path = tmp_path / "test.db"
+        con = duckdb.connect(str(db_path))
+        con.execute("""
+            CREATE TABLE validated_setups (
+                strategy_id VARCHAR PRIMARY KEY,
+                instrument VARCHAR,
+                status VARCHAR,
+                wf_tested BOOLEAN
+            )
+        """)
+        con.execute("""
+            INSERT INTO validated_setups VALUES
+                ('MGC_1', 'MGC', 'active', TRUE)
+        """)
+        con.close()
+
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_wf_coverage()
+        assert len(violations) == 0
+
+    def test_ignores_mnq_m2k(self, tmp_path, monkeypatch):
+        """MNQ with NULL -> no violation (not in required set)."""
+        import duckdb
+        from pipeline import check_drift
+        from pipeline.check_drift import check_wf_coverage
+
+        db_path = tmp_path / "test.db"
+        con = duckdb.connect(str(db_path))
+        con.execute("""
+            CREATE TABLE validated_setups (
+                strategy_id VARCHAR PRIMARY KEY,
+                instrument VARCHAR,
+                status VARCHAR,
+                wf_tested BOOLEAN
+            )
+        """)
+        con.execute("""
+            INSERT INTO validated_setups VALUES
+                ('MNQ_1', 'MNQ', 'active', NULL),
+                ('M2K_1', 'M2K', 'active', NULL)
+        """)
+        con.close()
+
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_wf_coverage()
+        assert len(violations) == 0
+
+
 class TestNoActiveE3:
     """Tests for check #39: no active E3 strategies in validated_setups."""
 

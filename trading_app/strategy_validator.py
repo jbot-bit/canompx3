@@ -874,6 +874,11 @@ def run_validation(
                     )
                     regime_waivers = sr["regime_waivers"]
 
+                    wf_result_dict = sr.get("wf_result_dict")
+                    wf_tested = wf_result_dict is not None
+                    wf_passed = (wf_result_dict or {}).get("passed", False) if wf_tested else None
+                    wf_windows_val = (wf_result_dict or {}).get("as_dict", {}).get("n_valid_windows") if wf_tested else None
+
                     con.execute(
                         """INSERT OR REPLACE INTO validated_setups
                            (strategy_id, promoted_from, instrument, orb_label,
@@ -889,8 +894,9 @@ def run_validation(
                             regime_waivers, regime_waiver_count,
                             dst_winter_n, dst_winter_avg_r,
                             dst_summer_n, dst_summer_avg_r,
-                            dst_verdict)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            dst_verdict,
+                            wf_tested, wf_passed, wf_windows)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         [
                             sid, sid,
                             rd["instrument"], rd["orb_label"],
@@ -916,6 +922,7 @@ def run_validation(
                             dst_split.get("winter_n"), dst_split.get("winter_avg_r"),
                             dst_split.get("summer_n"), dst_split.get("summer_avg_r"),
                             dst_split.get("verdict"),
+                            wf_tested, wf_passed, wf_windows_val,
                         ],
                     )
 

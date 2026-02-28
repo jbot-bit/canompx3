@@ -1673,6 +1673,53 @@ def check_sql_adapter_validation_sync() -> list[str]:
     return violations
 
 
+def check_wf_coverage() -> list[str]:
+    """Check #40: WF coverage for MGC/MES (soft gate — WARNING ONLY, never blocks).
+
+    MGC and MES have enough data years for walk-forward testing.
+    MNQ/M2K do not (~2-5 years), so they are skipped.
+    Prints warnings if any active strategy in MGC/MES lacks wf_tested=TRUE,
+    but returns empty violations so it never blocks commits.
+    """
+    WF_REQUIRED_INSTRUMENTS = {"MGC", "MES"}
+    warnings = []
+    try:
+        import duckdb
+
+        db_path = GOLD_DB_PATH_FOR_CHECKS
+        if db_path is None:
+            from pipeline.paths import GOLD_DB_PATH
+            db_path = GOLD_DB_PATH
+        if not Path(db_path).exists():
+            return []  # Skip if no DB (CI)
+        con = duckdb.connect(str(db_path), read_only=True)
+        try:
+            for inst in sorted(WF_REQUIRED_INSTRUMENTS):
+                row = con.execute(
+                    "SELECT COUNT(*) AS total, "
+                    "SUM(CASE WHEN wf_tested = TRUE THEN 1 ELSE 0 END) AS tested "
+                    "FROM validated_setups "
+                    "WHERE instrument = ? AND status = 'active'",
+                    [inst],
+                ).fetchone()
+                total, tested = row[0], row[1]
+                if total > 0 and tested < total:
+                    warnings.append(
+                        f"  {inst}: {total - tested}/{total} active strategies "
+                        f"missing WF test (soft gate)"
+                    )
+        finally:
+            con.close()
+    except Exception:
+        pass  # DB may not exist in CI
+
+    # Print warnings but never block — this is a soft gate
+    if warnings:
+        for w in warnings:
+            print(f"  WARNING (non-blocking): {w.strip()}")
+    return []  # Always pass — soft gate only warns
+
+
 def check_no_active_e3() -> list[str]:
     """Check #39: No active E3 strategies in validated_setups.
 
@@ -1792,6 +1839,8 @@ CHECKS = [
      check_old_session_names),
     ("No active E3 strategies (soft-retired Feb 2026)",
      check_no_active_e3),
+    ("WF coverage for MGC/MES (soft gate, SKIPPED warning)",
+     check_wf_coverage),
 ]
 
 

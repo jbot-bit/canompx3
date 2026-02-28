@@ -396,6 +396,18 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
             except duckdb.CatalogException:
                 pass  # column already exists
 
+        # Migration: add walk-forward soft gate columns (PASS2 audit Phase B)
+        wf_cols = [
+            ("wf_tested", "BOOLEAN"),
+            ("wf_passed", "BOOLEAN"),
+            ("wf_windows", "INTEGER"),
+        ]
+        for col, typedef in wf_cols:
+            try:
+                con.execute(f"ALTER TABLE validated_setups ADD COLUMN {col} {typedef}")
+            except duckdb.CatalogException:
+                pass  # column already exists
+
         con.commit()
         logger.info("Trading app schema initialized successfully")
 
@@ -505,6 +517,7 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
                 "regime_waivers", "regime_waiver_count",
                 "dst_winter_n", "dst_winter_avg_r",
                 "dst_summer_n", "dst_summer_avg_r", "dst_verdict",
+                "wf_tested", "wf_passed", "wf_windows",
                 "status", "retired_at", "retirement_reason"
             }
             actual_cols = {row[0] for row in result}
