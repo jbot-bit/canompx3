@@ -497,3 +497,61 @@ class TestNoActiveE3:
         monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
         violations = check_no_active_e3()
         assert len(violations) == 0
+
+
+class TestDataYearsDisclosure:
+    """Tests for check #41: data years disclosure (warning-only)."""
+
+    def test_warns_on_short_history(self, tmp_path, monkeypatch, capsys):
+        """MNQ with years_tested=5 -> warning printed, no blocking violation."""
+        import duckdb
+        from pipeline import check_drift
+        from pipeline.check_drift import check_data_years_disclosure
+
+        db_path = tmp_path / "test.db"
+        con = duckdb.connect(str(db_path))
+        con.execute("""
+            CREATE TABLE validated_setups (
+                strategy_id TEXT, instrument TEXT, status TEXT,
+                years_tested INTEGER
+            )
+        """)
+        con.execute("""
+            INSERT INTO validated_setups VALUES
+            ('S1', 'MNQ', 'active', 5),
+            ('S2', 'MGC', 'active', 10)
+        """)
+        con.close()
+
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_data_years_disclosure()
+        assert len(violations) == 0, "Soft gate must never block"
+        captured = capsys.readouterr()
+        assert "MNQ" in captured.out
+        assert "WARNING" in captured.out
+
+    def test_passes_long_history(self, tmp_path, monkeypatch, capsys):
+        """MGC with years_tested=10 -> no warning."""
+        import duckdb
+        from pipeline import check_drift
+        from pipeline.check_drift import check_data_years_disclosure
+
+        db_path = tmp_path / "test.db"
+        con = duckdb.connect(str(db_path))
+        con.execute("""
+            CREATE TABLE validated_setups (
+                strategy_id TEXT, instrument TEXT, status TEXT,
+                years_tested INTEGER
+            )
+        """)
+        con.execute("""
+            INSERT INTO validated_setups VALUES
+            ('S1', 'MGC', 'active', 10)
+        """)
+        con.close()
+
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_data_years_disclosure()
+        assert len(violations) == 0
+        captured = capsys.readouterr()
+        assert "WARNING" not in captured.out

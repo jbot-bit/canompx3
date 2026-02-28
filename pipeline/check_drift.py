@@ -1754,6 +1754,51 @@ def check_no_active_e3() -> list[str]:
     return violations
 
 
+def check_data_years_disclosure() -> list[str]:
+    """Check #41: Warn on instruments with years_tested < 7 (WARNING ONLY, never blocks).
+
+    MNQ (~5yr) and M2K (~5yr) have shorter histories than MGC (10yr)
+    and MES (7yr). Strategies validated on shorter data may not survive
+    regime changes. Advisory warning only — prints but doesn't block.
+    """
+    MIN_YEARS = 7
+    warnings = []
+    try:
+        import duckdb
+        db_path = GOLD_DB_PATH_FOR_CHECKS
+        if db_path is None:
+            from pipeline.paths import GOLD_DB_PATH
+            db_path = GOLD_DB_PATH
+        if not Path(db_path).exists():
+            return []
+        con = duckdb.connect(str(db_path), read_only=True)
+        try:
+            rows = con.execute(
+                """SELECT instrument, MIN(years_tested) as min_years,
+                          COUNT(*) as n_strategies
+                   FROM validated_setups
+                   WHERE status = 'active'
+                   GROUP BY instrument
+                   HAVING MIN(years_tested) < ?""",
+                [MIN_YEARS],
+            ).fetchall()
+            for inst, min_years, n_strats in rows:
+                warnings.append(
+                    f"  {inst}: {n_strats} active strategies with "
+                    f"min years_tested={min_years} (< {MIN_YEARS}). "
+                    f"Short data history — monitor for regime fragility"
+                )
+        finally:
+            con.close()
+    except Exception:
+        pass
+
+    if warnings:
+        for w in warnings:
+            print(f"  WARNING (non-blocking): {w.strip()}")
+    return []  # Always pass — soft gate only warns
+
+
 # =============================================================================
 # CHECK REGISTRY — single source of truth for all drift checks
 # =============================================================================
@@ -1841,6 +1886,8 @@ CHECKS = [
      check_no_active_e3),
     ("WF coverage for MGC/MES (soft gate, SKIPPED warning)",
      check_wf_coverage),
+    ("Data years disclosure (years_tested < 7 warning)",
+     check_data_years_disclosure),
 ]
 
 
