@@ -10,7 +10,7 @@ import numpy as np
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from pipeline.ingest_dbn_mgc import validate_chunk, validate_timestamp_utc
+from pipeline.ingest_dbn_mgc import validate_chunk, validate_timestamp_utc, check_merge_integrity
 
 
 # =============================================================================
@@ -204,3 +204,17 @@ class TestValidateTimestampUtc:
         valid, reason = validate_timestamp_utc(df)
         assert valid is False
         assert "Null" in reason or "null" in reason.lower()
+
+
+# =============================================================================
+# check_merge_integrity tests
+# =============================================================================
+
+class TestCheckMergeIntegrity:
+    """Tests for post-merge integrity gate."""
+
+    def test_accepts_symbol_parameter(self):
+        """check_merge_integrity should accept optional symbol parameter."""
+        import inspect
+        sig = inspect.signature(check_merge_integrity)
+        assert 'symbol' in sig.parameters, "check_merge_integrity must accept symbol param"

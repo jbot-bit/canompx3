@@ -416,7 +416,7 @@ def main():
                         FROM chunk_frame
                     """)
 
-                    int_ok, int_reason = check_merge_integrity(con, chunk_start, chunk_end)
+                    int_ok, int_reason = check_merge_integrity(con, chunk_start, chunk_end, symbol=symbol)
                     if not int_ok:
                         con.execute("ROLLBACK")
                         checkpoint_mgr.write_checkpoint(
@@ -483,7 +483,7 @@ def main():
                         FROM chunk_frame
                     """)
 
-                    int_ok, int_reason = check_merge_integrity(con, chunk_start, chunk_end)
+                    int_ok, int_reason = check_merge_integrity(con, chunk_start, chunk_end, symbol=symbol)
                     if not int_ok:
                         con.execute("ROLLBACK")
                         checkpoint_mgr.write_checkpoint(

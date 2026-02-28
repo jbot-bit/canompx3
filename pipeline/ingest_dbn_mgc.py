@@ -373,31 +373,43 @@ def check_pk_safety(df: pd.DataFrame, trading_day: date) -> tuple[bool, str]:
         return False, f"Duplicate ts_utc found for trading day {trading_day}: {len(dupes)} rows"
     return True, ""
 
-def check_merge_integrity(con: duckdb.DuckDBPyConnection, chunk_start: str, chunk_end: str) -> tuple[bool, str]:
+def check_merge_integrity(con: duckdb.DuckDBPyConnection, chunk_start: str, chunk_end: str, symbol: str = None) -> tuple[bool, str]:
     """
     Assert no duplicates or NULL source_symbol after merge.
 
-    Must run AFTER merge.
+    Must run AFTER merge. If symbol is provided, scopes checks to that symbol only.
+    Uses a 1-day buffer on the start of the date range to account for overnight bars
+    whose DATE(ts_utc) may precede the trading day.
     """
-    # Check for duplicates
-    dupe_check = con.execute("""
+    symbol_clause = "AND symbol = ?" if symbol else ""
+    params_base = [chunk_start, chunk_end]
+    if symbol:
+        params_base.append(symbol)
+
+    # Check for duplicates (with 1-day buffer for overnight bars)
+    dupe_check = con.execute(f"""
         SELECT symbol, ts_utc, COUNT(*) as cnt
         FROM bars_1m
-        WHERE DATE(ts_utc) BETWEEN ? AND ?
+        WHERE DATE(ts_utc) BETWEEN CAST(? AS DATE) - INTERVAL 1 DAY AND ?
+        {symbol_clause}
         GROUP BY symbol, ts_utc
         HAVING COUNT(*) > 1
         LIMIT 5
-    """, [chunk_start, chunk_end]).fetchall()
+    """, params_base).fetchall()
 
     if dupe_check:
         return False, f"Duplicate (symbol, ts_utc) found after merge: {dupe_check}"
 
     # Check for NULL source_symbol
-    null_check = con.execute("""
+    null_params = [chunk_start, chunk_end]
+    if symbol:
+        null_params.append(symbol)
+    null_check = con.execute(f"""
         SELECT COUNT(*) FROM bars_1m
-        WHERE DATE(ts_utc) BETWEEN ? AND ?
+        WHERE DATE(ts_utc) BETWEEN CAST(? AS DATE) - INTERVAL 1 DAY AND ?
+        {symbol_clause}
         AND source_symbol IS NULL
-    """, [chunk_start, chunk_end]).fetchone()[0]
+    """, null_params).fetchone()[0]
 
     if null_check > 0:
         return False, f"NULL source_symbol found after merge: {null_check} rows"
@@ -729,7 +741,7 @@ def main():
                     )
 
                     # INTEGRITY GATE
-                    int_ok, int_reason = check_merge_integrity(con, chunk_start, chunk_end)
+                    int_ok, int_reason = check_merge_integrity(con, chunk_start, chunk_end, symbol='MGC')
                     if not int_ok:
                         con.execute("ROLLBACK")
                         checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, 'failed', error=int_reason)
@@ -804,7 +816,7 @@ def main():
                         chunk_rows
                     )
 
-                    int_ok, int_reason = check_merge_integrity(con, chunk_start, chunk_end)
+                    int_ok, int_reason = check_merge_integrity(con, chunk_start, chunk_end, symbol='MGC')
                     if not int_ok:
                         con.execute("ROLLBACK")
                         checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, 'failed', error=int_reason)
