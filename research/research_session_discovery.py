@@ -56,7 +56,7 @@ from pipeline.paths import GOLD_DB_PATH
 CANDIDATE_TIMES = [(h, m) for h in range(24) for m in range(0, 60, 5)]
 
 RR_TARGETS = [1.0, 1.5, 2.0, 2.5, 3.0]
-G_THRESHOLDS = {"G4": 4.0, "G5": 5.0, "G6": 6.0}
+G_THRESHOLDS = {"G0": 0.0, "G4": 4.0, "G5": 5.0, "G6": 6.0}
 G_LIST = sorted(G_THRESHOLDS.items(), key=lambda x: x[1])  # (name, min_size) ascending
 
 ORB_BARS = 5          # 5-minute ORB

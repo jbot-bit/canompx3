@@ -74,7 +74,7 @@ DST_CLEAN_SESSIONS = {
     "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
     "US_DATA_830", "NYSE_OPEN", "US_DATA_1000", "COMEX_SETTLE",
     "CME_PRECLOSE", "NYSE_CLOSE",
-    "BRISBANE_0925",
+    "BRISBANE_0925", "BRISBANE_1025", "BRISBANE_1955",
 }
 
 
@@ -107,7 +107,7 @@ DST_CLEAN_SESSIONS = {
 DOW_ALIGNED_SESSIONS = {
     "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
     "US_DATA_830", "US_DATA_1000", "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
-    "BRISBANE_0925",
+    "BRISBANE_0925", "BRISBANE_1025", "BRISBANE_1955",
 }
 DOW_MISALIGNED_SESSIONS = {
     "NYSE_OPEN": -1,  # Brisbane DOW = exchange DOW + 1 (i.e. exchange is 1 day behind)
@@ -326,6 +326,30 @@ def brisbane_0925_brisbane(trading_day: date) -> tuple[int, int]:
     return (9, 25)
 
 
+def brisbane_1025_brisbane(trading_day: date) -> tuple[int, int]:
+    """Fixed 10:25 AM Brisbane session. No market event anchor.
+
+    Session discovery scan (2026-03-01): FDR survivor for MNQ.
+    N=1,272-1,289, avgR=+0.221 to +0.247 (RR2.5-3.0), Sharpe_ann=2.09-2.21.
+    Positive 6/6 years. Both DST seasons positive (Rw=+0.305, Rs=+0.189).
+    Independent from 09:25 cluster — 1 hour later, inverted season bias.
+    Also significant for M2K. No near existing session.
+    """
+    return (10, 25)
+
+
+def brisbane_1955_brisbane(trading_day: date) -> tuple[int, int]:
+    """Fixed 19:55 PM Brisbane session. No market event anchor.
+
+    Session discovery scan (2026-03-01): FDR survivor for MNQ.
+    N=724-1,291, avgR=+0.167 to +0.238 (RR2.0-2.5), Sharpe_ann=1.68-1.73.
+    Positive 5-6/6 years. Both DST seasons positive (Rw=+0.197, Rs=+0.192).
+    Completely independent liquidity pool — 115 min from nearest session.
+    Evening Brisbane = morning London/pre-US.
+    """
+    return (19, 55)
+
+
 # =========================================================================
 # SESSION CATALOG: master registry of all ORB sessions
 # =========================================================================
@@ -398,6 +422,18 @@ SESSION_CATALOG = {
         "resolver": brisbane_0925_brisbane,
         "break_group": "cme",
         "event": "Fixed 9:25 AM Brisbane (not event-relative)",
+    },
+    "BRISBANE_1025": {
+        "type": "dynamic",
+        "resolver": brisbane_1025_brisbane,
+        "break_group": "asia",
+        "event": "Fixed 10:25 AM Brisbane (not event-relative)",
+    },
+    "BRISBANE_1955": {
+        "type": "dynamic",
+        "resolver": brisbane_1955_brisbane,
+        "break_group": "london",
+        "event": "Fixed 19:55 PM Brisbane (not event-relative)",
     },
 }
 

@@ -33,6 +33,22 @@ MONTH_CODES = 'FGHJKMNQUVXZ'
 # =============================================================================
 
 ASSET_CONFIGS = {
+    "MBT": {
+        # Source data is BTC (full-size Bitcoin, 5 BTC/contract) — same price, stored as symbol='MBT'.
+        # Identical pattern to GC→MGC, RTY→M2K. Cost model uses MBT micro specs ($0.10/pt).
+        # BTC trades ~30k contracts/day vs MBT ~5k — far better 1m bar coverage.
+        "dbn_path": PROJECT_ROOT / "DB" / "BTC_DB",
+        "symbol": "MBT",
+        "outright_pattern": re.compile(r'^BTC[FGHJKMNQUVXZ]\d{1,2}$'),
+        "prefix_len": 3,
+        "minimum_start_date": date(2021, 2, 1),
+        "schema_required": "ohlcv-1m",
+        "enabled_sessions": [
+            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
+            "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
+            "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+        ],
+    },
     "MGC": {
         # Source data is GC (full-size Gold, $100/pt) — same price, stored as symbol='MGC'.
         # Identical pattern to RTY→M2K, SI→SIL, 6E→M6E. Cost model uses MGC micro specs ($10/pt).
@@ -59,7 +75,7 @@ ASSET_CONFIGS = {
             "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
             "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
             "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
-            "BRISBANE_0925",
+            "BRISBANE_0925", "BRISBANE_1025", "BRISBANE_1955",
         ],
     },
     "MCL": {
@@ -126,6 +142,7 @@ ASSET_CONFIGS = {
             "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
             "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
             "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+            "BRISBANE_0925", "BRISBANE_1025",
         ],
     },
     "SIL": {
@@ -177,6 +194,7 @@ ASSET_CONFIGS = {
             "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
             "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
             "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+            "BRISBANE_0925", "BRISBANE_1025", "BRISBANE_1955",
         ],
     },
 }

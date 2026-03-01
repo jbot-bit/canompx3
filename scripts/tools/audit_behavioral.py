@@ -253,11 +253,12 @@ def check_cli_arg_drift() -> list[str]:
             ["git", "diff", "HEAD", "--unified=0"],
             capture_output=True, text=True, timeout=10,
             cwd=str(PROJECT_ROOT),
+            encoding='utf-8', errors='replace',
         )
         if result.returncode != 0:
             return []
 
-        diff_text = result.stdout
+        diff_text = result.stdout or ""
         # Find added add_argument lines
         new_args = []
         current_file = None

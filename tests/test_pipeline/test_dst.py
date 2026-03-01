@@ -289,7 +289,7 @@ class TestDynamicOrbResolvers:
             "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
             "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
             "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
-            "BRISBANE_0925",
+            "BRISBANE_0925", "BRISBANE_1025", "BRISBANE_1955",
         }
 
     def test_resolvers_return_tuples(self):
@@ -364,8 +364,8 @@ class TestSessionCatalog:
     def test_get_break_group_unknown_returns_none(self):
         assert get_break_group("NONEXISTENT") is None
 
-    def test_catalog_has_exactly_11_sessions(self):
-        assert len(SESSION_CATALOG) == 11
+    def test_catalog_has_exactly_13_sessions(self):
+        assert len(SESSION_CATALOG) == 13
 
     def test_dst_sets_cover_all_sessions(self):
         """Every session must be in either DST_AFFECTED or DST_CLEAN."""
