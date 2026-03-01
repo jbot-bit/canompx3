@@ -7,8 +7,13 @@ No RAG needed -- total corpus fits easily in Claude's context window.
 
 from pathlib import Path
 
+from pipeline.cost_model import COST_SPECS
+
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 
+# Derive MGC friction from canonical source
+_mgc_spec = COST_SPECS["MGC"]
+_mgc_friction = _mgc_spec.commission_rt + _mgc_spec.spread_doubled + _mgc_spec.slippage
 
 # Canonical documents to load (path relative to project root, priority label)
 CORPUS_FILES = {
@@ -30,7 +35,7 @@ CORPUS_FILES = {
     "COST_MODEL": {
         "path": "pipeline/cost_model.py",
         "priority": "CRITICAL",
-        "description": "MGC friction $8.40, R-multiple math",
+        "description": f"MGC friction ${_mgc_friction:.2f}, R-multiple math",
     },
 }
 

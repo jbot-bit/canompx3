@@ -638,7 +638,7 @@ class TestRandomOutcomeMath:
 
     def test_win_pnl_consistent_with_cost(self):
         """Win pnl_r must match to_r_multiple. Small-ORB wins can be negative
-        after friction (0.7pt risk, $7 gross, -$8.40 friction = -$1.40 net).
+        after friction (0.5pt risk, $5 gross, -$5.74 friction = -$0.74 net).
         This is mathematically correct: 'target hit' != 'profitable after costs'.
         Large-ORB wins (risk >= friction_in_points) must always be positive."""
         _skip_if_no_db()

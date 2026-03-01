@@ -43,7 +43,7 @@ E3 = get a better price on the pullback. The right model depends on the session 
 
 The single most important variable is **ORB size**. Larger ORBs produce better outcomes because:
 1. More room for directional follow-through relative to noise
-2. Fixed friction ($8.40 RT) is a smaller percentage of risk
+2. Fixed friction ($5.74 RT) is a smaller percentage of risk
 3. Large ORBs signal genuine institutional participation
 
 ### Win rate by CME_REOPEN ORB size (E1 RR2.5 CB2):
@@ -433,18 +433,18 @@ point-based filter becomes less selective. Consider switching to percentage-base
 ## Cost Model
 
 ### MGC friction per round-trip
-- Commission: $2.40/RT
+- Commission: $1.74/RT
 - Spread: $2.00/RT (1 tick x $10)
-- Slippage: $4.00/RT
-- **Total: $8.40/RT = 0.84pt**
+- Slippage: $2.00/RT
+- **Total: $5.74/RT = 0.574pt**
 
 ### Impact by ORB size
 | ORB Size | Friction % of Risk | Win at 1RR | Need WR |
 |----------|-------------------|------------|---------|
-| 2pt | 42% | 0.58R | 63.3% |
-| 4pt | 21% | 0.79R | 55.9% |
-| 6pt | 14% | 0.86R | 53.7% |
-| 10pt | 8.4% | 0.92R | 52.2% |
+| 2pt | 28.7% | 0.71R | 58.5% |
+| 4pt | 14.4% | 0.86R | 53.8% |
+| 6pt | 9.6% | 0.90R | 52.6% |
+| 10pt | 5.7% | 0.94R | 51.5% |
 
 ---
 

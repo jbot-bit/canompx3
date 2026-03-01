@@ -17,7 +17,7 @@ Several instruments use full-size contract data for better 1m bar coverage. Full
 | M6E | 6E (full EUR/USD) | 6E has better coverage | M6E ($12,500/pt) |
 | SIL | SI (full silver) | SI has better coverage | SIL ($1,000/pt) |
 | MNQ | MNQ (native micro) | No mapping needed | MNQ ($2/pt) |
-| MCL | MCL (native micro) | No mapping needed | MCL ($100/pt) |
+| MCL | CL (full crude oil) | Better 1m coverage than MCL | MCL ($100/pt) |
 
 **For instruments, cost models, sessions, entry models, and all trading logic → see `TRADING_RULES.md`.**
 **For research methodology, statistical standards, and market structure knowledge → see `RESEARCH_RULES.md`.**

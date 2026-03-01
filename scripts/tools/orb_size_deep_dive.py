@@ -23,7 +23,7 @@ DEFAULT_DB = PROJECT_ROOT / "gold.db"
 
 # Cost models (RT friction in points)
 FRICTION = {
-    "MGC": {"rt_dollars": 8.40, "tick_value": 1.00, "rt_points": 0.84},
+    "MGC": {"rt_dollars": 5.74, "tick_value": 1.00, "rt_points": 0.574},
     "MES": {"rt_dollars": 2.10, "tick_value": 1.25, "rt_points": 1.68},
     "MNQ": {"rt_dollars": 2.74, "tick_value": 2.00, "rt_points": 1.37},
     "MCL": {"rt_dollars": 3.00, "tick_value": 1.00, "rt_points": 0.30},

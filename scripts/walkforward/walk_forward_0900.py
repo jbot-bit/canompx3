@@ -276,9 +276,9 @@ def main():
     print(f"  G6 wins with pnl_r < 0.15R (thin margin): {len(thin_wins)} of {len(all_wins)} wins ({len(thin_wins)/max(len(all_wins),1)*100:.1f}%)")
     print(f"  These trades could flip to losses under higher real-world costs.")
 
-    # What if we add 0.084R of extra friction to every trade (equivalent to doubling costs)?
-    # friction = $8.40. At median G6 ORB of ~9pt, risk = $98.40, extra friction = $8.40 = 0.085R
-    extra_friction_r = 0.085  # approximate
+    # What if we add 0.057R of extra friction to every trade (equivalent to doubling costs)?
+    # friction = $5.74. At median G6 ORB of ~9pt, risk = $95.74, extra friction = $5.74 = 0.060R
+    extra_friction_r = 0.060  # approximate
     adjusted = eligible_g6.copy()
     adjusted["pnl_r_stressed"] = adjusted["pnl_r"] - extra_friction_r
 

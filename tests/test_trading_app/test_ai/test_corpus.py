@@ -46,7 +46,7 @@ class TestLoadCorpus:
 
     def test_cost_model_contains_friction(self):
         corpus = load_corpus()
-        assert "8.40" in corpus["COST_MODEL"] or "total_friction" in corpus["COST_MODEL"]
+        assert "total_friction" in corpus["COST_MODEL"]
 
 
 class TestSchemaDefinitions:

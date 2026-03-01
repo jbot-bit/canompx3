@@ -53,7 +53,7 @@ DOLLAR_PER_POINT = {
 
 # Total round-trip friction per contract (commission + spread + slippage)
 FRICTION = {
-    "MGC": 8.40,   # 2.40 + 2.00 + 4.00
+    "MGC": 5.74,   # 1.74 + 2.00 + 2.00
     "MNQ": 2.74,   # 1.24 + 0.50 + 1.00
     "MES": 3.74,   # 1.24 + 1.25 + 1.25
     "M2K": 3.24,   # 1.24 + 1.00 + 1.00

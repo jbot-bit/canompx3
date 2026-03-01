@@ -7,10 +7,10 @@ See CANONICAL_LOGIC.txt sections 2B and 10.
 
 MGC (Micro Gold):
   Point value: $10/point
-  Commission RT: $2.40
+  Commission RT: $1.74
   Spread (doubled): $2.00
-  Slippage: $4.00
-  Total friction: $8.40 RT
+  Slippage: $2.00
+  Total friction: $5.74 RT
 
 FAIL-CLOSED: Unknown instruments raise ValueError.
 
@@ -70,9 +70,9 @@ COST_SPECS = {
     "MGC": CostSpec(
         instrument="MGC",
         point_value=10.0,
-        commission_rt=2.40,
+        commission_rt=1.74,
         spread_doubled=2.00,
-        slippage=4.00,
+        slippage=2.00,
         tick_size=0.10,
         min_ticks_floor=10,
     ),

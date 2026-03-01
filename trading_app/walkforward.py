@@ -76,6 +76,10 @@ def run_walkforward(
     Args:
         dst_regime: If 'winter' or 'summer', restrict DST-affected sessions to
             that regime only (matches the _W/_S strategy_id suffix from discovery).
+        wf_start_date: Optional per-instrument anchor override. When set,
+            window generation starts from max(earliest_outcome, wf_start_date)
+            instead of earliest_outcome. Full-sample outcomes still load from
+            earliest date — only the WF test window anchor shifts.
 
     Pass rule (ALL 4 required, fail-closed):
       1. n_valid >= min_valid_windows

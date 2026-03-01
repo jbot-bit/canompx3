@@ -347,7 +347,7 @@ else:
 ```
 
 **Friction:** From cost_model.py
-- MGC: $10/point × $8.40 RT friction = 0.84R per round-trip
+- MGC: $10/point × $5.74 RT friction = 0.574R per round-trip
 - MNQ: $2/point × $2.74 RT friction = 1.37R per RT
 - MES: $5/point × $3.74 RT friction = 0.748R per RT
 
@@ -928,7 +928,7 @@ For each candidate (ordered by ExpR DESC):
 
 ### 4. **Neglecting Cost Model Sensitivity**
 - **Anti-Pattern:** Using base cost for validation, different cost in live trading
-- **Problem:** $8.40 friction vs $12.00 actual friction → ExpR flips negative
+- **Problem:** $5.74 friction vs $12.00 actual friction → ExpR flips negative
 - **What to Do Instead:** Always stress-test at 1.5x friction in Phase 4
 - **Evidence:** Stress gate catches ~30% of discovered strategies
 

@@ -1033,12 +1033,12 @@ class TestCostModelInstruments:
             get_cost_spec("GARBAGE_INSTRUMENT")
 
     def test_mgc_friction_consistent(self):
-        """MGC friction is $8.40 RT (commission $2.40 + spread $2.00 + slippage $4.00)."""
+        """MGC friction is $5.74 RT (commission $1.74 + spread $2.00 + slippage $2.00)."""
         spec = get_cost_spec("MGC")
-        assert spec.commission_rt == pytest.approx(2.40), "MGC commission mismatch"
+        assert spec.commission_rt == pytest.approx(1.74), "MGC commission mismatch"
         assert spec.spread_doubled == pytest.approx(2.00), "MGC spread mismatch"
-        assert spec.slippage == pytest.approx(4.00), "MGC slippage mismatch"
-        assert spec.total_friction == pytest.approx(8.40), "MGC total friction mismatch"
+        assert spec.slippage == pytest.approx(2.00), "MGC slippage mismatch"
+        assert spec.total_friction == pytest.approx(5.74), "MGC total friction mismatch"
 
 
 # =============================================================================

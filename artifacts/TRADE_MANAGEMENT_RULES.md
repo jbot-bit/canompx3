@@ -75,7 +75,7 @@ All claims independently re-verified from raw data. Sample sizes noted for each.
 | MAE | Maximum Adverse Excursion. How far price went against you before the trade ended. |
 | PDH / PDL | Previous Day High / Previous Day Low. Key support/resistance levels. |
 | HOD / LOD | High of Day / Low of Day. Today's extremes so far. |
-| MGC | Micro Gold futures (the contract you trade). $10 per point, $8.40 round-trip cost. |
+| MGC | Micro Gold futures (the contract you trade). $10 per point, $5.74 round-trip cost. |
 | GC | Full-size Gold futures. Same price as MGC, just 10x the contract size. We use GC price data for accuracy but trade MGC for smaller position size. |
 
 ### Reading a Strategy ID
@@ -218,4 +218,4 @@ TRADE FILLS (E3 retrace at ORB edge)
 - "Went green" threshold: +0.3R from entry
 - 1-minute bars used for dwell time counting (bars_1m table)
 - All timestamps UTC, converted from Brisbane trading day boundaries
-- pnl_r is post-cost (MGC friction $8.40 RT deducted before R conversion)
+- pnl_r is post-cost (MGC friction $5.74 RT deducted before R conversion)

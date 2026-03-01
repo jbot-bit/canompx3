@@ -52,7 +52,7 @@ All sessions are now dynamic/event-based. Times are resolved per-day from `pipel
 
 **E3 vs E1 (verified per-combo, not generalized):** E3 beats E1 in 20/33 combos at RR2.0 G4+, but 19 of those 20 are both negative (E3 just loses less). Only MGC CME_REOPEN has E3 positive AND beating E1 (+0.186 vs +0.137).
 
-**Post-rebuild results (Feb 28):** 888 validated strategies with honest entries (E1+E2) across 5/15/30m ORB apertures (5m: 392, 15m: 312, 30m: 184). 241 FDR significant. 415 edge families (31 ROBUST, 53 WHITELISTED). E3 soft-retired (7 new E3 passed WF but retired per policy). Full rebuild with WF enabled for all instruments + MGC WF override (2022-01-01) + MGC cost model $8.40→$5.74.
+**Post-rebuild results (Mar 1):** Query DB via MCP for current counts. Includes session coverage rebuild (5 new sessions) + CL→MCL full-size source mapping. E3 soft-retired (all E3 RETIRED per policy).
 
 ### Confirm Bars (CB)
 CB1-CB5 = 1-5 consecutive 1m bars must close outside ORB. If ANY bar closes back inside, count resets. For E3, CB1-CB5 produce identical entry prices (same limit order).

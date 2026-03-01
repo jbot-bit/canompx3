@@ -134,8 +134,8 @@ For EACH instrument in ASSET_CONFIGS:
 - [ ] Dead instruments (MCL, SIL, M6E) → still in config but should NOT have active validated_setups. Verify.
 
 ### 2B. Cost Model (`pipeline/cost_model.py`)
-- [ ] TRADING_RULES.md claims MGC = $8.40/RT. Verify in code.
-- [ ] Per-instrument friction: MGC $8.40, MNQ $2.74, MES $3.74, M2K $3.24. All in code?
+- [ ] TRADING_RULES.md claims MGC = $5.74/RT. Verify in code.
+- [ ] Per-instrument friction: MGC $5.74, MNQ $2.74, MES $3.74, M2K $3.24. All in code?
 - [ ] `friction_points` computation → uses the correct tick_value per instrument?
 - [ ] Are there any instruments with cost specs that don't match TRADING_RULES.md? → `COST_MODEL_DRIFT`
 
@@ -171,7 +171,7 @@ Documentation rots faster than code. No automated check verifies docs.
 ### 3B. TRADING_RULES.md Audit
 - [ ] **Session table (10 sessions):** Compare every row against `dst.py:SESSION_CATALOG`. Flag mismatches.
 - [ ] **Entry model table (E1/E2/E3):** Compare trigger logic against `entry_rules.py`. Line by line.
-- [ ] **Cost model ($8.40/RT):** Match `cost_model.py`?
+- [ ] **Cost model ($5.74/RT):** Match `cost_model.py`?
 - [ ] **Live portfolio tiers 1/2/3:** Match `live_config.py`? Every family, every gate.
 - [ ] **Confirmed edges table:** For each "DEPLOYED" edge, grep execution_engine.py + portfolio.py. Code path exists?
 - [ ] **NO-GO table:** For each NO-GO, grep `pipeline/` and `trading_app/` for the feature name. Found in production → `NO_GO_ZOMBIE`.

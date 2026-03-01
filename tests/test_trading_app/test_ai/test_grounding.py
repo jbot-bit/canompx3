@@ -11,10 +11,10 @@ from trading_app.ai.grounding import (
 @pytest.fixture
 def mock_corpus():
     return {
-        "CANONICAL_LOGIC": "R-multiple = (pnl * 10 - 8.40) / risk",
+        "CANONICAL_LOGIC": "R-multiple = (pnl * 10 - 5.74) / risk",
         "TRADE_MANAGEMENT_RULES": "30-min kill rule for 1800 E3",
         "CONFIG": 'ENTRY_MODELS = ["E1", "E3"]\nCORE_MIN_SAMPLES = 100',
-        "COST_MODEL": "total_friction = 8.40\npoint_value = 10.0",
+        "COST_MODEL": "total_friction = 5.74\npoint_value = 10.0",
     }
 
 
@@ -26,7 +26,7 @@ def mock_schema():
 class TestBuildGroundingPrompt:
     def test_contains_critical_rules(self, mock_corpus, mock_schema):
         prompt = build_grounding_prompt(mock_corpus, mock_schema)
-        assert "8.40" in prompt
+        assert "5.74" in prompt
         assert "R-multiple" in prompt.lower() or "r-multiple" in prompt.lower()
 
     def test_contains_glossary(self, mock_corpus, mock_schema):

@@ -217,7 +217,7 @@ class TestValidateStrategy:
     def test_stress_test_falls_back_to_tick_floor(self):
         """Stress test uses tick-based floor when both risk stats are None."""
         # tick floor = 10 * 0.10 = 1.0 point, risk $ = 10.0
-        # stress delta = (8.40 * 0.5) / 10.0 = 0.42R -> needs ExpR > 0.42
+        # stress delta = (5.74 * 0.5) / 10.0 = 0.287R -> needs ExpR > 0.287
         status, _, _ = validate_strategy(
             _make_row(expectancy_r=0.50, median_risk_points=None, avg_risk_points=None), _cost()
         )

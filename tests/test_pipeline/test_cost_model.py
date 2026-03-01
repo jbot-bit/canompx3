@@ -28,18 +28,18 @@ from pipeline.cost_model import (
 class TestCostSpec:
 
     def test_mgc_total_friction(self):
-        """MGC total friction = $2.40 + $2.00 + $4.00 = $8.40."""
+        """MGC total friction = $1.74 + $2.00 + $2.00 = $5.74."""
         spec = get_cost_spec("MGC")
-        assert spec.total_friction == pytest.approx(8.40)
+        assert spec.total_friction == pytest.approx(5.74)
 
     def test_mgc_point_value(self):
         spec = get_cost_spec("MGC")
         assert spec.point_value == 10.0
 
     def test_mgc_friction_in_points(self):
-        """$8.40 / $10 per point = 0.84 points."""
+        """$5.74 / $10 per point = 0.574 points."""
         spec = get_cost_spec("MGC")
-        assert spec.friction_in_points == pytest.approx(0.84)
+        assert spec.friction_in_points == pytest.approx(0.574)
 
     def test_mgc_tick_size(self):
         spec = get_cost_spec("MGC")
@@ -87,27 +87,27 @@ class TestGetCostSpec:
 class TestRiskReward:
 
     def test_risk_in_dollars_long(self):
-        """Long: entry=2350, stop=2340, risk=10pts*$10+$8.40=$108.40."""
+        """Long: entry=2350, stop=2340, risk=10pts*$10+$5.74=$105.74."""
         spec = get_cost_spec("MGC")
         risk = risk_in_dollars(spec, entry=2350.0, stop=2340.0)
-        assert risk == pytest.approx(108.40)
+        assert risk == pytest.approx(105.74)
 
     def test_risk_in_dollars_short(self):
         """Short: entry=2340, stop=2350, same risk as long."""
         spec = get_cost_spec("MGC")
         risk = risk_in_dollars(spec, entry=2340.0, stop=2350.0)
-        assert risk == pytest.approx(108.40)
+        assert risk == pytest.approx(105.74)
 
     def test_reward_in_dollars_long(self):
-        """Long: entry=2350, target=2360, reward=10pts*$10-$8.40=$91.60."""
+        """Long: entry=2350, target=2360, reward=10pts*$10-$5.74=$94.26."""
         spec = get_cost_spec("MGC")
         rew = reward_in_dollars(spec, entry=2350.0, target=2360.0)
-        assert rew == pytest.approx(91.60)
+        assert rew == pytest.approx(94.26)
 
     def test_reward_less_than_friction_goes_negative(self):
         """Small target: reward can go negative after costs."""
         spec = get_cost_spec("MGC")
-        # 0.5 point move: $5.00 - $8.40 = -$3.40
+        # 0.5 point move: $5.00 - $5.74 = -$0.74
         rew = reward_in_dollars(spec, entry=2350.0, target=2350.5)
         assert rew < 0
 
@@ -116,8 +116,8 @@ class TestRiskReward:
         spec = get_cost_spec("MGC")
         # 10 point risk, 10 point target (theoretical RR=1)
         rr = realized_rr(spec, entry=2350.0, stop=2340.0, target=2360.0)
-        # $91.60 / $108.40 ≈ 0.845
-        assert rr == pytest.approx(91.60 / 108.40)
+        # $94.26 / $105.74 ≈ 0.891
+        assert rr == pytest.approx(94.26 / 105.74)
         assert rr < 1.0  # Costs degrade RR
 
     def test_realized_rr_2_theoretical(self):
@@ -125,8 +125,8 @@ class TestRiskReward:
         spec = get_cost_spec("MGC")
         # 10 point risk, 20 point target
         rr = realized_rr(spec, entry=2350.0, stop=2340.0, target=2370.0)
-        # reward = 20*10 - 8.40 = 191.60, risk = 10*10 + 8.40 = 108.40
-        assert rr == pytest.approx(191.60 / 108.40)
+        # reward = 20*10 - 5.74 = 194.26, risk = 10*10 + 5.74 = 105.74
+        assert rr == pytest.approx(194.26 / 105.74)
 
 
 class TestRMultiple:
@@ -135,22 +135,22 @@ class TestRMultiple:
         """At breakeven (0 PnL points), R is negative due to costs."""
         spec = get_cost_spec("MGC")
         r = to_r_multiple(spec, entry=2350.0, stop=2340.0, pnl_points=0.0)
-        # (0 - 8.40) / 108.40
+        # (0 - 5.74) / 105.74
         assert r < 0
 
     def test_to_r_multiple_1r_profit(self):
         """10 point profit (1R theoretical) -> realized R < 1."""
         spec = get_cost_spec("MGC")
         r = to_r_multiple(spec, entry=2350.0, stop=2340.0, pnl_points=10.0)
-        # (100 - 8.40) / 108.40 ≈ 0.845
-        assert r == pytest.approx(91.60 / 108.40)
+        # (100 - 5.74) / 105.74 ≈ 0.891
+        assert r == pytest.approx(94.26 / 105.74)
 
     def test_pnl_points_to_r_no_friction_deduction(self):
         """pnl_points_to_r doesn't deduct friction from PnL."""
         spec = get_cost_spec("MGC")
         r = pnl_points_to_r(spec, entry=2350.0, stop=2340.0, pnl_points=10.0)
-        # (100) / 108.40 ≈ 0.923
-        assert r == pytest.approx(100.0 / 108.40)
+        # (100) / 105.74 ≈ 0.946
+        assert r == pytest.approx(100.0 / 105.74)
 
 
 class TestStressTest:
@@ -160,10 +160,10 @@ class TestStressTest:
         spec = get_cost_spec("MGC")
         stressed = stress_test_costs(spec, multiplier=1.5)
 
-        assert stressed.commission_rt == pytest.approx(3.60)
+        assert stressed.commission_rt == pytest.approx(2.61)
         assert stressed.spread_doubled == pytest.approx(3.00)
-        assert stressed.slippage == pytest.approx(6.00)
-        assert stressed.total_friction == pytest.approx(12.60)
+        assert stressed.slippage == pytest.approx(3.00)
+        assert stressed.total_friction == pytest.approx(8.61)
 
     def test_stress_test_degrades_rr(self):
         """Stressed costs produce worse RR."""

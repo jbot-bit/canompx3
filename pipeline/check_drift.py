@@ -1356,14 +1356,8 @@ def check_doc_stats_consistency() -> list[str]:
 
     # Doc files to check: (file, regex, expected_key)
     DOC_STATS_CHECKS = [
-        ("TRADING_RULES.md", r"([\d,]+)\s+validated\s+strateg", "validated_active"),
-        ("TRADING_RULES.md", r"(\d+)\s+FDR\s+significant", "fdr_significant"),
-        ("TRADING_RULES.md", r"(\d+)\s+edge\s+famil", "edge_families"),
-        ("TRADING_RULES.md", r"5m:\s*(\d[\d,]*)", "aperture_5m"),
-        ("TRADING_RULES.md", r"15m:\s*(\d[\d,]*)", "aperture_15m"),
-        ("TRADING_RULES.md", r"30m:\s*(\d[\d,]*)", "aperture_30m"),
-        ("TRADING_RULES.md", r"(\d+)\s+ROBUST", "tier_robust"),
-        ("TRADING_RULES.md", r"(\d+)\s+WHITELISTED", "tier_whitelisted"),
+        # TRADING_RULES.md no longer hardcodes aggregate counts — query DB via MCP.
+        # Only guard against someone re-adding a "Post-rebuild results" line with counts.
         # Guard fires only if someone re-adds a hardcoded count to these files
         ("ROADMAP.md", r"([\d,]+)\s+validated\s+active", "validated_active"),
         ("CLAUDE.md", r"(\d+)\s+(?:drift|static)\s+checks", "drift_check_count"),
