@@ -54,6 +54,7 @@ VALID_ORB_LABELS = {
     "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
     "US_DATA_830", "NYSE_OPEN", "US_DATA_1000", "COMEX_SETTLE",
     "CME_PRECLOSE", "NYSE_CLOSE",
+    "BRISBANE_0925",
 }
 
 # Valid entry models
@@ -155,7 +156,14 @@ def _orb_size_filter_sql(filter_type: str | None, orb_label: str) -> str | None:
             raise ValueError(f"ORB filter threshold {threshold} out of range [1, 20]")
         return f"{col} >= {threshold}"
     if filter_type.startswith("ORB_L"):
-        threshold = int(filter_type[5:])
+        try:
+            threshold = int(filter_type[5:])
+        except ValueError:
+            raise ValueError(
+                f"Filter '{filter_type}' contains a non-ORB component that cannot "
+                f"be applied in SQL. Only pure ORB size filters (ORB_G4, ORB_L8, "
+                f"ORB_G4_L12) are supported in raw outcomes queries."
+            ) from None
         if not (1 <= threshold <= 20):
             raise ValueError(f"ORB filter threshold {threshold} out of range [1, 20]")
         return f"{col} < {threshold}"

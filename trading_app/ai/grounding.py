@@ -5,7 +5,13 @@ Assembles system prompts with critical rules, glossary, available templates,
 and schema summary so Claude gives grounded, honest answers.
 """
 
+from pipeline.cost_model import COST_SPECS
 from trading_app.ai.sql_adapter import SQLAdapter
+
+# Derive MGC cost values from canonical source
+_mgc = COST_SPECS["MGC"]
+_mgc_friction = _mgc.commission_rt + _mgc.spread_doubled + _mgc.slippage
+_mgc_pv = _mgc.point_value
 
 
 def build_grounding_prompt(corpus: dict[str, str], schema_summary: str) -> str:
@@ -28,8 +34,8 @@ You answer questions by selecting the right query template and parameters.
 You MUST ground all answers in the canonical documents below.
 
 === CRITICAL RULES ===
-1. R-multiples deduct friction: R = (pnl_points * $10 - $8.40) / risk_dollars
-2. MGC cost model: $10/point, $8.40 RT friction (commission $2.40 + spread $2.00 + slippage $4.00)
+1. R-multiples deduct friction: R = (pnl_points * ${_mgc_pv:.0f} - ${_mgc_friction:.2f}) / risk_dollars
+2. MGC cost model: ${_mgc_pv:.0f}/point, ${_mgc_friction:.2f} RT friction (commission ${_mgc.commission_rt:.2f} + spread ${_mgc.spread_doubled:.2f} + slippage ${_mgc.slippage:.2f})
 3. ORB size is THE edge: <4pt = house wins, 4-10pt = breakeven+, >10pt = strong
 4. NO_FILTER and L-filter strategies ALL have negative expectancy. NEVER recommend them.
 5. CB1-CB5 on same ORB with E3 = ~100% overlap. Two strategies, not ten.
@@ -49,7 +55,7 @@ You MUST ground all answers in the canonical documents below.
 - WR: Win rate
 - Sharpe: Risk-adjusted return ratio
 - MaxDD: Maximum drawdown in R-multiples
-- Sessions: CME_REOPEN, TOKYO_OPEN, SINGAPORE_OPEN, LONDON_METALS, US_DATA_830, NYSE_OPEN, US_DATA_1000, COMEX_SETTLE, CME_PRECLOSE, NYSE_CLOSE
+- Sessions: CME_REOPEN, TOKYO_OPEN, SINGAPORE_OPEN, LONDON_METALS, US_DATA_830, NYSE_OPEN, US_DATA_1000, COMEX_SETTLE, CME_PRECLOSE, NYSE_CLOSE, BRISBANE_0925
 
 === AVAILABLE QUERY TEMPLATES ===
 {templates_list}
@@ -96,7 +102,7 @@ def build_interpretation_prompt(
 Interpret the query results below and answer the user's question in plain English.
 
 === CRITICAL RULES (you MUST follow these) ===
-1. R-multiples deduct friction ($8.40 RT). Never quote raw point P&L as R.
+1. R-multiples deduct friction (${_mgc_friction:.2f} RT). Never quote raw point P&L as R.
 2. NO_FILTER and L-filter strategies have NEGATIVE expectancy. Flag them as "house wins".
 3. Sample size < 30 = INVALID (not tradeable). 30-99 = REGIME (conditional only). >= 100 = CORE.
 4. ORB size >= 4 points is required for positive edge. Smaller ORBs = no edge.

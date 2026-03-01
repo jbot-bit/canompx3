@@ -64,11 +64,11 @@ ORB SIZE FILTERS:
   NO_FILTER: Trade all days regardless of ORB size.
     ALL no-filter strategies have negative expectancy. Do not trade.
 
-GRID (2,808 strategy combinations, full grid before ENABLED_SESSIONS filtering):
-  E1: 10 ORBs x 6 RRs x 5 CBs x 6 filters = 1,800
-  E2: 10 ORBs x 6 RRs x 1 CB x 6 filters = 360 (E2 always CB1)
-  E3: 10 ORBs x 6 RRs x 1 CB x 6 filters = 360 (E3 always CB1)
-  Total = 2,520 (base grid; session-specific composites expand per-session)
+GRID (3,060 strategy combinations, full grid before ENABLED_SESSIONS filtering):
+  E1: 11 ORBs x 6 RRs x 5 CBs x 6 filters = 1,980
+  E2: 11 ORBs x 6 RRs x 1 CB x 6 filters = 396 (E2 always CB1)
+  E3: 11 ORBs x 6 RRs x 1 CB x 6 filters = 396 (E3 always CB1)
+  Total = 2,772 (base grid; session-specific composites expand per-session)
 
 ==========================================================================
 """
@@ -649,6 +649,7 @@ ORB_DURATION_MINUTES: dict[str, int] = {
     "COMEX_SETTLE": 5,     # COMEX gold settlement 1:30 PM ET
     "CME_PRECLOSE": 5,     # CME equity futures pre-settlement 2:45 PM CT
     "NYSE_CLOSE": 5,       # NYSE closing bell 4:00 PM ET
+    "BRISBANE_0925": 5,    # Fixed 9:25 AM Brisbane (MNQ only, session discovery 2026-03-01)
 }
 
 # =========================================================================
@@ -690,6 +691,7 @@ EARLY_EXIT_MINUTES: dict[str, int | None] = {
     "COMEX_SETTLE": None,
     "CME_PRECLOSE": 16,     # MES T80=16m (short session, fast-resolve)
     "NYSE_CLOSE": None,
+    "BRISBANE_0925": None,  # No T80 data yet — research after outcomes built
 }
 
 # Session exit modes: how each session manages target/stop after entry.
@@ -706,6 +708,7 @@ SESSION_EXIT_MODE: dict[str, str] = {
     "COMEX_SETTLE": "fixed_target",
     "CME_PRECLOSE": "fixed_target",
     "NYSE_CLOSE": "fixed_target",
+    "BRISBANE_0925": "fixed_target",
 }
 
 # IB (Initial Balance) = first 120 minutes from 09:00 Brisbane (23:00 UTC).

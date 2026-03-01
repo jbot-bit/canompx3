@@ -4,7 +4,7 @@ Build daily_features from bars_1m and bars_5m.
 
 Staged build (each stage is gated):
   1. Trading day assignment (09:00 Brisbane boundary)
-  2. ORB ranges (10 dynamic sessions, configurable duration)
+  2. ORB ranges (11 dynamic sessions, configurable duration)
   3. Break detection (first 1m close outside ORB)
   4. Session stats (dynamic-window high-low for session range features)
   5. RSI (Wilder's 14-period on 5m closes)

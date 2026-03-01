@@ -74,6 +74,7 @@ DST_CLEAN_SESSIONS = {
     "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
     "US_DATA_830", "NYSE_OPEN", "US_DATA_1000", "COMEX_SETTLE",
     "CME_PRECLOSE", "NYSE_CLOSE",
+    "BRISBANE_0925",
 }
 
 
@@ -106,6 +107,7 @@ DST_CLEAN_SESSIONS = {
 DOW_ALIGNED_SESSIONS = {
     "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
     "US_DATA_830", "US_DATA_1000", "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+    "BRISBANE_0925",
 }
 DOW_MISALIGNED_SESSIONS = {
     "NYSE_OPEN": -1,  # Brisbane DOW = exchange DOW + 1 (i.e. exchange is 1 day behind)
@@ -309,6 +311,21 @@ def nyse_close_brisbane(trading_day: date) -> tuple[int, int]:
     return (bris.hour, bris.minute)
 
 
+def brisbane_0925_brisbane(trading_day: date) -> tuple[int, int]:
+    """Fixed 09:25 AM Brisbane session. No market event anchor.
+
+    Session discovery scan (2026-03-01) found this fixed clock time
+    has positive raw expectancy for MNQ across both DST seasons.
+    Not event-relative to CME reopen — summer (85 min after CME open)
+    outperforms winter (25 min after CME open). 08:25 Brisbane
+    (event-relative equivalent in summer) shows zero edge.
+
+    break_group="cme" is MANDATORY — prevents truncating CME_REOPEN's
+    break detection window.
+    """
+    return (9, 25)
+
+
 # =========================================================================
 # SESSION CATALOG: master registry of all ORB sessions
 # =========================================================================
@@ -375,6 +392,12 @@ SESSION_CATALOG = {
         "resolver": nyse_close_brisbane,
         "break_group": "us",
         "event": "NYSE closing bell 4:00 PM ET",
+    },
+    "BRISBANE_0925": {
+        "type": "dynamic",
+        "resolver": brisbane_0925_brisbane,
+        "break_group": "cme",
+        "event": "Fixed 9:25 AM Brisbane (not event-relative)",
     },
 }
 

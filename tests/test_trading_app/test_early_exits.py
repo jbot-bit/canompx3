@@ -102,6 +102,7 @@ class TestEarlyExitConfig:
             "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
             "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
             "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+            "BRISBANE_0925",
         }
         assert set(EARLY_EXIT_MINUTES.keys()) == expected
 

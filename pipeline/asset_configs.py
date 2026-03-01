@@ -59,18 +59,23 @@ ASSET_CONFIGS = {
             "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
             "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
             "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+            "BRISBANE_0925",
         ],
     },
     "MCL": {
-        "dbn_path": PROJECT_ROOT / "DB" / "MCL_DB",
+        # Source data is CL (full-size Crude Oil, $1000/pt) — same price, stored as symbol='MCL'.
+        # Identical pattern to GC→MGC, RTY→M2K. Cost model uses MCL micro specs ($100/pt).
+        # CL trades ~500k contracts/day vs MCL ~50k — far better 1m bar coverage.
+        "dbn_path": PROJECT_ROOT / "DB" / "CL_DB",
         "symbol": "MCL",
-        "outright_pattern": re.compile(r'^MCL[FGHJKMNQUVXZ]\d{1,2}$'),
-        "prefix_len": 3,
-        "minimum_start_date": date(2021, 7, 11),
+        "outright_pattern": re.compile(r'^CL[FGHJKMNQUVXZ]\d{1,2}$'),
+        "prefix_len": 2,
+        "minimum_start_date": date(2021, 2, 1),
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
             "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
-            "US_DATA_830",
+            "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
+            "COMEX_SETTLE",
         ],
     },
     "MES": {
