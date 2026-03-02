@@ -61,7 +61,7 @@ class TestOrbLabelsSync:
         "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
         "US_DATA_830", "NYSE_OPEN", "US_DATA_1000", "COMEX_SETTLE",
         "CME_PRECLOSE", "NYSE_CLOSE",
-        "BRISBANE_0925", "BRISBANE_1025", "BRISBANE_1955",
+        "BRISBANE_1025",
     ]
 
     def test_orb_labels_exact(self):
@@ -298,7 +298,7 @@ class TestGridParamsSync:
         e1 = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * BASE_FILTER_COUNT
         e2_e3 = 2 * len(ORB_LABELS) * len(RR_TARGETS) * 1 * BASE_FILTER_COUNT
         expected = e1 + e2_e3
-        assert expected == 3276
+        assert expected == 2772
 
 class TestEntryModelsSync:
     """ENTRY_MODELS must be consistent."""
@@ -385,7 +385,7 @@ class TestStrategyIdSync:
                             sid = make_strategy_id("MGC", orb, em, rr, cb, fk)
                             assert sid not in ids, f"Duplicate ID: {sid}"
                             ids.add(sid)
-        assert len(ids) == 3276
+        assert len(ids) == 2772
 
 # ============================================================================
 # 5. DB schema column sync

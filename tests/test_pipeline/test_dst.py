@@ -17,9 +17,7 @@ from pipeline.dst import (
     nyse_close_brisbane,
     tokyo_open_brisbane,
     singapore_open_brisbane,
-    brisbane_0925_brisbane,
     brisbane_1025_brisbane,
-    brisbane_1955_brisbane,
     DYNAMIC_ORB_RESOLVERS,
     SESSION_CATALOG,
     validate_catalog,
@@ -292,7 +290,7 @@ class TestDynamicOrbResolvers:
             "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
             "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
             "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
-            "BRISBANE_0925", "BRISBANE_1025", "BRISBANE_1955",
+            "BRISBANE_1025",
         }
 
     def test_resolvers_return_tuples(self):
@@ -367,8 +365,8 @@ class TestSessionCatalog:
     def test_get_break_group_unknown_returns_none(self):
         assert get_break_group("NONEXISTENT") is None
 
-    def test_catalog_has_exactly_13_sessions(self):
-        assert len(SESSION_CATALOG) == 13
+    def test_catalog_has_exactly_11_sessions(self):
+        assert len(SESSION_CATALOG) == 11
 
     def test_dst_sets_cover_all_sessions(self):
         """Every session must be in either DST_AFFECTED or DST_CLEAN."""
@@ -602,39 +600,6 @@ class TestNyseCloseBrisbane:
         assert summer != winter
 
 
-# =========================================================================
-# BRISBANE_0925 resolver (Fixed 9:25 AM Brisbane)
-# =========================================================================
-
-class TestBrisbane0925:
-    """Fixed 9:25 AM Brisbane session — no DST, no market event anchor."""
-
-    def test_winter(self):
-        h, m = brisbane_0925_brisbane(date(2025, 1, 15))
-        assert (h, m) == (9, 25)
-
-    def test_summer(self):
-        h, m = brisbane_0925_brisbane(date(2025, 7, 15))
-        assert (h, m) == (9, 25)
-
-    def test_us_spring_forward(self):
-        # Fixed clock — unaffected by US DST transition
-        h, m = brisbane_0925_brisbane(date(2025, 3, 9))
-        assert (h, m) == (9, 25)
-
-    def test_uk_spring_forward(self):
-        # Fixed clock — unaffected by UK DST transition
-        h, m = brisbane_0925_brisbane(date(2025, 3, 30))
-        assert (h, m) == (9, 25)
-
-    def test_no_seasonal_shift(self):
-        """BRISBANE_0925 never shifts — it is a fixed Brisbane clock time."""
-        assert brisbane_0925_brisbane(date(2025, 7, 15)) == brisbane_0925_brisbane(date(2025, 1, 15))
-
-    def test_break_group_is_cme(self):
-        """Must be cme group to avoid truncating CME_REOPEN break window."""
-        assert get_break_group("BRISBANE_0925") == "cme"
-
 
 # =========================================================================
 # BRISBANE_1025 resolver (Fixed 10:25 AM Brisbane)
@@ -663,34 +628,3 @@ class TestBrisbane1025:
         assert get_break_group("BRISBANE_1025") == "asia"
 
 
-# =========================================================================
-# BRISBANE_1955 resolver (Fixed 19:55 PM Brisbane)
-# =========================================================================
-
-class TestBrisbane1955:
-    """Fixed 19:55 PM Brisbane session — no DST, no market event anchor."""
-
-    def test_winter(self):
-        h, m = brisbane_1955_brisbane(date(2025, 1, 15))
-        assert (h, m) == (19, 55)
-
-    def test_summer(self):
-        h, m = brisbane_1955_brisbane(date(2025, 7, 15))
-        assert (h, m) == (19, 55)
-
-    def test_us_spring_forward(self):
-        h, m = brisbane_1955_brisbane(date(2025, 3, 9))
-        assert (h, m) == (19, 55)
-
-    def test_uk_spring_forward(self):
-        # Fixed clock — unaffected by UK DST transition
-        h, m = brisbane_1955_brisbane(date(2025, 3, 30))
-        assert (h, m) == (19, 55)
-
-    def test_no_seasonal_shift(self):
-        """BRISBANE_1955 never shifts — fixed Brisbane clock time."""
-        assert brisbane_1955_brisbane(date(2025, 7, 15)) == brisbane_1955_brisbane(date(2025, 1, 15))
-
-    def test_break_group_is_london(self):
-        """19:55 Brisbane falls within London session window (17:00-23:30 summer)."""
-        assert get_break_group("BRISBANE_1955") == "london"

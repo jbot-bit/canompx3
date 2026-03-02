@@ -76,14 +76,12 @@ CREATE TABLE IF NOT EXISTS bars_5m (
 #   COMEX_SETTLE    - COMEX gold settlement at 1:30 PM ET (MGC)
 #   CME_PRECLOSE    - CME equity futures pre-settlement at 2:45 PM CT
 #   NYSE_CLOSE      - NYSE closing bell at 4:00 PM ET
-#   BRISBANE_0925   - Fixed 9:25 AM Brisbane (not event-relative)
 #   BRISBANE_1025   - Fixed 10:25 AM Brisbane (not event-relative)
-#   BRISBANE_1955   - Fixed 19:55 PM Brisbane (not event-relative)
 ORB_LABELS_DYNAMIC = [
     "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
     "US_DATA_830", "NYSE_OPEN", "US_DATA_1000", "COMEX_SETTLE",
     "CME_PRECLOSE", "NYSE_CLOSE",
-    "BRISBANE_0925", "BRISBANE_1025", "BRISBANE_1955",
+    "BRISBANE_1025",
 ]
 
 # Combined label list — used by schema generation and feature builders
