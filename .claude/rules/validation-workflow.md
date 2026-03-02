@@ -7,7 +7,7 @@ python trading_app/strategy_validator.py --instrument MGC --min-sample 50 \
 ```
 
 ## Critical Notes
-- **Always use `--no-walkforward` for MNQ** — only 2 years of data, never has 3+ WF windows
+- **MNQ uses WF testing** — ~5yr data, fully capable. The old "only 2 years" note was wrong and has been removed. Do NOT use `--no-walkforward` for MNQ.
 - **`--min-years-positive-pct` is dead code** when regime waivers are enabled (default). It lives in an `else` branch only reached with `--no-regime-waivers`. Always pair them.
 - **PowerShell breaks `--` flags** — always run validators from bash
 - **DB path:** `pipeline/paths.py` auto-loads `.env` -> `DUCKDB_PATH`. No manual env var needed.

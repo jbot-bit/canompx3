@@ -1793,6 +1793,124 @@ def check_data_years_disclosure() -> list[str]:
     return []  # Always pass — soft gate only warns
 
 
+def check_uncovered_fdr_strategies() -> list[str]:
+    """Check #43: Warn on FDR+WF strategies with no live_config spec (WARNING ONLY, never blocks).
+
+    Detects strategies that passed full validation (fdr_significant=True, wf_passed=True,
+    expectancy_r >= LIVE_MIN_EXPECTANCY_R) but are not covered by any spec in LIVE_PORTFOLIO.
+
+    A strategy is "covered" if LIVE_PORTFOLIO has a spec matching its
+    (orb_label, entry_model, filter_type) combination.
+
+    Advisory only — the portfolio is intentionally curated, not exhaustive.
+    Run after every validator rebuild to catch new FDR+WF winners not yet in the portfolio.
+    """
+    try:
+        import duckdb
+        from trading_app.live_config import LIVE_PORTFOLIO, LIVE_MIN_EXPECTANCY_R
+
+        db_path = GOLD_DB_PATH_FOR_CHECKS
+        if db_path is None:
+            from pipeline.paths import GOLD_DB_PATH
+            db_path = GOLD_DB_PATH
+        if not Path(db_path).exists():
+            return []
+
+        covered = {
+            (spec.orb_label, spec.entry_model, spec.filter_type)
+            for spec in LIVE_PORTFOLIO
+        }
+
+        con = duckdb.connect(str(db_path), read_only=True)
+        try:
+            rows = con.execute(
+                """SELECT DISTINCT orb_label, entry_model, filter_type,
+                          COUNT(*) OVER (PARTITION BY orb_label, entry_model, filter_type) AS combo_count,
+                          MAX(expectancy_r) OVER (PARTITION BY orb_label, entry_model, filter_type) AS best_exp_r
+                   FROM validated_setups
+                   WHERE status = 'active'
+                   AND fdr_significant = TRUE
+                   AND wf_passed = TRUE
+                   AND expectancy_r >= ?
+                   ORDER BY best_exp_r DESC, orb_label, entry_model, filter_type""",
+                [LIVE_MIN_EXPECTANCY_R],
+            ).fetchall()
+        finally:
+            con.close()
+
+        seen_combos: set[tuple] = set()
+        warnings = []
+        for orb_label, entry_model, filter_type, combo_count, best_exp_r in rows:
+            combo = (orb_label, entry_model, filter_type)
+            if combo in seen_combos:
+                continue
+            seen_combos.add(combo)
+            if combo not in covered:
+                warnings.append(
+                    f"{orb_label} {entry_model} {filter_type}: "
+                    f"{combo_count} FDR+WF strategy(ies) (best ExpR={best_exp_r:.3f}) "
+                    f"— consider adding LiveStrategySpec to live_config.py"
+                )
+
+        if warnings:
+            for w in warnings:
+                print(f"  WARNING (non-blocking): {w}")
+    except Exception:
+        pass  # DB or import may not be available in CI
+    return []  # Always pass — advisory only
+
+
+def check_orphaned_validated_strategies() -> list[str]:
+    """Check #42: Validated strategies must have corresponding outcome data.
+
+    Detects orphaned validated strategies — strategies in validated_setups for
+    (instrument, orb_minutes) with no matching rows in orb_outcomes.
+
+    This happens when outcome_builder is run for a subset of apertures (e.g.
+    5m only) but older 15m/30m validated strategies survive the validator's
+    per-aperture DELETE because the validator only removes the apertures it
+    actually processed (derived from experimental_strategies).
+
+    Fix: run outcome_builder --instrument <inst> --orb-minutes <n> --force
+    then rerun strategy_discovery, strategy_validator, build_edge_families.
+    """
+    violations = []
+    try:
+        import duckdb
+
+        db_path = GOLD_DB_PATH_FOR_CHECKS
+        if db_path is None:
+            from pipeline.paths import GOLD_DB_PATH
+            db_path = GOLD_DB_PATH
+        if not Path(db_path).exists():
+            return violations  # Skip if no DB (CI)
+        con = duckdb.connect(str(db_path), read_only=True)
+        try:
+            rows = con.execute(
+                """SELECT v.instrument, v.orb_minutes, COUNT(*) AS n_strategies
+                   FROM validated_setups v
+                   WHERE v.status = 'active'
+                   AND NOT EXISTS (
+                       SELECT 1 FROM orb_outcomes o
+                       WHERE o.symbol = v.instrument
+                       AND o.orb_minutes = v.orb_minutes
+                   )
+                   GROUP BY v.instrument, v.orb_minutes
+                   ORDER BY v.instrument, v.orb_minutes"""
+            ).fetchall()
+            for inst, orb_min, n in rows:
+                violations.append(
+                    f"  {inst} {orb_min}m: {n} active strategies with no "
+                    f"orb_outcomes rows — rebuild: outcome_builder "
+                    f"--instrument {inst} --orb-minutes {orb_min} --force"
+                )
+        finally:
+            con.close()
+    except Exception:
+        pass  # DB may not exist in CI
+    return violations
+
+
 # =============================================================================
 # CHECK REGISTRY — single source of truth for all drift checks
 # =============================================================================
@@ -1882,6 +2000,10 @@ CHECKS = [
      check_wf_coverage),
     ("Data years disclosure (years_tested < 7 warning)",
      check_data_years_disclosure),
+    ("Orphaned validated strategies (no outcome data for aperture)",
+     check_orphaned_validated_strategies),
+    ("Uncovered FDR+WF strategies (FDR-validated but no live_config spec)",
+     check_uncovered_fdr_strategies),
 ]
 
 

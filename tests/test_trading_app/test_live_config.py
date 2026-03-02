@@ -7,8 +7,10 @@ from pathlib import Path
 from trading_app.live_config import (
     LiveStrategySpec,
     LIVE_PORTFOLIO,
+    LIVE_MIN_EXPECTANCY_DOLLARS_MULT,
     _load_best_regime_variant,
     _load_best_experimental_variant,
+    _check_dollar_gate,
 )
 
 
@@ -143,6 +145,59 @@ class TestLoadBestRegimeVariant:
             live_config_db, "MGC", "TOKYO_OPEN", "E1", "ORB_G4"
         )
         assert result["strategy_id"] == "high_sharpe"
+
+
+class TestCheckDollarGate:
+    """_check_dollar_gate: 4 branches — None guard, fail, pass, exception."""
+
+    def _variant(self, expectancy_r: float, median_risk_points: float | None) -> dict:
+        return {"expectancy_r": expectancy_r, "median_risk_points": median_risk_points}
+
+    def test_none_guard_passes(self):
+        """Missing median_risk_points must pass (skip gate, not block strategy)."""
+        passes, note = _check_dollar_gate(self._variant(0.10, None), "MGC")
+        assert passes is True
+        assert "skipped" in note
+
+    def test_fails_when_exp_below_threshold(self):
+        """Tiny ORB on MGC: exp$ well below 1.3x RT cost must fail."""
+        # MGC: point_value=$10, total_friction=$5.74
+        # median=0.5pt → 1R$=0.5*10+5.74=$10.74; exp$=0.10*10.74=$1.07
+        # threshold=1.3*5.74=$7.46 → should fail
+        passes, note = _check_dollar_gate(self._variant(0.10, 0.5), "MGC")
+        assert passes is False
+        assert "dollar gate failed" not in note  # note uses "Exp$" format, not "failed"
+        assert "Exp$" in note or "<" in note
+
+    def test_passes_when_exp_meets_threshold(self):
+        """Large ORB on MGC: exp$ well above 1.3x RT cost must pass."""
+        # MGC: median=5pt → 1R$=5*10+5.74=$55.74; exp$=0.30*55.74=$16.72
+        # threshold=$7.46 → should pass
+        passes, note = _check_dollar_gate(self._variant(0.30, 5.0), "MGC")
+        assert passes is True
+        assert ">=" in note
+
+    def test_exception_in_cost_spec_passes(self):
+        """Unknown instrument raises in get_cost_spec — must pass (skip gate gracefully)."""
+        passes, note = _check_dollar_gate(self._variant(0.10, 3.0), "UNKNOWN_INSTRUMENT_XYZ")
+        assert passes is True
+        assert "skipped" in note
+
+    def test_multiplier_constant_is_applied(self):
+        """Gate threshold equals LIVE_MIN_EXPECTANCY_DOLLARS_MULT * RT cost."""
+        # MGC total_friction=$5.74; boundary case: exp$ just above vs just below threshold
+        from pipeline.cost_model import get_cost_spec
+        spec = get_cost_spec("MGC")
+        threshold = LIVE_MIN_EXPECTANCY_DOLLARS_MULT * spec.total_friction
+        median = 1.0
+        one_r = median * spec.point_value + spec.total_friction
+        # ExpR that lands exactly at threshold (boundary should pass)
+        expr_at_threshold = threshold / one_r
+        passes, _ = _check_dollar_gate(self._variant(expr_at_threshold, median), "MGC")
+        assert passes is True
+        # ExpR just below threshold should fail
+        passes_below, _ = _check_dollar_gate(self._variant(expr_at_threshold * 0.99, median), "MGC")
+        assert passes_below is False
 
 
 class TestLoadBestExperimentalVariant:

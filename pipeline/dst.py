@@ -314,8 +314,11 @@ def nyse_close_brisbane(trading_day: date) -> tuple[int, int]:
 def brisbane_0925_brisbane(trading_day: date) -> tuple[int, int]:
     """Fixed 09:25 AM Brisbane session. No market event anchor.
 
-    Session discovery scan (2026-03-01) found this fixed clock time
-    has positive raw expectancy for MNQ across both DST seasons.
+    Session discovery scan (2026-03-01): positive raw expectancy for MNQ
+    across both DST seasons, but did NOT survive BH FDR correction.
+    Zero validated strategies for MNQ (marginal signal only).
+    Not enabled for MGC or MES (no gold/equity liquidity event at this time).
+    M2K: all strategies negative (see brisbane_1025_brisbane note re: entry-model artifact).
     Not event-relative to CME reopen — summer (85 min after CME open)
     outperforms winter (25 min after CME open). 08:25 Brisbane
     (event-relative equivalent in summer) shows zero edge.
@@ -333,7 +336,10 @@ def brisbane_1025_brisbane(trading_day: date) -> tuple[int, int]:
     N=1,272-1,289, avgR=+0.221 to +0.247 (RR2.5-3.0), Sharpe_ann=2.09-2.21.
     Positive 6/6 years. Both DST seasons positive (Rw=+0.305, Rs=+0.189).
     Independent from 09:25 cluster — 1 hour later, inverted season bias.
-    Also significant for M2K. No near existing session.
+    M2K: all strategies negative in pipeline (entry-model artifact — scan used
+    close-based break detection; E2 stop-market gets stopped out before bar close
+    on M2K's small ORBs at this time). Kept in M2K enabled_sessions for monitoring.
+    No near existing session.
     """
     return (10, 25)
 

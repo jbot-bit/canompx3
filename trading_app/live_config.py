@@ -51,55 +51,107 @@ HOT_LOOKBACK_WINDOWS = 10
 # Minimum rolling stability score for HOT tier to be active.
 HOT_MIN_STABILITY = 0.6
 
+# Minimum expectancy per trade to include in live portfolio.
+# Filters out statistically-validated but practically-thin strategies.
+# At 0.10 R, after execution uncertainty (spread variance, slippage noise),
+# there is still meaningful edge remaining per trade.
+LIVE_MIN_EXPECTANCY_R = 0.10
+
+# Minimum expected dollar profit as a multiple of round-trip transaction cost.
+# Strategies must earn at least this multiple of their RT cost per trade so that
+# execution variance (spread widening, extra slippage) cannot eliminate the edge.
+#
+# 1.3x rationale: kills strategies where net edge is barely above RT cost
+# (MNQ TOKYO $2.93 = 1.07x, MNQ BRISBANE $2.83 = 1.03x — too thin to survive
+# live execution uncertainty). Keeps real edge at 1.4x+ (MES strategies at $5-6,
+# MNQ strategies at $4.82+). Tighter instruments (MNQ) have a proportionally
+# tougher screen than larger ones (MGC) because slippage uncertainty is bigger
+# relative to point value.
+#
+# Adjust if cost structure changes (new broker, exchange fee changes, tighter spreads).
+LIVE_MIN_EXPECTANCY_DOLLARS_MULT = 1.3
+
 # The live portfolio: what we actually trade.
 #
-# TIER 1 (CORE): Always on. Full-period validated (75%+ years positive,
-#   ROBUST edge family = 5+ parameter-stable members).
-#   Specs are instrument-agnostic: run with --instrument MGC/MNQ/MES.
+# TIER 1 (CORE): Always on. Full-period validated, N>=100, ROBUST/WHITELISTED
+#   edge family. Specs are instrument-agnostic — pass --instrument to select.
 #   If a spec has no match for an instrument, it emits WARN and skips.
 #
-# TIER 2 (HOT): Rolling-eval gated. Must be STABLE (>=0.6) in recent
-#   rolling windows. NOTE: gated off until rolling_portfolio.py is
-#   re-run after edge families rebuild (Feb 2026).
+# TIER 2 (REGIME): Fitness-gated. Validated but N<100 (REGIME classification).
+#   Only fires when strategy_fitness = FIT. regime_gate="high_vol".
 #
-# TIER 3 (REGIME): Fitness-gated. Full-period validated but regime-dependent.
-#   Only trade when strategy_fitness = FIT.
+# HOT tier removed — rolling_portfolio evaluation not yet wired to real-time
+# gate logic. Re-add when rolling eval pipeline is production-ready.
 #
-# EXIT MODES (see config.py SESSION_EXIT_MODE):
-#   CME_REOPEN = fixed_target
-#   TOKYO_OPEN = fixed_target (IB-conditional disabled, pending research validation)
-#   LONDON_METALS/US_DATA_830/NYSE_OPEN = fixed_target
+# Updated 2026-03-02: Full 4-instrument rebuild (MGC/MNQ/MES/M2K).
+#   18 unique specs (instrument-agnostic — filter_type is the base name, without _O15/_O30 aperture suffix).
+#   E0 fully purged. E2 dominant. E3 soft-retired.
+#   Filter_type note: strategy IDs encode aperture as _O15/_O30 suffix (e.g. VOL_RV12_N20_O15),
+#   but validated_setups.filter_type stores the base name (e.g. VOL_RV12_N20). Always use base name here.
+#   Dollar gate: LIVE_MIN_EXPECTANCY_DOLLARS_MULT (1.3x RT cost) applied on top of ExpR >= 0.10.
+#   Strategies that pass R gate but fail dollar gate are SKIP'd with a note (adjust mult if needed).
 #
-# Updated 2026-02-26: E0 purged, replaced by E2 (stop-market at ORB level + slippage).
-#   E0 had 3 optimistic biases (fill-on-touch, fakeout exclusion, fill-bar wins) — PURGED.
-#   E2 = stop-market entry at ORB level + N ticks slippage. Industry standard for breakout backtesting.
-#   Portfolio needs rebuild with E2/E1/E3 validated strategies (627 total, down from 1,322).
+# Active strategies per instrument may be fewer than spec count if dollar gate fires.
+# Run `python -m trading_app.live_config --instrument X` to see current actives + SKIP notes.
 LIVE_PORTFOLIO = [
-    # --- CORE: always on, full-period validated ROBUST families ---
+    # =========================================================================
+    # CORE: always-on, full-period validated, N>=100
+    # =========================================================================
 
-    # CME_REOPEN session (MGC + MNQ dominant; MES secondary)
-    # E2 = stop-market at ORB level + slippage (replaces E0 Feb 2026)
-    LiveStrategySpec("CME_REOPEN_E2_ORB_G5", "core", "CME_REOPEN", "E2", "ORB_G5", None),
-    LiveStrategySpec("CME_REOPEN_E2_ORB_G4", "core", "CME_REOPEN", "E2", "ORB_G4", None),
-    # E1 kept as fallback for instruments where E2 doesn't reach ROBUST threshold
-    LiveStrategySpec("CME_REOPEN_E1_ORB_G5", "core", "CME_REOPEN", "E1", "ORB_G5", None),
+    # CME_REOPEN: MGC wins with ORB_G5; MNQ wins with VOL_RV12_N20
+    LiveStrategySpec("CME_REOPEN_E2_ORB_G5",      "core", "CME_REOPEN", "E2", "ORB_G5",      None),
+    LiveStrategySpec("CME_REOPEN_E2_VOL_RV12_N20", "core", "CME_REOPEN", "E2", "VOL_RV12_N20", None),
 
-    # TOKYO_OPEN session (universal — positive for MGC, MNQ, MES)
-    LiveStrategySpec("TOKYO_OPEN_E2_ORB_G5", "core", "TOKYO_OPEN", "E2", "ORB_G5", None),
-    LiveStrategySpec("TOKYO_OPEN_E2_ORB_G4", "core", "TOKYO_OPEN", "E2", "ORB_G4", None),
-    LiveStrategySpec("TOKYO_OPEN_E1_ORB_G5", "core", "TOKYO_OPEN", "E1", "ORB_G5", None),
+    # CME_PRECLOSE: MES wins with ORB_G6; MNQ wins with VOL_RV12_N20 (O15 suffix is aperture, not filter_type)
+    LiveStrategySpec("CME_PRECLOSE_E2_ORB_G6",      "core", "CME_PRECLOSE", "E2", "ORB_G6",      None),
+    LiveStrategySpec("CME_PRECLOSE_E2_VOL_RV12_N20", "core", "CME_PRECLOSE", "E2", "VOL_RV12_N20", None),
 
-    # LONDON_METALS session (MGC-specific; MNQ marginal)
-    LiveStrategySpec("LONDON_METALS_E2_ORB_G4_NOMON", "core", "LONDON_METALS", "E2", "ORB_G4_NOMON", None),
+    # COMEX_SETTLE: MES wins with ORB_G6; MNQ wins with VOL_RV12_N20
+    LiveStrategySpec("COMEX_SETTLE_E2_ORB_G6",       "core", "COMEX_SETTLE", "E2", "ORB_G6",       None),
+    LiveStrategySpec("COMEX_SETTLE_E2_VOL_RV12_N20",  "core", "COMEX_SETTLE", "E2", "VOL_RV12_N20",  None),
 
-    # --- HOT: rolling-eval gated ---
-    # Auto-activates when stability >= HOT_MIN_STABILITY after rolling_portfolio.py re-run.
-    # All HOT entries are currently gated off ("family not found in rolling results").
-    LiveStrategySpec("CME_REOPEN_E2_ORB_G4_NOFRI", "hot", "CME_REOPEN", "E2", "ORB_G4_NOFRI", "rolling"),
-    LiveStrategySpec("TOKYO_OPEN_E2_ORB_G5_L12", "hot", "TOKYO_OPEN", "E2", "ORB_G5_L12", "rolling"),
+    # NYSE_CLOSE: MES wins with ORB_G4; MNQ wins with VOL_RV12_N20
+    LiveStrategySpec("NYSE_CLOSE_E2_ORB_G4",       "core", "NYSE_CLOSE", "E2", "ORB_G4",       None),
+    LiveStrategySpec("NYSE_CLOSE_E2_VOL_RV12_N20",  "core", "NYSE_CLOSE", "E2", "VOL_RV12_N20",  None),
 
-    # --- REGIME: fitness-gated ---
-    # (none currently active — add as fitness monitoring matures)
+    # NYSE_OPEN: MES wins VOL_RV12_N20; MNQ wins ORB_G4; M2K VOL_RV12_N20 (report ORB_G5_O30 = base filter ORB_G5, covered by VOL)
+    LiveStrategySpec("NYSE_OPEN_E2_VOL_RV12_N20", "core", "NYSE_OPEN", "E2", "VOL_RV12_N20", None),
+    LiveStrategySpec("NYSE_OPEN_E2_ORB_G4",        "core", "NYSE_OPEN", "E2", "ORB_G4",        None),
+
+    # US_DATA_1000: M2K wins VOL_RV12_N20 (O30 is aperture, not filter_type); MNQ wins ORB_G5
+    LiveStrategySpec("US_DATA_1000_E2_VOL_RV12_N20", "core", "US_DATA_1000", "E2", "VOL_RV12_N20", None),
+    LiveStrategySpec("US_DATA_1000_E2_ORB_G5",        "core", "US_DATA_1000", "E2", "ORB_G5",        None),
+
+    # TOKYO_OPEN: MGC + MNQ both win ORB_G5_CONT (handled together; MGC is REGIME N=96 but fitness gate below)
+    LiveStrategySpec("TOKYO_OPEN_E2_ORB_G5_CONT", "core", "TOKYO_OPEN", "E2", "ORB_G5_CONT", None),
+
+    # SINGAPORE_OPEN: DIR_LONG (long-only, any ORB size) is the primary filter for MNQ.
+    #   Research H5: shorts avgR=-0.247 (raw session avg, config.py), p=0.006, N=236 — systematically
+    #   negative; long side positive. DIR_LONG validated strategy (different from raw avg): ExpR=+0.219,
+    #   N=673, Sharpe=0.138 (MNQ_SINGAPORE_OPEN_E2_RR2.5_CB1_DIR_LONG_O30).
+    #   ORB_G8 also validated as secondary size-filtered spec: ExpR=+0.107, N=861, Sharpe=0.093.
+    LiveStrategySpec("SINGAPORE_OPEN_E2_DIR_LONG", "core", "SINGAPORE_OPEN", "E2", "DIR_LONG", None),
+    LiveStrategySpec("SINGAPORE_OPEN_E2_ORB_G8", "core", "SINGAPORE_OPEN", "E2", "ORB_G8", None),
+
+    # BRISBANE_1025: MNQ wins ORB_G6
+    LiveStrategySpec("BRISBANE_1025_E2_ORB_G6", "core", "BRISBANE_1025", "E2", "ORB_G6", None),
+
+    # LONDON_METALS: MNQ wins VOL_RV12_N20 (5m, all_years_positive) and ORB_G6_NOMON (15m aperture,
+    #   N=1032, FDR=True, WF=True, ExpR=0.122). M2K is REGIME below (ORB_G6_CONT).
+    #   ORB_G6_NOMON_O15 strategies were added after MNQ WF rebuild (Mar 2 2026) — not in original build.
+    LiveStrategySpec("LONDON_METALS_E2_VOL_RV12_N20", "core", "LONDON_METALS", "E2", "VOL_RV12_N20", None),
+    LiveStrategySpec("LONDON_METALS_E2_ORB_G6_NOMON", "core", "LONDON_METALS", "E2", "ORB_G6_NOMON", None),
+
+    # =========================================================================
+    # REGIME: fitness-gated (N<100 — only trade when strategy_fitness = FIT)
+    # =========================================================================
+
+    # M2K LONDON_METALS: N=59, REGIME. ORB_G6_CONT filter (different from MNQ's VOL_RV12_N20_O15 above)
+    LiveStrategySpec("LONDON_METALS_E2_ORB_G6_CONT", "regime", "LONDON_METALS", "E2", "ORB_G6_CONT", "high_vol"),
+
+    # NOTE: MGC TOKYO_OPEN (N=96) is loaded by the CORE TOKYO_OPEN_E2_ORB_G5_CONT spec above.
+    # N=96 is validated (passed full chain: 75%+ years positive, walk-forward).
+    # Monitor via get_strategy_fitness if conditional gating is needed.
 ]
 
 # =========================================================================
@@ -112,8 +164,13 @@ def _load_best_regime_variant(
     orb_label: str,
     entry_model: str,
     filter_type: str,
+    min_expectancy_r: float = LIVE_MIN_EXPECTANCY_R,
 ) -> dict | None:
-    """Load the best RR/CB variant from validated_setups for a regime family."""
+    """Load the best RR/CB variant from validated_setups for a regime family.
+
+    Only returns strategies with expectancy_r >= min_expectancy_r to filter
+    out statistically-validated but practically-thin strategies.
+    """
     con = duckdb.connect(str(db_path), read_only=True)
     try:
         rows = con.execute("""
@@ -130,9 +187,10 @@ def _load_best_regime_variant(
               AND vs.entry_model = ?
               AND vs.filter_type = ?
               AND LOWER(vs.status) = 'active'
+              AND vs.expectancy_r >= ?
             ORDER BY vs.sharpe_ratio DESC NULLS LAST
             LIMIT 1
-        """, [instrument, orb_label, entry_model, filter_type]).fetchall()
+        """, [instrument, orb_label, entry_model, filter_type, min_expectancy_r]).fetchall()
 
         if not rows:
             return None
@@ -232,12 +290,37 @@ def _check_rolling_stability(
 
     return 0.0, "family not found in rolling results"
 
+def _check_dollar_gate(variant: dict, instrument: str) -> tuple[bool, str]:
+    """Check that expected dollar profit >= LIVE_MIN_EXPECTANCY_DOLLARS_MULT * RT cost.
+
+    Returns (passes, note). If median_risk_points is unavailable, passes by default
+    (dollar gate skipped rather than blocking a strategy on missing data).
+    """
+    median_risk_pts = variant.get("median_risk_points")
+    if median_risk_pts is None:
+        return True, "dollar gate skipped (no median_risk_points)"
+    try:
+        from pipeline.cost_model import get_cost_spec
+        spec = get_cost_spec(instrument)
+        one_r_dollars = median_risk_pts * spec.point_value + spec.total_friction
+        exp_dollars = variant["expectancy_r"] * one_r_dollars
+        min_dollars = LIVE_MIN_EXPECTANCY_DOLLARS_MULT * spec.total_friction
+        if exp_dollars < min_dollars:
+            return False, (
+                f"Exp${exp_dollars:.2f} < {LIVE_MIN_EXPECTANCY_DOLLARS_MULT}x "
+                f"RT cost (${spec.total_friction:.2f} * {LIVE_MIN_EXPECTANCY_DOLLARS_MULT} = ${min_dollars:.2f})"
+            )
+        return True, f"Exp${exp_dollars:.2f} >= ${min_dollars:.2f} ({LIVE_MIN_EXPECTANCY_DOLLARS_MULT}x RT)"
+    except Exception:
+        return True, "dollar gate skipped (cost spec unavailable)"
+
 def build_live_portfolio(
     db_path: Path | None = None,
     instrument: str = "MGC",
     rolling_train_months: int = 12,
     account_equity: float = 25000.0,
     risk_per_trade_pct: float = 2.0,
+    min_expectancy_r: float = LIVE_MIN_EXPECTANCY_R,
 ) -> tuple[Portfolio, list[str]]:
     """
     Build the live portfolio from LIVE_PORTFOLIO spec.
@@ -262,7 +345,7 @@ def build_live_portfolio(
         rolling_strats = load_rolling_validated_strategies(
             db_path, instrument, rolling_train_months,
             min_weighted_score=STABLE_THRESHOLD,
-            min_expectancy_r=0.05,
+            min_expectancy_r=min_expectancy_r,
             lookback_windows=DEFAULT_LOOKBACK_WINDOWS,
         )
 
@@ -277,16 +360,22 @@ def build_live_portfolio(
                     match = rs
                     break
 
-            # Fall back to validated_setups (best Sharpe variant)
+            # Fall back to validated_setups (best Sharpe variant meeting quality floor)
             if match is None:
                 match = _load_best_regime_variant(
                     db_path, instrument,
                     spec.orb_label, spec.entry_model, spec.filter_type,
+                    min_expectancy_r=min_expectancy_r,
                 )
                 source = "baseline"
 
             if match is None:
                 notes.append(f"WARN: {spec.family_id} -- no variant found")
+                continue
+
+            passes_dollar, dollar_note = _check_dollar_gate(match, instrument)
+            if not passes_dollar:
+                notes.append(f"SKIP: {spec.family_id} -- dollar gate failed: {dollar_note}")
                 continue
 
             strategies.append(PortfolioStrategy(
@@ -308,10 +397,14 @@ def build_live_portfolio(
             ))
             notes.append(
                 f"CORE: {spec.family_id} -> {match['strategy_id']} "
-                f"(ExpR={match['expectancy_r']:+.3f}, source={source}, weight=1.0)"
+                f"(ExpR={match['expectancy_r']:+.3f}, source={source}, {dollar_note}, weight=1.0)"
             )
 
     # --- HOT tier: from experimental_strategies + rolling stability gate ---
+    # Note: dollar gate is NOT applied to HOT tier. HOT strategies load from
+    # experimental_strategies which rarely has median_risk_points populated, so
+    # the gate would trivially pass-through anyway. Re-evaluate if HOT tier is
+    # re-activated with strategies that have median_risk_points available.
     hot_specs = [s for s in LIVE_PORTFOLIO if s.tier == "hot"]
     for spec in hot_specs:
         variant = _load_best_experimental_variant(
@@ -366,10 +459,18 @@ def build_live_portfolio(
         variant = _load_best_regime_variant(
             db_path, instrument,
             spec.orb_label, spec.entry_model, spec.filter_type,
+            min_expectancy_r=min_expectancy_r,
         )
 
         if variant is None:
             notes.append(f"WARN: {spec.family_id} -- no validated variant found")
+            continue
+
+        # Dollar gate first — no point running compute_fitness (DB query) on a
+        # strategy that will be excluded for being too thin anyway.
+        passes_dollar, dollar_note = _check_dollar_gate(variant, instrument)
+        if not passes_dollar:
+            notes.append(f"SKIP: {spec.family_id} -- dollar gate failed: {dollar_note}")
             continue
 
         # Check fitness gate
@@ -436,6 +537,8 @@ def main():
     parser.add_argument("--instrument", default="MGC",
                         choices=get_active_instruments())
     parser.add_argument("--rolling-train-months", type=int, default=12)
+    parser.add_argument("--min-expectancy-r", type=float, default=LIVE_MIN_EXPECTANCY_R,
+                        help=f"Min ExpR per trade to include (default {LIVE_MIN_EXPECTANCY_R})")
     parser.add_argument("--output", type=str, default=None,
                         help="Write portfolio JSON to this path")
     args = parser.parse_args()
@@ -451,6 +554,7 @@ def main():
         db_path=db_path,
         instrument=args.instrument,
         rolling_train_months=args.rolling_train_months,
+        min_expectancy_r=args.min_expectancy_r,
     )
 
     # Print strategy details
@@ -461,13 +565,34 @@ def main():
         print(f"  {note}")
     print()
 
+    from pipeline.cost_model import get_cost_spec
+
     active = [s for s in portfolio.strategies if s.weight > 0]
     gated = [s for s in portfolio.strategies if s.weight == 0]
 
+    def _exp_dollars(s) -> str:
+        """Expected net dollar profit per trade.
+
+        ExpR is already net of costs; 1R in dollars includes friction in
+        the denominator: 1R$ = median_risk_pts * point_value + total_friction.
+        Exp$ = ExpR * 1R$
+        """
+        if s.median_risk_points is None:
+            return "   n/a"
+        try:
+            spec = get_cost_spec(s.instrument)
+            one_r_dollars = s.median_risk_points * spec.point_value + spec.total_friction
+            d = s.expectancy_r * one_r_dollars
+            return f"${d:+6.2f}"
+        except Exception:
+            return "   n/a"
+
     print(f"Active strategies: {len(active)}")
+    print(f"  {'Strategy':<50} {'ExpR':>6}  {'Exp$/trade':>10}  {'WR':>5}  {'N':>5}")
+    print(f"  {'-'*50} {'------':>6}  {'----------':>10}  {'-----':>5}  {'-----':>5}")
     for s in active:
-        print(f"  {s.strategy_id}: {s.source}, weight={s.weight}, "
-              f"ExpR={s.expectancy_r:+.3f}, WR={s.win_rate:.1%}, N={s.sample_size}")
+        print(f"  {s.strategy_id:<50} {s.expectancy_r:>+6.3f}  {_exp_dollars(s):>10}  "
+              f"{s.win_rate:>4.0%}  {s.sample_size:>5}")
 
     if gated:
         print(f"\nGated OFF (weight=0): {len(gated)}")

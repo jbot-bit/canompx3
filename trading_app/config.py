@@ -661,7 +661,7 @@ ORB_DURATION_MINUTES: dict[str, int] = {
 #   Tested: 5m/15m/30m ORBs, all sessions, NYMEX-focused, breakout + fade.
 #   Oil is structurally mean-reverting (47-80% double break). No edge exists.
 #   See memory/mcl_research.md for full scientific validation.
-# MNQ (Micro Nasdaq): WEAK edge (~half MGC). Only 2 years data. Held lightly.
+# MNQ (Micro Nasdaq): WEAK edge (~half MGC). ~5 years data.
 TRADEABLE_INSTRUMENTS = ["MGC"]
 
 # Timed early exit: kill losers at N minutes after fill.

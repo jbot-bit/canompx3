@@ -307,7 +307,7 @@ Build the table:
 
 ### 6C. Validator Flag Verification
 - [ ] Each instrument's last run used correct flags?
-  - MNQ: `--no-walkforward` (only 2 years of data)
+  - MNQ: `--no-walkforward` (currently run without WF; ~5yr data means WF is feasible)
   - All: `--no-regime-waivers --min-years-positive-pct 0.75`
 - [ ] Edge families built AFTER last validation?
 
