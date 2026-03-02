@@ -3,6 +3,13 @@ gold.db
 gold.db.wal
 local_db/
 
+# Vector DB cache (Chroma)
+chroma/
+chroma_data/
+
+# DB parquet exports (generated artifacts)
+db_export/
+
 # Data files (large, not for VCS)
 DB/
 OHLCV_MGC_FULL/

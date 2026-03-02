@@ -130,6 +130,15 @@ COST_SPECS = {
         tick_size=0.10,          # Minimum price increment (0.10 index points)
         min_ticks_floor=10,      # 10 ticks = 1.0pt = $5 minimum risk
     ),
+    "MBT": CostSpec(
+        instrument="MBT",
+        point_value=0.10,        # Micro Bitcoin: 0.1 BTC per contract, $0.10 per $1 of BTC price
+        commission_rt=2.50,      # MBT higher commission than other micros (~$1.25/side at IB)
+        spread_doubled=2.00,     # ~2 ticks ($1.00) per side × 2 (tick = $5 BTC = $0.50 MBT)
+        slippage=2.00,           # ~2 ticks ($1.00) per side × 2 (E2 stop-market fill)
+        tick_size=5.0,           # $5 minimum price increment in BTC price
+        min_ticks_floor=10,      # 10 ticks = $50 BTC price = $5.00 MBT minimum risk
+    ),
 }
 
 

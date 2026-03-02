@@ -191,7 +191,7 @@ def _build_server():
     mcp = FastMCP(
         "gold-db",
         instructions=(
-            "Gold futures trading database with 4 instruments: MGC (10yr), MNQ (2yr), MES (5yr), M2K (5yr). "
+            "Gold futures trading database with 4 instruments: MGC (10yr), MNQ (5yr), MES (7yr), M2K (5yr). "
             "735 FDR-validated ORB breakout strategies. "
             "WORKFLOW: (1) list_available_queries to discover templates, "
             "(2) query_trading_db for strategy lookups/comparisons/raw outcomes, "

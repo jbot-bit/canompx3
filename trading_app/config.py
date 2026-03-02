@@ -649,7 +649,9 @@ ORB_DURATION_MINUTES: dict[str, int] = {
     "COMEX_SETTLE": 5,     # COMEX gold settlement 1:30 PM ET
     "CME_PRECLOSE": 5,     # CME equity futures pre-settlement 2:45 PM CT
     "NYSE_CLOSE": 5,       # NYSE closing bell 4:00 PM ET
-    "BRISBANE_0925": 5,    # Fixed 9:25 AM Brisbane (MNQ only, session discovery 2026-03-01)
+    "BRISBANE_0925": 5,    # Fixed 9:25 AM Brisbane (session discovery 2026-03-01)
+    "BRISBANE_1025": 5,    # Fixed 10:25 AM Brisbane (session discovery 2026-03-01)
+    "BRISBANE_1955": 5,    # Fixed 19:55 PM Brisbane (session discovery 2026-03-01)
 }
 
 # =========================================================================
@@ -659,7 +661,7 @@ ORB_DURATION_MINUTES: dict[str, int] = {
 #   Tested: 5m/15m/30m ORBs, all sessions, NYMEX-focused, breakout + fade.
 #   Oil is structurally mean-reverting (47-80% double break). No edge exists.
 #   See memory/mcl_research.md for full scientific validation.
-# MNQ (Micro Nasdaq): WEAK edge (~half MGC). Only 2 years data. Held lightly.
+# MNQ (Micro Nasdaq): WEAK edge (~half MGC). ~5 years data.
 TRADEABLE_INSTRUMENTS = ["MGC"]
 
 # Timed early exit: kill losers at N minutes after fill.
@@ -692,6 +694,8 @@ EARLY_EXIT_MINUTES: dict[str, int | None] = {
     "CME_PRECLOSE": 16,     # MES T80=16m (short session, fast-resolve)
     "NYSE_CLOSE": None,
     "BRISBANE_0925": None,  # No T80 data yet — research after outcomes built
+    "BRISBANE_1025": None,  # No T80 data yet — research after outcomes built
+    "BRISBANE_1955": None,  # No T80 data yet — research after outcomes built
 }
 
 # Session exit modes: how each session manages target/stop after entry.
@@ -709,6 +713,8 @@ SESSION_EXIT_MODE: dict[str, str] = {
     "CME_PRECLOSE": "fixed_target",
     "NYSE_CLOSE": "fixed_target",
     "BRISBANE_0925": "fixed_target",
+    "BRISBANE_1025": "fixed_target",
+    "BRISBANE_1955": "fixed_target",
 }
 
 # IB (Initial Balance) = first 120 minutes from 09:00 Brisbane (23:00 UTC).
