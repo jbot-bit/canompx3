@@ -84,7 +84,7 @@ LIVE_MIN_EXPECTANCY_DOLLARS_MULT = 1.3
 # gate logic. Re-add when rolling eval pipeline is production-ready.
 #
 # Updated 2026-03-02: Full 4-instrument rebuild (MGC/MNQ/MES/M2K).
-#   18 unique specs (instrument-agnostic — filter_type is the base name, without _O15/_O30 aperture suffix).
+#   26 unique specs (instrument-agnostic — filter_type is the base name, without _O15/_O30 aperture suffix).
 #   E0 fully purged. E2 dominant. E3 soft-retired.
 #   Filter_type note: strategy IDs encode aperture as _O15/_O30 suffix (e.g. VOL_RV12_N20_O15),
 #   but validated_setups.filter_type stores the base name (e.g. VOL_RV12_N20). Always use base name here.
@@ -99,12 +99,16 @@ LIVE_PORTFOLIO = [
     # =========================================================================
 
     # CME_REOPEN: MGC wins with ORB_G5; MNQ wins with VOL_RV12_N20
-    LiveStrategySpec("CME_REOPEN_E2_ORB_G5",      "core", "CME_REOPEN", "E2", "ORB_G5",      None),
-    LiveStrategySpec("CME_REOPEN_E2_VOL_RV12_N20", "core", "CME_REOPEN", "E2", "VOL_RV12_N20", None),
+    #   ORB_G4_FAST10: MGC speed-filtered edge, 43 new days (75% overlap), ExpR=+0.269
+    LiveStrategySpec("CME_REOPEN_E2_ORB_G5",       "core", "CME_REOPEN", "E2", "ORB_G5",       None),
+    LiveStrategySpec("CME_REOPEN_E2_VOL_RV12_N20",  "core", "CME_REOPEN", "E2", "VOL_RV12_N20",  None),
+    LiveStrategySpec("CME_REOPEN_E2_ORB_G4_FAST10", "core", "CME_REOPEN", "E2", "ORB_G4_FAST10", None),
 
     # CME_PRECLOSE: MES wins with ORB_G6; MNQ wins with VOL_RV12_N20 (O15 suffix is aperture, not filter_type)
+    #   ORB_G5: MES 15m aperture, 434 new days (57% overlap with G6), ExpR=+0.242
     LiveStrategySpec("CME_PRECLOSE_E2_ORB_G6",      "core", "CME_PRECLOSE", "E2", "ORB_G6",      None),
     LiveStrategySpec("CME_PRECLOSE_E2_VOL_RV12_N20", "core", "CME_PRECLOSE", "E2", "VOL_RV12_N20", None),
+    LiveStrategySpec("CME_PRECLOSE_E2_ORB_G5",      "core", "CME_PRECLOSE", "E2", "ORB_G5",      None),
 
     # COMEX_SETTLE: MES wins with ORB_G6; MNQ wins with VOL_RV12_N20
     LiveStrategySpec("COMEX_SETTLE_E2_ORB_G6",       "core", "COMEX_SETTLE", "E2", "ORB_G6",       None),
@@ -115,15 +119,24 @@ LIVE_PORTFOLIO = [
     LiveStrategySpec("NYSE_CLOSE_E2_VOL_RV12_N20",  "core", "NYSE_CLOSE", "E2", "VOL_RV12_N20",  None),
 
     # NYSE_OPEN: MES wins VOL_RV12_N20; MNQ wins ORB_G4; M2K VOL_RV12_N20 (report ORB_G5_O30 = base filter ORB_G5, covered by VOL)
+    #   ORB_G8: MES 583 new days (38% overlap with VOL_RV12_N20), ExpR=+0.165 — strongest day-add
     LiveStrategySpec("NYSE_OPEN_E2_VOL_RV12_N20", "core", "NYSE_OPEN", "E2", "VOL_RV12_N20", None),
     LiveStrategySpec("NYSE_OPEN_E2_ORB_G4",        "core", "NYSE_OPEN", "E2", "ORB_G4",        None),
+    LiveStrategySpec("NYSE_OPEN_E2_ORB_G8",        "core", "NYSE_OPEN", "E2", "ORB_G8",        None),
 
-    # US_DATA_1000: M2K wins VOL_RV12_N20 (O30 is aperture, not filter_type); MNQ wins ORB_G5
+    # US_DATA_1000: M2K wins VOL_RV12_N20 (O30 is aperture, not filter_type); MNQ wins ORB_G5;
+    #   MGC wins ORB_G6 (N=297, FDR+WF, hash 8946a234a — new session for MGC)
     LiveStrategySpec("US_DATA_1000_E2_VOL_RV12_N20", "core", "US_DATA_1000", "E2", "VOL_RV12_N20", None),
     LiveStrategySpec("US_DATA_1000_E2_ORB_G5",        "core", "US_DATA_1000", "E2", "ORB_G5",        None),
+    LiveStrategySpec("US_DATA_1000_E2_ORB_G6",        "core", "US_DATA_1000", "E2", "ORB_G6",        None),
 
-    # TOKYO_OPEN: MGC + MNQ both win ORB_G5_CONT (handled together; MGC is REGIME N=96 but fitness gate below)
+    # TOKYO_OPEN: Multiple independent edges verified by family hash:
+    #   ORB_G5_CONT (5m aperture, hash 2e921bb81) — MGC N=96 (REGIME), MNQ CORE
+    #   ORB_G5 (15m aperture, hash d790ad6b) — MGC N=297+ FDR+WF, genuinely independent
+    #   ORB_G6_CONT (hash dd81bcff7) — MES N=221, FDR+WF, Exp$=7.19 passes dollar gate
     LiveStrategySpec("TOKYO_OPEN_E2_ORB_G5_CONT", "core", "TOKYO_OPEN", "E2", "ORB_G5_CONT", None),
+    LiveStrategySpec("TOKYO_OPEN_E2_ORB_G5",      "core", "TOKYO_OPEN", "E2", "ORB_G5",      None),
+    LiveStrategySpec("TOKYO_OPEN_E2_ORB_G6_CONT", "core", "TOKYO_OPEN", "E2", "ORB_G6_CONT", None),
 
     # SINGAPORE_OPEN: DIR_LONG (long-only, any ORB size) is the primary filter for MNQ.
     #   Research H5: shorts avgR=-0.247 (raw session avg, config.py), p=0.006, N=236 — systematically
@@ -134,7 +147,9 @@ LIVE_PORTFOLIO = [
     LiveStrategySpec("SINGAPORE_OPEN_E2_ORB_G8", "core", "SINGAPORE_OPEN", "E2", "ORB_G8", None),
 
     # BRISBANE_1025: MNQ wins ORB_G6
-    LiveStrategySpec("BRISBANE_1025_E2_ORB_G6", "core", "BRISBANE_1025", "E2", "ORB_G6", None),
+    #   VOL_RV12_N20: MNQ 113 new days (78% overlap with G6), ExpR=+0.149
+    LiveStrategySpec("BRISBANE_1025_E2_ORB_G6",       "core", "BRISBANE_1025", "E2", "ORB_G6",       None),
+    LiveStrategySpec("BRISBANE_1025_E2_VOL_RV12_N20", "core", "BRISBANE_1025", "E2", "VOL_RV12_N20", None),
 
     # LONDON_METALS: MNQ wins VOL_RV12_N20 (5m, all_years_positive) and ORB_G6_NOMON (15m aperture,
     #   N=1032, FDR=True, WF=True, ExpR=0.122). M2K is REGIME below (ORB_G6_CONT).
