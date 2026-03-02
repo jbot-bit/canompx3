@@ -128,6 +128,11 @@ backfill_overnight.log
 # Auto Claude data directory
 .auto-claude/
 
+# Pinecone Assistant sync state
+scripts/tools/.pinecone_assistant_id
+scripts/tools/.pinecone_sync_manifest.json
+scripts/tools/_snapshot_*.md
+
 # Auto Claude generated files
 .auto-claude-security.json
 .auto-claude-status
