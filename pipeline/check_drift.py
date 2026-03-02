@@ -23,6 +23,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 PIPELINE_DIR = PROJECT_ROOT / "pipeline"
 TRADING_APP_DIR = PROJECT_ROOT / "trading_app"
 SCRIPTS_DIR = PROJECT_ROOT / "scripts"
+RESEARCH_DIR = PROJECT_ROOT / "research"
 
 # Module-level override for tests; production uses GOLD_DB_PATH from pipeline.paths
 GOLD_DB_PATH_FOR_CHECKS = None  # Set by tests; production uses GOLD_DB_PATH
@@ -766,14 +767,18 @@ def check_timezone_hygiene() -> list[str]:
     Known footguns:
       - pytz has surprising DST normalization behavior
       - timedelta(hours=10) is a hardcoded Brisbane offset instead of using zoneinfo
+      - pd.Timedelta(hours=10) added to DuckDB timestamps double-converts
+        (DuckDB fetchdf() returns Brisbane-localized timestamps, not naive UTC)
     """
     violations = []
 
     pytz_pattern = re.compile(r'import\s+pytz|from\s+pytz\s+import')
-    # Match timedelta(hours=10) with optional spaces
+    # Match timedelta(hours=10) with optional spaces — both stdlib and pandas
     hardcoded_tz_pattern = re.compile(r'timedelta\s*\(\s*hours\s*=\s*10\s*\)')
+    # Match pd.Timedelta(hours=10) — the double-conversion footgun in research scripts
+    pd_timedelta_pattern = re.compile(r'pd\.Timedelta\s*\(\s*hours\s*=\s*10\s*\)')
 
-    for base_dir in [PIPELINE_DIR, TRADING_APP_DIR]:
+    for base_dir in [PIPELINE_DIR, TRADING_APP_DIR, RESEARCH_DIR]:
         if not base_dir.exists():
             continue
 
@@ -798,6 +803,11 @@ def check_timezone_hygiene() -> list[str]:
                     violations.append(
                         f"  {fpath.name}:{line_num}: Hardcoded timedelta(hours=10) "
                         f"(use timezone.utc or zoneinfo): {stripped[:80]}"
+                    )
+                if pd_timedelta_pattern.search(line):
+                    violations.append(
+                        f"  {fpath.name}:{line_num}: pd.Timedelta(hours=10) "
+                        f"double-converts DuckDB Brisbane timestamps: {stripped[:80]}"
                     )
 
     return violations

@@ -88,8 +88,9 @@ def build_day_arrays(bars_df):
     """
     df = bars_df.copy()
 
-    # Brisbane = UTC + 10 (constant, no DST)
-    df["bris_dt"] = df["ts_utc"] + pd.Timedelta(hours=10)
+    # DuckDB returns ts_utc as datetime64[us, Australia/Brisbane] — already local time.
+    # Do NOT add +10h (that was a double-conversion bug, fixed Mar 2026).
+    df["bris_dt"] = df["ts_utc"].dt.tz_localize(None)
     df["bris_hour"] = df["bris_dt"].dt.hour
     df["bris_minute"] = df["bris_dt"].dt.minute
 
