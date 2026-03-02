@@ -1,0 +1,68 @@
+{
+  "version": "1.0",
+  "assistant_name": "orb-research",
+  "last_sync": null,
+  "content_tiers": {
+    "static": {
+      "description": "Authority docs, findings archive -- upload on change only",
+      "files": [
+        "TRADING_RULES.md",
+        "RESEARCH_RULES.md",
+        "MARKET_PLAYBOOK.md",
+        "TRADING_PLAN.md",
+        "AGENTS.md",
+        "docs/BREAD_AND_BUTTER_REFERENCE.md",
+        "docs/RESEARCH_ARCHIVE.md",
+        "docs/STRATEGY_DISCOVERY_AUDIT.md",
+        "docs/MONOREPO_ARCHITECTURE.md",
+        "docs/DOW_ALIGNMENT.md",
+        "docs/DST_CONTAMINATION.md",
+        "docs/prompts/SYSTEM_AUDIT.md",
+        "docs/prompts/PIPELINE_DATA_GUARDIAN.md",
+        "docs/prompts/ENTRY_MODEL_GUARDIAN.md"
+      ]
+    },
+    "research_output": {
+      "description": "Research output .md/.txt narrative files",
+      "glob_patterns": ["research/output/*.md", "research/output/*.txt"],
+      "auto_discover": true
+    },
+    "living": {
+      "description": "Config files that change across sessions -- re-upload always",
+      "files": [
+        "trading_app/config.py",
+        "pipeline/dst.py",
+        "pipeline/cost_model.py",
+        "trading_app/live_config.py"
+      ]
+    },
+    "memory": {
+      "description": "ClaudeMem memory files -- re-upload always",
+      "base_path": "C:/Users/joshd/.claude/projects/C--Users-joshd-canompx3/memory",
+      "glob_pattern": "*.md",
+      "auto_discover": true
+    },
+    "generated": {
+      "description": "Snapshots generated on every sync from gold-db",
+      "output_dir": "scripts/tools",
+      "files": [
+        "_snapshot_portfolio_state.md",
+        "_snapshot_fitness_report.md",
+        "_snapshot_live_config.md",
+        "_snapshot_research_index.md"
+      ]
+    }
+  },
+  "excluded": {
+    "description": "Never upload these -- either in gold-db MCP, already injected by Claude Code, or code files",
+    "patterns": [
+      "*.csv",
+      "*.json",
+      "research/*.py",
+      "research/archive/*",
+      "docs/strategy/*",
+      ".claude/rules/*",
+      "CLAUDE.md"
+    ]
+  }
+}
