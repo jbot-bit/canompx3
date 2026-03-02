@@ -5,6 +5,8 @@ Calls Tradovate /contract/find, returns the nearest-expiry contract name
 (e.g. 'MGCM6', 'MNQM6'). Contracts roll quarterly — call this once per session
 start rather than caching across sessions.
 """
+from datetime import date
+
 import requests
 
 from .tradovate_auth import TradovateAuth
@@ -43,6 +45,12 @@ def resolve_front_month(instrument: str, auth: TradovateAuth, demo: bool = True)
     if not contracts:
         raise RuntimeError(f"No contracts found for {instrument} ({PRODUCT_MAP[instrument]})")
 
-    # Take the nearest expiry
-    front = sorted(contracts, key=lambda c: c.get("expirationDate", ""))[0]
+    # Filter out expired contracts (expirationDate < today)
+    today = date.today().isoformat()
+    active = [c for c in contracts if c.get("expirationDate", "") >= today]
+    if not active:
+        raise RuntimeError(f"All contracts for {instrument} are expired")
+
+    # Take the nearest future expiry (front month)
+    front = sorted(active, key=lambda c: c.get("expirationDate", ""))[0]
     return front["name"]

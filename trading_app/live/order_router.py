@@ -13,6 +13,7 @@ Entry model → order type mapping:
   E3 → BLOCKED (no timeout mechanism in live session; use E1 or E2 only)
 """
 import logging
+import time
 from dataclasses import dataclass
 from typing import Optional
 
@@ -83,7 +84,13 @@ class OrderRouter:
             )
 
     def submit(self, spec: OrderSpec) -> OrderResult:
-        """Submit an order to Tradovate. Requires auth."""
+        """Submit an order to Tradovate. Requires auth.
+
+        WARNING: This is a synchronous HTTP call. When called from the async
+        DataFeed callback, it blocks the event loop. Typical latency is ~100ms.
+        If latency exceeds 1s, a warning is logged. A future version should
+        use aiohttp or run_in_executor for non-blocking submission.
+        """
         if self.auth is None:
             raise RuntimeError("No auth — cannot submit live orders without TradovateAuth")
 
@@ -98,28 +105,53 @@ class OrderRouter:
         if spec.stop_price is not None:
             body["stopPrice"] = spec.stop_price
 
+        t0 = time.monotonic()
         resp = requests.post(
             f"{self.base}/order/placeOrder",
             json=body,
             headers=self.auth.headers(),
             timeout=5,
         )
+        elapsed_ms = (time.monotonic() - t0) * 1000
         resp.raise_for_status()
         data = resp.json()
         order_id = data.get("orderId", -1)
         log.info(
-            "Order placed: %s %s qty=%d → orderId=%d",
-            spec.action, spec.symbol, spec.qty, order_id,
+            "Order placed: %s %s qty=%d → orderId=%d (%.0fms)",
+            spec.action, spec.symbol, spec.qty, order_id, elapsed_ms,
         )
+        if elapsed_ms > 1000:
+            log.warning("Order submission took %.0fms — event loop was blocked", elapsed_ms)
         return OrderResult(order_id=order_id, status="submitted")
+
+    def build_exit_spec(
+        self,
+        direction: str,       # original trade direction ("long" or "short")
+        symbol: str,
+        qty: int = 1,
+    ) -> OrderSpec:
+        """
+        Build a market order to close a position.
+
+        Exits are ALWAYS market orders regardless of entry model.
+        Direction is the ORIGINAL trade direction — we reverse it for the close.
+        """
+        # Close a long by selling, close a short by buying
+        action = "Sell" if direction == "long" else "Buy"
+        return OrderSpec(
+            action=action, order_type="Market",
+            symbol=symbol, qty=qty, account_id=self.account_id,
+        )
 
     def cancel(self, order_id: int) -> None:
         """Cancel an open order by ID."""
         if self.auth is None:
             return
-        requests.post(
+        resp = requests.post(
             f"{self.base}/order/cancelOrder",
             json={"orderId": order_id},
             headers=self.auth.headers(),
             timeout=5,
         )
+        resp.raise_for_status()
+        log.info("Order cancelled: orderId=%d", order_id)

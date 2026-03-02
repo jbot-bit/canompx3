@@ -55,6 +55,22 @@ def test_e3_raises_not_supported():
         )
 
 
+def test_exit_long_generates_market_sell():
+    router = OrderRouter(account_id=12345, auth=None, demo=True)
+    spec = router.build_exit_spec(direction="long", symbol="MGCM6", qty=1)
+    assert spec.order_type == "Market"
+    assert spec.action == "Sell"  # close a long by selling
+    assert spec.stop_price is None
+
+
+def test_exit_short_generates_market_buy():
+    router = OrderRouter(account_id=12345, auth=None, demo=True)
+    spec = router.build_exit_spec(direction="short", symbol="MGCM6", qty=1)
+    assert spec.order_type == "Market"
+    assert spec.action == "Buy"  # close a short by buying
+    assert spec.stop_price is None
+
+
 def test_submit_without_auth_raises():
     from trading_app.live.order_router import OrderSpec
     router = OrderRouter(account_id=12345, auth=None, demo=True)

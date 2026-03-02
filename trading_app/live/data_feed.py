@@ -62,6 +62,7 @@ class DataFeed:
             log.info("Subscribed to quotes: %s", symbol)
 
             # Heartbeat task (required every 2.5s)
+            # Store reference to prevent GC of the task
             async def heartbeat():
                 while True:
                     await asyncio.sleep(2.5)
@@ -70,7 +71,7 @@ class DataFeed:
                     except Exception:
                         break
 
-            asyncio.create_task(heartbeat())
+            self._heartbeat_task = asyncio.create_task(heartbeat())
 
             async for message in ws:
                 if not message or message == "[]":
@@ -94,7 +95,9 @@ class DataFeed:
                 bar.symbol = symbol
                 self.on_bar(bar)
 
-    def flush(self) -> Bar | None:
+    def flush(self, symbol: str = "") -> Bar | None:
         """Force-close current bar at session end."""
         bar = self._agg.flush()
+        if bar is not None:
+            bar.symbol = symbol
         return bar

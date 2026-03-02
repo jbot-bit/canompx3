@@ -27,7 +27,7 @@ from trading_app.execution_engine import ExecutionEngine
 from trading_app.risk_manager import RiskManager, RiskLimits
 from trading_app.live_config import build_live_portfolio
 from trading_app.portfolio import PortfolioStrategy
-from pipeline.cost_model import get_cost_spec
+from pipeline.cost_model import get_cost_spec, CostSpec
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.daily_backfill import run_backfill_for_instrument
 
@@ -58,7 +58,8 @@ class SessionOrchestrator:
         }
 
         # Execution stack
-        cost = get_cost_spec(instrument)
+        self.cost_spec: CostSpec = get_cost_spec(instrument)
+        cost = self.cost_spec
         risk_limits = RiskLimits(
             max_daily_loss_r=self.portfolio.max_daily_loss_r,
             max_concurrent_positions=self.portfolio.max_concurrent_positions,
@@ -92,20 +93,53 @@ class SessionOrchestrator:
         """Called for each completed 1-minute bar from DataFeed."""
         self.orb_builder.on_bar(bar)
 
-        # Bar dict must use key 'ts_utc' — that is what ExecutionEngine.on_bar() reads
-        bar_dict = {
-            "ts_utc": bar.ts_utc,   # NOT ts_event
-            "open": bar.open,
-            "high": bar.high,
-            "low": bar.low,
-            "close": bar.close,
-            "volume": bar.volume,
-        }
-        # on_bar() takes ONE argument (bar dict), returns list[TradeEvent]
-        events = self.engine.on_bar(bar_dict)
+        # bar.as_dict() returns {ts_utc, open, high, low, close, volume}
+        # — exactly what ExecutionEngine.on_bar() expects
+        events = self.engine.on_bar(bar.as_dict())
 
         for event in events:
             self._handle_event(event)
+
+    def _close_position(self, event) -> None:
+        """Submit a closing market order to the broker for an EXIT or SCRATCH."""
+        exit_spec = self.order_router.build_exit_spec(
+            direction=event.direction,
+            symbol=self.contract_symbol,
+            qty=event.contracts,
+        )
+        result = self.order_router.submit(exit_spec)
+        log.info("%s close order: %s %s @ %.2f → orderId=%d",
+                 event.event_type, event.strategy_id, event.direction,
+                 event.price, result.order_id)
+
+    def _compute_actual_r(self, entry_price: float, exit_price: float,
+                          direction: str, risk_pts: float) -> float:
+        """Compute cost-adjusted R-multiple from entry/exit prices."""
+        direction_sign = 1.0 if direction == "long" else -1.0
+        gross_pts = direction_sign * (exit_price - entry_price)
+        # Subtract transaction costs (spread + slippage + commission) in points
+        net_pts = gross_pts - self.cost_spec.friction_in_points
+        return net_pts / risk_pts if risk_pts > 0 else 0.0
+
+    def _record_exit(self, event, entry_price: float) -> None:
+        """Record a completed trade (EXIT or SCRATCH) in the performance monitor."""
+        strategy = self._strategy_map[event.strategy_id]
+        risk_pts = strategy.median_risk_points or 10.0
+        actual_r = self._compute_actual_r(
+            entry_price, event.price, event.direction, risk_pts
+        )
+        record = TradeRecord(
+            strategy_id=event.strategy_id,
+            trading_day=self.trading_day,
+            direction=event.direction,
+            entry_price=entry_price,
+            exit_price=event.price,
+            actual_r=actual_r,
+            expected_r=strategy.expectancy_r,
+        )
+        alert = self.monitor.record_trade(record)
+        if alert:
+            log.warning(alert)
 
     def _handle_event(self, event) -> None:
         """
@@ -135,29 +169,12 @@ class SessionOrchestrator:
             log.info("ENTRY order: %s %s @ %.2f → orderId=%d",
                      event.strategy_id, event.direction, event.price, result.order_id)
 
-        elif event.event_type == "EXIT":
+        elif event.event_type in ("EXIT", "SCRATCH"):
             entry_price = self._entry_prices.pop(event.strategy_id, event.price)
-            exit_price = event.price  # TradeEvent.price on EXIT = fill price
-
-            # Compute actual R from prices (engine doesn't put pnl_r on TradeEvent)
-            risk_pts = strategy.median_risk_points or 10.0
-            direction_sign = 1.0 if event.direction == "long" else -1.0
-            gross_pts = direction_sign * (exit_price - entry_price)
-            actual_r = gross_pts / risk_pts if risk_pts > 0 else 0.0
-
-            record = TradeRecord(
-                strategy_id=event.strategy_id,
-                trading_day=self.trading_day,
-                direction=event.direction,
-                entry_price=entry_price,
-                exit_price=exit_price,
-                actual_r=actual_r,
-                expected_r=strategy.expectancy_r,  # from PortfolioStrategy
-            )
-            alert = self.monitor.record_trade(record)
-            if alert:
-                log.warning(alert)
-                # TODO Phase F: send to Slack / email
+            # Submit closing order to broker
+            self._close_position(event)
+            # Record trade in performance monitor with cost-adjusted R
+            self._record_exit(event, entry_price)
 
         elif event.event_type == "REJECT":
             log.info("REJECT: %s — %s", event.strategy_id, event.reason)
