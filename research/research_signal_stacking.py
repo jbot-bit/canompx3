@@ -88,7 +88,7 @@ G_FILTERS = {
 }
 
 # Reference parameters (fixed — not grid-searched)
-REF_ENTRY_MODEL = "E3"
+REF_ENTRY_MODEL = "E3"  # NOTE: Script uses legacy session names (0030/0900/1000) — needs rewrite for new names
 REF_CONFIRM_BARS = 1
 REF_RR_TARGET = 2.0
 

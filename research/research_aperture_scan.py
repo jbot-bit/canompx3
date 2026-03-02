@@ -602,9 +602,9 @@ def print_honest_summary(all_rows):
     # NEXT STEPS
     print(f"\n  NEXT STEPS:")
     print(f"    - If any combo is ROBUST + BH p<0.05 + CORE class:")
-    print(f"      → Run outcome_builder at that aperture (~60-90s)")
-    print(f"      → Run strategy_discovery + validation")
-    print(f"      → Compare family-level Sharpe to 5m families")
+    print(f"      -> Run outcome_builder at that aperture (~60-90s)")
+    print(f"      -> Run strategy_discovery + validation")
+    print(f"      -> Compare family-level Sharpe to 5m families")
     print(f"    - If nothing survives: 5m is optimal, stop here")
 
 
