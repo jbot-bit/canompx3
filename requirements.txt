@@ -11,3 +11,7 @@ pytest-xdist==3.8.0
 pytest-cov==6.1.1
 ruff==0.11.6
 arch==8.0.0
+# Live trading (Phase B-E)
+websockets>=14.0
+requests>=2.31.0
+python-dotenv>=1.0.0
