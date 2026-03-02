@@ -15,12 +15,14 @@ from pathlib import Path
 import duckdb
 
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
 
 
 def get_last_ingested_date(db_path: str, symbol: str):
     """Return the datetime of the most recent bar for symbol, or None."""
     con = duckdb.connect(db_path, read_only=True)
+    configure_connection(con)
     try:
         row = con.execute(
             "SELECT MAX(ts_event) FROM bars_1m WHERE symbol = ?", [symbol]
