@@ -38,6 +38,23 @@ from scripts.tools.pinecone_snapshots import (
 MANIFEST_PATH = PROJECT_ROOT / "scripts" / "tools" / "pinecone_manifest.json"
 STATE_PATH = PROJECT_ROOT / "scripts" / "tools" / ".pinecone_sync_state.json"
 ASSISTANT_ID_PATH = PROJECT_ROOT / "scripts" / "tools" / ".pinecone_assistant_id"
+TOOLS_DIR = PROJECT_ROOT / "scripts" / "tools"
+
+# ---------------------------------------------------------------------------
+# Research output topic prefixes → bundle names
+# ---------------------------------------------------------------------------
+
+# Order matters: longer/more-specific prefixes first to avoid mis-grouping.
+RESEARCH_BUNDLE_GROUPS: list[tuple[str, list[str]]] = [
+    ("a0_analysis", ["a0_"]),
+    ("dalton_research", ["dalton_"]),
+    ("leadlag_research", ["lead_lag_", "fast_lead_lag_", "fast_proxy_"]),
+    ("forward_gate", ["forward_gate_"]),
+    ("session_research", ["session_"]),
+    ("shinies_research", ["shinies_"]),
+    ("wide_regime", ["wide_"]),
+    ("dst_research", ["dst_", "DST_"]),
+]
 
 
 # ---------------------------------------------------------------------------
@@ -84,6 +101,140 @@ def get_assistant_name() -> str:
 
 
 # ---------------------------------------------------------------------------
+# Research output bundling (Issue 1: 100-file quota)
+# ---------------------------------------------------------------------------
+
+
+def _classify_research_file(filename: str) -> str:
+    """Return the bundle topic for a research output filename."""
+    lower = filename.lower()
+    for topic, prefixes in RESEARCH_BUNDLE_GROUPS:
+        for prefix in prefixes:
+            if lower.startswith(prefix.lower()):
+                return topic
+    return "misc_research"
+
+
+def bundle_research_output(
+    research_files: list[tuple[Path, str]],
+) -> list[tuple[Path, str]]:
+    """Bundle research output files by topic prefix into fewer combined files.
+
+    Groups files by their topic prefix (before first underscore or known
+    pattern), concatenates each group into a single markdown document with
+    clear section headers, and writes to scripts/tools/_bundle_*.md.
+
+    Returns new list of (abs_path, rel_key) for the bundled files.
+    """
+    from collections import defaultdict
+
+    groups: dict[str, list[tuple[Path, str]]] = defaultdict(list)
+
+    for abs_path, rel_key in research_files:
+        topic = _classify_research_file(abs_path.name)
+        groups[topic].append((abs_path, rel_key))
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    bundled: list[tuple[Path, str]] = []
+
+    for topic in sorted(groups.keys()):
+        files_in_group = groups[topic]
+        bundle_name = f"_bundle_{topic}.md"
+        bundle_path = TOOLS_DIR / bundle_name
+        rel_key = f"scripts/tools/{bundle_name}"
+
+        lines = [
+            f"# Research Bundle: {topic.replace('_', ' ').title()}",
+            "",
+            f"Generated: {timestamp}",
+            f"Files included: {len(files_in_group)}",
+            "",
+        ]
+
+        for abs_path, original_key in sorted(files_in_group, key=lambda x: x[1]):
+            lines.append("---")
+            lines.append("")
+            lines.append(f"## {abs_path.name}")
+            lines.append("")
+            try:
+                content = abs_path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                content = abs_path.read_bytes().decode("utf-8", errors="replace")
+            lines.append(content.rstrip())
+            lines.append("")
+
+        lines.append("---")
+
+        bundle_path.write_text("\n".join(lines), encoding="utf-8")
+        bundled.append((bundle_path, rel_key))
+        print(f"  Bundled {len(files_in_group)} files -> {bundle_name}")
+
+    return bundled
+
+
+# ---------------------------------------------------------------------------
+# Living file .py → .md conversion (Issue 2: .py rejected)
+# ---------------------------------------------------------------------------
+
+
+def prepare_living_as_md(
+    living_files: list[tuple[Path, str]],
+) -> list[tuple[Path, str]]:
+    """Convert .py config files to .md for Pinecone upload.
+
+    For each .py file, writes a markdown wrapper to
+    scripts/tools/_living_{basename}.md with the code in a fenced block.
+    Non-.py files are passed through unchanged.
+
+    Returns new list of (abs_path, rel_key).
+    """
+    result: list[tuple[Path, str]] = []
+
+    for abs_path, rel_key in living_files:
+        if abs_path.suffix == ".py":
+            md_name = f"_living_{abs_path.stem}.md"
+            md_path = TOOLS_DIR / md_name
+            md_rel_key = f"scripts/tools/{md_name}"
+
+            try:
+                code = abs_path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                code = abs_path.read_bytes().decode("utf-8", errors="replace")
+
+            content = (
+                f"# {abs_path.name} (Source of Truth)\n\n"
+                f"Source: `{rel_key}`\n\n"
+                f"```python\n{code}\n```\n"
+            )
+            md_path.write_text(content, encoding="utf-8")
+            result.append((md_path, md_rel_key))
+            print(f"  Converted {rel_key} -> {md_name}")
+        else:
+            result.append((abs_path, rel_key))
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# UTF-8 sanitization (Issue 3: encoding errors)
+# ---------------------------------------------------------------------------
+
+
+def ensure_utf8(file_path: Path) -> Path:
+    """Ensure file is valid UTF-8. Returns path to clean file (may be temp copy)."""
+    try:
+        file_path.read_text(encoding="utf-8")
+        return file_path  # Already valid
+    except UnicodeDecodeError:
+        # Read with replacement and write clean copy
+        content = file_path.read_bytes().decode("utf-8", errors="replace")
+        clean_path = TOOLS_DIR / f"_clean_{file_path.name}"
+        clean_path.write_text(content, encoding="utf-8")
+        print(f"  Sanitized UTF-8: {file_path.name} -> _clean_{file_path.name}")
+        return clean_path
+
+
+# ---------------------------------------------------------------------------
 # File collection
 # ---------------------------------------------------------------------------
 
@@ -107,15 +258,15 @@ def collect_files(manifest: dict) -> dict[str, list[tuple[Path, str]]]:
             print(f"  WARNING: static file missing: {rel_path}")
     collected["static"] = static_files
 
-    # --- Living files ---
-    living_files = []
+    # --- Living files (convert .py → .md for Pinecone) ---
+    raw_living = []
     for rel_path in tiers["living"]["files"]:
         abs_path = PROJECT_ROOT / rel_path
         if abs_path.exists():
-            living_files.append((abs_path, rel_path))
+            raw_living.append((abs_path, rel_path))
         else:
             print(f"  WARNING: living file missing: {rel_path}")
-    collected["living"] = living_files
+    collected["living"] = prepare_living_as_md(raw_living)
 
     # --- Memory files (absolute path + glob) ---
     memory_cfg = tiers["memory"]
@@ -132,9 +283,9 @@ def collect_files(manifest: dict) -> dict[str, list[tuple[Path, str]]]:
         print(f"  WARNING: memory base_path missing: {base_path}")
     collected["memory"] = memory_files
 
-    # --- Research output (glob patterns) ---
+    # --- Research output (bundle into ~10 topic files) ---
     research_cfg = tiers["research_output"]
-    research_files = []
+    raw_research: list[tuple[Path, str]] = []
     seen_paths: set[Path] = set()
     for glob_pattern in research_cfg["glob_patterns"]:
         for f in sorted(PROJECT_ROOT.glob(glob_pattern)):
@@ -144,8 +295,8 @@ def collect_files(manifest: dict) -> dict[str, list[tuple[Path, str]]]:
                     rel_key = str(f.relative_to(PROJECT_ROOT)).replace("\\", "/")
                 except ValueError:
                     rel_key = f.name
-                research_files.append((f, rel_key))
-    collected["research_output"] = research_files
+                raw_research.append((f, rel_key))
+    collected["research_output"] = bundle_research_output(raw_research)
 
     # --- Generated snapshots ---
     generated_cfg = tiers["generated"]
@@ -224,7 +375,9 @@ def upload_to_pinecone(
 
     for tier, files in changed.items():
         for abs_path, rel_key, _ in files:
-            basename = abs_path.name
+            # Ensure valid UTF-8 before upload (Issue 3)
+            upload_path = ensure_utf8(abs_path)
+            basename = upload_path.name
 
             # Check for name conflict — delete old version first
             if basename in existing_names:
@@ -237,7 +390,7 @@ def upload_to_pinecone(
             try:
                 print(f"  Uploading: {rel_key} (tier={tier})")
                 assistant.upload_file(
-                    file_path=str(abs_path),
+                    file_path=str(upload_path),
                     metadata={"tier": tier, "rel_key": rel_key},
                     timeout=None,
                 )
