@@ -14,10 +14,12 @@ import duckdb
 
 from trading_app.strategy_fitness import (
     classify_fitness,
+    DecayDiagnosis,
     FitnessScore,
     FitnessReport,
     compute_fitness,
     compute_portfolio_fitness,
+    diagnose_decay,
     _recent_trade_sharpe,
     _rolling_window_start,
     _load_strategy_outcomes,
@@ -719,3 +721,189 @@ class TestFitnessWeightedPortfolio:
         assert weight_map["REGIME_FIT"] == 0.5
         # CORE + FIT: min(1.0, 1.0) = 1.0
         assert weight_map["CORE_FIT"] == 1.0
+
+
+# =========================================================================
+# Decay diagnostic tests
+# =========================================================================
+
+def _setup_family_db(tmp_path, strategies, outcomes, family_hash="fam_abc",
+                     family_size=None, robustness="ROBUST"):
+    """Create DB with strategies linked to an edge family."""
+    db_path = _setup_fitness_db(tmp_path, strategies, outcomes)
+    con = duckdb.connect(str(db_path))
+
+    n_members = family_size or len(strategies)
+    head_sid = strategies[0]["strategy_id"]
+
+    # Create edge_families row
+    con.execute("""
+        INSERT INTO edge_families
+        (family_hash, instrument, member_count, trade_day_count,
+         head_strategy_id, head_expectancy_r, head_sharpe_ann,
+         robustness_status, cv_expectancy, median_expectancy_r,
+         avg_sharpe_ann, min_member_trades, trade_tier)
+        VALUES (?, 'MGC', ?, 100, ?, 0.30, 1.0, ?, 0.15, 0.28, 1.0, 80, 'CORE')
+    """, [family_hash, n_members, head_sid, robustness])
+
+    # Link strategies to family
+    for s in strategies:
+        is_head = s["strategy_id"] == head_sid
+        con.execute("""
+            UPDATE validated_setups
+            SET family_hash = ?, is_family_head = ?
+            WHERE strategy_id = ?
+        """, [family_hash, is_head, s["strategy_id"]])
+
+    con.commit()
+    con.close()
+    return db_path
+
+
+class TestDecayDiagnostics:
+
+    def test_regime_shift_all_siblings_decay(self, tmp_path):
+        """When all siblings are also DECAY -> REGIME_SHIFT."""
+        # 3 strategies, all with negative recent outcomes -> all DECAY
+        strategies = [
+            {"strategy_id": f"MGC_CME_REOPEN_E1_RR{rr}_CB2_NO_FILTER",
+             "rr_target": rr, "filter_type": "NO_FILTER",
+             "sample_size": 100, "expectancy_r": 0.30, "sharpe_ratio": 0.25}
+            for rr in [1.5, 2.0, 2.5]
+        ]
+        # All strategies share same NO_FILTER + same EM/CB -> same outcomes
+        # Make all outcomes losses in recent window
+        outcomes = [
+            {"trading_day": date(2025, (i % 11) + 1, (i % 27) + 1),
+             "outcome": "loss", "pnl_r": -1.0,
+             "rr_target": rr, "confirm_bars": 2}
+            for rr in [1.5, 2.0, 2.5]
+            for i in range(20)
+        ]
+        db_path = _setup_family_db(tmp_path, strategies, outcomes)
+
+        con = duckdb.connect(str(db_path), read_only=True)
+        try:
+            diag = diagnose_decay(
+                con, strategies[0]["strategy_id"],
+                as_of_date=date(2025, 12, 31), rolling_months=18,
+            )
+        finally:
+            con.close()
+
+        assert diag.diagnosis == "REGIME_SHIFT"
+        assert diag.family_size == 3
+
+    def test_overfit_siblings_fit(self, tmp_path):
+        """When siblings are FIT but target is DECAY -> OVERFIT."""
+        # Strategy at RR2.0 decays, but RR1.5 and RR2.5 are fine
+        strategies = [
+            {"strategy_id": "MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER",
+             "rr_target": 2.0, "filter_type": "NO_FILTER",
+             "sample_size": 100, "expectancy_r": 0.30, "sharpe_ratio": 0.25},
+            {"strategy_id": "MGC_CME_REOPEN_E1_RR1.5_CB2_NO_FILTER",
+             "rr_target": 1.5, "filter_type": "NO_FILTER",
+             "sample_size": 100, "expectancy_r": 0.30, "sharpe_ratio": 0.25},
+            {"strategy_id": "MGC_CME_REOPEN_E1_RR2.5_CB2_NO_FILTER",
+             "rr_target": 2.5, "filter_type": "NO_FILTER",
+             "sample_size": 100, "expectancy_r": 0.30, "sharpe_ratio": 0.25},
+        ]
+        # RR2.0 gets losses, RR1.5/2.5 get wins
+        outcomes = []
+        for i in range(20):
+            td = date(2025, (i % 11) + 1, (i % 27) + 1)
+            # RR2.0 = loss
+            outcomes.append({"trading_day": td, "outcome": "loss", "pnl_r": -1.0,
+                             "rr_target": 2.0, "confirm_bars": 2})
+            # RR1.5 = win
+            outcomes.append({"trading_day": td, "outcome": "win", "pnl_r": 1.5,
+                             "rr_target": 1.5, "confirm_bars": 2})
+            # RR2.5 = win
+            outcomes.append({"trading_day": td, "outcome": "win", "pnl_r": 2.5,
+                             "rr_target": 2.5, "confirm_bars": 2})
+
+        db_path = _setup_family_db(tmp_path, strategies, outcomes)
+
+        con = duckdb.connect(str(db_path), read_only=True)
+        try:
+            diag = diagnose_decay(
+                con, "MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER",
+                as_of_date=date(2025, 12, 31), rolling_months=18,
+            )
+        finally:
+            con.close()
+
+        assert diag.diagnosis == "OVERFIT"
+        assert diag.siblings_fit == 2
+        assert diag.siblings_decay == 0
+
+    def test_singleton_no_peers(self, tmp_path):
+        """Single-member family -> SINGLETON."""
+        strategies = [
+            {"strategy_id": "MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER",
+             "filter_type": "NO_FILTER",
+             "sample_size": 100, "expectancy_r": 0.30, "sharpe_ratio": 0.25},
+        ]
+        outcomes = _make_outcomes(
+            start_year=2024, end_year=2025, trades_per_year=20,
+            win_rate=0.40, win_pnl=1.5, loss_pnl=-1.0,
+        )
+        db_path = _setup_family_db(tmp_path, strategies, outcomes,
+                                   family_size=1, robustness="SINGLETON")
+
+        con = duckdb.connect(str(db_path), read_only=True)
+        try:
+            diag = diagnose_decay(
+                con, strategies[0]["strategy_id"],
+                as_of_date=date(2025, 12, 31), rolling_months=18,
+            )
+        finally:
+            con.close()
+
+        assert diag.diagnosis == "SINGLETON"
+
+    def test_no_family_hash(self, tmp_path):
+        """Strategy with no family_hash -> NO_FAMILY."""
+        strategies = [
+            {"strategy_id": "MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER",
+             "filter_type": "NO_FILTER",
+             "sample_size": 100, "expectancy_r": 0.30, "sharpe_ratio": 0.25},
+        ]
+        outcomes = _make_outcomes(start_year=2024, end_year=2025, trades_per_year=20)
+        db_path = _setup_fitness_db(tmp_path, strategies, outcomes)
+
+        con = duckdb.connect(str(db_path), read_only=True)
+        try:
+            diag = diagnose_decay(
+                con, strategies[0]["strategy_id"],
+                as_of_date=date(2025, 12, 31), rolling_months=18,
+            )
+        finally:
+            con.close()
+
+        assert diag.diagnosis == "NO_FAMILY"
+
+    def test_decay_diagnosis_dataclass_fields(self, tmp_path):
+        """DecayDiagnosis has all expected fields."""
+        strategies = [
+            {"strategy_id": "MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER",
+             "filter_type": "NO_FILTER",
+             "sample_size": 100, "expectancy_r": 0.30, "sharpe_ratio": 0.25},
+        ]
+        outcomes = _make_outcomes(start_year=2024, end_year=2025, trades_per_year=20)
+        db_path = _setup_fitness_db(tmp_path, strategies, outcomes)
+
+        con = duckdb.connect(str(db_path), read_only=True)
+        try:
+            diag = diagnose_decay(
+                con, strategies[0]["strategy_id"],
+                as_of_date=date(2025, 12, 31),
+            )
+        finally:
+            con.close()
+
+        assert isinstance(diag, DecayDiagnosis)
+        assert diag.strategy_id == strategies[0]["strategy_id"]
+        assert diag.diagnosis in (
+            "REGIME_SHIFT", "OVERFIT", "FRAGMENTED", "SINGLETON", "NO_FAMILY"
+        )

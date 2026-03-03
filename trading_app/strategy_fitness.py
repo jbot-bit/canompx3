@@ -520,6 +520,230 @@ def compute_portfolio_fitness(
     )
 
 # =========================================================================
+# Decay diagnostics: regime shift vs overfit
+# =========================================================================
+
+@dataclass(frozen=True)
+class DecayDiagnosis:
+    """Diagnosis of why a strategy is DECAY or WATCH."""
+    strategy_id: str
+    fitness_status: str
+    family_hash: str | None
+    family_size: int
+    family_robustness: str | None
+    # Sibling fitness counts
+    siblings_fit: int
+    siblings_watch: int
+    siblings_decay: int
+    siblings_stale: int
+    # Diagnosis
+    diagnosis: str  # REGIME_SHIFT | OVERFIT | FRAGMENTED | SINGLETON | NO_FAMILY
+    diagnosis_notes: str
+
+
+def diagnose_decay(
+    con,
+    strategy_id: str,
+    as_of_date: date,
+    rolling_months: int = 18,
+) -> DecayDiagnosis:
+    """
+    For a DECAY or WATCH strategy, check its edge family siblings to
+    distinguish regime shift from overfit.
+
+    REGIME_SHIFT: >= 50% of family siblings are also DECAY/WATCH
+    OVERFIT:      < 50% siblings decaying — this strategy is alone
+    FRAGMENTED:   Mixed (some FIT, some DECAY) — brittle edge
+    SINGLETON:    Family has only 1 member — no peers to compare
+    NO_FAMILY:    Strategy has no family_hash assigned
+    """
+    # Get strategy's family info
+    row = con.execute("""
+        SELECT vs.family_hash, vs.status,
+               ef.member_count, ef.robustness_status, ef.cv_expectancy
+        FROM validated_setups vs
+        LEFT JOIN edge_families ef ON vs.family_hash = ef.family_hash
+        WHERE vs.strategy_id = ?
+    """, [strategy_id]).fetchone()
+
+    if row is None:
+        return DecayDiagnosis(
+            strategy_id=strategy_id, fitness_status="UNKNOWN",
+            family_hash=None, family_size=0, family_robustness=None,
+            siblings_fit=0, siblings_watch=0, siblings_decay=0, siblings_stale=0,
+            diagnosis="NO_FAMILY", diagnosis_notes="Strategy not found",
+        )
+
+    family_hash = row[0]
+    member_count = row[2] or 0
+    robustness = row[3]
+
+    if family_hash is None:
+        return DecayDiagnosis(
+            strategy_id=strategy_id, fitness_status="UNKNOWN",
+            family_hash=None, family_size=0, family_robustness=None,
+            siblings_fit=0, siblings_watch=0, siblings_decay=0, siblings_stale=0,
+            diagnosis="NO_FAMILY",
+            diagnosis_notes="No family_hash assigned — run build_edge_families",
+        )
+
+    if member_count <= 1:
+        return DecayDiagnosis(
+            strategy_id=strategy_id, fitness_status="UNKNOWN",
+            family_hash=family_hash, family_size=1,
+            family_robustness=robustness,
+            siblings_fit=0, siblings_watch=0, siblings_decay=0, siblings_stale=0,
+            diagnosis="SINGLETON",
+            diagnosis_notes="Single-member family — no peers to compare",
+        )
+
+    # Get all siblings (same family, excluding self)
+    siblings = con.execute("""
+        SELECT strategy_id FROM validated_setups
+        WHERE family_hash = ?
+          AND strategy_id != ?
+          AND LOWER(status) = 'active'
+    """, [family_hash, strategy_id]).fetchall()
+
+    sibling_ids = [r[0] for r in siblings]
+
+    # Compute fitness for each sibling
+    counts = {"FIT": 0, "WATCH": 0, "DECAY": 0, "STALE": 0}
+    for sid in sibling_ids:
+        try:
+            score = _compute_fitness_with_con(con, sid, as_of_date, rolling_months)
+            key = score.fitness_status
+            counts[key] = counts.get(key, 0) + 1
+        except Exception:
+            counts["STALE"] += 1
+
+    total_assessed = counts["FIT"] + counts["WATCH"] + counts["DECAY"]
+    if total_assessed == 0:
+        diagnosis = "SINGLETON"
+        notes = f"All {len(sibling_ids)} siblings STALE — effectively isolated"
+    else:
+        decay_frac = (counts["DECAY"] + counts["WATCH"]) / total_assessed
+        if decay_frac >= 0.50:
+            diagnosis = "REGIME_SHIFT"
+            notes = (
+                f"{counts['DECAY']}D + {counts['WATCH']}W of "
+                f"{total_assessed} assessed siblings also declining"
+            )
+        elif counts["DECAY"] == 0 and counts["WATCH"] == 0:
+            diagnosis = "OVERFIT"
+            notes = (
+                f"All {counts['FIT']} assessed siblings are FIT — "
+                f"this strategy's decay is isolated"
+            )
+        else:
+            # Some siblings decaying but < 50%
+            diagnosis = "FRAGMENTED"
+            notes = (
+                f"{counts['FIT']}F / {counts['WATCH']}W / {counts['DECAY']}D — "
+                f"mixed signals, edge may be parameter-sensitive"
+            )
+
+    return DecayDiagnosis(
+        strategy_id=strategy_id, fitness_status="DECAY",
+        family_hash=family_hash, family_size=member_count,
+        family_robustness=robustness,
+        siblings_fit=counts["FIT"], siblings_watch=counts["WATCH"],
+        siblings_decay=counts["DECAY"], siblings_stale=counts["STALE"],
+        diagnosis=diagnosis, diagnosis_notes=notes,
+    )
+
+
+def diagnose_portfolio_decay(
+    db_path: Path | None = None,
+    instrument: str | None = None,
+    as_of_date: date | None = None,
+    rolling_months: int = 18,
+) -> list[DecayDiagnosis]:
+    """
+    For all DECAY/WATCH strategies in the portfolio, diagnose whether
+    the cause is regime shift or overfit.
+
+    Returns list of DecayDiagnosis sorted by diagnosis type.
+    """
+    if db_path is None:
+        db_path = GOLD_DB_PATH
+    if as_of_date is None:
+        as_of_date = date.today()
+
+    instruments = [instrument] if instrument else None
+
+    with duckdb.connect(str(db_path), read_only=True) as con:
+        # Get all active strategies
+        where = ["LOWER(status) = 'active'"]
+        params = []
+        if instruments:
+            where.append("instrument = ?")
+            params.append(instruments[0])
+
+        exclusion_clause = " AND ".join(
+            f"orb_label != '{s}'" for s in sorted(EXCLUDED_FROM_FITNESS)
+        )
+        where.append(exclusion_clause)
+
+        rows = con.execute(
+            f"""SELECT strategy_id FROM validated_setups
+               WHERE {' AND '.join(where)}
+               ORDER BY strategy_id""",
+            params,
+        ).fetchall()
+        strategy_ids = [r[0] for r in rows]
+
+        # First pass: find all DECAY/WATCH strategies
+        decay_ids = []
+        for sid in strategy_ids:
+            try:
+                score = _compute_fitness_with_con(con, sid, as_of_date, rolling_months)
+                if score.fitness_status in ("DECAY", "WATCH"):
+                    decay_ids.append(sid)
+            except Exception:
+                pass
+
+        # Second pass: diagnose each decaying strategy
+        diagnoses = []
+        # Cache: avoid re-diagnosing strategies in the same family
+        diagnosed_families: dict[str, DecayDiagnosis] = {}
+        for sid in decay_ids:
+            # Check if we already diagnosed this family
+            fh_row = con.execute(
+                "SELECT family_hash FROM validated_setups WHERE strategy_id = ?",
+                [sid],
+            ).fetchone()
+            fh = fh_row[0] if fh_row else None
+
+            if fh and fh in diagnosed_families:
+                # Reuse family diagnosis with different strategy_id
+                cached = diagnosed_families[fh]
+                diag = DecayDiagnosis(
+                    strategy_id=sid, fitness_status="DECAY",
+                    family_hash=cached.family_hash,
+                    family_size=cached.family_size,
+                    family_robustness=cached.family_robustness,
+                    siblings_fit=cached.siblings_fit,
+                    siblings_watch=cached.siblings_watch,
+                    siblings_decay=cached.siblings_decay,
+                    siblings_stale=cached.siblings_stale,
+                    diagnosis=cached.diagnosis,
+                    diagnosis_notes=cached.diagnosis_notes,
+                )
+            else:
+                diag = diagnose_decay(con, sid, as_of_date, rolling_months)
+                if fh:
+                    diagnosed_families[fh] = diag
+
+            diagnoses.append(diag)
+
+    # Sort: REGIME_SHIFT first, then OVERFIT, then others
+    order = {"REGIME_SHIFT": 0, "OVERFIT": 1, "FRAGMENTED": 2, "SINGLETON": 3, "NO_FAMILY": 4}
+    diagnoses.sort(key=lambda d: (order.get(d.diagnosis, 5), d.strategy_id))
+    return diagnoses
+
+
+# =========================================================================
 # CLI
 # =========================================================================
 
@@ -567,9 +791,34 @@ def main():
     parser.add_argument("--rolling-months", type=int, default=18, help="Rolling window months")
     parser.add_argument("--as-of", type=date.fromisoformat, default=None, help="As-of date (YYYY-MM-DD)")
     parser.add_argument("--format", choices=["table", "json"], default="table", help="Output format")
+    parser.add_argument("--diagnose", action="store_true",
+                        help="Run decay diagnostics (regime shift vs overfit)")
     args = parser.parse_args()
 
-    if args.strategy_id:
+    if args.diagnose:
+        logger.info(f"Diagnosing DECAY/WATCH strategies for {args.instrument}...")
+        diagnoses = diagnose_portfolio_decay(
+            instrument=args.instrument,
+            as_of_date=args.as_of,
+            rolling_months=args.rolling_months,
+        )
+        if not diagnoses:
+            logger.info("No DECAY or WATCH strategies found.")
+        elif args.format == "json":
+            logger.info(json.dumps([asdict(d) for d in diagnoses], indent=2, default=str))
+        else:
+            logger.info(f"{'Strategy':<50} {'Diagnosis':<16} {'Family':>6} {'F/W/D/S':>10}")
+            logger.info("-" * 86)
+            for d in diagnoses:
+                fam = f"N={d.family_size}" if d.family_hash else "none"
+                counts = f"{d.siblings_fit}/{d.siblings_watch}/{d.siblings_decay}/{d.siblings_stale}"
+                logger.info(f"{d.strategy_id:<50} {d.diagnosis:<16} {fam:>6} {counts:>10}")
+                logger.info(f"  {d.diagnosis_notes}")
+            counts = {}
+            for d in diagnoses:
+                counts[d.diagnosis] = counts.get(d.diagnosis, 0) + 1
+            logger.info(f"\nSummary: {dict(counts)}")
+    elif args.strategy_id:
         score = compute_fitness(
             args.strategy_id,
             as_of_date=args.as_of,
