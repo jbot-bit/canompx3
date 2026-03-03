@@ -2132,6 +2132,85 @@ def check_trading_rules_authority() -> list[str]:
     return violations
 
 
+def check_ml_config_canonical_sources() -> list[str]:
+    """Check ML config ACTIVE_INSTRUMENTS matches pipeline canonical source,
+    and no features appear in both feature lists and LOOKAHEAD_BLACKLIST."""
+    violations = []
+    try:
+        from trading_app.ml.config import (
+            ACTIVE_INSTRUMENTS,
+            GLOBAL_FEATURES,
+            LOOKAHEAD_BLACKLIST,
+            REL_VOL_SESSIONS,
+            TRADE_CONFIG_FEATURES,
+        )
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+        from pipeline.dst import SESSION_CATALOG
+
+        # ACTIVE_INSTRUMENTS must be a subset of pipeline instruments
+        # (ML excludes instruments with no validated strategies, e.g. MBT)
+        extra = set(ACTIVE_INSTRUMENTS) - set(ACTIVE_ORB_INSTRUMENTS)
+        if extra:
+            violations.append(
+                f"  ml/config.ACTIVE_INSTRUMENTS has instruments not in pipeline: {extra}"
+            )
+
+        # No feature in both GLOBAL_FEATURES and LOOKAHEAD_BLACKLIST
+        overlap = set(GLOBAL_FEATURES) & LOOKAHEAD_BLACKLIST
+        if overlap:
+            violations.append(
+                f"  ml/config: Features in both GLOBAL_FEATURES and "
+                f"LOOKAHEAD_BLACKLIST: {overlap}"
+            )
+
+        # No feature in both TRADE_CONFIG and LOOKAHEAD_BLACKLIST
+        overlap2 = set(TRADE_CONFIG_FEATURES) & LOOKAHEAD_BLACKLIST
+        if overlap2:
+            violations.append(
+                f"  ml/config: Features in both TRADE_CONFIG_FEATURES and "
+                f"LOOKAHEAD_BLACKLIST: {overlap2}"
+            )
+
+        # REL_VOL_SESSIONS must match SESSION_CATALOG dynamic entries
+        catalog_dynamic = {
+            name for name, cfg in SESSION_CATALOG.items()
+            if cfg.get("type") == "dynamic"
+        }
+        if set(REL_VOL_SESSIONS) != catalog_dynamic:
+            extra = set(REL_VOL_SESSIONS) - catalog_dynamic
+            missing = catalog_dynamic - set(REL_VOL_SESSIONS)
+            violations.append(
+                f"  ml/config.REL_VOL_SESSIONS mismatch with SESSION_CATALOG: "
+                f"extra={extra}, missing={missing}"
+            )
+
+    except ImportError as e:
+        violations.append(f"  Cannot import ml.config or pipeline modules: {e}")
+
+    return violations
+
+
+def check_ml_lookahead_blacklist() -> list[str]:
+    """Check ML LOOKAHEAD_BLACKLIST includes all required outcome targets."""
+    violations = []
+    try:
+        from trading_app.ml.config import LOOKAHEAD_BLACKLIST
+
+        required = {
+            "outcome", "pnl_r", "pnl_dollars", "mae_r", "mfe_r",
+            "double_break", "exit_ts", "exit_price",
+        }
+        missing = required - LOOKAHEAD_BLACKLIST
+        if missing:
+            violations.append(
+                f"  ml/config.LOOKAHEAD_BLACKLIST missing required targets: {missing}"
+            )
+    except ImportError as e:
+        violations.append(f"  Cannot import ml.config: {e}")
+
+    return violations
+
+
 # =============================================================================
 # CHECK REGISTRY — single source of truth for all drift checks
 # =============================================================================
@@ -2233,6 +2312,10 @@ CHECKS = [
      check_cost_model_completeness),
     ("TRADING_RULES.md authority values match code",
      check_trading_rules_authority),
+    ("ML config canonical sources (instruments, sessions, no blacklist overlap)",
+     check_ml_config_canonical_sources),
+    ("ML lookahead blacklist includes all outcome targets",
+     check_ml_lookahead_blacklist),
 ]
 
 
