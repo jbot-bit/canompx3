@@ -100,19 +100,13 @@ Brisbane DOW = exchange DOW for all sessions except NYSE_OPEN (midnight crossing
 
 **ONE database** (`gold.db`) at `<project>/gold.db` — local disk, no cloud sync.
 
-For long-running jobs, you can optionally use `C:\db\gold.db` as a scratch copy:
-```bash
-# Optional: copy to scratch location for crash safety
-cp "C:\Users\joshd\canompx3\gold.db" "C:\db\gold.db"
-export DUCKDB_PATH=C:/db/gold.db
-python trading_app/strategy_discovery.py --instrument MGC
-# Copy back when done
-cp "C:\db\gold.db" "C:\Users\joshd\canompx3\gold.db"
-```
+For long-running jobs, optionally copy to `C:\db\gold.db` as scratch, set `DUCKDB_PATH=C:/db/gold.db`, and copy back when done.
 
 **Rules:**
 - NEVER run two write processes against the same DuckDB file simultaneously
 - `pipeline/paths.py` reads `DUCKDB_PATH` env var to override default path
+
+**Research scripts use `C:/db/gold.db` by convention.** 45+ research scripts in `research/` hardcode `--db-path C:/db/gold.db` as their default. This is intentional — research scripts run exploratory queries on a scratch copy, keeping the production DB safe from concurrent reads during long-running analysis. Production code (`pipeline/`, `trading_app/`) uses `pipeline.paths.GOLD_DB_PATH` exclusively. Do not "fix" the research convention — it exists for isolation.
 
 ---
 
@@ -161,8 +155,6 @@ The `gold-db` MCP server (`trading_app/mcp_server.py`) exposes 4 read-only tools
 | `get_canonical_context` | Load grounding docs (cost model, trading rules, config) before complex analysis |
 
 **Decision framework:** See `.claude/rules/mcp-usage.md` for intent→tool mapping.
-
-**AI Query CLI:** `python -m trading_app.ai.cli "question"` is a standalone CLI that uses the Anthropic API for intent extraction. Redundant when using Claude Code + MCP, but available for non-Claude-Code use cases.
 
 ---
 
