@@ -6,6 +6,10 @@ Add new features here → they propagate to training + live prediction.
 
 from __future__ import annotations
 
+import pathlib
+
+from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+
 # ---------------------------------------------------------------------------
 # Feature lists
 # ---------------------------------------------------------------------------
@@ -120,9 +124,11 @@ THRESHOLD_STEP: float = 0.01
 # Minimum samples per instrument to train a model
 MIN_SAMPLES_TRAIN: int = 1000
 
-# Active instruments for ML (same as pipeline active instruments)
-ACTIVE_INSTRUMENTS: list[str] = ["MGC", "MNQ", "MES", "M2K"]
+# Active instruments for ML — derived from pipeline canonical source.
+# Excludes instruments with 0 validated strategies (MBT has no ORB edge).
+# Drift check #48 guards against staleness.
+_ML_EXCLUDED: set[str] = {"MBT"}
+ACTIVE_INSTRUMENTS: list[str] = [i for i in ACTIVE_ORB_INSTRUMENTS if i not in _ML_EXCLUDED]
 
 # Model persistence directory
-import pathlib
 MODEL_DIR: pathlib.Path = pathlib.Path(__file__).resolve().parent.parent.parent / "models" / "ml"

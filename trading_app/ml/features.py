@@ -99,7 +99,7 @@ def _encode_categoricals(df: pd.DataFrame) -> pd.DataFrame:
 
     # Convert to string to handle NaN gracefully
     for c in cats_present:
-        df[c] = df[c].astype(str).replace("nan", "UNKNOWN").replace("None", "UNKNOWN")
+        df[c] = df[c].astype(str).replace({"nan": "UNKNOWN", "None": "UNKNOWN"})
 
     df = pd.get_dummies(df, columns=cats_present, drop_first=False, dtype=float)
     return df
@@ -216,9 +216,9 @@ def load_feature_matrix(
             X[col] = df[col]
 
     # --- Safety: remove any look-ahead columns ---
+    # Exact match OR substring containment (catches orb_{SESSION}_mae_r etc.)
     for col in list(X.columns):
-        base = col.split("_")[-1] if "_" in col else col
-        if col in LOOKAHEAD_BLACKLIST or base in LOOKAHEAD_BLACKLIST:
+        if col in LOOKAHEAD_BLACKLIST or any(bl in col for bl in LOOKAHEAD_BLACKLIST):
             X.drop(columns=col, inplace=True)
             logger.warning(f"Dropped look-ahead column: {col}")
 

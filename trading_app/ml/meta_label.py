@@ -12,7 +12,9 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import logging
+from datetime import datetime, timezone
 
 import joblib
 import numpy as np
@@ -195,6 +197,10 @@ def train_meta_label(
     if save_model:
         MODEL_DIR.mkdir(parents=True, exist_ok=True)
         model_path = MODEL_DIR / f"meta_label_{instrument}.joblib"
+        # Config hash for reproducibility tracking
+        config_str = f"{RF_PARAMS}|{THRESHOLD_MIN}|{THRESHOLD_MAX}|{THRESHOLD_STEP}"
+        config_hash = hashlib.sha256(config_str.encode()).hexdigest()[:12]
+
         joblib.dump({
             "model": rf,
             "feature_names": list(X.columns),
@@ -203,6 +209,12 @@ def train_meta_label(
             "oos_auc": oos_auc,
             "optimal_threshold": opt["threshold"],
             "cpcv_auc": cpcv_results["auc_mean"] if cpcv_results else None,
+            "trained_at": datetime.now(timezone.utc).isoformat(),
+            "data_date_range": (
+                str(meta["trading_day"].min()),
+                str(meta["trading_day"].max()),
+            ),
+            "config_hash": config_hash,
         }, model_path)
         logger.info(f"Model saved: {model_path}")
 

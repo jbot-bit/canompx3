@@ -140,6 +140,32 @@ class TestEncodeCategoricals:
         assert list(result.columns) == ["value"]
 
 
+class TestFillMissingFeatures:
+    """_fill_missing_features uses correct fill values per column type."""
+
+    def test_onehot_filled_with_zero(self):
+        from trading_app.ml.evaluate import _fill_missing_features
+        X = pd.DataFrame({"existing": [1.0, 2.0]})
+        feature_names = ["existing", "orb_label_CME_REOPEN", "entry_model_E2"]
+        result = _fill_missing_features(X, feature_names)
+        assert result["orb_label_CME_REOPEN"].tolist() == [0.0, 0.0]
+        assert result["entry_model_E2"].tolist() == [0.0, 0.0]
+
+    def test_numeric_filled_with_negative_999(self):
+        from trading_app.ml.evaluate import _fill_missing_features
+        X = pd.DataFrame({"existing": [1.0, 2.0]})
+        feature_names = ["existing", "some_numeric_feature"]
+        result = _fill_missing_features(X, feature_names)
+        assert result["some_numeric_feature"].tolist() == [-999.0, -999.0]
+
+    def test_column_order_matches_feature_names(self):
+        from trading_app.ml.evaluate import _fill_missing_features
+        X = pd.DataFrame({"b": [1.0], "a": [2.0]})
+        feature_names = ["a", "b", "orb_label_X"]
+        result = _fill_missing_features(X, feature_names)
+        assert list(result.columns) == ["a", "b", "orb_label_X"]
+
+
 class TestLookaheadSafety:
     """Verify no look-ahead features can leak into the feature matrix."""
 
@@ -153,3 +179,68 @@ class TestLookaheadSafety:
             assert feat not in LOOKAHEAD_BLACKLIST, (
                 f"{feat} is in TRADE_CONFIG but also in BLACKLIST"
             )
+
+    def test_blacklist_catches_session_prefixed_columns(self):
+        """Substring matching should catch orb_CME_REOPEN_mae_r etc."""
+        test_cols = ["orb_CME_REOPEN_mae_r", "orb_TOKYO_OPEN_mfe_r",
+                     "orb_NYSE_OPEN_pnl_r", "safe_feature"]
+        caught = [col for col in test_cols
+                  if col in LOOKAHEAD_BLACKLIST
+                  or any(bl in col for bl in LOOKAHEAD_BLACKLIST)]
+        assert "safe_feature" not in caught
+        assert len(caught) == 3
+
+
+class TestLoadFeatureMatrixIntegration:
+    """Integration test for load_feature_matrix against real DB."""
+
+    @pytest.fixture
+    def db_path(self):
+        """Path to gold.db — skips if not available."""
+        import os
+        path = os.environ.get("DUCKDB_PATH", "gold.db")
+        if not os.path.exists(path):
+            pytest.skip("gold.db not available")
+        return path
+
+    def test_returns_correct_shapes(self, db_path):
+        """X, y, meta have consistent row counts and expected structure."""
+        from trading_app.ml.features import load_feature_matrix
+        X, y, meta = load_feature_matrix(db_path, "MGC")
+
+        assert len(X) == len(y) == len(meta)
+        assert len(X) > 0
+
+    def test_x_is_all_numeric(self, db_path):
+        """Feature matrix must be all-numeric after processing."""
+        from trading_app.ml.features import load_feature_matrix
+        X, _, _ = load_feature_matrix(db_path, "MGC")
+
+        non_numeric = X.select_dtypes(exclude=[np.number]).columns.tolist()
+        assert non_numeric == [], f"Non-numeric columns in X: {non_numeric}"
+
+    def test_no_lookahead_columns(self, db_path):
+        """No blacklisted column names or substrings should survive."""
+        from trading_app.ml.features import load_feature_matrix
+        X, _, _ = load_feature_matrix(db_path, "MGC")
+
+        for col in X.columns:
+            for bl in LOOKAHEAD_BLACKLIST:
+                assert bl not in col, f"Lookahead column leaked: {col} (contains {bl})"
+
+    def test_meta_has_required_columns(self, db_path):
+        """Meta should have trading_day, pnl_r, orb_label at minimum."""
+        from trading_app.ml.features import load_feature_matrix
+        _, _, meta = load_feature_matrix(db_path, "MGC")
+
+        required = {"trading_day", "pnl_r", "orb_label", "symbol"}
+        assert required.issubset(set(meta.columns)), (
+            f"Missing meta columns: {required - set(meta.columns)}"
+        )
+
+    def test_y_is_binary(self, db_path):
+        """Target must be 0/1 only."""
+        from trading_app.ml.features import load_feature_matrix
+        _, y, _ = load_feature_matrix(db_path, "MGC")
+
+        assert set(y.unique()).issubset({0, 1})

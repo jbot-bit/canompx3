@@ -131,6 +131,9 @@ backfill_overnight.log
 # Auto Claude data directory
 .auto-claude/
 
+# ML model artifacts (regenerable via: python -m trading_app.ml.meta_label --all)
+models/ml/*.joblib
+
 # Pinecone Assistant sync state + generated upload files
 scripts/tools/.pinecone_assistant_id
 scripts/tools/.pinecone_sync_manifest.json

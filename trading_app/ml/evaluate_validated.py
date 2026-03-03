@@ -75,11 +75,9 @@ def evaluate_validated(instrument: str, db_path: str) -> None:
     # Load full feature matrix
     X, y, meta = load_feature_matrix(db_path, instrument)
 
-    # Align features
-    missing = set(feature_names) - set(X.columns)
-    for col in missing:
-        X[col] = -999.0
-    X = X[feature_names]
+    # Align features (0.0 for one-hot, -999.0 for numeric)
+    from trading_app.ml.evaluate import _fill_missing_features
+    X = _fill_missing_features(X, feature_names)
 
     # Predict
     y_prob = rf.predict_proba(X)[:, 1]

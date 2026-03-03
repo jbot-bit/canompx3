@@ -44,8 +44,26 @@ def _max_drawdown_r(pnl: pd.Series) -> float:
     return float(dd.min()) if len(dd) > 0 else 0.0
 
 
+def _fill_missing_features(X: pd.DataFrame, feature_names: list[str]) -> pd.DataFrame:
+    """Align X to expected feature columns, using 0.0 for one-hot and -999.0 for numeric."""
+    missing = set(feature_names) - set(X.columns)
+    for col in missing:
+        # One-hot encoded columns (contain category prefix) should be 0, not -999
+        is_onehot = any(col.startswith(f"{cat}_") for cat in [
+            "orb_label", "entry_model", "prev_day_direction",
+            "gap_type", "atr_vel_regime", "break_dir",
+        ])
+        X[col] = 0.0 if is_onehot else -999.0
+    return X[feature_names]
+
+
 def evaluate_instrument(instrument: str, db_path: str) -> dict:
-    """Full before/after evaluation for one instrument."""
+    """Full before/after evaluation for one instrument.
+
+    WARNING: Metrics blend in-sample (80% train) and out-of-sample (20% test)
+    data. For unbiased assessment, use evaluate_validated.py which tests only
+    on validated strategies, or check the OOS-only section below.
+    """
     model_path = MODEL_DIR / f"meta_label_{instrument}.joblib"
     if not model_path.exists():
         logger.error(f"No trained model for {instrument}. Run meta_label.py first.")
@@ -56,22 +74,22 @@ def evaluate_instrument(instrument: str, db_path: str) -> dict:
     rf = bundle["model"]
     threshold = bundle["optimal_threshold"]
     feature_names = bundle["feature_names"]
+    n_train = bundle.get("n_train", 0)
 
     # Load data
     X, y, meta = load_feature_matrix(db_path, instrument)
 
-    # Align features (handle column mismatches gracefully)
-    missing = set(feature_names) - set(X.columns)
-    if missing:
-        for col in missing:
-            X[col] = -999.0
-    X = X[feature_names]
+    # Align features
+    X = _fill_missing_features(X, feature_names)
 
     # Predict
     y_prob = rf.predict_proba(X)[:, 1]
     meta = meta.copy()
     meta["p_win"] = y_prob
     meta["take"] = y_prob >= threshold
+    meta["is_oos"] = False
+    if n_train > 0 and n_train < len(meta):
+        meta.iloc[n_train:, meta.columns.get_loc("is_oos")] = True
 
     pnl_all = meta["pnl_r"]
     pnl_kept = meta.loc[meta["take"], "pnl_r"]
@@ -144,6 +162,28 @@ def evaluate_instrument(instrument: str, db_path: str) -> dict:
         })
     results["calibration"] = calibration
 
+    # OOS-only metrics (unbiased — model never saw this data)
+    oos = meta[meta["is_oos"]]
+    if len(oos) > 0:
+        oos_kept = oos[oos["take"]]
+        oos_skipped = oos[~oos["take"]]
+        results["oos"] = {
+            "n_total": len(oos),
+            "n_kept": len(oos_kept),
+            "n_skipped": len(oos_skipped),
+            "baseline": {
+                "avg_r": float(oos["pnl_r"].mean()),
+                "sharpe": _sharpe(oos["pnl_r"]),
+                "wr": float((oos["pnl_r"] > 0).mean()),
+            },
+            "filtered": {
+                "avg_r": float(oos_kept["pnl_r"].mean()) if len(oos_kept) > 0 else 0.0,
+                "sharpe": _sharpe(oos_kept["pnl_r"]) if len(oos_kept) > 0 else 0.0,
+                "wr": float((oos_kept["pnl_r"] > 0).mean()) if len(oos_kept) > 0 else 0.0,
+            },
+            "skipped_avg_r": float(oos_skipped["pnl_r"].mean()) if len(oos_skipped) > 0 else 0.0,
+        }
+
     return results
 
 
@@ -198,6 +238,23 @@ def print_evaluation(results: dict) -> None:
             print(f"  {s['session']:<20} {s['n_total']:>6d} {s['n_kept']:>6d} "
                   f"{s['skip_pct']:>6.1%} {s['base_avgR']:>+8.4f} {s['filt_avgR']:>+8.4f} "
                   f"{s['skip_avgR']:>+8.4f} {s['lift']:>+8.4f}")
+
+    # OOS-only section (unbiased)
+    if "oos" in results:
+        oos = results["oos"]
+        ob = oos["baseline"]
+        of = oos["filtered"]
+        print("\n  OUT-OF-SAMPLE ONLY (model never saw this data)")
+        print(f"  {'METRIC':<18} {'BASELINE':>12} {'FILTERED':>12} {'DELTA':>12}")
+        print(f"  {'-' * 18} {'-' * 12} {'-' * 12} {'-' * 12}")
+        print(f"  {'Trades':<18} {oos['n_total']:>12,d} {oos['n_kept']:>12,d} "
+              f"{oos['n_kept'] - oos['n_total']:>+12,d}")
+        print(f"  {'Avg R':<18} {ob['avg_r']:>+12.4f} {of['avg_r']:>+12.4f} "
+              f"{of['avg_r'] - ob['avg_r']:>+12.4f}")
+        print(f"  {'Sharpe':<18} {ob['sharpe']:>12.3f} {of['sharpe']:>12.3f} "
+              f"{of['sharpe'] - ob['sharpe']:>+12.3f}")
+        print(f"  {'Win Rate':<18} {ob['wr']:>11.1%} {of['wr']:>11.1%} "
+              f"{of['wr'] - ob['wr']:>+11.1%}")
 
     print(f"\n{'=' * 75}\n")
 
