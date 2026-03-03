@@ -2045,6 +2045,93 @@ def check_cost_model_completeness() -> list[str]:
     return violations
 
 
+def check_trading_rules_authority() -> list[str]:
+    """Check that TRADING_RULES.md canonical values match code.
+
+    Validates critical trading constants that, if diverged, would cause
+    incorrect trades, portfolio misconfiguration, or logical inconsistency.
+    """
+    violations = []
+
+    root_str = str(PROJECT_ROOT)
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
+
+    try:
+        from pipeline.dst import SESSION_CATALOG
+        from pipeline.cost_model import COST_SPECS
+        from trading_app.config import (
+            ENTRY_MODELS, TRADEABLE_INSTRUMENTS, EARLY_EXIT_MINUTES,
+            E2_SLIPPAGE_TICKS,
+        )
+        from trading_app.outcome_builder import RR_TARGETS
+
+        # 1. Session catalog must have all 11 dynamic sessions
+        expected_sessions = {
+            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
+            "US_DATA_830", "NYSE_OPEN", "US_DATA_1000", "COMEX_SETTLE",
+            "CME_PRECLOSE", "NYSE_CLOSE", "BRISBANE_1025",
+        }
+        catalog_sessions = {
+            k for k, v in SESSION_CATALOG.items() if v.get("type") == "dynamic"
+        }
+        missing = expected_sessions - catalog_sessions
+        if missing:
+            violations.append(f"  SESSION_CATALOG missing dynamic sessions: {sorted(missing)}")
+        extra = catalog_sessions - expected_sessions
+        if extra:
+            violations.append(f"  SESSION_CATALOG has unexpected dynamic sessions: {sorted(extra)}")
+
+        # 2. Entry models
+        if list(ENTRY_MODELS) != ["E1", "E2", "E3"]:
+            violations.append(f"  ENTRY_MODELS = {list(ENTRY_MODELS)}, expected ['E1', 'E2', 'E3']")
+
+        # 3. RR targets
+        expected_rr = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0]
+        if list(RR_TARGETS) != expected_rr:
+            violations.append(f"  RR_TARGETS = {list(RR_TARGETS)}, expected {expected_rr}")
+
+        # 4. Tradeable instruments
+        expected_inst = ["MGC", "MNQ", "MES", "M2K"]
+        if sorted(TRADEABLE_INSTRUMENTS) != sorted(expected_inst):
+            violations.append(
+                f"  TRADEABLE_INSTRUMENTS = {sorted(TRADEABLE_INSTRUMENTS)}, "
+                f"expected {sorted(expected_inst)}"
+            )
+
+        # 5. E2 slippage ticks
+        if E2_SLIPPAGE_TICKS != 1:
+            violations.append(f"  E2_SLIPPAGE_TICKS = {E2_SLIPPAGE_TICKS}, expected 1")
+
+        # 6. MGC cost model total friction (TRADING_RULES: $5.74/RT)
+        if "MGC" in COST_SPECS:
+            mgc_friction = COST_SPECS["MGC"].total_friction
+            if abs(mgc_friction - 5.74) > 0.01:
+                violations.append(
+                    f"  MGC total_friction = {mgc_friction}, TRADING_RULES says $5.74"
+                )
+
+        # 7. Early exit thresholds: sessions with T80 must have positive values
+        for session in ["CME_REOPEN", "TOKYO_OPEN", "CME_PRECLOSE"]:
+            t80 = EARLY_EXIT_MINUTES.get(session)
+            if t80 is None or t80 <= 0:
+                violations.append(
+                    f"  EARLY_EXIT_MINUTES['{session}'] = {t80}, expected positive T80 value"
+                )
+
+        # 8. All EARLY_EXIT_MINUTES keys must be valid sessions
+        for session in EARLY_EXIT_MINUTES:
+            if session not in catalog_sessions:
+                violations.append(
+                    f"  EARLY_EXIT_MINUTES key '{session}' not in SESSION_CATALOG"
+                )
+
+    except ImportError as e:
+        violations.append(f"  Cannot import required modules: {e}")
+
+    return violations
+
+
 # =============================================================================
 # CHECK REGISTRY — single source of truth for all drift checks
 # =============================================================================
@@ -2144,6 +2231,8 @@ CHECKS = [
      check_research_provenance_annotations),
     ("Cost model completeness (COST_SPECS covers all active instruments)",
      check_cost_model_completeness),
+    ("TRADING_RULES.md authority values match code",
+     check_trading_rules_authority),
 ]
 
 
