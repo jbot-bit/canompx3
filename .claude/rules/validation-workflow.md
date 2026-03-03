@@ -17,7 +17,13 @@ When outcome_builder changes (e.g., C8/C3 exit rules):
 1. `python trading_app/outcome_builder.py --instrument MGC --force --start 2021-02-05 --end 2026-02-04`  # adjust --end to latest ingested date
 2. `python trading_app/strategy_discovery.py --instrument MGC`
 3. `python trading_app/strategy_validator.py --instrument MGC --min-sample 50 --no-regime-waivers --min-years-positive-pct 0.75 --no-walkforward`
-4. `python scripts/tools/build_edge_families.py --instrument MGC`
+4. `python scripts/migrations/retire_e3_strategies.py`  # validator promotes E3; this fixes it
+5. `python scripts/tools/build_edge_families.py --instrument MGC`
+6. `python scripts/tools/gen_repo_map.py`  # auto-regen file inventory
+7. `python pipeline/health_check.py`  # post-rebuild validation gate
+8. `python scripts/tools/sync_pinecone.py`  # sync knowledge base
+
+Or use the wrapper: `bash scripts/tools/run_rebuild_with_sync.sh MGC`
 
 ## Strategy Classification
 | Class | Min Samples | Usage |

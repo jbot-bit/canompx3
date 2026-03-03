@@ -27,17 +27,17 @@ echo "=========================================="
 
 # Step 1: Rebuild outcomes
 echo ""
-echo "Step 1/6: Rebuilding outcomes..."
+echo "Step 1/8: Rebuilding outcomes..."
 python trading_app/outcome_builder.py --instrument "$INSTRUMENT" --force
 
 # Step 2: Discover strategies
 echo ""
-echo "Step 2/6: Discovering strategies..."
+echo "Step 2/8: Discovering strategies..."
 python trading_app/strategy_discovery.py --instrument "$INSTRUMENT"
 
 # Step 3: Validate strategies
 echo ""
-echo "Step 3/6: Validating strategies..."
+echo "Step 3/8: Validating strategies..."
 python trading_app/strategy_validator.py \
     --instrument "$INSTRUMENT" --min-sample 50 \
     --no-regime-waivers --min-years-positive-pct 0.75 \
@@ -45,17 +45,27 @@ python trading_app/strategy_validator.py \
 
 # Step 4: Retire E3 strategies (validator promotes E3 to active; this fixes it)
 echo ""
-echo "Step 4/6: Retiring E3 strategies..."
+echo "Step 4/8: Retiring E3 strategies..."
 python scripts/migrations/retire_e3_strategies.py
 
 # Step 5: Build edge families
 echo ""
-echo "Step 5/6: Building edge families..."
+echo "Step 5/8: Building edge families..."
 python scripts/tools/build_edge_families.py --instrument "$INSTRUMENT"
 
-# Step 6: Sync to Pinecone
+# Step 6: Regenerate REPO_MAP (tracks file inventory drift)
 echo ""
-echo "Step 6/6: Syncing knowledge to Pinecone..."
+echo "Step 6/8: Regenerating REPO_MAP.md..."
+python scripts/tools/gen_repo_map.py
+
+# Step 7: Post-rebuild health check (drift + integrity + tests)
+echo ""
+echo "Step 7/8: Running post-rebuild health check..."
+python pipeline/health_check.py
+
+# Step 8: Sync to Pinecone
+echo ""
+echo "Step 8/8: Syncing knowledge to Pinecone..."
 python scripts/tools/sync_pinecone.py
 
 echo ""

@@ -1870,6 +1870,83 @@ def check_uncovered_fdr_strategies() -> list[str]:
     return []  # Always pass — advisory only
 
 
+def check_variant_selection_metric() -> list[str]:
+    """Check #44: All variant selection ORDER BY clauses must use expectancy_r.
+
+    Prevents regression where one code path sorts by sharpe_ratio while another
+    sorts by expectancy_r. Within a family, all variants share the same trade
+    days, so ExpR = (WR*RR)-(1-WR) is the correct metric. Sharpe mechanically
+    favors RR 1.0 (lower variance).
+
+    Scans: live_config.py, rolling_portfolio.py
+    """
+    violations = []
+    files_to_check = [
+        TRADING_APP_DIR / "live_config.py",
+        TRADING_APP_DIR / "rolling_portfolio.py",
+    ]
+
+    # Allowed: ORDER BY ... expectancy_r DESC
+    # Forbidden: ORDER BY ... sharpe_ratio DESC (in variant selection contexts)
+    forbidden = re.compile(r'ORDER\s+BY\s+\S*sharpe_ratio\s+DESC', re.IGNORECASE)
+
+    for fpath in files_to_check:
+        if not fpath.exists():
+            continue
+        content = fpath.read_text(encoding='utf-8')
+        for i, line in enumerate(content.splitlines(), 1):
+            if forbidden.search(line):
+                violations.append(
+                    f"  {fpath.name}:{i}: ORDER BY sharpe_ratio in variant "
+                    f"selection — must use expectancy_r (Sharpe favors RR 1.0)"
+                )
+
+    return violations
+
+
+def check_research_provenance_annotations() -> list[str]:
+    """Check #45: Research-derived config values must have provenance annotations.
+
+    Config constants derived from research need structured comments documenting
+    which entry models were in the dataset. When entry models change (e.g.
+    E0→E2), stale thresholds silently drive live execution if not re-validated.
+
+    Scans config.py for @research-source blocks and verifies they include
+    @entry-models and @revalidated-for annotations.
+    """
+    violations = []
+    config_path = TRADING_APP_DIR / "config.py"
+    if not config_path.exists():
+        return violations
+
+    content = config_path.read_text(encoding='utf-8')
+
+    # Find all @research-source annotations
+    source_pattern = re.compile(r'#\s*@research-source:\s*(.+)')
+    entry_model_pattern = re.compile(r'#\s*@entry-models:\s*(.+)')
+
+    sources = source_pattern.findall(content)
+    entry_models = entry_model_pattern.findall(content)
+
+    # Every @research-source must have a corresponding @entry-models
+    if sources and not entry_models:
+        violations.append(
+            "  config.py: Found @research-source annotations but no "
+            "@entry-models tags — add entry model provenance"
+        )
+
+    # Check that active entry models (E1, E2) appear in annotations
+    for em_line in entry_models:
+        models = [m.strip() for m in em_line.split(",")]
+        if "E2" not in models:
+            violations.append(
+                f"  config.py: @entry-models '{em_line}' does not include E2 "
+                f"— research may be stale for current entry model"
+            )
+
+    return violations
+
+
 def check_orphaned_validated_strategies() -> list[str]:
     """Check #42: Validated strategies must have corresponding outcome data.
 
@@ -1918,6 +1995,53 @@ def check_orphaned_validated_strategies() -> list[str]:
             con.close()
     except Exception:
         pass  # DB may not exist in CI
+    return violations
+
+
+def check_cost_model_completeness() -> list[str]:
+    """Check that COST_SPECS covers all tradeable instruments and has valid values."""
+    violations = []
+
+    root_str = str(PROJECT_ROOT)
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
+
+    try:
+        from pipeline.cost_model import COST_SPECS, SESSION_SLIPPAGE_MULT
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+
+        # 1. Every active instrument must have a CostSpec
+        for inst in ACTIVE_ORB_INSTRUMENTS:
+            if inst not in COST_SPECS:
+                violations.append(
+                    f"  {inst} is in ACTIVE_ORB_INSTRUMENTS but missing from COST_SPECS"
+                )
+
+        # 2. Every CostSpec must have positive friction values
+        for inst, spec in COST_SPECS.items():
+            if spec.total_friction <= 0:
+                violations.append(
+                    f"  {inst}: total_friction = {spec.total_friction} (must be > 0)"
+                )
+            if spec.point_value <= 0:
+                violations.append(
+                    f"  {inst}: point_value = {spec.point_value} (must be > 0)"
+                )
+            if spec.instrument != inst:
+                violations.append(
+                    f"  COST_SPECS['{inst}'].instrument = '{spec.instrument}' (key mismatch)"
+                )
+
+        # 3. SESSION_SLIPPAGE_MULT keys must be subset of COST_SPECS keys
+        for inst in SESSION_SLIPPAGE_MULT:
+            if inst not in COST_SPECS:
+                violations.append(
+                    f"  SESSION_SLIPPAGE_MULT has '{inst}' but COST_SPECS does not"
+                )
+
+    except ImportError as e:
+        violations.append(f"  Cannot import cost_model or asset_configs: {e}")
+
     return violations
 
 
@@ -2014,6 +2138,12 @@ CHECKS = [
      check_orphaned_validated_strategies),
     ("Uncovered FDR+WF strategies (FDR-validated but no live_config spec)",
      check_uncovered_fdr_strategies),
+    ("Variant selection ORDER BY must use expectancy_r (not sharpe_ratio)",
+     check_variant_selection_metric),
+    ("Research-derived config values need @entry-models provenance",
+     check_research_provenance_annotations),
+    ("Cost model completeness (COST_SPECS covers all active instruments)",
+     check_cost_model_completeness),
 ]
 
 

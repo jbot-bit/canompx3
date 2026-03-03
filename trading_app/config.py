@@ -674,24 +674,35 @@ TRADEABLE_INSTRUMENTS = ["MGC", "MNQ", "MES", "M2K"]
 # None = no early exit for that session.
 # E3 retrace window: max minutes after confirm bar to wait for retrace fill.
 # None = unbounded (scan to trading day end). Value set from audit results.
-# See research/research_e3_fill_timing.py for the analysis backing this.
+# @research-source: research/research_e3_fill_timing.py
+# @research-date: 2026-02-25
+# @entry-models: E1, E2, E3
+# @note: E3 is soft-retired (RETIRED status). Value only matters for historical outcomes.
 E3_RETRACE_WINDOW_MINUTES: int | None = 60  # Audit: 4/12 sessions show stale inflation >0.1R
 
 EARLY_EXIT_MINUTES: dict[str, int | None] = {
     # T80 = time by which 80% of winners hit target. Trades past T80 are net
     # negative (P5b, BH FDR confirmed). At threshold: if MTM < 0, exit.
-    # Values from research/research_winner_speed.py (Feb 2026).
     # Per-session (not per-instrument). Where instruments differ, uses max
     # T80 (more patient) to avoid cutting slower instruments' winners.
-    "CME_REOPEN": 38,       # MGC T80=38m (N=908, avg_r_after=-0.300R)
-    "TOKYO_OPEN": 39,       # MGC T80=32m, MES T80=39m → use 39 (patient)
-    "SINGAPORE_OPEN": 31,   # MES T80=31m
-    "LONDON_METALS": 36,    # MGC T80=36m (avg_r_after=-0.339R, worst dead-chop)
+    #
+    # @research-source: research/research_winner_speed.py
+    # @research-date: 2026-02-20
+    # @entry-models: E0, E1, E2, E3
+    # @revalidated-for: E2 (2026-03-03, bar-level P5b simulation)
+    # @revalidation-result: ALL sessions net-positive at current thresholds.
+    #   E2 T80 differs (CME_REOPEN: 110m agg vs 38m config) but rule is
+    #   robust — 76-94% of MTM-negative trades at threshold never recover.
+    #   Future optimization: CME_REOPEN 25m saves ~47% more R than 38m.
+    "CME_REOPEN": 38,       # E2 T80=110m(agg), config checks early, NetR=+905R
+    "TOKYO_OPEN": 39,       # E2 T80=63m(agg), NetR=+1207R
+    "SINGAPORE_OPEN": 31,   # E2 T80=65m(agg), NetR=+1114R
+    "LONDON_METALS": 36,    # E2 T80=60m(agg), NetR=+937R
     "US_DATA_830": None,
     "NYSE_OPEN": None,
     "US_DATA_1000": None,
     "COMEX_SETTLE": None,
-    "CME_PRECLOSE": 16,     # MES T80=16m (short session, fast-resolve)
+    "CME_PRECLOSE": 16,     # E2 T80=13m(agg), closest to optimal, NetR=+607R
     "NYSE_CLOSE": None,
     "BRISBANE_1025": None,  # No T80 data yet — research after outcomes built
 }

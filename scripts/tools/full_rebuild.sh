@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Full rebuild chain for all 4 instruments
 # Run from project root: bash scripts/tools/full_rebuild.sh
+# NOTE: Pinecone sync is NOT included here. Use run_rebuild_with_sync.sh
+# for single-instrument rebuilds with Pinecone knowledge sync.
 set -e
 
 cd "$(dirname "$0")/../.."
@@ -24,19 +26,19 @@ for INST in MGC MNQ MES M2K; do
     echo "============================================"
 
     echo ""
-    echo "--- [$INST] Step 1/4: Outcome Builder (--force) ---"
+    echo "--- [$INST] Step 1/5: Outcome Builder (--force) ---"
     python trading_app/outcome_builder.py \
         --instrument "$INST" --force \
         --start "${STARTS[$INST]}" --end "${ENDS[$INST]}" 2>&1 | tail -5
     echo "[$INST] Outcomes done: $(date)"
 
     echo ""
-    echo "--- [$INST] Step 2/4: Strategy Discovery ---"
+    echo "--- [$INST] Step 2/5: Strategy Discovery ---"
     python trading_app/strategy_discovery.py --instrument "$INST" 2>&1 | tail -5
     echo "[$INST] Discovery done: $(date)"
 
     echo ""
-    echo "--- [$INST] Step 3/4: Strategy Validator ---"
+    echo "--- [$INST] Step 3/5: Strategy Validator ---"
     python trading_app/strategy_validator.py \
         --instrument "$INST" --min-sample 50 \
         --no-regime-waivers --min-years-positive-pct 0.75 \
@@ -44,7 +46,12 @@ for INST in MGC MNQ MES M2K; do
     echo "[$INST] Validation done: $(date)"
 
     echo ""
-    echo "--- [$INST] Step 4/4: Edge Families ---"
+    echo "--- [$INST] Step 4/5: Retire E3 strategies ---"
+    python scripts/migrations/retire_e3_strategies.py 2>&1 | tail -3
+    echo "[$INST] E3 retirement done: $(date)"
+
+    echo ""
+    echo "--- [$INST] Step 5/5: Edge Families ---"
     python scripts/tools/build_edge_families.py --instrument "$INST" 2>&1 | tail -5
     echo "[$INST] Edge families done: $(date)"
 
@@ -74,3 +81,13 @@ for inst in ['MGC', 'MNQ', 'MES', 'M2K']:
     print(f'  {inst}: {n} total, {fdr} FDR-pass')
 con.close()
 "
+
+# Post-rebuild: Regenerate REPO_MAP
+echo ""
+echo "--- Post-rebuild: Regenerating REPO_MAP.md ---"
+python scripts/tools/gen_repo_map.py
+
+# Post-rebuild: Full health check
+echo ""
+echo "--- Post-rebuild: Health check ---"
+python pipeline/health_check.py

@@ -203,7 +203,7 @@ def _load_best_regime_variant(
               AND vs.filter_type = ?
               AND LOWER(vs.status) = 'active'
               AND vs.expectancy_r >= ?
-            ORDER BY vs.sharpe_ratio DESC NULLS LAST
+            ORDER BY vs.expectancy_r DESC NULLS LAST
             LIMIT 1
         """, [instrument, orb_label, entry_model, filter_type, min_expectancy_r]).fetchall()
 
@@ -241,7 +241,7 @@ def _load_best_experimental_variant(
               AND entry_model = ?
               AND filter_type = ?
               AND expectancy_r > 0
-            ORDER BY sharpe_ratio DESC NULLS LAST
+            ORDER BY expectancy_r DESC NULLS LAST
             LIMIT 1
         """, [instrument, orb_label, entry_model, filter_type]).fetchall()
 

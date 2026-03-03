@@ -190,9 +190,11 @@ def _compute_group_stats(df: pd.DataFrame) -> dict:
 # SQL templates -- all SELECT-only, parameterized
 _TEMPLATES = {
     QueryTemplate.STRATEGY_LOOKUP: """
-        SELECT orb_label, entry_model, filter_type,
+        SELECT orb_label, orb_minutes, entry_model, filter_type,
                rr_target, confirm_bars, sample_size, win_rate,
-               expectancy_r, sharpe_ratio, max_drawdown_r
+               expectancy_r, sharpe_ratio, max_drawdown_r,
+               fdr_adjusted_p, all_years_positive, years_tested,
+               strategy_id
         FROM validated_setups
         WHERE LOWER(status) = 'active'
         {instrument_clause}
@@ -226,10 +228,10 @@ _TEMPLATES = {
         ORDER BY orb_label
     """,
     QueryTemplate.YEARLY_BREAKDOWN: """
-        SELECT orb_label, entry_model, filter_type,
+        SELECT orb_label, orb_minutes, entry_model, filter_type,
                rr_target, confirm_bars, sample_size, win_rate,
                expectancy_r, sharpe_ratio, max_drawdown_r,
-               yearly_results
+               yearly_results, strategy_id
         FROM validated_setups
         WHERE LOWER(status) = 'active'
         {instrument_clause}

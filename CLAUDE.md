@@ -170,6 +170,17 @@ The `gold-db` MCP server (`trading_app/mcp_server.py`) exposes 4 read-only tools
 
 Five layers enforce quality: pre-commit hook (`.githooks/pre-commit`), drift detection (`pipeline/check_drift.py` — count self-reported at runtime), Claude Code hooks (auto-run drift/tests on file edits), GitHub Actions CI, and built-in pipeline validation gates (7 ingestion gates, 4 aggregation gates). Setup: `git config core.hooksPath .githooks`
 
+### Volatile Data Rule
+**NEVER cite strategy counts, session counts, drift check counts, cost model numbers, or any other changing stat from memory files or docs.** These go stale after every rebuild. Instead:
+- Strategy counts/performance → query `gold-db` MCP tools
+- Session list/times → `from pipeline.dst import SESSION_CATALOG`
+- Cost models → `from pipeline.cost_model import COST_SPECS`
+- Active instruments → `from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS`
+- Live portfolio → `from trading_app.live_config import LIVE_PORTFOLIO`
+
+### Research Provenance Rule
+Config values derived from research (e.g. `EARLY_EXIT_MINUTES`) must include `@research-source`, `@entry-models`, and `@revalidated-for` annotations. Drift check #45 enforces this. When entry models change, re-validate all research-derived values against the new model before citing them as validated.
+
 ---
 
 ## Configuration (.env)
