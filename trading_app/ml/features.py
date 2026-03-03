@@ -122,7 +122,7 @@ def transform_to_features(df: pd.DataFrame) -> pd.DataFrame:
     Input DataFrame must have:
       - orb_label column (for session feature extraction)
       - All daily_features columns (global features, session ORB columns)
-      - Trade config columns: rr_target, confirm_bars, orb_minutes
+      - Trade config columns: confirm_bars, orb_minutes
       - entry_model column (for categorical encoding)
 
     Returns:

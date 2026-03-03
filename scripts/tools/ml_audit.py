@@ -5,11 +5,9 @@ Run: python scripts/tools/ml_audit.py [--instrument MNQ] [--all]
 """
 
 import argparse
-from collections import defaultdict
 
 import joblib
 import numpy as np
-import pandas as pd
 
 from trading_app.ml.config import ACTIVE_INSTRUMENTS, MODEL_DIR
 from trading_app.ml.features import load_feature_matrix

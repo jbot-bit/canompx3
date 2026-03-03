@@ -58,27 +58,28 @@ def main():
     results = []
     thresholds = np.arange(args.min_thresh, args.max_thresh + args.step, args.step)
 
-    for t in thresholds:
-        # Override threshold in the model file
-        bundle["optimal_threshold"] = float(t)
+    try:
+        for t in thresholds:
+            # Override threshold in the model file
+            bundle["optimal_threshold"] = float(t)
+            joblib.dump(bundle, model_path)
+
+            result = replay_historical(instrument=args.instrument, start_date=start, end_date=end, use_ml=True)
+            results.append({
+                "threshold": t,
+                "trades": result.total_trades,
+                "wins": result.total_wins,
+                "losses": result.total_losses,
+                "wr": result.total_wins / max(result.total_trades, 1),
+                "pnl_r": result.total_pnl_r,
+                "ml_skips": result.total_ml_skips,
+            })
+            print(f"  t={t:.2f}: {result.total_trades} trades, WR={result.total_wins / max(result.total_trades, 1):.1%}, "
+                  f"PnL={result.total_pnl_r:+.2f}R, ML skips={result.total_ml_skips}")
+    finally:
+        # Restore original threshold even on crash/interrupt
+        bundle["optimal_threshold"] = original_threshold
         joblib.dump(bundle, model_path)
-
-        result = replay_historical(instrument=args.instrument, start_date=start, end_date=end, use_ml=True)
-        results.append({
-            "threshold": t,
-            "trades": result.total_trades,
-            "wins": result.total_wins,
-            "losses": result.total_losses,
-            "wr": result.total_wins / max(result.total_trades, 1),
-            "pnl_r": result.total_pnl_r,
-            "ml_skips": result.total_ml_skips,
-        })
-        print(f"  t={t:.2f}: {result.total_trades} trades, WR={result.total_wins / max(result.total_trades, 1):.1%}, "
-              f"PnL={result.total_pnl_r:+.2f}R, ML skips={result.total_ml_skips}")
-
-    # Restore original threshold
-    bundle["optimal_threshold"] = original_threshold
-    joblib.dump(bundle, model_path)
 
     # Summary
     print(f"\n{'=' * 80}")
