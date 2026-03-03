@@ -66,9 +66,15 @@ CATEGORICAL_FEATURES: list[str] = [
     "break_dir",
 ]
 
-# Outcome columns from orb_outcomes that become trade-config features
+# Outcome columns from orb_outcomes that become trade-config features.
+# NOTE: rr_target was REMOVED from this list (Mar 4 2026) after ML audit
+# showed it dominated 56-69% of feature importance across all instruments.
+# The model was learning "low RR = higher win rate" (tautological) instead
+# of market-regime signals. Removing it forces the model to discriminate
+# based on daily market conditions.
+# @research-source: scripts/tools/ml_audit.py, all 4 instruments
+# @revalidated-for: E1, E2
 TRADE_CONFIG_FEATURES: list[str] = [
-    "rr_target",
     "confirm_bars",
     "orb_minutes",
 ]
@@ -145,5 +151,5 @@ def compute_config_hash() -> str:
     to detect when models were trained with different config. Must be called
     from a single source to prevent hash formula divergence.
     """
-    config_str = f"{RF_PARAMS}|{THRESHOLD_MIN}|{THRESHOLD_MAX}|{THRESHOLD_STEP}"
+    config_str = f"{RF_PARAMS}|{THRESHOLD_MIN}|{THRESHOLD_MAX}|{THRESHOLD_STEP}|{TRADE_CONFIG_FEATURES}"
     return hashlib.sha256(config_str.encode()).hexdigest()[:12]
