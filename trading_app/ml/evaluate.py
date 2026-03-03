@@ -14,7 +14,6 @@ import argparse
 import logging
 
 import joblib
-import numpy as np
 import pandas as pd
 
 from pipeline.paths import GOLD_DB_PATH
@@ -29,11 +28,16 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def _sharpe(pnl: pd.Series, annual_factor: float = 252) -> float:
-    """Annualized Sharpe ratio."""
+def _sharpe(pnl: pd.Series) -> float:
+    """Per-trade Sharpe ratio (no annualization).
+
+    Our data is per-trade pnl_r, NOT daily returns. Trade frequency varies
+    by filter (G0 ~500/yr, G8 ~50/yr), so sqrt(252) annualization is wrong.
+    Per-trade Sharpe = mean/std — comparable across all strategies.
+    """
     if pnl.std() == 0 or len(pnl) < 2:
         return 0.0
-    return float(pnl.mean() / pnl.std() * np.sqrt(annual_factor))
+    return float(pnl.mean() / pnl.std())
 
 
 def _max_drawdown_r(pnl: pd.Series) -> float:

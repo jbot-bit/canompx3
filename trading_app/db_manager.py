@@ -421,6 +421,20 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 except duckdb.CatalogException:
                     pass  # column already exists
 
+        # Migration: n_trials_at_discovery (Mar 2026 — paper audit Phase 1B)
+        # Records K (total combos tested) at discovery time. Required for
+        # auditing FST hurdle and Deflated Sharpe n_trials parameter.
+        # @research-source: Chordia et al (2018) Two Million Strategies
+        for col, typedef in [
+            ("n_trials_at_discovery", "INTEGER"),
+            ("fst_hurdle", "DOUBLE"),
+        ]:
+            for table in ["experimental_strategies", "validated_setups"]:
+                try:
+                    con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typedef}")
+                except duckdb.CatalogException:
+                    pass  # column already exists
+
         con.commit()
         logger.info("Trading app schema initialized successfully")
 

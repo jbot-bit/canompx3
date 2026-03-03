@@ -15,6 +15,9 @@ from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 # ---------------------------------------------------------------------------
 
 # Global market-state features (same across all sessions on a given day)
+# @research-source: NO-GO removals (Mar 3 2026):
+#   is_nfp_day, is_opex_day — calendar overlays, 0 BH survivors at q=0.10
+#   (NFP/OPEX/FOMC all confirmed NO-GO, re-verified Mar 3 with TZ fix)
 GLOBAL_FEATURES: list[str] = [
     "atr_20",
     "atr_vel_ratio",
@@ -26,17 +29,17 @@ GLOBAL_FEATURES: list[str] = [
     "prev_day_direction",
     "overnight_range",
     "day_of_week",
-    "is_nfp_day",
-    "is_opex_day",
     "is_friday",
     "is_monday",
 ]
 
 # Per-session features (extracted dynamically from orb_{SESSION}_{field})
 # These column suffixes are appended to the traded session's orb_label.
+# @research-source: compression_z removed (Mar 3 2026) — pre-ORB compression
+#   had 90+ tests, 0 BH survivors for break quality prediction.
+#   all_narrow AVOID works as a binary gate, NOT a continuous predictor.
 SESSION_FEATURE_SUFFIXES: list[str] = [
     "size",               # ORB range in points
-    "compression_z",      # Pre-ORB compression z-score (if available)
     "volume",             # Total ORB-window volume
     "break_bar_volume",   # Volume on the break bar
     "break_delay_min",    # Minutes from ORB close to break

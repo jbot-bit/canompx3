@@ -27,8 +27,6 @@ class TestExtractSessionFeatures:
             "orb_label": ["CME_REOPEN", "TOKYO_OPEN", "CME_REOPEN"],
             "orb_CME_REOPEN_size": [5.0, np.nan, 8.0],
             "orb_TOKYO_OPEN_size": [np.nan, 3.0, np.nan],
-            "orb_CME_REOPEN_compression_z": [1.2, np.nan, -0.5],
-            "orb_TOKYO_OPEN_compression_z": [np.nan, 0.8, np.nan],
             "orb_CME_REOPEN_volume": [1000, np.nan, 2000],
             "orb_TOKYO_OPEN_volume": [np.nan, 500, np.nan],
             "orb_CME_REOPEN_break_bar_volume": [100, np.nan, 200],
@@ -59,7 +57,7 @@ class TestExtractSessionFeatures:
 
     def test_output_has_generic_columns(self, mock_df):
         result = _extract_session_features(mock_df)
-        expected_cols = {"orb_size", "orb_compression_z", "orb_volume",
+        expected_cols = {"orb_size", "orb_volume",
                          "orb_break_bar_volume", "orb_break_delay_min",
                          "orb_break_bar_continues", "break_dir", "rel_vol"}
         assert expected_cols == set(result.columns)

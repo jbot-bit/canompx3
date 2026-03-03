@@ -18,7 +18,6 @@ import logging
 
 import duckdb
 import joblib
-import numpy as np
 import pandas as pd
 
 from pipeline.db_config import configure_connection
@@ -55,9 +54,10 @@ def _get_validated_params(db_path: str, instrument: str) -> pd.DataFrame:
 
 
 def _sharpe(pnl: pd.Series) -> float:
+    """Per-trade Sharpe ratio (no annualization — data is per-trade, not per-day)."""
     if pnl.std() == 0 or len(pnl) < 2:
         return 0.0
-    return float(pnl.mean() / pnl.std() * np.sqrt(252))
+    return float(pnl.mean() / pnl.std())
 
 
 def evaluate_validated(instrument: str, db_path: str) -> None:

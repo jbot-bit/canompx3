@@ -73,14 +73,16 @@ _INSERT_SQL = """INSERT OR REPLACE INTO experimental_strategies
      validation_status, validation_notes,
      created_at,
      p_value, sharpe_ann_adj, autocorr_lag1,
-     sharpe_haircut, skewness, kurtosis_excess)
+     sharpe_haircut, skewness, kurtosis_excess,
+     n_trials_at_discovery, fst_hurdle)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?,
             COALESCE(?, CURRENT_TIMESTAMP),
             ?, ?, ?,
-            ?, ?, ?)"""
+            ?, ?, ?,
+            ?, ?)"""
 
 _BATCH_COLUMNS = [
     'strategy_id', 'instrument', 'orb_label', 'orb_minutes',
@@ -101,6 +103,8 @@ _BATCH_COLUMNS = [
     'p_value', 'sharpe_ann_adj', 'autocorr_lag1',
     # Haircut Sharpe (Bailey & Lopez de Prado, 2014)
     'sharpe_haircut', 'skewness', 'kurtosis_excess',
+    # Multiple testing audit (Chordia et al 2018, Bailey & Lopez de Prado 2018)
+    'n_trials_at_discovery', 'fst_hurdle',
 ]
 
 
@@ -123,7 +127,9 @@ def _flush_batch_df(con, insert_batch: list[list]) -> None:
          dst_winter_n, dst_winter_avg_r, dst_summer_n, dst_summer_avg_r, dst_verdict,
          validation_status, validation_notes,
          created_at,
-         p_value, sharpe_ann_adj, autocorr_lag1)
+         p_value, sharpe_ann_adj, autocorr_lag1,
+         sharpe_haircut, skewness, kurtosis_excess,
+         n_trials_at_discovery, fst_hurdle)
         SELECT strategy_id, instrument, orb_label, orb_minutes,
                rr_target, confirm_bars, entry_model,
                filter_type, filter_params,
@@ -138,7 +144,9 @@ def _flush_batch_df(con, insert_batch: list[list]) -> None:
                dst_winter_n, dst_winter_avg_r, dst_summer_n, dst_summer_avg_r, dst_verdict,
                validation_status, validation_notes,
                COALESCE(created_at, CURRENT_TIMESTAMP),
-               p_value, sharpe_ann_adj, autocorr_lag1
+               p_value, sharpe_ann_adj, autocorr_lag1,
+               sharpe_haircut, skewness, kurtosis_excess,
+               n_trials_at_discovery, fst_hurdle
         FROM batch_df
     """)
 
@@ -262,6 +270,27 @@ def _t_test_pvalue(t_stat: float, df: int) -> float:
     return max(min(p_two_tail, 1.0), 1e-16)
 
 
+def _norm_ppf(p: float) -> float:
+    """Inverse normal CDF (rational approximation, Abramowitz & Stegun).
+
+    Used by Deflated Sharpe Ratio and False Strategy Theorem calculations.
+    Accuracy: ~4.5e-4 absolute error, sufficient for SR computations.
+    """
+    import math
+    if p <= 0:
+        return -6.0
+    if p >= 1:
+        return 6.0
+    if p == 0.5:
+        return 0.0
+    if p > 0.5:
+        return -_norm_ppf(1.0 - p)
+    t = math.sqrt(-2.0 * math.log(p))
+    c0, c1, c2 = 2.515517, 0.802853, 0.010328
+    d1, d2, d3 = 1.432788, 0.189269, 0.001308
+    return -(t - (c0 + c1 * t + c2 * t * t) / (1.0 + d1 * t + d2 * t * t + d3 * t * t * t))
+
+
 def _compute_haircut_sharpe(
     sharpe_per_trade: float,
     n_obs: int,
@@ -272,19 +301,23 @@ def _compute_haircut_sharpe(
 ) -> float | None:
     """Deflated Sharpe Ratio per Bailey & Lopez de Prado (2014).
 
-    Adjusts observed Sharpe for multiple testing bias. Works in per-trade
-    Sharpe space (as Mertens 2002 variance formula requires), then
-    annualizes the result.
+    Adjusts observed Sharpe for both multiple testing bias AND non-normality.
+    Returns the DSR Z-score: positive values mean the strategy's per-trade
+    Sharpe genuinely exceeds the noise floor from testing K combos.
 
     Steps:
-      1. Compute V(SR_per) using Mertens (2002) variance of the per-trade
-         Sharpe estimator.
-      2. Compute E[max(SR_per)] under the null (SR=0 for all strategies)
-         using the Euler-Mascheroni approximation. Under null, V_null = 1/T.
-      3. Haircut_per = SR_per - E[max(SR_per|null)]
-      4. Annualize: haircut_ann = haircut_per * sqrt(trades_per_year)
+      1. Compute V(SR_obs) using Mertens (2002) non-normality correction:
+         V[SR] = (1/T) * (1 - gamma3*SR + (gamma4/4)*SR^2)
+      2. Compute E[max(SR|null)] for K trials with zero skill.
+         Under null (SR=0), V_null = 1/T (Mertens terms vanish).
+      3. DSR = (SR_obs - E[max(SR|null)]) / sqrt(V[SR_obs])
+         This Z-score accounts for BOTH selection bias AND non-normality.
 
-    Returns haircut Sharpe (annualized) or None if insufficient data.
+    @research-source: Bailey & Lopez de Prado (2014) deflated-sharpe.pdf
+    @research-source: Mertens (2002) variance formula — non-normality correction
+    @revalidated-for: E1, E2 entry models (bimodal ORB payoffs)
+
+    Returns DSR Z-score (positive = exceeds noise floor) or None if insufficient data.
     """
     import math
 
@@ -294,44 +327,66 @@ def _compute_haircut_sharpe(
         return None
 
     sr = sharpe_per_trade
+    gamma3 = skewness if skewness is not None else 0.0
+    gamma4 = kurtosis_excess if kurtosis_excess is not None else 0.0
 
-    # Under the null (SR=0), all strategies have true Sharpe=0.
-    # Variance of the null SR estimator: V_null = 1/T
-    # (Mertens terms with SR=0 vanish: 1 - 0 + 0 = 1)
+    # Mertens (2002): variance of the per-trade Sharpe estimator
+    # V[SR] = (1/T) * (1 - gamma3*SR + (gamma4/4)*SR^2)
+    # For normal data: gamma3=0, gamma4=0 -> V = 1/T (simple formula)
+    # For bimodal ORB payoffs: gamma4 >> 0 -> V > 1/T (wider uncertainty)
+    v_sr_obs = (1.0 / n_obs) * (1.0 - gamma3 * sr + (gamma4 / 4.0) * sr * sr)
+    if v_sr_obs <= 0:
+        v_sr_obs = 1.0 / n_obs  # Degenerate case: fallback to simple
+
+    # Under null (SR=0), all Mertens terms vanish: V_null = 1/T
     std_sr_null = math.sqrt(1.0 / n_obs)
 
-    # Expected maximum per-trade Sharpe under null (BLP, 2014)
-    # E[max] ~ sqrt(V_null) * ((1-gamma)*Phi_inv(1-1/N) + gamma*Phi_inv(1-1/(N*e)))
+    # Expected max per-trade Sharpe under null (BLP 2014, Euler-Mascheroni approx)
     gamma_em = 0.5772156649
-
-    def _norm_ppf(p: float) -> float:
-        """Inverse normal CDF (rational approximation, Abramowitz & Stegun)."""
-        if p <= 0:
-            return -6.0
-        if p >= 1:
-            return 6.0
-        if p == 0.5:
-            return 0.0
-        if p > 0.5:
-            return -_norm_ppf(1.0 - p)
-        t = math.sqrt(-2.0 * math.log(p))
-        c0, c1, c2 = 2.515517, 0.802853, 0.010328
-        d1, d2, d3 = 1.432788, 0.189269, 0.001308
-        return -(t - (c0 + c1 * t + c2 * t * t) / (1.0 + d1 * t + d2 * t * t + d3 * t * t * t))
-
     p1 = 1.0 - 1.0 / n_trials
     p2 = 1.0 - 1.0 / (n_trials * math.e)
 
-    e_max_per = std_sr_null * (
+    e_max_null = std_sr_null * (
         (1.0 - gamma_em) * _norm_ppf(p1) + gamma_em * _norm_ppf(p2)
     )
 
-    # Haircut in per-trade space, then annualize
-    haircut_per = sr - e_max_per
-    ann_factor = math.sqrt(trades_per_year)
-    sharpe_haircut = haircut_per * ann_factor
+    # Deflated Sharpe Ratio: Z-score normalized by Mertens std error
+    # DSR > 0 means SR genuinely exceeds multiple-testing noise floor
+    dsr = (sr - e_max_null) / math.sqrt(v_sr_obs)
 
-    return round(sharpe_haircut, 4)
+    return round(dsr, 4)
+
+
+def compute_fst_hurdle(n_trials: int) -> float | None:
+    """False Strategy Theorem hurdle: expected max Sharpe under zero skill.
+
+    For K independent trials with true SR=0, the expected maximum observed
+    per-trade Sharpe follows the extreme value distribution:
+      E[max{SR}] = (1-gamma)*ppf(1 - 1/K) + gamma*ppf(1 - 1/(K*e))
+    where gamma = 0.5772 (Euler-Mascheroni constant).
+
+    Any strategy with per-trade Sharpe below this hurdle is indistinguishable
+    from noise under multiple testing.
+
+    @research-source: Bailey & Lopez de Prado (2018) false-strategy-lopez.pdf
+
+    Args:
+        n_trials: K, total number of strategy combos tested.
+
+    Returns:
+        Per-trade FST hurdle (float), or None if n_trials < 2.
+    """
+    import math
+
+    if n_trials < 2:
+        return None
+
+    gamma_em = 0.5772156649
+    p1 = 1.0 - 1.0 / n_trials
+    p2 = 1.0 - 1.0 / (n_trials * math.e)
+
+    hurdle = (1.0 - gamma_em) * _norm_ppf(p1) + gamma_em * _norm_ppf(p2)
+    return round(hurdle, 4)
 
 
 def compute_metrics(outcomes: list[dict], cost_spec=None, n_trials: int = 0) -> dict:
@@ -584,6 +639,8 @@ def compute_metrics(outcomes: list[dict], cost_spec=None, n_trials: int = 0) -> 
         "sharpe_haircut": sharpe_haircut,
         "skewness": round(skewness, 4) if skewness is not None else None,
         "kurtosis_excess": round(kurtosis_excess, 4) if kurtosis_excess is not None else None,
+        "n_trials_at_discovery": n_trials if n_trials > 0 else None,
+        "fst_hurdle": compute_fst_hurdle(n_trials) if n_trials > 0 else None,
         "yearly_results": json.dumps(yearly),
         "entry_signals": entry_signals,
         "scratch_count": len(scratches),
@@ -1089,6 +1146,8 @@ def run_discovery(
                     m.get("p_value"), m.get("sharpe_ann_adj"), m.get("autocorr_lag1"),
                     # Haircut Sharpe (Bailey & Lopez de Prado, 2014)
                     m.get("sharpe_haircut"), m.get("skewness"), m.get("kurtosis_excess"),
+                    # Multiple testing audit (Chordia et al 2018, Bailey 2018)
+                    m.get("n_trials_at_discovery"), m.get("fst_hurdle"),
                 ])
 
                 if len(insert_batch) >= 500:

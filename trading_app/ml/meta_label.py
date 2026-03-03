@@ -47,10 +47,15 @@ def _optimize_threshold(
     y_true: np.ndarray,
     pnl_r: np.ndarray,
 ) -> dict:
-    """Find P(win) threshold that maximizes total R improvement.
+    """Find P(win) threshold that maximizes Sharpe improvement.
 
     Optimizes on PROFIT (total R), not accuracy.
     Returns dict with optimal threshold and performance at that threshold.
+
+    WARNING: Threshold is optimized on the same holdout used for OOS reporting.
+    This means OOS metrics at the selected threshold are biased (optimistic).
+    Only CPCV AUC is truly unbiased. Phase 2 fix: 3-way split or CPCV-derived
+    threshold. See docs/specs/STATISTICAL_HARDENING.md FIX 10.
     """
     # Filter out NaN pnl_r before computing metrics
     valid = ~np.isnan(pnl_r)
@@ -61,7 +66,8 @@ def _optimize_threshold(
     baseline_total_r = float(pnl_r.sum())
     baseline_avg_r = float(pnl_r.mean())
     baseline_n = len(pnl_r)
-    baseline_sharpe = float(pnl_r.mean() / pnl_r.std() * np.sqrt(252)) if pnl_r.std() > 0 else 0.0
+    # Per-trade Sharpe (no annualization — data is per-trade, not per-day)
+    baseline_sharpe = float(pnl_r.mean() / pnl_r.std()) if pnl_r.std() > 0 else 0.0
     baseline_wr = float((pnl_r > 0).mean())
 
     # Minimum kept trades: at least 10% of baseline or 200, whichever is larger
@@ -79,7 +85,7 @@ def _optimize_threshold(
         kept_pnl = pnl_r[mask]
         avg_r = kept_pnl.mean()
         total_r = kept_pnl.sum()
-        sharpe = kept_pnl.mean() / kept_pnl.std() * np.sqrt(252) if kept_pnl.std() > 0 else 0
+        sharpe = kept_pnl.mean() / kept_pnl.std() if kept_pnl.std() > 0 else 0
         skip_pct = 1 - n_kept / baseline_n
         wr = (kept_pnl > 0).mean()
 
@@ -130,6 +136,11 @@ def train_meta_label(
       3. Train final model on 80% time-ordered data
       4. Threshold optimization on 20% holdout
       5. Save model + report results
+
+    BIAS NOTE: The 20% holdout serves double duty — threshold optimization
+    AND OOS evaluation. This means OOS metrics at the selected threshold
+    are slightly optimistic. The CPCV AUC (step 2) is the only fully
+    unbiased performance estimate. See STATISTICAL_HARDENING.md FIX 10.
 
     Returns:
         dict with cpcv_results, threshold_results, model_path

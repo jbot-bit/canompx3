@@ -30,7 +30,7 @@ def _extract_session_features(df: pd.DataFrame) -> pd.DataFrame:
     """Extract per-session ORB features based on each row's orb_label.
 
     Instead of carrying all 11 sessions' columns, we extract only the
-    traded session's features into generic columns: orb_size, compression_z,
+    traded session's features into generic columns: orb_size, orb_volume,
     rel_vol, break_delay_min, break_bar_continues, break_dir.
     """
     result = pd.DataFrame(index=df.index)
