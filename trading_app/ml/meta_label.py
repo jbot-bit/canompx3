@@ -12,7 +12,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import hashlib
+
 import logging
 from datetime import datetime, timezone
 
@@ -30,6 +30,7 @@ from trading_app.ml.config import (
     THRESHOLD_MAX,
     THRESHOLD_MIN,
     THRESHOLD_STEP,
+    compute_config_hash,
 )
 from trading_app.ml.cpcv import cpcv_score
 from trading_app.ml.features import load_feature_matrix
@@ -208,9 +209,7 @@ def train_meta_label(
     if save_model:
         MODEL_DIR.mkdir(parents=True, exist_ok=True)
         model_path = MODEL_DIR / f"meta_label_{instrument}.joblib"
-        # Config hash for reproducibility tracking
-        config_str = f"{RF_PARAMS}|{THRESHOLD_MIN}|{THRESHOLD_MAX}|{THRESHOLD_STEP}"
-        config_hash = hashlib.sha256(config_str.encode()).hexdigest()[:12]
+        config_hash = compute_config_hash()
 
         joblib.dump({
             "model": rf,

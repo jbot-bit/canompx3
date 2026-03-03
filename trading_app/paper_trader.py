@@ -80,6 +80,7 @@ class DaySummary:
     scratches: int = 0
     daily_pnl_r: float = 0.0
     risk_rejections: int = 0
+    ml_skips: int = 0
 
 @dataclass
 class ReplayResult:
@@ -93,6 +94,7 @@ class ReplayResult:
     total_scratches: int = 0
     total_pnl_r: float = 0.0
     total_risk_rejections: int = 0
+    total_ml_skips: int = 0
     journal: list[JournalEntry] = field(default_factory=list)
     day_summaries: list[DaySummary] = field(default_factory=list)
 
@@ -176,6 +178,7 @@ def replay_historical(
     live_session_costs: bool = False,
     max_correlation: float = 0.85,
     calendar_overlay: CalendarSkipFilter | None = None,
+    use_ml: bool = False,
 ) -> ReplayResult:
     """
     Feed historical bars_1m through ExecutionEngine + RiskManager.
@@ -211,12 +214,23 @@ def replay_historical(
 
     risk_mgr = RiskManager(risk_limits, corr_lookup=portfolio.corr_lookup)
 
+    # ML predictor (optional — fail-open if models missing)
+    ml_predictor = None
+    if use_ml:
+        from trading_app.ml.predict_live import LiveMLPredictor
+        ml_predictor = LiveMLPredictor(
+            db_path=str(db_path),
+            instruments=[instrument],
+        )
+        logger.info("ML meta-label enabled: %s", ml_predictor.summary())
+
     # MarketState built per-day below; engine gets it on day start
     market_state = None
     engine = ExecutionEngine(portfolio, cost_spec, risk_manager=risk_mgr,
                              market_state=market_state,
                              live_session_costs=live_session_costs,
-                             atr_velocity_overlay=ATR_VELOCITY_OVERLAY)
+                             atr_velocity_overlay=ATR_VELOCITY_OVERLAY,
+                             ml_predictor=ml_predictor)
 
     with duckdb.connect(str(db_path), read_only=True) as con:
         if start_date is None or end_date is None:
@@ -290,6 +304,10 @@ def replay_historical(
                         day_summary.risk_rejections += 1
                         result.total_risk_rejections += 1
                         result.journal.append(entry)
+
+                    elif event.event_type == "ML_SKIP":
+                        day_summary.ml_skips += 1
+                        result.total_ml_skips += 1
 
                     elif event.event_type in ("EXIT", "SCRATCH"):
                         # Find matching journal entry and update
@@ -455,6 +473,8 @@ def main():
                         help="Use session-adjusted slippage (CME_REOPEN=1.3x, US_DATA_830=0.8x)")
     parser.add_argument("--calendar-filter", choices=["NFP", "OPEX", "NONE"],
                         default="NONE", help="Calendar overlay filter")
+    parser.add_argument("--use-ml", action="store_true",
+                        help="Enable ML meta-label P(win) filtering (skip low-confidence trades)")
     args = parser.parse_args()
 
     # Convert CLI calendar filter to CalendarSkipFilter object
@@ -478,6 +498,7 @@ def main():
         live_session_costs=args.live_session_costs,
         max_correlation=args.max_correlation,
         calendar_overlay=calendar_overlay,
+        use_ml=args.use_ml,
     )
 
     logger.info(f"\nReplay complete: {result.start_date} to {result.end_date}")
@@ -485,6 +506,8 @@ def main():
     logger.info(f"  Trades: {result.total_trades} (W:{result.total_wins} L:{result.total_losses} S:{result.total_scratches})")
     logger.info(f"  Total PnL: {result.total_pnl_r:.2f}R")
     logger.info(f"  Risk rejections: {result.total_risk_rejections}")
+    if result.total_ml_skips > 0:
+        logger.info(f"  ML skips: {result.total_ml_skips}")
 
     if result.total_wins + result.total_losses > 0:
         wr = result.total_wins / (result.total_wins + result.total_losses)

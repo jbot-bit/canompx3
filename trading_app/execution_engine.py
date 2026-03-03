@@ -53,7 +53,7 @@ class TradeState(Enum):
 @dataclass
 class TradeEvent:
     """Abstract trade event (broker-agnostic)."""
-    event_type: str         # "ENTRY", "EXIT", "SCRATCH", "REJECT"
+    event_type: str         # "ENTRY", "EXIT", "SCRATCH", "REJECT", "ML_SKIP"
     strategy_id: str
     timestamp: datetime
     price: float
@@ -172,7 +172,8 @@ class ExecutionEngine:
                  risk_manager=None, market_state=None,
                  live_session_costs: bool = True,
                  calendar_overlay: CalendarSkipFilter | None = CALENDAR_SKIP_NFP_OPEX,
-                 atr_velocity_overlay=None):
+                 atr_velocity_overlay=None,
+                 ml_predictor=None):
         self.portfolio = portfolio
         self.cost_spec = cost_spec
         self.risk_manager = risk_manager  # Optional RiskManager for position limits
@@ -180,6 +181,8 @@ class ExecutionEngine:
         self._live_session_costs = live_session_costs  # Use session-adjusted slippage
         self.calendar_overlay = calendar_overlay  # NFP/OPEX skip overlay
         self.atr_velocity_overlay = atr_velocity_overlay  # Contracting ATR skip overlay
+        self.ml_predictor = ml_predictor  # Optional LiveMLPredictor for P(win) filtering
+        self.ml_skips: int = 0  # Count of ML-skipped trades
 
         # State
         self.trading_day: date | None = None
@@ -202,6 +205,7 @@ class ExecutionEngine:
         self.completed_trades = []
         self.daily_pnl_r = 0.0
         self.daily_trade_count = 0
+        self.ml_skips = 0
         self._bar_count = 0
         self._last_bar = None
         self._daily_features_row = daily_features_row
@@ -445,6 +449,35 @@ class ExecutionEngine:
                     strategy.strategy_id
                 )
                 if score is not None and score < MIN_SCORE_THRESHOLD:
+                    continue
+
+            # Check ML meta-label P(win) (if predictor available)
+            if self.ml_predictor is not None and self.trading_day is not None:
+                ml_result = self.ml_predictor.predict(
+                    instrument=strategy.instrument,
+                    trading_day=self.trading_day,
+                    orb_label=strategy.orb_label,
+                    orb_minutes=strategy.orb_minutes,
+                    entry_model=strategy.entry_model,
+                    rr_target=strategy.rr_target,
+                    confirm_bars=strategy.confirm_bars,
+                )
+                if not ml_result.take:
+                    logger.info(
+                        "ML_SKIP: %s on %s — P(win)=%.3f < threshold=%.3f",
+                        strategy.strategy_id, self.trading_day,
+                        ml_result.p_win, ml_result.threshold,
+                    )
+                    self.ml_skips += 1
+                    events.append(TradeEvent(
+                        event_type="ML_SKIP",
+                        strategy_id=strategy.strategy_id,
+                        timestamp=bar["ts_utc"],
+                        price=bar["close"],
+                        direction=orb.break_dir,
+                        contracts=0,
+                        reason=f"P(win)={ml_result.p_win:.3f}<{ml_result.threshold:.3f}",
+                    ))
                     continue
 
             # Check if already have a trade for this strategy today

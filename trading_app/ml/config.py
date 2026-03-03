@@ -6,6 +6,7 @@ Add new features here → they propagate to training + live prediction.
 
 from __future__ import annotations
 
+import hashlib
 import pathlib
 
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
@@ -135,3 +136,14 @@ ACTIVE_INSTRUMENTS: list[str] = [i for i in ACTIVE_ORB_INSTRUMENTS if i not in _
 
 # Model persistence directory
 MODEL_DIR: pathlib.Path = pathlib.Path(__file__).resolve().parent.parent.parent / "models" / "ml"
+
+
+def compute_config_hash() -> str:
+    """Compute SHA-256 hash of ML config for drift detection.
+
+    Used by BOTH training (meta_label.py) and prediction (predict_live.py)
+    to detect when models were trained with different config. Must be called
+    from a single source to prevent hash formula divergence.
+    """
+    config_str = f"{RF_PARAMS}|{THRESHOLD_MIN}|{THRESHOLD_MAX}|{THRESHOLD_STEP}"
+    return hashlib.sha256(config_str.encode()).hexdigest()[:12]

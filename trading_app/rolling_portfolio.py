@@ -418,7 +418,8 @@ def load_rolling_validated_strategies(
                        rv.rr_target, rv.confirm_bars, rv.filter_type,
                        rv.expectancy_r, rv.win_rate, rv.sample_size,
                        rv.sharpe_ratio, rv.max_drawdown_r,
-                       rs.median_risk_points, 'rolling' as source
+                       rs.median_risk_points, rv.orb_minutes,
+                       'rolling' as source
                 FROM regime_validated rv
                 LEFT JOIN regime_strategies rs
                   ON rv.run_label = rs.run_label AND rv.strategy_id = rs.strategy_id

@@ -62,6 +62,7 @@ class PortfolioStrategy:
     avg_risk_dollars: float | None = None
     avg_win_dollars: float | None = None
     avg_loss_dollars: float | None = None
+    orb_minutes: int = 5  # ORB aperture (5, 15, or 30). Default 5 for backward compat.
     source: str = "baseline"  # "baseline", "nested", or "rolling"
     weight: float = 1.0
     max_contracts: int = 1
@@ -277,6 +278,7 @@ def load_validated_strategies(
                    es.median_risk_points,
                    vs.median_risk_dollars, vs.avg_risk_dollars,
                    vs.avg_win_dollars, vs.avg_loss_dollars,
+                   vs.orb_minutes,
                    'baseline' as source
             FROM validated_setups vs
             LEFT JOIN experimental_strategies es
@@ -304,6 +306,7 @@ def load_validated_strategies(
                            ns.median_risk_points,
                            NULL as median_risk_dollars, NULL as avg_risk_dollars,
                            NULL as avg_win_dollars, NULL as avg_loss_dollars,
+                           nv.orb_minutes,
                            'nested' as source
                     FROM nested_validated nv
                     LEFT JOIN nested_strategies ns
@@ -490,6 +493,7 @@ def build_portfolio(
             avg_risk_dollars=s.get("avg_risk_dollars"),
             avg_win_dollars=s.get("avg_win_dollars"),
             avg_loss_dollars=s.get("avg_loss_dollars"),
+            orb_minutes=int(s.get("orb_minutes", 5)),
             source=s.get("source", "baseline"),
         ))
 

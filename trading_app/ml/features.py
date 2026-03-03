@@ -2,6 +2,13 @@
 
 Single feature extraction path used by BOTH training and live prediction.
 No redundant code — add a feature in config.py, it propagates everywhere.
+
+Key function:
+  transform_to_features(df) — shared transformation used by BOTH:
+    1. load_feature_matrix() for bulk training data
+    2. LiveMLPredictor.predict() for single-row live prediction
+  This guarantees training/serving parity. Any feature change in config.py
+  propagates to both paths automatically.
 """
 
 from __future__ import annotations
@@ -105,6 +112,88 @@ def _encode_categoricals(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def transform_to_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Transform a DataFrame into an ML feature matrix.
+
+    Shared between training (load_feature_matrix) and live prediction
+    (LiveMLPredictor). This is the SINGLE feature pipeline — any feature
+    change in config.py propagates to both callers automatically.
+
+    Input DataFrame must have:
+      - orb_label column (for session feature extraction)
+      - All daily_features columns (global features, session ORB columns)
+      - Trade config columns: rr_target, confirm_bars, orb_minutes
+      - entry_model column (for categorical encoding)
+
+    Returns:
+        Feature matrix (float, ready for sklearn). Columns may vary based on
+        which categories are present — alignment to model's feature_names is
+        the caller's responsibility.
+    """
+    # --- Extract session-specific features ---
+    session_feats = _extract_session_features(df)
+
+    # --- Build feature set ---
+    # Start with global features
+    feature_cols = [c for c in GLOBAL_FEATURES if c in df.columns]
+    X = df[feature_cols].copy()
+
+    # Add session-specific features
+    for col in session_feats.columns:
+        X[col] = session_feats[col]
+
+    # Add trade config features
+    for col in TRADE_CONFIG_FEATURES:
+        if col in df.columns:
+            X[col] = df[col]
+
+    # Add categoricals that need encoding
+    for col in CATEGORICAL_FEATURES:
+        if col in df.columns and col not in X.columns:
+            X[col] = df[col]
+        elif col in session_feats.columns and col not in X.columns:
+            X[col] = session_feats[col]
+
+    # Add gap_type and atr_vel_regime from daily_features
+    for col in ["gap_type", "atr_vel_regime"]:
+        if col in df.columns and col not in X.columns:
+            X[col] = df[col]
+
+    # --- Safety: remove any look-ahead columns ---
+    # Exact match OR substring containment (catches orb_{SESSION}_mae_r etc.)
+    for col in list(X.columns):
+        if col in LOOKAHEAD_BLACKLIST or any(bl in col for bl in LOOKAHEAD_BLACKLIST):
+            X.drop(columns=col, inplace=True)
+            logger.warning(f"Dropped look-ahead column: {col}")
+
+    # --- Normalize ---
+    X = _normalize_features(X)
+
+    # --- Encode categoricals ---
+    X = _encode_categoricals(X)
+
+    # --- Final cleanup ---
+    # Drop duplicate columns from the join (d.trading_day, d.symbol, etc.)
+    drop_cols = [c for c in X.columns if c in ("trading_day", "symbol",
+                 "trading_day:1", "symbol:1", "orb_minutes:1")]
+    X.drop(columns=[c for c in drop_cols if c in X.columns], inplace=True, errors="ignore")
+
+    # Convert bool columns to float
+    for col in X.select_dtypes(include=["bool"]).columns:
+        X[col] = X[col].astype(float)
+
+    # Fill NaN with -999 (sklearn RF handles missing values poorly)
+    X = X.fillna(-999.0)
+
+    # Ensure all columns are numeric
+    non_numeric = X.select_dtypes(exclude=[np.number]).columns.tolist()
+    if non_numeric:
+        logger.warning(f"Dropping non-numeric columns: {non_numeric}")
+        X.drop(columns=non_numeric, inplace=True)
+
+    return X
+
+
 def load_feature_matrix(
     db_path: str,
     instrument: str,
@@ -184,68 +273,8 @@ def load_feature_matrix(
     meta = df[["trading_day", "symbol", "orb_label", "orb_minutes",
                "entry_model", "rr_target", "confirm_bars", "pnl_r", "outcome"]].copy()
 
-    # --- Extract session-specific features ---
-    session_feats = _extract_session_features(df)
-
-    # --- Build feature set ---
-    # Start with global features
-    feature_cols = [c for c in GLOBAL_FEATURES if c in df.columns]
-    X = df[feature_cols].copy()
-
-    # Add session-specific features
-    for col in session_feats.columns:
-        X[col] = session_feats[col]
-
-    # Add trade config features
-    for col in TRADE_CONFIG_FEATURES:
-        if col in df.columns:
-            X[col] = df[col]
-        elif col in meta.columns:
-            X[col] = meta[col]
-
-    # Add categoricals that need encoding
-    for col in CATEGORICAL_FEATURES:
-        if col in df.columns and col not in X.columns:
-            X[col] = df[col]
-        elif col in session_feats.columns and col not in X.columns:
-            X[col] = session_feats[col]
-
-    # Add gap_type and atr_vel_regime from daily_features
-    for col in ["gap_type", "atr_vel_regime"]:
-        if col in df.columns and col not in X.columns:
-            X[col] = df[col]
-
-    # --- Safety: remove any look-ahead columns ---
-    # Exact match OR substring containment (catches orb_{SESSION}_mae_r etc.)
-    for col in list(X.columns):
-        if col in LOOKAHEAD_BLACKLIST or any(bl in col for bl in LOOKAHEAD_BLACKLIST):
-            X.drop(columns=col, inplace=True)
-            logger.warning(f"Dropped look-ahead column: {col}")
-
-    # --- Normalize ---
-    X = _normalize_features(X)
-
-    # --- Encode categoricals ---
-    X = _encode_categoricals(X)
-
-    # --- Final cleanup ---
-    # Drop duplicate columns from the join (d.trading_day, d.symbol, etc.)
-    drop_cols = [c for c in X.columns if c in ("trading_day", "symbol",
-                 "trading_day:1", "symbol:1", "orb_minutes:1")]
-    X.drop(columns=[c for c in drop_cols if c in X.columns], inplace=True, errors="ignore")
-
-    # Convert bool columns to float
-    for col in X.select_dtypes(include=["bool"]).columns:
-        X[col] = X[col].astype(float)
-
-    # Fill NaN with -999 (sklearn RF handles missing values poorly)
-    X = X.fillna(-999.0)
-
-    # Ensure all columns are numeric
-    non_numeric = X.select_dtypes(exclude=[np.number]).columns.tolist()
-    if non_numeric:
-        logger.warning(f"Dropping non-numeric columns: {non_numeric}")
-        X.drop(columns=non_numeric, inplace=True)
+    # --- Transform to features (shared with live prediction) ---
+    X = transform_to_features(df)
 
     logger.info(f"Feature matrix: {X.shape[0]:,d} rows x {X.shape[1]} features")
     return X, y, meta

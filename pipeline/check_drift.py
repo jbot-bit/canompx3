@@ -2211,6 +2211,148 @@ def check_ml_lookahead_blacklist() -> list[str]:
     return violations
 
 
+def check_audit_columns_populated() -> list[str]:
+    """Check #50: Audit columns (n_trials, fst_hurdle, DSR) must be populated.
+
+    Verifies that strategy_discovery has been run with the new audit code
+    for each active instrument. Old rows from prior runs (E0/E3, old combos)
+    legitimately have NULLs — we only fail if ZERO rows are populated,
+    meaning discovery was never re-run after the schema change.
+    """
+    violations = []
+    try:
+        import duckdb
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+        db_path = GOLD_DB_PATH_FOR_CHECKS
+        if db_path is None:
+            from pipeline.paths import GOLD_DB_PATH
+            db_path = GOLD_DB_PATH
+        if not Path(db_path).exists():
+            return violations
+        con = duckdb.connect(str(db_path), read_only=True)
+        try:
+            for inst in ACTIVE_ORB_INSTRUMENTS:
+                total = con.execute(
+                    "SELECT COUNT(*) FROM experimental_strategies "
+                    "WHERE instrument = ?", [inst],
+                ).fetchone()[0]
+                if total == 0:
+                    continue
+                # At least some rows must have audit columns populated
+                for col in ["n_trials_at_discovery", "fst_hurdle"]:
+                    populated = con.execute(
+                        f"SELECT COUNT(*) FROM experimental_strategies "
+                        f"WHERE instrument = ? AND {col} IS NOT NULL",
+                        [inst],
+                    ).fetchone()[0]
+                    if populated == 0:
+                        violations.append(
+                            f"  {inst}: 0/{total} rows have {col} "
+                            f"(re-run strategy_discovery)"
+                        )
+                # sharpe_haircut: at least some rows with sample_size>=30
+                # should have DSR computed
+                eligible = con.execute(
+                    "SELECT COUNT(*) FROM experimental_strategies "
+                    "WHERE instrument = ? AND sample_size >= 30",
+                    [inst],
+                ).fetchone()[0]
+                populated_dsr = con.execute(
+                    "SELECT COUNT(*) FROM experimental_strategies "
+                    "WHERE instrument = ? AND sharpe_haircut IS NOT NULL",
+                    [inst],
+                ).fetchone()[0]
+                if eligible > 0 and populated_dsr == 0:
+                    violations.append(
+                        f"  {inst}: 0/{eligible} eligible rows have "
+                        f"sharpe_haircut (re-run strategy_discovery)"
+                    )
+        finally:
+            con.close()
+    except Exception:
+        pass  # DB may not exist in CI
+    return violations
+
+
+def check_ml_model_files_exist() -> list[str]:
+    """Check ML model .joblib files exist for all active ML instruments."""
+    violations = []
+    try:
+        from trading_app.ml.config import ACTIVE_INSTRUMENTS, MODEL_DIR
+
+        for inst in ACTIVE_INSTRUMENTS:
+            path = MODEL_DIR / f"meta_label_{inst}.joblib"
+            if not path.exists():
+                violations.append(
+                    f"  Missing ML model for {inst}: {path}"
+                )
+    except ImportError as e:
+        violations.append(f"  Cannot import ml.config: {e}")
+    return violations
+
+
+def check_ml_config_hash_match() -> list[str]:
+    """Check ML model config hashes match current config."""
+    violations = []
+    try:
+        import joblib
+        from trading_app.ml.config import (
+            ACTIVE_INSTRUMENTS, MODEL_DIR, compute_config_hash,
+        )
+
+        current_hash = compute_config_hash()
+        for inst in ACTIVE_INSTRUMENTS:
+            path = MODEL_DIR / f"meta_label_{inst}.joblib"
+            if not path.exists():
+                continue
+            try:
+                bundle = joblib.load(path)
+                model_hash = bundle.get("config_hash")
+                if model_hash and model_hash != current_hash:
+                    violations.append(
+                        f"  {inst}: model hash={model_hash}, "
+                        f"current={current_hash} — retrain needed"
+                    )
+            except Exception as e:
+                violations.append(f"  {inst}: failed to load model: {e}")
+    except ImportError as e:
+        violations.append(f"  Cannot import ml.config: {e}")
+    return violations
+
+
+def check_ml_model_freshness() -> list[str]:
+    """Check ML models are < 90 days old."""
+    violations = []
+    try:
+        import joblib
+        from datetime import datetime, timezone
+        from trading_app.ml.config import ACTIVE_INSTRUMENTS, MODEL_DIR
+
+        for inst in ACTIVE_INSTRUMENTS:
+            path = MODEL_DIR / f"meta_label_{inst}.joblib"
+            if not path.exists():
+                continue
+            try:
+                bundle = joblib.load(path)
+                trained_at_str = bundle.get("trained_at")
+                if not trained_at_str:
+                    violations.append(
+                        f"  {inst}: model missing trained_at timestamp"
+                    )
+                    continue
+                trained_at = datetime.fromisoformat(trained_at_str)
+                age_days = (datetime.now(timezone.utc) - trained_at).days
+                if age_days > 90:
+                    violations.append(
+                        f"  {inst}: model is {age_days} days old (>90 day limit)"
+                    )
+            except Exception as e:
+                violations.append(f"  {inst}: failed to check freshness: {e}")
+    except ImportError as e:
+        violations.append(f"  Cannot import ml.config: {e}")
+    return violations
+
+
 # =============================================================================
 # CHECK REGISTRY — single source of truth for all drift checks
 # =============================================================================
@@ -2316,6 +2458,14 @@ CHECKS = [
      check_ml_config_canonical_sources),
     ("ML lookahead blacklist includes all outcome targets",
      check_ml_lookahead_blacklist),
+    ("Audit columns populated (n_trials, fst_hurdle, DSR)",
+     check_audit_columns_populated),
+    ("ML model files exist for all active instruments",
+     check_ml_model_files_exist),
+    ("ML model config hashes match current config",
+     check_ml_config_hash_match),
+    ("ML model freshness < 90 days",
+     check_ml_model_freshness),
 ]
 
 

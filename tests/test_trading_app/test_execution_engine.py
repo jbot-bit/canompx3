@@ -694,6 +694,88 @@ class TestFillBarExitEngine:
         assert len(exit_events) == 1, "E3 fill bar should detect target hit"
         assert "win" in exit_events[0].reason
 
+class TestMLIntegration:
+    """ML predictor integration in _arm_strategies."""
+
+    def test_no_ml_predictor_no_change(self):
+        """ml_predictor=None has zero effect on behavior."""
+        engine = ExecutionEngine(_make_portfolio(), _cost(), ml_predictor=None)
+        assert engine.ml_predictor is None
+
+    def test_ml_skip_emits_event(self):
+        """Mock predictor returning take=False → ML_SKIP event."""
+        from unittest.mock import MagicMock
+        from trading_app.ml.predict_live import MLPrediction
+
+        mock_pred = MagicMock()
+        mock_pred.predict.return_value = MLPrediction(
+            p_win=0.40, take=False, threshold=0.55,
+        )
+
+        strategy = _make_strategy()
+        portfolio = _make_portfolio([strategy])
+        engine = ExecutionEngine(portfolio, _cost(), ml_predictor=mock_pred)
+        engine.on_trading_day_start(date(2024, 1, 5))
+
+        # Simulate completed ORB with a break
+        orb = LiveORB(
+            label="US_DATA_830",
+            window_start_utc=datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc),
+            window_end_utc=datetime(2024, 1, 5, 13, 35, tzinfo=timezone.utc),
+            high=2710.0,
+            low=2695.0,
+            complete=True,
+            break_dir="long",
+            break_ts=datetime(2024, 1, 5, 13, 40, tzinfo=timezone.utc),
+        )
+
+        bar = _bar(datetime(2024, 1, 5, 13, 40, tzinfo=timezone.utc),
+                   2712, 2715, 2710, 2714)
+        events = engine._arm_strategies(orb, bar)
+
+        # Should get ML_SKIP event, no ENTRY
+        ml_skips = [e for e in events if e.event_type == "ML_SKIP"]
+        entries = [e for e in events if e.event_type == "ENTRY"]
+        assert len(ml_skips) == 1
+        assert len(entries) == 0
+        assert "P(win)=0.400" in ml_skips[0].reason
+        assert engine.ml_skips == 1
+
+    def test_ml_take_allows_entry(self):
+        """Mock predictor returning take=True → normal entry flow."""
+        from unittest.mock import MagicMock
+        from trading_app.ml.predict_live import MLPrediction
+
+        mock_pred = MagicMock()
+        mock_pred.predict.return_value = MLPrediction(
+            p_win=0.65, take=True, threshold=0.55,
+        )
+
+        strategy = _make_strategy(confirm_bars=1)
+        portfolio = _make_portfolio([strategy])
+        engine = ExecutionEngine(portfolio, _cost(), ml_predictor=mock_pred)
+        engine.on_trading_day_start(date(2024, 1, 5))
+
+        orb = LiveORB(
+            label="US_DATA_830",
+            window_start_utc=datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc),
+            window_end_utc=datetime(2024, 1, 5, 13, 35, tzinfo=timezone.utc),
+            high=2710.0,
+            low=2695.0,
+            complete=True,
+            break_dir="long",
+            break_ts=datetime(2024, 1, 5, 13, 40, tzinfo=timezone.utc),
+        )
+
+        bar = _bar(datetime(2024, 1, 5, 13, 40, tzinfo=timezone.utc),
+                   2712, 2715, 2710, 2714)
+        events = engine._arm_strategies(orb, bar)
+
+        ml_skips = [e for e in events if e.event_type == "ML_SKIP"]
+        assert len(ml_skips) == 0
+        assert engine.ml_skips == 0
+
+
 class TestCLI:
     def test_import(self):
         """Module imports without error."""
