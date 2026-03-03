@@ -557,6 +557,14 @@ def diagnose_decay(
     SINGLETON:    Family has only 1 member — no peers to compare
     NO_FAMILY:    Strategy has no family_hash assigned
     """
+    # Compute this strategy's actual fitness status
+    try:
+        own_fitness = _compute_fitness_with_con(con, strategy_id, as_of_date, rolling_months)
+        actual_status = own_fitness.fitness_status
+    except Exception as e:
+        logger.warning("Could not compute fitness for %s: %s", strategy_id, e)
+        actual_status = "UNKNOWN"
+
     # Get strategy's family info
     row = con.execute("""
         SELECT vs.family_hash, vs.status,
@@ -568,7 +576,7 @@ def diagnose_decay(
 
     if row is None:
         return DecayDiagnosis(
-            strategy_id=strategy_id, fitness_status="UNKNOWN",
+            strategy_id=strategy_id, fitness_status=actual_status,
             family_hash=None, family_size=0, family_robustness=None,
             siblings_fit=0, siblings_watch=0, siblings_decay=0, siblings_stale=0,
             diagnosis="NO_FAMILY", diagnosis_notes="Strategy not found",
@@ -580,7 +588,7 @@ def diagnose_decay(
 
     if family_hash is None:
         return DecayDiagnosis(
-            strategy_id=strategy_id, fitness_status="UNKNOWN",
+            strategy_id=strategy_id, fitness_status=actual_status,
             family_hash=None, family_size=0, family_robustness=None,
             siblings_fit=0, siblings_watch=0, siblings_decay=0, siblings_stale=0,
             diagnosis="NO_FAMILY",
@@ -589,7 +597,7 @@ def diagnose_decay(
 
     if member_count <= 1:
         return DecayDiagnosis(
-            strategy_id=strategy_id, fitness_status="UNKNOWN",
+            strategy_id=strategy_id, fitness_status=actual_status,
             family_hash=family_hash, family_size=1,
             family_robustness=robustness,
             siblings_fit=0, siblings_watch=0, siblings_decay=0, siblings_stale=0,
@@ -614,7 +622,8 @@ def diagnose_decay(
             score = _compute_fitness_with_con(con, sid, as_of_date, rolling_months)
             key = score.fitness_status
             counts[key] = counts.get(key, 0) + 1
-        except Exception:
+        except Exception as e:
+            logger.debug("Sibling %s fitness failed: %s", sid, e)
             counts["STALE"] += 1
 
     total_assessed = counts["FIT"] + counts["WATCH"] + counts["DECAY"]
@@ -644,7 +653,7 @@ def diagnose_decay(
             )
 
     return DecayDiagnosis(
-        strategy_id=strategy_id, fitness_status="DECAY",
+        strategy_id=strategy_id, fitness_status=actual_status,
         family_hash=family_hash, family_size=member_count,
         family_robustness=robustness,
         siblings_fit=counts["FIT"], siblings_watch=counts["WATCH"],
@@ -700,8 +709,8 @@ def diagnose_portfolio_decay(
                 score = _compute_fitness_with_con(con, sid, as_of_date, rolling_months)
                 if score.fitness_status in ("DECAY", "WATCH"):
                     decay_ids.append(sid)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Fitness computation failed for %s: %s", sid, e)
 
         # Second pass: diagnose each decaying strategy
         diagnoses = []
@@ -718,8 +727,14 @@ def diagnose_portfolio_decay(
             if fh and fh in diagnosed_families:
                 # Reuse family diagnosis with different strategy_id
                 cached = diagnosed_families[fh]
+                # Get this strategy's actual fitness status
+                try:
+                    own_score = _compute_fitness_with_con(con, sid, as_of_date, rolling_months)
+                    own_status = own_score.fitness_status
+                except Exception:
+                    own_status = "UNKNOWN"
                 diag = DecayDiagnosis(
-                    strategy_id=sid, fitness_status="DECAY",
+                    strategy_id=sid, fitness_status=own_status,
                     family_hash=cached.family_hash,
                     family_size=cached.family_size,
                     family_robustness=cached.family_robustness,
