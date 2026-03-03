@@ -5,7 +5,7 @@ Bar.ts_utc = start of minute in UTC.
 Bar.as_dict() produces the exact format ExecutionEngine.on_bar() expects
 (key 'ts_utc', not 'ts_event').
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 
 

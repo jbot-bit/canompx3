@@ -11,10 +11,8 @@ VERIFIED API NOTES:
 - TradeEvent.price: entry fill on ENTRY, exit fill on EXIT
 - entry_model: look up from self._strategy_map[event.strategy_id].entry_model
 """
-import asyncio
 import logging
 from datetime import date
-from pathlib import Path
 
 from trading_app.live.tradovate_auth import TradovateAuth
 from trading_app.live.data_feed import DataFeed

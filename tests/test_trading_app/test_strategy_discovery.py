@@ -15,6 +15,7 @@ from trading_app.strategy_discovery import (
     make_strategy_id,
     run_discovery,
     _compute_relative_volumes,
+    _compute_haircut_sharpe,
 )
 from trading_app.config import (
     ENTRY_MODELS, ALL_FILTERS, VolumeFilter,
@@ -706,6 +707,95 @@ class TestValidatorSkipsAliases:
         ).fetchone()[0]
         con.close()
         assert alias_status == "SKIPPED"
+
+class TestHaircutSharpe:
+    """Tests for _compute_haircut_sharpe (BLP 2014 Deflated Sharpe Ratio)."""
+
+    def test_strong_edge_survives(self):
+        """A genuine high-Sharpe strategy should survive the haircut."""
+        result = _compute_haircut_sharpe(
+            sharpe_per_trade=0.23, n_obs=1000, skewness=0.0,
+            kurtosis_excess=0.0, n_trials=2376, trades_per_year=200.0,
+        )
+        assert result is not None
+        assert result > 0, "Strong edge with N=1000 should survive haircut"
+
+    def test_noise_goes_negative(self):
+        """Near-zero per-trade Sharpe with small sample should go negative."""
+        result = _compute_haircut_sharpe(
+            sharpe_per_trade=0.01, n_obs=50, skewness=0.0,
+            kurtosis_excess=0.0, n_trials=2376, trades_per_year=10.0,
+        )
+        assert result is not None
+        assert result < 0, "Noise strategy should not survive haircut"
+
+    def test_more_trials_increases_penalty(self):
+        """More trials = higher expected max = more haircut."""
+        few = _compute_haircut_sharpe(
+            sharpe_per_trade=0.10, n_obs=200, skewness=0.0,
+            kurtosis_excess=0.0, n_trials=10, trades_per_year=40.0,
+        )
+        many = _compute_haircut_sharpe(
+            sharpe_per_trade=0.10, n_obs=200, skewness=0.0,
+            kurtosis_excess=0.0, n_trials=2376, trades_per_year=40.0,
+        )
+        assert few > many, "More trials should produce a lower haircut Sharpe"
+
+    def test_larger_sample_preserves_more(self):
+        """Larger N reduces estimator variance, less penalty from noise."""
+        small_n = _compute_haircut_sharpe(
+            sharpe_per_trade=0.10, n_obs=50, skewness=0.0,
+            kurtosis_excess=0.0, n_trials=2376, trades_per_year=10.0,
+        )
+        large_n = _compute_haircut_sharpe(
+            sharpe_per_trade=0.10, n_obs=500, skewness=0.0,
+            kurtosis_excess=0.0, n_trials=2376, trades_per_year=100.0,
+        )
+        assert large_n > small_n, "Larger sample should preserve more Sharpe"
+
+    def test_returns_none_insufficient_data(self):
+        """Edge cases should return None."""
+        # Too few observations
+        assert _compute_haircut_sharpe(0.1, 5, 0.0, 0.0, 2376, 1.0) is None
+        # Only 1 trial (no multiple testing)
+        assert _compute_haircut_sharpe(0.1, 200, 0.0, 0.0, 1, 40.0) is None
+        # None Sharpe
+        assert _compute_haircut_sharpe(None, 200, 0.0, 0.0, 2376, 40.0) is None
+        # Zero trades per year
+        assert _compute_haircut_sharpe(0.1, 200, 0.0, 0.0, 2376, 0.0) is None
+
+    def test_compute_metrics_populates_haircut(self):
+        """compute_metrics with n_trials > 0 should populate haircut fields."""
+        outcomes = [
+            {"trading_day": date(2024, 1, i), "outcome": "win", "pnl_r": 1.5,
+             "mae_r": 0.5, "mfe_r": 2.0, "entry_price": 100.0, "stop_price": 95.0}
+            for i in range(1, 16)
+        ] + [
+            {"trading_day": date(2024, 1, i), "outcome": "loss", "pnl_r": -1.0,
+             "mae_r": 1.0, "mfe_r": 0.2, "entry_price": 100.0, "stop_price": 95.0}
+            for i in range(16, 26)
+        ]
+        m = compute_metrics(outcomes, n_trials=2376)
+        assert m["sharpe_haircut"] is not None
+        assert m["skewness"] is not None
+        assert m["kurtosis_excess"] is not None
+
+    def test_compute_metrics_no_trials_leaves_none(self):
+        """compute_metrics without n_trials should leave haircut as None."""
+        outcomes = [
+            {"trading_day": date(2024, 1, i), "outcome": "win", "pnl_r": 1.5,
+             "mae_r": 0.5, "mfe_r": 2.0, "entry_price": 100.0, "stop_price": 95.0}
+            for i in range(1, 16)
+        ] + [
+            {"trading_day": date(2024, 1, i), "outcome": "loss", "pnl_r": -1.0,
+             "mae_r": 1.0, "mfe_r": 0.2, "entry_price": 100.0, "stop_price": 95.0}
+            for i in range(16, 26)
+        ]
+        m = compute_metrics(outcomes)
+        assert m["sharpe_haircut"] is None
+        assert m["skewness"] is None
+        assert m["kurtosis_excess"] is None
+
 
 class TestCLI:
     def test_help(self, monkeypatch, capsys):

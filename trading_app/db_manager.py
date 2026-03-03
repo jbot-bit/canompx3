@@ -408,6 +408,19 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
             except duckdb.CatalogException:
                 pass  # column already exists
 
+        # Migration: Haircut Sharpe (Bailey & Lopez de Prado, 2014)
+        haircut_cols = [
+            ("sharpe_haircut", "DOUBLE"),
+            ("skewness", "DOUBLE"),
+            ("kurtosis_excess", "DOUBLE"),
+        ]
+        for table in ["experimental_strategies", "validated_setups"]:
+            for col, typedef in haircut_cols:
+                try:
+                    con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typedef}")
+                except duckdb.CatalogException:
+                    pass  # column already exists
+
         con.commit()
         logger.info("Trading app schema initialized successfully")
 
@@ -488,7 +501,8 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
                 "trade_day_hash", "is_canonical", "canonical_strategy_id",
                 "dst_winter_n", "dst_winter_avg_r",
                 "dst_summer_n", "dst_summer_avg_r", "dst_verdict",
-                "validation_status", "validation_notes"
+                "validation_status", "validation_notes",
+                "sharpe_haircut", "skewness", "kurtosis_excess",
             }
             actual_cols = {row[0] for row in result}
 
@@ -518,7 +532,8 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
                 "dst_winter_n", "dst_winter_avg_r",
                 "dst_summer_n", "dst_summer_avg_r", "dst_verdict",
                 "wf_tested", "wf_passed", "wf_windows",
-                "status", "retired_at", "retirement_reason"
+                "status", "retired_at", "retirement_reason",
+                "sharpe_haircut", "skewness", "kurtosis_excess",
             }
             actual_cols = {row[0] for row in result}
 

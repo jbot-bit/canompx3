@@ -899,8 +899,9 @@ def run_validation(
                             dst_winter_n, dst_winter_avg_r,
                             dst_summer_n, dst_summer_avg_r,
                             dst_verdict,
-                            wf_tested, wf_passed, wf_windows)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            wf_tested, wf_passed, wf_windows,
+                            sharpe_haircut, skewness, kurtosis_excess)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         [
                             sid, sid,
                             rd["instrument"], rd["orb_label"],
@@ -927,6 +928,9 @@ def run_validation(
                             dst_split.get("summer_n"), dst_split.get("summer_avg_r"),
                             dst_split.get("verdict"),
                             wf_tested, wf_passed, wf_windows_val,
+                            rd.get("sharpe_haircut"),
+                            rd.get("skewness"),
+                            rd.get("kurtosis_excess"),
                         ],
                     )
 

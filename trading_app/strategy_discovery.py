@@ -72,12 +72,14 @@ _INSERT_SQL = """INSERT OR REPLACE INTO experimental_strategies
      dst_winter_n, dst_winter_avg_r, dst_summer_n, dst_summer_avg_r, dst_verdict,
      validation_status, validation_notes,
      created_at,
-     p_value, sharpe_ann_adj, autocorr_lag1)
+     p_value, sharpe_ann_adj, autocorr_lag1,
+     sharpe_haircut, skewness, kurtosis_excess)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?,
             COALESCE(?, CURRENT_TIMESTAMP),
+            ?, ?, ?,
             ?, ?, ?)"""
 
 _BATCH_COLUMNS = [
@@ -97,6 +99,8 @@ _BATCH_COLUMNS = [
     'created_at',
     # Audit metrics (F-04, F-11)
     'p_value', 'sharpe_ann_adj', 'autocorr_lag1',
+    # Haircut Sharpe (Bailey & Lopez de Prado, 2014)
+    'sharpe_haircut', 'skewness', 'kurtosis_excess',
 ]
 
 
@@ -258,7 +262,79 @@ def _t_test_pvalue(t_stat: float, df: int) -> float:
     return max(min(p_two_tail, 1.0), 1e-16)
 
 
-def compute_metrics(outcomes: list[dict], cost_spec=None) -> dict:
+def _compute_haircut_sharpe(
+    sharpe_per_trade: float,
+    n_obs: int,
+    skewness: float,
+    kurtosis_excess: float,
+    n_trials: int,
+    trades_per_year: float,
+) -> float | None:
+    """Deflated Sharpe Ratio per Bailey & Lopez de Prado (2014).
+
+    Adjusts observed Sharpe for multiple testing bias. Works in per-trade
+    Sharpe space (as Mertens 2002 variance formula requires), then
+    annualizes the result.
+
+    Steps:
+      1. Compute V(SR_per) using Mertens (2002) variance of the per-trade
+         Sharpe estimator.
+      2. Compute E[max(SR_per)] under the null (SR=0 for all strategies)
+         using the Euler-Mascheroni approximation. Under null, V_null = 1/T.
+      3. Haircut_per = SR_per - E[max(SR_per|null)]
+      4. Annualize: haircut_ann = haircut_per * sqrt(trades_per_year)
+
+    Returns haircut Sharpe (annualized) or None if insufficient data.
+    """
+    import math
+
+    if n_obs < 10 or n_trials < 2 or sharpe_per_trade is None:
+        return None
+    if trades_per_year <= 0:
+        return None
+
+    sr = sharpe_per_trade
+
+    # Under the null (SR=0), all strategies have true Sharpe=0.
+    # Variance of the null SR estimator: V_null = 1/T
+    # (Mertens terms with SR=0 vanish: 1 - 0 + 0 = 1)
+    std_sr_null = math.sqrt(1.0 / n_obs)
+
+    # Expected maximum per-trade Sharpe under null (BLP, 2014)
+    # E[max] ~ sqrt(V_null) * ((1-gamma)*Phi_inv(1-1/N) + gamma*Phi_inv(1-1/(N*e)))
+    gamma_em = 0.5772156649
+
+    def _norm_ppf(p: float) -> float:
+        """Inverse normal CDF (rational approximation, Abramowitz & Stegun)."""
+        if p <= 0:
+            return -6.0
+        if p >= 1:
+            return 6.0
+        if p == 0.5:
+            return 0.0
+        if p > 0.5:
+            return -_norm_ppf(1.0 - p)
+        t = math.sqrt(-2.0 * math.log(p))
+        c0, c1, c2 = 2.515517, 0.802853, 0.010328
+        d1, d2, d3 = 1.432788, 0.189269, 0.001308
+        return -(t - (c0 + c1 * t + c2 * t * t) / (1.0 + d1 * t + d2 * t * t + d3 * t * t * t))
+
+    p1 = 1.0 - 1.0 / n_trials
+    p2 = 1.0 - 1.0 / (n_trials * math.e)
+
+    e_max_per = std_sr_null * (
+        (1.0 - gamma_em) * _norm_ppf(p1) + gamma_em * _norm_ppf(p2)
+    )
+
+    # Haircut in per-trade space, then annualize
+    haircut_per = sr - e_max_per
+    ann_factor = math.sqrt(trades_per_year)
+    sharpe_haircut = haircut_per * ann_factor
+
+    return round(sharpe_haircut, 4)
+
+
+def compute_metrics(outcomes: list[dict], cost_spec=None, n_trials: int = 0) -> dict:
     """
     Compute performance metrics from a list of outcome rows.
 
@@ -430,6 +506,30 @@ def compute_metrics(outcomes: list[dict], cost_spec=None) -> dict:
         if t_stat is not None:
             p_value = _t_test_pvalue(t_stat, len(r_values) - 1)
 
+    # Haircut Sharpe: Bailey & Lopez de Prado (2014) Deflated Sharpe Ratio.
+    # Adjusts per-trade Sharpe for selection bias from testing n_trials combos,
+    # then annualizes the result. Requires skewness and excess kurtosis.
+    sharpe_haircut = None
+    skewness = None
+    kurtosis_excess = None
+    if sharpe_ratio is not None and len(r_values) >= 10 and n_trials > 1 and trades_per_year > 0:
+        n_r = len(r_values)
+        # Sample skewness: m3 / s^3
+        m3 = sum((r - mean_r) ** 3 for r in r_values) / n_r
+        skewness = m3 / (std_r ** 3) if std_r > 0 else 0.0
+        # Sample excess kurtosis: m4 / s^4 - 3
+        m4 = sum((r - mean_r) ** 4 for r in r_values) / n_r
+        kurtosis_excess = (m4 / (std_r ** 4) - 3.0) if std_r > 0 else 0.0
+
+        sharpe_haircut = _compute_haircut_sharpe(
+            sharpe_per_trade=sharpe_ratio,
+            n_obs=n_r,
+            skewness=skewness,
+            kurtosis_excess=kurtosis_excess,
+            n_trials=n_trials,
+            trades_per_year=trades_per_year,
+        )
+
     # Risk stats (from entry_price and stop_price)
     risk_points_list = [
         abs(o["entry_price"] - o["stop_price"])
@@ -481,6 +581,9 @@ def compute_metrics(outcomes: list[dict], cost_spec=None) -> dict:
         "sharpe_ann_adj": round(sharpe_ann_adj, 4) if sharpe_ann_adj is not None else None,
         "autocorr_lag1": round(autocorr_lag1, 4) if autocorr_lag1 is not None else None,
         "p_value": round(p_value, 6) if p_value is not None else None,
+        "sharpe_haircut": sharpe_haircut,
+        "skewness": round(skewness, 4) if skewness is not None else None,
+        "kurtosis_excess": round(kurtosis_excess, 4) if kurtosis_excess is not None else None,
         "yearly_results": json.dumps(yearly),
         "entry_signals": entry_signals,
         "scratch_count": len(scratches),
@@ -884,7 +987,7 @@ def run_discovery(
                             if not outcomes:
                                 continue
 
-                            metrics = compute_metrics(outcomes, cost_spec=cost_spec)
+                            metrics = compute_metrics(outcomes, cost_spec=cost_spec, n_trials=total_combos)
                             if metrics["sample_size"] == 0:
                                 continue
 
@@ -984,6 +1087,8 @@ def run_discovery(
                     existing_created.get(s["strategy_id"]),  # Preserve or DEFAULT
                     # Audit metrics (F-04, F-11)
                     m.get("p_value"), m.get("sharpe_ann_adj"), m.get("autocorr_lag1"),
+                    # Haircut Sharpe (Bailey & Lopez de Prado, 2014)
+                    m.get("sharpe_haircut"), m.get("skewness"), m.get("kurtosis_excess"),
                 ])
 
                 if len(insert_batch) >= 500:

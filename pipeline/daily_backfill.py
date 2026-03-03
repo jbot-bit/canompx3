@@ -10,7 +10,6 @@ import argparse
 import subprocess
 import sys
 from datetime import date, timedelta, timezone
-from pathlib import Path
 
 import duckdb
 
