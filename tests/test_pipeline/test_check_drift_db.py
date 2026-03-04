@@ -1,0 +1,288 @@
+"""
+WS2: Tests for DB-dependent drift checks in pipeline/check_drift.py.
+
+Covers checks 29, 35, 42, 43, 50, 54-58.
+Each test creates a temp DuckDB, injects data, and verifies the check.
+"""
+
+import pytest
+import duckdb
+from pathlib import Path
+
+from pipeline import check_drift
+
+
+def _create_db(tmp_path, tables_sql: str, inserts_sql: str = "") -> Path:
+    """Create a temp DuckDB with given schema and data."""
+    db_path = tmp_path / "test.db"
+    con = duckdb.connect(str(db_path))
+    con.execute(tables_sql)
+    if inserts_sql:
+        con.execute(inserts_sql)
+    con.close()
+    return db_path
+
+
+VALIDATED_SCHEMA = """
+    CREATE TABLE validated_setups (
+        strategy_id VARCHAR PRIMARY KEY,
+        instrument VARCHAR,
+        orb_label VARCHAR,
+        orb_minutes INTEGER,
+        entry_model VARCHAR,
+        confirm_bars INTEGER,
+        filter_type VARCHAR,
+        rr_target DOUBLE,
+        status VARCHAR,
+        win_rate DOUBLE,
+        expectancy_r DOUBLE,
+        fdr_significant BOOLEAN,
+        family_hash VARCHAR,
+        wf_tested BOOLEAN,
+        retired_at TIMESTAMPTZ,
+        retirement_reason VARCHAR
+    );
+"""
+
+OUTCOMES_SCHEMA = """
+    CREATE TABLE orb_outcomes (
+        trading_day DATE,
+        symbol VARCHAR,
+        orb_minutes INTEGER,
+        orb_label VARCHAR,
+        entry_model VARCHAR,
+        confirm_bars INTEGER
+    );
+"""
+
+EXPERIMENTAL_SCHEMA = """
+    CREATE TABLE experimental_strategies (
+        instrument VARCHAR,
+        strategy_id VARCHAR,
+        entry_model VARCHAR,
+        sample_size INTEGER,
+        n_trials_at_discovery INTEGER,
+        fst_hurdle DOUBLE,
+        sharpe_haircut DOUBLE
+    );
+"""
+
+DAILY_FEATURES_SCHEMA = """
+    CREATE TABLE daily_features (
+        trading_day DATE,
+        symbol VARCHAR,
+        orb_minutes INTEGER
+    );
+"""
+
+
+# ── Check 29: Validated filters registered ────────────────────────────
+
+
+class TestValidatedFiltersRegistered:
+    """Check 29: filter_type in validated_setups must exist in ALL_FILTERS."""
+
+    def test_current_db_passes(self):
+        violations = check_drift.check_validated_filters_registered()
+        assert len(violations) == 0
+
+
+# ── Check 35: No E0 in DB ────────────────────────────────────────────
+
+
+class TestNoE0InDb:
+    """Check 35: No E0 rows in trading tables."""
+
+    def test_catches_e0_in_outcomes(self, tmp_path, monkeypatch):
+        db_path = _create_db(tmp_path,
+            OUTCOMES_SCHEMA + EXPERIMENTAL_SCHEMA + VALIDATED_SCHEMA,
+            """INSERT INTO orb_outcomes VALUES
+                ('2025-01-01', 'MGC', 5, 'CME_REOPEN', 'E0', 1)""")
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_no_e0_in_db()
+        assert len(violations) > 0
+        assert "E0" in violations[0]
+
+    def test_passes_no_e0(self, tmp_path, monkeypatch):
+        db_path = _create_db(tmp_path,
+            OUTCOMES_SCHEMA + EXPERIMENTAL_SCHEMA + VALIDATED_SCHEMA,
+            """INSERT INTO orb_outcomes VALUES
+                ('2025-01-01', 'MGC', 5, 'CME_REOPEN', 'E2', 1)""")
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_no_e0_in_db()
+        assert len(violations) == 0
+
+
+# ── Check 42: Orphaned validated strategies ───────────────────────────
+
+
+class TestOrphanedValidatedStrategies:
+    """Check 42: Active strategies must have matching orb_outcomes."""
+
+    def test_catches_orphan(self, tmp_path, monkeypatch):
+        db_path = _create_db(tmp_path,
+            VALIDATED_SCHEMA + OUTCOMES_SCHEMA,
+            """INSERT INTO validated_setups (strategy_id, instrument, orb_minutes, status)
+               VALUES ('MGC_15m_1', 'MGC', 15, 'active')""")
+        # No orb_outcomes for MGC 15m
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_orphaned_validated_strategies()
+        assert len(violations) > 0
+        assert "15m" in violations[0]
+
+    def test_catches_orphan_wrong_aperture(self, tmp_path, monkeypatch):
+        """Outcomes exist for 5m but strategy is 15m — still orphaned."""
+        db_path = _create_db(tmp_path,
+            VALIDATED_SCHEMA + OUTCOMES_SCHEMA,
+            """INSERT INTO validated_setups (strategy_id, instrument, orb_minutes, status)
+               VALUES ('MGC_15m_1', 'MGC', 15, 'active');
+               INSERT INTO orb_outcomes (trading_day, symbol, orb_minutes)
+               VALUES ('2025-01-01', 'MGC', 5)""")
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_orphaned_validated_strategies()
+        assert len(violations) > 0
+
+    def test_passes_with_outcomes(self, tmp_path, monkeypatch):
+        db_path = _create_db(tmp_path,
+            VALIDATED_SCHEMA + OUTCOMES_SCHEMA,
+            """INSERT INTO validated_setups (strategy_id, instrument, orb_minutes, status)
+               VALUES ('MGC_5m_1', 'MGC', 5, 'active');
+               INSERT INTO orb_outcomes (trading_day, symbol, orb_minutes)
+               VALUES ('2025-01-01', 'MGC', 5)""")
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_orphaned_validated_strategies()
+        assert len(violations) == 0
+
+
+# ── Check 43: Uncovered FDR strategies ────────────────────────────────
+
+
+class TestUncoveredFdrStrategies:
+    """Check 43: FDR-significant strategies must be in edge families."""
+
+    def test_current_db_passes(self):
+        violations = check_drift.check_uncovered_fdr_strategies()
+        assert len(violations) == 0
+
+
+# ── Check 50: Audit columns populated ─────────────────────────────────
+
+
+class TestAuditColumnsPopulated:
+    """Check 50: experimental_strategies must have audit columns."""
+
+    def test_catches_unpopulated_n_trials(self, tmp_path, monkeypatch):
+        db_path = _create_db(tmp_path, EXPERIMENTAL_SCHEMA,
+            """INSERT INTO experimental_strategies
+               VALUES ('MGC', 's1', 'E2', 100, NULL, NULL, NULL)""")
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_audit_columns_populated()
+        assert len(violations) > 0
+        assert "n_trials" in violations[0]
+
+    def test_passes_populated(self, tmp_path, monkeypatch):
+        db_path = _create_db(tmp_path, EXPERIMENTAL_SCHEMA,
+            """INSERT INTO experimental_strategies
+               VALUES ('MGC', 's1', 'E2', 100, 2376, 0.05, 0.3)""")
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_audit_columns_populated()
+        assert len(violations) == 0
+
+
+# ── Check 54: Live config spec validity ───────────────────────────────
+
+
+class TestLiveConfigSpecValidity:
+    """Check 54: LIVE_PORTFOLIO specs reference valid sessions/models."""
+
+    def test_current_config_passes(self):
+        violations = check_drift.check_live_config_spec_validity()
+        assert len(violations) == 0
+
+
+# ── Check 55: Cost model field ranges ─────────────────────────────────
+
+
+class TestCostModelFieldRanges:
+    """Check 55: Cost model values within sane ranges."""
+
+    def test_current_config_passes(self):
+        violations = check_drift.check_cost_model_field_ranges()
+        assert len(violations) == 0
+
+
+# ── Check 56: Session resolver sanity ─────────────────────────────────
+
+
+class TestSessionResolverSanity:
+    """Check 56: All resolvers return valid (hour, minute) tuples."""
+
+    def test_current_config_passes(self):
+        violations = check_drift.check_session_resolver_sanity()
+        assert len(violations) == 0
+
+
+# ── Check 57: Daily features row integrity ────────────────────────────
+
+
+class TestDailyFeaturesRowIntegrity:
+    """Check 57: daily_features must have exactly 3 rows per (day, symbol)."""
+
+    def test_catches_partial_rows(self, tmp_path, monkeypatch):
+        db_path = _create_db(tmp_path, DAILY_FEATURES_SCHEMA,
+            """INSERT INTO daily_features VALUES
+                ('2025-01-01', 'MGC', 5),
+                ('2025-01-01', 'MGC', 15)""")
+        # Only 2 rows instead of 3
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_daily_features_row_integrity()
+        assert len(violations) > 0
+        assert "MGC" in violations[0]
+
+    def test_passes_complete(self, tmp_path, monkeypatch):
+        db_path = _create_db(tmp_path, DAILY_FEATURES_SCHEMA,
+            """INSERT INTO daily_features VALUES
+                ('2025-01-01', 'MGC', 5),
+                ('2025-01-01', 'MGC', 15),
+                ('2025-01-01', 'MGC', 30)""")
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_daily_features_row_integrity()
+        assert len(violations) == 0
+
+
+# ── Check 58: Data continuity ─────────────────────────────────────────
+
+
+class TestDataContinuity:
+    """Check 58: Advisory warning on large gaps in trading days."""
+
+    def test_warns_on_gap(self, tmp_path, monkeypatch, capsys):
+        db_path = _create_db(tmp_path, DAILY_FEATURES_SCHEMA,
+            """INSERT INTO daily_features VALUES
+                ('2025-01-01', 'MGC', 5),
+                ('2025-01-01', 'MGC', 15),
+                ('2025-01-01', 'MGC', 30),
+                ('2025-01-20', 'MGC', 5),
+                ('2025-01-20', 'MGC', 15),
+                ('2025-01-20', 'MGC', 30)""")
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_data_continuity()
+        # Advisory — always returns []
+        assert len(violations) == 0
+        captured = capsys.readouterr()
+        assert "WARNING" in captured.out and "gap" in captured.out.lower()
+
+    def test_no_warning_for_small_gaps(self, tmp_path, monkeypatch, capsys):
+        db_path = _create_db(tmp_path, DAILY_FEATURES_SCHEMA,
+            """INSERT INTO daily_features VALUES
+                ('2025-01-06', 'MGC', 5),
+                ('2025-01-06', 'MGC', 15),
+                ('2025-01-06', 'MGC', 30),
+                ('2025-01-07', 'MGC', 5),
+                ('2025-01-07', 'MGC', 15),
+                ('2025-01-07', 'MGC', 30)""")
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_data_continuity()
+        assert len(violations) == 0
+        captured = capsys.readouterr()
+        assert "WARNING" not in captured.out

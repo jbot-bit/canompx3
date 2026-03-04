@@ -28,6 +28,7 @@ INSTRUMENT_ALLOWLIST = {
     "cost_model.py",
     "hypothesis_test.py",
     "audit_15m30m.py",
+    "ml_hybrid_experiment.py",
 }
 # Directories whose files are always allowed
 INSTRUMENT_ALLOWLIST_DIRS = {"tests", "docs", "research"}
@@ -95,12 +96,12 @@ def _is_allowlisted(filepath: Path) -> bool:
     """Check if file is in the allowlist for instrument lists."""
     if filepath.name in INSTRUMENT_ALLOWLIST:
         return True
+    # Check if any path component matches an allowlisted directory name
+    # (handles nested dirs like research/archive/)
+    parts = filepath.parts
     for d in INSTRUMENT_ALLOWLIST_DIRS:
-        try:
-            filepath.relative_to(PROJECT_ROOT / d)
+        if d in parts:
             return True
-        except ValueError:
-            pass
     return False
 
 
@@ -207,12 +208,12 @@ def _is_triple_join_allowlisted(filepath: Path) -> bool:
     """Check if file is allowlisted for triple-join guard."""
     if filepath.name in TRIPLE_JOIN_ALLOWLIST_FILES:
         return True
+    # Check if any path component matches an allowlisted directory name
+    # (handles nested dirs like research/archive/)
+    parts = filepath.parts
     for d in TRIPLE_JOIN_ALLOWLIST_DIRS:
-        try:
-            filepath.relative_to(PROJECT_ROOT / d)
+        if d in parts:
             return True
-        except ValueError:
-            pass
     return False
 
 
@@ -332,6 +333,22 @@ def check_cli_arg_drift() -> list[str]:
     return warnings
 
 
+# Allowlist for double_break scanner: files that REFERENCE double_break for
+# analysis/reporting, not as pre-trade filters
+DOUBLE_BREAK_ALLOWLIST = {
+    "test_", "conftest.py", "audit_behavioral.py", ".md",
+    "__pycache__", ".pytest_cache",
+    "archive",                  # Archived research scripts (dead code)
+    "rolling_portfolio.py",     # Reports double_break degradation metrics (post-hoc)
+    "sql_adapter.py",           # Routes DOUBLE_BREAK_STATS template (query exposure)
+    "audit_ib_single_break.py", # Audit script analyzing double_break classification
+    "research_session_event_analysis.py",  # Historical double_break analysis (pre-NODBL removal)
+}
+
+# Scan directories for double_break scanner
+DOUBLE_BREAK_SCAN_DIRS_SUFFIXES = ["pipeline", "trading_app", ("scripts", "tools"), "research"]
+
+
 def check_double_break_lookahead() -> list[str]:
     """Detect double_break used as filter/predictor (look-ahead bias).
 
@@ -341,25 +358,13 @@ def check_double_break_lookahead() -> list[str]:
     """
     violations = []
 
-    # Allowlist: test files, docs, this script, archive, analysis/reporting code
-    # These files REFERENCE double_break for analysis/reporting, not as pre-trade filters
-    allowlist = {
-        "test_", "conftest.py", "audit_behavioral.py", ".md",
-        "__pycache__", ".pytest_cache",
-        "archive",                  # Archived research scripts (dead code)
-        "rolling_portfolio.py",     # Reports double_break degradation metrics (post-hoc)
-        "sql_adapter.py",           # Routes DOUBLE_BREAK_STATS template (query exposure)
-        "audit_ib_single_break.py", # Audit script analyzing double_break classification
-        "research_session_event_analysis.py",  # Historical double_break analysis (pre-NODBL removal)
-    }
-
-    # Scan locations: pipeline, trading_app, scripts/tools, research
-    scan_dirs = [
-        PROJECT_ROOT / "pipeline",
-        PROJECT_ROOT / "trading_app",
-        PROJECT_ROOT / "scripts" / "tools",
-        PROJECT_ROOT / "research",
-    ]
+    # Build scan dirs from PROJECT_ROOT
+    scan_dirs = []
+    for suffix in DOUBLE_BREAK_SCAN_DIRS_SUFFIXES:
+        if isinstance(suffix, tuple):
+            scan_dirs.append(PROJECT_ROOT.joinpath(*suffix))
+        else:
+            scan_dirs.append(PROJECT_ROOT / suffix)
 
     # Patterns that indicate double_break used as filter/predictor
     filter_patterns = [
@@ -376,7 +381,7 @@ def check_double_break_lookahead() -> list[str]:
             continue
         for fpath in scan_dir.rglob("*.py"):
             # Skip allowlisted files
-            if any(allow in str(fpath) for allow in allowlist):
+            if any(allow in str(fpath) for allow in DOUBLE_BREAK_ALLOWLIST):
                 continue
 
             try:

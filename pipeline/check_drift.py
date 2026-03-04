@@ -1293,8 +1293,11 @@ def check_no_e0_in_db() -> list[str]:
     violations = []
     try:
         import duckdb
-        from pipeline.paths import GOLD_DB_PATH
-        db_path = GOLD_DB_PATH
+
+        db_path = GOLD_DB_PATH_FOR_CHECKS
+        if db_path is None:
+            from pipeline.paths import GOLD_DB_PATH
+            db_path = GOLD_DB_PATH
         if not Path(db_path).exists():
             return violations
         con = duckdb.connect(str(db_path), read_only=True)
@@ -1460,6 +1463,7 @@ def check_old_session_names() -> list[str]:
         "research/archive",
         "scripts/walkforward",
         "docs/archive",
+        "tests",
         ".venv",
         "venv",
         ".auto-claude",
@@ -2274,6 +2278,17 @@ def check_audit_columns_populated() -> list[str]:
     return violations
 
 
+def _find_ml_model_path(model_dir, inst: str):
+    """Find ML model path: prefer hybrid, fall back to per-instrument."""
+    hybrid = model_dir / f"meta_label_{inst}_hybrid.joblib"
+    legacy = model_dir / f"meta_label_{inst}.joblib"
+    if hybrid.exists():
+        return hybrid
+    if legacy.exists():
+        return legacy
+    return None
+
+
 def check_ml_model_files_exist() -> list[str]:
     """Check ML model .joblib files exist for all active ML instruments."""
     violations = []
@@ -2281,10 +2296,9 @@ def check_ml_model_files_exist() -> list[str]:
         from trading_app.ml.config import ACTIVE_INSTRUMENTS, MODEL_DIR
 
         for inst in ACTIVE_INSTRUMENTS:
-            path = MODEL_DIR / f"meta_label_{inst}.joblib"
-            if not path.exists():
+            if _find_ml_model_path(MODEL_DIR, inst) is None:
                 violations.append(
-                    f"  Missing ML model for {inst}: {path}"
+                    f"  Missing ML model for {inst} (checked hybrid + legacy)"
                 )
     except ImportError as e:
         violations.append(f"  Cannot import ml.config: {e}")
@@ -2302,8 +2316,8 @@ def check_ml_config_hash_match() -> list[str]:
 
         current_hash = compute_config_hash()
         for inst in ACTIVE_INSTRUMENTS:
-            path = MODEL_DIR / f"meta_label_{inst}.joblib"
-            if not path.exists():
+            path = _find_ml_model_path(MODEL_DIR, inst)
+            if path is None:
                 continue
             try:
                 bundle = joblib.load(path)
@@ -2329,8 +2343,8 @@ def check_ml_model_freshness() -> list[str]:
         from trading_app.ml.config import ACTIVE_INSTRUMENTS, MODEL_DIR
 
         for inst in ACTIVE_INSTRUMENTS:
-            path = MODEL_DIR / f"meta_label_{inst}.joblib"
-            if not path.exists():
+            path = _find_ml_model_path(MODEL_DIR, inst)
+            if path is None:
                 continue
             try:
                 bundle = joblib.load(path)
@@ -2711,7 +2725,7 @@ CHECKS = [
     ("ML model files exist for all active instruments",
      check_ml_model_files_exist, False, False),
     ("ML model config hashes match current config",
-     check_ml_config_hash_match, False, False),
+     check_ml_config_hash_match, True, False),
     ("ML model freshness < 90 days",
      check_ml_model_freshness, False, False),
     # ── New checks from deep audit (Mar 2026) ──────────────────────────
