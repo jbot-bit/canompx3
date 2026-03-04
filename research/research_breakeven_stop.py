@@ -32,15 +32,16 @@ import pandas as pd
 from scipy import stats
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.cost_model import COST_SPECS, risk_in_dollars
 from research.lib.stats import bh_fdr
 
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-INSTRUMENTS = ["MGC", "MNQ", "MES", "M2K"]
+INSTRUMENTS = sorted(ACTIVE_ORB_INSTRUMENTS)
 RR_TARGETS = [1.5, 2.0, 2.5, 3.0]
-DB_PATH = Path(__file__).resolve().parents[1] / "gold.db"
+DB_PATH = Path("C:/db/gold.db")      # Research convention: scratch DB
 MIN_TRADES = 30
 
 # Grid A: time-based breakeven

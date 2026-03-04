@@ -16,10 +16,12 @@ try:
 except ImportError:
     pass  # python-dotenv not installed — rely on shell env
 
-# Database — single canonical location:
-#   DUCKDB_PATH=C:/db/gold.db (set in .env)
-#   All code reads from this one path. No scratch copies. No copy-back.
+# Database — dual-location workflow:
+#   C:/db/gold.db        = scratch DB for long-running rebuilds (isolated from project)
+#   <project>/gold.db    = canonical DB used by pipeline, tests, and live trading
+#   DUCKDB_PATH env var  = override (set in .env, typically C:/db/gold.db)
 #
+# Workflow: rebuild on scratch → health check → copy to project root → sync.
 # If DUCKDB_PATH points to a non-existent file → warns and falls back to project root.
 import os as _os
 import sys as _sys
