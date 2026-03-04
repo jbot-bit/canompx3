@@ -63,10 +63,8 @@ def _optimize_threshold(
     Optimizes on PROFIT (total R), not accuracy.
     Returns dict with optimal threshold and performance at that threshold.
 
-    WARNING: Threshold is optimized on the same holdout used for OOS reporting.
-    This means OOS metrics at the selected threshold are biased (optimistic).
-    Only CPCV AUC is truly unbiased. Phase 2 fix: 3-way split or CPCV-derived
-    threshold. See docs/specs/STATISTICAL_HARDENING.md FIX 10.
+    Called on the VALIDATION set (middle 20% of 3-way split).
+    Honest OOS evaluation happens separately on the frozen test set.
     """
     # Filter out NaN pnl_r before computing metrics
     valid = ~np.isnan(pnl_r)
@@ -135,17 +133,20 @@ def _optimize_threshold_profit(
     y_prob: np.ndarray,
     pnl_r: np.ndarray,
     *,
-    min_kept: int = 20,
+    min_kept: int = 50,
 ) -> tuple[float | None, float]:
     """Find threshold that maximizes total R improvement over baseline.
 
     Simpler than _optimize_threshold — used for per-session models where
     sample sizes are smaller and Sharpe is too noisy.
 
-    BIAS NOTE: Threshold is optimized on the same holdout used for reporting.
-    Reported delta_r values are optimistic upper bounds. Only CPCV AUC
-    (per-instrument path) is truly unbiased. Accept this bias for now;
-    fix with 3-way split if per-session CPCV is added later.
+    Called on the VALIDATION set (middle 20%) — never on the test set.
+    Honest OOS evaluation happens separately on the frozen test set.
+
+    Args:
+        min_kept: Minimum trades to keep at a threshold. Caller should set
+            this to max(50, int(n_val * 0.15)) to prevent overfitting
+            to a tiny subset of val trades.
 
     Returns:
         (best_threshold, best_delta_r) — None if no threshold beats baseline.
@@ -206,27 +207,32 @@ def train_per_session_meta_label(
     db_path: str,
     *,
     save_model: bool = True,
+    run_cpcv: bool = True,
 ) -> dict:
     """Train hybrid per-session meta-label models for one instrument.
 
-    Architecture validated by ml_hybrid_experiment.py (+1,068R across 4 instruments):
-      1. Load validated feature matrix
-      2. Apply E6 noise filter
+    Architecture per de Prado (meta-labeling + honest evaluation):
+      1. Load validated feature matrix, apply E6 noise filter
+      2. 3-way time split: train (60%) / val (20%) / test (20%)
+         - Train: RF fitting + optional per-session CPCV
+         - Val: threshold optimization (find best P(win) cutoff)
+         - Test: honest OOS evaluation (NEVER touched by optimization)
       3. For each session with >= MIN_SESSION_SAMPLES:
          - Adjust features for early sessions (drop cross-session)
          - Train RF with adaptive min_samples_leaf
-         - Optimize threshold on profit (total R delta)
+         - CPCV within training data (5 groups, 10 splits) for unbiased AUC
+         - Optimize threshold on VAL set (total R delta)
+         - Evaluate honestly on TEST set (frozen, no optimization)
          - Sessions where no threshold helps >> NO_MODEL
       4. Save all session models in one bundle
 
-    BIAS NOTE: Uses single 80/20 time split with threshold optimization on the
-    holdout set. Reported delta_R values are optimistic upper bounds. CPCV is
-    intentionally skipped because per-session sample sizes (500-5000) are too
-    small for 45-split CPCV (10 groups, C(10,2)). The AUC from the single split
-    provides a directional signal but is not a rigorous OOS estimate.
+    The 3-way split ensures reported delta_R values are honest out-of-sample.
+    Prior implementation used 80/20 with threshold optimization on the holdout,
+    which made OOS metrics optimistically biased (optimizing 36 thresholds on
+    the same data used for reporting = multiple testing on the holdout).
 
     @research-source: ml_hybrid_experiment.py (Mar 4 2026)
-      MNQ +741R, MES +251R, M2K +42R, MGC +34R = +1,068R total (+30.1%)
+    @revalidated-for: E1, E2
     """
     logger.info(f"{'=' * 60}")
     logger.info(f"  PER-SESSION META-LABEL: {instrument}")
@@ -238,10 +244,16 @@ def train_per_session_meta_label(
 
     logger.info(f"Total: {len(X_e6):,d} samples, {X_e6.shape[1]} E6 features")
 
-    # --- 80/20 time split (global) ---
+    # --- 3-way time split: 60% train / 20% val / 20% test ---
     n_total = len(X_e6)
-    n_train = int(n_total * 0.8)
+    n_train_end = int(n_total * 0.60)
+    n_val_end = int(n_total * 0.80)
     pnl_r = meta_all["pnl_r"].values
+
+    logger.info(
+        f"  Split: train={n_train_end:,d} / val={n_val_end - n_train_end:,d} / "
+        f"test={n_total - n_val_end:,d}"
+    )
 
     sessions = sorted(meta_all["orb_label"].unique())
     session_results: dict[str, dict] = {}
@@ -252,12 +264,19 @@ def train_per_session_meta_label(
         n_session = smask.sum()
         session_indices = np.where(smask)[0]
 
-        # Test set: session rows in global test window
-        test_idx = session_indices[session_indices >= n_train]
-        train_idx = session_indices[session_indices < n_train]
+        # 3-way split per session using global index boundaries
+        train_idx = session_indices[session_indices < n_train_end]
+        val_idx = session_indices[
+            (session_indices >= n_train_end) & (session_indices < n_val_end)
+        ]
+        test_idx = session_indices[session_indices >= n_val_end]
 
-        if n_session < MIN_SESSION_SAMPLES or len(test_idx) < 20:
-            reason = f"N={n_session}" if n_session < MIN_SESSION_SAMPLES else f"N_test={len(test_idx)}"
+        # Need enough data in ALL three splits
+        if n_session < MIN_SESSION_SAMPLES or len(val_idx) < 20 or len(test_idx) < 20:
+            reason = (
+                f"N={n_session}" if n_session < MIN_SESSION_SAMPLES
+                else f"N_val={len(val_idx)},N_test={len(test_idx)}"
+            )
             logger.info(f"  {session:<20} >> NO_MODEL ({reason} < threshold)")
             session_results[session] = {"model_type": "NONE", "reason": reason}
             continue
@@ -269,66 +288,120 @@ def train_per_session_meta_label(
         # Adaptive leaf size: bigger datasets get bigger leaves
         leaf_size = max(20, min(100, len(train_idx) // 20))
 
-        # Train RF
+        # --- Optional CPCV within training data ---
+        cpcv_auc = None
+        if run_cpcv and len(train_idx) >= 200:
+            try:
+                cpcv_results = cpcv_score(
+                    RandomForestClassifier,
+                    {**rf_base_params, "min_samples_leaf": leaf_size},
+                    X_session.iloc[train_idx],
+                    y_all.iloc[train_idx],
+                    meta_all["trading_day"].iloc[train_idx],
+                    n_groups=5,      # C(5,2) = 10 splits (feasible for per-session)
+                    k_test=2,
+                    max_splits=10,
+                )
+                cpcv_auc = cpcv_results["auc_mean"]
+            except Exception:
+                logger.debug(f"  {session}: CPCV failed, continuing without")
+
+        # --- Train RF on training data (first 60%) ---
         rf = RandomForestClassifier(**rf_base_params, min_samples_leaf=leaf_size)
         rf.fit(X_session.iloc[train_idx], y_all.iloc[train_idx])
 
-        # Predict on test set
-        y_prob = rf.predict_proba(X_session.iloc[test_idx])[:, 1]
-        test_pnl = pnl_r[test_idx]
+        # --- Optimize threshold on VALIDATION set (middle 20%) ---
+        val_prob = rf.predict_proba(X_session.iloc[val_idx])[:, 1]
+        val_pnl = pnl_r[val_idx]
+        val_min_kept = max(50, int(len(val_idx) * 0.15))
+        best_t, best_delta = _optimize_threshold_profit(
+            val_prob, val_pnl, min_kept=val_min_kept,
+        )
 
-        # AUC
+        # --- Evaluate honestly on TEST set (final 20%) ---
+        test_prob = rf.predict_proba(X_session.iloc[test_idx])[:, 1]
+        test_pnl = pnl_r[test_idx]
         y_test = y_all.iloc[test_idx].values
         try:
-            auc = roc_auc_score(y_test, y_prob)
+            test_auc = roc_auc_score(y_test, test_prob)
         except ValueError:
-            auc = 0.5  # Single class in test
-
-        # Optimize threshold on profit
-        best_t, best_delta = _optimize_threshold_profit(y_prob, test_pnl)
+            test_auc = 0.5  # Single class in test
 
         if best_t is not None:
-            kept = y_prob >= best_t
-            skip_pct = 1 - kept.sum() / len(test_idx)
-            base_r = float(test_pnl.sum())
+            # Apply val-optimized threshold to frozen test set
+            kept_test = test_prob >= best_t
+            n_kept_test = int(kept_test.sum())
+            if n_kept_test < 10:
+                # Threshold too aggressive for test set — reject
+                logger.info(
+                    f"  {session:<20} >> NO_MODEL (threshold {best_t:.2f} keeps "
+                    f"only {n_kept_test} test trades)"
+                )
+                session_results[session] = {
+                    "model_type": "NONE",
+                    "reason": f"threshold_too_aggressive_test_n={n_kept_test}",
+                    "test_auc": round(test_auc, 4),
+                    "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
+                }
+                continue
+
+            honest_base_r = float(test_pnl.sum())
+            honest_filt_r = float(test_pnl[kept_test].sum())
+            honest_delta_r = honest_filt_r - honest_base_r
+            skip_pct = 1 - n_kept_test / len(test_idx)
+
+            cpcv_str = f"{cpcv_auc:.3f}" if cpcv_auc else "  --"
             logger.info(
-                f"  {session:<20} >> ML t={best_t:.2f} AUC={auc:.3f} "
-                f"BaseR={base_r:+.1f} Delta={best_delta:+.1f} "
-                f"Skip={skip_pct:.0%} leaf={leaf_size} feat={len(feature_names)}"
+                f"  {session:<20} >> ML t={best_t:.2f} "
+                f"CPCV={cpcv_str} TestAUC={test_auc:.3f} "
+                f"ValDelta={best_delta:+.1f} HonestDelta={honest_delta_r:+.1f} "
+                f"Skip={skip_pct:.0%} leaf={leaf_size}"
             )
             session_results[session] = {
                 "model_type": "SESSION",
                 "model": rf,
                 "feature_names": feature_names,
                 "threshold": best_t,
-                "auc": round(auc, 4),
+                "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
+                "test_auc": round(test_auc, 4),
                 "n_train": len(train_idx),
+                "n_val": len(val_idx),
                 "n_test": len(test_idx),
-                "base_r": round(base_r, 2),
-                "delta_r": round(best_delta, 2),
+                "val_delta_r": round(best_delta, 2),
+                "honest_delta_r": round(honest_delta_r, 2),
+                "honest_base_r": round(honest_base_r, 2),
                 "skip_pct": round(skip_pct, 3),
                 "leaf_size": leaf_size,
             }
         else:
             logger.info(
-                f"  {session:<20} >> NO_MODEL (no threshold beats baseline, AUC={auc:.3f})"
+                f"  {session:<20} >> NO_MODEL (no threshold beats baseline, "
+                f"TestAUC={test_auc:.3f})"
             )
             session_results[session] = {
                 "model_type": "NONE",
                 "reason": "no_positive_threshold",
-                "auc": round(auc, 4),
+                "test_auc": round(test_auc, 4),
+                "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
             }
 
     # --- Summary ---
     n_ml = sum(1 for s in session_results.values() if s["model_type"] == "SESSION")
     n_none = sum(1 for s in session_results.values() if s["model_type"] == "NONE")
-    total_delta = sum(
-        s.get("delta_r", 0) for s in session_results.values()
+    total_val_delta = sum(
+        s.get("val_delta_r", 0) for s in session_results.values()
+        if s["model_type"] == "SESSION"
+    )
+    total_honest_delta = sum(
+        s.get("honest_delta_r", 0) for s in session_results.values()
         if s["model_type"] == "SESSION"
     )
 
-    logger.info(f"\n  SUMMARY: {n_ml} ML sessions, {n_none} NO_MODEL, "
-                f"total delta={total_delta:+.1f}R")
+    logger.info(
+        f"\n  SUMMARY: {n_ml} ML sessions, {n_none} NO_MODEL"
+        f"\n  Val delta (optimized):  {total_val_delta:+.1f}R"
+        f"\n  Honest delta (frozen):  {total_honest_delta:+.1f}R"
+    )
 
     # --- Save bundle ---
     model_path = None
@@ -337,7 +410,6 @@ def train_per_session_meta_label(
         model_path = MODEL_DIR / f"meta_label_{instrument}_hybrid.joblib"
         config_hash = compute_config_hash()
 
-        # Strip model objects for serialization manifest
         bundle = {
             "model_type": "hybrid_per_session",
             "instrument": instrument,
@@ -348,10 +420,12 @@ def train_per_session_meta_label(
                 str(meta_all["trading_day"].min()),
                 str(meta_all["trading_day"].max()),
             ),
+            "split_ratios": "60/20/20",
             "n_total_samples": n_total,
             "n_ml_sessions": n_ml,
             "n_none_sessions": n_none,
-            "total_delta_r": round(total_delta, 2),
+            "total_val_delta_r": round(total_val_delta, 2),
+            "total_honest_delta_r": round(total_honest_delta, 2),
         }
 
         for session, info in session_results.items():
@@ -360,10 +434,13 @@ def train_per_session_meta_label(
                     "model": info["model"],
                     "feature_names": info["feature_names"],
                     "optimal_threshold": info["threshold"],
-                    "auc": info["auc"],
+                    "cpcv_auc": info.get("cpcv_auc"),
+                    "test_auc": info["test_auc"],
                     "n_train": info["n_train"],
+                    "n_val": info["n_val"],
                     "n_test": info["n_test"],
-                    "delta_r": info["delta_r"],
+                    "val_delta_r": info["val_delta_r"],
+                    "honest_delta_r": info["honest_delta_r"],
                     "skip_pct": info["skip_pct"],
                     "leaf_size": info["leaf_size"],
                 }
@@ -384,13 +461,16 @@ def train_per_session_meta_label(
         "n_samples": n_total,
         "n_ml_sessions": n_ml,
         "n_none_sessions": n_none,
-        "total_delta_r": round(total_delta, 2),
+        "total_val_delta_r": round(total_val_delta, 2),
+        "total_honest_delta_r": round(total_honest_delta, 2),
         "sessions": {
             s: {
                 "model_type": info["model_type"],
                 "threshold": info.get("threshold"),
-                "auc": info.get("auc"),
-                "delta_r": info.get("delta_r"),
+                "cpcv_auc": info.get("cpcv_auc"),
+                "test_auc": info.get("test_auc"),
+                "val_delta_r": info.get("val_delta_r"),
+                "honest_delta_r": info.get("honest_delta_r"),
                 "skip_pct": info.get("skip_pct"),
             }
             for s, info in session_results.items()
@@ -407,35 +487,41 @@ def print_per_session_results(results: dict) -> None:
 
     inst = results["instrument"]
     print(f"\n{'=' * 70}")
-    print(f"  HYBRID PER-SESSION RESULTS -- {inst}")
+    print(f"  HYBRID PER-SESSION RESULTS -- {inst} (3-way split: 60/20/20)")
     print(f"{'=' * 70}")
     print(f"  Samples: {results['n_samples']:,d}")
     print(f"  ML sessions: {results['n_ml_sessions']} | "
           f"NO_MODEL sessions: {results['n_none_sessions']}")
-    print(f"  Total delta: {results['total_delta_r']:+.1f}R")
+    print(f"  Val delta (optimized):  {results['total_val_delta_r']:+.1f}R")
+    print(f"  Honest delta (frozen):  {results['total_honest_delta_r']:+.1f}R")
     print()
 
-    print(f"  {'SESSION':<22} {'TYPE':>7} {'THRESH':>7} "
-          f"{'AUC':>6} {'DELTA':>8} {'SKIP%':>7}")
-    print(f"  {'-' * 22} {'-' * 7} {'-' * 7} {'-' * 6} {'-' * 8} {'-' * 7}")
+    print(f"  {'SESSION':<22} {'TYPE':>5} {'THRESH':>6} "
+          f"{'CPCV':>6} {'T_AUC':>6} {'VAL_dR':>7} {'OOS_dR':>7} {'SKIP%':>6}")
+    print(f"  {'-' * 22} {'-' * 5} {'-' * 6} "
+          f"{'-' * 6} {'-' * 6} {'-' * 7} {'-' * 7} {'-' * 6}")
 
     for session in SESSION_CHRONOLOGICAL_ORDER:
         if session not in results["sessions"]:
             continue
         info = results["sessions"][session]
         if info["model_type"] == "SESSION":
-            print(f"  {session:<22} {'ML':>7} {info['threshold']:>7.2f} "
-                  f"{info['auc']:>6.3f} {info['delta_r']:>+8.1f} "
-                  f"{info['skip_pct']:>6.1%}")
+            cpcv_str = f"{info['cpcv_auc']:.3f}" if info.get("cpcv_auc") else "  --"
+            print(
+                f"  {session:<22} {'ML':>5} {info['threshold']:>6.2f} "
+                f"{cpcv_str:>6} {info['test_auc']:>6.3f} "
+                f"{info['val_delta_r']:>+7.1f} {info['honest_delta_r']:>+7.1f} "
+                f"{info['skip_pct']:>5.1%}"
+            )
         else:
-            print(f"  {session:<22} {'NONE':>7} {'--':>7} "
-                  f"{'--':>6} {'--':>8} {'--':>7}")
+            print(f"  {session:<22} {'NONE':>5} {'--':>6} "
+                  f"{'--':>6} {'--':>6} {'--':>7} {'--':>7} {'--':>6}")
 
     # Any sessions not in SESSION_CHRONOLOGICAL_ORDER
     for session, info in sorted(results["sessions"].items()):
         if session not in SESSION_CHRONOLOGICAL_ORDER:
-            print(f"  {session:<22} {'NONE':>7} {'--':>7} "
-                  f"{'--':>6} {'--':>8} {'--':>7}")
+            print(f"  {session:<22} {'NONE':>5} {'--':>6} "
+                  f"{'--':>6} {'--':>6} {'--':>7} {'--':>7} {'--':>6}")
 
     print(f"{'=' * 70}\n")
 
@@ -453,25 +539,19 @@ def train_meta_label(
 
     Steps:
       1. Load feature matrix (all outcomes OR validated-only)
-      2. CPCV validation (45 splits or capped)
-      3. Train final model on 80% time-ordered data
-      4. Threshold optimization on 20% holdout
-      5. Save model + report results
+      2. CPCV validation on training data (45 splits or capped)
+      3. 3-way time split: train (60%) / val (20%) / test (20%)
+      4. Train final model on 60% training data
+      5. Threshold optimization on 20% validation set
+      6. Honest OOS evaluation on 20% test set (frozen)
+      7. Save model + report results
 
     Args:
         validated_only: If True, train only on outcomes matching validated
-            strategy combos with filter_type eligibility applied. Per de Prado:
-            meta-model must train on primary model's triggered signals only.
-            This eliminates population mismatch between training (all outcomes,
-            negative baseline) and deployment (validated strategies, positive baseline).
-
-    BIAS NOTE: The 20% holdout serves double duty — threshold optimization
-    AND OOS evaluation. This means OOS metrics at the selected threshold
-    are slightly optimistic. The CPCV AUC (step 2) is the only fully
-    unbiased performance estimate. See STATISTICAL_HARDENING.md FIX 10.
+            strategy combos with filter_type eligibility applied.
 
     Returns:
-        dict with cpcv_results, threshold_results, model_path
+        dict with cpcv_results, threshold_results, honest_oos, model_path
     """
     mode = "VALIDATED-ONLY" if validated_only else "ALL OUTCOMES"
     logger.info(f"{'=' * 60}")
@@ -490,15 +570,32 @@ def train_meta_label(
 
     logger.info(f"Samples: {len(X):,d} | Features: {X.shape[1]} | Win rate: {y.mean():.1%}")
 
-    # --- CPCV Validation ---
+    # --- 3-way time split: 60% train / 20% val / 20% test ---
+    n_total = len(X)
+    n_train_end = int(n_total * 0.60)
+    n_val_end = int(n_total * 0.80)
+
+    X_train, y_train = X.iloc[:n_train_end], y.iloc[:n_train_end]
+    X_val, y_val = X.iloc[n_train_end:n_val_end], y.iloc[n_train_end:n_val_end]
+    X_test, y_test = X.iloc[n_val_end:], y.iloc[n_val_end:]
+    pnl_val = meta["pnl_r"].iloc[n_train_end:n_val_end].values
+    pnl_test = meta["pnl_r"].iloc[n_val_end:].values
+    meta_test = meta.iloc[n_val_end:].copy()
+
+    logger.info(
+        f"Split: train={n_train_end:,d} / val={n_val_end - n_train_end:,d} / "
+        f"test={n_total - n_val_end:,d}"
+    )
+
+    # --- CPCV Validation (on training data only) ---
     cpcv_results = None
     if run_cpcv:
-        logger.info("Running CPCV validation...")
+        logger.info("Running CPCV validation on training data...")
         cpcv_results = cpcv_score(
             RandomForestClassifier,
             RF_PARAMS,
-            X, y,
-            meta["trading_day"],
+            X_train, y_train,
+            meta["trading_day"].iloc[:n_train_end],
             max_splits=max_cpcv_splits,
         )
         logger.info(f"CPCV AUC: {cpcv_results['auc_mean']:.4f} +/- {cpcv_results['auc_std']:.4f} "
@@ -508,32 +605,36 @@ def train_meta_label(
             logger.warning(f"CPCV AUC {cpcv_results['auc_mean']:.4f} is barely above random. "
                           f"Meta-label may not add value for {instrument}.")
 
-    # --- Train final model (80/20 time split) ---
-    n_train = int(len(X) * 0.8)
-    X_train, y_train = X.iloc[:n_train], y.iloc[:n_train]
-    X_test, y_test = X.iloc[n_train:], y.iloc[n_train:]
-    pnl_test = meta["pnl_r"].iloc[n_train:].values
-    meta_test = meta.iloc[n_train:].copy()
-
-    logger.info(f"Training final model: {n_train:,d} train / {len(X) - n_train:,d} test")
+    # --- Train final model on training data (first 60%) ---
+    logger.info(f"Training final model: {n_train_end:,d} train")
 
     rf = RandomForestClassifier(**RF_PARAMS)
     rf.fit(X_train, y_train)
 
-    y_prob = rf.predict_proba(X_test)[:, 1]
-    oos_auc = roc_auc_score(y_test, y_prob)
-    logger.info(f"Final model OOS AUC: {oos_auc:.4f}")
-
-    # --- Threshold optimization ---
-    logger.info("Optimizing threshold on profit metric...")
-    threshold_results = _optimize_threshold(y_prob, y_test.values, pnl_test)
+    # --- Threshold optimization on VALIDATION set (middle 20%) ---
+    logger.info("Optimizing threshold on validation set...")
+    val_prob = rf.predict_proba(X_val)[:, 1]
+    threshold_results = _optimize_threshold(val_prob, y_val.values, pnl_val)
 
     opt = threshold_results["optimal"]
     base = threshold_results["baseline"]
-    logger.info(f"Baseline: avgR={base['avg_r']:.4f} | Sharpe={base['sharpe']:.3f} | N={base['n']:,d}")
-    logger.info(f"Optimal:  t={opt['threshold']:.2f} | avgR={opt['avg_r']:.4f} | "
+    logger.info(f"Val baseline: avgR={base['avg_r']:.4f} | Sharpe={base['sharpe']:.3f} | N={base['n']:,d}")
+    logger.info(f"Val optimal:  t={opt['threshold']:.2f} | avgR={opt['avg_r']:.4f} | "
                 f"Sharpe={opt['sharpe']:.3f} | skip={opt['skip_pct']:.1%} | N={opt['n_kept']:,d}")
-    logger.info(f"Improvement: avgR +{opt['avg_r_improvement']:.4f} | Sharpe +{opt['sharpe_improvement']:.3f}")
+
+    # --- Honest OOS evaluation on TEST set (final 20%) ---
+    test_prob = rf.predict_proba(X_test)[:, 1]
+    test_auc = roc_auc_score(y_test, test_prob)
+
+    # Apply val-optimized threshold to frozen test set
+    test_kept = test_prob >= opt["threshold"]
+    test_base_r = float(pnl_test.sum())
+    test_filt_r = float(pnl_test[test_kept].sum()) if test_kept.sum() > 0 else 0.0
+    test_delta_r = test_filt_r - test_base_r
+    test_skip_pct = 1 - test_kept.sum() / len(pnl_test) if len(pnl_test) > 0 else 0.0
+
+    logger.info(f"Honest OOS: AUC={test_auc:.4f} | BaseR={test_base_r:+.1f} | "
+                f"Delta={test_delta_r:+.1f} | Skip={test_skip_pct:.1%}")
 
     # --- Save model ---
     model_path = None
@@ -546,10 +647,12 @@ def train_meta_label(
             "model": rf,
             "feature_names": list(X.columns),
             "instrument": instrument,
-            "n_train": n_train,
-            "oos_auc": oos_auc,
+            "n_train": n_train_end,
+            "split_ratios": "60/20/20",
+            "oos_auc": test_auc,
             "optimal_threshold": opt["threshold"],
             "cpcv_auc": cpcv_results["auc_mean"] if cpcv_results else None,
+            "honest_delta_r": round(test_delta_r, 2),
             "trained_at": datetime.now(timezone.utc).isoformat(),
             "data_date_range": (
                 str(meta["trading_day"].min()),
@@ -557,12 +660,12 @@ def train_meta_label(
             ),
             "config_hash": config_hash,
             "validated_only": validated_only,
-            "n_total_samples": len(X),
+            "n_total_samples": n_total,
         }, model_path)
         logger.info(f"Model saved: {model_path}")
 
-    # --- Per-session breakdown ---
-    meta_test["y_prob"] = y_prob
+    # --- Per-session breakdown (on honest test set) ---
+    meta_test["y_prob"] = test_prob
     meta_test["y_true"] = y_test.values
     meta_test["pnl_r"] = pnl_test
 
@@ -594,9 +697,10 @@ def train_meta_label(
     return {
         "status": "trained",
         "instrument": instrument,
-        "n_samples": len(X),
+        "n_samples": n_total,
         "n_features": X.shape[1],
-        "oos_auc": oos_auc,
+        "oos_auc": test_auc,
+        "honest_delta_r": round(test_delta_r, 2),
         "cpcv": cpcv_results,
         "threshold": threshold_results,
         "session_breakdown": session_breakdown,
@@ -612,7 +716,7 @@ def print_results(results: dict) -> None:
 
     inst = results["instrument"]
     print(f"\n{'=' * 70}")
-    print(f"  META-LABEL RESULTS — {inst}")
+    print(f"  META-LABEL RESULTS — {inst} (3-way split: 60/20/20)")
     print(f"{'=' * 70}")
 
     # Summary
@@ -621,11 +725,13 @@ def print_results(results: dict) -> None:
     print(f"  Samples: {results['n_samples']:,d} | Features: {results['n_features']}")
     if results["cpcv"]:
         c = results["cpcv"]
-        print(f"  CPCV AUC: {c['auc_mean']:.4f} +/- {c['auc_std']:.4f} ({c['n_splits']} splits)")
-    print(f"  OOS AUC:  {results['oos_auc']:.4f}")
+        print(f"  CPCV AUC (train): {c['auc_mean']:.4f} +/- {c['auc_std']:.4f} ({c['n_splits']} splits)")
+    print(f"  Honest OOS AUC:   {results['oos_auc']:.4f}")
+    print(f"  Honest OOS delta: {results['honest_delta_r']:+.1f}R")
     print()
 
-    # Before/After
+    # Before/After (validation set — used for threshold optimization)
+    print("  VALIDATION SET (threshold optimization):")
     print(f"  {'METRIC':<20} {'BASELINE':>12} {'FILTERED':>12} {'CHANGE':>12}")
     print(f"  {'-' * 20} {'-' * 12} {'-' * 12} {'-' * 12}")
     print(f"  {'Trades':<20} {base['n']:>12,d} {opt['n_kept']:>12,d} {opt['n_kept'] - base['n']:>+12,d}")
@@ -636,8 +742,9 @@ def print_results(results: dict) -> None:
     print(f"  {'Threshold':<20} {'':>12} {opt['threshold']:>12.2f}")
     print()
 
-    # Per-session breakdown
+    # Per-session breakdown (honest test set)
     if results["session_breakdown"]:
+        print("  HONEST OOS (test set — never touched by optimization):")
         print(f"  {'SESSION':<20} {'N':>6} {'KEPT':>6} {'SKIP%':>7} {'BASE':>8} {'FILT':>8} {'LIFT':>8}")
         print(f"  {'-' * 20} {'-' * 6} {'-' * 6} {'-' * 7} {'-' * 8} {'-' * 8} {'-' * 8}")
         for s in sorted(results["session_breakdown"], key=lambda x: -x["lift"]):
