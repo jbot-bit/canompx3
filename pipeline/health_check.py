@@ -154,6 +154,33 @@ def check_git_hooks() -> tuple[bool, str]:
     except Exception:
         return False, "Git hooks: cannot read git config"
 
+def check_m25_audit() -> tuple[bool, str]:
+    """Run M2.5 second-opinion audit on recently changed files.
+
+    Advisory only — never fails the health check. Skips silently
+    if MINIMAX_API_KEY is not set.
+    """
+    import os
+    from dotenv import load_dotenv
+    load_dotenv()
+    if not os.environ.get("MINIMAX_API_KEY"):
+        return True, "M2.5 audit: skipped (no MINIMAX_API_KEY)"
+    try:
+        proc = subprocess.run(
+            [sys.executable, "scripts/tools/m25_auto_audit.py",
+             "--since", "HEAD~1", "--quick", "--advisory"],
+            capture_output=True, text=True, timeout=300,
+            cwd=str(PROJECT_ROOT),
+        )
+        # Parse output for summary line
+        for line in reversed(proc.stdout.splitlines()):
+            if "M2.5" in line:
+                return True, line.strip()
+        return True, "M2.5 audit: completed"
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+        return True, f"M2.5 audit: {type(e).__name__} (skipped)"
+
+
 def main():
     print("=" * 50)
     print("PIPELINE HEALTH CHECK")
@@ -168,6 +195,7 @@ def main():
         check_integrity,
         check_tests,
         check_git_hooks,
+        check_m25_audit,
     ]
 
     all_ok = True

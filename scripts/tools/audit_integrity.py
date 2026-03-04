@@ -108,24 +108,8 @@ def check_e0_cb2_contamination(con) -> list[str]:
     return violations
 
 
-def check_daily_features_multiplicity(con) -> list[str]:
-    """7. daily_features row counts (informational — no violations)."""
-    return []  # Informational only
-
-
-def check_outcome_counts(con) -> list[str]:
-    """8. Outcome counts by aperture (informational — no violations)."""
-    return []  # Informational only
-
-
-def check_validated_by_orb_minutes(con) -> list[str]:
-    """9. Validated strategies by orb_minutes (informational — no violations)."""
-    return []  # Informational only
-
-
-def check_experimental_by_orb_minutes(con) -> list[str]:
-    """10. Experimental strategies by orb_minutes (informational — no violations)."""
-    return []  # Informational only
+# Checks 7-10 were removed — they always returned [] (informational only).
+# Their data is displayed via _print_informational() below.
 
 
 def check_dead_instrument_contamination(con) -> list[str]:
@@ -154,14 +138,8 @@ def check_duplicate_strategy_ids(con) -> list[str]:
     return violations
 
 
-def check_outcome_date_ranges(con) -> list[str]:
-    """13. Outcome date ranges (informational — no violations)."""
-    return []  # Informational only
-
-
-def check_fdr_breakdown(con) -> list[str]:
-    """14. FDR breakdown (informational — no violations)."""
-    return []  # Informational only
+# Checks 13-14 were removed — they always returned [] (informational only).
+# Their data is displayed via _print_informational() below.
 
 
 def check_win_rate_sanity(con) -> list[str]:
@@ -192,9 +170,8 @@ def check_negative_expectancy(con) -> list[str]:
     return violations
 
 
-def check_table_row_counts(con) -> list[str]:
-    """17. Table row counts (informational — no violations)."""
-    return []  # Informational only
+# Check 17 was removed — it always returned [] (informational only).
+# Its data is displayed via _print_informational() below.
 
 
 # ── Ordered check registry ────────────────────────────────────────────
@@ -205,17 +182,13 @@ CHECKS = [
     ("4. E0 contamination", check_e0_contamination),
     ("5. Old session name check", check_old_session_names),
     ("6. E0 CB2+ contamination", check_e0_cb2_contamination),
-    ("7. Daily_features row counts", check_daily_features_multiplicity),
-    ("8. Outcomes by orb_minutes", check_outcome_counts),
-    ("9. Validated by orb_minutes", check_validated_by_orb_minutes),
-    ("10. Experimental by orb_minutes", check_experimental_by_orb_minutes),
+    # 7-10 removed: informational only (always returned []). Data in _print_informational().
     ("11. Dead instrument check", check_dead_instrument_contamination),
     ("12. Duplicate strategy IDs", check_duplicate_strategy_ids),
-    ("13. Outcome date ranges", check_outcome_date_ranges),
-    ("14. FDR breakdown", check_fdr_breakdown),
+    # 13-14 removed: informational only (always returned []). Data in _print_informational().
     ("15. Win rate sanity", check_win_rate_sanity),
     ("16. Negative expectancy check", check_negative_expectancy),
-    ("17. Table row counts", check_table_row_counts),
+    # 17 removed: informational only (always returned []). Data in _print_informational().
 ]
 
 

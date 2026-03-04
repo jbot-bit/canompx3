@@ -1228,9 +1228,8 @@ def check_validated_filters_registered() -> list[str]:
                 violations.append(
                     f"  filter_type '{ft}' in validated_setups but NOT in ALL_FILTERS"
                 )
-    except Exception:
-        # DB may not exist in CI — skip gracefully
-        pass
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_validated_filters_registered: {type(e).__name__}: {e}")
 
     return violations
 
@@ -1310,8 +1309,8 @@ def check_no_e0_in_db() -> list[str]:
                     )
         finally:
             con.close()
-    except Exception:
-        pass  # DB may not exist in CI
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_no_e0_in_db: {type(e).__name__}: {e}")
     return violations
 
 
@@ -1358,8 +1357,9 @@ def check_doc_stats_consistency() -> list[str]:
             tier_counts = {r[0]: r[1] for r in tier_rows}
         finally:
             con.close()
-    except Exception:
-        return violations  # DB may not exist in CI
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_doc_stats_consistency: {type(e).__name__}: {e}")
+        return violations
 
     # Count drift checks from the CHECKS registry (single source of truth)
     drift_check_count = len(CHECKS)
@@ -1408,31 +1408,31 @@ def check_doc_stats_consistency() -> list[str]:
 
 
 def check_stale_scratch_db() -> list[str]:
-    """Check #37: Scratch DB must not be older than canonical gold.db.
+    """Check #37: Canonical gold.db must exist at project root.
 
-    C:/db/gold.db is an optional scratch copy used for long-running jobs.
-    If it exists and is older than the canonical gold.db, someone forgot
-    to copy back or clean up — running against it risks time-alignment
-    errors and silent data corruption.
+    Canonical DB is <project>/gold.db (via pipeline.paths.GOLD_DB_PATH).
+    C:/db/gold.db is scratch only — used by research scripts for isolation.
+    If both exist, warn about the scratch copy being potentially stale.
     """
     violations = []
-    scratch = Path("C:/db/gold.db")
-    if not scratch.exists():
-        return violations  # No scratch DB — nothing to check
-    canonical = PROJECT_ROOT / "gold.db"
-    if not canonical.exists():
-        return violations
-    scratch_mtime = scratch.stat().st_mtime
-    canonical_mtime = canonical.stat().st_mtime
-    if scratch_mtime < canonical_mtime:
-        from datetime import datetime
-        scratch_age = datetime.fromtimestamp(scratch_mtime).strftime("%Y-%m-%d %H:%M")
-        canon_age = datetime.fromtimestamp(canonical_mtime).strftime("%Y-%m-%d %H:%M")
+    project_root_db = PROJECT_ROOT / "gold.db"
+    if not project_root_db.exists():
         violations.append(
-            f"  C:/db/gold.db is STALE (modified {scratch_age}, "
-            f"canonical gold.db modified {canon_age}). "
-            f"Delete it or copy canonical gold.db over it."
+            f"  Canonical DB not found at project root ({project_root_db}). "
+            f"Run pipeline to create it."
         )
+        return violations
+    scratch_db = Path("C:/db/gold.db")
+    if scratch_db.exists():
+        # Scratch copy exists — warn if it's older than canonical
+        root_mtime = project_root_db.stat().st_mtime
+        scratch_mtime = scratch_db.stat().st_mtime
+        if scratch_mtime < root_mtime:
+            delta_hours = (root_mtime - scratch_mtime) / 3600
+            violations.append(
+                f"  Scratch DB C:/db/gold.db is {delta_hours:.0f}h older than "
+                f"canonical — copy from project root if using for research"
+            )
     return violations
 
 
@@ -1706,8 +1706,8 @@ def check_no_active_e3() -> list[str]:
                 )
         finally:
             con.close()
-    except Exception:
-        pass  # DB may not exist in CI
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_no_active_e3: {type(e).__name__}: {e}")
     return violations
 
 
@@ -1748,8 +1748,8 @@ def check_wf_coverage() -> list[str]:
                     )
         finally:
             con.close()
-    except Exception:
-        pass  # DB may not exist in CI
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_wf_coverage: {type(e).__name__}: {e}")
 
     # Print warnings but never block — this is a soft gate
     if warnings:
@@ -1794,8 +1794,8 @@ def check_data_years_disclosure() -> list[str]:
                 )
         finally:
             con.close()
-    except Exception:
-        pass
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_data_years_disclosure: {type(e).__name__}: {e}")
 
     if warnings:
         for w in warnings:
@@ -1865,8 +1865,8 @@ def check_uncovered_fdr_strategies() -> list[str]:
         if warnings:
             for w in warnings:
                 print(f"  WARNING (non-blocking): {w}")
-    except Exception:
-        pass  # DB or import may not be available in CI
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_uncovered_fdr_strategies: {type(e).__name__}: {e}")
     return []  # Always pass — advisory only
 
 
@@ -1993,8 +1993,8 @@ def check_orphaned_validated_strategies() -> list[str]:
                 )
         finally:
             con.close()
-    except Exception:
-        pass  # DB may not exist in CI
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_orb_outcomes_coverage: {type(e).__name__}: {e}")
     return violations
 
 
@@ -2091,12 +2091,12 @@ def check_trading_rules_authority() -> list[str]:
         if list(RR_TARGETS) != expected_rr:
             violations.append(f"  RR_TARGETS = {list(RR_TARGETS)}, expected {expected_rr}")
 
-        # 4. Tradeable instruments
-        expected_inst = ["MGC", "MNQ", "MES", "M2K"]
-        if sorted(TRADEABLE_INSTRUMENTS) != sorted(expected_inst):
+        # 4. Tradeable instruments — canonical source is ACTIVE_ORB_INSTRUMENTS
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+        if sorted(TRADEABLE_INSTRUMENTS) != sorted(ACTIVE_ORB_INSTRUMENTS):
             violations.append(
                 f"  TRADEABLE_INSTRUMENTS = {sorted(TRADEABLE_INSTRUMENTS)}, "
-                f"expected {sorted(expected_inst)}"
+                f"expected {sorted(ACTIVE_ORB_INSTRUMENTS)} (from ACTIVE_ORB_INSTRUMENTS)"
             )
 
         # 5. E2 slippage ticks
@@ -2269,8 +2269,8 @@ def check_audit_columns_populated() -> list[str]:
                     )
         finally:
             con.close()
-    except Exception:
-        pass  # DB may not exist in CI
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_experimental_strategies_audit: {type(e).__name__}: {e}")
     return violations
 
 
@@ -2354,118 +2354,377 @@ def check_ml_model_freshness() -> list[str]:
 
 
 # =============================================================================
+# Check 54+: New checks added by deep audit (Mar 2026)
+# =============================================================================
+
+
+def check_live_config_spec_validity() -> list[str]:
+    """Validate that every LiveStrategySpec references real sessions, entry models,
+    filter types, and valid tiers. A misspelled orb_label silently produces
+    an empty portfolio with zero error."""
+    violations = []
+    root_str = str(PROJECT_ROOT)
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
+    try:
+        from trading_app.live_config import LIVE_PORTFOLIO
+        from trading_app.config import ALL_FILTERS, ENTRY_MODELS
+        from pipeline.dst import SESSION_CATALOG
+
+        valid_sessions = {
+            k for k, v in SESSION_CATALOG.items() if v.get("type") == "dynamic"
+        }
+        valid_entry_models = set(ENTRY_MODELS)
+        valid_filters = set(ALL_FILTERS.keys()) | {"NO_FILTER"}
+        valid_tiers = {"core", "regime", "hot"}
+
+        for spec in LIVE_PORTFOLIO:
+            if spec.orb_label not in valid_sessions:
+                violations.append(
+                    f"  LiveStrategySpec '{spec.family_id}': orb_label '{spec.orb_label}' "
+                    f"not in SESSION_CATALOG"
+                )
+            if spec.entry_model not in valid_entry_models:
+                violations.append(
+                    f"  LiveStrategySpec '{spec.family_id}': entry_model '{spec.entry_model}' "
+                    f"not in ENTRY_MODELS"
+                )
+            if spec.filter_type and spec.filter_type not in valid_filters:
+                # filter_type can be composite — check base name
+                base = spec.filter_type.split("_O")[0]  # strip aperture suffix
+                if base not in valid_filters:
+                    violations.append(
+                        f"  LiveStrategySpec '{spec.family_id}': filter_type '{spec.filter_type}' "
+                        f"not in ALL_FILTERS"
+                    )
+            if spec.tier not in valid_tiers:
+                violations.append(
+                    f"  LiveStrategySpec '{spec.family_id}': tier '{spec.tier}' "
+                    f"not in {valid_tiers}"
+                )
+    except ImportError as e:
+        violations.append(f"  Cannot import live_config: {e}")
+    return violations
+
+
+def check_cost_model_field_ranges() -> list[str]:
+    """Validate cost model fields are within sane ranges.
+
+    A typo like slippage=20.0 instead of 2.0 would silently make
+    every strategy look unprofitable. No check previously guarded this.
+    """
+    violations = []
+    root_str = str(PROJECT_ROOT)
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
+    try:
+        from pipeline.cost_model import COST_SPECS, SESSION_SLIPPAGE_MULT
+
+        for inst, spec in COST_SPECS.items():
+            # Commission: $0.50 - $10.00 per RT is the sane range for micro futures
+            if not (0.50 <= spec.commission_rt <= 10.0):
+                violations.append(
+                    f"  {inst}: commission_rt={spec.commission_rt} outside [0.50, 10.00]"
+                )
+            # Spread (doubled): $0.50 - $20.00
+            if not (0.50 <= spec.spread_doubled <= 20.0):
+                violations.append(
+                    f"  {inst}: spread_doubled={spec.spread_doubled} outside [0.50, 20.00]"
+                )
+            # Slippage: $0.50 - $20.00
+            if not (0.50 <= spec.slippage <= 20.0):
+                violations.append(
+                    f"  {inst}: slippage={spec.slippage} outside [0.50, 20.00]"
+                )
+            # Total friction: $2.00 - $50.00 for micro futures
+            if not (2.0 <= spec.total_friction <= 50.0):
+                violations.append(
+                    f"  {inst}: total_friction={spec.total_friction} outside [2.00, 50.00]"
+                )
+
+        # Session slippage multipliers: must be in [0.5, 3.0]
+        for inst, sessions in SESSION_SLIPPAGE_MULT.items():
+            for session, mult in sessions.items():
+                if not (0.5 <= mult <= 3.0):
+                    violations.append(
+                        f"  SESSION_SLIPPAGE_MULT[{inst}][{session}]={mult} "
+                        f"outside [0.5, 3.0]"
+                    )
+    except ImportError as e:
+        violations.append(f"  Cannot import cost_model: {e}")
+    return violations
+
+
+def check_session_resolver_sanity() -> list[str]:
+    """Call every session resolver for a winter and summer date and verify
+    the output is a valid (hour, minute) tuple. A broken resolver would
+    crash the pipeline at runtime with no pre-commit detection."""
+    violations = []
+    root_str = str(PROJECT_ROOT)
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
+    try:
+        from datetime import date as dt_date
+        from pipeline.dst import SESSION_CATALOG
+
+        test_dates = [dt_date(2025, 1, 15), dt_date(2025, 7, 15),
+                      dt_date(2025, 3, 9), dt_date(2025, 11, 2)]  # + DST transition days
+
+        for label, entry in SESSION_CATALOG.items():
+            if entry.get("type") != "dynamic":
+                continue
+            resolver = entry.get("resolver")
+            if resolver is None:
+                violations.append(f"  {label}: type=dynamic but no resolver function")
+                continue
+            for td in test_dates:
+                try:
+                    result = resolver(td)
+                    if not isinstance(result, tuple) or len(result) != 2:
+                        violations.append(
+                            f"  {label}: resolver({td}) returned {result}, expected (hour, minute)"
+                        )
+                        continue
+                    h, m = result
+                    if not (0 <= h <= 23 and 0 <= m <= 59):
+                        violations.append(
+                            f"  {label}: resolver({td}) returned ({h}, {m}) — invalid time"
+                        )
+                except Exception as e:
+                    violations.append(
+                        f"  {label}: resolver({td}) raised {type(e).__name__}: {e}"
+                    )
+    except ImportError as e:
+        violations.append(f"  Cannot import dst: {e}")
+    return violations
+
+
+def check_daily_features_row_integrity() -> list[str]:
+    """Verify daily_features has exactly 3 rows per (trading_day, symbol).
+
+    A partial rebuild can leave days with 1 or 2 rows instead of 3 (for
+    the three ORB apertures: 5, 15, 30 minutes). This causes strategy
+    discovery to silently compute on wrong N.
+    """
+    violations = []
+    try:
+        import duckdb
+
+        db_path = GOLD_DB_PATH_FOR_CHECKS
+        if db_path is None:
+            from pipeline.paths import GOLD_DB_PATH
+            db_path = GOLD_DB_PATH
+        if not Path(db_path).exists():
+            return violations
+        con = duckdb.connect(str(db_path), read_only=True)
+        try:
+            # Find (trading_day, symbol) pairs with != 3 rows
+            bad = con.execute("""
+                SELECT symbol, COUNT(*) as n_bad_days
+                FROM (
+                    SELECT trading_day, symbol, COUNT(*) as row_count
+                    FROM daily_features
+                    GROUP BY trading_day, symbol
+                    HAVING COUNT(*) != 3
+                )
+                GROUP BY symbol
+            """).fetchall()
+            for symbol, n_bad in bad:
+                violations.append(
+                    f"  {symbol}: {n_bad} trading day(s) with != 3 rows in daily_features"
+                )
+        finally:
+            con.close()
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_daily_features_row_integrity: {type(e).__name__}: {e}")
+    return violations
+
+
+def check_data_continuity() -> list[str]:
+    """Check #58: Warn on unexpected gaps in trading days per instrument.
+
+    Queries daily_features for each active instrument and flags gaps > 7
+    calendar days (~5 business days). Normal market closures (weekends,
+    holidays) produce 2-4 day gaps; longer gaps may indicate missing data
+    or incomplete ingestion.
+
+    Advisory only — market closures are legitimate.
+    """
+    warnings = []
+    try:
+        import duckdb
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+
+        db_path = GOLD_DB_PATH_FOR_CHECKS
+        if db_path is None:
+            from pipeline.paths import GOLD_DB_PATH
+            db_path = GOLD_DB_PATH
+        if not Path(db_path).exists():
+            return []
+        con = duckdb.connect(str(db_path), read_only=True)
+        try:
+            for inst in sorted(ACTIVE_ORB_INSTRUMENTS):
+                rows = con.execute("""
+                    WITH days AS (
+                        SELECT DISTINCT trading_day
+                        FROM daily_features
+                        WHERE symbol = ?
+                    ),
+                    gaps AS (
+                        SELECT trading_day,
+                               LEAD(trading_day) OVER (ORDER BY trading_day) as next_day
+                        FROM days
+                    )
+                    SELECT trading_day, next_day,
+                           next_day - trading_day as gap_days
+                    FROM gaps
+                    WHERE next_day IS NOT NULL
+                    AND next_day - trading_day > 7
+                    ORDER BY gap_days DESC
+                """, [inst]).fetchall()
+
+                for start_day, end_day, gap in rows:
+                    warnings.append(
+                        f"  {inst}: {gap}-day gap from {start_day} to {end_day}"
+                    )
+        finally:
+            con.close()
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_data_continuity: {type(e).__name__}: {e}")
+
+    if warnings:
+        for w in warnings:
+            print(f"  WARNING (non-blocking): {w.strip()}")
+    return []  # Always pass — advisory only
+
+
+# =============================================================================
 # CHECK REGISTRY — single source of truth for all drift checks
 # =============================================================================
-# Each entry: (description, callable returning list[str] violations).
+# Each entry: (description, callable, is_advisory).
+# is_advisory=True → prints warnings but never blocks (shown as ADVISORY).
 # Check number is derived from position (1-indexed).
 
+# Tuple format: (description, callable, is_advisory, requires_db)
+# requires_db=True means check can return "SKIPPED" if DB unavailable
 CHECKS = [
     ("Hardcoded 'MGC' SQL literals in generic pipeline code",
-     lambda: check_hardcoded_mgc_sql(GENERIC_FILES)),
+     lambda: check_hardcoded_mgc_sql(GENERIC_FILES), False, False),
     (".apply() / .iterrows() in ingest scripts",
-     lambda: check_apply_iterrows(INGEST_FILES)),
+     lambda: check_apply_iterrows(INGEST_FILES), False, False),
     ("Non-bars_1m writes in ingest scripts",
-     lambda: check_non_bars1m_writes(INGEST_WRITE_FILES)),
+     lambda: check_non_bars1m_writes(INGEST_WRITE_FILES), False, False),
     ("Schema-query table name consistency",
-     lambda: check_schema_query_consistency(PIPELINE_DIR)),
+     lambda: check_schema_query_consistency(PIPELINE_DIR), False, False),
     ("Import cycle prevention",
-     lambda: check_import_cycles(PIPELINE_DIR)),
+     lambda: check_import_cycles(PIPELINE_DIR), False, False),
     ("Hardcoded absolute paths",
-     lambda: check_hardcoded_paths(PIPELINE_DIR)),
+     lambda: check_hardcoded_paths(PIPELINE_DIR), False, False),
     ("Connection leak detection",
-     lambda: check_connection_leaks(PIPELINE_DIR)),
+     lambda: check_connection_leaks(PIPELINE_DIR), False, False),
     ("Dashboard read-only enforcement",
-     lambda: check_dashboard_readonly(PIPELINE_DIR)),
+     lambda: check_dashboard_readonly(PIPELINE_DIR), False, False),
     ("Pipeline never imports trading_app (one-way dependency)",
-     lambda: check_pipeline_never_imports_trading_app(PIPELINE_DIR)),
+     lambda: check_pipeline_never_imports_trading_app(PIPELINE_DIR), False, False),
     ("Trading app connection leak detection",
-     lambda: check_trading_app_connection_leaks(TRADING_APP_DIR)),
+     lambda: check_trading_app_connection_leaks(TRADING_APP_DIR), False, False),
     ("Trading app hardcoded paths",
-     lambda: check_trading_app_hardcoded_paths(TRADING_APP_DIR)),
+     lambda: check_trading_app_hardcoded_paths(TRADING_APP_DIR), False, False),
     ("Config filter_type sync",
-     check_config_filter_sync),
+     check_config_filter_sync, False, False),
     ("ENTRY_MODELS sync",
-     check_entry_models_sync),
+     check_entry_models_sync, False, False),
     ("Entry price sanity",
-     check_entry_price_sanity),
+     check_entry_price_sanity, False, False),
     ("Nested subpackage isolation",
-     check_nested_isolation),
+     check_nested_isolation, False, False),
     ("All imports resolve",
-     check_all_imports_resolve),
+     check_all_imports_resolve, False, False),
     ("Nested production table write guard",
-     check_nested_production_writes),
+     check_nested_production_writes, False, False),
     ("Trading app schema-query consistency",
-     lambda: check_schema_query_consistency_trading_app(TRADING_APP_DIR)),
+     lambda: check_schema_query_consistency_trading_app(TRADING_APP_DIR), False, False),
     ("Timezone hygiene",
-     check_timezone_hygiene),
+     check_timezone_hygiene, False, False),
     ("MarketState read-only SQL guard",
-     check_market_state_readonly),
+     check_market_state_readonly, False, False),
     ("Analytical honesty guard (sharpe_ann)",
-     check_sharpe_ann_presence),
+     check_sharpe_ann_presence, False, False),
     ("Ingest authority notice (ingest_dbn_mgc.py deprecation)",
-     check_ingest_authority_notice),
+     check_ingest_authority_notice, False, False),
     ("CLAUDE.md size cap",
-     check_claude_md_size_cap),
+     check_claude_md_size_cap, False, False),
     ("Validation gate existence",
-     check_validation_gate_existence),
+     check_validation_gate_existence, False, False),
     ("Naive datetime detection",
-     check_naive_datetime),
+     check_naive_datetime, False, False),
     ("DST session coverage (all sessions classified)",
-     check_dst_session_coverage),
+     check_dst_session_coverage, False, False),
     ("DB config usage (configure_connection after connect)",
-     check_db_config_usage),
+     check_db_config_usage, False, False),
     ("Discovery scripts use get_filters_for_grid (not ALL_FILTERS)",
-     check_discovery_session_aware_filters),
+     check_discovery_session_aware_filters, False, False),
     ("All validated filter_types registered in ALL_FILTERS",
-     check_validated_filters_registered),
+     check_validated_filters_registered, False, True),  # requires_db
     ("E2+E3 restricted to CB1 (no CB2+ for stop-market/retrace)",
-     check_e2_e3_cb1_only),
+     check_e2_e3_cb1_only, False, False),
     ("Non-5m strategy IDs include _O{minutes} suffix",
-     check_orb_minutes_in_strategy_id),
+     check_orb_minutes_in_strategy_id, False, False),
     ("ORB_LABELS matches SESSION_CATALOG dynamic entries",
-     check_orb_labels_session_catalog_sync),
+     check_orb_labels_session_catalog_sync, False, False),
     ("No old fixed-clock session names in Python source",
-     check_stale_session_names_in_code),
+     check_stale_session_names_in_code, False, False),
     ("sql_adapter VALID_* sets match outcome_builder grids",
-     check_sql_adapter_validation_sync),
+     check_sql_adapter_validation_sync, False, False),
     ("No E0 rows in trading tables",
-     check_no_e0_in_db),
+     check_no_e0_in_db, False, True),  # requires_db
     ("Doc stats match DB ground truth",
-     check_doc_stats_consistency),
-    ("No stale scratch DB at C:/db/gold.db",
-     check_stale_scratch_db),
+     check_doc_stats_consistency, False, True),  # requires_db
+    ("No duplicate gold.db at project root",
+     check_stale_scratch_db, False, False),
     ("No old session names in active code",
-     check_old_session_names),
+     check_old_session_names, False, False),
     ("No active E3 strategies (soft-retired Feb 2026)",
-     check_no_active_e3),
-    ("WF coverage for MGC/MES (soft gate, SKIPPED warning)",
-     check_wf_coverage),
-    ("Data years disclosure (years_tested < 7 warning)",
-     check_data_years_disclosure),
+     check_no_active_e3, False, True),  # requires_db
+    ("WF coverage for MGC/MES (soft gate)",
+     check_wf_coverage, True, True),  # ADVISORY, requires_db
+    ("Data years disclosure (years_tested < 7)",
+     check_data_years_disclosure, True, False),  # ADVISORY only
     ("Orphaned validated strategies (no outcome data for aperture)",
-     check_orphaned_validated_strategies),
+     check_orphaned_validated_strategies, False, True),  # requires_db
     ("Uncovered FDR+WF strategies (FDR-validated but no live_config spec)",
-     check_uncovered_fdr_strategies),
+     check_uncovered_fdr_strategies, True, True),  # ADVISORY, requires_db
     ("Variant selection ORDER BY must use expectancy_r (not sharpe_ratio)",
-     check_variant_selection_metric),
+     check_variant_selection_metric, False, False),
     ("Research-derived config values need @entry-models provenance",
-     check_research_provenance_annotations),
+     check_research_provenance_annotations, False, False),
     ("Cost model completeness (COST_SPECS covers all active instruments)",
-     check_cost_model_completeness),
+     check_cost_model_completeness, False, False),
     ("TRADING_RULES.md authority values match code",
-     check_trading_rules_authority),
+     check_trading_rules_authority, False, False),
     ("ML config canonical sources (instruments, sessions, no blacklist overlap)",
-     check_ml_config_canonical_sources),
+     check_ml_config_canonical_sources, False, False),
     ("ML lookahead blacklist includes all outcome targets",
-     check_ml_lookahead_blacklist),
+     check_ml_lookahead_blacklist, False, False),
     ("Audit columns populated (n_trials, fst_hurdle, DSR)",
-     check_audit_columns_populated),
+     check_audit_columns_populated, False, True),  # requires_db
     ("ML model files exist for all active instruments",
-     check_ml_model_files_exist),
+     check_ml_model_files_exist, False, False),
     ("ML model config hashes match current config",
-     check_ml_config_hash_match),
+     check_ml_config_hash_match, False, False),
     ("ML model freshness < 90 days",
-     check_ml_model_freshness),
+     check_ml_model_freshness, False, False),
+    # ── New checks from deep audit (Mar 2026) ──────────────────────────
+    ("Live config spec validity (orb_label, entry_model, filter, tier)",
+     check_live_config_spec_validity, False, False),
+    ("Cost model field ranges (commission, spread, slippage, multipliers)",
+     check_cost_model_field_ranges, False, False),
+    ("Session resolver sanity (valid hour/minute, incl. DST transition days)",
+     check_session_resolver_sanity, False, False),
+    ("Daily features row integrity (exactly 3 rows per trading_day × symbol)",
+     check_daily_features_row_integrity, False, True),  # requires_db
+    ("Data continuity (gaps > 7 calendar days in trading days per instrument)",
+     check_data_continuity, True, True),  # ADVISORY, requires_db
 ]
 
 
@@ -2476,28 +2735,59 @@ def main():
     print()
 
     all_violations = []
+    advisory_count = 0
+    blocking_count = 0
+    skip_count = 0
 
-    for i, (label, check_fn) in enumerate(CHECKS, 1):
+    for i, (label, check_fn, is_advisory, requires_db) in enumerate(CHECKS, 1):
         print(f"Check {i}: {label}...")
-        v = check_fn()
-        if v:
+
+        # DB-dependent checks can be skipped if DB unavailable
+        if requires_db:
+            try:
+                v = check_fn()
+            except (OSError, ImportError) as e:
+                skip_count += 1
+                print(f"  SKIPPED (DB unavailable): {type(e).__name__}")
+                print()
+                continue
+            except Exception as e:
+                v = [f"  EXCEPTION: {type(e).__name__}: {e}"]
+        else:
+            v = check_fn()
+
+        if is_advisory:
+            advisory_count += 1
+            # Advisory checks print their own warnings; show ADVISORY tag
+            print("  ADVISORY (non-blocking)")
+        elif v:
             print("  FAILED:")
             for line in v:
                 print(line)
             all_violations.extend(v)
         else:
+            blocking_count += 1
             print("  PASSED [OK]")
         print()
 
-    # Summary — len(CHECKS) is the single source of truth for check count
-    total_checks = len(CHECKS)
+    # Summary — blocking_count tracks actual passes (not computed from total)
     print("=" * 60)
+    summary_line = (
+        f"{blocking_count} checks passed [OK], "
+        f"{skip_count} skipped (DB unavailable), "
+        f"{advisory_count} advisory"
+    )
     if all_violations:
-        print(f"DRIFT DETECTED: {len(all_violations)} violation(s) across {total_checks} checks")
+        print(
+            f"DRIFT DETECTED: {len(all_violations)} violation(s) across "
+            f"{summary_line}"
+        )
         print("=" * 60)
         sys.exit(1)
     else:
-        print(f"NO DRIFT DETECTED: All {total_checks} checks passed [OK]")
+        print(
+            f"NO DRIFT DETECTED: {summary_line}"
+        )
         print("=" * 60)
         sys.exit(0)
 

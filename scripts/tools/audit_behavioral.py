@@ -124,13 +124,21 @@ def check_hardcoded_instrument_lists() -> list[str]:
 # ── Check 3: Broad except returning success ──────────────────────────
 
 BROAD_EXCEPT_PATTERN = re.compile(r'except\s+(?:Exception|BaseException)\b')
-SUCCESS_RETURN_PATTERN = re.compile(r'return\s+(?:True|0|None)\b')
+# Only True/0 are "success" returns — None is "unknown/couldn't compute" (not success masking)
+SUCCESS_RETURN_PATTERN = re.compile(r'return\s+(?:True|0)\b')
 
 # Only check health/integrity/audit paths where swallowing exceptions is dangerous
 EXCEPT_SCAN_GLOBS = [
     "pipeline/health_check.py",
+    "pipeline/*.py",
+    "trading_app/*.py",
+    "trading_app/**/*.py",
     "scripts/tools/audit_*.py",
 ]
+# Files allowed to use broad except + success return (documented intentional fail-open)
+BROAD_EXCEPT_ALLOWLIST = {
+    "live_config.py",  # Dollar gate intentionally fails open for live trading safety
+}
 
 
 def check_broad_except_success() -> list[str]:
@@ -141,6 +149,8 @@ def check_broad_except_success() -> list[str]:
         files.extend(PROJECT_ROOT.glob(pattern))
 
     for f in sorted(set(files)):
+        if f.name in BROAD_EXCEPT_ALLOWLIST:
+            continue
         try:
             lines = f.read_text(encoding='utf-8').splitlines()
         except (UnicodeDecodeError, PermissionError):
@@ -189,6 +199,9 @@ SQL_KEYWORD_PATTERN = re.compile(r'\b(?:SELECT|INSERT|FROM|JOIN)\b', re.IGNORECA
 # Regex to detect JOIN daily_features
 JOIN_DF_PATTERN = re.compile(r'\bJOIN\s+daily_features\b', re.IGNORECASE)
 
+# Regex to detect DataFrame merge calls
+MERGE_CALL_PATTERN = re.compile(r'\.merge\(|pd\.merge\(')
+
 
 def _is_triple_join_allowlisted(filepath: Path) -> bool:
     """Check if file is allowlisted for triple-join guard."""
@@ -204,10 +217,16 @@ def _is_triple_join_allowlisted(filepath: Path) -> bool:
 
 
 def check_triple_join_guard() -> list[str]:
-    """Detect JOIN daily_features without orb_minutes in the same SQL block.
+    """Detect JOIN/merge with daily_features without orb_minutes.
 
-    Extracts triple-quoted strings, filters to SQL blocks, and checks
-    that any block containing JOIN daily_features also contains orb_minutes.
+    Two passes:
+    1. SQL: Extracts triple-quoted strings, filters to SQL blocks, checks
+       that JOIN daily_features also contains orb_minutes.
+    2. DataFrame: In files that reference daily_features AND have .merge() calls,
+       checks that orb_minutes appears on the merge line or within 5 lines below it.
+
+    Missing orb_minutes triples row count (3 rows per trading_day × symbol)
+    and creates fake correlations.
     """
     violations = []
     for f in _python_files(TRIPLE_JOIN_SCAN_DIRS):
@@ -218,7 +237,7 @@ def check_triple_join_guard() -> list[str]:
         except (UnicodeDecodeError, PermissionError):
             continue
 
-        # Extract triple-quoted strings
+        # --- Pass 1: SQL JOINs in triple-quoted strings ---
         for match in TRIPLE_QUOTE_PATTERN.finditer(text):
             block = match.group(1) or match.group(2)
             if not block:
@@ -238,7 +257,33 @@ def check_triple_join_guard() -> list[str]:
                 violations.append(
                     f"  {rel}:{line_num}: JOIN daily_features without orb_minutes: {snippet}"
                 )
+
+        # --- Pass 2: DataFrame merges referencing daily_features ---
+        # Only check files that reference 'daily_features' (table or variable name)
+        if 'daily_features' not in text:
+            continue
+        lines = text.splitlines()
+        for i, line in enumerate(lines):
+            if not MERGE_CALL_PATTERN.search(line):
+                continue
+            # Check if 'daily_features' or 'daily_feat' appears on this line
+            # or within 3 lines before (common pattern: df = daily_features; df.merge(...))
+            context_start = max(0, i - 3)
+            context_lines = lines[context_start:i + 1]
+            context = ' '.join(context_lines)
+            if 'daily_features' not in context and 'daily_feat' not in context:
+                continue
+            # Found a merge near a daily_features reference — check for orb_minutes
+            # Look at the merge call + next 5 lines for orb_minutes
+            merge_context = ' '.join(lines[i:min(i + 6, len(lines))])
+            if 'orb_minutes' not in merge_context:
+                rel = f.relative_to(PROJECT_ROOT)
+                violations.append(
+                    f"  {rel}:{i+1}: DataFrame merge with daily_features "
+                    f"without orb_minutes: {line.strip()[:80]}"
+                )
     return violations
+
 
 def check_cli_arg_drift() -> list[str]:
     """Detect new CLI args in recent diff with no matching docs/test reference.
@@ -287,6 +332,71 @@ def check_cli_arg_drift() -> list[str]:
     return warnings
 
 
+def check_double_break_lookahead() -> list[str]:
+    """Detect double_break used as filter/predictor (look-ahead bias).
+
+    double_break is computed AFTER trade entry (session end). Cannot be used
+    as a real-time filter. Flags: WHERE double_break, if.*double_break,
+    df[.*double_break.*] in filter context.
+    """
+    violations = []
+
+    # Allowlist: test files, docs, this script, archive, analysis/reporting code
+    # These files REFERENCE double_break for analysis/reporting, not as pre-trade filters
+    allowlist = {
+        "test_", "conftest.py", "audit_behavioral.py", ".md",
+        "__pycache__", ".pytest_cache",
+        "archive",                  # Archived research scripts (dead code)
+        "rolling_portfolio.py",     # Reports double_break degradation metrics (post-hoc)
+        "sql_adapter.py",           # Routes DOUBLE_BREAK_STATS template (query exposure)
+        "audit_ib_single_break.py", # Audit script analyzing double_break classification
+        "research_session_event_analysis.py",  # Historical double_break analysis (pre-NODBL removal)
+    }
+
+    # Scan locations: pipeline, trading_app, scripts/tools, research
+    scan_dirs = [
+        PROJECT_ROOT / "pipeline",
+        PROJECT_ROOT / "trading_app",
+        PROJECT_ROOT / "scripts" / "tools",
+        PROJECT_ROOT / "research",
+    ]
+
+    # Patterns that indicate double_break used as filter/predictor
+    filter_patterns = [
+        re.compile(r'\bWHERE\b.*double_break', re.IGNORECASE),
+        re.compile(r'\bif\s+.*double_break', re.IGNORECASE),
+        re.compile(r'df\[.*double_break.*\]'),
+        re.compile(r'\.query\(.*double_break', re.IGNORECASE),
+        re.compile(r'\.loc\[.*double_break'),
+        re.compile(r'\.filter\(.*double_break', re.IGNORECASE),
+    ]
+
+    for scan_dir in scan_dirs:
+        if not scan_dir.exists():
+            continue
+        for fpath in scan_dir.rglob("*.py"):
+            # Skip allowlisted files
+            if any(allow in str(fpath) for allow in allowlist):
+                continue
+
+            try:
+                content = fpath.read_text(encoding='utf-8')
+            except (UnicodeDecodeError, PermissionError):
+                continue
+
+            # Check each filter pattern
+            for pattern in filter_patterns:
+                for i, match in enumerate(pattern.finditer(content)):
+                    line_num = content[:match.start()].count('\n') + 1
+                    rel_path = fpath.relative_to(PROJECT_ROOT)
+                    violations.append(
+                        f"  {rel_path}:{line_num}: double_break used as filter "
+                        f"(look-ahead bias — resolved AFTER trade entry)"
+                    )
+
+    return violations
+
+
 # ── Check registry ───────────────────────────────────────────────────
 
 CHECKS = [
@@ -295,6 +405,7 @@ CHECKS = [
     ("3. Broad except returning success", check_broad_except_success, False),
     ("4. CLI arg drift (warning only)", check_cli_arg_drift, True),  # warning_only
     ("5. Triple-join guard (orb_minutes in daily_features JOIN)", check_triple_join_guard, False),
+    ("6. Double-break look-ahead scanner (resolved AFTER trade entry)", check_double_break_lookahead, False),
 ]
 
 

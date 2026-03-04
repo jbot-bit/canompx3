@@ -100,13 +100,11 @@ Brisbane DOW = exchange DOW for all sessions except NYSE_OPEN (midnight crossing
 
 **ONE database** (`gold.db`) at `<project>/gold.db` — local disk, no cloud sync.
 
-For long-running jobs, optionally copy to `C:\db\gold.db` as scratch, set `DUCKDB_PATH=C:/db/gold.db`, and copy back when done.
+`C:\db\gold.db` is scratch only — optionally copy there for long-running research, copy back when done. Research scripts default to `C:/db/gold.db` for isolation; do not "fix" this convention.
 
 **Rules:**
 - NEVER run two write processes against the same DuckDB file simultaneously
 - `pipeline/paths.py` reads `DUCKDB_PATH` env var to override default path
-
-**Research scripts use `C:/db/gold.db` by convention.** 45+ research scripts in `research/` hardcode `--db-path C:/db/gold.db` as their default. This is intentional — research scripts run exploratory queries on a scratch copy, keeping the production DB safe from concurrent reads during long-running analysis. Production code (`pipeline/`, `trading_app/`) uses `pipeline.paths.GOLD_DB_PATH` exclusively. Do not "fix" the research convention — it exists for isolation.
 
 ---
 
@@ -172,6 +170,14 @@ Five layers enforce quality: pre-commit hook (`.githooks/pre-commit`), drift det
 
 ### Research Provenance Rule
 Config values derived from research (e.g. `EARLY_EXIT_MINUTES`) must include `@research-source`, `@entry-models`, and `@revalidated-for` annotations. Drift check #45 enforces this. When entry models change, re-validate all research-derived values against the new model before citing them as validated.
+
+### 2-Pass Implementation Method (MANDATORY)
+Every non-trivial code change follows two passes:
+
+1. **Discovery:** Read ALL affected files. Understand architecture, patterns, blast radius. Articulate PURPOSE (why it matters, what breaks without it) before writing code. Run guardian prompts if applicable.
+2. **Implementation:** Write code → verify (run `check_drift.py`, `audit_behavioral.py`, tests) → fix regressions → code review.
+
+One task at a time. Implement → verify → review → next. Never batch without verification.
 
 ---
 
