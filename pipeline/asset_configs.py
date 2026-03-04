@@ -200,18 +200,18 @@ ASSET_CONFIGS = {
 }
 
 # Primary instruments actively traded for ORB breakout.
-# Excludes source aliases (ES, NQ) and dead-for-ORB instruments (MCL, SIL, M6E).
+# Excludes source aliases (ES, NQ) and dead-for-ORB instruments (MCL, SIL, M6E, MBT).
 # This is the canonical source — import this instead of hardcoding instrument lists.
 ACTIVE_ORB_INSTRUMENTS = sorted([
     k for k, v in ASSET_CONFIGS.items()
-    if v['symbol'] == k and k not in {'MCL', 'SIL', 'M6E'}
+    if v['symbol'] == k and k not in {'MCL', 'SIL', 'M6E', 'MBT'}
 ])
 
 
 def get_active_instruments() -> list[str]:
     """Return the list of actively traded ORB instruments (sorted copy).
 
-    Use this instead of hardcoding instrument lists. Dead: MCL, SIL, M6E.
+    Use this instead of hardcoding instrument lists. Dead: MCL, SIL, M6E, MBT.
     """
     return list(ACTIVE_ORB_INSTRUMENTS)
 

@@ -149,3 +149,15 @@ scripts/tools/_clean_*.md
 .worktrees/
 .security-key
 logs/security/
+
+# Tool caches (firecrawl, claire worktrees, notebooklm config)
+.claire/
+.firecrawl/
+notebooklm-config.json
+parameter_stability.html
+
+# Pinecone sync state
+scripts/tools/.pinecone_sync_state.json
+
+# uv lockfile (regenerable)
+uv.lock

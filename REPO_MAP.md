@@ -54,7 +54,7 @@ research/
     analyze_entry_clearance.py
     analyze_eod_exits.py
     analyze_first_half_hour.py
-... and 718 more entries
+... and 754 more entries
 ```
 
 ## Module Index
@@ -95,7 +95,7 @@ research/
 | `trading_app/config.py` | 536 | Strategy configuration: filters, entry models, and grid parameters. | StrategyFilter, NoFilter, OrbSizeFilter, VolumeFilter, DirectionFilter |
 | `trading_app/db_manager.py` | 506 | Database schema manager for trading_app tables. | compute_trade_day_hash, init_trading_app_schema, verify_trading_app_schema, get_family_head_ids, has_edge_families |
 | `trading_app/entry_rules.py` | 297 | Entry detection logic with confirm_bars support and multiple entry models. | ConfirmResult, BreakTouchResult, EntrySignal, detect_confirm, detect_break_touch |
-| `trading_app/execution_engine.py` | 824 | Execution engine for live/replay bar-by-bar strategy execution. | TradeState, TradeEvent, LiveORB, LiveIB, ActiveTrade |
+| `trading_app/execution_engine.py` | 896 | Execution engine for live/replay bar-by-bar strategy execution. | TradeState, TradeEvent, LiveORB, LiveIB, ActiveTrade |
 | `trading_app/execution_spec.py` | 66 | Execution specification dataclass. | ExecutionSpec |
 | `trading_app/live/bar_aggregator.py` | 58 | Aggregates real-time ticks into 1-minute OHLCV bars. | Bar, BarAggregator |
 | `trading_app/live/contract_resolver.py` | 41 | Resolves instrument shortname to current Tradovate front-month contract symbol. | resolve_front_month |
@@ -114,10 +114,10 @@ research/
 | `trading_app/ml/cpcv.py` | 135 | Combinatorial Purged Cross-Validation (CPCV). | cpcv_score |
 | `trading_app/ml/evaluate.py` | 225 | Before/after quantification of meta-label impact. | evaluate_instrument, print_evaluation, main |
 | `trading_app/ml/evaluate_validated.py` | 151 | Evaluate meta-label impact on VALIDATED strategies only. | evaluate_validated, main |
-| `trading_app/ml/features.py` | 436 | Feature extraction: daily_features + orb_outcomes → ML feature matrix. | apply_e6_filter, transform_to_features, load_feature_matrix, load_validated_feature_matrix |
+| `trading_app/ml/features.py` | 649 | Feature extraction: daily_features + orb_outcomes → ML feature matrix. | apply_e6_filter, transform_to_features, load_feature_matrix, load_validated_feature_matrix, load_single_config_feature_matrix |
 | `trading_app/ml/importance.py` | 112 | Feature importance analysis: MDI and MDA (permutation importance). | compute_importance, print_importance_report, run_importance, main |
-| `trading_app/ml/meta_label.py` | 645 | Meta-label classifier: train, validate (CPCV), threshold-optimize, predict. | train_per_session_meta_label, print_per_session_results, train_meta_label, print_results, main |
-| `trading_app/ml/predict_live.py` | 302 | Live ML prediction: P(win) for trade entry decisions. | MLPrediction, LiveMLPredictor |
+| `trading_app/ml/meta_label.py` | 832 | Meta-label classifier: train, validate (CPCV), threshold-optimize, predict. | train_per_session_meta_label, print_per_session_results, train_meta_label, print_results, main |
+| `trading_app/ml/predict_live.py` | 336 | Live ML prediction: P(win) for trade entry decisions. | MLPrediction, LiveMLPredictor |
 | `trading_app/nested/__init__.py` | 5 | Nested ORB research track — isolated parallel experiment. |  |
 | `trading_app/nested/audit_outcomes.py` | 307 | Spot-check audit for nested_outcomes: independently reconstructs outcomes | audit_nested_outcomes, main |
 | `trading_app/nested/builder.py` | 444 | Build nested ORB outcomes: wider ORB range (15/30 min) with 5-minute entry bars. | resample_to_5m, build_nested_outcomes, main |
@@ -126,7 +126,7 @@ research/
 | `trading_app/nested/schema.py` | 225 | Schema for nested ORB tables (isolated from production tables). | init_nested_schema, verify_nested_schema, main |
 | `trading_app/nested/validator.py` | 147 | Validate nested ORB strategies and promote to nested_validated. | run_nested_validation, main |
 | `trading_app/outcome_builder.py` | 735 | Pre-compute outcomes for all RR targets x confirm_bars combinations. | compute_single_outcome, build_outcomes, main |
-| `trading_app/paper_trader.py` | 413 | Historical replay and paper trading. | JournalEntry, DaySummary, ReplayResult, replay_historical, main |
+| `trading_app/paper_trader.py` | 429 | Historical replay and paper trading. | JournalEntry, DaySummary, ReplayResult, replay_historical, main |
 | `trading_app/portfolio.py` | 790 | Portfolio construction from validated strategies. | PortfolioStrategy, Portfolio, compute_position_size, compute_position_size_prop, compute_vol_scalar |
 | `trading_app/regime/__init__.py` | 5 | Regime discovery — run strategy analysis on date-bounded subsets. |  |
 | `trading_app/regime/compare.py` | 196 | Side-by-side comparison: regime run vs full-period results. | run_comparison, main |
@@ -180,7 +180,7 @@ research/
 | `scripts/tools/build_edge_families.py` | 280 | Build edge families by hashing strategy trade-day lists. | classify_family, classify_trade_tier, build_edge_families, main |
 | `scripts/tools/build_mes_outcomes_fast.py` | 184 | Fast MES outcome builder -- parallel, preloaded bars. | log, process_single_day, main |
 | `scripts/tools/build_outcomes_fast.py` | 211 | Fast parallel outcome builder for MNQ (or any instrument). | process_single_day, main |
-... and 302 more modules
+... and 309 more modules
 
 ## Cross-Package Dependencies
 
@@ -233,7 +233,7 @@ research/
 - `trading_app/portfolio.py` -> pipeline, trading_app
 - `trading_app/regime/compare.py` -> pipeline
 - `trading_app/regime/discovery.py` -> pipeline, trading_app
-... and 251 more edges
+... and 257 more edges
 
 ## CLI Entry Points
 
@@ -261,4 +261,4 @@ research/
 - `python trading_app/ml/evaluate.py` -- (no argparse description)
 - `python trading_app/ml/evaluate_validated.py` -- (no argparse description)
 - `python trading_app/ml/importance.py` -- (no argparse description)
-... and 236 more entry points
+... and 239 more entry points

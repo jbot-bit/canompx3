@@ -149,7 +149,7 @@ For EACH instrument in ASSET_CONFIGS:
 ### 2D. Environment / Paths
 - [ ] `.env` file exists with `DUCKDB_PATH`, `DATABENTO_API_KEY`, `SYMBOL`, `TZ_LOCAL`
 - [ ] `pipeline/paths.py` correctly reads `DUCKDB_PATH` from `.env` / environment
-- [ ] No scratch DB lingering at `C:/db/gold.db` → drift check 37 should catch but verify
+- [ ] No duplicate gold.db at project root → canonical DB is `C:/db/gold.db`, drift check 37 should catch but verify
 - [ ] `GOLD_DB_PATH` resolves to a file that exists and is readable
 
 ---

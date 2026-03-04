@@ -1,0 +1,201 @@
+// ORB Breakout Volume Filter (VOL_RV12_N20)
+// Replicates the pipeline's relative volume filter for live trading.
+//
+// HOW IT WORKS:
+//   1. Computes the Opening Range (ORB) for a configurable session
+//   2. Detects the first breakout (close above/below ORB)
+//   3. Compares break bar volume to median of last 20 break volumes
+//   4. Labels PASS (>= 1.2x) or FAIL (< 1.2x)
+//
+// USE ON 1-MINUTE CHARTS for accurate ORB calculation.
+// Add the indicator multiple times with different session settings
+// to monitor multiple sessions simultaneously.
+//
+// Session presets (Eastern Time — adjust if your chart uses a different TZ):
+//   CME_REOPEN:     18:00 ET  /  17:00 CT  /  09:00 Brisbane (next day)
+//   TOKYO_OPEN:     19:00 ET  /  18:00 CT  /  10:00 Brisbane (next day)
+//   BRISBANE_1025:  19:25 ET  /  18:25 CT  /  10:25 Brisbane (next day)
+//   SINGAPORE_OPEN: 20:00 ET  /  19:00 CT  /  11:00 Brisbane (next day)
+//
+// NOTE: These are winter (EST) times. During US summer (EDT, Mar-Nov),
+//       Asian sessions shift 1 hour earlier in ET because Brisbane has no DST.
+//       The pipeline handles this automatically; for TradingView, adjust the
+//       session start hour seasonally or use Brisbane timezone on your chart.
+
+//@version=5
+indicator("ORB Volume Filter", "ORB Vol", overlay=true, max_labels_count=500, max_lines_count=500)
+
+// ── INPUTS ──────────────────────────────────────────────────
+grp_sess = "Session"
+i_sessHour  = input.int(18, "Session Start Hour", minval=0, maxval=23, group=grp_sess,
+               tooltip="Hour in your CHART's timezone")
+i_sessMin   = input.int(0, "Session Start Minute", minval=0, maxval=59, group=grp_sess)
+i_orbMins   = input.int(5, "ORB Minutes", options=[5, 15, 30], group=grp_sess,
+               tooltip="Must match your strategy's aperture (O5/O15/O30)")
+i_sessName  = input.string("CME_REOPEN", "Session Label", group=grp_sess,
+               options=["CME_REOPEN", "TOKYO_OPEN", "BRISBANE_1025", "SINGAPORE_OPEN",
+                        "LONDON_METALS", "NYSE_OPEN", "US_DATA_1000", "COMEX_SETTLE",
+                        "CME_PRECLOSE", "NYSE_CLOSE", "CUSTOM"],
+               tooltip="For display only — does not affect calculation")
+
+grp_vol = "Volume Filter"
+i_rvThresh  = input.float(1.2, "Min Relative Volume", step=0.05, group=grp_vol,
+               tooltip="1.2 = break volume must be >= 120% of median prior breaks")
+i_lookback  = input.int(20, "Lookback (prior break bars)", minval=5, maxval=50, group=grp_vol,
+               tooltip="Number of prior session breaks used for median calculation")
+i_minBreaks = input.int(5, "Min History (warm-up)", minval=1, maxval=20, group=grp_vol,
+               tooltip="Need this many prior breaks before filter can produce a reading")
+
+grp_vis = "Visuals"
+i_showOrb    = input.bool(true, "Show ORB Lines", group=grp_vis)
+i_showLabel  = input.bool(true, "Show Break Labels", group=grp_vis)
+i_showBg     = input.bool(true, "Background Color on ORB Formation", group=grp_vis)
+i_orbColor   = input.color(color.new(color.blue, 85), "ORB Background", group=grp_vis)
+i_passColor  = input.color(color.green, "Pass Color", group=grp_vis)
+i_failColor  = input.color(color.red, "Fail Color", group=grp_vis)
+i_warmColor  = input.color(color.gray, "Warm-up Color", group=grp_vis)
+
+// ── STATE ───────────────────────────────────────────────────
+var float   orbHigh       = na
+var float   orbLow        = na
+var bool    orbComplete   = false
+var int     barsInOrb     = 0
+var bool    inOrbWindow   = false
+var bool    breakDone     = false
+var float[] priorBreakVol = array.new_float(0)
+var line    lineHigh      = na
+var line    lineLow       = na
+var int     orbStartBar   = na
+var float   lastRelVol    = na
+var bool    lastPass      = false
+
+// ── TIMEFRAME CALC ──────────────────────────────────────────
+tfMins  = timeframe.in_seconds() / 60
+orbBars = i_orbMins < tfMins ? 1 : math.round(i_orbMins / tfMins)
+
+// ── SESSION START DETECTION ─────────────────────────────────
+// Detects the first bar at or after the configured session start time.
+// Works on 1-minute charts (recommended) and higher TFs.
+isNewBar    = hour == i_sessHour and minute == i_sessMin
+wasNotStart = not (hour[1] == i_sessHour and minute[1] == i_sessMin)
+newSession  = isNewBar and wasNotStart
+
+// ── RESET ON SESSION START ──────────────────────────────────
+if newSession
+    orbHigh     := high
+    orbLow      := low
+    orbComplete := false
+    barsInOrb   := 1
+    inOrbWindow := true
+    breakDone   := false
+    orbStartBar := bar_index
+    lastRelVol  := na
+    lastPass    := false
+
+// ── BUILD ORB ───────────────────────────────────────────────
+if inOrbWindow and not orbComplete
+    orbHigh := math.max(nz(orbHigh, high), high)
+    orbLow  := math.min(nz(orbLow, low), low)
+    barsInOrb += 1
+    if barsInOrb > orbBars
+        orbComplete := true
+        inOrbWindow := false
+
+        // Draw ORB lines extending forward
+        if i_showOrb
+            // Delete old lines to avoid clutter
+            if not na(lineHigh)
+                line.delete(lineHigh)
+            if not na(lineLow)
+                line.delete(lineLow)
+            lineHigh := line.new(orbStartBar, orbHigh, bar_index + 100, orbHigh,
+                         color=color.new(i_passColor, 40), width=2, style=line.style_dashed)
+            lineLow  := line.new(orbStartBar, orbLow, bar_index + 100, orbLow,
+                         color=color.new(i_failColor, 40), width=2, style=line.style_dashed)
+
+// ── BREAK DETECTION ─────────────────────────────────────────
+breakUp   = orbComplete and not breakDone and close > orbHigh
+breakDown = orbComplete and not breakDone and close < orbLow
+
+if breakUp or breakDown
+    breakDone := true
+
+    // ── RELATIVE VOLUME CALCULATION ─────────────────────────
+    // Matches pipeline: build_daily_features.py lines 1186-1213
+    // rel_vol = break_bar_volume / median(last N break volumes for this session)
+    // Computed BEFORE appending today (no look-ahead)
+    float rv     = na
+    bool  passes = false
+
+    if array.size(priorBreakVol) >= i_minBreaks
+        // Compute median of prior break volumes
+        float[] tmp = array.copy(priorBreakVol)
+        array.sort(tmp)
+        int mid     = array.size(tmp) / 2
+        float med   = array.get(tmp, mid)
+        rv     := med > 0 ? volume / med : na
+        passes := not na(rv) and rv >= i_rvThresh
+
+    lastRelVol := rv
+    lastPass   := passes
+
+    // Append today's break volume for future sessions (keep last N)
+    array.push(priorBreakVol, float(volume))
+    if array.size(priorBreakVol) > i_lookback
+        array.shift(priorBreakVol)
+
+    // ── BREAK LABEL ─────────────────────────────────────────
+    if i_showLabel
+        string dir    = breakUp ? "▲ LONG" : "▼ SHORT"
+        string volTxt = na(rv) ? "n/a (warming up: " + str.tostring(array.size(priorBreakVol)) + "/" + str.tostring(i_minBreaks) + ")" : str.tostring(rv, "#.##") + "x"
+        string status = na(rv) ? "⏳ WAIT" : (passes ? "✅ PASS" : "❌ FAIL")
+        string txt    = i_sessName + " " + dir + "\nRelVol: " + volTxt + "\n" + status
+
+        color c = na(rv) ? i_warmColor : (passes ? i_passColor : i_failColor)
+
+        label.new(bar_index, breakUp ? high : low, txt,
+                  color=c, textcolor=color.white, size=size.small,
+                  style=breakUp ? label.style_label_up : label.style_label_down)
+
+    // Terminate ORB lines at break bar
+    if i_showOrb
+        if not na(lineHigh)
+            line.set_x2(lineHigh, bar_index)
+        if not na(lineLow)
+            line.set_x2(lineLow, bar_index)
+
+// ── ORB FORMATION BACKGROUND ───────────────────────────────
+bgcolor(i_showBg and inOrbWindow ? i_orbColor : na, title="ORB Window")
+
+// ── INFO TABLE ──────────────────────────────────────────────
+var table infoTbl = table.new(position.top_right, 2, 5,
+                              bgcolor=color.new(color.black, 80),
+                              border_color=color.new(color.gray, 60),
+                              border_width=1)
+
+if barstate.islast
+    table.cell(infoTbl, 0, 0, "Session",   text_color=color.gray,  text_size=size.small, text_halign=text.align_left)
+    table.cell(infoTbl, 1, 0, i_sessName,  text_color=color.white, text_size=size.small)
+
+    table.cell(infoTbl, 0, 1, "ORB",       text_color=color.gray,  text_size=size.small, text_halign=text.align_left)
+    string orbTxt = orbComplete ? str.tostring(orbHigh, format.mintick) + " / " + str.tostring(orbLow, format.mintick) : "forming..."
+    table.cell(infoTbl, 1, 1, orbTxt,      text_color=color.white, text_size=size.small)
+
+    table.cell(infoTbl, 0, 2, "ORB Size",  text_color=color.gray,  text_size=size.small, text_halign=text.align_left)
+    string sizeTxt = orbComplete ? str.tostring(orbHigh - orbLow, format.mintick) + " pts" : "—"
+    table.cell(infoTbl, 1, 2, sizeTxt,     text_color=color.white, text_size=size.small)
+
+    table.cell(infoTbl, 0, 3, "RelVol",    text_color=color.gray,  text_size=size.small, text_halign=text.align_left)
+    string rvTxt  = breakDone ? (na(lastRelVol) ? "warming up" : str.tostring(lastRelVol, "#.##") + "x") : "no break yet"
+    color  rvClr  = breakDone ? (na(lastRelVol) ? i_warmColor : (lastPass ? i_passColor : i_failColor)) : color.white
+    table.cell(infoTbl, 1, 3, rvTxt,       text_color=rvClr,       text_size=size.small)
+
+    table.cell(infoTbl, 0, 4, "History",   text_color=color.gray,  text_size=size.small, text_halign=text.align_left)
+    table.cell(infoTbl, 1, 4, str.tostring(array.size(priorBreakVol)) + "/" + str.tostring(i_lookback) + " breaks",
+               text_color=color.white, text_size=size.small)
+
+// ── ALERTS ──────────────────────────────────────────────────
+alertcondition(breakUp and lastPass,  "ORB Break UP + Vol PASS",   "{{ticker}} ORB break UP at {{close}} — RelVol PASS ({{i_sessName}})")
+alertcondition(breakDown and lastPass,"ORB Break DOWN + Vol PASS", "{{ticker}} ORB break DOWN at {{close}} — RelVol PASS ({{i_sessName}})")
+alertcondition((breakUp or breakDown) and not lastPass and not na(lastRelVol),
+               "ORB Break + Vol FAIL", "{{ticker}} ORB break at {{close}} — RelVol FAIL ({{i_sessName}})")

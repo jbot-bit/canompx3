@@ -10,9 +10,15 @@
     },
     "notebooklm": {
       "type": "stdio",
-      "command": "C:/Users/joshd/canompx3/venv/Scripts/notebooklm-mcp",
-      "args": [],
-      "env": {}
+      "command": "notebooklm-mcp",
+      "args": [
+        "--config", "notebooklm-config.json",
+        "server",
+        "--transport", "stdio"
+      ],
+      "env": {
+        "PYTHONIOENCODING": "utf-8"
+      }
     }
   }
 }

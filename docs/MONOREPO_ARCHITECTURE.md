@@ -209,13 +209,7 @@ API service layer providing programmatic access to project resources.
 - `trading_app/nested/` modules handle 15m/30m ORB discovery (data stored in main orb_outcomes with orb_minutes=15/30, not separate tables)
 - `trading_app/regime/schema.py` creates regime schema (regime_strategies, regime_validated tables)
 
-**CRITICAL:** Never run two write processes against the same DuckDB file simultaneously. For long-running jobs, use scratch copy workflow:
-```bash
-cp gold.db C:/db/gold.db
-export DUCKDB_PATH=C:/db/gold.db
-# ... run job ...
-cp C:/db/gold.db gold.db
-```
+**CRITICAL:** Never run two write processes against the same DuckDB file simultaneously. Canonical DB location is `C:/db/gold.db` (set via `DUCKDB_PATH` in `.env`). All code reads from this single location via `pipeline.paths.GOLD_DB_PATH`.
 
 ---
 

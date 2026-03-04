@@ -17,5 +17,5 @@ python pipeline/check_drift.py
 Important:
 - `--no-walkforward` for MNQ — currently run without WF; ~5yr data means WF is feasible (re-run without flag to enable)
 - `--min-years-positive-pct` is dead code without `--no-regime-waivers` — always pair them
-- Use scratch DB (`C:/db/gold.db`) for long runs, copy back when done
+- Canonical DB is `C:/db/gold.db` (set via `DUCKDB_PATH` in `.env`)
 - See `docs/plans/2026-02-27-rebuild-audit-playbook.md` for full rebuild procedures
