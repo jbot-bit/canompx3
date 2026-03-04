@@ -114,6 +114,23 @@ def _get_trading_days(con, instrument: str, start_date: date, end_date: date) ->
     return [r[0] for r in rows]
 
 
+def _get_median_atr_20(con, instrument: str, trading_day: date,
+                       lookback_days: int = 252) -> float:
+    """Rolling median ATR_20 over prior N trading days (Carver Ch.9 vol-targeting).
+
+    Used by ExecutionEngine._compute_contracts() for Turtle-style vol scalar:
+    scalar = median_atr / current_atr → sizes position inversely to vol.
+    """
+    result = con.execute(
+        """SELECT MEDIAN(atr_20) FROM daily_features
+           WHERE symbol = ? AND orb_minutes = 5 AND atr_20 IS NOT NULL
+             AND trading_day < ? AND trading_day >= ? - INTERVAL '504 DAY'
+        """,
+        [instrument, trading_day, trading_day],
+    ).fetchone()
+    return float(result[0]) if result[0] is not None else 0.0
+
+
 def _get_daily_features_row(con, instrument: str, trading_day: date) -> dict | None:
     """Fetch all daily_features columns for one day (orb_minutes=5).
 
@@ -263,6 +280,8 @@ def replay_historical(
                 engine.market_state = None
 
             df_row = _get_daily_features_row(con, instrument, td)
+            if df_row is not None:
+                df_row["median_atr_20"] = _get_median_atr_20(con, instrument, td)
             engine.on_trading_day_start(td, daily_features_row=df_row)
             risk_mgr.daily_reset(td)
 

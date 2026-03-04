@@ -29,7 +29,10 @@ from trading_app.config import (
     IB_DURATION_MINUTES, HOLD_HOURS, ORB_DURATION_MINUTES,
     CalendarSkipFilter, CALENDAR_SKIP_NFP_OPEX,
 )
-from trading_app.portfolio import Portfolio, PortfolioStrategy
+from trading_app.portfolio import (
+    Portfolio, PortfolioStrategy,
+    compute_position_size_vol_scaled, compute_vol_scalar,
+)
 from pipeline.log import get_logger
 
 logger = get_logger(__name__)
@@ -195,6 +198,28 @@ class ExecutionEngine:
         self._bar_count: int = 0
         self._last_bar: dict | None = None  # Track last bar for scratch mark-to-market
         self._daily_features_row: dict | None = None  # Calendar filter data
+
+    def _compute_contracts(self, risk_points: float, cost: CostSpec) -> int:
+        """Compute position size using vol-adjusted sizing from portfolio params.
+
+        Uses account_equity and risk_per_trade_pct from self.portfolio.
+        Applies Turtle-style vol scalar from ATR_20 / median_atr_20 (Carver Ch.9).
+        Returns 0 if risk exceeds budget (caller should reject entry).
+        """
+        equity = self.portfolio.account_equity
+        risk_pct = self.portfolio.risk_per_trade_pct
+        if equity <= 0 or risk_points <= 0:
+            return 1  # Fallback: no equity info → 1 contract (legacy behavior)
+
+        row = self._daily_features_row or {}
+        atr_20 = row.get("atr_20") or 0.0
+        median_atr_20 = row.get("median_atr_20") or 0.0
+        vol_scalar = compute_vol_scalar(atr_20, median_atr_20) if (atr_20 > 0 and median_atr_20 > 0) else 1.0
+
+        contracts = compute_position_size_vol_scaled(
+            equity, risk_pct, risk_points, cost, vol_scalar,
+        )
+        return contracts
 
     def on_trading_day_start(self, trading_day: date,
                              daily_features_row: dict | None = None) -> None:
@@ -582,6 +607,25 @@ class ExecutionEngine:
             if risk_points <= 0:
                 return events
 
+            # Position sizing (vol-adjusted, Carver Ch.9)
+            cost = get_session_cost_spec(
+                self.portfolio.instrument, trade.orb_label,
+            ) if self._live_session_costs else self.cost_spec
+            trade.contracts = self._compute_contracts(risk_points, cost)
+            if trade.contracts == 0:
+                trade.state = TradeState.EXITED
+                self.completed_trades.append(trade)
+                events.append(TradeEvent(
+                    event_type="REJECT",
+                    strategy_id=trade.strategy_id,
+                    timestamp=confirm_bar["ts_utc"],
+                    price=entry_price,
+                    direction=trade.direction,
+                    contracts=0,
+                    reason="sizing_rejected: risk_exceeds_budget",
+                ))
+                return events
+
             # Risk manager check
             suggested_contract_factor = 1.0
             if self.risk_manager is not None:
@@ -719,8 +763,27 @@ class ExecutionEngine:
                         self.completed_trades.append(trade)
                         continue
 
+                    # Position sizing (vol-adjusted, Carver Ch.9)
+                    cost = get_session_cost_spec(
+                        self.portfolio.instrument, trade.orb_label,
+                    ) if self._live_session_costs else self.cost_spec
+                    trade.contracts = self._compute_contracts(risk_points, cost)
+                    if trade.contracts == 0:
+                        trade.state = TradeState.EXITED
+                        self.completed_trades.append(trade)
+                        events.append(TradeEvent(
+                            event_type="REJECT",
+                            strategy_id=trade.strategy_id,
+                            timestamp=entry_ts,
+                            price=entry_price,
+                            direction=trade.direction,
+                            contracts=0,
+                            reason="sizing_rejected: risk_exceeds_budget",
+                        ))
+                        continue
+
                     # Risk manager check BEFORE entry
-                    suggested_contract_factor = 1.0 # Default
+                    suggested_contract_factor = 1.0
                     if self.risk_manager is not None:
                         can_enter, reason, suggested_contract_factor = self.risk_manager.can_enter(
                             strategy_id=trade.strategy_id,
@@ -741,7 +804,7 @@ class ExecutionEngine:
                                 reason=f"risk_rejected: {reason}",
                             ))
                             continue
-                    
+
                     # Apply suggested contract factor
                     trade.contracts = max(1, int(trade.contracts * suggested_contract_factor))
 
@@ -824,8 +887,27 @@ class ExecutionEngine:
                             self.completed_trades.append(trade)
                             continue
 
+                        # Position sizing (vol-adjusted, Carver Ch.9)
+                        cost = get_session_cost_spec(
+                            self.portfolio.instrument, trade.orb_label,
+                        ) if self._live_session_costs else self.cost_spec
+                        trade.contracts = self._compute_contracts(risk_points, cost)
+                        if trade.contracts == 0:
+                            trade.state = TradeState.EXITED
+                            self.completed_trades.append(trade)
+                            events.append(TradeEvent(
+                                event_type="REJECT",
+                                strategy_id=trade.strategy_id,
+                                timestamp=bar["ts_utc"],
+                                price=entry_price,
+                                direction=trade.direction,
+                                contracts=0,
+                                reason="sizing_rejected: risk_exceeds_budget",
+                            ))
+                            continue
+
                         # Risk manager check BEFORE entry
-                        suggested_contract_factor = 1.0 # Default
+                        suggested_contract_factor = 1.0
                         if self.risk_manager is not None:
                             can_enter, reason, suggested_contract_factor = self.risk_manager.can_enter(
                                 strategy_id=trade.strategy_id,
@@ -846,7 +928,7 @@ class ExecutionEngine:
                                     reason=f"risk_rejected: {reason}",
                                 ))
                                 continue
-                        
+
                         # Apply suggested contract factor
                         trade.contracts = max(1, int(trade.contracts * suggested_contract_factor))
 

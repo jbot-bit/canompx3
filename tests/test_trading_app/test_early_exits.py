@@ -93,9 +93,29 @@ class TestEarlyExitConfig:
         """P5b: MES T80=16m (short session, fast-resolve)."""
         assert EARLY_EXIT_MINUTES["CME_PRECLOSE"] == 16
 
-    def test_other_sessions_none(self):
-        for label in ["US_DATA_830", "NYSE_OPEN"]:
-            assert EARLY_EXIT_MINUTES[label] is None, f"{label} should be None"
+    def test_us_data_830_t80(self):
+        """T80: max across instruments at RR1.0 (MNQ=49m)."""
+        assert EARLY_EXIT_MINUTES["US_DATA_830"] == 49
+
+    def test_nyse_open_t80(self):
+        """T80: max across instruments at RR1.0 (M2K=59m)."""
+        assert EARLY_EXIT_MINUTES["NYSE_OPEN"] == 59
+
+    def test_us_data_1000_t80(self):
+        """T80: max across instruments at RR1.0 (MGC=45m)."""
+        assert EARLY_EXIT_MINUTES["US_DATA_1000"] == 45
+
+    def test_comex_settle_t80(self):
+        """T80: max across instruments at RR1.0 (MGC=39m)."""
+        assert EARLY_EXIT_MINUTES["COMEX_SETTLE"] == 39
+
+    def test_nyse_close_t80(self):
+        """T80: max across instruments at RR1.0 (MNQ=111m)."""
+        assert EARLY_EXIT_MINUTES["NYSE_CLOSE"] == 111
+
+    def test_brisbane_1025_t80(self):
+        """T80: max across instruments at RR1.0 (MNQ=26m)."""
+        assert EARLY_EXIT_MINUTES["BRISBANE_1025"] == 26
 
     def test_all_active_sessions_present(self):
         expected = {

@@ -776,6 +776,67 @@ class TestMLIntegration:
         assert engine.ml_skips == 0
 
 
+class TestVolAdjustedSizing:
+    """Position sizing from portfolio account_equity and vol scalar (Carver Ch.9)."""
+
+    def test_sizing_with_equity_computes_contracts(self):
+        """With account_equity, _compute_contracts returns proper count."""
+        # $25K equity, 2% risk = $500 budget. 10pt risk × $10/pt = $100/contract → 5 contracts
+        portfolio = _make_portfolio(account_equity=25000.0, risk_per_trade_pct=2.0)
+        engine = ExecutionEngine(portfolio, _cost())
+        engine._daily_features_row = {}  # No ATR data → vol_scalar=1.0
+        contracts = engine._compute_contracts(10.0, _cost())
+        assert contracts == 5
+
+    def test_sizing_zero_equity_returns_one(self):
+        """account_equity=0 (legacy) → fallback to 1 contract."""
+        portfolio = _make_portfolio(account_equity=0.0)
+        engine = ExecutionEngine(portfolio, _cost())
+        engine._daily_features_row = {}
+        contracts = engine._compute_contracts(10.0, _cost())
+        assert contracts == 1
+
+    def test_vol_scalar_high_atr_fewer_contracts(self):
+        """High ATR (above median) → vol_scalar < 1 → fewer contracts."""
+        portfolio = _make_portfolio(account_equity=25000.0, risk_per_trade_pct=2.0)
+        engine = ExecutionEngine(portfolio, _cost())
+        # ATR_20 = 60 (high), median = 30 → scalar = 30/60 = 0.5
+        engine._daily_features_row = {"atr_20": 60.0, "median_atr_20": 30.0}
+        contracts_high_vol = engine._compute_contracts(10.0, _cost())
+        # Without vol scaling: 5 contracts. With 0.5 scalar: 2 contracts
+        engine._daily_features_row = {"atr_20": 30.0, "median_atr_20": 30.0}
+        contracts_normal = engine._compute_contracts(10.0, _cost())
+        assert contracts_high_vol < contracts_normal
+
+    def test_vol_scalar_low_atr_more_contracts(self):
+        """Low ATR (below median) → vol_scalar > 1 → more contracts."""
+        portfolio = _make_portfolio(account_equity=25000.0, risk_per_trade_pct=2.0)
+        engine = ExecutionEngine(portfolio, _cost())
+        # ATR_20 = 20 (low), median = 30 → scalar = 30/20 = 1.5
+        engine._daily_features_row = {"atr_20": 20.0, "median_atr_20": 30.0}
+        contracts_low_vol = engine._compute_contracts(10.0, _cost())
+        engine._daily_features_row = {"atr_20": 30.0, "median_atr_20": 30.0}
+        contracts_normal = engine._compute_contracts(10.0, _cost())
+        assert contracts_low_vol > contracts_normal
+
+    def test_sizing_rejects_when_risk_exceeds_budget(self):
+        """If risk per contract exceeds budget, returns 0."""
+        # $1K equity, 1% risk = $10 budget. 100pt risk × $10/pt = $1000. Can't trade.
+        portfolio = _make_portfolio(account_equity=1000.0, risk_per_trade_pct=1.0)
+        engine = ExecutionEngine(portfolio, _cost())
+        engine._daily_features_row = {}
+        contracts = engine._compute_contracts(100.0, _cost())
+        assert contracts == 0
+
+    def test_sizing_no_daily_features_row(self):
+        """When daily_features_row is None, uses vol_scalar=1.0 (no crash)."""
+        portfolio = _make_portfolio(account_equity=25000.0)
+        engine = ExecutionEngine(portfolio, _cost())
+        engine._daily_features_row = None
+        contracts = engine._compute_contracts(10.0, _cost())
+        assert contracts == 5  # Same as baseline
+
+
 class TestCLI:
     def test_import(self):
         """Module imports without error."""

@@ -662,7 +662,10 @@ ORB_DURATION_MINUTES: dict[str, int] = {
 # MNQ (Micro Nasdaq): ~5 years data, 14 live strategies, 8 sessions.
 # MES (Micro S&P 500): 4-5 live strategies, CME_PRECLOSE dominant.
 # M2K (Micro Russell): 4-5 live strategies, NYSE_OPEN/US_DATA_1000/LONDON_METALS.
-TRADEABLE_INSTRUMENTS = ["MGC", "MNQ", "MES", "M2K"]
+# Canonical source: pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS
+# Do NOT hardcode — import from the single source of truth.
+from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS  # noqa: E402
+TRADEABLE_INSTRUMENTS = list(ACTIVE_ORB_INSTRUMENTS)
 
 # Timed early exit: kill losers at N minutes after fill.
 # Research (artifacts/EARLY_EXIT_RULES.md, P5b winner speed profiling):
@@ -687,24 +690,27 @@ EARLY_EXIT_MINUTES: dict[str, int | None] = {
     # T80 (more patient) to avoid cutting slower instruments' winners.
     #
     # @research-source: research/research_winner_speed.py
-    # @research-date: 2026-02-20
+    # @research-date: 2026-03-04 (6 new sessions); 2026-02-20 (original 5)
     # @entry-models: E0, E1, E2, E3
     # @revalidated-for: E2 (2026-03-03, bar-level P5b simulation)
     # @revalidation-result: ALL sessions net-positive at current thresholds.
     #   E2 T80 differs (CME_REOPEN: 110m agg vs 38m config) but rule is
     #   robust — 76-94% of MTM-negative trades at threshold never recover.
     #   Future optimization: CME_REOPEN 25m saves ~47% more R than 38m.
+    # @note: New 6 sessions use RR=1.0 T80 max-across-instruments from
+    #   winner_speed_summary.csv (2026-03-04 run, all 4 instruments).
+    #   Pending P5b bar-level simulation for fine-tuning.
     "CME_REOPEN": 38,       # E2 T80=110m(agg), config checks early, NetR=+905R
     "TOKYO_OPEN": 39,       # E2 T80=63m(agg), NetR=+1207R
     "SINGAPORE_OPEN": 31,   # E2 T80=65m(agg), NetR=+1114R
     "LONDON_METALS": 36,    # E2 T80=60m(agg), NetR=+937R
-    "US_DATA_830": None,
-    "NYSE_OPEN": None,
-    "US_DATA_1000": None,
-    "COMEX_SETTLE": None,
+    "US_DATA_830": 49,      # RR1.0 T80: MGC=46, MNQ=49, MES=44, M2K=45
+    "NYSE_OPEN": 59,        # RR1.0 T80: MGC=28, MNQ=48, MES=43, M2K=59
+    "US_DATA_1000": 45,     # RR1.0 T80: MGC=45, MNQ=40, MES=41, M2K=38
+    "COMEX_SETTLE": 39,     # RR1.0 T80: MGC=39, MNQ=26, MES=24, M2K=27
     "CME_PRECLOSE": 16,     # E2 T80=13m(agg), closest to optimal, NetR=+607R
-    "NYSE_CLOSE": None,
-    "BRISBANE_1025": None,  # No T80 data yet — research after outcomes built
+    "NYSE_CLOSE": 111,      # RR1.0 T80: MNQ=111, MES=110, M2K=108 (no MGC)
+    "BRISBANE_1025": 26,    # RR1.0 T80: MNQ=26, M2K=24 (MNQ/M2K only)
 }
 
 # Session exit modes: how each session manages target/stop after entry.
