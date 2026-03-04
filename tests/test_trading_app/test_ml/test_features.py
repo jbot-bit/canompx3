@@ -1,5 +1,7 @@
 """Tests for trading_app.ml.features — feature extraction pipeline."""
 
+from unittest.mock import MagicMock
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -11,6 +13,7 @@ from trading_app.ml.config import (
     TRADE_CONFIG_FEATURES,
 )
 from trading_app.ml.features import (
+    _backfill_global_features,
     _encode_categoricals,
     _extract_session_features,
     _normalize_features,
@@ -57,9 +60,10 @@ class TestExtractSessionFeatures:
 
     def test_output_has_generic_columns(self, mock_df):
         result = _extract_session_features(mock_df)
-        expected_cols = {"orb_size", "orb_volume",
-                         "orb_break_bar_volume", "orb_break_delay_min",
-                         "orb_break_bar_continues", "break_dir", "rel_vol"}
+        # Pre-break features only: size, volume, rel_vol
+        # break_delay_min, break_bar_volume, break_bar_continues, break_dir
+        # removed Mar 4 2026 (pre-break ML architecture + theory audit)
+        expected_cols = {"orb_size", "orb_volume", "rel_vol"}
         assert expected_cols == set(result.columns)
 
 
@@ -136,6 +140,148 @@ class TestEncodeCategoricals:
         df = pd.DataFrame({"value": [1.0, 2.0]})
         result = _encode_categoricals(df)
         assert list(result.columns) == ["value"]
+
+
+class TestBackfillGlobalFeatures:
+    """_backfill_global_features fills NULL globals from orb_minutes=5 rows."""
+
+    def _make_mock_con(self, g5_rows: pd.DataFrame | None = None):
+        """Create a mock DuckDB connection that returns g5_rows from fetchdf()."""
+        con = MagicMock()
+        result = MagicMock()
+        if g5_rows is not None:
+            result.fetchdf.return_value = g5_rows
+        else:
+            result.fetchdf.return_value = pd.DataFrame(
+                columns=["trading_day"] + GLOBAL_FEATURES
+            )
+        con.execute.return_value = result
+        return con
+
+    def test_no_missing_skips_db_query(self):
+        """When all global features are present, no DB query should fire."""
+        df = pd.DataFrame({
+            "trading_day": pd.to_datetime(["2025-01-01", "2025-01-02"]),
+            **{col: [1.0, 2.0] for col in GLOBAL_FEATURES},
+        })
+        con = MagicMock()
+        result = _backfill_global_features(df, con, "MGC")
+        # No DB query should have been made
+        con.execute.assert_not_called()
+        assert len(result) == 2
+
+    def test_fills_null_from_o5(self):
+        """NULL global features are filled from orb_minutes=5 data."""
+        days = pd.to_datetime(["2025-01-01", "2025-01-02"])
+        df = pd.DataFrame({
+            "trading_day": days,
+            "atr_20": [10.0, 20.0],  # populated
+            "atr_vel_ratio": [np.nan, np.nan],  # NULL
+            "gap_open_points": [1.0, 2.0],  # populated
+            "prev_day_range": [np.nan, np.nan],  # NULL
+            "overnight_range": [np.nan, np.nan],  # NULL
+        })
+        g5 = pd.DataFrame({
+            "trading_day": days,
+            "atr_20": [10.0, 20.0],
+            "atr_vel_ratio": [1.1, 1.2],
+            "gap_open_points": [1.0, 2.0],
+            "prev_day_range": [30.0, 40.0],
+            "overnight_range": [15.0, 25.0],
+        })
+        con = self._make_mock_con(g5)
+        result = _backfill_global_features(df, con, "MGC")
+
+        assert result["atr_vel_ratio"].tolist() == [1.1, 1.2]
+        assert result["prev_day_range"].tolist() == [30.0, 40.0]
+        assert result["overnight_range"].tolist() == [15.0, 25.0]
+
+    def test_does_not_overwrite_existing_values(self):
+        """Backfill only fills NULL — never overwrites existing data."""
+        days = pd.to_datetime(["2025-01-01"])
+        df = pd.DataFrame({
+            "trading_day": days,
+            "atr_20": [10.0],
+            "atr_vel_ratio": [999.0],  # existing — must NOT be overwritten
+            "gap_open_points": [1.0],
+            "prev_day_range": [np.nan],  # NULL — should fill
+            "overnight_range": [np.nan],
+        })
+        g5 = pd.DataFrame({
+            "trading_day": days,
+            "atr_20": [10.0],
+            "atr_vel_ratio": [1.1],  # different from existing 999.0
+            "gap_open_points": [1.0],
+            "prev_day_range": [30.0],
+            "overnight_range": [15.0],
+        })
+        con = self._make_mock_con(g5)
+        result = _backfill_global_features(df, con, "MGC")
+
+        # Existing value preserved
+        assert result["atr_vel_ratio"].iloc[0] == 999.0
+        # NULL values filled
+        assert result["prev_day_range"].iloc[0] == 30.0
+        assert result["overnight_range"].iloc[0] == 15.0
+
+    def test_missing_o5_rows_stay_null(self):
+        """If no orb_minutes=5 row exists for a day, features stay NULL."""
+        days = pd.to_datetime(["2025-01-01", "2025-01-02"])
+        df = pd.DataFrame({
+            "trading_day": days,
+            "atr_20": [10.0, 20.0],
+            "atr_vel_ratio": [np.nan, np.nan],
+            "gap_open_points": [1.0, 2.0],
+            "prev_day_range": [np.nan, np.nan],
+            "overnight_range": [np.nan, np.nan],
+        })
+        # Only one day in g5
+        g5 = pd.DataFrame({
+            "trading_day": pd.to_datetime(["2025-01-01"]),
+            "atr_20": [10.0],
+            "atr_vel_ratio": [1.1],
+            "gap_open_points": [1.0],
+            "prev_day_range": [30.0],
+            "overnight_range": [15.0],
+        })
+        con = self._make_mock_con(g5)
+        result = _backfill_global_features(df, con, "MGC")
+
+        # Day 1: filled
+        assert result["atr_vel_ratio"].iloc[0] == 1.1
+        # Day 2: still NaN (no O5 data)
+        assert pd.isna(result["atr_vel_ratio"].iloc[1])
+
+    def test_preserves_non_global_columns(self):
+        """Columns not in GLOBAL_FEATURES are untouched."""
+        days = pd.to_datetime(["2025-01-01"])
+        df = pd.DataFrame({
+            "trading_day": days,
+            "my_custom_col": [42.0],
+            **{col: [np.nan] for col in GLOBAL_FEATURES},
+        })
+        g5 = pd.DataFrame({
+            "trading_day": days,
+            **{col: [1.0] for col in GLOBAL_FEATURES},
+        })
+        con = self._make_mock_con(g5)
+        result = _backfill_global_features(df, con, "MGC")
+
+        assert result["my_custom_col"].iloc[0] == 42.0
+        assert "my_custom_col_g5" not in result.columns
+
+    def test_empty_g5_query_no_crash(self):
+        """Empty O5 table returns df unchanged (except possibly NaN still)."""
+        days = pd.to_datetime(["2025-01-01"])
+        df = pd.DataFrame({
+            "trading_day": days,
+            **{col: [np.nan] for col in GLOBAL_FEATURES},
+        })
+        con = self._make_mock_con(None)  # Empty result
+        result = _backfill_global_features(df, con, "MGC")
+        assert len(result) == 1
+        # Still NaN since no O5 data
+        assert pd.isna(result[GLOBAL_FEATURES[0]].iloc[0])
 
 
 class TestFillMissingFeatures:

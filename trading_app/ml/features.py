@@ -36,6 +36,64 @@ from trading_app.ml.config import (
 logger = logging.getLogger(__name__)
 
 
+def _backfill_global_features(
+    df: pd.DataFrame,
+    con: duckdb.DuckDBPyConnection,
+    instrument: str,
+) -> pd.DataFrame:
+    """Fill missing global features from orb_minutes=5 rows.
+
+    Some instruments have NULL global features for orb_minutes=15/30 in
+    daily_features (pipeline computes them only at orb_minutes=5). Global
+    features don't depend on ORB aperture, so orb_minutes=5 values are
+    a valid fallback.
+
+    Called BEFORE the DB connection is closed — requires the open connection.
+    """
+    # Quick check: if ALL global features are present, skip.
+    # Must check every feature — some (atr_20) may be populated at O15/O30
+    # while others (overnight_range, prev_day_range) are NULL.
+    any_missing = False
+    for col in GLOBAL_FEATURES:
+        if col in df.columns and df[col].isna().any():
+            any_missing = True
+            break
+    if not any_missing:
+        return df
+
+    n_missing = max(df[col].isna().sum() for col in GLOBAL_FEATURES if col in df.columns)
+    logger.info(
+        f"Backfilling global features: {n_missing:,d}/{len(df):,d} rows "
+        f"missing (orb_minutes≠5)"
+    )
+
+    global_df = con.execute(
+        """SELECT trading_day, """
+        + ", ".join(GLOBAL_FEATURES)
+        + """ FROM daily_features
+            WHERE symbol = $instrument AND orb_minutes = 5""",
+        {"instrument": instrument},
+    ).fetchdf()
+
+    # Merge on trading_day, fill only NULL values
+    df = df.merge(global_df, on="trading_day", how="left", suffixes=("", "_g5"))
+    for col in GLOBAL_FEATURES:
+        g5_col = f"{col}_g5"
+        if g5_col in df.columns:
+            mask = df[col].isna() & df[g5_col].notna()
+            if mask.any():
+                df.loc[mask, col] = df.loc[mask, g5_col].values
+            df.drop(columns=[g5_col], inplace=True)
+
+    n_still_missing = df[GLOBAL_FEATURES[0]].isna().sum()
+    if n_still_missing > 0:
+        logger.warning(
+            f"  {n_still_missing:,d} rows still missing global features "
+            f"after backfill (no orb_minutes=5 row for those days)"
+        )
+    return df
+
+
 def _extract_session_features(df: pd.DataFrame) -> pd.DataFrame:
     """Extract per-session ORB features based on each row's orb_label.
 
@@ -454,6 +512,9 @@ def load_feature_matrix(
         """
 
         df = con.execute(query, params).fetchdf()
+
+        # Backfill global features for orb_minutes != 5 (pipeline gap)
+        df = _backfill_global_features(df, con, instrument)
     finally:
         con.close()
 
@@ -536,6 +597,9 @@ def load_validated_feature_matrix(
         """
 
         df = con.execute(query, {"instrument": instrument}).fetchdf()
+
+        # Backfill global features for orb_minutes != 5 (pipeline gap)
+        df = _backfill_global_features(df, con, instrument)
     finally:
         con.close()
 
@@ -597,4 +661,212 @@ def load_validated_feature_matrix(
 
     logger.info(f"Validated feature matrix: {X.shape[0]:,d} rows x {X.shape[1]} features "
                 f"(win rate: {y.mean():.1%})")
+    return X, y, meta
+
+
+def load_single_config_feature_matrix(
+    db_path: str,
+    instrument: str,
+    *,
+    rr_target: float | None = None,
+    config_selection: str = "max_samples",
+    skip_filter: bool = False,
+) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
+    """Load ML feature matrix with ONE config per session — clean labels.
+
+    Fixes the contradictory-label problem: instead of loading ALL validated
+    configs (N rows per day per session with different RR targets producing
+    different WIN/LOSS labels on identical features), picks ONE config per
+    session and loads only those outcomes.
+
+    Config selection modes:
+      - "max_samples": Pick config with MOST data per session (recommended for ML).
+        Avoids filter-selection bias where tight filters inflate Sharpe but starve ML.
+      - "best_sharpe": Pick config with highest Sharpe (original behavior).
+        WARNING: tends to select tightest filters = fewest samples.
+
+    Args:
+        rr_target: If set, only consider configs at this RR. If None, picks
+            across all RR targets per session.
+        config_selection: "max_samples" (default) or "best_sharpe".
+        skip_filter: If True, load ALL break days (no filter eligibility check).
+            ML sees full dataset and learns to discriminate via features like
+            orb_size and atr_20 instead of being pre-filtered.
+
+    Returns:
+        X: Feature matrix (float, ready for sklearn)
+        y: Binary target (1=win, 0=loss)
+        meta: DataFrame with trading_day, pnl_r, orb_label, filter_type, etc.
+
+    @research-source: Aronson Ch.6 data-mining bias analysis (Mar 4 2026)
+    @revalidated-for: E2
+    """
+    from trading_app.config import ALL_FILTERS
+
+    valid_selections = ("max_samples", "best_sharpe")
+    if config_selection not in valid_selections:
+        raise ValueError(f"config_selection must be one of {valid_selections}, got '{config_selection}'")
+
+    con = duckdb.connect(db_path, read_only=True)
+    configure_connection(con)
+    try:
+        # Build optional RR filter
+        rr_clause = ""
+        params: dict = {"instrument": instrument}
+        if rr_target is not None:
+            rr_clause = "AND v.rr_target = $rr_target"
+            params["rr_target"] = rr_target
+
+        # Config picker: max_samples picks loosest filter (most data for ML),
+        # best_sharpe picks tightest filter (highest Sharpe but least data).
+        if config_selection == "max_samples":
+            order_clause = "ORDER BY v.sample_size DESC NULLS LAST"
+        else:
+            order_clause = "ORDER BY v.sharpe_ratio DESC NULLS LAST"
+
+        # Single query: pick one config per session, load outcomes
+        query = f"""
+            WITH best_configs AS (
+                SELECT
+                    v.orb_label, v.entry_model, v.rr_target, v.confirm_bars,
+                    v.orb_minutes, v.filter_type, v.sharpe_ratio, v.sample_size,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY v.orb_label
+                        {order_clause}
+                    ) AS rn
+                FROM validated_setups v
+                WHERE v.instrument = $instrument
+                    AND v.status = 'active'
+                    {rr_clause}
+            )
+            SELECT
+                o.trading_day,
+                o.symbol,
+                o.orb_label,
+                o.orb_minutes,
+                o.entry_model,
+                o.rr_target,
+                o.confirm_bars,
+                o.pnl_r,
+                o.outcome,
+                bc.filter_type,
+                bc.sharpe_ratio AS config_sharpe,
+                bc.sample_size AS config_n,
+                d.*
+            FROM orb_outcomes o
+            JOIN best_configs bc
+                ON o.orb_label = bc.orb_label
+                AND o.entry_model = bc.entry_model
+                AND o.rr_target = bc.rr_target
+                AND o.confirm_bars = bc.confirm_bars
+                AND o.orb_minutes = bc.orb_minutes
+                AND bc.rn = 1
+            JOIN daily_features d
+                ON o.trading_day = d.trading_day
+                AND o.symbol = d.symbol
+                AND o.orb_minutes = d.orb_minutes
+            WHERE o.symbol = $instrument
+                AND o.pnl_r IS NOT NULL
+            ORDER BY o.trading_day
+        """
+
+        df = con.execute(query, params).fetchdf()
+
+        # Also fetch the selected configs for reporting
+        configs_query = f"""
+            WITH ranked AS (
+                SELECT
+                    v.orb_label, v.entry_model, v.rr_target, v.confirm_bars,
+                    v.orb_minutes, v.filter_type, v.sharpe_ratio, v.sample_size,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY v.orb_label
+                        {order_clause}
+                    ) AS rn
+                FROM validated_setups v
+                WHERE v.instrument = $instrument
+                    AND v.status = 'active'
+                    {rr_clause}
+            )
+            SELECT orb_label, entry_model, rr_target, confirm_bars,
+                   orb_minutes, filter_type, sharpe_ratio, sample_size
+            FROM ranked WHERE rn = 1
+            ORDER BY orb_label
+        """
+        configs_df = con.execute(configs_query, params).fetchdf()
+
+        # Backfill global features for orb_minutes != 5 (pipeline gap)
+        df = _backfill_global_features(df, con, instrument)
+    finally:
+        con.close()
+
+    if df.empty:
+        rr_str = f" at RR {rr_target}" if rr_target is not None else ""
+        raise ValueError(f"No single-config outcomes for {instrument}{rr_str}")
+
+    # Log selected configs
+    sel_str = config_selection.upper()
+    rr_str = f" RR={rr_target}" if rr_target is not None else ""
+    filt_str = " UNFILTERED" if skip_filter else ""
+    logger.info(f"Single-config ({sel_str}{rr_str}{filt_str}): "
+                f"{len(configs_df)} sessions, {len(df):,d} raw outcomes for {instrument}")
+    for _, cfg in configs_df.iterrows():
+        logger.info(f"  {cfg['orb_label']:<22} E{cfg['entry_model'][-1]} "
+                     f"RR{cfg['rr_target']:.1f} CB{cfg['confirm_bars']} "
+                     f"O{cfg['orb_minutes']} {cfg['filter_type']:<20} "
+                     f"Sharpe={cfg['sharpe_ratio']:.3f} N={cfg['sample_size']}")
+
+    if skip_filter:
+        # ML sees ALL break days — learns filter boundary from features
+        # (orb_size, atr_20, etc.) instead of being pre-filtered
+        logger.info(f"Filter SKIPPED: ML trains on all {len(df):,d} break days")
+    else:
+        # Apply filter eligibility (same logic as load_validated_feature_matrix)
+        n_before_filter = len(df)
+        keep_mask = np.zeros(len(df), dtype=bool)
+        filter_cache: dict[str, object] = {}
+
+        for idx, row in df.iterrows():
+            ft = row["filter_type"]
+            orb_label = row["orb_label"]
+
+            if ft not in filter_cache:
+                filter_cache[ft] = ALL_FILTERS.get(ft)
+
+            filt = filter_cache[ft]
+            if filt is None:
+                logger.warning(f"Unknown filter_type '{ft}' — skipping")
+                continue
+
+            if filt.matches_row(row.to_dict(), orb_label):
+                keep_mask[idx] = True
+
+        df = df[keep_mask].reset_index(drop=True)
+        n_after_filter = len(df)
+        logger.info(f"After filter: {n_after_filter:,d} rows "
+                    f"({n_before_filter - n_after_filter:,d} filtered out)")
+
+    # Safety dedup: should be 1 row per (trading_day, orb_label) already
+    dedup_cols = ["trading_day", "orb_label"]
+    n_before_dedup = len(df)
+    df = df.drop_duplicates(subset=dedup_cols, keep="first").reset_index(drop=True)
+    if len(df) < n_before_dedup:
+        logger.warning(f"Single-config had {n_before_dedup - len(df)} "
+                       f"unexpected duplicates — investigate")
+
+    # Drop config metadata columns before feature extraction
+    df = df.drop(columns=["config_sharpe", "config_n"], errors="ignore")
+
+    # --- Target ---
+    y = (df["pnl_r"] > 0).astype(int)
+
+    # --- Meta (for evaluation, not features) ---
+    meta = df[["trading_day", "symbol", "orb_label", "orb_minutes",
+               "entry_model", "rr_target", "confirm_bars", "pnl_r",
+               "outcome", "filter_type"]].copy()
+
+    # --- Transform to features (shared with live prediction) ---
+    X = transform_to_features(df)
+
+    logger.info(f"Single-config feature matrix: {X.shape[0]:,d} rows x "
+                f"{X.shape[1]} features (win rate: {y.mean():.1%})")
     return X, y, meta

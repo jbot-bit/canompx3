@@ -306,3 +306,253 @@ class TestModelInfo:
         with patch("trading_app.ml.predict_live.LiveMLPredictor._load_models"):
             predictor = LiveMLPredictor(db_path="dummy.db", instruments=["MGC"])
         assert predictor.get_model_info("MGC") is None
+
+
+# ---------------------------------------------------------------------------
+# Hybrid per-session model tests
+# ---------------------------------------------------------------------------
+
+def _make_hybrid_bundle(
+    sessions: dict[str, dict | None] | None = None,
+    model_type: str = "single_config_per_session",
+    total_honest_delta_r: float = 97.2,
+) -> dict:
+    """Create a hybrid per-session model bundle.
+
+    Args:
+        sessions: Dict of session_name -> session_info. None entries mean
+            no model for that session (fail-open). If None, creates a
+            default bundle with SINGAPORE_OPEN having a model.
+    """
+    if sessions is None:
+        model = MagicMock()
+        model.predict_proba.return_value = np.array([[0.35, 0.65]])
+        sessions = {
+            "SINGAPORE_OPEN": {
+                "model": model,
+                "feature_names": ["feat_0", "feat_1", "orb_label_CME_REOPEN"],
+                "optimal_threshold": 0.50,
+                "test_auc": 0.62,
+                "cpcv_auc": 0.58,
+                "n_train": 300,
+            },
+            "TOKYO_OPEN": {
+                "model": None,  # No model for this session
+                "reason": "oos_negative",
+            },
+        }
+
+    return {
+        "model_type": model_type,
+        "sessions": sessions,
+        "rr_target": 2.5,
+        "total_honest_delta_r": total_honest_delta_r,
+        "trained_at": datetime.now(timezone.utc).isoformat(),
+        "config_hash": _compute_config_hash(),
+        "data_date_range": ("2020-01-01", "2025-12-31"),
+    }
+
+
+class TestHybridModel:
+    """Hybrid per-session model: routes to correct session sub-model."""
+
+    def test_hybrid_predict_with_session_model(self):
+        """Session with a sub-model returns real prediction."""
+        bundle = _make_hybrid_bundle()
+        with patch("trading_app.ml.predict_live.LiveMLPredictor._load_models"):
+            predictor = LiveMLPredictor(db_path="dummy.db", instruments=["MGC"])
+        predictor._models["MGC"] = bundle
+
+        daily_row = _make_mock_daily_features_row()
+        with patch.object(predictor, "_get_daily_features", return_value=daily_row):
+            result = predictor.predict(
+                instrument="MGC",
+                trading_day=date(2025, 12, 1),
+                orb_label="SINGAPORE_OPEN",
+                orb_minutes=5,
+                entry_model="E2",
+                rr_target=2.5,
+                confirm_bars=1,
+            )
+        # Should use the model's prediction (0.65), not fail-open
+        assert result.p_win == pytest.approx(0.65, abs=0.01)
+        assert result.threshold == 0.50
+        assert predictor.predictions_made == 1
+
+    def test_hybrid_fail_open_no_session_model(self):
+        """Session without a sub-model (model=None) → fail-open.
+
+        Must short-circuit BEFORE hitting _get_daily_features (no DB call).
+        """
+        bundle = _make_hybrid_bundle()
+        with patch("trading_app.ml.predict_live.LiveMLPredictor._load_models"):
+            predictor = LiveMLPredictor(db_path="dummy.db", instruments=["MGC"])
+        predictor._models["MGC"] = bundle
+
+        with patch.object(predictor, "_get_daily_features") as mock_gdf:
+            result = predictor.predict(
+                instrument="MGC",
+                trading_day=date(2025, 12, 1),
+                orb_label="TOKYO_OPEN",  # has no model
+                orb_minutes=5,
+                entry_model="E2",
+                rr_target=2.5,
+                confirm_bars=1,
+            )
+            mock_gdf.assert_not_called()
+        assert result == MLPrediction(p_win=0.5, take=True, threshold=0.5)
+
+    def test_hybrid_fail_open_unknown_session(self):
+        """Session not in bundle at all → fail-open."""
+        bundle = _make_hybrid_bundle()
+        with patch("trading_app.ml.predict_live.LiveMLPredictor._load_models"):
+            predictor = LiveMLPredictor(db_path="dummy.db", instruments=["MGC"])
+        predictor._models["MGC"] = bundle
+
+        result = predictor.predict(
+            instrument="MGC",
+            trading_day=date(2025, 12, 1),
+            orb_label="COMEX_SETTLE",  # not in sessions dict
+            orb_minutes=5,
+            entry_model="E2",
+            rr_target=2.5,
+            confirm_bars=1,
+        )
+        assert result == MLPrediction(p_win=0.5, take=True, threshold=0.5)
+
+    def test_hybrid_predict_with_calibrator(self):
+        """Calibrator transforms raw P(win) for display, but threshold uses raw."""
+        mock_model = MagicMock()
+        mock_model.predict_proba.return_value = np.array([[0.35, 0.65]])
+
+        # Calibrator maps 0.65 → 0.72 (isotonic output)
+        mock_calibrator = MagicMock()
+        mock_calibrator.predict.return_value = np.array([0.72])
+
+        sessions = {
+            "SINGAPORE_OPEN": {
+                "model": mock_model,
+                "calibrator": mock_calibrator,
+                "feature_names": ["feat_0", "feat_1", "orb_label_CME_REOPEN"],
+                "optimal_threshold": 0.50,
+                "test_auc": 0.62,
+            },
+        }
+        bundle = _make_hybrid_bundle(sessions=sessions)
+
+        with patch("trading_app.ml.predict_live.LiveMLPredictor._load_models"):
+            predictor = LiveMLPredictor(db_path="dummy.db", instruments=["MGC"])
+        predictor._models["MGC"] = bundle
+
+        daily_row = _make_mock_daily_features_row()
+        with patch.object(predictor, "_get_daily_features", return_value=daily_row):
+            result = predictor.predict(
+                instrument="MGC",
+                trading_day=date(2025, 12, 1),
+                orb_label="SINGAPORE_OPEN",
+                orb_minutes=5,
+                entry_model="E2",
+                rr_target=2.5,
+                confirm_bars=1,
+            )
+        # p_win should be CALIBRATED (0.72), but take decision uses RAW (0.65 >= 0.50)
+        assert result.p_win == pytest.approx(0.72, abs=0.01)
+        assert result.take is True
+        assert result.threshold == 0.50
+        mock_calibrator.predict.assert_called_once()
+
+    def test_hybrid_predict_without_calibrator_returns_raw(self):
+        """No calibrator in bundle → p_win equals raw probability."""
+        bundle = _make_hybrid_bundle()  # default has no calibrator
+        with patch("trading_app.ml.predict_live.LiveMLPredictor._load_models"):
+            predictor = LiveMLPredictor(db_path="dummy.db", instruments=["MGC"])
+        predictor._models["MGC"] = bundle
+
+        daily_row = _make_mock_daily_features_row()
+        with patch.object(predictor, "_get_daily_features", return_value=daily_row):
+            result = predictor.predict(
+                instrument="MGC",
+                trading_day=date(2025, 12, 1),
+                orb_label="SINGAPORE_OPEN",
+                orb_minutes=5,
+                entry_model="E2",
+                rr_target=2.5,
+                confirm_bars=1,
+            )
+        # No calibrator → p_win equals raw probability
+        assert result.p_win == pytest.approx(0.65, abs=0.01)
+
+    def test_legacy_bundle_no_calibrator(self):
+        """Legacy (non-hybrid) bundle without calibrator returns raw p_win."""
+        bundle = _make_mock_bundle(threshold=0.55)
+        bundle["model"].predict_proba.return_value = np.array([[0.4, 0.6]])
+        # Legacy bundles have no "calibrator" key at all
+
+        with patch("trading_app.ml.predict_live.LiveMLPredictor._load_models"):
+            predictor = LiveMLPredictor(db_path="dummy.db", instruments=["MGC"])
+        predictor._models["MGC"] = bundle
+
+        daily_row = _make_mock_daily_features_row()
+        with patch.object(predictor, "_get_daily_features", return_value=daily_row):
+            result = predictor.predict(
+                instrument="MGC",
+                trading_day=date(2025, 12, 1),
+                orb_label="CME_REOPEN",
+                orb_minutes=5,
+                entry_model="E2",
+                rr_target=1.5,
+                confirm_bars=1,
+            )
+        # Legacy: no calibrator → p_win == raw (0.6), take based on raw >= 0.55
+        assert result.p_win == pytest.approx(0.6, abs=0.01)
+        assert result.take is True
+
+    def test_single_config_per_session_type_recognized(self):
+        """model_type='single_config_per_session' is treated as hybrid."""
+        bundle = _make_hybrid_bundle(model_type="single_config_per_session")
+        with patch("trading_app.ml.predict_live.LiveMLPredictor._load_models"):
+            predictor = LiveMLPredictor(db_path="dummy.db", instruments=["MGC"])
+        predictor._models["MGC"] = bundle
+
+        daily_row = _make_mock_daily_features_row()
+        with patch.object(predictor, "_get_daily_features", return_value=daily_row):
+            result = predictor.predict(
+                instrument="MGC",
+                trading_day=date(2025, 12, 1),
+                orb_label="SINGAPORE_OPEN",
+                orb_minutes=5,
+                entry_model="E2",
+                rr_target=2.5,
+                confirm_bars=1,
+            )
+        # Real prediction, not fail-open
+        assert result.p_win != 0.5
+        assert predictor.predictions_made == 1
+
+
+class TestHybridModelInfo:
+    """get_model_info for hybrid models returns session details."""
+
+    def test_hybrid_model_info_sessions(self):
+        bundle = _make_hybrid_bundle(total_honest_delta_r=97.2)
+        with patch("trading_app.ml.predict_live.LiveMLPredictor._load_models"):
+            predictor = LiveMLPredictor(db_path="dummy.db", instruments=["MGC"])
+        predictor._models["MGC"] = bundle
+
+        info = predictor.get_model_info("MGC")
+        assert info is not None
+        assert info["model_type"] == "hybrid_per_session"
+        assert info["n_ml_sessions"] == 1  # Only SINGAPORE_OPEN has a model
+        assert "SINGAPORE_OPEN" in info["ml_sessions"]
+        assert info["total_delta_r"] == 97.2
+
+    def test_hybrid_info_correct_key_name(self):
+        """total_delta_r in info reads from total_honest_delta_r in bundle."""
+        bundle = _make_hybrid_bundle(total_honest_delta_r=251.9)
+        with patch("trading_app.ml.predict_live.LiveMLPredictor._load_models"):
+            predictor = LiveMLPredictor(db_path="dummy.db", instruments=["MGC"])
+        predictor._models["MGC"] = bundle
+
+        info = predictor.get_model_info("MGC")
+        # Verifies the fix: reads "total_honest_delta_r" not "total_delta_r"
+        assert info["total_delta_r"] == 251.9

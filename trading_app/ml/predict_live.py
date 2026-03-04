@@ -7,7 +7,9 @@ Design principles (per de Prado AIFML, per ML_LIVE_INTEGRATION.md):
   1. Fail-open — missing model = trade anyway (0.5, True)
   2. Shared feature pipeline — uses transform_to_features() from features.py
      to guarantee training/serving parity
-  3. One model per instrument — session/entry/rr are INPUT features
+  3. Hybrid per-session models — each session gets its own RF + threshold
+     Sessions without a model fall-open (take all trades).
+     Falls back to per-instrument model if no hybrid model exists.
   4. Config hash + freshness checks for drift detection
 """
 
@@ -28,7 +30,7 @@ from trading_app.ml.config import (
     MODEL_DIR,
     compute_config_hash,
 )
-from trading_app.ml.features import transform_to_features
+from trading_app.ml.features import apply_e6_filter, transform_to_features
 
 logger = logging.getLogger(__name__)
 
@@ -83,29 +85,55 @@ class LiveMLPredictor:
         self._load_models()
 
     def _load_models(self) -> None:
-        """Load model .joblib files for all configured instruments."""
+        """Load model .joblib files for all configured instruments.
+
+        Prefers hybrid per-session models (_hybrid.joblib) when available,
+        falls back to per-instrument models. This enables gradual migration.
+        """
         current_hash = _compute_config_hash()
 
         for inst in self.instruments:
-            path = MODEL_DIR / f"meta_label_{inst}.joblib"
+            # Prefer hybrid model
+            hybrid_path = MODEL_DIR / f"meta_label_{inst}_hybrid.joblib"
+            legacy_path = MODEL_DIR / f"meta_label_{inst}.joblib"
+
+            path = hybrid_path if hybrid_path.exists() else legacy_path
             if not path.exists():
                 logger.warning(
-                    "No ML model for %s (expected %s) — will fail-open", inst, path
+                    "No ML model for %s (checked %s, %s) — will fail-open",
+                    inst, hybrid_path, legacy_path,
                 )
                 continue
 
             try:
                 bundle = joblib.load(path)
                 self._models[inst] = bundle
-                logger.info(
-                    "Loaded ML model for %s: threshold=%.2f, AUC=%.4f, "
-                    "%d features, trained=%s",
-                    inst,
-                    bundle["optimal_threshold"],
-                    bundle.get("oos_auc", 0),
-                    len(bundle["feature_names"]),
-                    bundle.get("trained_at", "unknown"),
+
+                is_hybrid = bundle.get("model_type") in (
+                    "hybrid_per_session", "single_config_per_session",
                 )
+                if is_hybrid:
+                    n_ml = sum(
+                        1 for s in bundle.get("sessions", {}).values()
+                        if s.get("model") is not None
+                    )
+                    n_total = len(bundle.get("sessions", {}))
+                    logger.info(
+                        "Loaded HYBRID ML model for %s: %d/%d sessions with models, "
+                        "trained=%s",
+                        inst, n_ml, n_total,
+                        bundle.get("trained_at", "unknown"),
+                    )
+                else:
+                    logger.info(
+                        "Loaded ML model for %s: threshold=%.2f, AUC=%.4f, "
+                        "%d features, trained=%s",
+                        inst,
+                        bundle["optimal_threshold"],
+                        bundle.get("oos_auc", 0),
+                        len(bundle["feature_names"]),
+                        bundle.get("trained_at", "unknown"),
+                    )
 
                 # Config hash check
                 model_hash = bundle.get("config_hash")
@@ -122,9 +150,9 @@ class LiveMLPredictor:
                     try:
                         trained_at = datetime.fromisoformat(trained_at_str)
                         age_days = (datetime.now(timezone.utc) - trained_at).days
-                        if age_days > 90:
+                        if age_days > 60:
                             logger.warning(
-                                "ML model for %s is %d days old (>90 day threshold)",
+                                "ML model for %s is %d days old (>60 day threshold)",
                                 inst, age_days,
                             )
                     except (ValueError, TypeError):
@@ -177,6 +205,18 @@ class LiveMLPredictor:
             return result
 
         bundle = self._models[instrument]
+        is_hybrid = bundle.get("model_type") in (
+            "hybrid_per_session", "single_config_per_session",
+        )
+
+        # Hybrid model: check if this session has a sub-model
+        if is_hybrid:
+            session_info = bundle.get("sessions", {}).get(orb_label)
+            if session_info is None or session_info.get("model") is None:
+                # No model for this session — fail-open (take all trades)
+                result = MLPrediction(p_win=0.5, take=True, threshold=0.5)
+                self._prediction_cache[cache_key] = result
+                return result
 
         try:
             # Step 1: Get daily features from DB
@@ -193,25 +233,52 @@ class LiveMLPredictor:
 
             # Step 2: Build single-row DataFrame matching training format
             df = pd.DataFrame([daily_row])
-            # Overlay trade config (these come from the strategy, not DB)
             df["orb_label"] = orb_label
             df["entry_model"] = entry_model
             df["rr_target"] = float(rr_target)
             df["confirm_bars"] = int(confirm_bars)
-            # orb_minutes is already in daily_features row, ensure consistency
             df["orb_minutes"] = int(orb_minutes)
 
             # Step 3: Transform using SHARED pipeline (same as training)
             X = transform_to_features(df)
 
-            # Step 4: Align to model's stored feature_names
-            X_aligned = self._align_features(X, bundle["feature_names"])
+            if is_hybrid:
+                # Hybrid path: E6 filter + session-specific model
+                X = apply_e6_filter(X)
+                session_info = bundle["sessions"][orb_label]
+                model = session_info["model"]
+                feature_names = session_info["feature_names"]
+                threshold = float(session_info["optimal_threshold"])
+            else:
+                # Legacy path: per-instrument model
+                model = bundle["model"]
+                feature_names = bundle["feature_names"]
+                threshold = float(bundle["optimal_threshold"])
 
-            # Step 5: Predict
-            model = bundle["model"]
-            p_win = float(model.predict_proba(X_aligned)[:, 1][0])
-            threshold = float(bundle["optimal_threshold"])
-            take = p_win >= threshold
+            # Step 4: Align to model's stored feature_names
+            X_aligned = self._align_features(X, feature_names)
+
+            # Step 5: Predict (raw probability)
+            p_win_raw = float(model.predict_proba(X_aligned)[:, 1][0])
+
+            # Step 6: Take/skip decision on RAW probability
+            # Threshold was optimized on raw RF probabilities during training.
+            # Must compare raw probability to raw threshold for consistency.
+            take = p_win_raw >= threshold
+
+            # Step 7: Calibrate probability for display/Kelly sizing
+            # Isotonic regression makes P(win) meaningful (0.60 ≈ 60% actual).
+            # Old bundles without calibrator fall back to raw probability.
+            calibrator = None
+            if is_hybrid:
+                calibrator = session_info.get("calibrator")
+            else:
+                calibrator = bundle.get("calibrator")
+
+            if calibrator is not None:
+                p_win = float(calibrator.predict([p_win_raw])[0])
+            else:
+                p_win = p_win_raw
 
             result = MLPrediction(p_win=p_win, take=take, threshold=threshold)
             self._prediction_cache[cache_key] = result
@@ -232,7 +299,12 @@ class LiveMLPredictor:
     def _get_daily_features(
         self, instrument: str, trading_day: date, orb_minutes: int,
     ) -> dict | None:
-        """Fetch daily_features row from DB. Cached per (inst, day, orb_min)."""
+        """Fetch daily_features row from DB. Cached per (inst, day, orb_min).
+
+        Backfills global features from orb_minutes=5 when they're NULL
+        (pipeline stores global features only at orb_minutes=5 for some
+        instruments).
+        """
         cache_key = (instrument, trading_day, orb_minutes)
         if cache_key in self._daily_cache:
             return self._daily_cache[cache_key]
@@ -251,6 +323,28 @@ class LiveMLPredictor:
                 return None
             columns = [desc[0] for desc in result.description]
             row_dict = dict(zip(columns, row))
+
+            # Backfill global features from orb_minutes=5 if needed.
+            # Check multiple features — atr_20 may exist at O15 while
+            # overnight_range/prev_day_range are NULL.
+            if orb_minutes != 5 and any(
+                row_dict.get(c) is None for c in ("overnight_range", "prev_day_range", "atr_vel_ratio")
+            ):
+                g5_result = con.execute(
+                    """SELECT * FROM daily_features
+                       WHERE symbol = ? AND orb_minutes = 5 AND trading_day = ?
+                       LIMIT 1""",
+                    [instrument, trading_day],
+                )
+                g5_row = g5_result.fetchone()
+                if g5_row is not None:
+                    g5_cols = [desc[0] for desc in g5_result.description]
+                    g5_dict = dict(zip(g5_cols, g5_row))
+                    from trading_app.ml.config import GLOBAL_FEATURES
+                    for col in GLOBAL_FEATURES:
+                        if row_dict.get(col) is None and g5_dict.get(col) is not None:
+                            row_dict[col] = g5_dict[col]
+
             self._daily_cache[cache_key] = row_dict
             return row_dict
         finally:
@@ -283,8 +377,26 @@ class LiveMLPredictor:
         if instrument not in self._models:
             return None
         b = self._models[instrument]
+
+        if b.get("model_type") in ("hybrid_per_session", "single_config_per_session"):
+            sessions_with_model = [
+                s for s, info in b.get("sessions", {}).items()
+                if info.get("model") is not None
+            ]
+            return {
+                "instrument": instrument,
+                "model_type": "hybrid_per_session",
+                "n_ml_sessions": len(sessions_with_model),
+                "ml_sessions": sessions_with_model,
+                "total_delta_r": b.get("total_honest_delta_r"),
+                "trained_at": b.get("trained_at"),
+                "config_hash": b.get("config_hash"),
+                "data_date_range": b.get("data_date_range"),
+            }
+
         return {
             "instrument": instrument,
+            "model_type": "per_instrument",
             "threshold": b["optimal_threshold"],
             "n_train": b["n_train"],
             "oos_auc": b.get("oos_auc"),

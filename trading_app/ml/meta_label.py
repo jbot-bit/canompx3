@@ -20,6 +20,7 @@ import joblib
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.isotonic import IsotonicRegression
 from sklearn.metrics import roc_auc_score
 
 from pipeline.paths import GOLD_DB_PATH
@@ -42,6 +43,7 @@ from trading_app.ml.cpcv import cpcv_score
 from trading_app.ml.features import (
     apply_e6_filter,
     load_feature_matrix,
+    load_single_config_feature_matrix,
     load_validated_feature_matrix,
 )
 
@@ -208,6 +210,11 @@ def train_per_session_meta_label(
     *,
     save_model: bool = True,
     run_cpcv: bool = True,
+    single_config: bool = False,
+    rr_target: float | None = None,
+    min_session_samples: int | None = None,
+    config_selection: str = "max_samples",
+    skip_filter: bool = False,
 ) -> dict:
     """Train hybrid per-session meta-label models for one instrument.
 
@@ -234,12 +241,22 @@ def train_per_session_meta_label(
     @research-source: ml_hybrid_experiment.py (Mar 4 2026)
     @revalidated-for: E1, E2
     """
+    mode_str = "SINGLE-CONFIG" if single_config else "MULTI-CONFIG"
+    rr_str = f" RR={rr_target}" if rr_target is not None else ""
+    sel_str = f" sel={config_selection}" if single_config else ""
+    filt_str = " UNFILTERED" if skip_filter else ""
     logger.info(f"{'=' * 60}")
-    logger.info(f"  PER-SESSION META-LABEL: {instrument}")
+    logger.info(f"  PER-SESSION META-LABEL: {instrument} ({mode_str}{rr_str}{sel_str}{filt_str})")
     logger.info(f"{'=' * 60}")
 
-    # --- Load validated data + E6 filter ---
-    X_all, y_all, meta_all = load_validated_feature_matrix(db_path, instrument)
+    # --- Load data + E6 filter ---
+    if single_config:
+        X_all, y_all, meta_all = load_single_config_feature_matrix(
+            db_path, instrument, rr_target=rr_target,
+            config_selection=config_selection, skip_filter=skip_filter,
+        )
+    else:
+        X_all, y_all, meta_all = load_validated_feature_matrix(db_path, instrument)
     X_e6 = apply_e6_filter(X_all)
 
     logger.info(f"Total: {len(X_e6):,d} samples, {X_e6.shape[1]} E6 features")
@@ -271,10 +288,15 @@ def train_per_session_meta_label(
         ]
         test_idx = session_indices[session_indices >= n_val_end]
 
+        # Effective threshold: lower for single-config (independent samples)
+        effective_min = min_session_samples if min_session_samples is not None else (
+            200 if single_config else MIN_SESSION_SAMPLES
+        )
+
         # Need enough data in ALL three splits
-        if n_session < MIN_SESSION_SAMPLES or len(val_idx) < 20 or len(test_idx) < 20:
+        if n_session < effective_min or len(val_idx) < 20 or len(test_idx) < 20:
             reason = (
-                f"N={n_session}" if n_session < MIN_SESSION_SAMPLES
+                f"N={n_session}<{effective_min}" if n_session < effective_min
                 else f"N_val={len(val_idx)},N_test={len(test_idx)}"
             )
             logger.info(f"  {session:<20} >> NO_MODEL ({reason} < threshold)")
@@ -283,6 +305,15 @@ def train_per_session_meta_label(
 
         # Get session-appropriate features
         X_session = _get_session_features(X_e6, session)
+
+        # Drop constant columns within this session (e.g., entry_model one-hots
+        # are constant per session — they waste a feature slot with zero info gain)
+        session_data = X_session.iloc[session_indices]
+        const_cols = [c for c in X_session.columns if session_data[c].nunique() <= 1]
+        if const_cols:
+            X_session = X_session.drop(columns=const_cols)
+            logger.debug(f"  {session}: dropped {len(const_cols)} constant columns")
+
         feature_names = list(X_session.columns)
 
         # Adaptive leaf size: bigger datasets get bigger leaves
@@ -310,26 +341,48 @@ def train_per_session_meta_label(
         rf = RandomForestClassifier(**rf_base_params, min_samples_leaf=leaf_size)
         rf.fit(X_session.iloc[train_idx], y_all.iloc[train_idx])
 
+        # --- Feature importance audit trail (top 10 by MDI) ---
+        importances = rf.feature_importances_
+        top_idx = np.argsort(importances)[::-1][:10]
+        top_feats = [(feature_names[i], importances[i]) for i in top_idx]
+        feat_str = ", ".join(f"{n}={v:.1%}" for n, v in top_feats)
+        logger.info(f"  {session:<20}    top10: {feat_str}")
+
         # --- Optimize threshold on VALIDATION set (middle 20%) ---
-        val_prob = rf.predict_proba(X_session.iloc[val_idx])[:, 1]
+        # Threshold search is rank-based (which trades to keep/skip).
+        # It MUST operate on raw RF probabilities, not calibrated ones.
+        # Calibration is a separate concern for P(win) interpretation only.
+        val_prob_raw = rf.predict_proba(X_session.iloc[val_idx])[:, 1]
+
         val_pnl = pnl_r[val_idx]
         val_min_kept = max(50, int(len(val_idx) * 0.15))
         best_t, best_delta = _optimize_threshold_profit(
-            val_prob, val_pnl, min_kept=val_min_kept,
+            val_prob_raw, val_pnl, min_kept=val_min_kept,
         )
 
+        # --- Probability calibration (isotonic regression) ---
+        # Fit on val set: maps raw RF probabilities to calibrated P(win).
+        # Monotone transform — preserves ranking, makes probabilities meaningful.
+        # Used ONLY at prediction time for display/Kelly sizing, never for
+        # threshold search (which is rank-based and uses raw probabilities).
+        y_val = y_all.iloc[val_idx].values
+        calibrator = IsotonicRegression(y_min=0, y_max=1, out_of_bounds="clip")
+        calibrator.fit(val_prob_raw, y_val)
+
         # --- Evaluate honestly on TEST set (final 20%) ---
-        test_prob = rf.predict_proba(X_session.iloc[test_idx])[:, 1]
+        # Use RAW probabilities for threshold comparison and AUC
+        # (consistent with threshold optimized on raw val probs).
+        test_prob_raw = rf.predict_proba(X_session.iloc[test_idx])[:, 1]
         test_pnl = pnl_r[test_idx]
         y_test = y_all.iloc[test_idx].values
         try:
-            test_auc = roc_auc_score(y_test, test_prob)
+            test_auc = roc_auc_score(y_test, test_prob_raw)
         except ValueError:
             test_auc = 0.5  # Single class in test
 
         if best_t is not None:
-            # Apply val-optimized threshold to frozen test set
-            kept_test = test_prob >= best_t
+            # Apply val-optimized threshold to frozen test set (raw probs)
+            kept_test = test_prob_raw >= best_t
             n_kept_test = int(kept_test.sum())
             if n_kept_test < 10:
                 # Threshold too aggressive for test set — reject
@@ -350,6 +403,64 @@ def train_per_session_meta_label(
             honest_delta_r = honest_filt_r - honest_base_r
             skip_pct = 1 - n_kept_test / len(test_idx)
 
+            # --- OOS quality gates ---
+            # Gate 1: OOS must be positive (ML must not hurt)
+            if honest_delta_r < 0:
+                logger.info(
+                    f"  {session:<20} >> NO_MODEL (OOS negative: "
+                    f"{honest_delta_r:+.1f}R, TestAUC={test_auc:.3f})"
+                )
+                session_results[session] = {
+                    "model_type": "NONE",
+                    "reason": f"oos_negative_{honest_delta_r:+.1f}R",
+                    "test_auc": round(test_auc, 4),
+                    "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
+                }
+                continue
+
+            # Gate 2: CPCV must be >= 0.50 (model must not be worse than random
+            # in cross-validation on training data). Only applies when CPCV ran.
+            if cpcv_auc is not None and cpcv_auc < 0.50:
+                logger.info(
+                    f"  {session:<20} >> NO_MODEL (CPCV={cpcv_auc:.3f} < 0.50, "
+                    f"below random in CV)"
+                )
+                session_results[session] = {
+                    "model_type": "NONE",
+                    "reason": f"cpcv_below_random_{cpcv_auc:.3f}",
+                    "test_auc": round(test_auc, 4),
+                    "cpcv_auc": round(cpcv_auc, 4),
+                }
+                continue
+
+            # Gate 3: AUC must be clearly above random (0.52 minimum)
+            if test_auc < 0.52:
+                logger.info(
+                    f"  {session:<20} >> NO_MODEL (AUC={test_auc:.3f} < 0.52, "
+                    f"near-random discrimination)"
+                )
+                session_results[session] = {
+                    "model_type": "NONE",
+                    "reason": f"auc_too_low_{test_auc:.3f}",
+                    "test_auc": round(test_auc, 4),
+                    "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
+                }
+                continue
+
+            # Gate 4: Skip rate must be < 85% (avoid "just don't trade" models)
+            if skip_pct > 0.85:
+                logger.info(
+                    f"  {session:<20} >> NO_MODEL (skip={skip_pct:.0%} > 85%, "
+                    f"avoidance not discrimination)"
+                )
+                session_results[session] = {
+                    "model_type": "NONE",
+                    "reason": f"skip_too_high_{skip_pct:.0%}",
+                    "test_auc": round(test_auc, 4),
+                    "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
+                }
+                continue
+
             cpcv_str = f"{cpcv_auc:.3f}" if cpcv_auc else "  --"
             logger.info(
                 f"  {session:<20} >> ML t={best_t:.2f} "
@@ -360,6 +471,7 @@ def train_per_session_meta_label(
             session_results[session] = {
                 "model_type": "SESSION",
                 "model": rf,
+                "calibrator": calibrator,
                 "feature_names": feature_names,
                 "threshold": best_t,
                 "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
@@ -372,6 +484,7 @@ def train_per_session_meta_label(
                 "honest_base_r": round(honest_base_r, 2),
                 "skip_pct": round(skip_pct, 3),
                 "leaf_size": leaf_size,
+                "top_features": top_feats,  # [(name, importance), ...] for stability tracking
             }
         else:
             logger.info(
@@ -407,11 +520,14 @@ def train_per_session_meta_label(
     model_path = None
     if save_model:
         MODEL_DIR.mkdir(parents=True, exist_ok=True)
+        # Production path: always _hybrid.joblib (predict_live.py expects this).
+        # Both single_config and multi-config per-session models are "hybrid"
+        # from the predictor's perspective (dict of per-session sub-models).
         model_path = MODEL_DIR / f"meta_label_{instrument}_hybrid.joblib"
         config_hash = compute_config_hash()
 
         bundle = {
-            "model_type": "hybrid_per_session",
+            "model_type": "single_config_per_session" if single_config else "hybrid_per_session",
             "instrument": instrument,
             "sessions": {},
             "config_hash": config_hash,
@@ -420,6 +536,8 @@ def train_per_session_meta_label(
                 str(meta_all["trading_day"].min()),
                 str(meta_all["trading_day"].max()),
             ),
+            "single_config": single_config,
+            "rr_target_lock": rr_target,
             "split_ratios": "60/20/20",
             "n_total_samples": n_total,
             "n_ml_sessions": n_ml,
@@ -432,6 +550,7 @@ def train_per_session_meta_label(
             if info["model_type"] == "SESSION":
                 bundle["sessions"][session] = {
                     "model": info["model"],
+                    "calibrator": info.get("calibrator"),
                     "feature_names": info["feature_names"],
                     "optimal_threshold": info["threshold"],
                     "cpcv_auc": info.get("cpcv_auc"),
@@ -443,6 +562,7 @@ def train_per_session_meta_label(
                     "honest_delta_r": info["honest_delta_r"],
                     "skip_pct": info["skip_pct"],
                     "leaf_size": info["leaf_size"],
+                    "top_features": info.get("top_features"),
                 }
             else:
                 bundle["sessions"][session] = {
@@ -450,6 +570,42 @@ def train_per_session_meta_label(
                     "model_type": "NONE",
                     "reason": info.get("reason", "insufficient_data"),
                 }
+
+        # --- Feature importance stability check (compare with previous model) ---
+        if model_path.exists():
+            try:
+                old_bundle = joblib.load(model_path)
+                old_sessions = old_bundle.get("sessions", {})
+                for sess, new_info in bundle["sessions"].items():
+                    if new_info.get("top_features") is None:
+                        continue
+                    old_info = old_sessions.get(sess, {})
+                    old_top = old_info.get("top_features")
+                    if old_top is None:
+                        continue
+                    # Compare top-10 feature rankings
+                    old_names = [f[0] for f in old_top[:10]]
+                    new_names = [f[0] for f in new_info["top_features"][:10]]
+                    drifted = []
+                    for i, name in enumerate(new_names):
+                        if name in old_names:
+                            old_rank = old_names.index(name)
+                            shift = abs(i - old_rank)
+                            if shift > 3:
+                                drifted.append(f"{name} #{old_rank+1}->{i+1}")
+                        else:
+                            drifted.append(f"{name} NEW(#{i+1})")
+                    if drifted:
+                        logger.warning(
+                            f"  {sess} FEATURE DRIFT: {', '.join(drifted)}"
+                        )
+                    else:
+                        logger.info(f"  {sess} feature importance stable")
+            except Exception:
+                logger.warning(
+                    "Could not load previous model for stability check",
+                    exc_info=True,
+                )
 
         joblib.dump(bundle, model_path)
         logger.info(f"  Hybrid model saved: {model_path}")
@@ -767,13 +923,85 @@ def main():
                         help="Train only on validated strategy outcomes (recommended)")
     parser.add_argument("--per-session", action="store_true",
                         help="Train hybrid per-session models (recommended, implies --validated-only)")
+    parser.add_argument("--single-config", action="store_true",
+                        help="Single config per session: 1 row per (day, session), clean labels")
+    parser.add_argument("--rr-target", type=float, default=None,
+                        help="Lock to a specific RR target (e.g. 2.0). Default: best per session")
+    parser.add_argument("--sweep-rr", action="store_true",
+                        help="Sweep all validated RR targets and compare honest OOS")
+    parser.add_argument("--config-selection", type=str, default="max_samples",
+                        choices=["max_samples", "best_sharpe"],
+                        help="How to pick one config per session: max_samples (most data, "
+                             "recommended) or best_sharpe (highest Sharpe, fewest samples)")
+    parser.add_argument("--skip-filter", action="store_true",
+                        help="Skip filter eligibility — ML trains on ALL break days and "
+                             "learns to discriminate via features (orb_size, atr, etc.)")
     args = parser.parse_args()
 
     instruments = ACTIVE_INSTRUMENTS if args.all else [args.instrument or "MGC"]
 
     for inst in instruments:
-        if args.per_session:
-            results = train_per_session_meta_label(inst, args.db_path)
+        if args.sweep_rr:
+            # Sweep all validated RR targets for this instrument
+            import duckdb as _ddb
+            from pipeline.db_config import configure_connection as _cc
+            _con = _ddb.connect(args.db_path, read_only=True)
+            _cc(_con)
+            rr_vals = _con.execute(
+                "SELECT DISTINCT rr_target FROM validated_setups "
+                "WHERE instrument = ? AND status = 'active' ORDER BY rr_target",
+                [inst],
+            ).fetchdf()["rr_target"].tolist()
+            _con.close()
+
+            sweep_results = {}
+            for rr in rr_vals:
+                logger.info(f"\n{'#' * 60}")
+                logger.info(f"  SWEEP: {inst} RR={rr}")
+                logger.info(f"{'#' * 60}")
+                try:
+                    results = train_per_session_meta_label(
+                        inst, args.db_path,
+                        single_config=True, rr_target=rr,
+                        save_model=False,  # Don't save during sweep
+                        run_cpcv=not args.no_cpcv,
+                        config_selection=args.config_selection,
+                        skip_filter=args.skip_filter,
+                    )
+                    sweep_results[rr] = results
+                    print_per_session_results(results)
+                except Exception as e:
+                    logger.warning(f"  RR={rr}: {e}")
+                    sweep_results[rr] = {"status": "error", "error": str(e)}
+
+            # Print sweep comparison
+            print(f"\n{'=' * 70}")
+            print(f"  SWEEP COMPARISON — {inst}")
+            print(f"{'=' * 70}")
+            print(f"  {'RR':>4} {'N':>7} {'ML_SESS':>8} {'VAL_dR':>8} {'OOS_dR':>8} {'STATUS':>8}")
+            print(f"  {'----':>4} {'-------':>7} {'--------':>8} {'--------':>8} {'--------':>8} {'--------':>8}")
+            for rr in sorted(sweep_results.keys()):
+                r = sweep_results[rr]
+                if r.get("status") == "trained":
+                    print(f"  {rr:>4.1f} {r['n_samples']:>7,d} "
+                          f"{r['n_ml_sessions']:>8d} "
+                          f"{r['total_val_delta_r']:>+8.1f} "
+                          f"{r['total_honest_delta_r']:>+8.1f} "
+                          f"{'OK':>8}")
+                else:
+                    print(f"  {rr:>4.1f} {'--':>7} {'--':>8} {'--':>8} {'--':>8} "
+                          f"{'SKIP':>8}")
+            print(f"{'=' * 70}\n")
+
+        elif args.per_session or args.single_config:
+            results = train_per_session_meta_label(
+                inst, args.db_path,
+                single_config=args.single_config,
+                rr_target=args.rr_target,
+                run_cpcv=not args.no_cpcv,
+                config_selection=args.config_selection,
+                skip_filter=args.skip_filter,
+            )
             print_per_session_results(results)
         else:
             results = train_meta_label(
