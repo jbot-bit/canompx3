@@ -2,8 +2,10 @@
 Read-only database helper for the Streamlit dashboard.
 
 All connections use read_only=True to prevent accidental writes.
+Uses a cached connection per db_path to avoid connection-per-query overhead.
 """
 
+import atexit
 from pathlib import Path
 
 import duckdb
@@ -12,10 +14,24 @@ import pandas as pd
 
 from pipeline.paths import GOLD_DB_PATH
 
+_DB_CONNECTIONS: dict[str, duckdb.DuckDBPyConnection] = {}
+
 def get_connection(db_path: Path | None = None) -> duckdb.DuckDBPyConnection:
-    """Open a read-only DuckDB connection."""
-    path = db_path or GOLD_DB_PATH
-    return duckdb.connect(str(path), read_only=True)
+    """Get or create a cached read-only DuckDB connection."""
+    path = str(db_path or GOLD_DB_PATH)
+    if path not in _DB_CONNECTIONS:
+        _DB_CONNECTIONS[path] = duckdb.connect(path, read_only=True)
+    return _DB_CONNECTIONS[path]
+
+def _cleanup_connections():
+    for con in _DB_CONNECTIONS.values():
+        try:
+            con.close()
+        except Exception:
+            pass
+    _DB_CONNECTIONS.clear()
+
+atexit.register(_cleanup_connections)
 
 def query_df(sql: str, db_path: Path | None = None) -> pd.DataFrame:
     """Execute a SELECT query and return a DataFrame.
@@ -26,11 +42,8 @@ def query_df(sql: str, db_path: Path | None = None) -> pd.DataFrame:
     if not stripped.startswith("SELECT") and not stripped.startswith("WITH"):
         raise ValueError(f"Only SELECT/WITH queries allowed, got: {sql[:40]}...")
 
-    conn = get_connection(db_path)
-    try:
-        return conn.execute(sql).fetchdf()
-    finally:
-        conn.close()
+    con = get_connection(db_path)
+    return con.execute(sql).fetchdf()
 
 def get_table_counts(db_path: Path | None = None) -> dict[str, int]:
     """Return row counts for all known tables."""
@@ -39,50 +52,44 @@ def get_table_counts(db_path: Path | None = None) -> dict[str, int]:
         "orb_outcomes", "experimental_strategies", "validated_setups",
     ]
     conn = get_connection(db_path)
-    try:
-        counts = {}
-        for t in tables:
-            try:
-                row = conn.execute(f"SELECT COUNT(*) AS cnt FROM {t}").fetchone()
-                counts[t] = row[0] if row else 0
-            except duckdb.CatalogException:
-                counts[t] = -1  # table doesn't exist
-        return counts
-    finally:
-        conn.close()
+    counts = {}
+    for t in tables:
+        try:
+            row = conn.execute(f"SELECT COUNT(*) AS cnt FROM {t}").fetchone()
+            counts[t] = row[0] if row else 0
+        except duckdb.CatalogException:
+            counts[t] = -1  # table doesn't exist
+    return counts
 
 def get_date_ranges(db_path: Path | None = None) -> dict[str, dict]:
     """Return min/max dates for key tables."""
     conn = get_connection(db_path)
+    ranges = {}
+    # bars_1m
     try:
-        ranges = {}
-        # bars_1m
-        try:
-            row = conn.execute(
-                "SELECT MIN(ts_utc)::DATE AS min_d, MAX(ts_utc)::DATE AS max_d FROM bars_1m"
-            ).fetchone()
-            ranges["bars_1m"] = {"min": str(row[0]), "max": str(row[1])} if row else {}
-        except Exception:
-            ranges["bars_1m"] = {}
-        # daily_features
-        try:
-            row = conn.execute(
-                "SELECT MIN(trading_day) AS min_d, MAX(trading_day) AS max_d FROM daily_features"
-            ).fetchone()
-            ranges["daily_features"] = {"min": str(row[0]), "max": str(row[1])} if row else {}
-        except Exception:
-            ranges["daily_features"] = {}
-        # orb_outcomes
-        try:
-            row = conn.execute(
-                "SELECT MIN(trading_day) AS min_d, MAX(trading_day) AS max_d FROM orb_outcomes"
-            ).fetchone()
-            ranges["orb_outcomes"] = {"min": str(row[0]), "max": str(row[1])} if row else {}
-        except Exception:
-            ranges["orb_outcomes"] = {}
-        return ranges
-    finally:
-        conn.close()
+        row = conn.execute(
+            "SELECT MIN(ts_utc)::DATE AS min_d, MAX(ts_utc)::DATE AS max_d FROM bars_1m"
+        ).fetchone()
+        ranges["bars_1m"] = {"min": str(row[0]), "max": str(row[1])} if row else {}
+    except Exception:
+        ranges["bars_1m"] = {}
+    # daily_features
+    try:
+        row = conn.execute(
+            "SELECT MIN(trading_day) AS min_d, MAX(trading_day) AS max_d FROM daily_features"
+        ).fetchone()
+        ranges["daily_features"] = {"min": str(row[0]), "max": str(row[1])} if row else {}
+    except Exception:
+        ranges["daily_features"] = {}
+    # orb_outcomes
+    try:
+        row = conn.execute(
+            "SELECT MIN(trading_day) AS min_d, MAX(trading_day) AS max_d FROM orb_outcomes"
+        ).fetchone()
+        ranges["orb_outcomes"] = {"min": str(row[0]), "max": str(row[1])} if row else {}
+    except Exception:
+        ranges["orb_outcomes"] = {}
+    return ranges
 
 def get_validated_strategies(
     db_path: Path | None = None,
@@ -151,18 +158,15 @@ def get_gap_days(db_path: Path | None = None) -> pd.DataFrame:
 def get_schema_summary(db_path: Path | None = None) -> str:
     """Return a text summary of DB tables and columns for AI context."""
     conn = get_connection(db_path)
-    try:
-        tables = conn.execute(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+    tables = conn.execute(
+        "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+    ).fetchdf()
+    lines = []
+    for t in tables["table_name"]:
+        cols = conn.execute(
+            f"SELECT column_name, data_type FROM information_schema.columns "
+            f"WHERE table_name='{t}' ORDER BY ordinal_position"
         ).fetchdf()
-        lines = []
-        for t in tables["table_name"]:
-            cols = conn.execute(
-                f"SELECT column_name, data_type FROM information_schema.columns "
-                f"WHERE table_name='{t}' ORDER BY ordinal_position"
-            ).fetchdf()
-            col_strs = [f"{r['column_name']} ({r['data_type']})" for _, r in cols.iterrows()]
-            lines.append(f"{t}: {', '.join(col_strs)}")
-        return "\n".join(lines)
-    finally:
-        conn.close()
+        col_strs = [f"{r['column_name']} ({r['data_type']})" for _, r in cols.iterrows()]
+        lines.append(f"{t}: {', '.join(col_strs)}")
+    return "\n".join(lines)
