@@ -28,6 +28,15 @@ RESEARCH_DIR = PROJECT_ROOT / "research"
 # Module-level override for tests; production uses GOLD_DB_PATH from pipeline.paths
 GOLD_DB_PATH_FOR_CHECKS = None  # Set by tests; production uses GOLD_DB_PATH
 
+
+def _get_db_path() -> Path:
+    """Resolve DB path: test override > pipeline.paths default."""
+    if GOLD_DB_PATH_FOR_CHECKS is not None:
+        return Path(GOLD_DB_PATH_FOR_CHECKS)
+    from pipeline.paths import GOLD_DB_PATH
+    return GOLD_DB_PATH
+
+
 # =============================================================================
 # FILES TO CHECK
 # =============================================================================
@@ -1201,7 +1210,7 @@ def check_discovery_session_aware_filters() -> list[str]:
     return violations
 
 
-def check_validated_filters_registered() -> list[str]:
+def check_validated_filters_registered(con=None) -> list[str]:
     """Check #29: Every filter_type in validated_setups must exist in ALL_FILTERS.
 
     ALL_FILTERS is the single source of truth for filter definitions.
@@ -1214,15 +1223,19 @@ def check_validated_filters_registered() -> list[str]:
         violations.append(f"  Cannot import ALL_FILTERS: {e}")
         return violations
 
+    _own_con = False
     try:
-        import duckdb
-        from pipeline.paths import GOLD_DB_PATH
+        if con is None:
+            import duckdb
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
 
-        con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
         rows = con.execute(
             "SELECT DISTINCT filter_type FROM validated_setups ORDER BY filter_type"
         ).fetchall()
-        con.close()
 
         db_filter_types = {r[0] for r in rows}
         missing = db_filter_types - set(ALL_FILTERS.keys())
@@ -1233,6 +1246,9 @@ def check_validated_filters_registered() -> list[str]:
                 )
     except (ImportError, OSError) as e:
         print(f"    SKIP check_validated_filters_registered: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
 
     return violations
 
@@ -1286,7 +1302,7 @@ def check_e2_e3_cb1_only() -> list[str]:
     return violations
 
 
-def check_no_e0_in_db() -> list[str]:
+def check_no_e0_in_db(con=None) -> list[str]:
     """Check #35: No E0 rows should exist in any trading table.
 
     E0 (limit-on-confirm) was purged Feb 2026. Replaced by E2 (stop-market).
@@ -1294,33 +1310,32 @@ def check_no_e0_in_db() -> list[str]:
     out in the main() runner until then.
     """
     violations = []
+    _own_con = False
     try:
-        import duckdb
-
-        db_path = GOLD_DB_PATH_FOR_CHECKS
-        if db_path is None:
-            from pipeline.paths import GOLD_DB_PATH
-            db_path = GOLD_DB_PATH
-        if not Path(db_path).exists():
-            return violations
-        con = duckdb.connect(str(db_path), read_only=True)
-        try:
-            for table in ["orb_outcomes", "experimental_strategies", "validated_setups"]:
-                count = con.execute(
-                    f"SELECT COUNT(*) FROM {table} WHERE entry_model = 'E0'"
-                ).fetchone()[0]
-                if count > 0:
-                    violations.append(
-                        f"  {table}: {count} rows with entry_model='E0' (purged Feb 2026)"
-                    )
-        finally:
-            con.close()
+        if con is None:
+            import duckdb
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+        for table in ["orb_outcomes", "experimental_strategies", "validated_setups"]:
+            count = con.execute(
+                f"SELECT COUNT(*) FROM {table} WHERE entry_model = 'E0'"
+            ).fetchone()[0]
+            if count > 0:
+                violations.append(
+                    f"  {table}: {count} rows with entry_model='E0' (purged Feb 2026)"
+                )
     except (ImportError, OSError) as e:
         print(f"    SKIP check_no_e0_in_db: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
     return violations
 
 
-def check_doc_stats_consistency() -> list[str]:
+def check_doc_stats_consistency(con=None) -> list[str]:
     """Check #36: Doc files must match ground-truth DB counts.
 
     Parses key stats (validated active, FDR significant, edge families,
@@ -1330,42 +1345,44 @@ def check_doc_stats_consistency() -> list[str]:
     violations = []
 
     # Ground-truth from DB
+    _own_con = False
     try:
-        import duckdb
-        from pipeline.paths import GOLD_DB_PATH
-        db_path = GOLD_DB_PATH
-        if not Path(db_path).exists():
-            return violations  # Skip if no DB (CI)
-        con = duckdb.connect(str(db_path), read_only=True)
-        try:
-            validated_active = con.execute(
-                "SELECT COUNT(*) FROM validated_setups WHERE status = 'active'"
-            ).fetchone()[0]
-            fdr_significant = con.execute(
-                "SELECT COUNT(*) FROM validated_setups "
-                "WHERE status = 'active' AND fdr_significant"
-            ).fetchone()[0]
-            edge_families_count = con.execute(
-                "SELECT COUNT(*) FROM edge_families"
-            ).fetchone()[0]
-            # Per-aperture validated counts
-            aperture_rows = con.execute(
-                "SELECT orb_minutes, COUNT(*) FROM validated_setups "
-                "WHERE status = 'active' GROUP BY orb_minutes"
-            ).fetchall()
-            aperture_counts = {int(r[0]): r[1] for r in aperture_rows}
-            # Edge family robustness tiers
-            tier_rows = con.execute(
-                "SELECT robustness_status, COUNT(*) FROM edge_families "
-                "WHERE robustness_status IN ('ROBUST','WHITELISTED') "
-                "GROUP BY robustness_status"
-            ).fetchall()
-            tier_counts = {r[0]: r[1] for r in tier_rows}
-        finally:
-            con.close()
+        if con is None:
+            import duckdb
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations  # Skip if no DB (CI)
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+        validated_active = con.execute(
+            "SELECT COUNT(*) FROM validated_setups WHERE status = 'active'"
+        ).fetchone()[0]
+        fdr_significant = con.execute(
+            "SELECT COUNT(*) FROM validated_setups "
+            "WHERE status = 'active' AND fdr_significant"
+        ).fetchone()[0]
+        edge_families_count = con.execute(
+            "SELECT COUNT(*) FROM edge_families"
+        ).fetchone()[0]
+        # Per-aperture validated counts
+        aperture_rows = con.execute(
+            "SELECT orb_minutes, COUNT(*) FROM validated_setups "
+            "WHERE status = 'active' GROUP BY orb_minutes"
+        ).fetchall()
+        aperture_counts = {int(r[0]): r[1] for r in aperture_rows}
+        # Edge family robustness tiers
+        tier_rows = con.execute(
+            "SELECT robustness_status, COUNT(*) FROM edge_families "
+            "WHERE robustness_status IN ('ROBUST','WHITELISTED') "
+            "GROUP BY robustness_status"
+        ).fetchall()
+        tier_counts = {r[0]: r[1] for r in tier_rows}
     except (ImportError, OSError) as e:
         print(f"    SKIP check_doc_stats_consistency: {type(e).__name__}: {e}")
         return violations
+    finally:
+        if _own_con and con is not None:
+            con.close()
 
     # Count drift checks from the CHECKS registry (single source of truth)
     drift_check_count = len(CHECKS)
@@ -1694,41 +1711,40 @@ def check_sql_adapter_validation_sync() -> list[str]:
     return violations
 
 
-def check_no_active_e3() -> list[str]:
+def check_no_active_e3(con=None) -> list[str]:
     """Check #39: No active E3 strategies in validated_setups.
 
     E3 (retrace limit entry) was soft-retired Feb 2026: 0/50 FDR-significant,
     no timeout mechanism (100% fill rate = late garbage included).
     """
     violations = []
+    _own_con = False
     try:
-        import duckdb
-
-        db_path = GOLD_DB_PATH_FOR_CHECKS
-        if db_path is None:
-            from pipeline.paths import GOLD_DB_PATH
-            db_path = GOLD_DB_PATH
-        if not Path(db_path).exists():
-            return violations  # Skip if no DB (CI)
-        con = duckdb.connect(str(db_path), read_only=True)
-        try:
-            count = con.execute(
-                "SELECT COUNT(*) FROM validated_setups "
-                "WHERE entry_model = 'E3' AND status = 'active'"
-            ).fetchone()[0]
-            if count > 0:
-                violations.append(
-                    f"  validated_setups: {count} active E3 strategies "
-                    f"(soft-retired Feb 2026)"
-                )
-        finally:
-            con.close()
+        if con is None:
+            import duckdb
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations  # Skip if no DB (CI)
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+        count = con.execute(
+            "SELECT COUNT(*) FROM validated_setups "
+            "WHERE entry_model = 'E3' AND status = 'active'"
+        ).fetchone()[0]
+        if count > 0:
+            violations.append(
+                f"  validated_setups: {count} active E3 strategies "
+                f"(soft-retired Feb 2026)"
+            )
     except (ImportError, OSError) as e:
         print(f"    SKIP check_no_active_e3: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
     return violations
 
 
-def check_wf_coverage() -> list[str]:
+def check_wf_coverage(con=None) -> list[str]:
     """Check #40: WF coverage for MGC/MES (soft gate — WARNING ONLY, never blocks).
 
     MGC and MES have enough data years for walk-forward testing.
@@ -1738,35 +1754,34 @@ def check_wf_coverage() -> list[str]:
     """
     WF_REQUIRED_INSTRUMENTS = {"MGC", "MES"}
     warnings = []
+    _own_con = False
     try:
-        import duckdb
-
-        db_path = GOLD_DB_PATH_FOR_CHECKS
-        if db_path is None:
-            from pipeline.paths import GOLD_DB_PATH
-            db_path = GOLD_DB_PATH
-        if not Path(db_path).exists():
-            return []  # Skip if no DB (CI)
-        con = duckdb.connect(str(db_path), read_only=True)
-        try:
-            for inst in sorted(WF_REQUIRED_INSTRUMENTS):
-                row = con.execute(
-                    "SELECT COUNT(*) AS total, "
-                    "SUM(CASE WHEN wf_tested = TRUE THEN 1 ELSE 0 END) AS tested "
-                    "FROM validated_setups "
-                    "WHERE instrument = ? AND status = 'active'",
-                    [inst],
-                ).fetchone()
-                total, tested = row[0], row[1]
-                if total > 0 and tested < total:
-                    warnings.append(
-                        f"  {inst}: {total - tested}/{total} active strategies "
-                        f"missing WF test (soft gate)"
-                    )
-        finally:
-            con.close()
+        if con is None:
+            import duckdb
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return []  # Skip if no DB (CI)
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+        for inst in sorted(WF_REQUIRED_INSTRUMENTS):
+            row = con.execute(
+                "SELECT COUNT(*) AS total, "
+                "SUM(CASE WHEN wf_tested = TRUE THEN 1 ELSE 0 END) AS tested "
+                "FROM validated_setups "
+                "WHERE instrument = ? AND status = 'active'",
+                [inst],
+            ).fetchone()
+            total, tested = row[0], row[1]
+            if total > 0 and tested < total:
+                warnings.append(
+                    f"  {inst}: {total - tested}/{total} active strategies "
+                    f"missing WF test (soft gate)"
+                )
     except (ImportError, OSError) as e:
         print(f"    SKIP check_wf_coverage: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
 
     # Print warnings but never block — this is a soft gate
     if warnings:
@@ -1825,7 +1840,7 @@ def check_data_years_disclosure() -> list[str]:
     return []  # Always pass — soft gate only warns
 
 
-def check_uncovered_fdr_strategies() -> list[str]:
+def check_uncovered_fdr_strategies(con=None) -> list[str]:
     """Check #43: Warn on FDR+WF strategies with no live_config spec (WARNING ONLY, never blocks).
 
     Detects strategies that passed full validation (fdr_significant=True, wf_passed=True,
@@ -1837,38 +1852,35 @@ def check_uncovered_fdr_strategies() -> list[str]:
     Advisory only — the portfolio is intentionally curated, not exhaustive.
     Run after every validator rebuild to catch new FDR+WF winners not yet in the portfolio.
     """
+    _own_con = False
     try:
-        import duckdb
         from trading_app.live_config import LIVE_PORTFOLIO, LIVE_MIN_EXPECTANCY_R
 
-        db_path = GOLD_DB_PATH_FOR_CHECKS
-        if db_path is None:
-            from pipeline.paths import GOLD_DB_PATH
-            db_path = GOLD_DB_PATH
-        if not Path(db_path).exists():
-            return []
+        if con is None:
+            import duckdb
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return []
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
 
         covered = {
             (spec.orb_label, spec.entry_model, spec.filter_type)
             for spec in LIVE_PORTFOLIO
         }
 
-        con = duckdb.connect(str(db_path), read_only=True)
-        try:
-            rows = con.execute(
-                """SELECT DISTINCT orb_label, entry_model, filter_type,
-                          COUNT(*) OVER (PARTITION BY orb_label, entry_model, filter_type) AS combo_count,
-                          MAX(expectancy_r) OVER (PARTITION BY orb_label, entry_model, filter_type) AS best_exp_r
-                   FROM validated_setups
-                   WHERE status = 'active'
-                   AND fdr_significant = TRUE
-                   AND wf_passed = TRUE
-                   AND expectancy_r >= ?
-                   ORDER BY best_exp_r DESC, orb_label, entry_model, filter_type""",
-                [LIVE_MIN_EXPECTANCY_R],
-            ).fetchall()
-        finally:
-            con.close()
+        rows = con.execute(
+            """SELECT DISTINCT orb_label, entry_model, filter_type,
+                      COUNT(*) OVER (PARTITION BY orb_label, entry_model, filter_type) AS combo_count,
+                      MAX(expectancy_r) OVER (PARTITION BY orb_label, entry_model, filter_type) AS best_exp_r
+               FROM validated_setups
+               WHERE status = 'active'
+               AND fdr_significant = TRUE
+               AND wf_passed = TRUE
+               AND expectancy_r >= ?
+               ORDER BY best_exp_r DESC, orb_label, entry_model, filter_type""",
+            [LIVE_MIN_EXPECTANCY_R],
+        ).fetchall()
 
         seen_combos: set[tuple] = set()
         warnings = []
@@ -1889,6 +1901,9 @@ def check_uncovered_fdr_strategies() -> list[str]:
                 print(f"  WARNING (non-blocking): {w}")
     except (ImportError, OSError) as e:
         print(f"    SKIP check_uncovered_fdr_strategies: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
     return []  # Always pass — advisory only
 
 
@@ -1969,7 +1984,7 @@ def check_research_provenance_annotations() -> list[str]:
     return violations
 
 
-def check_orphaned_validated_strategies() -> list[str]:
+def check_orphaned_validated_strategies(con=None) -> list[str]:
     """Check #42: Validated strategies must have corresponding outcome data.
 
     Detects orphaned validated strategies — strategies in validated_setups for
@@ -1984,39 +1999,38 @@ def check_orphaned_validated_strategies() -> list[str]:
     then rerun strategy_discovery, strategy_validator, build_edge_families.
     """
     violations = []
+    _own_con = False
     try:
-        import duckdb
-
-        db_path = GOLD_DB_PATH_FOR_CHECKS
-        if db_path is None:
-            from pipeline.paths import GOLD_DB_PATH
-            db_path = GOLD_DB_PATH
-        if not Path(db_path).exists():
-            return violations  # Skip if no DB (CI)
-        con = duckdb.connect(str(db_path), read_only=True)
-        try:
-            rows = con.execute(
-                """SELECT v.instrument, v.orb_minutes, COUNT(*) AS n_strategies
-                   FROM validated_setups v
-                   WHERE v.status = 'active'
-                   AND NOT EXISTS (
-                       SELECT 1 FROM orb_outcomes o
-                       WHERE o.symbol = v.instrument
-                       AND o.orb_minutes = v.orb_minutes
-                   )
-                   GROUP BY v.instrument, v.orb_minutes
-                   ORDER BY v.instrument, v.orb_minutes"""
-            ).fetchall()
-            for inst, orb_min, n in rows:
-                violations.append(
-                    f"  {inst} {orb_min}m: {n} active strategies with no "
-                    f"orb_outcomes rows — rebuild: outcome_builder "
-                    f"--instrument {inst} --orb-minutes {orb_min} --force"
-                )
-        finally:
-            con.close()
+        if con is None:
+            import duckdb
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations  # Skip if no DB (CI)
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+        rows = con.execute(
+            """SELECT v.instrument, v.orb_minutes, COUNT(*) AS n_strategies
+               FROM validated_setups v
+               WHERE v.status = 'active'
+               AND NOT EXISTS (
+                   SELECT 1 FROM orb_outcomes o
+                   WHERE o.symbol = v.instrument
+                   AND o.orb_minutes = v.orb_minutes
+               )
+               GROUP BY v.instrument, v.orb_minutes
+               ORDER BY v.instrument, v.orb_minutes"""
+        ).fetchall()
+        for inst, orb_min, n in rows:
+            violations.append(
+                f"  {inst} {orb_min}m: {n} active strategies with no "
+                f"orb_outcomes rows — rebuild: outcome_builder "
+                f"--instrument {inst} --orb-minutes {orb_min} --force"
+            )
     except (ImportError, OSError) as e:
         print(f"    SKIP check_orb_outcomes_coverage: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
     return violations
 
 
@@ -2233,7 +2247,7 @@ def check_ml_lookahead_blacklist() -> list[str]:
     return violations
 
 
-def check_audit_columns_populated() -> list[str]:
+def check_audit_columns_populated(con=None) -> list[str]:
     """Check #50: Audit columns (n_trials, fst_hurdle, DSR) must be populated.
 
     Verifies that strategy_discovery has been run with the new audit code
@@ -2242,57 +2256,57 @@ def check_audit_columns_populated() -> list[str]:
     meaning discovery was never re-run after the schema change.
     """
     violations = []
+    _own_con = False
     try:
-        import duckdb
         from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
-        db_path = GOLD_DB_PATH_FOR_CHECKS
-        if db_path is None:
-            from pipeline.paths import GOLD_DB_PATH
-            db_path = GOLD_DB_PATH
-        if not Path(db_path).exists():
-            return violations
-        con = duckdb.connect(str(db_path), read_only=True)
-        try:
-            for inst in ACTIVE_ORB_INSTRUMENTS:
-                total = con.execute(
-                    "SELECT COUNT(*) FROM experimental_strategies "
-                    "WHERE instrument = ?", [inst],
-                ).fetchone()[0]
-                if total == 0:
-                    continue
-                # At least some rows must have audit columns populated
-                for col in ["n_trials_at_discovery", "fst_hurdle"]:
-                    populated = con.execute(
-                        f"SELECT COUNT(*) FROM experimental_strategies "
-                        f"WHERE instrument = ? AND {col} IS NOT NULL",
-                        [inst],
-                    ).fetchone()[0]
-                    if populated == 0:
-                        violations.append(
-                            f"  {inst}: 0/{total} rows have {col} "
-                            f"(re-run strategy_discovery)"
-                        )
-                # sharpe_haircut: at least some rows with sample_size>=30
-                # should have DSR computed
-                eligible = con.execute(
-                    "SELECT COUNT(*) FROM experimental_strategies "
-                    "WHERE instrument = ? AND sample_size >= 30",
+        if con is None:
+            import duckdb
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+        for inst in ACTIVE_ORB_INSTRUMENTS:
+            total = con.execute(
+                "SELECT COUNT(*) FROM experimental_strategies "
+                "WHERE instrument = ?", [inst],
+            ).fetchone()[0]
+            if total == 0:
+                continue
+            # At least some rows must have audit columns populated
+            for col in ["n_trials_at_discovery", "fst_hurdle"]:
+                populated = con.execute(
+                    f"SELECT COUNT(*) FROM experimental_strategies "
+                    f"WHERE instrument = ? AND {col} IS NOT NULL",
                     [inst],
                 ).fetchone()[0]
-                populated_dsr = con.execute(
-                    "SELECT COUNT(*) FROM experimental_strategies "
-                    "WHERE instrument = ? AND sharpe_haircut IS NOT NULL",
-                    [inst],
-                ).fetchone()[0]
-                if eligible > 0 and populated_dsr == 0:
+                if populated == 0:
                     violations.append(
-                        f"  {inst}: 0/{eligible} eligible rows have "
-                        f"sharpe_haircut (re-run strategy_discovery)"
+                        f"  {inst}: 0/{total} rows have {col} "
+                        f"(re-run strategy_discovery)"
                     )
-        finally:
-            con.close()
+            # sharpe_haircut: at least some rows with sample_size>=30
+            # should have DSR computed
+            eligible = con.execute(
+                "SELECT COUNT(*) FROM experimental_strategies "
+                "WHERE instrument = ? AND sample_size >= 30",
+                [inst],
+            ).fetchone()[0]
+            populated_dsr = con.execute(
+                "SELECT COUNT(*) FROM experimental_strategies "
+                "WHERE instrument = ? AND sharpe_haircut IS NOT NULL",
+                [inst],
+            ).fetchone()[0]
+            if eligible > 0 and populated_dsr == 0:
+                violations.append(
+                    f"  {inst}: 0/{eligible} eligible rows have "
+                    f"sharpe_haircut (re-run strategy_discovery)"
+                )
     except (ImportError, OSError) as e:
         print(f"    SKIP check_experimental_strategies_audit: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
     return violations
 
 
@@ -2531,7 +2545,7 @@ def check_session_resolver_sanity() -> list[str]:
     return violations
 
 
-def check_daily_features_row_integrity() -> list[str]:
+def check_daily_features_row_integrity(con=None) -> list[str]:
     """Verify daily_features has exactly 3 rows per (trading_day, symbol).
 
     A partial rebuild can leave days with 1 or 2 rows instead of 3 (for
@@ -2539,40 +2553,39 @@ def check_daily_features_row_integrity() -> list[str]:
     discovery to silently compute on wrong N.
     """
     violations = []
+    _own_con = False
     try:
-        import duckdb
-
-        db_path = GOLD_DB_PATH_FOR_CHECKS
-        if db_path is None:
-            from pipeline.paths import GOLD_DB_PATH
-            db_path = GOLD_DB_PATH
-        if not Path(db_path).exists():
-            return violations
-        con = duckdb.connect(str(db_path), read_only=True)
-        try:
-            # Find (trading_day, symbol) pairs with != 3 rows
-            bad = con.execute("""
-                SELECT symbol, COUNT(*) as n_bad_days
-                FROM (
-                    SELECT trading_day, symbol, COUNT(*) as row_count
-                    FROM daily_features
-                    GROUP BY trading_day, symbol
-                    HAVING COUNT(*) != 3
-                )
-                GROUP BY symbol
-            """).fetchall()
-            for symbol, n_bad in bad:
-                violations.append(
-                    f"  {symbol}: {n_bad} trading day(s) with != 3 rows in daily_features"
-                )
-        finally:
-            con.close()
+        if con is None:
+            import duckdb
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+        # Find (trading_day, symbol) pairs with != 3 rows
+        bad = con.execute("""
+            SELECT symbol, COUNT(*) as n_bad_days
+            FROM (
+                SELECT trading_day, symbol, COUNT(*) as row_count
+                FROM daily_features
+                GROUP BY trading_day, symbol
+                HAVING COUNT(*) != 3
+            )
+            GROUP BY symbol
+        """).fetchall()
+        for symbol, n_bad in bad:
+            violations.append(
+                f"  {symbol}: {n_bad} trading day(s) with != 3 rows in daily_features"
+            )
     except (ImportError, OSError) as e:
         print(f"    SKIP check_daily_features_row_integrity: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
     return violations
 
 
-def check_data_continuity() -> list[str]:
+def check_data_continuity(con=None) -> list[str]:
     """Check #58: Warn on unexpected gaps in trading days per instrument.
 
     Queries daily_features for each active instrument and flags gaps > 7
@@ -2583,46 +2596,46 @@ def check_data_continuity() -> list[str]:
     Advisory only — market closures are legitimate.
     """
     warnings = []
+    _own_con = False
     try:
-        import duckdb
         from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 
-        db_path = GOLD_DB_PATH_FOR_CHECKS
-        if db_path is None:
-            from pipeline.paths import GOLD_DB_PATH
-            db_path = GOLD_DB_PATH
-        if not Path(db_path).exists():
-            return []
-        con = duckdb.connect(str(db_path), read_only=True)
-        try:
-            for inst in sorted(ACTIVE_ORB_INSTRUMENTS):
-                rows = con.execute("""
-                    WITH days AS (
-                        SELECT DISTINCT trading_day
-                        FROM daily_features
-                        WHERE symbol = ?
-                    ),
-                    gaps AS (
-                        SELECT trading_day,
-                               LEAD(trading_day) OVER (ORDER BY trading_day) as next_day
-                        FROM days
-                    )
-                    SELECT trading_day, next_day,
-                           next_day - trading_day as gap_days
-                    FROM gaps
-                    WHERE next_day IS NOT NULL
-                    AND next_day - trading_day > 7
-                    ORDER BY gap_days DESC
-                """, [inst]).fetchall()
+        if con is None:
+            import duckdb
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return []
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+        for inst in sorted(ACTIVE_ORB_INSTRUMENTS):
+            rows = con.execute("""
+                WITH days AS (
+                    SELECT DISTINCT trading_day
+                    FROM daily_features
+                    WHERE symbol = ?
+                ),
+                gaps AS (
+                    SELECT trading_day,
+                           LEAD(trading_day) OVER (ORDER BY trading_day) as next_day
+                    FROM days
+                )
+                SELECT trading_day, next_day,
+                       next_day - trading_day as gap_days
+                FROM gaps
+                WHERE next_day IS NOT NULL
+                AND next_day - trading_day > 7
+                ORDER BY gap_days DESC
+            """, [inst]).fetchall()
 
-                for start_day, end_day, gap in rows:
-                    warnings.append(
-                        f"  {inst}: {gap}-day gap from {start_day} to {end_day}"
-                    )
-        finally:
-            con.close()
+            for start_day, end_day, gap in rows:
+                warnings.append(
+                    f"  {inst}: {gap}-day gap from {start_day} to {end_day}"
+                )
     except (ImportError, OSError) as e:
         print(f"    SKIP check_data_continuity: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
 
     if warnings:
         for w in warnings:
@@ -2630,45 +2643,50 @@ def check_data_continuity() -> list[str]:
     return []  # Always pass — advisory only
 
 
-def check_family_rr_locks_coverage() -> list[str]:
+def check_family_rr_locks_coverage(con=None) -> list[str]:
     """Every active instrument must have family_rr_locks rows covering its validated strategies."""
     errors = []
+    _own_con = False
     try:
-        from pipeline.paths import GOLD_DB_PATH
-        import duckdb
-        con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
-        try:
-            # Check table exists
-            tables = [r[0] for r in con.execute(
-                "SELECT table_name FROM information_schema.tables WHERE table_name = 'family_rr_locks'"
-            ).fetchall()]
-            if not tables:
+        if con is None:
+            import duckdb
+            db_path = _get_db_path()
+            if not db_path.exists():
                 return ["SKIPPED"]
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+        # Check table exists
+        tables = [r[0] for r in con.execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_name = 'family_rr_locks'"
+        ).fetchall()]
+        if not tables:
+            return ["SKIPPED"]
 
-            # Count families in validated_setups without a matching lock
-            missing = con.execute("""
-                SELECT DISTINCT vs.instrument, vs.orb_label, vs.filter_type,
-                       vs.entry_model, vs.orb_minutes, vs.confirm_bars
-                FROM validated_setups vs
-                LEFT JOIN family_rr_locks frl
-                  ON vs.instrument = frl.instrument
-                  AND vs.orb_label = frl.orb_label
-                  AND vs.filter_type = frl.filter_type
-                  AND vs.entry_model = frl.entry_model
-                  AND vs.orb_minutes = frl.orb_minutes
-                  AND vs.confirm_bars = frl.confirm_bars
-                WHERE vs.status = 'active'
-                  AND frl.locked_rr IS NULL
-            """).fetchall()
-            if missing:
-                errors.append(
-                    f"{len(missing)} active families missing from family_rr_locks "
-                    f"(run: python scripts/tools/select_family_rr.py)"
-                )
-        finally:
-            con.close()
+        # Count families in validated_setups without a matching lock
+        missing = con.execute("""
+            SELECT DISTINCT vs.instrument, vs.orb_label, vs.filter_type,
+                   vs.entry_model, vs.orb_minutes, vs.confirm_bars
+            FROM validated_setups vs
+            LEFT JOIN family_rr_locks frl
+              ON vs.instrument = frl.instrument
+              AND vs.orb_label = frl.orb_label
+              AND vs.filter_type = frl.filter_type
+              AND vs.entry_model = frl.entry_model
+              AND vs.orb_minutes = frl.orb_minutes
+              AND vs.confirm_bars = frl.confirm_bars
+            WHERE vs.status = 'active'
+              AND frl.locked_rr IS NULL
+        """).fetchall()
+        if missing:
+            errors.append(
+                f"{len(missing)} active families missing from family_rr_locks "
+                f"(run: python scripts/tools/select_family_rr.py)"
+            )
     except (ImportError, OSError):
         return ["SKIPPED"]
+    finally:
+        if _own_con and con is not None:
+            con.close()
     return errors
 
 
@@ -2959,6 +2977,16 @@ def main():
     blocking_count = 0
     skip_count = 0
 
+    # Open shared read-only DB connection for all requires_db checks
+    import duckdb
+    _shared_con = None
+    db_path = _get_db_path()
+    if db_path.exists():
+        try:
+            _shared_con = duckdb.connect(str(db_path), read_only=True)
+        except Exception:
+            pass  # DB busy — individual checks will skip
+
     for i, (label, check_fn, is_advisory, requires_db) in enumerate(CHECKS, 1):
         print(f"Check {i}: {label}...")
 
@@ -2967,7 +2995,7 @@ def main():
         # the message to distinguish "DB busy" from real code failures.
         if requires_db:
             try:
-                v = check_fn()
+                v = check_fn(con=_shared_con)
             except Exception as e:
                 msg = str(e)
                 if "being used by another process" in msg or "Cannot open file" in msg:
@@ -2992,6 +3020,10 @@ def main():
             blocking_count += 1
             print("  PASSED [OK]")
         print()
+
+    # Cleanup shared connection
+    if _shared_con is not None:
+        _shared_con.close()
 
     # Summary — blocking_count tracks actual passes (not computed from total)
     print("=" * 60)
