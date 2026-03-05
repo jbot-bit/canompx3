@@ -25,16 +25,25 @@ for INST in MGC MNQ MES M2K; do
     echo "[$INST] Starting full chain (${STARTS[$INST]} to ${ENDS[$INST]})"
     echo "============================================"
 
+    # NOTE: daily_features must already be built for each aperture.
+    # If stale, run first: python pipeline/build_daily_features.py --instrument X --orb-minutes Y
     echo ""
-    echo "--- [$INST] Step 1/5: Outcome Builder (--force) ---"
-    python trading_app/outcome_builder.py \
-        --instrument "$INST" --force \
-        --start "${STARTS[$INST]}" --end "${ENDS[$INST]}" 2>&1 | tail -5
+    echo "--- [$INST] Step 1/5: Outcome Builder --force (O5 + O15 + O30) ---"
+    for OM in 5 15 30; do
+        echo "  -- outcome_builder --orb-minutes $OM --"
+        python trading_app/outcome_builder.py \
+            --instrument "$INST" --force \
+            --start "${STARTS[$INST]}" --end "${ENDS[$INST]}" \
+            --orb-minutes "$OM" 2>&1 | tail -5
+    done
     echo "[$INST] Outcomes done: $(date)"
 
     echo ""
-    echo "--- [$INST] Step 2/5: Strategy Discovery ---"
-    python trading_app/strategy_discovery.py --instrument "$INST" 2>&1 | tail -5
+    echo "--- [$INST] Step 2/5: Strategy Discovery (O5 + O15 + O30) ---"
+    for OM in 5 15 30; do
+        echo "  -- strategy_discovery --orb-minutes $OM --"
+        python trading_app/strategy_discovery.py --instrument "$INST" --orb-minutes "$OM" 2>&1 | tail -5
+    done
     echo "[$INST] Discovery done: $(date)"
 
     echo ""

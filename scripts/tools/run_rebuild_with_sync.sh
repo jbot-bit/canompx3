@@ -26,15 +26,23 @@ echo "Rebuild + Pinecone Sync for $INSTRUMENT"
 echo "Started: $(date)"
 echo "=========================================="
 
-# Step 1: Rebuild outcomes
+# Step 1: Rebuild outcomes for ALL apertures (5m, 15m, 30m)
+# NOTE: daily_features must already be built for each aperture.
+# If stale, run first: python pipeline/build_daily_features.py --instrument X --orb-minutes Y
 echo ""
-echo "Step 1/9: Rebuilding outcomes..."
-python trading_app/outcome_builder.py --instrument "$INSTRUMENT" --force
+echo "Step 1/9: Rebuilding outcomes (O5 + O15 + O30)..."
+for OM in 5 15 30; do
+    echo "  -- outcome_builder --orb-minutes $OM --"
+    python trading_app/outcome_builder.py --instrument "$INSTRUMENT" --force --orb-minutes "$OM"
+done
 
-# Step 2: Discover strategies
+# Step 2: Discover strategies for ALL apertures
 echo ""
-echo "Step 2/9: Discovering strategies..."
-python trading_app/strategy_discovery.py --instrument "$INSTRUMENT"
+echo "Step 2/9: Discovering strategies (O5 + O15 + O30)..."
+for OM in 5 15 30; do
+    echo "  -- strategy_discovery --orb-minutes $OM --"
+    python trading_app/strategy_discovery.py --instrument "$INSTRUMENT" --orb-minutes "$OM"
+done
 
 # Step 3: Validate strategies
 echo ""

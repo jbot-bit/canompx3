@@ -80,8 +80,20 @@ import json
 # Walk-forward start-date override per instrument.
 # Full-sample validation (Phase A) uses ALL data. Only WF window generation
 # starts from max(earliest_outcome, override_date).
-# Rationale: Gold tripled $1,300→$3,500+ (2016→2026). G4+ filters produce
-# <15 trades/window before 2022 = INVALID windows under anchored WF.
+#
+# ── MGC REGIME LIMITATION (verified Mar 5 2026) ──────────────────────────
+# Gold ATR: 11.5 (2018) → 30.6 (2020) → 105.3 (2026) = 9.2x variation.
+# Gold price: $1,300 → $3,500+ makes G4+ filters trivially easy at high prices.
+# With WF_START=2022-01-01 and 6-month test windows (min 15 trades):
+#   - CME_REOPEN strategies: only 3 valid windows, ALL in 2025-2026
+#   - US_DATA_1000 strategies: 5 valid windows, ALL in 2024-2026
+#   - Pre-2024 windows are INVALID (N<15) for most G4+ filter strategies
+# Consequence: WF validates the HIGH-VOL regime only. It does NOT confirm
+# that these strategies work in moderate-vol (ATR 15-25) environments.
+# Compare: MNQ 1.9x ATR variation, MES 2.8x, M2K 1.5x — MGC is the outlier.
+# Phase 2 TODO: Implement trade-count-based WF windows (Lopez de Prado AFML
+# Ch.2 information-driven sampling) to get regime-spanning OOS validation.
+# ─────────────────────────────────────────────────────────────────────────
 WF_START_OVERRIDE: dict[str, date] = {
     "MGC": date(2022, 1, 1),  # Gold <$1800 pre-2022 = tiny ORBs, G4+ windows invalid
 }

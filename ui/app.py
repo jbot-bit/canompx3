@@ -3,7 +3,15 @@ Canompx3 Dashboard -- Main Streamlit app.
 
 Launch: streamlit run ui/app.py
 """
+import sys
+from pathlib import Path
 
+# Ensure project root is on sys.path regardless of working directory.
+# Streamlit adds the script's own directory (ui/) to sys.path but not the root,
+# so absolute imports like `from ui.pages import ...` break without this.
+_ROOT = Path(__file__).parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 import streamlit as st
 

@@ -1798,8 +1798,13 @@ def check_data_years_disclosure() -> list[str]:
                 )
         finally:
             con.close()
-    except (ImportError, OSError) as e:
-        print(f"    SKIP check_data_years_disclosure: {type(e).__name__}: {e}")
+    except Exception as e:
+        # duckdb.IOException (DB locked) is not a subclass of OSError — catch all
+        msg = str(e)
+        if "being used by another process" in msg or "Cannot open file" in msg:
+            print("    SKIP: DB busy — another process holds the lock")
+        else:
+            print(f"    SKIP check_data_years_disclosure: {type(e).__name__}: {e}")
 
     if warnings:
         for w in warnings:
@@ -2908,16 +2913,19 @@ def main():
     for i, (label, check_fn, is_advisory, requires_db) in enumerate(CHECKS, 1):
         print(f"Check {i}: {label}...")
 
-        # DB-dependent checks can be skipped if DB unavailable
+        # DB-dependent checks can be skipped if DB unavailable.
+        # duckdb.IOException is NOT a subclass of OSError, so we inspect
+        # the message to distinguish "DB busy" from real code failures.
         if requires_db:
             try:
                 v = check_fn()
-            except (OSError, ImportError) as e:
-                skip_count += 1
-                print(f"  SKIPPED (DB unavailable): {type(e).__name__}")
-                print()
-                continue
             except Exception as e:
+                msg = str(e)
+                if "being used by another process" in msg or "Cannot open file" in msg:
+                    skip_count += 1
+                    print("  SKIPPED (DB busy — another process holds the lock)")
+                    print()
+                    continue
                 v = [f"  EXCEPTION: {type(e).__name__}: {e}"]
         else:
             v = check_fn()
