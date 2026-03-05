@@ -27,6 +27,11 @@ Usage:
     # Save output to file
     python scripts/tools/m25_audit.py pipeline/ingest_dbn.py --output audit_result.md
 
+    # DEEP MODE: 3-turn reasoning + auto cross-file context (recommended for production files)
+    # Uses ~3 API calls but dramatically reduces false positives (72% → ~30% estimated)
+    python scripts/tools/m25_audit.py trading_app/outcome_builder.py --deep --mode bias
+    python scripts/tools/m25_audit.py pipeline/build_daily_features.py --deep --mode joins
+
 Setup:
     Set MINIMAX_API_KEY in your .env or environment:
         export MINIMAX_API_KEY=your-key-here
@@ -350,6 +355,257 @@ AUDIT_MODES = {
 }
 
 
+def find_related_files(primary_paths: list[str], max_extra: int = 4) -> dict[str, str]:
+    """Auto-detect project files imported by primary_paths and return their contents.
+
+    M2.5's #1 false positive source is cross-file blindness — it flags "missing"
+    behaviour that lives in a different module. This pulls in the files that the
+    target code actually imports so M2.5 has the full picture.
+
+    Returns: {relative_path: content} for related files (not the primary files).
+    """
+    import re as _re
+
+    project_root = Path(__file__).parent.parent.parent
+
+    # Map importable module names to relative file paths in this project
+    module_map: dict[str, str] = {}
+    for package in ("pipeline", "trading_app", "trading_app/ml"):
+        pkg_dir = project_root / package.replace("/", "\\")
+        if not pkg_dir.exists():
+            pkg_dir = project_root / package
+        for py_file in pkg_dir.glob("*.py") if pkg_dir.exists() else []:
+            rel = py_file.relative_to(project_root).as_posix()
+            # Register as both "package.module" and bare "module"
+            mod_name = py_file.stem
+            pkg_name = package.replace("/", ".")
+            module_map[f"{pkg_name}.{mod_name}"] = rel
+            module_map[mod_name] = rel
+
+    # Parse imports from every primary file
+    candidates: dict[str, int] = {}  # rel_path -> reference count
+    for p in primary_paths:
+        path = Path(p)
+        if not path.exists():
+            path = project_root / p
+        if not path.exists():
+            continue
+        src = path.read_text(encoding="utf-8", errors="replace")
+        # Match: from pipeline.foo import ..., from trading_app.ml.bar import ...
+        for m in _re.finditer(
+            r"(?:from|import)\s+([\w.]+)", src
+        ):
+            name = m.group(1)
+            # Try full name and last two parts (e.g. "trading_app.config" -> "config")
+            for key in (name, name.split(".")[-1], ".".join(name.split(".")[-2:])):
+                if key in module_map:
+                    rel = module_map[key]
+                    if rel not in [Path(p).as_posix() for p in primary_paths]:
+                        candidates[rel] = candidates.get(rel, 0) + 1
+
+    # Sort by reference count (most-imported first), cap at max_extra
+    ranked = sorted(candidates, key=lambda r: -candidates[r])[:max_extra]
+
+    result: dict[str, str] = {}
+    for rel in ranked:
+        full = project_root / rel
+        if full.exists():
+            content = full.read_text(encoding="utf-8", errors="replace")
+            lines = content.splitlines()
+            if len(lines) > 500:
+                # Keep first 500 lines for related files — enough for interfaces
+                content = "\n".join(lines[:500])
+                content += f"\n\n... [TRUNCATED at 500 lines — {len(lines)} total]"
+            result[rel] = content
+    return result
+
+
+def _call_api(
+    messages: list[dict],
+    api_key: str,
+    *,
+    max_tokens: int = 8192,
+    timeout: float = 300.0,
+) -> str:
+    """Single raw API call. Returns the assistant message content."""
+    payload = {
+        "model": MODEL_STANDARD,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": 0.1,
+    }
+    for attempt in range(2):
+        try:
+            with httpx.Client(timeout=timeout) as client:
+                resp = client.post(
+                    API_URL,
+                    json=payload,
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                )
+            break
+        except httpx.ReadTimeout:
+            if attempt == 0:
+                timeout = min(timeout * 2, 900.0)
+            else:
+                raise
+    if resp.status_code != 200:
+        raise RuntimeError(f"API {resp.status_code}: {resp.text[:300]}")
+    return resp.json()["choices"][0]["message"]["content"]
+
+
+def audit_deep(
+    primary_paths: list[str],
+    mode: str,
+    api_key: str,
+    *,
+    verbose: bool = False,
+) -> str:
+    """Multi-turn structured audit that mirrors how Claude reasons.
+
+    Instead of one-shot "find bugs", this runs 3 turns:
+
+      Turn 1 — UNDERSTAND: Describe what the code does, its purpose, key
+               patterns, and any intentional design choices. No judgements yet.
+
+      Turn 2 — HYPOTHESISE: Given your understanding + the architecture
+               context, list potential issues. For each, state WHY you think
+               it might be a problem and what evidence you need to confirm it.
+
+      Turn 3 — VERIFY + VERDICT: For each hypothesis, quote the specific
+               code that proves or disproves it. Mark each as TRUE / FALSE
+               POSITIVE. Only report TRUE findings in the final output.
+
+    Also auto-injects related files so M2.5 has cross-file context.
+    Uses ~3 API calls per run.
+    """
+    project_root = Path(__file__).parent.parent.parent
+
+    # Build primary file content
+    primary_content_parts = []
+    for p in primary_paths:
+        path = Path(p)
+        if not path.exists():
+            path = project_root / p
+        if not path.exists():
+            print(f"WARNING: File not found: {p}", file=sys.stderr)
+            continue
+        content = path.read_text(encoding="utf-8", errors="replace")
+        lines = content.splitlines()
+        if len(lines) > 2000:
+            content = "\n".join(lines[:2000])
+            content += f"\n\n... [TRUNCATED — {len(lines)} total lines]"
+        primary_content_parts.append(f"### PRIMARY FILE: {p}\n```python\n{content}\n```")
+
+    if not primary_content_parts:
+        raise ValueError("No readable primary files.")
+
+    primary_content = "\n\n".join(primary_content_parts)
+
+    # Auto-inject related files
+    related = find_related_files(primary_paths)
+    if related:
+        related_parts = [
+            f"### RELATED FILE (imported by primary): {rel}\n```python\n{content}\n```"
+            for rel, content in related.items()
+        ]
+        context_block = (
+            "\n\n---\n## CROSS-FILE CONTEXT (auto-injected)\n"
+            "These files are imported by the primary file(s). Use them to verify "
+            "cross-module claims before flagging anything.\n\n"
+            + "\n\n".join(related_parts)
+        )
+        if verbose:
+            print(
+                f"  Auto-context: {len(related)} related file(s): {list(related)!r}",
+                file=sys.stderr,
+            )
+    else:
+        context_block = ""
+
+    mode_instruction = AUDIT_MODES.get(mode, AUDIT_MODES["general"])
+    system = (
+        f"{ARCHITECTURE_CONTEXT}\n---\n\n{mode_instruction}\n\n"
+        "CRITICAL RULE: You MUST complete all three turns (UNDERSTAND → HYPOTHESISE "
+        "→ VERIFY). Do NOT skip to conclusions. In Turn 3 you MUST quote actual code "
+        "lines that prove or disprove each hypothesis. If you cannot find code evidence "
+        "for a finding, it is a FALSE POSITIVE."
+    )
+
+    full_code = primary_content + context_block
+
+    # ── Turn 1: Understand ───────────────────────────────────────────
+    t1_prompt = (
+        "## TURN 1 — UNDERSTAND\n\n"
+        "Read the code carefully. Do NOT flag any issues yet.\n"
+        "Describe:\n"
+        "1. What this code does and its purpose in the pipeline\n"
+        "2. Key patterns and design choices (and why they might be intentional)\n"
+        "3. What the code ASSUMES about its inputs and environment\n"
+        "4. What other modules it depends on and what it expects from them\n\n"
+        "Be factual. No bug-hunting yet.\n\n"
+        + full_code
+    )
+
+    if verbose:
+        print("  [deep] Turn 1: Understanding code...", file=sys.stderr)
+    _increment_call_counter()
+    msgs: list[dict] = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": t1_prompt},
+    ]
+    t1_response = _call_api(msgs, api_key, max_tokens=4096, timeout=180.0)
+    msgs.append({"role": "assistant", "content": t1_response})
+
+    # ── Turn 2: Hypothesise ──────────────────────────────────────────
+    t2_prompt = (
+        "## TURN 2 — HYPOTHESISE\n\n"
+        "Based on your understanding from Turn 1, list potential issues.\n"
+        "For EACH hypothesis:\n"
+        "- State the concern precisely (what could go wrong, under what conditions)\n"
+        "- State what code evidence would CONFIRM it as a real bug\n"
+        "- State what code evidence would REFUTE it (i.e. an existing guard)\n"
+        "- Rate your initial confidence: HIGH / MEDIUM / LOW\n\n"
+        "Use the cross-file context provided — if a guard exists in a related file, "
+        "say so and lower your confidence accordingly.\n\n"
+        "List 3–8 hypotheses maximum. Quality over quantity."
+    )
+
+    if verbose:
+        print("  [deep] Turn 2: Forming hypotheses...", file=sys.stderr)
+    _increment_call_counter()
+    msgs.append({"role": "user", "content": t2_prompt})
+    t2_response = _call_api(msgs, api_key, max_tokens=4096, timeout=180.0)
+    msgs.append({"role": "assistant", "content": t2_response})
+
+    # ── Turn 3: Verify + Verdict ─────────────────────────────────────
+    t3_prompt = (
+        "## TURN 3 — VERIFY + VERDICT\n\n"
+        "For EACH hypothesis from Turn 2:\n"
+        "1. Quote the EXACT code line(s) that confirm or refute it\n"
+        "2. Mark as: **TRUE** (real bug) | **FALSE POSITIVE** | **WORTH EXPLORING** (not a bug, but an improvement)\n"
+        "3. If TRUE: describe the minimal fix\n"
+        "4. If FALSE POSITIVE: explain what existing guard makes it safe\n\n"
+        "Then write a FINAL REPORT:\n"
+        "- Only TRUE findings with severity (CRITICAL / HIGH / MEDIUM / LOW)\n"
+        "- WORTH EXPLORING list (improvements, not bugs)\n"
+        "- Summary line: 'X TRUE findings, Y false positives, Z improvements'\n\n"
+        "HARD RULE: If you cannot quote specific code evidence for a TRUE finding, "
+        "downgrade it to FALSE POSITIVE. Unverified claims are not findings."
+    )
+
+    if verbose:
+        print("  [deep] Turn 3: Verifying + final verdict...", file=sys.stderr)
+    _increment_call_counter()
+    msgs.append({"role": "user", "content": t3_prompt})
+    t3_response = _call_api(msgs, api_key, max_tokens=8192, timeout=300.0)
+
+    # Return only Turn 3 (the verified verdict) — that's all the caller needs
+    return t3_response
+
+
 def load_api_key() -> str:
     """Load MiniMax API key from env or .env file."""
     load_dotenv()
@@ -506,6 +762,15 @@ def main():
         help="Use MiniMax-M2.5-Lightning (3-5x faster, good for quick scans)",
     )
     parser.add_argument(
+        "--deep",
+        action="store_true",
+        help=(
+            "Multi-turn structured audit: understand → hypothesise → verify. "
+            "Auto-injects related files for cross-file context. Uses ~3 API calls. "
+            "Dramatically reduces false positives. Recommended for production files."
+        ),
+    )
+    parser.add_argument(
         "--budget",
         action="store_true",
         help="Show today's call usage and exit",
@@ -520,16 +785,23 @@ def main():
         parser.error("at least one file is required (or use --budget)")
 
     api_key = load_api_key()
-    file_content = read_files(args.files)
 
-    system_prompt = args.prompt if args.prompt else AUDIT_MODES[args.mode]
-    model_label = "Lightning" if args.fast else "Standard"
-    print(
-        f"Auditing {len(args.files)} file(s) with M2.5-{model_label} [{args.mode}]...",
-        file=sys.stderr,
-    )
-
-    result = audit(file_content, system_prompt, api_key, fast=args.fast)
+    if args.deep:
+        mode = args.mode if not args.prompt else "general"
+        print(
+            f"Deep audit: {len(args.files)} file(s) [{mode}] — 3-turn reasoning + auto-context...",
+            file=sys.stderr,
+        )
+        result = audit_deep(args.files, mode, api_key, verbose=True)
+    else:
+        file_content = read_files(args.files)
+        system_prompt = args.prompt if args.prompt else AUDIT_MODES[args.mode]
+        model_label = "Standard"
+        print(
+            f"Auditing {len(args.files)} file(s) with M2.5-{model_label} [{args.mode}]...",
+            file=sys.stderr,
+        )
+        result = audit(file_content, system_prompt, api_key, fast=args.fast)
 
     if args.output:
         Path(args.output).write_text(result, encoding="utf-8")
