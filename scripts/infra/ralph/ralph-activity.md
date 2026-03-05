@@ -66,3 +66,50 @@ Re-run confirmation table appended to CG-1 section in ralph-audit-report.md.
 
 **Files modified:** scripts/infra/ralph/ralph-audit-report.md (CG-3 section added)
 **Output files:** scripts/infra/ralph/m25_ml1.md, scripts/infra/ralph/m25_ml2.md
+
+## 2026-03-05 — Task 4: CG Pass 1 — Gaps Audit
+
+**What:** Cross-file interface audit — JOIN traps, silence killers, look-ahead leaks.
+
+**Results:**
+- M2.5 joins audit: 0 issues (1 LOW non-issue about checkpoint type coercion)
+- 3-column JOIN: ALL instances verified correct (trading_day + symbol + orb_minutes)
+- Silence killers: 0 found (no bare except pass, no hardcoded counts, no success-after-exception)
+- double_break look-ahead: properly blacklisted, never used as pre-entry filter
+- Architecture: one-way dependency intact, DELETE+INSERT idempotency correct
+
+**Files modified:** scripts/infra/ralph/ralph-audit-report.md (CG-4 section added)
+**Output files:** scripts/infra/ralph/m25_gaps.md
+
+## 2026-03-05 — Tasks 5, 6, 7: CG Pass 2 — Implementation (No-op)
+
+**What:** Tasks 5-7 require fixing TRUE findings from CG-1 through CG-4.
+CG-1 through CG-4 found **0 TRUE findings requiring action**.
+- CG-1: 0 action items (2 TRUE but no-action: GARCH perf, dead branch)
+- CG-2: 0 action items (1 PARTIALLY TRUE but no-action: ATR query unbounded)
+- CG-3: 0 action items (1 TRUE cosmetic, 1 PARTIALLY TRUE harmless)
+- CG-4: 0 issues (all clean)
+
+**Result:** Tasks 5, 6, 7 marked PASS — no code changes needed.
+
+## 2026-03-05 — Task 8: Architecture Drift Check
+
+**Results:**
+- One-way dependency: PASS (0 violations — pipeline/ never imports trading_app/ at runtime)
+- Canonical sources: PASS (no hardcoded instrument lists, session times, or cost values)
+- Drift check: 53/53 passed, 5 advisory
+- REPO_MAP: regenerated, current (minor delta: +8 ralph files)
+
+## 2026-03-05 — Task 9: Final CG Report
+
+**What:** Wrote FINAL SUMMARY section at top of ralph-audit-report.md.
+- Per-area verdicts: ALL CLEAN/PASS
+- WORTH EXPLORING queue: 5 non-bug improvements
+- FALSE POSITIVE patterns: 6 M2.5 blind spots documented
+- Overall M2.5 FP rate: ~75% across all audits
+
+**Files modified:**
+- scripts/infra/ralph/ralph-audit-report.md (FINAL SUMMARY + CG-8 sections)
+- scripts/infra/ralph/ralph-activity.md (tasks 4-9 entries)
+- scripts/infra/ralph/ralph-plan.md (tasks 4-9 marked PASS)
+- REPO_MAP.md (regenerated)

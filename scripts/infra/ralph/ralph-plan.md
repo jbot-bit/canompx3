@@ -61,7 +61,7 @@ dead references, error-handling holes, and architecture drift.
     "id": 4,
     "category": "discovery",
     "description": "CG Pass 1 — gaps audit: cross-file interfaces and silent contracts",
-    "passes": false,
+    "passes": true,
     "steps": [
       "Step 1: Run python scripts/tools/m25_audit.py pipeline/build_daily_features.py trading_app/outcome_builder.py --mode joins --output scripts/infra/ralph/m25_gaps.md",
       "Step 2: Manually check: does orb_outcomes always join daily_features on ALL 3 columns (trading_day, symbol, orb_minutes)? Search codebase for any bare 2-column joins.",
@@ -75,7 +75,7 @@ dead references, error-handling holes, and architecture drift.
     "id": 5,
     "category": "implementation",
     "description": "CG Pass 2 — fix all TRUE findings from CG-1 (pipeline)",
-    "passes": false,
+    "passes": true,
     "steps": [
       "Step 1: Read ralph-audit-report.md section '## CG-1: Pipeline Findings'",
       "Step 2: For each TRUE finding: implement the minimal fix (do NOT over-engineer, no new abstractions unless necessary)",
@@ -90,7 +90,7 @@ dead references, error-handling holes, and architecture drift.
     "id": 6,
     "category": "implementation",
     "description": "CG Pass 2 — fix all TRUE findings from CG-2 (trading_app) and CG-3 (ML)",
-    "passes": false,
+    "passes": true,
     "steps": [
       "Step 1: Read ralph-audit-report.md sections '## CG-2' and '## CG-3'",
       "Step 2: For each TRUE finding: implement minimal fix",
@@ -105,7 +105,7 @@ dead references, error-handling holes, and architecture drift.
     "id": 7,
     "category": "implementation",
     "description": "CG Pass 2 — fix all TRUE gap findings from CG-4",
-    "passes": false,
+    "passes": true,
     "steps": [
       "Step 1: Read ralph-audit-report.md section '## CG-4: Gaps and Silences'",
       "Step 2: Fix any confirmed join traps, silent successes, look-ahead leaks, or hardcoded counters",
@@ -120,7 +120,7 @@ dead references, error-handling holes, and architecture drift.
     "id": 8,
     "category": "verification",
     "description": "Architecture drift check — CLAUDE.md vs live code",
-    "passes": false,
+    "passes": true,
     "steps": [
       "Step 1: Read CLAUDE.md data flow diagram section",
       "Step 2: Verify one-way dependency (pipeline/ never imports trading_app/): grep -r 'from trading_app' pipeline/",
@@ -135,7 +135,7 @@ dead references, error-handling holes, and architecture drift.
     "id": 9,
     "category": "cleanup",
     "description": "Final CG report — summary with PASS/FAIL per area, WORTH-EXPLORING queue",
-    "passes": false,
+    "passes": true,
     "steps": [
       "Step 1: Read complete ralph-audit-report.md",
       "Step 2: Write '## FINAL SUMMARY' at top with per-area verdict: PASS/FAIL/CLEAN",

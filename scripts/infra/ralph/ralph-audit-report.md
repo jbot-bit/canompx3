@@ -6,7 +6,49 @@ Commit count at time of audit: 119 (branch: main)
 
 ---
 
-## Summary
+## FINAL SUMMARY — Code Guardian Deep Audit (2026-03-05)
+
+### Per-Area Verdict
+
+| Area | Verdict | TRUE Findings | FALSE Positives | M2.5 FP Rate |
+|------|---------|---------------|-----------------|--------------|
+| CG-1: Pipeline | **CLEAN** | 0 action items | 8 | 73% |
+| CG-2: Trading App | **CLEAN** | 0 action items | 6 | 86% |
+| CG-3: ML Module | **CLEAN** | 0 action items | 9 | 64% |
+| CG-4: Gaps & Silences | **PASS** | 0 issues | — | — |
+| CG-8: Architecture Drift | **PASS** | 0 violations | — | — |
+
+**Overall: PASS — 0 TRUE findings requiring code changes across 32 M2.5-triaged findings + 4 manual gap checks.**
+
+### WORTH-EXPLORING Queue (improvements, not bugs)
+
+1. **brisbane_1025_brisbane naming** — awkward function name in dst.py:315. Cosmetic rename.
+2. **5m bars dry-run: use `time_bucket()`** — consistency improvement vs `EPOCH/300`.
+3. **Threshold sweep documentation** — document ~36-value sweep multiple-testing trade-off in meta_label.py docstring.
+4. **Feature drift detection expansion** — extend from top-10 to top-20 MDI features for broader drift coverage.
+5. **Column drop transparency** — surface dropped non-numeric columns in evaluate.py return dict.
+
+### FALSE POSITIVE Patterns (M2.5 blind spots confirmed)
+
+| Pattern | Count | Example |
+|---------|-------|---------|
+| Cross-file architecture blindness | 5 | FDR not in experimental_strategies (it's in validated_setups) |
+| DuckDB replacement scan misunderstanding | 2 | Flags DataFrame-in-SQL as undefined variable |
+| Hallucinated code / wrong line numbers | 3 | Claims slippage not multiplied (it is at line 357) |
+| Intentional fail-open flagged as bug | 3 | atexit pass, missing data pass-through, CPCV seed |
+| Dead instrument flagged as missing | 2 | MBT slippage, MCL/SIL still in COST_SPECS |
+| Working code flagged as dead | 3 | is_winter_for_session, duckdb import, GLOBAL_FEATURES lazy import |
+| Self-contradicting findings | 2 | Says "not a bug" then rates it HIGH |
+
+**Aggregate M2.5 false positive rate: 72% (23/32)**. Architecture context preamble reduces but does not eliminate FP. Cross-file reasoning remains M2.5's weakest area.
+
+### Implementation Tasks (CG-5/6/7)
+
+All skipped — 0 TRUE findings requiring action across CG-1 through CG-4.
+
+---
+
+## Summary (Original Feb 18 Audit)
 
 ### Overall Verdict: PASS (with minor findings)
 
@@ -963,6 +1005,35 @@ Security posture is solid across the codebase:
 # CG Deep Audit — March 2026
 
 Generated: 2026-03-05
+Finalized: 2026-03-05
+
+## FINAL SUMMARY
+
+| Area | Verdict | TRUE Findings | FALSE Positives | M2.5 FP Rate |
+|------|---------|---------------|-----------------|--------------|
+| CG-1: Pipeline | **CLEAN** | 0 action items | 8 (orig) + 13 (re-run) | 73-81% |
+| CG-2: Trading App | **CLEAN** | 0 action items | 6 | 86% |
+| CG-3: ML Module | **CLEAN** | 0 action items | 9 | 64% |
+| CG-4: Gaps & Silences | **CLEAN** | 0 issues | N/A (manual) | N/A |
+| CG-5/6/7: Fixes | **NO-OP** | 0 TRUE findings to fix | — | — |
+| CG-8: Architecture | **PASS** | 0 violations | — | — |
+
+**Overall verdict: PASS — no actionable bugs found across 15 audited files.**
+
+### WORTH EXPLORING (future improvements, not bugs)
+1. 5m bars dry-run: use `time_bucket()` instead of `EPOCH/300` for consistency (CG-1)
+2. GARCH debug logging when convergence fails (CG-1)
+3. ML threshold sweep documentation (CG-3)
+4. ML feature drift — expand from top-10 to top-20 MDI features (CG-3)
+5. ML evaluate.py — surface dropped columns in return dict (CG-3)
+
+### FALSE POSITIVE Patterns (M2.5 blind spots confirmed)
+- **Hallucinated code**: M2.5 fabricated `slippage=spec.slippage` (not multiplied) — actual code multiplies it
+- **Cross-file blindness**: Claimed FDR not reflected in experimental_strategies — by design (two-table architecture)
+- **Conservative math as "bug"**: FST hurdle using full grid size is intentionally conservative
+- **Dead code misidentification**: `is_winter_for_session()` is NOT dead — returns None by design for DST-clean sessions
+- **Import hallucination**: Claimed duplicate import in predict_live.py — was a lazy import inside method body
+- **Missing context**: Claimed `duckdb` unused in features.py — used at 4 locations M2.5 didn't read
 
 ## CG-1: Pipeline Findings
 
@@ -1071,3 +1142,94 @@ Generated: 2026-03-05
 - **FALSE POSITIVES: 9** (3.2, 3.3, 3.4, 3.6, 3.8, 3.10, 3.12, 3.13, 3.14)
 - **WORTH EXPLORING: 3** (threshold sweep docs, feature drift expansion, column drop transparency)
 - **M2.5 false positive rate: 64%** (9/14)
+
+---
+
+Generated: 2026-03-05
+
+## CG-4: Gaps and Silences
+
+### Step 1: M2.5 Joins Audit (build_daily_features.py + outcome_builder.py)
+
+M2.5 found 0 JOIN issues. 1 LOW finding (checkpoint type coercion) — DuckDB DATE maps natively to Python `date`, non-issue.
+
+### Step 2: 3-Column JOIN Verification
+
+Searched all `JOIN daily_features` across the codebase. Every instance uses the full 3-column join:
+```
+ON o.trading_day = d.trading_day AND o.symbol = d.symbol AND o.orb_minutes = d.orb_minutes
+```
+Verified in: `strategy_validator.py:226` (parameterized orb_minutes), `ml/features.py:506-509,589-592,775-778` (explicit 3-column), `ml/predict_live.py:379-382` (3-column WHERE), `strategy_discovery.py:756` (full table load by design).
+**No bare 2-column joins found.** PASS.
+
+### Step 3: Silence Killers
+
+| Check | Result |
+|-------|--------|
+| `except Exception: pass` in pipeline/ or trading_app/ | **NONE FOUND** — no bare exception swallowing |
+| Hardcoded check counts | **NONE** — `len(CHECKS)` computed dynamically at check_drift.py:1368 |
+| Success after exception | **NONE** — all pipeline steps use fail-closed (`sys.exit(1)` or `raise`) |
+| `live_config.py:329` — `except Exception: return True` | **BY DESIGN** — fail-open dollar gate when cost spec unavailable. Message logged. |
+| `health_check.py:43-44` — `except IOException: return True` | **BY DESIGN** — documented: lock contention = DB in use, not broken |
+| `db_manager.py` — `except CatalogException: pass` (×multiple) | **BY DESIGN** — ALTER TABLE migration pattern: column already exists |
+
+### Step 4: double_break Look-Ahead Check
+
+| Location | Usage | Status |
+|----------|-------|--------|
+| `build_daily_features.py:926` | Computed (regime signal) | CORRECT — stored as column |
+| `init_db.py:126` | Schema definition | CORRECT |
+| `config.py:265` | `matches_row()` reads column | CORRECT — used for post-session analysis only |
+| `config.py:610-612` | NODBL removal comment | CORRECT — explicitly documents look-ahead nature |
+| `check_drift.py:2205` | `LOOKAHEAD_BLACKLIST` check | CORRECT — ensures double_break stays blacklisted |
+| `ml/config.py:106` | `LOOKAHEAD_BLACKLIST` | CORRECT — ML cannot use double_break |
+| `sql_adapter.py:316-317` | `double_break_stats` template | CORRECT — post-session analytics only |
+| `rolling_portfolio.py:59,253,485` | Degradation tracking | CORRECT — post-session regime analysis |
+| `config.py:385` | `NO_DBL_BREAK` filter defined | DEAD CODE — not registered for any session (removed Feb 2026) |
+| Pre-entry filter usage | NOT FOUND | **PASS** — no look-ahead leak |
+
+### CG-4 Summary
+- **Join traps: 0** — all 3-column joins verified
+- **Silence killers: 0** — no exception swallowing, no hardcoded counts
+- **Look-ahead leaks: 0** — double_break properly blacklisted and never used as pre-entry filter
+- **Architecture gaps: 0** — one-way dependency intact, DELETE+INSERT idempotency correct
+
+---
+
+Generated: 2026-03-05
+
+## CG-8: Architecture Drift
+
+### One-Way Dependency (pipeline/ -> trading_app/)
+
+`grep -r 'from trading_app' pipeline/` found imports ONLY in `check_drift.py` (drift check tool, not pipeline runtime). No pipeline runtime module imports from trading_app. **PASS.**
+
+### Canonical Source Usage
+
+| Data | Expected Source | Hardcoded? |
+|------|----------------|------------|
+| Active instruments | `pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS` | No hardcoded lists found in pipeline/ or trading_app/ |
+| Session catalog | `pipeline.dst.SESSION_CATALOG` | No hardcoded session times |
+| Cost specs | `pipeline.cost_model.COST_SPECS` | No hardcoded cost values |
+| DB path | `pipeline.paths.GOLD_DB_PATH` | No hardcoded absolute paths (drift check #19 enforces) |
+
+**PASS** — all canonical sources properly imported, not hardcoded.
+
+### Drift Check
+
+```
+53 checks passed [OK], 0 skipped, 5 advisory
+NO DRIFT DETECTED
+```
+
+Check count computed dynamically via `len(CHECKS)`. **PASS.**
+
+### REPO_MAP
+
+Regenerated. Minor delta: file count 756 -> 764 (new ralph output files). **Current.**
+
+### CG-8 Summary
+- **One-way dependency violations: 0** — PASS
+- **Hardcoded canonical values: 0** — PASS
+- **Drift check: PASS** (53/53)
+- **REPO_MAP: Current**
