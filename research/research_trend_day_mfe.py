@@ -16,6 +16,8 @@ import time
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+import warnings
+
 import duckdb
 import numpy as np
 import pandas as pd
@@ -222,6 +224,349 @@ def print_gap_table(summary: pd.DataFrame, instrument: str) -> None:
     print()
 
 
+# ---------------------------------------------------------------------------
+# Task 4: Predictor analysis with BH FDR
+# ---------------------------------------------------------------------------
+PREDICTOR_COLS = [
+    "atr_20",
+    "gap_open_points",
+    "overnight_range",
+    "prev_day_range",
+    "garch_atr_ratio",
+    "atr_vel_ratio",
+    "orb_size",              # session-specific ORB size, extracted per-row
+    "overnight_expansion",   # overnight_range / atr_20 (derived)
+]
+
+
+def load_predictor_features(
+    con: duckdb.DuckDBPyConnection, instrument: str
+) -> pd.DataFrame:
+    """Load daily_features predictor columns for merging with outcomes.
+
+    CRITICAL: daily_features has 3 rows per (trading_day, symbol) — one per
+    orb_minutes.  We return trading_day + orb_minutes as join keys so the
+    caller can merge on both columns (triple-join rule).
+    """
+    # Build list of orb_{SESSION}_size columns to fetch
+    orb_size_cols = [f"orb_{s}_size" for s in SESSIONS]
+    orb_size_sql = ", ".join(orb_size_cols)
+
+    sql = f"""
+        SELECT trading_day, orb_minutes,
+               atr_20, gap_open_points, overnight_range,
+               prev_day_range, prev_day_direction,
+               garch_atr_ratio, atr_vel_ratio,
+               {orb_size_sql}
+        FROM daily_features
+        WHERE symbol = ?
+    """
+    return con.execute(sql, [instrument]).fetchdf()
+
+
+def _extract_orb_size(df: pd.DataFrame) -> pd.DataFrame:
+    """For each row, extract the session-specific ORB size into 'orb_size'."""
+    df["orb_size"] = np.nan
+    for session in SESSIONS:
+        col = f"orb_{session}_size"
+        if col in df.columns:
+            mask = df["orb_label"] == session
+            df.loc[mask, "orb_size"] = df.loc[mask, col]
+    return df
+
+
+def _cohen_d(group_a: np.ndarray, group_b: np.ndarray) -> float:
+    """Cohen's d effect size (pooled std)."""
+    na, nb = len(group_a), len(group_b)
+    if na < 2 or nb < 2:
+        return float("nan")
+    var_a = float(np.var(group_a, ddof=1))
+    var_b = float(np.var(group_b, ddof=1))
+    pooled_std = np.sqrt(((na - 1) * var_a + (nb - 1) * var_b) / (na + nb - 2))
+    if pooled_std == 0:
+        return float("nan")
+    return float((np.mean(group_a) - np.mean(group_b)) / pooled_std)
+
+
+def test_unicorn_predictors(
+    df: pd.DataFrame,
+    instrument: str,
+) -> pd.DataFrame:
+    """Test which predictors distinguish unicorn trades (true_mfe_r > 3*rr_target).
+
+    For each (orb_label, orb_minutes, rr_target) combo with N >= MIN_TRADES:
+    - Binary label: unicorn = (true_mfe_r > 3 * rr_target)
+    - Welch's t-test, point-biserial correlation, Cohen's d per predictor
+    - Returns DataFrame of all test results (p-values for BH FDR later)
+    """
+    rows = []
+    valid = df.dropna(subset=["true_mfe_r"]).copy()
+
+    for (orb_label, orb_minutes, rr_target), grp in valid.groupby(
+        ["orb_label", "orb_minutes", "rr_target"]
+    ):
+        n = len(grp)
+        if n < MIN_TRADES:
+            continue
+
+        unicorn_flag = (grp["true_mfe_r"] > 3 * rr_target).astype(int)
+        n_unicorn = int(unicorn_flag.sum())
+        n_non = n - n_unicorn
+
+        # Need both groups to have >= 5 members
+        if n_unicorn < 5 or n_non < 5:
+            continue
+
+        for pred in PREDICTOR_COLS:
+            if pred not in grp.columns:
+                continue
+
+            pred_vals = grp[pred].values.astype(float)
+            mask_valid = ~np.isnan(pred_vals)
+            if mask_valid.sum() < MIN_TRADES:
+                continue
+
+            pred_clean = pred_vals[mask_valid]
+            flag_clean = unicorn_flag.values[mask_valid]
+
+            uni_vals = pred_clean[flag_clean == 1]
+            non_vals = pred_clean[flag_clean == 0]
+
+            if len(uni_vals) < 5 or len(non_vals) < 5:
+                continue
+
+            # Welch's t-test
+            t_stat, p_value = stats.ttest_ind(uni_vals, non_vals, equal_var=False)
+
+            # Point-biserial correlation
+            corr, corr_p = stats.pointbiserialr(flag_clean, pred_clean)
+
+            # Cohen's d (unicorn - non-unicorn)
+            cohen = _cohen_d(uni_vals, non_vals)
+
+            rows.append({
+                "orb_label": orb_label,
+                "orb_minutes": int(orb_minutes),
+                "rr_target": float(rr_target),
+                "predictor": pred,
+                "n": int(mask_valid.sum()),
+                "n_unicorn": int(len(uni_vals)),
+                "mean_unicorn": round(float(np.mean(uni_vals)), 4),
+                "mean_non_unicorn": round(float(np.mean(non_vals)), 4),
+                "t_stat": round(float(t_stat), 3),
+                "p_value": float(p_value),
+                "cohen_d": round(float(cohen), 4),
+                "correlation": round(float(corr), 4),
+                "test_type": "welch_t",
+            })
+
+    return pd.DataFrame(rows) if rows else pd.DataFrame()
+
+
+def test_overnight_expansion(df: pd.DataFrame) -> pd.DataFrame:
+    """Test overnight_expansion tertiles as unicorn predictor.
+
+    For each (orb_label, orb_minutes, rr_target) combo:
+    - Split overnight_expansion into tertiles (low/mid/high)
+    - Chi-square test on unicorn rates across tertiles
+    - ANOVA on true_mfe_r across tertiles
+    """
+    rows = []
+    valid = df.dropna(subset=["true_mfe_r", "overnight_expansion"]).copy()
+
+    for (orb_label, orb_minutes, rr_target), grp in valid.groupby(
+        ["orb_label", "orb_minutes", "rr_target"]
+    ):
+        n = len(grp)
+        if n < MIN_TRADES:
+            continue
+
+        # Create tertiles
+        try:
+            grp = grp.copy()
+            grp["oe_tertile"] = pd.qcut(
+                grp["overnight_expansion"], q=3, labels=["low", "mid", "high"]
+            )
+        except ValueError:
+            # Not enough unique values for tertiles
+            continue
+
+        unicorn_flag = (grp["true_mfe_r"] > 3 * rr_target).astype(int)
+
+        tertile_groups = grp.groupby("oe_tertile", observed=True)
+        if len(tertile_groups) < 3:
+            continue
+
+        # Chi-square: unicorn rate by tertile
+        contingency = pd.crosstab(grp["oe_tertile"], unicorn_flag)
+        if contingency.shape[1] < 2:
+            # All unicorn or all non-unicorn
+            continue
+
+        try:
+            chi2, chi2_p, _, _ = stats.chi2_contingency(contingency)
+        except ValueError:
+            continue
+
+        # ANOVA: true_mfe_r by tertile
+        tertile_mfe = [g["true_mfe_r"].values for _, g in tertile_groups]
+        if any(len(t) < 5 for t in tertile_mfe):
+            continue
+        f_stat, anova_p = stats.f_oneway(*tertile_mfe)
+
+        # Unicorn rates per tertile
+        uni_rates = {}
+        for label in ["low", "mid", "high"]:
+            t_grp = grp[grp["oe_tertile"] == label]
+            if len(t_grp) > 0:
+                uni_rates[label] = round(
+                    float((t_grp["true_mfe_r"] > 3 * rr_target).mean()) * 100, 2
+                )
+            else:
+                uni_rates[label] = 0.0
+
+        rows.append({
+            "orb_label": orb_label,
+            "orb_minutes": int(orb_minutes),
+            "rr_target": float(rr_target),
+            "predictor": "overnight_expansion_tertile",
+            "n": n,
+            "n_unicorn": int(unicorn_flag.sum()),
+            "chi2": round(float(chi2), 3),
+            "p_value": float(chi2_p),  # chi-square p for BH FDR
+            "f_stat": round(float(f_stat), 3),
+            "anova_p": float(anova_p),
+            "uni_rate_low": uni_rates["low"],
+            "uni_rate_mid": uni_rates["mid"],
+            "uni_rate_high": uni_rates["high"],
+            "test_type": "chi2_anova",
+        })
+
+    return pd.DataFrame(rows) if rows else pd.DataFrame()
+
+
+def apply_bh_fdr_to_results(
+    predictor_results: pd.DataFrame,
+    overnight_results: pd.DataFrame,
+    q: float = 0.05,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Apply BH FDR across ALL tests from both result sets.
+
+    Returns updated DataFrames with 'fdr_survives' column.
+    """
+    # Collect all p-values into one array with source tracking
+    all_p = []
+    sources = []  # (source_df_name, row_index)
+
+    if len(predictor_results) > 0:
+        for idx, row in predictor_results.iterrows():
+            all_p.append(row["p_value"])
+            sources.append(("predictor", idx))
+
+    if len(overnight_results) > 0:
+        for idx, row in overnight_results.iterrows():
+            all_p.append(row["p_value"])
+            sources.append(("overnight", idx))
+
+    if not all_p:
+        return predictor_results, overnight_results
+
+    survivors = bh_fdr(all_p, q=q)
+
+    # Mark survivors
+    if len(predictor_results) > 0:
+        predictor_results = predictor_results.copy()
+        predictor_results["fdr_survives"] = False
+    if len(overnight_results) > 0:
+        overnight_results = overnight_results.copy()
+        overnight_results["fdr_survives"] = False
+
+    for global_idx in survivors:
+        source_name, row_idx = sources[global_idx]
+        if source_name == "predictor":
+            predictor_results.loc[row_idx, "fdr_survives"] = True
+        else:
+            overnight_results.loc[row_idx, "fdr_survives"] = True
+
+    return predictor_results, overnight_results
+
+
+def print_predictor_table(
+    predictor_results: pd.DataFrame,
+    overnight_results: pd.DataFrame,
+    instrument: str,
+) -> None:
+    """Print formatted predictor analysis table."""
+    header = f" {instrument}: Unicorn Predictor Analysis "
+    print(f"\n  {'=' * 25}{header}{'=' * 25}")
+
+    # --- Welch t-test results ---
+    if len(predictor_results) > 0:
+        # Show FDR survivors and near-misses (p < 0.10 before FDR)
+        show = predictor_results[predictor_results["p_value"] < 0.10].copy()
+        show = show.sort_values("p_value")
+
+        if len(show) > 0:
+            print(
+                f"\n  {'Session':20s}| {'O':>2s} | {'RR':>3s} "
+                f"| {'Predictor':22s}| {'Cohen d':>8s} | {'p-value':>8s} | {'FDR':>3s}"
+            )
+            print(f"  {'-' * 78}")
+
+            for _, r in show.iterrows():
+                p_str = (
+                    "<0.001" if r["p_value"] < 0.001
+                    else f"{r['p_value']:.4f}"
+                )
+                fdr_str = "YES" if r.get("fdr_survives", False) else "NO"
+                print(
+                    f"  {r['orb_label']:20s}| {r['orb_minutes']:>2d} "
+                    f"| {r['rr_target']:>3.1f} "
+                    f"| {r['predictor']:22s}| {r['cohen_d']:>+7.3f} "
+                    f"| {p_str:>8s} | {fdr_str:>3s}"
+                )
+        else:
+            print("\n  No predictors with p < 0.10 (before FDR).")
+
+        n_total = len(predictor_results)
+        n_fdr = int(predictor_results["fdr_survives"].sum()) if "fdr_survives" in predictor_results.columns else 0
+        print(f"\n  Welch t-tests: {n_total} total, {n_fdr} BH FDR survivors (q=0.05)")
+
+    # --- Overnight expansion results ---
+    if len(overnight_results) > 0:
+        show_oe = overnight_results[overnight_results["p_value"] < 0.10].copy()
+        show_oe = show_oe.sort_values("p_value")
+
+        if len(show_oe) > 0:
+            print(f"\n  Overnight Expansion Tertile Analysis:")
+            print(
+                f"  {'Session':20s}| {'O':>2s} | {'RR':>3s} "
+                f"| {'chi2':>6s} | {'p-val':>7s} | {'FDR':>3s} "
+                f"| {'Uni%Lo':>6s} | {'Uni%Mi':>6s} | {'Uni%Hi':>6s}"
+            )
+            print(f"  {'-' * 90}")
+
+            for _, r in show_oe.iterrows():
+                p_str = (
+                    "<0.001" if r["p_value"] < 0.001
+                    else f"{r['p_value']:.4f}"
+                )
+                fdr_str = "YES" if r.get("fdr_survives", False) else "NO"
+                print(
+                    f"  {r['orb_label']:20s}| {r['orb_minutes']:>2d} "
+                    f"| {r['rr_target']:>3.1f} "
+                    f"| {r['chi2']:>6.2f} | {p_str:>7s} | {fdr_str:>3s} "
+                    f"| {r['uni_rate_low']:>5.1f}% | {r['uni_rate_mid']:>5.1f}% "
+                    f"| {r['uni_rate_high']:>5.1f}%"
+                )
+
+        n_oe_total = len(overnight_results)
+        n_oe_fdr = int(overnight_results["fdr_survives"].sum()) if "fdr_survives" in overnight_results.columns else 0
+        print(f"\n  Overnight expansion tests: {n_oe_total} total, {n_oe_fdr} BH FDR survivors (q=0.05)")
+
+    print()
+
+
 def print_unicorn_summary(summary: pd.DataFrame) -> None:
     """Print top unicorn producers."""
     top = summary[summary["n_trades"] >= MIN_TRADES].nlargest(10, "unicorn_pct")
@@ -382,6 +727,61 @@ def main() -> None:
             if len(gap_summary) > 0:
                 print_gap_table(gap_summary, instrument)
                 print_unicorn_summary(gap_summary)
+
+            # ----- Task 4: Predictor analysis with BH FDR -----
+            if args.predictors:
+                print(f"  Loading predictor features for {instrument}...")
+                features = load_predictor_features(con, instrument)
+                print(f"    {len(features):,} feature rows loaded")
+
+                # Merge on (trading_day, orb_minutes) — triple-join rule
+                df = df.merge(
+                    features,
+                    on=["trading_day", "orb_minutes"],
+                    how="left",
+                )
+
+                # Extract per-row ORB size from session-specific columns
+                df = _extract_orb_size(df)
+
+                # Derive overnight_expansion
+                df["overnight_expansion"] = np.where(
+                    (df["atr_20"].notna()) & (df["atr_20"] > 0),
+                    df["overnight_range"] / df["atr_20"],
+                    np.nan,
+                )
+
+                # Run predictor tests (suppress scipy precision warnings for small N)
+                print(f"  Running unicorn predictor tests...")
+                with warnings.catch_warnings():
+                    warnings.filterwarnings(
+                        "ignore",
+                        message="Precision loss occurred",
+                        category=RuntimeWarning,
+                    )
+                    predictor_results = test_unicorn_predictors(df, instrument)
+                    overnight_results = test_overnight_expansion(df)
+
+                n_pred = len(predictor_results)
+                n_oe = len(overnight_results)
+                print(
+                    f"    {n_pred} predictor tests, "
+                    f"{n_oe} overnight expansion tests"
+                )
+
+                # Apply BH FDR across ALL tests
+                predictor_results, overnight_results = apply_bh_fdr_to_results(
+                    predictor_results, overnight_results, q=0.05
+                )
+
+                n_fdr = 0
+                if len(predictor_results) > 0 and "fdr_survives" in predictor_results.columns:
+                    n_fdr += int(predictor_results["fdr_survives"].sum())
+                if len(overnight_results) > 0 and "fdr_survives" in overnight_results.columns:
+                    n_fdr += int(overnight_results["fdr_survives"].sum())
+                print(f"    BH FDR survivors (q=0.05): {n_fdr}/{n_pred + n_oe}")
+
+                print_predictor_table(predictor_results, overnight_results, instrument)
 
     finally:
         con.close()
