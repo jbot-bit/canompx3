@@ -144,6 +144,100 @@ def load_outcomes(con: duckdb.DuckDBPyConnection, instrument: str,
 
 
 # ---------------------------------------------------------------------------
+# Task 3: Gap quantification
+# ---------------------------------------------------------------------------
+def analyze_mfe_gap(df: pd.DataFrame) -> pd.DataFrame:
+    """Quantify gap between capped and TRUE MFE per combo."""
+    valid = df.dropna(subset=["true_mfe_r", "capped_mfe_r"]).copy()
+    if len(valid) == 0:
+        return pd.DataFrame()
+
+    valid["gap_r"] = valid["true_mfe_r"] - valid["capped_mfe_r"]
+
+    rows = []
+    for (orb_label, orb_minutes, rr_target), grp in valid.groupby(
+        ["orb_label", "orb_minutes", "rr_target"]
+    ):
+        n = len(grp)
+        if n < MIN_TRADES:
+            continue
+
+        gap = grp["gap_r"]
+        true_mfe = grp["true_mfe_r"]
+        capped_mfe = grp["capped_mfe_r"]
+
+        t_stat, p_value = stats.ttest_1samp(gap, 0)
+
+        rows.append({
+            "orb_label": orb_label,
+            "orb_minutes": orb_minutes,
+            "rr_target": rr_target,
+            "n_trades": n,
+            "mean_gap": round(float(gap.mean()), 4),
+            "median_gap": round(float(gap.median()), 4),
+            "p90_gap": round(float(gap.quantile(0.90)), 4),
+            "p95_gap": round(float(gap.quantile(0.95)), 4),
+            "p99_gap": round(float(gap.quantile(0.99)), 4),
+            "unicorn_pct": round(
+                float((true_mfe > 3 * rr_target).sum()) / n * 100, 2
+            ),
+            "mega_unicorn_pct": round(
+                float((true_mfe > 5 * rr_target).sum()) / n * 100, 2
+            ),
+            "mean_true_mfe": round(float(true_mfe.mean()), 4),
+            "mean_capped_mfe": round(float(capped_mfe.mean()), 4),
+            "t_stat": round(float(t_stat), 3),
+            "p_value": float(p_value),
+        })
+
+    if not rows:
+        return pd.DataFrame()
+
+    summary = pd.DataFrame(rows)
+    summary.sort_values("unicorn_pct", ascending=False, inplace=True)
+    summary.reset_index(drop=True, inplace=True)
+    return summary
+
+
+def print_gap_table(summary: pd.DataFrame, instrument: str) -> None:
+    """Print formatted MFE gap analysis table."""
+    header = f" {instrument}: MFE Gap Analysis "
+    print(f"\n  {'=' * 25}{header}{'=' * 25}")
+    print(
+        f"  {'Session':25s}| {'O':>2s} | {'RR':>3s} | {'N':>5s} "
+        f"| {'MeanGap':>7s} | {'P90':>6s} | {'P95':>6s} "
+        f"| {'Uni%':>5s} | {'Mega%':>5s} | {'p-value':>7s}"
+    )
+    print(f"  {'-' * 95}")
+
+    for _, r in summary.iterrows():
+        p_str = "<0.001" if r["p_value"] < 0.001 else f"{r['p_value']:.3f}"
+        print(
+            f"  {r['orb_label']:25s}| {int(r['orb_minutes']):>2d} "
+            f"| {r['rr_target']:>3.1f} | {int(r['n_trades']):>5d} "
+            f"| {r['mean_gap']:>+6.2f}R | {r['p90_gap']:>+5.1f}R "
+            f"| {r['p95_gap']:>+5.1f}R | {r['unicorn_pct']:>4.1f}% "
+            f"| {r['mega_unicorn_pct']:>4.1f}% | {p_str:>7s}"
+        )
+    print()
+
+
+def print_unicorn_summary(summary: pd.DataFrame) -> None:
+    """Print top unicorn producers."""
+    top = summary[summary["n_trades"] >= MIN_TRADES].nlargest(10, "unicorn_pct")
+    if len(top) == 0:
+        return
+    print(f"  TOP UNICORN PRODUCERS (>3xRR, minimum {MIN_TRADES} trades):")
+    for rank, (_, r) in enumerate(top.iterrows(), 1):
+        print(
+            f"  {rank:>2d}. {r['orb_label']} O{int(r['orb_minutes'])} "
+            f"RR{r['rr_target']:.1f}: {r['unicorn_pct']:.1f}% unicorn rate "
+            f"(N={int(r['n_trades']):,})"
+        )
+    print()
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 def main() -> None:
@@ -282,6 +376,12 @@ def main() -> None:
                 )
                 print(f"\n  Aggregate: {n_ok:,}/{n_valid:,} rows have true_mfe_r >= capped_mfe_r")
                 print()
+
+            # ----- Task 3: Gap quantification -----
+            gap_summary = analyze_mfe_gap(df)
+            if len(gap_summary) > 0:
+                print_gap_table(gap_summary, instrument)
+                print_unicorn_summary(gap_summary)
 
     finally:
         con.close()
