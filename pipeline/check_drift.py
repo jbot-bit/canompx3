@@ -1430,8 +1430,8 @@ def check_stale_scratch_db() -> list[str]:
         # Scratch copy exists — warn if it's older than canonical
         root_mtime = project_root_db.stat().st_mtime
         scratch_mtime = scratch_db.stat().st_mtime
-        if scratch_mtime < root_mtime:
-            delta_hours = (root_mtime - scratch_mtime) / 3600
+        delta_hours = (root_mtime - scratch_mtime) / 3600
+        if delta_hours >= 1:
             violations.append(
                 f"  Scratch DB C:/db/gold.db is {delta_hours:.0f}h older than "
                 f"canonical — copy from project root if using for research"

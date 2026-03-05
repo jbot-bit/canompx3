@@ -161,3 +161,7 @@ scripts/tools/.pinecone_sync_state.json
 
 # uv lockfile (regenerable)
 uv.lock
+
+# Cloudflare tunnel credentials (never commit)
+.cloudflared/*.json
+.cloudflared/*.pem

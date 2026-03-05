@@ -20,7 +20,7 @@ from trading_app.live.bar_aggregator import Bar
 from trading_app.live.live_market_state import LiveORBBuilder
 from trading_app.live.order_router import OrderRouter
 from trading_app.live.performance_monitor import PerformanceMonitor, TradeRecord
-from trading_app.live.contract_resolver import resolve_front_month
+from trading_app.live.contract_resolver import resolve_front_month, resolve_account_id
 from trading_app.execution_engine import ExecutionEngine
 from trading_app.risk_manager import RiskManager, RiskLimits
 from trading_app.live_config import build_live_portfolio
@@ -33,9 +33,11 @@ log = logging.getLogger(__name__)
 
 
 class SessionOrchestrator:
-    def __init__(self, instrument: str, demo: bool = True, account_id: int = 0):
+    def __init__(self, instrument: str, demo: bool = True, account_id: int = 0,
+                 signal_only: bool = False):
         self.instrument = instrument
         self.demo = demo
+        self.signal_only = signal_only
         self.trading_day = date.today()
 
         self.auth = TradovateAuth(demo=demo)
@@ -69,6 +71,10 @@ class SessionOrchestrator:
             risk_manager=self.risk_mgr,
             live_session_costs=True,
         )
+
+        # Resolve numeric account ID (auto-discover if not provided)
+        if account_id == 0:
+            account_id = resolve_account_id(self.auth, demo=demo)
 
         # Live infrastructure
         self.orb_builder = LiveORBBuilder(instrument, self.trading_day)
@@ -152,14 +158,21 @@ class SessionOrchestrator:
             return
 
         if event.event_type == "ENTRY":
-            # Store entry price for pnl calculation on exit
             self._entry_prices[event.strategy_id] = event.price
 
-            # Look up entry_model from PortfolioStrategy (not TradeEvent)
+            if self.signal_only:
+                # Signal-only mode: display the signal, do NOT place an order.
+                # Trade manually on your broker when you see this.
+                log.info(
+                    "⚡ SIGNAL [%s]: %s %s @ %.2f  ← trade this manually on Tradovate/TradingView",
+                    event.strategy_id, event.direction.upper(), self.contract_symbol, event.price,
+                )
+                return
+
             spec = self.order_router.build_order_spec(
                 direction=event.direction,
-                entry_model=strategy.entry_model,  # from PortfolioStrategy, not TradeEvent
-                entry_price=event.price,           # TradeEvent.price on ENTRY = fill price
+                entry_model=strategy.entry_model,
+                entry_price=event.price,
                 symbol=self.contract_symbol,
                 qty=event.contracts,
             )
@@ -169,9 +182,16 @@ class SessionOrchestrator:
 
         elif event.event_type in ("EXIT", "SCRATCH"):
             entry_price = self._entry_prices.pop(event.strategy_id, event.price)
-            # Submit closing order to broker
+
+            if self.signal_only:
+                log.info(
+                    "⚡ EXIT SIGNAL [%s]: close %s @ %.2f  ← close manually",
+                    event.strategy_id, event.direction.upper(), event.price,
+                )
+                self._record_exit(event, entry_price)
+                return
+
             self._close_position(event)
-            # Record trade in performance monitor with cost-adjusted R
             self._record_exit(event, entry_price)
 
         elif event.event_type == "REJECT":

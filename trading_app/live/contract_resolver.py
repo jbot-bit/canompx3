@@ -23,6 +23,35 @@ PRODUCT_MAP = {
 }
 
 
+def resolve_account_id(auth: TradovateAuth, demo: bool = True) -> int:
+    """
+    Return the numeric account ID for the authenticated user.
+
+    For prop firm accounts (Apex, TopstepX) there is typically one account.
+    If multiple accounts exist, returns the first active one.
+    """
+    base = DEMO_BASE if demo else LIVE_BASE
+    resp = requests.get(
+        f"{base}/account/list",
+        headers=auth.headers(),
+        timeout=5,
+    )
+    resp.raise_for_status()
+    accounts = resp.json()
+    if not accounts:
+        raise RuntimeError("No Tradovate accounts found for authenticated user")
+    # Prefer the first account — prop firm setups typically have exactly one
+    acct = accounts[0]
+    acct_id = acct["id"]
+    acct_name = acct.get("name", "unknown")
+    import logging
+    logging.getLogger(__name__).info(
+        "Auto-resolved account: %s (id=%d) — %s mode",
+        acct_name, acct_id, "DEMO" if demo else "LIVE",
+    )
+    return acct_id
+
+
 def resolve_front_month(instrument: str, auth: TradovateAuth, demo: bool = True) -> str:
     """
     Return the current front-month contract symbol for an instrument.
