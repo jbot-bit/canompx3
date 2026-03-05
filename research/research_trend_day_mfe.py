@@ -11,6 +11,7 @@ quantifies the gap vs stored mfe_r, and tests predictors of outsized moves.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 from datetime import date, datetime, timezone
@@ -567,6 +568,51 @@ def print_predictor_table(
     print()
 
 
+def save_csv_reports(
+    df: pd.DataFrame,
+    gap_summary: pd.DataFrame,
+    predictor_results: pd.DataFrame | None,
+    overnight_results: pd.DataFrame | None,
+    instrument: str,
+    output_dir: str,
+) -> None:
+    """Save analysis results to CSV files."""
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+
+    # 1. Per-trade raw data
+    raw_cols = [
+        "trading_day", "orb_label", "orb_minutes", "entry_model",
+        "rr_target", "outcome", "pnl_r", "capped_mfe_r",
+        "true_mfe_r", "true_mae_r", "session_close_r",
+        "time_to_mfe_min", "bars_after_entry",
+    ]
+    available = [c for c in raw_cols if c in df.columns]
+    raw_df = df[available].dropna(subset=["true_mfe_r"])
+    raw_df["gap_r"] = raw_df["true_mfe_r"] - raw_df["capped_mfe_r"]
+    raw_path = out / f"trend_day_mfe_raw_{instrument}.csv"
+    raw_df.to_csv(raw_path, index=False)
+    print(f"  Saved: {raw_path} ({len(raw_df):,} rows)")
+
+    # 2. Per-combo summary
+    if len(gap_summary) > 0:
+        summary_path = out / f"trend_day_mfe_summary_{instrument}.csv"
+        gap_summary.to_csv(summary_path, index=False)
+        print(f"  Saved: {summary_path} ({len(gap_summary)} rows)")
+
+    # 3. Predictor test results
+    if predictor_results is not None and len(predictor_results) > 0:
+        pred_path = out / f"trend_day_mfe_predictors_{instrument}.csv"
+        predictor_results.to_csv(pred_path, index=False)
+        print(f"  Saved: {pred_path} ({len(predictor_results)} rows)")
+
+    # 4. Overnight expansion results
+    if overnight_results is not None and len(overnight_results) > 0:
+        oe_path = out / f"trend_day_mfe_overnight_{instrument}.csv"
+        overnight_results.to_csv(oe_path, index=False)
+        print(f"  Saved: {oe_path} ({len(overnight_results)} rows)")
+
+
 def print_unicorn_summary(summary: pd.DataFrame) -> None:
     """Print top unicorn producers."""
     top = summary[summary["n_trades"] >= MIN_TRADES].nlargest(10, "unicorn_pct")
@@ -729,6 +775,8 @@ def main() -> None:
                 print_unicorn_summary(gap_summary)
 
             # ----- Task 4: Predictor analysis with BH FDR -----
+            predictor_results = None
+            overnight_results = None
             if args.predictors:
                 print(f"  Loading predictor features for {instrument}...")
                 features = load_predictor_features(con, instrument)
@@ -783,6 +831,18 @@ def main() -> None:
 
                 print_predictor_table(predictor_results, overnight_results, instrument)
 
+            # ----- Task 5: CSV export -----
+            _pred = predictor_results
+            _over = overnight_results
+            save_csv_reports(
+                df=df,
+                gap_summary=gap_summary,
+                predictor_results=_pred,
+                overnight_results=_over,
+                instrument=instrument,
+                output_dir=args.output_dir,
+            )
+
     finally:
         con.close()
 
@@ -790,7 +850,16 @@ def main() -> None:
         print("Dry run complete.")
         return
 
-    print("Done.")
+    print("=" * 60)
+    print("RESEARCH COMPLETE")
+    print("=" * 60)
+    print("Labels per RESEARCH_RULES.md:")
+    print("  - Unicorn rates and MFE gaps: CONFIRMED FINDING")
+    print("    (true_mfe_r >= capped_mfe_r is a mathematical invariant)")
+    print("  - Predictor BH FDR survivors: PROMISING HYPOTHESIS")
+    print("    (requires walk-forward holdout before promotion)")
+    print("  - Non-FDR results: STATISTICAL OBSERVATION only")
+    print()
 
 
 if __name__ == "__main__":
