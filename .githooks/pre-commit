@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # Pre-commit hook: blocks commit if guardrails fail.
-# Runs in <10 seconds. Fail-closed.
+# Staged-file-aware: only tests relevant to what changed. Fail-closed.
+# Skip M2.5: M25_SKIP=1 git commit ...
 #
 # Setup: git config core.hooksPath .githooks
 #
@@ -64,22 +65,52 @@ if ! "$PYTHON" pipeline/check_drift.py > /dev/null 2>&1; then
 fi
 echo "  PASSED"
 
-# 2. Fast tests — all Tier 1 tests except slow integration/paper_trader
-# Use -n 4 (not -n auto/32): reduces Windows resource pressure from parallel
-# DuckDB imports and test I/O. Higher counts cause intermittent failures.
+# 2. Staged-file-aware tests — only run tests for what actually changed.
+#    - pipeline/ changes  → tests/test_pipeline/
+#    - trading_app/ changes → tests/test_trading_app/ (excluding slow ones)
+#    - scripts/ or docs/ changes → skip pytest (not production code)
+#    - tests/ files staged → run only those test files
+#    Falls back to the full fast suite only if staged files span multiple dirs.
+#
 # NOTE: Capture output to temp file, NOT command substitution — PIPESTATUS is
 # unreliable in Git Bash command substitutions and can silently return 0.
 echo "[2/4] Fast tests..."
-TEST_TMPFILE=$(mktemp)
-set +e  # Temporarily disable errexit — we capture pytest exit code manually
-"$PYTHON" -m pytest "$SCRIPT_DIR/tests/" --ignore="$SCRIPT_DIR/tests/test_trader_logic.py" --ignore="$SCRIPT_DIR/tests/test_trading_app/test_integration.py" --ignore="$SCRIPT_DIR/tests/test_trading_app/test_paper_trader.py" --ignore="$SCRIPT_DIR/tests/test_tools/" -x -q -n 4 --dist loadscope > "$TEST_TMPFILE" 2>&1
-TEST_EXIT=$?
-set -e  # Re-enable errexit
-tail -5 "$TEST_TMPFILE"
-rm -f "$TEST_TMPFILE"
-if [ "$TEST_EXIT" -ne 0 ]; then
-    echo "BLOCKED: Tests failed."
-    exit 1
+STAGED_ALL=$(git diff --cached --name-only --diff-filter=ACM)
+STAGED_PIPELINE=$(echo "$STAGED_ALL" | grep '^pipeline/' | grep '\.py$' || true)
+STAGED_TRADING=$(echo "$STAGED_ALL"  | grep '^trading_app/' | grep '\.py$' || true)
+STAGED_TESTS=$(echo "$STAGED_ALL"    | grep '^tests/' | grep '\.py$' || true)
+
+# Build the test target list
+TEST_ARGS=""
+if [ -n "$STAGED_TESTS" ]; then
+    # Staged test files: run only those
+    TEST_ARGS="$STAGED_TESTS"
+elif [ -n "$STAGED_PIPELINE" ] && [ -z "$STAGED_TRADING" ]; then
+    TEST_ARGS="$SCRIPT_DIR/tests/test_pipeline/"
+elif [ -n "$STAGED_TRADING" ] && [ -z "$STAGED_PIPELINE" ]; then
+    TEST_ARGS="$SCRIPT_DIR/tests/test_trading_app/"
+elif [ -n "$STAGED_PIPELINE" ] && [ -n "$STAGED_TRADING" ]; then
+    TEST_ARGS="$SCRIPT_DIR/tests/test_pipeline/ $SCRIPT_DIR/tests/test_trading_app/"
+fi
+
+if [ -z "$TEST_ARGS" ]; then
+    echo "  No production .py files staged — tests skipped"
+else
+    TEST_TMPFILE=$(mktemp)
+    set +e
+    # shellcheck disable=SC2086  # intentional word-splitting for TEST_ARGS
+    "$PYTHON" -m pytest $TEST_ARGS \
+        --ignore="$SCRIPT_DIR/tests/test_trading_app/test_integration.py" \
+        --ignore="$SCRIPT_DIR/tests/test_trading_app/test_paper_trader.py" \
+        -x -q -n 4 --dist loadscope > "$TEST_TMPFILE" 2>&1
+    TEST_EXIT=$?
+    set -e
+    tail -5 "$TEST_TMPFILE"
+    rm -f "$TEST_TMPFILE"
+    if [ "$TEST_EXIT" -ne 0 ]; then
+        echo "BLOCKED: Tests failed."
+        exit 1
+    fi
 fi
 
 # 3. Behavioral audit (~1 second)

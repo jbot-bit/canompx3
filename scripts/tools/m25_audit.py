@@ -27,10 +27,18 @@ Usage:
     # Save output to file
     python scripts/tools/m25_audit.py pipeline/ingest_dbn.py --output audit_result.md
 
-    # DEEP MODE: 3-turn reasoning + auto cross-file context (recommended for production files)
-    # Uses ~3 API calls but dramatically reduces false positives (72% → ~30% estimated)
+    # DEEP MODE: 3-turn reasoning + auto cross-file context (~3 API calls, ~30% FP rate)
     python scripts/tools/m25_audit.py trading_app/outcome_builder.py --deep --mode bias
     python scripts/tools/m25_audit.py pipeline/build_daily_features.py --deep --mode joins
+
+    # DISCOVERY MODE: what features/improvements are missing from this code?
+    python scripts/tools/m25_audit.py trading_app/ml/meta_label.py --mode discovery
+    python scripts/tools/m25_audit.py pipeline/cost_model.py --mode discovery
+
+    # PLAN MODE: 4-turn implementation planning for a new feature (~4 API calls)
+    # Pass feature description as --plan, and relevant existing files as args
+    python scripts/tools/m25_audit.py trading_app/entry_rules.py --plan "Add trailing stop to E2"
+    python scripts/tools/m25_audit.py pipeline/build_daily_features.py trading_app/outcome_builder.py --plan "Add VWAP deviation feature to daily_features"
 
 Setup:
     Set MINIMAX_API_KEY in your .env or environment:
@@ -332,6 +340,53 @@ AUDIT_MODES = {
         "and concrete improvements. Do NOT recommend things already implemented "
         "(check the architecture context above first)."
     ),
+    "discovery": (
+        "You are a senior quant researcher and systems architect. Your job is to read "
+        "this code and identify HIGH-VALUE OPPORTUNITIES that don't yet exist.\n\n"
+        "Structure your output as:\n\n"
+        "## 1. WHAT EXISTS (orient yourself first)\n"
+        "One paragraph summarising what this code currently does and its quality.\n\n"
+        "## 2. FEATURE OPPORTUNITIES\n"
+        "For each opportunity:\n"
+        "- **Name**: concise label\n"
+        "- **Gap**: what's missing or suboptimal\n"
+        "- **Value**: why this matters for trading edge or system quality\n"
+        "- **Effort**: S/M/L (Small = 1 file change, Medium = 2-3 files, Large = new module)\n"
+        "- **Files to touch**: specific files/functions\n"
+        "- **Risk**: what could go wrong if implemented naively\n\n"
+        "## 3. PRIORITY RANKING\n"
+        "Top 3 opportunities ranked by value/effort ratio.\n\n"
+        "RULES:\n"
+        "- Only suggest things genuinely absent from the current code\n"
+        "- Be concrete: name the function to add, the column to compute, the check to insert\n"
+        "- Do NOT suggest what the architecture context says is intentionally absent or dead\n"
+        "- Distinguish 'trading edge improvement' from 'engineering quality improvement'"
+    ),
+    "architect": (
+        "You are a senior quant systems architect. You have been given code from an "
+        "existing trading pipeline. Your job is to design an implementation plan for "
+        "a NEW FEATURE or CHANGE, working within the existing architecture.\n\n"
+        "Structure your output as:\n\n"
+        "## 1. CURRENT STATE ANALYSIS\n"
+        "What exists today that is relevant to this feature. What would need to change.\n\n"
+        "## 2. DESIGN\n"
+        "- Data model: what new columns/tables/fields are needed\n"
+        "- Interface: function signatures with types\n"
+        "- Data flow: where does data come from, what transforms happen, where does it go\n"
+        "- Integration points: which existing functions call or are called by the new code\n\n"
+        "## 3. IMPLEMENTATION STEPS (ordered)\n"
+        "Numbered steps with: file to edit, function to add/change, what exactly changes.\n"
+        "Be specific enough that a developer can execute each step without ambiguity.\n\n"
+        "## 4. RISKS AND GUARDRAILS\n"
+        "- What could silently go wrong (data leaks, join traps, timezone issues)\n"
+        "- What tests are needed\n"
+        "- What drift checks or assertions should be added\n\n"
+        "RULES:\n"
+        "- Respect the one-way dependency: pipeline/ → trading_app/ (never reversed)\n"
+        "- Never suggest hardcoding values that belong in canonical sources\n"
+        "- Every DB write must be idempotent (DELETE+INSERT pattern)\n"
+        "- Every new join on daily_features MUST include orb_minutes"
+    ),
     "gaps": (
         "You are a senior quant systems architect reviewing MULTIPLE files from the "
         "same trading pipeline simultaneously.\n\n"
@@ -606,6 +661,191 @@ def audit_deep(
     return t3_response
 
 
+def audit_plan(
+    feature_description: str,
+    context_paths: list[str],
+    api_key: str,
+    *,
+    verbose: bool = False,
+) -> str:
+    """4-turn implementation planning session for a new feature.
+
+    Given a feature description and relevant existing files, produces a
+    concrete implementation plan. Mirrors how a senior engineer approaches
+    a new feature: orient → design → detail → validate.
+
+      Turn 1 — ORIENT: Understand the current codebase relevant to this
+               feature. What exists, what's close, what's missing.
+
+      Turn 2 — DESIGN: High-level design — data model, interfaces, data
+               flow, integration points. No code yet.
+
+      Turn 3 — DETAIL: Concrete implementation steps — specific files,
+               functions, line-level changes. Enough to execute without
+               ambiguity.
+
+      Turn 4 — VALIDATE: Risks, guardrails, tests needed, drift checks.
+               What would silently break if done wrong.
+
+    Args:
+        feature_description: Plain-English description of the feature to build.
+        context_paths: Existing files relevant to the feature (auto-extended
+                       with detected related files).
+        api_key: MiniMax API key.
+        verbose: Print turn progress to stderr.
+
+    Uses ~4 API calls.
+    """
+    project_root = Path(__file__).parent.parent.parent
+
+    # Build context from provided files + auto-detected related files
+    all_paths = list(context_paths)
+    related = find_related_files(context_paths, max_extra=3)
+    if verbose and related:
+        print(f"  Auto-context: {list(related)!r}", file=sys.stderr)
+
+    content_parts = []
+    for p in all_paths:
+        path = Path(p)
+        if not path.exists():
+            path = project_root / p
+        if not path.exists():
+            continue
+        content = path.read_text(encoding="utf-8", errors="replace")
+        lines = content.splitlines()
+        if len(lines) > 1500:
+            content = "\n".join(lines[:1500]) + f"\n\n... [TRUNCATED at 1500/{len(lines)} lines]"
+        content_parts.append(f"### EXISTING FILE: {p}\n```python\n{content}\n```")
+
+    for rel, content in related.items():
+        if rel not in all_paths:
+            content_parts.append(f"### RELATED FILE: {rel}\n```python\n{content}\n```")
+
+    codebase_block = "\n\n".join(content_parts) if content_parts else "(no files provided)"
+
+    system = (
+        f"{ARCHITECTURE_CONTEXT}\n---\n\n"
+        "You are designing a new feature for this production trading pipeline. "
+        "You MUST respect existing architecture conventions exactly as described above. "
+        "You MUST NOT suggest changes that violate the one-way dependency, "
+        "hardcode canonical values, or break idempotency."
+    )
+
+    feature_block = f"## Feature Request\n\n{feature_description}"
+
+    # ── Turn 1: Orient ───────────────────────────────────────────────
+    t1_prompt = (
+        "## TURN 1 — ORIENT\n\n"
+        f"{feature_block}\n\n"
+        "Read the existing code below. Describe:\n"
+        "1. What already exists that is relevant to this feature\n"
+        "2. What functions/modules/data structures are closest to what's needed\n"
+        "3. What is genuinely missing (the gap this feature fills)\n"
+        "4. Any constraints the existing architecture imposes on how this can be built\n\n"
+        "Do NOT design anything yet. Just orient yourself.\n\n"
+        + codebase_block
+    )
+
+    if verbose:
+        print("  [plan] Turn 1: Orienting in codebase...", file=sys.stderr)
+    _increment_call_counter()
+    msgs: list[dict] = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": t1_prompt},
+    ]
+    t1 = _call_api(msgs, api_key, max_tokens=3000, timeout=180.0)
+    msgs.append({"role": "assistant", "content": t1})
+
+    # ── Turn 2: Design ───────────────────────────────────────────────
+    t2_prompt = (
+        "## TURN 2 — DESIGN\n\n"
+        "Based on your orientation, design the high-level architecture:\n\n"
+        "1. **Data model**: What new columns, tables, or fields are needed? "
+        "What type, what units, what nullable?\n"
+        "2. **Interfaces**: Function signatures with full type annotations. "
+        "Where do they live (which module)?\n"
+        "3. **Data flow**: Step by step — where does data enter, what transforms "
+        "happen, where does it go?\n"
+        "4. **Integration**: Which existing functions call or are called by your new code?\n\n"
+        "No implementation code yet — just design. Be specific about types and names."
+    )
+
+    if verbose:
+        print("  [plan] Turn 2: Designing architecture...", file=sys.stderr)
+    _increment_call_counter()
+    msgs.append({"role": "user", "content": t2_prompt})
+    t2 = _call_api(msgs, api_key, max_tokens=4000, timeout=180.0)
+    msgs.append({"role": "assistant", "content": t2})
+
+    # ── Turn 3: Detail ───────────────────────────────────────────────
+    t3_prompt = (
+        "## TURN 3 — IMPLEMENTATION STEPS\n\n"
+        "Write the concrete implementation plan — ordered steps a developer "
+        "can execute exactly as written:\n\n"
+        "For each step:\n"
+        "- **File**: exact path\n"
+        "- **Where**: function name or line reference\n"
+        "- **What**: the exact change (new function body, new column in SQL, "
+        "new parameter, etc.)\n"
+        "- **Why**: one sentence on why this step is needed\n\n"
+        "Include the actual code/SQL for non-trivial steps. "
+        "Steps should be atomic — each independently committable. "
+        "Order them so earlier steps don't depend on later ones."
+    )
+
+    if verbose:
+        print("  [plan] Turn 3: Detailing implementation steps...", file=sys.stderr)
+    _increment_call_counter()
+    msgs.append({"role": "user", "content": t3_prompt})
+    t3 = _call_api(msgs, api_key, max_tokens=6000, timeout=300.0)
+    msgs.append({"role": "assistant", "content": t3})
+
+    # ── Turn 4: Validate ─────────────────────────────────────────────
+    t4_prompt = (
+        "## TURN 4 — RISKS AND GUARDRAILS\n\n"
+        "Review your implementation plan for things that could go wrong:\n\n"
+        "1. **Silent failure modes**: What would produce wrong results without "
+        "raising an error? (join traps, timezone bugs, off-by-one date ranges, "
+        "look-ahead data leaks)\n"
+        "2. **Tests needed**: Specific pytest test cases with their assertion logic\n"
+        "3. **Drift checks**: Should a new check be added to `pipeline/check_drift.py`? "
+        "If yes, what does it assert?\n"
+        "4. **Rebuild requirements**: Does this change require re-running "
+        "outcome_builder, strategy_validator, or build_edge_families? In what order?\n"
+        "5. **Rollback plan**: If this causes issues in production, how do you undo it?\n\n"
+        "Then write a **FINAL PLAN SUMMARY** — a single block a developer can "
+        "paste into a task tracker:\n"
+        "```\n"
+        "Feature: <name>\n"
+        "Files: <list>\n"
+        "Steps: <count>\n"
+        "Estimated effort: S/M/L\n"
+        "Requires rebuild: yes/no (which stages)\n"
+        "Key risk: <one sentence>\n"
+        "```"
+    )
+
+    if verbose:
+        print("  [plan] Turn 4: Risk assessment + final summary...", file=sys.stderr)
+    _increment_call_counter()
+    msgs.append({"role": "user", "content": t4_prompt})
+    t4 = _call_api(msgs, api_key, max_tokens=5000, timeout=300.0)
+
+    # Assemble full plan document
+    sections = [
+        f"# Implementation Plan: {feature_description[:80]}\n",
+        "---\n## Turn 1 — Current State\n",
+        t1,
+        "\n---\n## Turn 2 — Design\n",
+        t2,
+        "\n---\n## Turn 3 — Implementation Steps\n",
+        t3,
+        "\n---\n## Turn 4 — Risks & Guardrails\n",
+        t4,
+    ]
+    return "\n".join(sections)
+
+
 def load_api_key() -> str:
     """Load MiniMax API key from env or .env file."""
     load_dotenv()
@@ -752,7 +992,7 @@ def main():
         "--mode",
         choices=list(AUDIT_MODES.keys()),
         default="general",
-        help="Preset audit mode (default: general)",
+        help="Preset audit mode (default: general). New: discovery, architect",
     )
     parser.add_argument("--prompt", help="Custom audit prompt (overrides --mode)")
     parser.add_argument("--output", "-o", help="Save output to file")
@@ -765,9 +1005,18 @@ def main():
         "--deep",
         action="store_true",
         help=(
-            "Multi-turn structured audit: understand → hypothesise → verify. "
-            "Auto-injects related files for cross-file context. Uses ~3 API calls. "
-            "Dramatically reduces false positives. Recommended for production files."
+            "Multi-turn audit: understand → hypothesise → verify. "
+            "Auto-injects related files. ~3 API calls. Reduces FP rate ~72%%→30%%."
+        ),
+    )
+    parser.add_argument(
+        "--plan",
+        metavar="FEATURE",
+        help=(
+            "4-turn implementation planning mode. Pass a feature description in quotes. "
+            "Provide relevant existing files as positional args. "
+            "Produces: current state → design → implementation steps → risks. "
+            "Example: --plan 'Add trailing stop to E2 entry model' trading_app/entry_rules.py"
         ),
     )
     parser.add_argument(
@@ -781,24 +1030,36 @@ def main():
         show_budget()
         return
 
-    if not args.files:
-        parser.error("at least one file is required (or use --budget)")
-
     api_key = load_api_key()
 
-    if args.deep:
+    # ── Plan mode ────────────────────────────────────────────────────
+    if args.plan:
+        context_files = args.files or []
+        print(
+            f"Planning: '{args.plan[:60]}' with {len(context_files)} context file(s)...",
+            file=sys.stderr,
+        )
+        result = audit_plan(args.plan, context_files, api_key, verbose=True)
+
+    # ── Deep audit mode ──────────────────────────────────────────────
+    elif args.deep:
+        if not args.files:
+            parser.error("--deep requires at least one file")
         mode = args.mode if not args.prompt else "general"
         print(
-            f"Deep audit: {len(args.files)} file(s) [{mode}] — 3-turn reasoning + auto-context...",
+            f"Deep audit: {len(args.files)} file(s) [{mode}] — 3-turn + auto-context...",
             file=sys.stderr,
         )
         result = audit_deep(args.files, mode, api_key, verbose=True)
+
+    # ── Standard single-turn mode ────────────────────────────────────
     else:
+        if not args.files:
+            parser.error("at least one file is required (or use --budget / --plan)")
         file_content = read_files(args.files)
         system_prompt = args.prompt if args.prompt else AUDIT_MODES[args.mode]
-        model_label = "Standard"
         print(
-            f"Auditing {len(args.files)} file(s) with M2.5-{model_label} [{args.mode}]...",
+            f"Auditing {len(args.files)} file(s) [M2.5/{args.mode}]...",
             file=sys.stderr,
         )
         result = audit(file_content, system_prompt, api_key, fast=args.fast)
