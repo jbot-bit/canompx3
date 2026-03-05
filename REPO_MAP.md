@@ -54,7 +54,7 @@ research/
     analyze_entry_clearance.py
     analyze_eod_exits.py
     analyze_first_half_hour.py
-... and 754 more entries
+... and 756 more entries
 ```
 
 ## Module Index
@@ -114,10 +114,10 @@ research/
 | `trading_app/ml/cpcv.py` | 135 | Combinatorial Purged Cross-Validation (CPCV). | cpcv_score |
 | `trading_app/ml/evaluate.py` | 225 | Before/after quantification of meta-label impact. | evaluate_instrument, print_evaluation, main |
 | `trading_app/ml/evaluate_validated.py` | 151 | Evaluate meta-label impact on VALIDATED strategies only. | evaluate_validated, main |
-| `trading_app/ml/features.py` | 649 | Feature extraction: daily_features + orb_outcomes → ML feature matrix. | apply_e6_filter, transform_to_features, load_feature_matrix, load_validated_feature_matrix, load_single_config_feature_matrix |
+| `trading_app/ml/features.py` | 658 | Feature extraction: daily_features + orb_outcomes → ML feature matrix. | apply_e6_filter, transform_to_features, load_feature_matrix, load_validated_feature_matrix, load_single_config_feature_matrix |
 | `trading_app/ml/importance.py` | 112 | Feature importance analysis: MDI and MDA (permutation importance). | compute_importance, print_importance_report, run_importance, main |
-| `trading_app/ml/meta_label.py` | 832 | Meta-label classifier: train, validate (CPCV), threshold-optimize, predict. | train_per_session_meta_label, print_per_session_results, train_meta_label, print_results, main |
-| `trading_app/ml/predict_live.py` | 336 | Live ML prediction: P(win) for trade entry decisions. | MLPrediction, LiveMLPredictor |
+| `trading_app/ml/meta_label.py` | 912 | Meta-label classifier: train, validate (CPCV), threshold-optimize, predict. | train_per_session_meta_label, print_per_session_results, train_meta_label, print_results, main |
+| `trading_app/ml/predict_live.py` | 399 | Live ML prediction: P(win) for trade entry decisions. | MLPrediction, LiveMLPredictor |
 | `trading_app/nested/__init__.py` | 5 | Nested ORB research track — isolated parallel experiment. |  |
 | `trading_app/nested/audit_outcomes.py` | 307 | Spot-check audit for nested_outcomes: independently reconstructs outcomes | audit_nested_outcomes, main |
 | `trading_app/nested/builder.py` | 444 | Build nested ORB outcomes: wider ORB range (15/30 min) with 5-minute entry bars. | resample_to_5m, build_nested_outcomes, main |
@@ -170,7 +170,7 @@ research/
 | `scripts/run_live_session.py` | 32 | Entry point for a live trading session. | main |
 | `scripts/setup_daily_backfill.py` | 30 | Register Windows Task Scheduler job to run daily backfill at 7:00 AM Brisbane. |  |
 | `scripts/tools/audit_15m30m.py` | 84 | Investigate what happened to 15m/30m validated strategies. |  |
-| `scripts/tools/audit_behavioral.py` | 325 | Behavioral anti-pattern scanner — catches common AI/human coding mistakes. | check_hardcoded_check_counts, check_hardcoded_instrument_lists, check_broad_except_success, check_triple_join_guard, check_cli_arg_drift |
+| `scripts/tools/audit_behavioral.py` | 326 | Behavioral anti-pattern scanner — catches common AI/human coding mistakes. | check_hardcoded_check_counts, check_hardcoded_instrument_lists, check_broad_except_success, check_triple_join_guard, check_cli_arg_drift |
 | `scripts/tools/audit_ib_single_break.py` | 402 | AUDIT: IB Single Break script -- strip back, verify, rebuild honestly. | compute_ib, classify_at_checkpoint, classify_final, compute_hold_pnl, compute_fixed_exit_pnl |
 | `scripts/tools/audit_integrity.py` | 237 | Full data integrity audit — checks everything is honest and consistent. | check_outcome_coverage, check_validated_session_integrity, check_edge_family_integrity, check_e0_contamination, check_old_session_names |
 | `scripts/tools/backfill_dollar_columns.py` | 106 | Backfill dollar columns on existing orb_outcomes, experimental_strategies, | backfill_dollar_columns, main |
@@ -180,7 +180,7 @@ research/
 | `scripts/tools/build_edge_families.py` | 280 | Build edge families by hashing strategy trade-day lists. | classify_family, classify_trade_tier, build_edge_families, main |
 | `scripts/tools/build_mes_outcomes_fast.py` | 184 | Fast MES outcome builder -- parallel, preloaded bars. | log, process_single_day, main |
 | `scripts/tools/build_outcomes_fast.py` | 211 | Fast parallel outcome builder for MNQ (or any instrument). | process_single_day, main |
-... and 309 more modules
+... and 311 more modules
 
 ## Cross-Package Dependencies
 
@@ -233,7 +233,7 @@ research/
 - `trading_app/portfolio.py` -> pipeline, trading_app
 - `trading_app/regime/compare.py` -> pipeline
 - `trading_app/regime/discovery.py` -> pipeline, trading_app
-... and 257 more edges
+... and 260 more edges
 
 ## CLI Entry Points
 
@@ -261,4 +261,4 @@ research/
 - `python trading_app/ml/evaluate.py` -- (no argparse description)
 - `python trading_app/ml/evaluate_validated.py` -- (no argparse description)
 - `python trading_app/ml/importance.py` -- (no argparse description)
-... and 239 more entry points
+... and 241 more entry points

@@ -62,8 +62,8 @@ def preflight(script_path: str, force: bool = False, run_after: bool = False) ->
     try:
         api_key = load_api_key()
     except SystemExit:
-        print("WARNING: MINIMAX_API_KEY not set — skipping pre-flight.")
-        return 0  # Don't block if no key
+        print("WARNING: MINIMAX_API_KEY not set — pre-flight skipped (configure key to enable).")
+        return 2  # Distinct from pass (0) and fail (1) — skipped, not validated
 
     file_content = read_files([str(path)])
     system_prompt = AUDIT_MODES["bias"] + RESEARCH_BIAS_ADDENDUM
@@ -105,9 +105,12 @@ def preflight(script_path: str, force: bool = False, run_after: bool = False) ->
         print("✓ M2.5 pre-flight passed.")
 
     if run_after:
+        if failed and not passed:
+            print("ERROR: Script failed preflight. Review findings above before running.")
+            return 1
         print(f"\nRunning {path}...\n")
-        result = subprocess.run([sys.executable, str(path)], cwd=str(PROJECT))
-        return result.returncode
+        proc = subprocess.run([sys.executable, str(path)], cwd=str(PROJECT))
+        return proc.returncode
 
     return 0
 

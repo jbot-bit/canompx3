@@ -113,6 +113,8 @@ def get_changed_files(
         cwd=str(PROJECT_ROOT),
     )
     if result.returncode != 0:
+        if result.stderr.strip():
+            print(f"  WARNING: git failed — {result.stderr.strip()}")
         return []
 
     files = [f.strip() for f in result.stdout.strip().split("\n") if f.strip()]

@@ -44,7 +44,7 @@ from dotenv import load_dotenv
 # ── Config ──────────────────────────────────────────────────────────
 API_URL = "https://api.minimax.io/v1/chat/completions"
 MODEL_STANDARD = "MiniMax-M2.5"            # Deep analysis, improvements mode
-MODEL_FAST     = "MiniMax-M2.5-highspeed" # 3-5× faster, same accuracy for review
+MODEL_FAST     = "MiniMax-M2.5"            # Flash variants not on api.minimax.io plan; same model as standard
 MAX_CONTEXT = 200000  # M2.5 total context window (input + output) in tokens
 MAX_TOKENS = 131072   # 128K default — auto-reduced if input is large
 API_TIMEOUT_STANDARD = 600.0  # seconds — standard model, large files
@@ -535,7 +535,7 @@ def main():
         Path(args.output).write_text(result, encoding="utf-8")
         print(f"Saved to {args.output}", file=sys.stderr)
     else:
-        print(result)
+        sys.stdout.buffer.write((result + "\n").encode("utf-8", errors="replace"))
 
 
 if __name__ == "__main__":
