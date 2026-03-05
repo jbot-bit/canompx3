@@ -222,6 +222,9 @@ SESSION_SLIPPAGE_MULT = {
         "US_DATA_1000": 0.9,      # 10:00 ET; solid
         "CME_PRECLOSE": 1.0,      # 2:45 PM ET; moderate
     },
+    # MBT (Micro Bitcoin) intentionally absent: dead instrument (0 validated ORB
+    # strategies, no live trading). get_session_cost_spec() falls back to mult=1.0
+    # which is correct — BTC's 24/7 trading means session multipliers don't apply.
 }
 
 
