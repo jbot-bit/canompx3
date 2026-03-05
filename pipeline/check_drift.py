@@ -2828,6 +2828,94 @@ def check_no_hardcoded_scratch_db() -> list[str]:
     return violations
 
 
+def check_db_reader_cached_connection() -> list[str]:
+    """Check #63: ui/db_reader.py must use cached DB connections, not connection-per-query.
+
+    The cached _DB_CONNECTIONS pattern eliminates 45ms overhead per query.
+    Individual functions must NOT close the shared connection.
+    """
+    violations = []
+    db_reader = PROJECT_ROOT / "ui" / "db_reader.py"
+    if not db_reader.exists():
+        return violations
+    content = db_reader.read_text(encoding="utf-8")
+
+    # Must have the cached connection dict
+    if "_DB_CONNECTIONS" not in content:
+        violations.append(
+            "  ui/db_reader.py: missing _DB_CONNECTIONS cache — "
+            "connection-per-query anti-pattern detected"
+        )
+
+    # Individual functions must NOT close the shared connection
+    # (Only _cleanup_connections and atexit should close)
+    lines = content.splitlines()
+    for i, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if "con.close()" in stripped or "conn.close()" in stripped:
+            # Check if we're inside _cleanup_connections (allowed)
+            in_cleanup = False
+            for j in range(max(0, i - 20), i):
+                if "def _cleanup_connections" in lines[j - 1]:
+                    in_cleanup = True
+                    break
+            if not in_cleanup:
+                violations.append(
+                    f"  ui/db_reader.py:{i}: conn.close() outside _cleanup_connections — "
+                    f"shared connection must not be closed by individual callers"
+                )
+
+    return violations
+
+
+def check_drift_shared_db_connection() -> list[str]:
+    """Check #64: All requires_db drift checks must accept con= parameter.
+
+    The shared connection pattern saves ~400ms (11x45ms per connect).
+    """
+    violations = []
+    import inspect
+
+    # Get all requires_db check functions from CHECKS
+    for label, check_fn, is_advisory, requires_db in CHECKS:
+        if not requires_db:
+            continue
+        sig = inspect.signature(check_fn)
+        if "con" not in sig.parameters:
+            violations.append(
+                f"  {check_fn.__name__}: requires_db=True but missing con= parameter — "
+                f"cannot use shared DB connection"
+            )
+
+    return violations
+
+
+def check_no_broad_rglob_in_drift_checks() -> list[str]:
+    """Check #65: check_old_session_names must not use PROJECT_ROOT.rglob.
+
+    Scoped rglob (pipeline/, trading_app/, scripts/ only) saves ~1,800ms
+    by skipping venv/.git/.auto-claude tree walks.
+    """
+    violations = []
+    drift_file = PROJECT_ROOT / "pipeline" / "check_drift.py"
+    content = drift_file.read_text(encoding="utf-8")
+
+    # Find the check_old_session_names function and look for broad rglob
+    in_function = False
+    for i, line in enumerate(content.splitlines(), 1):
+        if "def check_old_session_names" in line:
+            in_function = True
+        elif in_function and line.strip().startswith("def "):
+            break  # Next function — stop scanning
+        elif in_function and "PROJECT_ROOT.rglob" in line:
+            violations.append(
+                f"  pipeline/check_drift.py:{i}: PROJECT_ROOT.rglob in "
+                f"check_old_session_names — must use scoped _scan_dirs instead"
+            )
+
+    return violations
+
+
 # =============================================================================
 # CHECK REGISTRY — single source of truth for all drift checks
 # =============================================================================
@@ -2963,6 +3051,12 @@ CHECKS = [
      check_rr_resolution_paths_locked, False, False),
     ("No hardcoded scratch DB defaults in active code",
      check_no_hardcoded_scratch_db, False, False),
+    ("db_reader cached connection enforcement",
+     check_db_reader_cached_connection, False, False),
+    ("Drift check shared DB connection enforcement",
+     check_drift_shared_db_connection, False, False),
+    ("No broad rglob in drift checks",
+     check_no_broad_rglob_in_drift_checks, False, False),
 ]
 
 
