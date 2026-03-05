@@ -65,12 +65,13 @@ if ! "$PYTHON" pipeline/check_drift.py > /dev/null 2>&1; then
 fi
 echo "  PASSED"
 
-# 2. Staged-file-aware tests — only run tests for what actually changed.
-#    - pipeline/ changes  → tests/test_pipeline/
-#    - trading_app/ changes → tests/test_trading_app/ (excluding slow ones)
-#    - scripts/ or docs/ changes → skip pytest (not production code)
+# 2. Staged-file-aware FAST tests — pre-commit must finish in <30s.
+#    - pipeline/ changes  → tests/test_pipeline/ (~11s, 636 tests)
+#    - trading_app/ changes → fast subset only (~2s, config/entry/tripwires)
+#    - Both changed → pipeline/ + fast trading_app subset (~13s)
 #    - tests/ files staged → run only those test files
-#    Falls back to the full fast suite only if staged files span multiple dirs.
+#    - scripts/ or docs/ changes → skip pytest (not production code)
+#    Full trading_app suite (13 min) runs via `pytest` or CI, not pre-commit.
 #
 # NOTE: Capture output to temp file, NOT command substitution — PIPESTATUS is
 # unreliable in Git Bash command substitutions and can silently return 0.
@@ -80,6 +81,13 @@ STAGED_PIPELINE=$(echo "$STAGED_ALL" | grep '^pipeline/' | grep '\.py$' || true)
 STAGED_TRADING=$(echo "$STAGED_ALL"  | grep '^trading_app/' | grep '\.py$' || true)
 STAGED_TESTS=$(echo "$STAGED_ALL"    | grep '^tests/' | grep '\.py$' || true)
 
+# Fast trading_app tests — core invariants without the 13-min heavy suite
+FAST_TRADING="$SCRIPT_DIR/tests/test_trading_app/test_config.py \
+$SCRIPT_DIR/tests/test_trading_app/test_live_config.py \
+$SCRIPT_DIR/tests/test_trading_app/test_entry_rules.py \
+$SCRIPT_DIR/tests/test_trading_app/test_market_state.py \
+$SCRIPT_DIR/tests/test_pipeline/test_tripwires.py"
+
 # Build the test target list
 TEST_ARGS=""
 if [ -n "$STAGED_TESTS" ]; then
@@ -88,9 +96,9 @@ if [ -n "$STAGED_TESTS" ]; then
 elif [ -n "$STAGED_PIPELINE" ] && [ -z "$STAGED_TRADING" ]; then
     TEST_ARGS="$SCRIPT_DIR/tests/test_pipeline/"
 elif [ -n "$STAGED_TRADING" ] && [ -z "$STAGED_PIPELINE" ]; then
-    TEST_ARGS="$SCRIPT_DIR/tests/test_trading_app/"
+    TEST_ARGS="$FAST_TRADING"
 elif [ -n "$STAGED_PIPELINE" ] && [ -n "$STAGED_TRADING" ]; then
-    TEST_ARGS="$SCRIPT_DIR/tests/test_pipeline/ $SCRIPT_DIR/tests/test_trading_app/"
+    TEST_ARGS="$SCRIPT_DIR/tests/test_pipeline/ $FAST_TRADING"
 fi
 
 if [ -z "$TEST_ARGS" ]; then
@@ -99,10 +107,7 @@ else
     TEST_TMPFILE=$(mktemp)
     set +e
     # shellcheck disable=SC2086  # intentional word-splitting for TEST_ARGS
-    "$PYTHON" -m pytest $TEST_ARGS \
-        --ignore="$SCRIPT_DIR/tests/test_trading_app/test_integration.py" \
-        --ignore="$SCRIPT_DIR/tests/test_trading_app/test_paper_trader.py" \
-        -x -q -n 4 --dist loadscope > "$TEST_TMPFILE" 2>&1
+    "$PYTHON" -m pytest $TEST_ARGS -x -q > "$TEST_TMPFILE" 2>&1
     TEST_EXIT=$?
     set -e
     tail -5 "$TEST_TMPFILE"

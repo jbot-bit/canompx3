@@ -43,6 +43,7 @@ from scipy import stats
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.cost_model import COST_SPECS, CostSpec, risk_in_dollars
+from pipeline.paths import GOLD_DB_PATH
 from research.lib.stats import bh_fdr
 
 # ---------------------------------------------------------------------------
@@ -52,7 +53,7 @@ ACTIVE_INSTRUMENTS = sorted(ACTIVE_ORB_INSTRUMENTS)
 RR_TARGETS = [1.5, 2.0, 2.5, 3.0]  # Skip 1.0 (0.1% rescuable), skip 4.0 (sparse)
 PARTIAL_LEVELS = [0.5, 1.0, 1.5]     # Grid for sensitivity analysis
 TRAIL_LEVELS = [0.0, 0.25, 0.5]      # 0=breakeven, 0.5=plan value
-DB_PATH = Path("C:/db/gold.db")      # Research convention: scratch DB
+DB_PATH = GOLD_DB_PATH
 
 # Minimum trades per cell for statistical testing
 MIN_TRADES = 30

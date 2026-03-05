@@ -11,6 +11,7 @@ VERIFIED API NOTES:
 - TradeEvent.price: entry fill on ENTRY, exit fill on EXIT
 - entry_model: look up from self._strategy_map[event.strategy_id].entry_model
 """
+import asyncio
 import json
 import logging
 from datetime import date, datetime, timezone
@@ -124,7 +125,7 @@ class SessionOrchestrator:
         except OSError as e:
             log.warning("Could not write signal record: %s", e)
 
-    def _on_bar(self, bar: Bar) -> None:
+    async def _on_bar(self, bar: Bar) -> None:
         """Called for each completed 1-minute bar from DataFeed."""
         self.orb_builder.on_bar(bar)
 
@@ -133,16 +134,17 @@ class SessionOrchestrator:
         events = self.engine.on_bar(bar.as_dict())
 
         for event in events:
-            self._handle_event(event)
+            await self._handle_event(event)
 
-    def _close_position(self, event) -> None:
+    async def _close_position(self, event) -> None:
         """Submit a closing market order to the broker for an EXIT or SCRATCH."""
         exit_spec = self.order_router.build_exit_spec(
             direction=event.direction,
             symbol=self.contract_symbol,
             qty=event.contracts,
         )
-        result = self.order_router.submit(exit_spec)
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(None, self.order_router.submit, exit_spec)
         log.info("%s close order: %s %s @ %.2f → orderId=%d",
                  event.event_type, event.strategy_id, event.direction,
                  event.price, result.order_id)
@@ -176,12 +178,15 @@ class SessionOrchestrator:
         if alert:
             log.warning(alert)
 
-    def _handle_event(self, event) -> None:
+    async def _handle_event(self, event) -> None:
         """
         Handle a TradeEvent from ExecutionEngine.
         TradeEvent fields: event_type, strategy_id, timestamp, price, direction, contracts, reason
         event.price = entry fill on ENTRY events, exit fill on EXIT events
         There is NO entry_model, pnl_r, or expectancy_r on TradeEvent.
+
+        HTTP order submission runs in a thread-pool executor so the async event loop
+        (and the Tradovate heartbeat task) are never blocked.
         """
         strategy = self._strategy_map.get(event.strategy_id)
         if strategy is None:
@@ -213,7 +218,8 @@ class SessionOrchestrator:
                 symbol=self.contract_symbol,
                 qty=event.contracts,
             )
-            result = self.order_router.submit(spec)
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(None, self.order_router.submit, spec)
             log.info("ENTRY order: %s %s @ %.2f → orderId=%d",
                      event.strategy_id, event.direction, event.price, result.order_id)
             self._write_signal_record({
@@ -244,7 +250,7 @@ class SessionOrchestrator:
                 })
                 return
 
-            self._close_position(event)
+            await self._close_position(event)
             self._record_exit(event, entry_price)
             self._write_signal_record({
                 "type": f"ORDER_{event.event_type}",
@@ -268,11 +274,27 @@ class SessionOrchestrator:
         await feed.run(self.contract_symbol)
 
     def post_session(self) -> None:
-        """EOD: close open positions, log summary, run incremental backfill."""
-        # Close any positions still open at session end
+        """EOD: close open positions, log summary, run incremental backfill.
+
+        Called from a synchronous finally block after asyncio.run() completes,
+        so we start a fresh event loop for the async close operations.
+        Each event is wrapped individually so one failure doesn't abort the rest
+        (CRIT-4: preventing open positions from being abandoned on error).
+        """
         eod_events = self.engine.on_trading_day_end()
-        for event in eod_events:
-            self._handle_event(event)
+
+        async def _close_all() -> None:
+            for event in eod_events:
+                try:
+                    await self._handle_event(event)
+                except Exception as e:
+                    log.error(
+                        "EOD close failed for %s (%s) — position may remain open: %s",
+                        event.strategy_id, event.event_type, e,
+                    )
+
+        if eod_events:
+            asyncio.run(_close_all())
 
         summary = self.monitor.daily_summary()
         log.info("EOD summary: %s", summary)

@@ -27,6 +27,7 @@ from sklearn.metrics import roc_auc_score
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
+from pipeline.paths import GOLD_DB_PATH
 from trading_app.ml.config import (
     ACTIVE_INSTRUMENTS,
     CROSS_SESSION_FEATURES,
@@ -355,7 +356,7 @@ def phase3_signal_diagnosis(X_e6, y, meta, instrument: str, oos_results: dict | 
 
 def main():
     parser = argparse.ArgumentParser(description="ML License Diagnostic")
-    parser.add_argument("--db-path", type=str, default="C:/db/gold.db")
+    parser.add_argument("--db-path", type=str, default=str(GOLD_DB_PATH))
     parser.add_argument("--instrument", type=str, help="Single instrument (default: all)")
     args = parser.parse_args()
 

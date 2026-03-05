@@ -32,6 +32,9 @@ from pathlib import Path
 
 import duckdb
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from pipeline.paths import GOLD_DB_PATH
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
@@ -263,7 +266,7 @@ def year_by_year(rows, bucket):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--db-path", default="C:/db/gold.db")
+    parser.add_argument("--db-path", default=str(GOLD_DB_PATH))
     parser.add_argument("--g6", action="store_true",
                         help="Use G6+ filter instead of G4+")
     args = parser.parse_args()

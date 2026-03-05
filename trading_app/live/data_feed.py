@@ -6,12 +6,16 @@ via BarAggregator, then calls on_bar(bar) callback for each completed bar.
 
 Heartbeat every 2.5s required per Tradovate docs.
 Reconnects automatically on disconnect with exponential backoff (5s → 60s max).
+
+Stop-file: create live_session.stop in project root for graceful shutdown.
 """
 import asyncio
 import json
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
 
 import websockets
 
@@ -28,19 +32,31 @@ _BACKOFF_INITIAL = 5.0   # seconds before first retry
 _BACKOFF_MAX = 60.0      # cap at 60s
 _MAX_RECONNECTS = 20     # give up after this many consecutive failures
 
+# Stop-file for graceful Windows shutdown (proc.terminate() is a hard kill on Windows)
+_STOP_FILE = Path(__file__).parent.parent.parent / "live_session.stop"
+
 
 class DataFeed:
     """
-    Streams Tradovate quotes → 1-minute bars → on_bar callback.
+    Streams Tradovate quotes → 1-minute bars → on_bar async callback.
+
+    on_bar must be an async coroutine: ``async def on_bar(bar: Bar) -> None``.
+    This allows the event loop to remain responsive (heartbeat, stop-file check)
+    even when on_bar awaits blocking I/O (e.g. order submission via run_in_executor).
 
     Reconnects automatically on WebSocket disconnect.
 
     Usage:
-        feed = DataFeed(auth, on_bar=my_callback, demo=True)
+        feed = DataFeed(auth, on_bar=my_async_callback, demo=True)
         await feed.run("MGCM6")
     """
 
-    def __init__(self, auth: TradovateAuth, on_bar: Callable[[Bar], None], demo: bool = True):
+    def __init__(
+        self,
+        auth: TradovateAuth,
+        on_bar: Callable[[Bar], Coroutine[Any, Any, None]],
+        demo: bool = True,
+    ):
         self.auth = auth
         self.on_bar = on_bar
         self.demo = demo
@@ -58,7 +74,6 @@ class DataFeed:
                 async with websockets.connect(url, ping_interval=None) as ws:
                     backoff = _BACKOFF_INITIAL  # reset on successful connect
                     await self._session(ws, symbol)
-                    # _session returns normally only if the feed is cleanly closed
                     log.info("Feed closed cleanly for %s", symbol)
                     return
 
@@ -87,8 +102,13 @@ class DataFeed:
             "body": {"token": self.auth.get_token()},
         }))
         resp_raw = await ws.recv()
-        resp = json.loads(resp_raw) if resp_raw and resp_raw != "[]" else {}
-        if isinstance(resp, dict) and resp.get("s") not in (200, None):
+        try:
+            resp = json.loads(resp_raw) if resp_raw and resp_raw != "[]" else {}
+        except json.JSONDecodeError:
+            resp = {}
+        # Tradovate returns either a dict or an array; treat non-200 status as failure
+        status = resp.get("s") if isinstance(resp, dict) else None
+        if status is not None and status not in (200,):
             raise RuntimeError(f"Tradovate auth failed: {resp}")
         log.info("Authenticated to Tradovate MD feed")
 
@@ -99,10 +119,18 @@ class DataFeed:
         }))
         log.info("Subscribed to quotes: %s", symbol)
 
+        # Stop event — set by heartbeat when stop-file is detected
+        stop_event = asyncio.Event()
+
         # Heartbeat task (required every 2.5s per Tradovate docs)
         async def heartbeat():
-            while True:
+            while not stop_event.is_set():
                 await asyncio.sleep(2.5)
+                if _STOP_FILE.exists():
+                    log.info("Stop file detected — requesting graceful shutdown")
+                    _STOP_FILE.unlink(missing_ok=True)
+                    stop_event.set()
+                    return
                 try:
                     await ws.send("[]")
                 except Exception:
@@ -111,6 +139,8 @@ class DataFeed:
         self._heartbeat_task = asyncio.create_task(heartbeat())
         try:
             async for message in ws:
+                if stop_event.is_set():
+                    break
                 if not message or message == "[]":
                     continue
                 try:
@@ -118,11 +148,11 @@ class DataFeed:
                 except json.JSONDecodeError:
                     continue
                 for frame in (frames if isinstance(frames, list) else [frames]):
-                    self._handle_frame(frame, symbol)
+                    await self._handle_frame(frame, symbol)
         finally:
             self._heartbeat_task.cancel()
 
-    def _handle_frame(self, frame: dict, symbol: str) -> None:
+    async def _handle_frame(self, frame: dict, symbol: str) -> None:
         if not isinstance(frame, dict):
             return
         for q in frame.get("d", {}).get("quotes", []):
@@ -132,7 +162,7 @@ class DataFeed:
             bar = self._agg.on_tick(float(price), 1, datetime.now(timezone.utc))
             if bar is not None:
                 bar.symbol = symbol
-                self.on_bar(bar)
+                await self.on_bar(bar)
 
     def flush(self, symbol: str = "") -> Bar | None:
         """Force-close current bar at session end."""

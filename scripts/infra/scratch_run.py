@@ -17,7 +17,10 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
-DEFAULT_GOLD = PROJECT_ROOT / "gold.db"
+sys.path.insert(0, str(PROJECT_ROOT))
+from pipeline.paths import GOLD_DB_PATH
+
+DEFAULT_GOLD = GOLD_DB_PATH
 DEFAULT_SCRATCH = Path("C:/db/gold.db")
 
 

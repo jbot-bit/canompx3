@@ -22,6 +22,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.stdout.reconfigure(line_buffering=True)
 
 from pipeline.cost_model import get_cost_spec, to_r_multiple
+from pipeline.paths import GOLD_DB_PATH
 from research._alt_strategy_utils import (
     load_daily_features, load_bars_for_day, resolve_bar_outcome,
 )
@@ -205,7 +206,7 @@ def main():
     parser.add_argument("--train-months", type=int, default=12)
     args = parser.parse_args()
 
-    db_path = args.db_path or Path("C:/db/gold.db")
+    db_path = args.db_path or GOLD_DB_PATH
 
     print("Loading features...")
     feat = load_daily_features(db_path, date(2016, 1, 1), date(2026, 2, 1))

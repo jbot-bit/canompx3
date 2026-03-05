@@ -100,7 +100,7 @@ Brisbane DOW = exchange DOW for all sessions except NYSE_OPEN (midnight crossing
 
 **ONE database** (`gold.db`) at `<project>/gold.db` — local disk, no cloud sync.
 
-`C:\db\gold.db` is scratch only — optionally copy there for long-running research, copy back when done. Research scripts default to `C:/db/gold.db` for isolation; do not "fix" this convention.
+`C:\db\gold.db` is an auto-synced scratch copy — drift check #37 copies canonical → scratch when stale. All scripts default to canonical `gold.db` via `pipeline.paths.GOLD_DB_PATH`. Drift check #62 blocks any hardcoded scratch DB defaults in active code.
 
 **Rules:**
 - NEVER run two write processes against the same DuckDB file simultaneously

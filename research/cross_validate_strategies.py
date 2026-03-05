@@ -24,6 +24,7 @@ import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+from pipeline.paths import GOLD_DB_PATH
 from research._alt_strategy_utils import (
     annualize_sharpe,
     compute_strategy_metrics,
@@ -158,7 +159,7 @@ def compute_portfolio_uplift(orb_df: pd.DataFrame, alt_results: dict, alt_name: 
 
 def main():
     parser = argparse.ArgumentParser(description="Cross-validate alt strategies vs ORB")
-    parser.add_argument("--db-path", type=Path, default=Path("C:/db/gold.db"))
+    parser.add_argument("--db-path", type=Path, default=GOLD_DB_PATH)
     parser.add_argument("--start", type=date.fromisoformat, default=date(2024, 8, 1))
     parser.add_argument("--end", type=date.fromisoformat, default=date(2026, 2, 1))
     parser.add_argument("--output", type=Path, default=None)

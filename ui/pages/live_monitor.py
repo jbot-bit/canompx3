@@ -21,6 +21,12 @@ import streamlit as st
 # Signals file written by SessionOrchestrator, read here
 _SIGNALS_FILE = Path(__file__).parent.parent.parent / "live_signals.jsonl"
 
+# Stop-file: DataFeed's heartbeat checks for this and shuts down gracefully.
+# On Windows, proc.terminate() calls TerminateProcess() (hard kill) which skips
+# all finally blocks and post_session() cleanup. Writing this file instead
+# gives the session a chance to close positions before exiting.
+_STOP_FILE = Path(__file__).parent.parent.parent / "live_session.stop"
+
 # Colour map for event type badges
 _TYPE_COLOURS = {
     "SESSION_START": "blue",
@@ -97,14 +103,29 @@ def render() -> None:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def _truncate_file(path: Path) -> None:
+    """Truncate a file to zero bytes without deleting it.
+
+    Windows raises PermissionError if you unlink() a file while another process
+    has it open. Truncating avoids that — the session process opens/closes the
+    signals file per-write so the window is tiny, but truncation is safer.
+    """
+    try:
+        with open(path, "w"):
+            pass
+    except OSError:
+        pass
+
+
 def _start_session(instrument: str, mode_label: str) -> None:
     is_signal_only = mode_label.startswith("Signal")
     flag = "--signal-only" if is_signal_only else "--demo"
     mode_short = "signal-only" if is_signal_only else "demo"
 
-    # Clear previous signal log so the new session starts fresh
+    # Clear previous signal log and any leftover stop file
     if _SIGNALS_FILE.exists():
-        _SIGNALS_FILE.unlink()
+        _truncate_file(_SIGNALS_FILE)
+    _STOP_FILE.unlink(missing_ok=True)
 
     cmd = [
         sys.executable,
@@ -125,10 +146,15 @@ def _start_session(instrument: str, mode_label: str) -> None:
 def _stop_session() -> None:
     proc: subprocess.Popen | None = st.session_state.get("live_proc")
     if proc:
-        proc.terminate()
+        # Write the stop file so DataFeed shuts down gracefully (closes positions,
+        # runs post_session). On Windows, proc.terminate() is a hard kill that
+        # bypasses all cleanup — the stop file is the safe alternative.
+        _STOP_FILE.touch()
         try:
-            proc.wait(timeout=5)
+            proc.wait(timeout=15)
         except subprocess.TimeoutExpired:
+            # Graceful shutdown timed out — hard kill as last resort
+            _STOP_FILE.unlink(missing_ok=True)
             proc.kill()
     st.session_state.pop("live_proc", None)
 
@@ -139,7 +165,7 @@ def _render_signal_log() -> None:
         st.subheader("Signal Log")
     with col_clear:
         if st.button("Clear", use_container_width=True) and _SIGNALS_FILE.exists():
-            _SIGNALS_FILE.unlink()
+            _truncate_file(_SIGNALS_FILE)
             st.rerun()
 
     if not _SIGNALS_FILE.exists():

@@ -1414,8 +1414,7 @@ def check_stale_scratch_db() -> list[str]:
     """Check #37: Canonical gold.db must exist at project root.
 
     Canonical DB is <project>/gold.db (via pipeline.paths.GOLD_DB_PATH).
-    C:/db/gold.db is scratch only — used by research scripts for isolation.
-    If both exist, warn about the scratch copy being potentially stale.
+    C:/db/gold.db is scratch only — auto-synced from canonical when stale.
     """
     violations = []
     project_root_db = PROJECT_ROOT / "gold.db"
@@ -1427,15 +1426,23 @@ def check_stale_scratch_db() -> list[str]:
         return violations
     scratch_db = Path("C:/db/gold.db")
     if scratch_db.exists():
-        # Scratch copy exists — warn if it's older than canonical
+        # Scratch copy exists — auto-sync if it's older than canonical
         root_mtime = project_root_db.stat().st_mtime
         scratch_mtime = scratch_db.stat().st_mtime
         delta_hours = (root_mtime - scratch_mtime) / 3600
         if delta_hours >= 1:
-            violations.append(
-                f"  Scratch DB C:/db/gold.db is {delta_hours:.0f}h older than "
-                f"canonical — copy from project root if using for research"
-            )
+            import shutil
+            try:
+                shutil.copy2(str(project_root_db), str(scratch_db))
+                print(
+                    f"  [AUTO-SYNC] Scratch DB was {delta_hours:.0f}h stale — "
+                    f"copied canonical → C:/db/gold.db"
+                )
+            except OSError as e:
+                violations.append(
+                    f"  Scratch DB C:/db/gold.db is {delta_hours:.0f}h stale "
+                    f"and auto-copy failed: {e}"
+                )
     return violations
 
 
@@ -2763,6 +2770,40 @@ def check_rr_resolution_paths_locked() -> list[str]:
     return violations
 
 
+def check_no_hardcoded_scratch_db() -> list[str]:
+    """Check #62: No hardcoded C:/db/gold.db defaults in active Python code.
+
+    Research/script files must use pipeline.paths.GOLD_DB_PATH as their default,
+    not a hardcoded scratch path. Docstrings and archive/ are excluded.
+    """
+    violations = []
+    scratch_pattern = re.compile(
+        r"""(?:default\s*=\s*(?:Path\s*\(\s*)?["']C:/db/gold\.db["']|"""
+        r"""^DB_PATH\s*=\s*Path\s*\(\s*["']C:/db/gold\.db["'])""",
+        re.MULTILINE,
+    )
+    scan_dirs = [RESEARCH_DIR, SCRIPTS_DIR]
+    for scan_dir in scan_dirs:
+        if not scan_dir.exists():
+            continue
+        for py_file in scan_dir.rglob("*.py"):
+            # Skip archive directories
+            if "archive" in py_file.parts:
+                continue
+            try:
+                content = py_file.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            for match in scratch_pattern.finditer(content):
+                line_no = content[:match.start()].count("\n") + 1
+                rel = py_file.relative_to(PROJECT_ROOT)
+                violations.append(
+                    f"  {rel}:{line_no} — hardcoded scratch DB default. "
+                    f"Use pipeline.paths.GOLD_DB_PATH instead."
+                )
+    return violations
+
+
 # =============================================================================
 # CHECK REGISTRY — single source of truth for all drift checks
 # =============================================================================
@@ -2896,6 +2937,8 @@ CHECKS = [
      check_frl_join_key_completeness, False, False),
     ("RR resolution paths locked (LIMIT 1 / ROW_NUMBER must JOIN family_rr_locks)",
      check_rr_resolution_paths_locked, False, False),
+    ("No hardcoded scratch DB defaults in active code",
+     check_no_hardcoded_scratch_db, False, False),
 ]
 
 
