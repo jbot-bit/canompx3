@@ -1465,16 +1465,6 @@ def check_old_session_names() -> list[str]:
         r"""(?:["'])({names})(?:["'])""".format(names="|".join(old_names))
     )
 
-    # Frozen file exclusions (never touch these)
-    frozen_dirs = {
-        "research/archive",
-        "scripts/walkforward",
-        "docs/archive",
-        "tests",
-        ".venv",
-        "venv",
-        ".auto-claude",
-    }
     frozen_files = {
         "scripts/tools/migrate_session_names.py",
         "scripts/tools/volume_session_analysis.py",
@@ -1491,15 +1481,28 @@ def check_old_session_names() -> list[str]:
         "research/analyze_double_break.py",
     }
 
-    for py_file in sorted(PROJECT_ROOT.rglob("*.py")):
+    # Scan only production directories (not venv/.git/.auto-claude)
+    _scan_dirs = [PIPELINE_DIR, TRADING_APP_DIR, SCRIPTS_DIR]
+    all_py_files = []
+    for scan_dir in _scan_dirs:
+        if scan_dir.exists():
+            all_py_files.extend(scan_dir.rglob("*.py"))
+    # Also include active research scripts explicitly
+    for ar in active_research:
+        ar_path = PROJECT_ROOT / ar
+        if ar_path.exists():
+            all_py_files.append(ar_path)
+
+    # Frozen subdirectories within scanned dirs
+    frozen_subdirs = {
+        "scripts/walkforward",
+    }
+
+    for py_file in sorted(all_py_files):
         rel = py_file.relative_to(PROJECT_ROOT).as_posix()
 
-        # Skip frozen directories
-        if any(rel.startswith(d + "/") for d in frozen_dirs):
-            continue
-        # Skip research/ root-level scripts (one-off historical),
-        # EXCEPT active research scripts that were fixed.
-        if re.match(r"^research/[^/]+\.py$", rel) and rel not in active_research:
+        # Skip frozen subdirectories
+        if any(rel.startswith(d + "/") for d in frozen_subdirs):
             continue
         # Skip explicitly frozen files
         if rel in frozen_files:
