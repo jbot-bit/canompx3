@@ -844,6 +844,9 @@ def check_all_imports_resolve() -> list[str]:
             rel = fpath.relative_to(PROJECT_ROOT)
             module = str(rel).replace("\\", "/").replace("/", ".").removesuffix(".py")
 
+            # Skip modules already loaded — their imports resolved successfully
+            if module in sys.modules:
+                continue
             try:
                 importlib.import_module(module)
             except Exception as e:
