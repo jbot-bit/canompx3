@@ -837,6 +837,94 @@ class TestVolAdjustedSizing:
         assert contracts == 5  # Same as baseline
 
 
+class TestTightStop:
+    """Test tight stop (0.75x) integration in the execution engine."""
+
+    def _run_to_break(self, engine, orb_high=2705.0):
+        """Helper: build ORB and trigger a long break."""
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        for i in range(5):
+            engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
+        # Break bar
+        events = engine.on_bar(
+            _bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706)
+        )
+        return ts_base, events
+
+    def test_e1_tight_stop_adjusts_stop_price(self):
+        """E1 with stop_multiplier=0.75: stop is 75% of ORB range from entry side."""
+        # ORB: high=2705, low=2695, range=10
+        # Tight stop long: 2695 + (1 - 0.75) * 10 = 2697.5
+        strategy = _make_strategy(
+            entry_model="E1", confirm_bars=1,
+            strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_NO_FILTER_S075",
+            stop_multiplier=0.75,
+        )
+        engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
+        engine.on_trading_day_start(date(2024, 1, 5))
+
+        ts_base, _ = self._run_to_break(engine)
+
+        # E1: enters on next bar open
+        engine.on_bar(
+            _bar(ts_base + timedelta(minutes=6), 2708, 2715, 2707, 2712)
+        )
+
+        # Find the entered trade
+        assert len(engine.active_trades) == 1
+        trade = engine.active_trades[0]
+        assert trade.stop_price == pytest.approx(2697.5)
+        assert trade.entry_price == 2708.0  # next bar open
+
+    def test_e1_standard_stop_unchanged(self):
+        """E1 with stop_multiplier=1.0: stop is at full ORB edge (2695)."""
+        strategy = _make_strategy(
+            entry_model="E1", confirm_bars=1,
+            strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_NO_FILTER",
+        )
+        engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
+        engine.on_trading_day_start(date(2024, 1, 5))
+
+        ts_base, _ = self._run_to_break(engine)
+
+        engine.on_bar(
+            _bar(ts_base + timedelta(minutes=6), 2708, 2715, 2707, 2712)
+        )
+
+        assert len(engine.active_trades) == 1
+        trade = engine.active_trades[0]
+        assert trade.stop_price == 2695.0  # full ORB edge
+
+    def test_tight_stop_triggers_earlier(self):
+        """Tight stop trade exits on a bar that wouldn't hit the standard stop."""
+        # ORB: high=2705, low=2695, range=10
+        # Tight stop = 2697.5. Standard stop = 2695.
+        # A bar with low=2696 hits tight stop but NOT standard stop.
+        strategy = _make_strategy(
+            entry_model="E1", confirm_bars=1,
+            strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_NO_FILTER_S075",
+            stop_multiplier=0.75,
+        )
+        engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
+        engine.on_trading_day_start(date(2024, 1, 5))
+
+        ts_base, _ = self._run_to_break(engine)
+
+        # E1 entry
+        engine.on_bar(
+            _bar(ts_base + timedelta(minutes=6), 2708, 2715, 2707, 2712)
+        )
+        assert len(engine.active_trades) == 1
+
+        # Bar that dips to 2696 — below tight stop (2697.5) but above standard (2695)
+        exit_events = engine.on_bar(
+            _bar(ts_base + timedelta(minutes=7), 2710, 2711, 2696, 2698)
+        )
+        exit_evts = [e for e in exit_events if e.event_type == "EXIT"]
+        assert len(exit_evts) == 1
+        assert "stop_hit" in exit_evts[0].reason  # "loss_stop_hit" or "stop_hit"
+
+
 class TestCLI:
     def test_import(self):
         """Module imports without error."""

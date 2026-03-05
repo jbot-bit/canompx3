@@ -522,7 +522,8 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
             expected_cols = {
                 "strategy_id", "created_at", "instrument", "orb_label",
                 "orb_minutes", "rr_target", "confirm_bars", "entry_model",
-                "filter_type", "filter_params", "sample_size", "win_rate",
+                "filter_type", "filter_params", "stop_multiplier",
+                "sample_size", "win_rate",
                 "avg_win_r", "avg_loss_r", "expectancy_r", "sharpe_ratio",
                 "max_drawdown_r", "median_risk_points", "avg_risk_points",
                 "trades_per_year", "sharpe_ann",
@@ -552,6 +553,7 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
                 "strategy_id", "promoted_at", "promoted_from",
                 "instrument", "orb_label", "orb_minutes", "rr_target",
                 "confirm_bars", "entry_model", "filter_type", "filter_params",
+                "stop_multiplier",
                 "sample_size", "win_rate", "expectancy_r",
                 "years_tested", "all_years_positive", "stress_test_passed",
                 "sharpe_ratio", "max_drawdown_r",

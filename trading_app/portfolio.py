@@ -29,7 +29,7 @@ import pandas as pd
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.cost_model import get_cost_spec, CostSpec
 from pipeline.init_db import ORB_LABELS
-from trading_app.config import ALL_FILTERS, ATRVelocityFilter, CalendarSkipFilter, classify_strategy
+from trading_app.config import ALL_FILTERS, ATRVelocityFilter, CalendarSkipFilter, classify_strategy, apply_tight_stop
 
 def _get_table_names(con: duckdb.DuckDBPyConnection) -> set[str]:
     """Return set of table names in the main schema."""
@@ -99,7 +99,7 @@ class Portfolio:
             "strategy_count": len(self.strategies),
             "strategies": [asdict(s) for s in self.strategies],
         }
-        return json.dumps(data, indent=2)
+        return json.dumps(data, indent=2, default=str)
 
     @classmethod
     def from_json(cls, json_str: str) -> "Portfolio":
@@ -280,6 +280,7 @@ def load_validated_strategies(
                    vs.median_risk_dollars, vs.avg_risk_dollars,
                    vs.avg_win_dollars, vs.avg_loss_dollars,
                    vs.orb_minutes,
+                   COALESCE(vs.stop_multiplier, 1.0) as stop_multiplier,
                    'baseline' as source
             FROM validated_setups vs
             LEFT JOIN experimental_strategies es
@@ -316,6 +317,7 @@ def load_validated_strategies(
                            NULL as median_risk_dollars, NULL as avg_risk_dollars,
                            NULL as avg_win_dollars, NULL as avg_loss_dollars,
                            nv.orb_minutes,
+                           CAST(1.0 AS DOUBLE) as stop_multiplier,
                            'nested' as source
                     FROM nested_validated nv
                     LEFT JOIN nested_strategies ns
@@ -511,6 +513,7 @@ def build_portfolio(
             avg_win_dollars=s.get("avg_win_dollars"),
             avg_loss_dollars=s.get("avg_loss_dollars"),
             orb_minutes=int(s.get("orb_minutes", 5)),
+            stop_multiplier=s.get("stop_multiplier", 1.0),
             source=s.get("source", "baseline"),
         ))
 
@@ -665,7 +668,9 @@ def build_strategy_daily_series(
 
         # Step 3: Load outcomes from both orb_outcomes (baseline) and nested_outcomes (nested)
         outcomes_baseline = con.execute(f"""
-            SELECT vs.strategy_id, oo.trading_day, oo.pnl_r
+            SELECT vs.strategy_id, oo.trading_day, oo.pnl_r,
+                   oo.mae_r, oo.entry_price, oo.stop_price,
+                   COALESCE(vs.stop_multiplier, 1.0) as stop_multiplier
             FROM validated_setups vs
             JOIN orb_outcomes oo
               ON oo.symbol = vs.instrument
@@ -677,6 +682,20 @@ def build_strategy_daily_series(
             WHERE vs.strategy_id IN ({placeholders})
               AND oo.pnl_r IS NOT NULL
         """, strategy_ids).fetchdf()
+
+        # Apply tight stop simulation for S075 strategies
+        if not outcomes_baseline.empty and "stop_multiplier" in outcomes_baseline.columns:
+            sm_strategies = outcomes_baseline[outcomes_baseline["stop_multiplier"] != 1.0]
+            if not sm_strategies.empty:
+                for sid in sm_strategies["strategy_id"].unique():
+                    mask = outcomes_baseline["strategy_id"] == sid
+                    sm = outcomes_baseline.loc[mask, "stop_multiplier"].iloc[0]
+                    instr = strats.loc[strats["strategy_id"] == sid, "instrument"].iloc[0]
+                    cost_spec = get_cost_spec(instr)
+                    rows_as_dicts = outcomes_baseline.loc[mask].to_dict("records")
+                    adjusted = apply_tight_stop(rows_as_dicts, sm, cost_spec)
+                    outcomes_baseline.loc[mask, "pnl_r"] = [r["pnl_r"] for r in adjusted]
+            outcomes_baseline = outcomes_baseline[["strategy_id", "trading_day", "pnl_r"]]
 
         outcomes_nested = pd.DataFrame()
         if "nested_outcomes" in tables and "nested_validated" in tables:

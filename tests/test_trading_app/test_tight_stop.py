@@ -9,7 +9,7 @@ Tests cover:
 
 import pytest
 from trading_app.config import apply_tight_stop, STOP_MULTIPLIERS
-from trading_app.strategy_discovery import make_strategy_id, parse_dst_regime
+from trading_app.strategy_discovery import make_strategy_id, parse_dst_regime, parse_stop_multiplier
 
 
 # ---------------------------------------------------------------------------
@@ -170,6 +170,25 @@ class TestStrategyIdEncoding:
     def test_parse_dst_works_with_s075_and_summer(self):
         sid = "MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G4_S075_S"
         assert parse_dst_regime(sid) == "summer"
+
+    def test_parse_stop_multiplier_075(self):
+        assert parse_stop_multiplier("MGC_TOKYO_OPEN_E2_RR2.5_CB1_ORB_G4_S075") == 0.75
+
+    def test_parse_stop_multiplier_default(self):
+        assert parse_stop_multiplier("MGC_TOKYO_OPEN_E2_RR2.5_CB1_ORB_G4") == 1.0
+
+    def test_parse_stop_multiplier_with_dst(self):
+        assert parse_stop_multiplier("MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G4_S075_W") == 0.75
+
+    def test_parse_stop_multiplier_roundtrip(self):
+        """make_strategy_id -> parse_stop_multiplier roundtrips correctly."""
+        sid = make_strategy_id("MGC", "TOKYO_OPEN", "E2", 2.5, 1, "ORB_G4",
+                               stop_multiplier=0.75)
+        assert parse_stop_multiplier(sid) == 0.75
+
+    def test_parse_stop_multiplier_dst_summer_not_confused(self):
+        """Standard strategy with _S (summer) suffix should NOT parse as stop multiplier."""
+        assert parse_stop_multiplier("MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G4_S") == 1.0
 
 
 # ---------------------------------------------------------------------------

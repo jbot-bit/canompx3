@@ -32,7 +32,7 @@ import duckdb
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.init_db import ORB_LABELS
 from pipeline.dst import DST_AFFECTED_SESSIONS, is_winter_for_session
-from trading_app.config import ALL_FILTERS, VolumeFilter, EXCLUDED_FROM_FITNESS
+from trading_app.config import ALL_FILTERS, VolumeFilter, EXCLUDED_FROM_FITNESS, apply_tight_stop
 from trading_app.strategy_discovery import compute_metrics
 
 # Whitelist for SQL column interpolation safety
@@ -163,6 +163,7 @@ def _load_strategy_params(con, strategy_id: str) -> dict | None:
     row = con.execute(
         """SELECT strategy_id, instrument, orb_label, orb_minutes,
                   entry_model, rr_target, confirm_bars, filter_type,
+                  COALESCE(stop_multiplier, 1.0) as stop_multiplier,
                   sample_size, win_rate, expectancy_r, sharpe_ratio,
                   max_drawdown_r
            FROM validated_setups
@@ -399,6 +400,13 @@ def _compute_fitness_with_con(
         filter_type=params["filter_type"],
         end_date=as_of_date,
     )
+
+    # Apply tight stop simulation for S075 strategies
+    sm = params.get("stop_multiplier", 1.0)
+    if sm != 1.0:
+        from pipeline.cost_model import get_cost_spec
+        cost_spec = get_cost_spec(params["instrument"])
+        all_outcomes = apply_tight_stop(all_outcomes, sm, cost_spec)
 
     # Layer 2: Rolling regime metrics
     rolling_outcomes = [

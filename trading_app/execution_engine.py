@@ -583,7 +583,9 @@ class ExecutionEngine:
 
         stop_price = orb.low if trade.direction == "long" else orb.high
 
-        # Apply tight stop (Option B): move stop closer by (1 - multiplier) * ORB range
+        # Apply tight stop (Option B): move stop closer by (1 - multiplier) * ORB range.
+        # Uses orb_range (not entry-stop distance) — backtester uses risk_pts which includes
+        # E2 slippage. Delta is ~1 tick per trade, structurally negligible (<0.2% of risk).
         sm = getattr(trade.strategy, "stop_multiplier", 1.0)
         if sm != 1.0:
             orb_range = orb.high - orb.low

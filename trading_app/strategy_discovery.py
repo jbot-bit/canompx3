@@ -60,7 +60,7 @@ def _get_filter_specificity(filter_key: str) -> int:
 _INSERT_SQL = """INSERT OR REPLACE INTO experimental_strategies
     (strategy_id, instrument, orb_label, orb_minutes,
      rr_target, confirm_bars, entry_model,
-     filter_type, filter_params,
+     filter_type, filter_params, stop_multiplier,
      sample_size, win_rate, avg_win_r, avg_loss_r,
      expectancy_r, sharpe_ratio, max_drawdown_r,
      median_risk_points, avg_risk_points,
@@ -76,7 +76,7 @@ _INSERT_SQL = """INSERT OR REPLACE INTO experimental_strategies
      sharpe_haircut, skewness, kurtosis_excess,
      n_trials_at_discovery, fst_hurdle)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-            ?, ?, ?,
+            ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?,
             COALESCE(?, CURRENT_TIMESTAMP),
@@ -750,6 +750,25 @@ def parse_dst_regime(strategy_id: str) -> str | None:
         return "summer"
     return None
 
+
+def parse_stop_multiplier(strategy_id: str) -> float:
+    """Extract stop multiplier from strategy_id _S{pct} suffix, or 1.0 if absent.
+
+    Example: 'MGC_TOKYO_OPEN_E2_RR2.5_CB1_ORB_G4_S075' -> 0.75
+             'MGC_TOKYO_OPEN_E2_RR2.5_CB1_ORB_G4_S075_W' -> 0.75
+             'MGC_TOKYO_OPEN_E2_RR2.5_CB1_ORB_G4' -> 1.0
+    """
+    import re
+    # Strip DST suffix first
+    sid = strategy_id
+    if sid.endswith("_W") or sid.endswith("_S"):
+        sid = sid[:-2]
+    m = re.search(r"_S(\d{3})$", sid)
+    if m:
+        return int(m.group(1)) / 100.0
+    return 1.0
+
+
 def _load_daily_features(con, instrument, orb_minutes, start_date, end_date):
     """Load all daily_features rows once into a list of dicts."""
     params = [instrument, orb_minutes]
@@ -1054,7 +1073,11 @@ def run_discovery(
                                 continue
 
                             for stop_mult in STOP_MULTIPLIERS:
-                                # Apply tight stop simulation (no-op for 1.0x)
+                                # Apply tight stop simulation (no-op for 1.0x).
+                                # NOTE: n_trials (total_combos) is NOT doubled for stop variants.
+                                # Tight stop is a post-hoc risk overlay on the same hypothesis,
+                                # producing highly correlated P&L streams. BH FDR with the base
+                                # combo count is already conservative (q=0.05 on 2376+ combos).
                                 sim_outcomes = apply_tight_stop(outcomes, stop_mult, cost_spec)
 
                                 metrics = compute_metrics(sim_outcomes, cost_spec=cost_spec, n_trials=total_combos)

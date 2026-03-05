@@ -2938,6 +2938,51 @@ def check_no_broad_rglob_in_drift_checks() -> list[str]:
     return violations
 
 
+def check_stop_multiplier_consistency(con=None) -> list[str]:
+    """Check: _S075 in strategy_id must match stop_multiplier=0.75 in column (and vice versa)."""
+    violations = []
+    _own_con = False
+    try:
+        if con is None:
+            import duckdb
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        for table in ["experimental_strategies", "validated_setups"]:
+            # Check if column exists
+            cols = [r[0] for r in con.execute(f"DESCRIBE {table}").fetchall()]
+            if "stop_multiplier" not in cols:
+                continue  # Column not yet migrated — skip
+
+            # IDs containing _S075 but column != 0.75
+            bad_id = con.execute(f"""
+                SELECT strategy_id, stop_multiplier FROM {table}
+                WHERE strategy_id LIKE '%\\_S075%' ESCAPE '\\'
+                  AND (stop_multiplier IS NULL OR ABS(stop_multiplier - 0.75) > 0.001)
+            """).fetchall()
+            for sid, sm in bad_id:
+                violations.append(f"  {table}: {sid} has _S075 in ID but stop_multiplier={sm}")
+
+            # Column = 0.75 but no _S075 in ID
+            bad_col = con.execute(f"""
+                SELECT strategy_id, stop_multiplier FROM {table}
+                WHERE ABS(stop_multiplier - 0.75) < 0.001
+                  AND strategy_id NOT LIKE '%\\_S075%' ESCAPE '\\'
+            """).fetchall()
+            for sid, sm in bad_col:
+                violations.append(f"  {table}: {sid} has stop_multiplier={sm} but no _S075 in ID")
+
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_stop_multiplier_consistency: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
 # =============================================================================
 # CHECK REGISTRY — single source of truth for all drift checks
 # =============================================================================
@@ -3079,6 +3124,8 @@ CHECKS = [
      check_drift_shared_db_connection, False, False),
     ("No broad rglob in drift checks",
      check_no_broad_rglob_in_drift_checks, False, False),
+    ("Stop multiplier ID-column consistency (_S075 ↔ stop_multiplier)",
+     check_stop_multiplier_consistency, False, True),  # requires_db
 ]
 
 
