@@ -43,53 +43,198 @@ from dotenv import load_dotenv
 
 # ── Config ──────────────────────────────────────────────────────────
 API_URL = "https://api.minimax.io/v1/chat/completions"
-MODEL = "MiniMax-M2.5"
+MODEL_STANDARD = "MiniMax-M2.5"            # Deep analysis, improvements mode
+MODEL_FAST     = "MiniMax-M2.5-highspeed" # 3-5× faster, same accuracy for review
 MAX_CONTEXT = 200000  # M2.5 total context window (input + output) in tokens
 MAX_TOKENS = 131072   # 128K default — auto-reduced if input is large
-API_TIMEOUT = 600.0   # seconds — large files need more time
+API_TIMEOUT_STANDARD = 600.0  # seconds — standard model, large files
+API_TIMEOUT_FAST     = 120.0  # seconds — Lightning is much quicker
+
+# ── Call budget counter ──────────────────────────────────────────────
+# Tracks daily API calls in ~/.m25_budget.json so you know where you stand.
+# 100 calls per 5-hour window is the Claude Code integration limit.
+import json as _json
+from pathlib import Path as _Path
+from datetime import date as _date
+
+_BUDGET_FILE = _Path.home() / ".m25_budget.json"
+_BUDGET_WINDOW = 100  # calls per window
+
+
+def _increment_call_counter() -> tuple[int, int]:
+    """Increment today's call count. Returns (today_count, window_remaining)."""
+    today = str(_date.today())
+    try:
+        data = _json.loads(_BUDGET_FILE.read_text()) if _BUDGET_FILE.exists() else {}
+    except Exception:
+        data = {}
+    data[today] = data.get(today, 0) + 1
+    # Prune old dates (keep last 7 days)
+    keys = sorted(data.keys())
+    if len(keys) > 7:
+        for k in keys[:-7]:
+            del data[k]
+    try:
+        _BUDGET_FILE.write_text(_json.dumps(data))
+    except Exception:
+        pass
+    return data[today], max(0, _BUDGET_WINDOW - data[today])
+
+
+def show_budget() -> None:
+    """Print today's call usage."""
+    today = str(_date.today())
+    try:
+        data = _json.loads(_BUDGET_FILE.read_text()) if _BUDGET_FILE.exists() else {}
+    except Exception:
+        data = {}
+    used = data.get(today, 0)
+    remaining = max(0, _BUDGET_WINDOW - used)
+    print(f"M2.5 budget today: {used} used / {remaining} remaining (window: {_BUDGET_WINDOW})")
+    # Show last 3 days for context
+    for d in sorted(data.keys())[-3:]:
+        marker = " ← today" if d == today else ""
+        print(f"  {d}: {data[d]} calls{marker}")
 
 # ── Architecture context ────────────────────────────────────────────
 # Prepended to every audit to prevent M2.5's known false positive patterns.
 # These are FACTS about the codebase that M2.5 consistently gets wrong
 # because it can't trace cross-file architecture.
 ARCHITECTURE_CONTEXT = """\
-IMPORTANT — Known architecture patterns (DO NOT flag these as bugs):
+IMPORTANT — Read ALL of this before analysing any file.
+This is a multi-instrument futures ORB (Opening Range Breakout) trading pipeline.
+The facts below prevent false positives that arise from single-file analysis.
 
-1. DuckDB replacement scans: This project uses DuckDB, which natively references
-   in-scope pandas DataFrames in SQL queries (e.g., `SELECT * FROM chunk_df`).
-   No `con.register()` is needed. This is documented DuckDB behavior, not a bug.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 1 — TECHNOLOGY PATTERNS (these are correct design, not bugs)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-2. Multi-stage validation pipeline: outcome_builder.py pre-computes ALL parameter
-   combinations (grid search). Statistical correction (Benjamini-Hochberg FDR)
-   is applied DOWNSTREAM in strategy_validator.py. Do NOT flag the grid search
-   as "data snooping" — the correction exists in a different file.
+1. DuckDB replacement scans
+   WHY: DuckDB natively references in-scope pandas DataFrames in SQL
+   (`SELECT * FROM chunk_df` with no con.register()). This is documented
+   DuckDB behaviour, chosen deliberately for zero-copy performance.
+   WRONG to flag: "chunk_df is not registered as a DuckDB table"
+   CORRECT: this is valid DuckDB syntax.
 
-3. ML quality gates: The ML system has a 4-gate quality system (delta_r >= 0,
-   CPCV AUC >= 0.50, test AUC > 0.52, skip rate <= 85%). Do NOT evaluate any
-   single gate in isolation — they work as a combined system.
+2. Multi-stage statistical pipeline
+   WHY: outcome_builder.py pre-computes ALL parameter combinations (grid
+   search). Benjamini-Hochberg FDR correction is applied DOWNSTREAM in
+   strategy_validator.py. The grid search is not snooping — the correction
+   lives in a different file by design (separation of concerns).
+   WRONG to flag: "grid search without multiple-testing correction"
+   CORRECT: only flag if strategy_validator.py itself is missing BH FDR.
 
-4. Fail-open ML design: When ML models are missing or fail, the system takes
-   all trades (fail-open). This is intentional for a trading system where
-   missing a trade costs more than a false positive.
+3. ML 4-gate quality system
+   WHY: The ML overlay uses four gates (delta_r >= 0, CPCV AUC >= 0.50,
+   test AUC > 0.52, skip rate <= 85%) as a combined system. No single gate
+   is sufficient alone — together they guard against overfitting.
+   WRONG to flag: "delta_r >= 0 is too lenient a threshold"
+   CORRECT: evaluate only if ALL four gates are simultaneously trivially met.
 
-5. atexit exception handling: `except Exception: pass` in atexit handlers is
-   correct — raising during interpreter shutdown produces noise tracebacks.
+4. Fail-open ML design
+   WHY: When ML models are absent or fail, the system takes all trades
+   (fail-open). In a trading system, a missed trade is a realised loss;
+   a false positive (taking a bad trade) is merely a potential loss. The
+   asymmetry intentionally favours participation over caution.
+   WRONG to flag: "system should fail-closed if ML model is missing"
 
-6. daily_features has 3 rows per (trading_day, symbol) — one per orb_minutes
-   (5, 15, 30). Any JOIN MUST include orb_minutes or rows triple.
+5. atexit exception handling
+   WHY: `except Exception: pass` inside atexit handlers is correct Python.
+   Raising during interpreter shutdown produces spurious noise tracebacks
+   with no actionable effect. This is the standard pattern for cleanup code.
+   WRONG to flag: "silent exception swallowed in atexit"
 
-7. -999.0 as NaN sentinel: sklearn RF cannot handle NaN. The -999.0 fill is
-   intentional. For level-proximity features, -999.0 means "no prior level
-   exists" — a meaningful domain value. For other features, real values are
-   in the 0-5 range, so -999.0 is safely distinct.
+6. -999.0 NaN sentinel
+   WHY: sklearn RandomForest cannot handle NaN. -999.0 is an intentional
+   domain sentinel: for level-proximity features it means "no prior level
+   exists" (a meaningful signal). All real feature values are in 0–5 range,
+   so -999.0 is safely out-of-band and distinguishable.
+   WRONG to flag: "fillna(-999.0) will corrupt feature distributions"
 
-8. Cost model: All P&L calculations deduct round-trip friction (commission +
-   spread + slippage) via to_r_multiple() in cost_model.py. Costs are handled.
+7. DELETE + INSERT idempotency
+   WHY: Every write operation deletes rows for the target date range then
+   re-inserts. This makes all pipeline stages safe to re-run without
+   duplicates. It is intentional, not inefficient.
+   WRONG to flag: "DELETE before INSERT is redundant; use UPSERT"
 
-9. Dead instruments: MCL, SIL, M6E, MBT were tested and found to have zero
-   ORB edge — this is a validated research finding, not missing data.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 2 — ENTRY MODELS & STRATEGY STATE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Only flag issues that are REAL given these architectural facts.
+Entry models in this system:
+- E1: market order after confirm bar (honest conservative baseline) — ACTIVE
+- E2: stop-market at ORB high/low (industry-standard) — ACTIVE, dominant
+- E0: limit order at ORB boundary — PURGED Feb 2026 (3 structural biases
+  confirmed: fill-on-touch artefact, fakeout exclusion, fill-bar wins).
+  E0 absence is correct. Any reference to E0 as "missing" is a false positive.
+- E3: wider-stop variant — SOFT-RETIRED. Still present in DB for history;
+  retire_e3_strategies.py removes promoted E3 after each validator run.
+
+Active instruments: MGC, MNQ, MES, M2K (micro futures).
+Dead instruments (zero ORB edge, validated by research): MCL, SIL, M6E, MBT.
+WRONG to flag: "MCL not included — possible survivorship bias"
+CORRECT: dead instruments were tested; their absence is a research conclusion.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 3 — PIPELINE ARCHITECTURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+One-way dependency: pipeline/ → trading_app/ (never reversed).
+If you see trading_app importing from pipeline/, that is correct.
+If you see pipeline/ importing from trading_app/, that is a real bug.
+
+Session architecture: ALL sessions are dynamic/event-based, resolved per-day
+from pipeline/dst.py SESSION_CATALOG (e.g. CME_REOPEN, TOKYO_OPEN, NYSE_OPEN).
+There are no hardcoded clock times for sessions. DST contamination was fully
+resolved in Feb 2026. The old fixed-clock sessions (0900/1800/0030/2300) were
+replaced. References to fixed session times in SESSION_WINDOWS in
+build_daily_features.py are Brisbane-time approximations for stats display only.
+WRONG to flag: "hardcoded session time 09:00 — will break under DST"
+
+daily_features JOIN invariant: daily_features has 3 rows per (trading_day,
+symbol) — one per orb_minutes (5, 15, 30). Any JOIN with orb_outcomes MUST
+include orb_minutes in the ON clause or row count triples. This IS a real bug
+if the join is missing orb_minutes. For LAG() / window functions, always check
+for WHERE d.orb_minutes = 5 inside the CTE to prevent cross-aperture leakage.
+
+Cost model: ALL P&L calculations deduct round-trip friction (commission +
+spread + slippage) via to_r_multiple() in pipeline/cost_model.py.
+WRONG to flag: "no transaction costs applied" — they are, in cost_model.py.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 4 — TRADING DOMAIN RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+G-filter semantics: ORB_G4 / ORB_G5 / ORB_G6 / ORB_G8 mean ORB size >= N
+POINTS (not ATR multiples, not percentages). Values like 4, 6, 8 are not
+magic numbers — they are instrument-appropriate point thresholds.
+WRONG to flag: "magic number 6 in ORB_G6 filter — should be a named constant"
+
+Strategy classification thresholds (from config.py, intentional):
+- CORE: N >= 100 trades — standalone portfolio weight
+- REGIME: N 30–99 — conditional overlay / signal only
+- INVALID: N < 30 — not tradeable
+Low trade counts under strict G6/G8 filters are EXPECTED behaviour, not bugs.
+WRONG to flag: "strategy has only 47 trades — insufficient sample size"
+CORRECT: check if N < 30 (INVALID) or 30–99 (REGIME, which is valid as overlay).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 5 — CONFIRMED RESEARCH NO-GOs (already tested, not worth re-suggesting)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+These have been rigorously tested and rejected. Do not recommend them:
+- Day-of-week filters (DOW): 0 BH FDR survivors across all instruments.
+- Calendar overlays (NFP/OPEX/FOMC): 0 BH FDR survivors at q=0.10.
+- Non-ORB strategies (RSI, MACD, MA crossovers, Bollinger): 540 tests, 0 FDR survivors.
+- Pre-break bar compression as a filter: rejected across all instruments/sessions.
+- NODBL filter (no-double-break): removed Feb 2026 after 6 strategies proved artefacts.
+- E0 entry model: purged. Any suggestion to restore limit-order fills is wrong.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Only flag issues that are REAL given all the above facts.
+If a concern is addressed in a file you have NOT been shown, say so explicitly
+rather than flagging it as unhandled.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
 
 AUDIT_MODES = {
@@ -182,6 +327,26 @@ AUDIT_MODES = {
         "and concrete improvements. Do NOT recommend things already implemented "
         "(check the architecture context above first)."
     ),
+    "gaps": (
+        "You are a senior quant systems architect reviewing MULTIPLE files from the "
+        "same trading pipeline simultaneously.\n\n"
+        "Your task is CROSS-FILE GAP ANALYSIS — finding issues that are invisible when "
+        "reviewing files one at a time. Single-file reviewers cannot see these.\n\n"
+        "Structure your review as:\n"
+        "1. **INTERFACE CONTRACTS** — do caller assumptions match callee behaviour? "
+        "(e.g. column names, return types, date ranges passed between files)\n"
+        "2. **INVARIANT GAPS** — rules enforced in one file but silently violated in "
+        "another (e.g. orb_minutes join rule, filter_type naming, UTC timestamps)\n"
+        "3. **MISSING GUARDS** — error that file A relies on file B to catch, but B "
+        "doesn't (e.g. division by zero only safe if upstream guarantees N>0)\n"
+        "4. **DATA FLOW BREAKS** — a value produced in file A that file B consumes "
+        "incorrectly (wrong column, wrong aggregation level, wrong timezone)\n"
+        "5. **DRIFT RISKS** — patterns that will silently break if one file changes "
+        "without the other being updated\n\n"
+        "IMPORTANT: Only flag cross-file issues. Do NOT repeat single-file bugs "
+        "that are obvious from reading one file alone — those are covered by other modes.\n\n"
+        "Be specific. Cite file:line for BOTH sides of each cross-file issue."
+    ),
 }
 
 
@@ -228,6 +393,7 @@ def audit(
     user_prompt: str | None = None,
     *,
     include_context: bool = True,
+    fast: bool = False,
     timeout: float | None = None,
 ) -> str:
     """Send code to MiniMax M2.5 for review.
@@ -239,17 +405,26 @@ def audit(
         user_prompt: Optional additional user instruction prepended to file content.
         include_context: Prepend ARCHITECTURE_CONTEXT to system prompt (default True).
             Set False for custom prompts that provide their own context.
-        timeout: API timeout in seconds (default: API_TIMEOUT = 600s).
+        fast: Use MiniMax-M2.5-Lightning (3-5x faster, same accuracy). Default False.
+        timeout: API timeout in seconds. Defaults to model-appropriate value.
     """
     if user_prompt:
         full_prompt = f"{user_prompt}\n\n{file_content}"
     else:
         full_prompt = file_content
 
-    # Prepend architecture context to reduce false positives
+    # Prepend architecture context to reduce false positives.
+    # Append official M2.5 token-budget hint last (per MiniMax best-practices docs:
+    # "M2.5 may terminate tasks early when approaching context capacity thresholds").
+    TOKEN_BUDGET_HINT = (
+        "\n\nThis is a thorough but bounded task. Keep your total output within the "
+        "available context window. Prioritise completeness for high-severity findings; "
+        "be concise for LOW findings. Do not truncate mid-review — finish every section."
+    )
     full_system = system_prompt
     if include_context:
         full_system = f"{ARCHITECTURE_CONTEXT}\n---\n\n{system_prompt}"
+    full_system += TOKEN_BUDGET_HINT
 
     # Auto-size output tokens: estimate input tokens, leave rest for output
     input_chars = len(full_system) + len(full_prompt)
@@ -264,8 +439,16 @@ def audit(
             file=sys.stderr,
         )
 
+    model = MODEL_FAST if fast else MODEL_STANDARD
+    effective_timeout = timeout or (API_TIMEOUT_FAST if fast else API_TIMEOUT_STANDARD)
+
+    # Track call budget
+    used, remaining = _increment_call_counter()
+    if remaining <= 10:
+        print(f"  ⚠ Budget warning: {remaining} calls remaining today", file=sys.stderr)
+
     payload = {
-        "model": MODEL,
+        "model": model,
         "messages": [
             {"role": "system", "content": full_system},
             {"role": "user", "content": full_prompt},
@@ -273,8 +456,6 @@ def audit(
         "max_tokens": effective_max_tokens,
         "temperature": 0.1,  # Low temp for precise analysis
     }
-
-    effective_timeout = timeout or API_TIMEOUT
 
     for attempt in range(2):
         try:
@@ -308,27 +489,47 @@ def main():
     parser = argparse.ArgumentParser(
         description="MiniMax M2.5 independent code audit",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="Modes: general, bias, joins, bugs, improvements",
+        epilog="Modes: general, bias, joins, bugs, improvements, gaps",
     )
-    parser.add_argument("files", nargs="+", help="Files to audit")
+    parser.add_argument("files", nargs="*", help="Files to audit")
     parser.add_argument(
         "--mode",
-        choices=AUDIT_MODES.keys(),
+        choices=list(AUDIT_MODES.keys()),
         default="general",
         help="Preset audit mode (default: general)",
     )
     parser.add_argument("--prompt", help="Custom audit prompt (overrides --mode)")
     parser.add_argument("--output", "-o", help="Save output to file")
+    parser.add_argument(
+        "--fast",
+        action="store_true",
+        help="Use MiniMax-M2.5-Lightning (3-5x faster, good for quick scans)",
+    )
+    parser.add_argument(
+        "--budget",
+        action="store_true",
+        help="Show today's call usage and exit",
+    )
     args = parser.parse_args()
+
+    if args.budget:
+        show_budget()
+        return
+
+    if not args.files:
+        parser.error("at least one file is required (or use --budget)")
 
     api_key = load_api_key()
     file_content = read_files(args.files)
 
     system_prompt = args.prompt if args.prompt else AUDIT_MODES[args.mode]
+    model_label = "Lightning" if args.fast else "Standard"
+    print(
+        f"Auditing {len(args.files)} file(s) with M2.5-{model_label} [{args.mode}]...",
+        file=sys.stderr,
+    )
 
-    print(f"Auditing {len(args.files)} file(s) with M2.5 [{args.mode}]...", file=sys.stderr)
-
-    result = audit(file_content, system_prompt, api_key)
+    result = audit(file_content, system_prompt, api_key, fast=args.fast)
 
     if args.output:
         Path(args.output).write_text(result, encoding="utf-8")

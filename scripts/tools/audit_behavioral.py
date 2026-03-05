@@ -29,6 +29,7 @@ INSTRUMENT_ALLOWLIST = {
     "hypothesis_test.py",
     "audit_15m30m.py",
     "ml_hybrid_experiment.py",
+    "gen_playbook.py",  # display order must match table header; asserts against canonical set
 }
 # Directories whose files are always allowed
 INSTRUMENT_ALLOWLIST_DIRS = {"tests", "docs", "research"}

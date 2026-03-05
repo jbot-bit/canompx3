@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime
-import math
 
 import pandas as pd
 from pathlib import Path
@@ -28,8 +27,12 @@ SESSION_ORDER = [
     ("US_DATA_830",    "23:30", "22:30", "US econ data 8:30 AM ET"),
 ]
 
-# Display order matches the Quick Reference table header.
-INSTRUMENTS = sorted(ACTIVE_ORB_INSTRUMENTS)
+# Display order matches the Quick Reference table header — do NOT use sorted().
+# sorted(ACTIVE_ORB_INSTRUMENTS) gives ['M2K','MES','MGC','MNQ'] which mismatches
+# the hardcoded header columns (MGC|MNQ|MES|M2K) and scrambles every cell.
+INSTRUMENTS = ["MGC", "MNQ", "MES", "M2K"]
+assert set(INSTRUMENTS) == set(ACTIVE_ORB_INSTRUMENTS), \
+    f"INSTRUMENTS out of sync: {INSTRUMENTS} vs {list(ACTIVE_ORB_INSTRUMENTS)}"
 
 # Minimum expected R per trade to show a strategy in detail.
 # Below this threshold the edge is too small to trust given real-world friction.
@@ -137,7 +140,8 @@ def main():
             L.append(f"### {inst}")
 
             if high_rr.empty:
-                # All validated strategies are either RR1.0 or below quality floor
+                # All validated strategies are below RR1.5 or below quality floor.
+                # low_rr may include RR1.0, RR1.25, etc — describe by actual RR levels.
                 qual = idf[idf.expectancy_r >= MIN_EXPR]
                 if qual.empty:
                     n_all = len(idf)
@@ -152,9 +156,11 @@ def main():
                         f"N={int(best.sample_size)}, WR={best.win_rate:.0%}, ExpR={best.expectancy_r:+.3f}"
                     )
                 else:
-                    n_rr10 = len(low_rr)
+                    rr_levels = sorted(low_rr.rr_target.unique())
+                    rr_label = "/".join(f"RR{r}" for r in rr_levels) if rr_levels else "low-RR"
+                    # Best = highest-scoring strategy that clears the quality floor
                     best = qual.sort_values("score", ascending=False).iloc[0]
-                    L.append(f"*{n_rr10} strategies at RR1.0 only.*")
+                    L.append(f"*{len(low_rr)} strategies at {rr_label} only.*")
                     L.append(
                         f"Best: {best.entry_model} CB{int(best.confirm_bars)} "
                         f"{best.filter_type} O{int(best.orb_minutes)}m "

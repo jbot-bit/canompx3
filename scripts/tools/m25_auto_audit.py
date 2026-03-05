@@ -162,7 +162,8 @@ def run_audit(
             )
 
         try:
-            result = audit(file_content, system_prompt, api_key)
+            # Always use Lightning for automated scans — faster, cheaper, same accuracy
+            result = audit(file_content, system_prompt, api_key, fast=True)
         except Exception as e:
             print(f" ERROR ({type(e).__name__})")
             continue
