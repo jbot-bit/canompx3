@@ -1,6 +1,6 @@
 # Integrity Guardian — Behavioral Rules
 
-Six non-negotiable rules for every change. Violations are caught by `scripts/tools/audit_behavioral.py`.
+Seven non-negotiable rules for every change. Violations are caught by `scripts/tools/audit_behavioral.py`.
 
 ## 1. Authority Hierarchy
 Defer to the governing document — never restate its content:
@@ -38,3 +38,13 @@ Provide verifiable output, not claims. Show command output, row counts, test res
 
 ## 6. Spec Compliance
 Check `docs/specs/` before building ANY feature. If a spec exists, follow it exactly.
+
+## 7. Never Trust Metadata — Always Verify
+Metadata, comments, docstrings, bundle fields, and config labels are NOT evidence.
+- Never trust a model bundle's `rr_target_lock` field without querying what data it trained on
+- Never trust a check's `PASSED` label without confirming the check actually tests what it claims
+- Never trust a function docstring's description of behavior without reading the code
+- Never trust row counts from memory — execute the query and read the output
+- When inspecting ML models, trace FROM the database query THROUGH the code TO the model output
+- When verifying drift checks, inject a known violation and confirm it's caught
+- **Reading code is not verifying code. Verifying requires execution + output inspection.**
