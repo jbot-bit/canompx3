@@ -121,7 +121,6 @@ def _build_command(
             "--exclude-years", "2021",
             "--no-regime-waivers",
             "--min-years-positive-pct", "0.75",
-            "--no-walkforward",
             "--min-sample", str(extra.get("min_sample", 50)),
         ]
 

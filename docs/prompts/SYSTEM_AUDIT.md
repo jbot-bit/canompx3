@@ -199,7 +199,7 @@ These guide Claude Code behavior. If stale, Claude gets wrong instructions.
 - [ ] `daily-features-joins.md` — triple-join rule still correct? `double_break` look-ahead warning still accurate?
 - [ ] `mcp-usage.md` — decision framework matches current MCP templates from Phase 1E?
 - [ ] `pipeline-patterns.md` — DST "fully resolved" still holds? Session names current?
-- [ ] `validation-workflow.md` — validator flags match `strategy_validator.py --help`? MNQ `--no-walkforward` still required?
+- [ ] `validation-workflow.md` — validator flags match `strategy_validator.py --help`? Walk-forward enabled for all instruments?
 
 ### 3G. docs/specs/ Compliance
 - [ ] List all files in `docs/specs/`. For each:
@@ -307,7 +307,7 @@ Build the table:
 
 ### 6C. Validator Flag Verification
 - [ ] Each instrument's last run used correct flags?
-  - MNQ: `--no-walkforward` (currently run without WF; ~5yr data means WF is feasible)
+  - All: walk-forward enabled (Mar 2026, all have 5+ years data)
   - All: `--no-regime-waivers --min-years-positive-pct 0.75`
 - [ ] Edge families built AFTER last validation?
 

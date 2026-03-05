@@ -15,7 +15,7 @@ python pipeline/check_drift.py
 ```
 
 Important:
-- `--no-walkforward` for MNQ — currently run without WF; ~5yr data means WF is feasible (re-run without flag to enable)
+- Walk-forward enabled for all instruments (Mar 2026). All have 5+ years of data. MGC uses WF_START_OVERRIDE=2022-01-01 in config.py.
 - `--min-years-positive-pct` is dead code without `--no-regime-waivers` — always pair them
 - Canonical DB is `C:/db/gold.db` (set via `DUCKDB_PATH` in `.env`)
 - See `docs/plans/2026-02-27-rebuild-audit-playbook.md` for full rebuild procedures

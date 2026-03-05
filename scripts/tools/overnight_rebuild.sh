@@ -19,17 +19,12 @@ for INST in MNQ MES M2K; do
     echo "Rebuilding $INST..."
     echo "========================================"
 
-    case "$INST" in
-        MNQ) WF_FLAG="" ;;
-        *)   WF_FLAG="--no-walkforward" ;;
-    esac
-
+    # Walk-forward enabled for all instruments (Mar 2026). All have 5+ years of data.
     python trading_app/outcome_builder.py --instrument "$INST" --force
     python trading_app/strategy_discovery.py --instrument "$INST"
     python trading_app/strategy_validator.py \
         --instrument "$INST" --min-sample 50 \
-        --no-regime-waivers --min-years-positive-pct 0.75 \
-        $WF_FLAG
+        --no-regime-waivers --min-years-positive-pct 0.75
     python scripts/migrations/retire_e3_strategies.py
     python scripts/tools/build_edge_families.py --instrument "$INST"
 

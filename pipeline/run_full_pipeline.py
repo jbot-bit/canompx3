@@ -107,7 +107,7 @@ def step_validate(instrument: str, args) -> int:
 
     Matches the canonical command from CLAUDE.md / validation-workflow.md:
       --min-sample 50 --no-regime-waivers --min-years-positive-pct 0.75
-    MNQ gets --no-walkforward (currently run without WF; ~5yr data means WF is feasible — re-run without this flag to enable).
+    Walk-forward enabled for all instruments (Mar 2026). All have 5+ years of data.
     """
     cmd = [
         sys.executable,
@@ -117,8 +117,6 @@ def step_validate(instrument: str, args) -> int:
         "--no-regime-waivers",
         "--min-years-positive-pct=0.75",
     ]
-    if instrument.upper() == "MNQ":
-        cmd.append("--no-walkforward")
     if args.db_path:
         cmd.append(f"--db={args.db_path}")
     return subprocess.run(cmd, cwd=str(PROJECT_ROOT)).returncode

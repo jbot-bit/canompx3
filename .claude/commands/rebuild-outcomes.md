@@ -2,23 +2,28 @@ Full rebuild chain for instrument $ARGUMENTS (default MGC). Use after outcome_bu
 
 Run these steps sequentially from bash:
 
-1. Rebuild outcomes with --force (adjust --end to latest ingested date):
+1. Rebuild outcomes with --force for all apertures:
 ```bash
-python trading_app/outcome_builder.py --instrument $ARGUMENTS --force --start 2021-02-05 --end 2026-02-04
+for OM in 5 15 30; do
+    python trading_app/outcome_builder.py --instrument $ARGUMENTS --force --orb-minutes $OM
+done
 ```
 
-2. Re-run strategy discovery:
+2. Re-run strategy discovery for all apertures:
 ```bash
-python trading_app/strategy_discovery.py --instrument $ARGUMENTS
+for OM in 5 15 30; do
+    python trading_app/strategy_discovery.py --instrument $ARGUMENTS --orb-minutes $OM
+done
 ```
 
-3. Re-validate:
+3. Re-validate (walk-forward enabled for all instruments):
 ```bash
-python trading_app/strategy_validator.py --instrument $ARGUMENTS --min-sample 50 --no-regime-waivers --min-years-positive-pct 0.75 --no-walkforward
+python trading_app/strategy_validator.py --instrument $ARGUMENTS --min-sample 50 --no-regime-waivers --min-years-positive-pct 0.75
 ```
 
 4. Rebuild edge families:
 ```bash
+python scripts/migrations/retire_e3_strategies.py
 python scripts/tools/build_edge_families.py --instrument $ARGUMENTS
 ```
 
@@ -29,4 +34,6 @@ python pipeline/check_drift.py
 python -m pytest tests/ -x -q
 ```
 
-Important: Each step depends on the previous one completing successfully. Never skip the audit gates — see `docs/plans/2026-02-27-rebuild-audit-playbook.md`.
+Or use the wrapper: `bash scripts/tools/run_rebuild_with_sync.sh $ARGUMENTS`
+
+Important: Each step depends on the previous one completing successfully. Never skip the audit gates.
