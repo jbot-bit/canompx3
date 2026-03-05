@@ -12,12 +12,14 @@ echo "FULL REBUILD — ALL 4 INSTRUMENTS"
 echo "Started: $(date)"
 echo "============================================"
 
-# Instrument configs: name, start, end, extra validator flags
-declare -A STARTS ENDS EXTRA_FLAGS
-STARTS[MGC]="2016-02-01"; ENDS[MGC]="2026-02-04"; EXTRA_FLAGS[MGC]="--no-walkforward"
-STARTS[MNQ]="2021-02-04"; ENDS[MNQ]="2026-02-03"; EXTRA_FLAGS[MNQ]=""
-STARTS[MES]="2019-02-12"; ENDS[MES]="2026-02-11"; EXTRA_FLAGS[MES]="--no-walkforward"
-STARTS[M2K]="2021-02-22"; ENDS[M2K]="2026-02-20"; EXTRA_FLAGS[M2K]="--no-walkforward"
+# Instrument configs: name, start, end
+# Walk-forward enabled for all instruments (Mar 2026).
+# All 4 have 5+ years — sufficient for WF. MGC uses WF_START_OVERRIDE in config.py.
+declare -A STARTS ENDS
+STARTS[MGC]="2016-02-01"; ENDS[MGC]="2026-02-04"
+STARTS[MNQ]="2021-02-04"; ENDS[MNQ]="2026-02-03"
+STARTS[MES]="2019-02-12"; ENDS[MES]="2026-02-11"
+STARTS[M2K]="2021-02-22"; ENDS[M2K]="2026-02-20"
 
 for INST in MGC MNQ MES M2K; do
     echo ""
@@ -51,7 +53,7 @@ for INST in MGC MNQ MES M2K; do
     python trading_app/strategy_validator.py \
         --instrument "$INST" --min-sample 50 \
         --no-regime-waivers --min-years-positive-pct 0.75 \
-        ${EXTRA_FLAGS[$INST]} 2>&1 | tail -10
+        2>&1 | tail -10
     echo "[$INST] Validation done: $(date)"
 
     echo ""

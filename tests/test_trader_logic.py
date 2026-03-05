@@ -857,23 +857,20 @@ class TestRandomStrategyMath:
         try:
             strats = con.execute(
                 "SELECT strategy_id, orb_label, entry_model, rr_target, "
-                "confirm_bars, filter_type, win_rate, sample_size, expectancy_r "
+                "confirm_bars, filter_type, win_rate, sample_size, expectancy_r, "
+                "orb_minutes "
                 "FROM experimental_strategies "
                 "WHERE instrument = 'MGC' AND sample_size >= 20 "
                 "ORDER BY strategy_id LIMIT 30"
             ).fetchall()
             strat_cols = ["strategy_id", "orb_label", "entry_model", "rr_target",
                           "confirm_bars", "filter_type", "win_rate", "sample_size",
-                          "expectancy_r"]
-
-            # Load daily_features for filter eligibility
-            features = con.execute(
-                "SELECT * FROM daily_features WHERE symbol = 'MGC' AND orb_minutes = 5"
-            ).fetchall()
-            feat_cols = [desc[0] for desc in con.description]
-            feat_dicts = [dict(zip(feat_cols, r)) for r in features]
+                          "expectancy_r", "orb_minutes"]
 
             from trading_app.config import ALL_FILTERS
+
+            # Cache daily_features per orb_minutes to avoid re-loading
+            feat_cache = {}
 
             for s in [dict(zip(strat_cols, r)) for r in strats]:
                 orb = s["orb_label"]
@@ -881,17 +878,27 @@ class TestRandomStrategyMath:
                 rr = s["rr_target"]
                 cb = s["confirm_bars"]
                 ft = s["filter_type"]
+                om = s["orb_minutes"]
 
                 # Skip volume filters (need bar data)
                 if ft.startswith("VOL_"):
                     continue
+
+                # Load daily_features for this aperture (cached)
+                if om not in feat_cache:
+                    features = con.execute(
+                        "SELECT * FROM daily_features WHERE symbol = 'MGC' AND orb_minutes = ?",
+                        [om]
+                    ).fetchall()
+                    feat_cols = [desc[0] for desc in con.description]
+                    feat_cache[om] = [dict(zip(feat_cols, r)) for r in features]
 
                 # Get eligible days for this filter
                 strat_filter = ALL_FILTERS.get(ft)
                 if strat_filter is None:
                     continue
                 eligible = set()
-                for row in feat_dicts:
+                for row in feat_cache[om]:
                     if row.get(f"orb_{orb}_break_dir") is None:
                         continue
                     if strat_filter.matches_row(row, orb):
@@ -901,9 +908,9 @@ class TestRandomStrategyMath:
                 outcomes = con.execute(
                     "SELECT trading_day, outcome, pnl_r FROM orb_outcomes "
                     "WHERE symbol = 'MGC' AND orb_label = ? AND entry_model = ? "
-                    "AND rr_target = ? AND confirm_bars = ? AND orb_minutes = 5 "
+                    "AND rr_target = ? AND confirm_bars = ? AND orb_minutes = ? "
                     "AND outcome IN ('win','loss')",
-                    [orb, em, rr, cb]
+                    [orb, em, rr, cb, om]
                 ).fetchall()
 
                 # Filter to eligible days
@@ -929,22 +936,19 @@ class TestRandomStrategyMath:
         try:
             strats = con.execute(
                 "SELECT strategy_id, orb_label, entry_model, rr_target, "
-                "confirm_bars, filter_type, win_rate, sample_size, expectancy_r "
+                "confirm_bars, filter_type, win_rate, sample_size, expectancy_r, "
+                "orb_minutes "
                 "FROM experimental_strategies "
                 "WHERE instrument = 'MGC' AND sample_size >= 20 "
                 "ORDER BY strategy_id LIMIT 30"
             ).fetchall()
             strat_cols = ["strategy_id", "orb_label", "entry_model", "rr_target",
                           "confirm_bars", "filter_type", "win_rate", "sample_size",
-                          "expectancy_r"]
-
-            features = con.execute(
-                "SELECT * FROM daily_features WHERE symbol = 'MGC' AND orb_minutes = 5"
-            ).fetchall()
-            feat_cols = [desc[0] for desc in con.description]
-            feat_dicts = [dict(zip(feat_cols, r)) for r in features]
+                          "expectancy_r", "orb_minutes"]
 
             from trading_app.config import ALL_FILTERS
+
+            feat_cache = {}
 
             for s in [dict(zip(strat_cols, r)) for r in strats]:
                 orb = s["orb_label"]
@@ -952,15 +956,24 @@ class TestRandomStrategyMath:
                 rr = s["rr_target"]
                 cb = s["confirm_bars"]
                 ft = s["filter_type"]
+                om = s["orb_minutes"]
 
                 if ft.startswith("VOL_"):
                     continue
+
+                if om not in feat_cache:
+                    features = con.execute(
+                        "SELECT * FROM daily_features WHERE symbol = 'MGC' AND orb_minutes = ?",
+                        [om]
+                    ).fetchall()
+                    feat_cols = [desc[0] for desc in con.description]
+                    feat_cache[om] = [dict(zip(feat_cols, r)) for r in features]
 
                 strat_filter = ALL_FILTERS.get(ft)
                 if strat_filter is None:
                     continue
                 eligible = set()
-                for row in feat_dicts:
+                for row in feat_cache[om]:
                     if row.get(f"orb_{orb}_break_dir") is None:
                         continue
                     if strat_filter.matches_row(row, orb):
@@ -969,9 +982,9 @@ class TestRandomStrategyMath:
                 outcomes = con.execute(
                     "SELECT trading_day, outcome, pnl_r FROM orb_outcomes "
                     "WHERE symbol = 'MGC' AND orb_label = ? AND entry_model = ? "
-                    "AND rr_target = ? AND confirm_bars = ? AND orb_minutes = 5 "
+                    "AND rr_target = ? AND confirm_bars = ? AND orb_minutes = ? "
                     "AND outcome IN ('win','loss')",
-                    [orb, em, rr, cb]
+                    [orb, em, rr, cb, om]
                 ).fetchall()
 
                 traded = [(td, oc, pr) for td, oc, pr in outcomes if td in eligible]
@@ -1002,21 +1015,17 @@ class TestRandomStrategyMath:
         try:
             strats = con.execute(
                 "SELECT strategy_id, orb_label, entry_model, rr_target, "
-                "confirm_bars, filter_type, max_drawdown_r "
+                "confirm_bars, filter_type, max_drawdown_r, orb_minutes "
                 "FROM experimental_strategies "
                 "WHERE instrument = 'MGC' AND sample_size >= 20 "
                 "ORDER BY strategy_id LIMIT 30"
             ).fetchall()
             strat_cols = ["strategy_id", "orb_label", "entry_model", "rr_target",
-                          "confirm_bars", "filter_type", "max_drawdown_r"]
-
-            features = con.execute(
-                "SELECT * FROM daily_features WHERE symbol = 'MGC' AND orb_minutes = 5"
-            ).fetchall()
-            feat_cols = [desc[0] for desc in con.description]
-            feat_dicts = [dict(zip(feat_cols, r)) for r in features]
+                          "confirm_bars", "filter_type", "max_drawdown_r", "orb_minutes"]
 
             from trading_app.config import ALL_FILTERS
+
+            feat_cache = {}
 
             for s in [dict(zip(strat_cols, r)) for r in strats]:
                 orb = s["orb_label"]
@@ -1024,15 +1033,24 @@ class TestRandomStrategyMath:
                 rr = s["rr_target"]
                 cb = s["confirm_bars"]
                 ft = s["filter_type"]
+                om = s["orb_minutes"]
 
                 if ft.startswith("VOL_"):
                     continue
+
+                if om not in feat_cache:
+                    features = con.execute(
+                        "SELECT * FROM daily_features WHERE symbol = 'MGC' AND orb_minutes = ?",
+                        [om]
+                    ).fetchall()
+                    feat_cols = [desc[0] for desc in con.description]
+                    feat_cache[om] = [dict(zip(feat_cols, r)) for r in features]
 
                 strat_filter = ALL_FILTERS.get(ft)
                 if strat_filter is None:
                     continue
                 eligible = set()
-                for row in feat_dicts:
+                for row in feat_cache[om]:
                     if row.get(f"orb_{orb}_break_dir") is None:
                         continue
                     if strat_filter.matches_row(row, orb):
@@ -1041,9 +1059,9 @@ class TestRandomStrategyMath:
                 outcomes = con.execute(
                     "SELECT trading_day, outcome, pnl_r FROM orb_outcomes "
                     "WHERE symbol = 'MGC' AND orb_label = ? AND entry_model = ? "
-                    "AND rr_target = ? AND confirm_bars = ? AND orb_minutes = 5 "
+                    "AND rr_target = ? AND confirm_bars = ? AND orb_minutes = ? "
                     "AND outcome IN ('win','loss') ORDER BY trading_day",
-                    [orb, em, rr, cb]
+                    [orb, em, rr, cb, om]
                 ).fetchall()
 
                 traded = [(td, oc, pr) for td, oc, pr in outcomes if td in eligible]

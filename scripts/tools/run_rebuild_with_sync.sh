@@ -15,11 +15,10 @@ cd "$(dirname "$0")/../.."
 
 INSTRUMENT="${1:-MGC}"
 
-# Per-instrument walkforward flags (MNQ has 5yr data, uses WF)
-case "$INSTRUMENT" in
-    MNQ) WF_FLAG="" ;;
-    *)   WF_FLAG="--no-walkforward" ;;
-esac
+# Walk-forward enabled for all instruments (Mar 2026).
+# All 4 active instruments have 5+ years of data — sufficient for WF.
+# MGC uses WF_START_OVERRIDE=2022-01-01 in config.py (regime shift).
+WF_FLAG=""
 
 echo "=========================================="
 echo "Rebuild + Pinecone Sync for $INSTRUMENT"
