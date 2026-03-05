@@ -957,3 +957,83 @@ Security posture is solid across the codebase:
 **Minor recommendations (non-blocking):**
 1. Convert `ui/db_reader.py` f-string SQL to parameterized queries (defense-in-depth for local UI)
 2. Move Telegram credentials to `.env` before committing `telegram_feed.py`
+
+---
+
+# CG Deep Audit — March 2026
+
+Generated: 2026-03-05
+
+## CG-1: Pipeline Findings
+
+### Source: m25_pipeline.md (ingest_dbn.py, build_bars_5m.py, build_daily_features.py) — mode: bugs
+
+| # | M2.5 Claim | Verdict | Evidence |
+|---|-----------|---------|----------|
+| 1.1 | Missing orb_minutes JOIN in build_daily_features.py | **FALSE POSITIVE** | M2.5 itself acknowledged this is correct. build_daily_features.py creates the 3 rows per (day, symbol) — it doesn't JOIN orb_outcomes. The JOIN contract is for downstream code. |
+| 1.2 | ATR velocity off-by-one: `len(prior_atrs) >= 5` should be `>= 4` | **FALSE POSITIVE** | `range(max(0, i-5), i)` gives indices [i-5, i-4, i-3, i-2, i-1] = exactly 5 elements when i >= 5. The check `len(prior_atrs) >= 5` is correct — requires all 5 prior ATR values non-None. Verified at build_daily_features.py:1067-1071. |
+| 1.3 | Double-break computed before outcome = look-ahead | **FALSE POSITIVE** | M2.5 self-corrected: "this is NOT a bug". Outcome uses only post-break bars. double_break is stored as a column but marked LOOK-AHEAD in docs. |
+| 1.4 | ORB label mismatch between ORB_LABELS and DYNAMIC_ORB_RESOLVERS | **FALSE POSITIVE** | Code is fail-closed at build_daily_features.py:202-205 — raises ValueError if label not in DYNAMIC_ORB_RESOLVERS. DYNAMIC_ORB_RESOLVERS derived from SESSION_CATALOG (dst.py:418-422). Mismatch caught at runtime immediately. |
+| 1.5 | GARCH warm-up calls function even when < 252 days | **TRUE (trivial)** | Performance-only. compute_garch_forecast() returns None when min_obs not met. Correct behavior, just wastes ~250 function calls during warm-up per rebuild. Not worth adding complexity. **NO ACTION.** |
+
+### Source: m25_pipeline2.md (dst.py, cost_model.py, asset_configs.py) — mode: bugs
+
+| # | M2.5 Claim | Verdict | Evidence |
+|---|-----------|---------|----------|
+| 1.6 | MBT slippage data missing in SESSION_SLIPPAGE_MULT | **FALSE POSITIVE** | MBT is a dead instrument (0 validated strategies, confirmed NO-GO Mar 2 2026). No slippage data needed. Default 1.0 multiplier harmless for a never-traded instrument. |
+| 1.7 | Dead instruments (MCL, SIL) still in COST_SPECS | **FALSE POSITIVE** | Dead instruments need CostSpec for historical outcome computation and research analysis. Removing would break outcome_builder for historical data. Correctly excluded from ACTIVE_ORB_INSTRUMENTS (asset_configs.py). |
+| 1.8 | Dead code in validate_catalog(): `else: h, m = entry["brisbane"]` never executes | **TRUE** | All SESSION_CATALOG entries are type "dynamic". The else branch at dst.py:447-448 is unreachable dead code from pre-Feb-2026 static session era. Low priority. |
+| 1.9 | Function name typo: `brisbane_1025_brisbane` | **WORTH EXPLORING** | Naming is awkward but functional. Used in dst.py:315 and SESSION_CATALOG:400. Renaming is cosmetic — deferred. |
+| 1.10 | is_winter_for_session() is dead code (always returns None) | **FALSE POSITIVE** | Actively called by strategy_validator.py:262, strategy_discovery.py:675, strategy_fitness.py:312. Returns None correctly for all DST-clean sessions. Callers handle None. Not dead — no-op by design, ready to activate if DST-affected session ever added. |
+| 1.11 | DOW alignment not validated for MBT NYSE_OPEN | **FALSE POSITIVE** | MBT is dead. validate_dow_filter_alignment() exists as a runtime guard. No DOW filters applied to NYSE_OPEN. |
+
+### CG-1 Summary
+- **TRUE findings requiring action: 0**
+- **TRUE but no-action: 2** (GARCH warm-up perf, validate_catalog dead branch)
+- **FALSE POSITIVES: 8** (1.1, 1.2, 1.3, 1.4, 1.6, 1.7, 1.10, 1.11)
+- **WORTH EXPLORING: 1** (brisbane_1025_brisbane naming)
+- **M2.5 false positive rate: 73%** (8/11)
+
+### CG-1 Re-run Confirmation (2026-03-05)
+
+Fresh M2.5 --mode bugs run produced 16 findings across both batches. Key deltas from prior triage:
+
+| New M2.5 Claim | Verdict | Evidence |
+|----------------|---------|----------|
+| stress_test_costs() missing slippage multiplier | **FALSE POSITIVE** | M2.5 hallucinated code. Actual line 357: `slippage=spec.slippage * multiplier` — slippage IS multiplied. |
+| Ingest fast-forward ineffective (batch_max_date before filtering) | **FALSE POSITIVE** | Fast-forward skips ENTIRE batches where ALL rows are before start_filter. Per-row filtering in downstream code handles partial batches. Working as designed. |
+| Relative volume warm-up bias (first 5 break-days NULL) | **FALSE POSITIVE** | Warm-up producing NULL is correct — need >= 5 prior break volumes for meaningful median. M2.5 suggestion to set 1.0 would introduce false uniformity. |
+| 5m bars dry-run uses EPOCH/300 vs actual uses time_bucket | **WORTH EXPLORING** | Both produce identical results for UTC timestamps (no DST in UTC). Consistency improvement, not a bug. |
+| RSI lookback insufficient (10 days may be too few) | **FALSE POSITIVE** | 10 days = 500-800 5m bars during market hours, well above the 200 needed for RSI-14. |
+| Filename date timezone confusion | **FALSE POSITIVE** | File-level date is just for batch skip optimization. Per-row ts_event filtering handles correctness. |
+
+**Re-run verdict: Consistent with prior triage. 0 new TRUE findings. M2.5 FP rate 81% (13/16) this run.**
+
+---
+
+Generated: 2026-03-05
+
+## CG-2: Trading App Findings
+
+### Source: m25_trading1.md (outcome_builder.py, strategy_discovery.py) — mode: bias
+
+| # | M2.5 Claim | Verdict | Evidence |
+|---|-----------|---------|----------|
+| 2.1 | FST hurdle uses full grid size, not filtered combinations | **FALSE POSITIVE** | Conservative direction (higher hurdle = harder to pass). Intentional — the full search space IS the multiple-testing penalty. M2.5 acknowledges this. |
+| 2.2 | Relative volume loads all historical minutes (perf) | **FALSE POSITIVE** | Performance concern, not a bias issue. Works correctly. Not a bias audit finding. |
+| 2.3 | Checkpoint resume uses only trading_day, not full signature | **FALSE POSITIVE** | The `--force` flag handles parameter changes. Checkpoint is for resuming interrupted runs. Design trade-off, not a bias. |
+
+### Source: m25_trading2.md (strategy_validator.py, config.py) — mode: bias
+
+| # | M2.5 Claim | Verdict | Evidence |
+|---|-----------|---------|----------|
+| 2.4 | FDR status not reflected in experimental_strategies (CRITICAL) | **FALSE POSITIVE** | By design. `experimental_strategies` is the staging table — tracks 6-phase validation. `validated_setups` is the promotion target with FDR columns. Intentional separation of concerns. No downstream code queries experimental_strategies for FDR status. |
+| 2.5 | ATR data leakage — atr_by_year query has no date filter | **PARTIALLY TRUE** | Query at strategy_validator.py:613-618 loads ALL years. Practical impact is ZERO — waivers only apply to strategy's own negative years, and ATR classifies already-failing years as DORMANT (not used for selection). Adding a date filter would be cleaner but changes nothing. **NO ACTION** — conservative and functionally correct. |
+| 2.6 | Walk-forward start date uses full-sample data | **FALSE POSITIVE** | Anchored expanding windows is the standard WF methodology. WF_START_OVERRIDE controls the start point. By design. |
+| 2.7 | Inconsistent filter parse in DST split fallback | **FALSE POSITIVE** | Primary path uses filter_params JSON (always present for validated strategies). Fallback is a safety net, not the main path. |
+
+### CG-2 Summary
+- **TRUE findings requiring action: 0**
+- **PARTIALLY TRUE but no-action: 1** (ATR query unbounded — functionally harmless)
+- **FALSE POSITIVES: 6** (2.1, 2.2, 2.3, 2.4, 2.6, 2.7)
+- **M2.5 false positive rate: 86%** (6/7)
