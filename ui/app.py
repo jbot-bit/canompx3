@@ -15,7 +15,7 @@ st.set_page_config(
 )
 
 # Page imports (deferred to avoid slow startup)
-from ui.pages import portfolio, strategies, market_state, data_quality
+from ui.pages import portfolio, strategies, market_state, data_quality, live_monitor
 from ui.chat import render_chat
 
 # Sidebar navigation
@@ -24,7 +24,7 @@ st.sidebar.caption("Gold (MGC) Trading Research")
 
 page = st.sidebar.radio(
     "Navigate",
-    ["Portfolio", "Strategies", "Market State", "Data Quality"],
+    ["Portfolio", "Strategies", "Market State", "Data Quality", "Live Trading"],
     index=0,
 )
 
@@ -37,6 +37,8 @@ elif page == "Market State":
     market_state.render()
 elif page == "Data Quality":
     data_quality.render()
+elif page == "Live Trading":
+    live_monitor.render()
 
 # AI Chat (always visible in sidebar below navigation)
 render_chat()

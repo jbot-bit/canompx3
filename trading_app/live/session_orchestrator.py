@@ -11,8 +11,10 @@ VERIFIED API NOTES:
 - TradeEvent.price: entry fill on ENTRY, exit fill on EXIT
 - entry_model: look up from self._strategy_map[event.strategy_id].entry_model
 """
+import json
 import logging
-from datetime import date
+from datetime import date, datetime, timezone
+from pathlib import Path
 
 from trading_app.live.tradovate_auth import TradovateAuth
 from trading_app.live.data_feed import DataFeed
@@ -33,6 +35,9 @@ log = logging.getLogger(__name__)
 
 
 class SessionOrchestrator:
+    # JSONL file for UI signal display — written by this process, read by Streamlit
+    SIGNALS_FILE = Path(__file__).parent.parent.parent / "live_signals.jsonl"
+
     def __init__(self, instrument: str, demo: bool = True, account_id: int = 0,
                  signal_only: bool = False):
         self.instrument = instrument
@@ -40,6 +45,7 @@ class SessionOrchestrator:
         self.signal_only = signal_only
         self.trading_day = date.today()
 
+        # Auth is needed even in signal-only mode (for the market data WebSocket feed)
         self.auth = TradovateAuth(demo=demo)
 
         # build_live_portfolio returns (Portfolio, list[str]) — unpack the tuple
@@ -72,26 +78,51 @@ class SessionOrchestrator:
             live_session_costs=True,
         )
 
-        # Resolve numeric account ID (auto-discover if not provided)
-        if account_id == 0:
-            account_id = resolve_account_id(self.auth, demo=demo)
+        # Order routing only needed when placing real/demo orders
+        if signal_only:
+            self.order_router = None
+            log.info("Signal-only mode: order router skipped (no Tradovate account needed)")
+        else:
+            if account_id == 0:
+                account_id = resolve_account_id(self.auth, demo=demo)
+            self.order_router = OrderRouter(account_id=account_id, auth=self.auth, demo=demo)
 
         # Live infrastructure
         self.orb_builder = LiveORBBuilder(instrument, self.trading_day)
-        self.order_router = OrderRouter(account_id=account_id, auth=self.auth, demo=demo)
         # PerformanceMonitor takes list[PortfolioStrategy] (has strategy_id + expectancy_r)
         self.monitor = PerformanceMonitor(self.portfolio.strategies)
 
         # Entry price side-table: strategy_id → entry fill price (for pnl_r calculation on exit)
         self._entry_prices: dict[str, float] = {}
 
-        # Resolve front-month contract symbol
+        # Resolve front-month contract symbol (needed even in signal-only for logging)
         self.contract_symbol = resolve_front_month(instrument, self.auth, demo=demo)
         log.info("Session ready: %s → %s (%s)", instrument, self.contract_symbol,
-                 "DEMO" if demo else "LIVE")
+                 "SIGNAL-ONLY" if signal_only else ("DEMO" if demo else "LIVE"))
+
+        # Write session-start marker to signals file
+        self._write_signal_record({
+            "type": "SESSION_START",
+            "instrument": instrument,
+            "contract": self.contract_symbol,
+            "mode": "signal_only" if signal_only else ("demo" if demo else "live"),
+        })
 
         # Signal engine that a new trading day is starting
         self.engine.on_trading_day_start(self.trading_day)
+
+    def _write_signal_record(self, extra: dict) -> None:
+        """Append a signal record to the JSONL file read by the Live Monitor UI."""
+        record = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "instrument": self.instrument,
+            **extra,
+        }
+        try:
+            with open(self.SIGNALS_FILE, "a") as fh:
+                fh.write(json.dumps(record) + "\n")
+        except OSError as e:
+            log.warning("Could not write signal record: %s", e)
 
     def _on_bar(self, bar: Bar) -> None:
         """Called for each completed 1-minute bar from DataFeed."""
@@ -161,12 +192,18 @@ class SessionOrchestrator:
             self._entry_prices[event.strategy_id] = event.price
 
             if self.signal_only:
-                # Signal-only mode: display the signal, do NOT place an order.
-                # Trade manually on your broker when you see this.
                 log.info(
                     "⚡ SIGNAL [%s]: %s %s @ %.2f  ← trade this manually on Tradovate/TradingView",
                     event.strategy_id, event.direction.upper(), self.contract_symbol, event.price,
                 )
+                self._write_signal_record({
+                    "type": "SIGNAL_ENTRY",
+                    "strategy_id": event.strategy_id,
+                    "contract": self.contract_symbol,
+                    "direction": event.direction.upper(),
+                    "price": event.price,
+                    "contracts": event.contracts,
+                })
                 return
 
             spec = self.order_router.build_order_spec(
@@ -179,6 +216,15 @@ class SessionOrchestrator:
             result = self.order_router.submit(spec)
             log.info("ENTRY order: %s %s @ %.2f → orderId=%d",
                      event.strategy_id, event.direction, event.price, result.order_id)
+            self._write_signal_record({
+                "type": "ORDER_ENTRY",
+                "strategy_id": event.strategy_id,
+                "contract": self.contract_symbol,
+                "direction": event.direction.upper(),
+                "price": event.price,
+                "contracts": event.contracts,
+                "order_id": result.order_id,
+            })
 
         elif event.event_type in ("EXIT", "SCRATCH"):
             entry_price = self._entry_prices.pop(event.strategy_id, event.price)
@@ -189,13 +235,32 @@ class SessionOrchestrator:
                     event.strategy_id, event.direction.upper(), event.price,
                 )
                 self._record_exit(event, entry_price)
+                self._write_signal_record({
+                    "type": "SIGNAL_EXIT",
+                    "strategy_id": event.strategy_id,
+                    "contract": self.contract_symbol,
+                    "direction": event.direction.upper(),
+                    "price": event.price,
+                })
                 return
 
             self._close_position(event)
             self._record_exit(event, entry_price)
+            self._write_signal_record({
+                "type": f"ORDER_{event.event_type}",
+                "strategy_id": event.strategy_id,
+                "contract": self.contract_symbol,
+                "direction": event.direction.upper(),
+                "price": event.price,
+            })
 
         elif event.event_type == "REJECT":
             log.info("REJECT: %s — %s", event.strategy_id, event.reason)
+            self._write_signal_record({
+                "type": "REJECT",
+                "strategy_id": event.strategy_id,
+                "reason": getattr(event, "reason", ""),
+            })
 
     async def run(self) -> None:
         feed = DataFeed(self.auth, on_bar=self._on_bar, demo=self.demo)

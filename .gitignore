@@ -46,6 +46,9 @@ pipeline/checkpoints/
 .env
 .env.*
 
+# Live session runtime output
+live_signals.jsonl
+
 # Serena (project-local state, memories, index)
 .serena/
 
