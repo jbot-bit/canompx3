@@ -256,7 +256,7 @@ def train_per_session_meta_label(
         X_all, y_all, meta_all = load_single_config_feature_matrix(
             db_path, instrument, rr_target=rr_target,
             config_selection=config_selection, skip_filter=skip_filter,
-            per_aperture=per_aperture,
+            per_aperture=per_aperture, apply_rr_lock=False,
         )
     else:
         X_all, y_all, meta_all = load_validated_feature_matrix(db_path, instrument)

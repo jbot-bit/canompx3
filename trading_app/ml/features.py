@@ -680,6 +680,7 @@ def load_single_config_feature_matrix(
     config_selection: str = "max_samples",
     skip_filter: bool = False,
     per_aperture: bool = False,
+    apply_rr_lock: bool = True,
 ) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
     """Load ML feature matrix with ONE config per session — clean labels.
 
@@ -704,6 +705,10 @@ def load_single_config_feature_matrix(
         per_aperture: If True, pick ONE config per (session, aperture) instead of
             per session. Returns multiple apertures per session for per-aperture
             model training.
+        apply_rr_lock: If True (default), filter validated_setups through
+            family_rr_locks to only use locked RR per family. Set False for ML
+            training — decouples training RR from portfolio RR lock so the model
+            picks whatever RR gives best label balance for discrimination.
 
     Returns:
         X: Feature matrix (float, ready for sklearn)
@@ -744,7 +749,23 @@ def load_single_config_feature_matrix(
         )
 
         # Single query: pick one config per session (or per session+aperture), load outcomes
-        # LEFT JOIN family_rr_locks to restrict to SharpeDD-locked RR per family
+        # When apply_rr_lock=True: LEFT JOIN family_rr_locks to restrict to locked RR
+        # When apply_rr_lock=False: ML training — skip lock, let ROW_NUMBER pick
+        #   whatever RR gives best data for label balance/discrimination
+        if apply_rr_lock:
+            frl_join = """
+                LEFT JOIN family_rr_locks frl
+                    ON v.instrument = frl.instrument
+                    AND v.orb_label = frl.orb_label
+                    AND v.filter_type = frl.filter_type
+                    AND v.entry_model = frl.entry_model
+                    AND v.orb_minutes = frl.orb_minutes
+                    AND v.confirm_bars = frl.confirm_bars"""
+            frl_where = "AND (frl.locked_rr IS NULL OR v.rr_target = frl.locked_rr)"
+        else:
+            frl_join = ""
+            frl_where = ""
+
         query = f"""
             WITH best_configs AS (
                 SELECT
@@ -754,17 +775,11 @@ def load_single_config_feature_matrix(
                         {partition_clause}
                         {order_clause}
                     ) AS rn
-                FROM validated_setups v
-                LEFT JOIN family_rr_locks frl
-                    ON v.instrument = frl.instrument
-                    AND v.orb_label = frl.orb_label
-                    AND v.filter_type = frl.filter_type
-                    AND v.entry_model = frl.entry_model
-                    AND v.orb_minutes = frl.orb_minutes
-                    AND v.confirm_bars = frl.confirm_bars
+                FROM validated_setups v  -- family_rr_locks via frl_join (conditional)
+                {frl_join}
                 WHERE v.instrument = $instrument
                     AND v.status = 'active'
-                    AND (frl.locked_rr IS NULL OR v.rr_target = frl.locked_rr)
+                    {frl_where}
                     {rr_clause}
             )
             SELECT
@@ -810,17 +825,11 @@ def load_single_config_feature_matrix(
                         {partition_clause}
                         {order_clause}
                     ) AS rn
-                FROM validated_setups v
-                LEFT JOIN family_rr_locks frl
-                    ON v.instrument = frl.instrument
-                    AND v.orb_label = frl.orb_label
-                    AND v.filter_type = frl.filter_type
-                    AND v.entry_model = frl.entry_model
-                    AND v.orb_minutes = frl.orb_minutes
-                    AND v.confirm_bars = frl.confirm_bars
+                FROM validated_setups v  -- family_rr_locks via frl_join (conditional)
+                {frl_join}
                 WHERE v.instrument = $instrument
                     AND v.status = 'active'
-                    AND (frl.locked_rr IS NULL OR v.rr_target = frl.locked_rr)
+                    {frl_where}
                     {rr_clause}
             )
             SELECT orb_label, entry_model, rr_target, confirm_bars,
