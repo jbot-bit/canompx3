@@ -182,25 +182,58 @@ def check_m25_audit() -> tuple[bool, str]:
 
 
 def main():
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     print("=" * 50)
     print("PIPELINE HEALTH CHECK")
     print("=" * 50)
     print()
 
-    checks = [
+    # Phase 1: Fast local checks (sequential, <1s total)
+    fast_checks = [
         check_python_deps,
         check_database,
         check_dbn_files,
+        check_git_hooks,
+    ]
+
+    # Phase 2: Slow subprocess checks (parallel)
+    slow_checks = [
         check_drift,
         check_integrity,
         check_tests,
-        check_git_hooks,
         check_m25_audit,
     ]
 
     all_ok = True
-    for check in checks:
+
+    # Run fast checks first (sequential — instant)
+    for check in fast_checks:
         ok, msg = check()
+        status = "[OK]" if ok else "[FAIL]"
+        print(f"  {status} {msg}")
+        if not ok:
+            all_ok = False
+
+    # Run slow checks in parallel (ThreadPoolExecutor — correct for subprocess waits)
+    # Per Python docs: ThreadPoolExecutor for I/O-bound/subprocess waiting
+    # Per DuckDB docs: multiple read-only processes can access same DB file
+    print()
+    print("  Running slow checks in parallel...")
+    results = {}
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = {pool.submit(check): check.__name__ for check in slow_checks}
+        for future in as_completed(futures):
+            name = futures[future]
+            try:
+                ok, msg = future.result()
+            except Exception as e:
+                ok, msg = False, f"{name}: {type(e).__name__}: {e}"
+            results[name] = (ok, msg)
+
+    # Print slow check results (deterministic order, not completion order)
+    for check in slow_checks:
+        ok, msg = results[check.__name__]
         status = "[OK]" if ok else "[FAIL]"
         print(f"  {status} {msg}")
         if not ok:
