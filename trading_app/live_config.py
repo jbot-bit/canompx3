@@ -44,6 +44,8 @@ class LiveStrategySpec:
     filter_type: str
     regime_gate: str | None  # None = always-on, "high_vol" = fitness must be FIT
                              # "rolling" = must be STABLE in recent rolling eval
+    rr_target: float | None = None  # Resolved at build time from family_rr_locks.
+                                     # None in spec = look up locked RR per instrument.
 
 # Lookback for HOT tier rolling stability check (recent months only).
 HOT_LOOKBACK_WINDOWS = 10
@@ -181,10 +183,14 @@ def _load_best_regime_variant(
     filter_type: str,
     min_expectancy_r: float = LIVE_MIN_EXPECTANCY_R,
 ) -> dict | None:
-    """Load the best RR/CB variant from validated_setups for a regime family.
+    """Load the best variant from validated_setups, enforcing locked RR.
 
-    Only returns strategies with expectancy_r >= min_expectancy_r to filter
-    out statistically-validated but practically-thin strategies.
+    Joins family_rr_locks to restrict each (instrument, orb_label, filter_type,
+    entry_model, orb_minutes, confirm_bars) to its SharpeDD-locked RR target.
+    Among matching rows, picks the best by expectancy_r (tiebreaker across
+    different orb_minutes/confirm_bars combos at the locked RR).
+
+    Only returns strategies with expectancy_r >= min_expectancy_r.
     """
     con = duckdb.connect(str(db_path), read_only=True)
     try:
@@ -197,6 +203,14 @@ def _load_best_regime_variant(
             FROM validated_setups vs
             LEFT JOIN experimental_strategies es
               ON vs.strategy_id = es.strategy_id
+            INNER JOIN family_rr_locks frl
+              ON vs.instrument = frl.instrument
+              AND vs.orb_label = frl.orb_label
+              AND vs.filter_type = frl.filter_type
+              AND vs.entry_model = frl.entry_model
+              AND vs.orb_minutes = frl.orb_minutes
+              AND vs.confirm_bars = frl.confirm_bars
+              AND vs.rr_target = frl.locked_rr
             WHERE vs.instrument = ?
               AND vs.orb_label = ?
               AND vs.entry_model = ?
@@ -226,6 +240,11 @@ def _load_best_experimental_variant(
 
     Used for HOT tier families that haven't passed full-period validation
     but are STABLE in recent rolling windows.
+
+    NOTE: Intentionally NOT RR-locked via family_rr_locks. The HOT tier
+    is dormant (no families currently use it) and experimental_strategies
+    is a separate table from validated_setups. When HOT tier is activated,
+    this should be revisited to enforce RR locks.
     """
     con = duckdb.connect(str(db_path), read_only=True)
     try:

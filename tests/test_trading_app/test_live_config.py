@@ -16,7 +16,7 @@ from trading_app.live_config import (
 
 @pytest.fixture
 def live_config_db(tmp_path):
-    """Create temp DB with validated_setups and experimental_strategies tables."""
+    """Create temp DB with validated_setups, experimental_strategies, family_rr_locks."""
     db_path = tmp_path / "live_test.db"
     con = duckdb.connect(str(db_path))
     con.execute("""
@@ -33,7 +33,8 @@ def live_config_db(tmp_path):
             sample_size INTEGER,
             sharpe_ratio DOUBLE,
             max_drawdown_r DOUBLE,
-            status VARCHAR
+            status VARCHAR,
+            orb_minutes INTEGER DEFAULT 5
         )
     """)
     con.execute("""
@@ -53,6 +54,8 @@ def live_config_db(tmp_path):
             median_risk_points DOUBLE
         )
     """)
+    from pipeline.init_db import FAMILY_RR_LOCKS_SCHEMA
+    con.execute(FAMILY_RR_LOCKS_SCHEMA)
     con.close()
     return db_path
 
@@ -85,10 +88,13 @@ class TestLivePortfolio:
 
 class TestLoadBestRegimeVariant:
     def test_found(self, live_config_db):
-        """Matching active strategy returns dict."""
+        """Matching active strategy with locked RR returns dict."""
         con = duckdb.connect(str(live_config_db))
         con.execute("""
-            INSERT INTO validated_setups VALUES (
+            INSERT INTO validated_setups (strategy_id, instrument, orb_label, entry_model,
+                rr_target, confirm_bars, filter_type, expectancy_r, win_rate,
+                sample_size, sharpe_ratio, max_drawdown_r, status)
+            VALUES (
                 'MGC_TOKYO_OPEN_E1_RR2.0_CB1_ORB_G4', 'MGC', 'TOKYO_OPEN', 'E1',
                 2.0, 1, 'ORB_G4', 0.35, 0.52, 150, 1.2, 3.5, 'active'
             )
@@ -98,6 +104,13 @@ class TestLoadBestRegimeVariant:
                 'MGC_TOKYO_OPEN_E1_RR2.0_CB1_ORB_G4', 'MGC', 'TOKYO_OPEN', 'E1',
                 2.0, 1, 'ORB_G4', 0.35, 0.52, 150, 1.2, 3.5, 4.2
             )
+        """)
+        con.execute("""
+            INSERT INTO family_rr_locks (instrument, orb_label, filter_type, entry_model,
+                orb_minutes, confirm_bars, locked_rr, method,
+                sharpe_at_rr, maxdd_at_rr, n_at_rr, expr_at_rr, tpy_at_rr)
+            VALUES ('MGC', 'TOKYO_OPEN', 'ORB_G4', 'E1', 5, 1, 2.0, 'ONLY_RR',
+                    1.2, 3.5, 150, 0.35, 50.0)
         """)
         con.close()
 
@@ -116,13 +129,24 @@ class TestLoadBestRegimeVariant:
         assert result is None
 
     def test_inactive_filtered(self, live_config_db):
-        """Inactive strategy is not returned."""
+        """Inactive strategy is not returned even with a matching RR lock."""
         con = duckdb.connect(str(live_config_db))
         con.execute("""
-            INSERT INTO validated_setups VALUES (
+            INSERT INTO validated_setups (strategy_id, instrument, orb_label, entry_model,
+                rr_target, confirm_bars, filter_type, expectancy_r, win_rate,
+                sample_size, sharpe_ratio, max_drawdown_r, status)
+            VALUES (
                 'test_inactive', 'MGC', 'TOKYO_OPEN', 'E1',
                 2.0, 1, 'ORB_G4', 0.35, 0.52, 150, 1.2, 3.5, 'purged'
             )
+        """)
+        # Lock exists, but strategy status is 'purged' — should still return None.
+        con.execute("""
+            INSERT INTO family_rr_locks (instrument, orb_label, filter_type, entry_model,
+                orb_minutes, confirm_bars, locked_rr, method,
+                sharpe_at_rr, maxdd_at_rr, n_at_rr, expr_at_rr, tpy_at_rr)
+            VALUES ('MGC', 'TOKYO_OPEN', 'ORB_G4', 'E1', 5, 1, 2.0, 'ONLY_RR',
+                    1.2, 3.5, 150, 0.35, 50.0)
         """)
         con.close()
 
@@ -131,20 +155,89 @@ class TestLoadBestRegimeVariant:
         )
         assert result is None
 
-    def test_best_sharpe_selected(self, live_config_db):
-        """When multiple candidates exist, highest Sharpe is returned."""
+    def test_best_expectancy_selected(self, live_config_db):
+        """Among locked-RR candidates, highest expectancy_r is returned."""
         con = duckdb.connect(str(live_config_db))
         con.execute("""
-            INSERT INTO validated_setups VALUES
-                ('low_sharpe', 'MGC', 'TOKYO_OPEN', 'E1', 2.0, 1, 'ORB_G4', 0.30, 0.50, 100, 0.8, 4.0, 'active'),
-                ('high_sharpe', 'MGC', 'TOKYO_OPEN', 'E1', 1.5, 2, 'ORB_G4', 0.40, 0.55, 120, 1.5, 3.0, 'active')
+            INSERT INTO validated_setups (strategy_id, instrument, orb_label, entry_model,
+                rr_target, confirm_bars, filter_type, expectancy_r, win_rate,
+                sample_size, sharpe_ratio, max_drawdown_r, status)
+            VALUES
+                ('low_expr', 'MGC', 'TOKYO_OPEN', 'E1', 2.0, 1, 'ORB_G4', 0.30, 0.50, 100, 0.8, 4.0, 'active'),
+                ('high_expr', 'MGC', 'TOKYO_OPEN', 'E1', 1.5, 2, 'ORB_G4', 0.40, 0.55, 120, 1.5, 3.0, 'active')
+        """)
+        # Each (confirm_bars) family locked at its own RR — both match INNER JOIN.
+        con.execute("""
+            INSERT INTO family_rr_locks (instrument, orb_label, filter_type, entry_model,
+                orb_minutes, confirm_bars, locked_rr, method,
+                sharpe_at_rr, maxdd_at_rr, n_at_rr, expr_at_rr, tpy_at_rr)
+            VALUES
+                ('MGC', 'TOKYO_OPEN', 'ORB_G4', 'E1', 5, 1, 2.0, 'ONLY_RR', 0.8, 4.0, 100, 0.30, 50.0),
+                ('MGC', 'TOKYO_OPEN', 'ORB_G4', 'E1', 5, 2, 1.5, 'ONLY_RR', 1.5, 3.0, 120, 0.40, 50.0)
         """)
         con.close()
 
         result = _load_best_regime_variant(
             live_config_db, "MGC", "TOKYO_OPEN", "E1", "ORB_G4"
         )
-        assert result["strategy_id"] == "high_sharpe"
+        assert result["strategy_id"] == "high_expr"
+
+
+    def test_unlocked_rr_excluded(self, live_config_db):
+        """Strategy at non-locked RR is excluded by INNER JOIN."""
+        con = duckdb.connect(str(live_config_db))
+        # Strategy at RR2.5, but family locked at RR1.0 — must NOT return.
+        con.execute("""
+            INSERT INTO validated_setups (strategy_id, instrument, orb_label, entry_model,
+                rr_target, confirm_bars, filter_type, expectancy_r, win_rate,
+                sample_size, sharpe_ratio, max_drawdown_r, status)
+            VALUES (
+                'wrong_rr', 'MGC', 'TOKYO_OPEN', 'E1',
+                2.5, 1, 'ORB_G4', 0.50, 0.55, 200, 1.5, 3.0, 'active'
+            )
+        """)
+        con.execute("""
+            INSERT INTO family_rr_locks (instrument, orb_label, filter_type, entry_model,
+                orb_minutes, confirm_bars, locked_rr, method,
+                sharpe_at_rr, maxdd_at_rr, n_at_rr, expr_at_rr, tpy_at_rr)
+            VALUES ('MGC', 'TOKYO_OPEN', 'ORB_G4', 'E1', 5, 1, 1.0, 'SHARPE_DD',
+                    1.2, 5.0, 180, 0.20, 50.0)
+        """)
+        con.close()
+
+        result = _load_best_regime_variant(
+            live_config_db, "MGC", "TOKYO_OPEN", "E1", "ORB_G4"
+        )
+        assert result is None  # RR2.5 != locked RR1.0
+
+    def test_locked_rr_only_returned(self, live_config_db):
+        """Only the locked RR variant is returned from a multi-RR family."""
+        con = duckdb.connect(str(live_config_db))
+        # Two strategies, same family, different RR. Lock at RR1.5.
+        con.execute("""
+            INSERT INTO validated_setups (strategy_id, instrument, orb_label, entry_model,
+                rr_target, confirm_bars, filter_type, expectancy_r, win_rate,
+                sample_size, sharpe_ratio, max_drawdown_r, status)
+            VALUES
+                ('rr10', 'MGC', 'TOKYO_OPEN', 'E1', 1.0, 1, 'ORB_G4', 0.45, 0.60, 200, 1.8, 3.0, 'active'),
+                ('rr15', 'MGC', 'TOKYO_OPEN', 'E1', 1.5, 1, 'ORB_G4', 0.30, 0.52, 180, 1.2, 5.0, 'active')
+        """)
+        # Lock at RR1.5 (lower ExpR but lower DD — SharpeDD picked it).
+        con.execute("""
+            INSERT INTO family_rr_locks (instrument, orb_label, filter_type, entry_model,
+                orb_minutes, confirm_bars, locked_rr, method,
+                sharpe_at_rr, maxdd_at_rr, n_at_rr, expr_at_rr, tpy_at_rr)
+            VALUES ('MGC', 'TOKYO_OPEN', 'ORB_G4', 'E1', 5, 1, 1.5, 'SHARPE_DD',
+                    1.2, 5.0, 180, 0.30, 50.0)
+        """)
+        con.close()
+
+        result = _load_best_regime_variant(
+            live_config_db, "MGC", "TOKYO_OPEN", "E1", "ORB_G4"
+        )
+        assert result is not None
+        assert result["strategy_id"] == "rr15"
+        assert result["rr_target"] == 1.5
 
 
 class TestCheckDollarGate:

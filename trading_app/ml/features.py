@@ -586,6 +586,13 @@ def load_validated_feature_matrix(
                 AND o.rr_target = v.rr_target
                 AND o.confirm_bars = v.confirm_bars
                 AND o.orb_minutes = v.orb_minutes
+            LEFT JOIN family_rr_locks frl
+                ON v.instrument = frl.instrument
+                AND v.orb_label = frl.orb_label
+                AND v.filter_type = frl.filter_type
+                AND v.entry_model = frl.entry_model
+                AND v.orb_minutes = frl.orb_minutes
+                AND v.confirm_bars = frl.confirm_bars
             JOIN daily_features d
                 ON o.trading_day = d.trading_day
                 AND o.symbol = d.symbol
@@ -593,6 +600,7 @@ def load_validated_feature_matrix(
             WHERE o.symbol = $instrument
                 AND o.pnl_r IS NOT NULL
                 AND v.status = 'active'
+                AND (frl.locked_rr IS NULL OR v.rr_target = frl.locked_rr)
             ORDER BY o.trading_day
         """
 
@@ -736,6 +744,7 @@ def load_single_config_feature_matrix(
         )
 
         # Single query: pick one config per session (or per session+aperture), load outcomes
+        # LEFT JOIN family_rr_locks to restrict to SharpeDD-locked RR per family
         query = f"""
             WITH best_configs AS (
                 SELECT
@@ -746,8 +755,16 @@ def load_single_config_feature_matrix(
                         {order_clause}
                     ) AS rn
                 FROM validated_setups v
+                LEFT JOIN family_rr_locks frl
+                    ON v.instrument = frl.instrument
+                    AND v.orb_label = frl.orb_label
+                    AND v.filter_type = frl.filter_type
+                    AND v.entry_model = frl.entry_model
+                    AND v.orb_minutes = frl.orb_minutes
+                    AND v.confirm_bars = frl.confirm_bars
                 WHERE v.instrument = $instrument
                     AND v.status = 'active'
+                    AND (frl.locked_rr IS NULL OR v.rr_target = frl.locked_rr)
                     {rr_clause}
             )
             SELECT
@@ -794,8 +811,16 @@ def load_single_config_feature_matrix(
                         {order_clause}
                     ) AS rn
                 FROM validated_setups v
+                LEFT JOIN family_rr_locks frl
+                    ON v.instrument = frl.instrument
+                    AND v.orb_label = frl.orb_label
+                    AND v.filter_type = frl.filter_type
+                    AND v.entry_model = frl.entry_model
+                    AND v.orb_minutes = frl.orb_minutes
+                    AND v.confirm_bars = frl.confirm_bars
                 WHERE v.instrument = $instrument
                     AND v.status = 'active'
+                    AND (frl.locked_rr IS NULL OR v.rr_target = frl.locked_rr)
                     {rr_clause}
             )
             SELECT orb_label, entry_model, rr_target, confirm_bars,

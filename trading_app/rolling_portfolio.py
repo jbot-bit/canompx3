@@ -412,7 +412,7 @@ def load_rolling_validated_strategies(
             if fam.avg_expectancy_r < min_expectancy_r:
                 continue
 
-            # Get best variant from most recent window
+            # Get best variant from most recent window, enforcing locked RR
             rows = con.execute("""
                 SELECT rv.strategy_id, rv.instrument, rv.orb_label, rv.entry_model,
                        rv.rr_target, rv.confirm_bars, rv.filter_type,
@@ -423,12 +423,20 @@ def load_rolling_validated_strategies(
                 FROM regime_validated rv
                 LEFT JOIN regime_strategies rs
                   ON rv.run_label = rs.run_label AND rv.strategy_id = rs.strategy_id
+                LEFT JOIN family_rr_locks frl
+                  ON rv.instrument = frl.instrument
+                  AND rv.orb_label = frl.orb_label
+                  AND rv.filter_type = frl.filter_type
+                  AND rv.entry_model = frl.entry_model
+                  AND rv.orb_minutes = frl.orb_minutes
+                  AND rv.confirm_bars = frl.confirm_bars
                 WHERE rv.run_label = ?
                   AND rv.instrument = ?
                   AND rv.orb_label = ?
                   AND rv.entry_model = ?
                   AND rv.filter_type = ?
                   AND LOWER(rv.status) = 'active'
+                  AND (frl.locked_rr IS NULL OR rv.rr_target = frl.locked_rr)
                 ORDER BY rv.expectancy_r DESC
                 LIMIT 1
             """, [latest_label, instrument, fam.orb_label,

@@ -107,6 +107,26 @@ CREATE TABLE IF NOT EXISTS prospective_signals (
 );
 """
 
+FAMILY_RR_LOCKS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS family_rr_locks (
+    instrument    TEXT    NOT NULL,
+    orb_label     TEXT    NOT NULL,
+    filter_type   TEXT    NOT NULL,
+    entry_model   TEXT    NOT NULL,
+    orb_minutes   INTEGER NOT NULL,
+    confirm_bars  INTEGER NOT NULL,
+    locked_rr     REAL    NOT NULL,
+    method        TEXT    NOT NULL,
+    sharpe_at_rr  REAL,
+    maxdd_at_rr   REAL,
+    n_at_rr       INTEGER,
+    expr_at_rr    REAL,
+    tpy_at_rr     REAL,
+    updated_at    TIMESTAMP DEFAULT current_timestamp,
+    PRIMARY KEY (instrument, orb_label, filter_type, entry_model, orb_minutes, confirm_bars)
+);
+"""
+
 def _build_daily_features_ddl() -> str:
     """Generate CREATE TABLE DDL for daily_features.
 
@@ -274,7 +294,7 @@ def init_db(db_path: Path, force: bool = False):
             # Drop trading_app tables first (FK dependencies on daily_features)
             for t in ["validated_setups_archive", "validated_setups",
                        "experimental_strategies", "orb_outcomes",
-                       "prospective_signals"]:
+                       "prospective_signals", "family_rr_locks"]:
                 con.execute(f"DROP TABLE IF EXISTS {t}")
             # Drop pipeline tables
             con.execute("DROP TABLE IF EXISTS daily_features")
@@ -412,6 +432,9 @@ def init_db(db_path: Path, force: bool = False):
 
         con.execute(PROSPECTIVE_SIGNALS_SCHEMA)
         logger.info("  prospective_signals: created (or already exists)")
+
+        con.execute(FAMILY_RR_LOCKS_SCHEMA)
+        logger.info("  family_rr_locks: created (or already exists)")
 
         con.commit()
 

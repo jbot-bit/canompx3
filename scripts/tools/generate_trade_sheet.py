@@ -188,10 +188,10 @@ def _load_best_by_expr(
     filter_type: str,
     min_expectancy_r: float,
 ) -> dict | None:
-    """Load the best RR/CB variant by ExpR (NOT Sharpe).
+    """Load the best locked-RR variant by ExpR.
 
-    This avoids the Sharpe bias that mechanically favors RR 1.0 over
-    higher RR targets. For manual trading, ExpR per trade is what matters.
+    Joins family_rr_locks to restrict each family to its SharpeDD-locked RR.
+    Falls back to best ExpR if no lock exists (graceful degradation).
     """
     con = duckdb.connect(str(db_path), read_only=True)
     try:
@@ -204,12 +204,20 @@ def _load_best_by_expr(
             FROM validated_setups vs
             LEFT JOIN experimental_strategies es
               ON vs.strategy_id = es.strategy_id
+            LEFT JOIN family_rr_locks frl
+              ON vs.instrument = frl.instrument
+              AND vs.orb_label = frl.orb_label
+              AND vs.filter_type = frl.filter_type
+              AND vs.entry_model = frl.entry_model
+              AND vs.orb_minutes = frl.orb_minutes
+              AND vs.confirm_bars = frl.confirm_bars
             WHERE vs.instrument = ?
               AND vs.orb_label = ?
               AND vs.entry_model = ?
               AND vs.filter_type = ?
               AND LOWER(vs.status) = 'active'
               AND vs.expectancy_r >= ?
+              AND (frl.locked_rr IS NULL OR vs.rr_target = frl.locked_rr)
             ORDER BY vs.expectancy_r DESC
             LIMIT 1
         """, [instrument, orb_label, entry_model, filter_type, min_expectancy_r]).fetchall()

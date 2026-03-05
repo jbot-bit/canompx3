@@ -260,24 +260,29 @@ class LiveMLPredictor:
                 self._prediction_cache[cache_key] = result
                 return result
 
-            # RR guard: aggressive RR (trade RR > training RR) → fail-open.
-            # Conservative RR (trade RR < training RR) is safe — P(win) is understated.
+            # RR guard: with family_rr_locks, trade RR should always match
+            # training RR. Mismatches indicate stale model or config drift.
+            #
+            # Aggressive (trade_rr > training_rr) → skip trade. Model trained
+            # at lower RR overestimates P(win) at higher RR — dangerous.
+            # Conservative (trade_rr < training_rr) → proceed with warning.
+            # P(win) is understated (actual win rate is higher) — safe direction.
             training_rr = session_info.get("training_rr")
             if training_rr is not None and rr_target > training_rr:
-                logger.info(
+                logger.error(
                     "RR mismatch for %s %s: model trained on RR%.1f, "
-                    "prediction for RR%.1f (aggressive) — fail-open",
+                    "prediction for RR%.1f (AGGRESSIVE) — skipping trade",
                     instrument, orb_label, training_rr, rr_target,
                 )
                 self.rr_mismatch_count += 1
-                result = MLPrediction(p_win=0.5, take=True, threshold=0.5)
+                result = MLPrediction(p_win=0.5, take=False, threshold=0.5)
                 self._prediction_cache[cache_key] = result
                 return result
 
             if training_rr is not None and rr_target < training_rr:
-                logger.debug(
+                logger.warning(
                     "RR conservative for %s %s: model RR%.1f, trade RR%.1f — "
-                    "P(win) may be understated",
+                    "P(win) may be understated, proceeding",
                     instrument, orb_label, training_rr, rr_target,
                 )
 

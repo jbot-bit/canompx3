@@ -3,8 +3,9 @@
 # Usage: bash scripts/tools/run_rebuild_with_sync.sh [INSTRUMENT]
 # Default: MGC
 #
-# This extends the standard 4-step rebuild chain (outcome_builder -> discovery
-# -> validator -> edge_families) with E3 retirement and Pinecone knowledge sync.
+# This extends the standard rebuild chain (outcome_builder -> discovery
+# -> validator -> edge_families -> family_rr_locks) with E3 retirement
+# and Pinecone knowledge sync.
 #
 # For a full all-instrument rebuild WITHOUT sync, see full_rebuild.sh.
 
@@ -27,17 +28,17 @@ echo "=========================================="
 
 # Step 1: Rebuild outcomes
 echo ""
-echo "Step 1/8: Rebuilding outcomes..."
+echo "Step 1/9: Rebuilding outcomes..."
 python trading_app/outcome_builder.py --instrument "$INSTRUMENT" --force
 
 # Step 2: Discover strategies
 echo ""
-echo "Step 2/8: Discovering strategies..."
+echo "Step 2/9: Discovering strategies..."
 python trading_app/strategy_discovery.py --instrument "$INSTRUMENT"
 
 # Step 3: Validate strategies
 echo ""
-echo "Step 3/8: Validating strategies..."
+echo "Step 3/9: Validating strategies..."
 python trading_app/strategy_validator.py \
     --instrument "$INSTRUMENT" --min-sample 50 \
     --no-regime-waivers --min-years-positive-pct 0.75 \
@@ -45,27 +46,32 @@ python trading_app/strategy_validator.py \
 
 # Step 4: Retire E3 strategies (validator promotes E3 to active; this fixes it)
 echo ""
-echo "Step 4/8: Retiring E3 strategies..."
+echo "Step 4/9: Retiring E3 strategies..."
 python scripts/migrations/retire_e3_strategies.py
 
 # Step 5: Build edge families
 echo ""
-echo "Step 5/8: Building edge families..."
+echo "Step 5/9: Building edge families..."
 python scripts/tools/build_edge_families.py --instrument "$INSTRUMENT"
 
-# Step 6: Regenerate REPO_MAP (tracks file inventory drift)
+# Step 6: Recompute family RR locks (SharpeDD criterion)
 echo ""
-echo "Step 6/8: Regenerating REPO_MAP.md..."
+echo "Step 6/9: Recomputing family RR locks..."
+python scripts/tools/select_family_rr.py
+
+# Step 7: Regenerate REPO_MAP (tracks file inventory drift)
+echo ""
+echo "Step 7/9: Regenerating REPO_MAP.md..."
 python scripts/tools/gen_repo_map.py
 
-# Step 7: Post-rebuild health check (drift + integrity + tests)
+# Step 8: Post-rebuild health check (drift + integrity + tests)
 echo ""
-echo "Step 7/8: Running post-rebuild health check..."
+echo "Step 8/9: Running post-rebuild health check..."
 python pipeline/health_check.py
 
-# Step 8: Sync to Pinecone
+# Step 9: Sync to Pinecone
 echo ""
-echo "Step 8/8: Syncing knowledge to Pinecone..."
+echo "Step 9/9: Syncing knowledge to Pinecone..."
 python scripts/tools/sync_pinecone.py
 
 echo ""

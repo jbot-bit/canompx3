@@ -627,8 +627,8 @@ class TestApertureRRGuard:
         assert result.p_win == pytest.approx(0.65, abs=0.01)
         assert predictor.aperture_mismatch_count == 0
 
-    def test_rr_aggressive_fails_open(self):
-        """Trade RR (3.0) > training RR (2.5) → fail-open (overconfident)."""
+    def test_rr_aggressive_skips_trade(self):
+        """Trade RR (3.0) > training RR (2.5) → skip (model overestimates P(win))."""
         bundle = self._make_guarded_bundle(training_rr=2.5)
         predictor = self._make_predictor(bundle)
 
@@ -643,7 +643,7 @@ class TestApertureRRGuard:
                 confirm_bars=1,
             )
             mock_gdf.assert_not_called()
-        assert result == MLPrediction(p_win=0.5, take=True, threshold=0.5)
+        assert result == MLPrediction(p_win=0.5, take=False, threshold=0.5)
         assert predictor.rr_mismatch_count == 1
 
     def test_rr_conservative_predicts_normally(self):
@@ -806,7 +806,7 @@ class TestPerApertureModel:
         assert result == MLPrediction(p_win=0.5, take=True, threshold=0.5)
 
     def test_per_aperture_rr_guard_still_works(self):
-        """Aggressive RR → fail-open even with per-aperture bundle."""
+        """Aggressive RR → skip trade even with per-aperture bundle."""
         bundle = _make_per_aperture_bundle(training_rr=2.5)
         predictor = self._make_predictor(bundle)
 
@@ -821,7 +821,7 @@ class TestPerApertureModel:
                 confirm_bars=1,
             )
             mock_gdf.assert_not_called()
-        assert result == MLPrediction(p_win=0.5, take=True, threshold=0.5)
+        assert result == MLPrediction(p_win=0.5, take=False, threshold=0.5)
         assert predictor.rr_mismatch_count == 1
 
     def test_old_flat_format_still_works(self):

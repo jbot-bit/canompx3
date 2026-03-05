@@ -2612,6 +2612,152 @@ def check_data_continuity() -> list[str]:
     return []  # Always pass — advisory only
 
 
+def check_family_rr_locks_coverage() -> list[str]:
+    """Every active instrument must have family_rr_locks rows covering its validated strategies."""
+    errors = []
+    try:
+        from pipeline.paths import GOLD_DB_PATH
+        import duckdb
+        con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+        try:
+            # Check table exists
+            tables = [r[0] for r in con.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_name = 'family_rr_locks'"
+            ).fetchall()]
+            if not tables:
+                return ["SKIPPED"]
+
+            # Count families in validated_setups without a matching lock
+            missing = con.execute("""
+                SELECT DISTINCT vs.instrument, vs.orb_label, vs.filter_type,
+                       vs.entry_model, vs.orb_minutes, vs.confirm_bars
+                FROM validated_setups vs
+                LEFT JOIN family_rr_locks frl
+                  ON vs.instrument = frl.instrument
+                  AND vs.orb_label = frl.orb_label
+                  AND vs.filter_type = frl.filter_type
+                  AND vs.entry_model = frl.entry_model
+                  AND vs.orb_minutes = frl.orb_minutes
+                  AND vs.confirm_bars = frl.confirm_bars
+                WHERE vs.status = 'active'
+                  AND frl.locked_rr IS NULL
+            """).fetchall()
+            if missing:
+                errors.append(
+                    f"{len(missing)} active families missing from family_rr_locks "
+                    f"(run: python scripts/tools/select_family_rr.py)"
+                )
+        finally:
+            con.close()
+    except (ImportError, OSError):
+        return ["SKIPPED"]
+    return errors
+
+
+def check_frl_join_key_completeness() -> list[str]:
+    """Check #60: Every family_rr_locks JOIN must use the full 6-column key.
+
+    The 6-column key is: (instrument, orb_label, filter_type, entry_model,
+    orb_minutes, confirm_bars). If any JOIN is missing a column, the query
+    silently matches wrong families — catastrophic for RR lock enforcement.
+
+    Scans all .py files that contain 'family_rr_locks' JOINs.
+    """
+    violations = []
+    required_columns = {"instrument", "orb_label", "filter_type",
+                        "entry_model", "orb_minutes", "confirm_bars"}
+
+    # Scan all Python files in production paths (exclude self to avoid
+    # matching our own docstrings/comments/regex patterns)
+    scan_dirs = [TRADING_APP_DIR, PIPELINE_DIR, SCRIPTS_DIR]
+    this_file = Path(__file__).resolve()
+    for scan_dir in scan_dirs:
+        if not scan_dir.exists():
+            continue
+        for fpath in scan_dir.rglob("*.py"):
+            if fpath.resolve() == this_file:
+                continue  # don't scan self
+            content = fpath.read_text(encoding="utf-8")
+            if "family_rr_locks" not in content:
+                continue
+
+            lines = content.splitlines()
+            for i, line in enumerate(lines):
+                # Match actual SQL JOINs: require 'frl' alias after table name.
+                # This skips comments/docstrings that merely mention the table.
+                if re.search(r'JOIN\s+family_rr_locks\s+frl\b', line, re.IGNORECASE):
+                    # Collect the next 10 lines to find ON clause columns
+                    block = "\n".join(lines[i:i + 12])
+                    found_cols = set()
+                    for col in required_columns:
+                        if re.search(rf'frl\.{col}\b', block):
+                            found_cols.add(col)
+                    missing = required_columns - found_cols
+                    if missing:
+                        rel = fpath.relative_to(PROJECT_ROOT)
+                        violations.append(
+                            f"  {rel}:{i + 1}: family_rr_locks JOIN missing columns: "
+                            f"{sorted(missing)}"
+                        )
+
+    return violations
+
+
+def check_rr_resolution_paths_locked() -> list[str]:
+    """Check #61: Production RR-resolution queries must JOIN family_rr_locks.
+
+    Files that SELECT from validated_setups with ROW_NUMBER() or LIMIT 1
+    (i.e., picking ONE variant per family) must JOIN family_rr_locks to
+    enforce the locked RR. Without the JOIN, the query can pick any RR.
+
+    Scans production files only (not research/, not tests/).
+    """
+    violations = []
+
+    # Production files that resolve a single variant from validated_setups
+    # (these are the only files where LIMIT 1 or ROW_NUMBER() on
+    # validated_setups is a valid pattern)
+    production_files = [
+        TRADING_APP_DIR / "live_config.py",
+        TRADING_APP_DIR / "portfolio.py",
+        TRADING_APP_DIR / "rolling_portfolio.py",
+        TRADING_APP_DIR / "ml" / "features.py",
+        SCRIPTS_DIR / "tools" / "generate_trade_sheet.py",
+    ]
+
+    # Pattern: SELECT ... FROM validated_setups ... (LIMIT 1 or ROW_NUMBER)
+    # WITHOUT family_rr_locks in the same query block
+    variant_pick = re.compile(
+        r'FROM\s+validated_setups.*?(?:LIMIT\s+1|ROW_NUMBER)',
+        re.IGNORECASE | re.DOTALL,
+    )
+
+    for fpath in production_files:
+        if not fpath.exists():
+            continue
+        content = fpath.read_text(encoding="utf-8")
+
+        # Find all query blocks that pick a single variant
+        for match in variant_pick.finditer(content):
+            # Get surrounding context (200 chars before, 500 after) to check
+            # for family_rr_locks in the same query
+            start = max(0, match.start() - 200)
+            end = min(len(content), match.end() + 500)
+            block = content[start:end]
+
+            if "family_rr_locks" not in block:
+                # Find the line number
+                line_num = content[:match.start()].count("\n") + 1
+                rel = fpath.relative_to(PROJECT_ROOT)
+                violations.append(
+                    f"  {rel}:{line_num}: variant selection (LIMIT 1 / "
+                    f"ROW_NUMBER) from validated_setups without "
+                    f"family_rr_locks JOIN"
+                )
+
+    return violations
+
+
 # =============================================================================
 # CHECK REGISTRY — single source of truth for all drift checks
 # =============================================================================
@@ -2739,6 +2885,12 @@ CHECKS = [
      check_daily_features_row_integrity, False, True),  # requires_db
     ("Data continuity (gaps > 7 calendar days in trading days per instrument)",
      check_data_continuity, True, True),  # ADVISORY, requires_db
+    ("family_rr_locks coverage (all active families have locked RR)",
+     check_family_rr_locks_coverage, False, True),  # requires_db
+    ("family_rr_locks JOIN key completeness (6-column key in every JOIN)",
+     check_frl_join_key_completeness, False, False),
+    ("RR resolution paths locked (LIMIT 1 / ROW_NUMBER must JOIN family_rr_locks)",
+     check_rr_resolution_paths_locked, False, False),
 ]
 
 

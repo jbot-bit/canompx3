@@ -269,7 +269,7 @@ def load_validated_strategies(
             if has_edge_families(con):
                 head_ids = get_family_head_ids(con, instrument)
 
-        # Load baseline strategies
+        # Load baseline strategies, enforcing locked RR from family_rr_locks
         baseline_rows = con.execute("""
             SELECT vs.strategy_id, vs.instrument, vs.orb_label, vs.entry_model,
                    vs.rr_target, vs.confirm_bars, vs.filter_type,
@@ -283,10 +283,18 @@ def load_validated_strategies(
             FROM validated_setups vs
             LEFT JOIN experimental_strategies es
               ON vs.strategy_id = es.strategy_id
+            LEFT JOIN family_rr_locks frl
+              ON vs.instrument = frl.instrument
+              AND vs.orb_label = frl.orb_label
+              AND vs.filter_type = frl.filter_type
+              AND vs.entry_model = frl.entry_model
+              AND vs.orb_minutes = frl.orb_minutes
+              AND vs.confirm_bars = frl.confirm_bars
             WHERE vs.instrument = ?
               AND LOWER(vs.status) = 'active'
               AND vs.expectancy_r >= ?
               AND vs.orb_label != 'SINGAPORE_OPEN'
+              AND (frl.locked_rr IS NULL OR vs.rr_target = frl.locked_rr)
             ORDER BY vs.expectancy_r DESC
         """, [instrument, min_expectancy_r]).fetchall()
 
@@ -311,10 +319,18 @@ def load_validated_strategies(
                     FROM nested_validated nv
                     LEFT JOIN nested_strategies ns
                       ON nv.strategy_id = ns.strategy_id
+                    LEFT JOIN family_rr_locks frl
+                      ON nv.instrument = frl.instrument
+                      AND nv.orb_label = frl.orb_label
+                      AND nv.filter_type = frl.filter_type
+                      AND nv.entry_model = frl.entry_model
+                      AND nv.orb_minutes = frl.orb_minutes
+                      AND nv.confirm_bars = frl.confirm_bars
                     WHERE nv.instrument = ?
                       AND LOWER(nv.status) = 'active'
                       AND nv.expectancy_r >= ?
                       AND nv.orb_label != 'SINGAPORE_OPEN'
+                      AND (frl.locked_rr IS NULL OR nv.rr_target = frl.locked_rr)
                     ORDER BY nv.expectancy_r DESC
                 """, [instrument, min_expectancy_r]).fetchall()
 
