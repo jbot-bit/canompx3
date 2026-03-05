@@ -2,6 +2,9 @@
 """Generate MARKET_PLAYBOOK.md from validated_setups snapshot."""
 from __future__ import annotations
 
+import datetime
+import math
+
 import pandas as pd
 from pathlib import Path
 
@@ -25,43 +28,80 @@ SESSION_ORDER = [
     ("US_DATA_830",    "23:30", "22:30", "US econ data 8:30 AM ET"),
 ]
 
+# Display order matches the Quick Reference table header.
 INSTRUMENTS = sorted(ACTIVE_ORB_INSTRUMENTS)
+
+# Minimum expected R per trade to show a strategy in detail.
+# Below this threshold the edge is too small to trust given real-world friction.
+MIN_EXPR = 0.05
+
+
+def add_score(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Rank score = ExpR × √N × robustness_bonus.
+
+    Rationale for ORB binary outcomes:
+    - ExpR is the actual edge per trade (already post-cost).
+    - √N makes this a t-stat proxy: larger samples make the mean more trustworthy.
+    - all_years_positive bonus (+25%) rewards regime robustness without over-weighting it.
+    - Sharpe is NOT used because it structurally penalises high-RR configs (their
+      binary variance is a feature, not a flaw).
+    """
+    robustness = df["all_years_positive"].map({True: 1.25, False: 1.0})
+    df = df.copy()
+    df["score"] = df["expectancy_r"] * df["sample_size"].pow(0.5) * robustness
+    return df
+
+
+def fmt_row(row) -> str:
+    ayp = "★" if row.all_years_positive else ""
+    return (
+        f"| {row.rr_target} | {row.entry_model} | "
+        f"{int(row.confirm_bars)} | {row.filter_type} | "
+        f"{int(row.orb_minutes)}m | {int(row.sample_size)} | "
+        f"{int(row.years_tested)}y | {row.win_rate:.0%} | "
+        f"{row.expectancy_r:+.4f} | {ayp} |"
+    )
 
 
 def main():
     df = pd.read_csv(CSV)
+    df = add_score(df)
+    today = datetime.date.today().isoformat()
     L = []  # lines
 
-    # ── Header ──
+    # ── Header ──────────────────────────────────────────────────────────────
     L.append("# Market Playbook — What Do I Trade?")
     L.append("")
     L.append(
         f"**Auto-generated from gold.db validated_setups.** "
-        f"{len(df)} active strategies across 4 instruments, "
+        f"{len(df)} active strategies across {df.instrument.nunique()} instruments, "
         f"{df.orb_label.nunique()} sessions."
     )
-    L.append("**Snapshot date:** 2026-03-04. Entry models: E1, E2 (dominant). E0 purged. E3 retired.")
+    L.append(f"**Snapshot date:** {today}. Entry models: E1, E2 (dominant). E0 purged. E3 retired.")
     L.append("")
     L.append(
         "**HOW TO READ THIS:** Find your Brisbane time below. "
-        "Each session shows the **best strategies per instrument at each RR level**. "
-        "Only RR >= 1.5 shown in detail. RR1.0 count noted for reference."
+        "Each session shows the top strategies per instrument at each RR level, "
+        f"ranked by **score = ExpR × √N × robustness** (★ = profitable every year tested). "
+        f"Only strategies with ExpR ≥ {MIN_EXPR} shown — weaker ones are FDR-validated but not worth trading."
     )
     L.append("")
     L.append("---")
     L.append("")
 
-    # ── Quick Reference ──
+    # ── Quick Reference ──────────────────────────────────────────────────────
     L.append("## Quick Reference — Session Schedule")
     L.append("")
-    L.append("| Brisbane (Winter) | Brisbane (Summer) | Session | Event | MGC | MNQ | MES | M2K |")
+    header_insts = " | ".join(INSTRUMENTS)
+    L.append(f"| Brisbane (Winter) | Brisbane (Summer) | Session | Event | {header_insts} |")
     L.append("|---|---|---|---|---|---|---|---|")
     for sess, bw, bs, event in SESSION_ORDER:
         cells = []
         for inst in INSTRUMENTS:
             mask = (df.orb_label == sess) & (df.instrument == inst)
             n = mask.sum()
-            rr15 = ((df.orb_label == sess) & (df.instrument == inst) & (df.rr_target >= 1.5)).sum()
+            rr15 = (mask & (df.rr_target >= 1.5)).sum()
             if n == 0:
                 cells.append("-")
             elif rr15 > 0:
@@ -71,12 +111,12 @@ def main():
         L.append(f"| {bw} | {bs} | {sess} | {event} | {' | '.join(cells)} |")
 
     L.append("")
-    L.append("*Bold = strategies at RR >= 1.5 (count at RR1.5+, total in parens). Plain number = RR1.0 only.*")
+    L.append("*Bold = strategies at RR ≥ 1.5 (count at RR1.5+, total in parens). Plain number = RR1.0 only.*")
     L.append("")
     L.append("---")
     L.append("")
 
-    # ── Per-Session Detail ──
+    # ── Per-Session Detail ───────────────────────────────────────────────────
     for sess, bw, bs, event in SESSION_ORDER:
         sdf = df[df.orb_label == sess]
         if sdf.empty:
@@ -91,41 +131,48 @@ def main():
             if idf.empty:
                 continue
 
-            high_rr = idf[idf.rr_target >= 1.5]
-            low_rr = idf[idf.rr_target < 1.5]
+            high_rr = idf[(idf.rr_target >= 1.5) & (idf.expectancy_r >= MIN_EXPR)]
+            low_rr  = idf[idf.rr_target < 1.5]
 
             L.append(f"### {inst}")
 
             if high_rr.empty:
-                L.append(f"*{len(low_rr)} strategies at RR1.0 only.*")
-                best = idf.sort_values("expectancy_r", ascending=False).iloc[0]
-                L.append(
-                    f"Best: {best.entry_model} CB{best.confirm_bars} "
-                    f"{best.filter_type} O{int(best.orb_minutes)} "
-                    f"RR{best.rr_target} — "
-                    f"N={best.sample_size}, WR={best.win_rate:.0%}, "
-                    f"ExpR={best.expectancy_r:+.3f}, Sharpe={best.sharpe_ratio:.3f}"
-                )
+                # All validated strategies are either RR1.0 or below quality floor
+                qual = idf[idf.expectancy_r >= MIN_EXPR]
+                if qual.empty:
+                    n_all = len(idf)
+                    best = idf.sort_values("score", ascending=False).iloc[0]
+                    L.append(
+                        f"*{n_all} validated strategies, all below quality floor (ExpR < {MIN_EXPR}).*"
+                    )
+                    L.append(
+                        f"Best available: {best.entry_model} CB{int(best.confirm_bars)} "
+                        f"{best.filter_type} O{int(best.orb_minutes)}m "
+                        f"RR{best.rr_target} — "
+                        f"N={int(best.sample_size)}, WR={best.win_rate:.0%}, ExpR={best.expectancy_r:+.3f}"
+                    )
+                else:
+                    n_rr10 = len(low_rr)
+                    best = qual.sort_values("score", ascending=False).iloc[0]
+                    L.append(f"*{n_rr10} strategies at RR1.0 only.*")
+                    L.append(
+                        f"Best: {best.entry_model} CB{int(best.confirm_bars)} "
+                        f"{best.filter_type} O{int(best.orb_minutes)}m "
+                        f"RR{best.rr_target} — "
+                        f"N={int(best.sample_size)}, {int(best.years_tested)}y, "
+                        f"WR={best.win_rate:.0%}, ExpR={best.expectancy_r:+.3f}"
+                    )
                 L.append("")
                 continue
 
             L.append("")
-            L.append("| RR | Entry | CB | Filter | Aperture | N | WR | ExpR | Sharpe | AllYrs+ |")
+            L.append("| RR | Entry | CB | Filter | Apt | N | Yrs | WR | ExpR | AllYrs |")
             L.append("|---|---|---|---|---|---|---|---|---|---|")
 
             for rr in sorted(high_rr.rr_target.unique(), reverse=True):
-                rr_df = high_rr[high_rr.rr_target == rr].sort_values(
-                    "expectancy_r", ascending=False
-                )
+                rr_df = high_rr[high_rr.rr_target == rr].sort_values("score", ascending=False)
                 for _, row in rr_df.head(3).iterrows():
-                    ayp = "Y" if row.all_years_positive else ""
-                    L.append(
-                        f"| {row.rr_target} | {row.entry_model} | "
-                        f"{int(row.confirm_bars)} | {row.filter_type} | "
-                        f"{int(row.orb_minutes)}m | {int(row.sample_size)} | "
-                        f"{row.win_rate:.0%} | {row.expectancy_r:+.4f} | "
-                        f"{row.sharpe_ratio:.4f} | {ayp} |"
-                    )
+                    L.append(fmt_row(row))
 
             n_rr10 = len(low_rr)
             if n_rr10 > 0:
@@ -136,39 +183,44 @@ def main():
         L.append("---")
         L.append("")
 
-    # ── Instrument Summary ──
+    # ── Instrument Summary ───────────────────────────────────────────────────
     L.append("## Instrument Summary")
     L.append("")
-    L.append("| Instrument | Total | Sessions | Best Session | Best ExpR | Best Sharpe |")
+    L.append("| Instrument | Total | Sessions | Best Session | Best ExpR | Best Score |")
     L.append("|---|---|---|---|---|---|")
     for inst in INSTRUMENTS:
         idf = df[df.instrument == inst]
-        n = len(idf)
         sessions = sorted(idf.orb_label.unique())
-        best = idf.sort_values("expectancy_r", ascending=False).iloc[0]
-        best_s = idf.sort_values("sharpe_ratio", ascending=False).iloc[0]
+        best_expr  = idf.sort_values("expectancy_r", ascending=False).iloc[0]
+        best_score = idf.sort_values("score", ascending=False).iloc[0]
         sess_str = ", ".join(sessions)
         L.append(
-            f"| {inst} | {n} | {len(sessions)} ({sess_str}) | "
-            f"{best.orb_label} | {best.expectancy_r:+.4f} | {best_s.sharpe_ratio:.4f} |"
+            f"| {inst} | {len(idf)} | {len(sessions)} ({sess_str}) | "
+            f"{best_expr.orb_label} | {best_expr.expectancy_r:+.4f} | {best_score.score:.2f} |"
         )
 
     L.append("")
     L.append("---")
     L.append("")
 
-    # ── Notes ──
+    # ── Notes ────────────────────────────────────────────────────────────────
     L.append("## Notes")
     L.append("")
     L.append("- **All strategies are post-cost, FDR-corrected, multi-year validated.**")
     L.append("- **E2** (stop-market) is the dominant entry model. E0 purged Feb 2026. E3 soft-retired.")
-    L.append("- **Aperture**: 5m = 5-minute ORB, 15m/30m = wider opening range.")
-    L.append("- **Filter types**: NO_FILTER (all days), ORB_G4/G5/G6/G8 (ORB size >= N points), VOL_RV12_N20 (realized vol filter), DIR_LONG (long-only), FAST5/FAST10 (fast-break), CONT (contiguous), NOTUE (exclude Tuesday).")
-    L.append("- **AllYrs+**: Every calendar year tested was individually profitable.")
+    L.append("- **Ranking:** `score = ExpR × √N × 1.25 (if all years positive)`. "
+             "Sharpe is not used — it structurally penalises high-RR configs whose binary variance is expected.")
+    L.append(f"- **Quality floor:** ExpR < {MIN_EXPR} strategies are FDR-validated but excluded from detail tables.")
+    L.append("- **Apt**: ORB aperture — 5m = 5-minute range, 15m/30m = wider opening range.")
+    L.append("- **Yrs**: calendar years in the backtest window.")
+    L.append("- **★ (AllYrs)**: every individual calendar year was profitable.")
+    L.append("- **Filter types**: NO_FILTER (all days), ORB_G4/G5/G6/G8 (ORB size ≥ N points), "
+             "VOL_RV12_N20 (realized vol filter), DIR_LONG (long-only), FAST5/FAST10 (fast-break), "
+             "CONT (contiguous), NOMON (exclude Monday), NOTUE (exclude Tuesday).")
     L.append("- **This file is a SNAPSHOT.** Rebuild after any strategy_validator run.")
     L.append("- **To regenerate:** `python scripts/tools/gen_playbook.py` (requires CSV snapshot in research/output/).")
-    L.append("- **Cost model**: Round-trip friction deducted per instrument (see cost_model.py).")
-    L.append("- **Brisbane winter** = UTC+10 (no DST). US times shift +/-1hr seasonally (ET DST).")
+    L.append("- **Cost model**: round-trip friction deducted per instrument (see `pipeline/cost_model.py`).")
+    L.append("- **Brisbane winter** = UTC+10 (no DST). US times shift ±1 hr seasonally (ET DST).")
     L.append("")
 
     text = "\n".join(L)

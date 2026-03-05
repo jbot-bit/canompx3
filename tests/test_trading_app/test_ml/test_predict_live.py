@@ -556,3 +556,320 @@ class TestHybridModelInfo:
         info = predictor.get_model_info("MGC")
         # Verifies the fix: reads "total_honest_delta_r" not "total_delta_r"
         assert info["total_delta_r"] == 251.9
+
+
+class TestApertureRRGuard:
+    """Phase 1 guards: aperture mismatch and RR mismatch detection."""
+
+    def _make_guarded_bundle(
+        self, training_aperture: int | None = 5, training_rr: float | None = 2.5,
+    ) -> dict:
+        """Create hybrid bundle with training_aperture and training_rr on SINGAPORE_OPEN."""
+        model = MagicMock()
+        model.predict_proba.return_value = np.array([[0.35, 0.65]])
+        sessions = {
+            "SINGAPORE_OPEN": {
+                "model": model,
+                "feature_names": ["feat_0", "feat_1", "orb_label_CME_REOPEN"],
+                "optimal_threshold": 0.50,
+                "test_auc": 0.62,
+                "cpcv_auc": 0.58,
+                "n_train": 300,
+                "training_aperture": training_aperture,
+                "training_rr": training_rr,
+            },
+        }
+        return _make_hybrid_bundle(sessions=sessions)
+
+    def _make_predictor(self, bundle: dict) -> LiveMLPredictor:
+        with patch("trading_app.ml.predict_live.LiveMLPredictor._load_models"):
+            predictor = LiveMLPredictor(db_path="dummy.db", instruments=["MGC"])
+        predictor._models["MGC"] = bundle
+        return predictor
+
+    def test_aperture_mismatch_fails_open(self):
+        """Model trained on O5, prediction for O15 → fail-open. No RF call."""
+        bundle = self._make_guarded_bundle(training_aperture=5)
+        predictor = self._make_predictor(bundle)
+        model_mock = bundle["sessions"]["SINGAPORE_OPEN"]["model"]
+
+        with patch.object(predictor, "_get_daily_features") as mock_gdf:
+            result = predictor.predict(
+                instrument="MGC",
+                trading_day=date(2025, 12, 1),
+                orb_label="SINGAPORE_OPEN",
+                orb_minutes=15,  # mismatch: model trained on O5
+                entry_model="E2",
+                rr_target=2.5,
+                confirm_bars=1,
+            )
+            mock_gdf.assert_not_called()  # short-circuits before DB call
+        assert result == MLPrediction(p_win=0.5, take=True, threshold=0.5)
+        assert predictor.aperture_mismatch_count == 1
+        model_mock.predict_proba.assert_not_called()
+
+    def test_aperture_match_predicts_normally(self):
+        """Model trained on O5, prediction for O5 → real prediction."""
+        bundle = self._make_guarded_bundle(training_aperture=5)
+        predictor = self._make_predictor(bundle)
+
+        daily_row = _make_mock_daily_features_row()
+        with patch.object(predictor, "_get_daily_features", return_value=daily_row):
+            result = predictor.predict(
+                instrument="MGC",
+                trading_day=date(2025, 12, 1),
+                orb_label="SINGAPORE_OPEN",
+                orb_minutes=5,  # matches training aperture
+                entry_model="E2",
+                rr_target=2.5,
+                confirm_bars=1,
+            )
+        assert result.p_win == pytest.approx(0.65, abs=0.01)
+        assert predictor.aperture_mismatch_count == 0
+
+    def test_rr_aggressive_fails_open(self):
+        """Trade RR (3.0) > training RR (2.5) → fail-open (overconfident)."""
+        bundle = self._make_guarded_bundle(training_rr=2.5)
+        predictor = self._make_predictor(bundle)
+
+        with patch.object(predictor, "_get_daily_features") as mock_gdf:
+            result = predictor.predict(
+                instrument="MGC",
+                trading_day=date(2025, 12, 1),
+                orb_label="SINGAPORE_OPEN",
+                orb_minutes=5,
+                entry_model="E2",
+                rr_target=3.0,  # aggressive: > training RR 2.5
+                confirm_bars=1,
+            )
+            mock_gdf.assert_not_called()
+        assert result == MLPrediction(p_win=0.5, take=True, threshold=0.5)
+        assert predictor.rr_mismatch_count == 1
+
+    def test_rr_conservative_predicts_normally(self):
+        """Trade RR (1.5) < training RR (2.5) → real prediction (safe direction)."""
+        bundle = self._make_guarded_bundle(training_rr=2.5)
+        predictor = self._make_predictor(bundle)
+
+        daily_row = _make_mock_daily_features_row()
+        with patch.object(predictor, "_get_daily_features", return_value=daily_row):
+            result = predictor.predict(
+                instrument="MGC",
+                trading_day=date(2025, 12, 1),
+                orb_label="SINGAPORE_OPEN",
+                orb_minutes=5,
+                entry_model="E2",
+                rr_target=1.5,  # conservative: < training RR 2.5
+                confirm_bars=1,
+            )
+        assert result.p_win == pytest.approx(0.65, abs=0.01)
+        assert predictor.rr_mismatch_count == 0
+
+    def test_old_bundle_without_guards_predicts_normally(self):
+        """Bundle without training_aperture/training_rr → real prediction (backward compat)."""
+        bundle = self._make_guarded_bundle(training_aperture=None, training_rr=None)
+        predictor = self._make_predictor(bundle)
+
+        daily_row = _make_mock_daily_features_row()
+        with patch.object(predictor, "_get_daily_features", return_value=daily_row):
+            result = predictor.predict(
+                instrument="MGC",
+                trading_day=date(2025, 12, 1),
+                orb_label="SINGAPORE_OPEN",
+                orb_minutes=15,  # would mismatch if guard fired
+                entry_model="E2",
+                rr_target=3.0,  # would mismatch if guard fired
+                confirm_bars=1,
+            )
+        # Both guards should NOT fire — old bundle fails open safely
+        assert result.p_win == pytest.approx(0.65, abs=0.01)
+        assert predictor.aperture_mismatch_count == 0
+        assert predictor.rr_mismatch_count == 0
+
+
+# ---------------------------------------------------------------------------
+# Per-aperture model tests
+# ---------------------------------------------------------------------------
+
+def _make_per_aperture_bundle(
+    session: str = "SINGAPORE_OPEN",
+    apertures: dict[int, dict | None] | None = None,
+    training_rr: float = 2.5,
+) -> dict:
+    """Create a per-aperture hybrid bundle.
+
+    Args:
+        session: Session name to populate.
+        apertures: {orb_minutes: session_info_or_None}. None entries mean no
+            model for that aperture. If None, creates O5 and O15 with models.
+        training_rr: RR target embedded in each aperture model.
+    """
+    if apertures is None:
+        model_o5 = MagicMock()
+        model_o5.predict_proba.return_value = np.array([[0.40, 0.60]])
+
+        model_o15 = MagicMock()
+        model_o15.predict_proba.return_value = np.array([[0.30, 0.70]])
+
+        apertures = {
+            5: {
+                "model": model_o5,
+                "feature_names": ["feat_0", "feat_1", "orb_label_CME_REOPEN"],
+                "optimal_threshold": 0.50,
+                "test_auc": 0.62,
+                "training_aperture": 5,
+                "training_rr": training_rr,
+            },
+            15: {
+                "model": model_o15,
+                "feature_names": ["feat_0", "feat_1", "orb_label_CME_REOPEN"],
+                "optimal_threshold": 0.55,
+                "test_auc": 0.64,
+                "training_aperture": 15,
+                "training_rr": training_rr,
+            },
+        }
+
+    sessions = {
+        session: {
+            f"O{ap}": info for ap, info in apertures.items()
+        }
+    }
+
+    return {
+        "model_type": "single_config_per_session",
+        "bundle_format": "per_aperture",
+        "sessions": sessions,
+        "rr_target": training_rr,
+        "total_honest_delta_r": 50.0,
+        "trained_at": datetime.now(timezone.utc).isoformat(),
+        "config_hash": _compute_config_hash(),
+        "data_date_range": ("2020-01-01", "2025-12-31"),
+    }
+
+
+class TestPerApertureModel:
+    """Per-aperture model: routes to correct (session, aperture) sub-model."""
+
+    def _make_predictor(self, bundle: dict) -> LiveMLPredictor:
+        with patch("trading_app.ml.predict_live.LiveMLPredictor._load_models"):
+            predictor = LiveMLPredictor(db_path="dummy.db", instruments=["MGC"])
+        predictor._models["MGC"] = bundle
+        return predictor
+
+    def test_per_aperture_routes_to_correct_model(self):
+        """O5 prediction hits O5 model, O15 hits O15 model."""
+        bundle = _make_per_aperture_bundle()
+        predictor = self._make_predictor(bundle)
+
+        daily_row = _make_mock_daily_features_row()
+        with patch.object(predictor, "_get_daily_features", return_value=daily_row):
+            result_o5 = predictor.predict(
+                instrument="MGC",
+                trading_day=date(2025, 12, 1),
+                orb_label="SINGAPORE_OPEN",
+                orb_minutes=5,
+                entry_model="E2",
+                rr_target=2.5,
+                confirm_bars=1,
+            )
+            result_o15 = predictor.predict(
+                instrument="MGC",
+                trading_day=date(2025, 12, 1),
+                orb_label="SINGAPORE_OPEN",
+                orb_minutes=15,
+                entry_model="E2",
+                rr_target=2.5,
+                confirm_bars=1,
+            )
+        # O5 model returns 0.60, O15 model returns 0.70
+        assert result_o5.p_win == pytest.approx(0.60, abs=0.01)
+        assert result_o15.p_win == pytest.approx(0.70, abs=0.01)
+        assert predictor.predictions_made == 2
+
+    def test_per_aperture_no_model_for_aperture(self):
+        """O30 has no model → fail-open."""
+        bundle = _make_per_aperture_bundle()  # only O5 and O15
+        predictor = self._make_predictor(bundle)
+
+        with patch.object(predictor, "_get_daily_features") as mock_gdf:
+            result = predictor.predict(
+                instrument="MGC",
+                trading_day=date(2025, 12, 1),
+                orb_label="SINGAPORE_OPEN",
+                orb_minutes=30,  # no O30 model
+                entry_model="E2",
+                rr_target=2.5,
+                confirm_bars=1,
+            )
+            mock_gdf.assert_not_called()  # short-circuits before DB call
+        assert result == MLPrediction(p_win=0.5, take=True, threshold=0.5)
+
+    def test_per_aperture_rr_guard_still_works(self):
+        """Aggressive RR → fail-open even with per-aperture bundle."""
+        bundle = _make_per_aperture_bundle(training_rr=2.5)
+        predictor = self._make_predictor(bundle)
+
+        with patch.object(predictor, "_get_daily_features") as mock_gdf:
+            result = predictor.predict(
+                instrument="MGC",
+                trading_day=date(2025, 12, 1),
+                orb_label="SINGAPORE_OPEN",
+                orb_minutes=5,
+                entry_model="E2",
+                rr_target=3.0,  # aggressive: > training RR 2.5
+                confirm_bars=1,
+            )
+            mock_gdf.assert_not_called()
+        assert result == MLPrediction(p_win=0.5, take=True, threshold=0.5)
+        assert predictor.rr_mismatch_count == 1
+
+    def test_old_flat_format_still_works(self):
+        """Old flat-format bundle (no bundle_format key) still routes correctly."""
+        # Flat bundle — same as Phase 1 format
+        bundle = _make_hybrid_bundle()  # no bundle_format key
+        predictor = self._make_predictor(bundle)
+
+        daily_row = _make_mock_daily_features_row()
+        with patch.object(predictor, "_get_daily_features", return_value=daily_row):
+            result = predictor.predict(
+                instrument="MGC",
+                trading_day=date(2025, 12, 1),
+                orb_label="SINGAPORE_OPEN",
+                orb_minutes=5,
+                entry_model="E2",
+                rr_target=2.5,
+                confirm_bars=1,
+            )
+        # Real prediction from flat bundle
+        assert result.p_win == pytest.approx(0.65, abs=0.01)
+        assert predictor.predictions_made == 1
+
+    def test_per_aperture_different_thresholds(self):
+        """O5 and O15 have different thresholds — applied correctly."""
+        bundle = _make_per_aperture_bundle()
+        predictor = self._make_predictor(bundle)
+
+        daily_row = _make_mock_daily_features_row()
+        with patch.object(predictor, "_get_daily_features", return_value=daily_row):
+            result_o5 = predictor.predict(
+                instrument="MGC",
+                trading_day=date(2025, 12, 1),
+                orb_label="SINGAPORE_OPEN",
+                orb_minutes=5,
+                entry_model="E2",
+                rr_target=2.5,
+                confirm_bars=1,
+            )
+            result_o15 = predictor.predict(
+                instrument="MGC",
+                trading_day=date(2025, 12, 1),
+                orb_label="SINGAPORE_OPEN",
+                orb_minutes=15,
+                entry_model="E2",
+                rr_target=2.5,
+                confirm_bars=1,
+            )
+        # O5 threshold=0.50, O15 threshold=0.55
+        assert result_o5.threshold == 0.50
+        assert result_o15.threshold == 0.55

@@ -215,6 +215,7 @@ def train_per_session_meta_label(
     min_session_samples: int | None = None,
     config_selection: str = "max_samples",
     skip_filter: bool = False,
+    per_aperture: bool = False,
 ) -> dict:
     """Train hybrid per-session meta-label models for one instrument.
 
@@ -245,8 +246,9 @@ def train_per_session_meta_label(
     rr_str = f" RR={rr_target}" if rr_target is not None else ""
     sel_str = f" sel={config_selection}" if single_config else ""
     filt_str = " UNFILTERED" if skip_filter else ""
+    aperture_str = " PER-APERTURE" if per_aperture else ""
     logger.info(f"{'=' * 60}")
-    logger.info(f"  PER-SESSION META-LABEL: {instrument} ({mode_str}{rr_str}{sel_str}{filt_str})")
+    logger.info(f"  PER-SESSION META-LABEL: {instrument} ({mode_str}{rr_str}{sel_str}{filt_str}{aperture_str})")
     logger.info(f"{'=' * 60}")
 
     # --- Load data + E6 filter ---
@@ -254,6 +256,7 @@ def train_per_session_meta_label(
         X_all, y_all, meta_all = load_single_config_feature_matrix(
             db_path, instrument, rr_target=rr_target,
             config_selection=config_selection, skip_filter=skip_filter,
+            per_aperture=per_aperture,
         )
     else:
         X_all, y_all, meta_all = load_validated_feature_matrix(db_path, instrument)
@@ -276,242 +279,292 @@ def train_per_session_meta_label(
     session_results: dict[str, dict] = {}
     rf_base_params = {k: v for k, v in RF_PARAMS.items() if k != "min_samples_leaf"}
 
+    # Per-aperture: build list of (session, aperture) training units.
+    # Flat mode: one unit per session. Per-aperture: one per (session, aperture).
+    if per_aperture:
+        all_apertures = sorted(meta_all["orb_minutes"].unique())
+    else:
+        all_apertures = [None]  # sentinel: no aperture sub-loop
+
     for session in sessions:
-        smask = (meta_all["orb_label"] == session).values
-        n_session = smask.sum()
-        session_indices = np.where(smask)[0]
+        smask_session = (meta_all["orb_label"] == session).values
 
-        # 3-way split per session using global index boundaries
-        train_idx = session_indices[session_indices < n_train_end]
-        val_idx = session_indices[
-            (session_indices >= n_train_end) & (session_indices < n_val_end)
-        ]
-        test_idx = session_indices[session_indices >= n_val_end]
+        if per_aperture:
+            session_results[session] = {}  # nested dict for apertures
 
-        # Effective threshold: lower for single-config (independent samples)
-        effective_min = min_session_samples if min_session_samples is not None else (
-            200 if single_config else MIN_SESSION_SAMPLES
-        )
+        for aperture in all_apertures:
+            if per_aperture:
+                # Further filter to this aperture within the session
+                amask = smask_session & (meta_all["orb_minutes"] == aperture).values
+                aperture_key = f"O{aperture}"
+                log_prefix = f"  {session:<20} O{aperture:<3}"
+            else:
+                amask = smask_session
+                log_prefix = f"  {session:<20}"
 
-        # Need enough data in ALL three splits
-        if n_session < effective_min or len(val_idx) < 20 or len(test_idx) < 20:
-            reason = (
-                f"N={n_session}<{effective_min}" if n_session < effective_min
-                else f"N_val={len(val_idx)},N_test={len(test_idx)}"
+            n_session = amask.sum()
+            session_indices = np.where(amask)[0]
+
+            # Helper: store result in flat or nested dict
+            def _store(result: dict) -> None:
+                if per_aperture:
+                    session_results[session][aperture_key] = result
+                else:
+                    session_results[session] = result
+
+            if n_session == 0:
+                if per_aperture:
+                    _store({"model_type": "NONE", "reason": "no_data_for_aperture"})
+                continue
+
+            # Capture training aperture/RR BEFORE constant column drop removes them.
+            training_aperture = int(meta_all["orb_minutes"].iloc[session_indices[0]])
+            training_rr = float(meta_all["rr_target"].iloc[session_indices[0]])
+
+            # 3-way split per session using global index boundaries
+            train_idx = session_indices[session_indices < n_train_end]
+            val_idx = session_indices[
+                (session_indices >= n_train_end) & (session_indices < n_val_end)
+            ]
+            test_idx = session_indices[session_indices >= n_val_end]
+
+            # Effective threshold: lower for single-config (independent samples)
+            effective_min = min_session_samples if min_session_samples is not None else (
+                200 if single_config else MIN_SESSION_SAMPLES
             )
-            logger.info(f"  {session:<20} >> NO_MODEL ({reason} < threshold)")
-            session_results[session] = {"model_type": "NONE", "reason": reason}
-            continue
 
-        # Get session-appropriate features
-        X_session = _get_session_features(X_e6, session)
+            # Need enough data in ALL three splits
+            if n_session < effective_min or len(val_idx) < 20 or len(test_idx) < 20:
+                reason = (
+                    f"N={n_session}<{effective_min}" if n_session < effective_min
+                    else f"N_val={len(val_idx)},N_test={len(test_idx)}"
+                )
+                logger.info(f"{log_prefix} >> NO_MODEL ({reason} < threshold)")
+                _store({"model_type": "NONE", "reason": reason})
+                continue
 
-        # Drop constant columns within this session (e.g., entry_model one-hots
-        # are constant per session — they waste a feature slot with zero info gain)
-        session_data = X_session.iloc[session_indices]
-        const_cols = [c for c in X_session.columns if session_data[c].nunique() <= 1]
-        if const_cols:
-            X_session = X_session.drop(columns=const_cols)
-            logger.debug(f"  {session}: dropped {len(const_cols)} constant columns")
+            # Get session-appropriate features
+            X_session = _get_session_features(X_e6, session)
 
-        feature_names = list(X_session.columns)
+            # Drop constant columns within this session (e.g., entry_model one-hots
+            # are constant per session — they waste a feature slot with zero info gain)
+            session_data = X_session.iloc[session_indices]
+            const_cols = [c for c in X_session.columns if session_data[c].nunique() <= 1]
+            if const_cols:
+                X_session = X_session.drop(columns=const_cols)
+                logger.debug(f"  {session}: dropped {len(const_cols)} constant columns")
 
-        # Adaptive leaf size: bigger datasets get bigger leaves
-        leaf_size = max(20, min(100, len(train_idx) // 20))
+            feature_names = list(X_session.columns)
 
-        # --- Optional CPCV within training data ---
-        cpcv_auc = None
-        if run_cpcv and len(train_idx) >= 200:
+            # Adaptive leaf size: bigger datasets get bigger leaves
+            leaf_size = max(20, min(100, len(train_idx) // 20))
+
+            # --- Optional CPCV within training data ---
+            cpcv_auc = None
+            if run_cpcv and len(train_idx) >= 200:
+                try:
+                    cpcv_results = cpcv_score(
+                        RandomForestClassifier,
+                        {**rf_base_params, "min_samples_leaf": leaf_size},
+                        X_session.iloc[train_idx],
+                        y_all.iloc[train_idx],
+                        meta_all["trading_day"].iloc[train_idx],
+                        n_groups=5,      # C(5,2) = 10 splits (feasible for per-session)
+                        k_test=2,
+                        max_splits=10,
+                    )
+                    cpcv_auc = cpcv_results["auc_mean"]
+                except Exception:
+                    logger.debug(f"  {session}: CPCV failed, continuing without")
+
+            # --- Train RF on training data (first 60%) ---
+            rf = RandomForestClassifier(**rf_base_params, min_samples_leaf=leaf_size)
+            rf.fit(X_session.iloc[train_idx], y_all.iloc[train_idx])
+
+            # --- Feature importance audit trail (top 10 by MDI) ---
+            importances = rf.feature_importances_
+            top_idx = np.argsort(importances)[::-1][:10]
+            top_feats = [(feature_names[i], importances[i]) for i in top_idx]
+            feat_str = ", ".join(f"{n}={v:.1%}" for n, v in top_feats)
+            logger.info(f"{log_prefix}    top10: {feat_str}")
+
+            # --- Optimize threshold on VALIDATION set (middle 20%) ---
+            # Threshold search is rank-based (which trades to keep/skip).
+            # It MUST operate on raw RF probabilities, not calibrated ones.
+            # Calibration is a separate concern for P(win) interpretation only.
+            val_prob_raw = rf.predict_proba(X_session.iloc[val_idx])[:, 1]
+
+            val_pnl = pnl_r[val_idx]
+            val_min_kept = max(50, int(len(val_idx) * 0.15))
+            best_t, best_delta = _optimize_threshold_profit(
+                val_prob_raw, val_pnl, min_kept=val_min_kept,
+            )
+
+            # --- Probability calibration (isotonic regression) ---
+            # Fit on val set: maps raw RF probabilities to calibrated P(win).
+            # Monotone transform — preserves ranking, makes probabilities meaningful.
+            # Used ONLY at prediction time for display/Kelly sizing, never for
+            # threshold search (which is rank-based and uses raw probabilities).
+            y_val = y_all.iloc[val_idx].values
+            calibrator = IsotonicRegression(y_min=0, y_max=1, out_of_bounds="clip")
+            calibrator.fit(val_prob_raw, y_val)
+
+            # --- Evaluate honestly on TEST set (final 20%) ---
+            # Use RAW probabilities for threshold comparison and AUC
+            # (consistent with threshold optimized on raw val probs).
+            test_prob_raw = rf.predict_proba(X_session.iloc[test_idx])[:, 1]
+            test_pnl = pnl_r[test_idx]
+            y_test = y_all.iloc[test_idx].values
             try:
-                cpcv_results = cpcv_score(
-                    RandomForestClassifier,
-                    {**rf_base_params, "min_samples_leaf": leaf_size},
-                    X_session.iloc[train_idx],
-                    y_all.iloc[train_idx],
-                    meta_all["trading_day"].iloc[train_idx],
-                    n_groups=5,      # C(5,2) = 10 splits (feasible for per-session)
-                    k_test=2,
-                    max_splits=10,
-                )
-                cpcv_auc = cpcv_results["auc_mean"]
-            except Exception:
-                logger.debug(f"  {session}: CPCV failed, continuing without")
+                test_auc = roc_auc_score(y_test, test_prob_raw)
+            except ValueError:
+                test_auc = 0.5  # Single class in test
 
-        # --- Train RF on training data (first 60%) ---
-        rf = RandomForestClassifier(**rf_base_params, min_samples_leaf=leaf_size)
-        rf.fit(X_session.iloc[train_idx], y_all.iloc[train_idx])
+            if best_t is not None:
+                # Apply val-optimized threshold to frozen test set (raw probs)
+                kept_test = test_prob_raw >= best_t
+                n_kept_test = int(kept_test.sum())
+                if n_kept_test < 10:
+                    # Threshold too aggressive for test set — reject
+                    logger.info(
+                        f"{log_prefix} >> NO_MODEL (threshold {best_t:.2f} keeps "
+                        f"only {n_kept_test} test trades)"
+                    )
+                    _store({
+                        "model_type": "NONE",
+                        "reason": f"threshold_too_aggressive_test_n={n_kept_test}",
+                        "test_auc": round(test_auc, 4),
+                        "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
+                    })
+                    continue
 
-        # --- Feature importance audit trail (top 10 by MDI) ---
-        importances = rf.feature_importances_
-        top_idx = np.argsort(importances)[::-1][:10]
-        top_feats = [(feature_names[i], importances[i]) for i in top_idx]
-        feat_str = ", ".join(f"{n}={v:.1%}" for n, v in top_feats)
-        logger.info(f"  {session:<20}    top10: {feat_str}")
+                honest_base_r = float(test_pnl.sum())
+                honest_filt_r = float(test_pnl[kept_test].sum())
+                honest_delta_r = honest_filt_r - honest_base_r
+                skip_pct = 1 - n_kept_test / len(test_idx)
 
-        # --- Optimize threshold on VALIDATION set (middle 20%) ---
-        # Threshold search is rank-based (which trades to keep/skip).
-        # It MUST operate on raw RF probabilities, not calibrated ones.
-        # Calibration is a separate concern for P(win) interpretation only.
-        val_prob_raw = rf.predict_proba(X_session.iloc[val_idx])[:, 1]
+                # --- OOS quality gates ---
+                # Gate 1: OOS must be positive (ML must not hurt)
+                if honest_delta_r < 0:
+                    logger.info(
+                        f"{log_prefix} >> NO_MODEL (OOS negative: "
+                        f"{honest_delta_r:+.1f}R, TestAUC={test_auc:.3f})"
+                    )
+                    _store({
+                        "model_type": "NONE",
+                        "reason": f"oos_negative_{honest_delta_r:+.1f}R",
+                        "test_auc": round(test_auc, 4),
+                        "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
+                    })
+                    continue
 
-        val_pnl = pnl_r[val_idx]
-        val_min_kept = max(50, int(len(val_idx) * 0.15))
-        best_t, best_delta = _optimize_threshold_profit(
-            val_prob_raw, val_pnl, min_kept=val_min_kept,
-        )
+                # Gate 2: CPCV must be >= 0.50 (model must not be worse than random
+                # in cross-validation on training data). Only applies when CPCV ran.
+                if cpcv_auc is not None and cpcv_auc < 0.50:
+                    logger.info(
+                        f"{log_prefix} >> NO_MODEL (CPCV={cpcv_auc:.3f} < 0.50, "
+                        f"below random in CV)"
+                    )
+                    _store({
+                        "model_type": "NONE",
+                        "reason": f"cpcv_below_random_{cpcv_auc:.3f}",
+                        "test_auc": round(test_auc, 4),
+                        "cpcv_auc": round(cpcv_auc, 4),
+                    })
+                    continue
 
-        # --- Probability calibration (isotonic regression) ---
-        # Fit on val set: maps raw RF probabilities to calibrated P(win).
-        # Monotone transform — preserves ranking, makes probabilities meaningful.
-        # Used ONLY at prediction time for display/Kelly sizing, never for
-        # threshold search (which is rank-based and uses raw probabilities).
-        y_val = y_all.iloc[val_idx].values
-        calibrator = IsotonicRegression(y_min=0, y_max=1, out_of_bounds="clip")
-        calibrator.fit(val_prob_raw, y_val)
+                # Gate 3: AUC must be clearly above random (0.52 minimum)
+                if test_auc < 0.52:
+                    logger.info(
+                        f"{log_prefix} >> NO_MODEL (AUC={test_auc:.3f} < 0.52, "
+                        f"near-random discrimination)"
+                    )
+                    _store({
+                        "model_type": "NONE",
+                        "reason": f"auc_too_low_{test_auc:.3f}",
+                        "test_auc": round(test_auc, 4),
+                        "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
+                    })
+                    continue
 
-        # --- Evaluate honestly on TEST set (final 20%) ---
-        # Use RAW probabilities for threshold comparison and AUC
-        # (consistent with threshold optimized on raw val probs).
-        test_prob_raw = rf.predict_proba(X_session.iloc[test_idx])[:, 1]
-        test_pnl = pnl_r[test_idx]
-        y_test = y_all.iloc[test_idx].values
-        try:
-            test_auc = roc_auc_score(y_test, test_prob_raw)
-        except ValueError:
-            test_auc = 0.5  # Single class in test
+                # Gate 4: Skip rate must be < 85% (avoid "just don't trade" models)
+                if skip_pct > 0.85:
+                    logger.info(
+                        f"{log_prefix} >> NO_MODEL (skip={skip_pct:.0%} > 85%, "
+                        f"avoidance not discrimination)"
+                    )
+                    _store({
+                        "model_type": "NONE",
+                        "reason": f"skip_too_high_{skip_pct:.0%}",
+                        "test_auc": round(test_auc, 4),
+                        "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
+                    })
+                    continue
 
-        if best_t is not None:
-            # Apply val-optimized threshold to frozen test set (raw probs)
-            kept_test = test_prob_raw >= best_t
-            n_kept_test = int(kept_test.sum())
-            if n_kept_test < 10:
-                # Threshold too aggressive for test set — reject
+                cpcv_str = f"{cpcv_auc:.3f}" if cpcv_auc else "  --"
                 logger.info(
-                    f"  {session:<20} >> NO_MODEL (threshold {best_t:.2f} keeps "
-                    f"only {n_kept_test} test trades)"
+                    f"{log_prefix} >> ML t={best_t:.2f} "
+                    f"CPCV={cpcv_str} TestAUC={test_auc:.3f} "
+                    f"ValDelta={best_delta:+.1f} HonestDelta={honest_delta_r:+.1f} "
+                    f"Skip={skip_pct:.0%} leaf={leaf_size}"
                 )
-                session_results[session] = {
+                _store({
+                    "model_type": "SESSION",
+                    "model": rf,
+                    "calibrator": calibrator,
+                    "feature_names": feature_names,
+                    "threshold": best_t,
+                    "training_aperture": training_aperture,
+                    "training_rr": training_rr,
+                    "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
+                    "test_auc": round(test_auc, 4),
+                    "n_train": len(train_idx),
+                    "n_val": len(val_idx),
+                    "n_test": len(test_idx),
+                    "val_delta_r": round(best_delta, 2),
+                    "honest_delta_r": round(honest_delta_r, 2),
+                    "honest_base_r": round(honest_base_r, 2),
+                    "skip_pct": round(skip_pct, 3),
+                    "leaf_size": leaf_size,
+                    "top_features": top_feats,
+                })
+            else:
+                logger.info(
+                    f"{log_prefix} >> NO_MODEL (no threshold beats baseline, "
+                    f"TestAUC={test_auc:.3f})"
+                )
+                _store({
                     "model_type": "NONE",
-                    "reason": f"threshold_too_aggressive_test_n={n_kept_test}",
+                    "reason": "no_positive_threshold",
                     "test_auc": round(test_auc, 4),
                     "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
-                }
-                continue
-
-            honest_base_r = float(test_pnl.sum())
-            honest_filt_r = float(test_pnl[kept_test].sum())
-            honest_delta_r = honest_filt_r - honest_base_r
-            skip_pct = 1 - n_kept_test / len(test_idx)
-
-            # --- OOS quality gates ---
-            # Gate 1: OOS must be positive (ML must not hurt)
-            if honest_delta_r < 0:
-                logger.info(
-                    f"  {session:<20} >> NO_MODEL (OOS negative: "
-                    f"{honest_delta_r:+.1f}R, TestAUC={test_auc:.3f})"
-                )
-                session_results[session] = {
-                    "model_type": "NONE",
-                    "reason": f"oos_negative_{honest_delta_r:+.1f}R",
-                    "test_auc": round(test_auc, 4),
-                    "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
-                }
-                continue
-
-            # Gate 2: CPCV must be >= 0.50 (model must not be worse than random
-            # in cross-validation on training data). Only applies when CPCV ran.
-            if cpcv_auc is not None and cpcv_auc < 0.50:
-                logger.info(
-                    f"  {session:<20} >> NO_MODEL (CPCV={cpcv_auc:.3f} < 0.50, "
-                    f"below random in CV)"
-                )
-                session_results[session] = {
-                    "model_type": "NONE",
-                    "reason": f"cpcv_below_random_{cpcv_auc:.3f}",
-                    "test_auc": round(test_auc, 4),
-                    "cpcv_auc": round(cpcv_auc, 4),
-                }
-                continue
-
-            # Gate 3: AUC must be clearly above random (0.52 minimum)
-            if test_auc < 0.52:
-                logger.info(
-                    f"  {session:<20} >> NO_MODEL (AUC={test_auc:.3f} < 0.52, "
-                    f"near-random discrimination)"
-                )
-                session_results[session] = {
-                    "model_type": "NONE",
-                    "reason": f"auc_too_low_{test_auc:.3f}",
-                    "test_auc": round(test_auc, 4),
-                    "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
-                }
-                continue
-
-            # Gate 4: Skip rate must be < 85% (avoid "just don't trade" models)
-            if skip_pct > 0.85:
-                logger.info(
-                    f"  {session:<20} >> NO_MODEL (skip={skip_pct:.0%} > 85%, "
-                    f"avoidance not discrimination)"
-                )
-                session_results[session] = {
-                    "model_type": "NONE",
-                    "reason": f"skip_too_high_{skip_pct:.0%}",
-                    "test_auc": round(test_auc, 4),
-                    "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
-                }
-                continue
-
-            cpcv_str = f"{cpcv_auc:.3f}" if cpcv_auc else "  --"
-            logger.info(
-                f"  {session:<20} >> ML t={best_t:.2f} "
-                f"CPCV={cpcv_str} TestAUC={test_auc:.3f} "
-                f"ValDelta={best_delta:+.1f} HonestDelta={honest_delta_r:+.1f} "
-                f"Skip={skip_pct:.0%} leaf={leaf_size}"
-            )
-            session_results[session] = {
-                "model_type": "SESSION",
-                "model": rf,
-                "calibrator": calibrator,
-                "feature_names": feature_names,
-                "threshold": best_t,
-                "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
-                "test_auc": round(test_auc, 4),
-                "n_train": len(train_idx),
-                "n_val": len(val_idx),
-                "n_test": len(test_idx),
-                "val_delta_r": round(best_delta, 2),
-                "honest_delta_r": round(honest_delta_r, 2),
-                "honest_base_r": round(honest_base_r, 2),
-                "skip_pct": round(skip_pct, 3),
-                "leaf_size": leaf_size,
-                "top_features": top_feats,  # [(name, importance), ...] for stability tracking
-            }
-        else:
-            logger.info(
-                f"  {session:<20} >> NO_MODEL (no threshold beats baseline, "
-                f"TestAUC={test_auc:.3f})"
-            )
-            session_results[session] = {
-                "model_type": "NONE",
-                "reason": "no_positive_threshold",
-                "test_auc": round(test_auc, 4),
-                "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
-            }
+                })
 
     # --- Summary ---
-    n_ml = sum(1 for s in session_results.values() if s["model_type"] == "SESSION")
-    n_none = sum(1 for s in session_results.values() if s["model_type"] == "NONE")
+    # Flatten results for counting (per-aperture has nested dicts)
+    def _iter_results():
+        for session, val in session_results.items():
+            if per_aperture:
+                for ak, info in val.items():
+                    yield session, ak, info
+            else:
+                yield session, None, val
+
+    all_results = list(_iter_results())
+    n_ml = sum(1 for _, _, r in all_results if r["model_type"] == "SESSION")
+    n_none = sum(1 for _, _, r in all_results if r["model_type"] == "NONE")
     total_val_delta = sum(
-        s.get("val_delta_r", 0) for s in session_results.values()
-        if s["model_type"] == "SESSION"
+        r.get("val_delta_r", 0) for _, _, r in all_results
+        if r["model_type"] == "SESSION"
     )
     total_honest_delta = sum(
-        s.get("honest_delta_r", 0) for s in session_results.values()
-        if s["model_type"] == "SESSION"
+        r.get("honest_delta_r", 0) for _, _, r in all_results
+        if r["model_type"] == "SESSION"
     )
 
+    unit_label = "models" if per_aperture else "ML sessions"
     logger.info(
-        f"\n  SUMMARY: {n_ml} ML sessions, {n_none} NO_MODEL"
+        f"\n  SUMMARY: {n_ml} {unit_label}, {n_none} NO_MODEL"
         f"\n  Val delta (optimized):  {total_val_delta:+.1f}R"
         f"\n  Honest delta (frozen):  {total_honest_delta:+.1f}R"
     )
@@ -528,6 +581,7 @@ def train_per_session_meta_label(
 
         bundle = {
             "model_type": "single_config_per_session" if single_config else "hybrid_per_session",
+            "bundle_format": "per_aperture" if per_aperture else "flat",
             "instrument": instrument,
             "sessions": {},
             "config_hash": config_hash,
@@ -546,13 +600,16 @@ def train_per_session_meta_label(
             "total_honest_delta_r": round(total_honest_delta, 2),
         }
 
-        for session, info in session_results.items():
+        def _to_bundle_entry(info: dict) -> dict:
+            """Convert a session result dict to bundle format."""
             if info["model_type"] == "SESSION":
-                bundle["sessions"][session] = {
+                return {
                     "model": info["model"],
                     "calibrator": info.get("calibrator"),
                     "feature_names": info["feature_names"],
                     "optimal_threshold": info["threshold"],
+                    "training_aperture": info["training_aperture"],
+                    "training_rr": info["training_rr"],
                     "cpcv_auc": info.get("cpcv_auc"),
                     "test_auc": info["test_auc"],
                     "n_train": info["n_train"],
@@ -564,26 +621,35 @@ def train_per_session_meta_label(
                     "leaf_size": info["leaf_size"],
                     "top_features": info.get("top_features"),
                 }
-            else:
+            return {
+                "model": None,
+                "model_type": "NONE",
+                "reason": info.get("reason", "insufficient_data"),
+            }
+
+        for session, val in session_results.items():
+            if per_aperture:
+                # Nested: sessions[session][aperture_key] = {...}
                 bundle["sessions"][session] = {
-                    "model": None,
-                    "model_type": "NONE",
-                    "reason": info.get("reason", "insufficient_data"),
+                    ak: _to_bundle_entry(info) for ak, info in val.items()
                 }
+            else:
+                # Flat: sessions[session] = {...}
+                bundle["sessions"][session] = _to_bundle_entry(val)
 
         # --- Feature importance stability check (compare with previous model) ---
         if model_path.exists():
             try:
                 old_bundle = joblib.load(model_path)
                 old_sessions = old_bundle.get("sessions", {})
-                for sess, new_info in bundle["sessions"].items():
+                old_is_per_aperture = old_bundle.get("bundle_format") == "per_aperture"
+
+                def _check_stability(label: str, new_info: dict, old_info: dict) -> None:
                     if new_info.get("top_features") is None:
-                        continue
-                    old_info = old_sessions.get(sess, {})
+                        return
                     old_top = old_info.get("top_features")
                     if old_top is None:
-                        continue
-                    # Compare top-10 feature rankings
+                        return
                     old_names = [f[0] for f in old_top[:10]]
                     new_names = [f[0] for f in new_info["top_features"][:10]]
                     drifted = []
@@ -596,11 +662,18 @@ def train_per_session_meta_label(
                         else:
                             drifted.append(f"{name} NEW(#{i+1})")
                     if drifted:
-                        logger.warning(
-                            f"  {sess} FEATURE DRIFT: {', '.join(drifted)}"
-                        )
+                        logger.warning(f"  {label} FEATURE DRIFT: {', '.join(drifted)}")
                     else:
-                        logger.info(f"  {sess} feature importance stable")
+                        logger.info(f"  {label} feature importance stable")
+
+                for sess, new_val in bundle["sessions"].items():
+                    old_val = old_sessions.get(sess, {})
+                    if per_aperture:
+                        for ak, new_info in new_val.items():
+                            old_info = old_val.get(ak, {}) if old_is_per_aperture else {}
+                            _check_stability(f"{sess} {ak}", new_info, old_info)
+                    else:
+                        _check_stability(sess, new_val, old_val)
             except Exception:
                 logger.warning(
                     "Could not load previous model for stability check",
@@ -609,6 +682,29 @@ def train_per_session_meta_label(
 
         joblib.dump(bundle, model_path)
         logger.info(f"  Hybrid model saved: {model_path}")
+
+    # Build return-dict sessions (summary info only — no model objects)
+    def _to_return_entry(info: dict) -> dict:
+        if info["model_type"] == "SESSION":
+            return {
+                "model_type": "SESSION",
+                "threshold": info["threshold"],
+                "cpcv_auc": info.get("cpcv_auc"),
+                "test_auc": info["test_auc"],
+                "val_delta_r": info["val_delta_r"],
+                "honest_delta_r": info["honest_delta_r"],
+                "skip_pct": info["skip_pct"],
+            }
+        return {"model_type": "NONE", "reason": info.get("reason", "insufficient_data")}
+
+    return_sessions: dict = {}
+    for session, val in session_results.items():
+        if per_aperture:
+            return_sessions[session] = {
+                ak: _to_return_entry(info) for ak, info in val.items()
+            }
+        else:
+            return_sessions[session] = _to_return_entry(val)
 
     return {
         "status": "trained",
@@ -619,18 +715,8 @@ def train_per_session_meta_label(
         "n_none_sessions": n_none,
         "total_val_delta_r": round(total_val_delta, 2),
         "total_honest_delta_r": round(total_honest_delta, 2),
-        "sessions": {
-            s: {
-                "model_type": info["model_type"],
-                "threshold": info.get("threshold"),
-                "cpcv_auc": info.get("cpcv_auc"),
-                "test_auc": info.get("test_auc"),
-                "val_delta_r": info.get("val_delta_r"),
-                "honest_delta_r": info.get("honest_delta_r"),
-                "skip_pct": info.get("skip_pct"),
-            }
-            for s, info in session_results.items()
-        },
+        "per_aperture": per_aperture,
+        "sessions": return_sessions,
         "model_path": str(model_path) if model_path else None,
     }
 
@@ -642,42 +728,50 @@ def print_per_session_results(results: dict) -> None:
         return
 
     inst = results["instrument"]
+    is_per_aperture = results.get("per_aperture", False)
+    mode_label = "PER-APERTURE" if is_per_aperture else "PER-SESSION"
+
     print(f"\n{'=' * 70}")
-    print(f"  HYBRID PER-SESSION RESULTS -- {inst} (3-way split: 60/20/20)")
+    print(f"  HYBRID {mode_label} RESULTS -- {inst} (3-way split: 60/20/20)")
     print(f"{'=' * 70}")
     print(f"  Samples: {results['n_samples']:,d}")
-    print(f"  ML sessions: {results['n_ml_sessions']} | "
-          f"NO_MODEL sessions: {results['n_none_sessions']}")
+    unit = "models" if is_per_aperture else "ML sessions"
+    print(f"  {unit}: {results['n_ml_sessions']} | "
+          f"NO_MODEL: {results['n_none_sessions']}")
     print(f"  Val delta (optimized):  {results['total_val_delta_r']:+.1f}R")
     print(f"  Honest delta (frozen):  {results['total_honest_delta_r']:+.1f}R")
     print()
 
-    print(f"  {'SESSION':<22} {'TYPE':>5} {'THRESH':>6} "
-          f"{'CPCV':>6} {'T_AUC':>6} {'VAL_dR':>7} {'OOS_dR':>7} {'SKIP%':>6}")
-    print(f"  {'-' * 22} {'-' * 5} {'-' * 6} "
-          f"{'-' * 6} {'-' * 6} {'-' * 7} {'-' * 7} {'-' * 6}")
-
-    for session in SESSION_CHRONOLOGICAL_ORDER:
-        if session not in results["sessions"]:
-            continue
-        info = results["sessions"][session]
+    def _print_row(label: str, info: dict) -> None:
         if info["model_type"] == "SESSION":
             cpcv_str = f"{info['cpcv_auc']:.3f}" if info.get("cpcv_auc") else "  --"
             print(
-                f"  {session:<22} {'ML':>5} {info['threshold']:>6.2f} "
+                f"  {label:<26} {'ML':>5} {info['threshold']:>6.2f} "
                 f"{cpcv_str:>6} {info['test_auc']:>6.3f} "
                 f"{info['val_delta_r']:>+7.1f} {info['honest_delta_r']:>+7.1f} "
                 f"{info['skip_pct']:>5.1%}"
             )
         else:
-            print(f"  {session:<22} {'NONE':>5} {'--':>6} "
+            print(f"  {label:<26} {'NONE':>5} {'--':>6} "
                   f"{'--':>6} {'--':>6} {'--':>7} {'--':>7} {'--':>6}")
 
-    # Any sessions not in SESSION_CHRONOLOGICAL_ORDER
-    for session, info in sorted(results["sessions"].items()):
-        if session not in SESSION_CHRONOLOGICAL_ORDER:
-            print(f"  {session:<22} {'NONE':>5} {'--':>6} "
-                  f"{'--':>6} {'--':>6} {'--':>7} {'--':>7} {'--':>6}")
+    print(f"  {'SESSION':<26} {'TYPE':>5} {'THRESH':>6} "
+          f"{'CPCV':>6} {'T_AUC':>6} {'VAL_dR':>7} {'OOS_dR':>7} {'SKIP%':>6}")
+    print(f"  {'-' * 26} {'-' * 5} {'-' * 6} "
+          f"{'-' * 6} {'-' * 6} {'-' * 7} {'-' * 7} {'-' * 6}")
+
+    all_sessions = list(SESSION_CHRONOLOGICAL_ORDER) + sorted(
+        s for s in results["sessions"] if s not in SESSION_CHRONOLOGICAL_ORDER
+    )
+    for session in all_sessions:
+        if session not in results["sessions"]:
+            continue
+        val = results["sessions"][session]
+        if is_per_aperture:
+            for ak in sorted(val.keys()):
+                _print_row(f"{session} {ak}", val[ak])
+        else:
+            _print_row(session, val)
 
     print(f"{'=' * 70}\n")
 
@@ -936,7 +1030,13 @@ def main():
     parser.add_argument("--skip-filter", action="store_true",
                         help="Skip filter eligibility — ML trains on ALL break days and "
                              "learns to discriminate via features (orb_size, atr, etc.)")
+    parser.add_argument("--per-aperture", action="store_true",
+                        help="Train separate model per (session, aperture). Fixes aperture "
+                             "covariate shift. Requires --single-config.")
     args = parser.parse_args()
+
+    if args.per_aperture and not args.single_config:
+        parser.error("--per-aperture requires --single-config")
 
     instruments = ACTIVE_INSTRUMENTS if args.all else [args.instrument or "MGC"]
 
@@ -967,6 +1067,7 @@ def main():
                         run_cpcv=not args.no_cpcv,
                         config_selection=args.config_selection,
                         skip_filter=args.skip_filter,
+                        per_aperture=args.per_aperture,
                     )
                     sweep_results[rr] = results
                     print_per_session_results(results)
@@ -1001,6 +1102,7 @@ def main():
                 run_cpcv=not args.no_cpcv,
                 config_selection=args.config_selection,
                 skip_filter=args.skip_filter,
+                per_aperture=args.per_aperture,
             )
             print_per_session_results(results)
         else:

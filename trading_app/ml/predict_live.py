@@ -81,6 +81,8 @@ class LiveMLPredictor:
         self.predictions_made: int = 0
         self.predictions_cached: int = 0
         self.fail_open_count: int = 0
+        self.aperture_mismatch_count: int = 0
+        self.rr_mismatch_count: int = 0
 
         self._load_models()
 
@@ -113,15 +115,27 @@ class LiveMLPredictor:
                     "hybrid_per_session", "single_config_per_session",
                 )
                 if is_hybrid:
-                    n_ml = sum(
-                        1 for s in bundle.get("sessions", {}).values()
-                        if s.get("model") is not None
-                    )
-                    n_total = len(bundle.get("sessions", {}))
+                    is_pa = bundle.get("bundle_format") == "per_aperture"
+                    if is_pa:
+                        n_ml = sum(
+                            1 for s_data in bundle.get("sessions", {}).values()
+                            for a_info in s_data.values()
+                            if isinstance(a_info, dict) and a_info.get("model") is not None
+                        )
+                        n_total = sum(
+                            len(s_data) for s_data in bundle.get("sessions", {}).values()
+                        )
+                    else:
+                        n_ml = sum(
+                            1 for s in bundle.get("sessions", {}).values()
+                            if s.get("model") is not None
+                        )
+                        n_total = len(bundle.get("sessions", {}))
+                    fmt_label = "per-aperture" if is_pa else "per-session"
                     logger.info(
-                        "Loaded HYBRID ML model for %s: %d/%d sessions with models, "
+                        "Loaded HYBRID ML model for %s (%s): %d/%d models, "
                         "trained=%s",
-                        inst, n_ml, n_total,
+                        inst, fmt_label, n_ml, n_total,
                         bundle.get("trained_at", "unknown"),
                     )
                 else:
@@ -211,12 +225,61 @@ class LiveMLPredictor:
 
         # Hybrid model: check if this session has a sub-model
         if is_hybrid:
-            session_info = bundle.get("sessions", {}).get(orb_label)
-            if session_info is None or session_info.get("model") is None:
+            session_data = bundle.get("sessions", {}).get(orb_label)
+            if session_data is None:
                 # No model for this session — fail-open (take all trades)
                 result = MLPrediction(p_win=0.5, take=True, threshold=0.5)
                 self._prediction_cache[cache_key] = result
                 return result
+
+            # Detect per-aperture vs flat bundle format
+            is_per_aperture = bundle.get("bundle_format") == "per_aperture"
+            if is_per_aperture:
+                aperture_key = f"O{orb_minutes}"
+                session_info = session_data.get(aperture_key, {})
+            else:
+                session_info = session_data
+
+            if session_info.get("model") is None:
+                # No model for this (session, aperture) — fail-open
+                result = MLPrediction(p_win=0.5, take=True, threshold=0.5)
+                self._prediction_cache[cache_key] = result
+                return result
+
+            # Aperture guard: check training aperture matches prediction aperture.
+            # Old bundles without training_aperture → fail-open (safe default).
+            training_aperture = session_info.get("training_aperture")
+            if training_aperture is not None and training_aperture != orb_minutes:
+                logger.info(
+                    "Aperture mismatch for %s %s: model trained on O%d, "
+                    "prediction for O%d — fail-open",
+                    instrument, orb_label, training_aperture, orb_minutes,
+                )
+                self.aperture_mismatch_count += 1
+                result = MLPrediction(p_win=0.5, take=True, threshold=0.5)
+                self._prediction_cache[cache_key] = result
+                return result
+
+            # RR guard: aggressive RR (trade RR > training RR) → fail-open.
+            # Conservative RR (trade RR < training RR) is safe — P(win) is understated.
+            training_rr = session_info.get("training_rr")
+            if training_rr is not None and rr_target > training_rr:
+                logger.info(
+                    "RR mismatch for %s %s: model trained on RR%.1f, "
+                    "prediction for RR%.1f (aggressive) — fail-open",
+                    instrument, orb_label, training_rr, rr_target,
+                )
+                self.rr_mismatch_count += 1
+                result = MLPrediction(p_win=0.5, take=True, threshold=0.5)
+                self._prediction_cache[cache_key] = result
+                return result
+
+            if training_rr is not None and rr_target < training_rr:
+                logger.debug(
+                    "RR conservative for %s %s: model RR%.1f, trade RR%.1f — "
+                    "P(win) may be understated",
+                    instrument, orb_label, training_rr, rr_target,
+                )
 
         try:
             # Step 1: Get daily features from DB
@@ -244,8 +307,8 @@ class LiveMLPredictor:
 
             if is_hybrid:
                 # Hybrid path: E6 filter + session-specific model
+                # session_info already resolved above (flat or per-aperture)
                 X = apply_e6_filter(X)
-                session_info = bundle["sessions"][orb_label]
                 model = session_info["model"]
                 feature_names = session_info["feature_names"]
                 threshold = float(session_info["optimal_threshold"])
@@ -379,15 +442,25 @@ class LiveMLPredictor:
         b = self._models[instrument]
 
         if b.get("model_type") in ("hybrid_per_session", "single_config_per_session"):
-            sessions_with_model = [
-                s for s, info in b.get("sessions", {}).items()
-                if info.get("model") is not None
-            ]
+            is_pa = b.get("bundle_format") == "per_aperture"
+            if is_pa:
+                models_with_model = [
+                    f"{s} {ak}"
+                    for s, s_data in b.get("sessions", {}).items()
+                    for ak, info in s_data.items()
+                    if isinstance(info, dict) and info.get("model") is not None
+                ]
+            else:
+                models_with_model = [
+                    s for s, info in b.get("sessions", {}).items()
+                    if info.get("model") is not None
+                ]
             return {
                 "instrument": instrument,
                 "model_type": "hybrid_per_session",
-                "n_ml_sessions": len(sessions_with_model),
-                "ml_sessions": sessions_with_model,
+                "bundle_format": b.get("bundle_format", "flat"),
+                "n_ml_sessions": len(models_with_model),
+                "ml_sessions": models_with_model,
                 "total_delta_r": b.get("total_honest_delta_r"),
                 "trained_at": b.get("trained_at"),
                 "config_hash": b.get("config_hash"),
@@ -419,5 +492,7 @@ class LiveMLPredictor:
             "predictions_made": self.predictions_made,
             "predictions_cached": self.predictions_cached,
             "fail_open_count": self.fail_open_count,
+            "aperture_mismatch_count": self.aperture_mismatch_count,
+            "rr_mismatch_count": self.rr_mismatch_count,
             "daily_cache_size": len(self._daily_cache),
         }

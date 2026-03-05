@@ -671,6 +671,7 @@ def load_single_config_feature_matrix(
     rr_target: float | None = None,
     config_selection: str = "max_samples",
     skip_filter: bool = False,
+    per_aperture: bool = False,
 ) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
     """Load ML feature matrix with ONE config per session — clean labels.
 
@@ -692,6 +693,9 @@ def load_single_config_feature_matrix(
         skip_filter: If True, load ALL break days (no filter eligibility check).
             ML sees full dataset and learns to discriminate via features like
             orb_size and atr_20 instead of being pre-filtered.
+        per_aperture: If True, pick ONE config per (session, aperture) instead of
+            per session. Returns multiple apertures per session for per-aperture
+            model training.
 
     Returns:
         X: Feature matrix (float, ready for sklearn)
@@ -724,14 +728,21 @@ def load_single_config_feature_matrix(
         else:
             order_clause = "ORDER BY v.sharpe_ratio DESC NULLS LAST"
 
-        # Single query: pick one config per session, load outcomes
+        # Per-aperture: pick one config per (session, aperture) instead of per session.
+        # This gives each aperture its own best config, enabling per-aperture models.
+        partition_clause = (
+            "PARTITION BY v.orb_label, v.orb_minutes" if per_aperture
+            else "PARTITION BY v.orb_label"
+        )
+
+        # Single query: pick one config per session (or per session+aperture), load outcomes
         query = f"""
             WITH best_configs AS (
                 SELECT
                     v.orb_label, v.entry_model, v.rr_target, v.confirm_bars,
                     v.orb_minutes, v.filter_type, v.sharpe_ratio, v.sample_size,
                     ROW_NUMBER() OVER (
-                        PARTITION BY v.orb_label
+                        {partition_clause}
                         {order_clause}
                     ) AS rn
                 FROM validated_setups v
@@ -779,7 +790,7 @@ def load_single_config_feature_matrix(
                     v.orb_label, v.entry_model, v.rr_target, v.confirm_bars,
                     v.orb_minutes, v.filter_type, v.sharpe_ratio, v.sample_size,
                     ROW_NUMBER() OVER (
-                        PARTITION BY v.orb_label
+                        {partition_clause}
                         {order_clause}
                     ) AS rn
                 FROM validated_setups v
@@ -807,8 +818,9 @@ def load_single_config_feature_matrix(
     sel_str = config_selection.upper()
     rr_str = f" RR={rr_target}" if rr_target is not None else ""
     filt_str = " UNFILTERED" if skip_filter else ""
-    logger.info(f"Single-config ({sel_str}{rr_str}{filt_str}): "
-                f"{len(configs_df)} sessions, {len(df):,d} raw outcomes for {instrument}")
+    aperture_str = " PER-APERTURE" if per_aperture else ""
+    logger.info(f"Single-config ({sel_str}{rr_str}{filt_str}{aperture_str}): "
+                f"{len(configs_df)} configs, {len(df):,d} raw outcomes for {instrument}")
     for _, cfg in configs_df.iterrows():
         logger.info(f"  {cfg['orb_label']:<22} E{cfg['entry_model'][-1]} "
                      f"RR{cfg['rr_target']:.1f} CB{cfg['confirm_bars']} "
@@ -845,8 +857,8 @@ def load_single_config_feature_matrix(
         logger.info(f"After filter: {n_after_filter:,d} rows "
                     f"({n_before_filter - n_after_filter:,d} filtered out)")
 
-    # Safety dedup: should be 1 row per (trading_day, orb_label) already
-    dedup_cols = ["trading_day", "orb_label"]
+    # Safety dedup: 1 row per (trading_day, orb_label[, orb_minutes]) already
+    dedup_cols = ["trading_day", "orb_label", "orb_minutes"] if per_aperture else ["trading_day", "orb_label"]
     n_before_dedup = len(df)
     df = df.drop_duplicates(subset=dedup_cols, keep="first").reset_index(drop=True)
     if len(df) < n_before_dedup:
