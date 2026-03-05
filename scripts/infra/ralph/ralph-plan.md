@@ -48,7 +48,7 @@ dead references, error-handling holes, and architecture drift.
     "id": 3,
     "category": "discovery",
     "description": "CG Pass 1 — M2.5 audit ML module files, triage findings",
-    "passes": false,
+    "passes": true,
     "steps": [
       "Step 1: Run python scripts/tools/m25_audit.py trading_app/ml/meta_label.py trading_app/ml/cpcv.py --mode bias --output scripts/infra/ralph/m25_ml1.md",
       "Step 2: Run python scripts/tools/m25_audit.py trading_app/ml/features.py trading_app/ml/evaluate.py trading_app/ml/predict_live.py --mode bugs --output scripts/infra/ralph/m25_ml2.md",

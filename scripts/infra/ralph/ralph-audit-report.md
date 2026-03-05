@@ -1037,3 +1037,37 @@ Generated: 2026-03-05
 - **PARTIALLY TRUE but no-action: 1** (ATR query unbounded — functionally harmless)
 - **FALSE POSITIVES: 6** (2.1, 2.2, 2.3, 2.4, 2.6, 2.7)
 - **M2.5 false positive rate: 86%** (6/7)
+
+## CG-3: ML Module Findings
+
+### Source: m25_ml1.md (meta_label.py, cpcv.py) — mode: bias
+
+| # | M2.5 Claim | Verdict | Evidence |
+|---|-----------|---------|----------|
+| 3.1 | Threshold sweep (~36 values) creates multiple testing bias on validation set | **WORTH EXPLORING** | Real concern but mitigated by design: 4-gate quality system on frozen test set provides backstop (delta_r >= 0, CPCV AUC >= 0.50, test AUC >= 0.52, skip_pct <= 85%). Threshold optimization is on validation, honest OOS on test. Standard ML pipeline practice. Not a bug — documented design trade-off. |
+| 3.2 | CPCV random split sampling without reproducibility | **FALSE POSITIVE** | Uses `RandomState(42)` — IS reproducible. M2.5 acknowledges this in the finding itself. |
+| 3.3 | Session split uses global index boundaries, not per-session 60/20/20 | **FALSE POSITIVE** | By design. Code at meta_label.py:229-235 checks `len(val_idx) < 20 or len(test_idx) < 20` and skips training if splits too small. Global boundaries ensure temporal consistency across sessions. |
+| 3.4 | Single config selection introduces implicit selection bias | **FALSE POSITIVE** | Intentional deduplication — one row per (day, session) prevents double-counting. `max_samples` is a principled criterion for the default config. |
+| 3.5 | Feature drift detection uses only top-10 features | **WORTH EXPLORING** | Minor observation. Top-10 MDI features carry most predictive weight. Expanding to top-20 is a nice-to-have. |
+| 3.6 | Calibration fit on validation set | **FALSE POSITIVE** | M2.5 itself says "not a bug" and "no action required". Calibration is for display/Kelly sizing only, not trade execution. |
+
+### Source: m25_ml2.md (features.py, evaluate.py, predict_live.py) — mode: bugs
+
+| # | M2.5 Claim | Verdict | Evidence |
+|---|-----------|---------|----------|
+| 3.7 | is_bool_feat redundant initialization (both branches create float64) | **TRUE (trivial)** | Confirmed at features.py:112-115. Both `elif is_bool_feat` and `else` branches create identical `float64` series. Not a bug — just redundant code. Conversion happens later at line 130. **NO ACTION** — cosmetic. |
+| 3.8 | Duplicate import of GLOBAL_FEATURES in predict_live.py | **FALSE POSITIVE** | Import at line 406 is a LAZY import inside `_get_daily_features()` method body. This is standard Python for avoiding circular imports. Not imported at module level. M2.5 hallucinated the "module level import at line 23". |
+| 3.9 | Silent column dropping in evaluate.py not surfaced in results | **WORTH EXPLORING** | Warning IS logged. Adding dropped columns to return dict would improve transparency. Minor improvement, not a bug. |
+| 3.10 | Potential key error in filter loop (features.py:469) | **FALSE POSITIVE** | `reset_index(drop=True)` at line 466 ensures sequential indices. The pattern is safe. |
+| 3.11 | Incomplete backfill check — only 3 features as trigger | **PARTIALLY TRUE** | Trigger at predict_live.py:394 checks 3 features (overnight_range, prev_day_range, atr_vel_ratio) but full backfill at lines 407-409 iterates ALL GLOBAL_FEATURES. The 3-feature trigger is an optimization — if those 3 are present, others likely are too. Could miss rare edge case where only other globals are NULL. Practically harmless. **NO ACTION.** |
+| 3.12 | Unused duckdb import in features.py | **FALSE POSITIVE** | `duckdb` IS used at lines 41 (type hint), 468, 564, 714 (connect calls). M2.5 didn't read the full file. |
+| 3.13 | Division by zero in evaluate.py calibration | **FALSE POSITIVE** | Earlier guards at line 70 return before reaching calibration code if no model exists. Empty data would trigger errors upstream. |
+| 3.14 | Module-level function shadows class method | **FALSE POSITIVE** | M2.5 itself says "it works correctly". No shadowing — it's a module-level wrapper, not a class method. |
+
+### CG-3 Summary
+- **TRUE findings requiring action: 0**
+- **TRUE but no-action: 1** (is_bool_feat redundant init — cosmetic)
+- **PARTIALLY TRUE but no-action: 1** (backfill trigger optimization — harmless)
+- **FALSE POSITIVES: 9** (3.2, 3.3, 3.4, 3.6, 3.8, 3.10, 3.12, 3.13, 3.14)
+- **WORTH EXPLORING: 3** (threshold sweep docs, feature drift expansion, column drop transparency)
+- **M2.5 false positive rate: 64%** (9/14)

@@ -43,3 +43,26 @@ Re-run confirmation table appended to CG-1 section in ralph-audit-report.md.
 
 **Files modified:** scripts/infra/ralph/ralph-audit-report.md (CG-2 section added)
 **Output files:** scripts/infra/ralph/m25_trading1.md, scripts/infra/ralph/m25_trading2.md
+
+## 2026-03-05 — Task 3: CG Pass 1 — ML Module M2.5 Audit + Triage
+
+**What:** Ran M2.5 audit on 5 ML module files in 2 batches:
+- Batch 1: meta_label.py, cpcv.py (bias mode)
+- Batch 2: features.py, evaluate.py, predict_live.py (bugs mode)
+
+**Triage results:** 14 findings total
+- 0 TRUE findings requiring action
+- 1 TRUE but no-action (is_bool_feat redundant init — cosmetic)
+- 1 PARTIALLY TRUE but no-action (backfill trigger — 3 features vs full GLOBAL_FEATURES list)
+- 9 FALSE POSITIVES
+- 3 WORTH EXPLORING (threshold sweep docs, feature drift expansion, column drop transparency)
+- M2.5 false positive rate: 64%
+
+**Key verifications:**
+- duckdb import in features.py: IS used at lines 41, 468, 564, 714. M2.5 didn't read full file.
+- GLOBAL_FEATURES import in predict_live.py: LAZY import (not duplicate). M2.5 hallucinated "module level import at line 23".
+- stress_test_costs at cost_model.py:357: slippage IS multiplied (`spec.slippage * multiplier`). M2.5 pipeline2 re-run was wrong.
+- Threshold sweep: real concern but 4-gate quality system is the documented mitigation.
+
+**Files modified:** scripts/infra/ralph/ralph-audit-report.md (CG-3 section added)
+**Output files:** scripts/infra/ralph/m25_ml1.md, scripts/infra/ralph/m25_ml2.md
