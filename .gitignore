@@ -62,6 +62,8 @@ live_signals.jsonl
 .claude/*
 !.claude/rules/
 !.claude/commands/
+!.claude/hooks/
+.claude/hooks/.last_drift_ok
 memory/
 
 # Windows junk
