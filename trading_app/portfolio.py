@@ -63,6 +63,7 @@ class PortfolioStrategy:
     avg_win_dollars: float | None = None
     avg_loss_dollars: float | None = None
     orb_minutes: int = 5  # ORB aperture (5, 15, or 30). Default 5 for backward compat.
+    stop_multiplier: float = 1.0  # 1.0 = standard stop, 0.75 = tight stop at 75% of ORB range
     source: str = "baseline"  # "baseline", "nested", or "rolling"
     weight: float = 1.0
     max_contracts: int = 1

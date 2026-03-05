@@ -113,6 +113,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 -- Filters
                 filter_type       TEXT,
                 filter_params     TEXT,
+                stop_multiplier   DOUBLE      DEFAULT 1.0,
 
                 -- Backtest results
                 sample_size       INTEGER,
@@ -177,6 +178,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 entry_model       TEXT        NOT NULL,
                 filter_type       TEXT        NOT NULL,
                 filter_params     TEXT,
+                stop_multiplier   DOUBLE      DEFAULT 1.0,
 
                 -- Validation results
                 sample_size       INTEGER     NOT NULL,
@@ -438,6 +440,15 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                     con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typedef}")
                 except duckdb.CatalogException:
                     pass  # column already exists
+
+        # Migration: stop_multiplier (Mar 2026 — tight stop feature)
+        # 1.0 = standard stop at ORB edge, 0.75 = tight stop at 75% of ORB range.
+        # Loss capped at -stop_multiplier R (e.g. -0.75R) instead of -1.0R.
+        for table in ["experimental_strategies", "validated_setups"]:
+            try:
+                con.execute(f"ALTER TABLE {table} ADD COLUMN stop_multiplier DOUBLE DEFAULT 1.0")
+            except duckdb.CatalogException:
+                pass  # column already exists
 
         con.commit()
         logger.info("Trading app schema initialized successfully")

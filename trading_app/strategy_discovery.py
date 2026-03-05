@@ -31,7 +31,7 @@ from pipeline.cost_model import get_cost_spec
 from pipeline.dst import (
     DST_AFFECTED_SESSIONS, is_winter_for_session, classify_dst_verdict,
 )
-from trading_app.config import get_filters_for_grid, ENTRY_MODELS, VolumeFilter
+from trading_app.config import get_filters_for_grid, ENTRY_MODELS, VolumeFilter, STOP_MULTIPLIERS, apply_tight_stop
 from trading_app.db_manager import init_trading_app_schema, compute_trade_day_hash
 from trading_app.outcome_builder import RR_TARGETS, CONFIRM_BARS_OPTIONS
 
@@ -87,7 +87,7 @@ _INSERT_SQL = """INSERT OR REPLACE INTO experimental_strategies
 _BATCH_COLUMNS = [
     'strategy_id', 'instrument', 'orb_label', 'orb_minutes',
     'rr_target', 'confirm_bars', 'entry_model',
-    'filter_type', 'filter_params',
+    'filter_type', 'filter_params', 'stop_multiplier',
     'sample_size', 'win_rate', 'avg_win_r', 'avg_loss_r',
     'expectancy_r', 'sharpe_ratio', 'max_drawdown_r',
     'median_risk_points', 'avg_risk_points',
@@ -115,7 +115,7 @@ def _flush_batch_df(con, insert_batch: list[list]) -> None:
         INSERT OR REPLACE INTO experimental_strategies
         (strategy_id, instrument, orb_label, orb_minutes,
          rr_target, confirm_bars, entry_model,
-         filter_type, filter_params,
+         filter_type, filter_params, stop_multiplier,
          sample_size, win_rate, avg_win_r, avg_loss_r,
          expectancy_r, sharpe_ratio, max_drawdown_r,
          median_risk_points, avg_risk_points,
@@ -132,7 +132,7 @@ def _flush_batch_df(con, insert_batch: list[list]) -> None:
          n_trials_at_discovery, fst_hurdle)
         SELECT strategy_id, instrument, orb_label, orb_minutes,
                rr_target, confirm_bars, entry_model,
-               filter_type, filter_params,
+               filter_type, filter_params, stop_multiplier,
                sample_size, win_rate, avg_win_r, avg_loss_r,
                expectancy_r, sharpe_ratio, max_drawdown_r,
                median_risk_points, avg_risk_points,
@@ -161,7 +161,8 @@ def _mark_canonical(strategies: list[dict]) -> None:
     groups = defaultdict(list)
     for s in strategies:
         key = (s["instrument"], s["orb_label"], s["entry_model"],
-               s["rr_target"], s["confirm_bars"], s["trade_day_hash"])
+               s["rr_target"], s["confirm_bars"], s["trade_day_hash"],
+               s.get("stop_multiplier", 1.0))
         groups[key].append(s)
 
     for group in groups.values():
@@ -705,27 +706,35 @@ def make_strategy_id(
     filter_type: str,
     dst_regime: str | None = None,
     orb_minutes: int = 5,
+    stop_multiplier: float = 1.0,
 ) -> str:
     """Generate deterministic strategy ID.
 
-    Format: {instrument}_{orb_label}_{entry_model}_RR{rr}_CB{cb}_{filter_type}[_O{min}][_W|_S]
+    Format: {instrument}_{orb_label}_{entry_model}_RR{rr}_CB{cb}_{filter_type}[_O{min}][_S075][_W|_S]
     Example: MGC_CME_REOPEN_E1_RR2.5_CB2_ORB_G4          (5m default — no suffix)
              MGC_CME_REOPEN_E1_RR2.5_CB2_ORB_G4_O15      (15m ORB)
              MGC_CME_REOPEN_E1_RR2.5_CB2_ORB_G4_O30_W    (30m ORB, winter-only)
+             MGC_CME_REOPEN_E1_RR2.5_CB2_ORB_G4_S075     (5m, tight stop 0.75x)
+             MGC_CME_REOPEN_E1_RR2.5_CB2_ORB_G4_O15_S075_W  (15m, tight stop, winter)
 
     Components:
-      instrument  - Trading instrument (MGC = Micro Gold Futures)
-      orb_label   - ORB session name (CME_REOPEN, TOKYO_OPEN, LONDON_METALS, etc.)
-      entry_model - E1 (next bar open), E2 (stop-market at ORB + slippage), E3 (limit retrace)
-      RR          - Risk/Reward target (1.0 to 4.0)
-      CB          - Confirm bars required (1 to 5)
-      filter_type - ORB size filter (NO_FILTER, ORB_G4, ORB_L3, etc.)
-      _O{min}     - ORB duration suffix; omitted for default 5m
-      _W/_S       - DST regime suffix (winter/summer); omitted for blended/clean sessions
+      instrument      - Trading instrument (MGC = Micro Gold Futures)
+      orb_label       - ORB session name (CME_REOPEN, TOKYO_OPEN, LONDON_METALS, etc.)
+      entry_model     - E1 (next bar open), E2 (stop-market at ORB + slippage), E3 (limit retrace)
+      RR              - Risk/Reward target (1.0 to 4.0)
+      CB              - Confirm bars required (1 to 5)
+      filter_type     - ORB size filter (NO_FILTER, ORB_G4, ORB_L3, etc.)
+      _O{min}         - ORB duration suffix; omitted for default 5m
+      _S075           - Tight stop suffix (0.75x ORB range); omitted for default 1.0x
+      _W/_S           - DST regime suffix (winter/summer); omitted for blended/clean sessions
     """
     base = f"{instrument}_{orb_label}_{entry_model}_RR{rr_target}_CB{confirm_bars}_{filter_type}"
     if orb_minutes != 5:
         base = f"{base}_O{orb_minutes}"
+    if stop_multiplier != 1.0:
+        # Encode as S075 for 0.75x — integer percentage of 100
+        sm_pct = int(round(stop_multiplier * 100))
+        base = f"{base}_S{sm_pct:03d}"
     if dst_regime == "winter":
         return f"{base}_W"
     if dst_regime == "summer":
@@ -1044,57 +1053,63 @@ def run_discovery(
                             if not outcomes:
                                 continue
 
-                            metrics = compute_metrics(outcomes, cost_spec=cost_spec, n_trials=total_combos)
-                            if metrics["sample_size"] == 0:
-                                continue
+                            for stop_mult in STOP_MULTIPLIERS:
+                                # Apply tight stop simulation (no-op for 1.0x)
+                                sim_outcomes = apply_tight_stop(outcomes, stop_mult, cost_spec)
 
-                            # Determine effective regime for strategy_id suffix:
-                            # use dst_regime if this session is DST-affected, else no suffix
-                            effective_regime = dst_regime if session_is_dst_affected else None
-                            strategy_id = make_strategy_id(
-                                instrument, orb_label, em, rr_target, cb, filter_key,
-                                dst_regime=effective_regime,
-                                orb_minutes=orb_minutes,
-                            )
-                            trade_days = sorted({o["trading_day"] for o in outcomes})
-                            trade_day_hash = compute_trade_day_hash(trade_days)
+                                metrics = compute_metrics(sim_outcomes, cost_spec=cost_spec, n_trials=total_combos)
+                                if metrics["sample_size"] == 0:
+                                    continue
 
-                            # Compute DST split metadata:
-                            # For regime-specific strategies, split is degenerate (one regime only).
-                            # For blended strategies, compute the full winter/summer breakdown.
-                            if dst_regime is not None and session_is_dst_affected:
-                                # All outcomes are already one regime; set split fields explicitly
-                                n = len([o for o in outcomes if o.get("outcome") not in ("scratch", "early_exit")])
-                                avg_r = metrics["expectancy_r"]
-                                if dst_regime == "winter":
-                                    dst_split = {
-                                        "winter_n": n, "winter_avg_r": avg_r,
-                                        "summer_n": 0, "summer_avg_r": None,
-                                        "verdict": "WINTER-ONLY",
-                                    }
+                                # Determine effective regime for strategy_id suffix:
+                                # use dst_regime if this session is DST-affected, else no suffix
+                                effective_regime = dst_regime if session_is_dst_affected else None
+                                strategy_id = make_strategy_id(
+                                    instrument, orb_label, em, rr_target, cb, filter_key,
+                                    dst_regime=effective_regime,
+                                    orb_minutes=orb_minutes,
+                                    stop_multiplier=stop_mult,
+                                )
+                                trade_days = sorted({o["trading_day"] for o in sim_outcomes})
+                                trade_day_hash = compute_trade_day_hash(trade_days)
+
+                                # Compute DST split metadata:
+                                # For regime-specific strategies, split is degenerate (one regime only).
+                                # For blended strategies, compute the full winter/summer breakdown.
+                                if dst_regime is not None and session_is_dst_affected:
+                                    # All outcomes are already one regime; set split fields explicitly
+                                    n = len([o for o in sim_outcomes if o.get("outcome") not in ("scratch", "early_exit")])
+                                    avg_r = metrics["expectancy_r"]
+                                    if dst_regime == "winter":
+                                        dst_split = {
+                                            "winter_n": n, "winter_avg_r": avg_r,
+                                            "summer_n": 0, "summer_avg_r": None,
+                                            "verdict": "WINTER-ONLY",
+                                        }
+                                    else:
+                                        dst_split = {
+                                            "winter_n": 0, "winter_avg_r": None,
+                                            "summer_n": n, "summer_avg_r": avg_r,
+                                            "verdict": "SUMMER-ONLY",
+                                        }
                                 else:
-                                    dst_split = {
-                                        "winter_n": 0, "winter_avg_r": None,
-                                        "summer_n": n, "summer_avg_r": avg_r,
-                                        "verdict": "SUMMER-ONLY",
-                                    }
-                            else:
-                                dst_split = compute_dst_split_from_outcomes(outcomes, orb_label)
+                                    dst_split = compute_dst_split_from_outcomes(sim_outcomes, orb_label)
 
-                            all_strategies.append({
-                                "strategy_id": strategy_id,
-                                "instrument": instrument,
-                                "orb_label": orb_label,
-                                "orb_minutes": orb_minutes,
-                                "rr_target": rr_target,
-                                "confirm_bars": cb,
-                                "entry_model": em,
-                                "filter_key": filter_key,
-                                "filter_params": strategy_filter.to_json(),
-                                "metrics": metrics,
-                                "trade_day_hash": trade_day_hash,
-                                "dst_split": dst_split,
-                            })
+                                all_strategies.append({
+                                    "strategy_id": strategy_id,
+                                    "instrument": instrument,
+                                    "orb_label": orb_label,
+                                    "orb_minutes": orb_minutes,
+                                    "rr_target": rr_target,
+                                    "confirm_bars": cb,
+                                    "entry_model": em,
+                                    "filter_key": filter_key,
+                                    "filter_params": strategy_filter.to_json(),
+                                    "stop_multiplier": stop_mult,
+                                    "metrics": metrics,
+                                    "trade_day_hash": trade_day_hash,
+                                    "dst_split": dst_split,
+                                })
 
                 if combo_idx % 500 == 0:
                     logger.info(f"  Progress: {combo_idx}/{total_combos} combos, {len(all_strategies)} strategies")
@@ -1124,6 +1139,7 @@ def run_discovery(
                     s["strategy_id"], s["instrument"], s["orb_label"],
                     s["orb_minutes"], s["rr_target"], s["confirm_bars"],
                     s["entry_model"], s["filter_key"], s["filter_params"],
+                    s["stop_multiplier"],
                     m["sample_size"], m["win_rate"],
                     m["avg_win_r"], m["avg_loss_r"],
                     m["expectancy_r"], m["sharpe_ratio"],

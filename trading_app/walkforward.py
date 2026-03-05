@@ -15,6 +15,7 @@ from pathlib import Path
 
 from trading_app.strategy_fitness import _load_strategy_outcomes
 from trading_app.strategy_discovery import compute_metrics
+from trading_app.config import apply_tight_stop
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,8 @@ def run_walkforward(
     min_pct_positive: float = 0.60,
     dst_regime: str | None = None,
     wf_start_date: date | None = None,
+    stop_multiplier: float = 1.0,
+    cost_spec=None,
 ) -> WalkForwardResult:
     """
     Anchored walk-forward validation on existing orb_outcomes.
@@ -116,6 +119,10 @@ def run_walkforward(
             passed=False, rejection_reason="No outcomes found",
             windows=[], params=params,
         )
+
+    # Apply tight stop simulation (no-op for 1.0x)
+    if stop_multiplier != 1.0 and cost_spec is not None:
+        outcomes = apply_tight_stop(outcomes, stop_multiplier, cost_spec)
 
     trading_days = [o["trading_day"] for o in outcomes]
     earliest = min(trading_days)

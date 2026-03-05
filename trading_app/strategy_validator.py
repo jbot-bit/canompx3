@@ -469,6 +469,7 @@ def _walkforward_worker(
     dst_verdict_from_discovery: str | None,
     dst_cols_from_discovery: dict | None,
     wf_start_date: date | None = None,
+    stop_multiplier: float = 1.0,
 ) -> dict:
     """Worker function for parallel walkforward. Runs in a subprocess.
 
@@ -494,6 +495,10 @@ def _walkforward_worker(
             configure_connection(con, writing=False)
 
             # Phase 4b: Walk-forward
+            # Load cost spec for tight stop re-simulation in WF windows
+            from pipeline.cost_model import get_cost_spec
+            wf_cost_spec = get_cost_spec(instrument) if stop_multiplier != 1.0 else None
+
             wf_result = run_walkforward(
                 con=con,
                 strategy_id=strategy_id,
@@ -511,6 +516,8 @@ def _walkforward_worker(
                 min_pct_positive=wf_params["min_pct_positive"],
                 dst_regime=dst_regime,
                 wf_start_date=wf_start_date,
+                stop_multiplier=stop_multiplier,
+                cost_spec=wf_cost_spec,
             )
             result["wf_result"] = {
                 "passed": wf_result.passed,
@@ -715,6 +722,7 @@ def run_validation(
                 dst_regime=cand["strat_dst_regime"],
                 dst_verdict_from_discovery=rd.get("dst_verdict"),
                 wf_start_date=wf_start_date,
+                stop_multiplier=rd.get("stop_multiplier", 1.0),
                 dst_cols_from_discovery={
                     "winter_n": rd.get("dst_winter_n"),
                     "winter_avg_r": rd.get("dst_winter_avg_r"),
@@ -887,7 +895,7 @@ def run_validation(
                         """INSERT OR REPLACE INTO validated_setups
                            (strategy_id, promoted_from, instrument, orb_label,
                             orb_minutes, rr_target, confirm_bars, entry_model,
-                            filter_type, filter_params,
+                            filter_type, filter_params, stop_multiplier,
                             sample_size, win_rate, expectancy_r,
                             years_tested, all_years_positive, stress_test_passed,
                             sharpe_ratio, max_drawdown_r,
@@ -901,7 +909,7 @@ def run_validation(
                             dst_verdict,
                             wf_tested, wf_passed, wf_windows,
                             sharpe_haircut, skewness, kurtosis_excess)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         [
                             sid, sid,
                             rd["instrument"], rd["orb_label"],
@@ -909,6 +917,7 @@ def run_validation(
                             rd["confirm_bars"], rd.get("entry_model", "E1"),
                             rd.get("filter_type", ""),
                             rd.get("filter_params", ""),
+                            rd.get("stop_multiplier", 1.0),
                             rd.get("sample_size", 0),
                             rd.get("win_rate", 0),
                             rd.get("expectancy_r", 0),

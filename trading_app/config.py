@@ -640,6 +640,79 @@ E2_SLIPPAGE_TICKS = 1
 E2_STRESS_TICKS = 2
 
 # =========================================================================
+# Stop Multipliers: tighter stop placement via MAE profiling
+# =========================================================================
+# Research (2026-03-06): 0.75x stop kills losers at 10-20:1 vs winners.
+# 56/57 combos show shallower max DD; 30/32 profitable combos improve R/DD.
+# 16/228 survive BH FDR at q=0.05. Option B (same risk reference, earlier exit):
+# loss at tight stop = -stop_multiplier R (original R basis unchanged).
+# @research-source: session analysis, mae_r friction-adjusted simulation
+# @research-date: 2026-03-06
+# @entry-models: E1, E2
+# @note: Do NOT test more than 3 levels (overfitting risk per Bloomy review).
+STOP_MULTIPLIERS = [1.0, 0.75]
+
+
+def apply_tight_stop(outcomes: list[dict], stop_multiplier: float,
+                     cost_spec) -> list[dict]:
+    """Apply tight stop simulation to a list of outcome dicts (Option B).
+
+    For each trade, checks whether max adverse excursion (mae_r) exceeded
+    stop_multiplier * raw_stop_distance. If so, the trade is "killed" —
+    pnl_r becomes -stop_multiplier and outcome becomes "loss".
+
+    Uses per-trade friction-adjusted thresholds because mae_r includes
+    friction in its denominator (risk_in_dollars = raw_risk + friction).
+
+    Args:
+        outcomes: list of outcome dicts with keys: mae_r, pnl_r, outcome,
+                  entry_price, stop_price
+        stop_multiplier: fraction of stop distance (e.g. 0.75)
+        cost_spec: CostSpec from pipeline.cost_model
+
+    Returns:
+        New list of outcome dicts with adjusted pnl_r and outcome.
+        Original list is NOT mutated.
+    """
+    if stop_multiplier >= 1.0:
+        return outcomes  # No-op for standard stop
+
+    adjusted = []
+    for o in outcomes:
+        mae_r = o.get("mae_r")
+        entry_price = o.get("entry_price")
+        stop_price = o.get("stop_price")
+
+        # Skip trades without required fields
+        if mae_r is None or entry_price is None or stop_price is None:
+            adjusted.append(o)
+            continue
+
+        risk_pts = abs(entry_price - stop_price)
+        if risk_pts <= 0:
+            adjusted.append(o)
+            continue
+
+        # Per-trade friction-adjusted threshold
+        raw_risk_d = risk_pts * cost_spec.point_value
+        risk_d = raw_risk_d + cost_spec.total_friction
+        max_adv_pts = mae_r * risk_d / cost_spec.point_value
+
+        killed = max_adv_pts >= stop_multiplier * risk_pts
+
+        if killed:
+            new_o = dict(o)
+            new_o["pnl_r"] = round(-stop_multiplier, 4)
+            # Killed winners/scratches become losses
+            if new_o.get("outcome") != "loss":
+                new_o["outcome"] = "loss"
+            adjusted.append(new_o)
+        else:
+            adjusted.append(o)
+
+    return adjusted
+
+# =========================================================================
 # Variable Aperture: session-specific ORB duration (minutes)
 # =========================================================================
 # Research (scripts/analyze_mgc_15m_orb.py, 2026-02-13):

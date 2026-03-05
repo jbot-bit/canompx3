@@ -583,6 +583,15 @@ class ExecutionEngine:
 
         stop_price = orb.low if trade.direction == "long" else orb.high
 
+        # Apply tight stop (Option B): move stop closer by (1 - multiplier) * ORB range
+        sm = getattr(trade.strategy, "stop_multiplier", 1.0)
+        if sm != 1.0:
+            orb_range = orb.high - orb.low
+            if trade.direction == "long":
+                stop_price = orb.low + (1.0 - sm) * orb_range
+            else:
+                stop_price = orb.high - (1.0 - sm) * orb_range
+
         # Resolve entry price based on model
         if trade.entry_model == "E2":
             # E2: Stop-Market — fill at ORB edge + slippage ON the confirm bar.
