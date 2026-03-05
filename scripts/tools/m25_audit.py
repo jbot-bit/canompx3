@@ -410,6 +410,327 @@ AUDIT_MODES = {
 }
 
 
+def gather_runtime_context(primary_paths: list[str]) -> str:
+    """Gather runtime context that M2.5 cannot access on its own.
+
+    M2.5 is a blind API call — no tools, no DB, no git. This function
+    pre-gathers the context it would need to avoid false positives:
+    - DB schema for tables referenced in the code
+    - Current config values (entry models, filters, sessions, costs)
+    - Test file contents for the target files
+    - Recent git diff for the target files (last 5 commits)
+    """
+    import subprocess
+
+    project_root = Path(__file__).parent.parent.parent
+    parts: list[str] = []
+
+    # ── 1. DB schema (if target touches DB) ──────────────────────────
+    db_keywords = {"duckdb", "gold.db", "GOLD_DB", "bars_1m", "bars_5m",
+                   "daily_features", "orb_outcomes", "validated_setups",
+                   "experimental_strategies", "edge_families"}
+    touches_db = False
+    for p in primary_paths:
+        path = Path(p) if Path(p).exists() else project_root / p
+        if path.exists():
+            content = path.read_text(encoding="utf-8", errors="replace")[:5000]
+            if any(kw in content for kw in db_keywords):
+                touches_db = True
+                break
+
+    if touches_db:
+        try:
+            db_path = project_root / "gold.db"
+            if db_path.exists():
+                import duckdb
+                con = duckdb.connect(str(db_path), read_only=True)
+                tables = con.execute(
+                    "SELECT table_name FROM information_schema.tables "
+                    "WHERE table_schema='main' ORDER BY table_name"
+                ).fetchall()
+                schema_lines = []
+                for (tbl,) in tables:
+                    cols = con.execute(
+                        f"SELECT column_name, data_type FROM information_schema.columns "
+                        f"WHERE table_name='{tbl}' ORDER BY ordinal_position"
+                    ).fetchall()
+                    col_str = ", ".join(f"{c} {t}" for c, t in cols)
+                    count = con.execute(f"SELECT COUNT(*) FROM {tbl}").fetchone()[0]
+                    schema_lines.append(f"  {tbl} ({count:,} rows): {col_str}")
+                con.close()
+                parts.append(
+                    "## DATABASE SCHEMA (live from gold.db)\n"
+                    "M2.5 cannot query the DB. Use this to verify column names, "
+                    "types, and table relationships.\n\n"
+                    + "\n".join(schema_lines)
+                )
+        except Exception as e:
+            parts.append(f"## DATABASE SCHEMA\n(Could not read: {e})")
+
+    # ── 2. Current config values ─────────────────────────────────────
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", (
+                "from trading_app.config import ENTRY_MODELS, FILTER_TYPES, ORB_MINUTES_OPTIONS, "
+                "CLASSIFICATION_THRESHOLDS, CONFIRM_BARS_OPTIONS, RR_TARGET_OPTIONS\n"
+                "print('ENTRY_MODELS:', sorted(ENTRY_MODELS))\n"
+                "print('FILTER_TYPES:', sorted(FILTER_TYPES))\n"
+                "print('ORB_MINUTES:', sorted(ORB_MINUTES_OPTIONS))\n"
+                "print('CONFIRM_BARS:', sorted(CONFIRM_BARS_OPTIONS))\n"
+                "print('RR_TARGETS:', sorted(RR_TARGET_OPTIONS))\n"
+                "print('CLASSIFICATION:', CLASSIFICATION_THRESHOLDS)\n"
+            )],
+            capture_output=True, text=True, timeout=10,
+            cwd=str(project_root),
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            parts.append(
+                "## CURRENT CONFIG VALUES (live from trading_app/config.py)\n"
+                + result.stdout.strip()
+            )
+    except Exception:
+        pass
+
+    # ── 3. Active instruments + cost specs ───────────────────────────
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", (
+                "from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS\n"
+                "from pipeline.cost_model import COST_SPECS\n"
+                "print('ACTIVE_INSTRUMENTS:', sorted(ACTIVE_ORB_INSTRUMENTS))\n"
+                "for sym, spec in sorted(COST_SPECS.items()):\n"
+                "    print(f'  {sym}: {spec}')\n"
+            )],
+            capture_output=True, text=True, timeout=10,
+            cwd=str(project_root),
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            parts.append(
+                "## ACTIVE INSTRUMENTS & COST SPECS (live)\n"
+                + result.stdout.strip()
+            )
+    except Exception:
+        pass
+
+    # ── 4. Session catalog summary ───────────────────────────────────
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", (
+                "from pipeline.dst import SESSION_CATALOG\n"
+                "import datetime\n"
+                "# Show resolved Brisbane times for EST and EDT\n"
+                "est_day = datetime.date(2025, 1, 15)  # US EST\n"
+                "edt_day = datetime.date(2025, 6, 15)  # US EDT\n"
+                "print('Sessions (resolved Brisbane times, EST vs EDT):')\n"
+                "for name in sorted(SESSION_CATALOG):\n"
+                "    info = SESSION_CATALOG[name]\n"
+                "    event = info.get('event', 'unknown')\n"
+                "    bg = info.get('break_group', '?')\n"
+                "    resolver = info.get('resolver')\n"
+                "    if resolver:\n"
+                "        try:\n"
+                "            est_hm = resolver(est_day)\n"
+                "            edt_hm = resolver(edt_day)\n"
+                "            est_str = f'{est_hm[0]:02d}:{est_hm[1]:02d}'\n"
+                "            edt_str = f'{edt_hm[0]:02d}:{edt_hm[1]:02d}'\n"
+                "            shift = '' if est_str == edt_str else f' (shifts to {edt_str} in EDT)'\n"
+                "            print(f'  {name}: {est_str} Brisbane (EST){shift} | group={bg} | {event}')\n"
+                "        except Exception as e:\n"
+                "            print(f'  {name}: resolver error: {e} | group={bg} | {event}')\n"
+                "    else:\n"
+                "        print(f'  {name}: no resolver | group={bg} | {event}')\n"
+            )],
+            capture_output=True, text=True, timeout=10,
+            cwd=str(project_root),
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            parts.append(
+                "## SESSION CATALOG (live from pipeline/dst.py)\n"
+                "These are ORB session START times in Brisbane time.\n"
+                "US DST shifts some sessions by 1 hour.\n\n"
+                + result.stdout.strip()
+            )
+    except Exception:
+        pass
+
+    # ── 5. Test files for target modules ─────────────────────────────
+    test_content_parts = []
+    for p in primary_paths:
+        stem = Path(p).stem
+        # Search common test locations
+        for test_dir in ["tests/test_pipeline", "tests/test_trading_app", "tests"]:
+            test_path = project_root / test_dir / f"test_{stem}.py"
+            if test_path.exists():
+                content = test_path.read_text(encoding="utf-8", errors="replace")
+                lines = content.splitlines()
+                if len(lines) > 300:
+                    content = "\n".join(lines[:300])
+                    content += f"\n... [TRUNCATED at 300/{len(lines)} lines]"
+                test_content_parts.append(
+                    f"### Test file: {test_path.relative_to(project_root).as_posix()}\n"
+                    f"```python\n{content}\n```"
+                )
+                break
+
+    if test_content_parts:
+        parts.append(
+            "## TEST FILES (M2.5 cannot see these without injection)\n"
+            "Use these to understand what IS tested vs what is NOT.\n\n"
+            + "\n\n".join(test_content_parts)
+        )
+
+    # ── 6. Recent git history for target files ───────────────────────
+    git_parts = []
+    for p in primary_paths:
+        try:
+            result = subprocess.run(
+                ["git", "log", "--oneline", "-5", "--", p],
+                capture_output=True, text=True, timeout=10,
+                cwd=str(project_root),
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                git_parts.append(f"  {p}:\n    " + "\n    ".join(result.stdout.strip().splitlines()))
+        except Exception:
+            pass
+
+    if git_parts:
+        parts.append(
+            "## RECENT GIT HISTORY (last 5 commits per file)\n"
+            + "\n".join(git_parts)
+        )
+
+    if not parts:
+        return ""
+
+    return (
+        "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "RUNTIME CONTEXT (auto-gathered — M2.5 cannot access tools)\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        + "\n\n".join(parts)
+        + "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    )
+
+
+def build_diff_content(files: list[str], ref: str = "HEAD") -> str | None:
+    """Build a focused diff view for M2.5 review.
+
+    Instead of sending whole files, sends only changed hunks + 15 lines
+    of surrounding context. M2.5 is strongest at reviewing small, focused
+    changes — this plays to that strength.
+
+    Returns None if no diff is available (new files, no changes, etc.).
+    """
+    import subprocess
+
+    project_root = Path(__file__).parent.parent.parent
+    diff_parts = []
+
+    for f in files:
+        try:
+            # Get the diff with context
+            result = subprocess.run(
+                ["git", "diff", "-U15", ref, "--", f],
+                capture_output=True, text=True, timeout=10,
+                cwd=str(project_root),
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                diff_parts.append(
+                    f"### DIFF: {f} (vs {ref})\n"
+                    f"```diff\n{result.stdout.strip()}\n```"
+                )
+            else:
+                # Try staged diff
+                result = subprocess.run(
+                    ["git", "diff", "-U15", "--cached", "--", f],
+                    capture_output=True, text=True, timeout=10,
+                    cwd=str(project_root),
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    diff_parts.append(
+                        f"### DIFF (staged): {f} (vs {ref})\n"
+                        f"```diff\n{result.stdout.strip()}\n```"
+                    )
+        except Exception:
+            pass
+
+    if not diff_parts:
+        return None
+
+    return (
+        "## CODE CHANGES TO REVIEW\n"
+        "Focus your audit on THESE CHANGES specifically. The surrounding context "
+        "is provided for understanding, but your findings should relate to the "
+        "changed lines (marked with + and -).\n\n"
+        + "\n\n".join(diff_parts)
+    )
+
+
+def triage_output(raw_output: str) -> str:
+    """Post-process M2.5 output to extract only actionable findings.
+
+    Strips FALSE POSITIVE sections, keeps TRUE and WORTH EXPLORING.
+    M2.5 has a ~41% FP rate — this filters the noise.
+    """
+    lines = raw_output.splitlines()
+    result_lines: list[str] = []
+    skip_section = False
+    in_finding = False
+    finding_lines: list[str] = []
+    finding_verdict = ""
+
+    for line in lines:
+        upper = line.upper().strip()
+
+        # Detect verdict markers
+        if "**FALSE POSITIVE**" in upper or "FALSE POSITIVE" in upper:
+            skip_section = True
+            finding_verdict = "FP"
+            continue
+        if "**TRUE**" in upper or "**TRUE BUG**" in upper:
+            skip_section = False
+            finding_verdict = "TRUE"
+        if "**WORTH EXPLORING**" in upper:
+            skip_section = False
+            finding_verdict = "EXPLORE"
+
+        # Keep section headers and non-finding content
+        if line.startswith("## ") or line.startswith("# "):
+            skip_section = False
+            # Skip "FALSE POSITIVE" headers
+            if "FALSE POSITIVE" in upper:
+                skip_section = True
+                continue
+
+        # Keep WELL-DONE, FINDINGS, RECOMMENDATIONS, SUMMARY headers
+        if any(kw in upper for kw in ["WELL-DONE", "FINDING", "RECOMMENDATION",
+                                       "SUMMARY", "OVERALL", "VERDICT",
+                                       "TRUE FINDING", "WORTH EXPLORING",
+                                       "CRITICAL", "HIGH", "MEDIUM"]):
+            if "FALSE" not in upper:
+                skip_section = False
+
+        if not skip_section:
+            result_lines.append(line)
+
+    triaged = "\n".join(result_lines).strip()
+
+    # Count findings for summary
+    true_count = raw_output.upper().count("**TRUE**") + raw_output.upper().count("**TRUE BUG**")
+    fp_count = raw_output.upper().count("**FALSE POSITIVE**")
+    explore_count = raw_output.upper().count("**WORTH EXPLORING**")
+
+    if true_count or fp_count or explore_count:
+        summary = (
+            f"\n\n--- TRIAGE SUMMARY ---\n"
+            f"TRUE findings: {true_count} | "
+            f"FALSE POSITIVEs filtered: {fp_count} | "
+            f"WORTH EXPLORING: {explore_count}"
+        )
+        triaged += summary
+
+    return triaged
+
+
 def find_related_files(primary_paths: list[str], max_extra: int = 4) -> dict[str, str]:
     """Auto-detect project files imported by primary_paths and return their contents.
 
@@ -517,6 +838,7 @@ def audit_deep(
     api_key: str,
     *,
     verbose: bool = False,
+    enrich: bool = False,
 ) -> str:
     """Multi-turn structured audit that mirrors how Claude reasons.
 
@@ -590,6 +912,14 @@ def audit_deep(
     )
 
     full_code = primary_content + context_block
+
+    # Enrich with runtime context if requested
+    if enrich:
+        if verbose:
+            print("  Gathering runtime context (DB, config, tests, git)...", file=sys.stderr)
+        runtime_ctx = gather_runtime_context(primary_paths)
+        if runtime_ctx:
+            full_code = full_code + "\n\n" + runtime_ctx
 
     # ── Turn 1: Understand ───────────────────────────────────────────
     t1_prompt = (
@@ -667,6 +997,7 @@ def audit_plan(
     api_key: str,
     *,
     verbose: bool = False,
+    enrich: bool = False,
 ) -> str:
     """4-turn implementation planning session for a new feature.
 
@@ -722,6 +1053,14 @@ def audit_plan(
             content_parts.append(f"### RELATED FILE: {rel}\n```python\n{content}\n```")
 
     codebase_block = "\n\n".join(content_parts) if content_parts else "(no files provided)"
+
+    # Enrich with runtime context if requested
+    if enrich:
+        if verbose:
+            print("  Gathering runtime context (DB, config, tests, git)...", file=sys.stderr)
+        runtime_ctx = gather_runtime_context(all_paths)
+        if runtime_ctx:
+            codebase_block = codebase_block + "\n\n" + runtime_ctx
 
     system = (
         f"{ARCHITECTURE_CONTEXT}\n---\n\n"
@@ -1020,6 +1359,34 @@ def main():
         ),
     )
     parser.add_argument(
+        "--enrich",
+        action="store_true",
+        help=(
+            "Auto-gather runtime context (DB schema, config values, test files, "
+            "git history) and inject into the prompt. M2.5 cannot call tools — "
+            "this is the workaround. Recommended for deep audits and presets."
+        ),
+    )
+    parser.add_argument(
+        "--diff",
+        metavar="REF",
+        nargs="?",
+        const="HEAD",
+        help=(
+            "Diff-only mode: show only changed lines + 15 lines context from "
+            "git diff REF (default HEAD). M2.5 is strongest reviewing small "
+            "focused changes, not whole files. Use with --enrich for full context."
+        ),
+    )
+    parser.add_argument(
+        "--triage",
+        action="store_true",
+        help=(
+            "Post-process output: extract only TRUE findings and WORTH EXPLORING, "
+            "strip FALSE POSITIVEs. Reduces noise from M2.5's ~41%% FP rate."
+        ),
+    )
+    parser.add_argument(
         "--budget",
         action="store_true",
         help="Show today's call usage and exit",
@@ -1039,7 +1406,7 @@ def main():
             f"Planning: '{args.plan[:60]}' with {len(context_files)} context file(s)...",
             file=sys.stderr,
         )
-        result = audit_plan(args.plan, context_files, api_key, verbose=True)
+        result = audit_plan(args.plan, context_files, api_key, verbose=True, enrich=args.enrich)
 
     # ── Deep audit mode ──────────────────────────────────────────────
     elif args.deep:
@@ -1050,19 +1417,49 @@ def main():
             f"Deep audit: {len(args.files)} file(s) [{mode}] — 3-turn + auto-context...",
             file=sys.stderr,
         )
-        result = audit_deep(args.files, mode, api_key, verbose=True)
+        result = audit_deep(args.files, mode, api_key, verbose=True, enrich=args.enrich)
 
     # ── Standard single-turn mode ────────────────────────────────────
     else:
         if not args.files:
             parser.error("at least one file is required (or use --budget / --plan)")
-        file_content = read_files(args.files)
+
+        # Diff mode: send only changed hunks + context instead of whole files
+        if args.diff is not None:
+            diff_content = build_diff_content(args.files, ref=args.diff)
+            if diff_content:
+                file_content = diff_content
+                # Still include full file for reference but after the diff
+                file_content += "\n\n## FULL FILE REFERENCE (for context only)\n"
+                file_content += read_files(args.files)
+                print(
+                    f"  Diff mode: reviewing changes vs {args.diff}",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    f"  No diff found vs {args.diff}, falling back to full file",
+                    file=sys.stderr,
+                )
+                file_content = read_files(args.files)
+        else:
+            file_content = read_files(args.files)
+
+        if args.enrich:
+            print("  Gathering runtime context (DB, config, tests, git)...", file=sys.stderr)
+            runtime_ctx = gather_runtime_context(args.files)
+            if runtime_ctx:
+                file_content = file_content + "\n\n" + runtime_ctx
         system_prompt = args.prompt if args.prompt else AUDIT_MODES[args.mode]
         print(
             f"Auditing {len(args.files)} file(s) [M2.5/{args.mode}]...",
             file=sys.stderr,
         )
         result = audit(file_content, system_prompt, api_key, fast=args.fast)
+
+    # Post-process: triage to strip false positives
+    if args.triage:
+        result = triage_output(result)
 
     if args.output:
         Path(args.output).write_text(result, encoding="utf-8")
