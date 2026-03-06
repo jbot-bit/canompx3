@@ -27,6 +27,7 @@ from ui.discipline_data import (
     get_latest_letter,
     get_pending_debriefs,
     is_cooling_active,
+    load_coaching_note,
     override_cooling,
     trigger_cooling,
 )
@@ -275,3 +276,11 @@ def render_pre_session_priming(
                 st.caption(f"Written {dt.strftime('%b %d')} after {letter.get('strategy_id', '')}")
             except ValueError:
                 pass
+
+    # AI Coach note from latest digest
+    coaching_note = load_coaching_note()
+    if coaching_note:
+        st.markdown("---")
+        st.markdown("**AI Coach Note** (from last session)")
+        with st.expander("Read coaching note", expanded=False):
+            st.markdown(coaching_note)

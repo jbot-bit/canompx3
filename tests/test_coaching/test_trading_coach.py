@@ -10,7 +10,7 @@ class TestBuildChatSystemPrompt:
         profile = {"version": 1, "strengths": [{"trait": "patience"}]}
         prompt = build_chat_system_prompt(profile, [])
         assert "patience" in prompt
-        assert "personal coach" in prompt.lower() or "trading coach" in prompt.lower()
+        assert "performance coach" in prompt.lower()
 
     def test_includes_recent_digests(self):
         profile = {"version": 1}

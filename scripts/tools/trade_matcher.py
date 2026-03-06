@@ -60,6 +60,7 @@ def match_fills_to_trades(fills: list[dict]) -> list[dict]:
     1. Group fills by (account_id, instrument)
     2. Sort by timestamp within each group
     3. Track running position; emit trade when position returns to zero or flips
+    4. Enrich with behavioral metrics for coaching (re-entry speed, size trajectory, etc.)
     """
     # Group by (account_id, instrument)
     groups: dict[tuple, list[dict]] = defaultdict(list)
@@ -109,6 +110,9 @@ def match_fills_to_trades(fills: list[dict]) -> list[dict]:
                 # Remaining size opens new position
                 entry_fills = [fill]  # The flip fill starts new position
                 position = new_position
+
+    # Enrich with behavioral metrics (needs full trade list for context)
+    _enrich_behavioral_metrics(all_trades)
 
     return all_trades
 
@@ -160,6 +164,67 @@ def _build_trade(
         "source": "manual",
         "strategy_id": None,
     }
+
+
+def _enrich_behavioral_metrics(trades: list[dict]) -> None:
+    """Add behavioral metrics to trades for coaching analysis. Mutates in-place.
+
+    Metrics added per trade:
+    - time_since_last_exit_s: seconds since previous trade's exit (re-entry speed)
+    - size_vs_baseline_pct: size relative to session median (100 = baseline)
+    - session_pnl_at_entry: cumulative PnL when this trade was entered
+    - consecutive_losses_at_entry: streak of consecutive losses before this trade
+    - same_instrument_reentry: True if same instrument as previous trade
+    """
+    if not trades:
+        return
+
+    # Sort by entry_time for sequential analysis
+    trades.sort(key=lambda t: t["entry_time"])
+
+    # Compute session median size for baseline
+    sizes = [t["size"] for t in trades]
+    sorted_sizes = sorted(sizes)
+    n = len(sorted_sizes)
+    median_size = sorted_sizes[n // 2] if n % 2 else (sorted_sizes[n // 2 - 1] + sorted_sizes[n // 2]) / 2
+
+    cumulative_pnl = 0.0
+    consecutive_losses = 0
+    prev_exit_time = None
+    prev_instrument = None
+
+    for trade in trades:
+        # Time since last exit (re-entry speed — <120s flags revenge spiral)
+        if prev_exit_time is not None:
+            try:
+                prev_dt = _parse_ts(prev_exit_time)
+                entry_dt = _parse_ts(trade["entry_time"])
+                trade["time_since_last_exit_s"] = (entry_dt - prev_dt).total_seconds()
+            except (ValueError, KeyError):
+                trade["time_since_last_exit_s"] = None
+        else:
+            trade["time_since_last_exit_s"] = None
+
+        # Size relative to session median
+        trade["size_vs_baseline_pct"] = round(trade["size"] / median_size * 100, 1) if median_size > 0 else 100.0
+
+        # Cumulative PnL at entry (negative = in drawdown)
+        trade["session_pnl_at_entry"] = round(cumulative_pnl, 2)
+
+        # Consecutive loss streak at entry
+        trade["consecutive_losses_at_entry"] = consecutive_losses
+
+        # Same instrument re-entry
+        trade["same_instrument_reentry"] = prev_instrument == trade["instrument"] if prev_instrument else False
+
+        # Update running state for next trade
+        cumulative_pnl += trade.get("pnl_dollar", 0)
+        if trade.get("pnl_dollar", 0) < 0:
+            consecutive_losses += 1
+        else:
+            consecutive_losses = 0
+        prev_exit_time = trade["exit_time"]
+        prev_instrument = trade["instrument"]
 
 
 def detect_source(trade: dict, signals: list[dict], *, tolerance_s: float = 60.0) -> None:

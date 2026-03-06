@@ -13,9 +13,11 @@ def test_adherence_enum_values():
 def test_deviation_trigger_values():
     from ui.discipline_data import DEVIATION_TRIGGERS
 
-    assert "narrative" in DEVIATION_TRIGGERS
-    assert "chasing_loss" in DEVIATION_TRIGGERS
-    assert len(DEVIATION_TRIGGERS) == 7
+    # Tendler emotion taxonomy — greed, fear, tilt, confidence, discipline + other
+    assert "fear_fomo_chased" in DEVIATION_TRIGGERS
+    assert "tilt_revenge_reentry" in DEVIATION_TRIGGERS
+    assert "other" in DEVIATION_TRIGGERS
+    assert len(DEVIATION_TRIGGERS) == 14
 
 
 def test_append_debrief_creates_file(tmp_path):

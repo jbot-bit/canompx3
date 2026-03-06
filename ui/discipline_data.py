@@ -18,13 +18,26 @@ SIGNALS_PATH = Path(__file__).parent.parent / "live_signals.jsonl"
 
 ADHERENCE_VALUES = ("followed", "modified", "overrode", "off_plan")
 
+# Tendler emotion taxonomy — maps to coaching spec Section 2
 DEVIATION_TRIGGERS = (
-    "chart_pattern",
-    "narrative",
-    "felt_reversal",
-    "chasing_loss",
-    "fomo_late",
-    "sized_up",
+    # Greed
+    "greed_target_widened",
+    "greed_sized_up_winners",
+    # Fear
+    "fear_fomo_chased",
+    "fear_of_losing_early_exit",
+    "fear_of_mistake_hesitated",
+    # Tilt
+    "tilt_revenge_reentry",
+    "tilt_hate_to_lose",
+    "tilt_injustice",
+    # Confidence
+    "confidence_over_ignored_stop",
+    "confidence_under_skipped_signal",
+    # Discipline
+    "discipline_impatience",
+    "discipline_boredom_overtrade",
+    "discipline_off_plan",
     "other",
 )
 
