@@ -18,11 +18,21 @@ jobs:
         with:
           python-version: '3.13'
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: uv sync --frozen
+
+      - name: Ruff format check
+        run: ruff format --check pipeline/ trading_app/ ui/ scripts/ tests/
 
       - name: Ruff lint check
-        run: ruff check pipeline/ trading_app/
+        run: ruff check pipeline/ trading_app/ ui/ scripts/
+
+      - name: Pyright type check
+        run: pyright
+        continue-on-error: true
 
       - name: Drift check (static analysis)
         run: python pipeline/check_drift.py
@@ -50,5 +60,9 @@ jobs:
           print('All tracked text files are UTF-8.')
           "
 
-      - name: Tier 1 - All tests (no gold.db needed)
-        run: python -m pytest tests/ -v --ignore=tests/test_trader_logic.py -n auto --dist loadscope --cov=pipeline --cov=trading_app --cov-report=term-missing
+      - name: Security audit (advisory)
+        run: pip-audit --desc on 2>&1 || true
+        continue-on-error: true
+
+      - name: Tests with coverage
+        run: python -m pytest tests/ -v --ignore=tests/test_trader_logic.py --cov=pipeline --cov=trading_app --cov-report=term-missing --cov-fail-under=28
