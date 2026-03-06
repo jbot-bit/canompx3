@@ -10,18 +10,18 @@
 set -e
 
 # Activate venv if present (for ruff/python/pytest)
-# Try venv/ first (active dev environment), fall back to .venv/
+# .venv/ is the canonical venv (managed by uv). venv/ is legacy fallback.
 # Save PATH before activate to prevent Git Bash utilities from disappearing
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 _SAVED_PATH="$PATH"
-if [ -f "$SCRIPT_DIR/venv/Scripts/activate" ]; then
-    source "$SCRIPT_DIR/venv/Scripts/activate" 2>/dev/null
-elif [ -f "$SCRIPT_DIR/venv/bin/activate" ]; then
-    source "$SCRIPT_DIR/venv/bin/activate" 2>/dev/null
-elif [ -f "$SCRIPT_DIR/.venv/Scripts/activate" ]; then
+if [ -f "$SCRIPT_DIR/.venv/Scripts/activate" ]; then
     source "$SCRIPT_DIR/.venv/Scripts/activate" 2>/dev/null
 elif [ -f "$SCRIPT_DIR/.venv/bin/activate" ]; then
     source "$SCRIPT_DIR/.venv/bin/activate" 2>/dev/null
+elif [ -f "$SCRIPT_DIR/venv/Scripts/activate" ]; then
+    source "$SCRIPT_DIR/venv/Scripts/activate" 2>/dev/null
+elif [ -f "$SCRIPT_DIR/venv/bin/activate" ]; then
+    source "$SCRIPT_DIR/venv/bin/activate" 2>/dev/null
 fi
 # Restore Git Bash utilities (tail, grep, etc.) that activate may have removed
 export PATH="$PATH:$_SAVED_PATH"
@@ -29,29 +29,29 @@ export PATH="$PATH:$_SAVED_PATH"
 echo "=== PRE-COMMIT CHECKS ==="
 echo ""
 
-# Resolve python — prefer venv/ (active dev env), fall back to .venv/
+# Resolve python — prefer .venv/ (uv-managed), fall back to venv/ (legacy)
 PYTHON="python"
-if [ -f "$SCRIPT_DIR/venv/Scripts/python.exe" ]; then
-    PYTHON="$SCRIPT_DIR/venv/Scripts/python.exe"
-elif [ -f "$SCRIPT_DIR/venv/bin/python" ]; then
-    PYTHON="$SCRIPT_DIR/venv/bin/python"
-elif [ -f "$SCRIPT_DIR/.venv/Scripts/python.exe" ]; then
+if [ -f "$SCRIPT_DIR/.venv/Scripts/python.exe" ]; then
     PYTHON="$SCRIPT_DIR/.venv/Scripts/python.exe"
 elif [ -f "$SCRIPT_DIR/.venv/bin/python" ]; then
     PYTHON="$SCRIPT_DIR/.venv/bin/python"
+elif [ -f "$SCRIPT_DIR/venv/Scripts/python.exe" ]; then
+    PYTHON="$SCRIPT_DIR/venv/Scripts/python.exe"
+elif [ -f "$SCRIPT_DIR/venv/bin/python" ]; then
+    PYTHON="$SCRIPT_DIR/venv/bin/python"
 fi
 
 # 0. Ruff lint check (~1 second)
 echo "[0/6] Ruff lint..."
 RUFF="ruff"
-if [ -f "$SCRIPT_DIR/venv/Scripts/ruff.exe" ]; then
-    RUFF="$SCRIPT_DIR/venv/Scripts/ruff.exe"
-elif [ -f "$SCRIPT_DIR/.venv/Scripts/ruff.exe" ]; then
+if [ -f "$SCRIPT_DIR/.venv/Scripts/ruff.exe" ]; then
     RUFF="$SCRIPT_DIR/.venv/Scripts/ruff.exe"
+elif [ -f "$SCRIPT_DIR/venv/Scripts/ruff.exe" ]; then
+    RUFF="$SCRIPT_DIR/venv/Scripts/ruff.exe"
 fi
-if ! "$RUFF" check pipeline/ trading_app/ > /dev/null 2>&1; then
+if ! "$RUFF" check pipeline/ trading_app/ ui/ scripts/ > /dev/null 2>&1; then
     echo "BLOCKED: Lint errors detected."
-    "$RUFF" check pipeline/ trading_app/
+    "$RUFF" check pipeline/ trading_app/ ui/ scripts/
     exit 1
 fi
 echo "  PASSED"

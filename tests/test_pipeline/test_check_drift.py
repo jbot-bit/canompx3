@@ -16,6 +16,10 @@ from pipeline.check_drift import (
     check_trading_app_connection_leaks,
     check_trading_app_hardcoded_paths,
     check_config_filter_sync,
+    check_pyright_config_exists,
+    check_ruff_rules_minimum,
+    check_python_version_file,
+    check_uv_lock_exists,
 )
 
 
@@ -555,3 +559,106 @@ class TestDataYearsDisclosure:
         assert len(violations) == 0
         captured = capsys.readouterr()
         assert "WARNING" not in captured.out
+
+
+# ============================================================================
+# Tooling config drift checks
+# ============================================================================
+
+
+class TestPyrightConfigExists:
+    """Tests for pyrightconfig.json existence and mode check."""
+
+    def test_passes_with_basic_mode(self, tmp_path):
+        config = tmp_path / "pyrightconfig.json"
+        config.write_text('{"typeCheckingMode": "basic"}')
+        assert check_pyright_config_exists(tmp_path) == []
+
+    def test_passes_with_strict_mode(self, tmp_path):
+        config = tmp_path / "pyrightconfig.json"
+        config.write_text('{"typeCheckingMode": "strict"}')
+        assert check_pyright_config_exists(tmp_path) == []
+
+    def test_fails_when_missing(self, tmp_path):
+        violations = check_pyright_config_exists(tmp_path)
+        assert len(violations) == 1
+        assert "missing" in violations[0]
+
+    def test_fails_with_off_mode(self, tmp_path):
+        config = tmp_path / "pyrightconfig.json"
+        config.write_text('{"typeCheckingMode": "off"}')
+        violations = check_pyright_config_exists(tmp_path)
+        assert len(violations) == 1
+        assert "off" in violations[0]
+
+    def test_fails_with_no_mode_key(self, tmp_path):
+        config = tmp_path / "pyrightconfig.json"
+        config.write_text('{"include": ["pipeline"]}')
+        violations = check_pyright_config_exists(tmp_path)
+        assert len(violations) == 1
+        assert "off" in violations[0]
+
+
+class TestRuffRulesMinimum:
+    """Tests for ruff.toml minimum rule set check."""
+
+    def test_passes_with_all_required(self, tmp_path):
+        ruff = tmp_path / "ruff.toml"
+        ruff.write_text('[lint]\nselect = ["F", "E", "W", "I", "B", "UP", "SIM"]')
+        assert check_ruff_rules_minimum(tmp_path) == []
+
+    def test_fails_when_missing_file(self, tmp_path):
+        violations = check_ruff_rules_minimum(tmp_path)
+        assert len(violations) == 1
+        assert "missing" in violations[0]
+
+    def test_fails_when_missing_rules(self, tmp_path):
+        ruff = tmp_path / "ruff.toml"
+        ruff.write_text('[lint]\nselect = ["F", "E"]')
+        violations = check_ruff_rules_minimum(tmp_path)
+        assert len(violations) == 1
+        assert "I" in violations[0]
+        assert "B" in violations[0]
+        assert "UP" in violations[0]
+
+
+class TestPythonVersionFile:
+    """Tests for .python-version file check."""
+
+    def test_passes_with_313(self, tmp_path):
+        pv = tmp_path / ".python-version"
+        pv.write_text("3.13\n")
+        assert check_python_version_file(tmp_path) == []
+
+    def test_fails_when_missing(self, tmp_path):
+        violations = check_python_version_file(tmp_path)
+        assert len(violations) == 1
+        assert "missing" in violations[0]
+
+    def test_fails_with_wrong_version(self, tmp_path):
+        pv = tmp_path / ".python-version"
+        pv.write_text("3.11\n")
+        violations = check_python_version_file(tmp_path)
+        assert len(violations) == 1
+        assert "3.11" in violations[0]
+
+
+class TestUvLockExists:
+    """Tests for uv.lock existence check."""
+
+    def test_passes_with_real_lock(self, tmp_path):
+        lock = tmp_path / "uv.lock"
+        lock.write_text("\n".join([f"[[package]]\nname = 'pkg{i}'" for i in range(10)]))
+        assert check_uv_lock_exists(tmp_path) == []
+
+    def test_fails_when_missing(self, tmp_path):
+        violations = check_uv_lock_exists(tmp_path)
+        assert len(violations) == 1
+        assert "missing" in violations[0]
+
+    def test_fails_with_skeleton(self, tmp_path):
+        lock = tmp_path / "uv.lock"
+        lock.write_text("version = 1\n[[package]]\nname = 'canompx3'\n")
+        violations = check_uv_lock_exists(tmp_path)
+        assert len(violations) == 1
+        assert "skeleton" in violations[0]

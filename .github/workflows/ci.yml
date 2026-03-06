@@ -22,27 +22,27 @@ jobs:
         uses: astral-sh/setup-uv@v5
 
       - name: Install dependencies
-        run: uv sync --frozen
+        run: uv sync --frozen --all-extras
 
       - name: Ruff format check
-        run: ruff format --check pipeline/ trading_app/ ui/ scripts/ tests/
+        run: uv run ruff format --check pipeline/ trading_app/ ui/ scripts/ tests/
 
       - name: Ruff lint check
-        run: ruff check pipeline/ trading_app/ ui/ scripts/
+        run: uv run ruff check pipeline/ trading_app/ ui/ scripts/
 
       - name: Pyright type check
-        run: pyright
+        run: uv run pyright
         continue-on-error: true
 
       - name: Drift check (static analysis)
-        run: python pipeline/check_drift.py
+        run: uv run python pipeline/check_drift.py
 
       - name: Behavioral audit
-        run: python scripts/tools/audit_behavioral.py
+        run: uv run python scripts/tools/audit_behavioral.py
 
       - name: Check file encoding (UTF-8)
         run: |
-          python -c "
+          uv run python -c "
           from pathlib import Path
           bad = []
           for ext in ('*.md', '*.txt', '*.py'):
@@ -61,8 +61,8 @@ jobs:
           "
 
       - name: Security audit (advisory)
-        run: pip-audit --desc on
+        run: uv run pip-audit --desc on
         continue-on-error: true
 
       - name: Tests with coverage
-        run: python -m pytest tests/ -v --ignore=tests/test_trader_logic.py --cov=pipeline --cov=trading_app --cov-report=term-missing --cov-fail-under=28
+        run: uv run pytest tests/ -v --ignore=tests/test_trader_logic.py --cov=pipeline --cov=trading_app --cov-report=term-missing --cov-fail-under=28
