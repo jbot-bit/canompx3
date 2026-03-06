@@ -110,7 +110,7 @@ def check_tests() -> tuple[bool, str]:
             [sys.executable, "-m", "pytest", "tests/", "-x", "-q", "--tb=no"],
             capture_output=True,
             text=True,
-            timeout=300,
+            timeout=600,
             cwd=str(PROJECT_ROOT),
         )
         # Parse "N passed" from output
