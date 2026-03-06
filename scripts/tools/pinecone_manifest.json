@@ -51,6 +51,10 @@
         "_snapshot_live_config.md",
         "_snapshot_research_index.md"
       ]
+    },
+    "coaching": {
+      "description": "AI coaching digests and trader profile — synced for chat RAG",
+      "files": ["data/trader_profile.json", "data/coaching_digests.jsonl"]
     }
   },
   "excluded": {

@@ -234,6 +234,16 @@ def ensure_utf8(file_path: Path) -> Path:
 # ---------------------------------------------------------------------------
 
 
+def collect_coaching_files(*, data_dir: Path = PROJECT_ROOT / "data") -> list[tuple[Path, str]]:
+    """Collect coaching files for Pinecone sync."""
+    files = []
+    for filename in ("trader_profile.json", "coaching_digests.jsonl"):
+        path = data_dir / filename
+        if path.exists():
+            files.append((path, f"coaching/{filename}"))
+    return files
+
+
 def collect_files(manifest: dict) -> dict[str, list[tuple[Path, str]]]:
     """Collect all files from manifest, grouped by tier.
 
@@ -305,6 +315,10 @@ def collect_files(manifest: dict) -> dict[str, list[tuple[Path, str]]]:
         else:
             print(f"  WARNING: generated snapshot missing: {filename}")
     collected["generated"] = generated_files
+
+    # --- Coaching files ---
+    if "coaching" in tiers:
+        collected["coaching"] = collect_coaching_files()
 
     return collected
 
