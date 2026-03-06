@@ -12,8 +12,8 @@ import requests
 
 from .tradovate_auth import TradovateAuth
 
-DEMO_BASE = "https://demo.tradovate.com/v1"
-LIVE_BASE = "https://live.tradovate.com/v1"
+DEMO_BASE = "https://demo.tradovateapi.com/v1"
+LIVE_BASE = "https://live.tradovateapi.com/v1"
 
 # Tradovate product base names (same as our instrument codes for all active instruments)
 PRODUCT_MAP = {

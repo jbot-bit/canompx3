@@ -21,8 +21,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-LIVE_BASE = "https://live.tradovate.com/v1"
-DEMO_BASE = "https://demo.tradovate.com/v1"
+LIVE_BASE = "https://live.tradovateapi.com/v1"
+DEMO_BASE = "https://demo.tradovateapi.com/v1"
 
 
 class TradovateAuth:

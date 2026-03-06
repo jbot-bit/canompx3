@@ -25,8 +25,8 @@ from .tradovate_auth import TradovateAuth
 
 log = logging.getLogger(__name__)
 
-MD_WS_LIVE = "wss://md.tradovate.com/v1/websocket"
-MD_WS_DEMO = "wss://md-demo.tradovate.com/v1/websocket"
+MD_WS_LIVE = "wss://md.tradovateapi.com/v1/websocket"
+MD_WS_DEMO = "wss://md.tradovateapi.com/v1/websocket"
 
 # Reconnect settings
 _BACKOFF_INITIAL = 5.0  # seconds before first retry

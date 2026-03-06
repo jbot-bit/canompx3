@@ -3007,6 +3007,31 @@ def check_python_version_file(project_root: Path) -> list[str]:
     return []
 
 
+def check_tradovate_api_urls() -> list[str]:
+    """Ensure all Tradovate URLs use tradovateapi.com (not tradovate.com).
+
+    Per official docs: REST = {demo,live}.tradovateapi.com, WS = md.tradovateapi.com.
+    The domain tradovate.com is the marketing site, not the API.
+    """
+    violations = []
+    live_dir = TRADING_APP_DIR / "live"
+    if not live_dir.exists():
+        return []
+    # Pattern: any URL with tradovate.com that is NOT tradovateapi.com
+    bad_url = re.compile(r"""https?://[a-z-]*\.tradovate\.com/|wss?://[a-z-]*\.tradovate\.com/""")
+    good_url = re.compile(r"""tradovateapi\.com""")
+    for py_file in live_dir.glob("*.py"):
+        try:
+            content = py_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for i, line in enumerate(content.splitlines(), 1):
+            if bad_url.search(line) and not good_url.search(line):
+                rel = py_file.relative_to(PROJECT_ROOT)
+                violations.append(f"  {rel}:{i} — wrong Tradovate domain. Use tradovateapi.com per official API docs.")
+    return violations
+
+
 def check_uv_lock_exists(project_root: Path) -> list[str]:
     """Ensure uv.lock exists and is not a skeleton."""
     lock_path = project_root / "uv.lock"
@@ -3194,6 +3219,7 @@ CHECKS = [
     ("ruff.toml has minimum required rules (I, B, UP)", lambda: check_ruff_rules_minimum(PROJECT_ROOT), False, False),
     (".python-version file exists and matches 3.13", lambda: check_python_version_file(PROJECT_ROOT), False, False),
     ("uv.lock exists and is not a skeleton", lambda: check_uv_lock_exists(PROJECT_ROOT), False, False),
+    ("Tradovate API URLs use tradovateapi.com (not tradovate.com)", check_tradovate_api_urls, False, False),
 ]
 
 

@@ -23,8 +23,8 @@ from .tradovate_auth import TradovateAuth
 
 log = logging.getLogger(__name__)
 
-LIVE_BASE = "https://live.tradovate.com/v1"
-DEMO_BASE = "https://demo.tradovate.com/v1"
+LIVE_BASE = "https://live.tradovateapi.com/v1"
+DEMO_BASE = "https://demo.tradovateapi.com/v1"
 
 
 @dataclass
