@@ -15,6 +15,9 @@ cd "$(dirname "$0")/../.."
 
 INSTRUMENT="${1:-MGC}"
 
+# Write FAILED manifest on error (non-fatal — must not abort rebuild)
+trap 'python scripts/tools/pipeline_status.py --write-manifest --instrument "$INSTRUMENT" --status-value FAILED --trigger SHELL 2>/dev/null || true' ERR
+
 # Walk-forward enabled for all instruments (Mar 2026).
 # All 4 active instruments have 5+ years of data — sufficient for WF.
 # MGC uses WF_START_OVERRIDE=2022-01-01 in config.py (regime shift).
@@ -80,6 +83,11 @@ python pipeline/health_check.py
 echo ""
 echo "Step 9/9: Syncing knowledge to Pinecone..."
 python scripts/tools/sync_pinecone.py
+
+# Write rebuild manifest (success)
+echo ""
+echo "--- Writing rebuild manifest ---"
+python scripts/tools/pipeline_status.py --write-manifest --instrument "$INSTRUMENT" --status-value COMPLETED --trigger SHELL 2>/dev/null || true
 
 echo ""
 echo "=========================================="

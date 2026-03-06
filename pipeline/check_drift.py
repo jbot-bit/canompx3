@@ -15,6 +15,7 @@ Usage:
     python pipeline/check_drift.py
 """
 
+import datetime
 import re
 import sys
 from datetime import UTC
@@ -3043,6 +3044,55 @@ def check_uv_lock_exists(project_root: Path) -> list[str]:
     return []
 
 
+def check_pipeline_staleness(con=None) -> list[str]:
+    """Fail if any active instrument has orb_outcomes > 7 trading days behind daily_features."""
+    violations = []
+    _own_con = False
+    try:
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return []
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        stale_instruments = []
+        for inst in sorted(ACTIVE_ORB_INSTRUMENTS):
+            df_max = con.execute(
+                "SELECT MAX(trading_day) FROM daily_features WHERE symbol = ? AND orb_minutes = 5",
+                [inst],
+            ).fetchone()[0]
+            oo_max = con.execute(
+                "SELECT MAX(trading_day) FROM orb_outcomes WHERE symbol = ?",
+                [inst],
+            ).fetchone()[0]
+
+            if df_max is None or oo_max is None:
+                continue  # No data yet — not a staleness issue
+
+            # Count trading days (weekdays) between oo_max and df_max
+            gap = 0
+            current = oo_max + datetime.timedelta(days=1)
+            while current <= df_max:
+                if current.weekday() < 5:
+                    gap += 1
+                current += datetime.timedelta(days=1)
+
+            if gap > 7:
+                stale_instruments.append(f"{inst} ({gap}d)")
+
+        if stale_instruments:
+            violations.append(f"  orb_outcomes stale: {', '.join(stale_instruments)}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
 # =============================================================================
 # CHECK REGISTRY — single source of truth for all drift checks
 # =============================================================================
@@ -3220,6 +3270,12 @@ CHECKS = [
     (".python-version file exists and matches 3.13", lambda: check_python_version_file(PROJECT_ROOT), False, False),
     ("uv.lock exists and is not a skeleton", lambda: check_uv_lock_exists(PROJECT_ROOT), False, False),
     ("Tradovate API URLs use tradovateapi.com (not tradovate.com)", check_tradovate_api_urls, False, False),
+    (
+        "Pipeline staleness: orb_outcomes not >7 trading days behind daily_features",
+        check_pipeline_staleness,
+        False,
+        True,
+    ),  # requires_db
 ]
 
 
