@@ -26,7 +26,7 @@ EXPORT_CONFIG = {
     "orb_outcomes": {"partition_by": ["symbol"]},
     "daily_features": {"partition_by": ["symbol"]},
     "validated_setups": {},  # Small table, no partitioning
-    "edge_families": {},     # Small table, no partitioning
+    "edge_families": {},  # Small table, no partitioning
 }
 
 
@@ -55,6 +55,7 @@ def export_table(
     table_dir = output_dir / table
     # Clean previous export (partitioned writes can't overwrite in DuckDB 1.4.4)
     import shutil
+
     if table_dir.exists():
         shutil.rmtree(table_dir)
     table_dir.mkdir(parents=True, exist_ok=True)
@@ -103,6 +104,7 @@ def export_all(
     results = {}
     with duckdb.connect(str(db_path), read_only=True) as con:
         from pipeline.db_config import configure_connection
+
         configure_connection(con)
 
         for table in tables:
@@ -120,12 +122,9 @@ def export_all(
 
 def main():
     parser = argparse.ArgumentParser(description="Export DuckDB tables to Parquet")
-    parser.add_argument("--db-path", type=Path, default=None,
-                        help="Path to gold.db")
-    parser.add_argument("--output-dir", type=Path, default=None,
-                        help="Output directory (default: gold_parquet/)")
-    parser.add_argument("--table", type=str, default=None,
-                        help="Export a specific table only")
+    parser.add_argument("--db-path", type=Path, default=None, help="Path to gold.db")
+    parser.add_argument("--output-dir", type=Path, default=None, help="Output directory (default: gold_parquet/)")
+    parser.add_argument("--table", type=str, default=None, help="Export a specific table only")
     args = parser.parse_args()
 
     tables = [args.table] if args.table else None

@@ -24,6 +24,7 @@ from pipeline.init_db import ORB_LABELS
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)
 
+
 def _load_strategies(con, table_name, instrument, min_sample=0):
     """Load strategies from a table, filtered by instrument and min sample."""
     rows = con.execute(
@@ -39,6 +40,7 @@ def _load_strategies(con, table_name, instrument, min_sample=0):
     cols = [desc[0] for desc in con.description]
     return [dict(zip(cols, r)) for r in rows]
 
+
 def _make_comparison_key(row):
     """Create a comparison key for matching baseline vs nested strategies."""
     return (
@@ -48,6 +50,7 @@ def _make_comparison_key(row):
         row["confirm_bars"],
         row["filter_type"],
     )
+
 
 def run_comparison(
     db_path: Path | None = None,
@@ -85,7 +88,8 @@ def run_comparison(
 
             # Check if nested_strategies table exists
             tables = {
-                r[0] for r in con.execute(
+                r[0]
+                for r in con.execute(
                     "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
                 ).fetchall()
             }
@@ -116,41 +120,33 @@ def run_comparison(
                         continue
                     b = baseline_index[key]
                     n = nested_index[key]
-                    session_pairs.append({
-                        "key": key,
-                        "baseline": b,
-                        "nested": n,
-                        "sharpe_delta": (
-                            (n["sharpe_ratio"] or 0) - (b["sharpe_ratio"] or 0)
-                            if b["sharpe_ratio"] is not None and n["sharpe_ratio"] is not None
-                            else None
-                        ),
-                        "exp_delta": (
-                            (n["expectancy_r"] or 0) - (b["expectancy_r"] or 0)
-                            if b["expectancy_r"] is not None and n["expectancy_r"] is not None
-                            else None
-                        ),
-                    })
+                    session_pairs.append(
+                        {
+                            "key": key,
+                            "baseline": b,
+                            "nested": n,
+                            "sharpe_delta": (
+                                (n["sharpe_ratio"] or 0) - (b["sharpe_ratio"] or 0)
+                                if b["sharpe_ratio"] is not None and n["sharpe_ratio"] is not None
+                                else None
+                            ),
+                            "exp_delta": (
+                                (n["expectancy_r"] or 0) - (b["expectancy_r"] or 0)
+                                if b["expectancy_r"] is not None and n["expectancy_r"] is not None
+                                else None
+                            ),
+                        }
+                    )
 
                 if not session_pairs:
                     continue
 
                 # Compute Structural Premium for this session
-                sharpe_deltas = [
-                    p["sharpe_delta"] for p in session_pairs
-                    if p["sharpe_delta"] is not None
-                ]
-                exp_deltas = [
-                    p["exp_delta"] for p in session_pairs
-                    if p["exp_delta"] is not None
-                ]
+                sharpe_deltas = [p["sharpe_delta"] for p in session_pairs if p["sharpe_delta"] is not None]
+                exp_deltas = [p["exp_delta"] for p in session_pairs if p["exp_delta"] is not None]
 
-                avg_sharpe_premium = (
-                    sum(sharpe_deltas) / len(sharpe_deltas) if sharpe_deltas else None
-                )
-                avg_exp_premium = (
-                    sum(exp_deltas) / len(exp_deltas) if exp_deltas else None
-                )
+                avg_sharpe_premium = sum(sharpe_deltas) / len(sharpe_deltas) if sharpe_deltas else None
+                avg_exp_premium = sum(exp_deltas) / len(exp_deltas) if exp_deltas else None
 
                 # Count how many nested beat baseline
                 nested_wins = sum(1 for d in sharpe_deltas if d > 0)
@@ -182,6 +178,7 @@ def run_comparison(
     finally:
         con.close()
 
+
 def _print_report(results: dict):
     """Print a formatted comparison report."""
     print("\n" + "=" * 80)
@@ -196,8 +193,10 @@ def _print_report(results: dict):
             continue
 
         # Summary table
-        print(f"\n  {'Session':<8} {'Pairs':>6} {'Nested>Base':>12} {'Base>Nested':>12} "
-              f"{'Avg Sharpe+':>12} {'Avg ExpR+':>10}")
+        print(
+            f"\n  {'Session':<8} {'Pairs':>6} {'Nested>Base':>12} {'Base>Nested':>12} "
+            f"{'Avg Sharpe+':>12} {'Avg ExpR+':>10}"
+        )
         print("  " + "-" * 62)
 
         for orb_label in ORB_LABELS:
@@ -206,8 +205,10 @@ def _print_report(results: dict):
             sr = session_results[orb_label]
             sharpe_str = f"{sr['avg_sharpe_premium']:+.4f}" if sr["avg_sharpe_premium"] is not None else "N/A"
             exp_str = f"{sr['avg_exp_premium']:+.4f}" if sr["avg_exp_premium"] is not None else "N/A"
-            print(f"  {orb_label:<8} {sr['n_pairs']:>6} {sr['nested_wins']:>12} "
-                  f"{sr['baseline_wins']:>12} {sharpe_str:>12} {exp_str:>10}")
+            print(
+                f"  {orb_label:<8} {sr['n_pairs']:>6} {sr['nested_wins']:>12} "
+                f"{sr['baseline_wins']:>12} {sharpe_str:>12} {exp_str:>10}"
+            )
 
         # Top improvements per session
         print()
@@ -232,15 +233,13 @@ def _print_report(results: dict):
 
     print("\n" + "=" * 80)
 
+
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="A/B comparison: baseline vs nested ORB strategies"
-    )
+    parser = argparse.ArgumentParser(description="A/B comparison: baseline vs nested ORB strategies")
     parser.add_argument("--instrument", default="MGC")
-    parser.add_argument("--min-sample", type=int, default=0,
-                        help="Min sample size for inclusion")
+    parser.add_argument("--min-sample", type=int, default=0, help="Min sample size for inclusion")
     parser.add_argument("--orb-minutes", type=int, nargs="+", default=[15, 30])
     args = parser.parse_args()
 
@@ -249,6 +248,7 @@ def main():
         min_sample=args.min_sample,
         orb_minutes_list=args.orb_minutes,
     )
+
 
 if __name__ == "__main__":
     main()

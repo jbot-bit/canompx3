@@ -32,13 +32,15 @@ from pipeline.cost_model import get_cost_spec
 from pipeline.dst import SESSION_CATALOG
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.live_config import (
-    LIVE_PORTFOLIO, LIVE_MIN_EXPECTANCY_R,
+    LIVE_PORTFOLIO,
+    LIVE_MIN_EXPECTANCY_R,
     LIVE_MIN_EXPECTANCY_DOLLARS_MULT,
 )
 from trading_app.strategy_fitness import compute_fitness
 
 
 # ── Filter → plain English ────────────────────────────────────────────
+
 
 def _filter_description(filter_type: str) -> str:
     """Convert filter_type to plain English for the trade sheet."""
@@ -151,6 +153,7 @@ def _check_fitness(strategy_id: str, db_path: Path) -> str:
 
 # ── Session time resolution ───────────────────────────────────────────
 
+
 def _resolve_session_times(trading_day: date) -> dict[str, tuple[int, int]]:
     """Resolve all session start times in Brisbane for a given date."""
     times = {}
@@ -180,6 +183,7 @@ def _sort_key(h: int, m: int) -> int:
 
 # ── Data collection ───────────────────────────────────────────────────
 
+
 def _load_best_by_expr(
     db_path: Path,
     instrument: str,
@@ -195,7 +199,8 @@ def _load_best_by_expr(
     """
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        rows = con.execute("""
+        rows = con.execute(
+            """
             SELECT vs.strategy_id, vs.instrument, vs.orb_label, vs.entry_model,
                    vs.rr_target, vs.confirm_bars, vs.filter_type,
                    vs.expectancy_r, vs.win_rate, vs.sample_size,
@@ -220,7 +225,9 @@ def _load_best_by_expr(
               AND (frl.locked_rr IS NULL OR vs.rr_target = frl.locked_rr)
             ORDER BY vs.expectancy_r DESC
             LIMIT 1
-        """, [instrument, orb_label, entry_model, filter_type, min_expectancy_r]).fetchall()
+        """,
+            [instrument, orb_label, entry_model, filter_type, min_expectancy_r],
+        ).fetchall()
 
         if not rows:
             return None
@@ -243,8 +250,11 @@ def collect_trades(trading_day: date, db_path: Path) -> list[dict]:
     for instrument in instruments:
         for spec in LIVE_PORTFOLIO:
             variant = _load_best_by_expr(
-                db_path, instrument,
-                spec.orb_label, spec.entry_model, spec.filter_type,
+                db_path,
+                instrument,
+                spec.orb_label,
+                spec.entry_model,
+                spec.filter_type,
                 min_expectancy_r=LIVE_MIN_EXPECTANCY_R,
             )
             if variant is None:
@@ -261,26 +271,29 @@ def collect_trades(trading_day: date, db_path: Path) -> list[dict]:
                 if fitness not in ("FIT",):
                     continue  # gated off
 
-            trades.append({
-                "session": variant["orb_label"],
-                "instrument": instrument,
-                "strategy_id": variant["strategy_id"],
-                "aperture": _parse_aperture(variant["strategy_id"]),
-                "direction": _direction_rule(variant["filter_type"]),
-                "filter_desc": _filter_description(variant["filter_type"]),
-                "filter_type": variant["filter_type"],
-                "rr": variant["rr_target"],
-                "win_rate": variant["win_rate"],
-                "exp_r": variant["expectancy_r"],
-                "exp_dollars": exp_d if exp_d is not None else _exp_dollars_from_row(variant, instrument),
-                "sample_size": variant["sample_size"],
-                "fitness": fitness,
-            })
+            trades.append(
+                {
+                    "session": variant["orb_label"],
+                    "instrument": instrument,
+                    "strategy_id": variant["strategy_id"],
+                    "aperture": _parse_aperture(variant["strategy_id"]),
+                    "direction": _direction_rule(variant["filter_type"]),
+                    "filter_desc": _filter_description(variant["filter_type"]),
+                    "filter_type": variant["filter_type"],
+                    "rr": variant["rr_target"],
+                    "win_rate": variant["win_rate"],
+                    "exp_r": variant["expectancy_r"],
+                    "exp_dollars": exp_d if exp_d is not None else _exp_dollars_from_row(variant, instrument),
+                    "sample_size": variant["sample_size"],
+                    "fitness": fitness,
+                }
+            )
 
     return trades
 
 
 # ── HTML generation ───────────────────────────────────────────────────
+
 
 def _direction_badge(direction: str) -> str:
     """HTML badge for direction constraint."""
@@ -309,10 +322,7 @@ def generate_html(trades: list[dict], session_times: dict, trading_day: date) ->
     """Generate self-contained HTML trade sheet."""
 
     # Group trades by session
-    sessions_used = sorted(
-        set(t["session"] for t in trades),
-        key=lambda s: _sort_key(*session_times.get(s, (0, 0)))
-    )
+    sessions_used = sorted(set(t["session"] for t in trades), key=lambda s: _sort_key(*session_times.get(s, (0, 0))))
 
     day_name = trading_day.strftime("%A")
     date_str = trading_day.strftime("%d %b %Y")
@@ -330,7 +340,7 @@ def generate_html(trades: list[dict], session_times: dict, trading_day: date) ->
         rows_html = ""
         for t in session_trades:
             trade_num += 1
-            exp_d_str = f"${t['exp_dollars']:+.2f}" if t['exp_dollars'] is not None else "n/a"
+            exp_d_str = f"${t['exp_dollars']:+.2f}" if t["exp_dollars"] is not None else "n/a"
             dir_badge = _direction_badge(t["direction"])
             fit_badge = _fitness_badge(t["fitness"])
 
@@ -338,13 +348,13 @@ def generate_html(trades: list[dict], session_times: dict, trading_day: date) ->
 
             rows_html += f"""
             <tr>
-                <td class="instrument-cell">{t['instrument']}</td>
-                <td>{t['aperture']}m</td>
-                <td>{dir_badge if dir_badge else 'ANY'}</td>
-                <td class="filter-cell">{t['filter_desc']}</td>
-                <td>{t['rr']:.1f} : 1</td>
-                <td>{t['win_rate']:.0%}</td>
-                <td class="{exp_r_class}">{t['exp_r']:+.3f}</td>
+                <td class="instrument-cell">{t["instrument"]}</td>
+                <td>{t["aperture"]}m</td>
+                <td>{dir_badge if dir_badge else "ANY"}</td>
+                <td class="filter-cell">{t["filter_desc"]}</td>
+                <td>{t["rr"]:.1f} : 1</td>
+                <td>{t["win_rate"]:.0%}</td>
+                <td class="{exp_r_class}">{t["exp_r"]:+.3f}</td>
                 <td class="dollars-cell">{exp_d_str}</td>
                 <td>{fit_badge if fit_badge else '<span class="fit-ok">FIT</span>'}</td>
             </tr>"""
@@ -640,16 +650,13 @@ def generate_html(trades: list[dict], session_times: dict, trading_day: date) ->
 
 # ── Main ──────────────────────────────────────────────────────────────
 
+
 def main():
     parser = argparse.ArgumentParser(description="Generate daily trade sheet HTML")
-    parser.add_argument("--date", type=str, default=None,
-                        help="Trading date (YYYY-MM-DD). Default: today.")
-    parser.add_argument("--output", type=str, default=None,
-                        help="Output HTML path. Default: trade_sheet.html")
-    parser.add_argument("--db-path", type=Path, default=None,
-                        help="Path to gold.db")
-    parser.add_argument("--no-open", action="store_true",
-                        help="Don't open in browser after generating")
+    parser.add_argument("--date", type=str, default=None, help="Trading date (YYYY-MM-DD). Default: today.")
+    parser.add_argument("--output", type=str, default=None, help="Output HTML path. Default: trade_sheet.html")
+    parser.add_argument("--db-path", type=Path, default=None, help="Path to gold.db")
+    parser.add_argument("--no-open", action="store_true", help="Don't open in browser after generating")
     args = parser.parse_args()
 
     db_path = args.db_path or GOLD_DB_PATH

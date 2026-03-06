@@ -59,6 +59,7 @@ ATR_THRESHOLDS = [0, 20, 25, 30, 35, 40]  # 0 = no gate (baseline)
 
 TARGET_SESSIONS = sorted(set(f["session"] for f in FAMILIES))
 
+
 def compute_family_metrics(outcomes_list, years_span):
     """Compute metrics for a list of outcome dicts."""
     if not outcomes_list:
@@ -86,8 +87,10 @@ def compute_family_metrics(outcomes_list, years_span):
         "tpy": round(tpy, 1),
     }
 
+
 def main():
     import argparse
+
     parser = argparse.ArgumentParser(description="Backtest ATR regime gate")
     parser.add_argument("--db", type=str, default=None)
     parser.add_argument("--instrument", default="MGC")
@@ -151,22 +154,26 @@ def main():
                     key = (orb_label, em, r[1], r[2])
                     if key not in outcomes_by_key:
                         outcomes_by_key[key] = []
-                    outcomes_by_key[key].append({
-                        "trading_day": r[0],
-                        "outcome": r[3],
-                        "pnl_r": r[4],
-                        "mae_r": r[5],
-                        "mfe_r": r[6],
-                        "entry_price": r[7],
-                        "stop_price": r[8],
-                    })
+                    outcomes_by_key[key].append(
+                        {
+                            "trading_day": r[0],
+                            "outcome": r[3],
+                            "pnl_r": r[4],
+                            "mae_r": r[5],
+                            "mfe_r": r[6],
+                            "entry_price": r[7],
+                            "stop_price": r[8],
+                        }
+                    )
         print(f"  {sum(len(v) for v in outcomes_by_key.values())} outcome rows")
 
         # For each family x threshold, compute family-level metrics
         # (average across all RR/CB variants)
         print("\n" + "=" * 130)
-        print(f"{'Family':<28} {'ATR>':<5} {'#V':>3} {'N':>5} {'T/Yr':>5} {'WR':>6} {'ExpR':>7} "
-              f"{'Sharpe':>7} {'ShANN':>7} {'PF':>6} {'MaxDD':>7} {'TotalR':>8} {'vs Base':>8}")
+        print(
+            f"{'Family':<28} {'ATR>':<5} {'#V':>3} {'N':>5} {'T/Yr':>5} {'WR':>6} {'ExpR':>7} "
+            f"{'Sharpe':>7} {'ShANN':>7} {'PF':>6} {'MaxDD':>7} {'TotalR':>8} {'vs Base':>8}"
+        )
         print("=" * 130)
 
         for family in FAMILIES:
@@ -189,8 +196,7 @@ def main():
                         continue
                     key = (session, em, rr, cb)
                     variant_outcomes = outcomes_by_key.get(key, [])
-                    baseline_filtered = [o for o in variant_outcomes
-                                         if o["trading_day"] in matching_days_base]
+                    baseline_filtered = [o for o in variant_outcomes if o["trading_day"] in matching_days_base]
                     if len(baseline_filtered) >= 10:
                         baseline_variant_keys.append(key)
 
@@ -204,10 +210,7 @@ def main():
                 if threshold == 0:
                     matching_days = matching_days_base
                 else:
-                    matching_days = {
-                        d for d in matching_days_base
-                        if atr_by_day.get(d, 0) >= threshold
-                    }
+                    matching_days = {d for d in matching_days_base if atr_by_day.get(d, 0) >= threshold}
 
                 if not matching_days:
                     print(f"{family_label:<28} {threshold:>4}  {'-- no eligible days --'}")
@@ -216,8 +219,7 @@ def main():
                 # Compute per-variant metrics using FIXED variant set
                 variant_metrics = []
                 for key in baseline_variant_keys:
-                    variant_outcomes = [o for o in outcomes_by_key.get(key, [])
-                                        if o["trading_day"] in matching_days]
+                    variant_outcomes = [o for o in outcomes_by_key.get(key, []) if o["trading_day"] in matching_days]
                     if not variant_outcomes:
                         continue
                     vm = compute_family_metrics(variant_outcomes, years_span)
@@ -256,9 +258,11 @@ def main():
                 pf_str = f"{avg_pf:>6.3f}" if avg_pf is not None else "   N/A"
 
                 n_variants = len(variant_metrics)
-                print(f"{family_label:<28} {threshold:>4} {n_variants:>3} {avg_n:>5} {avg_tpy:>5.1f} "
-                      f"{avg_wr:>5.1%} {avg_expr:>7.4f} {sharpe_str} {shann_str} "
-                      f"{pf_str} {avg_maxdd:>7.2f} {avg_total_r:>8.2f} {delta_str:>8}")
+                print(
+                    f"{family_label:<28} {threshold:>4} {n_variants:>3} {avg_n:>5} {avg_tpy:>5.1f} "
+                    f"{avg_wr:>5.1%} {avg_expr:>7.4f} {sharpe_str} {shann_str} "
+                    f"{pf_str} {avg_maxdd:>7.2f} {avg_total_r:>8.2f} {delta_str:>8}"
+                )
 
             print()  # blank line between families
 
@@ -274,6 +278,7 @@ def main():
 
     finally:
         con.close()
+
 
 if __name__ == "__main__":
     main()

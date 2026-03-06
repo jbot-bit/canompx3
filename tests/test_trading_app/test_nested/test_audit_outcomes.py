@@ -1,4 +1,5 @@
 """Tests for nested/audit_outcomes._outcomes_match() (T2)."""
+
 import pytest
 from trading_app.nested.audit_outcomes import _outcomes_match
 

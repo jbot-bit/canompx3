@@ -23,6 +23,7 @@ from pipeline.init_db import ORB_LABELS
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)
 
+
 def run_comparison(
     db_path: Path | None = None,
     instrument: str = "MGC",
@@ -43,7 +44,8 @@ def run_comparison(
     try:
         # Check tables exist
         tables = {
-            r[0] for r in con.execute(
+            r[0]
+            for r in con.execute(
                 "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
             ).fetchall()
         }
@@ -72,8 +74,7 @@ def run_comparison(
             d = dict(zip(regime_cols, row))
             regime_index[d["strategy_id"]] = d
 
-        print(f"Loaded {len(regime_index)} regime strategies "
-              f"(run_label={run_label}, min_sample={min_sample})")
+        print(f"Loaded {len(regime_index)} regime strategies (run_label={run_label}, min_sample={min_sample})")
 
         # Load full-period strategies
         full_rows = con.execute(
@@ -108,31 +109,33 @@ def run_comparison(
             r_exp = r["expectancy_r"] or 0
             f_exp = f["expectancy_r"] or 0
 
-            comparisons.append({
-                "strategy_id": sid,
-                "orb_label": r["orb_label"],
-                "entry_model": r["entry_model"],
-                "rr_target": r["rr_target"],
-                "confirm_bars": r["confirm_bars"],
-                "filter_type": r["filter_type"],
-                # Regime metrics
-                "regime_n": r["sample_size"],
-                "regime_wr": r["win_rate"],
-                "regime_exp_r": r_exp,
-                "regime_sharpe": r_sharpe,
-                "regime_maxdd": r["max_drawdown_r"],
-                "regime_validated": r.get("validation_status") == "PASSED",
-                # Full-period metrics
-                "full_n": f["sample_size"],
-                "full_wr": f["win_rate"],
-                "full_exp_r": f_exp,
-                "full_sharpe": f_sharpe,
-                "full_maxdd": f["max_drawdown_r"],
-                "full_validated": f.get("validation_status") == "PASSED",
-                # Deltas
-                "delta_exp_r": round(r_exp - f_exp, 4),
-                "delta_sharpe": round(r_sharpe - f_sharpe, 4),
-            })
+            comparisons.append(
+                {
+                    "strategy_id": sid,
+                    "orb_label": r["orb_label"],
+                    "entry_model": r["entry_model"],
+                    "rr_target": r["rr_target"],
+                    "confirm_bars": r["confirm_bars"],
+                    "filter_type": r["filter_type"],
+                    # Regime metrics
+                    "regime_n": r["sample_size"],
+                    "regime_wr": r["win_rate"],
+                    "regime_exp_r": r_exp,
+                    "regime_sharpe": r_sharpe,
+                    "regime_maxdd": r["max_drawdown_r"],
+                    "regime_validated": r.get("validation_status") == "PASSED",
+                    # Full-period metrics
+                    "full_n": f["sample_size"],
+                    "full_wr": f["win_rate"],
+                    "full_exp_r": f_exp,
+                    "full_sharpe": f_sharpe,
+                    "full_maxdd": f["max_drawdown_r"],
+                    "full_validated": f.get("validation_status") == "PASSED",
+                    # Deltas
+                    "delta_exp_r": round(r_exp - f_exp, 4),
+                    "delta_sharpe": round(r_sharpe - f_sharpe, 4),
+                }
+            )
 
         # Also flag regime-only and full-only validated
         regime_only_ids = set(regime_index.keys()) - set(full_index.keys())
@@ -158,8 +161,8 @@ def run_comparison(
     finally:
         con.close()
 
-def _print_report(comparisons: list[dict], run_label: str,
-                  regime_only: set, full_only: set):
+
+def _print_report(comparisons: list[dict], run_label: str, regime_only: set, full_only: set):
     """Print a formatted comparison report."""
     print("\n" + "=" * 80)
     print(f"REGIME COMPARISON REPORT: {run_label}")
@@ -177,8 +180,9 @@ def _print_report(comparisons: list[dict], run_label: str,
             session_data[orb] = []
         session_data[orb].append(c)
 
-    print(f"\n  {'Session':<8} {'Pairs':>6} {'Regime>Full':>12} {'Full>Regime':>12} "
-          f"{'Avg ExpR+':>10} {'Avg Sharpe+':>12}")
+    print(
+        f"\n  {'Session':<8} {'Pairs':>6} {'Regime>Full':>12} {'Full>Regime':>12} {'Avg ExpR+':>10} {'Avg Sharpe+':>12}"
+    )
     print("  " + "-" * 62)
 
     for orb_label in ORB_LABELS:
@@ -189,18 +193,21 @@ def _print_report(comparisons: list[dict], run_label: str,
         full_wins = sum(1 for c in pairs if c["delta_exp_r"] < 0)
         avg_exp = sum(c["delta_exp_r"] for c in pairs) / len(pairs)
         avg_sharpe = sum(c["delta_sharpe"] for c in pairs) / len(pairs)
-        print(f"  {orb_label:<8} {len(pairs):>6} {regime_wins:>12} "
-              f"{full_wins:>12} {avg_exp:>+10.4f} {avg_sharpe:>+12.4f}")
+        print(
+            f"  {orb_label:<8} {len(pairs):>6} {regime_wins:>12} {full_wins:>12} {avg_exp:>+10.4f} {avg_sharpe:>+12.4f}"
+        )
 
     # Top 10 regime improvements
     print("\n  Top 10 strategies by regime ExpR improvement:")
     for c in comparisons[:10]:
         val_flag = "*" if c["regime_validated"] else " "
-        print(f"    {val_flag} {c['strategy_id']}: "
-              f"ExpR {c['full_exp_r']:+.4f} -> {c['regime_exp_r']:+.4f} "
-              f"({c['delta_exp_r']:+.4f}), "
-              f"Sharpe {c['full_sharpe']:.3f} -> {c['regime_sharpe']:.3f}, "
-              f"N={c['regime_n']}")
+        print(
+            f"    {val_flag} {c['strategy_id']}: "
+            f"ExpR {c['full_exp_r']:+.4f} -> {c['regime_exp_r']:+.4f} "
+            f"({c['delta_exp_r']:+.4f}), "
+            f"Sharpe {c['full_sharpe']:.3f} -> {c['regime_sharpe']:.3f}, "
+            f"N={c['regime_n']}"
+        )
 
     # Validation comparison
     regime_validated = [c for c in comparisons if c["regime_validated"]]
@@ -219,23 +226,24 @@ def _print_report(comparisons: list[dict], run_label: str,
     if regime_new:
         print("\n  New edge in regime (validated in regime, not full-period):")
         for c in regime_new[:5]:
-            print(f"    {c['strategy_id']}: ExpR={c['regime_exp_r']:+.4f}, "
-                  f"Sharpe={c['regime_sharpe']:.3f}, N={c['regime_n']}")
+            print(
+                f"    {c['strategy_id']}: ExpR={c['regime_exp_r']:+.4f}, "
+                f"Sharpe={c['regime_sharpe']:.3f}, N={c['regime_n']}"
+            )
 
     print("\n" + "=" * 80)
+
 
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Compare regime vs full-period strategy results"
-    )
+    parser = argparse.ArgumentParser(description="Compare regime vs full-period strategy results")
     parser.add_argument("--instrument", default="MGC")
     parser.add_argument("--run-label", required=True, help="Regime run label")
-    parser.add_argument("--min-sample", type=int, default=0,
-                        help="Min sample size for inclusion")
-    parser.add_argument("--output", type=Path, default=None,
-                        help="Output CSV path (default: artifacts/regime_{label}_comparison.csv)")
+    parser.add_argument("--min-sample", type=int, default=0, help="Min sample size for inclusion")
+    parser.add_argument(
+        "--output", type=Path, default=None, help="Output CSV path (default: artifacts/regime_{label}_comparison.csv)"
+    )
     args = parser.parse_args()
 
     run_comparison(
@@ -244,6 +252,7 @@ def main():
         min_sample=args.min_sample,
         output_path=args.output,
     )
+
 
 if __name__ == "__main__":
     main()

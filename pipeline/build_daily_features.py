@@ -33,11 +33,18 @@ from pipeline.paths import GOLD_DB_PATH
 from pipeline.asset_configs import get_asset_config, list_instruments
 from pipeline.init_db import ORB_LABELS
 from pipeline.cost_model import get_cost_spec, pnl_points_to_r, CostSpec
-from pipeline.dst import (is_us_dst, is_uk_dst, DYNAMIC_ORB_RESOLVERS, get_break_group,
-                          DST_AFFECTED_SESSIONS, DST_CLEAN_SESSIONS)
+from pipeline.dst import (
+    is_us_dst,
+    is_uk_dst,
+    DYNAMIC_ORB_RESOLVERS,
+    get_break_group,
+    DST_AFFECTED_SESSIONS,
+    DST_CLEAN_SESSIONS,
+)
 from pipeline.calendar_filters import is_nfp_day, is_opex_day, is_friday, is_monday, is_tuesday, day_of_week
 
 from pipeline.log import get_logger
+
 logger = get_logger(__name__)
 
 # =============================================================================
@@ -70,9 +77,9 @@ TRADING_DAY_START_HOUR_LOCAL = 9  # Brisbane hour
 # session range features (high/low). These do NOT track actual market opens
 # which shift with DST. For DST-aware session times, see pipeline/dst.py.
 SESSION_WINDOWS = {
-    "asia":   (9, 0, 17, 0),
+    "asia": (9, 0, 17, 0),
     "london": (18, 0, 23, 0),
-    "ny":     (23, 0, 2, 0),    # crosses midnight
+    "ny": (23, 0, 2, 0),  # crosses midnight
 }
 
 # Valid ORB durations in minutes
@@ -92,6 +99,7 @@ if _unclassified:
 # MODULE 1: TRADING DAY ASSIGNMENT
 # =============================================================================
 
+
 def compute_trading_day(ts_utc: pd.Timestamp) -> date:
     """
     Assign a UTC timestamp to its Brisbane trading day.
@@ -109,6 +117,7 @@ def compute_trading_day(ts_utc: pd.Timestamp) -> date:
     shifted = ts_bris - timedelta(hours=TRADING_DAY_START_HOUR_LOCAL)
     return shifted.date()
 
+
 def compute_trading_day_utc_range(trading_day: date) -> tuple[datetime, datetime]:
     """
     Return the [start, end) UTC range for a given trading day.
@@ -119,16 +128,16 @@ def compute_trading_day_utc_range(trading_day: date) -> tuple[datetime, datetime
     """
     # 09:00 Brisbane on trading_day = 23:00 UTC on (trading_day - 1)
     start_utc = datetime(
-        trading_day.year, trading_day.month, trading_day.day,
-        TRADING_DAY_START_HOUR_LOCAL, 0, 0,
-        tzinfo=BRISBANE_TZ
+        trading_day.year, trading_day.month, trading_day.day, TRADING_DAY_START_HOUR_LOCAL, 0, 0, tzinfo=BRISBANE_TZ
     ).astimezone(UTC_TZ)
 
     end_utc = start_utc + timedelta(hours=24)
     return start_utc, end_utc
 
-def get_trading_days_in_range(con: duckdb.DuckDBPyConnection, symbol: str,
-                               start_date: date, end_date: date) -> list[date]:
+
+def get_trading_days_in_range(
+    con: duckdb.DuckDBPyConnection, symbol: str, start_date: date, end_date: date
+) -> list[date]:
     """
     Get distinct trading days that have bars_1m data in the date range.
 
@@ -147,8 +156,8 @@ def get_trading_days_in_range(con: duckdb.DuckDBPyConnection, symbol: str,
     rows = con.execute(query, [symbol, start_date, end_date]).fetchall()
     return [r[0] for r in rows]
 
-def get_bars_for_trading_day(con: duckdb.DuckDBPyConnection, symbol: str,
-                              trading_day: date) -> pd.DataFrame:
+
+def get_bars_for_trading_day(con: duckdb.DuckDBPyConnection, symbol: str, trading_day: date) -> pd.DataFrame:
     """
     Fetch all bars_1m for a single trading day, ordered by ts_utc.
 
@@ -169,16 +178,17 @@ def get_bars_for_trading_day(con: duckdb.DuckDBPyConnection, symbol: str,
 
     if not df.empty:
         # Ensure ts_utc is tz-aware
-        df['ts_utc'] = pd.to_datetime(df['ts_utc'], utc=True)
+        df["ts_utc"] = pd.to_datetime(df["ts_utc"], utc=True)
 
     return df
+
 
 # =============================================================================
 # MODULE 2: ORB RANGES
 # =============================================================================
 
-def _orb_utc_window(trading_day: date, orb_label: str,
-                     orb_minutes: int) -> tuple[datetime, datetime]:
+
+def _orb_utc_window(trading_day: date, orb_label: str, orb_minutes: int) -> tuple[datetime, datetime]:
     """
     Compute the [start, end) UTC window for an ORB on a given trading day.
 
@@ -214,11 +224,7 @@ def _orb_utc_window(trading_day: date, orb_label: str,
     else:
         cal_date = trading_day
 
-    local_start = datetime(
-        cal_date.year, cal_date.month, cal_date.day,
-        hour, minute, 0,
-        tzinfo=BRISBANE_TZ
-    )
+    local_start = datetime(cal_date.year, cal_date.month, cal_date.day, hour, minute, 0, tzinfo=BRISBANE_TZ)
     local_end = local_start + timedelta(minutes=orb_minutes)
 
     utc_start = local_start.astimezone(UTC_TZ)
@@ -234,8 +240,8 @@ def _orb_utc_window(trading_day: date, orb_label: str,
 
     return utc_start, utc_end
 
-def compute_orb_range(bars_df: pd.DataFrame, trading_day: date,
-                       orb_label: str, orb_minutes: int) -> dict:
+
+def compute_orb_range(bars_df: pd.DataFrame, trading_day: date, orb_label: str, orb_minutes: int) -> dict:
     """
     Compute ORB high/low/size/volume for a single ORB on a single trading day.
 
@@ -245,25 +251,26 @@ def compute_orb_range(bars_df: pd.DataFrame, trading_day: date,
     utc_start, utc_end = _orb_utc_window(trading_day, orb_label, orb_minutes)
 
     # Filter bars within [start, end)
-    mask = (bars_df['ts_utc'] >= utc_start) & (bars_df['ts_utc'] < utc_end)
+    mask = (bars_df["ts_utc"] >= utc_start) & (bars_df["ts_utc"] < utc_end)
     orb_bars = bars_df[mask]
 
     if orb_bars.empty:
         return {"high": None, "low": None, "size": None, "volume": None}
 
-    high = float(orb_bars['high'].max())
-    low = float(orb_bars['low'].min())
+    high = float(orb_bars["high"].max())
+    low = float(orb_bars["low"].min())
     size = high - low
-    volume = int(orb_bars['volume'].sum())
+    volume = int(orb_bars["volume"].sum())
 
     return {"high": high, "low": low, "size": size, "volume": volume}
+
 
 # =============================================================================
 # MODULE 3: BREAK DETECTION
 # =============================================================================
 
-def _break_detection_window(trading_day: date, orb_label: str,
-                             orb_minutes: int) -> tuple[datetime, datetime]:
+
+def _break_detection_window(trading_day: date, orb_label: str, orb_minutes: int) -> tuple[datetime, datetime]:
     """
     Return the [start, end) UTC window for break detection.
 
@@ -303,9 +310,10 @@ def _break_detection_window(trading_day: date, orb_label: str,
         _, td_end = compute_trading_day_utc_range(trading_day)
         return orb_end, td_end
 
-def detect_break(bars_df: pd.DataFrame, trading_day: date,
-                  orb_label: str, orb_minutes: int,
-                  orb_high: float, orb_low: float) -> dict:
+
+def detect_break(
+    bars_df: pd.DataFrame, trading_day: date, orb_label: str, orb_minutes: int, orb_high: float, orb_low: float
+) -> dict:
     """
     Detect the first 1m bar whose CLOSE breaks outside the ORB range.
 
@@ -319,23 +327,23 @@ def detect_break(bars_df: pd.DataFrame, trading_day: date,
       break_bar_continues (bool/None) - break bar closes in break direction
     """
     no_break = {
-        "break_dir": None, "break_ts": None,
-        "break_delay_min": None, "break_bar_continues": None,
+        "break_dir": None,
+        "break_ts": None,
+        "break_delay_min": None,
+        "break_bar_continues": None,
         "break_bar_volume": None,
     }
 
     if orb_high is None or orb_low is None:
         return no_break
 
-    window_start, window_end = _break_detection_window(
-        trading_day, orb_label, orb_minutes
-    )
+    window_start, window_end = _break_detection_window(trading_day, orb_label, orb_minutes)
     # window_start = ORB end time (start of break detection window)
     orb_end = window_start
 
     # Filter bars in break detection window
-    mask = (bars_df['ts_utc'] >= window_start) & (bars_df['ts_utc'] < window_end)
-    window_bars = bars_df[mask].sort_values('ts_utc')
+    mask = (bars_df["ts_utc"] >= window_start) & (bars_df["ts_utc"] < window_end)
+    window_bars = bars_df[mask].sort_values("ts_utc")
 
     for bar in window_bars.itertuples():
         close = float(bar.close)
@@ -363,10 +371,15 @@ def detect_break(bars_df: pd.DataFrame, trading_day: date,
 
     return no_break
 
-def detect_double_break(bars_df: pd.DataFrame, trading_day: date,
-                         orb_label: str, orb_minutes: int,
-                         orb_high: float | None,
-                         orb_low: float | None) -> bool | None:
+
+def detect_double_break(
+    bars_df: pd.DataFrame,
+    trading_day: date,
+    orb_label: str,
+    orb_minutes: int,
+    orb_high: float | None,
+    orb_low: float | None,
+) -> bool | None:
     """
     Detect if BOTH the ORB high and low were breached during the session.
 
@@ -381,24 +394,24 @@ def detect_double_break(bars_df: pd.DataFrame, trading_day: date,
     if orb_high is None or orb_low is None:
         return None
 
-    window_start, window_end = _break_detection_window(
-        trading_day, orb_label, orb_minutes
-    )
+    window_start, window_end = _break_detection_window(trading_day, orb_label, orb_minutes)
 
-    mask = (bars_df['ts_utc'] >= window_start) & (bars_df['ts_utc'] < window_end)
+    mask = (bars_df["ts_utc"] >= window_start) & (bars_df["ts_utc"] < window_end)
     window_bars = bars_df[mask]
 
     if window_bars.empty:
         return None
 
-    hit_high = (window_bars['high'] >= orb_high).any()
-    hit_low = (window_bars['low'] <= orb_low).any()
+    hit_high = (window_bars["high"] >= orb_high).any()
+    hit_low = (window_bars["low"] <= orb_low).any()
 
     return bool(hit_high and hit_low)
+
 
 # =============================================================================
 # MODULE 4: SESSION STATS
 # =============================================================================
+
 
 def _session_utc_window(trading_day: date, session: str) -> tuple[datetime, datetime]:
     """
@@ -416,10 +429,7 @@ def _session_utc_window(trading_day: date, session: str) -> tuple[datetime, date
     else:
         start_cal = trading_day
 
-    local_start = datetime(
-        start_cal.year, start_cal.month, start_cal.day,
-        start_h, start_m, 0, tzinfo=BRISBANE_TZ
-    )
+    local_start = datetime(start_cal.year, start_cal.month, start_cal.day, start_h, start_m, 0, tzinfo=BRISBANE_TZ)
 
     # End date — if end_h < start_h, it crosses midnight (next calendar day)
     if end_h < start_h:
@@ -427,15 +437,12 @@ def _session_utc_window(trading_day: date, session: str) -> tuple[datetime, date
     else:
         end_cal = start_cal
 
-    local_end = datetime(
-        end_cal.year, end_cal.month, end_cal.day,
-        end_h, end_m, 0, tzinfo=BRISBANE_TZ
-    )
+    local_end = datetime(end_cal.year, end_cal.month, end_cal.day, end_h, end_m, 0, tzinfo=BRISBANE_TZ)
 
     return local_start.astimezone(UTC_TZ), local_end.astimezone(UTC_TZ)
 
-def compute_session_stats(bars_df: pd.DataFrame,
-                           trading_day: date) -> dict:
+
+def compute_session_stats(bars_df: pd.DataFrame, trading_day: date) -> dict:
     """
     Compute session range stats using fixed Brisbane-time windows.
 
@@ -452,15 +459,15 @@ def compute_session_stats(bars_df: pd.DataFrame,
     for session in ["asia", "london", "ny"]:
         utc_start, utc_end = _session_utc_window(trading_day, session)
 
-        mask = (bars_df['ts_utc'] >= utc_start) & (bars_df['ts_utc'] < utc_end)
+        mask = (bars_df["ts_utc"] >= utc_start) & (bars_df["ts_utc"] < utc_end)
         session_bars = bars_df[mask]
 
         if session_bars.empty:
             result[f"session_{session}_high"] = None
             result[f"session_{session}_low"] = None
         else:
-            result[f"session_{session}_high"] = float(session_bars['high'].max())
-            result[f"session_{session}_low"] = float(session_bars['low'].min())
+            result[f"session_{session}_high"] = float(session_bars["high"].max())
+            result[f"session_{session}_low"] = float(session_bars["low"].min())
 
     return result
 
@@ -475,8 +482,11 @@ def compute_overnight_stats(bars_df: pd.DataFrame, trading_day: date) -> dict:
     These are pre-entry for the TOKYO_OPEN session — no look-ahead.
     """
     result: dict = {
-        "overnight_high": None, "overnight_low": None, "overnight_range": None,
-        "pre_1000_high": None, "pre_1000_low": None,
+        "overnight_high": None,
+        "overnight_low": None,
+        "overnight_range": None,
+        "pre_1000_high": None,
+        "pre_1000_low": None,
     }
 
     if bars_df.empty:
@@ -484,24 +494,24 @@ def compute_overnight_stats(bars_df: pd.DataFrame, trading_day: date) -> dict:
 
     # Overnight: Asia session window (SESSION_WINDOWS["asia"] = 09:00-17:00 Brisbane)
     asia_start, asia_end = _session_utc_window(trading_day, "asia")
-    asia_mask = (bars_df['ts_utc'] >= asia_start) & (bars_df['ts_utc'] < asia_end)
+    asia_mask = (bars_df["ts_utc"] >= asia_start) & (bars_df["ts_utc"] < asia_end)
     asia_bars = bars_df[asia_mask]
 
     if not asia_bars.empty:
-        result["overnight_high"] = float(asia_bars['high'].max())
-        result["overnight_low"]  = float(asia_bars['low'].min())
+        result["overnight_high"] = float(asia_bars["high"].max())
+        result["overnight_low"] = float(asia_bars["low"].min())
         result["overnight_range"] = round(result["overnight_high"] - result["overnight_low"], 4)
 
     # Pre-TOKYO_OPEN: all bars from trading day start up to (but not including) 10:00 Brisbane
     # _orb_utc_window(day, "TOKYO_OPEN", 5)[0] = start of the TOKYO_OPEN ORB window = 10:00 Brisbane
     pre_1000_start = _orb_utc_window(trading_day, "TOKYO_OPEN", 5)[0]
     td_start, _ = compute_trading_day_utc_range(trading_day)
-    pre_mask = (bars_df['ts_utc'] >= td_start) & (bars_df['ts_utc'] < pre_1000_start)
+    pre_mask = (bars_df["ts_utc"] >= td_start) & (bars_df["ts_utc"] < pre_1000_start)
     pre_bars = bars_df[pre_mask]
 
     if not pre_bars.empty:
-        result["pre_1000_high"] = float(pre_bars['high'].max())
-        result["pre_1000_low"]  = float(pre_bars['low'].min())
+        result["pre_1000_high"] = float(pre_bars["high"].max())
+        result["pre_1000_low"] = float(pre_bars["low"].min())
 
     return result
 
@@ -577,13 +587,14 @@ def compute_garch_forecast(daily_closes: list[float], min_obs: int = 252) -> flo
 
     try:
         from arch import arch_model
+
         model = arch_model(log_returns, vol="Garch", p=1, q=1, dist="Normal", mean="Zero")
         result = model.fit(disp="off", show_warning=False)
         forecast = result.forecast(horizon=1)
         cond_var = forecast.variance.iloc[-1, 0]
         # Undo percentage scaling, annualize
-        daily_vol = (cond_var ** 0.5) / 100
-        annual_vol = daily_vol * (252 ** 0.5)
+        daily_vol = (cond_var**0.5) / 100
+        annual_vol = daily_vol * (252**0.5)
         return round(float(annual_vol), 6)
     except Exception:
         return None
@@ -593,10 +604,14 @@ def compute_garch_forecast(daily_closes: list[float], min_obs: int = 252) -> flo
 # MODULE 5: RSI (Wilder's 14-period on 5m closes)
 # =============================================================================
 
-def compute_rsi_at_cme_reopen(con: duckdb.DuckDBPyConnection, symbol: str,
-                               trading_day: date,
-                               bars_5m_ts: np.ndarray | None = None,
-                               bars_5m_closes: np.ndarray | None = None) -> float | None:
+
+def compute_rsi_at_cme_reopen(
+    con: duckdb.DuckDBPyConnection,
+    symbol: str,
+    trading_day: date,
+    bars_5m_ts: np.ndarray | None = None,
+    bars_5m_closes: np.ndarray | None = None,
+) -> float | None:
     """
     Compute RSI-14 (Wilder's smoothing) on 5m closes, evaluated at CME_REOPEN (09:00 Brisbane).
 
@@ -612,9 +627,7 @@ def compute_rsi_at_cme_reopen(con: duckdb.DuckDBPyConnection, symbol: str,
     """
     # 09:00 Brisbane on trading_day = 23:00 UTC on (trading_day - 1)
     orb_0900_utc = datetime(
-        trading_day.year, trading_day.month, trading_day.day,
-        TRADING_DAY_START_HOUR_LOCAL, 0, 0,
-        tzinfo=BRISBANE_TZ
+        trading_day.year, trading_day.month, trading_day.day, TRADING_DAY_START_HOUR_LOCAL, 0, 0, tzinfo=BRISBANE_TZ
     ).astimezone(UTC_TZ)
 
     if bars_5m_ts is not None and bars_5m_closes is not None:
@@ -643,11 +656,12 @@ def compute_rsi_at_cme_reopen(con: duckdb.DuckDBPyConnection, symbol: str,
         return None
 
     # Sort ascending for computation
-    df = df.sort_values('ts_utc').reset_index(drop=True)
-    closes = df['close'].astype(float).values
+    df = df.sort_values("ts_utc").reset_index(drop=True)
+    closes = df["close"].astype(float).values
 
     # Compute RSI with Wilder's smoothing
     return _wilders_rsi(closes, period=14)
+
 
 def _wilders_rsi(closes: np.ndarray, period: int = 14) -> float | None:
     """
@@ -682,16 +696,23 @@ def _wilders_rsi(closes: np.ndarray, period: int = 14) -> float | None:
     rsi = 100.0 - (100.0 / (1.0 + rs))
     return round(rsi, 4)
 
+
 # =============================================================================
 # MODULE 6: OUTCOME AT RR=1.0
 # =============================================================================
 
-def compute_outcome(bars_df: pd.DataFrame, trading_day: date,
-                     orb_label: str, orb_minutes: int,
-                     orb_high: float, orb_low: float,
-                     break_dir: str | None,
-                     break_ts: datetime | None,
-                     cost_spec: CostSpec | None = None) -> dict:
+
+def compute_outcome(
+    bars_df: pd.DataFrame,
+    trading_day: date,
+    orb_label: str,
+    orb_minutes: int,
+    orb_high: float,
+    orb_low: float,
+    break_dir: str | None,
+    break_ts: datetime | None,
+    cost_spec: CostSpec | None = None,
+) -> dict:
     """
     Determine the outcome at RR=1.0 after an ORB break.
 
@@ -738,11 +759,11 @@ def compute_outcome(bars_df: pd.DataFrame, trading_day: date,
     # Get bars after break_ts until end of trading day
     _, td_end = compute_trading_day_utc_range(trading_day)
     # Start from the bar AFTER the break bar (no same-bar execution)
-    mask = (bars_df['ts_utc'] > break_ts) & (bars_df['ts_utc'] < td_end)
-    post_break = bars_df[mask].sort_values('ts_utc')
+    mask = (bars_df["ts_utc"] > break_ts) & (bars_df["ts_utc"] < td_end)
+    post_break = bars_df[mask].sort_values("ts_utc")
 
     # Track MAE/MFE
-    max_adverse_points = 0.0   # worst excursion against us
+    max_adverse_points = 0.0  # worst excursion against us
     max_favorable_points = 0.0  # best excursion for us
 
     for bar in post_break.itertuples():
@@ -779,26 +800,27 @@ def compute_outcome(bars_df: pd.DataFrame, trading_day: date,
 
     # Convert MAE/MFE to R-multiples if cost_spec provided
     if cost_spec is not None:
-        result["mae_r"] = round(
-            pnl_points_to_r(cost_spec, entry, stop, max_adverse_points), 4
-        )
-        result["mfe_r"] = round(
-            pnl_points_to_r(cost_spec, entry, stop, max_favorable_points), 4
-        )
+        result["mae_r"] = round(pnl_points_to_r(cost_spec, entry, stop, max_adverse_points), 4)
+        result["mfe_r"] = round(pnl_points_to_r(cost_spec, entry, stop, max_favorable_points), 4)
 
     return result
+
 
 # =============================================================================
 # ORCHESTRATOR: BUILD ONE TRADING DAY
 # =============================================================================
 
-def build_features_for_day(con: duckdb.DuckDBPyConnection, symbol: str,
-                            trading_day: date,
-                            orb_minutes: int,
-                            cost_spec: CostSpec | None = None,
-                            bars_df: pd.DataFrame | None = None,
-                            bars_5m_ts: np.ndarray | None = None,
-                            bars_5m_closes: np.ndarray | None = None) -> dict:
+
+def build_features_for_day(
+    con: duckdb.DuckDBPyConnection,
+    symbol: str,
+    trading_day: date,
+    orb_minutes: int,
+    cost_spec: CostSpec | None = None,
+    bars_df: pd.DataFrame | None = None,
+    bars_5m_ts: np.ndarray | None = None,
+    bars_5m_closes: np.ndarray | None = None,
+) -> dict:
     """
     Build all daily_features columns for a single trading day.
 
@@ -860,22 +882,22 @@ def build_features_for_day(con: duckdb.DuckDBPyConnection, symbol: str,
 
     # Market Profile context columns — overnight/pre-session computed below;
     # prev_day_*, sweep labels, gap_type, day_type computed in post-pass
-    row["overnight_high"]        = None
-    row["overnight_low"]         = None
-    row["overnight_range"]       = None
-    row["pre_1000_high"]         = None
-    row["pre_1000_low"]          = None
-    row["prev_day_high"]         = None
-    row["prev_day_low"]          = None
-    row["prev_day_close"]        = None
-    row["prev_day_range"]        = None
-    row["prev_day_direction"]    = None
-    row["gap_type"]              = None
-    row["took_pdh_before_1000"]  = None
-    row["took_pdl_before_1000"]  = None
-    row["overnight_took_pdh"]    = None
-    row["overnight_took_pdl"]    = None
-    row["day_type"]              = None
+    row["overnight_high"] = None
+    row["overnight_low"] = None
+    row["overnight_range"] = None
+    row["pre_1000_high"] = None
+    row["pre_1000_low"] = None
+    row["prev_day_high"] = None
+    row["prev_day_low"] = None
+    row["prev_day_close"] = None
+    row["prev_day_range"] = None
+    row["prev_day_direction"] = None
+    row["gap_type"] = None
+    row["took_pdh_before_1000"] = None
+    row["took_pdl_before_1000"] = None
+    row["overnight_took_pdh"] = None
+    row["overnight_took_pdl"] = None
+    row["day_type"] = None
 
     # Module 4: Session stats
     session_stats = compute_session_stats(bars_df, trading_day)
@@ -887,8 +909,11 @@ def build_features_for_day(con: duckdb.DuckDBPyConnection, symbol: str,
 
     # Module 5: RSI at 0900
     row["rsi_14_at_CME_REOPEN"] = compute_rsi_at_cme_reopen(
-        con, symbol, trading_day,
-        bars_5m_ts=bars_5m_ts, bars_5m_closes=bars_5m_closes,
+        con,
+        symbol,
+        trading_day,
+        bars_5m_ts=bars_5m_ts,
+        bars_5m_closes=bars_5m_closes,
     )
 
     # Modules 2, 3, 6: ORBs, breaks, outcomes
@@ -901,10 +926,7 @@ def build_features_for_day(con: duckdb.DuckDBPyConnection, symbol: str,
         row[f"orb_{label}_volume"] = orb["volume"]
 
         # Module 3: Break detection
-        brk = detect_break(
-            bars_df, trading_day, label, orb_minutes,
-            orb["high"], orb["low"]
-        )
+        brk = detect_break(bars_df, trading_day, label, orb_minutes, orb["high"], orb["low"])
         row[f"orb_{label}_break_dir"] = brk["break_dir"]
         row[f"orb_{label}_break_ts"] = brk["break_ts"]
         row[f"orb_{label}_break_delay_min"] = brk["break_delay_min"]
@@ -913,9 +935,14 @@ def build_features_for_day(con: duckdb.DuckDBPyConnection, symbol: str,
 
         # Module 6: Outcome + MAE/MFE
         outcome = compute_outcome(
-            bars_df, trading_day, label, orb_minutes,
-            orb["high"], orb["low"],
-            brk["break_dir"], brk["break_ts"],
+            bars_df,
+            trading_day,
+            label,
+            orb_minutes,
+            orb["high"],
+            orb["low"],
+            brk["break_dir"],
+            brk["break_ts"],
             cost_spec=cost_spec,
         )
         row[f"orb_{label}_outcome"] = outcome["outcome"]
@@ -924,19 +951,25 @@ def build_features_for_day(con: duckdb.DuckDBPyConnection, symbol: str,
 
         # Double-break detection (regime signal)
         row[f"orb_{label}_double_break"] = detect_double_break(
-            bars_df, trading_day, label, orb_minutes,
-            orb["high"], orb["low"],
+            bars_df,
+            trading_day,
+            label,
+            orb_minutes,
+            orb["high"],
+            orb["low"],
         )
 
     return row
+
 
 # =============================================================================
 # MAIN BUILD FUNCTION
 # =============================================================================
 
-def build_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
-                          start_date: date, end_date: date,
-                          orb_minutes: int, dry_run: bool) -> int:
+
+def build_daily_features(
+    con: duckdb.DuckDBPyConnection, symbol: str, start_date: date, end_date: date, orb_minutes: int, dry_run: bool
+) -> int:
     """
     Build daily_features for all trading days in [start_date, end_date].
 
@@ -968,20 +1001,23 @@ def build_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
     _, range_end_utc = compute_trading_day_utc_range(trading_days[-1])
     logger.info(f"  Bulk-loading bars_1m ({range_start_utc.date()} to {range_end_utc.date()})...")
 
-    all_bars_df = con.execute("""
+    all_bars_df = con.execute(
+        """
         SELECT ts_utc, open, high, low, close, volume, source_symbol
         FROM bars_1m
         WHERE symbol = ?
         AND ts_utc >= ?::TIMESTAMPTZ
         AND ts_utc < ?::TIMESTAMPTZ
         ORDER BY ts_utc ASC
-    """, [symbol, range_start_utc.isoformat(), range_end_utc.isoformat()]).fetchdf()
+    """,
+        [symbol, range_start_utc.isoformat(), range_end_utc.isoformat()],
+    ).fetchdf()
 
     if not all_bars_df.empty:
-        all_bars_df['ts_utc'] = pd.to_datetime(all_bars_df['ts_utc'], utc=True)
+        all_bars_df["ts_utc"] = pd.to_datetime(all_bars_df["ts_utc"], utc=True)
 
     # Pre-compute sorted timestamps for binary search (O(log n) per day)
-    all_ts = all_bars_df['ts_utc'].values if not all_bars_df.empty else np.array([])
+    all_ts = all_bars_df["ts_utc"].values if not all_bars_df.empty else np.array([])
 
     logger.info(f"  Loaded {len(all_bars_df):,} bars for slicing")
 
@@ -990,20 +1026,23 @@ def build_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
     rsi_lookback_start = range_start_utc - timedelta(days=10)  # ~200 5m bars ≈ ~3.5 days
     logger.info("  Bulk-loading bars_5m for RSI...")
 
-    all_bars_5m_df = con.execute("""
+    all_bars_5m_df = con.execute(
+        """
         SELECT ts_utc, close
         FROM bars_5m
         WHERE symbol = ?
         AND ts_utc >= ?::TIMESTAMPTZ
         AND ts_utc < ?::TIMESTAMPTZ
         ORDER BY ts_utc ASC
-    """, [symbol, rsi_lookback_start.isoformat(), range_end_utc.isoformat()]).fetchdf()
+    """,
+        [symbol, rsi_lookback_start.isoformat(), range_end_utc.isoformat()],
+    ).fetchdf()
 
     if not all_bars_5m_df.empty:
-        all_bars_5m_df['ts_utc'] = pd.to_datetime(all_bars_5m_df['ts_utc'], utc=True)
+        all_bars_5m_df["ts_utc"] = pd.to_datetime(all_bars_5m_df["ts_utc"], utc=True)
 
-    bars_5m_ts = all_bars_5m_df['ts_utc'].values if not all_bars_5m_df.empty else np.array([])
-    bars_5m_closes = all_bars_5m_df['close'].astype(float).values if not all_bars_5m_df.empty else np.array([])
+    bars_5m_ts = all_bars_5m_df["ts_utc"].values if not all_bars_5m_df.empty else np.array([])
+    bars_5m_closes = all_bars_5m_df["close"].astype(float).values if not all_bars_5m_df.empty else np.array([])
 
     logger.info(f"  Loaded {len(all_bars_5m_df):,} 5m bars for RSI")
 
@@ -1017,9 +1056,14 @@ def build_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
         day_bars = all_bars_df.iloc[start_idx:end_idx]
 
         row = build_features_for_day(
-            con, symbol, td, orb_minutes, cost_spec,
+            con,
+            symbol,
+            td,
+            orb_minutes,
+            cost_spec,
             bars_df=day_bars,
-            bars_5m_ts=bars_5m_ts, bars_5m_closes=bars_5m_closes,
+            bars_5m_ts=bars_5m_ts,
+            bars_5m_closes=bars_5m_closes,
         )
         rows.append(row)
 
@@ -1055,7 +1099,7 @@ def build_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
             true_ranges.append(None)
 
         # ATR(20) = SMA of last 20 True Range values, prior days only (no look-ahead)
-        lookback = [v for v in true_ranges[max(0, i - 20):i] if v is not None]
+        lookback = [v for v in true_ranges[max(0, i - 20) : i] if v is not None]
         if lookback:
             rows[i]["atr_20"] = round(sum(lookback) / len(lookback), 4)
         else:
@@ -1064,10 +1108,7 @@ def build_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
         # ATR Velocity: today's ATR_20 vs 5-day prior average.
         # Uses ROWS [i-5 .. i-1] — prior days only, no look-ahead.
         atr_today = rows[i]["atr_20"]
-        prior_atrs = [
-            rows[j]["atr_20"] for j in range(max(0, i - 5), i)
-            if rows[j].get("atr_20") is not None
-        ]
+        prior_atrs = [rows[j]["atr_20"] for j in range(max(0, i - 5), i) if rows[j].get("atr_20") is not None]
         if atr_today is not None and len(prior_atrs) >= 5:
             avg_5d = sum(prior_atrs) / len(prior_atrs)
             if avg_5d > 0:
@@ -1100,7 +1141,7 @@ def build_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
                     continue
                 mean_r = sum(prior_ratios) / len(prior_ratios)
                 variance = sum((x - mean_r) ** 2 for x in prior_ratios) / len(prior_ratios)
-                std_r = variance ** 0.5
+                std_r = variance**0.5
                 if std_r <= 0:
                     continue
                 z = (ratio_today - mean_r) / std_r
@@ -1114,10 +1155,7 @@ def build_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
 
         # GARCH(1,1) forward vol forecast from trailing daily closes.
         # Uses rows[0..i-1] daily_close values — prior days only, no look-ahead.
-        prior_closes = [
-            rows[j]["daily_close"] for j in range(i)
-            if rows[j].get("daily_close") is not None
-        ]
+        prior_closes = [rows[j]["daily_close"] for j in range(i) if rows[j].get("daily_close") is not None]
         garch_vol = compute_garch_forecast(prior_closes)
         if garch_vol is not None:
             rows[i]["garch_forecast_vol"] = garch_vol
@@ -1126,18 +1164,18 @@ def build_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
             # garch_atr_ratio ~1.0 means GARCH agrees with ATR; >1 = GARCH sees more vol.
             last_close = prior_closes[-1] if prior_closes else None
             if atr_today is not None and atr_today > 0 and last_close is not None:
-                implied_daily_atr = (garch_vol / (252 ** 0.5)) * last_close
+                implied_daily_atr = (garch_vol / (252**0.5)) * last_close
                 rows[i]["garch_atr_ratio"] = round(implied_daily_atr / atr_today, 4)
 
         # Prior day reference levels + gap_type + liquidity sweep labels + day_type.
         # All use rows[i-1] for prior-day data — no look-ahead.
-        prev_high  = rows[i - 1].get("daily_high")  if i > 0 else None
-        prev_low   = rows[i - 1].get("daily_low")   if i > 0 else None
+        prev_high = rows[i - 1].get("daily_high") if i > 0 else None
+        prev_low = rows[i - 1].get("daily_low") if i > 0 else None
         prev_close = rows[i - 1].get("daily_close") if i > 0 else None
-        prev_open  = rows[i - 1].get("daily_open")  if i > 0 else None
+        prev_open = rows[i - 1].get("daily_open") if i > 0 else None
 
-        rows[i]["prev_day_high"]  = prev_high
-        rows[i]["prev_day_low"]   = prev_low
+        rows[i]["prev_day_high"] = prev_high
+        rows[i]["prev_day_low"] = prev_low
         rows[i]["prev_day_close"] = prev_close
 
         if prev_high is not None and prev_low is not None:
@@ -1146,7 +1184,7 @@ def build_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
             rows[i]["prev_day_direction"] = "bull" if prev_close >= prev_open else "bear"
 
         # gap_type: classify gap_open_points relative to prior range
-        gap_pts    = rows[i].get("gap_open_points")
+        gap_pts = rows[i].get("gap_open_points")
         prev_range = rows[i].get("prev_day_range")
         if gap_pts is not None and prev_range is not None and prev_range > 0:
             threshold = 0.1 * prev_range
@@ -1160,10 +1198,10 @@ def build_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
             rows[i]["gap_type"] = "none"
 
         # Liquidity sweep labels — compare pre-session high/low to prior day high/low
-        pre_1000_high  = rows[i].get("pre_1000_high")
-        pre_1000_low   = rows[i].get("pre_1000_low")
+        pre_1000_high = rows[i].get("pre_1000_high")
+        pre_1000_low = rows[i].get("pre_1000_low")
         overnight_high = rows[i].get("overnight_high")
-        overnight_low  = rows[i].get("overnight_low")
+        overnight_low = rows[i].get("overnight_low")
 
         if pre_1000_high is not None and prev_high is not None:
             rows[i]["took_pdh_before_1000"] = bool(pre_1000_high > prev_high)
@@ -1220,21 +1258,27 @@ def build_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
 
     try:
         # Delete existing rows in range (scoped to this orb_minutes)
-        delete_count = con.execute("""
+        delete_count = con.execute(
+            """
             SELECT COUNT(*) FROM daily_features
             WHERE symbol = ?
             AND trading_day >= ?
             AND trading_day <= ?
             AND orb_minutes = ?
-        """, [symbol, start_date, end_date, orb_minutes]).fetchone()[0]
+        """,
+            [symbol, start_date, end_date, orb_minutes],
+        ).fetchone()[0]
 
-        con.execute("""
+        con.execute(
+            """
             DELETE FROM daily_features
             WHERE symbol = ?
             AND trading_day >= ?
             AND trading_day <= ?
             AND orb_minutes = ?
-        """, [symbol, start_date, end_date, orb_minutes])
+        """,
+            [symbol, start_date, end_date, orb_minutes],
+        )
 
         if delete_count > 0:
             logger.info(f"  Deleted {delete_count:,} existing daily_features rows")
@@ -1256,12 +1300,15 @@ def build_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
         logger.error(f"FATAL: Exception during daily_features build: {e}")
         raise
 
+
 # =============================================================================
 # VERIFICATION
 # =============================================================================
 
-def verify_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
-                           start_date: date, end_date: date) -> tuple[bool, list[str]]:
+
+def verify_daily_features(
+    con: duckdb.DuckDBPyConnection, symbol: str, start_date: date, end_date: date
+) -> tuple[bool, list[str]]:
     """
     Verify daily_features integrity after build.
 
@@ -1275,7 +1322,8 @@ def verify_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
     failures = []
 
     # Check 1: duplicates (PK is symbol, trading_day, orb_minutes)
-    dupe_count = con.execute("""
+    dupe_count = con.execute(
+        """
         SELECT COUNT(*) FROM (
             SELECT symbol, trading_day, orb_minutes FROM daily_features
             WHERE symbol = ?
@@ -1283,79 +1331,89 @@ def verify_daily_features(con: duckdb.DuckDBPyConnection, symbol: str,
             GROUP BY symbol, trading_day, orb_minutes
             HAVING COUNT(*) > 1
         )
-    """, [symbol, start_date, end_date]).fetchone()[0]
+    """,
+        [symbol, start_date, end_date],
+    ).fetchone()[0]
 
     if dupe_count > 0:
         failures.append(f"Duplicate (symbol, trading_day, orb_minutes): {dupe_count}")
 
     # Check 2: bar_count_1m > 0
-    zero_bars = con.execute("""
+    zero_bars = con.execute(
+        """
         SELECT COUNT(*) FROM daily_features
         WHERE symbol = ?
         AND trading_day >= ? AND trading_day <= ?
         AND (bar_count_1m IS NULL OR bar_count_1m <= 0)
-    """, [symbol, start_date, end_date]).fetchone()[0]
+    """,
+        [symbol, start_date, end_date],
+    ).fetchone()[0]
 
     if zero_bars > 0:
         failures.append(f"Rows with zero/null bar_count_1m: {zero_bars}")
 
     # Check 3: ORB size >= 0
     for label in ORB_LABELS:
-        neg_size = con.execute(f"""
+        neg_size = con.execute(
+            f"""
             SELECT COUNT(*) FROM daily_features
             WHERE symbol = ?
             AND trading_day >= ? AND trading_day <= ?
             AND orb_{label}_size < 0
-        """, [symbol, start_date, end_date]).fetchone()[0]
+        """,
+            [symbol, start_date, end_date],
+        ).fetchone()[0]
 
         if neg_size > 0:
             failures.append(f"Negative ORB size for {label}: {neg_size}")
 
     # Check 4: Break direction enum
     for label in ORB_LABELS:
-        bad_dir = con.execute(f"""
+        bad_dir = con.execute(
+            f"""
             SELECT COUNT(*) FROM daily_features
             WHERE symbol = ?
             AND trading_day >= ? AND trading_day <= ?
             AND orb_{label}_break_dir IS NOT NULL
             AND orb_{label}_break_dir NOT IN ('long', 'short')
-        """, [symbol, start_date, end_date]).fetchone()[0]
+        """,
+            [symbol, start_date, end_date],
+        ).fetchone()[0]
 
         if bad_dir > 0:
             failures.append(f"Invalid break_dir for {label}: {bad_dir}")
 
     # Check 5: Outcome enum
     for label in ORB_LABELS:
-        bad_outcome = con.execute(f"""
+        bad_outcome = con.execute(
+            f"""
             SELECT COUNT(*) FROM daily_features
             WHERE symbol = ?
             AND trading_day >= ? AND trading_day <= ?
             AND orb_{label}_outcome IS NOT NULL
             AND orb_{label}_outcome NOT IN ('win', 'loss', 'scratch')
-        """, [symbol, start_date, end_date]).fetchone()[0]
+        """,
+            [symbol, start_date, end_date],
+        ).fetchone()[0]
 
         if bad_outcome > 0:
             failures.append(f"Invalid outcome for {label}: {bad_outcome}")
 
     return len(failures) == 0, failures
 
+
 # =============================================================================
 # CLI MAIN
 # =============================================================================
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Build daily_features from bars_1m and bars_5m"
-    )
-    parser.add_argument(
-        "--instrument", type=str, required=True,
-        help=f"Instrument ({', '.join(list_instruments())})"
-    )
+    parser = argparse.ArgumentParser(description="Build daily_features from bars_1m and bars_5m")
+    parser.add_argument("--instrument", type=str, required=True, help=f"Instrument ({', '.join(list_instruments())})")
     parser.add_argument("--start", type=str, required=True, help="Start date YYYY-MM-DD")
     parser.add_argument("--end", type=str, required=True, help="End date YYYY-MM-DD")
     parser.add_argument(
-        "--orb-minutes", type=int, default=5, choices=VALID_ORB_MINUTES,
-        help="ORB duration in minutes (default: 5)"
+        "--orb-minutes", type=int, default=5, choices=VALID_ORB_MINUTES, help="ORB duration in minutes (default: 5)"
     )
     parser.add_argument("--dry-run", action="store_true", help="Count only, no DB writes")
     args = parser.parse_args()
@@ -1388,13 +1446,12 @@ def main():
 
     with duckdb.connect(str(GOLD_DB_PATH)) as con:
         from pipeline.db_config import configure_connection
+
         configure_connection(con, writing=True)
 
         # Build
         logger.info("Building daily features...")
-        row_count = build_daily_features(
-            con, symbol, start_date, end_date, args.orb_minutes, args.dry_run
-        )
+        row_count = build_daily_features(con, symbol, start_date, end_date, args.orb_minutes, args.dry_run)
 
         # Verify (skip for dry run)
         if not args.dry_run and row_count > 0:
@@ -1419,13 +1476,13 @@ def main():
         elapsed = datetime.now() - start_time
 
         logger.info("=" * 60)
-        logger.info(f"SUMMARY: {row_count:,} daily_features rows "
-                    f"{'(would be) ' if args.dry_run else ''}built")
+        logger.info(f"SUMMARY: {row_count:,} daily_features rows {'(would be) ' if args.dry_run else ''}built")
         logger.info(f"ORB duration: {args.orb_minutes}m")
         logger.info(f"Wall time: {elapsed}")
         logger.info("=" * 60)
 
         sys.exit(0)
+
 
 if __name__ == "__main__":
     main()

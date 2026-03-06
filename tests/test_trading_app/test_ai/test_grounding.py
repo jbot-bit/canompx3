@@ -59,15 +59,11 @@ class TestBuildGroundingPrompt:
 
 class TestBuildInterpretationPrompt:
     def test_contains_question(self, mock_corpus):
-        prompt = build_interpretation_prompt(
-            mock_corpus, "What is the best strategy?", "some data"
-        )
+        prompt = build_interpretation_prompt(mock_corpus, "What is the best strategy?", "some data")
         assert "What is the best strategy?" in prompt
 
     def test_contains_data(self, mock_corpus):
-        prompt = build_interpretation_prompt(
-            mock_corpus, "question", "orb_label=0900 win_rate=0.42"
-        )
+        prompt = build_interpretation_prompt(mock_corpus, "question", "orb_label=0900 win_rate=0.42")
         assert "orb_label=0900" in prompt
 
     def test_contains_honesty_rules(self, mock_corpus):

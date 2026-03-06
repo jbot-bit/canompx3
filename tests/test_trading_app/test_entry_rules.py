@@ -26,14 +26,16 @@ def _make_bars(closes: list[float], start_ts: datetime, freq_seconds: int = 60) 
         else pd.Timestamp(start_ts) + pd.Timedelta(seconds=i * freq_seconds)
         for i in range(len(closes))
     ]
-    return pd.DataFrame({
-        "ts_utc": timestamps,
-        "open": closes,
-        "high": [c + 0.5 for c in closes],
-        "low": [c - 0.5 for c in closes],
-        "close": closes,
-        "volume": [100] * len(closes),
-    })
+    return pd.DataFrame(
+        {
+            "ts_utc": timestamps,
+            "open": closes,
+            "high": [c + 0.5 for c in closes],
+            "low": [c - 0.5 for c in closes],
+            "close": closes,
+            "volume": [100] * len(closes),
+        }
+    )
 
 
 # ORB range: 2340 (low) to 2350 (high)
@@ -113,39 +115,29 @@ class TestEdgeCases:
     def test_invalid_confirm_bars(self):
         bars = _make_bars([2351.0], BREAK_TS)
         with pytest.raises(ValueError, match="confirm_bars must be 1-10"):
-            detect_entry_with_confirm_bars(
-                bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 0, WINDOW_END
-            )
+            detect_entry_with_confirm_bars(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 0, WINDOW_END)
 
     def test_invalid_break_dir(self):
         bars = _make_bars([2351.0], BREAK_TS)
         with pytest.raises(ValueError, match="break_dir must be"):
-            detect_entry_with_confirm_bars(
-                bars, BREAK_TS, ORB_HIGH, ORB_LOW, "up", 1, WINDOW_END
-            )
+            detect_entry_with_confirm_bars(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "up", 1, WINDOW_END)
 
     def test_empty_bars(self):
         bars = _make_bars([], BREAK_TS)
-        signal = detect_entry_with_confirm_bars(
-            bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, WINDOW_END
-        )
+        signal = detect_entry_with_confirm_bars(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, WINDOW_END)
         assert signal.triggered is False
 
     def test_window_boundary(self):
         """Bars exactly at window end should be excluded."""
         window_end = datetime(2024, 1, 15, 14, 7, tzinfo=timezone.utc)
         bars = _make_bars([2351.0, 2352.0, 2353.0], BREAK_TS)
-        signal = detect_entry_with_confirm_bars(
-            bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 3, window_end
-        )
+        signal = detect_entry_with_confirm_bars(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 3, window_end)
         assert signal.triggered is False
 
     def test_entry_ts_default_e1(self):
         """Default entry model is E1 — entry_ts is bar AFTER confirm."""
         bars = _make_bars([2351.0, 2352.0, 2353.0], BREAK_TS)
-        signal = detect_entry_with_confirm_bars(
-            bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 2, WINDOW_END
-        )
+        signal = detect_entry_with_confirm_bars(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 2, WINDOW_END)
         assert signal.triggered is True
         assert signal.entry_model == "E1"
         # E1: entry is bar AFTER 2nd confirm bar (index 2 = minute 7)
@@ -156,6 +148,7 @@ class TestEdgeCases:
 # ============================================================================
 # detect_confirm tests
 # ============================================================================
+
 
 class TestDetectConfirm:
     """Tests for the separated confirm detection logic."""
@@ -185,6 +178,7 @@ class TestDetectConfirm:
 # ============================================================================
 # resolve_entry E1/E3 tests
 # ============================================================================
+
 
 class TestResolveEntryE1:
     """E1: Market-On-Confirm. Next bar OPEN after confirm."""
@@ -271,7 +265,13 @@ class TestDefaultEntryModel:
         """Default entry_model is E1 (market at next bar open)."""
         bars = _make_bars([2351.0, 2352.0], BREAK_TS)
         signal = detect_entry_with_confirm_bars(
-            bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, WINDOW_END,
+            bars,
+            BREAK_TS,
+            ORB_HIGH,
+            ORB_LOW,
+            "long",
+            1,
+            WINDOW_END,
         )
         assert signal.entry_model == "E1"
         # E1 entry is the OPEN of the next bar, not the ORB level
@@ -281,7 +281,13 @@ class TestDefaultEntryModel:
         bars = _make_bars([2351.0], BREAK_TS)
         with pytest.raises(ValueError, match="Unknown entry_model"):
             detect_entry_with_confirm_bars(
-                bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, WINDOW_END,
+                bars,
+                BREAK_TS,
+                ORB_HIGH,
+                ORB_LOW,
+                "long",
+                1,
+                WINDOW_END,
                 entry_model="E99",
             )
 
@@ -293,7 +299,13 @@ class TestE2GuardInConfirmPath:
         bars = _make_bars([2351.0], BREAK_TS)
         with pytest.raises(ValueError, match="E2 uses detect_break_touch"):
             detect_entry_with_confirm_bars(
-                bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, WINDOW_END,
+                bars,
+                BREAK_TS,
+                ORB_HIGH,
+                ORB_LOW,
+                "long",
+                1,
+                WINDOW_END,
                 entry_model="E2",
             )
 
@@ -312,14 +324,16 @@ class TestE3StopBeforeFill:
             BREAK_TS + timedelta(minutes=1),
             BREAK_TS + timedelta(minutes=2),
         ]
-        bars = pd.DataFrame({
-            "ts_utc": timestamps,
-            "open": [2351.0, 2345.0, 2349.0],
-            "high": [2352.0, 2346.0, 2351.0],
-            "low": [2350.5, 2339.0, 2349.0],
-            "close": [2351.0, 2345.0, 2350.0],
-            "volume": [100, 100, 100],
-        })
+        bars = pd.DataFrame(
+            {
+                "ts_utc": timestamps,
+                "open": [2351.0, 2345.0, 2349.0],
+                "high": [2352.0, 2346.0, 2351.0],
+                "low": [2350.5, 2339.0, 2349.0],
+                "close": [2351.0, 2345.0, 2350.0],
+                "volume": [100, 100, 100],
+            }
+        )
         confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, WINDOW_END)
         assert confirm.confirmed is True
         signal = resolve_entry(bars, confirm, "E3", WINDOW_END)
@@ -334,14 +348,16 @@ class TestE3StopBeforeFill:
             BREAK_TS,
             BREAK_TS + timedelta(minutes=1),
         ]
-        bars = pd.DataFrame({
-            "ts_utc": timestamps,
-            "open": [2351.0, 2352.0],
-            "high": [2352.0, 2355.0],
-            "low": [2350.5, 2339.0],
-            "close": [2351.0, 2340.0],
-            "volume": [100, 100],
-        })
+        bars = pd.DataFrame(
+            {
+                "ts_utc": timestamps,
+                "open": [2351.0, 2352.0],
+                "high": [2352.0, 2355.0],
+                "low": [2350.5, 2339.0],
+                "close": [2351.0, 2340.0],
+                "volume": [100, 100],
+            }
+        )
         confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, WINDOW_END)
         assert confirm.confirmed is True
         signal = resolve_entry(bars, confirm, "E3", WINDOW_END)
@@ -357,14 +373,16 @@ class TestE3StopBeforeFill:
             BREAK_TS + timedelta(minutes=1),
             BREAK_TS + timedelta(minutes=2),
         ]
-        bars = pd.DataFrame({
-            "ts_utc": timestamps,
-            "open": [2351.0, 2353.0, 2352.0],
-            "high": [2352.0, 2355.0, 2353.0],
-            "low": [2350.5, 2352.0, 2349.5],
-            "close": [2351.0, 2354.0, 2350.5],
-            "volume": [100, 100, 100],
-        })
+        bars = pd.DataFrame(
+            {
+                "ts_utc": timestamps,
+                "open": [2351.0, 2353.0, 2352.0],
+                "high": [2352.0, 2355.0, 2353.0],
+                "low": [2350.5, 2352.0, 2349.5],
+                "close": [2351.0, 2354.0, 2350.5],
+                "volume": [100, 100, 100],
+            }
+        )
         confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, WINDOW_END)
         assert confirm.confirmed is True
         signal = resolve_entry(bars, confirm, "E3", WINDOW_END)
@@ -382,14 +400,16 @@ class TestE3StopBeforeFill:
             BREAK_TS + timedelta(minutes=1),
             BREAK_TS + timedelta(minutes=2),
         ]
-        bars = pd.DataFrame({
-            "ts_utc": timestamps,
-            "open": [2339.0, 2342.0, 2339.0],
-            "high": [2340.0, 2351.0, 2340.5],
-            "low": [2338.0, 2341.0, 2338.0],
-            "close": [2339.0, 2343.0, 2339.5],
-            "volume": [100, 100, 100],
-        })
+        bars = pd.DataFrame(
+            {
+                "ts_utc": timestamps,
+                "open": [2339.0, 2342.0, 2339.0],
+                "high": [2340.0, 2351.0, 2340.5],
+                "low": [2338.0, 2341.0, 2338.0],
+                "close": [2339.0, 2343.0, 2339.5],
+                "volume": [100, 100, 100],
+            }
+        )
         confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "short", 1, WINDOW_END)
         assert confirm.confirmed is True
         signal = resolve_entry(bars, confirm, "E3", WINDOW_END)
@@ -399,6 +419,7 @@ class TestE3StopBeforeFill:
 # ============================================================================
 # ORB boundary behavior tests
 # ============================================================================
+
 
 class TestORBBoundaryConfirm:
     """Pin down exact boundary: close == orb_high/orb_low is NOT a break.
@@ -472,14 +493,16 @@ class TestORBBoundaryE3Retrace:
             BREAK_TS,
             BREAK_TS + timedelta(minutes=1),
         ]
-        bars = pd.DataFrame({
-            "ts_utc": timestamps,
-            "open": [ORB_HIGH + 1.0, ORB_HIGH + 2.0],
-            "high": [ORB_HIGH + 2.0, ORB_HIGH + 3.0],
-            "low": [ORB_HIGH + 0.5, ORB_HIGH],  # bar 1 low exactly at orb_high
-            "close": [ORB_HIGH + 1.0, ORB_HIGH + 1.5],
-            "volume": [100, 100],
-        })
+        bars = pd.DataFrame(
+            {
+                "ts_utc": timestamps,
+                "open": [ORB_HIGH + 1.0, ORB_HIGH + 2.0],
+                "high": [ORB_HIGH + 2.0, ORB_HIGH + 3.0],
+                "low": [ORB_HIGH + 0.5, ORB_HIGH],  # bar 1 low exactly at orb_high
+                "close": [ORB_HIGH + 1.0, ORB_HIGH + 1.5],
+                "volume": [100, 100],
+            }
+        )
         confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, WINDOW_END)
         assert confirm.confirmed is True
         signal = resolve_entry(bars, confirm, "E3", WINDOW_END)
@@ -491,14 +514,16 @@ class TestORBBoundaryE3Retrace:
             BREAK_TS,
             BREAK_TS + timedelta(minutes=1),
         ]
-        bars = pd.DataFrame({
-            "ts_utc": timestamps,
-            "open": [ORB_HIGH + 1.0, ORB_HIGH + 2.0],
-            "high": [ORB_HIGH + 2.0, ORB_HIGH + 3.0],
-            "low": [ORB_HIGH + 0.5, ORB_HIGH + 0.1],  # just above orb_high
-            "close": [ORB_HIGH + 1.0, ORB_HIGH + 1.5],
-            "volume": [100, 100],
-        })
+        bars = pd.DataFrame(
+            {
+                "ts_utc": timestamps,
+                "open": [ORB_HIGH + 1.0, ORB_HIGH + 2.0],
+                "high": [ORB_HIGH + 2.0, ORB_HIGH + 3.0],
+                "low": [ORB_HIGH + 0.5, ORB_HIGH + 0.1],  # just above orb_high
+                "close": [ORB_HIGH + 1.0, ORB_HIGH + 1.5],
+                "volume": [100, 100],
+            }
+        )
         confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, WINDOW_END)
         assert confirm.confirmed is True
         signal = resolve_entry(bars, confirm, "E3", WINDOW_END)
@@ -509,14 +534,16 @@ class TestORBBoundaryE3Retrace:
             BREAK_TS,
             BREAK_TS + timedelta(minutes=1),
         ]
-        bars = pd.DataFrame({
-            "ts_utc": timestamps,
-            "open": [ORB_LOW - 1.0, ORB_LOW - 2.0],
-            "high": [ORB_LOW - 0.5, ORB_LOW],  # bar 1 high exactly at orb_low
-            "low": [ORB_LOW - 2.0, ORB_LOW - 3.0],
-            "close": [ORB_LOW - 1.0, ORB_LOW - 1.5],
-            "volume": [100, 100],
-        })
+        bars = pd.DataFrame(
+            {
+                "ts_utc": timestamps,
+                "open": [ORB_LOW - 1.0, ORB_LOW - 2.0],
+                "high": [ORB_LOW - 0.5, ORB_LOW],  # bar 1 high exactly at orb_low
+                "low": [ORB_LOW - 2.0, ORB_LOW - 3.0],
+                "close": [ORB_LOW - 1.0, ORB_LOW - 1.5],
+                "volume": [100, 100],
+            }
+        )
         confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "short", 1, WINDOW_END)
         assert confirm.confirmed is True
         signal = resolve_entry(bars, confirm, "E3", WINDOW_END)
@@ -528,14 +555,16 @@ class TestORBBoundaryE3Retrace:
             BREAK_TS,
             BREAK_TS + timedelta(minutes=1),
         ]
-        bars = pd.DataFrame({
-            "ts_utc": timestamps,
-            "open": [ORB_LOW - 1.0, ORB_LOW - 2.0],
-            "high": [ORB_LOW - 0.5, ORB_LOW - 0.1],  # just below orb_low
-            "low": [ORB_LOW - 2.0, ORB_LOW - 3.0],
-            "close": [ORB_LOW - 1.0, ORB_LOW - 1.5],
-            "volume": [100, 100],
-        })
+        bars = pd.DataFrame(
+            {
+                "ts_utc": timestamps,
+                "open": [ORB_LOW - 1.0, ORB_LOW - 2.0],
+                "high": [ORB_LOW - 0.5, ORB_LOW - 0.1],  # just below orb_low
+                "low": [ORB_LOW - 2.0, ORB_LOW - 3.0],
+                "close": [ORB_LOW - 1.0, ORB_LOW - 1.5],
+                "volume": [100, 100],
+            }
+        )
         confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "short", 1, WINDOW_END)
         assert confirm.confirmed is True
         signal = resolve_entry(bars, confirm, "E3", WINDOW_END)
@@ -555,14 +584,16 @@ class TestORBBoundaryE3Stop:
             BREAK_TS + timedelta(minutes=1),
             BREAK_TS + timedelta(minutes=2),
         ]
-        bars = pd.DataFrame({
-            "ts_utc": timestamps,
-            "open": [ORB_HIGH + 1.0, ORB_HIGH + 0.5, ORB_HIGH + 0.5],
-            "high": [ORB_HIGH + 2.0, ORB_HIGH + 1.0, ORB_HIGH + 1.0],
-            "low": [ORB_HIGH + 0.5, ORB_LOW, ORB_HIGH],  # bar 1 low == stop, bar 2 retraces
-            "close": [ORB_HIGH + 1.0, ORB_LOW + 1.0, ORB_HIGH + 0.5],
-            "volume": [100, 100, 100],
-        })
+        bars = pd.DataFrame(
+            {
+                "ts_utc": timestamps,
+                "open": [ORB_HIGH + 1.0, ORB_HIGH + 0.5, ORB_HIGH + 0.5],
+                "high": [ORB_HIGH + 2.0, ORB_HIGH + 1.0, ORB_HIGH + 1.0],
+                "low": [ORB_HIGH + 0.5, ORB_LOW, ORB_HIGH],  # bar 1 low == stop, bar 2 retraces
+                "close": [ORB_HIGH + 1.0, ORB_LOW + 1.0, ORB_HIGH + 0.5],
+                "volume": [100, 100, 100],
+            }
+        )
         confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, WINDOW_END)
         assert confirm.confirmed is True
         signal = resolve_entry(bars, confirm, "E3", WINDOW_END)
@@ -574,14 +605,16 @@ class TestORBBoundaryE3Stop:
             BREAK_TS + timedelta(minutes=1),
             BREAK_TS + timedelta(minutes=2),
         ]
-        bars = pd.DataFrame({
-            "ts_utc": timestamps,
-            "open": [ORB_HIGH + 1.0, ORB_HIGH + 0.5, ORB_HIGH + 0.5],
-            "high": [ORB_HIGH + 2.0, ORB_HIGH + 1.0, ORB_HIGH + 1.0],
-            "low": [ORB_HIGH + 0.5, ORB_LOW + 0.1, ORB_HIGH],  # bar 1 just above stop, bar 2 retraces
-            "close": [ORB_HIGH + 1.0, ORB_LOW + 1.0, ORB_HIGH + 0.5],
-            "volume": [100, 100, 100],
-        })
+        bars = pd.DataFrame(
+            {
+                "ts_utc": timestamps,
+                "open": [ORB_HIGH + 1.0, ORB_HIGH + 0.5, ORB_HIGH + 0.5],
+                "high": [ORB_HIGH + 2.0, ORB_HIGH + 1.0, ORB_HIGH + 1.0],
+                "low": [ORB_HIGH + 0.5, ORB_LOW + 0.1, ORB_HIGH],  # bar 1 just above stop, bar 2 retraces
+                "close": [ORB_HIGH + 1.0, ORB_LOW + 1.0, ORB_HIGH + 0.5],
+                "volume": [100, 100, 100],
+            }
+        )
         confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, WINDOW_END)
         assert confirm.confirmed is True
         signal = resolve_entry(bars, confirm, "E3", WINDOW_END)
@@ -594,14 +627,16 @@ class TestORBBoundaryE3Stop:
             BREAK_TS + timedelta(minutes=1),
             BREAK_TS + timedelta(minutes=2),
         ]
-        bars = pd.DataFrame({
-            "ts_utc": timestamps,
-            "open": [ORB_LOW - 1.0, ORB_LOW - 0.5, ORB_LOW - 0.5],
-            "high": [ORB_LOW - 0.5, ORB_HIGH, ORB_LOW],  # bar 1 high == stop, bar 2 retraces
-            "low": [ORB_LOW - 2.0, ORB_LOW - 1.0, ORB_LOW - 1.0],
-            "close": [ORB_LOW - 1.0, ORB_HIGH - 1.0, ORB_LOW - 0.5],
-            "volume": [100, 100, 100],
-        })
+        bars = pd.DataFrame(
+            {
+                "ts_utc": timestamps,
+                "open": [ORB_LOW - 1.0, ORB_LOW - 0.5, ORB_LOW - 0.5],
+                "high": [ORB_LOW - 0.5, ORB_HIGH, ORB_LOW],  # bar 1 high == stop, bar 2 retraces
+                "low": [ORB_LOW - 2.0, ORB_LOW - 1.0, ORB_LOW - 1.0],
+                "close": [ORB_LOW - 1.0, ORB_HIGH - 1.0, ORB_LOW - 0.5],
+                "volume": [100, 100, 100],
+            }
+        )
         confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "short", 1, WINDOW_END)
         assert confirm.confirmed is True
         signal = resolve_entry(bars, confirm, "E3", WINDOW_END)
@@ -613,14 +648,16 @@ class TestORBBoundaryE3Stop:
             BREAK_TS + timedelta(minutes=1),
             BREAK_TS + timedelta(minutes=2),
         ]
-        bars = pd.DataFrame({
-            "ts_utc": timestamps,
-            "open": [ORB_LOW - 1.0, ORB_LOW - 0.5, ORB_LOW - 0.5],
-            "high": [ORB_LOW - 0.5, ORB_HIGH - 0.1, ORB_LOW],  # bar 1 just below stop, bar 2 retraces
-            "low": [ORB_LOW - 2.0, ORB_LOW - 1.0, ORB_LOW - 1.0],
-            "close": [ORB_LOW - 1.0, ORB_HIGH - 1.0, ORB_LOW - 0.5],
-            "volume": [100, 100, 100],
-        })
+        bars = pd.DataFrame(
+            {
+                "ts_utc": timestamps,
+                "open": [ORB_LOW - 1.0, ORB_LOW - 0.5, ORB_LOW - 0.5],
+                "high": [ORB_LOW - 0.5, ORB_HIGH - 0.1, ORB_LOW],  # bar 1 just below stop, bar 2 retraces
+                "low": [ORB_LOW - 2.0, ORB_LOW - 1.0, ORB_LOW - 1.0],
+                "close": [ORB_LOW - 1.0, ORB_HIGH - 1.0, ORB_LOW - 0.5],
+                "volume": [100, 100, 100],
+            }
+        )
         confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "short", 1, WINDOW_END)
         assert confirm.confirmed is True
         signal = resolve_entry(bars, confirm, "E3", WINDOW_END)
@@ -632,6 +669,7 @@ class TestORBBoundaryE3Stop:
 # E3 Retrace Window Cap tests
 # ============================================================================
 
+
 class TestE3RetraceWindowCap:
     """E3 retrace window cap: E3_RETRACE_WINDOW_MINUTES limits how far after
     confirm the retrace scan extends. Prevents stale fills hours after the break.
@@ -640,6 +678,7 @@ class TestE3RetraceWindowCap:
     def test_retrace_within_window_fills(self, monkeypatch):
         """Retrace at 30 min with 60 min cap -> fills."""
         import trading_app.entry_rules as er
+
         monkeypatch.setattr(er, "E3_RETRACE_WINDOW_MINUTES", 60)
 
         # Confirm at bar 0 (minute 0). Retrace at bar 2 (minute 2, well within 60 min).
@@ -648,14 +687,16 @@ class TestE3RetraceWindowCap:
             BREAK_TS + timedelta(minutes=1),
             BREAK_TS + timedelta(minutes=2),
         ]
-        bars = pd.DataFrame({
-            "ts_utc": timestamps,
-            "open": [ORB_HIGH + 1.0, ORB_HIGH + 2.0, ORB_HIGH + 0.5],
-            "high": [ORB_HIGH + 2.0, ORB_HIGH + 3.0, ORB_HIGH + 1.0],
-            "low": [ORB_HIGH + 0.5, ORB_HIGH + 1.0, ORB_HIGH],  # bar 2 retraces
-            "close": [ORB_HIGH + 1.0, ORB_HIGH + 2.0, ORB_HIGH + 0.5],
-            "volume": [100, 100, 100],
-        })
+        bars = pd.DataFrame(
+            {
+                "ts_utc": timestamps,
+                "open": [ORB_HIGH + 1.0, ORB_HIGH + 2.0, ORB_HIGH + 0.5],
+                "high": [ORB_HIGH + 2.0, ORB_HIGH + 3.0, ORB_HIGH + 1.0],
+                "low": [ORB_HIGH + 0.5, ORB_HIGH + 1.0, ORB_HIGH],  # bar 2 retraces
+                "close": [ORB_HIGH + 1.0, ORB_HIGH + 2.0, ORB_HIGH + 0.5],
+                "volume": [100, 100, 100],
+            }
+        )
         confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, WINDOW_END)
         assert confirm.confirmed is True
         signal = resolve_entry(bars, confirm, "E3", WINDOW_END)
@@ -665,6 +706,7 @@ class TestE3RetraceWindowCap:
     def test_retrace_beyond_window_no_fill(self, monkeypatch):
         """Retrace at 120 min with 60 min cap -> no fill (stale)."""
         import trading_app.entry_rules as er
+
         monkeypatch.setattr(er, "E3_RETRACE_WINDOW_MINUTES", 60)
 
         # Confirm at bar 0. No retrace for 60 bars (60 min).
@@ -698,14 +740,16 @@ class TestE3RetraceWindowCap:
                 closes.append(ORB_HIGH + 0.5)
             volumes.append(100)
 
-        bars = pd.DataFrame({
-            "ts_utc": timestamps,
-            "open": opens,
-            "high": highs,
-            "low": lows,
-            "close": closes,
-            "volume": volumes,
-        })
+        bars = pd.DataFrame(
+            {
+                "ts_utc": timestamps,
+                "open": opens,
+                "high": highs,
+                "low": lows,
+                "close": closes,
+                "volume": volumes,
+            }
+        )
         confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, WINDOW_END)
         assert confirm.confirmed is True
         signal = resolve_entry(bars, confirm, "E3", WINDOW_END)
@@ -714,6 +758,7 @@ class TestE3RetraceWindowCap:
     def test_none_window_unbounded(self, monkeypatch):
         """E3_RETRACE_WINDOW_MINUTES=None -> unbounded (original behavior)."""
         import trading_app.entry_rules as er
+
         monkeypatch.setattr(er, "E3_RETRACE_WINDOW_MINUTES", None)
 
         # Retrace at bar 120 (2 hours after confirm). With None, this should fill.
@@ -743,14 +788,16 @@ class TestE3RetraceWindowCap:
                 closes.append(ORB_HIGH + 0.5)
             volumes.append(100)
 
-        bars = pd.DataFrame({
-            "ts_utc": timestamps,
-            "open": opens,
-            "high": highs,
-            "low": lows,
-            "close": closes,
-            "volume": volumes,
-        })
+        bars = pd.DataFrame(
+            {
+                "ts_utc": timestamps,
+                "open": opens,
+                "high": highs,
+                "low": lows,
+                "close": closes,
+                "volume": volumes,
+            }
+        )
         confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, WINDOW_END)
         assert confirm.confirmed is True
         signal = resolve_entry(bars, confirm, "E3", WINDOW_END)
@@ -760,6 +807,7 @@ class TestE3RetraceWindowCap:
     def test_cap_vs_trading_day_end_uses_earlier(self, monkeypatch):
         """If trading day ends before the cap, the day end wins."""
         import trading_app.entry_rules as er
+
         monkeypatch.setattr(er, "E3_RETRACE_WINDOW_MINUTES", 600)  # 10 hours
 
         # scan_window_end is only 3 min after BREAK_TS. Cap is 600 min.
@@ -770,14 +818,16 @@ class TestE3RetraceWindowCap:
             BREAK_TS + timedelta(minutes=1),
             BREAK_TS + timedelta(minutes=2),
         ]
-        bars = pd.DataFrame({
-            "ts_utc": timestamps,
-            "open": [ORB_HIGH + 1.0, ORB_HIGH + 2.0, ORB_HIGH + 0.5],
-            "high": [ORB_HIGH + 2.0, ORB_HIGH + 3.0, ORB_HIGH + 1.0],
-            "low": [ORB_HIGH + 0.5, ORB_HIGH + 1.0, ORB_HIGH],
-            "close": [ORB_HIGH + 1.0, ORB_HIGH + 2.0, ORB_HIGH + 0.5],
-            "volume": [100, 100, 100],
-        })
+        bars = pd.DataFrame(
+            {
+                "ts_utc": timestamps,
+                "open": [ORB_HIGH + 1.0, ORB_HIGH + 2.0, ORB_HIGH + 0.5],
+                "high": [ORB_HIGH + 2.0, ORB_HIGH + 3.0, ORB_HIGH + 1.0],
+                "low": [ORB_HIGH + 0.5, ORB_HIGH + 1.0, ORB_HIGH],
+                "close": [ORB_HIGH + 1.0, ORB_HIGH + 2.0, ORB_HIGH + 0.5],
+                "volume": [100, 100, 100],
+            }
+        )
         confirm = detect_confirm(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 1, short_window)
         assert confirm.confirmed is True
         signal = resolve_entry(bars, confirm, "E3", short_window)
@@ -787,6 +837,7 @@ class TestE3RetraceWindowCap:
 # ============================================================================
 # detect_break_touch tests (E2 detection path)
 # ============================================================================
+
 
 def _make_touch_bars(
     ohlc_list: list[tuple[float, float, float, float]],
@@ -800,13 +851,15 @@ def _make_touch_bars(
         else pd.Timestamp(start_ts) + pd.Timedelta(seconds=i * freq_seconds)
         for i in range(len(ohlc_list))
     ]
-    return pd.DataFrame({
-        "ts_utc": timestamps,
-        "open": [t[0] for t in ohlc_list],
-        "high": [t[1] for t in ohlc_list],
-        "low": [t[2] for t in ohlc_list],
-        "close": [t[3] for t in ohlc_list],
-    })
+    return pd.DataFrame(
+        {
+            "ts_utc": timestamps,
+            "open": [t[0] for t in ohlc_list],
+            "high": [t[1] for t in ohlc_list],
+            "low": [t[2] for t in ohlc_list],
+            "close": [t[3] for t in ohlc_list],
+        }
+    )
 
 
 # Window for break-touch tests
@@ -824,8 +877,12 @@ class TestDetectBreakTouch:
             TOUCH_WINDOW_START,
         )
         result = detect_break_touch(
-            bars, ORB_HIGH, ORB_LOW, "long",
-            TOUCH_WINDOW_START, TOUCH_WINDOW_END,
+            bars,
+            ORB_HIGH,
+            ORB_LOW,
+            "long",
+            TOUCH_WINDOW_START,
+            TOUCH_WINDOW_END,
         )
         assert result.touched is True
         assert result.touch_bar_idx == 0
@@ -835,13 +892,19 @@ class TestDetectBreakTouch:
     def test_long_no_touch(self):
         """Bar high never reaches orb_high. No touch."""
         bars = _make_touch_bars(
-            [(2345.0, 2349.0, 2343.0, 2347.0),  # high=2349 < 2350
-             (2346.0, 2348.0, 2344.0, 2346.0)],  # high=2348 < 2350
+            [
+                (2345.0, 2349.0, 2343.0, 2347.0),  # high=2349 < 2350
+                (2346.0, 2348.0, 2344.0, 2346.0),
+            ],  # high=2348 < 2350
             TOUCH_WINDOW_START,
         )
         result = detect_break_touch(
-            bars, ORB_HIGH, ORB_LOW, "long",
-            TOUCH_WINDOW_START, TOUCH_WINDOW_END,
+            bars,
+            ORB_HIGH,
+            ORB_LOW,
+            "long",
+            TOUCH_WINDOW_START,
+            TOUCH_WINDOW_END,
         )
         assert result.touched is False
         assert result.touch_bar_ts is None
@@ -854,8 +917,12 @@ class TestDetectBreakTouch:
             TOUCH_WINDOW_START,
         )
         result = detect_break_touch(
-            bars, ORB_HIGH, ORB_LOW, "short",
-            TOUCH_WINDOW_START, TOUCH_WINDOW_END,
+            bars,
+            ORB_HIGH,
+            ORB_LOW,
+            "short",
+            TOUCH_WINDOW_START,
+            TOUCH_WINDOW_END,
         )
         assert result.touched is True
         assert result.touch_bar_idx == 0
@@ -864,13 +931,19 @@ class TestDetectBreakTouch:
     def test_touch_returns_first_bar(self):
         """Multiple bars touch, returns FIRST (even if fakeout)."""
         bars = _make_touch_bars(
-            [(2345.0, 2351.0, 2344.0, 2346.0),  # bar 0: fakeout touch
-             (2348.0, 2355.0, 2347.0, 2354.0)],  # bar 1: clean break
+            [
+                (2345.0, 2351.0, 2344.0, 2346.0),  # bar 0: fakeout touch
+                (2348.0, 2355.0, 2347.0, 2354.0),
+            ],  # bar 1: clean break
             TOUCH_WINDOW_START,
         )
         result = detect_break_touch(
-            bars, ORB_HIGH, ORB_LOW, "long",
-            TOUCH_WINDOW_START, TOUCH_WINDOW_END,
+            bars,
+            ORB_HIGH,
+            ORB_LOW,
+            "long",
+            TOUCH_WINDOW_START,
+            TOUCH_WINDOW_END,
         )
         assert result.touched is True
         assert result.touch_bar_idx == 0
@@ -881,8 +954,10 @@ class TestDetectBreakTouch:
         """Bars before detection_window_start are ignored."""
         early_ts = TOUCH_WINDOW_START - timedelta(minutes=5)
         bars = _make_touch_bars(
-            [(2345.0, 2355.0, 2344.0, 2346.0),  # bar 0: touches, but BEFORE window
-             (2345.0, 2348.0, 2344.0, 2346.0)],  # bar 1: no touch, inside window
+            [
+                (2345.0, 2355.0, 2344.0, 2346.0),  # bar 0: touches, but BEFORE window
+                (2345.0, 2348.0, 2344.0, 2346.0),
+            ],  # bar 1: no touch, inside window
             early_ts,
         )
         # Bar 0 is at early_ts (before window), bar 1 is at early_ts + 1 min
@@ -890,8 +965,12 @@ class TestDetectBreakTouch:
         # Let's set up properly: bar 0 at early_ts, bar 1 at early_ts+1m. Both before window.
         # So no bars in window -> no touch.
         result = detect_break_touch(
-            bars, ORB_HIGH, ORB_LOW, "long",
-            TOUCH_WINDOW_START, TOUCH_WINDOW_END,
+            bars,
+            ORB_HIGH,
+            ORB_LOW,
+            "long",
+            TOUCH_WINDOW_START,
+            TOUCH_WINDOW_END,
         )
         assert result.touched is False
 
@@ -900,13 +979,19 @@ class TestDetectBreakTouch:
         # Put bar exactly at window end — should be excluded (< not <=)
         window_end = TOUCH_WINDOW_START + timedelta(minutes=1)
         bars = _make_touch_bars(
-            [(2345.0, 2348.0, 2344.0, 2346.0),   # bar 0: no touch, in window
-             (2345.0, 2355.0, 2344.0, 2354.0)],   # bar 1: touches, but AT window_end
+            [
+                (2345.0, 2348.0, 2344.0, 2346.0),  # bar 0: no touch, in window
+                (2345.0, 2355.0, 2344.0, 2354.0),
+            ],  # bar 1: touches, but AT window_end
             TOUCH_WINDOW_START,
         )
         result = detect_break_touch(
-            bars, ORB_HIGH, ORB_LOW, "long",
-            TOUCH_WINDOW_START, window_end,
+            bars,
+            ORB_HIGH,
+            ORB_LOW,
+            "long",
+            TOUCH_WINDOW_START,
+            window_end,
         )
         assert result.touched is False
 
@@ -914,8 +999,12 @@ class TestDetectBreakTouch:
         """Empty DataFrame returns no touch."""
         bars = pd.DataFrame(columns=["ts_utc", "open", "high", "low", "close"])
         result = detect_break_touch(
-            bars, ORB_HIGH, ORB_LOW, "long",
-            TOUCH_WINDOW_START, TOUCH_WINDOW_END,
+            bars,
+            ORB_HIGH,
+            ORB_LOW,
+            "long",
+            TOUCH_WINDOW_START,
+            TOUCH_WINDOW_END,
         )
         assert result.touched is False
         assert result.touch_bar_ts is None
@@ -928,14 +1017,19 @@ class TestDetectBreakTouch:
         )
         with pytest.raises(ValueError, match="break_dir must be 'long' or 'short'"):
             detect_break_touch(
-                bars, ORB_HIGH, ORB_LOW, "up",
-                TOUCH_WINDOW_START, TOUCH_WINDOW_END,
+                bars,
+                ORB_HIGH,
+                ORB_LOW,
+                "up",
+                TOUCH_WINDOW_START,
+                TOUCH_WINDOW_END,
             )
 
 
 # ============================================================================
 # _resolve_e2 tests (E2 stop-market entry resolution)
 # ============================================================================
+
 
 class TestResolveE2:
     """Tests for _resolve_e2 — stop-market entry price with slippage."""

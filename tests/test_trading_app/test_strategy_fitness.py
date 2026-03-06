@@ -26,6 +26,7 @@ from trading_app.strategy_fitness import (
 )
 from trading_app.strategy_discovery import compute_metrics
 
+
 def _setup_fitness_db(tmp_path, strategies=None, outcomes=None, features=None):
     """
     Create a temp DB with pipeline + trading_app schema and seed data.
@@ -40,12 +41,14 @@ def _setup_fitness_db(tmp_path, strategies=None, outcomes=None, features=None):
 
     # Create pipeline tables
     from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA, DAILY_FEATURES_SCHEMA
+
     con.execute(BARS_1M_SCHEMA)
     con.execute(BARS_5M_SCHEMA)
     con.execute(DAILY_FEATURES_SCHEMA)
 
     # Create trading_app tables
     from trading_app.db_manager import init_trading_app_schema
+
     con.close()
     init_trading_app_schema(db_path=db_path)
 
@@ -71,10 +74,19 @@ def _setup_fitness_db(tmp_path, strategies=None, outcomes=None, features=None):
                     sample_size, win_rate, expectancy_r, sharpe_ratio, max_drawdown_r)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 [
-                    sid, instrument, orb_label, orb_minutes,
-                    rr_target, confirm_bars, entry_model, filter_type, "{}",
-                    s.get("sample_size", 100), s.get("win_rate", 0.50),
-                    s.get("expectancy_r", 0.30), s.get("sharpe_ratio", 0.25),
+                    sid,
+                    instrument,
+                    orb_label,
+                    orb_minutes,
+                    rr_target,
+                    confirm_bars,
+                    entry_model,
+                    filter_type,
+                    "{}",
+                    s.get("sample_size", 100),
+                    s.get("win_rate", 0.50),
+                    s.get("expectancy_r", 0.30),
+                    s.get("sharpe_ratio", 0.25),
                     s.get("max_drawdown_r", 5.0),
                 ],
             )
@@ -90,15 +102,26 @@ def _setup_fitness_db(tmp_path, strategies=None, outcomes=None, features=None):
                     sharpe_ratio, max_drawdown_r, yearly_results, status)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 [
-                    sid, sid,
-                    instrument, orb_label, orb_minutes, rr_target,
-                    confirm_bars, entry_model, filter_type, "{}",
-                    s.get("sample_size", 100), s.get("win_rate", 0.50),
+                    sid,
+                    sid,
+                    instrument,
+                    orb_label,
+                    orb_minutes,
+                    rr_target,
+                    confirm_bars,
+                    entry_model,
+                    filter_type,
+                    "{}",
+                    s.get("sample_size", 100),
+                    s.get("win_rate", 0.50),
                     s.get("expectancy_r", 0.30),
-                    s.get("years_tested", 3), s.get("all_years_positive", True),
+                    s.get("years_tested", 3),
+                    s.get("all_years_positive", True),
                     s.get("stress_test_passed", True),
-                    s.get("sharpe_ratio", 0.25), s.get("max_drawdown_r", 5.0),
-                    s.get("yearly_results", "{}"), s.get("status", "active"),
+                    s.get("sharpe_ratio", 0.25),
+                    s.get("max_drawdown_r", 5.0),
+                    s.get("yearly_results", "{}"),
+                    s.get("status", "active"),
                 ],
             )
 
@@ -112,9 +135,12 @@ def _setup_fitness_db(tmp_path, strategies=None, outcomes=None, features=None):
                     orb_CME_REOPEN_break_dir)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 [
-                    f["trading_day"], f.get("symbol", "MGC"),
-                    f.get("orb_minutes", 5), f.get("bar_count_1m", 1400),
-                    f.get("orb_CME_REOPEN_high", 2355.0), f.get("orb_CME_REOPEN_low", 2345.0),
+                    f["trading_day"],
+                    f.get("symbol", "MGC"),
+                    f.get("orb_minutes", 5),
+                    f.get("bar_count_1m", 1400),
+                    f.get("orb_CME_REOPEN_high", 2355.0),
+                    f.get("orb_CME_REOPEN_low", 2345.0),
                     f.get("orb_CME_REOPEN_size", 10.0),
                     f.get("orb_CME_REOPEN_break_dir", "long"),
                 ],
@@ -143,14 +169,20 @@ def _setup_fitness_db(tmp_path, strategies=None, outcomes=None, features=None):
                     outcome, pnl_r, mae_r, mfe_r)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 [
-                    td, sym,
-                    o.get("orb_label", "CME_REOPEN"), om,
-                    o.get("rr_target", 2.0), o.get("confirm_bars", 2),
+                    td,
+                    sym,
+                    o.get("orb_label", "CME_REOPEN"),
+                    om,
+                    o.get("rr_target", 2.0),
+                    o.get("confirm_bars", 2),
                     o.get("entry_model", "E1"),
-                    o.get("entry_price", 2350.0), o.get("stop_price", 2340.0),
+                    o.get("entry_price", 2350.0),
+                    o.get("stop_price", 2340.0),
                     o.get("target_price", 2370.0),
-                    o["outcome"], o["pnl_r"],
-                    o.get("mae_r", -0.5), o.get("mfe_r", 1.5),
+                    o["outcome"],
+                    o["pnl_r"],
+                    o.get("mae_r", -0.5),
+                    o.get("mfe_r", 1.5),
                 ],
             )
 
@@ -158,8 +190,10 @@ def _setup_fitness_db(tmp_path, strategies=None, outcomes=None, features=None):
     con.close()
     return db_path
 
-def _make_outcomes(start_year=2023, end_year=2025, trades_per_year=40,
-                   win_rate=0.50, win_pnl=1.8, loss_pnl=-1.0, **overrides):
+
+def _make_outcomes(
+    start_year=2023, end_year=2025, trades_per_year=40, win_rate=0.50, win_pnl=1.8, loss_pnl=-1.0, **overrides
+):
     """Generate synthetic outcome rows spanning multiple years."""
     outcomes = []
     for year in range(start_year, end_year + 1):
@@ -179,8 +213,8 @@ def _make_outcomes(start_year=2023, end_year=2025, trades_per_year=40,
             outcomes.append(row)
     return outcomes
 
-def _make_features(start_year=2023, end_year=2025, trades_per_year=40,
-                   orb_size=10.0, **overrides):
+
+def _make_features(start_year=2023, end_year=2025, trades_per_year=40, orb_size=10.0, **overrides):
     """Generate daily_features rows matching outcome days."""
     features = []
     for year in range(start_year, end_year + 1):
@@ -196,70 +230,58 @@ def _make_features(start_year=2023, end_year=2025, trades_per_year=40,
             features.append(row)
     return features
 
+
 # =========================================================================
 # Classification tests
 # =========================================================================
 
-class TestClassifyFitness:
 
+class TestClassifyFitness:
     def test_classify_fitness_fit(self):
         """Positive rolling ExpR, stable recent Sharpe, enough trades -> FIT."""
-        status, notes = classify_fitness(
-            rolling_exp_r=0.30, rolling_sample=20, recent_sharpe_30=0.15
-        )
+        status, notes = classify_fitness(rolling_exp_r=0.30, rolling_sample=20, recent_sharpe_30=0.15)
         assert status == "FIT"
 
     def test_classify_fitness_watch_declining_sharpe(self):
         """Positive rolling ExpR but declining recent Sharpe -> WATCH."""
-        status, notes = classify_fitness(
-            rolling_exp_r=0.20, rolling_sample=20, recent_sharpe_30=-0.15
-        )
+        status, notes = classify_fitness(rolling_exp_r=0.20, rolling_sample=20, recent_sharpe_30=-0.15)
         assert status == "WATCH"
         assert "Declining" in notes
 
     def test_classify_fitness_watch_thin_data(self):
         """Positive rolling ExpR but only 10-14 trades -> WATCH."""
-        status, notes = classify_fitness(
-            rolling_exp_r=0.20, rolling_sample=12, recent_sharpe_30=0.10
-        )
+        status, notes = classify_fitness(rolling_exp_r=0.20, rolling_sample=12, recent_sharpe_30=0.10)
         assert status == "WATCH"
         assert "Thin data" in notes
 
     def test_classify_fitness_decay(self):
         """Negative rolling ExpR -> DECAY."""
-        status, notes = classify_fitness(
-            rolling_exp_r=-0.10, rolling_sample=25, recent_sharpe_30=-0.20
-        )
+        status, notes = classify_fitness(rolling_exp_r=-0.10, rolling_sample=25, recent_sharpe_30=-0.20)
         assert status == "DECAY"
         assert "Negative" in notes
 
     def test_classify_fitness_stale(self):
         """< 10 rolling trades -> STALE."""
-        status, notes = classify_fitness(
-            rolling_exp_r=0.50, rolling_sample=5, recent_sharpe_30=0.30
-        )
+        status, notes = classify_fitness(rolling_exp_r=0.50, rolling_sample=5, recent_sharpe_30=0.30)
         assert status == "STALE"
 
     def test_classify_fitness_stale_none_exp(self):
         """None rolling ExpR with enough trades -> STALE."""
-        status, notes = classify_fitness(
-            rolling_exp_r=None, rolling_sample=15, recent_sharpe_30=0.10
-        )
+        status, notes = classify_fitness(rolling_exp_r=None, rolling_sample=15, recent_sharpe_30=0.10)
         assert status == "STALE"
 
     def test_classify_fitness_fit_none_sharpe(self):
         """Positive rolling ExpR, None recent sharpe (not enough for 30-trade) -> FIT."""
-        status, notes = classify_fitness(
-            rolling_exp_r=0.25, rolling_sample=20, recent_sharpe_30=None
-        )
+        status, notes = classify_fitness(rolling_exp_r=0.25, rolling_sample=20, recent_sharpe_30=None)
         assert status == "FIT"
+
 
 # =========================================================================
 # Rolling metrics tests
 # =========================================================================
 
-class TestRollingMetrics:
 
+class TestRollingMetrics:
     def test_rolling_metrics_basic(self):
         """Rolling window filters outcomes by date correctly."""
         outcomes = _make_outcomes(start_year=2023, end_year=2025, trades_per_year=30)
@@ -277,17 +299,17 @@ class TestRollingMetrics:
         assert metrics["expectancy_r"] is None
         assert metrics["sharpe_ratio"] is None
 
+
 # =========================================================================
 # Recent trade Sharpe tests
 # =========================================================================
 
-class TestRecentTradeSharpe:
 
+class TestRecentTradeSharpe:
     def test_recent_trade_sharpe_basic(self):
         """Last 30 trades Sharpe calculation returns a number."""
         outcomes = _make_outcomes(
-            start_year=2024, end_year=2025, trades_per_year=30,
-            win_rate=0.55, win_pnl=1.8, loss_pnl=-1.0
+            start_year=2024, end_year=2025, trades_per_year=30, win_rate=0.55, win_pnl=1.8, loss_pnl=-1.0
         )
         result = _recent_trade_sharpe(outcomes, 30)
         assert result is not None
@@ -295,34 +317,27 @@ class TestRecentTradeSharpe:
 
     def test_recent_trade_sharpe_insufficient(self):
         """< 30 trades -> None."""
-        outcomes = _make_outcomes(
-            start_year=2025, end_year=2025, trades_per_year=10
-        )
+        outcomes = _make_outcomes(start_year=2025, end_year=2025, trades_per_year=10)
         result = _recent_trade_sharpe(outcomes, 30)
         assert result is None
 
     def test_recent_trade_sharpe_uses_last_n(self):
         """Sharpe uses only last N trades, not all."""
         # 50 good trades followed by 10 bad ones
-        good = [
-            {"trading_day": date(2024, 1, i + 1), "outcome": "win", "pnl_r": 2.0}
-            for i in range(20)
-        ]
-        bad = [
-            {"trading_day": date(2025, 1, i + 1), "outcome": "loss", "pnl_r": -1.0}
-            for i in range(20)
-        ]
+        good = [{"trading_day": date(2024, 1, i + 1), "outcome": "win", "pnl_r": 2.0} for i in range(20)]
+        bad = [{"trading_day": date(2025, 1, i + 1), "outcome": "loss", "pnl_r": -1.0} for i in range(20)]
         all_outcomes = good + bad
         # Last 20 trades = all losses -> negative Sharpe
         sharpe_20 = _recent_trade_sharpe(all_outcomes, 20)
         assert sharpe_20 is None  # all same pnl -> std=0 -> None
 
+
 # =========================================================================
 # Rolling window date math
 # =========================================================================
 
-class TestRollingWindowStart:
 
+class TestRollingWindowStart:
     def test_18_months_back(self):
         result = _rolling_window_start(date(2025, 12, 15), 18)
         assert result == date(2024, 6, 15)
@@ -336,12 +351,13 @@ class TestRollingWindowStart:
         result = _rolling_window_start(date(2025, 3, 31), 1)
         assert result == date(2025, 2, 28)
 
+
 # =========================================================================
 # Sharpe delta tests
 # =========================================================================
 
-class TestSharpeDelta:
 
+class TestSharpeDelta:
     def test_sharpe_delta_computation(self):
         """Delta = recent - full_period."""
         recent = 0.10
@@ -356,39 +372,47 @@ class TestSharpeDelta:
         delta = None if recent is None else recent - full
         assert delta is None
 
+
 # =========================================================================
 # Integration tests
 # =========================================================================
 
-class TestComputeFitnessIntegration:
 
+class TestComputeFitnessIntegration:
     def test_compute_fitness_end_to_end(self, tmp_path):
         """End-to-end fitness computation with in-memory DuckDB."""
         strategy_id = "MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER"
-        strategies = [{
-            "strategy_id": strategy_id,
-            "instrument": "MGC",
-            "orb_label": "CME_REOPEN",
-            "orb_minutes": 5,
-            "rr_target": 2.0,
-            "confirm_bars": 2,
-            "entry_model": "E1",
-            "filter_type": "NO_FILTER",
-            "sample_size": 120,
-            "win_rate": 0.50,
-            "expectancy_r": 0.30,
-            "sharpe_ratio": 0.25,
-        }]
+        strategies = [
+            {
+                "strategy_id": strategy_id,
+                "instrument": "MGC",
+                "orb_label": "CME_REOPEN",
+                "orb_minutes": 5,
+                "rr_target": 2.0,
+                "confirm_bars": 2,
+                "entry_model": "E1",
+                "filter_type": "NO_FILTER",
+                "sample_size": 120,
+                "win_rate": 0.50,
+                "expectancy_r": 0.30,
+                "sharpe_ratio": 0.25,
+            }
+        ]
         outcomes = _make_outcomes(
-            start_year=2023, end_year=2025, trades_per_year=40,
-            win_rate=0.50, win_pnl=1.8, loss_pnl=-1.0,
+            start_year=2023,
+            end_year=2025,
+            trades_per_year=40,
+            win_rate=0.50,
+            win_pnl=1.8,
+            loss_pnl=-1.0,
         )
         features = _make_features(start_year=2023, end_year=2025, trades_per_year=40)
 
         db_path = _setup_fitness_db(tmp_path, strategies, outcomes, features)
 
         score = compute_fitness(
-            strategy_id, db_path=db_path,
+            strategy_id,
+            db_path=db_path,
             as_of_date=date(2025, 12, 31),
             rolling_months=18,
         )
@@ -413,32 +437,33 @@ class TestComputeFitnessIntegration:
         so _recent_trade_sharpe could include future outcomes.
         """
         strategy_id = "MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER"
-        strategies = [{
-            "strategy_id": strategy_id,
-            "filter_type": "NO_FILTER",
-            "sample_size": 100,
-            "expectancy_r": 0.30,
-            "sharpe_ratio": 0.25,
-        }]
+        strategies = [
+            {
+                "strategy_id": strategy_id,
+                "filter_type": "NO_FILTER",
+                "sample_size": 100,
+                "expectancy_r": 0.30,
+                "sharpe_ratio": 0.25,
+            }
+        ]
         # 30 wins in 2023, then 30 losses in 2025
         early_wins = [
-            {"trading_day": date(2023, (i % 11) + 1, (i % 27) + 1),
-             "outcome": "win", "pnl_r": 2.0}
-            for i in range(30)
+            {"trading_day": date(2023, (i % 11) + 1, (i % 27) + 1), "outcome": "win", "pnl_r": 2.0} for i in range(30)
         ]
         late_losses = [
-            {"trading_day": date(2025, (i % 11) + 1, (i % 27) + 1),
-             "outcome": "loss", "pnl_r": -1.0}
-            for i in range(30)
+            {"trading_day": date(2025, (i % 11) + 1, (i % 27) + 1), "outcome": "loss", "pnl_r": -1.0} for i in range(30)
         ]
 
         db_path = _setup_fitness_db(
-            tmp_path, strategies, early_wins + late_losses,
+            tmp_path,
+            strategies,
+            early_wins + late_losses,
         )
 
         # as_of=2023-12-31: should only see the 30 wins, NOT the 2025 losses
         score = compute_fitness(
-            strategy_id, db_path=db_path,
+            strategy_id,
+            db_path=db_path,
             as_of_date=date(2023, 12, 31),
             rolling_months=18,
         )
@@ -458,25 +483,30 @@ class TestComputeFitnessIntegration:
         causing classify_fitness to return STALE instead of WATCH.
         """
         strategy_id = "MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER"
-        strategies = [{
-            "strategy_id": strategy_id,
-            "filter_type": "NO_FILTER",
-            "sample_size": 100,
-            "expectancy_r": 0.30,
-            "sharpe_ratio": 0.25,
-        }]
+        strategies = [
+            {
+                "strategy_id": strategy_id,
+                "filter_type": "NO_FILTER",
+                "sample_size": 100,
+                "expectancy_r": 0.30,
+                "sharpe_ratio": 0.25,
+            }
+        ]
         # Only 12 outcomes, all in the rolling window, mostly wins
         outcomes = [
-            {"trading_day": date(2025, (i % 11) + 1, (i % 27) + 1),
-             "outcome": "win" if i < 8 else "loss",
-             "pnl_r": 2.0 if i < 8 else -1.0}
+            {
+                "trading_day": date(2025, (i % 11) + 1, (i % 27) + 1),
+                "outcome": "win" if i < 8 else "loss",
+                "pnl_r": 2.0 if i < 8 else -1.0,
+            }
             for i in range(12)
         ]
 
         db_path = _setup_fitness_db(tmp_path, strategies, outcomes)
 
         score = compute_fitness(
-            strategy_id, db_path=db_path,
+            strategy_id,
+            db_path=db_path,
             as_of_date=date(2025, 12, 31),
             rolling_months=18,
         )
@@ -489,44 +519,40 @@ class TestComputeFitnessIntegration:
     def test_orb_size_filter_excludes_small_days(self, tmp_path):
         """ORB_G4 filter excludes days with orb_size < 4.0."""
         strategy_id = "MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G4"
-        strategies = [{
-            "strategy_id": strategy_id,
-            "filter_type": "ORB_G4",
-            "sample_size": 100,
-            "expectancy_r": 0.30,
-            "sharpe_ratio": 0.25,
-        }]
+        strategies = [
+            {
+                "strategy_id": strategy_id,
+                "filter_type": "ORB_G4",
+                "sample_size": 100,
+                "expectancy_r": 0.30,
+                "sharpe_ratio": 0.25,
+            }
+        ]
         # 20 outcomes on big-ORB days (size=10), 20 on small-ORB days (size=2)
         big_outcomes = [
-            {"trading_day": date(2025, (i % 11) + 1, (i % 27) + 1),
-             "outcome": "win", "pnl_r": 2.0}
-            for i in range(20)
+            {"trading_day": date(2025, (i % 11) + 1, (i % 27) + 1), "outcome": "win", "pnl_r": 2.0} for i in range(20)
         ]
         small_outcomes = [
-            {"trading_day": date(2024, (i % 11) + 1, (i % 27) + 1),
-             "outcome": "loss", "pnl_r": -1.0}
-            for i in range(20)
+            {"trading_day": date(2024, (i % 11) + 1, (i % 27) + 1), "outcome": "loss", "pnl_r": -1.0} for i in range(20)
         ]
         # Features: 2025 days have big ORBs, 2024 days have small ORBs
         big_features = [
-            {"trading_day": date(2025, (i % 11) + 1, (i % 27) + 1),
-             "orb_CME_REOPEN_size": 10.0}
-            for i in range(20)
+            {"trading_day": date(2025, (i % 11) + 1, (i % 27) + 1), "orb_CME_REOPEN_size": 10.0} for i in range(20)
         ]
         small_features = [
-            {"trading_day": date(2024, (i % 11) + 1, (i % 27) + 1),
-             "orb_CME_REOPEN_size": 2.0}
-            for i in range(20)
+            {"trading_day": date(2024, (i % 11) + 1, (i % 27) + 1), "orb_CME_REOPEN_size": 2.0} for i in range(20)
         ]
 
         db_path = _setup_fitness_db(
-            tmp_path, strategies,
+            tmp_path,
+            strategies,
             big_outcomes + small_outcomes,
             big_features + small_features,
         )
 
         score = compute_fitness(
-            strategy_id, db_path=db_path,
+            strategy_id,
+            db_path=db_path,
             as_of_date=date(2025, 12, 31),
             rolling_months=24,
         )
@@ -534,8 +560,8 @@ class TestComputeFitnessIntegration:
         # The 20 small-ORB (size=2.0 < 4.0) should be excluded
         assert score.rolling_sample == 20
 
-class TestFitnessReportSummary:
 
+class TestFitnessReportSummary:
     def test_fitness_report_summary_counts(self, tmp_path):
         """Summary correctly counts {fit: N, watch: N, decay: N, stale: N}."""
         # Create 3 strategies with different expected outcomes
@@ -552,17 +578,24 @@ class TestFitnessReportSummary:
         # All 3 strategies share the same outcome params (orb, EM, RR, CB),
         # so one set of outcomes covers all of them.
         outcomes = _make_outcomes(
-            start_year=2024, end_year=2025, trades_per_year=30,
-            win_rate=0.55, win_pnl=1.8, loss_pnl=-1.0,
+            start_year=2024,
+            end_year=2025,
+            trades_per_year=30,
+            win_rate=0.55,
+            win_pnl=1.8,
+            loss_pnl=-1.0,
         )
         features = _make_features(
-            start_year=2024, end_year=2025, trades_per_year=30,
+            start_year=2024,
+            end_year=2025,
+            trades_per_year=30,
         )
 
         db_path = _setup_fitness_db(tmp_path, strategies, outcomes, features)
 
         report = compute_portfolio_fitness(
-            db_path=db_path, instrument="MGC",
+            db_path=db_path,
+            instrument="MGC",
             as_of_date=date(2025, 12, 31),
         )
 
@@ -572,78 +605,135 @@ class TestFitnessReportSummary:
         assert total == 3
         assert set(report.summary.keys()) == {"fit", "watch", "decay", "stale"}
 
+
 # =========================================================================
 # Portfolio integration test
 # =========================================================================
 
-class TestFitnessWeightedPortfolio:
 
+class TestFitnessWeightedPortfolio:
     def test_fitness_weighted_portfolio(self):
         """FIT=1.0, WATCH=0.5, DECAY=0.0, STALE=0.0 weight adjustments."""
         from trading_app.portfolio import Portfolio, PortfolioStrategy, fitness_weighted_portfolio
 
         strats = [
             PortfolioStrategy(
-                strategy_id="S1", instrument="MGC", orb_label="CME_REOPEN",
-                entry_model="E1", rr_target=2.0, confirm_bars=2,
-                filter_type="NO_FILTER", expectancy_r=0.30, win_rate=0.50,
-                sample_size=100, sharpe_ratio=0.25, max_drawdown_r=5.0,
-                median_risk_points=10.0, weight=1.0,
+                strategy_id="S1",
+                instrument="MGC",
+                orb_label="CME_REOPEN",
+                entry_model="E1",
+                rr_target=2.0,
+                confirm_bars=2,
+                filter_type="NO_FILTER",
+                expectancy_r=0.30,
+                win_rate=0.50,
+                sample_size=100,
+                sharpe_ratio=0.25,
+                max_drawdown_r=5.0,
+                median_risk_points=10.0,
+                weight=1.0,
             ),
             PortfolioStrategy(
-                strategy_id="S2", instrument="MGC", orb_label="TOKYO_OPEN",
-                entry_model="E1", rr_target=2.5, confirm_bars=2,
-                filter_type="ORB_G4", expectancy_r=0.40, win_rate=0.55,
-                sample_size=80, sharpe_ratio=0.30, max_drawdown_r=4.0,
-                median_risk_points=12.0, weight=1.0,
+                strategy_id="S2",
+                instrument="MGC",
+                orb_label="TOKYO_OPEN",
+                entry_model="E1",
+                rr_target=2.5,
+                confirm_bars=2,
+                filter_type="ORB_G4",
+                expectancy_r=0.40,
+                win_rate=0.55,
+                sample_size=80,
+                sharpe_ratio=0.30,
+                max_drawdown_r=4.0,
+                median_risk_points=12.0,
+                weight=1.0,
             ),
             PortfolioStrategy(
-                strategy_id="S3", instrument="MGC", orb_label="LONDON_METALS",
-                entry_model="E3", rr_target=2.0, confirm_bars=5,
-                filter_type="ORB_G5", expectancy_r=0.35, win_rate=0.48,
-                sample_size=75, sharpe_ratio=0.20, max_drawdown_r=3.0,
-                median_risk_points=8.0, weight=1.0,
+                strategy_id="S3",
+                instrument="MGC",
+                orb_label="LONDON_METALS",
+                entry_model="E3",
+                rr_target=2.0,
+                confirm_bars=5,
+                filter_type="ORB_G5",
+                expectancy_r=0.35,
+                win_rate=0.48,
+                sample_size=75,
+                sharpe_ratio=0.20,
+                max_drawdown_r=3.0,
+                median_risk_points=8.0,
+                weight=1.0,
             ),
         ]
 
         portfolio = Portfolio(
-            name="test", instrument="MGC", strategies=strats,
-            account_equity=25000.0, risk_per_trade_pct=2.0,
-            max_concurrent_positions=3, max_daily_loss_r=5.0,
+            name="test",
+            instrument="MGC",
+            strategies=strats,
+            account_equity=25000.0,
+            risk_per_trade_pct=2.0,
+            max_concurrent_positions=3,
+            max_daily_loss_r=5.0,
         )
 
         scores = [
             FitnessScore(
-                strategy_id="S1", full_period_exp_r=0.30,
-                full_period_sharpe=0.25, full_period_sample=100,
-                rolling_exp_r=0.25, rolling_sharpe=0.20, rolling_win_rate=0.48,
-                rolling_sample=25, rolling_window_months=18,
-                recent_sharpe_30=0.15, recent_sharpe_60=0.18,
-                sharpe_delta_30=-0.10, sharpe_delta_60=-0.07,
-                fitness_status="FIT", fitness_notes="OK",
+                strategy_id="S1",
+                full_period_exp_r=0.30,
+                full_period_sharpe=0.25,
+                full_period_sample=100,
+                rolling_exp_r=0.25,
+                rolling_sharpe=0.20,
+                rolling_win_rate=0.48,
+                rolling_sample=25,
+                rolling_window_months=18,
+                recent_sharpe_30=0.15,
+                recent_sharpe_60=0.18,
+                sharpe_delta_30=-0.10,
+                sharpe_delta_60=-0.07,
+                fitness_status="FIT",
+                fitness_notes="OK",
             ),
             FitnessScore(
-                strategy_id="S2", full_period_exp_r=0.40,
-                full_period_sharpe=0.30, full_period_sample=80,
-                rolling_exp_r=0.15, rolling_sharpe=0.10, rolling_win_rate=0.45,
-                rolling_sample=18, rolling_window_months=18,
-                recent_sharpe_30=-0.15, recent_sharpe_60=0.05,
-                sharpe_delta_30=-0.45, sharpe_delta_60=-0.25,
-                fitness_status="WATCH", fitness_notes="Declining",
+                strategy_id="S2",
+                full_period_exp_r=0.40,
+                full_period_sharpe=0.30,
+                full_period_sample=80,
+                rolling_exp_r=0.15,
+                rolling_sharpe=0.10,
+                rolling_win_rate=0.45,
+                rolling_sample=18,
+                rolling_window_months=18,
+                recent_sharpe_30=-0.15,
+                recent_sharpe_60=0.05,
+                sharpe_delta_30=-0.45,
+                sharpe_delta_60=-0.25,
+                fitness_status="WATCH",
+                fitness_notes="Declining",
             ),
             FitnessScore(
-                strategy_id="S3", full_period_exp_r=0.35,
-                full_period_sharpe=0.20, full_period_sample=75,
-                rolling_exp_r=-0.10, rolling_sharpe=-0.05, rolling_win_rate=0.40,
-                rolling_sample=20, rolling_window_months=18,
-                recent_sharpe_30=-0.30, recent_sharpe_60=-0.20,
-                sharpe_delta_30=-0.50, sharpe_delta_60=-0.40,
-                fitness_status="DECAY", fitness_notes="Negative",
+                strategy_id="S3",
+                full_period_exp_r=0.35,
+                full_period_sharpe=0.20,
+                full_period_sample=75,
+                rolling_exp_r=-0.10,
+                rolling_sharpe=-0.05,
+                rolling_win_rate=0.40,
+                rolling_sample=20,
+                rolling_window_months=18,
+                recent_sharpe_30=-0.30,
+                recent_sharpe_60=-0.20,
+                sharpe_delta_30=-0.50,
+                sharpe_delta_60=-0.40,
+                fitness_status="DECAY",
+                fitness_notes="Negative",
             ),
         ]
 
         report = FitnessReport(
-            as_of_date=date(2025, 12, 31), scores=scores,
+            as_of_date=date(2025, 12, 31),
+            scores=scores,
             summary={"fit": 1, "watch": 1, "decay": 1, "stale": 0},
         )
 
@@ -654,9 +744,9 @@ class TestFitnessWeightedPortfolio:
         assert len(adjusted.strategies) == 3
 
         weight_map = {s.strategy_id: s.weight for s in adjusted.strategies}
-        assert weight_map["S1"] == 1.0   # FIT
-        assert weight_map["S2"] == 0.5   # WATCH
-        assert weight_map["S3"] == 0.0   # DECAY
+        assert weight_map["S1"] == 1.0  # FIT
+        assert weight_map["S2"] == 0.5  # WATCH
+        assert weight_map["S3"] == 0.0  # DECAY
 
         # Original unchanged
         assert all(s.weight == 1.0 for s in portfolio.strategies)
@@ -667,50 +757,87 @@ class TestFitnessWeightedPortfolio:
 
         strats = [
             PortfolioStrategy(
-                strategy_id="REGIME_FIT", instrument="MGC", orb_label="CME_REOPEN",
-                entry_model="E1", rr_target=2.0, confirm_bars=1,
-                filter_type="ORB_G5", expectancy_r=0.15, win_rate=0.45,
-                sample_size=60, sharpe_ratio=0.20, max_drawdown_r=3.0,
+                strategy_id="REGIME_FIT",
+                instrument="MGC",
+                orb_label="CME_REOPEN",
+                entry_model="E1",
+                rr_target=2.0,
+                confirm_bars=1,
+                filter_type="ORB_G5",
+                expectancy_r=0.15,
+                win_rate=0.45,
+                sample_size=60,
+                sharpe_ratio=0.20,
+                max_drawdown_r=3.0,
                 median_risk_points=4.0,
                 weight=0.5,  # REGIME classification weight
             ),
             PortfolioStrategy(
-                strategy_id="CORE_FIT", instrument="MGC", orb_label="TOKYO_OPEN",
-                entry_model="E1", rr_target=2.0, confirm_bars=1,
-                filter_type="ORB_G5", expectancy_r=0.20, win_rate=0.48,
-                sample_size=200, sharpe_ratio=0.25, max_drawdown_r=2.5,
+                strategy_id="CORE_FIT",
+                instrument="MGC",
+                orb_label="TOKYO_OPEN",
+                entry_model="E1",
+                rr_target=2.0,
+                confirm_bars=1,
+                filter_type="ORB_G5",
+                expectancy_r=0.20,
+                win_rate=0.48,
+                sample_size=200,
+                sharpe_ratio=0.25,
+                max_drawdown_r=2.5,
                 median_risk_points=4.0,
                 weight=1.0,  # CORE classification weight
             ),
         ]
         portfolio = Portfolio(
-            name="test", instrument="MGC", strategies=strats,
-            account_equity=25000.0, risk_per_trade_pct=2.0,
-            max_concurrent_positions=3, max_daily_loss_r=5.0,
+            name="test",
+            instrument="MGC",
+            strategies=strats,
+            account_equity=25000.0,
+            risk_per_trade_pct=2.0,
+            max_concurrent_positions=3,
+            max_daily_loss_r=5.0,
         )
 
         scores = [
             FitnessScore(
-                strategy_id="REGIME_FIT", full_period_exp_r=0.30,
-                full_period_sharpe=0.25, full_period_sample=60,
-                rolling_exp_r=0.25, rolling_sharpe=0.20, rolling_win_rate=0.48,
-                rolling_sample=25, rolling_window_months=18,
-                recent_sharpe_30=0.15, recent_sharpe_60=0.18,
-                sharpe_delta_30=0.0, sharpe_delta_60=0.0,
-                fitness_status="FIT", fitness_notes="",
+                strategy_id="REGIME_FIT",
+                full_period_exp_r=0.30,
+                full_period_sharpe=0.25,
+                full_period_sample=60,
+                rolling_exp_r=0.25,
+                rolling_sharpe=0.20,
+                rolling_win_rate=0.48,
+                rolling_sample=25,
+                rolling_window_months=18,
+                recent_sharpe_30=0.15,
+                recent_sharpe_60=0.18,
+                sharpe_delta_30=0.0,
+                sharpe_delta_60=0.0,
+                fitness_status="FIT",
+                fitness_notes="",
             ),
             FitnessScore(
-                strategy_id="CORE_FIT", full_period_exp_r=0.35,
-                full_period_sharpe=0.30, full_period_sample=200,
-                rolling_exp_r=0.28, rolling_sharpe=0.22, rolling_win_rate=0.50,
-                rolling_sample=30, rolling_window_months=18,
-                recent_sharpe_30=0.20, recent_sharpe_60=0.22,
-                sharpe_delta_30=0.0, sharpe_delta_60=0.0,
-                fitness_status="FIT", fitness_notes="",
+                strategy_id="CORE_FIT",
+                full_period_exp_r=0.35,
+                full_period_sharpe=0.30,
+                full_period_sample=200,
+                rolling_exp_r=0.28,
+                rolling_sharpe=0.22,
+                rolling_win_rate=0.50,
+                rolling_sample=30,
+                rolling_window_months=18,
+                recent_sharpe_30=0.20,
+                recent_sharpe_60=0.22,
+                sharpe_delta_30=0.0,
+                sharpe_delta_60=0.0,
+                fitness_status="FIT",
+                fitness_notes="",
             ),
         ]
         report = FitnessReport(
-            as_of_date=date(2025, 12, 31), scores=scores,
+            as_of_date=date(2025, 12, 31),
+            scores=scores,
             summary={"fit": 2, "watch": 0, "decay": 0, "stale": 0},
         )
 
@@ -727,8 +854,8 @@ class TestFitnessWeightedPortfolio:
 # Decay diagnostic tests
 # =========================================================================
 
-def _setup_family_db(tmp_path, strategies, outcomes, family_hash="fam_abc",
-                     family_size=None, robustness="ROBUST"):
+
+def _setup_family_db(tmp_path, strategies, outcomes, family_hash="fam_abc", family_size=None, robustness="ROBUST"):
     """Create DB with strategies linked to an edge family."""
     db_path = _setup_fitness_db(tmp_path, strategies, outcomes)
     con = duckdb.connect(str(db_path))
@@ -737,23 +864,29 @@ def _setup_family_db(tmp_path, strategies, outcomes, family_hash="fam_abc",
     head_sid = strategies[0]["strategy_id"]
 
     # Create edge_families row
-    con.execute("""
+    con.execute(
+        """
         INSERT INTO edge_families
         (family_hash, instrument, member_count, trade_day_count,
          head_strategy_id, head_expectancy_r, head_sharpe_ann,
          robustness_status, cv_expectancy, median_expectancy_r,
          avg_sharpe_ann, min_member_trades, trade_tier)
         VALUES (?, 'MGC', ?, 100, ?, 0.30, 1.0, ?, 0.15, 0.28, 1.0, 80, 'CORE')
-    """, [family_hash, n_members, head_sid, robustness])
+    """,
+        [family_hash, n_members, head_sid, robustness],
+    )
 
     # Link strategies to family
     for s in strategies:
         is_head = s["strategy_id"] == head_sid
-        con.execute("""
+        con.execute(
+            """
             UPDATE validated_setups
             SET family_hash = ?, is_family_head = ?
             WHERE strategy_id = ?
-        """, [family_hash, is_head, s["strategy_id"]])
+        """,
+            [family_hash, is_head, s["strategy_id"]],
+        )
 
     con.commit()
     con.close()
@@ -761,22 +894,30 @@ def _setup_family_db(tmp_path, strategies, outcomes, family_hash="fam_abc",
 
 
 class TestDecayDiagnostics:
-
     def test_regime_shift_all_siblings_decay(self, tmp_path):
         """When all siblings are also DECAY -> REGIME_SHIFT."""
         # 3 strategies, all with negative recent outcomes -> all DECAY
         strategies = [
-            {"strategy_id": f"MGC_CME_REOPEN_E1_RR{rr}_CB2_NO_FILTER",
-             "rr_target": rr, "filter_type": "NO_FILTER",
-             "sample_size": 100, "expectancy_r": 0.30, "sharpe_ratio": 0.25}
+            {
+                "strategy_id": f"MGC_CME_REOPEN_E1_RR{rr}_CB2_NO_FILTER",
+                "rr_target": rr,
+                "filter_type": "NO_FILTER",
+                "sample_size": 100,
+                "expectancy_r": 0.30,
+                "sharpe_ratio": 0.25,
+            }
             for rr in [1.5, 2.0, 2.5]
         ]
         # All strategies share same NO_FILTER + same EM/CB -> same outcomes
         # Make all outcomes losses in recent window
         outcomes = [
-            {"trading_day": date(2025, (i % 11) + 1, (i % 27) + 1),
-             "outcome": "loss", "pnl_r": -1.0,
-             "rr_target": rr, "confirm_bars": 2}
+            {
+                "trading_day": date(2025, (i % 11) + 1, (i % 27) + 1),
+                "outcome": "loss",
+                "pnl_r": -1.0,
+                "rr_target": rr,
+                "confirm_bars": 2,
+            }
             for rr in [1.5, 2.0, 2.5]
             for i in range(20)
         ]
@@ -785,8 +926,10 @@ class TestDecayDiagnostics:
         con = duckdb.connect(str(db_path), read_only=True)
         try:
             diag = diagnose_decay(
-                con, strategies[0]["strategy_id"],
-                as_of_date=date(2025, 12, 31), rolling_months=18,
+                con,
+                strategies[0]["strategy_id"],
+                as_of_date=date(2025, 12, 31),
+                rolling_months=18,
             )
         finally:
             con.close()
@@ -798,37 +941,51 @@ class TestDecayDiagnostics:
         """When siblings are FIT but target is DECAY -> OVERFIT."""
         # Strategy at RR2.0 decays, but RR1.5 and RR2.5 are fine
         strategies = [
-            {"strategy_id": "MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER",
-             "rr_target": 2.0, "filter_type": "NO_FILTER",
-             "sample_size": 100, "expectancy_r": 0.30, "sharpe_ratio": 0.25},
-            {"strategy_id": "MGC_CME_REOPEN_E1_RR1.5_CB2_NO_FILTER",
-             "rr_target": 1.5, "filter_type": "NO_FILTER",
-             "sample_size": 100, "expectancy_r": 0.30, "sharpe_ratio": 0.25},
-            {"strategy_id": "MGC_CME_REOPEN_E1_RR2.5_CB2_NO_FILTER",
-             "rr_target": 2.5, "filter_type": "NO_FILTER",
-             "sample_size": 100, "expectancy_r": 0.30, "sharpe_ratio": 0.25},
+            {
+                "strategy_id": "MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER",
+                "rr_target": 2.0,
+                "filter_type": "NO_FILTER",
+                "sample_size": 100,
+                "expectancy_r": 0.30,
+                "sharpe_ratio": 0.25,
+            },
+            {
+                "strategy_id": "MGC_CME_REOPEN_E1_RR1.5_CB2_NO_FILTER",
+                "rr_target": 1.5,
+                "filter_type": "NO_FILTER",
+                "sample_size": 100,
+                "expectancy_r": 0.30,
+                "sharpe_ratio": 0.25,
+            },
+            {
+                "strategy_id": "MGC_CME_REOPEN_E1_RR2.5_CB2_NO_FILTER",
+                "rr_target": 2.5,
+                "filter_type": "NO_FILTER",
+                "sample_size": 100,
+                "expectancy_r": 0.30,
+                "sharpe_ratio": 0.25,
+            },
         ]
         # RR2.0 gets losses, RR1.5/2.5 get wins
         outcomes = []
         for i in range(20):
             td = date(2025, (i % 11) + 1, (i % 27) + 1)
             # RR2.0 = loss
-            outcomes.append({"trading_day": td, "outcome": "loss", "pnl_r": -1.0,
-                             "rr_target": 2.0, "confirm_bars": 2})
+            outcomes.append({"trading_day": td, "outcome": "loss", "pnl_r": -1.0, "rr_target": 2.0, "confirm_bars": 2})
             # RR1.5 = win
-            outcomes.append({"trading_day": td, "outcome": "win", "pnl_r": 1.5,
-                             "rr_target": 1.5, "confirm_bars": 2})
+            outcomes.append({"trading_day": td, "outcome": "win", "pnl_r": 1.5, "rr_target": 1.5, "confirm_bars": 2})
             # RR2.5 = win
-            outcomes.append({"trading_day": td, "outcome": "win", "pnl_r": 2.5,
-                             "rr_target": 2.5, "confirm_bars": 2})
+            outcomes.append({"trading_day": td, "outcome": "win", "pnl_r": 2.5, "rr_target": 2.5, "confirm_bars": 2})
 
         db_path = _setup_family_db(tmp_path, strategies, outcomes)
 
         con = duckdb.connect(str(db_path), read_only=True)
         try:
             diag = diagnose_decay(
-                con, "MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER",
-                as_of_date=date(2025, 12, 31), rolling_months=18,
+                con,
+                "MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER",
+                as_of_date=date(2025, 12, 31),
+                rolling_months=18,
             )
         finally:
             con.close()
@@ -840,22 +997,31 @@ class TestDecayDiagnostics:
     def test_singleton_no_peers(self, tmp_path):
         """Single-member family -> SINGLETON."""
         strategies = [
-            {"strategy_id": "MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER",
-             "filter_type": "NO_FILTER",
-             "sample_size": 100, "expectancy_r": 0.30, "sharpe_ratio": 0.25},
+            {
+                "strategy_id": "MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER",
+                "filter_type": "NO_FILTER",
+                "sample_size": 100,
+                "expectancy_r": 0.30,
+                "sharpe_ratio": 0.25,
+            },
         ]
         outcomes = _make_outcomes(
-            start_year=2024, end_year=2025, trades_per_year=20,
-            win_rate=0.40, win_pnl=1.5, loss_pnl=-1.0,
+            start_year=2024,
+            end_year=2025,
+            trades_per_year=20,
+            win_rate=0.40,
+            win_pnl=1.5,
+            loss_pnl=-1.0,
         )
-        db_path = _setup_family_db(tmp_path, strategies, outcomes,
-                                   family_size=1, robustness="SINGLETON")
+        db_path = _setup_family_db(tmp_path, strategies, outcomes, family_size=1, robustness="SINGLETON")
 
         con = duckdb.connect(str(db_path), read_only=True)
         try:
             diag = diagnose_decay(
-                con, strategies[0]["strategy_id"],
-                as_of_date=date(2025, 12, 31), rolling_months=18,
+                con,
+                strategies[0]["strategy_id"],
+                as_of_date=date(2025, 12, 31),
+                rolling_months=18,
             )
         finally:
             con.close()
@@ -865,9 +1031,13 @@ class TestDecayDiagnostics:
     def test_no_family_hash(self, tmp_path):
         """Strategy with no family_hash -> NO_FAMILY."""
         strategies = [
-            {"strategy_id": "MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER",
-             "filter_type": "NO_FILTER",
-             "sample_size": 100, "expectancy_r": 0.30, "sharpe_ratio": 0.25},
+            {
+                "strategy_id": "MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER",
+                "filter_type": "NO_FILTER",
+                "sample_size": 100,
+                "expectancy_r": 0.30,
+                "sharpe_ratio": 0.25,
+            },
         ]
         outcomes = _make_outcomes(start_year=2024, end_year=2025, trades_per_year=20)
         db_path = _setup_fitness_db(tmp_path, strategies, outcomes)
@@ -875,8 +1045,10 @@ class TestDecayDiagnostics:
         con = duckdb.connect(str(db_path), read_only=True)
         try:
             diag = diagnose_decay(
-                con, strategies[0]["strategy_id"],
-                as_of_date=date(2025, 12, 31), rolling_months=18,
+                con,
+                strategies[0]["strategy_id"],
+                as_of_date=date(2025, 12, 31),
+                rolling_months=18,
             )
         finally:
             con.close()
@@ -886,9 +1058,13 @@ class TestDecayDiagnostics:
     def test_decay_diagnosis_dataclass_fields(self, tmp_path):
         """DecayDiagnosis has all expected fields."""
         strategies = [
-            {"strategy_id": "MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER",
-             "filter_type": "NO_FILTER",
-             "sample_size": 100, "expectancy_r": 0.30, "sharpe_ratio": 0.25},
+            {
+                "strategy_id": "MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER",
+                "filter_type": "NO_FILTER",
+                "sample_size": 100,
+                "expectancy_r": 0.30,
+                "sharpe_ratio": 0.25,
+            },
         ]
         outcomes = _make_outcomes(start_year=2024, end_year=2025, trades_per_year=20)
         db_path = _setup_fitness_db(tmp_path, strategies, outcomes)
@@ -896,7 +1072,8 @@ class TestDecayDiagnostics:
         con = duckdb.connect(str(db_path), read_only=True)
         try:
             diag = diagnose_decay(
-                con, strategies[0]["strategy_id"],
+                con,
+                strategies[0]["strategy_id"],
                 as_of_date=date(2025, 12, 31),
             )
         finally:
@@ -904,6 +1081,4 @@ class TestDecayDiagnostics:
 
         assert isinstance(diag, DecayDiagnosis)
         assert diag.strategy_id == strategies[0]["strategy_id"]
-        assert diag.diagnosis in (
-            "REGIME_SHIFT", "OVERFIT", "FRAGMENTED", "SINGLETON", "NO_FAMILY"
-        )
+        assert diag.diagnosis in ("REGIME_SHIFT", "OVERFIT", "FRAGMENTED", "SINGLETON", "NO_FAMILY")

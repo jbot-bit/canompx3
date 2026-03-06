@@ -52,6 +52,7 @@ class BreakTouchResult:
     Used by E2 (stop-market) where a resting stop order triggers on any
     intra-bar touch of the ORB level, regardless of where the bar closes.
     """
+
     touched: bool
     touch_bar_ts: datetime | None
     touch_bar_idx: int | None
@@ -94,15 +95,18 @@ def detect_confirm(
         raise ValueError(f"break_dir must be 'long' or 'short', got {break_dir}")
 
     no_confirm = ConfirmResult(
-        confirmed=False, confirm_bar_idx=None, confirm_bar_ts=None,
-        confirm_bar_close=None, orb_high=orb_high, orb_low=orb_low,
+        confirmed=False,
+        confirm_bar_idx=None,
+        confirm_bar_ts=None,
+        confirm_bar_close=None,
+        orb_high=orb_high,
+        orb_low=orb_low,
         break_dir=break_dir,
     )
 
     # Get bars from break_ts onwards within window
     candidate_bars = bars_df[
-        (bars_df["ts_utc"] >= orb_break_ts)
-        & (bars_df["ts_utc"] < detection_window_end)
+        (bars_df["ts_utc"] >= orb_break_ts) & (bars_df["ts_utc"] < detection_window_end)
     ].sort_values("ts_utc")
 
     if candidate_bars.empty:
@@ -129,8 +133,12 @@ def detect_confirm(
         ts = candidate_bars.iloc[idx]["ts_utc"].to_pydatetime()
         close = float(candidate_bars.iloc[idx]["close"])
         return ConfirmResult(
-            confirmed=True, confirm_bar_idx=idx, confirm_bar_ts=ts,
-            confirm_bar_close=close, orb_high=orb_high, orb_low=orb_low,
+            confirmed=True,
+            confirm_bar_idx=idx,
+            confirm_bar_ts=ts,
+            confirm_bar_close=close,
+            orb_high=orb_high,
+            orb_low=orb_low,
             break_dir=break_dir,
         )
 
@@ -156,8 +164,12 @@ def detect_break_touch(
     order triggers on any intra-bar touch of the level.
     """
     no_touch = BreakTouchResult(
-        touched=False, touch_bar_ts=None, touch_bar_idx=None,
-        orb_high=orb_high, orb_low=orb_low, break_dir=break_dir,
+        touched=False,
+        touch_bar_ts=None,
+        touch_bar_idx=None,
+        orb_high=orb_high,
+        orb_low=orb_low,
+        break_dir=break_dir,
     )
 
     if break_dir not in ("long", "short"):
@@ -183,8 +195,12 @@ def detect_break_touch(
     ts = candidate_bars.iloc[idx]["ts_utc"].to_pydatetime()
 
     return BreakTouchResult(
-        touched=True, touch_bar_ts=ts, touch_bar_idx=idx,
-        orb_high=orb_high, orb_low=orb_low, break_dir=break_dir,
+        touched=True,
+        touch_bar_ts=ts,
+        touch_bar_idx=idx,
+        orb_high=orb_high,
+        orb_low=orb_low,
+        break_dir=break_dir,
     )
 
 
@@ -208,8 +224,12 @@ def resolve_entry(
     """
     if not confirm.confirmed:
         return EntrySignal(
-            triggered=False, entry_ts=None, entry_price=None, stop_price=None,
-            entry_model=entry_model, confirm_bar_ts=None,
+            triggered=False,
+            entry_ts=None,
+            entry_price=None,
+            stop_price=None,
+            entry_model=entry_model,
+            confirm_bar_ts=None,
         )
 
     stop_price = confirm.orb_low if confirm.break_dir == "long" else confirm.orb_high
@@ -237,14 +257,17 @@ def _resolve_e1(
     """E1: Market-On-Confirm. Entry = next bar OPEN after confirm bar."""
     # Find bars strictly after confirm bar timestamp
     next_bars = bars_df[
-        (bars_df["ts_utc"] > pd.Timestamp(confirm.confirm_bar_ts))
-        & (bars_df["ts_utc"] < pd.Timestamp(scan_window_end))
+        (bars_df["ts_utc"] > pd.Timestamp(confirm.confirm_bar_ts)) & (bars_df["ts_utc"] < pd.Timestamp(scan_window_end))
     ].sort_values("ts_utc")
 
     if next_bars.empty:
         return EntrySignal(
-            triggered=False, entry_ts=None, entry_price=None, stop_price=None,
-            entry_model="E1", confirm_bar_ts=confirm.confirm_bar_ts,
+            triggered=False,
+            entry_ts=None,
+            entry_price=None,
+            stop_price=None,
+            entry_model="E1",
+            confirm_bar_ts=confirm.confirm_bar_ts,
         )
 
     entry_bar = next_bars.iloc[0]
@@ -252,8 +275,11 @@ def _resolve_e1(
     entry_price = float(entry_bar["open"])
 
     return EntrySignal(
-        triggered=True, entry_ts=entry_ts, entry_price=entry_price,
-        stop_price=stop_price, entry_model="E1",
+        triggered=True,
+        entry_ts=entry_ts,
+        entry_price=entry_price,
+        stop_price=stop_price,
+        entry_model="E1",
         confirm_bar_ts=confirm.confirm_bar_ts,
     )
 
@@ -272,14 +298,17 @@ def _resolve_e3(
     fill is invalid — you cannot enter a trade that is already stopped out.
     """
     no_fill = EntrySignal(
-        triggered=False, entry_ts=None, entry_price=None, stop_price=None,
-        entry_model="E3", confirm_bar_ts=confirm.confirm_bar_ts,
+        triggered=False,
+        entry_ts=None,
+        entry_price=None,
+        stop_price=None,
+        entry_model="E3",
+        confirm_bar_ts=confirm.confirm_bar_ts,
     )
 
     # Scan bars strictly after confirm bar
     post_confirm = bars_df[
-        (bars_df["ts_utc"] > pd.Timestamp(confirm.confirm_bar_ts))
-        & (bars_df["ts_utc"] < pd.Timestamp(scan_window_end))
+        (bars_df["ts_utc"] > pd.Timestamp(confirm.confirm_bar_ts)) & (bars_df["ts_utc"] < pd.Timestamp(scan_window_end))
     ].sort_values("ts_utc")
 
     if post_confirm.empty:
@@ -308,14 +337,17 @@ def _resolve_e3(
     # CRITICAL: Check if stop was breached on or before the retrace bar.
     # If ANY bar from confirm to retrace (inclusive) hit the stop, the
     # limit fill is invalid — the trade was dead before it could fill.
-    if stop_hit_mask[:retrace_idx + 1].any():
+    if stop_hit_mask[: retrace_idx + 1].any():
         return no_fill
 
     entry_ts = post_confirm.iloc[retrace_idx]["ts_utc"].to_pydatetime()
 
     return EntrySignal(
-        triggered=True, entry_ts=entry_ts, entry_price=entry_price,
-        stop_price=stop_price, entry_model="E3",
+        triggered=True,
+        entry_ts=entry_ts,
+        entry_price=entry_price,
+        stop_price=stop_price,
+        entry_model="E3",
         confirm_bar_ts=confirm.confirm_bar_ts,
     )
 
@@ -336,8 +368,12 @@ def _resolve_e2(
     """
     if not touch.touched:
         return EntrySignal(
-            triggered=False, entry_ts=None, entry_price=None,
-            stop_price=None, entry_model="E2", confirm_bar_ts=None,
+            triggered=False,
+            entry_ts=None,
+            entry_price=None,
+            stop_price=None,
+            entry_model="E2",
+            confirm_bar_ts=None,
         )
 
     slippage = slippage_ticks * tick_size
@@ -379,7 +415,12 @@ def detect_entry_with_confirm_bars(
         raise ValueError("E2 uses detect_break_touch(), not detect_entry_with_confirm_bars().")
 
     confirm = detect_confirm(
-        bars_df, orb_break_ts, orb_high, orb_low,
-        break_dir, confirm_bars, detection_window_end,
+        bars_df,
+        orb_break_ts,
+        orb_high,
+        orb_low,
+        break_dir,
+        confirm_bars,
+        detection_window_end,
     )
     return resolve_entry(bars_df, confirm, entry_model, detection_window_end)

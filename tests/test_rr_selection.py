@@ -1,4 +1,5 @@
 """Tests for SharpeDD family RR lock selection logic."""
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -11,6 +12,7 @@ from scripts.tools.select_family_rr import (
 
 
 # --- Unit tests for Jobson-Korkie ---
+
 
 def test_jk_identical_sharpe_returns_p1():
     """Identical Sharpes -> p = 1.0 (cannot reject equality)."""
@@ -45,15 +47,23 @@ def test_jk_symmetric():
 
 # --- Unit tests for select_rr_for_family ---
 
+
 def _make_family_row(rr, sharpe, maxdd, n=200, expr=0.10, tpy=50.0):
     """Helper to create a single strategy row."""
     return {
-        "instrument": "MGC", "orb_label": "TOKYO_OPEN",
-        "filter_type": "NO_FILTER", "entry_model": "E2",
-        "orb_minutes": 5, "confirm_bars": 1,
-        "rr_target": rr, "sharpe_ratio": sharpe,
-        "max_drawdown_r": maxdd, "sample_size": n,
-        "expectancy_r": expr, "trades_per_year": tpy, "win_rate": 0.55,
+        "instrument": "MGC",
+        "orb_label": "TOKYO_OPEN",
+        "filter_type": "NO_FILTER",
+        "entry_model": "E2",
+        "orb_minutes": 5,
+        "confirm_bars": 1,
+        "rr_target": rr,
+        "sharpe_ratio": sharpe,
+        "max_drawdown_r": maxdd,
+        "sample_size": n,
+        "expectancy_r": expr,
+        "trades_per_year": tpy,
+        "win_rate": 0.55,
     }
 
 
@@ -67,10 +77,12 @@ def test_single_rr_returns_only_rr():
 
 def test_best_sharpe_with_lowest_dd_returns_max_sharpe():
     """Best Sharpe also has lowest DD -> method=MAX_SHARPE."""
-    df = pd.DataFrame([
-        _make_family_row(1.0, 1.5, 8.0),   # best Sharpe AND lowest DD
-        _make_family_row(2.0, 1.3, 15.0),
-    ])
+    df = pd.DataFrame(
+        [
+            _make_family_row(1.0, 1.5, 8.0),  # best Sharpe AND lowest DD
+            _make_family_row(2.0, 1.3, 15.0),
+        ]
+    )
     result = select_rr_for_family(df)
     assert result["method"] == "MAX_SHARPE"
     assert result["locked_rr"] == 1.0
@@ -79,10 +91,12 @@ def test_best_sharpe_with_lowest_dd_returns_max_sharpe():
 def test_sharpe_dd_picks_lower_dd_from_equal_sharpe():
     """Equal Sharpes, different DD -> picks lower DD (SHARPE_DD)."""
     # Sharpes close enough that JK won't reject (both ~1.3, N=200, rho=0.7)
-    df = pd.DataFrame([
-        _make_family_row(1.0, 1.30, 8.0, n=200),   # slightly worse Sharpe, much lower DD
-        _make_family_row(2.0, 1.35, 20.0, n=200),   # slightly better Sharpe, much higher DD
-    ])
+    df = pd.DataFrame(
+        [
+            _make_family_row(1.0, 1.30, 8.0, n=200),  # slightly worse Sharpe, much lower DD
+            _make_family_row(2.0, 1.35, 20.0, n=200),  # slightly better Sharpe, much higher DD
+        ]
+    )
     result = select_rr_for_family(df)
     assert result["method"] == "SHARPE_DD"
     assert result["locked_rr"] == 1.0  # picked RR1.0 for its lower DD
@@ -92,10 +106,12 @@ def test_sharpe_dd_picks_lower_dd_from_equal_sharpe():
 def test_significantly_better_sharpe_wins_despite_higher_dd():
     """If one RR has SIGNIFICANTLY better Sharpe, it wins even with higher DD."""
     # Massive Sharpe difference with large N -> JK rejects equality
-    df = pd.DataFrame([
-        _make_family_row(1.0, 0.3, 5.0, n=500),   # terrible Sharpe, low DD
-        _make_family_row(2.0, 2.5, 25.0, n=500),   # amazing Sharpe, high DD
-    ])
+    df = pd.DataFrame(
+        [
+            _make_family_row(1.0, 0.3, 5.0, n=500),  # terrible Sharpe, low DD
+            _make_family_row(2.0, 2.5, 25.0, n=500),  # amazing Sharpe, high DD
+        ]
+    )
     result = select_rr_for_family(df)
     # RR1.0 should be excluded (JK p < 0.05 vs best), so RR2.0 wins
     assert result["locked_rr"] == 2.0
@@ -103,12 +119,14 @@ def test_significantly_better_sharpe_wins_despite_higher_dd():
 
 def test_multi_rr_all_equal_sharpe_picks_lowest_dd():
     """4 RR levels with similar Sharpes -> picks the one with lowest DD."""
-    df = pd.DataFrame([
-        _make_family_row(1.0, 1.20, 10.0, n=200),
-        _make_family_row(1.5, 1.25, 14.0, n=200),
-        _make_family_row(2.0, 1.22, 18.0, n=200),
-        _make_family_row(2.5, 1.18, 22.0, n=200),
-    ])
+    df = pd.DataFrame(
+        [
+            _make_family_row(1.0, 1.20, 10.0, n=200),
+            _make_family_row(1.5, 1.25, 14.0, n=200),
+            _make_family_row(2.0, 1.22, 18.0, n=200),
+            _make_family_row(2.5, 1.18, 22.0, n=200),
+        ]
+    )
     result = select_rr_for_family(df)
     assert result["locked_rr"] == 1.0  # lowest DD among statistically-equal Sharpes
     assert result["maxdd_at_rr"] == 10.0
@@ -127,10 +145,12 @@ def test_family_key_columns_preserved():
 
 def test_metrics_match_selected_rr():
     """Metrics in result must match the selected RR row, not some other row."""
-    df = pd.DataFrame([
-        _make_family_row(1.0, 1.30, 8.0, n=150, expr=0.08, tpy=40),
-        _make_family_row(2.0, 1.32, 20.0, n=180, expr=0.15, tpy=45),
-    ])
+    df = pd.DataFrame(
+        [
+            _make_family_row(1.0, 1.30, 8.0, n=150, expr=0.08, tpy=40),
+            _make_family_row(2.0, 1.32, 20.0, n=180, expr=0.15, tpy=45),
+        ]
+    )
     result = select_rr_for_family(df)
     # Should pick RR1.0 (SHARPE_DD — lower DD from equal Sharpe)
     assert result["locked_rr"] == 1.0

@@ -17,7 +17,11 @@ class TestFullCopilotFlow:
             now = datetime(2026, 3, 6, hour, 30, tzinfo=BRISBANE)
             state = get_app_state(now)
             assert state.name in (
-                "WEEKEND", "IDLE", "APPROACHING", "ALERT", "OVERNIGHT",
+                "WEEKEND",
+                "IDLE",
+                "APPROACHING",
+                "ALERT",
+                "OVERNIGHT",
             ), f"Invalid state at {hour}:30 — got {state.name}"
 
     def test_briefing_cards_build_without_error(self):
@@ -30,8 +34,7 @@ class TestFullCopilotFlow:
             assert b.session, "Briefing missing session"
             assert b.instrument, "Briefing missing instrument"
             assert b.rr_target > 0, f"{b.session} {b.instrument} missing rr_target"
-            assert len(b.conditions) > 0 or b.direction_note, \
-                f"{b.session} {b.instrument} has no conditions"
+            assert len(b.conditions) > 0 or b.direction_note, f"{b.session} {b.instrument} has no conditions"
 
     def test_no_state_crash_on_dst_transition_day(self):
         """State machine must not crash on US DST transition."""
@@ -42,7 +45,11 @@ class TestFullCopilotFlow:
             now = datetime(2026, 3, 8, hour, 0, tzinfo=BRISBANE)
             state = get_app_state(now)
             assert state.name in (
-                "WEEKEND", "IDLE", "APPROACHING", "ALERT", "OVERNIGHT",
+                "WEEKEND",
+                "IDLE",
+                "APPROACHING",
+                "ALERT",
+                "OVERNIGHT",
             )
 
     def test_weekend_state_saturday_sunday(self):
@@ -74,5 +81,4 @@ class TestFullCopilotFlow:
         for f in all_filters:
             english = filter_to_english(f)
             assert english, f"Filter {f} translated to empty string"
-            assert english != f or f in ("DIR_LONG", "DIR_SHORT"), \
-                f"Filter {f} fell through to raw name: {english}"
+            assert english != f or f in ("DIR_LONG", "DIR_SHORT"), f"Filter {f} fell through to raw name: {english}"

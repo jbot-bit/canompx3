@@ -58,25 +58,19 @@ def _verify_db(db_path: Path, instrument: str = None) -> dict:
         con = duckdb.connect(str(db_path), read_only=True)
         try:
             # Total bar count
-            stats["total_bars"] = con.execute(
-                "SELECT COUNT(*) FROM bars_1m"
-            ).fetchone()[0]
+            stats["total_bars"] = con.execute("SELECT COUNT(*) FROM bars_1m").fetchone()[0]
 
             # Per-instrument breakdown
             rows = con.execute(
                 "SELECT symbol, COUNT(*), MIN(DATE(ts_utc)), MAX(DATE(ts_utc)) "
                 "FROM bars_1m GROUP BY symbol ORDER BY symbol"
             ).fetchall()
-            stats["instruments"] = {
-                r[0]: {"rows": r[1], "min_date": str(r[2]), "max_date": str(r[3])}
-                for r in rows
-            }
+            stats["instruments"] = {r[0]: {"rows": r[1], "min_date": str(r[2]), "max_date": str(r[3])} for r in rows}
 
             # Check for specific instrument if requested
             if instrument:
                 inst_stats = con.execute(
-                    "SELECT COUNT(*), MIN(DATE(ts_utc)), MAX(DATE(ts_utc)) "
-                    "FROM bars_1m WHERE symbol = ?",
+                    "SELECT COUNT(*), MIN(DATE(ts_utc)), MAX(DATE(ts_utc)) FROM bars_1m WHERE symbol = ?",
                     [instrument],
                 ).fetchone()
                 stats["target"] = {
@@ -96,9 +90,7 @@ def _verify_db(db_path: Path, instrument: str = None) -> dict:
             stats["duplicates"] = dupes
 
             # Check for NULL source_symbol
-            nulls = con.execute(
-                "SELECT COUNT(*) FROM bars_1m WHERE source_symbol IS NULL"
-            ).fetchone()[0]
+            nulls = con.execute("SELECT COUNT(*) FROM bars_1m WHERE source_symbol IS NULL").fetchone()[0]
             stats["null_source"] = nulls
 
             stats["ok"] = dupes == 0 and nulls == 0
@@ -344,26 +336,20 @@ def main():
 
     # Mode flags (mutually exclusive)
     mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--verify-only", action="store_true",
-                       help="Just verify the scratch DB state")
-    mode.add_argument("--merge-back", action="store_true",
-                       help="Merge scratch DB back to main with integrity checks")
+    mode.add_argument("--verify-only", action="store_true", help="Just verify the scratch DB state")
+    mode.add_argument("--merge-back", action="store_true", help="Merge scratch DB back to main with integrity checks")
 
     # Common args
-    parser.add_argument("--instrument", type=str,
-                        help="Instrument to ingest (MGC, MNQ, MCL, MES, SIL)")
+    parser.add_argument("--instrument", type=str, help="Instrument to ingest (MGC, MNQ, MCL, MES, SIL)")
     parser.add_argument("--start", type=str, help="Start date YYYY-MM-DD")
     parser.add_argument("--end", type=str, help="End date YYYY-MM-DD")
-    parser.add_argument("--skip-to", type=str,
-                        help="Skip to pipeline step (e.g. build_outcomes)")
-    parser.add_argument("--fresh-copy", action="store_true",
-                        help="Force fresh copy of main DB to scratch")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Show what would happen without executing")
-    parser.add_argument("--gold", type=str, default=str(DEFAULT_GOLD),
-                        help=f"Main DB path (default: {DEFAULT_GOLD})")
-    parser.add_argument("--scratch", type=str, default=str(DEFAULT_SCRATCH),
-                        help=f"Scratch DB path (default: {DEFAULT_SCRATCH})")
+    parser.add_argument("--skip-to", type=str, help="Skip to pipeline step (e.g. build_outcomes)")
+    parser.add_argument("--fresh-copy", action="store_true", help="Force fresh copy of main DB to scratch")
+    parser.add_argument("--dry-run", action="store_true", help="Show what would happen without executing")
+    parser.add_argument("--gold", type=str, default=str(DEFAULT_GOLD), help=f"Main DB path (default: {DEFAULT_GOLD})")
+    parser.add_argument(
+        "--scratch", type=str, default=str(DEFAULT_SCRATCH), help=f"Scratch DB path (default: {DEFAULT_SCRATCH})"
+    )
 
     args = parser.parse_args()
 

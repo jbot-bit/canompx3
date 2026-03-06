@@ -62,12 +62,14 @@ def main():
     # Split args on '--'
     if "--" not in sys.argv:
         print("Usage: python scripts/infra/scratch_run.py [--scratch PATH] -- <command>")
-        print("Example: python scripts/infra/scratch_run.py -- python trading_app/strategy_discovery.py --instrument MGC")
+        print(
+            "Example: python scripts/infra/scratch_run.py -- python trading_app/strategy_discovery.py --instrument MGC"
+        )
         sys.exit(1)
 
     sep_idx = sys.argv.index("--")
     our_args = sys.argv[1:sep_idx]
-    cmd = sys.argv[sep_idx + 1:]
+    cmd = sys.argv[sep_idx + 1 :]
 
     if not cmd:
         print("FATAL: No command specified after '--'")

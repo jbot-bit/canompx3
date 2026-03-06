@@ -44,10 +44,10 @@ from pipeline.build_daily_features import (
 # HELPERS
 # =============================================================================
 
+
 def _ts(year, month, day, hour, minute=0) -> pd.Timestamp:
     """Create a UTC-aware Timestamp."""
-    return pd.Timestamp(year=year, month=month, day=day,
-                        hour=hour, minute=minute, tz="UTC")
+    return pd.Timestamp(year=year, month=month, day=day, hour=hour, minute=minute, tz="UTC")
 
 
 def _make_bars(timestamps, opens, highs, lows, closes, volumes=None):
@@ -55,23 +55,25 @@ def _make_bars(timestamps, opens, highs, lows, closes, volumes=None):
     n = len(timestamps)
     if volumes is None:
         volumes = [100] * n
-    return pd.DataFrame({
-        "ts_utc": timestamps,
-        "open": np.array(opens, dtype=float),
-        "high": np.array(highs, dtype=float),
-        "low": np.array(lows, dtype=float),
-        "close": np.array(closes, dtype=float),
-        "volume": np.array(volumes, dtype=int),
-        "source_symbol": ["MGCM4"] * n,
-    })
+    return pd.DataFrame(
+        {
+            "ts_utc": timestamps,
+            "open": np.array(opens, dtype=float),
+            "high": np.array(highs, dtype=float),
+            "low": np.array(lows, dtype=float),
+            "close": np.array(closes, dtype=float),
+            "volume": np.array(volumes, dtype=int),
+            "source_symbol": ["MGCM4"] * n,
+        }
+    )
 
 
 # =============================================================================
 # MODULE 1: TRADING DAY ASSIGNMENT
 # =============================================================================
 
-class TestTradingDay:
 
+class TestTradingDay:
     def test_bar_at_2300_utc_belongs_to_next_trading_day(self):
         """23:00 UTC = 09:00 Brisbane -> new trading day."""
         ts = pd.Timestamp("2024-01-04 23:00:00", tz="UTC")
@@ -112,8 +114,8 @@ class TestTradingDay:
 # MODULE 2: ORB RANGES
 # =============================================================================
 
-class TestOrbRanges:
 
+class TestOrbRanges:
     def test_0900_orb_window_5min(self):
         """0900 ORB on 2024-01-05: 23:00-23:05 UTC on 2024-01-04."""
         start, end = _orb_utc_window(date(2024, 1, 5), "CME_REOPEN", 5)
@@ -164,7 +166,10 @@ class TestOrbRanges:
         """ORB returns None when no bars in window."""
         bars = _make_bars(
             timestamps=[_ts(2024, 1, 5, 1, 0)],  # outside 0900 window
-            opens=[2350], highs=[2352], lows=[2349], closes=[2351],
+            opens=[2350],
+            highs=[2352],
+            lows=[2349],
+            closes=[2351],
         )
         result = compute_orb_range(bars, date(2024, 1, 5), "CME_REOPEN", 5)
         assert result["high"] is None
@@ -190,8 +195,8 @@ class TestOrbRanges:
 # MODULE 3: BREAK DETECTION
 # =============================================================================
 
-class TestBreakDetection:
 
+class TestBreakDetection:
     def test_long_break(self):
         """First close above ORB high = long break."""
         # ORB: high=2355, low=2348
@@ -258,7 +263,10 @@ class TestBreakDetection:
         """No break if ORB range is None."""
         bars = _make_bars(
             timestamps=[_ts(2024, 1, 4, 23, 5)],
-            opens=[2354], highs=[2358], lows=[2353], closes=[2356],
+            opens=[2354],
+            highs=[2358],
+            lows=[2353],
+            closes=[2356],
         )
         result = detect_break(bars, date(2024, 1, 5), "CME_REOPEN", 5, None, None)
         assert result["break_dir"] is None
@@ -268,8 +276,8 @@ class TestBreakDetection:
 # MODULE 4: SESSION STATS
 # =============================================================================
 
-class TestSessionStats:
 
+class TestSessionStats:
     def test_asia_session_window(self):
         """Fixed Asia stat window: 09:00-17:00 Brisbane (not DST-aware)."""
         start, end = _session_utc_window(date(2024, 1, 5), "asia")
@@ -320,7 +328,10 @@ class TestSessionStats:
         """Session returns None when no bars in window."""
         bars = _make_bars(
             timestamps=[_ts(2024, 1, 4, 23, 0)],  # Only Asia
-            opens=[2350], highs=[2352], lows=[2348], closes=[2351],
+            opens=[2350],
+            highs=[2352],
+            lows=[2348],
+            closes=[2351],
         )
         result = compute_session_stats(bars, date(2024, 1, 5))
         assert result["session_asia_high"] == 2352.0
@@ -332,14 +343,17 @@ class TestSessionStats:
 # MODULE 4b: Overnight Stats + Day Type
 # =============================================================================
 
-class TestOvernightStats:
 
+class TestOvernightStats:
     def test_overnight_keys_present(self):
         """compute_overnight_stats returns all required keys."""
         result = compute_overnight_stats(pd.DataFrame(), date(2024, 1, 5))
         assert set(result.keys()) == {
-            "overnight_high", "overnight_low", "overnight_range",
-            "pre_1000_high", "pre_1000_low",
+            "overnight_high",
+            "overnight_low",
+            "overnight_range",
+            "pre_1000_high",
+            "pre_1000_low",
         }
 
     def test_overnight_all_none_on_empty_bars(self):
@@ -357,8 +371,8 @@ class TestOvernightStats:
         bars = _make_bars(
             timestamps=[
                 _ts(2024, 1, 4, 23, 30),  # Asia
-                _ts(2024, 1, 5, 3, 0),    # Asia
-                _ts(2024, 1, 5, 10, 0),   # NY session (outside Asia)
+                _ts(2024, 1, 5, 3, 0),  # Asia
+                _ts(2024, 1, 5, 10, 0),  # NY session (outside Asia)
             ],
             opens=[2350, 2355, 2380],
             highs=[2355, 2360, 2390],
@@ -376,9 +390,9 @@ class TestOvernightStats:
         # pre_1000 = bars in [trading_day_start, 00:00 UTC Jan 5)
         bars = _make_bars(
             timestamps=[
-                _ts(2024, 1, 4, 23, 0),   # 09:00 Brisbane — included
+                _ts(2024, 1, 4, 23, 0),  # 09:00 Brisbane — included
                 _ts(2024, 1, 4, 23, 30),  # 09:30 Brisbane — included
-                _ts(2024, 1, 5, 0, 0),    # 10:00 Brisbane — excluded (start of ORB)
+                _ts(2024, 1, 5, 0, 0),  # 10:00 Brisbane — excluded (start of ORB)
             ],
             opens=[2350, 2355, 2370],
             highs=[2356, 2360, 2380],
@@ -392,7 +406,6 @@ class TestOvernightStats:
 
 
 class TestClassifyDayType:
-
     def test_trend_up(self):
         """Wide range, closed in top 30% = TREND_UP."""
         # range=5, atr=4 → range_pct=1.25. close at 4.8/5=0.96 → TREND_UP
@@ -447,8 +460,8 @@ class TestClassifyDayType:
 # MODULE 4c: GARCH Forecast
 # =============================================================================
 
-class TestGarchForecast:
 
+class TestGarchForecast:
     def test_garch_returns_none_on_insufficient_data(self):
         """GARCH returns None with fewer than 252 closes."""
         closes = [2350.0 + i for i in range(100)]
@@ -470,8 +483,8 @@ class TestGarchForecast:
 # MODULE 5: RSI
 # =============================================================================
 
-class TestRSI:
 
+class TestRSI:
     def test_wilders_rsi_all_up(self):
         """All gains -> RSI = 100."""
         closes = np.array([float(i) for i in range(20)])  # 0,1,2,...,19
@@ -518,13 +531,13 @@ class TestRSI:
 # MODULE 6: OUTCOME
 # =============================================================================
 
-class TestOutcome:
 
+class TestOutcome:
     def _bars_after_break(self, highs, lows):
         """Helper to create bars after a break timestamp."""
         n = len(highs)
         base_ts = _ts(2024, 1, 4, 23, 10)
-        timestamps = [base_ts + timedelta(minutes=i+1) for i in range(n)]
+        timestamps = [base_ts + timedelta(minutes=i + 1) for i in range(n)]
         return _make_bars(
             timestamps=timestamps,
             opens=[h - 1 for h in highs],
@@ -549,8 +562,12 @@ class TestOutcome:
             closes=[2353, 2357, 2360],
         )
         result = compute_outcome(
-            bars, date(2024, 1, 5), "CME_REOPEN", 5,
-            orb_high=2350.0, orb_low=2340.0,
+            bars,
+            date(2024, 1, 5),
+            "CME_REOPEN",
+            5,
+            orb_high=2350.0,
+            orb_low=2340.0,
             break_dir="long",
             break_ts=_ts(2024, 1, 4, 23, 10).to_pydatetime(),
         )
@@ -570,8 +587,12 @@ class TestOutcome:
             closes=[2349, 2341],
         )
         result = compute_outcome(
-            bars, date(2024, 1, 5), "CME_REOPEN", 5,
-            orb_high=2350.0, orb_low=2340.0,
+            bars,
+            date(2024, 1, 5),
+            "CME_REOPEN",
+            5,
+            orb_high=2350.0,
+            orb_low=2340.0,
             break_dir="long",
             break_ts=_ts(2024, 1, 4, 23, 10).to_pydatetime(),
         )
@@ -592,8 +613,12 @@ class TestOutcome:
             closes=[2336, 2330],
         )
         result = compute_outcome(
-            bars, date(2024, 1, 5), "CME_REOPEN", 5,
-            orb_high=2350.0, orb_low=2340.0,
+            bars,
+            date(2024, 1, 5),
+            "CME_REOPEN",
+            5,
+            orb_high=2350.0,
+            orb_low=2340.0,
             break_dir="short",
             break_ts=_ts(2024, 1, 4, 23, 10).to_pydatetime(),
         )
@@ -608,12 +633,16 @@ class TestOutcome:
             ],
             opens=[2351, 2352],
             highs=[2354, 2355],  # doesn't reach 2360 target
-            lows=[2349, 2350],   # doesn't reach 2340 stop
+            lows=[2349, 2350],  # doesn't reach 2340 stop
             closes=[2352, 2353],
         )
         result = compute_outcome(
-            bars, date(2024, 1, 5), "CME_REOPEN", 5,
-            orb_high=2350.0, orb_low=2340.0,
+            bars,
+            date(2024, 1, 5),
+            "CME_REOPEN",
+            5,
+            orb_high=2350.0,
+            orb_low=2340.0,
             break_dir="long",
             break_ts=_ts(2024, 1, 4, 23, 10).to_pydatetime(),
         )
@@ -628,12 +657,16 @@ class TestOutcome:
             ],
             opens=[2351, 2345],
             highs=[2352, 2361],  # hits target 2360
-            lows=[2349, 2339],   # hits stop 2340
+            lows=[2349, 2339],  # hits stop 2340
             closes=[2350, 2345],
         )
         result = compute_outcome(
-            bars, date(2024, 1, 5), "CME_REOPEN", 5,
-            orb_high=2350.0, orb_low=2340.0,
+            bars,
+            date(2024, 1, 5),
+            "CME_REOPEN",
+            5,
+            orb_high=2350.0,
+            orb_low=2340.0,
             break_dir="long",
             break_ts=_ts(2024, 1, 4, 23, 10).to_pydatetime(),
         )
@@ -643,12 +676,20 @@ class TestOutcome:
         """No break -> outcome is None."""
         bars = _make_bars(
             timestamps=[_ts(2024, 1, 4, 23, 10)],
-            opens=[2350], highs=[2352], lows=[2348], closes=[2351],
+            opens=[2350],
+            highs=[2352],
+            lows=[2348],
+            closes=[2351],
         )
         result = compute_outcome(
-            bars, date(2024, 1, 5), "CME_REOPEN", 5,
-            orb_high=2350.0, orb_low=2340.0,
-            break_dir=None, break_ts=None,
+            bars,
+            date(2024, 1, 5),
+            "CME_REOPEN",
+            5,
+            orb_high=2350.0,
+            orb_low=2340.0,
+            break_dir=None,
+            break_ts=None,
         )
         assert result["outcome"] is None
 
@@ -660,12 +701,16 @@ class TestOutcome:
             timestamps=[_ts(2024, 1, 4, 23, 10)],
             opens=[2351],
             highs=[2361],  # would hit target if used
-            lows=[2339],   # would hit stop if used
+            lows=[2339],  # would hit stop if used
             closes=[2351],
         )
         result = compute_outcome(
-            bars, date(2024, 1, 5), "CME_REOPEN", 5,
-            orb_high=2350.0, orb_low=2340.0,
+            bars,
+            date(2024, 1, 5),
+            "CME_REOPEN",
+            5,
+            orb_high=2350.0,
+            orb_low=2340.0,
             break_dir="long",
             break_ts=_ts(2024, 1, 4, 23, 10).to_pydatetime(),
         )
@@ -681,8 +726,12 @@ class TestOutcome:
             closes=[2353, 2360],
         )
         result = compute_outcome(
-            bars, date(2024, 1, 5), "CME_REOPEN", 5,
-            orb_high=2350.0, orb_low=2340.0,
+            bars,
+            date(2024, 1, 5),
+            "CME_REOPEN",
+            5,
+            orb_high=2350.0,
+            orb_low=2340.0,
             break_dir="long",
             break_ts=_ts(2024, 1, 4, 23, 10).to_pydatetime(),
         )
@@ -694,8 +743,8 @@ class TestOutcome:
 # INTEGRATION: FULL BUILD WITH DB
 # =============================================================================
 
-class TestBuildIntegration:
 
+class TestBuildIntegration:
     @pytest.fixture
     def feature_db(self, tmp_path):
         """Create a DB with bars_1m, bars_5m, daily_features and sample data."""
@@ -704,6 +753,7 @@ class TestBuildIntegration:
 
         # Create schema
         from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA, DAILY_FEATURES_SCHEMA
+
         con.execute(BARS_1M_SCHEMA)
         con.execute(BARS_5M_SCHEMA)
         con.execute(DAILY_FEATURES_SCHEMA)
@@ -716,33 +766,34 @@ class TestBuildIntegration:
         for i in range(60):  # 1 hour of 1m bars
             ts = base + timedelta(minutes=i)
             price = 2350.0 + i * 0.1
-            bars.append((
-                ts.isoformat(), 'MGC', 'MGCM4',
-                price, price + 2.0, price - 1.0, price + 0.5,
-                100 + i
-            ))
+            bars.append((ts.isoformat(), "MGC", "MGCM4", price, price + 2.0, price - 1.0, price + 0.5, 100 + i))
 
         for b in bars:
-            con.execute("""
+            con.execute(
+                """
                 INSERT INTO bars_1m VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, list(b))
+            """,
+                list(b),
+            )
 
         # Insert some bars_5m for RSI computation (need 15+ bars)
         base_5m = datetime(2024, 1, 4, 20, 0, 0, tzinfo=UTC_TZ)
         for i in range(20):
             ts = base_5m + timedelta(minutes=i * 5)
             price = 2340.0 + i * 0.5
-            con.execute("""
+            con.execute(
+                """
                 INSERT INTO bars_5m VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, [ts.isoformat(), 'MGC', 'MGCM4',
-                  price, price + 1.0, price - 1.0, price + 0.3, 500])
+            """,
+                [ts.isoformat(), "MGC", "MGCM4", price, price + 1.0, price - 1.0, price + 0.3, 500],
+            )
 
         yield con
         con.close()
 
     def test_build_features_for_day(self, feature_db):
         """Full build for one trading day produces valid row."""
-        row = build_features_for_day(feature_db, 'MGC', date(2024, 1, 5), 5)
+        row = build_features_for_day(feature_db, "MGC", date(2024, 1, 5), 5)
 
         assert row["trading_day"] == date(2024, 1, 5)
         assert row["symbol"] == "MGC"
@@ -760,24 +811,16 @@ class TestBuildIntegration:
 
     def test_build_and_verify(self, feature_db):
         """Build and verify round-trip."""
-        count = build_daily_features(
-            feature_db, 'MGC', date(2024, 1, 5), date(2024, 1, 5), 5, False
-        )
+        count = build_daily_features(feature_db, "MGC", date(2024, 1, 5), date(2024, 1, 5), 5, False)
         assert count == 1
 
-        ok, failures = verify_daily_features(
-            feature_db, 'MGC', date(2024, 1, 5), date(2024, 1, 5)
-        )
+        ok, failures = verify_daily_features(feature_db, "MGC", date(2024, 1, 5), date(2024, 1, 5))
         assert ok, f"Verification failed: {failures}"
 
     def test_idempotent(self, feature_db):
         """Running build twice produces same result."""
-        build_daily_features(
-            feature_db, 'MGC', date(2024, 1, 5), date(2024, 1, 5), 5, False
-        )
-        build_daily_features(
-            feature_db, 'MGC', date(2024, 1, 5), date(2024, 1, 5), 5, False
-        )
+        build_daily_features(feature_db, "MGC", date(2024, 1, 5), date(2024, 1, 5), 5, False)
+        build_daily_features(feature_db, "MGC", date(2024, 1, 5), date(2024, 1, 5), 5, False)
 
         count = feature_db.execute("""
             SELECT COUNT(*) FROM daily_features
@@ -787,19 +830,15 @@ class TestBuildIntegration:
 
     def test_dry_run_no_writes(self, feature_db):
         """Dry run doesn't write to database."""
-        build_daily_features(
-            feature_db, 'MGC', date(2024, 1, 5), date(2024, 1, 5), 5, True
-        )
+        build_daily_features(feature_db, "MGC", date(2024, 1, 5), date(2024, 1, 5), 5, True)
 
-        count = feature_db.execute(
-            "SELECT COUNT(*) FROM daily_features"
-        ).fetchone()[0]
+        count = feature_db.execute("SELECT COUNT(*) FROM daily_features").fetchone()[0]
         assert count == 0
 
     def test_different_orb_minutes(self, feature_db):
         """Can build with different ORB durations."""
-        row_5 = build_features_for_day(feature_db, 'MGC', date(2024, 1, 5), 5)
-        row_15 = build_features_for_day(feature_db, 'MGC', date(2024, 1, 5), 15)
+        row_5 = build_features_for_day(feature_db, "MGC", date(2024, 1, 5), 5)
+        row_15 = build_features_for_day(feature_db, "MGC", date(2024, 1, 5), 15)
 
         # orb_minutes is stored in the row
         assert row_5["orb_minutes"] == 5
@@ -811,12 +850,8 @@ class TestBuildIntegration:
 
     def test_different_orb_minutes_coexist_in_db(self, feature_db):
         """5m and 15m builds can coexist for the same day."""
-        build_daily_features(
-            feature_db, 'MGC', date(2024, 1, 5), date(2024, 1, 5), 5, False
-        )
-        build_daily_features(
-            feature_db, 'MGC', date(2024, 1, 5), date(2024, 1, 5), 15, False
-        )
+        build_daily_features(feature_db, "MGC", date(2024, 1, 5), date(2024, 1, 5), 5, False)
+        build_daily_features(feature_db, "MGC", date(2024, 1, 5), date(2024, 1, 5), 15, False)
 
         count = feature_db.execute("""
             SELECT COUNT(*) FROM daily_features

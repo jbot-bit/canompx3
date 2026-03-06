@@ -71,8 +71,7 @@ def get_schema_definitions(db_path: str) -> str:
     con = duckdb.connect(db_path, read_only=True)
     try:
         tables = con.execute(
-            "SELECT table_name FROM information_schema.tables "
-            "WHERE table_schema = 'main' ORDER BY table_name"
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' ORDER BY table_name"
         ).fetchall()
 
         lines = []
@@ -98,15 +97,12 @@ def get_db_stats(db_path: str) -> str:
     con = duckdb.connect(db_path, read_only=True)
     try:
         tables = con.execute(
-            "SELECT table_name FROM information_schema.tables "
-            "WHERE table_schema = 'main' ORDER BY table_name"
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' ORDER BY table_name"
         ).fetchall()
 
         lines = []
         for (table_name,) in tables:
-            count = con.execute(
-                f'SELECT COUNT(*) FROM "{table_name}"'
-            ).fetchone()[0]
+            count = con.execute(f'SELECT COUNT(*) FROM "{table_name}"').fetchone()[0]
             lines.append(f"{table_name}: {count:,} rows")
         return "\n".join(lines)
     finally:

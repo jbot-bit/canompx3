@@ -11,6 +11,7 @@ import duckdb
 
 from trading_app.nested.schema import init_nested_schema, verify_nested_schema
 
+
 @pytest.fixture
 def tmp_db(tmp_path):
     """Create a temporary DuckDB with required parent tables."""
@@ -30,6 +31,7 @@ def tmp_db(tmp_path):
     con.close()
     return db_path
 
+
 class TestInitNestedSchema:
     """Tests for init_nested_schema()."""
 
@@ -39,7 +41,8 @@ class TestInitNestedSchema:
         con = duckdb.connect(str(tmp_db), read_only=True)
         try:
             tables = {
-                r[0] for r in con.execute(
+                r[0]
+                for r in con.execute(
                     "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
                 ).fetchall()
             }
@@ -57,7 +60,8 @@ class TestInitNestedSchema:
         con = duckdb.connect(str(tmp_db), read_only=True)
         try:
             tables = {
-                r[0] for r in con.execute(
+                r[0]
+                for r in con.execute(
                     "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
                 ).fetchall()
             }
@@ -95,6 +99,7 @@ class TestInitNestedSchema:
         finally:
             con.close()
 
+
 class TestNestedOutcomesColumns:
     """Verify nested_outcomes has the expected columns including entry_resolution."""
 
@@ -104,9 +109,9 @@ class TestNestedOutcomesColumns:
         con = duckdb.connect(str(tmp_db), read_only=True)
         try:
             cols = {
-                r[0] for r in con.execute(
-                    "SELECT column_name FROM information_schema.columns "
-                    "WHERE table_name = 'nested_outcomes'"
+                r[0]
+                for r in con.execute(
+                    "SELECT column_name FROM information_schema.columns WHERE table_name = 'nested_outcomes'"
                 ).fetchall()
             }
             assert "entry_resolution" in cols
@@ -124,20 +129,35 @@ class TestNestedOutcomesColumns:
         con = duckdb.connect(str(tmp_db), read_only=True)
         try:
             cols = {
-                r[0] for r in con.execute(
-                    "SELECT column_name FROM information_schema.columns "
-                    "WHERE table_name = 'nested_outcomes'"
+                r[0]
+                for r in con.execute(
+                    "SELECT column_name FROM information_schema.columns WHERE table_name = 'nested_outcomes'"
                 ).fetchall()
             }
             expected = {
-                "trading_day", "symbol", "orb_label", "orb_minutes",
-                "entry_resolution", "rr_target", "confirm_bars", "entry_model",
-                "entry_ts", "entry_price", "stop_price", "target_price",
-                "outcome", "exit_ts", "exit_price", "pnl_r", "mae_r", "mfe_r",
+                "trading_day",
+                "symbol",
+                "orb_label",
+                "orb_minutes",
+                "entry_resolution",
+                "rr_target",
+                "confirm_bars",
+                "entry_model",
+                "entry_ts",
+                "entry_price",
+                "stop_price",
+                "target_price",
+                "outcome",
+                "exit_ts",
+                "exit_price",
+                "pnl_r",
+                "mae_r",
+                "mfe_r",
             }
             assert expected <= cols
         finally:
             con.close()
+
 
 class TestNestedStrategiesColumns:
     """Verify nested_strategies has entry_resolution."""
@@ -148,9 +168,9 @@ class TestNestedStrategiesColumns:
         con = duckdb.connect(str(tmp_db), read_only=True)
         try:
             cols = {
-                r[0] for r in con.execute(
-                    "SELECT column_name FROM information_schema.columns "
-                    "WHERE table_name = 'nested_strategies'"
+                r[0]
+                for r in con.execute(
+                    "SELECT column_name FROM information_schema.columns WHERE table_name = 'nested_strategies'"
                 ).fetchall()
             }
             assert "entry_resolution" in cols
@@ -158,6 +178,7 @@ class TestNestedStrategiesColumns:
             assert "orb_minutes" in cols
         finally:
             con.close()
+
 
 class TestVerifyNestedSchema:
     """Tests for verify_nested_schema()."""
@@ -174,6 +195,7 @@ class TestVerifyNestedSchema:
         assert not ok
         assert len(violations) >= 3  # All 3 tables missing
 
+
 class TestNestedDoesNotTouchProduction:
     """Verify nested schema does not modify production tables."""
 
@@ -184,7 +206,8 @@ class TestNestedDoesNotTouchProduction:
         con = duckdb.connect(str(tmp_db), read_only=True)
         try:
             tables = {
-                r[0] for r in con.execute(
+                r[0]
+                for r in con.execute(
                     "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
                 ).fetchall()
             }

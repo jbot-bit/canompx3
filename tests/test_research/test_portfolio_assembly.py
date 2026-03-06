@@ -81,7 +81,7 @@ class TestComputeHonestSharpe:
     def test_constant_returns_gives_none(self):
         """Constant 1R every day has zero std — Sharpe is undefined."""
         start = dt.date(2024, 1, 1)  # Monday
-        end = dt.date(2024, 1, 5)    # Friday
+        end = dt.date(2024, 1, 5)  # Friday
         daily = [(dt.date(2024, 1, d), 1.0) for d in range(1, 6)]
         _, sharpe_ann, n = compute_honest_sharpe(daily, start, end)
         assert n == 5
@@ -101,12 +101,12 @@ class TestComputeHonestSharpe:
         assert n == 5
         assert sharpe_d > 0
         assert sharpe_ann > 0
-        assert sharpe_ann == pytest.approx(sharpe_d * (252 ** 0.5))
+        assert sharpe_ann == pytest.approx(sharpe_d * (252**0.5))
 
     def test_zero_days_dilute_sharpe(self):
         """Returns on 2 of 5 days — zeros pad the series, lowering Sharpe."""
         start = dt.date(2024, 1, 1)  # Mon
-        end = dt.date(2024, 1, 5)    # Fri
+        end = dt.date(2024, 1, 5)  # Fri
         daily = [
             (dt.date(2024, 1, 1), 2.0),
             (dt.date(2024, 1, 3), 2.0),
@@ -114,9 +114,7 @@ class TestComputeHonestSharpe:
         _, sharpe_full, n_full = compute_honest_sharpe(daily, start, end)
 
         # Same returns but compressed range = higher Sharpe
-        _, sharpe_dense, n_dense = compute_honest_sharpe(
-            daily, dt.date(2024, 1, 1), dt.date(2024, 1, 3)
-        )
+        _, sharpe_dense, n_dense = compute_honest_sharpe(daily, dt.date(2024, 1, 1), dt.date(2024, 1, 3))
         assert n_full == 5
         assert n_dense == 3
         # Dense range should have higher Sharpe (same total R, fewer zero-days)
@@ -192,11 +190,11 @@ class TestComputeDrawdown:
         start = dt.date(2024, 1, 1)
         end = dt.date(2024, 1, 5)
         daily = [
-            (dt.date(2024, 1, 1), 3.0),   # cum=3, peak=3
-            (dt.date(2024, 1, 2), -2.0),   # cum=1, dd=2
-            (dt.date(2024, 1, 3), -1.0),   # cum=0, dd=3 (trough)
-            (dt.date(2024, 1, 4), 2.0),    # cum=2, recovering
-            (dt.date(2024, 1, 5), 1.0),    # cum=3, recovered!
+            (dt.date(2024, 1, 1), 3.0),  # cum=3, peak=3
+            (dt.date(2024, 1, 2), -2.0),  # cum=1, dd=2
+            (dt.date(2024, 1, 3), -1.0),  # cum=0, dd=3 (trough)
+            (dt.date(2024, 1, 4), 2.0),  # cum=2, recovering
+            (dt.date(2024, 1, 5), 1.0),  # cum=3, recovered!
         ]
         dd = compute_drawdown(daily, start, end)
         assert dd["recovery_days"] == (dt.date(2024, 1, 5) - dt.date(2024, 1, 3)).days

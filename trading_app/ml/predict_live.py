@@ -37,8 +37,9 @@ logger = logging.getLogger(__name__)
 
 class MLPrediction(NamedTuple):
     """Result of an ML prediction."""
-    p_win: float     # Probability of win (0.0 to 1.0)
-    take: bool       # True = trade, False = skip
+
+    p_win: float  # Probability of win (0.0 to 1.0)
+    take: bool  # True = trade, False = skip
     threshold: float  # Threshold used for the decision
 
 
@@ -103,7 +104,9 @@ class LiveMLPredictor:
             if not path.exists():
                 logger.warning(
                     "No ML model for %s (checked %s, %s) — will fail-open",
-                    inst, hybrid_path, legacy_path,
+                    inst,
+                    hybrid_path,
+                    legacy_path,
                 )
                 continue
 
@@ -112,36 +115,34 @@ class LiveMLPredictor:
                 self._models[inst] = bundle
 
                 is_hybrid = bundle.get("model_type") in (
-                    "hybrid_per_session", "single_config_per_session",
+                    "hybrid_per_session",
+                    "single_config_per_session",
                 )
                 if is_hybrid:
                     is_pa = bundle.get("bundle_format") == "per_aperture"
                     if is_pa:
                         n_ml = sum(
-                            1 for s_data in bundle.get("sessions", {}).values()
+                            1
+                            for s_data in bundle.get("sessions", {}).values()
                             for a_info in s_data.values()
                             if isinstance(a_info, dict) and a_info.get("model") is not None
                         )
-                        n_total = sum(
-                            len(s_data) for s_data in bundle.get("sessions", {}).values()
-                        )
+                        n_total = sum(len(s_data) for s_data in bundle.get("sessions", {}).values())
                     else:
-                        n_ml = sum(
-                            1 for s in bundle.get("sessions", {}).values()
-                            if s.get("model") is not None
-                        )
+                        n_ml = sum(1 for s in bundle.get("sessions", {}).values() if s.get("model") is not None)
                         n_total = len(bundle.get("sessions", {}))
                     fmt_label = "per-aperture" if is_pa else "per-session"
                     logger.info(
-                        "Loaded HYBRID ML model for %s (%s): %d/%d models, "
-                        "trained=%s",
-                        inst, fmt_label, n_ml, n_total,
+                        "Loaded HYBRID ML model for %s (%s): %d/%d models, trained=%s",
+                        inst,
+                        fmt_label,
+                        n_ml,
+                        n_total,
                         bundle.get("trained_at", "unknown"),
                     )
                 else:
                     logger.info(
-                        "Loaded ML model for %s: threshold=%.2f, AUC=%.4f, "
-                        "%d features, trained=%s",
+                        "Loaded ML model for %s: threshold=%.2f, AUC=%.4f, %d features, trained=%s",
                         inst,
                         bundle["optimal_threshold"],
                         bundle.get("oos_auc", 0),
@@ -155,7 +156,9 @@ class LiveMLPredictor:
                     logger.warning(
                         "ML config hash MISMATCH for %s: model=%s, current=%s. "
                         "Model may be stale — consider retraining.",
-                        inst, model_hash, current_hash,
+                        inst,
+                        model_hash,
+                        current_hash,
                     )
 
                 # Freshness check (isolated — parsing failure must not prevent model use)
@@ -167,12 +170,14 @@ class LiveMLPredictor:
                         if age_days > 60:
                             logger.warning(
                                 "ML model for %s is %d days old (>60 day threshold)",
-                                inst, age_days,
+                                inst,
+                                age_days,
                             )
                     except (ValueError, TypeError):
                         logger.warning(
                             "Could not parse trained_at for %s: %s",
-                            inst, trained_at_str,
+                            inst,
+                            trained_at_str,
                         )
 
             except Exception:
@@ -204,8 +209,13 @@ class LiveMLPredictor:
             Fail-open: returns (0.5, True, 0.5) on any error.
         """
         cache_key = (
-            instrument, trading_day, orb_label, orb_minutes,
-            entry_model, rr_target, confirm_bars,
+            instrument,
+            trading_day,
+            orb_label,
+            orb_minutes,
+            entry_model,
+            rr_target,
+            confirm_bars,
         )
         if cache_key in self._prediction_cache:
             self.predictions_cached += 1
@@ -220,7 +230,8 @@ class LiveMLPredictor:
 
         bundle = self._models[instrument]
         is_hybrid = bundle.get("model_type") in (
-            "hybrid_per_session", "single_config_per_session",
+            "hybrid_per_session",
+            "single_config_per_session",
         )
 
         # Hybrid model: check if this session has a sub-model
@@ -251,9 +262,11 @@ class LiveMLPredictor:
             training_aperture = session_info.get("training_aperture")
             if training_aperture is not None and training_aperture != orb_minutes:
                 logger.info(
-                    "Aperture mismatch for %s %s: model trained on O%d, "
-                    "prediction for O%d — fail-open",
-                    instrument, orb_label, training_aperture, orb_minutes,
+                    "Aperture mismatch for %s %s: model trained on O%d, prediction for O%d — fail-open",
+                    instrument,
+                    orb_label,
+                    training_aperture,
+                    orb_minutes,
                 )
                 self.aperture_mismatch_count += 1
                 result = MLPrediction(p_win=0.5, take=True, threshold=0.5)
@@ -272,7 +285,10 @@ class LiveMLPredictor:
                 logger.error(
                     "RR mismatch for %s %s: model trained on RR%.1f, "
                     "prediction for RR%.1f (AGGRESSIVE) — skipping trade",
-                    instrument, orb_label, training_rr, rr_target,
+                    instrument,
+                    orb_label,
+                    training_rr,
+                    rr_target,
                 )
                 self.rr_mismatch_count += 1
                 result = MLPrediction(p_win=0.5, take=False, threshold=0.5)
@@ -281,9 +297,11 @@ class LiveMLPredictor:
 
             if training_rr is not None and rr_target < training_rr:
                 logger.warning(
-                    "RR conservative for %s %s: model RR%.1f, trade RR%.1f — "
-                    "P(win) may be understated, proceeding",
-                    instrument, orb_label, training_rr, rr_target,
+                    "RR conservative for %s %s: model RR%.1f, trade RR%.1f — P(win) may be understated, proceeding",
+                    instrument,
+                    orb_label,
+                    training_rr,
+                    rr_target,
                 )
 
         try:
@@ -292,7 +310,9 @@ class LiveMLPredictor:
             if daily_row is None:
                 logger.warning(
                     "No daily_features for %s %s orb_minutes=%d — fail-open",
-                    instrument, trading_day, orb_minutes,
+                    instrument,
+                    trading_day,
+                    orb_minutes,
                 )
                 self.fail_open_count += 1
                 result = MLPrediction(p_win=0.5, take=True, threshold=0.5)
@@ -356,7 +376,9 @@ class LiveMLPredictor:
         except Exception:
             logger.warning(
                 "ML prediction failed for %s %s %s — fail-open",
-                instrument, orb_label, trading_day,
+                instrument,
+                orb_label,
+                trading_day,
                 exc_info=True,
             )
             self.fail_open_count += 1
@@ -365,7 +387,10 @@ class LiveMLPredictor:
             return result
 
     def _get_daily_features(
-        self, instrument: str, trading_day: date, orb_minutes: int,
+        self,
+        instrument: str,
+        trading_day: date,
+        orb_minutes: int,
     ) -> dict | None:
         """Fetch daily_features row from DB. Cached per (inst, day, orb_min).
 
@@ -409,6 +434,7 @@ class LiveMLPredictor:
                     g5_cols = [desc[0] for desc in g5_result.description]
                     g5_dict = dict(zip(g5_cols, g5_row))
                     from trading_app.ml.config import GLOBAL_FEATURES
+
                     for col in GLOBAL_FEATURES:
                         if row_dict.get(col) is None and g5_dict.get(col) is not None:
                             row_dict[col] = g5_dict[col]
@@ -420,7 +446,8 @@ class LiveMLPredictor:
 
     @staticmethod
     def _align_features(
-        X: pd.DataFrame, model_feature_names: list[str],
+        X: pd.DataFrame,
+        model_feature_names: list[str],
     ) -> pd.DataFrame:
         """Align prediction features to model's training feature order.
 
@@ -456,10 +483,7 @@ class LiveMLPredictor:
                     if isinstance(info, dict) and info.get("model") is not None
                 ]
             else:
-                models_with_model = [
-                    s for s, info in b.get("sessions", {}).items()
-                    if info.get("model") is not None
-                ]
+                models_with_model = [s for s, info in b.get("sessions", {}).items() if info.get("model") is not None]
             return {
                 "instrument": instrument,
                 "model_type": "hybrid_per_session",

@@ -4,6 +4,7 @@ Usage:
     python scripts/tools/gen_repo_map.py          # Regenerate REPO_MAP.md
     python scripts/tools/gen_repo_map.py --check  # Exit 1 if REPO_MAP.md is stale
 """
+
 from __future__ import annotations
 
 import ast

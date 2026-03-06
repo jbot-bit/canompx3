@@ -9,6 +9,7 @@ Usage:
     python scripts/tools/prospective_tracker.py
     python scripts/tools/prospective_tracker.py --freeze-date 2026-02-22
 """
+
 import argparse
 import datetime
 import logging
@@ -91,15 +92,18 @@ def fetch_qualifying_days(con, sig: dict) -> list[tuple]:
           AND l.orb_size_pts >= ?
         ORDER BY l.trading_day
     """
-    return con.execute(sql, [
-        sig["symbol"],
-        sig["orb_label"],
-        sig["entry_model"],
-        sig["rr_target"],
-        sig["confirm_bars"],
-        sig["prev_outcome_filter"],
-        sig["min_orb_pts"],
-    ]).fetchall()
+    return con.execute(
+        sql,
+        [
+            sig["symbol"],
+            sig["orb_label"],
+            sig["entry_model"],
+            sig["rr_target"],
+            sig["confirm_bars"],
+            sig["prev_outcome_filter"],
+            sig["min_orb_pts"],
+        ],
+    ).fetchall()
 
 
 # ---------------------------------------------------------------------------
@@ -117,33 +121,36 @@ def populate_signal(con, signal_id: str, sig: dict, freeze_date: datetime.date):
 
     for trading_day, prev_outcome, orb_size, outcome, pnl_r in rows:
         # trading_day from DuckDB may be datetime.date or datetime.datetime
-        if hasattr(trading_day, 'date'):
+        if hasattr(trading_day, "date"):
             td = trading_day.date()
         else:
             td = trading_day
         is_prospective = td >= freeze_date
-        con.execute("""
+        con.execute(
+            """
             INSERT INTO prospective_signals
                 (signal_id, trading_day, symbol, session,
                  prev_day_outcome, orb_size, entry_model,
                  confirm_bars, rr_target, outcome, pnl_r,
                  is_prospective, freeze_date)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, [
-            signal_id,
-            trading_day,
-            sig["symbol"],
-            sig["session"],
-            prev_outcome,
-            orb_size,
-            sig["entry_model"],
-            sig["confirm_bars"],
-            sig["rr_target"],
-            outcome,
-            pnl_r,
-            is_prospective,
-            freeze_date,
-        ])
+        """,
+            [
+                signal_id,
+                trading_day,
+                sig["symbol"],
+                sig["session"],
+                prev_outcome,
+                orb_size,
+                sig["entry_model"],
+                sig["confirm_bars"],
+                sig["rr_target"],
+                outcome,
+                pnl_r,
+                is_prospective,
+                freeze_date,
+            ],
+        )
 
     con.commit()
     return len(rows)
@@ -173,7 +180,7 @@ def compute_yearly_stats(rows: list[tuple]) -> dict:
     """Group by year and compute stats per year."""
     yearly = {}
     for trading_day, pnl_r in rows:
-        yr = trading_day.year if hasattr(trading_day, 'year') else int(str(trading_day)[:4])
+        yr = trading_day.year if hasattr(trading_day, "year") else int(str(trading_day)[:4])
         yearly.setdefault(yr, []).append(pnl_r)
     return {yr: compute_stats(vals) for yr, vals in sorted(yearly.items())}
 
@@ -183,17 +190,23 @@ def compute_yearly_stats(rows: list[tuple]) -> dict:
 # ---------------------------------------------------------------------------
 def print_report(con, signal_id: str, sig: dict, freeze_date: datetime.date):
     """Print console report for a signal."""
-    retro_rows = con.execute("""
+    retro_rows = con.execute(
+        """
         SELECT trading_day, pnl_r FROM prospective_signals
         WHERE signal_id = ? AND is_prospective = FALSE
         ORDER BY trading_day
-    """, [signal_id]).fetchall()
+    """,
+        [signal_id],
+    ).fetchall()
 
-    prosp_rows = con.execute("""
+    prosp_rows = con.execute(
+        """
         SELECT trading_day, pnl_r FROM prospective_signals
         WHERE signal_id = ? AND is_prospective = TRUE
         ORDER BY trading_day
-    """, [signal_id]).fetchall()
+    """,
+        [signal_id],
+    ).fetchall()
 
     retro_pnl = [r[1] for r in retro_rows]
     prosp_pnl = [r[1] for r in prosp_rows]
@@ -269,9 +282,7 @@ def print_report(con, signal_id: str, sig: dict, freeze_date: datetime.date):
 # Main
 # ---------------------------------------------------------------------------
 def main():
-    parser = argparse.ArgumentParser(
-        description="Prospective tracker for prior-day outcome signals"
-    )
+    parser = argparse.ArgumentParser(description="Prospective tracker for prior-day outcome signals")
     parser.add_argument(
         "--freeze-date",
         type=lambda s: datetime.date.fromisoformat(s),

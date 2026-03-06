@@ -33,11 +33,11 @@ from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 #     Removed from list for clarity.
 # @revalidated-for: E1, E2
 GLOBAL_FEATURES: list[str] = [
-    "atr_20",              # Volatility regime — defines the environment
-    "atr_vel_ratio",       # Vol acceleration — compressed spring (confirmed)
-    "gap_open_points",     # Overnight institutional repositioning
-    "prev_day_range",      # Prior day activity level — regime context
-    "overnight_range",     # Asian session range — #1 feature (6.5% avg imp)
+    "atr_20",  # Volatility regime — defines the environment
+    "atr_vel_ratio",  # Vol acceleration — compressed spring (confirmed)
+    "gap_open_points",  # Overnight institutional repositioning
+    "prev_day_range",  # Prior day activity level — regime context
+    "overnight_range",  # Asian session range — #1 feature (6.5% avg imp)
 ]
 
 # Per-session features (extracted dynamically from orb_{SESSION}_{field})
@@ -63,8 +63,8 @@ GLOBAL_FEATURES: list[str] = [
 # @research-source: M2.5 audit 2026-03-04, verified by timing analysis
 # @revalidated-for: E1, E2
 SESSION_FEATURE_SUFFIXES: list[str] = [
-    "size",               # ORB range in points — known at ORB close (pre-break)
-    "volume",             # Total ORB-window volume — known at ORB close (pre-break)
+    "size",  # ORB range in points — known at ORB close (pre-break)
+    "volume",  # Total ORB-window volume — known at ORB close (pre-break)
 ]
 
 # Features to normalize by atr_20 for stationarity
@@ -103,42 +103,58 @@ TRADE_CONFIG_FEATURES: list[str] = [
 # Architecture: ML predicts PRE-BREAK (before placing stop). Features must be
 # known at ORB close, before the break event occurs.
 LOOKAHEAD_BLACKLIST: set[str] = {
-    "double_break",       # Full-session look-ahead
-    "day_type",           # Full-session look-ahead
-    "outcome",            # IS the target
-    "mae_r",              # Post-trade
-    "mfe_r",              # Post-trade
-    "pnl_r",              # IS the target
-    "pnl_dollars",        # IS the target
-    "risk_dollars",       # Post-entry computation
-    "exit_ts",            # Post-trade
-    "exit_price",         # Post-trade
-    "ts_outcome",         # Time-stop outcome (post-trade)
-    "ts_pnl_r",           # Time-stop PnL (post-trade)
-    "ts_exit_ts",         # Time-stop exit (post-trade)
+    "double_break",  # Full-session look-ahead
+    "day_type",  # Full-session look-ahead
+    "outcome",  # IS the target
+    "mae_r",  # Post-trade
+    "mfe_r",  # Post-trade
+    "pnl_r",  # IS the target
+    "pnl_dollars",  # IS the target
+    "risk_dollars",  # Post-entry computation
+    "exit_ts",  # Post-trade
+    "exit_price",  # Post-trade
+    "ts_outcome",  # Time-stop outcome (post-trade)
+    "ts_pnl_r",  # Time-stop PnL (post-trade)
+    "ts_exit_ts",  # Time-stop exit (post-trade)
     "took_pdh_before_1000",  # Time-dependent within day
     "took_pdl_before_1000",  # Time-dependent within day
     # AT-BREAK features — valid theory but unknown pre-break (added Mar 4 2026)
     # @research-source: M2.5 audit + trading theory review
-    "break_delay_min",    # Minutes from ORB close to break — unknown pre-break
-    "break_bar_volume",   # Volume on the break bar — unknown pre-break
+    "break_delay_min",  # Minutes from ORB close to break — unknown pre-break
+    "break_bar_volume",  # Volume on the break bar — unknown pre-break
     "break_bar_continues",  # Break bar close direction — unknown pre-break
-    "break_dir",          # Direction — unknown pre-break (DIR_BOTH) or constant (DIR_LONG/SHORT)
+    "break_dir",  # Direction — unknown pre-break (DIR_BOTH) or constant (DIR_LONG/SHORT)
 }
 
 # Sessions available as rel_vol features
 REL_VOL_SESSIONS: list[str] = [
-    "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
-    "US_DATA_830", "NYSE_OPEN", "US_DATA_1000", "COMEX_SETTLE",
-    "CME_PRECLOSE", "NYSE_CLOSE", "BRISBANE_1025",
+    "CME_REOPEN",
+    "TOKYO_OPEN",
+    "SINGAPORE_OPEN",
+    "LONDON_METALS",
+    "US_DATA_830",
+    "NYSE_OPEN",
+    "US_DATA_1000",
+    "COMEX_SETTLE",
+    "CME_PRECLOSE",
+    "NYSE_CLOSE",
+    "BRISBANE_1025",
 ]
 
 # Session chronological order (Brisbane time) — used for cross-session features.
 # @research-source: pipeline/dst.py SESSION_CATALOG ordering
 SESSION_CHRONOLOGICAL_ORDER: list[str] = [
-    "CME_REOPEN", "TOKYO_OPEN", "BRISBANE_1025", "SINGAPORE_OPEN",
-    "LONDON_METALS", "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
-    "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+    "CME_REOPEN",
+    "TOKYO_OPEN",
+    "BRISBANE_1025",
+    "SINGAPORE_OPEN",
+    "LONDON_METALS",
+    "US_DATA_830",
+    "NYSE_OPEN",
+    "US_DATA_1000",
+    "COMEX_SETTLE",
+    "CME_PRECLOSE",
+    "NYSE_CLOSE",
 ]
 
 # Cross-session features: prior session ORB break counts and level proximity.
@@ -149,17 +165,17 @@ SESSION_CHRONOLOGICAL_ORDER: list[str] = [
 # (79.7% accuracy at predicting session from cross-features alone for MES).
 # They MUST be used with per-session models to avoid session-position bias.
 CROSS_SESSION_FEATURES: list[str] = [
-    "prior_sessions_broken",     # Count of prior sessions with ORB break today
-    "prior_sessions_long",       # Prior sessions with LONG break
-    "prior_sessions_short",      # Prior sessions with SHORT break
+    "prior_sessions_broken",  # Count of prior sessions with ORB break today
+    "prior_sessions_long",  # Prior sessions with LONG break
+    "prior_sessions_short",  # Prior sessions with SHORT break
 ]
 
 LEVEL_PROXIMITY_FEATURES: list[str] = [
-    "nearest_level_to_high_R",   # Distance from ORB high to nearest prior level (in R)
-    "nearest_level_to_low_R",    # Distance from ORB low to nearest prior level (in R)
-    "levels_within_1R",          # Count of prior levels within 1R of ORB boundaries
-    "levels_within_2R",          # Count of prior levels within 2R
-    "orb_nested_in_prior",       # Current ORB nested inside a prior ORB (0/1)
+    "nearest_level_to_high_R",  # Distance from ORB high to nearest prior level (in R)
+    "nearest_level_to_low_R",  # Distance from ORB low to nearest prior level (in R)
+    "levels_within_1R",  # Count of prior levels within 1R of ORB boundaries
+    "levels_within_2R",  # Count of prior levels within 2R
+    "orb_nested_in_prior",  # Current ORB nested inside a prior ORB (0/1)
     "prior_orb_size_ratio_max",  # Max(prior ORB size / current ORB size)
 ]
 
@@ -168,15 +184,15 @@ LEVEL_PROXIMITY_FEATURES: list[str] = [
 #   All had <1% importance across all 4 instruments in E3/E6 experiments.
 #   orb_label one-hots are the #1 problem — cause session identity leakage.
 E6_NOISE_PREFIXES: list[str] = [
-    "orb_label_",           # Session identity leakage (11-13% importance = tautological)
-    "gap_type_",            # <1% importance, noise
-    "atr_vel_regime_",      # <1% importance, noise
+    "orb_label_",  # Session identity leakage (11-13% importance = tautological)
+    "gap_type_",  # <1% importance, noise
+    "atr_vel_regime_",  # <1% importance, noise
     "prev_day_direction_",  # <1% importance, noise
 ]
 E6_NOISE_EXACT: list[str] = [
-    "confirm_bars",         # <1% importance, near-constant
+    "confirm_bars",  # <1% importance, near-constant
     "orb_break_bar_continues",  # <1% importance
-    "orb_minutes",          # <1% importance, near-constant
+    "orb_minutes",  # <1% importance, near-constant
 ]
 
 # ---------------------------------------------------------------------------
@@ -198,12 +214,12 @@ MAX_EARLY_SESSION_INDEX: int = 1  # CME_REOPEN (0) and TOKYO_OPEN (1)
 
 RF_PARAMS: dict = {
     "n_estimators": 200,
-    "max_depth": 6,            # Conservative to prevent overfitting
-    "min_samples_leaf": 100,   # Big leaf — stable predictions, prevents memorization
-    "max_features": "sqrt",    # Feature subsampling
+    "max_depth": 6,  # Conservative to prevent overfitting
+    "min_samples_leaf": 100,  # Big leaf — stable predictions, prevents memorization
+    "max_features": "sqrt",  # Feature subsampling
     "class_weight": "balanced",  # Handle 20-33% win rate imbalance
     "random_state": 42,
-    "n_jobs": -1,              # Use all cores
+    "n_jobs": -1,  # Use all cores
 }
 # @research-source: n_estimators convergence test (Mar 4 2026)
 #   100=0.6270, 200=0.6266, 300=0.6254, 500=0.6252 AUC on MGC test set.
@@ -213,10 +229,10 @@ RF_PARAMS: dict = {
 # overfitting risk with 103K samples. sweep: scripts/tools/ml_level_proximity_experiment.py
 
 # CPCV configuration (per de Prado)
-CPCV_N_GROUPS: int = 10       # Split data into 10 time-ordered groups
-CPCV_K_TEST: int = 2          # Use 2 groups as test = C(10,2) = 45 splits
-CPCV_PURGE_DAYS: int = 1      # Remove 1 day between train/test
-CPCV_EMBARGO_DAYS: int = 1    # Embargo 1 day after test set
+CPCV_N_GROUPS: int = 10  # Split data into 10 time-ordered groups
+CPCV_K_TEST: int = 2  # Use 2 groups as test = C(10,2) = 45 splits
+CPCV_PURGE_DAYS: int = 1  # Remove 1 day between train/test
+CPCV_EMBARGO_DAYS: int = 1  # Embargo 1 day after test set
 
 # Threshold search range
 THRESHOLD_MIN: float = 0.35

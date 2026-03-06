@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 
 from pipeline.log import get_logger
+
 logger = get_logger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -47,9 +48,11 @@ _EXIT_OUTCOME_MAP = {
 # Data classes
 # =========================================================================
 
+
 @dataclass
 class JournalEntry:
     """A single trade in the journal."""
+
     mode: str
     trading_day: date
     strategy_id: str
@@ -69,9 +72,11 @@ class JournalEntry:
     risk_rejected: bool = False
     risk_reason: str = ""
 
+
 @dataclass
 class DaySummary:
     """Summary for one trading day."""
+
     trading_day: date
     bars_processed: int = 0
     trades_entered: int = 0
@@ -82,9 +87,11 @@ class DaySummary:
     risk_rejections: int = 0
     ml_skips: int = 0
 
+
 @dataclass
 class ReplayResult:
     """Result from a historical replay run."""
+
     start_date: date
     end_date: date
     days_processed: int = 0
@@ -98,9 +105,11 @@ class ReplayResult:
     journal: list[JournalEntry] = field(default_factory=list)
     day_summaries: list[DaySummary] = field(default_factory=list)
 
+
 # =========================================================================
 # Trading day detection
 # =========================================================================
+
 
 def _get_trading_days(con, instrument: str, start_date: date, end_date: date) -> list[date]:
     """Get trading days from daily_features."""
@@ -114,8 +123,7 @@ def _get_trading_days(con, instrument: str, start_date: date, end_date: date) ->
     return [r[0] for r in rows]
 
 
-def _get_median_atr_20(con, instrument: str, trading_day: date,
-                       lookback_days: int = 252) -> float:
+def _get_median_atr_20(con, instrument: str, trading_day: date, lookback_days: int = 252) -> float:
     """Rolling median ATR_20 over prior N trading days (Carver Ch.9 vol-targeting).
 
     Used by ExecutionEngine._compute_contracts() for Turtle-style vol scalar:
@@ -149,6 +157,7 @@ def _get_daily_features_row(con, instrument: str, trading_day: date) -> dict | N
     columns = [desc[0] for desc in result.description]
     return dict(zip(columns, row))
 
+
 def _get_bars_for_day(con, instrument: str, trading_day: date) -> list[dict]:
     """
     Fetch 1-minute bars for a trading day.
@@ -156,8 +165,7 @@ def _get_bars_for_day(con, instrument: str, trading_day: date) -> list[dict]:
     Trading day in Brisbane starts at 23:00 UTC previous day.
     """
     prev_day = trading_day - timedelta(days=1)
-    td_start = datetime(prev_day.year, prev_day.month, prev_day.day,
-                        23, 0, tzinfo=timezone.utc)
+    td_start = datetime(prev_day.year, prev_day.month, prev_day.day, 23, 0, tzinfo=timezone.utc)
     td_end = td_start + timedelta(hours=24)
 
     rows = con.execute(
@@ -180,9 +188,11 @@ def _get_bars_for_day(con, instrument: str, trading_day: date) -> list[dict]:
         for r in rows
     ]
 
+
 # =========================================================================
 # Historical replay
 # =========================================================================
+
 
 def replay_historical(
     db_path: Path | None = None,
@@ -213,9 +223,9 @@ def replay_historical(
     cost_spec = get_cost_spec(instrument)
 
     if portfolio is None:
-        portfolio = build_portfolio(db_path=db_path, instrument=instrument,
-                                    max_correlation=max_correlation,
-                                    calendar_overlay=calendar_overlay)
+        portfolio = build_portfolio(
+            db_path=db_path, instrument=instrument, max_correlation=max_correlation, calendar_overlay=calendar_overlay
+        )
 
     if not portfolio.strategies:
         return ReplayResult(
@@ -227,6 +237,7 @@ def replay_historical(
     cascade_table = None
     if use_market_state:
         from trading_app.cascade_table import build_cascade_table
+
         cascade_table = build_cascade_table(db_path)
 
     risk_mgr = RiskManager(risk_limits, corr_lookup=portfolio.corr_lookup)
@@ -235,6 +246,7 @@ def replay_historical(
     ml_predictor = None
     if use_ml:
         from trading_app.ml.predict_live import LiveMLPredictor
+
         ml_predictor = LiveMLPredictor(
             db_path=str(db_path),
             instruments=[instrument],
@@ -243,11 +255,15 @@ def replay_historical(
 
     # MarketState built per-day below; engine gets it on day start
     market_state = None
-    engine = ExecutionEngine(portfolio, cost_spec, risk_manager=risk_mgr,
-                             market_state=market_state,
-                             live_session_costs=live_session_costs,
-                             atr_velocity_overlay=ATR_VELOCITY_OVERLAY,
-                             ml_predictor=ml_predictor)
+    engine = ExecutionEngine(
+        portfolio,
+        cost_spec,
+        risk_manager=risk_mgr,
+        market_state=market_state,
+        live_session_costs=live_session_costs,
+        atr_velocity_overlay=ATR_VELOCITY_OVERLAY,
+        ml_predictor=ml_predictor,
+    )
 
     with duckdb.connect(str(db_path), read_only=True) as con:
         if start_date is None or end_date is None:
@@ -269,8 +285,11 @@ def replay_historical(
             # Build market state for this day (if enabled)
             if use_market_state:
                 from trading_app.market_state import MarketState
+
                 market_state = MarketState.from_trading_day(
-                    td, db_path, cascade_table=cascade_table,
+                    td,
+                    db_path,
+                    cascade_table=cascade_table,
                     visible_sessions=set(),  # nothing resolved yet
                     instrument=instrument,
                 )
@@ -331,29 +350,34 @@ def replay_historical(
                     elif event.event_type in ("EXIT", "SCRATCH"):
                         # Find matching journal entry and update
                         for je in reversed(result.journal):
-                            if (je.strategy_id == event.strategy_id
-                                    and je.trading_day == td
-                                    and je.exit_ts is None
-                                    and not je.risk_rejected):
+                            if (
+                                je.strategy_id == event.strategy_id
+                                and je.trading_day == td
+                                and je.exit_ts is None
+                                and not je.risk_rejected
+                            ):
                                 je.exit_ts = event.timestamp
                                 je.exit_price = event.price
                                 je.outcome = _EXIT_OUTCOME_MAP.get(
-                                    event.reason,
-                                    event.reason.split("_")[0] if "_" in event.reason else event.reason
+                                    event.reason, event.reason.split("_")[0] if "_" in event.reason else event.reason
                                 )
                                 break
 
                         # Update PnL tracking from completed trade
                         trade = _find_completed_trade(engine, event.strategy_id)
                         if trade is None:
-                            logger.warning(f"No completed trade for {event.event_type} event: "
-                                           f"strategy={event.strategy_id}, day={td}")
+                            logger.warning(
+                                f"No completed trade for {event.event_type} event: "
+                                f"strategy={event.strategy_id}, day={td}"
+                            )
                         if trade and trade.pnl_r is not None:
                             for je in reversed(result.journal):
-                                if (je.strategy_id == event.strategy_id
-                                        and je.trading_day == td
-                                        and je.pnl_r is None
-                                        and not je.risk_rejected):
+                                if (
+                                    je.strategy_id == event.strategy_id
+                                    and je.trading_day == td
+                                    and je.pnl_r is None
+                                    and not je.risk_rejected
+                                ):
                                     je.pnl_r = trade.pnl_r
                                     je.stop_price = trade.stop_price
                                     je.target_price = trade.target_price
@@ -374,8 +398,7 @@ def replay_historical(
                         # Reveal resolved ORB outcome in market state
                         if market_state is not None:
                             orb_label = _orb_from_strategy(event.strategy_id)
-                            _reveal_outcome(market_state, orb_label, trade,
-                                            cascade_table, portfolio)
+                            _reveal_outcome(market_state, orb_label, trade, cascade_table, portfolio)
 
             # End of day
             eod_events = engine.on_trading_day_end()
@@ -386,14 +409,15 @@ def replay_historical(
                     # Get actual mark-to-market PnL from engine's completed trade
                     trade = _find_completed_trade(engine, event.strategy_id)
                     if trade is None:
-                        logger.warning(f"No completed trade for EOD SCRATCH: "
-                                       f"strategy={event.strategy_id}, day={td}")
+                        logger.warning(f"No completed trade for EOD SCRATCH: strategy={event.strategy_id}, day={td}")
                     scratch_pnl = trade.pnl_r if (trade and trade.pnl_r is not None) else 0.0
                     for je in reversed(result.journal):
-                        if (je.strategy_id == event.strategy_id
-                                and je.trading_day == td
-                                and je.exit_ts is None
-                                and not je.risk_rejected):
+                        if (
+                            je.strategy_id == event.strategy_id
+                            and je.trading_day == td
+                            and je.exit_ts is None
+                            and not je.risk_rejected
+                        ):
                             je.outcome = "scratch"
                             je.exit_ts = event.timestamp
                             je.exit_price = event.price
@@ -406,16 +430,20 @@ def replay_historical(
             result.total_pnl_r += engine.daily_pnl_r
 
             if (i + 1) % 50 == 0:
-                logger.info(f"  Replayed {i + 1}/{len(trading_days)} days, "
-                            f"{result.total_wins + result.total_losses + result.total_scratches} trades, "
-                            f"PnL: {result.total_pnl_r:.2f}R")
+                logger.info(
+                    f"  Replayed {i + 1}/{len(trading_days)} days, "
+                    f"{result.total_wins + result.total_losses + result.total_scratches} trades, "
+                    f"PnL: {result.total_pnl_r:.2f}R"
+                )
 
         result.total_trades = result.total_wins + result.total_losses + result.total_scratches
         return result
 
+
 # =========================================================================
 # Helpers
 # =========================================================================
+
 
 def _orb_from_strategy(strategy_id: str) -> str:
     """Extract ORB label from strategy ID.
@@ -433,6 +461,7 @@ def _orb_from_strategy(strategy_id: str) -> str:
     # Fallback: assume position 1 (legacy format)
     return parts[1] if len(parts) > 1 else ""
 
+
 def _entry_model_from_strategy(strategy_id: str) -> str:
     """Extract entry model from strategy ID.
 
@@ -445,12 +474,14 @@ def _entry_model_from_strategy(strategy_id: str) -> str:
     # Fallback: assume position 2 (legacy format)
     return parts[2] if len(parts) > 2 else ""
 
+
 def _find_completed_trade(engine: ExecutionEngine, strategy_id: str):
     """Find the most recent completed trade for a strategy."""
     for trade in reversed(engine.completed_trades):
         if trade.strategy_id == strategy_id:
             return trade
     return None
+
 
 def _reveal_outcome(market_state, orb_label: str, trade, cascade_table, portfolio) -> None:
     """Reveal a resolved ORB outcome in the market state and re-score.
@@ -471,16 +502,16 @@ def _reveal_outcome(market_state, orb_label: str, trade, cascade_table, portfoli
     market_state.update_signals(cascade_table)
     market_state.score_strategies(portfolio.strategies)
 
+
 # =========================================================================
 # CLI
 # =========================================================================
 
+
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Historical replay and paper trading"
-    )
+    parser = argparse.ArgumentParser(description="Historical replay and paper trading")
     parser.add_argument("--instrument", default="MGC", help="Instrument symbol")
     parser.add_argument("--start", type=date.fromisoformat, help="Start date")
     parser.add_argument("--end", type=date.fromisoformat, help="End date")
@@ -488,12 +519,17 @@ def main():
     parser.add_argument("--max-daily-loss", type=float, default=-5.0, help="Max daily loss (R)")
     parser.add_argument("--max-concurrent", type=int, default=3, help="Max concurrent positions")
     parser.add_argument("--max-correlation", type=float, default=0.85, help="Max pairwise correlation (0-1)")
-    parser.add_argument("--live-session-costs", action="store_true",
-                        help="Use session-adjusted slippage (CME_REOPEN=1.3x, US_DATA_830=0.8x)")
-    parser.add_argument("--calendar-filter", choices=["NFP", "OPEX", "NONE"],
-                        default="NONE", help="Calendar overlay filter")
-    parser.add_argument("--use-ml", action="store_true",
-                        help="Enable ML meta-label P(win) filtering (skip low-confidence trades)")
+    parser.add_argument(
+        "--live-session-costs",
+        action="store_true",
+        help="Use session-adjusted slippage (CME_REOPEN=1.3x, US_DATA_830=0.8x)",
+    )
+    parser.add_argument(
+        "--calendar-filter", choices=["NFP", "OPEX", "NONE"], default="NONE", help="Calendar overlay filter"
+    )
+    parser.add_argument(
+        "--use-ml", action="store_true", help="Enable ML meta-label P(win) filtering (skip low-confidence trades)"
+    )
     args = parser.parse_args()
 
     # Convert CLI calendar filter to CalendarSkipFilter object
@@ -522,7 +558,9 @@ def main():
 
     logger.info(f"\nReplay complete: {result.start_date} to {result.end_date}")
     logger.info(f"  Days: {result.days_processed}")
-    logger.info(f"  Trades: {result.total_trades} (W:{result.total_wins} L:{result.total_losses} S:{result.total_scratches})")
+    logger.info(
+        f"  Trades: {result.total_trades} (W:{result.total_wins} L:{result.total_losses} S:{result.total_scratches})"
+    )
     logger.info(f"  Total PnL: {result.total_pnl_r:.2f}R")
     logger.info(f"  Risk rejections: {result.total_risk_rejections}")
     if result.total_ml_skips > 0:
@@ -531,6 +569,7 @@ def main():
     if result.total_wins + result.total_losses > 0:
         wr = result.total_wins / (result.total_wins + result.total_losses)
         logger.info(f"  Win rate: {wr:.1%}")
+
 
 if __name__ == "__main__":
     main()

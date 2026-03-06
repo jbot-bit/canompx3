@@ -47,23 +47,17 @@ class ExecutionSpec:
             raise ValueError(f"entry_model must be E1/E3, got {self.entry_model}")
 
         if self.order_type not in ["market", "limit", "stop"]:
-            raise ValueError(
-                f"order_type must be market/limit/stop, got {self.order_type}"
-            )
+            raise ValueError(f"order_type must be market/limit/stop, got {self.order_type}")
 
         if self.limit_offset_pct is not None and self.limit_offset_pct < 0:
-            raise ValueError(
-                f"limit_offset_pct must be >= 0, got {self.limit_offset_pct}"
-            )
+            raise ValueError(f"limit_offset_pct must be >= 0, got {self.limit_offset_pct}")
 
         if self.benchmark is not None and self.benchmark not in [
             "arrival",
             "vwap",
             "twap",
         ]:
-            raise ValueError(
-                f"benchmark must be arrival/vwap/twap, got {self.benchmark}"
-            )
+            raise ValueError(f"benchmark must be arrival/vwap/twap, got {self.benchmark}")
 
     def to_json(self) -> str:
         """Serialize to JSON for storage."""

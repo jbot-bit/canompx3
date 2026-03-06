@@ -28,6 +28,7 @@ import numpy as np
 # PnL loading (from strategy_trade_days + orb_outcomes)
 # =========================================================================
 
+
 def _load_strategy_pnl(
     con: duckdb.DuckDBPyConnection,
     strategy_ids: list[str],
@@ -43,7 +44,8 @@ def _load_strategy_pnl(
 
     placeholders = ", ".join(["?"] * len(strategy_ids))
 
-    rows = con.execute(f"""
+    rows = con.execute(
+        f"""
         SELECT std.strategy_id, std.trading_day, oo.pnl_r
         FROM strategy_trade_days std
         JOIN validated_setups vs ON vs.strategy_id = std.strategy_id
@@ -57,7 +59,9 @@ def _load_strategy_pnl(
           AND oo.trading_day = std.trading_day
         WHERE std.strategy_id IN ({placeholders})
           AND oo.pnl_r IS NOT NULL
-    """, strategy_ids).fetchall()
+    """,
+        strategy_ids,
+    ).fetchall()
 
     result: dict[str, dict[date, float]] = {}
     for sid, td, pnl in rows:
@@ -98,6 +102,7 @@ def _pnl_to_arrays(
 # Function 1: Rolling correlation
 # =========================================================================
 
+
 def compute_rolling_correlation(
     db_path: str,
     strategy_ids: list[str],
@@ -134,7 +139,7 @@ def compute_rolling_correlation(
     while idx < len(all_days):
         window_end = all_days[idx]
         window_start_idx = idx - window_days + 1
-        window_days_list = all_days[window_start_idx:idx + 1]
+        window_days_list = all_days[window_start_idx : idx + 1]
 
         for id_a, id_b in pairs:
             pnl_a = pnl.get(id_a, {})
@@ -154,12 +159,14 @@ def compute_rolling_correlation(
                     if math.isnan(corr):
                         corr = None
 
-            results.append({
-                "window_end": window_end,
-                "pair": (id_a, id_b),
-                "correlation": corr,
-                "overlap_days": overlap,
-            })
+            results.append(
+                {
+                    "window_end": window_end,
+                    "pair": (id_a, id_b),
+                    "correlation": corr,
+                    "overlap_days": overlap,
+                }
+            )
 
         idx += step_days
 
@@ -169,6 +176,7 @@ def compute_rolling_correlation(
 # =========================================================================
 # Function 2: Drawdown correlation
 # =========================================================================
+
 
 def compute_drawdown_correlation(
     db_path: str,
@@ -233,6 +241,7 @@ def compute_drawdown_correlation(
 # Function 3: Co-loss percentage
 # =========================================================================
 
+
 def compute_co_loss_pct(
     db_path: str,
     strategy_ids: list[str],
@@ -264,10 +273,7 @@ def compute_co_loss_pct(
             }
             continue
 
-        both_neg = sum(
-            1 for d in shared_days
-            if pnl_a[d] < 0 and pnl_b[d] < 0
-        )
+        both_neg = sum(1 for d in shared_days if pnl_a[d] < 0 and pnl_b[d] < 0)
         results[(id_a, id_b)] = {
             "co_loss_pct": both_neg / both_traded,
             "both_traded_days": both_traded,
@@ -280,6 +286,7 @@ def compute_co_loss_pct(
 # =========================================================================
 # Function 4: Summary risk flagging
 # =========================================================================
+
 
 def summarize_correlation_risk(
     rolling: list[dict],
@@ -330,17 +337,19 @@ def summarize_correlation_risk(
         )
 
         if is_flagged:
-            flagged.append({
-                "pair": pair,
-                "peak_rolling_corr": p_corr,
-                "co_drawdown_pct": co_dd_pct,
-                "a_dd_days": dd_info.get("a_dd_days", 0),
-                "b_dd_days": dd_info.get("b_dd_days", 0),
-                "overlap_dd_days": dd_info.get("overlap_dd_days", 0),
-                "co_loss_pct": co_loss_pct,
-                "both_traded_days": cl_info.get("both_traded_days", 0),
-                "both_negative_days": cl_info.get("both_negative_days", 0),
-            })
+            flagged.append(
+                {
+                    "pair": pair,
+                    "peak_rolling_corr": p_corr,
+                    "co_drawdown_pct": co_dd_pct,
+                    "a_dd_days": dd_info.get("a_dd_days", 0),
+                    "b_dd_days": dd_info.get("b_dd_days", 0),
+                    "overlap_dd_days": dd_info.get("overlap_dd_days", 0),
+                    "co_loss_pct": co_loss_pct,
+                    "both_traded_days": cl_info.get("both_traded_days", 0),
+                    "both_negative_days": cl_info.get("both_negative_days", 0),
+                }
+            )
 
     return flagged
 
@@ -350,15 +359,12 @@ def summarize_correlation_risk(
 # =========================================================================
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Rolling correlation risk analysis for validated strategy portfolios"
-    )
+    parser = argparse.ArgumentParser(description="Rolling correlation risk analysis for validated strategy portfolios")
     parser.add_argument("--db-path", required=True)
     parser.add_argument("--instrument", required=True)
     parser.add_argument("--window-days", type=int, default=126)
     parser.add_argument("--step-days", type=int, default=21)
-    parser.add_argument("--top-n", type=int, default=20,
-                        help="Show top N riskiest pairs")
+    parser.add_argument("--top-n", type=int, default=20, help="Show top N riskiest pairs")
     args = parser.parse_args()
 
     db = Path(args.db_path)
@@ -369,8 +375,7 @@ if __name__ == "__main__":
     # Load validated family heads for this instrument
     with duckdb.connect(str(db), read_only=True) as con:
         heads = con.execute(
-            "SELECT strategy_id FROM validated_setups "
-            "WHERE instrument = ? AND is_family_head = TRUE",
+            "SELECT strategy_id FROM validated_setups WHERE instrument = ? AND is_family_head = TRUE",
             [args.instrument],
         ).fetchall()
     strategy_ids = [r[0] for r in heads]
@@ -385,7 +390,8 @@ if __name__ == "__main__":
     # Run all 3 metrics
     print("Computing rolling correlation...")
     rolling = compute_rolling_correlation(
-        str(db), strategy_ids,
+        str(db),
+        strategy_ids,
         window_days=args.window_days,
         step_days=args.step_days,
     )
@@ -407,13 +413,14 @@ if __name__ == "__main__":
     # Sort by peak rolling correlation descending
     flagged.sort(key=lambda x: x.get("peak_rolling_corr") or 0, reverse=True)
 
-    for entry in flagged[:args.top_n]:
+    for entry in flagged[: args.top_n]:
         a, b = entry["pair"]
         print(f"  {a} <-> {b}")
         if entry["peak_rolling_corr"] is not None:
             print(f"    Peak rolling corr: {entry['peak_rolling_corr']:.3f}")
-        print(f"    Co-drawdown:      {entry['co_drawdown_pct']:.1%}"
-              f" ({entry['overlap_dd_days']}d overlap)")
-        print(f"    Co-loss:          {entry['co_loss_pct']:.1%}"
-              f" ({entry['both_negative_days']}/{entry['both_traded_days']} shared days)")
+        print(f"    Co-drawdown:      {entry['co_drawdown_pct']:.1%} ({entry['overlap_dd_days']}d overlap)")
+        print(
+            f"    Co-loss:          {entry['co_loss_pct']:.1%}"
+            f" ({entry['both_negative_days']}/{entry['both_traded_days']} shared days)"
+        )
         print()

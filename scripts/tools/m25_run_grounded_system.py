@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 """Rerun grounded system improvement with 128K output + nb resources."""
+
 from __future__ import annotations
 
 import os
@@ -22,50 +23,98 @@ NB_DIR = Path(r"C:\Users\joshd\OneDrive\Desktop\Organisation\nb resources")
 TARGETS = {
     "Robert Carver - Systematic Trading.pdf": {
         "search": [
-            "position size", "kelly", "trailing stop", "exit", "portfolio",
-            "volatility target", "instrument weight", "forecast", "drawdown",
-            "risk", "sharpe", "diversification",
+            "position size",
+            "kelly",
+            "trailing stop",
+            "exit",
+            "portfolio",
+            "volatility target",
+            "instrument weight",
+            "forecast",
+            "drawdown",
+            "risk",
+            "sharpe",
+            "diversification",
         ],
         "max_pages": 25,
     },
     "Algorithmic_Trading_Chan.pdf": {
         "search": [
-            "exit", "stop loss", "trailing", "position size", "kelly",
-            "portfolio", "regime", "drawdown", "risk", "sharpe",
+            "exit",
+            "stop loss",
+            "trailing",
+            "position size",
+            "kelly",
+            "portfolio",
+            "regime",
+            "drawdown",
+            "risk",
+            "sharpe",
         ],
         "max_pages": 25,
     },
     "Building_Reliable_Trading_Systems.pdf": {
         "search": [
-            "exit", "profit target", "trailing", "scale out", "partial",
-            "stop", "position", "risk", "robust", "walk-forward",
+            "exit",
+            "profit target",
+            "trailing",
+            "scale out",
+            "partial",
+            "stop",
+            "position",
+            "risk",
+            "robust",
+            "walk-forward",
         ],
         "max_pages": 25,
     },
     "Quantitative_Trading_Chan_2008.pdf": {
         "search": [
-            "kelly", "position", "exit", "drawdown", "risk management",
-            "sharpe", "backtest", "regime",
+            "kelly",
+            "position",
+            "exit",
+            "drawdown",
+            "risk management",
+            "sharpe",
+            "backtest",
+            "regime",
         ],
         "max_pages": 20,
     },
     "Lopez_de_Prado_ML_for_Asset_Managers.pdf": {
         "search": [
-            "position size", "bet size", "meta-label", "exit", "portfolio",
-            "feature importance", "walk-forward", "purge", "embargo",
+            "position size",
+            "bet size",
+            "meta-label",
+            "exit",
+            "portfolio",
+            "feature importance",
+            "walk-forward",
+            "purge",
+            "embargo",
         ],
         "max_pages": 20,
     },
     "real_time_strategy_monitoring_cusum.pdf": {
         "search": [
-            "cusum", "monitoring", "regime", "decay", "drift", "performance",
-            "sequential", "change point",
+            "cusum",
+            "monitoring",
+            "regime",
+            "decay",
+            "drift",
+            "performance",
+            "sequential",
+            "change point",
         ],
         "max_pages": 15,
     },
     "deflated-sharpe.pdf": {
         "search": [
-            "sharpe", "deflated", "multiple testing", "haircut", "backtest",
+            "sharpe",
+            "deflated",
+            "multiple testing",
+            "haircut",
+            "backtest",
             "expected maximum",
         ],
         "max_pages": 15,
@@ -104,12 +153,21 @@ print(f"NB extracts: {len(nb_content):,} chars", file=sys.stderr)
 
 # ── Load system files ─────────────────────────────────────────────────
 KEY_FILES = [
-    "CLAUDE.md", "TRADING_RULES.md", "RESEARCH_RULES.md", "MARKET_PLAYBOOK.md",
-    "trading_app/config.py", "trading_app/live_config.py", "pipeline/cost_model.py",
-    "trading_app/outcome_builder.py", "trading_app/execution_engine.py",
-    "trading_app/paper_trader.py", "trading_app/entry_rules.py",
-    "pipeline/dst.py", "pipeline/build_daily_features.py",
-    "trading_app/ml/config.py", "trading_app/ml/predict_live.py",
+    "CLAUDE.md",
+    "TRADING_RULES.md",
+    "RESEARCH_RULES.md",
+    "MARKET_PLAYBOOK.md",
+    "trading_app/config.py",
+    "trading_app/live_config.py",
+    "pipeline/cost_model.py",
+    "trading_app/outcome_builder.py",
+    "trading_app/execution_engine.py",
+    "trading_app/paper_trader.py",
+    "trading_app/entry_rules.py",
+    "pipeline/dst.py",
+    "pipeline/build_daily_features.py",
+    "trading_app/ml/config.py",
+    "trading_app/ml/predict_live.py",
 ]
 
 file_parts = []

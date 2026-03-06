@@ -17,12 +17,14 @@ from pipeline.paths import GOLD_DB_PATH
 
 _DB_CONNECTIONS: dict[str, duckdb.DuckDBPyConnection] = {}
 
+
 def get_connection(db_path: Path | None = None) -> duckdb.DuckDBPyConnection:
     """Get or create a cached read-only DuckDB connection."""
     path = str(db_path or GOLD_DB_PATH)
     if path not in _DB_CONNECTIONS:
         _DB_CONNECTIONS[path] = duckdb.connect(path, read_only=True)
     return _DB_CONNECTIONS[path]
+
 
 def _cleanup_connections():
     for con in _DB_CONNECTIONS.values():
@@ -32,7 +34,9 @@ def _cleanup_connections():
             pass
     _DB_CONNECTIONS.clear()
 
+
 atexit.register(_cleanup_connections)
+
 
 def query_df(sql: str, db_path: Path | None = None) -> pd.DataFrame:
     """Execute a SELECT query and return a DataFrame.
@@ -46,11 +50,16 @@ def query_df(sql: str, db_path: Path | None = None) -> pd.DataFrame:
     con = get_connection(db_path)
     return con.execute(sql).fetchdf()
 
+
 def get_table_counts(db_path: Path | None = None) -> dict[str, int]:
     """Return row counts for all known tables."""
     tables = [
-        "bars_1m", "bars_5m", "daily_features",
-        "orb_outcomes", "experimental_strategies", "validated_setups",
+        "bars_1m",
+        "bars_5m",
+        "daily_features",
+        "orb_outcomes",
+        "experimental_strategies",
+        "validated_setups",
     ]
     conn = get_connection(db_path)
     counts = {}
@@ -62,35 +71,31 @@ def get_table_counts(db_path: Path | None = None) -> dict[str, int]:
             counts[t] = -1  # table doesn't exist
     return counts
 
+
 def get_date_ranges(db_path: Path | None = None) -> dict[str, dict]:
     """Return min/max dates for key tables."""
     conn = get_connection(db_path)
     ranges = {}
     # bars_1m
     try:
-        row = conn.execute(
-            "SELECT MIN(ts_utc)::DATE AS min_d, MAX(ts_utc)::DATE AS max_d FROM bars_1m"
-        ).fetchone()
+        row = conn.execute("SELECT MIN(ts_utc)::DATE AS min_d, MAX(ts_utc)::DATE AS max_d FROM bars_1m").fetchone()
         ranges["bars_1m"] = {"min": str(row[0]), "max": str(row[1])} if row else {}
     except Exception:
         ranges["bars_1m"] = {}
     # daily_features
     try:
-        row = conn.execute(
-            "SELECT MIN(trading_day) AS min_d, MAX(trading_day) AS max_d FROM daily_features"
-        ).fetchone()
+        row = conn.execute("SELECT MIN(trading_day) AS min_d, MAX(trading_day) AS max_d FROM daily_features").fetchone()
         ranges["daily_features"] = {"min": str(row[0]), "max": str(row[1])} if row else {}
     except Exception:
         ranges["daily_features"] = {}
     # orb_outcomes
     try:
-        row = conn.execute(
-            "SELECT MIN(trading_day) AS min_d, MAX(trading_day) AS max_d FROM orb_outcomes"
-        ).fetchone()
+        row = conn.execute("SELECT MIN(trading_day) AS min_d, MAX(trading_day) AS max_d FROM orb_outcomes").fetchone()
         ranges["orb_outcomes"] = {"min": str(row[0]), "max": str(row[1])} if row else {}
     except Exception:
         ranges["orb_outcomes"] = {}
     return ranges
+
 
 def get_validated_strategies(
     db_path: Path | None = None,
@@ -103,6 +108,7 @@ def get_validated_strategies(
         ORDER BY expectancy_r DESC
     """
     return query_df(sql, db_path)
+
 
 def get_daily_features(
     trading_day: str,
@@ -121,6 +127,7 @@ def get_daily_features(
         return None
     return df.iloc[0].to_dict()
 
+
 def get_bars_per_day(db_path: Path | None = None) -> pd.DataFrame:
     """Return bar count per trading day for coverage analysis."""
     sql = """
@@ -130,6 +137,7 @@ def get_bars_per_day(db_path: Path | None = None) -> pd.DataFrame:
         ORDER BY trading_day
     """
     return query_df(sql, db_path)
+
 
 def get_contract_timeline(db_path: Path | None = None) -> pd.DataFrame:
     """Return source_symbol usage over time (contract rolls)."""
@@ -145,6 +153,7 @@ def get_contract_timeline(db_path: Path | None = None) -> pd.DataFrame:
     """
     return query_df(sql, db_path)
 
+
 def get_gap_days(db_path: Path | None = None) -> pd.DataFrame:
     """Find trading days with unusually low bar counts (potential gaps)."""
     sql = """
@@ -156,12 +165,11 @@ def get_gap_days(db_path: Path | None = None) -> pd.DataFrame:
     """
     return query_df(sql, db_path)
 
+
 def get_schema_summary(db_path: Path | None = None) -> str:
     """Return a text summary of DB tables and columns for AI context."""
     conn = get_connection(db_path)
-    tables = conn.execute(
-        "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
-    ).fetchdf()
+    tables = conn.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='main'").fetchdf()
     lines = []
     for t in tables["table_name"]:
         cols = conn.execute(

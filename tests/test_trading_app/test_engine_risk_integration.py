@@ -24,8 +24,10 @@ from pipeline.cost_model import get_cost_spec
 # Helpers — mirrors existing test_execution_engine patterns
 # ============================================================================
 
+
 def _cost():
     return get_cost_spec("MGC")
+
 
 def _make_strategy(**overrides):
     base = dict(
@@ -46,6 +48,7 @@ def _make_strategy(**overrides):
     base.update(overrides)
     return PortfolioStrategy(**base)
 
+
 def _make_portfolio(strategies=None, **overrides):
     if strategies is None:
         strategies = [_make_strategy()]
@@ -61,36 +64,40 @@ def _make_portfolio(strategies=None, **overrides):
     defaults.update(overrides)
     return Portfolio(**defaults)
 
+
 def _bar(ts, o, h, l, c, v=100):
-    return {"ts_utc": ts, "open": float(o), "high": float(h),
-            "low": float(l), "close": float(c), "volume": int(v)}
+    return {"ts_utc": ts, "open": float(o), "high": float(h), "low": float(l), "close": float(c), "volume": int(v)}
+
 
 # US_DATA_830 ORB window: 8:30 AM ET = 13:30 UTC in winter (EST).
 _ORB_BASE = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
 _TRADING_DAY = date(2024, 1, 5)
 
+
 def _build_orb(engine, orb_high=2705.0, orb_low=2695.0):
     """Feed 5 bars to build the US_DATA_830 ORB, then return the post-window timestamp."""
     for i in range(5):
-        engine.on_bar(_bar(_ORB_BASE + timedelta(minutes=i),
-                           2700, orb_high, orb_low, 2702))
+        engine.on_bar(_bar(_ORB_BASE + timedelta(minutes=i), 2700, orb_high, orb_low, 2702))
     return _ORB_BASE + timedelta(minutes=5)
+
 
 def _break_long(engine, break_ts, close=2706.0):
     """Feed a bar that breaks the ORB high (long). Returns events."""
     return engine.on_bar(_bar(break_ts, 2704, 2710, 2703, close))
+
 
 def _fill_e1(engine, break_ts, o=2708, h=2715, l=2707, c=2712):
     """Feed the E1 fill bar (next bar after confirm). Returns events."""
     fill_ts = break_ts + timedelta(minutes=1)
     return engine.on_bar(_bar(fill_ts, o, h, l, c))
 
+
 # ============================================================================
 # 1. Engine calls risk_manager.on_trade_entry() on entry (E1, E3)
 # ============================================================================
 
-class TestOnTradeEntry:
 
+class TestOnTradeEntry:
     def test_e1_entry_calls_on_trade_entry(self):
         limits = RiskLimits()
         rm = RiskManager(limits)
@@ -117,7 +124,8 @@ class TestOnTradeEntry:
         rm.daily_reset(_TRADING_DAY)
 
         strategy = _make_strategy(
-            entry_model="E3", confirm_bars=1,
+            entry_model="E3",
+            confirm_bars=1,
             strategy_id="MGC_US_DATA_830_E3_RR2.0_CB1_NO_FILTER",
         )
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost(), risk_manager=rm)
@@ -135,12 +143,13 @@ class TestOnTradeEntry:
         assert len(entry_events) == 1
         assert rm.daily_trade_count == 1
 
+
 # ============================================================================
 # 2. Engine calls risk_manager.on_trade_exit(pnl_r) on target/stop exit
 # ============================================================================
 
-class TestOnTradeExit:
 
+class TestOnTradeExit:
     def test_target_hit_calls_on_trade_exit(self):
         limits = RiskLimits()
         rm = RiskManager(limits)
@@ -209,12 +218,13 @@ class TestOnTradeExit:
         assert completed[0].pnl_r == -1.0
         assert rm.daily_pnl_r == completed[0].pnl_r
 
+
 # ============================================================================
 # 3. Engine calls risk_manager.on_trade_exit(pnl_r) on EOD scratch
 # ============================================================================
 
-class TestScratchExit:
 
+class TestScratchExit:
     def test_scratch_calls_on_trade_exit(self):
         limits = RiskLimits()
         rm = RiskManager(limits)
@@ -264,12 +274,13 @@ class TestScratchExit:
         assert completed[0].pnl_r > 0  # Price went up for a long
         assert rm.daily_pnl_r == completed[0].pnl_r
 
+
 # ============================================================================
 # 4. Engine emits REJECT when risk_manager.can_enter() returns False
 # ============================================================================
 
-class TestReject:
 
+class TestReject:
     def test_e1_rejected_by_risk_manager(self):
         limits = RiskLimits(max_daily_trades=0)
         rm = RiskManager(limits)
@@ -296,7 +307,8 @@ class TestReject:
         rm.daily_reset(_TRADING_DAY)
 
         strategy = _make_strategy(
-            entry_model="E3", confirm_bars=1,
+            entry_model="E3",
+            confirm_bars=1,
             strategy_id="MGC_US_DATA_830_E3_RR2.0_CB1_NO_FILTER",
         )
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost(), risk_manager=rm)
@@ -335,30 +347,38 @@ class TestReject:
         assert len(entered) == 0
         assert engine.daily_trade_count == 0
 
+
 # ============================================================================
 # 5. Circuit breaker: after max_daily_loss_r exceeded, entries are rejected
 # ============================================================================
 
-class TestCircuitBreaker:
 
+class TestCircuitBreaker:
     def test_circuit_breaker_rejects_after_loss_limit(self):
-        limits = RiskLimits(max_daily_loss_r=-2.0, max_concurrent_positions=5,
-                            max_per_orb_positions=5, max_daily_trades=20)
+        limits = RiskLimits(
+            max_daily_loss_r=-2.0, max_concurrent_positions=5, max_per_orb_positions=5, max_daily_trades=20
+        )
         rm = RiskManager(limits)
         rm.daily_reset(_TRADING_DAY)
 
         # Two E1 strategies on same ORB: both enter and both lose => -2.0R total
         strat_a = _make_strategy(
-            entry_model="E1", confirm_bars=1, rr_target=2.0,
+            entry_model="E1",
+            confirm_bars=1,
+            rr_target=2.0,
             strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_A",
         )
         strat_b = _make_strategy(
-            entry_model="E1", confirm_bars=1, rr_target=2.0,
+            entry_model="E1",
+            confirm_bars=1,
+            rr_target=2.0,
             strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_B",
         )
 
         engine = ExecutionEngine(
-            _make_portfolio([strat_a, strat_b]), _cost(), risk_manager=rm,
+            _make_portfolio([strat_a, strat_b]),
+            _cost(),
+            risk_manager=rm,
         )
         engine.on_trading_day_start(_TRADING_DAY)
 
@@ -395,12 +415,13 @@ class TestCircuitBreaker:
         assert not allowed
         assert "circuit_breaker" in reason
 
+
 # ============================================================================
 # 6. Max concurrent: when limit reached, new entries are rejected
 # ============================================================================
 
-class TestMaxConcurrent:
 
+class TestMaxConcurrent:
     def test_max_concurrent_rejects_when_full(self):
         limits = RiskLimits(
             max_concurrent_positions=1,
@@ -412,16 +433,22 @@ class TestMaxConcurrent:
 
         # Two E1 strategies on same ORB: first enters, second gets rejected
         strat_a = _make_strategy(
-            entry_model="E1", confirm_bars=1, rr_target=2.0,
+            entry_model="E1",
+            confirm_bars=1,
+            rr_target=2.0,
             strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_A",
         )
         strat_b = _make_strategy(
-            entry_model="E1", confirm_bars=1, rr_target=2.0,
+            entry_model="E1",
+            confirm_bars=1,
+            rr_target=2.0,
             strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_B",
         )
 
         engine = ExecutionEngine(
-            _make_portfolio([strat_a, strat_b]), _cost(), risk_manager=rm,
+            _make_portfolio([strat_a, strat_b]),
+            _cost(),
+            risk_manager=rm,
         )
         engine.on_trading_day_start(_TRADING_DAY)
 
@@ -449,7 +476,9 @@ class TestMaxConcurrent:
 
         strategy = _make_strategy(entry_model="E1", confirm_bars=1, rr_target=2.0)
         engine = ExecutionEngine(
-            _make_portfolio([strategy]), _cost(), risk_manager=rm,
+            _make_portfolio([strategy]),
+            _cost(),
+            risk_manager=rm,
         )
         engine.on_trading_day_start(_TRADING_DAY)
 
@@ -464,12 +493,13 @@ class TestMaxConcurrent:
         allowed, _, _ = rm.can_enter("new_strat", "LONDON_METALS", [], engine.daily_pnl_r)
         assert allowed
 
+
 # ============================================================================
 # Lifecycle consistency: RM state matches engine state
 # ============================================================================
 
-class TestLifecycleConsistency:
 
+class TestLifecycleConsistency:
     def test_rm_trade_count_matches_engine(self):
         limits = RiskLimits()
         rm = RiskManager(limits)
@@ -486,22 +516,27 @@ class TestLifecycleConsistency:
         assert rm.daily_trade_count == engine.daily_trade_count
 
     def test_rm_pnl_tracks_engine_after_multiple_exits(self):
-        limits = RiskLimits(max_per_orb_positions=5, max_concurrent_positions=5,
-                            max_daily_trades=20)
+        limits = RiskLimits(max_per_orb_positions=5, max_concurrent_positions=5, max_daily_trades=20)
         rm = RiskManager(limits)
         rm.daily_reset(_TRADING_DAY)
 
         # Two E1 strategies, same ORB, both enter and lose
         strat_a = _make_strategy(
-            entry_model="E1", confirm_bars=1, rr_target=2.0,
+            entry_model="E1",
+            confirm_bars=1,
+            rr_target=2.0,
             strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_A",
         )
         strat_b = _make_strategy(
-            entry_model="E1", confirm_bars=1, rr_target=2.0,
+            entry_model="E1",
+            confirm_bars=1,
+            rr_target=2.0,
             strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_B",
         )
         engine = ExecutionEngine(
-            _make_portfolio([strat_a, strat_b]), _cost(), risk_manager=rm,
+            _make_portfolio([strat_a, strat_b]),
+            _cost(),
+            risk_manager=rm,
         )
         engine.on_trading_day_start(_TRADING_DAY)
 
@@ -533,22 +568,27 @@ class TestLifecycleConsistency:
         assert len(entry_events) == 1  # Works fine without RM
 
     def test_full_lifecycle_entry_exit_scratch(self):
-        limits = RiskLimits(max_concurrent_positions=5, max_per_orb_positions=5,
-                            max_daily_trades=20)
+        limits = RiskLimits(max_concurrent_positions=5, max_per_orb_positions=5, max_daily_trades=20)
         rm = RiskManager(limits)
         rm.daily_reset(_TRADING_DAY)
 
         strat_a = _make_strategy(
-            entry_model="E1", confirm_bars=1, rr_target=2.0,
+            entry_model="E1",
+            confirm_bars=1,
+            rr_target=2.0,
             strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_A",
         )
         strat_b = _make_strategy(
-            entry_model="E1", confirm_bars=1, rr_target=2.0,
+            entry_model="E1",
+            confirm_bars=1,
+            rr_target=2.0,
             strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_B",
         )
 
         engine = ExecutionEngine(
-            _make_portfolio([strat_a, strat_b]), _cost(), risk_manager=rm,
+            _make_portfolio([strat_a, strat_b]),
+            _cost(),
+            risk_manager=rm,
         )
         engine.on_trading_day_start(_TRADING_DAY)
 
@@ -569,12 +609,13 @@ class TestLifecycleConsistency:
         assert len(scratch_events) == 0  # Already exited
         assert rm.daily_pnl_r == -2.0  # Unchanged
 
+
 # ============================================================================
 # 7. Correlation-weighted concurrent guard (Phase 2 risk hardening)
 # ============================================================================
 
-class TestCorrelationWeightedConcurrent:
 
+class TestCorrelationWeightedConcurrent:
     def test_correlated_trades_fill_budget_faster(self):
         """Two highly correlated open positions (rho=0.9) consume 0.9 effective slots each."""
         corr_lookup = {
@@ -614,8 +655,11 @@ class TestCorrelationWeightedConcurrent:
                 self.orb_label = orb
                 self.state = TradeState.ENTERED
 
-        active = [FakeTrade("strat_a", "CME_REOPEN"), FakeTrade("strat_b", "CME_REOPEN"),
-                  FakeTrade("strat_c", "TOKYO_OPEN")]
+        active = [
+            FakeTrade("strat_a", "CME_REOPEN"),
+            FakeTrade("strat_b", "CME_REOPEN"),
+            FakeTrade("strat_c", "TOKYO_OPEN"),
+        ]
         # Need effective >= 3. Use 4 active trades at 0.95 each = 3.8 >= 3
         active.append(FakeTrade("strat_d", "TOKYO_OPEN"))
         corr_lookup[("strat_new", "strat_d")] = 0.95
@@ -664,17 +708,20 @@ class TestCorrelationWeightedConcurrent:
         assert not allowed
         assert "max_concurrent" in reason
 
+
 # ============================================================================
 # 8. Live session costs: engine produces different win PnL by session
 # ============================================================================
 
-class TestLiveSessionCosts:
 
+class TestLiveSessionCosts:
     def test_win_pnl_differs_with_session_costs(self):
         """Engine with live_session_costs=True produces different win PnL
         than one without, because session slippage differs from base."""
         strategy = _make_strategy(
-            entry_model="E1", confirm_bars=1, rr_target=2.0,
+            entry_model="E1",
+            confirm_bars=1,
+            rr_target=2.0,
             orb_label="CME_REOPEN",
             strategy_id="MGC_CME_REOPEN_E1_RR2.0_CB1_NO_FILTER",
         )
@@ -690,17 +737,14 @@ class TestLiveSessionCosts:
         for eng in (engine_flat, engine_live):
             eng.on_trading_day_start(td)
             for i in range(5):
-                eng.on_bar(_bar(orb_base + timedelta(minutes=i),
-                                2700, 2705, 2695, 2702))
+                eng.on_bar(_bar(orb_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
             # Break long
             break_ts = orb_base + timedelta(minutes=5)
             eng.on_bar(_bar(break_ts, 2704, 2710, 2703, 2706))
             # E1 fill bar: entry at open=2707, stop=2695, risk=12, target=2707+24=2731
-            eng.on_bar(_bar(break_ts + timedelta(minutes=1),
-                            2707, 2712, 2706, 2710))
+            eng.on_bar(_bar(break_ts + timedelta(minutes=1), 2707, 2712, 2706, 2710))
             # Win: target hit (high >= 2731)
-            eng.on_bar(_bar(break_ts + timedelta(minutes=2),
-                            2710, 2735, 2709, 2728))
+            eng.on_bar(_bar(break_ts + timedelta(minutes=2), 2710, 2735, 2709, 2728))
 
         flat_pnl = engine_flat.daily_pnl_r
         live_pnl = engine_live.daily_pnl_r
@@ -710,14 +754,15 @@ class TestLiveSessionCosts:
         assert live_pnl > 0, f"Live engine should win, got {live_pnl}"
         # CME_REOPEN has 1.3x slippage => higher friction => lower R-multiple
         assert live_pnl < flat_pnl, (
-            f"CME_REOPEN live (1.3x slippage) should produce lower R than flat: "
-            f"live={live_pnl}, flat={flat_pnl}"
+            f"CME_REOPEN live (1.3x slippage) should produce lower R than flat: live={live_pnl}, flat={flat_pnl}"
         )
 
     def test_scratch_uses_session_costs(self):
         """Scratch PnL in live mode uses session-adjusted costs."""
         strategy = _make_strategy(
-            entry_model="E1", confirm_bars=1, rr_target=2.0,
+            entry_model="E1",
+            confirm_bars=1,
+            rr_target=2.0,
             orb_label="CME_REOPEN",
             strategy_id="MGC_CME_REOPEN_E1_RR2.0_CB1_NO_FILTER",
         )
@@ -732,17 +777,14 @@ class TestLiveSessionCosts:
         for eng in (engine_flat, engine_live):
             eng.on_trading_day_start(td)
             for i in range(5):
-                eng.on_bar(_bar(orb_base + timedelta(minutes=i),
-                                2700, 2705, 2695, 2702))
+                eng.on_bar(_bar(orb_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
             # Break long
             break_ts = orb_base + timedelta(minutes=5)
             eng.on_bar(_bar(break_ts, 2704, 2710, 2703, 2706))
             # E1 fill bar: entry at open=2707
-            eng.on_bar(_bar(break_ts + timedelta(minutes=1),
-                            2707, 2712, 2706, 2710))
+            eng.on_bar(_bar(break_ts + timedelta(minutes=1), 2707, 2712, 2706, 2710))
             # Mid-trade bar, no stop/target — trade stays open
-            eng.on_bar(_bar(break_ts + timedelta(minutes=2),
-                            2710, 2714, 2708, 2712))
+            eng.on_bar(_bar(break_ts + timedelta(minutes=2), 2710, 2714, 2708, 2712))
             # EOD scratch
             eng.on_trading_day_end()
 
@@ -753,10 +795,8 @@ class TestLiveSessionCosts:
         assert flat_pnl > 0
         assert live_pnl > 0
         # 0900 session costs are higher => lower scratch PnL
-        assert live_pnl < flat_pnl, (
-            f"Scratch with 0900 session costs should be lower: "
-            f"live={live_pnl}, flat={flat_pnl}"
-        )
+        assert live_pnl < flat_pnl, f"Scratch with 0900 session costs should be lower: live={live_pnl}, flat={flat_pnl}"
+
 
 # ============================================================================
 # 9. Calendar overlay: NFP/OPEX day skipping in engine
@@ -764,13 +804,14 @@ class TestLiveSessionCosts:
 
 from trading_app.config import CALENDAR_SKIP_NFP_OPEX, CalendarSkipFilter
 
-class TestCalendarOverlay:
 
+class TestCalendarOverlay:
     def test_nfp_day_blocks_entry(self):
         """On an NFP day, the calendar overlay should prevent strategy arming."""
         strategy = _make_strategy(entry_model="E1", confirm_bars=1)
         engine = ExecutionEngine(
-            _make_portfolio([strategy]), _cost(),
+            _make_portfolio([strategy]),
+            _cost(),
             calendar_overlay=CALENDAR_SKIP_NFP_OPEX,
         )
         nfp_row = {"is_nfp_day": True, "is_opex_day": False, "is_friday": False, "day_of_week": 4}
@@ -789,7 +830,8 @@ class TestCalendarOverlay:
         """On an OPEX day, the calendar overlay should prevent strategy arming."""
         strategy = _make_strategy(entry_model="E1", confirm_bars=1)
         engine = ExecutionEngine(
-            _make_portfolio([strategy]), _cost(),
+            _make_portfolio([strategy]),
+            _cost(),
             calendar_overlay=CALENDAR_SKIP_NFP_OPEX,
         )
         opex_row = {"is_nfp_day": False, "is_opex_day": True, "is_friday": True, "day_of_week": 4}
@@ -803,7 +845,8 @@ class TestCalendarOverlay:
         """On a normal day (not NFP/OPEX), the calendar overlay allows trading."""
         strategy = _make_strategy(entry_model="E1", confirm_bars=1)
         engine = ExecutionEngine(
-            _make_portfolio([strategy]), _cost(),
+            _make_portfolio([strategy]),
+            _cost(),
             calendar_overlay=CALENDAR_SKIP_NFP_OPEX,
         )
         normal_row = {"is_nfp_day": False, "is_opex_day": False, "is_friday": False, "day_of_week": 2}
@@ -819,7 +862,8 @@ class TestCalendarOverlay:
         """With calendar_overlay=None, NFP day is not blocked."""
         strategy = _make_strategy(entry_model="E1", confirm_bars=1)
         engine = ExecutionEngine(
-            _make_portfolio([strategy]), _cost(),
+            _make_portfolio([strategy]),
+            _cost(),
             calendar_overlay=None,
         )
         nfp_row = {"is_nfp_day": True, "is_opex_day": False, "is_friday": False, "day_of_week": 4}
@@ -835,7 +879,8 @@ class TestCalendarOverlay:
         """When daily_features_row is None (no data), overlay is skipped."""
         strategy = _make_strategy(entry_model="E1", confirm_bars=1)
         engine = ExecutionEngine(
-            _make_portfolio([strategy]), _cost(),
+            _make_portfolio([strategy]),
+            _cost(),
             calendar_overlay=CALENDAR_SKIP_NFP_OPEX,
         )
         engine.on_trading_day_start(_TRADING_DAY)  # No daily_features_row

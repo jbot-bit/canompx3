@@ -36,10 +36,11 @@ from pipeline.paths import GOLD_DB_PATH
 from pipeline.asset_configs import get_asset_config, list_instruments
 
 from pipeline.log import get_logger
+
 logger = get_logger(__name__)
 
-def build_5m_bars(con: duckdb.DuckDBPyConnection, symbol: str,
-                  start_date: date, end_date: date, dry_run: bool) -> int:
+
+def build_5m_bars(con: duckdb.DuckDBPyConnection, symbol: str, start_date: date, end_date: date, dry_run: bool) -> int:
     """
     Build bars_5m from bars_1m for the given symbol and date range.
 
@@ -139,13 +140,16 @@ def build_5m_bars(con: duckdb.DuckDBPyConnection, symbol: str,
 
     if dry_run:
         # Count how many 5m bars would be built
-        count_result = con.execute("""
+        count_result = con.execute(
+            """
             SELECT COUNT(DISTINCT (EXTRACT(EPOCH FROM ts_utc)::BIGINT / 300 * 300))
             FROM bars_1m
             WHERE symbol = ?
             AND ts_utc >= ?::TIMESTAMPTZ
             AND ts_utc < ?::TIMESTAMPTZ
-        """, [symbol, start_ts, end_ts]).fetchone()[0]
+        """,
+            [symbol, start_ts, end_ts],
+        ).fetchone()[0]
         logger.info(f"  DRY RUN: Would build {count_result:,} bars_5m rows")
         return count_result
 
@@ -154,36 +158,48 @@ def build_5m_bars(con: duckdb.DuckDBPyConnection, symbol: str,
 
     try:
         # Delete existing 5m bars in range
-        delete_count = con.execute("""
+        delete_count = con.execute(
+            """
             SELECT COUNT(*) FROM bars_5m
             WHERE symbol = ?
             AND ts_utc >= ?::TIMESTAMPTZ
             AND ts_utc < ?::TIMESTAMPTZ
-        """, [symbol, start_ts, end_ts]).fetchone()[0]
+        """,
+            [symbol, start_ts, end_ts],
+        ).fetchone()[0]
 
-        con.execute("""
+        con.execute(
+            """
             DELETE FROM bars_5m
             WHERE symbol = ?
             AND ts_utc >= ?::TIMESTAMPTZ
             AND ts_utc < ?::TIMESTAMPTZ
-        """, [symbol, start_ts, end_ts])
+        """,
+            [symbol, start_ts, end_ts],
+        )
 
         if delete_count > 0:
             logger.info(f"  Deleted {delete_count:,} existing bars_5m rows")
 
         # Insert rebuilt rows
-        con.execute(f"""
+        con.execute(
+            f"""
             INSERT INTO bars_5m (ts_utc, symbol, source_symbol, open, high, low, close, volume)
             {build_query}
-        """, [symbol, start_ts, end_ts])
+        """,
+            [symbol, start_ts, end_ts],
+        )
 
         # Count inserted
-        new_count = con.execute("""
+        new_count = con.execute(
+            """
             SELECT COUNT(*) FROM bars_5m
             WHERE symbol = ?
             AND ts_utc >= ?::TIMESTAMPTZ
             AND ts_utc < ?::TIMESTAMPTZ
-        """, [symbol, start_ts, end_ts]).fetchone()[0]
+        """,
+            [symbol, start_ts, end_ts],
+        ).fetchone()[0]
 
         con.execute("COMMIT")
 
@@ -195,8 +211,10 @@ def build_5m_bars(con: duckdb.DuckDBPyConnection, symbol: str,
         logger.error(f"FATAL: Exception during bars_5m build: {e}")
         raise
 
-def verify_5m_integrity(con: duckdb.DuckDBPyConnection, symbol: str,
-                        start_date: date, end_date: date) -> tuple[bool, list[str]]:
+
+def verify_5m_integrity(
+    con: duckdb.DuckDBPyConnection, symbol: str, start_date: date, end_date: date
+) -> tuple[bool, list[str]]:
     """
     Verify bars_5m integrity after build.
 
@@ -212,7 +230,8 @@ def verify_5m_integrity(con: duckdb.DuckDBPyConnection, symbol: str,
     end_ts = f"{end_date + timedelta(days=1)}T00:00:00+00:00"
 
     # Check 1: duplicates
-    dupe_count = con.execute("""
+    dupe_count = con.execute(
+        """
         SELECT COUNT(*) FROM (
             SELECT symbol, ts_utc FROM bars_5m
             WHERE symbol = ?
@@ -221,57 +240,64 @@ def verify_5m_integrity(con: duckdb.DuckDBPyConnection, symbol: str,
             GROUP BY symbol, ts_utc
             HAVING COUNT(*) > 1
         )
-    """, [symbol, start_ts, end_ts]).fetchone()[0]
+    """,
+        [symbol, start_ts, end_ts],
+    ).fetchone()[0]
 
     if dupe_count > 0:
         failures.append(f"Duplicate (symbol, ts_utc) in bars_5m: {dupe_count}")
 
     # Check 2: 5-minute alignment
-    misaligned = con.execute("""
+    misaligned = con.execute(
+        """
         SELECT COUNT(*) FROM bars_5m
         WHERE symbol = ?
         AND ts_utc >= ?::TIMESTAMPTZ
         AND ts_utc < ?::TIMESTAMPTZ
         AND EXTRACT(EPOCH FROM ts_utc)::BIGINT % 300 != 0
-    """, [symbol, start_ts, end_ts]).fetchone()[0]
+    """,
+        [symbol, start_ts, end_ts],
+    ).fetchone()[0]
 
     if misaligned > 0:
         failures.append(f"Misaligned timestamps (not 5m boundary): {misaligned}")
 
     # Check 3: OHLCV sanity
-    ohlcv_bad = con.execute("""
+    ohlcv_bad = con.execute(
+        """
         SELECT COUNT(*) FROM bars_5m
         WHERE symbol = ?
         AND ts_utc >= ?::TIMESTAMPTZ
         AND ts_utc < ?::TIMESTAMPTZ
         AND (high < low OR high < open OR high < close OR low > open OR low > close)
-    """, [symbol, start_ts, end_ts]).fetchone()[0]
+    """,
+        [symbol, start_ts, end_ts],
+    ).fetchone()[0]
 
     if ohlcv_bad > 0:
         failures.append(f"OHLCV sanity failures (high/low violations): {ohlcv_bad}")
 
     # Check 4: volume
-    vol_bad = con.execute("""
+    vol_bad = con.execute(
+        """
         SELECT COUNT(*) FROM bars_5m
         WHERE symbol = ?
         AND ts_utc >= ?::TIMESTAMPTZ
         AND ts_utc < ?::TIMESTAMPTZ
         AND volume < 0
-    """, [symbol, start_ts, end_ts]).fetchone()[0]
+    """,
+        [symbol, start_ts, end_ts],
+    ).fetchone()[0]
 
     if vol_bad > 0:
         failures.append(f"Negative volume: {vol_bad}")
 
     return len(failures) == 0, failures
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Build bars_5m from bars_1m (deterministic aggregation)"
-    )
-    parser.add_argument(
-        "--instrument", type=str, required=True,
-        help=f"Instrument ({', '.join(list_instruments())})"
-    )
+    parser = argparse.ArgumentParser(description="Build bars_5m from bars_1m (deterministic aggregation)")
+    parser.add_argument("--instrument", type=str, required=True, help=f"Instrument ({', '.join(list_instruments())})")
     parser.add_argument("--start", type=str, required=True, help="Start date YYYY-MM-DD")
     parser.add_argument("--end", type=str, required=True, help="End date YYYY-MM-DD")
     parser.add_argument("--dry-run", action="store_true", help="Count only, no DB writes")
@@ -300,6 +326,7 @@ def main():
 
     with duckdb.connect(str(GOLD_DB_PATH)) as con:
         from pipeline.db_config import configure_connection
+
         configure_connection(con, writing=True)
 
         # Build
@@ -336,6 +363,7 @@ def main():
             logger.info("DRY RUN COMPLETE. No changes made.")
 
         sys.exit(0)
+
 
 if __name__ == "__main__":
     main()

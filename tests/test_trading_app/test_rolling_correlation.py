@@ -20,6 +20,7 @@ from trading_app.rolling_correlation import (
 # Helpers
 # =========================================================================
 
+
 def _create_test_db(tmp_path: Path) -> Path:
     """Create a minimal DB with required schema for rolling correlation tests."""
     db_path = tmp_path / "test.db"
@@ -83,26 +84,31 @@ def _create_test_db(tmp_path: Path) -> Path:
     return db_path
 
 
-def _insert_strategy(con, sid, instrument="MGC", orb_label="CME_REOPEN",
-                     orb_minutes=5, rr_target=2.0, confirm_bars=1,
-                     entry_model="E1", filter_type="ORB_G5"):
+def _insert_strategy(
+    con,
+    sid,
+    instrument="MGC",
+    orb_label="CME_REOPEN",
+    orb_minutes=5,
+    rr_target=2.0,
+    confirm_bars=1,
+    entry_model="E1",
+    filter_type="ORB_G5",
+):
     """Insert a validated_setups row."""
     con.execute(
         "INSERT INTO validated_setups "
         "(strategy_id, instrument, orb_label, orb_minutes, rr_target, "
         "confirm_bars, entry_model, filter_type) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        [sid, instrument, orb_label, orb_minutes, rr_target, confirm_bars,
-         entry_model, filter_type],
+        [sid, instrument, orb_label, orb_minutes, rr_target, confirm_bars, entry_model, filter_type],
     )
 
 
-def _insert_pnl(con, sid, instrument, orb_label, orb_minutes, rr_target,
-                 confirm_bars, entry_model, trading_day, pnl_r):
+def _insert_pnl(con, sid, instrument, orb_label, orb_minutes, rr_target, confirm_bars, entry_model, trading_day, pnl_r):
     """Insert a trade day + outcome row."""
     con.execute(
-        "INSERT OR IGNORE INTO daily_features (symbol, trading_day, orb_minutes) "
-        "VALUES (?, ?, ?)",
+        "INSERT OR IGNORE INTO daily_features (symbol, trading_day, orb_minutes) VALUES (?, ?, ?)",
         [instrument, trading_day, orb_minutes],
     )
     con.execute(
@@ -114,13 +120,21 @@ def _insert_pnl(con, sid, instrument, orb_label, orb_minutes, rr_target,
         "(trading_day, symbol, orb_label, orb_minutes, rr_target, confirm_bars, "
         "entry_model, outcome, pnl_r) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [trading_day, instrument, orb_label, orb_minutes, rr_target, confirm_bars,
-         entry_model, "win" if pnl_r > 0 else "loss", pnl_r],
+        [
+            trading_day,
+            instrument,
+            orb_label,
+            orb_minutes,
+            rr_target,
+            confirm_bars,
+            entry_model,
+            "win" if pnl_r > 0 else "loss",
+            pnl_r,
+        ],
     )
 
 
-def _populate_two_strategies(tmp_path, pnl_a_values, pnl_b_values,
-                             start_date=date(2024, 1, 1)):
+def _populate_two_strategies(tmp_path, pnl_a_values, pnl_b_values, start_date=date(2024, 1, 1)):
     """
     Create DB with two strategies (A and B) and daily PnL values.
 
@@ -154,8 +168,8 @@ def _populate_two_strategies(tmp_path, pnl_a_values, pnl_b_values,
 # Rolling correlation tests
 # =========================================================================
 
-class TestRollingCorrelation:
 
+class TestRollingCorrelation:
     def test_rolling_corr_identical_series(self, tmp_path):
         """Two strategies with identical daily PnL -> correlation = 1.0 in every window."""
         n = 200
@@ -163,8 +177,11 @@ class TestRollingCorrelation:
         db_path, sid_a, sid_b = _populate_two_strategies(tmp_path, pnl, pnl)
 
         results = compute_rolling_correlation(
-            str(db_path), [sid_a, sid_b],
-            window_days=60, min_overlap=30, step_days=20,
+            str(db_path),
+            [sid_a, sid_b],
+            window_days=60,
+            min_overlap=30,
+            step_days=20,
         )
 
         assert len(results) > 0
@@ -181,8 +198,11 @@ class TestRollingCorrelation:
         db_path, sid_a, sid_b = _populate_two_strategies(tmp_path, pnl_a, pnl_b)
 
         results = compute_rolling_correlation(
-            str(db_path), [sid_a, sid_b],
-            window_days=100, min_overlap=50, step_days=30,
+            str(db_path),
+            [sid_a, sid_b],
+            window_days=100,
+            min_overlap=50,
+            step_days=30,
         )
 
         assert len(results) > 0
@@ -214,8 +234,11 @@ class TestRollingCorrelation:
         con.close()
 
         results = compute_rolling_correlation(
-            str(db_path), [sid_a, sid_b],
-            window_days=60, min_overlap=30, step_days=20,
+            str(db_path),
+            [sid_a, sid_b],
+            window_days=60,
+            min_overlap=30,
+            step_days=20,
         )
 
         # All windows should have None correlation (no shared days)
@@ -232,8 +255,11 @@ class TestRollingCorrelation:
         step_days = 20
 
         results = compute_rolling_correlation(
-            str(db_path), [sid_a, sid_b],
-            window_days=window_days, min_overlap=30, step_days=step_days,
+            str(db_path),
+            [sid_a, sid_b],
+            window_days=window_days,
+            min_overlap=30,
+            step_days=step_days,
         )
 
         # Expected: first window ends at index 59, then step by 20
@@ -247,8 +273,8 @@ class TestRollingCorrelation:
 # Drawdown correlation tests
 # =========================================================================
 
-class TestDrawdownCorrelation:
 
+class TestDrawdownCorrelation:
     def test_drawdown_corr_simultaneous(self, tmp_path):
         """Two strategies that draw down at the same time -> high co_drawdown_pct."""
         # Both have a big losing streak in the same period
@@ -257,7 +283,8 @@ class TestDrawdownCorrelation:
         db_path, sid_a, sid_b = _populate_two_strategies(tmp_path, pnl, pnl)
 
         result = compute_drawdown_correlation(
-            str(db_path), [sid_a, sid_b],
+            str(db_path),
+            [sid_a, sid_b],
             drawdown_threshold_r=-2.0,
         )
 
@@ -277,7 +304,8 @@ class TestDrawdownCorrelation:
         db_path, sid_a, sid_b = _populate_two_strategies(tmp_path, pnl_a, pnl_b)
 
         result = compute_drawdown_correlation(
-            str(db_path), [sid_a, sid_b],
+            str(db_path),
+            [sid_a, sid_b],
             drawdown_threshold_r=-2.0,
         )
 
@@ -295,7 +323,8 @@ class TestDrawdownCorrelation:
         db_path, sid_a, sid_b = _populate_two_strategies(tmp_path, pnl_a, pnl_b)
 
         result = compute_drawdown_correlation(
-            str(db_path), [sid_a, sid_b],
+            str(db_path),
+            [sid_a, sid_b],
             drawdown_threshold_r=-2.0,
         )
 
@@ -309,8 +338,8 @@ class TestDrawdownCorrelation:
 # Co-loss tests
 # =========================================================================
 
-class TestCoLoss:
 
+class TestCoLoss:
     def test_co_loss_all_same_direction(self, tmp_path):
         """Both lose on every shared day -> co_loss_pct = 1.0."""
         n = 50
@@ -373,24 +402,29 @@ class TestCoLoss:
 # Summarize tests
 # =========================================================================
 
-class TestSummarize:
 
+class TestSummarize:
     def test_summarize_flags_high_corr_pair(self):
         """Pair with peak corr 0.90 gets flagged."""
         rolling = [
-            {"window_end": date(2024, 6, 1), "pair": ("A", "B"),
-             "correlation": 0.90, "overlap_days": 100},
-            {"window_end": date(2024, 9, 1), "pair": ("A", "B"),
-             "correlation": 0.70, "overlap_days": 100},
+            {"window_end": date(2024, 6, 1), "pair": ("A", "B"), "correlation": 0.90, "overlap_days": 100},
+            {"window_end": date(2024, 9, 1), "pair": ("A", "B"), "correlation": 0.70, "overlap_days": 100},
         ]
-        drawdown = {("A", "B"): {
-            "co_drawdown_pct": 0.1, "a_dd_days": 10,
-            "b_dd_days": 20, "overlap_dd_days": 2,
-        }}
-        co_loss = {("A", "B"): {
-            "co_loss_pct": 0.20, "both_traded_days": 100,
-            "both_negative_days": 20,
-        }}
+        drawdown = {
+            ("A", "B"): {
+                "co_drawdown_pct": 0.1,
+                "a_dd_days": 10,
+                "b_dd_days": 20,
+                "overlap_dd_days": 2,
+            }
+        }
+        co_loss = {
+            ("A", "B"): {
+                "co_loss_pct": 0.20,
+                "both_traded_days": 100,
+                "both_negative_days": 20,
+            }
+        }
 
         flagged = summarize_correlation_risk(rolling, drawdown, co_loss)
 
@@ -401,19 +435,24 @@ class TestSummarize:
     def test_summarize_clean_portfolio(self):
         """All pairs below thresholds -> empty flagged list."""
         rolling = [
-            {"window_end": date(2024, 6, 1), "pair": ("A", "B"),
-             "correlation": 0.30, "overlap_days": 100},
-            {"window_end": date(2024, 9, 1), "pair": ("A", "B"),
-             "correlation": 0.40, "overlap_days": 100},
+            {"window_end": date(2024, 6, 1), "pair": ("A", "B"), "correlation": 0.30, "overlap_days": 100},
+            {"window_end": date(2024, 9, 1), "pair": ("A", "B"), "correlation": 0.40, "overlap_days": 100},
         ]
-        drawdown = {("A", "B"): {
-            "co_drawdown_pct": 0.1, "a_dd_days": 5,
-            "b_dd_days": 8, "overlap_dd_days": 1,
-        }}
-        co_loss = {("A", "B"): {
-            "co_loss_pct": 0.20, "both_traded_days": 100,
-            "both_negative_days": 20,
-        }}
+        drawdown = {
+            ("A", "B"): {
+                "co_drawdown_pct": 0.1,
+                "a_dd_days": 5,
+                "b_dd_days": 8,
+                "overlap_dd_days": 1,
+            }
+        }
+        co_loss = {
+            ("A", "B"): {
+                "co_loss_pct": 0.20,
+                "both_traded_days": 100,
+                "both_negative_days": 20,
+            }
+        }
 
         flagged = summarize_correlation_risk(rolling, drawdown, co_loss)
 

@@ -38,6 +38,7 @@ import databento as db
 from pipeline.paths import GOLD_DB_PATH
 
 from pipeline.log import get_logger
+
 logger = get_logger(__name__)
 
 # =============================================================================
@@ -65,10 +66,10 @@ TZ_UTC = ZoneInfo("UTC")
 # GC + month_code (FGHJKMNQUVXZ) + year (1-2 digits)
 # We use GC (full-size Gold) bars for price data — better tick coverage than MGC.
 # Prices are identical (same underlying); cost model remains MGC ($10/point).
-GC_OUTRIGHT_PATTERN = re.compile(r'^GC[FGHJKMNQUVXZ]\d{1,2}$')
+GC_OUTRIGHT_PATTERN = re.compile(r"^GC[FGHJKMNQUVXZ]\d{1,2}$")
 
 # Month codes for expiry parsing
-MONTH_CODES = 'FGHJKMNQUVXZ'  # Jan=F, Feb=G, ..., Dec=Z
+MONTH_CODES = "FGHJKMNQUVXZ"  # Jan=F, Feb=G, ..., Dec=Z
 
 # MINIMUM DATE: Dataset now covers 2016-02-01 onward (GC data from Databento)
 # Two data directories: gold_db_fullsize_2016-2021 and GOLD_DB_FULLSIZE (2021+)
@@ -77,6 +78,7 @@ MINIMUM_START_DATE = date(2016, 1, 1)
 # =============================================================================
 # CHECKPOINT SYSTEM (JSONL, APPEND-ONLY)
 # =============================================================================
+
 
 class CheckpointManager:
     """Append-only JSONL checkpoint system."""
@@ -119,14 +121,14 @@ class CheckpointManager:
         if not self.checkpoint_file.exists():
             return checkpoints
 
-        with open(self.checkpoint_file, 'r') as f:
+        with open(self.checkpoint_file, "r") as f:
             for line in f:
                 if line.strip():
                     record = json.loads(line)
-                    key = (record['chunk_start'], record['chunk_end'])
+                    key = (record["chunk_start"], record["chunk_end"])
                     # Keep latest record per chunk (by attempt_id, or later in file for same attempt)
                     # Use >= so that 'done' overwrites 'in_progress' with same attempt_id
-                    if key not in checkpoints or record['attempt_id'] >= checkpoints[key]['attempt_id']:
+                    if key not in checkpoints or record["attempt_id"] >= checkpoints[key]["attempt_id"]:
                         checkpoints[key] = record
 
         return checkpoints
@@ -135,13 +137,13 @@ class CheckpointManager:
         """Get next monotonic attempt ID."""
         if not self.checkpoints:
             return 1
-        return max(r['attempt_id'] for r in self.checkpoints.values()) + 1
+        return max(r["attempt_id"] for r in self.checkpoints.values()) + 1
 
     def get_chunk_status(self, chunk_start: str, chunk_end: str) -> Optional[str]:
         """Get status of a chunk."""
         key = (chunk_start, chunk_end)
         if key in self.checkpoints:
-            return self.checkpoints[key]['status']
+            return self.checkpoints[key]["status"]
         return None
 
     def should_process_chunk(self, chunk_start: str, chunk_end: str, retry_failed: bool) -> bool:
@@ -150,44 +152,45 @@ class CheckpointManager:
 
         if status is None:
             return True  # Never processed
-        if status == 'done':
+        if status == "done":
             return False  # Already complete
-        if status == 'in_progress':
+        if status == "in_progress":
             return True  # Resume interrupted
-        if status == 'failed':
+        if status == "failed":
             return retry_failed  # Only if flag set
 
         return True
 
-    def write_checkpoint(self, chunk_start: str, chunk_end: str, status: str,
-                         rows_written: int = 0, error: str = None):
+    def write_checkpoint(self, chunk_start: str, chunk_end: str, status: str, rows_written: int = 0, error: str = None):
         """Append checkpoint record (immutable)."""
         record = {
             "chunk_start": chunk_start,
             "chunk_end": chunk_end,
             "status": status,
             "rows_written": rows_written,
-            "started_at": datetime.now(TZ_UTC).isoformat() if status == 'in_progress' else None,
-            "finished_at": datetime.now(TZ_UTC).isoformat() if status in ('done', 'failed') else None,
+            "started_at": datetime.now(TZ_UTC).isoformat() if status == "in_progress" else None,
+            "finished_at": datetime.now(TZ_UTC).isoformat() if status in ("done", "failed") else None,
             "source_dbn": self.source_identity,
             "error": error,
             "attempt_id": self.attempt_id,
         }
 
         # Append to file (never edit/delete)
-        with open(self.checkpoint_file, 'a') as f:
-            f.write(json.dumps(record) + '\n')
+        with open(self.checkpoint_file, "a") as f:
+            f.write(json.dumps(record) + "\n")
 
         # Update in-memory cache
         key = (chunk_start, chunk_end)
         self.checkpoints[key] = record
 
-        if status in ('done', 'failed'):
+        if status in ("done", "failed"):
             self.attempt_id += 1
+
 
 # =============================================================================
 # VALIDATION (VECTORIZED, FAIL-CLOSED)
 # =============================================================================
+
 
 def validate_chunk(df: pd.DataFrame) -> tuple[bool, str, Optional[pd.DataFrame]]:
     """
@@ -198,7 +201,7 @@ def validate_chunk(df: pd.DataFrame) -> tuple[bool, str, Optional[pd.DataFrame]]
     FAIL-CLOSED: Any single invalid row fails entire validation.
     """
     # Required columns
-    required_cols = ['open', 'high', 'low', 'close', 'volume']
+    required_cols = ["open", "high", "low", "close", "volume"]
     for col in required_cols:
         if col not in df.columns:
             return False, f"Missing column: {col}", None
@@ -209,7 +212,7 @@ def validate_chunk(df: pd.DataFrame) -> tuple[bool, str, Optional[pd.DataFrame]]
         return False, "NaN values in OHLCV", df[nan_mask].head(5)
 
     # Check prices are finite
-    price_cols = ['open', 'high', 'low', 'close']
+    price_cols = ["open", "high", "low", "close"]
     inf_mask = ~np.isfinite(df[price_cols].values).all(axis=1)
     if inf_mask.any():
         return False, "Infinite price values", df[inf_mask].head(5)
@@ -220,28 +223,29 @@ def validate_chunk(df: pd.DataFrame) -> tuple[bool, str, Optional[pd.DataFrame]]
         return False, "Non-positive prices (must be > 0)", df[nonpos_mask].head(5)
 
     # Check high >= max(open, close, low)
-    max_ocl = df[['open', 'close', 'low']].max(axis=1)
-    high_fail = df['high'] < max_ocl
+    max_ocl = df[["open", "close", "low"]].max(axis=1)
+    high_fail = df["high"] < max_ocl
     if high_fail.any():
         return False, "high < max(open, close, low)", df[high_fail].head(5)
 
     # Check low <= min(open, close)
-    min_oc = df[['open', 'close']].min(axis=1)
-    low_fail = df['low'] > min_oc
+    min_oc = df[["open", "close"]].min(axis=1)
+    low_fail = df["low"] > min_oc
     if low_fail.any():
         return False, "low > min(open, close)", df[low_fail].head(5)
 
     # Check high >= low
-    hl_fail = df['high'] < df['low']
+    hl_fail = df["high"] < df["low"]
     if hl_fail.any():
         return False, "high < low", df[hl_fail].head(5)
 
     # Check volume >= 0
-    vol_fail = df['volume'] < 0
+    vol_fail = df["volume"] < 0
     if vol_fail.any():
         return False, "Negative volume", df[vol_fail].head(5)
 
     return True, "", None
+
 
 def validate_timestamp_utc(df: pd.DataFrame) -> tuple[bool, str]:
     """
@@ -250,13 +254,13 @@ def validate_timestamp_utc(df: pd.DataFrame) -> tuple[bool, str]:
     FAIL-CLOSED: If timezone cannot be proven, abort.
     """
     # Check index is datetime with UTC timezone
-    if not hasattr(df.index, 'tz'):
+    if not hasattr(df.index, "tz"):
         return False, "Index has no timezone info"
 
     if df.index.tz is None:
         return False, "Index timezone is None (tz-naive)"
 
-    if str(df.index.tz) != 'UTC':
+    if str(df.index.tz) != "UTC":
         return False, f"Index timezone is {df.index.tz}, not UTC"
 
     # Check for null timestamps
@@ -265,9 +269,11 @@ def validate_timestamp_utc(df: pd.DataFrame) -> tuple[bool, str]:
 
     return True, ""
 
+
 # =============================================================================
 # CONTRACT SELECTION (DETERMINISTIC)
 # =============================================================================
+
 
 def parse_expiry(symbol: str, prefix_len: int = 3) -> tuple[int, int]:
     """
@@ -278,7 +284,7 @@ def parse_expiry(symbol: str, prefix_len: int = 3) -> tuple[int, int]:
     """
     # Format: PREFIX + month_code + year (e.g., MGCG5, MGCZ25, NQH5)
     month_code = symbol[prefix_len]
-    year_str = symbol[prefix_len + 1:]
+    year_str = symbol[prefix_len + 1 :]
 
     month = MONTH_CODES.index(month_code) + 1
     year = int(year_str)
@@ -291,7 +297,10 @@ def parse_expiry(symbol: str, prefix_len: int = 3) -> tuple[int, int]:
 
     return (year, month)
 
-def choose_front_contract(daily_volumes: dict, outright_pattern=None, prefix_len: int = 3, log_func=None) -> Optional[str]:
+
+def choose_front_contract(
+    daily_volumes: dict, outright_pattern=None, prefix_len: int = 3, log_func=None
+) -> Optional[str]:
     """
     Choose front-month contract with DETERMINISTIC tiebreak.
 
@@ -301,8 +310,7 @@ def choose_front_contract(daily_volumes: dict, outright_pattern=None, prefix_len
     """
     # Filter to outrights only
     pattern = outright_pattern or GC_OUTRIGHT_PATTERN
-    outrights = {s: v for s, v in daily_volumes.items()
-                 if pattern.match(str(s))}
+    outrights = {s: v for s, v in daily_volumes.items() if pattern.match(str(s))}
 
     if not outrights:
         return None
@@ -333,9 +341,11 @@ def choose_front_contract(daily_volumes: dict, outright_pattern=None, prefix_len
         log_func(f"  TIEBREAK by lexicographic: {winner}")
     return winner
 
+
 # =============================================================================
 # TRADING DAY CALCULATION (VECTORIZED)
 # =============================================================================
+
 
 def compute_trading_days(df: pd.DataFrame) -> pd.Series:
     """
@@ -358,9 +368,11 @@ def compute_trading_days(df: pd.DataFrame) -> pd.Series:
 
     return trading_days
 
+
 # =============================================================================
 # INTEGRITY GATES
 # =============================================================================
+
 
 def check_pk_safety(df: pd.DataFrame, trading_day: date) -> tuple[bool, str]:
     """
@@ -373,7 +385,10 @@ def check_pk_safety(df: pd.DataFrame, trading_day: date) -> tuple[bool, str]:
         return False, f"Duplicate ts_utc found for trading day {trading_day}: {len(dupes)} rows"
     return True, ""
 
-def check_merge_integrity(con: duckdb.DuckDBPyConnection, chunk_start: str, chunk_end: str, symbol: str = None) -> tuple[bool, str]:
+
+def check_merge_integrity(
+    con: duckdb.DuckDBPyConnection, chunk_start: str, chunk_end: str, symbol: str = None
+) -> tuple[bool, str]:
     """
     Assert no duplicates or NULL source_symbol after merge.
 
@@ -387,7 +402,8 @@ def check_merge_integrity(con: duckdb.DuckDBPyConnection, chunk_start: str, chun
         params_base.append(symbol)
 
     # Check for duplicates (with 1-day buffer for overnight bars)
-    dupe_check = con.execute(f"""
+    dupe_check = con.execute(
+        f"""
         SELECT symbol, ts_utc, COUNT(*) as cnt
         FROM bars_1m
         WHERE DATE(ts_utc) BETWEEN CAST(? AS DATE) - INTERVAL 1 DAY AND ?
@@ -395,7 +411,9 @@ def check_merge_integrity(con: duckdb.DuckDBPyConnection, chunk_start: str, chun
         GROUP BY symbol, ts_utc
         HAVING COUNT(*) > 1
         LIMIT 5
-    """, params_base).fetchall()
+    """,
+        params_base,
+    ).fetchall()
 
     if dupe_check:
         return False, f"Duplicate (symbol, ts_utc) found after merge: {dupe_check}"
@@ -404,21 +422,26 @@ def check_merge_integrity(con: duckdb.DuckDBPyConnection, chunk_start: str, chun
     null_params = [chunk_start, chunk_end]
     if symbol:
         null_params.append(symbol)
-    null_check = con.execute(f"""
+    null_check = con.execute(
+        f"""
         SELECT COUNT(*) FROM bars_1m
         WHERE DATE(ts_utc) BETWEEN CAST(? AS DATE) - INTERVAL 1 DAY AND ?
         {symbol_clause}
         AND source_symbol IS NULL
-    """, null_params).fetchone()[0]
+    """,
+        null_params,
+    ).fetchone()[0]
 
     if null_check > 0:
         return False, f"NULL source_symbol found after merge: {null_check} rows"
 
     return True, ""
 
+
 # =============================================================================
 # FINAL HONESTY GATES
 # =============================================================================
+
 
 def run_final_gates(con: duckdb.DuckDBPyConnection) -> tuple[bool, list[str]]:
     """
@@ -436,7 +459,7 @@ def run_final_gates(con: duckdb.DuckDBPyConnection) -> tuple[bool, list[str]]:
 
     if col_info:
         dtype = col_info[0].upper()
-        if 'TIMESTAMP' not in dtype:
+        if "TIMESTAMP" not in dtype:
             failures.append(f"ts_utc type is {dtype}, expected TIMESTAMP/TIMESTAMPTZ")
 
     # Gate 2: Check for any duplicate (symbol, ts_utc) globally
@@ -461,9 +484,11 @@ def run_final_gates(con: duckdb.DuckDBPyConnection) -> tuple[bool, list[str]]:
 
     return len(failures) == 0, failures
 
+
 # =============================================================================
 # MAIN INGESTION
 # =============================================================================
+
 
 def main():
     parser = argparse.ArgumentParser(description="Ingest MGC DBN into bars_1m (CANONICAL COMPLIANT)")
@@ -517,7 +542,7 @@ def main():
     logger.info(f"  Date range: {store.start} to {store.end}")
 
     # DBN CONTENT GATE: Must be ohlcv-1m
-    if store.schema != 'ohlcv-1m':
+    if store.schema != "ohlcv-1m":
         logger.warning(f"FATAL: DBN schema is '{store.schema}', expected 'ohlcv-1m'")
         logger.warning("ABORT: Schema verification failed (FAIL-CLOSED)")
         sys.exit(1)
@@ -538,6 +563,7 @@ def main():
     if not args.dry_run:
         con = duckdb.connect(str(DB_PATH))
         from pipeline.db_config import configure_connection
+
         configure_connection(con, writing=True)
         logger.info(f"Database opened: {DB_PATH}")
     else:
@@ -545,12 +571,14 @@ def main():
 
     # Ensure connection is closed on ALL exit paths (including sys.exit)
     import atexit
+
     def _close_con():
         if con is not None:
             try:
                 con.close()
             except Exception:
                 pass
+
     atexit.register(_close_con)
 
     # =========================================================================
@@ -559,13 +587,13 @@ def main():
     logger.info("Processing DBN in chunks...")
 
     stats = {
-        'chunks_done': 0,
-        'chunks_failed': 0,
-        'chunks_skipped': 0,
-        'rows_written': 0,
-        'trading_days_processed': 0,
-        'contracts_used': set(),
-        'validation_errors': [],
+        "chunks_done": 0,
+        "chunks_failed": 0,
+        "chunks_skipped": 0,
+        "rows_written": 0,
+        "trading_days_processed": 0,
+        "contracts_used": set(),
+        "validation_errors": [],
     }
 
     # Accumulator for trading days
@@ -596,11 +624,13 @@ def main():
         # FAST-FORWARD: Skip entire batches before start_filter
         # (DBN is sequential - we have to scan but don't need to process)
         # =====================================================================
-        batch_max_date = chunk_df['ts_event'].max().date()
+        batch_max_date = chunk_df["ts_event"].max().date()
         if batch_max_date < start_filter:
             skipped_batches += 1
             if skipped_batches % 20 == 1:
-                logger.info(f"  FAST-FORWARD: Batch {batch_num} ends at {batch_max_date}, skipping (target: {start_filter})...")
+                logger.info(
+                    f"  FAST-FORWARD: Batch {batch_num} ends at {batch_max_date}, skipping (target: {start_filter})..."
+                )
             continue
 
         if skipped_batches > 0:
@@ -611,7 +641,7 @@ def main():
         # VALIDATE TIMESTAMPS (FAIL-CLOSED)
         # =====================================================================
         # Re-set ts_event as index for validation
-        chunk_df = chunk_df.set_index('ts_event')
+        chunk_df = chunk_df.set_index("ts_event")
 
         ts_valid, ts_reason = validate_timestamp_utc(chunk_df)
         if not ts_valid:
@@ -621,10 +651,10 @@ def main():
             sys.exit(1)
 
         # =====================================================================
-        # FILTER TO OUTRIGHTS FIRST (apply — small N per chunk)
+        # FILTER TO OUTRIGHTS FIRST (vectorized str.match)
         # (Spreads have negative prices which is valid for them, so filter before validation)
         # =====================================================================
-        outright_mask = chunk_df['symbol'].apply(lambda s: bool(GC_OUTRIGHT_PATTERN.match(str(s))))
+        outright_mask = chunk_df["symbol"].astype(str).str.match(GC_OUTRIGHT_PATTERN.pattern)
         chunk_df = chunk_df[outright_mask]
 
         if len(chunk_df) == 0:
@@ -648,12 +678,12 @@ def main():
         # =====================================================================
         trading_days = compute_trading_days(chunk_df)
         chunk_df = chunk_df.copy()
-        chunk_df['trading_day'] = trading_days
+        chunk_df["trading_day"] = trading_days
 
         # =====================================================================
         # AGGREGATE BY TRADING DAY
         # =====================================================================
-        for tday, day_df in chunk_df.groupby('trading_day'):
+        for tday, day_df in chunk_df.groupby("trading_day"):
             # Apply date filters
             if start_filter and tday < start_filter:
                 continue
@@ -661,17 +691,19 @@ def main():
                 continue
 
             # Calculate volume per contract
-            volumes = day_df.groupby('symbol')['volume'].sum().to_dict()
+            volumes = day_df.groupby("symbol")["volume"].sum().to_dict()
 
             # Choose front contract (deterministic)
-            front = choose_front_contract(volumes, outright_pattern=GC_OUTRIGHT_PATTERN, prefix_len=2, log_func=lambda msg: None)
+            front = choose_front_contract(
+                volumes, outright_pattern=GC_OUTRIGHT_PATTERN, prefix_len=2, log_func=lambda msg: None
+            )
             if not front:
                 continue
 
-            stats['contracts_used'].add(front)
+            stats["contracts_used"].add(front)
 
             # Filter to front contract only
-            front_df = day_df[day_df['symbol'] == front].copy()
+            front_df = day_df[day_df["symbol"] == front].copy()
 
             # PK SAFETY: Check for duplicate timestamps
             pk_ok, pk_reason = check_pk_safety(front_df, tday)
@@ -689,15 +721,17 @@ def main():
 
             # NOTE: iterrows() here — deprecated path. Multi-instrument version uses vectorized zip.
             for ts_utc, row in front_df.iterrows():
-                trading_day_buffer[tday].append((
-                    ts_utc,
-                    front,
-                    float(row['open']),
-                    float(row['high']),
-                    float(row['low']),
-                    float(row['close']),
-                    int(row['volume']),
-                ))
+                trading_day_buffer[tday].append(
+                    (
+                        ts_utc,
+                        front,
+                        float(row["open"]),
+                        float(row["high"]),
+                        float(row["low"]),
+                        float(row["close"]),
+                        int(row["volume"]),
+                    )
+                )
 
         # =====================================================================
         # MERGE WHEN CHUNK IS FULL
@@ -706,18 +740,18 @@ def main():
 
         while len(sorted_days) >= args.chunk_days:
             # Take chunk_days worth of trading days
-            chunk_days = sorted_days[:args.chunk_days]
+            chunk_days = sorted_days[: args.chunk_days]
             chunk_start = str(chunk_days[0])
             chunk_end = str(chunk_days[-1])
 
             # Check if should process this chunk
             if args.resume and not checkpoint_mgr.should_process_chunk(chunk_start, chunk_end, args.retry_failed):
                 logger.info(f"  SKIP: Chunk {chunk_start} to {chunk_end} (already done)")
-                stats['chunks_skipped'] += 1
+                stats["chunks_skipped"] += 1
                 # Remove from buffer
                 for d in chunk_days:
                     del trading_day_buffer[d]
-                sorted_days = sorted_days[args.chunk_days:]
+                sorted_days = sorted_days[args.chunk_days :]
                 continue
 
             # Collect rows for this chunk
@@ -727,7 +761,7 @@ def main():
 
             if not args.dry_run and con:
                 # Write checkpoint: in_progress
-                checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, 'in_progress')
+                checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, "in_progress")
 
                 try:
                     # BEGIN TRANSACTION
@@ -740,14 +774,14 @@ def main():
                         (ts_utc, symbol, source_symbol, open, high, low, close, volume)
                         VALUES (?, 'MGC', ?, ?, ?, ?, ?, ?)
                         """,
-                        chunk_rows
+                        chunk_rows,
                     )
 
                     # INTEGRITY GATE
-                    int_ok, int_reason = check_merge_integrity(con, chunk_start, chunk_end, symbol='MGC')
+                    int_ok, int_reason = check_merge_integrity(con, chunk_start, chunk_end, symbol="MGC")
                     if not int_ok:
                         con.execute("ROLLBACK")
-                        checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, 'failed', error=int_reason)
+                        checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, "failed", error=int_reason)
                         logger.warning(f"FATAL: Integrity gate failed: {int_reason}")
                         logger.warning("ABORT: Merge integrity gate failed (FAIL-CLOSED)")
                         sys.exit(1)
@@ -756,36 +790,40 @@ def main():
                     con.execute("COMMIT")
 
                     # Write checkpoint: done
-                    checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, 'done', rows_written=len(chunk_rows))
+                    checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, "done", rows_written=len(chunk_rows))
 
-                    stats['chunks_done'] += 1
-                    stats['rows_written'] += len(chunk_rows)
-                    stats['trading_days_processed'] += len(chunk_days)
+                    stats["chunks_done"] += 1
+                    stats["rows_written"] += len(chunk_rows)
+                    stats["trading_days_processed"] += len(chunk_days)
 
-                    logger.info(f"  DONE: Chunk {chunk_start} to {chunk_end}: {len(chunk_rows):,} rows, {len(chunk_days)} days")
+                    logger.info(
+                        f"  DONE: Chunk {chunk_start} to {chunk_end}: {len(chunk_rows):,} rows, {len(chunk_days)} days"
+                    )
 
                 except Exception as e:
                     con.execute("ROLLBACK")
-                    checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, 'failed', error=str(e))
+                    checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, "failed", error=str(e))
                     logger.warning(f"FATAL: Exception during merge: {e}")
                     traceback.print_exc()
                     sys.exit(1)
 
             else:
                 # Dry run
-                stats['chunks_done'] += 1
-                stats['rows_written'] += len(chunk_rows)
-                stats['trading_days_processed'] += len(chunk_days)
+                stats["chunks_done"] += 1
+                stats["rows_written"] += len(chunk_rows)
+                stats["trading_days_processed"] += len(chunk_days)
                 logger.info(f"  DRY RUN: Chunk {chunk_start} to {chunk_end}: {len(chunk_rows):,} rows")
 
             # Remove processed days from buffer
             for d in chunk_days:
                 del trading_day_buffer[d]
-            sorted_days = sorted_days[args.chunk_days:]
+            sorted_days = sorted_days[args.chunk_days :]
 
         # Progress indicator
         if batch_num % 20 == 0:
-            logger.info(f"  Batch {batch_num}: {stats['rows_written']:,} rows written, {stats['trading_days_processed']} trading days")
+            logger.info(
+                f"  Batch {batch_num}: {stats['rows_written']:,} rows written, {stats['trading_days_processed']} trading days"
+            )
 
     # =========================================================================
     # PROCESS REMAINING BUFFER
@@ -806,7 +844,7 @@ def main():
                 chunk_rows.extend(trading_day_buffer[d])
 
             if not args.dry_run and con and chunk_rows:
-                checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, 'in_progress')
+                checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, "in_progress")
 
                 try:
                     con.execute("BEGIN TRANSACTION")
@@ -816,38 +854,38 @@ def main():
                         (ts_utc, symbol, source_symbol, open, high, low, close, volume)
                         VALUES (?, 'MGC', ?, ?, ?, ?, ?, ?)
                         """,
-                        chunk_rows
+                        chunk_rows,
                     )
 
-                    int_ok, int_reason = check_merge_integrity(con, chunk_start, chunk_end, symbol='MGC')
+                    int_ok, int_reason = check_merge_integrity(con, chunk_start, chunk_end, symbol="MGC")
                     if not int_ok:
                         con.execute("ROLLBACK")
-                        checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, 'failed', error=int_reason)
+                        checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, "failed", error=int_reason)
                         logger.warning(f"FATAL: Final chunk integrity failed: {int_reason}")
                         sys.exit(1)
 
                     con.execute("COMMIT")
-                    checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, 'done', rows_written=len(chunk_rows))
+                    checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, "done", rows_written=len(chunk_rows))
 
-                    stats['chunks_done'] += 1
-                    stats['rows_written'] += len(chunk_rows)
-                    stats['trading_days_processed'] += len(sorted_days)
+                    stats["chunks_done"] += 1
+                    stats["rows_written"] += len(chunk_rows)
+                    stats["trading_days_processed"] += len(sorted_days)
 
                     logger.info(f"  DONE: Final chunk {chunk_start} to {chunk_end}: {len(chunk_rows):,} rows")
 
                 except Exception as e:
                     con.execute("ROLLBACK")
-                    checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, 'failed', error=str(e))
+                    checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, "failed", error=str(e))
                     logger.warning(f"FATAL: Final chunk exception: {e}")
                     traceback.print_exc()
                     sys.exit(1)
             elif args.dry_run:
-                stats['chunks_done'] += 1
-                stats['rows_written'] += len(chunk_rows)
-                stats['trading_days_processed'] += len(sorted_days)
+                stats["chunks_done"] += 1
+                stats["rows_written"] += len(chunk_rows)
+                stats["trading_days_processed"] += len(sorted_days)
                 logger.info(f"  DRY RUN: Final chunk {chunk_start} to {chunk_end}: {len(chunk_rows):,} rows")
         else:
-            stats['chunks_skipped'] += 1
+            stats["chunks_skipped"] += 1
             logger.info(f"  SKIP: Final chunk {chunk_start} to {chunk_end} (already done)")
 
     # =========================================================================
@@ -907,6 +945,7 @@ def main():
 
     logger.info("SUCCESS: Backfill complete and validated.")
     sys.exit(0)
+
 
 if __name__ == "__main__":
     logger.info("NOTE: For multi-instrument support, prefer:")

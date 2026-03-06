@@ -45,6 +45,7 @@ DEFAULT_MASTER = Path(r"C:\db\gold.db")
 REBUILD_DIR = Path(r"C:\db\rebuild")
 ALL_STEPS = ["features", "outcome", "discovery", "validation"]
 
+
 # ---------------------------------------------------------------------------
 # Subprocess helpers
 # ---------------------------------------------------------------------------
@@ -56,6 +57,7 @@ def _stream_pipe(pipe, prefix: str, log_file) -> None:
             print(msg, end="", flush=True)
             log_file.write(msg)
     pipe.close()
+
 
 def _get_instrument_date_range(instrument: str) -> tuple[str, str]:
     """Return (start_date, end_date) strings for an instrument.
@@ -69,8 +71,12 @@ def _get_instrument_date_range(instrument: str) -> tuple[str, str]:
     end = date.today()
     return start.isoformat(), end.isoformat()
 
+
 def _build_command(
-    step: str, instrument: str, db_path: Path, extra: dict,
+    step: str,
+    instrument: str,
+    db_path: Path,
+    extra: dict,
 ) -> list[str]:
     """Build the CLI command for a single pipeline step."""
     py = sys.executable
@@ -82,18 +88,25 @@ def _build_command(
         if not start_dt or not end_dt:
             start_dt, end_dt = _get_instrument_date_range(instrument)
         cmd = [
-            py, str(PROJECT_ROOT / "pipeline" / "build_daily_features.py"),
-            "--instrument", instrument,
-            "--start", start_dt,
-            "--end", end_dt,
-            "--orb-minutes", str(extra.get("orb_minutes", 5)),
+            py,
+            str(PROJECT_ROOT / "pipeline" / "build_daily_features.py"),
+            "--instrument",
+            instrument,
+            "--start",
+            start_dt,
+            "--end",
+            end_dt,
+            "--orb-minutes",
+            str(extra.get("orb_minutes", 5)),
         ]
 
     elif step == "outcome":
         # outcome_builder has no --db; uses DUCKDB_PATH env var
         cmd = [
-            py, str(PROJECT_ROOT / "trading_app" / "outcome_builder.py"),
-            "--instrument", instrument,
+            py,
+            str(PROJECT_ROOT / "trading_app" / "outcome_builder.py"),
+            "--instrument",
+            instrument,
         ]
         if extra.get("start"):
             cmd += ["--start", extra["start"]]
@@ -104,9 +117,12 @@ def _build_command(
 
     elif step == "discovery":
         cmd = [
-            py, str(PROJECT_ROOT / "trading_app" / "strategy_discovery.py"),
-            "--instrument", instrument,
-            "--db", str(db_path),
+            py,
+            str(PROJECT_ROOT / "trading_app" / "strategy_discovery.py"),
+            "--instrument",
+            instrument,
+            "--db",
+            str(db_path),
         ]
         if extra.get("start"):
             cmd += ["--start", extra["start"]]
@@ -115,13 +131,19 @@ def _build_command(
 
     elif step == "validation":
         cmd = [
-            py, str(PROJECT_ROOT / "trading_app" / "strategy_validator.py"),
-            "--instrument", instrument,
-            "--db", str(db_path),
-            "--exclude-years", "2021",
+            py,
+            str(PROJECT_ROOT / "trading_app" / "strategy_validator.py"),
+            "--instrument",
+            instrument,
+            "--db",
+            str(db_path),
+            "--exclude-years",
+            "2021",
             "--no-regime-waivers",
-            "--min-years-positive-pct", "0.75",
-            "--min-sample", str(extra.get("min_sample", 50)),
+            "--min-years-positive-pct",
+            "0.75",
+            "--min-sample",
+            str(extra.get("min_sample", 50)),
         ]
 
     else:
@@ -129,8 +151,13 @@ def _build_command(
 
     return cmd
 
+
 def _run_step(
-    instrument: str, step: str, db_path: Path, extra: dict, log_path: Path,
+    instrument: str,
+    step: str,
+    db_path: Path,
+    extra: dict,
+    log_path: Path,
 ) -> int:
     """Run one pipeline step as a subprocess with live output streaming."""
     cmd = _build_command(step, instrument, db_path, extra)
@@ -140,10 +167,10 @@ def _run_step(
     env["DUCKDB_PATH"] = str(db_path)
 
     with open(log_path, "a", encoding="utf-8") as log:
-        log.write(f"\n{'='*60}\n")
+        log.write(f"\n{'=' * 60}\n")
         log.write(f"{label} started at {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
         log.write(f"CMD: {' '.join(cmd)}\n")
-        log.write(f"{'='*60}\n")
+        log.write(f"{'=' * 60}\n")
 
         proc = subprocess.Popen(
             cmd,
@@ -155,7 +182,9 @@ def _run_step(
         )
 
         reader = threading.Thread(
-            target=_stream_pipe, args=(proc.stdout, label, log), daemon=True,
+            target=_stream_pipe,
+            args=(proc.stdout, label, log),
+            daemon=True,
         )
         reader.start()
         proc.wait()
@@ -164,6 +193,7 @@ def _run_step(
         log.write(f"\n--- {label} exit code: {proc.returncode} ---\n")
 
     return proc.returncode
+
 
 # ---------------------------------------------------------------------------
 # Pre-clear: remove FK-dependent tables before daily_features rebuild
@@ -185,23 +215,27 @@ def _clear_downstream_tables(db_path: Path, instrument: str) -> None:
             [instrument],
         )
         con.execute(
-            "DELETE FROM validated_setups WHERE instrument = ?", [instrument],
+            "DELETE FROM validated_setups WHERE instrument = ?",
+            [instrument],
         )
         con.execute(
             "DELETE FROM experimental_strategies WHERE instrument = ?",
             [instrument],
         )
         n = con.execute(
-            "SELECT COUNT(*) FROM orb_outcomes WHERE symbol = ?", [instrument],
+            "SELECT COUNT(*) FROM orb_outcomes WHERE symbol = ?",
+            [instrument],
         ).fetchone()[0]
         con.execute(
-            "DELETE FROM orb_outcomes WHERE symbol = ?", [instrument],
+            "DELETE FROM orb_outcomes WHERE symbol = ?",
+            [instrument],
         )
         con.commit()
         if n > 0:
             print(f"  [{instrument}] Cleared {n:,} orb_outcomes (FK pre-clear)")
     finally:
         con.close()
+
 
 # ---------------------------------------------------------------------------
 # Per-instrument pipeline (runs in a thread, calls subprocesses)
@@ -241,6 +275,7 @@ def run_instrument(
 
     return results
 
+
 # ---------------------------------------------------------------------------
 # Merge: ATTACH temp DB, DELETE+INSERT per instrument
 # ---------------------------------------------------------------------------
@@ -275,7 +310,8 @@ def merge_instrument(
                 [instrument],
             )
             con.execute(
-                "DELETE FROM validated_setups WHERE instrument = ?", [instrument],
+                "DELETE FROM validated_setups WHERE instrument = ?",
+                [instrument],
             )
 
         if "discovery" in steps:
@@ -286,7 +322,8 @@ def merge_instrument(
 
         if "outcome" in steps:
             con.execute(
-                "DELETE FROM orb_outcomes WHERE symbol = ?", [instrument],
+                "DELETE FROM orb_outcomes WHERE symbol = ?",
+                [instrument],
             )
 
         if "features" in steps:
@@ -294,10 +331,12 @@ def merge_instrument(
             # (handled above if "outcome" in steps; if not, delete outcomes too)
             if "outcome" not in steps:
                 con.execute(
-                    "DELETE FROM orb_outcomes WHERE symbol = ?", [instrument],
+                    "DELETE FROM orb_outcomes WHERE symbol = ?",
+                    [instrument],
                 )
             con.execute(
-                "DELETE FROM daily_features WHERE symbol = ?", [instrument],
+                "DELETE FROM daily_features WHERE symbol = ?",
+                [instrument],
             )
 
         # --- INSERT in FK-safe order (parent -> child) ---
@@ -308,8 +347,7 @@ def merge_instrument(
                 [instrument],
             ).fetchone()[0]
             con.execute(
-                "INSERT INTO daily_features "
-                "SELECT * FROM src.daily_features WHERE symbol = ?",
+                "INSERT INTO daily_features SELECT * FROM src.daily_features WHERE symbol = ?",
                 [instrument],
             )
             print(f"    daily_features: {n:,} rows")
@@ -320,21 +358,18 @@ def merge_instrument(
                 [instrument],
             ).fetchone()[0]
             con.execute(
-                "INSERT INTO orb_outcomes "
-                "SELECT * FROM src.orb_outcomes WHERE symbol = ?",
+                "INSERT INTO orb_outcomes SELECT * FROM src.orb_outcomes WHERE symbol = ?",
                 [instrument],
             )
             print(f"    orb_outcomes: {n:,} rows")
 
         if "discovery" in steps:
             n = con.execute(
-                "SELECT COUNT(*) FROM src.experimental_strategies "
-                "WHERE instrument = ?",
+                "SELECT COUNT(*) FROM src.experimental_strategies WHERE instrument = ?",
                 [instrument],
             ).fetchone()[0]
             con.execute(
-                "INSERT INTO experimental_strategies "
-                "SELECT * FROM src.experimental_strategies WHERE instrument = ?",
+                "INSERT INTO experimental_strategies SELECT * FROM src.experimental_strategies WHERE instrument = ?",
                 [instrument],
             )
             print(f"    experimental_strategies: {n:,} rows")
@@ -345,8 +380,7 @@ def merge_instrument(
                 [instrument],
             ).fetchone()[0]
             con.execute(
-                "INSERT INTO validated_setups "
-                "SELECT * FROM src.validated_setups WHERE instrument = ?",
+                "INSERT INTO validated_setups SELECT * FROM src.validated_setups WHERE instrument = ?",
                 [instrument],
             )
             print(f"    validated_setups: {n:,} rows")
@@ -357,6 +391,7 @@ def merge_instrument(
 
     finally:
         con.close()
+
 
 # ---------------------------------------------------------------------------
 # Main
@@ -377,26 +412,37 @@ Examples:
 
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
-        "--all", action="store_true", help="Rebuild all available instruments",
+        "--all",
+        action="store_true",
+        help="Rebuild all available instruments",
     )
     group.add_argument(
-        "--instruments", nargs="+", help="Specific instruments to rebuild",
+        "--instruments",
+        nargs="+",
+        help="Specific instruments to rebuild",
     )
     group.add_argument(
-        "--merge-only", action="store_true",
+        "--merge-only",
+        action="store_true",
         help="Skip rebuild; merge existing temp copies into master",
     )
 
     parser.add_argument(
-        "--steps", nargs="+", choices=ALL_STEPS, default=ALL_STEPS,
+        "--steps",
+        nargs="+",
+        choices=ALL_STEPS,
+        default=ALL_STEPS,
         help="Pipeline steps to run (default: all)",
     )
     parser.add_argument(
-        "--master", type=Path, default=DEFAULT_MASTER,
+        "--master",
+        type=Path,
+        default=DEFAULT_MASTER,
         help=f"Master DB path (default: {DEFAULT_MASTER})",
     )
     parser.add_argument(
-        "--keep-copies", action="store_true",
+        "--keep-copies",
+        action="store_true",
         help="Keep per-instrument temp copies after merge",
     )
     parser.add_argument("--start", help="Start date for outcome_builder (YYYY-MM-DD)")
@@ -410,15 +456,13 @@ Examples:
     # -- Resolve instrument list --
     if args.all:
         from pipeline.asset_configs import list_available_instruments
+
         instruments = list_available_instruments()
     elif args.merge_only:
         if not REBUILD_DIR.exists():
             print(f"FATAL: No rebuild directory at {REBUILD_DIR}")
             sys.exit(1)
-        instruments = sorted(
-            f.stem.replace("gold_", "").upper()
-            for f in REBUILD_DIR.glob("gold_*.db")
-        )
+        instruments = sorted(f.stem.replace("gold_", "").upper() for f in REBUILD_DIR.glob("gold_*.db"))
         if not instruments:
             print(f"FATAL: No temp copies found in {REBUILD_DIR}")
             sys.exit(1)
@@ -467,9 +511,9 @@ Examples:
         log_dir = REBUILD_DIR / "logs"
         log_dir.mkdir(exist_ok=True)
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print("PHASE 1: Creating per-instrument DB copies")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         for inst in instruments:
             dst = REBUILD_DIR / f"gold_{inst.lower()}.db"
@@ -478,9 +522,9 @@ Examples:
             db_paths[inst] = dst
 
         # -- PHASE 2: Run rebuilds in parallel --
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"PHASE 2: Running {len(instruments)} instrument(s) in parallel")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -489,7 +533,12 @@ Examples:
         with ThreadPoolExecutor(max_workers=len(instruments)) as executor:
             futures = {
                 executor.submit(
-                    run_instrument, inst, db_paths[inst], args.steps, extra, log_dir,
+                    run_instrument,
+                    inst,
+                    db_paths[inst],
+                    args.steps,
+                    extra,
+                    log_dir,
                 ): inst
                 for inst in instruments
             }
@@ -505,15 +554,13 @@ Examples:
     else:
         # merge-only mode: assume all steps succeeded
         log_dir = REBUILD_DIR / "logs"
-        db_paths = {
-            inst: REBUILD_DIR / f"gold_{inst.lower()}.db" for inst in instruments
-        }
+        db_paths = {inst: REBUILD_DIR / f"gold_{inst.lower()}.db" for inst in instruments}
         all_results = {inst: {s: 0 for s in args.steps} for inst in instruments}
 
     # -- PHASE 3: Merge results into master --
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("PHASE 3: Merging results into master")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     merged = []
     skipped = []
@@ -554,9 +601,9 @@ Examples:
         print(f"\nTemp copies kept in: {REBUILD_DIR}")
 
     # -- Summary --
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("SUMMARY")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     for inst in instruments:
         results = all_results.get(inst, {})
@@ -570,8 +617,8 @@ Examples:
     if merged:
         print(f"\nMaster DB updated: {args.master}")
         print(f"Remember to copy back to project:")
-        print(f'  cp "{args.master}" '
-              f'"C:\\Users\\joshd\\canompx3\\gold.db"')
+        print(f'  cp "{args.master}" "C:\\Users\\joshd\\canompx3\\gold.db"')
+
 
 if __name__ == "__main__":
     main()

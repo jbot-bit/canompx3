@@ -29,14 +29,14 @@ CHECK_INTERVAL = 300  # 5 minutes
 
 
 def send_telegram(text: str) -> bool:
-    data = urllib.parse.urlencode({
-        "chat_id": CHAT_ID,
-        "text": text,
-        "parse_mode": "HTML",
-    }).encode()
-    req = urllib.request.Request(
-        f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", data=data
-    )
+    data = urllib.parse.urlencode(
+        {
+            "chat_id": CHAT_ID,
+            "text": text,
+            "parse_mode": "HTML",
+        }
+    ).encode()
+    req = urllib.request.Request(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", data=data)
     try:
         resp = json.loads(urllib.request.urlopen(req, timeout=10).read())
         return resp.get("ok", False)

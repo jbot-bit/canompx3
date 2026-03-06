@@ -87,7 +87,8 @@ class TestExportAll:
     def test_export_specific_table(self, tmp_db, tmp_path):
         output_dir = tmp_path / "parquet_out"
         results = export_all(
-            db_path=tmp_db, output_dir=output_dir,
+            db_path=tmp_db,
+            output_dir=output_dir,
             tables=["validated_setups"],
         )
         assert len(results) == 1

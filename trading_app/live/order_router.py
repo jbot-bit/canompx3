@@ -12,6 +12,7 @@ Entry model → order type mapping:
   E2 → Stop-market order (fill when price reaches stop_price)
   E3 → BLOCKED (no timeout mechanism in live session; use E1 or E2 only)
 """
+
 import logging
 import time
 from dataclasses import dataclass
@@ -29,8 +30,8 @@ DEMO_BASE = "https://demo.tradovate.com/v1"
 
 @dataclass
 class OrderSpec:
-    action: str              # "Buy" | "Sell"
-    order_type: str          # "Market" | "Stop"
+    action: str  # "Buy" | "Sell"
+    order_type: str  # "Market" | "Stop"
     symbol: str
     qty: int
     account_id: int
@@ -51,9 +52,9 @@ class OrderRouter:
 
     def build_order_spec(
         self,
-        direction: str,       # "long" | "short"
-        entry_model: str,     # "E1" | "E2" only — E3 blocked live
-        entry_price: float,   # TradeEvent.price on ENTRY events
+        direction: str,  # "long" | "short"
+        entry_model: str,  # "E1" | "E2" only — E3 blocked live
+        entry_price: float,  # TradeEvent.price on ENTRY events
         symbol: str,
         qty: int = 1,
     ) -> OrderSpec:
@@ -68,13 +69,19 @@ class OrderRouter:
 
         if entry_model == "E1":
             return OrderSpec(
-                action=action, order_type="Market",
-                symbol=symbol, qty=qty, account_id=self.account_id,
+                action=action,
+                order_type="Market",
+                symbol=symbol,
+                qty=qty,
+                account_id=self.account_id,
             )
         elif entry_model == "E2":
             return OrderSpec(
-                action=action, order_type="Stop",
-                symbol=symbol, qty=qty, account_id=self.account_id,
+                action=action,
+                order_type="Stop",
+                symbol=symbol,
+                qty=qty,
+                account_id=self.account_id,
                 stop_price=entry_price,
             )
         else:
@@ -121,7 +128,11 @@ class OrderRouter:
             raise RuntimeError(f"Order placement returned no valid orderId: {data}")
         log.info(
             "Order placed: %s %s qty=%d → orderId=%d (%.0fms)",
-            spec.action, spec.symbol, spec.qty, order_id, elapsed_ms,
+            spec.action,
+            spec.symbol,
+            spec.qty,
+            order_id,
+            elapsed_ms,
         )
         if elapsed_ms > 1000:
             log.warning("Order submission took %.0fms — event loop was blocked", elapsed_ms)
@@ -129,7 +140,7 @@ class OrderRouter:
 
     def build_exit_spec(
         self,
-        direction: str,       # original trade direction ("long" or "short")
+        direction: str,  # original trade direction ("long" or "short")
         symbol: str,
         qty: int = 1,
     ) -> OrderSpec:
@@ -142,8 +153,11 @@ class OrderRouter:
         # Close a long by selling, close a short by buying
         action = "Sell" if direction == "long" else "Buy"
         return OrderSpec(
-            action=action, order_type="Market",
-            symbol=symbol, qty=qty, account_id=self.account_id,
+            action=action,
+            order_type="Market",
+            symbol=symbol,
+            qty=qty,
+            account_id=self.account_id,
         )
 
     def cancel(self, order_id: int) -> None:

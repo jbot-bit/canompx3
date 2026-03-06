@@ -10,6 +10,7 @@ import duckdb
 
 from trading_app.regime.schema import init_regime_schema, verify_regime_schema
 
+
 @pytest.fixture
 def tmp_db(tmp_path):
     """Create a temporary DuckDB (no parent table needed -- regime has no FK)."""
@@ -18,6 +19,7 @@ def tmp_db(tmp_path):
     con.commit()
     con.close()
     return db_path
+
 
 class TestInitRegimeSchema:
     """Tests for init_regime_schema()."""
@@ -28,7 +30,8 @@ class TestInitRegimeSchema:
         con = duckdb.connect(str(tmp_db), read_only=True)
         try:
             tables = {
-                r[0] for r in con.execute(
+                r[0]
+                for r in con.execute(
                     "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
                 ).fetchall()
             }
@@ -45,7 +48,8 @@ class TestInitRegimeSchema:
         con = duckdb.connect(str(tmp_db), read_only=True)
         try:
             tables = {
-                r[0] for r in con.execute(
+                r[0]
+                for r in con.execute(
                     "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
                 ).fetchall()
             }
@@ -86,12 +90,14 @@ class TestInitRegimeSchema:
         init_regime_schema(con=con)
         # Connection should still be open
         tables = {
-            r[0] for r in con.execute(
+            r[0]
+            for r in con.execute(
                 "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
             ).fetchall()
         }
         assert "regime_strategies" in tables
         con.close()
+
 
 class TestRegimeStrategiesColumns:
     """Verify regime_strategies has expected columns."""
@@ -102,21 +108,35 @@ class TestRegimeStrategiesColumns:
         con = duckdb.connect(str(tmp_db), read_only=True)
         try:
             cols = {
-                r[0] for r in con.execute(
-                    "SELECT column_name FROM information_schema.columns "
-                    "WHERE table_name = 'regime_strategies'"
+                r[0]
+                for r in con.execute(
+                    "SELECT column_name FROM information_schema.columns WHERE table_name = 'regime_strategies'"
                 ).fetchall()
             }
             expected = {
-                "run_label", "strategy_id", "start_date", "end_date",
-                "instrument", "orb_label", "orb_minutes", "rr_target",
-                "confirm_bars", "entry_model", "filter_type",
-                "sample_size", "win_rate", "expectancy_r", "sharpe_ratio",
-                "max_drawdown_r", "yearly_results", "validation_status",
+                "run_label",
+                "strategy_id",
+                "start_date",
+                "end_date",
+                "instrument",
+                "orb_label",
+                "orb_minutes",
+                "rr_target",
+                "confirm_bars",
+                "entry_model",
+                "filter_type",
+                "sample_size",
+                "win_rate",
+                "expectancy_r",
+                "sharpe_ratio",
+                "max_drawdown_r",
+                "yearly_results",
+                "validation_status",
             }
             assert expected <= cols
         finally:
             con.close()
+
 
 class TestRegimeValidatedColumns:
     """Verify regime_validated has expected columns."""
@@ -127,20 +147,31 @@ class TestRegimeValidatedColumns:
         con = duckdb.connect(str(tmp_db), read_only=True)
         try:
             cols = {
-                r[0] for r in con.execute(
-                    "SELECT column_name FROM information_schema.columns "
-                    "WHERE table_name = 'regime_validated'"
+                r[0]
+                for r in con.execute(
+                    "SELECT column_name FROM information_schema.columns WHERE table_name = 'regime_validated'"
                 ).fetchall()
             }
             expected = {
-                "run_label", "strategy_id", "start_date", "end_date",
-                "instrument", "orb_label", "sample_size", "win_rate",
-                "expectancy_r", "years_tested", "all_years_positive",
-                "stress_test_passed", "sharpe_ratio", "status",
+                "run_label",
+                "strategy_id",
+                "start_date",
+                "end_date",
+                "instrument",
+                "orb_label",
+                "sample_size",
+                "win_rate",
+                "expectancy_r",
+                "years_tested",
+                "all_years_positive",
+                "stress_test_passed",
+                "sharpe_ratio",
+                "status",
             }
             assert expected <= cols
         finally:
             con.close()
+
 
 class TestVerifyRegimeSchema:
     """Tests for verify_regime_schema()."""
@@ -156,6 +187,7 @@ class TestVerifyRegimeSchema:
         assert not ok
         assert len(violations) >= 2  # Both tables missing
 
+
 class TestRegimeDoesNotTouchProduction:
     """Verify regime schema does not modify production tables."""
 
@@ -166,7 +198,8 @@ class TestRegimeDoesNotTouchProduction:
         con = duckdb.connect(str(tmp_db), read_only=True)
         try:
             tables = {
-                r[0] for r in con.execute(
+                r[0]
+                for r in con.execute(
                     "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
                 ).fetchall()
             }

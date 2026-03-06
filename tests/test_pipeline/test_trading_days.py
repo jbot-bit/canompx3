@@ -18,10 +18,8 @@ class TestComputeTradingDays:
     def _make_df(self, utc_timestamps):
         """Helper: create DataFrame with UTC timestamps as index."""
         utc = ZoneInfo("UTC")
-        idx = pd.DatetimeIndex([
-            datetime(*ts, tzinfo=utc) for ts in utc_timestamps
-        ])
-        return pd.DataFrame({'open': [1.0] * len(idx)}, index=idx)
+        idx = pd.DatetimeIndex([datetime(*ts, tzinfo=utc) for ts in utc_timestamps])
+        return pd.DataFrame({"open": [1.0] * len(idx)}, index=idx)
 
     def test_bar_at_1000_brisbane_is_same_day(self):
         # 10:00 Brisbane = 00:00 UTC (UTC+10)
@@ -57,12 +55,14 @@ class TestComputeTradingDays:
 
     def test_multiple_bars_mixed_days(self):
         # Mix of bars that should be on different trading days
-        df = self._make_df([
-            (2024, 6, 2, 23, 0),   # 09:00 Brisbane Jun 3 → trading day Jun 3
-            (2024, 6, 3, 0, 0),    # 10:00 Brisbane Jun 3 → trading day Jun 3
-            (2024, 6, 3, 22, 59),  # 08:59 Brisbane Jun 4 → trading day Jun 3
-            (2024, 6, 3, 23, 0),   # 09:00 Brisbane Jun 4 → trading day Jun 4
-        ])
+        df = self._make_df(
+            [
+                (2024, 6, 2, 23, 0),  # 09:00 Brisbane Jun 3 → trading day Jun 3
+                (2024, 6, 3, 0, 0),  # 10:00 Brisbane Jun 3 → trading day Jun 3
+                (2024, 6, 3, 22, 59),  # 08:59 Brisbane Jun 4 → trading day Jun 3
+                (2024, 6, 3, 23, 0),  # 09:00 Brisbane Jun 4 → trading day Jun 4
+            ]
+        )
         result = compute_trading_days(df)
         assert result.iloc[0] == date(2024, 6, 3)
         assert result.iloc[1] == date(2024, 6, 3)

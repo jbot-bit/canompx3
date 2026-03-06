@@ -36,6 +36,7 @@ ROADMAP_PATH = PROJECT_ROOT / "ROADMAP.md"
 # DATA COLLECTORS
 # =============================================================================
 
+
 def collect_db_metrics(db_path: Path) -> dict:
     """Query gold.db for row counts, date ranges, DB size."""
     result = {
@@ -61,9 +62,7 @@ def collect_db_metrics(db_path: Path) -> dict:
 
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        tables = con.execute(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
-        ).fetchall()
+        tables = con.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='main'").fetchall()
         result["tables"] = [t[0] for t in tables]
 
         if "bars_1m" in result["tables"]:
@@ -72,9 +71,7 @@ def collect_db_metrics(db_path: Path) -> dict:
                 dr = con.execute("SELECT MIN(DATE(ts_utc)), MAX(DATE(ts_utc)) FROM bars_1m").fetchone()
                 result["bars_1m_min_date"] = str(dr[0])
                 result["bars_1m_max_date"] = str(dr[1])
-                result["symbols"] = [
-                    r[0] for r in con.execute("SELECT DISTINCT symbol FROM bars_1m").fetchall()
-                ]
+                result["symbols"] = [r[0] for r in con.execute("SELECT DISTINCT symbol FROM bars_1m").fetchall()]
 
         if "bars_5m" in result["tables"]:
             result["bars_5m_count"] = con.execute("SELECT COUNT(*) FROM bars_5m").fetchone()[0]
@@ -93,6 +90,7 @@ def collect_db_metrics(db_path: Path) -> dict:
         con.close()
 
     return result
+
 
 def collect_checkpoint_progress(cp_dir: Path) -> dict:
     """Parse JSONL checkpoint files for ingestion progress."""
@@ -138,6 +136,7 @@ def collect_checkpoint_progress(cp_dir: Path) -> dict:
 
     return result
 
+
 def collect_file_inventory(dbn_dir: Path) -> dict:
     """Scan .dbn.zst files in the data directory."""
     result = {
@@ -157,11 +156,10 @@ def collect_file_inventory(dbn_dir: Path) -> dict:
     if files:
         result["first_file"] = files[0].name
         result["last_file"] = files[-1].name
-        result["total_size_mb"] = round(
-            sum(f.stat().st_size for f in files) / (1024 * 1024), 1
-        )
+        result["total_size_mb"] = round(sum(f.stat().st_size for f in files) / (1024 * 1024), 1)
 
     return result
+
 
 def collect_guardrail_status() -> dict:
     """Run drift check and collect test results."""
@@ -178,7 +176,9 @@ def collect_guardrail_status() -> dict:
     try:
         proc = subprocess.run(
             [sys.executable, "pipeline/check_drift.py"],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True,
+            text=True,
+            timeout=30,
             cwd=str(PROJECT_ROOT),
         )
         result["drift_passed"] = proc.returncode == 0
@@ -190,7 +190,9 @@ def collect_guardrail_status() -> dict:
     try:
         proc = subprocess.run(
             [sys.executable, "-m", "pytest", "tests/", "-v", "--tb=no", "-q"],
-            capture_output=True, text=True, timeout=60,
+            capture_output=True,
+            text=True,
+            timeout=60,
             cwd=str(PROJECT_ROOT),
         )
         result["tests_passed"] = proc.returncode == 0
@@ -215,6 +217,7 @@ def collect_guardrail_status() -> dict:
 
     return result
 
+
 def collect_contract_history(db_path: Path, instrument: str = "MGC") -> list[dict]:
     """Get contract usage history from the database."""
     if not db_path.exists():
@@ -222,7 +225,8 @@ def collect_contract_history(db_path: Path, instrument: str = "MGC") -> list[dic
 
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        rows = con.execute("""
+        rows = con.execute(
+            """
             SELECT source_symbol,
                    COUNT(*) as bar_count,
                    MIN(DATE(ts_utc)) as first_date,
@@ -232,7 +236,9 @@ def collect_contract_history(db_path: Path, instrument: str = "MGC") -> list[dic
             WHERE symbol = ?
             GROUP BY source_symbol
             ORDER BY first_date
-        """, [instrument]).fetchall()
+        """,
+            [instrument],
+        ).fetchall()
     finally:
         con.close()
 
@@ -246,6 +252,7 @@ def collect_contract_history(db_path: Path, instrument: str = "MGC") -> list[dic
         }
         for r in rows
     ]
+
 
 def collect_data_quality(db_path: Path) -> dict:
     """Run data quality checks on bars_1m."""
@@ -282,12 +289,8 @@ def collect_data_quality(db_path: Path) -> dict:
         result["bars_per_day_max"] = int(bpd[2]) if bpd[2] else 0
 
         # Gap days (weekdays with no data)
-        date_range = con.execute(
-            "SELECT MIN(DATE(ts_utc)), MAX(DATE(ts_utc)) FROM bars_1m"
-        ).fetchone()
-        actual_days = con.execute(
-            "SELECT COUNT(DISTINCT DATE(ts_utc)) FROM bars_1m"
-        ).fetchone()[0]
+        date_range = con.execute("SELECT MIN(DATE(ts_utc)), MAX(DATE(ts_utc)) FROM bars_1m").fetchone()
+        actual_days = con.execute("SELECT COUNT(DISTINCT DATE(ts_utc)) FROM bars_1m").fetchone()[0]
         if date_range[0] and date_range[1]:
             total_span = (date_range[1] - date_range[0]).days + 1
             # Rough weekday estimate: ~5/7 of span
@@ -295,9 +298,7 @@ def collect_data_quality(db_path: Path) -> dict:
             result["gap_days"] = max(0, expected_weekdays - actual_days)
 
         # OHLCV sanity: high < low
-        result["ohlcv_issues"] = con.execute(
-            "SELECT COUNT(*) FROM bars_1m WHERE high < low"
-        ).fetchone()[0]
+        result["ohlcv_issues"] = con.execute("SELECT COUNT(*) FROM bars_1m WHERE high < low").fetchone()[0]
 
         # Duplicates
         result["duplicate_count"] = con.execute("""
@@ -316,6 +317,7 @@ def collect_data_quality(db_path: Path) -> dict:
 
     return result
 
+
 def collect_strategy_metrics(db_path: Path) -> dict:
     """Query validated_setups + experimental_strategies for strategy panel."""
     result = {
@@ -333,16 +335,17 @@ def collect_strategy_metrics(db_path: Path) -> dict:
 
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        tables = [t[0] for t in con.execute(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
-        ).fetchall()]
+        tables = [
+            t[0]
+            for t in con.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+            ).fetchall()
+        ]
 
         if "validated_setups" not in tables:
             return result
 
-        count = con.execute(
-            "SELECT COUNT(*) FROM validated_setups WHERE status = 'active'"
-        ).fetchone()[0]
+        count = con.execute("SELECT COUNT(*) FROM validated_setups WHERE status = 'active'").fetchone()[0]
         if count == 0:
             return result
 
@@ -350,9 +353,7 @@ def collect_strategy_metrics(db_path: Path) -> dict:
         result["validated_count"] = count
 
         if "experimental_strategies" in tables:
-            result["experimental_count"] = con.execute(
-                "SELECT COUNT(*) FROM experimental_strategies"
-            ).fetchone()[0]
+            result["experimental_count"] = con.execute("SELECT COUNT(*) FROM experimental_strategies").fetchone()[0]
 
         # Top 10 by ExpR
         top = con.execute("""
@@ -366,9 +367,16 @@ def collect_strategy_metrics(db_path: Path) -> dict:
         """).fetchall()
         result["top_strategies"] = [
             {
-                "orb": r[0], "em": r[1], "cb": r[2], "rr": r[3],
-                "filter": r[4], "n": r[5], "wr": r[6], "expr": r[7],
-                "sharpe": r[8], "maxdd": r[9],
+                "orb": r[0],
+                "em": r[1],
+                "cb": r[2],
+                "rr": r[3],
+                "filter": r[4],
+                "n": r[5],
+                "wr": r[6],
+                "expr": r[7],
+                "sharpe": r[8],
+                "maxdd": r[9],
             }
             for r in top
         ]
@@ -386,9 +394,7 @@ def collect_strategy_metrics(db_path: Path) -> dict:
             ORDER BY count DESC
         """).fetchall()
         result["session_breakdown"] = [
-            {"orb": r[0], "count": r[1], "avg_expr": r[2],
-             "best_expr": r[3], "avg_sharpe": r[4]}
-            for r in sessions
+            {"orb": r[0], "count": r[1], "avg_expr": r[2], "best_expr": r[3], "avg_sharpe": r[4]} for r in sessions
         ]
 
         # Global bests
@@ -403,6 +409,7 @@ def collect_strategy_metrics(db_path: Path) -> dict:
         con.close()
 
     return result
+
 
 def collect_roadmap_status(roadmap_path: Path) -> list[dict]:
     """Parse ROADMAP.md for phase checklist."""
@@ -424,9 +431,11 @@ def collect_roadmap_status(roadmap_path: Path) -> list[dict]:
 
     return phases
 
+
 # =============================================================================
 # HTML RENDERERS
 # =============================================================================
+
 
 def status_badge(ok: bool | None, text: str = "") -> str:
     if ok is None:
@@ -434,6 +443,7 @@ def status_badge(ok: bool | None, text: str = "") -> str:
     if ok:
         return f'<span class="badge badge-ok">{text or "PASS"}</span>'
     return f'<span class="badge badge-fail">{text or "FAIL"}</span>'
+
 
 def render_ingestion_panel(cp: dict, inv: dict, db: dict) -> str:
     total_files = inv["total_files"]
@@ -452,17 +462,18 @@ def render_ingestion_panel(cp: dict, inv: dict, db: dict) -> str:
       </div>
       <table>
         <tr><td>DBN files in directory</td><td><strong>{total_files:,}</strong></td></tr>
-        <tr><td>DBN total size</td><td>{inv['total_size_mb']:,.1f} MB</td></tr>
-        <tr><td>First file</td><td>{inv['first_file'] or 'N/A'}</td></tr>
-        <tr><td>Last file</td><td>{inv['last_file'] or 'N/A'}</td></tr>
-        <tr><td>Checkpoint files</td><td>{cp['checkpoint_files']}</td></tr>
-        <tr><td>Chunks done</td><td>{cp['chunks_done']}</td></tr>
-        <tr><td>Chunks failed</td><td>{cp['chunks_failed']}</td></tr>
-        <tr><td>Rows written (checkpoints)</td><td>{cp['total_rows_written']:,}</td></tr>
-        <tr><td>Database rows (bars_1m)</td><td><strong>{db['bars_1m_count']:,}</strong></td></tr>
+        <tr><td>DBN total size</td><td>{inv["total_size_mb"]:,.1f} MB</td></tr>
+        <tr><td>First file</td><td>{inv["first_file"] or "N/A"}</td></tr>
+        <tr><td>Last file</td><td>{inv["last_file"] or "N/A"}</td></tr>
+        <tr><td>Checkpoint files</td><td>{cp["checkpoint_files"]}</td></tr>
+        <tr><td>Chunks done</td><td>{cp["chunks_done"]}</td></tr>
+        <tr><td>Chunks failed</td><td>{cp["chunks_failed"]}</td></tr>
+        <tr><td>Rows written (checkpoints)</td><td>{cp["total_rows_written"]:,}</td></tr>
+        <tr><td>Database rows (bars_1m)</td><td><strong>{db["bars_1m_count"]:,}</strong></td></tr>
       </table>
     </div>
     """
+
 
 def render_db_panel(db: dict) -> str:
     exists_badge = status_badge(db["exists"], "EXISTS" if db["exists"] else "MISSING")
@@ -471,18 +482,19 @@ def render_db_panel(db: dict) -> str:
       <h2>Database Metrics</h2>
       <table>
         <tr><td>Status</td><td>{exists_badge}</td></tr>
-        <tr><td>Size</td><td>{db['size_mb']} MB</td></tr>
-        <tr><td>Tables</td><td>{', '.join(db['tables']) or 'None'}</td></tr>
-        <tr><td>bars_1m rows</td><td><strong>{db['bars_1m_count']:,}</strong></td></tr>
-        <tr><td>bars_1m range</td><td>{db['bars_1m_min_date'] or 'N/A'} &rarr; {db['bars_1m_max_date'] or 'N/A'}</td></tr>
-        <tr><td>bars_5m rows</td><td><strong>{db['bars_5m_count']:,}</strong></td></tr>
-        <tr><td>bars_5m range</td><td>{db['bars_5m_min_date'] or 'N/A'} &rarr; {db['bars_5m_max_date'] or 'N/A'}</td></tr>
-        <tr><td>daily_features rows</td><td><strong>{db['daily_features_count']:,}</strong></td></tr>
-        <tr><td>daily_features range</td><td>{db['daily_features_min_date'] or 'N/A'} &rarr; {db['daily_features_max_date'] or 'N/A'}</td></tr>
-        <tr><td>Symbols</td><td>{', '.join(db['symbols']) or 'None'}</td></tr>
+        <tr><td>Size</td><td>{db["size_mb"]} MB</td></tr>
+        <tr><td>Tables</td><td>{", ".join(db["tables"]) or "None"}</td></tr>
+        <tr><td>bars_1m rows</td><td><strong>{db["bars_1m_count"]:,}</strong></td></tr>
+        <tr><td>bars_1m range</td><td>{db["bars_1m_min_date"] or "N/A"} &rarr; {db["bars_1m_max_date"] or "N/A"}</td></tr>
+        <tr><td>bars_5m rows</td><td><strong>{db["bars_5m_count"]:,}</strong></td></tr>
+        <tr><td>bars_5m range</td><td>{db["bars_5m_min_date"] or "N/A"} &rarr; {db["bars_5m_max_date"] or "N/A"}</td></tr>
+        <tr><td>daily_features rows</td><td><strong>{db["daily_features_count"]:,}</strong></td></tr>
+        <tr><td>daily_features range</td><td>{db["daily_features_min_date"] or "N/A"} &rarr; {db["daily_features_max_date"] or "N/A"}</td></tr>
+        <tr><td>Symbols</td><td>{", ".join(db["symbols"]) or "None"}</td></tr>
       </table>
     </div>
     """
+
 
 def render_quality_panel(quality: dict) -> str:
     if not quality["has_data"]:
@@ -490,23 +502,24 @@ def render_quality_panel(quality: dict) -> str:
 
     issues_badge = status_badge(
         quality["ohlcv_issues"] == 0 and quality["duplicate_count"] == 0 and quality["null_source_count"] == 0,
-        "CLEAN" if (quality["ohlcv_issues"] == 0 and quality["duplicate_count"] == 0) else "ISSUES"
+        "CLEAN" if (quality["ohlcv_issues"] == 0 and quality["duplicate_count"] == 0) else "ISSUES",
     )
 
     return f"""
     <div class="panel">
       <h2>Data Quality {issues_badge}</h2>
       <table>
-        <tr><td>Bars/day average</td><td>{quality['bars_per_day_avg']}</td></tr>
-        <tr><td>Bars/day min</td><td>{quality['bars_per_day_min']}</td></tr>
-        <tr><td>Bars/day max</td><td>{quality['bars_per_day_max']}</td></tr>
-        <tr><td>Estimated gap days</td><td>{quality['gap_days']}</td></tr>
-        <tr><td>OHLCV issues (high &lt; low)</td><td>{quality['ohlcv_issues']}</td></tr>
-        <tr><td>Duplicate (symbol, ts_utc)</td><td>{quality['duplicate_count']}</td></tr>
-        <tr><td>NULL source_symbol</td><td>{quality['null_source_count']}</td></tr>
+        <tr><td>Bars/day average</td><td>{quality["bars_per_day_avg"]}</td></tr>
+        <tr><td>Bars/day min</td><td>{quality["bars_per_day_min"]}</td></tr>
+        <tr><td>Bars/day max</td><td>{quality["bars_per_day_max"]}</td></tr>
+        <tr><td>Estimated gap days</td><td>{quality["gap_days"]}</td></tr>
+        <tr><td>OHLCV issues (high &lt; low)</td><td>{quality["ohlcv_issues"]}</td></tr>
+        <tr><td>Duplicate (symbol, ts_utc)</td><td>{quality["duplicate_count"]}</td></tr>
+        <tr><td>NULL source_symbol</td><td>{quality["null_source_count"]}</td></tr>
       </table>
     </div>
     """
+
 
 def render_contract_panel(contracts: list[dict]) -> str:
     if not contracts:
@@ -516,11 +529,11 @@ def render_contract_panel(contracts: list[dict]) -> str:
     for c in contracts:
         rows += f"""
         <tr>
-          <td>{c['contract']}</td>
-          <td>{c['bars']:,}</td>
-          <td>{c['first_date']}</td>
-          <td>{c['last_date']}</td>
-          <td>{c['volume']:,}</td>
+          <td>{c["contract"]}</td>
+          <td>{c["bars"]:,}</td>
+          <td>{c["first_date"]}</td>
+          <td>{c["last_date"]}</td>
+          <td>{c["volume"]:,}</td>
         </tr>"""
 
     return f"""
@@ -532,6 +545,7 @@ def render_contract_panel(contracts: list[dict]) -> str:
       </table>
     </div>
     """
+
 
 def render_guardrails_panel(g: dict) -> str:
     drift_badge = status_badge(g["drift_passed"])
@@ -554,10 +568,11 @@ def render_guardrails_panel(g: dict) -> str:
       </table>
       <details>
         <summary>Drift check details</summary>
-        <div class="details-content">{drift_lines or 'No output'}</div>
+        <div class="details-content">{drift_lines or "No output"}</div>
       </details>
     </div>
     """
+
 
 def render_roadmap_panel(phases: list[dict]) -> str:
     if not phases:
@@ -567,10 +582,10 @@ def render_roadmap_panel(phases: list[dict]) -> str:
     for phase in phases:
         done_count = sum(1 for i in phase["items"] if i["done"])
         total = len(phase["items"])
-        items_html += f'<h3>{phase["name"]} ({done_count}/{total})</h3><ul>'
+        items_html += f"<h3>{phase['name']} ({done_count}/{total})</h3><ul>"
         for item in phase["items"]:
             check = "&#x2705;" if item["done"] else "&#x2B1C;"
-            items_html += f'<li>{check} {item["text"]}</li>'
+            items_html += f"<li>{check} {item['text']}</li>"
         items_html += "</ul>"
 
     return f"""
@@ -579,6 +594,7 @@ def render_roadmap_panel(phases: list[dict]) -> str:
       {items_html}
     </div>
     """
+
 
 def render_strategy_panel(strats: dict) -> str:
     """Render validated strategies panel."""
@@ -594,15 +610,18 @@ def render_strategy_panel(strats: dict) -> str:
     top_rows = ""
     for i, s in enumerate(strats["top_strategies"], 1):
         wr_pct = f"{s['wr'] * 100:.0f}%"
-        sharpe = f"+{s['sharpe']:.2f}" if s['sharpe'] and s['sharpe'] >= 0 else (
-            f"{s['sharpe']:.2f}" if s['sharpe'] else "N/A")
-        maxdd = f"{s['maxdd']:.1f}R" if s['maxdd'] else "N/A"
+        sharpe = (
+            f"+{s['sharpe']:.2f}"
+            if s["sharpe"] and s["sharpe"] >= 0
+            else (f"{s['sharpe']:.2f}" if s["sharpe"] else "N/A")
+        )
+        maxdd = f"{s['maxdd']:.1f}R" if s["maxdd"] else "N/A"
         top_rows += f"""
         <tr>
-          <td>{i}</td><td>{s['orb']}</td><td>{s['em']}</td>
-          <td>{s['cb']}</td><td>{s['rr']:.1f}</td><td>{s['filter']}</td>
-          <td>{s['n']}</td><td>{wr_pct}</td>
-          <td><strong>+{s['expr']:.3f}</strong></td>
+          <td>{i}</td><td>{s["orb"]}</td><td>{s["em"]}</td>
+          <td>{s["cb"]}</td><td>{s["rr"]:.1f}</td><td>{s["filter"]}</td>
+          <td>{s["n"]}</td><td>{wr_pct}</td>
+          <td><strong>+{s["expr"]:.3f}</strong></td>
           <td>{sharpe}</td><td>{maxdd}</td>
         </tr>"""
 
@@ -611,9 +630,9 @@ def render_strategy_panel(strats: dict) -> str:
     for s in strats["session_breakdown"]:
         session_rows += f"""
         <tr>
-          <td>{s['orb']}</td><td>{s['count']}</td>
-          <td>+{s['avg_expr']:.3f}</td><td>+{s['best_expr']:.3f}</td>
-          <td>+{s['avg_sharpe']:.3f}</td>
+          <td>{s["orb"]}</td><td>{s["count"]}</td>
+          <td>+{s["avg_expr"]:.3f}</td><td>+{s["best_expr"]:.3f}</td>
+          <td>+{s["avg_sharpe"]:.3f}</td>
         </tr>"""
 
     return f"""
@@ -621,7 +640,7 @@ def render_strategy_panel(strats: dict) -> str:
       <h2>Validated Strategies</h2>
       <p style="margin-bottom:10px">
         {count_badge} {expr_badge} {sharpe_badge}
-        &nbsp; (from {strats['experimental_count']:,} experimental)
+        &nbsp; (from {strats["experimental_count"]:,} experimental)
       </p>
       <h3>Top 10 by Expectancy</h3>
       <table>
@@ -637,6 +656,7 @@ def render_strategy_panel(strats: dict) -> str:
     </div>
     """
 
+
 def render_system_panel() -> str:
     return f"""
     <div class="panel">
@@ -646,10 +666,11 @@ def render_system_panel() -> str:
         <tr><td>Platform</td><td>{sys.platform}</td></tr>
         <tr><td>DB path</td><td>{GOLD_DB_PATH}</td></tr>
         <tr><td>Data dir</td><td>{DAILY_DBN_DIR}</td></tr>
-        <tr><td>Generated</td><td>{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</td></tr>
+        <tr><td>Generated</td><td>{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</td></tr>
       </table>
     </div>
     """
+
 
 # =============================================================================
 # FULL DASHBOARD
@@ -691,9 +712,17 @@ li { padding: 2px 0; }
 .footer { margin-top: 20px; text-align: center; color: #484f58; font-size: 0.8em; }
 """
 
-def render_dashboard(db: dict, cp: dict, inv: dict, quality: dict,
-                     contracts: list, guardrails: dict, roadmap: list,
-                     strategies: dict | None = None) -> str:
+
+def render_dashboard(
+    db: dict,
+    cp: dict,
+    inv: dict,
+    quality: dict,
+    contracts: list,
+    guardrails: dict,
+    roadmap: list,
+    strategies: dict | None = None,
+) -> str:
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -709,21 +738,23 @@ def render_dashboard(db: dict, cp: dict, inv: dict, quality: dict,
     {render_db_panel(db)}
     {render_quality_panel(quality)}
     {render_guardrails_panel(guardrails)}
-    {render_strategy_panel(strategies) if strategies else ''}
+    {render_strategy_panel(strategies) if strategies else ""}
     {render_contract_panel(contracts)}
     {render_roadmap_panel(roadmap)}
     {render_system_panel()}
   </div>
   <div class="footer">
-    Generated {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} &mdash; MGC Data Pipeline
+    Generated {datetime.now().strftime("%Y-%m-%d %H:%M:%S")} &mdash; MGC Data Pipeline
   </div>
 </body>
 </html>"""
 
+
 def main():
     parser = argparse.ArgumentParser(description="Generate MGC Pipeline Dashboard")
-    parser.add_argument("--output", type=str, default="dashboard.html",
-                        help="Output HTML file (default: dashboard.html)")
+    parser.add_argument(
+        "--output", type=str, default="dashboard.html", help="Output HTML file (default: dashboard.html)"
+    )
     args = parser.parse_args()
 
     print("Collecting data for dashboard...")
@@ -759,6 +790,7 @@ def main():
     output_path.write_text(html, encoding="utf-8")
     print(f"\nDashboard written to: {output_path}")
     print(f"  Size: {len(html):,} bytes")
+
 
 if __name__ == "__main__":
     main()

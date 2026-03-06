@@ -23,15 +23,18 @@ sys.stdout.reconfigure(line_buffering=True)
 import duckdb
 from pipeline.paths import GOLD_DB_PATH
 
+
 def backfill_atr20(db_path: Path, dry_run: bool = False) -> int:
     """Backfill atr_20 for all rows in daily_features. Returns rows updated."""
     con = duckdb.connect(str(db_path))
     try:
         # Step 1: Ensure column exists
-        cols = [c[0] for c in con.execute(
-            "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name = 'daily_features'"
-        ).fetchall()]
+        cols = [
+            c[0]
+            for c in con.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'daily_features'"
+            ).fetchall()
+        ]
 
         if "atr_20" not in cols:
             print("Adding atr_20 column to daily_features...")
@@ -80,7 +83,7 @@ def backfill_atr20(db_path: Path, dry_run: bool = False) -> int:
                     true_ranges.append(None)
 
                 # ATR(20) = SMA of last 20 TRs
-                lookback = [v for v in true_ranges[max(0, i - 20):i] if v is not None]
+                lookback = [v for v in true_ranges[max(0, i - 20) : i] if v is not None]
                 if lookback:
                     atr_val = round(sum(lookback) / len(lookback), 4)
                 else:
@@ -99,12 +102,8 @@ def backfill_atr20(db_path: Path, dry_run: bool = False) -> int:
             total_updated += len(updates)
 
         # Step 3: Verify
-        null_count = con.execute(
-            "SELECT COUNT(*) FROM daily_features WHERE atr_20 IS NULL"
-        ).fetchone()[0]
-        total_count = con.execute(
-            "SELECT COUNT(*) FROM daily_features"
-        ).fetchone()[0]
+        null_count = con.execute("SELECT COUNT(*) FROM daily_features WHERE atr_20 IS NULL").fetchone()[0]
+        total_count = con.execute("SELECT COUNT(*) FROM daily_features").fetchone()[0]
 
         print(f"\nBackfill complete: {total_updated} rows updated")
         print(f"  Total rows: {total_count}")
@@ -136,8 +135,10 @@ def backfill_atr20(db_path: Path, dry_run: bool = False) -> int:
     finally:
         con.close()
 
+
 def main():
     import argparse
+
     parser = argparse.ArgumentParser(description="Backfill ATR(20) in daily_features")
     parser.add_argument("--db", type=str, default=None, help="Database path")
     parser.add_argument("--dry-run", action="store_true")
@@ -146,6 +147,7 @@ def main():
     db_path = Path(args.db) if args.db else GOLD_DB_PATH
     print(f"Database: {db_path}")
     backfill_atr20(db_path, dry_run=args.dry_run)
+
 
 if __name__ == "__main__":
     main()

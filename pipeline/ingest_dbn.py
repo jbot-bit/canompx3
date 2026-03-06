@@ -55,6 +55,7 @@ from pipeline.ingest_dbn_mgc import (
 )
 
 from pipeline.log import get_logger
+
 logger = get_logger(__name__)
 
 # Checkpoint directory (shared, files are named per-source)
@@ -63,7 +64,7 @@ CHECKPOINT_DIR = Path(__file__).parent / "checkpoints"
 
 def _parse_dbn_filename_date(filepath: Path) -> date | None:
     """Extract date from Databento filename like glbx-mdp3-20210204.ohlcv-1m.dbn.zst."""
-    m = re.search(r'(\d{8})', filepath.name)
+    m = re.search(r"(\d{8})", filepath.name)
     if m:
         try:
             return date(int(m.group(1)[:4]), int(m.group(1)[4:6]), int(m.group(1)[6:8]))
@@ -107,13 +108,11 @@ def iter_dbn_chunks(dbn_path: Path, batch_size: int, start_filter: date | None =
         for chunk_df in store.to_df(count=batch_size):
             yield chunk_df
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Ingest DBN into bars_1m (multi-instrument, CANONICAL COMPLIANT)"
-    )
+    parser = argparse.ArgumentParser(description="Ingest DBN into bars_1m (multi-instrument, CANONICAL COMPLIANT)")
     parser.add_argument(
-        "--instrument", type=str, required=True,
-        help=f"Instrument to ingest ({', '.join(list_instruments())})"
+        "--instrument", type=str, required=True, help=f"Instrument to ingest ({', '.join(list_instruments())})"
     )
     parser.add_argument("--start", type=str, help="Start date YYYY-MM-DD")
     parser.add_argument("--end", type=str, help="End date YYYY-MM-DD")
@@ -224,6 +223,7 @@ def main():
     if not args.dry_run:
         con = duckdb.connect(str(GOLD_DB_PATH))
         from pipeline.db_config import configure_connection
+
         configure_connection(con, writing=True)
         logger.info(f"Database opened: {GOLD_DB_PATH}")
     else:
@@ -231,12 +231,14 @@ def main():
 
     # Ensure connection is closed on ALL exit paths (including sys.exit)
     import atexit
+
     def _close_con():
         if con is not None:
             try:
                 con.close()
             except Exception:
                 pass
+
     atexit.register(_close_con)
 
     # =========================================================================
@@ -259,13 +261,13 @@ def main():
     logger.info("Processing DBN in chunks...")
 
     stats = {
-        'chunks_done': 0,
-        'chunks_failed': 0,
-        'chunks_skipped': 0,
-        'rows_written': 0,
-        'trading_days_processed': 0,
-        'contracts_used': set(),
-        'validation_errors': [],
+        "chunks_done": 0,
+        "chunks_failed": 0,
+        "chunks_skipped": 0,
+        "rows_written": 0,
+        "trading_days_processed": 0,
+        "contracts_used": set(),
+        "validation_errors": [],
     }
 
     trading_day_buffer = {}
@@ -280,11 +282,13 @@ def main():
         # =================================================================
         # FAST-FORWARD: Skip entire batches before start_filter
         # =================================================================
-        batch_max_date = chunk_df['ts_event'].max().date()
+        batch_max_date = chunk_df["ts_event"].max().date()
         if batch_max_date < start_filter:
             skipped_batches += 1
             if skipped_batches % 20 == 1:
-                logger.info(f"  FAST-FORWARD: Batch {batch_num} ends at {batch_max_date}, skipping (target: {start_filter})...")
+                logger.info(
+                    f"  FAST-FORWARD: Batch {batch_num} ends at {batch_max_date}, skipping (target: {start_filter})..."
+                )
             continue
 
         if skipped_batches > 0:
@@ -294,7 +298,7 @@ def main():
         # =================================================================
         # VALIDATE TIMESTAMPS (FAIL-CLOSED)
         # =================================================================
-        chunk_df = chunk_df.set_index('ts_event')
+        chunk_df = chunk_df.set_index("ts_event")
 
         ts_valid, ts_reason = validate_timestamp_utc(chunk_df)
         if not ts_valid:
@@ -303,11 +307,9 @@ def main():
             sys.exit(1)
 
         # =================================================================
-        # FILTER TO OUTRIGHTS (CONFIG-DRIVEN, apply for regex match)
+        # FILTER TO OUTRIGHTS (CONFIG-DRIVEN, vectorized str.match)
         # =================================================================
-        outright_mask = chunk_df['symbol'].apply(
-            lambda s: bool(outright_pattern.match(str(s)))
-        )
+        outright_mask = chunk_df["symbol"].astype(str).str.match(outright_pattern.pattern)
         chunk_df = chunk_df[outright_mask]
 
         if len(chunk_df) == 0:
@@ -330,18 +332,18 @@ def main():
         # =================================================================
         trading_days = compute_trading_days(chunk_df)
         chunk_df = chunk_df.copy()
-        chunk_df['trading_day'] = trading_days
+        chunk_df["trading_day"] = trading_days
 
         # =================================================================
         # AGGREGATE BY TRADING DAY
         # =================================================================
-        for tday, day_df in chunk_df.groupby('trading_day'):
+        for tday, day_df in chunk_df.groupby("trading_day"):
             if start_filter and tday < start_filter:
                 continue
             if end_filter and tday > end_filter:
                 continue
 
-            volumes = day_df.groupby('symbol')['volume'].sum().to_dict()
+            volumes = day_df.groupby("symbol")["volume"].sum().to_dict()
 
             front = choose_front_contract(
                 volumes,
@@ -352,9 +354,9 @@ def main():
             if not front:
                 continue
 
-            stats['contracts_used'].add(front)
+            stats["contracts_used"].add(front)
 
-            front_df = day_df[day_df['symbol'] == front].copy()
+            front_df = day_df[day_df["symbol"] == front].copy()
 
             pk_ok, pk_reason = check_pk_safety(front_df, tday)
             if not pk_ok:
@@ -367,15 +369,17 @@ def main():
             if tday not in trading_day_buffer:
                 trading_day_buffer[tday] = []
 
-            trading_day_buffer[tday].extend(zip(
-                front_df.index,
-                [front] * len(front_df),
-                front_df['open'].to_numpy(dtype=float),
-                front_df['high'].to_numpy(dtype=float),
-                front_df['low'].to_numpy(dtype=float),
-                front_df['close'].to_numpy(dtype=float),
-                front_df['volume'].to_numpy(dtype=int),
-            ))
+            trading_day_buffer[tday].extend(
+                zip(
+                    front_df.index,
+                    [front] * len(front_df),
+                    front_df["open"].to_numpy(dtype=float),
+                    front_df["high"].to_numpy(dtype=float),
+                    front_df["low"].to_numpy(dtype=float),
+                    front_df["close"].to_numpy(dtype=float),
+                    front_df["volume"].to_numpy(dtype=int),
+                )
+            )
 
         # =================================================================
         # MERGE WHEN CHUNK IS FULL
@@ -383,16 +387,16 @@ def main():
         sorted_days = sorted(trading_day_buffer.keys())
 
         while len(sorted_days) >= args.chunk_days:
-            chunk_days = sorted_days[:args.chunk_days]
+            chunk_days = sorted_days[: args.chunk_days]
             chunk_start = str(chunk_days[0])
             chunk_end = str(chunk_days[-1])
 
             if args.resume and not checkpoint_mgr.should_process_chunk(chunk_start, chunk_end, args.retry_failed):
                 logger.info(f"  SKIP: Chunk {chunk_start} to {chunk_end} (already done)")
-                stats['chunks_skipped'] += 1
+                stats["chunks_skipped"] += 1
                 for d in chunk_days:
                     del trading_day_buffer[d]
-                sorted_days = sorted_days[args.chunk_days:]
+                sorted_days = sorted_days[args.chunk_days :]
                 continue
 
             chunk_rows = []
@@ -400,14 +404,14 @@ def main():
                 chunk_rows.extend(trading_day_buffer[d])
 
             if not args.dry_run and con:
-                checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, 'in_progress')
+                checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, "in_progress")
 
                 try:
                     con.execute("BEGIN TRANSACTION")
 
                     chunk_df = pd.DataFrame(
                         [(r[0], symbol, r[1], r[2], r[3], r[4], r[5], r[6]) for r in chunk_rows],
-                        columns=['ts_utc', 'symbol', 'source_symbol', 'open', 'high', 'low', 'close', 'volume'],
+                        columns=["ts_utc", "symbol", "source_symbol", "open", "high", "low", "close", "volume"],
                     )
                     con.execute("""
                         INSERT OR REPLACE INTO bars_1m
@@ -418,40 +422,44 @@ def main():
                     int_ok, int_reason = check_merge_integrity(con, chunk_start, chunk_end, symbol=symbol)
                     if not int_ok:
                         con.execute("ROLLBACK")
-                        checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, 'failed', error=int_reason)
+                        checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, "failed", error=int_reason)
                         logger.warning(f"FATAL: Integrity gate failed: {int_reason}")
                         logger.warning("ABORT: Merge integrity gate failed (FAIL-CLOSED)")
                         sys.exit(1)
 
                     con.execute("COMMIT")
 
-                    checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, 'done', rows_written=len(chunk_rows))
+                    checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, "done", rows_written=len(chunk_rows))
 
-                    stats['chunks_done'] += 1
-                    stats['rows_written'] += len(chunk_rows)
-                    stats['trading_days_processed'] += len(chunk_days)
+                    stats["chunks_done"] += 1
+                    stats["rows_written"] += len(chunk_rows)
+                    stats["trading_days_processed"] += len(chunk_days)
 
-                    logger.info(f"  DONE: Chunk {chunk_start} to {chunk_end}: {len(chunk_rows):,} rows, {len(chunk_days)} days")
+                    logger.info(
+                        f"  DONE: Chunk {chunk_start} to {chunk_end}: {len(chunk_rows):,} rows, {len(chunk_days)} days"
+                    )
 
                 except Exception as e:
                     con.execute("ROLLBACK")
-                    checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, 'failed', error=str(e))
+                    checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, "failed", error=str(e))
                     logger.warning(f"FATAL: Exception during merge: {e}")
                     traceback.print_exc()
                     sys.exit(1)
 
             else:
-                stats['chunks_done'] += 1
-                stats['rows_written'] += len(chunk_rows)
-                stats['trading_days_processed'] += len(chunk_days)
+                stats["chunks_done"] += 1
+                stats["rows_written"] += len(chunk_rows)
+                stats["trading_days_processed"] += len(chunk_days)
                 logger.info(f"  DRY RUN: Chunk {chunk_start} to {chunk_end}: {len(chunk_rows):,} rows")
 
             for d in chunk_days:
                 del trading_day_buffer[d]
-            sorted_days = sorted_days[args.chunk_days:]
+            sorted_days = sorted_days[args.chunk_days :]
 
         if batch_num % 20 == 0:
-            logger.info(f"  Batch {batch_num}: {stats['rows_written']:,} rows written, {stats['trading_days_processed']} trading days")
+            logger.info(
+                f"  Batch {batch_num}: {stats['rows_written']:,} rows written, {stats['trading_days_processed']} trading days"
+            )
 
     # =========================================================================
     # PROCESS REMAINING BUFFER
@@ -471,13 +479,13 @@ def main():
                 chunk_rows.extend(trading_day_buffer[d])
 
             if not args.dry_run and con and chunk_rows:
-                checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, 'in_progress')
+                checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, "in_progress")
 
                 try:
                     con.execute("BEGIN TRANSACTION")
                     chunk_df = pd.DataFrame(
                         [(r[0], symbol, r[1], r[2], r[3], r[4], r[5], r[6]) for r in chunk_rows],
-                        columns=['ts_utc', 'symbol', 'source_symbol', 'open', 'high', 'low', 'close', 'volume'],
+                        columns=["ts_utc", "symbol", "source_symbol", "open", "high", "low", "close", "volume"],
                     )
                     con.execute("""
                         INSERT OR REPLACE INTO bars_1m
@@ -488,32 +496,32 @@ def main():
                     int_ok, int_reason = check_merge_integrity(con, chunk_start, chunk_end, symbol=symbol)
                     if not int_ok:
                         con.execute("ROLLBACK")
-                        checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, 'failed', error=int_reason)
+                        checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, "failed", error=int_reason)
                         logger.warning(f"FATAL: Final chunk integrity failed: {int_reason}")
                         sys.exit(1)
 
                     con.execute("COMMIT")
-                    checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, 'done', rows_written=len(chunk_rows))
+                    checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, "done", rows_written=len(chunk_rows))
 
-                    stats['chunks_done'] += 1
-                    stats['rows_written'] += len(chunk_rows)
-                    stats['trading_days_processed'] += len(sorted_days)
+                    stats["chunks_done"] += 1
+                    stats["rows_written"] += len(chunk_rows)
+                    stats["trading_days_processed"] += len(sorted_days)
 
                     logger.info(f"  DONE: Final chunk {chunk_start} to {chunk_end}: {len(chunk_rows):,} rows")
 
                 except Exception as e:
                     con.execute("ROLLBACK")
-                    checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, 'failed', error=str(e))
+                    checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, "failed", error=str(e))
                     logger.warning(f"FATAL: Final chunk exception: {e}")
                     traceback.print_exc()
                     sys.exit(1)
             elif args.dry_run:
-                stats['chunks_done'] += 1
-                stats['rows_written'] += len(chunk_rows)
-                stats['trading_days_processed'] += len(sorted_days)
+                stats["chunks_done"] += 1
+                stats["rows_written"] += len(chunk_rows)
+                stats["trading_days_processed"] += len(sorted_days)
                 logger.info(f"  DRY RUN: Final chunk {chunk_start} to {chunk_end}: {len(chunk_rows):,} rows")
         else:
-            stats['chunks_skipped'] += 1
+            stats["chunks_skipped"] += 1
             logger.info(f"  SKIP: Final chunk {chunk_start} to {chunk_end} (already done)")
 
     # =========================================================================
@@ -561,9 +569,7 @@ def main():
     logger.info(f"Wall time: {elapsed}")
 
     if not args.dry_run and con:
-        count = con.execute(
-            "SELECT COUNT(*) FROM bars_1m WHERE symbol = ?", [symbol]
-        ).fetchone()[0]
+        count = con.execute("SELECT COUNT(*) FROM bars_1m WHERE symbol = ?", [symbol]).fetchone()[0]
         date_range = con.execute(
             "SELECT MIN(DATE(ts_utc)), MAX(DATE(ts_utc)) FROM bars_1m WHERE symbol = ?", [symbol]
         ).fetchone()
@@ -575,6 +581,7 @@ def main():
 
     logger.info("SUCCESS: Backfill complete and validated.")
     sys.exit(0)
+
 
 if __name__ == "__main__":
     main()

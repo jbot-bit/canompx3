@@ -5,6 +5,7 @@ Rolling walk-forward analysis for 0900 ORB strategies.
 Uses rolling 6/12/18 month training windows, tests on the NEXT month.
 Zero lookahead. Honest regime-aware analysis.
 """
+
 import sys
 from pathlib import Path
 
@@ -14,6 +15,7 @@ import duckdb
 import numpy as np
 import pandas as pd
 from pipeline.paths import GOLD_DB_PATH
+
 
 def load_0900_data():
     """Load all 0900 outcomes joined with daily_features."""
@@ -33,6 +35,7 @@ def load_0900_data():
     df["orb_size"] = df["orb_0900_size"]
     return df
 
+
 def compute_stats(pnls):
     """Compute trading stats from array of R-multiples."""
     n = len(pnls)
@@ -47,6 +50,7 @@ def compute_stats(pnls):
     maxdd = (cumul - peak).min()
     total = pnls.sum()
     return {"n": n, "wr": wr, "expr": expr, "sharpe": sharpe, "maxdd": maxdd, "total": total}
+
 
 def find_best_combo(data, min_trades=10, metric="sharpe"):
     """Find best (em, rr, cb) from data. Lower min_trades for rolling windows."""
@@ -70,8 +74,10 @@ def find_best_combo(data, min_trades=10, metric="sharpe"):
 
     return best_combo, best_stats
 
+
 def em_label(em):
     return "E1" if em == "E1" else "E3"
+
 
 def main():
     df = load_0900_data()
@@ -138,9 +144,7 @@ def main():
                 # Training window: past N months
                 train_end = test_m - 1  # month before test
                 train_start_m = test_m - train_months
-                train_data = eligible[
-                    (eligible["ym"] >= train_start_m) & (eligible["ym"] <= train_end)
-                ]
+                train_data = eligible[(eligible["ym"] >= train_start_m) & (eligible["ym"] <= train_end)]
                 test_data = eligible[eligible["ym"] == test_m]
 
                 if len(train_data) == 0 or len(test_data) == 0:
@@ -149,29 +153,38 @@ def main():
                 combo, train_stats = find_best_combo(train_data, min_trades=10)
 
                 if combo is None:
-                    results.append({
-                        "test_m": str(test_m), "combo": "NONE",
-                        "train_n": len(train_data), "oos_n": 0, "oos_total": 0,
-                    })
+                    results.append(
+                        {
+                            "test_m": str(test_m),
+                            "combo": "NONE",
+                            "train_n": len(train_data),
+                            "oos_n": 0,
+                            "oos_total": 0,
+                        }
+                    )
                     continue
 
                 em, rr, cb = combo
-                mask = (test_data["entry_model"] == em) & \
-                       (test_data["rr_target"] == rr) & \
-                       (test_data["confirm_bars"] == cb)
+                mask = (
+                    (test_data["entry_model"] == em)
+                    & (test_data["rr_target"] == rr)
+                    & (test_data["confirm_bars"] == cb)
+                )
                 oos_pnls = test_data[mask]["pnl_r"].values
 
                 oos_total = oos_pnls.sum() if len(oos_pnls) > 0 else 0
                 oos_pnls_all.extend(oos_pnls)
 
-                results.append({
-                    "test_m": str(test_m),
-                    "combo": f"{em_label(em)} RR{rr} CB{cb}",
-                    "train_n": train_stats["n"],
-                    "train_sharpe": train_stats["sharpe"],
-                    "oos_n": len(oos_pnls),
-                    "oos_total": oos_total,
-                })
+                results.append(
+                    {
+                        "test_m": str(test_m),
+                        "combo": f"{em_label(em)} RR{rr} CB{cb}",
+                        "train_n": train_stats["n"],
+                        "train_sharpe": train_stats["sharpe"],
+                        "oos_n": len(oos_pnls),
+                        "oos_total": oos_total,
+                    }
+                )
 
             # Print results
             print(f"  {'Month':10s}  {'Selected':22s}  TrainN  TrainSh  OOS_N  OOS_R")
@@ -179,7 +192,9 @@ def main():
                 if r["combo"] == "NONE":
                     print(f"  {r['test_m']:10s}  {'(no qualifying strat)':22s}  {r['train_n']:6d}")
                 else:
-                    print(f"  {r['test_m']:10s}  {r['combo']:22s}  {r['train_n']:6d}  {r.get('train_sharpe', 0):+6.3f}  {r['oos_n']:5d}  {r['oos_total']:+5.1f}R")
+                    print(
+                        f"  {r['test_m']:10s}  {r['combo']:22s}  {r['train_n']:6d}  {r.get('train_sharpe', 0):+6.3f}  {r['oos_n']:5d}  {r['oos_total']:+5.1f}R"
+                    )
 
             # Summary
             if oos_pnls_all:
@@ -189,7 +204,9 @@ def main():
                 combos_used = set(r["combo"] for r in results if r["combo"] != "NONE")
 
                 print()
-                print(f"  SUMMARY: {combined['n']} OOS trades, ExpR={combined['expr']:+.3f}, Total={combined['total']:+.1f}R, WR={combined['wr']:.0%}, MaxDD={combined['maxdd']:+.1f}R")
+                print(
+                    f"  SUMMARY: {combined['n']} OOS trades, ExpR={combined['expr']:+.3f}, Total={combined['total']:+.1f}R, WR={combined['wr']:.0%}, MaxDD={combined['maxdd']:+.1f}R"
+                )
                 print(f"  Profitable months: {months_profitable}/{months_with_trades}")
                 print(f"  Distinct strategies selected: {len(combos_used)} -> {combos_used}")
             else:
@@ -243,13 +260,16 @@ def main():
                 avg_expr = np.mean([c["expr"] for c in combo_exprs])
                 pct_pos = sum(1 for c in combo_exprs if c["expr"] > 0) / len(combo_exprs) * 100
                 avg_n = np.mean([c["n"] for c in combo_exprs])
-                print(f"  {filt_name:10s}  {period_label:8s}  {len(combo_exprs):2d} combos, avg N/combo={avg_n:.0f}, avg ExpR={avg_expr:+.3f}, {pct_pos:.0f}% positive")
+                print(
+                    f"  {filt_name:10s}  {period_label:8s}  {len(combo_exprs):2d} combos, avg N/combo={avg_n:.0f}, avg ExpR={avg_expr:+.3f}, {pct_pos:.0f}% positive"
+                )
 
         print()
 
     print(sep)
     print("DONE")
     print(sep)
+
 
 if __name__ == "__main__":
     main()

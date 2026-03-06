@@ -8,8 +8,10 @@ SKIP_FILES = {"ingest_dbn.py", "ingest_dbn_mgc.py", "ingest_dbn_daily.py"}
 modified_files = []
 total_conversions = 0
 
+
 def get_indent(line):
     return line[: len(line) - len(line.lstrip())]
+
 
 def convert_try_finally(lines):
     conversions = 0
@@ -25,7 +27,8 @@ def convert_try_finally(lines):
         var_name = m.group(2)
         connect_expr = m.group(3)
         j = i + 1
-        while j < len(lines) and lines[j].strip() == "": j += 1
+        while j < len(lines) and lines[j].strip() == "":
+            j += 1
         if not (j < len(lines) and lines[j].strip() == "try:" and get_indent(lines[j]) == base_indent):
             result.append(lines[i])
             i += 1
@@ -85,29 +88,35 @@ def convert_try_finally(lines):
                 try_body.append(line)
         extra_finally = []
         for fl in range(finally_line + 1, fb_end):
-            if close_pattern not in lines[fl] and lines[fl].strip() != "": extra_finally.append(lines[fl])
+            if close_pattern not in lines[fl] and lines[fl].strip() != "":
+                extra_finally.append(lines[fl])
         result.append(base_indent + "with " + connect_expr + " as " + var_name + ":\n")
         if except_blocks:
             result.append(base_indent + "    try:\n")
             for line in try_body:
-                if line.strip() == "": result.append(line)
+                if line.strip() == "":
+                    result.append(line)
                 else:
                     old = get_indent(line)
-                    extra = old[len(base_indent):] if old.startswith(base_indent) else ""
+                    extra = old[len(base_indent) :] if old.startswith(base_indent) else ""
                     result.append(base_indent + "    " + extra + line.lstrip())
             for line in except_blocks:
-                if line.strip() == "": result.append(line)
+                if line.strip() == "":
+                    result.append(line)
                 else:
                     old = get_indent(line)
-                    extra = old[len(base_indent):] if old.startswith(base_indent) else ""
+                    extra = old[len(base_indent) :] if old.startswith(base_indent) else ""
                     result.append(base_indent + "    " + extra + line.lstrip())
         else:
-            for line in try_body: result.append(line)
-        for line in extra_finally: result.append(line)
+            for line in try_body:
+                result.append(line)
+        for line in extra_finally:
+            result.append(line)
         conversions += 1
         i = fb_end
         continue
     return result, conversions
+
 
 def convert_bare_close(lines):
     conversions = 0
@@ -123,7 +132,8 @@ def convert_bare_close(lines):
         var_name = m.group(2)
         connect_expr = m.group(3)
         j = i + 1
-        while j < len(lines) and lines[j].strip() == "": j += 1
+        while j < len(lines) and lines[j].strip() == "":
+            j += 1
         if j < len(lines) and lines[j].strip() == "try:" and get_indent(lines[j]) == base_indent:
             result.append(lines[i])
             i += 1
@@ -146,11 +156,12 @@ def convert_bare_close(lines):
         body_lines = lines[i + 1 : close_line]
         result.append(base_indent + "with " + connect_expr + " as " + var_name + ":\n")
         for line in body_lines:
-            if line.strip() == "": result.append(line)
+            if line.strip() == "":
+                result.append(line)
             else:
                 old_indent = get_indent(line)
                 if old_indent.startswith(base_indent):
-                    extra = old_indent[len(base_indent):]
+                    extra = old_indent[len(base_indent) :]
                     result.append(base_indent + "    " + extra + line.lstrip())
                 else:
                     result.append(base_indent + "    " + line.lstrip())
@@ -159,17 +170,23 @@ def convert_bare_close(lines):
         continue
     return result, conversions
 
+
 def process_file(filepath):
-    with open(filepath, "r", encoding="utf-8") as f: content = f.read()
-    if "duckdb.connect(" not in content and "= _connect(" not in content: return 0
-    if ".close()" not in content: return 0
+    with open(filepath, "r", encoding="utf-8") as f:
+        content = f.read()
+    if "duckdb.connect(" not in content and "= _connect(" not in content:
+        return 0
+    if ".close()" not in content:
+        return 0
     lines = content.splitlines(keepends=True)
     lines, c1 = convert_try_finally(lines)
     lines, c2 = convert_bare_close(lines)
     total = c1 + c2
     if total > 0:
-        with open(filepath, "w", encoding="utf-8") as f: f.writelines(lines)
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.writelines(lines)
     return total
+
 
 def main():
     global total_conversions
@@ -177,8 +194,10 @@ def main():
         for root, dirs, files in os.walk(d):
             dirs[:] = [dd for dd in dirs if dd != "__pycache__"]
             for fname in sorted(files):
-                if not fname.endswith(".py"): continue
-                if fname in SKIP_FILES: continue
+                if not fname.endswith(".py"):
+                    continue
+                if fname in SKIP_FILES:
+                    continue
                 fpath = Path(root) / fname
                 n = process_file(fpath)
                 if n > 0:
@@ -186,6 +205,9 @@ def main():
                     total_conversions += n
     print(f"Total conversions: {total_conversions}")
     print(f"Files modified: {len(modified_files)}")
-    for f, n in modified_files: print(f"  {f}: {n} conversion(s)")
+    for f, n in modified_files:
+        print(f"  {f}: {n} conversion(s)")
 
-if __name__ == "__main__": main()
+
+if __name__ == "__main__":
+    main()

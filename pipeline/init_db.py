@@ -23,6 +23,7 @@ import duckdb
 from pipeline.paths import GOLD_DB_PATH
 
 from pipeline.log import get_logger
+
 logger = get_logger(__name__)
 
 # =============================================================================
@@ -78,9 +79,16 @@ CREATE TABLE IF NOT EXISTS bars_5m (
 #   NYSE_CLOSE      - NYSE closing bell at 4:00 PM ET
 #   BRISBANE_1025   - Fixed 10:25 AM Brisbane (not event-relative)
 ORB_LABELS_DYNAMIC = [
-    "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
-    "US_DATA_830", "NYSE_OPEN", "US_DATA_1000", "COMEX_SETTLE",
-    "CME_PRECLOSE", "NYSE_CLOSE",
+    "CME_REOPEN",
+    "TOKYO_OPEN",
+    "SINGAPORE_OPEN",
+    "LONDON_METALS",
+    "US_DATA_830",
+    "NYSE_OPEN",
+    "US_DATA_1000",
+    "COMEX_SETTLE",
+    "CME_PRECLOSE",
+    "NYSE_CLOSE",
     "BRISBANE_1025",
 ]
 
@@ -127,6 +135,7 @@ CREATE TABLE IF NOT EXISTS family_rr_locks (
 );
 """
 
+
 def _build_daily_features_ddl() -> str:
     """Generate CREATE TABLE DDL for daily_features.
 
@@ -149,22 +158,24 @@ def _build_daily_features_ddl() -> str:
     """
     orb_cols = []
     for label in ORB_LABELS:
-        orb_cols.extend([
-            f"    orb_{label}_high              DOUBLE,",
-            f"    orb_{label}_low               DOUBLE,",
-            f"    orb_{label}_size              DOUBLE,",
-            f"    orb_{label}_volume            BIGINT,",
-            f"    orb_{label}_break_dir         TEXT,",
-            f"    orb_{label}_break_ts          TIMESTAMPTZ,",
-            f"    orb_{label}_break_delay_min   DOUBLE,",
-            f"    orb_{label}_break_bar_continues BOOLEAN,",
-            f"    orb_{label}_break_bar_volume  BIGINT,",
-            f"    orb_{label}_outcome           TEXT,",
-            f"    orb_{label}_mae_r             DOUBLE,",
-            f"    orb_{label}_mfe_r             DOUBLE,",
-            f"    orb_{label}_double_break      BOOLEAN,",
-            f"    rel_vol_{label}               DOUBLE,",
-        ])
+        orb_cols.extend(
+            [
+                f"    orb_{label}_high              DOUBLE,",
+                f"    orb_{label}_low               DOUBLE,",
+                f"    orb_{label}_size              DOUBLE,",
+                f"    orb_{label}_volume            BIGINT,",
+                f"    orb_{label}_break_dir         TEXT,",
+                f"    orb_{label}_break_ts          TIMESTAMPTZ,",
+                f"    orb_{label}_break_delay_min   DOUBLE,",
+                f"    orb_{label}_break_bar_continues BOOLEAN,",
+                f"    orb_{label}_break_bar_volume  BIGINT,",
+                f"    orb_{label}_outcome           TEXT,",
+                f"    orb_{label}_mae_r             DOUBLE,",
+                f"    orb_{label}_mfe_r             DOUBLE,",
+                f"    orb_{label}_double_break      BOOLEAN,",
+                f"    rel_vol_{label}               DOUBLE,",
+            ]
+        )
     orb_block = "\n".join(orb_cols)
 
     return f"""
@@ -275,7 +286,9 @@ CREATE TABLE IF NOT EXISTS daily_features (
 );
 """
 
+
 DAILY_FEATURES_SCHEMA = _build_daily_features_ddl()
+
 
 def init_db(db_path: Path, force: bool = False):
     """Initialize database with schema."""
@@ -288,13 +301,17 @@ def init_db(db_path: Path, force: bool = False):
 
     # Connect to database (creates file if doesn't exist)
     with duckdb.connect(str(db_path)) as con:
-
         if force:
             logger.info("FORCE MODE: Dropping ALL tables...")
             # Drop trading_app tables first (FK dependencies on daily_features)
-            for t in ["validated_setups_archive", "validated_setups",
-                       "experimental_strategies", "orb_outcomes",
-                       "prospective_signals", "family_rr_locks"]:
+            for t in [
+                "validated_setups_archive",
+                "validated_setups",
+                "experimental_strategies",
+                "orb_outcomes",
+                "prospective_signals",
+                "family_rr_locks",
+            ]:
                 con.execute(f"DROP TABLE IF EXISTS {t}")
             # Drop pipeline tables
             con.execute("DROP TABLE IF EXISTS daily_features")
@@ -332,13 +349,13 @@ def init_db(db_path: Path, force: bool = False):
 
         # Migration: add ATR velocity + compression tier columns (Feb 2026)
         for col, typedef in [
-            ("atr_vel_ratio",             "DOUBLE"),
-            ("atr_vel_regime",            "TEXT"),
-            ("orb_CME_REOPEN_compression_z",    "DOUBLE"),
+            ("atr_vel_ratio", "DOUBLE"),
+            ("atr_vel_regime", "TEXT"),
+            ("orb_CME_REOPEN_compression_z", "DOUBLE"),
             ("orb_CME_REOPEN_compression_tier", "TEXT"),
-            ("orb_TOKYO_OPEN_compression_z",    "DOUBLE"),
+            ("orb_TOKYO_OPEN_compression_z", "DOUBLE"),
             ("orb_TOKYO_OPEN_compression_tier", "TEXT"),
-            ("orb_LONDON_METALS_compression_z",    "DOUBLE"),
+            ("orb_LONDON_METALS_compression_z", "DOUBLE"),
             ("orb_LONDON_METALS_compression_tier", "TEXT"),
         ]:
             try:
@@ -351,7 +368,7 @@ def init_db(db_path: Path, force: bool = False):
         # 11 sessions × 2 columns = 22 columns
         for label in ORB_LABELS:
             for col, typedef in [
-                (f"orb_{label}_break_delay_min",   "DOUBLE"),
+                (f"orb_{label}_break_delay_min", "DOUBLE"),
                 (f"orb_{label}_break_bar_continues", "BOOLEAN"),
             ]:
                 try:
@@ -364,9 +381,9 @@ def init_db(db_path: Path, force: bool = False):
         # 11 sessions × 3 columns = 33 new columns
         for label in ORB_LABELS:
             for col, typedef in [
-                (f"orb_{label}_volume",           "BIGINT"),
+                (f"orb_{label}_volume", "BIGINT"),
                 (f"orb_{label}_break_bar_volume", "BIGINT"),
-                (f"rel_vol_{label}",              "DOUBLE"),
+                (f"rel_vol_{label}", "DOUBLE"),
             ]:
                 try:
                     con.execute(f"ALTER TABLE daily_features ADD COLUMN {col} {typedef}")
@@ -376,22 +393,22 @@ def init_db(db_path: Path, force: bool = False):
 
         # Migration: add Market Profile context columns (Feb 2026)
         for col, typedef in [
-            ("prev_day_high",           "DOUBLE"),
-            ("prev_day_low",            "DOUBLE"),
-            ("prev_day_close",          "DOUBLE"),
-            ("prev_day_range",          "DOUBLE"),
-            ("prev_day_direction",      "TEXT"),
-            ("gap_type",                "TEXT"),
-            ("overnight_high",          "DOUBLE"),
-            ("overnight_low",           "DOUBLE"),
-            ("overnight_range",         "DOUBLE"),
-            ("pre_1000_high",           "DOUBLE"),
-            ("pre_1000_low",            "DOUBLE"),
-            ("took_pdh_before_1000",    "BOOLEAN"),
-            ("took_pdl_before_1000",    "BOOLEAN"),
-            ("overnight_took_pdh",      "BOOLEAN"),
-            ("overnight_took_pdl",      "BOOLEAN"),
-            ("day_type",                "TEXT"),
+            ("prev_day_high", "DOUBLE"),
+            ("prev_day_low", "DOUBLE"),
+            ("prev_day_close", "DOUBLE"),
+            ("prev_day_range", "DOUBLE"),
+            ("prev_day_direction", "TEXT"),
+            ("gap_type", "TEXT"),
+            ("overnight_high", "DOUBLE"),
+            ("overnight_low", "DOUBLE"),
+            ("overnight_range", "DOUBLE"),
+            ("pre_1000_high", "DOUBLE"),
+            ("pre_1000_low", "DOUBLE"),
+            ("took_pdh_before_1000", "BOOLEAN"),
+            ("took_pdl_before_1000", "BOOLEAN"),
+            ("overnight_took_pdh", "BOOLEAN"),
+            ("overnight_took_pdl", "BOOLEAN"),
+            ("day_type", "TEXT"),
         ]:
             try:
                 con.execute(f"ALTER TABLE daily_features ADD COLUMN {col} {typedef}")
@@ -401,8 +418,8 @@ def init_db(db_path: Path, force: bool = False):
 
         # Migration: add GARCH forecast columns (Feb 2026)
         for col, typedef in [
-            ("garch_forecast_vol",  "DOUBLE"),
-            ("garch_atr_ratio",     "DOUBLE"),
+            ("garch_forecast_vol", "DOUBLE"),
+            ("garch_atr_ratio", "DOUBLE"),
         ]:
             try:
                 con.execute(f"ALTER TABLE daily_features ADD COLUMN {col} {typedef}")
@@ -414,14 +431,14 @@ def init_db(db_path: Path, force: bool = False):
         # Handles COMEX_SETTLE, NYSE_CLOSE, and any future additions to ORB_LABELS.
         for label in ORB_LABELS:
             for col, typedef in [
-                (f"orb_{label}_high",         "DOUBLE"),
-                (f"orb_{label}_low",          "DOUBLE"),
-                (f"orb_{label}_size",         "DOUBLE"),
-                (f"orb_{label}_break_dir",    "TEXT"),
-                (f"orb_{label}_break_ts",     "TIMESTAMPTZ"),
-                (f"orb_{label}_outcome",      "TEXT"),
-                (f"orb_{label}_mae_r",        "DOUBLE"),
-                (f"orb_{label}_mfe_r",        "DOUBLE"),
+                (f"orb_{label}_high", "DOUBLE"),
+                (f"orb_{label}_low", "DOUBLE"),
+                (f"orb_{label}_size", "DOUBLE"),
+                (f"orb_{label}_break_dir", "TEXT"),
+                (f"orb_{label}_break_ts", "TIMESTAMPTZ"),
+                (f"orb_{label}_outcome", "TEXT"),
+                (f"orb_{label}_mae_r", "DOUBLE"),
+                (f"orb_{label}_mfe_r", "DOUBLE"),
                 (f"orb_{label}_double_break", "BOOLEAN"),
             ]:
                 try:
@@ -441,21 +458,18 @@ def init_db(db_path: Path, force: bool = False):
         # Verify schema
         logger.info("Verifying schema...")
 
-        tables = con.execute(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
-        ).fetchall()
+        tables = con.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'").fetchall()
         table_names = [t[0] for t in tables]
 
         logger.info(f"  Tables found: {table_names}")
 
         # Check columns for each table
-        for table_name in ['bars_1m', 'bars_5m', 'daily_features']:
+        for table_name in ["bars_1m", "bars_5m", "daily_features"]:
             if table_name in table_names:
                 cols = con.execute(
                     f"SELECT column_name, data_type FROM information_schema.columns WHERE table_name = '{table_name}'"
                 ).fetchall()
                 logger.info(f"  {table_name} columns ({len(cols)}): {[c[0] for c in cols]}")
-
 
     logger.info("=" * 60)
     logger.info("INITIALIZATION COMPLETE")
@@ -464,12 +478,14 @@ def init_db(db_path: Path, force: bool = False):
     logger.info("  1. Run ingestion: python pipeline/ingest_dbn.py --instrument MGC")
     logger.info("  2. Check database: python pipeline/health_check.py")
 
+
 def main():
     parser = argparse.ArgumentParser(description="Initialize DuckDB schema")
     parser.add_argument("--force", action="store_true", help="Drop and recreate tables")
     args = parser.parse_args()
 
     init_db(GOLD_DB_PATH, force=args.force)
+
 
 if __name__ == "__main__":
     main()

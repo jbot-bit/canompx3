@@ -18,6 +18,7 @@ import duckdb
 from contextlib import nullcontext
 from pipeline.paths import GOLD_DB_PATH
 
+
 def init_nested_schema(
     db_path: Path | None = None,
     force: bool = False,
@@ -196,10 +197,24 @@ def verify_nested_schema(db_path: Path | None = None) -> tuple[bool, list[str]]:
             actual_cols = {row[0] for row in result}
 
             expected_cols = {
-                "trading_day", "symbol", "orb_label", "orb_minutes",
-                "entry_resolution", "rr_target", "confirm_bars", "entry_model",
-                "entry_ts", "entry_price", "stop_price", "target_price",
-                "outcome", "exit_ts", "exit_price", "pnl_r", "mae_r", "mfe_r",
+                "trading_day",
+                "symbol",
+                "orb_label",
+                "orb_minutes",
+                "entry_resolution",
+                "rr_target",
+                "confirm_bars",
+                "entry_model",
+                "entry_ts",
+                "entry_price",
+                "stop_price",
+                "target_price",
+                "outcome",
+                "exit_ts",
+                "exit_price",
+                "pnl_r",
+                "mae_r",
+                "mfe_r",
             }
             missing = expected_cols - actual_cols
             if missing:
@@ -215,12 +230,28 @@ def verify_nested_schema(db_path: Path | None = None) -> tuple[bool, list[str]]:
             actual_cols = {row[0] for row in result}
 
             expected_cols = {
-                "strategy_id", "created_at", "instrument", "orb_label",
-                "orb_minutes", "entry_resolution", "rr_target", "confirm_bars",
-                "entry_model", "filter_type", "filter_params", "sample_size",
-                "win_rate", "avg_win_r", "avg_loss_r", "expectancy_r",
-                "sharpe_ratio", "max_drawdown_r", "median_risk_points",
-                "avg_risk_points", "yearly_results", "validation_status",
+                "strategy_id",
+                "created_at",
+                "instrument",
+                "orb_label",
+                "orb_minutes",
+                "entry_resolution",
+                "rr_target",
+                "confirm_bars",
+                "entry_model",
+                "filter_type",
+                "filter_params",
+                "sample_size",
+                "win_rate",
+                "avg_win_r",
+                "avg_loss_r",
+                "expectancy_r",
+                "sharpe_ratio",
+                "max_drawdown_r",
+                "median_risk_points",
+                "avg_risk_points",
+                "yearly_results",
+                "validation_status",
                 "validation_notes",
             }
             missing = expected_cols - actual_cols
@@ -237,13 +268,31 @@ def verify_nested_schema(db_path: Path | None = None) -> tuple[bool, list[str]]:
             actual_cols = {row[0] for row in result}
 
             expected_cols = {
-                "strategy_id", "promoted_at", "promoted_from", "instrument",
-                "orb_label", "orb_minutes", "entry_resolution", "rr_target",
-                "confirm_bars", "entry_model", "filter_type", "filter_params",
-                "sample_size", "win_rate", "expectancy_r", "years_tested",
-                "all_years_positive", "stress_test_passed", "sharpe_ratio",
-                "max_drawdown_r", "yearly_results", "execution_spec",
-                "status", "retired_at", "retirement_reason",
+                "strategy_id",
+                "promoted_at",
+                "promoted_from",
+                "instrument",
+                "orb_label",
+                "orb_minutes",
+                "entry_resolution",
+                "rr_target",
+                "confirm_bars",
+                "entry_model",
+                "filter_type",
+                "filter_params",
+                "sample_size",
+                "win_rate",
+                "expectancy_r",
+                "years_tested",
+                "all_years_positive",
+                "stress_test_passed",
+                "sharpe_ratio",
+                "max_drawdown_r",
+                "yearly_results",
+                "execution_spec",
+                "status",
+                "retired_at",
+                "retirement_reason",
             }
             missing = expected_cols - actual_cols
             if missing:
@@ -272,6 +321,7 @@ def main():
             sys.exit(1)
     else:
         init_nested_schema(force=args.force)
+
 
 if __name__ == "__main__":
     main()

@@ -39,6 +39,7 @@ from trading_app.regime.schema import init_regime_schema
 # breaks, single-direction breakout strategies are auto-DEGRADED.
 DOUBLE_BREAK_THRESHOLD = 0.67
 
+
 def generate_rolling_windows(
     train_months: int,
     test_start: date,
@@ -69,18 +70,21 @@ def generate_rolling_windows(
 
         run_label = f"rolling_{train_months}m_{current.year}_{current.month:02d}"
 
-        windows.append({
-            "run_label": run_label,
-            "train_months": train_months,
-            "train_start": train_start,
-            "train_end": train_end,
-            "test_start": current,
-            "test_end": test_end_date,
-        })
+        windows.append(
+            {
+                "run_label": run_label,
+                "train_months": train_months,
+                "train_start": train_start,
+                "train_end": train_end,
+                "test_start": current,
+                "test_end": test_end_date,
+            }
+        )
 
         current = current + relativedelta(months=1)
 
     return windows
+
 
 def compute_double_break_pct(
     db_path: Path,
@@ -97,7 +101,8 @@ def compute_double_break_pct(
     try:
         result = {}
         for label in ORB_LABELS:
-            row = con.execute(f"""
+            row = con.execute(
+                f"""
                 SELECT
                     COUNT(*) FILTER (WHERE orb_{label}_double_break = TRUE) as double_ct,
                     COUNT(*) as break_ct
@@ -106,7 +111,9 @@ def compute_double_break_pct(
                   AND trading_day >= ?
                   AND trading_day <= ?
                   AND orb_{label}_break_dir IS NOT NULL
-            """, [orb_minutes, train_start, train_end]).fetchone()
+            """,
+                [orb_minutes, train_start, train_end],
+            ).fetchone()
 
             double_ct, break_ct = row
             if break_ct > 0:
@@ -117,6 +124,7 @@ def compute_double_break_pct(
         return result
     finally:
         con.close()
+
 
 def mark_degraded_by_double_break(
     db_path: Path,
@@ -134,26 +142,33 @@ def mark_degraded_by_double_break(
     try:
         total = 0
         for session in degraded_sessions:
-            count = con.execute("""
+            count = con.execute(
+                """
                 UPDATE regime_strategies
                 SET validation_status = 'REJECTED',
                     validation_notes = 'Auto-degraded: double-break >67% in training window'
                 WHERE run_label = ?
                   AND orb_label = ?
                   AND (validation_status IS NULL OR validation_status = '')
-            """, [run_label, session]).fetchone()
+            """,
+                [run_label, session],
+            ).fetchone()
 
-            affected = con.execute("""
+            affected = con.execute(
+                """
                 SELECT COUNT(*) FROM regime_strategies
                 WHERE run_label = ? AND orb_label = ?
                   AND validation_notes LIKE 'Auto-degraded%'
-            """, [run_label, session]).fetchone()[0]
+            """,
+                [run_label, session],
+            ).fetchone()[0]
             total += affected
 
         con.commit()
         return total
     finally:
         con.close()
+
 
 def run_rolling_evaluation(
     db_path: Path | None = None,
@@ -187,32 +202,25 @@ def run_rolling_evaluation(
     all_results = {}
 
     for train_months in train_months_list:
-        windows = generate_rolling_windows(
-            train_months, test_start_date, test_end_date
-        )
+        windows = generate_rolling_windows(train_months, test_start_date, test_end_date)
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"ROLLING EVALUATION: {train_months}m training window")
         print(f"  Test range: {test_start} to {test_end}")
         print(f"  Windows: {len(windows)}")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
 
         window_results = []
 
         for i, w in enumerate(windows):
             run_label = w["run_label"]
-            print(f"\n--- Window {i+1}/{len(windows)}: {run_label} ---")
+            print(f"\n--- Window {i + 1}/{len(windows)}: {run_label} ---")
             print(f"  Train: {w['train_start']} to {w['train_end']}")
             print(f"  Test:  {w['test_start']} to {w['test_end']}")
 
             # Step 1: Compute double-break frequency
-            db_pct = compute_double_break_pct(
-                db_path, w["train_start"], w["train_end"], orb_minutes
-            )
-            degraded_sessions = {
-                label for label, pct in db_pct.items()
-                if pct >= DOUBLE_BREAK_THRESHOLD
-            }
+            db_pct = compute_double_break_pct(db_path, w["train_start"], w["train_end"], orb_minutes)
+            degraded_sessions = {label for label, pct in db_pct.items() if pct >= DOUBLE_BREAK_THRESHOLD}
 
             if degraded_sessions:
                 print(f"  Double-break degraded sessions: {degraded_sessions}")
@@ -233,9 +241,7 @@ def run_rolling_evaluation(
             # Step 3: Mark double-break degraded BEFORE validation
             degraded_count = 0
             if not dry_run and degraded_sessions:
-                degraded_count = mark_degraded_by_double_break(
-                    db_path, run_label, degraded_sessions
-                )
+                degraded_count = mark_degraded_by_double_break(db_path, run_label, degraded_sessions)
                 print(f"  Auto-degraded {degraded_count} strategies (double-break)")
 
             # Step 4: Validate remaining (relaxed params for short windows)
@@ -270,28 +276,25 @@ def run_rolling_evaluation(
 
     return all_results
 
+
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Rolling window evaluation of ORB strategies"
-    )
+    parser = argparse.ArgumentParser(description="Rolling window evaluation of ORB strategies")
     parser.add_argument("--instrument", default="MGC", help="Instrument symbol")
-    parser.add_argument("--train-months", type=int, nargs="+", default=[12, 18],
-                        help="Training window sizes in months (e.g. 6 12 18)")
-    parser.add_argument("--test-start", default="2024-07",
-                        help="First test month YYYY-MM")
-    parser.add_argument("--test-end", default="2026-01",
-                        help="Last test month YYYY-MM")
+    parser.add_argument(
+        "--train-months", type=int, nargs="+", default=[12, 18], help="Training window sizes in months (e.g. 6 12 18)"
+    )
+    parser.add_argument("--test-start", default="2024-07", help="First test month YYYY-MM")
+    parser.add_argument("--test-end", default="2026-01", help="Last test month YYYY-MM")
     parser.add_argument("--orb-minutes", type=int, default=5)
-    parser.add_argument("--min-sample", type=int, default=20,
-                        help="Min sample size per window (relaxed for short windows)")
+    parser.add_argument(
+        "--min-sample", type=int, default=20, help="Min sample size per window (relaxed for short windows)"
+    )
     parser.add_argument("--stress-multiplier", type=float, default=1.5)
-    parser.add_argument("--db-path", type=str, default=None,
-                        help="Path to gold.db (default: project gold.db)")
+    parser.add_argument("--db-path", type=str, default=None, help="Path to gold.db (default: project gold.db)")
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--output", type=str, default=None,
-                        help="Write results JSON to this path")
+    parser.add_argument("--output", type=str, default=None, help="Write results JSON to this path")
     args = parser.parse_args()
 
     db_path = Path(args.db_path) if args.db_path else None
@@ -309,9 +312,9 @@ def main():
     )
 
     # Print summary
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("ROLLING EVALUATION SUMMARY")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     for key, windows in results.items():
         total_passed = sum(w["strategies_passed"] for w in windows)
@@ -325,13 +328,13 @@ def main():
             p = w["strategies_passed"]
             d = w["strategies_discovered"]
             db = w["strategies_degraded_double_break"]
-            print(f"    {w['run_label']}: {p} passed / {d} discovered"
-                  f"{f' ({db} degraded)' if db else ''}")
+            print(f"    {w['run_label']}: {p} passed / {d} discovered{f' ({db} degraded)' if db else ''}")
 
     if args.output:
         output_path = Path(args.output)
         output_path.write_text(json.dumps(results, indent=2))
         print(f"\nResults written to {output_path}")
+
 
 if __name__ == "__main__":
     main()

@@ -25,13 +25,20 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 from pipeline.cost_model import CostSpec, to_r_multiple, get_session_cost_spec
 from pipeline.dst import DYNAMIC_ORB_RESOLVERS
 from trading_app.config import (
-    ALL_FILTERS, EARLY_EXIT_MINUTES, SESSION_EXIT_MODE,
-    IB_DURATION_MINUTES, HOLD_HOURS, ORB_DURATION_MINUTES,
-    CalendarSkipFilter, CALENDAR_SKIP_NFP_OPEX,
+    ALL_FILTERS,
+    EARLY_EXIT_MINUTES,
+    SESSION_EXIT_MODE,
+    IB_DURATION_MINUTES,
+    HOLD_HOURS,
+    ORB_DURATION_MINUTES,
+    CalendarSkipFilter,
+    CALENDAR_SKIP_NFP_OPEX,
 )
 from trading_app.portfolio import (
-    Portfolio, PortfolioStrategy,
-    compute_position_size_vol_scaled, compute_vol_scalar,
+    Portfolio,
+    PortfolioStrategy,
+    compute_position_size_vol_scaled,
+    compute_vol_scalar,
 )
 from pipeline.log import get_logger
 
@@ -47,16 +54,19 @@ ORB_WINDOWS_UTC = {
     # This dict is kept empty for backward compatibility with tests that check membership.
 }
 
+
 class TradeState(Enum):
     ARMED = "ARMED"
     CONFIRMING = "CONFIRMING"
     ENTERED = "ENTERED"
     EXITED = "EXITED"
 
+
 @dataclass
 class TradeEvent:
     """Abstract trade event (broker-agnostic)."""
-    event_type: str         # "ENTRY", "EXIT", "SCRATCH", "REJECT", "ML_SKIP"
+
+    event_type: str  # "ENTRY", "EXIT", "SCRATCH", "REJECT", "ML_SKIP"
     strategy_id: str
     timestamp: datetime
     price: float
@@ -65,9 +75,11 @@ class TradeEvent:
     reason: str
     pnl_r: float | None = None  # Populated on EXIT/SCRATCH events
 
+
 @dataclass
 class LiveORB:
     """ORB range being built or completed."""
+
     label: str
     window_start_utc: datetime
     window_end_utc: datetime
@@ -83,6 +95,7 @@ class LiveORB:
             return self.high - self.low
         return None
 
+
 @dataclass
 class LiveIB:
     """Initial Balance (first 120 minutes from 09:00 Brisbane = 23:00 UTC).
@@ -90,6 +103,7 @@ class LiveIB:
     Tracks IB high/low during formation, then detects first break after IB ends.
     Used by TOKYO_OPEN session for IB-conditional exit logic.
     """
+
     window_start_utc: datetime
     window_end_utc: datetime
     high: float | None = None
@@ -125,9 +139,11 @@ class LiveIB:
             return "short"
         return None
 
+
 @dataclass
 class ActiveTrade:
     """A trade being tracked through its lifecycle."""
+
     strategy_id: str
     strategy: PortfolioStrategy
     orb_label: str
@@ -149,8 +165,8 @@ class ActiveTrade:
     contracts: int = 1
 
     # IB-conditional exit mode (TOKYO_OPEN session)
-    exit_mode: str = "fixed_target"   # "fixed_target" | "ib_pending" | "hold_7h"
-    ib_alignment: str | None = None   # "aligned" | "opposed" | None
+    exit_mode: str = "fixed_target"  # "fixed_target" | "ib_pending" | "hold_7h"
+    ib_alignment: str | None = None  # "aligned" | "opposed" | None
 
     # Timed early exit
     early_exit_checked: bool = False
@@ -162,6 +178,7 @@ class ActiveTrade:
     mae_points: float = 0.0
     mfe_points: float = 0.0
 
+
 class ExecutionEngine:
     """
     Bar-by-bar execution engine.
@@ -172,12 +189,17 @@ class ExecutionEngine:
     Optionally accepts a MarketState for context-aware strategy scoring.
     """
 
-    def __init__(self, portfolio: Portfolio, cost_spec: CostSpec,
-                 risk_manager=None, market_state=None,
-                 live_session_costs: bool = True,
-                 calendar_overlay: CalendarSkipFilter | None = CALENDAR_SKIP_NFP_OPEX,
-                 atr_velocity_overlay=None,
-                 ml_predictor=None):
+    def __init__(
+        self,
+        portfolio: Portfolio,
+        cost_spec: CostSpec,
+        risk_manager=None,
+        market_state=None,
+        live_session_costs: bool = True,
+        calendar_overlay: CalendarSkipFilter | None = CALENDAR_SKIP_NFP_OPEX,
+        atr_velocity_overlay=None,
+        ml_predictor=None,
+    ):
         self.portfolio = portfolio
         self.cost_spec = cost_spec
         self.risk_manager = risk_manager  # Optional RiskManager for position limits
@@ -218,12 +240,15 @@ class ExecutionEngine:
         vol_scalar = compute_vol_scalar(atr_20, median_atr_20) if (atr_20 > 0 and median_atr_20 > 0) else 1.0
 
         contracts = compute_position_size_vol_scaled(
-            equity, risk_pct, risk_points, cost, vol_scalar,
+            equity,
+            risk_pct,
+            risk_points,
+            cost,
+            vol_scalar,
         )
         return contracts
 
-    def on_trading_day_start(self, trading_day: date,
-                             daily_features_row: dict | None = None) -> None:
+    def on_trading_day_start(self, trading_day: date, daily_features_row: dict | None = None) -> None:
         """Reset state for a new trading day."""
         self.trading_day = trading_day
         self.orbs = {}
@@ -238,8 +263,7 @@ class ExecutionEngine:
 
         # Initialize IB tracker (23:00 UTC to 01:00 UTC = 09:00-11:00 Brisbane)
         prev_day = trading_day - timedelta(days=1)
-        ib_start = datetime(prev_day.year, prev_day.month, prev_day.day,
-                            23, 0, tzinfo=timezone.utc)
+        ib_start = datetime(prev_day.year, prev_day.month, prev_day.day, 23, 0, tzinfo=timezone.utc)
         ib_end = ib_start + timedelta(minutes=IB_DURATION_MINUTES)
         self.ib = LiveIB(window_start_utc=ib_start, window_end_utc=ib_end)
 
@@ -254,8 +278,7 @@ class ExecutionEngine:
                 base_date = prev_day
             else:
                 base_date = trading_day
-            start = datetime(base_date.year, base_date.month, base_date.day,
-                             hour, minute, tzinfo=timezone.utc)
+            start = datetime(base_date.year, base_date.month, base_date.day, hour, minute, tzinfo=timezone.utc)
             end = start + timedelta(minutes=duration)
             self.orbs[label] = LiveORB(
                 label=label,
@@ -265,6 +288,7 @@ class ExecutionEngine:
 
         # Dynamic sessions: DST-aware, resolved per-day
         from zoneinfo import ZoneInfo
+
         _brisbane = ZoneInfo("Australia/Brisbane")
         _utc = ZoneInfo("UTC")
         for label, resolver in DYNAMIC_ORB_RESOLVERS.items():
@@ -278,8 +302,7 @@ class ExecutionEngine:
                 cal_date = trading_day + timedelta(days=1)
             else:
                 cal_date = trading_day
-            local_start = datetime(cal_date.year, cal_date.month, cal_date.day,
-                                   bris_h, bris_m, 0, tzinfo=_brisbane)
+            local_start = datetime(cal_date.year, cal_date.month, cal_date.day, bris_h, bris_m, 0, tzinfo=_brisbane)
             start = local_start.astimezone(_utc).replace(tzinfo=timezone.utc)
             end = start + timedelta(minutes=duration)
             self.orbs[label] = LiveORB(
@@ -370,11 +393,11 @@ class ExecutionEngine:
                         cost = self.cost_spec
                         if self._live_session_costs:
                             cost = get_session_cost_spec(
-                                self.portfolio.instrument, trade.orb_label,
+                                self.portfolio.instrument,
+                                trade.orb_label,
                             )
                         trade.pnl_r = round(
-                            to_r_multiple(cost, trade.entry_price,
-                                          trade.stop_price, mtm_points),
+                            to_r_multiple(cost, trade.entry_price, trade.stop_price, mtm_points),
                             4,
                         )
                     else:
@@ -387,16 +410,18 @@ class ExecutionEngine:
                 if self.risk_manager is not None:
                     self.risk_manager.on_trade_exit(trade.pnl_r)
 
-                events.append(TradeEvent(
-                    event_type="SCRATCH",
-                    strategy_id=trade.strategy_id,
-                    timestamp=last_ts,
-                    price=last_close,
-                    direction=trade.direction,
-                    contracts=trade.contracts,
-                    reason="session_end",
-                    pnl_r=trade.pnl_r,
-                ))
+                events.append(
+                    TradeEvent(
+                        event_type="SCRATCH",
+                        strategy_id=trade.strategy_id,
+                        timestamp=last_ts,
+                        price=last_close,
+                        direction=trade.direction,
+                        contracts=trade.contracts,
+                        reason="session_end",
+                        pnl_r=trade.pnl_r,
+                    )
+                )
             elif trade.state in (TradeState.ARMED, TradeState.CONFIRMING):
                 trade.state = TradeState.EXITED
                 self.completed_trades.append(trade)
@@ -448,37 +473,39 @@ class ExecutionEngine:
                     continue
 
             # Check calendar overlay (NFP/OPEX skip)
-            if (self.calendar_overlay is not None
-                    and self._daily_features_row is not None
-                    and not self.calendar_overlay.matches_row(
-                        self._daily_features_row, orb.label)):
+            if (
+                self.calendar_overlay is not None
+                and self._daily_features_row is not None
+                and not self.calendar_overlay.matches_row(self._daily_features_row, orb.label)
+            ):
                 # Determine skip reason for audit trail
                 skip_reason = []
                 if self.calendar_overlay.skip_nfp and self._daily_features_row.get("is_nfp_day"):
                     skip_reason.append("NFP")
                 if self.calendar_overlay.skip_opex and self._daily_features_row.get("is_opex_day"):
                     skip_reason.append("OPEX")
-                if (self.calendar_overlay.skip_friday_session == orb.label
-                        and self._daily_features_row.get("is_friday")):
+                if self.calendar_overlay.skip_friday_session == orb.label and self._daily_features_row.get("is_friday"):
                     skip_reason.append(f"Friday-{orb.label}")
 
-                logger.info(f"Calendar skip: {strategy.strategy_id} on {self.trading_day} "
-                            f"({orb.label}) — {', '.join(skip_reason)}")
+                logger.info(
+                    f"Calendar skip: {strategy.strategy_id} on {self.trading_day} "
+                    f"({orb.label}) — {', '.join(skip_reason)}"
+                )
                 continue
 
             # Check ATR velocity overlay (Contracting×Neutral/Compressed skip)
-            if (self.atr_velocity_overlay is not None
-                    and self._daily_features_row is not None
-                    and not self.atr_velocity_overlay.matches_row(
-                        self._daily_features_row, orb.label)):
+            if (
+                self.atr_velocity_overlay is not None
+                and self._daily_features_row is not None
+                and not self.atr_velocity_overlay.matches_row(self._daily_features_row, orb.label)
+            ):
                 continue
 
             # Check market state scoring (if available)
             if self.market_state is not None:
                 from trading_app.scoring import MIN_SCORE_THRESHOLD
-                score = self.market_state.strategy_scores.get(
-                    strategy.strategy_id
-                )
+
+                score = self.market_state.strategy_scores.get(strategy.strategy_id)
                 if score is not None and score < MIN_SCORE_THRESHOLD:
                     continue
 
@@ -496,19 +523,23 @@ class ExecutionEngine:
                 if not ml_result.take:
                     logger.info(
                         "ML_SKIP: %s on %s — P(win)=%.3f < threshold=%.3f",
-                        strategy.strategy_id, self.trading_day,
-                        ml_result.p_win, ml_result.threshold,
+                        strategy.strategy_id,
+                        self.trading_day,
+                        ml_result.p_win,
+                        ml_result.threshold,
                     )
                     self.ml_skips += 1
-                    events.append(TradeEvent(
-                        event_type="ML_SKIP",
-                        strategy_id=strategy.strategy_id,
-                        timestamp=bar["ts_utc"],
-                        price=bar["close"],
-                        direction=orb.break_dir,
-                        contracts=0,
-                        reason=f"P(win)={ml_result.p_win:.3f}<{ml_result.threshold:.3f}",
-                    ))
+                    events.append(
+                        TradeEvent(
+                            event_type="ML_SKIP",
+                            strategy_id=strategy.strategy_id,
+                            timestamp=bar["ts_utc"],
+                            price=bar["close"],
+                            direction=orb.break_dir,
+                            contracts=0,
+                            reason=f"P(win)={ml_result.p_win:.3f}<{ml_result.threshold:.3f}",
+                        )
+                    )
                     continue
 
             # Check if already have a trade for this strategy today
@@ -526,7 +557,8 @@ class ExecutionEngine:
                 state=TradeState.CONFIRMING,
                 confirm_needed=strategy.confirm_bars,
                 confirm_count=(
-                    1 if (orb.break_dir == "long" and bar["close"] > orb.high)
+                    1
+                    if (orb.break_dir == "long" and bar["close"] > orb.high)
                     or (orb.break_dir == "short" and bar["close"] < orb.low)
                     else 0
                 ),
@@ -576,8 +608,9 @@ class ExecutionEngine:
         self.active_trades = still_active + new_trades
         return events
 
-    def _try_entry(self, trade: ActiveTrade, orb: LiveORB, confirm_bar: dict,
-                   new_trades: list | None = None) -> list[TradeEvent]:
+    def _try_entry(
+        self, trade: ActiveTrade, orb: LiveORB, confirm_bar: dict, new_trades: list | None = None
+    ) -> list[TradeEvent]:
         """Attempt to enter a trade after confirmation.
 
         new_trades: list to append newly active trades to (avoids mutating
@@ -608,6 +641,7 @@ class ExecutionEngine:
             # For shorts: bar low must go below orb_low; fill = orb_low - slippage.
             from trading_app.config import E2_SLIPPAGE_TICKS
             from pipeline.cost_model import get_cost_spec as _get_cost_spec
+
             tick_size = _get_cost_spec(trade.strategy.instrument).tick_size
             slippage = E2_SLIPPAGE_TICKS * tick_size
 
@@ -625,22 +659,29 @@ class ExecutionEngine:
                 return events
 
             # Position sizing (vol-adjusted, Carver Ch.9)
-            cost = get_session_cost_spec(
-                self.portfolio.instrument, trade.orb_label,
-            ) if self._live_session_costs else self.cost_spec
+            cost = (
+                get_session_cost_spec(
+                    self.portfolio.instrument,
+                    trade.orb_label,
+                )
+                if self._live_session_costs
+                else self.cost_spec
+            )
             trade.contracts = self._compute_contracts(risk_points, cost)
             if trade.contracts == 0:
                 trade.state = TradeState.EXITED
                 self.completed_trades.append(trade)
-                events.append(TradeEvent(
-                    event_type="REJECT",
-                    strategy_id=trade.strategy_id,
-                    timestamp=confirm_bar["ts_utc"],
-                    price=entry_price,
-                    direction=trade.direction,
-                    contracts=0,
-                    reason="sizing_rejected: risk_exceeds_budget",
-                ))
+                events.append(
+                    TradeEvent(
+                        event_type="REJECT",
+                        strategy_id=trade.strategy_id,
+                        timestamp=confirm_bar["ts_utc"],
+                        price=entry_price,
+                        direction=trade.direction,
+                        contracts=0,
+                        reason="sizing_rejected: risk_exceeds_budget",
+                    )
+                )
                 return events
 
             # Risk manager check
@@ -655,15 +696,17 @@ class ExecutionEngine:
                 if not can_enter:
                     trade.state = TradeState.EXITED
                     self.completed_trades.append(trade)
-                    events.append(TradeEvent(
-                        event_type="REJECT",
-                        strategy_id=trade.strategy_id,
-                        timestamp=confirm_bar["ts_utc"],
-                        price=entry_price,
-                        direction=trade.direction,
-                        contracts=trade.contracts,
-                        reason=f"risk_rejected: {reason}",
-                    ))
+                    events.append(
+                        TradeEvent(
+                            event_type="REJECT",
+                            strategy_id=trade.strategy_id,
+                            timestamp=confirm_bar["ts_utc"],
+                            price=entry_price,
+                            direction=trade.direction,
+                            contracts=trade.contracts,
+                            reason=f"risk_rejected: {reason}",
+                        )
+                    )
                     return events
 
             trade.contracts = max(1, int(trade.contracts * suggested_contract_factor))
@@ -691,15 +734,17 @@ class ExecutionEngine:
                         trade.ib_alignment = "opposed"
                         trade.state = TradeState.EXITED
                         self.completed_trades.append(trade)
-                        events.append(TradeEvent(
-                            event_type="REJECT",
-                            strategy_id=trade.strategy_id,
-                            timestamp=confirm_bar["ts_utc"],
-                            price=entry_price,
-                            direction=trade.direction,
-                            contracts=trade.contracts,
-                            reason="ib_already_opposed",
-                        ))
+                        events.append(
+                            TradeEvent(
+                                event_type="REJECT",
+                                strategy_id=trade.strategy_id,
+                                timestamp=confirm_bar["ts_utc"],
+                                price=entry_price,
+                                direction=trade.direction,
+                                contracts=trade.contracts,
+                                reason="ib_already_opposed",
+                            )
+                        )
                         return events
                 else:
                     trade.exit_mode = "ib_pending"
@@ -709,15 +754,17 @@ class ExecutionEngine:
                 self.risk_manager.on_trade_entry()
 
             new_trades.append(trade)
-            events.append(TradeEvent(
-                event_type="ENTRY",
-                strategy_id=trade.strategy_id,
-                timestamp=confirm_bar["ts_utc"],
-                price=entry_price,
-                direction=trade.direction,
-                contracts=trade.contracts,
-                reason="stop_market_E2",
-            ))
+            events.append(
+                TradeEvent(
+                    event_type="ENTRY",
+                    strategy_id=trade.strategy_id,
+                    timestamp=confirm_bar["ts_utc"],
+                    price=entry_price,
+                    direction=trade.direction,
+                    contracts=trade.contracts,
+                    reason="stop_market_E2",
+                )
+            )
             return events
 
         elif trade.entry_model == "E1":
@@ -781,22 +828,29 @@ class ExecutionEngine:
                         continue
 
                     # Position sizing (vol-adjusted, Carver Ch.9)
-                    cost = get_session_cost_spec(
-                        self.portfolio.instrument, trade.orb_label,
-                    ) if self._live_session_costs else self.cost_spec
+                    cost = (
+                        get_session_cost_spec(
+                            self.portfolio.instrument,
+                            trade.orb_label,
+                        )
+                        if self._live_session_costs
+                        else self.cost_spec
+                    )
                     trade.contracts = self._compute_contracts(risk_points, cost)
                     if trade.contracts == 0:
                         trade.state = TradeState.EXITED
                         self.completed_trades.append(trade)
-                        events.append(TradeEvent(
-                            event_type="REJECT",
-                            strategy_id=trade.strategy_id,
-                            timestamp=entry_ts,
-                            price=entry_price,
-                            direction=trade.direction,
-                            contracts=0,
-                            reason="sizing_rejected: risk_exceeds_budget",
-                        ))
+                        events.append(
+                            TradeEvent(
+                                event_type="REJECT",
+                                strategy_id=trade.strategy_id,
+                                timestamp=entry_ts,
+                                price=entry_price,
+                                direction=trade.direction,
+                                contracts=0,
+                                reason="sizing_rejected: risk_exceeds_budget",
+                            )
+                        )
                         continue
 
                     # Risk manager check BEFORE entry
@@ -811,15 +865,17 @@ class ExecutionEngine:
                         if not can_enter:
                             trade.state = TradeState.EXITED
                             self.completed_trades.append(trade)
-                            events.append(TradeEvent(
-                                event_type="REJECT",
-                                strategy_id=trade.strategy_id,
-                                timestamp=entry_ts,
-                                price=entry_price,
-                                direction=trade.direction,
-                                contracts=trade.contracts,
-                                reason=f"risk_rejected: {reason}",
-                            ))
+                            events.append(
+                                TradeEvent(
+                                    event_type="REJECT",
+                                    strategy_id=trade.strategy_id,
+                                    timestamp=entry_ts,
+                                    price=entry_price,
+                                    direction=trade.direction,
+                                    contracts=trade.contracts,
+                                    reason=f"risk_rejected: {reason}",
+                                )
+                            )
                             continue
 
                     # Apply suggested contract factor
@@ -848,15 +904,17 @@ class ExecutionEngine:
                                 trade.ib_alignment = "opposed"
                                 trade.state = TradeState.EXITED
                                 self.completed_trades.append(trade)
-                                events.append(TradeEvent(
-                                    event_type="REJECT",
-                                    strategy_id=trade.strategy_id,
-                                    timestamp=entry_ts,
-                                    price=entry_price,
-                                    direction=trade.direction,
-                                    contracts=trade.contracts,
-                                    reason="ib_already_opposed",
-                                ))
+                                events.append(
+                                    TradeEvent(
+                                        event_type="REJECT",
+                                        strategy_id=trade.strategy_id,
+                                        timestamp=entry_ts,
+                                        price=entry_price,
+                                        direction=trade.direction,
+                                        contracts=trade.contracts,
+                                        reason="ib_already_opposed",
+                                    )
+                                )
                                 continue
                         else:
                             trade.exit_mode = "ib_pending"
@@ -864,15 +922,17 @@ class ExecutionEngine:
                     if self.risk_manager is not None:
                         self.risk_manager.on_trade_entry()
 
-                    events.append(TradeEvent(
-                        event_type="ENTRY",
-                        strategy_id=trade.strategy_id,
-                        timestamp=entry_ts,
-                        price=entry_price,
-                        direction=trade.direction,
-                        contracts=trade.contracts,
-                        reason="confirm_bars_met_E1",
-                    ))
+                    events.append(
+                        TradeEvent(
+                            event_type="ENTRY",
+                            strategy_id=trade.strategy_id,
+                            timestamp=entry_ts,
+                            price=entry_price,
+                            direction=trade.direction,
+                            contracts=trade.contracts,
+                            reason="confirm_bars_met_E1",
+                        )
+                    )
                     # Fall through to exit check — fill bar may hit stop/target
                     # (matches outcome_builder _check_fill_bar_exit behavior)
 
@@ -905,22 +965,29 @@ class ExecutionEngine:
                             continue
 
                         # Position sizing (vol-adjusted, Carver Ch.9)
-                        cost = get_session_cost_spec(
-                            self.portfolio.instrument, trade.orb_label,
-                        ) if self._live_session_costs else self.cost_spec
+                        cost = (
+                            get_session_cost_spec(
+                                self.portfolio.instrument,
+                                trade.orb_label,
+                            )
+                            if self._live_session_costs
+                            else self.cost_spec
+                        )
                         trade.contracts = self._compute_contracts(risk_points, cost)
                         if trade.contracts == 0:
                             trade.state = TradeState.EXITED
                             self.completed_trades.append(trade)
-                            events.append(TradeEvent(
-                                event_type="REJECT",
-                                strategy_id=trade.strategy_id,
-                                timestamp=bar["ts_utc"],
-                                price=entry_price,
-                                direction=trade.direction,
-                                contracts=0,
-                                reason="sizing_rejected: risk_exceeds_budget",
-                            ))
+                            events.append(
+                                TradeEvent(
+                                    event_type="REJECT",
+                                    strategy_id=trade.strategy_id,
+                                    timestamp=bar["ts_utc"],
+                                    price=entry_price,
+                                    direction=trade.direction,
+                                    contracts=0,
+                                    reason="sizing_rejected: risk_exceeds_budget",
+                                )
+                            )
                             continue
 
                         # Risk manager check BEFORE entry
@@ -935,15 +1002,17 @@ class ExecutionEngine:
                             if not can_enter:
                                 trade.state = TradeState.EXITED
                                 self.completed_trades.append(trade)
-                                events.append(TradeEvent(
-                                    event_type="REJECT",
-                                    strategy_id=trade.strategy_id,
-                                    timestamp=bar["ts_utc"],
-                                    price=entry_price,
-                                    direction=trade.direction,
-                                    contracts=trade.contracts,
-                                    reason=f"risk_rejected: {reason}",
-                                ))
+                                events.append(
+                                    TradeEvent(
+                                        event_type="REJECT",
+                                        strategy_id=trade.strategy_id,
+                                        timestamp=bar["ts_utc"],
+                                        price=entry_price,
+                                        direction=trade.direction,
+                                        contracts=trade.contracts,
+                                        reason=f"risk_rejected: {reason}",
+                                    )
+                                )
                                 continue
 
                         # Apply suggested contract factor
@@ -971,15 +1040,17 @@ class ExecutionEngine:
                                     trade.ib_alignment = "opposed"
                                     trade.state = TradeState.EXITED
                                     self.completed_trades.append(trade)
-                                    events.append(TradeEvent(
-                                        event_type="REJECT",
-                                        strategy_id=trade.strategy_id,
-                                        timestamp=bar["ts_utc"],
-                                        price=entry_price,
-                                        direction=trade.direction,
-                                        contracts=trade.contracts,
-                                        reason="ib_already_opposed",
-                                    ))
+                                    events.append(
+                                        TradeEvent(
+                                            event_type="REJECT",
+                                            strategy_id=trade.strategy_id,
+                                            timestamp=bar["ts_utc"],
+                                            price=entry_price,
+                                            direction=trade.direction,
+                                            contracts=trade.contracts,
+                                            reason="ib_already_opposed",
+                                        )
+                                    )
                                     continue
                             else:
                                 trade.exit_mode = "ib_pending"
@@ -987,15 +1058,17 @@ class ExecutionEngine:
                         if self.risk_manager is not None:
                             self.risk_manager.on_trade_entry()
 
-                        events.append(TradeEvent(
-                            event_type="ENTRY",
-                            strategy_id=trade.strategy_id,
-                            timestamp=bar["ts_utc"],
-                            price=entry_price,
-                            direction=trade.direction,
-                            contracts=trade.contracts,
-                            reason="retrace_fill_E3",
-                        ))
+                        events.append(
+                            TradeEvent(
+                                event_type="ENTRY",
+                                strategy_id=trade.strategy_id,
+                                timestamp=bar["ts_utc"],
+                                price=entry_price,
+                                direction=trade.direction,
+                                contracts=trade.contracts,
+                                reason="retrace_fill_E3",
+                            )
+                        )
                         # Fall through to exit check — fill bar may hit target
                         # (E3 stop on fill bar is impossible: entry_rules rejects
                         # fills when stop breached on retrace bar)
@@ -1037,7 +1110,12 @@ class ExecutionEngine:
             # Timed early exit: kill losers at N minutes after fill
             # Skip for hold_7h — aligned trades should run, not get killed early
             threshold = EARLY_EXIT_MINUTES.get(trade.orb_label)
-            if threshold and not trade.early_exit_checked and trade.exit_mode != "hold_7h" and trade.entry_ts is not None:
+            if (
+                threshold
+                and not trade.early_exit_checked
+                and trade.exit_mode != "hold_7h"
+                and trade.entry_ts is not None
+            ):
                 elapsed = (bar["ts_utc"] - trade.entry_ts).total_seconds() / 60.0
                 if elapsed >= threshold:
                     trade.early_exit_checked = True
@@ -1059,13 +1137,13 @@ class ExecutionEngine:
 
         # Prune exited trades to prevent unbounded list growth and iteration bugs
         if events:
-            self.active_trades = [t for t in self.active_trades
-                                  if t.state != TradeState.EXITED]
+            self.active_trades = [t for t in self.active_trades if t.state != TradeState.EXITED]
 
         return events
 
-    def _exit_trade(self, trade: ActiveTrade, bar: dict, outcome: str,
-                    exit_price: float, events: list[TradeEvent]) -> None:
+    def _exit_trade(
+        self, trade: ActiveTrade, bar: dict, outcome: str, exit_price: float, events: list[TradeEvent]
+    ) -> None:
         """Exit a trade and compute PnL."""
         trade.exit_ts = bar["ts_utc"]
         trade.exit_price = exit_price
@@ -1077,7 +1155,8 @@ class ExecutionEngine:
         cost = self.cost_spec
         if self._live_session_costs:
             cost = get_session_cost_spec(
-                self.portfolio.instrument, trade.orb_label,
+                self.portfolio.instrument,
+                trade.orb_label,
             )
 
         if outcome == "win":
@@ -1121,13 +1200,15 @@ class ExecutionEngine:
         else:
             reason = "loss_stop_hit"
 
-        events.append(TradeEvent(
-            event_type="EXIT",
-            strategy_id=trade.strategy_id,
-            timestamp=bar["ts_utc"],
-            price=exit_price,
-            direction=trade.direction,
-            contracts=trade.contracts,
-            reason=reason,
-            pnl_r=trade.pnl_r,
-        ))
+        events.append(
+            TradeEvent(
+                event_type="EXIT",
+                strategy_id=trade.strategy_id,
+                timestamp=bar["ts_utc"],
+                price=exit_price,
+                direction=trade.direction,
+                contracts=trade.contracts,
+                reason=reason,
+                pnl_r=trade.pnl_r,
+            )
+        )

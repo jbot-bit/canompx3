@@ -26,7 +26,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 
 # Month codes: universal across all CME futures
-MONTH_CODES = 'FGHJKMNQUVXZ'
+MONTH_CODES = "FGHJKMNQUVXZ"
 
 # =============================================================================
 # ASSET CONFIGURATIONS
@@ -39,14 +39,21 @@ ASSET_CONFIGS = {
         # BTC trades ~30k contracts/day vs MBT ~5k — far better 1m bar coverage.
         "dbn_path": PROJECT_ROOT / "DB" / "BTC_DB",
         "symbol": "MBT",
-        "outright_pattern": re.compile(r'^BTC[FGHJKMNQUVXZ]\d{1,2}$'),
+        "outright_pattern": re.compile(r"^BTC[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 3,
         "minimum_start_date": date(2021, 2, 1),
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
-            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
-            "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
-            "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+            "CME_REOPEN",
+            "TOKYO_OPEN",
+            "SINGAPORE_OPEN",
+            "LONDON_METALS",
+            "US_DATA_830",
+            "NYSE_OPEN",
+            "US_DATA_1000",
+            "COMEX_SETTLE",
+            "CME_PRECLOSE",
+            "NYSE_CLOSE",
         ],
     },
     "MGC": {
@@ -54,27 +61,39 @@ ASSET_CONFIGS = {
         # Identical pattern to RTY→M2K, SI→SIL, 6E→M6E. Cost model uses MGC micro specs ($10/pt).
         "dbn_path": PROJECT_ROOT / "DB" / "GOLD_DB_FULLSIZE",
         "symbol": "MGC",
-        "outright_pattern": re.compile(r'^GC[FGHJKMNQUVXZ]\d{1,2}$'),
+        "outright_pattern": re.compile(r"^GC[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 2,
         "minimum_start_date": date(2019, 1, 1),
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
-            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
-            "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
+            "CME_REOPEN",
+            "TOKYO_OPEN",
+            "SINGAPORE_OPEN",
+            "LONDON_METALS",
+            "US_DATA_830",
+            "NYSE_OPEN",
+            "US_DATA_1000",
             "COMEX_SETTLE",
         ],
     },
     "MNQ": {
         "dbn_path": PROJECT_ROOT / "DB" / "MNQ_DB" / "glbx-mdp3-20240204-20260203.ohlcv-1m.dbn.zst",
         "symbol": "MNQ",
-        "outright_pattern": re.compile(r'^MNQ[FGHJKMNQUVXZ]\d{1,2}$'),
+        "outright_pattern": re.compile(r"^MNQ[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 3,
         "minimum_start_date": date(2024, 2, 4),
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
-            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
-            "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
-            "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+            "CME_REOPEN",
+            "TOKYO_OPEN",
+            "SINGAPORE_OPEN",
+            "LONDON_METALS",
+            "US_DATA_830",
+            "NYSE_OPEN",
+            "US_DATA_1000",
+            "COMEX_SETTLE",
+            "CME_PRECLOSE",
+            "NYSE_CLOSE",
             "BRISBANE_1025",
         ],
     },
@@ -84,13 +103,18 @@ ASSET_CONFIGS = {
         # CL trades ~500k contracts/day vs MCL ~50k — far better 1m bar coverage.
         "dbn_path": PROJECT_ROOT / "DB" / "CL_DB",
         "symbol": "MCL",
-        "outright_pattern": re.compile(r'^CL[FGHJKMNQUVXZ]\d{1,2}$'),
+        "outright_pattern": re.compile(r"^CL[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 2,
         "minimum_start_date": date(2021, 2, 1),
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
-            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
-            "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
+            "CME_REOPEN",
+            "TOKYO_OPEN",
+            "SINGAPORE_OPEN",
+            "LONDON_METALS",
+            "US_DATA_830",
+            "NYSE_OPEN",
+            "US_DATA_1000",
             "COMEX_SETTLE",
         ],
     },
@@ -102,14 +126,21 @@ ASSET_CONFIGS = {
         # this config's ^MES pattern selects only native MES outrights (2024 transition).
         "dbn_path": PROJECT_ROOT / "DB" / "MES_DB_2019-2024",
         "symbol": "MES",
-        "outright_pattern": re.compile(r'^MES[FGHJKMNQUVXZ]\d{1,2}$'),
+        "outright_pattern": re.compile(r"^MES[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 3,
         "minimum_start_date": date(2019, 2, 12),
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
-            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
-            "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
-            "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+            "CME_REOPEN",
+            "TOKYO_OPEN",
+            "SINGAPORE_OPEN",
+            "LONDON_METALS",
+            "US_DATA_830",
+            "NYSE_OPEN",
+            "US_DATA_1000",
+            "COMEX_SETTLE",
+            "CME_PRECLOSE",
+            "NYSE_CLOSE",
         ],
     },
     "ES": {
@@ -118,14 +149,21 @@ ASSET_CONFIGS = {
         # Identical pattern to GC→MGC, NQ→MNQ, RTY→M2K.
         "dbn_path": PROJECT_ROOT / "DB" / "MES_DB_2019-2024",
         "symbol": "MES",
-        "outright_pattern": re.compile(r'^ES[FGHJKMNQUVXZ]\d{1,2}$'),
+        "outright_pattern": re.compile(r"^ES[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 2,
         "minimum_start_date": date(2019, 2, 12),
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
-            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
-            "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
-            "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+            "CME_REOPEN",
+            "TOKYO_OPEN",
+            "SINGAPORE_OPEN",
+            "LONDON_METALS",
+            "US_DATA_830",
+            "NYSE_OPEN",
+            "US_DATA_1000",
+            "COMEX_SETTLE",
+            "CME_PRECLOSE",
+            "NYSE_CLOSE",
         ],
     },
     "M2K": {
@@ -134,14 +172,21 @@ ASSET_CONFIGS = {
         # Quarterly cycle only: H/M/U/Z.
         "dbn_path": PROJECT_ROOT / "DB" / "M2K_DB",
         "symbol": "M2K",
-        "outright_pattern": re.compile(r'^RTY[HMUZ]\d{1,2}$'),
+        "outright_pattern": re.compile(r"^RTY[HMUZ]\d{1,2}$"),
         "prefix_len": 3,
         "minimum_start_date": date(2021, 2, 21),
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
-            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
-            "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
-            "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+            "CME_REOPEN",
+            "TOKYO_OPEN",
+            "SINGAPORE_OPEN",
+            "LONDON_METALS",
+            "US_DATA_830",
+            "NYSE_OPEN",
+            "US_DATA_1000",
+            "COMEX_SETTLE",
+            "CME_PRECLOSE",
+            "NYSE_CLOSE",
             "BRISBANE_1025",
         ],
     },
@@ -150,12 +195,14 @@ ASSET_CONFIGS = {
         # Identical pattern to GC→MGC, 6E→M6E, RTY→M2K. Cost model uses SIL micro specs ($1000/pt).
         "dbn_path": PROJECT_ROOT / "DB" / "SL_DB",
         "symbol": "SIL",
-        "outright_pattern": re.compile(r'^SI[FGHJKMNQUVXZ]\d{1,2}$'),
+        "outright_pattern": re.compile(r"^SI[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 2,
         "minimum_start_date": date(2024, 2, 18),
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
-            "SINGAPORE_OPEN", "US_DATA_830", "NYSE_OPEN",
+            "SINGAPORE_OPEN",
+            "US_DATA_830",
+            "NYSE_OPEN",
             "US_DATA_1000",
         ],
     },
@@ -168,16 +215,17 @@ ASSET_CONFIGS = {
         # Asia sessions (TOKYO_OPEN/SINGAPORE_OPEN) are WATCH-ONLY until data confirms breakout edge.
         "dbn_path": PROJECT_ROOT / "DB" / "M6E_DB",
         "symbol": "M6E",
-        "outright_pattern": re.compile(r'^6E[HMUZ]\d{1,2}$'),
+        "outright_pattern": re.compile(r"^6E[HMUZ]\d{1,2}$"),
         "prefix_len": 2,
         "minimum_start_date": date(2021, 2, 21),
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
-            "TOKYO_OPEN", "SINGAPORE_OPEN",  # Asia — watch-only
-            "LONDON_METALS",        # London metals (best FX session)
-            "US_DATA_830",          # 8:30 ET data release (major FX mover)
-            "NYSE_OPEN",            # 9:30 ET
-            "US_DATA_1000",         # 10:00 ET
+            "TOKYO_OPEN",
+            "SINGAPORE_OPEN",  # Asia — watch-only
+            "LONDON_METALS",  # London metals (best FX session)
+            "US_DATA_830",  # 8:30 ET data release (major FX mover)
+            "NYSE_OPEN",  # 9:30 ET
+            "US_DATA_1000",  # 10:00 ET
         ],
     },
     "NQ": {
@@ -186,14 +234,21 @@ ASSET_CONFIGS = {
         # Identical pattern to GC→MGC, ES→MES, RTY→M2K.
         "dbn_path": PROJECT_ROOT / "DB" / "NQ_DB_2021-2024",
         "symbol": "MNQ",
-        "outright_pattern": re.compile(r'^NQ[FGHJKMNQUVXZ]\d{1,2}$'),
+        "outright_pattern": re.compile(r"^NQ[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 2,
         "minimum_start_date": date(2021, 2, 4),
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
-            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
-            "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
-            "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+            "CME_REOPEN",
+            "TOKYO_OPEN",
+            "SINGAPORE_OPEN",
+            "LONDON_METALS",
+            "US_DATA_830",
+            "NYSE_OPEN",
+            "US_DATA_1000",
+            "COMEX_SETTLE",
+            "CME_PRECLOSE",
+            "NYSE_CLOSE",
             "BRISBANE_1025",
         ],
     },
@@ -202,10 +257,9 @@ ASSET_CONFIGS = {
 # Primary instruments actively traded for ORB breakout.
 # Excludes source aliases (ES, NQ) and dead-for-ORB instruments (MCL, SIL, M6E, MBT).
 # This is the canonical source — import this instead of hardcoding instrument lists.
-ACTIVE_ORB_INSTRUMENTS = sorted([
-    k for k, v in ASSET_CONFIGS.items()
-    if v['symbol'] == k and k not in {'MCL', 'SIL', 'M6E', 'MBT'}
-])
+ACTIVE_ORB_INSTRUMENTS = sorted(
+    [k for k, v in ASSET_CONFIGS.items() if v["symbol"] == k and k not in {"MCL", "SIL", "M6E", "MBT"}]
+)
 
 
 def get_active_instruments() -> list[str]:

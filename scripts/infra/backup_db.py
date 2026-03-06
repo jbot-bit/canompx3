@@ -50,8 +50,9 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="Backup gold.db")
-    parser.add_argument("--keep", type=int, default=DEFAULT_KEEP,
-                        help=f"Number of backups to retain (default: {DEFAULT_KEEP})")
+    parser.add_argument(
+        "--keep", type=int, default=DEFAULT_KEEP, help=f"Number of backups to retain (default: {DEFAULT_KEEP})"
+    )
     args = parser.parse_args()
 
     result = backup_db(keep=args.keep)

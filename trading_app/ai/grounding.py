@@ -24,10 +24,7 @@ def build_grounding_prompt(corpus: dict[str, str], schema_summary: str) -> str:
     Returns:
         System prompt string for Claude.
     """
-    templates_list = "\n".join(
-        f"  - {t['template']}: {t['description']}"
-        for t in SQLAdapter.available_templates()
-    )
+    templates_list = "\n".join(f"  - {t['template']}: {t['description']}" for t in SQLAdapter.available_templates())
 
     return f"""You are a trading data analyst for an MGC (Micro Gold futures) research system.
 You answer questions by selecting the right query template and parameters.
@@ -66,10 +63,10 @@ You MUST ground all answers in the canonical documents below.
 === CANONICAL DOCUMENTS ===
 
 --- COST MODEL (pipeline/cost_model.py) ---
-{corpus.get('COST_MODEL', '[not loaded]')}
+{corpus.get("COST_MODEL", "[not loaded]")}
 
 --- CONFIG (trading_app/config.py, first 80 lines) ---
-{_truncate(corpus.get('CONFIG', '[not loaded]'), 80)}
+{_truncate(corpus.get("CONFIG", "[not loaded]"), 80)}
 
 === INSTRUCTIONS ===
 When the user asks a question:
@@ -85,9 +82,7 @@ If the question cannot be answered by any template, respond with:
 """
 
 
-def build_interpretation_prompt(
-    corpus: dict[str, str], question: str, data_summary: str
-) -> str:
+def build_interpretation_prompt(corpus: dict[str, str], question: str, data_summary: str) -> str:
     """Build prompt for interpreting query results.
 
     Args:

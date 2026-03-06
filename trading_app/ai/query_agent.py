@@ -47,9 +47,7 @@ class QueryAgent:
         self.db_path = db_path
         self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
         if not self.api_key:
-            raise ValueError(
-                "ANTHROPIC_API_KEY required. Pass api_key or set env var."
-            )
+            raise ValueError("ANTHROPIC_API_KEY required. Pass api_key or set env var.")
 
         self.corpus = load_corpus()
         self.adapter = SQLAdapter(db_path)
@@ -57,6 +55,7 @@ class QueryAgent:
         self.db_stats = get_db_stats(db_path)
 
         import anthropic
+
         self.client = anthropic.Anthropic(api_key=self.api_key)
 
     def query(self, question: str) -> QueryResult:

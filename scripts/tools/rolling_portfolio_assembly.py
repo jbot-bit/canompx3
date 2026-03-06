@@ -59,6 +59,7 @@ SIZING = {
 # Data loading — edge family session slots
 # ---------------------------------------------------------------------------
 
+
 def load_slot_data(db_path, instrument):
     """Load session slot heads and their trade outcomes.
 
@@ -72,7 +73,8 @@ def load_slot_data(db_path, instrument):
     con = duckdb.connect(str(db_path), read_only=True)
     try:
         # Step 1: Find slot heads (best family per session)
-        slot_rows = con.execute("""
+        slot_rows = con.execute(
+            """
             WITH ranked AS (
                 SELECT ef.instrument,
                        vs.orb_label AS session,
@@ -97,12 +99,19 @@ def load_slot_data(db_path, instrument):
                    trade_day_count, trade_tier, member_count
             FROM ranked WHERE rn = 1
             ORDER BY head_sharpe_ann DESC
-        """, [instrument]).fetchall()
+        """,
+            [instrument],
+        ).fetchall()
 
         slot_cols = [
-            "instrument", "session", "head_strategy_id",
-            "head_expectancy_r", "head_sharpe_ann",
-            "trade_day_count", "trade_tier", "member_count",
+            "instrument",
+            "session",
+            "head_strategy_id",
+            "head_expectancy_r",
+            "head_sharpe_ann",
+            "trade_day_count",
+            "trade_tier",
+            "member_count",
         ]
         slots = [dict(zip(slot_cols, r)) for r in slot_rows]
 
@@ -113,7 +122,8 @@ def load_slot_data(db_path, instrument):
         strategy_ids = [s["head_strategy_id"] for s in slots]
         placeholders = ", ".join(["?"] * len(strategy_ids))
 
-        trade_df = con.execute(f"""
+        trade_df = con.execute(
+            f"""
             SELECT vs.orb_label AS session,
                    oo.trading_day,
                    oo.pnl_r
@@ -131,7 +141,9 @@ def load_slot_data(db_path, instrument):
               AND oo.outcome IN ('win', 'loss')
               AND oo.pnl_r IS NOT NULL
             ORDER BY vs.orb_label, oo.trading_day
-        """, strategy_ids).fetchdf()
+        """,
+            strategy_ids,
+        ).fetchdf()
 
         # Group by session
         session_trades = {}
@@ -151,31 +163,30 @@ def load_slot_data(db_path, instrument):
 # Rolling window analysis
 # ---------------------------------------------------------------------------
 
+
 def rolling_windows(trade_df, data_start, data_end):
     """Compute rolling 12m window metrics."""
     windows = []
-    first_test = date(data_start.year, data_start.month, 1) + relativedelta(
-        months=WINDOW_MONTHS
-    )
+    first_test = date(data_start.year, data_start.month, 1) + relativedelta(months=WINDOW_MONTHS)
     current = first_test
 
     while current <= data_end:
         w_start = current - relativedelta(months=WINDOW_MONTHS)
         w_end = current - relativedelta(days=1)
-        mask = (trade_df["trading_day"] >= pd.Timestamp(w_start)) & (
-            trade_df["trading_day"] <= pd.Timestamp(w_end)
-        )
+        mask = (trade_df["trading_day"] >= pd.Timestamp(w_start)) & (trade_df["trading_day"] <= pd.Timestamp(w_end))
         window_trades = trade_df[mask]
 
         if len(window_trades) >= MIN_WINDOW_TRADES:
             m = compute_strategy_metrics(window_trades["pnl_r"].values)
             if m is not None:
-                windows.append({
-                    "start": w_start,
-                    "end": w_end,
-                    "label": f"{w_start} to {w_end}",
-                    **m,
-                })
+                windows.append(
+                    {
+                        "start": w_start,
+                        "end": w_end,
+                        "label": f"{w_start} to {w_end}",
+                        **m,
+                    }
+                )
 
         current += relativedelta(months=STEP_MONTHS)
 
@@ -203,13 +214,14 @@ def classify_windows(windows, n_recent=6):
 # Per-instrument processing
 # ---------------------------------------------------------------------------
 
+
 def process_instrument(db_path, instrument):
     """Run rolling analysis on all session slots for an instrument."""
     spec = get_cost_spec(instrument)
 
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print(f"  {instrument}  (${spec.point_value}/pt, ${spec.total_friction:.2f} RT)")
-    print(f"{'='*80}")
+    print(f"{'=' * 80}")
 
     slots, session_trades = load_slot_data(db_path, instrument)
 
@@ -267,20 +279,11 @@ def process_instrument(db_path, instrument):
 
         # Print window table
         if windows:
-            print(
-                f"\n  {'Window':28s} {'N':>4s} {'WR':>6s} {'ExpR':>8s} "
-                f"{'Sharpe':>8s} {'Total':>7s} {'Status':>12s}"
-            )
-            print(
-                f"  {'-'*28} {'-'*4} {'-'*6} {'-'*8} {'-'*8} {'-'*7} {'-'*12}"
-            )
+            print(f"\n  {'Window':28s} {'N':>4s} {'WR':>6s} {'ExpR':>8s} {'Sharpe':>8s} {'Total':>7s} {'Status':>12s}")
+            print(f"  {'-' * 28} {'-' * 4} {'-' * 6} {'-' * 8} {'-' * 8} {'-' * 7} {'-' * 12}")
 
             for w in windows:
-                status = (
-                    "STABLE"
-                    if w["sharpe"] >= STABLE_SHARPE
-                    else "positive" if w["sharpe"] > 0 else "negative"
-                )
+                status = "STABLE" if w["sharpe"] >= STABLE_SHARPE else "positive" if w["sharpe"] > 0 else "negative"
                 print(
                     f"  {w['label']:28s} {w['n']:>4d} {w['wr']:>5.1%} "
                     f"{w['expr']:>+8.4f} {w['sharpe']:>8.4f} {w['total']:>+7.1f} "
@@ -302,6 +305,7 @@ def process_instrument(db_path, instrument):
 # TRADING_PLAN.md
 # ---------------------------------------------------------------------------
 
+
 def generate_trading_plan(all_results):
     """Write multi-instrument TRADING_PLAN.md."""
     today = date.today().isoformat()
@@ -317,14 +321,8 @@ def generate_trading_plan(all_results):
         "",
         "## Portfolio Overview",
         "",
-        (
-            "| Instrument | Session | Head Strategy | Status | Size "
-            "| N | ExpR | Sharpe(ann) |"
-        ),
-        (
-            "|-----------|---------|---------------|--------|------"
-            "|---|------|-------------|"
-        ),
+        ("| Instrument | Session | Head Strategy | Status | Size | N | ExpR | Sharpe(ann) |"),
+        ("|-----------|---------|---------------|--------|------|---|------|-------------|"),
     ]
 
     total_slots = 0
@@ -361,10 +359,12 @@ def generate_trading_plan(all_results):
             continue
 
         spec = get_cost_spec(instrument)
-        lines.extend([
-            f"## {instrument} (${spec.point_value}/pt, ${spec.total_friction:.2f} RT)",
-            "",
-        ])
+        lines.extend(
+            [
+                f"## {instrument} (${spec.point_value}/pt, ${spec.total_friction:.2f} RT)",
+                "",
+            ]
+        )
 
         for session in sorted(inst_results.keys()):
             sr = inst_results[session]
@@ -376,8 +376,7 @@ def generate_trading_plan(all_results):
             fm = sr.get("full_metrics")
             if fm:
                 lines.append(
-                    f"  - Full period: N={fm['n']} WR={fm['wr']:.1%} "
-                    f"ExpR={fm['expr']:+.4f} Sharpe={fm['sharpe']:.4f}"
+                    f"  - Full period: N={fm['n']} WR={fm['wr']:.1%} ExpR={fm['expr']:+.4f} Sharpe={fm['sharpe']:.4f}"
                 )
 
             if sr["windows"]:
@@ -386,27 +385,29 @@ def generate_trading_plan(all_results):
                 lines.append(f"  - Last 3 window Sharpes: {sharpes}")
             lines.append("")
 
-    lines.extend([
-        "## Position Sizing Rules",
-        "",
-        "- **STABLE**: Full size (1.0x risk per trade)",
-        "- **TRANSITIONING**: Half size (0.5x risk per trade)",
-        "- **DEGRADED**: OFF — do not trade until 3 consecutive passing windows",
-        "",
-        "## Rolling Re-evaluation",
-        "",
-        "- Run monthly: `python scripts/tools/rolling_portfolio_assembly.py --all`",
-        "- STABLE -> TRANSITIONING: reduce size by 50%",
-        "- TRANSITIONING -> DEGRADED: turn OFF",
-        "- DEGRADED -> STABLE: requires 3 consecutive passing windows",
-        "",
-    ])
+    lines.extend(
+        [
+            "## Position Sizing Rules",
+            "",
+            "- **STABLE**: Full size (1.0x risk per trade)",
+            "- **TRANSITIONING**: Half size (0.5x risk per trade)",
+            "- **DEGRADED**: OFF — do not trade until 3 consecutive passing windows",
+            "",
+            "## Rolling Re-evaluation",
+            "",
+            "- Run monthly: `python scripts/tools/rolling_portfolio_assembly.py --all`",
+            "- STABLE -> TRANSITIONING: reduce size by 50%",
+            "- TRANSITIONING -> DEGRADED: turn OFF",
+            "- DEGRADED -> STABLE: requires 3 consecutive passing windows",
+            "",
+        ]
+    )
 
     plan_text = "\n".join(lines) + "\n"
 
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print("TRADING PLAN")
-    print(f"{'='*80}")
+    print(f"{'=' * 80}")
     for line in lines:
         print(f"  {line}")
 
@@ -418,6 +419,7 @@ def generate_trading_plan(all_results):
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def run(db_path, instruments):
     print("Rolling Portfolio Assembly")

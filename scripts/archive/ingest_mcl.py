@@ -108,12 +108,17 @@ def main():
 
     # Step 2: Ingest bars_1m from daily DBN files
     ingest_cmd = [
-        sys.executable, "pipeline/ingest_dbn_daily.py",
-        "--instrument", INSTRUMENT,
-        "--start", START_DATE,
-        "--end", END_DATE,
+        sys.executable,
+        "pipeline/ingest_dbn_daily.py",
+        "--instrument",
+        INSTRUMENT,
+        "--start",
+        START_DATE,
+        "--end",
+        END_DATE,
         f"--chunk-days={CHUNK_DAYS}",
-        "--db", str(LOCAL_DB),
+        "--db",
+        str(LOCAL_DB),
     ]
     if args.resume:
         ingest_cmd.append("--resume")
@@ -131,23 +136,37 @@ def main():
         sys.exit(0)
 
     # Step 3: Build bars_5m
-    rc = run_step("Build MCL bars_5m", [
-        sys.executable, "pipeline/build_bars_5m.py",
-        "--instrument", INSTRUMENT,
-        "--start", START_DATE,
-        "--end", END_DATE,
-    ])
+    rc = run_step(
+        "Build MCL bars_5m",
+        [
+            sys.executable,
+            "pipeline/build_bars_5m.py",
+            "--instrument",
+            INSTRUMENT,
+            "--start",
+            START_DATE,
+            "--end",
+            END_DATE,
+        ],
+    )
     if rc != 0:
         log("ABORT: bars_5m build failed")
         sys.exit(rc)
 
     # Step 4: Build daily_features
-    rc = run_step("Build MCL daily_features", [
-        sys.executable, "pipeline/build_daily_features.py",
-        "--instrument", INSTRUMENT,
-        "--start", START_DATE,
-        "--end", END_DATE,
-    ])
+    rc = run_step(
+        "Build MCL daily_features",
+        [
+            sys.executable,
+            "pipeline/build_daily_features.py",
+            "--instrument",
+            INSTRUMENT,
+            "--start",
+            START_DATE,
+            "--end",
+            END_DATE,
+        ],
+    )
     if rc != 0:
         log("ABORT: daily_features build failed")
         sys.exit(rc)

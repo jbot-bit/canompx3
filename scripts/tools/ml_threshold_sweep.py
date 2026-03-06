@@ -37,12 +37,15 @@ def main():
 
     print("\nRunning baseline (no ML)...")
     from datetime import date
+
     start = date.fromisoformat(args.start)
     end = date.fromisoformat(args.end)
 
     baseline = replay_historical(instrument=args.instrument, start_date=start, end_date=end, use_ml=False)
-    print(f"Baseline: {baseline.total_trades} trades, WR={baseline.total_wins / max(baseline.total_trades, 1):.1%}, "
-          f"PnL={baseline.total_pnl_r:+.2f}R")
+    print(
+        f"Baseline: {baseline.total_trades} trades, WR={baseline.total_wins / max(baseline.total_trades, 1):.1%}, "
+        f"PnL={baseline.total_pnl_r:+.2f}R"
+    )
 
     # Load model to override threshold
     model_path = MODEL_DIR / f"meta_label_{args.instrument}.joblib"
@@ -65,17 +68,21 @@ def main():
             joblib.dump(bundle, model_path)
 
             result = replay_historical(instrument=args.instrument, start_date=start, end_date=end, use_ml=True)
-            results.append({
-                "threshold": t,
-                "trades": result.total_trades,
-                "wins": result.total_wins,
-                "losses": result.total_losses,
-                "wr": result.total_wins / max(result.total_trades, 1),
-                "pnl_r": result.total_pnl_r,
-                "ml_skips": result.total_ml_skips,
-            })
-            print(f"  t={t:.2f}: {result.total_trades} trades, WR={result.total_wins / max(result.total_trades, 1):.1%}, "
-                  f"PnL={result.total_pnl_r:+.2f}R, ML skips={result.total_ml_skips}")
+            results.append(
+                {
+                    "threshold": t,
+                    "trades": result.total_trades,
+                    "wins": result.total_wins,
+                    "losses": result.total_losses,
+                    "wr": result.total_wins / max(result.total_trades, 1),
+                    "pnl_r": result.total_pnl_r,
+                    "ml_skips": result.total_ml_skips,
+                }
+            )
+            print(
+                f"  t={t:.2f}: {result.total_trades} trades, WR={result.total_wins / max(result.total_trades, 1):.1%}, "
+                f"PnL={result.total_pnl_r:+.2f}R, ML skips={result.total_ml_skips}"
+            )
     finally:
         # Restore original threshold even on crash/interrupt
         bundle["optimal_threshold"] = original_threshold
@@ -85,8 +92,7 @@ def main():
     print(f"\n{'=' * 80}")
     print(f"  RESULTS SUMMARY")
     print(f"{'=' * 80}")
-    print(f"\n{'Thresh':>7} {'Trades':>7} {'Wins':>6} {'WR':>7} {'PnL(R)':>9} "
-          f"{'MLSkip':>7} {'vs Base':>9}")
+    print(f"\n{'Thresh':>7} {'Trades':>7} {'Wins':>6} {'WR':>7} {'PnL(R)':>9} {'MLSkip':>7} {'vs Base':>9}")
     print(f"{'-' * 7} {'-' * 7} {'-' * 6} {'-' * 7} {'-' * 9} {'-' * 7} {'-' * 9}")
 
     best_pnl = -999
@@ -99,20 +105,19 @@ def main():
         if r["pnl_r"] > best_pnl:
             best_pnl = r["pnl_r"]
             best_t = r["threshold"]
-        print(f"{r['threshold']:>7.2f} {r['trades']:>7} {r['wins']:>6} {r['wr']:>6.1%} "
-              f"{r['pnl_r']:>+9.2f} {r['ml_skips']:>7} {delta:>+9.2f}{marker}")
+        print(
+            f"{r['threshold']:>7.2f} {r['trades']:>7} {r['wins']:>6} {r['wr']:>6.1%} "
+            f"{r['pnl_r']:>+9.2f} {r['ml_skips']:>7} {delta:>+9.2f}{marker}"
+        )
 
-    print(f"\nBaseline (no ML): {baseline.total_trades} trades, "
-          f"PnL={baseline.total_pnl_r:+.2f}R")
-    print(f"Best threshold: {best_t:.2f} (PnL={best_pnl:+.2f}R, "
-          f"delta={best_pnl - baseline.total_pnl_r:+.2f}R)")
+    print(f"\nBaseline (no ML): {baseline.total_trades} trades, PnL={baseline.total_pnl_r:+.2f}R")
+    print(f"Best threshold: {best_t:.2f} (PnL={best_pnl:+.2f}R, delta={best_pnl - baseline.total_pnl_r:+.2f}R)")
     print(f"Trained threshold: {original_threshold:.2f}")
 
     if best_pnl < baseline.total_pnl_r:
         print("\n** NO threshold beats baseline! ML adds no value for validated strategies. **")
     else:
-        print(f"\n** Best ML threshold {best_t:.2f} beats baseline by "
-              f"{best_pnl - baseline.total_pnl_r:+.2f}R **")
+        print(f"\n** Best ML threshold {best_t:.2f} beats baseline by {best_pnl - baseline.total_pnl_r:+.2f}R **")
 
 
 if __name__ == "__main__":

@@ -38,14 +38,17 @@ def _get_validated_params(db_path: str, instrument: str) -> pd.DataFrame:
     con = duckdb.connect(db_path, read_only=True)
     configure_connection(con)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT DISTINCT
                 orb_label, entry_model, rr_target, confirm_bars,
                 filter_type, orb_minutes
             FROM validated_setups
             WHERE instrument = $1
               AND status = 'active'
-        """, [instrument]).fetchdf()
+        """,
+            [instrument],
+        ).fetchdf()
     finally:
         con.close()
 
@@ -77,6 +80,7 @@ def evaluate_validated(instrument: str, db_path: str) -> None:
 
     # Align features (0.0 for one-hot, -999.0 for numeric)
     from trading_app.ml.evaluate import _fill_missing_features
+
     X = _fill_missing_features(X, feature_names)
 
     # Predict
@@ -99,23 +103,31 @@ def evaluate_validated(instrument: str, db_path: str) -> None:
     # Create a set of validated (orb_label, entry_model, rr_target, confirm_bars, orb_minutes)
     validated_keys = set()
     for _, row in validated.iterrows():
-        key = (row["orb_label"], row["entry_model"], round(row["rr_target"], 1),
-               int(row["confirm_bars"]), int(row["orb_minutes"]))
+        key = (
+            row["orb_label"],
+            row["entry_model"],
+            round(row["rr_target"], 1),
+            int(row["confirm_bars"]),
+            int(row["orb_minutes"]),
+        )
         validated_keys.add(key)
 
     # Filter meta to validated combos
-    meta["combo_key"] = list(zip(
-        meta["orb_label"],
-        meta["entry_model"],
-        meta["rr_target_rounded"],
-        meta["confirm_bars"].astype(int),
-        meta["orb_minutes"].astype(int),
-    ))
+    meta["combo_key"] = list(
+        zip(
+            meta["orb_label"],
+            meta["entry_model"],
+            meta["rr_target_rounded"],
+            meta["confirm_bars"].astype(int),
+            meta["orb_minutes"].astype(int),
+        )
+    )
     validated_mask = meta["combo_key"].isin(validated_keys)
     meta_val = meta[validated_mask].copy()
 
-    logger.info(f"Validated-strategy outcomes: {len(meta_val):,d} "
-                f"(of {len(meta):,d} total, {len(meta_val)/len(meta):.1%})")
+    logger.info(
+        f"Validated-strategy outcomes: {len(meta_val):,d} (of {len(meta):,d} total, {len(meta_val) / len(meta):.1%})"
+    )
 
     if len(meta_val) < 100:
         logger.warning(f"Too few validated outcomes ({len(meta_val)})")
@@ -135,24 +147,29 @@ def evaluate_validated(instrument: str, db_path: str) -> None:
 
     print(f"\n  {'METRIC':<18} {'BASELINE':>12} {'FILTERED':>12} {'SKIPPED':>12} {'DELTA':>12}")
     print(f"  {'-' * 18} {'-' * 12} {'-' * 12} {'-' * 12} {'-' * 12}")
-    print(f"  {'Trades':<18} {len(meta_val):>12,d} {take_mask.sum():>12,d} "
-          f"{(~take_mask).sum():>12,d}")
-    print(f"  {'Avg R':<18} {pnl_all.mean():>+12.4f} {pnl_kept.mean():>+12.4f} "
-          f"{pnl_skipped.mean():>+12.4f} {pnl_kept.mean() - pnl_all.mean():>+12.4f}")
-    print(f"  {'Total R':<18} {pnl_all.sum():>12.1f} {pnl_kept.sum():>12.1f} "
-          f"{pnl_skipped.sum():>12.1f} {pnl_kept.sum() - pnl_all.sum():>+12.1f}")
-    print(f"  {'Sharpe':<18} {_sharpe(pnl_all):>12.3f} {_sharpe(pnl_kept):>12.3f} "
-          f"{_sharpe(pnl_skipped):>12.3f} {_sharpe(pnl_kept) - _sharpe(pnl_all):>+12.3f}")
-    print(f"  {'Win Rate':<18} {(pnl_all > 0).mean():>11.1%} {(pnl_kept > 0).mean():>11.1%} "
-          f"{(pnl_skipped > 0).mean():>11.1%} {(pnl_kept > 0).mean() - (pnl_all > 0).mean():>+11.1%}")
+    print(f"  {'Trades':<18} {len(meta_val):>12,d} {take_mask.sum():>12,d} {(~take_mask).sum():>12,d}")
+    print(
+        f"  {'Avg R':<18} {pnl_all.mean():>+12.4f} {pnl_kept.mean():>+12.4f} "
+        f"{pnl_skipped.mean():>+12.4f} {pnl_kept.mean() - pnl_all.mean():>+12.4f}"
+    )
+    print(
+        f"  {'Total R':<18} {pnl_all.sum():>12.1f} {pnl_kept.sum():>12.1f} "
+        f"{pnl_skipped.sum():>12.1f} {pnl_kept.sum() - pnl_all.sum():>+12.1f}"
+    )
+    print(
+        f"  {'Sharpe':<18} {_sharpe(pnl_all):>12.3f} {_sharpe(pnl_kept):>12.3f} "
+        f"{_sharpe(pnl_skipped):>12.3f} {_sharpe(pnl_kept) - _sharpe(pnl_all):>+12.3f}"
+    )
+    print(
+        f"  {'Win Rate':<18} {(pnl_all > 0).mean():>11.1%} {(pnl_kept > 0).mean():>11.1%} "
+        f"{(pnl_skipped > 0).mean():>11.1%} {(pnl_kept > 0).mean() - (pnl_all > 0).mean():>+11.1%}"
+    )
     print(f"  {'Skip %':<18} {'':>12} {1 - take_mask.mean():>11.1%}")
 
     # Per-session for validated strategies
     print("\n  PER-SESSION (validated strategies only)")
-    print(f"  {'SESSION':<20} {'N':>6} {'KEPT':>6} {'SKIP%':>7} "
-          f"{'BASE':>8} {'FILT':>8} {'SKIP':>8} {'LIFT':>8}")
-    print(f"  {'-' * 20} {'-' * 6} {'-' * 6} {'-' * 7} "
-          f"{'-' * 8} {'-' * 8} {'-' * 8} {'-' * 8}")
+    print(f"  {'SESSION':<20} {'N':>6} {'KEPT':>6} {'SKIP%':>7} {'BASE':>8} {'FILT':>8} {'SKIP':>8} {'LIFT':>8}")
+    print(f"  {'-' * 20} {'-' * 6} {'-' * 6} {'-' * 7} {'-' * 8} {'-' * 8} {'-' * 8} {'-' * 8}")
 
     for session in sorted(meta_val["orb_label"].unique()):
         sm = meta_val[meta_val["orb_label"] == session]
@@ -164,10 +181,12 @@ def evaluate_validated(instrument: str, db_path: str) -> None:
             continue
 
         lift = kept["pnl_r"].mean() - sm["pnl_r"].mean()
-        print(f"  {session:<20} {len(sm):>6d} {len(kept):>6d} "
-              f"{1 - len(kept)/len(sm):>6.1%} "
-              f"{sm['pnl_r'].mean():>+8.4f} {kept['pnl_r'].mean():>+8.4f} "
-              f"{skipped['pnl_r'].mean():>+8.4f} {lift:>+8.4f}")
+        print(
+            f"  {session:<20} {len(sm):>6d} {len(kept):>6d} "
+            f"{1 - len(kept) / len(sm):>6.1%} "
+            f"{sm['pnl_r'].mean():>+8.4f} {kept['pnl_r'].mean():>+8.4f} "
+            f"{skipped['pnl_r'].mean():>+8.4f} {lift:>+8.4f}"
+        )
 
     # Calibration within validated strategies
     meta_val_sorted = meta_val.sort_values("p_win")
@@ -179,9 +198,11 @@ def evaluate_validated(instrument: str, db_path: str) -> None:
         s = q * quintile_size
         e = s + quintile_size if q < 4 else len(meta_val_sorted)
         chunk = meta_val_sorted.iloc[s:e]
-        print(f"  Q{q+1:<3d} {chunk['p_win'].min():.3f}-{chunk['p_win'].max():.3f}"
-              f"     {(chunk['pnl_r'] > 0).mean():>7.1%} "
-              f"{chunk['pnl_r'].mean():>+10.4f} {len(chunk):>8,d}")
+        print(
+            f"  Q{q + 1:<3d} {chunk['p_win'].min():.3f}-{chunk['p_win'].max():.3f}"
+            f"     {(chunk['pnl_r'] > 0).mean():>7.1%} "
+            f"{chunk['pnl_r'].mean():>+10.4f} {len(chunk):>8,d}"
+        )
 
     print(f"\n{'=' * 75}\n")
 

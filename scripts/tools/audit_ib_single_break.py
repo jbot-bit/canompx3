@@ -58,6 +58,7 @@ CHECKPOINTS_AFTER_ENTRY = [60, 90, 120, 180, 240]
 # Core functions
 # ---------------------------------------------------------------------------
 
+
 def compute_ib(bars: pd.DataFrame) -> dict | None:
     """Compute IB from bars. Returns ib_high, ib_low, ib_start, ib_end."""
     ib_start = None
@@ -80,6 +81,7 @@ def compute_ib(bars: pd.DataFrame) -> dict | None:
         "ib_start": ib_start,
         "ib_end": ib_end,
     }
+
 
 def classify_at_checkpoint(
     bars: pd.DataFrame,
@@ -118,6 +120,7 @@ def classify_at_checkpoint(
     else:
         return "no_break"
 
+
 def classify_final(bars: pd.DataFrame, ib: dict) -> str:
     """Classify using ALL post-IB bars (the look-ahead version)."""
     ib_high = ib["ib_high"]
@@ -137,9 +140,14 @@ def classify_final(bars: pd.DataFrame, ib: dict) -> str:
     else:
         return "no_break"
 
+
 def compute_hold_pnl(
-    bars: pd.DataFrame, entry_ts, entry_price: float,
-    stop_price: float, is_long: bool, hold_hours: int,
+    bars: pd.DataFrame,
+    entry_ts,
+    entry_price: float,
+    stop_price: float,
+    is_long: bool,
+    hold_hours: int,
 ) -> float | None:
     """7h hold with stop. Returns pnl_r."""
     spec = get_cost_spec("MGC")
@@ -164,9 +172,14 @@ def compute_hold_pnl(
     pnl = (last_close - entry_price) if is_long else (entry_price - last_close)
     return to_r_multiple(spec, entry_price, stop_price, pnl)
 
+
 def compute_fixed_exit_pnl(
-    bars: pd.DataFrame, entry_ts, entry_price: float,
-    stop_price: float, target_price: float, is_long: bool,
+    bars: pd.DataFrame,
+    entry_ts,
+    entry_price: float,
+    stop_price: float,
+    target_price: float,
+    is_long: bool,
 ) -> float | None:
     """Fixed stop/target exit. Returns pnl_r. Independent recomputation."""
     spec = get_cost_spec("MGC")
@@ -196,15 +209,18 @@ def compute_fixed_exit_pnl(
 
     return None  # no resolution
 
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def run(db_path: Path, start: date, end: date):
     con = duckdb.connect(str(db_path), read_only=True)
 
     print(f"Loading 1000 E1 CB{CB} RR{RR_TARGET} G{MIN_ORB_SIZE}+ trades...")
-    df = con.execute("""
+    df = con.execute(
+        """
         SELECT o.trading_day, o.entry_ts, o.entry_price, o.stop_price,
                o.target_price, o.outcome, o.pnl_r,
                d.orb_1000_size, d.orb_1000_break_dir
@@ -217,7 +233,9 @@ def run(db_path: Path, start: date, end: date):
           AND o.pnl_r IS NOT NULL AND d.orb_1000_size >= ?
           AND o.trading_day BETWEEN ? AND ?
         ORDER BY o.trading_day
-    """, [RR_TARGET, CB, MIN_ORB_SIZE, start, end]).fetchdf()
+    """,
+        [RR_TARGET, CB, MIN_ORB_SIZE, start, end],
+    ).fetchdf()
     df["entry_ts"] = pd.to_datetime(df["entry_ts"], utc=True)
     print(f"  {len(df)} trades")
 
@@ -253,16 +271,21 @@ def run(db_path: Path, start: date, end: date):
             continue
         is_long = row["orb_1000_break_dir"] == "long"
         recomputed = compute_fixed_exit_pnl(
-            bars, row["entry_ts"], row["entry_price"],
-            row["stop_price"], row["target_price"], is_long,
+            bars,
+            row["entry_ts"],
+            row["entry_price"],
+            row["stop_price"],
+            row["target_price"],
+            is_long,
         )
         if recomputed is None:
             continue
         stored = row["pnl_r"]
         if abs(recomputed - stored) > 0.05:
             mismatch_count += 1
-            print(f"  MISMATCH {td}: stored={stored:+.4f} recomputed={recomputed:+.4f} "
-                  f"delta={recomputed-stored:+.4f}")
+            print(
+                f"  MISMATCH {td}: stored={stored:+.4f} recomputed={recomputed:+.4f} delta={recomputed - stored:+.4f}"
+            )
         verified_count += 1
 
     print(f"  Verified {verified_count} trades, {mismatch_count} mismatches")
@@ -336,15 +359,19 @@ def run(db_path: Path, start: date, end: date):
         single_at_cp = pdf[col].isin(["single_bull", "single_bear"]).sum()
         double_at_cp = (pdf[col] == "double_break").sum()
         no_break_at_cp = (pdf[col] == "no_break").sum()
-        print(f"  At {cp_min:>3d}m after entry: "
-              f"single={single_at_cp:>3d} double={double_at_cp:>3d} no_break={no_break_at_cp:>3d} | "
-              f"matches final={matches_final}/{len(pdf)} ({pct:.0f}%)")
+        print(
+            f"  At {cp_min:>3d}m after entry: "
+            f"single={single_at_cp:>3d} double={double_at_cp:>3d} no_break={no_break_at_cp:>3d} | "
+            f"matches final={matches_final}/{len(pdf)} ({pct:.0f}%)"
+        )
 
     # Final distribution for reference
-    print(f"\n  Final (look-ahead): "
-          f"single={pdf['final_class'].isin(['single_bull','single_bear']).sum()} "
-          f"double={(pdf['final_class']=='double_break').sum()} "
-          f"no_break={(pdf['final_class']=='no_break').sum()}")
+    print(
+        f"\n  Final (look-ahead): "
+        f"single={pdf['final_class'].isin(['single_bull', 'single_bear']).sum()} "
+        f"double={(pdf['final_class'] == 'double_break').sum()} "
+        f"no_break={(pdf['final_class'] == 'no_break').sum()}"
+    )
 
     # ===================================================================
     # AUDIT 3: HONEST BLENDED STRATEGY AT EACH CHECKPOINT
@@ -356,27 +383,33 @@ def run(db_path: Path, start: date, end: date):
     print("Single at checkpoint -> hold 7h. Double/no_break -> fixed RR.\n")
 
     print(f"  {'Checkpoint':12s} {'N':>5s} {'WR':>7s} {'ExpR':>8s} {'Sharpe':>8s} {'MaxDD':>8s} {'Total':>8s}")
-    print(f"  {'-'*12} {'-'*5} {'-'*7} {'-'*8} {'-'*8} {'-'*8} {'-'*8}")
+    print(f"  {'-' * 12} {'-' * 5} {'-' * 7} {'-' * 8} {'-' * 8} {'-' * 8} {'-' * 8}")
 
     # Control: fixed RR
     mf = compute_strategy_metrics(pdf["fixed_pnl_r"].values)
     if mf:
-        print(f"  {'Fixed RR':12s} {mf['n']:>5d} {mf['wr']:>7.3f} {mf['expr']:>8.4f} "
-              f"{mf['sharpe']:>8.4f} {mf['maxdd']:>8.2f} {mf['total']:>8.1f}")
+        print(
+            f"  {'Fixed RR':12s} {mf['n']:>5d} {mf['wr']:>7.3f} {mf['expr']:>8.4f} "
+            f"{mf['sharpe']:>8.4f} {mf['maxdd']:>8.2f} {mf['total']:>8.1f}"
+        )
 
     # Control: pure 7h
     m7 = compute_strategy_metrics(pdf["hold_pnl_r"].values)
     if m7:
-        print(f"  {'7h hold':12s} {m7['n']:>5d} {m7['wr']:>7.3f} {m7['expr']:>8.4f} "
-              f"{m7['sharpe']:>8.4f} {m7['maxdd']:>8.2f} {m7['total']:>8.1f}")
+        print(
+            f"  {'7h hold':12s} {m7['n']:>5d} {m7['wr']:>7.3f} {m7['expr']:>8.4f} "
+            f"{m7['sharpe']:>8.4f} {m7['maxdd']:>8.2f} {m7['total']:>8.1f}"
+        )
 
     # Look-ahead blended (for comparison -- the DISHONEST number)
     la_single = pdf["final_class"].isin(["single_bull", "single_bear"])
     la_blended = np.where(la_single, pdf["hold_pnl_r"], pdf["fixed_pnl_r"])
     mla = compute_strategy_metrics(la_blended)
     if mla:
-        print(f"  {'LookAhead*':12s} {mla['n']:>5d} {mla['wr']:>7.3f} {mla['expr']:>8.4f} "
-              f"{mla['sharpe']:>8.4f} {mla['maxdd']:>8.2f} {mla['total']:>8.1f}")
+        print(
+            f"  {'LookAhead*':12s} {mla['n']:>5d} {mla['wr']:>7.3f} {mla['expr']:>8.4f} "
+            f"{mla['sharpe']:>8.4f} {mla['maxdd']:>8.2f} {mla['total']:>8.1f}"
+        )
 
     print()
 
@@ -388,9 +421,11 @@ def run(db_path: Path, start: date, end: date):
         m = compute_strategy_metrics(blended)
         if m:
             n_single = is_single.sum()
-            print(f"  {f'{cp_min}m honest':12s} {m['n']:>5d} {m['wr']:>7.3f} {m['expr']:>8.4f} "
-                  f"{m['sharpe']:>8.4f} {m['maxdd']:>8.2f} {m['total']:>8.1f}  "
-                  f"(single={n_single})")
+            print(
+                f"  {f'{cp_min}m honest':12s} {m['n']:>5d} {m['wr']:>7.3f} {m['expr']:>8.4f} "
+                f"{m['sharpe']:>8.4f} {m['maxdd']:>8.2f} {m['total']:>8.1f}  "
+                f"(single={n_single})"
+            )
 
     # ===================================================================
     # AUDIT 4: DIRECTION ALIGNMENT DEEP DIVE
@@ -421,9 +456,11 @@ def run(db_path: Path, start: date, end: date):
                     continue
                 m = compute_strategy_metrics(ss["hold_pnl_r"].values)
                 if m:
-                    print(f"    {dt} {label:8s}: N={m['n']:>3d}, "
-                          f"ExpR={m['expr']:+.4f}, Sharpe={m['sharpe']:.4f}, "
-                          f"WR={m['wr']:.3f}")
+                    print(
+                        f"    {dt} {label:8s}: N={m['n']:>3d}, "
+                        f"ExpR={m['expr']:+.4f}, Sharpe={m['sharpe']:.4f}, "
+                        f"WR={m['wr']:.3f}"
+                    )
 
     # ===================================================================
     # AUDIT 5: YEARLY STABILITY OF HONEST BLENDED
@@ -438,7 +475,7 @@ def run(db_path: Path, start: date, end: date):
     pdf["honest_blended"] = np.where(is_single, pdf["hold_pnl_r"], pdf["fixed_pnl_r"])
 
     print(f"  {'Year':5s} {'N':>4s} {'Single':>7s} {'Double':>7s} {'Fixed':>8s} {'7h':>8s} {'Honest':>8s} {'Best':>8s}")
-    print(f"  {'-'*5} {'-'*4} {'-'*7} {'-'*7} {'-'*8} {'-'*8} {'-'*8} {'-'*8}")
+    print(f"  {'-' * 5} {'-' * 4} {'-' * 7} {'-' * 7} {'-' * 8} {'-' * 8} {'-' * 8} {'-' * 8}")
 
     for year in sorted(pdf["year"].unique()):
         ydf = pdf[pdf["year"] == year]
@@ -454,9 +491,11 @@ def run(db_path: Path, start: date, end: date):
         if mf and m7 and mh:
             sharpes = {"fixed": mf["sharpe"], "7h": m7["sharpe"], "honest": mh["sharpe"]}
             best = max(sharpes, key=sharpes.get)
-            print(f"  {year:5s} {len(ydf):>4d} {n_single:>7d} {n_double:>7d} "
-                  f"{mf['sharpe']:>8.3f} {m7['sharpe']:>8.3f} "
-                  f"{mh['sharpe']:>8.3f} {best:>8s}")
+            print(
+                f"  {year:5s} {len(ydf):>4d} {n_single:>7d} {n_double:>7d} "
+                f"{mf['sharpe']:>8.3f} {m7['sharpe']:>8.3f} "
+                f"{mh['sharpe']:>8.3f} {best:>8s}"
+            )
 
     mf = compute_strategy_metrics(pdf["fixed_pnl_r"].values)
     m7 = compute_strategy_metrics(pdf["hold_pnl_r"].values)
@@ -464,9 +503,11 @@ def run(db_path: Path, start: date, end: date):
     if mf and m7 and mh:
         n_s = is_single.sum()
         n_d = len(pdf) - n_s
-        print(f"  {'TOTAL':5s} {len(pdf):>4d} {n_s:>7d} {n_d:>7d} "
-              f"{mf['sharpe']:>8.3f} {m7['sharpe']:>8.3f} "
-              f"{mh['sharpe']:>8.3f}")
+        print(
+            f"  {'TOTAL':5s} {len(pdf):>4d} {n_s:>7d} {n_d:>7d} "
+            f"{mf['sharpe']:>8.3f} {m7['sharpe']:>8.3f} "
+            f"{mh['sharpe']:>8.3f}"
+        )
 
     # ===================================================================
     # AUDIT 6: SPOT-CHECK INDIVIDUAL TRADES
@@ -477,20 +518,24 @@ def run(db_path: Path, start: date, end: date):
 
     single_trades = pdf[pdf[f"class_{best_cp}m"].isin(["single_bull", "single_bear"])].head(5)
     for _, t in single_trades.iterrows():
-        print(f"  {t['td']} | {t[f'class_{best_cp}m']:12s} | "
-              f"final={t['final_class']:12s} | "
-              f"long={t['is_long']} | "
-              f"fixed={t['fixed_pnl_r']:+.3f} | "
-              f"7h={t['hold_pnl_r']:+.3f}")
+        print(
+            f"  {t['td']} | {t[f'class_{best_cp}m']:12s} | "
+            f"final={t['final_class']:12s} | "
+            f"long={t['is_long']} | "
+            f"fixed={t['fixed_pnl_r']:+.3f} | "
+            f"7h={t['hold_pnl_r']:+.3f}"
+        )
 
     print("\n  5 DOUBLE BREAK TRADES (fixed RR):")
     double_trades = pdf[pdf[f"class_{best_cp}m"] == "double_break"].head(5)
     for _, t in double_trades.iterrows():
-        print(f"  {t['td']} | {t[f'class_{best_cp}m']:12s} | "
-              f"final={t['final_class']:12s} | "
-              f"long={t['is_long']} | "
-              f"fixed={t['fixed_pnl_r']:+.3f} | "
-              f"7h={t['hold_pnl_r']:+.3f}")
+        print(
+            f"  {t['td']} | {t[f'class_{best_cp}m']:12s} | "
+            f"final={t['final_class']:12s} | "
+            f"long={t['is_long']} | "
+            f"fixed={t['fixed_pnl_r']:+.3f} | "
+            f"7h={t['hold_pnl_r']:+.3f}"
+        )
 
     # ===================================================================
     # VERDICT
@@ -502,7 +547,11 @@ def run(db_path: Path, start: date, end: date):
         delta_sharpe = mla["sharpe"] - mh["sharpe"]
         print(f"  Look-ahead Sharpe:  {mla['sharpe']:.4f}")
         print(f"  Honest 120m Sharpe: {mh['sharpe']:.4f}")
-        print(f"  Look-ahead inflation: {delta_sharpe:+.4f} ({delta_sharpe/mh['sharpe']*100:+.0f}%)" if mh["sharpe"] != 0 else "")
+        print(
+            f"  Look-ahead inflation: {delta_sharpe:+.4f} ({delta_sharpe / mh['sharpe'] * 100:+.0f}%)"
+            if mh["sharpe"] != 0
+            else ""
+        )
         if mh["sharpe"] > mf["sharpe"]:
             print(f"  Honest blended STILL beats fixed RR ({mh['sharpe']:.4f} vs {mf['sharpe']:.4f})")
             print(f"  SIGNAL SURVIVES AUDIT (with reduced magnitude)")
@@ -512,6 +561,7 @@ def run(db_path: Path, start: date, end: date):
 
     print()
 
+
 def main():
     parser = argparse.ArgumentParser(description="Audit IB Single Break")
     parser.add_argument("--db-path", type=Path, default=GOLD_DB_PATH)
@@ -519,6 +569,7 @@ def main():
     parser.add_argument("--end", type=date.fromisoformat, default=date(2026, 2, 4))
     args = parser.parse_args()
     run(args.db_path, args.start, args.end)
+
 
 if __name__ == "__main__":
     main()

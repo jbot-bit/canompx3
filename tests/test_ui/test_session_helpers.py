@@ -11,6 +11,7 @@ BRISBANE = ZoneInfo("Australia/Brisbane")
 
 # ── get_upcoming_sessions ────────────────────────────────────────────────────
 
+
 class TestGetUpcomingSessions:
     """Chronological session ordering — no trading-day boundary logic."""
 
@@ -83,41 +84,49 @@ class TestGetUpcomingSessions:
 
 # ── current_trading_day ──────────────────────────────────────────────────────
 
+
 class TestCurrentTradingDay:
     """Uses pipeline's compute_trading_day — just a wrapper."""
 
     def test_morning_after_9am(self):
         from ui.session_helpers import current_trading_day
+
         td = current_trading_day(datetime(2026, 3, 6, 10, 0, tzinfo=BRISBANE))
         assert td == date(2026, 3, 6)
 
     def test_overnight_before_9am(self):
         from ui.session_helpers import current_trading_day
+
         td = current_trading_day(datetime(2026, 3, 7, 2, 0, tzinfo=BRISBANE))
         assert td == date(2026, 3, 6), "2 AM Saturday = Friday trading day"
 
     def test_exactly_9am_is_new_day(self):
         from ui.session_helpers import current_trading_day
+
         td = current_trading_day(datetime(2026, 3, 6, 9, 0, tzinfo=BRISBANE))
         assert td == date(2026, 3, 6)
 
 
 # ── is_weekend ───────────────────────────────────────────────────────────────
 
+
 class TestIsWeekend:
     def test_friday_morning_not_weekend(self):
         from ui.session_helpers import is_weekend
+
         now = datetime(2026, 3, 6, 10, 0, tzinfo=BRISBANE)  # Friday
         assert is_weekend(now) is False
 
     def test_saturday_morning_after_sessions_done(self):
         from ui.session_helpers import is_weekend
+
         # Saturday 10 AM — all Friday overnight sessions complete, no new ones
         now = datetime(2026, 3, 7, 10, 0, tzinfo=BRISBANE)
         assert is_weekend(now) is True
 
     def test_saturday_early_morning_not_weekend(self):
         from ui.session_helpers import is_weekend
+
         # Saturday 3 AM — Friday overnight sessions might still be active
         now = datetime(2026, 3, 7, 3, 0, tzinfo=BRISBANE)
         # This is tricky: CME is closed, but our function should still return True
@@ -132,56 +141,67 @@ class TestIsWeekend:
 
     def test_sunday_afternoon(self):
         from ui.session_helpers import is_weekend
+
         now = datetime(2026, 3, 8, 14, 0, tzinfo=BRISBANE)  # Sunday
         assert is_weekend(now) is True
 
     def test_monday_morning(self):
         from ui.session_helpers import is_weekend
+
         now = datetime(2026, 3, 9, 8, 50, tzinfo=BRISBANE)  # Monday
         assert is_weekend(now) is False
 
 
 # ── filter_to_english ────────────────────────────────────────────────────────
 
+
 class TestFilterToEnglish:
     def test_g_filter_basic(self):
         from ui.session_helpers import filter_to_english
+
         assert filter_to_english("ORB_G4") == "ORB >= 4pts"
 
     def test_g_filter_with_cont(self):
         from ui.session_helpers import filter_to_english
+
         result = filter_to_english("ORB_G5_CONT")
         assert "5pts" in result
         assert "continuation" in result.lower()
 
     def test_g_filter_with_fast(self):
         from ui.session_helpers import filter_to_english
+
         result = filter_to_english("ORB_G4_FAST10")
         assert "4pts" in result
         assert "fast" in result.lower()
 
     def test_g_filter_with_nomon(self):
         from ui.session_helpers import filter_to_english
+
         result = filter_to_english("ORB_G6_NOMON")
         assert "6pts" in result
         assert "monday" in result.lower()
 
     def test_vol_filter(self):
         from ui.session_helpers import filter_to_english
+
         result = filter_to_english("VOL_RV12_N20")
         assert "vol" in result.lower()
 
     def test_dir_long(self):
         from ui.session_helpers import filter_to_english
+
         result = filter_to_english("DIR_LONG")
         assert "long" in result.lower()
 
     def test_unknown_filter_returns_itself(self):
         from ui.session_helpers import filter_to_english
+
         assert filter_to_english("SOME_NEW_FILTER") == "SOME_NEW_FILTER"
 
 
 # ── build_session_briefings ──────────────────────────────────────────────────
+
 
 class TestBuildSessionBriefings:
     """Merge multiple strategies per session+instrument into one briefing."""
@@ -191,8 +211,7 @@ class TestBuildSessionBriefings:
 
         briefings = build_session_briefings()
         # CME_REOPEN has MGC with 3 filters (G5, VOL_RV12_N20, G4_FAST10)
-        cme_mgc = [b for b in briefings
-                    if b.session == "CME_REOPEN" and b.instrument == "MGC"]
+        cme_mgc = [b for b in briefings if b.session == "CME_REOPEN" and b.instrument == "MGC"]
         assert len(cme_mgc) == 1, "Should merge to single briefing per session+instrument"
         assert len(cme_mgc[0].conditions) >= 2, "Should have multiple conditions"
 
@@ -201,38 +220,45 @@ class TestBuildSessionBriefings:
 
         briefings = build_session_briefings()
         for b in briefings:
-            assert b.rr_target is not None and b.rr_target > 0, \
-                f"{b.session} {b.instrument} missing rr_target"
+            assert b.rr_target is not None and b.rr_target > 0, f"{b.session} {b.instrument} missing rr_target"
 
     def test_briefing_has_session_time(self):
         from ui.session_helpers import build_session_briefings
 
         briefings = build_session_briefings()
         for b in briefings:
-            assert b.session_hour is not None, \
-                f"{b.session} missing session time"
+            assert b.session_hour is not None, f"{b.session} missing session time"
 
 
 # ── get_app_state ────────────────────────────────────────────────────────────
 
+
 class TestGetAppState:
     def test_returns_valid_state_name(self):
         from ui.session_helpers import get_app_state
+
         now = datetime(2026, 3, 6, 10, 30, tzinfo=BRISBANE)
         state = get_app_state(now)
         assert state.name in (
-            "WEEKEND", "IDLE", "APPROACHING", "ALERT",
-            "LIVE", "POST", "OVERNIGHT",
+            "WEEKEND",
+            "IDLE",
+            "APPROACHING",
+            "ALERT",
+            "LIVE",
+            "POST",
+            "OVERNIGHT",
         )
 
     def test_weekend_on_saturday(self):
         from ui.session_helpers import get_app_state
+
         now = datetime(2026, 3, 7, 12, 0, tzinfo=BRISBANE)
         state = get_app_state(now)
         assert state.name == "WEEKEND"
 
     def test_alert_close_to_session(self):
         from ui.session_helpers import get_app_state
+
         # 5 min before TOKYO_OPEN (10:00)
         now = datetime(2026, 3, 6, 9, 55, tzinfo=BRISBANE)
         state = get_app_state(now)
@@ -240,6 +266,7 @@ class TestGetAppState:
 
     def test_approaching_30min_before(self):
         from ui.session_helpers import get_app_state
+
         # 30 min before TOKYO_OPEN (10:00)
         now = datetime(2026, 3, 6, 9, 30, tzinfo=BRISBANE)
         state = get_app_state(now)
@@ -247,6 +274,7 @@ class TestGetAppState:
 
     def test_idle_long_gap(self):
         from ui.session_helpers import get_app_state
+
         # 12:00 PM — 6 hours until LONDON_METALS at 18:00
         now = datetime(2026, 3, 6, 12, 0, tzinfo=BRISBANE)
         state = get_app_state(now)
@@ -254,6 +282,7 @@ class TestGetAppState:
 
     def test_overnight_late_evening(self):
         from ui.session_helpers import get_app_state
+
         # 9:30 PM — next session is US_DATA_830 at 11:30 PM (outside awake hours)
         now = datetime(2026, 3, 6, 21, 30, tzinfo=BRISBANE)
         state = get_app_state(now)
@@ -261,6 +290,7 @@ class TestGetAppState:
 
     def test_state_has_next_session_info(self):
         from ui.session_helpers import get_app_state
+
         now = datetime(2026, 3, 6, 9, 30, tzinfo=BRISBANE)
         state = get_app_state(now)
         assert state.next_session is not None
@@ -270,15 +300,19 @@ class TestGetAppState:
 
 # ── get_refresh_seconds ──────────────────────────────────────────────────────
 
+
 class TestGetRefreshSeconds:
     def test_weekend_slow_refresh(self):
         from ui.session_helpers import get_refresh_seconds
+
         assert get_refresh_seconds(minutes_to_next=2000, is_weekend=True) >= 60
 
     def test_alert_fast_refresh(self):
         from ui.session_helpers import get_refresh_seconds
+
         assert get_refresh_seconds(minutes_to_next=5, is_weekend=False) <= 10
 
     def test_idle_medium_refresh(self):
         from ui.session_helpers import get_refresh_seconds
+
         assert 15 <= get_refresh_seconds(minutes_to_next=120, is_weekend=False) <= 60

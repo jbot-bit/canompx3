@@ -4,12 +4,13 @@
 Each check returns list[str] violations. Exit code 0 = all passed, 1 = failures.
 Self-reports check count dynamically.
 """
+
 import re
 import subprocess
 import sys
 from pathlib import Path
 
-sys.stdout.reconfigure(encoding='utf-8')
+sys.stdout.reconfigure(encoding="utf-8")
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 SELF_PATH = Path(__file__).resolve()
@@ -57,7 +58,7 @@ def _text_files(dirs: list[Path], exts: tuple[str, ...] = (".py", ".yml", ".yaml
 # ── Check 1: Hardcoded check counts ──────────────────────────────────
 
 # Pattern: "all <number> checks" — counts should be computed at runtime
-HARDCODED_COUNT_PATTERN = re.compile(r'\ball\s+\d+\s+checks\b', re.IGNORECASE)
+HARDCODED_COUNT_PATTERN = re.compile(r"\ball\s+\d+\s+checks\b", re.IGNORECASE)
 
 
 def check_hardcoded_check_counts() -> list[str]:
@@ -68,7 +69,7 @@ def check_hardcoded_check_counts() -> list[str]:
         if f.resolve() == SELF_PATH:
             continue
         try:
-            text = f.read_text(encoding='utf-8')
+            text = f.read_text(encoding="utf-8")
         except (UnicodeDecodeError, PermissionError):
             continue
         for i, line in enumerate(text.splitlines(), 1):
@@ -82,7 +83,7 @@ def check_hardcoded_check_counts() -> list[str]:
 
 # Detects 3+ instrument symbols in a Python list literal or SQL IN clause.
 # These should import from pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS instead.
-_INST = r'(?:MGC|MNQ|MES|M2K|MCL|SIL|M6E)'
+_INST = r"(?:MGC|MNQ|MES|M2K|MCL|SIL|M6E)"
 PY_INSTRUMENT_LIST = re.compile(
     rf"""\[[\s'"]*{_INST}['"][\s,'"]*{_INST}['"][\s,'"]*{_INST}""",
     re.IGNORECASE,
@@ -113,7 +114,7 @@ def check_hardcoded_instrument_lists() -> list[str]:
         if f.resolve() == SELF_PATH or _is_allowlisted(f):
             continue
         try:
-            text = f.read_text(encoding='utf-8')
+            text = f.read_text(encoding="utf-8")
         except (UnicodeDecodeError, PermissionError):
             continue
         for i, line in enumerate(text.splitlines(), 1):
@@ -125,9 +126,9 @@ def check_hardcoded_instrument_lists() -> list[str]:
 
 # ── Check 3: Broad except returning success ──────────────────────────
 
-BROAD_EXCEPT_PATTERN = re.compile(r'except\s+(?:Exception|BaseException)\b')
+BROAD_EXCEPT_PATTERN = re.compile(r"except\s+(?:Exception|BaseException)\b")
 # Only True/0 are "success" returns — None is "unknown/couldn't compute" (not success masking)
-SUCCESS_RETURN_PATTERN = re.compile(r'return\s+(?:True|0)\b')
+SUCCESS_RETURN_PATTERN = re.compile(r"return\s+(?:True|0)\b")
 
 # Only check health/integrity/audit paths where swallowing exceptions is dangerous
 EXCEPT_SCAN_GLOBS = [
@@ -154,7 +155,7 @@ def check_broad_except_success() -> list[str]:
         if f.name in BROAD_EXCEPT_ALLOWLIST:
             continue
         try:
-            lines = f.read_text(encoding='utf-8').splitlines()
+            lines = f.read_text(encoding="utf-8").splitlines()
         except (UnicodeDecodeError, PermissionError):
             continue
         for i, line in enumerate(lines):
@@ -164,7 +165,7 @@ def check_broad_except_success() -> list[str]:
                     if SUCCESS_RETURN_PATTERN.search(lines[j]):
                         rel = f.relative_to(PROJECT_ROOT)
                         violations.append(
-                            f"  {rel}:{i+1}: broad except + success return: "
+                            f"  {rel}:{i + 1}: broad except + success return: "
                             f"{line.strip()[:40]} ... {lines[j].strip()[:40]}"
                         )
                         break
@@ -182,13 +183,13 @@ TRIPLE_JOIN_SCAN_DIRS = [PROJECT_ROOT / "research", PROJECT_ROOT / "scripts" / "
 # (they define SAFE_JOIN or use it via variable substitution)
 TRIPLE_JOIN_ALLOWLIST_FILES = {
     "audit_behavioral.py",  # self
-    "query.py",             # defines SAFE_JOIN
-    "edge_hunter.py",       # defines SAFE_JOIN
-    "discover.py",          # uses SAFE_JOIN
+    "query.py",  # defines SAFE_JOIN
+    "edge_hunter.py",  # defines SAFE_JOIN
+    "discover.py",  # uses SAFE_JOIN
     "multi_instrument_scan.py",  # uses SAFE_JOIN
-    "regime_scan_0900.py",       # uses SAFE_JOIN
+    "regime_scan_0900.py",  # uses SAFE_JOIN
     "research_break_quality_deep.py",  # intentional broken JOIN in audit function
-    "sql_adapter.py",       # docstring mentions JOIN; actual SQL is correct
+    "sql_adapter.py",  # docstring mentions JOIN; actual SQL is correct
 }
 TRIPLE_JOIN_ALLOWLIST_DIRS = {"archive", "tests"}
 
@@ -196,13 +197,13 @@ TRIPLE_JOIN_ALLOWLIST_DIRS = {"archive", "tests"}
 TRIPLE_QUOTE_PATTERN = re.compile(r'(?:"""(.*?)"""|\'\'\'(.*?)\'\'\')', re.DOTALL)
 
 # Regex to detect SQL blocks (contain SQL keywords)
-SQL_KEYWORD_PATTERN = re.compile(r'\b(?:SELECT|INSERT|FROM|JOIN)\b', re.IGNORECASE)
+SQL_KEYWORD_PATTERN = re.compile(r"\b(?:SELECT|INSERT|FROM|JOIN)\b", re.IGNORECASE)
 
 # Regex to detect JOIN daily_features
-JOIN_DF_PATTERN = re.compile(r'\bJOIN\s+daily_features\b', re.IGNORECASE)
+JOIN_DF_PATTERN = re.compile(r"\bJOIN\s+daily_features\b", re.IGNORECASE)
 
 # Regex to detect DataFrame merge calls
-MERGE_CALL_PATTERN = re.compile(r'\.merge\(|pd\.merge\(')
+MERGE_CALL_PATTERN = re.compile(r"\.merge\(|pd\.merge\(")
 
 
 def _is_triple_join_allowlisted(filepath: Path) -> bool:
@@ -235,7 +236,7 @@ def check_triple_join_guard() -> list[str]:
         if f.resolve() == SELF_PATH or _is_triple_join_allowlisted(f):
             continue
         try:
-            text = f.read_text(encoding='utf-8')
+            text = f.read_text(encoding="utf-8")
         except (UnicodeDecodeError, PermissionError):
             continue
 
@@ -249,20 +250,18 @@ def check_triple_join_guard() -> list[str]:
                 continue
             # Check for JOIN daily_features without orb_minutes
             join_match = JOIN_DF_PATTERN.search(block)
-            if join_match and 'orb_minutes' not in block:
+            if join_match and "orb_minutes" not in block:
                 # Find approximate line number
-                line_num = text[:match.start()].count('\n') + 1
+                line_num = text[: match.start()].count("\n") + 1
                 rel = f.relative_to(PROJECT_ROOT)
                 # Extract a short snippet of the JOIN for context
-                snippet = block[max(0, join_match.start() - 20):join_match.end() + 30].strip()
-                snippet = ' '.join(snippet.split())[:80]
-                violations.append(
-                    f"  {rel}:{line_num}: JOIN daily_features without orb_minutes: {snippet}"
-                )
+                snippet = block[max(0, join_match.start() - 20) : join_match.end() + 30].strip()
+                snippet = " ".join(snippet.split())[:80]
+                violations.append(f"  {rel}:{line_num}: JOIN daily_features without orb_minutes: {snippet}")
 
         # --- Pass 2: DataFrame merges referencing daily_features ---
         # Only check files that reference 'daily_features' (table or variable name)
-        if 'daily_features' not in text:
+        if "daily_features" not in text:
             continue
         lines = text.splitlines()
         for i, line in enumerate(lines):
@@ -271,18 +270,17 @@ def check_triple_join_guard() -> list[str]:
             # Check if 'daily_features' or 'daily_feat' appears on this line
             # or within 3 lines before (common pattern: df = daily_features; df.merge(...))
             context_start = max(0, i - 3)
-            context_lines = lines[context_start:i + 1]
-            context = ' '.join(context_lines)
-            if 'daily_features' not in context and 'daily_feat' not in context:
+            context_lines = lines[context_start : i + 1]
+            context = " ".join(context_lines)
+            if "daily_features" not in context and "daily_feat" not in context:
                 continue
             # Found a merge near a daily_features reference — check for orb_minutes
             # Look at the merge call + next 5 lines for orb_minutes
-            merge_context = ' '.join(lines[i:min(i + 6, len(lines))])
-            if 'orb_minutes' not in merge_context:
+            merge_context = " ".join(lines[i : min(i + 6, len(lines))])
+            if "orb_minutes" not in merge_context:
                 rel = f.relative_to(PROJECT_ROOT)
                 violations.append(
-                    f"  {rel}:{i+1}: DataFrame merge with daily_features "
-                    f"without orb_minutes: {line.strip()[:80]}"
+                    f"  {rel}:{i + 1}: DataFrame merge with daily_features without orb_minutes: {line.strip()[:80]}"
                 )
     return violations
 
@@ -298,9 +296,12 @@ def check_cli_arg_drift() -> list[str]:
         # Get recent changes (staged + unstaged)
         result = subprocess.run(
             ["git", "diff", "HEAD", "--unified=0"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
             cwd=str(PROJECT_ROOT),
-            encoding='utf-8', errors='replace',
+            encoding="utf-8",
+            errors="replace",
         )
         if result.returncode != 0:
             return []
@@ -324,11 +325,9 @@ def check_cli_arg_drift() -> list[str]:
 
         # Check if matching docs or test reference exists in diff
         for filepath, arg_name in new_args:
-            arg_base = arg_name.lstrip('-').replace('-', '_')
-            if arg_base not in diff_text.replace(filepath, ''):
-                warnings.append(
-                    f"  WARNING: {filepath}: new arg '{arg_name}' — no doc/test reference in diff"
-                )
+            arg_base = arg_name.lstrip("-").replace("-", "_")
+            if arg_base not in diff_text.replace(filepath, ""):
+                warnings.append(f"  WARNING: {filepath}: new arg '{arg_name}' — no doc/test reference in diff")
     except (subprocess.TimeoutExpired, FileNotFoundError):
         pass  # Fails open
     return warnings
@@ -337,12 +336,16 @@ def check_cli_arg_drift() -> list[str]:
 # Allowlist for double_break scanner: files that REFERENCE double_break for
 # analysis/reporting, not as pre-trade filters
 DOUBLE_BREAK_ALLOWLIST = {
-    "test_", "conftest.py", "audit_behavioral.py", ".md",
-    "__pycache__", ".pytest_cache",
-    "archive",                  # Archived research scripts (dead code)
-    "rolling_portfolio.py",     # Reports double_break degradation metrics (post-hoc)
-    "sql_adapter.py",           # Routes DOUBLE_BREAK_STATS template (query exposure)
-    "audit_ib_single_break.py", # Audit script analyzing double_break classification
+    "test_",
+    "conftest.py",
+    "audit_behavioral.py",
+    ".md",
+    "__pycache__",
+    ".pytest_cache",
+    "archive",  # Archived research scripts (dead code)
+    "rolling_portfolio.py",  # Reports double_break degradation metrics (post-hoc)
+    "sql_adapter.py",  # Routes DOUBLE_BREAK_STATS template (query exposure)
+    "audit_ib_single_break.py",  # Audit script analyzing double_break classification
     "research_session_event_analysis.py",  # Historical double_break analysis (pre-NODBL removal)
 }
 
@@ -369,12 +372,12 @@ def check_double_break_lookahead() -> list[str]:
 
     # Patterns that indicate double_break used as filter/predictor
     filter_patterns = [
-        re.compile(r'\bWHERE\b.*double_break', re.IGNORECASE),
-        re.compile(r'\bif\s+.*double_break', re.IGNORECASE),
-        re.compile(r'df\[.*double_break.*\]'),
-        re.compile(r'\.query\(.*double_break', re.IGNORECASE),
-        re.compile(r'\.loc\[.*double_break'),
-        re.compile(r'\.filter\(.*double_break', re.IGNORECASE),
+        re.compile(r"\bWHERE\b.*double_break", re.IGNORECASE),
+        re.compile(r"\bif\s+.*double_break", re.IGNORECASE),
+        re.compile(r"df\[.*double_break.*\]"),
+        re.compile(r"\.query\(.*double_break", re.IGNORECASE),
+        re.compile(r"\.loc\[.*double_break"),
+        re.compile(r"\.filter\(.*double_break", re.IGNORECASE),
     ]
 
     for scan_dir in scan_dirs:
@@ -386,14 +389,14 @@ def check_double_break_lookahead() -> list[str]:
                 continue
 
             try:
-                content = fpath.read_text(encoding='utf-8')
+                content = fpath.read_text(encoding="utf-8")
             except (UnicodeDecodeError, PermissionError):
                 continue
 
             # Check each filter pattern
             for pattern in filter_patterns:
                 for i, match in enumerate(pattern.finditer(content)):
-                    line_num = content[:match.start()].count('\n') + 1
+                    line_num = content[: match.start()].count("\n") + 1
                     rel_path = fpath.relative_to(PROJECT_ROOT)
                     violations.append(
                         f"  {rel_path}:{line_num}: double_break used as filter "
@@ -416,33 +419,33 @@ CHECKS = [
 
 
 def main():
-    print('=' * 70)
-    print('BEHAVIORAL AUDIT — ANTI-PATTERN SCANNER')
-    print('=' * 70)
+    print("=" * 70)
+    print("BEHAVIORAL AUDIT — ANTI-PATTERN SCANNER")
+    print("=" * 70)
 
     all_violations = []
 
     for label, check_fn, warning_only in CHECKS:
-        print(f'\n--- {label} ---')
+        print(f"\n--- {label} ---")
         results = check_fn()
         if results:
             tag = "WARNING" if warning_only else "FAILED"
-            print(f'  {tag}:')
+            print(f"  {tag}:")
             for line in results:
                 print(line)
             if not warning_only:
                 all_violations.extend(results)
         else:
-            print('  OK')
+            print("  OK")
 
-    print('\n' + '=' * 70)
+    print("\n" + "=" * 70)
     if all_violations:
-        print(f'BEHAVIORAL AUDIT FAILED: {len(all_violations)} violation(s)')
-        print('=' * 70)
+        print(f"BEHAVIORAL AUDIT FAILED: {len(all_violations)} violation(s)")
+        print("=" * 70)
         sys.exit(1)
     else:
-        print(f'BEHAVIORAL AUDIT PASSED: all {len(CHECKS)} checks clean')
-        print('=' * 70)
+        print(f"BEHAVIORAL AUDIT PASSED: all {len(CHECKS)} checks clean")
+        print("=" * 70)
         sys.exit(0)
 
 

@@ -51,9 +51,16 @@ MAX_RESULT_ROWS = 1000
 
 # Valid ORB labels for parameter validation
 VALID_ORB_LABELS = {
-    "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
-    "US_DATA_830", "NYSE_OPEN", "US_DATA_1000", "COMEX_SETTLE",
-    "CME_PRECLOSE", "NYSE_CLOSE",
+    "CME_REOPEN",
+    "TOKYO_OPEN",
+    "SINGAPORE_OPEN",
+    "LONDON_METALS",
+    "US_DATA_830",
+    "NYSE_OPEN",
+    "US_DATA_1000",
+    "COMEX_SETTLE",
+    "CME_PRECLOSE",
+    "NYSE_CLOSE",
     "BRISBANE_1025",
 }
 
@@ -68,6 +75,7 @@ VALID_INSTRUMENTS = set(get_active_instruments())
 
 VALID_RR_TARGETS = {1.0, 1.5, 2.0, 2.5, 3.0, 4.0}
 VALID_CONFIRM_BARS = {1, 2, 3, 4, 5}
+
 
 def _validate_orb_label(label: str) -> str:
     """Validate and return ORB label."""
@@ -482,15 +490,12 @@ class SQLAdapter:
         con = duckdb.connect(self.db_path, read_only=True)
         try:
             tables = con.execute(
-                "SELECT table_name FROM information_schema.tables "
-                "WHERE table_schema = 'main' ORDER BY table_name"
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' ORDER BY table_name"
             ).fetchall()
 
             rows = []
             for (table_name,) in tables:
-                count = con.execute(
-                    f'SELECT COUNT(*) FROM "{table_name}"'
-                ).fetchone()[0]
+                count = con.execute(f'SELECT COUNT(*) FROM "{table_name}"').fetchone()[0]
                 rows.append({"table_name": table_name, "row_count": count})
             return pd.DataFrame(rows)
         finally:
@@ -715,11 +720,19 @@ class SQLAdapter:
             con.close()
 
         if df.empty:
-            return pd.DataFrame([{
-                "N": 0, "win_rate": None, "avg_pnl_r": None,
-                "sharpe": None, "max_drawdown_r": None,
-                "avg_mae": None, "avg_mfe": None,
-            }])
+            return pd.DataFrame(
+                [
+                    {
+                        "N": 0,
+                        "win_rate": None,
+                        "avg_pnl_r": None,
+                        "sharpe": None,
+                        "max_drawdown_r": None,
+                        "avg_mae": None,
+                        "avg_mfe": None,
+                    }
+                ]
+            )
 
         stats = _compute_group_stats(df)
 
@@ -728,12 +741,8 @@ class SQLAdapter:
         peak = cum.cummax()
         stats["max_drawdown_r"] = round(float((cum - peak).min()), 2)
 
-        stats["avg_mae"] = (
-            round(float(df["mae_r"].mean()), 4) if df["mae_r"].notna().any() else None
-        )
-        stats["avg_mfe"] = (
-            round(float(df["mfe_r"].mean()), 4) if df["mfe_r"].notna().any() else None
-        )
+        stats["avg_mae"] = round(float(df["mae_r"].mean()), 4) if df["mae_r"].notna().any() else None
+        stats["avg_mfe"] = round(float(df["mfe_r"].mean()), 4) if df["mfe_r"].notna().any() else None
 
         return pd.DataFrame([stats])
 
@@ -776,8 +785,13 @@ class SQLAdapter:
             return pd.DataFrame(columns=["day_of_week", "day_name", "N", "win_rate", "avg_pnl_r"])
 
         dow_names = {
-            0: "Monday", 1: "Tuesday", 2: "Wednesday",
-            3: "Thursday", 4: "Friday", 5: "Saturday", 6: "Sunday",
+            0: "Monday",
+            1: "Tuesday",
+            2: "Wednesday",
+            3: "Thursday",
+            4: "Friday",
+            5: "Saturday",
+            6: "Sunday",
         }
         df["dow"] = pd.to_datetime(df["trading_day"]).dt.dayofweek
 
@@ -816,9 +830,7 @@ class SQLAdapter:
 
         # Fetch all trades with ORB size (no filter applied)
         params_no_filter = {k: v for k, v in params.items() if k != "filter_type"}
-        sql, bind = self._build_outcomes_base(
-            params_no_filter, extra_cols=f"{size_col} AS orb_size"
-        )
+        sql, bind = self._build_outcomes_base(params_no_filter, extra_cols=f"{size_col} AS orb_size")
 
         con = duckdb.connect(self.db_path, read_only=True)
         try:
@@ -927,7 +939,4 @@ class SQLAdapter:
             QueryTemplate.DST_SPLIT: "DEPRECATED: All sessions are now DST-clean (dynamic resolvers). No longer applicable.",
             QueryTemplate.FILTER_COMPARE: "Compare NO_FILTER vs G4 vs G5 vs G6 for same session",
         }
-        return [
-            {"template": t.value, "description": descriptions.get(t, "")}
-            for t in QueryTemplate
-        ]
+        return [{"template": t.value, "description": descriptions.get(t, "")} for t in QueryTemplate]

@@ -22,6 +22,7 @@ Security checklist before going live:
     [ ] Rate limit tested (max 3 orders / 60s)
     [ ] Tested in DEMO mode for 5+ sessions before live
 """
+
 import argparse
 import logging
 import os
@@ -44,8 +45,9 @@ log = logging.getLogger(__name__)
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="TradingView webhook server")
-    parser.add_argument("--live", action="store_true",
-                        help="REAL MONEY — requires typing CONFIRM and WEBHOOK_SECRET set")
+    parser.add_argument(
+        "--live", action="store_true", help="REAL MONEY — requires typing CONFIRM and WEBHOOK_SECRET set"
+    )
     parser.add_argument("--port", type=int, default=int(os.environ.get("WEBHOOK_PORT", "8765")))
     args = parser.parse_args()
 

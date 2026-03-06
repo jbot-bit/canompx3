@@ -27,6 +27,7 @@ from pipeline.paths import GOLD_DB_PATH
 # Data loading
 # ---------------------------------------------------------------------------
 
+
 def load_trade_log(path: str | Path) -> pd.DataFrame:
     """Parse DT trade log CSV into flip DataFrame.
 
@@ -40,28 +41,35 @@ def load_trade_log(path: str | Path) -> pd.DataFrame:
     entries["price"] = entries["Price USD"]
     return entries[["trade_num", "ts", "direction", "price"]].reset_index(drop=True)
 
+
 def load_bars_5m(start: str, end: str, db_path: Path | None = None) -> pd.DataFrame:
     """Load 5m bars from DB for the given date range."""
     import duckdb
+
     path = db_path or GOLD_DB_PATH
     con = duckdb.connect(str(path), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT ts_utc AS ts, open, high, low, close, volume
             FROM bars_5m
             WHERE symbol = 'MGC'
               AND ts_utc >= ?
               AND ts_utc <= ?
             ORDER BY ts_utc
-        """, [start, end]).fetchdf()
+        """,
+            [start, end],
+        ).fetchdf()
         df["ts"] = pd.to_datetime(df["ts"], utc=True).dt.tz_localize(None)
         return df
     finally:
         con.close()
 
+
 # ---------------------------------------------------------------------------
 # Indicator computation
 # ---------------------------------------------------------------------------
+
 
 def compute_indicators(bars: pd.DataFrame) -> pd.DataFrame:
     """Add all candidate indicators to bars DataFrame."""
@@ -99,15 +107,18 @@ def compute_indicators(bars: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
+
 # ---------------------------------------------------------------------------
 # Candidate strategy families
 # ---------------------------------------------------------------------------
+
 
 def family_a_signals(df: pd.DataFrame, fast: int, slow: int) -> pd.Series:
     """Family A: MA crossover. Returns direction series ('long'/'short')."""
     direction = pd.Series("short", index=df.index)
     direction[df[f"ma_{fast}"] > df[f"ma_{slow}"]] = "long"
     return direction
+
 
 def family_b_signals(df: pd.DataFrame, rsi_len: int, ma_len: int) -> pd.Series:
     """Family B: RSI vs RSI-MA crossover."""
@@ -117,8 +128,13 @@ def family_b_signals(df: pd.DataFrame, rsi_len: int, ma_len: int) -> pd.Series:
     direction[df[col_rsi] > df[col_ma]] = "long"
     return direction
 
+
 def family_c_signals(
-    df: pd.DataFrame, trend_ma: int, rsi_len: int, rsi_long_thresh: float, rsi_short_thresh: float,
+    df: pd.DataFrame,
+    trend_ma: int,
+    rsi_len: int,
+    rsi_long_thresh: float,
+    rsi_short_thresh: float,
 ) -> pd.Series:
     """Family C: Trend slope + pullback. Long when trend up + RSI pullback recovers."""
     slope_col = f"ma_{trend_ma}_slope"
@@ -136,6 +152,7 @@ def family_c_signals(
     direction = direction.ffill().fillna("short")
     return direction
 
+
 def extract_flips(direction: pd.Series, timestamps: pd.Series) -> pd.DataFrame:
     """Extract flip points from a direction series.
 
@@ -144,28 +161,33 @@ def extract_flips(direction: pd.Series, timestamps: pd.Series) -> pd.DataFrame:
     changed = direction != direction.shift(1)
     # Skip the first bar (no prior to compare)
     changed.iloc[0] = False
-    flips = pd.DataFrame({
-        "ts": timestamps[changed].values,
-        "direction": direction[changed].values,
-    })
+    flips = pd.DataFrame(
+        {
+            "ts": timestamps[changed].values,
+            "direction": direction[changed].values,
+        }
+    )
     return flips.reset_index(drop=True)
+
 
 # ---------------------------------------------------------------------------
 # Scoring
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class MatchScore:
     family: str
     params: dict
-    flip_hit_rate: float       # % of real flips matched within tolerance
-    false_flip_rate: float     # candidate flips with no matching real flip
+    flip_hit_rate: float  # % of real flips matched within tolerance
+    false_flip_rate: float  # candidate flips with no matching real flip
     direction_accuracy: float  # correct direction when matched
-    mean_timing_error: float   # mean bars early/late
+    mean_timing_error: float  # mean bars early/late
     total_candidate_flips: int
     total_real_flips: int
     matched_count: int
-    composite: float           # weighted score
+    composite: float  # weighted score
+
 
 def score_candidate(
     real_flips: pd.DataFrame,
@@ -250,9 +272,11 @@ def score_candidate(
         "composite": round(composite, 4),
     }
 
+
 # ---------------------------------------------------------------------------
 # Grid search
 # ---------------------------------------------------------------------------
+
 
 def run_grid_search(
     bars: pd.DataFrame,
@@ -274,11 +298,13 @@ def run_grid_search(
             direction = family_a_signals(df, fast, slow)
             cand_flips = extract_flips(direction, ts)
             score = score_candidate(real_flips, cand_flips, tolerance_bars)
-            results.append(MatchScore(
-                family="A_MA_Cross",
-                params={"fast": fast, "slow": slow},
-                **score,
-            ))
+            results.append(
+                MatchScore(
+                    family="A_MA_Cross",
+                    params={"fast": fast, "slow": slow},
+                    **score,
+                )
+            )
 
     # Family B: RSI vs RSI-MA
     for rsi_len in [7, 9, 14]:
@@ -286,11 +312,13 @@ def run_grid_search(
             direction = family_b_signals(df, rsi_len, ma_len)
             cand_flips = extract_flips(direction, ts)
             score = score_candidate(real_flips, cand_flips, tolerance_bars)
-            results.append(MatchScore(
-                family="B_RSI_Cross",
-                params={"rsi": rsi_len, "ma": ma_len},
-                **score,
-            ))
+            results.append(
+                MatchScore(
+                    family="B_RSI_Cross",
+                    params={"rsi": rsi_len, "ma": ma_len},
+                    **score,
+                )
+            )
 
     # Family C: Trend slope + pullback
     for trend_ma in [20, 50]:
@@ -300,11 +328,13 @@ def run_grid_search(
                 direction = family_c_signals(df, trend_ma, rsi_len, long_thresh, short_thresh)
                 cand_flips = extract_flips(direction, ts)
                 score = score_candidate(real_flips, cand_flips, tolerance_bars)
-                results.append(MatchScore(
-                    family="C_Trend_PB",
-                    params={"trend_ma": trend_ma, "rsi": rsi_len, "long_th": long_thresh},
-                    **score,
-                ))
+                results.append(
+                    MatchScore(
+                        family="C_Trend_PB",
+                        params={"trend_ma": trend_ma, "rsi": rsi_len, "long_th": long_thresh},
+                        **score,
+                    )
+                )
 
     # Family D: Chop wrapper on top A/B winners (applied after initial sort)
     # We'll do this as a post-filter on top-scoring A/B candidates
@@ -312,6 +342,7 @@ def run_grid_search(
     # Sort by composite score descending
     results.sort(key=lambda x: x.composite, reverse=True)
     return results
+
 
 def apply_chop_filter(
     bars_with_indicators: pd.DataFrame,
@@ -329,9 +360,11 @@ def apply_chop_filter(
     filtered = filtered.ffill().fillna("short")
     return filtered
 
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main():
     trade_log_path = Path(__file__).resolve().parent.parent.parent / "DT_V2_COMEX_MINI_MGC1!_2026-02-10.csv"
@@ -357,7 +390,9 @@ def main():
 
     # Top 15
     print("=" * 90)
-    print(f"{'Rank':<5} {'Family':<15} {'Params':<35} {'Hit%':<7} {'DirAcc':<7} {'FalseF':<7} {'TimErr':<7} {'Score':<7}")
+    print(
+        f"{'Rank':<5} {'Family':<15} {'Params':<35} {'Hit%':<7} {'DirAcc':<7} {'FalseF':<7} {'TimErr':<7} {'Score':<7}"
+    )
     print("=" * 90)
     for i, r in enumerate(results[:15], 1):
         params_str = str(r.params)
@@ -405,6 +440,7 @@ def main():
                 f"False={score['false_flip_rate']:.1%} Score={score['composite']:.4f} "
                 f"(flips: {score['total_candidate_flips']})"
             )
+
 
 if __name__ == "__main__":
     main()

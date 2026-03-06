@@ -10,6 +10,7 @@ For sessions with too few samples, fall back to no-model (take all).
 
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import duckdb
@@ -24,9 +25,17 @@ from trading_app.ml.features import transform_to_features
 from trading_app.config import ALL_FILTERS
 
 SESSION_ORDER = [
-    "CME_REOPEN", "TOKYO_OPEN", "BRISBANE_1025", "SINGAPORE_OPEN",
-    "LONDON_METALS", "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
-    "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+    "CME_REOPEN",
+    "TOKYO_OPEN",
+    "BRISBANE_1025",
+    "SINGAPORE_OPEN",
+    "LONDON_METALS",
+    "US_DATA_830",
+    "NYSE_OPEN",
+    "US_DATA_1000",
+    "COMEX_SETTLE",
+    "CME_PRECLOSE",
+    "NYSE_CLOSE",
 ]
 
 
@@ -108,28 +117,32 @@ def build_level_features(df):
         if prior_sizes:
             prior_size_ratio_max[i] = max(prior_sizes) / R
 
-    return pd.DataFrame({
-        "nearest_level_to_high_R": nearest_to_high,
-        "nearest_level_to_low_R": nearest_to_low,
-        "levels_within_1R": levels_within_1r,
-        "levels_within_2R": levels_within_2r,
-        "orb_nested_in_prior": is_nested,
-        "prior_orb_size_ratio_max": prior_size_ratio_max,
-        "prior_sessions_broken": prior_broken_count,
-        "prior_sessions_long": prior_long_count,
-        "prior_sessions_short": prior_short_count,
-    }, index=df.index)
+    return pd.DataFrame(
+        {
+            "nearest_level_to_high_R": nearest_to_high,
+            "nearest_level_to_low_R": nearest_to_low,
+            "levels_within_1R": levels_within_1r,
+            "levels_within_2R": levels_within_2r,
+            "orb_nested_in_prior": is_nested,
+            "prior_orb_size_ratio_max": prior_size_ratio_max,
+            "prior_sessions_broken": prior_broken_count,
+            "prior_sessions_long": prior_long_count,
+            "prior_sessions_short": prior_short_count,
+        },
+        index=df.index,
+    )
 
 
 def run_per_session(instrument="MES", min_session_samples=500):
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"  PER-SESSION ML EXPERIMENT — {instrument}")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
 
     # Load data
     con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
     configure_connection(con)
-    df = con.execute("""
+    df = con.execute(
+        """
         SELECT o.trading_day, o.symbol, o.orb_label, o.orb_minutes,
                o.entry_model, o.rr_target, o.confirm_bars, o.pnl_r, o.outcome,
                v.filter_type, d.*
@@ -143,7 +156,9 @@ def run_per_session(instrument="MES", min_session_samples=500):
             AND o.orb_minutes = d.orb_minutes
         WHERE o.symbol = $instrument AND o.pnl_r IS NOT NULL AND v.status = 'active'
         ORDER BY o.trading_day
-    """, {"instrument": instrument}).fetchdf()
+    """,
+        {"instrument": instrument},
+    ).fetchdf()
     con.close()
 
     keep_mask = np.zeros(len(df), dtype=bool)
@@ -154,9 +169,7 @@ def run_per_session(instrument="MES", min_session_samples=500):
             keep_mask[idx] = True
     df = df[keep_mask].reset_index(drop=True)
     df = df.drop_duplicates(
-        subset=["trading_day", "orb_label", "entry_model", "rr_target",
-                "confirm_bars", "orb_minutes"],
-        keep="first"
+        subset=["trading_day", "orb_label", "entry_model", "rr_target", "confirm_bars", "orb_minutes"], keep="first"
     ).reset_index(drop=True)
 
     print(f"Total outcomes: {len(df):,}")
@@ -165,9 +178,12 @@ def run_per_session(instrument="MES", min_session_samples=500):
     level_feats = build_level_features(df)
     X_base = transform_to_features(df)
     orb_label_cols = [c for c in X_base.columns if c.startswith("orb_label_")]
-    noise_cols = [c for c in X_base.columns if any(c.startswith(p) for p in [
-        "gap_type_", "atr_vel_regime_", "prev_day_direction_"
-    ]) or c in ["confirm_bars", "orb_break_bar_continues", "orb_minutes"]]
+    noise_cols = [
+        c
+        for c in X_base.columns
+        if any(c.startswith(p) for p in ["gap_type_", "atr_vel_regime_", "prev_day_direction_"])
+        or c in ["confirm_bars", "orb_break_bar_continues", "orb_minutes"]
+    ]
     X_clean = X_base.drop(columns=[c for c in orb_label_cols + noise_cols if c in X_base.columns])
 
     # Add level features
@@ -179,9 +195,13 @@ def run_per_session(instrument="MES", min_session_samples=500):
     pnl_r = df["pnl_r"].values
 
     rf_params = dict(
-        n_estimators=500, max_depth=6, min_samples_leaf=50,  # Lower leaf for smaller per-session N
-        max_features="sqrt", class_weight="balanced",
-        random_state=42, n_jobs=-1,
+        n_estimators=500,
+        max_depth=6,
+        min_samples_leaf=50,  # Lower leaf for smaller per-session N
+        max_features="sqrt",
+        class_weight="balanced",
+        random_state=42,
+        n_jobs=-1,
     )
 
     # ===== APPROACH 1: Per-instrument E6 model (current) =====
@@ -240,9 +260,13 @@ def run_per_session(instrument="MES", min_session_samples=500):
             use_cols = [c for c in X_clean.columns]
             # Still keep level features if they have data
             if session_idx == 1:
-                for col in ["nearest_level_to_high_R", "nearest_level_to_low_R",
-                            "levels_within_1R", "levels_within_2R",
-                            "prior_orb_size_ratio_max"]:
+                for col in [
+                    "nearest_level_to_high_R",
+                    "nearest_level_to_low_R",
+                    "levels_within_1R",
+                    "levels_within_2R",
+                    "prior_orb_size_ratio_max",
+                ]:
                     use_cols.append(col)
         else:
             # Later sessions: use all features
@@ -289,14 +313,12 @@ def run_per_session(instrument="MES", min_session_samples=500):
         total_r = pnl_test[mask].sum()
         delta = total_r - baseline_total
         skip = 1 - n_kept / valid.sum()
-        print(f"  t={t:.2f}: Kept={n_kept:>5} Skip={skip:>5.1%} "
-              f"TotalR={total_r:>+8.2f} Delta={delta:>+8.2f}")
+        print(f"  t={t:.2f}: Kept={n_kept:>5} Skip={skip:>5.1%} TotalR={total_r:>+8.2f} Delta={delta:>+8.2f}")
 
     print(f"\n--- Per-session models ---")
     for session, info in sorted(session_results.items()):
-        auc_str = f"{info['auc']:.4f}" if info['auc'] is not None else "N/A"
-        print(f"  {session:<20} N={info['n_total']:>6} test={info['n_test']:>4} "
-              f"AUC={auc_str:>6} model={info['model']}")
+        auc_str = f"{info['auc']:.4f}" if info["auc"] is not None else "N/A"
+        print(f"  {session:<20} N={info['n_total']:>6} test={info['n_test']:>4} AUC={auc_str:>6} model={info['model']}")
 
     # Combined per-session predictions
     has_pred = ~np.isnan(y_prob_session) & valid
@@ -325,8 +347,10 @@ def run_per_session(instrument="MES", min_session_samples=500):
 
             delta = combined_r - baseline_total
             skip = 1 - (n_kept + (no_pred & valid).sum()) / valid.sum()
-            print(f"  t={t:.2f}: Kept={n_kept:>5}+{(no_pred & valid).sum()} "
-                  f"Skip={skip:>5.1%} TotalR={combined_r:>+8.2f} Delta={delta:>+8.2f}")
+            print(
+                f"  t={t:.2f}: Kept={n_kept:>5}+{(no_pred & valid).sum()} "
+                f"Skip={skip:>5.1%} TotalR={combined_r:>+8.2f} Delta={delta:>+8.2f}"
+            )
 
     # Per-session delta comparison
     print(f"\n--- Per-session delta comparison (best threshold per model) ---")
@@ -364,13 +388,16 @@ def run_per_session(instrument="MES", min_session_samples=500):
             sess_skip = 0
 
         winner = "SESSION" if sess_total > inst_r else "INST" if inst_r > sess_total else "TIE"
-        print(f"  {session:<20} Base={base_r:>+8.1f} "
-              f"Inst(skip={inst_skip:.0%})={inst_r:>+8.1f} "
-              f"Sess(skip={sess_skip:.0%})={sess_total:>+8.1f} >> {winner}")
+        print(
+            f"  {session:<20} Base={base_r:>+8.1f} "
+            f"Inst(skip={inst_skip:.0%})={inst_r:>+8.1f} "
+            f"Sess(skip={sess_skip:.0%})={sess_total:>+8.1f} >> {winner}"
+        )
 
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--instrument", default="MES")
     parser.add_argument("--min-session-samples", type=int, default=500)

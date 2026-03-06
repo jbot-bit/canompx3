@@ -5,7 +5,11 @@ from datetime import date, datetime, timezone
 from dataclasses import dataclass
 
 from trading_app.market_state import (
-    MarketState, OrbSnapshot, SessionSignals, RegimeContext, ORB_LABELS,
+    MarketState,
+    OrbSnapshot,
+    SessionSignals,
+    RegimeContext,
+    ORB_LABELS,
 )
 from trading_app.scoring import score_strategy, ScoringWeights, MIN_SCORE_THRESHOLD
 from trading_app.cascade_table import lookup_cascade
@@ -15,9 +19,11 @@ from trading_app.cascade_table import lookup_cascade
 # Fixtures
 # =========================================================================
 
+
 @dataclass(frozen=True)
 class FakeStrategy:
     """Minimal strategy stub for scoring tests."""
+
     strategy_id: str
     orb_label: str
     expectancy_r: float
@@ -49,6 +55,7 @@ def _make_state(**orb_kwargs) -> MarketState:
 # =========================================================================
 # Fix 1: visible_sessions masks future outcomes
 # =========================================================================
+
 
 class TestVisibleSessions:
     def test_masks_future_outcomes(self):
@@ -102,10 +109,22 @@ class TestVisibleSessions:
         """Outcomes revealed one at a time as trades resolve."""
         state = _make_state(
             **{
-                "CME_REOPEN": {"outcome": "win", "high": 100.0, "low": 95.0, "size": 5.0,
-                          "break_dir": "long", "complete": True},
-                "TOKYO_OPEN": {"outcome": "loss", "high": 100.0, "low": 95.0, "size": 5.0,
-                          "break_dir": "short", "complete": True},
+                "CME_REOPEN": {
+                    "outcome": "win",
+                    "high": 100.0,
+                    "low": 95.0,
+                    "size": 5.0,
+                    "break_dir": "long",
+                    "complete": True,
+                },
+                "TOKYO_OPEN": {
+                    "outcome": "loss",
+                    "high": 100.0,
+                    "low": 95.0,
+                    "size": 5.0,
+                    "break_dir": "short",
+                    "complete": True,
+                },
             }
         )
         # Start: nothing visible
@@ -127,15 +146,28 @@ class TestVisibleSessions:
 # Signals: reversal, chop, continuation
 # =========================================================================
 
+
 class TestSignals:
     def test_reversal_detected(self):
         """CME_REOPEN loss + TOKYO_OPEN opposite direction = reversal."""
         state = _make_state(
             **{
-                "CME_REOPEN": {"outcome": "loss", "break_dir": "long", "complete": True,
-                          "high": 100.0, "low": 95.0, "size": 5.0},
-                "TOKYO_OPEN": {"outcome": "win", "break_dir": "short", "complete": True,
-                          "high": 100.0, "low": 95.0, "size": 5.0},
+                "CME_REOPEN": {
+                    "outcome": "loss",
+                    "break_dir": "long",
+                    "complete": True,
+                    "high": 100.0,
+                    "low": 95.0,
+                    "size": 5.0,
+                },
+                "TOKYO_OPEN": {
+                    "outcome": "win",
+                    "break_dir": "short",
+                    "complete": True,
+                    "high": 100.0,
+                    "low": 95.0,
+                    "size": 5.0,
+                },
             }
         )
         state.update_signals()
@@ -146,10 +178,22 @@ class TestSignals:
         """CME_REOPEN loss + TOKYO_OPEN loss = chop."""
         state = _make_state(
             **{
-                "CME_REOPEN": {"outcome": "loss", "break_dir": "long", "complete": True,
-                          "high": 100.0, "low": 95.0, "size": 5.0},
-                "TOKYO_OPEN": {"outcome": "loss", "break_dir": "long", "complete": True,
-                          "high": 100.0, "low": 95.0, "size": 5.0},
+                "CME_REOPEN": {
+                    "outcome": "loss",
+                    "break_dir": "long",
+                    "complete": True,
+                    "high": 100.0,
+                    "low": 95.0,
+                    "size": 5.0,
+                },
+                "TOKYO_OPEN": {
+                    "outcome": "loss",
+                    "break_dir": "long",
+                    "complete": True,
+                    "high": 100.0,
+                    "low": 95.0,
+                    "size": 5.0,
+                },
             }
         )
         state.update_signals()
@@ -159,10 +203,22 @@ class TestSignals:
         """CME_REOPEN win + TOKYO_OPEN same direction = continuation."""
         state = _make_state(
             **{
-                "CME_REOPEN": {"outcome": "win", "break_dir": "long", "complete": True,
-                          "high": 100.0, "low": 95.0, "size": 5.0},
-                "TOKYO_OPEN": {"outcome": "win", "break_dir": "long", "complete": True,
-                          "high": 100.0, "low": 95.0, "size": 5.0},
+                "CME_REOPEN": {
+                    "outcome": "win",
+                    "break_dir": "long",
+                    "complete": True,
+                    "high": 100.0,
+                    "low": 95.0,
+                    "size": 5.0,
+                },
+                "TOKYO_OPEN": {
+                    "outcome": "win",
+                    "break_dir": "long",
+                    "complete": True,
+                    "high": 100.0,
+                    "low": 95.0,
+                    "size": 5.0,
+                },
             }
         )
         state.update_signals()
@@ -172,10 +228,8 @@ class TestSignals:
         """No signals when outcomes are not yet visible."""
         state = _make_state(
             **{
-                "CME_REOPEN": {"break_dir": "long", "complete": True,
-                          "high": 100.0, "low": 95.0, "size": 5.0},
-                "TOKYO_OPEN": {"break_dir": "short", "complete": True,
-                          "high": 100.0, "low": 95.0, "size": 5.0},
+                "CME_REOPEN": {"break_dir": "long", "complete": True, "high": 100.0, "low": 95.0, "size": 5.0},
+                "TOKYO_OPEN": {"break_dir": "short", "complete": True, "high": 100.0, "low": 95.0, "size": 5.0},
             }
         )
         # outcomes are None (default)
@@ -188,6 +242,7 @@ class TestSignals:
 # =========================================================================
 # Scoring
 # =========================================================================
+
 
 class TestScoring:
     def test_orb_size_below_4_dampens(self):
@@ -244,6 +299,7 @@ class TestScoring:
 # Cascade table lookup
 # =========================================================================
 
+
 class TestCascadeLookup:
     def test_lookup_found(self):
         table = {("CME_REOPEN", "loss", "opposite"): {"TOKYO_OPEN_wr": 0.52, "n": 148}}
@@ -265,31 +321,30 @@ class TestCascadeLookup:
 # Risk manager chop warning
 # =========================================================================
 
+
 class TestRiskManagerChopWarning:
     def test_chop_warning_recorded(self):
         from trading_app.risk_manager import RiskManager, RiskLimits
+
         rm = RiskManager(RiskLimits())
         rm.daily_reset(date(2025, 6, 15))
 
         state = MarketState()
         state.signals.chop_detected = True
 
-        allowed, reason, _ = rm.can_enter(
-            "S1", "SINGAPORE_OPEN", [], 0.0, market_state=state
-        )
+        allowed, reason, _ = rm.can_enter("S1", "SINGAPORE_OPEN", [], 0.0, market_state=state)
         assert allowed is True
         assert any("chop_warning" in w for w in rm.warnings)
 
     def test_no_warning_without_chop(self):
         from trading_app.risk_manager import RiskManager, RiskLimits
+
         rm = RiskManager(RiskLimits())
         rm.daily_reset(date(2025, 6, 15))
 
         state = MarketState()
         state.signals.chop_detected = False
 
-        allowed, _, _ = rm.can_enter(
-            "S1", "SINGAPORE_OPEN", [], 0.0, market_state=state
-        )
+        allowed, _, _ = rm.can_enter("S1", "SINGAPORE_OPEN", [], 0.0, market_state=state)
         assert allowed is True
         assert not any("chop_warning" in w for w in rm.warnings)

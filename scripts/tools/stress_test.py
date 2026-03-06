@@ -69,12 +69,11 @@ def print_table(headers, rows, col_widths=None):
 def discover_top_edges(con):
     """Find the top edges per instrument -- N>=50, highest avg R."""
     edges = []
-    symbols = [r[0] for r in con.execute(
-        "SELECT DISTINCT symbol FROM orb_outcomes ORDER BY symbol"
-    ).fetchall()]
+    symbols = [r[0] for r in con.execute("SELECT DISTINCT symbol FROM orb_outcomes ORDER BY symbol").fetchall()]
 
     for sym in symbols:
-        rows = con.execute("""
+        rows = con.execute(
+            """
             SELECT orb_label, entry_model, confirm_bars, rr_target,
                    COUNT(*) as n,
                    ROUND(AVG(pnl_r), 4) as avg_r,
@@ -85,20 +84,24 @@ def discover_top_edges(con):
             HAVING COUNT(*) >= 50
             ORDER BY AVG(pnl_r) DESC
             LIMIT 5
-        """, [sym]).fetchall()
+        """,
+            [sym],
+        ).fetchall()
 
         for r in rows:
             if r[5] > 0.01:  # only edges with avg R > 0.01
-                edges.append({
-                    "symbol": sym,
-                    "session": r[0],
-                    "entry_model": r[1],
-                    "cb": r[2],
-                    "rr": r[3],
-                    "n": r[4],
-                    "avg_r": r[5],
-                    "wr": r[6],
-                })
+                edges.append(
+                    {
+                        "symbol": sym,
+                        "session": r[0],
+                        "entry_model": r[1],
+                        "cb": r[2],
+                        "rr": r[3],
+                        "n": r[4],
+                        "avg_r": r[5],
+                        "wr": r[6],
+                    }
+                )
     return edges
 
 
@@ -120,7 +123,8 @@ def test_1_no_size_filter(con, edge):
     try:
         size_col = f"orb_{sess}_size"
         # Split into small (<5pt) and large (>=5pt) ORBs
-        rows = con.execute(f"""
+        rows = con.execute(
+            f"""
             SELECT
                 CASE WHEN d.{size_col} >= 5.0 THEN 'LARGE (>=5pt)'
                      ELSE 'SMALL (<5pt)' END as orb_bucket,
@@ -136,7 +140,9 @@ def test_1_no_size_filter(con, edge):
               AND d.{size_col} IS NOT NULL
             GROUP BY orb_bucket
             ORDER BY orb_bucket
-        """, [sym, sess, em, cb, rr]).fetchall()
+        """,
+            [sym, sess, em, cb, rr],
+        ).fetchall()
     except Exception:
         return {"pass": None, "reason": f"Could not find size column for session {sess}"}
 
@@ -148,23 +154,29 @@ def test_1_no_size_filter(con, edge):
     small = result.get("SMALL (<5pt)", {"n": 0, "avg_r": 0, "total_r": 0})
     large = result.get("LARGE (>=5pt)", {"n": 0, "avg_r": 0, "total_r": 0})
 
-    print_table(
-        ["ORB Size", "N", "Win %", "Avg R", "Total R"],
-        rows
-    )
+    print_table(["ORB Size", "N", "Win %", "Avg R", "Total R"], rows)
 
     if large.get("n", 0) == 0:
         return {"pass": None, "reason": "No large-ORB trades found"}
 
     if small.get("n", 0) < 10:
-        return {"pass": True, "reason": f"Only {small.get('n', 0)} small-ORB trades -- edge is mostly large-ORB by nature"}
+        return {
+            "pass": True,
+            "reason": f"Only {small.get('n', 0)} small-ORB trades -- edge is mostly large-ORB by nature",
+        }
 
     # If small ORBs also profitable, the edge isn't just a size filter artifact
     if small.get("avg_r", 0) > 0:
-        return {"pass": True, "reason": f"Edge survives on small ORBs too (avg R = {small['avg_r']:+.4f}). Not just a size filter artifact."}
+        return {
+            "pass": True,
+            "reason": f"Edge survives on small ORBs too (avg R = {small['avg_r']:+.4f}). Not just a size filter artifact.",
+        }
     else:
         # If ONLY large ORBs work, the edge IS the size filter
-        return {"pass": False, "reason": f"Small ORBs LOSE (avg R = {small['avg_r']:+.4f}). Edge only works on large ORBs -- it's the size filter doing the work, not the params."}
+        return {
+            "pass": False,
+            "reason": f"Small ORBs LOSE (avg R = {small['avg_r']:+.4f}). Edge only works on large ORBs -- it's the size filter doing the work, not the params.",
+        }
 
 
 def test_2_year_over_year(con, edge):
@@ -175,7 +187,8 @@ def test_2_year_over_year(con, edge):
     cb = edge["cb"]
     rr = edge["rr"]
 
-    rows = con.execute("""
+    rows = con.execute(
+        """
         SELECT YEAR(trading_day) as yr,
                COUNT(*) as n,
                ROUND(AVG(CASE WHEN outcome='win' THEN 100.0 ELSE 0.0 END), 1) as wr,
@@ -187,12 +200,17 @@ def test_2_year_over_year(con, edge):
           AND outcome IN ('win', 'loss')
         GROUP BY YEAR(trading_day)
         ORDER BY yr
-    """, [sym, sess, em, cb, rr]).fetchall()
+    """,
+        [sym, sess, em, cb, rr],
+    ).fetchall()
 
     print_table(["Year", "N", "Win %", "Avg R", "Total R"], rows)
 
     if len(rows) < 2:
-        return {"pass": False, "reason": f"Only {len(rows)} year(s) of data -- cannot assess stability. INSUFFICIENT DATA."}
+        return {
+            "pass": False,
+            "reason": f"Only {len(rows)} year(s) of data -- cannot assess stability. INSUFFICIENT DATA.",
+        }
 
     positive_years = sum(1 for r in rows if r[3] > 0)
     negative_years = sum(1 for r in rows if r[3] < -0.01)
@@ -212,13 +230,22 @@ def test_2_year_over_year(con, edge):
         return {"pass": True, "reason": f"Positive in both years, but only 2 years -- needs more history to confirm."}
     elif positive_years >= total_years * 0.7:
         bad = [f"{r[0]}({r[3]:+.4f})" for r in rows if r[3] < -0.01]
-        return {"pass": True, "reason": f"Positive in {positive_years}/{total_years} years. Losing: {', '.join(bad) or 'minor'}. Acceptable."}
+        return {
+            "pass": True,
+            "reason": f"Positive in {positive_years}/{total_years} years. Losing: {', '.join(bad) or 'minor'}. Acceptable.",
+        }
     elif dominance > 0.7 and total_years >= 3:
         best_yr = max(rows, key=lambda r: r[4])
-        return {"pass": False, "reason": f"One year ({best_yr[0]}) accounts for {dominance*100:.0f}% of all returns. Regime-dependent, not structural."}
+        return {
+            "pass": False,
+            "reason": f"One year ({best_yr[0]}) accounts for {dominance * 100:.0f}% of all returns. Regime-dependent, not structural.",
+        }
     else:
         bad = [f"{r[0]}({r[3]:+.4f})" for r in rows if r[3] < -0.01]
-        return {"pass": False, "reason": f"Only positive in {positive_years}/{total_years} years. Losing: {', '.join(bad)}. Unstable edge."}
+        return {
+            "pass": False,
+            "reason": f"Only positive in {positive_years}/{total_years} years. Losing: {', '.join(bad)}. Unstable edge.",
+        }
 
 
 def test_3_parameter_sensitivity(con, edge):
@@ -236,7 +263,8 @@ def test_3_parameter_sensitivity(con, edge):
     results = []
     for test_cb in cb_vals:
         for test_rr in rr_vals:
-            row = con.execute("""
+            row = con.execute(
+                """
                 SELECT COUNT(*) as n,
                        ROUND(AVG(CASE WHEN outcome='win' THEN 100.0 ELSE 0.0 END), 1) as wr,
                        ROUND(AVG(pnl_r), 4) as avg_r
@@ -244,21 +272,17 @@ def test_3_parameter_sensitivity(con, edge):
                 WHERE symbol = ? AND orb_label = ? AND entry_model = ?
                   AND confirm_bars = ? AND rr_target = ?
                   AND outcome IN ('win', 'loss')
-            """, [sym, sess, em, test_cb, test_rr]).fetchone()
+            """,
+                [sym, sess, em, test_cb, test_rr],
+            ).fetchone()
 
-            is_orig = (test_cb == cb and abs(test_rr - rr) < 0.01)
+            is_orig = test_cb == cb and abs(test_rr - rr) < 0.01
             marker = " <-- ORIGINAL" if is_orig else ""
             n = row[0] if row else 0
             wr = row[1] if row and row[0] > 0 else 0
             avg_r = row[2] if row and row[0] > 0 else 0
 
-            results.append((
-                f"CB{test_cb}/RR{test_rr:.1f}",
-                n,
-                f"{wr}%",
-                f"{avg_r:+.4f}" if n > 0 else "-",
-                marker
-            ))
+            results.append((f"CB{test_cb}/RR{test_rr:.1f}", n, f"{wr}%", f"{avg_r:+.4f}" if n > 0 else "-", marker))
 
     print_table(["Params", "N", "Win %", "Avg R", ""], results)
 
@@ -271,13 +295,16 @@ def test_3_parameter_sensitivity(con, edge):
             if test_cb == cb and abs(test_rr - rr) < 0.01:
                 continue
             # Only count neighbors that actually HAVE data (N >= 20)
-            row = con.execute("""
+            row = con.execute(
+                """
                 SELECT COUNT(*) as n, AVG(pnl_r) as avg_r
                 FROM orb_outcomes
                 WHERE symbol = ? AND orb_label = ? AND entry_model = ?
                   AND confirm_bars = ? AND rr_target = ?
                   AND outcome IN ('win', 'loss')
-            """, [sym, sess, em, test_cb, test_rr]).fetchone()
+            """,
+                [sym, sess, em, test_cb, test_rr],
+            ).fetchone()
             if row and row[0] and row[0] >= 20:
                 neighbor_count += 1
                 if row[1] and row[1] > 0:
@@ -290,11 +317,20 @@ def test_3_parameter_sensitivity(con, edge):
     if positive_neighbors == neighbor_count:
         return {"pass": True, "reason": f"ALL {neighbor_count} neighbors with data are profitable. Robust."}
     elif pct >= 60:
-        return {"pass": True, "reason": f"{positive_neighbors}/{neighbor_count} neighbors profitable ({pct:.0f}%). Edge is reasonably robust."}
+        return {
+            "pass": True,
+            "reason": f"{positive_neighbors}/{neighbor_count} neighbors profitable ({pct:.0f}%). Edge is reasonably robust.",
+        }
     elif pct >= 40:
-        return {"pass": False, "reason": f"Only {positive_neighbors}/{neighbor_count} neighbors profitable ({pct:.0f}%). Edge is parameter-sensitive -- could be curve-fitted."}
+        return {
+            "pass": False,
+            "reason": f"Only {positive_neighbors}/{neighbor_count} neighbors profitable ({pct:.0f}%). Edge is parameter-sensitive -- could be curve-fitted.",
+        }
     else:
-        return {"pass": False, "reason": f"Only {positive_neighbors}/{neighbor_count} neighbors profitable ({pct:.0f}%). Edge COLLAPSES with small param changes. Likely curve-fitted."}
+        return {
+            "pass": False,
+            "reason": f"Only {positive_neighbors}/{neighbor_count} neighbors profitable ({pct:.0f}%). Edge COLLAPSES with small param changes. Likely curve-fitted.",
+        }
 
 
 def test_4_long_vs_short(con, edge):
@@ -307,7 +343,8 @@ def test_4_long_vs_short(con, edge):
 
     dir_col = f"orb_{sess}_break_dir"
     try:
-        rows = con.execute(f"""
+        rows = con.execute(
+            f"""
             SELECT
                 UPPER(d.{dir_col}) as direction,
                 COUNT(*) as n,
@@ -322,7 +359,9 @@ def test_4_long_vs_short(con, edge):
               AND d.{dir_col} IS NOT NULL
             GROUP BY direction
             ORDER BY direction
-        """, [sym, sess, em, cb, rr]).fetchall()
+        """,
+            [sym, sess, em, cb, rr],
+        ).fetchall()
     except Exception:
         return {"pass": None, "reason": f"Could not find direction column for session {sess}"}
 
@@ -343,19 +382,37 @@ def test_4_long_vs_short(con, edge):
     neither = long_r <= 0 and short_r <= 0
 
     if both_positive:
-        return {"pass": True, "reason": f"Both directions profitable (L: {long_r:+.4f}, S: {short_r:+.4f}). Bidirectional edge."}
+        return {
+            "pass": True,
+            "reason": f"Both directions profitable (L: {long_r:+.4f}, S: {short_r:+.4f}). Bidirectional edge.",
+        }
     elif only_long and long_n >= 30:
-        return {"pass": True, "reason": f"LONG-ONLY edge (L: {long_r:+.4f} N={long_n}, S: {short_r:+.4f} N={short_n}). Valid -- many sessions have directional bias."}
+        return {
+            "pass": True,
+            "reason": f"LONG-ONLY edge (L: {long_r:+.4f} N={long_n}, S: {short_r:+.4f} N={short_n}). Valid -- many sessions have directional bias.",
+        }
     elif only_short and short_n >= 30:
-        return {"pass": True, "reason": f"SHORT-ONLY edge (S: {short_r:+.4f} N={short_n}, L: {long_r:+.4f} N={long_n}). Valid -- may indicate mean-reversion session."}
+        return {
+            "pass": True,
+            "reason": f"SHORT-ONLY edge (S: {short_r:+.4f} N={short_n}, L: {long_r:+.4f} N={long_n}). Valid -- may indicate mean-reversion session.",
+        }
     elif neither:
-        return {"pass": False, "reason": f"NEITHER direction profitable individually (L: {long_r:+.4f}, S: {short_r:+.4f}). Aggregate avg R may be misleading."}
+        return {
+            "pass": False,
+            "reason": f"NEITHER direction profitable individually (L: {long_r:+.4f}, S: {short_r:+.4f}). Aggregate avg R may be misleading.",
+        }
     else:
         winner = "LONG" if long_r > short_r else "SHORT"
         loser_n = short_n if winner == "LONG" else long_n
         if loser_n < 15:
-            return {"pass": True, "reason": f"One direction dominant ({winner}), but losing side has only N={loser_n} -- insufficient to judge."}
-        return {"pass": False, "reason": f"One-directional only ({winner}). Other side is a loser. Edge halves your trade count."}
+            return {
+                "pass": True,
+                "reason": f"One direction dominant ({winner}), but losing side has only N={loser_n} -- insufficient to judge.",
+            }
+        return {
+            "pass": False,
+            "reason": f"One-directional only ({winner}). Other side is a loser. Edge halves your trade count.",
+        }
 
 
 def test_5_scratch_rate(con, edge):
@@ -366,7 +423,8 @@ def test_5_scratch_rate(con, edge):
     cb = edge["cb"]
     rr = edge["rr"]
 
-    rows = con.execute("""
+    rows = con.execute(
+        """
         SELECT outcome,
                COUNT(*) as n,
                ROUND(AVG(pnl_r), 4) as avg_r
@@ -375,7 +433,9 @@ def test_5_scratch_rate(con, edge):
           AND confirm_bars = ? AND rr_target = ?
         GROUP BY outcome
         ORDER BY n DESC
-    """, [sym, sess, em, cb, rr]).fetchall()
+    """,
+        [sym, sess, em, cb, rr],
+    ).fetchall()
 
     total = sum(r[1] for r in rows)
     if total == 0:
@@ -391,16 +451,28 @@ def test_5_scratch_rate(con, edge):
     scratch_pct = scratch / total * 100 if total > 0 else 0
 
     if resolved == 0:
-        return {"pass": False, "reason": "ZERO resolved trades (all scratches/no-breaks). This is not a tradeable edge."}
+        return {
+            "pass": False,
+            "reason": "ZERO resolved trades (all scratches/no-breaks). This is not a tradeable edge.",
+        }
 
     if scratch_pct > 60:
-        return {"pass": False, "reason": f"{scratch_pct:.0f}% of trades never resolve (scratch/no-break/expired). "
-                f"Only {resolved} out of {total} actually hit target or stop. Extremely inefficient."}
+        return {
+            "pass": False,
+            "reason": f"{scratch_pct:.0f}% of trades never resolve (scratch/no-break/expired). "
+            f"Only {resolved} out of {total} actually hit target or stop. Extremely inefficient.",
+        }
     elif scratch_pct > 40:
-        return {"pass": True, "reason": f"{scratch_pct:.0f}% unresolved trades. Moderate -- common for higher RR targets. "
-                f"{resolved} trades actually resolved."}
+        return {
+            "pass": True,
+            "reason": f"{scratch_pct:.0f}% unresolved trades. Moderate -- common for higher RR targets. "
+            f"{resolved} trades actually resolved.",
+        }
     else:
-        return {"pass": True, "reason": f"Only {scratch_pct:.0f}% unresolved. {resolved}/{total} trades hit target or stop. Good resolution rate."}
+        return {
+            "pass": True,
+            "reason": f"Only {scratch_pct:.0f}% unresolved. {resolved}/{total} trades hit target or stop. Good resolution rate.",
+        }
 
 
 def render_verdict(edge, results):
@@ -459,6 +531,7 @@ def render_verdict(edge, results):
 # MAIN
 # ============================================================
 
+
 def main():
     db_path = get_db_path()
     if not db_path.exists():
@@ -488,8 +561,10 @@ def main():
 
         print(f"  Found {len(edges)} candidate edge(s) to stress-test:\n")
         for i, e in enumerate(edges, 1):
-            print(f"    {i}. {e['symbol']} {e['session']}/{e['entry_model']}/CB{e['cb']}/RR{e['rr']}"
-                  f"  avg R = {e['avg_r']:+.4f}  WR = {e['wr']}%  N = {e['n']}")
+            print(
+                f"    {i}. {e['symbol']} {e['session']}/{e['entry_model']}/CB{e['cb']}/RR{e['rr']}"
+                f"  avg R = {e['avg_r']:+.4f}  WR = {e['wr']}%  N = {e['n']}"
+            )
         print()
         print("  " + "=" * 64)
 
@@ -573,7 +648,9 @@ def main():
 
         print()
         print(f"  Total edges tested: {len(all_verdicts)}")
-        print(f"  Survived: {len(survived)}  |  Mostly: {len(mostly)}  |  Mixed: {len(mixed)}  |  Failed: {len(failed)}  |  Insufficient: {len(insufficient)}")
+        print(
+            f"  Survived: {len(survived)}  |  Mostly: {len(mostly)}  |  Mixed: {len(mixed)}  |  Failed: {len(failed)}  |  Insufficient: {len(insufficient)}"
+        )
         print()
 
         # Honest caveat per RESEARCH_RULES.md

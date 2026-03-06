@@ -96,7 +96,8 @@ def test_h1_g3_for_mnq(con):
 
         for gate_min in [0, 2, 3, 4, 5, 6]:
             gate_label = f"G{gate_min}+" if gate_min > 0 else "ALL"
-            row = con.execute("""
+            row = con.execute(
+                """
                 SELECT COUNT(*) as n,
                        AVG(pnl_r) as avg_r,
                        SUM(pnl_r) as total_r,
@@ -111,7 +112,9 @@ def test_h1_g3_for_mnq(con):
                   AND o.rr_target = 2.0
                   AND o.confirm_bars = 2
                   AND (? = 0 OR f.orb_{sess}_size >= ?)
-            """.format(sess=sess), [sess, gate_min, gate_min]).fetchone()
+            """.format(sess=sess),
+                [sess, gate_min, gate_min],
+            ).fetchone()
 
             if row and row[0] > 0:
                 print_row(gate_label, row[0], row[1], row[2], row[3])
@@ -119,7 +122,8 @@ def test_h1_g3_for_mnq(con):
                 print(f"    {gate_label:<40s}  N=    0  (no data)")
 
         # Show the G3-ONLY band (3-4pt) -- is this marginal or real?
-        row = con.execute(f"""
+        row = con.execute(
+            f"""
             SELECT COUNT(*) as n,
                    AVG(pnl_r) as avg_r,
                    SUM(pnl_r) as total_r,
@@ -134,7 +138,9 @@ def test_h1_g3_for_mnq(con):
               AND o.rr_target = 2.0
               AND o.confirm_bars = 2
               AND f.orb_{sess}_size >= 3 AND f.orb_{sess}_size < 4
-        """, [sess]).fetchone()
+        """,
+            [sess],
+        ).fetchone()
 
         if row and row[0] > 0:
             print_row("BAND 3-4pt ONLY (new trades)", row[0], row[1], row[2], row[3])
@@ -156,7 +162,8 @@ def test_h2_band_filter_mes(con):
 
         # Standard gates
         for gate_min in [3, 4, 5, 6]:
-            row = con.execute(f"""
+            row = con.execute(
+                f"""
                 SELECT COUNT(*) as n, AVG(pnl_r) as avg_r, SUM(pnl_r) as total_r,
                        100.0 * SUM(CASE WHEN outcome = 'win' THEN 1 ELSE 0 END) / COUNT(*) as wr
                 FROM orb_outcomes o
@@ -166,12 +173,15 @@ def test_h2_band_filter_mes(con):
                   AND o.outcome IN ('win', 'loss')
                   AND o.entry_model = 'E1' AND o.rr_target = 2.0 AND o.confirm_bars = 2
                   AND f.orb_{sess}_size >= ?
-            """, [sess, gate_min]).fetchone()
+            """,
+                [sess, gate_min],
+            ).fetchone()
             print_row(f"G{gate_min}+ (no cap)", row[0], row[1], row[2], row[3])
 
         # Band filters with 12pt cap
         for gate_min in [3, 4, 5, 6]:
-            row = con.execute(f"""
+            row = con.execute(
+                f"""
                 SELECT COUNT(*) as n, AVG(pnl_r) as avg_r, SUM(pnl_r) as total_r,
                        100.0 * SUM(CASE WHEN outcome = 'win' THEN 1 ELSE 0 END) / COUNT(*) as wr
                 FROM orb_outcomes o
@@ -181,11 +191,14 @@ def test_h2_band_filter_mes(con):
                   AND o.outcome IN ('win', 'loss')
                   AND o.entry_model = 'E1' AND o.rr_target = 2.0 AND o.confirm_bars = 2
                   AND f.orb_{sess}_size >= ? AND f.orb_{sess}_size < 12
-            """, [sess, gate_min]).fetchone()
+            """,
+                [sess, gate_min],
+            ).fetchone()
             print_row(f"BAND G{gate_min} to L12 (capped)", row[0], row[1], row[2], row[3])
 
         # Show what 12pt+ looks like alone
-        row = con.execute(f"""
+        row = con.execute(
+            f"""
             SELECT COUNT(*) as n, AVG(pnl_r) as avg_r, SUM(pnl_r) as total_r,
                    100.0 * SUM(CASE WHEN outcome = 'win' THEN 1 ELSE 0 END) / COUNT(*) as wr
             FROM orb_outcomes o
@@ -195,7 +208,9 @@ def test_h2_band_filter_mes(con):
               AND o.outcome IN ('win', 'loss')
               AND o.entry_model = 'E1' AND o.rr_target = 2.0 AND o.confirm_bars = 2
               AND f.orb_{sess}_size >= 12
-        """, [sess]).fetchone()
+        """,
+            [sess],
+        ).fetchone()
         if row and row[0] > 0:
             print_row("TOXIC ZONE: 12pt+ only", row[0], row[1], row[2], row[3])
 
@@ -333,15 +348,15 @@ def test_h5_direction_filter(con):
 
         # Test combinations
         tests = [
-            ("CME_REOPEN", "long",  "CME_REOPEN LONG-ONLY (Asia bias)"),
+            ("CME_REOPEN", "long", "CME_REOPEN LONG-ONLY (Asia bias)"),
             ("CME_REOPEN", "short", "CME_REOPEN SHORT-ONLY"),
-            ("CME_REOPEN", None,    "CME_REOPEN BOTH (baseline)"),
-            ("TOKYO_OPEN", "long",  "TOKYO_OPEN LONG-ONLY"),
+            ("CME_REOPEN", None, "CME_REOPEN BOTH (baseline)"),
+            ("TOKYO_OPEN", "long", "TOKYO_OPEN LONG-ONLY"),
             ("TOKYO_OPEN", "short", "TOKYO_OPEN SHORT-ONLY (US bias)"),
-            ("TOKYO_OPEN", None,    "TOKYO_OPEN BOTH (baseline)"),
-            ("LONDON_METALS", "long",  "LONDON_METALS LONG-ONLY"),
+            ("TOKYO_OPEN", None, "TOKYO_OPEN BOTH (baseline)"),
+            ("LONDON_METALS", "long", "LONDON_METALS LONG-ONLY"),
             ("LONDON_METALS", "short", "LONDON_METALS SHORT-ONLY (London close bias)"),
-            ("LONDON_METALS", None,    "LONDON_METALS BOTH (baseline)"),
+            ("LONDON_METALS", None, "LONDON_METALS BOTH (baseline)"),
         ]
 
         best_gate = {"MGC": 5, "MNQ": 3, "MES": 3}[sym]

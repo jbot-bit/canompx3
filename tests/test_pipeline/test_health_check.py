@@ -28,6 +28,7 @@ class TestCheckPythonDeps:
     def test_missing_dep(self):
         """Simulate a missing dependency."""
         import builtins
+
         original = builtins.__import__
 
         def mock_import(name, *args, **kwargs):
@@ -52,6 +53,7 @@ class TestCheckDatabase:
     def test_existing_db(self, tmp_path):
         """Valid DB with tables returns success."""
         import duckdb
+
         db_path = tmp_path / "gold.db"
         con = duckdb.connect(str(db_path))
         con.execute("CREATE TABLE bars_1m (x INT)")
@@ -67,6 +69,7 @@ class TestCheckDatabase:
     def test_missing_table_returns_false(self, tmp_path):
         """Fail-closed: missing table returns False (not crash)."""
         import duckdb
+
         db_path = tmp_path / "gold.db"
         con = duckdb.connect(str(db_path))
         con.execute("CREATE TABLE bars_1m (x INT)")
@@ -83,8 +86,10 @@ class TestCheckDatabase:
         db_path = tmp_path / "gold.db"
         db_path.write_bytes(b"not a database")
 
-        with patch("pipeline.health_check.GOLD_DB_PATH", db_path), \
-             patch("pipeline.health_check.duckdb.connect", side_effect=RuntimeError("corrupt")):
+        with (
+            patch("pipeline.health_check.GOLD_DB_PATH", db_path),
+            patch("pipeline.health_check.duckdb.connect", side_effect=RuntimeError("corrupt")),
+        ):
             ok, msg = check_database()
             assert ok is False
             assert "cannot open" in msg.lower()
@@ -134,11 +139,7 @@ class TestCheckDrift:
         """Non-zero exit with mixed results shows honest pass/total ratio."""
         mock_result = MagicMock()
         mock_result.returncode = 1
-        mock_result.stdout = (
-            "Check 1: PASSED [OK]\n"
-            "Check 2: FAILED:\n  some violation\n"
-            "Check 3: PASSED [OK]\n"
-        )
+        mock_result.stdout = "Check 1: PASSED [OK]\nCheck 2: FAILED:\n  some violation\nCheck 3: PASSED [OK]\n"
         with patch("subprocess.run", return_value=mock_result):
             ok, msg = check_drift()
             assert ok is False
@@ -168,10 +169,7 @@ class TestCheckIntegrity:
         """Successful audit parses dynamic check count from output."""
         mock_result = MagicMock()
         mock_result.returncode = 0
-        mock_result.stdout = (
-            "--- 1. Outcome coverage ---\n  OK\n"
-            "INTEGRITY AUDIT PASSED: all 17 checks clean\n"
-        )
+        mock_result.stdout = "--- 1. Outcome coverage ---\n  OK\nINTEGRITY AUDIT PASSED: all 17 checks clean\n"
         with patch("subprocess.run", return_value=mock_result):
             ok, msg = check_integrity()
             assert ok is True
@@ -191,10 +189,7 @@ class TestCheckIntegrity:
         """Failed audit extracts violation count."""
         mock_result = MagicMock()
         mock_result.returncode = 1
-        mock_result.stdout = (
-            "--- 4. E0 contamination ---\n  FAILED:\n"
-            "INTEGRITY AUDIT FAILED: 2 violation(s)\n"
-        )
+        mock_result.stdout = "--- 4. E0 contamination ---\n  FAILED:\nINTEGRITY AUDIT FAILED: 2 violation(s)\n"
         with patch("subprocess.run", return_value=mock_result):
             ok, msg = check_integrity()
             assert ok is False
@@ -242,8 +237,7 @@ class TestCheckGitHooks:
         mock_result = MagicMock()
         mock_result.stdout = ".githooks\n"
 
-        with patch("pipeline.health_check.PROJECT_ROOT", tmp_path), \
-             patch("subprocess.run", return_value=mock_result):
+        with patch("pipeline.health_check.PROJECT_ROOT", tmp_path), patch("subprocess.run", return_value=mock_result):
             ok, msg = check_git_hooks()
             assert ok is True
             assert "configured" in msg

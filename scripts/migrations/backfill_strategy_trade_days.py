@@ -29,6 +29,7 @@ from trading_app.db_manager import init_trading_app_schema
 # Force unbuffered stdout (Windows cp1252 buffering issue)
 sys.stdout.reconfigure(line_buffering=True)
 
+
 def backfill_trade_days(db_path: str, instrument: str) -> int:
     """
     Backfill strategy_trade_days for one instrument.
@@ -41,13 +42,16 @@ def backfill_trade_days(db_path: str, instrument: str) -> int:
         init_trading_app_schema(db_path=Path(db_path))
 
         # 1. Load validated strategies for this instrument
-        rows = con.execute("""
+        rows = con.execute(
+            """
             SELECT strategy_id, instrument, orb_label, orb_minutes,
                    rr_target, confirm_bars, entry_model, filter_type
             FROM validated_setups
             WHERE instrument = ?
             ORDER BY strategy_id
-        """, [instrument]).fetchall()
+        """,
+            [instrument],
+        ).fetchall()
         cols = [d[0] for d in con.description]
         strategies = [dict(zip(cols, r)) for r in rows]
 
@@ -85,14 +89,17 @@ def backfill_trade_days(db_path: str, instrument: str) -> int:
         outcome_days = defaultdict(list)
         for orb_label in orb_labels:
             for em in entry_models:
-                orows = con.execute("""
+                orows = con.execute(
+                    """
                     SELECT rr_target, confirm_bars, trading_day
                     FROM orb_outcomes
                     WHERE symbol = ? AND orb_minutes = 5
                       AND orb_label = ? AND entry_model = ?
                       AND outcome IS NOT NULL
                     ORDER BY rr_target, confirm_bars, trading_day
-                """, [instrument, orb_label, em]).fetchall()
+                """,
+                    [instrument, orb_label, em],
+                ).fetchall()
                 for rr, cb, td in orows:
                     outcome_days[(orb_label, em, rr, cb)].append(td)
 
@@ -160,35 +167,39 @@ def backfill_trade_days(db_path: str, instrument: str) -> int:
         con.commit()
 
         # 9. Verify
-        count = con.execute("""
+        count = con.execute(
+            """
             SELECT COUNT(*) FROM strategy_trade_days
             WHERE strategy_id IN (
                 SELECT strategy_id FROM validated_setups WHERE instrument = ?
             )
-        """, [instrument]).fetchone()[0]
+        """,
+            [instrument],
+        ).fetchone()[0]
 
-        unique_days = con.execute("""
+        unique_days = con.execute(
+            """
             SELECT COUNT(DISTINCT trading_day) FROM strategy_trade_days
             WHERE strategy_id IN (
                 SELECT strategy_id FROM validated_setups WHERE instrument = ?
             )
-        """, [instrument]).fetchone()[0]
+        """,
+            [instrument],
+        ).fetchone()[0]
 
         print(
-            f"Done: {count:,} trade-day rows for {len(strategies)} "
-            f"{instrument} strategies ({unique_days} unique days)"
+            f"Done: {count:,} trade-day rows for {len(strategies)} {instrument} strategies ({unique_days} unique days)"
         )
         return count
 
     finally:
         con.close()
 
+
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Backfill strategy_trade_days from validated_setups"
-    )
+    parser = argparse.ArgumentParser(description="Backfill strategy_trade_days from validated_setups")
     parser.add_argument(
         "--instrument",
         help="Instrument symbol (MGC, MNQ, MES, MCL)",
@@ -216,6 +227,7 @@ def main():
         print(f"Grand total: {total:,} trade-day rows across all instruments")
     else:
         backfill_trade_days(args.db_path, args.instrument)
+
 
 if __name__ == "__main__":
     main()

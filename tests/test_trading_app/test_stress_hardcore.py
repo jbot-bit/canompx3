@@ -67,19 +67,22 @@ UTC = timezone.utc
 # HELPERS
 # =============================================================================
 
+
 def _bars(start_ts, ohlcv_list, interval_minutes=1):
     """Build a minimal bars_df from a list of (o, h, l, c, v) tuples."""
     rows = []
     ts = start_ts
     for o, h, l, c, v in ohlcv_list:
-        rows.append({
-            "ts_utc": ts,
-            "open": float(o),
-            "high": float(h),
-            "low": float(l),
-            "close": float(c),
-            "volume": int(v),
-        })
+        rows.append(
+            {
+                "ts_utc": ts,
+                "open": float(o),
+                "high": float(h),
+                "low": float(l),
+                "close": float(c),
+                "volume": int(v),
+            }
+        )
         ts += timedelta(minutes=interval_minutes)
     return pd.DataFrame(rows)
 
@@ -89,7 +92,7 @@ def _mgc():
 
 
 # Standard test dates (well inside known DST periods)
-SUMMER_DATE = date(2024, 7, 1)   # US and UK both in DST
+SUMMER_DATE = date(2024, 7, 1)  # US and UK both in DST
 WINTER_DATE = date(2024, 1, 15)  # US and UK both in standard time
 
 # A reference UTC start time for test bars
@@ -101,6 +104,7 @@ DAY_END = T0 + timedelta(hours=8)
 # 1. EXACT ORB BOUNDARY — close == orb_high is NOT a break
 # =============================================================================
 
+
 class TestExactORBBoundary:
     """close == orb_high MUST NOT trigger confirm. Break requires strict >."""
 
@@ -108,10 +112,13 @@ class TestExactORBBoundary:
         orb_high, orb_low = 2700.0, 2690.0
         break_ts = T0
         # Bar closes exactly AT orb_high — NOT outside
-        bars = _bars(T0, [
-            (2695, 2702, 2694, 2700.0, 100),  # close == orb_high exactly → no break
-            (2700, 2705, 2699, 2701.0, 100),  # close > orb_high → this IS a break
-        ])
+        bars = _bars(
+            T0,
+            [
+                (2695, 2702, 2694, 2700.0, 100),  # close == orb_high exactly → no break
+                (2700, 2705, 2699, 2701.0, 100),  # close > orb_high → this IS a break
+            ],
+        )
         result = detect_confirm(
             bars_df=bars,
             orb_break_ts=break_ts,
@@ -129,10 +136,13 @@ class TestExactORBBoundary:
     def test_close_exactly_at_orb_low_no_confirm(self):
         orb_high, orb_low = 2700.0, 2690.0
         break_ts = T0
-        bars = _bars(T0, [
-            (2695, 2696, 2688, 2690.0, 100),  # close == orb_low exactly → no break
-            (2690, 2691, 2685, 2689.5, 100),  # close < orb_low → IS a break
-        ])
+        bars = _bars(
+            T0,
+            [
+                (2695, 2696, 2688, 2690.0, 100),  # close == orb_low exactly → no break
+                (2690, 2691, 2685, 2689.5, 100),  # close < orb_low → IS a break
+            ],
+        )
         result = detect_confirm(
             bars_df=bars,
             orb_break_ts=break_ts,
@@ -159,24 +169,26 @@ class TestExactORBBoundary:
             confirm_bars=1,
             detection_window_end=DAY_END,
         )
-        assert result.confirmed, (
-            f"close={close_epsilon} > orb_high={orb_high} should confirm but didn't"
-        )
+        assert result.confirmed, f"close={close_epsilon} > orb_high={orb_high} should confirm but didn't"
 
 
 # =============================================================================
 # 2. ZERO-RISK GUARD — orb_high == orb_low
 # =============================================================================
 
+
 class TestZeroRisk:
     """A zero-range ORB must return null result — no division-by-zero."""
 
     def test_collapsed_orb_returns_null(self):
         orb_price = 2700.0
-        bars = _bars(T0, [
-            (2700, 2701, 2699, 2700.1, 100),  # Would normally confirm
-            (2700, 2705, 2700, 2703.0, 100),
-        ])
+        bars = _bars(
+            T0,
+            [
+                (2700, 2701, 2699, 2700.1, 100),  # Would normally confirm
+                (2700, 2705, 2700, 2703.0, 100),
+            ],
+        )
         result = compute_single_outcome(
             bars_df=bars,
             break_ts=T0,
@@ -190,17 +202,14 @@ class TestZeroRisk:
             entry_model="E1",
         )
         # Should not crash and should return null
-        assert result["pnl_r"] is None, (
-            "Zero-range ORB must produce null pnl_r — no trade possible"
-        )
-        assert result["entry_ts"] is None or result["pnl_r"] is None, (
-            "Zero risk_points must result in null outcome"
-        )
+        assert result["pnl_r"] is None, "Zero-range ORB must produce null pnl_r — no trade possible"
+        assert result["entry_ts"] is None or result["pnl_r"] is None, "Zero risk_points must result in null outcome"
 
 
 # =============================================================================
 # 3. SIMULTANEOUS STOP + TARGET ON SAME BAR → CONSERVATIVE LOSS
 # =============================================================================
+
 
 class TestSimultaneousStopTarget:
     """When fill bar (or post-entry bar) touches both stop and target,
@@ -210,11 +219,14 @@ class TestSimultaneousStopTarget:
         orb_high, orb_low = 2700.0, 2690.0
         # E1: entry at bar 1 open = 2702. Risk = 2702 - 2690 = 12. RR2 target = 2726.
         # Bar 1 (fill bar for E1): low=2688 (hits stop) AND high=2730 (hits target)
-        bars = _bars(T0, [
-            (2695, 2701, 2694, 2701.0, 100),  # bar0: confirm (close > orb_high)
-            (2702, 2730, 2688, 2710, 100),     # bar1: fill bar — stop AND target hit
-            (2710, 2720, 2708, 2715, 100),
-        ])
+        bars = _bars(
+            T0,
+            [
+                (2695, 2701, 2694, 2701.0, 100),  # bar0: confirm (close > orb_high)
+                (2702, 2730, 2688, 2710, 100),  # bar1: fill bar — stop AND target hit
+                (2710, 2720, 2708, 2715, 100),
+            ],
+        )
         result = compute_single_outcome(
             bars_df=bars,
             break_ts=T0,
@@ -227,22 +239,21 @@ class TestSimultaneousStopTarget:
             cost_spec=_mgc(),
             entry_model="E1",
         )
-        assert result["outcome"] == "loss", (
-            "Simultaneous stop+target on fill bar must be conservative loss"
-        )
-        assert result["pnl_r"] == pytest.approx(-1.0), (
-            "pnl_r must be exactly -1.0 on conservative loss"
-        )
+        assert result["outcome"] == "loss", "Simultaneous stop+target on fill bar must be conservative loss"
+        assert result["pnl_r"] == pytest.approx(-1.0), "pnl_r must be exactly -1.0 on conservative loss"
 
     def test_post_entry_bar_both_hit_is_loss(self):
         orb_high, orb_low = 2700.0, 2690.0
         # E1: entry at bar1 open=2703. Risk=13. RR2 target=2729.
         # Bar 2 (post-entry): touches BOTH stop (low=2688) and target (high=2732)
-        bars = _bars(T0, [
-            (2695, 2701, 2694, 2701.0, 100),  # bar0: confirm
-            (2703, 2706, 2701, 2704.0, 100),  # bar1: fill bar (clean, no exit)
-            (2704, 2732, 2688, 2710, 100),    # bar2: both hit simultaneously
-        ])
+        bars = _bars(
+            T0,
+            [
+                (2695, 2701, 2694, 2701.0, 100),  # bar0: confirm
+                (2703, 2706, 2701, 2704.0, 100),  # bar1: fill bar (clean, no exit)
+                (2704, 2732, 2688, 2710, 100),  # bar2: both hit simultaneously
+            ],
+        )
         result = compute_single_outcome(
             bars_df=bars,
             break_ts=T0,
@@ -255,14 +266,13 @@ class TestSimultaneousStopTarget:
             cost_spec=_mgc(),
             entry_model="E1",
         )
-        assert result["outcome"] == "loss", (
-            "Simultaneous hit on post-entry bar must be conservative loss (not win)"
-        )
+        assert result["outcome"] == "loss", "Simultaneous hit on post-entry bar must be conservative loss (not win)"
 
 
 # =============================================================================
 # 4. E2 STOP-MARKET TOUCH LOGIC — bar must cross ORB level to fill
 # =============================================================================
+
 
 class TestE2StopMarketTouch:
     """E2 uses detect_break_touch: fill when bar range crosses ORB level.
@@ -272,16 +282,20 @@ class TestE2StopMarketTouch:
     def test_e2_long_bar_touches_orb_fills_with_slippage(self):
         """E2 long: bar high > orb_high fills at orb_high + slippage."""
         from trading_app.config import E2_SLIPPAGE_TICKS
+
         orb_high, orb_low = 2700.0, 2690.0
         tick_size = _mgc().tick_size
         expected_entry = orb_high + E2_SLIPPAGE_TICKS * tick_size
 
         # bar0: high > orb_high (touches ORB range) — E2 fills
-        bars = _bars(T0, [
-            (2698, 2701, 2697, 2701.0, 100),  # bar0: high=2701 > orb_high=2700 → touch
-            (2700, 2710, 2700, 2705.0, 100),
-            (2705, 2720, 2704, 2715.0, 100),
-        ])
+        bars = _bars(
+            T0,
+            [
+                (2698, 2701, 2697, 2701.0, 100),  # bar0: high=2701 > orb_high=2700 → touch
+                (2700, 2710, 2700, 2705.0, 100),
+                (2705, 2720, 2704, 2715.0, 100),
+            ],
+        )
         result = compute_single_outcome(
             bars_df=bars,
             break_ts=T0,
@@ -296,18 +310,20 @@ class TestE2StopMarketTouch:
         )
         assert result["entry_ts"] is not None, "E2: bar touching ORB should fill"
         assert result["entry_price"] == pytest.approx(expected_entry), (
-            f"E2 long entry must be at orb_high + slippage={expected_entry}, "
-            f"got {result['entry_price']}"
+            f"E2 long entry must be at orb_high + slippage={expected_entry}, got {result['entry_price']}"
         )
 
     def test_e2_long_no_touch_no_fill(self):
         """E2 long: no bar touches orb_high → no fill."""
         orb_high, orb_low = 2700.0, 2690.0
         # All highs below orb_high
-        bars = _bars(T0, [
-            (2695, 2699, 2694, 2698.0, 100),
-            (2696, 2698, 2695, 2697.0, 100),
-        ])
+        bars = _bars(
+            T0,
+            [
+                (2695, 2699, 2694, 2698.0, 100),
+                (2696, 2698, 2695, 2697.0, 100),
+            ],
+        )
         result = compute_single_outcome(
             bars_df=bars,
             break_ts=T0,
@@ -325,15 +341,19 @@ class TestE2StopMarketTouch:
     def test_e2_short_bar_touches_orb_fills_with_slippage(self):
         """E2 short: bar low < orb_low fills at orb_low - slippage."""
         from trading_app.config import E2_SLIPPAGE_TICKS
+
         orb_high, orb_low = 2700.0, 2690.0
         tick_size = _mgc().tick_size
         expected_entry = orb_low - E2_SLIPPAGE_TICKS * tick_size
 
-        bars = _bars(T0, [
-            (2692, 2693, 2689, 2691.0, 100),  # bar0: low=2689 < orb_low=2690 → touch
-            (2690, 2691, 2685, 2686.0, 100),
-            (2686, 2687, 2675, 2676.0, 100),
-        ])
+        bars = _bars(
+            T0,
+            [
+                (2692, 2693, 2689, 2691.0, 100),  # bar0: low=2689 < orb_low=2690 → touch
+                (2690, 2691, 2685, 2686.0, 100),
+                (2686, 2687, 2675, 2676.0, 100),
+            ],
+        )
         result = compute_single_outcome(
             bars_df=bars,
             break_ts=T0,
@@ -348,14 +368,14 @@ class TestE2StopMarketTouch:
         )
         assert result["entry_ts"] is not None, "E2 short: bar touching ORB should fill"
         assert result["entry_price"] == pytest.approx(expected_entry), (
-            f"E2 short entry must be at orb_low - slippage={expected_entry}, "
-            f"got {result['entry_price']}"
+            f"E2 short entry must be at orb_low - slippage={expected_entry}, got {result['entry_price']}"
         )
 
 
 # =============================================================================
 # 5. E3 STOP-BEFORE-RETRACE — stop hit before retrace → no fill
 # =============================================================================
+
 
 class TestE3StopBeforeRetrace:
     """If price blows through stop BEFORE retracing to ORB level, E3 must NOT fill.
@@ -366,12 +386,15 @@ class TestE3StopBeforeRetrace:
         # Long break confirmed at bar0. E3 waits for retrace to 2700.
         # bar1: price drops to 2688 (below orb_low=2690 = stop) → stop hit
         # bar2: price retraces to 2701 touching orb_high — but stop already hit
-        bars = _bars(T0, [
-            (2698, 2702, 2697, 2702.0, 100),  # bar0: confirm long (CB1)
-            (2700, 2701, 2688, 2689.0, 100),  # bar1: crashes through stop
-            (2689, 2701, 2688, 2700.5, 100),  # bar2: touches orb_high, but stop already hit
-            (2700, 2710, 2699, 2705.0, 100),
-        ])
+        bars = _bars(
+            T0,
+            [
+                (2698, 2702, 2697, 2702.0, 100),  # bar0: confirm long (CB1)
+                (2700, 2701, 2688, 2689.0, 100),  # bar1: crashes through stop
+                (2689, 2701, 2688, 2700.5, 100),  # bar2: touches orb_high, but stop already hit
+                (2700, 2710, 2699, 2705.0, 100),
+            ],
+        )
         result = compute_single_outcome(
             bars_df=bars,
             break_ts=T0,
@@ -391,12 +414,15 @@ class TestE3StopBeforeRetrace:
     def test_e3_retrace_before_stop_does_fill(self):
         """E3 retrace that arrives BEFORE stop is hit MUST fill."""
         orb_high, orb_low = 2700.0, 2690.0
-        bars = _bars(T0, [
-            (2698, 2702, 2697, 2702.0, 100),  # bar0: confirm long
-            (2702, 2705, 2700, 2703.0, 100),  # bar1: touches orb_high (retrace) → E3 fills
-            (2703, 2720, 2702, 2715.0, 100),
-            (2715, 2740, 2714, 2730.0, 100),  # target hit (if RR not too high)
-        ])
+        bars = _bars(
+            T0,
+            [
+                (2698, 2702, 2697, 2702.0, 100),  # bar0: confirm long
+                (2702, 2705, 2700, 2703.0, 100),  # bar1: touches orb_high (retrace) → E3 fills
+                (2703, 2720, 2702, 2715.0, 100),
+                (2715, 2740, 2714, 2730.0, 100),  # target hit (if RR not too high)
+            ],
+        )
         result = compute_single_outcome(
             bars_df=bars,
             break_ts=T0,
@@ -409,17 +435,14 @@ class TestE3StopBeforeRetrace:
             cost_spec=_mgc(),
             entry_model="E3",
         )
-        assert result["entry_ts"] is not None, (
-            "E3: retrace before stop must trigger fill"
-        )
-        assert result["entry_price"] == pytest.approx(orb_high), (
-            f"E3 long must fill at orb_high={orb_high}"
-        )
+        assert result["entry_ts"] is not None, "E3: retrace before stop must trigger fill"
+        assert result["entry_price"] == pytest.approx(orb_high), f"E3 long must fill at orb_high={orb_high}"
 
 
 # =============================================================================
 # 6. CONFIRM BAR RESET — inside bar resets the count
 # =============================================================================
+
 
 class TestConfirmBarReset:
     """One bar closing inside ORB must reset the consecutive count to zero."""
@@ -431,14 +454,17 @@ class TestConfirmBarReset:
         # Without the reset: bar2 would be count=3 → CB3 triggers at bar2.
         # With the reset (bar2 close=2700.0 = orb_high, NOT > orb_high): count resets to 0.
         # CB3 instead triggers at bar5 (3rd consecutive after reset).
-        bars = _bars(T0, [
-            (2700, 2702, 2699, 2701.0, 100),  # bar0: outside (count=1)
-            (2701, 2703, 2700, 2702.0, 100),  # bar1: outside (count=2)
-            (2702, 2702, 2699, 2700.0, 100),  # bar2: INSIDE (close=2700=orb_high, not >) → RESET
-            (2699, 2703, 2698, 2701.5, 100),  # bar3: outside (count=1 after reset)
-            (2701, 2703, 2700, 2702.0, 100),  # bar4: outside (count=2)
-            (2702, 2704, 2701, 2703.5, 100),  # bar5: outside (count=3) → CB3 confirms here
-        ])
+        bars = _bars(
+            T0,
+            [
+                (2700, 2702, 2699, 2701.0, 100),  # bar0: outside (count=1)
+                (2701, 2703, 2700, 2702.0, 100),  # bar1: outside (count=2)
+                (2702, 2702, 2699, 2700.0, 100),  # bar2: INSIDE (close=2700=orb_high, not >) → RESET
+                (2699, 2703, 2698, 2701.5, 100),  # bar3: outside (count=1 after reset)
+                (2701, 2703, 2700, 2702.0, 100),  # bar4: outside (count=2)
+                (2702, 2704, 2701, 2703.5, 100),  # bar5: outside (count=3) → CB3 confirms here
+            ],
+        )
         result = detect_confirm(
             bars_df=bars,
             orb_break_ts=break_ts,
@@ -457,12 +483,15 @@ class TestConfirmBarReset:
     def test_exact_reset_at_boundary(self):
         """Close exactly at orb_high (not outside) RESETS the count."""
         orb_high = 2700.0
-        bars = _bars(T0, [
-            (2698, 2702, 2697, 2701.0, 100),  # bar0: outside (count=1)
-            (2701, 2702, 2699, 2700.0, 100),  # bar1: INSIDE (close==orb_high, not > orb_high) → RESET
-            (2700, 2703, 2699, 2701.5, 100),  # bar2: outside (count=1 again)
-            (2701, 2704, 2700, 2702.0, 100),  # bar3: outside (count=2) → CB2 confirms
-        ])
+        bars = _bars(
+            T0,
+            [
+                (2698, 2702, 2697, 2701.0, 100),  # bar0: outside (count=1)
+                (2701, 2702, 2699, 2700.0, 100),  # bar1: INSIDE (close==orb_high, not > orb_high) → RESET
+                (2700, 2703, 2699, 2701.5, 100),  # bar2: outside (count=1 again)
+                (2701, 2704, 2700, 2702.0, 100),  # bar3: outside (count=2) → CB2 confirms
+            ],
+        )
         result = detect_confirm(
             bars_df=bars,
             orb_break_ts=T0,
@@ -473,14 +502,13 @@ class TestConfirmBarReset:
             detection_window_end=DAY_END,
         )
         assert result.confirmed, "CB2 should confirm on bar3"
-        assert result.confirm_bar_close == pytest.approx(2702.0), (
-            "After reset at bar1, confirm must be bar3 (not bar1)"
-        )
+        assert result.confirm_bar_close == pytest.approx(2702.0), "After reset at bar1, confirm must be bar3 (not bar1)"
 
 
 # =============================================================================
 # 7. C3 SLOW BREAK FILTER — 1000 session only
 # =============================================================================
+
 
 class TestC3SlowBreakFilter:
     """C3: at 1000 session, if confirm_bar_ts - break_ts > 3 min → skip trade.
@@ -493,15 +521,18 @@ class TestC3SlowBreakFilter:
         # Confirm bar at T0 + 4 min (> 3 min = slow break)
         # Bars 0-3: close=2700.0 = orb_high exactly → NOT outside (strict > fails) → no confirm yet
         # Bar 4: close=2701.0 > 2700 → CB1 confirm. 4 min after break_ts → slow break (>3min)
-        bars = _bars(T0, [
-            (2699, 2700, 2698, 2700.0, 100),  # bar0 (T0+0): close==orb_high, NOT outside
-            (2699, 2700, 2698, 2700.0, 100),  # bar1 (T0+1): same, still inside
-            (2699, 2700, 2698, 2700.0, 100),  # bar2 (T0+2): same, still inside
-            (2699, 2700, 2698, 2700.0, 100),  # bar3 (T0+3): same, still inside
-            (2699, 2703, 2698, 2701.0, 100),  # bar4 (T0+4): CB1 confirm (close>2700), 4min from break → SLOW
-            (2701, 2710, 2700, 2705.0, 100),  # post-entry (E1 fills here)
-            (2705, 2730, 2704, 2725.0, 100),  # win bar
-        ])
+        bars = _bars(
+            T0,
+            [
+                (2699, 2700, 2698, 2700.0, 100),  # bar0 (T0+0): close==orb_high, NOT outside
+                (2699, 2700, 2698, 2700.0, 100),  # bar1 (T0+1): same, still inside
+                (2699, 2700, 2698, 2700.0, 100),  # bar2 (T0+2): same, still inside
+                (2699, 2700, 2698, 2700.0, 100),  # bar3 (T0+3): same, still inside
+                (2699, 2703, 2698, 2701.0, 100),  # bar4 (T0+4): CB1 confirm (close>2700), 4min from break → SLOW
+                (2701, 2710, 2700, 2705.0, 100),  # post-entry (E1 fills here)
+                (2705, 2730, 2704, 2725.0, 100),  # win bar
+            ],
+        )
         return bars, break_ts, orb_high, orb_low
 
     def test_c3_skips_slow_break_at_1000(self):
@@ -585,14 +616,13 @@ class TestC3SlowBreakFilter:
             orb_label="CME_REOPEN",  # C3 does NOT apply
             break_ts=break_ts,
         )
-        assert results[0]["pnl_r"] is not None, (
-            "C3 must NOT filter at CME_REOPEN — only TOKYO_OPEN"
-        )
+        assert results[0]["pnl_r"] is not None, "C3 must NOT filter at CME_REOPEN — only TOKYO_OPEN"
 
 
 # =============================================================================
 # 8. pnl_r BOUNDS INVARIANT (RANDOM FUZZ)
 # =============================================================================
+
 
 class TestPnlRBoundsInvariant:
     """pnl_r MUST be in [-1.0, rr_target] or None. Never outside.
@@ -600,10 +630,10 @@ class TestPnlRBoundsInvariant:
     Tested across random price series."""
 
     def _random_bar(self, rng, base_price, spread=20):
-        o = base_price + rng.uniform(-spread/2, spread/2)
-        c = base_price + rng.uniform(-spread/2, spread/2)
-        h = max(o, c) + rng.uniform(0, spread/2)
-        l = min(o, c) - rng.uniform(0, spread/2)
+        o = base_price + rng.uniform(-spread / 2, spread / 2)
+        c = base_price + rng.uniform(-spread / 2, spread / 2)
+        h = max(o, c) + rng.uniform(0, spread / 2)
+        l = min(o, c) - rng.uniform(0, spread / 2)
         return (round(o, 1), round(h, 1), round(l, 1), round(c, 1), rng.randint(10, 500))
 
     @pytest.mark.parametrize("seed", range(50))
@@ -659,11 +689,14 @@ class TestPnlRBoundsInvariant:
         orb_high = round(2700.0 + rng.uniform(-5, 5), 1)
         orb_low = round(orb_high - rng.uniform(5, 15), 1)
         # Make a bar that confirms, then goes straight to stop
-        bars = _bars(T0, [
-            (orb_high - 1, orb_high + 2, orb_high - 2, orb_high + 0.5, 100),  # confirm
-            (orb_high + 0.5, orb_high + 1, orb_low - 5, orb_low - 3, 100),    # E1 fill, crashes to stop
-            (orb_low - 3, orb_low, orb_low - 10, orb_low - 5, 100),
-        ])
+        bars = _bars(
+            T0,
+            [
+                (orb_high - 1, orb_high + 2, orb_high - 2, orb_high + 0.5, 100),  # confirm
+                (orb_high + 0.5, orb_high + 1, orb_low - 5, orb_low - 3, 100),  # E1 fill, crashes to stop
+                (orb_low - 3, orb_low, orb_low - 10, orb_low - 5, 100),
+            ],
+        )
         result = compute_single_outcome(
             bars_df=bars,
             break_ts=T0,
@@ -685,6 +718,7 @@ class TestPnlRBoundsInvariant:
 # =============================================================================
 # 9. DST TRANSITION DAYS
 # =============================================================================
+
 
 class TestDSTTransitionDays:
     """Verify DST detection on the actual US spring-forward and fall-back dates."""
@@ -741,6 +775,7 @@ class TestDSTTransitionDays:
 # 10. DOW MISALIGNMENT GUARD ON 0030
 # =============================================================================
 
+
 class TestDOWMisalignmentGuard:
     """0030 must raise when any DOW skip filter is applied.
     All other sessions must pass silently."""
@@ -760,6 +795,7 @@ class TestDOWMisalignmentGuard:
     def test_aligned_sessions_never_raise(self):
         """All sessions other than 0030 must never raise for any skip_days."""
         from pipeline.dst import DOW_ALIGNED_SESSIONS
+
         for session in DOW_ALIGNED_SESSIONS:
             for skip in [(0,), (1,), (4,), (0, 4)]:
                 validate_dow_filter_alignment(session, skip)  # Must not raise
@@ -769,6 +805,7 @@ class TestDOWMisalignmentGuard:
 # 11. TRADING DAY BOUNDARY (exact 23:00 UTC)
 # =============================================================================
 
+
 class TestTradingDayBoundary:
     """09:00 Brisbane = 23:00 UTC previous calendar day.
     Bars at exactly 23:00:00 UTC belong to the CURRENT Brisbane trading day.
@@ -776,6 +813,7 @@ class TestTradingDayBoundary:
 
     def test_boundary_computation(self):
         from pipeline.build_daily_features import compute_trading_day
+
         BRISBANE = ZoneInfo("Australia/Brisbane")
         UTC = ZoneInfo("UTC")
 
@@ -788,20 +826,15 @@ class TestTradingDayBoundary:
         day_before = compute_trading_day(pd.Timestamp(ts_before))
         day_after = compute_trading_day(pd.Timestamp(ts_after))
 
-        assert day_at == date(2024, 1, 6), (
-            f"23:00:00 UTC = 09:00:00 Brisbane = start of Jan 6, got {day_at}"
-        )
-        assert day_before == date(2024, 1, 5), (
-            f"22:59:59 UTC = 08:59:59 Brisbane = still Jan 5, got {day_before}"
-        )
-        assert day_after == date(2024, 1, 6), (
-            f"23:00:01 UTC = 09:00:01 Brisbane = Jan 6, got {day_after}"
-        )
+        assert day_at == date(2024, 1, 6), f"23:00:00 UTC = 09:00:00 Brisbane = start of Jan 6, got {day_at}"
+        assert day_before == date(2024, 1, 5), f"22:59:59 UTC = 08:59:59 Brisbane = still Jan 5, got {day_before}"
+        assert day_after == date(2024, 1, 6), f"23:00:01 UTC = 09:00:01 Brisbane = Jan 6, got {day_after}"
 
 
 # =============================================================================
 # 12. DST VERDICT BOUNDARY CONDITIONS
 # =============================================================================
+
 
 class TestDSTVerdictBoundary:
     """Verify the exact boundary conditions for classify_dst_verdict."""
@@ -814,9 +847,7 @@ class TestDSTVerdictBoundary:
 
     def test_stable_boundary_exactly_0_10(self):
         """diff == 0.10 exactly with N >= 15 both sides → STABLE."""
-        assert classify_dst_verdict(0.30, 0.20, 20, 20) == "STABLE", (
-            "|0.30 - 0.20| = 0.10 exactly, N>=15 both → STABLE"
-        )
+        assert classify_dst_verdict(0.30, 0.20, 20, 20) == "STABLE", "|0.30 - 0.20| = 0.10 exactly, N>=15 both → STABLE"
 
     def test_unstable_just_above_0_10(self):
         """diff == 0.11 → NOT stable (must fall into WINTER-DOM or SUMMER-DOM or UNSTABLE)."""
@@ -847,6 +878,7 @@ class TestDSTVerdictBoundary:
 # 13. OUTLIER ORB SIZES
 # =============================================================================
 
+
 class TestOutlierORBSizes:
     """Verify arithmetic doesn't break on extreme ORB sizes."""
 
@@ -854,11 +886,14 @@ class TestOutlierORBSizes:
         """ORB of 0.1 points (near tick-size floor). Should not crash."""
         orb_high = 2700.1
         orb_low = 2700.0  # 0.1 point range (MGC tick = 0.10)
-        bars = _bars(T0, [
-            (2700.0, 2700.2, 2699.9, 2700.15, 100),  # confirm long
-            (2700.15, 2700.5, 2700.1, 2700.3, 100),   # E1 entry
-            (2700.3, 2700.8, 2700.2, 2700.6, 100),    # climbing
-        ])
+        bars = _bars(
+            T0,
+            [
+                (2700.0, 2700.2, 2699.9, 2700.15, 100),  # confirm long
+                (2700.15, 2700.5, 2700.1, 2700.3, 100),  # E1 entry
+                (2700.3, 2700.8, 2700.2, 2700.6, 100),  # climbing
+            ],
+        )
         result = compute_single_outcome(
             bars_df=bars,
             break_ts=T0,
@@ -879,10 +914,13 @@ class TestOutlierORBSizes:
         """ORB of 1000 points. R calculation must still be proportional."""
         orb_high = 3200.0
         orb_low = 2200.0  # 1000 point range
-        bars = _bars(T0, [
-            (2800, 3201, 2799, 3201.0, 100),   # confirm long
-            (3202, 5402, 3200, 3500.0, 100),    # E1 entry; target (RR2) = 3202 + 2000 = 5202
-        ])
+        bars = _bars(
+            T0,
+            [
+                (2800, 3201, 2799, 3201.0, 100),  # confirm long
+                (3202, 5402, 3200, 3500.0, 100),  # E1 entry; target (RR2) = 3202 + 2000 = 5202
+            ],
+        )
         result = compute_single_outcome(
             bars_df=bars,
             break_ts=T0,
@@ -902,6 +940,7 @@ class TestOutlierORBSizes:
 # =============================================================================
 # 14. MAE/MFE INVARIANTS
 # =============================================================================
+
 
 class TestMAEMFEInvariants:
     """
@@ -928,11 +967,13 @@ class TestMAEMFEInvariants:
     def test_win_mfe_geq_pnl_r(self):
         """On a win, MFE must be >= pnl_r (we reached the target)."""
         # E1: entry at bar1 open ~2702. Risk=12. RR2 target=2726. Bar2 hits target.
-        result = self._run([
-            (2698, 2701, 2697, 2701.0, 100),  # confirm
-            (2702, 2704, 2701, 2703.0, 100),  # fill bar (clean)
-            (2703, 2730, 2702, 2728.0, 100),  # hits target
-        ])
+        result = self._run(
+            [
+                (2698, 2701, 2697, 2701.0, 100),  # confirm
+                (2702, 2704, 2701, 2703.0, 100),  # fill bar (clean)
+                (2703, 2730, 2702, 2728.0, 100),  # hits target
+            ]
+        )
         assert result["outcome"] == "win"
         assert result["mfe_r"] is not None
         assert result["pnl_r"] is not None
@@ -942,11 +983,13 @@ class TestMAEMFEInvariants:
 
     def test_loss_mae_nonnegative(self):
         """On a loss, MAE must be >= 0."""
-        result = self._run([
-            (2698, 2701, 2697, 2701.0, 100),  # confirm
-            (2702, 2703, 2701, 2702.0, 100),  # fill bar
-            (2700, 2701, 2685, 2686.0, 100),  # crashes to stop
-        ])
+        result = self._run(
+            [
+                (2698, 2701, 2697, 2701.0, 100),  # confirm
+                (2702, 2703, 2701, 2702.0, 100),  # fill bar
+                (2700, 2701, 2685, 2686.0, 100),  # crashes to stop
+            ]
+        )
         if result["outcome"] == "loss":
             assert result["mae_r"] is not None
             assert result["mae_r"] >= 0, f"MAE must be >= 0, got {result['mae_r']}"
@@ -969,17 +1012,21 @@ class TestMAEMFEInvariants:
 # 15. INSUFFICIENT BARS FOR CONFIRM
 # =============================================================================
 
+
 class TestInsufficientBarsForConfirm:
     """CB5 with only 4 bars must not trigger confirm."""
 
     def test_cb5_with_4_bars_no_confirm(self):
         orb_high = 2700.0
-        bars = _bars(T0, [
-            (2698, 2702, 2697, 2701.0, 100),  # bar0: outside (count=1)
-            (2701, 2703, 2700, 2702.0, 100),  # bar1: outside (count=2)
-            (2702, 2704, 2701, 2703.0, 100),  # bar2: outside (count=3)
-            (2703, 2705, 2702, 2704.0, 100),  # bar3: outside (count=4) — need 5
-        ])
+        bars = _bars(
+            T0,
+            [
+                (2698, 2702, 2697, 2701.0, 100),  # bar0: outside (count=1)
+                (2701, 2703, 2700, 2702.0, 100),  # bar1: outside (count=2)
+                (2702, 2704, 2701, 2703.0, 100),  # bar2: outside (count=3)
+                (2703, 2705, 2702, 2704.0, 100),  # bar3: outside (count=4) — need 5
+            ],
+        )
         result = detect_confirm(
             bars_df=bars,
             orb_break_ts=T0,
@@ -993,13 +1040,16 @@ class TestInsufficientBarsForConfirm:
 
     def test_cb5_with_5_bars_confirms(self):
         orb_high = 2700.0
-        bars = _bars(T0, [
-            (2698, 2702, 2697, 2701.0, 100),
-            (2701, 2703, 2700, 2702.0, 100),
-            (2702, 2704, 2701, 2703.0, 100),
-            (2703, 2705, 2702, 2704.0, 100),
-            (2704, 2706, 2703, 2705.0, 100),  # bar4: 5th consecutive → confirm
-        ])
+        bars = _bars(
+            T0,
+            [
+                (2698, 2702, 2697, 2701.0, 100),
+                (2701, 2703, 2700, 2702.0, 100),
+                (2702, 2704, 2701, 2703.0, 100),
+                (2703, 2705, 2702, 2704.0, 100),
+                (2704, 2706, 2703, 2705.0, 100),  # bar4: 5th consecutive → confirm
+            ],
+        )
         result = detect_confirm(
             bars_df=bars,
             orb_break_ts=T0,
@@ -1016,6 +1066,7 @@ class TestInsufficientBarsForConfirm:
 # =============================================================================
 # 16. COST MODEL — UNKNOWN INSTRUMENT
 # =============================================================================
+
 
 class TestCostModelInstruments:
     """All 4 instruments must have valid cost specs. Unknown raises."""
@@ -1045,6 +1096,7 @@ class TestCostModelInstruments:
 # 17. 2300 SESSION — DST CONTEXT SHIFT
 # =============================================================================
 
+
 class TestSessionUS_DATA_830DSTContext:
     """US_DATA_830 session tracks 8:30 AM ET data release.
     Dynamic resolver adjusts Brisbane time per DST regime:
@@ -1057,18 +1109,14 @@ class TestSessionUS_DATA_830DSTContext:
         winter_day = WINTER_DATE
         assert not is_us_dst(winter_day), "Winter day sanity check"
         h, m = us_data_open_brisbane(winter_day)
-        assert h == 23 and m == 30, (
-            f"Winter US data release should be 23:30 Brisbane, got {h}:{m:02d}"
-        )
+        assert h == 23 and m == 30, f"Winter US data release should be 23:30 Brisbane, got {h}:{m:02d}"
 
     def test_summer_us_data_is_2230_brisbane(self):
         """In summer (EDT): 8:30 ET = 12:30 UTC = 22:30 Brisbane."""
         summer_day = SUMMER_DATE
         assert is_us_dst(summer_day), "Summer day sanity check"
         h, m = us_data_open_brisbane(summer_day)
-        assert h == 22 and m == 30, (
-            f"Summer US data release should be 22:30 Brisbane, got {h}:{m:02d}"
-        )
+        assert h == 22 and m == 30, f"Summer US data release should be 22:30 Brisbane, got {h}:{m:02d}"
 
     def test_us_data_830_is_clean_session(self):
         """All sessions are now dynamic — US_DATA_830 is classified as clean."""
@@ -1090,19 +1138,24 @@ class TestSessionUS_DATA_830DSTContext:
 # 18. SESSION END BOUNDARY — bar at trading_day_end excluded
 # =============================================================================
 
+
 class TestSessionEndBoundary:
     """Bars at ts_utc >= trading_day_end must NOT be included in outcome scan."""
 
     def test_bar_exactly_at_day_end_not_included(self):
         orb_high, orb_low = 2700.0, 2690.0
         td_end = T0 + timedelta(hours=2)
-        bars = _bars(T0, [
-            (2698, 2701, 2697, 2701.0, 100),           # T0+0: confirm
-            (2702, 2703, 2701, 2702.0, 100),           # T0+1: fill bar (E1), clean
-            (2702, 2703, 2701, 2702.0, 100),           # T0+2: clean
-            # ... many bars all below target ...
-        ] + [(2700, 2701, 2699, 2700.5, 100)] * 116 +  # fill 118 min total
-        [(2700, 2750, 2699, 2745.0, 100)])              # This bar IS at td_end timestamp
+        bars = _bars(
+            T0,
+            [
+                (2698, 2701, 2697, 2701.0, 100),  # T0+0: confirm
+                (2702, 2703, 2701, 2702.0, 100),  # T0+1: fill bar (E1), clean
+                (2702, 2703, 2701, 2702.0, 100),  # T0+2: clean
+                # ... many bars all below target ...
+            ]
+            + [(2700, 2701, 2699, 2700.5, 100)] * 116  # fill 118 min total
+            + [(2700, 2750, 2699, 2745.0, 100)],
+        )  # This bar IS at td_end timestamp
         # Last bar is at T0 + 119 min. td_end = T0 + 120 min. Bar at T0+119 < td_end → included.
         # Bar at td_end WOULD be at T0+120 but we didn't include one there.
         result = compute_single_outcome(
@@ -1125,6 +1178,7 @@ class TestSessionEndBoundary:
 # 19. OUTLIER: FUZZ E2 ENTRY PRICE INVARIANT
 # =============================================================================
 
+
 class TestE2EntryPriceInvariant:
     """E2 must ALWAYS fill at orb_high + slippage (long) or orb_low - slippage (short).
     Never at a different price. This is the fundamental E2 stop-market guarantee."""
@@ -1132,6 +1186,7 @@ class TestE2EntryPriceInvariant:
     @pytest.mark.parametrize("seed", range(30))
     def test_e2_long_entry_always_at_orb_high_plus_slippage(self, seed):
         from trading_app.config import E2_SLIPPAGE_TICKS
+
         rng = random.Random(seed + 2000)
         orb_high = round(2700.0 + rng.uniform(-50, 50), 1)
         orb_low = round(orb_high - rng.uniform(2, 30), 1)
@@ -1143,11 +1198,14 @@ class TestE2EntryPriceInvariant:
         touch_low = orb_high - rng.uniform(0.1, 3.0)
         touch_close = orb_high + rng.uniform(0.1, 5.0)
 
-        bars = _bars(T0, [
-            (orb_high - 1, touch_high, touch_low, touch_close, 100),  # touches ORB → E2 fill
-            (touch_close, touch_close + 5, touch_close - 1, touch_close + 3, 100),
-            (touch_close + 3, touch_close + 20, touch_close + 2, touch_close + 15, 100),
-        ])
+        bars = _bars(
+            T0,
+            [
+                (orb_high - 1, touch_high, touch_low, touch_close, 100),  # touches ORB → E2 fill
+                (touch_close, touch_close + 5, touch_close - 1, touch_close + 3, 100),
+                (touch_close + 3, touch_close + 20, touch_close + 2, touch_close + 15, 100),
+            ],
+        )
         result = compute_single_outcome(
             bars_df=bars,
             break_ts=T0,
@@ -1169,6 +1227,7 @@ class TestE2EntryPriceInvariant:
     @pytest.mark.parametrize("seed", range(30))
     def test_e2_short_entry_always_at_orb_low_minus_slippage(self, seed):
         from trading_app.config import E2_SLIPPAGE_TICKS
+
         rng = random.Random(seed + 3000)
         orb_low = round(2700.0 - rng.uniform(0, 50), 1)
         orb_high = round(orb_low + rng.uniform(2, 30), 1)
@@ -1179,11 +1238,14 @@ class TestE2EntryPriceInvariant:
         touch_low = orb_low - rng.uniform(1.0, 10.0)
         touch_close = orb_low - rng.uniform(0.1, 5.0)
 
-        bars = _bars(T0, [
-            (orb_low + 1, touch_high, touch_low, touch_close, 100),
-            (touch_close, touch_close + 1, touch_close - 5, touch_close - 3, 100),
-            (touch_close - 3, touch_close - 2, touch_close - 20, touch_close - 15, 100),
-        ])
+        bars = _bars(
+            T0,
+            [
+                (orb_low + 1, touch_high, touch_low, touch_close, 100),
+                (touch_close, touch_close + 1, touch_close - 5, touch_close - 3, 100),
+                (touch_close - 3, touch_close - 2, touch_close - 20, touch_close - 15, 100),
+            ],
+        )
         result = compute_single_outcome(
             bars_df=bars,
             break_ts=T0,
@@ -1206,6 +1268,7 @@ class TestE2EntryPriceInvariant:
 # =============================================================================
 # 20. DETECT_CONFIRM GUARD: INVALID INPUTS
 # =============================================================================
+
 
 class TestDetectConfirmGuards:
     """Invalid inputs must raise, not silently produce wrong results."""
@@ -1243,6 +1306,7 @@ class TestDetectConfirmGuards:
 # 21. DST_AFFECTED vs DST_CLEAN — complete and non-overlapping
 # =============================================================================
 
+
 class TestDSTSessionCoverage:
     """DST_AFFECTED_SESSIONS and DST_CLEAN_SESSIONS must not overlap."""
 
@@ -1260,8 +1324,7 @@ class TestDSTSessionCoverage:
         )
 
     def test_known_clean_sessions_present(self):
-        for session in ("CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN",
-                         "LONDON_METALS", "US_DATA_830", "NYSE_OPEN"):
+        for session in ("CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS", "US_DATA_830", "NYSE_OPEN"):
             assert session in DST_CLEAN_SESSIONS, (
                 f"Session {session} must be in DST_CLEAN_SESSIONS (all sessions are dynamic)"
             )
@@ -1271,6 +1334,7 @@ class TestDSTSessionCoverage:
 # 22. DAILY_FEATURES JOIN CARDINALITY — the 3x inflation trap
 # =============================================================================
 
+
 class TestDailyFeaturesJoinCardinality:
     """The orb_minutes join MUST be included or you triple the row count.
     This test uses an in-memory DuckDB to verify the cardinality rule."""
@@ -1278,6 +1342,7 @@ class TestDailyFeaturesJoinCardinality:
     def test_join_without_orb_minutes_triples_rows(self):
         """Demonstrate that missing orb_minutes in join inflates rows 3x."""
         import duckdb
+
         con = duckdb.connect(":memory:")
         # Create minimal daily_features with 3 rows per (symbol, trading_day)
         con.execute("""
@@ -1302,12 +1367,11 @@ class TestDailyFeaturesJoinCardinality:
         """)
         # 1 trading day, 3 orb_minutes each
         for orb_min in [5, 15, 30]:
-            con.execute(
-                "INSERT INTO daily_features VALUES ('2024-01-05', 'MGC', ?, 10.0)",
-                [orb_min]
-            )
+            con.execute("INSERT INTO daily_features VALUES ('2024-01-05', 'MGC', ?, 10.0)", [orb_min])
         # orb_outcomes only has orb_minutes=5
-        con.execute("INSERT INTO orb_outcomes (trading_day, symbol, orb_minutes, pnl_r) VALUES ('2024-01-05', 'MGC', 5, 0.5)")
+        con.execute(
+            "INSERT INTO orb_outcomes (trading_day, symbol, orb_minutes, pnl_r) VALUES ('2024-01-05', 'MGC', 5, 0.5)"
+        )
 
         # BAD join (missing orb_minutes): should return 3 rows (tripled)
         bad_count = con.execute("""

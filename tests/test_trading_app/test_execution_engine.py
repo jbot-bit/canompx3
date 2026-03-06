@@ -19,8 +19,10 @@ from trading_app.execution_engine import (
 from trading_app.portfolio import Portfolio, PortfolioStrategy
 from pipeline.cost_model import get_cost_spec
 
+
 def _cost():
     return get_cost_spec("MGC")
+
 
 def _make_strategy(**overrides):
     base = dict(
@@ -41,6 +43,7 @@ def _make_strategy(**overrides):
     base.update(overrides)
     return PortfolioStrategy(**base)
 
+
 def _make_portfolio(strategies=None, **overrides):
     if strategies is None:
         strategies = [_make_strategy()]
@@ -56,16 +59,17 @@ def _make_portfolio(strategies=None, **overrides):
     defaults.update(overrides)
     return Portfolio(**defaults)
 
+
 def _bar(ts, o, h, l, c, v=100):
-    return {"ts_utc": ts, "open": float(o), "high": float(h),
-            "low": float(l), "close": float(c), "volume": int(v)}
+    return {"ts_utc": ts, "open": float(o), "high": float(h), "low": float(l), "close": float(c), "volume": int(v)}
+
 
 # ============================================================================
 # ORB Detection Tests
 # ============================================================================
 
-class TestORBDetection:
 
+class TestORBDetection:
     def test_orb_range_built_from_bars(self):
         """ORB high/low computed from bars within window."""
         engine = ExecutionEngine(_make_portfolio(), _cost())
@@ -120,27 +124,27 @@ class TestORBDetection:
         engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2702, 2704, 2696, 2700))
         assert engine.orbs["US_DATA_830"].break_dir is None
 
+
 # ============================================================================
 # Entry Tests
 # ============================================================================
 
-class TestEntry:
 
+class TestEntry:
     def _run_to_break(self, engine, orb_high=2705.0):
         """Helper: build ORB and trigger a long break."""
         ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
         # Break bar
-        events = engine.on_bar(
-            _bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706)
-        )
+        events = engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
         return ts_base, events
 
     def test_e1_enters_next_bar(self):
         """E1 with CB1: enters at next bar's open."""
-        strategy = _make_strategy(entry_model="E1", confirm_bars=1,
-                                  strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_NO_FILTER")
+        strategy = _make_strategy(
+            entry_model="E1", confirm_bars=1, strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_NO_FILTER"
+        )
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
@@ -149,17 +153,16 @@ class TestEntry:
         assert len([e for e in events if e.event_type == "ENTRY"]) == 0
 
         # Next bar
-        next_events = engine.on_bar(
-            _bar(ts_base + timedelta(minutes=6), 2708, 2715, 2707, 2712)
-        )
+        next_events = engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2708, 2715, 2707, 2712))
         entry_events = [e for e in next_events if e.event_type == "ENTRY"]
         assert len(entry_events) == 1
         assert entry_events[0].price == 2708.0  # Next bar open
 
     def test_e3_enters_on_retrace(self):
         """E3: enters at ORB level when price retraces."""
-        strategy = _make_strategy(entry_model="E3", confirm_bars=1,
-                                  strategy_id="MGC_US_DATA_830_E3_RR2.0_CB1_NO_FILTER")
+        strategy = _make_strategy(
+            entry_model="E3", confirm_bars=1, strategy_id="MGC_US_DATA_830_E3_RR2.0_CB1_NO_FILTER"
+        )
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
@@ -167,34 +170,32 @@ class TestEntry:
         assert len([e for e in events if e.event_type == "ENTRY"]) == 0
 
         # Bar that retraces: low <= orb_high (2705)
-        retrace_events = engine.on_bar(
-            _bar(ts_base + timedelta(minutes=6), 2708, 2712, 2704, 2710)
-        )
+        retrace_events = engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2708, 2712, 2704, 2710))
         entry_events = [e for e in retrace_events if e.event_type == "ENTRY"]
         assert len(entry_events) == 1
         assert entry_events[0].price == 2705.0  # ORB high
 
     def test_e3_no_retrace_no_fill(self):
         """E3: no entry if price doesn't retrace."""
-        strategy = _make_strategy(entry_model="E3", confirm_bars=1,
-                                  strategy_id="MGC_US_DATA_830_E3_RR2.0_CB1_NO_FILTER")
+        strategy = _make_strategy(
+            entry_model="E3", confirm_bars=1, strategy_id="MGC_US_DATA_830_E3_RR2.0_CB1_NO_FILTER"
+        )
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
         ts_base, events = self._run_to_break(engine)
 
         # Bar that doesn't retrace: low > orb_high (2705)
-        no_retrace = engine.on_bar(
-            _bar(ts_base + timedelta(minutes=6), 2708, 2715, 2706, 2712)
-        )
+        no_retrace = engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2708, 2715, 2706, 2712))
         assert len([e for e in no_retrace if e.event_type == "ENTRY"]) == 0
+
 
 # ============================================================================
 # Exit Tests
 # ============================================================================
 
-class TestExit:
 
+class TestExit:
     def test_target_hit(self):
         """Trade exits at target price."""
         strategy = _make_strategy(entry_model="E1", confirm_bars=1, rr_target=2.0)
@@ -213,9 +214,7 @@ class TestExit:
         engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2708, 2712, 2707, 2710))
 
         # Target hit bar
-        events = engine.on_bar(
-            _bar(ts_base + timedelta(minutes=7), 2710, 2740, 2709, 2735)
-        )
+        events = engine.on_bar(_bar(ts_base + timedelta(minutes=7), 2710, 2740, 2709, 2735))
         exit_events = [e for e in events if e.event_type == "EXIT"]
         assert len(exit_events) == 1
         assert "win" in exit_events[0].reason
@@ -237,9 +236,7 @@ class TestExit:
         engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2708, 2712, 2707, 2710))
 
         # Stop hit: low <= 2695
-        events = engine.on_bar(
-            _bar(ts_base + timedelta(minutes=7), 2704, 2706, 2694, 2695)
-        )
+        events = engine.on_bar(_bar(ts_base + timedelta(minutes=7), 2704, 2706, 2694, 2695))
         exit_events = [e for e in events if e.event_type == "EXIT"]
         assert len(exit_events) == 1
         assert "loss" in exit_events[0].reason
@@ -259,9 +256,7 @@ class TestExit:
         engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2708, 2712, 2707, 2710))
 
         # Huge bar: hits both target (2708+26=2734) and stop (2695)
-        events = engine.on_bar(
-            _bar(ts_base + timedelta(minutes=7), 2710, 2740, 2690, 2720)
-        )
+        events = engine.on_bar(_bar(ts_base + timedelta(minutes=7), 2710, 2740, 2690, 2720))
         exit_events = [e for e in events if e.event_type == "EXIT"]
         assert len(exit_events) == 1
         assert "loss" in exit_events[0].reason
@@ -284,12 +279,13 @@ class TestExit:
         scratch_events = [e for e in events if e.event_type == "SCRATCH"]
         assert len(scratch_events) == 1
 
+
 # ============================================================================
 # PnL Tests
 # ============================================================================
 
-class TestPnL:
 
+class TestPnL:
     def test_win_pnl_uses_to_r_multiple(self):
         """Win PnL must use to_r_multiple (friction deducted from PnL)."""
         strategy = _make_strategy(entry_model="E1", confirm_bars=1, rr_target=2.0)
@@ -348,12 +344,13 @@ class TestPnL:
         summary = engine.get_daily_summary()
         assert summary["daily_pnl_r"] == -1.0
 
+
 # ============================================================================
 # Daily Summary Tests
 # ============================================================================
 
-class TestDailySummary:
 
+class TestDailySummary:
     def test_summary_counts(self):
         strategy = _make_strategy(entry_model="E1", confirm_bars=1, rr_target=2.0)
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
@@ -374,12 +371,13 @@ class TestDailySummary:
         assert engine.daily_pnl_r == 0.0
         assert engine.daily_trade_count == 0
 
+
 # ============================================================================
 # Filter Tests
 # ============================================================================
 
-class TestFilters:
 
+class TestFilters:
     def test_orb_size_filter_rejects(self):
         """Strategy with G4 filter rejects ORBs < 4pt."""
         strategy = _make_strategy(
@@ -395,15 +393,15 @@ class TestFilters:
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2702, 2700, 2701))
 
         # Break attempt
-        events = engine.on_bar(
-            _bar(ts_base + timedelta(minutes=5), 2702, 2705, 2701, 2703)
-        )
+        events = engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2702, 2705, 2701, 2703))
         entry_events = [e for e in events if e.event_type == "ENTRY"]
         assert len(entry_events) == 0  # Filtered out
+
 
 # ============================================================================
 # Confirm Count Direction Tests
 # ============================================================================
+
 
 class TestConfirmCountDirection:
     """Confirm count initialization must be directional.
@@ -423,7 +421,8 @@ class TestConfirmCountDirection:
     def test_long_break_cb3_needs_two_more_bars(self):
         """Long break with CB3: break bar counts as 2, needs 1 more confirm bar."""
         strategy = _make_strategy(
-            entry_model="E1", confirm_bars=3,
+            entry_model="E1",
+            confirm_bars=3,
             strategy_id="MGC_US_DATA_830_E1_RR2.0_CB3_NO_FILTER",
         )
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
@@ -452,7 +451,8 @@ class TestConfirmCountDirection:
     def test_long_break_reversal_bar_resets_confirm(self):
         """If bar after break closes inside ORB, confirm_count resets to 0."""
         strategy = _make_strategy(
-            entry_model="E1", confirm_bars=3,
+            entry_model="E1",
+            confirm_bars=3,
             strategy_id="MGC_US_DATA_830_E1_RR2.0_CB3_NO_FILTER",
         )
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
@@ -476,7 +476,8 @@ class TestConfirmCountDirection:
     def test_short_break_confirm_count_directional(self):
         """Short break: confirm counted only when close < orb.low."""
         strategy = _make_strategy(
-            entry_model="E1", confirm_bars=3,
+            entry_model="E1",
+            confirm_bars=3,
             strategy_id="MGC_US_DATA_830_E1_RR2.0_CB3_NO_FILTER",
         )
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
@@ -500,6 +501,7 @@ class TestConfirmCountDirection:
 # CLI Tests
 # ============================================================================
 
+
 class TestArmedAtBarGuard:
     """The armed_at_bar guard prevents look-ahead bias.
 
@@ -520,9 +522,7 @@ class TestArmedAtBarGuard:
 
         # Bar at 13:35 — outside the window, close > orb_high => long break
         break_ts = ts_base + timedelta(minutes=5)
-        events = engine.on_bar(
-            _bar(break_ts, 2704, 2710, 2703, 2706)
-        )
+        events = engine.on_bar(_bar(break_ts, 2704, 2710, 2703, 2706))
         return break_ts, events
 
     def test_e1_armed_at_bar_no_fill_same_bar(self):
@@ -583,6 +583,7 @@ class TestArmedAtBarGuard:
         entered = [t for t in engine.active_trades if t.state == TradeState.ENTERED]
         assert len(entered) == 1
 
+
 class TestFillBarExitEngine:
     """Fill-bar exit must be checked for E1 and E3 (matches outcome_builder)."""
 
@@ -594,7 +595,9 @@ class TestFillBarExitEngine:
     def test_e1_fill_bar_target_hit(self):
         """E1: if fill bar hits target, trade should exit as win on same bar."""
         strategy = _make_strategy(
-            entry_model="E1", confirm_bars=1, rr_target=1.0,
+            entry_model="E1",
+            confirm_bars=1,
+            rr_target=1.0,
             strategy_id="MGC_US_DATA_830_E1_RR1.0_CB1_NO_FILTER",
         )
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
@@ -609,9 +612,7 @@ class TestFillBarExitEngine:
 
         # Fill bar: open=2708, entry=2708, stop=2695, risk=13, target=2708+13=2721
         # bar high=2725 >= 2721 -> target hit on fill bar
-        events = engine.on_bar(
-            _bar(ts_base + timedelta(minutes=6), 2708, 2725, 2707, 2720)
-        )
+        events = engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2708, 2725, 2707, 2720))
         entry_events = [e for e in events if e.event_type == "ENTRY"]
         exit_events = [e for e in events if e.event_type == "EXIT"]
         assert len(entry_events) == 1
@@ -621,7 +622,9 @@ class TestFillBarExitEngine:
     def test_e1_fill_bar_stop_hit(self):
         """E1: if fill bar hits stop, trade should exit as loss on same bar."""
         strategy = _make_strategy(
-            entry_model="E1", confirm_bars=1, rr_target=2.0,
+            entry_model="E1",
+            confirm_bars=1,
+            rr_target=2.0,
             strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_NO_FILTER",
         )
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
@@ -634,9 +637,7 @@ class TestFillBarExitEngine:
         engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
 
         # Fill bar: open=2708, stop=2695, bar low=2694 <= 2695 -> stop hit
-        events = engine.on_bar(
-            _bar(ts_base + timedelta(minutes=6), 2708, 2710, 2694, 2696)
-        )
+        events = engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2708, 2710, 2694, 2696))
         entry_events = [e for e in events if e.event_type == "ENTRY"]
         exit_events = [e for e in events if e.event_type == "EXIT"]
         assert len(entry_events) == 1
@@ -646,7 +647,9 @@ class TestFillBarExitEngine:
     def test_e1_fill_bar_ambiguous_is_loss(self):
         """E1: if fill bar hits BOTH stop and target, resolve as loss."""
         strategy = _make_strategy(
-            entry_model="E1", confirm_bars=1, rr_target=1.0,
+            entry_model="E1",
+            confirm_bars=1,
+            rr_target=1.0,
             strategy_id="MGC_US_DATA_830_E1_RR1.0_CB1_NO_FILTER",
         )
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
@@ -660,9 +663,7 @@ class TestFillBarExitEngine:
 
         # Fill bar: open=2708, stop=2695, target=2708+13=2721
         # high=2725 >= 2721 AND low=2694 <= 2695 -> both hit -> LOSS
-        events = engine.on_bar(
-            _bar(ts_base + timedelta(minutes=6), 2708, 2725, 2694, 2700)
-        )
+        events = engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2708, 2725, 2694, 2700))
         exit_events = [e for e in events if e.event_type == "EXIT"]
         assert len(exit_events) == 1, "Ambiguous fill bar should exit as loss"
         assert "loss" in exit_events[0].reason
@@ -670,7 +671,9 @@ class TestFillBarExitEngine:
     def test_e3_fill_bar_target_hit(self):
         """E3: if retrace bar also hits target, trade exits as win."""
         strategy = _make_strategy(
-            entry_model="E3", confirm_bars=1, rr_target=1.0,
+            entry_model="E3",
+            confirm_bars=1,
+            rr_target=1.0,
             strategy_id="MGC_US_DATA_830_E3_RR1.0_CB1_NO_FILTER",
         )
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
@@ -685,14 +688,13 @@ class TestFillBarExitEngine:
         # E3 retrace bar: low=2704 <= orb_high(2705) -> fills at 2705
         # entry=2705, stop=2695, risk=10, target=2705+10=2715
         # high=2716 >= 2715 -> target hit on fill bar
-        events = engine.on_bar(
-            _bar(ts_base + timedelta(minutes=6), 2708, 2716, 2704, 2712)
-        )
+        events = engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2708, 2716, 2704, 2712))
         entry_events = [e for e in events if e.event_type == "ENTRY"]
         exit_events = [e for e in events if e.event_type == "EXIT"]
         assert len(entry_events) == 1
         assert len(exit_events) == 1, "E3 fill bar should detect target hit"
         assert "win" in exit_events[0].reason
+
 
 class TestMLIntegration:
     """ML predictor integration in _arm_strategies."""
@@ -709,7 +711,9 @@ class TestMLIntegration:
 
         mock_pred = MagicMock()
         mock_pred.predict.return_value = MLPrediction(
-            p_win=0.40, take=False, threshold=0.55,
+            p_win=0.40,
+            take=False,
+            threshold=0.55,
         )
 
         strategy = _make_strategy()
@@ -729,8 +733,7 @@ class TestMLIntegration:
             break_ts=datetime(2024, 1, 5, 13, 40, tzinfo=timezone.utc),
         )
 
-        bar = _bar(datetime(2024, 1, 5, 13, 40, tzinfo=timezone.utc),
-                   2712, 2715, 2710, 2714)
+        bar = _bar(datetime(2024, 1, 5, 13, 40, tzinfo=timezone.utc), 2712, 2715, 2710, 2714)
         events = engine._arm_strategies(orb, bar)
 
         # Should get ML_SKIP event, no ENTRY
@@ -748,7 +751,9 @@ class TestMLIntegration:
 
         mock_pred = MagicMock()
         mock_pred.predict.return_value = MLPrediction(
-            p_win=0.65, take=True, threshold=0.55,
+            p_win=0.65,
+            take=True,
+            threshold=0.55,
         )
 
         strategy = _make_strategy(confirm_bars=1)
@@ -767,8 +772,7 @@ class TestMLIntegration:
             break_ts=datetime(2024, 1, 5, 13, 40, tzinfo=timezone.utc),
         )
 
-        bar = _bar(datetime(2024, 1, 5, 13, 40, tzinfo=timezone.utc),
-                   2712, 2715, 2710, 2714)
+        bar = _bar(datetime(2024, 1, 5, 13, 40, tzinfo=timezone.utc), 2712, 2715, 2710, 2714)
         events = engine._arm_strategies(orb, bar)
 
         ml_skips = [e for e in events if e.event_type == "ML_SKIP"]
@@ -846,9 +850,7 @@ class TestTightStop:
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
         # Break bar
-        events = engine.on_bar(
-            _bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706)
-        )
+        events = engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
         return ts_base, events
 
     def test_e1_tight_stop_adjusts_stop_price(self):
@@ -856,7 +858,8 @@ class TestTightStop:
         # ORB: high=2705, low=2695, range=10
         # Tight stop long: 2695 + (1 - 0.75) * 10 = 2697.5
         strategy = _make_strategy(
-            entry_model="E1", confirm_bars=1,
+            entry_model="E1",
+            confirm_bars=1,
             strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_NO_FILTER_S075",
             stop_multiplier=0.75,
         )
@@ -866,9 +869,7 @@ class TestTightStop:
         ts_base, _ = self._run_to_break(engine)
 
         # E1: enters on next bar open
-        engine.on_bar(
-            _bar(ts_base + timedelta(minutes=6), 2708, 2715, 2707, 2712)
-        )
+        engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2708, 2715, 2707, 2712))
 
         # Find the entered trade
         assert len(engine.active_trades) == 1
@@ -879,7 +880,8 @@ class TestTightStop:
     def test_e1_standard_stop_unchanged(self):
         """E1 with stop_multiplier=1.0: stop is at full ORB edge (2695)."""
         strategy = _make_strategy(
-            entry_model="E1", confirm_bars=1,
+            entry_model="E1",
+            confirm_bars=1,
             strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_NO_FILTER",
         )
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
@@ -887,9 +889,7 @@ class TestTightStop:
 
         ts_base, _ = self._run_to_break(engine)
 
-        engine.on_bar(
-            _bar(ts_base + timedelta(minutes=6), 2708, 2715, 2707, 2712)
-        )
+        engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2708, 2715, 2707, 2712))
 
         assert len(engine.active_trades) == 1
         trade = engine.active_trades[0]
@@ -901,7 +901,8 @@ class TestTightStop:
         # Tight stop = 2697.5. Standard stop = 2695.
         # A bar with low=2696 hits tight stop but NOT standard stop.
         strategy = _make_strategy(
-            entry_model="E1", confirm_bars=1,
+            entry_model="E1",
+            confirm_bars=1,
             strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_NO_FILTER_S075",
             stop_multiplier=0.75,
         )
@@ -911,15 +912,11 @@ class TestTightStop:
         ts_base, _ = self._run_to_break(engine)
 
         # E1 entry
-        engine.on_bar(
-            _bar(ts_base + timedelta(minutes=6), 2708, 2715, 2707, 2712)
-        )
+        engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2708, 2715, 2707, 2712))
         assert len(engine.active_trades) == 1
 
         # Bar that dips to 2696 — below tight stop (2697.5) but above standard (2695)
-        exit_events = engine.on_bar(
-            _bar(ts_base + timedelta(minutes=7), 2710, 2711, 2696, 2698)
-        )
+        exit_events = engine.on_bar(_bar(ts_base + timedelta(minutes=7), 2710, 2711, 2696, 2698))
         exit_evts = [e for e in exit_events if e.event_type == "EXIT"]
         assert len(exit_evts) == 1
         assert "stop_hit" in exit_evts[0].reason  # "loss_stop_hit" or "stop_hit"

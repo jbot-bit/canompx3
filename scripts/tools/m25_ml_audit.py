@@ -13,6 +13,7 @@ Usage:
 Setup:
     MINIMAX_API_KEY must be set in .env or environment.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -48,6 +49,7 @@ MAX_LINES_PER_FILE = 2000  # truncate very large files
 
 
 # ── File discovery ───────────────────────────────────────────────────
+
 
 def discover_files() -> list[tuple[str, Path]]:
     """Auto-discover all files to include. Returns (label, path) pairs."""
@@ -164,11 +166,15 @@ def main():
         description="M2.5 ML Integration Audit (self-identifying)",
     )
     parser.add_argument(
-        "--dry-run", action="store_true",
+        "--dry-run",
+        action="store_true",
         help="Show discovered files and token estimate, don't call API",
     )
     parser.add_argument(
-        "--output", "-o", type=str, default=None,
+        "--output",
+        "-o",
+        type=str,
+        default=None,
         help="Custom output path (default: research/output/m25_ml_audit_YYYYMMDD_HHMM.md)",
     )
     args = parser.parse_args()

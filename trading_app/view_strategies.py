@@ -21,6 +21,7 @@ import sys
 from pathlib import Path
 
 from pipeline.log import get_logger
+
 logger = get_logger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -52,17 +53,20 @@ SORT_COLUMNS = {
 # Allowed sort columns (whitelist for SQL safety)
 _VALID_SORT_COLS = set(SORT_COLUMNS.values())
 
+
 def _safe_float(val) -> float | None:
     """Return float if valid, None if None/NaN/missing."""
     if val is None:
         return None
     try:
         import math
+
         if math.isnan(val):
             return None
         return float(val)
     except (TypeError, ValueError):
         return None
+
 
 def _fmt_signed(val, fmt=".2f") -> str:
     """Format a float with +/- sign, or N/A if None/NaN."""
@@ -71,18 +75,26 @@ def _fmt_signed(val, fmt=".2f") -> str:
         return "N/A"
     return f"+{v:{fmt}}" if v >= 0 else f"{v:{fmt}}"
 
+
 def _has_table(con, table_name: str) -> bool:
     """Check if a table exists in the database."""
-    tables = [t[0] for t in con.execute(
-        "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
-    ).fetchall()]
+    tables = [
+        t[0]
+        for t in con.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='main'").fetchall()
+    ]
     return table_name in tables
 
-def fetch_strategies(db_path: Path, orb: str | None = None,
-                     entry: str | None = None, filter_type: str | None = None,
-                     min_expr: float | None = None, sort_col: str = "expectancy_r",
-                     direction: str | None = None,
-                     limit: int = 20) -> pd.DataFrame:
+
+def fetch_strategies(
+    db_path: Path,
+    orb: str | None = None,
+    entry: str | None = None,
+    filter_type: str | None = None,
+    min_expr: float | None = None,
+    sort_col: str = "expectancy_r",
+    direction: str | None = None,
+    limit: int = 20,
+) -> pd.DataFrame:
     """Query validated_setups with optional filters. All inputs parameterized."""
     with duckdb.connect(str(db_path), read_only=True) as con:
         if not _has_table(con, "validated_setups"):
@@ -128,6 +140,7 @@ def fetch_strategies(db_path: Path, orb: str | None = None,
         df = con.execute(sql, params).fetchdf()
     return df
 
+
 def fetch_summary(db_path: Path) -> pd.DataFrame:
     """Session-level summary of validated strategies with unique trade counts."""
     with duckdb.connect(str(db_path), read_only=True) as con:
@@ -152,14 +165,15 @@ def fetch_summary(db_path: Path) -> pd.DataFrame:
         """).fetchdf()
     return df
 
+
 def fetch_total_count(db_path: Path) -> int:
     """Total active validated strategies."""
     with duckdb.connect(str(db_path), read_only=True) as con:
         if not _has_table(con, "validated_setups"):
             return 0
-        return con.execute(
-            "SELECT COUNT(*) FROM validated_setups WHERE status = 'active'"
-        ).fetchone()[0]
+        return con.execute("SELECT COUNT(*) FROM validated_setups WHERE status = 'active'").fetchone()[0]
+
+
 def fetch_unique_trade_count(db_path: Path) -> int:
     """Count unique trade families (by session/EM/RR/CB identity)."""
     with duckdb.connect(str(db_path), read_only=True) as con:
@@ -171,8 +185,9 @@ def fetch_unique_trade_count(db_path: Path) -> int:
                          CAST(confirm_bars AS TEXT))
             FROM validated_setups WHERE status = 'active'
         """).fetchone()[0]
-def fetch_families(db_path: Path, orb: str | None = None,
-                   entry: str | None = None) -> pd.DataFrame:
+
+
+def fetch_families(db_path: Path, orb: str | None = None, entry: str | None = None) -> pd.DataFrame:
     """Group strategies by trade identity (session, EM, RR, CB). Parameterized."""
     with duckdb.connect(str(db_path), read_only=True) as con:
         if not _has_table(con, "validated_setups"):
@@ -188,7 +203,8 @@ def fetch_families(db_path: Path, orb: str | None = None,
             params.append(entry)
         where_clause = " AND ".join(where)
 
-        df = con.execute(f"""
+        df = con.execute(
+            f"""
             SELECT orb_label, entry_model, rr_target, confirm_bars,
                    COUNT(*) as filter_variants,
                    FIRST(filter_type ORDER BY sharpe_ann DESC NULLS LAST) as best_filter,
@@ -200,8 +216,11 @@ def fetch_families(db_path: Path, orb: str | None = None,
             WHERE {where_clause}
             GROUP BY orb_label, entry_model, rr_target, confirm_bars
             ORDER BY best_shann DESC NULLS LAST
-        """, params).fetchdf()
+        """,
+            params,
+        ).fetchdf()
     return df
+
 
 def format_table(df: pd.DataFrame) -> str:
     """Format strategy DataFrame as aligned terminal table."""
@@ -209,30 +228,35 @@ def format_table(df: pd.DataFrame) -> str:
         return "  No strategies found.\n"
 
     lines = []
-    header = (f" {'#':>3}  {'ORB':<5} {'EM':<3} {'CB':>2}  {'RR':>4}  "
-              f"{'Filter':<12} {'N':>5}  {'WR%':>5}  {'ExpR':>6}  "
-              f"{'ShANN':>6}  {'T/yr':>5}  {'MaxDD':>6}  {'Yrs':>3}  {'Stress':<6}")
+    header = (
+        f" {'#':>3}  {'ORB':<5} {'EM':<3} {'CB':>2}  {'RR':>4}  "
+        f"{'Filter':<12} {'N':>5}  {'WR%':>5}  {'ExpR':>6}  "
+        f"{'ShANN':>6}  {'T/yr':>5}  {'MaxDD':>6}  {'Yrs':>3}  {'Stress':<6}"
+    )
     lines.append(header)
     lines.append(" " + "-" * (len(header) - 1))
 
     for i, row in df.iterrows():
         wr_pct = f"{row['win_rate'] * 100:.0f}%"
-        expr = _fmt_signed(row['expectancy_r'])
-        shann = _fmt_signed(row['sharpe_ann'])
-        tpy_val = _safe_float(row['trades_per_year'])
+        expr = _fmt_signed(row["expectancy_r"])
+        shann = _fmt_signed(row["sharpe_ann"])
+        tpy_val = _safe_float(row["trades_per_year"])
         tpy = f"{tpy_val:.0f}" if tpy_val is not None else "N/A"
-        maxdd_val = _safe_float(row['max_drawdown_r'])
+        maxdd_val = _safe_float(row["max_drawdown_r"])
         maxdd = f"{maxdd_val:.1f}R" if maxdd_val is not None else "N/A"
-        stress = "PASS" if row['stress_test_passed'] else "FAIL"
+        stress = "PASS" if row["stress_test_passed"] else "FAIL"
 
-        line = (f" {i + 1:>3}  {row['orb_label']:<5} {row['entry_model']:<3} "
-                f"{row['confirm_bars']:>2}  {row['rr_target']:>4.1f}  "
-                f"{row['filter_type']:<12} {row['sample_size']:>5}  {wr_pct:>5}  "
-                f"{expr:>6}  {shann:>6}  {tpy:>5}  {maxdd:>6}  "
-                f"{row['years_tested']:>3}  {stress:<6}")
+        line = (
+            f" {i + 1:>3}  {row['orb_label']:<5} {row['entry_model']:<3} "
+            f"{row['confirm_bars']:>2}  {row['rr_target']:>4.1f}  "
+            f"{row['filter_type']:<12} {row['sample_size']:>5}  {wr_pct:>5}  "
+            f"{expr:>6}  {shann:>6}  {tpy:>5}  {maxdd:>6}  "
+            f"{row['years_tested']:>3}  {stress:<6}"
+        )
         lines.append(line)
 
     return "\n".join(lines) + "\n"
+
 
 def format_families(df: pd.DataFrame) -> str:
     """Format family DataFrame as aligned terminal table."""
@@ -240,26 +264,31 @@ def format_families(df: pd.DataFrame) -> str:
         return "  No families found.\n"
 
     lines = []
-    header = (f" {'#':>3}  {'ORB':<5} {'EM':<3} {'CB':>2}  {'RR':>4}  "
-              f"{'Variants':>8}  {'Best Filter':<12} {'ShANN':>6}  "
-              f"{'N':>5}  {'WR%':>5}  {'ExpR':>6}")
+    header = (
+        f" {'#':>3}  {'ORB':<5} {'EM':<3} {'CB':>2}  {'RR':>4}  "
+        f"{'Variants':>8}  {'Best Filter':<12} {'ShANN':>6}  "
+        f"{'N':>5}  {'WR%':>5}  {'ExpR':>6}"
+    )
     lines.append(header)
     lines.append(" " + "-" * (len(header) - 1))
 
     for i, row in df.iterrows():
-        shann = _fmt_signed(row['best_shann'])
-        wr_val = _safe_float(row['best_wr_pct'])
+        shann = _fmt_signed(row["best_shann"])
+        wr_val = _safe_float(row["best_wr_pct"])
         wr = f"{wr_val:.0f}%" if wr_val is not None else "N/A"
-        expr = _fmt_signed(row['best_expr'])
-        best_filter = row['best_filter'] if row['best_filter'] else "N/A"
+        expr = _fmt_signed(row["best_expr"])
+        best_filter = row["best_filter"] if row["best_filter"] else "N/A"
 
-        line = (f" {i + 1:>3}  {row['orb_label']:<5} {row['entry_model']:<3} "
-                f"{row['confirm_bars']:>2}  {row['rr_target']:>4.1f}  "
-                f"{row['filter_variants']:>8}  {best_filter:<12} {shann:>6}  "
-                f"{row['max_n']:>5}  {wr:>5}  {expr:>6}")
+        line = (
+            f" {i + 1:>3}  {row['orb_label']:<5} {row['entry_model']:<3} "
+            f"{row['confirm_bars']:>2}  {row['rr_target']:>4.1f}  "
+            f"{row['filter_variants']:>8}  {best_filter:<12} {shann:>6}  "
+            f"{row['max_n']:>5}  {wr:>5}  {expr:>6}"
+        )
         lines.append(line)
 
     return "\n".join(lines) + "\n"
+
 
 def format_summary(df: pd.DataFrame) -> str:
     """Format session summary with unique trade counts."""
@@ -268,8 +297,8 @@ def format_summary(df: pd.DataFrame) -> str:
 
     lines = ["Session summary:"]
     for _, row in df.iterrows():
-        avg_sh = _safe_float(row['avg_shann'])
-        best_sh = _safe_float(row['best_shann'])
+        avg_sh = _safe_float(row["avg_shann"])
+        best_sh = _safe_float(row["best_shann"])
         shann_str = f"avg ShANN {avg_sh:+.3f}" if avg_sh is not None else "avg ShANN N/A"
         best_shann_str = f"best {best_sh:+.3f}" if best_sh is not None else "best N/A"
         lines.append(
@@ -281,34 +310,26 @@ def format_summary(df: pd.DataFrame) -> str:
         )
     return "\n".join(lines) + "\n"
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="View and filter validated trading strategies"
+    parser = argparse.ArgumentParser(description="View and filter validated trading strategies")
+    parser.add_argument("--top", type=int, default=20, help="Number of strategies to show (default: 20)")
+    parser.add_argument("--orb", type=str, default=None, help="Filter by ORB session (e.g., 0900, 1800)")
+    parser.add_argument("--entry", type=str, default=None, help="Filter by entry model (E1, E3)")
+    parser.add_argument(
+        "--filter", type=str, default=None, dest="filter_type", help="Filter by filter type (e.g., ORB_G4, ORB_G6)"
     )
-    parser.add_argument("--top", type=int, default=20,
-                        help="Number of strategies to show (default: 20)")
-    parser.add_argument("--orb", type=str, default=None,
-                        help="Filter by ORB session (e.g., 0900, 1800)")
-    parser.add_argument("--entry", type=str, default=None,
-                        help="Filter by entry model (E1, E3)")
-    parser.add_argument("--filter", type=str, default=None, dest="filter_type",
-                        help="Filter by filter type (e.g., ORB_G4, ORB_G6)")
-    parser.add_argument("--direction", type=str, default=None,
-                        choices=["LONG", "SHORT", "BOTH"],
-                        help="Filter by direction")
-    parser.add_argument("--min-expr", type=float, default=None,
-                        help="Minimum expectancy_r threshold")
-    parser.add_argument("--sort", type=str, default="expr",
-                        choices=list(SORT_COLUMNS.keys()),
-                        help="Sort column (default: expr)")
-    parser.add_argument("--output", type=str, default=None,
-                        help="Export to CSV file")
-    parser.add_argument("--summary", action="store_true",
-                        help="Show session summary only")
-    parser.add_argument("--family", action="store_true",
-                        help="Group by unique trade identity (session, EM, RR, CB)")
-    parser.add_argument("--db", type=str, default=None,
-                        help="Database path (default: gold.db)")
+    parser.add_argument(
+        "--direction", type=str, default=None, choices=["LONG", "SHORT", "BOTH"], help="Filter by direction"
+    )
+    parser.add_argument("--min-expr", type=float, default=None, help="Minimum expectancy_r threshold")
+    parser.add_argument(
+        "--sort", type=str, default="expr", choices=list(SORT_COLUMNS.keys()), help="Sort column (default: expr)"
+    )
+    parser.add_argument("--output", type=str, default=None, help="Export to CSV file")
+    parser.add_argument("--summary", action="store_true", help="Show session summary only")
+    parser.add_argument("--family", action="store_true", help="Group by unique trade identity (session, EM, RR, CB)")
+    parser.add_argument("--db", type=str, default=None, help="Database path (default: gold.db)")
     args = parser.parse_args()
 
     db_path = Path(args.db) if args.db else GOLD_DB_PATH
@@ -354,9 +375,14 @@ def main():
     logger.info(f"Showing top {args.top} by {sort_col}\n")
 
     df = fetch_strategies(
-        db_path, orb=args.orb, entry=args.entry,
-        filter_type=args.filter_type, min_expr=args.min_expr,
-        sort_col=sort_col, direction=args.direction, limit=args.top,
+        db_path,
+        orb=args.orb,
+        entry=args.entry,
+        filter_type=args.filter_type,
+        min_expr=args.min_expr,
+        sort_col=sort_col,
+        direction=args.direction,
+        limit=args.top,
     )
     logger.info(format_table(df))
 
@@ -369,6 +395,7 @@ def main():
         output_path = PROJECT_ROOT / args.output
         df.to_csv(output_path, index=False)
         logger.info(f"Exported {len(df)} strategies to {output_path}")
+
 
 if __name__ == "__main__":
     main()

@@ -90,11 +90,27 @@ class TestInitSchema:
         con.close()
 
         expected = {
-            "trading_day", "symbol", "orb_label", "orb_minutes",
-            "rr_target", "confirm_bars", "entry_model", "entry_ts",
-            "entry_price", "stop_price", "target_price", "outcome",
-            "exit_ts", "exit_price", "pnl_r", "mae_r", "mfe_r",
-            "ambiguous_bar", "ts_outcome", "ts_pnl_r", "ts_exit_ts",
+            "trading_day",
+            "symbol",
+            "orb_label",
+            "orb_minutes",
+            "rr_target",
+            "confirm_bars",
+            "entry_model",
+            "entry_ts",
+            "entry_price",
+            "stop_price",
+            "target_price",
+            "outcome",
+            "exit_ts",
+            "exit_price",
+            "pnl_r",
+            "mae_r",
+            "mfe_r",
+            "ambiguous_bar",
+            "ts_outcome",
+            "ts_pnl_r",
+            "ts_exit_ts",
         }
         assert expected.issubset(col_names)
 
@@ -181,9 +197,13 @@ class TestEdgeFamiliesSchema:
         con.close()
 
         expected = {
-            "family_hash", "instrument", "member_count",
-            "trade_day_count", "head_strategy_id",
-            "head_expectancy_r", "head_sharpe_ann",
+            "family_hash",
+            "instrument",
+            "member_count",
+            "trade_day_count",
+            "head_strategy_id",
+            "head_expectancy_r",
+            "head_sharpe_ann",
         }
         assert expected.issubset(col_names)
 

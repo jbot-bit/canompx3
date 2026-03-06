@@ -72,15 +72,15 @@ def section_1_size_heatmap(con):
     print("  ================================================================")
     print()
 
-    symbols = [r[0] for r in con.execute(
-        "SELECT DISTINCT symbol FROM orb_outcomes ORDER BY symbol"
-    ).fetchall()]
+    symbols = [r[0] for r in con.execute("SELECT DISTINCT symbol FROM orb_outcomes ORDER BY symbol").fetchall()]
 
     for sym in symbols:
-        sessions = [r[0] for r in con.execute(
-            "SELECT DISTINCT orb_label FROM orb_outcomes WHERE symbol = ? ORDER BY orb_label",
-            [sym]
-        ).fetchall()]
+        sessions = [
+            r[0]
+            for r in con.execute(
+                "SELECT DISTINCT orb_label FROM orb_outcomes WHERE symbol = ? ORDER BY orb_label", [sym]
+            ).fetchall()
+        ]
 
         print(f"\n  --- {sym} ---")
         print(f"  (Aggregated across all CB/RR/EM combos, win+loss only)\n")
@@ -88,7 +88,8 @@ def section_1_size_heatmap(con):
         for sess in sessions:
             size_col = f"orb_{sess}_size"
             try:
-                rows = con.execute(f"""
+                rows = con.execute(
+                    f"""
                     SELECT
                         CASE
                             WHEN d.{size_col} < 2 THEN '< 2pt'
@@ -110,7 +111,9 @@ def section_1_size_heatmap(con):
                       AND d.{size_col} IS NOT NULL
                     GROUP BY size_bucket
                     ORDER BY MIN(d.{size_col})
-                """, [sym, sess]).fetchall()
+                """,
+                    [sym, sess],
+                ).fetchall()
             except Exception:
                 continue
 
@@ -118,10 +121,7 @@ def section_1_size_heatmap(con):
                 continue
 
             print(f"  {sess}:")
-            print_table(
-                ["Size", "Days", "Trades", "Avg R", "Total R", "WR%"],
-                rows
-            )
+            print_table(["Size", "Days", "Trades", "Avg R", "Total R", "WR%"], rows)
             print()
 
 
@@ -136,24 +136,25 @@ def section_2_breakeven_finder(con):
     print("  negative to positive. Below this = losing money. Above = edge.")
     print()
 
-    symbols = [r[0] for r in con.execute(
-        "SELECT DISTINCT symbol FROM orb_outcomes ORDER BY symbol"
-    ).fetchall()]
+    symbols = [r[0] for r in con.execute("SELECT DISTINCT symbol FROM orb_outcomes ORDER BY symbol").fetchall()]
 
     summary_rows = []
 
     for sym in symbols:
-        sessions = [r[0] for r in con.execute(
-            "SELECT DISTINCT orb_label FROM orb_outcomes WHERE symbol = ? ORDER BY orb_label",
-            [sym]
-        ).fetchall()]
+        sessions = [
+            r[0]
+            for r in con.execute(
+                "SELECT DISTINCT orb_label FROM orb_outcomes WHERE symbol = ? ORDER BY orb_label", [sym]
+            ).fetchall()
+        ]
 
         for sess in sessions:
             size_col = f"orb_{sess}_size"
             try:
                 # Test each integer threshold from 1 to 15
                 for threshold in range(1, 16):
-                    row = con.execute(f"""
+                    row = con.execute(
+                        f"""
                         SELECT
                             COUNT(*) as n,
                             ROUND(AVG(o.pnl_r), 4) as avg_r,
@@ -163,28 +164,38 @@ def section_2_breakeven_finder(con):
                         WHERE o.symbol = ? AND o.orb_label = ?
                           AND o.outcome IN ('win', 'loss')
                           AND d.{size_col} >= ?
-                    """, [sym, sess, float(threshold)]).fetchone()
+                    """,
+                        [sym, sess, float(threshold)],
+                    ).fetchone()
 
                     if row and row[0] and row[0] >= 20 and row[1] and row[1] > 0:
                         # Also get the "below threshold" stats
-                        below = con.execute(f"""
+                        below = con.execute(
+                            f"""
                             SELECT COUNT(*) as n, ROUND(AVG(o.pnl_r), 4) as avg_r
                             FROM orb_outcomes o
                             JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol AND o.orb_minutes = d.orb_minutes
                             WHERE o.symbol = ? AND o.orb_label = ?
                               AND o.outcome IN ('win', 'loss')
                               AND d.{size_col} < ?
-                        """, [sym, sess, float(threshold)]).fetchone()
+                        """,
+                            [sym, sess, float(threshold)],
+                        ).fetchone()
 
                         below_n = below[0] if below else 0
                         below_r = below[1] if below and below[1] else 0
 
-                        summary_rows.append((
-                            sym, sess,
-                            f">={threshold}pt",
-                            row[0], f"{row[1]:+.4f}",
-                            below_n, f"{below_r:+.4f}" if below_r else "-"
-                        ))
+                        summary_rows.append(
+                            (
+                                sym,
+                                sess,
+                                f">={threshold}pt",
+                                row[0],
+                                f"{row[1]:+.4f}",
+                                below_n,
+                                f"{below_r:+.4f}" if below_r else "-",
+                            )
+                        )
                         break
                 else:
                     # Never went positive
@@ -192,10 +203,7 @@ def section_2_breakeven_finder(con):
             except Exception:
                 continue
 
-    print_table(
-        ["Symbol", "Session", "Breakeven", "N(above)", "AvgR(above)", "N(below)", "AvgR(below)"],
-        summary_rows
-    )
+    print_table(["Symbol", "Session", "Breakeven", "N(above)", "AvgR(above)", "N(below)", "AvgR(below)"], summary_rows)
 
 
 def section_3_friction_theory(con):
@@ -210,9 +218,7 @@ def section_3_friction_theory(con):
     print("  MNQ has lowest friction -> should profit from smaller ORBs.")
     print()
 
-    symbols = [r[0] for r in con.execute(
-        "SELECT DISTINCT symbol FROM orb_outcomes ORDER BY symbol"
-    ).fetchall()]
+    symbols = [r[0] for r in con.execute("SELECT DISTINCT symbol FROM orb_outcomes ORDER BY symbol").fetchall()]
 
     rows = []
     for sym in symbols:
@@ -222,10 +228,12 @@ def section_3_friction_theory(con):
         # Get avg R at different size thresholds across ALL sessions
         for gate in [2, 3, 4, 5, 6, 8]:
             # Use all sessions that have the size column
-            sessions = [r[0] for r in con.execute(
-                "SELECT DISTINCT orb_label FROM orb_outcomes WHERE symbol = ? ORDER BY orb_label",
-                [sym]
-            ).fetchall()]
+            sessions = [
+                r[0]
+                for r in con.execute(
+                    "SELECT DISTINCT orb_label FROM orb_outcomes WHERE symbol = ? ORDER BY orb_label", [sym]
+                ).fetchall()
+            ]
 
             total_n = 0
             total_pnl = 0.0
@@ -233,14 +241,17 @@ def section_3_friction_theory(con):
             for sess in sessions:
                 size_col = f"orb_{sess}_size"
                 try:
-                    row = con.execute(f"""
+                    row = con.execute(
+                        f"""
                         SELECT COUNT(*) as n, SUM(o.pnl_r) as total_r
                         FROM orb_outcomes o
                         JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol AND o.orb_minutes = d.orb_minutes
                         WHERE o.symbol = ? AND o.orb_label = ?
                           AND o.outcome IN ('win', 'loss')
                           AND d.{size_col} >= ?
-                    """, [sym, sess, float(gate)]).fetchone()
+                    """,
+                        [sym, sess, float(gate)],
+                    ).fetchone()
                     if row and row[0]:
                         total_n += row[0]
                         total_pnl += row[1] if row[1] else 0
@@ -250,16 +261,17 @@ def section_3_friction_theory(con):
             avg_r = round(total_pnl / total_n, 4) if total_n > 0 else 0
             fric_pct = round(float(rt_points) / gate * 100, 1) if isinstance(rt_points, (int, float)) else "?"
 
-            rows.append((
-                sym, f"G{gate}+", total_n,
-                f"{avg_r:+.4f}" if total_n > 0 else "-",
-                f"{fric_pct}%" if isinstance(fric_pct, float) else "?"
-            ))
+            rows.append(
+                (
+                    sym,
+                    f"G{gate}+",
+                    total_n,
+                    f"{avg_r:+.4f}" if total_n > 0 else "-",
+                    f"{fric_pct}%" if isinstance(fric_pct, float) else "?",
+                )
+            )
 
-    print_table(
-        ["Symbol", "Gate", "Total N", "Avg R", "Friction %"],
-        rows
-    )
+    print_table(["Symbol", "Gate", "Total N", "Avg R", "Friction %"], rows)
 
     print()
     print("  READING THIS TABLE:")
@@ -280,17 +292,17 @@ def section_4_optimal_gate_per_session(con):
     print("  (Total R = sum of all trade R-multiples. Balances edge size vs frequency.)")
     print()
 
-    symbols = [r[0] for r in con.execute(
-        "SELECT DISTINCT symbol FROM orb_outcomes ORDER BY symbol"
-    ).fetchall()]
+    symbols = [r[0] for r in con.execute("SELECT DISTINCT symbol FROM orb_outcomes ORDER BY symbol").fetchall()]
 
     best_rows = []
 
     for sym in symbols:
-        sessions = [r[0] for r in con.execute(
-            "SELECT DISTINCT orb_label FROM orb_outcomes WHERE symbol = ? ORDER BY orb_label",
-            [sym]
-        ).fetchall()]
+        sessions = [
+            r[0]
+            for r in con.execute(
+                "SELECT DISTINCT orb_label FROM orb_outcomes WHERE symbol = ? ORDER BY orb_label", [sym]
+            ).fetchall()
+        ]
 
         for sess in sessions:
             size_col = f"orb_{sess}_size"
@@ -304,16 +316,20 @@ def section_4_optimal_gate_per_session(con):
                 try:
                     if gate == 0:
                         # No filter
-                        row = con.execute(f"""
+                        row = con.execute(
+                            f"""
                             SELECT COUNT(*) as n,
                                    ROUND(AVG(o.pnl_r), 4) as avg_r,
                                    ROUND(SUM(o.pnl_r), 1) as total_r
                             FROM orb_outcomes o
                             WHERE o.symbol = ? AND o.orb_label = ?
                               AND o.outcome IN ('win', 'loss')
-                        """, [sym, sess]).fetchone()
+                        """,
+                            [sym, sess],
+                        ).fetchone()
                     else:
-                        row = con.execute(f"""
+                        row = con.execute(
+                            f"""
                             SELECT COUNT(*) as n,
                                    ROUND(AVG(o.pnl_r), 4) as avg_r,
                                    ROUND(SUM(o.pnl_r), 1) as total_r
@@ -322,7 +338,9 @@ def section_4_optimal_gate_per_session(con):
                             WHERE o.symbol = ? AND o.orb_label = ?
                               AND o.outcome IN ('win', 'loss')
                               AND d.{size_col} >= ?
-                        """, [sym, sess, float(gate)]).fetchone()
+                        """,
+                            [sym, sess, float(gate)],
+                        ).fetchone()
 
                     if row and row[0] and row[0] >= 10:
                         n = row[0]
@@ -340,15 +358,9 @@ def section_4_optimal_gate_per_session(con):
                     continue
 
             if best_gate and best_total_r > 0:
-                best_rows.append((
-                    sym, sess, best_gate,
-                    best_n, f"{best_avg_r:+.4f}", f"{best_total_r:+.1f}"
-                ))
+                best_rows.append((sym, sess, best_gate, best_n, f"{best_avg_r:+.4f}", f"{best_total_r:+.1f}"))
 
-    print_table(
-        ["Symbol", "Session", "Best Gate", "N", "Avg R", "Total R"],
-        best_rows
-    )
+    print_table(["Symbol", "Session", "Best Gate", "N", "Avg R", "Total R"], best_rows)
 
     print()
     print("  NOTE: 'Best Gate' maximizes Total R (edge * frequency).")
@@ -364,20 +376,24 @@ def section_5_size_vs_direction(con):
     print("  ================================================================")
     print()
 
-    symbols = [r[0] for r in con.execute(
-        "SELECT DISTINCT symbol FROM orb_outcomes ORDER BY symbol"
-    ).fetchall()]
+    symbols = [r[0] for r in con.execute("SELECT DISTINCT symbol FROM orb_outcomes ORDER BY symbol").fetchall()]
 
     for sym in symbols:
         # Pick the most active sessions
-        sessions = [r[0] for r in con.execute("""
+        sessions = [
+            r[0]
+            for r in con.execute(
+                """
             SELECT orb_label FROM orb_outcomes
             WHERE symbol = ? AND outcome IN ('win', 'loss')
             GROUP BY orb_label
             HAVING COUNT(*) >= 100
             ORDER BY COUNT(*) DESC
             LIMIT 4
-        """, [sym]).fetchall()]
+        """,
+                [sym],
+            ).fetchall()
+        ]
 
         if not sessions:
             continue
@@ -388,7 +404,8 @@ def section_5_size_vs_direction(con):
             size_col = f"orb_{sess}_size"
             dir_col = f"orb_{sess}_break_dir"
             try:
-                rows = con.execute(f"""
+                rows = con.execute(
+                    f"""
                     SELECT
                         CASE WHEN d.{size_col} >= 5.0 THEN 'LARGE' ELSE 'SMALL' END as sz,
                         UPPER(d.{dir_col}) as dir,
@@ -403,7 +420,9 @@ def section_5_size_vs_direction(con):
                       AND d.{size_col} IS NOT NULL
                     GROUP BY sz, dir
                     ORDER BY sz, dir
-                """, [sym, sess]).fetchall()
+                """,
+                    [sym, sess],
+                ).fetchall()
             except Exception:
                 continue
 

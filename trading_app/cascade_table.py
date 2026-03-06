@@ -18,6 +18,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 import duckdb
 
+
 def build_cascade_table(
     db_path: Path | str,
     orb_minutes: int = 5,
@@ -50,7 +51,8 @@ def build_cascade_table(
     con = duckdb.connect(str(db_path), read_only=True)
     try:
         for sess_a, sess_b in pairs:
-            rows = con.execute("""
+            rows = con.execute(
+                """
                 SELECT
                     da.orb_{sa}_outcome AS outcome_a,
                     da.orb_{sa}_break_dir AS dir_a,
@@ -63,7 +65,9 @@ def build_cascade_table(
                   AND da.orb_{sb}_outcome IS NOT NULL
                   AND da.orb_{sa}_break_dir IS NOT NULL
                   AND da.orb_{sb}_break_dir IS NOT NULL
-            """.format(sa=sess_a, sb=sess_b), [orb_minutes]).fetchall()
+            """.format(sa=sess_a, sb=sess_b),
+                [orb_minutes],
+            ).fetchall()
 
             # Group by (outcome_a, direction_relation)
             groups: dict[tuple[str, str], list[str]] = {}
@@ -94,6 +98,7 @@ def build_cascade_table(
         con.close()
 
     return table
+
 
 def lookup_cascade(
     table: dict,

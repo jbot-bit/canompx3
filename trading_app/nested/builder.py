@@ -36,6 +36,7 @@ from trading_app.nested.schema import init_nested_schema
 # Entry resolution for nested ORB: always 5-minute bars
 ENTRY_RESOLUTION = 5
 
+
 def resample_to_5m(bars_1m_df: pd.DataFrame, after_ts: datetime) -> pd.DataFrame:
     """Resample post-ORB 1m bars to 5m OHLCV.
 
@@ -50,9 +51,7 @@ def resample_to_5m(bars_1m_df: pd.DataFrame, after_ts: datetime) -> pd.DataFrame
         DataFrame with same columns, timestamps floored to 5m boundaries.
         Empty DataFrame if no bars after after_ts.
     """
-    post_orb = bars_1m_df[
-        bars_1m_df["ts_utc"] > pd.Timestamp(after_ts)
-    ].copy()
+    post_orb = bars_1m_df[bars_1m_df["ts_utc"] > pd.Timestamp(after_ts)].copy()
 
     if post_orb.empty:
         return pd.DataFrame(columns=["ts_utc", "open", "high", "low", "close", "volume"])
@@ -72,6 +71,7 @@ def resample_to_5m(bars_1m_df: pd.DataFrame, after_ts: datetime) -> pd.DataFrame
 
     bars_5m = bars_5m.rename(columns={"bucket": "ts_utc"})
     return bars_5m
+
 
 def _verify_e3_sub_bar_fill(
     bars_1m_df: pd.DataFrame,
@@ -98,10 +98,7 @@ def _verify_e3_sub_bar_fill(
     bucket_start = pd.Timestamp(entry_ts)
     bucket_end = bucket_start + pd.Timedelta(minutes=5)
 
-    bars_in_candle = bars_1m_df[
-        (bars_1m_df["ts_utc"] >= bucket_start)
-        & (bars_1m_df["ts_utc"] < bucket_end)
-    ]
+    bars_in_candle = bars_1m_df[(bars_1m_df["ts_utc"] >= bucket_start) & (bars_1m_df["ts_utc"] < bucket_end)]
 
     if bars_in_candle.empty:
         return False
@@ -112,6 +109,7 @@ def _verify_e3_sub_bar_fill(
     else:
         # Short E3: limit sell at orb_low. Need high >= entry_price
         return bool((bars_in_candle["high"].values >= entry_price).any())
+
 
 def build_nested_outcomes(
     db_path: Path | None = None,
@@ -147,6 +145,7 @@ def build_nested_outcomes(
     con = duckdb.connect(str(db_path))
     try:
         from pipeline.db_config import configure_connection
+
         configure_connection(con, writing=True)
 
         if not dry_run:
@@ -172,10 +171,11 @@ def build_nested_outcomes(
             # Fetch all daily_features rows for this orb_minutes
             query = f"""
                 SELECT trading_day, symbol, orb_minutes,
-                       {', '.join(
-                           f'orb_{lbl}_high, orb_{lbl}_low, orb_{lbl}_break_dir, orb_{lbl}_break_ts'
-                           for lbl in ORB_LABELS
-                       )}
+                       {
+                ", ".join(
+                    f"orb_{lbl}_high, orb_{lbl}_low, orb_{lbl}_break_dir, orb_{lbl}_break_ts" for lbl in ORB_LABELS
+                )
+            }
                 FROM daily_features
                 WHERE symbol = ? AND orb_minutes = ?
                 {date_filter}
@@ -186,14 +186,17 @@ def build_nested_outcomes(
 
             total_days = len(rows)
             if total_days == 0:
-                print(f"  No daily_features rows for orb_minutes={orb_minutes}. "
-                      "Run: python pipeline/build_daily_features.py --orb-minutes {orb_minutes}")
+                print(
+                    f"  No daily_features rows for orb_minutes={orb_minutes}. "
+                    "Run: python pipeline/build_daily_features.py --orb-minutes {orb_minutes}"
+                )
                 continue
 
             # Resume: skip days already completed (set-based gap detection)
             if resume and not dry_run:
                 completed_days = {
-                    r[0] for r in con.execute(
+                    r[0]
+                    for r in con.execute(
                         """SELECT DISTINCT trading_day FROM nested_outcomes
                            WHERE symbol = ? AND orb_minutes = ?""",
                         [instrument, orb_minutes],
@@ -201,12 +204,13 @@ def build_nested_outcomes(
                 }
                 if completed_days:
                     original_count = total_days
-                    rows = [r for r in rows
-                            if dict(zip(col_names, r))["trading_day"] not in completed_days]
+                    rows = [r for r in rows if dict(zip(col_names, r))["trading_day"] not in completed_days]
                     total_days = len(rows)
-                    print(f"  {original_count} total trading days, "
-                          f"{len(completed_days)} already completed, "
-                          f"{total_days} remaining")
+                    print(
+                        f"  {original_count} total trading days, "
+                        f"{len(completed_days)} already completed, "
+                        f"{total_days} remaining"
+                    )
                     if total_days == 0:
                         print(f"  All days already completed for orb_minutes={orb_minutes}")
                         continue
@@ -278,8 +282,13 @@ def build_nested_outcomes(
                     confirm_cache = {}
                     for cb in CONFIRM_BARS_OPTIONS:
                         confirm_cache[cb] = detect_confirm(
-                            bars_5m_df, break_ts, orb_high, orb_low,
-                            break_dir, cb, td_end,
+                            bars_5m_df,
+                            break_ts,
+                            orb_high,
+                            orb_low,
+                            break_dir,
+                            cb,
+                            td_end,
                         )
 
                     # OPTIMIZATION: cache resolve_entry per (ORB, CB, EM)
@@ -293,27 +302,32 @@ def build_nested_outcomes(
                                     continue  # E2 always CB1
                                 from trading_app.entry_rules import detect_break_touch, _resolve_e2
                                 from trading_app.config import E2_SLIPPAGE_TICKS
+
                                 touch = detect_break_touch(
-                                    bars_5m_df, orb_high=orb_high, orb_low=orb_low,
+                                    bars_5m_df,
+                                    orb_high=orb_high,
+                                    orb_low=orb_low,
                                     break_dir=break_dir,
                                     detection_window_start=break_ts,
                                     detection_window_end=td_end,
                                 )
-                                signal = _resolve_e2(touch, slippage_ticks=E2_SLIPPAGE_TICKS,
-                                                     tick_size=cost_spec.tick_size)
+                                signal = _resolve_e2(
+                                    touch, slippage_ticks=E2_SLIPPAGE_TICKS, tick_size=cost_spec.tick_size
+                                )
                                 entry_cache[(cb, em)] = signal
                                 continue
 
                             if em == "E3" and cb > 1:
                                 continue
                             signal = resolve_entry(
-                                bars_5m_df, confirm_cache[cb], em, td_end,
+                                bars_5m_df,
+                                confirm_cache[cb],
+                                em,
+                                td_end,
                             )
 
                             # E3 sub-bar fill verification
-                            if (em == "E3"
-                                    and signal.triggered
-                                    and signal.entry_ts is not None):
+                            if em == "E3" and signal.triggered and signal.entry_ts is not None:
                                 fill_ok = _verify_e3_sub_bar_fill(
                                     bars_1m_df,
                                     signal.entry_ts,
@@ -336,14 +350,28 @@ def build_nested_outcomes(
                             # No entry (not triggered or E3 fill failed)
                             if signal is None or not signal.triggered:
                                 for rr_target in RR_TARGETS:
-                                    day_batch.append([
-                                        trading_day, symbol, orb_label, orb_minutes,
-                                        ENTRY_RESOLUTION,
-                                        rr_target, cb, em,
-                                        None, None, None, None,
-                                        None, None, None, None,
-                                        None, None,
-                                    ])
+                                    day_batch.append(
+                                        [
+                                            trading_day,
+                                            symbol,
+                                            orb_label,
+                                            orb_minutes,
+                                            ENTRY_RESOLUTION,
+                                            rr_target,
+                                            cb,
+                                            em,
+                                            None,
+                                            None,
+                                            None,
+                                            None,
+                                            None,
+                                            None,
+                                            None,
+                                            None,
+                                            None,
+                                            None,
+                                        ]
+                                    )
                                     total_written += 1
                                 continue
 
@@ -354,14 +382,28 @@ def build_nested_outcomes(
 
                             if risk_points <= 0:
                                 for rr_target in RR_TARGETS:
-                                    day_batch.append([
-                                        trading_day, symbol, orb_label, orb_minutes,
-                                        ENTRY_RESOLUTION,
-                                        rr_target, cb, em,
-                                        None, None, None, None,
-                                        None, None, None, None,
-                                        None, None,
-                                    ])
+                                    day_batch.append(
+                                        [
+                                            trading_day,
+                                            symbol,
+                                            orb_label,
+                                            orb_minutes,
+                                            ENTRY_RESOLUTION,
+                                            rr_target,
+                                            cb,
+                                            em,
+                                            None,
+                                            None,
+                                            None,
+                                            None,
+                                            None,
+                                            None,
+                                            None,
+                                            None,
+                                            None,
+                                            None,
+                                        ]
+                                    )
                                     total_written += 1
                                 continue
 
@@ -376,17 +418,33 @@ def build_nested_outcomes(
                                 mae_r = round(pnl_points_to_r(cost_spec, entry_price, stop_price, 0.0), 4)
                                 mfe_r = mae_r
                                 for rr_target in RR_TARGETS:
-                                    target_price = (entry_price + risk_points * rr_target
-                                                    if break_dir == "long"
-                                                    else entry_price - risk_points * rr_target)
-                                    day_batch.append([
-                                        trading_day, symbol, orb_label, orb_minutes,
-                                        ENTRY_RESOLUTION,
-                                        rr_target, cb, em,
-                                        entry_ts, entry_price, stop_price, target_price,
-                                        "scratch", None, None, None,
-                                        mae_r, mfe_r,
-                                    ])
+                                    target_price = (
+                                        entry_price + risk_points * rr_target
+                                        if break_dir == "long"
+                                        else entry_price - risk_points * rr_target
+                                    )
+                                    day_batch.append(
+                                        [
+                                            trading_day,
+                                            symbol,
+                                            orb_label,
+                                            orb_minutes,
+                                            ENTRY_RESOLUTION,
+                                            rr_target,
+                                            cb,
+                                            em,
+                                            entry_ts,
+                                            entry_price,
+                                            stop_price,
+                                            target_price,
+                                            "scratch",
+                                            None,
+                                            None,
+                                            None,
+                                            mae_r,
+                                            mfe_r,
+                                        ]
+                                    )
                                     total_written += 1
                                 continue
 
@@ -417,23 +475,45 @@ def build_nested_outcomes(
                                     outcome_str = "scratch"
                                     max_fav = float(np.max(favorable))
                                     max_adv = float(np.max(adverse))
-                                    mae_r = round(pnl_points_to_r(cost_spec, entry_price, stop_price, max(max_adv, 0.0)), 4)
-                                    mfe_r = round(pnl_points_to_r(cost_spec, entry_price, stop_price, max(max_fav, 0.0)), 4)
-                                    day_batch.append([
-                                        trading_day, symbol, orb_label, orb_minutes,
-                                        ENTRY_RESOLUTION,
-                                        rr_target, cb, em,
-                                        entry_ts, entry_price, stop_price, target_price,
-                                        outcome_str, None, None, None,
-                                        mae_r, mfe_r,
-                                    ])
+                                    mae_r = round(
+                                        pnl_points_to_r(cost_spec, entry_price, stop_price, max(max_adv, 0.0)), 4
+                                    )
+                                    mfe_r = round(
+                                        pnl_points_to_r(cost_spec, entry_price, stop_price, max(max_fav, 0.0)), 4
+                                    )
+                                    day_batch.append(
+                                        [
+                                            trading_day,
+                                            symbol,
+                                            orb_label,
+                                            orb_minutes,
+                                            ENTRY_RESOLUTION,
+                                            rr_target,
+                                            cb,
+                                            em,
+                                            entry_ts,
+                                            entry_price,
+                                            stop_price,
+                                            target_price,
+                                            outcome_str,
+                                            None,
+                                            None,
+                                            None,
+                                            mae_r,
+                                            mfe_r,
+                                        ]
+                                    )
                                 else:
                                     first_hit_idx = int(np.argmax(any_hit))
                                     exit_ts_val = post_entry.iloc[first_hit_idx]["ts_utc"].to_pydatetime()
-                                    max_fav = float(np.max(favorable[:first_hit_idx + 1]))
-                                    max_adv = float(np.max(adverse[:first_hit_idx + 1]))
-                                    mae_r = round(pnl_points_to_r(cost_spec, entry_price, stop_price, max(max_adv, 0.0)), 4)
-                                    mfe_r = round(pnl_points_to_r(cost_spec, entry_price, stop_price, max(max_fav, 0.0)), 4)
+                                    max_fav = float(np.max(favorable[: first_hit_idx + 1]))
+                                    max_adv = float(np.max(adverse[: first_hit_idx + 1]))
+                                    mae_r = round(
+                                        pnl_points_to_r(cost_spec, entry_price, stop_price, max(max_adv, 0.0)), 4
+                                    )
+                                    mfe_r = round(
+                                        pnl_points_to_r(cost_spec, entry_price, stop_price, max(max_fav, 0.0)), 4
+                                    )
 
                                     if hit_target[first_hit_idx] and hit_stop[first_hit_idx]:
                                         outcome_str = "loss"
@@ -443,21 +523,36 @@ def build_nested_outcomes(
                                         outcome_str = "win"
                                         exit_price = target_price
                                         pnl_r = round(
-                                            to_r_multiple(cost_spec, entry_price, stop_price,
-                                                          risk_points * rr_target), 4)
+                                            to_r_multiple(cost_spec, entry_price, stop_price, risk_points * rr_target),
+                                            4,
+                                        )
                                     else:
                                         outcome_str = "loss"
                                         exit_price = stop_price
                                         pnl_r = -1.0
 
-                                    day_batch.append([
-                                        trading_day, symbol, orb_label, orb_minutes,
-                                        ENTRY_RESOLUTION,
-                                        rr_target, cb, em,
-                                        entry_ts, entry_price, stop_price, target_price,
-                                        outcome_str, exit_ts_val, exit_price, pnl_r,
-                                        mae_r, mfe_r,
-                                    ])
+                                    day_batch.append(
+                                        [
+                                            trading_day,
+                                            symbol,
+                                            orb_label,
+                                            orb_minutes,
+                                            ENTRY_RESOLUTION,
+                                            rr_target,
+                                            cb,
+                                            em,
+                                            entry_ts,
+                                            entry_price,
+                                            stop_price,
+                                            target_price,
+                                            outcome_str,
+                                            exit_ts_val,
+                                            exit_price,
+                                            pnl_r,
+                                            mae_r,
+                                            mfe_r,
+                                        ]
+                                    )
 
                                 total_written += 1
 
@@ -500,26 +595,27 @@ def build_nested_outcomes(
     finally:
         con.close()
 
+
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Build nested ORB outcomes (wider range + 5m entry bars)"
-    )
+    parser = argparse.ArgumentParser(description="Build nested ORB outcomes (wider range + 5m entry bars)")
     parser.add_argument("--instrument", default="MGC", help="Instrument symbol")
     parser.add_argument("--start", type=date.fromisoformat, help="Start date (YYYY-MM-DD)")
     parser.add_argument("--end", type=date.fromisoformat, help="End date (YYYY-MM-DD)")
     parser.add_argument(
-        "--orb-minutes", type=int, nargs="+", default=[15, 30],
+        "--orb-minutes",
+        type=int,
+        nargs="+",
+        default=[15, 30],
         help="ORB duration(s) to build (default: 15 30)",
     )
     parser.add_argument("--dry-run", action="store_true", help="Validate without writing")
-    parser.add_argument("--resume", action="store_true",
-                        help="Resume from last completed day (skip already-built days)")
-    parser.add_argument("--audit", action="store_true",
-                        help="Run spot-check audit after build completes")
-    parser.add_argument("--audit-days", type=int, default=10,
-                        help="Number of random days to audit (default: 10)")
+    parser.add_argument(
+        "--resume", action="store_true", help="Resume from last completed day (skip already-built days)"
+    )
+    parser.add_argument("--audit", action="store_true", help="Run spot-check audit after build completes")
+    parser.add_argument("--audit-days", type=int, default=10, help="Number of random days to audit (default: 10)")
     args = parser.parse_args()
 
     total = build_nested_outcomes(
@@ -534,6 +630,7 @@ def main():
     if args.audit and not args.dry_run and total > 0:
         print("\n--- Running post-build audit ---")
         from trading_app.nested.audit_outcomes import audit_nested_outcomes
+
         results = audit_nested_outcomes(
             instrument=args.instrument,
             n_days=args.audit_days,
@@ -543,6 +640,7 @@ def main():
         if results["n_mismatch"] > 0:
             print(f"\nWARNING: {results['n_mismatch']} audit mismatches found!")
             sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

@@ -7,6 +7,7 @@ structural differences between instruments.
 
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import duckdb
@@ -21,9 +22,17 @@ from trading_app.ml.features import transform_to_features
 from trading_app.config import ALL_FILTERS
 
 SESSION_ORDER = [
-    "CME_REOPEN", "TOKYO_OPEN", "BRISBANE_1025", "SINGAPORE_OPEN",
-    "LONDON_METALS", "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
-    "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+    "CME_REOPEN",
+    "TOKYO_OPEN",
+    "BRISBANE_1025",
+    "SINGAPORE_OPEN",
+    "LONDON_METALS",
+    "US_DATA_830",
+    "NYSE_OPEN",
+    "US_DATA_1000",
+    "COMEX_SETTLE",
+    "CME_PRECLOSE",
+    "NYSE_CLOSE",
 ]
 
 
@@ -105,24 +114,28 @@ def build_level_features(df):
         if prior_sizes:
             prior_size_ratio_max[i] = max(prior_sizes) / R
 
-    return pd.DataFrame({
-        "nearest_level_to_high_R": nearest_to_high,
-        "nearest_level_to_low_R": nearest_to_low,
-        "levels_within_1R": levels_within_1r,
-        "levels_within_2R": levels_within_2r,
-        "orb_nested_in_prior": is_nested,
-        "prior_orb_size_ratio_max": prior_size_ratio_max,
-        "prior_sessions_broken": prior_broken_count,
-        "prior_sessions_long": prior_long_count,
-        "prior_sessions_short": prior_short_count,
-    }, index=df.index)
+    return pd.DataFrame(
+        {
+            "nearest_level_to_high_R": nearest_to_high,
+            "nearest_level_to_low_R": nearest_to_low,
+            "levels_within_1R": levels_within_1r,
+            "levels_within_2R": levels_within_2r,
+            "orb_nested_in_prior": is_nested,
+            "prior_orb_size_ratio_max": prior_size_ratio_max,
+            "prior_sessions_broken": prior_broken_count,
+            "prior_sessions_long": prior_long_count,
+            "prior_sessions_short": prior_short_count,
+        },
+        index=df.index,
+    )
 
 
 def load_instrument_data(instrument):
     """Load validated-only data for an instrument."""
     con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
     configure_connection(con)
-    df = con.execute("""
+    df = con.execute(
+        """
         SELECT o.trading_day, o.symbol, o.orb_label, o.orb_minutes,
                o.entry_model, o.rr_target, o.confirm_bars, o.pnl_r, o.outcome,
                v.filter_type, d.*
@@ -136,7 +149,9 @@ def load_instrument_data(instrument):
             AND o.orb_minutes = d.orb_minutes
         WHERE o.symbol = $instrument AND o.pnl_r IS NOT NULL AND v.status = 'active'
         ORDER BY o.trading_day
-    """, {"instrument": instrument}).fetchdf()
+    """,
+        {"instrument": instrument},
+    ).fetchdf()
     con.close()
 
     # Filter + dedup
@@ -148,9 +163,7 @@ def load_instrument_data(instrument):
             keep_mask[idx] = True
     df = df[keep_mask].reset_index(drop=True)
     df = df.drop_duplicates(
-        subset=["trading_day", "orb_label", "entry_model", "rr_target",
-                "confirm_bars", "orb_minutes"],
-        keep="first"
+        subset=["trading_day", "orb_label", "entry_model", "rr_target", "confirm_bars", "orb_minutes"], keep="first"
     ).reset_index(drop=True)
     return df
 
@@ -159,9 +172,12 @@ def build_e6_features(df):
     """Build E6 feature set (clean + levels + cross-session)."""
     X = transform_to_features(df)
     orb_label_cols = [c for c in X.columns if c.startswith("orb_label_")]
-    noise_cols = [c for c in X.columns if any(c.startswith(p) for p in [
-        "gap_type_", "atr_vel_regime_", "prev_day_direction_"
-    ]) or c in ["confirm_bars", "orb_break_bar_continues", "orb_minutes"]]
+    noise_cols = [
+        c
+        for c in X.columns
+        if any(c.startswith(p) for p in ["gap_type_", "atr_vel_regime_", "prev_day_direction_"])
+        or c in ["confirm_bars", "orb_break_bar_continues", "orb_minutes"]
+    ]
     X_clean = X.drop(columns=[c for c in orb_label_cols + noise_cols if c in X.columns])
 
     level_feats = build_level_features(df)
@@ -173,9 +189,9 @@ def build_e6_features(df):
 
 def run_deep_dive(instrument, optimal_threshold):
     """Run deep analysis for one instrument."""
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"  DEEP DIVE — {instrument} (optimal t={optimal_threshold})")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
 
     df = load_instrument_data(instrument)
     print(f"Validated outcomes: {len(df):,}")
@@ -199,8 +215,10 @@ def run_deep_dive(instrument, optimal_threshold):
         has_levels = (level_feats.loc[smask, "nearest_level_to_high_R"] > -999).sum()
         total = smask.sum()
         avg_broken = level_feats.loc[smask, "prior_sessions_broken"].mean()
-        print(f"  {session:<20} levels: {has_levels:>5}/{total:>5} ({has_levels/total:.0%}) "
-              f"avg_prior_broken: {avg_broken:.2f}")
+        print(
+            f"  {session:<20} levels: {has_levels:>5}/{total:>5} ({has_levels / total:.0%}) "
+            f"avg_prior_broken: {avg_broken:.2f}"
+        )
 
     # Train and evaluate
     n_train = int(len(X_full) * 0.8)
@@ -211,9 +229,13 @@ def run_deep_dive(instrument, optimal_threshold):
     pnl_test = pnl_r[n_train:]
 
     rf_params = dict(
-        n_estimators=500, max_depth=6, min_samples_leaf=100,
-        max_features="sqrt", class_weight="balanced",
-        random_state=42, n_jobs=-1,
+        n_estimators=500,
+        max_depth=6,
+        min_samples_leaf=100,
+        max_features="sqrt",
+        class_weight="balanced",
+        random_state=42,
+        n_jobs=-1,
     )
 
     rf = RandomForestClassifier(**rf_params)
@@ -237,7 +259,7 @@ def run_deep_dive(instrument, optimal_threshold):
         if names[i] in level_feats.columns:
             marker = " [LEVEL/CROSS]"
         bucket = "SIGNAL" if importances[i] >= 0.03 else ("WEAK" if importances[i] >= 0.01 else "NOISE")
-        print(f"  {rank+1:>2}. {names[i]:<35} {importances[i]:6.2%}  {bucket}{marker}")
+        print(f"  {rank + 1:>2}. {names[i]:<35} {importances[i]:6.2%}  {bucket}{marker}")
 
     # Per-session at optimal threshold
     meta_test = df.iloc[n_train:][["trading_day", "orb_label", "pnl_r"]].copy()
@@ -267,13 +289,14 @@ def run_deep_dive(instrument, optimal_threshold):
         base_avg = s_pnl.mean()
         filt_avg = s_pnl[kept].mean()
         label = "HELPS" if filt_total >= base_total else "HURTS"
-        print(f"  {label}: {session:<20} N={smask.sum():>5} Kept={kept.sum():>5} "
-              f"Skip={1-kept.sum()/smask.sum():>5.1%} "
-              f"BaseR={base_total:>+8.2f} FiltR={filt_total:>+8.2f} "
-              f"Delta={filt_total-base_total:>+8.2f}")
+        print(
+            f"  {label}: {session:<20} N={smask.sum():>5} Kept={kept.sum():>5} "
+            f"Skip={1 - kept.sum() / smask.sum():>5.1%} "
+            f"BaseR={base_total:>+8.2f} FiltR={filt_total:>+8.2f} "
+            f"Delta={filt_total - base_total:>+8.2f}"
+        )
 
-    print(f"\n  TOTAL: BaseR={total_base:>+8.2f} FiltR={total_filt:>+8.2f} "
-          f"Delta={total_filt-total_base:>+8.2f}")
+    print(f"\n  TOTAL: BaseR={total_base:>+8.2f} FiltR={total_filt:>+8.2f} Delta={total_filt - total_base:>+8.2f}")
 
     # Year-by-year stability check
     print(f"\nYear-by-year stability at t={t}:")
@@ -288,21 +311,32 @@ def run_deep_dive(instrument, optimal_threshold):
         base_r = y_pnl.sum()
         filt_r = y_pnl[kept].sum() if kept.sum() > 0 else 0
         label = "+" if filt_r >= base_r else "-"
-        print(f"  {year}: N={ymask.sum():>5} Kept={kept.sum():>5} "
-              f"BaseR={base_r:>+8.2f} FiltR={filt_r:>+8.2f} "
-              f"Delta={filt_r-base_r:>+8.2f} {label}")
+        print(
+            f"  {year}: N={ymask.sum():>5} Kept={kept.sum():>5} "
+            f"BaseR={base_r:>+8.2f} FiltR={filt_r:>+8.2f} "
+            f"Delta={filt_r - base_r:>+8.2f} {label}"
+        )
 
     # Probability distribution analysis
     print(f"\nProbability distribution:")
-    for bucket_lo, bucket_hi in [(0.0, 0.3), (0.3, 0.4), (0.4, 0.45),
-                                  (0.45, 0.50), (0.50, 0.55), (0.55, 0.60),
-                                  (0.60, 0.70), (0.70, 1.0)]:
+    for bucket_lo, bucket_hi in [
+        (0.0, 0.3),
+        (0.3, 0.4),
+        (0.4, 0.45),
+        (0.45, 0.50),
+        (0.50, 0.55),
+        (0.55, 0.60),
+        (0.60, 0.70),
+        (0.70, 1.0),
+    ]:
         bmask = (y_prob >= bucket_lo) & (y_prob < bucket_hi) & valid
         if bmask.sum() < 5:
             continue
         bucket_pnl = pnl_test[bmask]
-        print(f"  P[{bucket_lo:.2f}-{bucket_hi:.2f}): N={bmask.sum():>5} "
-              f"avgR={bucket_pnl.mean():>+.4f} WR={( bucket_pnl > 0).mean():>5.1%}")
+        print(
+            f"  P[{bucket_lo:.2f}-{bucket_hi:.2f}): N={bmask.sum():>5} "
+            f"avgR={bucket_pnl.mean():>+.4f} WR={(bucket_pnl > 0).mean():>5.1%}"
+        )
 
     return {
         "instrument": instrument,
@@ -328,9 +362,9 @@ if __name__ == "__main__":
         results.append(r)
 
     # Cross-instrument comparison
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"  CROSS-INSTRUMENT FEATURE COMPARISON")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
 
     # Find all unique features
     all_features = set()

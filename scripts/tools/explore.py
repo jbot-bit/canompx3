@@ -16,9 +16,11 @@ from datetime import datetime
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_DB = PROJECT_ROOT / "gold.db"
 
+
 def get_db_path():
     """Get DB path from args or default."""
     import os
+
     for i, arg in enumerate(sys.argv):
         if arg == "--db" and i + 1 < len(sys.argv):
             return Path(sys.argv[i + 1])
@@ -30,7 +32,8 @@ def get_db_path():
 
 def clear_screen():
     import os
-    os.system('cls' if os.name == 'nt' else 'clear')
+
+    os.system("cls" if os.name == "nt" else "clear")
 
 
 def pause():
@@ -80,16 +83,12 @@ def print_table(headers, rows, col_widths=None):
 
 def pick_instrument(con):
     """Let user pick an instrument from what's in the DB."""
-    result = con.execute(
-        "SELECT DISTINCT symbol FROM orb_outcomes ORDER BY symbol"
-    ).fetchall()
+    result = con.execute("SELECT DISTINCT symbol FROM orb_outcomes ORDER BY symbol").fetchall()
     symbols = [r[0] for r in result]
 
     if not symbols:
         # Fall back to bars_1m
-        result = con.execute(
-            "SELECT DISTINCT symbol FROM bars_1m ORDER BY symbol"
-        ).fetchall()
+        result = con.execute("SELECT DISTINCT symbol FROM bars_1m ORDER BY symbol").fetchall()
         symbols = [r[0] for r in result]
 
     if not symbols:
@@ -115,8 +114,7 @@ def pick_instrument(con):
 def pick_session(con, instrument):
     """Let user pick a session from what's in the DB."""
     result = con.execute(
-        "SELECT DISTINCT orb_label FROM orb_outcomes WHERE symbol = ? ORDER BY orb_label",
-        [instrument]
+        "SELECT DISTINCT orb_label FROM orb_outcomes WHERE symbol = ? ORDER BY orb_label", [instrument]
     ).fetchall()
     sessions = [r[0] for r in result]
 
@@ -143,6 +141,7 @@ def pick_session(con, instrument):
 # ============================================================
 # MENU OPTIONS
 # ============================================================
+
 
 def overview(con):
     """What data do I have?"""
@@ -198,7 +197,8 @@ def win_rate_by_session(con):
     if not instrument:
         return
 
-    rows = con.execute("""
+    rows = con.execute(
+        """
         SELECT orb_label as session,
                COUNT(*) as trades,
                ROUND(AVG(CASE WHEN outcome='win' THEN 100.0 ELSE 0.0 END), 1) as win_rate,
@@ -208,7 +208,9 @@ def win_rate_by_session(con):
         WHERE symbol = ? AND outcome IN ('win', 'loss')
         GROUP BY orb_label
         ORDER BY orb_label
-    """, [instrument]).fetchall()
+    """,
+        [instrument],
+    ).fetchall()
 
     print(f"  Instrument: {instrument}")
     print(f"  (All RR targets and confirm bars combined)")
@@ -232,7 +234,8 @@ def best_rr_target(con):
         where += " AND orb_label = ?"
         params.append(session)
 
-    rows = con.execute(f"""
+    rows = con.execute(
+        f"""
         SELECT rr_target as RR,
                COUNT(*) as trades,
                ROUND(AVG(CASE WHEN outcome='win' THEN 100.0 ELSE 0.0 END), 1) as win_rate,
@@ -242,7 +245,9 @@ def best_rr_target(con):
         WHERE {where}
         GROUP BY rr_target
         ORDER BY rr_target
-    """, params).fetchall()
+    """,
+        params,
+    ).fetchall()
 
     label = f"{instrument} / {session or 'ALL sessions'}"
     print(f"  {label}")
@@ -266,7 +271,8 @@ def entry_model_comparison(con):
         where += " AND orb_label = ?"
         params.append(session)
 
-    rows = con.execute(f"""
+    rows = con.execute(
+        f"""
         SELECT entry_model as model,
                COUNT(*) as trades,
                ROUND(AVG(CASE WHEN outcome='win' THEN 100.0 ELSE 0.0 END), 1) as win_rate,
@@ -276,7 +282,9 @@ def entry_model_comparison(con):
         WHERE {where}
         GROUP BY entry_model
         ORDER BY entry_model
-    """, params).fetchall()
+    """,
+        params,
+    ).fetchall()
 
     label = f"{instrument} / {session or 'ALL sessions'}"
     print(f"  {label}")
@@ -300,7 +308,8 @@ def confirm_bars_comparison(con):
         where += " AND orb_label = ?"
         params.append(session)
 
-    rows = con.execute(f"""
+    rows = con.execute(
+        f"""
         SELECT confirm_bars as CB,
                COUNT(*) as trades,
                ROUND(AVG(CASE WHEN outcome='win' THEN 100.0 ELSE 0.0 END), 1) as win_rate,
@@ -310,7 +319,9 @@ def confirm_bars_comparison(con):
         WHERE {where}
         GROUP BY confirm_bars
         ORDER BY confirm_bars
-    """, params).fetchall()
+    """,
+        params,
+    ).fetchall()
 
     label = f"{instrument} / {session or 'ALL sessions'}"
     print(f"  {label}")
@@ -334,7 +345,8 @@ def yearly_breakdown(con):
         where += " AND orb_label = ?"
         params.append(session)
 
-    rows = con.execute(f"""
+    rows = con.execute(
+        f"""
         SELECT YEAR(trading_day) as year,
                COUNT(*) as trades,
                ROUND(AVG(CASE WHEN outcome='win' THEN 100.0 ELSE 0.0 END), 1) as win_rate,
@@ -344,7 +356,9 @@ def yearly_breakdown(con):
         WHERE {where}
         GROUP BY YEAR(trading_day)
         ORDER BY YEAR(trading_day)
-    """, params).fetchall()
+    """,
+        params,
+    ).fetchall()
 
     label = f"{instrument} / {session or 'ALL sessions'}"
     print(f"  {label}")
@@ -369,11 +383,12 @@ def long_vs_short(con):
         params.append(session)
 
     # Join with daily_features to get break_dir
-    rows = con.execute(f"""
+    rows = con.execute(
+        f"""
         SELECT
             CASE
-                WHEN d.orb_{session or '0900'}_break_dir = 'long' THEN 'LONG'
-                WHEN d.orb_{session or '0900'}_break_dir = 'short' THEN 'SHORT'
+                WHEN d.orb_{session or "0900"}_break_dir = 'long' THEN 'LONG'
+                WHEN d.orb_{session or "0900"}_break_dir = 'short' THEN 'SHORT'
                 ELSE 'UNKNOWN'
             END as direction,
             COUNT(*) as trades,
@@ -384,7 +399,9 @@ def long_vs_short(con):
         WHERE {where}
         GROUP BY direction
         ORDER BY direction
-    """, params).fetchall()
+    """,
+        params,
+    ).fetchall()
 
     label = f"{instrument} / {session or '0900'}"
     print(f"  {label}")
@@ -408,11 +425,15 @@ def outcome_distribution(con):
         where += " AND orb_label = ?"
         params.append(session)
 
-    total = con.execute(f"""
+    total = con.execute(
+        f"""
         SELECT COUNT(*) FROM orb_outcomes WHERE {where}
-    """, params).fetchone()[0]
+    """,
+        params,
+    ).fetchone()[0]
 
-    rows = con.execute(f"""
+    rows = con.execute(
+        f"""
         SELECT outcome,
                COUNT(*) as count,
                ROUND(COUNT(*) * 100.0 / {total}, 1) as pct,
@@ -421,7 +442,9 @@ def outcome_distribution(con):
         WHERE {where}
         GROUP BY outcome
         ORDER BY count DESC
-    """, params).fetchall()
+    """,
+        params,
+    ).fetchall()
 
     label = f"{instrument} / {session or 'ALL sessions'}"
     print(f"  {label} ({total:,} total outcomes)")
@@ -445,7 +468,8 @@ def best_combos(con):
         where += " AND orb_label = ?"
         params.append(session)
 
-    rows = con.execute(f"""
+    rows = con.execute(
+        f"""
         SELECT orb_label as sess,
                entry_model as EM,
                confirm_bars as CB,
@@ -459,7 +483,9 @@ def best_combos(con):
         HAVING COUNT(*) >= 30
         ORDER BY AVG(pnl_r) DESC
         LIMIT 10
-    """, params).fetchall()
+    """,
+        params,
+    ).fetchall()
 
     label = f"{instrument} / {session or 'ALL sessions'} (min 30 trades)"
     print(f"  {label}")
@@ -483,7 +509,8 @@ def worst_combos(con):
         where += " AND orb_label = ?"
         params.append(session)
 
-    rows = con.execute(f"""
+    rows = con.execute(
+        f"""
         SELECT orb_label as sess,
                entry_model as EM,
                confirm_bars as CB,
@@ -497,7 +524,9 @@ def worst_combos(con):
         HAVING COUNT(*) >= 30
         ORDER BY AVG(pnl_r) ASC
         LIMIT 10
-    """, params).fetchall()
+    """,
+        params,
+    ).fetchall()
 
     label = f"{instrument} / {session or 'ALL sessions'} (min 30 trades)"
     print(f"  {label}")
@@ -540,7 +569,9 @@ def full_rundown(con):
             actions.append(f"Run outcome builder for {sym}")
         elif od["days"] < bd["days"] * 0.5:
             gap_pct = round((1 - od["days"] / bd["days"]) * 100)
-            issues.append(f"  !! {sym}: Outcomes cover only {od['days']}/{bd['days']} bar days ({gap_pct}% gap). Rebuild needed.")
+            issues.append(
+                f"  !! {sym}: Outcomes cover only {od['days']}/{bd['days']} bar days ({gap_pct}% gap). Rebuild needed."
+            )
             actions.append(f"Rebuild outcomes for {sym} (missing {gap_pct}% of available data)")
         else:
             good.append(f"  OK {sym}: {od['days']} days of outcomes, {bd['days']} days of bars")
@@ -552,7 +583,8 @@ def full_rundown(con):
     # ── 2. WIN RATE BY SESSION ──
     print("  [2/7] Analyzing win rates by session...")
     for sym in out_dict:
-        sess_rows = con.execute("""
+        sess_rows = con.execute(
+            """
             SELECT orb_label,
                    COUNT(*) as n,
                    ROUND(AVG(CASE WHEN outcome='win' THEN 100.0 ELSE 0.0 END), 1) as wr,
@@ -560,27 +592,36 @@ def full_rundown(con):
             FROM orb_outcomes
             WHERE symbol = ? AND outcome IN ('win', 'loss')
             GROUP BY orb_label ORDER BY orb_label
-        """, [sym]).fetchall()
+        """,
+            [sym],
+        ).fetchall()
 
         best_sess = max(sess_rows, key=lambda r: r[3]) if sess_rows else None
         worst_sess = min(sess_rows, key=lambda r: r[3]) if sess_rows else None
 
         if best_sess and best_sess[3] > 0:
-            good.append(f"  OK {sym} best session: {best_sess[0]} (avg R = {best_sess[3]:+.4f}, WR = {best_sess[2]}%, N = {best_sess[1]})")
+            good.append(
+                f"  OK {sym} best session: {best_sess[0]} (avg R = {best_sess[3]:+.4f}, WR = {best_sess[2]}%, N = {best_sess[1]})"
+            )
         if worst_sess and worst_sess[3] < -0.05:
-            issues.append(f"  !! {sym} worst session: {worst_sess[0]} (avg R = {worst_sess[3]:+.4f}, WR = {worst_sess[2]}%, N = {worst_sess[1]}) — consistently losing money")
+            issues.append(
+                f"  !! {sym} worst session: {worst_sess[0]} (avg R = {worst_sess[3]:+.4f}, WR = {worst_sess[2]}%, N = {worst_sess[1]}) — consistently losing money"
+            )
 
     # ── 3. BEST RR TARGETS ──
     print("  [3/7] Finding best RR targets...")
     for sym in out_dict:
-        rr_rows = con.execute("""
+        rr_rows = con.execute(
+            """
             SELECT rr_target,
                    ROUND(AVG(pnl_r), 4) as avg_r,
                    COUNT(*) as n
             FROM orb_outcomes
             WHERE symbol = ? AND outcome IN ('win', 'loss')
             GROUP BY rr_target ORDER BY rr_target
-        """, [sym]).fetchall()
+        """,
+            [sym],
+        ).fetchall()
 
         best_rr = max(rr_rows, key=lambda r: r[1]) if rr_rows else None
         worst_rr = min(rr_rows, key=lambda r: r[1]) if rr_rows else None
@@ -593,14 +634,17 @@ def full_rundown(con):
     # ── 4. E1 vs E3 ──
     print("  [4/7] Comparing entry models...")
     for sym in out_dict:
-        em_rows = con.execute("""
+        em_rows = con.execute(
+            """
             SELECT entry_model,
                    ROUND(AVG(pnl_r), 4) as avg_r,
                    COUNT(*) as n
             FROM orb_outcomes
             WHERE symbol = ? AND outcome IN ('win', 'loss')
             GROUP BY entry_model ORDER BY entry_model
-        """, [sym]).fetchall()
+        """,
+            [sym],
+        ).fetchall()
 
         if len(em_rows) >= 2:
             e1 = next((r for r in em_rows if r[0] == "E1"), None)
@@ -616,14 +660,17 @@ def full_rundown(con):
     # ── 5. YEAR-OVER-YEAR STABILITY ──
     print("  [5/7] Checking year-over-year stability...")
     for sym in out_dict:
-        yr_rows = con.execute("""
+        yr_rows = con.execute(
+            """
             SELECT YEAR(trading_day) as yr,
                    ROUND(AVG(pnl_r), 4) as avg_r,
                    COUNT(*) as n
             FROM orb_outcomes
             WHERE symbol = ? AND outcome IN ('win', 'loss')
             GROUP BY YEAR(trading_day) ORDER BY yr
-        """, [sym]).fetchall()
+        """,
+            [sym],
+        ).fetchall()
 
         if len(yr_rows) >= 2:
             rs = [r[1] for r in yr_rows]
@@ -639,16 +686,21 @@ def full_rundown(con):
     # ── 6. OUTCOME MIX ──
     print("  [6/7] Checking outcome distribution...")
     for sym in out_dict:
-        mix = con.execute("""
+        mix = con.execute(
+            """
             SELECT outcome, COUNT(*) as n
             FROM orb_outcomes WHERE symbol = ?
             GROUP BY outcome ORDER BY n DESC
-        """, [sym]).fetchall()
+        """,
+            [sym],
+        ).fetchall()
         mix_dict = {r[0]: r[1] for r in mix}
         total = sum(mix_dict.values())
         scratch_pct = round(mix_dict.get("scratch", 0) / total * 100, 1) if total > 0 else 0
         if scratch_pct > 40:
-            issues.append(f"  !! {sym}: {scratch_pct}% of outcomes are scratches (no target/stop hit). Lots of dead trades.")
+            issues.append(
+                f"  !! {sym}: {scratch_pct}% of outcomes are scratches (no target/stop hit). Lots of dead trades."
+            )
         elif scratch_pct > 25:
             good.append(f"  OK {sym}: {scratch_pct}% scratches (moderate — normal for wider RR targets)")
         else:
@@ -657,7 +709,8 @@ def full_rundown(con):
     # ── 7. TOP COMBOS CHECK ──
     print("  [7/7] Finding strongest edges...")
     for sym in out_dict:
-        top = con.execute("""
+        top = con.execute(
+            """
             SELECT orb_label, entry_model, confirm_bars, rr_target,
                    COUNT(*) as n,
                    ROUND(AVG(pnl_r), 4) as avg_r
@@ -667,7 +720,9 @@ def full_rundown(con):
             HAVING COUNT(*) >= 50
             ORDER BY AVG(pnl_r) DESC
             LIMIT 3
-        """, [sym]).fetchall()
+        """,
+            [sym],
+        ).fetchall()
 
         if top and top[0][5] > 0.02:
             for t in top:
@@ -731,8 +786,10 @@ def full_rundown(con):
     for sym in sorted(set(list(bars_dict.keys()) + list(out_dict.keys()))):
         bd = bars_dict.get(sym, {})
         od = out_dict.get(sym, {})
-        print(f"  {sym}: {bd.get('days', 0)} bar days, {od.get('days', 0)} outcome days, "
-              f"{od.get('first', '?')} to {od.get('last', '?')}")
+        print(
+            f"  {sym}: {bd.get('days', 0)} bar days, {od.get('days', 0)} outcome days, "
+            f"{od.get('first', '?')} to {od.get('last', '?')}"
+        )
 
     pause()
 
@@ -747,7 +804,7 @@ def custom_query(con):
 
     while True:
         query = input("  SQL> ").strip()
-        if query.lower() in ('back', 'exit', 'quit', 'q'):
+        if query.lower() in ("back", "exit", "quit", "q"):
             return
         if not query:
             continue
@@ -888,6 +945,7 @@ def main():
             else:
                 print("  Invalid choice.")
                 import time
+
                 time.sleep(0.5)
     finally:
         con.close()

@@ -19,20 +19,20 @@ class TestBuild5mBars:
 
         bars: list of (ts_utc_str, symbol, source_symbol, o, h, l, c, vol)
         """
-        con.executemany(
-            "INSERT INTO bars_1m VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            bars
-        )
+        con.executemany("INSERT INTO bars_1m VALUES (?, ?, ?, ?, ?, ?, ?, ?)", bars)
 
     def test_basic_aggregation(self, tmp_db):
         """5 x 1m bars at 00:00-00:04 UTC → 1 x 5m bar."""
-        self._insert_1m_bars(tmp_db, [
-            ("2024-06-03T00:00:00+00:00", "MGC", "MGCM4", 2350, 2352, 2349, 2351, 100),
-            ("2024-06-03T00:01:00+00:00", "MGC", "MGCM4", 2351, 2355, 2350, 2354, 150),
-            ("2024-06-03T00:02:00+00:00", "MGC", "MGCM4", 2354, 2356, 2353, 2355, 80),
-            ("2024-06-03T00:03:00+00:00", "MGC", "MGCM4", 2355, 2357, 2354, 2356, 120),
-            ("2024-06-03T00:04:00+00:00", "MGC", "MGCM4", 2356, 2358, 2355, 2357, 200),
-        ])
+        self._insert_1m_bars(
+            tmp_db,
+            [
+                ("2024-06-03T00:00:00+00:00", "MGC", "MGCM4", 2350, 2352, 2349, 2351, 100),
+                ("2024-06-03T00:01:00+00:00", "MGC", "MGCM4", 2351, 2355, 2350, 2354, 150),
+                ("2024-06-03T00:02:00+00:00", "MGC", "MGCM4", 2354, 2356, 2353, 2355, 80),
+                ("2024-06-03T00:03:00+00:00", "MGC", "MGCM4", 2355, 2357, 2354, 2356, 120),
+                ("2024-06-03T00:04:00+00:00", "MGC", "MGCM4", 2356, 2358, 2355, 2357, 200),
+            ],
+        )
 
         count = build_5m_bars(tmp_db, "MGC", date(2024, 6, 3), date(2024, 6, 3), dry_run=False)
         assert count == 1
@@ -43,18 +43,21 @@ class TestBuild5mBars:
         # OHLCV checks
         ts, symbol, source, o, h, l, c, vol = row
         assert symbol == "MGC"
-        assert o == 2350.0    # first open
-        assert h == 2358.0    # max high
-        assert l == 2349.0    # min low
-        assert c == 2357.0    # last close
-        assert vol == 650     # sum volume
+        assert o == 2350.0  # first open
+        assert h == 2358.0  # max high
+        assert l == 2349.0  # min low
+        assert c == 2357.0  # last close
+        assert vol == 650  # sum volume
 
     def test_idempotent(self, tmp_db):
         """Running build twice produces same result."""
-        self._insert_1m_bars(tmp_db, [
-            ("2024-06-03T00:00:00+00:00", "MGC", "MGCM4", 2350, 2352, 2349, 2351, 100),
-            ("2024-06-03T00:01:00+00:00", "MGC", "MGCM4", 2351, 2353, 2350, 2352, 150),
-        ])
+        self._insert_1m_bars(
+            tmp_db,
+            [
+                ("2024-06-03T00:00:00+00:00", "MGC", "MGCM4", 2350, 2352, 2349, 2351, 100),
+                ("2024-06-03T00:01:00+00:00", "MGC", "MGCM4", 2351, 2353, 2350, 2352, 150),
+            ],
+        )
 
         count1 = build_5m_bars(tmp_db, "MGC", date(2024, 6, 3), date(2024, 6, 3), dry_run=False)
         count2 = build_5m_bars(tmp_db, "MGC", date(2024, 6, 3), date(2024, 6, 3), dry_run=False)
@@ -66,9 +69,12 @@ class TestBuild5mBars:
 
     def test_dry_run_no_write(self, tmp_db):
         """Dry run doesn't write to database."""
-        self._insert_1m_bars(tmp_db, [
-            ("2024-06-03T00:00:00+00:00", "MGC", "MGCM4", 2350, 2352, 2349, 2351, 100),
-        ])
+        self._insert_1m_bars(
+            tmp_db,
+            [
+                ("2024-06-03T00:00:00+00:00", "MGC", "MGCM4", 2350, 2352, 2349, 2351, 100),
+            ],
+        )
 
         build_5m_bars(tmp_db, "MGC", date(2024, 6, 3), date(2024, 6, 3), dry_run=True)
 

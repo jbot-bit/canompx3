@@ -9,6 +9,7 @@ Features:
 
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import duckdb
@@ -23,9 +24,17 @@ from trading_app.ml.features import transform_to_features
 from trading_app.config import ALL_FILTERS
 
 SESSION_ORDER = [
-    "CME_REOPEN", "TOKYO_OPEN", "BRISBANE_1025", "SINGAPORE_OPEN",
-    "LONDON_METALS", "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
-    "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+    "CME_REOPEN",
+    "TOKYO_OPEN",
+    "BRISBANE_1025",
+    "SINGAPORE_OPEN",
+    "LONDON_METALS",
+    "US_DATA_830",
+    "NYSE_OPEN",
+    "US_DATA_1000",
+    "COMEX_SETTLE",
+    "CME_PRECLOSE",
+    "NYSE_CLOSE",
 ]
 
 
@@ -42,14 +51,14 @@ def build_level_features(df):
 
     # Output arrays
     nearest_to_high = np.full(n, -999.0)  # Distance to nearest prior level from ORB high (in R)
-    nearest_to_low = np.full(n, -999.0)   # Distance to nearest prior level from ORB low (in R)
-    levels_within_1r = np.zeros(n)         # Count of prior levels within 1R of ORB boundaries
-    levels_within_2r = np.zeros(n)         # Count of prior levels within 2R
-    is_nested = np.zeros(n)                # Current ORB inside a prior ORB
+    nearest_to_low = np.full(n, -999.0)  # Distance to nearest prior level from ORB low (in R)
+    levels_within_1r = np.zeros(n)  # Count of prior levels within 1R of ORB boundaries
+    levels_within_2r = np.zeros(n)  # Count of prior levels within 2R
+    is_nested = np.zeros(n)  # Current ORB inside a prior ORB
     prior_size_ratio_max = np.full(n, -999.0)  # Max(prior ORB size / current ORB size)
-    prior_broken_count = np.zeros(n)       # How many prior sessions had breaks
-    prior_long_count = np.zeros(n)         # Prior sessions with LONG breaks
-    prior_short_count = np.zeros(n)        # Prior sessions with SHORT breaks
+    prior_broken_count = np.zeros(n)  # How many prior sessions had breaks
+    prior_long_count = np.zeros(n)  # Prior sessions with LONG breaks
+    prior_short_count = np.zeros(n)  # Prior sessions with SHORT breaks
 
     for i in range(n):
         row = df.iloc[i]
@@ -124,28 +133,32 @@ def build_level_features(df):
         if prior_sizes:
             prior_size_ratio_max[i] = max(prior_sizes) / R
 
-    return pd.DataFrame({
-        "nearest_level_to_high_R": nearest_to_high,
-        "nearest_level_to_low_R": nearest_to_low,
-        "levels_within_1R": levels_within_1r,
-        "levels_within_2R": levels_within_2r,
-        "orb_nested_in_prior": is_nested,
-        "prior_orb_size_ratio_max": prior_size_ratio_max,
-        "prior_sessions_broken": prior_broken_count,
-        "prior_sessions_long": prior_long_count,
-        "prior_sessions_short": prior_short_count,
-    }, index=df.index)
+    return pd.DataFrame(
+        {
+            "nearest_level_to_high_R": nearest_to_high,
+            "nearest_level_to_low_R": nearest_to_low,
+            "levels_within_1R": levels_within_1r,
+            "levels_within_2R": levels_within_2r,
+            "orb_nested_in_prior": is_nested,
+            "prior_orb_size_ratio_max": prior_size_ratio_max,
+            "prior_sessions_broken": prior_broken_count,
+            "prior_sessions_long": prior_long_count,
+            "prior_sessions_short": prior_short_count,
+        },
+        index=df.index,
+    )
 
 
 def run_experiment(instrument="MNQ"):
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"  LEVEL PROXIMITY + CROSS-SESSION EXPERIMENT — {instrument}")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
 
     # Load raw data
     con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
     configure_connection(con)
-    df = con.execute("""
+    df = con.execute(
+        """
         SELECT o.trading_day, o.symbol, o.orb_label, o.orb_minutes,
                o.entry_model, o.rr_target, o.confirm_bars, o.pnl_r, o.outcome,
                v.filter_type, d.*
@@ -159,7 +172,9 @@ def run_experiment(instrument="MNQ"):
             AND o.orb_minutes = d.orb_minutes
         WHERE o.symbol = $instrument AND o.pnl_r IS NOT NULL AND v.status = 'active'
         ORDER BY o.trading_day
-    """, {"instrument": instrument}).fetchdf()
+    """,
+        {"instrument": instrument},
+    ).fetchdf()
     con.close()
 
     # Filter + dedup
@@ -171,9 +186,7 @@ def run_experiment(instrument="MNQ"):
             keep_mask[idx] = True
     df = df[keep_mask].reset_index(drop=True)
     df = df.drop_duplicates(
-        subset=["trading_day", "orb_label", "entry_model", "rr_target",
-                "confirm_bars", "orb_minutes"],
-        keep="first"
+        subset=["trading_day", "orb_label", "entry_model", "rr_target", "confirm_bars", "orb_minutes"], keep="first"
     ).reset_index(drop=True)
     print(f"Validated outcomes: {len(df):,}")
 
@@ -182,17 +195,24 @@ def run_experiment(instrument="MNQ"):
     level_feats = build_level_features(df)
 
     valid_levels = (level_feats["nearest_level_to_high_R"] > -999).sum()
-    print(f"  Rows with level data: {valid_levels:,}/{len(df):,} ({valid_levels/len(df):.1%})")
-    print(f"  nearest_to_high_R: mean={level_feats.loc[level_feats['nearest_level_to_high_R']>-999, 'nearest_level_to_high_R'].mean():.2f}")
+    print(f"  Rows with level data: {valid_levels:,}/{len(df):,} ({valid_levels / len(df):.1%})")
+    print(
+        f"  nearest_to_high_R: mean={level_feats.loc[level_feats['nearest_level_to_high_R'] > -999, 'nearest_level_to_high_R'].mean():.2f}"
+    )
     print(f"  levels_within_1R: mean={level_feats['levels_within_1R'].mean():.2f}")
-    print(f"  orb_nested: {level_feats['orb_nested_in_prior'].sum():.0f} ({level_feats['orb_nested_in_prior'].mean():.1%})")
+    print(
+        f"  orb_nested: {level_feats['orb_nested_in_prior'].sum():.0f} ({level_feats['orb_nested_in_prior'].mean():.1%})"
+    )
 
     # Build standard features
     X = transform_to_features(df)
     orb_label_cols = [c for c in X.columns if c.startswith("orb_label_")]
-    noise_cols = [c for c in X.columns if any(c.startswith(p) for p in [
-        "gap_type_", "atr_vel_regime_", "prev_day_direction_"
-    ]) or c in ["confirm_bars", "orb_break_bar_continues", "orb_minutes"]]
+    noise_cols = [
+        c
+        for c in X.columns
+        if any(c.startswith(p) for p in ["gap_type_", "atr_vel_regime_", "prev_day_direction_"])
+        or c in ["confirm_bars", "orb_break_bar_continues", "orb_minutes"]
+    ]
     X_clean = X.drop(columns=[c for c in orb_label_cols + noise_cols if c in X.columns])
 
     # E3: clean only
@@ -215,9 +235,13 @@ def run_experiment(instrument="MNQ"):
 
     # Best RF params from sweep
     rf_params = dict(
-        n_estimators=500, max_depth=6, min_samples_leaf=100,
-        max_features="sqrt", class_weight="balanced",
-        random_state=42, n_jobs=-1,
+        n_estimators=500,
+        max_depth=6,
+        min_samples_leaf=100,
+        max_features="sqrt",
+        class_weight="balanced",
+        random_state=42,
+        n_jobs=-1,
     )
 
     for exp_name, X_exp in [("E3_clean", X_clean), ("E6_levels+cross", X_full)]:
@@ -232,8 +256,7 @@ def run_experiment(instrument="MNQ"):
         print(f"\n--- {exp_name} ({X_exp.shape[1]} features, Big leaf d6,l100) ---")
         print(f"OOS AUC: {auc:.4f}")
         print(f"Baseline: N={baseline_n} avgR={baseline_avg:.4f} totalR={baseline_total:.2f}")
-        print(f"{'Thresh':>7} {'Kept':>6} {'Skip%':>6} {'AvgR':>8} {'TotalR':>8} "
-              f"{'WR':>6} {'vs Base':>8}")
+        print(f"{'Thresh':>7} {'Kept':>6} {'Skip%':>6} {'AvgR':>8} {'TotalR':>8} {'WR':>6} {'vs Base':>8}")
 
         for t in [0.44, 0.45, 0.46, 0.47, 0.48, 0.49, 0.50]:
             mask = (y_prob >= t) & valid
@@ -246,8 +269,7 @@ def run_experiment(instrument="MNQ"):
             wr = (kept_pnl > 0).mean()
             skip = 1 - n_kept / valid.sum()
             delta = total_r - baseline_total
-            print(f"{t:>7.2f} {n_kept:>6} {skip:>5.1%} {avg_r:>+8.4f} {total_r:>+8.2f} "
-                  f"{wr:>5.1%} {delta:>+8.2f}")
+            print(f"{t:>7.2f} {n_kept:>6} {skip:>5.1%} {avg_r:>+8.4f} {total_r:>+8.2f} {wr:>5.1%} {delta:>+8.2f}")
 
         # Feature importance — show ALL new features + top 10
         importances = rf.feature_importances_
@@ -285,14 +307,17 @@ def run_experiment(instrument="MNQ"):
             base_avg = s_pnl.mean()
             filt_avg = s_pnl[kept].mean()
             label = "HELPS" if filt_avg - base_avg > 0 else "HURTS"
-            print(f"  {label}: {session:<20} N={smask.sum():>5} Kept={kept.sum():>5} "
-                  f"Skip={1-kept.sum()/smask.sum():>5.1%} "
-                  f"Base={base_avg:>+.4f} Filt={filt_avg:>+.4f} "
-                  f"Lift={filt_avg-base_avg:>+.4f}")
+            print(
+                f"  {label}: {session:<20} N={smask.sum():>5} Kept={kept.sum():>5} "
+                f"Skip={1 - kept.sum() / smask.sum():>5.1%} "
+                f"Base={base_avg:>+.4f} Filt={filt_avg:>+.4f} "
+                f"Lift={filt_avg - base_avg:>+.4f}"
+            )
 
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--instrument", default="MNQ")
     args = parser.parse_args()

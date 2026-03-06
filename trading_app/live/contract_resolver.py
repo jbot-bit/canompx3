@@ -5,6 +5,7 @@ Calls Tradovate /contract/find, returns the nearest-expiry contract name
 (e.g. 'MGCM6', 'MNQM6'). Contracts roll quarterly — call this once per session
 start rather than caching across sessions.
 """
+
 from datetime import date
 
 import requests
@@ -45,9 +46,12 @@ def resolve_account_id(auth: TradovateAuth, demo: bool = True) -> int:
     acct_id = acct["id"]
     acct_name = acct.get("name", "unknown")
     import logging
+
     logging.getLogger(__name__).info(
         "Auto-resolved account: %s (id=%d) — %s mode",
-        acct_name, acct_id, "DEMO" if demo else "LIVE",
+        acct_name,
+        acct_id,
+        "DEMO" if demo else "LIVE",
     )
     return acct_id
 

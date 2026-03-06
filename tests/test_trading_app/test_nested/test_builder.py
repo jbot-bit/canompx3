@@ -19,28 +19,34 @@ from pipeline.cost_model import get_cost_spec
 # HELPERS
 # ============================================================================
 
+
 def _cost():
     return get_cost_spec("MGC")
+
 
 def _make_bars(start_ts, prices, interval_minutes=1):
     """Create bars_df from list of (open, high, low, close, volume) tuples."""
     rows = []
     ts = start_ts
     for o, h, l, c, v in prices:
-        rows.append({
-            "ts_utc": ts,
-            "open": float(o),
-            "high": float(h),
-            "low": float(l),
-            "close": float(c),
-            "volume": int(v),
-        })
+        rows.append(
+            {
+                "ts_utc": ts,
+                "open": float(o),
+                "high": float(h),
+                "low": float(l),
+                "close": float(c),
+                "volume": int(v),
+            }
+        )
         ts = ts + timedelta(minutes=interval_minutes)
     return pd.DataFrame(rows)
+
 
 # ============================================================================
 # resample_to_5m tests
 # ============================================================================
+
 
 class TestResampleTo5m:
     """Tests for the 1m -> 5m resampling function."""
@@ -49,13 +55,16 @@ class TestResampleTo5m:
         """5 consecutive 1m bars should produce exactly 1 5m bar."""
         # All bars at :00, :01, :02, :03, :04 -> bucket at :00
         start = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
-        bars = _make_bars(start, [
-            (100, 105, 99, 102, 10),  # :00
-            (102, 107, 101, 104, 20),  # :01
-            (104, 110, 103, 108, 30),  # :02
-            (108, 112, 106, 109, 15),  # :03
-            (109, 111, 107, 110, 25),  # :04
-        ])
+        bars = _make_bars(
+            start,
+            [
+                (100, 105, 99, 102, 10),  # :00
+                (102, 107, 101, 104, 20),  # :01
+                (104, 110, 103, 108, 30),  # :02
+                (108, 112, 106, 109, 15),  # :03
+                (109, 111, 107, 110, 25),  # :04
+            ],
+        )
 
         # after_ts before all bars
         before = datetime(2023, 12, 31, 23, 59, tzinfo=timezone.utc)
@@ -63,11 +72,11 @@ class TestResampleTo5m:
 
         assert len(result) == 1
         row = result.iloc[0]
-        assert row["open"] == 100.0   # first open
-        assert row["high"] == 112.0   # max high
-        assert row["low"] == 99.0     # min low
+        assert row["open"] == 100.0  # first open
+        assert row["high"] == 112.0  # max high
+        assert row["low"] == 99.0  # min low
         assert row["close"] == 110.0  # last close
-        assert row["volume"] == 100   # sum volume
+        assert row["volume"] == 100  # sum volume
 
     def test_ten_bars_to_two(self):
         """10 consecutive 1m bars across 2 buckets."""
@@ -131,9 +140,11 @@ class TestResampleTo5m:
         assert result.iloc[0]["open"] == 100
         assert result.iloc[0]["volume"] == 50
 
+
 # ============================================================================
 # E3 sub-bar fill verification tests
 # ============================================================================
+
 
 class TestE3SubBarFillVerification:
     """Tests for _verify_e3_sub_bar_fill()."""
@@ -159,7 +170,7 @@ class TestE3SubBarFillVerification:
             datetime(2024, 1, 5, 0, 5, tzinfo=timezone.utc),
             [
                 (2702, 2705, 2701, 2704, 10),  # low=2701 > 2700
-                (2704, 2710, 2703, 2708, 20),   # low=2703 > 2700
+                (2704, 2710, 2703, 2708, 20),  # low=2703 > 2700
             ],
         )
         assert _verify_e3_sub_bar_fill(bars, entry_ts, 2700.0, "long") is False
@@ -196,9 +207,11 @@ class TestE3SubBarFillVerification:
         )
         assert _verify_e3_sub_bar_fill(bars, entry_ts, 2700.0, "long") is False
 
+
 # ============================================================================
 # 5m outcome differs from 1m outcome
 # ============================================================================
+
 
 class TestOutcomeResolutionDifference:
     """Verify that same setup with 1m vs 5m bars can produce different results."""
@@ -247,10 +260,16 @@ class TestOutcomeResolutionDifference:
         # Risk = 2701 - 2690 = 11. Target = 2701 + 22 = 2723
         # Bar :10 high = 2724 >= 2723 -> WIN (target hit before stop on 1m)
         result_1m = compute_single_outcome(
-            bars_df=bars_1m, break_ts=break_ts,
-            orb_high=orb_high, orb_low=orb_low, break_dir="long",
-            rr_target=2.0, confirm_bars=1, trading_day_end=td_end,
-            cost_spec=_cost(), entry_model="E1",
+            bars_df=bars_1m,
+            break_ts=break_ts,
+            orb_high=orb_high,
+            orb_low=orb_low,
+            break_dir="long",
+            rr_target=2.0,
+            confirm_bars=1,
+            trading_day_end=td_end,
+            cost_spec=_cost(),
+            entry_model="E1",
         )
         assert result_1m["outcome"] == "win"
 
@@ -265,19 +284,27 @@ class TestOutcomeResolutionDifference:
         assert len(bars_5m) == 3  # verify 3 candles
 
         result_5m = compute_single_outcome(
-            bars_df=bars_5m, break_ts=break_ts,
-            orb_high=orb_high, orb_low=orb_low, break_dir="long",
-            rr_target=2.0, confirm_bars=1, trading_day_end=td_end,
-            cost_spec=_cost(), entry_model="E1",
+            bars_df=bars_5m,
+            break_ts=break_ts,
+            orb_high=orb_high,
+            orb_low=orb_low,
+            break_dir="long",
+            rr_target=2.0,
+            confirm_bars=1,
+            trading_day_end=td_end,
+            cost_spec=_cost(),
+            entry_model="E1",
         )
         assert result_5m["outcome"] == "loss"
 
         # Different outcomes prove resolution matters
         assert result_1m["outcome"] != result_5m["outcome"]
 
+
 # ============================================================================
 # Confirm bars on 5m bars
 # ============================================================================
+
 
 class TestConfirmBarsOn5m:
     """Verify confirm bar logic works correctly with 5m bars."""
@@ -293,18 +320,24 @@ class TestConfirmBarsOn5m:
             datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
             [
                 (2698, 2705, 2695, 2702, 500),  # close 2702 > 2700 -> confirm
-                (2702, 2730, 2701, 2725, 600),   # E1 entry at open = 2702
+                (2702, 2730, 2701, 2725, 600),  # E1 entry at open = 2702
                 # target at RR2.0: 2702 + (2702-2690)*2 = 2702+24 = 2726
-                (2725, 2730, 2720, 2728, 400),   # high 2730 > 2726 -> win
+                (2725, 2730, 2720, 2728, 400),  # high 2730 > 2726 -> win
             ],
             interval_minutes=5,
         )
 
         result = compute_single_outcome(
-            bars_df=bars_5m, break_ts=break_ts,
-            orb_high=orb_high, orb_low=orb_low, break_dir="long",
-            rr_target=2.0, confirm_bars=1, trading_day_end=td_end,
-            cost_spec=_cost(), entry_model="E1",
+            bars_df=bars_5m,
+            break_ts=break_ts,
+            orb_high=orb_high,
+            orb_low=orb_low,
+            break_dir="long",
+            rr_target=2.0,
+            confirm_bars=1,
+            trading_day_end=td_end,
+            cost_spec=_cost(),
+            entry_model="E1",
         )
         assert result["outcome"] == "win"
         assert result["entry_price"] == 2702.0  # next bar open after confirm

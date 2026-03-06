@@ -45,6 +45,7 @@ YEAR_RANGES = [
     ("2024-12-30", "2026-12-31"),
 ]
 
+
 def ingest_year(idx: int, start: str, end: str) -> str:
     """Ingest one date range into a temp DB. Runs in subprocess."""
     year_label = f"{idx}_{start[:4]}_{end[:4]}"
@@ -53,17 +54,24 @@ def ingest_year(idx: int, start: str, end: str) -> str:
 
     # Create schema in temp DB
     from pipeline.init_db import init_db
+
     init_db(temp_db, force=True)
 
     # Run ingestion into temp DB
     result = subprocess.run(
         [
-            PYTHON, "pipeline/ingest_dbn_daily.py",
-            "--start", start,
-            "--end", end,
-            "--db", str(temp_db),
+            PYTHON,
+            "pipeline/ingest_dbn_daily.py",
+            "--start",
+            start,
+            "--end",
+            end,
+            "--db",
+            str(temp_db),
         ],
-        capture_output=True, text=True, cwd=str(PROJECT_ROOT),
+        capture_output=True,
+        text=True,
+        cwd=str(PROJECT_ROOT),
     )
 
     if result.returncode != 0:
@@ -76,12 +84,13 @@ def ingest_year(idx: int, start: str, end: str) -> str:
 
     return f"OK {year_label}: {count:,} rows"
 
+
 def _find_temp_dbs() -> list[Path]:
     """Find temp DBs in TEMP_DIR matching indexed label pattern."""
     if not TEMP_DIR.exists():
         return []
-    return sorted(p for p in TEMP_DIR.glob("temp_*.db")
-                  if not p.name.endswith((".wal", ".tmp")))
+    return sorted(p for p in TEMP_DIR.glob("temp_*.db") if not p.name.endswith((".wal", ".tmp")))
+
 
 def merge_bars_only(db_path: Path = None, temp_dbs: list[Path] = None):
     """Merge temp DBs into gold.db -- bars_1m ONLY. Never touches trading tables."""
@@ -113,12 +122,8 @@ def merge_bars_only(db_path: Path = None, temp_dbs: list[Path] = None):
 
     # Verify
     actual = con.execute("SELECT COUNT(*) FROM bars_1m").fetchone()[0]
-    sources = con.execute(
-        "SELECT DISTINCT LEFT(source_symbol, 2) as prefix FROM bars_1m ORDER BY prefix"
-    ).fetchall()
-    nulls = con.execute(
-        "SELECT COUNT(*) FROM bars_1m WHERE source_symbol IS NULL"
-    ).fetchone()[0]
+    sources = con.execute("SELECT DISTINCT LEFT(source_symbol, 2) as prefix FROM bars_1m ORDER BY prefix").fetchall()
+    nulls = con.execute("SELECT COUNT(*) FROM bars_1m WHERE source_symbol IS NULL").fetchone()[0]
     print(f"\n  Total bars_1m:   {actual:,} (from {total:,} incl overlaps)")
     print(f"  Source prefixes: {[r[0] for r in sources]}")
     print(f"  NULL sources:    {nulls}")
@@ -128,15 +133,16 @@ def merge_bars_only(db_path: Path = None, temp_dbs: list[Path] = None):
 
     con.close()
 
+
 def build_downstream(instrument: str, start: str, end: str, db_path: Path):
     """Build bars_5m and daily_features."""
     env = {**os.environ, "DUCKDB_PATH": str(db_path)}
 
     print("\n=== BUILDING bars_5m ===")
     r = subprocess.run(
-        [PYTHON, "pipeline/build_bars_5m.py",
-         "--instrument", instrument, "--start", start, "--end", end],
-        cwd=str(PROJECT_ROOT), env=env,
+        [PYTHON, "pipeline/build_bars_5m.py", "--instrument", instrument, "--start", start, "--end", end],
+        cwd=str(PROJECT_ROOT),
+        env=env,
     )
     if r.returncode != 0:
         print("FATAL: bars_5m build failed")
@@ -144,13 +150,14 @@ def build_downstream(instrument: str, start: str, end: str, db_path: Path):
 
     print("\n=== BUILDING daily_features ===")
     r = subprocess.run(
-        [PYTHON, "pipeline/build_daily_features.py",
-         "--instrument", instrument, "--start", start, "--end", end],
-        cwd=str(PROJECT_ROOT), env=env,
+        [PYTHON, "pipeline/build_daily_features.py", "--instrument", instrument, "--start", start, "--end", end],
+        cwd=str(PROJECT_ROOT),
+        env=env,
     )
     if r.returncode != 0:
         print("FATAL: daily_features build failed")
         sys.exit(1)
+
 
 def verify(instrument: str, db_path: Path):
     """Final integrity checks."""
@@ -160,16 +167,17 @@ def verify(instrument: str, db_path: Path):
     bars = con.execute("SELECT COUNT(*) FROM bars_1m").fetchone()[0]
     bars5 = con.execute("SELECT COUNT(*) FROM bars_5m").fetchone()[0]
     feats = con.execute("SELECT COUNT(*) FROM daily_features").fetchone()[0]
-    nulls = con.execute(
-        "SELECT COUNT(*) FROM bars_1m WHERE source_symbol IS NULL"
-    ).fetchone()[0]
+    nulls = con.execute("SELECT COUNT(*) FROM bars_1m WHERE source_symbol IS NULL").fetchone()[0]
 
     # Check year coverage
-    years = con.execute("""
+    years = con.execute(
+        """
         SELECT EXTRACT(YEAR FROM ts_utc) as yr, COUNT(*) as cnt
         FROM bars_1m WHERE symbol=?
         GROUP BY yr ORDER BY yr
-    """, [instrument]).fetchall()
+    """,
+        [instrument],
+    ).fetchall()
 
     print(f"  bars_1m:        {bars:,}")
     print(f"  bars_5m:        {bars5:,}")
@@ -198,27 +206,32 @@ def verify(instrument: str, db_path: Path):
     else:
         print("\n  SOME CHECKS FAILED -- review above")
 
+
 def cleanup():
     """Remove temp DBs from TEMP_DIR."""
     for p in TEMP_DIR.glob("temp_*.db*"):
         p.unlink(missing_ok=True)
 
+
 def main():
     parser = argparse.ArgumentParser(description="Parallel GC re-ingest")
     parser.add_argument(
-        "--instrument", type=str, default="MGC",
+        "--instrument",
+        type=str,
+        default="MGC",
         help="Instrument symbol (default: MGC)",
     )
-    parser.add_argument("--start", type=str, default="2021-01-01",
-                        help="Start date YYYY-MM-DD (default: 2021-01-01)")
-    parser.add_argument("--end", type=str, default="2026-12-31",
-                        help="End date YYYY-MM-DD (default: 2026-12-31)")
+    parser.add_argument("--start", type=str, default="2021-01-01", help="Start date YYYY-MM-DD (default: 2021-01-01)")
+    parser.add_argument("--end", type=str, default="2026-12-31", help="End date YYYY-MM-DD (default: 2026-12-31)")
     parser.add_argument(
-        "--db-path", type=str, default=None,
+        "--db-path",
+        type=str,
+        default=None,
         help="Database path (default: DUCKDB_PATH env var or paths.py)",
     )
     parser.add_argument(
-        "--force-rebuild", action="store_true",
+        "--force-rebuild",
+        action="store_true",
         help="DROP ALL tables including trading_app before ingest (DANGEROUS)",
     )
     args = parser.parse_args()
@@ -235,6 +248,7 @@ def main():
             sys.exit(1)
         from pipeline.init_db import init_db
         from trading_app.db_manager import init_trading_app_schema
+
         init_db(db_path, force=True)
         init_trading_app_schema(db_path=db_path, force=True)
         print("Schema reset complete.\n")
@@ -288,7 +302,8 @@ def main():
     cleanup()
 
     elapsed = time.time() - t0
-    print(f"\n=== DONE in {elapsed/60:.1f} minutes ===")
+    print(f"\n=== DONE in {elapsed / 60:.1f} minutes ===")
+
 
 if __name__ == "__main__":
     main()

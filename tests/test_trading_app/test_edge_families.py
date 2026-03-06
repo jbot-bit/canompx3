@@ -40,7 +40,8 @@ def db_path(tmp_path):
         ("MGC_CME_REOPEN_E1_RR2.5_CB2_ORB_G5", "CME_REOPEN", 2.5, "ORB_G5", 0.45, 1.2, 120),
         ("MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G8", "CME_REOPEN", 2.0, "ORB_G8", 0.60, 1.5, 150),
     ]:
-        con.execute("""
+        con.execute(
+            """
             INSERT INTO validated_setups
             (strategy_id, instrument, orb_label, orb_minutes, rr_target,
              confirm_bars, entry_model, filter_type, sample_size,
@@ -48,7 +49,9 @@ def db_path(tmp_path):
              all_years_positive, stress_test_passed, status)
             VALUES (?, 'MGC', ?, 5, ?, 2, 'E1', ?, ?, 0.55, ?, ?,
                     3, TRUE, TRUE, 'active')
-        """, [sid, orb, rr, filt, sample, expr, shann])
+        """,
+            [sid, orb, rr, filt, sample, expr, shann],
+        )
 
     # s1 and s2: identical trade days
     for sid in [
@@ -56,9 +59,7 @@ def db_path(tmp_path):
         "MGC_CME_REOPEN_E1_RR2.5_CB2_ORB_G5",
     ]:
         for d in [date(2024, 1, 2), date(2024, 1, 3), date(2024, 1, 5)]:
-            con.execute(
-                "INSERT INTO strategy_trade_days VALUES (?, ?)", [sid, d]
-            )
+            con.execute("INSERT INTO strategy_trade_days VALUES (?, ?)", [sid, d])
 
     # s3: different trade days (stricter filter)
     for d in [date(2024, 1, 2), date(2024, 1, 5)]:
@@ -174,30 +175,33 @@ class TestRobustnessClassification:
 
     def test_classify_robust(self):
         from scripts.tools.build_edge_families import classify_family
+
         assert classify_family(5, 1.0, 0.2, 200) == "ROBUST"
         assert classify_family(10, 0.3, 0.5, 50) == "ROBUST"  # N>=5 always ROBUST
         assert classify_family(21, None, None, None) == "ROBUST"
 
     def test_classify_whitelisted(self):
         from scripts.tools.build_edge_families import classify_family
+
         # N in [3,4], ShANN>=0.8, CV<=0.5, trades>=50
         assert classify_family(3, 0.9, 0.2, 150) == "WHITELISTED"
-        assert classify_family(4, 1.5, 0.5, 50) == "WHITELISTED"   # CV=0.5 boundary
-        assert classify_family(3, 0.8, 0.0, 50) == "WHITELISTED"   # ShANN=0.8 boundary
+        assert classify_family(4, 1.5, 0.5, 50) == "WHITELISTED"  # CV=0.5 boundary
+        assert classify_family(3, 0.8, 0.0, 50) == "WHITELISTED"  # ShANN=0.8 boundary
 
     def test_classify_purged(self):
         from scripts.tools.build_edge_families import classify_family
+
         # N=1 with quality bar -> SINGLETON; without -> PURGED
         assert classify_family(1, 1.5, 0.0, 200) == "SINGLETON"  # high ShANN + trades
-        assert classify_family(1, 0.5, 0.0, 200) == "PURGED"     # ShANN too low
-        assert classify_family(1, 1.5, 0.0, 50) == "PURGED"      # trades too low
+        assert classify_family(1, 0.5, 0.0, 200) == "PURGED"  # ShANN too low
+        assert classify_family(1, 1.5, 0.0, 50) == "PURGED"  # trades too low
         # N=2 always PURGED (below WHITELIST_MIN_MEMBERS, not singleton)
-        assert classify_family(2, 1.5, 0.1, 200) == "PURGED"   # pair
+        assert classify_family(2, 1.5, 0.1, 200) == "PURGED"  # pair
         # N>=3 but fails a metric
-        assert classify_family(3, 0.5, 0.2, 100) == "PURGED"   # ShANN too low
-        assert classify_family(3, 0.9, 0.6, 100) == "PURGED"   # CV too high (>0.5)
-        assert classify_family(4, 0.9, 0.2, 30) == "PURGED"    # trades too low (<50)
-        assert classify_family(3, None, None, 50) == "PURGED"   # missing metrics
+        assert classify_family(3, 0.5, 0.2, 100) == "PURGED"  # ShANN too low
+        assert classify_family(3, 0.9, 0.6, 100) == "PURGED"  # CV too high (>0.5)
+        assert classify_family(4, 0.9, 0.2, 30) == "PURGED"  # trades too low (<50)
+        assert classify_family(3, None, None, 50) == "PURGED"  # missing metrics
 
     def test_singleton_purged_in_fixture(self, db_path):
         from scripts.tools.build_edge_families import build_edge_families
@@ -231,10 +235,10 @@ class TestRobustnessClassification:
         f2 = families[0]
         assert f2[0] in ("ROBUST", "WHITELISTED", "SINGLETON", "PURGED")
         assert f2[1] is not None  # CV computed for 2+ members
-        assert f2[2] == 0.375     # median of [0.30, 0.45]
+        assert f2[2] == 0.375  # median of [0.30, 0.45]
         assert f2[3] is not None  # avg ShANN
-        assert f2[4] == 100       # min(100, 120)
-        assert f2[5] == "CORE"    # min_trades=100 >= CORE threshold
+        assert f2[4] == 100  # min(100, 120)
+        assert f2[5] == "CORE"  # min_trades=100 >= CORE threshold
 
 
 class TestTradeTier:
@@ -242,16 +246,19 @@ class TestTradeTier:
 
     def test_classify_core(self):
         from scripts.tools.build_edge_families import classify_trade_tier
+
         assert classify_trade_tier(100) == "CORE"
         assert classify_trade_tier(500) == "CORE"
 
     def test_classify_regime(self):
         from scripts.tools.build_edge_families import classify_trade_tier
+
         assert classify_trade_tier(30) == "REGIME"
         assert classify_trade_tier(99) == "REGIME"
 
     def test_classify_invalid(self):
         from scripts.tools.build_edge_families import classify_trade_tier
+
         assert classify_trade_tier(29) == "INVALID"
         assert classify_trade_tier(0) == "INVALID"
         assert classify_trade_tier(None) == "INVALID"

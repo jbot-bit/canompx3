@@ -30,6 +30,7 @@ from pipeline.init_db import ORB_LABELS
 # US DST transitions (second Sunday Mar, first Sunday Nov)
 # =========================================================================
 
+
 class TestUsDst:
     """US Eastern DST detection."""
 
@@ -74,6 +75,7 @@ class TestUsDst:
 # UK DST transitions (last Sunday Mar, last Sunday Oct)
 # =========================================================================
 
+
 class TestUkDst:
     """UK British Summer Time detection."""
 
@@ -111,6 +113,7 @@ class TestUkDst:
 # CME_REOPEN resolver (CME Globex 5:00 PM CT)
 # =========================================================================
 
+
 class TestCmeOpenBrisbane:
     """CME Globex 5:00 PM CT -> Brisbane local time."""
 
@@ -145,6 +148,7 @@ class TestCmeOpenBrisbane:
 # TOKYO_OPEN resolver (TSE 9:00 AM JST — fixed)
 # =========================================================================
 
+
 class TestTokyoOpenBrisbane:
     """Tokyo Stock Exchange 9:00 AM JST -> Brisbane local time (always 10:00)."""
 
@@ -169,6 +173,7 @@ class TestTokyoOpenBrisbane:
 # SINGAPORE_OPEN resolver (SGX 9:00 AM SGT — fixed)
 # =========================================================================
 
+
 class TestSingaporeOpenBrisbane:
     """SGX/HKEX 9:00 AM SGT -> Brisbane local time (always 11:00)."""
 
@@ -192,6 +197,7 @@ class TestSingaporeOpenBrisbane:
 # =========================================================================
 # NYSE_OPEN resolver (NYSE 09:30 ET)
 # =========================================================================
+
 
 class TestUsEquityOpenBrisbane:
     """NYSE 09:30 ET -> Brisbane local time."""
@@ -221,6 +227,7 @@ class TestUsEquityOpenBrisbane:
 # US_DATA_830 resolver (Econ data 08:30 ET)
 # =========================================================================
 
+
 class TestUsDataOpenBrisbane:
     """US econ data 08:30 ET -> Brisbane local time."""
 
@@ -248,6 +255,7 @@ class TestUsDataOpenBrisbane:
 # =========================================================================
 # LONDON_METALS resolver (08:00 London)
 # =========================================================================
+
 
 class TestLondonOpenBrisbane:
     """London metals 08:00 LT -> Brisbane local time."""
@@ -282,14 +290,22 @@ class TestLondonOpenBrisbane:
 # Registry
 # =========================================================================
 
+
 class TestDynamicOrbResolvers:
     """DYNAMIC_ORB_RESOLVERS registry completeness."""
 
     def test_has_all_dynamic_sessions(self):
         assert set(DYNAMIC_ORB_RESOLVERS.keys()) == {
-            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
-            "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
-            "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+            "CME_REOPEN",
+            "TOKYO_OPEN",
+            "SINGAPORE_OPEN",
+            "LONDON_METALS",
+            "US_DATA_830",
+            "NYSE_OPEN",
+            "US_DATA_1000",
+            "COMEX_SETTLE",
+            "CME_PRECLOSE",
+            "NYSE_CLOSE",
             "BRISBANE_1025",
         }
 
@@ -307,6 +323,7 @@ class TestDynamicOrbResolvers:
 # SESSION_CATALOG
 # =========================================================================
 
+
 class TestSessionCatalog:
     """SESSION_CATALOG master registry validation."""
 
@@ -322,18 +339,13 @@ class TestSessionCatalog:
         validate_catalog()
 
     def test_dynamic_resolvers_built_from_catalog(self):
-        dynamic_in_catalog = {
-            label for label, entry in SESSION_CATALOG.items()
-            if entry["type"] == "dynamic"
-        }
+        dynamic_in_catalog = {label for label, entry in SESSION_CATALOG.items() if entry["type"] == "dynamic"}
         assert set(DYNAMIC_ORB_RESOLVERS.keys()) == dynamic_in_catalog
 
     def test_all_entries_are_dynamic(self):
         """After event-based rename, all sessions are dynamic (no fixed/alias)."""
         for label, entry in SESSION_CATALOG.items():
-            assert entry["type"] == "dynamic", (
-                f"{label} has type {entry['type']}, expected 'dynamic'"
-            )
+            assert entry["type"] == "dynamic", f"{label} has type {entry['type']}, expected 'dynamic'"
 
     def test_all_have_break_group(self):
         for label, entry in SESSION_CATALOG.items():
@@ -371,14 +383,18 @@ class TestSessionCatalog:
     def test_dst_sets_cover_all_sessions(self):
         """Every session must be in either DST_AFFECTED or DST_CLEAN."""
         from pipeline.dst import DST_AFFECTED_SESSIONS, DST_CLEAN_SESSIONS
+
         all_sessions = set(SESSION_CATALOG.keys())
         covered = set(DST_AFFECTED_SESSIONS.keys()) | DST_CLEAN_SESSIONS
-        assert covered == all_sessions, f"Missing from DST sets: {all_sessions - covered}, Extra: {covered - all_sessions}"
+        assert covered == all_sessions, (
+            f"Missing from DST sets: {all_sessions - covered}, Extra: {covered - all_sessions}"
+        )
 
 
 # =========================================================================
 # Break window grouping: verify asia sessions share boundary
 # =========================================================================
+
 
 class TestBreakWindowGrouping:
     """Break detection windows use group boundaries, not next label."""
@@ -391,6 +407,7 @@ class TestBreakWindowGrouping:
         17:00 Brisbane = 07:00 UTC.
         """
         from pipeline.build_daily_features import _break_detection_window
+
         td = date(2024, 6, 15)  # summer weekday
 
         _, window_end_tokyo = _break_detection_window(td, "TOKYO_OPEN", 5)
@@ -404,15 +421,14 @@ class TestBreakWindowGrouping:
         # TOKYO_OPEN's window should be much longer than 25 minutes
         orb_end_tokyo_start, _ = _break_detection_window(td, "TOKYO_OPEN", 5)
         duration_minutes = (window_end_tokyo - orb_end_tokyo_start).total_seconds() / 60
-        assert duration_minutes > 60, (
-            f"TOKYO_OPEN break window is only {duration_minutes:.0f} min, should be ~6 hours"
-        )
+        assert duration_minutes > 60, f"TOKYO_OPEN break window is only {duration_minutes:.0f} min, should be ~6 hours"
 
     def test_us_sessions_share_boundary(self):
         """US_DATA_830 and NYSE_OPEN are both 'us' group.
         Both should extend to end of trading day (next cme group).
         """
         from pipeline.build_daily_features import _break_detection_window
+
         td = date(2024, 6, 15)
 
         _, window_end_data = _break_detection_window(td, "US_DATA_830", 5)
@@ -425,6 +441,7 @@ class TestBreakWindowGrouping:
 # =========================================================================
 # US_DATA_1000 resolver (10:00 AM ET, ~30min after NYSE cash open)
 # =========================================================================
+
 
 class TestUsPostEquityBrisbane:
     """US post-equity-open 10:00 AM ET -> Brisbane local time."""
@@ -463,6 +480,7 @@ class TestUsPostEquityBrisbane:
 # CME_PRECLOSE resolver (2:45 PM CT, CME equity futures pre-close)
 # =========================================================================
 
+
 class TestCmeCloseBrisbane:
     """CME equity futures pre-close 2:45 PM CT -> Brisbane local time."""
 
@@ -499,6 +517,7 @@ class TestCmeCloseBrisbane:
 # =========================================================================
 # Consistency: same resolver gives different results summer vs winter
 # =========================================================================
+
 
 class TestSeasonalShift:
     """Verify that dynamic sessions actually shift between summer and winter."""
@@ -543,6 +562,7 @@ class TestSeasonalShift:
 # COMEX_SETTLE resolver (COMEX gold settlement 1:30 PM ET)
 # =========================================================================
 
+
 class TestComexSettleBrisbane:
     """COMEX gold settlement at 1:30 PM ET."""
 
@@ -574,6 +594,7 @@ class TestComexSettleBrisbane:
 # NYSE_CLOSE resolver (NYSE closing bell 4:00 PM ET)
 # =========================================================================
 
+
 class TestNyseCloseBrisbane:
     """NYSE closing bell at 4:00 PM ET."""
 
@@ -600,10 +621,10 @@ class TestNyseCloseBrisbane:
         assert summer != winter
 
 
-
 # =========================================================================
 # BRISBANE_1025 resolver (Fixed 10:25 AM Brisbane)
 # =========================================================================
+
 
 class TestBrisbane1025:
     """Fixed 10:25 AM Brisbane session — no DST, no market event anchor."""
@@ -626,5 +647,3 @@ class TestBrisbane1025:
 
     def test_break_group_is_asia(self):
         assert get_break_group("BRISBANE_1025") == "asia"
-
-

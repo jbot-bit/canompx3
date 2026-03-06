@@ -3,6 +3,7 @@
 Usage:
     python scripts/check_root_hygiene.py  # Exit 1 if unexpected items found
 """
+
 from __future__ import annotations
 
 import sys
@@ -11,29 +12,62 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 ALLOWED_DIRS = {
-    "pipeline", "trading_app", "tests", "scripts", "research", "docs", "artifacts", "backups",
-    "DB", ".git", ".github", ".githooks", ".claude", "__pycache__",
-    "llm-code-scanner", "plugins",
+    "pipeline",
+    "trading_app",
+    "tests",
+    "scripts",
+    "research",
+    "docs",
+    "artifacts",
+    "backups",
+    "DB",
+    ".git",
+    ".github",
+    ".githooks",
+    ".claude",
+    "__pycache__",
+    "llm-code-scanner",
+    "plugins",
     # Virtual environments
     ".venv",
     # Generated outputs
     "outputs",
     # Tool caches
-    ".pytest_cache", ".ruff_cache",
+    ".pytest_cache",
+    ".ruff_cache",
     # Gitignored but may exist locally
-    ".obsidian", "openclaw", "MNQ db", "local_db", "memory", "reports",
+    ".obsidian",
+    "openclaw",
+    "MNQ db",
+    "local_db",
+    "memory",
+    "reports",
     # UI
     "ui",
 }
 
 ALLOWED_FILES = {
-    "CLAUDE.md", "MARKET_PLAYBOOK.md", "ROADMAP.md", "REPO_MAP.md", "README.md",
-    "TRADING_RULES.md", "TRADING_PLAN.md",
-    "CANONICAL_LOGIC.txt", "CANONICAL_backfill_dbn_mgc_rules.txt",
+    "CLAUDE.md",
+    "MARKET_PLAYBOOK.md",
+    "ROADMAP.md",
+    "REPO_MAP.md",
+    "README.md",
+    "TRADING_RULES.md",
+    "TRADING_PLAN.md",
+    "CANONICAL_LOGIC.txt",
+    "CANONICAL_backfill_dbn_mgc_rules.txt",
     "CANONICAL_backfill_dbn_mgc_rules_addon.txt",
-    "pyproject.toml", "requirements.txt", "ruff.toml", ".gitignore", ".env", "conftest.py",
-    "gold.db", "dashboard.html", "pipeline-explorer.html",
-    "Canompx3.code-workspace", ".mcp.json",
+    "pyproject.toml",
+    "requirements.txt",
+    "ruff.toml",
+    ".gitignore",
+    ".env",
+    "conftest.py",
+    "gold.db",
+    "dashboard.html",
+    "pipeline-explorer.html",
+    "Canompx3.code-workspace",
+    ".mcp.json",
     # Data archives
     "GOLD_DB_FULLSIZE.zip",
     # Logs

@@ -22,6 +22,7 @@ def _make_db(rows=None):
 
 # ── A1 tests ─────────────────────────────────────────────────────────────────
 
+
 def test_get_last_ingested_date_empty():
     from pipeline.daily_backfill import get_last_ingested_date
 
@@ -64,6 +65,7 @@ def test_is_up_to_date_false():
 
 
 # ── A2 tests ──────────────────────────────────────────────────────────────────
+
 
 def test_run_backfill_skips_when_current():
     from pipeline.daily_backfill import run_backfill_for_instrument

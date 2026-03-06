@@ -16,6 +16,7 @@ from pathlib import Path
 from datetime import date, datetime, timedelta
 
 from pipeline.log import get_logger
+
 logger = get_logger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -53,6 +54,7 @@ RR_TARGETS = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0]
 #   NOTE: E3 (limit-at-ORB) always uses CB1 — higher CBs produce identical
 #   entry prices (always ORB level) with 93-96% outcome overlap.
 CONFIRM_BARS_OPTIONS = [1, 2, 3, 4, 5]
+
 
 def _check_fill_bar_exit(
     bars_df: pd.DataFrame,
@@ -109,8 +111,7 @@ def _check_fill_bar_exit(
         result["exit_ts"] = exit_ts_val
         result["exit_price"] = target_price
         result["pnl_r"] = round(
-            to_r_multiple(cost_spec, entry_price, stop_price,
-                          risk_points * rr_target),
+            to_r_multiple(cost_spec, entry_price, stop_price, risk_points * rr_target),
             4,
         )
     else:
@@ -120,12 +121,8 @@ def _check_fill_bar_exit(
         result["pnl_r"] = -1.0
 
     # MAE/MFE for fill-bar exit: single-bar excursion
-    result["mae_r"] = round(
-        pnl_points_to_r(cost_spec, entry_price, stop_price, max(adverse_pts, 0.0)), 4
-    )
-    result["mfe_r"] = round(
-        pnl_points_to_r(cost_spec, entry_price, stop_price, max(favorable_pts, 0.0)), 4
-    )
+    result["mae_r"] = round(pnl_points_to_r(cost_spec, entry_price, stop_price, max(adverse_pts, 0.0)), 4)
+    result["mfe_r"] = round(pnl_points_to_r(cost_spec, entry_price, stop_price, max(favorable_pts, 0.0)), 4)
 
     return result
 
@@ -190,9 +187,7 @@ def _annotate_time_stop(
     if mtm_points < 0:
         # Underwater — time-stop fires
         result["ts_outcome"] = "time_stop"
-        result["ts_pnl_r"] = round(
-            to_r_multiple(cost_spec, entry_price, stop_price, mtm_points), 4
-        )
+        result["ts_pnl_r"] = round(to_r_multiple(cost_spec, entry_price, stop_price, mtm_points), 4)
         result["ts_exit_ts"] = ts_bar_ts
     else:
         # Positive — trade keeps running to normal resolution
@@ -220,13 +215,22 @@ def _compute_outcomes_all_rr(
     Returns list of outcome dicts (one per RR target).
     """
     null_result = {
-        "entry_ts": None, "entry_price": None, "stop_price": None,
-        "target_price": None, "outcome": None, "exit_ts": None,
-        "exit_price": None, "pnl_r": None,
-        "risk_dollars": None, "pnl_dollars": None,
-        "mae_r": None, "mfe_r": None,
+        "entry_ts": None,
+        "entry_price": None,
+        "stop_price": None,
+        "target_price": None,
+        "outcome": None,
+        "exit_ts": None,
+        "exit_price": None,
+        "pnl_r": None,
+        "risk_dollars": None,
+        "pnl_dollars": None,
+        "mae_r": None,
+        "mfe_r": None,
         "ambiguous_bar": False,
-        "ts_outcome": None, "ts_pnl_r": None, "ts_exit_ts": None,
+        "ts_outcome": None,
+        "ts_pnl_r": None,
+        "ts_exit_ts": None,
     }
 
     # Time-stop threshold for this session
@@ -266,8 +270,7 @@ def _compute_outcomes_all_rr(
 
     # Pre-slice post-entry bars ONCE
     post_entry = bars_df[
-        (bars_df["ts_utc"] > pd.Timestamp(entry_ts))
-        & (bars_df["ts_utc"] < pd.Timestamp(trading_day_end))
+        (bars_df["ts_utc"] > pd.Timestamp(entry_ts)) & (bars_df["ts_utc"] < pd.Timestamp(trading_day_end))
     ].sort_values("ts_utc")
 
     # Pre-compute shared numpy arrays from post-entry (same for all RR)
@@ -287,11 +290,18 @@ def _compute_outcomes_all_rr(
     results = []
     for rr, target_price in zip(rr_targets, target_prices):
         result = {
-            "entry_ts": entry_ts, "entry_price": entry_price,
-            "stop_price": stop_price, "target_price": target_price,
-            "outcome": None, "exit_ts": None, "exit_price": None,
-            "pnl_r": None, "risk_dollars": _risk_dollars, "pnl_dollars": None,
-            "mae_r": None, "mfe_r": None,
+            "entry_ts": entry_ts,
+            "entry_price": entry_price,
+            "stop_price": stop_price,
+            "target_price": target_price,
+            "outcome": None,
+            "exit_ts": None,
+            "exit_price": None,
+            "pnl_r": None,
+            "risk_dollars": _risk_dollars,
+            "pnl_dollars": None,
+            "mae_r": None,
+            "mfe_r": None,
         }
 
         # --- Fill bar check ---
@@ -311,23 +321,20 @@ def _compute_outcomes_all_rr(
             if hit_tgt or hit_stp:
                 exit_ts_val = fill_row["ts_utc"].to_pydatetime()
                 if hit_tgt and hit_stp:
-                    result.update(outcome="loss", exit_ts=exit_ts_val,
-                                  exit_price=stop_price, pnl_r=-1.0,
-                                  ambiguous_bar=True)
+                    result.update(
+                        outcome="loss", exit_ts=exit_ts_val, exit_price=stop_price, pnl_r=-1.0, ambiguous_bar=True
+                    )
                 elif hit_tgt:
                     result.update(
-                        outcome="win", exit_ts=exit_ts_val,
+                        outcome="win",
+                        exit_ts=exit_ts_val,
                         exit_price=target_price,
-                        pnl_r=round(to_r_multiple(cost_spec, entry_price,
-                                                  stop_price, risk_points * rr), 4),
+                        pnl_r=round(to_r_multiple(cost_spec, entry_price, stop_price, risk_points * rr), 4),
                     )
                 else:
-                    result.update(outcome="loss", exit_ts=exit_ts_val,
-                                  exit_price=stop_price, pnl_r=-1.0)
-                result["mae_r"] = round(
-                    pnl_points_to_r(cost_spec, entry_price, stop_price, max(adv_pts, 0.0)), 4)
-                result["mfe_r"] = round(
-                    pnl_points_to_r(cost_spec, entry_price, stop_price, max(fav_pts, 0.0)), 4)
+                    result.update(outcome="loss", exit_ts=exit_ts_val, exit_price=stop_price, pnl_r=-1.0)
+                result["mae_r"] = round(pnl_points_to_r(cost_spec, entry_price, stop_price, max(adv_pts, 0.0)), 4)
+                result["mfe_r"] = round(pnl_points_to_r(cost_spec, entry_price, stop_price, max(fav_pts, 0.0)), 4)
                 if result["pnl_r"] is not None:
                     result["pnl_dollars"] = round(result["pnl_r"] * _risk_dollars, 2)
                 # Fill-bar exit — resolved before any time-stop
@@ -367,36 +374,41 @@ def _compute_outcomes_all_rr(
             first_hit_idx = int(np.argmax(any_hit))
             exit_ts_val = post_entry.iloc[first_hit_idx]["ts_utc"].to_pydatetime()
             if pe_hit_target[first_hit_idx] and pe_hit_stop[first_hit_idx]:
-                result.update(outcome="loss", exit_ts=exit_ts_val,
-                              exit_price=stop_price, pnl_r=-1.0,
-                              ambiguous_bar=True)
+                result.update(
+                    outcome="loss", exit_ts=exit_ts_val, exit_price=stop_price, pnl_r=-1.0, ambiguous_bar=True
+                )
             elif pe_hit_target[first_hit_idx]:
                 result.update(
-                    outcome="win", exit_ts=exit_ts_val, exit_price=target_price,
-                    pnl_r=round(to_r_multiple(cost_spec, entry_price, stop_price,
-                                              risk_points * rr), 4),
+                    outcome="win",
+                    exit_ts=exit_ts_val,
+                    exit_price=target_price,
+                    pnl_r=round(to_r_multiple(cost_spec, entry_price, stop_price, risk_points * rr), 4),
                 )
             else:
-                result.update(outcome="loss", exit_ts=exit_ts_val,
-                              exit_price=stop_price, pnl_r=-1.0)
-            max_fav = max(float(np.max(pe_favorable[:first_hit_idx + 1])), 0.0)
-            max_adv = max(float(np.max(pe_adverse[:first_hit_idx + 1])), 0.0)
+                result.update(outcome="loss", exit_ts=exit_ts_val, exit_price=stop_price, pnl_r=-1.0)
+            max_fav = max(float(np.max(pe_favorable[: first_hit_idx + 1])), 0.0)
+            max_adv = max(float(np.max(pe_adverse[: first_hit_idx + 1])), 0.0)
 
-        result["mae_r"] = round(
-            pnl_points_to_r(cost_spec, entry_price, stop_price, max_adv), 4)
-        result["mfe_r"] = round(
-            pnl_points_to_r(cost_spec, entry_price, stop_price, max_fav), 4)
+        result["mae_r"] = round(pnl_points_to_r(cost_spec, entry_price, stop_price, max_adv), 4)
+        result["mfe_r"] = round(pnl_points_to_r(cost_spec, entry_price, stop_price, max_fav), 4)
         if result["pnl_r"] is not None:
             result["pnl_dollars"] = round(result["pnl_r"] * _risk_dollars, 2)
 
         # Time-stop annotation (normal path — trade resolved via target/stop/scratch)
         _annotate_time_stop(
-            result, ts_threshold, post_entry,
-            entry_ts, entry_price, stop_price, break_dir, cost_spec,
+            result,
+            ts_threshold,
+            post_entry,
+            entry_ts,
+            entry_price,
+            stop_price,
+            break_dir,
+            cost_spec,
         )
         results.append(result)
 
     return results
+
 
 def compute_single_outcome(
     bars_df: pd.DataFrame,
@@ -440,13 +452,14 @@ def compute_single_outcome(
     # Detect entry: E2 uses break-touch, E1/E3 use confirm bars
     if entry_model == "E2":
         touch = detect_break_touch(
-            bars_df, orb_high=orb_high, orb_low=orb_low,
+            bars_df,
+            orb_high=orb_high,
+            orb_low=orb_low,
             break_dir=break_dir,
             detection_window_start=break_ts,
             detection_window_end=trading_day_end,
         )
-        signal = _resolve_e2(touch, slippage_ticks=E2_SLIPPAGE_TICKS,
-                             tick_size=cost_spec.tick_size)
+        signal = _resolve_e2(touch, slippage_ticks=E2_SLIPPAGE_TICKS, tick_size=cost_spec.tick_size)
     else:
         signal = detect_entry_with_confirm_bars(
             bars_df=bars_df,
@@ -487,8 +500,15 @@ def compute_single_outcome(
 
     # Check fill bar for immediate exit (E1 and E3)
     fill_exit = _check_fill_bar_exit(
-        bars_df, entry_ts, entry_price, stop_price, target_price,
-        break_dir, entry_model, cost_spec, rr_target,
+        bars_df,
+        entry_ts,
+        entry_price,
+        stop_price,
+        target_price,
+        break_dir,
+        entry_model,
+        cost_spec,
+        rr_target,
     )
     if fill_exit is not None:
         result.update(fill_exit)
@@ -503,18 +523,13 @@ def compute_single_outcome(
 
     # Scan bars forward from entry to determine outcome
     post_entry = bars_df[
-        (bars_df["ts_utc"] > pd.Timestamp(entry_ts))
-        & (bars_df["ts_utc"] < pd.Timestamp(trading_day_end))
+        (bars_df["ts_utc"] > pd.Timestamp(entry_ts)) & (bars_df["ts_utc"] < pd.Timestamp(trading_day_end))
     ].sort_values("ts_utc")
 
     if post_entry.empty:
         result["outcome"] = "scratch"
-        result["mae_r"] = round(
-            pnl_points_to_r(cost_spec, entry_price, stop_price, 0.0), 4
-        )
-        result["mfe_r"] = round(
-            pnl_points_to_r(cost_spec, entry_price, stop_price, 0.0), 4
-        )
+        result["mae_r"] = round(pnl_points_to_r(cost_spec, entry_price, stop_price, 0.0), 4)
+        result["mfe_r"] = round(pnl_points_to_r(cost_spec, entry_price, stop_price, 0.0), 4)
         if ts_threshold is not None:
             result["ts_outcome"] = result["outcome"]
             result["ts_pnl_r"] = result["pnl_r"]
@@ -559,8 +574,7 @@ def compute_single_outcome(
             result["exit_ts"] = exit_ts_val
             result["exit_price"] = target_price
             result["pnl_r"] = round(
-                to_r_multiple(cost_spec, entry_price, stop_price,
-                              risk_points * rr_target),
+                to_r_multiple(cost_spec, entry_price, stop_price, risk_points * rr_target),
                 4,
             )
         else:
@@ -574,12 +588,8 @@ def compute_single_outcome(
         max_adverse_points = max(float(np.max(adverse[: first_hit_idx + 1])), 0.0)
 
     # MAE/MFE in R
-    result["mae_r"] = round(
-        pnl_points_to_r(cost_spec, entry_price, stop_price, max_adverse_points), 4
-    )
-    result["mfe_r"] = round(
-        pnl_points_to_r(cost_spec, entry_price, stop_price, max_favorable_points), 4
-    )
+    result["mae_r"] = round(pnl_points_to_r(cost_spec, entry_price, stop_price, max_adverse_points), 4)
+    result["mfe_r"] = round(pnl_points_to_r(cost_spec, entry_price, stop_price, max_favorable_points), 4)
 
     # Dollar P&L
     if result["pnl_r"] is not None:
@@ -587,11 +597,18 @@ def compute_single_outcome(
 
     # Time-stop annotation
     _annotate_time_stop(
-        result, ts_threshold, post_entry,
-        entry_ts, entry_price, stop_price, break_dir, cost_spec,
+        result,
+        ts_threshold,
+        post_entry,
+        entry_ts,
+        entry_price,
+        stop_price,
+        break_dir,
+        cost_spec,
     )
 
     return result
+
 
 def build_outcomes(
     db_path: Path | None = None,
@@ -614,6 +631,7 @@ def build_outcomes(
 
     with duckdb.connect(str(db_path)) as con:
         from pipeline.db_config import configure_connection
+
         configure_connection(con, writing=True)
 
         # Ensure trading_app tables exist
@@ -663,10 +681,9 @@ def build_outcomes(
         # Fetch all daily_features rows
         query = f"""
             SELECT trading_day, symbol, orb_minutes,
-                   {', '.join(
-                       f'orb_{lbl}_high, orb_{lbl}_low, orb_{lbl}_break_dir, orb_{lbl}_break_ts'
-                       for lbl in sessions
-                   )}
+                   {
+            ", ".join(f"orb_{lbl}_high, orb_{lbl}_low, orb_{lbl}_break_dir, orb_{lbl}_break_ts" for lbl in sessions)
+        }
             FROM daily_features
             WHERE symbol = ? AND orb_minutes = ?
             {date_filter}
@@ -709,9 +726,9 @@ def build_outcomes(
         computed_days = set()
         if not dry_run and not force:
             computed_days = {
-                r[0] for r in con.execute(
-                    "SELECT DISTINCT trading_day FROM orb_outcomes "
-                    "WHERE symbol = ? AND orb_minutes = ?",
+                r[0]
+                for r in con.execute(
+                    "SELECT DISTINCT trading_day FROM orb_outcomes WHERE symbol = ? AND orb_minutes = ?",
                     [instrument, orb_minutes],
                 ).fetchall()
             }
@@ -756,36 +773,56 @@ def build_outcomes(
                         # E2: stop-market at ORB level. Uses break-touch detection
                         # (range crosses ORB, no close requirement) instead of confirm bars.
                         touch = detect_break_touch(
-                            bars_df, orb_high=orb_high, orb_low=orb_low,
+                            bars_df,
+                            orb_high=orb_high,
+                            orb_low=orb_low,
                             break_dir=break_dir,
                             detection_window_start=break_ts,
                             detection_window_end=td_end,
                         )
-                        signal = _resolve_e2(touch, slippage_ticks=E2_SLIPPAGE_TICKS,
-                                             tick_size=cost_spec.tick_size)
+                        signal = _resolve_e2(touch, slippage_ticks=E2_SLIPPAGE_TICKS, tick_size=cost_spec.tick_size)
                         cb = 1  # E2 is always CB1 in the grid
                         outcomes = _compute_outcomes_all_rr(
-                            bars_df=bars_df, signal=signal,
-                            orb_high=orb_high, orb_low=orb_low,
-                            break_dir=break_dir, rr_targets=RR_TARGETS,
-                            trading_day_end=td_end, cost_spec=cost_spec,
-                            entry_model=em, orb_label=orb_label, break_ts=break_ts,
+                            bars_df=bars_df,
+                            signal=signal,
+                            orb_high=orb_high,
+                            orb_low=orb_low,
+                            break_dir=break_dir,
+                            rr_targets=RR_TARGETS,
+                            trading_day_end=td_end,
+                            cost_spec=cost_spec,
+                            entry_model=em,
+                            orb_label=orb_label,
+                            break_ts=break_ts,
                         )
                         for rr_target, outcome in zip(RR_TARGETS, outcomes):
-                            day_batch.append([
-                                trading_day, symbol, orb_label, orb_minutes,
-                                rr_target, cb, em,
-                                outcome["entry_ts"], outcome["entry_price"],
-                                outcome["stop_price"], outcome["target_price"],
-                                outcome["outcome"], outcome["exit_ts"],
-                                outcome["exit_price"], outcome["pnl_r"],
-                                outcome["risk_dollars"], outcome["pnl_dollars"],
-                                outcome["mae_r"], outcome["mfe_r"],
-                                outcome.get("ambiguous_bar", False),
-                                outcome.get("ts_outcome"),
-                                outcome.get("ts_pnl_r"),
-                                outcome.get("ts_exit_ts"),
-                            ])
+                            day_batch.append(
+                                [
+                                    trading_day,
+                                    symbol,
+                                    orb_label,
+                                    orb_minutes,
+                                    rr_target,
+                                    cb,
+                                    em,
+                                    outcome["entry_ts"],
+                                    outcome["entry_price"],
+                                    outcome["stop_price"],
+                                    outcome["target_price"],
+                                    outcome["outcome"],
+                                    outcome["exit_ts"],
+                                    outcome["exit_price"],
+                                    outcome["pnl_r"],
+                                    outcome["risk_dollars"],
+                                    outcome["pnl_dollars"],
+                                    outcome["mae_r"],
+                                    outcome["mfe_r"],
+                                    outcome.get("ambiguous_bar", False),
+                                    outcome.get("ts_outcome"),
+                                    outcome.get("ts_pnl_r"),
+                                    outcome.get("ts_exit_ts"),
+                                ]
+                            )
                             total_written += 1
                         continue  # Skip the confirm-based path below
 
@@ -819,20 +856,33 @@ def build_outcomes(
                         )
 
                         for rr_target, outcome in zip(RR_TARGETS, outcomes):
-                            day_batch.append([
-                                trading_day, symbol, orb_label, orb_minutes,
-                                rr_target, cb, em,
-                                outcome["entry_ts"], outcome["entry_price"],
-                                outcome["stop_price"], outcome["target_price"],
-                                outcome["outcome"], outcome["exit_ts"],
-                                outcome["exit_price"], outcome["pnl_r"],
-                                outcome["risk_dollars"], outcome["pnl_dollars"],
-                                outcome["mae_r"], outcome["mfe_r"],
-                                outcome.get("ambiguous_bar", False),
-                                outcome.get("ts_outcome"),
-                                outcome.get("ts_pnl_r"),
-                                outcome.get("ts_exit_ts"),
-                            ])
+                            day_batch.append(
+                                [
+                                    trading_day,
+                                    symbol,
+                                    orb_label,
+                                    orb_minutes,
+                                    rr_target,
+                                    cb,
+                                    em,
+                                    outcome["entry_ts"],
+                                    outcome["entry_price"],
+                                    outcome["stop_price"],
+                                    outcome["target_price"],
+                                    outcome["outcome"],
+                                    outcome["exit_ts"],
+                                    outcome["exit_price"],
+                                    outcome["pnl_r"],
+                                    outcome["risk_dollars"],
+                                    outcome["pnl_dollars"],
+                                    outcome["mae_r"],
+                                    outcome["mfe_r"],
+                                    outcome.get("ambiguous_bar", False),
+                                    outcome.get("ts_outcome"),
+                                    outcome.get("ts_pnl_r"),
+                                    outcome.get("ts_exit_ts"),
+                                ]
+                            )
                             total_written += 1
 
             # Batch insert all outcomes for this trading day
@@ -840,14 +890,29 @@ def build_outcomes(
                 batch_df = pd.DataFrame(  # noqa: F841 — used by DuckDB SQL below
                     day_batch,
                     columns=[
-                        'trading_day', 'symbol', 'orb_label', 'orb_minutes',
-                        'rr_target', 'confirm_bars', 'entry_model',
-                        'entry_ts', 'entry_price', 'stop_price', 'target_price',
-                        'outcome', 'exit_ts', 'exit_price', 'pnl_r',
-                        'risk_dollars', 'pnl_dollars',
-                        'mae_r', 'mfe_r',
-                        'ambiguous_bar',
-                        'ts_outcome', 'ts_pnl_r', 'ts_exit_ts',
+                        "trading_day",
+                        "symbol",
+                        "orb_label",
+                        "orb_minutes",
+                        "rr_target",
+                        "confirm_bars",
+                        "entry_model",
+                        "entry_ts",
+                        "entry_price",
+                        "stop_price",
+                        "target_price",
+                        "outcome",
+                        "exit_ts",
+                        "exit_price",
+                        "pnl_r",
+                        "risk_dollars",
+                        "pnl_dollars",
+                        "mae_r",
+                        "mfe_r",
+                        "ambiguous_bar",
+                        "ts_outcome",
+                        "ts_pnl_r",
+                        "ts_exit_ts",
                     ],
                 )
                 con.execute("""
@@ -878,8 +943,7 @@ def build_outcomes(
                 if not dry_run:
                     heartbeat_path = Path(db_path).parent / "outcome_builder.heartbeat"
                     heartbeat_path.write_text(
-                        f"{datetime.now().isoformat()} | {instrument} | "
-                        f"{day_idx + 1}/{total_days} | {trading_day}\n"
+                        f"{datetime.now().isoformat()} | {instrument} | {day_idx + 1}/{total_days} | {trading_day}\n"
                     )
 
         if not dry_run:
@@ -892,12 +956,11 @@ def build_outcomes(
 
         return total_written
 
+
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Pre-compute ORB outcomes for all RR targets x confirm_bars"
-    )
+    parser = argparse.ArgumentParser(description="Pre-compute ORB outcomes for all RR targets x confirm_bars")
     parser.add_argument("--instrument", default="MGC", help="Instrument symbol")
     parser.add_argument("--start", type=date.fromisoformat, help="Start date (YYYY-MM-DD)")
     parser.add_argument("--end", type=date.fromisoformat, help="End date (YYYY-MM-DD)")
@@ -914,6 +977,7 @@ def main():
         dry_run=args.dry_run,
         force=args.force,
     )
+
 
 if __name__ == "__main__":
     main()

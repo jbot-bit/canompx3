@@ -44,36 +44,31 @@ class TestChooseFrontContract:
     def test_highest_volume_wins(self):
         """Contract with highest daily volume is chosen."""
         volumes = {"GCM4": 5000, "GCZ4": 3000, "GCQ4": 1000}
-        front = choose_front_contract(volumes, outright_pattern=GC_OUTRIGHT_PATTERN,
-                                       prefix_len=2)
+        front = choose_front_contract(volumes, outright_pattern=GC_OUTRIGHT_PATTERN, prefix_len=2)
         assert front == "GCM4"
 
     def test_deterministic_tiebreak(self):
         """Equal volume: earliest expiry wins, then lexicographic."""
         volumes = {"GCZ4": 5000, "GCM4": 5000}
-        front = choose_front_contract(volumes, outright_pattern=GC_OUTRIGHT_PATTERN,
-                                       prefix_len=2)
+        front = choose_front_contract(volumes, outright_pattern=GC_OUTRIGHT_PATTERN, prefix_len=2)
         # M (June) expires before Z (December)
         assert front == "GCM4"
 
     def test_filters_non_outrights(self):
         """Non-outright symbols in volume dict are ignored."""
         volumes = {"GCM4": 100, "GC-SPREAD": 9999, "INVALID": 5000}
-        front = choose_front_contract(volumes, outright_pattern=GC_OUTRIGHT_PATTERN,
-                                       prefix_len=2)
+        front = choose_front_contract(volumes, outright_pattern=GC_OUTRIGHT_PATTERN, prefix_len=2)
         assert front == "GCM4"
 
     def test_empty_volumes_returns_none(self):
         """No valid outrights → None."""
-        front = choose_front_contract({}, outright_pattern=GC_OUTRIGHT_PATTERN,
-                                       prefix_len=2)
+        front = choose_front_contract({}, outright_pattern=GC_OUTRIGHT_PATTERN, prefix_len=2)
         assert front is None
 
     def test_no_outrights_returns_none(self):
         """Only non-matching symbols → None."""
         volumes = {"INVALID1": 100, "INVALID2": 200}
-        front = choose_front_contract(volumes, outright_pattern=GC_OUTRIGHT_PATTERN,
-                                       prefix_len=2)
+        front = choose_front_contract(volumes, outright_pattern=GC_OUTRIGHT_PATTERN, prefix_len=2)
         assert front is None
 
 
@@ -100,6 +95,7 @@ class TestGcToMgcDataFlow:
         """GC contracts have 2-char prefix (GC), not 3 (MGC)."""
         # Verify parsing works with prefix_len=2
         from pipeline.ingest_dbn_mgc import parse_expiry
+
         year, month = parse_expiry("GCM4", prefix_len=2)
         assert month == 6  # M = June
         assert year == 2004 or year == 2024  # depends on year parsing
@@ -107,6 +103,7 @@ class TestGcToMgcDataFlow:
     def test_stored_symbol_is_mgc(self):
         """The SYMBOL constant in ingest_dbn_mgc.py is 'MGC'."""
         from pipeline.ingest_dbn_mgc import SYMBOL
+
         assert SYMBOL == "MGC"
 
     def test_gc_pattern_rejects_mgc_contracts(self):
@@ -126,6 +123,7 @@ class TestAssetConfigMgcPattern:
     def test_mgc_pattern_matches_gc_contracts(self):
         """MGC config must match GC outrights (data source is full-size Gold)."""
         from pipeline.asset_configs import ASSET_CONFIGS
+
         pattern = ASSET_CONFIGS["MGC"]["outright_pattern"]
         for sym in ["GCM4", "GCZ4", "GCG25", "GCQ5"]:
             assert pattern.match(sym), f"MGC pattern should match {sym}"
@@ -133,6 +131,7 @@ class TestAssetConfigMgcPattern:
     def test_mgc_pattern_rejects_mgc_contracts(self):
         """MGC config must NOT match MGC outrights (we use GC source data)."""
         from pipeline.asset_configs import ASSET_CONFIGS
+
         pattern = ASSET_CONFIGS["MGC"]["outright_pattern"]
         for sym in ["MGCM4", "MGCZ4", "MGCG25"]:
             assert not pattern.match(sym), f"MGC pattern should not match {sym}"
@@ -140,6 +139,7 @@ class TestAssetConfigMgcPattern:
     def test_mgc_prefix_len_is_2(self):
         """GC contracts have 2-char prefix before month code."""
         from pipeline.asset_configs import ASSET_CONFIGS
+
         assert ASSET_CONFIGS["MGC"]["prefix_len"] == 2
 
 
@@ -149,6 +149,7 @@ class TestAssetConfigMesPattern:
     def test_mes_pattern_matches_mes_contracts(self):
         """MES config must match native MES outrights (2024+)."""
         from pipeline.asset_configs import ASSET_CONFIGS
+
         pattern = ASSET_CONFIGS["MES"]["outright_pattern"]
         for sym in ["MESM4", "MESZ4", "MESH25"]:
             assert pattern.match(sym), f"MES pattern should match {sym}"
@@ -156,17 +157,20 @@ class TestAssetConfigMesPattern:
     def test_mes_dbn_path_exists(self):
         """MES config dbn_path must point to a non-empty directory."""
         from pipeline.asset_configs import ASSET_CONFIGS
+
         path = ASSET_CONFIGS["MES"]["dbn_path"]
         assert path.exists(), f"MES dbn_path does not exist: {path}"
 
     def test_es_config_exists(self):
         """An ES config entry must exist for pre-2024 ES→MES mapping."""
         from pipeline.asset_configs import ASSET_CONFIGS
+
         assert "ES" in ASSET_CONFIGS, "ES config needed for pre-2024 data"
 
     def test_es_pattern_matches_es_contracts(self):
         """ES config must match ES outrights."""
         from pipeline.asset_configs import ASSET_CONFIGS
+
         pattern = ASSET_CONFIGS["ES"]["outright_pattern"]
         for sym in ["ESH5", "ESM9", "ESZ24"]:
             assert pattern.match(sym), f"ES pattern should match {sym}"
@@ -174,6 +178,7 @@ class TestAssetConfigMesPattern:
     def test_es_pattern_rejects_mes_contracts(self):
         """ES config must NOT match MES outrights."""
         from pipeline.asset_configs import ASSET_CONFIGS
+
         pattern = ASSET_CONFIGS["ES"]["outright_pattern"]
         for sym in ["MESM4", "MESZ4"]:
             assert not pattern.match(sym), f"ES pattern should not match {sym}"
@@ -181,9 +186,11 @@ class TestAssetConfigMesPattern:
     def test_es_stores_as_mes_symbol(self):
         """ES config must store data under MES symbol (same as NQ→MNQ)."""
         from pipeline.asset_configs import ASSET_CONFIGS
+
         assert ASSET_CONFIGS["ES"]["symbol"] == "MES"
 
     def test_es_prefix_len_is_2(self):
         """ES contracts have 2-char prefix (ES) before month code."""
         from pipeline.asset_configs import ASSET_CONFIGS
+
         assert ASSET_CONFIGS["ES"]["prefix_len"] == 2

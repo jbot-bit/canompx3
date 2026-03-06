@@ -26,8 +26,10 @@ from trading_app.paper_trader import (
     _entry_model_from_strategy,
 )
 
+
 def _cost():
     return get_cost_spec("MGC")
+
 
 def _make_strategy(**overrides):
     base = {
@@ -48,6 +50,7 @@ def _make_strategy(**overrides):
     base.update(overrides)
     return PortfolioStrategy(**base)
 
+
 def _make_portfolio(strategies):
     return Portfolio(
         name="test",
@@ -58,6 +61,7 @@ def _make_portfolio(strategies):
         max_concurrent_positions=3,
         max_daily_loss_r=5.0,
     )
+
 
 def _setup_replay_db(tmp_path, n_days=5):
     """
@@ -85,8 +89,7 @@ def _setup_replay_db(tmp_path, n_days=5):
 
         # 0900 Brisbane = 23:00 UTC prev day = trading day start
         prev_day = trading_day - timedelta(days=1)
-        td_start = datetime(prev_day.year, prev_day.month, prev_day.day,
-                            23, 0, tzinfo=timezone.utc)
+        td_start = datetime(prev_day.year, prev_day.month, prev_day.day, 23, 0, tzinfo=timezone.utc)
 
         base_price = 2700.0 + days_created * 2.0
         bars = []
@@ -115,10 +118,18 @@ def _setup_replay_db(tmp_path, n_days=5):
                 l = o - 0.3
                 c = o + 0.5
 
-            bars.append((
-                ts.isoformat(), "MGC", "GCG4",
-                round(o, 2), round(h, 2), round(l, 2), round(c, 2), 100,
-            ))
+            bars.append(
+                (
+                    ts.isoformat(),
+                    "MGC",
+                    "GCG4",
+                    round(o, 2),
+                    round(h, 2),
+                    round(l, 2),
+                    round(c, 2),
+                    100,
+                )
+            )
 
         con.executemany(
             """INSERT OR REPLACE INTO bars_1m
@@ -138,9 +149,15 @@ def _setup_replay_db(tmp_path, n_days=5):
                 orb_CME_REOPEN_break_dir, orb_CME_REOPEN_break_ts)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::TIMESTAMPTZ)""",
             [
-                trading_day, "MGC", 5, len(bars),
-                orb_high, orb_low, round(orb_high - orb_low, 2),
-                "long", break_ts,
+                trading_day,
+                "MGC",
+                5,
+                len(bars),
+                orb_high,
+                orb_low,
+                round(orb_high - orb_low, 2),
+                "long",
+                break_ts,
             ],
         )
 
@@ -151,12 +168,13 @@ def _setup_replay_db(tmp_path, n_days=5):
     con.close()
     return db_path
 
+
 # ============================================================================
 # Helpers Tests (no DB needed)
 # ============================================================================
 
-class TestHelpers:
 
+class TestHelpers:
     def test_orb_from_strategy(self):
         assert _orb_from_strategy("MGC_US_DATA_830_E1_RR2.0_CB5_NO_FILTER") == "US_DATA_830"
         assert _orb_from_strategy("MGC_CME_REOPEN_E2_RR2.0_CB1_ORB_G5") == "CME_REOPEN"
@@ -166,9 +184,11 @@ class TestHelpers:
         assert _entry_model_from_strategy("MGC_US_DATA_830_E1_RR2.0_CB5_NO_FILTER") == "E1"
         assert _entry_model_from_strategy("MGC_CME_REOPEN_E2_RR2.0_CB1_ORB_G5") == "E2"
 
+
 # ============================================================================
 # Replay Tests — shared class fixture (runs replay ONCE)
 # ============================================================================
+
 
 @pytest.fixture(scope="class")
 def shared_replay(tmp_path_factory):
@@ -186,8 +206,8 @@ def shared_replay(tmp_path_factory):
     )
     return result, db_path, strategy
 
-class TestReplay:
 
+class TestReplay:
     def test_empty_portfolio(self, tmp_path):
         """Empty portfolio produces no trades (needs own fixture)."""
         db_path = _setup_replay_db(tmp_path, n_days=3)
@@ -224,12 +244,13 @@ class TestReplay:
         day_pnl_sum = sum(ds.daily_pnl_r for ds in result.day_summaries)
         assert abs(result.total_pnl_r - day_pnl_sum) < 0.01
 
+
 # ============================================================================
 # Risk Integration Tests (needs own fixture for custom risk limits)
 # ============================================================================
 
-class TestRiskIntegration:
 
+class TestRiskIntegration:
     def test_risk_rejection_recorded(self, tmp_path):
         db_path = _setup_replay_db(tmp_path, n_days=3)
         strategy = _make_strategy()
@@ -247,16 +268,20 @@ class TestRiskIntegration:
         )
         assert result.days_processed > 0
 
+
 # ============================================================================
 # CLI Tests
 # ============================================================================
 
+
 class TestCLI:
     def test_help(self):
         import subprocess
+
         r = subprocess.run(
             [sys.executable, "trading_app/paper_trader.py", "--help"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
             cwd=str(Path(__file__).parent.parent.parent),
         )
         assert r.returncode == 0
@@ -272,10 +297,14 @@ class TestCLI:
             [
                 sys.executable,
                 "trading_app/paper_trader.py",
-                "--instrument", "MGC",
-                "--start", "2024-01-08",
-                "--end", "2024-01-09",
-                "--calendar-filter", "NFP",
+                "--instrument",
+                "MGC",
+                "--start",
+                "2024-01-08",
+                "--end",
+                "2024-01-09",
+                "--calendar-filter",
+                "NFP",
             ],
             capture_output=True,
             text=True,

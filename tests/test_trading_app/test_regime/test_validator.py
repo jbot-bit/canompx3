@@ -13,6 +13,7 @@ import duckdb
 from trading_app.regime.schema import init_regime_schema
 from trading_app.regime.validator import run_regime_validation
 
+
 @pytest.fixture
 def validated_db(tmp_path):
     """Create a DB with regime_strategies pre-populated for validation."""
@@ -22,8 +23,7 @@ def validated_db(tmp_path):
     init_regime_schema(con=con)
 
     # Insert a strategy with good metrics (should pass)
-    yearly = json.dumps({"2025": {"trades": 30, "wins": 15, "total_r": 3.0,
-                                   "win_rate": 0.5, "avg_r": 0.1}})
+    yearly = json.dumps({"2025": {"trades": 30, "wins": 15, "total_r": 3.0, "win_rate": 0.5, "avg_r": 0.1}})
     con.execute(
         """INSERT INTO regime_strategies
            (run_label, strategy_id, start_date, end_date,
@@ -39,8 +39,7 @@ def validated_db(tmp_path):
     )
 
     # Insert a strategy with bad metrics (should fail)
-    yearly_bad = json.dumps({"2025": {"trades": 5, "wins": 1, "total_r": -3.0,
-                                       "win_rate": 0.2, "avg_r": -0.6}})
+    yearly_bad = json.dumps({"2025": {"trades": 5, "wins": 1, "total_r": -3.0, "win_rate": 0.2, "avg_r": -0.6}})
     con.execute(
         """INSERT INTO regime_strategies
            (run_label, strategy_id, start_date, end_date,
@@ -59,8 +58,8 @@ def validated_db(tmp_path):
     con.close()
     return db_path
 
-class TestRegimeValidation:
 
+class TestRegimeValidation:
     def test_validates_strategies(self, validated_db):
         """Validation processes strategies and returns counts."""
         passed, rejected = run_regime_validation(
@@ -85,9 +84,7 @@ class TestRegimeValidation:
 
         con = duckdb.connect(str(validated_db), read_only=True)
         try:
-            rows = con.execute(
-                "SELECT run_label, strategy_id, status FROM regime_validated"
-            ).fetchall()
+            rows = con.execute("SELECT run_label, strategy_id, status FROM regime_validated").fetchall()
             for run_label, sid, status in rows:
                 assert run_label == "test"
                 assert status == "active"
@@ -131,15 +128,11 @@ class TestRegimeValidation:
         con = duckdb.connect(str(validated_db), read_only=True)
         try:
             # Validation status should still be NULL
-            rows = con.execute(
-                "SELECT validation_status FROM regime_strategies WHERE run_label='test'"
-            ).fetchall()
+            rows = con.execute("SELECT validation_status FROM regime_strategies WHERE run_label='test'").fetchall()
             for (status,) in rows:
                 assert status is None or status == ""
             # regime_validated should be empty
-            count = con.execute(
-                "SELECT COUNT(*) FROM regime_validated WHERE run_label='test'"
-            ).fetchone()[0]
+            count = con.execute("SELECT COUNT(*) FROM regime_validated WHERE run_label='test'").fetchone()[0]
             assert count == 0
         finally:
             con.close()
@@ -147,13 +140,17 @@ class TestRegimeValidation:
     def test_revalidation_skips_already_validated(self, validated_db):
         """Running validation twice only processes unvalidated strategies."""
         p1, r1 = run_regime_validation(
-            db_path=validated_db, instrument="MGC",
-            run_label="test", min_sample=5,
+            db_path=validated_db,
+            instrument="MGC",
+            run_label="test",
+            min_sample=5,
         )
         # Second run: all already validated -> 0 processed
         p2, r2 = run_regime_validation(
-            db_path=validated_db, instrument="MGC",
-            run_label="test", min_sample=5,
+            db_path=validated_db,
+            instrument="MGC",
+            run_label="test",
+            min_sample=5,
         )
         assert p2 == 0
         assert r2 == 0

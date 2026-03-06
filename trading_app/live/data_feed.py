@@ -9,6 +9,7 @@ Reconnects automatically on disconnect with exponential backoff (5s → 60s max)
 
 Stop-file: create live_session.stop in project root for graceful shutdown.
 """
+
 import asyncio
 import json
 import logging
@@ -28,9 +29,9 @@ MD_WS_LIVE = "wss://md.tradovate.com/v1/websocket"
 MD_WS_DEMO = "wss://md-demo.tradovate.com/v1/websocket"
 
 # Reconnect settings
-_BACKOFF_INITIAL = 5.0   # seconds before first retry
-_BACKOFF_MAX = 60.0      # cap at 60s
-_MAX_RECONNECTS = 20     # give up after this many consecutive failures
+_BACKOFF_INITIAL = 5.0  # seconds before first retry
+_BACKOFF_MAX = 60.0  # cap at 60s
+_MAX_RECONNECTS = 20  # give up after this many consecutive failures
 
 # Stop-file for graceful Windows shutdown (proc.terminate() is a hard kill on Windows)
 _STOP_FILE = Path(__file__).parent.parent.parent / "live_session.stop"
@@ -97,10 +98,14 @@ class DataFeed:
     async def _session(self, ws, symbol: str) -> None:
         """Run a single authenticated WebSocket session."""
         # Auth handshake
-        await ws.send(json.dumps({
-            "url": "auth/accesstokenrequest",
-            "body": {"token": self.auth.get_token()},
-        }))
+        await ws.send(
+            json.dumps(
+                {
+                    "url": "auth/accesstokenrequest",
+                    "body": {"token": self.auth.get_token()},
+                }
+            )
+        )
         resp_raw = await ws.recv()
         try:
             resp = json.loads(resp_raw) if resp_raw and resp_raw != "[]" else {}
@@ -117,10 +122,14 @@ class DataFeed:
         log.info("Authenticated to Tradovate MD feed")
 
         # Subscribe to real-time quotes
-        await ws.send(json.dumps({
-            "url": "md/subscribeQuote",
-            "body": {"symbol": symbol},
-        }))
+        await ws.send(
+            json.dumps(
+                {
+                    "url": "md/subscribeQuote",
+                    "body": {"symbol": symbol},
+                }
+            )
+        )
         log.info("Subscribed to quotes: %s", symbol)
 
         # Stop event — set by heartbeat when stop-file is detected
@@ -151,7 +160,7 @@ class DataFeed:
                     frames = json.loads(message)
                 except json.JSONDecodeError:
                     continue
-                for frame in (frames if isinstance(frames, list) else [frames]):
+                for frame in frames if isinstance(frames, list) else [frames]:
                     await self._handle_frame(frame, symbol)
         finally:
             self._heartbeat_task.cancel()

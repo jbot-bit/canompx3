@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 """Generate MARKET_PLAYBOOK.md from validated_setups snapshot."""
+
 from __future__ import annotations
 
 import datetime
@@ -14,25 +15,26 @@ CSV = PROJECT / "research" / "output" / "_playbook_data.csv"
 OUT = PROJECT / "MARKET_PLAYBOOK.md"
 
 SESSION_ORDER = [
-    ("NYSE_OPEN",      "00:30", "23:30", "NYSE cash open 9:30 AM ET"),
-    ("US_DATA_1000",   "01:00", "00:00", "US 10:00 AM data (ISM/CC)"),
-    ("COMEX_SETTLE",   "04:30", "03:30", "COMEX gold settlement 1:30 PM ET"),
-    ("CME_PRECLOSE",   "06:45", "05:45", "CME equity pre-settlement 2:45 PM CT"),
-    ("NYSE_CLOSE",     "07:00", "06:00", "NYSE closing bell 4:00 PM ET"),
-    ("CME_REOPEN",     "09:00", "08:00", "CME Globex reopen 5:00 PM CT"),
-    ("TOKYO_OPEN",     "10:00", "10:00", "Tokyo Stock Exchange 9:00 AM JST"),
-    ("BRISBANE_1025",  "10:25", "10:25", "Fixed 10:25 AM Brisbane"),
+    ("NYSE_OPEN", "00:30", "23:30", "NYSE cash open 9:30 AM ET"),
+    ("US_DATA_1000", "01:00", "00:00", "US 10:00 AM data (ISM/CC)"),
+    ("COMEX_SETTLE", "04:30", "03:30", "COMEX gold settlement 1:30 PM ET"),
+    ("CME_PRECLOSE", "06:45", "05:45", "CME equity pre-settlement 2:45 PM CT"),
+    ("NYSE_CLOSE", "07:00", "06:00", "NYSE closing bell 4:00 PM ET"),
+    ("CME_REOPEN", "09:00", "08:00", "CME Globex reopen 5:00 PM CT"),
+    ("TOKYO_OPEN", "10:00", "10:00", "Tokyo Stock Exchange 9:00 AM JST"),
+    ("BRISBANE_1025", "10:25", "10:25", "Fixed 10:25 AM Brisbane"),
     ("SINGAPORE_OPEN", "11:00", "11:00", "SGX/HKEX open 9:00 AM SGT"),
-    ("LONDON_METALS",  "18:00", "17:00", "London metals AM 8:00 AM London"),
-    ("US_DATA_830",    "23:30", "22:30", "US econ data 8:30 AM ET"),
+    ("LONDON_METALS", "18:00", "17:00", "London metals AM 8:00 AM London"),
+    ("US_DATA_830", "23:30", "22:30", "US econ data 8:30 AM ET"),
 ]
 
 # Display order matches the Quick Reference table header — do NOT use sorted().
 # sorted(ACTIVE_ORB_INSTRUMENTS) gives ['M2K','MES','MGC','MNQ'] which mismatches
 # the hardcoded header columns (MGC|MNQ|MES|M2K) and scrambles every cell.
 INSTRUMENTS = ["MGC", "MNQ", "MES", "M2K"]
-assert set(INSTRUMENTS) == set(ACTIVE_ORB_INSTRUMENTS), \
+assert set(INSTRUMENTS) == set(ACTIVE_ORB_INSTRUMENTS), (
     f"INSTRUMENTS out of sync: {INSTRUMENTS} vs {list(ACTIVE_ORB_INSTRUMENTS)}"
+)
 
 # Minimum expected R per trade to show a strategy in detail.
 # Below this threshold the edge is too small to trust given real-world friction.
@@ -135,7 +137,7 @@ def main():
                 continue
 
             high_rr = idf[(idf.rr_target >= 1.5) & (idf.expectancy_r >= MIN_EXPR)]
-            low_rr  = idf[idf.rr_target < 1.5]
+            low_rr = idf[idf.rr_target < 1.5]
 
             L.append(f"### {inst}")
 
@@ -146,9 +148,7 @@ def main():
                 if qual.empty:
                     n_all = len(idf)
                     best = idf.sort_values("score", ascending=False).iloc[0]
-                    L.append(
-                        f"*{n_all} validated strategies, all below quality floor (ExpR < {MIN_EXPR}).*"
-                    )
+                    L.append(f"*{n_all} validated strategies, all below quality floor (ExpR < {MIN_EXPR}).*")
                     L.append(
                         f"Best available: {best.entry_model} CB{int(best.confirm_bars)} "
                         f"{best.filter_type} O{int(best.orb_minutes)}m "
@@ -197,7 +197,7 @@ def main():
     for inst in INSTRUMENTS:
         idf = df[df.instrument == inst]
         sessions = sorted(idf.orb_label.unique())
-        best_expr  = idf.sort_values("expectancy_r", ascending=False).iloc[0]
+        best_expr = idf.sort_values("expectancy_r", ascending=False).iloc[0]
         best_score = idf.sort_values("score", ascending=False).iloc[0]
         sess_str = ", ".join(sessions)
         L.append(
@@ -214,15 +214,19 @@ def main():
     L.append("")
     L.append("- **All strategies are post-cost, FDR-corrected, multi-year validated.**")
     L.append("- **E2** (stop-market) is the dominant entry model. E0 purged Feb 2026. E3 soft-retired.")
-    L.append("- **Ranking:** `score = ExpR × √N × 1.25 (if all years positive)`. "
-             "Sharpe is not used — it structurally penalises high-RR configs whose binary variance is expected.")
+    L.append(
+        "- **Ranking:** `score = ExpR × √N × 1.25 (if all years positive)`. "
+        "Sharpe is not used — it structurally penalises high-RR configs whose binary variance is expected."
+    )
     L.append(f"- **Quality floor:** ExpR < {MIN_EXPR} strategies are FDR-validated but excluded from detail tables.")
     L.append("- **Apt**: ORB aperture — 5m = 5-minute range, 15m/30m = wider opening range.")
     L.append("- **Yrs**: calendar years in the backtest window.")
     L.append("- **★ (AllYrs)**: every individual calendar year was profitable.")
-    L.append("- **Filter types**: NO_FILTER (all days), ORB_G4/G5/G6/G8 (ORB size ≥ N points), "
-             "VOL_RV12_N20 (realized vol filter), DIR_LONG (long-only), FAST5/FAST10 (fast-break), "
-             "CONT (contiguous), NOMON (exclude Monday), NOTUE (exclude Tuesday).")
+    L.append(
+        "- **Filter types**: NO_FILTER (all days), ORB_G4/G5/G6/G8 (ORB size ≥ N points), "
+        "VOL_RV12_N20 (realized vol filter), DIR_LONG (long-only), FAST5/FAST10 (fast-break), "
+        "CONT (contiguous), NOMON (exclude Monday), NOTUE (exclude Tuesday)."
+    )
     L.append("- **This file is a SNAPSHOT.** Rebuild after any strategy_validator run.")
     L.append("- **To regenerate:** `python scripts/tools/gen_playbook.py` (requires CSV snapshot in research/output/).")
     L.append("- **Cost model**: round-trip friction deducted per instrument (see `pipeline/cost_model.py`).")

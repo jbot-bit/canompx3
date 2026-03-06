@@ -19,6 +19,7 @@ from trading_app.walkforward import (
 # Helpers
 # ========================================================================
 
+
 def _create_tables(con):
     """Create minimal orb_outcomes and daily_features tables."""
     con.execute("""
@@ -64,18 +65,24 @@ def _insert_outcomes(con, rows):
             "entry_price, stop_price) "
             "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             [
-                o.get("symbol", "MGC"), o.get("orb_minutes", 5),
-                o.get("orb_label", "CME_REOPEN"), o.get("entry_model", "E1"),
-                o.get("rr_target", 2.0), o.get("confirm_bars", 1),
-                o["trading_day"], o["outcome"], o["pnl_r"],
-                o.get("mae_r", -0.5), o.get("mfe_r", 2.0),
-                o.get("entry_price", 2000.0), o.get("stop_price", 1995.0),
+                o.get("symbol", "MGC"),
+                o.get("orb_minutes", 5),
+                o.get("orb_label", "CME_REOPEN"),
+                o.get("entry_model", "E1"),
+                o.get("rr_target", 2.0),
+                o.get("confirm_bars", 1),
+                o["trading_day"],
+                o["outcome"],
+                o["pnl_r"],
+                o.get("mae_r", -0.5),
+                o.get("mfe_r", 2.0),
+                o.get("entry_price", 2000.0),
+                o.get("stop_price", 1995.0),
             ],
         )
 
 
-def _monthly_outcomes(year_start, year_end, trades_per_month=3,
-                      win_pattern=None):
+def _monthly_outcomes(year_start, year_end, trades_per_month=3, win_pattern=None):
     """Generate outcomes: trades on 10th, 15th, 20th of each month.
 
     win_pattern: list of bools per trade index within month.
@@ -91,24 +98,31 @@ def _monthly_outcomes(year_start, year_end, trades_per_month=3,
         for month in range(1, 13):
             for i in range(trades_per_month):
                 is_win = win_pattern[i % len(win_pattern)]
-                outcomes.append({
-                    "trading_day": date(year, month, days[i]),
-                    "outcome": "win" if is_win else "loss",
-                    "pnl_r": 2.0 if is_win else -1.0,
-                })
+                outcomes.append(
+                    {
+                        "trading_day": date(year, month, days[i]),
+                        "outcome": "win" if is_win else "loss",
+                        "pnl_r": 2.0 if is_win else -1.0,
+                    }
+                )
     return outcomes
 
 
 # Default WF params for compact test calls
 _WF_BASE = dict(
-    orb_label="CME_REOPEN", entry_model="E1", rr_target=2.0,
-    confirm_bars=1, filter_type="NO_FILTER", orb_minutes=5,
+    orb_label="CME_REOPEN",
+    entry_model="E1",
+    rr_target=2.0,
+    confirm_bars=1,
+    filter_type="NO_FILTER",
+    orb_minutes=5,
 )
 
 
 # ========================================================================
 # Fixtures
 # ========================================================================
+
 
 @pytest.fixture
 def con(tmp_path):
@@ -123,6 +137,7 @@ def con(tmp_path):
 # ========================================================================
 # Unit tests: _add_months
 # ========================================================================
+
 
 class TestAddMonths:
     def test_basic(self):
@@ -145,8 +160,8 @@ class TestAddMonths:
 # Walk-forward tests
 # ========================================================================
 
-class TestWalkForward:
 
+class TestWalkForward:
     def test_basic_pass(self, con):
         """4 years of consistently positive data -> should pass."""
         # 2020-2023: 3 trades/month, 67% WR, RR2.0 => ExpR ~ +1.0
@@ -156,7 +171,9 @@ class TestWalkForward:
         _insert_outcomes(con, outcomes)
 
         result = run_walkforward(
-            con=con, strategy_id="TEST_PASS", instrument="MGC",
+            con=con,
+            strategy_id="TEST_PASS",
+            instrument="MGC",
             **_WF_BASE,
         )
 
@@ -176,7 +193,9 @@ class TestWalkForward:
         _insert_outcomes(con, train + test)
 
         result = run_walkforward(
-            con=con, strategy_id="TEST_NEG_OOS", instrument="MGC",
+            con=con,
+            strategy_id="TEST_NEG_OOS",
+            instrument="MGC",
             **_WF_BASE,
         )
 
@@ -190,14 +209,19 @@ class TestWalkForward:
             year = 2024 + m_offset // 12
             month = (m_offset % 12) + 1
             for day in [10, 15, 20]:
-                outcomes.append({
-                    "trading_day": date(year, month, day),
-                    "outcome": "win", "pnl_r": 2.0,
-                })
+                outcomes.append(
+                    {
+                        "trading_day": date(year, month, day),
+                        "outcome": "win",
+                        "pnl_r": 2.0,
+                    }
+                )
         _insert_outcomes(con, outcomes)
 
         result = run_walkforward(
-            con=con, strategy_id="TEST_SHORT", instrument="MGC",
+            con=con,
+            strategy_id="TEST_SHORT",
+            instrument="MGC",
             **_WF_BASE,
         )
 
@@ -212,7 +236,9 @@ class TestWalkForward:
         _insert_outcomes(con, data)
 
         result = run_walkforward(
-            con=con, strategy_id="TEST_THIN", instrument="MGC",
+            con=con,
+            strategy_id="TEST_THIN",
+            instrument="MGC",
             **_WF_BASE,
         )
 
@@ -220,13 +246,15 @@ class TestWalkForward:
 
     def test_min_trades_per_window(self, con):
         """1 trade/month = 6 per 6m window < 15 min -> all invalid."""
-        outcomes = _monthly_outcomes(2020, 2023, trades_per_month=1,
-                                     win_pattern=[True])
+        outcomes = _monthly_outcomes(2020, 2023, trades_per_month=1, win_pattern=[True])
         _insert_outcomes(con, outcomes)
 
         result = run_walkforward(
-            con=con, strategy_id="TEST_FEW", instrument="MGC",
-            min_trades_per_window=15, **_WF_BASE,
+            con=con,
+            strategy_id="TEST_FEW",
+            instrument="MGC",
+            min_trades_per_window=15,
+            **_WF_BASE,
         )
 
         assert result.passed is False
@@ -244,24 +272,31 @@ class TestWalkForward:
             month = (m_offset % 12) + 1
             for i, day in enumerate([10, 15, 20]):
                 is_win = i < 2  # 67% WR
-                positive.append({
-                    "trading_day": date(year, month, day),
-                    "outcome": "win" if is_win else "loss",
-                    "pnl_r": 2.0 if is_win else -1.0,
-                })
+                positive.append(
+                    {
+                        "trading_day": date(year, month, day),
+                        "outcome": "win" if is_win else "loss",
+                        "pnl_r": 2.0 if is_win else -1.0,
+                    }
+                )
         negative = []
         for m_offset in range(12):  # 2022-07 to 2023-06 (windows 4-5)
             year = 2022 + (m_offset + 6) // 12
             month = ((m_offset + 6) % 12) + 1
             for day in [10, 15, 20]:
-                negative.append({
-                    "trading_day": date(year, month, day),
-                    "outcome": "loss", "pnl_r": -1.0,
-                })
+                negative.append(
+                    {
+                        "trading_day": date(year, month, day),
+                        "outcome": "loss",
+                        "pnl_r": -1.0,
+                    }
+                )
         _insert_outcomes(con, train + positive + negative)
 
         result = run_walkforward(
-            con=con, strategy_id="TEST_60PCT", instrument="MGC",
+            con=con,
+            strategy_id="TEST_60PCT",
+            instrument="MGC",
             **_WF_BASE,
         )
 
@@ -279,7 +314,9 @@ class TestWalkForward:
         output_path = tmp_path / "data" / "wf_results.jsonl"
 
         result = run_walkforward(
-            con=con, strategy_id="TEST_JSONL", instrument="MGC",
+            con=con,
+            strategy_id="TEST_JSONL",
+            instrument="MGC",
             **_WF_BASE,
         )
         append_walkforward_result(result, output_path)
@@ -314,13 +351,21 @@ class TestWalkForward:
                     )
 
         result_no_filter = run_walkforward(
-            con=con, strategy_id="TEST_NF", instrument="MGC",
+            con=con,
+            strategy_id="TEST_NF",
+            instrument="MGC",
             **_WF_BASE,
         )
         result_g5 = run_walkforward(
-            con=con, strategy_id="TEST_G5", instrument="MGC",
-            orb_label="CME_REOPEN", entry_model="E1", rr_target=2.0,
-            confirm_bars=1, filter_type="ORB_G5", orb_minutes=5,
+            con=con,
+            strategy_id="TEST_G5",
+            instrument="MGC",
+            orb_label="CME_REOPEN",
+            entry_model="E1",
+            rr_target=2.0,
+            confirm_bars=1,
+            filter_type="ORB_G5",
+            orb_minutes=5,
         )
 
         # G5 filter keeps only even-month trades (50% of data)
@@ -335,15 +380,19 @@ class TestWalkForward:
             for month in range(1, 13):
                 for i, day in enumerate([10, 15, 20]):
                     is_win = i % 2 == 0  # 0,2 win, 1 loss = 67% WR
-                    outcomes.append({
-                        "trading_day": date(year, month, day),
-                        "outcome": "win" if is_win else "loss",
-                        "pnl_r": 1.5 if is_win else -1.0,
-                    })
+                    outcomes.append(
+                        {
+                            "trading_day": date(year, month, day),
+                            "outcome": "win" if is_win else "loss",
+                            "pnl_r": 1.5 if is_win else -1.0,
+                        }
+                    )
         _insert_outcomes(con, outcomes)
 
         result = run_walkforward(
-            con=con, strategy_id="TEST_COST", instrument="MGC",
+            con=con,
+            strategy_id="TEST_COST",
+            instrument="MGC",
             **_WF_BASE,
         )
 
@@ -361,18 +410,26 @@ class TestWalkForward:
             month = ((m_offset + 1) % 12) + 1
             for i, day in enumerate([10, 15, 20]):
                 is_win = i < 2
-                outcomes.append({
-                    "trading_day": date(year, month, day),
-                    "outcome": "win" if is_win else "loss",
-                    "pnl_r": 2.0 if is_win else -1.0,
-                    "symbol": "MNQ",
-                })
+                outcomes.append(
+                    {
+                        "trading_day": date(year, month, day),
+                        "outcome": "win" if is_win else "loss",
+                        "pnl_r": 2.0 if is_win else -1.0,
+                        "symbol": "MNQ",
+                    }
+                )
         _insert_outcomes(con, outcomes)
 
         result = run_walkforward(
-            con=con, strategy_id="MNQ_TEST", instrument="MNQ",
-            orb_label="CME_REOPEN", entry_model="E1", rr_target=2.0,
-            confirm_bars=1, filter_type="NO_FILTER", orb_minutes=5,
+            con=con,
+            strategy_id="MNQ_TEST",
+            instrument="MNQ",
+            orb_label="CME_REOPEN",
+            entry_model="E1",
+            rr_target=2.0,
+            confirm_bars=1,
+            filter_type="NO_FILTER",
+            orb_minutes=5,
             min_valid_windows=3,
         )
 
@@ -383,9 +440,15 @@ class TestWalkForward:
 
         # With relaxed threshold, should pass
         result2 = run_walkforward(
-            con=con, strategy_id="MNQ_TEST_2W", instrument="MNQ",
-            orb_label="CME_REOPEN", entry_model="E1", rr_target=2.0,
-            confirm_bars=1, filter_type="NO_FILTER", orb_minutes=5,
+            con=con,
+            strategy_id="MNQ_TEST_2W",
+            instrument="MNQ",
+            orb_label="CME_REOPEN",
+            entry_model="E1",
+            rr_target=2.0,
+            confirm_bars=1,
+            filter_type="NO_FILTER",
+            orb_minutes=5,
             min_valid_windows=2,
         )
         assert result2.n_valid_windows >= 2
@@ -397,15 +460,21 @@ class TestWalkForward:
         outcomes = []
         for month in range(1, 7):
             for day in [10, 15, 20]:
-                outcomes.append({
-                    "trading_day": date(2020, month, day),
-                    "outcome": "win", "pnl_r": 2.0,
-                })
+                outcomes.append(
+                    {
+                        "trading_day": date(2020, month, day),
+                        "outcome": "win",
+                        "pnl_r": 2.0,
+                    }
+                )
         _insert_outcomes(con, outcomes)
 
         result = run_walkforward(
-            con=con, strategy_id="TEST_ZERO_WIN", instrument="MGC",
-            min_train_months=12, **_WF_BASE,
+            con=con,
+            strategy_id="TEST_ZERO_WIN",
+            instrument="MGC",
+            min_train_months=12,
+            **_WF_BASE,
         )
 
         assert result.passed is False
@@ -423,25 +492,35 @@ class TestWalkForward:
         for month in range(1, 7):
             for day in range(1, 21):
                 try:
-                    outcomes.append({
-                        "trading_day": date(2021, month, day),
-                        "outcome": "win", "pnl_r": 2.0,
-                    })
+                    outcomes.append(
+                        {
+                            "trading_day": date(2021, month, day),
+                            "outcome": "win",
+                            "pnl_r": 2.0,
+                        }
+                    )
                 except ValueError:
                     pass
         # 2021-H2: 1 trade/month (sparse) — 6 months, ~6 trades
         for month in range(7, 13):
-            outcomes.append({
-                "trading_day": date(2021, month, 15),
-                "outcome": "win", "pnl_r": 2.0,
-            })
+            outcomes.append(
+                {
+                    "trading_day": date(2021, month, 15),
+                    "outcome": "win",
+                    "pnl_r": 2.0,
+                }
+            )
         # 2022: keep data flowing for more windows
         outcomes.extend(_monthly_outcomes(2022, 2023))
         _insert_outcomes(con, outcomes)
 
         result = run_walkforward(
-            con=con, strategy_id="TEST_IMBAL", instrument="MGC",
-            min_trades_per_window=1, min_valid_windows=2, **_WF_BASE,
+            con=con,
+            strategy_id="TEST_IMBAL",
+            instrument="MGC",
+            min_trades_per_window=1,
+            min_valid_windows=2,
+            **_WF_BASE,
         )
 
         assert result.window_imbalance_ratio is not None
@@ -455,7 +534,9 @@ class TestWalkForward:
         _insert_outcomes(con, outcomes)
 
         result = run_walkforward(
-            con=con, strategy_id="TEST_BAL", instrument="MGC",
+            con=con,
+            strategy_id="TEST_BAL",
+            instrument="MGC",
             **_WF_BASE,
         )
 
@@ -477,7 +558,9 @@ class TestWalkForward:
         # anchor = max(2016-01-10, 2022-01-01) = 2022-01-01
         # First test window starts: 2022-01-01 + 12mo = 2023-01-01
         result = run_walkforward(
-            con=con, strategy_id="TEST_OVERRIDE", instrument="MGC",
+            con=con,
+            strategy_id="TEST_OVERRIDE",
+            instrument="MGC",
             wf_start_date=date(2022, 1, 1),
             **_WF_BASE,
         )
@@ -494,7 +577,9 @@ class TestWalkForward:
         _insert_outcomes(con, outcomes)
 
         result = run_walkforward(
-            con=con, strategy_id="TEST_NO_OVERRIDE", instrument="MGC",
+            con=con,
+            strategy_id="TEST_NO_OVERRIDE",
+            instrument="MGC",
             **_WF_BASE,
         )
 
@@ -509,7 +594,9 @@ class TestWalkForward:
         _insert_outcomes(con, outcomes)
 
         result = run_walkforward(
-            con=con, strategy_id="TEST_FUTURE_OVERRIDE", instrument="MGC",
+            con=con,
+            strategy_id="TEST_FUTURE_OVERRIDE",
+            instrument="MGC",
             wf_start_date=date(2030, 1, 1),
             **_WF_BASE,
         )
@@ -523,12 +610,16 @@ class TestWalkForward:
         _insert_outcomes(con, outcomes)
 
         result_with = run_walkforward(
-            con=con, strategy_id="TEST_EARLY_OVERRIDE", instrument="MGC",
+            con=con,
+            strategy_id="TEST_EARLY_OVERRIDE",
+            instrument="MGC",
             wf_start_date=date(2015, 1, 1),
             **_WF_BASE,
         )
         result_without = run_walkforward(
-            con=con, strategy_id="TEST_NO_OVERRIDE2", instrument="MGC",
+            con=con,
+            strategy_id="TEST_NO_OVERRIDE2",
+            instrument="MGC",
             **_WF_BASE,
         )
 

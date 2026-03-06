@@ -26,8 +26,10 @@ from pipeline.cost_model import get_cost_spec
 # HELPERS
 # ============================================================================
 
+
 def _cost():
     return get_cost_spec("MGC")
+
 
 def _make_bars(start_ts, prices, interval_minutes=1):
     """
@@ -37,20 +39,24 @@ def _make_bars(start_ts, prices, interval_minutes=1):
     rows = []
     ts = start_ts
     for o, h, l, c, v in prices:
-        rows.append({
-            "ts_utc": ts,
-            "open": float(o),
-            "high": float(h),
-            "low": float(l),
-            "close": float(c),
-            "volume": int(v),
-        })
+        rows.append(
+            {
+                "ts_utc": ts,
+                "open": float(o),
+                "high": float(h),
+                "low": float(l),
+                "close": float(c),
+                "volume": int(v),
+            }
+        )
         ts = ts + timedelta(minutes=interval_minutes)
     return pd.DataFrame(rows)
+
 
 # ============================================================================
 # compute_single_outcome tests (E1: next bar open entry)
 # ============================================================================
+
 
 class TestComputeSingleOutcome:
     """Tests for the core outcome computation function using E1 model."""
@@ -352,23 +358,39 @@ class TestComputeSingleOutcome:
         )
 
         r1 = compute_single_outcome(
-            bars_df=bars, break_ts=break_ts, orb_high=orb_high, orb_low=orb_low,
-            break_dir="long", rr_target=2.0, confirm_bars=1,
-            trading_day_end=td_end, cost_spec=_cost(), entry_model="E1",
+            bars_df=bars,
+            break_ts=break_ts,
+            orb_high=orb_high,
+            orb_low=orb_low,
+            break_dir="long",
+            rr_target=2.0,
+            confirm_bars=1,
+            trading_day_end=td_end,
+            cost_spec=_cost(),
+            entry_model="E1",
         )
         r2 = compute_single_outcome(
-            bars_df=bars, break_ts=break_ts, orb_high=orb_high, orb_low=orb_low,
-            break_dir="long", rr_target=2.0, confirm_bars=2,
-            trading_day_end=td_end, cost_spec=_cost(), entry_model="E1",
+            bars_df=bars,
+            break_ts=break_ts,
+            orb_high=orb_high,
+            orb_low=orb_low,
+            break_dir="long",
+            rr_target=2.0,
+            confirm_bars=2,
+            trading_day_end=td_end,
+            cost_spec=_cost(),
+            entry_model="E1",
         )
 
         assert r1["entry_ts"] is not None
         assert r2["entry_ts"] is not None
         assert r2["entry_ts"] > r1["entry_ts"]
 
+
 # ============================================================================
 # Entry model specific tests
 # ============================================================================
+
 
 class TestEntryModelE1:
     """E1: next bar open after confirm."""
@@ -388,15 +410,23 @@ class TestEntryModelE1:
         )
 
         result = compute_single_outcome(
-            bars_df=bars, break_ts=break_ts, orb_high=orb_high, orb_low=orb_low,
-            break_dir="long", rr_target=2.0, confirm_bars=1,
-            trading_day_end=td_end, cost_spec=_cost(), entry_model="E1",
+            bars_df=bars,
+            break_ts=break_ts,
+            orb_high=orb_high,
+            orb_low=orb_low,
+            break_dir="long",
+            rr_target=2.0,
+            confirm_bars=1,
+            trading_day_end=td_end,
+            cost_spec=_cost(),
+            entry_model="E1",
         )
 
         assert result["entry_price"] == 2703.0  # open of bar after confirm
         assert result["stop_price"] == orb_low
         # Risk = 2703 - 2690 = 13 points
         assert result["target_price"] == pytest.approx(2703.0 + 13.0 * 2.0, abs=0.01)
+
 
 class TestEntryModelE3:
     """E3: limit at ORB level with retrace."""
@@ -416,9 +446,16 @@ class TestEntryModelE3:
         )
 
         result = compute_single_outcome(
-            bars_df=bars, break_ts=break_ts, orb_high=orb_high, orb_low=orb_low,
-            break_dir="long", rr_target=2.0, confirm_bars=1,
-            trading_day_end=td_end, cost_spec=_cost(), entry_model="E3",
+            bars_df=bars,
+            break_ts=break_ts,
+            orb_high=orb_high,
+            orb_low=orb_low,
+            break_dir="long",
+            rr_target=2.0,
+            confirm_bars=1,
+            trading_day_end=td_end,
+            cost_spec=_cost(),
+            entry_model="E3",
         )
 
         assert result["entry_price"] == orb_high  # limit fill at ORB level
@@ -441,17 +478,26 @@ class TestEntryModelE3:
         )
 
         result = compute_single_outcome(
-            bars_df=bars, break_ts=break_ts, orb_high=orb_high, orb_low=orb_low,
-            break_dir="long", rr_target=2.0, confirm_bars=1,
-            trading_day_end=td_end, cost_spec=_cost(), entry_model="E3",
+            bars_df=bars,
+            break_ts=break_ts,
+            orb_high=orb_high,
+            orb_low=orb_low,
+            break_dir="long",
+            rr_target=2.0,
+            confirm_bars=1,
+            trading_day_end=td_end,
+            cost_spec=_cost(),
+            entry_model="E3",
         )
 
         assert result["outcome"] is None
         assert result["entry_price"] is None
 
+
 # ============================================================================
 # build_outcomes integration tests (with temp DB)
 # ============================================================================
+
 
 class TestBuildOutcomes:
     """Integration tests using a temporary DuckDB database."""
@@ -462,11 +508,13 @@ class TestBuildOutcomes:
         con = duckdb.connect(str(db_path))
 
         from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA, DAILY_FEATURES_SCHEMA
+
         con.execute(BARS_1M_SCHEMA)
         con.execute(BARS_5M_SCHEMA)
         con.execute(DAILY_FEATURES_SCHEMA)
 
         from trading_app.db_manager import init_trading_app_schema
+
         con.close()
         init_trading_app_schema(db_path=db_path)
 
@@ -497,8 +545,13 @@ class TestBuildOutcomes:
                 orb_CME_REOPEN_high, orb_CME_REOPEN_low, orb_CME_REOPEN_break_dir, orb_CME_REOPEN_break_ts)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?::TIMESTAMPTZ)""",
             [
-                date(2024, 1, 5), "MGC", 5, 300,
-                orb_high, orb_low, "long",
+                date(2024, 1, 5),
+                "MGC",
+                5,
+                300,
+                orb_high,
+                orb_low,
+                "long",
                 (base_ts + timedelta(minutes=6)).isoformat(),
             ],
         )
@@ -543,9 +596,12 @@ class TestBuildOutcomes:
         assert count > 0
 
         con = duckdb.connect(str(db_path), read_only=True)
-        tables = [r[0] for r in con.execute(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
-        ).fetchall()]
+        tables = [
+            r[0]
+            for r in con.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+            ).fetchall()
+        ]
         if "orb_outcomes" in tables:
             actual = con.execute("SELECT COUNT(*) FROM orb_outcomes").fetchone()[0]
             assert actual == 0
@@ -556,12 +612,16 @@ class TestBuildOutcomes:
         db_path = self._setup_db(tmp_path)
 
         count1 = build_outcomes(
-            db_path=db_path, instrument="MGC",
-            start_date=date(2024, 1, 1), end_date=date(2024, 12, 31),
+            db_path=db_path,
+            instrument="MGC",
+            start_date=date(2024, 1, 1),
+            end_date=date(2024, 12, 31),
         )
         count2 = build_outcomes(
-            db_path=db_path, instrument="MGC",
-            start_date=date(2024, 1, 1), end_date=date(2024, 12, 31),
+            db_path=db_path,
+            instrument="MGC",
+            start_date=date(2024, 1, 1),
+            end_date=date(2024, 12, 31),
         )
 
         con = duckdb.connect(str(db_path), read_only=True)
@@ -575,11 +635,13 @@ class TestBuildOutcomes:
         db_path = tmp_path / "test.db"
         con = duckdb.connect(str(db_path))
         from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA, DAILY_FEATURES_SCHEMA
+
         con.execute(BARS_1M_SCHEMA)
         con.execute(BARS_5M_SCHEMA)
         con.execute(DAILY_FEATURES_SCHEMA)
         con.close()
         from trading_app.db_manager import init_trading_app_schema
+
         init_trading_app_schema(db_path=db_path)
 
         con = duckdb.connect(str(db_path))
@@ -594,8 +656,10 @@ class TestBuildOutcomes:
         con.close()
 
         count = build_outcomes(
-            db_path=db_path, instrument="MGC",
-            start_date=date(2024, 1, 1), end_date=date(2024, 12, 31),
+            db_path=db_path,
+            instrument="MGC",
+            start_date=date(2024, 1, 1),
+            end_date=date(2024, 12, 31),
         )
 
         assert count == 0
@@ -604,16 +668,17 @@ class TestBuildOutcomes:
         """entry_model column has correct values in DB."""
         db_path = self._setup_db(tmp_path)
         build_outcomes(
-            db_path=db_path, instrument="MGC",
-            start_date=date(2024, 1, 1), end_date=date(2024, 12, 31),
+            db_path=db_path,
+            instrument="MGC",
+            start_date=date(2024, 1, 1),
+            end_date=date(2024, 12, 31),
         )
 
         con = duckdb.connect(str(db_path), read_only=True)
-        models = {r[0] for r in con.execute(
-            "SELECT DISTINCT entry_model FROM orb_outcomes"
-        ).fetchall()}
+        models = {r[0] for r in con.execute("SELECT DISTINCT entry_model FROM orb_outcomes").fetchall()}
         con.close()
         assert models == {"E1", "E2", "E3"}
+
 
 class TestCheckpointResume:
     """Tests for checkpoint/resume crash resilience."""
@@ -624,11 +689,13 @@ class TestCheckpointResume:
         con = duckdb.connect(str(db_path))
 
         from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA, DAILY_FEATURES_SCHEMA
+
         con.execute(BARS_1M_SCHEMA)
         con.execute(BARS_5M_SCHEMA)
         con.execute(DAILY_FEATURES_SCHEMA)
 
         from trading_app.db_manager import init_trading_app_schema
+
         con.close()
         init_trading_app_schema(db_path=db_path)
 
@@ -659,8 +726,13 @@ class TestCheckpointResume:
                 orb_CME_REOPEN_high, orb_CME_REOPEN_low, orb_CME_REOPEN_break_dir, orb_CME_REOPEN_break_ts)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?::TIMESTAMPTZ)""",
             [
-                date(2024, 1, 5), "MGC", 5, 300,
-                orb_high, orb_low, "long",
+                date(2024, 1, 5),
+                "MGC",
+                5,
+                300,
+                orb_high,
+                orb_low,
+                "long",
                 (base_ts + timedelta(minutes=6)).isoformat(),
             ],
         )
@@ -674,14 +746,18 @@ class TestCheckpointResume:
         db_path = self._setup_db(tmp_path)
 
         count1 = build_outcomes(
-            db_path=db_path, instrument="MGC",
-            start_date=date(2024, 1, 1), end_date=date(2024, 12, 31),
+            db_path=db_path,
+            instrument="MGC",
+            start_date=date(2024, 1, 1),
+            end_date=date(2024, 12, 31),
         )
         assert count1 > 0
 
         count2 = build_outcomes(
-            db_path=db_path, instrument="MGC",
-            start_date=date(2024, 1, 1), end_date=date(2024, 12, 31),
+            db_path=db_path,
+            instrument="MGC",
+            start_date=date(2024, 1, 1),
+            end_date=date(2024, 12, 31),
         )
         assert count2 == 0
 
@@ -697,11 +773,13 @@ class TestCheckpointResume:
         con = duckdb.connect(str(db_path))
 
         from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA, DAILY_FEATURES_SCHEMA
+
         con.execute(BARS_1M_SCHEMA)
         con.execute(BARS_5M_SCHEMA)
         con.execute(DAILY_FEATURES_SCHEMA)
 
         from trading_app.db_manager import init_trading_app_schema
+
         con.close()
         init_trading_app_schema(db_path=db_path)
 
@@ -734,8 +812,13 @@ class TestCheckpointResume:
                     orb_CME_REOPEN_high, orb_CME_REOPEN_low, orb_CME_REOPEN_break_dir, orb_CME_REOPEN_break_ts)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?::TIMESTAMPTZ)""",
                 [
-                    td, "MGC", 5, 60,
-                    orb_high, orb_low, "long",
+                    td,
+                    "MGC",
+                    5,
+                    60,
+                    orb_high,
+                    orb_low,
+                    "long",
                     (base_ts + timedelta(minutes=6)).isoformat(),
                 ],
             )
@@ -749,8 +832,10 @@ class TestCheckpointResume:
         db_path = self._setup_db_multi_day(tmp_path, num_days=11)
 
         build_outcomes(
-            db_path=db_path, instrument="MGC",
-            start_date=date(2024, 1, 1), end_date=date(2024, 12, 31),
+            db_path=db_path,
+            instrument="MGC",
+            start_date=date(2024, 1, 1),
+            end_date=date(2024, 12, 31),
         )
 
         heartbeat_path = tmp_path / "outcome_builder.heartbeat"
@@ -764,8 +849,10 @@ class TestCheckpointResume:
         db_path = self._setup_db(tmp_path)
 
         build_outcomes(
-            db_path=db_path, instrument="MGC",
-            start_date=date(2024, 1, 1), end_date=date(2024, 12, 31),
+            db_path=db_path,
+            instrument="MGC",
+            start_date=date(2024, 1, 1),
+            end_date=date(2024, 12, 31),
             dry_run=True,
         )
 
@@ -783,14 +870,19 @@ class TestTimeStop:
         td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
         bars = _make_bars(
             datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
-            [(2698, 2701, 2695, 2701, 100),
-             (2703, 2710, 2700, 2710, 100),
-             (2718, 2735, 2717, 2730, 100)],
+            [(2698, 2701, 2695, 2701, 100), (2703, 2710, 2700, 2710, 100), (2718, 2735, 2717, 2730, 100)],
         )
         result = compute_single_outcome(
-            bars_df=bars, break_ts=break_ts, orb_high=orb_high, orb_low=orb_low,
-            break_dir="long", rr_target=2.0, confirm_bars=1,
-            trading_day_end=td_end, cost_spec=_cost(), entry_model="E1",
+            bars_df=bars,
+            break_ts=break_ts,
+            orb_high=orb_high,
+            orb_low=orb_low,
+            break_dir="long",
+            rr_target=2.0,
+            confirm_bars=1,
+            trading_day_end=td_end,
+            cost_spec=_cost(),
+            entry_model="E1",
             orb_label="TOKYO_OPEN",
         )
         assert "ts_outcome" in result
@@ -804,14 +896,19 @@ class TestTimeStop:
         td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
         bars = _make_bars(
             datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
-            [(2698, 2701, 2695, 2701, 100),
-             (2703, 2710, 2700, 2710, 100),
-             (2718, 2735, 2717, 2730, 100)],
+            [(2698, 2701, 2695, 2701, 100), (2703, 2710, 2700, 2710, 100), (2718, 2735, 2717, 2730, 100)],
         )
         result = compute_single_outcome(
-            bars_df=bars, break_ts=break_ts, orb_high=orb_high, orb_low=orb_low,
-            break_dir="long", rr_target=2.0, confirm_bars=1,
-            trading_day_end=td_end, cost_spec=_cost(), entry_model="E1",
+            bars_df=bars,
+            break_ts=break_ts,
+            orb_high=orb_high,
+            orb_low=orb_low,
+            break_dir="long",
+            rr_target=2.0,
+            confirm_bars=1,
+            trading_day_end=td_end,
+            cost_spec=_cost(),
+            entry_model="E1",
             orb_label="UNKNOWN_SESSION",
         )
         assert result["ts_outcome"] is None
@@ -839,9 +936,16 @@ class TestTimeStop:
 
         bars = _make_bars(datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc), bar_data)
         result = compute_single_outcome(
-            bars_df=bars, break_ts=break_ts, orb_high=orb_high, orb_low=orb_low,
-            break_dir="long", rr_target=2.0, confirm_bars=1,
-            trading_day_end=td_end, cost_spec=_cost(), entry_model="E1",
+            bars_df=bars,
+            break_ts=break_ts,
+            orb_high=orb_high,
+            orb_low=orb_low,
+            break_dir="long",
+            rr_target=2.0,
+            confirm_bars=1,
+            trading_day_end=td_end,
+            cost_spec=_cost(),
+            entry_model="E1",
             orb_label="TOKYO_OPEN",
         )
         # Baseline: full stop loss
@@ -869,9 +973,16 @@ class TestTimeStop:
             ],
         )
         result = compute_single_outcome(
-            bars_df=bars, break_ts=break_ts, orb_high=orb_high, orb_low=orb_low,
-            break_dir="long", rr_target=2.0, confirm_bars=1,
-            trading_day_end=td_end, cost_spec=_cost(), entry_model="E1",
+            bars_df=bars,
+            break_ts=break_ts,
+            orb_high=orb_high,
+            orb_low=orb_low,
+            break_dir="long",
+            rr_target=2.0,
+            confirm_bars=1,
+            trading_day_end=td_end,
+            cost_spec=_cost(),
+            entry_model="E1",
             orb_label="TOKYO_OPEN",
         )
         assert result["outcome"] == "win"
@@ -896,9 +1007,16 @@ class TestTimeStop:
 
         bars = _make_bars(datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc), bar_data)
         result = compute_single_outcome(
-            bars_df=bars, break_ts=break_ts, orb_high=orb_high, orb_low=orb_low,
-            break_dir="long", rr_target=2.0, confirm_bars=1,
-            trading_day_end=td_end, cost_spec=_cost(), entry_model="E1",
+            bars_df=bars,
+            break_ts=break_ts,
+            orb_high=orb_high,
+            orb_low=orb_low,
+            break_dir="long",
+            rr_target=2.0,
+            confirm_bars=1,
+            trading_day_end=td_end,
+            cost_spec=_cost(),
+            entry_model="E1",
             orb_label="TOKYO_OPEN",
         )
         # Baseline: scratch (no hit)
@@ -911,6 +1029,7 @@ class TestTimeStop:
         """Schema migration adds ts_outcome, ts_pnl_r, ts_exit_ts."""
         from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA, DAILY_FEATURES_SCHEMA
         from trading_app.db_manager import init_trading_app_schema
+
         db_path = tmp_path / "test.db"
         with duckdb.connect(str(db_path)) as con:
             con.execute(BARS_1M_SCHEMA)
@@ -918,10 +1037,12 @@ class TestTimeStop:
             con.execute(DAILY_FEATURES_SCHEMA)
         init_trading_app_schema(db_path=db_path)
         with duckdb.connect(str(db_path)) as con:
-            cols = {r[0] for r in con.execute(
-                "SELECT column_name FROM information_schema.columns "
-                "WHERE table_name = 'orb_outcomes'"
-            ).fetchall()}
+            cols = {
+                r[0]
+                for r in con.execute(
+                    "SELECT column_name FROM information_schema.columns WHERE table_name = 'orb_outcomes'"
+                ).fetchall()
+            }
         assert "ts_outcome" in cols
         assert "ts_pnl_r" in cols
         assert "ts_exit_ts" in cols
@@ -934,6 +1055,7 @@ class TestCLI:
         monkeypatch.setattr("sys.argv", ["outcome_builder", "--help"])
         with pytest.raises(SystemExit) as exc_info:
             from trading_app.outcome_builder import main
+
             main()
         assert exc_info.value.code == 0
         assert "instrument" in capsys.readouterr().out

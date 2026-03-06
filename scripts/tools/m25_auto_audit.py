@@ -35,6 +35,7 @@ Setup:
     Set MINIMAX_API_KEY in your .env or environment.
     Without it, the script silently exits 0 (no-op).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -119,10 +120,7 @@ def get_changed_files(
 
     files = [f.strip() for f in result.stdout.strip().split("\n") if f.strip()]
     # Filter to .py files in audit directories
-    return [
-        f for f in files
-        if f.endswith(".py") and any(f.startswith(d) for d in AUDIT_DIRS)
-    ]
+    return [f for f in files if f.endswith(".py") and any(f.startswith(d) for d in AUDIT_DIRS)]
 
 
 def pick_mode(filepath: str) -> str:
@@ -172,8 +170,7 @@ def run_audit(
 
         # Check if findings exist (heuristic: look for severity markers)
         has_findings = any(
-            marker in result.upper()
-            for marker in ["CRITICAL", "WARNING", "BUG", "ERROR", "VULNERABILITY", "ISSUE"]
+            marker in result.upper() for marker in ["CRITICAL", "WARNING", "BUG", "ERROR", "VULNERABILITY", "ISSUE"]
         )
         is_clean = "CLEAN" in result.upper() and not has_findings
 
@@ -214,33 +211,43 @@ def main():
         description="M2.5 auto-audit for changed pipeline/trading_app files",
     )
     parser.add_argument(
-        "--staged", action="store_true",
+        "--staged",
+        action="store_true",
         help="Audit staged files only (for pre-commit hook)",
     )
     parser.add_argument(
-        "--since", type=str, default=None,
+        "--since",
+        type=str,
+        default=None,
         help="Audit changes since this git ref (e.g., HEAD~3, main)",
     )
     parser.add_argument(
-        "--files", nargs="+", default=None,
+        "--files",
+        nargs="+",
+        default=None,
         help="Audit specific files (overrides git detection)",
     )
     parser.add_argument(
-        "--quick", action="store_true",
+        "--quick",
+        action="store_true",
         help="Quick mode: concise output, no saved files",
     )
     parser.add_argument(
-        "--advisory", action="store_true",
+        "--advisory",
+        action="store_true",
         help="Non-blocking: always exit 0 regardless of findings",
     )
     parser.add_argument(
-        "--output-dir", type=str, default=None,
+        "--output-dir",
+        type=str,
+        default=None,
         help="Directory to save detailed audit output (default: research/output/)",
     )
     args = parser.parse_args()
 
     # Check for API key early — silent exit if not set
     from dotenv import load_dotenv
+
     load_dotenv()
     if not os.environ.get("MINIMAX_API_KEY"):
         # No API key = no-op (don't break workflows)
@@ -248,10 +255,7 @@ def main():
 
     # Determine files to audit
     if args.files:
-        files = [
-            f for f in args.files
-            if f.endswith(".py") and any(f.startswith(d) for d in AUDIT_DIRS)
-        ]
+        files = [f for f in args.files if f.endswith(".py") and any(f.startswith(d) for d in AUDIT_DIRS)]
     else:
         files = get_changed_files(staged=args.staged, since=args.since)
 

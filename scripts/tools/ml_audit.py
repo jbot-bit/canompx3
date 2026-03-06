@@ -30,8 +30,10 @@ def audit_instrument(instrument: str, db_path: str) -> dict:
     print(f"\n{'=' * 70}")
     print(f"  ML AUDIT — {instrument}")
     print(f"{'=' * 70}")
-    print(f"Model: threshold={threshold}, OOS AUC={bundle.get('oos_auc', 0):.4f}, "
-          f"CPCV AUC={bundle.get('cpcv_auc', 0):.4f}")
+    print(
+        f"Model: threshold={threshold}, OOS AUC={bundle.get('oos_auc', 0):.4f}, "
+        f"CPCV AUC={bundle.get('cpcv_auc', 0):.4f}"
+    )
     print(f"Features: {len(feature_names)}, n_train={bundle.get('n_train', '?'):,}")
     print(f"Data range: {bundle.get('data_date_range', '?')}")
 
@@ -61,8 +63,7 @@ def audit_instrument(instrument: str, db_path: str) -> dict:
     meta_oos = meta.iloc[n_train:].copy()
     pnl_oos = meta_oos["pnl_r"].values
 
-    print(f"\nOOS holdout: {len(X_oos):,} trades "
-          f"({meta_oos['trading_day'].min()} to {meta_oos['trading_day'].max()})")
+    print(f"\nOOS holdout: {len(X_oos):,} trades ({meta_oos['trading_day'].min()} to {meta_oos['trading_day'].max()})")
 
     # --- Align features and predict ---
     X_aligned = LiveMLPredictor._align_features(X_oos, feature_names)
@@ -83,12 +84,12 @@ def audit_instrument(instrument: str, db_path: str) -> dict:
     print(f"{'Metric':<25} {'ALL':>12} {'TAKEN':>12} {'SKIPPED':>12}")
     print(f"{'-' * 25} {'-' * 12} {'-' * 12} {'-' * 12}")
     print(f"{'Count':<25} {len(pnl_oos):>12,} {len(taken_pnl):>12,} {len(skipped_pnl):>12,}")
-    print(f"{'Win Rate':<25} {(pnl_oos > 0).mean():>11.1%} "
-          f"{(taken_pnl > 0).mean():>11.1%} {(skipped_pnl > 0).mean():>11.1%}")
-    print(f"{'Avg R':<25} {pnl_oos.mean():>+12.4f} "
-          f"{taken_pnl.mean():>+12.4f} {skipped_pnl.mean():>+12.4f}")
-    print(f"{'Total R':<25} {pnl_oos.sum():>+12.2f} "
-          f"{taken_pnl.sum():>+12.2f} {skipped_pnl.sum():>+12.2f}")
+    print(
+        f"{'Win Rate':<25} {(pnl_oos > 0).mean():>11.1%} "
+        f"{(taken_pnl > 0).mean():>11.1%} {(skipped_pnl > 0).mean():>11.1%}"
+    )
+    print(f"{'Avg R':<25} {pnl_oos.mean():>+12.4f} {taken_pnl.mean():>+12.4f} {skipped_pnl.mean():>+12.4f}")
+    print(f"{'Total R':<25} {pnl_oos.sum():>+12.2f} {taken_pnl.sum():>+12.2f} {skipped_pnl.sum():>+12.2f}")
     sh_all = pnl_oos.mean() / pnl_oos.std() if pnl_oos.std() > 0 else 0
     sh_take = taken_pnl.mean() / taken_pnl.std() if taken_pnl.std() > 0 else 0
     sh_skip = skipped_pnl.mean() / skipped_pnl.std() if skipped_pnl.std() > 0 else 0
@@ -128,8 +129,7 @@ def audit_instrument(instrument: str, db_path: str) -> dict:
     # === PER-SESSION ANALYSIS ===
     print(f"\n--- PER-SESSION SKIP ANALYSIS ---")
     sessions = sorted(meta_oos["orb_label"].unique())
-    print(f"{'Session':<20} {'TakeN':>6} {'TakeAvgR':>9} {'SkipN':>6} "
-          f"{'SkipAvgR':>9} {'SkipNet':>9} {'Verdict':>8}")
+    print(f"{'Session':<20} {'TakeN':>6} {'TakeAvgR':>9} {'SkipN':>6} {'SkipAvgR':>9} {'SkipNet':>9} {'Verdict':>8}")
     print(f"{'-' * 20} {'-' * 6} {'-' * 9} {'-' * 6} {'-' * 9} {'-' * 9} {'-' * 8}")
     for s in sessions:
         s_mask = meta_oos["orb_label"].values == s
@@ -143,8 +143,7 @@ def audit_instrument(instrument: str, db_path: str) -> dict:
         sk_avg = pnl_oos[sk_mask_s].mean() if sk_n > 0 else 0
         sk_net = pnl_oos[sk_mask_s].sum() if sk_n > 0 else 0
         verdict = "GOOD" if sk_net <= 0 else "BAD"
-        print(f"{s:<20} {t_n:>6} {t_avg:>+9.4f} {sk_n:>6} "
-              f"{sk_avg:>+9.4f} {sk_net:>+9.2f} {verdict:>8}")
+        print(f"{s:<20} {t_n:>6} {t_avg:>+9.4f} {sk_n:>6} {sk_avg:>+9.4f} {sk_net:>+9.2f} {verdict:>8}")
 
     # === P(win) CALIBRATION ===
     print(f"\n--- P(win) CALIBRATION ---")
@@ -163,8 +162,7 @@ def audit_instrument(instrument: str, db_path: str) -> dict:
 
     # === P(win) DISTRIBUTION ===
     print(f"\n--- P(win) DISTRIBUTION ---")
-    print(f"Mean={y_prob.mean():.3f}  Std={y_prob.std():.3f}  "
-          f"Min={y_prob.min():.3f}  Max={y_prob.max():.3f}")
+    print(f"Mean={y_prob.mean():.3f}  Std={y_prob.std():.3f}  Min={y_prob.min():.3f}  Max={y_prob.max():.3f}")
     hist_bins = np.arange(0.30, 0.70, 0.05)
     for i in range(len(hist_bins) - 1):
         bmask = (y_prob >= hist_bins[i]) & (y_prob < hist_bins[i + 1])
@@ -175,8 +173,10 @@ def audit_instrument(instrument: str, db_path: str) -> dict:
 
     # === THRESHOLD SWEEP ===
     print(f"\n--- THRESHOLD SWEEP ---")
-    print(f"{'Thresh':>7} {'TakeN':>7} {'SkipN':>7} {'TakeAvgR':>9} "
-          f"{'TakeTotR':>9} {'TakeWR':>7} {'SkipAvgR':>9} {'SkipTotR':>9}")
+    print(
+        f"{'Thresh':>7} {'TakeN':>7} {'SkipN':>7} {'TakeAvgR':>9} "
+        f"{'TakeTotR':>9} {'TakeWR':>7} {'SkipAvgR':>9} {'SkipTotR':>9}"
+    )
     best_tot_r = -999
     best_t = 0.5
     for t in np.arange(0.50, 0.66, 0.01):
@@ -195,8 +195,10 @@ def audit_instrument(instrument: str, db_path: str) -> dict:
         if t_tot > best_tot_r:
             best_tot_r = t_tot
             best_t = t
-        print(f"{t:>7.2f} {t_n:>7} {s_n:>7} {t_avg:>+9.4f} {t_tot:>+9.2f} "
-              f"{t_wr:>6.1%} {s_avg:>+9.4f} {s_tot:>+9.2f}{marker}")
+        print(
+            f"{t:>7.2f} {t_n:>7} {s_n:>7} {t_avg:>+9.4f} {t_tot:>+9.2f} "
+            f"{t_wr:>6.1%} {s_avg:>+9.4f} {s_tot:>+9.2f}{marker}"
+        )
 
     print(f"\nBest threshold for max PnL: {best_t:.2f} (total R={best_tot_r:+.2f})")
     print(f"Current threshold: {threshold:.2f} (total R={taken_pnl.sum():+.2f})")
@@ -206,8 +208,10 @@ def audit_instrument(instrument: str, db_path: str) -> dict:
     # The real question: within each RR level, does the model discriminate?
     print(f"\n--- WITHIN-RR DISCRIMINATION ---")
     print("Within each RR level, does P(win) predict outcomes?")
-    print(f"{'RR':>5} {'TopQ_N':>7} {'TopQ_WR':>8} {'TopQ_AvgR':>10} "
-          f"{'BotQ_N':>7} {'BotQ_WR':>8} {'BotQ_AvgR':>10} {'Delta':>8}")
+    print(
+        f"{'RR':>5} {'TopQ_N':>7} {'TopQ_WR':>8} {'TopQ_AvgR':>10} "
+        f"{'BotQ_N':>7} {'BotQ_WR':>8} {'BotQ_AvgR':>10} {'Delta':>8}"
+    )
     for rr in rrs:
         rr_mask = meta_oos["rr_target"].values == rr
         rr_probs = y_prob[rr_mask]
@@ -224,8 +228,10 @@ def audit_instrument(instrument: str, db_path: str) -> dict:
         top_avg = rr_pnl[top_q].mean()
         bot_avg = rr_pnl[bot_q].mean()
         delta = top_avg - bot_avg
-        print(f"{rr:>5.1f} {top_q.sum():>7} {top_wr:>7.1%} {top_avg:>+10.4f} "
-              f"{bot_q.sum():>7} {bot_wr:>7.1%} {bot_avg:>+10.4f} {delta:>+8.4f}")
+        print(
+            f"{rr:>5.1f} {top_q.sum():>7} {top_wr:>7.1%} {top_avg:>+10.4f} "
+            f"{bot_q.sum():>7} {bot_wr:>7.1%} {bot_avg:>+10.4f} {delta:>+8.4f}"
+        )
 
     # === WITHOUT RR: does market-only signal work? ===
     print(f"\n--- MARKET-ONLY SIGNAL (RR=1.5 subset) ---")
@@ -234,7 +240,7 @@ def audit_instrument(instrument: str, db_path: str) -> dict:
     if rr15_mask.sum() > 100:
         rr15_probs = y_prob[rr15_mask]
         rr15_pnl = pnl_oos[rr15_mask]
-        rr15_won = (rr15_pnl > 0)
+        rr15_won = rr15_pnl > 0
         # Tercile split
         p33 = np.percentile(rr15_probs, 33)
         p67 = np.percentile(rr15_probs, 67)
@@ -285,13 +291,17 @@ def main():
         print(f"\n{'=' * 70}")
         print("  CROSS-INSTRUMENT SUMMARY")
         print(f"{'=' * 70}")
-        print(f"{'Inst':<6} {'Thresh':>7} {'OOS_N':>7} {'Base_R':>8} {'Take_R':>8} "
-              f"{'Skip_R':>8} {'Best_T':>7} {'Best_R':>8} {'RR_Dom':>7}")
+        print(
+            f"{'Inst':<6} {'Thresh':>7} {'OOS_N':>7} {'Base_R':>8} {'Take_R':>8} "
+            f"{'Skip_R':>8} {'Best_T':>7} {'Best_R':>8} {'RR_Dom':>7}"
+        )
         for inst, r in results.items():
-            print(f"{inst:<6} {r['threshold']:>7.2f} {r['oos_n']:>7,} "
-                  f"{r['baseline_total_r']:>+8.1f} {r['taken_total_r']:>+8.1f} "
-                  f"{r['skipped_total_r']:>+8.1f} {r['best_threshold']:>7.2f} "
-                  f"{r['best_total_r']:>+8.1f} {r['rr_dominance']:>6.1%}")
+            print(
+                f"{inst:<6} {r['threshold']:>7.2f} {r['oos_n']:>7,} "
+                f"{r['baseline_total_r']:>+8.1f} {r['taken_total_r']:>+8.1f} "
+                f"{r['skipped_total_r']:>+8.1f} {r['best_threshold']:>7.2f} "
+                f"{r['best_total_r']:>+8.1f} {r['rr_dominance']:>6.1%}"
+            )
 
 
 if __name__ == "__main__":

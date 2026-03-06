@@ -54,13 +54,21 @@ from trading_app.db_manager import (
 # 1. ORB_LABELS consistency
 # ============================================================================
 
+
 class TestOrbLabelsSync:
     """ORB_LABELS must be consistent across all modules."""
 
     EXPECTED_ORB_LABELS = [
-        "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
-        "US_DATA_830", "NYSE_OPEN", "US_DATA_1000", "COMEX_SETTLE",
-        "CME_PRECLOSE", "NYSE_CLOSE",
+        "CME_REOPEN",
+        "TOKYO_OPEN",
+        "SINGAPORE_OPEN",
+        "LONDON_METALS",
+        "US_DATA_830",
+        "NYSE_OPEN",
+        "US_DATA_1000",
+        "COMEX_SETTLE",
+        "CME_PRECLOSE",
+        "NYSE_CLOSE",
         "BRISBANE_1025",
     ]
 
@@ -75,7 +83,9 @@ class TestOrbLabelsSync:
     def test_daily_features_columns_match_orb_labels(self):
         """daily_features DDL has columns for every ORB label and no extras."""
         # Match both fixed (4-digit) and dynamic (alpha) ORB column prefixes
-        orb_col_pattern = re.compile(r'orb_([A-Za-z0-9_]+?)_(?:high|low|size|break_dir|break_ts|outcome|mae_r|mfe_r|double_break)\b')
+        orb_col_pattern = re.compile(
+            r"orb_([A-Za-z0-9_]+?)_(?:high|low|size|break_dir|break_ts|outcome|mae_r|mfe_r|double_break)\b"
+        )
         found_labels = set()
         for match in orb_col_pattern.finditer(DAILY_FEATURES_SCHEMA):
             found_labels.add(match.group(1))
@@ -84,9 +94,11 @@ class TestOrbLabelsSync:
             f"DDL ORB columns {sorted(found_labels)} != ORB_LABELS {sorted(ORB_LABELS)}"
         )
 
+
 # ============================================================================
 # 2. ALL_FILTERS registry consistency
 # ============================================================================
+
 
 class TestAllFiltersSync:
     """ALL_FILTERS keys must match filter_type inside each filter."""
@@ -101,22 +113,47 @@ class TestAllFiltersSync:
     # NOTE: NODBL removed Feb 2026 — double_break is look-ahead
     EXPECTED_FILTER_KEYS = {
         "NO_FILTER",
-        "ORB_G4", "ORB_G5", "ORB_G6", "ORB_G8",
+        "ORB_G4",
+        "ORB_G5",
+        "ORB_G6",
+        "ORB_G8",
         "VOL_RV12_N20",
         # DOW composites (registered globally for portfolio.py lookups)
-        "ORB_G4_NOFRI", "ORB_G5_NOFRI", "ORB_G6_NOFRI", "ORB_G8_NOFRI",
-        "ORB_G4_NOMON", "ORB_G5_NOMON", "ORB_G6_NOMON", "ORB_G8_NOMON",
-        "ORB_G4_NOTUE", "ORB_G5_NOTUE", "ORB_G6_NOTUE", "ORB_G8_NOTUE",
+        "ORB_G4_NOFRI",
+        "ORB_G5_NOFRI",
+        "ORB_G6_NOFRI",
+        "ORB_G8_NOFRI",
+        "ORB_G4_NOMON",
+        "ORB_G5_NOMON",
+        "ORB_G6_NOMON",
+        "ORB_G8_NOMON",
+        "ORB_G4_NOTUE",
+        "ORB_G5_NOTUE",
+        "ORB_G6_NOTUE",
+        "ORB_G8_NOTUE",
         # Break quality composites (Feb 2026 research: break speed + conviction)
-        "ORB_G4_FAST5", "ORB_G5_FAST5", "ORB_G6_FAST5", "ORB_G8_FAST5",
-        "ORB_G4_FAST10", "ORB_G5_FAST10", "ORB_G6_FAST10", "ORB_G8_FAST10",
-        "ORB_G4_CONT", "ORB_G5_CONT", "ORB_G6_CONT", "ORB_G8_CONT",
+        "ORB_G4_FAST5",
+        "ORB_G5_FAST5",
+        "ORB_G6_FAST5",
+        "ORB_G8_FAST5",
+        "ORB_G4_FAST10",
+        "ORB_G5_FAST10",
+        "ORB_G6_FAST10",
+        "ORB_G8_FAST10",
+        "ORB_G4_CONT",
+        "ORB_G5_CONT",
+        "ORB_G6_CONT",
+        "ORB_G8_CONT",
         # M6E (EUR/USD) pip-scaled size filters — MGC point filters meaningless for FX
-        "M6E_G4", "M6E_G6", "M6E_G8",
+        "M6E_G4",
+        "M6E_G6",
+        "M6E_G8",
         # Direction filters (session-specific, registered for portfolio lookups)
-        "DIR_LONG", "DIR_SHORT",
+        "DIR_LONG",
+        "DIR_SHORT",
         # MES 1000 band filters (ORB size between min and max points)
-        "ORB_G4_L12", "ORB_G5_L12",
+        "ORB_G4_L12",
+        "ORB_G5_L12",
     }
 
     def test_expected_keys(self):
@@ -126,9 +163,7 @@ class TestAllFiltersSync:
     def test_filter_type_matches_key(self):
         """Each filter's filter_type field matches its key in ALL_FILTERS."""
         for key, filt in ALL_FILTERS.items():
-            assert filt.filter_type == key, (
-                f"Key '{key}' but filter_type='{filt.filter_type}'"
-            )
+            assert filt.filter_type == key, f"Key '{key}' but filter_type='{filt.filter_type}'"
 
     def test_all_are_strategy_filters(self):
         """Every value in ALL_FILTERS is a StrategyFilter subclass."""
@@ -140,9 +175,7 @@ class TestAllFiltersSync:
         for key, filt in ALL_FILTERS.items():
             j = filt.to_json()
             parsed = json.loads(j)
-            assert parsed["filter_type"] == key, (
-                f"JSON filter_type mismatch: key={key}, json={parsed['filter_type']}"
-            )
+            assert parsed["filter_type"] == key, f"JSON filter_type mismatch: key={key}, json={parsed['filter_type']}"
 
     def test_no_filter_matches_everything(self):
         """NoFilter.matches_row always returns True."""
@@ -158,14 +191,13 @@ class TestAllFiltersSync:
     def test_size_filters_have_thresholds(self):
         """Every ORB size filter (or composite with size base) has thresholds."""
         from trading_app.config import CompositeFilter, DirectionFilter
+
         for key, filt in ALL_FILTERS.items():
             if key == "NO_FILTER" or isinstance(filt, (VolumeFilter, DirectionFilter)):
                 continue
             if isinstance(filt, CompositeFilter):
                 # Composite: base should be OrbSizeFilter with thresholds
-                assert isinstance(filt.base, OrbSizeFilter), (
-                    f"{key} composite base should be OrbSizeFilter"
-                )
+                assert isinstance(filt.base, OrbSizeFilter), f"{key} composite base should be OrbSizeFilter"
                 assert filt.base.min_size is not None or filt.base.max_size is not None, (
                     f"{key} composite base has neither min_size nor max_size"
                 )
@@ -183,9 +215,11 @@ class TestAllFiltersSync:
             assert filt.min_rel_vol > 0, f"{key} min_rel_vol must be positive"
             assert filt.lookback_days > 0, f"{key} lookback_days must be positive"
 
+
 # ============================================================================
 # 2b. DirectionFilter sync
 # ============================================================================
+
 
 class TestDirectionFilterSync:
     """DirectionFilter must correctly filter by breakout direction."""
@@ -214,6 +248,7 @@ class TestDirectionFilterSync:
 # ============================================================================
 # 2c. get_filters_for_grid session-aware dispatch
 # ============================================================================
+
 
 class TestGetFiltersForGrid:
     """get_filters_for_grid must return correct filter sets per instrument+session."""
@@ -261,6 +296,7 @@ class TestGetFiltersForGrid:
 # 3. RR_TARGETS, CONFIRM_BARS_OPTIONS, ENTRY_MODELS consistency
 # ============================================================================
 
+
 class TestGridParamsSync:
     """Grid parameters must be consistent and valid."""
 
@@ -300,6 +336,7 @@ class TestGridParamsSync:
         expected = e1 + e2_e3
         assert expected == 2772
 
+
 class TestEntryModelsSync:
     """ENTRY_MODELS must be consistent."""
 
@@ -312,9 +349,11 @@ class TestEntryModelsSync:
     def test_entry_models_are_strings(self):
         assert all(isinstance(em, str) for em in ENTRY_MODELS)
 
+
 # ============================================================================
 # 3b. Strategy classification sync (FIX5 rules)
 # ============================================================================
+
 
 class TestStrategyClassificationSync:
     """FIX5 strategy classification thresholds must be consistent."""
@@ -350,9 +389,11 @@ class TestStrategyClassificationSync:
         assert classify_strategy(REGIME_MIN_SAMPLES) == "REGIME"
         assert classify_strategy(REGIME_MIN_SAMPLES - 1) == "INVALID"
 
+
 # ============================================================================
 # 4. Strategy ID format consistency
 # ============================================================================
+
 
 class TestStrategyIdSync:
     """Strategy IDs must be deterministic and parseable."""
@@ -387,9 +428,11 @@ class TestStrategyIdSync:
                             ids.add(sid)
         assert len(ids) == 2772
 
+
 # ============================================================================
 # 5. DB schema column sync
 # ============================================================================
+
 
 class TestSchemaSync:
     """DB schema must match what code actually writes."""
@@ -399,6 +442,7 @@ class TestSchemaSync:
         db_path = tmp_path / "sync_test.db"
         con = duckdb.connect(str(db_path))
         from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA
+
         con.execute(BARS_1M_SCHEMA)
         con.execute(BARS_5M_SCHEMA)
         con.execute(DAILY_FEATURES_SCHEMA)
@@ -414,6 +458,7 @@ class TestSchemaSync:
         db_path = tmp_path / "sync_test.db"
         con = duckdb.connect(str(db_path))
         from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA
+
         con.execute(BARS_1M_SCHEMA)
         con.execute(BARS_5M_SCHEMA)
         con.execute(DAILY_FEATURES_SCHEMA)
@@ -421,22 +466,42 @@ class TestSchemaSync:
         init_trading_app_schema(db_path=db_path)
 
         con = duckdb.connect(str(db_path), read_only=True)
-        cols = {r[0] for r in con.execute(
-            "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name='experimental_strategies'"
-        ).fetchall()}
+        cols = {
+            r[0]
+            for r in con.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name='experimental_strategies'"
+            ).fetchall()
+        }
         con.close()
 
         required = {
-            "strategy_id", "instrument", "orb_label", "orb_minutes",
-            "rr_target", "confirm_bars", "entry_model", "filter_type",
-            "filter_params", "sample_size", "win_rate", "avg_win_r",
-            "avg_loss_r", "expectancy_r", "sharpe_ratio", "max_drawdown_r",
-            "median_risk_points", "avg_risk_points",
+            "strategy_id",
+            "instrument",
+            "orb_label",
+            "orb_minutes",
+            "rr_target",
+            "confirm_bars",
+            "entry_model",
+            "filter_type",
+            "filter_params",
+            "sample_size",
+            "win_rate",
+            "avg_win_r",
+            "avg_loss_r",
+            "expectancy_r",
+            "sharpe_ratio",
+            "max_drawdown_r",
+            "median_risk_points",
+            "avg_risk_points",
             "yearly_results",
-            "entry_signals", "scratch_count", "early_exit_count",
-            "trade_day_hash", "is_canonical", "canonical_strategy_id",
-            "validation_status", "validation_notes",
+            "entry_signals",
+            "scratch_count",
+            "early_exit_count",
+            "trade_day_hash",
+            "is_canonical",
+            "canonical_strategy_id",
+            "validation_status",
+            "validation_notes",
         }
         missing = required - cols
         assert not missing, f"Missing columns in experimental_strategies: {missing}"
@@ -446,6 +511,7 @@ class TestSchemaSync:
         db_path = tmp_path / "sync_test.db"
         con = duckdb.connect(str(db_path))
         from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA
+
         con.execute(BARS_1M_SCHEMA)
         con.execute(BARS_5M_SCHEMA)
         con.execute(DAILY_FEATURES_SCHEMA)
@@ -453,19 +519,35 @@ class TestSchemaSync:
         init_trading_app_schema(db_path=db_path)
 
         con = duckdb.connect(str(db_path), read_only=True)
-        cols = {r[0] for r in con.execute(
-            "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name='validated_setups'"
-        ).fetchall()}
+        cols = {
+            r[0]
+            for r in con.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name='validated_setups'"
+            ).fetchall()
+        }
         con.close()
 
         required = {
-            "strategy_id", "promoted_from", "instrument", "orb_label",
-            "orb_minutes", "rr_target", "confirm_bars", "entry_model",
-            "filter_type", "filter_params", "sample_size", "win_rate",
-            "expectancy_r", "years_tested", "all_years_positive",
-            "stress_test_passed", "sharpe_ratio", "max_drawdown_r",
-            "yearly_results", "status",
+            "strategy_id",
+            "promoted_from",
+            "instrument",
+            "orb_label",
+            "orb_minutes",
+            "rr_target",
+            "confirm_bars",
+            "entry_model",
+            "filter_type",
+            "filter_params",
+            "sample_size",
+            "win_rate",
+            "expectancy_r",
+            "years_tested",
+            "all_years_positive",
+            "stress_test_passed",
+            "sharpe_ratio",
+            "max_drawdown_r",
+            "yearly_results",
+            "status",
         }
         missing = required - cols
         assert not missing, f"Missing columns in validated_setups: {missing}"
@@ -475,6 +557,7 @@ class TestSchemaSync:
         db_path = tmp_path / "sync_test.db"
         con = duckdb.connect(str(db_path))
         from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA
+
         con.execute(BARS_1M_SCHEMA)
         con.execute(BARS_5M_SCHEMA)
         con.execute(DAILY_FEATURES_SCHEMA)
@@ -482,24 +565,41 @@ class TestSchemaSync:
         init_trading_app_schema(db_path=db_path)
 
         con = duckdb.connect(str(db_path), read_only=True)
-        cols = {r[0] for r in con.execute(
-            "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name='orb_outcomes'"
-        ).fetchall()}
+        cols = {
+            r[0]
+            for r in con.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name='orb_outcomes'"
+            ).fetchall()
+        }
         con.close()
 
         required = {
-            "trading_day", "symbol", "orb_label", "orb_minutes",
-            "rr_target", "confirm_bars", "entry_model", "entry_ts",
-            "entry_price", "stop_price", "target_price", "outcome",
-            "exit_ts", "exit_price", "pnl_r", "mae_r", "mfe_r",
+            "trading_day",
+            "symbol",
+            "orb_label",
+            "orb_minutes",
+            "rr_target",
+            "confirm_bars",
+            "entry_model",
+            "entry_ts",
+            "entry_price",
+            "stop_price",
+            "target_price",
+            "outcome",
+            "exit_ts",
+            "exit_price",
+            "pnl_r",
+            "mae_r",
+            "mfe_r",
         }
         missing = required - cols
         assert not missing, f"Missing columns in orb_outcomes: {missing}"
 
+
 # ============================================================================
 # 6. Cross-module import sync
 # ============================================================================
+
 
 class TestImportSync:
     """Verify that modules import the same constants."""
@@ -508,41 +608,48 @@ class TestImportSync:
         """outcome_builder imports ORB_LABELS from init_db (not hardcoded)."""
         import trading_app.outcome_builder as ob
         import inspect
+
         source = inspect.getsource(ob)
-        assert 'from pipeline.init_db import ORB_LABELS' in source
+        assert "from pipeline.init_db import ORB_LABELS" in source
 
     def test_strategy_discovery_uses_shared_constants(self):
         """strategy_discovery imports RR_TARGETS/CONFIRM_BARS from outcome_builder."""
         import inspect
         import trading_app.strategy_discovery as sd
+
         source = inspect.getsource(sd)
-        assert 'from trading_app.outcome_builder import RR_TARGETS' in source
-        assert 'CONFIRM_BARS_OPTIONS' in source
+        assert "from trading_app.outcome_builder import RR_TARGETS" in source
+        assert "CONFIRM_BARS_OPTIONS" in source
 
     def test_outcome_builder_imports_entry_models(self):
         """outcome_builder imports ENTRY_MODELS from config."""
         import inspect
         import trading_app.outcome_builder as ob
+
         source = inspect.getsource(ob)
-        assert 'from trading_app.config import ENTRY_MODELS' in source
+        assert "from trading_app.config import ENTRY_MODELS" in source
 
     def test_strategy_discovery_imports_entry_models(self):
         """strategy_discovery imports ENTRY_MODELS from config."""
         import inspect
         import trading_app.strategy_discovery as sd
+
         source = inspect.getsource(sd)
-        assert 'ENTRY_MODELS' in source
+        assert "ENTRY_MODELS" in source
 
     def test_market_state_imports_orb_labels(self):
         """market_state imports ORB_LABELS from init_db (not hardcoded)."""
         import inspect
         import trading_app.market_state as ms
+
         source = inspect.getsource(ms)
-        assert 'from pipeline.init_db import ORB_LABELS' in source
+        assert "from pipeline.init_db import ORB_LABELS" in source
+
 
 # ============================================================================
 # 7. Enabled sessions validation
 # ============================================================================
+
 
 class TestEnabledSessionsSync:
     """Every enabled_sessions label must exist in ORB_LABELS."""
@@ -552,22 +659,16 @@ class TestEnabledSessionsSync:
         for instrument, config in ASSET_CONFIGS.items():
             sessions = config.get("enabled_sessions", [])
             for s in sessions:
-                assert s in orb_set, (
-                    f"{instrument} enabled_sessions has '{s}' which is not in ORB_LABELS"
-                )
+                assert s in orb_set, f"{instrument} enabled_sessions has '{s}' which is not in ORB_LABELS"
 
     def test_no_alias_in_enabled_sessions(self):
         from pipeline.dst import SESSION_CATALOG
-        aliases = {
-            label for label, entry in SESSION_CATALOG.items()
-            if entry["type"] == "alias"
-        }
+
+        aliases = {label for label, entry in SESSION_CATALOG.items() if entry["type"] == "alias"}
         for instrument, config in ASSET_CONFIGS.items():
             sessions = config.get("enabled_sessions", [])
             for s in sessions:
-                assert s not in aliases, (
-                    f"{instrument} enabled_sessions has alias '{s}' -- use the canonical label"
-                )
+                assert s not in aliases, f"{instrument} enabled_sessions has alias '{s}' -- use the canonical label"
 
     def test_get_enabled_sessions_returns_list(self):
         for instrument in ASSET_CONFIGS:

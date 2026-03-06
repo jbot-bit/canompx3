@@ -201,11 +201,7 @@ def prepare_living_as_md(
             except UnicodeDecodeError:
                 code = abs_path.read_bytes().decode("utf-8", errors="replace")
 
-            content = (
-                f"# {abs_path.name} (Source of Truth)\n\n"
-                f"Source: `{rel_key}`\n\n"
-                f"```python\n{code}\n```\n"
-            )
+            content = f"# {abs_path.name} (Source of Truth)\n\nSource: `{rel_key}`\n\n```python\n{code}\n```\n"
             md_path.write_text(content, encoding="utf-8")
             result.append((md_path, md_rel_key))
             print(f"  Converted {rel_key} -> {md_name}")
@@ -432,9 +428,7 @@ def check_basename_conflicts(
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Sync project knowledge to Pinecone Assistant"
-    )
+    parser = argparse.ArgumentParser(description="Sync project knowledge to Pinecone Assistant")
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -501,9 +495,7 @@ def main():
 
     # 5. Detect changes
     print("[5/6] Detecting changes...")
-    changed, current_hashes = detect_changes(
-        collected, previous_hashes, force=args.force
-    )
+    changed, current_hashes = detect_changes(collected, previous_hashes, force=args.force)
     total_changed = sum(len(files) for files in changed.values())
 
     if total_changed == 0:

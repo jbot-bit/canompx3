@@ -3,11 +3,15 @@
 Tests the VolumeFilter class and the overlay eligibility logic directly
 without requiring a database connection.
 """
+
 import pytest
 import numpy as np
 import pandas as pd
 from trading_app.config import (
-    VolumeFilter, OrbSizeFilter, NoFilter, ALL_FILTERS,
+    VolumeFilter,
+    OrbSizeFilter,
+    NoFilter,
+    ALL_FILTERS,
 )
 
 
@@ -16,7 +20,8 @@ class TestVolumeFilterMatchesRow:
         return VolumeFilter(
             filter_type="VOL_RV12_N20",
             description="Relative volume >= 1.2x",
-            min_rel_vol=1.2, lookback_days=20,
+            min_rel_vol=1.2,
+            lookback_days=20,
         )
 
     def test_above_threshold_eligible(self):

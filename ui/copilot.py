@@ -49,6 +49,7 @@ _STOP_FILE = Path(__file__).parent.parent / "live_session.stop"
 
 # ── Cached data ──────────────────────────────────────────────────────────────
 
+
 @st.cache_data(ttl=300)
 def _cached_briefings() -> list[SessionBriefing]:
     """Cache briefing cards for 5 minutes."""
@@ -61,6 +62,7 @@ def _cached_atr(instrument: str) -> float | None:
 
 
 # ── Header bar ───────────────────────────────────────────────────────────────
+
 
 def _render_header(now: datetime, state: AppState) -> None:
     """Top bar: date, time, session dots."""
@@ -79,8 +81,7 @@ def _render_header(now: datetime, state: AppState) -> None:
 
     # Session dot strip — only sessions with live portfolio strategies
     briefings = _cached_briefings()
-    active_sessions = sorted(set(b.session for b in briefings),
-                             key=lambda s: _session_sort_key(s, now))
+    active_sessions = sorted(set(b.session for b in briefings), key=lambda s: _session_sort_key(s, now))
 
     if active_sessions and not state.name == "WEEKEND":
         upcoming_names = {name for name, _ in get_upcoming_sessions(now)}
@@ -113,11 +114,11 @@ def _session_sort_key(session: str, now: datetime) -> float:
 
 # ── State renderers ──────────────────────────────────────────────────────────
 
+
 def _render_weekend(state: AppState) -> None:
     """Markets closed view."""
     st.markdown(
-        "<h1 style='text-align:center; color:#888; margin-top:80px;'>"
-        "Markets Closed</h1>",
+        "<h1 style='text-align:center; color:#888; margin-top:80px;'>Markets Closed</h1>",
         unsafe_allow_html=True,
     )
     if state.next_monday:
@@ -179,8 +180,7 @@ def _render_approaching(state: AppState, now: datetime) -> None:
     if state.then_session and state.then_session_dt:
         then_time = state.then_session_dt.strftime("%I:%M %p").lstrip("0")
         st.markdown(
-            f"<p style='text-align:center; color:#888;'>"
-            f"then {state.then_session} &middot; {then_time}</p>",
+            f"<p style='text-align:center; color:#888;'>then {state.then_session} &middot; {then_time}</p>",
             unsafe_allow_html=True,
         )
 
@@ -208,8 +208,7 @@ def _render_alert(state: AppState, now: datetime) -> None:
     if state.then_session and state.then_session_dt:
         then_time = state.then_session_dt.strftime("%I:%M %p").lstrip("0")
         st.markdown(
-            f"<p style='text-align:center; color:#888;'>"
-            f"then {state.then_session} &middot; {then_time}</p>",
+            f"<p style='text-align:center; color:#888;'>then {state.then_session} &middot; {then_time}</p>",
             unsafe_allow_html=True,
         )
 
@@ -231,8 +230,7 @@ def _render_overnight(state: AppState, now: datetime) -> None:
 
     # Overnight session list (dimmed)
     st.markdown(
-        "<p style='text-align:center; color:#666; margin-top:30px;'>"
-        "Overnight sessions</p>",
+        "<p style='text-align:center; color:#666; margin-top:30px;'>Overnight sessions</p>",
         unsafe_allow_html=True,
     )
     upcoming = get_upcoming_sessions(now)
@@ -242,8 +240,7 @@ def _render_overnight(state: AppState, now: datetime) -> None:
     if overnight:
         for name, dt in overnight[:6]:
             t = dt.strftime("%I:%M %p").lstrip("0")
-            st.markdown(f"<p style='text-align:center; color:#555;'>{name} &middot; {t}</p>",
-                        unsafe_allow_html=True)
+            st.markdown(f"<p style='text-align:center; color:#555;'>{name} &middot; {t}</p>", unsafe_allow_html=True)
 
     if daytime:
         next_day_session = daytime[0]
@@ -261,6 +258,7 @@ def _render_overnight(state: AppState, now: datetime) -> None:
 
 # ── Briefing cards ───────────────────────────────────────────────────────────
 
+
 def _render_briefing_cards(session: str, now: datetime) -> None:
     """Render instrument briefing cards for a session."""
     briefings = _cached_briefings()
@@ -274,8 +272,10 @@ def _render_briefing_cards(session: str, now: datetime) -> None:
         with st.container(border=True):
             # Instrument header
             instrument_names = {
-                "MGC": "Micro Gold", "MNQ": "Micro Nasdaq",
-                "MES": "Micro S&P", "M2K": "Micro Russell",
+                "MGC": "Micro Gold",
+                "MNQ": "Micro Nasdaq",
+                "MES": "Micro S&P",
+                "M2K": "Micro Russell",
             }
             full_name = instrument_names.get(b.instrument, b.instrument)
 
@@ -318,6 +318,7 @@ def _render_briefing_cards(session: str, now: datetime) -> None:
 
 # ── Day summary ──────────────────────────────────────────────────────────────
 
+
 def _render_today_summary(trading_day: date | None, now: datetime) -> None:
     """Show completed sessions for today's trading day."""
     if trading_day is None:
@@ -326,8 +327,7 @@ def _render_today_summary(trading_day: date | None, now: datetime) -> None:
     st.markdown("**Today**")
 
     briefings = _cached_briefings()
-    active_sessions = sorted(set(b.session for b in briefings),
-                             key=lambda s: _session_sort_key(s, now))
+    active_sessions = sorted(set(b.session for b in briefings), key=lambda s: _session_sort_key(s, now))
     upcoming_names = {name for name, _ in get_upcoming_sessions(now)}
 
     for session in active_sessions:
@@ -361,6 +361,7 @@ def _render_previous_day_summary(trading_day: date | None) -> None:
 
 
 # ── Session controls ─────────────────────────────────────────────────────────
+
 
 def _render_session_controls() -> None:
     """Start/stop live session buttons."""
@@ -410,7 +411,8 @@ def _start_session(instrument: str, signal_only: bool) -> None:
     cmd = [
         sys.executable,
         "scripts/run_live_session.py",
-        "--instrument", instrument,
+        "--instrument",
+        instrument,
         flag,
     ]
     proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -434,6 +436,7 @@ def _stop_session() -> None:
 
 # ── Signal log ───────────────────────────────────────────────────────────────
 
+
 def _render_signal_log() -> None:
     """Show recent signals from live_signals.jsonl."""
     if not _SIGNALS_FILE.exists():
@@ -456,6 +459,7 @@ def _render_signal_log() -> None:
         ts = r.get("ts", "")
         try:
             from datetime import timezone
+
             ts_display = datetime.fromisoformat(ts).astimezone(BRISBANE).strftime("%I:%M %p").lstrip("0")
         except (ValueError, TypeError):
             ts_display = ts
@@ -466,15 +470,19 @@ def _render_signal_log() -> None:
         price = r.get("price", "")
 
         colors = {
-            "SIGNAL_ENTRY": "green", "ORDER_ENTRY": "green",
-            "SIGNAL_EXIT": "orange", "ORDER_EXIT": "orange",
-            "REJECT": "red", "SESSION_START": "blue",
+            "SIGNAL_ENTRY": "green",
+            "ORDER_ENTRY": "green",
+            "SIGNAL_EXIT": "orange",
+            "ORDER_EXIT": "orange",
+            "REJECT": "red",
+            "SESSION_START": "blue",
         }
         color = colors.get(event_type, "gray")
         st.markdown(f":{color}[{ts_display}] {event_type} {instrument} {strategy} {price}")
 
 
 # ── Main render ──────────────────────────────────────────────────────────────
+
 
 def render() -> None:
     """Main entry point — renders the co-pilot dashboard."""

@@ -36,7 +36,7 @@ class TestHardcodedMgcSql:
 
     def test_passes_clean_code(self, tmp_path):
         f = tmp_path / "test.py"
-        f.write_text("con.execute(\"SELECT * FROM bars_1m WHERE symbol = ?\")\n")
+        f.write_text('con.execute("SELECT * FROM bars_1m WHERE symbol = ?")\n')
         violations = check_hardcoded_mgc_sql([f])
         assert len(violations) == 0
 
@@ -91,25 +91,25 @@ class TestNonBars1mWrites:
 
     def test_catches_insert_into_bars_5m(self, tmp_path):
         f = tmp_path / "test.py"
-        f.write_text("con.execute(\"INSERT INTO bars_5m (ts_utc) VALUES (?)\")\n")
+        f.write_text('con.execute("INSERT INTO bars_5m (ts_utc) VALUES (?)")\n')
         violations = check_non_bars1m_writes([f])
         assert len(violations) > 0
 
     def test_catches_delete_from_other_table(self, tmp_path):
         f = tmp_path / "test.py"
-        f.write_text("con.execute(\"DELETE FROM daily_features WHERE date = ?\")\n")
+        f.write_text('con.execute("DELETE FROM daily_features WHERE date = ?")\n')
         violations = check_non_bars1m_writes([f])
         assert len(violations) > 0
 
     def test_allows_bars_1m_writes(self, tmp_path):
         f = tmp_path / "test.py"
-        f.write_text("con.execute(\"INSERT OR REPLACE INTO bars_1m (ts_utc) VALUES (?)\")\n")
+        f.write_text('con.execute("INSERT OR REPLACE INTO bars_1m (ts_utc) VALUES (?)")\n')
         violations = check_non_bars1m_writes([f])
         assert len(violations) == 0
 
     def test_passes_clean_code(self, tmp_path):
         f = tmp_path / "test.py"
-        f.write_text("count = con.execute(\"SELECT COUNT(*) FROM bars_1m\").fetchone()[0]\n")
+        f.write_text('count = con.execute("SELECT COUNT(*) FROM bars_1m").fetchone()[0]\n')
         violations = check_non_bars1m_writes([f])
         assert len(violations) == 0
 
@@ -227,6 +227,7 @@ class TestConfigFilterSync:
         """Verify the check actually inspects ALL_FILTERS."""
         # If ALL_FILTERS is importable and has entries, check should return empty
         from trading_app.config import ALL_FILTERS
+
         assert len(ALL_FILTERS) > 0
         violations = check_config_filter_sync()
         assert len(violations) == 0
@@ -238,12 +239,14 @@ class TestClaudeMdSizeCap:
     def test_real_claude_md_exists_and_under_cap(self):
         """Verify actual CLAUDE.md is under 12KB."""
         from pipeline.check_drift import check_claude_md_size_cap
+
         violations = check_claude_md_size_cap()
         assert len(violations) == 0
 
     def test_catches_oversized_file(self, tmp_path, monkeypatch):
         """Oversized CLAUDE.md triggers violation."""
         from pipeline import check_drift
+
         monkeypatch.setattr(check_drift, "PROJECT_ROOT", tmp_path)
         (tmp_path / "CLAUDE.md").write_text("x" * 13000)
         violations = check_drift.check_claude_md_size_cap()
@@ -253,6 +256,7 @@ class TestClaudeMdSizeCap:
     def test_passes_small_file(self, tmp_path, monkeypatch):
         """Small CLAUDE.md passes."""
         from pipeline import check_drift
+
         monkeypatch.setattr(check_drift, "PROJECT_ROOT", tmp_path)
         (tmp_path / "CLAUDE.md").write_text("small")
         violations = check_drift.check_claude_md_size_cap()
@@ -271,9 +275,8 @@ class TestDiscoverySessionAwareFilters:
     def test_catches_all_filters_items(self, tmp_path, monkeypatch):
         """ALL_FILTERS.items() in strategy_discovery.py triggers a violation."""
         from pipeline import check_drift
-        (tmp_path / "strategy_discovery.py").write_text(
-            "for filter_key, filt in ALL_FILTERS.items():\n    pass\n"
-        )
+
+        (tmp_path / "strategy_discovery.py").write_text("for filter_key, filt in ALL_FILTERS.items():\n    pass\n")
         self._patch(monkeypatch, check_drift, tmp_path)
         violations = check_drift.check_discovery_session_aware_filters()
         assert len(violations) == 1
@@ -282,9 +285,8 @@ class TestDiscoverySessionAwareFilters:
     def test_catches_all_filters_values(self, tmp_path, monkeypatch):
         """ALL_FILTERS.values() in a discovery file triggers a violation."""
         from pipeline import check_drift
-        (tmp_path / "strategy_discovery.py").write_text(
-            "for filt in ALL_FILTERS.values():\n    pass\n"
-        )
+
+        (tmp_path / "strategy_discovery.py").write_text("for filt in ALL_FILTERS.values():\n    pass\n")
         self._patch(monkeypatch, check_drift, tmp_path)
         violations = check_drift.check_discovery_session_aware_filters()
         assert len(violations) == 1
@@ -293,9 +295,8 @@ class TestDiscoverySessionAwareFilters:
     def test_catches_len_all_filters(self, tmp_path, monkeypatch):
         """len(ALL_FILTERS) in a discovery file triggers a violation."""
         from pipeline import check_drift
-        (tmp_path / "strategy_discovery.py").write_text(
-            "total_combos = len(ALL_FILTERS) * len(RR_TARGETS)\n"
-        )
+
+        (tmp_path / "strategy_discovery.py").write_text("total_combos = len(ALL_FILTERS) * len(RR_TARGETS)\n")
         self._patch(monkeypatch, check_drift, tmp_path)
         violations = check_drift.check_discovery_session_aware_filters()
         assert len(violations) == 1
@@ -304,9 +305,8 @@ class TestDiscoverySessionAwareFilters:
     def test_passes_all_filters_get(self, tmp_path, monkeypatch):
         """ALL_FILTERS.get() is a registry lookup — not a grid iteration."""
         from pipeline import check_drift
-        (tmp_path / "strategy_discovery.py").write_text(
-            "filt = ALL_FILTERS.get(strategy.filter_type)\n"
-        )
+
+        (tmp_path / "strategy_discovery.py").write_text("filt = ALL_FILTERS.get(strategy.filter_type)\n")
         self._patch(monkeypatch, check_drift, tmp_path)
         violations = check_drift.check_discovery_session_aware_filters()
         assert len(violations) == 0
@@ -314,9 +314,8 @@ class TestDiscoverySessionAwareFilters:
     def test_passes_commented_out(self, tmp_path, monkeypatch):
         """Commented-out ALL_FILTERS.items() is not a violation."""
         from pipeline import check_drift
-        (tmp_path / "strategy_discovery.py").write_text(
-            "# for k, v in ALL_FILTERS.items():  # old pattern\n"
-        )
+
+        (tmp_path / "strategy_discovery.py").write_text("# for k, v in ALL_FILTERS.items():  # old pattern\n")
         self._patch(monkeypatch, check_drift, tmp_path)
         violations = check_drift.check_discovery_session_aware_filters()
         assert len(violations) == 0
@@ -324,6 +323,7 @@ class TestDiscoverySessionAwareFilters:
     def test_passes_missing_file(self, tmp_path, monkeypatch):
         """Missing discovery file is silently skipped."""
         from pipeline import check_drift
+
         self._patch(monkeypatch, check_drift, tmp_path)
         violations = check_drift.check_discovery_session_aware_filters()
         assert len(violations) == 0
@@ -331,11 +331,10 @@ class TestDiscoverySessionAwareFilters:
     def test_catches_nested_discovery(self, tmp_path, monkeypatch):
         """Violation in nested/discovery.py is detected."""
         from pipeline import check_drift
+
         nested = tmp_path / "nested"
         nested.mkdir()
-        (nested / "discovery.py").write_text(
-            "for k, v in ALL_FILTERS.items():\n    pass\n"
-        )
+        (nested / "discovery.py").write_text("for k, v in ALL_FILTERS.items():\n    pass\n")
         self._patch(monkeypatch, check_drift, tmp_path)
         violations = check_drift.check_discovery_session_aware_filters()
         assert len(violations) == 1
@@ -344,6 +343,7 @@ class TestDiscoverySessionAwareFilters:
     def test_real_discovery_files_pass(self):
         """Current codebase discovery scripts are clean."""
         from pipeline.check_drift import check_discovery_session_aware_filters
+
         violations = check_discovery_session_aware_filters()
         assert len(violations) == 0
 

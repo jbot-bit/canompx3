@@ -11,6 +11,7 @@ Usage:
     python scripts/tools/m25_nightly.py --setup  # Print Task Scheduler setup command
     python scripts/tools/m25_nightly.py --summary # Print last summary only (no API calls)
 """
+
 from __future__ import annotations
 
 import sys
@@ -34,20 +35,20 @@ OUTPUT_DIR = PROJECT / "research" / "output" / "m25"
 # Order matters: cheap/quick files first so partial runs are still useful.
 NIGHTLY_TARGETS: list[tuple[str, str]] = [
     # Pipeline — data integrity
-    ("pipeline/dst.py",                    "bugs"),
-    ("pipeline/cost_model.py",             "bugs"),
-    ("pipeline/asset_configs.py",          "bugs"),
-    ("pipeline/build_daily_features.py",   "joins"),
-    ("pipeline/build_bars_5m.py",          "joins"),
-    ("pipeline/ingest_dbn.py",             "bugs"),
+    ("pipeline/dst.py", "bugs"),
+    ("pipeline/cost_model.py", "bugs"),
+    ("pipeline/asset_configs.py", "bugs"),
+    ("pipeline/build_daily_features.py", "joins"),
+    ("pipeline/build_bars_5m.py", "joins"),
+    ("pipeline/ingest_dbn.py", "bugs"),
     # Trading app — statistical correctness
-    ("trading_app/outcome_builder.py",     "bias"),
-    ("trading_app/strategy_discovery.py",  "bias"),
-    ("trading_app/strategy_validator.py",  "bias"),
-    ("trading_app/config.py",              "bugs"),
+    ("trading_app/outcome_builder.py", "bias"),
+    ("trading_app/strategy_discovery.py", "bias"),
+    ("trading_app/strategy_validator.py", "bias"),
+    ("trading_app/config.py", "bugs"),
     # ML — bias focus
-    ("trading_app/ml/meta_label.py",       "bias"),
-    ("trading_app/ml/cpcv.py",             "bias"),
+    ("trading_app/ml/meta_label.py", "bias"),
+    ("trading_app/ml/cpcv.py", "bias"),
 ]
 
 # Sentinel file read by session-start hook to remind you of pending findings
@@ -102,10 +103,7 @@ def run_nightly(quick: bool = False) -> None:
             continue
 
         # Classify result
-        has_findings = any(
-            m in result.upper()
-            for m in ["CRITICAL", "HIGH", "BUG", "VULNERABILITY", "WRONG"]
-        )
+        has_findings = any(m in result.upper() for m in ["CRITICAL", "HIGH", "BUG", "VULNERABILITY", "WRONG"])
         is_clean = "CLEAN" in result.upper() and not has_findings
 
         if is_clean:
@@ -123,9 +121,7 @@ def run_nightly(quick: bool = False) -> None:
         safe = filepath.replace("/", "_").replace("\\", "_")
         detail_path = out_dir / f"{safe}.md"
         detail_path.write_text(
-            f"# M2.5 Audit: {filepath}\n"
-            f"**Mode:** {mode} | **Date:** {today} | **Model:** Lightning\n\n"
-            f"{result}\n",
+            f"# M2.5 Audit: {filepath}\n**Mode:** {mode} | **Date:** {today} | **Model:** Lightning\n\n{result}\n",
             encoding="utf-8",
         )
 
@@ -133,8 +129,7 @@ def run_nightly(quick: bool = False) -> None:
     total = len(NIGHTLY_TARGETS)
     summary_lines += [
         "",
-        f"**{clean_count}/{total} clean** | "
-        f"**{len(findings_files)} with findings**",
+        f"**{clean_count}/{total} clean** | **{len(findings_files)} with findings**",
         "",
     ]
 
@@ -187,10 +182,7 @@ def print_setup() -> None:
 
     print("# Run this ONCE to register the nightly M2.5 audit at 02:00 AM:")
     print()
-    print(
-        f'schtasks /Create /TN "M2.5 Nightly Audit" /TR '
-        f'"{python} {script}" /SC DAILY /ST 02:00 /F'
-    )
+    print(f'schtasks /Create /TN "M2.5 Nightly Audit" /TR "{python} {script}" /SC DAILY /ST 02:00 /F')
     print()
     print("# To verify it's registered:")
     print('schtasks /Query /TN "M2.5 Nightly Audit"')
@@ -207,9 +199,9 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="M2.5 nightly batch audit")
-    parser.add_argument("--setup",   action="store_true", help="Print Task Scheduler setup command")
+    parser.add_argument("--setup", action="store_true", help="Print Task Scheduler setup command")
     parser.add_argument("--summary", action="store_true", help="Print last summary, no API calls")
-    parser.add_argument("--quick",   action="store_true", help="One finding per file, faster")
+    parser.add_argument("--quick", action="store_true", help="One finding per file, faster")
     args = parser.parse_args()
 
     if args.setup:

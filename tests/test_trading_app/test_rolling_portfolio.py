@@ -36,6 +36,7 @@ from pipeline.build_daily_features import detect_double_break
 # Window generation tests
 # =========================================================================
 
+
 class TestWindowGeneration:
     """Test rolling window date range generation."""
 
@@ -68,8 +69,7 @@ class TestWindowGeneration:
         )
         for w in windows:
             assert w["train_end"] < w["test_start"], (
-                f"Lookahead violation: train_end={w['train_end']} >= "
-                f"test_start={w['test_start']}"
+                f"Lookahead violation: train_end={w['train_end']} >= test_start={w['test_start']}"
             )
 
     def test_train_period_correct_length(self):
@@ -101,9 +101,11 @@ class TestWindowGeneration:
         )
         assert len(windows) == 1
 
+
 # =========================================================================
 # Stability scoring tests
 # =========================================================================
+
 
 class TestStabilityScoring:
     """Test sample-size-weighted stability scoring."""
@@ -135,12 +137,13 @@ class TestStabilityScoring:
         assert classify_stability(0.2) == "DEGRADED"
         assert classify_stability(0.0) == "DEGRADED"
 
+
 class TestAggregatePerformance:
     """Test family-level aggregation of rolling results."""
 
-    def _make_validated(self, run_label, orb_label="CME_REOPEN", em="E1",
-                         ft="ORB_G4", rr=2.0, cb=2, sample=50,
-                         exp_r=0.15, sharpe=0.1):
+    def _make_validated(
+        self, run_label, orb_label="CME_REOPEN", em="E1", ft="ORB_G4", rr=2.0, cb=2, sample=50, exp_r=0.15, sharpe=0.1
+    ):
         return {
             "run_label": run_label,
             "strategy_id": f"MGC_{orb_label}_{em}_RR{rr}_CB{cb}_{ft}",
@@ -209,9 +212,11 @@ class TestAggregatePerformance:
         results = aggregate_rolling_performance([], [], {})
         assert results == []
 
+
 # =========================================================================
 # Double-break tests
 # =========================================================================
+
 
 class TestDoubleBreak:
     """Test double-break detection logic."""
@@ -222,22 +227,25 @@ class TestDoubleBreak:
         orb_high = 2000.0
         orb_low = 1990.0
 
-        bars = pd.DataFrame({
-            "ts_utc": pd.to_datetime([
-                "2025-01-06 23:05:00",  # After CME_REOPEN ORB close
-                "2025-01-06 23:10:00",
-                "2025-01-06 23:15:00",
-            ], utc=True),
-            "open": [1995.0, 2001.0, 1989.0],
-            "high": [2001.0, 2003.0, 1991.0],
-            "low": [1993.0, 1999.0, 1988.0],
-            "close": [2001.0, 2001.0, 1989.0],
-            "volume": [100, 100, 100],
-        })
-
-        result = detect_double_break(
-            bars, date(2025, 1, 7), "CME_REOPEN", 5, orb_high, orb_low
+        bars = pd.DataFrame(
+            {
+                "ts_utc": pd.to_datetime(
+                    [
+                        "2025-01-06 23:05:00",  # After CME_REOPEN ORB close
+                        "2025-01-06 23:10:00",
+                        "2025-01-06 23:15:00",
+                    ],
+                    utc=True,
+                ),
+                "open": [1995.0, 2001.0, 1989.0],
+                "high": [2001.0, 2003.0, 1991.0],
+                "low": [1993.0, 1999.0, 1988.0],
+                "close": [2001.0, 2001.0, 1989.0],
+                "volume": [100, 100, 100],
+            }
         )
+
+        result = detect_double_break(bars, date(2025, 1, 7), "CME_REOPEN", 5, orb_high, orb_low)
         assert result is True
 
     def test_only_one_boundary(self):
@@ -245,21 +253,24 @@ class TestDoubleBreak:
         orb_high = 2000.0
         orb_low = 1990.0
 
-        bars = pd.DataFrame({
-            "ts_utc": pd.to_datetime([
-                "2025-01-06 23:05:00",
-                "2025-01-06 23:10:00",
-            ], utc=True),
-            "open": [1995.0, 1996.0],
-            "high": [2001.0, 2002.0],  # Breaches high
-            "low": [1993.0, 1994.0],   # Never breaches low (1990)
-            "close": [1999.0, 2001.0],
-            "volume": [100, 100],
-        })
-
-        result = detect_double_break(
-            bars, date(2025, 1, 7), "CME_REOPEN", 5, orb_high, orb_low
+        bars = pd.DataFrame(
+            {
+                "ts_utc": pd.to_datetime(
+                    [
+                        "2025-01-06 23:05:00",
+                        "2025-01-06 23:10:00",
+                    ],
+                    utc=True,
+                ),
+                "open": [1995.0, 1996.0],
+                "high": [2001.0, 2002.0],  # Breaches high
+                "low": [1993.0, 1994.0],  # Never breaches low (1990)
+                "close": [1999.0, 2001.0],
+                "volume": [100, 100],
+            }
         )
+
+        result = detect_double_break(bars, date(2025, 1, 7), "CME_REOPEN", 5, orb_high, orb_low)
         assert result is False
 
     def test_missing_orb_data(self):
@@ -269,25 +280,27 @@ class TestDoubleBreak:
 
     def test_no_bars_in_window(self):
         """Empty window returns None."""
-        bars = pd.DataFrame({
-            "ts_utc": pd.to_datetime(["2025-01-06 10:00:00"], utc=True),
-            "open": [1995.0],
-            "high": [2001.0],
-            "low": [1993.0],
-            "close": [1999.0],
-            "volume": [100],
-        })
-        result = detect_double_break(
-            bars, date(2025, 1, 7), "CME_REOPEN", 5, 2000.0, 1990.0
+        bars = pd.DataFrame(
+            {
+                "ts_utc": pd.to_datetime(["2025-01-06 10:00:00"], utc=True),
+                "open": [1995.0],
+                "high": [2001.0],
+                "low": [1993.0],
+                "close": [1999.0],
+                "volume": [100],
+            }
         )
+        result = detect_double_break(bars, date(2025, 1, 7), "CME_REOPEN", 5, 2000.0, 1990.0)
         assert result is None
 
     def test_threshold_constant(self):
         assert DOUBLE_BREAK_THRESHOLD == 0.67
 
+
 # =========================================================================
 # Day-of-week concentration tests
 # =========================================================================
+
 
 class TestDayOfWeekConcentration:
     """Test day-of-week concentration detection."""
@@ -306,9 +319,11 @@ class TestDayOfWeekConcentration:
         concentration = max(day_total_r.values()) / total_abs_r
         assert concentration > 0.5
 
+
 # =========================================================================
 # Portfolio integration tests (with in-memory DB)
 # =========================================================================
+
 
 def _setup_rolling_db(tmp_path):
     """Create a temp DB with regime schema and seed rolling data."""
@@ -317,6 +332,7 @@ def _setup_rolling_db(tmp_path):
 
     # Create pipeline tables (needed for imports)
     from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA, DAILY_FEATURES_SCHEMA
+
     con.execute(BARS_1M_SCHEMA)
     con.execute(BARS_5M_SCHEMA)
     con.execute(DAILY_FEATURES_SCHEMA)
@@ -324,10 +340,12 @@ def _setup_rolling_db(tmp_path):
 
     # Create trading_app tables (uses db_path, not con)
     from trading_app.db_manager import init_trading_app_schema
+
     init_trading_app_schema(db_path=db_path)
 
     # Create regime tables
     from trading_app.regime.schema import init_regime_schema
+
     init_regime_schema(db_path=db_path)
 
     con = duckdb.connect(str(db_path))
@@ -335,7 +353,8 @@ def _setup_rolling_db(tmp_path):
     # Seed regime_strategies with rolling labels
     labels = [f"rolling_12m_2025_{m:02d}" for m in range(1, 4)]
     for label in labels:
-        con.execute("""
+        con.execute(
+            """
             INSERT INTO regime_strategies
             (run_label, strategy_id, instrument, orb_label, orb_minutes,
              rr_target, confirm_bars, entry_model, filter_type,
@@ -348,11 +367,14 @@ def _setup_rolling_db(tmp_path):
                     55, 0.45, 0.15, 0.12, 5.0, 3.5, 3.5,
                     'PASSED', '', '{}',
                     '2024-01-01', '2024-12-31')
-        """, [label])
+        """,
+            [label],
+        )
 
     # Seed regime_validated
     for label in labels:
-        con.execute("""
+        con.execute(
+            """
             INSERT INTO regime_validated
             (run_label, strategy_id, instrument, orb_label, orb_minutes,
              rr_target, confirm_bars, entry_model, filter_type,
@@ -366,11 +388,14 @@ def _setup_rolling_db(tmp_path):
                     1, TRUE, TRUE,
                     0.12, 5.0, '{}', 'active',
                     '2024-01-01', '2024-12-31')
-        """, [label])
+        """,
+            [label],
+        )
 
     con.commit()
     con.close()
     return db_path
+
 
 class TestPortfolioIntegration:
     """Test that rolling strategies integrate into portfolio system."""
@@ -389,7 +414,9 @@ class TestPortfolioIntegration:
     def test_load_rolling_validated_for_portfolio(self, tmp_path):
         db_path = _setup_rolling_db(tmp_path)
         strategies = load_rolling_validated_strategies(
-            db_path, "MGC", train_months=12,
+            db_path,
+            "MGC",
+            train_months=12,
             min_weighted_score=0.0,  # Accept anything
             min_expectancy_r=0.0,
         )
@@ -399,7 +426,9 @@ class TestPortfolioIntegration:
     def test_rolling_source_tag(self, tmp_path):
         db_path = _setup_rolling_db(tmp_path)
         strategies = load_rolling_validated_strategies(
-            db_path, "MGC", train_months=12,
+            db_path,
+            "MGC",
+            train_months=12,
             min_weighted_score=0.0,
             min_expectancy_r=0.0,
         )
@@ -437,41 +466,45 @@ class TestPortfolioIntegration:
         assert "LONDON_METALS_E3_ORB_G6" in counts
         assert counts["LONDON_METALS_E3_ORB_G6"] == 1
 
+
 # =========================================================================
 # Family ID tests
 # =========================================================================
 
-class TestFamilyId:
 
+class TestFamilyId:
     def test_basic_format(self):
         assert make_family_id("CME_REOPEN", "E1", "ORB_G4") == "CME_REOPEN_E1_ORB_G4"
 
     def test_no_filter(self):
         assert make_family_id("LONDON_METALS", "E3", "NO_FILTER") == "LONDON_METALS_E3_NO_FILTER"
 
+
 # =========================================================================
 # Edge cases
 # =========================================================================
 
-class TestEdgeCases:
 
+class TestEdgeCases:
     def test_single_window_all_pass(self):
         """Single window with high sample = STABLE."""
         labels = ["rolling_12m_2025_01"]
-        validated = [{
-            "run_label": "rolling_12m_2025_01",
-            "strategy_id": "MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G4",
-            "orb_label": "CME_REOPEN",
-            "entry_model": "E1",
-            "filter_type": "ORB_G4",
-            "rr_target": 2.0,
-            "confirm_bars": 2,
-            "sample_size": 80,
-            "win_rate": 0.50,
-            "expectancy_r": 0.20,
-            "sharpe_ratio": 0.15,
-            "max_drawdown_r": 4.0,
-        }]
+        validated = [
+            {
+                "run_label": "rolling_12m_2025_01",
+                "strategy_id": "MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G4",
+                "orb_label": "CME_REOPEN",
+                "entry_model": "E1",
+                "filter_type": "ORB_G4",
+                "rr_target": 2.0,
+                "confirm_bars": 2,
+                "sample_size": 80,
+                "win_rate": 0.50,
+                "expectancy_r": 0.20,
+                "sharpe_ratio": 0.15,
+                "max_drawdown_r": 4.0,
+            }
+        ]
 
         results = aggregate_rolling_performance(validated, labels, {})
         assert len(results) == 1

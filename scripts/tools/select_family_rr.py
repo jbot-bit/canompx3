@@ -15,6 +15,7 @@ Run after strategy_validator, before build_edge_families.
 Usage:
     python scripts/tools/select_family_rr.py [--db-path gold.db] [--dry-run]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -33,12 +34,10 @@ JK_RHO = 0.7
 JK_ALPHA = 0.05
 
 # 6-column family key
-FAMILY_COLS = ["instrument", "orb_label", "filter_type", "entry_model",
-               "orb_minutes", "confirm_bars"]
+FAMILY_COLS = ["instrument", "orb_label", "filter_type", "entry_model", "orb_minutes", "confirm_bars"]
 
 
-def _jobson_korkie_p(sharpe_a: float, sharpe_b: float,
-                     n_a: int, n_b: int, rho: float) -> float:
+def _jobson_korkie_p(sharpe_a: float, sharpe_b: float, n_a: int, n_b: int, rho: float) -> float:
     """Two-sided Jobson-Korkie (1981) test for Sharpe equality.
 
     Returns p-value. Large p means Sharpes are statistically indistinguishable.
@@ -47,12 +46,8 @@ def _jobson_korkie_p(sharpe_a: float, sharpe_b: float,
     if n_eff < 5:
         return 1.0  # insufficient data, treat as equal
 
-    se_sq = (
-        (2.0 / n_eff) * (1 - rho)
-        + (1.0 / (2 * n_eff)) * (
-            sharpe_a**2 + sharpe_b**2
-            - 2 * sharpe_a * sharpe_b * rho**2
-        )
+    se_sq = (2.0 / n_eff) * (1 - rho) + (1.0 / (2 * n_eff)) * (
+        sharpe_a**2 + sharpe_b**2 - 2 * sharpe_a * sharpe_b * rho**2
     )
     if se_sq <= 0:
         se_sq = 2.0 / n_eff
@@ -98,8 +93,10 @@ def select_rr_for_family(group: pd.DataFrame) -> dict:
     candidates = []
     for idx, row in group.iterrows():
         p = _jobson_korkie_p(
-            best_sharpe, row["sharpe_ratio"],
-            int(best_n), int(row["sample_size"]),
+            best_sharpe,
+            row["sharpe_ratio"],
+            int(best_n),
+            int(row["sample_size"]),
             JK_RHO,
         )
         if p > JK_ALPHA:
@@ -135,8 +132,7 @@ def select_rr_for_family(group: pd.DataFrame) -> dict:
 def main():
     parser = argparse.ArgumentParser(description="Select locked RR per family (SharpeDD)")
     parser.add_argument("--db-path", type=Path, default=GOLD_DB_PATH)
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Print results without writing to DB")
+    parser.add_argument("--dry-run", action="store_true", help="Print results without writing to DB")
     args = parser.parse_args()
 
     db_path = args.db_path
@@ -152,8 +148,7 @@ def main():
         WHERE status = 'active' AND entry_model IN ('E1', 'E2')
     """).fetchdf()
 
-    print(f"Loaded {len(df)} active strategies across "
-          f"{df.groupby(FAMILY_COLS).ngroups} families")
+    print(f"Loaded {len(df)} active strategies across {df.groupby(FAMILY_COLS).ngroups} families")
 
     # Process each family
     results = []
@@ -165,18 +160,18 @@ def main():
     n_total = len(rdf)
 
     # === Summary ===
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"FAMILY RR LOCKS — {n_total} families")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     print("\n--- Method Distribution ---")
     for method, count in rdf["method"].value_counts().items():
-        print(f"  {method:12s}: {count:3d} ({count/n_total:.0%})")
+        print(f"  {method:12s}: {count:3d} ({count / n_total:.0%})")
 
     print("\n--- Locked RR Distribution ---")
     for rr in sorted(rdf["locked_rr"].unique()):
         c = (rdf["locked_rr"] == rr).sum()
-        print(f"  RR{rr:<4g}: {c:3d} ({c/n_total:.0%})")
+        print(f"  RR{rr:<4g}: {c:3d} ({c / n_total:.0%})")
 
     print("\n--- Per-Instrument Breakdown ---")
     for inst in sorted(rdf["instrument"].unique()):
@@ -187,10 +182,8 @@ def main():
 
     multi = rdf[rdf["method"] != "ONLY_RR"]
     print(f"\n--- Multi-RR Families: {len(multi)}/{n_total} ---")
-    print(f"  MAX_SHARPE (best Sharpe = lowest DD): "
-          f"{(multi['method'] == 'MAX_SHARPE').sum()}")
-    print(f"  SHARPE_DD  (picked lower DD from equal Sharpe): "
-          f"{(multi['method'] == 'SHARPE_DD').sum()}")
+    print(f"  MAX_SHARPE (best Sharpe = lowest DD): {(multi['method'] == 'MAX_SHARPE').sum()}")
+    print(f"  SHARPE_DD  (picked lower DD from equal Sharpe): {(multi['method'] == 'SHARPE_DD').sum()}")
 
     # Write to DB (transactional — crash between DELETE and INSERT won't empty table)
     if not args.dry_run:

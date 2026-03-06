@@ -6,8 +6,7 @@ from types import SimpleNamespace
 from trading_app.scoring import score_strategy, ScoringWeights, MIN_SCORE_THRESHOLD
 
 
-def _make_strategy(expectancy_r=0.3, orb_label="TOKYO_OPEN", strategy_id="test_strat",
-                   win_rate=0.50):
+def _make_strategy(expectancy_r=0.3, orb_label="TOKYO_OPEN", strategy_id="test_strat", win_rate=0.50):
     return SimpleNamespace(
         expectancy_r=expectancy_r,
         orb_label=orb_label,
@@ -16,8 +15,9 @@ def _make_strategy(expectancy_r=0.3, orb_label="TOKYO_OPEN", strategy_id="test_s
     )
 
 
-def _make_state(regime=None, chop_detected=False, reversal_active=False,
-                continuation=False, cascade_wr=None, orbs=None):
+def _make_state(
+    regime=None, chop_detected=False, reversal_active=False, continuation=False, cascade_wr=None, orbs=None
+):
     signals = SimpleNamespace(
         chop_detected=chop_detected,
         reversal_active=reversal_active,

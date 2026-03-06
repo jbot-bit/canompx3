@@ -33,6 +33,7 @@ from trading_app.outcome_builder import compute_single_outcome, RR_TARGETS, CONF
 from trading_app.config import ENTRY_MODELS
 from trading_app.nested.builder import resample_to_5m, _verify_e3_sub_bar_fill
 
+
 def audit_nested_outcomes(
     db_path: Path | None = None,
     instrument: str = "MGC",
@@ -99,8 +100,12 @@ def audit_nested_outcomes(
 
             for trading_day in sample_days:
                 _audit_single_day(
-                    con, trading_day, instrument, orb_minutes,
-                    cost_spec, results,
+                    con,
+                    trading_day,
+                    instrument,
+                    orb_minutes,
+                    cost_spec,
+                    results,
                 )
 
         # Print summary
@@ -109,6 +114,7 @@ def audit_nested_outcomes(
 
     finally:
         con.close()
+
 
 def _audit_single_day(con, trading_day, instrument, orb_minutes, cost_spec, results):
     """Audit all nested outcomes for a single trading day."""
@@ -187,9 +193,11 @@ def _audit_single_day(con, trading_day, instrument, orb_minutes, cost_spec, resu
             ratio = len(post_orb_1m) / len(bars_5m_df)
             if ratio < 1.0 or ratio > 6.0:
                 results["resampling_errors"] += 1
-                print(f"    RESAMPLE WARN: {trading_day} {orb_label}: "
-                      f"{len(post_orb_1m)} 1m bars -> {len(bars_5m_df)} 5m bars "
-                      f"(ratio={ratio:.1f}, expected ~5)")
+                print(
+                    f"    RESAMPLE WARN: {trading_day} {orb_label}: "
+                    f"{len(post_orb_1m)} 1m bars -> {len(bars_5m_df)} 5m bars "
+                    f"(ratio={ratio:.1f}, expected ~5)"
+                )
 
         if bars_5m_df.empty:
             continue
@@ -233,11 +241,16 @@ def _audit_single_day(con, trading_day, instrument, orb_minutes, cost_spec, resu
                                 results["e3_stats"]["e3_1m_rejected"] += 1
                                 # After rejection, outcome should be None
                                 recomputed = {
-                                    "entry_ts": None, "entry_price": None,
-                                    "stop_price": None, "target_price": None,
-                                    "outcome": None, "exit_ts": None,
-                                    "exit_price": None, "pnl_r": None,
-                                    "mae_r": None, "mfe_r": None,
+                                    "entry_ts": None,
+                                    "entry_price": None,
+                                    "stop_price": None,
+                                    "target_price": None,
+                                    "outcome": None,
+                                    "exit_ts": None,
+                                    "exit_price": None,
+                                    "pnl_r": None,
+                                    "mae_r": None,
+                                    "mfe_r": None,
                                 }
 
                     # Compare stored vs recomputed
@@ -264,14 +277,16 @@ def _audit_single_day(con, trading_day, instrument, orb_minutes, cost_spec, resu
                         }
                         results["mismatches"].append(mismatch_detail)
                         if len(results["mismatches"]) <= 10:
-                            print(f"    MISMATCH: {trading_day} {orb_label} {em} "
-                                  f"RR{rr_target} CB{cb}: "
-                                  f"stored={stored['outcome']}/{stored['pnl_r']} "
-                                  f"vs recomputed={recomputed['outcome']}/{recomputed['pnl_r']}")
+                            print(
+                                f"    MISMATCH: {trading_day} {orb_label} {em} "
+                                f"RR{rr_target} CB{cb}: "
+                                f"stored={stored['outcome']}/{stored['pnl_r']} "
+                                f"vs recomputed={recomputed['outcome']}/{recomputed['pnl_r']}"
+                            )
 
     if day_checked > 0:
-        print(f"  {trading_day}: {day_matched}/{day_checked} match "
-              f"({day_matched/day_checked*100:.1f}%)")
+        print(f"  {trading_day}: {day_matched}/{day_checked} match ({day_matched / day_checked * 100:.1f}%)")
+
 
 def _outcomes_match(stored: dict, recomputed: dict) -> bool:
     """Compare stored vs recomputed outcome, allowing for float tolerance."""
@@ -306,6 +321,7 @@ def _outcomes_match(stored: dict, recomputed: dict) -> bool:
         return False  # one None, other not
 
     return True
+
 
 def _print_audit_summary(results: dict):
     """Print formatted audit summary."""
@@ -344,10 +360,12 @@ def _print_audit_summary(results: dict):
     if results["mismatches"]:
         print(f"\n  First {min(10, len(results['mismatches']))} mismatches:")
         for m in results["mismatches"][:10]:
-            print(f"    {m['trading_day']} {m['orb_label']} {m['entry_model']} "
-                  f"RR{m['rr_target']} CB{m['confirm_bars']}: "
-                  f"stored={m['stored_outcome']}/{m['stored_pnl_r']} "
-                  f"vs recomputed={m['recomputed_outcome']}/{m['recomputed_pnl_r']}")
+            print(
+                f"    {m['trading_day']} {m['orb_label']} {m['entry_model']} "
+                f"RR{m['rr_target']} CB{m['confirm_bars']}: "
+                f"stored={m['stored_outcome']}/{m['stored_pnl_r']} "
+                f"vs recomputed={m['recomputed_outcome']}/{m['recomputed_pnl_r']}"
+            )
 
     if results["n_mismatch"] == 0:
         print("\n  ALL CHECKS PASSED [OK]")
@@ -356,6 +374,7 @@ def _print_audit_summary(results: dict):
 
     print("=" * 70)
 
+
 def main():
     import argparse
 
@@ -363,10 +382,8 @@ def main():
         description="Spot-check audit of nested_outcomes against independent reconstruction"
     )
     parser.add_argument("--instrument", default="MGC")
-    parser.add_argument("--n-days", type=int, default=10,
-                        help="Number of random days to audit (default: 10)")
-    parser.add_argument("--seed", type=int, default=None,
-                        help="Random seed for reproducibility")
+    parser.add_argument("--n-days", type=int, default=10, help="Number of random days to audit (default: 10)")
+    parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility")
     parser.add_argument("--orb-minutes", type=int, nargs="+", default=[15, 30])
     args = parser.parse_args()
 
@@ -376,6 +393,7 @@ def main():
         seed=args.seed,
         orb_minutes_list=args.orb_minutes,
     )
+
 
 if __name__ == "__main__":
     main()

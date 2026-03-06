@@ -21,6 +21,7 @@ from datetime import datetime
 from pipeline.asset_configs import list_instruments
 
 from pipeline.log import get_logger
+
 logger = get_logger(__name__)
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -28,6 +29,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 # =============================================================================
 # STEP FUNCTIONS
 # =============================================================================
+
 
 def step_ingest(instrument: str, args) -> int:
     """Ingest DBN -> bars_1m."""
@@ -41,6 +43,7 @@ def step_ingest(instrument: str, args) -> int:
     if args.end:
         cmd.append(f"--end={args.end}")
     return subprocess.run(cmd, cwd=str(PROJECT_ROOT)).returncode
+
 
 def step_build_5m(instrument: str, args) -> int:
     """Rebuild bars_5m from bars_1m."""
@@ -56,6 +59,7 @@ def step_build_5m(instrument: str, args) -> int:
     ]
     return subprocess.run(cmd, cwd=str(PROJECT_ROOT)).returncode
 
+
 def step_build_features(instrument: str, args) -> int:
     """Rebuild daily_features."""
     if not args.start or not args.end:
@@ -70,10 +74,12 @@ def step_build_features(instrument: str, args) -> int:
     ]
     return subprocess.run(cmd, cwd=str(PROJECT_ROOT)).returncode
 
+
 def step_audit(instrument: str, args) -> int:
     """Database integrity check."""
     cmd = [sys.executable, str(PROJECT_ROOT / "pipeline" / "check_db.py")]
     return subprocess.run(cmd, cwd=str(PROJECT_ROOT)).returncode
+
 
 def step_build_outcomes(instrument: str, args) -> int:
     """Pre-compute orb_outcomes."""
@@ -89,6 +95,7 @@ def step_build_outcomes(instrument: str, args) -> int:
     ]
     return subprocess.run(cmd, cwd=str(PROJECT_ROOT)).returncode
 
+
 def step_discover(instrument: str, args) -> int:
     """Grid search experimental_strategies."""
     cmd = [
@@ -101,6 +108,7 @@ def step_discover(instrument: str, args) -> int:
     if args.holdout_date:
         cmd.append(f"--holdout-date={args.holdout_date}")
     return subprocess.run(cmd, cwd=str(PROJECT_ROOT)).returncode
+
 
 def step_validate(instrument: str, args) -> int:
     """Strategy validation with canonical flags.
@@ -121,6 +129,7 @@ def step_validate(instrument: str, args) -> int:
         cmd.append(f"--db={args.db_path}")
     return subprocess.run(cmd, cwd=str(PROJECT_ROOT)).returncode
 
+
 # =============================================================================
 # STEP REGISTRY
 # =============================================================================
@@ -139,6 +148,7 @@ FULL_PIPELINE_STEPS = [
 # HELPERS
 # =============================================================================
 
+
 def get_steps_from(steps, skip_to: str):
     """Return steps starting from skip_to."""
     names = [s[0] for s in steps]
@@ -147,6 +157,7 @@ def get_steps_from(steps, skip_to: str):
     idx = names.index(skip_to)
     return steps[idx:]
 
+
 def print_dry_run(steps, instrument: str):
     """Print planned steps without executing."""
     print(f"DRY RUN: Full pipeline for {instrument}")
@@ -154,25 +165,25 @@ def print_dry_run(steps, instrument: str):
         print(f"  Step {i}: {name} - {desc}")
     print("No steps executed (dry run).")
 
+
 # =============================================================================
 # MAIN
 # =============================================================================
+
 
 def main():
     parser = argparse.ArgumentParser(
         description="Full pipeline: ingest -> 5m -> features -> outcomes -> discovery -> validation"
     )
-    parser.add_argument("--instrument", type=str, required=True,
-                        help=f"Instrument ({', '.join(list_instruments())})")
+    parser.add_argument("--instrument", type=str, required=True, help=f"Instrument ({', '.join(list_instruments())})")
     parser.add_argument("--start", type=str, help="Start date YYYY-MM-DD")
     parser.add_argument("--end", type=str, help="End date YYYY-MM-DD")
     parser.add_argument("--dry-run", action="store_true", help="Show plan only")
-    parser.add_argument("--skip-to", type=str,
-                        help="Skip to named step (e.g. build_outcomes)")
-    parser.add_argument("--db-path", type=str,
-                        help="Database path (also sets DUCKDB_PATH env var)")
-    parser.add_argument("--holdout-date", type=str,
-                        help="OOS holdout date (YYYY-MM-DD), forwarded to strategy_discovery")
+    parser.add_argument("--skip-to", type=str, help="Skip to named step (e.g. build_outcomes)")
+    parser.add_argument("--db-path", type=str, help="Database path (also sets DUCKDB_PATH env var)")
+    parser.add_argument(
+        "--holdout-date", type=str, help="OOS holdout date (YYYY-MM-DD), forwarded to strategy_discovery"
+    )
     args = parser.parse_args()
 
     instrument = args.instrument.upper()
@@ -230,6 +241,7 @@ def main():
     logger.info(f"\nTotal: {total}")
     logger.info("SUCCESS" if all_ok else "FAILED")
     sys.exit(0 if all_ok else 1)
+
 
 if __name__ == "__main__":
     main()

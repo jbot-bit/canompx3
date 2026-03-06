@@ -37,9 +37,7 @@ class TestQueryTemplate:
         for t, sql in _TEMPLATES.items():
             sql_upper = sql.upper()
             for kw in write_keywords:
-                assert kw not in sql_upper, (
-                    f"Template {t.value} contains forbidden keyword: {kw}"
-                )
+                assert kw not in sql_upper, f"Template {t.value} contains forbidden keyword: {kw}"
 
     def test_all_templates_are_select(self):
         """All templates must be SELECT queries."""
@@ -238,20 +236,24 @@ class TestComputeGroupStats:
         assert stats["win_rate"] is None
 
     def test_all_wins(self):
-        df = pd.DataFrame({
-            "pnl_r": [1.0, 1.0, 1.0],
-            "outcome": ["win", "win", "win"],
-        })
+        df = pd.DataFrame(
+            {
+                "pnl_r": [1.0, 1.0, 1.0],
+                "outcome": ["win", "win", "win"],
+            }
+        )
         stats = _compute_group_stats(df)
         assert stats["N"] == 3
         assert stats["win_rate"] == 100.0
         assert stats["avg_pnl_r"] == 1.0
 
     def test_mixed_outcomes(self):
-        df = pd.DataFrame({
-            "pnl_r": [2.0, -1.0, 2.0, -1.0],
-            "outcome": ["win", "loss", "win", "loss"],
-        })
+        df = pd.DataFrame(
+            {
+                "pnl_r": [2.0, -1.0, 2.0, -1.0],
+                "outcome": ["win", "loss", "win", "loss"],
+            }
+        )
         stats = _compute_group_stats(df)
         assert stats["N"] == 4
         assert stats["win_rate"] == 50.0
@@ -260,10 +262,12 @@ class TestComputeGroupStats:
 
     def test_constant_pnl_sharpe_none(self):
         """Zero std dev → sharpe is None."""
-        df = pd.DataFrame({
-            "pnl_r": [1.0, 1.0, 1.0],
-            "outcome": ["win", "win", "win"],
-        })
+        df = pd.DataFrame(
+            {
+                "pnl_r": [1.0, 1.0, 1.0],
+                "outcome": ["win", "win", "win"],
+            }
+        )
         stats = _compute_group_stats(df)
         # std of constant series is 0 → sharpe None
         assert stats["sharpe"] is None
@@ -293,9 +297,7 @@ class TestBuildOutcomesBase:
 
     def test_basic_query(self):
         adapter = self._make_adapter()
-        sql, bind = adapter._build_outcomes_base(
-            {"instrument": "MGC", "orb_label": "CME_REOPEN"}
-        )
+        sql, bind = adapter._build_outcomes_base({"instrument": "MGC", "orb_label": "CME_REOPEN"})
         assert "orb_outcomes o" in sql
         assert "daily_features d" in sql
         assert "o.orb_minutes = d.orb_minutes" in sql
@@ -303,11 +305,16 @@ class TestBuildOutcomesBase:
 
     def test_all_params(self):
         adapter = self._make_adapter()
-        sql, bind = adapter._build_outcomes_base({
-            "instrument": "MNQ", "orb_label": "TOKYO_OPEN",
-            "entry_model": "E2", "rr_target": 2.0, "confirm_bars": 1,
-            "filter_type": "ORB_G4",
-        })
+        sql, bind = adapter._build_outcomes_base(
+            {
+                "instrument": "MNQ",
+                "orb_label": "TOKYO_OPEN",
+                "entry_model": "E2",
+                "rr_target": 2.0,
+                "confirm_bars": 1,
+                "filter_type": "ORB_G4",
+            }
+        )
         assert "o.entry_model = ?" in sql
         assert "o.rr_target = ?" in sql
         assert "o.confirm_bars = ?" in sql
@@ -317,10 +324,13 @@ class TestBuildOutcomesBase:
     def test_band_filter_in_outcomes(self):
         """Band filter ORB_G4_L12 should work in _build_outcomes_base."""
         adapter = self._make_adapter()
-        sql, bind = adapter._build_outcomes_base({
-            "instrument": "MGC", "orb_label": "TOKYO_OPEN",
-            "filter_type": "ORB_G4_L12",
-        })
+        sql, bind = adapter._build_outcomes_base(
+            {
+                "instrument": "MGC",
+                "orb_label": "TOKYO_OPEN",
+                "filter_type": "ORB_G4_L12",
+            }
+        )
         assert "d.orb_TOKYO_OPEN_size >= 4" in sql
         assert "d.orb_TOKYO_OPEN_size < 12" in sql
 
@@ -331,9 +341,7 @@ class TestBuildOutcomesBase:
 
     def test_extra_cols(self):
         adapter = self._make_adapter()
-        sql, _ = adapter._build_outcomes_base(
-            {"orb_label": "CME_REOPEN"}, extra_cols="o.entry_model"
-        )
+        sql, _ = adapter._build_outcomes_base({"orb_label": "CME_REOPEN"}, extra_cols="o.entry_model")
         assert "o.entry_model" in sql
 
 

@@ -11,23 +11,23 @@ from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 
-def _insert_sample_1m_bars(con, symbol="MGC", source_symbol="GCM4",
-                           base_date=date(2024, 6, 3), n_bars=60):
+def _insert_sample_1m_bars(con, symbol="MGC", source_symbol="GCM4", base_date=date(2024, 6, 3), n_bars=60):
     """Insert n_bars of 1m bars starting at midnight UTC on base_date."""
     utc = ZoneInfo("UTC")
     rows = []
     for i in range(n_bars):
-        ts = datetime(base_date.year, base_date.month, base_date.day,
-                      0, i, tzinfo=utc)
+        ts = datetime(base_date.year, base_date.month, base_date.day, 0, i, tzinfo=utc)
         price = 2350.0 + i * 0.1
-        rows.append((ts, symbol, source_symbol,
-                      price, price + 1.0, price - 0.5, price + 0.5, 100 + i))
+        rows.append((ts, symbol, source_symbol, price, price + 1.0, price - 0.5, price + 0.5, 100 + i))
 
-    con.executemany("""
+    con.executemany(
+        """
         INSERT OR REPLACE INTO bars_1m
         (ts_utc, symbol, source_symbol, open, high, low, close, volume)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, rows)
+    """,
+        rows,
+    )
 
 
 @pytest.fixture
@@ -70,12 +70,15 @@ def tmp_db_with_1m(tmp_path):
 
 def _snapshot_5m(con, symbol="MGC"):
     """Return bars_5m as a sorted list of tuples for comparison."""
-    rows = con.execute("""
+    rows = con.execute(
+        """
         SELECT ts_utc, symbol, source_symbol, open, high, low, close, volume
         FROM bars_5m
         WHERE symbol = ?
         ORDER BY ts_utc
-    """, [symbol]).fetchall()
+    """,
+        [symbol],
+    ).fetchall()
     return rows
 
 

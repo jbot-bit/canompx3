@@ -36,8 +36,10 @@ from trading_app.strategy_validator import run_validation
 # SYNTHETIC DATA GENERATORS
 # =============================================================================
 
-def _insert_bars_1m(con, n_days=30, instrument="MGC", start_year=2024,
-                    start_month=1, start_day_of_month=7, base_price=2700.0):
+
+def _insert_bars_1m(
+    con, n_days=30, instrument="MGC", start_year=2024, start_month=1, start_day_of_month=7, base_price=2700.0
+):
     """
     Insert synthetic bars_1m for n_days of weekday trading days.
 
@@ -73,7 +75,9 @@ def _insert_bars_1m(con, n_days=30, instrument="MGC", start_year=2024,
 
         # Trading day starts at 09:00 Brisbane = 23:00 UTC previous calendar day
         td_start = datetime(
-            trading_day.year, trading_day.month, trading_day.day,
+            trading_day.year,
+            trading_day.month,
+            trading_day.day,
             tzinfo=timezone.utc,
         ) - timedelta(hours=1)  # 23:00 UTC prev day
 
@@ -96,10 +100,18 @@ def _insert_bars_1m(con, n_days=30, instrument="MGC", start_year=2024,
                 l = o - 0.3
                 c = o + 1.0
 
-            bars.append((
-                ts.isoformat(), instrument, source_sym,
-                round(o, 2), round(h, 2), round(l, 2), round(c, 2), 100,
-            ))
+            bars.append(
+                (
+                    ts.isoformat(),
+                    instrument,
+                    source_sym,
+                    round(o, 2),
+                    round(h, 2),
+                    round(l, 2),
+                    round(c, 2),
+                    100,
+                )
+            )
 
         con.executemany(
             """INSERT OR REPLACE INTO bars_1m
@@ -115,6 +127,7 @@ def _insert_bars_1m(con, n_days=30, instrument="MGC", start_year=2024,
     con.commit()
     return trading_days
 
+
 def _create_l1_db(tmp_path, n_days=30, instrument="MGC", base_price=2700.0):
     """Create a temp DB with bars_1m only -- L1 pipeline builds the rest."""
     db_path = tmp_path / "l1_integration.db"
@@ -129,11 +142,15 @@ def _create_l1_db(tmp_path, n_days=30, instrument="MGC", base_price=2700.0):
 
     con = duckdb.connect(str(db_path))
     trading_days = _insert_bars_1m(
-        con, n_days=n_days, instrument=instrument, base_price=base_price,
+        con,
+        n_days=n_days,
+        instrument=instrument,
+        base_price=base_price,
     )
     con.close()
 
     return db_path, trading_days
+
 
 def _run_l1_pipeline(db_path, instrument="MGC", start_date=None, end_date=None):
     """Run L1 pipeline: build_5m -> build_daily_features. Returns (bars_5m_count, features_count)."""
@@ -146,15 +163,20 @@ def _run_l1_pipeline(db_path, instrument="MGC", start_date=None, end_date=None):
     try:
         bars_5m_count = build_5m_bars(con, instrument, start_date, end_date, dry_run=False)
         features_count = build_daily_features(
-            con, instrument, start_date, end_date, orb_minutes=5, dry_run=False,
+            con,
+            instrument,
+            start_date,
+            end_date,
+            orb_minutes=5,
+            dry_run=False,
         )
     finally:
         con.close()
 
     return bars_5m_count, features_count
 
-def _run_l2_pipeline(db_path, instrument="MGC", start_date=None, end_date=None,
-                     min_sample=5):
+
+def _run_l2_pipeline(db_path, instrument="MGC", start_date=None, end_date=None, min_sample=5):
     """Run L2 pipeline: outcomes -> discovery -> validation. Returns (outcomes, strategies, passed, rejected)."""
     if start_date is None:
         start_date = date(2024, 1, 1)
@@ -162,23 +184,30 @@ def _run_l2_pipeline(db_path, instrument="MGC", start_date=None, end_date=None,
         end_date = date(2024, 12, 31)
 
     outcome_count = build_outcomes(
-        db_path=db_path, instrument=instrument,
-        start_date=start_date, end_date=end_date,
+        db_path=db_path,
+        instrument=instrument,
+        start_date=start_date,
+        end_date=end_date,
     )
     strategy_count = run_discovery(
-        db_path=db_path, instrument=instrument,
-        start_date=start_date, end_date=end_date,
+        db_path=db_path,
+        instrument=instrument,
+        start_date=start_date,
+        end_date=end_date,
     )
     passed, rejected = run_validation(
-        db_path=db_path, instrument=instrument,
+        db_path=db_path,
+        instrument=instrument,
         min_sample=min_sample,
         enable_walkforward=False,
     )
     return outcome_count, strategy_count, passed, rejected
 
+
 # =============================================================================
 # SHARED FIXTURES
 # =============================================================================
+
 
 @pytest.fixture(scope="class")
 def l1_pipeline_db(tmp_path_factory):
@@ -188,6 +217,7 @@ def l1_pipeline_db(tmp_path_factory):
     bars_5m_count, features_count = _run_l1_pipeline(db_path)
     return db_path, trading_days, bars_5m_count, features_count
 
+
 @pytest.fixture(scope="class")
 def full_pipeline_db(tmp_path_factory):
     """30-day DB with full L1+L2 pipeline complete."""
@@ -196,7 +226,8 @@ def full_pipeline_db(tmp_path_factory):
     bars_5m_count, features_count = _run_l1_pipeline(db_path)
 
     outcome_count, strategy_count, passed, rejected = _run_l2_pipeline(
-        db_path, min_sample=5,
+        db_path,
+        min_sample=5,
     )
     return {
         "db_path": db_path,
@@ -208,6 +239,7 @@ def full_pipeline_db(tmp_path_factory):
         "passed": passed,
         "rejected": rejected,
     }
+
 
 @pytest.fixture(scope="class")
 def multi_instrument_db(tmp_path_factory):
@@ -246,9 +278,11 @@ def multi_instrument_db(tmp_path_factory):
         "mnq_l2": mnq_l2,
     }
 
+
 # =============================================================================
 # Test A: L1 Pipeline Integration (bars_1m -> bars_5m -> daily_features)
 # =============================================================================
+
 
 class TestL1Pipeline:
     """Tests the connected L1 flow: bars_1m -> bars_5m -> daily_features."""
@@ -337,9 +371,11 @@ class TestL1Pipeline:
 
         assert bad_rows == 0
 
+
 # =============================================================================
 # Test B: Full L1 -> L2 End-to-End
 # =============================================================================
+
 
 class TestFullL1L2:
     """Tests the complete pipeline: bars_1m -> ... -> validated_setups."""
@@ -397,9 +433,7 @@ class TestFullL1L2:
         db_path = full_pipeline_db["db_path"]
 
         con = duckdb.connect(str(db_path), read_only=True)
-        rows = con.execute(
-            "SELECT yearly_results FROM experimental_strategies LIMIT 20"
-        ).fetchall()
+        rows = con.execute("SELECT yearly_results FROM experimental_strategies LIMIT 20").fetchall()
         con.close()
 
         assert len(rows) > 0
@@ -431,24 +465,23 @@ class TestFullL1L2:
         strategy_id, orb_label, rr_target, confirm_bars, entry_model, sample_size = strat
 
         # Verify outcomes exist for this strategy's parameters
-        outcome_count = con.execute("""
+        outcome_count = con.execute(
+            """
             SELECT COUNT(*) FROM orb_outcomes
             WHERE symbol = 'MGC'
             AND orb_label = ?
             AND rr_target = ?
             AND confirm_bars = ?
             AND entry_model = ?
-        """, [orb_label, rr_target, confirm_bars, entry_model]).fetchone()[0]
+        """,
+            [orb_label, rr_target, confirm_bars, entry_model],
+        ).fetchone()[0]
 
         # Verify daily_features exist
-        feature_count = con.execute(
-            "SELECT COUNT(*) FROM daily_features WHERE symbol = 'MGC'"
-        ).fetchone()[0]
+        feature_count = con.execute("SELECT COUNT(*) FROM daily_features WHERE symbol = 'MGC'").fetchone()[0]
 
         # Verify bars_1m exist
-        bars_count = con.execute(
-            "SELECT COUNT(*) FROM bars_1m WHERE symbol = 'MGC'"
-        ).fetchone()[0]
+        bars_count = con.execute("SELECT COUNT(*) FROM bars_1m WHERE symbol = 'MGC'").fetchone()[0]
 
         con.close()
 
@@ -456,9 +489,11 @@ class TestFullL1L2:
         assert feature_count > 0, "No daily_features for tracing"
         assert outcome_count > 0, "No outcomes matching strategy params"
 
+
 # =============================================================================
 # Test C: Multi-Instrument Isolation
 # =============================================================================
+
 
 class TestMultiInstrument:
     """Tests MGC + MNQ in the same DB don't contaminate each other."""
@@ -505,12 +540,8 @@ class TestMultiInstrument:
         con = duckdb.connect(str(db_path), read_only=True)
 
         for table in ["bars_1m", "bars_5m", "daily_features", "orb_outcomes"]:
-            mgc_count = con.execute(
-                f"SELECT COUNT(*) FROM {table} WHERE symbol = 'MGC'"
-            ).fetchone()[0]
-            mnq_count = con.execute(
-                f"SELECT COUNT(*) FROM {table} WHERE symbol = 'MNQ'"
-            ).fetchone()[0]
+            mgc_count = con.execute(f"SELECT COUNT(*) FROM {table} WHERE symbol = 'MGC'").fetchone()[0]
+            mnq_count = con.execute(f"SELECT COUNT(*) FROM {table} WHERE symbol = 'MNQ'").fetchone()[0]
 
             assert mgc_count > 0, f"MGC has 0 rows in {table}"
             assert mnq_count > 0, f"MNQ has 0 rows in {table}"
@@ -545,21 +576,19 @@ class TestMultiInstrument:
 
         con = duckdb.connect(str(db_path), read_only=True)
 
-        mgc_avg = con.execute(
-            "SELECT AVG(close) FROM bars_1m WHERE symbol = 'MGC'"
-        ).fetchone()[0]
-        mnq_avg = con.execute(
-            "SELECT AVG(close) FROM bars_1m WHERE symbol = 'MNQ'"
-        ).fetchone()[0]
+        mgc_avg = con.execute("SELECT AVG(close) FROM bars_1m WHERE symbol = 'MGC'").fetchone()[0]
+        mnq_avg = con.execute("SELECT AVG(close) FROM bars_1m WHERE symbol = 'MNQ'").fetchone()[0]
 
         con.close()
 
         assert mgc_avg < 5000, f"MGC avg price {mgc_avg} unexpectedly high"
         assert mnq_avg > 10000, f"MNQ avg price {mnq_avg} unexpectedly low"
 
+
 # =============================================================================
 # Test D: Idempotency Across Full Pipeline
 # =============================================================================
+
 
 class TestFullPipelineIdempotent:
     """Tests that re-running pipeline stages produces identical results.
@@ -601,10 +630,8 @@ class TestFullPipelineIdempotent:
         _run_l1_pipeline(db_path, start_date=start_d, end_date=end_d)
 
         # First L2 run
-        build_outcomes(db_path=db_path, instrument="MGC",
-                       start_date=start_d, end_date=end_d)
-        run_discovery(db_path=db_path, instrument="MGC",
-                      start_date=start_d, end_date=end_d)
+        build_outcomes(db_path=db_path, instrument="MGC", start_date=start_d, end_date=end_d)
+        run_discovery(db_path=db_path, instrument="MGC", start_date=start_d, end_date=end_d)
 
         con = duckdb.connect(str(db_path), read_only=True)
         outcomes_1 = con.execute("SELECT COUNT(*) FROM orb_outcomes").fetchone()[0]
@@ -612,10 +639,8 @@ class TestFullPipelineIdempotent:
         con.close()
 
         # Second L2 run (idempotent INSERT OR REPLACE)
-        build_outcomes(db_path=db_path, instrument="MGC",
-                       start_date=start_d, end_date=end_d)
-        run_discovery(db_path=db_path, instrument="MGC",
-                      start_date=start_d, end_date=end_d)
+        build_outcomes(db_path=db_path, instrument="MGC", start_date=start_d, end_date=end_d)
+        run_discovery(db_path=db_path, instrument="MGC", start_date=start_d, end_date=end_d)
 
         con = duckdb.connect(str(db_path), read_only=True)
         outcomes_2 = con.execute("SELECT COUNT(*) FROM orb_outcomes").fetchone()[0]

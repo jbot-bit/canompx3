@@ -24,11 +24,14 @@ sys.stdout.reconfigure(line_buffering=True)
 from pipeline.cost_model import get_cost_spec, to_r_multiple
 from pipeline.paths import GOLD_DB_PATH
 from research._alt_strategy_utils import (
-    load_daily_features, load_bars_for_day, resolve_bar_outcome,
+    load_daily_features,
+    load_bars_for_day,
+    resolve_bar_outcome,
 )
 
 SPEC = get_cost_spec("MGC")
 UTC = ZoneInfo("UTC")
+
 
 def compute_all_reversal_outcomes(db_path, features, orb_label="0900"):
     """Pre-compute all double-break reversal outcomes with ORB-size stop."""
@@ -117,11 +120,18 @@ def compute_all_reversal_outcomes(db_path, features, orb_label="0900"):
                 pr = to_r_multiple(SPEC, ep, sp, res["pnl_points"])
                 oc = res["outcome"]
 
-            outcomes.append({
-                "td": td, "sz": sz, "rr": rr, "pnl_r": pr, "oc": oc,
-            })
+            outcomes.append(
+                {
+                    "td": td,
+                    "sz": sz,
+                    "rr": rr,
+                    "pnl_r": pr,
+                    "oc": oc,
+                }
+            )
 
     return pd.DataFrame(outcomes)
+
 
 def run_walk_forward(df, train_months=12):
     """Run walk-forward on pre-computed outcomes."""
@@ -184,23 +194,27 @@ def run_walk_forward(df, train_months=12):
         selections.append(f"{fn}_RR{rr}")
         oos_trades.extend(oos_traded["pnl_r"].tolist())
 
-        windows.append({
-            "test": str(current)[:7],
-            "selected": f"{fn}_RR{rr}",
-            "train_n": train_n,
-            "train_sh": round(train_sh, 3),
-            "oos_n": oos_n,
-            "oos_wr": round(oos_wr, 3) if oos_n > 0 else None,
-            "oos_expr": round(oos_expr, 3) if oos_n > 0 else None,
-            "oos_total": round(oos_total, 2),
-        })
+        windows.append(
+            {
+                "test": str(current)[:7],
+                "selected": f"{fn}_RR{rr}",
+                "train_n": train_n,
+                "train_sh": round(train_sh, 3),
+                "oos_n": oos_n,
+                "oos_wr": round(oos_wr, 3) if oos_n > 0 else None,
+                "oos_expr": round(oos_expr, 3) if oos_n > 0 else None,
+                "oos_total": round(oos_total, 2),
+            }
+        )
 
         current += relativedelta(months=1)
 
     return windows, oos_trades, selections
 
+
 def main():
     import argparse
+
     parser = argparse.ArgumentParser(description="Walk-forward: 0900 DB reversal")
     parser.add_argument("--db-path", type=Path, default=None)
     parser.add_argument("--train-months", type=int, default=12)
@@ -233,9 +247,11 @@ def main():
     for w in windows:
         wr_s = f"{w['oos_wr']:.0%}" if w["oos_wr"] is not None else "-"
         expr_s = f"{w['oos_expr']:+.3f}" if w["oos_expr"] is not None else "-"
-        print(f"{w['test']:>8s} {w['selected']:>12s} {w['train_n']:>5d} "
-              f"{w['train_sh']:>+6.3f} {w['oos_n']:>5d} {wr_s:>5s} "
-              f"{expr_s:>8s} {w['oos_total']:>+8.2f}")
+        print(
+            f"{w['test']:>8s} {w['selected']:>12s} {w['train_n']:>5d} "
+            f"{w['train_sh']:>+6.3f} {w['oos_n']:>5d} {wr_s:>5s} "
+            f"{expr_s:>8s} {w['oos_total']:>+8.2f}"
+        )
 
     # Combined OOS
     if oos_trades:
@@ -247,9 +263,11 @@ def main():
         cum = np.cumsum(arr)
         peak = np.maximum.accumulate(cum)
         maxdd = (peak - cum).max()
-        print(f"\nCOMBINED OOS: N={len(arr)}, WR={wr:.0%}, "
-              f"ExpR={mu:+.4f}, Sharpe={sh:+.4f}, "
-              f"Total={arr.sum():+.1f}R, MaxDD={maxdd:.1f}R")
+        print(
+            f"\nCOMBINED OOS: N={len(arr)}, WR={wr:.0%}, "
+            f"ExpR={mu:+.4f}, Sharpe={sh:+.4f}, "
+            f"Total={arr.sum():+.1f}R, MaxDD={maxdd:.1f}R"
+        )
 
     # Selection stability
     sel_counts = Counter(selections)
@@ -274,6 +292,7 @@ def main():
 
     print(f"\n{sep}")
     print("DONE")
+
 
 if __name__ == "__main__":
     main()

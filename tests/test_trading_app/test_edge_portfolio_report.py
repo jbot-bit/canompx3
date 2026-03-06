@@ -11,6 +11,7 @@ import duckdb
 
 from trading_app.db_manager import init_trading_app_schema
 
+
 @pytest.fixture
 def db_path(tmp_path):
     """Create temp DB with full schema + test data for report.
@@ -39,17 +40,21 @@ def db_path(tmp_path):
 
     # Insert daily_features rows (required by orb_outcomes FK)
     for d in [date(2024, 1, 2), date(2024, 1, 3), date(2024, 1, 5), date(2024, 1, 6)]:
-        con.execute("""
+        con.execute(
+            """
             INSERT INTO daily_features (trading_day, symbol, orb_minutes, bar_count_1m)
             VALUES (?, 'MGC', 5, 1440)
-        """, [d])
+        """,
+            [d],
+        )
 
     # Insert validated_setups
     for sid, orb, em, rr, cb, filt, expr in [
         ("MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G5", "CME_REOPEN", "E1", 2.0, 2, "ORB_G5", 0.30),
         ("MGC_LONDON_METALS_E3_RR1.5_CB1_ORB_G4", "LONDON_METALS", "E3", 1.5, 1, "ORB_G4", 0.20),
     ]:
-        con.execute("""
+        con.execute(
+            """
             INSERT INTO validated_setups
             (strategy_id, instrument, orb_label, orb_minutes, rr_target,
              confirm_bars, entry_model, filter_type, sample_size,
@@ -57,7 +62,9 @@ def db_path(tmp_path):
              all_years_positive, stress_test_passed, status)
             VALUES (?, 'MGC', ?, 5, ?, ?, ?, ?, 100, 0.55, ?,
                     3, TRUE, TRUE, 'active')
-        """, [sid, orb, rr, cb, em, filt, expr])
+        """,
+            [sid, orb, rr, cb, em, filt, expr],
+        )
 
     # Insert edge_families (both ROBUST)
     con.execute("""
@@ -71,15 +78,11 @@ def db_path(tmp_path):
 
     # Insert strategy_trade_days
     for sid, days in [
-        ("MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G5",
-         [date(2024, 1, 2), date(2024, 1, 3), date(2024, 1, 5)]),
-        ("MGC_LONDON_METALS_E3_RR1.5_CB1_ORB_G4",
-         [date(2024, 1, 2), date(2024, 1, 6)]),
+        ("MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G5", [date(2024, 1, 2), date(2024, 1, 3), date(2024, 1, 5)]),
+        ("MGC_LONDON_METALS_E3_RR1.5_CB1_ORB_G4", [date(2024, 1, 2), date(2024, 1, 6)]),
     ]:
         for d in days:
-            con.execute(
-                "INSERT INTO strategy_trade_days VALUES (?, ?)", [sid, d]
-            )
+            con.execute("INSERT INTO strategy_trade_days VALUES (?, ?)", [sid, d])
 
     # Insert orb_outcomes (matching trades)
     outcomes = [
@@ -92,20 +95,23 @@ def db_path(tmp_path):
         (date(2024, 1, 6), "LONDON_METALS", 5, 1.5, 1, "E3", "loss", -1.0, 100.0, 98.5),
     ]
     for td, orb, om, rr, cb, em, outcome, pnl, entry, stop in outcomes:
-        con.execute("""
+        con.execute(
+            """
             INSERT INTO orb_outcomes
             (trading_day, symbol, orb_label, orb_minutes, rr_target,
              confirm_bars, entry_model, outcome, pnl_r,
              entry_price, stop_price)
             VALUES (?, 'MGC', ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, [td, orb, om, rr, cb, em, outcome, pnl, entry, stop])
+        """,
+            [td, orb, om, rr, cb, em, outcome, pnl, entry, stop],
+        )
 
     con.commit()
     con.close()
     return path
 
-class TestReportInstrument:
 
+class TestReportInstrument:
     def test_correct_trade_count(self, db_path):
         from scripts.reports.report_edge_portfolio import report_instrument
 
@@ -158,8 +164,8 @@ class TestReportInstrument:
         result = report_instrument(path, "MGC")
         assert result is None
 
-class TestDailyLedger:
 
+class TestDailyLedger:
     def test_two_trades_same_day_sum(self):
         """Two trades on same day sum to one daily return."""
         from scripts.reports.report_edge_portfolio import _compute_daily_ledger
@@ -184,16 +190,14 @@ class TestDailyLedger:
         assert daily_returns == []
         assert overlap == 0
 
-class TestPortfolioStats:
 
+class TestPortfolioStats:
     def test_positive_sharpe(self):
         """Mostly positive daily returns should yield positive Sharpe."""
         from scripts.reports.report_edge_portfolio import _compute_portfolio_stats
 
         # Vary returns to get nonzero std (constant returns -> std=0 -> Sharpe=None)
-        daily_returns = [
-            (date(2024, 1, i), 0.3 + (i % 3) * 0.2) for i in range(1, 31)
-        ]
+        daily_returns = [(date(2024, 1, i), 0.3 + (i % 3) * 0.2) for i in range(1, 31)]
         stats = _compute_portfolio_stats(daily_returns)
         assert stats["sharpe_ann"] is not None
         assert stats["sharpe_ann"] > 0
@@ -213,16 +217,16 @@ class TestPortfolioStats:
         from scripts.reports.report_edge_portfolio import _compute_portfolio_stats
 
         daily_returns = [
-            (date(2024, 1, 1), 5.0),   # cumulative = 5, peak = 5
+            (date(2024, 1, 1), 5.0),  # cumulative = 5, peak = 5
             (date(2024, 1, 2), -3.0),  # cumulative = 2, dd = 3
             (date(2024, 1, 3), -2.0),  # cumulative = 0, dd = 5
-            (date(2024, 1, 4), 1.0),   # cumulative = 1, dd = 4
+            (date(2024, 1, 4), 1.0),  # cumulative = 1, dd = 4
         ]
         stats = _compute_portfolio_stats(daily_returns)
         assert stats["max_dd_r"] == pytest.approx(5.0)
 
-class TestPurgedFilter:
 
+class TestPurgedFilter:
     def test_purged_excluded_by_default(self, tmp_path):
         """PURGED families excluded unless --include-purged."""
         from scripts.reports.report_edge_portfolio import report_instrument
@@ -244,10 +248,13 @@ class TestPurgedFilter:
 
         # Insert daily_features rows (required by orb_outcomes FK)
         for d in [date(2024, 1, 2), date(2024, 1, 3)]:
-            con.execute("""
+            con.execute(
+                """
                 INSERT INTO daily_features (trading_day, symbol, orb_minutes, bar_count_1m)
                 VALUES (?, 'MGC', 5, 1440)
-            """, [d])
+            """,
+                [d],
+            )
 
         # One ROBUST, one PURGED
         con.execute("""
@@ -277,9 +284,7 @@ class TestPurgedFilter:
             ("s_purged", [date(2024, 1, 3)]),
         ]:
             for d in days:
-                con.execute(
-                    "INSERT INTO strategy_trade_days VALUES (?, ?)", [sid, d]
-                )
+                con.execute("INSERT INTO strategy_trade_days VALUES (?, ?)", [sid, d])
 
         con.execute("""
             INSERT INTO orb_outcomes

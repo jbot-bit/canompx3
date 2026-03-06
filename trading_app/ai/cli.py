@@ -16,9 +16,7 @@ from pathlib import Path
 
 # Fix Windows cp1252 console encoding -- replace unencodable chars
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
-    sys.stdout = io.TextIOWrapper(
-        sys.stdout.buffer, encoding=sys.stdout.encoding, errors="replace"
-    )
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding=sys.stdout.encoding, errors="replace")
 
 
 def _load_env(env_path: Path) -> None:
@@ -34,9 +32,7 @@ def _load_env(env_path: Path) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="AI-powered query interface for MGC trading data"
-    )
+    parser = argparse.ArgumentParser(description="AI-powered query interface for MGC trading data")
     parser.add_argument("query", help="Question in plain English")
     parser.add_argument(
         "--db",

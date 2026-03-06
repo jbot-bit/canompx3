@@ -26,6 +26,7 @@ from datetime import date
 from pathlib import Path
 
 from pipeline.log import get_logger
+
 logger = get_logger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -36,7 +37,8 @@ from pipeline.paths import GOLD_DB_PATH
 from pipeline.cost_model import get_cost_spec, stress_test_costs
 from pipeline.dst import (
     DST_AFFECTED_SESSIONS,
-    is_winter_for_session, classify_dst_verdict,
+    is_winter_for_session,
+    classify_dst_verdict,
 )
 from trading_app.config import CORE_MIN_SAMPLES, REGIME_MIN_SAMPLES, WF_START_OVERRIDE
 from trading_app.db_manager import init_trading_app_schema
@@ -50,6 +52,7 @@ sys.stdout.reconfigure(line_buffering=True)
 # =========================================================================
 # FDR correction (F-01: Multiple comparison adjustment)
 # =========================================================================
+
 
 def benjamini_hochberg(p_values: list[tuple[str, float]], alpha: float = 0.05) -> dict[str, dict]:
     """Apply Benjamini-Hochberg FDR correction to a set of p-values.
@@ -101,6 +104,7 @@ def benjamini_hochberg(p_values: list[tuple[str, float]], alpha: float = 0.05) -
 
     return results
 
+
 def _parse_orb_size_bounds(filter_type: str | None, filter_params: str | None) -> tuple[float | None, float | None]:
     """Extract min_size/max_size from filter_type or filter_params JSON.
 
@@ -113,16 +117,14 @@ def _parse_orb_size_bounds(filter_type: str | None, filter_params: str | None) -
             min_s = params.get("min_size")
             max_s = params.get("max_size")
             if min_s is not None or max_s is not None:
-                return (float(min_s) if min_s is not None else None,
-                        float(max_s) if max_s is not None else None)
+                return (float(min_s) if min_s is not None else None, float(max_s) if max_s is not None else None)
             # CompositeFilter: size bounds are in params["base"]
             base = params.get("base")
             if isinstance(base, dict):
                 min_s = base.get("min_size")
                 max_s = base.get("max_size")
                 if min_s is not None or max_s is not None:
-                    return (float(min_s) if min_s is not None else None,
-                            float(max_s) if max_s is not None else None)
+                    return (float(min_s) if min_s is not None else None, float(max_s) if max_s is not None else None)
         except (json.JSONDecodeError, TypeError, ValueError):
             pass
 
@@ -132,7 +134,7 @@ def _parse_orb_size_bounds(filter_type: str | None, filter_params: str | None) -
         # Strip DOW skip suffixes for composite filter_types (e.g. ORB_G4_NOFRI)
         for dow_suffix in ("_NOFRI", "_NOMON", "_NOTUE"):
             if rest.endswith(dow_suffix):
-                rest = rest[:-len(dow_suffix)]
+                rest = rest[: -len(dow_suffix)]
                 break
         if "_L" in rest:
             parts = rest.split("_L")
@@ -173,10 +175,18 @@ def _parse_skip_days(filter_params: str | None) -> list[int] | None:
     return None
 
 
-def compute_dst_split(con, strategy_id: str, instrument: str, orb_label: str,
-                      entry_model: str, rr_target: float, confirm_bars: int,
-                      filter_type: str, filter_params: str | None = None,
-                      orb_minutes: int = 5) -> dict:
+def compute_dst_split(
+    con,
+    strategy_id: str,
+    instrument: str,
+    orb_label: str,
+    entry_model: str,
+    rr_target: float,
+    confirm_bars: int,
+    filter_type: str,
+    filter_params: str | None = None,
+    orb_minutes: int = 5,
+) -> dict:
     """Compute winter/summer split metrics for a strategy at a DST-affected session.
 
     Queries orb_outcomes joined with daily_features to apply the ORB size filter,
@@ -191,8 +201,10 @@ def compute_dst_split(con, strategy_id: str, instrument: str, orb_label: str,
     """
     if orb_label not in DST_AFFECTED_SESSIONS:
         return {
-            "winter_n": None, "winter_avg_r": None,
-            "summer_n": None, "summer_avg_r": None,
+            "winter_n": None,
+            "winter_avg_r": None,
+            "summer_n": None,
+            "summer_avg_r": None,
             "verdict": "CLEAN",
         }
 
@@ -220,7 +232,8 @@ def compute_dst_split(con, strategy_id: str, instrument: str, orb_label: str,
 
     size_where = (" AND " + " AND ".join(size_clauses)) if size_clauses else ""
 
-    rows = con.execute(f"""
+    rows = con.execute(
+        f"""
         SELECT o.trading_day, o.pnl_r
         FROM orb_outcomes o
         JOIN daily_features df
@@ -236,13 +249,16 @@ def compute_dst_split(con, strategy_id: str, instrument: str, orb_label: str,
           AND o.outcome IN ('win', 'loss')
           {size_where}
         ORDER BY o.trading_day
-    """, [instrument, orb_minutes, instrument, orb_label,
-          entry_model, rr_target, confirm_bars] + size_params).fetchall()
+    """,
+        [instrument, orb_minutes, instrument, orb_label, entry_model, rr_target, confirm_bars] + size_params,
+    ).fetchall()
 
     if not rows:
         return {
-            "winter_n": 0, "winter_avg_r": None,
-            "summer_n": 0, "summer_avg_r": None,
+            "winter_n": 0,
+            "winter_avg_r": None,
+            "summer_n": 0,
+            "summer_avg_r": None,
             "verdict": "LOW-N",
         }
 
@@ -252,7 +268,7 @@ def compute_dst_split(con, strategy_id: str, instrument: str, orb_label: str,
 
     for trading_day, pnl_r in rows:
         # trading_day may come back as date or datetime
-        if hasattr(trading_day, 'date'):
+        if hasattr(trading_day, "date"):
             td = trading_day.date()
         elif isinstance(trading_day, date):
             td = trading_day
@@ -291,14 +307,20 @@ def classify_regime(atr_20: float) -> str:
         return "MARGINAL"
     return "ACTIVE"
 
-def validate_strategy(row: dict, cost_spec, stress_multiplier: float = 1.5,
-                      min_sample: int = REGIME_MIN_SAMPLES, min_sharpe: float | None = None,
-                      max_drawdown: float | None = None,
-                      exclude_years: set[int] | None = None,
-                      min_years_positive_pct: float = 1.0,
-                      min_trades_per_year: int = 1,
-                      atr_by_year: dict[int, float] | None = None,
-                      enable_regime_waivers: bool = True) -> tuple[str, str, list[int]]:
+
+def validate_strategy(
+    row: dict,
+    cost_spec,
+    stress_multiplier: float = 1.5,
+    min_sample: int = REGIME_MIN_SAMPLES,
+    min_sharpe: float | None = None,
+    max_drawdown: float | None = None,
+    exclude_years: set[int] | None = None,
+    min_years_positive_pct: float = 1.0,
+    min_trades_per_year: int = 1,
+    atr_by_year: dict[int, float] | None = None,
+    enable_regime_waivers: bool = True,
+) -> tuple[str, str, list[int]]:
     """
     Run 6-phase validation on a single strategy row.
 
@@ -350,9 +372,7 @@ def validate_strategy(row: dict, cost_spec, stress_multiplier: float = 1.5,
         return "REJECTED", "Phase 3: No yearly data", []
 
     included_years = {
-        y: d for y, d in yearly.items()
-        if int(y) not in exclude_years
-        and d.get("trades", 0) >= min_trades_per_year
+        y: d for y, d in yearly.items() if int(y) not in exclude_years and d.get("trades", 0) >= min_trades_per_year
     }
     if not included_years:
         return "REJECTED", "Phase 3: No yearly data after exclusions", []
@@ -377,35 +397,43 @@ def validate_strategy(row: dict, cost_spec, stress_multiplier: float = 1.5,
             unwaived_neg = [y for y in neg_years if int(y) not in waived]
 
             if unwaived_neg:
-                return "REJECTED", (
-                    f"Phase 3: {len(unwaived_neg)} year(s) negative and not waivable: "
-                    f"{', '.join(sorted(unwaived_neg))}"
-                ), []
+                return (
+                    "REJECTED",
+                    (
+                        f"Phase 3: {len(unwaived_neg)} year(s) negative and not waivable: "
+                        f"{', '.join(sorted(unwaived_neg))}"
+                    ),
+                    [],
+                )
 
             if pos_count == 0:
-                return "REJECTED", (
-                    "Phase 3: All years require DORMANT waiver, "
-                    "need at least 1 clean positive year"
-                ), []
+                return (
+                    "REJECTED",
+                    ("Phase 3: All years require DORMANT waiver, need at least 1 clean positive year"),
+                    [],
+                )
 
             regime_waivers = sorted(waived)
             for yr in regime_waivers:
                 y_str = str(yr)
                 d = neg_years[y_str]
                 notes.append(
-                    f"Year {yr} waived: DORMANT regime "
-                    f"(mean_atr={atr_by_year[yr]:.1f}, trades={d.get('trades', 0)})"
+                    f"Year {yr} waived: DORMANT regime (mean_atr={atr_by_year[yr]:.1f}, trades={d.get('trades', 0)})"
                 )
         else:
             # Original strict logic
             pct_positive = pos_count / len(included_years)
             if pct_positive < min_years_positive_pct:
                 neg_list = sorted(neg_years.keys())
-                return "REJECTED", (
-                    f"Phase 3: {pos_count}/{len(included_years)} years positive "
-                    f"({pct_positive:.0%} < {min_years_positive_pct:.0%}), "
-                    f"negative: {', '.join(neg_list)}"
-                ), []
+                return (
+                    "REJECTED",
+                    (
+                        f"Phase 3: {pos_count}/{len(included_years)} years positive "
+                        f"({pct_positive:.0%} < {min_years_positive_pct:.0%}), "
+                        f"negative: {', '.join(neg_list)}"
+                    ),
+                    [],
+                )
 
     # Phase 4: Stress test — "ExpR > 0 at +50% costs"
     # Compute extra friction per trade in R-multiples.
@@ -434,7 +462,11 @@ def validate_strategy(row: dict, cost_spec, stress_multiplier: float = 1.5,
     stress_exp = exp_r - extra_cost_per_trade_r
 
     if stress_exp <= 0:
-        return "REJECTED", f"Phase 4: Stress ExpR={stress_exp:.4f} <= 0 (base={exp_r}, delta_r={extra_cost_per_trade_r:.4f}, risk_pts={strategy_risk_points:.2f})", []
+        return (
+            "REJECTED",
+            f"Phase 4: Stress ExpR={stress_exp:.4f} <= 0 (base={exp_r}, delta_r={extra_cost_per_trade_r:.4f}, risk_pts={strategy_risk_points:.2f})",
+            [],
+        )
 
     # Phase 5: Sharpe ratio (optional)
     if min_sharpe is not None:
@@ -452,6 +484,7 @@ def validate_strategy(row: dict, cost_spec, stress_multiplier: float = 1.5,
     if notes:
         return status, "; ".join(notes), regime_waivers
     return status, "All phases passed", regime_waivers
+
 
 def _walkforward_worker(
     strategy_id: str,
@@ -497,6 +530,7 @@ def _walkforward_worker(
             # Phase 4b: Walk-forward
             # Load cost spec for tight stop re-simulation in WF windows
             from pipeline.cost_model import get_cost_spec
+
             wf_cost_spec = get_cost_spec(instrument) if stop_multiplier != 1.0 else None
 
             wf_result = run_walkforward(
@@ -522,9 +556,7 @@ def _walkforward_worker(
             result["wf_result"] = {
                 "passed": wf_result.passed,
                 "rejection_reason": wf_result.rejection_reason,
-                "as_dict": {
-                    k: v for k, v in wf_result.__dict__.items()
-                },
+                "as_dict": {k: v for k, v in wf_result.__dict__.items()},
             }
 
             # DST split (recompute only for blended strategies missing data)
@@ -532,7 +564,9 @@ def _walkforward_worker(
                 result["dst_split"] = dst_cols_from_discovery
             elif dst_regime is None:
                 dst_split = compute_dst_split(
-                    con, strategy_id, instrument,
+                    con,
+                    strategy_id,
+                    instrument,
                     orb_label=orb_label,
                     entry_model=entry_model,
                     rr_target=rr_target,
@@ -544,8 +578,10 @@ def _walkforward_worker(
                 result["dst_split"] = dst_split
             else:
                 result["dst_split"] = {
-                    "winter_n": None, "winter_avg_r": None,
-                    "summer_n": None, "summer_avg_r": None,
+                    "winter_n": None,
+                    "winter_avg_r": None,
+                    "summer_n": None,
+                    "summer_avg_r": None,
                     "verdict": None,
                 }
 
@@ -554,6 +590,7 @@ def _walkforward_worker(
 
     result["wf_duration_s"] = time.monotonic() - t0
     return result
+
 
 def run_validation(
     db_path: Path | None = None,
@@ -597,6 +634,7 @@ def run_validation(
     # ── Phase A: Load strategies + serial cull (phases 1-5) ──────────
     with duckdb.connect(str(db_path)) as con:
         from pipeline.db_config import configure_connection
+
         configure_connection(con, writing=True)
 
         if not dry_run:
@@ -617,12 +655,15 @@ def run_validation(
             # same (trading_day, symbol).  Filter to orb_minutes=5 to get exactly
             # one row per day (avoids 3x inflation from 5/15/30m rows).
             # Using 5 is safe: 5m daily_features always exist for all instruments.
-            atr_rows = con.execute("""
+            atr_rows = con.execute(
+                """
                 SELECT EXTRACT(YEAR FROM trading_day) as yr, AVG(atr_20) as mean_atr
                 FROM daily_features
                 WHERE symbol = ? AND orb_minutes = 5 AND atr_20 IS NOT NULL
                 GROUP BY yr
-            """, [instrument]).fetchall()
+            """,
+                [instrument],
+            ).fetchall()
             atr_by_year = {int(r[0]): r[1] for r in atr_rows}
 
     # Connection closed — DuckDB requires no write connection open
@@ -634,7 +675,7 @@ def run_validation(
     passed_strategy_ids = []
 
     serial_results = []  # Each: {row_dict, status, notes, regime_waivers, dst_split}
-    wf_candidates = []   # Survivors needing walkforward
+    wf_candidates = []  # Survivors needing walkforward
 
     for row in rows:
         row_dict = dict(zip(col_names, row))
@@ -642,16 +683,26 @@ def run_validation(
 
         if row_dict.get("is_canonical") is False:
             skipped_aliases += 1
-            serial_results.append({
-                "row_dict": row_dict, "status": "SKIPPED",
-                "notes": "Alias (non-canonical)", "regime_waivers": [],
-                "dst_split": {"winter_n": None, "winter_avg_r": None,
-                              "summer_n": None, "summer_avg_r": None, "verdict": None},
-            })
+            serial_results.append(
+                {
+                    "row_dict": row_dict,
+                    "status": "SKIPPED",
+                    "notes": "Alias (non-canonical)",
+                    "regime_waivers": [],
+                    "dst_split": {
+                        "winter_n": None,
+                        "winter_avg_r": None,
+                        "summer_n": None,
+                        "summer_avg_r": None,
+                        "verdict": None,
+                    },
+                }
+            )
             continue
 
         status, notes, regime_waivers = validate_strategy(
-            row_dict, cost_spec,
+            row_dict,
+            cost_spec,
             stress_multiplier=stress_multiplier,
             min_sample=min_sample,
             min_sharpe=min_sharpe,
@@ -666,18 +717,32 @@ def run_validation(
         strat_dst_regime = parse_dst_regime(strategy_id)
 
         if status == "PASSED" and enable_walkforward:
-            wf_candidates.append({
-                "row_dict": row_dict, "status": status, "notes": notes,
-                "regime_waivers": regime_waivers,
-                "strat_dst_regime": strat_dst_regime,
-            })
+            wf_candidates.append(
+                {
+                    "row_dict": row_dict,
+                    "status": status,
+                    "notes": notes,
+                    "regime_waivers": regime_waivers,
+                    "strat_dst_regime": strat_dst_regime,
+                }
+            )
         else:
-            dst_split = {"winter_n": None, "winter_avg_r": None,
-                         "summer_n": None, "summer_avg_r": None, "verdict": None}
-            serial_results.append({
-                "row_dict": row_dict, "status": status, "notes": notes,
-                "regime_waivers": regime_waivers, "dst_split": dst_split,
-            })
+            dst_split = {
+                "winter_n": None,
+                "winter_avg_r": None,
+                "summer_n": None,
+                "summer_avg_r": None,
+                "verdict": None,
+            }
+            serial_results.append(
+                {
+                    "row_dict": row_dict,
+                    "status": status,
+                    "notes": notes,
+                    "regime_waivers": regime_waivers,
+                    "dst_split": dst_split,
+                }
+            )
             if status == "PASSED":
                 passed += 1
                 passed_strategy_ids.append(strategy_id)
@@ -729,7 +794,9 @@ def run_validation(
                     "summer_n": rd.get("dst_summer_n"),
                     "summer_avg_r": rd.get("dst_summer_avg_r"),
                     "verdict": rd.get("dst_verdict"),
-                } if rd.get("dst_verdict") is not None else None,
+                }
+                if rd.get("dst_verdict") is not None
+                else None,
             )
 
         if use_parallel:
@@ -751,8 +818,10 @@ def run_validation(
                     except Exception as e:
                         logger.error(f"Worker exception for {sid}: {e}")
                         wf_results_map[sid] = {
-                            "strategy_id": sid, "wf_result": None,
-                            "dst_split": None, "error": str(e),
+                            "strategy_id": sid,
+                            "wf_result": None,
+                            "dst_split": None,
+                            "error": str(e),
                             "wf_duration_s": 0,
                         }
         else:
@@ -792,16 +861,23 @@ def run_validation(
                 notes = "Phase 4b: No walkforward result received"
 
             dst_split = wr.get("dst_split") or {
-                "winter_n": None, "winter_avg_r": None,
-                "summer_n": None, "summer_avg_r": None, "verdict": None,
+                "winter_n": None,
+                "winter_avg_r": None,
+                "summer_n": None,
+                "summer_avg_r": None,
+                "verdict": None,
             }
 
-            serial_results.append({
-                "row_dict": rd, "status": status, "notes": notes,
-                "regime_waivers": cand["regime_waivers"],
-                "dst_split": dst_split,
-                "wf_result_dict": wr.get("wf_result"),
-            })
+            serial_results.append(
+                {
+                    "row_dict": rd,
+                    "status": status,
+                    "notes": notes,
+                    "regime_waivers": cand["regime_waivers"],
+                    "dst_split": dst_split,
+                    "wf_result_dict": wr.get("wf_result"),
+                }
+            )
 
             if status == "PASSED":
                 passed += 1
@@ -810,12 +886,11 @@ def run_validation(
                 rejected += 1
 
     # ── Phase C: Batch write all results ─────────────────────────────
-    processed_orb_minutes = sorted({
-        sr["row_dict"].get("orb_minutes", 5) for sr in serial_results
-    })
+    processed_orb_minutes = sorted({sr["row_dict"].get("orb_minutes", 5) for sr in serial_results})
     if not dry_run and processed_orb_minutes:
         with duckdb.connect(str(db_path)) as con:
             from pipeline.db_config import configure_connection
+
             configure_connection(con, writing=True)
 
             # Purge stale validated_setups for this instrument + processed
@@ -864,11 +939,16 @@ def run_validation(
                            dst_summer_n = ?, dst_summer_avg_r = ?,
                            dst_verdict = ?
                        WHERE strategy_id = ?""",
-                    [status, notes,
-                     dst_split.get("winter_n"), dst_split.get("winter_avg_r"),
-                     dst_split.get("summer_n"), dst_split.get("summer_avg_r"),
-                     dst_split.get("verdict"),
-                     sid],
+                    [
+                        status,
+                        notes,
+                        dst_split.get("winter_n"),
+                        dst_split.get("winter_avg_r"),
+                        dst_split.get("summer_n"),
+                        dst_split.get("summer_avg_r"),
+                        dst_split.get("verdict"),
+                        sid,
+                    ],
                 )
 
                 if status == "PASSED":
@@ -878,18 +958,17 @@ def run_validation(
                     except (json.JSONDecodeError, TypeError):
                         yearly_data = {}
 
-                    included = {y: d for y, d in yearly_data.items()
-                                if int(y) not in (exclude_years or set())}
+                    included = {y: d for y, d in yearly_data.items() if int(y) not in (exclude_years or set())}
                     years_tested = len(included)
-                    all_positive = all(
-                        d.get("avg_r", 0) > 0 for d in included.values()
-                    )
+                    all_positive = all(d.get("avg_r", 0) > 0 for d in included.values())
                     regime_waivers = sr["regime_waivers"]
 
                     wf_result_dict = sr.get("wf_result_dict")
                     wf_tested = wf_result_dict is not None
                     wf_passed = (wf_result_dict or {}).get("passed", False) if wf_tested else None
-                    wf_windows_val = (wf_result_dict or {}).get("as_dict", {}).get("n_valid_windows") if wf_tested else None
+                    wf_windows_val = (
+                        (wf_result_dict or {}).get("as_dict", {}).get("n_valid_windows") if wf_tested else None
+                    )
 
                     con.execute(
                         """INSERT OR REPLACE INTO validated_setups
@@ -911,32 +990,43 @@ def run_validation(
                             sharpe_haircut, skewness, kurtosis_excess)
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         [
-                            sid, sid,
-                            rd["instrument"], rd["orb_label"],
-                            rd["orb_minutes"], rd["rr_target"],
-                            rd["confirm_bars"], rd.get("entry_model", "E1"),
+                            sid,
+                            sid,
+                            rd["instrument"],
+                            rd["orb_label"],
+                            rd["orb_minutes"],
+                            rd["rr_target"],
+                            rd["confirm_bars"],
+                            rd.get("entry_model", "E1"),
                             rd.get("filter_type", ""),
                             rd.get("filter_params", ""),
                             rd.get("stop_multiplier", 1.0),
                             rd.get("sample_size", 0),
                             rd.get("win_rate", 0),
                             rd.get("expectancy_r", 0),
-                            years_tested, all_positive, True,
+                            years_tested,
+                            all_positive,
+                            True,
                             rd.get("sharpe_ratio"),
                             rd.get("max_drawdown_r"),
                             rd.get("trades_per_year"),
                             rd.get("sharpe_ann"),
-                            yearly, "active",
+                            yearly,
+                            "active",
                             rd.get("median_risk_dollars"),
                             rd.get("avg_risk_dollars"),
                             rd.get("avg_win_dollars"),
                             rd.get("avg_loss_dollars"),
                             json.dumps(regime_waivers) if regime_waivers else None,
                             len(regime_waivers),
-                            dst_split.get("winter_n"), dst_split.get("winter_avg_r"),
-                            dst_split.get("summer_n"), dst_split.get("summer_avg_r"),
+                            dst_split.get("winter_n"),
+                            dst_split.get("winter_avg_r"),
+                            dst_split.get("summer_n"),
+                            dst_split.get("summer_avg_r"),
                             dst_split.get("verdict"),
-                            wf_tested, wf_passed, wf_windows_val,
+                            wf_tested,
+                            wf_passed,
+                            wf_windows_val,
                             rd.get("sharpe_haircut"),
                             rd.get("skewness"),
                             rd.get("kurtosis_excess"),
@@ -945,14 +1035,14 @@ def run_validation(
 
             # Write walkforward JSONL (batch)
             from trading_app.walkforward import WalkForwardResult
+
             for sr in serial_results:
                 wfr = sr.get("wf_result_dict")
                 if wfr and wfr.get("as_dict"):
                     wd = wfr["as_dict"]
-                    wf_obj = WalkForwardResult(**{
-                        k: v for k, v in wd.items()
-                        if k in WalkForwardResult.__dataclass_fields__
-                    })
+                    wf_obj = WalkForwardResult(
+                        **{k: v for k, v in wd.items() if k in WalkForwardResult.__dataclass_fields__}
+                    )
                     append_walkforward_result(wf_obj, wf_output_path)
 
             # FDR correction (unchanged)
@@ -997,51 +1087,69 @@ def run_validation(
 
             con.commit()
 
-    logger.info(f"Validation complete: {passed} PASSED, {rejected} REJECTED, "
-                f"{skipped_aliases} aliases skipped "
-                f"(of {len(rows)} strategies)")
+    logger.info(
+        f"Validation complete: {passed} PASSED, {rejected} REJECTED, "
+        f"{skipped_aliases} aliases skipped "
+        f"(of {len(rows)} strategies)"
+    )
     if dry_run:
         logger.info("  (DRY RUN — no data written)")
 
     return passed, rejected
 
+
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Validate strategies and promote to validated_setups"
-    )
+    parser = argparse.ArgumentParser(description="Validate strategies and promote to validated_setups")
     parser.add_argument("--instrument", default="MGC", help="Instrument symbol")
     parser.add_argument("--min-sample", type=int, default=REGIME_MIN_SAMPLES, help="Min sample size")
     parser.add_argument("--stress-multiplier", type=float, default=1.5, help="Cost stress multiplier")
     parser.add_argument("--min-sharpe", type=float, default=None, help="Min Sharpe ratio (optional)")
     parser.add_argument("--max-drawdown", type=float, default=None, help="Max drawdown in R (optional)")
-    parser.add_argument("--exclude-years", type=int, nargs="*", default=None,
-                        help="Years to exclude from Phase 3 (e.g. --exclude-years 2021)")
-    parser.add_argument("--min-years-positive-pct", type=float, default=1.0,
-                        help="Fraction of included years that must be positive (0.0-1.0, default 1.0)")
-    parser.add_argument("--min-trades-per-year", type=int, default=1,
-                        help="Min trades for a year to count in Phase 3 robustness check (default 1)")
+    parser.add_argument(
+        "--exclude-years",
+        type=int,
+        nargs="*",
+        default=None,
+        help="Years to exclude from Phase 3 (e.g. --exclude-years 2021)",
+    )
+    parser.add_argument(
+        "--min-years-positive-pct",
+        type=float,
+        default=1.0,
+        help="Fraction of included years that must be positive (0.0-1.0, default 1.0)",
+    )
+    parser.add_argument(
+        "--min-trades-per-year",
+        type=int,
+        default=1,
+        help="Min trades for a year to count in Phase 3 robustness check (default 1)",
+    )
     parser.add_argument("--dry-run", action="store_true", help="No DB writes")
-    parser.add_argument("--db", type=str, default=None,
-                        help="Database path (default: gold.db)")
+    parser.add_argument("--db", type=str, default=None, help="Database path (default: gold.db)")
     # Walk-forward (Phase 4b)
-    parser.add_argument("--no-walkforward", action="store_true",
-                        help="Disable walk-forward validation (Phase 4b)")
-    parser.add_argument("--wf-test-months", type=int, default=6,
-                        help="Walk-forward test window months (default: 6)")
-    parser.add_argument("--wf-min-train-months", type=int, default=12,
-                        help="Walk-forward min training months (default: 12)")
-    parser.add_argument("--wf-min-trades", type=int, default=15,
-                        help="Walk-forward min trades per window (default: 15)")
-    parser.add_argument("--wf-min-windows", type=int, default=3,
-                        help="Walk-forward min valid windows (default: 3)")
-    parser.add_argument("--wf-min-pct-positive", type=float, default=0.60,
-                        help="Walk-forward min pct positive windows (default: 0.60)")
-    parser.add_argument("--no-regime-waivers", action="store_true",
-                        help="Disable DORMANT regime waivers (strict all-years-positive)")
-    parser.add_argument("--workers", type=int, default=None,
-                        help="Parallel workers for walkforward (default: min(8, cpu_count-1), 1=serial)")
+    parser.add_argument("--no-walkforward", action="store_true", help="Disable walk-forward validation (Phase 4b)")
+    parser.add_argument("--wf-test-months", type=int, default=6, help="Walk-forward test window months (default: 6)")
+    parser.add_argument(
+        "--wf-min-train-months", type=int, default=12, help="Walk-forward min training months (default: 12)"
+    )
+    parser.add_argument(
+        "--wf-min-trades", type=int, default=15, help="Walk-forward min trades per window (default: 15)"
+    )
+    parser.add_argument("--wf-min-windows", type=int, default=3, help="Walk-forward min valid windows (default: 3)")
+    parser.add_argument(
+        "--wf-min-pct-positive", type=float, default=0.60, help="Walk-forward min pct positive windows (default: 0.60)"
+    )
+    parser.add_argument(
+        "--no-regime-waivers", action="store_true", help="Disable DORMANT regime waivers (strict all-years-positive)"
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        help="Parallel workers for walkforward (default: min(8, cpu_count-1), 1=serial)",
+    )
     args = parser.parse_args()
 
     exclude = set(args.exclude_years) if args.exclude_years else None
@@ -1067,6 +1175,7 @@ def main():
         enable_regime_waivers=not args.no_regime_waivers,
         workers=args.workers,
     )
+
 
 if __name__ == "__main__":
     main()

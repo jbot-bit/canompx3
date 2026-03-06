@@ -160,9 +160,11 @@ def phase2_honest_oos(X_e6, y, meta, instrument: str):
     sessions = meta["orb_label"].unique()
     results = {}
 
-    print(f"\n  {'Session':<22} {'N_train':>7} {'N_val':>6} {'N_test':>6} "
-          f"{'AUC_val':>7} {'AUC_test':>8} {'Thresh':>6} "
-          f"{'BaseR':>7} {'DeltaR':>7} {'Skip%':>6} {'VERDICT':>8}")
+    print(
+        f"\n  {'Session':<22} {'N_train':>7} {'N_val':>6} {'N_test':>6} "
+        f"{'AUC_val':>7} {'AUC_test':>8} {'Thresh':>6} "
+        f"{'BaseR':>7} {'DeltaR':>7} {'Skip%':>6} {'VERDICT':>8}"
+    )
     print(f"  {'-' * 100}")
 
     total_base_r = 0.0
@@ -182,9 +184,9 @@ def phase2_honest_oos(X_e6, y, meta, instrument: str):
         X_train = X_e6.iloc[sess_train][feature_names]
         X_val = X_e6.iloc[sess_val][feature_names]
         X_test = X_e6.iloc[sess_test][feature_names]
-        y_train = y.iloc[sess_train] if hasattr(y, 'iloc') else y[sess_train]
-        y_val = y.iloc[sess_val] if hasattr(y, 'iloc') else y[sess_val]
-        y_test = y.iloc[sess_test] if hasattr(y, 'iloc') else y[sess_test]
+        y_train = y.iloc[sess_train] if hasattr(y, "iloc") else y[sess_train]
+        y_val = y.iloc[sess_val] if hasattr(y, "iloc") else y[sess_val]
+        y_test = y.iloc[sess_test] if hasattr(y, "iloc") else y[sess_test]
 
         leaf_size = max(20, min(100, len(sess_train) // 20))
         rf = RandomForestClassifier(**{**RF_PARAMS, "min_samples_leaf": leaf_size})
@@ -248,20 +250,27 @@ def phase2_honest_oos(X_e6, y, meta, instrument: str):
             verdict = "NOISE"
 
         results[session] = {
-            "auc_val": auc_val, "auc_test": auc_test,
-            "threshold": best_t, "delta_r": delta_r,
-            "base_r": base_r_test, "n_test": len(sess_test),
+            "auc_val": auc_val,
+            "auc_test": auc_test,
+            "threshold": best_t,
+            "delta_r": delta_r,
+            "base_r": base_r_test,
+            "n_test": len(sess_test),
             "verdict": verdict,
         }
 
-        print(f"  {session:<22} {len(sess_train):>7,d} {len(sess_val):>6,d} {len(sess_test):>6,d} "
-              f"{auc_val:>7.3f} {auc_test:>8.3f} {best_t:>6.2f} "
-              f"{base_r_test:>+7.1f} {delta_r:>+7.1f} {skip_pct:>5.0%} "
-              f"{verdict:>8}")
+        print(
+            f"  {session:<22} {len(sess_train):>7,d} {len(sess_val):>6,d} {len(sess_test):>6,d} "
+            f"{auc_val:>7.3f} {auc_test:>8.3f} {best_t:>6.2f} "
+            f"{base_r_test:>+7.1f} {delta_r:>+7.1f} {skip_pct:>5.0%} "
+            f"{verdict:>8}"
+        )
 
     total_delta = total_filtered_r - total_base_r
-    print(f"\n  TOTAL: BaseR={total_base_r:+.1f}  FilteredR={total_filtered_r:+.1f}  "
-          f"Delta={total_delta:+.1f}  N_test={total_test_n:,d}")
+    print(
+        f"\n  TOTAL: BaseR={total_base_r:+.1f}  FilteredR={total_filtered_r:+.1f}  "
+        f"Delta={total_delta:+.1f}  N_test={total_test_n:,d}"
+    )
 
     # Summary verdict
     real_sessions = [s for s, r in results.items() if r["verdict"] == "REAL"]
@@ -289,12 +298,29 @@ def phase3_signal_diagnosis(X_e6, y, meta, instrument: str, oos_results: dict | 
 
     # For each session with signal: what feature groups matter?
     feature_groups = {
-        "volatility": ["atr_20", "atr_vel_ratio", "garch_atr_ratio", "garch_forecast_vol",
-                        "prev_day_range", "overnight_range"],
-        "orb_quality": ["orb_size", "orb_volume", "orb_break_bar_volume",
-                         "orb_break_delay_min", "orb_break_bar_continues"],
-        "direction": ["rsi_14_at_CME_REOPEN", "gap_open_points", "orb_break_dir_LONG",
-                       "orb_break_dir_SHORT", "entry_model_E1", "entry_model_E2"],
+        "volatility": [
+            "atr_20",
+            "atr_vel_ratio",
+            "garch_atr_ratio",
+            "garch_forecast_vol",
+            "prev_day_range",
+            "overnight_range",
+        ],
+        "orb_quality": [
+            "orb_size",
+            "orb_volume",
+            "orb_break_bar_volume",
+            "orb_break_delay_min",
+            "orb_break_bar_continues",
+        ],
+        "direction": [
+            "rsi_14_at_CME_REOPEN",
+            "gap_open_points",
+            "orb_break_dir_LONG",
+            "orb_break_dir_SHORT",
+            "entry_model_E1",
+            "entry_model_E2",
+        ],
         "calendar": ["day_of_week", "is_friday", "is_monday"],
         "cross_session": list(CROSS_SESSION_FEATURES) + list(LEVEL_PROXIMITY_FEATURES),
         "trade_config": ["rr_target", "confirm_bars", "orb_minutes"],
@@ -314,7 +340,7 @@ def phase3_signal_diagnosis(X_e6, y, meta, instrument: str, oos_results: dict | 
 
         feature_names = _get_session_features(X_e6, session)
         X_sess = X_e6.loc[mask, feature_names]
-        y_sess = y[mask] if not hasattr(y, 'iloc') else y.iloc[np.where(mask)[0]]
+        y_sess = y[mask] if not hasattr(y, "iloc") else y.iloc[np.where(mask)[0]]
 
         rf = RandomForestClassifier(**{**RF_PARAMS, "n_estimators": 200})
         rf.fit(X_sess, y_sess)
@@ -341,7 +367,7 @@ def phase3_signal_diagnosis(X_e6, y, meta, instrument: str, oos_results: dict | 
     # Per-instrument summary
     print(f"\n  INSTRUMENT DIAGNOSIS:")
     total_n = len(y)
-    win_rate = y.mean() if hasattr(y, 'mean') else np.mean(y)
+    win_rate = y.mean() if hasattr(y, "mean") else np.mean(y)
     n_sessions = len([s for s in sessions if (meta["orb_label"] == s).sum() >= MIN_SESSION_SAMPLES])
     print(f"    Total samples: {total_n:,d}")
     print(f"    Win rate: {win_rate:.1%}")
@@ -372,8 +398,7 @@ def main():
         X_all, y_all, meta_all = load_validated_feature_matrix(args.db_path, instrument)
         X_e6 = apply_e6_filter(X_all)
 
-        logger.info(f"{instrument}: {len(X_e6):,d} samples, {X_e6.shape[1]} features, "
-                     f"win_rate={y_all.mean():.1%}")
+        logger.info(f"{instrument}: {len(X_e6):,d} samples, {X_e6.shape[1]} features, win_rate={y_all.mean():.1%}")
 
         # Phase 1: Feature importance
         importances = phase1_feature_importance(X_e6, y_all, meta_all, instrument)

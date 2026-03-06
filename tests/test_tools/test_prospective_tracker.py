@@ -6,6 +6,7 @@ Uses an in-memory DuckDB with synthetic data to verify:
 - Retrospective vs prospective tagging
 - Stats computation
 """
+
 import datetime
 import duckdb
 import pytest
@@ -82,23 +83,29 @@ def tracker_db(tmp_path):
     # Day 4: prev=win, win outcome -> not qualifying
     # Day 5: prev=win, loss outcome, orb_size=3.5 -> not qualifying (orb < 4.0)
     days = [
-        (datetime.date(2025, 1, 1), "win",  6.0, "win",   2.0),
+        (datetime.date(2025, 1, 1), "win", 6.0, "win", 2.0),
         (datetime.date(2025, 1, 2), "loss", 5.5, "loss", -1.0),
-        (datetime.date(2025, 1, 3), "win",  5.0, "win",   2.0),
-        (datetime.date(2025, 1, 4), "win",  4.5, "win",   1.5),
+        (datetime.date(2025, 1, 3), "win", 5.0, "win", 2.0),
+        (datetime.date(2025, 1, 4), "win", 4.5, "win", 1.5),
         (datetime.date(2025, 1, 5), "loss", 3.5, "loss", -1.0),
     ]
 
     for day, df_outcome, orb_size, oo_outcome, pnl in days:
-        con.execute("""
+        con.execute(
+            """
             INSERT INTO daily_features (trading_day, symbol, orb_minutes, orb_CME_REOPEN_outcome, orb_CME_REOPEN_size)
             VALUES (?, 'MGC', 5, ?, ?)
-        """, [day, df_outcome, orb_size])
+        """,
+            [day, df_outcome, orb_size],
+        )
 
-        con.execute("""
+        con.execute(
+            """
             INSERT INTO orb_outcomes (trading_day, symbol, orb_label, orb_minutes, entry_model, confirm_bars, rr_target, outcome, pnl_r)
             VALUES (?, 'MGC', 'CME_REOPEN', 5, 'E2', 1, 2.0, ?, ?)
-        """, [day, oo_outcome, pnl])
+        """,
+            [day, oo_outcome, pnl],
+        )
 
     con.commit()
     return con

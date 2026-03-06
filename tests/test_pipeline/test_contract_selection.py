@@ -68,7 +68,7 @@ class TestChooseFrontContract:
 
     def test_tie_by_lexicographic(self):
         # If expiry parse fails, fall back to lexicographic
-        pattern = re.compile(r'^TEST\w+$')
+        pattern = re.compile(r"^TEST\w+$")
         volumes = {"TESTB": 500, "TESTA": 500}
         result = choose_front_contract(volumes, outright_pattern=pattern, prefix_len=4)
         assert result == "TESTA"
@@ -94,6 +94,8 @@ class TestChooseFrontContract:
     def test_log_func_called_on_tie(self):
         logs = []
         volumes = {"GCM4": 500, "GCZ4": 500}
-        choose_front_contract(volumes, outright_pattern=GC_OUTRIGHT_PATTERN, prefix_len=2, log_func=lambda msg: logs.append(msg))
+        choose_front_contract(
+            volumes, outright_pattern=GC_OUTRIGHT_PATTERN, prefix_len=2, log_func=lambda msg: logs.append(msg)
+        )
         assert len(logs) > 0
         assert "TIE" in logs[0]

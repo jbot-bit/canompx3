@@ -19,9 +19,12 @@ class TestSchemaConstants:
         db_path = tmp_path / "test.db"
         con = duckdb.connect(str(db_path))
         con.execute(BARS_1M_SCHEMA)
-        tables = [r[0] for r in con.execute(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
-        ).fetchall()]
+        tables = [
+            r[0]
+            for r in con.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+            ).fetchall()
+        ]
         con.close()
         assert "bars_1m" in tables
 
@@ -29,9 +32,12 @@ class TestSchemaConstants:
         db_path = tmp_path / "test.db"
         con = duckdb.connect(str(db_path))
         con.execute(BARS_5M_SCHEMA)
-        tables = [r[0] for r in con.execute(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
-        ).fetchall()]
+        tables = [
+            r[0]
+            for r in con.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+            ).fetchall()
+        ]
         con.close()
         assert "bars_5m" in tables
 
@@ -39,9 +45,12 @@ class TestSchemaConstants:
         db_path = tmp_path / "test.db"
         con = duckdb.connect(str(db_path))
         con.execute(DAILY_FEATURES_SCHEMA)
-        tables = [r[0] for r in con.execute(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
-        ).fetchall()]
+        tables = [
+            r[0]
+            for r in con.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+            ).fetchall()
+        ]
         con.close()
         assert "daily_features" in tables
 
@@ -51,9 +60,16 @@ class TestSchemaConstants:
 
     def test_orb_labels_dynamic_contains_all_sessions(self):
         for session in [
-            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
-            "US_DATA_830", "NYSE_OPEN", "US_DATA_1000", "COMEX_SETTLE",
-            "CME_PRECLOSE", "NYSE_CLOSE",
+            "CME_REOPEN",
+            "TOKYO_OPEN",
+            "SINGAPORE_OPEN",
+            "LONDON_METALS",
+            "US_DATA_830",
+            "NYSE_OPEN",
+            "US_DATA_1000",
+            "COMEX_SETTLE",
+            "CME_PRECLOSE",
+            "NYSE_CLOSE",
             "BRISBANE_1025",
         ]:
             assert session in ORB_LABELS_DYNAMIC
@@ -64,9 +80,12 @@ class TestInitDb:
         db_path = tmp_path / "fresh.db"
         init_db(db_path, force=False)
         con = duckdb.connect(str(db_path), read_only=True)
-        tables = [r[0] for r in con.execute(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
-        ).fetchall()]
+        tables = [
+            r[0]
+            for r in con.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+            ).fetchall()
+        ]
         con.close()
         assert "bars_1m" in tables
         assert "bars_5m" in tables
@@ -109,9 +128,12 @@ class TestInitDb:
         db_path = tmp_path / "cols.db"
         init_db(db_path, force=False)
         con = duckdb.connect(str(db_path), read_only=True)
-        cols = [r[0] for r in con.execute(
-            "SELECT column_name FROM information_schema.columns WHERE table_name='daily_features'"
-        ).fetchall()]
+        cols = [
+            r[0]
+            for r in con.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name='daily_features'"
+            ).fetchall()
+        ]
         con.close()
         # Check a few ORB-label-derived columns
         assert "orb_CME_REOPEN_high" in cols

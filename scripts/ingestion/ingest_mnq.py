@@ -108,10 +108,14 @@ def main():
 
     # Step 2: Ingest bars_1m
     ingest_cmd = [
-        sys.executable, "pipeline/ingest_dbn.py",
-        "--instrument", INSTRUMENT,
-        "--start", START_DATE,
-        "--end", END_DATE,
+        sys.executable,
+        "pipeline/ingest_dbn.py",
+        "--instrument",
+        INSTRUMENT,
+        "--start",
+        START_DATE,
+        "--end",
+        END_DATE,
         f"--chunk-days={CHUNK_DAYS}",
     ]
     if args.resume:
@@ -130,23 +134,37 @@ def main():
         sys.exit(0)
 
     # Step 3: Build bars_5m
-    rc = run_step("Build MNQ bars_5m", [
-        sys.executable, "pipeline/build_bars_5m.py",
-        "--instrument", INSTRUMENT,
-        "--start", START_DATE,
-        "--end", END_DATE,
-    ])
+    rc = run_step(
+        "Build MNQ bars_5m",
+        [
+            sys.executable,
+            "pipeline/build_bars_5m.py",
+            "--instrument",
+            INSTRUMENT,
+            "--start",
+            START_DATE,
+            "--end",
+            END_DATE,
+        ],
+    )
     if rc != 0:
         log("ABORT: bars_5m build failed")
         sys.exit(rc)
 
     # Step 4: Build daily_features
-    rc = run_step("Build MNQ daily_features", [
-        sys.executable, "pipeline/build_daily_features.py",
-        "--instrument", INSTRUMENT,
-        "--start", START_DATE,
-        "--end", END_DATE,
-    ])
+    rc = run_step(
+        "Build MNQ daily_features",
+        [
+            sys.executable,
+            "pipeline/build_daily_features.py",
+            "--instrument",
+            INSTRUMENT,
+            "--start",
+            START_DATE,
+            "--end",
+            END_DATE,
+        ],
+    )
     if rc != 0:
         log("ABORT: daily_features build failed")
         sys.exit(rc)

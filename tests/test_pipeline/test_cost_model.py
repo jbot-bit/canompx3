@@ -26,7 +26,6 @@ from pipeline.cost_model import (
 
 
 class TestCostSpec:
-
     def test_mgc_total_friction(self):
         """MGC total friction = $1.74 + $2.00 + $2.00 = $5.74."""
         spec = get_cost_spec("MGC")
@@ -66,7 +65,6 @@ class TestCostSpec:
 
 
 class TestGetCostSpec:
-
     def test_valid_instrument(self):
         spec = get_cost_spec("MGC")
         assert spec.instrument == "MGC"
@@ -85,7 +83,6 @@ class TestGetCostSpec:
 
 
 class TestRiskReward:
-
     def test_risk_in_dollars_long(self):
         """Long: entry=2350, stop=2340, risk=10pts*$10+$5.74=$105.74."""
         spec = get_cost_spec("MGC")
@@ -130,7 +127,6 @@ class TestRiskReward:
 
 
 class TestRMultiple:
-
     def test_to_r_multiple_breakeven(self):
         """At breakeven (0 PnL points), R is negative due to costs."""
         spec = get_cost_spec("MGC")
@@ -154,7 +150,6 @@ class TestRMultiple:
 
 
 class TestStressTest:
-
     def test_stress_test_50pct(self):
         """Stress test at +50% increases all friction components."""
         spec = get_cost_spec("MGC")
@@ -234,15 +229,13 @@ class TestSessionSlippage:
     def test_all_sessions_have_multiplier(self):
         """All ORB sessions should be in SESSION_SLIPPAGE_MULT for MGC."""
         mgc_mults = SESSION_SLIPPAGE_MULT["MGC"]
-        for label in ["CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN",
-                       "LONDON_METALS", "US_DATA_830", "NYSE_OPEN"]:
+        for label in ["CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS", "US_DATA_830", "NYSE_OPEN"]:
             assert label in mgc_mults
 
     def test_all_sessions_have_multiplier_mnq(self):
         """All ORB sessions should be in SESSION_SLIPPAGE_MULT for MNQ."""
         mnq_mults = SESSION_SLIPPAGE_MULT["MNQ"]
-        for label in ["CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN",
-                       "LONDON_METALS", "US_DATA_830", "NYSE_OPEN"]:
+        for label in ["CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS", "US_DATA_830", "NYSE_OPEN"]:
             assert label in mnq_mults
 
 

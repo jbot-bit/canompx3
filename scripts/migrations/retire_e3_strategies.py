@@ -42,8 +42,7 @@ def retire_e3(
     try:
         # Count active E3
         active_count = con.execute(
-            "SELECT COUNT(*) FROM validated_setups "
-            "WHERE entry_model = 'E3' AND status = 'active'"
+            "SELECT COUNT(*) FROM validated_setups WHERE entry_model = 'E3' AND status = 'active'"
         ).fetchone()[0]
 
         print(f"Found {active_count} active E3 strategies")
@@ -78,9 +77,7 @@ def retire_e3(
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Soft-retire active E3 strategies in validated_setups"
-    )
+    parser = argparse.ArgumentParser(description="Soft-retire active E3 strategies in validated_setups")
     parser.add_argument("--db", type=str, default=None, help="Database path")
     parser.add_argument("--dry-run", action="store_true", help="Show what would change")
     args = parser.parse_args()

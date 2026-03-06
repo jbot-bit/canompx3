@@ -14,6 +14,7 @@ from trading_app.ml.predict_live import LiveMLPredictor, MLPrediction, _compute_
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_mock_bundle(
     n_features: int = 10,
     threshold: float = 0.55,
@@ -75,6 +76,7 @@ def _make_mock_daily_features_row() -> dict:
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 class TestFailOpen:
     """Fail-open: every error returns (0.5, True, 0.5)."""
@@ -235,6 +237,7 @@ class TestConfigHash:
     def test_config_hash_matches_shared_function(self):
         """predict_live._compute_config_hash matches config.compute_config_hash."""
         from trading_app.ml.config import compute_config_hash
+
         assert _compute_config_hash() == compute_config_hash()
 
 
@@ -311,6 +314,7 @@ class TestModelInfo:
 # ---------------------------------------------------------------------------
 # Hybrid per-session model tests
 # ---------------------------------------------------------------------------
+
 
 def _make_hybrid_bundle(
     sessions: dict[str, dict | None] | None = None,
@@ -562,7 +566,9 @@ class TestApertureRRGuard:
     """Phase 1 guards: aperture mismatch and RR mismatch detection."""
 
     def _make_guarded_bundle(
-        self, training_aperture: int | None = 5, training_rr: float | None = 2.5,
+        self,
+        training_aperture: int | None = 5,
+        training_rr: float | None = 2.5,
     ) -> dict:
         """Create hybrid bundle with training_aperture and training_rr on SINGAPORE_OPEN."""
         model = MagicMock()
@@ -691,6 +697,7 @@ class TestApertureRRGuard:
 # Per-aperture model tests
 # ---------------------------------------------------------------------------
 
+
 def _make_per_aperture_bundle(
     session: str = "SINGAPORE_OPEN",
     apertures: dict[int, dict | None] | None = None,
@@ -730,11 +737,7 @@ def _make_per_aperture_bundle(
             },
         }
 
-    sessions = {
-        session: {
-            f"O{ap}": info for ap, info in apertures.items()
-        }
-    }
+    sessions = {session: {f"O{ap}": info for ap, info in apertures.items()}}
 
     return {
         "model_type": "single_config_per_session",

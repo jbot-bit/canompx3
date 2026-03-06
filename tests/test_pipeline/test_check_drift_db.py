@@ -94,20 +94,24 @@ class TestNoE0InDb:
     """Check 35: No E0 rows in trading tables."""
 
     def test_catches_e0_in_outcomes(self, tmp_path, monkeypatch):
-        db_path = _create_db(tmp_path,
+        db_path = _create_db(
+            tmp_path,
             OUTCOMES_SCHEMA + EXPERIMENTAL_SCHEMA + VALIDATED_SCHEMA,
             """INSERT INTO orb_outcomes VALUES
-                ('2025-01-01', 'MGC', 5, 'CME_REOPEN', 'E0', 1)""")
+                ('2025-01-01', 'MGC', 5, 'CME_REOPEN', 'E0', 1)""",
+        )
         monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
         violations = check_drift.check_no_e0_in_db()
         assert len(violations) > 0
         assert "E0" in violations[0]
 
     def test_passes_no_e0(self, tmp_path, monkeypatch):
-        db_path = _create_db(tmp_path,
+        db_path = _create_db(
+            tmp_path,
             OUTCOMES_SCHEMA + EXPERIMENTAL_SCHEMA + VALIDATED_SCHEMA,
             """INSERT INTO orb_outcomes VALUES
-                ('2025-01-01', 'MGC', 5, 'CME_REOPEN', 'E2', 1)""")
+                ('2025-01-01', 'MGC', 5, 'CME_REOPEN', 'E2', 1)""",
+        )
         monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
         violations = check_drift.check_no_e0_in_db()
         assert len(violations) == 0
@@ -120,10 +124,12 @@ class TestOrphanedValidatedStrategies:
     """Check 42: Active strategies must have matching orb_outcomes."""
 
     def test_catches_orphan(self, tmp_path, monkeypatch):
-        db_path = _create_db(tmp_path,
+        db_path = _create_db(
+            tmp_path,
             VALIDATED_SCHEMA + OUTCOMES_SCHEMA,
             """INSERT INTO validated_setups (strategy_id, instrument, orb_minutes, status)
-               VALUES ('MGC_15m_1', 'MGC', 15, 'active')""")
+               VALUES ('MGC_15m_1', 'MGC', 15, 'active')""",
+        )
         # No orb_outcomes for MGC 15m
         monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
         violations = check_drift.check_orphaned_validated_strategies()
@@ -132,23 +138,27 @@ class TestOrphanedValidatedStrategies:
 
     def test_catches_orphan_wrong_aperture(self, tmp_path, monkeypatch):
         """Outcomes exist for 5m but strategy is 15m — still orphaned."""
-        db_path = _create_db(tmp_path,
+        db_path = _create_db(
+            tmp_path,
             VALIDATED_SCHEMA + OUTCOMES_SCHEMA,
             """INSERT INTO validated_setups (strategy_id, instrument, orb_minutes, status)
                VALUES ('MGC_15m_1', 'MGC', 15, 'active');
                INSERT INTO orb_outcomes (trading_day, symbol, orb_minutes)
-               VALUES ('2025-01-01', 'MGC', 5)""")
+               VALUES ('2025-01-01', 'MGC', 5)""",
+        )
         monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
         violations = check_drift.check_orphaned_validated_strategies()
         assert len(violations) > 0
 
     def test_passes_with_outcomes(self, tmp_path, monkeypatch):
-        db_path = _create_db(tmp_path,
+        db_path = _create_db(
+            tmp_path,
             VALIDATED_SCHEMA + OUTCOMES_SCHEMA,
             """INSERT INTO validated_setups (strategy_id, instrument, orb_minutes, status)
                VALUES ('MGC_5m_1', 'MGC', 5, 'active');
                INSERT INTO orb_outcomes (trading_day, symbol, orb_minutes)
-               VALUES ('2025-01-01', 'MGC', 5)""")
+               VALUES ('2025-01-01', 'MGC', 5)""",
+        )
         monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
         violations = check_drift.check_orphaned_validated_strategies()
         assert len(violations) == 0
@@ -172,18 +182,24 @@ class TestAuditColumnsPopulated:
     """Check 50: experimental_strategies must have audit columns."""
 
     def test_catches_unpopulated_n_trials(self, tmp_path, monkeypatch):
-        db_path = _create_db(tmp_path, EXPERIMENTAL_SCHEMA,
+        db_path = _create_db(
+            tmp_path,
+            EXPERIMENTAL_SCHEMA,
             """INSERT INTO experimental_strategies
-               VALUES ('MGC', 's1', 'E2', 100, NULL, NULL, NULL)""")
+               VALUES ('MGC', 's1', 'E2', 100, NULL, NULL, NULL)""",
+        )
         monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
         violations = check_drift.check_audit_columns_populated()
         assert len(violations) > 0
         assert "n_trials" in violations[0]
 
     def test_passes_populated(self, tmp_path, monkeypatch):
-        db_path = _create_db(tmp_path, EXPERIMENTAL_SCHEMA,
+        db_path = _create_db(
+            tmp_path,
+            EXPERIMENTAL_SCHEMA,
             """INSERT INTO experimental_strategies
-               VALUES ('MGC', 's1', 'E2', 100, 2376, 0.05, 0.3)""")
+               VALUES ('MGC', 's1', 'E2', 100, 2376, 0.05, 0.3)""",
+        )
         monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
         violations = check_drift.check_audit_columns_populated()
         assert len(violations) == 0
@@ -229,10 +245,13 @@ class TestDailyFeaturesRowIntegrity:
     """Check 57: daily_features must have exactly 3 rows per (day, symbol)."""
 
     def test_catches_partial_rows(self, tmp_path, monkeypatch):
-        db_path = _create_db(tmp_path, DAILY_FEATURES_SCHEMA,
+        db_path = _create_db(
+            tmp_path,
+            DAILY_FEATURES_SCHEMA,
             """INSERT INTO daily_features VALUES
                 ('2025-01-01', 'MGC', 5),
-                ('2025-01-01', 'MGC', 15)""")
+                ('2025-01-01', 'MGC', 15)""",
+        )
         # Only 2 rows instead of 3
         monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
         violations = check_drift.check_daily_features_row_integrity()
@@ -240,11 +259,14 @@ class TestDailyFeaturesRowIntegrity:
         assert "MGC" in violations[0]
 
     def test_passes_complete(self, tmp_path, monkeypatch):
-        db_path = _create_db(tmp_path, DAILY_FEATURES_SCHEMA,
+        db_path = _create_db(
+            tmp_path,
+            DAILY_FEATURES_SCHEMA,
             """INSERT INTO daily_features VALUES
                 ('2025-01-01', 'MGC', 5),
                 ('2025-01-01', 'MGC', 15),
-                ('2025-01-01', 'MGC', 30)""")
+                ('2025-01-01', 'MGC', 30)""",
+        )
         monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
         violations = check_drift.check_daily_features_row_integrity()
         assert len(violations) == 0
@@ -257,14 +279,17 @@ class TestDataContinuity:
     """Check 58: Advisory warning on large gaps in trading days."""
 
     def test_warns_on_gap(self, tmp_path, monkeypatch, capsys):
-        db_path = _create_db(tmp_path, DAILY_FEATURES_SCHEMA,
+        db_path = _create_db(
+            tmp_path,
+            DAILY_FEATURES_SCHEMA,
             """INSERT INTO daily_features VALUES
                 ('2025-01-01', 'MGC', 5),
                 ('2025-01-01', 'MGC', 15),
                 ('2025-01-01', 'MGC', 30),
                 ('2025-01-20', 'MGC', 5),
                 ('2025-01-20', 'MGC', 15),
-                ('2025-01-20', 'MGC', 30)""")
+                ('2025-01-20', 'MGC', 30)""",
+        )
         monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
         violations = check_drift.check_data_continuity()
         # Advisory — always returns []
@@ -273,14 +298,17 @@ class TestDataContinuity:
         assert "WARNING" in captured.out and "gap" in captured.out.lower()
 
     def test_no_warning_for_small_gaps(self, tmp_path, monkeypatch, capsys):
-        db_path = _create_db(tmp_path, DAILY_FEATURES_SCHEMA,
+        db_path = _create_db(
+            tmp_path,
+            DAILY_FEATURES_SCHEMA,
             """INSERT INTO daily_features VALUES
                 ('2025-01-06', 'MGC', 5),
                 ('2025-01-06', 'MGC', 15),
                 ('2025-01-06', 'MGC', 30),
                 ('2025-01-07', 'MGC', 5),
                 ('2025-01-07', 'MGC', 15),
-                ('2025-01-07', 'MGC', 30)""")
+                ('2025-01-07', 'MGC', 30)""",
+        )
         monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
         violations = check_drift.check_data_continuity()
         assert len(violations) == 0

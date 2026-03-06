@@ -82,9 +82,7 @@ class TestRetireE3:
             count = retire_e3(con=con, dry_run=True)
             assert count == 0
 
-            active = con.execute(
-                "SELECT COUNT(*) FROM validated_setups WHERE status = 'active'"
-            ).fetchone()[0]
+            active = con.execute("SELECT COUNT(*) FROM validated_setups WHERE status = 'active'").fetchone()[0]
             assert active == 5
         finally:
             con.close()

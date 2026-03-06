@@ -62,7 +62,9 @@ def compute_importance(
     # MDA (Permutation Importance on OOS data)
     logger.info("Computing permutation importance (MDA)...")
     perm_result = permutation_importance(
-        rf, X_test, y_test,
+        rf,
+        X_test,
+        y_test,
         n_repeats=10,
         random_state=42,
         n_jobs=-1,
@@ -75,16 +77,19 @@ def compute_importance(
     oos_auc = rf.score(X_test, y_test)
     y_prob = rf.predict_proba(X_test)[:, 1]
     from sklearn.metrics import roc_auc_score
+
     oos_auc = roc_auc_score(y_test, y_prob)
     logger.info(f"OOS AUC: {oos_auc:.4f}")
 
     # Combine
-    importance = pd.DataFrame({
-        "feature": X.columns,
-        "mdi_score": mdi.values,
-        "mda_score": mda.values,
-        "mda_std": mda_std.values,
-    })
+    importance = pd.DataFrame(
+        {
+            "feature": X.columns,
+            "mdi_score": mdi.values,
+            "mda_score": mda.values,
+            "mda_std": mda_std.values,
+        }
+    )
     importance["mdi_rank"] = importance["mdi_score"].rank(ascending=False).astype(int)
     importance["mda_rank"] = importance["mda_score"].rank(ascending=False).astype(int)
     importance["combined_rank"] = (importance["mdi_rank"] + importance["mda_rank"]) / 2
@@ -111,8 +116,10 @@ def print_importance_report(instrument: str, importance: pd.DataFrame, oos_auc: 
         elif row["mda_score"] > 0.0001:
             signal = " *"
 
-        print(f"  {i:<6d} {row['feature']:<40s} {row['mdi_score']:>8.4f} "
-              f"{row['mda_score']:>8.4f} {row['mda_std']:>7.4f}{signal}")
+        print(
+            f"  {i:<6d} {row['feature']:<40s} {row['mdi_score']:>8.4f} "
+            f"{row['mda_score']:>8.4f} {row['mda_std']:>7.4f}{signal}"
+        )
 
     print(f"{'=' * 70}")
     print("  *** = strong signal (MDA > 0.001)")

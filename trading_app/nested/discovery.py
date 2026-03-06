@@ -35,6 +35,7 @@ sys.stdout.reconfigure(line_buffering=True)
 # Nested entry resolution (always 5m)
 ENTRY_RESOLUTION = 5
 
+
 def make_nested_strategy_id(
     instrument: str,
     orb_label: str,
@@ -49,13 +50,10 @@ def make_nested_strategy_id(
     Format: NESTED_{instrument}_{orb}_{minutes}m_{em}_RR{rr}_CB{cb}_{filter}
     Example: NESTED_MGC_CME_REOPEN_15m_E1_RR2.5_CB2_ORB_G4
     """
-    return (
-        f"NESTED_{instrument}_{orb_label}_{orb_minutes}m_"
-        f"{entry_model}_RR{rr_target}_CB{confirm_bars}_{filter_type}"
-    )
+    return f"NESTED_{instrument}_{orb_label}_{orb_minutes}m_{entry_model}_RR{rr_target}_CB{confirm_bars}_{filter_type}"
 
-def _load_nested_outcomes_bulk(con, instrument, orb_minutes, entry_resolution,
-                               orb_labels, entry_models):
+
+def _load_nested_outcomes_bulk(con, instrument, orb_minutes, entry_resolution, orb_labels, entry_models):
     """Load all non-NULL nested outcomes in bulk.
 
     Returns dict keyed by (orb_label, entry_model, rr_target, confirm_bars)
@@ -81,17 +79,20 @@ def _load_nested_outcomes_bulk(con, instrument, orb_minutes, entry_resolution,
                 key = (orb_label, em, r[1], r[2])
                 if key not in grouped:
                     grouped[key] = []
-                grouped[key].append({
-                    "trading_day": r[0],
-                    "outcome": r[3],
-                    "pnl_r": r[4],
-                    "mae_r": r[5],
-                    "mfe_r": r[6],
-                    "entry_price": r[7],
-                    "stop_price": r[8],
-                })
+                grouped[key].append(
+                    {
+                        "trading_day": r[0],
+                        "outcome": r[3],
+                        "pnl_r": r[4],
+                        "mae_r": r[5],
+                        "mfe_r": r[6],
+                        "entry_price": r[7],
+                        "stop_price": r[8],
+                    }
+                )
 
     return grouped
+
 
 def run_nested_discovery(
     db_path: Path | None = None,
@@ -114,6 +115,7 @@ def run_nested_discovery(
     con = duckdb.connect(str(db_path))
     try:
         from pipeline.db_config import configure_connection
+
         configure_connection(con, writing=True)
 
         if not dry_run:
@@ -146,7 +148,12 @@ def run_nested_discovery(
 
             print("Loading nested outcomes (bulk)...")
             outcomes_by_key = _load_nested_outcomes_bulk(
-                con, instrument, orb_minutes, ENTRY_RESOLUTION, ORB_LABELS, ENTRY_MODELS,
+                con,
+                instrument,
+                orb_minutes,
+                ENTRY_RESOLUTION,
+                ORB_LABELS,
+                ENTRY_MODELS,
             )
             print(f"  {sum(len(v) for v in outcomes_by_key.values())} outcome rows loaded")
 
@@ -155,7 +162,7 @@ def run_nested_discovery(
             for s in ORB_LABELS:
                 nf = len(get_filters_for_grid(instrument, s))
                 total_combos += nf * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS)  # E1 (all CBs)
-                total_combos += nf * len(RR_TARGETS) * 2                        # E2+E3 (CB1 only)
+                total_combos += nf * len(RR_TARGETS) * 2  # E2+E3 (CB1 only)
             combo_idx = 0
             insert_batch = []
 
@@ -175,36 +182,50 @@ def run_nested_discovery(
                                     continue
 
                                 all_outcomes = outcomes_by_key.get(
-                                    (orb_label, em, rr_target, cb), [],
+                                    (orb_label, em, rr_target, cb),
+                                    [],
                                 )
-                                outcomes = [
-                                    o for o in all_outcomes
-                                    if o["trading_day"] in matching_day_set
-                                ]
+                                outcomes = [o for o in all_outcomes if o["trading_day"] in matching_day_set]
 
                                 if not outcomes:
                                     continue
 
                                 metrics = compute_metrics(outcomes)
                                 strategy_id = make_nested_strategy_id(
-                                    instrument, orb_label, orb_minutes,
-                                    em, rr_target, cb, filter_key,
+                                    instrument,
+                                    orb_label,
+                                    orb_minutes,
+                                    em,
+                                    rr_target,
+                                    cb,
+                                    filter_key,
                                 )
 
                                 if not dry_run:
-                                    insert_batch.append([
-                                        strategy_id, instrument, orb_label,
-                                        orb_minutes, ENTRY_RESOLUTION,
-                                        rr_target, cb, em, filter_key,
-                                        strategy_filter.to_json(),
-                                        metrics["sample_size"], metrics["win_rate"],
-                                        metrics["avg_win_r"], metrics["avg_loss_r"],
-                                        metrics["expectancy_r"], metrics["sharpe_ratio"],
-                                        metrics["max_drawdown_r"],
-                                        metrics["median_risk_points"],
-                                        metrics["avg_risk_points"],
-                                        metrics["yearly_results"],
-                                    ])
+                                    insert_batch.append(
+                                        [
+                                            strategy_id,
+                                            instrument,
+                                            orb_label,
+                                            orb_minutes,
+                                            ENTRY_RESOLUTION,
+                                            rr_target,
+                                            cb,
+                                            em,
+                                            filter_key,
+                                            strategy_filter.to_json(),
+                                            metrics["sample_size"],
+                                            metrics["win_rate"],
+                                            metrics["avg_win_r"],
+                                            metrics["avg_loss_r"],
+                                            metrics["expectancy_r"],
+                                            metrics["sharpe_ratio"],
+                                            metrics["max_drawdown_r"],
+                                            metrics["median_risk_points"],
+                                            metrics["avg_risk_points"],
+                                            metrics["yearly_results"],
+                                        ]
+                                    )
 
                                     if len(insert_batch) >= 500:
                                         con.executemany(
@@ -226,8 +247,7 @@ def run_nested_discovery(
                                 total_strategies += 1
 
                     if combo_idx % 500 == 0:
-                        print(f"  Progress: {combo_idx}/{total_combos} combos, "
-                              f"{total_strategies} strategies")
+                        print(f"  Progress: {combo_idx}/{total_combos} combos, {total_strategies} strategies")
 
             # Flush remaining batch
             if insert_batch and not dry_run:
@@ -258,17 +278,19 @@ def run_nested_discovery(
     finally:
         con.close()
 
+
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Grid search over nested ORB strategy variants"
-    )
+    parser = argparse.ArgumentParser(description="Grid search over nested ORB strategy variants")
     parser.add_argument("--instrument", default="MGC", help="Instrument symbol")
     parser.add_argument("--start", type=date.fromisoformat, help="Start date")
     parser.add_argument("--end", type=date.fromisoformat, help="End date")
     parser.add_argument(
-        "--orb-minutes", type=int, nargs="+", default=[15, 30],
+        "--orb-minutes",
+        type=int,
+        nargs="+",
+        default=[15, 30],
         help="ORB duration(s) (default: 15 30)",
     )
     parser.add_argument("--dry-run", action="store_true", help="No DB writes")
@@ -281,6 +303,7 @@ def main():
         orb_minutes_list=args.orb_minutes,
         dry_run=args.dry_run,
     )
+
 
 if __name__ == "__main__":
     main()

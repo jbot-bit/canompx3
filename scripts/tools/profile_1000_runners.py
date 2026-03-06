@@ -38,12 +38,14 @@ sys.stdout.reconfigure(line_buffering=True)
 CHECKPOINTS = [15, 30, 60, 120]
 THRESHOLDS = [0.0, 0.3, 0.5, 0.75, 1.0]
 
+
 def run(db_path: Path, start: date, end: date):
     spec = get_cost_spec("MGC")
     con = duckdb.connect(str(db_path), read_only=True)
 
     # Load 1000 E1 G4+ trades (all RR/CB combos pooled)
-    df = con.execute("""
+    df = con.execute(
+        """
         SELECT o.trading_day, o.entry_ts, o.entry_price, o.stop_price,
                o.target_price, o.outcome, o.pnl_r, o.rr_target, o.confirm_bars,
                d.orb_1000_size, d.orb_1000_break_dir,
@@ -57,7 +59,9 @@ def run(db_path: Path, start: date, end: date):
           AND o.pnl_r IS NOT NULL AND d.orb_1000_size >= 4
           AND o.trading_day BETWEEN ? AND ?
         ORDER BY o.trading_day
-    """, [start, end]).fetchdf()
+    """,
+        [start, end],
+    ).fetchdf()
     df["entry_ts"] = pd.to_datetime(df["entry_ts"], utc=True)
     print(f"Trades: {len(df)} ({start} to {end})")
 
@@ -187,8 +191,8 @@ def run(db_path: Path, start: date, end: date):
     print("=" * 85)
     print("WHAT MAKES A RUNNER? (1000 E1 CB2 RR2.0 G4+)")
     print("=" * 85)
-    print(f"Runners (7h > +1R): {len(runners)} ({len(runners)/len(pdf)*100:.0f}%)")
-    print(f"Non-runners:        {len(non_runners)} ({len(non_runners)/len(pdf)*100:.0f}%)")
+    print(f"Runners (7h > +1R): {len(runners)} ({len(runners) / len(pdf) * 100:.0f}%)")
+    print(f"Non-runners:        {len(non_runners)} ({len(non_runners) / len(pdf) * 100:.0f}%)")
 
     # Checkpoint analysis
     for cp in CHECKPOINTS:
@@ -223,19 +227,23 @@ def run(db_path: Path, start: date, end: date):
                 continue
 
             # Blended result: runners get 7h pnl, others get fixed_rr pnl
-            blended = pd.concat([
-                hold["r_7h"],
-                take_fixed["fixed_rr_pnl"],
-            ])
+            blended = pd.concat(
+                [
+                    hold["r_7h"],
+                    take_fixed["fixed_rr_pnl"],
+                ]
+            )
             arr = blended.values
             m = compute_strategy_metrics(arr)
             if m is None:
                 continue
 
             hold_pct = len(hold) / len(pdf) * 100
-            print(f"    R>={threshold:+.1f}: hold {len(hold)} ({hold_pct:.0f}%), "
-                  f"ExpR={m['expr']:+.4f}  Sharpe={m['sharpe']:.4f}  "
-                  f"Total={m['total']:+.1f}")
+            print(
+                f"    R>={threshold:+.1f}: hold {len(hold)} ({hold_pct:.0f}%), "
+                f"ExpR={m['expr']:+.4f}  Sharpe={m['sharpe']:.4f}  "
+                f"Total={m['total']:+.1f}"
+            )
 
     # 0900 alignment
     print()
@@ -244,9 +252,7 @@ def run(db_path: Path, start: date, end: date):
     print("=" * 85)
     pdf["same_dir"] = pdf.apply(
         lambda r: (
-            r["orb_0900_dir"] == ("long" if r["is_long"] else "short")
-            if pd.notna(r.get("orb_0900_dir"))
-            else False
+            r["orb_0900_dir"] == ("long" if r["is_long"] else "short") if pd.notna(r.get("orb_0900_dir")) else False
         ),
         axis=1,
     )
@@ -256,8 +262,7 @@ def run(db_path: Path, start: date, end: date):
             continue
         avg_7h = subset["r_7h"].mean()
         runner_rate = subset["is_runner"].mean() * 100
-        print(f"  {label:10s}: N={len(subset):>4}, avg 7h R={avg_7h:+.3f}, "
-              f"runner rate={runner_rate:.0f}%")
+        print(f"  {label:10s}: N={len(subset):>4}, avg 7h R={avg_7h:+.3f}, runner rate={runner_rate:.0f}%")
 
     # ORB size tiers
     print()
@@ -271,9 +276,11 @@ def run(db_path: Path, start: date, end: date):
         avg_7h = subset["r_7h"].mean()
         runner_rate = subset["is_runner"].mean() * 100
         avg_fixed = subset["fixed_rr_pnl"].mean()
-        print(f"  G{g:>2}+: N={len(subset):>4}, "
-              f"fixed ExpR={avg_fixed:+.4f}, 7h ExpR={avg_7h:+.4f}, "
-              f"runner rate={runner_rate:.0f}%")
+        print(
+            f"  G{g:>2}+: N={len(subset):>4}, "
+            f"fixed ExpR={avg_fixed:+.4f}, 7h ExpR={avg_7h:+.4f}, "
+            f"runner rate={runner_rate:.0f}%"
+        )
 
     # Year breakdown of adaptive strategy
     print()
@@ -295,7 +302,7 @@ def run(db_path: Path, start: date, end: date):
         print(f"Rule: At {best_cp}m, if R >= {best_thresh:+.1f} -> hold 7h, else fixed RR")
         print()
         print(f"  {'Year':5s} {'N':>4s} {'FixedRR':>8s} {'7h_only':>8s} {'Adaptive':>8s} {'Best':>8s}")
-        print(f"  {'-'*5} {'-'*4} {'-'*8} {'-'*8} {'-'*8} {'-'*8}")
+        print(f"  {'-' * 5} {'-' * 4} {'-' * 8} {'-' * 8} {'-' * 8} {'-' * 8}")
 
         for year in sorted(pdf["year"].unique()):
             ypdf = pdf[pdf["year"] == year]
@@ -307,20 +314,22 @@ def run(db_path: Path, start: date, end: date):
             if mf and m7 and ma:
                 sharpes = {"fixed": mf["sharpe"], "7h": m7["sharpe"], "adaptive": ma["sharpe"]}
                 best = max(sharpes, key=sharpes.get)
-                print(f"  {year:5s} {len(ypdf):>4d} {mf['sharpe']:>8.3f} {m7['sharpe']:>8.3f} "
-                      f"{ma['sharpe']:>8.3f} {best:>8s}")
+                print(
+                    f"  {year:5s} {len(ypdf):>4d} {mf['sharpe']:>8.3f} {m7['sharpe']:>8.3f} "
+                    f"{ma['sharpe']:>8.3f} {best:>8s}"
+                )
 
         # Overall
         mf = compute_strategy_metrics(pdf["fixed_rr_pnl"].values)
         m7 = compute_strategy_metrics(pdf["r_7h"].values)
         ma = compute_strategy_metrics(pdf["adaptive_pnl"].values)
         if mf and m7 and ma:
-            print(f"  {'TOTAL':5s} {len(pdf):>4d} {mf['sharpe']:>8.3f} {m7['sharpe']:>8.3f} "
-                  f"{ma['sharpe']:>8.3f}")
+            print(f"  {'TOTAL':5s} {len(pdf):>4d} {mf['sharpe']:>8.3f} {m7['sharpe']:>8.3f} {ma['sharpe']:>8.3f}")
             print()
             print(f"  Fixed RR: ExpR={mf['expr']:+.4f} Sharpe={mf['sharpe']:.4f} Total={mf['total']:+.1f}")
             print(f"  7h only:  ExpR={m7['expr']:+.4f} Sharpe={m7['sharpe']:.4f} Total={m7['total']:+.1f}")
             print(f"  Adaptive: ExpR={ma['expr']:+.4f} Sharpe={ma['sharpe']:.4f} Total={ma['total']:+.1f}")
+
 
 def main():
     parser = argparse.ArgumentParser(description="Profile 1000 runner days")
@@ -329,6 +338,7 @@ def main():
     parser.add_argument("--end", type=date.fromisoformat, default=date(2026, 2, 4))
     args = parser.parse_args()
     run(args.db_path, args.start, args.end)
+
 
 if __name__ == "__main__":
     main()

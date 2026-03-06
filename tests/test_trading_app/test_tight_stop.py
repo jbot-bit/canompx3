@@ -16,8 +16,10 @@ from trading_app.strategy_discovery import make_strategy_id, parse_dst_regime, p
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 class FakeCostSpec:
     """Minimal CostSpec for testing."""
+
     def __init__(self, point_value=10.0, total_friction=5.74):
         self.point_value = point_value
         self.total_friction = total_friction
@@ -39,8 +41,8 @@ def _make_outcome(entry_price, stop_price, mae_r, pnl_r, outcome="win"):
 # apply_tight_stop tests
 # ---------------------------------------------------------------------------
 
-class TestApplyTightStop:
 
+class TestApplyTightStop:
     def test_passthrough_at_1x(self):
         """stop_multiplier=1.0 returns outcomes unchanged."""
         outcomes = [_make_outcome(2700.0, 2695.0, 0.5, 1.5)]
@@ -109,8 +111,7 @@ class TestApplyTightStop:
     def test_missing_fields_passthrough(self):
         """Outcomes with None mae_r/entry_price/stop_price pass through."""
         spec = FakeCostSpec()
-        outcomes = [{"pnl_r": -1.0, "mae_r": None, "entry_price": None,
-                     "stop_price": None, "outcome": "loss"}]
+        outcomes = [{"pnl_r": -1.0, "mae_r": None, "entry_price": None, "stop_price": None, "outcome": "loss"}]
         result = apply_tight_stop(outcomes, 0.75, spec)
         assert result[0]["pnl_r"] == -1.0
 
@@ -127,9 +128,9 @@ class TestApplyTightStop:
         """Batch with mix of killed/surviving trades."""
         spec = FakeCostSpec(point_value=10.0, total_friction=5.74)
         outcomes = [
-            _make_outcome(2700.0, 2695.0, 0.2, 2.0, "win"),   # survives
+            _make_outcome(2700.0, 2695.0, 0.2, 2.0, "win"),  # survives
             _make_outcome(2700.0, 2695.0, 0.87, -1.0, "loss"),  # killed
-            _make_outcome(2700.0, 2695.0, 0.5, 1.5, "win"),   # survives
+            _make_outcome(2700.0, 2695.0, 0.5, 1.5, "win"),  # survives
             _make_outcome(2700.0, 2695.0, 0.95, -1.0, "loss"),  # killed
         ]
         result = apply_tight_stop(outcomes, 0.75, spec)
@@ -140,26 +141,23 @@ class TestApplyTightStop:
 # Strategy ID encoding tests
 # ---------------------------------------------------------------------------
 
-class TestStrategyIdEncoding:
 
+class TestStrategyIdEncoding:
     def test_no_suffix_at_1x(self):
         sid = make_strategy_id("MGC", "TOKYO_OPEN", "E2", 2.5, 1, "ORB_G4")
         assert "_S0" not in sid
         assert sid == "MGC_TOKYO_OPEN_E2_RR2.5_CB1_ORB_G4"
 
     def test_s075_suffix(self):
-        sid = make_strategy_id("MGC", "TOKYO_OPEN", "E2", 2.5, 1, "ORB_G4",
-                               stop_multiplier=0.75)
+        sid = make_strategy_id("MGC", "TOKYO_OPEN", "E2", 2.5, 1, "ORB_G4", stop_multiplier=0.75)
         assert sid.endswith("_S075")
 
     def test_s075_before_dst(self):
-        sid = make_strategy_id("MGC", "CME_REOPEN", "E2", 2.5, 1, "ORB_G4",
-                               stop_multiplier=0.75, dst_regime="winter")
+        sid = make_strategy_id("MGC", "CME_REOPEN", "E2", 2.5, 1, "ORB_G4", stop_multiplier=0.75, dst_regime="winter")
         assert "_S075_W" in sid
 
     def test_s075_with_o15(self):
-        sid = make_strategy_id("MGC", "TOKYO_OPEN", "E2", 2.5, 1, "ORB_G4",
-                               orb_minutes=15, stop_multiplier=0.75)
+        sid = make_strategy_id("MGC", "TOKYO_OPEN", "E2", 2.5, 1, "ORB_G4", orb_minutes=15, stop_multiplier=0.75)
         assert "_O15_S075" in sid
 
     def test_parse_dst_not_confused_by_s075(self):
@@ -182,8 +180,7 @@ class TestStrategyIdEncoding:
 
     def test_parse_stop_multiplier_roundtrip(self):
         """make_strategy_id -> parse_stop_multiplier roundtrips correctly."""
-        sid = make_strategy_id("MGC", "TOKYO_OPEN", "E2", 2.5, 1, "ORB_G4",
-                               stop_multiplier=0.75)
+        sid = make_strategy_id("MGC", "TOKYO_OPEN", "E2", 2.5, 1, "ORB_G4", stop_multiplier=0.75)
         assert parse_stop_multiplier(sid) == 0.75
 
     def test_parse_stop_multiplier_dst_summer_not_confused(self):
@@ -195,8 +192,8 @@ class TestStrategyIdEncoding:
 # Config sanity
 # ---------------------------------------------------------------------------
 
-class TestConfigSanity:
 
+class TestConfigSanity:
     def test_stop_multipliers_includes_baseline(self):
         assert 1.0 in STOP_MULTIPLIERS
 

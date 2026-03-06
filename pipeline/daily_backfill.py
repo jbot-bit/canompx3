@@ -6,6 +6,7 @@ Usage:
     python pipeline/daily_backfill.py --instrument MGC
     python pipeline/daily_backfill.py  # all active instruments
 """
+
 import argparse
 import subprocess
 import sys
@@ -23,9 +24,7 @@ def get_last_ingested_date(db_path: str, symbol: str):
     con = duckdb.connect(db_path, read_only=True)
     configure_connection(con)
     try:
-        row = con.execute(
-            "SELECT MAX(ts_event) FROM bars_1m WHERE symbol = ?", [symbol]
-        ).fetchone()
+        row = con.execute("SELECT MAX(ts_event) FROM bars_1m WHERE symbol = ?", [symbol]).fetchone()
         ts = row[0] if row and row[0] is not None else None
         # Normalize to UTC — DuckDB returns TIMESTAMPTZ in system local timezone
         if ts is not None and hasattr(ts, "astimezone"):
@@ -71,19 +70,23 @@ def run_backfill_for_instrument(
     print(f"▶ {instrument}: backfilling {start} → {end}")
 
     py = sys.executable
-    _run([py, "pipeline/ingest_dbn.py",
-          "--instrument", instrument, "--start", start, "--end", end],
-         f"ingest_dbn {instrument}")
-    _run([py, "pipeline/build_bars_5m.py",
-          "--instrument", instrument, "--start", start, "--end", end],
-         f"build_bars_5m {instrument}")
-    _run([py, "pipeline/build_daily_features.py",
-          "--instrument", instrument, "--start", start, "--end", end],
-         f"build_daily_features {instrument}")
+    _run(
+        [py, "pipeline/ingest_dbn.py", "--instrument", instrument, "--start", start, "--end", end],
+        f"ingest_dbn {instrument}",
+    )
+    _run(
+        [py, "pipeline/build_bars_5m.py", "--instrument", instrument, "--start", start, "--end", end],
+        f"build_bars_5m {instrument}",
+    )
+    _run(
+        [py, "pipeline/build_daily_features.py", "--instrument", instrument, "--start", start, "--end", end],
+        f"build_daily_features {instrument}",
+    )
     # Outcomes: incremental only. DO NOT trigger discovery/validation.
-    _run([py, "trading_app/outcome_builder.py",
-          "--instrument", instrument, "--start", start, "--end", end],
-         f"outcome_builder {instrument}")
+    _run(
+        [py, "trading_app/outcome_builder.py", "--instrument", instrument, "--start", start, "--end", end],
+        f"outcome_builder {instrument}",
+    )
 
 
 def main():

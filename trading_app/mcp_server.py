@@ -36,7 +36,16 @@ DB_PATH = str(GOLD_DB_PATH)
 MAX_MCP_ROWS = 5000
 
 # Only these parameter keys are forwarded to SQLAdapter. Anything else is rejected.
-_ALLOWED_PARAMS = {"orb_label", "entry_model", "filter_type", "min_sample_size", "limit", "instrument", "rr_target", "confirm_bars"}
+_ALLOWED_PARAMS = {
+    "orb_label",
+    "entry_model",
+    "filter_type",
+    "min_sample_size",
+    "limit",
+    "instrument",
+    "rr_target",
+    "confirm_bars",
+}
 
 # ---------------------------------------------------------------------------
 # Warnings — thresholds imported from config.py (single source of truth)
@@ -45,17 +54,21 @@ _ALLOWED_PARAMS = {"orb_label", "entry_model", "filter_type", "min_sample_size",
 _CORE_MIN = CORE_MIN_SAMPLES
 _REGIME_MIN = REGIME_MIN_SAMPLES
 
+
 def _generate_warnings(df) -> list[str]:
     """Generate auto-warnings — delegates to shared implementation in config.py."""
     return generate_strategy_warnings(df)
+
 
 # ---------------------------------------------------------------------------
 # Core logic (plain functions, testable without MCP)
 # ---------------------------------------------------------------------------
 
+
 def _list_available_queries() -> list[dict[str, str]]:
     """List all pre-approved query templates and their descriptions."""
     return SQLAdapter.available_templates()
+
 
 def _query_trading_db(
     template: str,
@@ -125,6 +138,7 @@ def _query_trading_db(
         "warnings": warnings,
     }
 
+
 def _get_strategy_fitness(
     strategy_id: str | None = None,
     instrument: str = "MGC",
@@ -142,24 +156,25 @@ def _get_strategy_fitness(
     if strategy_id:
         try:
             score = compute_fitness(
-                strategy_id, db_path=db_path,
-                as_of_date=as_of, rolling_months=rolling_months,
+                strategy_id,
+                db_path=db_path,
+                as_of_date=as_of,
+                rolling_months=rolling_months,
             )
         except ValueError as e:
             return {"error": str(e)}
         return asdict(score)
 
     report = compute_portfolio_fitness(
-        db_path=db_path, instrument=instrument,
-        as_of_date=as_of, rolling_months=rolling_months,
+        db_path=db_path,
+        instrument=instrument,
+        as_of_date=as_of,
+        rolling_months=rolling_months,
     )
 
     if summary_only:
         # Return only summary + non-FIT strategies (compact)
-        non_fit = [
-            asdict(s) for s in report.scores
-            if s.fitness_status != "FIT"
-        ]
+        non_fit = [asdict(s) for s in report.scores if s.fitness_status != "FIT"]
         return {
             "as_of_date": report.as_of_date.isoformat(),
             "summary": report.summary,
@@ -175,14 +190,18 @@ def _get_strategy_fitness(
         "scores": [asdict(s) for s in report.scores],
     }
 
+
 def _get_canonical_context() -> dict:
     """Load canonical grounding documents for AI context."""
     from trading_app.ai.corpus import load_corpus
+
     return load_corpus()
+
 
 # ---------------------------------------------------------------------------
 # MCP server (thin wrappers around core logic)
 # ---------------------------------------------------------------------------
+
 
 def _build_server():
     """Build and return the FastMCP server instance."""
@@ -248,10 +267,15 @@ def _build_server():
             Dict with 'columns', 'rows', 'row_count', and 'warnings' keys.
         """
         return _query_trading_db(
-            template=template, orb_label=orb_label, entry_model=entry_model,
-            filter_type=filter_type, min_sample_size=min_sample_size,
-            instrument=instrument, limit=limit,
-            rr_target=rr_target, confirm_bars=confirm_bars,
+            template=template,
+            orb_label=orb_label,
+            entry_model=entry_model,
+            filter_type=filter_type,
+            min_sample_size=min_sample_size,
+            instrument=instrument,
+            limit=limit,
+            rr_target=rr_target,
+            confirm_bars=confirm_bars,
         )
 
     @mcp.tool()
@@ -277,8 +301,10 @@ def _build_server():
             Dict with fitness scores and summary counts.
         """
         return _get_strategy_fitness(
-            strategy_id=strategy_id, instrument=instrument,
-            rolling_months=rolling_months, summary_only=summary_only,
+            strategy_id=strategy_id,
+            instrument=instrument,
+            rolling_months=rolling_months,
+            summary_only=summary_only,
         )
 
     @mcp.tool()
@@ -291,6 +317,7 @@ def _build_server():
         return _get_canonical_context()
 
     return mcp
+
 
 if __name__ == "__main__":
     mcp = _build_server()

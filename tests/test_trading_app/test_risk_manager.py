@@ -14,28 +14,33 @@ from trading_app.risk_manager import RiskLimits, RiskManager
 
 # --- Minimal stubs for active trades ---
 
+
 class _State(Enum):
     ENTERED = "ENTERED"
     ARMED = "ARMED"
     EXITED = "EXITED"
+
 
 @dataclass
 class _FakeTrade:
     orb_label: str
     state: _State = _State.ENTERED
 
+
 def _entered(orb="US_DATA_830"):
     return _FakeTrade(orb_label=orb, state=_State.ENTERED)
 
+
 def _armed(orb="US_DATA_830"):
     return _FakeTrade(orb_label=orb, state=_State.ARMED)
+
 
 # ============================================================================
 # RiskLimits Tests
 # ============================================================================
 
-class TestRiskLimits:
 
+class TestRiskLimits:
     def test_defaults(self):
         limits = RiskLimits()
         assert limits.max_daily_loss_r == -5.0
@@ -60,12 +65,13 @@ class TestRiskLimits:
         assert limits.max_daily_loss_r == -3.0
         assert limits.max_concurrent_positions == 5
 
+
 # ============================================================================
 # Circuit Breaker Tests
 # ============================================================================
 
-class TestCircuitBreaker:
 
+class TestCircuitBreaker:
     def test_halts_at_limit(self):
         rm = RiskManager(RiskLimits(max_daily_loss_r=-5.0))
         rm.daily_reset(date(2024, 1, 5))
@@ -120,12 +126,13 @@ class TestCircuitBreaker:
         rm.on_trade_exit(-3.0)  # total: -6.0
         assert rm.is_halted()
 
+
 # ============================================================================
 # Max Concurrent Tests
 # ============================================================================
 
-class TestMaxConcurrent:
 
+class TestMaxConcurrent:
     def test_rejects_at_limit(self):
         rm = RiskManager(RiskLimits(max_concurrent_positions=2))
         rm.daily_reset(date(2024, 1, 5))
@@ -152,12 +159,13 @@ class TestMaxConcurrent:
         allowed, _, _ = rm.can_enter("s3", "NYSE_OPEN", trades, 0.0)
         assert allowed
 
+
 # ============================================================================
 # Max Per ORB Tests
 # ============================================================================
 
-class TestMaxPerOrb:
 
+class TestMaxPerOrb:
     def test_rejects_same_orb(self):
         rm = RiskManager(RiskLimits(max_per_orb_positions=1))
         rm.daily_reset(date(2024, 1, 5))
@@ -183,12 +191,13 @@ class TestMaxPerOrb:
         allowed, _, _ = rm.can_enter("s2", "US_DATA_830", trades, 0.0)
         assert allowed
 
+
 # ============================================================================
 # Max Daily Trades Tests
 # ============================================================================
 
-class TestMaxDailyTrades:
 
+class TestMaxDailyTrades:
     def test_rejects_at_limit(self):
         rm = RiskManager(RiskLimits(max_daily_trades=3))
         rm.daily_reset(date(2024, 1, 5))
@@ -224,12 +233,13 @@ class TestMaxDailyTrades:
         allowed, _, _ = rm.can_enter("s1", "US_DATA_830", [], 0.0)
         assert allowed
 
+
 # ============================================================================
 # Drawdown Warning Tests
 # ============================================================================
 
-class TestDrawdownWarning:
 
+class TestDrawdownWarning:
     def test_warning_logged_but_allows(self):
         rm = RiskManager(RiskLimits(drawdown_warning_r=-3.0, max_daily_loss_r=-5.0))
         rm.daily_reset(date(2024, 1, 5))
@@ -246,12 +256,13 @@ class TestDrawdownWarning:
         rm.can_enter("s1", "US_DATA_830", [], -2.0)
         assert len(rm.warnings) == 0
 
+
 # ============================================================================
 # Status and Daily Reset Tests
 # ============================================================================
 
-class TestStatus:
 
+class TestStatus:
     def test_get_status(self):
         rm = RiskManager(RiskLimits())
         rm.daily_reset(date(2024, 1, 5))
@@ -278,12 +289,13 @@ class TestStatus:
         assert status["halted"] is False
         assert status["warnings"] == 0
 
+
 # ============================================================================
 # Multi-Day Equity Drawdown Tests
 # ============================================================================
 
-class TestEquityDrawdown:
 
+class TestEquityDrawdown:
     def test_cumulative_pnl_tracks_across_days(self):
         rm = RiskManager(RiskLimits(max_equity_drawdown_r=-10.0))
         rm.daily_reset(date(2024, 1, 5))

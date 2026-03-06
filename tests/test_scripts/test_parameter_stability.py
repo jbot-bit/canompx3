@@ -82,8 +82,15 @@ class TestBuildHeatmapData:
 
     def _make_grid_cell(self, rr, cb, om, expr=0.10, n=100):
         return {
-            "rr": rr, "cb": cb, "om": om, "ExpR": expr, "WR": 0.45,
-            "N": n, "Sharpe": 0.5, "SharpeH": 0.3, "strategy_id": f"TEST_RR{rr}_CB{cb}_O{om}",
+            "rr": rr,
+            "cb": cb,
+            "om": om,
+            "ExpR": expr,
+            "WR": 0.45,
+            "N": n,
+            "Sharpe": 0.5,
+            "SharpeH": 0.3,
+            "strategy_id": f"TEST_RR{rr}_CB{cb}_O{om}",
         }
 
     def test_e2_grid_rr_x_om_matrix(self):

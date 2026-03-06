@@ -13,6 +13,7 @@ import duckdb
 from trading_app.regime.schema import init_regime_schema
 from trading_app.regime.discovery import run_regime_discovery
 
+
 @pytest.fixture
 def regime_db(tmp_path):
     """Create a temporary DuckDB with daily_features and orb_outcomes tables."""
@@ -21,6 +22,7 @@ def regime_db(tmp_path):
 
     # Use production schema for daily_features
     from pipeline.init_db import DAILY_FEATURES_SCHEMA
+
     con.execute(DAILY_FEATURES_SCHEMA)
 
     # Minimal orb_outcomes
@@ -55,10 +57,15 @@ def regime_db(tmp_path):
     """)
 
     # Insert test data: 5 days in 2025
-    for i, day in enumerate([
-        date(2025, 1, 6), date(2025, 1, 7), date(2025, 1, 8),
-        date(2025, 1, 9), date(2025, 1, 10),
-    ]):
+    for i, day in enumerate(
+        [
+            date(2025, 1, 6),
+            date(2025, 1, 7),
+            date(2025, 1, 8),
+            date(2025, 1, 9),
+            date(2025, 1, 10),
+        ]
+    ):
         orb_size = 5.0 + i  # 5, 6, 7, 8, 9 -- all pass G4+ filter
         orb_high = 2700.0 + orb_size / 2
         orb_low = 2700.0 - orb_size / 2
@@ -67,7 +74,7 @@ def regime_db(tmp_path):
                (symbol, trading_day, orb_minutes, bar_count_1m,
                 orb_CME_REOPEN_high, orb_CME_REOPEN_low, orb_CME_REOPEN_size, orb_CME_REOPEN_break_dir)
                VALUES (?, ?, 5, 1400, ?, ?, ?, 'long')""",
-            ['MGC', day, orb_high, orb_low, orb_size],
+            ["MGC", day, orb_high, orb_low, orb_size],
         )
         # Outcomes: E1 RR2.0 CB2 -> win half the time
         outcome = "win" if i % 2 == 0 else "loss"
@@ -87,8 +94,8 @@ def regime_db(tmp_path):
     con.close()
     return db_path
 
-class TestRegimeDiscovery:
 
+class TestRegimeDiscovery:
     def test_populates_regime_strategies(self, regime_db):
         """Discovery writes strategies to regime_strategies with correct run_label."""
         count = run_regime_discovery(
@@ -120,22 +127,24 @@ class TestRegimeDiscovery:
     def test_idempotent_rerun(self, regime_db):
         """Running discovery twice with same label replaces previous results."""
         count1 = run_regime_discovery(
-            db_path=regime_db, instrument="MGC",
-            start_date=date(2025, 1, 1), end_date=date(2025, 12, 31),
+            db_path=regime_db,
+            instrument="MGC",
+            start_date=date(2025, 1, 1),
+            end_date=date(2025, 12, 31),
             run_label="rerun_test",
         )
         count2 = run_regime_discovery(
-            db_path=regime_db, instrument="MGC",
-            start_date=date(2025, 1, 1), end_date=date(2025, 12, 31),
+            db_path=regime_db,
+            instrument="MGC",
+            start_date=date(2025, 1, 1),
+            end_date=date(2025, 12, 31),
             run_label="rerun_test",
         )
         assert count1 == count2
 
         con = duckdb.connect(str(regime_db), read_only=True)
         try:
-            total = con.execute(
-                "SELECT COUNT(*) FROM regime_strategies WHERE run_label = 'rerun_test'"
-            ).fetchone()[0]
+            total = con.execute("SELECT COUNT(*) FROM regime_strategies WHERE run_label = 'rerun_test'").fetchone()[0]
             assert total == count2  # No duplicates
         finally:
             con.close()
@@ -143,23 +152,23 @@ class TestRegimeDiscovery:
     def test_different_labels_coexist(self, regime_db):
         """Multiple run_labels can coexist in the same table."""
         run_regime_discovery(
-            db_path=regime_db, instrument="MGC",
-            start_date=date(2025, 1, 1), end_date=date(2025, 6, 30),
+            db_path=regime_db,
+            instrument="MGC",
+            start_date=date(2025, 1, 1),
+            end_date=date(2025, 6, 30),
             run_label="h1_2025",
         )
         run_regime_discovery(
-            db_path=regime_db, instrument="MGC",
-            start_date=date(2025, 1, 1), end_date=date(2025, 12, 31),
+            db_path=regime_db,
+            instrument="MGC",
+            start_date=date(2025, 1, 1),
+            end_date=date(2025, 12, 31),
             run_label="full_2025",
         )
 
         con = duckdb.connect(str(regime_db), read_only=True)
         try:
-            labels = {
-                r[0] for r in con.execute(
-                    "SELECT DISTINCT run_label FROM regime_strategies"
-                ).fetchall()
-            }
+            labels = {r[0] for r in con.execute("SELECT DISTINCT run_label FROM regime_strategies").fetchall()}
             assert "h1_2025" in labels
             assert "full_2025" in labels
         finally:
@@ -168,24 +177,26 @@ class TestRegimeDiscovery:
     def test_dry_run_no_writes(self, regime_db):
         """Dry run does not write to database."""
         count = run_regime_discovery(
-            db_path=regime_db, instrument="MGC",
-            start_date=date(2025, 1, 1), end_date=date(2025, 12, 31),
-            run_label="dry_test", dry_run=True,
+            db_path=regime_db,
+            instrument="MGC",
+            start_date=date(2025, 1, 1),
+            end_date=date(2025, 12, 31),
+            run_label="dry_test",
+            dry_run=True,
         )
         assert count > 0
 
         con = duckdb.connect(str(regime_db), read_only=True)
         try:
             tables = {
-                r[0] for r in con.execute(
+                r[0]
+                for r in con.execute(
                     "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
                 ).fetchall()
             }
             # regime_strategies may not even exist in dry_run mode
             if "regime_strategies" in tables:
-                total = con.execute(
-                    "SELECT COUNT(*) FROM regime_strategies WHERE run_label = 'dry_test'"
-                ).fetchone()[0]
+                total = con.execute("SELECT COUNT(*) FROM regime_strategies WHERE run_label = 'dry_test'").fetchone()[0]
                 assert total == 0
         finally:
             con.close()
@@ -193,17 +204,18 @@ class TestRegimeDiscovery:
     def test_uses_same_strategy_id_format(self, regime_db):
         """Strategy IDs in regime_strategies match production format (no prefix)."""
         run_regime_discovery(
-            db_path=regime_db, instrument="MGC",
-            start_date=date(2025, 1, 1), end_date=date(2025, 12, 31),
+            db_path=regime_db,
+            instrument="MGC",
+            start_date=date(2025, 1, 1),
+            end_date=date(2025, 12, 31),
             run_label="id_test",
         )
 
         con = duckdb.connect(str(regime_db), read_only=True)
         try:
             sids = [
-                r[0] for r in con.execute(
-                    "SELECT strategy_id FROM regime_strategies WHERE run_label = 'id_test'"
-                ).fetchall()
+                r[0]
+                for r in con.execute("SELECT strategy_id FROM regime_strategies WHERE run_label = 'id_test'").fetchall()
             ]
             for sid in sids:
                 # Should match production format: MGC_XXXX_EX_RRXX_CBXX_FILTER

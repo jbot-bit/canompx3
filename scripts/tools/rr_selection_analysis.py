@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 """RR selection analysis: SharpeDD criterion + multi-account deployment sizing."""
+
 import duckdb
 import pandas as pd
 import numpy as np
@@ -23,15 +24,24 @@ for (inst, sess, filt, em), group in families:
     group = group.copy()
     if len(group) < 2:
         row = group.iloc[0]
-        results.append({
-            "instrument": inst, "orb_label": sess, "filter_type": filt,
-            "entry_model": em, "n_rr": 1,
-            "rr_maxSharpe": row["rr_target"], "rr_maxExpR": row["rr_target"],
-            "rr_sharpeDD": row["rr_target"], "rr_calmar": row["rr_target"],
-            "dd_at_sharpeDD": row["AbsDD"], "sharpe_at_sharpeDD": row["Sharpe"],
-            "expr_at_sharpeDD": row["ExpR"], "n_at_sharpeDD": row["N"],
-            "tpy_at_sharpeDD": row["TPY"],
-        })
+        results.append(
+            {
+                "instrument": inst,
+                "orb_label": sess,
+                "filter_type": filt,
+                "entry_model": em,
+                "n_rr": 1,
+                "rr_maxSharpe": row["rr_target"],
+                "rr_maxExpR": row["rr_target"],
+                "rr_sharpeDD": row["rr_target"],
+                "rr_calmar": row["rr_target"],
+                "dd_at_sharpeDD": row["AbsDD"],
+                "sharpe_at_sharpeDD": row["Sharpe"],
+                "expr_at_sharpeDD": row["ExpR"],
+                "n_at_sharpeDD": row["N"],
+                "tpy_at_sharpeDD": row["TPY"],
+            }
+        )
         continue
 
     best_sharpe_idx = group["Sharpe"].idxmax()
@@ -45,7 +55,7 @@ for (inst, sess, filt, em), group in families:
     for idx, row in group.iterrows():
         n_eff = min(row["N"], best_n)
         se_sq = (2.0 / n_eff) * (1 - rho) + (1.0 / (2 * n_eff)) * (
-            best_s**2 + row["Sharpe"]**2 - 2 * best_s * row["Sharpe"] * rho**2
+            best_s**2 + row["Sharpe"] ** 2 - 2 * best_s * row["Sharpe"] * rho**2
         )
         if se_sq <= 0:
             se_sq = 2.0 / n_eff
@@ -63,19 +73,24 @@ for (inst, sess, filt, em), group in families:
     best_calmar_idx = group["calmar"].idxmax()
 
     sel = group.loc[sharpe_dd_idx]
-    results.append({
-        "instrument": inst, "orb_label": sess, "filter_type": filt,
-        "entry_model": em, "n_rr": len(group),
-        "rr_maxSharpe": group.loc[best_sharpe_idx, "rr_target"],
-        "rr_maxExpR": group.loc[best_expr_idx, "rr_target"],
-        "rr_sharpeDD": sel["rr_target"],
-        "rr_calmar": group.loc[best_calmar_idx, "rr_target"],
-        "dd_at_sharpeDD": sel["AbsDD"],
-        "sharpe_at_sharpeDD": sel["Sharpe"],
-        "expr_at_sharpeDD": sel["ExpR"],
-        "n_at_sharpeDD": sel["N"],
-        "tpy_at_sharpeDD": sel["TPY"],
-    })
+    results.append(
+        {
+            "instrument": inst,
+            "orb_label": sess,
+            "filter_type": filt,
+            "entry_model": em,
+            "n_rr": len(group),
+            "rr_maxSharpe": group.loc[best_sharpe_idx, "rr_target"],
+            "rr_maxExpR": group.loc[best_expr_idx, "rr_target"],
+            "rr_sharpeDD": sel["rr_target"],
+            "rr_calmar": group.loc[best_calmar_idx, "rr_target"],
+            "dd_at_sharpeDD": sel["AbsDD"],
+            "sharpe_at_sharpeDD": sel["Sharpe"],
+            "expr_at_sharpeDD": sel["ExpR"],
+            "n_at_sharpeDD": sel["N"],
+            "tpy_at_sharpeDD": sel["TPY"],
+        }
+    )
 
 rdf = pd.DataFrame(results)
 multi = rdf[rdf["n_rr"] > 1]
@@ -90,17 +105,17 @@ for c1, c2 in [
     ("rr_calmar", "rr_sharpeDD"),
 ]:
     agree = (multi[c1] == multi[c2]).sum()
-    print(f"  {c1:15s} == {c2:15s}: {agree}/{n} ({agree/n:.0%})")
+    print(f"  {c1:15s} == {c2:15s}: {agree}/{n} ({agree / n:.0%})")
 
 diff = (multi["rr_maxSharpe"] != multi["rr_sharpeDD"]).sum()
-print(f"\nSharpeDD picks different RR from MaxSharpe: {diff}/{n} ({diff/n:.0%})")
+print(f"\nSharpeDD picks different RR from MaxSharpe: {diff}/{n} ({diff / n:.0%})")
 diff2 = (multi["rr_maxExpR"] != multi["rr_sharpeDD"]).sum()
-print(f"SharpeDD picks different RR from MaxExpR: {diff2}/{n} ({diff2/n:.0%})")
+print(f"SharpeDD picks different RR from MaxExpR: {diff2}/{n} ({diff2 / n:.0%})")
 
 print("\n=== RR DISTRIBUTION UNDER SharpeDD ===")
 for rr in sorted(rdf["rr_sharpeDD"].unique()):
     c = (rdf["rr_sharpeDD"] == rr).sum()
-    print(f"  RR{rr:<4g}: {c:3d} families ({c/len(rdf):.0%})")
+    print(f"  RR{rr:<4g}: {c:3d} families ({c / len(rdf):.0%})")
 
 print("\n=== DEPLOYMENT: DD ceiling filters portfolio ===")
 for dd_ceil in [5, 10, 15, 20, 25, 30, 50, 999]:
@@ -136,14 +151,11 @@ print("\n=== SAME STRATEGIES, DIFFERENT SIZING ===")
 print("(Top 10 families by SharpeDD score)")
 rdf["score"] = rdf["sharpe_at_sharpeDD"] * rdf["n_at_sharpeDD"] ** 0.5
 top = rdf.sort_values("score", ascending=False).head(10)
-print(
-    f"{'Inst':4s} {'Session':18s} {'Filter':15s} {'EM':3s} RR   DD     "
-    f"| $2K r/t  | $6K r/t  | $20K r/t"
-)
+print(f"{'Inst':4s} {'Session':18s} {'Filter':15s} {'EM':3s} RR   DD     | $2K r/t  | $6K r/t  | $20K r/t")
 for _, r in top.iterrows():
     dd = r["dd_at_sharpeDD"]
     print(
         f"{r.instrument:4s} {r.orb_label:18s} {r.filter_type:15s} {r.entry_model:3s} "
         f"RR{r.rr_sharpeDD:<4g} {dd:5.1f}R "
-        f"| ${2000/dd:6.0f}  | ${6000/dd:6.0f}  | ${20000/dd:6.0f}"
+        f"| ${2000 / dd:6.0f}  | ${6000 / dd:6.0f}  | ${20000 / dd:6.0f}"
     )

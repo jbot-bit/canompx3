@@ -29,9 +29,11 @@ SESSION_ORDER = {label: i for i, label in enumerate(ORB_LABELS)}
 # Data classes
 # =========================================================================
 
+
 @dataclass
 class OrbSnapshot:
     """State of a single ORB for today."""
+
     label: str
     high: float | None = None
     low: float | None = None
@@ -41,22 +43,27 @@ class OrbSnapshot:
     complete: bool = False
     outcome: str | None = None  # "win", "loss", None (pending/no trade)
 
+
 @dataclass
 class SessionSignals:
     """Cross-session intelligence derived from today's outcomes."""
+
     prior_outcomes: dict[str, str] = field(default_factory=dict)
     reversal_active: bool = False
     chop_detected: bool = False
     continuation: bool = False
     cascade_wr: float | None = None
 
+
 @dataclass
 class RegimeContext:
     """Current regime vs full-period performance deltas."""
+
     label: str = ""
     start_date: date | None = None
     end_date: date | None = None
     deltas: dict[str, float] = field(default_factory=dict)
+
 
 @dataclass
 class MarketState:
@@ -129,13 +136,20 @@ class MarketState:
             # Build ORB column list dynamically from ORB_LABELS
             orb_cols = []
             for lbl in ORB_LABELS:
-                orb_cols.extend([
-                    f"orb_{lbl}_high", f"orb_{lbl}_low", f"orb_{lbl}_size",
-                    f"orb_{lbl}_break_dir", f"orb_{lbl}_break_ts", f"orb_{lbl}_outcome",
-                ])
+                orb_cols.extend(
+                    [
+                        f"orb_{lbl}_high",
+                        f"orb_{lbl}_low",
+                        f"orb_{lbl}_size",
+                        f"orb_{lbl}_break_dir",
+                        f"orb_{lbl}_break_ts",
+                        f"orb_{lbl}_outcome",
+                    ]
+                )
             orb_select = ", ".join(orb_cols)
 
-            row = con.execute(f"""
+            row = con.execute(
+                f"""
                 SELECT rsi_14_at_CME_REOPEN,
                        session_asia_high, session_asia_low,
                        session_london_high, session_london_low,
@@ -145,7 +159,9 @@ class MarketState:
                 WHERE symbol = ?
                   AND trading_day = ?
                   AND orb_minutes = ?
-            """, [instrument, trading_day, orb_minutes]).fetchone()
+            """,
+                [instrument, trading_day, orb_minutes],
+            ).fetchone()
 
             if row is None:
                 return state
@@ -205,9 +221,17 @@ class MarketState:
     # Update methods
     # -----------------------------------------------------------------
 
-    def update_orb(self, label: str, high: float, low: float, size: float,
-                   break_dir: str | None = None, break_ts: datetime | None = None,
-                   complete: bool = False, outcome: str | None = None) -> None:
+    def update_orb(
+        self,
+        label: str,
+        high: float,
+        low: float,
+        size: float,
+        break_dir: str | None = None,
+        break_ts: datetime | None = None,
+        complete: bool = False,
+        outcome: str | None = None,
+    ) -> None:
         """Update ORB snapshot from live or replay data."""
         self.orbs[label] = OrbSnapshot(
             label=label,
@@ -257,10 +281,15 @@ class MarketState:
 
         # Look up cascade win rate from pre-computed table
         if cascade_table and orb_cme_reopen and orb_cme_reopen.outcome and orb_tokyo_open:
-            dir_relation = "same" if (
-                orb_cme_reopen.break_dir and orb_tokyo_open.break_dir
-                and orb_cme_reopen.break_dir.upper() == orb_tokyo_open.break_dir.upper()
-            ) else "opposite"
+            dir_relation = (
+                "same"
+                if (
+                    orb_cme_reopen.break_dir
+                    and orb_tokyo_open.break_dir
+                    and orb_cme_reopen.break_dir.upper() == orb_tokyo_open.break_dir.upper()
+                )
+                else "opposite"
+            )
             key = ("CME_REOPEN", orb_cme_reopen.outcome, dir_relation)
             entry = cascade_table.get(key)
             if entry:
@@ -291,16 +320,21 @@ class MarketState:
         self.strategy_scores = scores
         return scores
 
+
 # =========================================================================
 # Internal helpers
 # =========================================================================
 
+
 def _load_regime_context(con: duckdb.DuckDBPyConnection, state: MarketState) -> None:
     """Load regime deltas from regime_strategies if available."""
     try:
-        tables = {r[0] for r in con.execute(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
-        ).fetchall()}
+        tables = {
+            r[0]
+            for r in con.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+            ).fetchall()
+        }
     except Exception:
         return
 

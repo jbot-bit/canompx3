@@ -32,6 +32,7 @@ from trading_app.regime.schema import init_regime_schema
 from trading_app.regime.discovery import run_regime_discovery
 from trading_app.regime.validator import run_regime_validation
 
+
 def _process_window(args: dict) -> dict:
     """Process a single rolling window in an isolated DB copy."""
     src_db = args["src_db"]
@@ -53,13 +54,8 @@ def _process_window(args: dict) -> dict:
         init_regime_schema(db_path=tmp_db)
 
         # Step 1: Double-break
-        db_pct = compute_double_break_pct(
-            tmp_db, window["train_start"], window["train_end"], orb_minutes
-        )
-        degraded_sessions = {
-            label for label, pct in db_pct.items()
-            if pct >= DOUBLE_BREAK_THRESHOLD
-        }
+        db_pct = compute_double_break_pct(tmp_db, window["train_start"], window["train_end"], orb_minutes)
+        degraded_sessions = {label for label, pct in db_pct.items() if pct >= DOUBLE_BREAK_THRESHOLD}
 
         # Step 2: Discovery
         strategies_found = run_regime_discovery(
@@ -75,9 +71,8 @@ def _process_window(args: dict) -> dict:
         degraded_count = 0
         if degraded_sessions:
             from scripts.infra.rolling_eval import mark_degraded_by_double_break
-            degraded_count = mark_degraded_by_double_break(
-                tmp_db, run_label, degraded_sessions
-            )
+
+            degraded_count = mark_degraded_by_double_break(tmp_db, run_label, degraded_sessions)
 
         # Step 4: Validate
         passed, rejected = run_regime_validation(
@@ -114,6 +109,7 @@ def _process_window(args: dict) -> dict:
             "tmp_db": None,
         }
 
+
 def merge_results_to_main(main_db: Path, tmp_dbs: list[Path], run_labels: list[str]):
     """Merge regime_strategies and regime_validated from temp DBs into main."""
     import duckdb
@@ -130,18 +126,24 @@ def merge_results_to_main(main_db: Path, tmp_dbs: list[Path], run_labels: list[s
             con.execute(f"ATTACH '{tmp_db}' AS tmp (READ_ONLY)")
 
             # Copy regime_strategies
-            con.execute("""
+            con.execute(
+                """
                 INSERT OR REPLACE INTO regime_strategies
                 SELECT * FROM tmp.regime_strategies
                 WHERE run_label = ?
-            """, [run_label])
+            """,
+                [run_label],
+            )
 
             # Copy regime_validated
-            con.execute("""
+            con.execute(
+                """
                 INSERT OR REPLACE INTO regime_validated
                 SELECT * FROM tmp.regime_validated
                 WHERE run_label = ?
-            """, [run_label])
+            """,
+                [run_label],
+            )
 
             con.execute("DETACH tmp")
 
@@ -149,12 +151,11 @@ def merge_results_to_main(main_db: Path, tmp_dbs: list[Path], run_labels: list[s
     finally:
         con.close()
 
+
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Parallel rolling window evaluation (multi-core)"
-    )
+    parser = argparse.ArgumentParser(description="Parallel rolling window evaluation (multi-core)")
     parser.add_argument("--instrument", default="MGC")
     parser.add_argument("--train-months", type=int, nargs="+", default=[12, 18])
     parser.add_argument("--test-start", default="2017-01")
@@ -163,8 +164,7 @@ def main():
     parser.add_argument("--min-sample", type=int, default=30)
     parser.add_argument("--stress-multiplier", type=float, default=1.5)
     parser.add_argument("--db-path", type=str, default=None)
-    parser.add_argument("--workers", type=int, default=16,
-                        help="Number of parallel workers")
+    parser.add_argument("--workers", type=int, default=16, help="Number of parallel workers")
     parser.add_argument("--output", type=str, default=None)
     args = parser.parse_args()
 
@@ -185,15 +185,17 @@ def main():
     # Build work items
     work_items = []
     for i, w in enumerate(all_windows):
-        work_items.append({
-            "src_db": str(db_path),
-            "window": w,
-            "instrument": args.instrument,
-            "orb_minutes": args.orb_minutes,
-            "min_sample": args.min_sample,
-            "stress_multiplier": args.stress_multiplier,
-            "worker_id": i,
-        })
+        work_items.append(
+            {
+                "src_db": str(db_path),
+                "window": w,
+                "instrument": args.instrument,
+                "orb_minutes": args.orb_minutes,
+                "min_sample": args.min_sample,
+                "stress_multiplier": args.stress_multiplier,
+                "worker_id": i,
+            }
+        )
 
     # Run in parallel
     completed = []
@@ -206,15 +208,17 @@ def main():
             result = future.result()
             if "error" in result:
                 errors.append(result)
-                print(f"  [{i+1}/{len(all_windows)}] {result['run_label']}: ERROR - {result['error']}")
+                print(f"  [{i + 1}/{len(all_windows)}] {result['run_label']}: ERROR - {result['error']}")
             else:
                 completed.append(result)
                 p = result["strategies_passed"]
                 d = result["strategies_discovered"]
                 db = result["strategies_degraded_double_break"]
-                print(f"  [{i+1}/{len(all_windows)}] {result['run_label']}: "
-                      f"{p} passed / {d} discovered"
-                      f"{f' ({db} degraded)' if db else ''}")
+                print(
+                    f"  [{i + 1}/{len(all_windows)}] {result['run_label']}: "
+                    f"{p} passed / {d} discovered"
+                    f"{f' ({db} degraded)' if db else ''}"
+                )
 
     # Merge results into main DB
     print(f"\nMerging {len(completed)} window results into {db_path}...")
@@ -229,9 +233,9 @@ def main():
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
     # Summary
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("ROLLING EVALUATION SUMMARY (PARALLEL)")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"  Windows completed: {len(completed)}")
     print(f"  Errors: {len(errors)}")
     total_passed = sum(r["strategies_passed"] for r in completed)
@@ -253,6 +257,7 @@ def main():
         output_data = {"completed": completed, "errors": errors}
         Path(args.output).write_text(json.dumps(output_data, indent=2))
         print(f"\nResults written to {args.output}")
+
 
 if __name__ == "__main__":
     main()

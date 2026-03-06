@@ -20,6 +20,7 @@ from trading_app.nested.schema import init_nested_schema
 # Strategy ID format tests
 # ============================================================================
 
+
 class TestNestedStrategyId:
     """Tests for make_nested_strategy_id() format."""
 
@@ -42,6 +43,7 @@ class TestNestedStrategyId:
 
         # Baseline format for comparison (from strategy_discovery.make_strategy_id)
         from trading_app.strategy_discovery import make_strategy_id
+
         baseline_id = make_strategy_id("MGC", "CME_REOPEN", "E1", 2.5, 2, "ORB_G4")
         assert not baseline_id.startswith("NESTED_")
 
@@ -53,15 +55,18 @@ class TestNestedStrategyId:
         assert "30m" in sid_30
         assert sid_15 != sid_30
 
+
 class TestEntryResolution:
     """Verify the entry resolution constant."""
 
     def test_entry_resolution_is_5(self):
         assert ENTRY_RESOLUTION == 5
 
+
 # ============================================================================
 # Table isolation tests
 # ============================================================================
+
 
 class TestTableIsolation:
     """Verify nested tables don't interfere with production tables."""
@@ -117,15 +122,11 @@ class TestTableIsolation:
             con.commit()
 
             # nested_strategies should have the row
-            n_nested = con.execute(
-                "SELECT COUNT(*) FROM nested_strategies"
-            ).fetchone()[0]
+            n_nested = con.execute("SELECT COUNT(*) FROM nested_strategies").fetchone()[0]
             assert n_nested == 1
 
             # experimental_strategies should be empty
-            n_prod = con.execute(
-                "SELECT COUNT(*) FROM experimental_strategies"
-            ).fetchone()[0]
+            n_prod = con.execute("SELECT COUNT(*) FROM experimental_strategies").fetchone()[0]
             assert n_prod == 0
         finally:
             con.close()

@@ -244,6 +244,7 @@ class ATRVelocityFilter(StrategyFilter):
 
     Fail-open: missing data (warm-up period) → trade is allowed.
     """
+
     filter_type: str = "ATR_VEL"
     description: str = "Skip Contracting ATR × Neutral/Compressed ORB sessions"
     apply_to_sessions: tuple[str, ...] = ("CME_REOPEN", "TOKYO_OPEN")
@@ -271,6 +272,7 @@ class DoubleBreakFilter(StrategyFilter):
     Double-break = mean-reversion regime. ORB breakout = momentum strategy.
     Filtering these out selects clean momentum days only.
     """
+
     exclude: bool = True
 
     def matches_row(self, row: dict, orb_label: str) -> bool:
@@ -331,8 +333,7 @@ class CompositeFilter(StrategyFilter):
     overlay: StrategyFilter
 
     def matches_row(self, row: dict, orb_label: str) -> bool:
-        return (self.base.matches_row(row, orb_label)
-                and self.overlay.matches_row(row, orb_label))
+        return self.base.matches_row(row, orb_label) and self.overlay.matches_row(row, orb_label)
 
 
 # =========================================================================
@@ -386,12 +387,8 @@ _BREAK_BAR_CONTINUES = BreakBarContinuesFilter(
 )
 
 # Direction filters (H5: TOKYO_OPEN session shorts are noise; long-only doubles avgR)
-DIR_LONG = DirectionFilter(
-    filter_type="DIR_LONG", description="Long breakouts only", direction="long"
-)
-DIR_SHORT = DirectionFilter(
-    filter_type="DIR_SHORT", description="Short breakouts only", direction="short"
-)
+DIR_LONG = DirectionFilter(filter_type="DIR_LONG", description="Long breakouts only", direction="long")
+DIR_SHORT = DirectionFilter(filter_type="DIR_SHORT", description="Short breakouts only", direction="short")
 
 # Double-break filter (regime classifier: momentum vs mean-reversion)
 NO_DBL_BREAK = DoubleBreakFilter(
@@ -403,38 +400,44 @@ NO_DBL_BREAK = DoubleBreakFilter(
 # MES TOKYO_OPEN band filters (H2: MES TOKYO_OPEN ORBs >= 12pt are toxic)
 _MES_1000_BAND_FILTERS = {
     "ORB_G4_L12": OrbSizeFilter(
-        filter_type="ORB_G4_L12", description="ORB size >= 4 and < 12 points",
-        min_size=4.0, max_size=12.0,
+        filter_type="ORB_G4_L12",
+        description="ORB size >= 4 and < 12 points",
+        min_size=4.0,
+        max_size=12.0,
     ),
     "ORB_G5_L12": OrbSizeFilter(
-        filter_type="ORB_G5_L12", description="ORB size >= 5 and < 12 points",
-        min_size=5.0, max_size=12.0,
+        filter_type="ORB_G5_L12",
+        description="ORB size >= 5 and < 12 points",
+        min_size=5.0,
+        max_size=12.0,
     ),
 }
 
 # Filters included in discovery grid (active filters only)
 # L-filters removed from grid (negative ExpR, 0/1024 validated). Classes retained for reference.
 # G2/G3 removed (99%+ pass rate on most sessions = cosmetic, not real filtering)
-_GRID_SIZE_FILTERS = {k: v for k, v in MGC_ORB_SIZE_FILTERS.items()
-                      if k in ("G4", "G5", "G6", "G8")}
+_GRID_SIZE_FILTERS = {k: v for k, v in MGC_ORB_SIZE_FILTERS.items() if k in ("G4", "G5", "G6", "G8")}
 
 # MGC-specific: G4/G5 restored (Feb 2026 correction).
 # Original removal claimed "G4 passes 87.5%" but actual CME_REOPEN pass rate is 7.2%.
 # The 87.5% figure was likely about TOKYO_OPEN session (15m ORB = larger ranges).
 # G4 strategies are the best MGC performers (ExpR +0.44-0.54, all validated).
-_MGC_GRID_SIZE_FILTERS = {k: v for k, v in MGC_ORB_SIZE_FILTERS.items()
-                          if k in ("G4", "G5", "G6", "G8")}
+_MGC_GRID_SIZE_FILTERS = {k: v for k, v in MGC_ORB_SIZE_FILTERS.items() if k in ("G4", "G5", "G6", "G8")}
 
 # Calendar skip filters (portfolio overlay, not in discovery grid)
 CALENDAR_SKIP_NFP_OPEX = CalendarSkipFilter(
     filter_type="CAL_SKIP_NFP_OPEX",
     description="Skip NFP + OPEX days",
-    skip_nfp=True, skip_opex=True, skip_friday_session=None,
+    skip_nfp=True,
+    skip_opex=True,
+    skip_friday_session=None,
 )
 CALENDAR_SKIP_ALL_CME_REOPEN = CalendarSkipFilter(
     filter_type="CAL_SKIP_ALL_CME_REOPEN",
     description="Skip NFP + OPEX + Friday@CME_REOPEN",
-    skip_nfp=True, skip_opex=True, skip_friday_session="CME_REOPEN",
+    skip_nfp=True,
+    skip_opex=True,
+    skip_friday_session="CME_REOPEN",
 )
 
 # DOW skip filters (discovery grid composites, Feb 2026 research)
@@ -467,7 +470,8 @@ def _make_dow_composites(
         f"{key}_{suffix}": CompositeFilter(
             filter_type=f"{key}_{suffix}",
             description=f"{filt.description} + {dow_filter.description}",
-            base=filt, overlay=dow_filter,
+            base=filt,
+            overlay=dow_filter,
         )
         for key, filt in size_filters.items()
     }
@@ -483,7 +487,8 @@ def _make_dbl_composites(
         f"{key}_{suffix}": CompositeFilter(
             filter_type=f"{key}_{suffix}",
             description=f"{filt.description} + {dbl_filter.description}",
-            base=filt, overlay=dbl_filter,
+            base=filt,
+            overlay=dbl_filter,
         )
         for key, filt in size_filters.items()
     }
@@ -499,7 +504,8 @@ def _make_break_quality_composites(
         f"{key}_{suffix}": CompositeFilter(
             filter_type=f"{key}_{suffix}",
             description=f"{filt.description} + {bq_filter.description}",
-            base=filt, overlay=bq_filter,
+            base=filt,
+            overlay=bq_filter,
         )
         for key, filt in size_filters.items()
     }
@@ -521,8 +527,8 @@ BASE_GRID_FILTERS: dict[str, StrategyFilter] = {
 ALL_FILTERS: dict[str, StrategyFilter] = {
     **BASE_GRID_FILTERS,
     **_M6E_SIZE_FILTERS,
-    **_make_dow_composites(_GRID_SIZE_FILTERS_ORB, _DOW_SKIP_FRIDAY,  "NOFRI"),
-    **_make_dow_composites(_GRID_SIZE_FILTERS_ORB, _DOW_SKIP_MONDAY,  "NOMON"),
+    **_make_dow_composites(_GRID_SIZE_FILTERS_ORB, _DOW_SKIP_FRIDAY, "NOFRI"),
+    **_make_dow_composites(_GRID_SIZE_FILTERS_ORB, _DOW_SKIP_MONDAY, "NOMON"),
     **_make_dow_composites(_GRID_SIZE_FILTERS_ORB, _DOW_SKIP_TUESDAY, "NOTUE"),
     **_make_break_quality_composites(_GRID_SIZE_FILTERS_ORB, _BREAK_SPEED_FAST5, "FAST5"),
     **_make_break_quality_composites(_GRID_SIZE_FILTERS_ORB, _BREAK_SPEED_FAST10, "FAST10"),
@@ -595,12 +601,9 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
 
     # Break quality composites for momentum sessions (CME_REOPEN, TOKYO_OPEN, LONDON_METALS)
     if session in ("CME_REOPEN", "TOKYO_OPEN", "LONDON_METALS"):
-        filters.update(_make_break_quality_composites(
-            size_filters_orb, _BREAK_SPEED_FAST5, "FAST5"))
-        filters.update(_make_break_quality_composites(
-            size_filters_orb, _BREAK_SPEED_FAST10, "FAST10"))
-        filters.update(_make_break_quality_composites(
-            size_filters_orb, _BREAK_BAR_CONTINUES, "CONT"))
+        filters.update(_make_break_quality_composites(size_filters_orb, _BREAK_SPEED_FAST5, "FAST5"))
+        filters.update(_make_break_quality_composites(size_filters_orb, _BREAK_SPEED_FAST10, "FAST10"))
+        filters.update(_make_break_quality_composites(size_filters_orb, _BREAK_BAR_CONTINUES, "CONT"))
 
     if session == "CME_REOPEN":
         validate_dow_filter_alignment(session, _DOW_SKIP_FRIDAY.skip_days)
@@ -653,8 +656,7 @@ E2_STRESS_TICKS = 2
 STOP_MULTIPLIERS = [1.0, 0.75]
 
 
-def apply_tight_stop(outcomes: list[dict], stop_multiplier: float,
-                     cost_spec) -> list[dict]:
+def apply_tight_stop(outcomes: list[dict], stop_multiplier: float, cost_spec) -> list[dict]:
     """Apply tight stop simulation to a list of outcome dicts (Option B).
 
     For each trade, checks whether max adverse excursion (mae_r) exceeded
@@ -712,6 +714,7 @@ def apply_tight_stop(outcomes: list[dict], stop_multiplier: float,
 
     return adjusted
 
+
 # =========================================================================
 # Variable Aperture: session-specific ORB duration (minutes)
 # =========================================================================
@@ -724,17 +727,17 @@ def apply_tight_stop(outcomes: list[dict], stop_multiplier: float,
 #   US_DATA_830: All negative at all windows.
 #   NYSE_OPEN: All negative at all windows.
 ORB_DURATION_MINUTES: dict[str, int] = {
-    "CME_REOPEN": 5,       # CME Globex electronic reopen 5:00 PM CT
-    "TOKYO_OPEN": 15,      # Tokyo Stock Exchange open 9:00 AM JST (15m ORB)
-    "SINGAPORE_OPEN": 5,   # SGX/HKEX open 9:00 AM SGT
-    "LONDON_METALS": 5,    # London metals AM session 8:00 AM London
-    "US_DATA_830": 5,      # US economic data release 8:30 AM ET
-    "NYSE_OPEN": 5,        # NYSE cash open 9:30 AM ET
-    "US_DATA_1000": 5,     # US 10:00 AM data (ISM/CC) + post-equity-open flow
-    "COMEX_SETTLE": 5,     # COMEX gold settlement 1:30 PM ET
-    "CME_PRECLOSE": 5,     # CME equity futures pre-settlement 2:45 PM CT
-    "NYSE_CLOSE": 5,       # NYSE closing bell 4:00 PM ET
-    "BRISBANE_1025": 5,    # Fixed 10:25 AM Brisbane (session discovery 2026-03-01)
+    "CME_REOPEN": 5,  # CME Globex electronic reopen 5:00 PM CT
+    "TOKYO_OPEN": 15,  # Tokyo Stock Exchange open 9:00 AM JST (15m ORB)
+    "SINGAPORE_OPEN": 5,  # SGX/HKEX open 9:00 AM SGT
+    "LONDON_METALS": 5,  # London metals AM session 8:00 AM London
+    "US_DATA_830": 5,  # US economic data release 8:30 AM ET
+    "NYSE_OPEN": 5,  # NYSE cash open 9:30 AM ET
+    "US_DATA_1000": 5,  # US 10:00 AM data (ISM/CC) + post-equity-open flow
+    "COMEX_SETTLE": 5,  # COMEX gold settlement 1:30 PM ET
+    "CME_PRECLOSE": 5,  # CME equity futures pre-settlement 2:45 PM CT
+    "NYSE_CLOSE": 5,  # NYSE closing bell 4:00 PM ET
+    "BRISBANE_1025": 5,  # Fixed 10:25 AM Brisbane (session discovery 2026-03-01)
 }
 
 # =========================================================================
@@ -750,6 +753,7 @@ ORB_DURATION_MINUTES: dict[str, int] = {
 # Canonical source: pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS
 # Do NOT hardcode — import from the single source of truth.
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS  # noqa: E402
+
 TRADEABLE_INSTRUMENTS = list(ACTIVE_ORB_INSTRUMENTS)
 
 # Timed early exit: kill losers at N minutes after fill.
@@ -785,17 +789,17 @@ EARLY_EXIT_MINUTES: dict[str, int | None] = {
     # @note: New 6 sessions use RR=1.0 T80 max-across-instruments from
     #   winner_speed_summary.csv (2026-03-04 run, all 4 instruments).
     #   Pending P5b bar-level simulation for fine-tuning.
-    "CME_REOPEN": 38,       # E2 T80=110m(agg), config checks early, NetR=+905R
-    "TOKYO_OPEN": 39,       # E2 T80=63m(agg), NetR=+1207R
-    "SINGAPORE_OPEN": 31,   # E2 T80=65m(agg), NetR=+1114R
-    "LONDON_METALS": 36,    # E2 T80=60m(agg), NetR=+937R
-    "US_DATA_830": 49,      # RR1.0 T80: MGC=46, MNQ=49, MES=44, M2K=45
-    "NYSE_OPEN": 59,        # RR1.0 T80: MGC=28, MNQ=48, MES=43, M2K=59
-    "US_DATA_1000": 45,     # RR1.0 T80: MGC=45, MNQ=40, MES=41, M2K=38
-    "COMEX_SETTLE": 39,     # RR1.0 T80: MGC=39, MNQ=26, MES=24, M2K=27
-    "CME_PRECLOSE": 16,     # E2 T80=13m(agg), closest to optimal, NetR=+607R
-    "NYSE_CLOSE": 111,      # RR1.0 T80: MNQ=111, MES=110, M2K=108 (no MGC)
-    "BRISBANE_1025": 26,    # RR1.0 T80: MNQ=26, M2K=24 (MNQ/M2K only)
+    "CME_REOPEN": 38,  # E2 T80=110m(agg), config checks early, NetR=+905R
+    "TOKYO_OPEN": 39,  # E2 T80=63m(agg), NetR=+1207R
+    "SINGAPORE_OPEN": 31,  # E2 T80=65m(agg), NetR=+1114R
+    "LONDON_METALS": 36,  # E2 T80=60m(agg), NetR=+937R
+    "US_DATA_830": 49,  # RR1.0 T80: MGC=46, MNQ=49, MES=44, M2K=45
+    "NYSE_OPEN": 59,  # RR1.0 T80: MGC=28, MNQ=48, MES=43, M2K=59
+    "US_DATA_1000": 45,  # RR1.0 T80: MGC=45, MNQ=40, MES=41, M2K=38
+    "COMEX_SETTLE": 39,  # RR1.0 T80: MGC=39, MNQ=26, MES=24, M2K=27
+    "CME_PRECLOSE": 16,  # E2 T80=13m(agg), closest to optimal, NetR=+607R
+    "NYSE_CLOSE": 111,  # RR1.0 T80: MNQ=111, MES=110, M2K=108 (no MGC)
+    "BRISBANE_1025": 26,  # RR1.0 T80: MNQ=26, M2K=24 (MNQ/M2K only)
 }
 
 # Session exit modes: how each session manages target/stop after entry.
@@ -893,9 +897,7 @@ def generate_strategy_warnings(df) -> list[str]:
     if "sample_size" in df.columns:
         small = (df["sample_size"] < REGIME_MIN_SAMPLES).sum()
         if small > 0:
-            warnings.append(
-                f"{small} result(s) have sample_size < {REGIME_MIN_SAMPLES} (INVALID -- not tradeable)."
-            )
+            warnings.append(f"{small} result(s) have sample_size < {REGIME_MIN_SAMPLES} (INVALID -- not tradeable).")
         regime = ((df["sample_size"] >= REGIME_MIN_SAMPLES) & (df["sample_size"] < CORE_MIN_SAMPLES)).sum()
         if regime > 0:
             warnings.append(

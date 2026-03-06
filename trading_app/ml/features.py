@@ -62,10 +62,7 @@ def _backfill_global_features(
         return df
 
     n_missing = max(df[col].isna().sum() for col in GLOBAL_FEATURES if col in df.columns)
-    logger.info(
-        f"Backfilling global features: {n_missing:,d}/{len(df):,d} rows "
-        f"missing (orb_minutes≠5)"
-    )
+    logger.info(f"Backfilling global features: {n_missing:,d}/{len(df):,d} rows missing (orb_minutes≠5)")
 
     global_df = con.execute(
         """SELECT trading_day, """
@@ -188,11 +185,14 @@ def _extract_cross_session_features(df: pd.DataFrame) -> pd.DataFrame:
             long_count[mask] += is_long
             short_count[mask] += is_short
 
-    return pd.DataFrame({
-        "prior_sessions_broken": broken,
-        "prior_sessions_long": long_count,
-        "prior_sessions_short": short_count,
-    }, index=df.index)
+    return pd.DataFrame(
+        {
+            "prior_sessions_broken": broken,
+            "prior_sessions_long": long_count,
+            "prior_sessions_short": short_count,
+        },
+        index=df.index,
+    )
 
 
 def _extract_level_proximity_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -264,10 +264,8 @@ def _extract_level_proximity_features(df: pd.DataFrame) -> pd.DataFrame:
                 d_min = np.minimum(d_to_high, d_to_low)
 
                 # Update running minimums (scatter into global arrays)
-                nearest_to_high[mask_indices] = np.minimum(
-                    nearest_to_high[mask_indices], d_to_high)
-                nearest_to_low[mask_indices] = np.minimum(
-                    nearest_to_low[mask_indices], d_to_low)
+                nearest_to_high[mask_indices] = np.minimum(nearest_to_high[mask_indices], d_to_high)
+                nearest_to_low[mask_indices] = np.minimum(nearest_to_low[mask_indices], d_to_low)
 
                 # Count levels within thresholds
                 levels_within_1r[mask_indices] += np.where(valid & (d_min <= 1.0), 1.0, 0.0)
@@ -279,8 +277,7 @@ def _extract_level_proximity_features(df: pd.DataFrame) -> pd.DataFrame:
                 ps_low = df.loc[mask, ps_l_col].values.astype(float)
                 valid_nest = valid_base & ~np.isnan(ps_high) & ~np.isnan(ps_low)
                 nested = valid_nest & (cur_high <= ps_high) & (cur_low >= ps_low)
-                is_nested[mask_indices] = np.maximum(
-                    is_nested[mask_indices], nested.astype(float))
+                is_nested[mask_indices] = np.maximum(is_nested[mask_indices], nested.astype(float))
 
             # Size ratio: prior size / current size
             if ps_s_col in df.columns:
@@ -288,21 +285,23 @@ def _extract_level_proximity_features(df: pd.DataFrame) -> pd.DataFrame:
                 valid_size = valid_base & ~np.isnan(ps_size) & (ps_size > 0)
                 if valid_size.any():
                     ratio = np.where(valid_size, ps_size / R, -999.0)
-                    prior_size_ratio_max[mask_indices] = np.maximum(
-                        prior_size_ratio_max[mask_indices], ratio)
+                    prior_size_ratio_max[mask_indices] = np.maximum(prior_size_ratio_max[mask_indices], ratio)
 
     # Replace inf with -999 for rows without prior levels
     nearest_to_high = np.where(has_prior_levels, nearest_to_high, -999.0)
     nearest_to_low = np.where(has_prior_levels, nearest_to_low, -999.0)
 
-    return pd.DataFrame({
-        "nearest_level_to_high_R": nearest_to_high,
-        "nearest_level_to_low_R": nearest_to_low,
-        "levels_within_1R": levels_within_1r,
-        "levels_within_2R": levels_within_2r,
-        "orb_nested_in_prior": is_nested,
-        "prior_orb_size_ratio_max": prior_size_ratio_max,
-    }, index=df.index)
+    return pd.DataFrame(
+        {
+            "nearest_level_to_high_R": nearest_to_high,
+            "nearest_level_to_low_R": nearest_to_low,
+            "levels_within_1R": levels_within_1r,
+            "levels_within_2R": levels_within_2r,
+            "orb_nested_in_prior": is_nested,
+            "prior_orb_size_ratio_max": prior_size_ratio_max,
+        },
+        index=df.index,
+    )
 
 
 def _normalize_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -428,8 +427,7 @@ def transform_to_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # --- Final cleanup ---
     # Drop duplicate columns from the join (d.trading_day, d.symbol, etc.)
-    drop_cols = [c for c in X.columns if c in ("trading_day", "symbol",
-                 "trading_day:1", "symbol:1", "orb_minutes:1")]
+    drop_cols = [c for c in X.columns if c in ("trading_day", "symbol", "trading_day:1", "symbol:1", "orb_minutes:1")]
     X.drop(columns=[c for c in drop_cols if c in X.columns], inplace=True, errors="ignore")
 
     # Convert bool columns to float
@@ -527,8 +525,19 @@ def load_feature_matrix(
     y = (df["pnl_r"] > 0).astype(int)
 
     # --- Meta (for evaluation, not features) ---
-    meta = df[["trading_day", "symbol", "orb_label", "orb_minutes",
-               "entry_model", "rr_target", "confirm_bars", "pnl_r", "outcome"]].copy()
+    meta = df[
+        [
+            "trading_day",
+            "symbol",
+            "orb_label",
+            "orb_minutes",
+            "entry_model",
+            "rr_target",
+            "confirm_bars",
+            "pnl_r",
+            "outcome",
+        ]
+    ].copy()
 
     # --- Transform to features (shared with live prediction) ---
     X = transform_to_features(df)
@@ -641,16 +650,17 @@ def load_validated_feature_matrix(
 
     df = df[keep_mask].reset_index(drop=True)
     n_after_filter = len(df)
-    logger.info(f"After filter eligibility: {n_after_filter:,d} rows "
-                f"({n_before_filter - n_after_filter:,d} filtered out, "
-                f"{n_after_filter / max(n_before_filter, 1):.1%} kept)")
+    logger.info(
+        f"After filter eligibility: {n_after_filter:,d} rows "
+        f"({n_before_filter - n_after_filter:,d} filtered out, "
+        f"{n_after_filter / max(n_before_filter, 1):.1%} kept)"
+    )
 
     # Deduplicate: same (trading_day, orb_label, entry_model, rr_target,
     # confirm_bars, orb_minutes) outcome may appear multiple times if
     # multiple validated strategies share those params but differ in filter_type.
     # Keep only unique outcomes (the outcome itself is identical).
-    dedup_cols = ["trading_day", "orb_label", "entry_model", "rr_target",
-                  "confirm_bars", "orb_minutes"]
+    dedup_cols = ["trading_day", "orb_label", "entry_model", "rr_target", "confirm_bars", "orb_minutes"]
     n_before_dedup = len(df)
     df = df.drop_duplicates(subset=dedup_cols, keep="first").reset_index(drop=True)
     if len(df) < n_before_dedup:
@@ -660,15 +670,25 @@ def load_validated_feature_matrix(
     y = (df["pnl_r"] > 0).astype(int)
 
     # --- Meta (for evaluation, not features) ---
-    meta = df[["trading_day", "symbol", "orb_label", "orb_minutes",
-               "entry_model", "rr_target", "confirm_bars", "pnl_r",
-               "outcome", "filter_type"]].copy()
+    meta = df[
+        [
+            "trading_day",
+            "symbol",
+            "orb_label",
+            "orb_minutes",
+            "entry_model",
+            "rr_target",
+            "confirm_bars",
+            "pnl_r",
+            "outcome",
+            "filter_type",
+        ]
+    ].copy()
 
     # --- Transform to features (shared with live prediction) ---
     X = transform_to_features(df)
 
-    logger.info(f"Validated feature matrix: {X.shape[0]:,d} rows x {X.shape[1]} features "
-                f"(win rate: {y.mean():.1%})")
+    logger.info(f"Validated feature matrix: {X.shape[0]:,d} rows x {X.shape[1]} features (win rate: {y.mean():.1%})")
     return X, y, meta
 
 
@@ -743,10 +763,7 @@ def load_single_config_feature_matrix(
 
         # Per-aperture: pick one config per (session, aperture) instead of per session.
         # This gives each aperture its own best config, enabling per-aperture models.
-        partition_clause = (
-            "PARTITION BY v.orb_label, v.orb_minutes" if per_aperture
-            else "PARTITION BY v.orb_label"
-        )
+        partition_clause = "PARTITION BY v.orb_label, v.orb_minutes" if per_aperture else "PARTITION BY v.orb_label"
 
         # Single query: pick one config per session (or per session+aperture), load outcomes
         # When apply_rr_lock=True: LEFT JOIN family_rr_locks to restrict to locked RR
@@ -853,13 +870,17 @@ def load_single_config_feature_matrix(
     rr_str = f" RR={rr_target}" if rr_target is not None else ""
     filt_str = " UNFILTERED" if skip_filter else ""
     aperture_str = " PER-APERTURE" if per_aperture else ""
-    logger.info(f"Single-config ({sel_str}{rr_str}{filt_str}{aperture_str}): "
-                f"{len(configs_df)} configs, {len(df):,d} raw outcomes for {instrument}")
+    logger.info(
+        f"Single-config ({sel_str}{rr_str}{filt_str}{aperture_str}): "
+        f"{len(configs_df)} configs, {len(df):,d} raw outcomes for {instrument}"
+    )
     for _, cfg in configs_df.iterrows():
-        logger.info(f"  {cfg['orb_label']:<22} E{cfg['entry_model'][-1]} "
-                     f"RR{cfg['rr_target']:.1f} CB{cfg['confirm_bars']} "
-                     f"O{cfg['orb_minutes']} {cfg['filter_type']:<20} "
-                     f"Sharpe={cfg['sharpe_ratio']:.3f} N={cfg['sample_size']}")
+        logger.info(
+            f"  {cfg['orb_label']:<22} E{cfg['entry_model'][-1]} "
+            f"RR{cfg['rr_target']:.1f} CB{cfg['confirm_bars']} "
+            f"O{cfg['orb_minutes']} {cfg['filter_type']:<20} "
+            f"Sharpe={cfg['sharpe_ratio']:.3f} N={cfg['sample_size']}"
+        )
 
     if skip_filter:
         # ML sees ALL break days — learns filter boundary from features
@@ -888,16 +909,14 @@ def load_single_config_feature_matrix(
 
         df = df[keep_mask].reset_index(drop=True)
         n_after_filter = len(df)
-        logger.info(f"After filter: {n_after_filter:,d} rows "
-                    f"({n_before_filter - n_after_filter:,d} filtered out)")
+        logger.info(f"After filter: {n_after_filter:,d} rows ({n_before_filter - n_after_filter:,d} filtered out)")
 
     # Safety dedup: 1 row per (trading_day, orb_label[, orb_minutes]) already
     dedup_cols = ["trading_day", "orb_label", "orb_minutes"] if per_aperture else ["trading_day", "orb_label"]
     n_before_dedup = len(df)
     df = df.drop_duplicates(subset=dedup_cols, keep="first").reset_index(drop=True)
     if len(df) < n_before_dedup:
-        logger.warning(f"Single-config had {n_before_dedup - len(df)} "
-                       f"unexpected duplicates — investigate")
+        logger.warning(f"Single-config had {n_before_dedup - len(df)} unexpected duplicates — investigate")
 
     # Drop config metadata columns before feature extraction
     df = df.drop(columns=["config_sharpe", "config_n"], errors="ignore")
@@ -906,13 +925,25 @@ def load_single_config_feature_matrix(
     y = (df["pnl_r"] > 0).astype(int)
 
     # --- Meta (for evaluation, not features) ---
-    meta = df[["trading_day", "symbol", "orb_label", "orb_minutes",
-               "entry_model", "rr_target", "confirm_bars", "pnl_r",
-               "outcome", "filter_type"]].copy()
+    meta = df[
+        [
+            "trading_day",
+            "symbol",
+            "orb_label",
+            "orb_minutes",
+            "entry_model",
+            "rr_target",
+            "confirm_bars",
+            "pnl_r",
+            "outcome",
+            "filter_type",
+        ]
+    ].copy()
 
     # --- Transform to features (shared with live prediction) ---
     X = transform_to_features(df)
 
-    logger.info(f"Single-config feature matrix: {X.shape[0]:,d} rows x "
-                f"{X.shape[1]} features (win rate: {y.mean():.1%})")
+    logger.info(
+        f"Single-config feature matrix: {X.shape[0]:,d} rows x {X.shape[1]} features (win rate: {y.mean():.1%})"
+    )
     return X, y, meta

@@ -17,6 +17,7 @@ import duckdb
 from contextlib import nullcontext
 from pipeline.paths import GOLD_DB_PATH
 
+
 def init_regime_schema(
     db_path: Path | None = None,
     force: bool = False,
@@ -161,12 +162,30 @@ def verify_regime_schema(db_path: Path | None = None) -> tuple[bool, list[str]]:
             actual_cols = {row[0] for row in result}
 
             expected_cols = {
-                "run_label", "strategy_id", "created_at", "start_date", "end_date",
-                "instrument", "orb_label", "orb_minutes", "rr_target", "confirm_bars",
-                "entry_model", "filter_type", "filter_params", "sample_size",
-                "win_rate", "avg_win_r", "avg_loss_r", "expectancy_r",
-                "sharpe_ratio", "max_drawdown_r", "median_risk_points",
-                "avg_risk_points", "yearly_results", "validation_status",
+                "run_label",
+                "strategy_id",
+                "created_at",
+                "start_date",
+                "end_date",
+                "instrument",
+                "orb_label",
+                "orb_minutes",
+                "rr_target",
+                "confirm_bars",
+                "entry_model",
+                "filter_type",
+                "filter_params",
+                "sample_size",
+                "win_rate",
+                "avg_win_r",
+                "avg_loss_r",
+                "expectancy_r",
+                "sharpe_ratio",
+                "max_drawdown_r",
+                "median_risk_points",
+                "avg_risk_points",
+                "yearly_results",
+                "validation_status",
                 "validation_notes",
             }
             missing = expected_cols - actual_cols
@@ -183,12 +202,29 @@ def verify_regime_schema(db_path: Path | None = None) -> tuple[bool, list[str]]:
             actual_cols = {row[0] for row in result}
 
             expected_cols = {
-                "run_label", "strategy_id", "promoted_at", "start_date", "end_date",
-                "instrument", "orb_label", "orb_minutes", "rr_target", "confirm_bars",
-                "entry_model", "filter_type", "filter_params",
-                "sample_size", "win_rate", "expectancy_r", "years_tested",
-                "all_years_positive", "stress_test_passed", "sharpe_ratio",
-                "max_drawdown_r", "yearly_results", "status",
+                "run_label",
+                "strategy_id",
+                "promoted_at",
+                "start_date",
+                "end_date",
+                "instrument",
+                "orb_label",
+                "orb_minutes",
+                "rr_target",
+                "confirm_bars",
+                "entry_model",
+                "filter_type",
+                "filter_params",
+                "sample_size",
+                "win_rate",
+                "expectancy_r",
+                "years_tested",
+                "all_years_positive",
+                "stress_test_passed",
+                "sharpe_ratio",
+                "max_drawdown_r",
+                "yearly_results",
+                "status",
             }
             missing = expected_cols - actual_cols
             if missing:
@@ -217,6 +253,7 @@ def main():
             sys.exit(1)
     else:
         init_regime_schema(force=args.force)
+
 
 if __name__ == "__main__":
     main()

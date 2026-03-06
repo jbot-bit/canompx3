@@ -57,6 +57,7 @@ def live_config_db(tmp_path):
         )
     """)
     from pipeline.init_db import FAMILY_RR_LOCKS_SCHEMA
+
     con.execute(FAMILY_RR_LOCKS_SCHEMA)
     con.close()
     return db_path
@@ -119,18 +120,14 @@ class TestLoadBestRegimeVariant:
         """)
         con.close()
 
-        result = _load_best_regime_variant(
-            live_config_db, "MGC", "TOKYO_OPEN", "E1", "ORB_G4"
-        )
+        result = _load_best_regime_variant(live_config_db, "MGC", "TOKYO_OPEN", "E1", "ORB_G4")
         assert result is not None
         assert result["strategy_id"] == "MGC_TOKYO_OPEN_E1_RR2.0_CB1_ORB_G4"
         assert result["sharpe_ratio"] == 1.2
 
     def test_not_found(self, live_config_db):
         """No matching strategy returns None."""
-        result = _load_best_regime_variant(
-            live_config_db, "MGC", "9999", "E1", "ORB_G4"
-        )
+        result = _load_best_regime_variant(live_config_db, "MGC", "9999", "E1", "ORB_G4")
         assert result is None
 
     def test_inactive_filtered(self, live_config_db):
@@ -155,9 +152,7 @@ class TestLoadBestRegimeVariant:
         """)
         con.close()
 
-        result = _load_best_regime_variant(
-            live_config_db, "MGC", "TOKYO_OPEN", "E1", "ORB_G4"
-        )
+        result = _load_best_regime_variant(live_config_db, "MGC", "TOKYO_OPEN", "E1", "ORB_G4")
         assert result is None
 
     def test_best_expectancy_selected(self, live_config_db):
@@ -182,11 +177,8 @@ class TestLoadBestRegimeVariant:
         """)
         con.close()
 
-        result = _load_best_regime_variant(
-            live_config_db, "MGC", "TOKYO_OPEN", "E1", "ORB_G4"
-        )
+        result = _load_best_regime_variant(live_config_db, "MGC", "TOKYO_OPEN", "E1", "ORB_G4")
         assert result["strategy_id"] == "high_expr"
-
 
     def test_unlocked_rr_excluded(self, live_config_db):
         """Strategy at non-locked RR is excluded by INNER JOIN."""
@@ -210,9 +202,7 @@ class TestLoadBestRegimeVariant:
         """)
         con.close()
 
-        result = _load_best_regime_variant(
-            live_config_db, "MGC", "TOKYO_OPEN", "E1", "ORB_G4"
-        )
+        result = _load_best_regime_variant(live_config_db, "MGC", "TOKYO_OPEN", "E1", "ORB_G4")
         assert result is None  # RR2.5 != locked RR1.0
 
     def test_locked_rr_only_returned(self, live_config_db):
@@ -237,9 +227,7 @@ class TestLoadBestRegimeVariant:
         """)
         con.close()
 
-        result = _load_best_regime_variant(
-            live_config_db, "MGC", "TOKYO_OPEN", "E1", "ORB_G4"
-        )
+        result = _load_best_regime_variant(live_config_db, "MGC", "TOKYO_OPEN", "E1", "ORB_G4")
         assert result is not None
         assert result["strategy_id"] == "rr15"
         assert result["rr_target"] == 1.5
@@ -285,6 +273,7 @@ class TestCheckDollarGate:
         """Gate threshold equals LIVE_MIN_EXPECTANCY_DOLLARS_MULT * RT cost."""
         # MGC total_friction=$5.74; boundary case: exp$ just above vs just below threshold
         from pipeline.cost_model import get_cost_spec
+
         spec = get_cost_spec("MGC")
         threshold = LIVE_MIN_EXPECTANCY_DOLLARS_MULT * spec.total_friction
         median = 1.0
@@ -313,9 +302,7 @@ class TestLoadBestExperimentalVariant:
         """)
         con.close()
 
-        result = _load_best_experimental_variant(
-            live_config_db, "MGC", "TOKYO_OPEN", "E2", "ORB_G5"
-        )
+        result = _load_best_experimental_variant(live_config_db, "MGC", "TOKYO_OPEN", "E2", "ORB_G5")
         assert result is not None
         assert result["expectancy_r"] == 0.25
 
@@ -333,13 +320,9 @@ class TestLoadBestExperimentalVariant:
         """)
         con.close()
 
-        result = _load_best_experimental_variant(
-            live_config_db, "MGC", "TOKYO_OPEN", "E2", "ORB_G5"
-        )
+        result = _load_best_experimental_variant(live_config_db, "MGC", "TOKYO_OPEN", "E2", "ORB_G5")
         assert result is None
 
     def test_not_found(self, live_config_db):
-        result = _load_best_experimental_variant(
-            live_config_db, "MNQ", "CME_REOPEN", "E1", "ORB_G4"
-        )
+        result = _load_best_experimental_variant(live_config_db, "MNQ", "CME_REOPEN", "E1", "ORB_G4")
         assert result is None

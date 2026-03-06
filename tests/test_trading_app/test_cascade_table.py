@@ -38,23 +38,29 @@ def cascade_db(tmp_path):
     # 6 rows: CME_REOPEN loss + same dir -> TOKYO_OPEN outcomes
     for i in range(6):
         outcome_b = "win" if i < 4 else "loss"  # 4 wins, 2 losses = 66.7% WR
-        con.execute("""
+        con.execute(
+            """
             INSERT INTO daily_features VALUES (
                 ?, 'MGC', 5,
                 'loss', 'long', ?, 'long', NULL, NULL,
                 NULL, NULL, NULL, NULL, NULL, NULL
             )
-        """, [f"2024-01-{i+1:02d}", outcome_b])
+        """,
+            [f"2024-01-{i + 1:02d}", outcome_b],
+        )
 
     # 3 rows: not enough for threshold (will be filtered)
     for i in range(3):
-        con.execute("""
+        con.execute(
+            """
             INSERT INTO daily_features VALUES (
                 ?, 'MGC', 5,
                 'win', 'short', 'loss', 'short', NULL, NULL,
                 NULL, NULL, NULL, NULL, NULL, NULL
             )
-        """, [f"2024-02-{i+1:02d}"])
+        """,
+            [f"2024-02-{i + 1:02d}"],
+        )
 
     con.close()
     return db_path

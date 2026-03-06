@@ -24,13 +24,18 @@ from trading_app.execution_engine import (
     ORB_WINDOWS_UTC,
 )
 from trading_app.config import (
-    SESSION_EXIT_MODE, IB_DURATION_MINUTES, HOLD_HOURS, ORB_DURATION_MINUTES,
+    SESSION_EXIT_MODE,
+    IB_DURATION_MINUTES,
+    HOLD_HOURS,
+    ORB_DURATION_MINUTES,
 )
 from trading_app.portfolio import Portfolio, PortfolioStrategy
 from pipeline.cost_model import get_cost_spec
 
+
 def _cost():
     return get_cost_spec("MGC")
+
 
 def _make_strategy(**overrides):
     base = dict(
@@ -51,6 +56,7 @@ def _make_strategy(**overrides):
     base.update(overrides)
     return PortfolioStrategy(**base)
 
+
 def _make_portfolio(strategies=None, **overrides):
     if strategies is None:
         strategies = [_make_strategy()]
@@ -66,16 +72,17 @@ def _make_portfolio(strategies=None, **overrides):
     defaults.update(overrides)
     return Portfolio(**defaults)
 
+
 def _bar(ts, o, h, l, c, v=100):
-    return {"ts_utc": ts, "open": float(o), "high": float(h),
-            "low": float(l), "close": float(c), "volume": int(v)}
+    return {"ts_utc": ts, "open": float(o), "high": float(h), "low": float(l), "close": float(c), "volume": int(v)}
+
 
 # ============================================================================
 # LiveIB Unit Tests
 # ============================================================================
 
-class TestLiveIB:
 
+class TestLiveIB:
     def test_ib_formation(self):
         """IB high/low computed from bars within 120-min window."""
         start = datetime(2024, 1, 4, 23, 0, tzinfo=timezone.utc)
@@ -179,12 +186,13 @@ class TestLiveIB:
         result = ib.check_break(_bar(start + timedelta(minutes=60), 2708, 2715, 2707, 2711))
         assert result is None
 
+
 # ============================================================================
 # Config Tests
 # ============================================================================
 
-class TestConfig:
 
+class TestConfig:
     def test_session_exit_modes_defined(self):
         """All active sessions have exit modes defined."""
         for label in ORB_WINDOWS_UTC:
@@ -202,16 +210,17 @@ class TestConfig:
     def test_hold_hours(self):
         assert HOLD_HOURS == 7
 
+
 # ============================================================================
 # IB-Conditional Exit Integration Tests
 # ============================================================================
+
 
 @pytest.mark.skip(reason="IB-conditional disabled pending research validation — TOKYO_OPEN now fixed_target")
 class TestIBConditionalExits:
     """Test TOKYO_OPEN session IB-conditional exit behavior in the execution engine."""
 
-    def _build_tokyo_open_orb_and_enter(self, engine, td=date(2024, 1, 5),
-                                   orb_high=2710.0, orb_low=2700.0):
+    def _build_tokyo_open_orb_and_enter(self, engine, td=date(2024, 1, 5), orb_high=2710.0, orb_low=2700.0):
         """Build TOKYO_OPEN ORB, trigger long break, and enter E1 trade.
 
         TOKYO_OPEN ORB window: 00:00 to 00:00+ORB_DURATION UTC on trading day.
@@ -223,24 +232,23 @@ class TestIBConditionalExits:
 
         # Feed IB bars before the TOKYO_OPEN window (23:00-00:00 UTC)
         prev_day = td - timedelta(days=1)
-        ib_ts = datetime(prev_day.year, prev_day.month, prev_day.day,
-                         23, 0, tzinfo=timezone.utc)
+        ib_ts = datetime(prev_day.year, prev_day.month, prev_day.day, 23, 0, tzinfo=timezone.utc)
         for i in range(60):
-            engine.on_bar(_bar(ib_ts + timedelta(minutes=i),
-                               2700, 2720, 2680, 2705))
+            engine.on_bar(_bar(ib_ts + timedelta(minutes=i), 2700, 2720, 2680, 2705))
 
         # Build TOKYO_OPEN ORB (00:00 to 00:00+orb_dur UTC)
         for i in range(orb_dur):
-            engine.on_bar(_bar(ts_base + timedelta(minutes=i),
-                               orb_low, orb_high, orb_low, orb_low + 5))
+            engine.on_bar(_bar(ts_base + timedelta(minutes=i), orb_low, orb_high, orb_low, orb_low + 5))
 
         # Break bar at orb_dur: close > ORB high
-        engine.on_bar(_bar(ts_base + timedelta(minutes=orb_dur),
-                           orb_high - 1, orb_high + 5, orb_high - 2, orb_high + 1))
+        engine.on_bar(
+            _bar(ts_base + timedelta(minutes=orb_dur), orb_high - 1, orb_high + 5, orb_high - 2, orb_high + 1)
+        )
 
         # E1 fill bar at orb_dur+1
-        fill_bar = _bar(ts_base + timedelta(minutes=orb_dur + 1),
-                        orb_high + 2, orb_high + 5, orb_high + 1, orb_high + 3)
+        fill_bar = _bar(
+            ts_base + timedelta(minutes=orb_dur + 1), orb_high + 2, orb_high + 5, orb_high + 1, orb_high + 3
+        )
         engine.on_bar(fill_bar)
 
         return ts_base
@@ -282,8 +290,7 @@ class TestIBConditionalExits:
         assert engine.ib.complete
 
         # Bar that breaks IB high (aligned with long trade)
-        events = engine.on_bar(_bar(ib_end + timedelta(minutes=1),
-                                    2720, 2725, 2718, 2722))
+        events = engine.on_bar(_bar(ib_end + timedelta(minutes=1), 2720, 2725, 2718, 2722))
 
         entered = [t for t in engine.active_trades if t.state == TradeState.ENTERED]
         assert len(entered) == 1
@@ -310,16 +317,14 @@ class TestIBConditionalExits:
         assert engine.ib.complete
 
         # Bar that breaks IB low (opposed to long trade)
-        events = engine.on_bar(_bar(ib_end + timedelta(minutes=1),
-                                    2685, 2688, 2675, 2678))
+        events = engine.on_bar(_bar(ib_end + timedelta(minutes=1), 2685, 2688, 2675, 2678))
 
         exit_events = [e for e in events if e.event_type == "EXIT"]
         assert len(exit_events) == 1
         assert "ib_opposed" in exit_events[0].reason
 
         # Trade should be completed
-        completed = [t for t in engine.completed_trades
-                     if t.ib_alignment == "opposed"]
+        completed = [t for t in engine.completed_trades if t.ib_alignment == "opposed"]
         assert len(completed) == 1
 
     def test_tokyo_open_ib_pending_keeps_fixed_target(self):
@@ -334,7 +339,7 @@ class TestIBConditionalExits:
         assert len(entered) == 1
         assert entered[0].exit_mode == "ib_pending"
         assert entered[0].target_price is not None  # Target still active
-        assert entered[0].stop_price is not None     # Stop still active
+        assert entered[0].stop_price is not None  # Stop still active
 
     def test_hold_7h_timeout_exit(self):
         """Trade in hold_7h exits after HOLD_HOURS."""
@@ -398,19 +403,19 @@ class TestIBConditionalExits:
         stop = entered[0].stop_price
 
         # Bar that hits stop
-        events = engine.on_bar(_bar(ib_end + timedelta(minutes=2),
-                                    2702, 2705, stop - 1, 2698))
+        events = engine.on_bar(_bar(ib_end + timedelta(minutes=2), 2702, 2705, stop - 1, 2698))
         exit_events = [e for e in events if e.event_type == "EXIT"]
         assert len(exit_events) == 1
         assert "loss" in exit_events[0].reason
+
 
 # ============================================================================
 # Early Exit Skip in hold_7h Mode
 # ============================================================================
 
+
 @pytest.mark.skip(reason="IB-conditional disabled pending research validation — TOKYO_OPEN now fixed_target")
 class TestEarlyExitSkipInHold7h:
-
     def test_early_exit_skipped_in_hold_7h(self):
         """Timed early exit must NOT fire when trade is in hold_7h mode."""
         strategy = _make_strategy()
@@ -420,8 +425,7 @@ class TestEarlyExitSkipInHold7h:
         # Build and enter TOKYO_OPEN trade
         td = date(2024, 1, 5)
         prev_day = td - timedelta(days=1)
-        ib_ts = datetime(prev_day.year, prev_day.month, prev_day.day,
-                         23, 0, tzinfo=timezone.utc)
+        ib_ts = datetime(prev_day.year, prev_day.month, prev_day.day, 23, 0, tzinfo=timezone.utc)
         # Feed IB bars
         for i in range(60):
             engine.on_bar(_bar(ib_ts + timedelta(minutes=i), 2700, 2720, 2680, 2705))
@@ -465,17 +469,16 @@ class TestEarlyExitSkipInHold7h:
             t += timedelta(minutes=1)
 
         # No exit should have fired — early exit skipped for hold_7h
-        assert len(exit_events) == 0, (
-            "Early exit must be skipped in hold_7h mode"
-        )
+        assert len(exit_events) == 0, "Early exit must be skipped in hold_7h mode"
+
 
 # ============================================================================
 # IB Already Opposed at Entry Time
 # ============================================================================
 
+
 @pytest.mark.skip(reason="IB-conditional disabled pending research validation — TOKYO_OPEN now fixed_target")
 class TestIBAlreadyOpposed:
-
     def test_tokyo_open_entry_rejected_when_ib_already_opposed_unit(self):
         """Unit test: verify rejection code path when IB is pre-resolved opposed.
 
@@ -492,8 +495,7 @@ class TestIBAlreadyOpposed:
         prev_day = td - timedelta(days=1)
 
         # Build TOKYO_OPEN ORB normally
-        ib_ts = datetime(prev_day.year, prev_day.month, prev_day.day,
-                         23, 0, tzinfo=timezone.utc)
+        ib_ts = datetime(prev_day.year, prev_day.month, prev_day.day, 23, 0, tzinfo=timezone.utc)
         for i in range(60):
             engine.on_bar(_bar(ib_ts + timedelta(minutes=i), 2705, 2710, 2702, 2706))
 
@@ -510,12 +512,10 @@ class TestIBAlreadyOpposed:
         engine.ib.break_ts = ts_base + timedelta(minutes=50)
 
         # Trigger ORB LONG break (close > 2710)
-        events = engine.on_bar(_bar(ts_base + timedelta(minutes=orb_dur),
-                                    2709, 2715, 2708, 2711))
+        events = engine.on_bar(_bar(ts_base + timedelta(minutes=orb_dur), 2709, 2715, 2708, 2711))
 
         # E1 armed on break bar — fills on next bar
-        next_events = engine.on_bar(_bar(ts_base + timedelta(minutes=orb_dur + 1),
-                                         2712, 2715, 2711, 2713))
+        next_events = engine.on_bar(_bar(ts_base + timedelta(minutes=orb_dur + 1), 2712, 2715, 2711, 2713))
 
         reject_events = [e for e in next_events if e.event_type == "REJECT"]
         entry_events = [e for e in next_events if e.event_type == "ENTRY"]
@@ -524,12 +524,13 @@ class TestIBAlreadyOpposed:
         assert "ib_already_opposed" in reject_events[0].reason
         assert len(entry_events) == 0, "No entry should happen"
 
+
 # ============================================================================
 # CME_REOPEN Session (Fixed Target, No IB Logic)
 # ============================================================================
 
-class TestCmeReopenFixedTarget:
 
+class TestCmeReopenFixedTarget:
     def test_cme_reopen_always_fixed_target(self):
         """CME_REOPEN session trades always use fixed_target exit mode."""
         strategy = _make_strategy(
@@ -541,33 +542,30 @@ class TestCmeReopenFixedTarget:
 
         # CME_REOPEN ORB window: 23:00-23:05 UTC prev day (winter)
         prev_day = date(2024, 1, 4)
-        ts_base = datetime(prev_day.year, prev_day.month, prev_day.day,
-                           23, 0, tzinfo=timezone.utc)
+        ts_base = datetime(prev_day.year, prev_day.month, prev_day.day, 23, 0, tzinfo=timezone.utc)
 
         # Build ORB
         for i in range(5):
-            engine.on_bar(_bar(ts_base + timedelta(minutes=i),
-                               2700, 2710, 2695, 2705))
+            engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2710, 2695, 2705))
 
         # Break bar
-        engine.on_bar(_bar(ts_base + timedelta(minutes=5),
-                           2708, 2715, 2707, 2712))
+        engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2708, 2715, 2707, 2712))
 
         # E1 fill bar
-        engine.on_bar(_bar(ts_base + timedelta(minutes=6),
-                           2714, 2718, 2712, 2716))
+        engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2714, 2718, 2712, 2716))
 
         entered = [t for t in engine.active_trades if t.state == TradeState.ENTERED]
         assert len(entered) == 1
         assert entered[0].exit_mode == "fixed_target"
         assert entered[0].target_price is not None  # Target active
 
+
 # ============================================================================
 # IB Initialization Tests
 # ============================================================================
 
-class TestIBInitialization:
 
+class TestIBInitialization:
     def test_engine_creates_ib_on_day_start(self):
         """Engine creates LiveIB on trading day start."""
         engine = ExecutionEngine(_make_portfolio(), _cost())

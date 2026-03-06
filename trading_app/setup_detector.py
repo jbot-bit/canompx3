@@ -19,6 +19,7 @@ import duckdb
 
 from trading_app.config import StrategyFilter
 
+
 def detect_setups(
     con: duckdb.DuckDBPyConnection,
     strategy_filter: StrategyFilter,

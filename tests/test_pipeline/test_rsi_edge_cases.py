@@ -1,4 +1,5 @@
 """Tests for RSI edge cases — avg_loss near zero after smoothing (T6)."""
+
 import pytest
 import numpy as np
 from pipeline.build_daily_features import _wilders_rsi
@@ -38,10 +39,12 @@ class TestWildersRsiEdgeCases:
         assert rsi == 100.0
 
     def test_single_loss_then_all_gains(self):
-        closes = np.concatenate([
-            np.array([101.0, 100.0]),  # 1 loss
-            np.array([100.0 + i * 0.5 for i in range(18)]),  # 18 gains
-        ])
+        closes = np.concatenate(
+            [
+                np.array([101.0, 100.0]),  # 1 loss
+                np.array([100.0 + i * 0.5 for i in range(18)]),  # 18 gains
+            ]
+        )
         rsi = _wilders_rsi(closes, period=14)
         assert rsi is not None
         assert rsi > 80.0  # mostly gains
@@ -55,10 +58,12 @@ class TestWildersRsiEdgeCases:
     def test_avg_loss_smoothed_to_near_zero(self):
         """After initial period with one loss, Wilder's smoothing decays avg_loss
         toward zero. Verify no division by zero."""
-        closes = np.concatenate([
-            np.array([101.0, 100.0]),  # tiny loss at start
-            np.array([100.0 + i for i in range(200)]),  # 200 bars of gains
-        ])
+        closes = np.concatenate(
+            [
+                np.array([101.0, 100.0]),  # tiny loss at start
+                np.array([100.0 + i for i in range(200)]),  # 200 bars of gains
+            ]
+        )
         rsi = _wilders_rsi(closes, period=14)
         assert rsi is not None
         assert rsi > 99.0  # avg_loss decayed to near zero, RSI near 100

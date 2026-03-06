@@ -42,7 +42,6 @@ RR_TARGETS = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0]
 CONFIRM_BARS_OPTIONS = [1, 2, 3, 4, 5]
 
 
-
 def log(msg: str):
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
@@ -85,21 +84,34 @@ def process_single_day(args):
                         entry_model=em,
                         orb_label=orb_label,
                     )
-                    day_batch.append([
-                        trading_day, symbol, orb_label, orb_minutes,
-                        rr_target, cb, em,
-                        outcome["entry_ts"], outcome["entry_price"],
-                        outcome["stop_price"], outcome["target_price"],
-                        outcome["outcome"], outcome["exit_ts"],
-                        outcome["exit_price"], outcome["pnl_r"],
-                        outcome["mae_r"], outcome["mfe_r"],
-                    ])
+                    day_batch.append(
+                        [
+                            trading_day,
+                            symbol,
+                            orb_label,
+                            orb_minutes,
+                            rr_target,
+                            cb,
+                            em,
+                            outcome["entry_ts"],
+                            outcome["entry_price"],
+                            outcome["stop_price"],
+                            outcome["target_price"],
+                            outcome["outcome"],
+                            outcome["exit_ts"],
+                            outcome["exit_price"],
+                            outcome["pnl_r"],
+                            outcome["mae_r"],
+                            outcome["mfe_r"],
+                        ]
+                    )
 
     return day_batch
 
 
 def main():
     import argparse
+
     parser = argparse.ArgumentParser(description="Fast MES outcome builder (parallel)")
     parser.add_argument("--orb-minutes", type=int, default=5)
     parser.add_argument("--dry-run", action="store_true")
@@ -124,28 +136,33 @@ def main():
     con = duckdb.connect(str(DB_PATH), read_only=True)
 
     log("Loading bars_1m...")
-    all_bars = con.execute("""
+    all_bars = con.execute(
+        """
         SELECT ts_utc, open, high, low, close, volume
         FROM bars_1m WHERE symbol = ?
         ORDER BY ts_utc
-    """, [INSTRUMENT]).fetchdf()
+    """,
+        [INSTRUMENT],
+    ).fetchdf()
     all_bars["ts_utc"] = pd.to_datetime(all_bars["ts_utc"], utc=True)
-    log(f"  {len(all_bars):,} bars loaded ({time.time()-t0:.1f}s)")
+    log(f"  {len(all_bars):,} bars loaded ({time.time() - t0:.1f}s)")
 
     # =====================================================================
     # STEP 2: Load daily_features
     # =====================================================================
-    orb_cols = ', '.join(
-        f'orb_{lbl}_high, orb_{lbl}_low, orb_{lbl}_break_dir, orb_{lbl}_break_ts'
-        for lbl in ORB_LABELS
+    orb_cols = ", ".join(
+        f"orb_{lbl}_high, orb_{lbl}_low, orb_{lbl}_break_dir, orb_{lbl}_break_ts" for lbl in ORB_LABELS
     )
-    features = con.execute(f"""
+    features = con.execute(
+        f"""
         SELECT trading_day, symbol, orb_minutes, {orb_cols}
         FROM daily_features
         WHERE symbol = ? AND orb_minutes = ?
         AND trading_day BETWEEN ? AND ?
         ORDER BY trading_day
-    """, [INSTRUMENT, orb_minutes, START_DATE, END_DATE]).fetchall()
+    """,
+        [INSTRUMENT, orb_minutes, START_DATE, END_DATE],
+    ).fetchall()
     col_names = [desc[0] for desc in con.description]
     con.close()
 
@@ -164,13 +181,12 @@ def main():
     # Partition bars
     bars_by_day = {}
     for td, (td_start, td_end) in day_ranges.items():
-        mask = (all_bars["ts_utc"] >= pd.Timestamp(td_start)) & \
-               (all_bars["ts_utc"] < pd.Timestamp(td_end))
+        mask = (all_bars["ts_utc"] >= pd.Timestamp(td_start)) & (all_bars["ts_utc"] < pd.Timestamp(td_end))
         day_bars = all_bars[mask].copy()
         if not day_bars.empty:
             bars_by_day[td] = day_bars
 
-    log(f"  Partitioned into {len(bars_by_day)} day chunks ({time.time()-t1:.1f}s)")
+    log(f"  Partitioned into {len(bars_by_day)} day chunks ({time.time() - t1:.1f}s)")
 
     # =====================================================================
     # STEP 4: Build task list
@@ -198,10 +214,12 @@ def main():
                 elapsed = time.time() - t2
                 rate = (i + 1) / elapsed
                 remaining = (len(tasks) - i - 1) / rate
-                log(f"  {i+1}/{len(tasks)} days ({len(all_outcomes):,} outcomes, "
-                    f"{elapsed:.0f}s elapsed, ~{remaining:.0f}s remaining)")
+                log(
+                    f"  {i + 1}/{len(tasks)} days ({len(all_outcomes):,} outcomes, "
+                    f"{elapsed:.0f}s elapsed, ~{remaining:.0f}s remaining)"
+                )
 
-    log(f"  {len(all_outcomes):,} total outcomes ({time.time()-t2:.1f}s)")
+    log(f"  {len(all_outcomes):,} total outcomes ({time.time() - t2:.1f}s)")
 
     if args.dry_run:
         log("DRY RUN -- no DB writes")
@@ -215,17 +233,21 @@ def main():
     con = duckdb.connect(str(DB_PATH))
 
     # Clear existing outcomes for this instrument + orb_minutes
-    con.execute("""
+    con.execute(
+        """
         DELETE FROM orb_outcomes
         WHERE symbol = ? AND orb_minutes = ?
         AND trading_day BETWEEN ? AND ?
-    """, [INSTRUMENT, orb_minutes, START_DATE, END_DATE])
+    """,
+        [INSTRUMENT, orb_minutes, START_DATE, END_DATE],
+    )
 
     # Bulk insert
     BATCH_SIZE = 10_000
     for i in range(0, len(all_outcomes), BATCH_SIZE):
-        batch = all_outcomes[i:i + BATCH_SIZE]
-        con.executemany("""
+        batch = all_outcomes[i : i + BATCH_SIZE]
+        con.executemany(
+            """
             INSERT INTO orb_outcomes
             (trading_day, symbol, orb_label, orb_minutes,
              rr_target, confirm_bars, entry_model,
@@ -233,19 +255,20 @@ def main():
              outcome, exit_ts, exit_price, pnl_r,
              mae_r, mfe_r)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, batch)
+        """,
+            batch,
+        )
 
     con.commit()
 
     count = con.execute(
-        "SELECT COUNT(*) FROM orb_outcomes WHERE symbol = ? AND orb_minutes = ?",
-        [INSTRUMENT, orb_minutes]
+        "SELECT COUNT(*) FROM orb_outcomes WHERE symbol = ? AND orb_minutes = ?", [INSTRUMENT, orb_minutes]
     ).fetchone()[0]
     con.close()
 
-    log(f"  Written {count:,} outcomes to DB ({time.time()-t3:.1f}s)")
+    log(f"  Written {count:,} outcomes to DB ({time.time() - t3:.1f}s)")
     log("=" * 60)
-    log(f"DONE: {count:,} outcomes, total {time.time()-t0:.0f}s")
+    log(f"DONE: {count:,} outcomes, total {time.time() - t0:.0f}s")
     log("=" * 60)
 
 

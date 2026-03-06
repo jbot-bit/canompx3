@@ -44,7 +44,8 @@ def check_entry_price_parity(con, instrument: str, sample: int) -> list[str]:
     spec = get_cost_spec(instrument)
     tick_tol = spec.tick_size  # 1-tick tolerance for stop-market gap-through
 
-    rows = con.execute("""
+    rows = con.execute(
+        """
         SELECT o.trading_day, o.symbol, o.orb_label, o.entry_model,
                o.rr_target, o.confirm_bars, o.orb_minutes,
                o.entry_ts, o.entry_price, o.stop_price, o.target_price,
@@ -55,7 +56,9 @@ def check_entry_price_parity(con, instrument: str, sample: int) -> list[str]:
           AND o.entry_ts IS NOT NULL
         ORDER BY o.trading_day DESC
         LIMIT ?
-    """, [instrument, sample]).fetchall()
+    """,
+        [instrument, sample],
+    ).fetchall()
 
     if not rows:
         failures.append(f"  {instrument}: No orb_outcomes rows found")
@@ -65,18 +68,32 @@ def check_entry_price_parity(con, instrument: str, sample: int) -> list[str]:
     entry_mismatches = 0
 
     for row in rows:
-        (trading_day, symbol, orb_label, entry_model,
-         rr_target, confirm_bars, orb_minutes,
-         entry_ts, entry_price, stop_price, target_price,
-         outcome, pnl_r) = row
+        (
+            trading_day,
+            symbol,
+            orb_label,
+            entry_model,
+            rr_target,
+            confirm_bars,
+            orb_minutes,
+            entry_ts,
+            entry_price,
+            stop_price,
+            target_price,
+            outcome,
+            pnl_r,
+        ) = row
 
         # Check entry_price against bars_1m
-        bar = con.execute("""
+        bar = con.execute(
+            """
             SELECT open, high, low, close
             FROM bars_1m
             WHERE symbol = ? AND ts_utc = ?
             LIMIT 1
-        """, [symbol, entry_ts]).fetchone()
+        """,
+            [symbol, entry_ts],
+        ).fetchone()
 
         if bar is None:
             # Entry might be from a source symbol (GC for MGC, etc.)
@@ -99,18 +116,14 @@ def check_entry_price_parity(con, instrument: str, sample: int) -> list[str]:
         checked += 1
 
     if entry_mismatches > 5:
-        failures.append(
-            f"  ... and {entry_mismatches - 5} more entry price mismatches"
-        )
+        failures.append(f"  ... and {entry_mismatches - 5} more entry price mismatches")
 
     if checked == 0:
         failures.append(f"  {instrument}: No bars_1m matches for entry timestamps")
     elif entry_mismatches == 0:
         print(f"    Entry price parity: {checked} trades checked, all OK")
     else:
-        failures.append(
-            f"  {instrument}: {entry_mismatches}/{checked} entry price mismatches"
-        )
+        failures.append(f"  {instrument}: {entry_mismatches}/{checked} entry price mismatches")
 
     return failures
 
@@ -119,7 +132,8 @@ def check_target_price_consistency(con, instrument: str, sample: int) -> list[st
     """Verify target_price = entry + risk * RR (accounting for direction)."""
     failures = []
 
-    rows = con.execute("""
+    rows = con.execute(
+        """
         SELECT o.entry_price, o.stop_price, o.target_price,
                o.rr_target, o.orb_label, o.trading_day, o.entry_model
         FROM orb_outcomes o
@@ -128,7 +142,9 @@ def check_target_price_consistency(con, instrument: str, sample: int) -> list[st
           AND o.entry_ts IS NOT NULL
         ORDER BY o.trading_day DESC
         LIMIT ?
-    """, [instrument, sample]).fetchall()
+    """,
+        [instrument, sample],
+    ).fetchall()
 
     checked = 0
     mismatches = 0
@@ -166,9 +182,7 @@ def check_target_price_consistency(con, instrument: str, sample: int) -> list[st
     if checked > 0 and mismatches == 0:
         print(f"    Target price consistency: {checked} trades checked, all OK")
     elif mismatches > 0:
-        failures.append(
-            f"  {instrument}: {mismatches}/{checked} target price inconsistencies"
-        )
+        failures.append(f"  {instrument}: {mismatches}/{checked} target price inconsistencies")
 
     return failures
 
@@ -178,7 +192,8 @@ def check_pnl_plausibility(con, instrument: str, sample: int) -> list[str]:
     failures = []
     spec = get_cost_spec(instrument)
 
-    rows = con.execute("""
+    rows = con.execute(
+        """
         SELECT o.entry_price, o.stop_price, o.target_price,
                o.outcome, o.pnl_r, o.rr_target, o.orb_label, o.trading_day
         FROM orb_outcomes o
@@ -187,7 +202,9 @@ def check_pnl_plausibility(con, instrument: str, sample: int) -> list[str]:
           AND o.entry_ts IS NOT NULL
         ORDER BY o.trading_day DESC
         LIMIT ?
-    """, [instrument, sample]).fetchall()
+    """,
+        [instrument, sample],
+    ).fetchall()
 
     checked = 0
     implausible = 0
@@ -206,18 +223,14 @@ def check_pnl_plausibility(con, instrument: str, sample: int) -> list[str]:
                 implausible += 1
                 if implausible <= 3:
                     failures.append(
-                        f"  {instrument} {td} {orb_label}: win pnl_r={pnl_r:.3f} "
-                        f"outside [0, {max_expected:.1f}]"
+                        f"  {instrument} {td} {orb_label}: win pnl_r={pnl_r:.3f} outside [0, {max_expected:.1f}]"
                     )
         elif outcome == "loss":
             # Loser PnL should be negative, near -1.0 (plus friction)
             if pnl_r > 0 or pnl_r < -1.5:
                 implausible += 1
                 if implausible <= 3:
-                    failures.append(
-                        f"  {instrument} {td} {orb_label}: loss pnl_r={pnl_r:.3f} "
-                        f"outside [-1.5, 0]"
-                    )
+                    failures.append(f"  {instrument} {td} {orb_label}: loss pnl_r={pnl_r:.3f} outside [-1.5, 0]")
 
         checked += 1
 
@@ -227,9 +240,7 @@ def check_pnl_plausibility(con, instrument: str, sample: int) -> list[str]:
     if checked > 0 and implausible == 0:
         print(f"    PnL plausibility: {checked} trades checked, all OK")
     elif implausible > 0:
-        failures.append(
-            f"  {instrument}: {implausible}/{checked} implausible pnl_r values"
-        )
+        failures.append(f"  {instrument}: {implausible}/{checked} implausible pnl_r values")
 
     return failures
 
@@ -238,7 +249,8 @@ def check_time_stop_consistency(con, instrument: str, sample: int) -> list[str]:
     """Verify ts_pnl_r is consistent with bar data at threshold time."""
     failures = []
 
-    rows = con.execute("""
+    rows = con.execute(
+        """
         SELECT o.trading_day, o.orb_label, o.entry_model, o.rr_target,
                o.entry_ts, o.entry_price, o.stop_price,
                o.ts_outcome, o.ts_pnl_r, o.ts_exit_ts,
@@ -249,7 +261,9 @@ def check_time_stop_consistency(con, instrument: str, sample: int) -> list[str]:
           AND o.ts_pnl_r IS NOT NULL
         ORDER BY o.trading_day DESC
         LIMIT ?
-    """, [instrument, sample]).fetchall()
+    """,
+        [instrument, sample],
+    ).fetchall()
 
     if not rows:
         print(f"    Time-stop consistency: no time_stop outcomes found (OK if no T80 sessions)")
@@ -259,8 +273,20 @@ def check_time_stop_consistency(con, instrument: str, sample: int) -> list[str]:
     mismatches = 0
 
     for row in rows:
-        (td, orb_label, em, rr, entry_ts, entry_price, stop_price,
-         ts_outcome, ts_pnl_r, ts_exit_ts, outcome, raw_pnl_r) = row
+        (
+            td,
+            orb_label,
+            em,
+            rr,
+            entry_ts,
+            entry_price,
+            stop_price,
+            ts_outcome,
+            ts_pnl_r,
+            ts_exit_ts,
+            outcome,
+            raw_pnl_r,
+        ) = row
 
         # ts_pnl_r should be non-positive (time-stop fires on MTM <= 0)
         # Exactly 0.0 is theoretically possible (break-even at time-stop bar)
@@ -277,8 +303,7 @@ def check_time_stop_consistency(con, instrument: str, sample: int) -> list[str]:
             mismatches += 1
             if mismatches <= 3:
                 failures.append(
-                    f"  {instrument} {td} {orb_label} {em}: "
-                    f"ts_pnl_r={ts_pnl_r:.3f} < -1.2 (worse than stop loss)"
+                    f"  {instrument} {td} {orb_label} {em}: ts_pnl_r={ts_pnl_r:.3f} < -1.2 (worse than stop loss)"
                 )
 
         checked += 1
@@ -289,19 +314,17 @@ def check_time_stop_consistency(con, instrument: str, sample: int) -> list[str]:
     if checked > 0 and mismatches == 0:
         print(f"    Time-stop consistency: {checked} trades checked, all OK")
     elif mismatches > 0:
-        failures.append(
-            f"  {instrument}: {mismatches}/{checked} time-stop inconsistencies"
-        )
+        failures.append(f"  {instrument}: {mismatches}/{checked} time-stop inconsistencies")
 
     return failures
 
 
 def main():
     parser = argparse.ArgumentParser(description="Backtest-to-live parity check")
-    parser.add_argument("--instrument", default=None,
-                        help="Instrument to check (default: all active)")
-    parser.add_argument("--sample", type=int, default=200,
-                        help="Number of trades to sample per instrument (default: 200)")
+    parser.add_argument("--instrument", default=None, help="Instrument to check (default: all active)")
+    parser.add_argument(
+        "--sample", type=int, default=200, help="Number of trades to sample per instrument (default: 200)"
+    )
     parser.add_argument("--db", default=None, help="Database path")
     args = parser.parse_args()
 
@@ -348,8 +371,9 @@ def main():
         sys.exit(1)
     else:
         checks_per_inst = 4
-        print(f"PARITY CHECK PASSED: {len(instruments)} instruments, "
-              f"{checks_per_inst * len(instruments)} checks, all OK")
+        print(
+            f"PARITY CHECK PASSED: {len(instruments)} instruments, {checks_per_inst * len(instruments)} checks, all OK"
+        )
         sys.exit(0)
 
 

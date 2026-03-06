@@ -16,17 +16,22 @@ from datetime import date
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+
 @dataclass(frozen=True)
 class RiskLimits:
     """Immutable risk parameters for a trading session."""
-    max_daily_loss_r: float = -5.0          # Circuit breaker threshold (R)
-    max_concurrent_positions: int = 3       # Max open positions at once
-    max_per_orb_positions: int = 1          # Max positions from same ORB
-    max_daily_trades: int = 15              # Max entries per day
-    drawdown_warning_r: float = -3.0        # Log warning threshold (R)
-    corr_threshold_for_reduction: float = 0.5 # Correlation above this triggers size reduction
-    min_correlation_factor: float = 0.3     # Min assumed correlation if not in lookup, used in effective exposure calculation
+
+    max_daily_loss_r: float = -5.0  # Circuit breaker threshold (R)
+    max_concurrent_positions: int = 3  # Max open positions at once
+    max_per_orb_positions: int = 1  # Max positions from same ORB
+    max_daily_trades: int = 15  # Max entries per day
+    drawdown_warning_r: float = -3.0  # Log warning threshold (R)
+    corr_threshold_for_reduction: float = 0.5  # Correlation above this triggers size reduction
+    min_correlation_factor: float = (
+        0.3  # Min assumed correlation if not in lookup, used in effective exposure calculation
+    )
     max_equity_drawdown_r: float | None = None  # Multi-day drawdown limit (R from peak). None = disabled.
+
 
 class RiskManager:
     """
@@ -40,8 +45,7 @@ class RiskManager:
     5. Drawdown warning (allows entry, logs warning)
     """
 
-    def __init__(self, limits: RiskLimits,
-                 corr_lookup: dict[tuple[str, str], float] | None = None):
+    def __init__(self, limits: RiskLimits, corr_lookup: dict[tuple[str, str], float] | None = None):
         self.limits = limits
         self._corr_lookup = corr_lookup or {}
         self.daily_pnl_r: float = 0.0
@@ -74,14 +78,17 @@ class RiskManager:
         active_trades: list,
         daily_pnl_r: float,
         market_state=None,
-    ) -> tuple[bool, str, float]: # Added float to return type
-
+    ) -> tuple[bool, str, float]:  # Added float to return type
         suggested_contract_factor = 1.0
 
         # Check 0: Multi-day equity drawdown
         if self._equity_halted:
             drawdown = self.cumulative_pnl_r - self.equity_high_water_r
-            return False, f"equity_drawdown: {drawdown:.2f}R from peak (limit {self.limits.max_equity_drawdown_r}R)", 0.0
+            return (
+                False,
+                f"equity_drawdown: {drawdown:.2f}R from peak (limit {self.limits.max_equity_drawdown_r}R)",
+                0.0,
+            )
 
         # Check 1: Circuit breaker
         if self._halted or daily_pnl_r <= self.limits.max_daily_loss_r:
@@ -89,32 +96,37 @@ class RiskManager:
             return False, f"circuit_breaker: daily PnL {daily_pnl_r:.2f}R <= {self.limits.max_daily_loss_r}R", 0.0
 
         # Check 2: Max concurrent positions (correlation-weighted if available)
-        entered = [t for t in active_trades if hasattr(t, 'state') and t.state.value == "ENTERED"]
+        entered = [t for t in active_trades if hasattr(t, "state") and t.state.value == "ENTERED"]
         if self._corr_lookup and entered:
             # Calculate effective exposure from correlations
             effective_exposure = 0.0
             for t in entered:
                 corr_val = self._corr_lookup.get(
-                    (strategy_id, t.strategy_id),
-                    self._corr_lookup.get((t.strategy_id, strategy_id), None)
+                    (strategy_id, t.strategy_id), self._corr_lookup.get((t.strategy_id, strategy_id), None)
                 )
                 if corr_val is None:
                     corr_val = self.limits.min_correlation_factor
-                
+
                 # Use max of corr_val and limits.min_correlation_factor to avoid over-discounting strong negative correlations
-                effective_exposure += max(corr_val, self.limits.min_correlation_factor) 
-            
+                effective_exposure += max(corr_val, self.limits.min_correlation_factor)
+
             # Add min_correlation_factor for the new trade (conservative: assumes at least
             # this much correlation with existing positions, even if uncorrelated).
             # If effective exposure exceeds max_concurrent_positions, reject.
             if (effective_exposure + self.limits.min_correlation_factor) > self.limits.max_concurrent_positions:
-                return False, f"corr_concurrent: effective exposure {effective_exposure + self.limits.min_correlation_factor:.1f} >= {self.limits.max_concurrent_positions}", 0.0
+                return (
+                    False,
+                    f"corr_concurrent: effective exposure {effective_exposure + self.limits.min_correlation_factor:.1f} >= {self.limits.max_concurrent_positions}",
+                    0.0,
+                )
 
             # If effective exposure is high but within limits, suggest a reduced contract factor
             # This is a heuristic that can be refined. For now, a simple linear reduction
             if effective_exposure > self.limits.corr_threshold_for_reduction * self.limits.max_concurrent_positions:
-                reduction_factor = 1.0 - (effective_exposure / self.limits.max_concurrent_positions) * 0.5 # Example reduction
-                suggested_contract_factor = max(0.1, reduction_factor) # Ensure not too small
+                reduction_factor = (
+                    1.0 - (effective_exposure / self.limits.max_concurrent_positions) * 0.5
+                )  # Example reduction
+                suggested_contract_factor = max(0.1, reduction_factor)  # Ensure not too small
 
         else:
             if len(entered) >= self.limits.max_concurrent_positions:
@@ -122,9 +134,12 @@ class RiskManager:
 
         # Check 3: Max per ORB
         orb_count = sum(
-            1 for t in active_trades
-            if hasattr(t, 'orb_label') and t.orb_label == orb_label
-            and hasattr(t, 'state') and t.state.value == "ENTERED"
+            1
+            for t in active_trades
+            if hasattr(t, "orb_label")
+            and t.orb_label == orb_label
+            and hasattr(t, "state")
+            and t.state.value == "ENTERED"
         )
         if orb_count >= self.limits.max_per_orb_positions:
             return False, f"max_per_orb: {orb_count} positions on {orb_label}", 0.0
@@ -140,11 +155,9 @@ class RiskManager:
             )
 
         # Check 6: Chop awareness (warn only, does not block)
-        if market_state is not None and hasattr(market_state, 'signals'):
+        if market_state is not None and hasattr(market_state, "signals"):
             if market_state.signals.chop_detected:
-                self._warnings.append(
-                    f"chop_warning: chop detected for {strategy_id} on {orb_label}"
-                )
+                self._warnings.append(f"chop_warning: chop detected for {strategy_id} on {orb_label}")
 
         return True, "", suggested_contract_factor
 
@@ -161,8 +174,7 @@ class RiskManager:
         self.cumulative_pnl_r += pnl_r
         if self.cumulative_pnl_r > self.equity_high_water_r:
             self.equity_high_water_r = self.cumulative_pnl_r
-        if (self.limits.max_equity_drawdown_r is not None
-                and not self._equity_halted):
+        if self.limits.max_equity_drawdown_r is not None and not self._equity_halted:
             drawdown = self.cumulative_pnl_r - self.equity_high_water_r
             if drawdown <= self.limits.max_equity_drawdown_r:
                 self._equity_halted = True

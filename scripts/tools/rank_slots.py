@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Quick ranking of STABLE session slots for concentrated trading plan."""
+
 import sys
 from pathlib import Path
 
@@ -15,14 +16,14 @@ from pipeline.cost_model import get_cost_spec
 con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
 
 slots = [
-    ("MGC", "CME_REOPEN",   "MGC_CME_REOPEN_E2_RR1.0_CB1_ORB_G5"),
-    ("MGC", "TOKYO_OPEN",   "MGC_TOKYO_OPEN_E2_RR2.0_CB1_ORB_G5_CONT"),
+    ("MGC", "CME_REOPEN", "MGC_CME_REOPEN_E2_RR1.0_CB1_ORB_G5"),
+    ("MGC", "TOKYO_OPEN", "MGC_TOKYO_OPEN_E2_RR2.0_CB1_ORB_G5_CONT"),
     ("MNQ", "CME_PRECLOSE", "MNQ_CME_PRECLOSE_E2_RR1.5_CB1_ORB_G5"),
-    ("MNQ", "CME_REOPEN",   "MNQ_CME_REOPEN_E2_RR1.0_CB1_VOL_RV12_N20"),
-    ("MNQ", "NYSE_OPEN",    "MNQ_NYSE_OPEN_E2_RR1.0_CB1_ORB_G4"),
+    ("MNQ", "CME_REOPEN", "MNQ_CME_REOPEN_E2_RR1.0_CB1_VOL_RV12_N20"),
+    ("MNQ", "NYSE_OPEN", "MNQ_NYSE_OPEN_E2_RR1.0_CB1_ORB_G4"),
     ("MES", "COMEX_SETTLE", "MES_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G6"),
-    ("MES", "NYSE_OPEN",    "MES_NYSE_OPEN_E2_RR1.0_CB1_VOL_RV12_N20"),
-    ("M2K", "NYSE_OPEN",    "M2K_NYSE_OPEN_E2_RR1.0_CB1_ORB_G5_O30"),
+    ("MES", "NYSE_OPEN", "MES_NYSE_OPEN_E2_RR1.0_CB1_VOL_RV12_N20"),
+    ("M2K", "NYSE_OPEN", "M2K_NYSE_OPEN_E2_RR1.0_CB1_ORB_G5_O30"),
 ]
 
 print("=== STABLE Session Slot Ranking ===\n")
@@ -32,7 +33,8 @@ all_trades = {}
 for inst, sess, strat_id in slots:
     spec = get_cost_spec(inst)
 
-    trades = con.execute("""
+    trades = con.execute(
+        """
         SELECT oo.trading_day, oo.pnl_r
         FROM validated_setups vs
         JOIN strategy_trade_days std ON vs.strategy_id = std.strategy_id
@@ -48,7 +50,9 @@ for inst, sess, strat_id in slots:
           AND oo.outcome IN ('win', 'loss')
           AND oo.pnl_r IS NOT NULL
         ORDER BY oo.trading_day
-    """, [strat_id]).fetchdf()
+    """,
+        [strat_id],
+    ).fetchdf()
 
     if trades.empty:
         print(f"  {inst} {sess}: NO TRADES")
@@ -67,9 +71,7 @@ for inst, sess, strat_id in slots:
 
     td_min = trades["trading_day"].min()
     td_max = trades["trading_day"].max()
-    total_biz_days = np.busday_count(
-        pd.Timestamp(td_min).date(), pd.Timestamp(td_max).date()
-    )
+    total_biz_days = np.busday_count(pd.Timestamp(td_min).date(), pd.Timestamp(td_max).date())
     freq_day = n / total_biz_days if total_biz_days > 0 else 0
 
     recent = trades[trades["trading_day"] >= pd.Timestamp("2025-03-01")]
@@ -82,7 +84,9 @@ for inst, sess, strat_id in slots:
     yrs_pos = (yrstats["mean"] > 0).sum()
     yrs_total = len(yrstats)
 
-    print(f"  {key:25s}  ExpR={avg_r:+.4f}  Sharpe={sharpe:.2f}  WR={wr:.1%}  N={n}  Yrs+={yrs_pos}/{yrs_total}  Freq={freq_day:.2f}/day  Cost=${spec.total_friction:.2f}")
+    print(
+        f"  {key:25s}  ExpR={avg_r:+.4f}  Sharpe={sharpe:.2f}  WR={wr:.1%}  N={n}  Yrs+={yrs_pos}/{yrs_total}  Freq={freq_day:.2f}/day  Cost=${spec.total_friction:.2f}"
+    )
     if not np.isnan(recent_r):
         print(f"    -> Recent 12m: N={recent_n}, avgR={recent_r:+.4f}")
     # Year breakdown
@@ -103,8 +107,7 @@ top3_keys = ["MGC CME_REOPEN", "MNQ CME_PRECLOSE", "MES COMEX_SETTLE"]
 # Also test alternative: MGC CME_REOPEN, MGC TOKYO_OPEN, MNQ NYSE_OPEN
 alt3_keys = ["MGC CME_REOPEN", "MGC TOKYO_OPEN", "MNQ NYSE_OPEN"]
 
-for label, keys in [("Option A: Cross-instrument", top3_keys),
-                     ("Option B: Evening cluster", alt3_keys)]:
+for label, keys in [("Option A: Cross-instrument", top3_keys), ("Option B: Evening cluster", alt3_keys)]:
     print(f"\n--- {label}: {', '.join(keys)} ---")
 
     # Merge trades from selected slots, aggregate by trading_day
@@ -122,10 +125,15 @@ for label, keys in [("Option A: Cross-instrument", top3_keys),
     combined["trading_day"] = pd.to_datetime(combined["trading_day"])
 
     # Daily P&L: sum of all trades that day (could be 0-3 trades)
-    daily = combined.groupby("trading_day").agg(
-        total_r=("pnl_r", "sum"),
-        n_trades=("pnl_r", "count"),
-    ).reset_index().sort_values("trading_day")
+    daily = (
+        combined.groupby("trading_day")
+        .agg(
+            total_r=("pnl_r", "sum"),
+            n_trades=("pnl_r", "count"),
+        )
+        .reset_index()
+        .sort_values("trading_day")
+    )
 
     # Fill in missing trading days (days with 0 trades = 0 P&L)
     all_days = pd.bdate_range(daily["trading_day"].min(), daily["trading_day"].max())
@@ -159,7 +167,7 @@ for label, keys in [("Option A: Cross-instrument", top3_keys),
     yearly = daily.groupby("yr")["total_r"].agg(["sum", "count"])
     yearly.columns = ["total_r", "days"]
 
-    print(f"  Total R: {total_r:+.1f}R over {n_total_days} trading days ({n_total_days/252:.1f} yrs)")
+    print(f"  Total R: {total_r:+.1f}R over {n_total_days} trading days ({n_total_days / 252:.1f} yrs)")
     print(f"  Trades: {n_trades} total, {avg_trades_per_day:.1f} avg/active day")
     print(f"  Active days: {n_days_active}/{n_total_days} ({active_pct:.0%})")
     print(f"  Avg daily R: {avg_daily_r:+.4f}")
@@ -182,6 +190,6 @@ for k in top3_keys + [x for x in alt3_keys if x not in top3_keys]:
     n = len(df)
     td_range = (pd.to_datetime(df["trading_day"].max()) - pd.to_datetime(df["trading_day"].min())).days
     trades_per_month = n / (td_range / 30.44) if td_range > 0 else 0
-    print(f"  {k:25s}: {n} trades over {td_range/365.25:.1f} yrs = {trades_per_month:.1f} trades/month")
+    print(f"  {k:25s}: {n} trades over {td_range / 365.25:.1f} yrs = {trades_per_month:.1f} trades/month")
 
 con.close()

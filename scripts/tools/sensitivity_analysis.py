@@ -65,7 +65,7 @@ def compute_metrics_from_rows(rows: list) -> dict:
 
     if n > 1:
         var = sum((x - avg_r) ** 2 for x in pnl_rs) / (n - 1)
-        std = var ** 0.5
+        std = var**0.5
         sharpe = avg_r / std if std > 0 else 0.0
     else:
         sharpe = 0.0
@@ -123,8 +123,13 @@ def get_adjacent_filters(filter_type: str) -> list[str]:
 
 
 def query_strategy_outcomes(
-    con, instrument: str, orb_label: str, entry_model: str,
-    filter_type: str, rr_target: float, confirm_bars: int,
+    con,
+    instrument: str,
+    orb_label: str,
+    entry_model: str,
+    filter_type: str,
+    rr_target: float,
+    confirm_bars: int,
     orb_minutes_list: list[int] | None = None,
 ) -> list[tuple]:
     """Query orb_outcomes joined with daily_features filter eligibility.
@@ -138,7 +143,7 @@ def query_strategy_outcomes(
     base_ft = filter_type
     for suffix in ("_O5", "_O15", "_O30"):
         if base_ft.endswith(suffix):
-            base_ft = base_ft[:-len(suffix)]
+            base_ft = base_ft[: -len(suffix)]
             break
     filt = ALL_FILTERS.get(base_ft)
     if filt is None:
@@ -147,11 +152,14 @@ def query_strategy_outcomes(
     # Build eligible day set from orb_minutes=5 (has all filter columns).
     # Volume (rel_vol) columns may be NULL at 15m/30m apertures, but are
     # always populated at 5m. Strategy discovery uses this same approach.
-    df_rows = con.execute("""
+    df_rows = con.execute(
+        """
         SELECT d.*
         FROM daily_features d
         WHERE d.symbol = ? AND d.orb_minutes = 5
-    """, [instrument]).fetchdf()
+    """,
+        [instrument],
+    ).fetchdf()
 
     if df_rows.empty:
         return []
@@ -170,7 +178,8 @@ def query_strategy_outcomes(
     # Query outcomes at target aperture(s), filtered to eligible days
     all_results = []
     for om in orb_minutes_list:
-        day_filtered = con.execute("""
+        day_filtered = con.execute(
+            """
             SELECT o.outcome, o.pnl_r
             FROM orb_outcomes o
             WHERE o.symbol = ?
@@ -181,8 +190,9 @@ def query_strategy_outcomes(
               AND o.orb_minutes = ?
               AND o.outcome IN ('win', 'loss')
               AND o.trading_day IN (SELECT UNNEST(?::DATE[]))
-        """, [instrument, orb_label, entry_model, rr_target, confirm_bars, om,
-              day_list]).fetchall()
+        """,
+            [instrument, orb_label, entry_model, rr_target, confirm_bars, om, day_list],
+        ).fetchall()
 
         all_results.extend(day_filtered)
 
@@ -193,7 +203,8 @@ def find_validated_variants(con, instrument: str, spec) -> list[dict]:
     """Find all validated variants matching a spec for an instrument."""
     # Match base filter_type exactly. Aperture is in orb_minutes, not filter_type.
     # Composite variants (e.g., ORB_G5_NOTUE) are separate specs, not sub-matches.
-    rows = con.execute("""
+    rows = con.execute(
+        """
         SELECT strategy_id, rr_target, confirm_bars, orb_minutes,
                expectancy_r, win_rate, sample_size, sharpe_ratio,
                max_drawdown_r, filter_type
@@ -204,14 +215,22 @@ def find_validated_variants(con, instrument: str, spec) -> list[dict]:
           AND filter_type = ?
           AND status = 'active'
         ORDER BY expectancy_r DESC
-    """, [instrument, spec.orb_label, spec.entry_model,
-          spec.filter_type]).fetchall()
+    """,
+        [instrument, spec.orb_label, spec.entry_model, spec.filter_type],
+    ).fetchall()
 
     return [
         {
-            "strategy_id": r[0], "rr_target": r[1], "confirm_bars": r[2],
-            "orb_minutes": r[3], "ExpR": r[4], "WR": r[5], "N": r[6],
-            "Sharpe": r[7], "MaxDD": r[8], "filter_type": r[9],
+            "strategy_id": r[0],
+            "rr_target": r[1],
+            "confirm_bars": r[2],
+            "orb_minutes": r[3],
+            "ExpR": r[4],
+            "WR": r[5],
+            "N": r[6],
+            "Sharpe": r[7],
+            "MaxDD": r[8],
+            "filter_type": r[9],
         }
         for r in rows
     ]
@@ -226,32 +245,31 @@ def analyze_sensitivity(con, instrument: str, variant: dict, spec) -> dict:
     em = spec.entry_model
 
     baseline = {
-        "N": variant["N"], "ExpR": variant["ExpR"],
-        "WR": variant["WR"], "Sharpe": variant["Sharpe"],
+        "N": variant["N"],
+        "ExpR": variant["ExpR"],
+        "WR": variant["WR"],
+        "Sharpe": variant["Sharpe"],
     }
 
     results = {"baseline": baseline, "sweeps": {}}
 
     # 1. RR sweep
     for adj_rr in get_adjacent_rr(rr):
-        outcomes = query_strategy_outcomes(
-            con, instrument, spec.orb_label, em, ft, adj_rr, cb, [om])
+        outcomes = query_strategy_outcomes(con, instrument, spec.orb_label, em, ft, adj_rr, cb, [om])
         metrics = compute_metrics_from_rows(outcomes)
         label = f"RR{adj_rr}"
         results["sweeps"][label] = metrics
 
     # 2. CB sweep (E1 only)
     for adj_cb in get_adjacent_cb(cb, em):
-        outcomes = query_strategy_outcomes(
-            con, instrument, spec.orb_label, em, ft, rr, adj_cb, [om])
+        outcomes = query_strategy_outcomes(con, instrument, spec.orb_label, em, ft, rr, adj_cb, [om])
         metrics = compute_metrics_from_rows(outcomes)
         label = f"CB{adj_cb}"
         results["sweeps"][label] = metrics
 
     # 3. Filter threshold sweep
     for adj_ft in get_adjacent_filters(ft):
-        outcomes = query_strategy_outcomes(
-            con, instrument, spec.orb_label, em, adj_ft, rr, cb, [om])
+        outcomes = query_strategy_outcomes(con, instrument, spec.orb_label, em, adj_ft, rr, cb, [om])
         metrics = compute_metrics_from_rows(outcomes)
         label = f"F:{adj_ft}"
         results["sweeps"][label] = metrics
@@ -263,21 +281,24 @@ def analyze_sensitivity(con, instrument: str, variant: dict, spec) -> dict:
         # Re-compute ExpR assuming higher friction (reduces R-multiples)
         # Higher friction shrinks each R by (extra_friction / avg_risk_points)
         # Approximate: fetch median_risk_points from validated_setups
-        mrp_row = con.execute("""
+        mrp_row = con.execute(
+            """
             SELECT es.median_risk_points
             FROM experimental_strategies es
             WHERE es.strategy_id = ?
-        """, [variant["strategy_id"]]).fetchone()
+        """,
+            [variant["strategy_id"]],
+        ).fetchone()
 
         if mrp_row and mrp_row[0] and mrp_row[0] > 0:
             median_risk = mrp_row[0]
-            extra_friction_r = (stress_friction - cost_spec.total_friction) / (
-                median_risk * cost_spec.point_value
-            )
+            extra_friction_r = (stress_friction - cost_spec.total_friction) / (median_risk * cost_spec.point_value)
             stress_expr = baseline["ExpR"] - extra_friction_r
             results["sweeps"]["2x_slippage"] = {
-                "N": baseline["N"], "WR": baseline["WR"],
-                "ExpR": stress_expr, "Sharpe": None,
+                "N": baseline["N"],
+                "WR": baseline["WR"],
+                "ExpR": stress_expr,
+                "Sharpe": None,
                 "note": f"ExpR adjusted by {-extra_friction_r:.4f}R",
             }
 
@@ -313,17 +334,15 @@ def print_sweep_results(strategy_id: str, analysis: dict):
     """Print formatted sensitivity table for one strategy."""
     bl = analysis["baseline"]
     print(f"\n  Strategy: {strategy_id}")
-    print(f"  Baseline: ExpR={bl['ExpR']:+.4f}, Sharpe={bl['Sharpe']:.3f}, "
-          f"WR={bl['WR']:.1%}, N={bl['N']}")
+    print(f"  Baseline: ExpR={bl['ExpR']:+.4f}, Sharpe={bl['Sharpe']:.3f}, WR={bl['WR']:.1%}, N={bl['N']}")
 
     if not analysis["sweeps"]:
         print("    (no sweeps applicable)")
         return None  # Neither stable nor unstable; skipped in count
 
     # Header
-    print(f"  {'Perturbation':<22} {'ExpR':>8} {'d. ExpR':>18} "
-          f"{'N':>6} {'d. N':>10} {'WR':>7}")
-    print(f"  {'-'*22} {'-'*8} {'-'*18} {'-'*6} {'-'*10} {'-'*7}")
+    print(f"  {'Perturbation':<22} {'ExpR':>8} {'d. ExpR':>18} {'N':>6} {'d. N':>10} {'WR':>7}")
+    print(f"  {'-' * 22} {'-' * 8} {'-' * 18} {'-' * 6} {'-' * 10} {'-' * 7}")
 
     all_stable = True
     for label, metrics in analysis["sweeps"].items():
@@ -332,8 +351,7 @@ def print_sweep_results(strategy_id: str, analysis: dict):
         wr = metrics.get("WR")
 
         if n < MIN_PERTURB_N:
-            print(f"  {label:<22} {'N/A':>8} {'(N too small)':>18} "
-                  f"{n:>6} {'':>10} {'':>7}")
+            print(f"  {label:<22} {'N/A':>8} {'(N too small)':>18} {n:>6} {'':>10} {'':>7}")
             continue
 
         expr_str = f"{expr:+.4f}" if expr is not None else "N/A"
@@ -346,8 +364,7 @@ def print_sweep_results(strategy_id: str, analysis: dict):
             if ratio < STABILITY_THRESHOLD:
                 all_stable = False
 
-        print(f"  {label:<22} {expr_str:>8} {delta_expr:>18} "
-              f"{n:>6} {delta_n:>10} {wr_str:>7}")
+        print(f"  {label:<22} {expr_str:>8} {delta_expr:>18} {n:>6} {delta_n:>10} {wr_str:>7}")
 
         note = metrics.get("note")
         if note:
@@ -359,15 +376,11 @@ def print_sweep_results(strategy_id: str, analysis: dict):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Automated sensitivity analysis for live strategies")
-    parser.add_argument("--instrument", default=None,
-                        help="Instrument to analyze (default: all tradeable)")
-    parser.add_argument("--family", default=None,
-                        help="Specific family_id to analyze (default: all live specs)")
+    parser = argparse.ArgumentParser(description="Automated sensitivity analysis for live strategies")
+    parser.add_argument("--instrument", default=None, help="Instrument to analyze (default: all tradeable)")
+    parser.add_argument("--family", default=None, help="Specific family_id to analyze (default: all live specs)")
     parser.add_argument("--db", default=None, help="Database path override")
-    parser.add_argument("--top-n", type=int, default=3,
-                        help="Analyze top N variants per spec (default: 3)")
+    parser.add_argument("--top-n", type=int, default=3, help="Analyze top N variants per spec (default: 3)")
     args = parser.parse_args()
 
     db_path = Path(args.db) if args.db else GOLD_DB_PATH
@@ -398,9 +411,9 @@ def main():
 
     try:
         for inst in instruments:
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print(f"  {inst}")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
 
             for spec in specs:
                 variants = find_validated_variants(con, inst, spec)
@@ -409,7 +422,7 @@ def main():
 
                 print(f"\n--- {spec.family_id} ({spec.tier}) [{len(variants)} variants] ---")
 
-                for v in variants[:args.top_n]:
+                for v in variants[: args.top_n]:
                     analysis = analyze_sensitivity(con, inst, v, spec)
                     stable = print_sweep_results(v["strategy_id"], analysis)
                     total_reviewed += 1
@@ -424,11 +437,9 @@ def main():
     if total_reviewed == 0:
         print("SENSITIVITY ANALYSIS: No strategies found to analyze")
     elif total_unstable == 0:
-        print(f"SENSITIVITY ANALYSIS PASSED: {total_reviewed} strategies reviewed, "
-              f"all parameter-stable")
+        print(f"SENSITIVITY ANALYSIS PASSED: {total_reviewed} strategies reviewed, all parameter-stable")
     else:
-        print(f"SENSITIVITY ANALYSIS: {total_reviewed} strategies reviewed, "
-              f"{total_unstable} need review")
+        print(f"SENSITIVITY ANALYSIS: {total_reviewed} strategies reviewed, {total_unstable} need review")
     print("=" * 70)
 
     sys.exit(1 if total_unstable > 0 else 0)

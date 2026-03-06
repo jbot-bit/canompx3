@@ -29,35 +29,39 @@ AWAKE_END = int(os.getenv("DASHBOARD_AWAKE_END", "21"))
 
 # ── Data classes ─────────────────────────────────────────────────────────────
 
+
 @dataclass
 class AppState:
     """Current state of the co-pilot UI."""
+
     name: str  # WEEKEND, IDLE, APPROACHING, ALERT, LIVE, POST, OVERNIGHT
     next_session: str | None = None
     next_session_dt: datetime | None = None
     minutes_to_next: float | None = None
-    then_session: str | None = None      # back-to-back session within 30 min
+    then_session: str | None = None  # back-to-back session within 30 min
     then_session_dt: datetime | None = None
-    next_monday: date | None = None      # only set for WEEKEND state
+    next_monday: date | None = None  # only set for WEEKEND state
     trading_day: date | None = None
 
 
 @dataclass
 class SessionBriefing:
     """Merged briefing card for one instrument at one session."""
+
     session: str
     instrument: str
-    conditions: list[str]         # Human-readable filter conditions
+    conditions: list[str]  # Human-readable filter conditions
     rr_target: float
-    entry_instruction: str        # e.g. "Place stop-market at ORB edge"
-    direction_note: str | None    # e.g. "Long breakouts only"
-    session_hour: int             # Hour in Brisbane (for display)
-    session_minute: int           # Minute in Brisbane
-    orb_minutes: int = 5          # ORB aperture
-    strategy_count: int = 1       # How many underlying strategies merged
+    entry_instruction: str  # e.g. "Place stop-market at ORB edge"
+    direction_note: str | None  # e.g. "Long breakouts only"
+    session_hour: int  # Hour in Brisbane (for display)
+    session_minute: int  # Minute in Brisbane
+    orb_minutes: int = 5  # ORB aperture
+    strategy_count: int = 1  # How many underlying strategies merged
 
 
 # ── Session time resolution (DST-safe) ──────────────────────────────────────
+
 
 def get_upcoming_sessions(now: datetime) -> list[tuple[str, datetime]]:
     """Get all sessions in the next ~36 hours, sorted chronologically.
@@ -172,6 +176,7 @@ def filter_to_english(filter_type: str) -> str:
 
 # ── Briefing card builder ────────────────────────────────────────────────────
 
+
 def build_session_briefings() -> list[SessionBriefing]:
     """Build merged briefing cards from LIVE_PORTFOLIO.
 
@@ -182,6 +187,7 @@ def build_session_briefings() -> list[SessionBriefing]:
     from pipeline.asset_configs import get_active_instruments
 
     from datetime import date as date_type
+
     today = date_type.today()
 
     # Collect all strategies across all instruments
@@ -229,23 +235,26 @@ def build_session_briefings() -> list[SessionBriefing]:
         else:
             entry_instruction = f"Entry model: {entry_model}"
 
-        briefings.append(SessionBriefing(
-            session=session,
-            instrument=instrument,
-            conditions=conditions,
-            rr_target=rr_target,
-            entry_instruction=entry_instruction,
-            direction_note=direction_note,
-            session_hour=h,
-            session_minute=m,
-            orb_minutes=strats[0].orb_minutes,
-            strategy_count=len(strats),
-        ))
+        briefings.append(
+            SessionBriefing(
+                session=session,
+                instrument=instrument,
+                conditions=conditions,
+                rr_target=rr_target,
+                entry_instruction=entry_instruction,
+                direction_note=direction_note,
+                session_hour=h,
+                session_minute=m,
+                orb_minutes=strats[0].orb_minutes,
+                strategy_count=len(strats),
+            )
+        )
 
     return briefings
 
 
 # ── App state machine ────────────────────────────────────────────────────────
+
 
 def get_app_state(now: datetime) -> AppState:
     """Determine the current UI state based on time.

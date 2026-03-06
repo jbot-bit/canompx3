@@ -9,6 +9,7 @@ Usage:
     python scripts/tools/backfill_garch.py --instrument MGC
     python scripts/tools/backfill_garch.py --instrument MGC MNQ MES M2K
 """
+
 import argparse
 import logging
 import time
@@ -27,12 +28,15 @@ def backfill_instrument(db_path: str, instrument: str):
     con = duckdb.connect(db_path)
 
     # Load all daily closes in order (orb_minutes=5 to avoid tripling)
-    rows = con.execute("""
+    rows = con.execute(
+        """
         SELECT trading_day, daily_close, atr_20
         FROM daily_features
         WHERE symbol = ? AND orb_minutes = 5
         ORDER BY trading_day ASC
-    """, [instrument]).fetchall()
+    """,
+        [instrument],
+    ).fetchall()
 
     logger.info(f"{instrument}: {len(rows)} trading days loaded")
 
@@ -50,25 +54,27 @@ def backfill_instrument(db_path: str, instrument: str):
         # Convert annualized vol to implied daily ATR-equivalent points
         last_close = prior_closes[-1] if prior_closes else None
         if atr_20 and atr_20 > 0 and last_close is not None:
-            implied_daily_atr = (garch_vol / (252 ** 0.5)) * last_close
+            implied_daily_atr = (garch_vol / (252**0.5)) * last_close
             garch_atr_ratio = round(implied_daily_atr / atr_20, 4)
         else:
             garch_atr_ratio = None
 
         # UPDATE all orb_minutes rows for this day (5, 15, 30)
-        con.execute("""
+        con.execute(
+            """
             UPDATE daily_features
             SET garch_forecast_vol = ?, garch_atr_ratio = ?
             WHERE symbol = ? AND trading_day = ?
-        """, [garch_vol, garch_atr_ratio, instrument, trading_day])
+        """,
+            [garch_vol, garch_atr_ratio, instrument, trading_day],
+        )
         updated += 1
 
         if updated % 50 == 0:
             elapsed = time.time() - t0
             rate = updated / elapsed if elapsed > 0 else 0
             remaining = (len(rows) - i) / rate if rate > 0 else 0
-            logger.info(f"  {instrument}: {updated} rows updated, "
-                        f"{rate:.1f} rows/s, ~{remaining:.0f}s remaining")
+            logger.info(f"  {instrument}: {updated} rows updated, {rate:.1f} rows/s, ~{remaining:.0f}s remaining")
 
     con.commit()
     con.close()
@@ -79,8 +85,7 @@ def backfill_instrument(db_path: str, instrument: str):
 
 def main():
     parser = argparse.ArgumentParser(description="Backfill GARCH columns")
-    parser.add_argument("--instrument", nargs="+", default=["MGC"],
-                        help="Instruments to backfill")
+    parser.add_argument("--instrument", nargs="+", default=["MGC"], help="Instruments to backfill")
     parser.add_argument("--db-path", default=str(GOLD_DB_PATH))
     args = parser.parse_args()
 

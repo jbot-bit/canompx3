@@ -185,11 +185,7 @@ def _get_session_features(
     TOKYO_OPEN keeps level proximity features (1 prior session provides
     meaningful level data).
     """
-    session_idx = (
-        SESSION_CHRONOLOGICAL_ORDER.index(session)
-        if session in SESSION_CHRONOLOGICAL_ORDER
-        else -1
-    )
+    session_idx = SESSION_CHRONOLOGICAL_ORDER.index(session) if session in SESSION_CHRONOLOGICAL_ORDER else -1
 
     if session_idx <= MAX_EARLY_SESSION_INDEX:
         # Early session: drop cross-session counts
@@ -254,9 +250,13 @@ def train_per_session_meta_label(
     # --- Load data + E6 filter ---
     if single_config:
         X_all, y_all, meta_all = load_single_config_feature_matrix(
-            db_path, instrument, rr_target=rr_target,
-            config_selection=config_selection, skip_filter=skip_filter,
-            per_aperture=per_aperture, apply_rr_lock=False,
+            db_path,
+            instrument,
+            rr_target=rr_target,
+            config_selection=config_selection,
+            skip_filter=skip_filter,
+            per_aperture=per_aperture,
+            apply_rr_lock=False,
         )
     else:
         X_all, y_all, meta_all = load_validated_feature_matrix(db_path, instrument)
@@ -270,10 +270,7 @@ def train_per_session_meta_label(
     n_val_end = int(n_total * 0.80)
     pnl_r = meta_all["pnl_r"].values
 
-    logger.info(
-        f"  Split: train={n_train_end:,d} / val={n_val_end - n_train_end:,d} / "
-        f"test={n_total - n_val_end:,d}"
-    )
+    logger.info(f"  Split: train={n_train_end:,d} / val={n_val_end - n_train_end:,d} / test={n_total - n_val_end:,d}")
 
     sessions = sorted(meta_all["orb_label"].unique())
     session_results: dict[str, dict] = {}
@@ -323,20 +320,21 @@ def train_per_session_meta_label(
 
             # 3-way split per session using global index boundaries
             train_idx = session_indices[session_indices < n_train_end]
-            val_idx = session_indices[
-                (session_indices >= n_train_end) & (session_indices < n_val_end)
-            ]
+            val_idx = session_indices[(session_indices >= n_train_end) & (session_indices < n_val_end)]
             test_idx = session_indices[session_indices >= n_val_end]
 
             # Effective threshold: lower for single-config (independent samples)
-            effective_min = min_session_samples if min_session_samples is not None else (
-                200 if single_config else MIN_SESSION_SAMPLES
+            effective_min = (
+                min_session_samples
+                if min_session_samples is not None
+                else (200 if single_config else MIN_SESSION_SAMPLES)
             )
 
             # Need enough data in ALL three splits
             if n_session < effective_min or len(val_idx) < 20 or len(test_idx) < 20:
                 reason = (
-                    f"N={n_session}<{effective_min}" if n_session < effective_min
+                    f"N={n_session}<{effective_min}"
+                    if n_session < effective_min
                     else f"N_val={len(val_idx)},N_test={len(test_idx)}"
                 )
                 logger.info(f"{log_prefix} >> NO_MODEL ({reason} < threshold)")
@@ -369,7 +367,7 @@ def train_per_session_meta_label(
                         X_session.iloc[train_idx],
                         y_all.iloc[train_idx],
                         meta_all["trading_day"].iloc[train_idx],
-                        n_groups=5,      # C(5,2) = 10 splits (feasible for per-session)
+                        n_groups=5,  # C(5,2) = 10 splits (feasible for per-session)
                         k_test=2,
                         max_splits=10,
                     )
@@ -397,7 +395,9 @@ def train_per_session_meta_label(
             val_pnl = pnl_r[val_idx]
             val_min_kept = max(50, int(len(val_idx) * 0.15))
             best_t, best_delta = _optimize_threshold_profit(
-                val_prob_raw, val_pnl, min_kept=val_min_kept,
+                val_prob_raw,
+                val_pnl,
+                min_kept=val_min_kept,
             )
 
             # --- Probability calibration (isotonic regression) ---
@@ -427,15 +427,16 @@ def train_per_session_meta_label(
                 if n_kept_test < 10:
                     # Threshold too aggressive for test set — reject
                     logger.info(
-                        f"{log_prefix} >> NO_MODEL (threshold {best_t:.2f} keeps "
-                        f"only {n_kept_test} test trades)"
+                        f"{log_prefix} >> NO_MODEL (threshold {best_t:.2f} keeps only {n_kept_test} test trades)"
                     )
-                    _store({
-                        "model_type": "NONE",
-                        "reason": f"threshold_too_aggressive_test_n={n_kept_test}",
-                        "test_auc": round(test_auc, 4),
-                        "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
-                    })
+                    _store(
+                        {
+                            "model_type": "NONE",
+                            "reason": f"threshold_too_aggressive_test_n={n_kept_test}",
+                            "test_auc": round(test_auc, 4),
+                            "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
+                        }
+                    )
                     continue
 
                 honest_base_r = float(test_pnl.sum())
@@ -447,58 +448,56 @@ def train_per_session_meta_label(
                 # Gate 1: OOS must be positive (ML must not hurt)
                 if honest_delta_r < 0:
                     logger.info(
-                        f"{log_prefix} >> NO_MODEL (OOS negative: "
-                        f"{honest_delta_r:+.1f}R, TestAUC={test_auc:.3f})"
+                        f"{log_prefix} >> NO_MODEL (OOS negative: {honest_delta_r:+.1f}R, TestAUC={test_auc:.3f})"
                     )
-                    _store({
-                        "model_type": "NONE",
-                        "reason": f"oos_negative_{honest_delta_r:+.1f}R",
-                        "test_auc": round(test_auc, 4),
-                        "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
-                    })
+                    _store(
+                        {
+                            "model_type": "NONE",
+                            "reason": f"oos_negative_{honest_delta_r:+.1f}R",
+                            "test_auc": round(test_auc, 4),
+                            "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
+                        }
+                    )
                     continue
 
                 # Gate 2: CPCV must be >= 0.50 (model must not be worse than random
                 # in cross-validation on training data). Only applies when CPCV ran.
                 if cpcv_auc is not None and cpcv_auc < 0.50:
-                    logger.info(
-                        f"{log_prefix} >> NO_MODEL (CPCV={cpcv_auc:.3f} < 0.50, "
-                        f"below random in CV)"
+                    logger.info(f"{log_prefix} >> NO_MODEL (CPCV={cpcv_auc:.3f} < 0.50, below random in CV)")
+                    _store(
+                        {
+                            "model_type": "NONE",
+                            "reason": f"cpcv_below_random_{cpcv_auc:.3f}",
+                            "test_auc": round(test_auc, 4),
+                            "cpcv_auc": round(cpcv_auc, 4),
+                        }
                     )
-                    _store({
-                        "model_type": "NONE",
-                        "reason": f"cpcv_below_random_{cpcv_auc:.3f}",
-                        "test_auc": round(test_auc, 4),
-                        "cpcv_auc": round(cpcv_auc, 4),
-                    })
                     continue
 
                 # Gate 3: AUC must be clearly above random (0.52 minimum)
                 if test_auc < 0.52:
-                    logger.info(
-                        f"{log_prefix} >> NO_MODEL (AUC={test_auc:.3f} < 0.52, "
-                        f"near-random discrimination)"
+                    logger.info(f"{log_prefix} >> NO_MODEL (AUC={test_auc:.3f} < 0.52, near-random discrimination)")
+                    _store(
+                        {
+                            "model_type": "NONE",
+                            "reason": f"auc_too_low_{test_auc:.3f}",
+                            "test_auc": round(test_auc, 4),
+                            "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
+                        }
                     )
-                    _store({
-                        "model_type": "NONE",
-                        "reason": f"auc_too_low_{test_auc:.3f}",
-                        "test_auc": round(test_auc, 4),
-                        "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
-                    })
                     continue
 
                 # Gate 4: Skip rate must be < 85% (avoid "just don't trade" models)
                 if skip_pct > 0.85:
-                    logger.info(
-                        f"{log_prefix} >> NO_MODEL (skip={skip_pct:.0%} > 85%, "
-                        f"avoidance not discrimination)"
+                    logger.info(f"{log_prefix} >> NO_MODEL (skip={skip_pct:.0%} > 85%, avoidance not discrimination)")
+                    _store(
+                        {
+                            "model_type": "NONE",
+                            "reason": f"skip_too_high_{skip_pct:.0%}",
+                            "test_auc": round(test_auc, 4),
+                            "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
+                        }
                     )
-                    _store({
-                        "model_type": "NONE",
-                        "reason": f"skip_too_high_{skip_pct:.0%}",
-                        "test_auc": round(test_auc, 4),
-                        "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
-                    })
                     continue
 
                 cpcv_str = f"{cpcv_auc:.3f}" if cpcv_auc else "  --"
@@ -508,37 +507,38 @@ def train_per_session_meta_label(
                     f"ValDelta={best_delta:+.1f} HonestDelta={honest_delta_r:+.1f} "
                     f"Skip={skip_pct:.0%} leaf={leaf_size}"
                 )
-                _store({
-                    "model_type": "SESSION",
-                    "model": rf,
-                    "calibrator": calibrator,
-                    "feature_names": feature_names,
-                    "threshold": best_t,
-                    "training_aperture": training_aperture,
-                    "training_rr": training_rr,
-                    "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
-                    "test_auc": round(test_auc, 4),
-                    "n_train": len(train_idx),
-                    "n_val": len(val_idx),
-                    "n_test": len(test_idx),
-                    "val_delta_r": round(best_delta, 2),
-                    "honest_delta_r": round(honest_delta_r, 2),
-                    "honest_base_r": round(honest_base_r, 2),
-                    "skip_pct": round(skip_pct, 3),
-                    "leaf_size": leaf_size,
-                    "top_features": top_feats,
-                })
-            else:
-                logger.info(
-                    f"{log_prefix} >> NO_MODEL (no threshold beats baseline, "
-                    f"TestAUC={test_auc:.3f})"
+                _store(
+                    {
+                        "model_type": "SESSION",
+                        "model": rf,
+                        "calibrator": calibrator,
+                        "feature_names": feature_names,
+                        "threshold": best_t,
+                        "training_aperture": training_aperture,
+                        "training_rr": training_rr,
+                        "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
+                        "test_auc": round(test_auc, 4),
+                        "n_train": len(train_idx),
+                        "n_val": len(val_idx),
+                        "n_test": len(test_idx),
+                        "val_delta_r": round(best_delta, 2),
+                        "honest_delta_r": round(honest_delta_r, 2),
+                        "honest_base_r": round(honest_base_r, 2),
+                        "skip_pct": round(skip_pct, 3),
+                        "leaf_size": leaf_size,
+                        "top_features": top_feats,
+                    }
                 )
-                _store({
-                    "model_type": "NONE",
-                    "reason": "no_positive_threshold",
-                    "test_auc": round(test_auc, 4),
-                    "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
-                })
+            else:
+                logger.info(f"{log_prefix} >> NO_MODEL (no threshold beats baseline, TestAUC={test_auc:.3f})")
+                _store(
+                    {
+                        "model_type": "NONE",
+                        "reason": "no_positive_threshold",
+                        "test_auc": round(test_auc, 4),
+                        "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
+                    }
+                )
 
     # --- Summary ---
     # Flatten results for counting (per-aperture has nested dicts)
@@ -553,14 +553,8 @@ def train_per_session_meta_label(
     all_results = list(_iter_results())
     n_ml = sum(1 for _, _, r in all_results if r["model_type"] == "SESSION")
     n_none = sum(1 for _, _, r in all_results if r["model_type"] == "NONE")
-    total_val_delta = sum(
-        r.get("val_delta_r", 0) for _, _, r in all_results
-        if r["model_type"] == "SESSION"
-    )
-    total_honest_delta = sum(
-        r.get("honest_delta_r", 0) for _, _, r in all_results
-        if r["model_type"] == "SESSION"
-    )
+    total_val_delta = sum(r.get("val_delta_r", 0) for _, _, r in all_results if r["model_type"] == "SESSION")
+    total_honest_delta = sum(r.get("honest_delta_r", 0) for _, _, r in all_results if r["model_type"] == "SESSION")
 
     unit_label = "models" if per_aperture else "ML sessions"
     logger.info(
@@ -630,9 +624,7 @@ def train_per_session_meta_label(
         for session, val in session_results.items():
             if per_aperture:
                 # Nested: sessions[session][aperture_key] = {...}
-                bundle["sessions"][session] = {
-                    ak: _to_bundle_entry(info) for ak, info in val.items()
-                }
+                bundle["sessions"][session] = {ak: _to_bundle_entry(info) for ak, info in val.items()}
             else:
                 # Flat: sessions[session] = {...}
                 bundle["sessions"][session] = _to_bundle_entry(val)
@@ -658,9 +650,9 @@ def train_per_session_meta_label(
                             old_rank = old_names.index(name)
                             shift = abs(i - old_rank)
                             if shift > 3:
-                                drifted.append(f"{name} #{old_rank+1}->{i+1}")
+                                drifted.append(f"{name} #{old_rank + 1}->{i + 1}")
                         else:
-                            drifted.append(f"{name} NEW(#{i+1})")
+                            drifted.append(f"{name} NEW(#{i + 1})")
                     if drifted:
                         logger.warning(f"  {label} FEATURE DRIFT: {', '.join(drifted)}")
                     else:
@@ -700,9 +692,7 @@ def train_per_session_meta_label(
     return_sessions: dict = {}
     for session, val in session_results.items():
         if per_aperture:
-            return_sessions[session] = {
-                ak: _to_return_entry(info) for ak, info in val.items()
-            }
+            return_sessions[session] = {ak: _to_return_entry(info) for ak, info in val.items()}
         else:
             return_sessions[session] = _to_return_entry(val)
 
@@ -736,8 +726,7 @@ def print_per_session_results(results: dict) -> None:
     print(f"{'=' * 70}")
     print(f"  Samples: {results['n_samples']:,d}")
     unit = "models" if is_per_aperture else "ML sessions"
-    print(f"  {unit}: {results['n_ml_sessions']} | "
-          f"NO_MODEL: {results['n_none_sessions']}")
+    print(f"  {unit}: {results['n_ml_sessions']} | NO_MODEL: {results['n_none_sessions']}")
     print(f"  Val delta (optimized):  {results['total_val_delta_r']:+.1f}R")
     print(f"  Honest delta (frozen):  {results['total_honest_delta_r']:+.1f}R")
     print()
@@ -752,13 +741,12 @@ def print_per_session_results(results: dict) -> None:
                 f"{info['skip_pct']:>5.1%}"
             )
         else:
-            print(f"  {label:<26} {'NONE':>5} {'--':>6} "
-                  f"{'--':>6} {'--':>6} {'--':>7} {'--':>7} {'--':>6}")
+            print(f"  {label:<26} {'NONE':>5} {'--':>6} {'--':>6} {'--':>6} {'--':>7} {'--':>7} {'--':>6}")
 
-    print(f"  {'SESSION':<26} {'TYPE':>5} {'THRESH':>6} "
-          f"{'CPCV':>6} {'T_AUC':>6} {'VAL_dR':>7} {'OOS_dR':>7} {'SKIP%':>6}")
-    print(f"  {'-' * 26} {'-' * 5} {'-' * 6} "
-          f"{'-' * 6} {'-' * 6} {'-' * 7} {'-' * 7} {'-' * 6}")
+    print(
+        f"  {'SESSION':<26} {'TYPE':>5} {'THRESH':>6} {'CPCV':>6} {'T_AUC':>6} {'VAL_dR':>7} {'OOS_dR':>7} {'SKIP%':>6}"
+    )
+    print(f"  {'-' * 26} {'-' * 5} {'-' * 6} {'-' * 6} {'-' * 6} {'-' * 7} {'-' * 7} {'-' * 6}")
 
     all_sessions = list(SESSION_CHRONOLOGICAL_ORDER) + sorted(
         s for s in results["sessions"] if s not in SESSION_CHRONOLOGICAL_ORDER
@@ -832,10 +820,7 @@ def train_meta_label(
     pnl_test = meta["pnl_r"].iloc[n_val_end:].values
     meta_test = meta.iloc[n_val_end:].copy()
 
-    logger.info(
-        f"Split: train={n_train_end:,d} / val={n_val_end - n_train_end:,d} / "
-        f"test={n_total - n_val_end:,d}"
-    )
+    logger.info(f"Split: train={n_train_end:,d} / val={n_val_end - n_train_end:,d} / test={n_total - n_val_end:,d}")
 
     # --- CPCV Validation (on training data only) ---
     cpcv_results = None
@@ -844,16 +829,21 @@ def train_meta_label(
         cpcv_results = cpcv_score(
             RandomForestClassifier,
             RF_PARAMS,
-            X_train, y_train,
+            X_train,
+            y_train,
             meta["trading_day"].iloc[:n_train_end],
             max_splits=max_cpcv_splits,
         )
-        logger.info(f"CPCV AUC: {cpcv_results['auc_mean']:.4f} +/- {cpcv_results['auc_std']:.4f} "
-                     f"({cpcv_results['n_splits']} splits)")
+        logger.info(
+            f"CPCV AUC: {cpcv_results['auc_mean']:.4f} +/- {cpcv_results['auc_std']:.4f} "
+            f"({cpcv_results['n_splits']} splits)"
+        )
 
         if cpcv_results["auc_mean"] < 0.505:
-            logger.warning(f"CPCV AUC {cpcv_results['auc_mean']:.4f} is barely above random. "
-                          f"Meta-label may not add value for {instrument}.")
+            logger.warning(
+                f"CPCV AUC {cpcv_results['auc_mean']:.4f} is barely above random. "
+                f"Meta-label may not add value for {instrument}."
+            )
 
     # --- Train final model on training data (first 60%) ---
     logger.info(f"Training final model: {n_train_end:,d} train")
@@ -869,8 +859,10 @@ def train_meta_label(
     opt = threshold_results["optimal"]
     base = threshold_results["baseline"]
     logger.info(f"Val baseline: avgR={base['avg_r']:.4f} | Sharpe={base['sharpe']:.3f} | N={base['n']:,d}")
-    logger.info(f"Val optimal:  t={opt['threshold']:.2f} | avgR={opt['avg_r']:.4f} | "
-                f"Sharpe={opt['sharpe']:.3f} | skip={opt['skip_pct']:.1%} | N={opt['n_kept']:,d}")
+    logger.info(
+        f"Val optimal:  t={opt['threshold']:.2f} | avgR={opt['avg_r']:.4f} | "
+        f"Sharpe={opt['sharpe']:.3f} | skip={opt['skip_pct']:.1%} | N={opt['n_kept']:,d}"
+    )
 
     # --- Honest OOS evaluation on TEST set (final 20%) ---
     test_prob = rf.predict_proba(X_test)[:, 1]
@@ -883,8 +875,10 @@ def train_meta_label(
     test_delta_r = test_filt_r - test_base_r
     test_skip_pct = 1 - test_kept.sum() / len(pnl_test) if len(pnl_test) > 0 else 0.0
 
-    logger.info(f"Honest OOS: AUC={test_auc:.4f} | BaseR={test_base_r:+.1f} | "
-                f"Delta={test_delta_r:+.1f} | Skip={test_skip_pct:.1%}")
+    logger.info(
+        f"Honest OOS: AUC={test_auc:.4f} | BaseR={test_base_r:+.1f} | "
+        f"Delta={test_delta_r:+.1f} | Skip={test_skip_pct:.1%}"
+    )
 
     # --- Save model ---
     model_path = None
@@ -893,25 +887,28 @@ def train_meta_label(
         model_path = MODEL_DIR / f"meta_label_{instrument}.joblib"
         config_hash = compute_config_hash()
 
-        joblib.dump({
-            "model": rf,
-            "feature_names": list(X.columns),
-            "instrument": instrument,
-            "n_train": n_train_end,
-            "split_ratios": "60/20/20",
-            "oos_auc": test_auc,
-            "optimal_threshold": opt["threshold"],
-            "cpcv_auc": cpcv_results["auc_mean"] if cpcv_results else None,
-            "honest_delta_r": round(test_delta_r, 2),
-            "trained_at": datetime.now(timezone.utc).isoformat(),
-            "data_date_range": (
-                str(meta["trading_day"].min()),
-                str(meta["trading_day"].max()),
-            ),
-            "config_hash": config_hash,
-            "validated_only": validated_only,
-            "n_total_samples": n_total,
-        }, model_path)
+        joblib.dump(
+            {
+                "model": rf,
+                "feature_names": list(X.columns),
+                "instrument": instrument,
+                "n_train": n_train_end,
+                "split_ratios": "60/20/20",
+                "oos_auc": test_auc,
+                "optimal_threshold": opt["threshold"],
+                "cpcv_auc": cpcv_results["auc_mean"] if cpcv_results else None,
+                "honest_delta_r": round(test_delta_r, 2),
+                "trained_at": datetime.now(timezone.utc).isoformat(),
+                "data_date_range": (
+                    str(meta["trading_day"].min()),
+                    str(meta["trading_day"].max()),
+                ),
+                "config_hash": config_hash,
+                "validated_only": validated_only,
+                "n_total_samples": n_total,
+            },
+            model_path,
+        )
         logger.info(f"Model saved: {model_path}")
 
     # --- Per-session breakdown (on honest test set) ---
@@ -934,15 +931,17 @@ def train_meta_label(
 
         base_avg = s_pnl.mean()
         filt_avg = s_pnl[kept].mean()
-        session_breakdown.append({
-            "session": session,
-            "n_total": smask.sum(),
-            "n_kept": kept.sum(),
-            "skip_pct": round(1 - kept.sum() / smask.sum(), 3),
-            "base_avgR": round(base_avg, 4),
-            "filt_avgR": round(filt_avg, 4),
-            "lift": round(filt_avg - base_avg, 4),
-        })
+        session_breakdown.append(
+            {
+                "session": session,
+                "n_total": smask.sum(),
+                "n_kept": kept.sum(),
+                "skip_pct": round(1 - kept.sum() / smask.sum(), 3),
+                "base_avgR": round(base_avg, 4),
+                "filt_avgR": round(filt_avg, 4),
+                "lift": round(filt_avg - base_avg, 4),
+            }
+        )
 
     return {
         "status": "trained",
@@ -998,9 +997,11 @@ def print_results(results: dict) -> None:
         print(f"  {'SESSION':<20} {'N':>6} {'KEPT':>6} {'SKIP%':>7} {'BASE':>8} {'FILT':>8} {'LIFT':>8}")
         print(f"  {'-' * 20} {'-' * 6} {'-' * 6} {'-' * 7} {'-' * 8} {'-' * 8} {'-' * 8}")
         for s in sorted(results["session_breakdown"], key=lambda x: -x["lift"]):
-            print(f"  {s['session']:<20} {s['n_total']:>6d} {s['n_kept']:>6d} "
-                  f"{s['skip_pct']:>6.1%} {s['base_avgR']:>+8.4f} {s['filt_avgR']:>+8.4f} "
-                  f"{s['lift']:>+8.4f}")
+            print(
+                f"  {s['session']:<20} {s['n_total']:>6d} {s['n_kept']:>6d} "
+                f"{s['skip_pct']:>6.1%} {s['base_avgR']:>+8.4f} {s['filt_avgR']:>+8.4f} "
+                f"{s['lift']:>+8.4f}"
+            )
 
     print(f"{'=' * 70}\n")
 
@@ -1010,29 +1011,45 @@ def main():
     parser.add_argument("--instrument", type=str, help="Single instrument")
     parser.add_argument("--all", action="store_true", help="All active instruments")
     parser.add_argument("--no-cpcv", action="store_true", help="Skip CPCV (faster)")
-    parser.add_argument("--max-cpcv-splits", type=int, default=20,
-                        help="Max CPCV splits (default 20 of 45)")
+    parser.add_argument("--max-cpcv-splits", type=int, default=20, help="Max CPCV splits (default 20 of 45)")
     parser.add_argument("--db-path", type=str, default=str(GOLD_DB_PATH))
-    parser.add_argument("--validated-only", action="store_true",
-                        help="Train only on validated strategy outcomes (recommended)")
-    parser.add_argument("--per-session", action="store_true",
-                        help="Train hybrid per-session models (recommended, implies --validated-only)")
-    parser.add_argument("--single-config", action="store_true",
-                        help="Single config per session: 1 row per (day, session), clean labels")
-    parser.add_argument("--rr-target", type=float, default=None,
-                        help="Lock to a specific RR target (e.g. 2.0). Default: best per session")
-    parser.add_argument("--sweep-rr", action="store_true",
-                        help="Sweep all validated RR targets and compare honest OOS")
-    parser.add_argument("--config-selection", type=str, default="max_samples",
-                        choices=["max_samples", "best_sharpe"],
-                        help="How to pick one config per session: max_samples (most data, "
-                             "recommended) or best_sharpe (highest Sharpe, fewest samples)")
-    parser.add_argument("--skip-filter", action="store_true",
-                        help="Skip filter eligibility — ML trains on ALL break days and "
-                             "learns to discriminate via features (orb_size, atr, etc.)")
-    parser.add_argument("--per-aperture", action="store_true",
-                        help="Train separate model per (session, aperture). Fixes aperture "
-                             "covariate shift. Requires --single-config.")
+    parser.add_argument(
+        "--validated-only", action="store_true", help="Train only on validated strategy outcomes (recommended)"
+    )
+    parser.add_argument(
+        "--per-session",
+        action="store_true",
+        help="Train hybrid per-session models (recommended, implies --validated-only)",
+    )
+    parser.add_argument(
+        "--single-config", action="store_true", help="Single config per session: 1 row per (day, session), clean labels"
+    )
+    parser.add_argument(
+        "--rr-target",
+        type=float,
+        default=None,
+        help="Lock to a specific RR target (e.g. 2.0). Default: best per session",
+    )
+    parser.add_argument("--sweep-rr", action="store_true", help="Sweep all validated RR targets and compare honest OOS")
+    parser.add_argument(
+        "--config-selection",
+        type=str,
+        default="max_samples",
+        choices=["max_samples", "best_sharpe"],
+        help="How to pick one config per session: max_samples (most data, "
+        "recommended) or best_sharpe (highest Sharpe, fewest samples)",
+    )
+    parser.add_argument(
+        "--skip-filter",
+        action="store_true",
+        help="Skip filter eligibility — ML trains on ALL break days and "
+        "learns to discriminate via features (orb_size, atr, etc.)",
+    )
+    parser.add_argument(
+        "--per-aperture",
+        action="store_true",
+        help="Train separate model per (session, aperture). Fixes aperture covariate shift. Requires --single-config.",
+    )
     args = parser.parse_args()
 
     if args.per_aperture and not args.single_config:
@@ -1045,13 +1062,18 @@ def main():
             # Sweep all validated RR targets for this instrument
             import duckdb as _ddb
             from pipeline.db_config import configure_connection as _cc
+
             _con = _ddb.connect(args.db_path, read_only=True)
             _cc(_con)
-            rr_vals = _con.execute(
-                "SELECT DISTINCT rr_target FROM validated_setups "
-                "WHERE instrument = ? AND status = 'active' ORDER BY rr_target",
-                [inst],
-            ).fetchdf()["rr_target"].tolist()
+            rr_vals = (
+                _con.execute(
+                    "SELECT DISTINCT rr_target FROM validated_setups "
+                    "WHERE instrument = ? AND status = 'active' ORDER BY rr_target",
+                    [inst],
+                )
+                .fetchdf()["rr_target"]
+                .tolist()
+            )
             _con.close()
 
             sweep_results = {}
@@ -1061,8 +1083,10 @@ def main():
                 logger.info(f"{'#' * 60}")
                 try:
                     results = train_per_session_meta_label(
-                        inst, args.db_path,
-                        single_config=True, rr_target=rr,
+                        inst,
+                        args.db_path,
+                        single_config=True,
+                        rr_target=rr,
                         save_model=False,  # Don't save during sweep
                         run_cpcv=not args.no_cpcv,
                         config_selection=args.config_selection,
@@ -1084,19 +1108,21 @@ def main():
             for rr in sorted(sweep_results.keys()):
                 r = sweep_results[rr]
                 if r.get("status") == "trained":
-                    print(f"  {rr:>4.1f} {r['n_samples']:>7,d} "
-                          f"{r['n_ml_sessions']:>8d} "
-                          f"{r['total_val_delta_r']:>+8.1f} "
-                          f"{r['total_honest_delta_r']:>+8.1f} "
-                          f"{'OK':>8}")
+                    print(
+                        f"  {rr:>4.1f} {r['n_samples']:>7,d} "
+                        f"{r['n_ml_sessions']:>8d} "
+                        f"{r['total_val_delta_r']:>+8.1f} "
+                        f"{r['total_honest_delta_r']:>+8.1f} "
+                        f"{'OK':>8}"
+                    )
                 else:
-                    print(f"  {rr:>4.1f} {'--':>7} {'--':>8} {'--':>8} {'--':>8} "
-                          f"{'SKIP':>8}")
+                    print(f"  {rr:>4.1f} {'--':>7} {'--':>8} {'--':>8} {'--':>8} {'SKIP':>8}")
             print(f"{'=' * 70}\n")
 
         elif args.per_session or args.single_config:
             results = train_per_session_meta_label(
-                inst, args.db_path,
+                inst,
+                args.db_path,
                 single_config=args.single_config,
                 rr_target=args.rr_target,
                 run_cpcv=not args.no_cpcv,
@@ -1107,7 +1133,8 @@ def main():
             print_per_session_results(results)
         else:
             results = train_meta_label(
-                inst, args.db_path,
+                inst,
+                args.db_path,
                 run_cpcv=not args.no_cpcv,
                 max_cpcv_splits=args.max_cpcv_splits,
                 validated_only=args.validated_only,

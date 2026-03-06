@@ -32,6 +32,7 @@ from datetime import datetime
 from pipeline.asset_configs import list_instruments
 
 from pipeline.log import get_logger
+
 logger = get_logger(__name__)
 
 # Project root for resolving script paths
@@ -40,6 +41,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 # =============================================================================
 # PIPELINE STEP DEFINITIONS
 # =============================================================================
+
 
 def step_ingest(instrument: str, args) -> int:
     """Step 1: Ingest DBN -> bars_1m. Delegates to pipeline/ingest_dbn.py."""
@@ -69,6 +71,7 @@ def step_ingest(instrument: str, args) -> int:
     result = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
     return result.returncode
 
+
 def step_build_5m(instrument: str, args) -> int:
     """Step 2: Rebuild bars_5m from bars_1m. Delegates to pipeline/build_bars_5m.py."""
     if not args.start or not args.end:
@@ -91,6 +94,7 @@ def step_build_5m(instrument: str, args) -> int:
     result = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
     return result.returncode
 
+
 def step_build_features(instrument: str, args) -> int:
     """Step 3: Rebuild daily_features from bars_1m/bars_5m."""
     if not args.start or not args.end:
@@ -109,13 +113,14 @@ def step_build_features(instrument: str, args) -> int:
         cmd.append("--dry-run")
 
     # Pass orb_minutes if available
-    orb_minutes = getattr(args, 'orb_minutes', 5)
+    orb_minutes = getattr(args, "orb_minutes", 5)
     cmd.append(f"--orb-minutes={orb_minutes}")
 
     logger.info(f"  Command: {' '.join(cmd)}")
 
     result = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
     return result.returncode
+
 
 def step_audit(instrument: str, args) -> int:
     """Step 4: Run database integrity check."""
@@ -128,6 +133,7 @@ def step_audit(instrument: str, args) -> int:
 
     result = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
     return result.returncode
+
 
 # =============================================================================
 # PIPELINE STEPS REGISTRY (ordered)
@@ -144,13 +150,11 @@ PIPELINE_STEPS = [
 # MAIN
 # =============================================================================
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Pipeline runner: ingest -> build_5m -> build_features -> audit"
-    )
+    parser = argparse.ArgumentParser(description="Pipeline runner: ingest -> build_5m -> build_features -> audit")
     parser.add_argument(
-        "--instrument", type=str, required=True,
-        help=f"Instrument to process ({', '.join(list_instruments())})"
+        "--instrument", type=str, required=True, help=f"Instrument to process ({', '.join(list_instruments())})"
     )
     parser.add_argument("--start", type=str, help="Start date YYYY-MM-DD")
     parser.add_argument("--end", type=str, help="End date YYYY-MM-DD")
@@ -159,8 +163,9 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Show planned steps without executing")
     parser.add_argument("--chunk-days", type=int, default=7, help="Trading days per ingest commit")
     parser.add_argument("--batch-size", type=int, default=50000, help="Rows per DBN read batch")
-    parser.add_argument("--orb-minutes", type=int, default=5, choices=[5, 15, 30],
-                        help="ORB duration in minutes (default: 5)")
+    parser.add_argument(
+        "--orb-minutes", type=int, default=5, choices=[5, 15, 30], help="ORB duration in minutes (default: 5)"
+    )
     args = parser.parse_args()
 
     instrument = args.instrument.upper()
@@ -188,6 +193,7 @@ def main():
         # Still validate that the instrument config is loadable
         logger.info("Validating instrument config...")
         from pipeline.asset_configs import get_asset_config
+
         config = get_asset_config(instrument)
         logger.info(f"  Config loaded for {instrument} [OK]")
         logger.info(f"  DBN: {config['dbn_path']}")
@@ -210,13 +216,15 @@ def main():
         returncode = step_func(instrument, args)
         step_elapsed = datetime.now() - step_start
 
-        results.append({
-            'step': i,
-            'name': name,
-            'desc': desc,
-            'returncode': returncode,
-            'elapsed': step_elapsed,
-        })
+        results.append(
+            {
+                "step": i,
+                "name": name,
+                "desc": desc,
+                "returncode": returncode,
+                "elapsed": step_elapsed,
+            }
+        )
 
         if returncode != 0:
             logger.error(f"FATAL: Step {i} ({name}) failed with exit code {returncode}")
@@ -233,12 +241,12 @@ def main():
     logger.info("=" * 70)
 
     total_elapsed = datetime.now() - start_time
-    all_passed = all(r['returncode'] == 0 for r in results)
+    all_passed = all(r["returncode"] == 0 for r in results)
     steps_run = len(results)
     steps_total = len(PIPELINE_STEPS)
 
     for r in results:
-        status = "PASSED" if r['returncode'] == 0 else f"FAILED (exit {r['returncode']})"
+        status = "PASSED" if r["returncode"] == 0 else f"FAILED (exit {r['returncode']})"
         logger.info(f"  Step {r['step']}: {r['name']} - {status} ({r['elapsed']})")
 
     if steps_run < steps_total:
@@ -255,6 +263,7 @@ def main():
     else:
         logger.info("FAILED: Pipeline did not complete. See step failures above.")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

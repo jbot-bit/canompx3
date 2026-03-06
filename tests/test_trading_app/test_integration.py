@@ -21,6 +21,7 @@ from trading_app.outcome_builder import build_outcomes
 from trading_app.strategy_discovery import run_discovery
 from trading_app.strategy_validator import run_validation
 
+
 def _create_test_db(tmp_path, n_days=20, start_year=2024):
     """
     Create a temp DB with synthetic bars_1m + daily_features for n_days.
@@ -48,10 +49,9 @@ def _create_test_db(tmp_path, n_days=20, start_year=2024):
             trading_day += timedelta(days=1)
             continue
 
-        td_start = datetime(
-            trading_day.year, trading_day.month, trading_day.day,
-            tzinfo=timezone.utc
-        ) - timedelta(hours=1)  # 23:00 UTC prev day
+        td_start = datetime(trading_day.year, trading_day.month, trading_day.day, tzinfo=timezone.utc) - timedelta(
+            hours=1
+        )  # 23:00 UTC prev day
         td_end = td_start + timedelta(hours=24)
 
         base_price = 2700.0 + days_created * 0.5
@@ -62,10 +62,18 @@ def _create_test_db(tmp_path, n_days=20, start_year=2024):
             h = o + 1.5
             l = o - 0.5
             c = o + 1.0
-            bars.append((
-                ts.isoformat(), "MGC", "GCG4",
-                round(o, 2), round(h, 2), round(l, 2), round(c, 2), 100,
-            ))
+            bars.append(
+                (
+                    ts.isoformat(),
+                    "MGC",
+                    "GCG4",
+                    round(o, 2),
+                    round(h, 2),
+                    round(l, 2),
+                    round(c, 2),
+                    100,
+                )
+            )
 
         con.executemany(
             """INSERT OR REPLACE INTO bars_1m
@@ -85,9 +93,15 @@ def _create_test_db(tmp_path, n_days=20, start_year=2024):
                 orb_CME_REOPEN_break_dir, orb_CME_REOPEN_break_ts)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::TIMESTAMPTZ)""",
             [
-                trading_day, "MGC", 5, 200,
-                orb_high, orb_low, round(orb_high - orb_low, 2),
-                "long", break_ts,
+                trading_day,
+                "MGC",
+                5,
+                200,
+                orb_high,
+                orb_low,
+                round(orb_high - orb_low, 2),
+                "long",
+                break_ts,
             ],
         )
 
@@ -98,9 +112,11 @@ def _create_test_db(tmp_path, n_days=20, start_year=2024):
     con.close()
     return db_path
 
+
 # =============================================================================
 # Shared class-scoped fixtures (run pipeline ONCE per class)
 # =============================================================================
+
 
 @pytest.fixture(scope="class")
 def pipeline_20day(tmp_path_factory):
@@ -109,21 +125,29 @@ def pipeline_20day(tmp_path_factory):
     db_path = _create_test_db(tmp_dir, n_days=20)
 
     outcome_count = build_outcomes(
-        db_path=db_path, instrument="MGC",
-        start_date=date(2024, 1, 1), end_date=date(2024, 12, 31),
+        db_path=db_path,
+        instrument="MGC",
+        start_date=date(2024, 1, 1),
+        end_date=date(2024, 12, 31),
     )
     strategy_count = run_discovery(
-        db_path=db_path, instrument="MGC",
-        start_date=date(2024, 1, 1), end_date=date(2024, 12, 31),
+        db_path=db_path,
+        instrument="MGC",
+        start_date=date(2024, 1, 1),
+        end_date=date(2024, 12, 31),
     )
     passed, rejected = run_validation(
-        db_path=db_path, instrument="MGC", min_sample=5,
+        db_path=db_path,
+        instrument="MGC",
+        min_sample=5,
     )
     return db_path, outcome_count, strategy_count, passed, rejected
+
 
 # =============================================================================
 # TestPipelineFull: 5 tests share 1 pipeline run (was 3 separate runs)
 # =============================================================================
+
 
 class TestPipelineFull:
     """Tests sharing the 20-day pipeline fixture."""
@@ -177,9 +201,7 @@ class TestPipelineFull:
         db_path, _, _, _, _ = pipeline_20day
 
         con = duckdb.connect(str(db_path), read_only=True)
-        rows = con.execute(
-            "SELECT yearly_results FROM experimental_strategies LIMIT 10"
-        ).fetchall()
+        rows = con.execute("SELECT yearly_results FROM experimental_strategies LIMIT 10").fetchall()
         con.close()
 
         for (yearly_json,) in rows:
@@ -190,9 +212,11 @@ class TestPipelineFull:
                 assert "wins" in year_data
                 assert "total_r" in year_data
 
+
 # =============================================================================
 # TestIdempotent: must run pipeline twice, needs own DB
 # =============================================================================
+
 
 class TestIdempotent:
     def test_idempotent_rerun(self, tmp_path):
@@ -217,9 +241,11 @@ class TestIdempotent:
         assert outcomes1 == outcomes2
         assert strats1 == strats2
 
+
 # =============================================================================
 # TestRejection: needs high min_sample on small data
 # =============================================================================
+
 
 class TestRejection:
     def test_rejected_not_in_validated(self, tmp_path):
@@ -228,7 +254,9 @@ class TestRejection:
         build_outcomes(db_path=db_path, instrument="MGC")
         run_discovery(db_path=db_path, instrument="MGC")
         passed, rejected = run_validation(
-            db_path=db_path, instrument="MGC", min_sample=100,
+            db_path=db_path,
+            instrument="MGC",
+            min_sample=100,
         )
 
         con = duckdb.connect(str(db_path), read_only=True)

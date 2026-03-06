@@ -4,13 +4,18 @@ Brisbane (UTC+10) has NO daylight saving, but US markets do.
 These tests verify that trading day boundaries and UTC conversions
 are correct across US DST transitions.
 """
+
 import pytest
 from datetime import datetime, date, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from pipeline.dst import (
-    cme_open_brisbane, us_equity_open_brisbane, us_data_open_brisbane,
-    london_open_brisbane, us_post_equity_brisbane, cme_close_brisbane,
+    cme_open_brisbane,
+    us_equity_open_brisbane,
+    us_data_open_brisbane,
+    london_open_brisbane,
+    us_post_equity_brisbane,
+    cme_close_brisbane,
 )
 from pipeline.build_daily_features import compute_trading_day_utc_range
 
@@ -89,20 +94,16 @@ class TestUTCConversionConsistency:
         for td in [date(2025, 1, 15), date(2025, 6, 15), date(2025, 3, 9), date(2025, 11, 2)]:
             # Formula: previous day 23:00 UTC
             prev_day = td - timedelta(days=1)
-            formula_start = datetime(prev_day.year, prev_day.month, prev_day.day,
-                                     23, 0, tzinfo=UTC)
+            formula_start = datetime(prev_day.year, prev_day.month, prev_day.day, 23, 0, tzinfo=UTC)
             # Proper: 09:00 Brisbane on trading day
-            proper_start = datetime(td.year, td.month, td.day, 9, 0,
-                                    tzinfo=BRISBANE).astimezone(UTC)
+            proper_start = datetime(td.year, td.month, td.day, 9, 0, tzinfo=BRISBANE).astimezone(UTC)
             assert formula_start == proper_start, f"Mismatch on {td}"
 
     def test_year_boundary(self):
         td = date(2025, 1, 1)
         prev_day = td - timedelta(days=1)
-        formula_start = datetime(prev_day.year, prev_day.month, prev_day.day,
-                                 23, 0, tzinfo=UTC)
-        proper_start = datetime(td.year, td.month, td.day, 9, 0,
-                                tzinfo=BRISBANE).astimezone(UTC)
+        formula_start = datetime(prev_day.year, prev_day.month, prev_day.day, 23, 0, tzinfo=UTC)
+        proper_start = datetime(td.year, td.month, td.day, 9, 0, tzinfo=BRISBANE).astimezone(UTC)
         assert formula_start == proper_start
         assert formula_start.year == 2024
         assert formula_start.month == 12
@@ -125,10 +126,10 @@ ALL_RESOLVERS = {
 # UK fall back:      Sun Oct 26 → Mon Oct 27
 # US fall back:      Sun Nov 2  → Mon Nov 3
 TRANSITION_MONDAYS = [
-    date(2025, 3, 10),   # US spring forward
-    date(2025, 3, 31),   # UK spring forward
+    date(2025, 3, 10),  # US spring forward
+    date(2025, 3, 31),  # UK spring forward
     date(2025, 10, 27),  # UK fall back
-    date(2025, 11, 3),   # US fall back
+    date(2025, 11, 3),  # US fall back
 ]
 
 
@@ -139,8 +140,7 @@ class TestResolverOutputOnTransitionDays:
     day boundaries but never verified resolver output values near transitions.
     """
 
-    @pytest.mark.parametrize("td", TRANSITION_MONDAYS,
-                             ids=["US_spring", "UK_spring", "UK_fall", "US_fall"])
+    @pytest.mark.parametrize("td", TRANSITION_MONDAYS, ids=["US_spring", "UK_spring", "UK_fall", "US_fall"])
     @pytest.mark.parametrize("name", ALL_RESOLVERS.keys())
     def test_resolver_within_trading_day(self, name, td):
         """Every resolver output must fall within the trading day UTC window."""
@@ -152,8 +152,7 @@ class TestResolverOutputOnTransitionDays:
             cal_date = td + timedelta(days=1)
         else:
             cal_date = td
-        local_dt = datetime(cal_date.year, cal_date.month, cal_date.day,
-                            hour, minute, tzinfo=BRISBANE)
+        local_dt = datetime(cal_date.year, cal_date.month, cal_date.day, hour, minute, tzinfo=BRISBANE)
         utc_dt = local_dt.astimezone(UTC)
 
         td_start, td_end = compute_trading_day_utc_range(td)
@@ -162,8 +161,7 @@ class TestResolverOutputOnTransitionDays:
             f"{utc_dt} UTC, outside [{td_start}, {td_end})"
         )
 
-    @pytest.mark.parametrize("td", TRANSITION_MONDAYS,
-                             ids=["US_spring", "UK_spring", "UK_fall", "US_fall"])
+    @pytest.mark.parametrize("td", TRANSITION_MONDAYS, ids=["US_spring", "UK_spring", "UK_fall", "US_fall"])
     def test_resolver_returns_valid_time(self, td):
         """All resolvers return (hour, minute) with valid ranges."""
         for name, resolver in ALL_RESOLVERS.items():

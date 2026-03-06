@@ -32,6 +32,7 @@ ORB_COLUMN_DEFS = [
     ("double_break", "BOOLEAN"),
 ]
 
+
 def migrate(db_path: Path, dry_run: bool = False) -> int:
     """Add missing ORB columns to daily_features.
 
@@ -44,8 +45,7 @@ def migrate(db_path: Path, dry_run: bool = False) -> int:
         existing = set(
             row[0]
             for row in con.execute(
-                "SELECT column_name FROM information_schema.columns "
-                "WHERE table_name = 'daily_features'"
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'daily_features'"
             ).fetchall()
         )
 
@@ -68,9 +68,7 @@ def migrate(db_path: Path, dry_run: bool = False) -> int:
                 if dry_run:
                     print(f"    Would add: {col_name} {dtype}")
                 else:
-                    con.execute(
-                        f"ALTER TABLE daily_features ADD COLUMN {col_name} {dtype}"
-                    )
+                    con.execute(f"ALTER TABLE daily_features ADD COLUMN {col_name} {dtype}")
                     print(f"    Added: {col_name} {dtype}")
                 added += 1
 
@@ -79,8 +77,7 @@ def migrate(db_path: Path, dry_run: bool = False) -> int:
 
         # Verify final column count
         final_count = con.execute(
-            "SELECT COUNT(*) FROM information_schema.columns "
-            "WHERE table_name = 'daily_features'"
+            "SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'daily_features'"
         ).fetchone()[0]
 
         print(f"\n{'Would add' if dry_run else 'Added'} {added} columns")
@@ -94,15 +91,21 @@ def migrate(db_path: Path, dry_run: bool = False) -> int:
     finally:
         con.close()
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Add missing ORB columns to daily_features",
     )
     parser.add_argument(
-        "--db-path", type=Path, required=True, help="Path to DuckDB database",
+        "--db-path",
+        type=Path,
+        required=True,
+        help="Path to DuckDB database",
     )
     parser.add_argument(
-        "--dry-run", action="store_true", help="Show what would be added",
+        "--dry-run",
+        action="store_true",
+        help="Show what would be added",
     )
     args = parser.parse_args()
 
@@ -111,6 +114,7 @@ def main() -> None:
         sys.exit(1)
 
     migrate(args.db_path, dry_run=args.dry_run)
+
 
 if __name__ == "__main__":
     main()

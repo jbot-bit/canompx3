@@ -81,8 +81,7 @@ class TestTtest1s:
         assert np.isnan(p)
 
     def test_nan_stripped(self):
-        arr = np.array([1.0, float("nan"), 2.0, float("nan"), 3.0,
-                        4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0])
+        arr = np.array([1.0, float("nan"), 2.0, float("nan"), 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0])
         n, mean, wr, t, p = ttest_1s(arr)
         assert n == 10  # 2 NaN stripped
 
@@ -181,12 +180,12 @@ class TestYearByYear:
     """Per-year breakdown of PnL stats."""
 
     def test_two_years(self):
-        df = pd.DataFrame({
-            "trading_day": pd.to_datetime(
-                ["2024-03-01"] * 15 + ["2025-03-01"] * 15
-            ),
-            "pnl_r": [1.0] * 10 + [-0.5] * 5 + [0.5] * 10 + [-1.0] * 5,
-        })
+        df = pd.DataFrame(
+            {
+                "trading_day": pd.to_datetime(["2024-03-01"] * 15 + ["2025-03-01"] * 15),
+                "pnl_r": [1.0] * 10 + [-0.5] * 5 + [0.5] * 10 + [-1.0] * 5,
+            }
+        )
         result = year_by_year(df)
         assert len(result) == 2
         assert list(result["year"]) == [2024, 2025]
@@ -349,13 +348,11 @@ class TestOutcomesQuery:
         assert "d.atr_5d" in sql
 
     def test_filters(self):
-        sql = outcomes_query("MGC", "TOKYO_OPEN", "E1",
-                             filters=["d.orb_TOKYO_OPEN_size >= 4"])
+        sql = outcomes_query("MGC", "TOKYO_OPEN", "E1", filters=["d.orb_TOKYO_OPEN_size >= 4"])
         assert "d.orb_TOKYO_OPEN_size >= 4" in sql
 
     def test_date_range(self):
-        sql = outcomes_query("MGC", "TOKYO_OPEN", "E1",
-                             date_range=("2021-01-01", "2025-12-31"))
+        sql = outcomes_query("MGC", "TOKYO_OPEN", "E1", date_range=("2021-01-01", "2025-12-31"))
         assert "2021-01-01" in sql
         assert "2025-12-31" in sql
 
@@ -404,26 +401,31 @@ class TestTopLevelImports:
 
     def test_stats_available(self):
         from research.lib import ttest_1s, bh_fdr, compute_metrics
+
         assert callable(ttest_1s)
         assert callable(bh_fdr)
         assert callable(compute_metrics)
 
     def test_db_available(self):
         from research.lib import connect_db, query_df
+
         assert callable(connect_db)
         assert callable(query_df)
 
     def test_query_available(self):
         from research.lib import outcomes_query, session_col, SAFE_JOIN
+
         assert callable(outcomes_query)
         assert callable(session_col)
         assert isinstance(SAFE_JOIN, str)
 
     def test_audit_available(self):
         from research.lib import assert_no_inflation
+
         assert callable(assert_no_inflation)
 
     def test_io_available(self):
         from research.lib import output_dir, write_csv, write_markdown, format_stats_table
+
         assert callable(output_dir)
         assert callable(write_csv)

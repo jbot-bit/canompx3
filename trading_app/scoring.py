@@ -17,6 +17,7 @@ from dataclasses import dataclass
 @dataclass
 class ScoringWeights:
     """Tunable weights for context signals."""
+
     base_expectancy: float = 1.0
     regime_delta: float = 0.3
     cross_session: float = 0.2

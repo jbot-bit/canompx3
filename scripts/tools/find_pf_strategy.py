@@ -45,6 +45,7 @@ MAX_SHANN = 1.5
 MAX_WR = 0.75
 MIN_TRADES = 30
 
+
 def compute_profit_factor(outcomes: list[dict]) -> float | None:
     """Profit factor = gross_wins / gross_losses."""
     gross_wins = sum(o["pnl_r"] for o in outcomes if o["pnl_r"] is not None and o["pnl_r"] > 0)
@@ -52,6 +53,7 @@ def compute_profit_factor(outcomes: list[dict]) -> float | None:
     if gross_losses == 0:
         return None  # infinite or undefined
     return gross_wins / gross_losses
+
 
 def main():
     import argparse
@@ -73,9 +75,11 @@ def main():
     print(f"Database: {db_path}")
     print(f"Window: {START_DATE} to {END_DATE} (~{YEARS_SPAN} years)")
     print(f"Sessions: {TARGET_SESSIONS}")
-    print(f"Criteria: PF [{args.min_pf}, {args.max_pf}], "
-          f"ShANN [{args.min_shann}, {args.max_shann}], "
-          f"WR <= {args.max_wr}, N >= {args.min_trades}")
+    print(
+        f"Criteria: PF [{args.min_pf}, {args.max_pf}], "
+        f"ShANN [{args.min_shann}, {args.max_shann}], "
+        f"WR <= {args.max_wr}, N >= {args.min_trades}"
+    )
     print()
 
     con = duckdb.connect(str(db_path), read_only=True)
@@ -111,15 +115,17 @@ def main():
                     key = (orb_label, em, r[1], r[2])
                     if key not in outcomes_by_key:
                         outcomes_by_key[key] = []
-                    outcomes_by_key[key].append({
-                        "trading_day": r[0],
-                        "outcome": r[3],
-                        "pnl_r": r[4],
-                        "mae_r": r[5],
-                        "mfe_r": r[6],
-                        "entry_price": r[7],
-                        "stop_price": r[8],
-                    })
+                    outcomes_by_key[key].append(
+                        {
+                            "trading_day": r[0],
+                            "outcome": r[3],
+                            "pnl_r": r[4],
+                            "mae_r": r[5],
+                            "mfe_r": r[6],
+                            "entry_price": r[7],
+                            "stop_price": r[8],
+                        }
+                    )
 
         total_outcomes = sum(len(v) for v in outcomes_by_key.values())
         print(f"  {total_outcomes} outcome rows loaded")
@@ -142,13 +148,8 @@ def main():
                                 continue
                             combos_checked += 1
 
-                            all_outcomes = outcomes_by_key.get(
-                                (orb_label, em, rr_target, cb), []
-                            )
-                            outcomes = [
-                                o for o in all_outcomes
-                                if o["trading_day"] in matching_days
-                            ]
+                            all_outcomes = outcomes_by_key.get((orb_label, em, rr_target, cb), [])
+                            outcomes = [o for o in all_outcomes if o["trading_day"] in matching_days]
 
                             if len(outcomes) < args.min_trades:
                                 continue
@@ -177,25 +178,32 @@ def main():
                                 continue
 
                             strategy_id = make_strategy_id(
-                                instrument, orb_label, em, rr_target, cb, filter_key,
+                                instrument,
+                                orb_label,
+                                em,
+                                rr_target,
+                                cb,
+                                filter_key,
                             )
 
-                            candidates.append({
-                                "strategy_id": strategy_id,
-                                "session": orb_label,
-                                "em": em,
-                                "rr": rr_target,
-                                "cb": cb,
-                                "filter": filter_key,
-                                "n": n,
-                                "wr": wr,
-                                "pf": round(pf, 3),
-                                "shann": round(shann, 3),
-                                "expr": metrics["expectancy_r"],
-                                "maxdd": metrics["max_drawdown_r"],
-                                "sharpe_pt": sharpe,
-                                "tpy": round(trades_per_year, 1),
-                            })
+                            candidates.append(
+                                {
+                                    "strategy_id": strategy_id,
+                                    "session": orb_label,
+                                    "em": em,
+                                    "rr": rr_target,
+                                    "cb": cb,
+                                    "filter": filter_key,
+                                    "n": n,
+                                    "wr": wr,
+                                    "pf": round(pf, 3),
+                                    "shann": round(shann, 3),
+                                    "expr": metrics["expectancy_r"],
+                                    "maxdd": metrics["max_drawdown_r"],
+                                    "sharpe_pt": sharpe,
+                                    "tpy": round(trades_per_year, 1),
+                                }
+                            )
 
         # Step 5: Sort and display
         candidates.sort(key=lambda x: x["expr"], reverse=True)
@@ -210,17 +218,21 @@ def main():
             return
 
         # Header
-        print(f"{'Strategy ID':<42} {'Sess':>4} {'EM':>2} {'RR':>4} {'CB':>2} "
-              f"{'Filter':<12} {'N':>4} {'WR':>5} {'PF':>5} {'ShANN':>6} "
-              f"{'ExpR':>6} {'MaxDD':>6} {'T/Yr':>5}")
+        print(
+            f"{'Strategy ID':<42} {'Sess':>4} {'EM':>2} {'RR':>4} {'CB':>2} "
+            f"{'Filter':<12} {'N':>4} {'WR':>5} {'PF':>5} {'ShANN':>6} "
+            f"{'ExpR':>6} {'MaxDD':>6} {'T/Yr':>5}"
+        )
         print("-" * 120)
 
         for c in candidates:
-            print(f"{c['strategy_id']:<42} {c['session']:>4} {c['em']:>2} "
-                  f"{c['rr']:>4.1f} {c['cb']:>2} {c['filter']:<12} "
-                  f"{c['n']:>4} {c['wr']:>5.1%} {c['pf']:>5.2f} "
-                  f"{c['shann']:>6.3f} {c['expr']:>6.4f} "
-                  f"{c['maxdd']:>6.2f} {c['tpy']:>5.1f}")
+            print(
+                f"{c['strategy_id']:<42} {c['session']:>4} {c['em']:>2} "
+                f"{c['rr']:>4.1f} {c['cb']:>2} {c['filter']:<12} "
+                f"{c['n']:>4} {c['wr']:>5.1%} {c['pf']:>5.2f} "
+                f"{c['shann']:>6.3f} {c['expr']:>6.4f} "
+                f"{c['maxdd']:>6.2f} {c['tpy']:>5.1f}"
+            )
 
         # Summary stats
         print(f"\n--- Summary ---")
@@ -236,6 +248,7 @@ def main():
 
     finally:
         con.close()
+
 
 if __name__ == "__main__":
     main()

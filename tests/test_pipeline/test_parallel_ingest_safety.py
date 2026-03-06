@@ -1,10 +1,12 @@
 """Tests for parallel ingest safety: merge integrity + concurrent write behavior."""
+
 import inspect
 import threading
 from pathlib import Path
 
 import pytest
 import duckdb
+
 
 def test_merge_does_not_drop_trading_tables(tmp_path):
     """merge_bars_only() must NOT drop trading_app tables."""
@@ -32,6 +34,7 @@ def test_merge_does_not_drop_trading_tables(tmp_path):
 
     # Import and run the safe merge
     from scripts.infra.run_parallel_ingest import merge_bars_only
+
     merge_bars_only(db_path=db_path, temp_dbs=[])
 
     # Trading table must survive
@@ -40,18 +43,20 @@ def test_merge_does_not_drop_trading_tables(tmp_path):
     con.close()
     assert count == 1, "merge_bars_only() destroyed trading_app data!"
 
+
 def test_merge_bars_only_has_no_force_rebuild_param():
     """merge_bars_only() must NOT have a force_rebuild parameter."""
     from scripts.infra.run_parallel_ingest import merge_bars_only
+
     sig = inspect.signature(merge_bars_only)
-    assert "force_rebuild" not in sig.parameters, \
-        "merge_bars_only() should not have force_rebuild — that's in main()"
+    assert "force_rebuild" not in sig.parameters, "merge_bars_only() should not have force_rebuild — that's in main()"
+
 
 def test_no_merge_all_function():
     """The old merge_all() function must be gone."""
     import scripts.infra.run_parallel_ingest as mod
-    assert not hasattr(mod, "merge_all"), \
-        "merge_all() still exists — must be replaced by merge_bars_only()"
+
+    assert not hasattr(mod, "merge_all"), "merge_all() still exists — must be replaced by merge_bars_only()"
 
 
 def test_merge_deduplicates_overlapping_rows(tmp_path):
@@ -73,15 +78,21 @@ def test_merge_deduplicates_overlapping_rows(tmp_path):
 
     # Create two temp DBs with overlapping rows (simulates 2-day overlap)
     for temp_db, rows in [
-        (temp1, [
-            ("2024-01-01 09:00:00+00", "MGC", "GCG4", 2050, 2051, 2049, 2050, 100),
-            ("2024-01-01 09:01:00+00", "MGC", "GCG4", 2050, 2052, 2049, 2051, 110),
-        ]),
-        (temp2, [
-            # Overlapping row (same PK) + new row
-            ("2024-01-01 09:01:00+00", "MGC", "GCG4", 2050, 2052, 2049, 2051, 110),
-            ("2024-01-02 09:00:00+00", "MGC", "GCG4", 2055, 2056, 2054, 2055, 120),
-        ]),
+        (
+            temp1,
+            [
+                ("2024-01-01 09:00:00+00", "MGC", "GCG4", 2050, 2051, 2049, 2050, 100),
+                ("2024-01-01 09:01:00+00", "MGC", "GCG4", 2050, 2052, 2049, 2051, 110),
+            ],
+        ),
+        (
+            temp2,
+            [
+                # Overlapping row (same PK) + new row
+                ("2024-01-01 09:01:00+00", "MGC", "GCG4", 2050, 2052, 2049, 2051, 110),
+                ("2024-01-02 09:00:00+00", "MGC", "GCG4", 2055, 2056, 2054, 2055, 120),
+            ],
+        ),
     ]:
         tc = duckdb.connect(str(temp_db))
         tc.execute("""
@@ -92,12 +103,11 @@ def test_merge_deduplicates_overlapping_rows(tmp_path):
             )
         """)
         for r in rows:
-            tc.execute(
-                "INSERT INTO bars_1m VALUES (?, ?, ?, ?, ?, ?, ?, ?)", r
-            )
+            tc.execute("INSERT INTO bars_1m VALUES (?, ?, ?, ?, ?, ?, ?, ?)", r)
         tc.close()
 
     from scripts.infra.run_parallel_ingest import merge_bars_only
+
     merge_bars_only(db_path=db_path, temp_dbs=[temp1, temp2])
 
     con = duckdb.connect(str(db_path), read_only=True)

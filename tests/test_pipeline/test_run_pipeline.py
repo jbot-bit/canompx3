@@ -23,6 +23,7 @@ from pipeline.run_pipeline import (
 # HELPERS
 # =============================================================================
 
+
 def make_args(**overrides):
     """Build a fake argparse.Namespace with sensible defaults."""
     defaults = dict(
@@ -50,6 +51,7 @@ def mock_subprocess_ok():
 # 1. STEP REGISTRY STRUCTURE
 # =============================================================================
 
+
 class TestStepRegistry:
     def test_pipeline_steps_count(self):
         assert len(PIPELINE_STEPS) == 4
@@ -74,6 +76,7 @@ class TestStepRegistry:
 # =============================================================================
 # 2. COMMAND CONSTRUCTION
 # =============================================================================
+
 
 class TestStepIngest:
     @patch("pipeline.run_pipeline.subprocess.run")
@@ -228,6 +231,7 @@ class TestStepAudit:
 # 3. FAIL-CLOSED ORCHESTRATION
 # =============================================================================
 
+
 class TestMainOrchestration:
     """Test main() via sys.argv + mocked subprocess.run."""
 
@@ -287,6 +291,7 @@ class TestMainOrchestration:
 # 4. DRY RUN
 # =============================================================================
 
+
 class TestDryRun:
     DRY_ARGV = [
         "run_pipeline.py",
@@ -329,6 +334,7 @@ class TestDryRun:
 # =============================================================================
 # 5. RETURN CODE PROPAGATION
 # =============================================================================
+
 
 class TestReturnCodePropagation:
     @patch("pipeline.run_pipeline.subprocess.run")

@@ -113,11 +113,18 @@ def run_walkforward(
 
     if not outcomes:
         return WalkForwardResult(
-            strategy_id=strategy_id, instrument=instrument,
-            n_total_windows=0, n_valid_windows=0, n_positive_windows=0,
-            pct_positive=0.0, agg_oos_exp_r=0.0, total_oos_trades=0,
-            passed=False, rejection_reason="No outcomes found",
-            windows=[], params=params,
+            strategy_id=strategy_id,
+            instrument=instrument,
+            n_total_windows=0,
+            n_valid_windows=0,
+            n_positive_windows=0,
+            pct_positive=0.0,
+            agg_oos_exp_r=0.0,
+            total_oos_trades=0,
+            passed=False,
+            rejection_reason="No outcomes found",
+            windows=[],
+            params=params,
         )
 
     # Apply tight stop simulation (no-op for 1.0x)
@@ -137,66 +144,65 @@ def run_walkforward(
     while window_start <= latest:
         window_end = _add_months(window_start, test_window_months)
 
-        test_outcomes = [
-            o for o in outcomes
-            if window_start <= o["trading_day"] < window_end
-        ]
+        test_outcomes = [o for o in outcomes if window_start <= o["trading_day"] < window_end]
 
         metrics = compute_metrics(test_outcomes)
         test_n = metrics["sample_size"]
         test_exp_r = metrics["expectancy_r"]
 
-        windows.append({
-            "window_start": window_start.isoformat(),
-            "window_end": window_end.isoformat(),
-            "test_n": test_n,
-            "test_exp_r": test_exp_r,
-            "test_wr": metrics["win_rate"],
-            "test_sharpe": metrics["sharpe_ratio"],
-            "test_pass": (
-                test_n >= min_trades_per_window
-                and test_exp_r is not None
-                and test_exp_r > 0
-            ),
-        })
+        windows.append(
+            {
+                "window_start": window_start.isoformat(),
+                "window_end": window_end.isoformat(),
+                "test_n": test_n,
+                "test_exp_r": test_exp_r,
+                "test_wr": metrics["win_rate"],
+                "test_sharpe": metrics["sharpe_ratio"],
+                "test_pass": (test_n >= min_trades_per_window and test_exp_r is not None and test_exp_r > 0),
+            }
+        )
 
         logger.info(
             "WF %s window %s..%s: N=%d ExpR=%s",
-            strategy_id, window_start, window_end, test_n, test_exp_r,
+            strategy_id,
+            window_start,
+            window_end,
+            test_n,
+            test_exp_r,
         )
 
         window_start = window_end
 
     if not windows:
         return WalkForwardResult(
-            strategy_id=strategy_id, instrument=instrument,
-            n_total_windows=0, n_valid_windows=0, n_positive_windows=0,
-            pct_positive=0.0, agg_oos_exp_r=0.0, total_oos_trades=0,
+            strategy_id=strategy_id,
+            instrument=instrument,
+            n_total_windows=0,
+            n_valid_windows=0,
+            n_positive_windows=0,
+            pct_positive=0.0,
+            agg_oos_exp_r=0.0,
+            total_oos_trades=0,
             passed=False,
             rejection_reason=(
-                f"All {len(outcomes)} outcomes in training period "
-                f"({min_train_months}mo). No test windows."
+                f"All {len(outcomes)} outcomes in training period ({min_train_months}mo). No test windows."
             ),
-            windows=[], params=params,
+            windows=[],
+            params=params,
         )
 
     # Aggregate valid windows (test_n >= threshold)
     valid_windows = [w for w in windows if w["test_n"] >= min_trades_per_window]
     n_valid = len(valid_windows)
-    n_positive = sum(
-        1 for w in valid_windows
-        if w["test_exp_r"] is not None and w["test_exp_r"] > 0
-    )
+    n_positive = sum(1 for w in valid_windows if w["test_exp_r"] is not None and w["test_exp_r"] > 0)
     pct_positive = n_positive / n_valid if n_valid > 0 else 0.0
     total_oos_trades = sum(w["test_n"] for w in valid_windows)
 
     # Trade-weighted aggregate OOS ExpR
     if total_oos_trades > 0:
-        agg_oos_exp_r = sum(
-            w["test_exp_r"] * w["test_n"]
-            for w in valid_windows
-            if w["test_exp_r"] is not None
-        ) / total_oos_trades
+        agg_oos_exp_r = (
+            sum(w["test_exp_r"] * w["test_n"] for w in valid_windows if w["test_exp_r"] is not None) / total_oos_trades
+        )
     else:
         agg_oos_exp_r = 0.0
 
@@ -213,43 +219,42 @@ def run_walkforward(
     rejection_reason = None
 
     if n_valid < min_valid_windows:
-        rejection_reason = (
-            f"Insufficient valid windows: {n_valid} < {min_valid_windows}"
-        )
+        rejection_reason = f"Insufficient valid windows: {n_valid} < {min_valid_windows}"
     elif pct_positive < min_pct_positive:
-        rejection_reason = (
-            f"Too few positive windows: {pct_positive:.0%} < {min_pct_positive:.0%}"
-        )
+        rejection_reason = f"Too few positive windows: {pct_positive:.0%} < {min_pct_positive:.0%}"
     elif agg_oos_exp_r <= 0:
-        rejection_reason = (
-            f"Negative aggregate OOS ExpR: {agg_oos_exp_r:.4f}"
-        )
+        rejection_reason = f"Negative aggregate OOS ExpR: {agg_oos_exp_r:.4f}"
     elif total_oos_trades < oos_trade_floor:
-        rejection_reason = (
-            f"Total OOS trades {total_oos_trades} < floor {oos_trade_floor}"
-        )
+        rejection_reason = f"Total OOS trades {total_oos_trades} < floor {oos_trade_floor}"
 
     passed = rejection_reason is None
 
     if passed:
         logger.warning(
-            "WF PASS %s: %d/%d windows positive (%.0f%%), "
-            "agg_ExpR=%.4f, N=%d",
-            strategy_id, n_positive, n_valid, pct_positive * 100,
-            agg_oos_exp_r, total_oos_trades,
+            "WF PASS %s: %d/%d windows positive (%.0f%%), agg_ExpR=%.4f, N=%d",
+            strategy_id,
+            n_positive,
+            n_valid,
+            pct_positive * 100,
+            agg_oos_exp_r,
+            total_oos_trades,
         )
     else:
         logger.warning("WF FAIL %s: %s", strategy_id, rejection_reason)
 
     return WalkForwardResult(
-        strategy_id=strategy_id, instrument=instrument,
-        n_total_windows=len(windows), n_valid_windows=n_valid,
+        strategy_id=strategy_id,
+        instrument=instrument,
+        n_total_windows=len(windows),
+        n_valid_windows=n_valid,
         n_positive_windows=n_positive,
         pct_positive=round(pct_positive, 4),
         agg_oos_exp_r=round(agg_oos_exp_r, 4),
         total_oos_trades=total_oos_trades,
-        passed=passed, rejection_reason=rejection_reason,
-        windows=windows, params=params,
+        passed=passed,
+        rejection_reason=rejection_reason,
+        windows=windows,
+        params=params,
         window_imbalance_ratio=window_imbalance_ratio,
         window_imbalanced=window_imbalanced,
     )

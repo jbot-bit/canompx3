@@ -53,10 +53,17 @@ def _fill_missing_features(X: pd.DataFrame, feature_names: list[str]) -> pd.Data
     missing = set(feature_names) - set(X.columns)
     for col in missing:
         # One-hot encoded columns (contain category prefix) should be 0, not -999
-        is_onehot = any(col.startswith(f"{cat}_") for cat in [
-            "orb_label", "entry_model", "prev_day_direction",
-            "gap_type", "atr_vel_regime", "break_dir",
-        ])
+        is_onehot = any(
+            col.startswith(f"{cat}_")
+            for cat in [
+                "orb_label",
+                "entry_model",
+                "prev_day_direction",
+                "gap_type",
+                "atr_vel_regime",
+                "break_dir",
+            ]
+        )
         X[col] = 0.0 if is_onehot else -999.0
     return X[feature_names]
 
@@ -136,16 +143,18 @@ def evaluate_instrument(instrument: str, db_path: str) -> dict:
             continue
         kept = sm[sm["take"]]
         skipped = sm[~sm["take"]]
-        sessions.append({
-            "session": session,
-            "n_total": len(sm),
-            "n_kept": len(kept),
-            "skip_pct": round(1 - len(kept) / len(sm), 3),
-            "base_avgR": round(sm["pnl_r"].mean(), 4),
-            "filt_avgR": round(kept["pnl_r"].mean(), 4) if len(kept) > 0 else 0,
-            "skip_avgR": round(skipped["pnl_r"].mean(), 4) if len(skipped) > 0 else 0,
-            "lift": round(kept["pnl_r"].mean() - sm["pnl_r"].mean(), 4) if len(kept) > 0 else 0,
-        })
+        sessions.append(
+            {
+                "session": session,
+                "n_total": len(sm),
+                "n_kept": len(kept),
+                "skip_pct": round(1 - len(kept) / len(sm), 3),
+                "base_avgR": round(sm["pnl_r"].mean(), 4),
+                "filt_avgR": round(kept["pnl_r"].mean(), 4) if len(kept) > 0 else 0,
+                "skip_avgR": round(skipped["pnl_r"].mean(), 4) if len(skipped) > 0 else 0,
+                "lift": round(kept["pnl_r"].mean() - sm["pnl_r"].mean(), 4) if len(kept) > 0 else 0,
+            }
+        )
     results["sessions"] = sessions
 
     # Probability calibration check (lift curve)
@@ -157,13 +166,15 @@ def evaluate_instrument(instrument: str, db_path: str) -> dict:
         start = q * quintile_size
         end = start + quintile_size if q < n_quintiles - 1 else len(meta_sorted)
         chunk = meta_sorted.iloc[start:end]
-        calibration.append({
-            "quintile": q + 1,
-            "p_win_range": f"{chunk['p_win'].min():.3f}-{chunk['p_win'].max():.3f}",
-            "actual_wr": round((chunk["pnl_r"] > 0).mean(), 3),
-            "avg_r": round(chunk["pnl_r"].mean(), 4),
-            "n": len(chunk),
-        })
+        calibration.append(
+            {
+                "quintile": q + 1,
+                "p_win_range": f"{chunk['p_win'].min():.3f}-{chunk['p_win'].max():.3f}",
+                "actual_wr": round((chunk["pnl_r"] > 0).mean(), 3),
+                "avg_r": round(chunk["pnl_r"].mean(), 4),
+                "n": len(chunk),
+            }
+        )
     results["calibration"] = calibration
 
     # OOS-only metrics (unbiased — model never saw this data)
@@ -203,23 +214,25 @@ def print_evaluation(results: dict) -> None:
 
     print(f"\n{'=' * 75}")
     print(f"  META-LABEL EVALUATION — {inst}")
-    print(f"  Threshold: {results['threshold']:.2f} | "
-          f"Skip: {results['skip_pct']:.1%} ({results['n_skipped']:,d} of {results['n_total']:,d})")
+    print(
+        f"  Threshold: {results['threshold']:.2f} | "
+        f"Skip: {results['skip_pct']:.1%} ({results['n_skipped']:,d} of {results['n_total']:,d})"
+    )
     print(f"{'=' * 75}")
 
     # Before/After comparison
     print(f"\n  {'METRIC':<18} {'BASELINE':>12} {'FILTERED':>12} {'SKIPPED':>12} {'DELTA':>12}")
     print(f"  {'-' * 18} {'-' * 12} {'-' * 12} {'-' * 12} {'-' * 12}")
-    print(f"  {'Trades':<18} {results['n_total']:>12,d} {results['n_kept']:>12,d} "
-          f"{results['n_skipped']:>12,d}")
-    print(f"  {'Avg R':<18} {b['avg_r']:>+12.4f} {f['avg_r']:>+12.4f} "
-          f"{sk['avg_r']:>+12.4f} {f['avg_r'] - b['avg_r']:>+12.4f}")
-    print(f"  {'Total R':<18} {b['total_r']:>12.1f} {f['total_r']:>12.1f} "
-          f"{'':>12} {f['total_r'] - b['total_r']:>+12.1f}")
-    print(f"  {'Sharpe':<18} {b['sharpe']:>12.3f} {f['sharpe']:>12.3f} "
-          f"{'':>12} {f['sharpe'] - b['sharpe']:>+12.3f}")
-    print(f"  {'Win Rate':<18} {b['wr']:>11.1%} {f['wr']:>11.1%} "
-          f"{sk['wr']:>11.1%} {f['wr'] - b['wr']:>+11.1%}")
+    print(f"  {'Trades':<18} {results['n_total']:>12,d} {results['n_kept']:>12,d} {results['n_skipped']:>12,d}")
+    print(
+        f"  {'Avg R':<18} {b['avg_r']:>+12.4f} {f['avg_r']:>+12.4f} "
+        f"{sk['avg_r']:>+12.4f} {f['avg_r'] - b['avg_r']:>+12.4f}"
+    )
+    print(
+        f"  {'Total R':<18} {b['total_r']:>12.1f} {f['total_r']:>12.1f} {'':>12} {f['total_r'] - b['total_r']:>+12.1f}"
+    )
+    print(f"  {'Sharpe':<18} {b['sharpe']:>12.3f} {f['sharpe']:>12.3f} {'':>12} {f['sharpe'] - b['sharpe']:>+12.3f}")
+    print(f"  {'Win Rate':<18} {b['wr']:>11.1%} {f['wr']:>11.1%} {sk['wr']:>11.1%} {f['wr'] - b['wr']:>+11.1%}")
     print(f"  {'Max DD (R)':<18} {b['max_dd']:>12.1f} {f['max_dd']:>12.1f}")
 
     # Calibration (lift curve)
@@ -228,20 +241,22 @@ def print_evaluation(results: dict) -> None:
     print(f"  {'-' * 4} {'-' * 18} {'-' * 10} {'-' * 10} {'-' * 8}")
     for c in results["calibration"]:
         marker = " <-- skip" if c["quintile"] <= 2 and c["avg_r"] < 0 else ""
-        print(f"  Q{c['quintile']:<3d} {c['p_win_range']:<18} {c['actual_wr']:>9.1%} "
-              f"{c['avg_r']:>+10.4f} {c['n']:>8,d}{marker}")
+        print(
+            f"  Q{c['quintile']:<3d} {c['p_win_range']:<18} {c['actual_wr']:>9.1%} "
+            f"{c['avg_r']:>+10.4f} {c['n']:>8,d}{marker}"
+        )
 
     # Session breakdown
     if results["sessions"]:
         print("\n  PER-SESSION IMPACT (sorted by lift)")
-        print(f"  {'SESSION':<20} {'N':>6} {'KEPT':>6} {'SKIP%':>7} "
-              f"{'BASE':>8} {'FILT':>8} {'SKIP':>8} {'LIFT':>8}")
-        print(f"  {'-' * 20} {'-' * 6} {'-' * 6} {'-' * 7} "
-              f"{'-' * 8} {'-' * 8} {'-' * 8} {'-' * 8}")
+        print(f"  {'SESSION':<20} {'N':>6} {'KEPT':>6} {'SKIP%':>7} {'BASE':>8} {'FILT':>8} {'SKIP':>8} {'LIFT':>8}")
+        print(f"  {'-' * 20} {'-' * 6} {'-' * 6} {'-' * 7} {'-' * 8} {'-' * 8} {'-' * 8} {'-' * 8}")
         for s in sorted(results["sessions"], key=lambda x: -x["lift"]):
-            print(f"  {s['session']:<20} {s['n_total']:>6d} {s['n_kept']:>6d} "
-                  f"{s['skip_pct']:>6.1%} {s['base_avgR']:>+8.4f} {s['filt_avgR']:>+8.4f} "
-                  f"{s['skip_avgR']:>+8.4f} {s['lift']:>+8.4f}")
+            print(
+                f"  {s['session']:<20} {s['n_total']:>6d} {s['n_kept']:>6d} "
+                f"{s['skip_pct']:>6.1%} {s['base_avgR']:>+8.4f} {s['filt_avgR']:>+8.4f} "
+                f"{s['skip_avgR']:>+8.4f} {s['lift']:>+8.4f}"
+            )
 
     # OOS-only section (unbiased)
     if "oos" in results:
@@ -251,14 +266,10 @@ def print_evaluation(results: dict) -> None:
         print("\n  OUT-OF-SAMPLE ONLY (model never saw this data)")
         print(f"  {'METRIC':<18} {'BASELINE':>12} {'FILTERED':>12} {'DELTA':>12}")
         print(f"  {'-' * 18} {'-' * 12} {'-' * 12} {'-' * 12}")
-        print(f"  {'Trades':<18} {oos['n_total']:>12,d} {oos['n_kept']:>12,d} "
-              f"{oos['n_kept'] - oos['n_total']:>+12,d}")
-        print(f"  {'Avg R':<18} {ob['avg_r']:>+12.4f} {of['avg_r']:>+12.4f} "
-              f"{of['avg_r'] - ob['avg_r']:>+12.4f}")
-        print(f"  {'Sharpe':<18} {ob['sharpe']:>12.3f} {of['sharpe']:>12.3f} "
-              f"{of['sharpe'] - ob['sharpe']:>+12.3f}")
-        print(f"  {'Win Rate':<18} {ob['wr']:>11.1%} {of['wr']:>11.1%} "
-              f"{of['wr'] - ob['wr']:>+11.1%}")
+        print(f"  {'Trades':<18} {oos['n_total']:>12,d} {oos['n_kept']:>12,d} {oos['n_kept'] - oos['n_total']:>+12,d}")
+        print(f"  {'Avg R':<18} {ob['avg_r']:>+12.4f} {of['avg_r']:>+12.4f} {of['avg_r'] - ob['avg_r']:>+12.4f}")
+        print(f"  {'Sharpe':<18} {ob['sharpe']:>12.3f} {of['sharpe']:>12.3f} {of['sharpe'] - ob['sharpe']:>+12.3f}")
+        print(f"  {'Win Rate':<18} {ob['wr']:>11.1%} {of['wr']:>11.1%} {of['wr'] - ob['wr']:>+11.1%}")
 
     print(f"\n{'=' * 75}\n")
 

@@ -27,13 +27,14 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class CostSpec:
     """Immutable cost specification for a futures instrument."""
+
     instrument: str
-    point_value: float        # Dollars per point of price movement
-    commission_rt: float      # Round-trip commission ($)
-    spread_doubled: float     # Spread cost doubled for entry+exit ($)
-    slippage: float           # Expected slippage both sides ($)
-    tick_size: float = 0.10   # Minimum price increment (points)
-    min_ticks_floor: int = 10 # Minimum risk in ticks for stress test
+    point_value: float  # Dollars per point of price movement
+    commission_rt: float  # Round-trip commission ($)
+    spread_doubled: float  # Spread cost doubled for entry+exit ($)
+    slippage: float  # Expected slippage both sides ($)
+    tick_size: float = 0.10  # Minimum price increment (points)
+    min_ticks_floor: int = 10  # Minimum risk in ticks for stress test
 
     def __post_init__(self):
         if self.point_value <= 0:
@@ -87,57 +88,57 @@ COST_SPECS = {
     ),
     "MES": CostSpec(
         instrument="MES",
-        point_value=5.0,         # $5 per index point
-        commission_rt=1.24,      # Micro contract RT commission
-        spread_doubled=1.25,     # 0.25pt spread * $5 * 2 sides (tick = 0.25)
-        slippage=1.25,           # 0.25pt slippage * $5 * 2 sides
-        tick_size=0.25,          # $0.25/point minimum increment
-        min_ticks_floor=10,      # 2.5pt = $12.50 minimum risk
+        point_value=5.0,  # $5 per index point
+        commission_rt=1.24,  # Micro contract RT commission
+        spread_doubled=1.25,  # 0.25pt spread * $5 * 2 sides (tick = 0.25)
+        slippage=1.25,  # 0.25pt slippage * $5 * 2 sides
+        tick_size=0.25,  # $0.25/point minimum increment
+        min_ticks_floor=10,  # 2.5pt = $12.50 minimum risk
     ),
     "MCL": CostSpec(
         instrument="MCL",
-        point_value=100.0,       # 100 barrels * $1/barrel per point
-        commission_rt=1.24,      # Micro contract RT commission
-        spread_doubled=2.00,     # ~$0.01 spread * 100 barrels * 2 sides
-        slippage=2.00,           # ~$0.01 slippage * 100 barrels * 2 sides
-        tick_size=0.01,          # $0.01/barrel minimum increment
-        min_ticks_floor=10,      # $0.10 = $10 minimum risk
+        point_value=100.0,  # 100 barrels * $1/barrel per point
+        commission_rt=1.24,  # Micro contract RT commission
+        spread_doubled=2.00,  # ~$0.01 spread * 100 barrels * 2 sides
+        slippage=2.00,  # ~$0.01 slippage * 100 barrels * 2 sides
+        tick_size=0.01,  # $0.01/barrel minimum increment
+        min_ticks_floor=10,  # $0.10 = $10 minimum risk
     ),
     "SIL": CostSpec(
         instrument="SIL",
-        point_value=1000.0,      # 1000 oz * $1/oz per point
-        commission_rt=1.24,      # Micro contract RT commission
-        spread_doubled=10.00,    # ~$0.005 spread * 1000 oz * 2 sides
-        slippage=10.00,          # ~$0.005 slippage * 1000 oz * 2 sides
-        tick_size=0.005,         # $0.005/oz minimum increment
-        min_ticks_floor=10,      # $0.05 = $50 minimum risk
+        point_value=1000.0,  # 1000 oz * $1/oz per point
+        commission_rt=1.24,  # Micro contract RT commission
+        spread_doubled=10.00,  # ~$0.005 spread * 1000 oz * 2 sides
+        slippage=10.00,  # ~$0.005 slippage * 1000 oz * 2 sides
+        tick_size=0.005,  # $0.005/oz minimum increment
+        min_ticks_floor=10,  # $0.05 = $50 minimum risk
     ),
     "M6E": CostSpec(
         instrument="M6E",
-        point_value=12500.0,     # Micro EUR/USD: 12,500 EUR × $1 per EUR per point
-        commission_rt=1.24,      # IB micro futures RT commission
-        spread_doubled=1.25,     # ~1 tick ($0.625) each side (tick = 0.00005)
-        slippage=1.25,           # ~1 tick ($0.625) each side (measured from actual data)
-        tick_size=0.00005,       # Minimum price increment (half-pip for EUR/USD)
-        min_ticks_floor=10,      # 10 ticks = 0.0005 = 5 pips minimum risk
+        point_value=12500.0,  # Micro EUR/USD: 12,500 EUR × $1 per EUR per point
+        commission_rt=1.24,  # IB micro futures RT commission
+        spread_doubled=1.25,  # ~1 tick ($0.625) each side (tick = 0.00005)
+        slippage=1.25,  # ~1 tick ($0.625) each side (measured from actual data)
+        tick_size=0.00005,  # Minimum price increment (half-pip for EUR/USD)
+        min_ticks_floor=10,  # 10 ticks = 0.0005 = 5 pips minimum risk
     ),
     "M2K": CostSpec(
         instrument="M2K",
-        point_value=5.0,         # Micro E-mini Russell 2000: $5 per index point
-        commission_rt=1.24,      # IB micro futures RT commission
-        spread_doubled=1.00,     # ~1 tick ($0.50) each side (tick = 0.10pt = $0.50)
-        slippage=1.00,           # ~1 tick ($0.50) each side
-        tick_size=0.10,          # Minimum price increment (0.10 index points)
-        min_ticks_floor=10,      # 10 ticks = 1.0pt = $5 minimum risk
+        point_value=5.0,  # Micro E-mini Russell 2000: $5 per index point
+        commission_rt=1.24,  # IB micro futures RT commission
+        spread_doubled=1.00,  # ~1 tick ($0.50) each side (tick = 0.10pt = $0.50)
+        slippage=1.00,  # ~1 tick ($0.50) each side
+        tick_size=0.10,  # Minimum price increment (0.10 index points)
+        min_ticks_floor=10,  # 10 ticks = 1.0pt = $5 minimum risk
     ),
     "MBT": CostSpec(
         instrument="MBT",
-        point_value=0.10,        # Micro Bitcoin: 0.1 BTC per contract, $0.10 per $1 of BTC price
-        commission_rt=2.50,      # MBT higher commission than other micros (~$1.25/side at IB)
-        spread_doubled=2.00,     # ~2 ticks ($1.00) per side × 2 (tick = $5 BTC = $0.50 MBT)
-        slippage=2.00,           # ~2 ticks ($1.00) per side × 2 (E2 stop-market fill)
-        tick_size=5.0,           # $5 minimum price increment in BTC price
-        min_ticks_floor=10,      # 10 ticks = $50 BTC price = $5.00 MBT minimum risk
+        point_value=0.10,  # Micro Bitcoin: 0.1 BTC per contract, $0.10 per $1 of BTC price
+        commission_rt=2.50,  # MBT higher commission than other micros (~$1.25/side at IB)
+        spread_doubled=2.00,  # ~2 ticks ($1.00) per side × 2 (tick = $5 BTC = $0.50 MBT)
+        slippage=2.00,  # ~2 ticks ($1.00) per side × 2 (E2 stop-market fill)
+        tick_size=5.0,  # $5 minimum price increment in BTC price
+        min_ticks_floor=10,  # 10 ticks = $50 BTC price = $5.00 MBT minimum risk
     ),
 }
 
@@ -151,76 +152,76 @@ COST_SPECS = {
 # Fallback: instrument not found -> use 1.0 for all sessions
 SESSION_SLIPPAGE_MULT = {
     "MGC": {
-        "CME_REOPEN": 1.3,       # 23:00 UTC -- thin Asian session
-        "TOKYO_OPEN": 1.2,       # 00:00 UTC -- thin early Asian
-        "SINGAPORE_OPEN": 1.0,   # 01:00 UTC -- moderate
-        "LONDON_METALS": 0.9,    # 08:00 UTC -- pre-London, decent liquidity
-        "US_DATA_830": 0.8,      # 13:00 UTC -- NY session, best liquidity
-        "NYSE_OPEN": 1.1,        # 14:30 UTC -- moderate NY
-        "COMEX_SETTLE": 0.9,     # ~18:25 UTC -- settlement window
-        "CME_PRECLOSE": 1.0,     # ~19:45 UTC -- closing session
-        "NYSE_CLOSE": 1.0,       # ~20:00 UTC -- NYSE close
-        "US_DATA_1000": 0.9,     # ~14:00 UTC -- post-equity-open flow
+        "CME_REOPEN": 1.3,  # 23:00 UTC -- thin Asian session
+        "TOKYO_OPEN": 1.2,  # 00:00 UTC -- thin early Asian
+        "SINGAPORE_OPEN": 1.0,  # 01:00 UTC -- moderate
+        "LONDON_METALS": 0.9,  # 08:00 UTC -- pre-London, decent liquidity
+        "US_DATA_830": 0.8,  # 13:00 UTC -- NY session, best liquidity
+        "NYSE_OPEN": 1.1,  # 14:30 UTC -- moderate NY
+        "COMEX_SETTLE": 0.9,  # ~18:25 UTC -- settlement window
+        "CME_PRECLOSE": 1.0,  # ~19:45 UTC -- closing session
+        "NYSE_CLOSE": 1.0,  # ~20:00 UTC -- NYSE close
+        "US_DATA_1000": 0.9,  # ~14:00 UTC -- post-equity-open flow
     },
     "MNQ": {
-        "CME_REOPEN": 1.0,       # 23:00 UTC -- NQ liquid even in Asian
-        "TOKYO_OPEN": 1.0,       # 00:00 UTC -- early Asian
-        "SINGAPORE_OPEN": 0.9,   # 01:00 UTC -- moderate
-        "LONDON_METALS": 0.9,    # 08:00 UTC -- pre-London
-        "US_DATA_830": 0.8,      # 13:00 UTC -- NY session, best liquidity
-        "NYSE_OPEN": 0.9,        # 14:30 UTC -- moderate NY
-        "US_DATA_1000": 0.9,     # ~14:00 UTC -- post-equity-open flow
-        "CME_PRECLOSE": 1.0,     # ~19:45 UTC -- closing session
-        "NYSE_CLOSE": 0.9,       # ~20:00 UTC -- NYSE close
+        "CME_REOPEN": 1.0,  # 23:00 UTC -- NQ liquid even in Asian
+        "TOKYO_OPEN": 1.0,  # 00:00 UTC -- early Asian
+        "SINGAPORE_OPEN": 0.9,  # 01:00 UTC -- moderate
+        "LONDON_METALS": 0.9,  # 08:00 UTC -- pre-London
+        "US_DATA_830": 0.8,  # 13:00 UTC -- NY session, best liquidity
+        "NYSE_OPEN": 0.9,  # 14:30 UTC -- moderate NY
+        "US_DATA_1000": 0.9,  # ~14:00 UTC -- post-equity-open flow
+        "CME_PRECLOSE": 1.0,  # ~19:45 UTC -- closing session
+        "NYSE_CLOSE": 0.9,  # ~20:00 UTC -- NYSE close
     },
     "MES": {
-        "CME_REOPEN": 1.0,       # 23:00 UTC -- ES/MES liquid 24h
-        "TOKYO_OPEN": 1.0,       # 00:00 UTC -- early Asian
-        "SINGAPORE_OPEN": 0.9,   # 01:00 UTC -- moderate
-        "LONDON_METALS": 0.9,    # 08:00 UTC -- pre-London
-        "US_DATA_830": 0.8,      # 13:00 UTC -- NY session, best liquidity
-        "NYSE_OPEN": 0.9,        # 14:30 UTC -- moderate NY
-        "US_DATA_1000": 0.9,     # ~14:00 UTC -- post-equity-open flow
-        "CME_PRECLOSE": 1.0,     # ~19:45 UTC -- closing session
-        "NYSE_CLOSE": 0.9,       # ~20:00 UTC -- NYSE close
+        "CME_REOPEN": 1.0,  # 23:00 UTC -- ES/MES liquid 24h
+        "TOKYO_OPEN": 1.0,  # 00:00 UTC -- early Asian
+        "SINGAPORE_OPEN": 0.9,  # 01:00 UTC -- moderate
+        "LONDON_METALS": 0.9,  # 08:00 UTC -- pre-London
+        "US_DATA_830": 0.8,  # 13:00 UTC -- NY session, best liquidity
+        "NYSE_OPEN": 0.9,  # 14:30 UTC -- moderate NY
+        "US_DATA_1000": 0.9,  # ~14:00 UTC -- post-equity-open flow
+        "CME_PRECLOSE": 1.0,  # ~19:45 UTC -- closing session
+        "NYSE_CLOSE": 0.9,  # ~20:00 UTC -- NYSE close
     },
     "MCL": {
-        "CME_REOPEN": 1.2,       # 23:00 UTC -- thin Asian session for crude
-        "TOKYO_OPEN": 1.1,       # 00:00 UTC -- early Asian
-        "SINGAPORE_OPEN": 1.0,   # 01:00 UTC -- moderate
-        "LONDON_METALS": 0.9,    # 08:00 UTC -- pre-London, decent crude liquidity
-        "US_DATA_830": 0.8,      # 13:00 UTC -- NY/NYMEX session, best liquidity
-        "NYSE_OPEN": 1.0,        # 14:30 UTC -- moderate NY
+        "CME_REOPEN": 1.2,  # 23:00 UTC -- thin Asian session for crude
+        "TOKYO_OPEN": 1.1,  # 00:00 UTC -- early Asian
+        "SINGAPORE_OPEN": 1.0,  # 01:00 UTC -- moderate
+        "LONDON_METALS": 0.9,  # 08:00 UTC -- pre-London, decent crude liquidity
+        "US_DATA_830": 0.8,  # 13:00 UTC -- NY/NYMEX session, best liquidity
+        "NYSE_OPEN": 1.0,  # 14:30 UTC -- moderate NY
     },
     "SIL": {
         # Defaults — update after volume analysis determines actual session list
-        "CME_REOPEN": 1.3,       # 23:00 UTC -- thin Asian session for silver
-        "TOKYO_OPEN": 1.2,       # 00:00 UTC -- early Asian
-        "SINGAPORE_OPEN": 1.0,   # 01:00 UTC -- moderate
-        "LONDON_METALS": 0.9,    # 08:00 UTC -- pre-London, decent liquidity
-        "US_DATA_830": 0.8,      # 13:00 UTC -- NY/COMEX session, best liquidity
-        "NYSE_OPEN": 1.0,        # 14:30 UTC -- moderate NY
-        "COMEX_SETTLE": 0.9,     # ~18:25 UTC -- settlement window
+        "CME_REOPEN": 1.3,  # 23:00 UTC -- thin Asian session for silver
+        "TOKYO_OPEN": 1.2,  # 00:00 UTC -- early Asian
+        "SINGAPORE_OPEN": 1.0,  # 01:00 UTC -- moderate
+        "LONDON_METALS": 0.9,  # 08:00 UTC -- pre-London, decent liquidity
+        "US_DATA_830": 0.8,  # 13:00 UTC -- NY/COMEX session, best liquidity
+        "NYSE_OPEN": 1.0,  # 14:30 UTC -- moderate NY
+        "COMEX_SETTLE": 0.9,  # ~18:25 UTC -- settlement window
     },
     "M6E": {
         # EUR/USD liquidity peaks at London open and tapers through US session
-        "TOKYO_OPEN": 1.3,        # 00:00 UTC -- thin Asian FX; EUR/USD less active pre-London
-        "SINGAPORE_OPEN": 1.2,    # 01:00 UTC -- early Asian; slight improvement
-        "LONDON_METALS": 0.8,     # 08:00 UTC -- London open; best EUR/USD liquidity
-        "NYSE_OPEN": 1.0,         # 14:30 UTC -- US equity open; decent EUR/USD flow
-        "US_DATA_830": 1.5,       # 08:30 ET data release; wide spreads during news
-        "US_DATA_1000": 1.0,      # 10:00 ET; moderate
+        "TOKYO_OPEN": 1.3,  # 00:00 UTC -- thin Asian FX; EUR/USD less active pre-London
+        "SINGAPORE_OPEN": 1.2,  # 01:00 UTC -- early Asian; slight improvement
+        "LONDON_METALS": 0.8,  # 08:00 UTC -- London open; best EUR/USD liquidity
+        "NYSE_OPEN": 1.0,  # 14:30 UTC -- US equity open; decent EUR/USD flow
+        "US_DATA_830": 1.5,  # 08:30 ET data release; wide spreads during news
+        "US_DATA_1000": 1.0,  # 10:00 ET; moderate
     },
     "M2K": {
         # Russell 2000 micro — same equity session structure as MES/MNQ
-        "CME_REOPEN": 1.1,        # 23:00 UTC -- thin Asian (RTY less liquid than ES overnight)
-        "TOKYO_OPEN": 1.1,        # 00:00 UTC -- early Asian
-        "SINGAPORE_OPEN": 1.0,    # 01:00 UTC -- moderate
-        "LONDON_METALS": 1.0,     # 08:00 UTC -- pre-NY, picking up
-        "NYSE_OPEN": 0.9,         # 14:30 UTC -- US equity open, peak Russell liquidity
-        "US_DATA_830": 1.3,       # 08:30 ET data; wider spreads during release
-        "US_DATA_1000": 0.9,      # 10:00 ET; solid
-        "CME_PRECLOSE": 1.0,      # 2:45 PM ET; moderate
+        "CME_REOPEN": 1.1,  # 23:00 UTC -- thin Asian (RTY less liquid than ES overnight)
+        "TOKYO_OPEN": 1.1,  # 00:00 UTC -- early Asian
+        "SINGAPORE_OPEN": 1.0,  # 01:00 UTC -- moderate
+        "LONDON_METALS": 1.0,  # 08:00 UTC -- pre-NY, picking up
+        "NYSE_OPEN": 0.9,  # 14:30 UTC -- US equity open, peak Russell liquidity
+        "US_DATA_830": 1.3,  # 08:30 ET data; wider spreads during release
+        "US_DATA_1000": 0.9,  # 10:00 ET; solid
+        "CME_PRECLOSE": 1.0,  # 2:45 PM ET; moderate
     },
     # MBT (Micro Bitcoin) intentionally absent: dead instrument (0 validated ORB
     # strategies, no live trading). get_session_cost_spec() falls back to mult=1.0
@@ -276,6 +277,7 @@ def list_validated_instruments() -> list[str]:
 # R-MULTIPLE CALCULATIONS
 # =============================================================================
 
+
 def risk_in_dollars(spec: CostSpec, entry: float, stop: float) -> float:
     """
     Realized risk in dollars (costs INCREASE risk).
@@ -311,8 +313,7 @@ def realized_rr(spec: CostSpec, entry: float, stop: float, target: float) -> flo
     return rew / risk
 
 
-def to_r_multiple(spec: CostSpec, entry: float, stop: float,
-                   pnl_points: float) -> float:
+def to_r_multiple(spec: CostSpec, entry: float, stop: float, pnl_points: float) -> float:
     """
     Convert a P&L in price points to an R-multiple.
 
@@ -329,8 +330,7 @@ def to_r_multiple(spec: CostSpec, entry: float, stop: float,
     return pnl_dollars / risk
 
 
-def pnl_points_to_r(spec: CostSpec, entry: float, stop: float,
-                     pnl_points: float) -> float:
+def pnl_points_to_r(spec: CostSpec, entry: float, stop: float, pnl_points: float) -> float:
     """
     Convert raw P&L points to R-multiple WITHOUT deducting friction from P&L.
 

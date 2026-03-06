@@ -117,8 +117,13 @@ class TestRFParams:
 
     def test_valid_sklearn_keys(self):
         valid_keys = {
-            "n_estimators", "max_depth", "min_samples_leaf",
-            "max_features", "class_weight", "random_state", "n_jobs",
+            "n_estimators",
+            "max_depth",
+            "min_samples_leaf",
+            "max_features",
+            "class_weight",
+            "random_state",
+            "n_jobs",
         }
         assert set(RF_PARAMS.keys()) == valid_keys
 
@@ -141,6 +146,7 @@ class TestCPCVConfig:
     def test_expected_splits_count(self):
         """C(10, 2) = 45 splits."""
         from math import comb
+
         expected = comb(CPCV_N_GROUPS, CPCV_K_TEST)
         assert expected == 45
 
@@ -173,6 +179,7 @@ class TestActiveInstruments:
         """ML instruments must be a subset of pipeline instruments
         (excludes instruments with no validated strategies, e.g. MBT)."""
         from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+
         extra = set(ACTIVE_INSTRUMENTS) - set(ACTIVE_ORB_INSTRUMENTS)
         assert extra == set(), f"ML has instruments not in pipeline: {extra}"
 
@@ -182,15 +189,11 @@ class TestRelVolSessions:
 
     def test_sessions_match_catalog(self):
         from pipeline.dst import SESSION_CATALOG
-        catalog_dynamic = {
-            name for name, cfg in SESSION_CATALOG.items()
-            if cfg.get("type") == "dynamic"
-        }
+
+        catalog_dynamic = {name for name, cfg in SESSION_CATALOG.items() if cfg.get("type") == "dynamic"}
         rel_vol_set = set(REL_VOL_SESSIONS)
         assert rel_vol_set == catalog_dynamic, (
-            f"REL_VOL_SESSIONS mismatch: "
-            f"extra={rel_vol_set - catalog_dynamic}, "
-            f"missing={catalog_dynamic - rel_vol_set}"
+            f"REL_VOL_SESSIONS mismatch: extra={rel_vol_set - catalog_dynamic}, missing={catalog_dynamic - rel_vol_set}"
         )
 
 

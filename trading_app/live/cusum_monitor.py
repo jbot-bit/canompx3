@@ -10,14 +10,15 @@ from the expected R per trade exceeds `threshold` standard deviations.
 threshold=4.0 ≈ 4σ of accumulated drift before alarm — conservative enough to
 avoid false positives over ~100-trade windows while catching genuine regime change.
 """
+
 from dataclasses import dataclass, field
 
 
 @dataclass
 class CUSUMMonitor:
-    expected_r: float   # Expected R per trade from backtest (e.g. 0.30)
-    std_r: float         # Std deviation of R outcomes (use 1.0 as conservative default)
-    threshold: float     # Alarm threshold in std units (e.g. 4.0)
+    expected_r: float  # Expected R per trade from backtest (e.g. 0.30)
+    std_r: float  # Std deviation of R outcomes (use 1.0 as conservative default)
+    threshold: float  # Alarm threshold in std units (e.g. 4.0)
 
     cusum_pos: float = field(default=0.0, init=False)
     cusum_neg: float = field(default=0.0, init=False)
@@ -34,8 +35,8 @@ class CUSUMMonitor:
         """
         self.n_trades += 1
         z = (actual_r - self.expected_r) / self.std_r
-        self.cusum_neg = min(0.0, self.cusum_neg + z)   # tracks persistent losses
-        self.cusum_pos = max(0.0, self.cusum_pos + z)   # tracks persistent gains
+        self.cusum_neg = min(0.0, self.cusum_neg + z)  # tracks persistent losses
+        self.cusum_pos = max(0.0, self.cusum_pos + z)  # tracks persistent gains
 
         if -self.cusum_neg > self.threshold and not self.alarm_triggered:
             self.alarm_triggered = True

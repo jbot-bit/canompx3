@@ -24,6 +24,7 @@ class TestPaths:
     def test_gold_db_path_is_absolute_and_named_correctly(self):
         # DB may be in project root, local_db/ junction, or DUCKDB_PATH override
         import os
+
         assert GOLD_DB_PATH.is_absolute()
         assert GOLD_DB_PATH.name == "gold.db"
         # If DUCKDB_PATH is set (e.g. C:/db/gold.db), it may be outside project root — allowed

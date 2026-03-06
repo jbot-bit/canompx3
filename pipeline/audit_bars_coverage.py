@@ -49,23 +49,29 @@ TRADING_DAY_START_HOUR_LOCAL = 9
 
 # Both data directories
 DATA_DIRS = [
-    DAILY_DBN_DIR,                                        # 2021-2026
-    PROJECT_ROOT / "DB" / "gold_db_fullsize_2016-2021",   # 2016-2021
+    DAILY_DBN_DIR,  # 2021-2026
+    PROJECT_ROOT / "DB" / "gold_db_fullsize_2016-2021",  # 2016-2021
 ]
 
 # ---------------------------------------------------------------------------
 # Trading day helpers (match build_daily_features logic exactly)
 # ---------------------------------------------------------------------------
 
+
 def _trading_day_utc_range(trading_day: date) -> tuple[datetime, datetime]:
     """Return [start, end) UTC range for a trading day (09:00 Bris boundary)."""
     start_utc = datetime(
-        trading_day.year, trading_day.month, trading_day.day,
-        TRADING_DAY_START_HOUR_LOCAL, 0, 0,
+        trading_day.year,
+        trading_day.month,
+        trading_day.day,
+        TRADING_DAY_START_HOUR_LOCAL,
+        0,
+        0,
         tzinfo=BRISBANE_TZ,
     ).astimezone(UTC_TZ)
     end_utc = start_utc + timedelta(hours=24)
     return start_utc, end_utc
+
 
 def _calendar_dates_for_trading_day(trading_day: date) -> list[date]:
     """
@@ -76,9 +82,11 @@ def _calendar_dates_for_trading_day(trading_day: date) -> list[date]:
     """
     return [trading_day - timedelta(days=1), trading_day]
 
+
 # ---------------------------------------------------------------------------
 # File discovery across both data directories
 # ---------------------------------------------------------------------------
+
 
 def _build_file_index() -> dict[date, Path]:
     """Build calendar_date -> file_path index across all data dirs."""
@@ -95,22 +103,24 @@ def _build_file_index() -> dict[date, Path]:
             index[file_date] = fpath
     return index
 
+
 # ---------------------------------------------------------------------------
 # Sampling tiers
 # ---------------------------------------------------------------------------
+
 
 def _sample_boundary(con, n: int = 10) -> list[tuple[date, str]]:
     """First and last n/2 trading days in gold.db."""
     half = n // 2
     rows = con.execute(
-        "SELECT DISTINCT trading_day FROM daily_features "
-        "WHERE symbol = 'MGC' ORDER BY trading_day"
+        "SELECT DISTINCT trading_day FROM daily_features WHERE symbol = 'MGC' ORDER BY trading_day"
     ).fetchall()
     days = [r[0] for r in rows]
     if len(days) <= n:
         return [(d, "boundary") for d in days]
     selected = days[:half] + days[-half:]
     return [(d, "boundary") for d in selected]
+
 
 def _sample_roll(con, n: int = 10) -> list[tuple[date, str]]:
     """Days where source_symbol changes (futures roll dates)."""
@@ -140,6 +150,7 @@ def _sample_roll(con, n: int = 10) -> list[tuple[date, str]]:
     selected = [roll_days[int(i * step)] for i in range(n)]
     return [(d, "roll") for d in selected]
 
+
 def _sample_anomaly(con, n: int = 10) -> list[tuple[date, str]]:
     """Days with lowest bar_count_1m (potential missing-data days)."""
     rows = con.execute(
@@ -150,12 +161,11 @@ def _sample_anomaly(con, n: int = 10) -> list[tuple[date, str]]:
     ).fetchall()
     return [(r[0], "anomaly") for r in rows]
 
-def _sample_random(con, already: set[date], n: int = 30,
-                   seed: int | None = None) -> list[tuple[date, str]]:
+
+def _sample_random(con, already: set[date], n: int = 30, seed: int | None = None) -> list[tuple[date, str]]:
     """Uniform random from remaining trading days."""
     rows = con.execute(
-        "SELECT DISTINCT trading_day FROM daily_features "
-        "WHERE symbol = 'MGC' ORDER BY trading_day"
+        "SELECT DISTINCT trading_day FROM daily_features WHERE symbol = 'MGC' ORDER BY trading_day"
     ).fetchall()
     pool = [r[0] for r in rows if r[0] not in already]
     if not pool:
@@ -165,8 +175,8 @@ def _sample_random(con, already: set[date], n: int = 30,
     selected = rng.sample(pool, count)
     return [(d, "random") for d in sorted(selected)]
 
-def build_sample(con, random_count: int = 30,
-                 seed: int | None = None) -> list[tuple[date, str]]:
+
+def build_sample(con, random_count: int = 30, seed: int | None = None) -> list[tuple[date, str]]:
     """Build the combined sample across all 4 tiers (deduplicated)."""
     seen: set[date] = set()
     sample: list[tuple[date, str]] = []
@@ -189,9 +199,11 @@ def build_sample(con, random_count: int = 30,
     sample.sort(key=lambda x: x[0])
     return sample
 
+
 # ---------------------------------------------------------------------------
 # Per-day audit: read raw files, reproduce pipeline logic, count bars
 # ---------------------------------------------------------------------------
+
 
 def audit_day(trading_day: date, file_index: dict[date, Path]) -> dict:
     """
@@ -249,9 +261,7 @@ def audit_day(trading_day: date, file_index: dict[date, Path]) -> dict:
 
     # Choose front contract (same logic as pipeline)
     volumes = combined.groupby("symbol")["volume"].sum().to_dict()
-    front = choose_front_contract(
-        volumes, outright_pattern=GC_OUTRIGHT_PATTERN, prefix_len=2
-    )
+    front = choose_front_contract(volumes, outright_pattern=GC_OUTRIGHT_PATTERN, prefix_len=2)
     if front is None:
         result["raw_count"] = 0
         result["detail"] = "No front contract selected"
@@ -266,44 +276,50 @@ def audit_day(trading_day: date, file_index: dict[date, Path]) -> dict:
     result["front_contract"] = front
     return result
 
+
 def query_db_count(con, trading_day: date) -> int:
     """Count bars_1m rows for a trading day via the same UTC-range logic."""
     start_utc, end_utc = _trading_day_utc_range(trading_day)
     row = con.execute(
-        "SELECT COUNT(*) FROM bars_1m "
-        "WHERE symbol = 'MGC' AND ts_utc >= ? AND ts_utc < ?",
+        "SELECT COUNT(*) FROM bars_1m WHERE symbol = 'MGC' AND ts_utc >= ? AND ts_utc < ?",
         [start_utc, end_utc],
     ).fetchone()
     return row[0] if row else 0
+
 
 def query_db_source_symbols(con, trading_day: date) -> list[str]:
     """Return distinct source_symbols for a trading day (detects roll days)."""
     start_utc, end_utc = _trading_day_utc_range(trading_day)
     rows = con.execute(
-        "SELECT DISTINCT source_symbol FROM bars_1m "
-        "WHERE symbol = 'MGC' AND ts_utc >= ? AND ts_utc < ?",
+        "SELECT DISTINCT source_symbol FROM bars_1m WHERE symbol = 'MGC' AND ts_utc >= ? AND ts_utc < ?",
         [start_utc, end_utc],
     ).fetchall()
     return [r[0] for r in rows]
+
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Audit bars_1m coverage: raw .dbn.zst vs gold.db"
-    )
+    parser = argparse.ArgumentParser(description="Audit bars_1m coverage: raw .dbn.zst vs gold.db")
     parser.add_argument(
-        "--random-count", type=int, default=30,
+        "--random-count",
+        type=int,
+        default=30,
         help="Number of random-sample days (default: 30)",
     )
     parser.add_argument(
-        "--seed", type=int, default=None,
+        "--seed",
+        type=int,
+        default=None,
         help="Random seed for reproducibility",
     )
     parser.add_argument(
-        "--db", type=str, default=None,
+        "--db",
+        type=str,
+        default=None,
         help="Database path (default: gold.db)",
     )
     args = parser.parse_args()
@@ -434,6 +450,7 @@ def main():
     # Exit code: 0 if no hard failures or errors, 1 otherwise
     # (WARNs are expected and don't fail the audit)
     sys.exit(0 if fails == 0 and errors == 0 else 1)
+
 
 if __name__ == "__main__":
     main()

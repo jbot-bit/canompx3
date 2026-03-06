@@ -44,6 +44,7 @@ Setup:
     Set MINIMAX_API_KEY in your .env or environment:
         export MINIMAX_API_KEY=your-key-here
 """
+
 from __future__ import annotations
 
 import argparse
@@ -56,12 +57,12 @@ from dotenv import load_dotenv
 
 # ── Config ──────────────────────────────────────────────────────────
 API_URL = "https://api.minimax.io/v1/chat/completions"
-MODEL_STANDARD = "MiniMax-M2.5"            # Deep analysis, improvements mode
-MODEL_FAST     = "MiniMax-M2.5"            # Flash variants not on api.minimax.io plan; same model as standard
+MODEL_STANDARD = "MiniMax-M2.5"  # Deep analysis, improvements mode
+MODEL_FAST = "MiniMax-M2.5"  # Flash variants not on api.minimax.io plan; same model as standard
 MAX_CONTEXT = 200000  # M2.5 total context window (input + output) in tokens
-MAX_TOKENS = 131072   # 128K default — auto-reduced if input is large
+MAX_TOKENS = 131072  # 128K default — auto-reduced if input is large
 API_TIMEOUT_STANDARD = 600.0  # seconds — standard model, large files
-API_TIMEOUT_FAST     = 120.0  # seconds — Lightning is much quicker
+API_TIMEOUT_FAST = 120.0  # seconds — Lightning is much quicker
 
 # ── Call budget counter ──────────────────────────────────────────────
 # Tracks daily API calls in ~/.m25_budget.json so you know where you stand.
@@ -108,6 +109,7 @@ def show_budget() -> None:
     for d in sorted(data.keys())[-3:]:
         marker = " ← today" if d == today else ""
         print(f"  {d}: {data[d]} calls{marker}")
+
 
 # ── Architecture context ────────────────────────────────────────────
 # Prepended to every audit to prevent M2.5's known false positive patterns.
@@ -426,9 +428,18 @@ def gather_runtime_context(primary_paths: list[str]) -> str:
     parts: list[str] = []
 
     # ── 1. DB schema (if target touches DB) ──────────────────────────
-    db_keywords = {"duckdb", "gold.db", "GOLD_DB", "bars_1m", "bars_5m",
-                   "daily_features", "orb_outcomes", "validated_setups",
-                   "experimental_strategies", "edge_families"}
+    db_keywords = {
+        "duckdb",
+        "gold.db",
+        "GOLD_DB",
+        "bars_1m",
+        "bars_5m",
+        "daily_features",
+        "orb_outcomes",
+        "validated_setups",
+        "experimental_strategies",
+        "edge_families",
+    }
     touches_db = False
     for p in primary_paths:
         path = Path(p) if Path(p).exists() else project_root / p
@@ -443,10 +454,10 @@ def gather_runtime_context(primary_paths: list[str]) -> str:
             db_path = project_root / "gold.db"
             if db_path.exists():
                 import duckdb
+
                 con = duckdb.connect(str(db_path), read_only=True)
                 tables = con.execute(
-                    "SELECT table_name FROM information_schema.tables "
-                    "WHERE table_schema='main' ORDER BY table_name"
+                    "SELECT table_name FROM information_schema.tables WHERE table_schema='main' ORDER BY table_name"
                 ).fetchall()
                 schema_lines = []
                 for (tbl,) in tables:
@@ -461,8 +472,7 @@ def gather_runtime_context(primary_paths: list[str]) -> str:
                 parts.append(
                     "## DATABASE SCHEMA (live from gold.db)\n"
                     "M2.5 cannot query the DB. Use this to verify column names, "
-                    "types, and table relationships.\n\n"
-                    + "\n".join(schema_lines)
+                    "types, and table relationships.\n\n" + "\n".join(schema_lines)
                 )
         except Exception as e:
             parts.append(f"## DATABASE SCHEMA\n(Could not read: {e})")
@@ -470,85 +480,96 @@ def gather_runtime_context(primary_paths: list[str]) -> str:
     # ── 2. Current config values ─────────────────────────────────────
     try:
         result = subprocess.run(
-            [sys.executable, "-c", (
-                "from trading_app.config import ENTRY_MODELS, FILTER_TYPES, ORB_MINUTES_OPTIONS, "
-                "CLASSIFICATION_THRESHOLDS, CONFIRM_BARS_OPTIONS, RR_TARGET_OPTIONS\n"
-                "print('ENTRY_MODELS:', sorted(ENTRY_MODELS))\n"
-                "print('FILTER_TYPES:', sorted(FILTER_TYPES))\n"
-                "print('ORB_MINUTES:', sorted(ORB_MINUTES_OPTIONS))\n"
-                "print('CONFIRM_BARS:', sorted(CONFIRM_BARS_OPTIONS))\n"
-                "print('RR_TARGETS:', sorted(RR_TARGET_OPTIONS))\n"
-                "print('CLASSIFICATION:', CLASSIFICATION_THRESHOLDS)\n"
-            )],
-            capture_output=True, text=True, timeout=10,
+            [
+                sys.executable,
+                "-c",
+                (
+                    "from trading_app.config import ENTRY_MODELS, FILTER_TYPES, ORB_MINUTES_OPTIONS, "
+                    "CLASSIFICATION_THRESHOLDS, CONFIRM_BARS_OPTIONS, RR_TARGET_OPTIONS\n"
+                    "print('ENTRY_MODELS:', sorted(ENTRY_MODELS))\n"
+                    "print('FILTER_TYPES:', sorted(FILTER_TYPES))\n"
+                    "print('ORB_MINUTES:', sorted(ORB_MINUTES_OPTIONS))\n"
+                    "print('CONFIRM_BARS:', sorted(CONFIRM_BARS_OPTIONS))\n"
+                    "print('RR_TARGETS:', sorted(RR_TARGET_OPTIONS))\n"
+                    "print('CLASSIFICATION:', CLASSIFICATION_THRESHOLDS)\n"
+                ),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
             cwd=str(project_root),
         )
         if result.returncode == 0 and result.stdout.strip():
-            parts.append(
-                "## CURRENT CONFIG VALUES (live from trading_app/config.py)\n"
-                + result.stdout.strip()
-            )
+            parts.append("## CURRENT CONFIG VALUES (live from trading_app/config.py)\n" + result.stdout.strip())
     except Exception:
         pass
 
     # ── 3. Active instruments + cost specs ───────────────────────────
     try:
         result = subprocess.run(
-            [sys.executable, "-c", (
-                "from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS\n"
-                "from pipeline.cost_model import COST_SPECS\n"
-                "print('ACTIVE_INSTRUMENTS:', sorted(ACTIVE_ORB_INSTRUMENTS))\n"
-                "for sym, spec in sorted(COST_SPECS.items()):\n"
-                "    print(f'  {sym}: {spec}')\n"
-            )],
-            capture_output=True, text=True, timeout=10,
+            [
+                sys.executable,
+                "-c",
+                (
+                    "from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS\n"
+                    "from pipeline.cost_model import COST_SPECS\n"
+                    "print('ACTIVE_INSTRUMENTS:', sorted(ACTIVE_ORB_INSTRUMENTS))\n"
+                    "for sym, spec in sorted(COST_SPECS.items()):\n"
+                    "    print(f'  {sym}: {spec}')\n"
+                ),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
             cwd=str(project_root),
         )
         if result.returncode == 0 and result.stdout.strip():
-            parts.append(
-                "## ACTIVE INSTRUMENTS & COST SPECS (live)\n"
-                + result.stdout.strip()
-            )
+            parts.append("## ACTIVE INSTRUMENTS & COST SPECS (live)\n" + result.stdout.strip())
     except Exception:
         pass
 
     # ── 4. Session catalog summary ───────────────────────────────────
     try:
         result = subprocess.run(
-            [sys.executable, "-c", (
-                "from pipeline.dst import SESSION_CATALOG\n"
-                "import datetime\n"
-                "# Show resolved Brisbane times for EST and EDT\n"
-                "est_day = datetime.date(2025, 1, 15)  # US EST\n"
-                "edt_day = datetime.date(2025, 6, 15)  # US EDT\n"
-                "print('Sessions (resolved Brisbane times, EST vs EDT):')\n"
-                "for name in sorted(SESSION_CATALOG):\n"
-                "    info = SESSION_CATALOG[name]\n"
-                "    event = info.get('event', 'unknown')\n"
-                "    bg = info.get('break_group', '?')\n"
-                "    resolver = info.get('resolver')\n"
-                "    if resolver:\n"
-                "        try:\n"
-                "            est_hm = resolver(est_day)\n"
-                "            edt_hm = resolver(edt_day)\n"
-                "            est_str = f'{est_hm[0]:02d}:{est_hm[1]:02d}'\n"
-                "            edt_str = f'{edt_hm[0]:02d}:{edt_hm[1]:02d}'\n"
-                "            shift = '' if est_str == edt_str else f' (shifts to {edt_str} in EDT)'\n"
-                "            print(f'  {name}: {est_str} Brisbane (EST){shift} | group={bg} | {event}')\n"
-                "        except Exception as e:\n"
-                "            print(f'  {name}: resolver error: {e} | group={bg} | {event}')\n"
-                "    else:\n"
-                "        print(f'  {name}: no resolver | group={bg} | {event}')\n"
-            )],
-            capture_output=True, text=True, timeout=10,
+            [
+                sys.executable,
+                "-c",
+                (
+                    "from pipeline.dst import SESSION_CATALOG\n"
+                    "import datetime\n"
+                    "# Show resolved Brisbane times for EST and EDT\n"
+                    "est_day = datetime.date(2025, 1, 15)  # US EST\n"
+                    "edt_day = datetime.date(2025, 6, 15)  # US EDT\n"
+                    "print('Sessions (resolved Brisbane times, EST vs EDT):')\n"
+                    "for name in sorted(SESSION_CATALOG):\n"
+                    "    info = SESSION_CATALOG[name]\n"
+                    "    event = info.get('event', 'unknown')\n"
+                    "    bg = info.get('break_group', '?')\n"
+                    "    resolver = info.get('resolver')\n"
+                    "    if resolver:\n"
+                    "        try:\n"
+                    "            est_hm = resolver(est_day)\n"
+                    "            edt_hm = resolver(edt_day)\n"
+                    "            est_str = f'{est_hm[0]:02d}:{est_hm[1]:02d}'\n"
+                    "            edt_str = f'{edt_hm[0]:02d}:{edt_hm[1]:02d}'\n"
+                    "            shift = '' if est_str == edt_str else f' (shifts to {edt_str} in EDT)'\n"
+                    "            print(f'  {name}: {est_str} Brisbane (EST){shift} | group={bg} | {event}')\n"
+                    "        except Exception as e:\n"
+                    "            print(f'  {name}: resolver error: {e} | group={bg} | {event}')\n"
+                    "    else:\n"
+                    "        print(f'  {name}: no resolver | group={bg} | {event}')\n"
+                ),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
             cwd=str(project_root),
         )
         if result.returncode == 0 and result.stdout.strip():
             parts.append(
                 "## SESSION CATALOG (live from pipeline/dst.py)\n"
                 "These are ORB session START times in Brisbane time.\n"
-                "US DST shifts some sessions by 1 hour.\n\n"
-                + result.stdout.strip()
+                "US DST shifts some sessions by 1 hour.\n\n" + result.stdout.strip()
             )
     except Exception:
         pass
@@ -567,16 +588,14 @@ def gather_runtime_context(primary_paths: list[str]) -> str:
                     content = "\n".join(lines[:300])
                     content += f"\n... [TRUNCATED at 300/{len(lines)} lines]"
                 test_content_parts.append(
-                    f"### Test file: {test_path.relative_to(project_root).as_posix()}\n"
-                    f"```python\n{content}\n```"
+                    f"### Test file: {test_path.relative_to(project_root).as_posix()}\n```python\n{content}\n```"
                 )
                 break
 
     if test_content_parts:
         parts.append(
             "## TEST FILES (M2.5 cannot see these without injection)\n"
-            "Use these to understand what IS tested vs what is NOT.\n\n"
-            + "\n\n".join(test_content_parts)
+            "Use these to understand what IS tested vs what is NOT.\n\n" + "\n\n".join(test_content_parts)
         )
 
     # ── 6. Recent git history for target files ───────────────────────
@@ -585,7 +604,9 @@ def gather_runtime_context(primary_paths: list[str]) -> str:
         try:
             result = subprocess.run(
                 ["git", "log", "--oneline", "-5", "--", p],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True,
+                text=True,
+                timeout=10,
                 cwd=str(project_root),
             )
             if result.returncode == 0 and result.stdout.strip():
@@ -594,10 +615,7 @@ def gather_runtime_context(primary_paths: list[str]) -> str:
             pass
 
     if git_parts:
-        parts.append(
-            "## RECENT GIT HISTORY (last 5 commits per file)\n"
-            + "\n".join(git_parts)
-        )
+        parts.append("## RECENT GIT HISTORY (last 5 commits per file)\n" + "\n".join(git_parts))
 
     if not parts:
         return ""
@@ -630,26 +648,24 @@ def build_diff_content(files: list[str], ref: str = "HEAD") -> str | None:
             # Get the diff with context
             result = subprocess.run(
                 ["git", "diff", "-U15", ref, "--", f],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True,
+                text=True,
+                timeout=10,
                 cwd=str(project_root),
             )
             if result.returncode == 0 and result.stdout.strip():
-                diff_parts.append(
-                    f"### DIFF: {f} (vs {ref})\n"
-                    f"```diff\n{result.stdout.strip()}\n```"
-                )
+                diff_parts.append(f"### DIFF: {f} (vs {ref})\n```diff\n{result.stdout.strip()}\n```")
             else:
                 # Try staged diff
                 result = subprocess.run(
                     ["git", "diff", "-U15", "--cached", "--", f],
-                    capture_output=True, text=True, timeout=10,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
                     cwd=str(project_root),
                 )
                 if result.returncode == 0 and result.stdout.strip():
-                    diff_parts.append(
-                        f"### DIFF (staged): {f} (vs {ref})\n"
-                        f"```diff\n{result.stdout.strip()}\n```"
-                    )
+                    diff_parts.append(f"### DIFF (staged): {f} (vs {ref})\n```diff\n{result.stdout.strip()}\n```")
         except Exception:
             pass
 
@@ -660,8 +676,7 @@ def build_diff_content(files: list[str], ref: str = "HEAD") -> str | None:
         "## CODE CHANGES TO REVIEW\n"
         "Focus your audit on THESE CHANGES specifically. The surrounding context "
         "is provided for understanding, but your findings should relate to the "
-        "changed lines (marked with + and -).\n\n"
-        + "\n\n".join(diff_parts)
+        "changed lines (marked with + and -).\n\n" + "\n\n".join(diff_parts)
     )
 
 
@@ -702,10 +717,22 @@ def triage_output(raw_output: str) -> str:
                 continue
 
         # Keep WELL-DONE, FINDINGS, RECOMMENDATIONS, SUMMARY headers
-        if any(kw in upper for kw in ["WELL-DONE", "FINDING", "RECOMMENDATION",
-                                       "SUMMARY", "OVERALL", "VERDICT",
-                                       "TRUE FINDING", "WORTH EXPLORING",
-                                       "CRITICAL", "HIGH", "MEDIUM"]):
+        if any(
+            kw in upper
+            for kw in [
+                "WELL-DONE",
+                "FINDING",
+                "RECOMMENDATION",
+                "SUMMARY",
+                "OVERALL",
+                "VERDICT",
+                "TRUE FINDING",
+                "WORTH EXPLORING",
+                "CRITICAL",
+                "HIGH",
+                "MEDIUM",
+            ]
+        ):
             if "FALSE" not in upper:
                 skip_section = False
 
@@ -768,9 +795,7 @@ def find_related_files(primary_paths: list[str], max_extra: int = 4) -> dict[str
             continue
         src = path.read_text(encoding="utf-8", errors="replace")
         # Match: from pipeline.foo import ..., from trading_app.ml.bar import ...
-        for m in _re.finditer(
-            r"(?:from|import)\s+([\w.]+)", src
-        ):
+        for m in _re.finditer(r"(?:from|import)\s+([\w.]+)", src):
             name = m.group(1)
             # Try full name and last two parts (e.g. "trading_app.config" -> "config")
             for key in (name, name.split(".")[-1], ".".join(name.split(".")[-2:])):
@@ -891,8 +916,7 @@ def audit_deep(
         context_block = (
             "\n\n---\n## CROSS-FILE CONTEXT (auto-injected)\n"
             "These files are imported by the primary file(s). Use them to verify "
-            "cross-module claims before flagging anything.\n\n"
-            + "\n\n".join(related_parts)
+            "cross-module claims before flagging anything.\n\n" + "\n\n".join(related_parts)
         )
         if verbose:
             print(
@@ -930,8 +954,7 @@ def audit_deep(
         "2. Key patterns and design choices (and why they might be intentional)\n"
         "3. What the code ASSUMES about its inputs and environment\n"
         "4. What other modules it depends on and what it expects from them\n\n"
-        "Be factual. No bug-hunting yet.\n\n"
-        + full_code
+        "Be factual. No bug-hunting yet.\n\n" + full_code
     )
 
     if verbose:
@@ -1081,8 +1104,7 @@ def audit_plan(
         "2. What functions/modules/data structures are closest to what's needed\n"
         "3. What is genuinely missing (the gap this feature fills)\n"
         "4. Any constraints the existing architecture imposes on how this can be built\n\n"
-        "Do NOT design anything yet. Just orient yourself.\n\n"
-        + codebase_block
+        "Do NOT design anything yet. Just orient yourself.\n\n" + codebase_block
     )
 
     if verbose:

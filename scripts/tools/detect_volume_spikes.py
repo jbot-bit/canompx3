@@ -43,11 +43,11 @@ MINUTES_PER_DAY = 1440
 ROLLING_WINDOW = 61  # +/-30 minutes centered
 REPORTS_DIR = Path(__file__).resolve().parent.parent.parent / "reports"
 
+
 # ---------------------------------------------------------------------------
 # Peak detection (no scipy)
 # ---------------------------------------------------------------------------
-def find_peaks(z_scores: np.ndarray, min_height: float = 3.0,
-               min_distance: int = 15) -> list[int]:
+def find_peaks(z_scores: np.ndarray, min_height: float = 3.0, min_distance: int = 15) -> list[int]:
     """Local maxima above threshold with minimum separation.
 
     Uses circular indexing so minute 0 and minute 1439 are neighbors.
@@ -62,6 +62,7 @@ def find_peaks(z_scores: np.ndarray, min_height: float = 3.0,
                 if not peaks or (i - peaks[-1]) >= min_distance:
                     peaks.append(i)
     return peaks
+
 
 # ---------------------------------------------------------------------------
 # Circular rolling baseline
@@ -80,6 +81,7 @@ def circular_rolling(arr: np.ndarray, window: int) -> tuple[np.ndarray, np.ndarr
     # Avoid division by zero
     rolling_std = np.where(rolling_std < 1e-9, 1e-9, rolling_std)
     return rolling_mean, rolling_std
+
 
 # ---------------------------------------------------------------------------
 # Build volume profiles
@@ -121,6 +123,7 @@ def load_bars(con: duckdb.DuckDBPyConnection, instrument: str) -> pd.DataFrame:
     df["is_uk_summer"] = df["trading_day"].map(uk_dst_map)
     return df
 
+
 def build_profile(df: pd.DataFrame, mask: pd.Series | None = None) -> np.ndarray:
     """Return median volume per minute_utc (0-1439). NaN for missing."""
     subset = df if mask is None else df[mask]
@@ -131,6 +134,7 @@ def build_profile(df: pd.DataFrame, mask: pd.Series | None = None) -> np.ndarray
     for minute_utc, vol in grouped.items():
         profile[int(minute_utc)] = vol
     return profile
+
 
 def build_day_count(df: pd.DataFrame, mask: pd.Series | None = None) -> np.ndarray:
     """Return number of distinct trading days per minute_utc."""
@@ -143,12 +147,13 @@ def build_day_count(df: pd.DataFrame, mask: pd.Series | None = None) -> np.ndarr
         counts[int(minute_utc)] = n
     return counts
 
+
 # ---------------------------------------------------------------------------
 # Year-by-year stability
 # ---------------------------------------------------------------------------
-def compute_stability_and_years(df: pd.DataFrame, spike_minutes: list[int],
-                                min_z_per_year: float = 2.0
-                                ) -> tuple[dict[int, float], dict[int, list[int]]]:
+def compute_stability_and_years(
+    df: pd.DataFrame, spike_minutes: list[int], min_z_per_year: float = 2.0
+) -> tuple[dict[int, float], dict[int, list[int]]]:
     """For each spike minute, compute stability and active years.
 
     Pre-computes per-year profiles and z-scores once, then looks up spike minutes.
@@ -176,6 +181,7 @@ def compute_stability_and_years(df: pd.DataFrame, spike_minutes: list[int],
 
     return stability, years_active
 
+
 # ---------------------------------------------------------------------------
 # Winter/summer shift detection
 # ---------------------------------------------------------------------------
@@ -188,6 +194,7 @@ def _circular_shift(a: int, b: int) -> int:
         diff += MINUTES_PER_DAY
     return diff
 
+
 def _nearest_peak(target: int, peaks: list[int], max_dist: int = 90) -> int | None:
     """Find the peak nearest to target (circular), within max_dist."""
     best = None
@@ -198,6 +205,7 @@ def _nearest_peak(target: int, peaks: list[int], max_dist: int = 90) -> int | No
             best_dist = dist
             best = p
     return best
+
 
 def detect_shift_for_spike(
     minute_utc: int,
@@ -261,6 +269,7 @@ def detect_shift_for_spike(
 
     return winter_min, summer_min, shift, shift_type
 
+
 # ---------------------------------------------------------------------------
 # Map spikes to SESSION_CATALOG
 # ---------------------------------------------------------------------------
@@ -268,6 +277,7 @@ def minute_utc_to_brisbane(minute_utc: int) -> tuple[int, int]:
     """Convert minute-of-day in UTC to (hour, minute) in Brisbane."""
     brisbane_min = (minute_utc + 600) % MINUTES_PER_DAY
     return brisbane_min // 60, brisbane_min % 60
+
 
 def match_to_catalog(minute_utc: int, tolerance: int = 5) -> tuple[str | None, str | None]:
     """Match a UTC spike minute to SESSION_CATALOG entries.
@@ -287,8 +297,7 @@ def match_to_catalog(minute_utc: int, tolerance: int = 5) -> tuple[str | None, s
         if entry["type"] == "fixed":
             cat_h, cat_m = entry["brisbane"]
             cat_total = cat_h * 60 + cat_m
-            dist = min(abs(bris_total - cat_total),
-                       MINUTES_PER_DAY - abs(bris_total - cat_total))
+            dist = min(abs(bris_total - cat_total), MINUTES_PER_DAY - abs(bris_total - cat_total))
             if dist <= tolerance:
                 matched_fixed = label
 
@@ -299,19 +308,20 @@ def match_to_catalog(minute_utc: int, tolerance: int = 5) -> tuple[str | None, s
                 # Convert resolver result (Brisbane) to UTC minute
                 res_bris_total = res_h * 60 + res_m
                 res_utc_total = (res_bris_total - 600) % MINUTES_PER_DAY
-                dist = min(abs(minute_utc - res_utc_total),
-                           MINUTES_PER_DAY - abs(minute_utc - res_utc_total))
+                dist = min(abs(minute_utc - res_utc_total), MINUTES_PER_DAY - abs(minute_utc - res_utc_total))
                 if dist <= tolerance:
                     matched_dynamic = label
                     break
 
     return matched_dynamic, matched_fixed
 
+
 # ---------------------------------------------------------------------------
 # Analysis pipeline
 # ---------------------------------------------------------------------------
-def analyze_instrument(con: duckdb.DuckDBPyConnection, instrument: str,
-                       min_z: float = 3.0, min_distance: int = 15) -> dict | None:
+def analyze_instrument(
+    con: duckdb.DuckDBPyConnection, instrument: str, min_z: float = 3.0, min_distance: int = 15
+) -> dict | None:
     """Run full volume spike analysis for one instrument."""
     print(f"\nLoading {instrument} bars_1m...")
     df = load_bars(con, instrument)
@@ -327,8 +337,7 @@ def analyze_instrument(con: duckdb.DuckDBPyConnection, instrument: str,
         td_min.strftime("%Y-%m-%d") if hasattr(td_min, "strftime") else str(td_min),
         td_max.strftime("%Y-%m-%d") if hasattr(td_max, "strftime") else str(td_max),
     )
-    print(f"  {len(df):,} bars, {total_days} trading days "
-          f"({date_range[0]} to {date_range[1]})")
+    print(f"  {len(df):,} bars, {total_days} trading days ({date_range[0]} to {date_range[1]})")
 
     # Build profiles: all / winter / summer
     profile_all = build_profile(df)
@@ -355,14 +364,18 @@ def analyze_instrument(con: duckdb.DuckDBPyConnection, instrument: str,
     # Merge: union of all peak minutes, sorted by z_all descending
     all_peak_set = sorted(set(peaks_all) | set(peaks_winter) | set(peaks_summer))
     # Re-filter: keep only those with z_all > min_z OR z_winter > min_z OR z_summer > min_z
-    significant = [m for m in all_peak_set
-                   if z_all[m] > min_z or z_winter[m] > min_z or z_summer[m] > min_z]
+    significant = [m for m in all_peak_set if z_all[m] > min_z or z_winter[m] > min_z or z_summer[m] > min_z]
     significant.sort(key=lambda m: -z_all[m])
 
     if not significant:
         print(f"  No spikes above z={min_z} detected.")
-        return {"instrument": instrument, "data_range": [str(date_range[0]), str(date_range[1])],
-                "total_trading_days": total_days, "spikes": [], "catalog_coverage": {}}
+        return {
+            "instrument": instrument,
+            "data_range": [str(date_range[0]), str(date_range[1])],
+            "total_trading_days": total_days,
+            "spikes": [],
+            "catalog_coverage": {},
+        }
 
     # Stability
     print(f"  Computing year-by-year stability for {len(significant)} spikes...")
@@ -372,8 +385,11 @@ def analyze_instrument(con: duckdb.DuckDBPyConnection, instrument: str,
     spikes = []
     for rank, minute_utc in enumerate(significant, 1):
         winter_min, summer_min, shift_minutes, shift_type = detect_shift_for_spike(
-            minute_utc, z_winter[minute_utc], z_summer[minute_utc],
-            peaks_winter, peaks_summer,
+            minute_utc,
+            z_winter[minute_utc],
+            z_summer[minute_utc],
+            peaks_winter,
+            peaks_summer,
         )
 
         matched_dynamic, matched_fixed = match_to_catalog(minute_utc)
@@ -450,6 +466,7 @@ def analyze_instrument(con: duckdb.DuckDBPyConnection, instrument: str,
         "catalog_coverage": catalog_coverage,
     }
 
+
 # ---------------------------------------------------------------------------
 # Console output
 # ---------------------------------------------------------------------------
@@ -471,10 +488,14 @@ def print_report(result: dict, min_z: float) -> None:
 
     # Table header
     print(f"\n  Top Spikes (z > {min_z}):")
-    print(f"  {'#':>3}  {'UTC':>5}  {'Bris':>5}  {'Z-All':>6}  {'Z-Win':>6}  "
-          f"{'Z-Sum':>6}  {'Shift':>6}  {'Type':<12}  {'Stab':>5}  {'Session Match'}")
-    print(f"  {'---':>3}  {'-----':>5}  {'-----':>5}  {'------':>6}  {'------':>6}  "
-          f"{'------':>6}  {'------':>6}  {'----------':<12}  {'-----':>5}  {'-------------'}")
+    print(
+        f"  {'#':>3}  {'UTC':>5}  {'Bris':>5}  {'Z-All':>6}  {'Z-Win':>6}  "
+        f"{'Z-Sum':>6}  {'Shift':>6}  {'Type':<12}  {'Stab':>5}  {'Session Match'}"
+    )
+    print(
+        f"  {'---':>3}  {'-----':>5}  {'-----':>5}  {'------':>6}  {'------':>6}  "
+        f"{'------':>6}  {'------':>6}  {'----------':<12}  {'-----':>5}  {'-------------'}"
+    )
 
     for sp in spikes:
         shift_str = f"{sp['shift_minutes']:+d}" if sp["shift_minutes"] is not None else "N/A"
@@ -485,10 +506,12 @@ def print_report(result: dict, min_z: float) -> None:
             match_parts.append(sp["matched_fixed_label"])
         match_str = " / ".join(match_parts) if match_parts else "--"
 
-        print(f"  {sp['rank']:>3}  {sp['time_utc']:>5}  {sp['time_brisbane']:>5}  "
-              f"{sp['z_score_all']:>6.1f}  {sp['z_score_winter']:>6.1f}  "
-              f"{sp['z_score_summer']:>6.1f}  {shift_str:>6}  {sp['shift_type']:<12}  "
-              f"{sp['stability']:>5.2f}  {match_str}")
+        print(
+            f"  {sp['rank']:>3}  {sp['time_utc']:>5}  {sp['time_brisbane']:>5}  "
+            f"{sp['z_score_all']:>6.1f}  {sp['z_score_winter']:>6.1f}  "
+            f"{sp['z_score_summer']:>6.1f}  {shift_str:>6}  {sp['shift_type']:<12}  "
+            f"{sp['stability']:>5.2f}  {match_str}"
+        )
 
     # Catalog coverage
     print(f"\n  Catalog Coverage:")
@@ -501,13 +524,15 @@ def print_report(result: dict, min_z: float) -> None:
             print(f"    {label:<18} NOT DETECTED ({note})")
 
     # Unmatched spikes
-    unmatched = [sp for sp in spikes
-                 if not sp["matched_session"] and not sp["matched_fixed_label"]]
+    unmatched = [sp for sp in spikes if not sp["matched_session"] and not sp["matched_fixed_label"]]
     if unmatched:
         print(f"\n  Unmatched Spikes (potential new sessions):")
         for sp in unmatched:
-            print(f"    {sp['time_utc']} UTC ({sp['time_brisbane']} Brisbane) "
-                  f"z={sp['z_score_all']:.1f}, stability={sp['stability']:.2f}")
+            print(
+                f"    {sp['time_utc']} UTC ({sp['time_brisbane']} Brisbane) "
+                f"z={sp['z_score_all']:.1f}, stability={sp['stability']:.2f}"
+            )
+
 
 # ---------------------------------------------------------------------------
 # JSON output
@@ -520,24 +545,19 @@ def save_json(result: dict, output_dir: Path) -> Path:
         json.dump(result, f, indent=2, default=str)
     return path
 
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 def main():
-    parser = argparse.ArgumentParser(
-        description="Detect volume spikes in bars_1m by minute-of-day"
-    )
+    parser = argparse.ArgumentParser(description="Detect volume spikes in bars_1m by minute-of-day")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--instrument", type=str, help="Instrument symbol (e.g., MGC)")
     group.add_argument("--all", action="store_true", help="Run for all instruments with data")
-    parser.add_argument("--db-path", type=str, default=None,
-                        help=f"Database path (default: {GOLD_DB_PATH})")
-    parser.add_argument("--min-z", type=float, default=3.0,
-                        help="Minimum z-score for spike detection (default: 3.0)")
-    parser.add_argument("--min-distance", type=int, default=15,
-                        help="Minimum minutes between peaks (default: 15)")
-    parser.add_argument("--no-json", action="store_true",
-                        help="Skip JSON output")
+    parser.add_argument("--db-path", type=str, default=None, help=f"Database path (default: {GOLD_DB_PATH})")
+    parser.add_argument("--min-z", type=float, default=3.0, help="Minimum z-score for spike detection (default: 3.0)")
+    parser.add_argument("--min-distance", type=int, default=15, help="Minimum minutes between peaks (default: 15)")
+    parser.add_argument("--no-json", action="store_true", help="Skip JSON output")
     args = parser.parse_args()
 
     db_path = Path(args.db_path) if args.db_path else GOLD_DB_PATH
@@ -550,9 +570,7 @@ def main():
     # Determine instruments to process
     if args.all:
         # Find instruments that actually have bars_1m data
-        rows = con.execute(
-            "SELECT DISTINCT symbol FROM bars_1m ORDER BY symbol"
-        ).fetchall()
+        rows = con.execute("SELECT DISTINCT symbol FROM bars_1m ORDER BY symbol").fetchall()
         instruments = [r[0] for r in rows]
         if not instruments:
             print("No instruments found in bars_1m.")
@@ -562,9 +580,7 @@ def main():
         instruments = [args.instrument.upper()]
 
     for instrument in instruments:
-        result = analyze_instrument(con, instrument,
-                                    min_z=args.min_z,
-                                    min_distance=args.min_distance)
+        result = analyze_instrument(con, instrument, min_z=args.min_z, min_distance=args.min_distance)
         if result is None:
             continue
 
@@ -575,6 +591,7 @@ def main():
             print(f"\n  JSON saved: {path}")
 
     con.close()
+
 
 if __name__ == "__main__":
     main()

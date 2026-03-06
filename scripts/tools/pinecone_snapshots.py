@@ -32,6 +32,7 @@ from pipeline.paths import GOLD_DB_PATH
 # Utility
 # ---------------------------------------------------------------------------
 
+
 def save_snapshot(content: str, snapshot_name: str) -> Path:
     """Save snapshot content to scripts/tools/{snapshot_name}. Return path."""
     output_path = PROJECT_ROOT / "scripts" / "tools" / snapshot_name
@@ -46,6 +47,7 @@ def _utc_now_iso() -> str:
 # ---------------------------------------------------------------------------
 # 1. Portfolio State Snapshot
 # ---------------------------------------------------------------------------
+
 
 def generate_portfolio_state_snapshot() -> str:
     """Strategy counts and edge family summary by instrument."""
@@ -117,6 +119,7 @@ def generate_portfolio_state_snapshot() -> str:
 # 2. Fitness Report Snapshot
 # ---------------------------------------------------------------------------
 
+
 def generate_fitness_report_snapshot() -> str:
     """Active strategy breakdown by session, entry model, aperture; top 10 by Sharpe."""
     con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
@@ -157,10 +160,7 @@ def generate_fitness_report_snapshot() -> str:
         "|------------|---------|-------|----------|-------|----------|------------|",
     ]
     for inst, orb, entry, aperture, count, avg_exp, avg_sh in breakdown_rows:
-        lines.append(
-            f"| {inst} | {orb} | {entry} | {aperture}m | {count} | "
-            f"{avg_exp:+.3f} | {avg_sh:.2f} |"
-        )
+        lines.append(f"| {inst} | {orb} | {entry} | {aperture}m | {count} | {avg_exp:+.3f} | {avg_sh:.2f} |")
 
     lines += [
         "",
@@ -169,7 +169,7 @@ def generate_fitness_report_snapshot() -> str:
         "| Strategy ID | Instrument | Session | Entry | Aperture | N | ExpR | Sharpe | WR | FDR |",
         "|-------------|------------|---------|-------|----------|---|------|--------|----|----|",
     ]
-    for (sid, inst, orb, entry, aperture, n, exp_r, sharpe, wr, fdr) in top_rows:
+    for sid, inst, orb, entry, aperture, n, exp_r, sharpe, wr, fdr in top_rows:
         fdr_mark = "Y" if fdr else "N"
         lines.append(
             f"| {sid} | {inst} | {orb} | {entry} | {aperture}m | "
@@ -183,6 +183,7 @@ def generate_fitness_report_snapshot() -> str:
 # ---------------------------------------------------------------------------
 # 3. Live Config Snapshot
 # ---------------------------------------------------------------------------
+
 
 def generate_live_config_snapshot() -> str:
     """Live portfolio specs, tier counts, and gates from trading_app.live_config."""
@@ -238,6 +239,7 @@ def generate_live_config_snapshot() -> str:
 # 4. Research Index Snapshot
 # ---------------------------------------------------------------------------
 
+
 def generate_research_index_snapshot() -> str:
     """Scan research/output/ for .md and .txt files, group by prefix, show summary."""
     research_dir = PROJECT_ROOT / "research" / "output"
@@ -247,8 +249,7 @@ def generate_research_index_snapshot() -> str:
 
     # Collect all .md and .txt files
     files = sorted(
-        [f for f in research_dir.iterdir()
-         if f.is_file() and f.suffix in (".md", ".txt")],
+        [f for f in research_dir.iterdir() if f.is_file() and f.suffix in (".md", ".txt")],
         key=lambda f: f.name,
     )
 
@@ -337,13 +338,11 @@ def generate_all_snapshots() -> dict[str, Path]:
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Generate markdown snapshots of trading system state"
+    parser = argparse.ArgumentParser(description="Generate markdown snapshots of trading system state")
+    parser.add_argument(
+        "--snapshot", choices=list(SNAPSHOT_REGISTRY.keys()), help="Generate a single snapshot (default: all)"
     )
-    parser.add_argument("--snapshot", choices=list(SNAPSHOT_REGISTRY.keys()),
-                        help="Generate a single snapshot (default: all)")
-    parser.add_argument("--list", action="store_true",
-                        help="List available snapshot names")
+    parser.add_argument("--list", action="store_true", help="List available snapshot names")
     args = parser.parse_args()
 
     if args.list:
@@ -370,9 +369,9 @@ def main():
         # Print first 30 lines of each
         for name, path in results.items():
             content = path.read_text(encoding="utf-8")
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print(f"  {name}")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             for line in content.splitlines()[:30]:
                 print(line)
 

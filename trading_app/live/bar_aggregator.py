@@ -5,13 +5,14 @@ Bar.ts_utc = start of minute in UTC.
 Bar.as_dict() produces the exact format ExecutionEngine.on_bar() expects
 (key 'ts_utc', not 'ts_event').
 """
+
 from dataclasses import dataclass
 from datetime import datetime
 
 
 @dataclass
 class Bar:
-    ts_utc: datetime   # UTC, truncated to minute start
+    ts_utc: datetime  # UTC, truncated to minute start
     open: float
     high: float
     low: float
@@ -59,7 +60,11 @@ class BarAggregator:
         self._bar_minute = minute
         self._current = Bar(
             ts_utc=minute,
-            open=price, high=price, low=price, close=price, volume=volume,
+            open=price,
+            high=price,
+            low=price,
+            close=price,
+            volume=volume,
         )
 
     def flush(self) -> Bar | None:

@@ -16,6 +16,7 @@ Examples:
     python scripts/run_live_session.py --instrument MGC --demo
     python scripts/run_live_session.py --instrument MGC --live
 """
+
 import argparse
 import asyncio
 import logging
@@ -71,20 +72,28 @@ def main() -> None:
 
     mode_group = parser.add_mutually_exclusive_group()
     mode_group.add_argument(
-        "--signal-only", action="store_true", default=False,
+        "--signal-only",
+        action="store_true",
+        default=False,
         help="Show signals only — no orders placed. Trade manually. (SAFEST)",
     )
     mode_group.add_argument(
-        "--demo", action="store_true", default=False,
+        "--demo",
+        action="store_true",
+        default=False,
         help="Auto-place orders on Tradovate DEMO account (paper trading)",
     )
     mode_group.add_argument(
-        "--live", action="store_true", default=False,
+        "--live",
+        action="store_true",
+        default=False,
         help="Auto-place REAL MONEY orders — requires typing CONFIRM",
     )
 
     parser.add_argument(
-        "--account-id", type=int, default=0,
+        "--account-id",
+        type=int,
+        default=0,
         help="Tradovate numeric account ID (default: auto-discover from API)",
     )
     args = parser.parse_args()
@@ -106,10 +115,7 @@ def main() -> None:
         _print_mode_banner("demo", args.instrument)
 
     else:  # --live
-        confirm = input(
-            "\n⚠  LIVE MODE — real money orders will be placed.\n"
-            "   Type CONFIRM to proceed: "
-        ).strip()
+        confirm = input("\n⚠  LIVE MODE — real money orders will be placed.\n   Type CONFIRM to proceed: ").strip()
         if confirm != "CONFIRM":
             print("Aborted.")
             sys.exit(0)

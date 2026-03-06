@@ -7,6 +7,7 @@ traders use manually.
 
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import duckdb
@@ -23,9 +24,17 @@ from trading_app.config import ALL_FILTERS
 
 # Session chronological order (Brisbane time)
 SESSION_ORDER = [
-    "CME_REOPEN", "TOKYO_OPEN", "BRISBANE_1025", "SINGAPORE_OPEN",
-    "LONDON_METALS", "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
-    "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+    "CME_REOPEN",
+    "TOKYO_OPEN",
+    "BRISBANE_1025",
+    "SINGAPORE_OPEN",
+    "LONDON_METALS",
+    "US_DATA_830",
+    "NYSE_OPEN",
+    "US_DATA_1000",
+    "COMEX_SETTLE",
+    "CME_PRECLOSE",
+    "NYSE_CLOSE",
 ]
 
 
@@ -82,25 +91,29 @@ def build_cross_session_features(df):
             size_max[i] = max(sizes)
             size_avg[i] = np.mean(sizes)
 
-    result = pd.DataFrame({
-        "prior_sessions_broken": broken,
-        "prior_sessions_long": long_count,
-        "prior_sessions_short": short_count,
-        "prior_orb_size_max": size_max,
-        "prior_orb_size_avg": size_avg,
-    }, index=df.index)
+    result = pd.DataFrame(
+        {
+            "prior_sessions_broken": broken,
+            "prior_sessions_long": long_count,
+            "prior_sessions_short": short_count,
+            "prior_orb_size_max": size_max,
+            "prior_orb_size_avg": size_avg,
+        },
+        index=df.index,
+    )
     return result
 
 
 def run_experiment(instrument="MNQ"):
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"  CROSS-SESSION FEATURE EXPERIMENT — {instrument}")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
 
     # Load raw data (need full df for cross-session columns)
     con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
     configure_connection(con)
-    df = con.execute("""
+    df = con.execute(
+        """
         SELECT o.trading_day, o.symbol, o.orb_label, o.orb_minutes,
                o.entry_model, o.rr_target, o.confirm_bars, o.pnl_r, o.outcome,
                v.filter_type, d.*
@@ -114,7 +127,9 @@ def run_experiment(instrument="MNQ"):
             AND o.orb_minutes = d.orb_minutes
         WHERE o.symbol = $instrument AND o.pnl_r IS NOT NULL AND v.status = 'active'
         ORDER BY o.trading_day
-    """, {"instrument": instrument}).fetchdf()
+    """,
+        {"instrument": instrument},
+    ).fetchdf()
     con.close()
 
     # Apply filter eligibility + dedup
@@ -127,25 +142,29 @@ def run_experiment(instrument="MNQ"):
             keep_mask[idx] = True
     df = df[keep_mask].reset_index(drop=True)
 
-    dedup_cols = ["trading_day", "orb_label", "entry_model", "rr_target",
-                  "confirm_bars", "orb_minutes"]
+    dedup_cols = ["trading_day", "orb_label", "entry_model", "rr_target", "confirm_bars", "orb_minutes"]
     df = df.drop_duplicates(subset=dedup_cols, keep="first").reset_index(drop=True)
     print(f"Validated outcomes: {len(df):,}")
 
     # Build cross-session features
     print("Building cross-session features...")
     cross_feats = build_cross_session_features(df)
-    print(f"  prior_sessions_broken: mean={cross_feats['prior_sessions_broken'].mean():.2f}, "
-          f"max={cross_feats['prior_sessions_broken'].max():.0f}")
+    print(
+        f"  prior_sessions_broken: mean={cross_feats['prior_sessions_broken'].mean():.2f}, "
+        f"max={cross_feats['prior_sessions_broken'].max():.0f}"
+    )
 
     # Build standard features
     X = transform_to_features(df)
 
     # Remove orb_label one-hots and noise
     drop_cols = [c for c in X.columns if c.startswith("orb_label_")]
-    drop_cols += [c for c in X.columns if any(c.startswith(p) for p in [
-        "gap_type_", "atr_vel_regime_", "prev_day_direction_"
-    ]) or c in ["confirm_bars", "orb_break_bar_continues", "orb_minutes"]]
+    drop_cols += [
+        c
+        for c in X.columns
+        if any(c.startswith(p) for p in ["gap_type_", "atr_vel_regime_", "prev_day_direction_"])
+        or c in ["confirm_bars", "orb_break_bar_continues", "orb_minutes"]
+    ]
     X_clean = X.drop(columns=[c for c in drop_cols if c in X.columns])
 
     y = (df["pnl_r"] > 0).astype(int)
@@ -180,8 +199,7 @@ def run_experiment(instrument="MNQ"):
         print(f"\n--- {exp_name} ({X_exp.shape[1]} features) ---")
         print(f"OOS AUC: {auc:.4f}")
         print(f"Baseline: N={baseline_n} avgR={baseline_avg:.4f} totalR={baseline_total:.2f}")
-        print(f"{'Thresh':>7} {'Kept':>6} {'Skip%':>6} {'AvgR':>8} {'TotalR':>8} "
-              f"{'WR':>6} {'vs Base':>8}")
+        print(f"{'Thresh':>7} {'Kept':>6} {'Skip%':>6} {'AvgR':>8} {'TotalR':>8} {'WR':>6} {'vs Base':>8}")
 
         for t in [0.45, 0.48, 0.50, 0.52, 0.55]:
             mask = (y_prob >= t) & valid
@@ -194,8 +212,7 @@ def run_experiment(instrument="MNQ"):
             wr = (kept_pnl > 0).mean()
             skip = 1 - n_kept / valid.sum()
             delta = total_r - baseline_total
-            print(f"{t:>7.2f} {n_kept:>6} {skip:>5.1%} {avg_r:>+8.4f} {total_r:>+8.2f} "
-                  f"{wr:>5.1%} {delta:>+8.2f}")
+            print(f"{t:>7.2f} {n_kept:>6} {skip:>5.1%} {avg_r:>+8.4f} {total_r:>+8.2f} {wr:>5.1%} {delta:>+8.2f}")
 
         # Feature importance
         importances = rf.feature_importances_
@@ -220,20 +237,22 @@ def run_experiment(instrument="MNQ"):
             s_prob = meta_test.loc[smask, "y_prob"]
             kept = s_prob >= 0.50
             if kept.sum() < 5:
-                print(f"  SKIP:  {session:<20} N={smask.sum():>5} Kept={kept.sum():>5} "
-                      f"(too few kept)")
+                print(f"  SKIP:  {session:<20} N={smask.sum():>5} Kept={kept.sum():>5} (too few kept)")
                 continue
             base_avg = s_pnl.mean()
             filt_avg = s_pnl[kept].mean()
             label = "HELPS" if filt_avg - base_avg > 0 else "HURTS"
-            print(f"  {label}: {session:<20} N={smask.sum():>5} Kept={kept.sum():>5} "
-                  f"Skip={1-kept.sum()/smask.sum():>5.1%} "
-                  f"Base={base_avg:>+.4f} Filt={filt_avg:>+.4f} "
-                  f"Lift={filt_avg-base_avg:>+.4f}")
+            print(
+                f"  {label}: {session:<20} N={smask.sum():>5} Kept={kept.sum():>5} "
+                f"Skip={1 - kept.sum() / smask.sum():>5.1%} "
+                f"Base={base_avg:>+.4f} Filt={filt_avg:>+.4f} "
+                f"Lift={filt_avg - base_avg:>+.4f}"
+            )
 
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--instrument", default="MNQ")
     args = parser.parse_args()

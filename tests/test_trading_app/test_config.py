@@ -461,27 +461,30 @@ class TestBreakQualityComposites:
         filters = get_filters_for_grid("MGC", "CME_REOPEN")
         comp = filters["ORB_G6_FAST5"]
         # Big ORB + fast break -> accepted
-        assert comp.matches_row(
-            {"orb_CME_REOPEN_size": 8.0, "orb_CME_REOPEN_break_delay_min": 2.0}, "CME_REOPEN"
-        ) is True
+        assert (
+            comp.matches_row({"orb_CME_REOPEN_size": 8.0, "orb_CME_REOPEN_break_delay_min": 2.0}, "CME_REOPEN") is True
+        )
         # Big ORB + slow break -> rejected
-        assert comp.matches_row(
-            {"orb_CME_REOPEN_size": 8.0, "orb_CME_REOPEN_break_delay_min": 20.0}, "CME_REOPEN"
-        ) is False
+        assert (
+            comp.matches_row({"orb_CME_REOPEN_size": 8.0, "orb_CME_REOPEN_break_delay_min": 20.0}, "CME_REOPEN")
+            is False
+        )
         # Small ORB + fast break -> rejected (base G6 filter fails)
-        assert comp.matches_row(
-            {"orb_CME_REOPEN_size": 2.0, "orb_CME_REOPEN_break_delay_min": 2.0}, "CME_REOPEN"
-        ) is False
+        assert (
+            comp.matches_row({"orb_CME_REOPEN_size": 2.0, "orb_CME_REOPEN_break_delay_min": 2.0}, "CME_REOPEN") is False
+        )
 
     def test_cont_composite_matches_row(self):
         """Composite(G6 + CONT) requires both big ORB and conviction candle."""
         filters = get_filters_for_grid("MGC", "CME_REOPEN")
         comp = filters["ORB_G6_CONT"]
         # Big ORB + continues -> accepted
-        assert comp.matches_row(
-            {"orb_CME_REOPEN_size": 8.0, "orb_CME_REOPEN_break_bar_continues": True}, "CME_REOPEN"
-        ) is True
+        assert (
+            comp.matches_row({"orb_CME_REOPEN_size": 8.0, "orb_CME_REOPEN_break_bar_continues": True}, "CME_REOPEN")
+            is True
+        )
         # Big ORB + reversal -> rejected
-        assert comp.matches_row(
-            {"orb_CME_REOPEN_size": 8.0, "orb_CME_REOPEN_break_bar_continues": False}, "CME_REOPEN"
-        ) is False
+        assert (
+            comp.matches_row({"orb_CME_REOPEN_size": 8.0, "orb_CME_REOPEN_break_bar_continues": False}, "CME_REOPEN")
+            is False
+        )

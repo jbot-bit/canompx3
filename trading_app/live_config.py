@@ -34,18 +34,21 @@ from trading_app.strategy_fitness import compute_fitness
 # Live portfolio specification
 # =========================================================================
 
+
 @dataclass(frozen=True)
 class LiveStrategySpec:
     """Declarative specification for a live strategy family."""
-    family_id: str          # e.g. "TOKYO_OPEN_E1_ORB_G4"
-    tier: str               # "core", "regime", or "hot"
+
+    family_id: str  # e.g. "TOKYO_OPEN_E1_ORB_G4"
+    tier: str  # "core", "regime", or "hot"
     orb_label: str
     entry_model: str
     filter_type: str
     regime_gate: str | None  # None = always-on, "high_vol" = fitness must be FIT
-                             # "rolling" = must be STABLE in recent rolling eval
+    # "rolling" = must be STABLE in recent rolling eval
     rr_target: float | None = None  # Resolved at build time from family_rr_locks.
-                                     # None in spec = look up locked RR per instrument.
+    # None in spec = look up locked RR per instrument.
+
 
 # Lookback for HOT tier rolling stability check (recent months only).
 HOT_LOOKBACK_WINDOWS = 10
@@ -99,47 +102,39 @@ LIVE_PORTFOLIO = [
     # =========================================================================
     # CORE: always-on, full-period validated, N>=100
     # =========================================================================
-
     # CME_REOPEN: MGC wins with ORB_G5; MNQ wins with VOL_RV12_N20
     #   ORB_G4_FAST10: MGC speed-filtered edge, 43 new days (75% overlap), ExpR=+0.269
-    LiveStrategySpec("CME_REOPEN_E2_ORB_G5",       "core", "CME_REOPEN", "E2", "ORB_G5",       None),
-    LiveStrategySpec("CME_REOPEN_E2_VOL_RV12_N20",  "core", "CME_REOPEN", "E2", "VOL_RV12_N20",  None),
+    LiveStrategySpec("CME_REOPEN_E2_ORB_G5", "core", "CME_REOPEN", "E2", "ORB_G5", None),
+    LiveStrategySpec("CME_REOPEN_E2_VOL_RV12_N20", "core", "CME_REOPEN", "E2", "VOL_RV12_N20", None),
     LiveStrategySpec("CME_REOPEN_E2_ORB_G4_FAST10", "core", "CME_REOPEN", "E2", "ORB_G4_FAST10", None),
-
     # CME_PRECLOSE: MES wins with ORB_G6; MNQ wins with VOL_RV12_N20 (O15 suffix is aperture, not filter_type)
     #   ORB_G5: MES 15m aperture, 434 new days (57% overlap with G6), ExpR=+0.242
-    LiveStrategySpec("CME_PRECLOSE_E2_ORB_G6",      "core", "CME_PRECLOSE", "E2", "ORB_G6",      None),
+    LiveStrategySpec("CME_PRECLOSE_E2_ORB_G6", "core", "CME_PRECLOSE", "E2", "ORB_G6", None),
     LiveStrategySpec("CME_PRECLOSE_E2_VOL_RV12_N20", "core", "CME_PRECLOSE", "E2", "VOL_RV12_N20", None),
-    LiveStrategySpec("CME_PRECLOSE_E2_ORB_G5",      "core", "CME_PRECLOSE", "E2", "ORB_G5",      None),
-
+    LiveStrategySpec("CME_PRECLOSE_E2_ORB_G5", "core", "CME_PRECLOSE", "E2", "ORB_G5", None),
     # COMEX_SETTLE: MES wins with ORB_G6; MNQ wins with VOL_RV12_N20
-    LiveStrategySpec("COMEX_SETTLE_E2_ORB_G6",       "core", "COMEX_SETTLE", "E2", "ORB_G6",       None),
-    LiveStrategySpec("COMEX_SETTLE_E2_VOL_RV12_N20",  "core", "COMEX_SETTLE", "E2", "VOL_RV12_N20",  None),
-
+    LiveStrategySpec("COMEX_SETTLE_E2_ORB_G6", "core", "COMEX_SETTLE", "E2", "ORB_G6", None),
+    LiveStrategySpec("COMEX_SETTLE_E2_VOL_RV12_N20", "core", "COMEX_SETTLE", "E2", "VOL_RV12_N20", None),
     # NYSE_CLOSE: MES wins with ORB_G4; MNQ wins with VOL_RV12_N20
-    LiveStrategySpec("NYSE_CLOSE_E2_ORB_G4",       "core", "NYSE_CLOSE", "E2", "ORB_G4",       None),
-    LiveStrategySpec("NYSE_CLOSE_E2_VOL_RV12_N20",  "core", "NYSE_CLOSE", "E2", "VOL_RV12_N20",  None),
-
+    LiveStrategySpec("NYSE_CLOSE_E2_ORB_G4", "core", "NYSE_CLOSE", "E2", "ORB_G4", None),
+    LiveStrategySpec("NYSE_CLOSE_E2_VOL_RV12_N20", "core", "NYSE_CLOSE", "E2", "VOL_RV12_N20", None),
     # NYSE_OPEN: MES wins VOL_RV12_N20; MNQ wins ORB_G4; M2K VOL_RV12_N20 (report ORB_G5_O30 = base filter ORB_G5, covered by VOL)
     #   ORB_G8: MES 583 new days (38% overlap with VOL_RV12_N20), ExpR=+0.165 — strongest day-add
     LiveStrategySpec("NYSE_OPEN_E2_VOL_RV12_N20", "core", "NYSE_OPEN", "E2", "VOL_RV12_N20", None),
-    LiveStrategySpec("NYSE_OPEN_E2_ORB_G4",        "core", "NYSE_OPEN", "E2", "ORB_G4",        None),
-    LiveStrategySpec("NYSE_OPEN_E2_ORB_G8",        "core", "NYSE_OPEN", "E2", "ORB_G8",        None),
-
+    LiveStrategySpec("NYSE_OPEN_E2_ORB_G4", "core", "NYSE_OPEN", "E2", "ORB_G4", None),
+    LiveStrategySpec("NYSE_OPEN_E2_ORB_G8", "core", "NYSE_OPEN", "E2", "ORB_G8", None),
     # US_DATA_1000: M2K wins VOL_RV12_N20 (O30 is aperture, not filter_type); MNQ wins ORB_G5;
     #   MGC wins ORB_G6 (N=297, FDR+WF, hash 8946a234a — new session for MGC)
     LiveStrategySpec("US_DATA_1000_E2_VOL_RV12_N20", "core", "US_DATA_1000", "E2", "VOL_RV12_N20", None),
-    LiveStrategySpec("US_DATA_1000_E2_ORB_G5",        "core", "US_DATA_1000", "E2", "ORB_G5",        None),
-    LiveStrategySpec("US_DATA_1000_E2_ORB_G6",        "core", "US_DATA_1000", "E2", "ORB_G6",        None),
-
+    LiveStrategySpec("US_DATA_1000_E2_ORB_G5", "core", "US_DATA_1000", "E2", "ORB_G5", None),
+    LiveStrategySpec("US_DATA_1000_E2_ORB_G6", "core", "US_DATA_1000", "E2", "ORB_G6", None),
     # TOKYO_OPEN: Multiple independent edges verified by family hash:
     #   ORB_G5_CONT (5m aperture, hash 2e921bb81) — MGC N=96 (REGIME), MNQ CORE
     #   ORB_G5 (15m aperture, hash d790ad6b) — MGC N=297+ FDR+WF, genuinely independent
     #   ORB_G6_CONT (hash dd81bcff7) — MES N=221, FDR+WF, Exp$=7.19 passes dollar gate
     LiveStrategySpec("TOKYO_OPEN_E2_ORB_G5_CONT", "core", "TOKYO_OPEN", "E2", "ORB_G5_CONT", None),
-    LiveStrategySpec("TOKYO_OPEN_E2_ORB_G5",      "core", "TOKYO_OPEN", "E2", "ORB_G5",      None),
+    LiveStrategySpec("TOKYO_OPEN_E2_ORB_G5", "core", "TOKYO_OPEN", "E2", "ORB_G5", None),
     LiveStrategySpec("TOKYO_OPEN_E2_ORB_G6_CONT", "core", "TOKYO_OPEN", "E2", "ORB_G6_CONT", None),
-
     # SINGAPORE_OPEN: DIR_LONG (long-only, any ORB size) is the primary filter for MNQ.
     #   Research H5: shorts avgR=-0.247 (raw session avg, config.py), p=0.006, N=236 — systematically
     #   negative; long side positive. DIR_LONG validated strategy (different from raw avg): ExpR=+0.219,
@@ -147,25 +142,20 @@ LIVE_PORTFOLIO = [
     #   ORB_G8 also validated as secondary size-filtered spec: ExpR=+0.107, N=861, Sharpe=0.093.
     LiveStrategySpec("SINGAPORE_OPEN_E2_DIR_LONG", "core", "SINGAPORE_OPEN", "E2", "DIR_LONG", None),
     LiveStrategySpec("SINGAPORE_OPEN_E2_ORB_G8", "core", "SINGAPORE_OPEN", "E2", "ORB_G8", None),
-
     # BRISBANE_1025: MNQ wins ORB_G6
     #   VOL_RV12_N20: MNQ 113 new days (78% overlap with G6), ExpR=+0.149
-    LiveStrategySpec("BRISBANE_1025_E2_ORB_G6",       "core", "BRISBANE_1025", "E2", "ORB_G6",       None),
+    LiveStrategySpec("BRISBANE_1025_E2_ORB_G6", "core", "BRISBANE_1025", "E2", "ORB_G6", None),
     LiveStrategySpec("BRISBANE_1025_E2_VOL_RV12_N20", "core", "BRISBANE_1025", "E2", "VOL_RV12_N20", None),
-
     # LONDON_METALS: MNQ wins VOL_RV12_N20 (5m, all_years_positive) and ORB_G6_NOMON (15m aperture,
     #   N=1032, FDR=True, WF=True, ExpR=0.122). M2K is REGIME below (ORB_G6_CONT).
     #   ORB_G6_NOMON_O15 strategies were added after MNQ WF rebuild (Mar 2 2026) — not in original build.
     LiveStrategySpec("LONDON_METALS_E2_VOL_RV12_N20", "core", "LONDON_METALS", "E2", "VOL_RV12_N20", None),
     LiveStrategySpec("LONDON_METALS_E2_ORB_G6_NOMON", "core", "LONDON_METALS", "E2", "ORB_G6_NOMON", None),
-
     # =========================================================================
     # REGIME: fitness-gated (N<100 — only trade when strategy_fitness = FIT)
     # =========================================================================
-
     # M2K LONDON_METALS: N=59, REGIME. ORB_G6_CONT filter (different from MNQ's VOL_RV12_N20_O15 above)
     LiveStrategySpec("LONDON_METALS_E2_ORB_G6_CONT", "regime", "LONDON_METALS", "E2", "ORB_G6_CONT", "high_vol"),
-
     # NOTE: MGC TOKYO_OPEN (N=96) is loaded by the CORE TOKYO_OPEN_E2_ORB_G5_CONT spec above.
     # N=96 is validated (passed full chain: 75%+ years positive, walk-forward).
     # Monitor via get_strategy_fitness if conditional gating is needed.
@@ -174,6 +164,7 @@ LIVE_PORTFOLIO = [
 # =========================================================================
 # Portfolio builder
 # =========================================================================
+
 
 def _load_best_regime_variant(
     db_path: Path,
@@ -194,7 +185,8 @@ def _load_best_regime_variant(
     """
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        rows = con.execute("""
+        rows = con.execute(
+            """
             SELECT vs.strategy_id, vs.instrument, vs.orb_label, vs.entry_model,
                    vs.rr_target, vs.confirm_bars, vs.filter_type,
                    vs.expectancy_r, vs.win_rate, vs.sample_size,
@@ -220,7 +212,9 @@ def _load_best_regime_variant(
               AND vs.expectancy_r >= ?
             ORDER BY vs.expectancy_r DESC NULLS LAST
             LIMIT 1
-        """, [instrument, orb_label, entry_model, filter_type, min_expectancy_r]).fetchall()
+        """,
+            [instrument, orb_label, entry_model, filter_type, min_expectancy_r],
+        ).fetchall()
 
         if not rows:
             return None
@@ -229,6 +223,7 @@ def _load_best_regime_variant(
         return dict(zip(cols, rows[0]))
     finally:
         con.close()
+
 
 def _load_best_experimental_variant(
     db_path: Path,
@@ -249,7 +244,8 @@ def _load_best_experimental_variant(
     """
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        rows = con.execute("""
+        rows = con.execute(
+            """
             SELECT strategy_id, instrument, orb_label, entry_model,
                    rr_target, confirm_bars, filter_type,
                    expectancy_r, win_rate, sample_size,
@@ -264,7 +260,9 @@ def _load_best_experimental_variant(
               AND expectancy_r > 0
             ORDER BY expectancy_r DESC NULLS LAST
             LIMIT 1
-        """, [instrument, orb_label, entry_model, filter_type]).fetchall()
+        """,
+            [instrument, orb_label, entry_model, filter_type],
+        ).fetchall()
 
         if not rows:
             return None
@@ -273,6 +271,7 @@ def _load_best_experimental_variant(
         return dict(zip(cols, rows[0]))
     finally:
         con.close()
+
 
 def _check_rolling_stability(
     db_path: Path,
@@ -296,18 +295,12 @@ def _check_rolling_stability(
         make_family_id,
     )
 
-    all_labels = load_all_rolling_run_labels(
-        db_path, train_months, instrument, lookback_windows
-    )
+    all_labels = load_all_rolling_run_labels(db_path, train_months, instrument, lookback_windows)
     if not all_labels:
         return 0.0, "no rolling windows found"
 
-    validated = load_rolling_results(
-        db_path, train_months, instrument, run_labels=all_labels
-    )
-    degraded = load_rolling_degraded_counts(
-        db_path, train_months, instrument, run_labels=all_labels
-    )
+    validated = load_rolling_results(db_path, train_months, instrument, run_labels=all_labels)
+    degraded = load_rolling_degraded_counts(db_path, train_months, instrument, run_labels=all_labels)
     families = aggregate_rolling_performance(validated, all_labels, degraded)
 
     target_fid = make_family_id(orb_label, entry_model, filter_type)
@@ -315,16 +308,15 @@ def _check_rolling_stability(
         if fam.family_id == target_fid:
             if fam.weighted_stability >= min_stability:
                 return fam.weighted_stability, (
-                    f"STABLE ({fam.weighted_stability:.3f}, "
-                    f"{fam.windows_passed}/{fam.windows_total} windows)"
+                    f"STABLE ({fam.weighted_stability:.3f}, {fam.windows_passed}/{fam.windows_total} windows)"
                 )
             else:
                 return fam.weighted_stability, (
-                    f"NOT STABLE ({fam.weighted_stability:.3f}, "
-                    f"{fam.windows_passed}/{fam.windows_total} windows)"
+                    f"NOT STABLE ({fam.weighted_stability:.3f}, {fam.windows_passed}/{fam.windows_total} windows)"
                 )
 
     return 0.0, "family not found in rolling results"
+
 
 def _check_dollar_gate(variant: dict, instrument: str) -> tuple[bool, str]:
     """Check that expected dollar profit >= LIVE_MIN_EXPECTANCY_DOLLARS_MULT * RT cost.
@@ -337,6 +329,7 @@ def _check_dollar_gate(variant: dict, instrument: str) -> tuple[bool, str]:
         return True, "dollar gate skipped (no median_risk_points)"
     try:
         from pipeline.cost_model import get_cost_spec
+
         spec = get_cost_spec(instrument)
         one_r_dollars = median_risk_pts * spec.point_value + spec.total_friction
         exp_dollars = variant["expectancy_r"] * one_r_dollars
@@ -349,6 +342,7 @@ def _check_dollar_gate(variant: dict, instrument: str) -> tuple[bool, str]:
         return True, f"Exp${exp_dollars:.2f} >= ${min_dollars:.2f} ({LIVE_MIN_EXPECTANCY_DOLLARS_MULT}x RT)"
     except Exception:
         return True, "dollar gate skipped (cost spec unavailable)"
+
 
 def build_live_portfolio(
     db_path: Path | None = None,
@@ -379,7 +373,9 @@ def build_live_portfolio(
     core_specs = [s for s in LIVE_PORTFOLIO if s.tier == "core"]
     if core_specs:
         rolling_strats = load_rolling_validated_strategies(
-            db_path, instrument, rolling_train_months,
+            db_path,
+            instrument,
+            rolling_train_months,
             min_weighted_score=STABLE_THRESHOLD,
             min_expectancy_r=min_expectancy_r,
             lookback_windows=DEFAULT_LOOKBACK_WINDOWS,
@@ -390,17 +386,22 @@ def build_live_portfolio(
             match = None
             source = "rolling"
             for rs in rolling_strats:
-                if (rs["orb_label"] == spec.orb_label
-                        and rs["entry_model"] == spec.entry_model
-                        and rs["filter_type"] == spec.filter_type):
+                if (
+                    rs["orb_label"] == spec.orb_label
+                    and rs["entry_model"] == spec.entry_model
+                    and rs["filter_type"] == spec.filter_type
+                ):
                     match = rs
                     break
 
             # Fall back to validated_setups (best Sharpe variant meeting quality floor)
             if match is None:
                 match = _load_best_regime_variant(
-                    db_path, instrument,
-                    spec.orb_label, spec.entry_model, spec.filter_type,
+                    db_path,
+                    instrument,
+                    spec.orb_label,
+                    spec.entry_model,
+                    spec.filter_type,
                     min_expectancy_r=min_expectancy_r,
                 )
                 source = "baseline"
@@ -414,24 +415,26 @@ def build_live_portfolio(
                 notes.append(f"SKIP: {spec.family_id} -- dollar gate failed: {dollar_note}")
                 continue
 
-            strategies.append(PortfolioStrategy(
-                strategy_id=match["strategy_id"],
-                instrument=match["instrument"],
-                orb_label=match["orb_label"],
-                entry_model=match["entry_model"],
-                rr_target=match["rr_target"],
-                confirm_bars=match["confirm_bars"],
-                filter_type=match["filter_type"],
-                expectancy_r=match["expectancy_r"],
-                win_rate=match["win_rate"],
-                sample_size=match["sample_size"],
-                sharpe_ratio=match.get("sharpe_ratio"),
-                max_drawdown_r=match.get("max_drawdown_r"),
-                median_risk_points=match.get("median_risk_points"),
-                stop_multiplier=match.get("stop_multiplier", 1.0),
-                source=source,
-                weight=1.0,
-            ))
+            strategies.append(
+                PortfolioStrategy(
+                    strategy_id=match["strategy_id"],
+                    instrument=match["instrument"],
+                    orb_label=match["orb_label"],
+                    entry_model=match["entry_model"],
+                    rr_target=match["rr_target"],
+                    confirm_bars=match["confirm_bars"],
+                    filter_type=match["filter_type"],
+                    expectancy_r=match["expectancy_r"],
+                    win_rate=match["win_rate"],
+                    sample_size=match["sample_size"],
+                    sharpe_ratio=match.get("sharpe_ratio"),
+                    max_drawdown_r=match.get("max_drawdown_r"),
+                    median_risk_points=match.get("median_risk_points"),
+                    stop_multiplier=match.get("stop_multiplier", 1.0),
+                    source=source,
+                    weight=1.0,
+                )
+            )
             notes.append(
                 f"CORE: {spec.family_id} -> {match['strategy_id']} "
                 f"(ExpR={match['expectancy_r']:+.3f}, source={source}, {dollar_note}, weight=1.0)"
@@ -445,8 +448,11 @@ def build_live_portfolio(
     hot_specs = [s for s in LIVE_PORTFOLIO if s.tier == "hot"]
     for spec in hot_specs:
         variant = _load_best_experimental_variant(
-            db_path, instrument,
-            spec.orb_label, spec.entry_model, spec.filter_type,
+            db_path,
+            instrument,
+            spec.orb_label,
+            spec.entry_model,
+            spec.filter_type,
         )
 
         if variant is None:
@@ -458,8 +464,11 @@ def build_live_portfolio(
         stability_note = "no gate"
         if spec.regime_gate == "rolling":
             stability_score, stability_note = _check_rolling_stability(
-                db_path, instrument,
-                spec.orb_label, spec.entry_model, spec.filter_type,
+                db_path,
+                instrument,
+                spec.orb_label,
+                spec.entry_model,
+                spec.filter_type,
                 train_months=rolling_train_months,
             )
             if stability_score < HOT_MIN_STABILITY:
@@ -468,24 +477,26 @@ def build_live_portfolio(
             else:
                 stability_note = f"ACTIVE ({stability_note})"
 
-        strategies.append(PortfolioStrategy(
-            strategy_id=variant["strategy_id"],
-            instrument=variant["instrument"],
-            orb_label=variant["orb_label"],
-            entry_model=variant["entry_model"],
-            rr_target=variant["rr_target"],
-            confirm_bars=variant["confirm_bars"],
-            filter_type=variant["filter_type"],
-            expectancy_r=variant["expectancy_r"],
-            win_rate=variant["win_rate"],
-            sample_size=variant["sample_size"],
-            sharpe_ratio=variant.get("sharpe_ratio"),
-            max_drawdown_r=variant.get("max_drawdown_r"),
-            median_risk_points=variant.get("median_risk_points"),
-            stop_multiplier=variant.get("stop_multiplier", 1.0),
-            source="hot_rolling",
-            weight=weight,
-        ))
+        strategies.append(
+            PortfolioStrategy(
+                strategy_id=variant["strategy_id"],
+                instrument=variant["instrument"],
+                orb_label=variant["orb_label"],
+                entry_model=variant["entry_model"],
+                rr_target=variant["rr_target"],
+                confirm_bars=variant["confirm_bars"],
+                filter_type=variant["filter_type"],
+                expectancy_r=variant["expectancy_r"],
+                win_rate=variant["win_rate"],
+                sample_size=variant["sample_size"],
+                sharpe_ratio=variant.get("sharpe_ratio"),
+                max_drawdown_r=variant.get("max_drawdown_r"),
+                median_risk_points=variant.get("median_risk_points"),
+                stop_multiplier=variant.get("stop_multiplier", 1.0),
+                source="hot_rolling",
+                weight=weight,
+            )
+        )
         notes.append(
             f"HOT: {spec.family_id} -> {variant['strategy_id']} "
             f"(ExpR={variant['expectancy_r']:+.3f}, weight={weight}, {stability_note})"
@@ -495,8 +506,11 @@ def build_live_portfolio(
     regime_specs = [s for s in LIVE_PORTFOLIO if s.tier == "regime"]
     for spec in regime_specs:
         variant = _load_best_regime_variant(
-            db_path, instrument,
-            spec.orb_label, spec.entry_model, spec.filter_type,
+            db_path,
+            instrument,
+            spec.orb_label,
+            spec.entry_model,
+            spec.filter_type,
             min_expectancy_r=min_expectancy_r,
         )
 
@@ -517,7 +531,8 @@ def build_live_portfolio(
         if spec.regime_gate == "high_vol":
             try:
                 fitness = compute_fitness(
-                    variant["strategy_id"], db_path=db_path,
+                    variant["strategy_id"],
+                    db_path=db_path,
                 )
                 if fitness.fitness_status != "FIT":
                     weight = 0.0
@@ -528,24 +543,26 @@ def build_live_portfolio(
                 weight = 0.0
                 fitness_note = f"GATED OFF (fitness error: {e})"
 
-        strategies.append(PortfolioStrategy(
-            strategy_id=variant["strategy_id"],
-            instrument=variant["instrument"],
-            orb_label=variant["orb_label"],
-            entry_model=variant["entry_model"],
-            rr_target=variant["rr_target"],
-            confirm_bars=variant["confirm_bars"],
-            filter_type=variant["filter_type"],
-            expectancy_r=variant["expectancy_r"],
-            win_rate=variant["win_rate"],
-            sample_size=variant["sample_size"],
-            sharpe_ratio=variant.get("sharpe_ratio"),
-            max_drawdown_r=variant.get("max_drawdown_r"),
-            median_risk_points=variant.get("median_risk_points"),
-            stop_multiplier=variant.get("stop_multiplier", 1.0),
-            source="baseline",
-            weight=weight,
-        ))
+        strategies.append(
+            PortfolioStrategy(
+                strategy_id=variant["strategy_id"],
+                instrument=variant["instrument"],
+                orb_label=variant["orb_label"],
+                entry_model=variant["entry_model"],
+                rr_target=variant["rr_target"],
+                confirm_bars=variant["confirm_bars"],
+                filter_type=variant["filter_type"],
+                expectancy_r=variant["expectancy_r"],
+                win_rate=variant["win_rate"],
+                sample_size=variant["sample_size"],
+                sharpe_ratio=variant.get("sharpe_ratio"),
+                max_drawdown_r=variant.get("max_drawdown_r"),
+                median_risk_points=variant.get("median_risk_points"),
+                stop_multiplier=variant.get("stop_multiplier", 1.0),
+                source="baseline",
+                weight=weight,
+            )
+        )
         notes.append(
             f"REGIME: {spec.family_id} -> {variant['strategy_id']} "
             f"(ExpR={variant['expectancy_r']:+.3f}, weight={weight}, {fitness_note})"
@@ -561,25 +578,26 @@ def build_live_portfolio(
         max_daily_loss_r=5.0,
     ), notes
 
+
 # =========================================================================
 # CLI
 # =========================================================================
 
+
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Build live portfolio from declarative config"
-    )
-    parser.add_argument("--db-path", type=Path, default=None,
-                        help="Path to gold.db")
-    parser.add_argument("--instrument", default="MGC",
-                        choices=get_active_instruments())
+    parser = argparse.ArgumentParser(description="Build live portfolio from declarative config")
+    parser.add_argument("--db-path", type=Path, default=None, help="Path to gold.db")
+    parser.add_argument("--instrument", default="MGC", choices=get_active_instruments())
     parser.add_argument("--rolling-train-months", type=int, default=12)
-    parser.add_argument("--min-expectancy-r", type=float, default=LIVE_MIN_EXPECTANCY_R,
-                        help=f"Min ExpR per trade to include (default {LIVE_MIN_EXPECTANCY_R})")
-    parser.add_argument("--output", type=str, default=None,
-                        help="Write portfolio JSON to this path")
+    parser.add_argument(
+        "--min-expectancy-r",
+        type=float,
+        default=LIVE_MIN_EXPECTANCY_R,
+        help=f"Min ExpR per trade to include (default {LIVE_MIN_EXPECTANCY_R})",
+    )
+    parser.add_argument("--output", type=str, default=None, help="Write portfolio JSON to this path")
     args = parser.parse_args()
 
     db_path = args.db_path or GOLD_DB_PATH
@@ -597,9 +615,9 @@ def main():
     )
 
     # Print strategy details
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
     print("LIVE PORTFOLIO")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
     for note in notes:
         print(f"  {note}")
     print()
@@ -628,10 +646,12 @@ def main():
 
     print(f"Active strategies: {len(active)}")
     print(f"  {'Strategy':<50} {'ExpR':>6}  {'Exp$/trade':>10}  {'WR':>5}  {'N':>5}")
-    print(f"  {'-'*50} {'------':>6}  {'----------':>10}  {'-----':>5}  {'-----':>5}")
+    print(f"  {'-' * 50} {'------':>6}  {'----------':>10}  {'-----':>5}  {'-----':>5}")
     for s in active:
-        print(f"  {s.strategy_id:<50} {s.expectancy_r:>+6.3f}  {_exp_dollars(s):>10}  "
-              f"{s.win_rate:>4.0%}  {s.sample_size:>5}")
+        print(
+            f"  {s.strategy_id:<50} {s.expectancy_r:>+6.3f}  {_exp_dollars(s):>10}  "
+            f"{s.win_rate:>4.0%}  {s.sample_size:>5}"
+        )
 
     if gated:
         print(f"\nGated OFF (weight=0): {len(gated)}")
@@ -642,6 +662,7 @@ def main():
         output_path = Path(args.output)
         output_path.write_text(portfolio.to_json())
         print(f"\nWritten to {output_path}")
+
 
 if __name__ == "__main__":
     main()

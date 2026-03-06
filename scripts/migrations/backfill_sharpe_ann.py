@@ -20,6 +20,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 import duckdb
 from pipeline.paths import GOLD_DB_PATH
 
+
 def backfill(db_path: Path, dry_run: bool = False) -> int:
     con = duckdb.connect(str(db_path))
     try:
@@ -38,7 +39,7 @@ def backfill(db_path: Path, dry_run: bool = False) -> int:
 
             trades_per_year = round(n_traded / n_years, 1) if n_years > 0 else 0
             if sharpe_ratio is not None and trades_per_year > 0:
-                sharpe_ann = round(sharpe_ratio * (trades_per_year ** 0.5), 4)
+                sharpe_ann = round(sharpe_ratio * (trades_per_year**0.5), 4)
             else:
                 sharpe_ann = None
 
@@ -73,7 +74,7 @@ def backfill(db_path: Path, dry_run: bool = False) -> int:
                 n_traded = sample_size or 0
                 trades_per_year = round(n_traded / n_years, 1) if n_years > 0 else 0
                 if sharpe_ratio is not None and trades_per_year > 0:
-                    sharpe_ann = round(sharpe_ratio * (trades_per_year ** 0.5), 4)
+                    sharpe_ann = round(sharpe_ratio * (trades_per_year**0.5), 4)
                 else:
                     sharpe_ann = None
                 vs_updates.append((trades_per_year, sharpe_ann, strategy_id))
@@ -90,6 +91,7 @@ def backfill(db_path: Path, dry_run: bool = False) -> int:
         return len(updates)
     finally:
         con.close()
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Backfill sharpe_ann columns")

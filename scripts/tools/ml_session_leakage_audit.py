@@ -12,6 +12,7 @@ with session identity enough to act as proxies.
 
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import duckdb
@@ -26,9 +27,17 @@ from trading_app.ml.features import transform_to_features
 from trading_app.config import ALL_FILTERS
 
 SESSION_ORDER = [
-    "CME_REOPEN", "TOKYO_OPEN", "BRISBANE_1025", "SINGAPORE_OPEN",
-    "LONDON_METALS", "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
-    "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+    "CME_REOPEN",
+    "TOKYO_OPEN",
+    "BRISBANE_1025",
+    "SINGAPORE_OPEN",
+    "LONDON_METALS",
+    "US_DATA_830",
+    "NYSE_OPEN",
+    "US_DATA_1000",
+    "COMEX_SETTLE",
+    "CME_PRECLOSE",
+    "NYSE_CLOSE",
 ]
 
 
@@ -110,28 +119,32 @@ def build_level_features(df):
         if prior_sizes:
             prior_size_ratio_max[i] = max(prior_sizes) / R
 
-    return pd.DataFrame({
-        "nearest_level_to_high_R": nearest_to_high,
-        "nearest_level_to_low_R": nearest_to_low,
-        "levels_within_1R": levels_within_1r,
-        "levels_within_2R": levels_within_2r,
-        "orb_nested_in_prior": is_nested,
-        "prior_orb_size_ratio_max": prior_size_ratio_max,
-        "prior_sessions_broken": prior_broken_count,
-        "prior_sessions_long": prior_long_count,
-        "prior_sessions_short": prior_short_count,
-    }, index=df.index)
+    return pd.DataFrame(
+        {
+            "nearest_level_to_high_R": nearest_to_high,
+            "nearest_level_to_low_R": nearest_to_low,
+            "levels_within_1R": levels_within_1r,
+            "levels_within_2R": levels_within_2r,
+            "orb_nested_in_prior": is_nested,
+            "prior_orb_size_ratio_max": prior_size_ratio_max,
+            "prior_sessions_broken": prior_broken_count,
+            "prior_sessions_long": prior_long_count,
+            "prior_sessions_short": prior_short_count,
+        },
+        index=df.index,
+    )
 
 
 def run_audit(instrument="MES"):
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"  SESSION LEAKAGE AUDIT — {instrument}")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
 
     # Load data
     con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
     configure_connection(con)
-    df = con.execute("""
+    df = con.execute(
+        """
         SELECT o.trading_day, o.symbol, o.orb_label, o.orb_minutes,
                o.entry_model, o.rr_target, o.confirm_bars, o.pnl_r, o.outcome,
                v.filter_type, d.*
@@ -145,7 +158,9 @@ def run_audit(instrument="MES"):
             AND o.orb_minutes = d.orb_minutes
         WHERE o.symbol = $instrument AND o.pnl_r IS NOT NULL AND v.status = 'active'
         ORDER BY o.trading_day
-    """, {"instrument": instrument}).fetchdf()
+    """,
+        {"instrument": instrument},
+    ).fetchdf()
     con.close()
 
     keep_mask = np.zeros(len(df), dtype=bool)
@@ -156,9 +171,7 @@ def run_audit(instrument="MES"):
             keep_mask[idx] = True
     df = df[keep_mask].reset_index(drop=True)
     df = df.drop_duplicates(
-        subset=["trading_day", "orb_label", "entry_model", "rr_target",
-                "confirm_bars", "orb_minutes"],
-        keep="first"
+        subset=["trading_day", "orb_label", "entry_model", "rr_target", "confirm_bars", "orb_minutes"], keep="first"
     ).reset_index(drop=True)
 
     level_feats = build_level_features(df)
@@ -166,8 +179,14 @@ def run_audit(instrument="MES"):
     # AUDIT 1: Cross-session feature distributions per session
     print(f"\n--- AUDIT 1: Cross-session features by session ---")
     print(f"If distributions are tight and non-overlapping, features leak session identity.\n")
-    cross_cols = ["prior_sessions_broken", "prior_sessions_long", "prior_sessions_short",
-                  "prior_orb_size_ratio_max", "levels_within_1R", "levels_within_2R"]
+    cross_cols = [
+        "prior_sessions_broken",
+        "prior_sessions_long",
+        "prior_sessions_short",
+        "prior_orb_size_ratio_max",
+        "levels_within_1R",
+        "levels_within_2R",
+    ]
 
     for col in cross_cols:
         print(f"\n  {col}:")
@@ -178,15 +197,18 @@ def run_audit(instrument="MES"):
             if len(valid_vals) == 0:
                 print(f"    {session:<20} N={smask.sum():>5} NO DATA")
                 continue
-            print(f"    {session:<20} N={smask.sum():>5} "
-                  f"mean={valid_vals.mean():>6.2f} std={valid_vals.std():>5.2f} "
-                  f"[{valid_vals.min():>5.1f}, {valid_vals.max():>5.1f}]")
+            print(
+                f"    {session:<20} N={smask.sum():>5} "
+                f"mean={valid_vals.mean():>6.2f} std={valid_vals.std():>5.2f} "
+                f"[{valid_vals.min():>5.1f}, {valid_vals.max():>5.1f}]"
+            )
 
     # AUDIT 2: Can a classifier predict session from cross-session features alone?
     print(f"\n--- AUDIT 2: Session predictability from cross/level features ---")
     print(f"If accuracy >> random baseline, features ARE session proxies.\n")
 
     from sklearn.preprocessing import LabelEncoder
+
     le = LabelEncoder()
     session_labels = le.fit_transform(df["orb_label"])
 
@@ -200,6 +222,7 @@ def run_audit(instrument="MES"):
     y_te = session_labels[n_train:]
 
     from sklearn.ensemble import RandomForestClassifier as RFC
+
     clf = RFC(n_estimators=100, max_depth=4, random_state=42, n_jobs=-1)
     clf.fit(X_tr, y_tr)
     acc = clf.score(X_te, y_te)
@@ -225,9 +248,12 @@ def run_audit(instrument="MES"):
 
     X_base = transform_to_features(df)
     orb_label_cols = [c for c in X_base.columns if c.startswith("orb_label_")]
-    noise_cols = [c for c in X_base.columns if any(c.startswith(p) for p in [
-        "gap_type_", "atr_vel_regime_", "prev_day_direction_"
-    ]) or c in ["confirm_bars", "orb_break_bar_continues", "orb_minutes"]]
+    noise_cols = [
+        c
+        for c in X_base.columns
+        if any(c.startswith(p) for p in ["gap_type_", "atr_vel_regime_", "prev_day_direction_"])
+        or c in ["confirm_bars", "orb_break_bar_continues", "orb_minutes"]
+    ]
     X_clean = X_base.drop(columns=[c for c in orb_label_cols + noise_cols if c in X_base.columns])
 
     y = (df["pnl_r"] > 0).astype(int)
@@ -247,9 +273,14 @@ def run_audit(instrument="MES"):
                 norm_long[i] = level_feats.iloc[i]["prior_sessions_long"] / idx
                 norm_short[i] = level_feats.iloc[i]["prior_sessions_short"] / idx
 
-    level_only_cols = ["nearest_level_to_high_R", "nearest_level_to_low_R",
-                       "levels_within_1R", "levels_within_2R",
-                       "orb_nested_in_prior", "prior_orb_size_ratio_max"]
+    level_only_cols = [
+        "nearest_level_to_high_R",
+        "nearest_level_to_low_R",
+        "levels_within_1R",
+        "levels_within_2R",
+        "orb_nested_in_prior",
+        "prior_orb_size_ratio_max",
+    ]
     cross_only_cols = ["prior_sessions_broken", "prior_sessions_long", "prior_sessions_short"]
 
     # E6a: levels only
@@ -283,14 +314,22 @@ def run_audit(instrument="MES"):
     meta_test = df.iloc[n_train:][["trading_day", "orb_label", "pnl_r"]].copy()
 
     rf_params = dict(
-        n_estimators=500, max_depth=6, min_samples_leaf=100,
-        max_features="sqrt", class_weight="balanced",
-        random_state=42, n_jobs=-1,
+        n_estimators=500,
+        max_depth=6,
+        min_samples_leaf=100,
+        max_features="sqrt",
+        class_weight="balanced",
+        random_state=42,
+        n_jobs=-1,
     )
 
-    for name, X_exp in [("E3_clean", X_clean), ("E6a_levels", X_e6a),
-                        ("E6b_cross", X_e6b), ("E6c_all", X_e6c),
-                        ("E6d_normalized", X_e6d)]:
+    for name, X_exp in [
+        ("E3_clean", X_clean),
+        ("E6a_levels", X_e6a),
+        ("E6b_cross", X_e6b),
+        ("E6c_all", X_e6c),
+        ("E6d_normalized", X_e6d),
+    ]:
         X_tr = X_exp.iloc[:n_train]
         X_te = X_exp.iloc[n_train:]
 
@@ -318,8 +357,7 @@ def run_audit(instrument="MES"):
                 best_total = total_r
 
         skip = 1 - (y_prob >= best_t).sum() / valid.sum() if best_t > 0 else 0
-        print(f"    Best: t={best_t:.2f} TotalR={best_total:+.1f} "
-              f"Delta={best_delta:+.1f} Skip={skip:.1%}")
+        print(f"    Best: t={best_t:.2f} TotalR={best_total:+.1f} Delta={best_delta:+.1f} Skip={skip:.1%}")
 
         # Per-session at best threshold
         meta_test_copy = meta_test.copy()
@@ -355,6 +393,7 @@ def run_audit(instrument="MES"):
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--instrument", default="MES")
     args = parser.parse_args()

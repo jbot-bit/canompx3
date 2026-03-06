@@ -4,8 +4,10 @@
 Each check returns list[str] violations. Exit code 0 = all passed, 1 = failures.
 Human-readable output is preserved for interactive use.
 """
+
 import sys
-sys.stdout.reconfigure(encoding='utf-8')
+
+sys.stdout.reconfigure(encoding="utf-8")
 
 import duckdb
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS, ASSET_CONFIGS
@@ -25,10 +27,10 @@ def check_outcome_coverage(con) -> list[str]:
     violations = []
     for inst in ACTIVE_INSTRUMENTS:
         cfg = ASSET_CONFIGS[inst]
-        enabled = set(cfg['enabled_sessions'])
+        enabled = set(cfg["enabled_sessions"])
         r = con.execute(
             "SELECT DISTINCT orb_label FROM orb_outcomes WHERE symbol = ?",
-            [cfg['symbol']],
+            [cfg["symbol"]],
         ).fetchall()
         in_db = set(row[0] for row in r)
         missing = enabled - in_db
@@ -50,10 +52,8 @@ def check_validated_session_integrity(con) -> list[str]:
     """).fetchall()
     for inst, sess, n in r:
         cfg = ASSET_CONFIGS.get(inst)
-        if cfg and sess not in cfg.get('enabled_sessions', []):
-            violations.append(
-                f"  {inst} x {sess} ({n} strategies) NOT in enabled_sessions"
-            )
+        if cfg and sess not in cfg.get("enabled_sessions", []):
+            violations.append(f"  {inst} x {sess} ({n} strategies) NOT in enabled_sessions")
     return violations
 
 
@@ -72,10 +72,8 @@ def check_edge_family_integrity(con) -> list[str]:
 def check_e0_contamination(con) -> list[str]:
     """4. No E0 rows in any trading table."""
     violations = []
-    for table in ['orb_outcomes', 'experimental_strategies', 'validated_setups']:
-        r = con.execute(
-            f"SELECT COUNT(*) FROM {table} WHERE entry_model = 'E0'"
-        ).fetchone()[0]
+    for table in ["orb_outcomes", "experimental_strategies", "validated_setups"]:
+        r = con.execute(f"SELECT COUNT(*) FROM {table} WHERE entry_model = 'E0'").fetchone()[0]
         if r > 0:
             violations.append(f"  {table}: {r} E0 rows (should be 0)")
     return violations
@@ -84,25 +82,21 @@ def check_e0_contamination(con) -> list[str]:
 def check_old_session_names(con) -> list[str]:
     """5. No old fixed-clock session names in DB."""
     violations = []
-    for table in ['orb_outcomes', 'experimental_strategies', 'validated_setups']:
+    for table in ["orb_outcomes", "experimental_strategies", "validated_setups"]:
         r = con.execute(f"""
             SELECT DISTINCT orb_label FROM {table}
             WHERE orb_label IN ('0900','1000','1100','1800','2300','0030')
         """).fetchall()
         if r:
-            violations.append(
-                f"  {table}: old session names: {[x[0] for x in r]}"
-            )
+            violations.append(f"  {table}: old session names: {[x[0] for x in r]}")
     return violations
 
 
 def check_e0_cb2_contamination(con) -> list[str]:
     """6. No E0 + CB>1 rows."""
     violations = []
-    for table in ['orb_outcomes', 'experimental_strategies', 'validated_setups']:
-        r = con.execute(
-            f"SELECT COUNT(*) FROM {table} WHERE entry_model = 'E0' AND confirm_bars > 1"
-        ).fetchone()[0]
+    for table in ["orb_outcomes", "experimental_strategies", "validated_setups"]:
+        r = con.execute(f"SELECT COUNT(*) FROM {table} WHERE entry_model = 'E0' AND confirm_bars > 1").fetchone()[0]
         if r > 0:
             violations.append(f"  {table}: {r} E0+CB>1 rows (should be 0)")
     return violations
@@ -194,52 +188,52 @@ CHECKS = [
 
 def _print_informational(con):
     """Print informational stats that don't produce violations."""
-    print('\n--- 7. DAILY_FEATURES ROW COUNTS ---')
+    print("\n--- 7. DAILY_FEATURES ROW COUNTS ---")
     for row in con.execute(f"""
         SELECT symbol, orb_minutes, COUNT(*) as n FROM daily_features
         WHERE symbol IN ({_SQL_IN})
         GROUP BY symbol, orb_minutes ORDER BY symbol, orb_minutes
     """).fetchall():
-        print(f'  {row[0]} orb_{row[1]}m: {row[2]:,} rows')
+        print(f"  {row[0]} orb_{row[1]}m: {row[2]:,} rows")
 
-    print('\n--- 8. OUTCOMES BY ORB_MINUTES ---')
+    print("\n--- 8. OUTCOMES BY ORB_MINUTES ---")
     for row in con.execute(f"""
         SELECT symbol, orb_minutes, COUNT(*) FROM orb_outcomes
         WHERE symbol IN ({_SQL_IN})
         GROUP BY symbol, orb_minutes ORDER BY symbol, orb_minutes
     """).fetchall():
-        print(f'  {row[0]} {row[1]}m: {row[2]:,}')
+        print(f"  {row[0]} {row[1]}m: {row[2]:,}")
 
-    print('\n--- 9. VALIDATED STRATEGIES BY ORB_MINUTES ---')
+    print("\n--- 9. VALIDATED STRATEGIES BY ORB_MINUTES ---")
     for row in con.execute("""
         SELECT orb_minutes, instrument, COUNT(*) FROM validated_setups
         WHERE status='active'
         GROUP BY orb_minutes, instrument ORDER BY orb_minutes, instrument
     """).fetchall():
-        print(f'  {row[0]}m {row[1]}: {row[2]}')
+        print(f"  {row[0]}m {row[1]}: {row[2]}")
     for row in con.execute("""
         SELECT orb_minutes, COUNT(*) FROM validated_setups
         WHERE status='active' GROUP BY orb_minutes ORDER BY orb_minutes
     """).fetchall():
-        print(f'    TOTAL {row[0]}m: {row[1]}')
+        print(f"    TOTAL {row[0]}m: {row[1]}")
 
-    print('\n--- 10. EXPERIMENTAL STRATEGIES BY ORB_MINUTES ---')
+    print("\n--- 10. EXPERIMENTAL STRATEGIES BY ORB_MINUTES ---")
     for row in con.execute(f"""
         SELECT orb_minutes, instrument, COUNT(*) FROM experimental_strategies
         WHERE instrument IN ({_SQL_IN})
         GROUP BY orb_minutes, instrument ORDER BY orb_minutes, instrument
     """).fetchall():
-        print(f'  {row[0]}m {row[1]}: {row[2]:,}')
+        print(f"  {row[0]}m {row[1]}: {row[2]:,}")
 
-    print('\n--- 13. OUTCOME DATE RANGES ---')
+    print("\n--- 13. OUTCOME DATE RANGES ---")
     for row in con.execute(f"""
         SELECT symbol, MIN(trading_day), MAX(trading_day), COUNT(DISTINCT trading_day)
         FROM orb_outcomes WHERE symbol IN ({_SQL_IN})
         GROUP BY symbol ORDER BY symbol
     """).fetchall():
-        print(f'  {row[0]}: {row[1]} to {row[2]} ({row[3]:,} days)')
+        print(f"  {row[0]}: {row[1]} to {row[2]} ({row[3]:,} days)")
 
-    print('\n--- 14. FDR BREAKDOWN ---')
+    print("\n--- 14. FDR BREAKDOWN ---")
     total_fdr = 0
     for row in con.execute("""
         SELECT instrument,
@@ -249,50 +243,57 @@ def _print_informational(con):
         FROM validated_setups WHERE status='active'
         GROUP BY instrument ORDER BY instrument
     """).fetchall():
-        print(f'  {row[0]}: {row[1]} FDR-sig / {row[2]} not / {row[3]} total')
+        print(f"  {row[0]}: {row[1]} FDR-sig / {row[2]} not / {row[3]} total")
         total_fdr += row[1]
-    print(f'  TOTAL FDR significant: {total_fdr}')
+    print(f"  TOTAL FDR significant: {total_fdr}")
 
-    print('\n--- 17. TABLE ROW COUNTS ---')
-    for table in ['bars_1m', 'bars_5m', 'daily_features', 'orb_outcomes',
-                  'experimental_strategies', 'validated_setups', 'edge_families']:
+    print("\n--- 17. TABLE ROW COUNTS ---")
+    for table in [
+        "bars_1m",
+        "bars_5m",
+        "daily_features",
+        "orb_outcomes",
+        "experimental_strategies",
+        "validated_setups",
+        "edge_families",
+    ]:
         r = con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-        print(f'  {table}: {r:,}')
+        print(f"  {table}: {r:,}")
 
 
 def main():
-    print('=' * 70)
-    print('INTEGRITY AUDIT — EVERYTHING MUST BE HONEST')
-    print('=' * 70)
+    print("=" * 70)
+    print("INTEGRITY AUDIT — EVERYTHING MUST BE HONEST")
+    print("=" * 70)
 
     con = _connect()
     all_violations = []
 
     try:
         for label, check_fn in CHECKS:
-            print(f'\n--- {label} ---')
+            print(f"\n--- {label} ---")
             v = check_fn(con)
             if v:
-                print('  FAILED:')
+                print("  FAILED:")
                 for line in v:
                     print(line)
                 all_violations.extend(v)
             else:
-                print('  OK')
+                print("  OK")
 
         # Print informational stats (no violations, just data)
         _print_informational(con)
     finally:
         con.close()
 
-    print('\n' + '=' * 70)
+    print("\n" + "=" * 70)
     if all_violations:
-        print(f'INTEGRITY AUDIT FAILED: {len(all_violations)} violation(s)')
-        print('=' * 70)
+        print(f"INTEGRITY AUDIT FAILED: {len(all_violations)} violation(s)")
+        print("=" * 70)
         sys.exit(1)
     else:
-        print(f'INTEGRITY AUDIT PASSED: all {len(CHECKS)} checks clean')
-        print('=' * 70)
+        print(f"INTEGRITY AUDIT PASSED: all {len(CHECKS)} checks clean")
+        print("=" * 70)
         sys.exit(0)
 
 

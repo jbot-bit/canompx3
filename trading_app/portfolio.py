@@ -16,6 +16,7 @@ from pathlib import Path
 from dataclasses import dataclass, asdict, field, replace
 
 from pipeline.log import get_logger
+
 logger = get_logger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -31,20 +32,22 @@ from pipeline.cost_model import get_cost_spec, CostSpec
 from pipeline.init_db import ORB_LABELS
 from trading_app.config import ALL_FILTERS, ATRVelocityFilter, CalendarSkipFilter, classify_strategy, apply_tight_stop
 
+
 def _get_table_names(con: duckdb.DuckDBPyConnection) -> set[str]:
     """Return set of table names in the main schema."""
-    rows = con.execute(
-        "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
-    ).fetchall()
+    rows = con.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='main'").fetchall()
     return {r[0] for r in rows}
+
 
 # =========================================================================
 # Data classes
 # =========================================================================
 
+
 @dataclass(frozen=True)
 class PortfolioStrategy:
     """A single strategy selected for the portfolio."""
+
     strategy_id: str
     instrument: str
     orb_label: str
@@ -73,9 +76,11 @@ class PortfolioStrategy:
         """CORE / REGIME / INVALID per FIX5 rules."""
         return classify_strategy(self.sample_size)
 
+
 @dataclass
 class Portfolio:
     """A collection of strategies with risk parameters."""
+
     name: str
     instrument: str
     strategies: list[PortfolioStrategy]
@@ -133,9 +138,11 @@ class Portfolio:
             "max_expectancy_r": max(exp_values),
         }
 
+
 # =========================================================================
 # Position sizing
 # =========================================================================
+
 
 def compute_position_size(
     account_equity: float,
@@ -165,6 +172,7 @@ def compute_position_size(
         return 0  # Risk per contract exceeds budget — don't trade
     return int(contracts)
 
+
 def compute_position_size_prop(
     max_drawdown: float,
     risk_per_trade_pct: float,
@@ -191,6 +199,7 @@ def compute_position_size_prop(
         return 0  # Risk per contract exceeds budget — don't trade
     return int(contracts)
 
+
 def compute_vol_scalar(
     atr_20: float,
     median_atr_20: float,
@@ -211,6 +220,7 @@ def compute_vol_scalar(
         return 1.0
     raw = median_atr_20 / atr_20
     return max(min_scalar, min(raw, max_scalar))
+
 
 def compute_position_size_vol_scaled(
     account_equity: float,
@@ -240,9 +250,11 @@ def compute_position_size_vol_scaled(
         return 0
     return int(contracts)
 
+
 # =========================================================================
 # Portfolio construction
 # =========================================================================
+
 
 def load_validated_strategies(
     db_path: Path,
@@ -267,11 +279,13 @@ def load_validated_strategies(
         head_ids = None
         if family_heads_only:
             from trading_app.db_manager import has_edge_families, get_family_head_ids
+
             if has_edge_families(con):
                 head_ids = get_family_head_ids(con, instrument)
 
         # Load baseline strategies, enforcing locked RR from family_rr_locks
-        baseline_rows = con.execute("""
+        baseline_rows = con.execute(
+            """
             SELECT vs.strategy_id, vs.instrument, vs.orb_label, vs.entry_model,
                    vs.rr_target, vs.confirm_bars, vs.filter_type,
                    vs.expectancy_r, vs.win_rate, vs.sample_size,
@@ -298,7 +312,9 @@ def load_validated_strategies(
               AND vs.orb_label != 'SINGAPORE_OPEN'
               AND (frl.locked_rr IS NULL OR vs.rr_target = frl.locked_rr)
             ORDER BY vs.expectancy_r DESC
-        """, [instrument, min_expectancy_r]).fetchall()
+        """,
+            [instrument, min_expectancy_r],
+        ).fetchall()
 
         cols = [desc[0] for desc in con.description]
         results = [dict(zip(cols, row)) for row in baseline_rows]
@@ -308,7 +324,8 @@ def load_validated_strategies(
             table_names = _get_table_names(con)
 
             if "nested_validated" in table_names:
-                nested_rows = con.execute("""
+                nested_rows = con.execute(
+                    """
                     SELECT nv.strategy_id, nv.instrument, nv.orb_label, nv.entry_model,
                            nv.rr_target, nv.confirm_bars, nv.filter_type,
                            nv.expectancy_r, nv.win_rate, nv.sample_size,
@@ -335,7 +352,9 @@ def load_validated_strategies(
                       AND nv.orb_label != 'SINGAPORE_OPEN'
                       AND (frl.locked_rr IS NULL OR nv.rr_target = frl.locked_rr)
                     ORDER BY nv.expectancy_r DESC
-                """, [instrument, min_expectancy_r]).fetchall()
+                """,
+                    [instrument, min_expectancy_r],
+                ).fetchall()
 
                 nested_cols = [desc[0] for desc in con.description]
                 assert len(nested_cols) == len(cols), (
@@ -349,8 +368,11 @@ def load_validated_strategies(
         # Load rolling-validated strategies if requested
         if include_rolling:
             from trading_app.rolling_portfolio import load_rolling_validated_strategies
+
             rolling_results = load_rolling_validated_strategies(
-                db_path, instrument, rolling_train_months,
+                db_path,
+                instrument,
+                rolling_train_months,
                 min_expectancy_r=min_expectancy_r,
             )
             # Deduplicate: don't add rolling strategies already in baseline/nested
@@ -364,6 +386,8 @@ def load_validated_strategies(
             results = [r for r in results if r["strategy_id"] in head_ids]
 
         return results
+
+
 def diversify_strategies(
     candidates: list[dict],
     max_strategies: int,
@@ -421,6 +445,7 @@ def diversify_strategies(
 
     return selected
 
+
 def build_portfolio(
     db_path: Path | None = None,
     instrument: str = "MGC",
@@ -455,7 +480,9 @@ def build_portfolio(
 
     # Load and filter candidates
     candidates = load_validated_strategies(
-        db_path, instrument, min_expectancy_r,
+        db_path,
+        instrument,
+        min_expectancy_r,
         include_nested=include_nested,
         include_rolling=include_rolling,
         rolling_train_months=rolling_train_months,
@@ -478,7 +505,9 @@ def build_portfolio(
     if len(candidates) > 1:
         strategy_ids = [c["strategy_id"] for c in candidates]
         corr = correlation_matrix(
-            db_path, strategy_ids, min_overlap_days=100,
+            db_path,
+            strategy_ids,
+            min_overlap_days=100,
             calendar_overlay=calendar_overlay,
             atr_velocity_overlay=atr_velocity_overlay,
         )
@@ -487,35 +516,40 @@ def build_portfolio(
 
     # Diversify selection
     selected = diversify_strategies(
-        candidates, max_strategies, max_per_orb,
-        corr_matrix=corr, max_correlation=max_correlation,
+        candidates,
+        max_strategies,
+        max_per_orb,
+        corr_matrix=corr,
+        max_correlation=max_correlation,
     )
 
     # Convert to PortfolioStrategy objects
     strategies = []
     for s in selected:
-        strategies.append(PortfolioStrategy(
-            strategy_id=s["strategy_id"],
-            instrument=s["instrument"],
-            orb_label=s["orb_label"],
-            entry_model=s["entry_model"],
-            rr_target=s["rr_target"],
-            confirm_bars=s["confirm_bars"],
-            filter_type=s["filter_type"],
-            expectancy_r=s["expectancy_r"],
-            win_rate=s["win_rate"],
-            sample_size=s["sample_size"],
-            sharpe_ratio=s.get("sharpe_ratio"),
-            max_drawdown_r=s.get("max_drawdown_r"),
-            median_risk_points=s.get("median_risk_points"),
-            median_risk_dollars=s.get("median_risk_dollars"),
-            avg_risk_dollars=s.get("avg_risk_dollars"),
-            avg_win_dollars=s.get("avg_win_dollars"),
-            avg_loss_dollars=s.get("avg_loss_dollars"),
-            orb_minutes=int(s.get("orb_minutes", 5)),
-            stop_multiplier=s.get("stop_multiplier", 1.0),
-            source=s.get("source", "baseline"),
-        ))
+        strategies.append(
+            PortfolioStrategy(
+                strategy_id=s["strategy_id"],
+                instrument=s["instrument"],
+                orb_label=s["orb_label"],
+                entry_model=s["entry_model"],
+                rr_target=s["rr_target"],
+                confirm_bars=s["confirm_bars"],
+                filter_type=s["filter_type"],
+                expectancy_r=s["expectancy_r"],
+                win_rate=s["win_rate"],
+                sample_size=s["sample_size"],
+                sharpe_ratio=s.get("sharpe_ratio"),
+                max_drawdown_r=s.get("max_drawdown_r"),
+                median_risk_points=s.get("median_risk_points"),
+                median_risk_dollars=s.get("median_risk_dollars"),
+                avg_risk_dollars=s.get("avg_risk_dollars"),
+                avg_win_dollars=s.get("avg_win_dollars"),
+                avg_loss_dollars=s.get("avg_loss_dollars"),
+                orb_minutes=int(s.get("orb_minutes", 5)),
+                stop_multiplier=s.get("stop_multiplier", 1.0),
+                source=s.get("source", "baseline"),
+            )
+        )
 
     # Classification-aware weight adjustment (FIX5)
     # CORE (>=100): weight=1.0 (default), REGIME (30-99): weight=0.5, INVALID (<30): excluded
@@ -523,13 +557,13 @@ def build_portfolio(
     for strat in strategies:
         cls = strat.classification
         if cls == "INVALID":
-            logger.info("Excluding INVALID strategy %s (sample_size=%d)",
-                        strat.strategy_id, strat.sample_size)
+            logger.info("Excluding INVALID strategy %s (sample_size=%d)", strat.strategy_id, strat.sample_size)
             continue
         if cls == "REGIME":
             strat = replace(strat, weight=0.5)
-            logger.info("REGIME strategy %s: weight reduced to 0.5 (sample_size=%d)",
-                        strat.strategy_id, strat.sample_size)
+            logger.info(
+                "REGIME strategy %s: weight reduced to 0.5 (sample_size=%d)", strat.strategy_id, strat.sample_size
+            )
         classified.append(strat)
     strategies = classified
 
@@ -557,9 +591,11 @@ def build_portfolio(
         corr_lookup=lookup,
     )
 
+
 # Minimum overlapping non-NaN days required for a meaningful correlation.
 # Pairs below this threshold get NaN correlation (insufficient evidence).
 MIN_OVERLAP_DAYS = 200
+
 
 def build_strategy_daily_series(
     db_path: Path,
@@ -593,30 +629,37 @@ def build_strategy_daily_series(
         placeholders = ", ".join(["?"] * len(strategy_ids))
 
         # Step 1: Load strategy parameters from baseline, nested, and rolling
-        baseline_strats = con.execute(f"""
+        baseline_strats = con.execute(
+            f"""
             SELECT strategy_id, instrument, orb_label, orb_minutes,
                    entry_model, rr_target, confirm_bars, filter_type,
                    'baseline' as source
             FROM validated_setups
             WHERE strategy_id IN ({placeholders})
-        """, strategy_ids).fetchdf()
+        """,
+            strategy_ids,
+        ).fetchdf()
 
         # Check if nested/rolling tables exist
         tables = _get_table_names(con)
         nested_strats = pd.DataFrame()
         if "nested_validated" in tables:
-            nested_strats = con.execute(f"""
+            nested_strats = con.execute(
+                f"""
                 SELECT strategy_id, instrument, orb_label, orb_minutes,
                        entry_model, rr_target, confirm_bars, filter_type,
                        'nested' as source
                 FROM nested_validated
                 WHERE strategy_id IN ({placeholders})
-            """, strategy_ids).fetchdf()
+            """,
+                strategy_ids,
+            ).fetchdf()
 
         # Rolling strategies: pick from regime_validated (deduplicate by strategy_id)
         rolling_strats = pd.DataFrame()
         if "regime_validated" in tables:
-            rolling_strats = con.execute(f"""
+            rolling_strats = con.execute(
+                f"""
                 SELECT DISTINCT ON (strategy_id)
                        strategy_id, instrument, orb_label, orb_minutes,
                        entry_model, rr_target, confirm_bars, filter_type,
@@ -625,11 +668,12 @@ def build_strategy_daily_series(
                 WHERE strategy_id IN ({placeholders})
                   AND run_label LIKE 'rolling_%'
                 ORDER BY strategy_id, run_label DESC
-            """, strategy_ids).fetchdf()
+            """,
+                strategy_ids,
+            ).fetchdf()
 
         # Combine all sources (deduplicate: baseline wins over rolling)
-        strats = pd.concat([baseline_strats, nested_strats, rolling_strats],
-                           ignore_index=True)
+        strats = pd.concat([baseline_strats, nested_strats, rolling_strats], ignore_index=True)
         strats = strats.drop_duplicates(subset=["strategy_id"], keep="first")
         if strats.empty:
             return pd.DataFrame(), {}
@@ -647,7 +691,8 @@ def build_strategy_daily_series(
             # Compression tier only exists for momentum sessions
             _COMPRESSION_SESSIONS = ["CME_REOPEN", "TOKYO_OPEN", "LONDON_METALS"]
             _comp_cols = ", ".join(f"orb_{lbl}_compression_tier" for lbl in _COMPRESSION_SESSIONS)
-            df_om = con.execute(f"""
+            df_om = con.execute(
+                f"""
                 SELECT trading_day, day_of_week,
                        {_size_cols},
                        is_nfp_day, is_opex_day, is_friday,
@@ -656,7 +701,9 @@ def build_strategy_daily_series(
                 FROM daily_features
                 WHERE symbol = ? AND orb_minutes = ?
                 ORDER BY trading_day
-            """, [instrument, om_int]).fetchdf()
+            """,
+                [instrument, om_int],
+            ).fetchdf()
             if df_om.empty:
                 continue
             df_rows_by_om[om_int] = df_om
@@ -667,7 +714,8 @@ def build_strategy_daily_series(
             return pd.DataFrame(), {}
 
         # Step 3: Load outcomes from both orb_outcomes (baseline) and nested_outcomes (nested)
-        outcomes_baseline = con.execute(f"""
+        outcomes_baseline = con.execute(
+            f"""
             SELECT vs.strategy_id, oo.trading_day, oo.pnl_r,
                    oo.mae_r, oo.entry_price, oo.stop_price,
                    COALESCE(vs.stop_multiplier, 1.0) as stop_multiplier
@@ -681,7 +729,9 @@ def build_strategy_daily_series(
               AND oo.confirm_bars = vs.confirm_bars
             WHERE vs.strategy_id IN ({placeholders})
               AND oo.pnl_r IS NOT NULL
-        """, strategy_ids).fetchdf()
+        """,
+            strategy_ids,
+        ).fetchdf()
 
         # Apply tight stop simulation for S075 strategies
         if not outcomes_baseline.empty and "stop_multiplier" in outcomes_baseline.columns:
@@ -699,7 +749,8 @@ def build_strategy_daily_series(
 
         outcomes_nested = pd.DataFrame()
         if "nested_outcomes" in tables and "nested_validated" in tables:
-            outcomes_nested = con.execute(f"""
+            outcomes_nested = con.execute(
+                f"""
                 SELECT nv.strategy_id, no.trading_day, no.pnl_r
                 FROM nested_validated nv
                 JOIN nested_outcomes no
@@ -712,7 +763,9 @@ def build_strategy_daily_series(
                   AND no.entry_resolution = nv.entry_resolution
                 WHERE nv.strategy_id IN ({placeholders})
                   AND no.pnl_r IS NOT NULL
-            """, strategy_ids).fetchdf()
+            """,
+                strategy_ids,
+            ).fetchdf()
 
         # Combine outcomes
         outcomes = pd.concat([outcomes_baseline, outcomes_nested], ignore_index=True)
@@ -745,8 +798,7 @@ def build_strategy_daily_series(
                 # Convert NaN to None to preserve fail-closed filter semantics.
                 eligible_mask = df_rows.apply(
                     lambda row: filt.matches_row(
-                        {k: (None if (isinstance(v, float) and np.isnan(v)) else v)
-                         for k, v in row.items()},
+                        {k: (None if (isinstance(v, float) and np.isnan(v)) else v) for k, v in row.items()},
                         orb_label,
                     ),
                     axis=1,
@@ -757,8 +809,10 @@ def build_strategy_daily_series(
             if calendar_overlay is not None:
                 for idx in range(len(df_rows)):
                     if eligible_mask[idx]:
-                        row_dict = {k: (None if (isinstance(v, float) and np.isnan(v)) else v)
-                                    for k, v in df_rows.iloc[idx].items()}
+                        row_dict = {
+                            k: (None if (isinstance(v, float) and np.isnan(v)) else v)
+                            for k, v in df_rows.iloc[idx].items()
+                        }
                         if not calendar_overlay.matches_row(row_dict, orb_label):
                             eligible_mask[idx] = False
 
@@ -766,8 +820,10 @@ def build_strategy_daily_series(
             if atr_velocity_overlay is not None:
                 for idx in range(len(df_rows)):
                     if eligible_mask[idx]:
-                        row_dict = {k: (None if (isinstance(v, float) and np.isnan(v)) else v)
-                                    for k, v in df_rows.iloc[idx].items()}
+                        row_dict = {
+                            k: (None if (isinstance(v, float) and np.isnan(v)) else v)
+                            for k, v in df_rows.iloc[idx].items()
+                        }
                         if not atr_velocity_overlay.matches_row(row_dict, orb_label):
                             eligible_mask[idx] = False
 
@@ -812,6 +868,7 @@ def build_strategy_daily_series(
         result.index.name = "trading_day"
         return result, stats
 
+
 def correlation_matrix(
     db_path: Path,
     strategy_ids: list[str],
@@ -829,7 +886,9 @@ def correlation_matrix(
     Returns symmetric correlation matrix (diagonal = 1.0).
     """
     series_df, stats = build_strategy_daily_series(
-        db_path, strategy_ids, calendar_overlay=calendar_overlay,
+        db_path,
+        strategy_ids,
+        calendar_overlay=calendar_overlay,
         atr_velocity_overlay=atr_velocity_overlay,
     )
 
@@ -857,9 +916,11 @@ def correlation_matrix(
 
     return corr
 
+
 # =========================================================================
 # Capital estimation
 # =========================================================================
+
 
 def estimate_daily_capital(
     portfolio: Portfolio,
@@ -885,7 +946,8 @@ def estimate_daily_capital(
     # Max concurrent risk = max_concurrent * max_risk_per_trade
     # Prefer stored dollar values; fall back to computing from points
     risk_dollars_list = [
-        s.median_risk_dollars for s in portfolio.strategies
+        s.median_risk_dollars
+        for s in portfolio.strategies
         if s.median_risk_dollars is not None and s.median_risk_dollars > 0
     ]
     if risk_dollars_list:
@@ -895,13 +957,12 @@ def estimate_daily_capital(
     else:
         # Fallback: compute from points (legacy path)
         risk_points_list = [
-            s.median_risk_points for s in portfolio.strategies
+            s.median_risk_points
+            for s in portfolio.strategies
             if s.median_risk_points is not None and s.median_risk_points > 0
         ]
         avg_risk_points = (
-            sum(risk_points_list) / len(risk_points_list)
-            if risk_points_list
-            else cost_spec.min_risk_floor_points
+            sum(risk_points_list) / len(risk_points_list) if risk_points_list else cost_spec.min_risk_floor_points
         )
         risk_per_trade_dollars = avg_risk_points * cost_spec.point_value + cost_spec.total_friction
     max_concurrent_risk = portfolio.max_concurrent_positions * risk_per_trade_dollars
@@ -917,6 +978,7 @@ def estimate_daily_capital(
         "worst_case_daily_loss_dollars": round(worst_case, 2),
     }
 
+
 # =========================================================================
 # Fitness-weighted portfolio
 # =========================================================================
@@ -928,6 +990,7 @@ FITNESS_WEIGHTS = {
     "DECAY": 0.0,
     "STALE": 0.0,
 }
+
 
 def fitness_weighted_portfolio(portfolio: Portfolio, fitness_report) -> Portfolio:
     """
@@ -964,16 +1027,16 @@ def fitness_weighted_portfolio(portfolio: Portfolio, fitness_report) -> Portfoli
         corr_lookup=portfolio.corr_lookup,
     )
 
+
 # =========================================================================
 # CLI
 # =========================================================================
 
+
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Build a diversified strategy portfolio from validated setups"
-    )
+    parser = argparse.ArgumentParser(description="Build a diversified strategy portfolio from validated setups")
     parser.add_argument("--instrument", default="MGC", help="Instrument symbol")
     parser.add_argument("--max-strategies", type=int, default=20, help="Max strategies")
     parser.add_argument("--min-expr", type=float, default=0.10, help="Min ExpR threshold")
@@ -986,8 +1049,9 @@ def main():
     parser.add_argument("--include-rolling", action="store_true", help="Include rolling-validated strategies")
     parser.add_argument("--rolling-train-months", type=int, default=12, help="Rolling training window months")
     parser.add_argument("--max-correlation", type=float, default=0.85, help="Max pairwise correlation (0-1)")
-    parser.add_argument("--family-heads-only", action="store_true",
-                        help="Only include family head strategies (1 per edge family)")
+    parser.add_argument(
+        "--family-heads-only", action="store_true", help="Only include family head strategies (1 per edge family)"
+    )
     parser.add_argument("--output", type=str, default=None, help="Output JSON file path")
     args = parser.parse_args()
 
@@ -1024,6 +1088,7 @@ def main():
         output_path = Path(args.output)
         output_path.write_text(portfolio.to_json())
         logger.info(f"  Written to {output_path}")
+
 
 if __name__ == "__main__":
     main()

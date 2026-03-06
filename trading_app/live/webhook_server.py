@@ -17,6 +17,7 @@ Endpoints:
     GET  /health  — liveness check
     POST /trade   — place a trade (entry or exit)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -56,6 +57,7 @@ def _get_auth():
     global _auth
     if _auth is None:
         from trading_app.live.tradovate_auth import TradovateAuth
+
         _auth = TradovateAuth(demo=DEMO)
         log.info("TradovateAuth initialized (demo=%s)", DEMO)
     return _auth
@@ -65,6 +67,7 @@ def _get_account_id() -> int:
     global _account_id
     if _account_id is None:
         from trading_app.live.contract_resolver import resolve_account_id
+
         _account_id = resolve_account_id(_get_auth(), demo=DEMO)
     return _account_id
 
@@ -72,6 +75,7 @@ def _get_account_id() -> int:
 def _get_contract(instrument: str) -> str:
     """Resolve front-month contract symbol, cached for 1 hour."""
     from trading_app.live.contract_resolver import resolve_front_month
+
     now = time.monotonic()
     if instrument in _contract_cache:
         symbol, resolved_at = _contract_cache[instrument]
@@ -104,11 +108,11 @@ app = FastAPI(title="ORB Webhook Server", lifespan=lifespan)
 # ── Request / Response models ────────────────────────────────────────────────
 class TradeRequest(BaseModel):
     instrument: str
-    direction: str       # "long" | "short"
-    action: str = "entry"          # "entry" | "exit"
+    direction: str  # "long" | "short"
+    action: str = "entry"  # "entry" | "exit"
     qty: int = 1
-    entry_model: str = "E1"        # "E1" (market) | "E2" (stop-market)
-    entry_price: float | None = None   # required only for E2 stop orders
+    entry_model: str = "E1"  # "E1" (market) | "E2" (stop-market)
+    entry_price: float | None = None  # required only for E2 stop orders
     secret: str = ""
 
     @field_validator("direction")
@@ -170,6 +174,7 @@ def _check_rate_limit() -> None:
 def _place_order(req: TradeRequest, contract: str) -> int:
     """Build and submit order. Returns order_id. Runs in a thread executor."""
     from trading_app.live.order_router import OrderRouter
+
     router = OrderRouter(account_id=_get_account_id(), auth=_get_auth(), demo=DEMO)
 
     if req.action == "entry":
@@ -233,7 +238,11 @@ async def trade(req: TradeRequest, request: Request):
 
     log.info(
         "WEBHOOK ORDER: %s %s %s qty=%d → orderId=%d (%s)",
-        req.action, req.instrument, req.direction, req.qty, order_id,
+        req.action,
+        req.instrument,
+        req.direction,
+        req.qty,
+        order_id,
         "DEMO" if DEMO else "LIVE",
     )
 

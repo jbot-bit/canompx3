@@ -23,6 +23,7 @@ from datetime import date, timezone
 from dataclasses import dataclass, asdict
 
 from pipeline.log import get_logger
+
 logger = get_logger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -45,9 +46,11 @@ sys.stdout.reconfigure(line_buffering=True)
 # Data classes
 # =========================================================================
 
+
 @dataclass(frozen=True)
 class FitnessScore:
     """Fitness assessment for a single strategy."""
+
     strategy_id: str
     # Layer 1: Structural (from validated_setups)
     full_period_exp_r: float
@@ -68,12 +71,15 @@ class FitnessScore:
     fitness_status: str
     fitness_notes: str
 
+
 @dataclass(frozen=True)
 class FitnessReport:
     """Fitness report for all strategies in a portfolio."""
+
     as_of_date: date
     scores: list[FitnessScore]
     summary: dict
+
 
 # =========================================================================
 # Classification
@@ -81,6 +87,7 @@ class FitnessReport:
 
 MIN_ROLLING_FIT = 15
 MIN_ROLLING_WATCH = 10
+
 
 def classify_fitness(
     rolling_exp_r: float | None,
@@ -114,9 +121,11 @@ def classify_fitness(
 
     return "FIT", "Positive rolling ExpR with stable recent Sharpe"
 
+
 # =========================================================================
 # Core metric computation
 # =========================================================================
+
 
 def _recent_trade_sharpe(outcomes: list[dict], n_trades: int) -> float | None:
     """Sharpe of last N trades (sorted by trading_day). None if < n_trades."""
@@ -134,12 +143,13 @@ def _recent_trade_sharpe(outcomes: list[dict], n_trades: int) -> float | None:
 
     mean_r = sum(r_values) / len(r_values)
     variance = sum((r - mean_r) ** 2 for r in r_values) / (len(r_values) - 1)
-    std_r = variance ** 0.5
+    std_r = variance**0.5
 
     if std_r <= 0:
         return None
 
     return mean_r / std_r
+
 
 def _rolling_window_start(as_of: date, months: int) -> date:
     """Compute start date for rolling window (as_of - N months)."""
@@ -150,13 +160,16 @@ def _rolling_window_start(as_of: date, months: int) -> date:
         month += 12
     # Clamp day to valid range for target month
     import calendar
+
     max_day = calendar.monthrange(year, month)[1]
     day = min(as_of.day, max_day)
     return date(year, month, day)
 
+
 # =========================================================================
 # Data loading
 # =========================================================================
+
 
 def _load_strategy_params(con, strategy_id: str) -> dict | None:
     """Load strategy parameters from validated_setups."""
@@ -278,8 +291,12 @@ def _load_strategy_outcomes(
     # Load outcomes
     params = [instrument, orb_minutes, orb_label, entry_model, rr_target, confirm_bars]
     where = [
-        "symbol = ?", "orb_minutes = ?", "orb_label = ?",
-        "entry_model = ?", "rr_target = ?", "confirm_bars = ?",
+        "symbol = ?",
+        "orb_minutes = ?",
+        "orb_label = ?",
+        "entry_model = ?",
+        "rr_target = ?",
+        "confirm_bars = ?",
         "outcome IS NOT NULL",
     ]
     if start_date:
@@ -293,7 +310,7 @@ def _load_strategy_outcomes(
         f"""SELECT trading_day, outcome, pnl_r, mae_r, mfe_r,
                    entry_price, stop_price
             FROM orb_outcomes
-            WHERE {' AND '.join(where)}
+            WHERE {" AND ".join(where)}
             ORDER BY trading_day""",
         params,
     ).fetchall()
@@ -307,11 +324,8 @@ def _load_strategy_outcomes(
         """Apply DST regime filter if requested for a DST-affected session."""
         if dst_regime is None or orb_label not in DST_AFFECTED_SESSIONS:
             return outcomes
-        want_winter = (dst_regime == "winter")
-        return [
-            o for o in outcomes
-            if is_winter_for_session(o["trading_day"], orb_label) == want_winter
-        ]
+        want_winter = dst_regime == "winter"
+        return [o for o in outcomes if is_winter_for_session(o["trading_day"], orb_label) == want_winter]
 
     # Apply filter: load daily_features and check eligibility
     filt = ALL_FILTERS.get(filter_type)
@@ -344,7 +358,7 @@ def _load_strategy_outcomes(
     feat_rows = con.execute(
         f"""SELECT *
             FROM daily_features
-            WHERE {' AND '.join(feat_where)}""",
+            WHERE {" AND ".join(feat_where)}""",
         feat_params,
     ).fetchall()
     feat_cols = [desc[0] for desc in con.description]
@@ -362,9 +376,11 @@ def _load_strategy_outcomes(
     filtered = [o for o in all_outcomes if o["trading_day"] in eligible_days]
     return _apply_dst(filtered)
 
+
 # =========================================================================
 # Fitness computation
 # =========================================================================
+
 
 def _compute_fitness_with_con(
     con,
@@ -405,14 +421,12 @@ def _compute_fitness_with_con(
     sm = params.get("stop_multiplier", 1.0)
     if sm != 1.0:
         from pipeline.cost_model import get_cost_spec
+
         cost_spec = get_cost_spec(params["instrument"])
         all_outcomes = apply_tight_stop(all_outcomes, sm, cost_spec)
 
     # Layer 2: Rolling regime metrics
-    rolling_outcomes = [
-        o for o in all_outcomes
-        if rolling_start <= o["trading_day"] <= as_of_date
-    ]
+    rolling_outcomes = [o for o in all_outcomes if rolling_start <= o["trading_day"] <= as_of_date]
     rolling_metrics = compute_metrics(rolling_outcomes)
 
     # Raw rolling values for classification (before nulling)
@@ -462,6 +476,7 @@ def _compute_fitness_with_con(
         fitness_notes=notes,
     )
 
+
 def compute_fitness(
     strategy_id: str,
     db_path: Path | None = None,
@@ -477,8 +492,13 @@ def compute_fitness(
 
     with duckdb.connect(str(db_path), read_only=True) as con:
         return _compute_fitness_with_con(
-            con, strategy_id, as_of_date, rolling_months, min_rolling_trades,
+            con,
+            strategy_id,
+            as_of_date,
+            rolling_months,
+            min_rolling_trades,
         )
+
 
 def compute_portfolio_fitness(
     db_path: Path | None = None,
@@ -494,9 +514,7 @@ def compute_portfolio_fitness(
 
     with duckdb.connect(str(db_path), read_only=True) as con:
         # Exclude sessions with no confirmed edge (see config.EXCLUDED_FROM_FITNESS)
-        exclusion_clause = " AND ".join(
-            f"orb_label != '{s}'" for s in sorted(EXCLUDED_FROM_FITNESS)
-        )
+        exclusion_clause = " AND ".join(f"orb_label != '{s}'" for s in sorted(EXCLUDED_FROM_FITNESS))
         rows = con.execute(
             f"""SELECT strategy_id FROM validated_setups
                WHERE instrument = ? AND LOWER(status) = 'active'
@@ -511,7 +529,10 @@ def compute_portfolio_fitness(
         for sid in strategy_ids:
             try:
                 score = _compute_fitness_with_con(
-                    con, sid, as_of_date, rolling_months,
+                    con,
+                    sid,
+                    as_of_date,
+                    rolling_months,
                 )
                 scores.append(score)
             except Exception as e:
@@ -527,13 +548,16 @@ def compute_portfolio_fitness(
         summary=summary,
     )
 
+
 # =========================================================================
 # Decay diagnostics: regime shift vs overfit
 # =========================================================================
 
+
 @dataclass(frozen=True)
 class DecayDiagnosis:
     """Diagnosis of why a strategy is DECAY or WATCH."""
+
     strategy_id: str
     fitness_status: str
     family_hash: str | None
@@ -574,20 +598,30 @@ def diagnose_decay(
         actual_status = "UNKNOWN"
 
     # Get strategy's family info
-    row = con.execute("""
+    row = con.execute(
+        """
         SELECT vs.family_hash, vs.status,
                ef.member_count, ef.robustness_status, ef.cv_expectancy
         FROM validated_setups vs
         LEFT JOIN edge_families ef ON vs.family_hash = ef.family_hash
         WHERE vs.strategy_id = ?
-    """, [strategy_id]).fetchone()
+    """,
+        [strategy_id],
+    ).fetchone()
 
     if row is None:
         return DecayDiagnosis(
-            strategy_id=strategy_id, fitness_status=actual_status,
-            family_hash=None, family_size=0, family_robustness=None,
-            siblings_fit=0, siblings_watch=0, siblings_decay=0, siblings_stale=0,
-            diagnosis="NO_FAMILY", diagnosis_notes="Strategy not found",
+            strategy_id=strategy_id,
+            fitness_status=actual_status,
+            family_hash=None,
+            family_size=0,
+            family_robustness=None,
+            siblings_fit=0,
+            siblings_watch=0,
+            siblings_decay=0,
+            siblings_stale=0,
+            diagnosis="NO_FAMILY",
+            diagnosis_notes="Strategy not found",
         )
 
     family_hash = row[0]
@@ -596,30 +630,44 @@ def diagnose_decay(
 
     if family_hash is None:
         return DecayDiagnosis(
-            strategy_id=strategy_id, fitness_status=actual_status,
-            family_hash=None, family_size=0, family_robustness=None,
-            siblings_fit=0, siblings_watch=0, siblings_decay=0, siblings_stale=0,
+            strategy_id=strategy_id,
+            fitness_status=actual_status,
+            family_hash=None,
+            family_size=0,
+            family_robustness=None,
+            siblings_fit=0,
+            siblings_watch=0,
+            siblings_decay=0,
+            siblings_stale=0,
             diagnosis="NO_FAMILY",
             diagnosis_notes="No family_hash assigned — run build_edge_families",
         )
 
     if member_count <= 1:
         return DecayDiagnosis(
-            strategy_id=strategy_id, fitness_status=actual_status,
-            family_hash=family_hash, family_size=1,
+            strategy_id=strategy_id,
+            fitness_status=actual_status,
+            family_hash=family_hash,
+            family_size=1,
             family_robustness=robustness,
-            siblings_fit=0, siblings_watch=0, siblings_decay=0, siblings_stale=0,
+            siblings_fit=0,
+            siblings_watch=0,
+            siblings_decay=0,
+            siblings_stale=0,
             diagnosis="SINGLETON",
             diagnosis_notes="Single-member family — no peers to compare",
         )
 
     # Get all siblings (same family, excluding self)
-    siblings = con.execute("""
+    siblings = con.execute(
+        """
         SELECT strategy_id FROM validated_setups
         WHERE family_hash = ?
           AND strategy_id != ?
           AND LOWER(status) = 'active'
-    """, [family_hash, strategy_id]).fetchall()
+    """,
+        [family_hash, strategy_id],
+    ).fetchall()
 
     sibling_ids = [r[0] for r in siblings]
 
@@ -642,16 +690,10 @@ def diagnose_decay(
         decay_frac = (counts["DECAY"] + counts["WATCH"]) / total_assessed
         if decay_frac >= 0.50:
             diagnosis = "REGIME_SHIFT"
-            notes = (
-                f"{counts['DECAY']}D + {counts['WATCH']}W of "
-                f"{total_assessed} assessed siblings also declining"
-            )
+            notes = f"{counts['DECAY']}D + {counts['WATCH']}W of {total_assessed} assessed siblings also declining"
         elif counts["DECAY"] == 0 and counts["WATCH"] == 0:
             diagnosis = "OVERFIT"
-            notes = (
-                f"All {counts['FIT']} assessed siblings are FIT — "
-                f"this strategy's decay is isolated"
-            )
+            notes = f"All {counts['FIT']} assessed siblings are FIT — this strategy's decay is isolated"
         else:
             # Some siblings decaying but < 50%
             diagnosis = "FRAGMENTED"
@@ -661,12 +703,17 @@ def diagnose_decay(
             )
 
     return DecayDiagnosis(
-        strategy_id=strategy_id, fitness_status=actual_status,
-        family_hash=family_hash, family_size=member_count,
+        strategy_id=strategy_id,
+        fitness_status=actual_status,
+        family_hash=family_hash,
+        family_size=member_count,
         family_robustness=robustness,
-        siblings_fit=counts["FIT"], siblings_watch=counts["WATCH"],
-        siblings_decay=counts["DECAY"], siblings_stale=counts["STALE"],
-        diagnosis=diagnosis, diagnosis_notes=notes,
+        siblings_fit=counts["FIT"],
+        siblings_watch=counts["WATCH"],
+        siblings_decay=counts["DECAY"],
+        siblings_stale=counts["STALE"],
+        diagnosis=diagnosis,
+        diagnosis_notes=notes,
     )
 
 
@@ -697,14 +744,12 @@ def diagnose_portfolio_decay(
             where.append("instrument = ?")
             params.append(instruments[0])
 
-        exclusion_clause = " AND ".join(
-            f"orb_label != '{s}'" for s in sorted(EXCLUDED_FROM_FITNESS)
-        )
+        exclusion_clause = " AND ".join(f"orb_label != '{s}'" for s in sorted(EXCLUDED_FROM_FITNESS))
         where.append(exclusion_clause)
 
         rows = con.execute(
             f"""SELECT strategy_id FROM validated_setups
-               WHERE {' AND '.join(where)}
+               WHERE {" AND ".join(where)}
                ORDER BY strategy_id""",
             params,
         ).fetchall()
@@ -742,7 +787,8 @@ def diagnose_portfolio_decay(
                 except Exception:
                     own_status = "UNKNOWN"
                 diag = DecayDiagnosis(
-                    strategy_id=sid, fitness_status=own_status,
+                    strategy_id=sid,
+                    fitness_status=own_status,
                     family_hash=cached.family_hash,
                     family_size=cached.family_size,
                     family_robustness=cached.family_robustness,
@@ -770,29 +816,27 @@ def diagnose_portfolio_decay(
 # CLI
 # =========================================================================
 
+
 def _format_table(report: FitnessReport) -> str:
     """Format fitness report as a text table."""
     lines = []
     lines.append(f"Strategy Fitness Report (as of {report.as_of_date})")
-    lines.append(f"{'='*80}")
-    lines.append(
-        f"{'Strategy':<45} {'Status':<6} {'RollExpR':>8} {'RollN':>5} "
-        f"{'Sh30':>6} {'D30':>6}"
-    )
-    lines.append(f"{'-'*80}")
+    lines.append(f"{'=' * 80}")
+    lines.append(f"{'Strategy':<45} {'Status':<6} {'RollExpR':>8} {'RollN':>5} {'Sh30':>6} {'D30':>6}")
+    lines.append(f"{'-' * 80}")
 
     for s in sorted(report.scores, key=lambda x: x.fitness_status):
         roll_exp = f"{s.rolling_exp_r:.4f}" if s.rolling_exp_r is not None else "N/A"
         sh30 = f"{s.recent_sharpe_30:.3f}" if s.recent_sharpe_30 is not None else "N/A"
         d30 = f"{s.sharpe_delta_30:+.3f}" if s.sharpe_delta_30 is not None else "N/A"
         lines.append(
-            f"{s.strategy_id:<45} {s.fitness_status:<6} {roll_exp:>8} "
-            f"{s.rolling_sample:>5} {sh30:>6} {d30:>6}"
+            f"{s.strategy_id:<45} {s.fitness_status:<6} {roll_exp:>8} {s.rolling_sample:>5} {sh30:>6} {d30:>6}"
         )
 
-    lines.append(f"{'-'*80}")
+    lines.append(f"{'-' * 80}")
     lines.append(f"Summary: {report.summary}")
     return "\n".join(lines)
+
 
 def _format_json(report: FitnessReport) -> str:
     """Format fitness report as JSON."""
@@ -803,19 +847,17 @@ def _format_json(report: FitnessReport) -> str:
     }
     return json.dumps(data, indent=2, default=str)
 
+
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Strategy fitness assessment: rolling regime + decay monitoring"
-    )
+    parser = argparse.ArgumentParser(description="Strategy fitness assessment: rolling regime + decay monitoring")
     parser.add_argument("--instrument", default="MGC", help="Instrument symbol")
     parser.add_argument("--strategy-id", default=None, help="Single strategy ID")
     parser.add_argument("--rolling-months", type=int, default=18, help="Rolling window months")
     parser.add_argument("--as-of", type=date.fromisoformat, default=None, help="As-of date (YYYY-MM-DD)")
     parser.add_argument("--format", choices=["table", "json"], default="table", help="Output format")
-    parser.add_argument("--diagnose", action="store_true",
-                        help="Run decay diagnostics (regime shift vs overfit)")
+    parser.add_argument("--diagnose", action="store_true", help="Run decay diagnostics (regime shift vs overfit)")
     args = parser.parse_args()
 
     if args.diagnose:
@@ -852,8 +894,12 @@ def main():
         else:
             logger.info(f"Strategy: {score.strategy_id}")
             logger.info(f"  Status: {score.fitness_status}")
-            logger.info(f"  Full-period: ExpR={score.full_period_exp_r:.4f}, Sharpe={score.full_period_sharpe}, N={score.full_period_sample}")
-            logger.info(f"  Rolling ({score.rolling_window_months}mo): ExpR={score.rolling_exp_r}, Sharpe={score.rolling_sharpe}, WR={score.rolling_win_rate}, N={score.rolling_sample}")
+            logger.info(
+                f"  Full-period: ExpR={score.full_period_exp_r:.4f}, Sharpe={score.full_period_sharpe}, N={score.full_period_sample}"
+            )
+            logger.info(
+                f"  Rolling ({score.rolling_window_months}mo): ExpR={score.rolling_exp_r}, Sharpe={score.rolling_sharpe}, WR={score.rolling_win_rate}, N={score.rolling_sample}"
+            )
             logger.info(f"  Recent Sharpe: 30-trade={score.recent_sharpe_30}, 60-trade={score.recent_sharpe_60}")
             logger.info(f"  Sharpe Delta: 30={score.sharpe_delta_30}, 60={score.sharpe_delta_60}")
             logger.info(f"  Notes: {score.fitness_notes}")
@@ -868,6 +914,7 @@ def main():
             logger.info(_format_json(report))
         else:
             logger.info(_format_table(report))
+
 
 if __name__ == "__main__":
     main()

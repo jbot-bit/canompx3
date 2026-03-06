@@ -36,9 +36,7 @@ class TestQueryTradingDb:
     @patch("trading_app.mcp_server.SQLAdapter")
     def test_valid_query_returns_data(self, mock_cls):
         mock_adapter = MagicMock()
-        mock_adapter.execute.return_value = pd.DataFrame(
-            {"orb_label": ["CME_REOPEN"], "expectancy_r": [0.15]}
-        )
+        mock_adapter.execute.return_value = pd.DataFrame({"orb_label": ["CME_REOPEN"], "expectancy_r": [0.15]})
         mock_cls.return_value = mock_adapter
 
         result = _query_trading_db(template="validated_summary")
@@ -128,9 +126,7 @@ class TestGuardrails:
         """Even if adapter returns too many rows, MCP truncates."""
         mock_adapter = MagicMock()
         # Return more rows than the cap
-        mock_adapter.execute.return_value = pd.DataFrame(
-            {"x": range(MAX_MCP_ROWS + 100)}
-        )
+        mock_adapter.execute.return_value = pd.DataFrame({"x": range(MAX_MCP_ROWS + 100)})
         mock_cls.return_value = mock_adapter
 
         result = _query_trading_db(template="validated_summary")
@@ -138,7 +134,16 @@ class TestGuardrails:
 
     def test_allowed_params_whitelist(self):
         """Only known parameter keys are in the allowlist."""
-        assert _ALLOWED_PARAMS == {"orb_label", "entry_model", "filter_type", "min_sample_size", "limit", "instrument", "rr_target", "confirm_bars"}
+        assert _ALLOWED_PARAMS == {
+            "orb_label",
+            "entry_model",
+            "filter_type",
+            "min_sample_size",
+            "limit",
+            "instrument",
+            "rr_target",
+            "confirm_bars",
+        }
 
 
 class TestGenerateWarnings:

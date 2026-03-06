@@ -42,8 +42,7 @@ def backfill_wf(
             sid = rec["strategy_id"]
             wf_map[sid] = rec
 
-    print(f"Loaded {len(wf_map)} unique strategy_ids from JSONL "
-          f"({jsonl_path.name})")
+    print(f"Loaded {len(wf_map)} unique strategy_ids from JSONL ({jsonl_path.name})")
 
     if dry_run:
         print("(DRY RUN — no changes written)")
@@ -52,12 +51,7 @@ def backfill_wf(
     con = duckdb.connect(str(db_path))
     try:
         # Get all strategy_ids in validated_setups
-        existing = {
-            r[0]
-            for r in con.execute(
-                "SELECT strategy_id FROM validated_setups"
-            ).fetchall()
-        }
+        existing = {r[0] for r in con.execute("SELECT strategy_id FROM validated_setups").fetchall()}
 
         updated = 0
         for sid, rec in wf_map.items():
@@ -66,9 +60,7 @@ def backfill_wf(
             passed = rec.get("passed", False)
             n_windows = rec.get("n_valid_windows")
             con.execute(
-                "UPDATE validated_setups "
-                "SET wf_tested = TRUE, wf_passed = ?, wf_windows = ? "
-                "WHERE strategy_id = ?",
+                "UPDATE validated_setups SET wf_tested = TRUE, wf_passed = ?, wf_windows = ? WHERE strategy_id = ?",
                 [passed, n_windows, sid],
             )
             updated += 1
@@ -82,16 +74,18 @@ def backfill_wf(
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Backfill walk-forward columns on validated_setups"
-    )
+    parser = argparse.ArgumentParser(description="Backfill walk-forward columns on validated_setups")
     parser.add_argument("--db", type=str, default=None, help="Database path")
     parser.add_argument(
-        "--jsonl", type=str, default=None,
+        "--jsonl",
+        type=str,
+        default=None,
         help="Path to walkforward_results.jsonl",
     )
     parser.add_argument(
-        "--dry-run", action="store_true", help="Show what would change",
+        "--dry-run",
+        action="store_true",
+        help="Show what would change",
     )
     args = parser.parse_args()
 

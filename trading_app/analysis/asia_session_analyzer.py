@@ -40,19 +40,23 @@ COST_SPEC = get_cost_spec(INSTRUMENT)
 
 OUTPUT_DIR = PROJECT_ROOT / "artifacts"
 
+
 def _connect(db_path: Path | None = None) -> "duckdb.DuckDBPyConnection":
     p = db_path or GOLD_DB_PATH
     return duckdb.connect(str(p), read_only=True)
+
 
 def _fmt(val, decimals=2):
     if val is None:
         return "N/A"
     return f"{val:+.{decimals}f}" if isinstance(val, float) else str(val)
 
+
 def _pct(val, decimals=1):
     if val is None:
         return "N/A"
     return f"{val * 100:.{decimals}f}%"
+
 
 # =========================================================================
 # SECTION A: CME_REOPEN 2025 Regime Deep Dive
@@ -78,8 +82,10 @@ def section_a_regime_deep_dive(con, year: int) -> list[str]:
             ORDER BY expectancy_r DESC
             LIMIT 20
         """).fetchall()
-        lines.append(f"{'ID':<32} {'EM':>3} {'CB':>3} {'RR':>4} {'Filter':<16} "
-                     f"{'N':>4} {'WR':>6} {'ExpR':>7} {'Sharpe':>7} {'MaxDD':>7}")
+        lines.append(
+            f"{'ID':<32} {'EM':>3} {'CB':>3} {'RR':>4} {'Filter':<16} "
+            f"{'N':>4} {'WR':>6} {'ExpR':>7} {'Sharpe':>7} {'MaxDD':>7}"
+        )
         for r in rows:
             sid, em, cb, rr, ft, n, wr, expr, sh, mdd = r
             lines.append(
@@ -93,8 +99,10 @@ def section_a_regime_deep_dive(con, year: int) -> list[str]:
     # A2: Direction split for 0900 E1 CB2 RR2.5 G4+ (year vs full)
     lines.append(f"\nA2) 0900 Direction Split -- E1 CB2 RR2.5 G4+ ({year} vs Full)")
     lines.append("-" * 60)
-    for label, date_filter in [(str(year), f"AND o.trading_day >= '{year}-01-01' AND o.trading_day <= '{year}-12-31'"),
-                                ("Full", "")]:
+    for label, date_filter in [
+        (str(year), f"AND o.trading_day >= '{year}-01-01' AND o.trading_day <= '{year}-12-31'"),
+        ("Full", ""),
+    ]:
         for direction in ["LONG", "SHORT"]:
             outcomes = con.execute(f"""
                 SELECT o.trading_day, o.outcome, o.pnl_r, o.entry_price,
@@ -118,19 +126,22 @@ def section_a_regime_deep_dive(con, year: int) -> list[str]:
                 wins = sum(1 for o in outcomes if o[1] == "win")
                 total_r = sum(o[2] for o in outcomes if o[2] is not None)
                 avg_r = total_r / n
-                lines.append(f"  {label:>5} {direction:<6}: N={n:>4}, "
-                             f"WR={_pct(wins / n)}, AvgR={_fmt(avg_r)}, "
-                             f"TotalR={_fmt(total_r)}")
+                lines.append(
+                    f"  {label:>5} {direction:<6}: N={n:>4}, "
+                    f"WR={_pct(wins / n)}, AvgR={_fmt(avg_r)}, "
+                    f"TotalR={_fmt(total_r)}"
+                )
             else:
                 lines.append(f"  {label:>5} {direction:<6}: N=0")
 
     # A3: ORB size distribution comparison
     lines.append(f"\nA3) 0900 ORB Size Distribution ({year} vs 2022-2024)")
     lines.append("-" * 60)
-    buckets = [(0, 2, "<2"), (2, 4, "2-4"), (4, 6, "4-6"),
-               (6, 8, "6-8"), (8, 10, "8-10"), (10, 999, "10+")]
-    for label, date_filter in [(str(year), f"AND trading_day >= '{year}-01-01' AND trading_day <= '{year}-12-31'"),
-                                ("2022-24", "AND trading_day >= '2022-01-01' AND trading_day <= '2024-12-31'")]:
+    buckets = [(0, 2, "<2"), (2, 4, "2-4"), (4, 6, "4-6"), (6, 8, "6-8"), (8, 10, "8-10"), (10, 999, "10+")]
+    for label, date_filter in [
+        (str(year), f"AND trading_day >= '{year}-01-01' AND trading_day <= '{year}-12-31'"),
+        ("2022-24", "AND trading_day >= '2022-01-01' AND trading_day <= '2024-12-31'"),
+    ]:
         counts = []
         for lo, hi, bkt in buckets:
             row = con.execute(f"""
@@ -141,10 +152,11 @@ def section_a_regime_deep_dive(con, year: int) -> list[str]:
             """).fetchone()
             counts.append((bkt, row[0]))
         total = sum(c for _, c in counts)
-        dist = "  ".join(f"{bkt}:{cnt}({cnt*100//max(total,1)}%)" for bkt, cnt in counts)
+        dist = "  ".join(f"{bkt}:{cnt}({cnt * 100 // max(total, 1)}%)" for bkt, cnt in counts)
         lines.append(f"  {label:>7}: {dist}  [total={total}]")
 
     return lines
+
 
 # =========================================================================
 # SECTION B: Cross-Session Cascade (0900 -> 1000 -> 1100)
@@ -255,10 +267,11 @@ def section_b_cross_session(con, year: int) -> list[str]:
     """).fetchall()
     total = sum(r[1] for r in chop)
     for r in chop:
-        lines.append(f"  1100 {r[0]}: {r[1]} ({r[1]*100//max(total,1)}%)")
+        lines.append(f"  1100 {r[0]}: {r[1]} ({r[1] * 100 // max(total, 1)}%)")
     lines.append(f"  Total double-loss days: {total}")
 
     return lines
+
 
 # =========================================================================
 # SECTION C: MFE/MAE Path Analysis on 0900 Losses
@@ -297,9 +310,11 @@ def section_c_mfe_analysis(con, year: int) -> list[str]:
             p50 = statistics.median(vals)
             p75 = sorted(vals)[3 * len(vals) // 4]
             near_miss = sum(1 for v in vals if v >= 1.0)
-            lines.append(f"  RR{rr}: N={len(vals)}, P25={_fmt(p25)}, "
-                         f"Med={_fmt(p50)}, P75={_fmt(p75)}, "
-                         f">=1.0R: {near_miss} ({near_miss*100//len(vals)}%)")
+            lines.append(
+                f"  RR{rr}: N={len(vals)}, P25={_fmt(p25)}, "
+                f"Med={_fmt(p50)}, P75={_fmt(p75)}, "
+                f">=1.0R: {near_miss} ({near_miss * 100 // len(vals)}%)"
+            )
         else:
             lines.append(f"  RR{rr}: N=0")
 
@@ -329,9 +344,11 @@ def section_c_mfe_analysis(con, year: int) -> list[str]:
             med = statistics.median(vals)
             near_miss = sum(1 for v in vals if v >= 1.0)
             be_sim = sum(1 for v in vals if v >= 0.5)
-            lines.append(f"  {direction:<6}: N={len(vals)}, MedMFE={_fmt(med)}, "
-                         f">=1.0R: {near_miss} ({near_miss*100//len(vals)}%), "
-                         f">=0.5R (BE trail): {be_sim} ({be_sim*100//len(vals)}%)")
+            lines.append(
+                f"  {direction:<6}: N={len(vals)}, MedMFE={_fmt(med)}, "
+                f">=1.0R: {near_miss} ({near_miss * 100 // len(vals)}%), "
+                f">=0.5R (BE trail): {be_sim} ({be_sim * 100 // len(vals)}%)"
+            )
         else:
             lines.append(f"  {direction:<6}: N=0")
 
@@ -361,13 +378,16 @@ def section_c_mfe_analysis(con, year: int) -> list[str]:
             # Losses that reached +0.5R MFE would become scratches (0R)
             converted = sum(1 for r in loss_rows if r[0] >= 0.5)
             saved_r = sum(abs(r[1]) for r in loss_rows if r[0] >= 0.5)
-            lines.append(f"  RR{rr}: {converted}/{total_losses} losses convert "
-                         f"({converted*100//total_losses}%), "
-                         f"saves {_fmt(saved_r)}R total")
+            lines.append(
+                f"  RR{rr}: {converted}/{total_losses} losses convert "
+                f"({converted * 100 // total_losses}%), "
+                f"saves {_fmt(saved_r)}R total"
+            )
         else:
             lines.append(f"  RR{rr}: no losses found")
 
     return lines
+
 
 # =========================================================================
 # SECTION D: Direction-Filtered Grid
@@ -382,8 +402,7 @@ def section_d_direction_grid(con, year: int) -> list[str]:
 
     lines.append("\nD1) LONG-only vs Bidirectional for 0900 (E1 CB2, G4+/G6+)")
     lines.append("-" * 60)
-    lines.append(f"  {'RR':>4} {'Filter':<8} {'Dir':<8} {'N':>4} {'WR':>6} "
-                 f"{'ExpR':>7} {'TotalR':>8} {'Sharpe':>7}")
+    lines.append(f"  {'RR':>4} {'Filter':<8} {'Dir':<8} {'N':>4} {'WR':>6} {'ExpR':>7} {'TotalR':>8} {'Sharpe':>7}")
 
     for rr in [2.0, 2.5, 3.0]:
         for min_size, flabel in [(4.0, "G4+"), (6.0, "G6+")]:
@@ -417,12 +436,14 @@ def section_d_direction_grid(con, year: int) -> list[str]:
                     if len(r_vals) > 1:
                         mean_r = sum(r_vals) / len(r_vals)
                         var = sum((r - mean_r) ** 2 for r in r_vals) / (len(r_vals) - 1)
-                        sharpe = mean_r / (var ** 0.5) if var > 0 else None
+                        sharpe = mean_r / (var**0.5) if var > 0 else None
                     else:
                         sharpe = None
-                    lines.append(f"  {rr:>4.1f} {flabel:<8} {dlabel:<8} {n:>4} "
-                                 f"{_pct(wr):>6} {_fmt(avg_r):>7} {_fmt(total_r):>8} "
-                                 f"{_fmt(sharpe):>7}")
+                    lines.append(
+                        f"  {rr:>4.1f} {flabel:<8} {dlabel:<8} {n:>4} "
+                        f"{_pct(wr):>6} {_fmt(avg_r):>7} {_fmt(total_r):>8} "
+                        f"{_fmt(sharpe):>7}"
+                    )
                 else:
                     lines.append(f"  {rr:>4.1f} {flabel:<8} {dlabel:<8}    0")
 
@@ -451,12 +472,12 @@ def section_d_direction_grid(con, year: int) -> list[str]:
             wins = sum(1 for o in outcomes if o[0] == "win")
             total_r = sum(o[1] for o in outcomes if o[1] is not None)
             avg_r = total_r / n
-            lines.append(f"  {rr:>4.1f} {n:>4} {_pct(wins/n):>6} "
-                         f"{_fmt(avg_r):>7} {_fmt(total_r):>8}")
+            lines.append(f"  {rr:>4.1f} {n:>4} {_pct(wins / n):>6} {_fmt(avg_r):>7} {_fmt(total_r):>8}")
         else:
             lines.append(f"  {rr:>4.1f}    0")
 
     return lines
+
 
 # =========================================================================
 # SECTION E: 1000/1100 as Reversal Trades
@@ -498,8 +519,9 @@ def section_e_reversal_trades(con, year: int) -> list[str]:
             if n > 0:
                 wins = sum(1 for r in cond_rows if r[0] == "win")
                 total_r = sum(r[1] for r in cond_rows if r[1] is not None)
-                lines.append(f"  0900={o900_cond:<5} 1000 RR{rr_1000}: N={n:>3}, "
-                             f"WR={_pct(wins/n)}, TotalR={_fmt(total_r)}")
+                lines.append(
+                    f"  0900={o900_cond:<5} 1000 RR{rr_1000}: N={n:>3}, WR={_pct(wins / n)}, TotalR={_fmt(total_r)}"
+                )
             else:
                 lines.append(f"  0900={o900_cond:<5} 1000 RR{rr_1000}: N=0")
 
@@ -536,8 +558,7 @@ def section_e_reversal_trades(con, year: int) -> list[str]:
                 wins = sum(1 for r in rev_rows if r[0] == "win")
                 total_r = sum(r[1] for r in rev_rows if r[1] is not None)
                 avg_r = total_r / n
-                lines.append(f"  {rr:>4.1f} {cb:>3} {n:>4} "
-                             f"{_pct(wins/n):>6} {_fmt(avg_r):>7} {_fmt(total_r):>8}")
+                lines.append(f"  {rr:>4.1f} {cb:>3} {n:>4} {_pct(wins / n):>6} {_fmt(avg_r):>7} {_fmt(total_r):>8}")
 
     # E3: 1100 as chop-cleared signal
     lines.append("\nE3) 1100 After Double 0900+1000 Loss (Chop-Cleared Signal)")
@@ -573,12 +594,12 @@ def section_e_reversal_trades(con, year: int) -> list[str]:
             if n > 0:
                 wins = sum(1 for r in chop_rows if r[0] == "win")
                 total_r = sum(r[1] for r in chop_rows if r[1] is not None)
-                lines.append(f"  {period_label:>7} 1100 RR{rr}: N={n:>3}, "
-                             f"WR={_pct(wins/n)}, TotalR={_fmt(total_r)}")
+                lines.append(f"  {period_label:>7} 1100 RR{rr}: N={n:>3}, WR={_pct(wins / n)}, TotalR={_fmt(total_r)}")
             else:
                 lines.append(f"  {period_label:>7} 1100 RR{rr}: N=0")
 
     return lines
+
 
 # =========================================================================
 # MAIN
@@ -614,13 +635,13 @@ def run_analysis(year: int = DEFAULT_YEAR, db_path: Path | None = None) -> str:
     finally:
         con.close()
 
+
 def main():
     import argparse
+
     parser = argparse.ArgumentParser(description="Deep CME_REOPEN Asia Session Analysis")
-    parser.add_argument("--year", type=int, default=DEFAULT_YEAR,
-                        help=f"Focus year (default: {DEFAULT_YEAR})")
-    parser.add_argument("--db-path", type=str, default=None,
-                        help="Path to gold.db (default: auto-detect)")
+    parser.add_argument("--year", type=int, default=DEFAULT_YEAR, help=f"Focus year (default: {DEFAULT_YEAR})")
+    parser.add_argument("--db-path", type=str, default=None, help="Path to gold.db (default: auto-detect)")
     args = parser.parse_args()
 
     db_path = Path(args.db_path) if args.db_path else None
@@ -633,6 +654,7 @@ def main():
     out_file = OUTPUT_DIR / f"asia_session_analysis_{args.year}.txt"
     out_file.write_text(report, encoding="utf-8")
     print(f"\nReport saved to: {out_file}")
+
 
 if __name__ == "__main__":
     main()

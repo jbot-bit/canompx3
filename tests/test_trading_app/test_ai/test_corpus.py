@@ -55,6 +55,7 @@ class TestSchemaDefinitions:
     @pytest.fixture
     def db_path(self):
         from pipeline.paths import GOLD_DB_PATH
+
         if not GOLD_DB_PATH.exists():
             pytest.skip("gold.db not available")
         return str(GOLD_DB_PATH)

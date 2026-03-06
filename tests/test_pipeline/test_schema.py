@@ -19,9 +19,12 @@ class TestInitDb:
         init_db(db_path, force=False)
 
         con = duckdb.connect(str(db_path))
-        tables = [t[0] for t in con.execute(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
-        ).fetchall()]
+        tables = [
+            t[0]
+            for t in con.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
+            ).fetchall()
+        ]
         con.close()
 
         assert "bars_1m" in tables
@@ -31,9 +34,12 @@ class TestInitDb:
         init_db(db_path, force=False)
 
         con = duckdb.connect(str(db_path))
-        tables = [t[0] for t in con.execute(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
-        ).fetchall()]
+        tables = [
+            t[0]
+            for t in con.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
+            ).fetchall()
+        ]
         con.close()
 
         assert "bars_5m" in tables
@@ -43,12 +49,15 @@ class TestInitDb:
         init_db(db_path, force=False)
 
         con = duckdb.connect(str(db_path))
-        cols = [c[0] for c in con.execute(
-            "SELECT column_name FROM information_schema.columns WHERE table_name = 'bars_1m'"
-        ).fetchall()]
+        cols = [
+            c[0]
+            for c in con.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'bars_1m'"
+            ).fetchall()
+        ]
         con.close()
 
-        expected = ['ts_utc', 'symbol', 'source_symbol', 'open', 'high', 'low', 'close', 'volume']
+        expected = ["ts_utc", "symbol", "source_symbol", "open", "high", "low", "close", "volume"]
         for col in expected:
             assert col in cols, f"Missing column: {col}"
 
@@ -58,8 +67,7 @@ class TestInitDb:
 
         con = duckdb.connect(str(db_path))
         dtype = con.execute(
-            "SELECT data_type FROM information_schema.columns "
-            "WHERE table_name = 'bars_1m' AND column_name = 'ts_utc'"
+            "SELECT data_type FROM information_schema.columns WHERE table_name = 'bars_1m' AND column_name = 'ts_utc'"
         ).fetchone()[0]
         con.close()
 
@@ -95,9 +103,12 @@ class TestInitDb:
         init_db(db_path, force=False)
 
         con = duckdb.connect(str(db_path))
-        tables = [t[0] for t in con.execute(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
-        ).fetchall()]
+        tables = [
+            t[0]
+            for t in con.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
+            ).fetchall()
+        ]
         con.close()
 
         assert "daily_features" in tables
@@ -107,14 +118,17 @@ class TestInitDb:
         init_db(db_path, force=False)
 
         con = duckdb.connect(str(db_path))
-        cols = [c[0] for c in con.execute(
-            "SELECT column_name FROM information_schema.columns WHERE table_name = 'daily_features'"
-        ).fetchall()]
+        cols = [
+            c[0]
+            for c in con.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'daily_features'"
+            ).fetchall()
+        ]
         con.close()
 
         # Each ORB label should have 8 columns
         for label in ORB_LABELS:
-            for suffix in ['high', 'low', 'size', 'break_dir', 'break_ts', 'outcome', 'mae_r', 'mfe_r']:
+            for suffix in ["high", "low", "size", "break_dir", "break_ts", "outcome", "mae_r", "mfe_r"]:
                 col_name = f"orb_{label}_{suffix}"
                 assert col_name in cols, f"Missing ORB column: {col_name}"
 
@@ -123,15 +137,24 @@ class TestInitDb:
         init_db(db_path, force=False)
 
         con = duckdb.connect(str(db_path))
-        cols = [c[0] for c in con.execute(
-            "SELECT column_name FROM information_schema.columns WHERE table_name = 'daily_features'"
-        ).fetchall()]
+        cols = [
+            c[0]
+            for c in con.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'daily_features'"
+            ).fetchall()
+        ]
         con.close()
 
-        for col in ['session_asia_high', 'session_asia_low',
-                     'session_london_high', 'session_london_low',
-                     'session_ny_high', 'session_ny_low',
-                     'rsi_14_at_CME_REOPEN', 'atr_20']:
+        for col in [
+            "session_asia_high",
+            "session_asia_low",
+            "session_london_high",
+            "session_london_low",
+            "session_ny_high",
+            "session_ny_low",
+            "rsi_14_at_CME_REOPEN",
+            "atr_20",
+        ]:
             assert col in cols, f"Missing session column: {col}"
 
     def test_daily_features_has_garch_columns(self, tmp_path):
@@ -139,9 +162,12 @@ class TestInitDb:
         init_db(db_path, force=False)
 
         con = duckdb.connect(str(db_path))
-        cols = [c[0] for c in con.execute(
-            "SELECT column_name FROM information_schema.columns WHERE table_name = 'daily_features'"
-        ).fetchall()]
+        cols = [
+            c[0]
+            for c in con.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'daily_features'"
+            ).fetchall()
+        ]
         con.close()
 
         assert "garch_forecast_vol" in cols, "Missing garch_forecast_vol column"
@@ -152,9 +178,12 @@ class TestInitDb:
         init_db(db_path, force=False)
 
         con = duckdb.connect(str(db_path))
-        tables = [t[0] for t in con.execute(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
-        ).fetchall()]
+        tables = [
+            t[0]
+            for t in con.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
+            ).fetchall()
+        ]
         con.close()
 
         assert "prospective_signals" in tables
@@ -164,15 +193,30 @@ class TestInitDb:
         init_db(db_path, force=False)
 
         con = duckdb.connect(str(db_path))
-        cols = [c[0] for c in con.execute(
-            "SELECT column_name FROM information_schema.columns WHERE table_name = 'prospective_signals'"
-        ).fetchall()]
+        cols = [
+            c[0]
+            for c in con.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'prospective_signals'"
+            ).fetchall()
+        ]
         con.close()
 
-        expected = ["signal_id", "trading_day", "symbol", "session",
-                    "prev_day_outcome", "orb_size", "entry_model",
-                    "confirm_bars", "rr_target", "outcome", "pnl_r",
-                    "is_prospective", "freeze_date", "created_at"]
+        expected = [
+            "signal_id",
+            "trading_day",
+            "symbol",
+            "session",
+            "prev_day_outcome",
+            "orb_size",
+            "entry_model",
+            "confirm_bars",
+            "rr_target",
+            "outcome",
+            "pnl_r",
+            "is_prospective",
+            "freeze_date",
+            "created_at",
+        ]
         for col in expected:
             assert col in cols, f"Missing column: {col}"
 
@@ -184,9 +228,12 @@ class TestInitDb:
         init_db(db_path, force=False)
 
         con = duckdb.connect(str(db_path))
-        tables = [t[0] for t in con.execute(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
-        ).fetchall()]
+        tables = [
+            t[0]
+            for t in con.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
+            ).fetchall()
+        ]
         con.close()
 
         assert "bars_1m" in tables

@@ -10,6 +10,7 @@ Usage:
     python scripts/tools/m25_preflight.py research/my_script.py --run   # scan then run
     python scripts/tools/m25_preflight.py research/my_script.py --force # skip prompt
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -78,6 +79,7 @@ def preflight(script_path: str, force: bool = False, run_after: bool = False) ->
     # optionally wrapped in bold markers. Using the first line avoids false positives
     # from words like "failure", "fails", "fallback" appearing later in the body.
     import re as _re
+
     first_line = next((l.strip() for l in result.splitlines() if l.strip()), "")
     _verdict = _re.match(r"^\*{0,2}(PASS|FAIL)\*{0,2}", first_line, _re.IGNORECASE)
     verdict = _verdict.group(1).upper() if _verdict else ""
@@ -120,7 +122,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="M2.5 bias pre-flight for research scripts")
     parser.add_argument("script", help="Research script to scan")
-    parser.add_argument("--run",   action="store_true", help="Run the script after passing")
+    parser.add_argument("--run", action="store_true", help="Run the script after passing")
     parser.add_argument("--force", action="store_true", help="Don't prompt on findings")
     args = parser.parse_args()
 

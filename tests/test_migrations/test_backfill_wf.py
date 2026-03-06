@@ -40,10 +40,8 @@ def _setup_test_db_and_jsonl(tmp_path):
 
     jsonl_path = tmp_path / "wf_results.jsonl"
     records = [
-        {"strategy_id": "S1", "passed": True, "n_valid_windows": 4,
-         "instrument": "MGC"},
-        {"strategy_id": "S2", "passed": False, "n_valid_windows": 2,
-         "instrument": "MES"},
+        {"strategy_id": "S1", "passed": True, "n_valid_windows": 4, "instrument": "MGC"},
+        {"strategy_id": "S2", "passed": False, "n_valid_windows": 2, "instrument": "MES"},
     ]
     with open(jsonl_path, "w") as f:
         for rec in records:
@@ -61,8 +59,7 @@ class TestBackfillWf:
 
         con = duckdb.connect(str(db_path), read_only=True)
         rows = con.execute(
-            "SELECT strategy_id, wf_tested, wf_passed, wf_windows "
-            "FROM validated_setups ORDER BY strategy_id"
+            "SELECT strategy_id, wf_tested, wf_passed, wf_windows FROM validated_setups ORDER BY strategy_id"
         ).fetchall()
         con.close()
 
@@ -81,8 +78,7 @@ class TestBackfillWf:
 
         con = duckdb.connect(str(db_path), read_only=True)
         rows = con.execute(
-            "SELECT wf_tested, wf_passed, wf_windows "
-            "FROM validated_setups ORDER BY strategy_id"
+            "SELECT wf_tested, wf_passed, wf_windows FROM validated_setups ORDER BY strategy_id"
         ).fetchall()
         con.close()
 
@@ -127,8 +123,7 @@ class TestBackfillWf:
 
         con = duckdb.connect(str(db_path), read_only=True)
         row = con.execute(
-            "SELECT wf_tested, wf_passed, wf_windows "
-            "FROM validated_setups WHERE strategy_id = 'S1'"
+            "SELECT wf_tested, wf_passed, wf_windows FROM validated_setups WHERE strategy_id = 'S1'"
         ).fetchone()
         con.close()
 

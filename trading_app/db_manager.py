@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 
 from pipeline.log import get_logger
+
 logger = get_logger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -21,14 +22,17 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 import duckdb
 from pipeline.paths import GOLD_DB_PATH
 
+
 def compute_trade_day_hash(days: list) -> str:
     """Compute deterministic MD5 hash of sorted trade-day list.
 
     Canonical implementation — used by strategy_discovery and build_edge_families.
     """
     import hashlib
+
     day_str = ",".join(str(d) for d in sorted(days))
     return hashlib.md5(day_str.encode()).hexdigest()
+
 
 def init_trading_app_schema(db_path: Path | None = None, force: bool = False) -> None:
     """
@@ -290,6 +294,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
 
         # Table 7: family_rr_locks (SharpeDD-locked RR per family)
         from pipeline.init_db import FAMILY_RR_LOCKS_SCHEMA
+
         con.execute(FAMILY_RR_LOCKS_SCHEMA)
 
         # Migration: add regime waiver columns (for existing DBs)
@@ -453,6 +458,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
         con.commit()
         logger.info("Trading app schema initialized successfully")
 
+
 def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[str]]:
     """
     Verify all trading_app tables exist with correct schema.
@@ -498,12 +504,29 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
             """).fetchall()
 
             expected_cols = {
-                "trading_day", "symbol", "orb_label", "orb_minutes",
-                "rr_target", "confirm_bars", "entry_model", "entry_ts",
-                "entry_price", "stop_price", "target_price", "outcome",
-                "exit_ts", "exit_price", "pnl_r", "mae_r", "mfe_r",
-                "risk_dollars", "pnl_dollars", "ambiguous_bar",
-                "ts_outcome", "ts_pnl_r", "ts_exit_ts",
+                "trading_day",
+                "symbol",
+                "orb_label",
+                "orb_minutes",
+                "rr_target",
+                "confirm_bars",
+                "entry_model",
+                "entry_ts",
+                "entry_price",
+                "stop_price",
+                "target_price",
+                "outcome",
+                "exit_ts",
+                "exit_price",
+                "pnl_r",
+                "mae_r",
+                "mfe_r",
+                "risk_dollars",
+                "pnl_dollars",
+                "ambiguous_bar",
+                "ts_outcome",
+                "ts_pnl_r",
+                "ts_exit_ts",
             }
             actual_cols = {row[0] for row in result}
 
@@ -520,20 +543,45 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
             """).fetchall()
 
             expected_cols = {
-                "strategy_id", "created_at", "instrument", "orb_label",
-                "orb_minutes", "rr_target", "confirm_bars", "entry_model",
-                "filter_type", "filter_params", "stop_multiplier",
-                "sample_size", "win_rate",
-                "avg_win_r", "avg_loss_r", "expectancy_r", "sharpe_ratio",
-                "max_drawdown_r", "median_risk_points", "avg_risk_points",
-                "trades_per_year", "sharpe_ann",
+                "strategy_id",
+                "created_at",
+                "instrument",
+                "orb_label",
+                "orb_minutes",
+                "rr_target",
+                "confirm_bars",
+                "entry_model",
+                "filter_type",
+                "filter_params",
+                "stop_multiplier",
+                "sample_size",
+                "win_rate",
+                "avg_win_r",
+                "avg_loss_r",
+                "expectancy_r",
+                "sharpe_ratio",
+                "max_drawdown_r",
+                "median_risk_points",
+                "avg_risk_points",
+                "trades_per_year",
+                "sharpe_ann",
                 "yearly_results",
-                "entry_signals", "scratch_count", "early_exit_count",
-                "trade_day_hash", "is_canonical", "canonical_strategy_id",
-                "dst_winter_n", "dst_winter_avg_r",
-                "dst_summer_n", "dst_summer_avg_r", "dst_verdict",
-                "validation_status", "validation_notes",
-                "sharpe_haircut", "skewness", "kurtosis_excess",
+                "entry_signals",
+                "scratch_count",
+                "early_exit_count",
+                "trade_day_hash",
+                "is_canonical",
+                "canonical_strategy_id",
+                "dst_winter_n",
+                "dst_winter_avg_r",
+                "dst_summer_n",
+                "dst_summer_avg_r",
+                "dst_verdict",
+                "validation_status",
+                "validation_notes",
+                "sharpe_haircut",
+                "skewness",
+                "kurtosis_excess",
             }
             actual_cols = {row[0] for row in result}
 
@@ -550,22 +598,48 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
             """).fetchall()
 
             expected_cols = {
-                "strategy_id", "promoted_at", "promoted_from",
-                "instrument", "orb_label", "orb_minutes", "rr_target",
-                "confirm_bars", "entry_model", "filter_type", "filter_params",
+                "strategy_id",
+                "promoted_at",
+                "promoted_from",
+                "instrument",
+                "orb_label",
+                "orb_minutes",
+                "rr_target",
+                "confirm_bars",
+                "entry_model",
+                "filter_type",
+                "filter_params",
                 "stop_multiplier",
-                "sample_size", "win_rate", "expectancy_r",
-                "years_tested", "all_years_positive", "stress_test_passed",
-                "sharpe_ratio", "max_drawdown_r",
-                "trades_per_year", "sharpe_ann",
-                "yearly_results", "execution_spec",
-                "family_hash", "is_family_head",
-                "regime_waivers", "regime_waiver_count",
-                "dst_winter_n", "dst_winter_avg_r",
-                "dst_summer_n", "dst_summer_avg_r", "dst_verdict",
-                "wf_tested", "wf_passed", "wf_windows",
-                "status", "retired_at", "retirement_reason",
-                "sharpe_haircut", "skewness", "kurtosis_excess",
+                "sample_size",
+                "win_rate",
+                "expectancy_r",
+                "years_tested",
+                "all_years_positive",
+                "stress_test_passed",
+                "sharpe_ratio",
+                "max_drawdown_r",
+                "trades_per_year",
+                "sharpe_ann",
+                "yearly_results",
+                "execution_spec",
+                "family_hash",
+                "is_family_head",
+                "regime_waivers",
+                "regime_waiver_count",
+                "dst_winter_n",
+                "dst_winter_avg_r",
+                "dst_summer_n",
+                "dst_summer_avg_r",
+                "dst_verdict",
+                "wf_tested",
+                "wf_passed",
+                "wf_windows",
+                "status",
+                "retired_at",
+                "retirement_reason",
+                "sharpe_haircut",
+                "skewness",
+                "kurtosis_excess",
             }
             actual_cols = {row[0] for row in result}
 
@@ -575,6 +649,7 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
 
         all_valid = len(violations) == 0
         return all_valid, violations
+
 
 def get_family_head_ids(
     con: duckdb.DuckDBPyConnection,
@@ -590,26 +665,27 @@ def get_family_head_ids(
         exclude_purged: If True (default), excludes PURGED families.
     """
     purge_filter = " AND robustness_status != 'PURGED'" if exclude_purged else ""
-    rows = con.execute(f"""
+    rows = con.execute(
+        f"""
         SELECT head_strategy_id FROM edge_families
         WHERE instrument = ?{purge_filter}
-    """, [instrument]).fetchall()
+    """,
+        [instrument],
+    ).fetchall()
     return {r[0] for r in rows}
+
 
 def has_edge_families(con: duckdb.DuckDBPyConnection) -> bool:
     """Check if edge_families table exists (for graceful degradation)."""
-    tables = con.execute(
-        "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
-    ).fetchall()
+    tables = con.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'").fetchall()
     return "edge_families" in {r[0] for r in tables}
+
 
 def main():
     """CLI entry point."""
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Initialize trading_app database schema"
-    )
+    parser = argparse.ArgumentParser(description="Initialize trading_app database schema")
     parser.add_argument(
         "--force",
         action="store_true",
@@ -634,6 +710,7 @@ def main():
             sys.exit(1)
     else:
         init_trading_app_schema(force=args.force)
+
 
 if __name__ == "__main__":
     main()

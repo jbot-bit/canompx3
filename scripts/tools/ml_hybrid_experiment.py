@@ -9,6 +9,7 @@ that works best for it, and sessions where ML can't help just pass through.
 
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import duckdb
@@ -23,9 +24,17 @@ from trading_app.ml.features import transform_to_features
 from trading_app.config import ALL_FILTERS
 
 SESSION_ORDER = [
-    "CME_REOPEN", "TOKYO_OPEN", "BRISBANE_1025", "SINGAPORE_OPEN",
-    "LONDON_METALS", "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
-    "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+    "CME_REOPEN",
+    "TOKYO_OPEN",
+    "BRISBANE_1025",
+    "SINGAPORE_OPEN",
+    "LONDON_METALS",
+    "US_DATA_830",
+    "NYSE_OPEN",
+    "US_DATA_1000",
+    "COMEX_SETTLE",
+    "CME_PRECLOSE",
+    "NYSE_CLOSE",
 ]
 
 
@@ -61,18 +70,23 @@ def build_level_features(df):
             ps_low = row.get(f"orb_{ps}_low")
             ps_size = row.get(f"orb_{ps}_size")
             ps_break = row.get(f"orb_{ps}_break_dir")
-            if pd.notna(ps_high): all_prior_levels.append(float(ps_high))
-            if pd.notna(ps_low): all_prior_levels.append(float(ps_low))
+            if pd.notna(ps_high):
+                all_prior_levels.append(float(ps_high))
+            if pd.notna(ps_low):
+                all_prior_levels.append(float(ps_low))
             if pd.notna(ps_size) and ps_size > 0:
                 prior_sizes.append(float(ps_size))
                 if pd.notna(ps_high) and pd.notna(ps_low):
                     if current_high <= ps_high and current_low >= ps_low:
                         is_nested[i] = 1
             if ps_break is not None and str(ps_break).lower() == "long":
-                prior_broken_count[i] += 1; prior_long_count[i] += 1
+                prior_broken_count[i] += 1
+                prior_long_count[i] += 1
             elif ps_break is not None and str(ps_break).lower() == "short":
-                prior_broken_count[i] += 1; prior_short_count[i] += 1
-        if not all_prior_levels: continue
+                prior_broken_count[i] += 1
+                prior_short_count[i] += 1
+        if not all_prior_levels:
+            continue
         R = float(current_size)
         prior_arr = np.array(all_prior_levels)
         dist_h = np.abs(prior_arr - float(current_high)) / R
@@ -82,25 +96,34 @@ def build_level_features(df):
         all_dists = np.minimum(dist_h, dist_l)
         levels_within_1r[i] = (all_dists <= 1.0).sum()
         levels_within_2r[i] = (all_dists <= 2.0).sum()
-        if prior_sizes: prior_size_ratio_max[i] = max(prior_sizes) / R
+        if prior_sizes:
+            prior_size_ratio_max[i] = max(prior_sizes) / R
 
-    return pd.DataFrame({
-        "nearest_level_to_high_R": nearest_to_high, "nearest_level_to_low_R": nearest_to_low,
-        "levels_within_1R": levels_within_1r, "levels_within_2R": levels_within_2r,
-        "orb_nested_in_prior": is_nested, "prior_orb_size_ratio_max": prior_size_ratio_max,
-        "prior_sessions_broken": prior_broken_count, "prior_sessions_long": prior_long_count,
-        "prior_sessions_short": prior_short_count,
-    }, index=df.index)
+    return pd.DataFrame(
+        {
+            "nearest_level_to_high_R": nearest_to_high,
+            "nearest_level_to_low_R": nearest_to_low,
+            "levels_within_1R": levels_within_1r,
+            "levels_within_2R": levels_within_2r,
+            "orb_nested_in_prior": is_nested,
+            "prior_orb_size_ratio_max": prior_size_ratio_max,
+            "prior_sessions_broken": prior_broken_count,
+            "prior_sessions_long": prior_long_count,
+            "prior_sessions_short": prior_short_count,
+        },
+        index=df.index,
+    )
 
 
 def run_hybrid(instrument):
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"  HYBRID ML — {instrument}")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
 
     con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
     configure_connection(con)
-    df = con.execute("""
+    df = con.execute(
+        """
         SELECT o.trading_day, o.symbol, o.orb_label, o.orb_minutes,
                o.entry_model, o.rr_target, o.confirm_bars, o.pnl_r, o.outcome,
                v.filter_type, d.*
@@ -114,7 +137,9 @@ def run_hybrid(instrument):
             AND o.orb_minutes = d.orb_minutes
         WHERE o.symbol = $instrument AND o.pnl_r IS NOT NULL AND v.status = 'active'
         ORDER BY o.trading_day
-    """, {"instrument": instrument}).fetchdf()
+    """,
+        {"instrument": instrument},
+    ).fetchdf()
     con.close()
 
     keep_mask = np.zeros(len(df), dtype=bool)
@@ -125,16 +150,18 @@ def run_hybrid(instrument):
             keep_mask[idx] = True
     df = df[keep_mask].reset_index(drop=True)
     df = df.drop_duplicates(
-        subset=["trading_day", "orb_label", "entry_model", "rr_target",
-                "confirm_bars", "orb_minutes"], keep="first"
+        subset=["trading_day", "orb_label", "entry_model", "rr_target", "confirm_bars", "orb_minutes"], keep="first"
     ).reset_index(drop=True)
 
     level_feats = build_level_features(df)
     X_base = transform_to_features(df)
     orb_label_cols = [c for c in X_base.columns if c.startswith("orb_label_")]
-    noise_cols = [c for c in X_base.columns if any(c.startswith(p) for p in [
-        "gap_type_", "atr_vel_regime_", "prev_day_direction_"
-    ]) or c in ["confirm_bars", "orb_break_bar_continues", "orb_minutes"]]
+    noise_cols = [
+        c
+        for c in X_base.columns
+        if any(c.startswith(p) for p in ["gap_type_", "atr_vel_regime_", "prev_day_direction_"])
+        or c in ["confirm_bars", "orb_break_bar_continues", "orb_minutes"]
+    ]
     X_clean = X_base.drop(columns=[c for c in orb_label_cols + noise_cols if c in X_base.columns])
 
     X_full = X_clean.copy()
@@ -153,8 +180,12 @@ def run_hybrid(instrument):
     print(f"Total: {n_total:,} | Test: {baseline_n} | Baseline: {baseline_total:.2f}R")
 
     rf_params = dict(
-        n_estimators=500, max_depth=6, max_features="sqrt",
-        class_weight="balanced", random_state=42, n_jobs=-1,
+        n_estimators=500,
+        max_depth=6,
+        max_features="sqrt",
+        class_weight="balanced",
+        random_state=42,
+        n_jobs=-1,
     )
 
     # Train per-session models
@@ -178,8 +209,13 @@ def run_hybrid(instrument):
         if session_idx <= 1:
             X_s = X_clean.copy()
             if session_idx == 1:
-                for col in ["nearest_level_to_high_R", "nearest_level_to_low_R",
-                            "levels_within_1R", "levels_within_2R", "prior_orb_size_ratio_max"]:
+                for col in [
+                    "nearest_level_to_high_R",
+                    "nearest_level_to_low_R",
+                    "levels_within_1R",
+                    "levels_within_2R",
+                    "prior_orb_size_ratio_max",
+                ]:
                     if col in level_feats.columns:
                         X_s[col] = level_feats[col].values
         else:
@@ -237,8 +273,10 @@ def run_hybrid(instrument):
             kept = y_prob >= best_t
             skip_pct = 1 - kept.sum() / len(test_idx)
             session_config[session] = ("SESSION", best_t)
-            print(f"  {session:<20} -> SESSION t={best_t:.2f} "
-                  f"BaseR={base_r:+.1f} Delta={best_delta:+.1f} Skip={skip_pct:.0%}")
+            print(
+                f"  {session:<20} -> SESSION t={best_t:.2f} "
+                f"BaseR={base_r:+.1f} Delta={best_delta:+.1f} Skip={skip_pct:.0%}"
+            )
         else:
             session_config[session] = ("NONE", 0.0)
             print(f"  {session:<20} -> NO_MODEL (all thresholds negative)")
@@ -279,16 +317,20 @@ def run_hybrid(instrument):
         hybrid_skipped += n_skip
 
         label = "ML" if model_type != "NONE" else "ALL"
-        print(f"  [{label:>3}] {session:<20} N={len(test_idx):>5} "
-              f"Kept={n_kept:>5} Skip={n_skip:>4} "
-              f"BaseR={base_r:>+8.2f} FiltR={filt_r:>+8.2f} "
-              f"Delta={delta:>+8.2f}")
+        print(
+            f"  [{label:>3}] {session:<20} N={len(test_idx):>5} "
+            f"Kept={n_kept:>5} Skip={n_skip:>4} "
+            f"BaseR={base_r:>+8.2f} FiltR={filt_r:>+8.2f} "
+            f"Delta={delta:>+8.2f}"
+        )
 
     total_skip_pct = hybrid_skipped / baseline_n if baseline_n > 0 else 0
     hybrid_delta = hybrid_total - baseline_total
-    print(f"\n  TOTAL: BaseR={baseline_total:>+8.2f} HybridR={hybrid_total:>+8.2f} "
-          f"Delta={hybrid_delta:>+8.2f} Skip={total_skip_pct:.1%}")
-    print(f"  vs ALL trades: {hybrid_delta/baseline_total*100:+.1f}% improvement")
+    print(
+        f"\n  TOTAL: BaseR={baseline_total:>+8.2f} HybridR={hybrid_total:>+8.2f} "
+        f"Delta={hybrid_delta:>+8.2f} Skip={total_skip_pct:.1%}"
+    )
+    print(f"  vs ALL trades: {hybrid_delta / baseline_total * 100:+.1f}% improvement")
 
 
 if __name__ == "__main__":

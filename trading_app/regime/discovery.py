@@ -34,6 +34,7 @@ from trading_app.regime.schema import init_regime_schema
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)
 
+
 def run_regime_discovery(
     db_path: Path | None = None,
     instrument: str = "MGC",
@@ -56,22 +57,18 @@ def run_regime_discovery(
     con = duckdb.connect(str(db_path))
     try:
         from pipeline.db_config import configure_connection
+
         configure_connection(con, writing=True)
 
         if not dry_run:
             init_regime_schema(con=con)
             # Idempotent: clear previous run with same label
-            con.execute(
-                "DELETE FROM regime_validated WHERE run_label = ?", [run_label]
-            )
-            con.execute(
-                "DELETE FROM regime_strategies WHERE run_label = ?", [run_label]
-            )
+            con.execute("DELETE FROM regime_validated WHERE run_label = ?", [run_label])
+            con.execute("DELETE FROM regime_strategies WHERE run_label = ?", [run_label])
             con.commit()
 
         # ---- Bulk load phase ----
-        print(f"Regime discovery: run_label={run_label}, "
-              f"dates={start_date} to {end_date}, orb_minutes={orb_minutes}")
+        print(f"Regime discovery: run_label={run_label}, dates={start_date} to {end_date}, orb_minutes={orb_minutes}")
 
         print("Loading daily features...")
         features = _load_daily_features(con, instrument, orb_minutes, start_date, end_date)
@@ -98,15 +95,18 @@ def run_regime_discovery(
 
         print("Loading outcomes (bulk)...")
         outcomes_by_key = _load_outcomes_bulk(
-            con, instrument, orb_minutes, ORB_LABELS, ENTRY_MODELS,
+            con,
+            instrument,
+            orb_minutes,
+            ORB_LABELS,
+            ENTRY_MODELS,
         )
         print(f"  {sum(len(v) for v in outcomes_by_key.values())} outcome rows loaded")
 
         # ---- Grid iteration (session-aware: only session-appropriate filters per ORB) ----
         total_strategies = 0
         total_combos = sum(
-            len(sf) * len(RR_TARGETS) * (len(CONFIRM_BARS_OPTIONS) + 2)
-            for sf in session_filters.values()
+            len(sf) * len(RR_TARGETS) * (len(CONFIRM_BARS_OPTIONS) + 2) for sf in session_filters.values()
         )
         combo_idx = 0
         insert_batch = []
@@ -127,12 +127,13 @@ def run_regime_discovery(
 
                             # Filter outcomes by matching days AND date range
                             all_outcomes = outcomes_by_key.get(
-                                (orb_label, em, rr_target, cb), [],
+                                (orb_label, em, rr_target, cb),
+                                [],
                             )
                             outcomes = [
-                                o for o in all_outcomes
-                                if o["trading_day"] in matching_day_set
-                                and o["trading_day"] in feature_day_set
+                                o
+                                for o in all_outcomes
+                                if o["trading_day"] in matching_day_set and o["trading_day"] in feature_day_set
                             ]
 
                             if not outcomes:
@@ -140,24 +141,41 @@ def run_regime_discovery(
 
                             metrics = compute_metrics(outcomes)
                             strategy_id = make_strategy_id(
-                                instrument, orb_label, em, rr_target, cb, filter_key,
+                                instrument,
+                                orb_label,
+                                em,
+                                rr_target,
+                                cb,
+                                filter_key,
                             )
 
                             if not dry_run:
-                                insert_batch.append([
-                                    run_label, strategy_id,
-                                    start_date, end_date,
-                                    instrument, orb_label, orb_minutes,
-                                    rr_target, cb, em, filter_key,
-                                    strategy_filter.to_json(),
-                                    metrics["sample_size"], metrics["win_rate"],
-                                    metrics["avg_win_r"], metrics["avg_loss_r"],
-                                    metrics["expectancy_r"], metrics["sharpe_ratio"],
-                                    metrics["max_drawdown_r"],
-                                    metrics["median_risk_points"],
-                                    metrics["avg_risk_points"],
-                                    metrics["yearly_results"],
-                                ])
+                                insert_batch.append(
+                                    [
+                                        run_label,
+                                        strategy_id,
+                                        start_date,
+                                        end_date,
+                                        instrument,
+                                        orb_label,
+                                        orb_minutes,
+                                        rr_target,
+                                        cb,
+                                        em,
+                                        filter_key,
+                                        strategy_filter.to_json(),
+                                        metrics["sample_size"],
+                                        metrics["win_rate"],
+                                        metrics["avg_win_r"],
+                                        metrics["avg_loss_r"],
+                                        metrics["expectancy_r"],
+                                        metrics["sharpe_ratio"],
+                                        metrics["max_drawdown_r"],
+                                        metrics["median_risk_points"],
+                                        metrics["avg_risk_points"],
+                                        metrics["yearly_results"],
+                                    ]
+                                )
 
                                 if len(insert_batch) >= 500:
                                     con.executemany(
@@ -180,8 +198,7 @@ def run_regime_discovery(
                             total_strategies += 1
 
                 if combo_idx % 500 == 0:
-                    print(f"  Progress: {combo_idx}/{total_combos} combos, "
-                          f"{total_strategies} strategies")
+                    print(f"  Progress: {combo_idx}/{total_combos} combos, {total_strategies} strategies")
 
         # Flush remaining batch
         if insert_batch and not dry_run:
@@ -204,8 +221,7 @@ def run_regime_discovery(
         if not dry_run:
             con.commit()
 
-        print(f"\nDone: {total_strategies} regime strategies "
-              f"(run_label={run_label}) from {total_combos} combos")
+        print(f"\nDone: {total_strategies} regime strategies (run_label={run_label}) from {total_combos} combos")
         if dry_run:
             print("  (DRY RUN -- no data written)")
 
@@ -214,19 +230,15 @@ def run_regime_discovery(
     finally:
         con.close()
 
+
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Grid search over strategy variants for a date-bounded regime"
-    )
+    parser = argparse.ArgumentParser(description="Grid search over strategy variants for a date-bounded regime")
     parser.add_argument("--instrument", default="MGC", help="Instrument symbol")
-    parser.add_argument("--start", type=date.fromisoformat, help="Start date",
-                        required=True)
-    parser.add_argument("--end", type=date.fromisoformat, help="End date",
-                        required=True)
-    parser.add_argument("--run-label", required=True,
-                        help="Label for this regime run (e.g. 2025_only)")
+    parser.add_argument("--start", type=date.fromisoformat, help="Start date", required=True)
+    parser.add_argument("--end", type=date.fromisoformat, help="End date", required=True)
+    parser.add_argument("--run-label", required=True, help="Label for this regime run (e.g. 2025_only)")
     parser.add_argument("--orb-minutes", type=int, default=5, help="ORB duration")
     parser.add_argument("--dry-run", action="store_true", help="No DB writes")
     args = parser.parse_args()
@@ -239,6 +251,7 @@ def main():
         orb_minutes=args.orb_minutes,
         dry_run=args.dry_run,
     )
+
 
 if __name__ == "__main__":
     main()

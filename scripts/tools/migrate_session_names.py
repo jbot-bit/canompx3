@@ -32,7 +32,7 @@ SESSION_RENAME_MAP = {
     "0900": "CME_REOPEN",
     "1000": "TOKYO_OPEN",
     "1100": "SINGAPORE_OPEN",
-    "1130": "SINGAPORE_OPEN",       # Merge -- 1130 data will be DROPPED
+    "1130": "SINGAPORE_OPEN",  # Merge -- 1130 data will be DROPPED
     "1800": "LONDON_METALS",
     "2300": "US_DATA_830",
     "0030": "NYSE_OPEN",
@@ -49,11 +49,11 @@ SESSION_RENAME_MAP = {
 # DELETE the fixed session's data first (dynamic has correct DST alignment).
 # Format: fixed_to_delete -> dynamic_to_rename
 MERGE_DELETE_FIXED = {
-    "0900": "CME_OPEN",       # Both -> CME_REOPEN; keep CME_OPEN data
-    "1800": "LONDON_OPEN",    # Both -> LONDON_METALS; keep LONDON_OPEN data
-    "2300": "US_DATA_OPEN",   # Both -> US_DATA_830; keep US_DATA_OPEN data
-    "0030": "US_EQUITY_OPEN", # Both -> NYSE_OPEN; keep US_EQUITY_OPEN data
-    "1130": None,             # -> SINGAPORE_OPEN; 1100 exists, 1130 dropped
+    "0900": "CME_OPEN",  # Both -> CME_REOPEN; keep CME_OPEN data
+    "1800": "LONDON_OPEN",  # Both -> LONDON_METALS; keep LONDON_OPEN data
+    "2300": "US_DATA_OPEN",  # Both -> US_DATA_830; keep US_DATA_OPEN data
+    "0030": "US_EQUITY_OPEN",  # Both -> NYSE_OPEN; keep US_EQUITY_OPEN data
+    "1130": None,  # -> SINGAPORE_OPEN; 1100 exists, 1130 dropped
 }
 
 # For strategy_id replacement, order matters to avoid partial matches.
@@ -108,8 +108,7 @@ COMPRESSION_SUFFIXES = [
 def _table_exists(con: duckdb.DuckDBPyConnection, table: str) -> bool:
     """Check whether a table exists in the database."""
     rows = con.execute(
-        "SELECT table_name FROM information_schema.tables "
-        "WHERE table_schema = 'main' AND table_name = ?",
+        "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' AND table_name = ?",
         [table],
     ).fetchall()
     return len(rows) > 0
@@ -118,8 +117,7 @@ def _table_exists(con: duckdb.DuckDBPyConnection, table: str) -> bool:
 def _column_exists(con: duckdb.DuckDBPyConnection, table: str, column: str) -> bool:
     """Check whether a column exists on a table."""
     rows = con.execute(
-        "SELECT column_name FROM information_schema.columns "
-        "WHERE table_name = ? AND column_name = ?",
+        "SELECT column_name FROM information_schema.columns WHERE table_name = ? AND column_name = ?",
         [table, column],
     ).fetchall()
     return len(rows) > 0
@@ -136,16 +134,13 @@ def _get_columns(con: duckdb.DuckDBPyConnection, table: str) -> set[str]:
 
 def _count_rows(con: duckdb.DuckDBPyConnection, table: str, col: str, val: str) -> int:
     """Count rows matching col = val."""
-    return con.execute(
-        f'SELECT COUNT(*) FROM "{table}" WHERE "{col}" = ?', [val]
-    ).fetchone()[0]
+    return con.execute(f'SELECT COUNT(*) FROM "{table}" WHERE "{col}" = ?', [val]).fetchone()[0]
 
 
 # -----------------------------------------------------------------------
 # Step 1: orb_outcomes -- DELETE 1130, then UPDATE orb_label
 # -----------------------------------------------------------------------
-def _delete_merge_conflicts(con: duckdb.DuckDBPyConnection, table: str,
-                            col: str, dry_run: bool) -> None:
+def _delete_merge_conflicts(con: duckdb.DuckDBPyConnection, table: str, col: str, dry_run: bool) -> None:
     """Delete fixed session rows that would collide with dynamic session renames.
 
     When both a fixed session (e.g. 0900) and its dynamic counterpart (CME_OPEN)
@@ -163,8 +158,7 @@ def _delete_merge_conflicts(con: duckdb.DuckDBPyConnection, table: str,
             logger.info("  DELETE %s '%s': 0 (nothing to delete)", col, fixed_label)
 
 
-def _delete_strategy_id_merge_conflicts(con: duckdb.DuckDBPyConnection, table: str,
-                                         column: str, dry_run: bool) -> None:
+def _delete_strategy_id_merge_conflicts(con: duckdb.DuckDBPyConnection, table: str, column: str, dry_run: bool) -> None:
     """Delete rows with fixed-session strategy_ids that would collide after rename.
 
     Same logic as _delete_merge_conflicts but matches on strategy_id patterns
@@ -174,19 +168,13 @@ def _delete_strategy_id_merge_conflicts(con: duckdb.DuckDBPyConnection, table: s
     """
     for fixed_label in MERGE_DELETE_FIXED:
         pattern = f"%_{fixed_label}_%"
-        n = con.execute(
-            f'SELECT COUNT(*) FROM "{table}" WHERE "{column}" LIKE ?', [pattern]
-        ).fetchone()[0]
+        n = con.execute(f'SELECT COUNT(*) FROM "{table}" WHERE "{column}" LIKE ?', [pattern]).fetchone()[0]
         if n > 0:
-            logger.info("  DELETE %s LIKE '%%_%s_%%' (merge conflict): %d rows",
-                        column, fixed_label, n)
+            logger.info("  DELETE %s LIKE '%%_%s_%%' (merge conflict): %d rows", column, fixed_label, n)
             if not dry_run:
-                con.execute(
-                    f'DELETE FROM "{table}" WHERE "{column}" LIKE ?', [pattern]
-                )
+                con.execute(f'DELETE FROM "{table}" WHERE "{column}" LIKE ?', [pattern])
         else:
-            logger.info("  DELETE %s LIKE '%%_%s_%%': 0 (nothing to delete)",
-                        column, fixed_label)
+            logger.info("  DELETE %s LIKE '%%_%s_%%': 0 (nothing to delete)", column, fixed_label)
 
 
 def migrate_orb_outcomes(con: duckdb.DuckDBPyConnection, dry_run: bool) -> None:
@@ -516,9 +504,7 @@ def migrate_daily_features_columns(con: duckdb.DuckDBPyConnection, dry_run: bool
         for old_col, new_col in renames:
             logger.info("    %s -> %s", old_col, new_col)
             if not dry_run:
-                con.execute(
-                    f'ALTER TABLE {table} RENAME COLUMN "{old_col}" TO "{new_col}"'
-                )
+                con.execute(f'ALTER TABLE {table} RENAME COLUMN "{old_col}" TO "{new_col}"')
     else:
         logger.info("  RENAME: 0 columns (already migrated or not present)")
 
@@ -551,15 +537,11 @@ def _rename_strategy_ids(
     col_label = label or column
 
     # Count total affected rows (any pattern match)
-    like_clauses = " OR ".join(
-        f'"{column}" LIKE \'%{old}%\'' for old, _ in STRATEGY_ID_REPLACEMENTS
-    )
+    like_clauses = " OR ".join(f"\"{column}\" LIKE '%{old}%'" for old, _ in STRATEGY_ID_REPLACEMENTS)
     if not like_clauses:
         return
 
-    n_total = con.execute(
-        f'SELECT COUNT(*) FROM "{table}" WHERE {like_clauses}'
-    ).fetchone()[0]
+    n_total = con.execute(f'SELECT COUNT(*) FROM "{table}" WHERE {like_clauses}').fetchone()[0]
 
     if n_total == 0:
         logger.info("  REPLACE %s: 0 rows (skip)", col_label)
@@ -571,7 +553,7 @@ def _rename_strategy_ids(
         # Show per-pattern counts for dry-run visibility
         for old, new in STRATEGY_ID_REPLACEMENTS:
             n = con.execute(
-                f"SELECT COUNT(*) FROM \"{table}\" WHERE \"{column}\" LIKE '%{old}%'",
+                f'SELECT COUNT(*) FROM "{table}" WHERE "{column}" LIKE \'%{old}%\'',
             ).fetchone()[0]
             if n > 0:
                 logger.info("    pattern '%s' -> '%s': %d rows", old, new, n)
@@ -622,20 +604,20 @@ def migrate(db_path: str, dry_run: bool = False) -> None:
         #   orb_outcomes -> daily_features (blocks ALTER TABLE RENAME COLUMN)
         #   nested_outcomes -> daily_features
         fk_tables = [
-            "edge_families",              # leaf: FK -> validated_setups
-            "validated_setups_archive",    # leaf: FK -> validated_setups
-            "validated_setups",            # mid:  FK -> experimental_strategies
-            "nested_validated",            # leaf: FK -> nested_strategies
-            "orb_outcomes",               # leaf: FK -> daily_features (needed for col rename)
-            "nested_outcomes",            # leaf: FK -> daily_features
+            "edge_families",  # leaf: FK -> validated_setups
+            "validated_setups_archive",  # leaf: FK -> validated_setups
+            "validated_setups",  # mid:  FK -> experimental_strategies
+            "nested_validated",  # leaf: FK -> nested_strategies
+            "orb_outcomes",  # leaf: FK -> daily_features (needed for col rename)
+            "nested_outcomes",  # leaf: FK -> daily_features
         ]
         if not dry_run:
             for tbl in fk_tables:
                 if _table_exists(con, tbl):
                     logger.info("  Recreating %s without FK constraints...", tbl)
-                    con.execute(f'CREATE TABLE {tbl}_tmp AS SELECT * FROM {tbl}')
-                    con.execute(f'DROP TABLE {tbl}')
-                    con.execute(f'ALTER TABLE {tbl}_tmp RENAME TO {tbl}')
+                    con.execute(f"CREATE TABLE {tbl}_tmp AS SELECT * FROM {tbl}")
+                    con.execute(f"DROP TABLE {tbl}")
+                    con.execute(f"ALTER TABLE {tbl}_tmp RENAME TO {tbl}")
                     logger.info("    Done (%s FK-free)", tbl)
 
         # --- Row-level renames (FK-free) ---

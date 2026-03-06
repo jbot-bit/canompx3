@@ -12,6 +12,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 # Load .env from project root (populates DUCKDB_PATH and API keys into os.environ)
 try:
     from dotenv import load_dotenv as _load_dotenv
+
     _load_dotenv(PROJECT_ROOT / ".env", override=False)
 except ImportError:
     pass  # python-dotenv not installed — rely on shell env
@@ -27,17 +28,18 @@ except ImportError:
 import os as _os
 import sys as _sys
 
+
 def _resolve_db_path() -> Path:
     if "DUCKDB_PATH" in _os.environ:
         candidate = Path(_os.environ["DUCKDB_PATH"])
         if candidate.exists():
             return candidate
         print(
-            f"[DB] WARNING: DUCKDB_PATH={candidate} does not exist — "
-            f"falling back to project gold.db",
+            f"[DB] WARNING: DUCKDB_PATH={candidate} does not exist — falling back to project gold.db",
             file=_sys.stderr,
         )
     return PROJECT_ROOT / "gold.db"
+
 
 GOLD_DB_PATH = _resolve_db_path()
 

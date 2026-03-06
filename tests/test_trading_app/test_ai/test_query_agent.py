@@ -69,6 +69,7 @@ class TestQueryAgentInit:
         with patch.dict("os.environ", {}, clear=True):
             with pytest.raises(ValueError, match="ANTHROPIC_API_KEY"):
                 from trading_app.ai.query_agent import QueryAgent
+
                 QueryAgent(db_path="dummy.db", api_key=None)
 
 
@@ -84,8 +85,10 @@ class TestQueryAgentIntentExtraction:
         agent.db_path = "dummy.db"
         agent.api_key = "test-key"
         agent.corpus = {
-            "CONFIG": "test", "COST_MODEL": "test",
-            "CANONICAL_LOGIC": "test", "TRADE_MANAGEMENT_RULES": "test",
+            "CONFIG": "test",
+            "COST_MODEL": "test",
+            "CANONICAL_LOGIC": "test",
+            "TRADE_MANAGEMENT_RULES": "test",
         }
         agent.adapter = MagicMock()
         agent.schema_summary = "bars_1m: ts_utc, symbol"
@@ -97,9 +100,11 @@ class TestQueryAgentIntentExtraction:
     def test_extract_intent_valid_json(self, mock_agent):
         """Mock Claude returning valid JSON intent."""
         mock_response = MagicMock()
-        mock_response.content = [MagicMock(
-            text='{"template": "strategy_lookup", "parameters": {"orb_label": "CME_REOPEN"}, "explanation": "test"}'
-        )]
+        mock_response.content = [
+            MagicMock(
+                text='{"template": "strategy_lookup", "parameters": {"orb_label": "CME_REOPEN"}, "explanation": "test"}'
+            )
+        ]
         mock_agent.client.messages.create.return_value = mock_response
 
         intent = mock_agent._extract_intent("show CME_REOPEN strategies")
@@ -110,9 +115,7 @@ class TestQueryAgentIntentExtraction:
     def test_extract_intent_null_template(self, mock_agent):
         """Mock Claude saying no template fits."""
         mock_response = MagicMock()
-        mock_response.content = [MagicMock(
-            text='{"template": null, "parameters": {}, "explanation": "cannot answer"}'
-        )]
+        mock_response.content = [MagicMock(text='{"template": null, "parameters": {}, "explanation": "cannot answer"}')]
         mock_agent.client.messages.create.return_value = mock_response
 
         intent = mock_agent._extract_intent("what is the meaning of life?")
@@ -121,9 +124,9 @@ class TestQueryAgentIntentExtraction:
     def test_extract_intent_code_block(self, mock_agent):
         """Mock Claude wrapping JSON in code block."""
         mock_response = MagicMock()
-        mock_response.content = [MagicMock(
-            text='```json\n{"template": "table_counts", "parameters": {}, "explanation": "row counts"}\n```'
-        )]
+        mock_response.content = [
+            MagicMock(text='```json\n{"template": "table_counts", "parameters": {}, "explanation": "row counts"}\n```')
+        ]
         mock_agent.client.messages.create.return_value = mock_response
 
         intent = mock_agent._extract_intent("how many rows?")
@@ -134,23 +137,23 @@ class TestQueryAgentIntentExtraction:
         """Test full query with mocked API and adapter."""
         # Mock intent extraction
         intent_response = MagicMock()
-        intent_response.content = [MagicMock(
-            text='{"template": "validated_summary", "parameters": {}, "explanation": "summary"}'
-        )]
+        intent_response.content = [
+            MagicMock(text='{"template": "validated_summary", "parameters": {}, "explanation": "summary"}')
+        ]
 
         # Mock interpretation
         interp_response = MagicMock()
-        interp_response.content = [MagicMock(
-            text="There are 312 validated strategies across 4 sessions."
-        )]
+        interp_response.content = [MagicMock(text="There are 312 validated strategies across 4 sessions.")]
 
         mock_agent.client.messages.create.side_effect = [intent_response, interp_response]
 
         # Mock adapter execution
-        mock_agent.adapter.execute.return_value = pd.DataFrame({
-            "orb_label": ["CME_REOPEN", "TOKYO_OPEN", "LONDON_METALS", "US_DATA_830"],
-            "count": [134, 75, 85, 18],
-        })
+        mock_agent.adapter.execute.return_value = pd.DataFrame(
+            {
+                "orb_label": ["CME_REOPEN", "TOKYO_OPEN", "LONDON_METALS", "US_DATA_830"],
+                "count": [134, 75, 85, 18],
+            }
+        )
 
         result = mock_agent.query("How many validated strategies per session?")
         assert result.intent is not None

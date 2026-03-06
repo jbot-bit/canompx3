@@ -40,8 +40,7 @@ def is_us_dst(trading_day: date) -> bool:
       08:30 ET = 13:30 UTC
     """
     # Use noon to avoid any ambiguity on transition days
-    dt = datetime(trading_day.year, trading_day.month, trading_day.day,
-                  12, 0, 0, tzinfo=_US_EASTERN)
+    dt = datetime(trading_day.year, trading_day.month, trading_day.day, 12, 0, 0, tzinfo=_US_EASTERN)
     return dt.utcoffset().total_seconds() == -4 * 3600
 
 
@@ -53,8 +52,7 @@ def is_uk_dst(trading_day: date) -> bool:
     Standard time (GMT = UTC+0):
       08:00 London = 08:00 UTC
     """
-    dt = datetime(trading_day.year, trading_day.month, trading_day.day,
-                  12, 0, 0, tzinfo=_UK_LONDON)
+    dt = datetime(trading_day.year, trading_day.month, trading_day.day, 12, 0, 0, tzinfo=_UK_LONDON)
     return dt.utcoffset().total_seconds() == 1 * 3600
 
 
@@ -71,9 +69,16 @@ DST_AFFECTED_SESSIONS = {}
 
 # All sessions are dynamic (DST-aware resolvers) — all are "clean" by definition.
 DST_CLEAN_SESSIONS = {
-    "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
-    "US_DATA_830", "NYSE_OPEN", "US_DATA_1000", "COMEX_SETTLE",
-    "CME_PRECLOSE", "NYSE_CLOSE",
+    "CME_REOPEN",
+    "TOKYO_OPEN",
+    "SINGAPORE_OPEN",
+    "LONDON_METALS",
+    "US_DATA_830",
+    "NYSE_OPEN",
+    "US_DATA_1000",
+    "COMEX_SETTLE",
+    "CME_PRECLOSE",
+    "NYSE_CLOSE",
     "BRISBANE_1025",
 }
 
@@ -105,8 +110,15 @@ DST_CLEAN_SESSIONS = {
 # Any DOW filter for NYSE_OPEN must account for this -1 day offset.
 
 DOW_ALIGNED_SESSIONS = {
-    "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
-    "US_DATA_830", "US_DATA_1000", "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+    "CME_REOPEN",
+    "TOKYO_OPEN",
+    "SINGAPORE_OPEN",
+    "LONDON_METALS",
+    "US_DATA_830",
+    "US_DATA_1000",
+    "COMEX_SETTLE",
+    "CME_PRECLOSE",
+    "NYSE_CLOSE",
     "BRISBANE_1025",
 }
 DOW_MISALIGNED_SESSIONS = {
@@ -146,8 +158,7 @@ def is_winter_for_session(trading_day: date, orb_label: str) -> bool | None:
         return not is_uk_dst(trading_day)  # winter = NOT BST
 
 
-def classify_dst_verdict(winter_avg_r: float | None, summer_avg_r: float | None,
-                         winter_n: int, summer_n: int) -> str:
+def classify_dst_verdict(winter_avg_r: float | None, summer_avg_r: float | None, winter_n: int, summer_n: int) -> str:
     """Classify DST stability verdict for a strategy.
 
     Verdicts:
@@ -198,8 +209,7 @@ def cme_open_brisbane(trading_day: date) -> tuple[int, int]:
       Summer (CDT): 5PM CT = 22:00 UTC = 08:00 AEST
       Winter (CST): 5PM CT = 23:00 UTC = 09:00 AEST
     """
-    ct_open = datetime(trading_day.year, trading_day.month, trading_day.day,
-                       17, 0, 0, tzinfo=_US_CHICAGO)
+    ct_open = datetime(trading_day.year, trading_day.month, trading_day.day, 17, 0, 0, tzinfo=_US_CHICAGO)
     bris = ct_open.astimezone(_BRISBANE)
     return (bris.hour, bris.minute)
 
@@ -211,8 +221,7 @@ def us_equity_open_brisbane(trading_day: date) -> tuple[int, int]:
       Summer (EDT): 09:30 ET = 13:30 UTC = 23:30 AEST
       Winter (EST): 09:30 ET = 14:30 UTC = 00:30 AEST (next cal day)
     """
-    et_open = datetime(trading_day.year, trading_day.month, trading_day.day,
-                       9, 30, 0, tzinfo=_US_EASTERN)
+    et_open = datetime(trading_day.year, trading_day.month, trading_day.day, 9, 30, 0, tzinfo=_US_EASTERN)
     bris = et_open.astimezone(_BRISBANE)
     return (bris.hour, bris.minute)
 
@@ -224,8 +233,7 @@ def us_data_open_brisbane(trading_day: date) -> tuple[int, int]:
       Summer (EDT): 08:30 ET = 12:30 UTC = 22:30 AEST
       Winter (EST): 08:30 ET = 13:30 UTC = 23:30 AEST
     """
-    et_data = datetime(trading_day.year, trading_day.month, trading_day.day,
-                       8, 30, 0, tzinfo=_US_EASTERN)
+    et_data = datetime(trading_day.year, trading_day.month, trading_day.day, 8, 30, 0, tzinfo=_US_EASTERN)
     bris = et_data.astimezone(_BRISBANE)
     return (bris.hour, bris.minute)
 
@@ -237,8 +245,7 @@ def london_open_brisbane(trading_day: date) -> tuple[int, int]:
       Summer (BST): 08:00 London = 07:00 UTC = 17:00 AEST
       Winter (GMT): 08:00 London = 08:00 UTC = 18:00 AEST
     """
-    ldn_open = datetime(trading_day.year, trading_day.month, trading_day.day,
-                        8, 0, 0, tzinfo=_UK_LONDON)
+    ldn_open = datetime(trading_day.year, trading_day.month, trading_day.day, 8, 0, 0, tzinfo=_UK_LONDON)
     bris = ldn_open.astimezone(_BRISBANE)
     return (bris.hour, bris.minute)
 
@@ -250,8 +257,7 @@ def us_post_equity_brisbane(trading_day: date) -> tuple[int, int]:
       Summer (EDT): 10:00 ET = 14:00 UTC = 00:00 AEST (next cal day)
       Winter (EST): 10:00 ET = 15:00 UTC = 01:00 AEST (next cal day)
     """
-    et_time = datetime(trading_day.year, trading_day.month, trading_day.day,
-                       10, 0, 0, tzinfo=_US_EASTERN)
+    et_time = datetime(trading_day.year, trading_day.month, trading_day.day, 10, 0, 0, tzinfo=_US_EASTERN)
     bris = et_time.astimezone(_BRISBANE)
     return (bris.hour, bris.minute)
 
@@ -263,8 +269,7 @@ def cme_close_brisbane(trading_day: date) -> tuple[int, int]:
       Summer (CDT): 2:45 PM CT = 19:45 UTC = 05:45 AEST
       Winter (CST): 2:45 PM CT = 20:45 UTC = 06:45 AEST
     """
-    ct_close = datetime(trading_day.year, trading_day.month, trading_day.day,
-                        14, 45, 0, tzinfo=_US_CHICAGO)
+    ct_close = datetime(trading_day.year, trading_day.month, trading_day.day, 14, 45, 0, tzinfo=_US_CHICAGO)
     bris = ct_close.astimezone(_BRISBANE)
     return (bris.hour, bris.minute)
 
@@ -292,8 +297,7 @@ def comex_settle_brisbane(trading_day: date) -> tuple[int, int]:
       Summer (EDT): 01:30 PM ET = 17:30 UTC = 03:30 AEST (next cal day)
       Winter (EST): 01:30 PM ET = 18:30 UTC = 04:30 AEST (next cal day)
     """
-    et_settle = datetime(trading_day.year, trading_day.month, trading_day.day,
-                         13, 30, 0, tzinfo=_US_EASTERN)
+    et_settle = datetime(trading_day.year, trading_day.month, trading_day.day, 13, 30, 0, tzinfo=_US_EASTERN)
     bris = et_settle.astimezone(_BRISBANE)
     return (bris.hour, bris.minute)
 
@@ -305,11 +309,9 @@ def nyse_close_brisbane(trading_day: date) -> tuple[int, int]:
       Summer (EDT): 04:00 PM ET = 20:00 UTC = 06:00 AEST (next cal day)
       Winter (EST): 04:00 PM ET = 21:00 UTC = 07:00 AEST (next cal day)
     """
-    et_close = datetime(trading_day.year, trading_day.month, trading_day.day,
-                        16, 0, 0, tzinfo=_US_EASTERN)
+    et_close = datetime(trading_day.year, trading_day.month, trading_day.day, 16, 0, 0, tzinfo=_US_EASTERN)
     bris = et_close.astimezone(_BRISBANE)
     return (bris.hour, bris.minute)
-
 
 
 def brisbane_1025_brisbane(trading_day: date) -> tuple[int, int]:
@@ -325,7 +327,6 @@ def brisbane_1025_brisbane(trading_day: date) -> tuple[int, int]:
     No near existing session.
     """
     return (10, 25)
-
 
 
 # =========================================================================
@@ -414,11 +415,10 @@ def get_break_group(orb_label: str) -> str | None:
         return None
     return entry.get("break_group")
 
+
 # Only non-alias dynamic sessions get resolvers
 DYNAMIC_ORB_RESOLVERS = {
-    label: entry["resolver"]
-    for label, entry in SESSION_CATALOG.items()
-    if entry["type"] == "dynamic"
+    label: entry["resolver"] for label, entry in SESSION_CATALOG.items() if entry["type"] == "dynamic"
 }
 
 
@@ -461,6 +461,4 @@ def validate_catalog():
 
         if permanent:
             pairs = ", ".join(f"{a}+{b}" for a, b in sorted(permanent))
-            raise ValueError(
-                f"Permanent collision (same time on all test dates): {pairs}"
-            )
+            raise ValueError(f"Permanent collision (same time on all test dates): {pairs}")

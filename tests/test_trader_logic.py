@@ -26,24 +26,29 @@ from trading_app.entry_rules import detect_confirm, resolve_entry
 from trading_app.config import ENTRY_MODELS
 from pipeline.cost_model import get_cost_spec, pnl_points_to_r, to_r_multiple, risk_in_dollars
 
+
 def _cost():
     return get_cost_spec("MGC")
+
 
 def _make_bars(start_ts, prices, interval_minutes=1):
     """Create bars_df from (open, high, low, close, volume) tuples."""
     rows = []
     ts = start_ts
     for o, h, l, c, v in prices:
-        rows.append({
-            "ts_utc": ts,
-            "open": float(o),
-            "high": float(h),
-            "low": float(l),
-            "close": float(c),
-            "volume": int(v),
-        })
+        rows.append(
+            {
+                "ts_utc": ts,
+                "open": float(o),
+                "high": float(h),
+                "low": float(l),
+                "close": float(c),
+                "volume": int(v),
+            }
+        )
         ts = ts + timedelta(minutes=interval_minutes)
     return pd.DataFrame(rows)
+
 
 # Standard test scenario: long break, ORB 2690-2700
 ORB_HIGH = 2700.0
@@ -66,14 +71,23 @@ STANDARD_BARS = _make_bars(
 # TRADER LOGIC CHECKS (1-10)
 # ============================================================================
 
+
 class TestEntryPriceReachable:
     """Check 1: Entry price must be a real price from bar data."""
 
     def test_e1_entry_is_bar_open(self):
         """E1 entry_price must equal the open of the next bar after confirm."""
         result = compute_single_outcome(
-            STANDARD_BARS, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-            2.0, 1, TD_END, _cost(), "E1",
+            STANDARD_BARS,
+            BREAK_TS,
+            ORB_HIGH,
+            ORB_LOW,
+            "long",
+            2.0,
+            1,
+            TD_END,
+            _cost(),
+            "E1",
         )
         if result["entry_price"] is not None:
             # E1 entry = open of bar after confirm
@@ -82,11 +96,20 @@ class TestEntryPriceReachable:
     def test_e3_entry_is_orb_level(self):
         """E3 entry must be at ORB level (long=orb_high, short=orb_low)."""
         result = compute_single_outcome(
-            STANDARD_BARS, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-            2.0, 1, TD_END, _cost(), "E3",
+            STANDARD_BARS,
+            BREAK_TS,
+            ORB_HIGH,
+            ORB_LOW,
+            "long",
+            2.0,
+            1,
+            TD_END,
+            _cost(),
+            "E3",
         )
         if result["entry_price"] is not None:
             assert result["entry_price"] == ORB_HIGH
+
 
 class TestEntryTimingCausality:
     """Check 2: Entry must be after signal (causal ordering)."""
@@ -103,14 +126,23 @@ class TestEntryTimingCausality:
         if signal.triggered:
             assert signal.entry_ts > confirm.confirm_bar_ts
 
+
 class TestRiskPhysicallyCorrect:
     """Check 3: Risk makes physical sense for each entry model."""
 
     def test_e1_long_entry_above_orb(self):
         """E1 long: entry_price >= orb_high (bought after breakout confirmed)."""
         result = compute_single_outcome(
-            STANDARD_BARS, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-            2.0, 1, TD_END, _cost(), "E1",
+            STANDARD_BARS,
+            BREAK_TS,
+            ORB_HIGH,
+            ORB_LOW,
+            "long",
+            2.0,
+            1,
+            TD_END,
+            _cost(),
+            "E1",
         )
         if result["entry_price"] is not None:
             assert result["entry_price"] >= ORB_HIGH
@@ -118,12 +150,21 @@ class TestRiskPhysicallyCorrect:
     def test_e3_risk_equals_orb_size(self):
         """E3: risk = |orb_high - orb_low| (entry at ORB level, stop at opposite)."""
         result = compute_single_outcome(
-            STANDARD_BARS, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-            2.0, 1, TD_END, _cost(), "E3",
+            STANDARD_BARS,
+            BREAK_TS,
+            ORB_HIGH,
+            ORB_LOW,
+            "long",
+            2.0,
+            1,
+            TD_END,
+            _cost(),
+            "E3",
         )
         if result["entry_price"] is not None:
             risk = abs(result["entry_price"] - result["stop_price"])
             assert risk == pytest.approx(ORB_HIGH - ORB_LOW, abs=0.01)
+
 
 class TestStopStructuralSense:
     """Check 5: Stop is at the opposite ORB level."""
@@ -131,8 +172,16 @@ class TestStopStructuralSense:
     def test_long_stop_at_orb_low(self):
         for em in ENTRY_MODELS:
             result = compute_single_outcome(
-                STANDARD_BARS, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-                2.0, 1, TD_END, _cost(), em,
+                STANDARD_BARS,
+                BREAK_TS,
+                ORB_HIGH,
+                ORB_LOW,
+                "long",
+                2.0,
+                1,
+                TD_END,
+                _cost(),
+                em,
             )
             if result["stop_price"] is not None:
                 assert result["stop_price"] == ORB_LOW, f"Failed for {em}"
@@ -147,11 +196,20 @@ class TestStopStructuralSense:
         )
         for em in ENTRY_MODELS:
             result = compute_single_outcome(
-                short_bars, BREAK_TS, ORB_HIGH, ORB_LOW, "short",
-                2.0, 1, TD_END, _cost(), em,
+                short_bars,
+                BREAK_TS,
+                ORB_HIGH,
+                ORB_LOW,
+                "short",
+                2.0,
+                1,
+                TD_END,
+                _cost(),
+                em,
             )
             if result["stop_price"] is not None:
                 assert result["stop_price"] == ORB_HIGH, f"Failed for {em}"
+
 
 class TestWinLossPnl:
     """Check 8: Win PnL > 0, loss PnL < 0."""
@@ -160,8 +218,16 @@ class TestWinLossPnl:
         """All winning trades have positive pnl_r."""
         for em in ENTRY_MODELS:
             result = compute_single_outcome(
-                STANDARD_BARS, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-                1.0, 1, TD_END, _cost(), em,
+                STANDARD_BARS,
+                BREAK_TS,
+                ORB_HIGH,
+                ORB_LOW,
+                "long",
+                1.0,
+                1,
+                TD_END,
+                _cost(),
+                em,
             )
             if result["outcome"] == "win":
                 assert result["pnl_r"] > 0, f"Win with negative PnL for {em}"
@@ -177,11 +243,20 @@ class TestWinLossPnl:
         )
         # E1 fills at bar 1 open=2703, bar 1 low=2689 < stop=2690 -> fill-bar stop
         result = compute_single_outcome(
-            loss_bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-            2.0, 1, TD_END, _cost(), "E1",
+            loss_bars,
+            BREAK_TS,
+            ORB_HIGH,
+            ORB_LOW,
+            "long",
+            2.0,
+            1,
+            TD_END,
+            _cost(),
+            "E1",
         )
         if result["outcome"] == "loss":
             assert result["pnl_r"] == -1.0, "Loss not -1.0R for E1"
+
 
 class TestCostModelApplied:
     """Check 9: Costs reduce wins. pnl_r < rr_target for wins."""
@@ -189,14 +264,22 @@ class TestCostModelApplied:
     def test_win_pnl_less_than_rr(self):
         for em in ENTRY_MODELS:
             result = compute_single_outcome(
-                STANDARD_BARS, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-                2.0, 1, TD_END, _cost(), em,
+                STANDARD_BARS,
+                BREAK_TS,
+                ORB_HIGH,
+                ORB_LOW,
+                "long",
+                2.0,
+                1,
+                TD_END,
+                _cost(),
+                em,
             )
             if result["outcome"] == "win":
                 assert result["pnl_r"] < 2.0, (
-                    f"Win pnl_r={result['pnl_r']} >= RR=2.0 for {em} "
-                    f"(costs should reduce wins)"
+                    f"Win pnl_r={result['pnl_r']} >= RR=2.0 for {em} (costs should reduce wins)"
                 )
+
 
 class TestEntryModelDifference:
     """Check 10: Different entry models produce different entry prices."""
@@ -206,8 +289,16 @@ class TestEntryModelDifference:
         prices = {}
         for em in ENTRY_MODELS:
             result = compute_single_outcome(
-                STANDARD_BARS, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-                2.0, 1, TD_END, _cost(), em,
+                STANDARD_BARS,
+                BREAK_TS,
+                ORB_HIGH,
+                ORB_LOW,
+                "long",
+                2.0,
+                1,
+                TD_END,
+                _cost(),
+                em,
             )
             if result["entry_price"] is not None:
                 prices[em] = result["entry_price"]
@@ -215,13 +306,13 @@ class TestEntryModelDifference:
         # At least 2 models should produce different prices
         if len(prices) >= 2:
             unique_prices = set(prices.values())
-            assert len(unique_prices) >= 2, (
-                f"Entry models produced identical prices: {prices}"
-            )
+            assert len(unique_prices) >= 2, f"Entry models produced identical prices: {prices}"
+
 
 # ============================================================================
 # MATH LOGIC CHECKS (11-20)
 # ============================================================================
+
 
 class TestRiskMath:
     """Check 12: risk_points = abs(entry_price - stop_price)."""
@@ -229,12 +320,21 @@ class TestRiskMath:
     def test_risk_calculation(self):
         for em in ENTRY_MODELS:
             result = compute_single_outcome(
-                STANDARD_BARS, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-                2.0, 1, TD_END, _cost(), em,
+                STANDARD_BARS,
+                BREAK_TS,
+                ORB_HIGH,
+                ORB_LOW,
+                "long",
+                2.0,
+                1,
+                TD_END,
+                _cost(),
+                em,
             )
             if result["entry_price"] is not None and result["stop_price"] is not None:
                 risk = abs(result["entry_price"] - result["stop_price"])
                 assert risk > 0, f"Zero risk for {em}"
+
 
 class TestTargetMath:
     """Check 13: target_price = entry + risk * RR * direction."""
@@ -242,16 +342,24 @@ class TestTargetMath:
     def test_long_target(self):
         for em in ENTRY_MODELS:
             result = compute_single_outcome(
-                STANDARD_BARS, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-                2.0, 1, TD_END, _cost(), em,
+                STANDARD_BARS,
+                BREAK_TS,
+                ORB_HIGH,
+                ORB_LOW,
+                "long",
+                2.0,
+                1,
+                TD_END,
+                _cost(),
+                em,
             )
             if result["entry_price"] is not None and result["target_price"] is not None:
                 risk = abs(result["entry_price"] - result["stop_price"])
                 expected_target = result["entry_price"] + risk * 2.0
                 assert result["target_price"] == pytest.approx(expected_target, abs=0.01), (
-                    f"Target mismatch for {em}: got {result['target_price']}, "
-                    f"expected {expected_target}"
+                    f"Target mismatch for {em}: got {result['target_price']}, expected {expected_target}"
                 )
+
 
 class TestLossPnlExact:
     """Check 18: Losses should be exactly -1.0R (stop hit)."""
@@ -265,11 +373,20 @@ class TestLossPnlExact:
             ],
         )
         result = compute_single_outcome(
-            loss_bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-            2.0, 1, TD_END, _cost(), "E1",
+            loss_bars,
+            BREAK_TS,
+            ORB_HIGH,
+            ORB_LOW,
+            "long",
+            2.0,
+            1,
+            TD_END,
+            _cost(),
+            "E1",
         )
         if result["outcome"] == "loss":
             assert result["pnl_r"] == -1.0
+
 
 class TestMaeMfeBounds:
     """Check 19: MAE/MFE bounds.
@@ -284,8 +401,16 @@ class TestMaeMfeBounds:
     def test_mae_reasonable(self):
         for em in ENTRY_MODELS:
             result = compute_single_outcome(
-                STANDARD_BARS, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-                2.0, 1, TD_END, _cost(), em,
+                STANDARD_BARS,
+                BREAK_TS,
+                ORB_HIGH,
+                ORB_LOW,
+                "long",
+                2.0,
+                1,
+                TD_END,
+                _cost(),
+                em,
             )
             if result["mae_r"] is not None:
                 assert result["mae_r"] > -1.0, f"Extreme negative MAE for {em}"
@@ -294,11 +419,20 @@ class TestMaeMfeBounds:
         """For wins, MFE must be positive (price reached target)."""
         for em in ENTRY_MODELS:
             result = compute_single_outcome(
-                STANDARD_BARS, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-                2.0, 1, TD_END, _cost(), em,
+                STANDARD_BARS,
+                BREAK_TS,
+                ORB_HIGH,
+                ORB_LOW,
+                "long",
+                2.0,
+                1,
+                TD_END,
+                _cost(),
+                em,
             )
             if result["outcome"] == "win" and result["mfe_r"] is not None:
                 assert result["mfe_r"] > 0, f"Win with non-positive MFE for {em}"
+
 
 class TestE3NoSameBarFill:
     """Check 6: E3 exit must be on or after fill bar."""
@@ -315,13 +449,20 @@ class TestE3NoSameBarFill:
             ],
         )
         result = compute_single_outcome(
-            bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-            2.0, 1, TD_END, _cost(), "E3",
+            bars,
+            BREAK_TS,
+            ORB_HIGH,
+            ORB_LOW,
+            "long",
+            2.0,
+            1,
+            TD_END,
+            _cost(),
+            "E3",
         )
         if result["entry_ts"] is not None and result["exit_ts"] is not None:
-            assert result["exit_ts"] >= result["entry_ts"], (
-                "E3 exit must be on or after entry bar"
-            )
+            assert result["exit_ts"] >= result["entry_ts"], "E3 exit must be on or after entry bar"
+
 
 class TestAmbiguousBarConservativeLoss:
     """Both target and stop hit on same bar -> conservative loss."""
@@ -336,8 +477,16 @@ class TestAmbiguousBarConservativeLoss:
                 ],
             )
             result = compute_single_outcome(
-                bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-                2.0, 1, TD_END, _cost(), em,
+                bars,
+                BREAK_TS,
+                ORB_HIGH,
+                ORB_LOW,
+                "long",
+                2.0,
+                1,
+                TD_END,
+                _cost(),
+                em,
             )
             if result["outcome"] is not None and result["outcome"] != "scratch":
                 # If both target and stop could be hit, should be loss
@@ -347,6 +496,7 @@ class TestAmbiguousBarConservativeLoss:
                 target = result["target_price"]
                 if entry is not None and target is not None:
                     pass  # specific check depends on bar range vs targets
+
 
 class TestWinRMultipleExact:
     """Check 11: Win pnl_r must equal to_r_multiple (friction deducted from PnL).
@@ -361,8 +511,16 @@ class TestWinRMultipleExact:
         cost = _cost()
         for em in ENTRY_MODELS:
             result = compute_single_outcome(
-                STANDARD_BARS, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-                2.0, 1, TD_END, cost, em,
+                STANDARD_BARS,
+                BREAK_TS,
+                ORB_HIGH,
+                ORB_LOW,
+                "long",
+                2.0,
+                1,
+                TD_END,
+                cost,
+                em,
             )
             if result["outcome"] == "win":
                 entry = result["entry_price"]
@@ -383,8 +541,16 @@ class TestWinRMultipleExact:
         cost = _cost()
         for em in ENTRY_MODELS:
             result = compute_single_outcome(
-                STANDARD_BARS, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-                2.0, 1, TD_END, cost, em,
+                STANDARD_BARS,
+                BREAK_TS,
+                ORB_HIGH,
+                ORB_LOW,
+                "long",
+                2.0,
+                1,
+                TD_END,
+                cost,
+                em,
             )
             if result["outcome"] == "win":
                 entry = result["entry_price"]
@@ -398,9 +564,11 @@ class TestWinRMultipleExact:
                 # And pnl_r should match the CORRECT one
                 assert result["pnl_r"] == pytest.approx(correct_r, abs=0.0001)
 
+
 # ============================================================================
 # FILL-BAR EXIT TESTS (R1)
 # ============================================================================
+
 
 class TestFillBarExits:
     """R1: Fill bar can hit stop/target for E1 and E3 entries."""
@@ -419,14 +587,20 @@ class TestFillBarExits:
             ],
         )
         result = compute_single_outcome(
-            bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-            2.0, 1, TD_END, _cost(), "E1",
+            bars,
+            BREAK_TS,
+            ORB_HIGH,
+            ORB_LOW,
+            "long",
+            2.0,
+            1,
+            TD_END,
+            _cost(),
+            "E1",
         )
         assert result["outcome"] == "loss"
         assert result["pnl_r"] == -1.0
-        assert result["exit_ts"] == result["entry_ts"], (
-            "Fill-bar exit: exit_ts must equal entry_ts"
-        )
+        assert result["exit_ts"] == result["entry_ts"], "Fill-bar exit: exit_ts must equal entry_ts"
 
     def test_e1_fill_bar_target_hit(self):
         """E1 fills at bar open. Bar's high reaches target -> win on fill bar."""
@@ -441,8 +615,16 @@ class TestFillBarExits:
             ],
         )
         result = compute_single_outcome(
-            bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-            1.0, 1, TD_END, _cost(), "E1",
+            bars,
+            BREAK_TS,
+            ORB_HIGH,
+            ORB_LOW,
+            "long",
+            1.0,
+            1,
+            TD_END,
+            _cost(),
+            "E1",
         )
         assert result["outcome"] == "win"
         assert result["pnl_r"] > 0
@@ -461,8 +643,16 @@ class TestFillBarExits:
             ],
         )
         result = compute_single_outcome(
-            bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-            1.0, 1, TD_END, _cost(), "E1",
+            bars,
+            BREAK_TS,
+            ORB_HIGH,
+            ORB_LOW,
+            "long",
+            1.0,
+            1,
+            TD_END,
+            _cost(),
+            "E1",
         )
         assert result["outcome"] == "loss"
         assert result["pnl_r"] == -1.0
@@ -483,13 +673,19 @@ class TestFillBarExits:
             ],
         )
         result = compute_single_outcome(
-            bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-            2.0, 1, TD_END, _cost(), "E1",
+            bars,
+            BREAK_TS,
+            ORB_HIGH,
+            ORB_LOW,
+            "long",
+            2.0,
+            1,
+            TD_END,
+            _cost(),
+            "E1",
         )
         assert result["outcome"] == "win"
-        assert result["exit_ts"] > result["entry_ts"], (
-            "No fill-bar exit: exit should be on a later bar"
-        )
+        assert result["exit_ts"] > result["entry_ts"], "No fill-bar exit: exit should be on a later bar"
 
     def test_e3_fill_bar_stop_invalidates_entry(self):
         """E3: if fill bar's low breaches stop, entry_rules rejects the fill entirely."""
@@ -504,8 +700,16 @@ class TestFillBarExits:
             ],
         )
         result = compute_single_outcome(
-            bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-            2.0, 1, TD_END, _cost(), "E3",
+            bars,
+            BREAK_TS,
+            ORB_HIGH,
+            ORB_LOW,
+            "long",
+            2.0,
+            1,
+            TD_END,
+            _cost(),
+            "E3",
         )
         # E3 entry_rules correctly reject: stop breached on retrace bar
         assert result["outcome"] is None
@@ -524,8 +728,16 @@ class TestFillBarExits:
             ],
         )
         result = compute_single_outcome(
-            bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-            1.0, 1, TD_END, _cost(), "E3",
+            bars,
+            BREAK_TS,
+            ORB_HIGH,
+            ORB_LOW,
+            "long",
+            1.0,
+            1,
+            TD_END,
+            _cost(),
+            "E3",
         )
         assert result["outcome"] == "win"
         assert result["pnl_r"] > 0
@@ -545,8 +757,16 @@ class TestFillBarExits:
             ],
         )
         result = compute_single_outcome(
-            bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-            2.0, 1, TD_END, _cost(), "E3",
+            bars,
+            BREAK_TS,
+            ORB_HIGH,
+            ORB_LOW,
+            "long",
+            2.0,
+            1,
+            TD_END,
+            _cost(),
+            "E3",
         )
         assert result["outcome"] == "win"
         assert result["exit_ts"] > result["entry_ts"]
@@ -567,13 +787,22 @@ class TestFillBarExits:
             ],
         )
         result = compute_single_outcome(
-            bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long",
-            2.0, 1, TD_END, _cost(), "E1",
+            bars,
+            BREAK_TS,
+            ORB_HIGH,
+            ORB_LOW,
+            "long",
+            2.0,
+            1,
+            TD_END,
+            _cost(),
+            "E1",
         )
         # Must be loss (fill bar stop), not win (later target)
         assert result["outcome"] == "loss"
         assert result["pnl_r"] == -1.0
         assert result["exit_ts"] == result["entry_ts"]
+
 
 # ============================================================================
 # RANDOMIZED SPOT-CHECK TESTS (against real gold.db data)
@@ -586,8 +815,10 @@ class TestFillBarExits:
 import random
 
 from pipeline.paths import GOLD_DB_PATH
+
 GOLD_DB = GOLD_DB_PATH
 SAMPLE_SIZE = 50  # rows per test — enough to catch errors, fast enough for CI
+
 
 def _skip_if_no_db():
     """Skip test if gold.db not present, locked, or missing orb_outcomes."""
@@ -595,14 +826,18 @@ def _skip_if_no_db():
         pytest.skip("gold.db not available")
     try:
         test_con = duckdb.connect(str(GOLD_DB), read_only=True)
-        tables = {r[0] for r in test_con.execute(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
-        ).fetchall()}
+        tables = {
+            r[0]
+            for r in test_con.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+            ).fetchall()
+        }
         test_con.close()
         if "orb_outcomes" not in tables:
             pytest.skip("gold.db has no orb_outcomes table")
     except Exception:
         pytest.skip("gold.db locked by another process")
+
 
 def _sample_outcomes(con, n=SAMPLE_SIZE, where_extra=""):
     """Pull n random outcome rows with win/loss result."""
@@ -614,10 +849,25 @@ def _sample_outcomes(con, n=SAMPLE_SIZE, where_extra=""):
         f"WHERE symbol = 'MGC' AND outcome IN ('win','loss') {where_extra} "
         f"ORDER BY trading_day, orb_label, entry_model LIMIT {n}"
     ).fetchall()
-    cols = ["trading_day", "symbol", "orb_label", "orb_minutes", "rr_target",
-            "confirm_bars", "entry_model", "outcome", "pnl_r", "mae_r", "mfe_r",
-            "entry_price", "stop_price", "target_price", "exit_price"]
+    cols = [
+        "trading_day",
+        "symbol",
+        "orb_label",
+        "orb_minutes",
+        "rr_target",
+        "confirm_bars",
+        "entry_model",
+        "outcome",
+        "pnl_r",
+        "mae_r",
+        "mfe_r",
+        "entry_price",
+        "stop_price",
+        "target_price",
+        "exit_price",
+    ]
     return [dict(zip(cols, r)) for r in rows]
+
 
 class TestRandomOutcomeMath:
     """Sample random real outcomes and recompute all stored values."""
@@ -664,8 +914,7 @@ class TestRandomOutcomeMath:
         try:
             for row in _sample_outcomes(con, where_extra="AND outcome = 'loss'"):
                 assert row["pnl_r"] == -1.0, (
-                    f"Loss pnl_r={row['pnl_r']} != -1.0 "
-                    f"({row['entry_model']} {row['orb_label']} {row['trading_day']})"
+                    f"Loss pnl_r={row['pnl_r']} != -1.0 ({row['entry_model']} {row['orb_label']} {row['trading_day']})"
                 )
         finally:
             con.close()
@@ -731,12 +980,22 @@ class TestRandomOutcomeMath:
                 "  AND o.orb_label IN ('CME_REOPEN','TOKYO_OPEN','LONDON_METALS','US_DATA_830') "
                 "ORDER BY o.trading_day, o.orb_label, o.entry_model LIMIT 50"
             ).fetchall()
-            cols = ["trading_day", "orb_label", "entry_model", "entry_price",
-                    "stop_price", "outcome",
-                    "orb_CME_REOPEN_high", "orb_CME_REOPEN_low",
-                    "orb_TOKYO_OPEN_high", "orb_TOKYO_OPEN_low",
-                    "orb_LONDON_METALS_high", "orb_LONDON_METALS_low",
-                    "orb_US_DATA_830_high", "orb_US_DATA_830_low"]
+            cols = [
+                "trading_day",
+                "orb_label",
+                "entry_model",
+                "entry_price",
+                "stop_price",
+                "outcome",
+                "orb_CME_REOPEN_high",
+                "orb_CME_REOPEN_low",
+                "orb_TOKYO_OPEN_high",
+                "orb_TOKYO_OPEN_low",
+                "orb_LONDON_METALS_high",
+                "orb_LONDON_METALS_low",
+                "orb_US_DATA_830_high",
+                "orb_US_DATA_830_low",
+            ]
             for r in [dict(zip(cols, row)) for row in rows]:
                 orb = r["orb_label"]
                 orb_high = r[f"orb_{orb}_high"]
@@ -747,13 +1006,11 @@ class TestRandomOutcomeMath:
                 is_long = entry > stop
                 if is_long:
                     assert stop == pytest.approx(orb_low, abs=0.01), (
-                        f"Long stop={stop} != orb_low={orb_low} "
-                        f"({r['entry_model']} {orb} {r['trading_day']})"
+                        f"Long stop={stop} != orb_low={orb_low} ({r['entry_model']} {orb} {r['trading_day']})"
                     )
                 else:
                     assert stop == pytest.approx(orb_high, abs=0.01), (
-                        f"Short stop={stop} != orb_high={orb_high} "
-                        f"({r['entry_model']} {orb} {r['trading_day']})"
+                        f"Short stop={stop} != orb_high={orb_high} ({r['entry_model']} {orb} {r['trading_day']})"
                     )
         finally:
             con.close()
@@ -777,11 +1034,20 @@ class TestRandomOutcomeMath:
                 "  AND o.orb_label IN ('CME_REOPEN','TOKYO_OPEN','LONDON_METALS','US_DATA_830') "
                 "ORDER BY o.trading_day, o.orb_label LIMIT 50"
             ).fetchall()
-            cols = ["trading_day", "orb_label", "entry_price", "stop_price",
-                    "orb_CME_REOPEN_high", "orb_CME_REOPEN_low",
-                    "orb_TOKYO_OPEN_high", "orb_TOKYO_OPEN_low",
-                    "orb_LONDON_METALS_high", "orb_LONDON_METALS_low",
-                    "orb_US_DATA_830_high", "orb_US_DATA_830_low"]
+            cols = [
+                "trading_day",
+                "orb_label",
+                "entry_price",
+                "stop_price",
+                "orb_CME_REOPEN_high",
+                "orb_CME_REOPEN_low",
+                "orb_TOKYO_OPEN_high",
+                "orb_TOKYO_OPEN_low",
+                "orb_LONDON_METALS_high",
+                "orb_LONDON_METALS_low",
+                "orb_US_DATA_830_high",
+                "orb_US_DATA_830_low",
+            ]
             for r in [dict(zip(cols, row)) for row in rows]:
                 orb = r["orb_label"]
                 orb_high = r[f"orb_{orb}_high"]
@@ -792,15 +1058,9 @@ class TestRandomOutcomeMath:
                 # E1 fills at next bar's open — can gap beyond ORB in either direction.
                 # The key invariant: stop must be on the correct side of entry.
                 if is_long:
-                    assert stop < entry, (
-                        f"E1 long: stop={stop} >= entry={entry} "
-                        f"({orb} {r['trading_day']})"
-                    )
+                    assert stop < entry, f"E1 long: stop={stop} >= entry={entry} ({orb} {r['trading_day']})"
                 else:
-                    assert stop > entry, (
-                        f"E1 short: stop={stop} <= entry={entry} "
-                        f"({orb} {r['trading_day']})"
-                    )
+                    assert stop > entry, f"E1 short: stop={stop} <= entry={entry} ({orb} {r['trading_day']})"
         finally:
             con.close()
 
@@ -823,11 +1083,20 @@ class TestRandomOutcomeMath:
                 "  AND o.orb_label IN ('CME_REOPEN','TOKYO_OPEN','LONDON_METALS','US_DATA_830') "
                 "ORDER BY o.trading_day, o.orb_label LIMIT 50"
             ).fetchall()
-            cols = ["trading_day", "orb_label", "entry_price", "stop_price",
-                    "orb_CME_REOPEN_high", "orb_CME_REOPEN_low",
-                    "orb_TOKYO_OPEN_high", "orb_TOKYO_OPEN_low",
-                    "orb_LONDON_METALS_high", "orb_LONDON_METALS_low",
-                    "orb_US_DATA_830_high", "orb_US_DATA_830_low"]
+            cols = [
+                "trading_day",
+                "orb_label",
+                "entry_price",
+                "stop_price",
+                "orb_CME_REOPEN_high",
+                "orb_CME_REOPEN_low",
+                "orb_TOKYO_OPEN_high",
+                "orb_TOKYO_OPEN_low",
+                "orb_LONDON_METALS_high",
+                "orb_LONDON_METALS_low",
+                "orb_US_DATA_830_high",
+                "orb_US_DATA_830_low",
+            ]
             for r in [dict(zip(cols, row)) for row in rows]:
                 orb = r["orb_label"]
                 orb_high = r[f"orb_{orb}_high"]
@@ -836,16 +1105,15 @@ class TestRandomOutcomeMath:
                 is_long = entry > r["stop_price"]
                 if is_long:
                     assert entry == pytest.approx(orb_high, abs=0.01), (
-                        f"E3 long entry={entry} != orb_high={orb_high} "
-                        f"({orb} {r['trading_day']})"
+                        f"E3 long entry={entry} != orb_high={orb_high} ({orb} {r['trading_day']})"
                     )
                 else:
                     assert entry == pytest.approx(orb_low, abs=0.01), (
-                        f"E3 short entry={entry} != orb_low={orb_low} "
-                        f"({orb} {r['trading_day']})"
+                        f"E3 short entry={entry} != orb_low={orb_low} ({orb} {r['trading_day']})"
                     )
         finally:
             con.close()
+
 
 class TestRandomStrategyMath:
     """Sample random strategies and recompute stored metrics from outcomes."""
@@ -863,9 +1131,18 @@ class TestRandomStrategyMath:
                 "WHERE instrument = 'MGC' AND sample_size >= 20 "
                 "ORDER BY strategy_id LIMIT 30"
             ).fetchall()
-            strat_cols = ["strategy_id", "orb_label", "entry_model", "rr_target",
-                          "confirm_bars", "filter_type", "win_rate", "sample_size",
-                          "expectancy_r", "orb_minutes"]
+            strat_cols = [
+                "strategy_id",
+                "orb_label",
+                "entry_model",
+                "rr_target",
+                "confirm_bars",
+                "filter_type",
+                "win_rate",
+                "sample_size",
+                "expectancy_r",
+                "orb_minutes",
+            ]
 
             from trading_app.config import ALL_FILTERS
 
@@ -887,8 +1164,7 @@ class TestRandomStrategyMath:
                 # Load daily_features for this aperture (cached)
                 if om not in feat_cache:
                     features = con.execute(
-                        "SELECT * FROM daily_features WHERE symbol = 'MGC' AND orb_minutes = ?",
-                        [om]
+                        "SELECT * FROM daily_features WHERE symbol = 'MGC' AND orb_minutes = ?", [om]
                     ).fetchall()
                     feat_cols = [desc[0] for desc in con.description]
                     feat_cache[om] = [dict(zip(feat_cols, r)) for r in features]
@@ -910,7 +1186,7 @@ class TestRandomStrategyMath:
                     "WHERE symbol = 'MGC' AND orb_label = ? AND entry_model = ? "
                     "AND rr_target = ? AND confirm_bars = ? AND orb_minutes = ? "
                     "AND outcome IN ('win','loss')",
-                    [orb, em, rr, cb, om]
+                    [orb, em, rr, cb, om],
                 ).fetchall()
 
                 # Filter to eligible days
@@ -942,9 +1218,18 @@ class TestRandomStrategyMath:
                 "WHERE instrument = 'MGC' AND sample_size >= 20 "
                 "ORDER BY strategy_id LIMIT 30"
             ).fetchall()
-            strat_cols = ["strategy_id", "orb_label", "entry_model", "rr_target",
-                          "confirm_bars", "filter_type", "win_rate", "sample_size",
-                          "expectancy_r", "orb_minutes"]
+            strat_cols = [
+                "strategy_id",
+                "orb_label",
+                "entry_model",
+                "rr_target",
+                "confirm_bars",
+                "filter_type",
+                "win_rate",
+                "sample_size",
+                "expectancy_r",
+                "orb_minutes",
+            ]
 
             from trading_app.config import ALL_FILTERS
 
@@ -963,8 +1248,7 @@ class TestRandomStrategyMath:
 
                 if om not in feat_cache:
                     features = con.execute(
-                        "SELECT * FROM daily_features WHERE symbol = 'MGC' AND orb_minutes = ?",
-                        [om]
+                        "SELECT * FROM daily_features WHERE symbol = 'MGC' AND orb_minutes = ?", [om]
                     ).fetchall()
                     feat_cols = [desc[0] for desc in con.description]
                     feat_cache[om] = [dict(zip(feat_cols, r)) for r in features]
@@ -984,7 +1268,7 @@ class TestRandomStrategyMath:
                     "WHERE symbol = 'MGC' AND orb_label = ? AND entry_model = ? "
                     "AND rr_target = ? AND confirm_bars = ? AND orb_minutes = ? "
                     "AND outcome IN ('win','loss')",
-                    [orb, em, rr, cb, om]
+                    [orb, em, rr, cb, om],
                 ).fetchall()
 
                 traded = [(td, oc, pr) for td, oc, pr in outcomes if td in eligible]
@@ -1020,8 +1304,16 @@ class TestRandomStrategyMath:
                 "WHERE instrument = 'MGC' AND sample_size >= 20 "
                 "ORDER BY strategy_id LIMIT 30"
             ).fetchall()
-            strat_cols = ["strategy_id", "orb_label", "entry_model", "rr_target",
-                          "confirm_bars", "filter_type", "max_drawdown_r", "orb_minutes"]
+            strat_cols = [
+                "strategy_id",
+                "orb_label",
+                "entry_model",
+                "rr_target",
+                "confirm_bars",
+                "filter_type",
+                "max_drawdown_r",
+                "orb_minutes",
+            ]
 
             from trading_app.config import ALL_FILTERS
 
@@ -1040,8 +1332,7 @@ class TestRandomStrategyMath:
 
                 if om not in feat_cache:
                     features = con.execute(
-                        "SELECT * FROM daily_features WHERE symbol = 'MGC' AND orb_minutes = ?",
-                        [om]
+                        "SELECT * FROM daily_features WHERE symbol = 'MGC' AND orb_minutes = ?", [om]
                     ).fetchall()
                     feat_cols = [desc[0] for desc in con.description]
                     feat_cache[om] = [dict(zip(feat_cols, r)) for r in features]
@@ -1061,7 +1352,7 @@ class TestRandomStrategyMath:
                     "WHERE symbol = 'MGC' AND orb_label = ? AND entry_model = ? "
                     "AND rr_target = ? AND confirm_bars = ? AND orb_minutes = ? "
                     "AND outcome IN ('win','loss') ORDER BY trading_day",
-                    [orb, em, rr, cb, om]
+                    [orb, em, rr, cb, om],
                 ).fetchall()
 
                 traded = [(td, oc, pr) for td, oc, pr in outcomes if td in eligible]
@@ -1079,11 +1370,11 @@ class TestRandomStrategyMath:
                     max_dd = max(max_dd, dd)
 
                 assert s["max_drawdown_r"] == pytest.approx(max_dd, abs=0.01), (
-                    f"MaxDD mismatch for {s['strategy_id']}: "
-                    f"stored={s['max_drawdown_r']}, recomputed={max_dd:.2f}"
+                    f"MaxDD mismatch for {s['strategy_id']}: stored={s['max_drawdown_r']}, recomputed={max_dd:.2f}"
                 )
         finally:
             con.close()
+
 
 class TestRandomWalkForwardIntegrity:
     """Verify walk-forward results match independent recomputation."""
@@ -1096,6 +1387,7 @@ class TestRandomWalkForwardIntegrity:
             pytest.skip("walk-forward artifacts not present")
 
         import json
+
         with open(wf_json) as f:
             results = json.load(f)
 
@@ -1121,6 +1413,7 @@ class TestRandomWalkForwardIntegrity:
 
         import json
         from datetime import date as d
+
         with open(wf_json) as f:
             results = json.load(f)
 

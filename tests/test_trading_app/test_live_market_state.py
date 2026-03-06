@@ -7,6 +7,7 @@ CME_REOPEN for trading_day 2026-03-03 (March, winter/CST):
 
 Bars must be at 2026-03-02 23:xx UTC to fall inside this window.
 """
+
 from datetime import date, datetime, timezone
 
 import pytest
@@ -15,8 +16,7 @@ from trading_app.live.bar_aggregator import Bar
 from trading_app.live.live_market_state import LiveORBBuilder
 
 
-def _bar(cal_day: int, hour_utc: int, minute_utc: int,
-         high: float, low: float, symbol="MGC") -> Bar:
+def _bar(cal_day: int, hour_utc: int, minute_utc: int, high: float, low: float, symbol="MGC") -> Bar:
     """Create a Bar. cal_day = day of month in March 2026."""
     ts = datetime(2026, 3, cal_day, hour_utc, minute_utc, 0, tzinfo=timezone.utc)
     mid = (high + low) / 2
@@ -43,8 +43,8 @@ def test_orb_complete_after_five_bars():
         builder.on_bar(_bar(2, 23, m, high=2001.0 + m, low=1999.0 - m))
     orb = builder.get_orb("CME_REOPEN", orb_minutes=5)
     assert orb is not None
-    assert orb.high == 2005.0   # max(2001,2002,2003,2004,2005)
-    assert orb.low == 1995.0    # min(1999,1998,1997,1996,1995)
+    assert orb.high == 2005.0  # max(2001,2002,2003,2004,2005)
+    assert orb.low == 1995.0  # min(1999,1998,1997,1996,1995)
     assert orb.complete is True
     assert orb.bars_count == 5
 
@@ -69,7 +69,7 @@ def test_bars_outside_window_excluded():
         builder.on_bar(_bar(2, 23, m, high=2001.0, low=1999.0))
     orb = builder.get_orb("CME_REOPEN", orb_minutes=5)
     assert orb is not None
-    assert orb.high == 2001.0   # 9999 excluded
+    assert orb.high == 2001.0  # 9999 excluded
     assert orb.low == 1999.0
 
 

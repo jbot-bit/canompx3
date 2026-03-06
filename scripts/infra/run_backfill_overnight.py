@@ -27,8 +27,8 @@ from pathlib import Path
 
 # Configuration
 MAX_RETRIES = 100  # Maximum restart attempts
-RETRY_DELAY = 30   # Seconds to wait before restart
-CHUNK_DAYS = 7     # Trading days per commit
+RETRY_DELAY = 30  # Seconds to wait before restart
+CHUNK_DAYS = 7  # Trading days per commit
 
 LOG_FILE = Path(__file__).parent / "backfill_overnight.log"
 
@@ -38,8 +38,8 @@ def log(message: str):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{timestamp}] {message}"
     print(line)
-    with open(LOG_FILE, 'a') as f:
-        f.write(line + '\n')
+    with open(LOG_FILE, "a") as f:
+        f.write(line + "\n")
 
 
 def run_ingest(start_date: str = None, end_date: str = None) -> int:

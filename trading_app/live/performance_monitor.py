@@ -4,6 +4,7 @@ Per-strategy live P&L tracking with CUSUM drift detection.
 Takes list[PortfolioStrategy] from Portfolio.strategies — NOT LiveStrategySpec.
 PortfolioStrategy has .strategy_id and .expectancy_r. LiveStrategySpec does not.
 """
+
 import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
@@ -49,9 +50,7 @@ class PerformanceMonitor:
             )
             for s in strategies
         }
-        self._strategy_map: dict[str, PortfolioStrategy] = {
-            s.strategy_id: s for s in strategies
-        }
+        self._strategy_map: dict[str, PortfolioStrategy] = {s.strategy_id: s for s in strategies}
         self._trades: list[TradeRecord] = []
         self._daily_r: dict[str, float] = {}
 
@@ -60,9 +59,7 @@ class PerformanceMonitor:
         Record a completed trade. Returns alert string if CUSUM alarm triggered, else None.
         """
         self._trades.append(record)
-        self._daily_r[record.strategy_id] = (
-            self._daily_r.get(record.strategy_id, 0.0) + record.actual_r
-        )
+        self._daily_r[record.strategy_id] = self._daily_r.get(record.strategy_id, 0.0) + record.actual_r
         monitor = self._monitors.get(record.strategy_id)
         if monitor and monitor.update(record.actual_r):
             msg = (

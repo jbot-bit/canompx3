@@ -12,12 +12,14 @@ import duckdb
 from trading_app.setup_detector import detect_setups
 from trading_app.config import NoFilter, OrbSizeFilter
 
+
 def _setup_db(tmp_path, days_data):
     """Create temp DB with daily_features rows."""
     db_path = tmp_path / "test.db"
     con = duckdb.connect(str(db_path))
 
     from pipeline.init_db import DAILY_FEATURES_SCHEMA
+
     con.execute(DAILY_FEATURES_SCHEMA)
 
     for d in days_data:
@@ -32,20 +34,38 @@ def _setup_db(tmp_path, days_data):
     con.close()
     return db_path
 
+
 class TestDetectSetups:
     """Tests for detect_setups()."""
 
     def test_no_filter_returns_all_break_days(self, tmp_path):
         """NoFilter returns all days with a break."""
         days = [
-            {"trading_day": date(2024, 1, 1), "symbol": "MGC", "orb_minutes": 5,
-             "orb_CME_REOPEN_high": 2700.0, "orb_CME_REOPEN_low": 2690.0,
-             "orb_CME_REOPEN_break_dir": "long", "orb_CME_REOPEN_size": 10.0},
-            {"trading_day": date(2024, 1, 2), "symbol": "MGC", "orb_minutes": 5,
-             "orb_CME_REOPEN_high": 2705.0, "orb_CME_REOPEN_low": 2695.0,
-             "orb_CME_REOPEN_break_dir": "short", "orb_CME_REOPEN_size": 10.0},
-            {"trading_day": date(2024, 1, 3), "symbol": "MGC", "orb_minutes": 5,
-             "orb_CME_REOPEN_high": 2710.0, "orb_CME_REOPEN_low": 2700.0},  # no break
+            {
+                "trading_day": date(2024, 1, 1),
+                "symbol": "MGC",
+                "orb_minutes": 5,
+                "orb_CME_REOPEN_high": 2700.0,
+                "orb_CME_REOPEN_low": 2690.0,
+                "orb_CME_REOPEN_break_dir": "long",
+                "orb_CME_REOPEN_size": 10.0,
+            },
+            {
+                "trading_day": date(2024, 1, 2),
+                "symbol": "MGC",
+                "orb_minutes": 5,
+                "orb_CME_REOPEN_high": 2705.0,
+                "orb_CME_REOPEN_low": 2695.0,
+                "orb_CME_REOPEN_break_dir": "short",
+                "orb_CME_REOPEN_size": 10.0,
+            },
+            {
+                "trading_day": date(2024, 1, 3),
+                "symbol": "MGC",
+                "orb_minutes": 5,
+                "orb_CME_REOPEN_high": 2710.0,
+                "orb_CME_REOPEN_low": 2700.0,
+            },  # no break
         ]
         db_path = _setup_db(tmp_path, days)
 
@@ -60,12 +80,24 @@ class TestDetectSetups:
     def test_orb_size_filter(self, tmp_path):
         """OrbSizeFilter restricts by ORB size."""
         days = [
-            {"trading_day": date(2024, 1, 1), "symbol": "MGC", "orb_minutes": 5,
-             "orb_CME_REOPEN_high": 2700.0, "orb_CME_REOPEN_low": 2697.0,
-             "orb_CME_REOPEN_break_dir": "long", "orb_CME_REOPEN_size": 3.0},
-            {"trading_day": date(2024, 1, 2), "symbol": "MGC", "orb_minutes": 5,
-             "orb_CME_REOPEN_high": 2700.0, "orb_CME_REOPEN_low": 2692.0,
-             "orb_CME_REOPEN_break_dir": "long", "orb_CME_REOPEN_size": 8.0},
+            {
+                "trading_day": date(2024, 1, 1),
+                "symbol": "MGC",
+                "orb_minutes": 5,
+                "orb_CME_REOPEN_high": 2700.0,
+                "orb_CME_REOPEN_low": 2697.0,
+                "orb_CME_REOPEN_break_dir": "long",
+                "orb_CME_REOPEN_size": 3.0,
+            },
+            {
+                "trading_day": date(2024, 1, 2),
+                "symbol": "MGC",
+                "orb_minutes": 5,
+                "orb_CME_REOPEN_high": 2700.0,
+                "orb_CME_REOPEN_low": 2692.0,
+                "orb_CME_REOPEN_break_dir": "long",
+                "orb_CME_REOPEN_size": 8.0,
+            },
         ]
         db_path = _setup_db(tmp_path, days)
 
@@ -80,19 +112,41 @@ class TestDetectSetups:
     def test_date_range_filter(self, tmp_path):
         """Start/end dates restrict results."""
         days = [
-            {"trading_day": date(2024, 1, 1), "symbol": "MGC", "orb_minutes": 5,
-             "orb_CME_REOPEN_break_dir": "long", "orb_CME_REOPEN_high": 2700.0, "orb_CME_REOPEN_low": 2690.0},
-            {"trading_day": date(2024, 6, 1), "symbol": "MGC", "orb_minutes": 5,
-             "orb_CME_REOPEN_break_dir": "long", "orb_CME_REOPEN_high": 2700.0, "orb_CME_REOPEN_low": 2690.0},
-            {"trading_day": date(2024, 12, 1), "symbol": "MGC", "orb_minutes": 5,
-             "orb_CME_REOPEN_break_dir": "long", "orb_CME_REOPEN_high": 2700.0, "orb_CME_REOPEN_low": 2690.0},
+            {
+                "trading_day": date(2024, 1, 1),
+                "symbol": "MGC",
+                "orb_minutes": 5,
+                "orb_CME_REOPEN_break_dir": "long",
+                "orb_CME_REOPEN_high": 2700.0,
+                "orb_CME_REOPEN_low": 2690.0,
+            },
+            {
+                "trading_day": date(2024, 6, 1),
+                "symbol": "MGC",
+                "orb_minutes": 5,
+                "orb_CME_REOPEN_break_dir": "long",
+                "orb_CME_REOPEN_high": 2700.0,
+                "orb_CME_REOPEN_low": 2690.0,
+            },
+            {
+                "trading_day": date(2024, 12, 1),
+                "symbol": "MGC",
+                "orb_minutes": 5,
+                "orb_CME_REOPEN_break_dir": "long",
+                "orb_CME_REOPEN_high": 2700.0,
+                "orb_CME_REOPEN_low": 2690.0,
+            },
         ]
         db_path = _setup_db(tmp_path, days)
 
         con = duckdb.connect(str(db_path), read_only=True)
         results = detect_setups(
-            con, NoFilter(), "CME_REOPEN", "MGC",
-            start_date=date(2024, 3, 1), end_date=date(2024, 9, 1),
+            con,
+            NoFilter(),
+            "CME_REOPEN",
+            "MGC",
+            start_date=date(2024, 3, 1),
+            end_date=date(2024, 9, 1),
         )
         con.close()
 
@@ -102,9 +156,15 @@ class TestDetectSetups:
     def test_empty_result_impossible_filter(self, tmp_path):
         """Filter that matches nothing returns empty list."""
         days = [
-            {"trading_day": date(2024, 1, 1), "symbol": "MGC", "orb_minutes": 5,
-             "orb_CME_REOPEN_break_dir": "long", "orb_CME_REOPEN_high": 2700.0, "orb_CME_REOPEN_low": 2690.0,
-             "orb_CME_REOPEN_size": 10.0},
+            {
+                "trading_day": date(2024, 1, 1),
+                "symbol": "MGC",
+                "orb_minutes": 5,
+                "orb_CME_REOPEN_break_dir": "long",
+                "orb_CME_REOPEN_high": 2700.0,
+                "orb_CME_REOPEN_low": 2690.0,
+                "orb_CME_REOPEN_size": 10.0,
+            },
         ]
         db_path = _setup_db(tmp_path, days)
 

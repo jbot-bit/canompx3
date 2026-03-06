@@ -17,6 +17,7 @@ from collections import defaultdict
 from datetime import date, timezone
 
 from pipeline.log import get_logger
+
 logger = get_logger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -29,7 +30,9 @@ from pipeline.init_db import ORB_LABELS
 from pipeline.asset_configs import get_enabled_sessions
 from pipeline.cost_model import get_cost_spec
 from pipeline.dst import (
-    DST_AFFECTED_SESSIONS, is_winter_for_session, classify_dst_verdict,
+    DST_AFFECTED_SESSIONS,
+    is_winter_for_session,
+    classify_dst_verdict,
 )
 from trading_app.config import get_filters_for_grid, ENTRY_MODELS, VolumeFilter, STOP_MULTIPLIERS, apply_tight_stop
 from trading_app.db_manager import init_trading_app_schema, compute_trade_day_hash
@@ -40,9 +43,16 @@ sys.stdout.reconfigure(line_buffering=True)
 
 # Filter specificity ranking: higher = more specific = preferred as canonical
 _FILTER_SPECIFICITY_BASE = {
-    "ORB_G8": 5, "ORB_G6": 4, "ORB_G5_L12": 4, "ORB_G5": 3, "ORB_G4_L12": 3,
-    "ORB_G4": 2, "DIR_LONG": 2, "DIR_SHORT": 2,
-    "VOL_RV12_N20": 1, "NO_FILTER": 0,
+    "ORB_G8": 5,
+    "ORB_G6": 4,
+    "ORB_G5_L12": 4,
+    "ORB_G5": 3,
+    "ORB_G4_L12": 3,
+    "ORB_G4": 2,
+    "DIR_LONG": 2,
+    "DIR_SHORT": 2,
+    "VOL_RV12_N20": 1,
+    "NO_FILTER": 0,
 }
 # Sorted longest-first so ORB_G5_L12 matches before ORB_G5
 _SPECIFICITY_PREFIXES = sorted(_FILTER_SPECIFICITY_BASE.items(), key=lambda x: -len(x[0]))
@@ -56,6 +66,7 @@ def _get_filter_specificity(filter_key: str) -> int:
         if filter_key.startswith(base + "_"):
             return spec + 1
     return 0  # unknown defaults to same as NO_FILTER
+
 
 _INSERT_SQL = """INSERT OR REPLACE INTO experimental_strategies
     (strategy_id, instrument, orb_label, orb_minutes,
@@ -85,26 +96,57 @@ _INSERT_SQL = """INSERT OR REPLACE INTO experimental_strategies
             ?, ?)"""
 
 _BATCH_COLUMNS = [
-    'strategy_id', 'instrument', 'orb_label', 'orb_minutes',
-    'rr_target', 'confirm_bars', 'entry_model',
-    'filter_type', 'filter_params', 'stop_multiplier',
-    'sample_size', 'win_rate', 'avg_win_r', 'avg_loss_r',
-    'expectancy_r', 'sharpe_ratio', 'max_drawdown_r',
-    'median_risk_points', 'avg_risk_points',
-    'median_risk_dollars', 'avg_risk_dollars', 'avg_win_dollars', 'avg_loss_dollars',
-    'trades_per_year', 'sharpe_ann',
-    'yearly_results',
-    'entry_signals', 'scratch_count', 'early_exit_count',
-    'trade_day_hash', 'is_canonical', 'canonical_strategy_id',
-    'dst_winter_n', 'dst_winter_avg_r', 'dst_summer_n', 'dst_summer_avg_r', 'dst_verdict',
-    'validation_status', 'validation_notes',
-    'created_at',
+    "strategy_id",
+    "instrument",
+    "orb_label",
+    "orb_minutes",
+    "rr_target",
+    "confirm_bars",
+    "entry_model",
+    "filter_type",
+    "filter_params",
+    "stop_multiplier",
+    "sample_size",
+    "win_rate",
+    "avg_win_r",
+    "avg_loss_r",
+    "expectancy_r",
+    "sharpe_ratio",
+    "max_drawdown_r",
+    "median_risk_points",
+    "avg_risk_points",
+    "median_risk_dollars",
+    "avg_risk_dollars",
+    "avg_win_dollars",
+    "avg_loss_dollars",
+    "trades_per_year",
+    "sharpe_ann",
+    "yearly_results",
+    "entry_signals",
+    "scratch_count",
+    "early_exit_count",
+    "trade_day_hash",
+    "is_canonical",
+    "canonical_strategy_id",
+    "dst_winter_n",
+    "dst_winter_avg_r",
+    "dst_summer_n",
+    "dst_summer_avg_r",
+    "dst_verdict",
+    "validation_status",
+    "validation_notes",
+    "created_at",
     # Audit metrics (F-04, F-11)
-    'p_value', 'sharpe_ann_adj', 'autocorr_lag1',
+    "p_value",
+    "sharpe_ann_adj",
+    "autocorr_lag1",
     # Haircut Sharpe (Bailey & Lopez de Prado, 2014)
-    'sharpe_haircut', 'skewness', 'kurtosis_excess',
+    "sharpe_haircut",
+    "skewness",
+    "kurtosis_excess",
     # Multiple testing audit (Chordia et al 2018, Bailey & Lopez de Prado 2018)
-    'n_trials_at_discovery', 'fst_hurdle',
+    "n_trials_at_discovery",
+    "fst_hurdle",
 ]
 
 
@@ -160,23 +202,32 @@ def _mark_canonical(strategies: list[dict]) -> None:
     """
     groups = defaultdict(list)
     for s in strategies:
-        key = (s["instrument"], s["orb_label"], s["entry_model"],
-               s["rr_target"], s["confirm_bars"], s["trade_day_hash"],
-               s.get("stop_multiplier", 1.0))
+        key = (
+            s["instrument"],
+            s["orb_label"],
+            s["entry_model"],
+            s["rr_target"],
+            s["confirm_bars"],
+            s["trade_day_hash"],
+            s.get("stop_multiplier", 1.0),
+        )
         groups[key].append(s)
 
     for group in groups.values():
         # Sort by specificity descending, then filter_key for determinism
-        group.sort(key=lambda s: (
-            -_get_filter_specificity(s["filter_key"]),
-            s["filter_key"],
-        ))
+        group.sort(
+            key=lambda s: (
+                -_get_filter_specificity(s["filter_key"]),
+                s["filter_key"],
+            )
+        )
         head = group[0]
         head["is_canonical"] = True
         head["canonical_strategy_id"] = head["strategy_id"]
         for alias in group[1:]:
             alias["is_canonical"] = False
             alias["canonical_strategy_id"] = head["strategy_id"]
+
 
 def _t_test_pvalue(t_stat: float, df: int) -> float:
     """Two-tailed p-value from Student's t-distribution (no scipy needed).
@@ -220,9 +271,7 @@ def _t_test_pvalue(t_stat: float, df: int) -> float:
 
         # Log-beta prefactor
         log_beta = math.lgamma(a_val) + math.lgamma(b_val) - math.lgamma(a_val + b_val)
-        front = math.exp(
-            a_val * math.log(x_val) + b_val * math.log(1.0 - x_val) - log_beta
-        ) / a_val
+        front = math.exp(a_val * math.log(x_val) + b_val * math.log(1.0 - x_val) - log_beta) / a_val
 
         # Continued fraction (Numerical Recipes betacf)
         TINY = 1e-30
@@ -278,6 +327,7 @@ def _norm_ppf(p: float) -> float:
     Accuracy: ~4.5e-4 absolute error, sufficient for SR computations.
     """
     import math
+
     if p <= 0:
         return -6.0
     if p >= 1:
@@ -347,9 +397,7 @@ def _compute_haircut_sharpe(
     p1 = 1.0 - 1.0 / n_trials
     p2 = 1.0 - 1.0 / (n_trials * math.e)
 
-    e_max_null = std_sr_null * (
-        (1.0 - gamma_em) * _norm_ppf(p1) + gamma_em * _norm_ppf(p2)
-    )
+    e_max_null = std_sr_null * ((1.0 - gamma_em) * _norm_ppf(p1) + gamma_em * _norm_ppf(p2))
 
     # Deflated Sharpe Ratio: Z-score normalized by Mertens std error
     # DSR > 0 means SR genuinely exceeds multiple-testing noise floor
@@ -456,12 +504,8 @@ def compute_metrics(outcomes: list[dict], cost_spec=None, n_trials: int = 0) -> 
     win_rate = len(wins) / n_traded
     loss_rate = 1.0 - win_rate
 
-    avg_win_r = (
-        sum(o["pnl_r"] for o in wins) / len(wins) if wins else 0.0
-    )
-    avg_loss_r = (
-        abs(sum(o["pnl_r"] for o in losses) / len(losses)) if losses else 0.0
-    )
+    avg_win_r = sum(o["pnl_r"] for o in wins) / len(wins) if wins else 0.0
+    avg_loss_r = abs(sum(o["pnl_r"] for o in losses) / len(losses)) if losses else 0.0
 
     # E = (WR * AvgWin_R) - (LR * AvgLoss_R)  [CANONICAL_LOGIC.txt section 4]
     expectancy_r = (win_rate * avg_win_r) - (loss_rate * avg_loss_r)
@@ -471,7 +515,7 @@ def compute_metrics(outcomes: list[dict], cost_spec=None, n_trials: int = 0) -> 
     mean_r = sum(r_values) / len(r_values)
     if len(r_values) > 1:
         variance = sum((r - mean_r) ** 2 for r in r_values) / (len(r_values) - 1)
-        std_r = variance ** 0.5
+        std_r = variance**0.5
         sharpe_ratio = mean_r / std_r if std_r > 0 else None
     else:
         sharpe_ratio = None
@@ -499,12 +543,8 @@ def compute_metrics(outcomes: list[dict], cost_spec=None, n_trials: int = 0) -> 
 
     # Compute per-year metrics
     for year_data in yearly.values():
-        year_data["win_rate"] = round(
-            year_data["wins"] / year_data["trades"], 4
-        ) if year_data["trades"] > 0 else 0.0
-        year_data["avg_r"] = round(
-            year_data["total_r"] / year_data["trades"], 4
-        ) if year_data["trades"] > 0 else 0.0
+        year_data["win_rate"] = round(year_data["wins"] / year_data["trades"], 4) if year_data["trades"] > 0 else 0.0
+        year_data["avg_r"] = round(year_data["total_r"] / year_data["trades"], 4) if year_data["trades"] > 0 else 0.0
         year_data["total_r"] = round(year_data["total_r"], 4)
 
     # Annualized Sharpe = per_trade_sharpe * sqrt(trades_per_year)
@@ -517,6 +557,7 @@ def compute_metrics(outcomes: list[dict], cost_spec=None, n_trials: int = 0) -> 
             span_days = (max_day - min_day).days + 1
         else:
             from datetime import date as _date
+
             min_day = _date.fromisoformat(str(min_day)[:10])
             max_day = _date.fromisoformat(str(max_day)[:10])
             span_days = (max_day - min_day).days + 1
@@ -524,11 +565,7 @@ def compute_metrics(outcomes: list[dict], cost_spec=None, n_trials: int = 0) -> 
     else:
         years_span = 0
     trades_per_year = (n_traded / years_span) if years_span > 0 else 0
-    sharpe_ann = (
-        sharpe_ratio * (trades_per_year ** 0.5)
-        if sharpe_ratio is not None and trades_per_year > 0
-        else None
-    )
+    sharpe_ann = sharpe_ratio * (trades_per_year**0.5) if sharpe_ratio is not None and trades_per_year > 0 else None
 
     # FIX (F-11): Lo (2002) autocorrelation-adjusted annualized Sharpe.
     # Raw sharpe_ann assumes iid returns. If returns are positively
@@ -549,7 +586,7 @@ def compute_metrics(outcomes: list[dict], cost_spec=None, n_trials: int = 0) -> 
             # Lo (2002): q = 1 + 2 * rho_1 (first-order approximation)
             # Clamp q to [0.1, 10] to prevent extreme adjustments from noisy estimates
             q = max(0.1, min(10.0, 1.0 + 2.0 * autocorr_lag1))
-            sharpe_ann_adj = sharpe_ann / (q ** 0.5)
+            sharpe_ann_adj = sharpe_ann / (q**0.5)
 
     # FIX (F-04): One-sample t-test p-value for H0: mean(pnl_r) = 0.
     # This tests whether the strategy's edge is statistically distinguishable
@@ -572,10 +609,10 @@ def compute_metrics(outcomes: list[dict], cost_spec=None, n_trials: int = 0) -> 
         n_r = len(r_values)
         # Sample skewness: m3 / s^3
         m3 = sum((r - mean_r) ** 3 for r in r_values) / n_r
-        skewness = m3 / (std_r ** 3) if std_r > 0 else 0.0
+        skewness = m3 / (std_r**3) if std_r > 0 else 0.0
         # Sample excess kurtosis: m4 / s^4 - 3
         m4 = sum((r - mean_r) ** 4 for r in r_values) / n_r
-        kurtosis_excess = (m4 / (std_r ** 4) - 3.0) if std_r > 0 else 0.0
+        kurtosis_excess = (m4 / (std_r**4) - 3.0) if std_r > 0 else 0.0
 
         sharpe_haircut = _compute_haircut_sharpe(
             sharpe_per_trade=sharpe_ratio,
@@ -648,6 +685,7 @@ def compute_metrics(outcomes: list[dict], cost_spec=None, n_trials: int = 0) -> 
         "early_exit_count": len(early_exits),
     }
 
+
 def compute_dst_split_from_outcomes(outcomes: list[dict], orb_label: str) -> dict:
     """Compute winter/summer split metrics from in-memory outcome list.
 
@@ -656,8 +694,10 @@ def compute_dst_split_from_outcomes(outcomes: list[dict], orb_label: str) -> dic
     """
     if orb_label not in DST_AFFECTED_SESSIONS:
         return {
-            "winter_n": None, "winter_avg_r": None,
-            "summer_n": None, "summer_avg_r": None,
+            "winter_n": None,
+            "winter_avg_r": None,
+            "summer_n": None,
+            "summer_avg_r": None,
             "verdict": "CLEAN",
         }
 
@@ -668,7 +708,7 @@ def compute_dst_split_from_outcomes(outcomes: list[dict], orb_label: str) -> dic
         if o["outcome"] not in ("win", "loss"):
             continue
         td = o["trading_day"]
-        if hasattr(td, 'date'):
+        if hasattr(td, "date"):
             td = td.date()
         elif not isinstance(td, date):
             td = date.fromisoformat(str(td)[:10])
@@ -759,6 +799,7 @@ def parse_stop_multiplier(strategy_id: str) -> float:
              'MGC_TOKYO_OPEN_E2_RR2.5_CB1_ORB_G4' -> 1.0
     """
     import re
+
     # Strip DST suffix first
     sid = strategy_id
     if sid.endswith("_W") or sid.endswith("_S"):
@@ -787,6 +828,7 @@ def _load_daily_features(con, instrument, orb_minutes, start_date, end_date):
     cols = [desc[0] for desc in con.description]
     return [dict(zip(cols, r)) for r in rows]
 
+
 def _build_filter_day_sets(features, orb_labels, all_filters):
     """Pre-compute matching day sets for every (filter, orb) combo.
 
@@ -808,6 +850,7 @@ def _build_filter_day_sets(features, orb_labels, all_filters):
             result[(filter_key, orb_label)] = days
     return result
 
+
 def _ts_minute_key(ts):
     """Normalize a timestamp to UTC (year, month, day, hour, minute) tuple.
 
@@ -817,6 +860,7 @@ def _ts_minute_key(ts):
     """
     utc_ts = ts.astimezone(timezone.utc) if ts.tzinfo is not None else ts
     return (utc_ts.year, utc_ts.month, utc_ts.day, utc_ts.hour, utc_ts.minute)
+
 
 def _compute_relative_volumes(con, features, instrument, orb_labels, all_filters):
     """
@@ -903,8 +947,8 @@ def _compute_relative_volumes(con, features, instrument, orb_labels, all_filters
 
             row[f"rel_vol_{orb_label}"] = break_vol / baseline
 
-def _load_outcomes_bulk(con, instrument, orb_minutes, orb_labels, entry_models,
-                        holdout_date=None):
+
+def _load_outcomes_bulk(con, instrument, orb_minutes, orb_labels, entry_models, holdout_date=None):
     """
     Load all non-NULL outcomes in one query per (orb, entry_model).
 
@@ -939,17 +983,20 @@ def _load_outcomes_bulk(con, instrument, orb_minutes, orb_labels, entry_models,
                 key = (orb_label, em, r[1], r[2])  # (orb, em, rr, cb)
                 if key not in grouped:
                     grouped[key] = []
-                grouped[key].append({
-                    "trading_day": r[0],
-                    "outcome": r[3],
-                    "pnl_r": r[4],
-                    "mae_r": r[5],
-                    "mfe_r": r[6],
-                    "entry_price": r[7],
-                    "stop_price": r[8],
-                })
+                grouped[key].append(
+                    {
+                        "trading_day": r[0],
+                        "outcome": r[3],
+                        "pnl_r": r[4],
+                        "mae_r": r[5],
+                        "mfe_r": r[6],
+                        "entry_price": r[7],
+                        "stop_price": r[8],
+                    }
+                )
 
     return grouped
+
 
 def run_discovery(
     db_path: Path | None = None,
@@ -989,6 +1036,7 @@ def run_discovery(
 
     with duckdb.connect(str(db_path)) as con:
         from pipeline.db_config import configure_connection
+
         configure_connection(con, writing=True)
 
         # Determine which sessions to search
@@ -1023,7 +1071,11 @@ def run_discovery(
         if holdout_date is not None:
             logger.info(f"  HOLDOUT MODE: only using outcomes before {holdout_date}")
         outcomes_by_key = _load_outcomes_bulk(
-            con, instrument, orb_minutes, sessions, ENTRY_MODELS,
+            con,
+            instrument,
+            orb_minutes,
+            sessions,
+            ENTRY_MODELS,
             holdout_date=holdout_date,
         )
         logger.info(f"  {sum(len(v) for v in outcomes_by_key.values())} outcome rows loaded")
@@ -1038,7 +1090,7 @@ def run_discovery(
         for s in sessions:
             nf = len(get_filters_for_grid(instrument, s))
             total_combos += nf * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS)  # E1 (all CBs)
-            total_combos += nf * len(RR_TARGETS) * 2                          # E2+E3 (CB1 only)
+            total_combos += nf * len(RR_TARGETS) * 2  # E2+E3 (CB1 only)
         combo_idx = 0
 
         for orb_label in sessions:
@@ -1063,9 +1115,10 @@ def run_discovery(
                             # Apply DST regime filter for affected sessions
                             session_is_dst_affected = orb_label in DST_AFFECTED_SESSIONS
                             if dst_regime is not None and session_is_dst_affected:
-                                want_winter = (dst_regime == "winter")
+                                want_winter = dst_regime == "winter"
                                 outcomes = [
-                                    o for o in outcomes
+                                    o
+                                    for o in outcomes
                                     if is_winter_for_session(o["trading_day"], orb_label) == want_winter
                                 ]
 
@@ -1088,7 +1141,12 @@ def run_discovery(
                                 # use dst_regime if this session is DST-affected, else no suffix
                                 effective_regime = dst_regime if session_is_dst_affected else None
                                 strategy_id = make_strategy_id(
-                                    instrument, orb_label, em, rr_target, cb, filter_key,
+                                    instrument,
+                                    orb_label,
+                                    em,
+                                    rr_target,
+                                    cb,
+                                    filter_key,
                                     dst_regime=effective_regime,
                                     orb_minutes=orb_minutes,
                                     stop_multiplier=stop_mult,
@@ -1101,38 +1159,46 @@ def run_discovery(
                                 # For blended strategies, compute the full winter/summer breakdown.
                                 if dst_regime is not None and session_is_dst_affected:
                                     # All outcomes are already one regime; set split fields explicitly
-                                    n = len([o for o in sim_outcomes if o.get("outcome") not in ("scratch", "early_exit")])
+                                    n = len(
+                                        [o for o in sim_outcomes if o.get("outcome") not in ("scratch", "early_exit")]
+                                    )
                                     avg_r = metrics["expectancy_r"]
                                     if dst_regime == "winter":
                                         dst_split = {
-                                            "winter_n": n, "winter_avg_r": avg_r,
-                                            "summer_n": 0, "summer_avg_r": None,
+                                            "winter_n": n,
+                                            "winter_avg_r": avg_r,
+                                            "summer_n": 0,
+                                            "summer_avg_r": None,
                                             "verdict": "WINTER-ONLY",
                                         }
                                     else:
                                         dst_split = {
-                                            "winter_n": 0, "winter_avg_r": None,
-                                            "summer_n": n, "summer_avg_r": avg_r,
+                                            "winter_n": 0,
+                                            "winter_avg_r": None,
+                                            "summer_n": n,
+                                            "summer_avg_r": avg_r,
                                             "verdict": "SUMMER-ONLY",
                                         }
                                 else:
                                     dst_split = compute_dst_split_from_outcomes(sim_outcomes, orb_label)
 
-                                all_strategies.append({
-                                    "strategy_id": strategy_id,
-                                    "instrument": instrument,
-                                    "orb_label": orb_label,
-                                    "orb_minutes": orb_minutes,
-                                    "rr_target": rr_target,
-                                    "confirm_bars": cb,
-                                    "entry_model": em,
-                                    "filter_key": filter_key,
-                                    "filter_params": strategy_filter.to_json(),
-                                    "stop_multiplier": stop_mult,
-                                    "metrics": metrics,
-                                    "trade_day_hash": trade_day_hash,
-                                    "dst_split": dst_split,
-                                })
+                                all_strategies.append(
+                                    {
+                                        "strategy_id": strategy_id,
+                                        "instrument": instrument,
+                                        "orb_label": orb_label,
+                                        "orb_minutes": orb_minutes,
+                                        "rr_target": rr_target,
+                                        "confirm_bars": cb,
+                                        "entry_model": em,
+                                        "filter_key": filter_key,
+                                        "filter_params": strategy_filter.to_json(),
+                                        "stop_multiplier": stop_mult,
+                                        "metrics": metrics,
+                                        "trade_day_hash": trade_day_hash,
+                                        "dst_split": dst_split,
+                                    }
+                                )
 
                 if combo_idx % 500 == 0:
                     logger.info(f"  Progress: {combo_idx}/{total_combos} combos, {len(all_strategies)} strategies")
@@ -1158,36 +1224,61 @@ def run_discovery(
             for s in all_strategies:
                 m = s["metrics"]
                 dst = s["dst_split"]
-                insert_batch.append([
-                    s["strategy_id"], s["instrument"], s["orb_label"],
-                    s["orb_minutes"], s["rr_target"], s["confirm_bars"],
-                    s["entry_model"], s["filter_key"], s["filter_params"],
-                    s["stop_multiplier"],
-                    m["sample_size"], m["win_rate"],
-                    m["avg_win_r"], m["avg_loss_r"],
-                    m["expectancy_r"], m["sharpe_ratio"],
-                    m["max_drawdown_r"],
-                    m["median_risk_points"], m["avg_risk_points"],
-                    m["median_risk_dollars"], m["avg_risk_dollars"],
-                    m["avg_win_dollars"], m["avg_loss_dollars"],
-                    m["trades_per_year"], m["sharpe_ann"],
-                    m["yearly_results"],
-                    m["entry_signals"], m["scratch_count"],
-                    m["early_exit_count"],
-                    s["trade_day_hash"], s["is_canonical"],
-                    s["canonical_strategy_id"],
-                    dst["winter_n"], dst["winter_avg_r"],
-                    dst["summer_n"], dst["summer_avg_r"],
-                    dst["verdict"],
-                    None, None,  # Reset validation_status/notes
-                    existing_created.get(s["strategy_id"]),  # Preserve or DEFAULT
-                    # Audit metrics (F-04, F-11)
-                    m.get("p_value"), m.get("sharpe_ann_adj"), m.get("autocorr_lag1"),
-                    # Haircut Sharpe (Bailey & Lopez de Prado, 2014)
-                    m.get("sharpe_haircut"), m.get("skewness"), m.get("kurtosis_excess"),
-                    # Multiple testing audit (Chordia et al 2018, Bailey 2018)
-                    m.get("n_trials_at_discovery"), m.get("fst_hurdle"),
-                ])
+                insert_batch.append(
+                    [
+                        s["strategy_id"],
+                        s["instrument"],
+                        s["orb_label"],
+                        s["orb_minutes"],
+                        s["rr_target"],
+                        s["confirm_bars"],
+                        s["entry_model"],
+                        s["filter_key"],
+                        s["filter_params"],
+                        s["stop_multiplier"],
+                        m["sample_size"],
+                        m["win_rate"],
+                        m["avg_win_r"],
+                        m["avg_loss_r"],
+                        m["expectancy_r"],
+                        m["sharpe_ratio"],
+                        m["max_drawdown_r"],
+                        m["median_risk_points"],
+                        m["avg_risk_points"],
+                        m["median_risk_dollars"],
+                        m["avg_risk_dollars"],
+                        m["avg_win_dollars"],
+                        m["avg_loss_dollars"],
+                        m["trades_per_year"],
+                        m["sharpe_ann"],
+                        m["yearly_results"],
+                        m["entry_signals"],
+                        m["scratch_count"],
+                        m["early_exit_count"],
+                        s["trade_day_hash"],
+                        s["is_canonical"],
+                        s["canonical_strategy_id"],
+                        dst["winter_n"],
+                        dst["winter_avg_r"],
+                        dst["summer_n"],
+                        dst["summer_avg_r"],
+                        dst["verdict"],
+                        None,
+                        None,  # Reset validation_status/notes
+                        existing_created.get(s["strategy_id"]),  # Preserve or DEFAULT
+                        # Audit metrics (F-04, F-11)
+                        m.get("p_value"),
+                        m.get("sharpe_ann_adj"),
+                        m.get("autocorr_lag1"),
+                        # Haircut Sharpe (Bailey & Lopez de Prado, 2014)
+                        m.get("sharpe_haircut"),
+                        m.get("skewness"),
+                        m.get("kurtosis_excess"),
+                        # Multiple testing audit (Chordia et al 2018, Bailey 2018)
+                        m.get("n_trials_at_discovery"),
+                        m.get("fst_hurdle"),
+                    ]
+                )
 
                 if len(insert_batch) >= 500:
                     _flush_batch_df(con, insert_batch)
@@ -1198,38 +1289,42 @@ def run_discovery(
             con.commit()
 
         total_strategies = len(all_strategies)
-        logger.info(f"Discovered {total_strategies} strategies "
-                    f"({n_canonical} canonical, {n_alias} aliases) "
-                    f"from {total_combos} combos")
+        logger.info(
+            f"Discovered {total_strategies} strategies "
+            f"({n_canonical} canonical, {n_alias} aliases) "
+            f"from {total_combos} combos"
+        )
         if dry_run:
             logger.info("  (DRY RUN -- no data written)")
 
         return total_strategies
 
+
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Grid search over strategy variants"
-    )
+    parser = argparse.ArgumentParser(description="Grid search over strategy variants")
     parser.add_argument("--instrument", default="MGC", help="Instrument symbol")
     parser.add_argument("--start", type=date.fromisoformat, help="Start date")
     parser.add_argument("--end", type=date.fromisoformat, help="End date")
     parser.add_argument("--orb-minutes", type=int, default=5, help="ORB duration")
     parser.add_argument("--dry-run", action="store_true", help="No DB writes")
-    parser.add_argument("--db", type=str, default=None,
-                        help="Database path (default: gold.db)")
+    parser.add_argument("--db", type=str, default=None, help="Database path (default: gold.db)")
     parser.add_argument(
-        "--dst-regime", choices=["winter", "summer"], default=None,
+        "--dst-regime",
+        choices=["winter", "summer"],
+        default=None,
         help="Restrict DST-affected sessions (CME_REOPEN/LONDON_METALS/NYSE_OPEN/US_DATA_830) to one regime. "
-             "Produces _W or _S strategy IDs. Clean sessions unaffected. "
-             "Run twice (--dst-regime winter AND --dst-regime summer) to replace all blended strategies.",
+        "Produces _W or _S strategy IDs. Clean sessions unaffected. "
+        "Run twice (--dst-regime winter AND --dst-regime summer) to replace all blended strategies.",
     )
     parser.add_argument(
-        "--holdout-date", type=date.fromisoformat, default=None,
+        "--holdout-date",
+        type=date.fromisoformat,
+        default=None,
         help="Temporal holdout cutoff (YYYY-MM-DD). Discovery only uses outcomes "
-             "BEFORE this date. Use with validator --oos-start for true OOS testing. "
-             "Example: --holdout-date 2025-01-01 discovers on pre-2025 data.",
+        "BEFORE this date. Use with validator --oos-start for true OOS testing. "
+        "Example: --holdout-date 2025-01-01 discovers on pre-2025 data.",
     )
     args = parser.parse_args()
 
@@ -1245,6 +1340,7 @@ def main():
         dst_regime=args.dst_regime,
         holdout_date=args.holdout_date,
     )
+
 
 if __name__ == "__main__":
     main()

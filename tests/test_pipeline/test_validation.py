@@ -17,6 +17,7 @@ from pipeline.ingest_dbn_mgc import validate_chunk, validate_timestamp_utc, chec
 # validate_chunk tests
 # =============================================================================
 
+
 class TestValidateChunk:
     """Tests for OHLCV validation (vectorized, fail-closed)."""
 
@@ -28,16 +29,21 @@ class TestValidateChunk:
 
     def test_nan_fails(self):
         utc = ZoneInfo("UTC")
-        df = pd.DataFrame({
-            'open': [2350.0, float('nan')],
-            'high': [2352.0, 2353.0],
-            'low': [2349.0, 2350.0],
-            'close': [2351.0, 2349.0],
-            'volume': [100, 150],
-        }, index=pd.DatetimeIndex([
-            datetime(2024, 1, 1, 0, 0, tzinfo=utc),
-            datetime(2024, 1, 1, 0, 1, tzinfo=utc),
-        ]))
+        df = pd.DataFrame(
+            {
+                "open": [2350.0, float("nan")],
+                "high": [2352.0, 2353.0],
+                "low": [2349.0, 2350.0],
+                "close": [2351.0, 2349.0],
+                "volume": [100, 150],
+            },
+            index=pd.DatetimeIndex(
+                [
+                    datetime(2024, 1, 1, 0, 0, tzinfo=utc),
+                    datetime(2024, 1, 1, 0, 1, tzinfo=utc),
+                ]
+            ),
+        )
 
         valid, reason, bad = validate_chunk(df)
         assert valid is False
@@ -45,16 +51,21 @@ class TestValidateChunk:
 
     def test_infinite_price_fails(self):
         utc = ZoneInfo("UTC")
-        df = pd.DataFrame({
-            'open': [2350.0, float('inf')],
-            'high': [2352.0, float('inf')],
-            'low': [2349.0, 2350.0],
-            'close': [2351.0, 2349.0],
-            'volume': [100, 150],
-        }, index=pd.DatetimeIndex([
-            datetime(2024, 1, 1, 0, 0, tzinfo=utc),
-            datetime(2024, 1, 1, 0, 1, tzinfo=utc),
-        ]))
+        df = pd.DataFrame(
+            {
+                "open": [2350.0, float("inf")],
+                "high": [2352.0, float("inf")],
+                "low": [2349.0, 2350.0],
+                "close": [2351.0, 2349.0],
+                "volume": [100, 150],
+            },
+            index=pd.DatetimeIndex(
+                [
+                    datetime(2024, 1, 1, 0, 0, tzinfo=utc),
+                    datetime(2024, 1, 1, 0, 1, tzinfo=utc),
+                ]
+            ),
+        )
 
         valid, reason, bad = validate_chunk(df)
         assert valid is False
@@ -62,16 +73,21 @@ class TestValidateChunk:
 
     def test_negative_price_fails(self):
         utc = ZoneInfo("UTC")
-        df = pd.DataFrame({
-            'open': [2350.0, -1.0],
-            'high': [2352.0, 2353.0],
-            'low': [2349.0, -1.0],
-            'close': [2351.0, 2349.0],
-            'volume': [100, 150],
-        }, index=pd.DatetimeIndex([
-            datetime(2024, 1, 1, 0, 0, tzinfo=utc),
-            datetime(2024, 1, 1, 0, 1, tzinfo=utc),
-        ]))
+        df = pd.DataFrame(
+            {
+                "open": [2350.0, -1.0],
+                "high": [2352.0, 2353.0],
+                "low": [2349.0, -1.0],
+                "close": [2351.0, 2349.0],
+                "volume": [100, 150],
+            },
+            index=pd.DatetimeIndex(
+                [
+                    datetime(2024, 1, 1, 0, 0, tzinfo=utc),
+                    datetime(2024, 1, 1, 0, 1, tzinfo=utc),
+                ]
+            ),
+        )
 
         valid, reason, bad = validate_chunk(df)
         assert valid is False
@@ -79,30 +95,40 @@ class TestValidateChunk:
 
     def test_zero_price_fails(self):
         utc = ZoneInfo("UTC")
-        df = pd.DataFrame({
-            'open': [0.0],
-            'high': [0.0],
-            'low': [0.0],
-            'close': [0.0],
-            'volume': [100],
-        }, index=pd.DatetimeIndex([
-            datetime(2024, 1, 1, 0, 0, tzinfo=utc),
-        ]))
+        df = pd.DataFrame(
+            {
+                "open": [0.0],
+                "high": [0.0],
+                "low": [0.0],
+                "close": [0.0],
+                "volume": [100],
+            },
+            index=pd.DatetimeIndex(
+                [
+                    datetime(2024, 1, 1, 0, 0, tzinfo=utc),
+                ]
+            ),
+        )
 
         valid, reason, bad = validate_chunk(df)
         assert valid is False
 
     def test_high_less_than_low_fails(self):
         utc = ZoneInfo("UTC")
-        df = pd.DataFrame({
-            'open': [2350.0],
-            'high': [2348.0],  # high < low
-            'low': [2351.0],
-            'close': [2350.0],
-            'volume': [100],
-        }, index=pd.DatetimeIndex([
-            datetime(2024, 1, 1, 0, 0, tzinfo=utc),
-        ]))
+        df = pd.DataFrame(
+            {
+                "open": [2350.0],
+                "high": [2348.0],  # high < low
+                "low": [2351.0],
+                "close": [2350.0],
+                "volume": [100],
+            },
+            index=pd.DatetimeIndex(
+                [
+                    datetime(2024, 1, 1, 0, 0, tzinfo=utc),
+                ]
+            ),
+        )
 
         valid, reason, bad = validate_chunk(df)
         assert valid is False
@@ -110,15 +136,20 @@ class TestValidateChunk:
 
     def test_negative_volume_fails(self):
         utc = ZoneInfo("UTC")
-        df = pd.DataFrame({
-            'open': [2350.0],
-            'high': [2352.0],
-            'low': [2349.0],
-            'close': [2351.0],
-            'volume': [-1],
-        }, index=pd.DatetimeIndex([
-            datetime(2024, 1, 1, 0, 0, tzinfo=utc),
-        ]))
+        df = pd.DataFrame(
+            {
+                "open": [2350.0],
+                "high": [2352.0],
+                "low": [2349.0],
+                "close": [2351.0],
+                "volume": [-1],
+            },
+            index=pd.DatetimeIndex(
+                [
+                    datetime(2024, 1, 1, 0, 0, tzinfo=utc),
+                ]
+            ),
+        )
 
         valid, reason, bad = validate_chunk(df)
         assert valid is False
@@ -126,30 +157,40 @@ class TestValidateChunk:
 
     def test_zero_volume_passes(self):
         utc = ZoneInfo("UTC")
-        df = pd.DataFrame({
-            'open': [2350.0],
-            'high': [2352.0],
-            'low': [2349.0],
-            'close': [2351.0],
-            'volume': [0],
-        }, index=pd.DatetimeIndex([
-            datetime(2024, 1, 1, 0, 0, tzinfo=utc),
-        ]))
+        df = pd.DataFrame(
+            {
+                "open": [2350.0],
+                "high": [2352.0],
+                "low": [2349.0],
+                "close": [2351.0],
+                "volume": [0],
+            },
+            index=pd.DatetimeIndex(
+                [
+                    datetime(2024, 1, 1, 0, 0, tzinfo=utc),
+                ]
+            ),
+        )
 
         valid, reason, bad = validate_chunk(df)
         assert valid is True
 
     def test_missing_column_fails(self):
         utc = ZoneInfo("UTC")
-        df = pd.DataFrame({
-            'open': [2350.0],
-            'high': [2352.0],
-            # 'low' missing
-            'close': [2351.0],
-            'volume': [100],
-        }, index=pd.DatetimeIndex([
-            datetime(2024, 1, 1, 0, 0, tzinfo=utc),
-        ]))
+        df = pd.DataFrame(
+            {
+                "open": [2350.0],
+                "high": [2352.0],
+                # 'low' missing
+                "close": [2351.0],
+                "volume": [100],
+            },
+            index=pd.DatetimeIndex(
+                [
+                    datetime(2024, 1, 1, 0, 0, tzinfo=utc),
+                ]
+            ),
+        )
 
         valid, reason, bad = validate_chunk(df)
         assert valid is False
@@ -157,13 +198,16 @@ class TestValidateChunk:
 
     def test_empty_dataframe_passes(self):
         utc = ZoneInfo("UTC")
-        df = pd.DataFrame({
-            'open': pd.Series(dtype='float64'),
-            'high': pd.Series(dtype='float64'),
-            'low': pd.Series(dtype='float64'),
-            'close': pd.Series(dtype='float64'),
-            'volume': pd.Series(dtype='int64'),
-        }, index=pd.DatetimeIndex([], tz=utc))
+        df = pd.DataFrame(
+            {
+                "open": pd.Series(dtype="float64"),
+                "high": pd.Series(dtype="float64"),
+                "low": pd.Series(dtype="float64"),
+                "close": pd.Series(dtype="float64"),
+                "volume": pd.Series(dtype="int64"),
+            },
+            index=pd.DatetimeIndex([], tz=utc),
+        )
         valid, reason, bad = validate_chunk(df)
         assert valid is True
 
@@ -171,6 +215,7 @@ class TestValidateChunk:
 # =============================================================================
 # validate_timestamp_utc tests
 # =============================================================================
+
 
 class TestValidateTimestampUtc:
     """Tests for timezone verification gate."""
@@ -181,26 +226,21 @@ class TestValidateTimestampUtc:
         assert reason == ""
 
     def test_naive_fails(self):
-        df = pd.DataFrame(
-            {'open': [1.0]},
-            index=pd.DatetimeIndex([datetime(2024, 1, 1)])
-        )
+        df = pd.DataFrame({"open": [1.0]}, index=pd.DatetimeIndex([datetime(2024, 1, 1)]))
         valid, reason = validate_timestamp_utc(df)
         assert valid is False
         assert "None" in reason or "naive" in reason.lower()
 
     def test_wrong_tz_fails(self):
-        ts = pd.DatetimeIndex([
-            datetime(2024, 1, 1, tzinfo=ZoneInfo("US/Eastern"))
-        ])
-        df = pd.DataFrame({'open': [1.0]}, index=ts)
+        ts = pd.DatetimeIndex([datetime(2024, 1, 1, tzinfo=ZoneInfo("US/Eastern"))])
+        df = pd.DataFrame({"open": [1.0]}, index=ts)
         valid, reason = validate_timestamp_utc(df)
         assert valid is False
         assert "UTC" in reason
 
     def test_null_timestamp_fails(self):
         ts = pd.DatetimeIndex([pd.NaT], tz="UTC")
-        df = pd.DataFrame({'open': [1.0]}, index=ts)
+        df = pd.DataFrame({"open": [1.0]}, index=ts)
         valid, reason = validate_timestamp_utc(df)
         assert valid is False
         assert "Null" in reason or "null" in reason.lower()
@@ -210,11 +250,13 @@ class TestValidateTimestampUtc:
 # check_merge_integrity tests
 # =============================================================================
 
+
 class TestCheckMergeIntegrity:
     """Tests for post-merge integrity gate."""
 
     def test_accepts_symbol_parameter(self):
         """check_merge_integrity should accept optional symbol parameter."""
         import inspect
+
         sig = inspect.signature(check_merge_integrity)
-        assert 'symbol' in sig.parameters, "check_merge_integrity must accept symbol param"
+        assert "symbol" in sig.parameters, "check_merge_integrity must accept symbol param"

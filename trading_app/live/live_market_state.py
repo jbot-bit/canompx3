@@ -4,6 +4,7 @@ Builds ORB ranges incrementally from live 1-minute bars.
 CRITICAL: DYNAMIC_ORB_RESOLVERS[label](date) returns (hour, minute) in
 Brisbane local time (UTC+10, no DST). Must convert to UTC for bar comparisons.
 """
+
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
@@ -34,8 +35,7 @@ def _session_start_utc(session_label: str, trading_day: date) -> Optional[dateti
 
     # Before 09:00 Brisbane = next calendar day (midnight-crossing sessions)
     cal_date = trading_day + timedelta(days=1) if bris_h < 9 else trading_day
-    bris_dt = datetime(cal_date.year, cal_date.month, cal_date.day,
-                       bris_h, bris_m, 0, tzinfo=_BRISBANE)
+    bris_dt = datetime(cal_date.year, cal_date.month, cal_date.day, bris_h, bris_m, 0, tzinfo=_BRISBANE)
     return bris_dt.astimezone(_UTC)
 
 

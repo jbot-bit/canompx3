@@ -94,6 +94,7 @@ class TestQualityGateContracts:
         # importing the function and checking the docstring + source.
         import inspect
         from trading_app.ml.meta_label import train_per_session_meta_label
+
         source = inspect.getsource(train_per_session_meta_label)
 
         # Gate 1: honest_delta_r < 0
@@ -109,6 +110,7 @@ class TestQualityGateContracts:
         """All 4 quality gates are present in the training function."""
         import inspect
         from trading_app.ml.meta_label import train_per_session_meta_label
+
         source = inspect.getsource(train_per_session_meta_label)
 
         # Count gate comments
@@ -127,6 +129,7 @@ class TestQualityGateContracts:
         """Threshold rejection requires n_kept_test < 10."""
         import inspect
         from trading_app.ml.meta_label import train_per_session_meta_label
+
         source = inspect.getsource(train_per_session_meta_label)
 
         assert "n_kept_test < 10" in source
@@ -135,5 +138,6 @@ class TestQualityGateContracts:
         """60/20/20 split is encoded in the config hash."""
         from trading_app.ml.config import compute_config_hash
         import inspect
+
         source = inspect.getsource(compute_config_hash)
         assert "split=60/20/20" in source

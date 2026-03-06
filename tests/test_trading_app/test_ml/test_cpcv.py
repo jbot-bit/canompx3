@@ -24,11 +24,14 @@ class TestCPCVSplits:
 
     def test_returns_dict_with_required_keys(self, sample_data):
         from sklearn.ensemble import RandomForestClassifier
+
         X, y, days = sample_data
         result = cpcv_score(
             RandomForestClassifier,
             {"n_estimators": 10, "random_state": 42},
-            X, y, days,
+            X,
+            y,
+            days,
             max_splits=3,
         )
         assert "auc_mean" in result
@@ -38,22 +41,28 @@ class TestCPCVSplits:
 
     def test_max_splits_cap(self, sample_data):
         from sklearn.ensemble import RandomForestClassifier
+
         X, y, days = sample_data
         result = cpcv_score(
             RandomForestClassifier,
             {"n_estimators": 10, "random_state": 42},
-            X, y, days,
+            X,
+            y,
+            days,
             max_splits=5,
         )
         assert result["n_splits"] <= 5
 
     def test_auc_scores_are_valid(self, sample_data):
         from sklearn.ensemble import RandomForestClassifier
+
         X, y, days = sample_data
         result = cpcv_score(
             RandomForestClassifier,
             {"n_estimators": 10, "random_state": 42},
-            X, y, days,
+            X,
+            y,
+            days,
             max_splits=3,
         )
         for score in result["auc_scores"]:
@@ -62,13 +71,16 @@ class TestCPCVSplits:
     def test_no_train_test_overlap(self, sample_data):
         """Train and test indices must be disjoint in each split."""
         from sklearn.ensemble import RandomForestClassifier
+
         X, y, days = sample_data
 
         # Access internals by running with max_splits=1
         result = cpcv_score(
             RandomForestClassifier,
             {"n_estimators": 10, "random_state": 42},
-            X, y, days,
+            X,
+            y,
+            days,
             max_splits=1,
         )
         # If it ran, train/test didn't overlap (model trained successfully)

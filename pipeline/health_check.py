@@ -16,6 +16,7 @@ from pipeline.paths import GOLD_DB_PATH, DAILY_DBN_DIR
 
 PROJECT_ROOT = Path(__file__).parent.parent
 
+
 def check_python_deps() -> tuple[bool, str]:
     """Check Python version and key dependencies."""
     version = f"Python {sys.version.split()[0]}"
@@ -28,6 +29,7 @@ def check_python_deps() -> tuple[bool, str]:
     if missing:
         return False, f"{version}, missing: {', '.join(missing)}"
     return True, f"{version}, all deps installed"
+
 
 def check_database() -> tuple[bool, str]:
     """Check gold.db exists and has data.
@@ -63,6 +65,7 @@ def check_database() -> tuple[bool, str]:
         f"{counts['bars_5m']:,} bars_5m, {counts['daily_features']:,} daily_features)"
     )
 
+
 def check_dbn_files() -> tuple[bool, str]:
     """Check DBN files are present."""
     if not DAILY_DBN_DIR.exists():
@@ -72,12 +75,15 @@ def check_dbn_files() -> tuple[bool, str]:
         return False, "No .dbn.zst files found"
     return True, f"{count:,} DBN files present"
 
+
 def check_drift() -> tuple[bool, str]:
     """Run drift detection."""
     try:
         proc = subprocess.run(
             [sys.executable, "pipeline/check_drift.py"],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True,
+            text=True,
+            timeout=30,
             cwd=str(PROJECT_ROOT),
         )
         if proc.returncode == 0:
@@ -96,12 +102,15 @@ def check_drift() -> tuple[bool, str]:
     except Exception as e:
         return False, f"Drift detection error: {e}"
 
+
 def check_tests() -> tuple[bool, str]:
     """Run test suite."""
     try:
         proc = subprocess.run(
             [sys.executable, "-m", "pytest", "tests/", "-x", "-q", "--tb=no"],
-            capture_output=True, text=True, timeout=300,
+            capture_output=True,
+            text=True,
+            timeout=300,
             cwd=str(PROJECT_ROOT),
         )
         # Parse "N passed" from output
@@ -112,12 +121,15 @@ def check_tests() -> tuple[bool, str]:
     except Exception as e:
         return False, f"Tests error: {e}"
 
+
 def check_integrity() -> tuple[bool, str]:
     """Run data integrity audit."""
     try:
         proc = subprocess.run(
             [sys.executable, "scripts/tools/audit_integrity.py"],
-            capture_output=True, text=True, timeout=60,
+            capture_output=True,
+            text=True,
+            timeout=60,
             cwd=str(PROJECT_ROOT),
         )
         if proc.returncode == 0:
@@ -134,6 +146,7 @@ def check_integrity() -> tuple[bool, str]:
     except Exception as e:
         return False, f"Integrity audit error: {e}"
 
+
 def check_git_hooks() -> tuple[bool, str]:
     """Check git hooks are configured."""
     hooks_dir = PROJECT_ROOT / ".githooks"
@@ -144,7 +157,9 @@ def check_git_hooks() -> tuple[bool, str]:
     try:
         proc = subprocess.run(
             ["git", "config", "core.hooksPath"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
             cwd=str(PROJECT_ROOT),
         )
         hooks_path = proc.stdout.strip()
@@ -154,6 +169,7 @@ def check_git_hooks() -> tuple[bool, str]:
     except Exception:
         return False, "Git hooks: cannot read git config"
 
+
 def check_m25_audit() -> tuple[bool, str]:
     """Run M2.5 second-opinion audit on recently changed files.
 
@@ -162,14 +178,16 @@ def check_m25_audit() -> tuple[bool, str]:
     """
     import os
     from dotenv import load_dotenv
+
     load_dotenv()
     if not os.environ.get("MINIMAX_API_KEY"):
         return True, "M2.5 audit: skipped (no MINIMAX_API_KEY)"
     try:
         proc = subprocess.run(
-            [sys.executable, "scripts/tools/m25_auto_audit.py",
-             "--since", "HEAD~1", "--quick", "--advisory"],
-            capture_output=True, text=True, timeout=300,
+            [sys.executable, "scripts/tools/m25_auto_audit.py", "--since", "HEAD~1", "--quick", "--advisory"],
+            capture_output=True,
+            text=True,
+            timeout=300,
             cwd=str(PROJECT_ROOT),
         )
         # Parse output for summary line
@@ -245,6 +263,7 @@ def main():
     else:
         print("SOME CHECKS FAILED")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

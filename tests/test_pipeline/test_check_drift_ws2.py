@@ -35,27 +35,36 @@ class TestSchemaQueryConsistency:
     """Check 4: SQL table refs in pipeline/ must match init_db.py schema."""
 
     def test_catches_unknown_table(self, tmp_path):
-        _mkfile(tmp_path / "init_db.py", 'CREATE TABLE IF NOT EXISTS bars_1m (ts_utc TEXT)')
-        _mkfile(tmp_path / "run_pipeline.py", '''
+        _mkfile(tmp_path / "init_db.py", "CREATE TABLE IF NOT EXISTS bars_1m (ts_utc TEXT)")
+        _mkfile(
+            tmp_path / "run_pipeline.py",
+            '''
 sql = """SELECT * FROM fake_table WHERE 1=1"""
-''')
+''',
+        )
         violations = check_drift.check_schema_query_consistency(tmp_path)
         assert len(violations) > 0
         assert "fake_table" in violations[0]
 
     def test_passes_known_table(self, tmp_path):
-        _mkfile(tmp_path / "init_db.py", 'CREATE TABLE IF NOT EXISTS bars_1m (ts_utc TEXT)')
-        _mkfile(tmp_path / "run_pipeline.py", '''
+        _mkfile(tmp_path / "init_db.py", "CREATE TABLE IF NOT EXISTS bars_1m (ts_utc TEXT)")
+        _mkfile(
+            tmp_path / "run_pipeline.py",
+            '''
 sql = """SELECT * FROM bars_1m WHERE symbol = ?"""
-''')
+''',
+        )
         violations = check_drift.check_schema_query_consistency(tmp_path)
         assert len(violations) == 0
 
     def test_skips_cte_names(self, tmp_path):
-        _mkfile(tmp_path / "init_db.py", 'CREATE TABLE IF NOT EXISTS bars_1m (ts_utc TEXT)')
-        _mkfile(tmp_path / "run_pipeline.py", '''
+        _mkfile(tmp_path / "init_db.py", "CREATE TABLE IF NOT EXISTS bars_1m (ts_utc TEXT)")
+        _mkfile(
+            tmp_path / "run_pipeline.py",
+            '''
 sql = """WITH recent AS (SELECT * FROM bars_1m) SELECT * FROM recent"""
-''')
+''',
+        )
         violations = check_drift.check_schema_query_consistency(tmp_path)
         assert len(violations) == 0
 
@@ -67,15 +76,13 @@ class TestImportCycles:
     """Check 5: ingest_dbn_mgc.py must not import from ingest_dbn.py."""
 
     def test_catches_circular_import(self, tmp_path):
-        _mkfile(tmp_path / "ingest_dbn_mgc.py",
-                "from pipeline.ingest_dbn import validate_chunk\n")
+        _mkfile(tmp_path / "ingest_dbn_mgc.py", "from pipeline.ingest_dbn import validate_chunk\n")
         violations = check_drift.check_import_cycles(tmp_path)
         assert len(violations) > 0
         assert "circular" in violations[0].lower()
 
     def test_passes_clean(self, tmp_path):
-        _mkfile(tmp_path / "ingest_dbn_mgc.py",
-                "from pipeline.paths import GOLD_DB_PATH\n")
+        _mkfile(tmp_path / "ingest_dbn_mgc.py", "from pipeline.paths import GOLD_DB_PATH\n")
         violations = check_drift.check_import_cycles(tmp_path)
         assert len(violations) == 0
 
@@ -113,20 +120,23 @@ class TestConnectionLeaksPipeline:
     """Check 7: duckdb.connect() must have matching close/finally."""
 
     def test_catches_leak(self, tmp_path):
-        _mkfile(tmp_path / "leaky.py",
-                "import duckdb\ncon = duckdb.connect('test.db')\ncon.execute('SELECT 1')\n")
+        _mkfile(tmp_path / "leaky.py", "import duckdb\ncon = duckdb.connect('test.db')\ncon.execute('SELECT 1')\n")
         violations = check_drift.check_connection_leaks(tmp_path)
         assert len(violations) > 0
 
     def test_passes_with_close(self, tmp_path):
-        _mkfile(tmp_path / "good.py",
-                "import duckdb\ncon = duckdb.connect('test.db')\ncon.execute('SELECT 1')\ncon.close()\n")
+        _mkfile(
+            tmp_path / "good.py",
+            "import duckdb\ncon = duckdb.connect('test.db')\ncon.execute('SELECT 1')\ncon.close()\n",
+        )
         violations = check_drift.check_connection_leaks(tmp_path)
         assert len(violations) == 0
 
     def test_passes_with_finally(self, tmp_path):
-        _mkfile(tmp_path / "good.py",
-                "import duckdb\ncon = duckdb.connect('test.db')\ntry:\n    pass\nfinally:\n    con.close()\n")
+        _mkfile(
+            tmp_path / "good.py",
+            "import duckdb\ncon = duckdb.connect('test.db')\ntry:\n    pass\nfinally:\n    con.close()\n",
+        )
         violations = check_drift.check_connection_leaks(tmp_path)
         assert len(violations) == 0
 
@@ -138,23 +148,24 @@ class TestDashboardReadonly:
     """Check 8: dashboard.py must be read-only (no SQL writes)."""
 
     def test_catches_insert(self, tmp_path):
-        _mkfile(tmp_path / "dashboard.py",
-                "con.execute(\"INSERT INTO bars_1m VALUES (?)\")\n"
-                "con = duckdb.connect('db', read_only=True)\n")
+        _mkfile(
+            tmp_path / "dashboard.py",
+            "con.execute(\"INSERT INTO bars_1m VALUES (?)\")\ncon = duckdb.connect('db', read_only=True)\n",
+        )
         violations = check_drift.check_dashboard_readonly(tmp_path)
         assert len(violations) > 0
 
     def test_catches_missing_readonly(self, tmp_path):
-        _mkfile(tmp_path / "dashboard.py",
-                "con = duckdb.connect(str(db_path))\nresult = con.execute('SELECT 1')\n")
+        _mkfile(tmp_path / "dashboard.py", "con = duckdb.connect(str(db_path))\nresult = con.execute('SELECT 1')\n")
         violations = check_drift.check_dashboard_readonly(tmp_path)
         assert len(violations) > 0
         assert "read_only" in violations[0]
 
     def test_passes_clean(self, tmp_path):
-        _mkfile(tmp_path / "dashboard.py",
-                "con = duckdb.connect(str(db_path), read_only=True)\n"
-                "result = con.execute('SELECT * FROM bars_1m')\n")
+        _mkfile(
+            tmp_path / "dashboard.py",
+            "con = duckdb.connect(str(db_path), read_only=True)\nresult = con.execute('SELECT * FROM bars_1m')\n",
+        )
         violations = check_drift.check_dashboard_readonly(tmp_path)
         assert len(violations) == 0
 
@@ -178,15 +189,13 @@ class TestEntryPriceSanity:
 
     def test_catches_hardcoded_entry(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
-        _mkfile(tmp_path / "trading_app" / "outcome_builder.py",
-                "entry_price = orb_high  # bad\n")
+        _mkfile(tmp_path / "trading_app" / "outcome_builder.py", "entry_price = orb_high  # bad\n")
         violations = check_drift.check_entry_price_sanity()
         assert len(violations) > 0
 
     def test_passes_clean(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
-        _mkfile(tmp_path / "trading_app" / "outcome_builder.py",
-                "entry_price = compute_entry(model, row)\n")
+        _mkfile(tmp_path / "trading_app" / "outcome_builder.py", "entry_price = compute_entry(model, row)\n")
         violations = check_drift.check_entry_price_sanity()
         assert len(violations) == 0
 
@@ -200,16 +209,14 @@ class TestNestedIsolation:
     def test_catches_db_manager_import(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
         nested = tmp_path / "trading_app" / "nested"
-        _mkfile(nested / "discovery.py",
-                "from trading_app.db_manager import init_schema\n")
+        _mkfile(nested / "discovery.py", "from trading_app.db_manager import init_schema\n")
         violations = check_drift.check_nested_isolation()
         assert len(violations) > 0
 
     def test_passes_clean(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
         nested = tmp_path / "trading_app" / "nested"
-        _mkfile(nested / "discovery.py",
-                "from pipeline.paths import GOLD_DB_PATH\n")
+        _mkfile(nested / "discovery.py", "from pipeline.paths import GOLD_DB_PATH\n")
         violations = check_drift.check_nested_isolation()
         assert len(violations) == 0
 
@@ -223,16 +230,14 @@ class TestNestedProductionWrites:
     def test_catches_insert_validated(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
         nested = tmp_path / "trading_app" / "nested"
-        _mkfile(nested / "builder.py",
-                'con.execute("INSERT INTO validated_setups VALUES (?)")\n')
+        _mkfile(nested / "builder.py", 'con.execute("INSERT INTO validated_setups VALUES (?)")\n')
         violations = check_drift.check_nested_production_writes()
         assert len(violations) > 0
 
     def test_passes_own_table(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
         nested = tmp_path / "trading_app" / "nested"
-        _mkfile(nested / "builder.py",
-                'con.execute("INSERT INTO nested_strategies VALUES (?)")\n')
+        _mkfile(nested / "builder.py", 'con.execute("INSERT INTO nested_strategies VALUES (?)")\n')
         violations = check_drift.check_nested_production_writes()
         assert len(violations) == 0
 
@@ -245,31 +250,31 @@ class TestSchemaQueryConsistencyTradingApp:
 
     def test_catches_unknown_table(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
-        _mkfile(tmp_path / "pipeline" / "init_db.py",
-                'CREATE TABLE IF NOT EXISTS bars_1m (ts TEXT)')
-        _mkfile(tmp_path / "trading_app" / "db_manager.py",
-                'CREATE TABLE IF NOT EXISTS validated_setups (id TEXT)')
-        _mkfile(tmp_path / "trading_app" / "query.py", '''
+        _mkfile(tmp_path / "pipeline" / "init_db.py", "CREATE TABLE IF NOT EXISTS bars_1m (ts TEXT)")
+        _mkfile(tmp_path / "trading_app" / "db_manager.py", "CREATE TABLE IF NOT EXISTS validated_setups (id TEXT)")
+        _mkfile(
+            tmp_path / "trading_app" / "query.py",
+            '''
 sql = """SELECT COUNT(*) FROM bogus_table WHERE 1=1
          INSERT INTO bogus_table VALUES (1)"""
-''')
-        violations = check_drift.check_schema_query_consistency_trading_app(
-            tmp_path / "trading_app")
+''',
+        )
+        violations = check_drift.check_schema_query_consistency_trading_app(tmp_path / "trading_app")
         assert len(violations) > 0
         assert "bogus_table" in violations[0]
 
     def test_passes_known_table(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
-        _mkfile(tmp_path / "pipeline" / "init_db.py",
-                'CREATE TABLE IF NOT EXISTS bars_1m (ts TEXT)')
-        _mkfile(tmp_path / "trading_app" / "db_manager.py",
-                'CREATE TABLE IF NOT EXISTS validated_setups (id TEXT)')
-        _mkfile(tmp_path / "trading_app" / "query.py", '''
+        _mkfile(tmp_path / "pipeline" / "init_db.py", "CREATE TABLE IF NOT EXISTS bars_1m (ts TEXT)")
+        _mkfile(tmp_path / "trading_app" / "db_manager.py", "CREATE TABLE IF NOT EXISTS validated_setups (id TEXT)")
+        _mkfile(
+            tmp_path / "trading_app" / "query.py",
+            '''
 sql = """SELECT COUNT(*) FROM validated_setups
          INSERT INTO bars_1m VALUES (1)"""
-''')
-        violations = check_drift.check_schema_query_consistency_trading_app(
-            tmp_path / "trading_app")
+''',
+        )
+        violations = check_drift.check_schema_query_consistency_trading_app(tmp_path / "trading_app")
         assert len(violations) == 0
 
 
@@ -287,15 +292,15 @@ class TestTimezoneHygiene:
 
     def test_catches_timedelta_10(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
-        _mkfile(tmp_path / "pipeline" / "bad.py",
-                "dt = datetime.now() + timedelta(hours=10)\n")
+        _mkfile(tmp_path / "pipeline" / "bad.py", "dt = datetime.now() + timedelta(hours=10)\n")
         violations = check_drift.check_timezone_hygiene()
         assert len(violations) > 0
 
     def test_passes_zoneinfo(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
-        _mkfile(tmp_path / "pipeline" / "good.py",
-                "from zoneinfo import ZoneInfo\ntz = ZoneInfo('Australia/Brisbane')\n")
+        _mkfile(
+            tmp_path / "pipeline" / "good.py", "from zoneinfo import ZoneInfo\ntz = ZoneInfo('Australia/Brisbane')\n"
+        )
         violations = check_drift.check_timezone_hygiene()
         assert len(violations) == 0
 
@@ -308,15 +313,15 @@ class TestMarketStateReadonly:
 
     def test_catches_insert(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
-        _mkfile(tmp_path / "trading_app" / "market_state.py",
-                'con.execute("INSERT INTO bars_1m VALUES (?)")\n')
+        _mkfile(tmp_path / "trading_app" / "market_state.py", 'con.execute("INSERT INTO bars_1m VALUES (?)")\n')
         violations = check_drift.check_market_state_readonly()
         assert len(violations) > 0
 
     def test_passes_select_only(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
-        _mkfile(tmp_path / "trading_app" / "market_state.py",
-                'result = con.execute("SELECT * FROM bars_1m").fetchall()\n')
+        _mkfile(
+            tmp_path / "trading_app" / "market_state.py", 'result = con.execute("SELECT * FROM bars_1m").fetchall()\n'
+        )
         violations = check_drift.check_market_state_readonly()
         assert len(violations) == 0
 
@@ -329,18 +334,15 @@ class TestSharpeAnnPresence:
 
     def test_catches_missing_sharpe_ann(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
-        _mkfile(tmp_path / "trading_app" / "strategy_discovery.py",
-                '"trades_per_year": 252\n')
+        _mkfile(tmp_path / "trading_app" / "strategy_discovery.py", '"trades_per_year": 252\n')
         violations = check_drift.check_sharpe_ann_presence()
         assert len(violations) > 0
         assert "sharpe_ann" in violations[0]
 
     def test_passes_both_present(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
-        _mkfile(tmp_path / "trading_app" / "strategy_discovery.py",
-                '"sharpe_ann": 1.5,\n"trades_per_year": 252\n')
-        _mkfile(tmp_path / "trading_app" / "view_strategies.py",
-                'print(f"sharpe_ann={row.sharpe_ann}")\n')
+        _mkfile(tmp_path / "trading_app" / "strategy_discovery.py", '"sharpe_ann": 1.5,\n"trades_per_year": 252\n')
+        _mkfile(tmp_path / "trading_app" / "view_strategies.py", 'print(f"sharpe_ann={row.sharpe_ann}")\n')
         violations = check_drift.check_sharpe_ann_presence()
         assert len(violations) == 0
 
@@ -353,18 +355,19 @@ class TestIngestAuthorityNotice:
 
     def test_catches_missing_notice(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
-        _mkfile(tmp_path / "pipeline" / "ingest_dbn_mgc.py",
-                'if __name__ == "__main__":\n    run()\n')
+        _mkfile(tmp_path / "pipeline" / "ingest_dbn_mgc.py", 'if __name__ == "__main__":\n    run()\n')
         violations = check_drift.check_ingest_authority_notice()
         assert len(violations) > 0
 
     def test_passes_with_notice(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
-        _mkfile(tmp_path / "pipeline" / "ingest_dbn_mgc.py",
-                'if __name__ == "__main__":\n'
-                '    print("NOTE: For multi-instrument support, prefer:")\n'
-                '    print("  python pipeline/ingest_dbn.py --instrument MGC")\n'
-                '    run()\n')
+        _mkfile(
+            tmp_path / "pipeline" / "ingest_dbn_mgc.py",
+            'if __name__ == "__main__":\n'
+            '    print("NOTE: For multi-instrument support, prefer:")\n'
+            '    print("  python pipeline/ingest_dbn.py --instrument MGC")\n'
+            "    run()\n",
+        )
         violations = check_drift.check_ingest_authority_notice()
         assert len(violations) == 0
 
@@ -378,24 +381,23 @@ class TestValidationGateExistence:
     def test_catches_missing_gate(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
         # Create ingest_dbn_mgc.py without required gate functions
-        _mkfile(tmp_path / "pipeline" / "ingest_dbn_mgc.py",
-                "def process(): pass\n")
+        _mkfile(tmp_path / "pipeline" / "ingest_dbn_mgc.py", "def process(): pass\n")
         violations = check_drift.check_validation_gate_existence()
         assert len(violations) > 0
         assert "validate_chunk" in violations[0] or "Missing gate" in violations[0]
 
     def test_passes_all_gates(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
-        _mkfile(tmp_path / "pipeline" / "ingest_dbn_mgc.py",
-                "def validate_chunk(df): pass\n"
-                "def validate_timestamp_utc(ts): pass\n"
-                "def check_pk_safety(con): pass\n"
-                "def check_merge_integrity(df): pass\n"
-                "def run_final_gates(con): pass\n")
-        _mkfile(tmp_path / "pipeline" / "build_bars_5m.py",
-                "def verify_5m_integrity(con): pass\n")
-        _mkfile(tmp_path / "pipeline" / "ingest_dbn.py",
-                "# FAIL-CLOSED validation\n")
+        _mkfile(
+            tmp_path / "pipeline" / "ingest_dbn_mgc.py",
+            "def validate_chunk(df): pass\n"
+            "def validate_timestamp_utc(ts): pass\n"
+            "def check_pk_safety(con): pass\n"
+            "def check_merge_integrity(df): pass\n"
+            "def run_final_gates(con): pass\n",
+        )
+        _mkfile(tmp_path / "pipeline" / "build_bars_5m.py", "def verify_5m_integrity(con): pass\n")
+        _mkfile(tmp_path / "pipeline" / "ingest_dbn.py", "# FAIL-CLOSED validation\n")
         violations = check_drift.check_validation_gate_existence()
         assert len(violations) == 0
 
@@ -408,22 +410,19 @@ class TestNaiveDatetime:
 
     def test_catches_utcnow(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
-        _mkfile(tmp_path / "pipeline" / "bad.py",
-                "now = datetime.utcnow()\n")
+        _mkfile(tmp_path / "pipeline" / "bad.py", "now = datetime.utcnow()\n")
         violations = check_drift.check_naive_datetime()
         assert len(violations) > 0
 
     def test_catches_utcfromtimestamp(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
-        _mkfile(tmp_path / "trading_app" / "bad.py",
-                "dt = datetime.utcfromtimestamp(ts)\n")
+        _mkfile(tmp_path / "trading_app" / "bad.py", "dt = datetime.utcfromtimestamp(ts)\n")
         violations = check_drift.check_naive_datetime()
         assert len(violations) > 0
 
     def test_passes_aware(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
-        _mkfile(tmp_path / "pipeline" / "good.py",
-                "now = datetime.now(timezone.utc)\n")
+        _mkfile(tmp_path / "pipeline" / "good.py", "now = datetime.now(timezone.utc)\n")
         violations = check_drift.check_naive_datetime()
         assert len(violations) == 0
 
@@ -447,18 +446,21 @@ class TestDbConfigUsage:
 
     def test_catches_missing_configure(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
-        _mkfile(tmp_path / "pipeline" / "build_bars_5m.py",
-                "con = duckdb.connect(str(db_path))\ncon.execute('SELECT 1')\n")
+        _mkfile(
+            tmp_path / "pipeline" / "build_bars_5m.py", "con = duckdb.connect(str(db_path))\ncon.execute('SELECT 1')\n"
+        )
         violations = check_drift.check_db_config_usage()
         assert len(violations) > 0
         assert "configure_connection" in violations[0]
 
     def test_passes_with_configure(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
-        _mkfile(tmp_path / "pipeline" / "build_bars_5m.py",
-                "from pipeline.db_config import configure_connection\n"
-                "con = duckdb.connect(str(db_path))\n"
-                "configure_connection(con)\n")
+        _mkfile(
+            tmp_path / "pipeline" / "build_bars_5m.py",
+            "from pipeline.db_config import configure_connection\n"
+            "con = duckdb.connect(str(db_path))\n"
+            "configure_connection(con)\n",
+        )
         violations = check_drift.check_db_config_usage()
         assert len(violations) == 0
 
@@ -471,15 +473,15 @@ class TestE2E3Cb1Only:
 
     def test_catches_missing_e3_restriction(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
-        _mkfile(tmp_path / "trading_app" / "outcome_builder.py",
-                "# no E3 restriction\nfor em in ENTRY_MODELS:\n    pass\n")
+        _mkfile(
+            tmp_path / "trading_app" / "outcome_builder.py", "# no E3 restriction\nfor em in ENTRY_MODELS:\n    pass\n"
+        )
         violations = check_drift.check_e2_e3_cb1_only()
         assert len(violations) > 0
 
     def test_passes_with_restriction(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
-        _mkfile(tmp_path / "trading_app" / "outcome_builder.py",
-                'if em == "E3":\n    cb_options = [1]\n')
+        _mkfile(tmp_path / "trading_app" / "outcome_builder.py", 'if em == "E3":\n    cb_options = [1]\n')
         violations = check_drift.check_e2_e3_cb1_only()
         assert len(violations) == 0
 
@@ -547,10 +549,12 @@ class TestStaleScratchDb:
         (tmp_path / "gold.db").write_bytes(b"fake db")
         # Patch Path to make C:/db/gold.db appear nonexistent
         original_exists = Path.exists
+
         def mock_exists(self):
             if str(self) == r"C:\db\gold.db" or str(self) == "C:/db/gold.db":
                 return False
             return original_exists(self)
+
         monkeypatch.setattr(Path, "exists", mock_exists)
         violations = check_drift.check_stale_scratch_db()
         assert len(violations) == 0
@@ -564,16 +568,14 @@ class TestVariantSelectionMetric:
 
     def test_catches_sharpe_order(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
-        _mkfile(tmp_path / "trading_app" / "live_config.py",
-                'sql = "ORDER BY sharpe_ratio DESC LIMIT 1"\n')
+        _mkfile(tmp_path / "trading_app" / "live_config.py", 'sql = "ORDER BY sharpe_ratio DESC LIMIT 1"\n')
         violations = check_drift.check_variant_selection_metric()
         assert len(violations) > 0
         assert "sharpe_ratio" in violations[0]
 
     def test_passes_expectancy(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
-        _mkfile(tmp_path / "trading_app" / "live_config.py",
-                'sql = "ORDER BY expectancy_r DESC LIMIT 1"\n')
+        _mkfile(tmp_path / "trading_app" / "live_config.py", 'sql = "ORDER BY expectancy_r DESC LIMIT 1"\n')
         violations = check_drift.check_variant_selection_metric()
         assert len(violations) == 0
 
@@ -586,29 +588,30 @@ class TestResearchProvenanceAnnotations:
 
     def test_catches_missing_entry_models(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
-        _mkfile(tmp_path / "trading_app" / "config.py",
-                "# @research-source: winner_speed T80 profiling\n"
-                "EARLY_EXIT_MINUTES = 38\n")
+        _mkfile(
+            tmp_path / "trading_app" / "config.py",
+            "# @research-source: winner_speed T80 profiling\nEARLY_EXIT_MINUTES = 38\n",
+        )
         violations = check_drift.check_research_provenance_annotations()
         assert len(violations) > 0
         assert "@entry-models" in violations[0]
 
     def test_catches_stale_entry_model(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
-        _mkfile(tmp_path / "trading_app" / "config.py",
-                "# @research-source: winner_speed T80\n"
-                "# @entry-models: E0, E1\n"
-                "EARLY_EXIT_MINUTES = 38\n")
+        _mkfile(
+            tmp_path / "trading_app" / "config.py",
+            "# @research-source: winner_speed T80\n# @entry-models: E0, E1\nEARLY_EXIT_MINUTES = 38\n",
+        )
         violations = check_drift.check_research_provenance_annotations()
         assert len(violations) > 0
         assert "E2" in violations[0]
 
     def test_passes_with_e2(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
-        _mkfile(tmp_path / "trading_app" / "config.py",
-                "# @research-source: winner_speed T80\n"
-                "# @entry-models: E1, E2\n"
-                "EARLY_EXIT_MINUTES = 38\n")
+        _mkfile(
+            tmp_path / "trading_app" / "config.py",
+            "# @research-source: winner_speed T80\n# @entry-models: E1, E2\nEARLY_EXIT_MINUTES = 38\n",
+        )
         violations = check_drift.check_research_provenance_annotations()
         assert len(violations) == 0
 

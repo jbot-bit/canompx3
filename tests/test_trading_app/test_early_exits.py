@@ -28,39 +28,41 @@ from pipeline.cost_model import get_cost_spec
 # Helpers
 # ============================================================================
 
+
 def _cost():
     return get_cost_spec("MGC")
 
+
 def _make_bars(closes, start_ts, freq_seconds=60):
     """Build bars DataFrame with realistic OHLCV from close prices."""
-    timestamps = [
-        pd.Timestamp(start_ts, tz="UTC") + pd.Timedelta(seconds=i * freq_seconds)
-        for i in range(len(closes))
-    ]
-    return pd.DataFrame({
-        "ts_utc": timestamps,
-        "open": closes,
-        "high": [c + 0.5 for c in closes],
-        "low": [c - 0.5 for c in closes],
-        "close": closes,
-        "volume": [100] * len(closes),
-    })
+    timestamps = [pd.Timestamp(start_ts, tz="UTC") + pd.Timedelta(seconds=i * freq_seconds) for i in range(len(closes))]
+    return pd.DataFrame(
+        {
+            "ts_utc": timestamps,
+            "open": closes,
+            "high": [c + 0.5 for c in closes],
+            "low": [c - 0.5 for c in closes],
+            "close": closes,
+            "volume": [100] * len(closes),
+        }
+    )
+
 
 def _make_bars_ohlc(ohlc_rows, start_ts, freq_seconds=60):
     """Build bars from explicit (open, high, low, close) tuples."""
     base = pd.Timestamp(start_ts) if start_ts.tzinfo else pd.Timestamp(start_ts, tz="UTC")
-    timestamps = [
-        base + pd.Timedelta(seconds=i * freq_seconds)
-        for i in range(len(ohlc_rows))
-    ]
-    return pd.DataFrame({
-        "ts_utc": timestamps,
-        "open": [r[0] for r in ohlc_rows],
-        "high": [r[1] for r in ohlc_rows],
-        "low": [r[2] for r in ohlc_rows],
-        "close": [r[3] for r in ohlc_rows],
-        "volume": [100] * len(ohlc_rows),
-    })
+    timestamps = [base + pd.Timedelta(seconds=i * freq_seconds) for i in range(len(ohlc_rows))]
+    return pd.DataFrame(
+        {
+            "ts_utc": timestamps,
+            "open": [r[0] for r in ohlc_rows],
+            "high": [r[1] for r in ohlc_rows],
+            "low": [r[2] for r in ohlc_rows],
+            "close": [r[3] for r in ohlc_rows],
+            "volume": [100] * len(ohlc_rows),
+        }
+    )
+
 
 ORB_HIGH = 2350.0
 ORB_LOW = 2340.0
@@ -71,8 +73,8 @@ DAY_END = datetime(2024, 1, 16, 23, 0, tzinfo=timezone.utc)
 # Config Tests
 # ============================================================================
 
-class TestEarlyExitConfig:
 
+class TestEarlyExitConfig:
     def test_cme_reopen_t80(self):
         """P5b: MGC T80=38m (N=908, avg_r_after=-0.300R)."""
         assert EARLY_EXIT_MINUTES["CME_REOPEN"] == 38
@@ -119,19 +121,27 @@ class TestEarlyExitConfig:
 
     def test_all_active_sessions_present(self):
         expected = {
-            "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
-            "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
-            "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+            "CME_REOPEN",
+            "TOKYO_OPEN",
+            "SINGAPORE_OPEN",
+            "LONDON_METALS",
+            "US_DATA_830",
+            "NYSE_OPEN",
+            "US_DATA_1000",
+            "COMEX_SETTLE",
+            "CME_PRECLOSE",
+            "NYSE_CLOSE",
             "BRISBANE_1025",
         }
         assert set(EARLY_EXIT_MINUTES.keys()) == expected
+
 
 # ============================================================================
 # outcome_builder Tests
 # ============================================================================
 
-class TestOutcomeBuilderEarlyExit:
 
+class TestOutcomeBuilderEarlyExit:
     def test_cme_reopen_losing_at_15min_no_early_exit(self):
         """CME_REOPEN long trade, losing at 15 min -> resolves normally (no early_exit)."""
         bars = []
@@ -336,9 +346,11 @@ class TestOutcomeBuilderEarlyExit:
         assert result["mae_r"] >= 0
         assert result["mfe_r"] >= 0
 
+
 # ============================================================================
 # execution_engine Tests
 # ============================================================================
+
 
 def _make_strategy(**overrides):
     base = dict(
@@ -359,6 +371,7 @@ def _make_strategy(**overrides):
     base.update(overrides)
     return PortfolioStrategy(**base)
 
+
 def _make_portfolio(strategies=None, **overrides):
     if strategies is None:
         strategies = [_make_strategy()]
@@ -374,12 +387,12 @@ def _make_portfolio(strategies=None, **overrides):
     defaults.update(overrides)
     return Portfolio(**defaults)
 
+
 def _bar(ts, o, h, l, c, v=100):
-    return {"ts_utc": ts, "open": float(o), "high": float(h),
-            "low": float(l), "close": float(c), "volume": int(v)}
+    return {"ts_utc": ts, "open": float(o), "high": float(h), "low": float(l), "close": float(c), "volume": int(v)}
+
 
 class TestExecutionEngineEarlyExit:
-
     def test_early_exit_fires_at_t80_cme_reopen(self):
         """CME_REOPEN E1 trade losing at T80 (38m) -> early_exit event."""
         strategy = _make_strategy(orb_label="CME_REOPEN")

@@ -55,9 +55,9 @@ DYNAMIC_SESSION_TIMES = {
 # Viability thresholds
 # Note: bar_coverage naturally caps ~88% even for liquid instruments (CME
 # holidays, maintenance, early closes). 85% is the practical maximum.
-VIABLE_BAR_COV = 85.0      # % of trading days with bars
-VIABLE_AVG_VOL = 50         # mean volume per bar
-VIABLE_ORB_OK = 80.0        # % of days with complete 5-bar ORB window
+VIABLE_BAR_COV = 85.0  # % of trading days with bars
+VIABLE_AVG_VOL = 50  # mean volume per bar
+VIABLE_ORB_OK = 80.0  # % of days with complete 5-bar ORB window
 MARGINAL_BAR_COV = 70.0
 MARGINAL_AVG_VOL = 20
 
@@ -186,6 +186,7 @@ ORDER BY bris_h, slot_m
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
+
 def get_db_path(args):
     if args.db_path:
         return Path(args.db_path)
@@ -224,6 +225,7 @@ def session_match(bris_h, bris_m):
 
 
 # ── Core Analysis ────────────────────────────────────────────────────
+
 
 def analyze_instrument(con, instrument):
     """Run full volume profile analysis for an instrument.
@@ -275,17 +277,19 @@ def analyze_instrument(con, instrument):
         status = classify_slot(bar_cov, avg_vol, orb_pct)
         sess = session_match(bris_h, bris_m)
 
-        slots.append({
-            "bris_h": bris_h,
-            "bris_m": bris_m,
-            "avg_volume": avg_vol,
-            "bar_coverage": bar_cov,
-            "orb_viability": orb_pct,
-            "days_with_bars": days_with,
-            "total_days": total_days,
-            "status": status,
-            "session": sess,
-        })
+        slots.append(
+            {
+                "bris_h": bris_h,
+                "bris_m": bris_m,
+                "avg_volume": avg_vol,
+                "bar_coverage": bar_cov,
+                "orb_viability": orb_pct,
+                "days_with_bars": days_with,
+                "total_days": total_days,
+                "status": status,
+                "session": sess,
+            }
+        )
 
     return {"total_days": total_days, "slots": slots}
 
@@ -322,20 +326,20 @@ def recommend_sessions(slots):
 
 # ── Output ───────────────────────────────────────────────────────────
 
+
 def print_profile(instrument, result, reference_result=None, ref_instrument=None):
     """Print the full volume profile analysis."""
     slots = result["slots"]
     total_days = result["total_days"]
 
-    print(f"\n{'='*72}")
+    print(f"\n{'=' * 72}")
     print(f"  {instrument} VOLUME PROFILE (Brisbane Time)")
     print(f"  {total_days} trading days analyzed")
-    print(f"{'='*72}")
+    print(f"{'=' * 72}")
     print()
 
     # Thresholds legend
-    print(f"  Thresholds: VIABLE = barCov>{VIABLE_BAR_COV}% + avgVol>{VIABLE_AVG_VOL}"
-          f" + ORB5>{VIABLE_ORB_OK}%")
+    print(f"  Thresholds: VIABLE = barCov>{VIABLE_BAR_COV}% + avgVol>{VIABLE_AVG_VOL} + ORB5>{VIABLE_ORB_OK}%")
     print(f"              MARGINAL = barCov>{MARGINAL_BAR_COV}% + avgVol>{MARGINAL_AVG_VOL}")
     print(f"              DEAD = below marginal")
     print()
@@ -343,7 +347,7 @@ def print_profile(instrument, result, reference_result=None, ref_instrument=None
     # Header
     header = f"  {'Time':<7} {'AvgVol':>7} {'BarCov%':>8} {'ORB5ok%':>8} {'Status':<10} {'Session Match'}"
     print(header)
-    print(f"  {'-'*7} {'-'*7} {'-'*8} {'-'*8} {'-'*10} {'-'*20}")
+    print(f"  {'-' * 7} {'-' * 7} {'-' * 8} {'-' * 8} {'-' * 10} {'-' * 20}")
 
     # Only print non-DEAD slots (or all if --verbose)
     for slot in slots:
@@ -403,18 +407,16 @@ def print_profile(instrument, result, reference_result=None, ref_instrument=None
         if only_dead_here:
             # Group consecutive dead slots
             sorted_dead = sorted(only_dead_here)
-            print(f"    Dead in {instrument} but viable in {ref_instrument}: "
-                  f"{len(sorted_dead)} slots")
+            print(f"    Dead in {instrument} but viable in {ref_instrument}: {len(sorted_dead)} slots")
 
     print()
 
 
 # ── Main ─────────────────────────────────────────────────────────────
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Analyze volume profile to determine viable ORB sessions"
-    )
+    parser = argparse.ArgumentParser(description="Analyze volume profile to determine viable ORB sessions")
     parser.add_argument("--instrument", required=True, help="Instrument to analyze (e.g., SIL)")
     parser.add_argument("--reference", default=None, help="Reference instrument for comparison (e.g., MGC)")
     parser.add_argument("--db-path", default=None, help="Path to DuckDB database")
@@ -429,9 +431,7 @@ def main():
     con = duckdb.connect(str(db_path), read_only=True)
 
     # Verify instrument has data
-    n_bars = con.execute(
-        "SELECT COUNT(*) FROM bars_1m WHERE symbol = $1", [instrument]
-    ).fetchone()[0]
+    n_bars = con.execute("SELECT COUNT(*) FROM bars_1m WHERE symbol = $1", [instrument]).fetchone()[0]
     print(f"  {instrument}: {n_bars:,} bars in bars_1m")
 
     if n_bars == 0:
@@ -447,9 +447,7 @@ def main():
     ref_result = None
     if args.reference:
         ref = args.reference.upper()
-        ref_bars = con.execute(
-            "SELECT COUNT(*) FROM bars_1m WHERE symbol = $1", [ref]
-        ).fetchone()[0]
+        ref_bars = con.execute("SELECT COUNT(*) FROM bars_1m WHERE symbol = $1", [ref]).fetchone()[0]
         print(f"  {ref}: {ref_bars:,} bars in bars_1m")
         if ref_bars > 0:
             print(f"Analyzing {ref} volume profile...")

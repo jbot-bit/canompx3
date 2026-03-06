@@ -18,6 +18,7 @@ from dataclasses import dataclass, asdict
 from collections import defaultdict
 
 from pipeline.log import get_logger
+
 logger = get_logger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -41,9 +42,11 @@ FULL_WEIGHT_SAMPLE = 50
 # ~2 years of monthly windows. None = use all windows.
 DEFAULT_LOOKBACK_WINDOWS = 24
 
+
 @dataclass
 class FamilyResult:
     """Aggregated rolling results for a strategy family."""
+
     family_id: str
     orb_label: str
     entry_model: str
@@ -60,9 +63,11 @@ class FamilyResult:
     day_of_week_stats: dict | None = None
     day_of_week_concentration: float | None = None
 
+
 def make_family_id(orb_label: str, entry_model: str, filter_type: str) -> str:
     """Create a family-level identifier (ignores RR/CB params)."""
     return f"{orb_label}_{entry_model}_{filter_type}"
+
 
 def load_rolling_results(
     db_path: Path,
@@ -78,7 +83,8 @@ def load_rolling_results(
     prefix = f"rolling_{train_months}m_%"
 
     with duckdb.connect(str(db_path), read_only=True) as con:
-        rows = con.execute("""
+        rows = con.execute(
+            """
             SELECT rv.run_label, rv.strategy_id,
                    rv.start_date, rv.end_date,
                    rv.orb_label, rv.entry_model, rv.filter_type,
@@ -91,7 +97,9 @@ def load_rolling_results(
               AND rv.instrument = ?
               AND LOWER(rv.status) = 'active'
             ORDER BY rv.run_label, rv.strategy_id
-        """, [prefix, instrument]).fetchall()
+        """,
+            [prefix, instrument],
+        ).fetchall()
 
         cols = [desc[0] for desc in con.description]
         results = [dict(zip(cols, row)) for row in rows]
@@ -99,6 +107,7 @@ def load_rolling_results(
             label_set = set(run_labels)
             results = [r for r in results if r["run_label"] in label_set]
         return results
+
 
 def load_all_rolling_run_labels(
     db_path: Path,
@@ -113,17 +122,21 @@ def load_all_rolling_run_labels(
     prefix = f"rolling_{train_months}m_%"
 
     with duckdb.connect(str(db_path), read_only=True) as con:
-        rows = con.execute("""
+        rows = con.execute(
+            """
             SELECT DISTINCT run_label
             FROM regime_strategies
             WHERE run_label LIKE ?
               AND instrument = ?
             ORDER BY run_label
-        """, [prefix, instrument]).fetchall()
+        """,
+            [prefix, instrument],
+        ).fetchall()
         labels = [r[0] for r in rows]
         if lookback_windows is not None:
             labels = labels[-lookback_windows:]
         return labels
+
 
 def load_rolling_degraded_counts(
     db_path: Path,
@@ -139,14 +152,17 @@ def load_rolling_degraded_counts(
     prefix = f"rolling_{train_months}m_%"
 
     with duckdb.connect(str(db_path), read_only=True) as con:
-        rows = con.execute("""
+        rows = con.execute(
+            """
             SELECT run_label, orb_label, entry_model, filter_type, COUNT(*)
             FROM regime_strategies
             WHERE run_label LIKE ?
               AND instrument = ?
               AND validation_notes LIKE 'Auto-degraded%'
             GROUP BY run_label, orb_label, entry_model, filter_type
-        """, [prefix, instrument]).fetchall()
+        """,
+            [prefix, instrument],
+        ).fetchall()
 
         if run_labels is not None:
             label_set = set(run_labels)
@@ -160,12 +176,14 @@ def load_rolling_degraded_counts(
 
         return {fid: len(labels) for fid, labels in degraded_windows.items()}
 
+
 def _window_weight(sample_size: int) -> float:
     """Compute weight for a window based on its sample size.
 
     50+ trades = 1.0 weight, 20 trades = 0.4, linear scale.
     """
     return min(sample_size / FULL_WEIGHT_SAMPLE, 1.0)
+
 
 def classify_stability(weighted_score: float) -> str:
     """STABLE / TRANSITIONING / DEGRADED based on weighted stability score."""
@@ -174,6 +192,7 @@ def classify_stability(weighted_score: float) -> str:
     elif weighted_score >= TRANSITIONING_THRESHOLD:
         return "TRANSITIONING"
     return "DEGRADED"
+
 
 def aggregate_rolling_performance(
     validated: list[dict],
@@ -204,7 +223,7 @@ def aggregate_rolling_performance(
         em_idx = next(i for i, p in enumerate(parts) if p in ("E1", "E2", "E3"))
         orb_label = "_".join(parts[:em_idx])
         entry_model = parts[em_idx]
-        filter_type = "_".join(parts[em_idx + 1:])
+        filter_type = "_".join(parts[em_idx + 1 :])
 
         # For each window, pick the best variant (highest ExpR)
         passing_windows = []
@@ -237,25 +256,28 @@ def aggregate_rolling_performance(
         total_sample = sum(pw["sample_size"] for pw in passing_windows)
         oos_r = sum(pw["expectancy_r"] * pw["sample_size"] for pw in passing_windows)
 
-        results.append(FamilyResult(
-            family_id=fid,
-            orb_label=orb_label,
-            entry_model=entry_model,
-            filter_type=filter_type,
-            windows_total=total_windows,
-            windows_passed=len(passing_windows),
-            weighted_stability=round(weighted_stability, 3),
-            classification=classify_stability(weighted_stability),
-            avg_expectancy_r=round(np.mean(exp_values), 4) if exp_values else 0.0,
-            avg_sharpe=round(np.mean(sharpe_values), 4) if sharpe_values else 0.0,
-            total_sample_size=total_sample,
-            oos_cumulative_r=round(oos_r, 2),
-            double_break_degraded_windows=degraded_counts.get(fid, 0),
-        ))
+        results.append(
+            FamilyResult(
+                family_id=fid,
+                orb_label=orb_label,
+                entry_model=entry_model,
+                filter_type=filter_type,
+                windows_total=total_windows,
+                windows_passed=len(passing_windows),
+                weighted_stability=round(weighted_stability, 3),
+                classification=classify_stability(weighted_stability),
+                avg_expectancy_r=round(np.mean(exp_values), 4) if exp_values else 0.0,
+                avg_sharpe=round(np.mean(sharpe_values), 4) if sharpe_values else 0.0,
+                total_sample_size=total_sample,
+                oos_cumulative_r=round(oos_r, 2),
+                double_break_degraded_windows=degraded_counts.get(fid, 0),
+            )
+        )
 
     # Sort by weighted stability descending
     results.sort(key=lambda r: r.weighted_stability, reverse=True)
     return results
+
 
 def compute_day_of_week_stats(
     db_path: Path,
@@ -275,11 +297,14 @@ def compute_day_of_week_stats(
     with duckdb.connect(str(db_path), read_only=True) as con:
         # Pre-load daily_features for filter eligibility
         _size_cols = ", ".join(f"orb_{lbl}_size" for lbl in ORB_LABELS)
-        df_features = con.execute(f"""
+        df_features = con.execute(
+            f"""
             SELECT trading_day, {_size_cols}
             FROM daily_features
             WHERE symbol = ? AND orb_minutes = 5
-        """, [instrument]).fetchdf()
+        """,
+            [instrument],
+        ).fetchdf()
 
         for fam in family_results:
             if fam.classification == "DEGRADED":
@@ -295,6 +320,7 @@ def compute_day_of_week_stats(
             def _to_date(td):
                 """Convert numpy.datetime64/Timestamp/date to datetime.date."""
                 import pandas as pd_local
+
                 return pd_local.Timestamp(td).date()
 
             if fam.filter_type == "NO_FILTER":
@@ -311,7 +337,8 @@ def compute_day_of_week_stats(
             # Get trade outcomes filtered to eligible days.
             # orb_outcomes has ~30 rows per day per family (rr_target × confirm_bars),
             # so we aggregate to one avg pnl_r per trading_day to avoid DOW inflation.
-            rows = con.execute("""
+            rows = con.execute(
+                """
                 SELECT DAYOFWEEK(oo.trading_day) as dow,
                        oo.trading_day,
                        AVG(oo.pnl_r) as avg_pnl_r
@@ -321,11 +348,12 @@ def compute_day_of_week_stats(
                   AND oo.entry_model = ?
                   AND oo.pnl_r IS NOT NULL
                 GROUP BY oo.trading_day
-            """, [instrument, fam.orb_label, fam.entry_model]).fetchall()
+            """,
+                [instrument, fam.orb_label, fam.entry_model],
+            ).fetchall()
 
             # Filter to eligible days only
-            rows = [(dow, pnl_r) for dow, td, pnl_r in rows
-                    if td in eligible_days]
+            rows = [(dow, pnl_r) for dow, td, pnl_r in rows if td in eligible_days]
 
             if not rows:
                 continue
@@ -362,13 +390,12 @@ def compute_day_of_week_stats(
             # Compute concentration: max single-day contribution to total |R|
             total_abs_r = sum(day_total_r.values())
             if total_abs_r > 0:
-                fam.day_of_week_concentration = round(
-                    max(day_total_r.values()) / total_abs_r, 3
-                )
+                fam.day_of_week_concentration = round(max(day_total_r.values()) / total_abs_r, 3)
             else:
                 fam.day_of_week_concentration = None
 
         return family_results
+
 
 def load_rolling_validated_strategies(
     db_path: Path,
@@ -386,15 +413,9 @@ def load_rolling_validated_strategies(
 
     Returns list of dicts matching the format expected by portfolio.py.
     """
-    all_labels = load_all_rolling_run_labels(
-        db_path, train_months, instrument, lookback_windows
-    )
-    validated = load_rolling_results(
-        db_path, train_months, instrument, run_labels=all_labels
-    )
-    degraded = load_rolling_degraded_counts(
-        db_path, train_months, instrument, run_labels=all_labels
-    )
+    all_labels = load_all_rolling_run_labels(db_path, train_months, instrument, lookback_windows)
+    validated = load_rolling_results(db_path, train_months, instrument, run_labels=all_labels)
+    degraded = load_rolling_degraded_counts(db_path, train_months, instrument, run_labels=all_labels)
 
     families = aggregate_rolling_performance(validated, all_labels, degraded)
 
@@ -413,7 +434,8 @@ def load_rolling_validated_strategies(
                 continue
 
             # Get best variant from most recent window, enforcing locked RR
-            rows = con.execute("""
+            rows = con.execute(
+                """
                 SELECT rv.strategy_id, rv.instrument, rv.orb_label, rv.entry_model,
                        rv.rr_target, rv.confirm_bars, rv.filter_type,
                        rv.expectancy_r, rv.win_rate, rv.sample_size,
@@ -439,8 +461,9 @@ def load_rolling_validated_strategies(
                   AND (frl.locked_rr IS NULL OR rv.rr_target = frl.locked_rr)
                 ORDER BY rv.expectancy_r DESC
                 LIMIT 1
-            """, [latest_label, instrument, fam.orb_label,
-                  fam.entry_model, fam.filter_type]).fetchall()
+            """,
+                [latest_label, instrument, fam.orb_label, fam.entry_model, fam.filter_type],
+            ).fetchall()
 
             if rows:
                 cols = [desc[0] for desc in con.description]
@@ -448,15 +471,16 @@ def load_rolling_validated_strategies(
 
         return results
 
+
 def print_report(families: list[FamilyResult]) -> None:
     """Print a human-readable report of rolling evaluation results."""
     stable = [f for f in families if f.classification == "STABLE"]
     transitioning = [f for f in families if f.classification == "TRANSITIONING"]
     degraded = [f for f in families if f.classification == "DEGRADED"]
 
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     logger.info("ROLLING PORTFOLIO REPORT")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
     logger.info(f"\nTotal families: {len(families)}")
     logger.info(f"  STABLE: {len(stable)}")
     logger.info(f"  TRANSITIONING: {len(transitioning)}")
@@ -465,28 +489,32 @@ def print_report(families: list[FamilyResult]) -> None:
     if stable:
         logger.info(f"\n--- STABLE (weighted score >= {STABLE_THRESHOLD}) ---")
         for f in stable:
-            logger.info(f"  {f.family_id}: score={f.weighted_stability:.3f}, "
-                        f"passed={f.windows_passed}/{f.windows_total}, "
-                        f"ExpR={f.avg_expectancy_r:+.4f}, "
-                        f"Sharpe={f.avg_sharpe:.4f}, "
-                        f"N={f.total_sample_size}")
+            logger.info(
+                f"  {f.family_id}: score={f.weighted_stability:.3f}, "
+                f"passed={f.windows_passed}/{f.windows_total}, "
+                f"ExpR={f.avg_expectancy_r:+.4f}, "
+                f"Sharpe={f.avg_sharpe:.4f}, "
+                f"N={f.total_sample_size}"
+            )
             if f.day_of_week_stats:
                 for day, stats in sorted(f.day_of_week_stats.items()):
                     conc_flag = ""
                     if f.day_of_week_concentration and f.day_of_week_concentration > 0.5:
                         conc_flag = " [DAY-DEPENDENT]"
-                    logger.info(f"    {day}: WR={stats['win_rate']:.1%}, "
-                                f"ExpR={stats['exp_r']:+.4f}, N={stats['sample_size']}")
+                    logger.info(
+                        f"    {day}: WR={stats['win_rate']:.1%}, ExpR={stats['exp_r']:+.4f}, N={stats['sample_size']}"
+                    )
                 if conc_flag:
-                    logger.info(f"    ** Day concentration: "
-                                f"{f.day_of_week_concentration:.1%}{conc_flag}")
+                    logger.info(f"    ** Day concentration: {f.day_of_week_concentration:.1%}{conc_flag}")
 
     if transitioning:
         logger.info(f"\n--- TRANSITIONING ({TRANSITIONING_THRESHOLD} <= score < {STABLE_THRESHOLD}) ---")
         for f in transitioning:
-            logger.info(f"  {f.family_id}: score={f.weighted_stability:.3f}, "
-                        f"passed={f.windows_passed}/{f.windows_total}, "
-                        f"ExpR={f.avg_expectancy_r:+.4f}")
+            logger.info(
+                f"  {f.family_id}: score={f.weighted_stability:.3f}, "
+                f"passed={f.windows_passed}/{f.windows_total}, "
+                f"ExpR={f.avg_expectancy_r:+.4f}"
+            )
 
     if degraded:
         logger.info(f"\n--- DEGRADED (score < {TRANSITIONING_THRESHOLD}) ---")
@@ -496,41 +524,38 @@ def print_report(families: list[FamilyResult]) -> None:
         # Don't print every degraded family -- just summary
         logger.info(f"  Total: {len(degraded)} families")
 
+
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Aggregate rolling window results and classify strategy stability"
-    )
+    parser = argparse.ArgumentParser(description="Aggregate rolling window results and classify strategy stability")
     parser.add_argument("--instrument", default="MGC", help="Instrument symbol")
-    parser.add_argument("--train-months", type=int, default=12,
-                        help="Training window size to analyze")
-    parser.add_argument("--min-weighted-score", type=float, default=STABLE_THRESHOLD,
-                        help="Minimum weighted stability score for portfolio inclusion")
-    parser.add_argument("--report", action="store_true",
-                        help="Print detailed report")
-    parser.add_argument("--lookback-windows", type=int, default=DEFAULT_LOOKBACK_WINDOWS,
-                        help=f"Only use the N most recent windows for scoring "
-                             f"(default: {DEFAULT_LOOKBACK_WINDOWS}). "
-                             f"Use 0 for all windows.")
-    parser.add_argument("--output", type=str, default=None,
-                        help="Write results JSON to this path")
+    parser.add_argument("--train-months", type=int, default=12, help="Training window size to analyze")
+    parser.add_argument(
+        "--min-weighted-score",
+        type=float,
+        default=STABLE_THRESHOLD,
+        help="Minimum weighted stability score for portfolio inclusion",
+    )
+    parser.add_argument("--report", action="store_true", help="Print detailed report")
+    parser.add_argument(
+        "--lookback-windows",
+        type=int,
+        default=DEFAULT_LOOKBACK_WINDOWS,
+        help=f"Only use the N most recent windows for scoring "
+        f"(default: {DEFAULT_LOOKBACK_WINDOWS}). "
+        f"Use 0 for all windows.",
+    )
+    parser.add_argument("--output", type=str, default=None, help="Write results JSON to this path")
     args = parser.parse_args()
 
     db_path = GOLD_DB_PATH
     lookback = args.lookback_windows if args.lookback_windows > 0 else None
 
-    logger.info(f"Loading rolling results (train_months={args.train_months}, "
-                f"lookback_windows={lookback or 'all'})...")
-    all_labels = load_all_rolling_run_labels(
-        db_path, args.train_months, args.instrument, lookback
-    )
-    validated = load_rolling_results(
-        db_path, args.train_months, args.instrument, run_labels=all_labels
-    )
-    degraded_counts = load_rolling_degraded_counts(
-        db_path, args.train_months, args.instrument, run_labels=all_labels
-    )
+    logger.info(f"Loading rolling results (train_months={args.train_months}, lookback_windows={lookback or 'all'})...")
+    all_labels = load_all_rolling_run_labels(db_path, args.train_months, args.instrument, lookback)
+    validated = load_rolling_results(db_path, args.train_months, args.instrument, run_labels=all_labels)
+    degraded_counts = load_rolling_degraded_counts(db_path, args.train_months, args.instrument, run_labels=all_labels)
 
     logger.info(f"  {len(validated)} validated strategies across {len(all_labels)} windows")
 
@@ -538,9 +563,7 @@ def main():
     logger.info(f"  {len(families)} unique families")
 
     # Add day-of-week stats for non-degraded families
-    families = compute_day_of_week_stats(
-        db_path, families, args.train_months, args.instrument
-    )
+    families = compute_day_of_week_stats(db_path, families, args.train_months, args.instrument)
 
     if args.report or not args.output:
         print_report(families)
@@ -550,6 +573,7 @@ def main():
         output_data = [asdict(f) for f in families]
         output_path.write_text(json.dumps(output_data, indent=2))
         logger.info(f"\nResults written to {output_path}")
+
 
 if __name__ == "__main__":
     main()

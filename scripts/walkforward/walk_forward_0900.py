@@ -3,6 +3,7 @@
 Walk-forward analysis for 0900 ORB strategies.
 Zero lookahead: train on past years, test on unseen year.
 """
+
 import sys
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from pipeline.paths import GOLD_DB_PATH
 from pipeline.cost_model import get_cost_spec, stress_test_costs
 
 spec = get_cost_spec("MGC")
+
 
 def load_0900_data():
     """Load all 0900 outcomes joined with daily_features for filter eligibility."""
@@ -34,6 +36,7 @@ def load_0900_data():
     df["orb_size"] = df["orb_0900_size"]
     return df
 
+
 def compute_stats(pnls):
     """Compute trading stats from array of R-multiples."""
     n = len(pnls)
@@ -48,9 +51,14 @@ def compute_stats(pnls):
     maxdd = (cumul - peak).min()
     total = pnls.sum()
     return {
-        "n": n, "wr": wr, "expr": expr, "sharpe": sharpe,
-        "maxdd": maxdd, "total": total,
+        "n": n,
+        "wr": wr,
+        "expr": expr,
+        "sharpe": sharpe,
+        "maxdd": maxdd,
+        "total": total,
     }
+
 
 def find_best_strategy(data, metric="sharpe", min_trades=30):
     """Find best (em, rr, cb) combo by metric. Returns (combo, stats) or (None, None)."""
@@ -77,6 +85,7 @@ def find_best_strategy(data, metric="sharpe", min_trades=30):
 
     return best_combo, best_stats
 
+
 def find_worst_strategy(data, metric="sharpe", min_trades=30):
     """Find worst combo by metric."""
     worst_val = 999
@@ -102,16 +111,17 @@ def find_worst_strategy(data, metric="sharpe", min_trades=30):
 
     return worst_combo, worst_stats
 
+
 def get_oos_trades(data, combo):
     """Get OOS trades for a specific (em, rr, cb) combo."""
     em, rr, cb = combo
-    mask = (data["entry_model"] == em) & \
-           (data["rr_target"] == rr) & \
-           (data["confirm_bars"] == cb)
+    mask = (data["entry_model"] == em) & (data["rr_target"] == rr) & (data["confirm_bars"] == cb)
     return data[mask]["pnl_r"].values
+
 
 def em_label(em):
     return "E1" if em == "E1" else "E3"
+
 
 def main():
     df = load_0900_data()
@@ -167,16 +177,22 @@ def main():
 
             print(f"  Test {test_year} (train {train_years}):")
             print(f"    Selected: {em_label(combo[0])} RR{combo[1]} CB{combo[2]} {filt_name}")
-            print(f"    Train:    N={train_stats['n']}, Sharpe={train_stats['sharpe']:.3f}, ExpR={train_stats['expr']:+.3f}")
-            print(f"    OOS:      N={oos_stats['n']}, WR={oos_stats['wr']:.0%}, ExpR={oos_stats['expr']:+.3f}, Sharpe={oos_stats['sharpe']:.3f}, MaxDD={oos_stats['maxdd']:+.1f}R, Total={oos_stats['total']:+.1f}R")
+            print(
+                f"    Train:    N={train_stats['n']}, Sharpe={train_stats['sharpe']:.3f}, ExpR={train_stats['expr']:+.3f}"
+            )
+            print(
+                f"    OOS:      N={oos_stats['n']}, WR={oos_stats['wr']:.0%}, ExpR={oos_stats['expr']:+.3f}, Sharpe={oos_stats['sharpe']:.3f}, MaxDD={oos_stats['maxdd']:+.1f}R, Total={oos_stats['total']:+.1f}R"
+            )
 
             oos_all_pnls.extend(oos_pnls)
-            oos_results.append({
-                "test_year": test_year,
-                "combo": f"{em_label(combo[0])} RR{combo[1]} CB{combo[2]}",
-                "train_sharpe": train_stats["sharpe"],
-                "oos_stats": oos_stats,
-            })
+            oos_results.append(
+                {
+                    "test_year": test_year,
+                    "combo": f"{em_label(combo[0])} RR{combo[1]} CB{combo[2]}",
+                    "train_sharpe": train_stats["sharpe"],
+                    "oos_stats": oos_stats,
+                }
+            )
 
         # Combined OOS summary
         if oos_all_pnls:
@@ -185,12 +201,16 @@ def main():
             stable = len(set(combos_picked)) == 1
             avg_train_sharpe = np.mean([r["train_sharpe"] for r in oos_results])
 
-            print(f"  COMBINED OOS: N={combined['n']}, WR={combined['wr']:.0%}, ExpR={combined['expr']:+.3f}, Sharpe={combined['sharpe']:.3f}, MaxDD={combined['maxdd']:+.1f}R, Total={combined['total']:+.1f}R")
+            print(
+                f"  COMBINED OOS: N={combined['n']}, WR={combined['wr']:.0%}, ExpR={combined['expr']:+.3f}, Sharpe={combined['sharpe']:.3f}, MaxDD={combined['maxdd']:+.1f}R, Total={combined['total']:+.1f}R"
+            )
             if stable:
                 print(f"  Selection stability: STABLE (same pick every year: {combos_picked[0]})")
             else:
                 print(f"  Selection stability: CHANGED across years: {combos_picked}")
-            print(f"  Sharpe decay: train avg {avg_train_sharpe:.3f} -> OOS {combined['sharpe']:.3f} ({(combined['sharpe'] / avg_train_sharpe - 1) * 100:+.0f}%)")
+            print(
+                f"  Sharpe decay: train avg {avg_train_sharpe:.3f} -> OOS {combined['sharpe']:.3f} ({(combined['sharpe'] / avg_train_sharpe - 1) * 100:+.0f}%)"
+            )
 
             # Every year profitable?
             all_profitable = all(r["oos_stats"]["total"] > 0 for r in oos_results)
@@ -240,7 +260,9 @@ def main():
 
     sim_totals = np.array(sim_totals)
     print(f"  Total R: median={np.median(sim_totals):+.1f}, mean={np.mean(sim_totals):+.1f}")
-    print(f"  Range: p5={np.percentile(sim_totals, 5):+.1f}, p25={np.percentile(sim_totals, 25):+.1f}, p75={np.percentile(sim_totals, 75):+.1f}, p95={np.percentile(sim_totals, 95):+.1f}")
+    print(
+        f"  Range: p5={np.percentile(sim_totals, 5):+.1f}, p25={np.percentile(sim_totals, 25):+.1f}, p75={np.percentile(sim_totals, 75):+.1f}, p95={np.percentile(sim_totals, 95):+.1f}"
+    )
     pct_profitable = (sim_totals > 0).sum() / n_sims * 100
     print(f"  Profitable sims: {pct_profitable:.0f}%")
     print()
@@ -257,7 +279,9 @@ def main():
         if combo:
             pnls = get_oos_trades(test_data, combo)
             adv_pnls.extend(pnls)
-            print(f"  {test_year}: Picked {em_label(combo[0])} RR{combo[1]} CB{combo[2]}, OOS N={len(pnls)}, Total={sum(pnls):+.1f}R")
+            print(
+                f"  {test_year}: Picked {em_label(combo[0])} RR{combo[1]} CB{combo[2]}, OOS N={len(pnls)}, Total={sum(pnls):+.1f}R"
+            )
 
     if adv_pnls:
         adv_stats = compute_stats(np.array(adv_pnls))
@@ -273,7 +297,9 @@ def main():
     # Approach: count wins with pnl_r between 0 and 0.15R (barely profitable)
     thin_wins = eligible_g6[(eligible_g6["pnl_r"] > 0) & (eligible_g6["pnl_r"] < 0.15)]
     all_wins = eligible_g6[eligible_g6["pnl_r"] > 0]
-    print(f"  G6 wins with pnl_r < 0.15R (thin margin): {len(thin_wins)} of {len(all_wins)} wins ({len(thin_wins)/max(len(all_wins),1)*100:.1f}%)")
+    print(
+        f"  G6 wins with pnl_r < 0.15R (thin margin): {len(thin_wins)} of {len(all_wins)} wins ({len(thin_wins) / max(len(all_wins), 1) * 100:.1f}%)"
+    )
     print(f"  These trades could flip to losses under higher real-world costs.")
 
     # What if we add 0.057R of extra friction to every trade (equivalent to doubling costs)?
@@ -293,15 +319,15 @@ def main():
 
         if combo:
             em, rr, cb = combo
-            mask = (test_data["entry_model"] == em) & \
-                   (test_data["rr_target"] == rr) & \
-                   (test_data["confirm_bars"] == cb)
+            mask = (test_data["entry_model"] == em) & (test_data["rr_target"] == rr) & (test_data["confirm_bars"] == cb)
             stressed_pnls = test_data[mask]["pnl_r_stressed"].values
             normal_pnls = test_data[mask]["pnl_r"].values
             if len(stressed_pnls) > 0:
                 normal_stats = compute_stats(normal_pnls)
                 stress_stats = compute_stats(stressed_pnls)
-                print(f"  {test_year} {em_label(combo[0])} RR{combo[1]} CB{combo[2]}: Normal ExpR={normal_stats['expr']:+.3f}, Stressed ExpR={stress_stats['expr']:+.3f}, Stressed Total={stress_stats['total']:+.1f}R")
+                print(
+                    f"  {test_year} {em_label(combo[0])} RR{combo[1]} CB{combo[2]}: Normal ExpR={normal_stats['expr']:+.3f}, Stressed ExpR={stress_stats['expr']:+.3f}, Stressed Total={stress_stats['total']:+.1f}R"
+                )
 
     con.close()
     print()
@@ -335,12 +361,15 @@ def main():
 
             avg_expr = np.mean(combo_exprs) if combo_exprs else 0
             pct_positive = sum(1 for e in combo_exprs if e > 0) / max(len(combo_exprs), 1) * 100
-            print(f"  {test_year}: {len(combo_exprs)} E1 variants, avg ExpR={avg_expr:+.3f}, {pct_positive:.0f}% positive")
+            print(
+                f"  {test_year}: {len(combo_exprs)} E1 variants, avg ExpR={avg_expr:+.3f}, {pct_positive:.0f}% positive"
+            )
 
     print()
     print(sep)
     print("DONE")
     print(sep)
+
 
 if __name__ == "__main__":
     main()

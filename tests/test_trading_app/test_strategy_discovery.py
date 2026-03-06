@@ -18,12 +18,15 @@ from trading_app.strategy_discovery import (
     _compute_haircut_sharpe,
 )
 from trading_app.config import (
-    ENTRY_MODELS, ALL_FILTERS, VolumeFilter,
+    ENTRY_MODELS,
+    ALL_FILTERS,
+    VolumeFilter,
 )
 
 # ============================================================================
 # compute_metrics tests
 # ============================================================================
+
 
 class TestComputeMetrics:
     """Tests for compute_metrics()."""
@@ -31,10 +34,26 @@ class TestComputeMetrics:
     def test_win_rate(self):
         """Win rate = wins / (wins + losses)."""
         outcomes = [
-            {"trading_day": date(2024, 1, i), "outcome": "win", "pnl_r": 2.0, "mae_r": 0.5, "mfe_r": 2.5, "entry_price": 2703.0, "stop_price": 2690.0}
+            {
+                "trading_day": date(2024, 1, i),
+                "outcome": "win",
+                "pnl_r": 2.0,
+                "mae_r": 0.5,
+                "mfe_r": 2.5,
+                "entry_price": 2703.0,
+                "stop_price": 2690.0,
+            }
             for i in range(1, 8)
         ] + [
-            {"trading_day": date(2024, 1, i), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.2, "entry_price": 2703.0, "stop_price": 2690.0}
+            {
+                "trading_day": date(2024, 1, i),
+                "outcome": "loss",
+                "pnl_r": -1.0,
+                "mae_r": 1.0,
+                "mfe_r": 0.2,
+                "entry_price": 2703.0,
+                "stop_price": 2690.0,
+            }
             for i in range(8, 11)
         ]
 
@@ -44,10 +63,42 @@ class TestComputeMetrics:
     def test_expectancy(self):
         """E = (WR * AvgWin_R) - (LR * AvgLoss_R)."""
         outcomes = [
-            {"trading_day": date(2024, 1, 1), "outcome": "win", "pnl_r": 2.0, "mae_r": 0.5, "mfe_r": 2.0, "entry_price": 2703.0, "stop_price": 2690.0},
-            {"trading_day": date(2024, 1, 2), "outcome": "win", "pnl_r": 3.0, "mae_r": 0.5, "mfe_r": 3.0, "entry_price": 2703.0, "stop_price": 2690.0},
-            {"trading_day": date(2024, 1, 3), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2703.0, "stop_price": 2690.0},
-            {"trading_day": date(2024, 1, 4), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2703.0, "stop_price": 2690.0},
+            {
+                "trading_day": date(2024, 1, 1),
+                "outcome": "win",
+                "pnl_r": 2.0,
+                "mae_r": 0.5,
+                "mfe_r": 2.0,
+                "entry_price": 2703.0,
+                "stop_price": 2690.0,
+            },
+            {
+                "trading_day": date(2024, 1, 2),
+                "outcome": "win",
+                "pnl_r": 3.0,
+                "mae_r": 0.5,
+                "mfe_r": 3.0,
+                "entry_price": 2703.0,
+                "stop_price": 2690.0,
+            },
+            {
+                "trading_day": date(2024, 1, 3),
+                "outcome": "loss",
+                "pnl_r": -1.0,
+                "mae_r": 1.0,
+                "mfe_r": 0.0,
+                "entry_price": 2703.0,
+                "stop_price": 2690.0,
+            },
+            {
+                "trading_day": date(2024, 1, 4),
+                "outcome": "loss",
+                "pnl_r": -1.0,
+                "mae_r": 1.0,
+                "mfe_r": 0.0,
+                "entry_price": 2703.0,
+                "stop_price": 2690.0,
+            },
         ]
 
         m = compute_metrics(outcomes)
@@ -56,7 +107,15 @@ class TestComputeMetrics:
     def test_sharpe_ratio(self):
         """Sharpe = mean(R) / std(R)."""
         outcomes = [
-            {"trading_day": date(2024, 1, i), "outcome": "win", "pnl_r": 1.0, "mae_r": 0.5, "mfe_r": 1.0, "entry_price": 2703.0, "stop_price": 2690.0}
+            {
+                "trading_day": date(2024, 1, i),
+                "outcome": "win",
+                "pnl_r": 1.0,
+                "mae_r": 0.5,
+                "mfe_r": 1.0,
+                "entry_price": 2703.0,
+                "stop_price": 2690.0,
+            }
             for i in range(1, 5)
         ]
         m = compute_metrics(outcomes)
@@ -65,8 +124,24 @@ class TestComputeMetrics:
     def test_sharpe_ratio_valid(self):
         """Sharpe computes correctly with mixed results."""
         outcomes = [
-            {"trading_day": date(2024, 1, 1), "outcome": "win", "pnl_r": 2.0, "mae_r": 0.5, "mfe_r": 2.0, "entry_price": 2703.0, "stop_price": 2690.0},
-            {"trading_day": date(2024, 1, 2), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2703.0, "stop_price": 2690.0},
+            {
+                "trading_day": date(2024, 1, 1),
+                "outcome": "win",
+                "pnl_r": 2.0,
+                "mae_r": 0.5,
+                "mfe_r": 2.0,
+                "entry_price": 2703.0,
+                "stop_price": 2690.0,
+            },
+            {
+                "trading_day": date(2024, 1, 2),
+                "outcome": "loss",
+                "pnl_r": -1.0,
+                "mae_r": 1.0,
+                "mfe_r": 0.0,
+                "entry_price": 2703.0,
+                "stop_price": 2690.0,
+            },
         ]
         m = compute_metrics(outcomes)
         assert m["sharpe_ratio"] is not None
@@ -75,10 +150,42 @@ class TestComputeMetrics:
     def test_max_drawdown(self):
         """Max drawdown tracks peak-to-trough in cumulative R."""
         outcomes = [
-            {"trading_day": date(2024, 1, 1), "outcome": "win", "pnl_r": 3.0, "mae_r": 0.5, "mfe_r": 3.0, "entry_price": 2703.0, "stop_price": 2690.0},
-            {"trading_day": date(2024, 1, 2), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2703.0, "stop_price": 2690.0},
-            {"trading_day": date(2024, 1, 3), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2703.0, "stop_price": 2690.0},
-            {"trading_day": date(2024, 1, 4), "outcome": "win", "pnl_r": 2.0, "mae_r": 0.5, "mfe_r": 2.0, "entry_price": 2703.0, "stop_price": 2690.0},
+            {
+                "trading_day": date(2024, 1, 1),
+                "outcome": "win",
+                "pnl_r": 3.0,
+                "mae_r": 0.5,
+                "mfe_r": 3.0,
+                "entry_price": 2703.0,
+                "stop_price": 2690.0,
+            },
+            {
+                "trading_day": date(2024, 1, 2),
+                "outcome": "loss",
+                "pnl_r": -1.0,
+                "mae_r": 1.0,
+                "mfe_r": 0.0,
+                "entry_price": 2703.0,
+                "stop_price": 2690.0,
+            },
+            {
+                "trading_day": date(2024, 1, 3),
+                "outcome": "loss",
+                "pnl_r": -1.0,
+                "mae_r": 1.0,
+                "mfe_r": 0.0,
+                "entry_price": 2703.0,
+                "stop_price": 2690.0,
+            },
+            {
+                "trading_day": date(2024, 1, 4),
+                "outcome": "win",
+                "pnl_r": 2.0,
+                "mae_r": 0.5,
+                "mfe_r": 2.0,
+                "entry_price": 2703.0,
+                "stop_price": 2690.0,
+            },
         ]
         m = compute_metrics(outcomes)
         assert m["max_drawdown_r"] == pytest.approx(2.0, abs=0.01)
@@ -86,9 +193,33 @@ class TestComputeMetrics:
     def test_yearly_breakdown(self):
         """Yearly results contain per-year stats."""
         outcomes = [
-            {"trading_day": date(2024, 1, 1), "outcome": "win", "pnl_r": 2.0, "mae_r": 0.5, "mfe_r": 2.0, "entry_price": 2703.0, "stop_price": 2690.0},
-            {"trading_day": date(2024, 6, 1), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2703.0, "stop_price": 2690.0},
-            {"trading_day": date(2025, 1, 1), "outcome": "win", "pnl_r": 1.5, "mae_r": 0.5, "mfe_r": 1.5, "entry_price": 2703.0, "stop_price": 2690.0},
+            {
+                "trading_day": date(2024, 1, 1),
+                "outcome": "win",
+                "pnl_r": 2.0,
+                "mae_r": 0.5,
+                "mfe_r": 2.0,
+                "entry_price": 2703.0,
+                "stop_price": 2690.0,
+            },
+            {
+                "trading_day": date(2024, 6, 1),
+                "outcome": "loss",
+                "pnl_r": -1.0,
+                "mae_r": 1.0,
+                "mfe_r": 0.0,
+                "entry_price": 2703.0,
+                "stop_price": 2690.0,
+            },
+            {
+                "trading_day": date(2025, 1, 1),
+                "outcome": "win",
+                "pnl_r": 1.5,
+                "mae_r": 0.5,
+                "mfe_r": 1.5,
+                "entry_price": 2703.0,
+                "stop_price": 2690.0,
+            },
         ]
         m = compute_metrics(outcomes)
         yearly = json.loads(m["yearly_results"])
@@ -108,7 +239,15 @@ class TestComputeMetrics:
     def test_all_scratches(self):
         """Only scratches -> no win/loss stats."""
         outcomes = [
-            {"trading_day": date(2024, 1, 1), "outcome": "scratch", "pnl_r": None, "mae_r": 0.1, "mfe_r": 0.1, "entry_price": None, "stop_price": None},
+            {
+                "trading_day": date(2024, 1, 1),
+                "outcome": "scratch",
+                "pnl_r": None,
+                "mae_r": 0.1,
+                "mfe_r": 0.1,
+                "entry_price": None,
+                "stop_price": None,
+            },
         ]
         m = compute_metrics(outcomes)
         assert m["sample_size"] == 0  # scratches excluded from sample_size
@@ -117,8 +256,24 @@ class TestComputeMetrics:
     def test_risk_stats_computed(self):
         """median_risk_points and avg_risk_points computed from entry/stop."""
         outcomes = [
-            {"trading_day": date(2024, 1, 1), "outcome": "win", "pnl_r": 2.0, "mae_r": 0.5, "mfe_r": 2.0, "entry_price": 2703.0, "stop_price": 2690.0},
-            {"trading_day": date(2024, 1, 2), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2705.0, "stop_price": 2690.0},
+            {
+                "trading_day": date(2024, 1, 1),
+                "outcome": "win",
+                "pnl_r": 2.0,
+                "mae_r": 0.5,
+                "mfe_r": 2.0,
+                "entry_price": 2703.0,
+                "stop_price": 2690.0,
+            },
+            {
+                "trading_day": date(2024, 1, 2),
+                "outcome": "loss",
+                "pnl_r": -1.0,
+                "mae_r": 1.0,
+                "mfe_r": 0.0,
+                "entry_price": 2705.0,
+                "stop_price": 2690.0,
+            },
         ]
         m = compute_metrics(outcomes)
         assert m["median_risk_points"] == pytest.approx(14.0, abs=0.01)  # median of 13, 15
@@ -126,16 +281,44 @@ class TestComputeMetrics:
 
     def test_sharpe_ann_computed(self):
         """sharpe_ann = sharpe_ratio * sqrt(trades_per_year)."""
-        outcomes = [
-            {"trading_day": date(2024, 1, i), "outcome": "win", "pnl_r": 2.0, "mae_r": 0.5, "mfe_r": 2.0, "entry_price": 2703.0, "stop_price": 2690.0}
-            for i in range(1, 6)
-        ] + [
-            {"trading_day": date(2024, 6, i), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2703.0, "stop_price": 2690.0}
-            for i in range(1, 4)
-        ] + [
-            {"trading_day": date(2025, 3, i), "outcome": "win", "pnl_r": 1.5, "mae_r": 0.5, "mfe_r": 1.5, "entry_price": 2703.0, "stop_price": 2690.0}
-            for i in range(1, 4)
-        ]
+        outcomes = (
+            [
+                {
+                    "trading_day": date(2024, 1, i),
+                    "outcome": "win",
+                    "pnl_r": 2.0,
+                    "mae_r": 0.5,
+                    "mfe_r": 2.0,
+                    "entry_price": 2703.0,
+                    "stop_price": 2690.0,
+                }
+                for i in range(1, 6)
+            ]
+            + [
+                {
+                    "trading_day": date(2024, 6, i),
+                    "outcome": "loss",
+                    "pnl_r": -1.0,
+                    "mae_r": 1.0,
+                    "mfe_r": 0.0,
+                    "entry_price": 2703.0,
+                    "stop_price": 2690.0,
+                }
+                for i in range(1, 4)
+            ]
+            + [
+                {
+                    "trading_day": date(2025, 3, i),
+                    "outcome": "win",
+                    "pnl_r": 1.5,
+                    "mae_r": 0.5,
+                    "mfe_r": 1.5,
+                    "entry_price": 2703.0,
+                    "stop_price": 2690.0,
+                }
+                for i in range(1, 4)
+            ]
+        )
         m = compute_metrics(outcomes)
         assert m["sharpe_ann"] is not None
         # Date range: 2024-01-01 to 2025-03-03 = 428 days ≈ 1.17 years
@@ -148,7 +331,15 @@ class TestComputeMetrics:
     def test_sharpe_ann_none_when_no_variance(self):
         """If all trades have identical pnl_r, sharpe_ratio is None -> sharpe_ann is None."""
         outcomes = [
-            {"trading_day": date(2024, 1, i), "outcome": "win", "pnl_r": 1.0, "mae_r": 0.5, "mfe_r": 1.0, "entry_price": 2703.0, "stop_price": 2690.0}
+            {
+                "trading_day": date(2024, 1, i),
+                "outcome": "win",
+                "pnl_r": 1.0,
+                "mae_r": 0.5,
+                "mfe_r": 1.0,
+                "entry_price": 2703.0,
+                "stop_price": 2690.0,
+            }
             for i in range(1, 5)
         ]
         m = compute_metrics(outcomes)
@@ -164,9 +355,33 @@ class TestComputeMetrics:
     def test_sharpe_ann_single_year(self):
         """sharpe_ann works when all trades are in a single year."""
         outcomes = [
-            {"trading_day": date(2024, 1, 1), "outcome": "win", "pnl_r": 2.0, "mae_r": 0.5, "mfe_r": 2.0, "entry_price": 2703.0, "stop_price": 2690.0},
-            {"trading_day": date(2024, 3, 1), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2703.0, "stop_price": 2690.0},
-            {"trading_day": date(2024, 6, 1), "outcome": "win", "pnl_r": 1.5, "mae_r": 0.5, "mfe_r": 1.5, "entry_price": 2703.0, "stop_price": 2690.0},
+            {
+                "trading_day": date(2024, 1, 1),
+                "outcome": "win",
+                "pnl_r": 2.0,
+                "mae_r": 0.5,
+                "mfe_r": 2.0,
+                "entry_price": 2703.0,
+                "stop_price": 2690.0,
+            },
+            {
+                "trading_day": date(2024, 3, 1),
+                "outcome": "loss",
+                "pnl_r": -1.0,
+                "mae_r": 1.0,
+                "mfe_r": 0.0,
+                "entry_price": 2703.0,
+                "stop_price": 2690.0,
+            },
+            {
+                "trading_day": date(2024, 6, 1),
+                "outcome": "win",
+                "pnl_r": 1.5,
+                "mae_r": 0.5,
+                "mfe_r": 1.5,
+                "entry_price": 2703.0,
+                "stop_price": 2690.0,
+            },
         ]
         m = compute_metrics(outcomes)
         # Date range: 2024-01-01 to 2024-06-01 = 153 days ≈ 0.42 years
@@ -180,10 +395,42 @@ class TestComputeMetrics:
     def test_sharpe_ann_negative(self):
         """Negative sharpe_ann when strategy is losing."""
         outcomes = [
-            {"trading_day": date(2024, 1, 1), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2703.0, "stop_price": 2690.0},
-            {"trading_day": date(2024, 1, 2), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2703.0, "stop_price": 2690.0},
-            {"trading_day": date(2024, 1, 3), "outcome": "win", "pnl_r": 2.0, "mae_r": 0.5, "mfe_r": 2.0, "entry_price": 2703.0, "stop_price": 2690.0},
-            {"trading_day": date(2025, 1, 1), "outcome": "loss", "pnl_r": -1.0, "mae_r": 1.0, "mfe_r": 0.0, "entry_price": 2703.0, "stop_price": 2690.0},
+            {
+                "trading_day": date(2024, 1, 1),
+                "outcome": "loss",
+                "pnl_r": -1.0,
+                "mae_r": 1.0,
+                "mfe_r": 0.0,
+                "entry_price": 2703.0,
+                "stop_price": 2690.0,
+            },
+            {
+                "trading_day": date(2024, 1, 2),
+                "outcome": "loss",
+                "pnl_r": -1.0,
+                "mae_r": 1.0,
+                "mfe_r": 0.0,
+                "entry_price": 2703.0,
+                "stop_price": 2690.0,
+            },
+            {
+                "trading_day": date(2024, 1, 3),
+                "outcome": "win",
+                "pnl_r": 2.0,
+                "mae_r": 0.5,
+                "mfe_r": 2.0,
+                "entry_price": 2703.0,
+                "stop_price": 2690.0,
+            },
+            {
+                "trading_day": date(2025, 1, 1),
+                "outcome": "loss",
+                "pnl_r": -1.0,
+                "mae_r": 1.0,
+                "mfe_r": 0.0,
+                "entry_price": 2703.0,
+                "stop_price": 2690.0,
+            },
         ]
         m = compute_metrics(outcomes)
         assert m["sharpe_ratio"] < 0
@@ -191,9 +438,11 @@ class TestComputeMetrics:
         expected = m["sharpe_ratio"] * (m["trades_per_year"] ** 0.5)
         assert m["sharpe_ann"] == pytest.approx(expected, abs=0.01)
 
+
 # ============================================================================
 # make_strategy_id tests
 # ============================================================================
+
 
 class TestMakeStrategyId:
     """Tests for strategy ID generation."""
@@ -231,14 +480,14 @@ class TestMakeStrategyId:
         assert sid == "MGC_CME_REOPEN_E1_RR2.0_CB1_ORB_G4_O30"
 
     def test_orb_minutes_with_dst_suffix_order(self):
-        sid = make_strategy_id("MGC", "CME_REOPEN", "E1", 2.0, 1, "ORB_G4",
-                               dst_regime="winter", orb_minutes=15)
+        sid = make_strategy_id("MGC", "CME_REOPEN", "E1", 2.0, 1, "ORB_G4", dst_regime="winter", orb_minutes=15)
         assert sid == "MGC_CME_REOPEN_E1_RR2.0_CB1_ORB_G4_O15_W"
 
     def test_orb_minutes_15_vs_5_different(self):
         s5 = make_strategy_id("MGC", "CME_REOPEN", "E1", 2.0, 1, "ORB_G4", orb_minutes=5)
         s15 = make_strategy_id("MGC", "CME_REOPEN", "E1", 2.0, 1, "ORB_G4", orb_minutes=15)
         assert s5 != s15
+
 
 # ============================================================================
 # CLI test
@@ -247,6 +496,7 @@ class TestMakeStrategyId:
 # ============================================================================
 # _compute_relative_volumes tests
 # ============================================================================
+
 
 def _make_bars_1m_table(con):
     """Create bars_1m table for testing."""
@@ -260,6 +510,7 @@ def _make_bars_1m_table(con):
             PRIMARY KEY (symbol, ts_utc)
         )
     """)
+
 
 class TestComputeRelativeVolumes:
     """Tests for _compute_relative_volumes relative volume enrichment."""
@@ -291,10 +542,12 @@ class TestComputeRelativeVolumes:
             )
 
         # Feature row: break at 23:05 on day 21
-        features = [{
-            "trading_day": date(2024, 1, 21),
-            "orb_CME_REOPEN_break_ts": datetime(2024, 1, 21, 23, 5, tzinfo=timezone.utc),
-        }]
+        features = [
+            {
+                "trading_day": date(2024, 1, 21),
+                "orb_CME_REOPEN_break_ts": datetime(2024, 1, 21, 23, 5, tzinfo=timezone.utc),
+            }
+        ]
 
         _compute_relative_volumes(con, features, "MGC", ["CME_REOPEN"], ALL_FILTERS)
         con.close()
@@ -314,10 +567,12 @@ class TestComputeRelativeVolumes:
             [datetime(2024, 6, 15, 23, 5, tzinfo=timezone.utc).isoformat()],
         )
 
-        features = [{
-            "trading_day": date(2024, 6, 15),
-            "orb_CME_REOPEN_break_ts": datetime(2024, 6, 15, 23, 5, tzinfo=timezone.utc),
-        }]
+        features = [
+            {
+                "trading_day": date(2024, 6, 15),
+                "orb_CME_REOPEN_break_ts": datetime(2024, 6, 15, 23, 5, tzinfo=timezone.utc),
+            }
+        ]
 
         _compute_relative_volumes(con, features, "MGC", ["CME_REOPEN"], ALL_FILTERS)
         con.close()
@@ -341,10 +596,12 @@ class TestComputeRelativeVolumes:
             [datetime(2024, 3, 21, 23, 5, tzinfo=timezone.utc).isoformat()],
         )
 
-        features = [{
-            "trading_day": date(2024, 3, 21),
-            "orb_CME_REOPEN_break_ts": datetime(2024, 3, 21, 23, 5, tzinfo=timezone.utc),
-        }]
+        features = [
+            {
+                "trading_day": date(2024, 3, 21),
+                "orb_CME_REOPEN_break_ts": datetime(2024, 3, 21, 23, 5, tzinfo=timezone.utc),
+            }
+        ]
 
         _compute_relative_volumes(con, features, "MGC", ["CME_REOPEN"], ALL_FILTERS)
         con.close()
@@ -358,10 +615,12 @@ class TestComputeRelativeVolumes:
         # Pass filters with NO VolumeFilter
         no_vol_filters = {k: v for k, v in ALL_FILTERS.items() if not isinstance(v, VolumeFilter)}
 
-        features = [{
-            "trading_day": date(2024, 1, 21),
-            "orb_CME_REOPEN_break_ts": datetime(2024, 1, 21, 23, 5, tzinfo=timezone.utc),
-        }]
+        features = [
+            {
+                "trading_day": date(2024, 1, 21),
+                "orb_CME_REOPEN_break_ts": datetime(2024, 1, 21, 23, 5, tzinfo=timezone.utc),
+            }
+        ]
 
         _compute_relative_volumes(con, features, "MGC", ["CME_REOPEN"], no_vol_filters)
         con.close()
@@ -389,12 +648,14 @@ class TestComputeRelativeVolumes:
         # Features: days 21-30 all have breaks
         features = []
         for i in range(21, 31):
-            features.append({
-                "trading_day": date(2024, 3, i),
-                "orb_CME_REOPEN_break_ts": datetime(2024, 3, i, 23, 5, tzinfo=timezone.utc),
-                "orb_CME_REOPEN_break_dir": "long",
-                "orb_CME_REOPEN_size": 5.0,
-            })
+            features.append(
+                {
+                    "trading_day": date(2024, 3, i),
+                    "orb_CME_REOPEN_break_ts": datetime(2024, 3, i, 23, 5, tzinfo=timezone.utc),
+                    "orb_CME_REOPEN_break_dir": "long",
+                    "orb_CME_REOPEN_size": 5.0,
+                }
+            )
 
         _compute_relative_volumes(con, features, "MGC", ["CME_REOPEN"], ALL_FILTERS)
 
@@ -412,6 +673,7 @@ class TestComputeRelativeVolumes:
         # Low vol days: 50/100 = 0.5 < 1.2
         assert vol_count < nf_count
         assert vol_count == 5  # only the 5 high-volume days
+
 
 class TestDoubleBreakNoExclusion:
     """Double-break days are NOT excluded from _build_filter_day_sets (Feb 2026).
@@ -452,7 +714,7 @@ class TestDoubleBreakNoExclusion:
         from trading_app.strategy_discovery import _build_filter_day_sets
 
         features = [
-            self._make_feature(1, True),   # double break
+            self._make_feature(1, True),  # double break
             self._make_feature(2, False),  # single break
             self._make_feature(3, False),  # single break
         ]
@@ -503,6 +765,7 @@ class TestComputeMetricsScratchCounts:
         assert m["entry_signals"] == 15
         assert m["scratch_count"] == 5
 
+
 class TestZeroSampleNotWritten:
     """B2: All-scratch/early_exit outcomes should not produce strategy rows."""
 
@@ -513,12 +776,14 @@ class TestZeroSampleNotWritten:
 
         # Create minimal schema
         from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA, DAILY_FEATURES_SCHEMA
+
         con.execute(BARS_1M_SCHEMA)
         con.execute(BARS_5M_SCHEMA)
         con.execute(DAILY_FEATURES_SCHEMA)
         con.close()
 
         from trading_app.db_manager import init_trading_app_schema
+
         init_trading_app_schema(db_path=db_path)
 
         con = duckdb.connect(str(db_path))
@@ -544,8 +809,10 @@ class TestZeroSampleNotWritten:
 
         # Run discovery
         count = run_discovery(
-            db_path=db_path, instrument="MGC",
-            start_date=date(2024, 1, 1), end_date=date(2024, 1, 31),
+            db_path=db_path,
+            instrument="MGC",
+            start_date=date(2024, 1, 1),
+            end_date=date(2024, 1, 31),
         )
 
         # Verify no strategies were written (all had sample_size=0)
@@ -554,9 +821,11 @@ class TestZeroSampleNotWritten:
         con.close()
         assert rows == 0, f"Expected 0 strategies but got {rows}"
 
+
 # ============================================================================
 # Dedup tests
 # ============================================================================
+
 
 class TestDedup:
     """Tests for trade-day hash dedup (_mark_canonical, _compute_trade_day_hash)."""
@@ -570,11 +839,17 @@ class TestDedup:
         day_hash = _compute_trade_day_hash(days)
 
         strategies = [
-            {"strategy_id": f"MGC_CME_REOPEN_E1_RR2.0_CB1_ORB_{f}",
-             "instrument": "MGC", "orb_label": "CME_REOPEN",
-             "entry_model": "E1", "rr_target": 2.0, "confirm_bars": 1,
-             "filter_key": f"ORB_{f}", "trade_day_hash": day_hash,
-             "metrics": {"expectancy_r": 0.5}}
+            {
+                "strategy_id": f"MGC_CME_REOPEN_E1_RR2.0_CB1_ORB_{f}",
+                "instrument": "MGC",
+                "orb_label": "CME_REOPEN",
+                "entry_model": "E1",
+                "rr_target": 2.0,
+                "confirm_bars": 1,
+                "filter_key": f"ORB_{f}",
+                "trade_day_hash": day_hash,
+                "metrics": {"expectancy_r": 0.5},
+            }
             for f in ["G4", "G5", "G6"]
         ]
 
@@ -599,25 +874,39 @@ class TestDedup:
         days2 = [date(2024, 1, i) for i in range(6, 11)]
 
         strategies = [
-            {"strategy_id": "MGC_CME_REOPEN_E1_RR2.0_CB1_ORB_G4",
-             "instrument": "MGC", "orb_label": "CME_REOPEN",
-             "entry_model": "E1", "rr_target": 2.0, "confirm_bars": 1,
-             "filter_key": "ORB_G4", "trade_day_hash": _compute_trade_day_hash(days1),
-             "metrics": {"expectancy_r": 0.5}},
-            {"strategy_id": "MGC_CME_REOPEN_E1_RR2.0_CB1_ORB_G8",
-             "instrument": "MGC", "orb_label": "CME_REOPEN",
-             "entry_model": "E1", "rr_target": 2.0, "confirm_bars": 1,
-             "filter_key": "ORB_G8", "trade_day_hash": _compute_trade_day_hash(days2),
-             "metrics": {"expectancy_r": 0.8}},
+            {
+                "strategy_id": "MGC_CME_REOPEN_E1_RR2.0_CB1_ORB_G4",
+                "instrument": "MGC",
+                "orb_label": "CME_REOPEN",
+                "entry_model": "E1",
+                "rr_target": 2.0,
+                "confirm_bars": 1,
+                "filter_key": "ORB_G4",
+                "trade_day_hash": _compute_trade_day_hash(days1),
+                "metrics": {"expectancy_r": 0.5},
+            },
+            {
+                "strategy_id": "MGC_CME_REOPEN_E1_RR2.0_CB1_ORB_G8",
+                "instrument": "MGC",
+                "orb_label": "CME_REOPEN",
+                "entry_model": "E1",
+                "rr_target": 2.0,
+                "confirm_bars": 1,
+                "filter_key": "ORB_G8",
+                "trade_day_hash": _compute_trade_day_hash(days2),
+                "metrics": {"expectancy_r": 0.8},
+            },
         ]
 
         _mark_canonical(strategies)
         canonical = [s for s in strategies if s["is_canonical"]]
         assert len(canonical) == 2
 
+
 # ============================================================================
 # Validator alias skipping
 # ============================================================================
+
 
 class TestValidatorSkipsAliases:
     """Test that strategy_validator skips non-canonical (alias) strategies."""
@@ -627,12 +916,14 @@ class TestValidatorSkipsAliases:
         db_path = tmp_path / "test.db"
         con = duckdb.connect(str(db_path))
         from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA, DAILY_FEATURES_SCHEMA
+
         con.execute(BARS_1M_SCHEMA)
         con.execute(BARS_5M_SCHEMA)
         con.execute(DAILY_FEATURES_SCHEMA)
         con.close()
 
         from trading_app.db_manager import init_trading_app_schema
+
         init_trading_app_schema(db_path=db_path)
 
         con = duckdb.connect(str(db_path))
@@ -668,11 +959,13 @@ class TestValidatorSkipsAliases:
             "max_drawdown_r": 5.0,
             "median_risk_points": 10.0,
             "avg_risk_points": 10.5,
-            "yearly_results": json.dumps({
-                "2022": {"trades": 50, "wins": 28, "total_r": 10.0, "win_rate": 0.56, "avg_r": 0.2},
-                "2023": {"trades": 50, "wins": 27, "total_r": 8.0, "win_rate": 0.54, "avg_r": 0.16},
-                "2024": {"trades": 50, "wins": 28, "total_r": 9.0, "win_rate": 0.56, "avg_r": 0.18},
-            }),
+            "yearly_results": json.dumps(
+                {
+                    "2022": {"trades": 50, "wins": 28, "total_r": 10.0, "win_rate": 0.56, "avg_r": 0.2},
+                    "2023": {"trades": 50, "wins": 27, "total_r": 8.0, "win_rate": 0.54, "avg_r": 0.16},
+                    "2024": {"trades": 50, "wins": 28, "total_r": 9.0, "win_rate": 0.56, "avg_r": 0.18},
+                }
+            ),
             "is_canonical": True,
         }
         base.update(overrides)
@@ -691,9 +984,7 @@ class TestValidatorSkipsAliases:
         )
         db_path = self._setup_db(tmp_path, [canonical, alias])
 
-        passed, rejected = run_validation(
-            db_path=db_path, instrument="MGC", enable_walkforward=False
-        )
+        passed, rejected = run_validation(db_path=db_path, instrument="MGC", enable_walkforward=False)
 
         # Canonical passes validation, alias is skipped
         assert passed == 1
@@ -708,14 +999,19 @@ class TestValidatorSkipsAliases:
         con.close()
         assert alias_status == "SKIPPED"
 
+
 class TestHaircutSharpe:
     """Tests for _compute_haircut_sharpe (BLP 2014 Deflated Sharpe Ratio)."""
 
     def test_strong_edge_survives(self):
         """A genuine high-Sharpe strategy should survive the haircut."""
         result = _compute_haircut_sharpe(
-            sharpe_per_trade=0.23, n_obs=1000, skewness=0.0,
-            kurtosis_excess=0.0, n_trials=2376, trades_per_year=200.0,
+            sharpe_per_trade=0.23,
+            n_obs=1000,
+            skewness=0.0,
+            kurtosis_excess=0.0,
+            n_trials=2376,
+            trades_per_year=200.0,
         )
         assert result is not None
         assert result > 0, "Strong edge with N=1000 should survive haircut"
@@ -723,8 +1019,12 @@ class TestHaircutSharpe:
     def test_noise_goes_negative(self):
         """Near-zero per-trade Sharpe with small sample should go negative."""
         result = _compute_haircut_sharpe(
-            sharpe_per_trade=0.01, n_obs=50, skewness=0.0,
-            kurtosis_excess=0.0, n_trials=2376, trades_per_year=10.0,
+            sharpe_per_trade=0.01,
+            n_obs=50,
+            skewness=0.0,
+            kurtosis_excess=0.0,
+            n_trials=2376,
+            trades_per_year=10.0,
         )
         assert result is not None
         assert result < 0, "Noise strategy should not survive haircut"
@@ -732,24 +1032,40 @@ class TestHaircutSharpe:
     def test_more_trials_increases_penalty(self):
         """More trials = higher expected max = more haircut."""
         few = _compute_haircut_sharpe(
-            sharpe_per_trade=0.10, n_obs=200, skewness=0.0,
-            kurtosis_excess=0.0, n_trials=10, trades_per_year=40.0,
+            sharpe_per_trade=0.10,
+            n_obs=200,
+            skewness=0.0,
+            kurtosis_excess=0.0,
+            n_trials=10,
+            trades_per_year=40.0,
         )
         many = _compute_haircut_sharpe(
-            sharpe_per_trade=0.10, n_obs=200, skewness=0.0,
-            kurtosis_excess=0.0, n_trials=2376, trades_per_year=40.0,
+            sharpe_per_trade=0.10,
+            n_obs=200,
+            skewness=0.0,
+            kurtosis_excess=0.0,
+            n_trials=2376,
+            trades_per_year=40.0,
         )
         assert few > many, "More trials should produce a lower haircut Sharpe"
 
     def test_larger_sample_preserves_more(self):
         """Larger N reduces estimator variance, less penalty from noise."""
         small_n = _compute_haircut_sharpe(
-            sharpe_per_trade=0.10, n_obs=50, skewness=0.0,
-            kurtosis_excess=0.0, n_trials=2376, trades_per_year=10.0,
+            sharpe_per_trade=0.10,
+            n_obs=50,
+            skewness=0.0,
+            kurtosis_excess=0.0,
+            n_trials=2376,
+            trades_per_year=10.0,
         )
         large_n = _compute_haircut_sharpe(
-            sharpe_per_trade=0.10, n_obs=500, skewness=0.0,
-            kurtosis_excess=0.0, n_trials=2376, trades_per_year=100.0,
+            sharpe_per_trade=0.10,
+            n_obs=500,
+            skewness=0.0,
+            kurtosis_excess=0.0,
+            n_trials=2376,
+            trades_per_year=100.0,
         )
         assert large_n > small_n, "Larger sample should preserve more Sharpe"
 
@@ -767,12 +1083,26 @@ class TestHaircutSharpe:
     def test_compute_metrics_populates_haircut(self):
         """compute_metrics with n_trials > 0 should populate haircut fields."""
         outcomes = [
-            {"trading_day": date(2024, 1, i), "outcome": "win", "pnl_r": 1.5,
-             "mae_r": 0.5, "mfe_r": 2.0, "entry_price": 100.0, "stop_price": 95.0}
+            {
+                "trading_day": date(2024, 1, i),
+                "outcome": "win",
+                "pnl_r": 1.5,
+                "mae_r": 0.5,
+                "mfe_r": 2.0,
+                "entry_price": 100.0,
+                "stop_price": 95.0,
+            }
             for i in range(1, 16)
         ] + [
-            {"trading_day": date(2024, 1, i), "outcome": "loss", "pnl_r": -1.0,
-             "mae_r": 1.0, "mfe_r": 0.2, "entry_price": 100.0, "stop_price": 95.0}
+            {
+                "trading_day": date(2024, 1, i),
+                "outcome": "loss",
+                "pnl_r": -1.0,
+                "mae_r": 1.0,
+                "mfe_r": 0.2,
+                "entry_price": 100.0,
+                "stop_price": 95.0,
+            }
             for i in range(16, 26)
         ]
         m = compute_metrics(outcomes, n_trials=2376)
@@ -783,12 +1113,26 @@ class TestHaircutSharpe:
     def test_compute_metrics_no_trials_leaves_none(self):
         """compute_metrics without n_trials should leave haircut as None."""
         outcomes = [
-            {"trading_day": date(2024, 1, i), "outcome": "win", "pnl_r": 1.5,
-             "mae_r": 0.5, "mfe_r": 2.0, "entry_price": 100.0, "stop_price": 95.0}
+            {
+                "trading_day": date(2024, 1, i),
+                "outcome": "win",
+                "pnl_r": 1.5,
+                "mae_r": 0.5,
+                "mfe_r": 2.0,
+                "entry_price": 100.0,
+                "stop_price": 95.0,
+            }
             for i in range(1, 16)
         ] + [
-            {"trading_day": date(2024, 1, i), "outcome": "loss", "pnl_r": -1.0,
-             "mae_r": 1.0, "mfe_r": 0.2, "entry_price": 100.0, "stop_price": 95.0}
+            {
+                "trading_day": date(2024, 1, i),
+                "outcome": "loss",
+                "pnl_r": -1.0,
+                "mae_r": 1.0,
+                "mfe_r": 0.2,
+                "entry_price": 100.0,
+                "stop_price": 95.0,
+            }
             for i in range(16, 26)
         ]
         m = compute_metrics(outcomes)
@@ -802,6 +1146,7 @@ class TestCLI:
         monkeypatch.setattr("sys.argv", ["strategy_discovery", "--help"])
         with pytest.raises(SystemExit) as exc_info:
             from trading_app.strategy_discovery import main
+
             main()
         assert exc_info.value.code == 0
         assert "instrument" in capsys.readouterr().out
