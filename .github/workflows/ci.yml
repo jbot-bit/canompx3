@@ -61,7 +61,7 @@ jobs:
           "
 
       - name: Security audit (advisory)
-        run: pip-audit --desc on 2>&1 || true
+        run: pip-audit --desc on
         continue-on-error: true
 
       - name: Tests with coverage

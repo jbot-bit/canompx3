@@ -2985,9 +2985,12 @@ def check_ruff_rules_minimum(project_root: Path) -> list[str]:
     ruff_path = project_root / "ruff.toml"
     if not ruff_path.exists():
         return ["ruff.toml missing"]
-    content = ruff_path.read_text()
+    import tomllib
+
+    config = tomllib.loads(ruff_path.read_text())
+    selected = config.get("lint", {}).get("select", [])
     required = ["I", "B", "UP"]
-    missing = [r for r in required if f'"{r}"' not in content]
+    missing = [r for r in required if r not in selected]
     if missing:
         return [f"ruff.toml missing required rule sets: {missing}"]
     return []

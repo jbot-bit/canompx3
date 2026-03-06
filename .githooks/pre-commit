@@ -74,7 +74,7 @@ if ! "$PYTHON" pipeline/check_drift.py > /dev/null 2>&1; then
 fi
 echo "  PASSED"
 
-# 2. Staged-file-aware FAST tests — pre-commit must finish in <30s.
+# 3. Staged-file-aware FAST tests — pre-commit must finish in <30s.
 #    - pipeline/ changes  → tests/test_pipeline/ (~11s, 636 tests)
 #    - trading_app/ changes → fast subset only (~2s, config/entry/tripwires)
 #    - Both changed → pipeline/ + fast trading_app subset (~13s)
