@@ -107,8 +107,9 @@ def match_fills_to_trades(fills: list[dict]) -> list[dict]:
                 trade = _build_trade(entry_fills, fill, account_id, instrument, trade_counter)
                 all_trades.append(trade)
 
-                # Remaining size opens new position
-                entry_fills = [fill]  # The flip fill starts new position
+                # Remaining size opens new position — synthetic fill with net size only
+                remainder_fill = {**fill, "size": abs(new_position)}
+                entry_fills = [remainder_fill]
                 position = new_position
 
     # Enrich with behavioral metrics (needs full trade list for context)
@@ -169,10 +170,13 @@ def _build_trade(
 def _enrich_behavioral_metrics(trades: list[dict]) -> None:
     """Add behavioral metrics to trades for coaching analysis. Mutates in-place.
 
+    Metrics are computed per trading day (entry_time date). Cross-day metrics
+    don't bleed between sessions.
+
     Metrics added per trade:
     - time_since_last_exit_s: seconds since previous trade's exit (re-entry speed)
-    - size_vs_baseline_pct: size relative to session median (100 = baseline)
-    - session_pnl_at_entry: cumulative PnL when this trade was entered
+    - size_vs_baseline_pct: size relative to day's median size (100 = baseline)
+    - session_pnl_at_entry: cumulative day PnL when this trade was entered
     - consecutive_losses_at_entry: streak of consecutive losses before this trade
     - same_instrument_reentry: True if same instrument as previous trade
     """
@@ -182,7 +186,19 @@ def _enrich_behavioral_metrics(trades: list[dict]) -> None:
     # Sort by entry_time for sequential analysis
     trades.sort(key=lambda t: t["entry_time"])
 
-    # Compute session median size for baseline
+    # Group by trading day to avoid cross-session metric bleeding
+    day_groups: dict[str, list[dict]] = defaultdict(list)
+    for trade in trades:
+        day = trade["entry_time"][:10]
+        day_groups[day].append(trade)
+
+    for day_trades in day_groups.values():
+        _enrich_day(day_trades)
+
+
+def _enrich_day(trades: list[dict]) -> None:
+    """Enrich a single day's trades with behavioral metrics."""
+    # Compute day median size for baseline
     sizes = [t["size"] for t in trades]
     sorted_sizes = sorted(sizes)
     n = len(sorted_sizes)

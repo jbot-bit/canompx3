@@ -109,7 +109,21 @@ def load_trader_profile(*, path: Path = PROFILE_PATH) -> dict:
         "behavioral_patterns": [],
         "goals": [],
         "session_tendencies": {},
-        "emotional_profile": {"tilt_indicators": [], "calm_indicators": []},
+        "inchworm": {
+            "c_game_patterns": [],
+            "b_game_patterns": [],
+            "a_game_indicators": [],
+        },
+        "emotional_profile": {
+            "primary_emotion": None,
+            "tilt_subtype": None,
+            "escalation_speed": None,
+            "recovery_pattern": None,
+            "tilt_indicators": [],
+            "calm_indicators": [],
+            "known_triggers": [],
+            "effective_interventions": [],
+        },
         "account_summary": {},
     }
 

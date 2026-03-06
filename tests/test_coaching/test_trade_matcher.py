@@ -97,7 +97,9 @@ class TestPositionFlip:
         trades = match_fills_to_trades(fills)
         assert len(trades) == 2
         assert trades[0]["direction"] == "LONG"
+        assert trades[0]["size"] == 2  # original long position size
         assert trades[1]["direction"] == "SHORT"
+        assert trades[1]["size"] == 2  # flipped position = remainder, not full fill
 
 
 class TestMultiAccountIsolation:
