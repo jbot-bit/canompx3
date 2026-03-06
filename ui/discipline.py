@@ -4,6 +4,7 @@ Pure Streamlit rendering. Reads live_signals.jsonl (written by orchestrator),
 writes to data/trade_debriefs.jsonl and data/discipline_state.jsonl.
 No orchestrator or execution engine changes.
 """
+
 from __future__ import annotations
 
 import random
@@ -42,9 +43,7 @@ def render_pending_debriefs(
     state_path: Path = STATE_PATH,
 ) -> None:
     """Render debrief forms for any exit signals without a matching debrief."""
-    pending = get_pending_debriefs(
-        signals_path=signals_path, debriefs_path=debriefs_path
-    )
+    pending = get_pending_debriefs(signals_path=signals_path, debriefs_path=debriefs_path)
     if not pending:
         return
 
@@ -165,7 +164,7 @@ def check_cooling(
     # Cooling content
     st.markdown("**Take a breath.**")
     quote = random.choice(_TRADING_QUOTES)
-    st.markdown(f"*\"{quote}\"*")
+    st.markdown(f'*"{quote}"*')
     st.caption("Wait for the signal. The plan is the edge.")
 
     # Soft mode: override button after 15s
@@ -214,8 +213,11 @@ def render_pre_session_priming(
     if stats["total"] > 0:
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Adherence", f"{stats['adherence_rate']:.0%}",
-                       help=f"{stats['followed']}/{stats['total']} signals followed")
+            st.metric(
+                "Adherence",
+                f"{stats['adherence_rate']:.0%}",
+                help=f"{stats['followed']}/{stats['total']} signals followed",
+            )
         with col2:
             st.metric("Avg R (followed)", f"{stats['avg_r_followed']:+.2f}")
         with col3:
@@ -254,7 +256,7 @@ def render_pre_session_priming(
     if letter:
         st.markdown("---")
         st.markdown("**Letter from your past self:**")
-        st.info(f"\"{letter['text']}\"")
+        st.info(f'"{letter["text"]}"')
         ts_str = letter.get("ts", "")
         if ts_str:
             try:

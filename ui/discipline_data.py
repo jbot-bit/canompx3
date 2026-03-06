@@ -3,6 +3,7 @@
 Append-only JSONL storage for trade debriefs and discipline state events.
 No database writes, no schema migrations. Pure file I/O.
 """
+
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -42,9 +43,7 @@ def load_debriefs(*, path: Path = DEBRIEFS_PATH) -> list[dict]:
     return records
 
 
-def append_discipline_event(
-    event_type: str, extra: dict | None = None, *, path: Path = STATE_PATH
-) -> None:
+def append_discipline_event(event_type: str, extra: dict | None = None, *, path: Path = STATE_PATH) -> None:
     """Append a discipline state event (cooling, commitment, etc.)."""
     path.parent.mkdir(parents=True, exist_ok=True)
     record = {
@@ -70,27 +69,19 @@ def _load_signals(signals_path: Path) -> list[dict]:
     return records
 
 
-def get_pending_debriefs(
-    *, signals_path: Path, debriefs_path: Path = DEBRIEFS_PATH
-) -> list[dict]:
+def get_pending_debriefs(*, signals_path: Path, debriefs_path: Path = DEBRIEFS_PATH) -> list[dict]:
     """Find exit signals that have no matching debrief.
 
     Key: (strategy_id, exit_ts) — a debrief matches if its signal_exit_ts
     equals the exit signal's ts.
     """
     signals = _load_signals(signals_path)
-    exits = [
-        s for s in signals
-        if s.get("type") in ("SIGNAL_EXIT", "ORDER_EXIT")
-    ]
+    exits = [s for s in signals if s.get("type") in ("SIGNAL_EXIT", "ORDER_EXIT")]
     if not exits:
         return []
 
     debriefs = load_debriefs(path=debriefs_path)
-    debriefed_keys = {
-        (d.get("strategy_id"), d.get("signal_exit_ts"))
-        for d in debriefs
-    }
+    debriefed_keys = {(d.get("strategy_id"), d.get("signal_exit_ts")) for d in debriefs}
 
     pending = []
     for ex in exits:
@@ -100,9 +91,7 @@ def get_pending_debriefs(
     return pending
 
 
-def compute_adherence_stats(
-    *, path: Path = DEBRIEFS_PATH, session: str | None = None
-) -> dict:
+def compute_adherence_stats(*, path: Path = DEBRIEFS_PATH, session: str | None = None) -> dict:
     """Compute adherence stats from debrief records."""
     records = load_debriefs(path=path)
     if session:
@@ -110,8 +99,11 @@ def compute_adherence_stats(
 
     if not records:
         return {
-            "total": 0, "followed": 0, "adherence_rate": 0.0,
-            "avg_r_followed": 0.0, "avg_r_deviated": 0.0,
+            "total": 0,
+            "followed": 0,
+            "adherence_rate": 0.0,
+            "avg_r_followed": 0.0,
+            "avg_r_deviated": 0.0,
             "deviation_cost_dollars": 0.0,
         }
 
@@ -132,16 +124,10 @@ def compute_adherence_stats(
     }
 
 
-def get_latest_letter(
-    session: str, *, path: Path = DEBRIEFS_PATH
-) -> dict | None:
+def get_latest_letter(session: str, *, path: Path = DEBRIEFS_PATH) -> dict | None:
     """Get the most recent letter_to_future_self for a session."""
     records = load_debriefs(path=path)
-    letters = [
-        r for r in records
-        if r.get("letter_to_future_self")
-        and session in r.get("strategy_id", "")
-    ]
+    letters = [r for r in records if r.get("letter_to_future_self") and session in r.get("strategy_id", "")]
     if not letters:
         return None
     latest = max(letters, key=lambda r: r.get("ts", ""))

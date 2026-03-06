@@ -1,4 +1,5 @@
 """Tests for discipline UI components — debrief card, cooling screen, priming."""
+
 import json
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -7,6 +8,7 @@ from unittest.mock import patch, MagicMock
 def test_render_pending_debriefs_no_exits(tmp_path):
     """No exit signals -> no debrief cards rendered."""
     from ui.discipline import render_pending_debriefs
+
     signals_path = tmp_path / "signals.jsonl"
     debriefs_path = tmp_path / "debriefs.jsonl"
     signals_path.write_text("")
@@ -18,6 +20,7 @@ def test_render_pending_debriefs_no_exits(tmp_path):
 def test_render_pending_debriefs_shows_form(tmp_path):
     """Exit signal without debrief -> form rendered."""
     from ui.discipline import render_pending_debriefs
+
     signals_path = tmp_path / "signals.jsonl"
     debriefs_path = tmp_path / "debriefs.jsonl"
     signal = {
@@ -40,6 +43,7 @@ def test_render_pending_debriefs_shows_form(tmp_path):
 
 def test_check_cooling_returns_false_when_not_active():
     from ui.discipline import check_cooling
+
     with patch("ui.discipline.st") as mock_st:
         mock_st.session_state = {}
         assert check_cooling() is False
@@ -48,6 +52,7 @@ def test_check_cooling_returns_false_when_not_active():
 def test_check_cooling_returns_true_when_active():
     from ui.discipline import check_cooling
     from datetime import datetime, timezone, timedelta
+
     with patch("ui.discipline.st") as mock_st:
         until = (datetime.now(timezone.utc) + timedelta(seconds=60)).isoformat()
         mock_st.session_state = {"cooling_until": until, "cooling_mode": "hard"}
@@ -56,6 +61,7 @@ def test_check_cooling_returns_true_when_active():
 
 def test_render_pre_session_priming_shows_commitment(tmp_path):
     from ui.discipline import render_pre_session_priming
+
     debriefs_path = tmp_path / "debriefs.jsonl"
     state_path = tmp_path / "state.jsonl"
     with patch("ui.discipline.st") as mock_st:
@@ -74,18 +80,24 @@ def test_losing_exit_triggers_cooling(tmp_path):
     """A negative pnl exit signal should activate cooling."""
     from ui.discipline import render_pending_debriefs
     import json
+
     signals_path = tmp_path / "signals.jsonl"
     debriefs_path = tmp_path / "debriefs.jsonl"
     state_path = tmp_path / "state.jsonl"
     entry = {
-        "ts": "2026-03-06T23:00:00Z", "instrument": "MGC",
-        "type": "SIGNAL_ENTRY", "strategy_id": "MGC_CME_REOPEN_E2_CB1_G4_RR2.5",
+        "ts": "2026-03-06T23:00:00Z",
+        "instrument": "MGC",
+        "type": "SIGNAL_ENTRY",
+        "strategy_id": "MGC_CME_REOPEN_E2_CB1_G4_RR2.5",
         "price": 3250.0,
     }
     exit_sig = {
-        "ts": "2026-03-06T23:15:00Z", "instrument": "MGC",
-        "type": "SIGNAL_EXIT", "strategy_id": "MGC_CME_REOPEN_E2_CB1_G4_RR2.5",
-        "price": 3245.0, "pnl_r": -1.2,
+        "ts": "2026-03-06T23:15:00Z",
+        "instrument": "MGC",
+        "type": "SIGNAL_EXIT",
+        "strategy_id": "MGC_CME_REOPEN_E2_CB1_G4_RR2.5",
+        "price": 3245.0,
+        "pnl_r": -1.2,
     }
     signals_path.write_text(json.dumps(entry) + "\n" + json.dumps(exit_sig) + "\n")
     with patch("ui.discipline.st") as mock_st:

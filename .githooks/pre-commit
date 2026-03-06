@@ -42,7 +42,7 @@ elif [ -f "$SCRIPT_DIR/.venv/bin/python" ]; then
 fi
 
 # 0. Ruff lint check (~1 second)
-echo "[0/4] Ruff lint..."
+echo "[0/6] Ruff lint..."
 RUFF="ruff"
 if [ -f "$SCRIPT_DIR/venv/Scripts/ruff.exe" ]; then
     RUFF="$SCRIPT_DIR/venv/Scripts/ruff.exe"
@@ -56,8 +56,17 @@ if ! "$RUFF" check pipeline/ trading_app/ > /dev/null 2>&1; then
 fi
 echo "  PASSED"
 
-# 1. Drift check (~2 seconds)
-echo "[1/4] Drift check..."
+# 1. Ruff format check (~1 second)
+echo "[1/6] Ruff format..."
+if ! "$RUFF" format --check pipeline/ trading_app/ ui/ scripts/ tests/ > /dev/null 2>&1; then
+    echo "BLOCKED: Unformatted code detected. Run: ruff format pipeline/ trading_app/ ui/ scripts/ tests/"
+    "$RUFF" format --check pipeline/ trading_app/ ui/ scripts/ tests/ 2>&1 | head -20
+    exit 1
+fi
+echo "  PASSED"
+
+# 2. Drift check (~2 seconds)
+echo "[2/6] Drift check..."
 if ! "$PYTHON" pipeline/check_drift.py > /dev/null 2>&1; then
     echo "BLOCKED: Drift detected."
     "$PYTHON" pipeline/check_drift.py
@@ -75,7 +84,7 @@ echo "  PASSED"
 #
 # NOTE: Capture output to temp file, NOT command substitution — PIPESTATUS is
 # unreliable in Git Bash command substitutions and can silently return 0.
-echo "[2/4] Fast tests..."
+echo "[3/6] Fast tests..."
 STAGED_ALL=$(git diff --cached --name-only --diff-filter=ACM)
 STAGED_PIPELINE=$(echo "$STAGED_ALL" | grep '^pipeline/' | grep '\.py$' || true)
 STAGED_TRADING=$(echo "$STAGED_ALL"  | grep '^trading_app/' | grep '\.py$' || true)
@@ -118,8 +127,8 @@ else
     fi
 fi
 
-# 3. Behavioral audit (~1 second)
-echo "[3/4] Behavioral audit..."
+# 4. Behavioral audit (~1 second)
+echo "[4/6] Behavioral audit..."
 if ! "$PYTHON" scripts/tools/audit_behavioral.py > /dev/null 2>&1; then
     echo "BLOCKED: Behavioral audit violations detected."
     "$PYTHON" scripts/tools/audit_behavioral.py
@@ -127,8 +136,8 @@ if ! "$PYTHON" scripts/tools/audit_behavioral.py > /dev/null 2>&1; then
 fi
 echo "  PASSED"
 
-# 4. Syntax check on staged .py files
-echo "[4/4] Syntax check..."
+# 5. Syntax check on staged .py files
+echo "[5/6] Syntax check..."
 STAGED_PY=$(git diff --cached --name-only --diff-filter=ACM | grep '\.py$' || true)
 if [ -n "$STAGED_PY" ]; then
     for f in $STAGED_PY; do
@@ -144,17 +153,17 @@ else
     echo "  No .py files staged"
 fi
 
-# 5. M2.5 second-opinion scan (ADVISORY ONLY — verify with Claude before acting)
+# 6. M2.5 second-opinion scan (ADVISORY ONLY — verify with Claude before acting)
 # Runs only if MINIMAX_API_KEY is set. Skips silently otherwise.
 # Use M25_SKIP=1 to skip even with API key set.
 # NOTE: ~70% false positive rate. Findings are suggestions, not facts.
 if [ -z "$M25_SKIP" ]; then
-    echo "[5/5] M2.5 scan (unverified suggestions only)..."
+    echo "[6/6] M2.5 scan (unverified suggestions only)..."
     M25_OUTPUT=$("$PYTHON" scripts/tools/m25_auto_audit.py --staged --quick --advisory 2>&1) || true
     echo "$M25_OUTPUT" | grep -v "^$" | head -20
     echo "  (verify any findings with Claude Code before acting)"
 else
-    echo "[5/5] M2.5 scan... SKIPPED (M25_SKIP=1)"
+    echo "[6/6] M2.5 scan... SKIPPED (M25_SKIP=1)"
 fi
 
 echo ""
