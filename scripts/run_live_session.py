@@ -3,13 +3,13 @@ ORB Live Session — entry point.
 
 THREE MODES (pick exactly one):
 
-  --signal-only   Shows trade signals. YOU place orders manually on Tradovate/TradingView.
+  --signal-only   Shows trade signals. YOU place orders manually on your platform.
                   No account connection needed. Safe to run any time.
 
-  --demo          Auto-places orders on your Tradovate DEMO account (paper trading).
-                  Requires Tradovate credentials in .env. No real money.
+  --demo          Auto-places orders on your broker's DEMO account (paper trading).
+                  Requires broker credentials in .env. No real money.
 
-  --live          Auto-places orders with REAL MONEY. Requires CONFIRM + Tradovate creds.
+  --live          Auto-places orders with REAL MONEY. Requires CONFIRM + broker creds.
 
 Examples:
     python scripts/run_live_session.py --instrument MGC --signal-only
@@ -37,13 +37,13 @@ def _print_mode_banner(mode: str, instrument: str) -> None:
             "╔══════════════════════════════════════════╗",
             "║   MODE: SIGNAL ONLY — no orders placed   ║",
             "║   Watch for ⚡ SIGNAL lines in the log   ║",
-            "║   Trade manually on Tradovate/TV          ║",
+            "║   Trade manually on your platform            ║",
             "╚══════════════════════════════════════════╝",
         ],
         "demo": [
             "╔══════════════════════════════════════════╗",
             "║   MODE: DEMO — paper orders only         ║",
-            "║   Connected to Tradovate DEMO account    ║",
+            "║   Connected to broker DEMO account        ║",
             "║   No real money at risk                  ║",
             "╚══════════════════════════════════════════╝",
         ],
@@ -81,7 +81,7 @@ def main() -> None:
         "--demo",
         action="store_true",
         default=False,
-        help="Auto-place orders on Tradovate DEMO account (paper trading)",
+        help="Auto-place orders on broker DEMO account (paper trading)",
     )
     mode_group.add_argument(
         "--live",
@@ -94,7 +94,18 @@ def main() -> None:
         "--account-id",
         type=int,
         default=0,
-        help="Tradovate numeric account ID (default: auto-discover from API)",
+        help="Numeric account ID (default: auto-discover from API)",
+    )
+    parser.add_argument(
+        "--broker",
+        default=None,
+        help="Broker: 'projectx' or 'tradovate' (default: from BROKER env var or 'projectx')",
+    )
+    parser.add_argument(
+        "--force-orphans",
+        action="store_true",
+        default=False,
+        help="Continue even if orphaned broker positions are detected on startup",
     )
     args = parser.parse_args()
 
@@ -125,9 +136,11 @@ def main() -> None:
 
     session = SessionOrchestrator(
         instrument=args.instrument,
+        broker=args.broker,
         demo=demo,
         account_id=args.account_id,
         signal_only=signal_only,
+        force_orphans=args.force_orphans,
     )
 
     try:

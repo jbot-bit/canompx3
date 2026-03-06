@@ -25,6 +25,7 @@ class TradeRecord:
     exit_price: float
     actual_r: float
     expected_r: float
+    slippage_pts: float = 0.0
     timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -72,11 +73,13 @@ class PerformanceMonitor:
 
     def daily_summary(self) -> dict:
         """Return EOD summary dict for logging."""
+        total_slippage = sum(t.slippage_pts for t in self._trades)
         return {
             "date": date.today().isoformat(),
             "total_r": round(sum(self._daily_r.values()), 4),
             "by_strategy": dict(self._daily_r),
             "n_trades": len(self._trades),
+            "total_slippage_pts": round(total_slippage, 4),
             "alarms": [sid for sid, m in self._monitors.items() if m.alarm_triggered],
         }
 

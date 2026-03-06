@@ -68,6 +68,7 @@ class ProjectXOrderRouter(BrokerRouter):
             raise RuntimeError(f"ProjectX order failed: {data.get('errorMessage', data)}")
 
         order_id = data.get("orderId", 0)
+        fill_price = data.get("fillPrice") or data.get("averagePrice")
         log.info(
             "ProjectX order placed: side=%d type=%d qty=%d -> orderId=%d (%.0fms)",
             spec.get("side", -1),
@@ -78,7 +79,11 @@ class ProjectXOrderRouter(BrokerRouter):
         )
         if elapsed_ms > 1000:
             log.warning("Order submission took %.0fms", elapsed_ms)
-        return {"order_id": order_id, "status": "submitted"}
+        return {
+            "order_id": order_id,
+            "status": "submitted",
+            "fill_price": float(fill_price) if fill_price else None,
+        }
 
     def build_exit_spec(self, direction: str, symbol: str, qty: int = 1) -> dict:
         side = 1 if direction == "long" else 0  # Reverse: close long=sell, close short=buy

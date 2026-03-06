@@ -47,6 +47,7 @@ class SessionOrchestrator:
         demo: bool = True,
         account_id: int = 0,
         signal_only: bool = False,
+        force_orphans: bool = False,
     ):
         self.instrument = instrument
         self.demo = demo
@@ -113,6 +114,14 @@ class SessionOrchestrator:
                 orphans = self.positions.query_open(account_id)
                 if orphans:
                     log.critical("ORPHANED POSITIONS DETECTED on session start: %s", orphans)
+                    if not force_orphans:
+                        raise RuntimeError(
+                            f"Refusing to start: {len(orphans)} orphaned position(s) detected. "
+                            f"Close them manually or pass --force-orphans to acknowledge the risk."
+                        )
+                    log.warning("--force-orphans: continuing with %d orphaned position(s)", len(orphans))
+            except RuntimeError:
+                raise  # re-raise our own error
             except Exception as e:
                 log.warning("Position query failed on startup: %s", e)
 
@@ -121,8 +130,9 @@ class SessionOrchestrator:
         # PerformanceMonitor takes list[PortfolioStrategy] (has strategy_id + expectancy_r)
         self.monitor = PerformanceMonitor(self.portfolio.strategies)
 
-        # Entry price side-table: strategy_id → entry fill price (for pnl_r calculation on exit)
-        self._entry_prices: dict[str, float] = {}
+        # Entry price side-table: strategy_id → {engine_price, fill_price, slippage}
+        # fill_price is the actual broker fill (None if unavailable, e.g. E2 stop pending)
+        self._entry_prices: dict[str, dict] = {}
 
         # Resolve front-month contract symbol (needed even in signal-only for logging)
         self.contract_symbol = contracts.resolve_front_month(instrument)
@@ -272,9 +282,8 @@ class SessionOrchestrator:
         for event in eod_events:
             strategy = self._strategy_map.get(event.strategy_id)
             if strategy and event.event_type in ("EXIT", "SCRATCH"):
-                entry_price = self._entry_prices.pop(event.strategy_id, None)
-                if entry_price is None:
-                    entry_price = event.price
+                fill_info = self._entry_prices.pop(event.strategy_id, {})
+                entry_price = self._best_price(fill_info, event.price)
                 self._record_exit(event, entry_price)
                 log.info("EOD rollover close: %s @ %.2f (pnl_r=%s)", event.strategy_id, event.price, event.pnl_r)
 
@@ -301,24 +310,10 @@ class SessionOrchestrator:
         for event in events:
             await self._handle_event(event)
 
-    async def _close_position(self, event) -> None:
-        """Submit a closing market order to the broker for an EXIT or SCRATCH."""
-        exit_spec = self.order_router.build_exit_spec(
-            direction=event.direction,
-            symbol=self.contract_symbol,
-            qty=event.contracts,
-        )
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(None, self.order_router.submit, exit_spec)
-        order_id = result.get("order_id") if isinstance(result, dict) else result.order_id
-        log.info(
-            "%s close order: %s %s @ %.2f → orderId=%s",
-            event.event_type,
-            event.strategy_id,
-            event.direction,
-            event.price,
-            order_id,
-        )
+    @staticmethod
+    def _best_price(fill_info: dict, fallback: float) -> float:
+        """Return fill_price if available, else engine_price, else fallback."""
+        return fill_info.get("fill_price") or fill_info.get("engine_price") or fallback
 
     def _compute_actual_r(self, entry_price: float, exit_price: float, direction: str, risk_pts: float) -> float:
         """Compute cost-adjusted R-multiple from entry/exit prices."""
@@ -328,24 +323,37 @@ class SessionOrchestrator:
         net_pts = gross_pts - self.cost_spec.friction_in_points
         return net_pts / risk_pts if risk_pts > 0 else 0.0
 
-    def _record_exit(self, event, entry_price: float) -> None:
-        """Record a completed trade (EXIT or SCRATCH) in the performance monitor."""
+    def _record_exit(self, event, entry_price: float, exit_fill_price: float | None = None) -> None:
+        """Record a completed trade (EXIT or SCRATCH) in the performance monitor.
+
+        Uses broker fill prices when available for more accurate P&L.
+        Falls back to engine prices (event.price) when fills are unknown.
+        """
         strategy = self._strategy_map[event.strategy_id]
+        exit_price = exit_fill_price if exit_fill_price is not None else event.price
+
         # Use engine's authoritative pnl_r (session-adjusted costs) when available;
         # fall back to local computation only if not present.
         if event.pnl_r is not None:
             actual_r = event.pnl_r
         else:
             risk_pts = strategy.median_risk_points or 10.0
-            actual_r = self._compute_actual_r(entry_price, event.price, event.direction, risk_pts)
+            actual_r = self._compute_actual_r(entry_price, exit_price, event.direction, risk_pts)
+
+        # Compute total slippage (entry + exit) in points
+        slippage_pts = 0.0
+        if exit_fill_price is not None:
+            slippage_pts += exit_fill_price - event.price
+
         record = TradeRecord(
             strategy_id=event.strategy_id,
             trading_day=self.trading_day,
             direction=event.direction,
             entry_price=entry_price,
-            exit_price=event.price,
+            exit_price=exit_price,
             actual_r=actual_r,
             expected_r=strategy.expectancy_r,
+            slippage_pts=slippage_pts,
         )
         alert = self.monitor.record_trade(record)
         if alert:
@@ -367,9 +375,8 @@ class SessionOrchestrator:
             return
 
         if event.event_type == "ENTRY":
-            self._entry_prices[event.strategy_id] = event.price
-
             if self.signal_only:
+                self._entry_prices[event.strategy_id] = {"engine_price": event.price}
                 log.info(
                     "⚡ SIGNAL [%s]: %s %s @ %.2f  ← trade this manually on Tradovate/TradingView",
                     event.strategy_id,
@@ -399,13 +406,32 @@ class SessionOrchestrator:
             loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(None, self.order_router.submit, spec)
             order_id = result.get("order_id") if isinstance(result, dict) else result.order_id
-            log.info(
-                "ENTRY order: %s %s @ %.2f → orderId=%s",
-                event.strategy_id,
-                event.direction,
-                event.price,
-                order_id,
-            )
+            fill_price = result.get("fill_price") if isinstance(result, dict) else getattr(result, "fill_price", None)
+
+            # Track entry with both engine and broker fill prices
+            entry_info: dict = {"engine_price": event.price, "fill_price": fill_price}
+            if fill_price is not None:
+                slippage = fill_price - event.price
+                entry_info["slippage"] = slippage
+                log.info(
+                    "ENTRY FILL: %s %s engine=%.2f fill=%.2f slip=%+.4f pts → orderId=%s",
+                    event.strategy_id,
+                    event.direction,
+                    event.price,
+                    fill_price,
+                    slippage,
+                    order_id,
+                )
+            else:
+                log.info(
+                    "ENTRY order: %s %s @ %.2f → orderId=%s (fill pending)",
+                    event.strategy_id,
+                    event.direction,
+                    event.price,
+                    order_id,
+                )
+            self._entry_prices[event.strategy_id] = entry_info
+
             self._write_signal_record(
                 {
                     "type": "ORDER_ENTRY",
@@ -413,16 +439,17 @@ class SessionOrchestrator:
                     "contract": self.contract_symbol,
                     "direction": event.direction.upper(),
                     "price": event.price,
+                    "fill_price": fill_price,
                     "contracts": event.contracts,
                     "order_id": order_id,
                 }
             )
 
         elif event.event_type in ("EXIT", "SCRATCH"):
-            entry_price = self._entry_prices.pop(event.strategy_id, None)
-            if entry_price is None:
-                log.warning("EXIT for %s with no prior ENTRY — using exit price as fallback", event.strategy_id)
-                entry_price = event.price
+            fill_info = self._entry_prices.pop(event.strategy_id, {})
+            if not fill_info:
+                log.warning("EXIT for %s with no prior ENTRY — using engine exit price as fallback", event.strategy_id)
+            entry_price = self._best_price(fill_info, event.price)
 
             if self.signal_only:
                 log.info(
@@ -443,8 +470,39 @@ class SessionOrchestrator:
                 )
                 return
 
-            await self._close_position(event)
-            self._record_exit(event, entry_price)
+            # Submit close order and capture exit fill
+            exit_spec = self.order_router.build_exit_spec(
+                direction=event.direction,
+                symbol=self.contract_symbol,
+                qty=event.contracts,
+            )
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(None, self.order_router.submit, exit_spec)
+            order_id = result.get("order_id") if isinstance(result, dict) else result.order_id
+            exit_fill = result.get("fill_price") if isinstance(result, dict) else getattr(result, "fill_price", None)
+
+            if exit_fill is not None:
+                exit_slip = exit_fill - event.price
+                log.info(
+                    "EXIT FILL: %s %s engine=%.2f fill=%.2f slip=%+.4f pts → orderId=%s",
+                    event.strategy_id,
+                    event.direction,
+                    event.price,
+                    exit_fill,
+                    exit_slip,
+                    order_id,
+                )
+            else:
+                log.info(
+                    "%s close order: %s %s @ %.2f → orderId=%s",
+                    event.event_type,
+                    event.strategy_id,
+                    event.direction,
+                    event.price,
+                    order_id,
+                )
+
+            self._record_exit(event, entry_price, exit_fill_price=exit_fill)
             self._write_signal_record(
                 {
                     "type": f"ORDER_{event.event_type}",
@@ -452,6 +510,7 @@ class SessionOrchestrator:
                     "contract": self.contract_symbol,
                     "direction": event.direction.upper(),
                     "price": event.price,
+                    "fill_price": exit_fill,
                 }
             )
 
@@ -495,15 +554,23 @@ class SessionOrchestrator:
         if eod_events and not self.signal_only:
             # Pre-refresh auth token before close loop — if network is back,
             # this ensures we have a valid token. If still down, we log CRITICAL.
+            auth_ok = False
             for attempt in range(3):
                 try:
                     self.auth.get_token()
+                    auth_ok = True
                     break
                 except Exception as e:
                     log.critical("Auth refresh attempt %d/3 failed before EOD close: %s", attempt + 1, e)
                     import time
 
                     time.sleep(2**attempt)
+            if not auth_ok:
+                log.critical(
+                    "*** MANUAL CLOSE REQUIRED *** Auth failed after 3 attempts. %d position(s) may remain open: %s",
+                    len(eod_events),
+                    [e.strategy_id for e in eod_events],
+                )
             asyncio.run(_close_all())
         elif eod_events:
             asyncio.run(_close_all())

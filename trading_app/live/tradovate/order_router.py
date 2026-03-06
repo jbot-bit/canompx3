@@ -41,6 +41,7 @@ class OrderSpec:
 class OrderResult:
     order_id: int
     status: str
+    fill_price: float | None = None
 
 
 class TradovateOrderRouter(BrokerRouter):
@@ -134,7 +135,12 @@ class TradovateOrderRouter(BrokerRouter):
         )
         if elapsed_ms > 1000:
             log.warning("Order submission took %.0fms -- event loop was blocked", elapsed_ms)
-        return OrderResult(order_id=order_id, status="submitted")
+        fill_price = data.get("avgPx") or data.get("fillPrice")
+        return OrderResult(
+            order_id=order_id,
+            status="submitted",
+            fill_price=float(fill_price) if fill_price else None,
+        )
 
     def build_exit_spec(
         self,
