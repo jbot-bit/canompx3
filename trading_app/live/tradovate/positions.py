@@ -13,5 +13,6 @@ class TradovatePositions(BrokerPositions):
         self.demo = demo
 
     def query_open(self, account_id: int) -> list[dict]:
-        log.warning("Tradovate position query not implemented (no API access for prop firms). Returning empty.")
-        return []
+        raise NotImplementedError(
+            "Tradovate position query not implemented. Use --broker projectx or implement Tradovate position API."
+        )

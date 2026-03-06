@@ -1,7 +1,7 @@
 """Test broker factory."""
 
 import os
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -76,3 +76,11 @@ def test_factory_returns_correct_classes_projectx():
     assert isinstance(components["auth"], ProjectXAuth)
     assert components["feed_class"] is ProjectXDataFeed
     assert components["router_class"] is ProjectXOrderRouter
+
+
+def test_tradovate_positions_raises_not_implemented():
+    from trading_app.live.tradovate.positions import TradovatePositions
+
+    pos = TradovatePositions(auth=MagicMock(), demo=True)
+    with pytest.raises(NotImplementedError):
+        pos.query_open(12345)
