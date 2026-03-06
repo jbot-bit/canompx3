@@ -1,0 +1,13 @@
+{
+  "planPath": "docs/plans/2026-03-07-live-trading-tier1-tier2-fixes.md",
+  "tasks": [
+    {"id": 0, "subject": "Task 0: Fix dollar gate arithmetic bug in live_config.py", "status": "pending"},
+    {"id": 1, "subject": "Task 1: Make webhook secret fail-closed", "status": "pending"},
+    {"id": 2, "subject": "Task 2: Make Tradovate positions stub raise NotImplementedError", "status": "pending"},
+    {"id": 3, "subject": "Task 3: Fix signalrcore bar drops with asyncio queue bridge", "status": "pending"},
+    {"id": 4, "subject": "Task 4: Per-strategy CUSUM sigma from validated_setups", "status": "pending"},
+    {"id": 5, "subject": "Task 5: Add broker API circuit breaker", "status": "pending"},
+    {"id": 6, "subject": "Task 6: Run full test suite + commit", "status": "pending", "blockedBy": [0, 1, 2, 3, 4, 5]}
+  ],
+  "lastUpdated": "2026-03-07T00:00:00Z"
+}
