@@ -5,8 +5,11 @@ No database writes, no schema migrations. Pure file I/O.
 """
 
 import json
+import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 _DATA_DIR = Path(__file__).parent.parent / "data"
 DEBRIEFS_PATH = _DATA_DIR / "trade_debriefs.jsonl"
@@ -25,48 +28,57 @@ DEVIATION_TRIGGERS = (
 )
 
 
-def append_debrief(record: dict, *, path: Path = DEBRIEFS_PATH) -> None:
-    """Append a debrief record to the JSONL file."""
+def _load_jsonl(path: Path, *, label: str = "records") -> list[dict]:
+    """Load JSONL file with per-line error handling. Skips corrupt lines."""
+    if not path.exists():
+        return []
+    records = []
+    for i, line in enumerate(path.read_text(encoding="utf-8").strip().split("\n"), 1):
+        if line.strip():
+            try:
+                records.append(json.loads(line))
+            except json.JSONDecodeError:
+                log.warning("Corrupt %s JSON at %s line %d: %s", label, path, i, line[:120])
+    return records
+
+
+def append_debrief(record: dict, *, path: Path = DEBRIEFS_PATH) -> bool:
+    """Append a debrief record to the JSONL file. Returns True on success."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "a", encoding="utf-8") as fh:
-        fh.write(json.dumps(record) + "\n")
+    try:
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(record) + "\n")
+        return True
+    except OSError as exc:
+        log.error("Failed to write debrief to %s: %s", path, exc)
+        return False
 
 
 def load_debriefs(*, path: Path = DEBRIEFS_PATH) -> list[dict]:
     """Load all debrief records from JSONL. Returns [] if file missing."""
-    if not path.exists():
-        return []
-    records = []
-    for line in path.read_text(encoding="utf-8").strip().split("\n"):
-        if line.strip():
-            records.append(json.loads(line))
-    return records
+    return _load_jsonl(path, label="debrief")
 
 
-def append_discipline_event(event_type: str, extra: dict | None = None, *, path: Path = STATE_PATH) -> None:
-    """Append a discipline state event (cooling, commitment, etc.)."""
+def append_discipline_event(event_type: str, extra: dict | None = None, *, path: Path = STATE_PATH) -> bool:
+    """Append a discipline state event (cooling, commitment, etc.). Returns True on success."""
     path.parent.mkdir(parents=True, exist_ok=True)
     record = {
         "ts": datetime.now(UTC).isoformat(),
         "event": event_type,
         **(extra or {}),
     }
-    with open(path, "a", encoding="utf-8") as fh:
-        fh.write(json.dumps(record) + "\n")
+    try:
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(record) + "\n")
+        return True
+    except OSError as exc:
+        log.error("Failed to write discipline event to %s: %s", path, exc)
+        return False
 
 
 def _load_signals(signals_path: Path) -> list[dict]:
     """Load signal records from live_signals.jsonl."""
-    if not signals_path.exists():
-        return []
-    records = []
-    for line in signals_path.read_text(encoding="utf-8").strip().split("\n"):
-        if line.strip():
-            try:
-                records.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
-    return records
+    return _load_jsonl(signals_path, label="signal")
 
 
 def get_pending_debriefs(*, signals_path: Path, debriefs_path: Path = DEBRIEFS_PATH) -> list[dict]:
@@ -171,7 +183,12 @@ def is_cooling_active(session_state: dict) -> bool:
     until_str = session_state.get("cooling_until")
     if not until_str:
         return False
-    until = datetime.fromisoformat(until_str)
+    try:
+        until = datetime.fromisoformat(until_str)
+    except (ValueError, TypeError):
+        log.warning("Corrupt cooling_until value: %r — clearing", until_str)
+        session_state.pop("cooling_until", None)
+        return False
     return datetime.now(UTC) < until
 
 
@@ -180,7 +197,11 @@ def cooling_remaining_seconds(session_state: dict) -> float:
     until_str = session_state.get("cooling_until")
     if not until_str:
         return 0.0
-    until = datetime.fromisoformat(until_str)
+    try:
+        until = datetime.fromisoformat(until_str)
+    except (ValueError, TypeError):
+        session_state.pop("cooling_until", None)
+        return 0.0
     remaining = (until - datetime.now(UTC)).total_seconds()
     return max(0.0, remaining)
 

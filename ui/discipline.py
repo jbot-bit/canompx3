@@ -15,6 +15,7 @@ import streamlit as st
 
 from ui.discipline_data import (
     ADHERENCE_VALUES,
+    COOLING_SECONDS,
     DEBRIEFS_PATH,
     DEVIATION_TRIGGERS,
     STATE_PATH,
@@ -28,6 +29,8 @@ from ui.discipline_data import (
     override_cooling,
     trigger_cooling,
 )
+
+_OVERRIDE_DELAY = 15  # seconds before soft-mode override is available
 
 # Signals file — same path as copilot.py
 _SIGNALS_FILE = Path(__file__).parent.parent / "live_signals.jsonl"
@@ -119,13 +122,16 @@ def render_pending_debriefs(
                     "strategy_id": strategy_id,
                     "signal_exit_ts": exit_ts,
                     "exit_price": exit_price,
+                    "pnl_r": exit_signal.get("pnl_r"),
                     "adherence": adherence,
                     "deviation_trigger": deviation_trigger if adherence != "followed" else None,
                     "emotional_temp": emotional_temp,
                     "letter_to_future_self": letter if letter else None,
                 }
-                append_debrief(record, path=debriefs_path)
-                st.success("Debrief saved.")
+                if append_debrief(record, path=debriefs_path):
+                    st.success("Debrief saved.")
+                else:
+                    st.error("Failed to save debrief — check disk space and permissions.")
                 st.rerun()
 
 
@@ -158,7 +164,7 @@ def check_cooling(
     mode = st.session_state.get("cooling_mode", "hard")
 
     # Progress bar
-    progress = 1.0 - (remaining / 90.0)
+    progress = 1.0 - (remaining / COOLING_SECONDS)
     st.progress(min(progress, 1.0), text=f"Cooling: {int(remaining)}s remaining")
 
     # Cooling content
@@ -167,13 +173,13 @@ def check_cooling(
     st.markdown(f'*"{quote}"*')
     st.caption("Wait for the signal. The plan is the edge.")
 
-    # Soft mode: override button after 15s
-    if mode == "soft" and remaining < 75:  # 90 - 15 = 75
+    # Soft mode: override button after initial delay
+    if mode == "soft" and remaining < (COOLING_SECONDS - _OVERRIDE_DELAY):
         if st.button("Override cooling", type="secondary"):
             override_cooling(st.session_state, state_path=state_path)
             st.rerun()
 
-    return mode == "hard" or remaining >= 75
+    return True  # Always block signals while cooling is active
 
 
 def render_cooling_settings() -> None:

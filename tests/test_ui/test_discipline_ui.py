@@ -76,6 +76,36 @@ def test_render_pre_session_priming_shows_commitment(tmp_path):
         mock_st.button.assert_called()
 
 
+def test_winning_exit_does_not_trigger_cooling(tmp_path):
+    """A positive pnl exit should NOT activate cooling."""
+    from ui.discipline import render_pending_debriefs
+
+    signals_path = tmp_path / "signals.jsonl"
+    debriefs_path = tmp_path / "debriefs.jsonl"
+    state_path = tmp_path / "state.jsonl"
+    exit_sig = {
+        "ts": "2026-03-06T23:15:00Z",
+        "instrument": "MGC",
+        "type": "SIGNAL_EXIT",
+        "strategy_id": "MGC_CME_REOPEN_E2_CB1_G4_RR2.5",
+        "price": 3260.0,
+        "pnl_r": 2.5,
+    }
+    signals_path.write_text(json.dumps(exit_sig) + "\n")
+    with patch("ui.discipline.st") as mock_st:
+        mock_st.session_state = {}
+        mock_form = MagicMock()
+        mock_st.form.return_value.__enter__ = MagicMock(return_value=mock_form)
+        mock_st.form.return_value.__exit__ = MagicMock(return_value=False)
+        mock_st.form_submit_button.return_value = False
+        render_pending_debriefs(
+            signals_path=signals_path,
+            debriefs_path=debriefs_path,
+            state_path=state_path,
+        )
+        assert "cooling_until" not in mock_st.session_state
+
+
 def test_losing_exit_triggers_cooling(tmp_path):
     """A negative pnl exit signal should activate cooling."""
     from ui.discipline import render_pending_debriefs

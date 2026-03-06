@@ -168,6 +168,31 @@ def test_get_latest_letter(tmp_path):
     assert letter["text"] == "Stick to the plan."
 
 
+def test_load_debriefs_survives_corrupt_line(tmp_path):
+    """Corrupt JSONL line should be skipped, not crash."""
+    from ui.discipline_data import load_debriefs
+
+    f = tmp_path / "debriefs.jsonl"
+    f.write_text('{"adherence": "followed"}\nNOT VALID JSON\n{"adherence": "overrode"}\n')
+    records = load_debriefs(path=f)
+    assert len(records) == 2  # skipped the corrupt line
+
+
+def test_append_debrief_returns_bool(tmp_path):
+    from ui.discipline_data import append_debrief
+
+    f = tmp_path / "debriefs.jsonl"
+    assert append_debrief({"test": True}, path=f) is True
+
+
+def test_is_cooling_active_handles_corrupt_timestamp():
+    from ui.discipline_data import is_cooling_active
+
+    state = {"cooling_until": "not-a-timestamp"}
+    assert is_cooling_active(state) is False
+    assert "cooling_until" not in state  # cleared the bad value
+
+
 def test_trigger_cooling_sets_until(tmp_path):
     from ui.discipline_data import trigger_cooling, is_cooling_active
 
