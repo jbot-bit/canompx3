@@ -56,7 +56,7 @@ CONTRACT_TTL = 3600.0  # re-resolve front month after 1 hour
 def _get_auth():
     global _auth
     if _auth is None:
-        from trading_app.live.tradovate_auth import TradovateAuth
+        from trading_app.live.tradovate.auth import TradovateAuth
 
         _auth = TradovateAuth(demo=DEMO)
         log.info("TradovateAuth initialized (demo=%s)", DEMO)
@@ -66,7 +66,7 @@ def _get_auth():
 def _get_account_id() -> int:
     global _account_id
     if _account_id is None:
-        from trading_app.live.contract_resolver import resolve_account_id
+        from trading_app.live.tradovate.contract_resolver import resolve_account_id
 
         _account_id = resolve_account_id(_get_auth(), demo=DEMO)
     return _account_id
@@ -74,7 +74,7 @@ def _get_account_id() -> int:
 
 def _get_contract(instrument: str) -> str:
     """Resolve front-month contract symbol, cached for 1 hour."""
-    from trading_app.live.contract_resolver import resolve_front_month
+    from trading_app.live.tradovate.contract_resolver import resolve_front_month
 
     now = time.monotonic()
     if instrument in _contract_cache:
@@ -91,6 +91,8 @@ def _get_contract(instrument: str) -> str:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("Webhook server starting — demo=%s port=%d", DEMO, PORT)
+    if not WEBHOOK_SECRET:
+        raise RuntimeError("WEBHOOK_SECRET env var is required — refusing to start without authentication")
     try:
         # Warm up auth + account ID in a thread (synchronous HTTP call)
         loop = asyncio.get_event_loop()
@@ -173,7 +175,7 @@ def _check_rate_limit() -> None:
 
 def _place_order(req: TradeRequest, contract: str) -> int:
     """Build and submit order. Returns order_id. Runs in a thread executor."""
-    from trading_app.live.order_router import OrderRouter
+    from trading_app.live.tradovate.order_router import TradovateOrderRouter as OrderRouter
 
     router = OrderRouter(account_id=_get_account_id(), auth=_get_auth(), demo=DEMO)
 
@@ -213,7 +215,7 @@ async def health():
 @app.post("/trade", response_model=TradeResponse)
 async def trade(req: TradeRequest, request: Request):
     # 1. Auth check
-    if WEBHOOK_SECRET and req.secret != WEBHOOK_SECRET:
+    if req.secret != WEBHOOK_SECRET:
         log.warning("Rejected webhook from %s — invalid secret", request.client)
         raise HTTPException(status_code=403, detail="Invalid webhook secret")
 

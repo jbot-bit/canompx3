@@ -37,7 +37,7 @@ def _print_mode_banner(mode: str, instrument: str) -> None:
             "╔══════════════════════════════════════════╗",
             "║   MODE: SIGNAL ONLY — no orders placed   ║",
             "║   Watch for ⚡ SIGNAL lines in the log   ║",
-            "║   Trade manually on your platform            ║",
+            "║   Trade manually on your platform        ║",
             "╚══════════════════════════════════════════╝",
         ],
         "demo": [

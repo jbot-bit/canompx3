@@ -1,6 +1,7 @@
 import pytest
 
-from trading_app.live.order_router import OrderRouter, OrderSpec
+from trading_app.live.tradovate.order_router import OrderSpec
+from trading_app.live.tradovate.order_router import TradovateOrderRouter as OrderRouter
 
 
 def test_e1_long_generates_market_buy():
@@ -87,8 +88,6 @@ def test_exit_short_generates_market_buy():
 
 
 def test_submit_without_auth_raises():
-    from trading_app.live.order_router import OrderSpec
-
     router = OrderRouter(account_id=12345, auth=None, demo=True)
     spec = OrderSpec(action="Buy", order_type="Market", symbol="MGCM6", qty=1, account_id=12345)
     with pytest.raises(RuntimeError, match="No auth"):
