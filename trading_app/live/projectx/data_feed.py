@@ -52,6 +52,7 @@ class ProjectXDataFeed(BrokerFeed):
         self._agg = BarAggregator()
         self._symbol: str = ""
         self._stop_requested = False
+        self._bar_queue: asyncio.Queue = asyncio.Queue()
 
     # ------------------------------------------------------------------
     # Public helpers
@@ -188,10 +189,15 @@ class ProjectXDataFeed(BrokerFeed):
                 hub.send("SubscribeContractQuotes", [symbol])
                 log.info("Subscribed to quotes: %s", symbol)
 
-                # Block until stop file
-                while not _STOP_FILE.exists():
-                    await asyncio.sleep(2.5)
-                    self.auth.refresh_if_needed()
+                # Start async consumer for bars from sync callbacks
+                drain_task = asyncio.create_task(self._drain_bar_queue())
+                try:
+                    # Block until stop file
+                    while not _STOP_FILE.exists():
+                        await asyncio.sleep(2.5)
+                        self.auth.refresh_if_needed()
+                finally:
+                    drain_task.cancel()
 
                 log.info("Stop file detected — shutting down")
                 _STOP_FILE.unlink(missing_ok=True)
@@ -211,6 +217,16 @@ class ProjectXDataFeed(BrokerFeed):
                         _MAX_RECONNECTS,
                         symbol,
                     )
+
+    # ------------------------------------------------------------------
+    # Sync → async queue bridge
+    # ------------------------------------------------------------------
+
+    async def _drain_bar_queue(self) -> None:
+        """Consume bars from the sync→async queue bridge."""
+        while True:
+            bar = await self._bar_queue.get()
+            await self.on_bar(bar)
 
     # ------------------------------------------------------------------
     # SignalR event handlers — pysignalr (async context)
@@ -264,8 +280,11 @@ class ProjectXDataFeed(BrokerFeed):
                 bar = self._agg.on_tick(price, vol, datetime.now(UTC))
                 if bar is not None:
                     bar.symbol = self._symbol
-                    # signalrcore is sync — can't await. Log instead.
                     log.info("BAR: %s", bar)
+                    try:
+                        self._bar_queue.put_nowait(bar)
+                    except Exception:
+                        log.error("Bar queue full — dropping bar %s", bar.ts_utc)
             except (ValueError, KeyError) as e:
                 log.debug("Skipping quote: %s", e)
 
@@ -282,6 +301,10 @@ class ProjectXDataFeed(BrokerFeed):
                 if bar is not None:
                     bar.symbol = self._symbol
                     log.info("BAR: %s", bar)
+                    try:
+                        self._bar_queue.put_nowait(bar)
+                    except Exception:
+                        log.error("Bar queue full — dropping bar %s", bar.ts_utc)
 
     # ------------------------------------------------------------------
     # Stop-file watcher
