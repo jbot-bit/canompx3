@@ -39,6 +39,7 @@ def render_pending_debriefs(
     *,
     signals_path: Path = _SIGNALS_FILE,
     debriefs_path: Path = DEBRIEFS_PATH,
+    state_path: Path = STATE_PATH,
 ) -> None:
     """Render debrief forms for any exit signals without a matching debrief."""
     pending = get_pending_debriefs(
@@ -46,6 +47,19 @@ def render_pending_debriefs(
     )
     if not pending:
         return
+
+    # Auto-trigger cooling on losing exits (if not already cooling)
+    for ex in pending:
+        pnl_r = ex.get("pnl_r")
+        if pnl_r is not None and pnl_r < 0 and not is_cooling_active(st.session_state):
+            trigger_cooling(
+                st.session_state,
+                pnl_r=pnl_r,
+                consecutive_losses=1,  # simplified for MVP
+                session_pnl_r=pnl_r,
+                state_path=state_path,
+            )
+            break  # one trigger per render cycle
 
     st.markdown("**Post-Trade Debrief**")
 
