@@ -28,6 +28,12 @@ from ui.db_reader import (
     get_prior_day_atr,
     get_today_completed_sessions,
 )
+from ui.discipline import (
+    render_pending_debriefs,
+    check_cooling,
+    render_pre_session_priming,
+    render_cooling_settings,
+)
 from ui.session_helpers import (
     AWAKE_END,
     AWAKE_START,
@@ -184,6 +190,12 @@ def _render_approaching(state: AppState, now: datetime) -> None:
 
     st.divider()
 
+    # Pre-session priming
+    briefings = _cached_briefings()
+    session_strategies = [b for b in briefings if b.session == state.next_session]
+    render_pre_session_priming(session=state.next_session, strategies=session_strategies)
+    st.divider()
+
     # Show briefing cards for next session
     _render_briefing_cards(state.next_session, now)
 
@@ -210,6 +222,12 @@ def _render_alert(state: AppState, now: datetime) -> None:
             unsafe_allow_html=True,
         )
 
+    st.divider()
+
+    # Pre-session priming
+    briefings = _cached_briefings()
+    session_strategies = [b for b in briefings if b.session == state.next_session]
+    render_pre_session_priming(session=state.next_session, strategies=session_strategies)
     st.divider()
 
     # Briefing cards — full detail
@@ -487,6 +505,10 @@ def render() -> None:
 
     _render_header(now, state)
 
+    # Sidebar — discipline settings
+    with st.sidebar:
+        render_cooling_settings()
+
     # State-dependent main area
     if state.name == "WEEKEND":
         _render_weekend(state)
@@ -503,7 +525,12 @@ def render() -> None:
     proc = st.session_state.get("live_proc")
     if proc is not None and proc.poll() is None:
         st.divider()
-        _render_signal_log()
+        # Cooling check — may block signal rendering in hard mode
+        cooling_active = check_cooling()
+        if not cooling_active:
+            _render_signal_log()
+        # Debrief cards for any unprocessed exits
+        render_pending_debriefs()
 
     # Adaptive refresh
     refresh = get_refresh_seconds(
