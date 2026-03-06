@@ -7,8 +7,12 @@ import duckdb
 from pipeline.init_db import init_db
 from scripts.tools.pipeline_status import (
     _trading_days_between,
+    get_resume_point,
     is_stale,
+    preflight_check,
+    read_last_manifest,
     staleness_engine,
+    write_manifest,
 )
 
 
@@ -295,3 +299,110 @@ class TestStalenessEngine:
         con.close()
 
         assert "bars_5m" in status["stale_steps"]
+
+
+# ---------------------------------------------------------------------------
+# Pre-flight check tests
+# ---------------------------------------------------------------------------
+
+
+class TestPreflightCheck:
+    def test_preflight_daily_features_missing(self, tmp_path):
+        """No O15 daily_features data -> fails with helpful message."""
+        db_path, con = _create_test_db(tmp_path)
+        # Insert O5 data but NOT O15
+        _insert_daily_features(con, "MGC", "2026-03-06", 5)
+        con.commit()
+
+        ok, msg = preflight_check(con, "MGC", "outcome_builder", orb_minutes=15)
+        con.close()
+
+        assert ok is False
+        assert "PRE-FLIGHT FAIL" in msg
+        assert "O15" in msg
+        assert "build_daily_features" in msg
+
+    def test_preflight_daily_features_present(self, tmp_path):
+        """O15 daily_features data exists -> passes."""
+        db_path, con = _create_test_db(tmp_path)
+        _insert_daily_features(con, "MGC", "2026-03-06", 15)
+        con.commit()
+
+        ok, msg = preflight_check(con, "MGC", "outcome_builder", orb_minutes=15)
+        con.close()
+
+        assert ok is True
+        assert "Pre-flight OK" in msg
+
+    def test_preflight_no_rule(self, tmp_path):
+        """Unknown step -> passes with 'no rule' message."""
+        db_path, con = _create_test_db(tmp_path)
+        ok, msg = preflight_check(con, "MGC", "nonexistent_step")
+        con.close()
+
+        assert ok is True
+        assert "No pre-flight rule" in msg
+
+
+# ---------------------------------------------------------------------------
+# Manifest tests
+# ---------------------------------------------------------------------------
+
+
+class TestManifest:
+    def test_manifest_write_and_read(self, tmp_path):
+        """Write COMPLETED manifest, read back, verify all fields."""
+        db_path, con = _create_test_db(tmp_path)
+
+        rid = "test-rebuild-001"
+        write_manifest(
+            con,
+            rebuild_id=rid,
+            instrument="MGC",
+            status="COMPLETED",
+            steps_completed=["outcome_builder", "strategy_discovery"],
+            trigger="MANUAL",
+        )
+
+        result = read_last_manifest(con, "MGC")
+        con.close()
+
+        assert result is not None
+        assert result["rebuild_id"] == rid
+        assert result["instrument"] == "MGC"
+        assert result["status"] == "COMPLETED"
+        assert result["completed_at"] is not None
+        assert result["failed_step"] is None
+        assert result["steps_completed"] == ["outcome_builder", "strategy_discovery"]
+        assert result["trigger"] == "MANUAL"
+
+    def test_manifest_resume_from_failed(self, tmp_path):
+        """Write FAILED manifest with steps_completed, get_resume_point returns correct data."""
+        db_path, con = _create_test_db(tmp_path)
+
+        rid = "test-rebuild-fail-001"
+        write_manifest(
+            con,
+            rebuild_id=rid,
+            instrument="MNQ",
+            status="FAILED",
+            failed_step="strategy_validator",
+            steps_completed=["outcome_builder", "strategy_discovery"],
+            trigger="MANUAL",
+        )
+
+        result = get_resume_point(con, "MNQ")
+        con.close()
+
+        assert result is not None
+        assert result["rebuild_id"] == rid
+        assert result["failed_step"] == "strategy_validator"
+        assert result["steps_completed"] == ["outcome_builder", "strategy_discovery"]
+
+    def test_manifest_no_history(self, tmp_path):
+        """read_last_manifest on instrument with no history -> None."""
+        db_path, con = _create_test_db(tmp_path)
+        result = read_last_manifest(con, "MGC")
+        con.close()
+
+        assert result is None
