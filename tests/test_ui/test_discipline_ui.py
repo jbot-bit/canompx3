@@ -36,3 +36,19 @@ def test_render_pending_debriefs_shows_form(tmp_path):
         mock_st.form_submit_button.return_value = False
         render_pending_debriefs(signals_path=signals_path, debriefs_path=debriefs_path)
         mock_st.form.assert_called_once()
+
+
+def test_check_cooling_returns_false_when_not_active():
+    from ui.discipline import check_cooling
+    with patch("ui.discipline.st") as mock_st:
+        mock_st.session_state = {}
+        assert check_cooling() is False
+
+
+def test_check_cooling_returns_true_when_active():
+    from ui.discipline import check_cooling
+    from datetime import datetime, timezone, timedelta
+    with patch("ui.discipline.st") as mock_st:
+        until = (datetime.now(timezone.utc) + timedelta(seconds=60)).isoformat()
+        mock_st.session_state = {"cooling_until": until, "cooling_mode": "hard"}
+        assert check_cooling() is True

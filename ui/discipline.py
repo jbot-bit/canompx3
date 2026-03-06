@@ -6,6 +6,7 @@ No orchestrator or execution engine changes.
 """
 from __future__ import annotations
 
+import random
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -17,8 +18,10 @@ from ui.discipline_data import (
     DEBRIEFS_PATH,
     STATE_PATH,
     append_debrief,
+    cooling_remaining_seconds,
     get_pending_debriefs,
     is_cooling_active,
+    override_cooling,
     trigger_cooling,
 )
 
@@ -108,3 +111,64 @@ def render_pending_debriefs(
                 append_debrief(record, path=debriefs_path)
                 st.success("Debrief saved.")
                 st.rerun()
+
+
+# -- Cooling period --------------------------------------------------------
+
+_TRADING_QUOTES = [
+    "The goal of a successful trader is to make the best trades. Money is secondary.",
+    "It's not whether you're right or wrong, but how much you make when right and lose when wrong.",
+    "The market can stay irrational longer than you can stay solvent.",
+    "In trading, the impossible happens about twice a year.",
+    "The elements of good trading are: cutting losses, cutting losses, and cutting losses.",
+    "Trade what you see, not what you think.",
+    "Discipline is the bridge between goals and accomplishment.",
+    "The best trade is the one you didn't take.",
+]
+
+
+def check_cooling(
+    *,
+    state_path: Path = STATE_PATH,
+) -> bool:
+    """Check if cooling period is active. If active, render cooling screen.
+
+    Returns True if cooling is active (caller should skip signal rendering).
+    """
+    if not is_cooling_active(st.session_state):
+        return False
+
+    remaining = cooling_remaining_seconds(st.session_state)
+    mode = st.session_state.get("cooling_mode", "hard")
+
+    # Progress bar
+    progress = 1.0 - (remaining / 90.0)
+    st.progress(min(progress, 1.0), text=f"Cooling: {int(remaining)}s remaining")
+
+    # Cooling content
+    st.markdown("**Take a breath.**")
+    quote = random.choice(_TRADING_QUOTES)
+    st.markdown(f"*\"{quote}\"*")
+    st.caption("Wait for the signal. The plan is the edge.")
+
+    # Soft mode: override button after 15s
+    if mode == "soft" and remaining < 75:  # 90 - 15 = 75
+        if st.button("Override cooling", type="secondary"):
+            override_cooling(st.session_state, state_path=state_path)
+            st.rerun()
+
+    return mode == "hard" or remaining >= 75
+
+
+def render_cooling_settings() -> None:
+    """Render cooling mode toggle in sidebar."""
+    current = st.session_state.get("cooling_mode", "hard")
+    mode = st.radio(
+        "Cooling mode",
+        options=["hard", "soft"],
+        index=0 if current == "hard" else 1,
+        format_func=lambda x: f"{x.title()} (90s {'non-dismissable' if x == 'hard' else 'dismissable after 15s'})",
+        key="cooling_mode_radio",
+        horizontal=True,
+    )
+    st.session_state["cooling_mode"] = mode
