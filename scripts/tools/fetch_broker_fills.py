@@ -65,10 +65,12 @@ def save_fills(fills: list[dict], *, path: Path = FILLS_PATH) -> int:
         for line in path.read_text(encoding="utf-8").strip().split("\n"):
             if line.strip():
                 try:
-                    existing_ids.add(json.loads(line).get("fill_id", ""))
+                    fid = json.loads(line).get("fill_id", "")
+                    if fid:
+                        existing_ids.add(fid)
                 except json.JSONDecodeError:
                     pass
-    new_fills = [f for f in fills if f.get("fill_id") not in existing_ids]
+    new_fills = [f for f in fills if not f.get("fill_id") or f["fill_id"] not in existing_ids]
     if not new_fills:
         return 0
     with open(path, "a", encoding="utf-8") as fh:

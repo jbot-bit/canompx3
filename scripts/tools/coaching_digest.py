@@ -23,14 +23,6 @@ os.chdir(PROJECT_ROOT)
 
 from dotenv import load_dotenv
 
-load_dotenv()
-
-DATA_DIR = PROJECT_ROOT / "data"
-PROFILE_PATH = DATA_DIR / "trader_profile.json"
-TRADES_PATH = DATA_DIR / "broker_trades.jsonl"
-DIGESTS_PATH = DATA_DIR / "coaching_digests.jsonl"
-TRADING_RULES_PATH = PROJECT_ROOT / "TRADING_RULES.md"
-
 from scripts.tools.coaching_prompts import (
     BEHAVIORAL_PATTERNS,
     COACHING_RULES,
@@ -38,6 +30,14 @@ from scripts.tools.coaching_prompts import (
     TENDLER_FRAMEWORK,
     TRADE_GRADING_RUBRIC,
 )
+
+load_dotenv()
+
+DATA_DIR = PROJECT_ROOT / "data"
+PROFILE_PATH = DATA_DIR / "trader_profile.json"
+TRADES_PATH = DATA_DIR / "broker_trades.jsonl"
+DIGESTS_PATH = DATA_DIR / "coaching_digests.jsonl"
+TRADING_RULES_PATH = PROJECT_ROOT / "TRADING_RULES.md"
 
 SYSTEM_PROMPT = f"""\
 You are a trading performance coach grounded in Tendler's Mental Game of Trading framework.

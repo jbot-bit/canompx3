@@ -144,7 +144,7 @@ def _build_trade(
 
     total_fees = sum(f.get("fees", 0) for f in entry_fills) + exit_fill.get("fees", 0)
 
-    # Compute PnL from prices — never trust broker-reported cumulative pnl fields
+    # Gross PnL from prices (before fees) — never trust broker-reported cumulative pnl fields
     price_diff = exit_fill["price"] - entry_price_avg
     if direction == "SHORT":
         price_diff = -price_diff
@@ -283,10 +283,12 @@ def save_trades(trades: list[dict], *, path: Path = TRADES_PATH) -> int:
         for line in path.read_text(encoding="utf-8").strip().split("\n"):
             if line.strip():
                 try:
-                    existing_ids.add(json.loads(line).get("trade_id", ""))
+                    tid = json.loads(line).get("trade_id", "")
+                    if tid:
+                        existing_ids.add(tid)
                 except json.JSONDecodeError:
                     pass
-    new_trades = [t for t in trades if t.get("trade_id") not in existing_ids]
+    new_trades = [t for t in trades if not t.get("trade_id") or t["trade_id"] not in existing_ids]
     if not new_trades:
         return 0
     with open(path, "a", encoding="utf-8") as fh:

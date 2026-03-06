@@ -21,6 +21,13 @@ os.chdir(PROJECT_ROOT)
 
 from dotenv import load_dotenv
 
+from scripts.tools.coaching_prompts import (
+    COACHING_RULES,
+    EMOTION_CATEGORIES,
+    INTERVENTION_PROTOCOLS,
+    TENDLER_FRAMEWORK,
+)
+
 load_dotenv()
 
 DATA_DIR = PROJECT_ROOT / "data"
@@ -41,13 +48,6 @@ def load_recent_digests(n: int = 5, *, path: Path = DIGESTS_PATH) -> list[dict]:
                 pass
     return digests[-n:]
 
-
-from scripts.tools.coaching_prompts import (
-    COACHING_RULES,
-    EMOTION_CATEGORIES,
-    INTERVENTION_PROTOCOLS,
-    TENDLER_FRAMEWORK,
-)
 
 COACH_SYSTEM_PROMPT = f"""\
 You are a trading performance coach grounded in Tendler's Mental Game of Trading framework.

@@ -128,6 +128,24 @@ def test_save_fills_appends_not_overwrites(tmp_path):
     assert len(lines) == 2
 
 
+def test_save_fills_dedup_prevents_duplicates(tmp_path):
+    out = tmp_path / "fills.jsonl"
+    fills = [{"fill_id": "f1", "price": 100}]
+    assert save_fills(fills, path=out) == 1
+    # Re-save same fill_id — should skip
+    assert save_fills(fills, path=out) == 0
+    lines = out.read_text().strip().split("\n")
+    assert len(lines) == 1
+
+
+def test_save_fills_dedup_allows_new(tmp_path):
+    out = tmp_path / "fills.jsonl"
+    save_fills([{"fill_id": "f1"}], path=out)
+    save_fills([{"fill_id": "f1"}, {"fill_id": "f2"}], path=out)
+    lines = out.read_text().strip().split("\n")
+    assert len(lines) == 2  # f1 deduped, f2 appended
+
+
 # -- Coach state persistence --------------------------------------------------
 
 
