@@ -2962,6 +2962,60 @@ def check_stop_multiplier_consistency(con=None) -> list[str]:
 
 
 # =============================================================================
+# TOOLING CONFIG CHECKS
+# =============================================================================
+
+
+def check_pyright_config_exists(project_root: Path) -> list[str]:
+    """Ensure pyrightconfig.json exists and has basic mode."""
+    config_path = project_root / "pyrightconfig.json"
+    if not config_path.exists():
+        return ["pyrightconfig.json missing — type checking not configured"]
+    import json
+
+    config = json.loads(config_path.read_text())
+    mode = config.get("typeCheckingMode", "off")
+    if mode not in ("basic", "standard", "strict"):
+        return [f"pyrightconfig.json typeCheckingMode={mode}, expected basic/standard/strict"]
+    return []
+
+
+def check_ruff_rules_minimum(project_root: Path) -> list[str]:
+    """Ensure ruff.toml has minimum required rule sets."""
+    ruff_path = project_root / "ruff.toml"
+    if not ruff_path.exists():
+        return ["ruff.toml missing"]
+    content = ruff_path.read_text()
+    required = ["I", "B", "UP"]
+    missing = [r for r in required if f'"{r}"' not in content]
+    if missing:
+        return [f"ruff.toml missing required rule sets: {missing}"]
+    return []
+
+
+def check_python_version_file(project_root: Path) -> list[str]:
+    """Ensure .python-version exists and matches pyproject.toml."""
+    pv_path = project_root / ".python-version"
+    if not pv_path.exists():
+        return [".python-version file missing"]
+    version = pv_path.read_text().strip()
+    if not version.startswith("3.13"):
+        return [f".python-version says {version}, expected 3.13"]
+    return []
+
+
+def check_uv_lock_exists(project_root: Path) -> list[str]:
+    """Ensure uv.lock exists and is not a skeleton."""
+    lock_path = project_root / "uv.lock"
+    if not lock_path.exists():
+        return ["uv.lock missing — run 'uv lock' to generate"]
+    content = lock_path.read_text()
+    if content.count("[[package]]") < 5:
+        return ["uv.lock appears to be a skeleton — run 'uv lock' to regenerate"]
+    return []
+
+
+# =============================================================================
 # CHECK REGISTRY — single source of truth for all drift checks
 # =============================================================================
 # Each entry: (description, callable, is_advisory).
@@ -3133,6 +3187,10 @@ CHECKS = [
         False,
         True,
     ),  # requires_db
+    ("pyrightconfig.json exists with basic+ mode", lambda: check_pyright_config_exists(PROJECT_ROOT), False, False),
+    ("ruff.toml has minimum required rules (I, B, UP)", lambda: check_ruff_rules_minimum(PROJECT_ROOT), False, False),
+    (".python-version file exists and matches 3.13", lambda: check_python_version_file(PROJECT_ROOT), False, False),
+    ("uv.lock exists and is not a skeleton", lambda: check_uv_lock_exists(PROJECT_ROOT), False, False),
 ]
 
 
