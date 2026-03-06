@@ -382,6 +382,9 @@ def detect_double_break(
     """
     Detect if BOTH the ORB high and low were breached during the session.
 
+    NOTE: This is LOOK-AHEAD relative to intraday entry — it checks the FULL
+    session after trade entry. Do NOT use as a live trading filter.
+
     A "double break" means price hit both sides of the ORB range after the
     ORB closed. This is a regime signal -- high double-break frequency
     indicates choppy/mean-reverting conditions where single-direction

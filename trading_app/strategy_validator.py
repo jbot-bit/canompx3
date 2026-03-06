@@ -126,7 +126,7 @@ def _parse_orb_size_bounds(filter_type: str | None, filter_params: str | None) -
                 if min_s is not None or max_s is not None:
                     return (float(min_s) if min_s is not None else None, float(max_s) if max_s is not None else None)
         except (json.JSONDecodeError, TypeError, ValueError):
-            pass
+            logger.warning("Corrupt filter_params in _parse_orb_size_bounds: %s", filter_params)
 
     # Fallback: parse from filter_type string (ORB_G5 -> min=5, ORB_G4_L12 -> min=4/max=12)
     if filter_type and filter_type.startswith("ORB_G"):
@@ -171,7 +171,7 @@ def _parse_skip_days(filter_params: str | None) -> list[int] | None:
             if sd is not None and len(sd) > 0:
                 return [int(d) for d in sd]
     except (json.JSONDecodeError, TypeError, ValueError):
-        pass
+        logger.warning("Corrupt filter_params in _parse_skip_days: %s", filter_params)
     return None
 
 
@@ -301,6 +301,8 @@ def compute_dst_split(
 
 def classify_regime(atr_20: float) -> str:
     """Classify market regime from mean ATR(20)."""
+    # @research-source: MGC regime analysis (Mar 2026), see memory/mgc_regime_analysis.md
+    # ATR < 20 = dormant (pre-2022 MGC regime), ATR 20-30 = marginal transition zone
     if atr_20 < 20.0:
         return "DORMANT"
     elif atr_20 < 30.0:
@@ -391,6 +393,9 @@ def validate_strategy(
                 yr_int = int(y)
                 mean_atr = atr_by_year.get(yr_int)
                 trades = d.get("trades", 0)
+                # @research-source: MGC regime analysis (Mar 2026) — DORMANT years
+                # typically have 0-5 trades; waiving years with >5 trades risks
+                # masking real negative signal
                 if mean_atr is not None and classify_regime(mean_atr) == "DORMANT" and trades <= 5:
                     waived.append(yr_int)
 
@@ -959,7 +964,11 @@ def run_validation(
                     except (json.JSONDecodeError, TypeError):
                         yearly_data = {}
 
-                    included = {y: d for y, d in yearly_data.items() if int(y) not in (exclude_years or set())}
+                    included = {
+                        y: d
+                        for y, d in yearly_data.items()
+                        if int(y) not in (exclude_years or set()) and d.get("trades", 0) >= min_trades_per_year
+                    }
                     years_tested = len(included)
                     all_positive = all(d.get("avg_r", 0) > 0 for d in included.values())
                     regime_waivers = sr["regime_waivers"]

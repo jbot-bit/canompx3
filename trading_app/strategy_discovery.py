@@ -68,33 +68,6 @@ def _get_filter_specificity(filter_key: str) -> int:
     return 0  # unknown defaults to same as NO_FILTER
 
 
-_INSERT_SQL = """INSERT OR REPLACE INTO experimental_strategies
-    (strategy_id, instrument, orb_label, orb_minutes,
-     rr_target, confirm_bars, entry_model,
-     filter_type, filter_params, stop_multiplier,
-     sample_size, win_rate, avg_win_r, avg_loss_r,
-     expectancy_r, sharpe_ratio, max_drawdown_r,
-     median_risk_points, avg_risk_points,
-     median_risk_dollars, avg_risk_dollars, avg_win_dollars, avg_loss_dollars,
-     trades_per_year, sharpe_ann,
-     yearly_results,
-     entry_signals, scratch_count, early_exit_count,
-     trade_day_hash, is_canonical, canonical_strategy_id,
-     dst_winter_n, dst_winter_avg_r, dst_summer_n, dst_summer_avg_r, dst_verdict,
-     validation_status, validation_notes,
-     created_at,
-     p_value, sharpe_ann_adj, autocorr_lag1,
-     sharpe_haircut, skewness, kurtosis_excess,
-     n_trials_at_discovery, fst_hurdle)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-            ?, ?, ?, ?,
-            ?, ?, ?, ?, ?,
-            ?, ?,
-            COALESCE(?, CURRENT_TIMESTAMP),
-            ?, ?, ?,
-            ?, ?, ?,
-            ?, ?)"""
-
 _BATCH_COLUMNS = [
     "strategy_id",
     "instrument",
