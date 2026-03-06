@@ -18,7 +18,10 @@ from ui.discipline_data import (
     DEBRIEFS_PATH,
     STATE_PATH,
     append_debrief,
+    append_discipline_event,
+    compute_adherence_stats,
     cooling_remaining_seconds,
+    get_latest_letter,
     get_pending_debriefs,
     is_cooling_active,
     override_cooling,
@@ -172,3 +175,76 @@ def render_cooling_settings() -> None:
         horizontal=True,
     )
     st.session_state["cooling_mode"] = mode
+
+
+# -- Pre-session priming ---------------------------------------------------
+
+
+def render_pre_session_priming(
+    *,
+    session: str,
+    strategies: list,
+    debriefs_path: Path = DEBRIEFS_PATH,
+    state_path: Path = STATE_PATH,
+) -> None:
+    """Render pre-session priming card: stats, plan, commitment, letter from past self.
+
+    Args:
+        session: Session name (e.g. "CME_REOPEN")
+        strategies: List of PortfolioStrategy for this session
+    """
+    st.markdown("**Pre-Session Priming**")
+
+    # Pattern stats
+    stats = compute_adherence_stats(path=debriefs_path, session=session)
+    if stats["total"] > 0:
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Adherence", f"{stats['adherence_rate']:.0%}",
+                       help=f"{stats['followed']}/{stats['total']} signals followed")
+        with col2:
+            st.metric("Avg R (followed)", f"{stats['avg_r_followed']:+.2f}")
+        with col3:
+            st.metric("Deviation cost", f"${stats['deviation_cost_dollars']:,.0f}")
+    else:
+        st.caption("No debrief history yet for this session.")
+
+    # Today's plan
+    if strategies:
+        st.markdown("**Today's Plan**")
+        for s in strategies:
+            st.markdown(
+                f"- **{s.instrument}** {s.entry_model} CB{s.confirm_bars} "
+                f"{s.filter_type} RR{s.rr_target} ({s.orb_minutes}m ORB)"
+            )
+        st.caption("Action rule: Execute within 60s of signal.")
+
+    # Commitment button
+    committed_key = f"committed_{session}_{datetime.now(timezone.utc).strftime('%Y%m%d')}"
+    already_committed = st.session_state.get(committed_key, False)
+
+    if already_committed:
+        st.success("Committed to the plan.")
+    else:
+        if st.button("I commit to following the plan", type="primary", key=f"commit_{session}"):
+            st.session_state[committed_key] = True
+            append_discipline_event(
+                "commitment",
+                {"session": session},
+                path=state_path,
+            )
+            st.rerun()
+
+    # Letter from past self
+    letter = get_latest_letter(session=session, path=debriefs_path)
+    if letter:
+        st.markdown("---")
+        st.markdown("**Letter from your past self:**")
+        st.info(f"\"{letter['text']}\"")
+        ts_str = letter.get("ts", "")
+        if ts_str:
+            try:
+                dt = datetime.fromisoformat(ts_str)
+                st.caption(f"Written {dt.strftime('%b %d')} after {letter.get('strategy_id', '')}")
+            except ValueError:
+                pass

@@ -52,3 +52,19 @@ def test_check_cooling_returns_true_when_active():
         until = (datetime.now(timezone.utc) + timedelta(seconds=60)).isoformat()
         mock_st.session_state = {"cooling_until": until, "cooling_mode": "hard"}
         assert check_cooling() is True
+
+
+def test_render_pre_session_priming_shows_commitment(tmp_path):
+    from ui.discipline import render_pre_session_priming
+    debriefs_path = tmp_path / "debriefs.jsonl"
+    state_path = tmp_path / "state.jsonl"
+    with patch("ui.discipline.st") as mock_st:
+        mock_st.session_state = {}
+        mock_st.button.return_value = False
+        render_pre_session_priming(
+            session="CME_REOPEN",
+            strategies=[],
+            debriefs_path=debriefs_path,
+            state_path=state_path,
+        )
+        mock_st.button.assert_called()
