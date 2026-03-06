@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+"""Interactive AI trading coach — conversational CLI.
+
+Loads trader profile + recent coaching digests into system prompt.
+Uses Claude API for conversation. Supports Pinecone RAG for historical queries.
+
+Usage:
+    python scripts/tools/trading_coach.py          # start chat
+    python scripts/tools/trading_coach.py --query "Why do I keep losing on Fridays?"
+"""
+
+import argparse
+import json
+import os
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+os.chdir(PROJECT_ROOT)
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+DATA_DIR = PROJECT_ROOT / "data"
+PROFILE_PATH = DATA_DIR / "trader_profile.json"
+DIGESTS_PATH = DATA_DIR / "coaching_digests.jsonl"
+TRADING_RULES_PATH = PROJECT_ROOT / "TRADING_RULES.md"
+
+
+def load_recent_digests(n: int = 5, *, path: Path = DIGESTS_PATH) -> list[dict]:
+    """Load the last N coaching digests."""
+    if not path.exists():
+        return []
+    digests = []
+    for line in path.read_text(encoding="utf-8").strip().split("\n"):
+        if line.strip():
+            digests.append(json.loads(line))
+    return digests[-n:]
+
+
+def build_chat_system_prompt(profile: dict, recent_digests: list[dict]) -> str:
+    """Build the system prompt for interactive chat."""
+    parts = [
+        "You are this trader's personal trading coach. You know their patterns, "
+        "strengths, and growth edges from your ongoing analysis of their trades.",
+        "",
+        "## Trader Profile",
+        f"```json\n{json.dumps(profile, indent=2)}\n```",
+    ]
+
+    if recent_digests:
+        parts.append("\n## Recent Coaching Digests")
+        for d in recent_digests:
+            parts.append(f"\n### {d.get('date', 'Unknown date')}")
+            if d.get("coaching_note"):
+                parts.append(d["coaching_note"])
+            if d.get("metrics"):
+                parts.append(f"Metrics: {json.dumps(d['metrics'])}")
+
+    parts.extend(
+        [
+            "",
+            "## Your Role",
+            "- Answer questions using evidence from the profile and trading history",
+            "- Be honest and direct — the trader needs truth, not comfort",
+            "- Reference specific trades, patterns, and metrics when relevant",
+            "- If asked about something not in the data, say so clearly",
+        ]
+    )
+
+    return "\n".join(parts)
+
+
+def chat_loop():
+    """Run interactive chat with the trading coach."""
+    try:
+        import anthropic
+    except ImportError:
+        print("ERROR: anthropic package not installed. Run: pip install anthropic")
+        return
+
+    from scripts.tools.coaching_digest import load_trader_profile
+
+    profile = load_trader_profile()
+    digests = load_recent_digests()
+    system_prompt = build_chat_system_prompt(profile, digests)
+
+    client = anthropic.Anthropic()
+    messages = []
+
+    print("Trading Coach (type 'quit' to exit)")
+    print("=" * 50)
+
+    while True:
+        try:
+            user_input = input("\nYou: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nGoodbye.")
+            break
+
+        if user_input.lower() in ("quit", "exit", "q"):
+            print("Goodbye.")
+            break
+
+        if not user_input:
+            continue
+
+        messages.append({"role": "user", "content": user_input})
+
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=2048,
+            system=system_prompt,
+            messages=messages,
+        )
+
+        assistant_text = response.content[0].text
+        messages.append({"role": "assistant", "content": assistant_text})
+
+        print(f"\nCoach: {assistant_text}")
+
+
+def single_query(query: str):
+    """Ask a single question and print the response."""
+    try:
+        import anthropic
+    except ImportError:
+        print("ERROR: anthropic package not installed. Run: pip install anthropic")
+        return
+
+    from scripts.tools.coaching_digest import load_trader_profile
+
+    profile = load_trader_profile()
+    digests = load_recent_digests()
+    system_prompt = build_chat_system_prompt(profile, digests)
+
+    client = anthropic.Anthropic()
+    response = client.messages.create(
+        model="claude-sonnet-4-20250514",
+        max_tokens=2048,
+        system=system_prompt,
+        messages=[{"role": "user", "content": query}],
+    )
+    print(response.content[0].text)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="AI Trading Coach")
+    parser.add_argument("--query", "-q", help="Single question (no interactive mode)")
+    args = parser.parse_args()
+
+    if args.query:
+        single_query(args.query)
+    else:
+        chat_loop()
+
+
+if __name__ == "__main__":
+    main()
