@@ -7,10 +7,12 @@ import duckdb
 from pipeline.init_db import init_db
 from scripts.tools.pipeline_status import (
     _trading_days_between,
+    build_step_list,
     get_resume_point,
     is_stale,
     preflight_check,
     read_last_manifest,
+    run_rebuild,
     staleness_engine,
     write_manifest,
 )
@@ -406,3 +408,60 @@ class TestManifest:
         con.close()
 
         assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Build step list tests
+# ---------------------------------------------------------------------------
+
+
+class TestBuildStepList:
+    def test_build_step_list_full(self):
+        """Full step list has all 13 steps."""
+        steps = build_step_list("MGC")
+        assert len(steps) == 13
+        assert steps[0]["name"] == "outcome_builder_O5"
+        assert "MGC" in steps[0]["cmd"]
+        assert steps[-1]["name"] == "pinecone_sync"
+
+    def test_build_step_list_resume(self):
+        """Resume skips completed steps."""
+        completed = ["outcome_builder_O5", "outcome_builder_O15", "outcome_builder_O30"]
+        steps = build_step_list("MGC", resume_from=completed)
+        assert len(steps) == 10
+        assert steps[0]["name"] == "discovery_O5"
+
+    def test_build_step_list_instrument_substitution(self):
+        """Instrument name is substituted into all commands."""
+        steps = build_step_list("MNQ")
+        for step in steps:
+            # Steps without {instrument} (retire_e3, repo_map, health_check, pinecone_sync, family_rr_locks) won't have it
+            if "{instrument}" not in step["cmd"]:
+                continue
+            assert "MNQ" in step["cmd"]
+
+
+# ---------------------------------------------------------------------------
+# Rebuild dry run tests
+# ---------------------------------------------------------------------------
+
+
+class TestRebuildDryRun:
+    def test_rebuild_dry_run(self, tmp_path, capsys):
+        """Dry run prints steps without executing."""
+        db_path, con = _create_test_db(tmp_path)
+        result = run_rebuild(con, "MGC", dry_run=True)
+        assert result is True
+        captured = capsys.readouterr()
+        assert "DRY RUN" in captured.out
+        assert "outcome_builder_O5" in captured.out
+        con.close()
+
+    def test_rebuild_dry_run_shows_all_steps(self, tmp_path, capsys):
+        """Dry run lists all 13 steps."""
+        db_path, con = _create_test_db(tmp_path)
+        run_rebuild(con, "MGC", dry_run=True)
+        captured = capsys.readouterr()
+        assert "[13/13]" in captured.out
+        assert "pinecone_sync" in captured.out
+        con.close()

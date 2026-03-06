@@ -11,7 +11,9 @@ Usage:
     python scripts/tools/pipeline_status.py  # all active instruments
 """
 
+import subprocess
 import sys
+import uuid
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
@@ -216,6 +218,149 @@ def get_resume_point(
 
 
 # ---------------------------------------------------------------------------
+# Rebuild orchestration
+# ---------------------------------------------------------------------------
+
+REBUILD_STEPS = [
+    ("outcome_builder_O5", "python trading_app/outcome_builder.py --instrument {instrument} --force --orb-minutes 5"),
+    ("outcome_builder_O15", "python trading_app/outcome_builder.py --instrument {instrument} --force --orb-minutes 15"),
+    ("outcome_builder_O30", "python trading_app/outcome_builder.py --instrument {instrument} --force --orb-minutes 30"),
+    ("discovery_O5", "python trading_app/strategy_discovery.py --instrument {instrument} --orb-minutes 5"),
+    ("discovery_O15", "python trading_app/strategy_discovery.py --instrument {instrument} --orb-minutes 15"),
+    ("discovery_O30", "python trading_app/strategy_discovery.py --instrument {instrument} --orb-minutes 30"),
+    (
+        "validator",
+        "python trading_app/strategy_validator.py --instrument {instrument} --min-sample 50 --no-regime-waivers --min-years-positive-pct 0.75",
+    ),
+    ("retire_e3", "python scripts/migrations/retire_e3_strategies.py"),
+    ("edge_families", "python scripts/tools/build_edge_families.py --instrument {instrument}"),
+    ("family_rr_locks", "python scripts/tools/select_family_rr.py"),
+    ("repo_map", "python scripts/tools/gen_repo_map.py"),
+    ("health_check", "python pipeline/health_check.py"),
+    ("pinecone_sync", "python scripts/tools/sync_pinecone.py"),
+]
+
+
+def build_step_list(instrument: str, resume_from: list[str] | None = None) -> list[dict]:
+    """Build ordered list of rebuild steps, optionally skipping completed ones.
+
+    Args:
+        instrument: Instrument symbol to format into commands.
+        resume_from: List of step names already completed (skipped).
+
+    Returns:
+        List of dicts with 'name' and 'cmd' keys.
+    """
+    skip = set(resume_from) if resume_from else set()
+    steps = []
+    for name, cmd_template in REBUILD_STEPS:
+        if name in skip:
+            continue
+        steps.append(
+            {
+                "name": name,
+                "cmd": cmd_template.format(instrument=instrument),
+            }
+        )
+    return steps
+
+
+def _parse_step_preflight(step_name: str) -> tuple[str, int]:
+    """Extract preflight base name and orb_minutes from a step name.
+
+    E.g. 'outcome_builder_O15' -> ('outcome_builder', 15)
+         'validator' -> ('validator', 5)
+    """
+    if "_O" in step_name:
+        parts = step_name.rsplit("_O", 1)
+        base = parts[0]
+        try:
+            orb_min = int(parts[1])
+        except (ValueError, IndexError):
+            return step_name, 5
+        return base, orb_min
+    return step_name, 5
+
+
+def run_rebuild(
+    con: duckdb.DuckDBPyConnection,
+    instrument: str,
+    dry_run: bool = False,
+    resume: bool = False,
+    trigger: str = "CLI",
+) -> bool:
+    """Execute the full rebuild chain for *instrument*.
+
+    Args:
+        con: DuckDB connection (for manifest writes and preflight checks).
+        instrument: Instrument symbol.
+        dry_run: If True, print steps without executing.
+        resume: If True, skip steps completed in the last FAILED manifest.
+        trigger: Trigger label for the manifest record.
+
+    Returns:
+        True if all steps passed (or dry_run), False on any failure.
+    """
+    resume_completed: list[str] = []
+    if resume:
+        rp = get_resume_point(con, instrument)
+        if rp and rp["steps_completed"]:
+            resume_completed = list(rp["steps_completed"])
+            print(f"Resuming from after: {', '.join(resume_completed)}")
+        else:
+            print("No failed rebuild found to resume — running full chain.")
+
+    steps = build_step_list(instrument, resume_from=resume_completed if resume_completed else None)
+    total = len(steps)
+
+    if dry_run:
+        print(f"DRY RUN — {total} steps for {instrument}:")
+        for i, step in enumerate(steps, 1):
+            print(f"  [{i}/{total}] {step['name']}: {step['cmd']}")
+        return True
+
+    rebuild_id = str(uuid.uuid4())
+    completed: list[str] = list(resume_completed)  # carry forward previously completed
+
+    # Write RUNNING manifest
+    write_manifest(con, rebuild_id, instrument, "RUNNING", trigger=trigger, steps_completed=completed)
+    print(f"Rebuild started: {rebuild_id} for {instrument} ({total} steps)")
+
+    for i, step in enumerate(steps, 1):
+        step_name = step["name"]
+        step_cmd = step["cmd"]
+
+        # Pre-flight check
+        step_base, orb_min = _parse_step_preflight(step_name)
+        ok, msg = preflight_check(con, instrument, step_base, orb_minutes=orb_min)
+        if not ok:
+            print(f"  [{i}/{total}] {step_name} — {msg}")
+            write_manifest(
+                con, rebuild_id, instrument, "FAILED", failed_step=step_name, steps_completed=completed, trigger=trigger
+            )
+            return False
+
+        # Execute
+        print(f"  [{i}/{total}] {step_name}")
+        print(f"    CMD: {step_cmd}")
+        result = subprocess.run(step_cmd, shell=True, cwd=str(PROJECT_ROOT))
+        if result.returncode != 0:
+            print(f"    FAILED (exit code {result.returncode})")
+            write_manifest(
+                con, rebuild_id, instrument, "FAILED", failed_step=step_name, steps_completed=completed, trigger=trigger
+            )
+            return False
+
+        print("    PASSED")
+        completed.append(step_name)
+
+    # All steps passed
+    write_manifest(con, rebuild_id, instrument, "COMPLETED", steps_completed=completed, trigger=trigger)
+    print(f"Rebuild COMPLETED: {rebuild_id}")
+    return True
+
+
+# ---------------------------------------------------------------------------
 # Core engine
 # ---------------------------------------------------------------------------
 
@@ -398,18 +543,92 @@ def format_status(instrument: str, status: dict) -> str:
 def main() -> None:
     import argparse
 
-    parser = argparse.ArgumentParser(description="Pipeline staleness status")
-    parser.add_argument(
-        "--instrument",
-        type=str,
-        default=None,
-        help="Single instrument (default: all active)",
+    parser = argparse.ArgumentParser(
+        description="Pipeline staleness status and rebuild orchestration",
     )
+
+    # Actions (mutually exclusive group)
+    actions = parser.add_mutually_exclusive_group()
+    actions.add_argument("--status", action="store_true", help="Show staleness status (default)")
+    actions.add_argument("--rebuild", action="store_true", help="Run rebuild chain for one instrument")
+    actions.add_argument("--rebuild-all", action="store_true", help="Run rebuild chain for all stale instruments")
+    actions.add_argument("--resume", action="store_true", help="Resume last failed rebuild")
+    actions.add_argument("--write-manifest", action="store_true", help="Write a manifest record (for shell scripts)")
+
+    # Options
+    parser.add_argument("--instrument", type=str, default=None, help="Instrument symbol")
+    parser.add_argument(
+        "--status-value", type=str, choices=["COMPLETED", "FAILED", "RUNNING"], help="Status for --write-manifest"
+    )
+    parser.add_argument(
+        "--trigger", type=str, default="CLI", choices=["CLI", "SHELL", "MANUAL"], help="Trigger type (default: CLI)"
+    )
+    parser.add_argument("--dry-run", action="store_true", help="Show what would execute without running")
+    parser.add_argument("--db-path", type=str, default=None, help="Database path (default: GOLD_DB_PATH)")
+
     args = parser.parse_args()
 
-    instruments = [args.instrument] if args.instrument else list(ACTIVE_ORB_INSTRUMENTS)
+    db_path = args.db_path if args.db_path else str(GOLD_DB_PATH)
 
-    con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+    # --- --write-manifest ---
+    if args.write_manifest:
+        if not args.instrument:
+            parser.error("--write-manifest requires --instrument")
+        if not args.status_value:
+            parser.error("--write-manifest requires --status-value")
+        con = duckdb.connect(db_path)
+        try:
+            rid = str(uuid.uuid4())
+            write_manifest(con, rid, args.instrument, args.status_value, trigger=args.trigger)
+            print(f"Manifest written: {rid} {args.instrument} {args.status_value}")
+        finally:
+            con.close()
+        return
+
+    # --- --rebuild ---
+    if args.rebuild:
+        if not args.instrument:
+            parser.error("--rebuild requires --instrument")
+        con = duckdb.connect(db_path)
+        try:
+            ok = run_rebuild(con, args.instrument, dry_run=args.dry_run, trigger=args.trigger)
+        finally:
+            con.close()
+        sys.exit(0 if ok else 1)
+
+    # --- --rebuild-all ---
+    if args.rebuild_all:
+        con = duckdb.connect(db_path)
+        try:
+            for inst in ACTIVE_ORB_INSTRUMENTS:
+                status = staleness_engine(con, inst)
+                if not status["stale_steps"]:
+                    print(f"{inst}: up to date, skipping.")
+                    continue
+                print(f"{inst}: stale ({', '.join(status['stale_steps'])}), rebuilding...")
+                ok = run_rebuild(con, inst, dry_run=args.dry_run, trigger=args.trigger)
+                if not ok:
+                    print(f"{inst}: rebuild FAILED — stopping.")
+                    sys.exit(1)
+        finally:
+            con.close()
+        print("All stale instruments rebuilt successfully.")
+        return
+
+    # --- --resume ---
+    if args.resume:
+        if not args.instrument:
+            parser.error("--resume requires --instrument")
+        con = duckdb.connect(db_path)
+        try:
+            ok = run_rebuild(con, args.instrument, dry_run=args.dry_run, resume=True, trigger=args.trigger)
+        finally:
+            con.close()
+        sys.exit(0 if ok else 1)
+
+    # --- Default: --status ---
+    instruments = [args.instrument] if args.instrument else list(ACTIVE_ORB_INSTRUMENTS)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         for inst in instruments:
             status = staleness_engine(con, inst)
