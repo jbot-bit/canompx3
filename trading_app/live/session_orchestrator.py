@@ -26,12 +26,9 @@ from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.execution_engine import ExecutionEngine
 from trading_app.live.bar_aggregator import Bar
-from trading_app.live.contract_resolver import resolve_account_id, resolve_front_month
-from trading_app.live.data_feed import DataFeed
+from trading_app.live.broker_factory import create_broker_components, get_broker_name
 from trading_app.live.live_market_state import LiveORBBuilder
-from trading_app.live.order_router import OrderRouter
 from trading_app.live.performance_monitor import PerformanceMonitor, TradeRecord
-from trading_app.live.tradovate_auth import TradovateAuth
 from trading_app.live_config import build_live_portfolio
 from trading_app.portfolio import PortfolioStrategy
 from trading_app.risk_manager import RiskLimits, RiskManager
@@ -43,7 +40,14 @@ class SessionOrchestrator:
     # JSONL file for UI signal display — written by this process, read by Streamlit
     SIGNALS_FILE = Path(__file__).parent.parent.parent / "live_signals.jsonl"
 
-    def __init__(self, instrument: str, demo: bool = True, account_id: int = 0, signal_only: bool = False):
+    def __init__(
+        self,
+        instrument: str,
+        broker: str | None = None,
+        demo: bool = True,
+        account_id: int = 0,
+        signal_only: bool = False,
+    ):
         self.instrument = instrument
         self.demo = demo
         self.signal_only = signal_only
@@ -55,8 +59,13 @@ class SessionOrchestrator:
         else:
             self.trading_day = bris_now.date()
 
-        # Auth is needed even in signal-only mode (for the market data WebSocket feed)
-        self.auth = TradovateAuth(demo=demo)
+        # Create broker components via factory
+        self._broker_name = broker or get_broker_name()
+        components = create_broker_components(self._broker_name, demo=demo)
+        self.auth = components["auth"]
+        self._feed_class = components["feed_class"]
+        contracts_cls = components["contracts_class"]
+        self._positions_cls = components["positions_class"]
 
         # build_live_portfolio returns (Portfolio, list[str]) — unpack the tuple
         self.portfolio, notes = build_live_portfolio(db_path=GOLD_DB_PATH, instrument=instrument)
@@ -84,14 +93,28 @@ class SessionOrchestrator:
             live_session_costs=True,
         )
 
+        # Contract resolution (needed even in signal-only for front-month lookup)
+        contracts = contracts_cls(auth=self.auth, demo=demo)
+
         # Order routing only needed when placing real/demo orders
         if signal_only:
             self.order_router = None
-            log.info("Signal-only mode: order router skipped (no Tradovate account needed)")
+            self.positions = None
+            log.info("Signal-only mode: order router skipped")
         else:
             if account_id == 0:
-                account_id = resolve_account_id(self.auth, demo=demo)
-            self.order_router = OrderRouter(account_id=account_id, auth=self.auth, demo=demo)
+                account_id = contracts.resolve_account_id()
+            router_cls = components["router_class"]
+            self.order_router = router_cls(account_id=account_id, auth=self.auth, demo=demo)
+            self.positions = self._positions_cls(auth=self.auth)
+
+            # Position reconciliation on startup (M2.5 P0: crash recovery)
+            try:
+                orphans = self.positions.query_open(account_id)
+                if orphans:
+                    log.critical("ORPHANED POSITIONS DETECTED on session start: %s", orphans)
+            except Exception as e:
+                log.warning("Position query failed on startup: %s", e)
 
         # Live infrastructure
         self.orb_builder = LiveORBBuilder(instrument, self.trading_day)
@@ -102,7 +125,7 @@ class SessionOrchestrator:
         self._entry_prices: dict[str, float] = {}
 
         # Resolve front-month contract symbol (needed even in signal-only for logging)
-        self.contract_symbol = resolve_front_month(instrument, self.auth, demo=demo)
+        self.contract_symbol = contracts.resolve_front_month(instrument)
         log.info(
             "Session ready: %s → %s (%s)",
             instrument,
@@ -287,13 +310,14 @@ class SessionOrchestrator:
         )
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(None, self.order_router.submit, exit_spec)
+        order_id = result.get("order_id") if isinstance(result, dict) else result.order_id
         log.info(
-            "%s close order: %s %s @ %.2f → orderId=%d",
+            "%s close order: %s %s @ %.2f → orderId=%s",
             event.event_type,
             event.strategy_id,
             event.direction,
             event.price,
-            result.order_id,
+            order_id,
         )
 
     def _compute_actual_r(self, entry_price: float, exit_price: float, direction: str, risk_pts: float) -> float:
@@ -374,12 +398,13 @@ class SessionOrchestrator:
             )
             loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(None, self.order_router.submit, spec)
+            order_id = result.get("order_id") if isinstance(result, dict) else result.order_id
             log.info(
-                "ENTRY order: %s %s @ %.2f → orderId=%d",
+                "ENTRY order: %s %s @ %.2f → orderId=%s",
                 event.strategy_id,
                 event.direction,
                 event.price,
-                result.order_id,
+                order_id,
             )
             self._write_signal_record(
                 {
@@ -389,7 +414,7 @@ class SessionOrchestrator:
                     "direction": event.direction.upper(),
                     "price": event.price,
                     "contracts": event.contracts,
-                    "order_id": result.order_id,
+                    "order_id": order_id,
                 }
             )
 
@@ -441,8 +466,8 @@ class SessionOrchestrator:
             )
 
     async def run(self) -> None:
-        feed = DataFeed(self.auth, on_bar=self._on_bar, demo=self.demo)
-        log.info("Starting live feed: %s", self.contract_symbol)
+        feed = self._feed_class(self.auth, on_bar=self._on_bar, demo=self.demo)
+        log.info("Starting live feed: %s (broker: %s)", self.contract_symbol, self._broker_name)
         await feed.run(self.contract_symbol)
 
     def post_session(self) -> None:
@@ -485,6 +510,21 @@ class SessionOrchestrator:
 
         summary = self.monitor.daily_summary()
         log.info("EOD summary: %s", summary)
+
+        # EOD position reconciliation (M2.5 P0)
+        if self.positions and not self.signal_only:
+            try:
+                account_id = self.order_router.account_id if self.order_router else 0
+                remaining = self.positions.query_open(account_id)
+                if remaining:
+                    log.critical(
+                        "EOD RECONCILIATION: %d positions still open after session end: %s", len(remaining), remaining
+                    )
+                else:
+                    log.info("EOD reconciliation: no orphaned positions")
+            except Exception as e:
+                log.warning("EOD position reconciliation failed: %s", e)
+
         try:
             run_backfill_for_instrument(self.instrument)
         except Exception as e:
