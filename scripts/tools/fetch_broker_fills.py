@@ -58,12 +58,23 @@ def save_coach_state(state: dict, *, path: Path = COACH_STATE_PATH) -> None:
 
 
 def save_fills(fills: list[dict], *, path: Path = FILLS_PATH) -> int:
-    """Append fills to JSONL. Returns count written."""
+    """Append fills to JSONL with dedup by fill_id. Returns count written."""
     path.parent.mkdir(parents=True, exist_ok=True)
+    existing_ids: set[str] = set()
+    if path.exists():
+        for line in path.read_text(encoding="utf-8").strip().split("\n"):
+            if line.strip():
+                try:
+                    existing_ids.add(json.loads(line).get("fill_id", ""))
+                except json.JSONDecodeError:
+                    pass
+    new_fills = [f for f in fills if f.get("fill_id") not in existing_ids]
+    if not new_fills:
+        return 0
     with open(path, "a", encoding="utf-8") as fh:
-        for fill in fills:
+        for fill in new_fills:
             fh.write(json.dumps(fill) + "\n")
-    return len(fills)
+    return len(new_fills)
 
 
 # ---------------------------------------------------------------------------

@@ -31,48 +31,26 @@ TRADES_PATH = DATA_DIR / "broker_trades.jsonl"
 DIGESTS_PATH = DATA_DIR / "coaching_digests.jsonl"
 TRADING_RULES_PATH = PROJECT_ROOT / "TRADING_RULES.md"
 
-SYSTEM_PROMPT = """\
+from scripts.tools.coaching_prompts import (
+    BEHAVIORAL_PATTERNS,
+    COACHING_RULES,
+    EMOTION_CATEGORIES,
+    TENDLER_FRAMEWORK,
+    TRADE_GRADING_RUBRIC,
+)
+
+SYSTEM_PROMPT = f"""\
 You are a trading performance coach grounded in Tendler's Mental Game of Trading framework.
 
-## Performance Model: The Inchworm
-All execution falls into three zones:
-- **A-Game**: Learning mistakes only. No emotional interference. Calm, decisive, trusting the system.
-- **B-Game**: Impulse to deviate but controlled it. Minor timing/sizing suboptimality.
-- **C-Game**: Emotional hijacking overrode known rules. Revenge entries, oversizing, moved stops.
+{TENDLER_FRAMEWORK}
 
-Progress = raising the floor (eliminating C-game), not raising the ceiling.
+{TRADE_GRADING_RUBRIC}
 
-## Trade Grading Rubric (PROCESS, not outcome — a losing A-grade > a winning F-grade)
-- **A**: Followed plan, appropriate size, held to target/stop, no emotional interference.
-- **B**: Had impulse to deviate but controlled it. Minor suboptimality.
-- **C**: Emotional entry or sizing error, but recognized mid-trade and managed recovery.
-- **D**: Emotional override of known rules. Revenge entry, oversized, moved stop, chased.
-- **F**: Complete discipline collapse. No plan, gambling, trading to margin.
+{BEHAVIORAL_PATTERNS}
 
-## Behavioral Pattern Detection
-Look for these in the trade data and flag by name:
-- **Revenge spiral**: Loss → re-entry <2min → larger size → loss → re-entry
-- **Overconfidence cascade**: Win streak → size increase → target widened → blowup
-- **Fear of losing**: Cluster of exits near entry (breakeven exits), early profit-taking
-- **Tilt escalation**: Trade frequency spike within session, size increasing after losses
-- **Session shutdown**: No trades after first loss despite remaining time (underconfidence)
-- **Boredom overtrading**: High trade count in low-volatility periods
-- **Skipped winners**: Valid signals not taken after drawdown (recency bias)
+{EMOTION_CATEGORIES}
 
-## Emotion Categories (Tendler)
-When you identify a pattern, classify it:
-- **Greed**: Profit-target manipulation, sizing up on winners, can't stop watching PnL
-- **Fear**: FOMO, fear of losing (early exits), fear of mistakes (hesitation), fear of failure
-- **Tilt**: Hating to lose, mistake tilt (self-anger), injustice tilt, revenge trading, entitlement
-- **Confidence**: Overconfidence (ignoring stops, euphoria) OR underconfidence (hesitation, need validation)
-- **Discipline**: Impatience, boredom, results-fixation, distractibility
-
-## Rules
-- Never praise without citing specific evidence from the trades.
-- Never comfort after losses. Validate the emotion, redirect to process.
-- Never conflate outcome with process.
-- Reference the trader's historical patterns when available.
-- Use specific interventions: "Reduce to minimum size" not "take a break."
+{COACHING_RULES}
 
 RESPOND WITH VALID JSON ONLY — no markdown fencing, no commentary outside the JSON."""
 
@@ -189,12 +167,13 @@ def apply_profile_patch(profile: dict, patch: dict) -> None:
         return
 
     changed = False
+
+    # Merge list fields (strengths, growth_edges, behavioral_patterns)
     for list_field in ("strengths", "growth_edges", "behavioral_patterns"):
         if list_field not in patch:
             continue
         existing = profile.setdefault(list_field, [])
         for new_item in patch[list_field]:
-            # Find existing by trait/pattern name
             key_field = "trait" if list_field != "behavioral_patterns" else "pattern"
             match = next(
                 (e for e in existing if e.get(key_field) == new_item.get(key_field)),
@@ -204,6 +183,20 @@ def apply_profile_patch(profile: dict, patch: dict) -> None:
                 match.update(new_item)
             else:
                 existing.append(new_item)
+            changed = True
+
+    # Merge dict fields (inchworm, emotional_profile) — shallow merge of sub-keys
+    for dict_field in ("inchworm", "emotional_profile"):
+        if dict_field not in patch:
+            continue
+        existing = profile.setdefault(dict_field, {})
+        for key, value in patch[dict_field].items():
+            if isinstance(value, list) and isinstance(existing.get(key), list):
+                # Deduplicate list values (e.g. c_game_patterns)
+                combined = existing[key] + [v for v in value if v not in existing[key]]
+                existing[key] = combined
+            else:
+                existing[key] = value
             changed = True
 
     if changed:

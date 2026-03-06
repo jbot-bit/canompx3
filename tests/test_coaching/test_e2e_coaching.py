@@ -76,7 +76,8 @@ def test_full_pipeline_mocked(coaching_data_dir):
     trades = match_fills_to_trades(fills)
     assert len(trades) == 1
     assert trades[0]["direction"] == "LONG"
-    assert trades[0]["pnl_dollar"] == 20.0
+    # Price-based PnL: (24810 - 24800) * 2 * $2/pt = $40
+    assert trades[0]["pnl_dollar"] == 40.0
 
     # 3. Generate digest (mock Claude API)
     mock_response = MagicMock()

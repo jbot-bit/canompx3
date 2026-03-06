@@ -21,6 +21,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 os.chdir(PROJECT_ROOT)
 
+from pipeline.cost_model import COST_SPECS
+
 DATA_DIR = PROJECT_ROOT / "data"
 FILLS_PATH = DATA_DIR / "broker_fills.jsonl"
 TRADES_PATH = DATA_DIR / "broker_trades.jsonl"
@@ -141,7 +143,14 @@ def _build_trade(
     direction = "LONG" if entry_fills[0]["side"].upper() == "BUY" else "SHORT"
 
     total_fees = sum(f.get("fees", 0) for f in entry_fills) + exit_fill.get("fees", 0)
-    total_pnl = sum(f.get("pnl", 0) for f in entry_fills) + exit_fill.get("pnl", 0)
+
+    # Compute PnL from prices — never trust broker-reported cumulative pnl fields
+    price_diff = exit_fill["price"] - entry_price_avg
+    if direction == "SHORT":
+        price_diff = -price_diff
+    spec = COST_SPECS.get(instrument)
+    point_value = spec.point_value if spec else 1.0
+    total_pnl = price_diff * total_entry_size * point_value
 
     date_str = entry_dt.strftime("%Y-%m-%d")
     trade_id = f"{entry_fills[0]['broker']}-{account_id}-{date_str}-{counter:03d}"
@@ -267,12 +276,23 @@ def detect_source(trade: dict, signals: list[dict], *, tolerance_s: float = 60.0
 
 
 def save_trades(trades: list[dict], *, path: Path = TRADES_PATH) -> int:
-    """Append trades to JSONL. Returns count written."""
+    """Append trades to JSONL with dedup by trade_id. Returns count written."""
     path.parent.mkdir(parents=True, exist_ok=True)
+    existing_ids: set[str] = set()
+    if path.exists():
+        for line in path.read_text(encoding="utf-8").strip().split("\n"):
+            if line.strip():
+                try:
+                    existing_ids.add(json.loads(line).get("trade_id", ""))
+                except json.JSONDecodeError:
+                    pass
+    new_trades = [t for t in trades if t.get("trade_id") not in existing_ids]
+    if not new_trades:
+        return 0
     with open(path, "a", encoding="utf-8") as fh:
-        for trade in trades:
+        for trade in new_trades:
             fh.write(json.dumps(trade) + "\n")
-    return len(trades)
+    return len(new_trades)
 
 
 def _load_signals() -> list[dict]:

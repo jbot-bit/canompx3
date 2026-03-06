@@ -8,6 +8,7 @@ from scripts.tools.trade_matcher import (
     classify_trade_type,
     load_fills,
     match_fills_to_trades,
+    save_trades,
 )
 
 
@@ -113,6 +114,50 @@ class TestMultiAccountIsolation:
         trades = match_fills_to_trades(fills)
         # No round-trips: each account has an open position, neither is closed
         assert len(trades) == 0
+
+
+class TestPnlComputation:
+    """PnL computed from (exit - entry) * size * point_value, not broker pnl field."""
+
+    def test_long_pnl_uses_price_diff(self):
+        # MNQ: point_value = $2. BUY 4 @ 24800, SELL 4 @ 24810 = +10 pts * 4 * $2 = $80
+        fills = [
+            _make_fill("f1", 123, "MNQ", "2026-03-06T13:00:00Z", "BUY", 4, 24800.0, 999, 0),
+            _make_fill("f2", 123, "MNQ", "2026-03-06T13:02:00Z", "SELL", 4, 24810.0, 999, 0),
+        ]
+        trades = match_fills_to_trades(fills)
+        assert len(trades) == 1
+        # Should be price-based, not the 999 broker pnl
+        assert trades[0]["pnl_dollar"] == pytest.approx(80.0)
+
+    def test_short_pnl_uses_price_diff(self):
+        # MNQ: SELL 2 @ 24800, BUY 2 @ 24790 = +10 pts * 2 * $2 = $40
+        fills = [
+            _make_fill("f1", 123, "MNQ", "2026-03-06T13:00:00Z", "SELL", 2, 24800.0, 0, 0),
+            _make_fill("f2", 123, "MNQ", "2026-03-06T13:01:00Z", "BUY", 2, 24790.0, 0, 0),
+        ]
+        trades = match_fills_to_trades(fills)
+        assert trades[0]["pnl_dollar"] == pytest.approx(40.0)
+
+
+class TestSaveTradesDedup:
+    """save_trades skips trades with duplicate trade_ids."""
+
+    def test_dedup_prevents_duplicates(self, tmp_path):
+        path = tmp_path / "trades.jsonl"
+        trades = [{"trade_id": "t1", "pnl_dollar": 100}]
+        assert save_trades(trades, path=path) == 1
+        # Re-save same trade_id — should skip
+        assert save_trades(trades, path=path) == 0
+        lines = path.read_text().strip().split("\n")
+        assert len(lines) == 1
+
+    def test_new_trades_appended(self, tmp_path):
+        path = tmp_path / "trades.jsonl"
+        save_trades([{"trade_id": "t1"}], path=path)
+        save_trades([{"trade_id": "t2"}], path=path)
+        lines = path.read_text().strip().split("\n")
+        assert len(lines) == 2
 
 
 class TestLoadFills:

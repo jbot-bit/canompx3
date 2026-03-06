@@ -92,6 +92,49 @@ class TestApplyProfilePatch:
         apply_profile_patch(profile, {})
         assert profile["version"] == 5
 
+    def test_patches_inchworm_dict(self):
+        profile = {
+            "version": 1,
+            "inchworm": {"c_game_patterns": ["revenge_spiral"], "b_game_patterns": [], "a_game_indicators": []},
+        }
+        patch = {
+            "inchworm": {
+                "c_game_patterns": ["tilt_escalation"],
+                "a_game_indicators": ["calm_sizing"],
+            }
+        }
+        apply_profile_patch(profile, patch)
+        assert "revenge_spiral" in profile["inchworm"]["c_game_patterns"]
+        assert "tilt_escalation" in profile["inchworm"]["c_game_patterns"]
+        assert profile["inchworm"]["a_game_indicators"] == ["calm_sizing"]
+        assert profile["version"] == 2
+
+    def test_patches_emotional_profile_dict(self):
+        profile = {
+            "version": 1,
+            "emotional_profile": {"primary_emotion": None, "tilt_indicators": ["fast_reentry"]},
+        }
+        patch = {
+            "emotional_profile": {
+                "primary_emotion": "tilt",
+                "tilt_indicators": ["size_increase"],
+            }
+        }
+        apply_profile_patch(profile, patch)
+        assert profile["emotional_profile"]["primary_emotion"] == "tilt"
+        assert "fast_reentry" in profile["emotional_profile"]["tilt_indicators"]
+        assert "size_increase" in profile["emotional_profile"]["tilt_indicators"]
+
+    def test_inchworm_deduplicates_list_values(self):
+        profile = {
+            "version": 1,
+            "inchworm": {"c_game_patterns": ["revenge_spiral"]},
+        }
+        patch = {"inchworm": {"c_game_patterns": ["revenge_spiral", "new_pattern"]}}
+        apply_profile_patch(profile, patch)
+        assert profile["inchworm"]["c_game_patterns"].count("revenge_spiral") == 1
+        assert "new_pattern" in profile["inchworm"]["c_game_patterns"]
+
 
 class TestProfilePersistence:
     def test_roundtrip(self, tmp_path):
