@@ -248,7 +248,7 @@ class TestCheckDollarGate:
     def test_fails_when_exp_below_threshold(self):
         """Tiny ORB on MGC: exp$ well below 1.3x RT cost must fail."""
         # MGC: point_value=$10, total_friction=$5.74
-        # median=0.5pt → 1R$=0.5*10+5.74=$10.74; exp$=0.10*10.74=$1.07
+        # median=0.5pt → 1R$=0.5*10=$5.00; exp$=0.10*5.00=$0.50
         # threshold=1.3*5.74=$7.46 → should fail
         passes, note = _check_dollar_gate(self._variant(0.10, 0.5), "MGC")
         assert passes is False
@@ -257,7 +257,7 @@ class TestCheckDollarGate:
 
     def test_passes_when_exp_meets_threshold(self):
         """Large ORB on MGC: exp$ well above 1.3x RT cost must pass."""
-        # MGC: median=5pt → 1R$=5*10+5.74=$55.74; exp$=0.30*55.74=$16.72
+        # MGC: median=5pt → 1R$=5*10=$50.00; exp$=0.30*50.00=$15.00
         # threshold=$7.46 → should pass
         passes, note = _check_dollar_gate(self._variant(0.30, 5.0), "MGC")
         assert passes is True
@@ -269,6 +269,29 @@ class TestCheckDollarGate:
         assert passes is True
         assert "skipped" in note
 
+    def test_one_r_excludes_friction(self):
+        """1R dollars = median_risk_pts * point_value only — friction must NOT be added."""
+        from pipeline.cost_model import get_cost_spec
+
+        spec = get_cost_spec("MGC")
+        median = 3.0
+        correct_one_r = median * spec.point_value  # $30.00
+        wrong_one_r = median * spec.point_value + spec.total_friction  # $35.74
+
+        # Choose ExpR so the result distinguishes the two formulas
+        expr = 0.50
+        correct_exp_dollars = expr * correct_one_r
+        wrong_exp_dollars = expr * wrong_one_r
+        assert correct_exp_dollars != wrong_exp_dollars  # sanity
+
+        # Set median_risk_points high enough that both formulas pass the gate,
+        # so we can inspect the note string for the correct Exp$ value.
+        passes, note = _check_dollar_gate({"expectancy_r": expr, "median_risk_points": median}, "MGC")
+        assert passes is True
+        # The note contains "Exp$XX.XX" — verify it matches the CORRECT formula
+        assert f"Exp${correct_exp_dollars:.2f}" in note
+        assert f"Exp${wrong_exp_dollars:.2f}" not in note
+
     def test_multiplier_constant_is_applied(self):
         """Gate threshold equals LIVE_MIN_EXPECTANCY_DOLLARS_MULT * RT cost."""
         # MGC total_friction=$5.74; boundary case: exp$ just above vs just below threshold
@@ -277,7 +300,7 @@ class TestCheckDollarGate:
         spec = get_cost_spec("MGC")
         threshold = LIVE_MIN_EXPECTANCY_DOLLARS_MULT * spec.total_friction
         median = 1.0
-        one_r = median * spec.point_value + spec.total_friction
+        one_r = median * spec.point_value
         # ExpR that lands exactly at threshold (boundary should pass)
         expr_at_threshold = threshold / one_r
         passes, _ = _check_dollar_gate(self._variant(expr_at_threshold, median), "MGC")

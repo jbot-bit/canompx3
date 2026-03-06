@@ -331,7 +331,7 @@ def _check_dollar_gate(variant: dict, instrument: str) -> tuple[bool, str]:
         from pipeline.cost_model import get_cost_spec
 
         spec = get_cost_spec(instrument)
-        one_r_dollars = median_risk_pts * spec.point_value + spec.total_friction
+        one_r_dollars = median_risk_pts * spec.point_value
         exp_dollars = variant["expectancy_r"] * one_r_dollars
         min_dollars = LIVE_MIN_EXPECTANCY_DOLLARS_MULT * spec.total_friction
         if exp_dollars < min_dollars:
@@ -630,15 +630,15 @@ def main():
     def _exp_dollars(s) -> str:
         """Expected net dollar profit per trade.
 
-        ExpR is already net of costs; 1R in dollars includes friction in
-        the denominator: 1R$ = median_risk_pts * point_value + total_friction.
+        ExpR is already net of costs; 1R in dollars is the stop distance
+        in dollar terms: 1R$ = median_risk_pts * point_value.
         Exp$ = ExpR * 1R$
         """
         if s.median_risk_points is None:
             return "   n/a"
         try:
             spec = get_cost_spec(s.instrument)
-            one_r_dollars = s.median_risk_points * spec.point_value + spec.total_friction
+            one_r_dollars = s.median_risk_points * spec.point_value
             d = s.expectancy_r * one_r_dollars
             return f"${d:+6.2f}"
         except Exception:
