@@ -346,8 +346,12 @@ class ExecutionEngine:
     def on_trading_day_end(self) -> list[TradeEvent]:
         """Close all open positions as scratch at end of trading day."""
         events = []
-        last_ts = self._last_bar["ts_utc"] if self._last_bar else datetime.now(timezone.utc)
-        last_close = self._last_bar["close"] if self._last_bar else 0.0
+        if not self._last_bar:
+            # No bars processed — nothing to close (can't have ENTERED without bars)
+            self.active_trades = []
+            return events
+        last_ts = self._last_bar["ts_utc"]
+        last_close = self._last_bar["close"]
 
         for trade in list(self.active_trades):
             if trade.state == TradeState.ENTERED:
@@ -1052,6 +1056,11 @@ class ExecutionEngine:
                 self._exit_trade(trade, bar, "win", trade.target_price, events)
             elif hit_stop:
                 self._exit_trade(trade, bar, "loss", trade.stop_price, events)
+
+        # Prune exited trades to prevent unbounded list growth and iteration bugs
+        if events:
+            self.active_trades = [t for t in self.active_trades
+                                  if t.state != TradeState.EXITED]
 
         return events
 

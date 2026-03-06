@@ -104,10 +104,9 @@ class RiskManager:
                 # Use max of corr_val and limits.min_correlation_factor to avoid over-discounting strong negative correlations
                 effective_exposure += max(corr_val, self.limits.min_correlation_factor) 
             
-            # Add 1.0 for the current strategy (if allowed, it will take 1 position)
-            # This sum should not exceed max_concurrent_positions
-            
-            # If the effective exposure plus the current strategy's "weight" exceeds the limit, reject
+            # Add min_correlation_factor for the new trade (conservative: assumes at least
+            # this much correlation with existing positions, even if uncorrelated).
+            # If effective exposure exceeds max_concurrent_positions, reject.
             if (effective_exposure + self.limits.min_correlation_factor) > self.limits.max_concurrent_positions:
                 return False, f"corr_concurrent: effective exposure {effective_exposure + self.limits.min_correlation_factor:.1f} >= {self.limits.max_concurrent_positions}", 0.0
 

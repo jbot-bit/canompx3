@@ -16,6 +16,7 @@ import json
 import logging
 from datetime import date, datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from trading_app.live.tradovate_auth import TradovateAuth
 from trading_app.live.data_feed import DataFeed
@@ -46,7 +47,7 @@ class SessionOrchestrator:
         self.instrument = instrument
         self.demo = demo
         self.signal_only = signal_only
-        self.trading_day = date.today()
+        self.trading_day = datetime.now(ZoneInfo("Australia/Brisbane")).date()
 
         # Auth is needed even in signal-only mode (for the market data WebSocket feed)
         self.auth = TradovateAuth(demo=demo)
