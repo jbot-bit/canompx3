@@ -106,11 +106,11 @@ async def test_feed(auth, contract_id, instrument, duration_seconds=30):
     # Override _on_quote to count quotes
     original_on_quote = feed._on_quote
 
-    def counting_on_quote(args):
+    async def counting_on_quote(args):
         quotes_received[0] += 1
         if quotes_received[0] % 50 == 1:
             log.info("  Quotes received: %d", quotes_received[0])
-        original_on_quote(args)
+        await original_on_quote(args)
 
     feed._on_quote = counting_on_quote
 

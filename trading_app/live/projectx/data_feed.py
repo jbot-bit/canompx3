@@ -116,15 +116,17 @@ class ProjectXDataFeed(BrokerFeed):
                     attempt + 1,
                 )
 
+                token = self.auth.get_token()
+                url = f"{MARKET_HUB_URL}?access_token={token}"
                 client = SignalRClient(
-                    MARKET_HUB_URL,
+                    url,
                     access_token_factory=lambda: self.auth.get_token(),
                     headers={"Accept": "text/plain"},
                 )
 
                 client.on("GatewayQuote", self._on_quote)
                 client.on("GatewayTrade", self._on_trade)
-                client.on_open(lambda _c=client, _s=symbol: self._on_connected(_c, _s))
+                client.on_open(lambda _c=client, _s=symbol: self._on_connected_async(_c, _s))
 
                 # Run feed with stop-file watcher
                 stop_task = asyncio.create_task(self._stop_file_watcher())
@@ -214,14 +216,14 @@ class ProjectXDataFeed(BrokerFeed):
     # SignalR event handlers — pysignalr (async context)
     # ------------------------------------------------------------------
 
-    def _on_connected(self, client, symbol: str) -> None:
+    async def _on_connected_async(self, client, symbol: str) -> None:
         """Called when pysignalr connects — subscribe to contract quotes."""
         log.info("Connected to ProjectX Market Hub")
-        asyncio.create_task(client.send("SubscribeContractQuotes", [symbol]))
+        await client.send("SubscribeContractQuotes", [symbol])
         log.info("Subscribed to quotes: %s", symbol)
 
-    def _on_quote(self, args: list[Any]) -> None:
-        """Handle GatewayQuote event (pysignalr — called in async context)."""
+    async def _on_quote(self, args: list[Any]) -> None:
+        """Handle GatewayQuote event (pysignalr — async callback)."""
         for quote in args if isinstance(args, list) else [args]:
             if not isinstance(quote, dict):
                 continue
@@ -230,12 +232,12 @@ class ProjectXDataFeed(BrokerFeed):
                 bar = self._agg.on_tick(price, vol, datetime.now(UTC))
                 if bar is not None:
                     bar.symbol = self._symbol
-                    asyncio.create_task(self.on_bar(bar))
+                    await self.on_bar(bar)
             except (ValueError, KeyError) as e:
                 log.debug("Skipping quote: %s", e)
 
-    def _on_trade(self, args: list[Any]) -> None:
-        """Handle GatewayTrade event (pysignalr)."""
+    async def _on_trade(self, args: list[Any]) -> None:
+        """Handle GatewayTrade event (pysignalr — async callback)."""
         for trade in args if isinstance(args, list) else [args]:
             if not isinstance(trade, dict):
                 continue
@@ -245,7 +247,7 @@ class ProjectXDataFeed(BrokerFeed):
                 bar = self._agg.on_tick(float(price), int(vol) if vol else 1, datetime.now(UTC))
                 if bar is not None:
                     bar.symbol = self._symbol
-                    asyncio.create_task(self.on_bar(bar))
+                    await self.on_bar(bar)
 
     # ------------------------------------------------------------------
     # SignalR event handlers — signalrcore (synchronous callbacks)
