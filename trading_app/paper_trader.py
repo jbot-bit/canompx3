@@ -12,9 +12,9 @@ Usage:
 """
 
 import sys
-from pathlib import Path
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 
 from pipeline.log import get_logger
 
@@ -26,12 +26,12 @@ sys.stdout.reconfigure(line_buffering=True)
 
 import duckdb
 
-from pipeline.paths import GOLD_DB_PATH
 from pipeline.cost_model import get_cost_spec
-from trading_app.portfolio import Portfolio, build_portfolio
-from trading_app.execution_engine import ExecutionEngine
-from trading_app.risk_manager import RiskManager, RiskLimits
+from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import ATR_VELOCITY_OVERLAY, CalendarSkipFilter
+from trading_app.execution_engine import ExecutionEngine
+from trading_app.portfolio import Portfolio, build_portfolio
+from trading_app.risk_manager import RiskLimits, RiskManager
 
 # Explicit mapping from execution engine exit reasons to journal outcomes.
 # Fallback: split on "_" and take first token.
@@ -155,7 +155,7 @@ def _get_daily_features_row(con, instrument: str, trading_day: date) -> dict | N
     if row is None:
         return None
     columns = [desc[0] for desc in result.description]
-    return dict(zip(columns, row))
+    return dict(zip(columns, row, strict=False))
 
 
 def _get_bars_for_day(con, instrument: str, trading_day: date) -> list[dict]:
@@ -165,7 +165,7 @@ def _get_bars_for_day(con, instrument: str, trading_day: date) -> list[dict]:
     Trading day in Brisbane starts at 23:00 UTC previous day.
     """
     prev_day = trading_day - timedelta(days=1)
-    td_start = datetime(prev_day.year, prev_day.month, prev_day.day, 23, 0, tzinfo=timezone.utc)
+    td_start = datetime(prev_day.year, prev_day.month, prev_day.day, 23, 0, tzinfo=UTC)
     td_end = td_start + timedelta(hours=24)
 
     rows = con.execute(

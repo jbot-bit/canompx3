@@ -77,6 +77,7 @@ def main() -> None:
     os.environ["WEBHOOK_PORT"] = str(args.port)
 
     import uvicorn
+
     from trading_app.live.webhook_server import app
 
     log.info("Webhook server on http://0.0.0.0:%d", args.port)

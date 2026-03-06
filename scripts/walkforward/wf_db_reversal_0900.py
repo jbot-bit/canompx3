@@ -9,13 +9,14 @@ Walk-forward: 12m train, 1m test step.
 """
 
 import sys
+from collections import Counter
 from datetime import date
-from dateutil.relativedelta import relativedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
-from collections import Counter
-import pandas as pd
+
 import numpy as np
+import pandas as pd
+from dateutil.relativedelta import relativedelta
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -24,8 +25,8 @@ sys.stdout.reconfigure(line_buffering=True)
 from pipeline.cost_model import get_cost_spec, to_r_multiple
 from pipeline.paths import GOLD_DB_PATH
 from research._alt_strategy_utils import (
-    load_daily_features,
     load_bars_for_day,
+    load_daily_features,
     resolve_bar_outcome,
 )
 
@@ -43,7 +44,7 @@ def compute_all_reversal_outcomes(db_path, features, orb_label="0900"):
     col_bts = f"orb_{orb_label}_break_ts"
 
     RRS = [1.0, 1.5, 2.0, 2.5, 3.0]
-    db_days = features[features[col_db] == True].copy()
+    db_days = features[features[col_db]].copy()
     print(f"  {len(db_days)} double-break days at {orb_label}")
 
     outcomes = []
@@ -96,10 +97,7 @@ def compute_all_reversal_outcomes(db_path, features, orb_label="0900"):
                 bt = bt.astimezone(UTC)
             if bt <= bts_utc:
                 continue
-            if d == "short" and b["low"] <= ep:
-                eidx = i
-                break
-            elif d == "long" and b["high"] >= ep:
+            if d == "short" and b["low"] <= ep or d == "long" and b["high"] >= ep:
                 eidx = i
                 break
 

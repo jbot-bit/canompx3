@@ -11,10 +11,10 @@ Usage:
     python scripts/tools/build_edge_families.py --all --db-path C:/db/gold.db
 """
 
-import sys
 import statistics
-from pathlib import Path
+import sys
 from collections import defaultdict
+from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -22,8 +22,8 @@ import duckdb
 
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.db_manager import compute_trade_day_hash
 from trading_app.config import CORE_MIN_SAMPLES, REGIME_MIN_SAMPLES
+from trading_app.db_manager import compute_trade_day_hash
 
 # Force unbuffered stdout (Windows cp1252 buffering issue)
 sys.stdout.reconfigure(line_buffering=True)
@@ -210,7 +210,7 @@ def build_edge_families(db_path: str, instrument: str) -> int:
         hash_map = {}
         orb_minutes_map = {}
         fallback_count = 0
-        for sid, expr, shann, sample, precomputed_hash, orb_min in strategies:
+        for sid, _expr, _shann, _sample, precomputed_hash, orb_min in strategies:
             orb_minutes_map[sid] = orb_min or 5
             if precomputed_hash:
                 hash_map[sid] = precomputed_hash

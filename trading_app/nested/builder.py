@@ -12,8 +12,8 @@ Usage:
 
 import sys
 import time
-from pathlib import Path
 from datetime import date, datetime
+from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -24,14 +24,14 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-from pipeline.paths import GOLD_DB_PATH
+from pipeline.build_daily_features import compute_trading_day_utc_range
 from pipeline.cost_model import get_cost_spec, pnl_points_to_r, to_r_multiple
 from pipeline.init_db import ORB_LABELS
-from pipeline.build_daily_features import compute_trading_day_utc_range
-from trading_app.outcome_builder import RR_TARGETS, CONFIRM_BARS_OPTIONS
-from trading_app.entry_rules import detect_confirm, resolve_entry
+from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import ENTRY_MODELS
+from trading_app.entry_rules import detect_confirm, resolve_entry
 from trading_app.nested.schema import init_nested_schema
+from trading_app.outcome_builder import CONFIRM_BARS_OPTIONS, RR_TARGETS
 
 # Entry resolution for nested ORB: always 5-minute bars
 ENTRY_RESOLUTION = 5
@@ -204,7 +204,9 @@ def build_nested_outcomes(
                 }
                 if completed_days:
                     original_count = total_days
-                    rows = [r for r in rows if dict(zip(col_names, r))["trading_day"] not in completed_days]
+                    rows = [
+                        r for r in rows if dict(zip(col_names, r, strict=False))["trading_day"] not in completed_days
+                    ]
                     total_days = len(rows)
                     print(
                         f"  {original_count} total trading days, "
@@ -220,7 +222,7 @@ def build_nested_outcomes(
                 print(f"  {total_days} trading days loaded")
 
             # --- Bulk-load bars_1m for the full date range ---
-            trading_days = [dict(zip(col_names, r))["trading_day"] for r in rows]
+            trading_days = [dict(zip(col_names, r, strict=False))["trading_day"] for r in rows]
             first_td_start, _ = compute_trading_day_utc_range(trading_days[0])
             _, last_td_end = compute_trading_day_utc_range(trading_days[-1])
 
@@ -243,7 +245,7 @@ def build_nested_outcomes(
             ts_values = all_bars_1m["ts_utc"].values  # numpy datetime64 array (sorted)
 
             for day_idx, row in enumerate(rows):
-                row_dict = dict(zip(col_names, row))
+                row_dict = dict(zip(col_names, row, strict=False))
                 trading_day = row_dict["trading_day"]
                 symbol = row_dict["symbol"]
 
@@ -300,8 +302,8 @@ def build_nested_outcomes(
                                 # E2: stop-market uses break-touch, not confirm
                                 if cb > 1:
                                     continue  # E2 always CB1
-                                from trading_app.entry_rules import detect_break_touch, _resolve_e2
                                 from trading_app.config import E2_SLIPPAGE_TICKS
+                                from trading_app.entry_rules import _resolve_e2, detect_break_touch
 
                                 touch = detect_break_touch(
                                     bars_5m_df,

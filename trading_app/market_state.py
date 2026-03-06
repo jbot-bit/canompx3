@@ -12,9 +12,9 @@ Usage:
     print(state.strategy_scores)
 """
 
-from pathlib import Path
 from dataclasses import dataclass, field
 from datetime import date, datetime
+from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -308,7 +308,7 @@ class MarketState:
         Returns:
             {strategy_id: context_score}
         """
-        from trading_app.scoring import score_strategy, ScoringWeights
+        from trading_app.scoring import ScoringWeights, score_strategy
 
         if weights is None:
             weights = ScoringWeights()

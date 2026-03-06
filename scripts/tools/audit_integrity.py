@@ -10,6 +10,7 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 
 import duckdb
+
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS, ASSET_CONFIGS
 from pipeline.paths import GOLD_DB_PATH
 

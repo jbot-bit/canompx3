@@ -15,26 +15,26 @@ VERIFIED API NOTES:
 import asyncio
 import json
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from trading_app.live.tradovate_auth import TradovateAuth
-from trading_app.live.data_feed import DataFeed
+from pipeline.calendar_filters import day_of_week, is_friday, is_nfp_day, is_opex_day
+from pipeline.cost_model import CostSpec, get_cost_spec
+from pipeline.daily_backfill import run_backfill_for_instrument
+from pipeline.db_config import configure_connection
+from pipeline.paths import GOLD_DB_PATH
+from trading_app.execution_engine import ExecutionEngine
 from trading_app.live.bar_aggregator import Bar
+from trading_app.live.contract_resolver import resolve_account_id, resolve_front_month
+from trading_app.live.data_feed import DataFeed
 from trading_app.live.live_market_state import LiveORBBuilder
 from trading_app.live.order_router import OrderRouter
 from trading_app.live.performance_monitor import PerformanceMonitor, TradeRecord
-from trading_app.live.contract_resolver import resolve_front_month, resolve_account_id
-from trading_app.execution_engine import ExecutionEngine
-from trading_app.risk_manager import RiskManager, RiskLimits
+from trading_app.live.tradovate_auth import TradovateAuth
 from trading_app.live_config import build_live_portfolio
 from trading_app.portfolio import PortfolioStrategy
-from pipeline.cost_model import get_cost_spec, CostSpec
-from pipeline.paths import GOLD_DB_PATH
-from pipeline.daily_backfill import run_backfill_for_instrument
-from pipeline.calendar_filters import is_nfp_day, is_opex_day, is_friday, day_of_week
-from pipeline.db_config import configure_connection
+from trading_app.risk_manager import RiskLimits, RiskManager
 
 log = logging.getLogger(__name__)
 
@@ -216,7 +216,7 @@ class SessionOrchestrator:
     def _write_signal_record(self, extra: dict) -> None:
         """Append a signal record to the JSONL file read by the Live Monitor UI."""
         record = {
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": datetime.now(UTC).isoformat(),
             "instrument": self.instrument,
             **extra,
         }

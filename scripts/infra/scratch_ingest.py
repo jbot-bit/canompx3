@@ -214,9 +214,9 @@ def cmd_run_pipeline(args):
     if scratch.exists() and not do_copy:
         print(f"  Scratch DB exists ({_fmt_size(scratch)}), reusing (use --fresh-copy to overwrite)")
     elif scratch.exists() and do_copy:
-        print(f"  Scratch DB exists, --fresh-copy: will overwrite")
+        print("  Scratch DB exists, --fresh-copy: will overwrite")
     else:
-        print(f"  Scratch DB does not exist, will copy from main")
+        print("  Scratch DB does not exist, will copy from main")
         do_copy = True
 
     print(f"  Instrument: {instrument}")
@@ -238,8 +238,8 @@ def cmd_run_pipeline(args):
         if args.skip_to:
             print(f" --skip-to {args.skip_to}", end="")
         print(f" --db-path {scratch}")
-        print(f"  4. Verify scratch DB")
-        print(f"  5. Print merge-back command")
+        print("  4. Verify scratch DB")
+        print("  5. Print merge-back command")
         print("\nNo actions taken (dry run).")
         return 0
 
@@ -273,7 +273,7 @@ def cmd_run_pipeline(args):
     env = {**os.environ, "DUCKDB_PATH": str(scratch)}
 
     print("=" * 60)
-    print(f"  RUNNING PIPELINE")
+    print("  RUNNING PIPELINE")
     print("=" * 60)
     print(f"  Command: {' '.join(cmd)}")
     print(f"  DUCKDB_PATH={scratch}")
@@ -316,12 +316,12 @@ def cmd_run_pipeline(args):
     print()
     print("  When you're satisfied with the results, run:")
     print()
-    merge_cmd = f"  python scripts/infra/scratch_ingest.py --merge-back"
+    merge_cmd = "  python scripts/infra/scratch_ingest.py --merge-back"
     if instrument:
         merge_cmd += f" --instrument {instrument}"
     print(merge_cmd)
     print()
-    print(f"  This will: verify scratch DB -> backup main DB -> copy scratch -> verify merged")
+    print("  This will: verify scratch DB -> backup main DB -> copy scratch -> verify merged")
     print()
 
     return 0

@@ -23,16 +23,16 @@ from zoneinfo import ZoneInfo
 import duckdb
 import pandas as pd
 
-# ---------------------------------------------------------------------------
-# Reuse canonical pipeline logic — no copies, single source of truth
-# ---------------------------------------------------------------------------
-
-from pipeline.paths import GOLD_DB_PATH, DAILY_DBN_DIR, PROJECT_ROOT
+from pipeline.ingest_dbn_daily import DAILY_FILE_PATTERN
 from pipeline.ingest_dbn_mgc import (
     GC_OUTRIGHT_PATTERN,
     choose_front_contract,
 )
-from pipeline.ingest_dbn_daily import DAILY_FILE_PATTERN
+
+# ---------------------------------------------------------------------------
+# Reuse canonical pipeline logic — no copies, single source of truth
+# ---------------------------------------------------------------------------
+from pipeline.paths import DAILY_DBN_DIR, GOLD_DB_PATH, PROJECT_ROOT
 
 try:
     import databento as db

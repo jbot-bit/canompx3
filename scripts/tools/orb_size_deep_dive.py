@@ -13,10 +13,11 @@ Usage:
     python scripts/tools/orb_size_deep_dive.py --db C:/db/gold.db
 """
 
-import sys
 import os
-import duckdb
+import sys
 from pathlib import Path
+
+import duckdb
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_DB = PROJECT_ROOT / "gold.db"
@@ -53,13 +54,13 @@ def print_table(headers, rows, col_widths=None):
                     max_w = max(max_w, len(str(row[i] if row[i] is not None else "")))
             col_widths.append(min(max_w + 2, 22))
     header_str = "  "
-    for h, w in zip(headers, col_widths):
+    for h, w in zip(headers, col_widths, strict=False):
         header_str += str(h).ljust(w)
     print(header_str)
     print("  " + "-" * sum(col_widths))
     for row in rows:
         row_str = "  "
-        for val, w in zip(row, col_widths):
+        for val, w in zip(row, col_widths, strict=False):
             row_str += str(val if val is not None else "-").ljust(w)
         print(row_str)
 
@@ -83,7 +84,7 @@ def section_1_size_heatmap(con):
         ]
 
         print(f"\n  --- {sym} ---")
-        print(f"  (Aggregated across all CB/RR/EM combos, win+loss only)\n")
+        print("  (Aggregated across all CB/RR/EM combos, win+loss only)\n")
 
         for sess in sessions:
             size_col = f"orb_{sess}_size"
@@ -317,7 +318,7 @@ def section_4_optimal_gate_per_session(con):
                     if gate == 0:
                         # No filter
                         row = con.execute(
-                            f"""
+                            """
                             SELECT COUNT(*) as n,
                                    ROUND(AVG(o.pnl_r), 4) as avg_r,
                                    ROUND(SUM(o.pnl_r), 1) as total_r

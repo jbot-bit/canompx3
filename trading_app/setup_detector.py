@@ -10,8 +10,8 @@ Usage:
     setups = detect_setups(con, filter, "CME_REOPEN", "MGC", start, end)
 """
 
-from pathlib import Path
 from datetime import date
+from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -65,7 +65,7 @@ def detect_setups(
 
     results = []
     for row in rows:
-        row_dict = dict(zip(col_names, row))
+        row_dict = dict(zip(col_names, row, strict=False))
 
         # Must have a break for this ORB
         break_dir = row_dict.get(f"orb_{orb_label}_break_dir")

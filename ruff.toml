@@ -1,24 +1,35 @@
-# Ruff linter config — bug-catching rules only, no style nits
+# Ruff linter + formatter config — professional-grade rules
 line-length = 120
 target-version = "py313"
 
 [lint]
-# F = pyflakes (unused imports, undefined names, unreachable code)
-# E = pycodestyle errors (syntax issues, not style)
-# W = pycodestyle warnings (whitespace issues that cause bugs)
-select = ["F", "E", "W"]
-# Ignore style-only rules that create noisy diffs
+# F = pyflakes, E = pycodestyle errors, W = pycodestyle warnings
+# I = isort (import sorting), B = bugbear (real bug patterns)
+# UP = pyupgrade (modernize to 3.13), SIM = simplify
+select = ["F", "E", "W", "I", "B", "UP", "SIM"]
 ignore = [
-    "E402",  # module-level import not at top (required: sys.path.insert before imports)
-    "E501",  # line too long (handled by line-length setting)
-    "W291",  # trailing whitespace
-    "W292",  # no newline at end of file
-    "W293",  # whitespace before ':'
-    "E731",  # lambda assignment (common pattern in this codebase)
+    "E402",   # module-level import not at top (required: sys.path.insert before imports)
+    "E501",   # line too long (handled by line-length setting)
+    "E731",   # lambda assignment (common pattern in this codebase)
+    "UP015",  # redundant open mode (noisy, low value)
+    "UP038",  # X | Y in isinstance (requires Python 3.10+ but less readable)
+    "SIM102", # nested if → combined if (readability preference)
+    "SIM103", # return negated condition directly (readability preference)
+    "SIM105", # contextlib.suppress instead of try/except/pass (atexit pattern)
+    "SIM108", # ternary instead of if/else (readability preference)
+    "SIM110", # any() instead of for loop (readability preference)
+    "SIM113", # enumerate for index variable (readability preference)
+    "SIM117", # multiple with statements (readability preference)
+    "SIM201", # != instead of not == (auto-fixable but noisy)
 ]
 
 [lint.per-file-ignores]
 "tests/*" = ["F401", "F811"]  # unused imports + redefined names OK in tests (fixtures)
+"scripts/*" = ["E402"]        # scripts often manipulate sys.path before imports
+"research/*" = ["E402", "F401"]  # research scripts are experimental
+
+[lint.isort]
+known-first-party = ["pipeline", "trading_app", "ui"]
 
 [format]
 quote-style = "double"

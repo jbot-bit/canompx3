@@ -16,10 +16,10 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import roc_auc_score
 
-from pipeline.paths import GOLD_DB_PATH
 from pipeline.db_config import configure_connection
-from trading_app.ml.features import transform_to_features
+from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import ALL_FILTERS
+from trading_app.ml.features import transform_to_features
 
 SESSION_ORDER = [
     "CME_REOPEN",
@@ -197,7 +197,7 @@ def run_deep_dive(instrument, optimal_threshold):
     print(f"Validated outcomes: {len(df):,}")
 
     # Session distribution
-    print(f"\nSession distribution:")
+    print("\nSession distribution:")
     for session in sorted(df["orb_label"].unique()):
         n = (df["orb_label"] == session).sum()
         avg_pnl = df.loc[df["orb_label"] == session, "pnl_r"].mean()
@@ -209,7 +209,7 @@ def run_deep_dive(instrument, optimal_threshold):
     pnl_r = df["pnl_r"].values
 
     # Check level feature coverage per session
-    print(f"\nLevel feature coverage by session:")
+    print("\nLevel feature coverage by session:")
     for session in sorted(df["orb_label"].unique()):
         smask = df["orb_label"] == session
         has_levels = (level_feats.loc[smask, "nearest_level_to_high_R"] > -999).sum()
@@ -286,8 +286,6 @@ def run_deep_dive(instrument, optimal_threshold):
         total_base += base_total
         total_filt += filt_total
 
-        base_avg = s_pnl.mean()
-        filt_avg = s_pnl[kept].mean()
         label = "HELPS" if filt_total >= base_total else "HURTS"
         print(
             f"  {label}: {session:<20} N={smask.sum():>5} Kept={kept.sum():>5} "
@@ -318,7 +316,7 @@ def run_deep_dive(instrument, optimal_threshold):
         )
 
     # Probability distribution analysis
-    print(f"\nProbability distribution:")
+    print("\nProbability distribution:")
     for bucket_lo, bucket_hi in [
         (0.0, 0.3),
         (0.3, 0.4),
@@ -343,7 +341,7 @@ def run_deep_dive(instrument, optimal_threshold):
         "auc": auc,
         "n_samples": len(df),
         "n_features": len(names),
-        "importances": dict(zip(names, importances)),
+        "importances": dict(zip(names, importances, strict=False)),
     }
 
 
@@ -363,7 +361,7 @@ if __name__ == "__main__":
 
     # Cross-instrument comparison
     print(f"\n{'=' * 70}")
-    print(f"  CROSS-INSTRUMENT FEATURE COMPARISON")
+    print("  CROSS-INSTRUMENT FEATURE COMPARISON")
     print(f"{'=' * 70}")
 
     # Find all unique features

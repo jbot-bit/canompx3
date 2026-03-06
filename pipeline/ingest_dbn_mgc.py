@@ -18,26 +18,25 @@ Usage (DEPRECATED -- prefer ingest_dbn.py or ingest_dbn_daily.py):
     python pipeline/ingest_dbn_daily.py --instrument MGC --start ... --end ...
 """
 
-import sys
-import re
-import json
-import hashlib
 import argparse
+import hashlib
+import json
+import re
+import sys
 import traceback
+from datetime import date, datetime, timedelta
 from pathlib import Path
-from datetime import datetime, timedelta, date
 from zoneinfo import ZoneInfo
-from typing import Optional
 
+import databento as db
+import duckdb
 import numpy as np
 import pandas as pd
-import duckdb
-import databento as db
+
+from pipeline.log import get_logger
 
 # Add project root to path
 from pipeline.paths import GOLD_DB_PATH
-
-from pipeline.log import get_logger
 
 logger = get_logger(__name__)
 
@@ -139,7 +138,7 @@ class CheckpointManager:
             return 1
         return max(r["attempt_id"] for r in self.checkpoints.values()) + 1
 
-    def get_chunk_status(self, chunk_start: str, chunk_end: str) -> Optional[str]:
+    def get_chunk_status(self, chunk_start: str, chunk_end: str) -> str | None:
         """Get status of a chunk."""
         key = (chunk_start, chunk_end)
         if key in self.checkpoints:
@@ -192,7 +191,7 @@ class CheckpointManager:
 # =============================================================================
 
 
-def validate_chunk(df: pd.DataFrame) -> tuple[bool, str, Optional[pd.DataFrame]]:
+def validate_chunk(df: pd.DataFrame) -> tuple[bool, str, pd.DataFrame | None]:
     """
     Validate chunk with vectorized operations.
 
@@ -298,9 +297,7 @@ def parse_expiry(symbol: str, prefix_len: int = 3) -> tuple[int, int]:
     return (year, month)
 
 
-def choose_front_contract(
-    daily_volumes: dict, outright_pattern=None, prefix_len: int = 3, log_func=None
-) -> Optional[str]:
+def choose_front_contract(daily_volumes: dict, outright_pattern=None, prefix_len: int = 3, log_func=None) -> str | None:
     """
     Choose front-month contract with DETERMINISTIC tiebreak.
 

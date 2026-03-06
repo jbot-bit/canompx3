@@ -17,8 +17,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 import duckdb
 
-from pipeline.paths import GOLD_DB_PATH
 from pipeline.init_db import ORB_LABELS
+from pipeline.paths import GOLD_DB_PATH
 
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)
@@ -71,7 +71,7 @@ def run_comparison(
         regime_cols = [desc[0] for desc in con.description]
         regime_index = {}
         for row in regime_rows:
-            d = dict(zip(regime_cols, row))
+            d = dict(zip(regime_cols, row, strict=False))
             regime_index[d["strategy_id"]] = d
 
         print(f"Loaded {len(regime_index)} regime strategies (run_label={run_label}, min_sample={min_sample})")
@@ -90,7 +90,7 @@ def run_comparison(
         full_cols = [desc[0] for desc in con.description]
         full_index = {}
         for row in full_rows:
-            d = dict(zip(full_cols, row))
+            d = dict(zip(full_cols, row, strict=False))
             full_index[d["strategy_id"]] = d
 
         print(f"Loaded {len(full_index)} full-period strategies")

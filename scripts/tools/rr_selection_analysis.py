@@ -2,8 +2,8 @@
 """RR selection analysis: SharpeDD criterion + multi-account deployment sizing."""
 
 import duckdb
-import pandas as pd
 import numpy as np
+import pandas as pd
 from scipy import stats
 
 con = duckdb.connect("gold.db", read_only=True)

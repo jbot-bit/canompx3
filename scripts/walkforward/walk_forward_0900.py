@@ -4,7 +4,6 @@ Walk-forward analysis for 0900 ORB strategies.
 Zero lookahead: train on past years, test on unseen year.
 """
 
-import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -12,8 +11,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 import duckdb
 import numpy as np
 import pandas as pd
+
+from pipeline.cost_model import get_cost_spec
 from pipeline.paths import GOLD_DB_PATH
-from pipeline.cost_model import get_cost_spec, stress_test_costs
 
 spec = get_cost_spec("MGC")
 
@@ -300,7 +300,7 @@ def main():
     print(
         f"  G6 wins with pnl_r < 0.15R (thin margin): {len(thin_wins)} of {len(all_wins)} wins ({len(thin_wins) / max(len(all_wins), 1) * 100:.1f}%)"
     )
-    print(f"  These trades could flip to losses under higher real-world costs.")
+    print("  These trades could flip to losses under higher real-world costs.")
 
     # What if we add 0.057R of extra friction to every trade (equivalent to doubling costs)?
     # friction = $5.74. At median G6 ORB of ~9pt, risk = $95.74, extra friction = $5.74 = 0.060R

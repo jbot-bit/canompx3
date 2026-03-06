@@ -16,12 +16,11 @@ import duckdb
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import roc_auc_score
 
-from pipeline.paths import GOLD_DB_PATH
 from pipeline.db_config import configure_connection
-from trading_app.ml.features import transform_to_features
+from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import ALL_FILTERS
+from trading_app.ml.features import transform_to_features
 
 SESSION_ORDER = [
     "CME_REOPEN",
@@ -229,7 +228,7 @@ def run_hybrid(instrument):
     # For each session, try thresholds from 0.38-0.52 for per-session model
     # Pick the threshold that maximizes R on a validation fold
     # Use the LAST 25% of training data as validation for threshold selection
-    print(f"\n--- Per-session threshold optimization ---")
+    print("\n--- Per-session threshold optimization ---")
 
     session_config = {}  # session -> (model_type, threshold, expected_delta)
 
@@ -282,7 +281,7 @@ def run_hybrid(instrument):
             print(f"  {session:<20} -> NO_MODEL (all thresholds negative)")
 
     # Apply hybrid predictions
-    print(f"\n--- HYBRID RESULTS ---")
+    print("\n--- HYBRID RESULTS ---")
     hybrid_total = 0
     hybrid_kept = 0
     hybrid_skipped = 0

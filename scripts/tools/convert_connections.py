@@ -1,5 +1,5 @@
-import re
 import os
+import re
 from pathlib import Path
 
 PROJECT = Path(r"C:\users\joshd\canompx3")

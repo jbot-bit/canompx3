@@ -10,26 +10,26 @@ Usage:
 """
 
 import sys
-from pathlib import Path
 from datetime import date
+from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 import duckdb
 
-from pipeline.paths import GOLD_DB_PATH
 from pipeline.init_db import ORB_LABELS
-from trading_app.config import get_filters_for_grid, ENTRY_MODELS
-from trading_app.outcome_builder import RR_TARGETS, CONFIRM_BARS_OPTIONS
+from pipeline.paths import GOLD_DB_PATH
+from trading_app.config import ENTRY_MODELS, get_filters_for_grid
+from trading_app.outcome_builder import CONFIRM_BARS_OPTIONS, RR_TARGETS
+from trading_app.regime.schema import init_regime_schema
 from trading_app.strategy_discovery import (
-    compute_metrics,
-    make_strategy_id,
-    _load_daily_features,
     _build_filter_day_sets,
     _compute_relative_volumes,
+    _load_daily_features,
     _load_outcomes_bulk,
+    compute_metrics,
+    make_strategy_id,
 )
-from trading_app.regime.schema import init_regime_schema
 
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)

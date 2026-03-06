@@ -20,6 +20,7 @@ logger = get_logger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 import duckdb
+
 from pipeline.paths import GOLD_DB_PATH
 
 

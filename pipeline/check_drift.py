@@ -17,6 +17,7 @@ Usage:
 
 import re
 import sys
+from datetime import UTC
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -573,7 +574,7 @@ def check_entry_models_sync() -> list[str]:
         from trading_app.config import ENTRY_MODELS
 
         expected = ["E1", "E2", "E3"]
-        if ENTRY_MODELS != expected:
+        if expected != ENTRY_MODELS:
             violations.append(f"  ENTRY_MODELS = {ENTRY_MODELS}, expected {expected}")
     except ImportError as e:
         violations.append(f"  Cannot import trading_app.config.ENTRY_MODELS: {e}")
@@ -1136,7 +1137,7 @@ def check_dst_session_coverage() -> list[str]:
         sys.path.insert(0, root_str)
 
     try:
-        from pipeline.dst import SESSION_CATALOG, DST_AFFECTED_SESSIONS, DST_CLEAN_SESSIONS
+        from pipeline.dst import DST_AFFECTED_SESSIONS, DST_CLEAN_SESSIONS, SESSION_CATALOG
 
         non_alias = {label for label, entry in SESSION_CATALOG.items() if entry["type"] != "alias"}
         classified = set(DST_AFFECTED_SESSIONS.keys()) | DST_CLEAN_SESSIONS
@@ -1651,8 +1652,8 @@ def check_orb_labels_session_catalog_sync() -> list[str]:
 
     # Import both sources
     try:
-        from pipeline.init_db import ORB_LABELS
         from pipeline.dst import SESSION_CATALOG
+        from pipeline.init_db import ORB_LABELS
     except ImportError as e:
         violations.append(f"  Cannot import for sync check: {e}")
         return violations
@@ -1893,7 +1894,7 @@ def check_uncovered_fdr_strategies(con=None) -> list[str]:
     """
     _own_con = False
     try:
-        from trading_app.live_config import LIVE_PORTFOLIO, LIVE_MIN_EXPECTANCY_R
+        from trading_app.live_config import LIVE_MIN_EXPECTANCY_R, LIVE_PORTFOLIO
 
         if con is None:
             import duckdb
@@ -2080,8 +2081,8 @@ def check_cost_model_completeness() -> list[str]:
         sys.path.insert(0, root_str)
 
     try:
-        from pipeline.cost_model import COST_SPECS, SESSION_SLIPPAGE_MULT
         from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+        from pipeline.cost_model import COST_SPECS, SESSION_SLIPPAGE_MULT
 
         # 1. Every active instrument must have a CostSpec
         for inst in ACTIVE_ORB_INSTRUMENTS:
@@ -2121,13 +2122,13 @@ def check_trading_rules_authority() -> list[str]:
         sys.path.insert(0, root_str)
 
     try:
-        from pipeline.dst import SESSION_CATALOG
         from pipeline.cost_model import COST_SPECS
+        from pipeline.dst import SESSION_CATALOG
         from trading_app.config import (
+            E2_SLIPPAGE_TICKS,
+            EARLY_EXIT_MINUTES,
             ENTRY_MODELS,
             TRADEABLE_INSTRUMENTS,
-            EARLY_EXIT_MINUTES,
-            E2_SLIPPAGE_TICKS,
         )
         from trading_app.outcome_builder import RR_TARGETS
 
@@ -2203,6 +2204,8 @@ def check_ml_config_canonical_sources() -> list[str]:
     and no features appear in both feature lists and LOOKAHEAD_BLACKLIST."""
     violations = []
     try:
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+        from pipeline.dst import SESSION_CATALOG
         from trading_app.ml.config import (
             ACTIVE_INSTRUMENTS,
             GLOBAL_FEATURES,
@@ -2210,8 +2213,6 @@ def check_ml_config_canonical_sources() -> list[str]:
             REL_VOL_SESSIONS,
             TRADE_CONFIG_FEATURES,
         )
-        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
-        from pipeline.dst import SESSION_CATALOG
 
         # ACTIVE_INSTRUMENTS must be a subset of pipeline instruments
         # (ML excludes instruments with no validated strategies, e.g. MBT)
@@ -2362,6 +2363,7 @@ def check_ml_config_hash_match() -> list[str]:
     violations = []
     try:
         import joblib
+
         from trading_app.ml.config import (
             ACTIVE_INSTRUMENTS,
             MODEL_DIR,
@@ -2390,8 +2392,10 @@ def check_ml_model_freshness() -> list[str]:
     """Check ML models are < 90 days old."""
     violations = []
     try:
+        from datetime import datetime
+
         import joblib
-        from datetime import datetime, timezone
+
         from trading_app.ml.config import ACTIVE_INSTRUMENTS, MODEL_DIR
 
         for inst in ACTIVE_INSTRUMENTS:
@@ -2405,7 +2409,7 @@ def check_ml_model_freshness() -> list[str]:
                     violations.append(f"  {inst}: model missing trained_at timestamp")
                     continue
                 trained_at = datetime.fromisoformat(trained_at_str)
-                age_days = (datetime.now(timezone.utc) - trained_at).days
+                age_days = (datetime.now(UTC) - trained_at).days
                 if age_days > 90:
                     violations.append(f"  {inst}: model is {age_days} days old (>90 day limit)")
             except Exception as e:
@@ -2430,9 +2434,9 @@ def check_live_config_spec_validity() -> list[str]:
     if root_str not in sys.path:
         sys.path.insert(0, root_str)
     try:
-        from trading_app.live_config import LIVE_PORTFOLIO
-        from trading_app.config import ALL_FILTERS, ENTRY_MODELS
         from pipeline.dst import SESSION_CATALOG
+        from trading_app.config import ALL_FILTERS, ENTRY_MODELS
+        from trading_app.live_config import LIVE_PORTFOLIO
 
         valid_sessions = {k for k, v in SESSION_CATALOG.items() if v.get("type") == "dynamic"}
         valid_entry_models = set(ENTRY_MODELS)
@@ -2509,6 +2513,7 @@ def check_session_resolver_sanity() -> list[str]:
         sys.path.insert(0, root_str)
     try:
         from datetime import date as dt_date
+
         from pipeline.dst import SESSION_CATALOG
 
         test_dates = [
@@ -2872,7 +2877,7 @@ def check_drift_shared_db_connection() -> list[str]:
     import inspect
 
     # Get all requires_db check functions from CHECKS
-    for label, check_fn, is_advisory, requires_db in CHECKS:
+    for _label, check_fn, _is_advisory, requires_db in CHECKS:
         if not requires_db:
             continue
         sig = inspect.signature(check_fn)

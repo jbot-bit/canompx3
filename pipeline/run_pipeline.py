@@ -21,16 +21,14 @@ Options:
     --batch-size N        Rows per DBN read batch (default: 50000)
 """
 
-import sys
-import subprocess
 import argparse
-from pathlib import Path
+import subprocess
+import sys
 from datetime import datetime
+from pathlib import Path
 
 # Add project root to path
-
 from pipeline.asset_configs import list_instruments
-
 from pipeline.log import get_logger
 
 logger = get_logger(__name__)

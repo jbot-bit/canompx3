@@ -11,15 +11,14 @@ Usage:
     python pipeline/run_full_pipeline.py --instrument MGC --dry-run
 """
 
-import os
-import sys
-import subprocess
 import argparse
-from pathlib import Path
+import os
+import subprocess
+import sys
 from datetime import datetime
+from pathlib import Path
 
 from pipeline.asset_configs import list_instruments
-
 from pipeline.log import get_logger
 
 logger = get_logger(__name__)

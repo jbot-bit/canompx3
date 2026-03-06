@@ -17,10 +17,11 @@ Usage:
     python scripts/rolling_eval.py --train-months 6 12 18 --test-start 2024-07 --test-end 2026-01 --dry-run
 """
 
-import sys
 import json
-from pathlib import Path
+import sys
 from datetime import date
+from pathlib import Path
+
 from dateutil.relativedelta import relativedelta
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -29,11 +30,11 @@ sys.stdout.reconfigure(line_buffering=True)
 
 import duckdb
 
-from pipeline.paths import GOLD_DB_PATH
 from pipeline.init_db import ORB_LABELS
+from pipeline.paths import GOLD_DB_PATH
 from trading_app.regime.discovery import run_regime_discovery
-from trading_app.regime.validator import run_regime_validation
 from trading_app.regime.schema import init_regime_schema
+from trading_app.regime.validator import run_regime_validation
 
 # Double-break threshold: if >= this fraction of break-days had double
 # breaks, single-direction breakout strategies are auto-DEGRADED.
@@ -142,7 +143,7 @@ def mark_degraded_by_double_break(
     try:
         total = 0
         for session in degraded_sessions:
-            count = con.execute(
+            con.execute(
                 """
                 UPDATE regime_strategies
                 SET validation_status = 'REJECTED',

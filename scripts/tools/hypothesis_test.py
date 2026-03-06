@@ -97,7 +97,7 @@ def test_h1_g3_for_mnq(con):
         for gate_min in [0, 2, 3, 4, 5, 6]:
             gate_label = f"G{gate_min}+" if gate_min > 0 else "ALL"
             row = con.execute(
-                """
+                f"""
                 SELECT COUNT(*) as n,
                        AVG(pnl_r) as avg_r,
                        SUM(pnl_r) as total_r,
@@ -112,7 +112,7 @@ def test_h1_g3_for_mnq(con):
                   AND o.rr_target = 2.0
                   AND o.confirm_bars = 2
                   AND (? = 0 OR f.orb_{sess}_size >= ?)
-            """.format(sess=sess),
+            """,
                 [sess, gate_min, gate_min],
             ).fetchone()
 
@@ -362,7 +362,6 @@ def test_h5_direction_filter(con):
         best_gate = {"MGC": 5, "MNQ": 3, "MES": 3}[sym]
 
         for sess, direction, label in tests:
-            dir_clause = f"AND o.orb_label = '{sess}'" if sess else ""
             dir_filter = ""
             if direction:
                 dir_filter = f"""

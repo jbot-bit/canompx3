@@ -10,7 +10,7 @@ Usage:
 import argparse
 import subprocess
 import sys
-from datetime import date, timedelta, timezone
+from datetime import UTC, date, timedelta
 
 import duckdb
 
@@ -28,7 +28,7 @@ def get_last_ingested_date(db_path: str, symbol: str):
         ts = row[0] if row and row[0] is not None else None
         # Normalize to UTC — DuckDB returns TIMESTAMPTZ in system local timezone
         if ts is not None and hasattr(ts, "astimezone"):
-            ts = ts.astimezone(timezone.utc)
+            ts = ts.astimezone(UTC)
         return ts
     finally:
         con.close()

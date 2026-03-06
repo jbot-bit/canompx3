@@ -21,20 +21,21 @@ import json
 import sys
 from datetime import date
 from pathlib import Path
+
 import duckdb
 import numpy as np
 import pandas as pd
 
+from pipeline.dst import (
+    SESSION_CATALOG,
+    is_uk_dst,
+    is_us_dst,
+)
+
 # ---------------------------------------------------------------------------
 # Project imports
 # ---------------------------------------------------------------------------
-
 from pipeline.paths import GOLD_DB_PATH
-from pipeline.dst import (
-    SESSION_CATALOG,
-    is_us_dst,
-    is_uk_dst,
-)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -514,7 +515,7 @@ def print_report(result: dict, min_z: float) -> None:
         )
 
     # Catalog coverage
-    print(f"\n  Catalog Coverage:")
+    print("\n  Catalog Coverage:")
     coverage = result["catalog_coverage"]
     for label, info in sorted(coverage.items()):
         if info["detected"]:
@@ -526,7 +527,7 @@ def print_report(result: dict, min_z: float) -> None:
     # Unmatched spikes
     unmatched = [sp for sp in spikes if not sp["matched_session"] and not sp["matched_fixed_label"]]
     if unmatched:
-        print(f"\n  Unmatched Spikes (potential new sessions):")
+        print("\n  Unmatched Spikes (potential new sessions):")
         for sp in unmatched:
             print(
                 f"    {sp['time_utc']} UTC ({sp['time_brisbane']} Brisbane) "

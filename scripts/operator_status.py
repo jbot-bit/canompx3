@@ -15,7 +15,6 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
-import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -63,10 +62,10 @@ def _read_roadmap() -> str:
 def _extract_todos(roadmap: str) -> list[str]:
     todos: list[str] = []
     for line in roadmap.splitlines():
-        l = line.strip()
-        if "TODO" in l or "IN PROGRESS" in l:
-            if l.startswith("#") or l.startswith("-"):
-                todos.append(l.lstrip("- "))
+        line_stripped = line.strip()
+        if "TODO" in line_stripped or "IN PROGRESS" in line_stripped:
+            if line_stripped.startswith("#") or line_stripped.startswith("-"):
+                todos.append(line_stripped.lstrip("- "))
     return todos[:8]
 
 

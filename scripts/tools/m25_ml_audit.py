@@ -24,7 +24,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.tools.m25_audit import load_api_key, audit, ARCHITECTURE_CONTEXT  # noqa: E402
+from scripts.tools.m25_audit import ARCHITECTURE_CONTEXT, audit, load_api_key  # noqa: E402
 
 # ── Self-identification: what to send ────────────────────────────────
 

@@ -18,10 +18,10 @@ Example (partial backfill):
     python run_backfill_overnight.py --start 2020-01-01 --end 2025-12-31
 """
 
+import argparse
 import subprocess
 import sys
 import time
-import argparse
 from datetime import datetime
 from pathlib import Path
 

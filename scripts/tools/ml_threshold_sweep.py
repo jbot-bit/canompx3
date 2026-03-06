@@ -90,7 +90,7 @@ def main():
 
     # Summary
     print(f"\n{'=' * 80}")
-    print(f"  RESULTS SUMMARY")
+    print("  RESULTS SUMMARY")
     print(f"{'=' * 80}")
     print(f"\n{'Thresh':>7} {'Trades':>7} {'Wins':>6} {'WR':>7} {'PnL(R)':>9} {'MLSkip':>7} {'vs Base':>9}")
     print(f"{'-' * 7} {'-' * 7} {'-' * 6} {'-' * 7} {'-' * 9} {'-' * 7} {'-' * 9}")

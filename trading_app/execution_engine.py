@@ -15,24 +15,25 @@ Usage:
     engine.on_trading_day_end()
 """
 
-from pathlib import Path
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from enum import Enum
+from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-from pipeline.cost_model import CostSpec, to_r_multiple, get_session_cost_spec
+from pipeline.cost_model import CostSpec, get_session_cost_spec, to_r_multiple
 from pipeline.dst import DYNAMIC_ORB_RESOLVERS
+from pipeline.log import get_logger
 from trading_app.config import (
     ALL_FILTERS,
-    EARLY_EXIT_MINUTES,
-    SESSION_EXIT_MODE,
-    IB_DURATION_MINUTES,
-    HOLD_HOURS,
-    ORB_DURATION_MINUTES,
-    CalendarSkipFilter,
     CALENDAR_SKIP_NFP_OPEX,
+    EARLY_EXIT_MINUTES,
+    HOLD_HOURS,
+    IB_DURATION_MINUTES,
+    ORB_DURATION_MINUTES,
+    SESSION_EXIT_MODE,
+    CalendarSkipFilter,
 )
 from trading_app.portfolio import (
     Portfolio,
@@ -40,7 +41,6 @@ from trading_app.portfolio import (
     compute_position_size_vol_scaled,
     compute_vol_scalar,
 )
-from pipeline.log import get_logger
 
 logger = get_logger(__name__)
 
@@ -263,7 +263,7 @@ class ExecutionEngine:
 
         # Initialize IB tracker (23:00 UTC to 01:00 UTC = 09:00-11:00 Brisbane)
         prev_day = trading_day - timedelta(days=1)
-        ib_start = datetime(prev_day.year, prev_day.month, prev_day.day, 23, 0, tzinfo=timezone.utc)
+        ib_start = datetime(prev_day.year, prev_day.month, prev_day.day, 23, 0, tzinfo=UTC)
         ib_end = ib_start + timedelta(minutes=IB_DURATION_MINUTES)
         self.ib = LiveIB(window_start_utc=ib_start, window_end_utc=ib_end)
 
@@ -278,7 +278,7 @@ class ExecutionEngine:
                 base_date = prev_day
             else:
                 base_date = trading_day
-            start = datetime(base_date.year, base_date.month, base_date.day, hour, minute, tzinfo=timezone.utc)
+            start = datetime(base_date.year, base_date.month, base_date.day, hour, minute, tzinfo=UTC)
             end = start + timedelta(minutes=duration)
             self.orbs[label] = LiveORB(
                 label=label,
@@ -303,7 +303,7 @@ class ExecutionEngine:
             else:
                 cal_date = trading_day
             local_start = datetime(cal_date.year, cal_date.month, cal_date.day, bris_h, bris_m, 0, tzinfo=_brisbane)
-            start = local_start.astimezone(_utc).replace(tzinfo=timezone.utc)
+            start = local_start.astimezone(_utc).replace(tzinfo=UTC)
             end = start + timedelta(minutes=duration)
             self.orbs[label] = LiveORB(
                 label=label,
@@ -328,7 +328,7 @@ class ExecutionEngine:
             self.market_state.current_ts = ts
 
         # Phase 1: Update ORB ranges
-        for label, orb in self.orbs.items():
+        for _label, orb in self.orbs.items():
             if not orb.complete and orb.window_start_utc <= ts < orb.window_end_utc:
                 if orb.high is None or bar["high"] > orb.high:
                     orb.high = bar["high"]
@@ -340,7 +340,7 @@ class ExecutionEngine:
                 orb.complete = True
 
         # Phase 2: Detect breaks for complete ORBs
-        for label, orb in self.orbs.items():
+        for _label, orb in self.orbs.items():
             if orb.complete and orb.break_dir is None and orb.high is not None:
                 if bar["close"] > orb.high:
                     orb.break_dir = "long"
@@ -639,8 +639,8 @@ class ExecutionEngine:
             # The stop order triggers when the bar's range crosses the ORB level.
             # For longs: bar high must exceed orb_high; fill = orb_high + slippage.
             # For shorts: bar low must go below orb_low; fill = orb_low - slippage.
-            from trading_app.config import E2_SLIPPAGE_TICKS
             from pipeline.cost_model import get_cost_spec as _get_cost_spec
+            from trading_app.config import E2_SLIPPAGE_TICKS
 
             tick_size = _get_cost_spec(trade.strategy.instrument).tick_size
             slippage = E2_SLIPPAGE_TICKS * tick_size

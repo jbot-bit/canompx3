@@ -6,18 +6,17 @@ Brisbane local time (UTC+10, no DST). Must convert to UTC for bar comparisons.
 """
 
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from pipeline.dst import DYNAMIC_ORB_RESOLVERS
 from trading_app.live.bar_aggregator import Bar
 
 _BRISBANE = ZoneInfo("Australia/Brisbane")
-_UTC = timezone.utc
+_UTC = UTC
 
 
-def _session_start_utc(session_label: str, trading_day: date) -> Optional[datetime]:
+def _session_start_utc(session_label: str, trading_day: date) -> datetime | None:
     """
     Get session start as UTC datetime for a given Brisbane trading_day.
 
@@ -65,7 +64,7 @@ class LiveORBBuilder:
         """Append a completed 1-minute bar."""
         self._bars.append(bar)
 
-    def get_orb(self, session_label: str, orb_minutes: int) -> Optional[LiveORB]:
+    def get_orb(self, session_label: str, orb_minutes: int) -> LiveORB | None:
         """
         Return the completed ORB for this session/aperture, or None if not enough bars yet.
         """

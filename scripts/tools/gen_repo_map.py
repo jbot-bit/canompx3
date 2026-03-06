@@ -7,9 +7,8 @@ Usage:
 
 from __future__ import annotations
 
-import ast
 import argparse
-import os
+import ast
 import sys
 from pathlib import Path
 
@@ -74,10 +73,7 @@ def _parse_module(path: Path) -> dict:
     exports = []
     imports = set()
     for node in ast.iter_child_nodes(tree):
-        if isinstance(node, ast.ClassDef):
-            if not node.name.startswith("_"):
-                exports.append(node.name)
-        elif isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
             if not node.name.startswith("_"):
                 exports.append(node.name)
         elif isinstance(node, ast.Import):
@@ -138,9 +134,7 @@ def _walk_tree(dirpath: Path, root: Path, lines: list[str], prefix: str) -> None
     entries = sorted(dirpath.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))
     # Filter out __pycache__, .pyc
     entries = [e for e in entries if e.name != "__pycache__" and not e.name.endswith(".pyc")]
-    for i, entry in enumerate(entries):
-        is_last = i == len(entries) - 1
-        connector = "  "
+    for entry in entries:
         if entry.is_dir():
             _walk_tree(entry, root, lines, prefix=prefix + "  ")
         else:

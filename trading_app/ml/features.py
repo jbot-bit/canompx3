@@ -14,7 +14,6 @@ Key function:
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 import duckdb
 import numpy as np
@@ -342,9 +341,7 @@ def apply_e6_filter(X: pd.DataFrame) -> pd.DataFrame:
     """
     drop_cols = []
     for col in X.columns:
-        if any(col.startswith(prefix) for prefix in E6_NOISE_PREFIXES):
-            drop_cols.append(col)
-        elif col in E6_NOISE_EXACT:
+        if any(col.startswith(prefix) for prefix in E6_NOISE_PREFIXES) or col in E6_NOISE_EXACT:
             drop_cols.append(col)
 
     if drop_cols:
@@ -450,11 +447,11 @@ def load_feature_matrix(
     db_path: str,
     instrument: str,
     *,
-    orb_minutes: Optional[int] = None,
-    entry_model: Optional[str] = None,
-    orb_label: Optional[str] = None,
-    min_date: Optional[str] = None,
-    max_date: Optional[str] = None,
+    orb_minutes: int | None = None,
+    entry_model: str | None = None,
+    orb_label: str | None = None,
+    min_date: str | None = None,
+    max_date: str | None = None,
 ) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
     """Load and prepare the full ML feature matrix for an instrument.
 

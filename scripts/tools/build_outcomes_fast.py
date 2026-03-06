@@ -11,31 +11,29 @@ Usage:
     python scripts/build_outcomes_fast.py --instrument MNQ --dry-run
 """
 
+import argparse
 import sys
 import time
-import argparse
-from pathlib import Path
-from datetime import date, datetime
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from datetime import date
+from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 sys.stdout.reconfigure(line_buffering=True)
 
 import duckdb
-import numpy as np
 import pandas as pd
 
-from pipeline.paths import GOLD_DB_PATH
+from pipeline.build_daily_features import compute_trading_day_utc_range
 from pipeline.cost_model import get_cost_spec
 from pipeline.init_db import ORB_LABELS
-from pipeline.build_daily_features import compute_trading_day_utc_range
 from trading_app.config import ENTRY_MODELS
 from trading_app.db_manager import init_trading_app_schema
 from trading_app.outcome_builder import (
-    compute_single_outcome,
-    RR_TARGETS,
     CONFIRM_BARS_OPTIONS,
+    RR_TARGETS,
+    compute_single_outcome,
 )
 
 DB_PATH = Path(r"C:\db\gold.db")
@@ -199,7 +197,7 @@ def main():
     # Build work items
     work_items = []
     for row in rows:
-        row_dict = dict(zip(col_names, row))
+        row_dict = dict(zip(col_names, row, strict=False))
         trading_day = row_dict["trading_day"]
         symbol = row_dict["symbol"]
         work_items.append((trading_day, symbol, orb_minutes, row_dict, instrument))

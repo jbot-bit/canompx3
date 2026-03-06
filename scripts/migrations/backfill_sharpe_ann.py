@@ -10,14 +10,14 @@ Usage:
     python scripts/backfill_sharpe_ann.py --db C:/db/gold.db --dry-run
 """
 
-import sys
-import json
 import argparse
+import json
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 import duckdb
+
 from pipeline.paths import GOLD_DB_PATH
 
 

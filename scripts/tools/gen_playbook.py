@@ -4,9 +4,9 @@
 from __future__ import annotations
 
 import datetime
+from pathlib import Path
 
 import pandas as pd
-from pathlib import Path
 
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 

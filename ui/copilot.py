@@ -16,30 +16,28 @@ import json
 import subprocess
 import sys
 import time
-from datetime import datetime, date, timedelta, time as dt_time
+from datetime import date, datetime, timedelta
+from datetime import time as dt_time
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 import streamlit as st
 
 from pipeline.dst import SESSION_CATALOG
-from ui.session_helpers import (
-    AppState,
-    SessionBriefing,
-    get_app_state,
-    get_upcoming_sessions,
-    get_refresh_seconds,
-    build_session_briefings,
-    is_weekend,
-    current_trading_day,
-    BRISBANE,
-    AWAKE_START,
-    AWAKE_END,
-)
 from ui.db_reader import (
+    get_previous_trading_day,
     get_prior_day_atr,
     get_today_completed_sessions,
-    get_previous_trading_day,
+)
+from ui.session_helpers import (
+    AWAKE_END,
+    AWAKE_START,
+    BRISBANE,
+    AppState,
+    SessionBriefing,
+    build_session_briefings,
+    get_app_state,
+    get_refresh_seconds,
+    get_upcoming_sessions,
 )
 
 # Signals file written by SessionOrchestrator
@@ -458,8 +456,6 @@ def _render_signal_log() -> None:
     for r in reversed(records):
         ts = r.get("ts", "")
         try:
-            from datetime import timezone
-
             ts_display = datetime.fromisoformat(ts).astimezone(BRISBANE).strftime("%I:%M %p").lstrip("0")
         except (ValueError, TypeError):
             ts_display = ts

@@ -12,7 +12,7 @@ from pathlib import Path
 
 import duckdb
 
-from pipeline.paths import GOLD_DB_PATH, DAILY_DBN_DIR
+from pipeline.paths import DAILY_DBN_DIR, GOLD_DB_PATH
 
 PROJECT_ROOT = Path(__file__).parent.parent
 
@@ -177,6 +177,7 @@ def check_m25_audit() -> tuple[bool, str]:
     if MINIMAX_API_KEY is not set.
     """
     import os
+
     from dotenv import load_dotenv
 
     load_dotenv()

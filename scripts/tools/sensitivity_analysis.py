@@ -33,7 +33,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from pipeline.cost_model import get_cost_spec  # noqa: E402
 from pipeline.paths import GOLD_DB_PATH  # noqa: E402
 from trading_app.config import ALL_FILTERS, TRADEABLE_INSTRUMENTS  # noqa: E402
-from trading_app.live_config import LIVE_PORTFOLIO, LIVE_MIN_EXPECTANCY_R  # noqa: E402
+from trading_app.live_config import LIVE_PORTFOLIO  # noqa: E402
 
 # Ordered RR targets used in outcome_builder grid
 RR_STEPS = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0]

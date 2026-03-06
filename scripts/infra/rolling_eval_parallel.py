@@ -9,27 +9,26 @@ Usage:
     python scripts/rolling_eval_parallel.py --db-path C:/db/gold.db --workers 16
 """
 
-import sys
 import json
 import shutil
+import sys
 import tempfile
-from pathlib import Path
-from datetime import date
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from datetime import date
+from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 sys.stdout.reconfigure(line_buffering=True)
 
-from scripts.infra.rolling_eval import (
-    generate_rolling_windows,
-    compute_double_break_pct,
-    run_rolling_evaluation,
-    DOUBLE_BREAK_THRESHOLD,
-)
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.regime.schema import init_regime_schema
+from scripts.infra.rolling_eval import (
+    DOUBLE_BREAK_THRESHOLD,
+    compute_double_break_pct,
+    generate_rolling_windows,
+)
 from trading_app.regime.discovery import run_regime_discovery
+from trading_app.regime.schema import init_regime_schema
 from trading_app.regime.validator import run_regime_validation
 
 
@@ -118,7 +117,7 @@ def merge_results_to_main(main_db: Path, tmp_dbs: list[Path], run_labels: list[s
     init_regime_schema(db_path=main_db)
 
     try:
-        for tmp_db, run_label in zip(tmp_dbs, run_labels):
+        for tmp_db, run_label in zip(tmp_dbs, run_labels, strict=False):
             if tmp_db is None:
                 continue
 

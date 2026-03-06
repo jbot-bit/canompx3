@@ -88,7 +88,7 @@ def phase1_feature_importance(X_e6, y, meta, instrument: str):
         rf = RandomForestClassifier(**{**RF_PARAMS, "n_estimators": 200})
         rf.fit(X_feat, y_sess)
 
-        importances = dict(zip(feature_names, rf.feature_importances_))
+        importances = dict(zip(feature_names, rf.feature_importances_, strict=False))
         sorted_imp = sorted(importances.items(), key=lambda x: x[1], reverse=True)
         all_importances[session] = sorted_imp
 
@@ -101,12 +101,12 @@ def phase1_feature_importance(X_e6, y, meta, instrument: str):
             print(f"  {feat:<35} {imp:>10.4f}  {cum:>5.1%}")
 
     # Cross-instrument feature frequency analysis
-    print(f"\n  TOP FEATURES ACROSS ALL SESSIONS:")
+    print("\n  TOP FEATURES ACROSS ALL SESSIONS:")
     print(f"  {'Feature':<35} {'Avg Importance':>14}  {'#Sessions':>9}")
     print(f"  {'-' * 62}")
 
     feature_scores = {}
-    for session, sorted_imp in all_importances.items():
+    for _session, sorted_imp in all_importances.items():
         for feat, imp in sorted_imp:
             if feat not in feature_scores:
                 feature_scores[feat] = []
@@ -277,7 +277,7 @@ def phase2_honest_oos(X_e6, y, meta, instrument: str):
     weak_sessions = [s for s, r in results.items() if r["verdict"] == "WEAK"]
     nogo_sessions = [s for s, r in results.items() if r["verdict"] == "NO-GO"]
 
-    print(f"\n  VERDICTS:")
+    print("\n  VERDICTS:")
     print(f"    REAL signal: {real_sessions or 'NONE'}")
     print(f"    WEAK signal: {weak_sessions or 'NONE'}")
     print(f"    NO-GO:       {nogo_sessions or 'NONE'}")
@@ -345,7 +345,7 @@ def phase3_signal_diagnosis(X_e6, y, meta, instrument: str, oos_results: dict | 
         rf = RandomForestClassifier(**{**RF_PARAMS, "n_estimators": 200})
         rf.fit(X_sess, y_sess)
 
-        importances = dict(zip(feature_names, rf.feature_importances_))
+        importances = dict(zip(feature_names, rf.feature_importances_, strict=False))
 
         # Group importances
         group_scores = {}
@@ -365,7 +365,7 @@ def phase3_signal_diagnosis(X_e6, y, meta, instrument: str, oos_results: dict | 
             print(f"    {'other':<16} {remaining:>6.1%}  {bar}")
 
     # Per-instrument summary
-    print(f"\n  INSTRUMENT DIAGNOSIS:")
+    print("\n  INSTRUMENT DIAGNOSIS:")
     total_n = len(y)
     win_rate = y.mean() if hasattr(y, "mean") else np.mean(y)
     n_sessions = len([s for s in sessions if (meta["orb_label"] == s).sum() >= MIN_SESSION_SAMPLES])
@@ -401,7 +401,7 @@ def main():
         logger.info(f"{instrument}: {len(X_e6):,d} samples, {X_e6.shape[1]} features, win_rate={y_all.mean():.1%}")
 
         # Phase 1: Feature importance
-        importances = phase1_feature_importance(X_e6, y_all, meta_all, instrument)
+        phase1_feature_importance(X_e6, y_all, meta_all, instrument)
 
         # Phase 2: Honest OOS
         oos_results = phase2_honest_oos(X_e6, y_all, meta_all, instrument)
@@ -413,7 +413,7 @@ def main():
 
     # Grand summary
     print(f"\n{'#' * 80}")
-    print(f"  GRAND SUMMARY: ML LICENSE STATUS")
+    print("  GRAND SUMMARY: ML LICENSE STATUS")
     print(f"{'#' * 80}")
 
     print(f"\n  {'Instrument':<12} {'REAL':>6} {'WEAK':>6} {'NO-GO':>6} {'Total Delta':>12} {'Verdict':>10}")

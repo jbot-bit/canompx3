@@ -12,19 +12,19 @@ Usage:
 
 import sys
 import time
-from pathlib import Path
 from datetime import date, timedelta
+from pathlib import Path
 
+import databento as db
+import duckdb
 import numpy as np
 import pandas as pd
-import duckdb
-import databento as db
 
 from pipeline.ingest_dbn_mgc import (
-    validate_chunk,
-    validate_timestamp_utc,
     choose_front_contract,
     run_final_gates,
+    validate_chunk,
+    validate_timestamp_utc,
 )
 
 # =========================================================================
@@ -59,8 +59,8 @@ def compute_trading_days_fast(ts_index: pd.DatetimeIndex) -> np.ndarray:
 
 
 def main():
-    import re
     import argparse
+    import re
 
     parser = argparse.ArgumentParser(description="Fast MES ingestion (daily splits)")
     parser.add_argument("--dry-run", action="store_true")
@@ -163,7 +163,7 @@ def main():
 
     front_contracts = {}
     for tday, grp in daily_vols.groupby("trading_day"):
-        vols = dict(zip(grp["symbol"], grp["volume"]))
+        vols = dict(zip(grp["symbol"], grp["volume"], strict=False))
         front = choose_front_contract(
             vols,
             outright_pattern=outright_pattern,

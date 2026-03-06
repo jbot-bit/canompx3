@@ -14,7 +14,7 @@ Usage:
 """
 
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -26,7 +26,6 @@ sys.stdout.reconfigure(line_buffering=True)
 import duckdb
 
 from pipeline.paths import GOLD_DB_PATH
-
 
 # ---------------------------------------------------------------------------
 # Utility
@@ -41,7 +40,7 @@ def save_snapshot(content: str, snapshot_name: str) -> Path:
 
 
 def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 # ---------------------------------------------------------------------------
@@ -188,9 +187,9 @@ def generate_fitness_report_snapshot() -> str:
 def generate_live_config_snapshot() -> str:
     """Live portfolio specs, tier counts, and gates from trading_app.live_config."""
     from trading_app.live_config import (
-        LIVE_PORTFOLIO,
-        LIVE_MIN_EXPECTANCY_R,
         LIVE_MIN_EXPECTANCY_DOLLARS_MULT,
+        LIVE_MIN_EXPECTANCY_R,
+        LIVE_PORTFOLIO,
     )
 
     # Count by tier
@@ -356,7 +355,7 @@ def main():
         content = gen_func()
         path = save_snapshot(content, filename)
         print(f"Generated {args.snapshot} -> {path}")
-        print(f"--- first 30 lines ---")
+        print("--- first 30 lines ---")
         for line in content.splitlines()[:30]:
             print(line)
     else:

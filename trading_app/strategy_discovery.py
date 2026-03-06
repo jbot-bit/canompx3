@@ -10,11 +10,11 @@ Usage:
     python trading_app/strategy_discovery.py --instrument MGC --start 2021-01-01 --end 2025-12-31 --dry-run
 """
 
-import sys
 import json
-from pathlib import Path
+import sys
 from collections import defaultdict
-from datetime import date, timezone
+from datetime import UTC, date
+from pathlib import Path
 
 from pipeline.log import get_logger
 
@@ -25,18 +25,18 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 import duckdb
 import pandas as pd
 
-from pipeline.paths import GOLD_DB_PATH
-from pipeline.init_db import ORB_LABELS
 from pipeline.asset_configs import get_enabled_sessions
 from pipeline.cost_model import get_cost_spec
 from pipeline.dst import (
     DST_AFFECTED_SESSIONS,
-    is_winter_for_session,
     classify_dst_verdict,
+    is_winter_for_session,
 )
-from trading_app.config import get_filters_for_grid, ENTRY_MODELS, VolumeFilter, STOP_MULTIPLIERS, apply_tight_stop
-from trading_app.db_manager import init_trading_app_schema, compute_trade_day_hash
-from trading_app.outcome_builder import RR_TARGETS, CONFIRM_BARS_OPTIONS
+from pipeline.init_db import ORB_LABELS
+from pipeline.paths import GOLD_DB_PATH
+from trading_app.config import ENTRY_MODELS, STOP_MULTIPLIERS, VolumeFilter, apply_tight_stop, get_filters_for_grid
+from trading_app.db_manager import compute_trade_day_hash, init_trading_app_schema
+from trading_app.outcome_builder import CONFIRM_BARS_OPTIONS, RR_TARGETS
 
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)
@@ -826,7 +826,7 @@ def _load_daily_features(con, instrument, orb_minutes, start_date, end_date):
         params,
     ).fetchall()
     cols = [desc[0] for desc in con.description]
-    return [dict(zip(cols, r)) for r in rows]
+    return [dict(zip(cols, r, strict=False)) for r in rows]
 
 
 def _build_filter_day_sets(features, orb_labels, all_filters):
@@ -858,7 +858,7 @@ def _ts_minute_key(ts):
     while Python datetime may use timezone.utc. Normalize to UTC for
     consistent comparison.
     """
-    utc_ts = ts.astimezone(timezone.utc) if ts.tzinfo is not None else ts
+    utc_ts = ts.astimezone(UTC) if ts.tzinfo is not None else ts
     return (utc_ts.year, utc_ts.month, utc_ts.day, utc_ts.hour, utc_ts.minute)
 
 
@@ -886,7 +886,7 @@ def _compute_relative_volumes(con, features, instrument, orb_labels, all_filters
             break_ts = row.get(f"orb_{orb_label}_break_ts")
             if break_ts is not None and hasattr(break_ts, "hour"):
                 break_ts_list.append(break_ts)
-                utc_ts = break_ts.astimezone(timezone.utc) if break_ts.tzinfo is not None else break_ts
+                utc_ts = break_ts.astimezone(UTC) if break_ts.tzinfo is not None else break_ts
                 unique_minutes.add(utc_ts.hour * 60 + utc_ts.minute)
 
     if not unique_minutes:
@@ -915,7 +915,7 @@ def _compute_relative_volumes(con, features, instrument, orb_labels, all_filters
                 continue
 
             break_key = _ts_minute_key(break_ts)
-            utc_ts = break_ts.astimezone(timezone.utc) if break_ts.tzinfo is not None else break_ts
+            utc_ts = break_ts.astimezone(UTC) if break_ts.tzinfo is not None else break_ts
             mod = utc_ts.hour * 60 + utc_ts.minute
             history = minute_history.get(mod, [])
             if not history:

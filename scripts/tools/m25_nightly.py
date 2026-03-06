@@ -15,7 +15,7 @@ Usage:
 from __future__ import annotations
 
 import sys
-from datetime import datetime, date
+from datetime import date, datetime
 from pathlib import Path
 
 PROJECT = Path(__file__).parent.parent.parent
@@ -23,9 +23,9 @@ sys.path.insert(0, str(PROJECT))
 
 from scripts.tools.m25_audit import (  # noqa: E402
     AUDIT_MODES,
+    audit,
     load_api_key,
     read_files,
-    audit,
     show_budget,
 )
 

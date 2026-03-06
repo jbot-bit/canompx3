@@ -17,8 +17,8 @@ from pathlib import Path
 
 import duckdb
 
-from pipeline.paths import GOLD_DB_PATH
 from pipeline.cost_model import COST_SPECS
+from pipeline.paths import GOLD_DB_PATH
 from trading_app.db_manager import init_trading_app_schema
 
 
@@ -66,7 +66,7 @@ def backfill_dollar_columns(db_path: Path | None = None, dry_run: bool = False) 
                     [instrument],
                 )
                 con.commit()
-                print(f"    Done.")
+                print("    Done.")
 
         # ---- experimental_strategies: backfill dollar aggregates ----
         for instrument, spec in COST_SPECS.items():
@@ -100,7 +100,7 @@ def backfill_dollar_columns(db_path: Path | None = None, dry_run: bool = False) 
                     [instrument],
                 )
                 con.commit()
-                print(f"    Done.")
+                print("    Done.")
 
         # ---- validated_setups: backfill from experimental_strategies ----
         count = con.execute("SELECT COUNT(*) FROM validated_setups WHERE median_risk_dollars IS NULL").fetchone()[0]
@@ -121,9 +121,9 @@ def backfill_dollar_columns(db_path: Path | None = None, dry_run: bool = False) 
                       AND es.median_risk_dollars IS NOT NULL
                 """)
                 con.commit()
-                print(f"    Done.")
+                print("    Done.")
         else:
-            print(f"  validated_setups — 0 rows to backfill")
+            print("  validated_setups — 0 rows to backfill")
 
     print("\nBackfill complete.")
     if dry_run:

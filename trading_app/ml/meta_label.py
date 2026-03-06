@@ -12,9 +12,8 @@ Usage:
 from __future__ import annotations
 
 import argparse
-
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import joblib
 import numpy as np
@@ -303,7 +302,7 @@ def train_per_session_meta_label(
             session_indices = np.where(amask)[0]
 
             # Helper: store result in flat or nested dict
-            def _store(result: dict) -> None:
+            def _store(result: dict, session=session, aperture_key=aperture_key) -> None:
                 if per_aperture:
                     session_results[session][aperture_key] = result
                 else:
@@ -579,7 +578,7 @@ def train_per_session_meta_label(
             "instrument": instrument,
             "sessions": {},
             "config_hash": config_hash,
-            "trained_at": datetime.now(timezone.utc).isoformat(),
+            "trained_at": datetime.now(UTC).isoformat(),
             "data_date_range": (
                 str(meta_all["trading_day"].min()),
                 str(meta_all["trading_day"].max()),
@@ -898,7 +897,7 @@ def train_meta_label(
                 "optimal_threshold": opt["threshold"],
                 "cpcv_auc": cpcv_results["auc_mean"] if cpcv_results else None,
                 "honest_delta_r": round(test_delta_r, 2),
-                "trained_at": datetime.now(timezone.utc).isoformat(),
+                "trained_at": datetime.now(UTC).isoformat(),
                 "data_date_range": (
                     str(meta["trading_day"].min()),
                     str(meta["trading_day"].max()),
@@ -1061,6 +1060,7 @@ def main():
         if args.sweep_rr:
             # Sweep all validated RR targets for this instrument
             import duckdb as _ddb
+
             from pipeline.db_config import configure_connection as _cc
 
             _con = _ddb.connect(args.db_path, read_only=True)

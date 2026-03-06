@@ -16,7 +16,6 @@ Entry model → order type mapping:
 import logging
 import time
 from dataclasses import dataclass
-from typing import Optional
 
 import requests
 
@@ -35,7 +34,7 @@ class OrderSpec:
     symbol: str
     qty: int
     account_id: int
-    stop_price: Optional[float] = None
+    stop_price: float | None = None
 
 
 @dataclass
@@ -45,7 +44,7 @@ class OrderResult:
 
 
 class OrderRouter:
-    def __init__(self, account_id: int, auth: Optional[TradovateAuth], demo: bool = True):
+    def __init__(self, account_id: int, auth: TradovateAuth | None, demo: bool = True):
         self.account_id = account_id
         self.auth = auth
         self.base = DEMO_BASE if demo else LIVE_BASE

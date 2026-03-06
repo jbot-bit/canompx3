@@ -19,8 +19,7 @@ Usage:
 
 import argparse
 import sys
-import time
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 from pathlib import Path
 
 import duckdb
@@ -554,10 +553,10 @@ def run(db_path: Path, start: date, end: date):
         )
         if mh["sharpe"] > mf["sharpe"]:
             print(f"  Honest blended STILL beats fixed RR ({mh['sharpe']:.4f} vs {mf['sharpe']:.4f})")
-            print(f"  SIGNAL SURVIVES AUDIT (with reduced magnitude)")
+            print("  SIGNAL SURVIVES AUDIT (with reduced magnitude)")
         else:
-            print(f"  Honest blended does NOT beat fixed RR")
-            print(f"  SIGNAL IS LOOK-AHEAD ARTIFACT -- KILL IT")
+            print("  Honest blended does NOT beat fixed RR")
+            print("  SIGNAL IS LOOK-AHEAD ARTIFACT -- KILL IT")
 
     print()
 

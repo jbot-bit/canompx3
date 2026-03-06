@@ -13,11 +13,11 @@ Usage:
 import argparse
 import logging
 import time
-import duckdb
-import numpy as np
 
-from pipeline.paths import GOLD_DB_PATH
+import duckdb
+
 from pipeline.build_daily_features import compute_garch_forecast
+from pipeline.paths import GOLD_DB_PATH
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
@@ -43,7 +43,7 @@ def backfill_instrument(db_path: str, instrument: str):
     updated = 0
     t0 = time.time()
 
-    for i, (trading_day, daily_close, atr_20) in enumerate(rows):
+    for i, (trading_day, _daily_close, atr_20) in enumerate(rows):
         # Collect prior closes (no look-ahead)
         prior_closes = [r[1] for r in rows[:i] if r[1] is not None]
 

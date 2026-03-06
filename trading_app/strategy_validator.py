@@ -19,8 +19,8 @@ Usage:
     python trading_app/strategy_validator.py --instrument MGC --min-sample 100 --dry-run
 """
 
-import sys
 import json
+import sys
 import time
 from datetime import date
 from pathlib import Path
@@ -33,17 +33,17 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 import duckdb
 
-from pipeline.paths import GOLD_DB_PATH
 from pipeline.cost_model import get_cost_spec, stress_test_costs
 from pipeline.dst import (
     DST_AFFECTED_SESSIONS,
-    is_winter_for_session,
     classify_dst_verdict,
+    is_winter_for_session,
 )
+from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import CORE_MIN_SAMPLES, REGIME_MIN_SAMPLES, WF_START_OVERRIDE
 from trading_app.db_manager import init_trading_app_schema
-from trading_app.walkforward import append_walkforward_result
 from trading_app.strategy_discovery import parse_dst_regime
+from trading_app.walkforward import append_walkforward_result
 
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)
@@ -512,6 +512,7 @@ def _walkforward_worker(
     t0 = time.monotonic()
 
     import duckdb
+
     from pipeline.db_config import configure_connection
     from trading_app.walkforward import run_walkforward
 
@@ -678,7 +679,7 @@ def run_validation(
     wf_candidates = []  # Survivors needing walkforward
 
     for row in rows:
-        row_dict = dict(zip(col_names, row))
+        row_dict = dict(zip(col_names, row, strict=False))
         strategy_id = row_dict["strategy_id"]
 
         if row_dict.get("is_canonical") is False:

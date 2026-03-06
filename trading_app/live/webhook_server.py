@@ -26,7 +26,7 @@ import os
 import time
 from collections import deque
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
@@ -206,7 +206,7 @@ async def health():
         "demo": DEMO,
         "account_id": _account_id,
         "rate_limit": f"{RATE_LIMIT_ORDERS} orders/{RATE_LIMIT_WINDOW:.0f}s",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
 
@@ -225,16 +225,16 @@ async def trade(req: TradeRequest, request: Request):
     try:
         contract = await loop.run_in_executor(None, _get_contract, req.instrument)
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Contract resolution failed: {e}")
+        raise HTTPException(status_code=503, detail=f"Contract resolution failed: {e}") from e
 
     # 4. Place order (synchronous HTTP in thread pool to avoid blocking event loop)
     try:
         order_id = await loop.run_in_executor(None, _place_order, req, contract)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         log.error("Order failed: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Order failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Order failed: {e}") from e
 
     log.info(
         "WEBHOOK ORDER: %s %s %s qty=%d → orderId=%d (%s)",
@@ -254,5 +254,5 @@ async def trade(req: TradeRequest, request: Request):
         direction=req.direction,
         qty=req.qty,
         demo=DEMO,
-        timestamp=datetime.now(timezone.utc).isoformat(),
+        timestamp=datetime.now(UTC).isoformat(),
     )

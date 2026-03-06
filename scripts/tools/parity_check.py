@@ -190,8 +190,6 @@ def check_target_price_consistency(con, instrument: str, sample: int) -> list[st
 def check_pnl_plausibility(con, instrument: str, sample: int) -> list[str]:
     """Verify pnl_r values are plausible given cost model."""
     failures = []
-    spec = get_cost_spec(instrument)
-
     rows = con.execute(
         """
         SELECT o.entry_price, o.stop_price, o.target_price,
@@ -266,7 +264,7 @@ def check_time_stop_consistency(con, instrument: str, sample: int) -> list[str]:
     ).fetchall()
 
     if not rows:
-        print(f"    Time-stop consistency: no time_stop outcomes found (OK if no T80 sessions)")
+        print("    Time-stop consistency: no time_stop outcomes found (OK if no T80 sessions)")
         return failures
 
     checked = 0

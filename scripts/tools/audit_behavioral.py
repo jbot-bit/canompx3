@@ -395,7 +395,7 @@ def check_double_break_lookahead() -> list[str]:
 
             # Check each filter pattern
             for pattern in filter_patterns:
-                for i, match in enumerate(pattern.finditer(content)):
+                for _i, match in enumerate(pattern.finditer(content)):
                     line_num = content[: match.start()].count("\n") + 1
                     rel_path = fpath.relative_to(PROJECT_ROOT)
                     violations.append(

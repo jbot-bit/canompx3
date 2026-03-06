@@ -873,9 +873,7 @@ class SQLAdapter:
             instrument_clause = "AND instrument = ?"
             instrument_clause_symbol = "AND symbol = ?"
             # Determine which placeholder this template uses
-            if "{instrument_clause_symbol}" in sql_template:
-                bind_params.append(inst)
-            elif "{instrument_clause}" in sql_template:
+            if "{instrument_clause_symbol}" in sql_template or "{instrument_clause}" in sql_template:
                 bind_params.append(inst)
 
         sql_template = sql_template.replace("{instrument_clause}", instrument_clause)

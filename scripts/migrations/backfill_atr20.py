@@ -21,6 +21,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.stdout.reconfigure(line_buffering=True)
 
 import duckdb
+
 from pipeline.paths import GOLD_DB_PATH
 
 
@@ -69,7 +70,7 @@ def backfill_atr20(db_path: Path, dry_run: bool = False) -> int:
             updates = []  # [(atr_20, trading_day, symbol, orb_minutes), ...]
             true_ranges = []
 
-            for i, (td, high, low, close) in enumerate(rows):
+            for i, (td, high, low, _close) in enumerate(rows):
                 prev_close = rows[i - 1][3] if i > 0 else None  # daily_close of prev row
 
                 if high is not None and low is not None:

@@ -7,10 +7,10 @@ PortfolioStrategy has .strategy_id and .expectancy_r. LiveStrategySpec does not.
 
 import logging
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
-from typing import Optional
+from datetime import UTC, date, datetime
 
 from trading_app.portfolio import PortfolioStrategy
+
 from .cusum_monitor import CUSUMMonitor
 
 log = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ class TradeRecord:
     exit_price: float
     actual_r: float
     expected_r: float
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 class PerformanceMonitor:
@@ -54,7 +54,7 @@ class PerformanceMonitor:
         self._trades: list[TradeRecord] = []
         self._daily_r: dict[str, float] = {}
 
-    def record_trade(self, record: TradeRecord) -> Optional[str]:
+    def record_trade(self, record: TradeRecord) -> str | None:
         """
         Record a completed trade. Returns alert string if CUSUM alarm triggered, else None.
         """
@@ -84,6 +84,6 @@ class PerformanceMonitor:
         """Clear daily R accumulator (call at EOD after logging summary)."""
         self._daily_r.clear()
 
-    def get_cusum(self, strategy_id: str) -> Optional[CUSUMMonitor]:
+    def get_cusum(self, strategy_id: str) -> CUSUMMonitor | None:
         """Return the CUSUM monitor for a specific strategy (for inspection/testing)."""
         return self._monitors.get(strategy_id)

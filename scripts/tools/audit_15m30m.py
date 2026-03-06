@@ -24,7 +24,7 @@ for om in [5, 15, 30]:
         GROUP BY instrument ORDER BY instrument
     """).fetchall()
     print(f"\n--- {om}m experimental strategies ---")
-    print(f"  Inst | Total | N>=50 | ExpR>0 | Sharpe>0.15")
+    print("  Inst | Total | N>=50 | ExpR>0 | Sharpe>0.15")
     for row in r:
         print(f"  {row[0]}  | {row[1]:5,} | {row[2]:5} | {row[3]:6} | {row[4]:11}")
 

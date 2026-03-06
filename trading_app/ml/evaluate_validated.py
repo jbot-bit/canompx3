@@ -120,6 +120,7 @@ def evaluate_validated(instrument: str, db_path: str) -> None:
             meta["rr_target_rounded"],
             meta["confirm_bars"].astype(int),
             meta["orb_minutes"].astype(int),
+            strict=False,
         )
     )
     validated_mask = meta["combo_key"].isin(validated_keys)

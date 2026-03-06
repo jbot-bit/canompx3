@@ -8,18 +8,18 @@ Usage:
     python -m trading_app.regime.validator --instrument MGC --run-label 2025_only --min-sample 20 --dry-run
 """
 
-import sys
 import json
+import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 import duckdb
 
-from pipeline.paths import GOLD_DB_PATH
 from pipeline.cost_model import get_cost_spec
-from trading_app.strategy_validator import validate_strategy
+from pipeline.paths import GOLD_DB_PATH
 from trading_app.regime.schema import init_regime_schema
+from trading_app.strategy_validator import validate_strategy
 
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)
@@ -69,7 +69,7 @@ def run_regime_validation(
         rejected = 0
 
         for row in rows:
-            row_dict = dict(zip(col_names, row))
+            row_dict = dict(zip(col_names, row, strict=False))
             strategy_id = row_dict["strategy_id"]
 
             status, notes, _ = validate_strategy(

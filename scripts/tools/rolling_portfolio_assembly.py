@@ -25,8 +25,8 @@ import time
 from datetime import date
 from pathlib import Path
 
-import pandas as pd
 import duckdb
+import pandas as pd
 from dateutil.relativedelta import relativedelta
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -113,7 +113,7 @@ def load_slot_data(db_path, instrument):
             "trade_tier",
             "member_count",
         ]
-        slots = [dict(zip(slot_cols, r)) for r in slot_rows]
+        slots = [dict(zip(slot_cols, r, strict=False)) for r in slot_rows]
 
         if not slots:
             return [], {}

@@ -6,7 +6,6 @@ Uses rolling 6/12/18 month training windows, tests on the NEXT month.
 Zero lookahead. Honest regime-aware analysis.
 """
 
-import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -14,6 +13,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 import duckdb
 import numpy as np
 import pandas as pd
+
 from pipeline.paths import GOLD_DB_PATH
 
 
@@ -108,7 +108,7 @@ def main():
 
     # Show eligible days per month for last 24 months
     recent = [m for m in months if m >= pd.Period("2024-01")]
-    print(f"  Month      G4days  G5days  G6days  TotalTrades(G4+)")
+    print("  Month      G4days  G5days  G6days  TotalTrades(G4+)")
     for m in recent:
         m_data = df[df["ym"] == m]
         # Unique trading days with each filter
@@ -210,7 +210,7 @@ def main():
                 print(f"  Profitable months: {months_profitable}/{months_with_trades}")
                 print(f"  Distinct strategies selected: {len(combos_used)} -> {combos_used}")
             else:
-                print(f"\n  NO OOS trades generated (filter too strict for this window)")
+                print("\n  NO OOS trades generated (filter too strict for this window)")
 
             print()
 

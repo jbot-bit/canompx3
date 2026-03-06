@@ -22,37 +22,36 @@ Usage:
     python pipeline/ingest_dbn_daily.py --dry-run
 """
 
-import sys
-import re
-import json
 import argparse
+import json
+import re
+import sys
+from datetime import date, datetime
 from pathlib import Path
-from datetime import datetime, date
 from zoneinfo import ZoneInfo
 
 # Force unbuffered stdout so progress prints appear immediately
 sys.stdout.reconfigure(line_buffering=True)
 
-import pandas as pd
-import duckdb
 import databento as db
+import duckdb
+import pandas as pd
 
-# Add project root to path
-
-from pipeline.paths import GOLD_DB_PATH
 from pipeline.asset_configs import get_asset_config
 from pipeline.ingest_dbn_mgc import (
-    validate_chunk,
-    validate_timestamp_utc,
+    CheckpointManager,
+    check_merge_integrity,
+    check_pk_safety,
     choose_front_contract,
     compute_trading_days,
-    check_pk_safety,
-    check_merge_integrity,
     run_final_gates,
-    CheckpointManager,
+    validate_chunk,
+    validate_timestamp_utc,
 )
-
 from pipeline.log import get_logger
+
+# Add project root to path
+from pipeline.paths import GOLD_DB_PATH
 
 logger = get_logger(__name__)
 

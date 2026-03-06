@@ -11,14 +11,14 @@ from __future__ import annotations
 
 import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 import pandas as pd
 
-from pipeline.dst import SESSION_CATALOG
 from pipeline.build_daily_features import compute_trading_day
+from pipeline.dst import SESSION_CATALOG
 
 BRISBANE = ZoneInfo("Australia/Brisbane")
 
@@ -183,10 +183,10 @@ def build_session_briefings() -> list[SessionBriefing]:
     Groups all strategies by (session, instrument) and merges their filter
     conditions into a single human-readable instruction card.
     """
-    from trading_app.live_config import build_live_portfolio
-    from pipeline.asset_configs import get_active_instruments
-
     from datetime import date as date_type
+
+    from pipeline.asset_configs import get_active_instruments
+    from trading_app.live_config import build_live_portfolio
 
     today = date_type.today()
 

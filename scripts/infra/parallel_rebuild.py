@@ -472,7 +472,7 @@ Examples:
     # -- Validate master DB --
     if not args.master.exists():
         print(f"FATAL: Master DB not found: {args.master}")
-        print(f"  Copy from project first:")
+        print("  Copy from project first:")
         print(f'  cp "C:\\Users\\joshd\\canompx3\\gold.db" "{args.master}"')
         sys.exit(1)
 
@@ -586,7 +586,7 @@ Examples:
 
     # -- PHASE 4: Cleanup --
     if not args.keep_copies:
-        print(f"\nCleaning up temp copies...")
+        print("\nCleaning up temp copies...")
         for inst in instruments:
             p = db_paths.get(inst)
             if p and p.exists():
@@ -616,7 +616,7 @@ Examples:
 
     if merged:
         print(f"\nMaster DB updated: {args.master}")
-        print(f"Remember to copy back to project:")
+        print("Remember to copy back to project:")
         print(f'  cp "{args.master}" "C:\\Users\\joshd\\canompx3\\gold.db"')
 
 

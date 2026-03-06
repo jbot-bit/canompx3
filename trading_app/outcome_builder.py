@@ -12,8 +12,8 @@ Usage:
 
 import sys
 import time
-from pathlib import Path
 from datetime import date, datetime, timedelta
+from pathlib import Path
 
 from pipeline.log import get_logger
 
@@ -28,14 +28,14 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-from pipeline.paths import GOLD_DB_PATH
-from pipeline.cost_model import get_cost_spec, pnl_points_to_r, to_r_multiple, risk_in_dollars
-from pipeline.init_db import ORB_LABELS
 from pipeline.asset_configs import get_enabled_sessions
 from pipeline.build_daily_features import compute_trading_day_utc_range
-from trading_app.entry_rules import detect_entry_with_confirm_bars, detect_break_touch, _resolve_e2
-from trading_app.config import ENTRY_MODELS, EARLY_EXIT_MINUTES, E2_SLIPPAGE_TICKS
+from pipeline.cost_model import get_cost_spec, pnl_points_to_r, risk_in_dollars, to_r_multiple
+from pipeline.init_db import ORB_LABELS
+from pipeline.paths import GOLD_DB_PATH
+from trading_app.config import E2_SLIPPAGE_TICKS, EARLY_EXIT_MINUTES, ENTRY_MODELS
 from trading_app.db_manager import init_trading_app_schema
+from trading_app.entry_rules import _resolve_e2, detect_break_touch, detect_entry_with_confirm_bars
 
 # Grid parameters — see trading_app/config.py for full documentation
 #
@@ -288,7 +288,7 @@ def _compute_outcomes_all_rr(
             pe_adverse = pe_highs - entry_price
 
     results = []
-    for rr, target_price in zip(rr_targets, target_prices):
+    for rr, target_price in zip(rr_targets, target_prices, strict=False):
         result = {
             "entry_ts": entry_ts,
             "entry_price": entry_price,
@@ -700,8 +700,8 @@ def build_outcomes(
         # Pre-compute trading day boundaries for first and last day
         if total_days == 0:
             return 0
-        first_day = dict(zip(col_names, rows[0]))["trading_day"]
-        last_day = dict(zip(col_names, rows[-1]))["trading_day"]
+        first_day = dict(zip(col_names, rows[0], strict=False))["trading_day"]
+        last_day = dict(zip(col_names, rows[-1], strict=False))["trading_day"]
         global_start, _ = compute_trading_day_utc_range(first_day)
         _, global_end = compute_trading_day_utc_range(last_day)
 
@@ -736,7 +736,7 @@ def build_outcomes(
                 logger.info(f"  Checkpoint: {len(computed_days)} days already computed, will skip")
 
         for day_idx, row in enumerate(rows):
-            row_dict = dict(zip(col_names, row))
+            row_dict = dict(zip(col_names, row, strict=False))
             trading_day = row_dict["trading_day"]
             symbol = row_dict["symbol"]
 
@@ -795,7 +795,7 @@ def build_outcomes(
                             orb_label=orb_label,
                             break_ts=break_ts,
                         )
-                        for rr_target, outcome in zip(RR_TARGETS, outcomes):
+                        for rr_target, outcome in zip(RR_TARGETS, outcomes, strict=False):
                             day_batch.append(
                                 [
                                     trading_day,
@@ -855,7 +855,7 @@ def build_outcomes(
                             break_ts=break_ts,
                         )
 
-                        for rr_target, outcome in zip(RR_TARGETS, outcomes):
+                        for rr_target, outcome in zip(RR_TARGETS, outcomes, strict=False):
                             day_batch.append(
                                 [
                                     trading_day,

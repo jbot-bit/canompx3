@@ -16,11 +16,11 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import roc_auc_score
 
-from pipeline.paths import GOLD_DB_PATH
 from pipeline.db_config import configure_connection
+from pipeline.paths import GOLD_DB_PATH
+from trading_app.config import ALL_FILTERS
 from trading_app.ml.config import RF_PARAMS
 from trading_app.ml.features import transform_to_features
-from trading_app.config import ALL_FILTERS
 
 # Session chronological order (Brisbane time)
 SESSION_ORDER = [
@@ -218,7 +218,7 @@ def run_experiment(instrument="MNQ"):
         importances = rf.feature_importances_
         names = list(X_exp.columns)
         idx_sorted = np.argsort(importances)[::-1]
-        print(f"\nTop 15 features:")
+        print("\nTop 15 features:")
         for i in idx_sorted[:15]:
             marker = " <-- CROSS" if names[i].startswith("prior_") else ""
             print(f"  {names[i]:<35} {importances[i]:6.2%}{marker}")
@@ -228,7 +228,7 @@ def run_experiment(instrument="MNQ"):
         meta_test["y_prob"] = y_prob
         meta_test["pnl_r_val"] = pnl_test
 
-        print(f"\nPer-session breakdown at t=0.50:")
+        print("\nPer-session breakdown at t=0.50:")
         for session in sorted(meta_test["orb_label"].unique()):
             smask = meta_test["orb_label"] == session
             if smask.sum() < 30:

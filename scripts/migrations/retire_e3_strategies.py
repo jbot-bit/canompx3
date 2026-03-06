@@ -14,13 +14,14 @@ Usage:
 """
 
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
+
 from pipeline.paths import GOLD_DB_PATH
 
 
@@ -56,7 +57,7 @@ def retire_e3(
             return 0
 
         # Retire
-        now_utc = datetime.now(timezone.utc)
+        now_utc = datetime.now(UTC)
         con.execute(
             "UPDATE validated_setups "
             "SET status = 'RETIRED', "

@@ -16,7 +16,6 @@ Usage:
 """
 
 import argparse
-import os
 import sys
 import webbrowser
 from datetime import date, datetime
@@ -32,12 +31,11 @@ from pipeline.cost_model import get_cost_spec
 from pipeline.dst import SESSION_CATALOG
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.live_config import (
-    LIVE_PORTFOLIO,
-    LIVE_MIN_EXPECTANCY_R,
     LIVE_MIN_EXPECTANCY_DOLLARS_MULT,
+    LIVE_MIN_EXPECTANCY_R,
+    LIVE_PORTFOLIO,
 )
 from trading_app.strategy_fitness import compute_fitness
-
 
 # ── Filter → plain English ────────────────────────────────────────────
 
@@ -233,7 +231,7 @@ def _load_best_by_expr(
             return None
 
         cols = [desc[0] for desc in con.description]
-        return dict(zip(cols, rows[0]))
+        return dict(zip(cols, rows[0], strict=False))
     finally:
         con.close()
 
@@ -663,7 +661,7 @@ def main():
     trading_day = date.fromisoformat(args.date) if args.date else date.today()
     output_path = Path(args.output) if args.output else PROJECT_ROOT / "trade_sheet.html"
 
-    print(f"Trade Sheet Generator")
+    print("Trade Sheet Generator")
     print(f"  Date:   {trading_day}")
     print(f"  DB:     {db_path}")
     print(f"  Output: {output_path}")

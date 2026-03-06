@@ -16,8 +16,8 @@ Usage:
     python trading_app/analysis/asia_session_analyzer.py --year 2025
 """
 
-import sys
 import statistics
+import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -27,8 +27,8 @@ sys.stdout.reconfigure(line_buffering=True)
 
 import duckdb
 
-from pipeline.paths import GOLD_DB_PATH
 from pipeline.cost_model import get_cost_spec
+from pipeline.paths import GOLD_DB_PATH
 
 # ---------------------------------------------------------------------------
 # Config

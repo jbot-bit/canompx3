@@ -10,10 +10,10 @@ Usage:
     python scripts/find_pf_strategy.py --min-pf 1.3 --max-pf 2.5
 """
 
-import sys
 import math
-from pathlib import Path
+import sys
 from datetime import date
+from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -24,12 +24,12 @@ import duckdb
 
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import ALL_FILTERS, ENTRY_MODELS
-from trading_app.outcome_builder import RR_TARGETS, CONFIRM_BARS_OPTIONS
+from trading_app.outcome_builder import CONFIRM_BARS_OPTIONS, RR_TARGETS
 from trading_app.strategy_discovery import (
+    _build_filter_day_sets,
+    _load_daily_features,
     compute_metrics,
     make_strategy_id,
-    _load_daily_features,
-    _build_filter_day_sets,
 )
 
 # --- Configuration ---
@@ -235,7 +235,7 @@ def main():
             )
 
         # Summary stats
-        print(f"\n--- Summary ---")
+        print("\n--- Summary ---")
         print(f"Total matches: {len(candidates)}")
         sessions = set(c["session"] for c in candidates)
         for s in sorted(sessions):

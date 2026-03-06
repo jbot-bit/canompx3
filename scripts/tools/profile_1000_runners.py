@@ -20,16 +20,15 @@ Usage:
 
 import argparse
 import sys
-from pathlib import Path
 from datetime import date, timedelta
-from collections import defaultdict
+from pathlib import Path
 
 import duckdb
 import numpy as np
 import pandas as pd
 
-from pipeline.cost_model import get_cost_spec, to_r_multiple
 from pipeline.build_daily_features import compute_trading_day_utc_range
+from pipeline.cost_model import get_cost_spec, to_r_multiple
 from pipeline.paths import GOLD_DB_PATH
 from research._alt_strategy_utils import compute_strategy_metrics
 

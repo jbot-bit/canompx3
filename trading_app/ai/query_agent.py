@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
-from trading_app.ai.corpus import load_corpus, get_schema_definitions, get_db_stats
+from trading_app.ai.corpus import get_db_stats, get_schema_definitions, load_corpus
 from trading_app.ai.grounding import build_grounding_prompt, build_interpretation_prompt
 from trading_app.ai.sql_adapter import (
     QueryIntent,

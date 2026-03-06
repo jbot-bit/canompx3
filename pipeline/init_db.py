@@ -19,10 +19,10 @@ from pathlib import Path
 
 import duckdb
 
+from pipeline.log import get_logger
+
 # Add project root to path
 from pipeline.paths import GOLD_DB_PATH
-
-from pipeline.log import get_logger
 
 logger = get_logger(__name__)
 

@@ -16,7 +16,7 @@ Design principles (per de Prado AIFML, per ML_LIVE_INTEGRATION.md):
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from typing import NamedTuple
 
 import duckdb
@@ -166,7 +166,7 @@ class LiveMLPredictor:
                 if trained_at_str:
                     try:
                         trained_at = datetime.fromisoformat(trained_at_str)
-                        age_days = (datetime.now(timezone.utc) - trained_at).days
+                        age_days = (datetime.now(UTC) - trained_at).days
                         if age_days > 60:
                             logger.warning(
                                 "ML model for %s is %d days old (>60 day threshold)",
@@ -415,7 +415,7 @@ class LiveMLPredictor:
             if row is None:
                 return None
             columns = [desc[0] for desc in result.description]
-            row_dict = dict(zip(columns, row))
+            row_dict = dict(zip(columns, row, strict=False))
 
             # Backfill global features from orb_minutes=5 if needed.
             # Check multiple features — atr_20 may exist at O15 while
@@ -432,7 +432,7 @@ class LiveMLPredictor:
                 g5_row = g5_result.fetchone()
                 if g5_row is not None:
                     g5_cols = [desc[0] for desc in g5_result.description]
-                    g5_dict = dict(zip(g5_cols, g5_row))
+                    g5_dict = dict(zip(g5_cols, g5_row, strict=False))
                     from trading_app.ml.config import GLOBAL_FEATURES
 
                     for col in GLOBAL_FEATURES:

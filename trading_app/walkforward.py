@@ -6,16 +6,16 @@ Runs between Phase 4 (stress test) and promotion to validated_setups.
 No new DB tables. Results written to JSONL file (append-only).
 """
 
+import calendar
 import json
 import logging
-import calendar
-from dataclasses import dataclass, asdict
-from datetime import date, datetime, timezone
+from dataclasses import asdict, dataclass
+from datetime import UTC, date, datetime
 from pathlib import Path
 
-from trading_app.strategy_fitness import _load_strategy_outcomes
-from trading_app.strategy_discovery import compute_metrics
 from trading_app.config import apply_tight_stop
+from trading_app.strategy_discovery import compute_metrics
+from trading_app.strategy_fitness import _load_strategy_outcomes
 
 logger = logging.getLogger(__name__)
 
@@ -266,7 +266,7 @@ def append_walkforward_result(result: WalkForwardResult, output_path: str | Path
     path.parent.mkdir(parents=True, exist_ok=True)
 
     record = asdict(result)
-    record["timestamp"] = datetime.now(timezone.utc).isoformat()
+    record["timestamp"] = datetime.now(UTC).isoformat()
 
     with open(path, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, default=str) + "\n")

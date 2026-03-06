@@ -5,8 +5,8 @@ Encapsulates entry rules and order parameters for a trading strategy.
 Future extension point for TCA (slippage benchmarking, limit orders).
 """
 
-from dataclasses import dataclass, asdict
 import json
+from dataclasses import asdict, dataclass
 
 
 @dataclass(frozen=True)

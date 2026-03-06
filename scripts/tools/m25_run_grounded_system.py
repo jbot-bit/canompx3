@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -13,7 +12,7 @@ import fitz  # PyMuPDF
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.tools.m25_audit import load_api_key, audit, ARCHITECTURE_CONTEXT
+from scripts.tools.m25_audit import ARCHITECTURE_CONTEXT, audit, load_api_key
 
 api_key = load_api_key()
 

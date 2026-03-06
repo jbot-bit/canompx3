@@ -42,12 +42,12 @@ def audit_instrument(instrument: str, db_path: str) -> dict:
     rr_idx = feature_names.index("rr_target") if "rr_target" in feature_names else -1
     rr_imp = importances[rr_idx] if rr_idx >= 0 else 0
 
-    print(f"\n--- FEATURE IMPORTANCE ---")
+    print("\n--- FEATURE IMPORTANCE ---")
     print(f"rr_target dominance: {rr_imp:.1%} of total importance")
     sp = ["rr_target", "confirm_bars", "orb_minutes"]
     sp_imp = sum(importances[feature_names.index(f)] for f in sp if f in feature_names)
     print(f"Strategy params total: {sp_imp:.1%} | Market features: {1 - sp_imp:.1%}")
-    print(f"\nTop 10 features:")
+    print("\nTop 10 features:")
     for rank, i in enumerate(idx[:10], 1):
         print(f"  {rank:>2}. {feature_names[i]:<35} {importances[i]:.4f}")
 
@@ -96,7 +96,7 @@ def audit_instrument(instrument: str, db_path: str) -> dict:
     print(f"{'Sharpe':<25} {sh_all:>12.3f} {sh_take:>12.3f} {sh_skip:>12.3f}")
 
     # Skip quality
-    print(f"\n--- SKIP QUALITY ---")
+    print("\n--- SKIP QUALITY ---")
     sw = (skipped_pnl > 0).sum()
     sl = (skipped_pnl <= 0).sum()
     print(f"Skipped winners: {sw} ({sw / len(skipped_pnl) * 100:.1f}%)")
@@ -108,7 +108,7 @@ def audit_instrument(instrument: str, db_path: str) -> dict:
         print("** WARNING: Model is skipping net-WINNING trades! **")
 
     # === RR TARGET TAUTOLOGY CHECK ===
-    print(f"\n--- RR TARGET TAUTOLOGY CHECK ---")
+    print("\n--- RR TARGET TAUTOLOGY CHECK ---")
     print("rr_target is the dominant feature. Is the model just learning")
     print("'low RR = higher win rate' (which is tautological)?")
     rrs = sorted(meta_oos["rr_target"].unique())
@@ -127,7 +127,7 @@ def audit_instrument(instrument: str, db_path: str) -> dict:
         print(f"{rr:>5.1f} {n:>7} {pw:>8.3f} {wr:>6.1%} {avg_r:>+8.4f} {tot_r:>+9.2f} {t_n:>7} {s_n:>7}")
 
     # === PER-SESSION ANALYSIS ===
-    print(f"\n--- PER-SESSION SKIP ANALYSIS ---")
+    print("\n--- PER-SESSION SKIP ANALYSIS ---")
     sessions = sorted(meta_oos["orb_label"].unique())
     print(f"{'Session':<20} {'TakeN':>6} {'TakeAvgR':>9} {'SkipN':>6} {'SkipAvgR':>9} {'SkipNet':>9} {'Verdict':>8}")
     print(f"{'-' * 20} {'-' * 6} {'-' * 9} {'-' * 6} {'-' * 9} {'-' * 9} {'-' * 8}")
@@ -146,7 +146,7 @@ def audit_instrument(instrument: str, db_path: str) -> dict:
         print(f"{s:<20} {t_n:>6} {t_avg:>+9.4f} {sk_n:>6} {sk_avg:>+9.4f} {sk_net:>+9.2f} {verdict:>8}")
 
     # === P(win) CALIBRATION ===
-    print(f"\n--- P(win) CALIBRATION ---")
+    print("\n--- P(win) CALIBRATION ---")
     print("Does P(win) = 0.60 actually mean 60% win rate?")
     bins = np.arange(0.30, 0.70, 0.05)
     print(f"{'P(win) bin':<12} {'N':>6} {'ActualWR':>9} {'AvgR':>9} {'TotalR':>9}")
@@ -161,7 +161,7 @@ def audit_instrument(instrument: str, db_path: str) -> dict:
         print(f"[{bins[i]:.2f}-{bins[i + 1]:.2f}) {n:>6} {wr:>8.1%} {avg_r:>+9.4f} {total_r:>+9.2f}")
 
     # === P(win) DISTRIBUTION ===
-    print(f"\n--- P(win) DISTRIBUTION ---")
+    print("\n--- P(win) DISTRIBUTION ---")
     print(f"Mean={y_prob.mean():.3f}  Std={y_prob.std():.3f}  Min={y_prob.min():.3f}  Max={y_prob.max():.3f}")
     hist_bins = np.arange(0.30, 0.70, 0.05)
     for i in range(len(hist_bins) - 1):
@@ -172,7 +172,7 @@ def audit_instrument(instrument: str, db_path: str) -> dict:
         print(f"  [{hist_bins[i]:.2f}-{hist_bins[i + 1]:.2f}) {n:>6} {bar}{marker}")
 
     # === THRESHOLD SWEEP ===
-    print(f"\n--- THRESHOLD SWEEP ---")
+    print("\n--- THRESHOLD SWEEP ---")
     print(
         f"{'Thresh':>7} {'TakeN':>7} {'SkipN':>7} {'TakeAvgR':>9} "
         f"{'TakeTotR':>9} {'TakeWR':>7} {'SkipAvgR':>9} {'SkipTotR':>9}"
@@ -206,7 +206,7 @@ def audit_instrument(instrument: str, db_path: str) -> dict:
 
     # === CONDITIONAL RR ANALYSIS ===
     # The real question: within each RR level, does the model discriminate?
-    print(f"\n--- WITHIN-RR DISCRIMINATION ---")
+    print("\n--- WITHIN-RR DISCRIMINATION ---")
     print("Within each RR level, does P(win) predict outcomes?")
     print(
         f"{'RR':>5} {'TopQ_N':>7} {'TopQ_WR':>8} {'TopQ_AvgR':>10} "
@@ -234,7 +234,7 @@ def audit_instrument(instrument: str, db_path: str) -> dict:
         )
 
     # === WITHOUT RR: does market-only signal work? ===
-    print(f"\n--- MARKET-ONLY SIGNAL (RR=1.5 subset) ---")
+    print("\n--- MARKET-ONLY SIGNAL (RR=1.5 subset) ---")
     print("Controlling for RR=1.5 (most common), does P(win) variation predict?")
     rr15_mask = meta_oos["rr_target"].values == 1.5
     if rr15_mask.sum() > 100:

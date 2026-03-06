@@ -15,12 +15,13 @@ The script is idempotent: running twice is safe (second run finds 0 rows).
 """
 
 import argparse
-import duckdb
 import logging
 import os
 import shutil
 import sys
 from pathlib import Path
+
+import duckdb
 
 logger = logging.getLogger(__name__)
 

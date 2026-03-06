@@ -27,8 +27,8 @@ from trading_app.ai.sql_adapter import (
     QueryTemplate,
     SQLAdapter,
 )
-from trading_app.strategy_fitness import compute_fitness, compute_portfolio_fitness
 from trading_app.config import CORE_MIN_SAMPLES, REGIME_MIN_SAMPLES, generate_strategy_warnings
+from trading_app.strategy_fitness import compute_fitness, compute_portfolio_fitness
 
 DB_PATH = str(GOLD_DB_PATH)
 

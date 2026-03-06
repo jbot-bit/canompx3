@@ -23,9 +23,10 @@ import os
 import subprocess
 import sys
 import time
-import duckdb
-from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from pathlib import Path
+
+import duckdb
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -262,7 +263,7 @@ def main():
     print(f"  DB path:     {db_path}")
     print(f"  Temp dir:    {TEMP_DIR}")
     print(f"  {len(YEAR_RANGES)} parallel workers (overlapping boundaries)")
-    print(f"  INSERT OR REPLACE deduplicates overlap\n")
+    print("  INSERT OR REPLACE deduplicates overlap\n")
 
     # Parallel ingest
     failures = []

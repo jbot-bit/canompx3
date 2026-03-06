@@ -341,7 +341,7 @@ def print_profile(instrument, result, reference_result=None, ref_instrument=None
     # Thresholds legend
     print(f"  Thresholds: VIABLE = barCov>{VIABLE_BAR_COV}% + avgVol>{VIABLE_AVG_VOL} + ORB5>{VIABLE_ORB_OK}%")
     print(f"              MARGINAL = barCov>{MARGINAL_BAR_COV}% + avgVol>{MARGINAL_AVG_VOL}")
-    print(f"              DEAD = below marginal")
+    print("              DEAD = below marginal")
     print()
 
     # Header

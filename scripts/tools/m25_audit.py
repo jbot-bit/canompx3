@@ -68,8 +68,8 @@ API_TIMEOUT_FAST = 120.0  # seconds — Lightning is much quicker
 # Tracks daily API calls in ~/.m25_budget.json so you know where you stand.
 # 100 calls per 5-hour window is the Claude Code integration limit.
 import json as _json
-from pathlib import Path as _Path
 from datetime import date as _date
+from pathlib import Path as _Path
 
 _BUDGET_FILE = _Path.home() / ".m25_budget.json"
 _BUDGET_WINDOW = 100  # calls per window
@@ -689,9 +689,6 @@ def triage_output(raw_output: str) -> str:
     lines = raw_output.splitlines()
     result_lines: list[str] = []
     skip_section = False
-    in_finding = False
-    finding_lines: list[str] = []
-    finding_verdict = ""
 
     for line in lines:
         upper = line.upper().strip()
@@ -699,14 +696,12 @@ def triage_output(raw_output: str) -> str:
         # Detect verdict markers
         if "**FALSE POSITIVE**" in upper or "FALSE POSITIVE" in upper:
             skip_section = True
-            finding_verdict = "FP"
             continue
         if "**TRUE**" in upper or "**TRUE BUG**" in upper:
             skip_section = False
-            finding_verdict = "TRUE"
         if "**WORTH EXPLORING**" in upper:
             skip_section = False
-            finding_verdict = "EXPLORE"
+            pass
 
         # Keep section headers and non-finding content
         if line.startswith("## ") or line.startswith("# "):

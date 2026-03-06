@@ -26,7 +26,7 @@ from pathlib import Path
 import duckdb
 
 # Add project root to path
-from pipeline.paths import GOLD_DB_PATH, DAILY_DBN_DIR
+from pipeline.paths import DAILY_DBN_DIR, GOLD_DB_PATH
 
 PROJECT_ROOT = Path(__file__).parent.parent
 CHECKPOINT_DIR = Path(__file__).parent / "checkpoints"
@@ -120,7 +120,7 @@ def collect_checkpoint_progress(cp_dir: Path) -> dict:
                 if key not in seen or record["attempt_id"] >= seen[key]["attempt_id"]:
                     seen[key] = record
 
-        for key, rec in seen.items():
+        for _key, rec in seen.items():
             if rec["status"] == "done":
                 result["chunks_done"] += 1
                 result["total_rows_written"] += rec.get("rows_written", 0)

@@ -20,6 +20,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
+
 from pipeline.paths import GOLD_DB_PATH
 
 DEFAULT_JSONL = PROJECT_ROOT / "data" / "walkforward_results.jsonl"

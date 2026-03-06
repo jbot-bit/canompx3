@@ -22,11 +22,9 @@ Usage:
     python scripts/backtest_atr_regime.py --db C:/db/gold.db
 """
 
-import sys
 import math
+import sys
 from pathlib import Path
-from datetime import date
-from collections import defaultdict
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -36,11 +34,11 @@ import duckdb
 
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import ALL_FILTERS, ENTRY_MODELS
-from trading_app.outcome_builder import RR_TARGETS, CONFIRM_BARS_OPTIONS
+from trading_app.outcome_builder import CONFIRM_BARS_OPTIONS, RR_TARGETS
 from trading_app.strategy_discovery import (
-    compute_metrics,
-    _load_daily_features,
     _build_filter_day_sets,
+    _load_daily_features,
+    compute_metrics,
 )
 
 # Families to test: the live/validated ones

@@ -12,7 +12,6 @@ from pathlib import Path
 import duckdb
 import pandas as pd
 
-
 from pipeline.paths import GOLD_DB_PATH
 
 _DB_CONNECTIONS: dict[str, duckdb.DuckDBPyConnection] = {}

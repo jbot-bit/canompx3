@@ -11,7 +11,6 @@ import argparse
 import io
 import os
 import sys
-
 from pathlib import Path
 
 # Fix Windows cp1252 console encoding -- replace unencodable chars

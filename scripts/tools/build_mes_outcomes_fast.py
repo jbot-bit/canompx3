@@ -15,21 +15,20 @@ Usage:
 
 import sys
 import time
-from pathlib import Path
 from datetime import date
 from multiprocessing import Pool, cpu_count
+from pathlib import Path
 
-import numpy as np
-import pandas as pd
 import duckdb
+import pandas as pd
 
 sys.stdout.reconfigure(line_buffering=True)
 
+from pipeline.build_daily_features import compute_trading_day_utc_range
 from pipeline.cost_model import get_cost_spec
 from pipeline.init_db import ORB_LABELS
-from pipeline.build_daily_features import compute_trading_day_utc_range
-from trading_app.outcome_builder import compute_single_outcome
 from trading_app.config import ENTRY_MODELS
+from trading_app.outcome_builder import compute_single_outcome
 
 # =========================================================================
 # CONFIG
@@ -122,7 +121,7 @@ def main():
     cost_spec = get_cost_spec(INSTRUMENT)
 
     log("=" * 60)
-    log(f"FAST MES OUTCOME BUILDER (PARALLEL)")
+    log("FAST MES OUTCOME BUILDER (PARALLEL)")
     log(f"  DB:          {DB_PATH}")
     log(f"  ORB minutes: {orb_minutes}")
     log(f"  Workers:     {args.workers}")
@@ -175,7 +174,7 @@ def main():
     from pipeline.build_daily_features import compute_trading_day_utc_range
 
     # Build (td_start, td_end) for each trading day
-    trading_days = [dict(zip(col_names, row))["trading_day"] for row in features]
+    trading_days = [dict(zip(col_names, row, strict=False))["trading_day"] for row in features]
     day_ranges = {td: compute_trading_day_utc_range(td) for td in trading_days}
 
     # Partition bars
@@ -193,7 +192,7 @@ def main():
     # =====================================================================
     tasks = []
     for row in features:
-        day_features = dict(zip(col_names, row))
+        day_features = dict(zip(col_names, row, strict=False))
         td = day_features["trading_day"]
         if td not in bars_by_day:
             continue

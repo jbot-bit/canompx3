@@ -18,8 +18,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 import duckdb
 
-from pipeline.paths import GOLD_DB_PATH
 from pipeline.init_db import ORB_LABELS
+from pipeline.paths import GOLD_DB_PATH
 
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)
@@ -38,7 +38,7 @@ def _load_strategies(con, table_name, instrument, min_sample=0):
         [instrument, min_sample],
     ).fetchall()
     cols = [desc[0] for desc in con.description]
-    return [dict(zip(cols, r)) for r in rows]
+    return [dict(zip(cols, r, strict=False)) for r in rows]
 
 
 def _make_comparison_key(row):

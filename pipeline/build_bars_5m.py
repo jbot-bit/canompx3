@@ -24,18 +24,17 @@ Usage:
     python pipeline/build_bars_5m.py --instrument MGC --start 2024-01-01 --end 2024-01-31 --dry-run
 """
 
-import sys
 import argparse
-from datetime import datetime, date, timedelta
+import sys
+from datetime import date, datetime, timedelta
 
 import duckdb
 
-# Add project root to path
-
-from pipeline.paths import GOLD_DB_PATH
 from pipeline.asset_configs import get_asset_config, list_instruments
-
 from pipeline.log import get_logger
+
+# Add project root to path
+from pipeline.paths import GOLD_DB_PATH
 
 logger = get_logger(__name__)
 

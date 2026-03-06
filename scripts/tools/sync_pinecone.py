@@ -11,13 +11,12 @@ Usage:
     python scripts/tools/sync_pinecone.py --force      # upload everything
 """
 
-import json
 import hashlib
-import sys
+import json
 import os
-import glob as glob_mod
+import sys
+from datetime import UTC, datetime
 from pathlib import Path
-from datetime import datetime, timezone
 
 # ---------------------------------------------------------------------------
 # Project root + imports
@@ -28,9 +27,9 @@ sys.path.insert(0, str(PROJECT_ROOT))
 os.chdir(PROJECT_ROOT)
 
 from scripts.tools.pinecone_snapshots import (
-    generate_portfolio_state_snapshot,
     generate_fitness_report_snapshot,
     generate_live_config_snapshot,
+    generate_portfolio_state_snapshot,
     generate_research_index_snapshot,
     save_snapshot,
 )
@@ -134,7 +133,7 @@ def bundle_research_output(
         topic = _classify_research_file(abs_path.name)
         groups[topic].append((abs_path, rel_key))
 
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     bundled: list[tuple[Path, str]] = []
 
     for topic in sorted(groups.keys()):
@@ -151,7 +150,7 @@ def bundle_research_output(
             "",
         ]
 
-        for abs_path, original_key in sorted(files_in_group, key=lambda x: x[1]):
+        for abs_path, _original_key in sorted(files_in_group, key=lambda x: x[1]):
             lines.append("---")
             lines.append("")
             lines.append(f"## {abs_path.name}")
@@ -408,7 +407,7 @@ def check_basename_conflicts(
 ) -> list[str]:
     """Check for files with the same basename across tiers."""
     seen: dict[str, list[str]] = {}
-    for tier, files in collected.items():
+    for _tier, files in collected.items():
         for abs_path, rel_key in files:
             basename = abs_path.name
             seen.setdefault(basename, []).append(rel_key)
@@ -529,7 +528,7 @@ def main():
 
         # Save state only on full success
         state = {
-            "last_sync": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "last_sync": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "assistant_name": assistant_name,
             "hashes": current_hashes,
             "file_count": total_files,

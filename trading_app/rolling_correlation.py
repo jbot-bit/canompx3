@@ -23,7 +23,6 @@ from pathlib import Path
 import duckdb
 import numpy as np
 
-
 # =========================================================================
 # PnL loading (from strategy_trade_days + orb_outcomes)
 # =========================================================================

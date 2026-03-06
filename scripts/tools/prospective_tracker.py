@@ -254,8 +254,8 @@ def print_report(con, signal_id: str, sig: dict, freeze_date: datetime.date):
     bar = "=" * filled + "." * (bar_len - filled)
     print("--- PROGRESS ---")
     print(f"  Prospective N: {prosp_n:3d} / {target}  [{bar}] {pct:.0f}%")
-    print(f"  Next milestone:  N=100 -> formal re-evaluation")
-    print(f"  Final milestone: N=150 -> full validation pipeline")
+    print("  Next milestone:  N=100 -> formal re-evaluation")
+    print("  Final milestone: N=150 -> full validation pipeline")
 
     if prosp_n >= 150:
         print()

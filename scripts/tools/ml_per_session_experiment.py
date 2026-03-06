@@ -19,10 +19,10 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import roc_auc_score
 
-from pipeline.paths import GOLD_DB_PATH
 from pipeline.db_config import configure_connection
-from trading_app.ml.features import transform_to_features
+from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import ALL_FILTERS
+from trading_app.ml.features import transform_to_features
 
 SESSION_ORDER = [
     "CME_REOPEN",
@@ -315,7 +315,7 @@ def run_per_session(instrument="MES", min_session_samples=500):
         skip = 1 - n_kept / valid.sum()
         print(f"  t={t:.2f}: Kept={n_kept:>5} Skip={skip:>5.1%} TotalR={total_r:>+8.2f} Delta={delta:>+8.2f}")
 
-    print(f"\n--- Per-session models ---")
+    print("\n--- Per-session models ---")
     for session, info in sorted(session_results.items()):
         auc_str = f"{info['auc']:.4f}" if info["auc"] is not None else "N/A"
         print(f"  {session:<20} N={info['n_total']:>6} test={info['n_test']:>4} AUC={auc_str:>6} model={info['model']}")
@@ -334,8 +334,7 @@ def run_per_session(instrument="MES", min_session_samples=500):
         for t in [0.38, 0.40, 0.42, 0.44, 0.46, 0.48, 0.50]:
             mask = has_pred & (y_prob_session >= t)
             # For trades without predictions, include them (no-model = take all)
-            no_pred = ~np.isnan(y_prob_session) == False
-            total_mask = mask | (no_pred & valid)
+            no_pred = np.isnan(y_prob_session)
 
             n_kept = mask.sum()
             if n_kept < 50:
@@ -353,7 +352,7 @@ def run_per_session(instrument="MES", min_session_samples=500):
             )
 
     # Per-session delta comparison
-    print(f"\n--- Per-session delta comparison (best threshold per model) ---")
+    print("\n--- Per-session delta comparison (best threshold per model) ---")
     meta_test_copy = meta_test.copy()
     meta_test_copy["prob_inst"] = y_prob_inst
     meta_test_copy["prob_session"] = y_prob_session

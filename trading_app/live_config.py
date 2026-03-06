@@ -11,8 +11,8 @@ Usage:
 """
 
 import sys
-from pathlib import Path
 from dataclasses import dataclass
+from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -24,9 +24,9 @@ from pipeline.asset_configs import get_active_instruments
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.portfolio import Portfolio, PortfolioStrategy
 from trading_app.rolling_portfolio import (
-    load_rolling_validated_strategies,
-    STABLE_THRESHOLD,
     DEFAULT_LOOKBACK_WINDOWS,
+    STABLE_THRESHOLD,
+    load_rolling_validated_strategies,
 )
 from trading_app.strategy_fitness import compute_fitness
 
@@ -220,7 +220,7 @@ def _load_best_regime_variant(
             return None
 
         cols = [desc[0] for desc in con.description]
-        return dict(zip(cols, rows[0]))
+        return dict(zip(cols, rows[0], strict=False))
     finally:
         con.close()
 
@@ -268,7 +268,7 @@ def _load_best_experimental_variant(
             return None
 
         cols = [desc[0] for desc in con.description]
-        return dict(zip(cols, rows[0]))
+        return dict(zip(cols, rows[0], strict=False))
     finally:
         con.close()
 
@@ -288,10 +288,10 @@ def _check_rolling_stability(
     Returns (stability_score, note_string).
     """
     from trading_app.rolling_portfolio import (
-        load_all_rolling_run_labels,
-        load_rolling_results,
-        load_rolling_degraded_counts,
         aggregate_rolling_performance,
+        load_all_rolling_run_labels,
+        load_rolling_degraded_counts,
+        load_rolling_results,
         make_family_id,
     )
 

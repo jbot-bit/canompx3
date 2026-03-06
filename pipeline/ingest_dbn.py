@@ -28,33 +28,32 @@ Options:
     --batch-size N        Rows per DBN read batch (default: 50000)
 """
 
+import argparse
 import re
 import sys
-import argparse
 import traceback
+from datetime import date, datetime, timedelta
 from pathlib import Path
-from datetime import datetime, date, timedelta
 
-import duckdb
 import databento as db
+import duckdb
 import pandas as pd
 
-# Add project root to path
-
-from pipeline.paths import GOLD_DB_PATH
 from pipeline.asset_configs import get_asset_config, list_instruments
 from pipeline.ingest_dbn_mgc import (
     CheckpointManager,
-    validate_chunk,
-    validate_timestamp_utc,
+    check_merge_integrity,
+    check_pk_safety,
     choose_front_contract,
     compute_trading_days,
-    check_pk_safety,
-    check_merge_integrity,
     run_final_gates,
+    validate_chunk,
+    validate_timestamp_utc,
 )
-
 from pipeline.log import get_logger
+
+# Add project root to path
+from pipeline.paths import GOLD_DB_PATH
 
 logger = get_logger(__name__)
 
@@ -378,6 +377,7 @@ def main():
                     front_df["low"].to_numpy(dtype=float),
                     front_df["close"].to_numpy(dtype=float),
                     front_df["volume"].to_numpy(dtype=int),
+                    strict=False,
                 )
             )
 

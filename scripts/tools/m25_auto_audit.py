@@ -49,7 +49,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.tools.m25_audit import load_api_key, read_files, audit, AUDIT_MODES  # noqa: E402
+from scripts.tools.m25_audit import AUDIT_MODES, audit, load_api_key, read_files  # noqa: E402
 
 # ── File → audit mode mapping ────────────────────────────────────────
 # Files that touch SQL joins or daily_features get "joins" mode.
@@ -178,7 +178,7 @@ def run_audit(
             print(" CLEAN")
         else:
             findings_count += 1
-            print(f" FINDINGS")
+            print(" FINDINGS")
 
         # Save detailed output
         if output_dir and not quick:

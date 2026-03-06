@@ -15,10 +15,11 @@ Tests run:
   6. Honest verdict          - plain-English summary of what survived
 """
 
-import sys
 import os
-import duckdb
+import sys
 from pathlib import Path
+
+import duckdb
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_DB = PROJECT_ROOT / "gold.db"
@@ -55,13 +56,13 @@ def print_table(headers, rows, col_widths=None):
                     max_w = max(max_w, len(str(row[i] if row[i] is not None else "")))
             col_widths.append(min(max_w + 2, 22))
     header_str = "  "
-    for h, w in zip(headers, col_widths):
+    for h, w in zip(headers, col_widths, strict=False):
         header_str += str(h).ljust(w)
     print(header_str)
     print("  " + "-" * sum(col_widths))
     for row in rows:
         row_str = "  "
-        for val, w in zip(row, col_widths):
+        for val, w in zip(row, col_widths, strict=False):
             row_str += str(val if val is not None else "-").ljust(w)
         print(row_str)
 
@@ -227,7 +228,7 @@ def test_2_year_over_year(con, edge):
     if negative_years == 0 and total_years >= 3:
         return {"pass": True, "reason": f"Positive in ALL {total_years} years. Stable."}
     elif negative_years == 0 and total_years == 2:
-        return {"pass": True, "reason": f"Positive in both years, but only 2 years -- needs more history to confirm."}
+        return {"pass": True, "reason": "Positive in both years, but only 2 years -- needs more history to confirm."}
     elif positive_years >= total_years * 0.7:
         bad = [f"{r[0]}({r[3]:+.4f})" for r in rows if r[3] < -0.01]
         return {
@@ -573,34 +574,34 @@ def main():
         for i, edge in enumerate(edges, 1):
             label = f"{edge['symbol']} {edge['session']}/{edge['entry_model']}/CB{edge['cb']}/RR{edge['rr']}"
             print()
-            print(f"  +===========================================================+")
+            print("  +===========================================================+")
             print(f"  |  STRESS TESTING [{i}/{len(edges)}]: {label:<40}|")
-            print(f"  +===========================================================+")
+            print("  +===========================================================+")
 
             results = {}
 
             # Test 1: Size filter
-            print(f"\n  -- TEST 1: ORB Size Filter Survival --")
+            print("\n  -- TEST 1: ORB Size Filter Survival --")
             results["Size Filter"] = test_1_no_size_filter(con, edge)
             print(f"  -> {results['Size Filter']['reason']}")
 
             # Test 2: Year-over-year
-            print(f"\n  -- TEST 2: Year-Over-Year Stability --")
+            print("\n  -- TEST 2: Year-Over-Year Stability --")
             results["YoY Stability"] = test_2_year_over_year(con, edge)
             print(f"  -> {results['YoY Stability']['reason']}")
 
             # Test 3: Parameter sensitivity
-            print(f"\n  -- TEST 3: Parameter Sensitivity (CB+/-1, RR+/-0.5) --")
+            print("\n  -- TEST 3: Parameter Sensitivity (CB+/-1, RR+/-0.5) --")
             results["Param Sensitivity"] = test_3_parameter_sensitivity(con, edge)
             print(f"  -> {results['Param Sensitivity']['reason']}")
 
             # Test 4: Long vs short
-            print(f"\n  -- TEST 4: Long vs Short Breakdown --")
+            print("\n  -- TEST 4: Long vs Short Breakdown --")
             results["Long/Short"] = test_4_long_vs_short(con, edge)
             print(f"  -> {results['Long/Short']['reason']}")
 
             # Test 5: Scratch rate
-            print(f"\n  -- TEST 5: Scratch Rate Check --")
+            print("\n  -- TEST 5: Scratch Rate Check --")
             results["Scratch Rate"] = test_5_scratch_rate(con, edge)
             print(f"  -> {results['Scratch Rate']['reason']}")
 
@@ -623,27 +624,27 @@ def main():
 
         if survived:
             print("  SURVIVED SCRUTINY (5/5):")
-            for label, verdict in survived:
+            for label, _verdict in survived:
                 print(f"    [Y] {label}")
 
         if mostly:
             print("  MOSTLY SURVIVED (4/5):")
-            for label, verdict in mostly:
+            for label, _verdict in mostly:
                 print(f"    [~] {label}")
 
         if mixed:
             print("  MIXED -- CAUTION (3/5 or 2+2):")
-            for label, verdict in mixed:
+            for label, _verdict in mixed:
                 print(f"    [?] {label}")
 
         if failed:
             print("  DID NOT SURVIVE:")
-            for label, verdict in failed:
+            for label, _verdict in failed:
                 print(f"    [X] {label}")
 
         if insufficient:
             print("  INSUFFICIENT DATA:")
-            for label, verdict in insufficient:
+            for label, _verdict in insufficient:
                 print(f"    [-] {label}")
 
         print()

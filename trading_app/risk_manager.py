@@ -10,9 +10,9 @@ Usage:
     allowed, reason = rm.can_enter(trade, active_trades, daily_pnl_r)
 """
 
-from pathlib import Path
 from dataclasses import dataclass
 from datetime import date
+from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 

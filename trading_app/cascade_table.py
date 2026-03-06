@@ -52,20 +52,20 @@ def build_cascade_table(
     try:
         for sess_a, sess_b in pairs:
             rows = con.execute(
-                """
+                f"""
                 SELECT
-                    da.orb_{sa}_outcome AS outcome_a,
-                    da.orb_{sa}_break_dir AS dir_a,
-                    da.orb_{sb}_break_dir AS dir_b,
-                    da.orb_{sb}_outcome AS outcome_b
+                    da.orb_{sess_a}_outcome AS outcome_a,
+                    da.orb_{sess_a}_break_dir AS dir_a,
+                    da.orb_{sess_b}_break_dir AS dir_b,
+                    da.orb_{sess_b}_outcome AS outcome_b
                 FROM daily_features da
                 WHERE da.symbol = 'MGC'
                   AND da.orb_minutes = ?
-                  AND da.orb_{sa}_outcome IS NOT NULL
-                  AND da.orb_{sb}_outcome IS NOT NULL
-                  AND da.orb_{sa}_break_dir IS NOT NULL
-                  AND da.orb_{sb}_break_dir IS NOT NULL
-            """.format(sa=sess_a, sb=sess_b),
+                  AND da.orb_{sess_a}_outcome IS NOT NULL
+                  AND da.orb_{sess_b}_outcome IS NOT NULL
+                  AND da.orb_{sess_a}_break_dir IS NOT NULL
+                  AND da.orb_{sess_b}_break_dir IS NOT NULL
+            """,
                 [orb_minutes],
             ).fetchall()
 

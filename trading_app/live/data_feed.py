@@ -14,7 +14,7 @@ import asyncio
 import json
 import logging
 from collections.abc import Callable, Coroutine
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -174,7 +174,7 @@ class DataFeed:
                 price = q.get("price")
             if price is None:
                 continue
-            bar = self._agg.on_tick(float(price), 1, datetime.now(timezone.utc))
+            bar = self._agg.on_tick(float(price), 1, datetime.now(UTC))
             if bar is not None:
                 bar.symbol = symbol
                 await self.on_bar(bar)

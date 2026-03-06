@@ -8,9 +8,10 @@ Usage:
 """
 
 import sys
-import duckdb
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+
+import duckdb
 
 # --- Setup ---
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -66,7 +67,7 @@ def print_table(headers, rows, col_widths=None):
 
     # Header
     header_str = "  "
-    for h, w in zip(headers, col_widths):
+    for h, w in zip(headers, col_widths, strict=False):
         header_str += str(h).ljust(w)
     print(header_str)
     print("  " + "-" * sum(col_widths))
@@ -74,7 +75,7 @@ def print_table(headers, rows, col_widths=None):
     # Rows
     for row in rows:
         row_str = "  "
-        for val, w in zip(row, col_widths):
+        for val, w in zip(row, col_widths, strict=False):
             if val is None:
                 val = "-"
             row_str += str(val).ljust(w)
@@ -124,7 +125,7 @@ def pick_session(con, instrument):
 
     print()
     print("  Pick session:")
-    print(f"    0. ALL sessions")
+    print("    0. ALL sessions")
     for i, s in enumerate(sessions, 1):
         print(f"    {i}. {s}")
     print()
@@ -213,7 +214,7 @@ def win_rate_by_session(con):
     ).fetchall()
 
     print(f"  Instrument: {instrument}")
-    print(f"  (All RR targets and confirm bars combined)")
+    print("  (All RR targets and confirm bars combined)")
     print()
     print_table(["Session", "Trades", "Win %", "Avg R", "Total R"], rows)
     pause()
@@ -928,7 +929,7 @@ def main():
             for i, (label, _) in enumerate(MENU, 1):
                 print(f"    {i:2d}. {label}")
             print()
-            print(f"     0. Exit")
+            print("     0. Exit")
             print()
 
             choice = input("  Pick a number: ").strip()

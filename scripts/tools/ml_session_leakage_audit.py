@@ -21,10 +21,10 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import roc_auc_score
 
-from pipeline.paths import GOLD_DB_PATH
 from pipeline.db_config import configure_connection
-from trading_app.ml.features import transform_to_features
+from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import ALL_FILTERS
+from trading_app.ml.features import transform_to_features
 
 SESSION_ORDER = [
     "CME_REOPEN",
@@ -177,8 +177,8 @@ def run_audit(instrument="MES"):
     level_feats = build_level_features(df)
 
     # AUDIT 1: Cross-session feature distributions per session
-    print(f"\n--- AUDIT 1: Cross-session features by session ---")
-    print(f"If distributions are tight and non-overlapping, features leak session identity.\n")
+    print("\n--- AUDIT 1: Cross-session features by session ---")
+    print("If distributions are tight and non-overlapping, features leak session identity.\n")
     cross_cols = [
         "prior_sessions_broken",
         "prior_sessions_long",
@@ -204,8 +204,8 @@ def run_audit(instrument="MES"):
             )
 
     # AUDIT 2: Can a classifier predict session from cross-session features alone?
-    print(f"\n--- AUDIT 2: Session predictability from cross/level features ---")
-    print(f"If accuracy >> random baseline, features ARE session proxies.\n")
+    print("\n--- AUDIT 2: Session predictability from cross/level features ---")
+    print("If accuracy >> random baseline, features ARE session proxies.\n")
 
     from sklearn.preprocessing import LabelEncoder
 
@@ -240,11 +240,11 @@ def run_audit(instrument="MES"):
         print(f"    {session:<20} recall={s_acc:.1%} (N={smask.sum()})")
 
     # AUDIT 3: Test E6 WITHOUT cross-session features (levels only)
-    print(f"\n--- AUDIT 3: E6 variants comparison ---")
-    print(f"E6a = clean + levels only (no cross-session counts)")
-    print(f"E6b = clean + cross-session counts only (no levels)")
-    print(f"E6c = clean + ALL (current E6)")
-    print(f"E6d = clean + cross-session NORMALIZED (broken/max_possible)\n")
+    print("\n--- AUDIT 3: E6 variants comparison ---")
+    print("E6a = clean + levels only (no cross-session counts)")
+    print("E6b = clean + cross-session counts only (no levels)")
+    print("E6c = clean + ALL (current E6)")
+    print("E6d = clean + cross-session NORMALIZED (broken/max_possible)\n")
 
     X_base = transform_to_features(df)
     orb_label_cols = [c for c in X_base.columns if c.startswith("orb_label_")]
@@ -310,7 +310,6 @@ def run_audit(instrument="MES"):
     pnl_test = pnl_r[n_train:]
     valid = ~np.isnan(pnl_test)
     baseline_total = pnl_test[valid].sum()
-    baseline_n = valid.sum()
     meta_test = df.iloc[n_train:][["trading_day", "orb_label", "pnl_r"]].copy()
 
     rf_params = dict(

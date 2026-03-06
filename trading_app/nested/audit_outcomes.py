@@ -13,8 +13,8 @@ Usage:
     python -m trading_app.nested.audit_outcomes --instrument MGC --n-days 20 --seed 42
 """
 
-import sys
 import random
+import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -25,13 +25,13 @@ sys.stdout.reconfigure(line_buffering=True)
 import duckdb
 import pandas as pd
 
-from pipeline.paths import GOLD_DB_PATH
+from pipeline.build_daily_features import compute_trading_day_utc_range
 from pipeline.cost_model import get_cost_spec
 from pipeline.init_db import ORB_LABELS
-from pipeline.build_daily_features import compute_trading_day_utc_range
-from trading_app.outcome_builder import compute_single_outcome, RR_TARGETS, CONFIRM_BARS_OPTIONS
+from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import ENTRY_MODELS
-from trading_app.nested.builder import resample_to_5m, _verify_e3_sub_bar_fill
+from trading_app.nested.builder import _verify_e3_sub_bar_fill, resample_to_5m
+from trading_app.outcome_builder import CONFIRM_BARS_OPTIONS, RR_TARGETS, compute_single_outcome
 
 
 def audit_nested_outcomes(
@@ -132,7 +132,7 @@ def _audit_single_day(con, trading_day, instrument, orb_minutes, cost_spec, resu
         print(f"    WARN: No daily_features for {trading_day} orb_minutes={orb_minutes}")
         return
 
-    features = dict(zip(col_names, df_row[0]))
+    features = dict(zip(col_names, df_row[0], strict=False))
 
     # 2. Load bars_1m for this trading day
     td_start, td_end = compute_trading_day_utc_range(trading_day)
@@ -164,7 +164,7 @@ def _audit_single_day(con, trading_day, instrument, orb_minutes, cost_spec, resu
     stored_cols = [desc[0] for desc in con.description]
     stored_index = {}
     for r in stored_rows:
-        d = dict(zip(stored_cols, r))
+        d = dict(zip(stored_cols, r, strict=False))
         key = (d["orb_label"], d["entry_model"], d["rr_target"], d["confirm_bars"])
         stored_index[key] = d
 

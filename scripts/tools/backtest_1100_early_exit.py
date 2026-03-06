@@ -15,7 +15,6 @@ Include yearly breakdown for the best threshold.
 Uses cost model for honest R-multiple calculation.
 """
 
-import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -23,8 +22,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 import duckdb
 import numpy as np
 import pandas as pd
-from pipeline.paths import GOLD_DB_PATH
+
 from pipeline.cost_model import get_cost_spec, to_r_multiple
+from pipeline.paths import GOLD_DB_PATH
 
 
 def run_backtest(db_path=None):
@@ -243,7 +243,7 @@ def run_backtest(db_path=None):
 
     print(f"\n{'=' * 80}")
     print(f"YEARLY BREAKDOWN: Best threshold = {best_t}m")
-    print(f"  E1 CB4 RR2.5 G4+ (reference strat)")
+    print("  E1 CB4 RR2.5 G4+ (reference strat)")
     print(f"{'=' * 80}")
 
     baseline_cb4_rr25 = [r for r in results["baseline"] if r["rr_target"] == 2.5 and r["confirm_bars"] == 4]
@@ -252,7 +252,7 @@ def run_backtest(db_path=None):
     _yearly_comparison(baseline_cb4_rr25, exit_cb4_rr25, best_t)
 
     # Also show CB4 RR2.0
-    print(f"\n  E1 CB4 RR2.0 G4+:")
+    print("\n  E1 CB4 RR2.0 G4+:")
     baseline_cb4_rr20 = [r for r in results["baseline"] if r["rr_target"] == 2.0 and r["confirm_bars"] == 4]
     exit_cb4_rr20 = [r for r in results[best_t] if r["rr_target"] == 2.0 and r["confirm_bars"] == 4]
     _yearly_comparison(baseline_cb4_rr20, exit_cb4_rr20, best_t)
@@ -271,18 +271,24 @@ def run_backtest(db_path=None):
         n_total = len(baseline_sub)
         n_early = sum(1 for r in exit_sub if r["outcome"] == "early_exit")
         n_were_loss = sum(
-            1 for b, e in zip(baseline_sub, exit_sub) if e["outcome"] == "early_exit" and b["outcome"] == "loss"
+            1
+            for b, e in zip(baseline_sub, exit_sub, strict=False)
+            if e["outcome"] == "early_exit" and b["outcome"] == "loss"
         )
         n_were_win = sum(
-            1 for b, e in zip(baseline_sub, exit_sub) if e["outcome"] == "early_exit" and b["outcome"] == "win"
+            1
+            for b, e in zip(baseline_sub, exit_sub, strict=False)
+            if e["outcome"] == "early_exit" and b["outcome"] == "win"
         )
         n_were_scratch = sum(
-            1 for b, e in zip(baseline_sub, exit_sub) if e["outcome"] == "early_exit" and b["outcome"] == "scratch"
+            1
+            for b, e in zip(baseline_sub, exit_sub, strict=False)
+            if e["outcome"] == "early_exit" and b["outcome"] == "scratch"
         )
 
         # Average pnl_r of early-exited trades: baseline vs after
         early_baseline_pnl = _clean_pnl(
-            [b["pnl_r"] for b, e in zip(baseline_sub, exit_sub) if e["outcome"] == "early_exit"]
+            [b["pnl_r"] for b, e in zip(baseline_sub, exit_sub, strict=False) if e["outcome"] == "early_exit"]
         )
         early_exit_pnl = _clean_pnl([e["pnl_r"] for e in exit_sub if e["outcome"] == "early_exit"])
 

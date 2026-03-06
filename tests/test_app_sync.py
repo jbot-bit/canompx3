@@ -618,7 +618,8 @@ class TestImportSync:
         import trading_app.strategy_discovery as sd
 
         source = inspect.getsource(sd)
-        assert "from trading_app.outcome_builder import RR_TARGETS" in source
+        assert "from trading_app.outcome_builder import" in source
+        assert "RR_TARGETS" in source
         assert "CONFIRM_BARS_OPTIONS" in source
 
     def test_outcome_builder_imports_entry_models(self):
@@ -627,7 +628,8 @@ class TestImportSync:
         import trading_app.outcome_builder as ob
 
         source = inspect.getsource(ob)
-        assert "from trading_app.config import ENTRY_MODELS" in source
+        assert "from trading_app.config import" in source
+        assert "ENTRY_MODELS" in source
 
     def test_strategy_discovery_imports_entry_models(self):
         """strategy_discovery imports ENTRY_MODELS from config."""

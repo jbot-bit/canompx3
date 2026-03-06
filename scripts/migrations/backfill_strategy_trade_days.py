@@ -10,8 +10,8 @@ Usage:
 """
 
 import sys
-from pathlib import Path
 from collections import defaultdict
+from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -19,12 +19,12 @@ import duckdb
 
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import ALL_FILTERS, VolumeFilter
+from trading_app.db_manager import init_trading_app_schema
 from trading_app.strategy_discovery import (
     _build_filter_day_sets,
     _compute_relative_volumes,
     _load_daily_features,
 )
-from trading_app.db_manager import init_trading_app_schema
 
 # Force unbuffered stdout (Windows cp1252 buffering issue)
 sys.stdout.reconfigure(line_buffering=True)
@@ -53,7 +53,7 @@ def backfill_trade_days(db_path: str, instrument: str) -> int:
             [instrument],
         ).fetchall()
         cols = [d[0] for d in con.description]
-        strategies = [dict(zip(cols, r)) for r in rows]
+        strategies = [dict(zip(cols, r, strict=False)) for r in rows]
 
         print(f"Backfilling {len(strategies)} strategies for {instrument}")
 

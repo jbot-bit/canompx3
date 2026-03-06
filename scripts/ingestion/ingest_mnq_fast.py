@@ -22,20 +22,20 @@ Usage:
 
 import sys
 import time
-from pathlib import Path
 from datetime import date, timedelta
+from pathlib import Path
 
+import databento as db
+import duckdb
 import numpy as np
 import pandas as pd
-import duckdb
-import databento as db
 
 from pipeline.asset_configs import get_asset_config
 from pipeline.ingest_dbn_mgc import (
-    validate_chunk,
-    validate_timestamp_utc,
     choose_front_contract,
     run_final_gates,
+    validate_chunk,
+    validate_timestamp_utc,
 )
 
 # =========================================================================
@@ -79,7 +79,7 @@ def main():
     prefix_len = config["prefix_len"]
 
     log("=" * 60)
-    log(f"FAST MNQ INGESTION (VECTORIZED, SAME HONESTY GATES)")
+    log("FAST MNQ INGESTION (VECTORIZED, SAME HONESTY GATES)")
     log(f"  DBN: {dbn_path}")
     log(f"  DB:  {DB_PATH}")
     log(f"  Range: {START_DATE} to {END_DATE}")
@@ -159,7 +159,7 @@ def main():
     # Choose front contract per day
     front_contracts = {}
     for tday, grp in daily_vols.groupby("trading_day"):
-        vols = dict(zip(grp["symbol"], grp["volume"]))
+        vols = dict(zip(grp["symbol"], grp["volume"], strict=False))
         front = choose_front_contract(
             vols,
             outright_pattern=outright_pattern,
@@ -238,7 +238,7 @@ def main():
         """,
             [symbol, str(START_DATE), str(END_DATE)],
         )
-        log(f"  Cleared existing MNQ data in range")
+        log("  Cleared existing MNQ data in range")
 
         # Bulk insert from DataFrame -- DuckDB can read pandas directly
         con.execute("BEGIN TRANSACTION")

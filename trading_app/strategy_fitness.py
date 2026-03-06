@@ -16,11 +16,11 @@ Usage:
     python trading_app/strategy_fitness.py --instrument MGC --format json
 """
 
-import sys
 import json
+import sys
+from dataclasses import asdict, dataclass
+from datetime import UTC, date
 from pathlib import Path
-from datetime import date, timezone
-from dataclasses import dataclass, asdict
 
 from pipeline.log import get_logger
 
@@ -30,10 +30,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 import duckdb
 
-from pipeline.paths import GOLD_DB_PATH
-from pipeline.init_db import ORB_LABELS
 from pipeline.dst import DST_AFFECTED_SESSIONS, is_winter_for_session
-from trading_app.config import ALL_FILTERS, VolumeFilter, EXCLUDED_FROM_FITNESS, apply_tight_stop
+from pipeline.init_db import ORB_LABELS
+from pipeline.paths import GOLD_DB_PATH
+from trading_app.config import ALL_FILTERS, EXCLUDED_FROM_FITNESS, VolumeFilter, apply_tight_stop
 from trading_app.strategy_discovery import compute_metrics
 
 # Whitelist for SQL column interpolation safety
@@ -188,7 +188,7 @@ def _load_strategy_params(con, strategy_id: str) -> dict | None:
         return None
 
     cols = [desc[0] for desc in con.description]
-    return dict(zip(cols, row))
+    return dict(zip(cols, row, strict=False))
 
 
 def _enrich_relative_volumes(con, feat_dicts, instrument, orb_label, lookback_days):
@@ -204,14 +204,14 @@ def _enrich_relative_volumes(con, feat_dicts, instrument, orb_label, lookback_da
     for row in feat_dicts:
         break_ts = row.get(col)
         if break_ts is not None and hasattr(break_ts, "hour"):
-            utc_ts = break_ts.astimezone(timezone.utc) if break_ts.tzinfo is not None else break_ts
+            utc_ts = break_ts.astimezone(UTC) if break_ts.tzinfo is not None else break_ts
             unique_minutes.add(utc_ts.hour * 60 + utc_ts.minute)
 
     if not unique_minutes:
         return
 
     def _minute_key(ts):
-        utc = ts.astimezone(timezone.utc) if ts.tzinfo is not None else ts
+        utc = ts.astimezone(UTC) if ts.tzinfo is not None else ts
         return (utc.year, utc.month, utc.day, utc.hour, utc.minute)
 
     # Load historical volumes for each unique minute-of-day
@@ -235,7 +235,7 @@ def _enrich_relative_volumes(con, feat_dicts, instrument, orb_label, lookback_da
             continue
 
         break_key = _minute_key(break_ts)
-        utc_ts = break_ts.astimezone(timezone.utc) if break_ts.tzinfo is not None else break_ts
+        utc_ts = break_ts.astimezone(UTC) if break_ts.tzinfo is not None else break_ts
         mod = utc_ts.hour * 60 + utc_ts.minute
         history = minute_history.get(mod, [])
         if not history:
@@ -315,7 +315,7 @@ def _load_strategy_outcomes(
         params,
     ).fetchall()
     cols = [desc[0] for desc in con.description]
-    all_outcomes = [dict(zip(cols, r)) for r in rows]
+    all_outcomes = [dict(zip(cols, r, strict=False)) for r in rows]
 
     if not all_outcomes:
         return []
@@ -362,7 +362,7 @@ def _load_strategy_outcomes(
         feat_params,
     ).fetchall()
     feat_cols = [desc[0] for desc in con.description]
-    feat_dicts = [dict(zip(feat_cols, r)) for r in feat_rows]
+    feat_dicts = [dict(zip(feat_cols, r, strict=False)) for r in feat_rows]
 
     # VolumeFilter needs rel_vol enrichment from bars_1m
     if isinstance(filt, VolumeFilter):

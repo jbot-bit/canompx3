@@ -11,11 +11,11 @@ Usage:
     python -m trading_app.rolling_portfolio --train-months 12 --report
 """
 
-import sys
 import json
-from pathlib import Path
-from dataclasses import dataclass, asdict
+import sys
 from collections import defaultdict
+from dataclasses import asdict, dataclass
+from pathlib import Path
 
 from pipeline.log import get_logger
 
@@ -28,8 +28,8 @@ sys.stdout.reconfigure(line_buffering=True)
 import duckdb
 import numpy as np
 
-from pipeline.paths import GOLD_DB_PATH
 from pipeline.init_db import ORB_LABELS
+from pipeline.paths import GOLD_DB_PATH
 
 # Stability thresholds (weighted score)
 STABLE_THRESHOLD = 0.6
@@ -102,7 +102,7 @@ def load_rolling_results(
         ).fetchall()
 
         cols = [desc[0] for desc in con.description]
-        results = [dict(zip(cols, row)) for row in rows]
+        results = [dict(zip(cols, row, strict=False)) for row in rows]
         if run_labels is not None:
             label_set = set(run_labels)
             results = [r for r in results if r["run_label"] in label_set]
@@ -227,7 +227,7 @@ def aggregate_rolling_performance(
 
         # For each window, pick the best variant (highest ExpR)
         passing_windows = []
-        for run_label, variants in windows_data.items():
+        for _run_label, variants in windows_data.items():
             best = max(variants, key=lambda v: v["expectancy_r"])
             passing_windows.append(best)
 
@@ -329,7 +329,7 @@ def compute_day_of_week_stats(
                 sizes = df_features[size_col].values
                 tdays = df_features["trading_day"].values
                 eligible_days = set()
-                for td, s in zip(tdays, sizes):
+                for td, s in zip(tdays, sizes, strict=False):
                     if s is not None and not (isinstance(s, float) and np.isnan(s)):
                         if filt.matches_row({size_col: s}, fam.orb_label):
                             eligible_days.add(_to_date(td))
@@ -467,7 +467,7 @@ def load_rolling_validated_strategies(
 
             if rows:
                 cols = [desc[0] for desc in con.description]
-                results.append(dict(zip(cols, rows[0])))
+                results.append(dict(zip(cols, rows[0], strict=False)))
 
         return results
 

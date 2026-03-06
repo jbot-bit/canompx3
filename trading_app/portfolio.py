@@ -10,10 +10,10 @@ Usage:
     python trading_app/portfolio.py --instrument MGC --account-equity 25000
 """
 
-import sys
 import json
+import sys
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
-from dataclasses import dataclass, asdict, field, replace
 
 from pipeline.log import get_logger
 
@@ -27,10 +27,10 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-from pipeline.paths import GOLD_DB_PATH
-from pipeline.cost_model import get_cost_spec, CostSpec
+from pipeline.cost_model import CostSpec, get_cost_spec
 from pipeline.init_db import ORB_LABELS
-from trading_app.config import ALL_FILTERS, ATRVelocityFilter, CalendarSkipFilter, classify_strategy, apply_tight_stop
+from pipeline.paths import GOLD_DB_PATH
+from trading_app.config import ALL_FILTERS, ATRVelocityFilter, CalendarSkipFilter, apply_tight_stop, classify_strategy
 
 
 def _get_table_names(con: duckdb.DuckDBPyConnection) -> set[str]:
@@ -278,7 +278,7 @@ def load_validated_strategies(
         # Resolve family head filter (post-filter in Python to avoid SQL interpolation)
         head_ids = None
         if family_heads_only:
-            from trading_app.db_manager import has_edge_families, get_family_head_ids
+            from trading_app.db_manager import get_family_head_ids, has_edge_families
 
             if has_edge_families(con):
                 head_ids = get_family_head_ids(con, instrument)
@@ -317,7 +317,7 @@ def load_validated_strategies(
         ).fetchall()
 
         cols = [desc[0] for desc in con.description]
-        results = [dict(zip(cols, row)) for row in baseline_rows]
+        results = [dict(zip(cols, row, strict=False)) for row in baseline_rows]
 
         # Load nested strategies if requested
         if include_nested:
@@ -363,7 +363,7 @@ def load_validated_strategies(
 
                 # Append nested results
                 for row in nested_rows:
-                    results.append(dict(zip(cols, row)))
+                    results.append(dict(zip(cols, row, strict=False)))
 
         # Load rolling-validated strategies if requested
         if include_rolling:
@@ -797,7 +797,7 @@ def build_strategy_daily_series(
                 # can access all columns (orb_size, day_of_week, etc.).
                 # Convert NaN to None to preserve fail-closed filter semantics.
                 eligible_mask = df_rows.apply(
-                    lambda row: filt.matches_row(
+                    lambda row, filt=filt, orb_label=orb_label: filt.matches_row(
                         {k: (None if (isinstance(v, float) and np.isnan(v)) else v) for k, v in row.items()},
                         orb_label,
                     ),

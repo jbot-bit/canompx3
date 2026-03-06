@@ -14,8 +14,10 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
-import duckdb
 from contextlib import nullcontext
+
+import duckdb
+
 from pipeline.paths import GOLD_DB_PATH
 
 

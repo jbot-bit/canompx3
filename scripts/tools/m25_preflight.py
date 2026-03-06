@@ -20,7 +20,7 @@ from pathlib import Path
 PROJECT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT))
 
-from scripts.tools.m25_audit import AUDIT_MODES, load_api_key, read_files, audit  # noqa: E402
+from scripts.tools.m25_audit import AUDIT_MODES, audit, load_api_key, read_files  # noqa: E402
 
 # Extra instructions bolted onto bias mode specifically for research scripts
 RESEARCH_BIAS_ADDENDUM = """
@@ -80,7 +80,7 @@ def preflight(script_path: str, force: bool = False, run_after: bool = False) ->
     # from words like "failure", "fails", "fallback" appearing later in the body.
     import re as _re
 
-    first_line = next((l.strip() for l in result.splitlines() if l.strip()), "")
+    first_line = next((line_text.strip() for line_text in result.splitlines() if line_text.strip()), "")
     _verdict = _re.match(r"^\*{0,2}(PASS|FAIL)\*{0,2}", first_line, _re.IGNORECASE)
     verdict = _verdict.group(1).upper() if _verdict else ""
     passed = verdict == "PASS"

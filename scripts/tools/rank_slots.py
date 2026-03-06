@@ -8,10 +8,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.stdout.reconfigure(line_buffering=True)
 
 import duckdb
-import pandas as pd
 import numpy as np
-from pipeline.paths import GOLD_DB_PATH
+import pandas as pd
+
 from pipeline.cost_model import get_cost_spec
+from pipeline.paths import GOLD_DB_PATH
 
 con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
 
@@ -90,7 +91,7 @@ for inst, sess, strat_id in slots:
     if not np.isnan(recent_r):
         print(f"    -> Recent 12m: N={recent_n}, avgR={recent_r:+.4f}")
     # Year breakdown
-    for _, row in yrstats.iterrows():
+    for _, _row in yrstats.iterrows():
         pass  # skip for brevity
 
 print()
@@ -174,7 +175,7 @@ for label, keys in [("Option A: Cross-instrument", top3_keys), ("Option B: Eveni
     print(f"  Daily Sharpe (ann): {sharpe_daily:.2f}")
     print(f"  Daily win rate: {daily_wr:.1%}")
     print(f"  Max drawdown: {max_dd:+.1f}R")
-    print(f"\n  Year-by-year:")
+    print("\n  Year-by-year:")
     for yr, row in yearly.iterrows():
         yr_avg = row["total_r"] / row["days"] if row["days"] > 0 else 0
         print(f"    {yr}: {row['total_r']:+6.1f}R ({row['days']} days, avg {yr_avg:+.4f}R/day)")

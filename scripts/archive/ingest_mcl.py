@@ -20,9 +20,9 @@ Usage:
     python scripts/ingest_mcl.py --skip-copy  # Already on local disk
 """
 
+import shutil
 import subprocess
 import sys
-import shutil
 import time
 from datetime import datetime
 from pathlib import Path
@@ -83,7 +83,7 @@ def main():
     args = parser.parse_args()
 
     log("=" * 60)
-    log(f"MCL INGESTION PIPELINE")
+    log("MCL INGESTION PIPELINE")
     log(f"  Source DB: {MASTER_DB}")
     log(f"  Local DB:  {LOCAL_DB}")
     log(f"  Date range: {START_DATE} to {END_DATE}")
