@@ -66,7 +66,7 @@ def render():
     # Table
     st.dataframe(
         filtered[available_cols],
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         height=400,
     )
@@ -114,7 +114,7 @@ def render():
                 LIMIT 20
             """)
             if not outcomes_df.empty:
-                st.dataframe(outcomes_df, use_container_width=True, hide_index=True)
+                st.dataframe(outcomes_df, width="stretch", hide_index=True)
             else:
                 st.info("No outcomes found for this strategy.")
         except Exception as e:

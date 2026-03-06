@@ -69,12 +69,12 @@ def render() -> None:
     col_start, col_stop, col_status = st.columns([1, 1, 4])
 
     with col_start:
-        if st.button("▶  Start", disabled=is_running, type="primary", use_container_width=True):
+        if st.button("▶  Start", disabled=is_running, type="primary", width="stretch"):
             _start_session(instrument, mode_label)
             st.rerun()
 
     with col_stop:
-        if st.button("⏹  Stop", disabled=not is_running, type="secondary", use_container_width=True):
+        if st.button("⏹  Stop", disabled=not is_running, type="secondary", width="stretch"):
             _stop_session()
             st.rerun()
 
@@ -164,7 +164,7 @@ def _render_signal_log() -> None:
     with col_head:
         st.subheader("Signal Log")
     with col_clear:
-        if st.button("Clear", use_container_width=True) and _SIGNALS_FILE.exists():
+        if st.button("Clear", width="stretch") and _SIGNALS_FILE.exists():
             _truncate_file(_SIGNALS_FILE)
             st.rerun()
 
@@ -210,4 +210,4 @@ def _render_signal_log() -> None:
         })
 
     df = pd.DataFrame(rows)
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.dataframe(df, width="stretch", hide_index=True)

@@ -60,7 +60,7 @@ def render():
             template="plotly_dark",
             height=350,
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
         # Summary stats
         col1, col2, col3, col4 = st.columns(4)
@@ -80,13 +80,13 @@ def render():
         st.success("No gap days detected.")
     else:
         st.warning(f"{len(gaps_df)} days with low bar counts")
-        st.dataframe(gaps_df, use_container_width=True, hide_index=True, height=200)
+        st.dataframe(gaps_df, width="stretch", hide_index=True, height=200)
 
     # Contract timeline
     st.subheader("Contract Roll Timeline")
     contracts_df = _cached_contract_timeline()
     if not contracts_df.empty:
-        st.dataframe(contracts_df, use_container_width=True, hide_index=True, height=300)
+        st.dataframe(contracts_df, width="stretch", hide_index=True, height=300)
 
         # Timeline chart
         fig = px.timeline(
@@ -101,6 +101,6 @@ def render():
             title="Contract Usage Timeline",
         )
         fig.update_layout(template="plotly_dark", height=400)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
     else:
         st.info("No contract data available.")

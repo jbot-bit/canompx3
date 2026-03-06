@@ -106,7 +106,9 @@ class DataFeed:
             resp = json.loads(resp_raw) if resp_raw and resp_raw != "[]" else {}
         except json.JSONDecodeError:
             resp = {}
-        # Tradovate returns either a dict or an array; treat non-200 status as failure
+        # Tradovate returns either a dict or an array; unwrap arrays
+        if isinstance(resp, list) and resp:
+            resp = resp[0]
         status = resp.get("s") if isinstance(resp, dict) else None
         if status is not None and status not in (200,):
             raise RuntimeError(f"Tradovate auth failed: {resp}")
@@ -156,7 +158,9 @@ class DataFeed:
         if not isinstance(frame, dict):
             return
         for q in frame.get("d", {}).get("quotes", []):
-            price = q.get("bidPrice") or q.get("price")
+            price = q.get("bidPrice")
+            if price is None:
+                price = q.get("price")
             if price is None:
                 continue
             bar = self._agg.on_tick(float(price), 1, datetime.now(timezone.utc))

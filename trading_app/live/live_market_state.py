@@ -21,12 +21,8 @@ def _session_start_utc(session_label: str, trading_day: date) -> Optional[dateti
     Get session start as UTC datetime for a given Brisbane trading_day.
 
     DYNAMIC_ORB_RESOLVERS[label](date) returns (hour, minute) in Brisbane local time.
-    We attach that (hour, minute) to the trading_day Brisbane date and convert to UTC.
-
-    Note: sessions that start before 09:00 Brisbane (e.g. NYSE_OPEN at 00:30)
-    are already correctly handled — they still use trading_day as the Brisbane
-    calendar date because the pipeline assigns those midnight-crossing bars to
-    trading_day, not trading_day-1.
+    Sessions before 09:00 Brisbane (e.g. NYSE_OPEN at 00:30 in winter) fall on
+    trading_day + 1 in calendar terms — same logic as execution_engine.py:276-279.
     """
     resolver = DYNAMIC_ORB_RESOLVERS.get(session_label)
     if resolver is None:
@@ -36,7 +32,9 @@ def _session_start_utc(session_label: str, trading_day: date) -> Optional[dateti
     except Exception:
         return None
 
-    bris_dt = datetime(trading_day.year, trading_day.month, trading_day.day,
+    # Before 09:00 Brisbane = next calendar day (midnight-crossing sessions)
+    cal_date = trading_day + timedelta(days=1) if bris_h < 9 else trading_day
+    bris_dt = datetime(cal_date.year, cal_date.month, cal_date.day,
                        bris_h, bris_m, 0, tzinfo=_BRISBANE)
     return bris_dt.astimezone(_UTC)
 

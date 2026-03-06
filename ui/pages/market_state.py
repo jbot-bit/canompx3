@@ -77,7 +77,7 @@ def _load_and_display(selected_date: date, orb_minutes: int):
         })
 
     orb_df = pd.DataFrame(orb_rows)
-    st.dataframe(orb_df, use_container_width=True, hide_index=True)
+    st.dataframe(orb_df, width="stretch", hide_index=True)
 
     # Session stats
     st.subheader("Session Ranges")
@@ -93,7 +93,7 @@ def _load_and_display(selected_date: date, orb_minutes: int):
                 "Range": f"{(high - low):.2f}",
             })
     if session_rows:
-        st.dataframe(pd.DataFrame(session_rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(session_rows), width="stretch", hide_index=True)
 
     # MarketState (full object with signals)
     st.subheader("MarketState Signals")
@@ -127,7 +127,7 @@ def _load_and_display(selected_date: date, orb_minutes: int):
                     {"strategy_id": k, "score": f"{v:.3f}"}
                     for k, v in sorted(scores.items(), key=lambda x: x[1], reverse=True)
                 ])
-                st.dataframe(scores_df, use_container_width=True, hide_index=True)
+                st.dataframe(scores_df, width="stretch", hide_index=True)
             else:
                 st.info("No scores computed (check portfolio).")
 

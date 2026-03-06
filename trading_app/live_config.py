@@ -199,7 +199,8 @@ def _load_best_regime_variant(
                    vs.rr_target, vs.confirm_bars, vs.filter_type,
                    vs.expectancy_r, vs.win_rate, vs.sample_size,
                    vs.sharpe_ratio, vs.max_drawdown_r,
-                   es.median_risk_points
+                   es.median_risk_points,
+                   1.0 as stop_multiplier
             FROM validated_setups vs
             LEFT JOIN experimental_strategies es
               ON vs.strategy_id = es.strategy_id
@@ -253,7 +254,8 @@ def _load_best_experimental_variant(
                    rr_target, confirm_bars, filter_type,
                    expectancy_r, win_rate, sample_size,
                    sharpe_ratio, max_drawdown_r,
-                   median_risk_points
+                   median_risk_points,
+                   1.0 as stop_multiplier
             FROM experimental_strategies
             WHERE instrument = ?
               AND orb_label = ?
@@ -426,6 +428,7 @@ def build_live_portfolio(
                 sharpe_ratio=match.get("sharpe_ratio"),
                 max_drawdown_r=match.get("max_drawdown_r"),
                 median_risk_points=match.get("median_risk_points"),
+                stop_multiplier=match.get("stop_multiplier", 1.0),
                 source=source,
                 weight=1.0,
             ))
@@ -479,6 +482,7 @@ def build_live_portfolio(
             sharpe_ratio=variant.get("sharpe_ratio"),
             max_drawdown_r=variant.get("max_drawdown_r"),
             median_risk_points=variant.get("median_risk_points"),
+            stop_multiplier=variant.get("stop_multiplier", 1.0),
             source="hot_rolling",
             weight=weight,
         ))
@@ -538,6 +542,7 @@ def build_live_portfolio(
             sharpe_ratio=variant.get("sharpe_ratio"),
             max_drawdown_r=variant.get("max_drawdown_r"),
             median_risk_points=variant.get("median_risk_points"),
+            stop_multiplier=variant.get("stop_multiplier", 1.0),
             source="baseline",
             weight=weight,
         ))

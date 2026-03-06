@@ -31,6 +31,8 @@ from trading_app.portfolio import PortfolioStrategy
 from pipeline.cost_model import get_cost_spec, CostSpec
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.daily_backfill import run_backfill_for_instrument
+from pipeline.calendar_filters import is_nfp_day, is_opex_day, is_friday, day_of_week
+from pipeline.db_config import configure_connection
 
 log = logging.getLogger(__name__)
 
@@ -109,8 +111,86 @@ class SessionOrchestrator:
             "mode": "signal_only" if signal_only else ("demo" if demo else "live"),
         })
 
+        # Build partial daily_features_row from what's available pre-session.
+        # Without this, fail-closed filters (VOL_RV12_N20, DOW, calendar) silently
+        # reject ALL trades because their required columns are missing.
+        daily_row = self._build_daily_features_row(self.trading_day, instrument)
+
         # Signal engine that a new trading day is starting
-        self.engine.on_trading_day_start(self.trading_day)
+        self.engine.on_trading_day_start(self.trading_day, daily_features_row=daily_row)
+
+    @staticmethod
+    def _build_daily_features_row(trading_day: date, instrument: str) -> dict:
+        """Build a daily_features_row from DB + calendar for live execution.
+
+        Without this, fail-closed filters (VOL_RV12_N20, DOW, break speed, calendar)
+        silently reject ALL trades because their required columns are None.
+
+        Populates:
+          - Calendar (exact for today): is_nfp_day, is_opex_day, is_friday, day_of_week
+          - From most recent DB row (yesterday's proxy): atr_20, atr_vel_regime,
+            compression tiers, rel_vol_*, break_delay_min, etc.
+          - Computed: median_atr_20 (rolling 252-day median for vol-scaling)
+
+        The rel_vol_* and break_delay_min values are yesterday's — imperfect but
+        vastly better than None (which silently kills every VOL/FAST strategy).
+        orb_{label}_size is set by ExecutionEngine from live ORB, overriding the DB value.
+        """
+        row: dict = {}
+
+        # Calendar flags — exact for today
+        row["is_nfp_day"] = is_nfp_day(trading_day)
+        row["is_opex_day"] = is_opex_day(trading_day)
+        row["is_friday"] = is_friday(trading_day)
+        row["day_of_week"] = day_of_week(trading_day)
+
+        # Load ALL columns from the most recent daily_features row.
+        # This gives filters yesterday's values as proxies for today.
+        try:
+            import duckdb
+            con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+            try:
+                configure_connection(con)
+                df = con.execute("""
+                    SELECT * FROM daily_features
+                    WHERE symbol = ? AND orb_minutes = 5
+                      AND trading_day = (
+                          SELECT MAX(trading_day) FROM daily_features
+                          WHERE symbol = ? AND orb_minutes = 5
+                      )
+                """, [instrument, instrument]).fetchdf()
+                if not df.empty:
+                    latest = df.iloc[0].to_dict()
+                    # Merge all DB columns (ATR, compression, rel_vol, break speed, etc.)
+                    # Calendar flags from above override any DB values (exact for today).
+                    for k, v in latest.items():
+                        if k not in row:  # don't overwrite today's calendar flags
+                            row[k] = v
+                    # Staleness warning — daily_features should be from yesterday or today
+                    latest_day = latest.get("trading_day")
+                    if latest_day is not None:
+                        gap = (trading_day - (latest_day.date() if hasattr(latest_day, 'date') else latest_day)).days
+                        if gap > 3:
+                            log.warning("daily_features data is %d days stale (latest: %s)", gap, latest_day)
+
+                # median_atr_20 is NOT in daily_features — it's a rolling median computed
+                # by paper_trader. Compute it here for live vol-scaling.
+                median_result = con.execute("""
+                    SELECT MEDIAN(atr_20) FROM daily_features
+                    WHERE symbol = ? AND orb_minutes = 5 AND atr_20 IS NOT NULL
+                      AND trading_day < ? AND trading_day >= ? - INTERVAL '504 DAY'
+                """, [instrument, trading_day, trading_day]).fetchone()
+                if median_result and median_result[0] is not None:
+                    row["median_atr_20"] = float(median_result[0])
+            finally:
+                con.close()
+        except Exception as e:
+            log.warning("Could not load daily_features for live session: %s", e)
+
+        log.info("Daily features row: atr_20=%s, atr_vel=%s, nfp=%s, opex=%s, dow=%s",
+                 row.get("atr_20"), row.get("atr_vel_regime"),
+                 row.get("is_nfp_day"), row.get("is_opex_day"), row.get("day_of_week"))
+        return row
 
     def _write_signal_record(self, extra: dict) -> None:
         """Append a signal record to the JSONL file read by the Live Monitor UI."""
@@ -161,10 +241,15 @@ class SessionOrchestrator:
     def _record_exit(self, event, entry_price: float) -> None:
         """Record a completed trade (EXIT or SCRATCH) in the performance monitor."""
         strategy = self._strategy_map[event.strategy_id]
-        risk_pts = strategy.median_risk_points or 10.0
-        actual_r = self._compute_actual_r(
-            entry_price, event.price, event.direction, risk_pts
-        )
+        # Use engine's authoritative pnl_r (session-adjusted costs) when available;
+        # fall back to local computation only if not present.
+        if event.pnl_r is not None:
+            actual_r = event.pnl_r
+        else:
+            risk_pts = strategy.median_risk_points or 10.0
+            actual_r = self._compute_actual_r(
+                entry_price, event.price, event.direction, risk_pts
+            )
         record = TradeRecord(
             strategy_id=event.strategy_id,
             trading_day=self.trading_day,
@@ -233,7 +318,11 @@ class SessionOrchestrator:
             })
 
         elif event.event_type in ("EXIT", "SCRATCH"):
-            entry_price = self._entry_prices.pop(event.strategy_id, event.price)
+            entry_price = self._entry_prices.pop(event.strategy_id, None)
+            if entry_price is None:
+                log.warning("EXIT for %s with no prior ENTRY — using exit price as fallback",
+                            event.strategy_id)
+                entry_price = event.price
 
             if self.signal_only:
                 log.info(
@@ -293,7 +382,20 @@ class SessionOrchestrator:
                         event.strategy_id, event.event_type, e,
                     )
 
-        if eod_events:
+        if eod_events and not self.signal_only:
+            # Pre-refresh auth token before close loop — if network is back,
+            # this ensures we have a valid token. If still down, we log CRITICAL.
+            for attempt in range(3):
+                try:
+                    self.auth.get_token()
+                    break
+                except Exception as e:
+                    log.critical("Auth refresh attempt %d/3 failed before EOD close: %s",
+                                 attempt + 1, e)
+                    import time
+                    time.sleep(2 ** attempt)
+            asyncio.run(_close_all())
+        elif eod_events:
             asyncio.run(_close_all())
 
         summary = self.monitor.daily_summary()

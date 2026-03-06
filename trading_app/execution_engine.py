@@ -63,6 +63,7 @@ class TradeEvent:
     direction: str
     contracts: int
     reason: str
+    pnl_r: float | None = None  # Populated on EXIT/SCRATCH events
 
 @dataclass
 class LiveORB:
@@ -390,6 +391,7 @@ class ExecutionEngine:
                     direction=trade.direction,
                     contracts=trade.contracts,
                     reason="session_end",
+                    pnl_r=trade.pnl_r,
                 ))
             elif trade.state in (TradeState.ARMED, TradeState.CONFIRMING):
                 trade.state = TradeState.EXITED
@@ -1031,7 +1033,7 @@ class ExecutionEngine:
             # Timed early exit: kill losers at N minutes after fill
             # Skip for hold_7h — aligned trades should run, not get killed early
             threshold = EARLY_EXIT_MINUTES.get(trade.orb_label)
-            if threshold and not trade.early_exit_checked and trade.exit_mode != "hold_7h":
+            if threshold and not trade.early_exit_checked and trade.exit_mode != "hold_7h" and trade.entry_ts is not None:
                 elapsed = (bar["ts_utc"] - trade.entry_ts).total_seconds() / 60.0
                 if elapsed >= threshold:
                     trade.early_exit_checked = True
@@ -1118,4 +1120,5 @@ class ExecutionEngine:
             direction=trade.direction,
             contracts=trade.contracts,
             reason=reason,
+            pnl_r=trade.pnl_r,
         ))

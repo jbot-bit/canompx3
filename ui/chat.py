@@ -9,11 +9,13 @@ Uses Ollama (qwen2.5-coder:7b) with SOP-compliant system prompt.
 
 import re
 from datetime import date
+from pathlib import Path
 
 import streamlit as st
 
-
 from ui.db_reader import get_schema_summary, get_table_counts, get_date_ranges, query_df
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 from ui.sandbox_runner import run_sandboxed, promote_sandbox, discard_sandbox
 
 # Tag patterns for structured AI output
@@ -162,7 +164,7 @@ def render_chat():
                 if isinstance(msg.get("result"), str):
                     st.error(msg["result"])
                 else:
-                    st.dataframe(msg["result"], use_container_width=True)
+                    st.dataframe(msg["result"], width="stretch")
             elif role == "command_output":
                 with st.expander(f"Output: {msg.get('cmd', '')}", expanded=False):
                     st.code(msg.get("output", ""), language="text")

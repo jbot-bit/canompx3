@@ -194,6 +194,7 @@ _TEMPLATES = {
                rr_target, confirm_bars, sample_size, win_rate,
                expectancy_r, sharpe_ratio, max_drawdown_r,
                fdr_adjusted_p, all_years_positive, years_tested,
+               COALESCE(stop_multiplier, 1.0) as stop_multiplier,
                strategy_id
         FROM validated_setups
         WHERE LOWER(status) = 'active'

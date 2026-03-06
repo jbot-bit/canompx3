@@ -59,7 +59,7 @@ def render():
         avg_expr=("expectancy_r", "mean"),
         avg_wr=("win_rate", "mean"),
     ).reset_index()
-    st.dataframe(session_summary, use_container_width=True, hide_index=True)
+    st.dataframe(session_summary, width="stretch", hide_index=True)
 
     # By entry model
     col1, col2 = st.columns(2)
@@ -69,7 +69,7 @@ def render():
             count=("strategy_id", "count"),
             avg_expr=("expectancy_r", "mean"),
         ).reset_index()
-        st.dataframe(em_summary, use_container_width=True, hide_index=True)
+        st.dataframe(em_summary, width="stretch", hide_index=True)
 
     with col2:
         st.markdown("**By Filter Type**")
@@ -77,7 +77,7 @@ def render():
             count=("strategy_id", "count"),
             avg_expr=("expectancy_r", "mean"),
         ).reset_index()
-        st.dataframe(ft_summary, use_container_width=True, hide_index=True)
+        st.dataframe(ft_summary, width="stretch", hide_index=True)
 
     # --- Build Portfolio ---
     st.subheader("Portfolio Builder")
@@ -132,7 +132,7 @@ def render():
                     template="plotly_dark",
                     height=400,
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
 
                 # Stats
                 total_r = combined.iloc[-1] if len(combined) > 0 else 0
@@ -157,7 +157,7 @@ def render():
                         template="plotly_dark",
                         height=500,
                     )
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width="stretch")
                 except Exception as e:
                     st.error(f"Correlation failed: {e}")
         else:

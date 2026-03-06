@@ -115,7 +115,10 @@ class OrderRouter:
         elapsed_ms = (time.monotonic() - t0) * 1000
         resp.raise_for_status()
         data = resp.json()
-        order_id = data.get("orderId", -1)
+        order_id = data.get("orderId")
+        if order_id is None or order_id <= 0:
+            log.error("Order placement returned no valid orderId: %s", data)
+            raise RuntimeError(f"Order placement returned no valid orderId: {data}")
         log.info(
             "Order placed: %s %s qty=%d → orderId=%d (%.0fms)",
             spec.action, spec.symbol, spec.qty, order_id, elapsed_ms,
@@ -146,6 +149,7 @@ class OrderRouter:
     def cancel(self, order_id: int) -> None:
         """Cancel an open order by ID."""
         if self.auth is None:
+            log.error("Cannot cancel order %d — no auth configured", order_id)
             return
         resp = requests.post(
             f"{self.base}/order/cancelOrder",

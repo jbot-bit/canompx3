@@ -34,7 +34,8 @@ def live_config_db(tmp_path):
             sharpe_ratio DOUBLE,
             max_drawdown_r DOUBLE,
             status VARCHAR,
-            orb_minutes INTEGER DEFAULT 5
+            orb_minutes INTEGER DEFAULT 5,
+            stop_multiplier DOUBLE DEFAULT 1.0
         )
     """)
     con.execute("""
@@ -51,7 +52,8 @@ def live_config_db(tmp_path):
             sample_size INTEGER,
             sharpe_ratio DOUBLE,
             max_drawdown_r DOUBLE,
-            median_risk_points DOUBLE
+            median_risk_points DOUBLE,
+            stop_multiplier DOUBLE DEFAULT 1.0
         )
     """)
     from pipeline.init_db import FAMILY_RR_LOCKS_SCHEMA
@@ -100,7 +102,10 @@ class TestLoadBestRegimeVariant:
             )
         """)
         con.execute("""
-            INSERT INTO experimental_strategies VALUES (
+            INSERT INTO experimental_strategies (strategy_id, instrument, orb_label,
+                entry_model, rr_target, confirm_bars, filter_type, expectancy_r,
+                win_rate, sample_size, sharpe_ratio, max_drawdown_r, median_risk_points)
+            VALUES (
                 'MGC_TOKYO_OPEN_E1_RR2.0_CB1_ORB_G4', 'MGC', 'TOKYO_OPEN', 'E1',
                 2.0, 1, 'ORB_G4', 0.35, 0.52, 150, 1.2, 3.5, 4.2
             )
@@ -298,7 +303,10 @@ class TestLoadBestExperimentalVariant:
         """Matching experimental strategy with positive ExpR returns dict."""
         con = duckdb.connect(str(live_config_db))
         con.execute("""
-            INSERT INTO experimental_strategies VALUES (
+            INSERT INTO experimental_strategies (strategy_id, instrument, orb_label,
+                entry_model, rr_target, confirm_bars, filter_type, expectancy_r,
+                win_rate, sample_size, sharpe_ratio, max_drawdown_r, median_risk_points)
+            VALUES (
                 'exp_test', 'MGC', 'TOKYO_OPEN', 'E2', 2.0, 1, 'ORB_G5',
                 0.25, 0.51, 200, 1.0, 4.0, 3.5
             )
@@ -315,7 +323,10 @@ class TestLoadBestExperimentalVariant:
         """Negative expectancy is filtered out."""
         con = duckdb.connect(str(live_config_db))
         con.execute("""
-            INSERT INTO experimental_strategies VALUES (
+            INSERT INTO experimental_strategies (strategy_id, instrument, orb_label,
+                entry_model, rr_target, confirm_bars, filter_type, expectancy_r,
+                win_rate, sample_size, sharpe_ratio, max_drawdown_r, median_risk_points)
+            VALUES (
                 'neg_test', 'MGC', 'TOKYO_OPEN', 'E2', 2.0, 1, 'ORB_G5',
                 -0.10, 0.45, 200, -0.5, 5.0, 3.5
             )
