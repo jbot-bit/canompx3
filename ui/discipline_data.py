@@ -216,3 +216,21 @@ def override_cooling(session_state: dict, *, state_path: Path = STATE_PATH) -> N
         {"remaining_seconds": round(remaining, 1)},
         path=state_path,
     )
+
+
+# -- AI Coach integration ---------------------------------------------------
+
+COACHING_DIGESTS_PATH = _DATA_DIR / "coaching_digests.jsonl"
+
+
+def load_coaching_note(*, digests_path: Path = COACHING_DIGESTS_PATH) -> str | None:
+    """Load the latest coaching note for pre-session priming. Returns None if unavailable."""
+    records = _load_jsonl(digests_path, label="coaching_digest")
+    if not records:
+        return None
+    # Get last record with a coaching_note
+    for record in reversed(records):
+        note = record.get("coaching_note")
+        if note:
+            return note
+    return None
