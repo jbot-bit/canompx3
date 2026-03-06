@@ -6,6 +6,7 @@ Uses a cached connection per db_path to avoid connection-per-query overhead.
 """
 
 import atexit
+from datetime import date
 from pathlib import Path
 
 import duckdb
@@ -170,3 +171,83 @@ def get_schema_summary(db_path: Path | None = None) -> str:
         col_strs = [f"{r['column_name']} ({r['data_type']})" for _, r in cols.iterrows()]
         lines.append(f"{t}: {', '.join(col_strs)}")
     return "\n".join(lines)
+
+
+def get_prior_day_atr(
+    instrument: str,
+    orb_minutes: int = 5,
+    db_path: Path | None = None,
+) -> float | None:
+    """Get the most recent ATR-20 for an instrument.
+
+    Returns the atr_20 value from the latest trading day in daily_features.
+    Used by the co-pilot to set expectations: "Prior day ATR: 28pts."
+    """
+    sql = f"""
+        SELECT atr_20
+        FROM daily_features
+        WHERE symbol = '{instrument}'
+          AND orb_minutes = {orb_minutes}
+        ORDER BY trading_day DESC
+        LIMIT 1
+    """
+    try:
+        df = query_df(sql, db_path)
+        if df.empty:
+            return None
+        val = df.iloc[0]["atr_20"]
+        return float(val) if val is not None else None
+    except Exception:
+        return None
+
+
+def get_today_completed_sessions(
+    trading_day: date,
+    db_path: Path | None = None,
+) -> list[dict]:
+    """Get ORB outcomes for a trading day, grouped by session.
+
+    Returns list of dicts with keys: orb_label, symbol, break_dir, pnl_r, outcome.
+    Used by the co-pilot's day summary section.
+    """
+    sql = f"""
+        SELECT orb_label, symbol, break_dir, pnl_r, outcome,
+               entry_model, rr_target
+        FROM orb_outcomes
+        WHERE trading_day = '{trading_day.isoformat()}'
+          AND orb_minutes = 5
+        ORDER BY orb_label, symbol
+    """
+    try:
+        df = query_df(sql, db_path)
+        return df.to_dict("records") if not df.empty else []
+    except Exception:
+        return []
+
+
+def get_previous_trading_day(
+    before: date,
+    db_path: Path | None = None,
+) -> date | None:
+    """Find the most recent trading day before the given date.
+
+    Queries daily_features for the latest trading_day < before.
+    Used by the co-pilot for "Last trading day" summary.
+    """
+    sql = f"""
+        SELECT MAX(trading_day) as prev_day
+        FROM daily_features
+        WHERE trading_day < '{before.isoformat()}'
+          AND orb_minutes = 5
+    """
+    try:
+        df = query_df(sql, db_path)
+        if df.empty or df.iloc[0]["prev_day"] is None:
+            return None
+        val = df.iloc[0]["prev_day"]
+        # DuckDB returns pd.Timestamp — convert to date
+        if hasattr(val, "date"):
+            return val.date()
+        return val
+    except Exception:
+        return None
