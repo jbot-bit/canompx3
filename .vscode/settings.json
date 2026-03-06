@@ -1,0 +1,23 @@
+{
+    "python.defaultInterpreterPath": "./venv/Scripts/python.exe",
+    "python.analysis.typeCheckingMode": "basic",
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportMissingModuleSource": "warning",
+        "reportMissingTypeStubs": "warning"
+    },
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+        }
+    },
+    "ruff.lint.args": ["--config=ruff.toml"],
+    "ruff.format.args": ["--config=ruff.toml"],
+    "files.exclude": {
+        "**/__pycache__": true,
+        "venv": true,
+        ".venv": true,
+        "*.egg-info": true
+    }
+}

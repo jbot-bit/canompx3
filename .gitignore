@@ -53,7 +53,7 @@ live_signals.jsonl
 .serena/
 
 # IDE
-.vscode/
+# .vscode/  — settings.json committed for team consistency
 .idea/
 *.swp
 *.swo
