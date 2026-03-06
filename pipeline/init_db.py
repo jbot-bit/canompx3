@@ -135,6 +135,19 @@ CREATE TABLE IF NOT EXISTS family_rr_locks (
 );
 """
 
+REBUILD_MANIFEST_SCHEMA = """
+CREATE TABLE IF NOT EXISTS rebuild_manifest (
+    rebuild_id      TEXT        PRIMARY KEY,
+    instrument      TEXT        NOT NULL,
+    started_at      TIMESTAMPTZ NOT NULL,
+    completed_at    TIMESTAMPTZ,
+    status          TEXT        NOT NULL,
+    failed_step     TEXT,
+    steps_completed TEXT[],
+    trigger         TEXT        NOT NULL
+);
+"""
+
 
 def _build_daily_features_ddl() -> str:
     """Generate CREATE TABLE DDL for daily_features.
@@ -311,6 +324,7 @@ def init_db(db_path: Path, force: bool = False):
                 "orb_outcomes",
                 "prospective_signals",
                 "family_rr_locks",
+                "rebuild_manifest",
             ]:
                 con.execute(f"DROP TABLE IF EXISTS {t}")
             # Drop pipeline tables
@@ -452,6 +466,9 @@ def init_db(db_path: Path, force: bool = False):
 
         con.execute(FAMILY_RR_LOCKS_SCHEMA)
         logger.info("  family_rr_locks: created (or already exists)")
+
+        con.execute(REBUILD_MANIFEST_SCHEMA)
+        logger.info("  rebuild_manifest: created (or already exists)")
 
         con.commit()
 
