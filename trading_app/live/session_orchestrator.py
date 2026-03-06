@@ -14,7 +14,7 @@ VERIFIED API NOTES:
 import asyncio
 import json
 import logging
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -47,7 +47,13 @@ class SessionOrchestrator:
         self.instrument = instrument
         self.demo = demo
         self.signal_only = signal_only
-        self.trading_day = datetime.now(ZoneInfo("Australia/Brisbane")).date()
+        # Trading day = 09:00 Brisbane → 09:00 next day Brisbane.
+        # If started before 09:00, we're still in yesterday's trading day.
+        bris_now = datetime.now(ZoneInfo("Australia/Brisbane"))
+        if bris_now.hour < 9:
+            self.trading_day = (bris_now - timedelta(days=1)).date()
+        else:
+            self.trading_day = bris_now.date()
 
         # Auth is needed even in signal-only mode (for the market data WebSocket feed)
         self.auth = TradovateAuth(demo=demo)
