@@ -1,0 +1,22 @@
+{
+    "pythonVersion": "3.13",
+    "typeCheckingMode": "basic",
+    "include": [
+        "pipeline",
+        "trading_app",
+        "ui"
+    ],
+    "exclude": [
+        "**/__pycache__",
+        "venv",
+        ".venv",
+        "research",
+        "openclaw",
+        "llm-code-scanner",
+        ".auto-claude"
+    ],
+    "reportMissingModuleSource": "warning",
+    "reportMissingTypeStubs": "warning",
+    "reportUnusedImport": false,
+    "reportUnusedVariable": false
+}
