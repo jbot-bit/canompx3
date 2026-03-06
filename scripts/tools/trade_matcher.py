@@ -159,6 +159,23 @@ def _build_trade(
     }
 
 
+def detect_source(trade: dict, signals: list[dict], *, tolerance_s: float = 60.0) -> None:
+    """Match a trade to a system signal. Mutates trade in-place."""
+    if not signals:
+        return
+    trade_ts = _parse_ts(trade["entry_time"])
+    for sig in signals:
+        if sig.get("type") not in ("SIGNAL_ENTRY", "ORDER_ENTRY"):
+            continue
+        if sig.get("instrument") != trade["instrument"]:
+            continue
+        sig_ts = _parse_ts(sig["ts"])
+        if abs((trade_ts - sig_ts).total_seconds()) <= tolerance_s:
+            trade["source"] = "system"
+            trade["strategy_id"] = sig.get("strategy_id")
+            return
+
+
 def save_trades(trades: list[dict], *, path: Path = TRADES_PATH) -> int:
     """Append trades to JSONL. Returns count written."""
     path.parent.mkdir(parents=True, exist_ok=True)
