@@ -11,6 +11,7 @@ Usage:
     python scripts/tools/pipeline_status.py  # all active instruments
 """
 
+import shlex
 import subprocess
 import sys
 import uuid
@@ -396,7 +397,7 @@ def run_rebuild(
         print(f"  [{i}/{total}] {step_name}")
         print(f"    CMD: {step_cmd}")
         try:
-            result = subprocess.run(step_cmd, shell=True, cwd=str(PROJECT_ROOT), timeout=3600)
+            result = subprocess.run(shlex.split(step_cmd), cwd=str(PROJECT_ROOT), timeout=3600)
         except TimeoutExpired:
             print("    TIMED OUT (>3600s)")
             write_manifest(
@@ -631,6 +632,10 @@ def main() -> None:
     args = parser.parse_args()
 
     db_path = args.db_path if args.db_path else str(GOLD_DB_PATH)
+
+    # Validate instrument if provided (prevents typos and shell injection in subprocess commands)
+    if args.instrument and args.instrument not in ACTIVE_ORB_INSTRUMENTS:
+        parser.error(f"Unknown instrument '{args.instrument}'. Valid: {', '.join(sorted(ACTIVE_ORB_INSTRUMENTS))}")
 
     # --- --write-manifest ---
     if args.write_manifest:

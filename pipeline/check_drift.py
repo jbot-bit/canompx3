@@ -15,7 +15,6 @@ Usage:
     python pipeline/check_drift.py
 """
 
-import datetime
 import re
 import sys
 from datetime import UTC
@@ -3075,12 +3074,9 @@ def check_pipeline_staleness(con=None) -> list[str]:
                 continue  # No data yet — not a staleness issue
 
             # Count trading days (weekdays) between oo_max and df_max
-            gap = 0
-            current = oo_max + datetime.timedelta(days=1)
-            while current <= df_max:
-                if current.weekday() < 5:
-                    gap += 1
-                current += datetime.timedelta(days=1)
+            from scripts.tools.pipeline_status import _trading_days_between
+
+            gap = _trading_days_between(oo_max, df_max)
 
             if gap > 7:
                 stale_instruments.append(f"{inst} ({gap}d)")
