@@ -3,7 +3,7 @@
 Connects to the Market Hub, subscribes to contract quotes,
 aggregates into 1-minute OHLCV bars via BarAggregator.
 
-Market Hub URL: https://rtc.thefuturesdesk.projectx.com/hubs/market
+Market Hub URL: configurable via PROJECTX_BASE_URL env var
 Subscribe: invoke SubscribeContractQuotes with contract ID
 Events: GatewayQuote (lastPrice, bestBid, bestAsk, volume),
         GatewayTrade (price, volume, type)
@@ -18,10 +18,9 @@ from typing import Any
 
 from ..bar_aggregator import Bar, BarAggregator
 from ..broker_base import BrokerAuth, BrokerFeed
+from .auth import MARKET_HUB_URL
 
 log = logging.getLogger(__name__)
-
-MARKET_HUB = "https://rtc.thefuturesdesk.projectx.com/hubs/market"
 
 # Stop-file for graceful Windows shutdown (same as Tradovate)
 _STOP_FILE = Path(__file__).parent.parent.parent.parent / "live_session.stop"
@@ -118,7 +117,7 @@ class ProjectXDataFeed(BrokerFeed):
                 )
 
                 client = SignalRClient(
-                    MARKET_HUB,
+                    MARKET_HUB_URL,
                     access_token_factory=lambda: self.auth.get_token(),
                     headers={"Accept": "text/plain"},
                 )
@@ -174,7 +173,7 @@ class ProjectXDataFeed(BrokerFeed):
                 token = self.auth.get_token()
                 hub = (
                     HubConnectionBuilder()
-                    .with_url(f"{MARKET_HUB}?access_token={token}")
+                    .with_url(f"{MARKET_HUB_URL}?access_token={token}")
                     .with_automatic_reconnect({"type": "interval", "intervals": [5, 10, 30, 60]})
                     .build()
                 )

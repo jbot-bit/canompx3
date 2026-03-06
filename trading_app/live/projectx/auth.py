@@ -16,7 +16,12 @@ from ..broker_base import BrokerAuth
 load_dotenv()
 log = logging.getLogger(__name__)
 
-BASE_URL = "https://api.thefuturesdesk.projectx.com"
+# Base URLs — configurable via PROJECTX_BASE_URL env var.
+# TopstepX uses api.topstepx.com; older ProjectX docs reference thefuturesdesk.
+_DEFAULT_BASE = "https://api.topstepx.com"
+BASE_URL = os.environ.get("PROJECTX_BASE_URL", _DEFAULT_BASE).rstrip("/")
+MARKET_HUB_URL = BASE_URL.replace("://api.", "://rtc.") + "/hubs/market"
+USER_HUB_URL = BASE_URL.replace("://api.", "://rtc.") + "/hubs/user"
 
 
 class ProjectXAuth(BrokerAuth):
@@ -38,7 +43,7 @@ class ProjectXAuth(BrokerAuth):
             self._validate_or_login()
 
     def _login(self) -> str:
-        user = os.environ["PROJECTX_USER"]
+        user = os.environ.get("PROJECTX_USERNAME") or os.environ["PROJECTX_USER"]
         api_key = os.environ["PROJECTX_API_KEY"]
         resp = requests.post(
             f"{BASE_URL}/api/Auth/loginKey",

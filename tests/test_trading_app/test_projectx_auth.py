@@ -15,7 +15,9 @@ def test_projectx_auth_login():
     }
     mock_resp.raise_for_status = MagicMock()
 
-    with patch.dict("os.environ", {"PROJECTX_USER": "testuser", "PROJECTX_API_KEY": "testkey"}):
+    with patch.dict(
+        "os.environ", {"PROJECTX_USERNAME": "testuser", "PROJECTX_USER": "testuser", "PROJECTX_API_KEY": "testkey"}
+    ):
         with patch("requests.post", return_value=mock_resp) as mock_post:
             from trading_app.live.projectx.auth import ProjectXAuth
 
@@ -41,7 +43,9 @@ def test_projectx_auth_headers():
     }
     mock_resp.raise_for_status = MagicMock()
 
-    with patch.dict("os.environ", {"PROJECTX_USER": "testuser", "PROJECTX_API_KEY": "testkey"}):
+    with patch.dict(
+        "os.environ", {"PROJECTX_USERNAME": "testuser", "PROJECTX_USER": "testuser", "PROJECTX_API_KEY": "testkey"}
+    ):
         with patch("requests.post", return_value=mock_resp):
             from trading_app.live.projectx.auth import ProjectXAuth
 

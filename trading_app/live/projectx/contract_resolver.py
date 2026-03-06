@@ -5,10 +5,9 @@ import logging
 import requests
 
 from ..broker_base import BrokerAuth, BrokerContracts
+from .auth import BASE_URL
 
 log = logging.getLogger(__name__)
-
-BASE_URL = "https://api.thefuturesdesk.projectx.com"
 
 # Search terms for each instrument. Dynamic discovery via /api/Contract/available.
 INSTRUMENT_SEARCH_TERMS: dict[str, list[str]] = {

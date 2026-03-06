@@ -10,10 +10,9 @@ import time
 import requests
 
 from ..broker_base import BrokerAuth, BrokerRouter
+from .auth import BASE_URL
 
 log = logging.getLogger(__name__)
-
-BASE_URL = "https://api.thefuturesdesk.projectx.com"
 
 
 class ProjectXOrderRouter(BrokerRouter):
