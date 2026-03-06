@@ -138,3 +138,34 @@ def test_get_latest_letter(tmp_path):
     letter = get_latest_letter(session="CME_REOPEN", path=f)
     assert letter is not None
     assert letter["text"] == "Stick to the plan."
+
+
+def test_trigger_cooling_sets_until(tmp_path):
+    from ui.discipline_data import trigger_cooling, is_cooling_active
+    state = {}
+    trigger_cooling(state, pnl_r=-1.0, consecutive_losses=2, session_pnl_r=-2.0,
+                    state_path=tmp_path / "state.jsonl")
+    assert "cooling_until" in state
+    assert is_cooling_active(state)
+
+
+def test_cooling_expires():
+    from ui.discipline_data import is_cooling_active
+    from datetime import datetime, timezone, timedelta
+    state = {"cooling_until": (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()}
+    assert not is_cooling_active(state)
+
+
+def test_override_cooling_logs_event(tmp_path):
+    from ui.discipline_data import trigger_cooling, override_cooling
+    import json
+    state_path = tmp_path / "state.jsonl"
+    state = {}
+    trigger_cooling(state, pnl_r=-1.0, consecutive_losses=1, session_pnl_r=-1.0,
+                    state_path=state_path)
+    override_cooling(state, state_path=state_path)
+    assert "cooling_until" not in state
+    lines = state_path.read_text().strip().split("\n")
+    events = [json.loads(ln) for ln in lines]
+    override_events = [e for e in events if e["event"] == "cooling_overridden"]
+    assert len(override_events) == 1

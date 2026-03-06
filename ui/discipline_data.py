@@ -4,7 +4,7 @@ Append-only JSONL storage for trade debriefs and discipline state events.
 No database writes, no schema migrations. Pure file I/O.
 """
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 _DATA_DIR = Path(__file__).parent.parent / "data"
@@ -150,3 +150,61 @@ def get_latest_letter(
         "ts": latest.get("ts"),
         "strategy_id": latest.get("strategy_id"),
     }
+
+
+# -- Cooling period --------------------------------------------------------
+
+COOLING_SECONDS = 90
+
+
+def trigger_cooling(
+    session_state: dict,
+    *,
+    pnl_r: float,
+    consecutive_losses: int,
+    session_pnl_r: float,
+    state_path: Path = STATE_PATH,
+) -> None:
+    """Activate cooling period after a losing trade."""
+    until = datetime.now(timezone.utc) + timedelta(seconds=COOLING_SECONDS)
+    session_state["cooling_until"] = until.isoformat()
+    append_discipline_event(
+        "cooling_triggered",
+        {
+            "pnl_r": pnl_r,
+            "consecutive_losses": consecutive_losses,
+            "session_pnl_r": session_pnl_r,
+            "cooldown_seconds": COOLING_SECONDS,
+        },
+        path=state_path,
+    )
+
+
+def is_cooling_active(session_state: dict) -> bool:
+    """Check if cooling period is still active."""
+    until_str = session_state.get("cooling_until")
+    if not until_str:
+        return False
+    until = datetime.fromisoformat(until_str)
+    return datetime.now(timezone.utc) < until
+
+
+def cooling_remaining_seconds(session_state: dict) -> float:
+    """Seconds remaining in cooling period. 0 if not active."""
+    until_str = session_state.get("cooling_until")
+    if not until_str:
+        return 0.0
+    until = datetime.fromisoformat(until_str)
+    remaining = (until - datetime.now(timezone.utc)).total_seconds()
+    return max(0.0, remaining)
+
+
+def override_cooling(session_state: dict, *, state_path: Path = STATE_PATH) -> None:
+    """Override cooling period (soft mode). Logs the override event."""
+    remaining = cooling_remaining_seconds(session_state)
+    session_state.pop("cooling_until", None)
+    append_discipline_event(
+        "cooling_overridden",
+        {"remaining_seconds": round(remaining, 1)},
+        path=state_path,
+    )
