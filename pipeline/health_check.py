@@ -170,6 +170,27 @@ def check_git_hooks() -> tuple[bool, str]:
         return False, "Git hooks: cannot read git config"
 
 
+def check_staleness() -> tuple[bool, str]:
+    """Report pipeline staleness (advisory — always passes)."""
+    try:
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+        from scripts.tools.pipeline_status import staleness_engine
+
+        con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+        stale = []
+        for inst in ACTIVE_ORB_INSTRUMENTS:
+            status = staleness_engine(con, inst)
+            if status["stale_steps"]:
+                stale.append(f"{inst}: {', '.join(status['stale_steps'])}")
+        con.close()
+
+        if stale:
+            return True, f"STALENESS WARNING: {'; '.join(stale)}"
+        return True, "All instruments up to date"
+    except (ImportError, OSError, duckdb.Error) as e:
+        return True, f"Staleness check skipped: {e}"
+
+
 def check_m25_audit() -> tuple[bool, str]:
     """Run M2.5 second-opinion audit on recently changed files.
 
@@ -213,6 +234,7 @@ def main():
         check_python_deps,
         check_database,
         check_dbn_files,
+        check_staleness,
         check_git_hooks,
     ]
 
