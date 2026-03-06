@@ -29,6 +29,37 @@ from pipeline.paths import GOLD_DB_PATH
 # Helpers
 # ---------------------------------------------------------------------------
 
+# Schema for rebuild_manifest — used by _ensure_manifest_table()
+_REBUILD_MANIFEST_DDL = """
+CREATE TABLE IF NOT EXISTS rebuild_manifest (
+    rebuild_id TEXT PRIMARY KEY,
+    instrument TEXT NOT NULL,
+    started_at TIMESTAMPTZ NOT NULL,
+    completed_at TIMESTAMPTZ,
+    status TEXT NOT NULL,
+    failed_step TEXT,
+    steps_completed TEXT[],
+    trigger TEXT NOT NULL
+);
+"""
+
+
+def _ensure_manifest_table(con: duckdb.DuckDBPyConnection) -> bool:
+    """Create rebuild_manifest if it doesn't exist (idempotent).
+
+    Returns True if table is available, False if DB is read-only and table missing.
+    """
+    try:
+        con.execute(_REBUILD_MANIFEST_DDL)
+        return True
+    except duckdb.InvalidInputException:
+        # Read-only connection — check if table already exists
+        try:
+            con.execute("SELECT 1 FROM rebuild_manifest LIMIT 0")
+            return True
+        except duckdb.CatalogException:
+            return False
+
 
 def _trading_days_between(d1: date | None, d2: date | None) -> int:
     """Count weekdays between d1 and d2 (exclusive of d1, inclusive of d2).
@@ -148,6 +179,7 @@ def write_manifest(
     Uses parameterized SQL for safety. Sets started_at to now (UTC).
     Sets completed_at to now if status is COMPLETED or FAILED, else NULL.
     """
+    _ensure_manifest_table(con)
     now = datetime.now(UTC)
     completed_at = now if status in ("COMPLETED", "FAILED") else None
     steps_arr = steps_completed if steps_completed else []
@@ -457,11 +489,14 @@ def staleness_engine(con: duckdb.DuckDBPyConnection, instrument: str) -> dict:
             result["family_rr_locks"] = None
 
     # --- rebuild_manifest (last completed rebuild) ---
-    row = con.execute(
-        "SELECT MAX(completed_at::DATE) FROM rebuild_manifest WHERE instrument = ? AND status = 'completed'",
-        [instrument],
-    ).fetchone()
-    result["last_rebuild"] = row[0] if row and row[0] is not None else None
+    if _ensure_manifest_table(con):
+        row = con.execute(
+            "SELECT MAX(completed_at::DATE) FROM rebuild_manifest WHERE instrument = ? AND status = 'completed'",
+            [instrument],
+        ).fetchone()
+        result["last_rebuild"] = row[0] if row and row[0] is not None else None
+    else:
+        result["last_rebuild"] = None
 
     # --- Staleness detection ---
     # Each step compared to its UPSTREAM, not to today.
