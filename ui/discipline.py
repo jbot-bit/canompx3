@@ -18,6 +18,7 @@ from ui.discipline_data import (
     COOLING_SECONDS,
     DEBRIEFS_PATH,
     DEVIATION_TRIGGERS,
+    SIGNALS_PATH,
     STATE_PATH,
     append_debrief,
     append_discipline_event,
@@ -32,8 +33,8 @@ from ui.discipline_data import (
 
 _OVERRIDE_DELAY = 15  # seconds before soft-mode override is available
 
-# Signals file — same path as copilot.py
-_SIGNALS_FILE = Path(__file__).parent.parent / "live_signals.jsonl"
+# Signals file — canonical path from discipline_data
+_SIGNALS_FILE = SIGNALS_PATH
 
 
 # -- Debrief card ----------------------------------------------------------
@@ -227,7 +228,11 @@ def render_pre_session_priming(
         with col2:
             st.metric("Avg R (followed)", f"{stats['avg_r_followed']:+.2f}")
         with col3:
-            st.metric("Deviation cost", f"${stats['deviation_cost_dollars']:,.0f}")
+            dev_cost = stats["deviation_cost_dollars"]
+            if dev_cost > 0:
+                st.metric("Deviation cost", f"${dev_cost:,.0f}")
+            else:
+                st.metric("Deviated", f"{stats['total'] - stats['followed']}")
     else:
         st.caption("No debrief history yet for this session.")
 

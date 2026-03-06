@@ -14,6 +14,7 @@ log = logging.getLogger(__name__)
 _DATA_DIR = Path(__file__).parent.parent / "data"
 DEBRIEFS_PATH = _DATA_DIR / "trade_debriefs.jsonl"
 STATE_PATH = _DATA_DIR / "discipline_state.jsonl"
+SIGNALS_PATH = Path(__file__).parent.parent / "live_signals.jsonl"
 
 ADHERENCE_VALUES = ("followed", "modified", "overrode", "off_plan")
 
@@ -107,7 +108,7 @@ def compute_adherence_stats(*, path: Path = DEBRIEFS_PATH, session: str | None =
     """Compute adherence stats from debrief records."""
     records = load_debriefs(path=path)
     if session:
-        records = [r for r in records if session in r.get("strategy_id", "")]
+        records = [r for r in records if f"_{session}_" in r.get("strategy_id", "")]
 
     if not records:
         return {
@@ -139,7 +140,7 @@ def compute_adherence_stats(*, path: Path = DEBRIEFS_PATH, session: str | None =
 def get_latest_letter(session: str, *, path: Path = DEBRIEFS_PATH) -> dict | None:
     """Get the most recent letter_to_future_self for a session."""
     records = load_debriefs(path=path)
-    letters = [r for r in records if r.get("letter_to_future_self") and session in r.get("strategy_id", "")]
+    letters = [r for r in records if r.get("letter_to_future_self") and f"_{session}_" in r.get("strategy_id", "")]
     if not letters:
         return None
     latest = max(letters, key=lambda r: r.get("ts", ""))
