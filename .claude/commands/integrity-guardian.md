@@ -17,16 +17,6 @@ python scripts/tools/audit_behavioral.py
 ```
 If violations found, fix them before proceeding.
 
-## Scope Note
-
-This is the COMPREHENSIVE post-task review with full impact mapping.
-
-| Situation | Use |
-|-----------|-----|
-| Quick pre-commit check | /quant-verify |
-| Full post-task audit with impact map | /integrity-guardian |
-| Institutional code review with grading | /bloomey-review |
-
 ## Step 3: Impact Map
 Build a table for every modified production file:
 
@@ -64,3 +54,13 @@ Tests: PASS/FAIL (N passed)
 Open issues: [any remaining items]
 ================================
 ```
+
+## Scope Note
+
+This is the COMPREHENSIVE post-task review with full impact mapping.
+
+| Situation | Use |
+|-----------|-----|
+| Quick pre-commit check | /quant-verify |
+| Full post-task audit with impact map | /integrity-guardian |
+| Institutional code review with grading | /bloomey-review |

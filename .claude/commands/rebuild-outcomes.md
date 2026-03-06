@@ -1,5 +1,7 @@
 Full rebuild chain for instrument $ARGUMENTS (default MGC). Use after outcome_builder changes (e.g., new exit rules).
 
+Use when: "rebuild", "rebuild outcomes", "full rebuild", "rebuild [instrument]", "outcome_builder changed", "re-run the chain"
+
 Run these steps sequentially from bash:
 
 1. Rebuild outcomes with --force for all apertures:

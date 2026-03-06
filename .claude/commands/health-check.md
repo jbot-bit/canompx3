@@ -1,5 +1,7 @@
 Run the full project health check suite. No arguments needed.
 
+Use when: "health check", "is everything ok", "run all checks", "full check", "system check"
+
 Run these checks:
 
 1. Drift detection (static analysis — check count self-reported at runtime):

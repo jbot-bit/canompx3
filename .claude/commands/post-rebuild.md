@@ -25,7 +25,11 @@ python scripts/tools/build_edge_families.py --instrument $INSTRUMENT
 
 If no instrument specified, run for all active:
 ```bash
-for INST in MGC MNQ MES M2K; do
+python -c "
+from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+for inst in ACTIVE_ORB_INSTRUMENTS:
+    print(inst)
+" | while read INST; do
     python scripts/tools/build_edge_families.py --instrument $INST
 done
 ```
