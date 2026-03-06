@@ -123,6 +123,12 @@ python pipeline/run_pipeline.py --instrument MGC --start 2024-01-01 --end 2024-1
 python pipeline/build_bars_5m.py --instrument MGC --start 2024-01-01 --end 2024-12-31
 python pipeline/build_daily_features.py --instrument MGC --start 2024-01-01 --end 2024-12-31
 
+# Pipeline Status & Rebuild (scripts/tools/pipeline_status.py)
+python scripts/tools/pipeline_status.py --status              # Staleness for all instruments
+python scripts/tools/pipeline_status.py --rebuild --instrument MGC  # Rebuild stale steps
+python scripts/tools/pipeline_status.py --rebuild-all         # All stale instruments
+python scripts/tools/pipeline_status.py --resume --instrument MGC   # Resume failed rebuild
+
 # Trading App
 python trading_app/paper_trader.py --instrument MGC --start 2025-01-01 --end 2025-12-31
 python -m trading_app.live_config --db-path C:/db/gold.db
@@ -148,16 +154,7 @@ See `.claude/rules/` for contextual rules on daily_features JOINs, pipeline patt
 
 ## MCP Server (gold-db)
 
-The `gold-db` MCP server (`trading_app/mcp_server.py`) exposes 4 read-only tools for querying the trading database. **ALWAYS prefer these over raw SQL against gold.db** — they apply correct filters, enforce read-only, and handle edge cases.
-
-| Tool | When to Use |
-|------|-------------|
-| `list_available_queries` | Discover available query templates (call first if unsure) |
-| `query_trading_db` | Run any of 18 pre-approved SQL templates — strategy lookups, performance stats, trade history, schema info. Params: `template`, `orb_label`, `entry_model`, `filter_type`, `instrument`, `limit`. Row cap 5000. |
-| `get_strategy_fitness` | Rolling regime assessment (FIT/WATCH/DECAY/STALE). Use for "is it still working?" questions. **Always use `summary_only=True` for portfolio-wide calls** (full output >150K chars). |
-| `get_canonical_context` | Load grounding docs (cost model, trading rules, config) before complex analysis |
-
-**Decision framework:** See `.claude/rules/mcp-usage.md` for intent→tool mapping.
+`gold-db` MCP server (`trading_app/mcp_server.py`) — 4 read-only tools. **ALWAYS prefer over raw SQL.** Tools: `list_available_queries`, `query_trading_db` (18 templates, row cap 5000), `get_strategy_fitness` (always `summary_only=True` for portfolio-wide), `get_canonical_context`. See `.claude/rules/mcp-usage.md` for intent→tool mapping.
 
 ---
 

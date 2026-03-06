@@ -54,7 +54,7 @@ research/
     analyze_entry_clearance.py
     analyze_eod_exits.py
     analyze_first_half_hour.py
-... and 814 more entries
+... and 839 more entries
 ```
 
 ## Module Index
@@ -67,18 +67,18 @@ research/
 | `pipeline/build_daily_features.py` | 1052 | Build daily_features from bars_1m and bars_5m. | compute_trading_day, compute_trading_day_utc_range, get_trading_days_in_range, get_bars_for_trading_day, compute_orb_range |
 | `pipeline/calendar_filters.py` | 38 | Calendar-based skip filters: NFP, OPEX, Friday, day-of-week. | is_nfp_day, is_opex_day, is_friday, is_monday, is_tuesday |
 | `pipeline/check_db.py` | 61 | Check database contents and integrity. | check_db |
-| `pipeline/check_drift.py` | 2542 | Drift detection for the multi-instrument pipeline. | check_hardcoded_mgc_sql, check_apply_iterrows, check_non_bars1m_writes, check_schema_query_consistency, check_import_cycles |
+| `pipeline/check_drift.py` | 2612 | Drift detection for the multi-instrument pipeline. | check_hardcoded_mgc_sql, check_apply_iterrows, check_non_bars1m_writes, check_schema_query_consistency, check_import_cycles |
 | `pipeline/cost_model.py` | 290 | Cost model for futures instruments. | CostSpec, get_session_cost_spec, get_cost_spec, list_validated_instruments, risk_in_dollars |
 | `pipeline/daily_backfill.py` | 92 | Nightly data backfill: ingest new bars → 5m bars → daily features → outcomes. | get_last_ingested_date, is_up_to_date, run_backfill_for_instrument, main |
 | `pipeline/dashboard.py` | 647 | Pipeline Dashboard — generates a self-contained HTML report. | collect_db_metrics, collect_checkpoint_progress, collect_file_inventory, collect_guardrail_status, collect_contract_history |
 | `pipeline/db_config.py` | 15 | Standard DuckDB connection tuning | configure_connection |
 | `pipeline/dst.py` | 335 | DST detection and dynamic session resolvers. | is_us_dst, is_uk_dst, validate_dow_filter_alignment, is_winter_for_session, classify_dst_verdict |
 | `pipeline/export_parquet.py` | 111 | Export DuckDB tables to Parquet files for read-independent analysis. | export_table, export_all, main |
-| `pipeline/health_check.py` | 218 | Pipeline health check — quick CLI that checks everything at once. | check_python_deps, check_database, check_dbn_files, check_drift, check_tests |
+| `pipeline/health_check.py` | 236 | Pipeline health check — quick CLI that checks everything at once. | check_python_deps, check_database, check_dbn_files, check_drift, check_tests |
 | `pipeline/ingest_dbn.py` | 425 | Generic multi-instrument DBN ingestion into bars_1m table. | iter_dbn_chunks, main |
 | `pipeline/ingest_dbn_daily.py` | 394 | Ingest daily DBN files into bars_1m table (multi-instrument). | get_ingest_config, load_symbology, discover_daily_files, main |
 | `pipeline/ingest_dbn_mgc.py` | 606 | Ingest MGC DBN file into bars_1m table. | CheckpointManager, validate_chunk, validate_timestamp_utc, parse_expiry, choose_front_contract |
-| `pipeline/init_db.py` | 381 | Initialize the DuckDB database schema for multi-instrument data pipeline. | init_db, main |
+| `pipeline/init_db.py` | 396 | Initialize the DuckDB database schema for multi-instrument data pipeline. | init_db, main |
 | `pipeline/log.py` | 12 | Shared logging configuration for pipeline and trading_app modules. | get_logger |
 | `pipeline/paths.py` | 28 | Canonical paths for the MGC data pipeline. |  |
 | `pipeline/run_full_pipeline.py` | 181 | Full pipeline: ingest -> bars_5m -> features -> audit -> outcomes -> discover... | step_ingest, step_build_5m, step_build_features, step_audit, step_build_outcomes |
@@ -98,14 +98,28 @@ research/
 | `trading_app/execution_engine.py` | 980 | Execution engine for live/replay bar-by-bar strategy execution. | TradeState, TradeEvent, LiveORB, LiveIB, ActiveTrade |
 | `trading_app/execution_spec.py` | 60 | Execution specification dataclass. | ExecutionSpec |
 | `trading_app/live/bar_aggregator.py` | 62 | Aggregates real-time ticks into 1-minute OHLCV bars. | Bar, BarAggregator |
-| `trading_app/live/contract_resolver.py` | 68 | Resolves instrument shortname to current Tradovate front-month contract symbol. | resolve_account_id, resolve_front_month |
+| `trading_app/live/broker_base.py` | 92 | Abstract base classes for multi-broker support. | BrokerAuth, BrokerFeed, BrokerRouter, BrokerContracts, BrokerPositions |
+| `trading_app/live/broker_factory.py` | 60 | Factory for creating broker components from a broker name. | get_broker_name, create_broker_components |
+| `trading_app/live/contract_resolver.py` | 6 | Backwards-compat re-export |  |
 | `trading_app/live/cusum_monitor.py` | 43 | CUSUM (Cumulative Sum) control chart for detecting strategy performance drift. | CUSUMMonitor |
-| `trading_app/live/data_feed.py` | 153 | Tradovate market data WebSocket feed. | DataFeed |
+| `trading_app/live/data_feed.py` | 2 | Backwards-compat re-export |  |
 | `trading_app/live/live_market_state.py` | 75 | Builds ORB ranges incrementally from live 1-minute bars. | LiveORB, LiveORBBuilder |
-| `trading_app/live/order_router.py` | 150 | Maps ExecutionEngine TradeEvent → Tradovate REST orders. | OrderSpec, OrderResult, OrderRouter |
+| `trading_app/live/order_router.py` | 3 | Backwards-compat re-export |  |
 | `trading_app/live/performance_monitor.py` | 74 | Per-strategy live P&L tracking with CUSUM drift detection. | TradeRecord, PerformanceMonitor |
-| `trading_app/live/session_orchestrator.py` | 398 | Live trading session orchestrator. | SessionOrchestrator |
-| `trading_app/live/tradovate_auth.py` | 51 | Tradovate OAuth token management | TradovateAuth |
+| `trading_app/live/projectx/__init__.py` | 1 | ProjectX (TopstepX) broker implementation. |  |
+| `trading_app/live/projectx/auth.py` | 70 | ProjectX Gateway API authentication. | ProjectXAuth |
+| `trading_app/live/projectx/contract_resolver.py` | 60 | ProjectX contract resolution and account discovery. | ProjectXContracts |
+| `trading_app/live/projectx/data_feed.py` | 222 | ProjectX real-time market data via SignalR. | ProjectXDataFeed |
+| `trading_app/live/projectx/order_router.py` | 91 | ProjectX order routing via REST API. | ProjectXOrderRouter |
+| `trading_app/live/projectx/positions.py` | 32 | ProjectX position queries for crash recovery. | ProjectXPositions |
+| `trading_app/live/session_orchestrator.py` | 431 | Live trading session orchestrator. | SessionOrchestrator |
+| `trading_app/live/tradovate/__init__.py` | 13 | Tradovate broker implementation. |  |
+| `trading_app/live/tradovate/auth.py` | 56 | Tradovate OAuth token management | TradovateAuth |
+| `trading_app/live/tradovate/contract_resolver.py` | 80 | Resolves instrument shortname to current Tradovate front-month contract symbol. | resolve_account_id, resolve_front_month, TradovateContracts |
+| `trading_app/live/tradovate/data_feed.py` | 152 | Tradovate market data WebSocket feed. | TradovateDataFeed |
+| `trading_app/live/tradovate/order_router.py` | 152 | Maps ExecutionEngine TradeEvent -> Tradovate REST orders. | OrderSpec, OrderResult, TradovateOrderRouter |
+| `trading_app/live/tradovate/positions.py` | 11 | Tradovate position queries -- stub for future API access. | TradovatePositions |
+| `trading_app/live/tradovate_auth.py` | 2 | Backwards-compat re-export |  |
 | `trading_app/live/webhook_server.py` | 196 | TradingView webhook server — receives alerts and places orders via Tradovate. | lifespan, TradeRequest, TradeResponse, health, trade |
 | `trading_app/live_config.py` | 489 | Declarative live portfolio configuration. | LiveStrategySpec, build_live_portfolio, main |
 | `trading_app/market_state.py` | 259 | Market state: single shared object describing current market context. | OrbSnapshot, SessionSignals, RegimeContext, MarketState |
@@ -166,21 +180,7 @@ research/
 | `scripts/migrations/retire_e3_strategies.py` | 67 | Soft-retire all active E3 strategies in validated_setups. | retire_e3, main |
 | `scripts/operator_status.py` | 110 | Low-token operator status for canompx3. | OperatorStatus, build_status, print_human, main |
 | `scripts/reports/parameter_stability_heatmap.py` | 390 | Parameter stability heatmap generator for live portfolio strategies. | query_grid, build_heatmap_data, render_html_report, find_best_variant, main |
-| `scripts/reports/report_edge_portfolio.py` | 361 | Edge family portfolio report with honest aggregate stats. | report_instrument, print_report, session_slots, print_session_slots, main |
-| `scripts/reports/report_wf_diagnostics.py` | 137 | Walk-forward diagnostic report from JSONL results. | load_results, classify_windows, print_summary_table, main |
-| `scripts/run_live_session.py` | 116 | ORB Live Session — entry point. | main |
-| `scripts/run_webhook_server.py` | 74 | Entry point for the TradingView → Tradovate webhook server. | main |
-| `scripts/setup_daily_backfill.py` | 37 | Register Windows Task Scheduler job to run daily backfill at 7:00 AM Brisbane. |  |
-| `scripts/tools/audit_15m30m.py` | 84 | Investigate what happened to 15m/30m validated strategies. |  |
-| `scripts/tools/audit_behavioral.py` | 328 | Behavioral anti-pattern scanner — catches common AI/human coding mistakes. | check_hardcoded_check_counts, check_hardcoded_instrument_lists, check_broad_except_success, check_triple_join_guard, check_cli_arg_drift |
-| `scripts/tools/audit_ib_single_break.py` | 443 | AUDIT: IB Single Break script -- strip back, verify, rebuild honestly. | compute_ib, classify_at_checkpoint, classify_final, compute_hold_pnl, compute_fixed_exit_pnl |
-| `scripts/tools/audit_integrity.py` | 236 | Full data integrity audit — checks everything is honest and consistent. | check_outcome_coverage, check_validated_session_integrity, check_edge_family_integrity, check_e0_contamination, check_old_session_names |
-| `scripts/tools/backfill_dollar_columns.py` | 108 | Backfill dollar columns on existing orb_outcomes, experimental_strategies, | backfill_dollar_columns, main |
-| `scripts/tools/backfill_garch.py` | 72 | Backfill garch_forecast_vol and garch_atr_ratio into existing daily_features ... | backfill_instrument, main |
-| `scripts/tools/backtest_1100_early_exit.py` | 308 | Backtest: 1100 timed early exit at multiple thresholds. | run_backtest |
-| `scripts/tools/backtest_atr_regime.py` | 224 | Backtest ATR(20) as a regime on/off switch for ORB breakout families. | compute_family_metrics, main |
-| `scripts/tools/build_edge_families.py` | 303 | Build edge families by hashing strategy trade-day lists. | classify_family, classify_trade_tier, build_edge_families, main |
-... and 323 more modules
+... and 345 more modules
 
 ## Cross-Package Dependencies
 
@@ -233,7 +233,7 @@ research/
 - `trading_app/portfolio.py` -> pipeline, trading_app
 - `trading_app/regime/compare.py` -> pipeline
 - `trading_app/regime/discovery.py` -> pipeline, trading_app
-... and 267 more edges
+... and 272 more edges
 
 ## CLI Entry Points
 
@@ -261,4 +261,4 @@ research/
 - `python trading_app/ml/evaluate.py` -- (no argparse description)
 - `python trading_app/ml/evaluate_validated.py` -- (no argparse description)
 - `python trading_app/ml/importance.py` -- (no argparse description)
-... and 244 more entry points
+... and 246 more entry points

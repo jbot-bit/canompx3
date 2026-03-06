@@ -1,6 +1,7 @@
 """Tests for rebuild_manifest table schema and pipeline staleness engine."""
 
 from datetime import date
+from unittest.mock import patch
 
 import duckdb
 
@@ -464,4 +465,117 @@ class TestRebuildDryRun:
         captured = capsys.readouterr()
         assert "[13/13]" in captured.out
         assert "pinecone_sync" in captured.out
+        con.close()
+
+
+# ---------------------------------------------------------------------------
+# Non-dry-run rebuild tests (mock subprocess)
+# ---------------------------------------------------------------------------
+
+
+class TestRebuildExecution:
+    def test_rebuild_all_steps_pass(self, tmp_path, capsys):
+        """All steps succeed -> COMPLETED manifest written."""
+        _, con = _create_test_db(tmp_path)
+        sym = "MGC"
+        # Seed prerequisites so preflight checks pass
+        for ap in [5, 15, 30]:
+            _insert_daily_features(con, sym, "2026-03-06", ap)
+        _insert_orb_outcome(con, sym, "2026-03-06")
+        con.execute("INSERT INTO experimental_strategies (strategy_id, instrument) VALUES ('s1', ?)", [sym])
+        con.execute("INSERT INTO validated_setups (strategy_id, instrument, status) VALUES ('s1', ?, 'active')", [sym])
+        con.execute(
+            "INSERT INTO edge_families (family_hash, instrument, head_strategy_id, member_count, trade_day_count) "
+            "VALUES ('h1', ?, 's1', 1, 1)",
+            [sym],
+        )
+        con.commit()
+
+        mock_result = type("Result", (), {"returncode": 0})()
+        with patch("scripts.tools.pipeline_status.subprocess.run", return_value=mock_result):
+            ok = run_rebuild(con, sym)
+
+        assert ok is True
+        manifest = read_last_manifest(con, sym)
+        assert manifest is not None
+        assert manifest["status"] == "COMPLETED"
+        assert len(manifest["steps_completed"]) == 13
+        con.close()
+
+    def test_rebuild_step_fails_writes_manifest(self, tmp_path, capsys):
+        """Step failure -> FAILED manifest with failed_step recorded."""
+        _, con = _create_test_db(tmp_path)
+        sym = "MGC"
+        for ap in [5, 15, 30]:
+            _insert_daily_features(con, sym, "2026-03-06", ap)
+        con.commit()
+
+        call_count = 0
+
+        def mock_run(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            # Fail on 2nd step (outcome_builder_O15)
+            rc = 1 if call_count == 2 else 0
+            return type("Result", (), {"returncode": rc})()
+
+        with patch("scripts.tools.pipeline_status.subprocess.run", side_effect=mock_run):
+            ok = run_rebuild(con, sym)
+
+        assert ok is False
+        manifest = read_last_manifest(con, sym)
+        assert manifest is not None
+        assert manifest["status"] == "FAILED"
+        assert manifest["failed_step"] == "outcome_builder_O15"
+        assert manifest["steps_completed"] == ["outcome_builder_O5"]
+        con.close()
+
+    def test_rebuild_timeout_writes_manifest(self, tmp_path, capsys):
+        """Subprocess timeout -> FAILED manifest."""
+        from subprocess import TimeoutExpired
+
+        _, con = _create_test_db(tmp_path)
+        sym = "MGC"
+        for ap in [5, 15, 30]:
+            _insert_daily_features(con, sym, "2026-03-06", ap)
+        con.commit()
+
+        def mock_run(*args, **kwargs):
+            raise TimeoutExpired(cmd="test", timeout=3600)
+
+        with patch("scripts.tools.pipeline_status.subprocess.run", side_effect=mock_run):
+            ok = run_rebuild(con, sym)
+
+        assert ok is False
+        manifest = read_last_manifest(con, sym)
+        assert manifest["status"] == "FAILED"
+        assert manifest["failed_step"] == "outcome_builder_O5"
+        captured = capsys.readouterr()
+        assert "TIMED OUT" in captured.out
+        con.close()
+
+
+# ---------------------------------------------------------------------------
+# Manifest started_at preservation
+# ---------------------------------------------------------------------------
+
+
+class TestManifestStartedAtPreservation:
+    def test_update_preserves_started_at(self, tmp_path):
+        """RUNNING -> COMPLETED update preserves the original started_at."""
+        _, con = _create_test_db(tmp_path)
+
+        rid = "test-preserve-001"
+        # Write initial RUNNING record
+        write_manifest(con, rid, "MGC", "RUNNING", trigger="CLI")
+        row1 = read_last_manifest(con, "MGC")
+        original_started = row1["started_at"]
+
+        # Transition to COMPLETED
+        write_manifest(con, rid, "MGC", "COMPLETED", steps_completed=["step1"], trigger="CLI")
+        row2 = read_last_manifest(con, "MGC")
+
+        assert row2["started_at"] == original_started
+        assert row2["status"] == "COMPLETED"
+        assert row2["completed_at"] is not None
         con.close()

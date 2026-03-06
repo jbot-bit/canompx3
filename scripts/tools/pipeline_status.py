@@ -16,6 +16,7 @@ import sys
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from subprocess import TimeoutExpired
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -176,22 +177,41 @@ def write_manifest(
 ) -> None:
     """Write or update a rebuild manifest row.
 
-    Uses parameterized SQL for safety. Sets started_at to now (UTC).
-    Sets completed_at to now if status is COMPLETED or FAILED, else NULL.
+    Uses parameterized SQL for safety. Preserves started_at on updates —
+    only sets it on initial RUNNING insert. Sets completed_at on terminal states.
     """
     _ensure_manifest_table(con)
     now = datetime.now(UTC)
     completed_at = now if status in ("COMPLETED", "FAILED") else None
     steps_arr = steps_completed if steps_completed else []
 
-    con.execute(
-        """
-        INSERT OR REPLACE INTO rebuild_manifest
-            (rebuild_id, instrument, started_at, completed_at, status, failed_step, steps_completed, trigger)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        """,
-        [rebuild_id, instrument, now, completed_at, status, failed_step, steps_arr, trigger],
-    )
+    # Check if row already exists (status transition: RUNNING -> COMPLETED/FAILED)
+    existing = con.execute(
+        "SELECT started_at FROM rebuild_manifest WHERE rebuild_id = $1",
+        [rebuild_id],
+    ).fetchone()
+
+    if existing is not None:
+        # Update — preserve original started_at
+        con.execute(
+            """
+            UPDATE rebuild_manifest
+            SET completed_at = $1, status = $2, failed_step = $3,
+                steps_completed = $4
+            WHERE rebuild_id = $5
+            """,
+            [completed_at, status, failed_step, steps_arr, rebuild_id],
+        )
+    else:
+        # Insert — new rebuild
+        con.execute(
+            """
+            INSERT INTO rebuild_manifest
+                (rebuild_id, instrument, started_at, completed_at, status, failed_step, steps_completed, trigger)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            """,
+            [rebuild_id, instrument, now, completed_at, status, failed_step, steps_arr, trigger],
+        )
     con.commit()
 
 
@@ -375,7 +395,14 @@ def run_rebuild(
         # Execute
         print(f"  [{i}/{total}] {step_name}")
         print(f"    CMD: {step_cmd}")
-        result = subprocess.run(step_cmd, shell=True, cwd=str(PROJECT_ROOT))
+        try:
+            result = subprocess.run(step_cmd, shell=True, cwd=str(PROJECT_ROOT), timeout=3600)
+        except TimeoutExpired:
+            print("    TIMED OUT (>3600s)")
+            write_manifest(
+                con, rebuild_id, instrument, "FAILED", failed_step=step_name, steps_completed=completed, trigger=trigger
+            )
+            return False
         if result.returncode != 0:
             print(f"    FAILED (exit code {result.returncode})")
             write_manifest(
