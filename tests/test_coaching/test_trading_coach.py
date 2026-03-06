@@ -1,9 +1,6 @@
 """Tests for interactive trading coach."""
 
 import json
-from pathlib import Path
-
-import pytest
 
 from scripts.tools.trading_coach import build_chat_system_prompt, load_recent_digests
 

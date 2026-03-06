@@ -109,14 +109,24 @@ def build_digest_prompt(profile: dict, trades: list[dict], trading_rules_excerpt
 
 
 def parse_digest_response(raw: str) -> tuple[dict, dict]:
-    """Parse Claude's response into (digest, profile_patch)."""
+    """Parse Claude's response into (digest, profile_patch).
+
+    Raises ValueError if response is not valid JSON or missing required keys.
+    """
     # Strip markdown fencing if present
     cleaned = raw.strip()
     if cleaned.startswith("```"):
         cleaned = re.sub(r"^```(?:json)?\s*\n?", "", cleaned)
         cleaned = re.sub(r"\n?```\s*$", "", cleaned)
 
-    data = json.loads(cleaned)
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Claude returned invalid JSON: {cleaned[:200]}") from exc
+
+    if "digest" not in data:
+        raise ValueError(f"Claude response missing 'digest' key. Got keys: {list(data.keys())}")
+
     return data["digest"], data.get("profile_patch", {})
 
 
@@ -172,16 +182,24 @@ def generate_digest(trades: list[dict], *, profile_path: Path = PROFILE_PATH) ->
 
     user_prompt = build_digest_prompt(profile, trades, rules_excerpt)
 
-    client = anthropic.Anthropic()
-    response = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=4096,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_prompt}],
-    )
+    try:
+        client = anthropic.Anthropic()
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=4096,
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+    except Exception as exc:
+        print(f"ERROR: Claude API call failed: {exc}")
+        return None
 
     raw_text = response.content[0].text
-    digest, patch = parse_digest_response(raw_text)
+    try:
+        digest, patch = parse_digest_response(raw_text)
+    except ValueError as exc:
+        print(f"ERROR: Failed to parse Claude response: {exc}")
+        return None
 
     # Apply profile patch
     version_before = profile.get("version", 1)

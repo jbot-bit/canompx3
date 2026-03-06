@@ -181,10 +181,13 @@ def main():
             fills = fetch_all_topstepx(state)
             all_fills.extend(fills)
         except Exception as exc:
+            import traceback
+
             print(f"  TopstepX fetch failed: {exc}")
+            traceback.print_exc()
 
     if args.broker in ("tradovate", "all"):
-        print("Tradovate: skipping (auth not configured)")
+        print("Tradovate: skipped (set TRADOVATE_USERNAME + TRADOVATE_PASSWORD in .env to enable)")
 
     if all_fills:
         n = save_fills(all_fills)

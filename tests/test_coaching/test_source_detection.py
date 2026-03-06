@@ -1,10 +1,5 @@
 """Tests for source detection — matching broker trades to system signals."""
 
-import json
-from pathlib import Path
-
-import pytest
-
 from scripts.tools.trade_matcher import detect_source
 
 

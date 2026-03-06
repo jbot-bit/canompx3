@@ -1,10 +1,6 @@
 """Tests for coaching digest engine."""
 
 import json
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
 
 from scripts.tools.coaching_digest import (
     apply_profile_patch,

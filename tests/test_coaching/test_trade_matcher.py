@@ -1,7 +1,6 @@
 """Tests for trade matcher — fills -> round-trip trades."""
 
 import json
-from pathlib import Path
 
 import pytest
 
@@ -12,7 +11,7 @@ from scripts.tools.trade_matcher import (
 )
 
 
-def _make_fill(fill_id, account_id, instrument, timestamp, side, size, price, pnl=0, fees=0):
+def _make_fill(fill_id, account_id, instrument, timestamp, side, size, price, pnl=0.0, fees=0.0):
     return {
         "fill_id": fill_id,
         "broker": "topstepx",

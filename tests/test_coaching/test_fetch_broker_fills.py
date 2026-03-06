@@ -1,15 +1,10 @@
 """Tests for broker fill fetcher."""
 
 import json
-from datetime import UTC, datetime
-from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from scripts.tools.fetch_broker_fills import (
     fetch_topstepx_accounts,
-    fetch_topstepx_fills,
     load_coach_state,
     normalize_topstepx_fill,
     save_coach_state,

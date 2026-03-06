@@ -27,13 +27,16 @@ TRADES_PATH = DATA_DIR / "broker_trades.jsonl"
 
 
 def load_fills(*, path: Path = FILLS_PATH) -> list[dict]:
-    """Load fills from JSONL."""
+    """Load fills from JSONL. Skips corrupt lines."""
     if not path.exists():
         return []
     fills = []
-    for line in path.read_text(encoding="utf-8").strip().split("\n"):
+    for i, line in enumerate(path.read_text(encoding="utf-8").strip().split("\n"), 1):
         if line.strip():
-            fills.append(json.loads(line))
+            try:
+                fills.append(json.loads(line))
+            except json.JSONDecodeError:
+                print(f"  WARNING: corrupt JSON at {path} line {i}, skipping")
     return fills
 
 
@@ -163,13 +166,19 @@ def detect_source(trade: dict, signals: list[dict], *, tolerance_s: float = 60.0
     """Match a trade to a system signal. Mutates trade in-place."""
     if not signals:
         return
-    trade_ts = _parse_ts(trade["entry_time"])
+    try:
+        trade_ts = _parse_ts(trade["entry_time"])
+    except (ValueError, KeyError):
+        return
     for sig in signals:
         if sig.get("type") not in ("SIGNAL_ENTRY", "ORDER_ENTRY"):
             continue
         if sig.get("instrument") != trade["instrument"]:
             continue
-        sig_ts = _parse_ts(sig["ts"])
+        try:
+            sig_ts = _parse_ts(sig["ts"])
+        except (ValueError, KeyError):
+            continue
         if abs((trade_ts - sig_ts).total_seconds()) <= tolerance_s:
             trade["source"] = "system"
             trade["strategy_id"] = sig.get("strategy_id")
@@ -185,6 +194,21 @@ def save_trades(trades: list[dict], *, path: Path = TRADES_PATH) -> int:
     return len(trades)
 
 
+def _load_signals() -> list[dict]:
+    """Load live signals for source detection."""
+    signals_path = PROJECT_ROOT / "live_signals.jsonl"
+    if not signals_path.exists():
+        return []
+    signals = []
+    for line in signals_path.read_text(encoding="utf-8").strip().split("\n"):
+        if line.strip():
+            try:
+                signals.append(json.loads(line))
+            except json.JSONDecodeError:
+                pass
+    return signals
+
+
 def main():
     parser = argparse.ArgumentParser(description="Match fills to round-trip trades")
     parser.add_argument("--date", help="Filter fills by date (YYYY-MM-DD)")
@@ -196,6 +220,15 @@ def main():
 
     print(f"Loaded {len(fills)} fills")
     trades = match_fills_to_trades(fills)
+
+    # Tag system vs manual trades
+    signals = _load_signals()
+    if signals:
+        for t in trades:
+            detect_source(t, signals)
+        system_count = sum(1 for t in trades if t["source"] == "system")
+        print(f"Source detection: {system_count} system, {len(trades) - system_count} manual")
+
     print(f"Matched {len(trades)} round-trip trades")
 
     if trades:
@@ -204,10 +237,11 @@ def main():
 
         for t in trades:
             prefix = "+" if t["pnl_dollar"] >= 0 else ""
+            src = f" [{t['source']}]" if t["source"] != "manual" else ""
             print(
                 f"  {t['trade_id']}: {t['direction']} {t['instrument']} "
                 f"x{t['size']} {prefix}${t['pnl_dollar']:.0f} ({t['trade_type']}, "
-                f"{t['hold_seconds']:.0f}s)"
+                f"{t['hold_seconds']:.0f}s){src}"
             )
 
 

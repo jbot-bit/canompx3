@@ -2,7 +2,7 @@
 """Interactive AI trading coach — conversational CLI.
 
 Loads trader profile + recent coaching digests into system prompt.
-Uses Claude API for conversation. Supports Pinecone RAG for historical queries.
+Uses Claude API for conversation.
 
 Usage:
     python scripts/tools/trading_coach.py          # start chat
@@ -26,7 +26,6 @@ load_dotenv()
 DATA_DIR = PROJECT_ROOT / "data"
 PROFILE_PATH = DATA_DIR / "trader_profile.json"
 DIGESTS_PATH = DATA_DIR / "coaching_digests.jsonl"
-TRADING_RULES_PATH = PROJECT_ROOT / "TRADING_RULES.md"
 
 
 def load_recent_digests(n: int = 5, *, path: Path = DIGESTS_PATH) -> list[dict]:
@@ -36,7 +35,10 @@ def load_recent_digests(n: int = 5, *, path: Path = DIGESTS_PATH) -> list[dict]:
     digests = []
     for line in path.read_text(encoding="utf-8").strip().split("\n"):
         if line.strip():
-            digests.append(json.loads(line))
+            try:
+                digests.append(json.loads(line))
+            except json.JSONDecodeError:
+                pass
     return digests[-n:]
 
 
@@ -73,21 +75,26 @@ def build_chat_system_prompt(profile: dict, recent_digests: list[dict]) -> str:
     return "\n".join(parts)
 
 
-def chat_loop():
-    """Run interactive chat with the trading coach."""
+def _get_client_and_profile():
+    """Load anthropic client + trader profile. Exits on failure."""
     try:
         import anthropic
     except ImportError:
-        print("ERROR: anthropic package not installed. Run: pip install anthropic")
-        return
+        print("ERROR: anthropic not installed. Run: pip install anthropic", file=sys.stderr)
+        sys.exit(1)
 
     from scripts.tools.coaching_digest import load_trader_profile
 
     profile = load_trader_profile()
     digests = load_recent_digests()
     system_prompt = build_chat_system_prompt(profile, digests)
-
     client = anthropic.Anthropic()
+    return client, system_prompt
+
+
+def chat_loop():
+    """Run interactive chat with the trading coach."""
+    client, system_prompt = _get_client_and_profile()
     messages = []
 
     print("Trading Coach (type 'quit' to exit)")
@@ -109,41 +116,36 @@ def chat_loop():
 
         messages.append({"role": "user", "content": user_input})
 
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=2048,
-            system=system_prompt,
-            messages=messages,
-        )
-
-        assistant_text = response.content[0].text
-        messages.append({"role": "assistant", "content": assistant_text})
-
-        print(f"\nCoach: {assistant_text}")
+        try:
+            response = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=2048,
+                system=system_prompt,
+                messages=messages,
+            )
+            assistant_text = response.content[0].text
+            messages.append({"role": "assistant", "content": assistant_text})
+            print(f"\nCoach: {assistant_text}")
+        except Exception as exc:
+            print(f"\nERROR: {exc}", file=sys.stderr)
+            messages.pop()  # remove failed user message
 
 
 def single_query(query: str):
     """Ask a single question and print the response."""
+    client, system_prompt = _get_client_and_profile()
+
     try:
-        import anthropic
-    except ImportError:
-        print("ERROR: anthropic package not installed. Run: pip install anthropic")
-        return
-
-    from scripts.tools.coaching_digest import load_trader_profile
-
-    profile = load_trader_profile()
-    digests = load_recent_digests()
-    system_prompt = build_chat_system_prompt(profile, digests)
-
-    client = anthropic.Anthropic()
-    response = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=2048,
-        system=system_prompt,
-        messages=[{"role": "user", "content": query}],
-    )
-    print(response.content[0].text)
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=2048,
+            system=system_prompt,
+            messages=[{"role": "user", "content": query}],
+        )
+        print(response.content[0].text)
+    except Exception as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
 
 
 def main():
