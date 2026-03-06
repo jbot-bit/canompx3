@@ -1,5 +1,8 @@
-# Top-level dependencies for MGC data pipeline
-# Pin to exact versions for reproducibility
+# DEPRECATED — dependencies now managed in pyproject.toml
+# This file is kept as fallback only. Use: uv sync --frozen
+# To update: uv lock && uv export > requirements.txt
+#
+# Original pins below (for environments without uv):
 databento==0.70.0
 duckdb==1.4.4
 pandas==2.3.3

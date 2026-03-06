@@ -77,7 +77,7 @@ Databento .dbn.zst files
 ### Key Design Principles
 - **Fail-closed:** Any validation failure aborts immediately
 - **Idempotent:** All operations safe to re-run (INSERT OR REPLACE / DELETE+INSERT)
-- **Pre-computed outcomes:** ~6.1M rows across 7 instruments (4 active + 3 dead), 5/15/30m ORB apertures, reused for all discovery
+- **Pre-computed outcomes:** 5/15/30m ORB apertures, reused for all discovery
 - **One-way dependency:** pipeline/ → trading_app/ (never reversed)
 
 ### Time & Calendar Model
@@ -86,13 +86,9 @@ Databento .dbn.zst files
 - Bars before 09:00 assigned to PREVIOUS trading day
 - All DB timestamps are UTC (`TIMESTAMPTZ`)
 
-### DST Contamination (Feb 2026 — FULLY RESOLVED)
-
-All sessions are now dynamic/event-based (e.g., CME_REOPEN, LONDON_METALS, NYSE_OPEN, US_DATA_830). Session times are resolved per-day from `pipeline/dst.py` SESSION_CATALOG, so DST contamination is no longer an issue. The old fixed-clock sessions (0900/1800/0030/2300) have been replaced. DST columns remain in the database for historical reference. Detail → `docs/DST_CONTAMINATION.md`.
-
-### DOW Alignment (Feb 2026 — VERIFIED)
-
-Brisbane DOW = exchange DOW for all sessions except NYSE_OPEN (midnight crossing). Runtime guard `validate_dow_filter_alignment()` in `pipeline/dst.py` prevents misaligned DOW filters. Detail → `docs/DOW_ALIGNMENT.md`.
+### DST & DOW (FULLY RESOLVED)
+- DST: All sessions dynamic/event-based from `pipeline/dst.py` SESSION_CATALOG. Detail → `docs/DST_CONTAMINATION.md`
+- DOW: Brisbane DOW = exchange DOW except NYSE_OPEN (midnight crossing). Guard in `pipeline/dst.py`. Detail → `docs/DOW_ALIGNMENT.md`
 
 ---
 
@@ -132,6 +128,15 @@ python trading_app/paper_trader.py --instrument MGC --start 2025-01-01 --end 202
 python -m trading_app.live_config --db-path C:/db/gold.db
 python pipeline/dashboard.py                 # Generate dashboard.html
 python scripts/reports/report_edge_portfolio.py      # Edge family portfolio report
+
+# Tooling
+ruff format pipeline/ trading_app/ ui/ scripts/ tests/  # Format all code
+ruff check pipeline/ trading_app/ ui/ scripts/           # Lint all code
+ruff check --fix pipeline/ trading_app/ ui/ scripts/     # Auto-fix lint issues
+pyright                                                   # Type check (basic mode)
+uv sync --frozen                                          # Install from lock file
+uv lock                                                   # Regenerate lock file
+pip-audit --desc on                                       # Security scan
 ```
 
 For outcome rebuild, validation, and edge family workflows, use slash commands:

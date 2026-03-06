@@ -29,10 +29,10 @@ from ui.db_reader import (
     get_today_completed_sessions,
 )
 from ui.discipline import (
-    render_pending_debriefs,
     check_cooling,
-    render_pre_session_priming,
     render_cooling_settings,
+    render_pending_debriefs,
+    render_pre_session_priming,
 )
 from ui.session_helpers import (
     AWAKE_END,

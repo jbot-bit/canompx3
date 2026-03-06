@@ -8,15 +8,15 @@ No orchestrator or execution engine changes.
 from __future__ import annotations
 
 import random
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import streamlit as st
 
 from ui.discipline_data import (
     ADHERENCE_VALUES,
-    DEVIATION_TRIGGERS,
     DEBRIEFS_PATH,
+    DEVIATION_TRIGGERS,
     STATE_PATH,
     append_debrief,
     append_discipline_event,
@@ -113,8 +113,8 @@ def render_pending_debriefs(
 
             if submitted:
                 record = {
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                    "trading_day": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                    "ts": datetime.now(UTC).isoformat(),
+                    "trading_day": datetime.now(UTC).strftime("%Y-%m-%d"),
                     "instrument": instrument,
                     "strategy_id": strategy_id,
                     "signal_exit_ts": exit_ts,
@@ -236,7 +236,7 @@ def render_pre_session_priming(
         st.caption("Action rule: Execute within 60s of signal.")
 
     # Commitment button
-    committed_key = f"committed_{session}_{datetime.now(timezone.utc).strftime('%Y%m%d')}"
+    committed_key = f"committed_{session}_{datetime.now(UTC).strftime('%Y%m%d')}"
     already_committed = st.session_state.get(committed_key, False)
 
     if already_committed:

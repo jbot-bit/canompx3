@@ -5,7 +5,7 @@ No database writes, no schema migrations. Pure file I/O.
 """
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 _DATA_DIR = Path(__file__).parent.parent / "data"
@@ -47,7 +47,7 @@ def append_discipline_event(event_type: str, extra: dict | None = None, *, path:
     """Append a discipline state event (cooling, commitment, etc.)."""
     path.parent.mkdir(parents=True, exist_ok=True)
     record = {
-        "ts": datetime.now(timezone.utc).isoformat(),
+        "ts": datetime.now(UTC).isoformat(),
         "event": event_type,
         **(extra or {}),
     }
@@ -152,7 +152,7 @@ def trigger_cooling(
     state_path: Path = STATE_PATH,
 ) -> None:
     """Activate cooling period after a losing trade."""
-    until = datetime.now(timezone.utc) + timedelta(seconds=COOLING_SECONDS)
+    until = datetime.now(UTC) + timedelta(seconds=COOLING_SECONDS)
     session_state["cooling_until"] = until.isoformat()
     append_discipline_event(
         "cooling_triggered",
@@ -172,7 +172,7 @@ def is_cooling_active(session_state: dict) -> bool:
     if not until_str:
         return False
     until = datetime.fromisoformat(until_str)
-    return datetime.now(timezone.utc) < until
+    return datetime.now(UTC) < until
 
 
 def cooling_remaining_seconds(session_state: dict) -> float:
@@ -181,7 +181,7 @@ def cooling_remaining_seconds(session_state: dict) -> float:
     if not until_str:
         return 0.0
     until = datetime.fromisoformat(until_str)
-    remaining = (until - datetime.now(timezone.utc)).total_seconds()
+    remaining = (until - datetime.now(UTC)).total_seconds()
     return max(0.0, remaining)
 
 
