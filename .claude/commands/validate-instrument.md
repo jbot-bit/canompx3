@@ -1,5 +1,7 @@
 Validate strategies for instrument $ARGUMENTS (default MGC). Uses the correct flag combination.
 
+Use when: "validate", "run validation", "validate [instrument]", "re-validate", "strategy validation"
+
 Run this exact command from bash (not PowerShell):
 
 ```bash
@@ -17,5 +19,5 @@ python pipeline/check_drift.py
 Important:
 - Walk-forward enabled for all instruments (Mar 2026). All have 5+ years of data. MGC uses WF_START_OVERRIDE=2022-01-01 in config.py.
 - `--min-years-positive-pct` is dead code without `--no-regime-waivers` — always pair them
-- Canonical DB is `C:/db/gold.db` (set via `DUCKDB_PATH` in `.env`)
+- DB path resolved via `pipeline.paths.GOLD_DB_PATH` (reads `DUCKDB_PATH` from `.env`). `C:/db/gold.db` is the SCRATCH copy, not canonical.
 - See `docs/plans/2026-02-27-rebuild-audit-playbook.md` for full rebuild procedures

@@ -1,5 +1,7 @@
 Post-completion integrity gate. Run after finishing a task to verify quality.
 
+Use when: task is COMPLETE and needs full impact verification, "integrity check", "full audit", "impact check", "guardian". For lightweight pre-commit gates only, use /quant-verify instead.
+
 Execute these 6 steps in order. Do NOT skip steps.
 
 ## Step 1: Instruction Intake
@@ -14,6 +16,16 @@ Run the behavioral audit:
 python scripts/tools/audit_behavioral.py
 ```
 If violations found, fix them before proceeding.
+
+## Scope Note
+
+This is the COMPREHENSIVE post-task review with full impact mapping.
+
+| Situation | Use |
+|-----------|-----|
+| Quick pre-commit check | /quant-verify |
+| Full post-task audit with impact map | /integrity-guardian |
+| Institutional code review with grading | /bloomey-review |
 
 ## Step 3: Impact Map
 Build a table for every modified production file:

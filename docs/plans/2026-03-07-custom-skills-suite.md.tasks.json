@@ -1,0 +1,19 @@
+{
+  "planPath": "docs/plans/2026-03-07-custom-skills-suite.md",
+  "tasks": [
+    {"id": 0, "subject": "Task 0: Write 4t.md skill", "status": "pending"},
+    {"id": 1, "subject": "Task 1: Write 4tp.md skill", "status": "pending", "blockedBy": [0]},
+    {"id": 2, "subject": "Task 2: Write quant-debug.md skill", "status": "pending"},
+    {"id": 3, "subject": "Task 3: Write quant-tdd.md skill", "status": "pending"},
+    {"id": 4, "subject": "Task 4: Write bloomey-review.md skill", "status": "pending"},
+    {"id": 5, "subject": "Task 5: Write quant-verify.md skill", "status": "pending"},
+    {"id": 6, "subject": "Task 6: Write trade-book.md skill", "status": "pending"},
+    {"id": 7, "subject": "Task 7: Write regime-check.md skill", "status": "pending"},
+    {"id": 8, "subject": "Task 8: Write post-rebuild.md skill", "status": "pending"},
+    {"id": 9, "subject": "Task 9: Fix discover.md", "status": "pending"},
+    {"id": 10, "subject": "Task 10: Fix validate-instrument.md", "status": "pending"},
+    {"id": 11, "subject": "Task 11: Update integrity-guardian.md", "status": "pending"},
+    {"id": 12, "subject": "Task 12: Commit all skills", "status": "pending", "blockedBy": [0,1,2,3,4,5,6,7,8,9,10,11]}
+  ],
+  "lastUpdated": "2026-03-07T22:00:00"
+}
