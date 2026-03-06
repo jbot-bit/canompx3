@@ -106,8 +106,17 @@ def _extract_instrument(contract_id: str) -> str:
     return match.group(1) if match else contract_id
 
 
+_SIDE_MAP = {1: "BUY", 2: "SELL", "Buy": "BUY", "Sell": "SELL"}
+
+
 def normalize_topstepx_fill(raw: dict, *, account_name: str) -> dict:
-    """Normalize a TopstepX fill to the unified schema."""
+    """Normalize a TopstepX fill to the unified schema.
+
+    TopstepX uses: side=1 (BUY) / side=2 (SELL), creationTimestamp, fees (not commission).
+    """
+    raw_side = raw.get("side", raw.get("action", ""))
+    side = _SIDE_MAP.get(raw_side, str(raw_side).upper())
+
     return {
         "fill_id": f"topstepx-{raw['id']}",
         "broker": "topstepx",
@@ -115,12 +124,12 @@ def normalize_topstepx_fill(raw: dict, *, account_name: str) -> dict:
         "account_name": account_name,
         "instrument": _extract_instrument(raw.get("contractId", "")),
         "contract_id": raw.get("contractId", ""),
-        "timestamp": raw.get("timestamp", ""),
-        "side": raw.get("action", "").upper(),
+        "timestamp": raw.get("creationTimestamp", raw.get("timestamp", "")),
+        "side": side,
         "size": raw.get("size", 0),
         "price": raw.get("price", 0.0),
         "pnl": raw.get("profitAndLoss") or 0.0,
-        "fees": raw.get("commission") or 0.0,
+        "fees": raw.get("fees", raw.get("commission")) or 0.0,
         "order_id": raw.get("orderId"),
     }
 

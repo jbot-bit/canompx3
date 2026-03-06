@@ -36,7 +36,22 @@ def test_fetch_topstepx_accounts():
 
 # -- TopstepX fill normalization ----------------------------------------------
 
-MOCK_FILL = {
+# Real API format: side=int (1=BUY, 2=SELL), creationTimestamp, fees (not commission)
+MOCK_FILL_REAL = {
+    "id": 2241049355,
+    "accountId": 19858923,
+    "contractId": "CON.F.US.MNQ.H26",
+    "creationTimestamp": "2026-03-06T13:43:48.140526+00:00",
+    "side": 1,
+    "size": 4,
+    "price": 24740.75,
+    "profitAndLoss": 556.0,
+    "fees": 1.48,
+    "orderId": 2587762443,
+}
+
+# Legacy format (action string) for backwards compat
+MOCK_FILL_LEGACY = {
     "id": 2241049355,
     "accountId": 19858923,
     "contractId": "CON.F.US.MNQ.H26",
@@ -50,8 +65,9 @@ MOCK_FILL = {
 }
 
 
-def test_normalize_topstepx_fill():
-    fill = normalize_topstepx_fill(MOCK_FILL, account_name="50KTC-V2-451890-20967121")
+def test_normalize_topstepx_fill_real_api():
+    """Real API: side=1 (BUY), creationTimestamp, fees."""
+    fill = normalize_topstepx_fill(MOCK_FILL_REAL, account_name="50KTC-V2-451890-20967121")
     assert fill["fill_id"] == "topstepx-2241049355"
     assert fill["broker"] == "topstepx"
     assert fill["instrument"] == "MNQ"
@@ -60,17 +76,31 @@ def test_normalize_topstepx_fill():
     assert fill["price"] == 24740.75
     assert fill["pnl"] == 556.0
     assert fill["fees"] == 1.48
+    assert "2026-03-06" in fill["timestamp"]
+
+
+def test_normalize_topstepx_fill_sell_side():
+    fill = normalize_topstepx_fill({**MOCK_FILL_REAL, "side": 2}, account_name="test")
+    assert fill["side"] == "SELL"
+
+
+def test_normalize_topstepx_fill_legacy_format():
+    """Backwards compat: action string, timestamp, commission."""
+    fill = normalize_topstepx_fill(MOCK_FILL_LEGACY, account_name="test")
+    assert fill["side"] == "BUY"
+    assert fill["fees"] == 1.48
+    assert "2026-03-06" in fill["timestamp"]
 
 
 def test_normalize_topstepx_fill_null_pnl():
-    fill_data = {**MOCK_FILL, "profitAndLoss": None}
+    fill_data = {**MOCK_FILL_REAL, "profitAndLoss": None}
     fill = normalize_topstepx_fill(fill_data, account_name="test")
     assert fill["pnl"] == 0.0
 
 
 def test_normalize_topstepx_fill_extracts_instrument_from_contract_id():
     """CON.F.US.MGC.J26 -> MGC"""
-    fill_data = {**MOCK_FILL, "contractId": "CON.F.US.MGC.J26"}
+    fill_data = {**MOCK_FILL_REAL, "contractId": "CON.F.US.MGC.J26"}
     fill = normalize_topstepx_fill(fill_data, account_name="test")
     assert fill["instrument"] == "MGC"
 
