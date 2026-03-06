@@ -47,3 +47,24 @@ def test_trade_count_increments():
     for _ in range(5):
         monitor.update(0.1)
     assert monitor.n_trades == 5
+
+
+def test_cusum_lower_sigma_triggers_alarm_sooner():
+    """CUSUM with lower sigma should trigger alarm sooner on same drift.
+
+    z = (actual_r - expected_r) / std_r, so lower std_r amplifies z-scores.
+    With actual_r=-0.5, expected_r=0.3:
+      conservative (std_r=1.0): z=-0.8/trade → 4 trades = cusum -3.2 (no alarm)
+      sensitive    (std_r=0.5): z=-1.6/trade → 3 trades = cusum -4.8 (alarm at >4.0)
+    """
+    conservative = CUSUMMonitor(expected_r=0.3, std_r=1.0, threshold=4.0)
+    sensitive = CUSUMMonitor(expected_r=0.3, std_r=0.5, threshold=4.0)
+
+    # Feed identical losing trades
+    for _ in range(4):
+        conservative.update(-0.5)
+        sensitive.update(-0.5)
+
+    # Sensitive (lower sigma) should alarm first
+    assert sensitive.alarm_triggered is True
+    assert conservative.alarm_triggered is False
