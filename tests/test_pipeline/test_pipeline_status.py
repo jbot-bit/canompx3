@@ -1,8 +1,15 @@
-"""Tests for rebuild_manifest table schema."""
+"""Tests for rebuild_manifest table schema and pipeline staleness engine."""
+
+from datetime import date
 
 import duckdb
 
 from pipeline.init_db import init_db
+from scripts.tools.pipeline_status import (
+    _trading_days_between,
+    is_stale,
+    staleness_engine,
+)
 
 
 class TestRebuildManifest:
@@ -53,3 +60,238 @@ class TestRebuildManifest:
         assert "TIMESTAMP" in cols["started_at"].upper()
         assert "TIMESTAMP" in cols["completed_at"].upper()
         assert cols["steps_completed"].upper().endswith("[]")
+
+
+# ---------------------------------------------------------------------------
+# Helper: create all tables needed for staleness_engine in an in-memory DB
+# ---------------------------------------------------------------------------
+
+
+def _create_test_db(tmp_path):
+    """Create a test DB with all tables the staleness engine queries."""
+    db_path = tmp_path / "test.db"
+    # Use init_db for pipeline tables (bars_1m, bars_5m, daily_features, etc.)
+    init_db(db_path, force=False)
+
+    con = duckdb.connect(str(db_path))
+    # Create trading_app tables with minimal schemas
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS orb_outcomes (
+            trading_day DATE NOT NULL,
+            symbol TEXT NOT NULL,
+            orb_label TEXT NOT NULL,
+            orb_minutes INTEGER NOT NULL,
+            rr_target DOUBLE NOT NULL,
+            confirm_bars INTEGER NOT NULL,
+            entry_model TEXT NOT NULL,
+            outcome TEXT,
+            pnl_r DOUBLE,
+            PRIMARY KEY (symbol, trading_day, orb_label, orb_minutes, rr_target, confirm_bars, entry_model)
+        )
+    """)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS experimental_strategies (
+            strategy_id TEXT PRIMARY KEY,
+            instrument TEXT NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS validated_setups (
+            strategy_id TEXT PRIMARY KEY,
+            instrument TEXT NOT NULL,
+            promoted_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+            status TEXT NOT NULL DEFAULT 'active'
+        )
+    """)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS edge_families (
+            family_hash TEXT PRIMARY KEY,
+            instrument TEXT NOT NULL,
+            head_strategy_id TEXT NOT NULL,
+            member_count INTEGER NOT NULL,
+            trade_day_count INTEGER NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    con.commit()
+    return db_path, con
+
+
+def _insert_bar_1m(con, symbol, dt_str):
+    """Insert a minimal bars_1m row."""
+    con.execute(
+        "INSERT INTO bars_1m (ts_utc, symbol, source_symbol, open, high, low, close, volume) "
+        "VALUES (?::TIMESTAMPTZ, ?, ?, 100, 101, 99, 100, 1000)",
+        [dt_str, symbol, symbol],
+    )
+
+
+def _insert_bar_5m(con, symbol, dt_str):
+    """Insert a minimal bars_5m row."""
+    con.execute(
+        "INSERT INTO bars_5m (ts_utc, symbol, open, high, low, close, volume) "
+        "VALUES (?::TIMESTAMPTZ, ?, 100, 101, 99, 100, 1000)",
+        [dt_str, symbol],
+    )
+
+
+def _insert_daily_features(con, symbol, trading_day, orb_minutes):
+    """Insert a minimal daily_features row."""
+    con.execute(
+        "INSERT INTO daily_features (trading_day, symbol, orb_minutes) VALUES (?, ?, ?)",
+        [trading_day, symbol, orb_minutes],
+    )
+
+
+def _insert_orb_outcome(con, symbol, trading_day):
+    """Insert a minimal orb_outcomes row."""
+    con.execute(
+        "INSERT INTO orb_outcomes (trading_day, symbol, orb_label, orb_minutes, rr_target, "
+        "confirm_bars, entry_model, outcome, pnl_r) VALUES (?, ?, 'CME_REOPEN', 5, 1.5, 1, 'E2', 'win', 1.0)",
+        [trading_day, symbol],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Staleness engine tests
+# ---------------------------------------------------------------------------
+
+
+class TestTradingDaysBetween:
+    def test_weekend_gap(self):
+        """Friday to Monday = 1 trading day (Monday itself)."""
+        friday = date(2026, 3, 6)  # Friday
+        monday = date(2026, 3, 9)  # Monday
+        assert _trading_days_between(friday, monday) == 1
+
+    def test_real_gap(self):
+        """10 weekdays gap is correctly counted."""
+        d1 = date(2026, 2, 20)  # Friday
+        d2 = date(2026, 3, 6)  # Friday (2 weeks later)
+        gap = _trading_days_between(d1, d2)
+        assert gap == 10
+
+    def test_same_day(self):
+        """Same day returns 0."""
+        d = date(2026, 3, 6)
+        assert _trading_days_between(d, d) == 0
+
+    def test_none_returns_zero(self):
+        """None input returns 0."""
+        assert _trading_days_between(None, date(2026, 3, 6)) == 0
+        assert _trading_days_between(date(2026, 3, 6), None) == 0
+
+    def test_reversed_returns_zero(self):
+        """d1 > d2 returns 0."""
+        assert _trading_days_between(date(2026, 3, 10), date(2026, 3, 6)) == 0
+
+
+class TestIsStale:
+    def test_none_table_date_is_stale(self):
+        """Missing table data is stale when upstream exists."""
+        assert is_stale(None, date(2026, 3, 6)) is True
+
+    def test_none_reference_is_not_stale(self):
+        """No upstream data means not stale."""
+        assert is_stale(None, None) is False
+        assert is_stale(date(2026, 3, 6), None) is False
+
+    def test_same_date_not_stale(self):
+        """Table at same date as upstream is fresh."""
+        d = date(2026, 3, 6)
+        assert is_stale(d, d) is False
+
+    def test_weekend_gap_not_stale(self):
+        """Friday-to-Monday is 1 trading day, within default threshold of 1."""
+        assert is_stale(date(2026, 3, 6), date(2026, 3, 9)) is False
+
+
+class TestStalenessEngine:
+    def test_staleness_fresh(self, tmp_path):
+        """All tables at same date -> stale_steps only flags things without data."""
+        db_path, con = _create_test_db(tmp_path)
+        sym = "MGC"
+        day = "2026-03-06"
+
+        _insert_bar_1m(con, sym, f"{day}T00:00:00+00:00")
+        _insert_bar_5m(con, sym, f"{day}T00:00:00+00:00")
+        for ap in [5, 15, 30]:
+            _insert_daily_features(con, sym, day, ap)
+        _insert_orb_outcome(con, sym, day)
+        con.execute(
+            "INSERT INTO experimental_strategies (strategy_id, instrument, created_at) "
+            "VALUES ('s1', ?, ?::TIMESTAMPTZ)",
+            [sym, f"{day}T00:00:00+00:00"],
+        )
+        con.execute(
+            "INSERT INTO validated_setups (strategy_id, instrument, promoted_at, status) "
+            "VALUES ('s1', ?, ?::TIMESTAMPTZ, 'active')",
+            [sym, f"{day}T00:00:00+00:00"],
+        )
+        con.execute(
+            "INSERT INTO edge_families (family_hash, instrument, head_strategy_id, member_count, trade_day_count, created_at) "
+            "VALUES ('h1', ?, 's1', 1, 1, ?::TIMESTAMPTZ)",
+            [sym, f"{day}T00:00:00+00:00"],
+        )
+        con.commit()
+
+        status = staleness_engine(con, sym)
+        con.close()
+
+        # Everything at same date — nothing should be stale
+        assert status["stale_steps"] == []
+        assert status["bars_1m"] == date(2026, 3, 6)
+        assert status["bars_5m"] == date(2026, 3, 6)
+        assert status["daily_features_min"] == date(2026, 3, 6)
+
+    def test_staleness_detects_gap(self, tmp_path):
+        """orb_outcomes 14 days behind daily_features -> detected as stale."""
+        db_path, con = _create_test_db(tmp_path)
+        sym = "MGC"
+
+        _insert_bar_1m(con, sym, "2026-03-06T00:00:00+00:00")
+        _insert_bar_5m(con, sym, "2026-03-06T00:00:00+00:00")
+        for ap in [5, 15, 30]:
+            _insert_daily_features(con, sym, "2026-03-06", ap)
+        # orb_outcomes 14 calendar days behind (10 trading days)
+        _insert_orb_outcome(con, sym, "2026-02-20")
+        con.commit()
+
+        status = staleness_engine(con, sym)
+        con.close()
+
+        assert "orb_outcomes" in status["stale_steps"]
+        assert status["orb_outcomes"] == date(2026, 2, 20)
+        assert status["daily_features_min"] == date(2026, 3, 6)
+
+    def test_weekend_not_false_positive(self, tmp_path):
+        """Friday bars_1m -> Monday bars_5m = not stale (0 trading day gap)."""
+        db_path, con = _create_test_db(tmp_path)
+        sym = "MGC"
+
+        # bars_1m on Monday, bars_5m on previous Friday
+        _insert_bar_1m(con, sym, "2026-03-09T00:00:00+00:00")  # Monday
+        _insert_bar_5m(con, sym, "2026-03-06T00:00:00+00:00")  # Friday
+        con.commit()
+
+        status = staleness_engine(con, sym)
+        con.close()
+
+        # Friday to Monday = 0 trading days gap, should NOT be stale
+        assert "bars_5m" not in status["stale_steps"]
+
+    def test_staleness_real_gap(self, tmp_path):
+        """10+ trading day gap IS stale."""
+        db_path, con = _create_test_db(tmp_path)
+        sym = "MGC"
+
+        # bars_1m 2 weeks ahead of bars_5m (10 trading days)
+        _insert_bar_1m(con, sym, "2026-03-06T00:00:00+00:00")
+        _insert_bar_5m(con, sym, "2026-02-20T00:00:00+00:00")
+        con.commit()
+
+        status = staleness_engine(con, sym)
+        con.close()
+
+        assert "bars_5m" in status["stale_steps"]
