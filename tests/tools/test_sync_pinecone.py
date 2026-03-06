@@ -205,8 +205,8 @@ def test_collect_files_from_manifest():
     manifest = load_manifest()
     collected = collect_files(manifest)
 
-    # All 5 tiers should be present
-    assert set(collected.keys()) == {"static", "living", "memory", "research_output", "generated"}
+    # All 6 tiers should be present
+    assert set(collected.keys()) == {"static", "living", "memory", "research_output", "generated", "coaching"}
 
     # Static files should exist (we know TRADING_RULES.md is one)
     assert len(collected["static"]) > 0

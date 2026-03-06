@@ -54,7 +54,7 @@ research/
     analyze_entry_clearance.py
     analyze_eod_exits.py
     analyze_first_half_hour.py
-... and 839 more entries
+... and 853 more entries
 ```
 
 ## Module Index
@@ -67,7 +67,7 @@ research/
 | `pipeline/build_daily_features.py` | 1052 | Build daily_features from bars_1m and bars_5m. | compute_trading_day, compute_trading_day_utc_range, get_trading_days_in_range, get_bars_for_trading_day, compute_orb_range |
 | `pipeline/calendar_filters.py` | 38 | Calendar-based skip filters: NFP, OPEX, Friday, day-of-week. | is_nfp_day, is_opex_day, is_friday, is_monday, is_tuesday |
 | `pipeline/check_db.py` | 61 | Check database contents and integrity. | check_db |
-| `pipeline/check_drift.py` | 2612 | Drift detection for the multi-instrument pipeline. | check_hardcoded_mgc_sql, check_apply_iterrows, check_non_bars1m_writes, check_schema_query_consistency, check_import_cycles |
+| `pipeline/check_drift.py` | 2607 | Drift detection for the multi-instrument pipeline. | check_hardcoded_mgc_sql, check_apply_iterrows, check_non_bars1m_writes, check_schema_query_consistency, check_import_cycles |
 | `pipeline/cost_model.py` | 290 | Cost model for futures instruments. | CostSpec, get_session_cost_spec, get_cost_spec, list_validated_instruments, risk_in_dollars |
 | `pipeline/daily_backfill.py` | 92 | Nightly data backfill: ingest new bars → 5m bars → daily features → outcomes. | get_last_ingested_date, is_up_to_date, run_backfill_for_instrument, main |
 | `pipeline/dashboard.py` | 647 | Pipeline Dashboard — generates a self-contained HTML report. | collect_db_metrics, collect_checkpoint_progress, collect_file_inventory, collect_guardrail_status, collect_contract_history |
@@ -180,7 +180,7 @@ research/
 | `scripts/migrations/retire_e3_strategies.py` | 67 | Soft-retire all active E3 strategies in validated_setups. | retire_e3, main |
 | `scripts/operator_status.py` | 110 | Low-token operator status for canompx3. | OperatorStatus, build_status, print_human, main |
 | `scripts/reports/parameter_stability_heatmap.py` | 390 | Parameter stability heatmap generator for live portfolio strategies. | query_grid, build_heatmap_data, render_html_report, find_best_variant, main |
-... and 345 more modules
+... and 357 more modules
 
 ## Cross-Package Dependencies
 
@@ -233,7 +233,7 @@ research/
 - `trading_app/portfolio.py` -> pipeline, trading_app
 - `trading_app/regime/compare.py` -> pipeline
 - `trading_app/regime/discovery.py` -> pipeline, trading_app
-... and 272 more edges
+... and 279 more edges
 
 ## CLI Entry Points
 
@@ -261,4 +261,4 @@ research/
 - `python trading_app/ml/evaluate.py` -- (no argparse description)
 - `python trading_app/ml/evaluate_validated.py` -- (no argparse description)
 - `python trading_app/ml/importance.py` -- (no argparse description)
-... and 246 more entry points
+... and 250 more entry points
