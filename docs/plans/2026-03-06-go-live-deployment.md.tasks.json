@@ -1,0 +1,12 @@
+{
+  "planPath": "docs/plans/2026-03-06-go-live-deployment.md",
+  "tasks": [
+    {"id": 0, "subject": "Task 0: Get Tradovate Demo Credentials", "status": "pending"},
+    {"id": 1, "subject": "Task 1: First Signal-Only Session", "status": "pending", "blockedBy": [0]},
+    {"id": 2, "subject": "Task 2: First Demo Order", "status": "pending", "blockedBy": [0]},
+    {"id": 3, "subject": "Task 3: EOD Backfill Automation", "status": "pending", "blockedBy": [0]},
+    {"id": 4, "subject": "Task 4: Paper Trading Campaign (2+ Weeks)", "status": "pending", "blockedBy": [1, 2]},
+    {"id": 5, "subject": "Task 5: Go Live", "status": "pending", "blockedBy": [4]}
+  ],
+  "lastUpdated": "2026-03-06T17:00:00+10:00"
+}
