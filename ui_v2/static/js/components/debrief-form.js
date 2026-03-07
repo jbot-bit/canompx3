@@ -5,12 +5,12 @@
  * D → toggle expanded form visibility
  */
 
+// Must match discipline_api.py ADHERENCE_VALUES
 const ADHERENCE_OPTIONS = [
-  'FOLLOWED_PLAN',
-  'MINOR_DEVIATION',
-  'MAJOR_DEVIATION',
-  'REVENGE_TRADE',
-  'FOMO_ENTRY',
+  'followed',
+  'modified',
+  'overrode',
+  'off_plan',
 ];
 
 let _container = null;
@@ -133,40 +133,48 @@ function _renderSummary() {
   _summaryEl.appendChild(badge);
 }
 
+/** POST debrief. Returns true on success, false on failure. */
 async function _postDebrief(payload) {
   try {
-    await fetch('/api/debrief', {
+    const resp = await fetch('/api/debrief', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
+    if (!resp.ok) {
+      console.error(`Debrief POST failed: ${resp.status}`);
+      return false;
+    }
+    return true;
   } catch (e) {
     console.error('Debrief POST failed:', e);
+    return false;
   }
 }
 
 async function submitCleanTrade() {
   if (!_tradeData) return;
-  await _postDebrief({
+  const ok = await _postDebrief({
     strategy_id: _tradeData.strategy_id,
-    adherence: 'FOLLOWED_PLAN',
-    deviation_trigger: '',
-    notes: '',
-    letter: '',
+    signal_exit_ts: _tradeData.signal_exit_ts || '',
+    adherence: 'followed',
+    pnl_r: _tradeData.pnl_r ?? null,
   });
-  hide();
+  if (ok) hide();
 }
 
 async function _submitDetailed() {
   if (!_tradeData) return;
-  await _postDebrief({
+  const ok = await _postDebrief({
     strategy_id: _tradeData.strategy_id,
+    signal_exit_ts: _tradeData.signal_exit_ts || '',
     adherence: _adherenceSelect.value,
-    deviation_trigger: _deviationInput.value,
-    notes: _notesTextarea.value,
-    letter: _letterTextarea.value,
+    pnl_r: _tradeData.pnl_r ?? null,
+    deviation_trigger: _deviationInput.value || null,
+    notes: _notesTextarea.value || null,
+    letter_to_future_self: _letterTextarea.value || null,
   });
-  hide();
+  if (ok) hide();
 }
 
 function toggleDetails() {
@@ -184,7 +192,7 @@ export function show(tradeData) {
   _visible = true;
   _detailsExpanded = false;
   _detailsPanel.style.display = 'none';
-  _adherenceSelect.value = 'FOLLOWED_PLAN';
+  _adherenceSelect.value = 'followed';
   _deviationInput.value = '';
   _notesTextarea.value = '';
   _letterTextarea.value = '';

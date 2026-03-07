@@ -75,40 +75,48 @@ function _setMode(mode) {
   _exitModeBtn.className = mode === 'exit' ? 'btn btn--primary' : 'btn btn--ghost';
 }
 
-async function _submitEntry() {
-  const payload = {
-    action: 'entry',
-    instrument: _instrumentSelect.value,
-    direction: _directionSelect.value.toLowerCase(),
-    price: parseFloat(_priceInput.value),
-    orb_high: parseFloat(_orbHighInput.value),
-    orb_low: parseFloat(_orbLowInput.value),
-  };
+// Track last entry for exit payload
+let _lastInstrument = null;
+let _lastDirection = null;
+
+async function _postTrade(payload) {
   try {
-    await fetch('/api/trade-log', {
+    const resp = await fetch('/api/trade-log', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
+    if (!resp.ok) {
+      console.error(`Trade log POST failed: ${resp.status}`);
+      return false;
+    }
+    return true;
   } catch (e) {
-    console.error('Manual entry POST failed:', e);
+    console.error('Trade log POST failed:', e);
+    return false;
   }
 }
 
+async function _submitEntry() {
+  _lastInstrument = _instrumentSelect.value;
+  _lastDirection = _directionSelect.value.toLowerCase();
+  await _postTrade({
+    action: 'entry',
+    instrument: _lastInstrument,
+    direction: _lastDirection,
+    price: parseFloat(_priceInput.value),
+    orb_high: parseFloat(_orbHighInput.value) || null,
+    orb_low: parseFloat(_orbLowInput.value) || null,
+  });
+}
+
 async function _submitExit() {
-  const payload = {
+  await _postTrade({
     action: 'exit',
+    instrument: _lastInstrument || _instrumentSelect.value,
+    direction: _lastDirection || _directionSelect.value.toLowerCase(),
     price: parseFloat(_exitPriceInput.value),
-  };
-  try {
-    await fetch('/api/trade-log', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-  } catch (e) {
-    console.error('Manual exit POST failed:', e);
-  }
+  });
 }
 
 function _buildDOM() {

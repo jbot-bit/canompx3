@@ -28,11 +28,14 @@ function _formatCountdown(seconds) {
 
 async function _handleOverride() {
   try {
-    await fetch('/api/cooling/override', {
+    const resp = await fetch('/api/cooling/override', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ override: true }),
+      body: JSON.stringify({}),
     });
+    if (!resp.ok) {
+      console.error(`Cooling override failed: ${resp.status}`);
+    }
   } catch (e) {
     console.error('Cooling override POST failed:', e);
   }

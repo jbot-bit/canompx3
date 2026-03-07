@@ -24,7 +24,7 @@ import { init as initTradeStatus, render as renderTradeStatus } from './componen
 import { init as initSignalLog, append as appendSignal } from './components/signal-log.js';
 import { init as initCooling, render as renderCooling } from './components/cooling.js';
 import { init as initManualTrade, toggle as toggleManualTrade } from './components/manual-trade.js';
-import { initAudio, playAlert, toggleAudio } from './audio.js';
+import { initAudio, playAlert, toggleAudio, isAudioEnabled } from './audio.js';
 
 // ── State ────────────────────────────────────────────────────────────────
 
@@ -742,15 +742,17 @@ function initAudioToggle() {
     const btn = $('#audio-toggle');
     if (!btn) return;
 
-    const enabled = localStorage.getItem('audio_enabled') === 'true';
-    btn.classList.toggle('audio-toggle--enabled', enabled);
-    btn.textContent = enabled ? '\u{1F50A}' : '\u{1F507}';
+    // Sync visual state from audio.js (single source of truth for localStorage)
+    const syncVisual = (enabled) => {
+        btn.classList.toggle('audio-toggle--enabled', enabled);
+        btn.textContent = enabled ? '\u{1F50A}' : '\u{1F507}';
+    };
+
+    syncVisual(isAudioEnabled());
 
     btn.addEventListener('click', () => {
-        const next = !btn.classList.contains('audio-toggle--enabled');
-        btn.classList.toggle('audio-toggle--enabled', next);
-        btn.textContent = next ? '\u{1F50A}' : '\u{1F507}';
-        localStorage.setItem('audio_enabled', String(next));
+        const newState = toggleAudio();
+        syncVisual(newState);
     });
 }
 
@@ -852,14 +854,6 @@ async function init() {
 
     // Audio (muted by default)
     initAudio();
-
-    // Wire audio toggle button to audio.js
-    const audioBtn = $('#audio-toggle');
-    if (audioBtn) {
-        audioBtn.addEventListener('click', () => {
-            toggleAudio();
-        });
-    }
 
     // Register Phase 4-6 keyboard shortcuts
     registerShortcut(' ', () => {
