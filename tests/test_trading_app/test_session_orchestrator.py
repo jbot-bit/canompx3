@@ -613,3 +613,65 @@ class TestKillSwitch:
             await orch._on_bar(bar)
             # Should have logged a critical heartbeat warning
             assert any("HEARTBEAT" in str(call) for call in mock_crit.call_args_list)
+
+    async def test_post_session_skips_eod_close_after_kill_switch(self):
+        """post_session() must NOT submit duplicate close orders after kill switch."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._kill_switch_fired = True
+
+        orch.post_session()
+
+        # Engine.on_trading_day_end should NOT be called (positions already flat)
+        orch.engine.on_trading_day_end.assert_not_called()
+        # No orders submitted
+        assert len(orch.order_router.submitted) == 0
+
+    async def test_emergency_flatten_uses_correct_qty(self):
+        """Kill switch uses record.contracts (not hardcoded 1) for multi-contract."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=1, contracts=3)
+        orch._positions.on_entry_filled(STRATEGY_ID, 2350.0)
+
+        await orch._emergency_flatten()
+
+        # Verify the exit spec used qty=3
+        assert len(orch.order_router.submitted) == 1
+        assert orch.order_router.submitted[0]["qty"] == 3
+
+    async def test_emergency_flatten_multiple_positions(self):
+        """Kill switch flattens ALL open positions, not just the first one."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        # Add a second strategy to the map
+        from trading_app.portfolio import PortfolioStrategy
+
+        s2 = PortfolioStrategy(
+            strategy_id="TEST_STRAT_002",
+            instrument="MGC",
+            orb_label="TOKYO_OPEN",
+            entry_model="E2",
+            rr_target=1.5,
+            confirm_bars=1,
+            filter_type="ORB_G4",
+            expectancy_r=0.15,
+            win_rate=0.38,
+            sample_size=150,
+            sharpe_ratio=1.2,
+            max_drawdown_r=4.0,
+            median_risk_points=3.5,
+            stop_multiplier=1.0,
+            source="test",
+            weight=1.0,
+        )
+        orch._strategy_map["TEST_STRAT_002"] = s2
+
+        # Open two positions
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=1)
+        orch._positions.on_entry_filled(STRATEGY_ID, 2350.0)
+        orch._positions.on_entry_sent("TEST_STRAT_002", "short", 2360.0, order_id=2)
+        orch._positions.on_entry_filled("TEST_STRAT_002", 2360.0)
+
+        await orch._emergency_flatten()
+
+        # Both positions should be flattened
+        assert orch._positions.active_positions() == []
+        assert len(orch.order_router.submitted) == 2

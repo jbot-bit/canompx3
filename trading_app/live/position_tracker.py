@@ -31,6 +31,7 @@ class PositionRecord:
     fill_entry_price: float | None = None
     entry_order_id: int | None = None
     entry_slippage: float | None = None
+    contracts: int = 1
     exit_order_id: int | None = None
     fill_exit_price: float | None = None
     entered_at: datetime | None = None
@@ -49,6 +50,7 @@ class PositionTracker:
         direction: str,
         engine_price: float,
         order_id: int | None = None,
+        contracts: int = 1,
     ) -> PositionRecord:
         """Record that an entry order has been submitted to the broker."""
         if strategy_id in self._positions and self._positions[strategy_id].state != PositionState.FLAT:
@@ -64,13 +66,16 @@ class PositionTracker:
             direction=direction,
             engine_entry_price=engine_price,
             entry_order_id=order_id,
+            contracts=contracts,
             state_changed_at=now,
         )
         self._positions[strategy_id] = record
         log.debug("Position %s -> PENDING_ENTRY (order=%s)", strategy_id, order_id)
         return record
 
-    def on_signal_entry(self, strategy_id: str, engine_price: float, direction: str) -> PositionRecord:
+    def on_signal_entry(
+        self, strategy_id: str, engine_price: float, direction: str, contracts: int = 1
+    ) -> PositionRecord:
         """Record a signal-only entry (no broker interaction)."""
         now = datetime.now(UTC)
         record = PositionRecord(
@@ -78,6 +83,7 @@ class PositionTracker:
             state=PositionState.ENTERED,
             direction=direction,
             engine_entry_price=engine_price,
+            contracts=contracts,
             entered_at=now,
             state_changed_at=now,
         )

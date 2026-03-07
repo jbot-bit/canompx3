@@ -390,7 +390,9 @@ class SessionOrchestrator:
 
         if event.event_type == "ENTRY":
             if self.signal_only:
-                self._positions.on_signal_entry(event.strategy_id, event.price, event.direction)
+                self._positions.on_signal_entry(
+                    event.strategy_id, event.price, event.direction, contracts=event.contracts
+                )
                 log.info(
                     "⚡ SIGNAL [%s]: %s %s @ %.2f  ← trade this manually on Tradovate/TradingView",
                     event.strategy_id,
@@ -423,7 +425,9 @@ class SessionOrchestrator:
             fill_price = result.get("fill_price") if isinstance(result, dict) else getattr(result, "fill_price", None)
 
             # Track entry via position tracker
-            self._positions.on_entry_sent(event.strategy_id, event.direction, event.price, order_id=order_id)
+            self._positions.on_entry_sent(
+                event.strategy_id, event.direction, event.price, order_id=order_id, contracts=event.contracts
+            )
             if fill_price is not None:
                 self._positions.on_entry_filled(event.strategy_id, fill_price)
                 slippage = fill_price - event.price
@@ -583,7 +587,7 @@ class SessionOrchestrator:
                     exit_spec = self.order_router.build_exit_spec(
                         direction=direction,
                         symbol=self.contract_symbol,
-                        qty=1,
+                        qty=record.contracts,
                     )
                     result = await loop.run_in_executor(None, self.order_router.submit, exit_spec)
                     order_id = result.get("order_id") if isinstance(result, dict) else result.order_id
@@ -655,7 +659,13 @@ class SessionOrchestrator:
         Each event is wrapped individually so one failure doesn't abort the rest
         (CRIT-4: preventing open positions from being abandoned on error).
         """
-        eod_events = self.engine.on_trading_day_end()
+        # If kill switch already fired, positions are already closed at the broker.
+        # Skip EOD close to avoid duplicate close orders.
+        if self._kill_switch_fired:
+            log.info("Kill switch was activated — skipping EOD close (positions already flattened)")
+            eod_events = []
+        else:
+            eod_events = self.engine.on_trading_day_end()
 
         async def _close_all() -> None:
             for event in eod_events:
