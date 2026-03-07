@@ -64,8 +64,8 @@ class StateBroadcaster:
                 # Determine adaptive interval
                 minutes_to_next = state.minutes_to_next or 999
                 is_wknd = state.name == StateName.WEEKEND
-                refresh = get_refresh_seconds(minutes_to_next, is_weekend=is_wknd)
-                interval = _FAST_INTERVAL if refresh <= 5 else _SLOW_INTERVAL
+                refresh_interval = get_refresh_seconds(minutes_to_next, is_weekend=is_wknd)
+                interval = _FAST_INTERVAL if refresh_interval <= 5 else _SLOW_INTERVAL
 
                 # Always broadcast clock tick
                 clock_data = {

@@ -243,7 +243,8 @@ def build_session_briefings() -> list[SessionBriefing]:
         try:
             portfolio, _ = build_live_portfolio(instrument=instrument)
             all_strategies.extend(portfolio.strategies)
-        except Exception:
+        except Exception as exc:
+            log.warning("Failed to load portfolio for %s: %s", instrument, exc)
             continue
 
     # Group by (session, instrument, rr_target) — one card per RR target
