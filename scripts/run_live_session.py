@@ -31,6 +31,79 @@ log = logging.getLogger(__name__)
 from trading_app.live.session_orchestrator import SessionOrchestrator
 
 
+def _run_preflight(instrument: str, broker: str | None, demo: bool) -> bool:
+    """Pre-flight validation. Returns True if all checks pass."""
+    from datetime import date
+
+    from pipeline.paths import GOLD_DB_PATH
+    from trading_app.live.broker_factory import create_broker_components, get_broker_name
+    from trading_app.live_config import build_live_portfolio
+
+    checks_passed = 0
+    checks_total = 4
+
+    # 1. Auth check
+    broker_name = broker or get_broker_name()
+    print(f"\n[1/{checks_total}] Auth check ({broker_name})...", end=" ", flush=True)
+    try:
+        components = create_broker_components(broker_name, demo=demo)
+        token = components["auth"].get_token()
+        print(f"OK (token: {token[:8]}...)")
+        checks_passed += 1
+    except Exception as e:
+        print(f"FAILED: {e}")
+        components = None
+
+    # 2. Portfolio check
+    print(f"[2/{checks_total}] Portfolio check ({instrument})...", end=" ", flush=True)
+    try:
+        portfolio, notes = build_live_portfolio(db_path=GOLD_DB_PATH, instrument=instrument)
+        print(f"OK ({len(portfolio.strategies)} strategies)")
+        for s in portfolio.strategies:
+            print(
+                f"    {s.strategy_id} | {s.orb_label} {s.entry_model} "
+                f"RR{s.rr_target} O{s.orb_minutes} | WR={s.win_rate:.0%} "
+                f"ExpR={s.expectancy_r:.3f} N={s.sample_size}"
+            )
+        for note in notes:
+            print(f"    NOTE: {note}")
+        checks_passed += 1
+    except Exception as e:
+        print(f"FAILED: {e}")
+
+    # 3. Daily features freshness
+    print(f"[3/{checks_total}] Daily features freshness...", end=" ", flush=True)
+    try:
+        row = SessionOrchestrator._build_daily_features_row(date.today(), instrument)
+        atr = row.get("atr_20")
+        vel = row.get("atr_vel_regime")
+        print(f"OK (atr_20={atr}, atr_vel={vel})")
+        checks_passed += 1
+    except Exception as e:
+        print(f"FAILED: {e}")
+
+    # 4. Contract resolution
+    print(f"[4/{checks_total}] Contract resolution...", end=" ", flush=True)
+    if components is not None:
+        try:
+            contracts_cls = components["contracts_class"]
+            contracts = contracts_cls(auth=components["auth"], demo=demo)
+            front = contracts.resolve_front_month(instrument)
+            print(f"OK ({front})")
+            checks_passed += 1
+        except Exception as e:
+            print(f"FAILED: {e}")
+    else:
+        print("SKIPPED (auth failed)")
+
+    print(f"\nPreflight: {checks_passed}/{checks_total} passed")
+    if checks_passed == checks_total:
+        print("All clear — ready to trade.\n")
+    else:
+        print("FIX FAILURES before starting a live session.\n")
+    return checks_passed == checks_total
+
+
 def _print_mode_banner(mode: str, instrument: str) -> None:
     lines = {
         "signal": [
@@ -107,7 +180,18 @@ def main() -> None:
         default=False,
         help="Continue even if orphaned broker positions are detected on startup",
     )
+    parser.add_argument(
+        "--preflight",
+        action="store_true",
+        default=False,
+        help="Run pre-flight checks (auth, portfolio, daily_features, contract) then exit — no trading",
+    )
     args = parser.parse_args()
+
+    if args.preflight:
+        demo = not args.live
+        ok = _run_preflight(args.instrument, args.broker, demo)
+        sys.exit(0 if ok else 1)
 
     # Default to signal-only if no mode specified (safest default)
     if not args.signal_only and not args.demo and not args.live:
