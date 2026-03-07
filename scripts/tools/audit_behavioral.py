@@ -141,6 +141,7 @@ EXCEPT_SCAN_GLOBS = [
 # Files allowed to use broad except + success return (documented intentional fail-open)
 BROAD_EXCEPT_ALLOWLIST = {
     "live_config.py",  # Dollar gate intentionally fails open for live trading safety
+    "session_orchestrator.py",  # _verify_fill_poller: 404/auth errors mean endpoint exists
 }
 
 

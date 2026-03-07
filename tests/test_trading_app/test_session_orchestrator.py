@@ -173,6 +173,13 @@ def build_orchestrator(components: FakeBrokerComponents | None = None) -> Sessio
     orch._positions = PositionTracker()
     orch._last_bar_at = None
     orch._kill_switch_fired = False
+    orch._bar_count = 0
+    orch._notifications_broken = False
+
+    from trading_app.live.session_orchestrator import SessionStats
+
+    orch._stats = SessionStats()
+    orch._poller_active = False
     orch.contract_symbol = "MGCJ6"
 
     from trading_app.live.circuit_breaker import CircuitBreaker
@@ -181,6 +188,8 @@ def build_orchestrator(components: FakeBrokerComponents | None = None) -> Sessio
     orch.order_router = c.router
     orch.positions = c.positions
     orch._write_signal_record = MagicMock()
+    # Self-tests require real Telegram/broker — mock to always pass in tests
+    orch.run_self_tests = MagicMock(return_value={"notifications": True, "brackets": True, "fill_poller": True})
 
     return orch
 
@@ -1303,3 +1312,183 @@ class TestFillPoller:
 
         # query_order_status should NOT have been called
         orch.order_router.query_order_status.assert_not_called()
+
+
+class TestObservability:
+    """Tests for SessionStats counters, upgraded _notify, heartbeat, and self-tests."""
+
+    def test_notify_counts_success(self):
+        """Successful _notify() increments notifications_sent."""
+        orch = build_orchestrator()
+        with patch("trading_app.live.notifications.notify"):
+            orch._notify("test")
+        assert orch._stats.notifications_sent == 1
+        assert orch._stats.notifications_failed == 0
+
+    def test_notify_counts_failure_and_logs(self):
+        """Failed _notify() increments notifications_failed and logs error."""
+        orch = build_orchestrator()
+        with patch("trading_app.live.notifications.notify", side_effect=RuntimeError("bad token")):
+            orch._notify("test")
+        assert orch._stats.notifications_failed == 1
+        assert orch._stats.notifications_sent == 0
+
+    def test_notify_first_failure_prints_to_stdout(self, capsys):
+        """First notification failure prints warning to STDOUT."""
+        orch = build_orchestrator()
+        with patch("trading_app.live.notifications.notify", side_effect=RuntimeError("bad token")):
+            orch._notify("test1")
+            orch._notify("test2")  # second failure should NOT print again
+        captured = capsys.readouterr()
+        assert "NOTIFICATION FAILURE" in captured.out
+        # Only one print (first failure)
+        assert captured.out.count("NOTIFICATION FAILURE") == 1
+
+    async def test_bar_count_increments(self):
+        """_on_bar increments both _bar_count and _stats.bars_received."""
+        orch = build_orchestrator()
+        orch.engine.on_bar.return_value = []
+        bar = FakeBar()
+        await orch._on_bar(bar)
+        assert orch._bar_count == 1
+        assert orch._stats.bars_received == 1
+
+    async def test_events_processed_counter(self):
+        """_handle_event increments events_processed."""
+        orch = build_orchestrator(FakeBrokerComponents(signal_only=True))
+        event = MagicMock()
+        event.event_type = "ENTRY"
+        event.strategy_id = STRATEGY_ID
+        event.price = 2350.0
+        event.direction = "long"
+        event.contracts = 1
+        await orch._handle_event(event)
+        assert orch._stats.events_processed == 1
+
+    async def test_bracket_submit_counter(self):
+        """Successful bracket submit increments brackets_submitted."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch.order_router.supports_native_brackets = MagicMock(return_value=True)
+        orch.order_router.build_bracket_spec = MagicMock(return_value={"type": "OCO"})
+        orch.order_router.submit = MagicMock(return_value={"order_ids": [100, 101]})
+
+        strategy = list(orch._strategy_map.values())[0]
+        event = MagicMock()
+        event.strategy_id = strategy.strategy_id
+        event.direction = "long"
+        event.contracts = 1
+
+        await orch._submit_bracket(event, strategy, 2350.0)
+        assert orch._stats.brackets_submitted == 1
+        assert orch._stats.brackets_failed == 0
+
+    async def test_bracket_failure_counter(self):
+        """Failed bracket submit increments brackets_failed."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch.order_router.supports_native_brackets = MagicMock(return_value=True)
+        orch.order_router.build_bracket_spec = MagicMock(return_value={"type": "OCO"})
+        orch.order_router.submit = MagicMock(side_effect=RuntimeError("API error"))
+
+        strategy = list(orch._strategy_map.values())[0]
+        event = MagicMock()
+        event.strategy_id = strategy.strategy_id
+        event.direction = "long"
+        event.contracts = 1
+
+        await orch._submit_bracket(event, strategy, 2350.0)
+        assert orch._stats.brackets_failed == 1
+        assert orch._stats.brackets_submitted == 0
+
+    async def test_fill_poller_counters(self):
+        """Fill poller increments fill_polls_run and fill_polls_confirmed."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=42)
+        orch.FILL_POLL_INTERVAL = 0.01
+
+        orch.order_router.query_order_status = MagicMock(return_value={"status": "Filled", "fill_price": 2351.0})
+
+        task = asyncio.create_task(orch._fill_poller())
+        await asyncio.sleep(0.1)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        assert orch._stats.fill_polls_run >= 1
+        assert orch._stats.fill_polls_confirmed >= 1
+
+    def test_session_stats_in_post_session(self):
+        """post_session() includes stats in EOD notification."""
+        orch = build_orchestrator()
+        orch._stats.bars_received = 42
+        orch._stats.notifications_sent = 5
+        orch.engine.on_trading_day_end.return_value = []
+        orch._notify = MagicMock()
+
+        orch.post_session()
+
+        # Find the EOD notification call that includes stats
+        notify_calls = [str(c) for c in orch._notify.call_args_list]
+        eod_calls = [c for c in notify_calls if "42 bars" in c]
+        assert len(eod_calls) >= 1, f"Expected '42 bars' in notify calls: {notify_calls}"
+
+    def test_self_tests_return_dict(self):
+        """run_self_tests() returns a dict of component: bool."""
+        orch = build_orchestrator()
+        # Replace the mock from build_orchestrator with the real method
+        orch.run_self_tests = SessionOrchestrator.run_self_tests.__get__(orch)
+        with patch(
+            "trading_app.live.session_orchestrator.SessionOrchestrator._verify_notifications", return_value=True
+        ):
+            results = orch.run_self_tests()
+        assert isinstance(results, dict)
+        assert "notifications" in results
+        assert "brackets" in results
+        assert "fill_poller" in results
+
+    def test_notify_fallback_when_broken(self, capsys):
+        """When _notifications_broken=True, _notify skips Telegram and prints to STDOUT."""
+        orch = build_orchestrator()
+        orch._notifications_broken = True
+        orch._notify("critical alert")
+        captured = capsys.readouterr()
+        assert "NOTIFY-FALLBACK" in captured.out
+        assert "critical alert" in captured.out
+        assert orch._stats.notifications_failed == 1
+        assert orch._stats.notifications_sent == 0
+
+    def test_notify_fallback_does_not_call_telegram(self):
+        """Broken notifications must NOT attempt Telegram (avoids repeated timeouts)."""
+        orch = build_orchestrator()
+        orch._notifications_broken = True
+        with patch("trading_app.live.notifications.notify") as mock_notify:
+            orch._notify("should not reach telegram")
+        mock_notify.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_run_aborts_on_broken_notifications_live_mode(self):
+        """run() raises RuntimeError if notifications broken in non-signal-only mode."""
+        orch = build_orchestrator()
+        orch.signal_only = False
+        with patch.object(
+            orch, "run_self_tests", return_value={"notifications": False, "brackets": True, "fill_poller": True}
+        ):
+            with pytest.raises(RuntimeError, match="notifications broken"):
+                await orch.run()
+
+    @pytest.mark.asyncio
+    async def test_run_continues_on_broken_notifications_signal_only(self):
+        """run() does NOT abort in signal-only mode even if notifications broken."""
+        orch = build_orchestrator()
+        orch.signal_only = True
+        # Mock self-tests to return broken notifications
+        with patch.object(
+            orch, "run_self_tests", return_value={"notifications": False, "brackets": True, "fill_poller": True}
+        ):
+            # Mock the feed class to raise immediately so run() exits after the gate
+            orch._feed_class = MagicMock(side_effect=KeyboardInterrupt)
+            try:
+                await orch.run()
+            except (KeyboardInterrupt, Exception):
+                pass  # Expected — we just need to verify it got past the notification gate

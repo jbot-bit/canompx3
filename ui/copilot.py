@@ -431,7 +431,12 @@ def _start_session(instrument: str, signal_only: bool) -> None:
         instrument,
         flag,
     ]
-    proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        cwd=Path(__file__).parent.parent,
+    )
     st.session_state["live_proc"] = proc
     st.session_state["live_instrument"] = instrument
     st.session_state["live_mode_short"] = "signal-only" if signal_only else "demo"
@@ -537,5 +542,6 @@ def render() -> None:
         minutes_to_next=state.minutes_to_next or 999,
         is_weekend=state.name == "WEEKEND",
     )
-    time.sleep(refresh)
+    # Cap sleep at 5s to keep UI responsive — Streamlit blocks during sleep
+    time.sleep(min(refresh, 5))
     st.rerun()

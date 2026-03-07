@@ -241,9 +241,11 @@ def render_pre_session_priming(
     if strategies:
         st.markdown("**Today's Plan**")
         for s in strategies:
+            conds = ", ".join(s.conditions) if s.conditions else "No filter"
+            direction = f" | {s.direction_note}" if s.direction_note else ""
             st.markdown(
-                f"- **{s.instrument}** {s.entry_model} CB{s.confirm_bars} "
-                f"{s.filter_type} RR{s.rr_target} ({s.orb_minutes}m ORB)"
+                f"- **{s.instrument}** {s.entry_instruction} "
+                f"RR{s.rr_target} ({s.orb_minutes}m ORB) — {conds}{direction}"
             )
         st.caption("Action rule: Execute within 60s of signal.")
 

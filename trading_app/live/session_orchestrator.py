@@ -15,6 +15,7 @@ VERIFIED API NOTES:
 import asyncio
 import json
 import logging
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -35,6 +36,24 @@ from trading_app.portfolio import PortfolioStrategy
 from trading_app.risk_manager import RiskLimits, RiskManager
 
 log = logging.getLogger(__name__)
+
+
+@dataclass
+class SessionStats:
+    """Observability counters — tracks success/failure for every silent-failure component."""
+
+    notifications_sent: int = 0
+    notifications_failed: int = 0
+    brackets_submitted: int = 0
+    brackets_failed: int = 0
+    bracket_cancels_ok: int = 0
+    bracket_cancels_failed: int = 0
+    fill_polls_run: int = 0
+    fill_polls_confirmed: int = 0
+    fill_polls_failed: int = 0
+    reconnect_attempts: int = 0
+    bars_received: int = 0
+    events_processed: int = 0
 
 
 class SessionOrchestrator:
@@ -142,6 +161,10 @@ class SessionOrchestrator:
         self._positions = PositionTracker()
         self._last_bar_at: datetime | None = None  # bar heartbeat
         self._kill_switch_fired = False  # one-shot emergency flatten
+        self._notifications_broken = False  # set by self-test
+        self._bar_count = 0  # total bars received this session
+        self._stats = SessionStats()  # observability counters
+        self._poller_active = False  # set True once fill poller runs a cycle
 
         # Circuit breaker: blocks order submission after 5 consecutive broker failures
         from trading_app.live.circuit_breaker import CircuitBreaker
@@ -276,13 +299,99 @@ class SessionOrchestrator:
         return row
 
     def _notify(self, message: str) -> None:
-        """Send Telegram notification. Never raises — notifications must not kill the trading loop."""
+        """Send Telegram notification. Never raises — notifications must not kill the trading loop.
+
+        If notifications were flagged broken by self-test, skips Telegram and logs
+        to STDOUT so the session log still captures every event.
+        """
+        if self._notifications_broken:
+            print(f"[NOTIFY-FALLBACK] {self.instrument}: {message}")
+            log.warning("Notification (fallback): %s", message)
+            self._stats.notifications_failed += 1
+            return
         try:
             from trading_app.live.notifications import notify
 
             notify(self.instrument, message)
-        except Exception:
-            pass
+            self._stats.notifications_sent += 1
+        except Exception as e:
+            self._stats.notifications_failed += 1
+            log.error("Notification failed (will not retry): %s", e)
+            if self._stats.notifications_failed == 1:
+                print(f"!!! NOTIFICATION FAILURE: {e} — check TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID !!!")
+
+    def _verify_notifications(self) -> bool:
+        """Send test notification via the same path as _notify(). Returns False if broken."""
+        try:
+            from trading_app.live.notifications import notify
+
+            notify(self.instrument, "SELF-TEST: notifications working")
+            log.info("Notification self-test passed")
+            return True
+        except Exception as e:
+            log.critical("NOTIFICATION SELF-TEST FAILED: %s", e)
+            print(f"!!! NOTIFICATIONS ARE BROKEN: {e} !!!")
+            return False
+
+    def _verify_brackets(self) -> bool:
+        """Verify bracket order support works, not just claimed."""
+        if self.order_router is None:
+            return True  # signal-only
+        if not self.order_router.supports_native_brackets():
+            log.info("Broker does not support brackets — no crash protection")
+            return True
+        try:
+            spec = self.order_router.build_bracket_spec(
+                direction="long",
+                symbol="TEST",
+                entry_price=100.0,
+                stop_price=99.0,
+                target_price=102.0,
+                qty=1,
+            )
+            if spec is None:
+                log.warning("build_bracket_spec returned None despite supports_native_brackets=True")
+                return False
+            log.info("Bracket spec self-test passed")
+            return True
+        except Exception as e:
+            log.critical("BRACKET SELF-TEST FAILED: %s", e)
+            return False
+
+    def _verify_fill_poller(self) -> bool:
+        """Verify broker supports order status queries for fill polling.
+
+        Returns True if the endpoint exists (even if it returns an error for
+        order ID 0 — that's expected). Only returns False for NotImplementedError,
+        which means the broker genuinely doesn't support polling.
+        """
+        if self.order_router is None or self.signal_only:
+            return True
+        try:
+            self.order_router.query_order_status(0)
+        except NotImplementedError:
+            log.warning("Broker does not support query_order_status — fill poller will be inactive")
+            return False
+        except Exception as e:  # noqa: audit-ok — 404/auth errors mean endpoint exists
+            log.info("Fill poller endpoint exists (non-fatal error: %s)", e)
+        return True
+
+    def run_self_tests(self) -> dict[str, bool]:
+        """Run all component self-tests. Returns {component: passed}."""
+        results = {}
+        results["notifications"] = self._verify_notifications()
+        results["brackets"] = self._verify_brackets()
+        results["fill_poller"] = self._verify_fill_poller()
+
+        print("\n  SELF-TEST RESULTS:")
+        for component, passed in results.items():
+            status = "PASS" if passed else "FAIL"
+            marker = "  " if passed else "!!"
+            print(f"  {marker} {component:20s} {status}")
+        print()
+
+        self._notifications_broken = not results["notifications"]
+        return results
 
     def _write_signal_record(self, extra: dict) -> None:
         """Append a signal record to the JSONL file read by the Live Monitor UI."""
@@ -354,6 +463,8 @@ class SessionOrchestrator:
                     log.critical("STALE ORDERS: %s", [(s.strategy_id, s.state.value) for s in stale])
                     self._notify(f"STALE ORDERS: {[(s.strategy_id, s.state.value) for s in stale]}")
         self._last_bar_at = now
+        self._bar_count += 1
+        self._stats.bars_received += 1
 
         # Kill switch fired = we already emergency-flattened at the broker.
         # Do NOT process further bars — engine doesn't know positions are closed,
@@ -452,7 +563,9 @@ class SessionOrchestrator:
                         bracket_ids = [oid]
                 record.bracket_order_ids = bracket_ids
             log.info("Bracket submitted for %s: stop=%.2f target=%.2f", event.strategy_id, stop_price, target_price)
+            self._stats.brackets_submitted += 1
         except Exception as e:
+            self._stats.brackets_failed += 1
             log.warning("Bracket submit failed for %s (position still managed by engine): %s", event.strategy_id, e)
 
     async def _cancel_brackets(self, strategy_id: str) -> None:
@@ -466,7 +579,9 @@ class SessionOrchestrator:
         for oid in record.bracket_order_ids:
             try:
                 await loop.run_in_executor(None, self.order_router.cancel, oid)
+                self._stats.bracket_cancels_ok += 1
             except Exception as e:
+                self._stats.bracket_cancels_failed += 1
                 log.warning("Bracket cancel failed (may have filled): %s", e)
         # Brief pause to let cancellations settle
         await asyncio.sleep(0.5)
@@ -481,6 +596,7 @@ class SessionOrchestrator:
         HTTP order submission runs in a thread-pool executor so the async event loop
         (and the Tradovate heartbeat task) are never blocked.
         """
+        self._stats.events_processed += 1
         strategy = self._strategy_map.get(event.strategy_id)
         if strategy is None:
             log.warning("Unknown strategy_id: %s", event.strategy_id)
@@ -769,6 +885,24 @@ class SessionOrchestrator:
             except Exception as e:
                 log.error("Watchdog error (will retry): %s", e)
 
+    HEARTBEAT_INTERVAL = 1800.0  # 30 minutes between heartbeat notifications
+
+    async def _heartbeat_notifier(self) -> None:
+        """Send periodic alive notification. Absence of heartbeat = notifications broken."""
+        while True:
+            try:
+                await asyncio.sleep(self.HEARTBEAT_INTERVAL)
+                n_trades = len(self.monitor.trades) if hasattr(self.monitor, "trades") else 0
+                active = len(self._positions.active_positions())
+                poller_status = "ON" if self._poller_active else "OFF"
+                self._notify(
+                    f"Heartbeat: {self._bar_count} bars, {n_trades} trades, {active} active, poller={poller_status}"
+                )
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                log.error("Heartbeat error (will retry): %s", e)
+
     FILL_POLL_INTERVAL = 5.0  # seconds between fill status checks
 
     async def _fill_poller(self) -> None:
@@ -781,11 +915,14 @@ class SessionOrchestrator:
         while True:
             try:
                 await asyncio.sleep(self.FILL_POLL_INTERVAL)
+                self._poller_active = True
+                pending_count = 0
                 for record in self._positions.active_positions():
                     if record.state != PositionState.PENDING_ENTRY:
                         continue
                     if record.entry_order_id is None:
                         continue
+                    pending_count += 1
                     try:
                         loop = asyncio.get_running_loop()
                         status = await loop.run_in_executor(
@@ -795,18 +932,23 @@ class SessionOrchestrator:
                         current = self._positions.get(record.strategy_id)
                         if current is None or current.state != PositionState.PENDING_ENTRY:
                             continue
+                        self._stats.fill_polls_run += 1
                         if status["status"] == "Filled":
                             fill_price = status.get("fill_price")
                             if fill_price is not None:
                                 self._positions.on_entry_filled(record.strategy_id, fill_price)
                             log.info("Fill confirmed for %s: %s", record.strategy_id, status)
+                            self._stats.fill_polls_confirmed += 1
                         elif status["status"] in ("Cancelled", "Rejected"):
                             self._positions.pop(record.strategy_id)
                             log.warning("Order %s for %s: %s", status["status"], record.strategy_id, status)
                     except NotImplementedError:
                         pass  # broker doesn't support polling
                     except Exception as e:
+                        self._stats.fill_polls_failed += 1
                         log.warning("Fill poll failed for %s: %s", record.strategy_id, e)
+                if pending_count > 0:
+                    log.info("Fill poller: checked %d pending orders", pending_count)
             except asyncio.CancelledError:
                 return
             except Exception:
@@ -819,8 +961,19 @@ class SessionOrchestrator:
     ORCHESTRATOR_BACKOFF_MAX = 300.0
 
     async def run(self) -> None:
+        # Run component self-tests before accepting any bars
+        results = self.run_self_tests()
+
+        # Fail-closed: broken notifications in live trading = flying blind
+        if not self.signal_only and not results.get("notifications", False):
+            msg = "ABORTING: notifications broken — cannot trade without alerts"
+            log.critical(msg)
+            print(f"!!! {msg} !!!")
+            raise RuntimeError(msg)
+
         backoff = self.ORCHESTRATOR_BACKOFF_INITIAL
         watchdog = asyncio.create_task(self._watchdog())
+        heartbeat = asyncio.create_task(self._heartbeat_notifier())
         poller = None
         if not self.signal_only:
             poller = asyncio.create_task(self._fill_poller())
@@ -859,6 +1012,7 @@ class SessionOrchestrator:
                         self.auth.refresh_if_needed()
                     except Exception:
                         pass
+                    self._stats.reconnect_attempts += 1
                     self._notify(f"Reconnecting in {backoff:.0f}s (attempt {attempt + 2})")
                     await asyncio.sleep(backoff)
                     backoff = min(backoff * 2, self.ORCHESTRATOR_BACKOFF_MAX)
@@ -868,6 +1022,7 @@ class SessionOrchestrator:
             self._notify(f"CRITICAL: {msg}")
         finally:
             watchdog.cancel()
+            heartbeat.cancel()
             if poller:
                 poller.cancel()
 
@@ -925,7 +1080,18 @@ class SessionOrchestrator:
 
         summary = self.monitor.daily_summary()
         log.info("EOD summary: %s", summary)
-        self._notify(f"EOD: {summary.get('n_trades', 0)} trades, {summary.get('total_r', 0):.2f}R")
+        log.info("SESSION STATS: %s", self._stats)
+        n_notifs_ok = self._stats.notifications_sent
+        n_notifs_total = n_notifs_ok + self._stats.notifications_failed
+        n_brackets_ok = self._stats.brackets_submitted
+        n_brackets_total = n_brackets_ok + self._stats.brackets_failed
+        self._notify(
+            f"EOD: {summary.get('n_trades', 0)} trades, {summary.get('total_r', 0):.2f}R | "
+            f"{self._stats.bars_received} bars, {n_notifs_ok}/{n_notifs_total} notifs OK, "
+            f"{n_brackets_ok}/{n_brackets_total} brackets OK, "
+            f"{self._stats.fill_polls_confirmed} fills confirmed, "
+            f"{self._stats.reconnect_attempts} reconnects"
+        )
 
         # EOD position reconciliation (M2.5 P0)
         if self.positions and not self.signal_only:

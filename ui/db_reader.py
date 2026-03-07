@@ -37,16 +37,23 @@ def _cleanup_connections():
 atexit.register(_cleanup_connections)
 
 
-def query_df(sql: str, db_path: Path | None = None) -> pd.DataFrame:
+def query_df(
+    sql: str,
+    db_path: Path | None = None,
+    params: list | None = None,
+) -> pd.DataFrame:
     """Execute a SELECT query and return a DataFrame.
 
     Only SELECT statements are allowed. Raises ValueError for anything else.
+    Use $1, $2, ... placeholders for parameterized queries.
     """
     stripped = sql.strip().upper()
     if not stripped.startswith("SELECT") and not stripped.startswith("WITH"):
         raise ValueError(f"Only SELECT/WITH queries allowed, got: {sql[:40]}...")
 
     con = get_connection(db_path)
+    if params:
+        return con.execute(sql, params).fetchdf()
     return con.execute(sql).fetchdf()
 
 
@@ -101,12 +108,12 @@ def get_validated_strategies(
     min_expectancy_r: float = 0.0,
 ) -> pd.DataFrame:
     """Load validated_setups as a DataFrame, optionally filtered by min ExpR."""
-    sql = f"""
+    sql = """
         SELECT * FROM validated_setups
-        WHERE expectancy_r >= {min_expectancy_r}
+        WHERE expectancy_r >= $1
         ORDER BY expectancy_r DESC
     """
-    return query_df(sql, db_path)
+    return query_df(sql, db_path, params=[min_expectancy_r])
 
 
 def get_daily_features(
@@ -115,13 +122,13 @@ def get_daily_features(
     db_path: Path | None = None,
 ) -> dict | None:
     """Load daily_features for a single trading day. Returns dict or None."""
-    sql = f"""
+    sql = """
         SELECT * FROM daily_features
-        WHERE trading_day = '{trading_day}'
-          AND orb_minutes = {orb_minutes}
+        WHERE trading_day = $1
+          AND orb_minutes = $2
         LIMIT 1
     """
-    df = query_df(sql, db_path)
+    df = query_df(sql, db_path, params=[trading_day, orb_minutes])
     if df.empty:
         return None
     return df.iloc[0].to_dict()
@@ -190,16 +197,16 @@ def get_prior_day_atr(
     Returns the atr_20 value from the latest trading day in daily_features.
     Used by the co-pilot to set expectations: "Prior day ATR: 28pts."
     """
-    sql = f"""
+    sql = """
         SELECT atr_20
         FROM daily_features
-        WHERE symbol = '{instrument}'
-          AND orb_minutes = {orb_minutes}
+        WHERE symbol = $1
+          AND orb_minutes = $2
         ORDER BY trading_day DESC
         LIMIT 1
     """
     try:
-        df = query_df(sql, db_path)
+        df = query_df(sql, db_path, params=[instrument, orb_minutes])
         if df.empty:
             return None
         val = df.iloc[0]["atr_20"]
@@ -217,16 +224,16 @@ def get_today_completed_sessions(
     Returns list of dicts with keys: orb_label, symbol, break_dir, pnl_r, outcome.
     Used by the co-pilot's day summary section.
     """
-    sql = f"""
+    sql = """
         SELECT orb_label, symbol, break_dir, pnl_r, outcome,
                entry_model, rr_target
         FROM orb_outcomes
-        WHERE trading_day = '{trading_day.isoformat()}'
+        WHERE trading_day = $1
           AND orb_minutes = 5
         ORDER BY orb_label, symbol
     """
     try:
-        df = query_df(sql, db_path)
+        df = query_df(sql, db_path, params=[trading_day.isoformat()])
         return df.to_dict("records") if not df.empty else []
     except Exception:
         return []
@@ -241,14 +248,14 @@ def get_previous_trading_day(
     Queries daily_features for the latest trading_day < before.
     Used by the co-pilot for "Last trading day" summary.
     """
-    sql = f"""
+    sql = """
         SELECT MAX(trading_day) as prev_day
         FROM daily_features
-        WHERE trading_day < '{before.isoformat()}'
+        WHERE trading_day < $1
           AND orb_minutes = 5
     """
     try:
-        df = query_df(sql, db_path)
+        df = query_df(sql, db_path, params=[before.isoformat()])
         if df.empty or df.iloc[0]["prev_day"] is None:
             return None
         val = df.iloc[0]["prev_day"]

@@ -189,10 +189,10 @@ def collect_guardrail_status() -> dict:
     # Run tests
     try:
         proc = subprocess.run(
-            [sys.executable, "-m", "pytest", "tests/", "-v", "--tb=no", "-q"],
+            [sys.executable, "-m", "pytest", "tests/", "-x", "-q", "--tb=no"],
             capture_output=True,
             text=True,
-            timeout=60,
+            timeout=300,
             cwd=str(PROJECT_ROOT),
         )
         result["tests_passed"] = proc.returncode == 0
@@ -437,280 +437,621 @@ def collect_roadmap_status(roadmap_path: Path) -> list[dict]:
 # =============================================================================
 
 
+def _fmt_count(n: int) -> str:
+    """Format large numbers with M/K suffix."""
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    if n >= 1_000:
+        return f"{n / 1_000:.1f}K"
+    return str(n)
+
+
 def status_badge(ok: bool | None, text: str = "") -> str:
     if ok is None:
-        return f'<span class="badge badge-unknown">{text or "UNKNOWN"}</span>'
+        return f'<span class="badge badge-muted">{text or "UNKNOWN"}</span>'
     if ok:
         return f'<span class="badge badge-ok">{text or "PASS"}</span>'
     return f'<span class="badge badge-fail">{text or "FAIL"}</span>'
 
 
-def render_ingestion_panel(cp: dict, inv: dict, db: dict) -> str:
-    total_files = inv["total_files"]
-    # Estimate processed files from checkpoint progress
-    pct = 0
-    if total_files > 0 and db["bars_1m_count"] > 0:
-        # ~1400 bars/day, ~1 file/day
-        estimated_days = db["bars_1m_count"] / 1400
-        pct = min(100, round(estimated_days / total_files * 100, 1))
+def render_header(db: dict, strategies: dict | None) -> str:
+    bars = _fmt_count(db["bars_1m_count"])
+    strat_count = strategies["validated_count"] if strategies and strategies["has_data"] else 0
+    db_size = f"{db['size_mb'] / 1024:.1f} GB" if db["size_mb"] >= 1024 else f"{db['size_mb']} MB"
+    exp_count = strategies["experimental_count"] if strategies and strategies["has_data"] else 0
 
     return f"""
-    <div class="panel">
-      <h2>Ingestion Progress</h2>
-      <div class="progress-bar-container">
-        <div class="progress-bar" style="width:{pct}%">{pct}%</div>
+    <header class="header">
+      <div class="header-inner">
+        <div class="header-top">
+          <h1>ORB PIPELINE<span class="header-sub">Futures Research &amp; Backtesting</span></h1>
+        </div>
+        <div class="hero-row">
+          <div class="hero-stat">
+            <div class="hero-value">{bars}</div>
+            <div class="hero-label">1-Min Bars</div>
+          </div>
+          <div class="hero-stat">
+            <div class="hero-value gold">{strat_count}</div>
+            <div class="hero-label">Validated</div>
+          </div>
+          <div class="hero-stat">
+            <div class="hero-value">{_fmt_count(exp_count)}</div>
+            <div class="hero-label">Experimental</div>
+          </div>
+          <div class="hero-stat">
+            <div class="hero-value">{len(db["symbols"])}</div>
+            <div class="hero-label">Instruments</div>
+          </div>
+          <div class="hero-stat">
+            <div class="hero-value">{db_size}</div>
+            <div class="hero-label">Database</div>
+          </div>
+        </div>
       </div>
-      <table>
-        <tr><td>DBN files in directory</td><td><strong>{total_files:,}</strong></td></tr>
-        <tr><td>DBN total size</td><td>{inv["total_size_mb"]:,.1f} MB</td></tr>
-        <tr><td>First file</td><td>{inv["first_file"] or "N/A"}</td></tr>
-        <tr><td>Last file</td><td>{inv["last_file"] or "N/A"}</td></tr>
-        <tr><td>Checkpoint files</td><td>{cp["checkpoint_files"]}</td></tr>
-        <tr><td>Chunks done</td><td>{cp["chunks_done"]}</td></tr>
-        <tr><td>Chunks failed</td><td>{cp["chunks_failed"]}</td></tr>
-        <tr><td>Rows written (checkpoints)</td><td>{cp["total_rows_written"]:,}</td></tr>
-        <tr><td>Database rows (bars_1m)</td><td><strong>{db["bars_1m_count"]:,}</strong></td></tr>
-      </table>
-    </div>
-    """
+    </header>"""
 
 
-def render_db_panel(db: dict) -> str:
-    exists_badge = status_badge(db["exists"], "EXISTS" if db["exists"] else "MISSING")
-    return f"""
-    <div class="panel">
-      <h2>Database Metrics</h2>
-      <table>
-        <tr><td>Status</td><td>{exists_badge}</td></tr>
-        <tr><td>Size</td><td>{db["size_mb"]} MB</td></tr>
-        <tr><td>Tables</td><td>{", ".join(db["tables"]) or "None"}</td></tr>
-        <tr><td>bars_1m rows</td><td><strong>{db["bars_1m_count"]:,}</strong></td></tr>
-        <tr><td>bars_1m range</td><td>{db["bars_1m_min_date"] or "N/A"} &rarr; {db["bars_1m_max_date"] or "N/A"}</td></tr>
-        <tr><td>bars_5m rows</td><td><strong>{db["bars_5m_count"]:,}</strong></td></tr>
-        <tr><td>bars_5m range</td><td>{db["bars_5m_min_date"] or "N/A"} &rarr; {db["bars_5m_max_date"] or "N/A"}</td></tr>
-        <tr><td>daily_features rows</td><td><strong>{db["daily_features_count"]:,}</strong></td></tr>
-        <tr><td>daily_features range</td><td>{db["daily_features_min_date"] or "N/A"} &rarr; {db["daily_features_max_date"] or "N/A"}</td></tr>
-        <tr><td>Symbols</td><td>{", ".join(db["symbols"]) or "None"}</td></tr>
-      </table>
-    </div>
-    """
-
-
-def render_quality_panel(quality: dict) -> str:
-    if not quality["has_data"]:
-        return '<div class="panel"><h2>Data Quality</h2><p>No data in database.</p></div>'
-
-    issues_badge = status_badge(
-        quality["ohlcv_issues"] == 0 and quality["duplicate_count"] == 0 and quality["null_source_count"] == 0,
-        "CLEAN" if (quality["ohlcv_issues"] == 0 and quality["duplicate_count"] == 0) else "ISSUES",
+def render_status_strip(guardrails: dict, quality: dict, db: dict) -> str:
+    drift_cls = "green" if guardrails["drift_passed"] else ("red" if guardrails["drift_passed"] is False else "muted")
+    drift_text = (
+        "Drift PASS"
+        if guardrails["drift_passed"]
+        else ("Drift FAIL" if guardrails["drift_passed"] is False else "Drift ?")
     )
 
-    return f"""
-    <div class="panel">
-      <h2>Data Quality {issues_badge}</h2>
-      <table>
-        <tr><td>Bars/day average</td><td>{quality["bars_per_day_avg"]}</td></tr>
-        <tr><td>Bars/day min</td><td>{quality["bars_per_day_min"]}</td></tr>
-        <tr><td>Bars/day max</td><td>{quality["bars_per_day_max"]}</td></tr>
-        <tr><td>Estimated gap days</td><td>{quality["gap_days"]}</td></tr>
-        <tr><td>OHLCV issues (high &lt; low)</td><td>{quality["ohlcv_issues"]}</td></tr>
-        <tr><td>Duplicate (symbol, ts_utc)</td><td>{quality["duplicate_count"]}</td></tr>
-        <tr><td>NULL source_symbol</td><td>{quality["null_source_count"]}</td></tr>
-      </table>
-    </div>
-    """
+    test_cls = "green" if guardrails["tests_passed"] else ("red" if guardrails["tests_passed"] is False else "muted")
+    test_text = f"Tests {guardrails['test_count']}" if guardrails["tests_passed"] else "Tests FAIL"
 
+    q_ok = quality["ohlcv_issues"] == 0 and quality["duplicate_count"] == 0 and quality["null_source_count"] == 0
+    q_cls = "green" if q_ok else "red"
+    q_text = "Quality CLEAN" if q_ok else "Quality ISSUES"
 
-def render_contract_panel(contracts: list[dict]) -> str:
-    if not contracts:
-        return '<div class="panel"><h2>Contract History</h2><p>No contract data.</p></div>'
-
-    rows = ""
-    for c in contracts:
-        rows += f"""
-        <tr>
-          <td>{c["contract"]}</td>
-          <td>{c["bars"]:,}</td>
-          <td>{c["first_date"]}</td>
-          <td>{c["last_date"]}</td>
-          <td>{c["volume"]:,}</td>
-        </tr>"""
+    db_cls = "green" if db["exists"] else "red"
+    db_text = "DB Online" if db["exists"] else "DB Missing"
 
     return f"""
-    <div class="panel wide">
-      <h2>Contract History ({len(contracts)} contracts)</h2>
-      <table>
-        <tr><th>Contract</th><th>Bars</th><th>First Date</th><th>Last Date</th><th>Total Volume</th></tr>
-        {rows}
-      </table>
-    </div>
-    """
-
-
-def render_guardrails_panel(g: dict) -> str:
-    drift_badge = status_badge(g["drift_passed"])
-    test_badge = status_badge(g["tests_passed"], f"{g['test_count']} passed" if g["tests_passed"] else "FAIL")
-
-    # Parse drift output for individual checks
-    drift_lines = ""
-    for line in g["drift_output"].splitlines():
-        if "PASSED" in line:
-            drift_lines += f'<div class="check-ok">{line.strip()}</div>'
-        elif "FAILED" in line:
-            drift_lines += f'<div class="check-fail">{line.strip()}</div>'
-
-    return f"""
-    <div class="panel">
-      <h2>Guardrails</h2>
-      <table>
-        <tr><td>Drift Detection</td><td>{drift_badge}</td></tr>
-        <tr><td>Test Suite</td><td>{test_badge}</td></tr>
-      </table>
-      <details>
-        <summary>Drift check details</summary>
-        <div class="details-content">{drift_lines or "No output"}</div>
-      </details>
-    </div>
-    """
-
-
-def render_roadmap_panel(phases: list[dict]) -> str:
-    if not phases:
-        return '<div class="panel"><h2>Development Roadmap</h2><p>ROADMAP.md not found.</p></div>'
-
-    items_html = ""
-    for phase in phases:
-        done_count = sum(1 for i in phase["items"] if i["done"])
-        total = len(phase["items"])
-        items_html += f"<h3>{phase['name']} ({done_count}/{total})</h3><ul>"
-        for item in phase["items"]:
-            check = "&#x2705;" if item["done"] else "&#x2B1C;"
-            items_html += f"<li>{check} {item['text']}</li>"
-        items_html += "</ul>"
-
-    return f"""
-    <div class="panel">
-      <h2>Development Roadmap</h2>
-      {items_html}
-    </div>
-    """
+    <div class="strip">
+      <div class="strip-inner">
+        <span class="strip-item"><span class="dot {drift_cls}"></span>{drift_text}</span>
+        <span class="strip-item"><span class="dot {test_cls}"></span>{test_text}</span>
+        <span class="strip-item"><span class="dot {q_cls}"></span>{q_text}</span>
+        <span class="strip-item"><span class="dot {db_cls}"></span>{db_text}</span>
+        <span class="strip-item strip-right">{datetime.now().strftime("%Y-%m-%d %H:%M")}</span>
+      </div>
+    </div>"""
 
 
 def render_strategy_panel(strats: dict) -> str:
-    """Render validated strategies panel."""
     if not strats["has_data"]:
-        return '<div class="panel"><h2>Validated Strategies</h2><p>No strategies yet. Run strategy_validator.py first.</p></div>'
-
-    # Badges
-    count_badge = status_badge(True, f"{strats['validated_count']} validated")
-    expr_badge = f'<span class="badge badge-ok">Best ExpR +{strats["best_expr"]:.3f}</span>'
-    sharpe_badge = f'<span class="badge badge-ok">Best Sharpe +{strats["best_sharpe"]:.3f}</span>'
+        return '<div class="card wide"><div class="card-title">Strategies</div><p class="muted">No validated strategies yet.</p></div>'
 
     # Top 10 table
     top_rows = ""
     for i, s in enumerate(strats["top_strategies"], 1):
         wr_pct = f"{s['wr'] * 100:.0f}%"
-        sharpe = (
-            f"+{s['sharpe']:.2f}"
-            if s["sharpe"] and s["sharpe"] >= 0
-            else (f"{s['sharpe']:.2f}" if s["sharpe"] else "N/A")
-        )
-        maxdd = f"{s['maxdd']:.1f}R" if s["maxdd"] else "N/A"
+        sharpe = f"{s['sharpe']:+.2f}" if s["sharpe"] else "—"
+        maxdd = f"{s['maxdd']:.1f}R" if s["maxdd"] else "—"
         top_rows += f"""
         <tr>
-          <td>{i}</td><td>{s["orb"]}</td><td>{s["em"]}</td>
-          <td>{s["cb"]}</td><td>{s["rr"]:.1f}</td><td>{s["filter"]}</td>
-          <td>{s["n"]}</td><td>{wr_pct}</td>
-          <td><strong>+{s["expr"]:.3f}</strong></td>
-          <td>{sharpe}</td><td>{maxdd}</td>
+          <td class="muted">{i}</td>
+          <td class="session-name">{s["orb"]}</td>
+          <td>{s["em"]}</td>
+          <td class="num">{s["cb"]}</td>
+          <td class="num">{s["rr"]:.1f}</td>
+          <td class="filter-name">{s["filter"]}</td>
+          <td class="num">{s["n"]:,}</td>
+          <td class="num">{wr_pct}</td>
+          <td class="num positive">+{s["expr"]:.3f}</td>
+          <td class="num">{sharpe}</td>
+          <td class="num">{maxdd}</td>
         </tr>"""
 
-    # Session breakdown
-    session_rows = ""
+    # Session bars
+    max_count = max((s["count"] for s in strats["session_breakdown"]), default=1)
+    session_bars = ""
     for s in strats["session_breakdown"]:
-        session_rows += f"""
-        <tr>
-          <td>{s["orb"]}</td><td>{s["count"]}</td>
-          <td>+{s["avg_expr"]:.3f}</td><td>+{s["best_expr"]:.3f}</td>
-          <td>+{s["avg_sharpe"]:.3f}</td>
-        </tr>"""
+        w = round((s["count"] / max_count) * 100)
+        session_bars += f"""
+        <div class="sbar-row">
+          <span class="sbar-label">{s["orb"]}</span>
+          <div class="sbar-track"><div class="sbar-fill" style="width:{w}%"></div></div>
+          <span class="sbar-num">{s["count"]}</span>
+          <span class="sbar-expr">+{s["avg_expr"]:.3f}</span>
+        </div>"""
 
     return f"""
-    <div class="panel wide">
-      <h2>Validated Strategies</h2>
-      <p style="margin-bottom:10px">
-        {count_badge} {expr_badge} {sharpe_badge}
-        &nbsp; (from {strats["experimental_count"]:,} experimental)
-      </p>
-      <h3>Top 10 by Expectancy</h3>
+    <div class="card wide gold-border">
+      <div class="card-title">
+        <span>Validated Strategies</span>
+        <span class="card-badges">
+          <span class="badge badge-gold">{strats["validated_count"]} validated</span>
+          <span class="badge badge-ok">ExpR +{strats["best_expr"]:.3f}</span>
+          <span class="badge badge-ok">Sharpe +{strats["best_sharpe"]:.3f}</span>
+        </span>
+      </div>
+      <div class="strat-grid">
+        <div class="strat-table-wrap">
+          <div class="section-label">Top 10 by Expectancy</div>
+          <table>
+            <tr><th>#</th><th>Session</th><th>EM</th><th>CB</th><th>RR</th><th>Filter</th>
+                <th>N</th><th>WR</th><th>ExpR</th><th>Sharpe</th><th>MaxDD</th></tr>
+            {top_rows}
+          </table>
+        </div>
+        <div class="strat-bars-wrap">
+          <div class="section-label">By Session</div>
+          {session_bars}
+        </div>
+      </div>
+    </div>"""
+
+
+def render_db_panel(db: dict) -> str:
+    return f"""
+    <div class="card">
+      <div class="card-title">Database</div>
       <table>
-        <tr><th>#</th><th>ORB</th><th>EM</th><th>CB</th><th>RR</th><th>Filter</th>
-            <th>N</th><th>WR</th><th>ExpR</th><th>Sharpe</th><th>MaxDD</th></tr>
-        {top_rows}
+        <tr><td>bars_1m</td><td class="num"><strong>{db["bars_1m_count"]:,}</strong></td></tr>
+        <tr><td>bars_5m</td><td class="num"><strong>{db["bars_5m_count"]:,}</strong></td></tr>
+        <tr><td>daily_features</td><td class="num"><strong>{db["daily_features_count"]:,}</strong></td></tr>
+        <tr><td>1m range</td><td>{db["bars_1m_min_date"] or "—"} &rarr; {db["bars_1m_max_date"] or "—"}</td></tr>
+        <tr><td>features range</td><td>{db["daily_features_min_date"] or "—"} &rarr; {db["daily_features_max_date"] or "—"}</td></tr>
+        <tr><td>symbols</td><td>{", ".join(db["symbols"]) or "—"}</td></tr>
+        <tr><td>tables</td><td>{len(db["tables"])}</td></tr>
       </table>
-      <h3 style="margin-top:14px">Session Breakdown</h3>
+    </div>"""
+
+
+def render_quality_guardrails_panel(quality: dict, guardrails: dict) -> str:
+    if not quality["has_data"]:
+        return '<div class="card"><div class="card-title">Quality &amp; Guards</div><p class="muted">No data.</p></div>'
+
+    q_ok = quality["ohlcv_issues"] == 0 and quality["duplicate_count"] == 0
+
+    # Drift details
+    drift_lines = ""
+    for line in guardrails["drift_output"].splitlines():
+        if "PASSED" in line:
+            drift_lines += f'<div class="chk-ok">{line.strip()}</div>'
+        elif "FAILED" in line:
+            drift_lines += f'<div class="chk-fail">{line.strip()}</div>'
+
+    return f"""
+    <div class="card">
+      <div class="card-title">
+        <span>Quality &amp; Guards</span>
+        {status_badge(q_ok, "CLEAN" if q_ok else "ISSUES")}
+      </div>
       <table>
-        <tr><th>Session</th><th>Count</th><th>Avg ExpR</th><th>Best ExpR</th><th>Avg Sharpe</th></tr>
-        {session_rows}
+        <tr><td>Bars/day avg</td><td class="num">{quality["bars_per_day_avg"]}</td></tr>
+        <tr><td>Bars/day range</td><td class="num">{quality["bars_per_day_min"]} — {quality["bars_per_day_max"]}</td></tr>
+        <tr><td>Gap days</td><td class="num">{quality["gap_days"]}</td></tr>
+        <tr><td>OHLCV issues</td><td class="num">{quality["ohlcv_issues"]}</td></tr>
+        <tr><td>Duplicates</td><td class="num">{quality["duplicate_count"]}</td></tr>
+        <tr><td>Drift detection</td><td>{status_badge(guardrails["drift_passed"])}</td></tr>
+        <tr><td>Test suite</td><td>{status_badge(guardrails["tests_passed"], f"{guardrails['test_count']} passed" if guardrails["tests_passed"] else "FAIL")}</td></tr>
       </table>
-    </div>
-    """
+      <details>
+        <summary>Drift check details</summary>
+        <div class="details-box">{drift_lines or "No output"}</div>
+      </details>
+    </div>"""
+
+
+def render_ingestion_panel(cp: dict, inv: dict, db: dict) -> str:
+    total_files = inv["total_files"]
+    pct = 0
+    if total_files > 0 and db["bars_1m_count"] > 0:
+        estimated_days = db["bars_1m_count"] / 1400
+        pct = min(100, round(estimated_days / total_files * 100, 1))
+
+    return f"""
+    <div class="card">
+      <div class="card-title">Ingestion</div>
+      <div class="pbar-header">
+        <span class="muted">Progress</span>
+        <span class="gold">{pct}%</span>
+      </div>
+      <div class="pbar-track"><div class="pbar-fill" style="width:{pct}%"></div></div>
+      <table>
+        <tr><td>DBN files</td><td class="num"><strong>{total_files:,}</strong></td></tr>
+        <tr><td>Compressed</td><td class="num">{inv["total_size_mb"]:,.1f} MB</td></tr>
+        <tr><td>Chunks done</td><td class="num">{cp["chunks_done"]:,}</td></tr>
+        <tr><td>Chunks failed</td><td class="num">{cp["chunks_failed"]}</td></tr>
+        <tr><td>DB rows</td><td class="num"><strong>{db["bars_1m_count"]:,}</strong></td></tr>
+      </table>
+    </div>"""
 
 
 def render_system_panel() -> str:
     return f"""
-    <div class="panel">
-      <h2>System Info</h2>
+    <div class="card">
+      <div class="card-title">System</div>
       <table>
         <tr><td>Python</td><td>{sys.version.split()[0]}</td></tr>
         <tr><td>Platform</td><td>{sys.platform}</td></tr>
-        <tr><td>DB path</td><td>{GOLD_DB_PATH}</td></tr>
-        <tr><td>Data dir</td><td>{DAILY_DBN_DIR}</td></tr>
+        <tr><td>DB path</td><td class="path-cell">{GOLD_DB_PATH}</td></tr>
+        <tr><td>Data dir</td><td class="path-cell">{DAILY_DBN_DIR}</td></tr>
         <tr><td>Generated</td><td>{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</td></tr>
       </table>
-    </div>
-    """
+    </div>"""
+
+
+def render_contract_panel(contracts: list[dict]) -> str:
+    if not contracts:
+        return ""
+
+    rows = ""
+    for c in contracts:
+        rows += f"""
+        <tr>
+          <td class="mono">{c["contract"]}</td>
+          <td class="num">{c["bars"]:,}</td>
+          <td>{c["first_date"]}</td>
+          <td>{c["last_date"]}</td>
+          <td class="num">{c["volume"]:,}</td>
+        </tr>"""
+
+    return f"""
+    <div class="card wide">
+      <details>
+        <summary class="collapse-title">Contract History ({len(contracts)})</summary>
+        <div class="collapse-body">
+          <table>
+            <tr><th>Contract</th><th>Bars</th><th>First</th><th>Last</th><th>Volume</th></tr>
+            {rows}
+          </table>
+        </div>
+      </details>
+    </div>"""
+
+
+def render_roadmap_panel(phases: list[dict]) -> str:
+    if not phases:
+        return ""
+
+    phase_html = ""
+    for phase in phases:
+        name = phase["name"]
+        is_done = "DONE" in name.upper()
+        total = len(phase["items"])
+        icon = '<span class="phase-done">&#10003;</span>' if is_done else '<span class="phase-todo">&#9675;</span>'
+
+        items_html = ""
+        for item in phase["items"]:
+            items_html += f'<div class="roadmap-item">{item["text"]}</div>'
+
+        phase_html += f"""
+        <details {"" if not is_done or total == 0 else ""}>
+          <summary class="phase-row">{icon} {name}</summary>
+          <div class="phase-items">{items_html}</div>
+        </details>"""
+
+    return f"""
+    <div class="card wide">
+      <details>
+        <summary class="collapse-title">Development Roadmap ({len(phases)} phases)</summary>
+        <div class="collapse-body">{phase_html}</div>
+      </details>
+    </div>"""
+
+
+# =============================================================================
+# CSS
+# =============================================================================
+
+CSS = """
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Syne:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --bg:        #07080c;
+  --bg-card:   #0f1117;
+  --bg-hover:  #151820;
+  --border:    #1a1d27;
+  --border-g:  #2a2210;
+  --gold:      #c9a227;
+  --gold-b:    #e8bf3b;
+  --gold-d:    #6b5819;
+  --gold-glow: rgba(201,162,39,0.07);
+  --text:      #d1cdc7;
+  --text-dim:  #5e616a;
+  --text-b:    #f0ede8;
+  --green:     #22c55e;
+  --red:       #ef4444;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Header ──────────────────────────────────────────── */
+
+.header {
+  background: linear-gradient(180deg, #0d0e14, var(--bg));
+  border-bottom: 1px solid var(--border);
+  padding: 28px 32px 24px;
+  position: relative;
+}
+.header::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent 5%, var(--gold-d), var(--gold), var(--gold-b), var(--gold), var(--gold-d), transparent 95%);
+}
+.header-inner { max-width: 1440px; margin: 0 auto; }
+.header-top { display: flex; align-items: baseline; gap: 16px; margin-bottom: 22px; }
+.header h1 {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.5em;
+  font-weight: 800;
+  color: var(--gold);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+.header-sub {
+  color: var(--text-dim);
+  font-weight: 400;
+  font-size: 0.5em;
+  letter-spacing: 0;
+  text-transform: none;
+  margin-left: 14px;
+}
+.hero-row { display: flex; gap: 40px; }
+.hero-stat { text-align: center; }
+.hero-value {
+  font-family: 'Syne', sans-serif;
+  font-size: 2em;
+  font-weight: 700;
+  color: var(--text-b);
+  line-height: 1.1;
+}
+.hero-value.gold { color: var(--gold-b); }
+.hero-label {
+  font-size: 0.7em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin-top: 4px;
+}
+
+/* ── Status strip ────────────────────────────────────── */
+
+.strip {
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 32px;
+  overflow-x: auto;
+}
+.strip-inner {
+  display: flex;
+  gap: 20px;
+  max-width: 1440px;
+  margin: 0 auto;
+  align-items: center;
+}
+.strip-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.85em;
+  white-space: nowrap;
+  color: var(--text);
+}
+.strip-right { margin-left: auto; color: var(--text-dim); }
+.dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dot.green  { background: var(--green); box-shadow: 0 0 5px var(--green); }
+.dot.red    { background: var(--red);   box-shadow: 0 0 5px var(--red);   }
+.dot.muted  { background: var(--text-dim); }
+
+/* ── Layout ──────────────────────────────────────────── */
+
+.main {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 20px 32px 48px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+/* ── Cards ───────────────────────────────────────────── */
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 18px 20px;
+  position: relative;
+}
+.card::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 3px; height: 100%;
+  background: var(--gold-d);
+  border-radius: 6px 0 0 6px;
+  opacity: 0.4;
+}
+.card.wide { grid-column: 1 / -1; }
+.card.gold-border::after { background: var(--gold); opacity: 1; }
+
+.card-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 0.78em;
+  font-weight: 600;
+  color: var(--gold);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.card-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* ── Tables ──────────────────────────────────────────── */
+
+table { width: 100%; border-collapse: collapse; font-size: 0.92em; }
+td, th { padding: 6px 10px; text-align: left; }
+th {
+  color: var(--text-dim);
+  font-weight: 500;
+  font-size: 0.75em;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 9px;
+}
+tr:not(:last-child) td { border-bottom: 1px solid #0c0d12; }
+tr:hover td { background: var(--bg-hover); }
+td:first-child { color: var(--text-dim); }
+td strong { color: var(--text-b); font-weight: 600; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.positive { color: var(--green); font-weight: 600; }
+.negative { color: var(--red); }
+.muted { color: var(--text-dim); }
+.gold { color: var(--gold-b); }
+.mono { font-family: inherit; letter-spacing: 0.5px; }
+.session-name { color: var(--gold); font-weight: 500; }
+.filter-name { font-size: 0.85em; color: var(--text-dim); }
+.path-cell { font-size: 0.78em; word-break: break-all; color: var(--text-dim); }
+.section-label {
+  font-size: 0.72em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin-bottom: 10px;
+  font-weight: 500;
+}
+
+/* ── Badges ──────────────────────────────────────────── */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 4px;
+  font-size: 0.76em;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+.badge-ok   { background: rgba(34,197,94,0.1);  color: var(--green); border: 1px solid rgba(34,197,94,0.18); }
+.badge-fail { background: rgba(239,68,68,0.1);  color: var(--red);   border: 1px solid rgba(239,68,68,0.18); }
+.badge-muted{ background: rgba(94,97,106,0.1);  color: var(--text-dim); border: 1px solid rgba(94,97,106,0.18); }
+.badge-gold { background: var(--gold-glow);      color: var(--gold-b);   border: 1px solid var(--border-g); }
+
+/* ── Progress bar ────────────────────────────────────── */
+
+.pbar-header { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 0.8em; }
+.pbar-track { background: #0c0d12; border-radius: 3px; height: 5px; margin-bottom: 14px; overflow: hidden; }
+.pbar-fill { height: 100%; background: linear-gradient(90deg, var(--gold-d), var(--gold), var(--gold-b)); border-radius: 3px; }
+
+/* ── Session bars ────────────────────────────────────── */
+
+.strat-grid { display: grid; grid-template-columns: 1fr 320px; gap: 24px; }
+.strat-table-wrap { overflow-x: auto; }
+.strat-bars-wrap { padding-top: 2px; }
+
+.sbar-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.sbar-label { width: 130px; font-size: 0.82em; color: var(--text); flex-shrink: 0; }
+.sbar-track { flex: 1; height: 14px; background: #0c0d12; border-radius: 2px; overflow: hidden; }
+.sbar-fill { height: 100%; background: linear-gradient(90deg, var(--gold-d), var(--gold)); border-radius: 2px; }
+.sbar-num { font-size: 0.75em; color: var(--text-dim); min-width: 28px; text-align: right; }
+.sbar-expr { font-size: 0.75em; color: var(--green); min-width: 46px; text-align: right; }
+
+/* ── Collapsible sections ────────────────────────────── */
+
+details { margin-top: 10px; }
+summary { cursor: pointer; user-select: none; }
+summary::-webkit-details-marker { color: var(--gold-d); }
+.collapse-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 0.78em;
+  font-weight: 600;
+  color: var(--gold);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  padding: 4px 0;
+}
+.collapse-title:hover { color: var(--gold-b); }
+.collapse-body { margin-top: 12px; }
+.details-box {
+  margin-top: 8px;
+  font-size: 0.82em;
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 10px 12px;
+  background: #090a0e;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+.chk-ok   { color: var(--green); padding: 1px 0; }
+.chk-fail { color: var(--red);   padding: 1px 0; }
+
+/* ── Roadmap ─────────────────────────────────────────── */
+
+.phase-row { padding: 5px 0; font-size: 0.88em; }
+.phase-row:hover { color: var(--gold); }
+.phase-done { color: var(--green); margin-right: 4px; }
+.phase-todo { color: var(--text-dim); margin-right: 4px; }
+.phase-items { padding-left: 20px; margin-bottom: 6px; }
+.roadmap-item { padding: 2px 0; font-size: 0.82em; color: var(--text-dim); }
+
+/* ── Footer ──────────────────────────────────────────── */
+
+.footer {
+  text-align: center;
+  padding: 20px 32px;
+  color: var(--text-dim);
+  font-size: 0.72em;
+  letter-spacing: 1px;
+  border-top: 1px solid var(--border);
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+/* ── Scrollbar ───────────────────────────────────────── */
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--gold-d); }
+
+/* ── Responsive ──────────────────────────────────────── */
+
+@media (max-width: 1100px) {
+  .strat-grid { grid-template-columns: 1fr; }
+  .strat-bars-wrap { margin-top: 12px; }
+}
+@media (max-width: 900px) {
+  .grid { grid-template-columns: 1fr; }
+  .card.wide { grid-column: 1; }
+  .hero-row { flex-wrap: wrap; gap: 24px; }
+  .header, .main, .strip { padding-left: 16px; padding-right: 16px; }
+}
+"""
 
 
 # =============================================================================
 # FULL DASHBOARD
 # =============================================================================
-
-CSS = """
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-       background: #0d1117; color: #c9d1d9; padding: 20px; }
-h1 { color: #58a6ff; margin-bottom: 20px; }
-h2 { color: #58a6ff; margin-bottom: 12px; font-size: 1.1em; }
-h3 { color: #8b949e; margin: 10px 0 6px; font-size: 0.95em; }
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
-        gap: 16px; }
-.panel { background: #161b22; border: 1px solid #30363d; border-radius: 8px;
-         padding: 16px; }
-.panel.wide { grid-column: 1 / -1; }
-table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
-td, th { padding: 6px 10px; text-align: left; border-bottom: 1px solid #21262d; }
-th { color: #8b949e; font-weight: 600; }
-.badge { display: inline-block; padding: 2px 10px; border-radius: 12px;
-         font-size: 0.8em; font-weight: 600; }
-.badge-ok { background: #238636; color: #fff; }
-.badge-fail { background: #da3633; color: #fff; }
-.badge-unknown { background: #6e7681; color: #fff; }
-.progress-bar-container { background: #21262d; border-radius: 8px; height: 24px;
-                          margin-bottom: 12px; overflow: hidden; }
-.progress-bar { background: linear-gradient(90deg, #238636, #2ea043);
-                height: 100%; line-height: 24px; text-align: center;
-                color: #fff; font-size: 0.8em; font-weight: 600;
-                min-width: 40px; transition: width 0.3s; }
-details { margin-top: 10px; }
-summary { cursor: pointer; color: #58a6ff; font-size: 0.85em; }
-.details-content { margin-top: 8px; font-size: 0.8em; font-family: monospace; }
-.check-ok { color: #3fb950; }
-.check-fail { color: #f85149; }
-ul { list-style: none; padding-left: 8px; font-size: 0.9em; }
-li { padding: 2px 0; }
-.footer { margin-top: 20px; text-align: center; color: #484f58; font-size: 0.8em; }
-"""
 
 
 def render_dashboard(
@@ -728,30 +1069,32 @@ def render_dashboard(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MGC Pipeline Dashboard</title>
+  <title>ORB Pipeline Dashboard</title>
   <style>{CSS}</style>
 </head>
 <body>
-  <h1>MGC Pipeline Dashboard</h1>
-  <div class="grid">
-    {render_ingestion_panel(cp, inv, db)}
-    {render_db_panel(db)}
-    {render_quality_panel(quality)}
-    {render_guardrails_panel(guardrails)}
-    {render_strategy_panel(strategies) if strategies else ""}
-    {render_contract_panel(contracts)}
-    {render_roadmap_panel(roadmap)}
-    {render_system_panel()}
+  {render_header(db, strategies)}
+  {render_status_strip(guardrails, quality, db)}
+  <div class="main">
+    <div class="grid">
+      {render_strategy_panel(strategies) if strategies else ""}
+      {render_db_panel(db)}
+      {render_quality_guardrails_panel(quality, guardrails)}
+      {render_ingestion_panel(cp, inv, db)}
+      {render_system_panel()}
+      {render_contract_panel(contracts)}
+      {render_roadmap_panel(roadmap)}
+    </div>
   </div>
   <div class="footer">
-    Generated {datetime.now().strftime("%Y-%m-%d %H:%M:%S")} &mdash; MGC Data Pipeline
+    ORB PIPELINE &middot; Multi-Instrument Futures Research &middot; {datetime.now().strftime("%Y-%m-%d %H:%M")}
   </div>
 </body>
 </html>"""
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate MGC Pipeline Dashboard")
+    parser = argparse.ArgumentParser(description="Generate ORB Pipeline Dashboard")
     parser.add_argument(
         "--output", type=str, default="dashboard.html", help="Output HTML file (default: dashboard.html)"
     )

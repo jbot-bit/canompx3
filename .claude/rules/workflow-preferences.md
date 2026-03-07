@@ -1,0 +1,48 @@
+# Workflow Preferences
+
+## Implementation Gating — MANDATORY
+Do NOT start writing code, editing files, or running implementation commands until the user explicitly says to implement.
+Words that mean DESIGN MODE (no code): "plan", "design", "think about", "what if", "how would", "explore", "iterate", "4t", "brainstorm".
+Words that mean IMPLEMENT NOW: "build it", "do it", "implement", "go", "ship it", "make it happen".
+
+If the user says "plan this feature" and you start writing code, you have failed. Stay in design mode. Iterate on the plan. Present options. Wait for the green light. This has been the #1 source of friction — Claude jumping to implementation during design sessions. Do not do it.
+
+If the user pushes back with "I said design" or "stop implementing" — you went too far. Apologize briefly and return to design mode immediately.
+
+## Git Operations — Just Execute
+When the user says "commit", "commit all", "push", "merge", or any variant (including typos like "pusdh", "comit", "vcommit"):
+1. Do NOT explain that there's nothing to commit
+2. Do NOT ask "are you sure?" or "which files?"
+3. Do NOT describe what you're about to do
+4. Just check git status, stage relevant files, and execute
+
+The user has been forced to repeat commit/push commands multiple times across sessions because Claude hesitated, explained, or asked unnecessary questions. Stop doing that. The user knows what they want. Execute.
+
+Exception: warn (but still execute) if staging files that look like secrets (.env, credentials, tokens).
+
+## Response Style — Concise, No Extras
+- Do NOT add CLI usage documentation unless asked
+- Do NOT add docstrings or comments to code you didn't change
+- Do NOT start background tasks the user didn't request
+- Do NOT add "here's what I did" summaries longer than 3 lines
+- Do NOT add unnecessary type annotations, error handling, or "improvements" beyond scope
+
+When the user asks a direct question, give a direct answer. Not a paragraph. Not a tutorial. The answer.
+
+When the user asks you to do something, do it and report the result. Don't explain your reasoning unless it's non-obvious or risky.
+
+The user has explicitly said they find verbose AI responses frustrating. Respect that.
+
+## Trading Queries — Exact Format
+When querying trading strategies or trade data:
+- Return EXACTLY the number requested. "Top 2 per instrument" = 2 rows per instrument. Not 3. Not 5. Not "here are some extras that might interest you."
+- ALWAYS include ALL of these fields: instrument, session name, session time (Brisbane TZ), orb_minutes (5/15/30), entry_model, confirm_bars, filter_type, rr_target, direction, sample_size, win_rate, ExpR, Sharpe, fitness status (FIT/WATCH/DECAY)
+- Sort by ExpR or edge ratio, NEVER by Sharpe alone (Sharpe is biased under multiple testing — see RESEARCH_RULES.md)
+- Use the canonical DB path from `pipeline.paths.GOLD_DB_PATH` — never hardcode paths
+- Include data freshness (when was the strategy last validated/promoted)
+- The user has corrected missing rr_target, missing session times, wrong sort order, and incomplete field sets across 10+ sessions. Get it right the first time.
+
+## Session Start — Intent Framing
+If the user's first message is ambiguous about whether they want design or implementation, ask ONE question: "Design or implement?" Then follow their answer strictly.
+
+Do not assume. Do not guess. Ask once, then execute.

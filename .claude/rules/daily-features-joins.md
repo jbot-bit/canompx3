@@ -1,3 +1,9 @@
+---
+paths:
+  - "pipeline/**"
+  - "trading_app/**"
+  - "research/**"
+---
 # Daily Features JOIN Rules
 
 ## The Triple-Join Trap

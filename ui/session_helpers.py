@@ -9,6 +9,7 @@ Trading-day concept used ONLY for database queries.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from dataclasses import dataclass
@@ -197,6 +198,7 @@ def build_session_briefings() -> list[SessionBriefing]:
             portfolio, _ = build_live_portfolio(instrument=instrument)
             all_strategies.extend(portfolio.strategies)
         except Exception:
+            logging.warning("Failed to build briefings for %s", instrument, exc_info=True)
             continue
 
     # Group by (session, instrument)

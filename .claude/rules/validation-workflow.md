@@ -1,3 +1,9 @@
+---
+paths:
+  - "trading_app/strategy_*"
+  - "trading_app/outcome_*"
+  - "scripts/tools/build_edge*"
+---
 # Validation Workflow
 
 ## Correct Validator Flags

@@ -40,7 +40,7 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool) -> bool:
     from trading_app.live_config import build_live_portfolio
 
     checks_passed = 0
-    checks_total = 4
+    checks_total = 5
 
     # 1. Auth check
     broker_name = broker or get_broker_name()
@@ -96,9 +96,35 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool) -> bool:
     else:
         print("SKIPPED (auth failed)")
 
+    # 5. Component self-tests (notifications, brackets, fill poller)
+    all_pass = True  # default if check 5 fails entirely
+    print(f"[5/{checks_total}] Component self-tests...", end=" ", flush=True)
+    try:
+        orch = SessionOrchestrator(
+            instrument=instrument,
+            broker=broker_name,
+            demo=demo,
+            signal_only=True,  # safe: no orders, just test components
+        )
+        test_results = orch.run_self_tests()
+        all_pass = all(test_results.values())
+        if all_pass:
+            print("OK (all components verified)")
+            checks_passed += 1
+        else:
+            failed = [k for k, v in test_results.items() if not v]
+            print(f"WARNINGS: {', '.join(failed)}")
+            # Don't fail preflight for component warnings — they're informational
+            checks_passed += 1
+    except Exception as e:
+        print(f"FAILED: {e}")
+
     print(f"\nPreflight: {checks_passed}/{checks_total} passed")
     if checks_passed == checks_total:
-        print("All clear — ready to trade.\n")
+        if not all_pass:
+            print("All checks passed, but component warnings present. Review above.\n")
+        else:
+            print("All clear — ready to trade.\n")
     else:
         print("FIX FAILURES before starting a live session.\n")
     return checks_passed == checks_total

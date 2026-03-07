@@ -1,3 +1,7 @@
+---
+paths:
+  - "scripts/tools/m25*"
+---
 # M2.5 Second-Opinion Audit Protocol
 
 ## Authority Chain
