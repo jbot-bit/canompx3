@@ -756,15 +756,26 @@ class SessionOrchestrator:
 
         # EOD position reconciliation (M2.5 P0)
         if self.positions and not self.signal_only:
+            context = " (post-kill-switch)" if self._kill_switch_fired else ""
             try:
                 account_id = self.order_router.account_id if self.order_router else 0
                 remaining = self.positions.query_open(account_id)
                 if remaining:
                     log.critical(
-                        "EOD RECONCILIATION: %d positions still open after session end: %s", len(remaining), remaining
+                        "EOD RECONCILIATION%s: %d positions still open after session end: %s",
+                        context,
+                        len(remaining),
+                        remaining,
                     )
+                    if self._kill_switch_fired:
+                        log.critical(
+                            "Kill switch flatten may have failed — MANUAL CLOSE REQUIRED for: %s",
+                            [r.get("contract_id", "?") for r in remaining],
+                        )
                 else:
-                    log.info("EOD reconciliation: no orphaned positions")
+                    log.info("EOD reconciliation%s: all positions flat", context)
+            except NotImplementedError:
+                log.warning("EOD reconciliation skipped — broker does not support position queries")
             except Exception as e:
                 log.warning("EOD position reconciliation failed: %s", e)
 
