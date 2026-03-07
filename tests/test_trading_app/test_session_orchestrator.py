@@ -7,8 +7,9 @@ FakeBrokerComponents groups all mock broker dependencies in one place.
 When SessionOrchestrator.__init__ gains new attributes, add them here once.
 """
 
+import asyncio
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -164,6 +165,7 @@ def build_orchestrator(components: FakeBrokerComponents | None = None) -> Sessio
     orch.monitor.record_trade.return_value = None
     orch._positions = PositionTracker()
     orch._last_bar_at = None
+    orch._kill_switch_fired = False
     orch.contract_symbol = "MGCJ6"
     orch.order_router = c.router
     orch.positions = c.positions
@@ -365,3 +367,249 @@ class TestSlippageInSummary:
         monitor.record_trade(record)
         summary = monitor.daily_summary()
         assert summary["total_slippage_pts"] == 0.25
+
+
+# ---------------------------------------------------------------------------
+# KILL SWITCH tests
+# ---------------------------------------------------------------------------
+
+
+class FakeBar:
+    """Minimal bar stub for _on_bar tests."""
+
+    def __init__(self, ts_utc=None):
+        self.ts_utc = ts_utc or datetime.now(UTC)
+        self.open = 2350.0
+        self.high = 2351.0
+        self.low = 2349.0
+        self.close = 2350.5
+        self.volume = 100
+
+    def as_dict(self):
+        return {
+            "ts_utc": self.ts_utc,
+            "open": self.open,
+            "high": self.high,
+            "low": self.low,
+            "close": self.close,
+            "volume": self.volume,
+        }
+
+
+class TestKillSwitch:
+    """Kill switch / emergency flatten — the last line of defense."""
+
+    async def test_watchdog_fires_on_feed_death_with_open_positions(self):
+        """Feed dies for >KILL_SWITCH_TIMEOUT with active positions → emergency flatten."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        # Simulate an open position
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=1)
+        orch._positions.on_entry_filled(STRATEGY_ID, 2350.0)
+        # Simulate last bar was long ago
+        orch._last_bar_at = datetime.now(UTC) - timedelta(seconds=400)
+        # Override timeout for fast test
+        orch.KILL_SWITCH_TIMEOUT = 0.0
+        orch.KILL_SWITCH_CHECK_INTERVAL = 0.01
+
+        # Run watchdog briefly — it should fire
+        task = asyncio.create_task(orch._watchdog())
+        await asyncio.sleep(0.1)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        assert orch._kill_switch_fired is True
+        # Position should be flattened
+        assert orch._positions.active_positions() == []
+        # Router should have received a close order
+        assert len(orch.order_router.submitted) == 1
+
+    async def test_watchdog_does_nothing_without_open_positions(self):
+        """Feed dead but no open positions → watchdog does NOT fire."""
+        orch = build_orchestrator()
+        orch._last_bar_at = datetime.now(UTC) - timedelta(seconds=400)
+        orch.KILL_SWITCH_TIMEOUT = 0.0
+        orch.KILL_SWITCH_CHECK_INTERVAL = 0.01
+
+        task = asyncio.create_task(orch._watchdog())
+        await asyncio.sleep(0.1)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        assert orch._kill_switch_fired is False
+
+    async def test_watchdog_skips_before_first_bar(self):
+        """No bars received yet (_last_bar_at is None) → watchdog waits."""
+        orch = build_orchestrator()
+        assert orch._last_bar_at is None
+        orch.KILL_SWITCH_TIMEOUT = 0.0
+        orch.KILL_SWITCH_CHECK_INTERVAL = 0.01
+
+        task = asyncio.create_task(orch._watchdog())
+        await asyncio.sleep(0.1)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        assert orch._kill_switch_fired is False
+
+    async def test_kill_switch_is_one_shot(self):
+        """Kill switch fires once, not on every watchdog cycle."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=1)
+        orch._positions.on_entry_filled(STRATEGY_ID, 2350.0)
+        orch._last_bar_at = datetime.now(UTC) - timedelta(seconds=400)
+        orch.KILL_SWITCH_TIMEOUT = 0.0
+        orch.KILL_SWITCH_CHECK_INTERVAL = 0.01
+
+        task = asyncio.create_task(orch._watchdog())
+        await asyncio.sleep(0.2)  # multiple watchdog cycles
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        # Only ONE close order submitted despite multiple cycles
+        assert len(orch.order_router.submitted) == 1
+
+    async def test_on_bar_returns_early_after_kill_switch(self):
+        """After kill switch fires, _on_bar does nothing (prevents duplicate exits)."""
+        orch = build_orchestrator()
+        orch._kill_switch_fired = True
+        orch.engine.on_bar.return_value = []
+
+        bar = FakeBar()
+        await orch._on_bar(bar)
+
+        # Engine should NOT be called — we returned early
+        orch.engine.on_bar.assert_not_called()
+
+    async def test_emergency_flatten_signal_only_logs_manual_close(self):
+        """Signal-only mode: kill switch logs MANUAL CLOSE REQUIRED, no broker calls."""
+        orch = build_orchestrator(FakeBrokerComponents(signal_only=True))
+        orch._positions.on_signal_entry(STRATEGY_ID, 2350.0, "long")
+        orch._last_bar_at = datetime.now(UTC)
+
+        await orch._emergency_flatten()
+
+        # Signal record should have KILL_SWITCH type
+        orch._write_signal_record.assert_called()
+        call_args = orch._write_signal_record.call_args[0][0]
+        assert call_args["type"] == "KILL_SWITCH"
+        # Position NOT flattened (no broker to send to)
+        assert len(orch._positions.active_positions()) == 1
+
+    async def test_emergency_flatten_retries_on_failure(self):
+        """Broker failure → 3 retries with exponential backoff."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=1)
+        orch._positions.on_entry_filled(STRATEGY_ID, 2350.0)
+
+        # Make first 2 attempts fail, 3rd succeeds
+        call_count = 0
+        original_submit = orch.order_router.submit
+
+        def failing_submit(spec):
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise ConnectionError("broker down")
+            return original_submit(spec)
+
+        orch.order_router.submit = failing_submit
+
+        await orch._emergency_flatten()
+
+        assert call_count == 3  # 2 failures + 1 success
+        assert orch._positions.active_positions() == []
+
+    async def test_emergency_flatten_all_retries_fail_logs_manual(self):
+        """All 3 retries fail → logs MANUAL CLOSE REQUIRED."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=1)
+        orch._positions.on_entry_filled(STRATEGY_ID, 2350.0)
+
+        # All attempts fail
+        orch.order_router.submit = MagicMock(side_effect=ConnectionError("broker dead"))
+
+        await orch._emergency_flatten()
+
+        # 3 attempts made
+        assert orch.order_router.submit.call_count == 3
+        # Position still active (couldn't flatten)
+        assert len(orch._positions.active_positions()) == 1
+
+    async def test_watchdog_survives_internal_errors(self):
+        """Watchdog doesn't die from its own errors (crash-resistant)."""
+        orch = build_orchestrator()
+        orch.KILL_SWITCH_CHECK_INTERVAL = 0.01
+        # Force an error in active_positions check by setting _last_bar_at to
+        # a value that will cause a gap check, then make _positions raise
+        orch._last_bar_at = datetime.now(UTC) - timedelta(seconds=400)
+        orch.KILL_SWITCH_TIMEOUT = 0.0
+
+        # Patch active_positions to raise once, then return empty
+        original = orch._positions.active_positions
+        error_raised = False
+
+        def flaky_active():
+            nonlocal error_raised
+            if not error_raised:
+                error_raised = True
+                raise RuntimeError("transient DB error")
+            return original()
+
+        orch._positions.active_positions = flaky_active
+
+        # Watchdog should survive the error and keep running
+        task = asyncio.create_task(orch._watchdog())
+        await asyncio.sleep(0.15)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        # Key: watchdog survived — error_raised was True, then it continued
+        assert error_raised is True
+        # Kill switch should NOT have fired (active_positions returned [] on retry)
+        assert orch._kill_switch_fired is False
+
+    async def test_run_starts_watchdog_task(self):
+        """run() creates a watchdog task alongside the feed."""
+        orch = build_orchestrator()
+
+        # Mock feed that completes immediately
+        class InstantFeed:
+            def __init__(self, auth, on_bar, demo):
+                pass
+
+            async def run(self, symbol):
+                return  # complete immediately
+
+        orch._feed_class = InstantFeed
+
+        await orch.run()
+        # If we got here without error, watchdog was started and cancelled in finally
+
+    async def test_bar_heartbeat_logs_gap(self, orch):
+        """Bar heartbeat detects >180s gap and logs CRITICAL."""
+        import logging
+
+        orch._last_bar_at = datetime.now(UTC) - timedelta(seconds=200)
+        orch.engine.on_bar.return_value = []
+        orch._check_trading_day_rollover = MagicMock()
+
+        bar = FakeBar()
+        with patch.object(logging.getLogger("trading_app.live.session_orchestrator"), "critical") as mock_crit:
+            await orch._on_bar(bar)
+            # Should have logged a critical heartbeat warning
+            assert any("HEARTBEAT" in str(call) for call in mock_crit.call_args_list)

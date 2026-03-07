@@ -134,6 +134,7 @@ class SessionOrchestrator:
         # Position lifecycle tracker — replaces ad-hoc _entry_prices dict
         self._positions = PositionTracker()
         self._last_bar_at: datetime | None = None  # bar heartbeat
+        self._kill_switch_fired = False  # one-shot emergency flatten
 
         # Resolve front-month contract symbol (needed even in signal-only for logging)
         self.contract_symbol = contracts.resolve_front_month(instrument)
@@ -305,11 +306,16 @@ class SessionOrchestrator:
             gap = (now - self._last_bar_at).total_seconds()
             if gap > 180:  # 3 minutes without a bar
                 log.critical("BAR HEARTBEAT: %.0fs since last bar — feed may be dead", gap)
-                # Check for stale pending orders
                 stale = self._positions.stale_positions(timeout_seconds=300)
                 if stale:
                     log.critical("STALE ORDERS: %s", [(s.strategy_id, s.state.value) for s in stale])
         self._last_bar_at = now
+
+        # Kill switch fired = we already emergency-flattened at the broker.
+        # Do NOT process further bars — engine doesn't know positions are closed,
+        # so it would generate duplicate EXIT orders for already-flattened positions.
+        if self._kill_switch_fired:
+            return
 
         # Check if we've crossed the 9:00 AM Brisbane boundary
         self._check_trading_day_rollover(bar.ts_utc)
@@ -533,10 +539,113 @@ class SessionOrchestrator:
                 }
             )
 
+    # Kill switch: emergency flatten if feed dies with open positions.
+    # 5 minutes of silence = assume feed is dead. This is the last line of defense.
+    KILL_SWITCH_TIMEOUT = 300.0  # seconds without a bar before emergency flatten
+    KILL_SWITCH_CHECK_INTERVAL = 30.0  # how often the watchdog checks
+
+    async def _emergency_flatten(self) -> None:
+        """Nuclear option: market-close every open position immediately.
+
+        Runs when the feed is dead and we're blind with open exposure.
+        Retries aggressively — the goal is to get flat no matter what.
+        """
+        active = self._positions.active_positions()
+        if not active:
+            return
+
+        log.critical(
+            "*** KILL SWITCH *** Feed dead for >%.0fs with %d open position(s). Emergency flatten ALL positions.",
+            self.KILL_SWITCH_TIMEOUT,
+            len(active),
+        )
+        self._write_signal_record(
+            {
+                "type": "KILL_SWITCH",
+                "reason": "feed_dead",
+                "positions": [r.strategy_id for r in active],
+            }
+        )
+
+        if self.signal_only or self.order_router is None:
+            log.critical(
+                "*** MANUAL CLOSE REQUIRED *** Signal-only mode — cannot auto-flatten. Close these positions NOW: %s",
+                [r.strategy_id for r in active],
+            )
+            return
+
+        loop = asyncio.get_running_loop()
+        for record in active:
+            direction = record.direction or "long"
+            for attempt in range(3):
+                try:
+                    self.auth.refresh_if_needed()
+                    exit_spec = self.order_router.build_exit_spec(
+                        direction=direction,
+                        symbol=self.contract_symbol,
+                        qty=1,
+                    )
+                    result = await loop.run_in_executor(None, self.order_router.submit, exit_spec)
+                    order_id = result.get("order_id") if isinstance(result, dict) else result.order_id
+                    log.critical(
+                        "KILL SWITCH FLATTEN: %s %s → orderId=%s (attempt %d)",
+                        record.strategy_id,
+                        direction,
+                        order_id,
+                        attempt + 1,
+                    )
+                    self._positions.on_exit_filled(record.strategy_id)
+                    break
+                except Exception as e:
+                    log.critical(
+                        "KILL SWITCH FLATTEN FAILED: %s attempt %d/3 — %s",
+                        record.strategy_id,
+                        attempt + 1,
+                        e,
+                    )
+                    await asyncio.sleep(2**attempt)
+            else:
+                log.critical(
+                    "*** MANUAL CLOSE REQUIRED *** Failed to flatten %s after 3 attempts. "
+                    "Close this position IMMEDIATELY on your broker platform.",
+                    record.strategy_id,
+                )
+
+    async def _watchdog(self) -> None:
+        """Independent watchdog task — fires kill switch if feed goes silent.
+
+        Runs on its own asyncio schedule, not dependent on bar arrival.
+        This is the fail-safe that protects against the feed dying silently.
+        The watchdog MUST NOT die — it wraps everything in try/except so that
+        a transient error doesn't kill the last line of defense.
+        """
+        while True:
+            try:
+                await asyncio.sleep(self.KILL_SWITCH_CHECK_INTERVAL)
+
+                if self._kill_switch_fired:
+                    continue  # already fired, don't spam
+
+                if self._last_bar_at is None:
+                    continue  # haven't received any bars yet
+
+                gap = (datetime.now(UTC) - self._last_bar_at).total_seconds()
+                if gap > self.KILL_SWITCH_TIMEOUT and self._positions.active_positions():
+                    self._kill_switch_fired = True
+                    await self._emergency_flatten()
+            except asyncio.CancelledError:
+                raise  # normal shutdown
+            except Exception as e:
+                log.error("Watchdog error (will retry): %s", e)
+
     async def run(self) -> None:
         feed = self._feed_class(self.auth, on_bar=self._on_bar, demo=self.demo)
         log.info("Starting live feed: %s (broker: %s)", self.contract_symbol, self._broker_name)
-        await feed.run(self.contract_symbol)
+        watchdog = asyncio.create_task(self._watchdog())
+        try:
+            await feed.run(self.contract_symbol)
+        finally:
+            watchdog.cancel()
 
     def post_session(self) -> None:
         """EOD: close open positions, log summary, run incremental backfill.
