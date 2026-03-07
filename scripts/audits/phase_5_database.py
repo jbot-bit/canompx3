@@ -11,12 +11,12 @@ import sys
 
 sys.stdout.reconfigure(encoding="utf-8")
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS, ASSET_CONFIGS
-from trading_app.config import ALL_FILTERS, ENTRY_MODELS
-
 from scripts.audits import AuditPhase, Severity, db_connect
+from trading_app.config import ALL_FILTERS, ENTRY_MODELS
 
 _SQL_IN = ", ".join(f"'{s}'" for s in ACTIVE_ORB_INSTRUMENTS)
 

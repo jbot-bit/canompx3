@@ -7,20 +7,17 @@ Live config coherence, execution engine wiring, risk manager,
 and backtest↔live feature parity.
 """
 
-import re
 import sys
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.dst import SESSION_CATALOG
 from pipeline.paths import PROJECT_ROOT
-from trading_app.config import ENTRY_MODELS, ALL_FILTERS, EXCLUDED_FROM_FITNESS
-from trading_app.live_config import LIVE_PORTFOLIO
-
 from scripts.audits import AuditPhase, Severity, db_connect
+from trading_app.config import ALL_FILTERS, ENTRY_MODELS, EXCLUDED_FROM_FITNESS
+from trading_app.live_config import LIVE_PORTFOLIO
 
 
 def main():
@@ -77,7 +74,7 @@ def _check_live_config_coherence(audit: AuditPhase, con):
                 "CONFIG_DRIFT",
                 claimed=f"{spec.family_id} references valid config values",
                 actual="; ".join(issues),
-                evidence=f"trading_app/live_config.py:LIVE_PORTFOLIO",
+                evidence="trading_app/live_config.py:LIVE_PORTFOLIO",
                 fix_type="CONFIG_FIX",
             )
 

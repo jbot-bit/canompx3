@@ -12,11 +12,11 @@ import sys
 
 sys.stdout.reconfigure(encoding="utf-8")
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS, ASSET_CONFIGS
 from pipeline.paths import PROJECT_ROOT
-
 from scripts.audits import AuditPhase, Severity, db_connect
 
 
@@ -29,7 +29,7 @@ def _git_log_file(filepath: str, days: int = 60) -> list[str]:
         cwd=str(PROJECT_ROOT),
         timeout=15,
     )
-    return [l for l in (r.stdout or "").strip().splitlines() if l]
+    return [line for line in (r.stdout or "").strip().splitlines() if line]
 
 
 def main():

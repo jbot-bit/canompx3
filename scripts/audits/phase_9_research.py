@@ -6,7 +6,6 @@ Source: SYSTEM_AUDIT.md Phase 9 (lines 376-407)
 NO-GO enforcement, data snooping quarantine, pending item staleness.
 """
 
-import re
 import sys
 from pathlib import Path
 
@@ -14,9 +13,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from pipeline.paths import PROJECT_ROOT
-
 from scripts.audits import AuditPhase, Severity
-
 
 # Production directories to scan for NO-GO zombies
 PROD_DIRS = [PROJECT_ROOT / "pipeline", PROJECT_ROOT / "trading_app"]

@@ -17,7 +17,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS, ASSET_CONFIGS, DEAD_ORB_INSTRUMENTS
 from pipeline.cost_model import COST_SPECS, SESSION_SLIPPAGE_MULT
 from pipeline.dst import (
-    DOW_ALIGNED_SESSIONS,
     DOW_MISALIGNED_SESSIONS,
     DYNAMIC_ORB_RESOLVERS,
     SESSION_CATALOG,
