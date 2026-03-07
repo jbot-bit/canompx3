@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from trading_app.live.position_tracker import PositionTracker
 from trading_app.live.session_orchestrator import SessionOrchestrator
 from trading_app.portfolio import Portfolio, PortfolioStrategy
 
@@ -161,7 +162,8 @@ def build_orchestrator(components: FakeBrokerComponents | None = None) -> Sessio
     orch.orb_builder = MagicMock()
     orch.monitor = MagicMock()
     orch.monitor.record_trade.return_value = None
-    orch._entry_prices = {}
+    orch._positions = PositionTracker()
+    orch._last_bar_at = None
     orch.contract_symbol = "MGCJ6"
     orch.order_router = c.router
     orch.positions = c.positions
@@ -255,27 +257,23 @@ class TestFillPriceTracking:
         """Broker fill_price stored alongside engine price, slippage computed."""
         await orch_with_fill._handle_event(_entry_event(2350.5))
 
-        info = orch_with_fill._entry_prices[STRATEGY_ID]
-        assert info["engine_price"] == 2350.5
-        assert info["fill_price"] == 2351.0
-        assert info["slippage"] == pytest.approx(0.5)
+        record = orch_with_fill._positions.get(STRATEGY_ID)
+        assert record.engine_entry_price == 2350.5
+        assert record.fill_entry_price == 2351.0
+        assert record.entry_slippage == pytest.approx(0.5)
 
     async def test_entry_without_fill_records_none(self, orch):
         """No fill_price from broker -> stored as None, no slippage key."""
         await orch._handle_event(_entry_event(2350.5))
 
-        info = orch._entry_prices[STRATEGY_ID]
-        assert info["engine_price"] == 2350.5
-        assert info["fill_price"] is None
-        assert "slippage" not in info
+        record = orch._positions.get(STRATEGY_ID)
+        assert record.engine_entry_price == 2350.5
+        assert record.fill_entry_price is None
 
     async def test_exit_uses_fill_price_for_entry(self, orch_with_fill):
         """EXIT uses broker fill_price (not engine price) for entry."""
-        orch_with_fill._entry_prices[STRATEGY_ID] = {
-            "engine_price": 2350.5,
-            "fill_price": 2351.0,
-            "slippage": 0.5,
-        }
+        orch_with_fill._positions.on_entry_sent(STRATEGY_ID, "long", 2350.5, order_id=1)
+        orch_with_fill._positions.on_entry_filled(STRATEGY_ID, 2351.0)
 
         await orch_with_fill._handle_event(_exit_event())
 
@@ -284,10 +282,8 @@ class TestFillPriceTracking:
 
     async def test_exit_falls_back_to_engine_when_no_fill(self, orch):
         """No fill_price -> exit uses engine_price."""
-        orch._entry_prices[STRATEGY_ID] = {
-            "engine_price": 2350.5,
-            "fill_price": None,
-        }
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.5, order_id=1)
+        # Don't call on_entry_filled — simulates no fill
 
         await orch._handle_event(_exit_event())
 
@@ -298,17 +294,17 @@ class TestFillPriceTracking:
         """Signal-only: no broker interaction, only engine_price recorded."""
         await orch_signal_only._handle_event(_entry_event(2350.5))
 
-        info = orch_signal_only._entry_prices[STRATEGY_ID]
-        assert info["engine_price"] == 2350.5
-        assert "fill_price" not in info
+        record = orch_signal_only._positions.get(STRATEGY_ID)
+        assert record.engine_entry_price == 2350.5
+        assert record.fill_entry_price is None
 
     async def test_entry_exit_roundtrip(self, orch_with_fill):
         """Full ENTRY -> EXIT flow: fill tracked through entire lifecycle."""
         await orch_with_fill._handle_event(_entry_event(2350.5))
-        assert STRATEGY_ID in orch_with_fill._entry_prices
+        assert orch_with_fill._positions.get(STRATEGY_ID) is not None
 
         await orch_with_fill._handle_event(_exit_event(2355.0))
-        assert STRATEGY_ID not in orch_with_fill._entry_prices  # cleaned up
+        assert orch_with_fill._positions.get(STRATEGY_ID) is None  # cleaned up
 
         record = orch_with_fill.monitor.record_trade.call_args[0][0]
         assert record.entry_price == 2351.0  # broker fill, not engine
@@ -316,13 +312,19 @@ class TestFillPriceTracking:
 
 class TestBestPrice:
     def test_prefers_fill(self):
-        assert SessionOrchestrator._best_price({"fill_price": 100.0, "engine_price": 99.0}, 0.0) == 100.0
+        tracker = PositionTracker()
+        tracker.on_entry_sent("S1", "long", 99.0)
+        tracker.on_entry_filled("S1", 100.0)
+        assert tracker.best_entry_price("S1", 0.0) == 100.0
 
     def test_falls_back_to_engine(self):
-        assert SessionOrchestrator._best_price({"fill_price": None, "engine_price": 99.0}, 0.0) == 99.0
+        tracker = PositionTracker()
+        tracker.on_entry_sent("S1", "long", 99.0)
+        assert tracker.best_entry_price("S1", 0.0) == 99.0
 
     def test_falls_back_to_fallback(self):
-        assert SessionOrchestrator._best_price({}, 42.0) == 42.0
+        tracker = PositionTracker()
+        assert tracker.best_entry_price("UNKNOWN", 42.0) == 42.0
 
 
 # ---------------------------------------------------------------------------

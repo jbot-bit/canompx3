@@ -29,6 +29,7 @@ from trading_app.live.bar_aggregator import Bar
 from trading_app.live.broker_factory import create_broker_components, get_broker_name
 from trading_app.live.live_market_state import LiveORBBuilder
 from trading_app.live.performance_monitor import PerformanceMonitor, TradeRecord
+from trading_app.live.position_tracker import PositionTracker
 from trading_app.live_config import build_live_portfolio
 from trading_app.portfolio import PortfolioStrategy
 from trading_app.risk_manager import RiskLimits, RiskManager
@@ -130,9 +131,9 @@ class SessionOrchestrator:
         # PerformanceMonitor takes list[PortfolioStrategy] (has strategy_id + expectancy_r)
         self.monitor = PerformanceMonitor(self.portfolio.strategies)
 
-        # Entry price side-table: strategy_id → {engine_price, fill_price, slippage}
-        # fill_price is the actual broker fill (None if unavailable, e.g. E2 stop pending)
-        self._entry_prices: dict[str, dict] = {}
+        # Position lifecycle tracker — replaces ad-hoc _entry_prices dict
+        self._positions = PositionTracker()
+        self._last_bar_at: datetime | None = None  # bar heartbeat
 
         # Resolve front-month contract symbol (needed even in signal-only for logging)
         self.contract_symbol = contracts.resolve_front_month(instrument)
@@ -282,8 +283,8 @@ class SessionOrchestrator:
         for event in eod_events:
             strategy = self._strategy_map.get(event.strategy_id)
             if strategy and event.event_type in ("EXIT", "SCRATCH"):
-                fill_info = self._entry_prices.pop(event.strategy_id, {})
-                entry_price = self._best_price(fill_info, event.price)
+                entry_price = self._positions.best_entry_price(event.strategy_id, event.price)
+                self._positions.pop(event.strategy_id)
                 self._record_exit(event, entry_price)
                 log.info("EOD rollover close: %s @ %.2f (pnl_r=%s)", event.strategy_id, event.price, event.pnl_r)
 
@@ -298,6 +299,18 @@ class SessionOrchestrator:
 
     async def _on_bar(self, bar: Bar) -> None:
         """Called for each completed 1-minute bar from DataFeed."""
+        # Bar heartbeat monitoring
+        now = datetime.now(UTC)
+        if self._last_bar_at is not None:
+            gap = (now - self._last_bar_at).total_seconds()
+            if gap > 180:  # 3 minutes without a bar
+                log.critical("BAR HEARTBEAT: %.0fs since last bar — feed may be dead", gap)
+                # Check for stale pending orders
+                stale = self._positions.stale_positions(timeout_seconds=300)
+                if stale:
+                    log.critical("STALE ORDERS: %s", [(s.strategy_id, s.state.value) for s in stale])
+        self._last_bar_at = now
+
         # Check if we've crossed the 9:00 AM Brisbane boundary
         self._check_trading_day_rollover(bar.ts_utc)
 
@@ -309,11 +322,6 @@ class SessionOrchestrator:
 
         for event in events:
             await self._handle_event(event)
-
-    @staticmethod
-    def _best_price(fill_info: dict, fallback: float) -> float:
-        """Return fill_price if available, else engine_price, else fallback."""
-        return fill_info.get("fill_price") or fill_info.get("engine_price") or fallback
 
     def _compute_actual_r(self, entry_price: float, exit_price: float, direction: str, risk_pts: float) -> float:
         """Compute cost-adjusted R-multiple from entry/exit prices."""
@@ -376,7 +384,7 @@ class SessionOrchestrator:
 
         if event.event_type == "ENTRY":
             if self.signal_only:
-                self._entry_prices[event.strategy_id] = {"engine_price": event.price}
+                self._positions.on_signal_entry(event.strategy_id, event.price, event.direction)
                 log.info(
                     "⚡ SIGNAL [%s]: %s %s @ %.2f  ← trade this manually on Tradovate/TradingView",
                     event.strategy_id,
@@ -408,11 +416,11 @@ class SessionOrchestrator:
             order_id = result.get("order_id") if isinstance(result, dict) else result.order_id
             fill_price = result.get("fill_price") if isinstance(result, dict) else getattr(result, "fill_price", None)
 
-            # Track entry with both engine and broker fill prices
-            entry_info: dict = {"engine_price": event.price, "fill_price": fill_price}
+            # Track entry via position tracker
+            self._positions.on_entry_sent(event.strategy_id, event.direction, event.price, order_id=order_id)
             if fill_price is not None:
+                self._positions.on_entry_filled(event.strategy_id, fill_price)
                 slippage = fill_price - event.price
-                entry_info["slippage"] = slippage
                 log.info(
                     "ENTRY FILL: %s %s engine=%.2f fill=%.2f slip=%+.4f pts → orderId=%s",
                     event.strategy_id,
@@ -430,7 +438,6 @@ class SessionOrchestrator:
                     event.price,
                     order_id,
                 )
-            self._entry_prices[event.strategy_id] = entry_info
 
             self._write_signal_record(
                 {
@@ -446,10 +453,9 @@ class SessionOrchestrator:
             )
 
         elif event.event_type in ("EXIT", "SCRATCH"):
-            fill_info = self._entry_prices.pop(event.strategy_id, {})
-            if not fill_info:
+            entry_price = self._positions.best_entry_price(event.strategy_id, event.price)
+            if self._positions.get(event.strategy_id) is None:
                 log.warning("EXIT for %s with no prior ENTRY — using engine exit price as fallback", event.strategy_id)
-            entry_price = self._best_price(fill_info, event.price)
 
             if self.signal_only:
                 log.info(
@@ -459,6 +465,7 @@ class SessionOrchestrator:
                     event.price,
                 )
                 self._record_exit(event, entry_price)
+                self._positions.pop(event.strategy_id)
                 self._write_signal_record(
                     {
                         "type": "SIGNAL_EXIT",
@@ -471,6 +478,7 @@ class SessionOrchestrator:
                 return
 
             # Submit close order and capture exit fill
+            self._positions.on_exit_sent(event.strategy_id)
             exit_spec = self.order_router.build_exit_spec(
                 direction=event.direction,
                 symbol=self.contract_symbol,
@@ -502,6 +510,7 @@ class SessionOrchestrator:
                     order_id,
                 )
 
+            self._positions.on_exit_filled(event.strategy_id, fill_price=exit_fill)
             self._record_exit(event, entry_price, exit_fill_price=exit_fill)
             self._write_signal_record(
                 {
