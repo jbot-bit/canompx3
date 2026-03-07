@@ -17,10 +17,18 @@
 
 import { SSEClient } from './sse-client.js';
 import { initClock, setCountdownTarget, clearCountdown, getBrisbaneDateStr } from './clock.js';
-import { initKeyboard, buildOverlayHTML } from './keyboard.js';
+import { initKeyboard, buildOverlayHTML, registerShortcut } from './keyboard.js';
+import { init as initDebriefForm, show as showDebrief, submitCleanTrade, toggleDetails, isVisible as isDebriefVisible } from './components/debrief-form.js';
+import { init as initOrbTracker, render as renderOrb } from './components/orb-tracker.js';
+import { init as initTradeStatus, render as renderTradeStatus } from './components/trade-status.js';
+import { init as initSignalLog, append as appendSignal } from './components/signal-log.js';
+import { init as initCooling, render as renderCooling } from './components/cooling.js';
+import { init as initManualTrade, toggle as toggleManualTrade } from './components/manual-trade.js';
+import { initAudio, playAlert, toggleAudio } from './audio.js';
 
 // ── State ────────────────────────────────────────────────────────────────
 
+let previousState = null;
 let currentState = 'IDLE';
 let stateData = null;
 let briefingsData = [];
@@ -123,6 +131,7 @@ async function fetchFitness() {
 // ── Panel Switching ──────────────────────────────────────────────────────
 
 function applyState(stateName, data) {
+    previousState = currentState;
     currentState = stateName;
 
     // Set data-state on #app for CSS state selectors
@@ -186,6 +195,13 @@ function applyState(stateName, data) {
 
     // Update session strip dots
     updateSessionStrip(data);
+
+    // Audio alerts on state transitions
+    if (stateName === 'APPROACHING' && previousState !== 'APPROACHING') {
+        playAlert('approaching');
+    } else if (stateName === 'ALERT' && previousState !== 'ALERT') {
+        playAlert('alert');
+    }
 
     // Connection indicator
     updateConnectionIndicator();
@@ -598,6 +614,101 @@ function renderFitnessSummary(strategies) {
     el.appendChild(grid);
 }
 
+// ── Session History (Sidebar) ────────────────────────────────────────────
+
+async function fetchSessionHistory(sessionName) {
+    if (!sessionName) return;
+    const data = await fetchJSON(`/api/session-history/${sessionName}`);
+    if (data && data.history) {
+        renderSessionHistory(data.history, sessionName);
+    }
+}
+
+function renderSessionHistory(history, sessionName) {
+    const el = document.querySelector('#sidebar-session-history');
+    if (!el) return;
+
+    while (el.firstChild) el.removeChild(el.firstChild);
+
+    if (history.length === 0) {
+        el.appendChild(createElement('div', { className: 'text-tertiary', text: `No history for ${sessionName}` }));
+        return;
+    }
+
+    const title = createElement('div', { className: 'text-secondary', text: sessionName });
+    title.style.cssText = 'font-size:0.75rem; margin-bottom:var(--space-2)';
+    el.appendChild(title);
+
+    let wins = 0, losses = 0, totalR = 0;
+    for (const h of history) {
+        const pnl = h.pnl_r || 0;
+        if (pnl >= 0) wins++; else losses++;
+        totalR += pnl;
+
+        const item = createElement('div', { className: 'session-history-item' });
+        const dateStr = h.trading_day ? String(h.trading_day).slice(5) : '--';
+        item.appendChild(createElement('span', { className: 'mono text-tertiary', text: dateStr }));
+
+        const sign = pnl >= 0 ? '+' : '';
+        const color = pnl >= 0 ? 'var(--color-long)' : 'var(--color-short)';
+        const val = createElement('span', { className: 'mono', text: `${sign}${pnl.toFixed(1)}R` });
+        val.style.color = color;
+        item.appendChild(val);
+        el.appendChild(item);
+    }
+
+    const summary = createElement('div', { className: 'mono text-secondary' });
+    summary.style.cssText = 'font-size:0.75rem; margin-top:var(--space-2); padding-top:var(--space-2); border-top:1px solid var(--surface-border)';
+    summary.textContent = `${wins}W ${losses}L | ${totalR >= 0 ? '+' : ''}${totalR.toFixed(1)}R`;
+    el.appendChild(summary);
+}
+
+// ── Adherence (Sidebar) ─────────────────────────────────────────────────
+
+async function fetchAdherence(sessionName) {
+    if (!sessionName) return;
+    const data = await fetchJSON(`/api/adherence-stats/${sessionName}`);
+    if (data) {
+        renderAdherence(data);
+    }
+}
+
+function renderAdherence(data) {
+    const el = document.querySelector('#sidebar-adherence');
+    if (!el) return;
+
+    while (el.firstChild) el.removeChild(el.firstChild);
+
+    const stats = data.stats || {};
+
+    if (stats.total === 0 || stats.total === undefined) {
+        el.appendChild(createElement('div', { className: 'text-tertiary', text: 'No debrief data yet' }));
+        return;
+    }
+
+    // Adherence percentage
+    const pct = stats.followed_plan_pct !== undefined ? stats.followed_plan_pct : 0;
+    const pctEl = createElement('div', { className: 'mono' });
+    pctEl.style.cssText = `font-size:1.25rem; font-weight:600; color:${pct >= 80 ? 'var(--color-long)' : pct >= 60 ? 'var(--color-warning)' : 'var(--color-short)'}`;
+    pctEl.textContent = `${Math.round(pct)}%`;
+    el.appendChild(pctEl);
+
+    const label = createElement('div', { className: 'text-tertiary', text: `${stats.total} debriefs` });
+    label.style.fontSize = '0.75rem';
+    el.appendChild(label);
+
+    // Latest letter
+    if (data.latest_letter) {
+        const letterCard = createElement('div', { className: 'card' });
+        letterCard.style.cssText = 'margin-top:var(--space-3); padding:var(--space-3)';
+        const letterText = createElement('div', { className: 'text-secondary' });
+        letterText.style.cssText = 'font-size:0.75rem; font-style:italic';
+        letterText.textContent = data.latest_letter;
+        letterCard.appendChild(letterText);
+        el.appendChild(letterCard);
+    }
+}
+
 // ── Connection Indicator ─────────────────────────────────────────────────
 
 function updateConnectionIndicator() {
@@ -665,6 +776,40 @@ function initSSE() {
         }
     });
 
+    sseClient.on('orb_update', (data) => {
+        renderOrb(data);
+    });
+
+    sseClient.on('signal', (data) => {
+        appendSignal(data);
+        // Play audio for entry/exit signals
+        if (data.type === 'SIGNAL_ENTRY' || data.type === 'MANUAL_ENTRY') {
+            playAlert('signal_entry');
+        } else if (data.type === 'SIGNAL_EXIT' || data.type === 'ORDER_EXIT') {
+            playAlert('signal_exit');
+        }
+    });
+
+    sseClient.on('trade_update', (data) => {
+        renderTradeStatus(data);
+    });
+
+    sseClient.on('cooling', (data) => {
+        renderCooling(data);
+    });
+
+    sseClient.on('debrief_required', (data) => {
+        showDebrief(data);
+    });
+
+    sseClient.on('clock_tick', (data) => {
+        // Update clocks from server (supplement client-side clock)
+        const brisEl = document.querySelector('#topbar__bris-time');
+        const etEl = document.querySelector('#topbar__et-time');
+        if (brisEl && data.bris_time) brisEl.textContent = data.bris_time;
+        if (etEl && data.et_time) etEl.textContent = data.et_time;
+    });
+
     sseClient.onStatusChange(() => {
         updateConnectionIndicator();
     });
@@ -697,6 +842,69 @@ async function init() {
     // Checklist click handlers
     initChecklist();
 
+    // Initialize Phase 4 components
+    initOrbTracker(document.getElementById('orb-tracker-container'));
+    initTradeStatus(document.getElementById('trade-status-container'));
+    initSignalLog(document.getElementById('signal-log-container'));
+    initDebriefForm(document.getElementById('debrief-form-container'));
+    initCooling(document.getElementById('cooling-overlay'));
+    initManualTrade(document.getElementById('manual-trade-container'));
+
+    // Audio (muted by default)
+    initAudio();
+
+    // Wire audio toggle button to audio.js
+    const audioBtn = $('#audio-toggle');
+    if (audioBtn) {
+        audioBtn.addEventListener('click', () => {
+            toggleAudio();
+        });
+    }
+
+    // Register Phase 4-6 keyboard shortcuts
+    registerShortcut(' ', () => {
+        if (currentState === 'DEBRIEF' && isDebriefVisible()) {
+            submitCleanTrade();
+        }
+    });
+
+    registerShortcut('d', () => {
+        if (currentState === 'DEBRIEF') {
+            toggleDetails();
+        }
+    });
+
+    registerShortcut('c', () => {
+        if (currentState === 'APPROACHING' || currentState === 'ALERT') {
+            // Check all checklist items
+            document.querySelectorAll('.checklist__item').forEach(item => {
+                item.classList.add('checklist__item--checked');
+            });
+        }
+    });
+
+    registerShortcut('m', () => {
+        toggleManualTrade();
+    });
+
+    // Manual ORB size calculator
+    const orbHighInput = document.getElementById('manual-orb-high');
+    const orbLowInput = document.getElementById('manual-orb-low');
+    const orbSizeDisplay = document.getElementById('manual-orb-size');
+    if (orbHighInput && orbLowInput && orbSizeDisplay) {
+        const updateSize = () => {
+            const h = parseFloat(orbHighInput.value);
+            const l = parseFloat(orbLowInput.value);
+            if (!isNaN(h) && !isNaN(l) && h > l) {
+                orbSizeDisplay.textContent = `Size: ${(h - l).toFixed(2)}`;
+            } else {
+                orbSizeDisplay.textContent = 'Size: --';
+            }
+        };
+        orbHighInput.addEventListener('input', updateSize);
+        orbLowInput.addEventListener('input', updateSize);
+    }
+
     // Date display
     const dateEl = $('#topbar__date');
     if (dateEl) {
@@ -711,6 +919,12 @@ async function init() {
         fetchDaySummary(),
         fetchFitness(),
     ]);
+
+    // Sidebar: session history + adherence for next session
+    if (stateData && stateData.next_session) {
+        fetchSessionHistory(stateData.next_session);
+        fetchAdherence(stateData.next_session);
+    }
 
     // SSE connection (after initial data loaded)
     initSSE();

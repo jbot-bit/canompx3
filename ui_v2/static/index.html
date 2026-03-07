@@ -181,12 +181,21 @@
         <div id="panel-orb-forming" class="state-panel">
             <div class="orb__header">
                 <div class="orb__title">ORB Forming</div>
-                <div class="orb__subtitle">Aperture accumulating...</div>
+                <div class="orb__subtitle" id="orb-session-label">Aperture accumulating...</div>
             </div>
-            <div class="orb__placeholder card">
-                <div class="card-body" style="text-align:center; padding:var(--space-8)">
-                    <div class="text-tertiary">Live ORB tracker with progress ring, high/low/size, and filter qualification badges</div>
-                    <div class="text-tertiary" style="margin-top:var(--space-4); font-size:0.75rem">Phase 4 will populate this panel</div>
+            <div id="orb-tracker-container">
+                <!-- Populated by orb-tracker.js -->
+            </div>
+            <div id="orb-manual-input" class="card" style="margin-top:var(--space-4)">
+                <div class="card-body">
+                    <div style="font-size:0.8125rem; color:var(--text-secondary); margin-bottom:var(--space-2)">Manual ORB Input (Signal-Only)</div>
+                    <div style="display:flex; gap:var(--space-3); align-items:center">
+                        <label class="text-tertiary" style="font-size:0.75rem">High</label>
+                        <input id="manual-orb-high" type="number" step="0.01" class="mono" style="width:100px; background:var(--surface-bg); border:1px solid var(--surface-border); color:var(--text-primary); padding:var(--space-1) var(--space-2); border-radius:var(--border-radius); font-family:var(--font-mono); font-size:0.8125rem">
+                        <label class="text-tertiary" style="font-size:0.75rem">Low</label>
+                        <input id="manual-orb-low" type="number" step="0.01" class="mono" style="width:100px; background:var(--surface-bg); border:1px solid var(--surface-border); color:var(--text-primary); padding:var(--space-1) var(--space-2); border-radius:var(--border-radius); font-family:var(--font-mono); font-size:0.8125rem">
+                        <span id="manual-orb-size" class="mono text-secondary" style="font-size:0.8125rem">Size: --</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -196,11 +205,11 @@
             <div class="session__header">
                 <div class="session__title">In Session</div>
             </div>
-            <div class="session__placeholder card">
-                <div class="card-body" style="text-align:center; padding:var(--space-8)">
-                    <div class="text-tertiary">Trade status: entry/stop/target levels, direction, live R, time-in-trade</div>
-                    <div class="text-tertiary" style="margin-top:var(--space-4); font-size:0.75rem">Phase 4 will populate this panel</div>
-                </div>
+            <div id="trade-status-container">
+                <!-- Populated by trade-status.js -->
+            </div>
+            <div id="signal-log-container" style="margin-top:var(--space-4); max-height:200px; overflow-y:auto">
+                <!-- Populated by signal-log.js -->
             </div>
         </div>
 
@@ -209,15 +218,8 @@
             <div class="debrief__header">
                 <div class="debrief__title">Debrief</div>
             </div>
-            <div class="debrief__placeholder card">
-                <div class="card-body" style="text-align:center; padding:var(--space-8)">
-                    <div class="text-tertiary">Fast debrief (1-click clean trade) + expandable form. Trade summary with entry/exit/R/time.</div>
-                    <div class="text-tertiary" style="margin-top:var(--space-3); font-size:0.75rem">
-                        <span class="kbd">Space</span> Clean Trade
-                        <span class="kbd">D</span> Expand Details
-                    </div>
-                    <div class="text-tertiary" style="margin-top:var(--space-4); font-size:0.75rem">Phase 4 will populate this panel</div>
-                </div>
+            <div id="debrief-form-container">
+                <!-- Populated by debrief-form.js -->
             </div>
         </div>
 
@@ -245,14 +247,14 @@
         <div class="sidebar-section sidebar__session-history">
             <div class="sidebar-section__title">Recent Sessions</div>
             <div id="sidebar-session-history">
-                <div class="text-tertiary" style="font-size:0.8125rem">Session history loads with Phase 4</div>
+                <div class="skeleton skeleton--block" style="height:80px"></div>
             </div>
         </div>
 
         <div class="sidebar-section sidebar__adherence">
             <div class="sidebar-section__title">Discipline</div>
             <div id="sidebar-adherence">
-                <div class="text-tertiary" style="font-size:0.8125rem">Adherence stats load with Phase 4</div>
+                <div class="skeleton skeleton--block" style="height:60px"></div>
             </div>
         </div>
 
@@ -278,6 +280,16 @@
         <div class="statusbar__item">
             <span class="text-tertiary" style="font-size:0.6875rem">Press <span class="kbd">?</span> for shortcuts</span>
         </div>
+    </div>
+
+    <!-- Cooling overlay (hidden by default) -->
+    <div id="cooling-overlay" style="display:none; position:fixed; inset:0; z-index:1000">
+        <!-- Populated by cooling.js -->
+    </div>
+
+    <!-- Manual trade panel (hidden by default) -->
+    <div id="manual-trade-container" style="display:none; position:fixed; bottom:var(--statusbar-height); right:var(--space-4); z-index:50; width:320px">
+        <!-- Populated by manual-trade.js -->
     </div>
 
 </div>
