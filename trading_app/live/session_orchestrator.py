@@ -462,9 +462,10 @@ class SessionOrchestrator:
         record = self._positions.get(strategy_id)
         if record is None or not record.bracket_order_ids:
             return
+        loop = asyncio.get_running_loop()
         for oid in record.bracket_order_ids:
             try:
-                self.order_router.cancel(oid)
+                await loop.run_in_executor(None, self.order_router.cancel, oid)
             except Exception as e:
                 log.warning("Bracket cancel failed (may have filled): %s", e)
         # Brief pause to let cancellations settle
@@ -790,6 +791,10 @@ class SessionOrchestrator:
                         status = await loop.run_in_executor(
                             None, self.order_router.query_order_status, record.entry_order_id
                         )
+                        # Re-check state after await — another coroutine may have handled this
+                        current = self._positions.get(record.strategy_id)
+                        if current is None or current.state != PositionState.PENDING_ENTRY:
+                            continue
                         if status["status"] == "Filled":
                             fill_price = status.get("fill_price")
                             if fill_price is not None:
