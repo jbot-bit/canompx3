@@ -54,7 +54,7 @@ research/
     analyze_entry_clearance.py
     analyze_eod_exits.py
     analyze_first_half_hour.py
-... and 852 more entries
+... and 862 more entries
 ```
 
 ## Module Index
@@ -100,22 +100,24 @@ research/
 | `trading_app/live/bar_aggregator.py` | 62 | Aggregates real-time ticks into 1-minute OHLCV bars. | Bar, BarAggregator |
 | `trading_app/live/broker_base.py` | 92 | Abstract base classes for multi-broker support. | BrokerAuth, BrokerFeed, BrokerRouter, BrokerContracts, BrokerPositions |
 | `trading_app/live/broker_factory.py` | 68 | Factory for creating broker components from a broker name. | BrokerComponents, get_broker_name, create_broker_components |
+| `trading_app/live/circuit_breaker.py` | 41 | Circuit breaker for broker API resilience. | CircuitBreaker |
 | `trading_app/live/cusum_monitor.py` | 43 | CUSUM (Cumulative Sum) control chart for detecting strategy performance drift. | CUSUMMonitor |
 | `trading_app/live/live_market_state.py` | 75 | Builds ORB ranges incrementally from live 1-minute bars. | LiveORB, LiveORBBuilder |
 | `trading_app/live/performance_monitor.py` | 77 | Per-strategy live P&L tracking with CUSUM drift detection. | TradeRecord, PerformanceMonitor |
+| `trading_app/live/position_tracker.py` | 148 | Position lifecycle state machine for live trading. | PositionState, PositionRecord, PositionTracker |
 | `trading_app/live/projectx/__init__.py` | 1 | ProjectX (TopstepX) broker implementation. |  |
 | `trading_app/live/projectx/auth.py` | 70 | ProjectX Gateway API authentication. | ProjectXAuth |
 | `trading_app/live/projectx/contract_resolver.py` | 60 | ProjectX contract resolution and account discovery. | ProjectXContracts |
-| `trading_app/live/projectx/data_feed.py` | 222 | ProjectX real-time market data via SignalR. | ProjectXDataFeed |
+| `trading_app/live/projectx/data_feed.py` | 240 | ProjectX real-time market data via SignalR. | ProjectXDataFeed |
 | `trading_app/live/projectx/order_router.py` | 96 | ProjectX order routing via REST API. | ProjectXOrderRouter |
 | `trading_app/live/projectx/positions.py` | 32 | ProjectX position queries for crash recovery. | ProjectXPositions |
-| `trading_app/live/session_orchestrator.py` | 487 | Live trading session orchestrator. | SessionOrchestrator |
+| `trading_app/live/session_orchestrator.py` | 588 | Live trading session orchestrator. | SessionOrchestrator |
 | `trading_app/live/tradovate/__init__.py` | 13 | Tradovate broker implementation. |  |
 | `trading_app/live/tradovate/auth.py` | 56 | Tradovate OAuth token management | TradovateAuth |
 | `trading_app/live/tradovate/contract_resolver.py` | 80 | Resolves instrument shortname to current Tradovate front-month contract symbol. | resolve_account_id, resolve_front_month, TradovateContracts |
 | `trading_app/live/tradovate/data_feed.py` | 152 | Tradovate market data WebSocket feed. | TradovateDataFeed |
 | `trading_app/live/tradovate/order_router.py` | 158 | Maps ExecutionEngine TradeEvent -> Tradovate REST orders. | OrderSpec, OrderResult, TradovateOrderRouter |
-| `trading_app/live/tradovate/positions.py` | 11 | Tradovate position queries -- stub for future API access. | TradovatePositions |
+| `trading_app/live/tradovate/positions.py` | 12 | Tradovate position queries -- stub for future API access. | TradovatePositions |
 | `trading_app/live/webhook_server.py` | 198 | TradingView webhook server — receives alerts and places orders via Tradovate. | lifespan, TradeRequest, TradeResponse, health, trade |
 | `trading_app/live_config.py` | 489 | Declarative live portfolio configuration. | LiveStrategySpec, build_live_portfolio, main |
 | `trading_app/market_state.py` | 259 | Market state: single shared object describing current market context. | OrbSnapshot, SessionSignals, RegimeContext, MarketState |
@@ -178,9 +180,7 @@ research/
 | `scripts/reports/parameter_stability_heatmap.py` | 390 | Parameter stability heatmap generator for live portfolio strategies. | query_grid, build_heatmap_data, render_html_report, find_best_variant, main |
 | `scripts/reports/report_edge_portfolio.py` | 361 | Edge family portfolio report with honest aggregate stats. | report_instrument, print_report, session_slots, print_session_slots, main |
 | `scripts/reports/report_wf_diagnostics.py` | 137 | Walk-forward diagnostic report from JSONL results. | load_results, classify_windows, print_summary_table, main |
-| `scripts/run_live_session.py` | 129 | ORB Live Session — entry point. | main |
-| `scripts/run_webhook_server.py` | 74 | Entry point for the TradingView → Tradovate webhook server. | main |
-... and 356 more modules
+... and 364 more modules
 
 ## Cross-Package Dependencies
 
@@ -233,7 +233,7 @@ research/
 - `trading_app/portfolio.py` -> pipeline, trading_app
 - `trading_app/regime/compare.py` -> pipeline
 - `trading_app/regime/discovery.py` -> pipeline, trading_app
-... and 283 more edges
+... and 285 more edges
 
 ## CLI Entry Points
 
