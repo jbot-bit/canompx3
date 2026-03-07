@@ -1198,3 +1198,108 @@ class TestBracketOrders:
 
         # Position should be cleaned up despite "already flat" error
         assert orch._positions.get(STRATEGY_ID) is None
+
+
+# ---------------------------------------------------------------------------
+# FILL POLLER tests
+# ---------------------------------------------------------------------------
+
+
+class TestFillPoller:
+    async def test_pending_entry_gets_confirmed(self):
+        """PENDING_ENTRY order polled -> Filled status -> on_entry_filled called."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        # Set up a PENDING_ENTRY position
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=42)
+        orch.FILL_POLL_INTERVAL = 0.01
+
+        # Mock order status to return Filled
+        orch.order_router.query_order_status = MagicMock(
+            return_value={"order_id": 42, "status": "Filled", "fill_price": 2350.5}
+        )
+
+        task = asyncio.create_task(orch._fill_poller())
+        await asyncio.sleep(0.1)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        # Position should now be ENTERED with fill price
+        record = orch._positions.get(STRATEGY_ID)
+        assert record is not None
+        assert record.fill_entry_price == 2350.5
+
+    async def test_cancelled_order_popped(self):
+        """Cancelled order -> position removed from tracker."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=42)
+        orch.FILL_POLL_INTERVAL = 0.01
+
+        orch.order_router.query_order_status = MagicMock(
+            return_value={"order_id": 42, "status": "Cancelled", "fill_price": None}
+        )
+
+        task = asyncio.create_task(orch._fill_poller())
+        await asyncio.sleep(0.1)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        # Position should be removed
+        assert orch._positions.get(STRATEGY_ID) is None
+
+    async def test_poller_survives_query_failure(self):
+        """query_order_status raises -> poller continues polling."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=42)
+        orch.FILL_POLL_INTERVAL = 0.01
+
+        call_count = 0
+
+        def flaky_query(order_id):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise ConnectionError("network error")
+            return {"order_id": order_id, "status": "Filled", "fill_price": 2350.5}
+
+        orch.order_router.query_order_status = flaky_query
+
+        task = asyncio.create_task(orch._fill_poller())
+        await asyncio.sleep(0.15)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        # First call failed, second succeeded
+        assert call_count >= 2
+        record = orch._positions.get(STRATEGY_ID)
+        assert record is not None
+        assert record.fill_entry_price == 2350.5
+
+    async def test_poller_skips_non_pending(self):
+        """ENTERED positions not polled."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        # Set up an ENTERED position (not pending)
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=42)
+        orch._positions.on_entry_filled(STRATEGY_ID, 2350.0)
+        orch.FILL_POLL_INTERVAL = 0.01
+
+        orch.order_router.query_order_status = MagicMock()
+
+        task = asyncio.create_task(orch._fill_poller())
+        await asyncio.sleep(0.1)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        # query_order_status should NOT have been called
+        orch.order_router.query_order_status.assert_not_called()

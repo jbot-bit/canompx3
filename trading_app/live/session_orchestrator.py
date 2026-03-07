@@ -29,7 +29,7 @@ from trading_app.live.bar_aggregator import Bar
 from trading_app.live.broker_factory import create_broker_components, get_broker_name
 from trading_app.live.live_market_state import LiveORBBuilder
 from trading_app.live.performance_monitor import PerformanceMonitor, TradeRecord
-from trading_app.live.position_tracker import PositionTracker
+from trading_app.live.position_tracker import PositionState, PositionTracker
 from trading_app.live_config import build_live_portfolio
 from trading_app.portfolio import PortfolioStrategy
 from trading_app.risk_manager import RiskLimits, RiskManager
@@ -768,6 +768,45 @@ class SessionOrchestrator:
             except Exception as e:
                 log.error("Watchdog error (will retry): %s", e)
 
+    FILL_POLL_INTERVAL = 5.0  # seconds between fill status checks
+
+    async def _fill_poller(self) -> None:
+        """Poll PENDING_ENTRY orders for fill confirmation every 5s.
+
+        E2 stop-market orders rest until price reaches stop level. Without polling,
+        PositionTracker stays PENDING_ENTRY indefinitely. This background task
+        detects fills and cancellations.
+        """
+        while True:
+            try:
+                await asyncio.sleep(self.FILL_POLL_INTERVAL)
+                for record in self._positions.active_positions():
+                    if record.state != PositionState.PENDING_ENTRY:
+                        continue
+                    if record.entry_order_id is None:
+                        continue
+                    try:
+                        loop = asyncio.get_running_loop()
+                        status = await loop.run_in_executor(
+                            None, self.order_router.query_order_status, record.entry_order_id
+                        )
+                        if status["status"] == "Filled":
+                            fill_price = status.get("fill_price")
+                            if fill_price is not None:
+                                self._positions.on_entry_filled(record.strategy_id, fill_price)
+                            log.info("Fill confirmed for %s: %s", record.strategy_id, status)
+                        elif status["status"] in ("Cancelled", "Rejected"):
+                            self._positions.pop(record.strategy_id)
+                            log.warning("Order %s for %s: %s", status["status"], record.strategy_id, status)
+                    except NotImplementedError:
+                        pass  # broker doesn't support polling
+                    except Exception as e:
+                        log.warning("Fill poll failed for %s: %s", record.strategy_id, e)
+            except asyncio.CancelledError:
+                return
+            except Exception:
+                pass  # poller must never crash
+
     # Orchestrator-level reconnect: covers the case where the feed exhausts its
     # internal reconnects (20 attempts) and run() returns cleanly.
     ORCHESTRATOR_MAX_RECONNECTS = 5
@@ -777,6 +816,9 @@ class SessionOrchestrator:
     async def run(self) -> None:
         backoff = self.ORCHESTRATOR_BACKOFF_INITIAL
         watchdog = asyncio.create_task(self._watchdog())
+        poller = None
+        if not self.signal_only:
+            poller = asyncio.create_task(self._fill_poller())
         try:
             for attempt in range(self.ORCHESTRATOR_MAX_RECONNECTS + 1):
                 if self._kill_switch_fired:
@@ -821,6 +863,8 @@ class SessionOrchestrator:
             self._notify(f"CRITICAL: {msg}")
         finally:
             watchdog.cancel()
+            if poller:
+                poller.cancel()
 
     def post_session(self) -> None:
         """EOD: close open positions, log summary, run incremental backfill.
