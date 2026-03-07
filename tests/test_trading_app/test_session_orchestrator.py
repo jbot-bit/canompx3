@@ -368,6 +368,28 @@ class TestSlippageInSummary:
         summary = monitor.daily_summary()
         assert summary["total_slippage_pts"] == 0.25
 
+    def test_reset_daily_clears_trades(self):
+        """reset_daily() must clear _trades list so slippage doesn't accumulate across days."""
+        from trading_app.live.performance_monitor import PerformanceMonitor, TradeRecord
+
+        monitor = PerformanceMonitor([_test_strategy()])
+        record = TradeRecord(
+            strategy_id=STRATEGY_ID,
+            trading_day=date(2026, 3, 7),
+            direction="long",
+            entry_price=100.0,
+            exit_price=102.0,
+            actual_r=0.5,
+            expected_r=0.3,
+            slippage_pts=0.25,
+        )
+        monitor.record_trade(record)
+        monitor.reset_daily()
+
+        summary = monitor.daily_summary()
+        assert summary["total_slippage_pts"] == 0.0
+        assert summary["n_trades"] == 0
+
 
 # ---------------------------------------------------------------------------
 # KILL SWITCH tests

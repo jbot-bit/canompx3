@@ -94,8 +94,9 @@ class PerformanceMonitor:
         }
 
     def reset_daily(self) -> None:
-        """Clear daily R accumulator (call at EOD after logging summary)."""
+        """Clear daily accumulators (call at EOD after logging summary)."""
         self._daily_r.clear()
+        self._trades.clear()
 
     def get_cusum(self, strategy_id: str) -> CUSUMMonitor | None:
         """Return the CUSUM monitor for a specific strategy (for inspection/testing)."""
