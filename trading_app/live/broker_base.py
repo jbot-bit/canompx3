@@ -47,6 +47,11 @@ class BrokerFeed(ABC):
         """Connect and stream bars. Reconnects on disconnect."""
         ...
 
+    @property
+    def was_stopped(self) -> bool:
+        """Whether feed was stopped by user request (stop-file), not by exhausting reconnects."""
+        return getattr(self, "_stop_requested", False)
+
     @abstractmethod
     def flush(self, symbol: str = "") -> Bar | None:
         """Force-close current bar at session end."""

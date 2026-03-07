@@ -62,9 +62,11 @@ class TradovateDataFeed(BrokerFeed):
         self.demo = demo
         self._agg = BarAggregator()
         self._heartbeat_task: asyncio.Task | None = None
+        self._stop_requested = False
 
     async def run(self, symbol: str) -> None:
         """Connect and stream bars. Reconnects on disconnect up to _MAX_RECONNECTS times."""
+        self._stop_requested = False
         url = MD_WS_DEMO if self.demo else MD_WS_LIVE
         backoff = _BACKOFF_INITIAL
 
@@ -141,6 +143,7 @@ class TradovateDataFeed(BrokerFeed):
                 if _STOP_FILE.exists():
                     log.info("Stop file detected — requesting graceful shutdown")
                     _STOP_FILE.unlink(missing_ok=True)
+                    self._stop_requested = True
                     stop_event.set()
                     return
                 try:

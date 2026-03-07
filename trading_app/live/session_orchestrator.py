@@ -702,12 +702,57 @@ class SessionOrchestrator:
             except Exception as e:
                 log.error("Watchdog error (will retry): %s", e)
 
+    # Orchestrator-level reconnect: covers the case where the feed exhausts its
+    # internal reconnects (20 attempts) and run() returns cleanly.
+    ORCHESTRATOR_MAX_RECONNECTS = 5
+    ORCHESTRATOR_BACKOFF_INITIAL = 30.0
+    ORCHESTRATOR_BACKOFF_MAX = 300.0
+
     async def run(self) -> None:
-        feed = self._feed_class(self.auth, on_bar=self._on_bar, demo=self.demo)
-        log.info("Starting live feed: %s (broker: %s)", self.contract_symbol, self._broker_name)
+        backoff = self.ORCHESTRATOR_BACKOFF_INITIAL
         watchdog = asyncio.create_task(self._watchdog())
         try:
-            await feed.run(self.contract_symbol)
+            for attempt in range(self.ORCHESTRATOR_MAX_RECONNECTS + 1):
+                if self._kill_switch_fired:
+                    msg = "Kill switch fired — not reconnecting"
+                    log.critical(msg)
+                    self._notify(msg)
+                    return
+
+                feed = self._feed_class(self.auth, on_bar=self._on_bar, demo=self.demo)
+                log.info(
+                    "Starting feed (attempt %d/%d): %s (broker: %s)",
+                    attempt + 1,
+                    self.ORCHESTRATOR_MAX_RECONNECTS + 1,
+                    self.contract_symbol,
+                    self._broker_name,
+                )
+                try:
+                    self._last_bar_at = None  # reset heartbeat to avoid false watchdog trigger
+                    await feed.run(self.contract_symbol)
+
+                    # Distinguish stop-file exit from feed exhaustion
+                    if feed.was_stopped:
+                        log.info("Feed stopped by user — clean exit")
+                        return
+                    log.warning("Feed exited without stop request — reconnecting")
+
+                except Exception as e:
+                    log.critical("Feed crashed: %s", e)
+                    self._notify(f"Feed crashed: {e}")
+
+                if attempt < self.ORCHESTRATOR_MAX_RECONNECTS:
+                    try:
+                        self.auth.refresh_if_needed()
+                    except Exception:
+                        pass
+                    self._notify(f"Reconnecting in {backoff:.0f}s (attempt {attempt + 2})")
+                    await asyncio.sleep(backoff)
+                    backoff = min(backoff * 2, self.ORCHESTRATOR_BACKOFF_MAX)
+
+            msg = f"Exhausted {self.ORCHESTRATOR_MAX_RECONNECTS} orchestrator reconnects — session dead"
+            log.critical(msg)
+            self._notify(f"CRITICAL: {msg}")
         finally:
             watchdog.cancel()
 

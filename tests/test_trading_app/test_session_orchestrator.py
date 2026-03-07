@@ -658,10 +658,14 @@ class TestKillSwitch:
         """run() creates a watchdog task alongside the feed."""
         orch = build_orchestrator()
 
-        # Mock feed that completes immediately
+        # Mock feed that completes immediately with stop request
         class InstantFeed:
             def __init__(self, auth, on_bar, demo):
-                pass
+                self._stop_requested = True
+
+            @property
+            def was_stopped(self):
+                return self._stop_requested
 
             async def run(self, symbol):
                 return  # complete immediately
@@ -931,3 +935,131 @@ class TestTradingDayRollover:
 
         # No EOD call since we didn't roll
         orch.engine.on_trading_day_end.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# ORCHESTRATOR RECONNECT tests
+# ---------------------------------------------------------------------------
+
+
+def _make_feed_class(was_stopped: bool = False, crash: Exception | None = None):
+    """Factory: build a mock feed class for reconnect tests."""
+
+    class MockFeed:
+        def __init__(self, auth, on_bar, demo):
+            self._stop_requested = was_stopped
+
+        @property
+        def was_stopped(self):
+            return self._stop_requested
+
+        async def run(self, symbol):
+            if crash:
+                raise crash
+
+    return MockFeed
+
+
+class TestOrchestratorReconnect:
+    async def test_clean_stop_no_reconnect(self):
+        """Feed stopped by stop-file (was_stopped=True) -> no reconnect."""
+        orch = build_orchestrator()
+        orch._feed_class = _make_feed_class(was_stopped=True)
+
+        await orch.run()
+        # Should exit cleanly after one attempt
+
+    async def test_reconnects_after_feed_exhaustion(self):
+        """Feed exhausts internal reconnects (was_stopped=False) -> orchestrator retries."""
+        orch = build_orchestrator()
+        orch._notify = MagicMock()
+        orch.ORCHESTRATOR_BACKOFF_INITIAL = 0.01
+        orch.ORCHESTRATOR_BACKOFF_MAX = 0.01
+
+        call_count = 0
+
+        class CountingFeed:
+            def __init__(self, auth, on_bar, demo):
+                self._stop_requested = False
+
+            @property
+            def was_stopped(self):
+                return self._stop_requested
+
+            async def run(self, symbol):
+                nonlocal call_count
+                call_count += 1
+                if call_count >= 3:
+                    self._stop_requested = True  # stop on 3rd attempt
+
+        orch._feed_class = CountingFeed
+        await orch.run()
+        assert call_count == 3
+
+    async def test_no_reconnect_after_kill_switch(self):
+        """Kill switch fired -> no reconnect attempt."""
+        orch = build_orchestrator()
+        orch._kill_switch_fired = True
+        orch._notify = MagicMock()
+
+        call_count = 0
+
+        class NeverReachFeed:
+            def __init__(self, auth, on_bar, demo):
+                self._stop_requested = False
+
+            @property
+            def was_stopped(self):
+                return False
+
+            async def run(self, symbol):
+                nonlocal call_count
+                call_count += 1
+
+        orch._feed_class = NeverReachFeed
+        await orch.run()
+        assert call_count == 0
+
+    async def test_reconnects_after_feed_crash(self):
+        """Feed raises exception -> orchestrator retries with new feed instance."""
+        orch = build_orchestrator()
+        orch._notify = MagicMock()
+        orch.ORCHESTRATOR_BACKOFF_INITIAL = 0.01
+        orch.ORCHESTRATOR_BACKOFF_MAX = 0.01
+        orch.ORCHESTRATOR_MAX_RECONNECTS = 2
+
+        call_count = 0
+
+        class CrashOnceFeed:
+            def __init__(self, auth, on_bar, demo):
+                self._stop_requested = False
+
+            @property
+            def was_stopped(self):
+                return self._stop_requested
+
+            async def run(self, symbol):
+                nonlocal call_count
+                call_count += 1
+                if call_count == 1:
+                    raise ConnectionError("ws died")
+                self._stop_requested = True
+
+        orch._feed_class = CrashOnceFeed
+        await orch.run()
+        assert call_count == 2
+
+    async def test_max_reconnects_exhausted(self):
+        """After ORCHESTRATOR_MAX_RECONNECTS failures -> session ends with notification."""
+        orch = build_orchestrator()
+        orch._notify = MagicMock()
+        orch.ORCHESTRATOR_MAX_RECONNECTS = 2
+        orch.ORCHESTRATOR_BACKOFF_INITIAL = 0.01
+        orch.ORCHESTRATOR_BACKOFF_MAX = 0.01
+        orch._feed_class = _make_feed_class(was_stopped=False)
+
+        await orch.run()
+
+        # Should have notified about exhaustion
+        calls = [str(c) for c in orch._notify.call_args_list]
+        assert any("Exhausted" in c for c in calls)
