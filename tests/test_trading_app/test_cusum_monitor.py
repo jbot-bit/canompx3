@@ -68,3 +68,62 @@ def test_cusum_lower_sigma_triggers_alarm_sooner():
     # Sensitive (lower sigma) should alarm first
     assert sensitive.alarm_triggered is True
     assert conservative.alarm_triggered is False
+
+
+def test_std_r_calibrated_per_strategy():
+    """CUSUM std_r must be computed from win_rate + rr_target, not hardcoded 1.0."""
+    from trading_app.live.performance_monitor import PerformanceMonitor
+    from trading_app.portfolio import PortfolioStrategy
+
+    s = PortfolioStrategy(
+        strategy_id="TEST_RR3",
+        instrument="MGC",
+        orb_label="CME_REOPEN",
+        entry_model="E2",
+        rr_target=3.0,
+        confirm_bars=1,
+        filter_type="ORB_G5",
+        expectancy_r=0.20,
+        win_rate=0.30,
+        sample_size=200,
+        sharpe_ratio=1.0,
+        max_drawdown_r=5.0,
+        median_risk_points=3.0,
+        stop_multiplier=1.0,
+        source="test",
+        weight=1.0,
+    )
+    monitor = PerformanceMonitor([s])
+    cusum = monitor.get_cusum("TEST_RR3")
+    # std_r for WR=0.30, RR=3.0, ExpR=0.20:
+    # sqrt(0.30*(3.0-0.20)^2 + 0.70*(-1-0.20)^2) ≈ 1.764
+    assert cusum.std_r > 1.5, f"std_r={cusum.std_r} — should be ~1.76, not 1.0"
+    assert cusum.std_r < 2.0
+
+
+def test_std_r_rr1_stays_near_one():
+    """RR1.0 strategies should have std_r ≈ 1.0 (validates formula doesn't break them)."""
+    from trading_app.live.performance_monitor import PerformanceMonitor
+    from trading_app.portfolio import PortfolioStrategy
+
+    s = PortfolioStrategy(
+        strategy_id="TEST_RR1",
+        instrument="MGC",
+        orb_label="CME_REOPEN",
+        entry_model="E2",
+        rr_target=1.0,
+        confirm_bars=1,
+        filter_type="ORB_G5",
+        expectancy_r=0.05,
+        win_rate=0.55,
+        sample_size=200,
+        sharpe_ratio=1.0,
+        max_drawdown_r=5.0,
+        median_risk_points=3.0,
+        stop_multiplier=1.0,
+        source="test",
+        weight=1.0,
+    )
+    monitor = PerformanceMonitor([s])
+    cusum = monitor.get_cusum("TEST_RR1")
+    assert 0.9 < cusum.std_r < 1.1

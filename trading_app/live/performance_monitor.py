@@ -6,6 +6,7 @@ PortfolioStrategy has .strategy_id and .expectancy_r. LiveStrategySpec does not.
 """
 
 import logging
+import math
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 
@@ -14,6 +15,15 @@ from trading_app.portfolio import PortfolioStrategy
 from .cusum_monitor import CUSUMMonitor
 
 log = logging.getLogger(__name__)
+
+
+def _compute_std_r(win_rate: float, rr_target: float, expectancy_r: float) -> float:
+    """Theoretical std of R outcomes for a fixed-RR strategy.
+
+    Wins pay +RR, losses cost -1.0. Formula is binary outcome variance.
+    @research-source: binary outcome variance for fixed risk-reward
+    """
+    return math.sqrt(win_rate * (rr_target - expectancy_r) ** 2 + (1 - win_rate) * (-1.0 - expectancy_r) ** 2)
 
 
 @dataclass
@@ -46,7 +56,7 @@ class PerformanceMonitor:
         self._monitors: dict[str, CUSUMMonitor] = {
             s.strategy_id: CUSUMMonitor(
                 expected_r=s.expectancy_r,
-                std_r=1.0,
+                std_r=_compute_std_r(s.win_rate, s.rr_target, s.expectancy_r),
                 threshold=4.0,
             )
             for s in strategies
