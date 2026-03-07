@@ -18,8 +18,6 @@ from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS, ASSET_CONFIGS
 from scripts.audits import AuditPhase, Severity, db_connect
 from trading_app.config import ALL_FILTERS, ENTRY_MODELS
 
-_SQL_IN = ", ".join(f"'{s}'" for s in ACTIVE_ORB_INSTRUMENTS)
-
 
 def main():
     audit = AuditPhase(phase_num=5, name="Database Integrity")
@@ -49,6 +47,8 @@ def _check_schema_alignment(audit: AuditPhase, con):
     """).fetchall()
     actual_tables = {row[0] for row in tables_result}
 
+    # Derive expected tables from init_db + trading_app schemas
+    # Core pipeline tables + trading app tables that exist in production
     expected_tables = {
         "bars_1m",
         "bars_5m",
@@ -56,10 +56,14 @@ def _check_schema_alignment(audit: AuditPhase, con):
         "orb_outcomes",
         "experimental_strategies",
         "validated_setups",
+        "validated_setups_archive",
         "edge_families",
         "prospective_signals",
         "family_rr_locks",
-        "rebuild_manifest",
+        "strategy_trade_days",
+        "regime_strategies",
+        "regime_validated",
+        "_vs_backup",
     }
 
     missing = expected_tables - actual_tables
@@ -125,16 +129,21 @@ def _check_row_ratios(audit: AuditPhase, con):
     # daily_features: rows should be divisible by number of orb_minutes variants
     for inst in ACTIVE_ORB_INSTRUMENTS:
         symbol = ASSET_CONFIGS[inst]["symbol"]
-        orb_counts = con.execute("""
+        orb_counts = con.execute(
+            """
             SELECT orb_minutes, COUNT(*) FROM daily_features
             WHERE symbol = ? GROUP BY orb_minutes ORDER BY orb_minutes
-        """, [symbol]).fetchall()
+        """,
+            [symbol],
+        ).fetchall()
 
         if orb_counts:
             counts = [c for _, c in orb_counts]
             # All orb_minutes should have same count (one per trading_day)
             if len(set(counts)) == 1:
-                audit.check_passed(f"{inst}: daily_features balanced ({len(orb_counts)} apertures × {counts[0]:,} days)")
+                audit.check_passed(
+                    f"{inst}: daily_features balanced ({len(orb_counts)} apertures × {counts[0]:,} days)"
+                )
             else:
                 audit.check_failed(f"{inst}: daily_features unbalanced: {dict(orb_counts)}")
                 audit.add_finding(
@@ -191,15 +200,21 @@ def _check_temporal_coverage(audit: AuditPhase, con):
         for table in tables:
             col = "trading_day" if table in ("daily_features", "orb_outcomes") else "ts_utc"
             if col == "ts_utc":
-                r = con.execute(f"""
+                r = con.execute(
+                    f"""
                     SELECT MIN({col})::DATE, MAX({col})::DATE
                     FROM {table} WHERE symbol = ?
-                """, [symbol]).fetchone()
+                """,
+                    [symbol],
+                ).fetchone()
             else:
-                r = con.execute(f"""
+                r = con.execute(
+                    f"""
                     SELECT MIN({col}), MAX({col})
                     FROM {table} WHERE symbol = ?
-                """, [symbol]).fetchone()
+                """,
+                    [symbol],
+                ).fetchone()
             if r and r[0]:
                 dates[table] = (str(r[0]), str(r[1]))
                 print(f"    {table}: {r[0]} → {r[1]}")

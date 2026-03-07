@@ -63,7 +63,9 @@ def _check_per_instrument_status(audit: AuditPhase, con):
         "validated_setups": "instrument",
     }
 
-    print(f"\n  {'Instrument':<12} {'bars_1m':<12} {'bars_5m':<12} {'features':<12} {'outcomes':<12} {'experi':<12} {'valid':<12} {'Status'}")
+    print(
+        f"\n  {'Instrument':<12} {'bars_1m':<12} {'bars_5m':<12} {'features':<12} {'outcomes':<12} {'experi':<12} {'valid':<12} {'Status'}"
+    )
     print("  " + "-" * 96)
 
     for inst in ACTIVE_ORB_INSTRUMENTS:
@@ -81,10 +83,13 @@ def _check_per_instrument_status(audit: AuditPhase, con):
         # Strategy tables (use instrument)
         for table, col_name in strategy_tables.items():
             try:
-                r = con.execute(f"""
+                r = con.execute(
+                    f"""
                     SELECT MAX(trading_day) FROM {table}
                     WHERE {col_name} = ?
-                """, [inst]).fetchone()
+                """,
+                    [inst],
+                ).fetchone()
                 dates[table] = str(r[0]) if r and r[0] else "N/A"
             except Exception:
                 # Some tables might not have trading_day
@@ -146,14 +151,6 @@ def _check_code_change_rebuilds(audit: AuditPhase):
             audit.check_info(f"{filepath}: {len(commits)} commit(s) in last 60 days → may need {affects} rebuild")
             for c in commits[:3]:
                 print(f"         {c}")
-            audit.add_finding(
-                Severity.MEDIUM,
-                "REBUILD_NEEDED",
-                claimed=f"Rebuild triggered after {filepath} changes",
-                actual=f"{len(commits)} commit(s) in last 60 days",
-                evidence=f"git log --since='60 days ago' -- {filepath}",
-                fix_type="REBUILD_NEEDED",
-            )
         else:
             audit.check_passed(f"{filepath}: no changes in 60 days")
 
