@@ -10,7 +10,7 @@ When SessionOrchestrator.__init__ gains new attributes, add them here once.
 import asyncio
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -677,7 +677,7 @@ class TestKillSwitch:
 
         orch._last_bar_at = datetime.now(UTC) - timedelta(seconds=200)
         orch.engine.on_bar.return_value = []
-        orch._check_trading_day_rollover = MagicMock()
+        orch._check_trading_day_rollover = AsyncMock()
 
         bar = FakeBar()
         with patch.object(logging.getLogger("trading_app.live.session_orchestrator"), "critical") as mock_crit:
@@ -879,3 +879,55 @@ class TestNotifications:
         # Should have been called with KILL SWITCH message
         calls = [str(c) for c in orch._notify.call_args_list]
         assert any("KILL SWITCH" in c for c in calls)
+
+
+# ---------------------------------------------------------------------------
+# TRADING DAY ROLLOVER tests
+# ---------------------------------------------------------------------------
+
+
+class TestTradingDayRollover:
+    async def test_rollover_submits_broker_exit(self):
+        """Trading day rollover -> _handle_event called -> broker exit submitted."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._handle_event = AsyncMock()
+        orch.trading_day = date(2026, 3, 6)
+
+        exit_event = _exit_event(price=2355.0, pnl_r=1.0)
+        orch.engine.on_trading_day_end.return_value = [exit_event]
+
+        bar_ts = datetime(2026, 3, 6, 23, 1, tzinfo=UTC)
+        with patch.object(SessionOrchestrator, "_build_daily_features_row", return_value={}):
+            await orch._check_trading_day_rollover(bar_ts)
+
+        orch._handle_event.assert_awaited_once_with(exit_event)
+        assert orch.trading_day == date(2026, 3, 7)
+
+    async def test_rollover_resets_engine_state(self):
+        """After rollover: new trading_day, fresh engine, fresh orb_builder."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._handle_event = AsyncMock()
+        orch.engine.on_trading_day_end.return_value = []
+        orch.trading_day = date(2026, 3, 6)
+
+        bar_ts = datetime(2026, 3, 6, 23, 1, tzinfo=UTC)
+        with patch.object(SessionOrchestrator, "_build_daily_features_row", return_value={}):
+            await orch._check_trading_day_rollover(bar_ts)
+
+        assert orch.trading_day == date(2026, 3, 7)
+        orch.engine.on_trading_day_start.assert_called_once()
+        orch.monitor.reset_daily.assert_called_once()
+        orch.risk_mgr.daily_reset.assert_called_once()
+
+    async def test_rollover_no_action_same_day(self):
+        """Same trading day -> no rollover action."""
+        orch = build_orchestrator()
+        orch.engine.on_trading_day_end.return_value = []
+        orch.trading_day = date(2026, 3, 7)
+
+        # 10 AM Brisbane = midnight UTC -> same trading day March 7
+        bar_ts = datetime(2026, 3, 7, 0, 0, tzinfo=UTC)
+        await orch._check_trading_day_rollover(bar_ts)
+
+        # No EOD call since we didn't roll
+        orch.engine.on_trading_day_end.assert_not_called()

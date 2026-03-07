@@ -297,11 +297,14 @@ class SessionOrchestrator:
         except OSError as e:
             log.warning("Could not write signal record: %s", e)
 
-    def _check_trading_day_rollover(self, bar_ts_utc) -> None:
+    async def _check_trading_day_rollover(self, bar_ts_utc) -> None:
         """Detect 9:00 AM Brisbane boundary crossing and roll to new trading day.
 
         Without this, a session running past 9 AM Brisbane would continue using
         yesterday's ORB windows, calendar flags, daily P&L, and risk limits.
+
+        Uses _handle_event() for each EOD close so broker orders are submitted
+        (not just engine-side closes).
         """
         _bris = ZoneInfo("Australia/Brisbane")
         bris_time = bar_ts_utc.astimezone(_bris)
@@ -315,15 +318,18 @@ class SessionOrchestrator:
 
         log.info("Trading day rollover: %s -> %s", self.trading_day, bar_trading_day)
 
-        # Close previous day's open positions
+        # Close previous day's open positions via _handle_event (submits broker orders)
         eod_events = self.engine.on_trading_day_end()
         for event in eod_events:
-            strategy = self._strategy_map.get(event.strategy_id)
-            if strategy and event.event_type in ("EXIT", "SCRATCH"):
-                entry_price = self._positions.best_entry_price(event.strategy_id, event.price)
-                self._positions.pop(event.strategy_id)
-                self._record_exit(event, entry_price)
-                log.info("EOD rollover close: %s @ %.2f (pnl_r=%s)", event.strategy_id, event.price, event.pnl_r)
+            try:
+                await self._handle_event(event)
+            except Exception as e:
+                log.error(
+                    "Rollover close failed for %s (%s) — position may remain open: %s",
+                    event.strategy_id,
+                    event.event_type,
+                    e,
+                )
 
         # Start new trading day
         self.trading_day = bar_trading_day
@@ -356,7 +362,7 @@ class SessionOrchestrator:
             return
 
         # Check if we've crossed the 9:00 AM Brisbane boundary
-        self._check_trading_day_rollover(bar.ts_utc)
+        await self._check_trading_day_rollover(bar.ts_utc)
 
         self.orb_builder.on_bar(bar)
 
