@@ -1549,6 +1549,9 @@ def check_old_session_names() -> list[str]:
         "scripts/tools/explore.py",
         "scripts/tools/profile_1000_runners.py",
         "pipeline/check_drift.py",  # this file defines the old names
+        "scripts/audits/phase_3_docs.py",  # detects old names in rule files
+        "scripts/audits/phase_8_test_suite.py",  # detects old names in tests
+        "scripts/audits/phase_9_research.py",  # detects old names in research scripts
     }
     # Active research scripts that were fixed — NOT frozen
     active_research = {

@@ -51,14 +51,18 @@ def _check_claude_md(audit: AuditPhase):
     content = _read_file(PROJECT_ROOT / "CLAUDE.md")
     if not content:
         audit.check_failed("CLAUDE.md not found")
-        audit.add_finding(Severity.CRITICAL, "DOC_STALE", "CLAUDE.md exists", "Not found", str(PROJECT_ROOT / "CLAUDE.md"), "DOC_FIX")
+        audit.add_finding(
+            Severity.CRITICAL, "DOC_STALE", "CLAUDE.md exists", "Not found", str(PROJECT_ROOT / "CLAUDE.md"), "DOC_FIX"
+        )
         return
 
     # Active vs dead instruments
     for inst in ACTIVE_ORB_INSTRUMENTS:
         if inst not in content:
             audit.check_failed(f"CLAUDE.md missing active instrument: {inst}")
-            audit.add_finding(Severity.MEDIUM, "DOC_STALE", f"{inst} mentioned in CLAUDE.md", "Not found", "CLAUDE.md", "DOC_FIX")
+            audit.add_finding(
+                Severity.MEDIUM, "DOC_STALE", f"{inst} mentioned in CLAUDE.md", "Not found", "CLAUDE.md", "DOC_FIX"
+            )
 
     for inst in DEAD_ORB_INSTRUMENTS:
         if inst in content:
@@ -68,17 +72,17 @@ def _check_claude_md(audit: AuditPhase):
 
     audit.check_passed("CLAUDE.md references active instruments")
 
-    # Classification thresholds
-    if "100" in content and "CORE" in content:
-        audit.check_passed("CLAUDE.md mentions CORE threshold (100)")
+    # Classification thresholds — match the specific table patterns
+    if ">= 100" in content or ">=100" in content:
+        audit.check_passed("CLAUDE.md documents CORE threshold (>= 100)")
     else:
-        audit.check_failed("CLAUDE.md missing CORE threshold 100")
+        audit.check_failed("CLAUDE.md missing CORE threshold >= 100")
         audit.add_finding(Severity.MEDIUM, "DOC_STALE", "CORE >= 100 documented", "Not found", "CLAUDE.md", "DOC_FIX")
 
-    if "30" in content and "REGIME" in content:
-        audit.check_passed("CLAUDE.md mentions REGIME threshold (30)")
+    if "30-99" in content or ("30" in content and "REGIME" in content and "99" in content):
+        audit.check_passed("CLAUDE.md documents REGIME threshold (30-99)")
     else:
-        audit.check_failed("CLAUDE.md missing REGIME threshold 30")
+        audit.check_failed("CLAUDE.md missing REGIME threshold 30-99")
 
     # Source contract mapping
     mappings = {"GC": "MGC", "ES": "MES", "RTY": "M2K"}
@@ -96,7 +100,14 @@ def _check_trading_rules(audit: AuditPhase):
     content = _read_file(PROJECT_ROOT / "TRADING_RULES.md")
     if not content:
         audit.check_failed("TRADING_RULES.md not found")
-        audit.add_finding(Severity.CRITICAL, "DOC_STALE", "TRADING_RULES.md exists", "Not found", str(PROJECT_ROOT / "TRADING_RULES.md"), "DOC_FIX")
+        audit.add_finding(
+            Severity.CRITICAL,
+            "DOC_STALE",
+            "TRADING_RULES.md exists",
+            "Not found",
+            str(PROJECT_ROOT / "TRADING_RULES.md"),
+            "DOC_FIX",
+        )
         return
 
     # Session names — all SESSION_CATALOG keys should appear
@@ -121,7 +132,9 @@ def _check_trading_rules(audit: AuditPhase):
     for em in ENTRY_MODELS:
         if em not in content:
             audit.check_failed(f"TRADING_RULES.md missing entry model: {em}")
-            audit.add_finding(Severity.HIGH, "DOC_STALE", f"{em} documented", "Not found", "TRADING_RULES.md", "DOC_FIX")
+            audit.add_finding(
+                Severity.HIGH, "DOC_STALE", f"{em} documented", "Not found", "TRADING_RULES.md", "DOC_FIX"
+            )
     audit.check_passed(f"Entry models {ENTRY_MODELS} documented")
 
     # E0 should be mentioned as dead/purged
@@ -152,7 +165,14 @@ def _check_research_rules(audit: AuditPhase):
     content = _read_file(PROJECT_ROOT / "RESEARCH_RULES.md")
     if not content:
         audit.check_failed("RESEARCH_RULES.md not found")
-        audit.add_finding(Severity.HIGH, "DOC_STALE", "RESEARCH_RULES.md exists", "Not found", str(PROJECT_ROOT / "RESEARCH_RULES.md"), "DOC_FIX")
+        audit.add_finding(
+            Severity.HIGH,
+            "DOC_STALE",
+            "RESEARCH_RULES.md exists",
+            "Not found",
+            str(PROJECT_ROOT / "RESEARCH_RULES.md"),
+            "DOC_FIX",
+        )
         return
 
     # Sample size thresholds

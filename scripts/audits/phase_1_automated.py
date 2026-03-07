@@ -143,7 +143,12 @@ def main():
 
     # Print informational stats from integrity output (checks 7-17)
     for line in combined.splitlines():
-        if line.startswith("--- 7.") or line.startswith("--- 8.") or line.startswith("--- 9.") or line.startswith("--- 1") and ("ROW" in line or "DATE" in line or "FDR" in line or "TABLE" in line):
+        if (
+            line.startswith("--- 7.")
+            or line.startswith("--- 8.")
+            or line.startswith("--- 9.")
+            or line.startswith("--- 1")
+        ) and ("ROW" in line or "DATE" in line or "FDR" in line or "TABLE" in line):
             print(f"\n  [INFO] {line.strip()}")
 
     # ── 1E: Behavioral Audit ──

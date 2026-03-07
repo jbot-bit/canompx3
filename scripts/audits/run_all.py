@@ -91,7 +91,9 @@ def main():
 
         if rc == 1:
             print(f"\n  *** CRITICAL failure in Phase {phase_num} ({name}) — stopping ***")
-            print(f"  Fix the CRITICAL issue(s), then resume with: python scripts/audits/run_all.py --start {phase_num}")
+            print(
+                f"  Fix the CRITICAL issue(s), then resume with: python scripts/audits/run_all.py --start {phase_num}"
+            )
             break
         elif rc == -1:
             print(f"  Phase {phase_num} skipped (script not found)")

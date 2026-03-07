@@ -149,10 +149,7 @@ def _check_cost_model(audit: AuditPhase):
                 fix_type="CONFIG_FIX",
             )
         else:
-            audit.check_passed(
-                f"{inst}: ${spec.total_friction:.2f}/RT "
-                f"(pv={spec.point_value}, tick={spec.tick_size})"
-            )
+            audit.check_passed(f"{inst}: ${spec.total_friction:.2f}/RT (pv={spec.point_value}, tick={spec.tick_size})")
 
     # SESSION_SLIPPAGE_MULT sessions are valid
     catalog_keys = set(SESSION_CATALOG.keys())
@@ -210,9 +207,7 @@ def _check_dst_sessions(audit: AuditPhase):
             )
 
     all_valid = all(
-        entry.get("resolver") in DYNAMIC_ORB_RESOLVERS
-        for entry in SESSION_CATALOG.values()
-        if entry.get("resolver")
+        entry.get("resolver") in DYNAMIC_ORB_RESOLVERS for entry in SESSION_CATALOG.values() if entry.get("resolver")
     )
     if all_valid:
         audit.check_passed("All sessions have valid resolvers")
@@ -223,10 +218,12 @@ def _check_dst_sessions(audit: AuditPhase):
         (date(2025, 1, 15), "winter"),
     ]
     for td, season in test_dates:
+        season_ok = True
         for name, resolver_fn in DYNAMIC_ORB_RESOLVERS.items():
             try:
                 result = resolver_fn(td)
                 if not (isinstance(result, tuple) and len(result) == 2):
+                    season_ok = False
                     audit.check_failed(f"{name}({td}): returned {type(result)} not tuple(h, m)")
                     audit.add_finding(
                         Severity.HIGH,
@@ -237,6 +234,7 @@ def _check_dst_sessions(audit: AuditPhase):
                         fix_type="CODE_FIX",
                     )
             except Exception as e:
+                season_ok = False
                 audit.check_failed(f"{name}({td}): raised {e}")
                 audit.add_finding(
                     Severity.HIGH,
@@ -246,7 +244,8 @@ def _check_dst_sessions(audit: AuditPhase):
                     evidence=f"DYNAMIC_ORB_RESOLVERS['{name}']({td})",
                     fix_type="CODE_FIX",
                 )
-        audit.check_passed(f"All resolvers return valid (h, m) for {season} ({td})")
+        if season_ok:
+            audit.check_passed(f"All resolvers return valid (h, m) for {season} ({td})")
 
     # DOW_MISALIGNED_SESSIONS should only contain NYSE_OPEN
     if set(DOW_MISALIGNED_SESSIONS.keys()) == {"NYSE_OPEN"}:

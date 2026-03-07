@@ -102,10 +102,13 @@ def _check_live_config_coherence(audit: AuditPhase, con):
     # Verify families exist in validated_setups
     valid_issues = 0
     for spec in LIVE_PORTFOLIO:
-        r = con.execute("""
+        r = con.execute(
+            """
             SELECT COUNT(*) FROM validated_setups
             WHERE orb_label = ? AND entry_model = ? AND filter_type = ? AND status = 'active'
-        """, [spec.orb_label, spec.entry_model, spec.filter_type]).fetchone()[0]
+        """,
+            [spec.orb_label, spec.entry_model, spec.filter_type],
+        ).fetchone()[0]
         if r == 0:
             valid_issues += 1
             audit.check_failed(f"{spec.family_id}: no matching active validated_setups")
