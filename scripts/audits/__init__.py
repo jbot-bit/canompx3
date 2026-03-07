@@ -8,7 +8,6 @@ Pattern follows existing audit_integrity.py / audit_behavioral.py.
 import sys
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
 
 import duckdb
 

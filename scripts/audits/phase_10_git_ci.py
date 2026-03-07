@@ -7,7 +7,6 @@ Checks git hooks, CI pipeline, and repo cleanliness.
 """
 
 import os
-import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -15,7 +14,7 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from scripts.audits import AuditPhase, Severity, PROJECT_ROOT
+from scripts.audits import PROJECT_ROOT, AuditPhase, Severity
 
 
 def _git_config(key: str) -> str:
@@ -50,7 +49,7 @@ def main():
     print("\n--- 10A. Git Hooks ---")
     pre_commit = PROJECT_ROOT / ".githooks" / "pre-commit"
     if pre_commit.exists():
-        audit.check_passed(f".githooks/pre-commit exists")
+        audit.check_passed(".githooks/pre-commit exists")
         # Check executable
         if os.access(pre_commit, os.X_OK):
             audit.check_passed(".githooks/pre-commit is executable")
@@ -147,8 +146,8 @@ def main():
     # Uncommitted changes
     status = _git_status()
     if status:
-        modified = [l for l in status.splitlines() if l.startswith(" M") or l.startswith("M ")]
-        untracked = [l for l in status.splitlines() if l.startswith("??")]
+        modified = [line for line in status.splitlines() if line.startswith(" M") or line.startswith("M ")]
+        untracked = [line for line in status.splitlines() if line.startswith("??")]
         if modified:
             audit.check_info(f"{len(modified)} modified file(s)")
             for m in modified[:5]:

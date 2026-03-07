@@ -7,7 +7,6 @@ Validates CLAUDE.md, TRADING_RULES.md, RESEARCH_RULES.md, ROADMAP.md,
 REPO_MAP.md, .claude/rules/, and docs/specs/ against canonical code sources.
 """
 
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -15,13 +14,12 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS, ASSET_CONFIGS, DEAD_ORB_INSTRUMENTS
+from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS, DEAD_ORB_INSTRUMENTS
 from pipeline.cost_model import COST_SPECS
 from pipeline.dst import SESSION_CATALOG
 from pipeline.paths import PROJECT_ROOT
-from trading_app.config import CORE_MIN_SAMPLES, ENTRY_MODELS, REGIME_MIN_SAMPLES
-
 from scripts.audits import AuditPhase, Severity
+from trading_app.config import CORE_MIN_SAMPLES, ENTRY_MODELS, REGIME_MIN_SAMPLES
 
 
 def _read_file(path: Path) -> str:
@@ -68,7 +66,7 @@ def _check_claude_md(audit: AuditPhase):
             # Just check it exists (it should be mentioned in the dead list)
             pass
 
-    audit.check_passed(f"CLAUDE.md references active instruments")
+    audit.check_passed("CLAUDE.md references active instruments")
 
     # Classification thresholds
     if "100" in content and "CORE" in content:

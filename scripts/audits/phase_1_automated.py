@@ -14,9 +14,10 @@ import sys
 
 sys.stdout.reconfigure(encoding="utf-8")
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from scripts.audits import AuditPhase, Severity, PROJECT_ROOT
+from scripts.audits import PROJECT_ROOT, AuditPhase, Severity
 
 
 def _run_tool(cmd: list[str], timeout: int = 300) -> tuple[int, str, str]:
@@ -135,16 +136,14 @@ def main():
             Severity.CRITICAL,
             "DATA_INTEGRITY_VIOLATION",
             claimed="All integrity checks pass",
-            actual=f"Integrity audit failed",
+            actual="Integrity audit failed",
             evidence=f"python scripts/tools/audit_integrity.py → exit {rc}",
             fix_type="DATA_FIX",
         )
 
     # Print informational stats from integrity output (checks 7-17)
     for line in combined.splitlines():
-        if line.startswith("--- 7.") or line.startswith("--- 8.") or line.startswith("--- 9."):
-            print(f"\n  [INFO] {line.strip()}")
-        elif line.startswith("--- 1") and ("ROW" in line or "DATE" in line or "FDR" in line or "TABLE" in line):
+        if line.startswith("--- 7.") or line.startswith("--- 8.") or line.startswith("--- 9.") or line.startswith("--- 1") and ("ROW" in line or "DATE" in line or "FDR" in line or "TABLE" in line):
             print(f"\n  [INFO] {line.strip()}")
 
     # ── 1E: Behavioral Audit ──

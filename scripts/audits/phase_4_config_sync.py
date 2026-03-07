@@ -11,19 +11,11 @@ import sys
 
 sys.stdout.reconfigure(encoding="utf-8")
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS, ASSET_CONFIGS
 from pipeline.dst import SESSION_CATALOG
-from trading_app.config import (
-    ALL_FILTERS,
-    CORE_MIN_SAMPLES,
-    ENTRY_MODELS,
-    ORB_DURATION_MINUTES,
-    REGIME_MIN_SAMPLES,
-)
-from trading_app.outcome_builder import CONFIRM_BARS_OPTIONS, RR_TARGETS
-
 from scripts.audits import AuditPhase, Severity, db_connect
 
 # Import MCP allowlists
@@ -34,6 +26,14 @@ from trading_app.ai.sql_adapter import (
     VALID_ORB_LABELS,
     VALID_RR_TARGETS,
 )
+from trading_app.config import (
+    ALL_FILTERS,
+    CORE_MIN_SAMPLES,
+    ENTRY_MODELS,
+    ORB_DURATION_MINUTES,
+    REGIME_MIN_SAMPLES,
+)
+from trading_app.outcome_builder import CONFIRM_BARS_OPTIONS, RR_TARGETS
 
 
 def main():
@@ -185,14 +185,14 @@ def _check_grid_sync(audit: AuditPhase):
 
     # RR_TARGETS
     expected_rr = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0]
-    if RR_TARGETS == expected_rr:
+    if expected_rr == RR_TARGETS:
         audit.check_passed(f"RR_TARGETS = {RR_TARGETS}")
     else:
         audit.check_info(f"RR_TARGETS = {RR_TARGETS}")
 
     # CB_LEVELS
     expected_cb = [1, 2, 3, 4, 5]
-    if CONFIRM_BARS_OPTIONS == expected_cb:
+    if expected_cb == CONFIRM_BARS_OPTIONS:
         audit.check_passed(f"CONFIRM_BARS_OPTIONS = {CONFIRM_BARS_OPTIONS}")
     else:
         audit.check_info(f"CONFIRM_BARS_OPTIONS = {CONFIRM_BARS_OPTIONS}")
@@ -235,7 +235,7 @@ def _check_mcp_allowlists(audit: AuditPhase):
 
     # VALID_ENTRY_MODELS should match ENTRY_MODELS
     config_set = set(ENTRY_MODELS)
-    if VALID_ENTRY_MODELS == config_set:
+    if config_set == VALID_ENTRY_MODELS:
         audit.check_passed(f"VALID_ENTRY_MODELS matches ENTRY_MODELS: {sorted(config_set)}")
     else:
         diff = VALID_ENTRY_MODELS.symmetric_difference(config_set)
@@ -251,7 +251,7 @@ def _check_mcp_allowlists(audit: AuditPhase):
 
     # VALID_INSTRUMENTS should match ACTIVE_ORB_INSTRUMENTS
     active_set = set(ACTIVE_ORB_INSTRUMENTS)
-    if VALID_INSTRUMENTS == active_set:
+    if active_set == VALID_INSTRUMENTS:
         audit.check_passed(f"VALID_INSTRUMENTS matches ACTIVE_ORB_INSTRUMENTS: {sorted(active_set)}")
     else:
         diff = VALID_INSTRUMENTS.symmetric_difference(active_set)
@@ -267,7 +267,7 @@ def _check_mcp_allowlists(audit: AuditPhase):
 
     # VALID_ORB_LABELS should match SESSION_CATALOG keys
     catalog_set = set(SESSION_CATALOG.keys())
-    if VALID_ORB_LABELS == catalog_set:
+    if catalog_set == VALID_ORB_LABELS:
         audit.check_passed(f"VALID_ORB_LABELS matches SESSION_CATALOG: {len(catalog_set)} sessions")
     else:
         diff = VALID_ORB_LABELS.symmetric_difference(catalog_set)
@@ -283,7 +283,7 @@ def _check_mcp_allowlists(audit: AuditPhase):
 
     # VALID_RR_TARGETS should match RR_TARGETS
     rr_set = set(RR_TARGETS)
-    if VALID_RR_TARGETS == rr_set:
+    if rr_set == VALID_RR_TARGETS:
         audit.check_passed(f"VALID_RR_TARGETS matches RR_TARGETS: {sorted(rr_set)}")
     else:
         diff = VALID_RR_TARGETS.symmetric_difference(rr_set)
@@ -299,7 +299,7 @@ def _check_mcp_allowlists(audit: AuditPhase):
 
     # VALID_CONFIRM_BARS should match CONFIRM_BARS_OPTIONS
     cb_set = set(CONFIRM_BARS_OPTIONS)
-    if VALID_CONFIRM_BARS == cb_set:
+    if cb_set == VALID_CONFIRM_BARS:
         audit.check_passed(f"VALID_CONFIRM_BARS matches CONFIRM_BARS_OPTIONS: {sorted(cb_set)}")
     else:
         diff = VALID_CONFIRM_BARS.symmetric_difference(cb_set)

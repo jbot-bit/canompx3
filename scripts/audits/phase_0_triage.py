@@ -14,7 +14,7 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from scripts.audits import AuditPhase, Severity, PROJECT_ROOT
+from scripts.audits import PROJECT_ROOT, AuditPhase, Severity
 
 
 def _git_log_since(paths: list[str], days: int = 30) -> list[str]:

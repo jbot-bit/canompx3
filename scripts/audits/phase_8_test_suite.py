@@ -14,9 +14,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from pipeline.paths import PROJECT_ROOT
-
 from scripts.audits import AuditPhase, Severity
-
 
 # Critical modules that MUST have tests (from SYSTEM_AUDIT.md Phase 8)
 CRITICAL_MODULES = [
