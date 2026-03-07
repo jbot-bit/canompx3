@@ -163,6 +163,7 @@ def build_orchestrator(components: FakeBrokerComponents | None = None) -> Sessio
     orch.orb_builder = MagicMock()
     orch.monitor = MagicMock()
     orch.monitor.record_trade.return_value = None
+    orch.monitor.daily_summary.return_value = {"n_trades": 0, "total_r": 0.0, "total_slippage_pts": 0.0}
     orch._positions = PositionTracker()
     orch._last_bar_at = None
     orch._kill_switch_fired = False
@@ -823,3 +824,58 @@ class TestCircuitBreaker:
         exit_failed = [c for c in calls if c.get("type") == "EXIT_FAILED"]
         assert len(exit_failed) == 1
         assert "broker dead" in exit_failed[0]["error"]
+
+
+# ---------------------------------------------------------------------------
+# NOTIFICATION tests
+# ---------------------------------------------------------------------------
+
+
+class TestNotifications:
+    def test_notify_never_raises(self):
+        """_notify() must swallow all exceptions."""
+        orch = build_orchestrator()
+        with patch("trading_app.live.notifications.notify", side_effect=Exception("boom")):
+            orch._notify("test")  # must not raise
+
+    def test_notify_calls_notify_module(self):
+        """_notify() delegates to notifications.notify()."""
+        orch = build_orchestrator()
+        with patch("trading_app.live.notifications.notify") as mock_notify:
+            orch._notify("hello world")
+            mock_notify.assert_called_once_with("MGC", "hello world")
+
+    def test_cusum_alarm_triggers_notify(self):
+        """CUSUM alarm from record_trade() triggers _notify()."""
+        orch = build_orchestrator()
+        orch._notify = MagicMock()
+        orch.monitor.record_trade.return_value = "CUSUM ALARM: test_strat"
+
+        event = _exit_event()
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.5, order_id=1)
+        orch._positions.on_entry_filled(STRATEGY_ID, 2350.5)
+
+        # Call _record_exit directly
+        orch._record_exit(event, entry_price=2350.5)
+
+        orch._notify.assert_called_once_with("CUSUM ALARM: test_strat")
+
+    def test_notify_skips_when_no_telegram(self):
+        """_notify() is a no-op when telegram module unavailable."""
+        orch = build_orchestrator()
+        # Patch the import to fail
+        with patch("trading_app.live.notifications.notify", side_effect=ImportError("no telegram")):
+            orch._notify("test")  # no crash
+
+    async def test_kill_switch_sends_notification(self):
+        """Kill switch fires -> _notify() called with KILL SWITCH message."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._notify = MagicMock()
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=1)
+        orch._positions.on_entry_filled(STRATEGY_ID, 2350.0)
+
+        await orch._emergency_flatten()
+
+        # Should have been called with KILL SWITCH message
+        calls = [str(c) for c in orch._notify.call_args_list]
+        assert any("KILL SWITCH" in c for c in calls)

@@ -115,6 +115,7 @@ class SessionOrchestrator:
                 orphans = self.positions.query_open(account_id)
                 if orphans:
                     log.critical("ORPHANED POSITIONS DETECTED on session start: %s", orphans)
+                    self._notify(f"ORPHAN DETECTED: {orphans}")
                     if not force_orphans:
                         raise RuntimeError(
                             f"Refusing to start: {len(orphans)} orphaned position(s) detected. "
@@ -173,6 +174,9 @@ class SessionOrchestrator:
 
         # Signal engine that a new trading day is starting
         self.engine.on_trading_day_start(self.trading_day, daily_features_row=daily_row)
+
+        mode = "SIGNAL" if signal_only else ("DEMO" if demo else "LIVE")
+        self._notify(f"Session started: {instrument} ({mode})")
 
     @staticmethod
     def _build_daily_features_row(trading_day: date, instrument: str) -> dict:
@@ -271,6 +275,15 @@ class SessionOrchestrator:
         )
         return row
 
+    def _notify(self, message: str) -> None:
+        """Send Telegram notification. Never raises — notifications must not kill the trading loop."""
+        try:
+            from trading_app.live.notifications import notify
+
+            notify(self.instrument, message)
+        except Exception:
+            pass
+
     def _write_signal_record(self, extra: dict) -> None:
         """Append a signal record to the JSONL file read by the Live Monitor UI."""
         record = {
@@ -329,9 +342,11 @@ class SessionOrchestrator:
             gap = (now - self._last_bar_at).total_seconds()
             if gap > 180:  # 3 minutes without a bar
                 log.critical("BAR HEARTBEAT: %.0fs since last bar — feed may be dead", gap)
+                self._notify(f"BAR HEARTBEAT: {gap:.0f}s since last bar — feed may be dead")
                 stale = self._positions.stale_positions(timeout_seconds=300)
                 if stale:
                     log.critical("STALE ORDERS: %s", [(s.strategy_id, s.state.value) for s in stale])
+                    self._notify(f"STALE ORDERS: {[(s.strategy_id, s.state.value) for s in stale]}")
         self._last_bar_at = now
 
         # Kill switch fired = we already emergency-flattened at the broker.
@@ -395,6 +410,7 @@ class SessionOrchestrator:
         alert = self.monitor.record_trade(record)
         if alert:
             log.warning(alert)
+            self._notify(alert)
 
     async def _handle_event(self, event) -> None:
         """
@@ -437,6 +453,7 @@ class SessionOrchestrator:
 
             if not self._circuit_breaker.should_allow_request():
                 log.critical("CIRCUIT BREAKER OPEN — skipping ENTRY for %s", event.strategy_id)
+                self._notify(f"CIRCUIT BREAKER OPEN — skipping ENTRY for {event.strategy_id}")
                 self._write_signal_record({"type": "CIRCUIT_BREAKER", "strategy_id": event.strategy_id})
                 return
 
@@ -524,10 +541,9 @@ class SessionOrchestrator:
             # Submit close order and capture exit fill
             # NOTE: exits NEVER blocked by circuit breaker — can't leave positions open
             if not self._circuit_breaker.should_allow_request():
-                log.critical(
-                    "CIRCUIT BREAKER OPEN — EXIT for %s submitted anyway (can't leave positions open)",
-                    event.strategy_id,
-                )
+                msg = f"CIRCUIT BREAKER OPEN — EXIT for {event.strategy_id} submitted anyway"
+                log.critical(msg)
+                self._notify(msg)
 
             self._positions.on_exit_sent(event.strategy_id)
             exit_spec = self.order_router.build_exit_spec(
@@ -541,7 +557,9 @@ class SessionOrchestrator:
                 self._circuit_breaker.record_success()
             except Exception as e:
                 self._circuit_breaker.record_failure()
-                log.critical("EXIT order FAILED for %s: %s — MANUAL CLOSE REQUIRED", event.strategy_id, e)
+                msg = f"EXIT order FAILED for {event.strategy_id}: {e} — MANUAL CLOSE REQUIRED"
+                log.critical(msg)
+                self._notify(msg)
                 self._write_signal_record({"type": "EXIT_FAILED", "strategy_id": event.strategy_id, "error": str(e)})
                 return
             order_id = result.get("order_id") if isinstance(result, dict) else result.order_id
@@ -606,11 +624,9 @@ class SessionOrchestrator:
         if not active:
             return
 
-        log.critical(
-            "*** KILL SWITCH *** Feed dead for >%.0fs with %d open position(s). Emergency flatten ALL positions.",
-            self.KILL_SWITCH_TIMEOUT,
-            len(active),
-        )
+        msg = f"KILL SWITCH: Feed dead >{self.KILL_SWITCH_TIMEOUT:.0f}s with {len(active)} open position(s). Emergency flatten ALL."
+        log.critical(msg)
+        self._notify(msg)
         self._write_signal_record(
             {
                 "type": "KILL_SWITCH",
@@ -620,10 +636,9 @@ class SessionOrchestrator:
         )
 
         if self.signal_only or self.order_router is None:
-            log.critical(
-                "*** MANUAL CLOSE REQUIRED *** Signal-only mode — cannot auto-flatten. Close these positions NOW: %s",
-                [r.strategy_id for r in active],
-            )
+            msg = f"MANUAL CLOSE REQUIRED: Signal-only mode — flatten {[r.strategy_id for r in active]} NOW"
+            log.critical(msg)
+            self._notify(msg)
             return
 
         loop = asyncio.get_running_loop()
@@ -639,29 +654,20 @@ class SessionOrchestrator:
                     )
                     result = await loop.run_in_executor(None, self.order_router.submit, exit_spec)
                     order_id = result.get("order_id") if isinstance(result, dict) else result.order_id
-                    log.critical(
-                        "KILL SWITCH FLATTEN: %s %s → orderId=%s (attempt %d)",
-                        record.strategy_id,
-                        direction,
-                        order_id,
-                        attempt + 1,
-                    )
+                    msg = f"KILL SWITCH FLATTEN: {record.strategy_id} {direction} → orderId={order_id} (attempt {attempt + 1})"
+                    log.critical(msg)
+                    self._notify(msg)
                     self._positions.on_exit_filled(record.strategy_id)
                     break
                 except Exception as e:
-                    log.critical(
-                        "KILL SWITCH FLATTEN FAILED: %s attempt %d/3 — %s",
-                        record.strategy_id,
-                        attempt + 1,
-                        e,
-                    )
+                    msg = f"KILL SWITCH FLATTEN FAILED: {record.strategy_id} attempt {attempt + 1}/3 — {e}"
+                    log.critical(msg)
+                    self._notify(msg)
                     await asyncio.sleep(2**attempt)
             else:
-                log.critical(
-                    "*** MANUAL CLOSE REQUIRED *** Failed to flatten %s after 3 attempts. "
-                    "Close this position IMMEDIATELY on your broker platform.",
-                    record.strategy_id,
-                )
+                msg = f"MANUAL CLOSE REQUIRED: Failed to flatten {record.strategy_id} after 3 attempts"
+                log.critical(msg)
+                self._notify(msg)
 
     async def _watchdog(self) -> None:
         """Independent watchdog task — fires kill switch if feed goes silent.
@@ -737,22 +743,23 @@ class SessionOrchestrator:
                     auth_ok = True
                     break
                 except Exception as e:
-                    log.critical("Auth refresh attempt %d/3 failed before EOD close: %s", attempt + 1, e)
+                    msg = f"Auth refresh attempt {attempt + 1}/3 failed before EOD close: {e}"
+                    log.critical(msg)
+                    self._notify(msg)
                     import time
 
                     time.sleep(2**attempt)
             if not auth_ok:
-                log.critical(
-                    "*** MANUAL CLOSE REQUIRED *** Auth failed after 3 attempts. %d position(s) may remain open: %s",
-                    len(eod_events),
-                    [e.strategy_id for e in eod_events],
-                )
+                msg = f"MANUAL CLOSE REQUIRED: Auth failed after 3 attempts. {len(eod_events)} position(s) may remain open"
+                log.critical(msg)
+                self._notify(msg)
             asyncio.run(_close_all())
         elif eod_events:
             asyncio.run(_close_all())
 
         summary = self.monitor.daily_summary()
         log.info("EOD summary: %s", summary)
+        self._notify(f"EOD: {summary.get('n_trades', 0)} trades, {summary.get('total_r', 0):.2f}R")
 
         # EOD position reconciliation (M2.5 P0)
         if self.positions and not self.signal_only:
@@ -761,17 +768,13 @@ class SessionOrchestrator:
                 account_id = self.order_router.account_id if self.order_router else 0
                 remaining = self.positions.query_open(account_id)
                 if remaining:
-                    log.critical(
-                        "EOD RECONCILIATION%s: %d positions still open after session end: %s",
-                        context,
-                        len(remaining),
-                        remaining,
-                    )
+                    msg = f"EOD RECONCILIATION{context}: {len(remaining)} positions still open after session end"
+                    log.critical(msg)
+                    self._notify(msg)
                     if self._kill_switch_fired:
-                        log.critical(
-                            "Kill switch flatten may have failed — MANUAL CLOSE REQUIRED for: %s",
-                            [r.get("contract_id", "?") for r in remaining],
-                        )
+                        msg = f"Kill switch flatten may have failed — MANUAL CLOSE REQUIRED for: {[r.get('contract_id', '?') for r in remaining]}"
+                        log.critical(msg)
+                        self._notify(msg)
                 else:
                     log.info("EOD reconciliation%s: all positions flat", context)
             except NotImplementedError:
