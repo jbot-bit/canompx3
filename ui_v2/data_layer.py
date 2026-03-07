@@ -187,8 +187,11 @@ def get_session_history(
         ORDER BY trading_day DESC
         LIMIT {limit}
     """
-    df = query_df(sql, db_path)
-    return _df_to_records(df)
+    try:
+        df = query_df(sql, db_path)
+        return _df_to_records(df)
+    except Exception:
+        return []
 
 
 def get_rolling_pnl(

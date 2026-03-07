@@ -233,7 +233,7 @@ async def get_state():
 
     now = datetime.now(ZoneInfo("Australia/Brisbane"))
     state = get_app_state(now)
-    state.active_sessions = _session_stack
+    state.active_sessions = list(_session_stack)
     return _state_to_dict(state)
 
 

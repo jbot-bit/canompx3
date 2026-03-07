@@ -15,6 +15,7 @@ Extended from ui/session_helpers.py with:
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from dataclasses import dataclass, field
@@ -26,6 +27,8 @@ import pandas as pd
 
 from pipeline.build_daily_features import compute_trading_day
 from pipeline.dst import SESSION_CATALOG
+
+log = logging.getLogger(__name__)
 
 BRISBANE = ZoneInfo("Australia/Brisbane")
 ET = ZoneInfo("US/Eastern")
@@ -174,8 +177,10 @@ def _is_in_awake_hours(dt: datetime) -> bool:
 def get_et_time(now: datetime) -> str:
     """Format current time in US/Eastern for display."""
     et = now.astimezone(ET)
-    # Windows uses %#I for no-padding; Unix uses %-I
-    return et.strftime("%#I:%M %p ET")
+    try:
+        return et.strftime("%#I:%M %p ET")  # Windows
+    except ValueError:
+        return et.strftime("%-I:%M %p ET")  # Unix/Mac
 
 
 # -- Filter translation --------------------------------------------------------
@@ -230,7 +235,7 @@ def build_session_briefings() -> list[SessionBriefing]:
     from pipeline.asset_configs import get_active_instruments
     from trading_app.live_config import build_live_portfolio
 
-    today = date.today()
+    today = datetime.now(BRISBANE).date()
 
     # Collect all strategies across all instruments
     all_strategies: list = []
@@ -266,6 +271,7 @@ def build_session_briefings() -> list[SessionBriefing]:
         if session in SESSION_CATALOG:
             h, m = SESSION_CATALOG[session]["resolver"](today)
         else:
+            log.warning("Session %s not found in SESSION_CATALOG, defaulting to 00:00", session)
             h, m = 0, 0
 
         # Entry instruction — all current strategies are E2
