@@ -1487,8 +1487,11 @@ class TestObservability:
             orch, "run_self_tests", return_value={"notifications": False, "brackets": True, "fill_poller": True}
         ):
             # Mock the feed class to raise immediately so run() exits after the gate
-            orch._feed_class = MagicMock(side_effect=KeyboardInterrupt)
+            mock_feed_cls = MagicMock(side_effect=KeyboardInterrupt)
+            orch._feed_class = mock_feed_cls
             try:
                 await orch.run()
             except (KeyboardInterrupt, Exception):
-                pass  # Expected — we just need to verify it got past the notification gate
+                pass
+            # Verify we got PAST the notification gate (feed class was reached)
+            mock_feed_cls.assert_called()

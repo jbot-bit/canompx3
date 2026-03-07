@@ -104,10 +104,4 @@ A valid trade day requires BOTH:
 | **REGIME** | 30-99 | Conditional overlay / signal only |
 | **INVALID** | < 30 | Not tradeable |
 
-### Behavioral Rules
-1. NEVER treat "low trade count" alone as evidence of a bug
-2. ALWAYS verify `trade_days <= eligible_days` before investigating
-3. If `trade_days > eligible_days` → assume corruption until proven otherwise
-4. Do NOT suggest "fixing" filters to increase sample size
-5. NEVER recommend REGIME strategies as standalone trading systems
-6. For trading logic (filters, entry models, edge zones, Sharpe formulas) → see `TRADING_RULES.md`
+See CLAUDE.md "Strategy Classification — Behavioral Rules" for the 7 non-negotiable rules.

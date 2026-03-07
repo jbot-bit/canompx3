@@ -179,8 +179,9 @@ def get_schema_summary(db_path: Path | None = None) -> str:
     lines = []
     for t in tables["table_name"]:
         cols = conn.execute(
-            f"SELECT column_name, data_type FROM information_schema.columns "
-            f"WHERE table_name='{t}' ORDER BY ordinal_position"
+            "SELECT column_name, data_type FROM information_schema.columns "
+            "WHERE table_name = $1 ORDER BY ordinal_position",
+            [t],
         ).fetchdf()
         col_strs = [f"{r['column_name']} ({r['data_type']})" for _, r in cols.iterrows()]
         lines.append(f"{t}: {', '.join(col_strs)}")
