@@ -167,6 +167,10 @@ def build_orchestrator(components: FakeBrokerComponents | None = None) -> Sessio
     orch._last_bar_at = None
     orch._kill_switch_fired = False
     orch.contract_symbol = "MGCJ6"
+
+    from trading_app.live.circuit_breaker import CircuitBreaker
+
+    orch._circuit_breaker = CircuitBreaker(failure_threshold=5, recovery_timeout=30.0)
     orch.order_router = c.router
     orch.positions = c.positions
     orch._write_signal_record = MagicMock()
@@ -714,3 +718,81 @@ class TestKillSwitch:
         # Both positions should be flattened
         assert orch._positions.active_positions() == []
         assert len(orch.order_router.submitted) == 2
+
+
+# ---------------------------------------------------------------------------
+# CIRCUIT BREAKER tests
+# ---------------------------------------------------------------------------
+
+
+class TestCircuitBreaker:
+    """Circuit breaker blocks entries after consecutive broker failures."""
+
+    async def test_circuit_breaker_blocks_entry_after_failures(self):
+        """5 consecutive submit failures → circuit breaker opens → ENTRY blocked."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+
+        # Exhaust the circuit breaker with 5 failures
+        for _ in range(5):
+            orch._circuit_breaker.record_failure()
+
+        assert not orch._circuit_breaker.should_allow_request()
+
+        # Try to enter — should be blocked
+        await orch._handle_event(_entry_event(2350.5))
+
+        # No order submitted
+        assert len(orch.order_router.submitted) == 0
+        # Signal record should log CIRCUIT_BREAKER
+        orch._write_signal_record.assert_called()
+        call_args = orch._write_signal_record.call_args[0][0]
+        assert call_args["type"] == "CIRCUIT_BREAKER"
+
+    async def test_circuit_breaker_allows_exit_even_when_open(self):
+        """Circuit breaker open must NOT block exits — can't leave positions open."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+
+        # Set up an open position
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=1)
+        orch._positions.on_entry_filled(STRATEGY_ID, 2350.0)
+
+        # Open the circuit breaker
+        for _ in range(5):
+            orch._circuit_breaker.record_failure()
+        assert not orch._circuit_breaker.should_allow_request()
+
+        # Exit should still go through
+        await orch._handle_event(_exit_event(2355.0))
+
+        # Order WAS submitted despite open breaker
+        assert len(orch.order_router.submitted) == 1
+        assert orch.order_router.submitted[0]["type"] == "fake_exit"
+
+    async def test_circuit_breaker_records_success_on_entry(self):
+        """Successful entry order records success on circuit breaker."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+
+        await orch._handle_event(_entry_event(2350.5))
+
+        # Verify breaker is healthy
+        assert orch._circuit_breaker.should_allow_request()
+        assert len(orch.order_router.submitted) == 1
+
+    async def test_exit_failure_logs_manual_close_required(self):
+        """Failed exit order logs MANUAL CLOSE REQUIRED and writes EXIT_FAILED signal."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+
+        # Set up an open position
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=1)
+        orch._positions.on_entry_filled(STRATEGY_ID, 2350.0)
+
+        # Make submit fail
+        orch.order_router.submit = MagicMock(side_effect=ConnectionError("broker dead"))
+
+        await orch._handle_event(_exit_event(2355.0))
+
+        # Signal record should have EXIT_FAILED
+        calls = [c[0][0] for c in orch._write_signal_record.call_args_list]
+        exit_failed = [c for c in calls if c.get("type") == "EXIT_FAILED"]
+        assert len(exit_failed) == 1
+        assert "broker dead" in exit_failed[0]["error"]

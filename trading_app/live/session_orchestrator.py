@@ -136,6 +136,11 @@ class SessionOrchestrator:
         self._last_bar_at: datetime | None = None  # bar heartbeat
         self._kill_switch_fired = False  # one-shot emergency flatten
 
+        # Circuit breaker: blocks order submission after 5 consecutive broker failures
+        from trading_app.live.circuit_breaker import CircuitBreaker
+
+        self._circuit_breaker = CircuitBreaker(failure_threshold=5, recovery_timeout=30.0)
+
         # Resolve front-month contract symbol (needed even in signal-only for logging)
         self.contract_symbol = contracts.resolve_front_month(instrument)
         log.info(
@@ -424,6 +429,11 @@ class SessionOrchestrator:
                 )
                 return
 
+            if not self._circuit_breaker.should_allow_request():
+                log.critical("CIRCUIT BREAKER OPEN — skipping ENTRY for %s", event.strategy_id)
+                self._write_signal_record({"type": "CIRCUIT_BREAKER", "strategy_id": event.strategy_id})
+                return
+
             spec = self.order_router.build_order_spec(
                 direction=event.direction,
                 entry_model=strategy.entry_model,
@@ -432,7 +442,13 @@ class SessionOrchestrator:
                 qty=event.contracts,
             )
             loop = asyncio.get_running_loop()
-            result = await loop.run_in_executor(None, self.order_router.submit, spec)
+            try:
+                result = await loop.run_in_executor(None, self.order_router.submit, spec)
+                self._circuit_breaker.record_success()
+            except Exception as e:
+                self._circuit_breaker.record_failure()
+                log.error("ENTRY order failed for %s: %s", event.strategy_id, e)
+                return
             order_id = result.get("order_id") if isinstance(result, dict) else result.order_id
             fill_price = result.get("fill_price") if isinstance(result, dict) else getattr(result, "fill_price", None)
 
@@ -500,6 +516,13 @@ class SessionOrchestrator:
                 return
 
             # Submit close order and capture exit fill
+            # NOTE: exits NEVER blocked by circuit breaker — can't leave positions open
+            if not self._circuit_breaker.should_allow_request():
+                log.critical(
+                    "CIRCUIT BREAKER OPEN — EXIT for %s submitted anyway (can't leave positions open)",
+                    event.strategy_id,
+                )
+
             self._positions.on_exit_sent(event.strategy_id)
             exit_spec = self.order_router.build_exit_spec(
                 direction=event.direction,
@@ -507,7 +530,14 @@ class SessionOrchestrator:
                 qty=event.contracts,
             )
             loop = asyncio.get_running_loop()
-            result = await loop.run_in_executor(None, self.order_router.submit, exit_spec)
+            try:
+                result = await loop.run_in_executor(None, self.order_router.submit, exit_spec)
+                self._circuit_breaker.record_success()
+            except Exception as e:
+                self._circuit_breaker.record_failure()
+                log.critical("EXIT order FAILED for %s: %s — MANUAL CLOSE REQUIRED", event.strategy_id, e)
+                self._write_signal_record({"type": "EXIT_FAILED", "strategy_id": event.strategy_id, "error": str(e)})
+                return
             order_id = result.get("order_id") if isinstance(result, dict) else result.order_id
             exit_fill = result.get("fill_price") if isinstance(result, dict) else getattr(result, "fill_price", None)
 
