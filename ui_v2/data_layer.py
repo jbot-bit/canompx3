@@ -226,16 +226,34 @@ def get_rolling_pnl(
         return {"daily": [], "week_r": 0.0, "month_r": 0.0}
 
 
+def _get_overnight_sessions(for_date: date) -> tuple[str, ...]:
+    """Derive overnight sessions dynamically from SESSION_CATALOG.
+
+    A session is 'overnight' if its Brisbane hour falls outside AWAKE_START..AWAKE_END.
+    """
+    from pipeline.dst import SESSION_CATALOG
+    from ui_v2.state_machine import AWAKE_END, AWAKE_START
+
+    overnight: list[str] = []
+    for name, entry in SESSION_CATALOG.items():
+        h, _m = entry["resolver"](for_date)
+        if not (AWAKE_START <= h < AWAKE_END):
+            overnight.append(name)
+    return tuple(overnight)
+
+
 def get_overnight_recap(
     trading_day: date,
     db_path: Path | None = None,
 ) -> list[dict]:
     """Overnight session outcomes for a trading day.
 
-    Returns outcomes for sessions outside awake hours
-    (TOKYO_OPEN, SINGAPORE_OPEN, LONDON_METALS).
+    Returns outcomes for sessions outside awake hours, derived dynamically
+    from SESSION_CATALOG + AWAKE_START/AWAKE_END.
     """
-    overnight_sessions = ("TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS")
+    overnight_sessions = _get_overnight_sessions(trading_day)
+    if not overnight_sessions:
+        return []
     placeholders = ", ".join(f"'{s}'" for s in overnight_sessions)
     sql = f"""
         SELECT orb_label, symbol, pnl_r, outcome

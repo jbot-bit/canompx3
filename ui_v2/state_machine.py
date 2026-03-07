@@ -227,12 +227,10 @@ def build_session_briefings() -> list[SessionBriefing]:
     Groups all strategies by (session, instrument) and merges their filter
     conditions into a single human-readable instruction card.
     """
-    from datetime import date as date_type
-
     from pipeline.asset_configs import get_active_instruments
     from trading_app.live_config import build_live_portfolio
 
-    today = date_type.today()
+    today = date.today()
 
     # Collect all strategies across all instruments
     all_strategies: list = []
@@ -243,18 +241,18 @@ def build_session_briefings() -> list[SessionBriefing]:
         except Exception:
             continue
 
-    # Group by (session, instrument)
-    groups: dict[tuple[str, str], list] = {}
+    # Group by (session, instrument, rr_target) — one card per RR target
+    # so the trader knows exactly which RR to set for each trade
+    groups: dict[tuple[str, str, float], list] = {}
     for s in all_strategies:
-        key = (s.orb_label, s.instrument)
+        key = (s.orb_label, s.instrument, s.rr_target)
         groups.setdefault(key, []).append(s)
 
     briefings: list[SessionBriefing] = []
-    for (session, instrument), strats in groups.items():
+    for (session, instrument, rr_target), strats in groups.items():
         # Merge filter conditions
         conditions: list[str] = []
         direction_note = None
-        rr_target = strats[0].rr_target  # All same session share RR
 
         for s in strats:
             english = filter_to_english(s.filter_type)
@@ -270,7 +268,7 @@ def build_session_briefings() -> list[SessionBriefing]:
         else:
             h, m = 0, 0
 
-        # Entry instruction -- all current strategies are E2
+        # Entry instruction — all current strategies are E2
         entry_model = strats[0].entry_model
         if entry_model == "E2":
             entry_instruction = "Place stop-market at ORB edge"

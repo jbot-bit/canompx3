@@ -18,11 +18,12 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from sse_starlette.sse import EventSourceResponse
 
 from ui_v2.data_layer import (
     get_fitness_regimes,
@@ -44,6 +45,9 @@ from ui_v2.discipline_api import (
     override_cooling,
     trigger_cooling,
 )
+from ui_v2.session_monitor import SessionMonitor
+from ui_v2.sse_manager import SSEManager
+from ui_v2.state_broadcaster import StateBroadcaster
 from ui_v2.state_machine import (
     AppState,
     SessionBriefing,
@@ -75,6 +79,12 @@ _commitment: dict[str, Any] = {"items": {}, "date": None}
 STATIC_DIR = Path(__file__).parent / "static"
 SIGNALS_PATH = Path(__file__).parent.parent / "live_signals.jsonl"
 
+# ── SSE infrastructure ────────────────────────────────────────────────────────
+
+sse_manager = SSEManager()
+session_monitor = SessionMonitor()
+state_broadcaster = StateBroadcaster(sse_manager)
+
 
 # ── Lifespan ─────────────────────────────────────────────────────────────────
 
@@ -82,7 +92,15 @@ SIGNALS_PATH = Path(__file__).parent.parent / "live_signals.jsonl"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("Dashboard V2 server starting on port %d", PORT)
+    # Start SSE infrastructure
+    await sse_manager.start()
+    session_monitor.start(sse_manager, SIGNALS_PATH)
+    state_broadcaster.start()
     yield
+    # Shutdown SSE infrastructure
+    state_broadcaster.stop()
+    session_monitor.stop()
+    await sse_manager.shutdown()
     log.info("Dashboard V2 server shutting down")
 
 
@@ -229,7 +247,7 @@ async def get_briefings():
         return {"briefings": [_briefing_to_dict(b) for b in briefings]}
     except Exception as e:
         log.error("Failed to build briefings: %s", e)
-        return {"briefings": [], "error": str(e)}
+        raise HTTPException(status_code=500, detail=f"Failed to build briefings: {e}") from e
 
 
 # ── Routes: Session History ──────────────────────────────────────────────────
@@ -237,6 +255,10 @@ async def get_briefings():
 
 @app.get("/api/session-history/{name}")
 async def get_session_history_endpoint(name: str, limit: int = 10):
+    from pipeline.dst import SESSION_CATALOG
+
+    if name not in SESSION_CATALOG:
+        raise HTTPException(status_code=400, detail=f"Unknown session: {name}")
     records = get_session_history(name, limit=min(limit, 50))
     return {"session": name, "history": records}
 
@@ -424,3 +446,29 @@ async def cooling_override(req: CoolingOverrideRequest):
 
     override_cooling(_cooling_state)
     return {"status": "ok", "cooling_active": False}
+
+
+# ── Routes: SSE ─────────────────────────────────────────────────────────────
+
+
+@app.get("/api/events")
+async def sse_events(request: Request):
+    """SSE endpoint — streams real-time events to the browser."""
+
+    async def event_generator():
+        client_id = sse_manager.connect()
+        try:
+            async for event in sse_manager.subscribe(client_id):
+                if await request.is_disconnected():
+                    break
+                yield event
+        finally:
+            sse_manager.disconnect(client_id)
+
+    return EventSourceResponse(event_generator())
+
+
+@app.get("/api/sse-status")
+async def sse_status():
+    """Return SSE connection count for monitoring."""
+    return {"connections": sse_manager.connection_count}
