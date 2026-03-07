@@ -116,6 +116,12 @@ class FakeRouter:
     def cancel(self, order_id: int) -> None:
         pass
 
+    def build_bracket_spec(self, **kwargs) -> dict | None:
+        return None
+
+    def query_order_status(self, order_id: int) -> dict:
+        raise NotImplementedError
+
 
 @dataclass
 class FakeBrokerComponents:
@@ -1063,3 +1069,132 @@ class TestOrchestratorReconnect:
         # Should have notified about exhaustion
         calls = [str(c) for c in orch._notify.call_args_list]
         assert any("Exhausted" in c for c in calls)
+
+
+# ---------------------------------------------------------------------------
+# BRACKET ORDER tests
+# ---------------------------------------------------------------------------
+
+
+class FakeBracketRouter(FakeRouter):
+    """Router that supports native brackets for testing."""
+
+    def __init__(self, fill_price=None):
+        super().__init__(fill_price)
+        self.bracket_submitted = []
+        self.cancelled_ids = []
+
+    def supports_native_brackets(self) -> bool:
+        return True
+
+    def build_bracket_spec(self, **kwargs) -> dict:
+        spec = {"type": "bracket", **kwargs}
+        return spec
+
+    def submit(self, spec):
+        self.submitted.append(spec)
+        if spec.get("type") == "bracket":
+            self.bracket_submitted.append(spec)
+            return {"order_id": 200, "order_ids": [201, 202], "status": "submitted"}
+        return {
+            "order_id": 99,
+            "status": "submitted",
+            "fill_price": self._fill_price,
+        }
+
+    def cancel(self, order_id: int) -> None:
+        self.cancelled_ids.append(order_id)
+
+
+class TestBracketOrders:
+    async def test_bracket_submitted_after_entry(self):
+        """Entry fill -> bracket stop+target submitted to broker."""
+        router = FakeBracketRouter(fill_price=2351.0)
+        c = FakeBrokerComponents()
+        c.router = router
+        orch = build_orchestrator(c)
+        orch.order_router = router
+
+        await orch._handle_event(_entry_event(2350.5))
+
+        # Bracket should be submitted
+        assert len(router.bracket_submitted) == 1
+        bracket = router.bracket_submitted[0]
+        assert bracket["type"] == "bracket"
+        # Position should have bracket order IDs
+        record = orch._positions.get(STRATEGY_ID)
+        assert record is not None
+        assert record.bracket_order_ids == [201, 202]
+
+    async def test_bracket_cancelled_before_exit(self):
+        """Exit signal -> bracket orders cancelled -> exit submitted."""
+        router = FakeBracketRouter(fill_price=2351.0)
+        c = FakeBrokerComponents()
+        c.router = router
+        orch = build_orchestrator(c)
+        orch.order_router = router
+
+        # Enter and get brackets
+        await orch._handle_event(_entry_event(2350.5))
+
+        # Exit
+        await orch._handle_event(_exit_event(2355.0))
+
+        # Both bracket orders should have been cancelled
+        assert 201 in router.cancelled_ids
+        assert 202 in router.cancelled_ids
+
+    async def test_no_bracket_when_unsupported(self):
+        """supports_native_brackets() returns False -> no bracket submitted."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2351.0))
+
+        await orch._handle_event(_entry_event(2350.5))
+
+        # No bracket submitted (FakeRouter returns False for supports_native_brackets)
+        assert len(orch.order_router.submitted) == 1  # only the entry order
+
+    async def test_bracket_failure_is_warning_not_error(self):
+        """Bracket submit fails -> WARNING logged, position still tracked."""
+        router = FakeBracketRouter(fill_price=2351.0)
+        original_submit = router.submit
+
+        def fail_bracket(spec):
+            if spec.get("type") == "bracket":
+                raise ConnectionError("bracket api down")
+            return original_submit(spec)
+
+        router.submit = fail_bracket
+        c = FakeBrokerComponents()
+        c.router = router
+        orch = build_orchestrator(c)
+        orch.order_router = router
+
+        # Should not raise even though bracket submission fails
+        await orch._handle_event(_entry_event(2350.5))
+
+        # Position still tracked
+        record = orch._positions.get(STRATEGY_ID)
+        assert record is not None
+        assert record.bracket_order_ids == []  # no brackets stored
+
+    async def test_bracket_race_already_flat(self):
+        """Bracket fills between cancel and exit -> 'already flat' handled gracefully."""
+        router = FakeBracketRouter(fill_price=2351.0)
+        original_submit = router.submit
+
+        def flat_on_exit(spec):
+            if spec.get("type") != "bracket" and spec.get("type") == "fake_exit":
+                raise RuntimeError("No position - already flat")
+            return original_submit(spec)
+
+        router.submit = flat_on_exit
+        c = FakeBrokerComponents()
+        c.router = router
+        orch = build_orchestrator(c)
+        orch.order_router = router
+
+        await orch._handle_event(_entry_event(2350.5))
+        await orch._handle_event(_exit_event(2355.0))
+
+        # Position should be cleaned up despite "already flat" error
+        assert orch._positions.get(STRATEGY_ID) is None

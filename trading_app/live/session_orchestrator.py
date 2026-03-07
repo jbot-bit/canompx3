@@ -418,6 +418,58 @@ class SessionOrchestrator:
             log.warning(alert)
             self._notify(alert)
 
+    async def _submit_bracket(self, event, strategy, entry_price: float) -> None:
+        """Submit broker-side stop/target bracket after entry fill. Never raises."""
+        if self.order_router is None or not self.order_router.supports_native_brackets():
+            return
+        try:
+            risk_pts = strategy.median_risk_points or 10.0
+            mult = getattr(strategy, "stop_multiplier", 1.0) or 1.0
+            stop_dist = risk_pts * mult
+            sign = 1 if event.direction == "long" else -1
+            stop_price = entry_price - sign * stop_dist
+            target_price = entry_price + sign * stop_dist * strategy.rr_target
+
+            bracket = self.order_router.build_bracket_spec(
+                direction=event.direction,
+                symbol=self.contract_symbol,
+                entry_price=entry_price,
+                stop_price=stop_price,
+                target_price=target_price,
+                qty=event.contracts,
+            )
+            if bracket is None:
+                return
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(None, self.order_router.submit, bracket)
+            # Store bracket order IDs on the position record
+            record = self._positions.get(event.strategy_id)
+            if record is not None:
+                bracket_ids = result.get("order_ids", []) if isinstance(result, dict) else []
+                if not bracket_ids:
+                    oid = result.get("order_id") if isinstance(result, dict) else getattr(result, "order_id", None)
+                    if oid:
+                        bracket_ids = [oid]
+                record.bracket_order_ids = bracket_ids
+            log.info("Bracket submitted for %s: stop=%.2f target=%.2f", event.strategy_id, stop_price, target_price)
+        except Exception as e:
+            log.warning("Bracket submit failed for %s (position still managed by engine): %s", event.strategy_id, e)
+
+    async def _cancel_brackets(self, strategy_id: str) -> None:
+        """Cancel bracket orders before submitting exit. Never raises."""
+        if self.order_router is None:
+            return
+        record = self._positions.get(strategy_id)
+        if record is None or not record.bracket_order_ids:
+            return
+        for oid in record.bracket_order_ids:
+            try:
+                self.order_router.cancel(oid)
+            except Exception as e:
+                log.warning("Bracket cancel failed (may have filled): %s", e)
+        # Brief pause to let cancellations settle
+        await asyncio.sleep(0.5)
+
     async def _handle_event(self, event) -> None:
         """
         Handle a TradeEvent from ExecutionEngine.
@@ -519,6 +571,10 @@ class SessionOrchestrator:
                 }
             )
 
+            # Submit broker-side stop/target bracket for crash protection
+            actual_entry = fill_price if fill_price is not None else event.price
+            await self._submit_bracket(event, strategy, actual_entry)
+
         elif event.event_type in ("EXIT", "SCRATCH"):
             entry_price = self._positions.best_entry_price(event.strategy_id, event.price)
             if self._positions.get(event.strategy_id) is None:
@@ -544,6 +600,9 @@ class SessionOrchestrator:
                 )
                 return
 
+            # Cancel any broker-side bracket orders before submitting exit
+            await self._cancel_brackets(event.strategy_id)
+
             # Submit close order and capture exit fill
             # NOTE: exits NEVER blocked by circuit breaker — can't leave positions open
             if not self._circuit_breaker.should_allow_request():
@@ -562,6 +621,13 @@ class SessionOrchestrator:
                 result = await loop.run_in_executor(None, self.order_router.submit, exit_spec)
                 self._circuit_breaker.record_success()
             except Exception as e:
+                # Handle "already flat" from bracket filling between cancel and exit
+                err_msg = str(e).lower()
+                if "no position" in err_msg or "already flat" in err_msg:
+                    log.info("Position already closed by bracket for %s — skipping exit order", event.strategy_id)
+                    self._positions.on_exit_filled(event.strategy_id)
+                    self._record_exit(event, entry_price)
+                    return
                 self._circuit_breaker.record_failure()
                 msg = f"EXIT order FAILED for {event.strategy_id}: {e} — MANUAL CLOSE REQUIRED"
                 log.critical(msg)

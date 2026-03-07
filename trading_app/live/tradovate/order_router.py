@@ -181,3 +181,30 @@ class TradovateOrderRouter(BrokerRouter):
     def supports_native_brackets(self) -> bool:
         """Tradovate does not support native bracket orders via this router."""
         return False
+
+    def query_order_status(self, order_id: int) -> dict:
+        """Query order status from Tradovate REST API."""
+        if self.auth is None:
+            raise RuntimeError("No auth — cannot query order status")
+        resp = requests.get(
+            f"{self.base}/order/item",
+            params={"id": order_id},
+            headers=self.auth.headers(),
+            timeout=5,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        # Map Tradovate ordStatus to standard format
+        status_map = {
+            "Filled": "Filled",
+            "Working": "Working",
+            "Cancelled": "Cancelled",
+            "Rejected": "Rejected",
+        }
+        raw_status = data.get("ordStatus", "Unknown")
+        fill_price = data.get("avgPx") or data.get("fillPrice")
+        return {
+            "order_id": order_id,
+            "status": status_map.get(raw_status, raw_status),
+            "fill_price": float(fill_price) if fill_price else None,
+        }

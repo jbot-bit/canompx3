@@ -110,3 +110,61 @@ class ProjectXOrderRouter(BrokerRouter):
 
     def supports_native_brackets(self) -> bool:
         return True
+
+    def build_bracket_spec(
+        self,
+        direction: str,
+        symbol: str,
+        entry_price: float,
+        stop_price: float,
+        target_price: float,
+        qty: int = 1,
+    ) -> dict | None:
+        """Build OCO bracket (stop + limit target) for ProjectX."""
+        # Stop side: reverse direction to close position
+        stop_side = 1 if direction == "long" else 0
+        target_side = stop_side  # same side for close
+
+        return {
+            "accountId": self.account_id,
+            "contractId": symbol,
+            "orders": [
+                {
+                    "type": 4,  # Stop
+                    "side": stop_side,
+                    "size": qty,
+                    "stopPrice": stop_price,
+                },
+                {
+                    "type": 1,  # Limit
+                    "side": target_side,
+                    "size": qty,
+                    "price": target_price,
+                },
+            ],
+        }
+
+    def query_order_status(self, order_id: int) -> dict:
+        """Query order status from ProjectX REST API."""
+        if self.auth is None:
+            raise RuntimeError("No auth — cannot query order status")
+        resp = requests.get(
+            f"{BASE_URL}/api/Order/{order_id}",
+            headers=self.auth.headers(),
+            timeout=5,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        # Map ProjectX status to standard format
+        status_map = {
+            "Filled": "Filled",
+            "Working": "Working",
+            "Cancelled": "Cancelled",
+            "Rejected": "Rejected",
+        }
+        raw_status = data.get("status", "Unknown")
+        return {
+            "order_id": order_id,
+            "status": status_map.get(raw_status, raw_status),
+            "fill_price": data.get("fillPrice") or data.get("averagePrice"),
+        }

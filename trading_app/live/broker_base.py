@@ -97,6 +97,26 @@ class BrokerRouter(ABC):
         """Whether broker supports stop/target brackets on entry order."""
         ...
 
+    def build_bracket_spec(
+        self,
+        direction: str,
+        symbol: str,
+        entry_price: float,
+        stop_price: float,
+        target_price: float,
+        qty: int = 1,
+    ) -> dict | None:
+        """Build OCO bracket (stop + target). Returns None if not supported."""
+        return None
+
+    def query_order_status(self, order_id: int) -> dict:
+        """Query order status. Returns {order_id, status, fill_price}.
+
+        Status values: 'Filled', 'Working', 'Cancelled', 'Rejected'.
+        Raises NotImplementedError if broker doesn't support it.
+        """
+        raise NotImplementedError
+
 
 class BrokerContracts(ABC):
     """Resolve accounts and contract symbols."""

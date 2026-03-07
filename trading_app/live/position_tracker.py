@@ -32,6 +32,7 @@ class PositionRecord:
     entry_order_id: int | None = None
     entry_slippage: float | None = None
     contracts: int = 1
+    bracket_order_ids: list[int] = field(default_factory=list)
     exit_order_id: int | None = None
     fill_exit_price: float | None = None
     entered_at: datetime | None = None
