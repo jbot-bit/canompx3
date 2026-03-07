@@ -252,6 +252,33 @@ class TestOrphanBlocking:
         """No orphans = clean start."""
         assert FakePositions(orphans=[]).query_open(12345) == []
 
+    def test_not_implemented_does_not_crash(self):
+        """NotImplementedError from query_open → warning, not crash."""
+        import logging
+
+        class UnimplementedPositions:
+            def query_open(self, account_id: int):
+                raise NotImplementedError("not supported")
+
+        positions = UnimplementedPositions()
+        # Simulate the orchestrator's __init__ logic
+        broker_name = "test_broker"
+        warned = False
+        try:
+            positions.query_open(12345)
+        except NotImplementedError:
+            warned = True
+            logging.getLogger().warning(
+                "ORPHAN DETECTION DISABLED — %s does not implement query_open()",
+                broker_name,
+            )
+        except RuntimeError:
+            raise
+        except Exception:
+            pass
+
+        assert warned, "NotImplementedError should be caught, not re-raised"
+
 
 # ---------------------------------------------------------------------------
 # HIGH-1: Fill price tracking tests

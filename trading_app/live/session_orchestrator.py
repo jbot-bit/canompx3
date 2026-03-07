@@ -121,8 +121,14 @@ class SessionOrchestrator:
                             f"Close them manually or pass --force-orphans to acknowledge the risk."
                         )
                     log.warning("--force-orphans: continuing with %d orphaned position(s)", len(orphans))
+            except NotImplementedError:
+                log.warning(
+                    "ORPHAN DETECTION DISABLED — %s broker adapter does not implement query_open(). "
+                    "You must manually verify no orphaned positions exist before trading.",
+                    self._broker_name,
+                )
             except RuntimeError:
-                raise  # re-raise our own error
+                raise  # re-raise our own orphan-blocking error
             except Exception as e:
                 log.warning("Position query failed on startup: %s", e)
 
