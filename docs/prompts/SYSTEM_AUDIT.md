@@ -131,7 +131,7 @@ For EACH instrument in ASSET_CONFIGS:
 - [ ] `outright_pattern` → regex makes sense for the instrument's contract format?
 - [ ] `minimum_start_date` → plausible? (MGC should be 2019+, MNQ 2024+, etc.)
 - [ ] `enabled_sessions` → compare against `pipeline/dst.py:SESSION_CATALOG` keys. Any session enabled here but not in SESSION_CATALOG → `SESSION_CONFIG_DRIFT`
-- [ ] Dead instruments (MCL, SIL, M6E) → still in config but should NOT have active validated_setups. Verify.
+- [ ] Dead instruments (MCL, SIL, M6E, MBT) → still in config but should NOT have active validated_setups. Verify.
 
 ### 2B. Cost Model (`pipeline/cost_model.py`)
 - [ ] TRADING_RULES.md claims MGC = $5.74/RT. Verify in code.

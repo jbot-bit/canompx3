@@ -254,11 +254,15 @@ ASSET_CONFIGS = {
     },
 }
 
+# Dead instruments — tested and confirmed NO ORB breakout edge.
+# This is the canonical source for dead instruments.
+DEAD_ORB_INSTRUMENTS = frozenset({"MCL", "SIL", "M6E", "MBT"})
+
 # Primary instruments actively traded for ORB breakout.
-# Excludes source aliases (ES, NQ) and dead-for-ORB instruments (MCL, SIL, M6E, MBT).
+# Excludes source aliases (ES, NQ) and dead-for-ORB instruments.
 # This is the canonical source — import this instead of hardcoding instrument lists.
 ACTIVE_ORB_INSTRUMENTS = sorted(
-    [k for k, v in ASSET_CONFIGS.items() if v["symbol"] == k and k not in {"MCL", "SIL", "M6E", "MBT"}]
+    [k for k, v in ASSET_CONFIGS.items() if v["symbol"] == k and k not in DEAD_ORB_INSTRUMENTS]
 )
 
 

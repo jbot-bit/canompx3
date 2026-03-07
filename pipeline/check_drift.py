@@ -3089,6 +3089,50 @@ def check_pipeline_staleness(con=None) -> list[str]:
     return violations
 
 
+def check_dead_instruments_doc_sync() -> list[str]:
+    """Verify docs referencing dead instruments match the canonical DEAD_ORB_INSTRUMENTS set."""
+    import re
+
+    from pipeline.asset_configs import DEAD_ORB_INSTRUMENTS
+
+    violations = []
+    canonical = sorted(DEAD_ORB_INSTRUMENTS)
+    canonical_str = ", ".join(canonical)
+
+    # Files that should list dead instruments — pattern: "MCL, SIL, M6E" or "MCL/SIL/M6E"
+    doc_files = [
+        PROJECT_ROOT / "CLAUDE.md",
+        PROJECT_ROOT / ".claude" / "rules" / "quant-agent-identity.md",
+        PROJECT_ROOT / "docs" / "prompts" / "SYSTEM_AUDIT.md",
+        PROJECT_ROOT / "docs" / "prompts" / "PIPELINE_DATA_GUARDIAN.md",
+        PROJECT_ROOT / "docs" / "STRATEGY_DISCOVERY_AUDIT.md",
+    ]
+
+    # Match patterns like "MCL, SIL, M6E" or "MCL/SIL/M6E" (with or without MBT)
+    # Only match lines that look like dead-instrument lists (contain MCL AND SIL)
+    pattern = re.compile(r"MCL[,/\s]+SIL[,/\s]+M6E(?:[,/\s]+\w+)*")
+
+    for fpath in doc_files:
+        if not fpath.exists():
+            continue
+        text = fpath.read_text(encoding="utf-8")
+        for i, line in enumerate(text.splitlines(), 1):
+            match = pattern.search(line)
+            if match:
+                found_symbols = set(re.findall(r"\b([A-Z][A-Z0-9]{1,3})\b", match.group()))
+                # Filter to only known dead instruments + potential missing ones
+                found_dead = found_symbols & (DEAD_ORB_INSTRUMENTS | {"MCL", "SIL", "M6E", "MBT"})
+                if found_dead != DEAD_ORB_INSTRUMENTS:
+                    missing = DEAD_ORB_INSTRUMENTS - found_dead
+                    violations.append(
+                        f"  {fpath.relative_to(PROJECT_ROOT)}:{i} — "
+                        f"lists {sorted(found_dead)} but canonical is [{canonical_str}], "
+                        f"missing: {sorted(missing)}"
+                    )
+
+    return violations
+
+
 # =============================================================================
 # CHECK REGISTRY — single source of truth for all drift checks
 # =============================================================================
@@ -3272,6 +3316,7 @@ CHECKS = [
         False,
         True,
     ),  # requires_db
+    ("Dead instruments doc sync (docs match DEAD_ORB_INSTRUMENTS)", check_dead_instruments_doc_sync, False, False),
 ]
 
 

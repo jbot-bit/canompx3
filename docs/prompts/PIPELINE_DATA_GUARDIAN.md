@@ -78,7 +78,7 @@ For EACH table, trace the full lineage:
 - [ ] Every validated strategy must have a traceable path from outcomes
 
 ### 1C. Instrument Coverage Audit
-For EACH instrument (MGC, MNQ, MES, M2K, MCL, SIL, M6E):
+For EACH instrument (MGC, MNQ, MES, M2K, MCL, SIL, M6E, MBT):
 - [ ] Date range in bars_1m
 - [ ] Date range in bars_5m (should match)
 - [ ] Date range in daily_features (should match)
