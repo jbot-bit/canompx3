@@ -218,7 +218,13 @@ class SessionOrchestrator:
                     latest_day = latest.get("trading_day")
                     if latest_day is not None:
                         gap = (trading_day - (latest_day.date() if hasattr(latest_day, "date") else latest_day)).days
-                        if gap > 3:
+                        if gap > 5:
+                            raise RuntimeError(
+                                f"FAIL-CLOSED: daily_features is {gap} days stale (latest: {latest_day}). "
+                                f"Filters would silently reject all trades. Run: "
+                                f"python pipeline/build_daily_features.py --instrument {instrument}"
+                            )
+                        elif gap > 3:
                             log.warning("daily_features data is %d days stale (latest: %s)", gap, latest_day)
 
                 # median_atr_20 is NOT in daily_features — it's a rolling median computed
@@ -235,8 +241,14 @@ class SessionOrchestrator:
                     row["median_atr_20"] = float(median_result[0])
             finally:
                 con.close()
+        except RuntimeError:
+            raise  # re-raise our own fail-closed errors
         except Exception as e:
-            log.warning("Could not load daily_features for live session: %s", e)
+            raise RuntimeError(
+                f"FAIL-CLOSED: Cannot load daily_features for {instrument}: {e}. "
+                f"Filters would silently reject all trades. Fix the database or run: "
+                f"python pipeline/build_daily_features.py --instrument {instrument}"
+            ) from e
 
         log.info(
             "Daily features row: atr_20=%s, atr_vel=%s, nfp=%s, opex=%s, dow=%s",

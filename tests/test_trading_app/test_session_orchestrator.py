@@ -392,6 +392,23 @@ class TestSlippageInSummary:
 
 
 # ---------------------------------------------------------------------------
+# DAILY FEATURES FAIL-CLOSED tests
+# ---------------------------------------------------------------------------
+
+
+class TestDailyFeaturesFailClosed:
+    def test_raises_on_db_error(self):
+        """_build_daily_features_row must raise if DB is unreachable."""
+        import duckdb as real_duckdb
+
+        mock_duckdb = MagicMock(spec=real_duckdb)
+        mock_duckdb.connect.side_effect = OSError("DB locked")
+        with patch.dict("sys.modules", {"duckdb": mock_duckdb}):
+            with pytest.raises(RuntimeError, match="FAIL-CLOSED"):
+                SessionOrchestrator._build_daily_features_row(date(2026, 3, 7), "MGC")
+
+
+# ---------------------------------------------------------------------------
 # KILL SWITCH tests
 # ---------------------------------------------------------------------------
 
