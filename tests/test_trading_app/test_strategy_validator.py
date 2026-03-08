@@ -213,48 +213,48 @@ class TestValidateStrategy:
         status, notes, _ = validate_strategy(_make_row(sharpe_ratio=0.01, max_drawdown_r=50.0), _cost())
         assert status == "PASSED"
 
-    # --- Phase 4c: DSR gate (Bailey & Lopez de Prado 2014) ---
+    # --- Phase 4c: DSR (Bailey & Lopez de Prado 2014) — INFORMATIONAL ONLY ---
+    # DSR logged but not used as hard gate until N_eff estimation is implemented.
+    # BH FDR already handles multiple testing at discovery level.
 
-    def test_reject_dsr_below_noise_floor(self):
-        """DSR < 0 means strategy is indistinguishable from noise."""
+    def test_dsr_below_noise_floor_passes(self):
+        """DSR < 0 is logged but does NOT reject (informational only)."""
         status, notes, _ = validate_strategy(_make_row(sharpe_haircut=-0.5), _cost())
-        assert status == "REJECTED"
-        assert "Phase 4c" in notes
-        assert "DSR below noise floor" in notes
+        assert status == "PASSED"
 
-    def test_pass_dsr_above_noise_floor(self):
-        """DSR >= 0 passes the gate."""
+    def test_dsr_above_noise_floor_passes(self):
+        """DSR >= 0 passes."""
         status, notes, _ = validate_strategy(_make_row(sharpe_haircut=0.5), _cost())
         assert status == "PASSED"
 
-    def test_pass_dsr_exactly_zero(self):
-        """DSR == 0.0 (exactly at noise floor boundary) should pass."""
+    def test_dsr_exactly_zero_passes(self):
+        """DSR == 0.0 passes."""
         status, notes, _ = validate_strategy(_make_row(sharpe_haircut=0.0), _cost())
         assert status == "PASSED"
 
-    def test_pass_dsr_missing(self):
-        """Missing DSR (legacy strategies) should not be rejected."""
+    def test_dsr_missing_passes(self):
+        """Missing DSR (legacy strategies) passes."""
         row = _make_row()
         assert "sharpe_haircut" not in row  # not in defaults
         status, notes, _ = validate_strategy(row, _cost())
         assert status == "PASSED"
 
-    # --- Phase 4d: FST hurdle (Lopez de Prado 2018) ---
+    # --- Phase 4d: FST hurdle (Lopez de Prado 2018) — INFORMATIONAL ONLY ---
+    # FST hurdle in Z-score units, sharpe_ratio in per-trade units. Unit mismatch.
+    # Also same N_eff issue as P4c. Demoted to informational.
 
-    def test_reject_sharpe_below_fst_hurdle(self):
-        """Sharpe below FST hurdle = noise-floor indistinguishable."""
+    def test_fst_below_hurdle_passes(self):
+        """Sharpe below FST hurdle is logged but does NOT reject (informational)."""
         status, notes, _ = validate_strategy(_make_row(sharpe_ratio=0.05, fst_hurdle=0.15), _cost())
-        assert status == "REJECTED"
-        assert "Phase 4d" in notes
-        assert "FST hurdle" in notes
+        assert status == "PASSED"
 
-    def test_pass_sharpe_above_fst_hurdle(self):
+    def test_fst_above_hurdle_passes(self):
         """Sharpe above FST hurdle passes."""
         status, notes, _ = validate_strategy(_make_row(sharpe_ratio=0.30, fst_hurdle=0.15), _cost())
         assert status == "PASSED"
 
-    def test_pass_fst_hurdle_missing(self):
-        """Missing FST hurdle (legacy strategies) should not be rejected."""
+    def test_fst_hurdle_missing_passes(self):
+        """Missing FST hurdle (legacy strategies) passes."""
         row = _make_row()
         assert "fst_hurdle" not in row  # not in defaults
         status, notes, _ = validate_strategy(row, _cost())
