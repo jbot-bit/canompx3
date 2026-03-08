@@ -53,7 +53,15 @@ count unnecessarily.
 **Why:** DSR, FST, and BH FDR are computed but not used for decisions. This is the #1
 Bloomey finding. "You built a fire suppression system and left the sprinkler valves closed."
 
-#### 1a: DSR Hard Gate (Phase 4c in validation)
+> **AMENDED (2026-03-08, commit bc03c02):** P4c (DSR) and P4d (FST) demoted to
+> informational-only logging. Root causes: (1) DSR uses raw n_trials without N_eff
+> correlated-trial adjustment (BLP 2014 Appendix A.3), inflating the threshold;
+> (2) FST hurdle is in Z-score units but compared against per-trade Sharpe (unit mismatch,
+> BLP 2018 Theorem 1). Both gates rejected 100% of strategies on first production run.
+> BH FDR at discovery remains as the primary multiple-testing defense. See risk table
+> line 255 — this was the anticipated failure mode with prescribed mitigation.
+
+#### 1a: DSR ~~Hard~~ Informational Gate (Phase 4c in validation)
 
 **File:** `trading_app/strategy_validator.py` → `validate_strategy()`
 **Location:** After Phase 4 (stress test), before Phase 5 (optional Sharpe)
@@ -67,7 +75,7 @@ if sharpe_haircut is not None and sharpe_haircut < 0:
 **Rationale:** DSR < 0 means the observed Sharpe doesn't exceed what K random strategies
 would produce. Strategy is indistinguishable from noise.
 
-#### 1b: FST Hurdle Gate (Phase 4d in validation)
+#### 1b: FST ~~Hurdle~~ Informational Gate (Phase 4d in validation)
 
 **File:** `trading_app/strategy_validator.py` → `validate_strategy()`
 **Location:** After Phase 4c

@@ -1126,7 +1126,7 @@ class TestRandomStrategyMath:
             strats = con.execute(
                 "SELECT strategy_id, orb_label, entry_model, rr_target, "
                 "confirm_bars, filter_type, win_rate, sample_size, expectancy_r, "
-                "orb_minutes "
+                "orb_minutes, stop_multiplier "
                 "FROM experimental_strategies "
                 "WHERE instrument = 'MGC' AND sample_size >= 20 "
                 "ORDER BY strategy_id LIMIT 30"
@@ -1142,6 +1142,7 @@ class TestRandomStrategyMath:
                 "sample_size",
                 "expectancy_r",
                 "orb_minutes",
+                "stop_multiplier",
             ]
 
             from trading_app.config import ALL_FILTERS
@@ -1157,9 +1158,9 @@ class TestRandomStrategyMath:
                 ft = s["filter_type"]
                 om = s["orb_minutes"]
 
-                # Skip stop-multiplier variants — orb_outcomes doesn't store
-                # stop-adjusted outcomes, so WR can't be recomputed from raw data
-                if "_S075" in s["strategy_id"]:
+                # Skip stop-multiplier variants — orb_outcomes stores outcomes at
+                # base stop only; adjusted stops are applied at discovery level
+                if s.get("stop_multiplier") is not None and s["stop_multiplier"] != 1.0:
                     continue
 
                 # Skip volume filters (need bar data)
@@ -1218,7 +1219,7 @@ class TestRandomStrategyMath:
             strats = con.execute(
                 "SELECT strategy_id, orb_label, entry_model, rr_target, "
                 "confirm_bars, filter_type, win_rate, sample_size, expectancy_r, "
-                "orb_minutes "
+                "orb_minutes, stop_multiplier "
                 "FROM experimental_strategies "
                 "WHERE instrument = 'MGC' AND sample_size >= 20 "
                 "ORDER BY strategy_id LIMIT 30"
@@ -1234,6 +1235,7 @@ class TestRandomStrategyMath:
                 "sample_size",
                 "expectancy_r",
                 "orb_minutes",
+                "stop_multiplier",
             ]
 
             from trading_app.config import ALL_FILTERS
@@ -1248,9 +1250,9 @@ class TestRandomStrategyMath:
                 ft = s["filter_type"]
                 om = s["orb_minutes"]
 
-                # Skip stop-multiplier variants — orb_outcomes doesn't store
-                # stop-adjusted outcomes, so ExpR can't be recomputed from raw data
-                if "_S075" in s["strategy_id"]:
+                # Skip stop-multiplier variants — orb_outcomes stores outcomes at
+                # base stop only; adjusted stops are applied at discovery level
+                if s.get("stop_multiplier") is not None and s["stop_multiplier"] != 1.0:
                     continue
 
                 if ft.startswith("VOL_"):
@@ -1309,7 +1311,8 @@ class TestRandomStrategyMath:
         try:
             strats = con.execute(
                 "SELECT strategy_id, orb_label, entry_model, rr_target, "
-                "confirm_bars, filter_type, max_drawdown_r, orb_minutes "
+                "confirm_bars, filter_type, max_drawdown_r, orb_minutes, "
+                "stop_multiplier "
                 "FROM experimental_strategies "
                 "WHERE instrument = 'MGC' AND sample_size >= 20 "
                 "ORDER BY strategy_id LIMIT 30"
@@ -1323,6 +1326,7 @@ class TestRandomStrategyMath:
                 "filter_type",
                 "max_drawdown_r",
                 "orb_minutes",
+                "stop_multiplier",
             ]
 
             from trading_app.config import ALL_FILTERS
@@ -1337,9 +1341,9 @@ class TestRandomStrategyMath:
                 ft = s["filter_type"]
                 om = s["orb_minutes"]
 
-                # Skip stop-multiplier variants — orb_outcomes doesn't store
-                # stop-adjusted outcomes, so MaxDD can't be recomputed from raw data
-                if "_S075" in s["strategy_id"]:
+                # Skip stop-multiplier variants — orb_outcomes stores outcomes at
+                # base stop only; adjusted stops are applied at discovery level
+                if s.get("stop_multiplier") is not None and s["stop_multiplier"] != 1.0:
                     continue
 
                 if ft.startswith("VOL_"):
