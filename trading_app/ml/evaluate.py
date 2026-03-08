@@ -17,6 +17,7 @@ import joblib
 import pandas as pd
 
 from pipeline.paths import GOLD_DB_PATH
+from pipeline.stats import jobson_korkie_p, per_trade_sharpe
 from trading_app.ml.config import ACTIVE_INSTRUMENTS, MODEL_DIR
 from trading_app.ml.features import load_feature_matrix
 
@@ -29,15 +30,8 @@ logger = logging.getLogger(__name__)
 
 
 def _sharpe(pnl: pd.Series) -> float:
-    """Per-trade Sharpe ratio (no annualization).
-
-    Our data is per-trade pnl_r, NOT daily returns. Trade frequency varies
-    by filter (G0 ~500/yr, G8 ~50/yr), so sqrt(252) annualization is wrong.
-    Per-trade Sharpe = mean/std — comparable across all strategies.
-    """
-    if pnl.std() == 0 or len(pnl) < 2:
-        return 0.0
-    return float(pnl.mean() / pnl.std())
+    """Per-trade Sharpe ratio. Delegates to pipeline.stats.per_trade_sharpe."""
+    return per_trade_sharpe(pnl)
 
 
 def _max_drawdown_r(pnl: pd.Series) -> float:
@@ -68,6 +62,65 @@ def _fill_missing_features(X: pd.DataFrame, feature_names: list[str]) -> pd.Data
     return X[feature_names]
 
 
+def _load_model_bundle(instrument: str):
+    """Load model bundle, preferring hybrid over legacy format.
+
+    Returns (bundle, model_path) or (None, None) if no model exists.
+    Matches predict_live.py pattern: hybrid -> legacy fallback.
+    """
+    hybrid_path = MODEL_DIR / f"meta_label_{instrument}_hybrid.joblib"
+    legacy_path = MODEL_DIR / f"meta_label_{instrument}.joblib"
+    model_path = hybrid_path if hybrid_path.exists() else legacy_path
+    if not model_path.exists():
+        return None, None
+    return joblib.load(model_path), model_path
+
+
+def _apply_hybrid_predictions(bundle: dict, X: pd.DataFrame, meta: pd.DataFrame) -> pd.DataFrame:
+    """Apply per-session hybrid model to data.
+
+    For each session (and optionally aperture) with a trained sub-model,
+    predicts p_win using that sub-model's RF + features, and applies its
+    threshold. Sessions without models default to take=True (pass-through).
+
+    Returns meta with p_win, take, session_threshold columns.
+    """
+    meta = meta.copy()
+    meta["p_win"] = 0.5
+    meta["take"] = True
+    meta["session_threshold"] = float("nan")
+
+    is_per_aperture = bundle.get("bundle_format") == "per_aperture"
+
+    for session, session_val in bundle.get("sessions", {}).items():
+        sub_models = session_val.items() if is_per_aperture else [(None, session_val)]
+
+        for aperture_key, info in sub_models:
+            if info.get("model") is None:
+                continue
+
+            rf = info["model"]
+            threshold = info["optimal_threshold"]
+            feature_names = info["feature_names"]
+
+            mask = meta["orb_label"] == session
+            if aperture_key is not None:
+                ap_minutes = int(aperture_key.replace("O", ""))
+                mask = mask & (meta["orb_minutes"] == ap_minutes)
+
+            if mask.sum() == 0:
+                continue
+
+            X_sub = _fill_missing_features(X.loc[mask].copy(), feature_names)
+            probs = rf.predict_proba(X_sub)[:, 1]
+
+            meta.loc[mask, "p_win"] = probs
+            meta.loc[mask, "take"] = probs >= threshold
+            meta.loc[mask, "session_threshold"] = threshold
+
+    return meta
+
+
 def evaluate_instrument(instrument: str, db_path: str) -> dict:
     """Full before/after evaluation for one instrument.
 
@@ -75,32 +128,41 @@ def evaluate_instrument(instrument: str, db_path: str) -> dict:
     data. For unbiased assessment, use evaluate_validated.py which tests only
     on validated strategies, or check the OOS-only section below.
     """
-    model_path = MODEL_DIR / f"meta_label_{instrument}.joblib"
-    if not model_path.exists():
+    bundle, model_path = _load_model_bundle(instrument)
+    if bundle is None:
         logger.error(f"No trained model for {instrument}. Run meta_label.py first.")
         return {"status": "no_model"}
 
-    # Load model
-    bundle = joblib.load(model_path)
-    rf = bundle["model"]
-    threshold = bundle["optimal_threshold"]
-    feature_names = bundle["feature_names"]
-    n_train = bundle.get("n_train", 0)
+    is_hybrid = "sessions" in bundle
 
     # Load data
     X, y, meta = load_feature_matrix(db_path, instrument)
 
-    # Align features
-    X = _fill_missing_features(X, feature_names)
+    if is_hybrid:
+        meta = _apply_hybrid_predictions(bundle, X, meta)
+        threshold = meta["session_threshold"].dropna().median()
+        n_train = bundle.get("n_total_samples", 0)
+        meta["is_oos"] = False
+        # Approximate OOS boundary: meta_label.py uses 60/20/20 (train/val/test),
+        # so last 20% is pure OOS. 0.8 = train + val proportion.
+        n_train_end = int(len(meta) * 0.8)
+        if n_train_end < len(meta):
+            meta.iloc[n_train_end:, meta.columns.get_loc("is_oos")] = True
+    else:
+        # Legacy single model
+        rf = bundle["model"]
+        threshold = bundle["optimal_threshold"]
+        feature_names = bundle["feature_names"]
+        n_train = bundle.get("n_train", 0)
 
-    # Predict
-    y_prob = rf.predict_proba(X)[:, 1]
-    meta = meta.copy()
-    meta["p_win"] = y_prob
-    meta["take"] = y_prob >= threshold
-    meta["is_oos"] = False
-    if n_train > 0 and n_train < len(meta):
-        meta.iloc[n_train:, meta.columns.get_loc("is_oos")] = True
+        X = _fill_missing_features(X, feature_names)
+        y_prob = rf.predict_proba(X)[:, 1]
+        meta = meta.copy()
+        meta["p_win"] = y_prob
+        meta["take"] = y_prob >= threshold
+        meta["is_oos"] = False
+        if n_train > 0 and n_train < len(meta):
+            meta.iloc[n_train:, meta.columns.get_loc("is_oos")] = True
 
     pnl_all = meta["pnl_r"]
     pnl_kept = meta.loc[meta["take"], "pnl_r"]
@@ -232,7 +294,12 @@ def print_evaluation(results: dict) -> None:
     print(
         f"  {'Total R':<18} {b['total_r']:>12.1f} {f['total_r']:>12.1f} {'':>12} {f['total_r'] - b['total_r']:>+12.1f}"
     )
-    print(f"  {'Sharpe':<18} {b['sharpe']:>12.3f} {f['sharpe']:>12.3f} {'':>12} {f['sharpe'] - b['sharpe']:>+12.3f}")
+    sharpe_delta = f["sharpe"] - b["sharpe"]
+    jk_p = jobson_korkie_p(b["sharpe"], f["sharpe"], results["n_total"], results["n_kept"], rho=0.7)
+    sig_label = "" if jk_p <= 0.05 else " (n.s.)"
+    print(
+        f"  {'Sharpe':<18} {b['sharpe']:>12.3f} {f['sharpe']:>12.3f} {'':>12} {sharpe_delta:>+12.3f}  JK p={jk_p:.3f}{sig_label}"
+    )
     print(f"  {'Win Rate':<18} {b['wr']:>11.1%} {f['wr']:>11.1%} {sk['wr']:>11.1%} {f['wr'] - b['wr']:>+11.1%}")
     print(f"  {'Max DD (R)':<18} {b['max_dd']:>12.1f} {f['max_dd']:>12.1f}")
 
@@ -269,7 +336,11 @@ def print_evaluation(results: dict) -> None:
         print(f"  {'-' * 18} {'-' * 12} {'-' * 12} {'-' * 12}")
         print(f"  {'Trades':<18} {oos['n_total']:>12,d} {oos['n_kept']:>12,d} {oos['n_kept'] - oos['n_total']:>+12,d}")
         print(f"  {'Avg R':<18} {ob['avg_r']:>+12.4f} {of['avg_r']:>+12.4f} {of['avg_r'] - ob['avg_r']:>+12.4f}")
-        print(f"  {'Sharpe':<18} {ob['sharpe']:>12.3f} {of['sharpe']:>12.3f} {of['sharpe'] - ob['sharpe']:>+12.3f}")
+        oos_jk_p = jobson_korkie_p(ob["sharpe"], of["sharpe"], oos["n_total"], oos["n_kept"], rho=0.7)
+        oos_sig = "" if oos_jk_p <= 0.05 else " (n.s.)"
+        print(
+            f"  {'Sharpe':<18} {ob['sharpe']:>12.3f} {of['sharpe']:>12.3f} {of['sharpe'] - ob['sharpe']:>+12.3f}  JK p={oos_jk_p:.3f}{oos_sig}"
+        )
         print(f"  {'Win Rate':<18} {ob['wr']:>11.1%} {of['wr']:>11.1%} {of['wr'] - ob['wr']:>+11.1%}")
 
     print(f"\n{'=' * 75}\n")

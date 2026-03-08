@@ -16,16 +16,47 @@ from trading_app.ml.predict_live import LiveMLPredictor
 
 def audit_instrument(instrument: str, db_path: str) -> dict:
     """Run full ML audit for one instrument."""
-    path = MODEL_DIR / f"meta_label_{instrument}.joblib"
+    # Hybrid → legacy fallback (matching predict_live.py pattern)
+    hybrid_path = MODEL_DIR / f"meta_label_{instrument}_hybrid.joblib"
+    legacy_path = MODEL_DIR / f"meta_label_{instrument}.joblib"
+    path = hybrid_path if hybrid_path.exists() else legacy_path
     if not path.exists():
         print(f"\n{instrument}: NO MODEL FOUND")
         return {}
 
     bundle = joblib.load(path)
-    model = bundle["model"]
-    threshold = float(bundle["optimal_threshold"])
-    feature_names = bundle["feature_names"]
-    importances = model.feature_importances_
+
+    # For hybrid models, use the first session with a model for audit
+    if "sessions" in bundle:
+        model = None
+        threshold = 0.5
+        feature_names = []
+        is_per_aperture = bundle.get("bundle_format") == "per_aperture"
+        for _session, info in bundle.get("sessions", {}).items():
+            if is_per_aperture:
+                for _ak, sub_info in info.items():
+                    if isinstance(sub_info, dict) and sub_info.get("model") is not None:
+                        model = sub_info["model"]
+                        threshold = float(sub_info["optimal_threshold"])
+                        feature_names = sub_info["feature_names"]
+                        break
+                if model is not None:
+                    break
+            else:
+                if isinstance(info, dict) and info.get("model") is not None:
+                    model = info["model"]
+                    threshold = float(info["optimal_threshold"])
+                    feature_names = info["feature_names"]
+                    break
+        if model is None:
+            print(f"\n{instrument}: HYBRID MODEL HAS NO TRAINED SESSIONS")
+            return {}
+        importances = model.feature_importances_
+    else:
+        model = bundle["model"]
+        threshold = float(bundle["optimal_threshold"])
+        feature_names = bundle["feature_names"]
+        importances = model.feature_importances_
 
     print(f"\n{'=' * 70}")
     print(f"  ML AUDIT — {instrument}")

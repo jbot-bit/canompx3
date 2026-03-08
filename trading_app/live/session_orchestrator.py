@@ -952,7 +952,7 @@ class SessionOrchestrator:
             except asyncio.CancelledError:
                 return
             except Exception:
-                pass  # poller must never crash
+                log.exception("Fill poller iteration error — continuing")  # poller must never crash
 
     # Orchestrator-level reconnect: covers the case where the feed exhausts its
     # internal reconnects (20 attempts) and run() returns cleanly.
@@ -1011,7 +1011,7 @@ class SessionOrchestrator:
                     try:
                         self.auth.refresh_if_needed()
                     except Exception:
-                        pass
+                        log.warning("Auth refresh failed before reconnect", exc_info=True)
                     self._stats.reconnect_attempts += 1
                     self._notify(f"Reconnecting in {backoff:.0f}s (attempt {attempt + 2})")
                     await asyncio.sleep(backoff)

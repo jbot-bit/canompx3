@@ -73,9 +73,15 @@ GRID (3,060 strategy combinations, full grid before ENABLED_SESSIONS filtering):
 ==========================================================================
 """
 
+from __future__ import annotations
+
 import json
 from dataclasses import asdict, dataclass
 from datetime import date
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 # Walk-forward start-date override per instrument.
 # Full-sample validation (Phase A) uses ALL data. Only WF window generation
@@ -114,6 +120,15 @@ class StrategyFilter:
         """Check if a daily_features row matches this filter. Override in subclass."""
         return True
 
+    def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        """Vectorized filter: return boolean Series. Default falls back to iterrows."""
+        import pandas as pd
+
+        return pd.Series(
+            [self.matches_row(row.to_dict(), orb_label) for _, row in df.iterrows()],
+            index=df.index,
+        )
+
 
 @dataclass(frozen=True)
 class NoFilter(StrategyFilter):
@@ -124,6 +139,11 @@ class NoFilter(StrategyFilter):
 
     def matches_row(self, row: dict, orb_label: str) -> bool:
         return True
+
+    def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        import pandas as pd
+
+        return pd.Series(True, index=df.index)
 
 
 @dataclass(frozen=True)
@@ -142,6 +162,19 @@ class OrbSizeFilter(StrategyFilter):
         if self.max_size is not None and size >= self.max_size:
             return False
         return True
+
+    def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        import pandas as pd
+
+        col = f"orb_{orb_label}_size"
+        if col not in df.columns:
+            return pd.Series(False, index=df.index)
+        mask = df[col].notna()
+        if self.min_size is not None:
+            mask = mask & (df[col] >= self.min_size)
+        if self.max_size is not None:
+            mask = mask & (df[col] < self.max_size)
+        return mask
 
 
 @dataclass(frozen=True)
@@ -165,6 +198,14 @@ class VolumeFilter(StrategyFilter):
             return False  # fail-closed: no data = ineligible
         return rel_vol >= self.min_rel_vol
 
+    def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        import pandas as pd
+
+        col = f"rel_vol_{orb_label}"
+        if col not in df.columns:
+            return pd.Series(False, index=df.index)
+        return df[col].notna() & (df[col] >= self.min_rel_vol)
+
 
 @dataclass(frozen=True)
 class DirectionFilter(StrategyFilter):
@@ -177,6 +218,14 @@ class DirectionFilter(StrategyFilter):
         if break_dir is None:
             return False  # fail-closed
         return break_dir == self.direction
+
+    def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        import pandas as pd
+
+        col = f"orb_{orb_label}_break_dir"
+        if col not in df.columns:
+            return pd.Series(False, index=df.index)
+        return df[col] == self.direction
 
 
 @dataclass(frozen=True)
@@ -201,6 +250,19 @@ class CalendarSkipFilter(StrategyFilter):
                 return False
         return True
 
+    def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        import pandas as pd
+
+        mask = pd.Series(True, index=df.index)
+        if self.skip_nfp and "is_nfp_day" in df.columns:
+            mask = mask & ~df["is_nfp_day"].fillna(False).astype(bool)
+        if self.skip_opex and "is_opex_day" in df.columns:
+            mask = mask & ~df["is_opex_day"].fillna(False).astype(bool)
+        if self.skip_friday_session and orb_label == self.skip_friday_session:
+            if "is_friday" in df.columns:
+                mask = mask & ~df["is_friday"].fillna(False).astype(bool)
+        return mask
+
 
 @dataclass(frozen=True)
 class DayOfWeekSkipFilter(StrategyFilter):
@@ -217,6 +279,14 @@ class DayOfWeekSkipFilter(StrategyFilter):
         if dow is None:
             return False  # fail-closed
         return dow not in self.skip_days
+
+    def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        import pandas as pd
+
+        if "day_of_week" not in df.columns:
+            return pd.Series(False, index=df.index)
+        # NaN → fail-closed (notna check), then exclude skip_days
+        return df["day_of_week"].notna() & ~df["day_of_week"].isin(self.skip_days)
 
 
 @dataclass(frozen=True)
@@ -260,6 +330,22 @@ class ATRVelocityFilter(StrategyFilter):
             return True  # warm-up: no rolling data yet — fail-open
         return comp_tier == "Expanded"  # Neutral/Compressed → skip; Expanded → allow
 
+    def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        import pandas as pd
+
+        if orb_label not in self.apply_to_sessions:
+            return pd.Series(True, index=df.index)
+        # Start with all True, then exclude Contracting + non-Expanded
+        comp_col = f"orb_{orb_label}_compression_tier"
+        is_contracting = df.get("atr_vel_regime") == "Contracting"
+        if comp_col in df.columns:
+            is_non_expanded = df[comp_col].notna() & (df[comp_col] != "Expanded")
+        else:
+            # No compression data — fail-open
+            return pd.Series(True, index=df.index)
+        # Skip when BOTH contracting AND non-expanded
+        return ~(is_contracting & is_non_expanded)
+
 
 # Default ATR velocity overlay — applied as portfolio-level overlay.
 ATR_VELOCITY_OVERLAY = ATRVelocityFilter()
@@ -283,6 +369,18 @@ class DoubleBreakFilter(StrategyFilter):
             return not db
         return db
 
+    def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        import pandas as pd
+
+        col = f"orb_{orb_label}_double_break"
+        if col not in df.columns:
+            return pd.Series(True, index=df.index)  # missing → pass-through
+        if self.exclude:
+            # NaN → pass-through (True), non-double-break → True, double-break → False
+            return df[col].isna() | ~df[col].astype(bool)
+        else:
+            return df[col].fillna(False).astype(bool)
+
 
 @dataclass(frozen=True)
 class BreakSpeedFilter(StrategyFilter):
@@ -302,6 +400,14 @@ class BreakSpeedFilter(StrategyFilter):
         if delay is None:
             return False  # fail-closed: no break or no data
         return delay <= self.max_delay_min
+
+    def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        import pandas as pd
+
+        col = f"orb_{orb_label}_break_delay_min"
+        if col not in df.columns:
+            return pd.Series(False, index=df.index)
+        return df[col].notna() & (df[col] <= self.max_delay_min)
 
 
 @dataclass(frozen=True)
@@ -324,6 +430,14 @@ class BreakBarContinuesFilter(StrategyFilter):
             return False  # fail-closed
         return continues == self.require_continues
 
+    def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        import pandas as pd
+
+        col = f"orb_{orb_label}_break_bar_continues"
+        if col not in df.columns:
+            return pd.Series(False, index=df.index)
+        return df[col].notna() & (df[col] == self.require_continues)
+
 
 @dataclass(frozen=True)
 class CompositeFilter(StrategyFilter):
@@ -334,6 +448,9 @@ class CompositeFilter(StrategyFilter):
 
     def matches_row(self, row: dict, orb_label: str) -> bool:
         return self.base.matches_row(row, orb_label) and self.overlay.matches_row(row, orb_label)
+
+    def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        return self.base.matches_df(df, orb_label) & self.overlay.matches_df(df, orb_label)
 
 
 # =========================================================================

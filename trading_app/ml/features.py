@@ -623,27 +623,22 @@ def load_validated_feature_matrix(
     n_before_filter = len(df)
     logger.info(f"Loaded {n_before_filter:,d} validated-combo outcomes for {instrument}")
 
-    # Apply filter_type eligibility conditions per row.
-    # Each row has a filter_type from validated_setups — check if the
-    # daily_features conditions for that filter pass on that trading day.
-    keep_mask = np.zeros(len(df), dtype=bool)
+    # Apply filter_type eligibility conditions per group (vectorized).
+    # Group by (filter_type, orb_label) to apply each filter's matches_df
+    # to its session's data in bulk — O(groups) pandas ops vs O(N) Python loop.
+    keep_mask = pd.Series(False, index=df.index)
     filter_cache: dict[str, object] = {}
 
-    for idx, row in df.iterrows():
-        ft = row["filter_type"]
-        orb_label = row["orb_label"]
+    for (ft_name, orb_label), group_idx in df.groupby(["filter_type", "orb_label"]).groups.items():
+        if ft_name not in filter_cache:
+            filter_cache[ft_name] = ALL_FILTERS.get(ft_name)
 
-        if ft not in filter_cache:
-            filter_cache[ft] = ALL_FILTERS.get(ft)
-
-        filt = filter_cache[ft]
+        filt = filter_cache[ft_name]
         if filt is None:
-            # Unknown filter — fail-closed, skip
-            logger.warning(f"Unknown filter_type '{ft}' — skipping")
+            logger.warning(f"Unknown filter_type '{ft_name}' — skipping")
             continue
 
-        if filt.matches_row(row.to_dict(), orb_label):
-            keep_mask[idx] = True
+        keep_mask.loc[group_idx] = filt.matches_df(df.loc[group_idx], orb_label)
 
     df = df[keep_mask].reset_index(drop=True)
     n_after_filter = len(df)
@@ -884,25 +879,21 @@ def load_single_config_feature_matrix(
         # (orb_size, atr_20, etc.) instead of being pre-filtered
         logger.info(f"Filter SKIPPED: ML trains on all {len(df):,d} break days")
     else:
-        # Apply filter eligibility (same logic as load_validated_feature_matrix)
+        # Apply filter eligibility (vectorized — same logic as load_validated_feature_matrix)
         n_before_filter = len(df)
-        keep_mask = np.zeros(len(df), dtype=bool)
+        keep_mask = pd.Series(False, index=df.index)
         filter_cache: dict[str, object] = {}
 
-        for idx, row in df.iterrows():
-            ft = row["filter_type"]
-            orb_label = row["orb_label"]
+        for (ft_name, orb_label_g), group_idx in df.groupby(["filter_type", "orb_label"]).groups.items():
+            if ft_name not in filter_cache:
+                filter_cache[ft_name] = ALL_FILTERS.get(ft_name)
 
-            if ft not in filter_cache:
-                filter_cache[ft] = ALL_FILTERS.get(ft)
-
-            filt = filter_cache[ft]
+            filt = filter_cache[ft_name]
             if filt is None:
-                logger.warning(f"Unknown filter_type '{ft}' — skipping")
+                logger.warning(f"Unknown filter_type '{ft_name}' — skipping")
                 continue
 
-            if filt.matches_row(row.to_dict(), orb_label):
-                keep_mask[idx] = True
+            keep_mask.loc[group_idx] = filt.matches_df(df.loc[group_idx], orb_label_g)
 
         df = df[keep_mask].reset_index(drop=True)
         n_after_filter = len(df)

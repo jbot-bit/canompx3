@@ -426,6 +426,14 @@ def train_per_session_meta_label(
                 # Apply val-optimized threshold to frozen test set (raw probs)
                 kept_test = test_prob_raw >= best_t
                 n_kept_test = int(kept_test.sum())
+
+                # Compute honest OOS delta BEFORE gates — needed for total_full_delta_r
+                # (White 2000: always report ALL sessions, not just survivors)
+                honest_base_r = float(test_pnl.sum())
+                honest_filt_r = float(test_pnl[kept_test].sum())
+                honest_delta_r = honest_filt_r - honest_base_r
+                skip_pct = 1 - n_kept_test / len(test_idx)
+
                 if n_kept_test < 10:
                     # Threshold too aggressive for test set — reject
                     logger.info(
@@ -437,14 +445,10 @@ def train_per_session_meta_label(
                             "reason": f"threshold_too_aggressive_test_n={n_kept_test}",
                             "test_auc": round(test_auc, 4),
                             "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
+                            "honest_delta_r": round(honest_delta_r, 2),
                         }
                     )
                     continue
-
-                honest_base_r = float(test_pnl.sum())
-                honest_filt_r = float(test_pnl[kept_test].sum())
-                honest_delta_r = honest_filt_r - honest_base_r
-                skip_pct = 1 - n_kept_test / len(test_idx)
 
                 # --- OOS quality gates ---
                 # Gate 1: OOS must be positive (ML must not hurt)
@@ -458,6 +462,7 @@ def train_per_session_meta_label(
                             "reason": f"oos_negative_{honest_delta_r:+.1f}R",
                             "test_auc": round(test_auc, 4),
                             "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
+                            "honest_delta_r": round(honest_delta_r, 2),
                         }
                     )
                     continue
@@ -472,6 +477,7 @@ def train_per_session_meta_label(
                             "reason": f"cpcv_below_random_{cpcv_auc:.3f}",
                             "test_auc": round(test_auc, 4),
                             "cpcv_auc": round(cpcv_auc, 4),
+                            "honest_delta_r": round(honest_delta_r, 2),
                         }
                     )
                     continue
@@ -485,6 +491,7 @@ def train_per_session_meta_label(
                             "reason": f"auc_too_low_{test_auc:.3f}",
                             "test_auc": round(test_auc, 4),
                             "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
+                            "honest_delta_r": round(honest_delta_r, 2),
                         }
                     )
                     continue
@@ -498,6 +505,7 @@ def train_per_session_meta_label(
                             "reason": f"skip_too_high_{skip_pct:.0%}",
                             "test_auc": round(test_auc, 4),
                             "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
+                            "honest_delta_r": round(honest_delta_r, 2),
                         }
                     )
                     continue
@@ -539,6 +547,7 @@ def train_per_session_meta_label(
                         "reason": "no_positive_threshold",
                         "test_auc": round(test_auc, 4),
                         "cpcv_auc": round(cpcv_auc, 4) if cpcv_auc else None,
+                        "honest_delta_r": 0.0,
                     }
                 )
 
@@ -558,12 +567,25 @@ def train_per_session_meta_label(
     total_val_delta = sum(r.get("val_delta_r", 0) for _, _, r in all_results if r["model_type"] == "SESSION")
     total_honest_delta = sum(r.get("honest_delta_r", 0) for _, _, r in all_results if r["model_type"] == "SESSION")
 
+    # White (2000) / HLZ (2016): report ALL trained sessions, not just survivors.
+    # Sessions with test_auc trained an RF — include their honest_delta_r even if
+    # gates rejected them. Sessions without test_auc (no data / insufficient) use 0.
+    total_full_delta = sum(r.get("honest_delta_r", 0) for _, _, r in all_results if r.get("test_auc") is not None)
+    selection_uplift = total_honest_delta - total_full_delta
+
     unit_label = "models" if per_aperture else "ML sessions"
     logger.info(
         f"\n  SUMMARY: {n_ml} {unit_label}, {n_none} NO_MODEL"
         f"\n  Val delta (optimized):  {total_val_delta:+.1f}R"
-        f"\n  Honest delta (frozen):  {total_honest_delta:+.1f}R"
+        f"\n  Honest delta (deployed):{total_honest_delta:+.1f}R"
+        f"\n  Full delta (all trained):{total_full_delta:+.1f}R"
+        f"\n  Selection uplift:       {selection_uplift:+.1f}R"
     )
+    if total_full_delta != 0 and abs(selection_uplift) > 0.5 * abs(total_full_delta):
+        logger.warning(
+            f"  ⚠ Selection uplift ({selection_uplift:+.1f}R) is >{50}% of full delta — "
+            f"reported honest_delta_r is cherry-picked upward (White 2000)"
+        )
 
     # --- Save bundle ---
     model_path = None
@@ -594,6 +616,7 @@ def train_per_session_meta_label(
             "n_none_sessions": n_none,
             "total_val_delta_r": round(total_val_delta, 2),
             "total_honest_delta_r": round(total_honest_delta, 2),
+            "total_full_delta_r": round(total_full_delta, 2),
         }
 
         def _to_bundle_entry(info: dict) -> dict:
@@ -617,11 +640,14 @@ def train_per_session_meta_label(
                     "leaf_size": info["leaf_size"],
                     "top_features": info.get("top_features"),
                 }
-            return {
+            entry = {
                 "model": None,
                 "model_type": "NONE",
                 "reason": info.get("reason", "insufficient_data"),
             }
+            if "honest_delta_r" in info:
+                entry["honest_delta_r"] = info["honest_delta_r"]
+            return entry
 
         for session, val in session_results.items():
             if per_aperture:
@@ -689,7 +715,10 @@ def train_per_session_meta_label(
                 "honest_delta_r": info["honest_delta_r"],
                 "skip_pct": info["skip_pct"],
             }
-        return {"model_type": "NONE", "reason": info.get("reason", "insufficient_data")}
+        entry = {"model_type": "NONE", "reason": info.get("reason", "insufficient_data")}
+        if "honest_delta_r" in info:
+            entry["honest_delta_r"] = info["honest_delta_r"]
+        return entry
 
     return_sessions: dict = {}
     for session, val in session_results.items():
@@ -707,6 +736,7 @@ def train_per_session_meta_label(
         "n_none_sessions": n_none,
         "total_val_delta_r": round(total_val_delta, 2),
         "total_honest_delta_r": round(total_honest_delta, 2),
+        "total_full_delta_r": round(total_full_delta, 2),
         "per_aperture": per_aperture,
         "sessions": return_sessions,
         "model_path": str(model_path) if model_path else None,
@@ -730,7 +760,11 @@ def print_per_session_results(results: dict) -> None:
     unit = "models" if is_per_aperture else "ML sessions"
     print(f"  {unit}: {results['n_ml_sessions']} | NO_MODEL: {results['n_none_sessions']}")
     print(f"  Val delta (optimized):  {results['total_val_delta_r']:+.1f}R")
-    print(f"  Honest delta (frozen):  {results['total_honest_delta_r']:+.1f}R")
+    print(f"  Honest delta (deployed):{results['total_honest_delta_r']:+.1f}R")
+    full_delta = results.get("total_full_delta_r")
+    if full_delta is not None:
+        uplift = results["total_honest_delta_r"] - full_delta
+        print(f"  Full delta (all trained):{full_delta:+.1f}R  (selection uplift: {uplift:+.1f}R)")
     print()
 
     def _print_row(label: str, info: dict) -> None:
@@ -1106,20 +1140,25 @@ def main():
             print(f"\n{'=' * 70}")
             print(f"  SWEEP COMPARISON — {inst}")
             print(f"{'=' * 70}")
-            print(f"  {'RR':>4} {'N':>7} {'ML_SESS':>8} {'VAL_dR':>8} {'OOS_dR':>8} {'STATUS':>8}")
-            print(f"  {'----':>4} {'-------':>7} {'--------':>8} {'--------':>8} {'--------':>8} {'--------':>8}")
+            print(f"  {'RR':>4} {'N':>7} {'ML_SESS':>8} {'VAL_dR':>8} {'OOS_dR':>8} {'FULL_dR':>8} {'STATUS':>8}")
+            print(
+                f"  {'----':>4} {'-------':>7} {'--------':>8} {'--------':>8} {'--------':>8} {'--------':>8} {'--------':>8}"
+            )
             for rr in sorted(sweep_results.keys()):
                 r = sweep_results[rr]
                 if r.get("status") == "trained":
+                    full_dr = r.get("total_full_delta_r")
+                    full_str = f"{full_dr:>+8.1f}" if full_dr is not None else f"{'--':>8}"
                     print(
                         f"  {rr:>4.1f} {r['n_samples']:>7,d} "
                         f"{r['n_ml_sessions']:>8d} "
                         f"{r['total_val_delta_r']:>+8.1f} "
                         f"{r['total_honest_delta_r']:>+8.1f} "
+                        f"{full_str} "
                         f"{'OK':>8}"
                     )
                 else:
-                    print(f"  {rr:>4.1f} {'--':>7} {'--':>8} {'--':>8} {'--':>8} {'SKIP':>8}")
+                    print(f"  {rr:>4.1f} {'--':>7} {'--':>8} {'--':>8} {'--':>8} {'--':>8} {'SKIP':>8}")
             print(f"{'=' * 70}\n")
 
         elif args.per_session or args.single_config:

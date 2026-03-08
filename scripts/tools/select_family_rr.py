@@ -22,11 +22,10 @@ import argparse
 from pathlib import Path
 
 import duckdb
-import numpy as np
 import pandas as pd
-from scipy import stats
 
 from pipeline.paths import GOLD_DB_PATH
+from pipeline.stats import jobson_korkie_p as _jobson_korkie_p
 
 # Jobson-Korkie assumed correlation between same-setup / different-RR return streams.
 # Same ORB break, same entry, different exit target -> high correlation.
@@ -35,26 +34,6 @@ JK_ALPHA = 0.05
 
 # 6-column family key
 FAMILY_COLS = ["instrument", "orb_label", "filter_type", "entry_model", "orb_minutes", "confirm_bars"]
-
-
-def _jobson_korkie_p(sharpe_a: float, sharpe_b: float, n_a: int, n_b: int, rho: float) -> float:
-    """Two-sided Jobson-Korkie (1981) test for Sharpe equality.
-
-    Returns p-value. Large p means Sharpes are statistically indistinguishable.
-    """
-    n_eff = min(n_a, n_b)
-    if n_eff < 5:
-        return 1.0  # insufficient data, treat as equal
-
-    se_sq = (2.0 / n_eff) * (1 - rho) + (1.0 / (2 * n_eff)) * (
-        sharpe_a**2 + sharpe_b**2 - 2 * sharpe_a * sharpe_b * rho**2
-    )
-    if se_sq <= 0:
-        se_sq = 2.0 / n_eff
-
-    diff = abs(sharpe_a - sharpe_b)
-    z = diff / np.sqrt(se_sq)
-    return float(2 * (1 - stats.norm.cdf(z)))
 
 
 def select_rr_for_family(group: pd.DataFrame) -> dict:
