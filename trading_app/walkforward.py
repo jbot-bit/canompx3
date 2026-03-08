@@ -9,6 +9,7 @@ No new DB tables. Results written to JSONL file (append-only).
 import calendar
 import json
 import logging
+from bisect import bisect_left
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -132,9 +133,11 @@ def run_walkforward(
     if stop_multiplier != 1.0 and cost_spec is not None:
         outcomes = apply_tight_stop(outcomes, stop_multiplier, cost_spec)
 
-    trading_days = [o["trading_day"] for o in outcomes]
-    earliest = min(trading_days)
-    latest = max(trading_days)
+    # Pre-sort outcomes by trading_day (should already be sorted from DB, make explicit)
+    outcomes.sort(key=lambda o: o["trading_day"])
+    all_trading_days = [o["trading_day"] for o in outcomes]
+    earliest = all_trading_days[0]
+    latest = all_trading_days[-1]
 
     # Generate non-overlapping test windows
     # Apply per-instrument WF start override (skip regime-shifted early data)
@@ -145,14 +148,18 @@ def run_walkforward(
     while window_start <= latest:
         window_end = _add_months(window_start, test_window_months)
 
-        test_outcomes = [o for o in outcomes if window_start <= o["trading_day"] < window_end]
+        # O(log N) window slicing via bisect
+        lo = bisect_left(all_trading_days, window_start)
+        hi = bisect_left(all_trading_days, window_end)
+        test_outcomes = outcomes[lo:hi]
 
         metrics = compute_metrics(test_outcomes)
         test_n = metrics["sample_size"]
         test_exp_r = metrics["expectancy_r"]
 
         # IS metrics: all outcomes before this window (anchored expanding)
-        is_outcomes = [o for o in outcomes if o["trading_day"] < window_start]
+        is_hi = bisect_left(all_trading_days, window_start)
+        is_outcomes = outcomes[:is_hi]
         is_metrics = compute_metrics(is_outcomes) if len(is_outcomes) >= 15 else None
         is_exp_r = is_metrics["expectancy_r"] if is_metrics else None
 
