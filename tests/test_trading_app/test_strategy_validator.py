@@ -213,6 +213,48 @@ class TestValidateStrategy:
         status, notes, _ = validate_strategy(_make_row(sharpe_ratio=0.01, max_drawdown_r=50.0), _cost())
         assert status == "PASSED"
 
+    # --- Phase 4c: DSR gate (Bailey & Lopez de Prado 2014) ---
+
+    def test_reject_dsr_below_noise_floor(self):
+        """DSR < 0 means strategy is indistinguishable from noise."""
+        status, notes, _ = validate_strategy(_make_row(sharpe_haircut=-0.5), _cost())
+        assert status == "REJECTED"
+        assert "Phase 4c" in notes
+        assert "DSR below noise floor" in notes
+
+    def test_pass_dsr_above_noise_floor(self):
+        """DSR >= 0 passes the gate."""
+        status, notes, _ = validate_strategy(_make_row(sharpe_haircut=0.5), _cost())
+        assert status == "PASSED"
+
+    def test_pass_dsr_missing(self):
+        """Missing DSR (legacy strategies) should not be rejected."""
+        row = _make_row()
+        assert "sharpe_haircut" not in row  # not in defaults
+        status, notes, _ = validate_strategy(row, _cost())
+        assert status == "PASSED"
+
+    # --- Phase 4d: FST hurdle (Lopez de Prado 2018) ---
+
+    def test_reject_sharpe_below_fst_hurdle(self):
+        """Sharpe below FST hurdle = noise-floor indistinguishable."""
+        status, notes, _ = validate_strategy(_make_row(sharpe_ratio=0.05, fst_hurdle=0.15), _cost())
+        assert status == "REJECTED"
+        assert "Phase 4d" in notes
+        assert "FST hurdle" in notes
+
+    def test_pass_sharpe_above_fst_hurdle(self):
+        """Sharpe above FST hurdle passes."""
+        status, notes, _ = validate_strategy(_make_row(sharpe_ratio=0.30, fst_hurdle=0.15), _cost())
+        assert status == "PASSED"
+
+    def test_pass_fst_hurdle_missing(self):
+        """Missing FST hurdle (legacy strategies) should not be rejected."""
+        row = _make_row()
+        assert "fst_hurdle" not in row  # not in defaults
+        status, notes, _ = validate_strategy(row, _cost())
+        assert status == "PASSED"
+
     def test_validation_notes_contain_reason(self):
         """Rejection notes explain which phase failed."""
         status, notes, _ = validate_strategy(_make_row(sample_size=10), _cost())

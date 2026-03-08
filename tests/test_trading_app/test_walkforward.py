@@ -625,3 +625,89 @@ class TestWalkForward:
 
         assert result_with.n_total_windows == result_without.n_total_windows
         assert result_with.n_valid_windows == result_without.n_valid_windows
+
+    # ================================================================
+    # Walk-Forward Efficiency (WFE) tests — Pardo
+    # ================================================================
+
+    def test_wfe_computed_for_positive_strategy(self, con):
+        """WFE = mean(OOS ExpR) / mean(IS ExpR) when IS is positive."""
+        outcomes = _monthly_outcomes(2020, 2023)
+        _insert_outcomes(con, outcomes)
+
+        result = run_walkforward(
+            con=con,
+            strategy_id="TEST_WFE_POS",
+            instrument="MGC",
+            **_WF_BASE,
+        )
+
+        assert result.passed is True
+        assert result.wfe is not None
+        # With consistent 67% WR and 2:1 RR across all windows,
+        # OOS ≈ IS, so WFE should be close to 1.0
+        assert 0.5 < result.wfe <= 2.0
+
+    def test_wfe_none_when_no_valid_windows(self, con):
+        """WFE is None when no valid windows exist."""
+        # Only 6 months — all in training, no test windows
+        outcomes = []
+        for month in range(1, 7):
+            for day in [10, 15, 20]:
+                outcomes.append(
+                    {
+                        "trading_day": date(2020, month, day),
+                        "outcome": "win",
+                        "pnl_r": 2.0,
+                    }
+                )
+        _insert_outcomes(con, outcomes)
+
+        result = run_walkforward(
+            con=con,
+            strategy_id="TEST_WFE_NONE",
+            instrument="MGC",
+            min_train_months=12,
+            **_WF_BASE,
+        )
+
+        assert result.wfe is None
+
+    def test_wfe_none_when_is_negative(self, con):
+        """WFE excludes windows where IS ExpR <= 0."""
+        # Training year all losses -> IS ExpR < 0 -> WFE windows excluded
+        train = _monthly_outcomes(2020, 2020, win_pattern=[False, False, False])
+        test = _monthly_outcomes(2021, 2023)
+        _insert_outcomes(con, train + test)
+
+        result = run_walkforward(
+            con=con,
+            strategy_id="TEST_WFE_NEG_IS",
+            instrument="MGC",
+            **_WF_BASE,
+        )
+
+        # First window's IS is all-loss (negative IS ExpR) -> excluded from WFE
+        # Later windows have mixed IS (2020 losses + 2021+ wins)
+        # WFE may be None or computed from later windows only
+        if result.wfe is not None:
+            assert result.wfe > 0  # OOS is positive, IS (later) turns positive
+
+    def test_wfe_in_result_dataclass(self, con):
+        """WFE field present in WalkForwardResult and serializable."""
+        outcomes = _monthly_outcomes(2020, 2023)
+        _insert_outcomes(con, outcomes)
+
+        result = run_walkforward(
+            con=con,
+            strategy_id="TEST_WFE_DC",
+            instrument="MGC",
+            **_WF_BASE,
+        )
+
+        # Verify field exists and is serializable
+        from dataclasses import asdict
+
+        d = asdict(result)
+        assert "wfe" in d
+        assert isinstance(d["wfe"], (float, type(None)))

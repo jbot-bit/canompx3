@@ -22,7 +22,7 @@ Usage:
 import json
 import sys
 import time
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from pipeline.log import get_logger
@@ -318,7 +318,7 @@ def validate_strategy(
     min_sharpe: float | None = None,
     max_drawdown: float | None = None,
     exclude_years: set[int] | None = None,
-    min_years_positive_pct: float = 1.0,
+    min_years_positive_pct: float = 0.75,  # @research-source Fitschen "Building Reliable Trading Systems" — 85% of top CTAs have ≥1 losing year
     min_trades_per_year: int = 1,
     atr_by_year: dict[int, float] | None = None,
     enable_regime_waivers: bool = True,
@@ -335,7 +335,7 @@ def validate_strategy(
         max_drawdown: Optional max drawdown in R (Phase 6)
         exclude_years: Years to exclude from Phase 3 yearly check
         min_years_positive_pct: Fraction of included years that must be
-            positive (0.0-1.0). Default 1.0 = ALL years must be positive.
+            positive (0.0-1.0). Default 0.75 per Fitschen (85% of top CTAs have a bad year).
         min_trades_per_year: Minimum trades for a year to count in Phase 3.
             Years below this are excluded. Default 1 = include all years.
         atr_by_year: Mean ATR(20) per year for regime classification.
@@ -473,6 +473,29 @@ def validate_strategy(
             [],
         )
 
+    # Phase 4c: Deflated Sharpe gate (Bailey & Lopez de Prado 2014)
+    # DSR < 0 means observed Sharpe doesn't exceed what K random strategies
+    # would produce from noise alone. Strategy is indistinguishable from chance.
+    sharpe_haircut = row.get("sharpe_haircut")
+    if sharpe_haircut is not None and sharpe_haircut < 0:
+        return (
+            "REJECTED",
+            f"Phase 4c: DSR below noise floor (haircut={sharpe_haircut:.4f})",
+            [],
+        )
+
+    # Phase 4d: False Strategy Theorem hurdle (Lopez de Prado 2018)
+    # FST hurdle = expected max per-trade Sharpe from K trials with zero skill.
+    # Any strategy below this threshold is noise-floor indistinguishable.
+    fst_hurdle = row.get("fst_hurdle")
+    sharpe_ratio = row.get("sharpe_ratio")
+    if fst_hurdle is not None and sharpe_ratio is not None and sharpe_ratio < fst_hurdle:
+        return (
+            "REJECTED",
+            f"Phase 4d: Sharpe {sharpe_ratio:.4f} < FST hurdle {fst_hurdle:.4f}",
+            [],
+        )
+
     # Phase 5: Sharpe ratio (optional)
     if min_sharpe is not None:
         sharpe = row.get("sharpe_ratio")
@@ -606,7 +629,7 @@ def run_validation(
     min_sharpe: float | None = None,
     max_drawdown: float | None = None,
     exclude_years: set[int] | None = None,
-    min_years_positive_pct: float = 1.0,
+    min_years_positive_pct: float = 0.75,  # @research-source Fitschen — see validate_strategy()
     min_trades_per_year: int = 1,
     dry_run: bool = False,
     enable_walkforward: bool = True,
@@ -979,6 +1002,7 @@ def run_validation(
                     wf_windows_val = (
                         (wf_result_dict or {}).get("as_dict", {}).get("n_valid_windows") if wf_tested else None
                     )
+                    wfe_val = (wf_result_dict or {}).get("as_dict", {}).get("wfe") if wf_tested else None
 
                     con.execute(
                         """INSERT OR REPLACE INTO validated_setups
@@ -996,9 +1020,9 @@ def run_validation(
                             dst_winter_n, dst_winter_avg_r,
                             dst_summer_n, dst_summer_avg_r,
                             dst_verdict,
-                            wf_tested, wf_passed, wf_windows,
+                            wf_tested, wf_passed, wf_windows, wfe,
                             sharpe_haircut, skewness, kurtosis_excess)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         [
                             sid,
                             sid,
@@ -1037,6 +1061,7 @@ def run_validation(
                             wf_tested,
                             wf_passed,
                             wf_windows_val,
+                            wfe_val,
                             rd.get("sharpe_haircut"),
                             rd.get("skewness"),
                             rd.get("kurtosis_excess"),
@@ -1105,6 +1130,78 @@ def run_validation(
     if dry_run:
         logger.info("  (DRY RUN — no data written)")
 
+    # ── Phase D: Log rejection rate per phase ─────────────────────────
+    if not dry_run:
+        # Count rejections per phase from notes
+        phase_counts = {
+            "phase1": 0,
+            "phase2": 0,
+            "phase3": 0,
+            "phase4": 0,
+            "phase4c": 0,
+            "phase4d": 0,
+            "phase4b": 0,
+        }
+        for sr in serial_results:
+            notes_str = sr.get("notes", "")
+            if sr["status"] == "REJECTED":
+                if notes_str.startswith("Phase 1:"):
+                    phase_counts["phase1"] += 1
+                elif notes_str.startswith("Phase 2:"):
+                    phase_counts["phase2"] += 1
+                elif notes_str.startswith("Phase 3:"):
+                    phase_counts["phase3"] += 1
+                elif notes_str.startswith("Phase 4c:"):
+                    phase_counts["phase4c"] += 1
+                elif notes_str.startswith("Phase 4d:"):
+                    phase_counts["phase4d"] += 1
+                elif notes_str.startswith("Phase 4b:"):
+                    phase_counts["phase4b"] += 1
+                elif notes_str.startswith("Phase 4:"):
+                    phase_counts["phase4"] += 1
+
+        candidates = len(rows) - skipped_aliases
+        rejection_rate = 1.0 - (passed / candidates) if candidates > 0 else 1.0
+
+        import uuid
+
+        run_id = f"{instrument}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+
+        with duckdb.connect(str(db_path)) as con:
+            from pipeline.db_config import configure_connection
+
+            configure_connection(con, writing=True)
+            con.execute(
+                """INSERT INTO validation_run_log
+                   (run_id, instrument, candidates,
+                    phase1_rejected, phase2_rejected, phase3_rejected,
+                    phase4_rejected, phase4c_rejected, phase4d_rejected,
+                    phase4b_rejected, final_passed, rejection_rate)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                [
+                    run_id,
+                    instrument,
+                    candidates,
+                    phase_counts["phase1"],
+                    phase_counts["phase2"],
+                    phase_counts["phase3"],
+                    phase_counts["phase4"],
+                    phase_counts["phase4c"],
+                    phase_counts["phase4d"],
+                    phase_counts["phase4b"],
+                    passed,
+                    round(rejection_rate, 4),
+                ],
+            )
+            con.commit()
+        logger.info(
+            f"  Run logged: {run_id} — rejection_rate={rejection_rate:.1%}, "
+            f"P1={phase_counts['phase1']}, P2={phase_counts['phase2']}, "
+            f"P3={phase_counts['phase3']}, P4={phase_counts['phase4']}, "
+            f"P4c={phase_counts['phase4c']}, P4d={phase_counts['phase4d']}, "
+            f"P4b={phase_counts['phase4b']}"
+        )
+
     return passed, rejected
 
 
@@ -1127,8 +1224,8 @@ def main():
     parser.add_argument(
         "--min-years-positive-pct",
         type=float,
-        default=1.0,
-        help="Fraction of included years that must be positive (0.0-1.0, default 1.0)",
+        default=0.75,
+        help="Fraction of included years that must be positive (0.0-1.0, default 0.75)",
     )
     parser.add_argument(
         "--min-trades-per-year",

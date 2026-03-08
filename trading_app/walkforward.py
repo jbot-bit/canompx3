@@ -38,6 +38,7 @@ class WalkForwardResult:
     params: dict
     window_imbalance_ratio: float | None = None
     window_imbalanced: bool = False
+    wfe: float | None = None  # Walk-Forward Efficiency = OOS/IS ExpR (Pardo)
 
 
 def _add_months(d: date, months: int) -> date:
@@ -150,6 +151,11 @@ def run_walkforward(
         test_n = metrics["sample_size"]
         test_exp_r = metrics["expectancy_r"]
 
+        # IS metrics: all outcomes before this window (anchored expanding)
+        is_outcomes = [o for o in outcomes if o["trading_day"] < window_start]
+        is_metrics = compute_metrics(is_outcomes) if len(is_outcomes) >= 15 else None
+        is_exp_r = is_metrics["expectancy_r"] if is_metrics else None
+
         windows.append(
             {
                 "window_start": window_start.isoformat(),
@@ -159,6 +165,7 @@ def run_walkforward(
                 "test_wr": metrics["win_rate"],
                 "test_sharpe": metrics["sharpe_ratio"],
                 "test_pass": (test_n >= min_trades_per_window and test_exp_r is not None and test_exp_r > 0),
+                "is_exp_r": is_exp_r,
             }
         )
 
@@ -205,6 +212,20 @@ def run_walkforward(
         )
     else:
         agg_oos_exp_r = 0.0
+
+    # Walk-Forward Efficiency (Pardo): WFE = mean(OOS ExpR) / mean(IS ExpR)
+    # WFE > 0.50 = healthy strategy (OOS retains half of IS performance)
+    wfe = None
+    wfe_windows = [
+        w
+        for w in valid_windows
+        if w.get("is_exp_r") is not None and w["is_exp_r"] > 0 and w.get("test_exp_r") is not None
+    ]
+    if wfe_windows:
+        mean_oos = sum(w["test_exp_r"] for w in wfe_windows) / len(wfe_windows)
+        mean_is = sum(w["is_exp_r"] for w in wfe_windows) / len(wfe_windows)
+        if mean_is > 0:
+            wfe = round(mean_oos / mean_is, 4)
 
     # Window imbalance detection
     window_counts = [w["test_n"] for w in valid_windows if w["test_n"] > 0]
@@ -257,6 +278,7 @@ def run_walkforward(
         params=params,
         window_imbalance_ratio=window_imbalance_ratio,
         window_imbalanced=window_imbalanced,
+        wfe=wfe,
     )
 
 

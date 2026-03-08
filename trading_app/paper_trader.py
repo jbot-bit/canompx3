@@ -28,7 +28,7 @@ import duckdb
 
 from pipeline.cost_model import get_cost_spec
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.config import ATR_VELOCITY_OVERLAY, CalendarSkipFilter
+from trading_app.config import ATR_VELOCITY_OVERLAY
 from trading_app.execution_engine import ExecutionEngine
 from trading_app.portfolio import Portfolio, build_portfolio
 from trading_app.risk_manager import RiskLimits, RiskManager
@@ -204,7 +204,6 @@ def replay_historical(
     use_market_state: bool = False,
     live_session_costs: bool = False,
     max_correlation: float = 0.85,
-    calendar_overlay: CalendarSkipFilter | None = None,
     use_ml: bool = False,
 ) -> ReplayResult:
     """
@@ -223,9 +222,7 @@ def replay_historical(
     cost_spec = get_cost_spec(instrument)
 
     if portfolio is None:
-        portfolio = build_portfolio(
-            db_path=db_path, instrument=instrument, max_correlation=max_correlation, calendar_overlay=calendar_overlay
-        )
+        portfolio = build_portfolio(db_path=db_path, instrument=instrument, max_correlation=max_correlation)
 
     if not portfolio.strategies:
         return ReplayResult(
@@ -371,6 +368,7 @@ def replay_historical(
                                 f"strategy={event.strategy_id}, day={td}"
                             )
                         if trade and trade.pnl_r is not None:
+                            scaled_pnl = trade.pnl_r * trade.size_multiplier
                             for je in reversed(result.journal):
                                 if (
                                     je.strategy_id == event.strategy_id
@@ -378,17 +376,17 @@ def replay_historical(
                                     and je.pnl_r is None
                                     and not je.risk_rejected
                                 ):
-                                    je.pnl_r = trade.pnl_r
+                                    je.pnl_r = scaled_pnl
                                     je.stop_price = trade.stop_price
                                     je.target_price = trade.target_price
                                     je.exit_mode = trade.exit_mode
                                     je.ib_alignment = trade.ib_alignment
                                     break
 
-                            if trade.pnl_r > 0:
+                            if scaled_pnl > 0:
                                 day_summary.wins += 1
                                 result.total_wins += 1
-                            elif trade.pnl_r < 0:
+                            elif scaled_pnl < 0:
                                 day_summary.losses += 1
                                 result.total_losses += 1
                             else:
@@ -410,7 +408,8 @@ def replay_historical(
                     trade = _find_completed_trade(engine, event.strategy_id)
                     if trade is None:
                         logger.warning(f"No completed trade for EOD SCRATCH: strategy={event.strategy_id}, day={td}")
-                    scratch_pnl = trade.pnl_r if (trade and trade.pnl_r is not None) else 0.0
+                    raw_pnl = trade.pnl_r if (trade and trade.pnl_r is not None) else 0.0
+                    scratch_pnl = raw_pnl * (trade.size_multiplier if trade else 1.0)
                     for je in reversed(result.journal):
                         if (
                             je.strategy_id == event.strategy_id
@@ -525,20 +524,9 @@ def main():
         help="Use session-adjusted slippage (CME_REOPEN=1.3x, US_DATA_830=0.8x)",
     )
     parser.add_argument(
-        "--calendar-filter", choices=["NFP", "OPEX", "NONE"], default="NONE", help="Calendar overlay filter"
-    )
-    parser.add_argument(
         "--use-ml", action="store_true", help="Enable ML meta-label P(win) filtering (skip low-confidence trades)"
     )
     args = parser.parse_args()
-
-    # Convert CLI calendar filter to CalendarSkipFilter object
-    calendar_overlay = None
-    if args.calendar_filter == "NFP":
-        calendar_overlay = CalendarSkipFilter(skip_nfp=True, skip_opex=False)
-    elif args.calendar_filter == "OPEX":
-        calendar_overlay = CalendarSkipFilter(skip_nfp=False, skip_opex=True)
-    # "NONE" keeps calendar_overlay=None
 
     risk_limits = RiskLimits(
         max_daily_loss_r=args.max_daily_loss,
@@ -552,7 +540,6 @@ def main():
         risk_limits=risk_limits,
         live_session_costs=args.live_session_costs,
         max_correlation=args.max_correlation,
-        calendar_overlay=calendar_overlay,
         use_ml=args.use_ml,
     )
 

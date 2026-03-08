@@ -425,6 +425,8 @@ _GRID_SIZE_FILTERS = {k: v for k, v in MGC_ORB_SIZE_FILTERS.items() if k in ("G4
 _MGC_GRID_SIZE_FILTERS = {k: v for k, v in MGC_ORB_SIZE_FILTERS.items() if k in ("G4", "G5", "G6", "G8")}
 
 # Calendar skip filters (portfolio overlay, not in discovery grid)
+# DEPRECATED: Blanket NFP/OPEX skip disproven (Mar 2026 research). Retained for
+# per-session conditional use only. Default engine overlay is now None.
 CALENDAR_SKIP_NFP_OPEX = CalendarSkipFilter(
     filter_type="CAL_SKIP_NFP_OPEX",
     description="Skip NFP + OPEX days",

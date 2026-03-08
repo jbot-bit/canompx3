@@ -25,15 +25,14 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 from pipeline.cost_model import CostSpec, get_session_cost_spec, to_r_multiple
 from pipeline.dst import DYNAMIC_ORB_RESOLVERS
 from pipeline.log import get_logger
+from trading_app.calendar_overlay import CalendarAction, get_calendar_action
 from trading_app.config import (
     ALL_FILTERS,
-    CALENDAR_SKIP_NFP_OPEX,
     EARLY_EXIT_MINUTES,
     HOLD_HOURS,
     IB_DURATION_MINUTES,
     ORB_DURATION_MINUTES,
     SESSION_EXIT_MODE,
-    CalendarSkipFilter,
 )
 from trading_app.portfolio import (
     Portfolio,
@@ -171,6 +170,9 @@ class ActiveTrade:
     # Timed early exit
     early_exit_checked: bool = False
 
+    # Calendar overlay sizing (1.0 = full, 0.5 = half)
+    size_multiplier: float = 1.0
+
     # Outcome tracking
     exit_ts: datetime | None = None
     exit_price: float | None = None
@@ -196,7 +198,6 @@ class ExecutionEngine:
         risk_manager=None,
         market_state=None,
         live_session_costs: bool = True,
-        calendar_overlay: CalendarSkipFilter | None = CALENDAR_SKIP_NFP_OPEX,
         atr_velocity_overlay=None,
         ml_predictor=None,
     ):
@@ -205,7 +206,6 @@ class ExecutionEngine:
         self.risk_manager = risk_manager  # Optional RiskManager for position limits
         self.market_state = market_state  # Optional MarketState for scoring
         self._live_session_costs = live_session_costs  # Use session-adjusted slippage
-        self.calendar_overlay = calendar_overlay  # NFP/OPEX skip overlay
         self.atr_velocity_overlay = atr_velocity_overlay  # Contracting ATR skip overlay
         self.ml_predictor = ml_predictor  # Optional LiveMLPredictor for P(win) filtering
         self.ml_skips: int = 0  # Count of ML-skipped trades
@@ -472,26 +472,18 @@ class ExecutionEngine:
                 if not filt.matches_row(row, orb.label):
                     continue
 
-            # Check calendar overlay (NFP/OPEX skip)
-            if (
-                self.calendar_overlay is not None
-                and self._daily_features_row is not None
-                and not self.calendar_overlay.matches_row(self._daily_features_row, orb.label)
-            ):
-                # Determine skip reason for audit trail
-                skip_reason = []
-                if self.calendar_overlay.skip_nfp and self._daily_features_row.get("is_nfp_day"):
-                    skip_reason.append("NFP")
-                if self.calendar_overlay.skip_opex and self._daily_features_row.get("is_opex_day"):
-                    skip_reason.append("OPEX")
-                if self.calendar_overlay.skip_friday_session == orb.label and self._daily_features_row.get("is_friday"):
-                    skip_reason.append(f"Friday-{orb.label}")
-
+            # Check calendar overlay (per-instrument×session rules)
+            action = get_calendar_action(strategy.instrument, orb.label, self.trading_day)
+            if action == CalendarAction.SKIP:
                 logger.info(
-                    f"Calendar skip: {strategy.strategy_id} on {self.trading_day} "
-                    f"({orb.label}) — {', '.join(skip_reason)}"
+                    "Calendar SKIP: %s on %s (%s)",
+                    strategy.strategy_id,
+                    self.trading_day,
+                    orb.label,
                 )
                 continue
+            # size_multiplier: 0.5 for HALF_SIZE, 1.0 for NEUTRAL
+            size_multiplier = action.value
 
             # Check ATR velocity overlay (Contracting×Neutral/Compressed skip)
             if (
@@ -563,6 +555,7 @@ class ExecutionEngine:
                     else 0
                 ),
                 bars_since_break=[bar],
+                size_multiplier=size_multiplier,
             )
 
             # Check if immediately confirmed (confirm_bars=1 and break bar qualifies)

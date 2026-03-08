@@ -799,91 +799,88 @@ class TestLiveSessionCosts:
 
 
 # ============================================================================
-# 9. Calendar overlay: NFP/OPEX day skipping in engine
+# 9. Calendar overlay: per-instrument×session rules via get_calendar_action
 # ============================================================================
 
-from trading_app.config import CALENDAR_SKIP_NFP_OPEX, CalendarSkipFilter
+from unittest.mock import patch
+
+from trading_app.calendar_overlay import CalendarAction
 
 
 class TestCalendarOverlay:
-    def test_nfp_day_blocks_entry(self):
-        """On an NFP day, the calendar overlay should prevent strategy arming."""
+    def test_skip_blocks_entry(self):
+        """When get_calendar_action returns SKIP, strategy should not arm."""
         strategy = _make_strategy(entry_model="E1", confirm_bars=1)
         engine = ExecutionEngine(
             _make_portfolio([strategy]),
             _cost(),
-            calendar_overlay=CALENDAR_SKIP_NFP_OPEX,
         )
-        nfp_row = {"is_nfp_day": True, "is_opex_day": False, "is_friday": False, "day_of_week": 4}
-        engine.on_trading_day_start(_TRADING_DAY, daily_features_row=nfp_row)
+        engine.on_trading_day_start(_TRADING_DAY, daily_features_row={})
 
         break_ts = _build_orb(engine)
-        events = _break_long(engine, break_ts)
-        # No strategy should arm on NFP day
+        with patch(
+            "trading_app.execution_engine.get_calendar_action",
+            return_value=CalendarAction.SKIP,
+        ):
+            events = _break_long(engine, break_ts)
+        # No strategy should arm when SKIP
         assert len(engine.active_trades) == 0
-        # Fill bar should produce nothing
-        events = _fill_e1(engine, break_ts)
         entry_events = [e for e in events if e.event_type == "ENTRY"]
         assert len(entry_events) == 0
 
-    def test_opex_day_blocks_entry(self):
-        """On an OPEX day, the calendar overlay should prevent strategy arming."""
+    def test_half_size_allows_entry_with_multiplier(self):
+        """When get_calendar_action returns HALF_SIZE, trade is armed with size_multiplier=0.5."""
         strategy = _make_strategy(entry_model="E1", confirm_bars=1)
         engine = ExecutionEngine(
             _make_portfolio([strategy]),
             _cost(),
-            calendar_overlay=CALENDAR_SKIP_NFP_OPEX,
         )
-        opex_row = {"is_nfp_day": False, "is_opex_day": True, "is_friday": True, "day_of_week": 4}
-        engine.on_trading_day_start(_TRADING_DAY, daily_features_row=opex_row)
+        engine.on_trading_day_start(_TRADING_DAY, daily_features_row={})
 
         break_ts = _build_orb(engine)
-        events = _break_long(engine, break_ts)
-        assert len(engine.active_trades) == 0
-
-    def test_normal_day_allows_entry(self):
-        """On a normal day (not NFP/OPEX), the calendar overlay allows trading."""
-        strategy = _make_strategy(entry_model="E1", confirm_bars=1)
-        engine = ExecutionEngine(
-            _make_portfolio([strategy]),
-            _cost(),
-            calendar_overlay=CALENDAR_SKIP_NFP_OPEX,
-        )
-        normal_row = {"is_nfp_day": False, "is_opex_day": False, "is_friday": False, "day_of_week": 2}
-        engine.on_trading_day_start(_TRADING_DAY, daily_features_row=normal_row)
-
-        break_ts = _build_orb(engine)
-        _break_long(engine, break_ts)
-        events = _fill_e1(engine, break_ts)
+        with patch(
+            "trading_app.execution_engine.get_calendar_action",
+            return_value=CalendarAction.HALF_SIZE,
+        ):
+            _break_long(engine, break_ts)
+            events = _fill_e1(engine, break_ts)
         entry_events = [e for e in events if e.event_type == "ENTRY"]
         assert len(entry_events) == 1
+        # Verify size_multiplier on the completed/active trade
+        trades = [t for t in engine.active_trades + engine.completed_trades if t.strategy_id == strategy.strategy_id]
+        assert len(trades) == 1
+        assert trades[0].size_multiplier == 0.5
 
-    def test_no_overlay_allows_nfp_day(self):
-        """With calendar_overlay=None, NFP day is not blocked."""
+    def test_neutral_allows_entry(self):
+        """When get_calendar_action returns NEUTRAL, trading proceeds normally."""
         strategy = _make_strategy(entry_model="E1", confirm_bars=1)
         engine = ExecutionEngine(
             _make_portfolio([strategy]),
             _cost(),
-            calendar_overlay=None,
         )
-        nfp_row = {"is_nfp_day": True, "is_opex_day": False, "is_friday": False, "day_of_week": 4}
-        engine.on_trading_day_start(_TRADING_DAY, daily_features_row=nfp_row)
+        engine.on_trading_day_start(_TRADING_DAY, daily_features_row={})
 
         break_ts = _build_orb(engine)
-        _break_long(engine, break_ts)
-        events = _fill_e1(engine, break_ts)
+        with patch(
+            "trading_app.execution_engine.get_calendar_action",
+            return_value=CalendarAction.NEUTRAL,
+        ):
+            _break_long(engine, break_ts)
+            events = _fill_e1(engine, break_ts)
         entry_events = [e for e in events if e.event_type == "ENTRY"]
         assert len(entry_events) == 1
+        trades = [t for t in engine.active_trades + engine.completed_trades if t.strategy_id == strategy.strategy_id]
+        assert len(trades) == 1
+        assert trades[0].size_multiplier == 1.0
 
-    def test_no_daily_features_row_allows_entry(self):
-        """When daily_features_row is None (no data), overlay is skipped."""
+    def test_default_neutral_no_mock(self):
+        """Without mocking, empty CALENDAR_RULES returns NEUTRAL — entry allowed."""
         strategy = _make_strategy(entry_model="E1", confirm_bars=1)
         engine = ExecutionEngine(
             _make_portfolio([strategy]),
             _cost(),
-            calendar_overlay=CALENDAR_SKIP_NFP_OPEX,
         )
-        engine.on_trading_day_start(_TRADING_DAY)  # No daily_features_row
+        engine.on_trading_day_start(_TRADING_DAY, daily_features_row={})
 
         break_ts = _build_orb(engine)
         _break_long(engine, break_ts)
