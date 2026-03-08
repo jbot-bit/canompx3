@@ -77,7 +77,7 @@ ASSET_CONFIGS = {
         ],
     },
     "MNQ": {
-        "dbn_path": PROJECT_ROOT / "DB" / "MNQ_DB" / "glbx-mdp3-20240204-20260203.ohlcv-1m.dbn.zst",
+        "dbn_path": PROJECT_ROOT / "DB" / "MNQ_DB",
         "symbol": "MNQ",
         "outright_pattern": re.compile(r"^MNQ[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 3,
