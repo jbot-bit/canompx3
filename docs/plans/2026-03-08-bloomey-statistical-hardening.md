@@ -29,35 +29,24 @@ count unnecessarily.
 | FIX 11 (Synthetic null) | NOT DONE | Deferred to future |
 | FIX 12 (PBO) | NOT DONE | Bloomey #5 |
 
-## Phases
+## PHASE 0: Grid Reduction — CANCELLED
 
-### PHASE 0: Grid Reduction (prerequisite — reduces n_trials for all downstream)
+**Decision:** Keep E3 in grid, keep 0.75× stop in grid. Let the new statistical gates
+(DSR/FST) filter on merit instead of manually excluding.
 
-**Why first:** Removing E3 and 0.75× stop drops n_trials from ~2,376 → ~792 per instrument.
-FST hurdle drops from SR ≈ 0.17 to SR ≈ 0.14. DSR thresholds become more achievable.
-Every downstream calculation depends on correct n_trials.
-
-**Changes:**
-- `trading_app/config.py`: `ENTRY_MODELS = ["E1", "E2"]` (remove "E3")
-- `trading_app/config.py`: `STOP_MULTIPLIERS = [1.0]` (remove 0.75)
-- `pipeline/check_drift.py`: Update any hardcoded assertions on entry model count
-- Tests: Update grid size assertions, remove E3 fixtures from validation tests
-- DB: No migration needed — E3 already RETIRED, 0.75× strategies will be superseded on next rebuild
-
-**Keep but no-op:**
-- `apply_tight_stop()` function stays (called with 1.0 = no-op, keeps API stable)
-- `retire_e3_strategies.py` stays (idempotent, already ran)
-- outcome_builder still computes E3 outcomes (historical completeness for research)
-
-**Blast radius:**
-- 64 files import config.py — but ENTRY_MODELS/STOP_MULTIPLIERS only read in discovery grid loop
-- strategy_discovery.py: grid loop already iterates over ENTRY_MODELS (no change needed)
-- execution_engine.py: reads stop_multiplier from DB per-strategy (no change needed)
-- live_config.py: no E3 strategies in live portfolio (no change needed)
-
-**Verify:** `python pipeline/check_drift.py` + `pytest tests/ -x -q`
+**Rationale:**
+- E3: 0/50 FDR survivors, but removing it pre-hoc is a form of reverse cherry-picking.
+  If DSR/FST gates kill all E3 strategies, that's confirmation. If one survives, we learn.
+  E3 adds only ~264 combos (~10% of grid) — modest n_trials inflation.
+- 0.75× stop: Kill ratio is 10:1 to 20:1 (structural, not curve-fit). Deliberately
+  designed NOT to inflate n_trials (correlated overlay on same hypothesis). Has 0 validated
+  strategies currently because it hasn't been through validation yet. Removing it before
+  giving it a chance is premature.
+- The whole point of statistical gates is to let the math decide, not our priors.
 
 ---
+
+## Phases
 
 ### PHASE 1: Enforce Statistical Gates
 
@@ -263,16 +252,16 @@ python scripts/tools/build_edge_families.py
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
-| DSR/FST gates reject ALL strategies for an instrument | Low | High | Check distribution of DSR values before enforcing; use reduced n_trials from Phase 0 |
+| DSR/FST gates reject ALL strategies for an instrument | Low | High | Check distribution of DSR values before enforcing; soft-launch as logging-only first |
 | Yearly relaxation admits noise strategies | Medium | Medium | DSR/FST gates catch these |
-| E3 removal breaks drift checks | High | Low | Update assertions in Phase 0 |
 | PBO computation too slow | Medium | Low | Limit to edge family heads only |
 | Full rebuild reveals zero validated strategies for M2K | Medium | Medium | M2K already marginal (12-15 strategies); accept if gates reject all |
+| E3 strategies all die under new gates | High | None | Expected outcome; confirms soft-retirement decision |
+| 0.75× stop strategies mostly die under new gates | Medium | Low | Structural kill ratio means survivors are real |
 
 ## Rollback Plan
 
 Each phase is independently revertable:
-- Phase 0: Restore ENTRY_MODELS/STOP_MULTIPLIERS in config.py
 - Phase 1: Remove Phase 4c/4d from validate_strategy()
 - Phase 2: Remove WFE computation (informational only)
 - Phase 3: Change min_years_positive_pct back to 1.0
@@ -280,13 +269,13 @@ Each phase is independently revertable:
 - Phase 5: Drop PBO computation
 
 No destructive schema changes. All additions are additive columns/tables.
+No grid reduction — E3 and 0.75× stop stay in grid, filtered by gates.
 
 ## Guardian Prompt Assessment
 
-- **ENTRY_MODEL_GUARDIAN:** E3 removal is config-only (not outcome_builder or discovery logic).
-  E3 already soft-retired. outcome_builder still computes E3 for historical research.
-  No entry model LOGIC changes. Guardian Pass 1 satisfied.
+- **ENTRY_MODEL_GUARDIAN:** No entry model changes. E3 stays in grid. No entry model
+  LOGIC changes. Guardian not triggered.
 
 - **PIPELINE_DATA_GUARDIAN:** No changes to ingestion, aggregation, or feature computation.
-  Changes are validation-layer only (strategy_validator.py, walkforward.py, config.py).
-  No data flow changes. Guardian Pass 1 satisfied.
+  Changes are validation-layer only (strategy_validator.py, walkforward.py).
+  No data flow changes. Guardian not triggered.

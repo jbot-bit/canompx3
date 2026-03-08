@@ -120,6 +120,9 @@ _BATCH_COLUMNS = [
     # Multiple testing audit (Chordia et al 2018, Bailey & Lopez de Prado 2018)
     "n_trials_at_discovery",
     "fst_hurdle",
+    # BH FDR at discovery (Mar 2026 — Bloomey statistical hardening)
+    "fdr_significant_discovery",
+    "fdr_adjusted_p_discovery",
 ]
 
 
@@ -144,7 +147,8 @@ def _flush_batch_df(con, insert_batch: list[list]) -> None:
          created_at,
          p_value, sharpe_ann_adj, autocorr_lag1,
          sharpe_haircut, skewness, kurtosis_excess,
-         n_trials_at_discovery, fst_hurdle)
+         n_trials_at_discovery, fst_hurdle,
+         fdr_significant_discovery, fdr_adjusted_p_discovery)
         SELECT strategy_id, instrument, orb_label, orb_minutes,
                rr_target, confirm_bars, entry_model,
                filter_type, filter_params, stop_multiplier,
@@ -161,7 +165,8 @@ def _flush_batch_df(con, insert_batch: list[list]) -> None:
                COALESCE(created_at, CURRENT_TIMESTAMP),
                p_value, sharpe_ann_adj, autocorr_lag1,
                sharpe_haircut, skewness, kurtosis_excess,
-               n_trials_at_discovery, fst_hurdle
+               n_trials_at_discovery, fst_hurdle,
+               fdr_significant_discovery, fdr_adjusted_p_discovery
         FROM batch_df
     """)
 
@@ -1183,6 +1188,20 @@ def run_discovery(
         n_alias = len(all_strategies) - n_canonical
         logger.info(f"  {n_canonical} canonical, {n_alias} aliases")
 
+        # ---- BH FDR at discovery (Bloomey statistical hardening, Mar 2026) ----
+        # Annotate each strategy with BH FDR significance across all K trials.
+        # Informational — DSR/FST gates in validation are the hard filters.
+        from trading_app.strategy_validator import benjamini_hochberg
+
+        p_pairs = [
+            (s["strategy_id"], s["metrics"].get("p_value"))
+            for s in all_strategies
+            if s["metrics"].get("p_value") is not None
+        ]
+        fdr_results = benjamini_hochberg(p_pairs, alpha=0.05) if p_pairs else {}
+        n_fdr_sig = sum(1 for v in fdr_results.values() if v.get("fdr_significant"))
+        logger.info(f"BH FDR at discovery: {n_fdr_sig}/{len(p_pairs)} significant at q=0.05")
+
         # ---- Batch write ----
         if not dry_run:
             # Preserve existing created_at timestamps (INSERT OR REPLACE = DELETE+INSERT)
@@ -1197,6 +1216,7 @@ def run_discovery(
             for s in all_strategies:
                 m = s["metrics"]
                 dst = s["dst_split"]
+                fdr = fdr_results.get(s["strategy_id"], {})
                 insert_batch.append(
                     [
                         s["strategy_id"],
@@ -1250,6 +1270,9 @@ def run_discovery(
                         # Multiple testing audit (Chordia et al 2018, Bailey 2018)
                         m.get("n_trials_at_discovery"),
                         m.get("fst_hurdle"),
+                        # BH FDR at discovery (Bloomey hardening)
+                        fdr.get("fdr_significant"),
+                        fdr.get("adjusted_p"),
                     ]
                 )
 

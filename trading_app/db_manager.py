@@ -447,6 +447,40 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 except duckdb.CatalogException:
                     pass  # column already exists
 
+        # Migration: BH FDR at discovery (Mar 2026 — Bloomey statistical hardening)
+        # Annotates each strategy with whether its p-value survives BH FDR correction
+        # across all K trials at discovery time. Informational — DSR/FST are the hard gates.
+        for col, typedef in [
+            ("fdr_significant_discovery", "BOOLEAN"),
+            ("fdr_adjusted_p_discovery", "DOUBLE"),
+        ]:
+            try:
+                con.execute(f"ALTER TABLE experimental_strategies ADD COLUMN {col} {typedef}")
+            except duckdb.CatalogException:
+                pass  # column already exists
+
+        # Migration: PBO on edge_families (Mar 2026 — Bloomey FIX 12)
+        # Probability of Backtest Overfitting (Bailey et al. 2014).
+        # PBO > 0.50 = likely overfit selection process.
+        ef_tables = {
+            r[0]
+            for r in con.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
+            ).fetchall()
+        }
+        if "edge_families" in ef_tables:
+            try:
+                con.execute("ALTER TABLE edge_families ADD COLUMN pbo DOUBLE")
+            except duckdb.CatalogException:
+                pass  # column already exists
+
+        # Migration: Walk-Forward Efficiency (Mar 2026 — Bloomey statistical hardening)
+        # WFE = mean(OOS ExpR) / mean(IS ExpR) per Pardo. WFE > 0.50 = healthy.
+        try:
+            con.execute("ALTER TABLE validated_setups ADD COLUMN wfe DOUBLE")
+        except duckdb.CatalogException:
+            pass  # column already exists
+
         # Migration: stop_multiplier (Mar 2026 — tight stop feature)
         # 1.0 = standard stop at ORB edge, 0.75 = tight stop at 75% of ORB range.
         # Loss capped at -stop_multiplier R (e.g. -0.75R) instead of -1.0R.
@@ -455,6 +489,27 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 con.execute(f"ALTER TABLE {table} ADD COLUMN stop_multiplier DOUBLE DEFAULT 1.0")
             except duckdb.CatalogException:
                 pass  # column already exists
+
+        # Table 7: validation_run_log (Mar 2026 — Bloomey FIX 8)
+        # Tracks rejection rate per phase per validation run for auditability.
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS validation_run_log (
+                run_id            TEXT        PRIMARY KEY,
+                run_ts            TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                instrument        TEXT        NOT NULL,
+                candidates        INTEGER,
+                phase1_rejected   INTEGER,
+                phase2_rejected   INTEGER,
+                phase3_rejected   INTEGER,
+                phase4_rejected   INTEGER,
+                phase4c_rejected  INTEGER,
+                phase4d_rejected  INTEGER,
+                phase4b_rejected  INTEGER,
+                final_passed      INTEGER,
+                rejection_rate    DOUBLE,
+                notes             TEXT
+            )
+        """)
 
         con.commit()
         logger.info("Trading app schema initialized successfully")
@@ -583,6 +638,8 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
                 "sharpe_haircut",
                 "skewness",
                 "kurtosis_excess",
+                "fdr_significant_discovery",
+                "fdr_adjusted_p_discovery",
             }
             actual_cols = {row[0] for row in result}
 
@@ -635,6 +692,7 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
                 "wf_tested",
                 "wf_passed",
                 "wf_windows",
+                "wfe",
                 "status",
                 "retired_at",
                 "retirement_reason",

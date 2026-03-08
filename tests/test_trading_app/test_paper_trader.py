@@ -287,12 +287,12 @@ class TestCLI:
         assert r.returncode == 0
         assert "instrument" in r.stdout
 
-    def test_calendar_filter_cli_arg(self, tmp_path):
-        """Verify --calendar-filter CLI argument is wired correctly."""
-        import subprocess
+    def test_calendar_filter_cli_arg_removed(self, tmp_path):
+        """--calendar-filter CLI arg was removed; calendar overlay is now automatic."""
         import os
+        import subprocess
 
-        # Run paper_trader with --calendar-filter NFP
+        # Run paper_trader with the old --calendar-filter flag — should be rejected
         result = subprocess.run(
             [
                 sys.executable,
@@ -311,7 +311,14 @@ class TestCLI:
             cwd=str(Path(__file__).parent.parent.parent),
             env={**os.environ, "PYTHONPATH": str(Path(__file__).parent.parent.parent)},
         )
+        # The flag no longer exists — argparse should reject it
+        assert "unrecognized arguments" in result.stderr
 
-        # Should not error (even if DB doesn't exist in subprocess, argparse should work)
-        # At minimum, verify the argument is accepted
-        assert "--calendar-filter" not in result.stderr or "unrecognized arguments" not in result.stderr
+    def test_calendar_overlay_importable(self):
+        """get_calendar_action is importable and returns NEUTRAL with empty rules."""
+        from datetime import date
+
+        from trading_app.calendar_overlay import CalendarAction, get_calendar_action
+
+        result = get_calendar_action("MGC", "TOKYO_OPEN", date(2025, 1, 6))
+        assert result == CalendarAction.NEUTRAL

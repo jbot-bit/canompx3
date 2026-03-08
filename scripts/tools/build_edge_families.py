@@ -332,6 +332,29 @@ def build_edge_families(db_path: str, instrument: str) -> int:
                     [family_hash, is_head, sid],
                 )
 
+        # 6b. Compute PBO for families with 2+ members (Bailey et al. 2014)
+        from trading_app.pbo import compute_family_pbo
+
+        pbo_computed = 0
+        pbo_high = 0  # PBO > 0.50 (likely overfit selection)
+        for family_hash, members in families.items():
+            if len(members) < 2:
+                continue
+
+            pbo_result = compute_family_pbo(con, family_hash, instrument)
+            pbo_val = pbo_result.get("pbo")
+            if pbo_val is not None:
+                con.execute(
+                    "UPDATE edge_families SET pbo = ? WHERE family_hash = ?",
+                    [pbo_val, family_hash],
+                )
+                pbo_computed += 1
+                if pbo_val > 0.50:
+                    pbo_high += 1
+
+        if pbo_computed:
+            print(f"  PBO computed for {pbo_computed} families ({pbo_high} with PBO > 0.50)")
+
         # 7. Fail gates — abort before commit if data quality checks fail
         total_fam = len(families)
         singleton_count = status_counts.get("SINGLETON", 0)
