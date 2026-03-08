@@ -137,19 +137,51 @@ Example (E1): 10pt ORB + 2pt overshoot = 12pt risk, RR2.0 = 24pt target, 12pt st
 
 > **Key insight**: Gold trends intraday more than it mean-reverts. The only confirmed edges are momentum breakouts with size filters. Full research details: `docs/RESEARCH_ARCHIVE.md`.
 
-### Calendar Effects (P2 — Feb 2026)
+### Calendar Effects (Revalidated Mar 2026)
 
-Three actionable calendar skip filters confirmed by `research/research_day_of_week.py`. Mechanisms are structural and stable across years.
+Calendar effects are **instrument × session specific**, NOT universal. The blanket "skip all NFP/OPEX days" approach was proven wrong by `research/research_calendar_effects.py` (BH FDR q=0.10 across all tests). Some combos are WORSE on these days; others are BETTER.
 
-**NFP_SKIP (Universal):** First-Friday Non-Farm Payrolls days are toxic for all instruments and sessions. MES TOKYO_OPEN G6+ delta = -0.75R. Random spike from 8:30 ET release destroys ORB signal. Skip all NFP days.
+@research-source research/research_calendar_effects.py
+@revalidated-for E1/E2 event-based sessions (Mar 2026)
 
-**OPEX_SKIP (Universal):** Third-Friday options expiration days degrade edge. Strongest at CME_REOPEN for MNQ (-0.28 delta) and MGC (-0.50 delta). Options pinning kills follow-through. Skip all OPEX days.
+**NFP (First Friday — NOT universal):**
+| Direction | Instrument | Session | Delta (R) | p_bh |
+|-----------|-----------|---------|-----------|------|
+| WORSE | MGC | TOKYO_OPEN | -0.092 | <0.001 |
+| WORSE | MNQ | CME_PRECLOSE | -0.365 | <0.001 |
+| WORSE | MES | CME_PRECLOSE | -0.264 | <0.001 |
+| WORSE | MES | SINGAPORE_OPEN | -0.215 | <0.001 |
+| WORSE | M2K | NYSE_OPEN | -0.142 | <0.001 |
+| WORSE | MGC | CME_REOPEN | -0.153 | 0.002 |
+| BETTER | MNQ | NYSE_OPEN | +0.161 | <0.001 |
+| BETTER | MES | US_DATA_1000 | +0.218 | <0.001 |
+| BETTER | MES | NYSE_OPEN | +0.122 | <0.001 |
+| BETTER | MNQ | BRISBANE_1025 | +0.157 | <0.001 |
+| BETTER | MGC | US_DATA_1000 | +0.132 | 0.005 |
 
-**FRIDAY_SKIP (CME_REOPEN only):** Friday CME_REOPEN underperforms other weekdays. MNQ G4+ Friday avgR = -0.376 vs +0.067 non-Friday. MGC G5+ Friday avgR = -0.292. Mechanism: weekend position-squaring. Do NOT apply to TOKYO_OPEN — all days are positive there.
+**OPEX (Third Friday — NOT universal):**
+| Direction | Instrument | Session | Delta (R) | p_bh |
+|-----------|-----------|---------|-----------|------|
+| WORSE | MGC | NYSE_OPEN | -0.164 | <0.001 |
+| WORSE | MNQ | CME_PRECLOSE | -0.341 | <0.001 |
+| WORSE | MNQ | COMEX_SETTLE | -0.172 | <0.001 |
+| BETTER | MNQ | NYSE_OPEN | +0.201 | <0.001 |
+| BETTER | MNQ | SINGAPORE_OPEN | +0.184 | <0.001 |
+| BETTER | MNQ | CME_REOPEN | +0.219 | <0.001 |
+| BETTER | MNQ | TOKYO_OPEN | +0.096 | <0.001 |
+| BETTER | MES | NYSE_CLOSE | +0.464 | <0.001 |
+| BETTER | MES | LONDON_METALS | +0.243 | 0.001 |
+| BETTER | MES | NYSE_OPEN | +0.057 | 0.001 |
+| BETTER | M2K | NYSE_OPEN | +0.174 | <0.001 |
+| BETTER | MNQ | US_DATA_830 | +0.211 | <0.001 |
 
-**DOW at TOKYO_OPEN:** Day-of-week has no significant stable effect. Best day rotates year to year. Do NOT filter.
+**FRIDAY_SKIP (CME_REOPEN only):** Friday CME_REOPEN underperforms other weekdays. Mechanism: weekend position-squaring. Do NOT apply universally — DOW effects vary by instrument × session.
 
-Calendar filters implemented in `pipeline/calendar_filters.py`. Filter classes and `CALENDAR_OVERLAYS` defined in `trading_app/config.py`. **Infrastructure complete** (columns in `daily_features`, filter classes, tests) but **not yet wired** into `portfolio.py` / `paper_trader.py` execution. CSVs: `research/output/day_of_week_*.csv`.
+**DOW effects:** Instrument × session specific, NOT noise. MGC TOKYO_OPEN Monday is significantly positive (+0.12R, p_bh<0.001); MGC TOKYO_OPEN Friday is significantly negative (-0.07R, p_bh<0.001). Other combos vary. Currently wired as DOW composite filters in the discovery grid for sessions with research support.
+
+**Bottom line:** Do NOT apply blanket calendar skip filters. Each instrument × session must be evaluated individually. The `CALENDAR_OVERLAYS` in config.py are infrastructure only — blanket NFP+OPEX skip would hurt strategies where those days are BETTER.
+
+Calendar flag functions in `pipeline/calendar_filters.py`. Filter classes in `trading_app/config.py`. CSVs: `research/output/calendar_effects_comprehensive.csv`, `research/output/day_of_week_skip_filter.csv`.
 
 ### DOW Alignment: Brisbane DOW vs Exchange DOW (Feb 2026)
 

@@ -542,6 +542,12 @@ ALL_FILTERS: dict[str, StrategyFilter] = {
 
 # Calendar skip overlays (NOT in discovery grid — applied at portfolio/paper_trader level)
 # Wired into ExecutionEngine._arm_strategies via calendar_overlay param.
+# WARNING: Blanket NFP+OPEX skip is WRONG — Mar 2026 revalidation showed effects are
+# instrument×session specific (some combos BETTER on NFP/OPEX days). These filters
+# exist as infrastructure but should NOT be applied universally. Per-strategy calendar
+# overlays (instrument×session specific) are the correct approach.
+# @research-source research/research_calendar_effects.py
+# @revalidated-for E1/E2 event-based sessions (Mar 2026)
 CALENDAR_OVERLAYS: dict[str, CalendarSkipFilter] = {
     "CAL_SKIP_NFP_OPEX": CALENDAR_SKIP_NFP_OPEX,
     "CAL_SKIP_ALL_CME_REOPEN": CALENDAR_SKIP_ALL_CME_REOPEN,

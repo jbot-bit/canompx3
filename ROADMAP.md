@@ -248,14 +248,13 @@ Six high-leverage research items identified by cross-referencing all findings. O
 - Step 6: ✅ Migrate DST columns to production gold.db — DONE (auto-migration in init_trading_app_schema())
 - All sessions are now event-based — DST contamination is fully resolved
 
-**P2. Calendar Effect Scan (Day-of-Week, FOMC, NFP, Opex) — DONE (Feb 2026)**
-- Script: `research/research_day_of_week.py` — COMPLETED
-- Output: `research/output/day_of_week_breakdown.csv`, `day_of_week_macro_overlay.csv`, `day_of_week_skip_filter.csv`
-- **NFP_SKIP:** First-Friday NFP days are toxic for breakout strategies. Actionable skip filter.
-- **OPEX_SKIP:** Monthly options expiration days degrade edge. Actionable skip filter.
-- **FRIDAY_SKIP (CME_REOPEN only):** Friday CME_REOPEN underperforms other weekdays. Session-specific skip.
-- **DOW at TOKYO_OPEN:** Day-of-week has no significant effect — noise. Do NOT filter.
-- Calendar filters implemented in `pipeline/calendar_filters.py` and integrated as portfolio-level overlays in `trading_app/config.py` (`CALENDAR_OVERLAYS`).
+**P2. Calendar Effect Scan (Day-of-Week, FOMC, NFP, Opex) — DONE (Feb 2026, revalidated Mar 2026)**
+- Script: `research/research_calendar_effects.py` — comprehensive revalidation with event-based sessions + E1/E2
+- Output: `research/output/calendar_effects_comprehensive.csv`, `day_of_week_skip_filter.csv`
+- **NFP/OPEX:** Instrument × session specific, NOT universal. Some combos WORSE, some BETTER. Blanket skip is WRONG.
+- **FRIDAY_SKIP (CME_REOPEN only):** Friday CME_REOPEN underperforms. Session-specific skip.
+- **DOW effects:** Instrument × session specific (e.g., MGC TOKYO_OPEN Monday=positive, Friday=negative). Wired as DOW composites in discovery grid.
+- Calendar flag functions in `pipeline/calendar_filters.py`. Infrastructure in `trading_app/config.py` (`CALENDAR_OVERLAYS`) — blanket skip NOT recommended.
 
 **P3. Signal Stacking (Size + Direction + Concordance + Volume) — DONE (Feb 2026)**
 - Script: `research/research_signal_stacking.py` — COMPLETED

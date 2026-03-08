@@ -739,38 +739,25 @@ Q3: FOMC/NFP/opex day overlay — do macro events explain the pattern?
 
 Stable across years. Mechanism: Friday pre-weekend position squaring kills ORB follow-through at the CME open session.
 
-### Macro Event Findings
+### Macro Event Findings (SUPERSEDED — see revalidation below)
 
-**NFP (Non-Farm Payrolls, first Friday of month) — UNIVERSALLY TOXIC:**
+> **WARNING:** The original Feb 2026 findings below used old fixed session names (0900/1000/1100) and E0 entry models (now purged). They claimed NFP was "universally toxic" — this was WRONG. Revalidated Mar 2026 with `research/research_calendar_effects.py` using event-based sessions and E1/E2 entry models.
 
-| Instrument | Session | Filter | NFP avgR | Non-NFP avgR | Delta |
-|-----------|---------|--------|---------|-------------|-------|
-| MES | 1000 | G6+ | -0.512 | +0.238 | -0.749 |
-| MNQ | 1100 | G6+ | -0.427 | +0.035 | -0.462 |
-| MNQ | 1000 | G4+ | -0.139 | +0.224 | -0.363 |
-| MGC | 0900 | G6+ | -0.739 | -0.026 | -0.713 |
+**Revalidated finding (Mar 2026):** NFP, OPEX, FOMC, CPI, and DOW effects are ALL **instrument × session specific**. Neither NFP nor OPEX is universally toxic. Some combos are significantly WORSE on these days; others are significantly BETTER (BH FDR q=0.10). A blanket skip filter would hurt strategies that benefit from these days.
 
-Mechanism: Random spike from NFP release at 8:30 ET destroys ORB signal. The breakout direction is noise on NFP days.
+Key examples:
+- NFP WORSE: MGC TOKYO_OPEN (-0.09R), MNQ CME_PRECLOSE (-0.37R), M2K NYSE_OPEN (-0.14R)
+- NFP BETTER: MNQ NYSE_OPEN (+0.16R), MES US_DATA_1000 (+0.22R), MES NYSE_OPEN (+0.12R)
+- OPEX WORSE: MGC NYSE_OPEN (-0.16R), MNQ CME_PRECLOSE (-0.34R)
+- OPEX BETTER: MNQ NYSE_OPEN (+0.20R), MNQ SINGAPORE_OPEN (+0.18R), MES NYSE_CLOSE (+0.46R)
 
-**OPEX (Options Expiration, third Friday of month):**
-
-| Instrument | Session | Filter | OPEX avgR | Non-OPEX avgR | Delta |
-|-----------|---------|--------|----------|--------------|-------|
-| MNQ | 0900 | G4+ | -0.250 | +0.029 | -0.279 |
-| MNQ | 0900 | G6+ | -0.250 | +0.031 | -0.281 |
-| MGC | 0900 | G4+ | -0.400 | +0.098 | -0.498 |
-
-Mechanism: Options pinning kills follow-through as market makers defend strikes.
-
-**FOMC:** Mixed — helps some sessions (MES 1800 delta = +1.11), hurts others. Not actionable as a universal filter.
+Full data: `research/output/calendar_effects_comprehensive.csv`. See TRADING_RULES.md "Calendar Effects" for complete tables.
 
 ### Actionable Filters
 
-1. **NFP_SKIP:** Skip first-Friday NFP days. Universal across instruments/sessions. Strongest signal.
-2. **OPEX_SKIP:** Skip third-Friday OPEX days. Strongest at 0900 for MNQ and MGC.
-3. **FRIDAY_SKIP (0900 only):** Skip all Fridays at 0900. Do NOT apply to 1000 (all days positive there).
-
-Calendar filters implemented in `pipeline/calendar_filters.py` and integrated as portfolio-level overlays in `trading_app/config.py` (`CALENDAR_OVERLAYS`).
+1. **FRIDAY_SKIP (CME_REOPEN only):** Skip all Fridays at CME_REOPEN. Weekend position-squaring mechanism. Do NOT apply universally.
+2. **NFP/OPEX:** Must be applied per instrument × session, not blanket. Infrastructure exists in `trading_app/config.py` (`CALENDAR_OVERLAYS`) but blanket skip is WRONG.
+3. **DOW composites:** Wired in discovery grid for sessions with research support (e.g., MGC TOKYO_OPEN Monday=positive, Friday=negative).
 
 ---
 
