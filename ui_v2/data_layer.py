@@ -52,17 +52,40 @@ def _cleanup_connections():
 atexit.register(_cleanup_connections)
 
 
-def query_df(sql: str, db_path: Path | None = None) -> pd.DataFrame:
+def query_df(
+    sql: str,
+    params: list | None = None,
+    db_path: Path | None = None,
+) -> pd.DataFrame:
     """Execute a SELECT query and return a DataFrame.
 
     Only SELECT statements are allowed. Raises ValueError for anything else.
+    Retries once on IOException (stale connection from concurrent writer).
     """
     stripped = sql.strip().upper()
     if not stripped.startswith("SELECT") and not stripped.startswith("WITH"):
         raise ValueError(f"Only SELECT/WITH queries allowed, got: {sql[:40]}...")
 
-    con = get_connection(db_path)
-    return con.execute(sql).fetchdf()
+    for attempt in range(2):
+        try:
+            con = get_connection(db_path)
+            if params is not None:
+                return con.execute(sql, params).fetchdf()
+            return con.execute(sql).fetchdf()
+        except duckdb.IOException:
+            if attempt == 0:
+                # Stale connection — drop cache and retry
+                path = str(db_path or GOLD_DB_PATH)
+                old = _DB_CONNECTIONS.pop(path, None)
+                if old:
+                    try:
+                        old.close()
+                    except Exception:
+                        pass
+                log.warning("DuckDB query failed (IOException), retrying with fresh connection")
+            else:
+                raise
+    return pd.DataFrame()  # unreachable, satisfies type checker
 
 
 def _df_to_records(df: pd.DataFrame) -> list[dict]:
@@ -94,16 +117,16 @@ def get_prior_day_atr(
     Returns the atr_20 value from the latest trading day in daily_features.
     Used by the co-pilot to set expectations: "Prior day ATR: 28pts."
     """
-    sql = f"""
+    sql = """
         SELECT atr_20
         FROM daily_features
-        WHERE symbol = '{instrument}'
-          AND orb_minutes = {orb_minutes}
+        WHERE symbol = ?
+          AND orb_minutes = ?
         ORDER BY trading_day DESC
         LIMIT 1
     """
     try:
-        df = query_df(sql, db_path)
+        df = query_df(sql, [instrument, orb_minutes], db_path)
         if df.empty:
             return None
         val = df.iloc[0]["atr_20"]
@@ -120,14 +143,14 @@ def get_previous_trading_day(
 
     Queries daily_features for the latest trading_day < before.
     """
-    sql = f"""
+    sql = """
         SELECT MAX(trading_day) as prev_day
         FROM daily_features
-        WHERE trading_day < '{before.isoformat()}'
+        WHERE trading_day < ?
           AND orb_minutes = 5
     """
     try:
-        df = query_df(sql, db_path)
+        df = query_df(sql, [before.isoformat()], db_path)
         if df.empty or pd.isna(df.iloc[0]["prev_day"]):
             return None
         val = df.iloc[0]["prev_day"]
@@ -148,16 +171,16 @@ def get_today_completed_sessions(
     Returns list of dicts with keys: orb_label, symbol, pnl_r, outcome,
     entry_model, rr_target.
     """
-    sql = f"""
+    sql = """
         SELECT orb_label, symbol, pnl_r, outcome,
                entry_model, rr_target
         FROM orb_outcomes
-        WHERE trading_day = '{trading_day.isoformat()}'
+        WHERE trading_day = ?
           AND orb_minutes = 5
         ORDER BY orb_label, symbol
     """
     try:
-        df = query_df(sql, db_path)
+        df = query_df(sql, [trading_day.isoformat()], db_path)
         return _df_to_records(df)
     except Exception:
         return []
@@ -178,17 +201,17 @@ def get_session_history(
     Returns list of dicts: trading_day, symbol, pnl_r, outcome,
     entry_model, rr_target.
     """
-    sql = f"""
+    sql = """
         SELECT trading_day, symbol, pnl_r, outcome,
                entry_model, rr_target
         FROM orb_outcomes
-        WHERE orb_label = '{session_name}'
+        WHERE orb_label = ?
           AND orb_minutes = 5
         ORDER BY trading_day DESC
-        LIMIT {limit}
+        LIMIT ?
     """
     try:
-        df = query_df(sql, db_path)
+        df = query_df(sql, [session_name, limit], db_path)
         return _df_to_records(df)
     except Exception:
         return []
@@ -202,7 +225,7 @@ def get_rolling_pnl(
 
     Returns dict with keys: daily (list of {date, total_r}), week_r, month_r.
     """
-    sql = f"""
+    sql = """
         SELECT trading_day,
                SUM(pnl_r) AS total_r,
                COUNT(*) AS trade_count
@@ -211,10 +234,10 @@ def get_rolling_pnl(
           AND pnl_r IS NOT NULL
         GROUP BY trading_day
         ORDER BY trading_day DESC
-        LIMIT {days}
+        LIMIT ?
     """
     try:
-        df = query_df(sql, db_path)
+        df = query_df(sql, [days], db_path)
         if df.empty:
             return {"daily": [], "week_r": 0.0, "month_r": 0.0}
 
@@ -257,17 +280,17 @@ def get_overnight_recap(
     overnight_sessions = _get_overnight_sessions(trading_day)
     if not overnight_sessions:
         return []
-    placeholders = ", ".join(f"'{s}'" for s in overnight_sessions)
+    placeholders = ", ".join("?" for _ in overnight_sessions)
     sql = f"""
         SELECT orb_label, symbol, pnl_r, outcome
         FROM orb_outcomes
-        WHERE trading_day = '{trading_day.isoformat()}'
+        WHERE trading_day = ?
           AND orb_label IN ({placeholders})
           AND orb_minutes = 5
         ORDER BY orb_label, symbol
     """
     try:
-        df = query_df(sql, db_path)
+        df = query_df(sql, [trading_day.isoformat(), *overnight_sessions], db_path)
         return _df_to_records(df)
     except Exception:
         return []
@@ -287,7 +310,7 @@ def get_fitness_regimes(db_path: Path | None = None) -> list[dict]:
         ORDER BY instrument, orb_label
     """
     try:
-        df = query_df(sql, db_path)
+        df = query_df(sql, db_path=db_path)
         return _df_to_records(df)
     except Exception:
         return []

@@ -11,8 +11,10 @@ Port 8766 (avoids conflict with webhook_server on 8765).
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
+import time as _time
 from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -60,6 +62,12 @@ from ui_v2.state_machine import (
     get_refresh_seconds,
     resolve_global_state,
 )
+from ui_v2.state_persistence import (
+    load_commitment_state,
+    load_cooling_state,
+    save_commitment_state,
+    save_cooling_state,
+)
 
 log = logging.getLogger(__name__)
 
@@ -67,14 +75,20 @@ PORT = int(os.environ.get("DASHBOARD_PORT", "8766"))
 
 # ── Server-side shared state ─────────────────────────────────────────────────
 
-# Cooling state dict — replaces Streamlit session_state
-_cooling_state: dict[str, Any] = {}
+# Cooling state — loaded from disk on startup, persisted on change
+_cooling_state: dict[str, Any] = load_cooling_state()
 
 # Session stack — active trading sessions
 _session_stack: list[SessionState] = []
 
-# Commitment checklist state (resets daily)
-_commitment: dict[str, Any] = {"items": {}, "date": None}
+# Session start lock — prevents concurrent session starts
+_session_lock = asyncio.Lock()
+
+# Commitment checklist state — loaded from disk on startup
+_commitment: dict[str, Any] = load_commitment_state()
+
+# Server start time for /api/health uptime
+_server_start_time: float = _time.monotonic()
 
 STATIC_DIR = Path(__file__).parent / "static"
 SIGNALS_PATH = Path(__file__).parent.parent / "live_signals.jsonl"
@@ -244,7 +258,20 @@ async def get_state():
 async def get_briefings():
     try:
         briefings = build_session_briefings()
-        return {"briefings": [_briefing_to_dict(b) for b in briefings]}
+        result = [_briefing_to_dict(b) for b in briefings]
+
+        # First-run detection: if no briefings, check if LIVE_PORTFOLIO is empty
+        first_run = False
+        if not result:
+            try:
+                from trading_app.live_config import LIVE_PORTFOLIO
+
+                if len(LIVE_PORTFOLIO) == 0:
+                    first_run = True
+            except ImportError:
+                first_run = True
+
+        return {"briefings": result, "first_run": first_run}
     except Exception as e:
         log.error("Failed to build briefings: %s", e)
         raise HTTPException(status_code=500, detail=f"Failed to build briefings: {e}") from e
@@ -371,6 +398,7 @@ async def submit_debrief(req: DebriefRequest):
             consecutive_losses=1,
             session_pnl_r=req.pnl_r,
         )
+        save_cooling_state(_cooling_state)
 
     return {"status": "ok", "cooling_active": is_cooling_active(_cooling_state)}
 
@@ -408,8 +436,9 @@ async def log_trade(req: TradeLogRequest):
 
 @app.post("/api/session/start")
 async def start_session():
-    # Placeholder — Phase 2 will wire to SessionOrchestrator
-    return {"status": "not_implemented", "message": "Session start requires Phase 2 (SSE + session_monitor)"}
+    async with _session_lock:
+        # Placeholder — Phase 2 will wire to SessionOrchestrator
+        return {"status": "not_implemented", "message": "Session start requires Phase 2 wiring"}
 
 
 @app.post("/api/session/stop")
@@ -433,6 +462,7 @@ async def record_commitment(req: CommitmentRequest):
         _commitment["date"] = today
 
     _commitment["items"].update(req.items)
+    save_commitment_state(_commitment)
     return {"status": "ok", "items": _commitment["items"], "date": today}
 
 
@@ -445,6 +475,7 @@ async def cooling_override(req: CoolingOverrideRequest):
         raise HTTPException(status_code=400, detail="No active cooling period")
 
     override_cooling(_cooling_state)
+    save_cooling_state(_cooling_state)
     return {"status": "ok", "cooling_active": False}
 
 
@@ -472,3 +503,58 @@ async def sse_events(request: Request):
 async def sse_status():
     """Return SSE connection count for monitoring."""
     return {"connections": sse_manager.connection_count}
+
+
+# ── Routes: Health ──────────────────────────────────────────────────────────
+
+
+@app.get("/api/health")
+async def health_check():
+    """Health endpoint — DB connectivity, SSE status, uptime, state."""
+    from zoneinfo import ZoneInfo
+
+    now = datetime.now(ZoneInfo("Australia/Brisbane"))
+    uptime_seconds = _time.monotonic() - _server_start_time
+
+    # DB connectivity check
+    db_ok = False
+    db_error = None
+    try:
+        from ui_v2.data_layer import get_connection
+
+        con = get_connection()
+        con.execute("SELECT 1").fetchone()
+        db_ok = True
+    except Exception as exc:
+        db_error = str(exc)
+
+    # LIVE_PORTFOLIO check (first-run detection)
+    portfolio_status = "ok"
+    portfolio_count = 0
+    try:
+        from trading_app.live_config import LIVE_PORTFOLIO
+
+        portfolio_count = len(LIVE_PORTFOLIO)
+        if portfolio_count == 0:
+            portfolio_status = "empty"
+    except ImportError:
+        portfolio_status = "unavailable"
+    except Exception:
+        portfolio_status = "error"
+
+    # Current state
+    state = get_app_state(now)
+    global_state = resolve_global_state(state)
+
+    return {
+        "status": "healthy" if db_ok else "degraded",
+        "uptime_seconds": round(uptime_seconds),
+        "db_connected": db_ok,
+        "db_error": db_error,
+        "sse_clients": sse_manager.connection_count,
+        "state": global_state.value,
+        "portfolio_strategies": portfolio_count,
+        "portfolio_status": portfolio_status,
+        "cooling_active": is_cooling_active(_cooling_state),
+        "server_time": now.isoformat(),
+    }
