@@ -18,19 +18,17 @@ from enum import Enum
 from pathlib import Path
 
 from pipeline.calendar_filters import (
+    build_cpi_set,
+    build_fomc_set,
     day_of_week,
+    is_month_end,
+    is_month_start,
     is_nfp_day,
     is_opex_day,
+    is_quarter_end,
+    opex_week_dates,
 )
 from pipeline.log import get_logger
-from research.research_calendar_effects import (
-    _build_cpi_set,
-    _build_fomc_set,
-    _is_month_end,
-    _is_month_start,
-    _is_quarter_end,
-    _opex_week_dates,
-)
 
 logger = get_logger(__name__)
 
@@ -84,9 +82,9 @@ CALENDAR_RULES: dict[tuple[str, str, str], CalendarAction] = _load_rules()
 # =========================================================================
 
 # Pre-built date sets (computed once at import time)
-_FOMC_DATES: set[date] = _build_fomc_set()
-_CPI_DATES: set[date] = _build_cpi_set()
-_OPEX_WEEK_DATES: set[date] = _opex_week_dates()
+_FOMC_DATES: set[date] = build_fomc_set()
+_CPI_DATES: set[date] = build_cpi_set()
+_OPEX_WEEK_DATES: set[date] = opex_week_dates()
 
 # Signal name → column mapping (matches cascade scanner names)
 # Lazy-built set of all known trading days for month-end/start/quarter-end checks.
@@ -113,11 +111,11 @@ def _get_active_signals(trading_day: date) -> list[str]:
         signals.append("FOMC")
     if trading_day in _CPI_DATES:
         signals.append("CPI")
-    if _is_month_end(trading_day, _EMPTY_TRADING_DAYS):
+    if is_month_end(trading_day, _EMPTY_TRADING_DAYS):
         signals.append("MONTH_END")
-    if _is_month_start(trading_day, _EMPTY_TRADING_DAYS):
+    if is_month_start(trading_day, _EMPTY_TRADING_DAYS):
         signals.append("MONTH_START")
-    if _is_quarter_end(trading_day, _EMPTY_TRADING_DAYS):
+    if is_quarter_end(trading_day, _EMPTY_TRADING_DAYS):
         signals.append("QUARTER_END")
     if trading_day in _OPEX_WEEK_DATES:
         signals.append("OPEX_WEEK")

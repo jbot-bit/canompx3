@@ -138,6 +138,9 @@ def compute_family_pbo(
     # Bulk-load outcomes for ALL members in one query (eliminates N+1 loop)
     # Map (orb_label, orb_minutes, entry_model, rr_target, confirm_bars) -> strategy_id
     member_keys = {}
+    # _filter_type fetched but intentionally unused — PBO operates on raw outcomes
+    # without filter application. See review I-1: if filter-aware PBO is needed,
+    # join daily_features and apply filter_type here.
     for sid, orb_label, orb_minutes, entry_model, rr_target, confirm_bars, _filter_type in members:
         member_keys[(orb_label, orb_minutes, entry_model, rr_target, confirm_bars)] = sid
 
