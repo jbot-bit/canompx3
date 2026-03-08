@@ -921,6 +921,11 @@ def run_validation(
             else:
                 rejected += 1
 
+    # Log WF error summary
+    wf_errors = sum(1 for sr in serial_results if sr["notes"] and "Worker error" in sr["notes"])
+    if wf_errors > 0:
+        logger.warning(f"Walkforward: {wf_errors} strategies rejected due to worker errors")
+
     # ── Phase C: Batch write all results ─────────────────────────────
     processed_orb_minutes = sorted({sr["row_dict"].get("orb_minutes", 5) for sr in serial_results})
     if not dry_run and processed_orb_minutes:

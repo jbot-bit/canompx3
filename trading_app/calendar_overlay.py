@@ -145,7 +145,8 @@ def get_calendar_action(
     looks up each in CALENDAR_RULES, returns the most restrictive action.
 
     Returns NEUTRAL if no rules match or if CALENDAR_RULES is empty.
-    On ANY exception, logs a warning and returns NEUTRAL (never skip on error).
+    On ANY exception, logs an error and returns SKIP (fail-closed: bugs skip trades,
+    never allow trades through broken filters).
     """
     try:
         if not CALENDAR_RULES:
@@ -163,11 +164,11 @@ def get_calendar_action(
 
         return most_restrictive
     except Exception:
-        logger.warning(
-            "Error in get_calendar_action(%s, %s, %s) — defaulting to NEUTRAL",
+        logger.error(
+            "Error in get_calendar_action(%s, %s, %s) — fail-closed SKIP",
             instrument,
             session,
             trading_day,
             exc_info=True,
         )
-        return CalendarAction.NEUTRAL
+        return CalendarAction.SKIP

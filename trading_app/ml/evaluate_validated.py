@@ -17,12 +17,12 @@ import argparse
 import logging
 
 import duckdb
-import joblib
 import pandas as pd
 
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.ml.config import ACTIVE_INSTRUMENTS, MODEL_DIR
+from pipeline.stats import jobson_korkie_p
+from trading_app.ml.config import ACTIVE_INSTRUMENTS
 from trading_app.ml.features import load_feature_matrix
 
 logging.basicConfig(
@@ -57,36 +57,42 @@ def _get_validated_params(db_path: str, instrument: str) -> pd.DataFrame:
 
 
 def _sharpe(pnl: pd.Series) -> float:
-    """Per-trade Sharpe ratio (no annualization — data is per-trade, not per-day)."""
-    if pnl.std() == 0 or len(pnl) < 2:
-        return 0.0
-    return float(pnl.mean() / pnl.std())
+    """Per-trade Sharpe ratio. Delegates to pipeline.stats.per_trade_sharpe."""
+    from pipeline.stats import per_trade_sharpe
+
+    return per_trade_sharpe(pnl)
 
 
 def evaluate_validated(instrument: str, db_path: str) -> None:
     """Evaluate meta-label on validated strategies only."""
-    model_path = MODEL_DIR / f"meta_label_{instrument}.joblib"
-    if not model_path.exists():
+    from trading_app.ml.evaluate import (
+        _apply_hybrid_predictions,
+        _fill_missing_features,
+        _load_model_bundle,
+    )
+
+    bundle, model_path = _load_model_bundle(instrument)
+    if bundle is None:
         logger.error(f"No trained model for {instrument}")
         return
 
-    bundle = joblib.load(model_path)
-    rf = bundle["model"]
-    threshold = bundle["optimal_threshold"]
-    feature_names = bundle["feature_names"]
+    is_hybrid = "sessions" in bundle
 
     # Load full feature matrix
     X, y, meta = load_feature_matrix(db_path, instrument)
 
-    # Align features (0.0 for one-hot, -999.0 for numeric)
-    from trading_app.ml.evaluate import _fill_missing_features
+    if is_hybrid:
+        meta = _apply_hybrid_predictions(bundle, X, meta)
+        threshold = meta["session_threshold"].dropna().median()
+    else:
+        rf = bundle["model"]
+        threshold = bundle["optimal_threshold"]
+        feature_names = bundle["feature_names"]
 
-    X = _fill_missing_features(X, feature_names)
-
-    # Predict
-    y_prob = rf.predict_proba(X)[:, 1]
-    meta = meta.copy()
-    meta["p_win"] = y_prob
+        X = _fill_missing_features(X, feature_names)
+        y_prob = rf.predict_proba(X)[:, 1]
+        meta = meta.copy()
+        meta["p_win"] = y_prob
 
     # Get validated strategy params
     validated = _get_validated_params(db_path, instrument)
@@ -159,9 +165,15 @@ def evaluate_validated(instrument: str, db_path: str) -> None:
         f"  {'Total R':<18} {pnl_all.sum():>12.1f} {pnl_kept.sum():>12.1f} "
         f"{pnl_skipped.sum():>12.1f} {pnl_kept.sum() - pnl_all.sum():>+12.1f}"
     )
+    sh_base = _sharpe(pnl_all)
+    sh_filt = _sharpe(pnl_kept)
+    sh_skip = _sharpe(pnl_skipped)
+    sh_delta = sh_filt - sh_base
+    jk_p = jobson_korkie_p(sh_base, sh_filt, len(pnl_all), len(pnl_kept), rho=0.7)
+    sig_label = "" if jk_p <= 0.05 else " (n.s.)"
     print(
-        f"  {'Sharpe':<18} {_sharpe(pnl_all):>12.3f} {_sharpe(pnl_kept):>12.3f} "
-        f"{_sharpe(pnl_skipped):>12.3f} {_sharpe(pnl_kept) - _sharpe(pnl_all):>+12.3f}"
+        f"  {'Sharpe':<18} {sh_base:>12.3f} {sh_filt:>12.3f} "
+        f"{sh_skip:>12.3f} {sh_delta:>+12.3f}  JK p={jk_p:.3f}{sig_label}"
     )
     print(
         f"  {'Win Rate':<18} {(pnl_all > 0).mean():>11.1%} {(pnl_kept > 0).mean():>11.1%} "

@@ -3137,6 +3137,78 @@ def check_dead_instruments_doc_sync() -> list[str]:
 
 
 # =============================================================================
+# ML layer Bloomey fixes drift checks (Mar 2026)
+# =============================================================================
+
+
+def check_ml_evaluate_hybrid_support() -> list[str]:
+    """Evaluate scripts must support hybrid model format (_hybrid.joblib)."""
+    violations = []
+    eval_files = [
+        PROJECT_ROOT / "trading_app" / "ml" / "evaluate.py",
+        PROJECT_ROOT / "trading_app" / "ml" / "evaluate_validated.py",
+    ]
+    for fpath in eval_files:
+        if not fpath.exists():
+            violations.append(f"  {fpath.name}: file not found")
+            continue
+        text = fpath.read_text(encoding="utf-8")
+        if "_hybrid.joblib" not in text and "_load_model_bundle" not in text:
+            violations.append(
+                f"  {fpath.name}: no hybrid model detection (missing _hybrid.joblib or _load_model_bundle)"
+            )
+    return violations
+
+
+def check_ml_bundle_full_delta() -> list[str]:
+    """ML bundles must include total_full_delta_r alongside total_honest_delta_r (White 2000)."""
+    violations = []
+    meta_label = PROJECT_ROOT / "trading_app" / "ml" / "meta_label.py"
+    if not meta_label.exists():
+        violations.append("  meta_label.py: file not found")
+        return violations
+    text = meta_label.read_text(encoding="utf-8")
+    if "total_full_delta_r" not in text:
+        violations.append("  meta_label.py: missing total_full_delta_r computation (White 2000 OOS selection bias fix)")
+    return violations
+
+
+def check_ml_sharpe_jk_pvalue() -> list[str]:
+    """Evaluate scripts must display JK p-value alongside Sharpe delta."""
+    violations = []
+    eval_files = [
+        PROJECT_ROOT / "trading_app" / "ml" / "evaluate.py",
+        PROJECT_ROOT / "trading_app" / "ml" / "evaluate_validated.py",
+    ]
+    for fpath in eval_files:
+        if not fpath.exists():
+            continue
+        text = fpath.read_text(encoding="utf-8")
+        if "jobson_korkie" not in text.lower():
+            violations.append(f"  {fpath.name}: Sharpe delta displayed without Jobson-Korkie p-value")
+    return violations
+
+
+def check_ml_no_iterrows_filters() -> list[str]:
+    """features.py filter application must not use iterrows (vectorized matches_df instead)."""
+    violations = []
+    features = PROJECT_ROOT / "trading_app" / "ml" / "features.py"
+    if not features.exists():
+        return violations
+    text = features.read_text(encoding="utf-8")
+    # Check for iterrows inside the filter application sections
+    in_filter_section = False
+    for i, line in enumerate(text.splitlines(), 1):
+        if "filter eligibility" in line.lower() or "filter_type" in line.lower() and "keep_mask" in line:
+            in_filter_section = True
+        if in_filter_section and ".iterrows()" in line and "matches_row" in line:
+            violations.append(f"  features.py:{i}: iterrows() still used in filter application (should use matches_df)")
+        if in_filter_section and "reset_index" in line:
+            in_filter_section = False
+    return violations
+
+
+# =============================================================================
 # CHECK REGISTRY — single source of truth for all drift checks
 # =============================================================================
 # Each entry: (description, callable, is_advisory).
@@ -3320,6 +3392,11 @@ CHECKS = [
         True,
     ),  # requires_db — advisory: staleness is a pipeline status issue, not code drift
     ("Dead instruments doc sync (docs match DEAD_ORB_INSTRUMENTS)", check_dead_instruments_doc_sync, False, False),
+    # ── ML layer Bloomey fixes (Mar 2026) ─────────────────────────
+    ("ML evaluate scripts support hybrid model format", check_ml_evaluate_hybrid_support, False, False),
+    ("ML bundles include total_full_delta_r (White 2000)", check_ml_bundle_full_delta, False, False),
+    ("ML Sharpe deltas include JK p-value", check_ml_sharpe_jk_pvalue, False, False),
+    ("No iterrows in features.py filter application", check_ml_no_iterrows_filters, False, False),
 ]
 
 

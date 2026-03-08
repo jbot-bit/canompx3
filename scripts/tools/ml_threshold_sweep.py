@@ -7,6 +7,7 @@ Run: python scripts/tools/ml_threshold_sweep.py --instrument MNQ
 """
 
 import argparse
+import shutil
 import sys
 from pathlib import Path
 
@@ -47,24 +48,70 @@ def main():
         f"PnL={baseline.total_pnl_r:+.2f}R"
     )
 
-    # Load model to override threshold
-    model_path = MODEL_DIR / f"meta_label_{args.instrument}.joblib"
+    # Load model to override threshold (hybrid -> legacy fallback)
+    hybrid_path = MODEL_DIR / f"meta_label_{args.instrument}_hybrid.joblib"
+    legacy_path = MODEL_DIR / f"meta_label_{args.instrument}.joblib"
+    model_path = hybrid_path if hybrid_path.exists() else legacy_path
     if not model_path.exists():
         print(f"ERROR: No model at {model_path}")
         return
 
     bundle = joblib.load(model_path)
-    original_threshold = bundle["optimal_threshold"]
-    print(f"Model original threshold: {original_threshold:.2f}")
+    is_hybrid = "sessions" in bundle
+
+    if is_hybrid:
+        # Collect original per-session thresholds for restore
+        original_thresholds = {}
+        is_per_aperture = bundle.get("bundle_format") == "per_aperture"
+        for session, val in bundle.get("sessions", {}).items():
+            if is_per_aperture:
+                original_thresholds[session] = {
+                    ak: info.get("optimal_threshold")
+                    for ak, info in val.items()
+                    if isinstance(info, dict) and info.get("model") is not None
+                }
+            else:
+                if isinstance(val, dict) and val.get("model") is not None:
+                    original_thresholds[session] = val.get("optimal_threshold")
+        # Use median of original thresholds for display
+        all_orig = [
+            v
+            for v in (
+                original_thresholds.values()
+                if not is_per_aperture
+                else [t for d in original_thresholds.values() for t in d.values() if t is not None]
+            )
+            if v is not None
+        ]
+        original_threshold = float(np.median(all_orig)) if all_orig else 0.5
+    else:
+        original_threshold = bundle["optimal_threshold"]
+
+    print(f"Model original threshold: {original_threshold:.2f} ({'hybrid' if is_hybrid else 'legacy'})")
 
     # Sweep thresholds
     results = []
     thresholds = np.arange(args.min_thresh, args.max_thresh + args.step, args.step)
 
+    # Safety: backup original model file before mutating thresholds.
+    # If anything goes wrong during sweep, we can restore from backup.
+    backup_path = model_path.with_suffix(".joblib.bak")
+    shutil.copy2(model_path, backup_path)
+
     try:
         for t in thresholds:
-            # Override threshold in the model file
-            bundle["optimal_threshold"] = float(t)
+            # Override threshold(s) in the model file
+            if is_hybrid:
+                for _session, val in bundle.get("sessions", {}).items():
+                    if is_per_aperture:
+                        for _ak, info in val.items():
+                            if isinstance(info, dict) and info.get("model") is not None:
+                                info["optimal_threshold"] = float(t)
+                    else:
+                        if isinstance(val, dict) and val.get("model") is not None:
+                            val["optimal_threshold"] = float(t)
+            else:
+                bundle["optimal_threshold"] = float(t)
             joblib.dump(bundle, model_path)
 
             result = replay_historical(instrument=args.instrument, start_date=start, end_date=end, use_ml=True)
@@ -84,9 +131,28 @@ def main():
                 f"PnL={result.total_pnl_r:+.2f}R, ML skips={result.total_ml_skips}"
             )
     finally:
-        # Restore original threshold even on crash/interrupt
-        bundle["optimal_threshold"] = original_threshold
-        joblib.dump(bundle, model_path)
+        # Restore original model from backup (atomic: copy is always clean)
+        if backup_path.exists():
+            shutil.copy2(backup_path, model_path)
+            backup_path.unlink()
+        else:
+            # Fallback: reconstruct from in-memory thresholds
+            if is_hybrid:
+                for session, val in bundle.get("sessions", {}).items():
+                    if is_per_aperture:
+                        for ak, info in val.items():
+                            if isinstance(info, dict) and info.get("model") is not None:
+                                orig = original_thresholds.get(session, {}).get(ak)
+                                if orig is not None:
+                                    info["optimal_threshold"] = orig
+                    else:
+                        if isinstance(val, dict) and val.get("model") is not None:
+                            orig = original_thresholds.get(session)
+                            if orig is not None:
+                                val["optimal_threshold"] = orig
+            else:
+                bundle["optimal_threshold"] = original_threshold
+            joblib.dump(bundle, model_path)
 
     # Summary
     print(f"\n{'=' * 80}")

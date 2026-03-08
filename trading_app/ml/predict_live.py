@@ -529,6 +529,7 @@ class LiveMLPredictor:
                 "n_ml_sessions": len(models_with_model),
                 "ml_sessions": models_with_model,
                 "total_delta_r": b.get("total_honest_delta_r"),
+                "total_full_delta_r": b.get("total_full_delta_r"),
                 "trained_at": b.get("trained_at"),
                 "config_hash": b.get("config_hash"),
                 "data_date_range": b.get("data_date_range"),

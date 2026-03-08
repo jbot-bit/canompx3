@@ -3,14 +3,12 @@
 from datetime import date
 from unittest.mock import patch
 
-
 from trading_app.calendar_overlay import (
     CALENDAR_RULES,
     CalendarAction,
     _get_active_signals,
     get_calendar_action,
 )
-
 
 # =========================================================================
 # CalendarAction enum
@@ -261,8 +259,8 @@ class TestGetActiveSignals:
 
 
 class TestErrorHandling:
-    def test_exception_returns_neutral(self):
-        """If _get_active_signals raises, get_calendar_action returns NEUTRAL."""
+    def test_exception_returns_skip(self):
+        """If _get_active_signals raises, get_calendar_action returns SKIP (fail-closed)."""
         with patch(
             "trading_app.calendar_overlay._get_active_signals",
             side_effect=ValueError("boom"),
@@ -273,7 +271,7 @@ class TestErrorHandling:
                 {("MGC", "TOKYO_OPEN", "NFP"): CalendarAction.SKIP},
             ):
                 result = get_calendar_action("MGC", "TOKYO_OPEN", date(2025, 1, 3))
-                assert result == CalendarAction.NEUTRAL
+                assert result == CalendarAction.SKIP
 
 
 # =========================================================================
