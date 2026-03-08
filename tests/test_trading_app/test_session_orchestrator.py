@@ -1348,6 +1348,7 @@ class TestObservability:
         """_on_bar increments both _bar_count and _stats.bars_received."""
         orch = build_orchestrator()
         orch.engine.on_bar.return_value = []
+        orch._check_trading_day_rollover = AsyncMock()
         bar = FakeBar()
         await orch._on_bar(bar)
         assert orch._bar_count == 1
