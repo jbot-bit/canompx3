@@ -1,22 +1,26 @@
 """
-Calendar-based skip filters: NFP, OPEX, Friday, day-of-week.
+Calendar-based date flags: NFP, OPEX, Friday, day-of-week.
 
 Pure date functions — no timezone logic, no DB access.
 These flags are deterministic from the trading day date alone.
 
-NFP (Non-Farm Payrolls): Released on the first Friday of each month.
-  Random spike destroys ORB signal. Universally toxic across instruments.
+IMPORTANT: Calendar effects are INSTRUMENT x SESSION SPECIFIC, not universal.
+See research/research_calendar_effects.py (Mar 2026) for the comprehensive
+BH FDR analysis. The blanket "skip all NFP/OPEX" approach was proven wrong —
+some instrument×session combos are BETTER on NFP/OPEX days.
 
-OPEX (Options Expiration): Third Friday of each month.
-  Options pinning kills follow-through. Negative expectancy on MNQ.
+NFP (Non-Farm Payrolls): First Friday of month.
+  Effect is mixed — WORSE for MGC TOKYO_OPEN, MNQ CME_PRECLOSE, M2K NYSE_OPEN.
+  BETTER for MES US_DATA_1000, MNQ NYSE_OPEN, MGC US_DATA_1000.
+  NOT universally toxic.
 
-Friday: Position-squaring mechanism at CME_REOPEN session specifically.
-  Not a universal skip — only applies to session CME_REOPEN.
+OPEX (Options Expiration): Third Friday of month.
+  WORSE for MGC NYSE_OPEN (9/11 years consistent).
+  BETTER for MNQ NYSE_OPEN (6/6 years), MNQ SINGAPORE_OPEN (5/6 years),
+  MES NYSE_CLOSE (+0.46R), MES LONDON_METALS, MES NYSE_OPEN.
+  NOT universally negative.
 
-Day-of-week (DOW): Session-specific skip rules from DOW research (Feb 2026).
-  CME_REOPEN: Skip Friday (position-squaring kills follow-through).
-  LONDON_METALS: Skip Monday (thin London open, no follow-through).
-  TOKYO_OPEN: Skip Tuesday (consistently weakest day at Tokyo session).
+Day-of-week: Session-specific, varies by instrument.
 """
 
 from datetime import date
