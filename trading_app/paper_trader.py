@@ -44,6 +44,10 @@ _EXIT_OUTCOME_MAP = {
     "session_end": "scratch",
 }
 
+# Outcomes classified as losses in reporting. Single source of truth —
+# used by _print_strategy_summary and _print_session_summary.
+_LOSS_OUTCOMES = frozenset({"loss", "early_exit", "hold_timeout", "ib_opposed"})
+
 # =========================================================================
 # Data classes
 # =========================================================================
@@ -503,6 +507,220 @@ def _reveal_outcome(market_state, orb_label: str, trade, cascade_table, portfoli
 
 
 # =========================================================================
+# CLI Output Helpers
+# =========================================================================
+
+
+def _print_header(result: ReplayResult, instrument: str) -> None:
+    """Print replay header summary."""
+    total_decided = result.total_wins + result.total_losses
+    wr = (result.total_wins / total_decided * 100) if total_decided > 0 else 0.0
+    print(f"\n{'=' * 72}")
+    print(f"  PAPER TRADER REPLAY: {instrument}")
+    print(f"  {result.start_date} to {result.end_date} ({result.days_processed} trading days)")
+    print(f"{'=' * 72}")
+    print(
+        f"  Trades: {result.total_trades}  (W:{result.total_wins}  L:{result.total_losses}  S:{result.total_scratches})"
+    )
+    print(f"  Win Rate: {wr:.1f}%   Total PnL: {result.total_pnl_r:+.2f}R")
+    if result.total_trades > 0:
+        avg_pnl = result.total_pnl_r / result.total_trades
+        print(f"  Avg PnL/Trade: {avg_pnl:+.3f}R")
+    print(f"  Risk Rejections: {result.total_risk_rejections}")
+    if result.total_ml_skips > 0:
+        print(f"  ML Skips: {result.total_ml_skips}")
+
+
+def _print_drawdown(result: ReplayResult) -> None:
+    """Compute and print max drawdown from daily PnL."""
+    if not result.day_summaries:
+        return
+    cum_pnl = 0.0
+    high_water = 0.0
+    max_dd = 0.0
+    max_dd_date = result.start_date
+    for ds in result.day_summaries:
+        cum_pnl += ds.daily_pnl_r
+        if cum_pnl > high_water:
+            high_water = cum_pnl
+        dd = cum_pnl - high_water
+        if dd < max_dd:
+            max_dd = dd
+            max_dd_date = ds.trading_day
+    if max_dd < 0:
+        print(f"  Max Drawdown: {max_dd:+.2f}R (on {max_dd_date})")
+    else:
+        print("  Max Drawdown: 0.00R (none)")
+    if high_water > 0:
+        print(f"  High Water: {high_water:+.2f}R")
+
+
+def _print_strategy_summary(result: ReplayResult) -> None:
+    """Print per-strategy breakdown table."""
+    # Aggregate by strategy_id (exclude risk-rejected entries)
+    from collections import defaultdict
+
+    stats: dict[str, dict] = defaultdict(lambda: {"w": 0, "l": 0, "s": 0, "pnl": 0.0})
+    for je in result.journal:
+        if je.risk_rejected:
+            continue
+        if je.outcome is None:
+            continue
+        s = stats[je.strategy_id]
+        if je.pnl_r is not None:
+            s["pnl"] += je.pnl_r
+        if je.outcome == "win":
+            s["w"] += 1
+        elif je.outcome in _LOSS_OUTCOMES:
+            s["l"] += 1
+        elif je.outcome == "scratch":
+            s["s"] += 1
+
+    if not stats:
+        return
+
+    print(f"\n{'-' * 72}")
+    print("  STRATEGY BREAKDOWN")
+    print(f"{'-' * 72}")
+    header = f"  {'Strategy':<45} {'Trd':>4} {'W':>3} {'L':>3} {'S':>3} {'WR%':>5} {'PnL(R)':>8}"
+    print(header)
+    print(f"  {'-' * 69}")
+
+    # Sort by PnL descending
+    for sid, s in sorted(stats.items(), key=lambda x: x[1]["pnl"], reverse=True):
+        total = s["w"] + s["l"] + s["s"]
+        decided = s["w"] + s["l"]
+        wr = (s["w"] / decided * 100) if decided > 0 else 0.0
+        # Truncate long strategy IDs
+        name = sid if len(sid) <= 45 else sid[:42] + "..."
+        print(f"  {name:<45} {total:>4} {s['w']:>3} {s['l']:>3} {s['s']:>3} {wr:>5.1f} {s['pnl']:>+8.2f}")
+
+
+def _print_session_summary(result: ReplayResult) -> None:
+    """Print per-session (ORB label) breakdown."""
+    from collections import defaultdict
+
+    stats: dict[str, dict] = defaultdict(lambda: {"w": 0, "l": 0, "s": 0, "pnl": 0.0})
+    for je in result.journal:
+        if je.risk_rejected or je.outcome is None:
+            continue
+        orb = _orb_from_strategy(je.strategy_id)
+        s = stats[orb]
+        if je.pnl_r is not None:
+            s["pnl"] += je.pnl_r
+        if je.outcome == "win":
+            s["w"] += 1
+        elif je.outcome in _LOSS_OUTCOMES:
+            s["l"] += 1
+        elif je.outcome == "scratch":
+            s["s"] += 1
+
+    if not stats:
+        return
+
+    print(f"\n{'-' * 72}")
+    print("  SESSION BREAKDOWN")
+    print(f"{'-' * 72}")
+    header = f"  {'Session':<25} {'Trd':>4} {'W':>3} {'L':>3} {'S':>3} {'WR%':>5} {'PnL(R)':>8}"
+    print(header)
+    print(f"  {'-' * 53}")
+
+    for orb, s in sorted(stats.items(), key=lambda x: x[1]["pnl"], reverse=True):
+        total = s["w"] + s["l"] + s["s"]
+        decided = s["w"] + s["l"]
+        wr = (s["w"] / decided * 100) if decided > 0 else 0.0
+        print(f"  {orb:<25} {total:>4} {s['w']:>3} {s['l']:>3} {s['s']:>3} {wr:>5.1f} {s['pnl']:>+8.2f}")
+
+
+def _print_risk_rejections(result: ReplayResult) -> None:
+    """Print risk rejection breakdown by reason."""
+    from collections import Counter
+
+    reasons: Counter[str] = Counter()
+    for je in result.journal:
+        if je.risk_rejected and je.risk_reason:
+            reasons[je.risk_reason] += 1
+
+    if not reasons:
+        return
+
+    print(f"\n{'-' * 72}")
+    print(f"  RISK REJECTIONS: {sum(reasons.values())}")
+    print(f"{'-' * 72}")
+    for reason, count in reasons.most_common():
+        print(f"    {reason}: {count}")
+
+
+def _print_daily_equity(result: ReplayResult, quiet: bool = False) -> None:
+    """Print daily equity curve (cumulative PnL)."""
+    if not result.day_summaries or quiet:
+        return
+
+    print(f"\n{'-' * 72}")
+    print("  DAILY EQUITY")
+    print(f"{'-' * 72}")
+    cum_pnl = 0.0
+    for ds in result.day_summaries:
+        cum_pnl += ds.daily_pnl_r
+        trades = ds.wins + ds.losses + ds.scratches
+        bar = "+" * int(max(0, cum_pnl)) + "-" * int(max(0, -cum_pnl))
+        if not bar:
+            bar = "."
+        print(f"  {ds.trading_day}  {ds.daily_pnl_r:>+6.2f}R  cum:{cum_pnl:>+7.2f}R  ({trades}t)  {bar}")
+
+
+def _export_csv(result: ReplayResult, output_path: str) -> None:
+    """Export full journal to CSV."""
+    import csv
+
+    fieldnames = [
+        "trading_day",
+        "strategy_id",
+        "entry_model",
+        "direction",
+        "entry_ts",
+        "entry_price",
+        "stop_price",
+        "target_price",
+        "contracts",
+        "exit_ts",
+        "exit_price",
+        "outcome",
+        "pnl_r",
+        "exit_mode",
+        "ib_alignment",
+        "risk_rejected",
+        "risk_reason",
+    ]
+    with open(output_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for je in result.journal:
+            writer.writerow(
+                {
+                    "trading_day": je.trading_day,
+                    "strategy_id": je.strategy_id,
+                    "entry_model": je.entry_model,
+                    "direction": je.direction,
+                    "entry_ts": je.entry_ts,
+                    "entry_price": je.entry_price,
+                    "stop_price": je.stop_price,
+                    "target_price": je.target_price,
+                    "contracts": je.contracts,
+                    "exit_ts": je.exit_ts,
+                    "exit_price": je.exit_price,
+                    "outcome": je.outcome,
+                    "pnl_r": je.pnl_r,
+                    "exit_mode": je.exit_mode,
+                    "ib_alignment": je.ib_alignment,
+                    "risk_rejected": je.risk_rejected,
+                    "risk_reason": je.risk_reason,
+                }
+            )
+    print(f"\n  Journal exported: {output_path} ({len(result.journal)} rows)")
+
+
+# =========================================================================
 # CLI
 # =========================================================================
 
@@ -526,6 +744,8 @@ def main():
     parser.add_argument(
         "--use-ml", action="store_true", help="Enable ML meta-label P(win) filtering (skip low-confidence trades)"
     )
+    parser.add_argument("--output", type=str, default=None, help="Export journal to CSV file path")
+    parser.add_argument("--quiet", action="store_true", help="Suppress daily equity lines")
     args = parser.parse_args()
 
     risk_limits = RiskLimits(
@@ -543,19 +763,30 @@ def main():
         use_ml=args.use_ml,
     )
 
-    logger.info(f"\nReplay complete: {result.start_date} to {result.end_date}")
-    logger.info(f"  Days: {result.days_processed}")
-    logger.info(
-        f"  Trades: {result.total_trades} (W:{result.total_wins} L:{result.total_losses} S:{result.total_scratches})"
-    )
-    logger.info(f"  Total PnL: {result.total_pnl_r:.2f}R")
-    logger.info(f"  Risk rejections: {result.total_risk_rejections}")
-    if result.total_ml_skips > 0:
-        logger.info(f"  ML skips: {result.total_ml_skips}")
+    # Fix 6: No-data warning
+    if result.days_processed == 0:
+        logger.warning(
+            "No trading days found for %s between %s and %s. "
+            "Check that bars_1m and daily_features have data in this range.",
+            args.instrument,
+            args.start,
+            args.end,
+        )
+        return
 
-    if result.total_wins + result.total_losses > 0:
-        wr = result.total_wins / (result.total_wins + result.total_losses)
-        logger.info(f"  Win rate: {wr:.1%}")
+    # Rich output
+    _print_header(result, args.instrument)
+    _print_drawdown(result)
+    _print_strategy_summary(result)
+    _print_session_summary(result)
+    _print_risk_rejections(result)
+    _print_daily_equity(result, quiet=args.quiet)
+
+    # CSV export
+    if args.output:
+        _export_csv(result, args.output)
+
+    print(f"\n{'=' * 72}")
 
 
 if __name__ == "__main__":

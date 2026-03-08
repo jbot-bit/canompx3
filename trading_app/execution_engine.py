@@ -513,7 +513,7 @@ class ExecutionEngine:
                     confirm_bars=strategy.confirm_bars,
                 )
                 if not ml_result.take:
-                    logger.info(
+                    logger.debug(
                         "ML_SKIP: %s on %s — P(win)=%.3f < threshold=%.3f",
                         strategy.strategy_id,
                         self.trading_day,
