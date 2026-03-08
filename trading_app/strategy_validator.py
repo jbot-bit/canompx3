@@ -473,31 +473,34 @@ def validate_strategy(
             [],
         )
 
-    # Phase 4c: Deflated Sharpe gate (Bailey & Lopez de Prado 2014)
-    # DSR < 0 means observed Sharpe doesn't exceed what K random strategies
-    # would produce from noise alone. Strategy is indistinguishable from chance.
+    # Phase 4c: Deflated Sharpe (Bailey & Lopez de Prado 2014) — INFORMATIONAL ONLY
+    # DSR uses raw n_trials (K) without correlated-trial adjustment (N_eff, BLP Appendix A.3).
+    # Until N_eff is estimated per-instrument, DSR threshold is inflated. BH FDR already
+    # handles multiple testing at discovery. Stacking both as hard gates double-penalizes.
+    # @research-source: deflated-sharpe.pdf (BLP 2014), Appendix A.3 (correlated trials)
     sharpe_haircut = row.get("sharpe_haircut")
-    if sharpe_haircut is None:
-        logger.debug("Phase 4c: sharpe_haircut not populated for %s — gate skipped", row.get("strategy_id", "?"))
     if sharpe_haircut is not None and sharpe_haircut < 0:
-        return (
-            "REJECTED",
-            f"Phase 4c: DSR below noise floor (haircut={sharpe_haircut:.4f})",
-            [],
+        logger.info(
+            "Phase 4c (info): DSR below noise floor for %s (haircut=%.4f) — logged, not rejected",
+            row.get("strategy_id", "?"),
+            sharpe_haircut,
         )
 
-    # Phase 4d: False Strategy Theorem hurdle (Lopez de Prado 2018)
-    # FST hurdle = expected max per-trade Sharpe from K trials with zero skill.
-    # Any strategy below this threshold is noise-floor indistinguishable.
+    # Phase 4d: False Strategy Theorem hurdle (Lopez de Prado 2018) — INFORMATIONAL ONLY
+    # TWO issues prevent using this as a hard gate:
+    # 1. fst_hurdle is in Z-score units (E[max{Z_K}] ≈ 3.63 for K=4074) but sharpe_ratio
+    #    is per-trade (mean_r/std_r). Correct comparison: sharpe_ratio < hurdle/sqrt(T).
+    #    See FST Theorem 1: E[max{SR}] = sqrt(V[SR]) * Z_max, where V[SR] = 1/T.
+    # 2. Same N_eff issue as P4c — raw n_trials without correlated-trial adjustment.
+    # @research-source: false-strategy-lopez.pdf (BLP 2018), Theorem 1
     fst_hurdle = row.get("fst_hurdle")
     sharpe_ratio = row.get("sharpe_ratio")
-    if fst_hurdle is None:
-        logger.debug("Phase 4d: fst_hurdle not populated for %s — gate skipped", row.get("strategy_id", "?"))
     if fst_hurdle is not None and sharpe_ratio is not None and sharpe_ratio < fst_hurdle:
-        return (
-            "REJECTED",
-            f"Phase 4d: Sharpe {sharpe_ratio:.4f} < FST hurdle {fst_hurdle:.4f}",
-            [],
+        logger.info(
+            "Phase 4d (info): Sharpe %.4f < FST hurdle %.4f for %s — logged, not rejected",
+            sharpe_ratio,
+            fst_hurdle,
+            row.get("strategy_id", "?"),
         )
 
     # Phase 5: Sharpe ratio (optional)
