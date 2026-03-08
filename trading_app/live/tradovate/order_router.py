@@ -92,10 +92,8 @@ class TradovateOrderRouter(BrokerRouter):
     def submit(self, spec: OrderSpec) -> OrderResult:
         """Submit an order to Tradovate. Requires auth.
 
-        WARNING: This is a synchronous HTTP call. When called from the async
-        DataFeed callback, it blocks the event loop. Typical latency is ~100ms.
-        If latency exceeds 1s, a warning is logged. A future version should
-        use aiohttp or run_in_executor for non-blocking submission.
+        Synchronous HTTP call — the orchestrator wraps this in run_in_executor
+        so the async event loop is never blocked.
         """
         if self.auth is None:
             raise RuntimeError("No auth -- cannot submit live orders without TradovateAuth")
@@ -134,7 +132,7 @@ class TradovateOrderRouter(BrokerRouter):
             elapsed_ms,
         )
         if elapsed_ms > 1000:
-            log.warning("Order submission took %.0fms -- event loop was blocked", elapsed_ms)
+            log.warning("Order HTTP round-trip took %.0fms", elapsed_ms)
         fill_price = data.get("avgPx") or data.get("fillPrice")
         return OrderResult(
             order_id=order_id,
