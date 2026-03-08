@@ -4,9 +4,10 @@ research_mnq_singapore_avoid.py -- MNQ SINGAPORE_OPEN Compressed Spring AVOID
 
 PURPOSE:
     Test whether contracting ATR is an AVOID signal for MNQ SINGAPORE_OPEN,
-    extending the proven finding from MGC TOKYO_OPEN (48 BH survivors, p_bh<0.001)
-    and the cross-instrument crosscheck (Contracting x Neutral: 9/9 sessions
-    100% negative, median -0.372R).
+    extending the confirmed finding from MGC TOKYO_OPEN (10/10 years negative E1).
+
+    NOTE: The old crosscheck (9/9 sessions, E0, old fixed sessions) is STALE.
+    Mar 2026 revalidation: MGC confirmed, MES redundant, MNQ no signal.
 
     MNQ was previously REGIME-grade (only 2 years of data). Now we have 5 years
     (2021-2025), enough for PRELIMINARY classification.
@@ -283,7 +284,7 @@ def analyse(df: pd.DataFrame, config_label: str) -> list[dict]:
                     tag = " <-- BOOST?"
             print(fmt(f"  {vel[:3]}x{comp[:4]}", n, avg, wr, t, p) + tag)
 
-    # L4: Contracting-only (any compression) -- the universal AVOID
+    # L4: Contracting-only (any compression) -- MGC-confirmed AVOID, testing here
     print(f"\n{SEP}")
     print(f"L4: Contracting ATR (any compression) vs Rest  [{config_label}]")
     print(SEP)
