@@ -135,25 +135,43 @@ def compute_family_pbo(
     if len(members) < 2:
         return {"pbo": None, "n_splits": 0, "n_negative_oos": 0, "logit_pbo": None}
 
-    # Load outcomes for each member
-    strategy_pnl = {}
+    # Bulk-load outcomes for ALL members in one query (eliminates N+1 loop)
+    # Map (orb_label, orb_minutes, entry_model, rr_target, confirm_bars) -> strategy_id
+    member_keys = {}
     for sid, orb_label, orb_minutes, entry_model, rr_target, confirm_bars, _filter_type in members:
-        rows = con.execute(
-            """SELECT o.trading_day, o.pnl_r
-               FROM orb_outcomes o
-               WHERE o.symbol = ?
-               AND o.orb_label = ?
-               AND o.orb_minutes = ?
-               AND o.entry_model = ?
-               AND o.rr_target = ?
-               AND o.confirm_bars = ?
-               AND o.pnl_r IS NOT NULL
-               ORDER BY o.trading_day""",
-            [instrument, orb_label, orb_minutes, entry_model, rr_target, confirm_bars],
-        ).fetchall()
+        member_keys[(orb_label, orb_minutes, entry_model, rr_target, confirm_bars)] = sid
 
-        if rows:
-            strategy_pnl[sid] = [(r[0], r[1]) for r in rows]
+    if not member_keys:
+        return {"pbo": None, "n_splits": 0, "n_negative_oos": 0, "logit_pbo": None}
+
+    # Single query with DuckDB multi-column IN (VALUES syntax)
+    values_rows = list(member_keys.keys())
+    placeholders = ", ".join(["(?, ?, ?, ?, ?)"] * len(values_rows))
+    flat_params = [instrument]
+    for row in values_rows:
+        flat_params.extend(row)
+
+    rows = con.execute(
+        f"""SELECT o.trading_day, o.pnl_r,
+                   o.orb_label, o.orb_minutes, o.entry_model, o.rr_target, o.confirm_bars
+            FROM orb_outcomes o
+            WHERE o.symbol = ?
+              AND o.pnl_r IS NOT NULL
+              AND (o.orb_label, o.orb_minutes, o.entry_model, o.rr_target, o.confirm_bars)
+                  IN (VALUES {placeholders})
+            ORDER BY o.trading_day""",
+        flat_params,
+    ).fetchall()
+
+    # Partition results by member key -> strategy_id
+    strategy_pnl = {}
+    for trading_day, pnl_r, orb_label, orb_minutes, entry_model, rr_target, confirm_bars in rows:
+        key = (orb_label, orb_minutes, entry_model, rr_target, confirm_bars)
+        sid = member_keys.get(key)
+        if sid is not None:
+            if sid not in strategy_pnl:
+                strategy_pnl[sid] = []
+            strategy_pnl[sid].append((trading_day, pnl_r))
 
     if len(strategy_pnl) < 2:
         return {"pbo": None, "n_splits": 0, "n_negative_oos": 0, "logit_pbo": None}

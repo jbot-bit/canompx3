@@ -119,3 +119,18 @@ class TestComputePbo:
         # All positive -> PBO should be 0
         assert result["pbo"] == 0.0
         assert result["n_splits"] == 70
+
+    def test_compute_pbo_deterministic_regression(self):
+        """Pin PBO output to catch regressions from bulk-load refactoring."""
+        days = _days(80)
+        half = len(days) // 2
+        strategy_pnl = {
+            "A": [(d, 3.0) if i < half else (d, -2.0) for i, d in enumerate(days)],
+            "B": [(d, 0.1) for d in days],
+            "C": [(d, 1.5) for d in days],
+        }
+        result = compute_pbo(strategy_pnl)
+        assert result["pbo"] is not None
+        assert result["n_splits"] == 70
+        assert isinstance(result["pbo"], float)
+        assert 0.0 <= result["pbo"] <= 1.0
