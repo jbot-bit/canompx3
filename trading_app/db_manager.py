@@ -536,6 +536,7 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
             "strategy_trade_days",
             "edge_families",
             "family_rr_locks",
+            "validation_run_log",
         ]
 
         # Check tables exist

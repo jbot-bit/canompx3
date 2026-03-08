@@ -95,6 +95,9 @@ _OPEX_WEEK_DATES: set[date] = _opex_week_dates()
 # happens to be a non-trading day, the window calculation degrades gracefully
 # (may be off by 1 day). For perfect accuracy, the cascade scanner uses the full
 # trading day set from the database. Here we pass a minimal set.
+# TODO: _EMPTY_TRADING_DAYS causes _is_month_end/_is_month_start/_is_quarter_end
+# to always return True (count=0 <= window). No impact while CALENDAR_RULES is
+# empty, but must be fixed before any MONTH_END/MONTH_START rules go live.
 _EMPTY_TRADING_DAYS: set[date] = set()
 
 
