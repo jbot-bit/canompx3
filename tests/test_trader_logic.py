@@ -1157,6 +1157,11 @@ class TestRandomStrategyMath:
                 ft = s["filter_type"]
                 om = s["orb_minutes"]
 
+                # Skip stop-multiplier variants — orb_outcomes doesn't store
+                # stop-adjusted outcomes, so WR can't be recomputed from raw data
+                if "_S075" in s["strategy_id"]:
+                    continue
+
                 # Skip volume filters (need bar data)
                 if ft.startswith("VOL_"):
                     continue
@@ -1243,6 +1248,11 @@ class TestRandomStrategyMath:
                 ft = s["filter_type"]
                 om = s["orb_minutes"]
 
+                # Skip stop-multiplier variants — orb_outcomes doesn't store
+                # stop-adjusted outcomes, so ExpR can't be recomputed from raw data
+                if "_S075" in s["strategy_id"]:
+                    continue
+
                 if ft.startswith("VOL_"):
                     continue
 
@@ -1326,6 +1336,11 @@ class TestRandomStrategyMath:
                 cb = s["confirm_bars"]
                 ft = s["filter_type"]
                 om = s["orb_minutes"]
+
+                # Skip stop-multiplier variants — orb_outcomes doesn't store
+                # stop-adjusted outcomes, so MaxDD can't be recomputed from raw data
+                if "_S075" in s["strategy_id"]:
+                    continue
 
                 if ft.startswith("VOL_"):
                     continue
