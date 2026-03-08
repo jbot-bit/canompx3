@@ -93,10 +93,20 @@ for inst in ['MGC', 'MNQ', 'MES', 'M2K']:
 con.close()
 "
 
+# Post-rebuild: Lock family RR targets
+echo ""
+echo "--- Post-rebuild: Locking family RR targets ---"
+python scripts/tools/select_family_rr.py
+
 # Post-rebuild: Regenerate REPO_MAP
 echo ""
 echo "--- Post-rebuild: Regenerating REPO_MAP.md ---"
 python scripts/tools/gen_repo_map.py
+
+# Post-rebuild: Pinecone sync (skip if SDK not installed)
+echo ""
+echo "--- Post-rebuild: Pinecone sync ---"
+python scripts/tools/sync_pinecone.py 2>&1 || echo "  WARNING: Pinecone sync failed (SDK missing or auth error) — run manually"
 
 # Post-rebuild: Full health check
 echo ""
