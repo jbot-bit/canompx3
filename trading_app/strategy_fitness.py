@@ -467,6 +467,8 @@ def _compute_fitness_from_cache(
         params["confirm_bars"],
     )
     all_outcomes_raw = outcome_cache.get(key, [])
+    if not all_outcomes_raw:
+        logger.debug("Cache miss for %s (key=%s) — 0 outcomes", strategy_id, key)
 
     # end_date filter already applied during bulk load, but filter for as_of_date safety
     all_outcomes = [o for o in all_outcomes_raw if o["trading_day"] <= as_of_date]
@@ -703,6 +705,7 @@ def compute_portfolio_fitness(
 
         # Compute fitness from cache (no per-strategy queries)
         scores = []
+        skipped = 0
         for p in all_params:
             try:
                 filt = ALL_FILTERS.get(p["filter_type"])
@@ -720,8 +723,11 @@ def compute_portfolio_fitness(
                         rolling_months,
                     )
                 scores.append(score)
-            except Exception:
+            except (ValueError, duckdb.Error, KeyError):
                 logger.exception("Failed to compute fitness for %s", p["strategy_id"])
+                skipped += 1
+        if skipped:
+            logger.warning("Skipped %d/%d strategies due to errors", skipped, len(all_params))
 
     summary = {"fit": 0, "watch": 0, "decay": 0, "stale": 0}
     for s in scores:

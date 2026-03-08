@@ -158,8 +158,7 @@ def run_walkforward(
         test_exp_r = metrics["expectancy_r"]
 
         # IS metrics: all outcomes before this window (anchored expanding)
-        is_hi = bisect_left(all_trading_days, window_start)
-        is_outcomes = outcomes[:is_hi]
+        is_outcomes = outcomes[:lo]
         is_metrics = compute_metrics(is_outcomes) if len(is_outcomes) >= 15 else None
         is_exp_r = is_metrics["expectancy_r"] if is_metrics else None
 

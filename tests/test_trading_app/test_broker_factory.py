@@ -78,9 +78,26 @@ def test_factory_returns_correct_classes_projectx():
     assert components["router_class"] is ProjectXOrderRouter
 
 
-def test_tradovate_positions_raises_not_implemented():
+def test_tradovate_positions_query_open():
     from trading_app.live.tradovate.positions import TradovatePositions
 
-    pos = TradovatePositions(auth=MagicMock(), demo=True)
-    with pytest.raises(NotImplementedError):
-        pos.query_open(12345)
+    mock_auth = MagicMock()
+    mock_auth.headers.return_value = {"Authorization": "Bearer test"}
+    pos = TradovatePositions(auth=mock_auth, demo=True)
+
+    with patch("trading_app.live.tradovate.positions.requests.get") as mock_get:
+        mock_get.return_value = MagicMock(
+            status_code=200,
+            json=MagicMock(
+                return_value=[
+                    {"contractId": 1, "netPos": 2, "netPrice": 100.0, "accountId": 12345},
+                    {"contractId": 2, "netPos": 0, "netPrice": 50.0, "accountId": 12345},
+                ]
+            ),
+        )
+        mock_get.return_value.raise_for_status = MagicMock()
+
+        result = pos.query_open(12345)
+        assert len(result) == 1
+        assert result[0]["side"] == "BUY"
+        assert result[0]["size"] == 2

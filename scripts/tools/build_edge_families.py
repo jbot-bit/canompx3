@@ -325,7 +325,11 @@ def build_edge_families(db_path: str, instrument: str) -> int:
         # 6a. Batch-tag all members via temp table (replaces row-by-row UPDATEs)
         member_updates = []
         for family_hash, members in families.items():
-            head_sid = family_heads[family_hash]
+            head_sid = family_heads.get(family_hash)
+            if head_sid is None:
+                # Loop 1 was interrupted before processing this family — skip
+                print(f"  WARNING: family {family_hash} missing head (partial failure in loop 1)")
+                continue
             for sid, _, _, _ in members:
                 member_updates.append((sid, family_hash, sid == head_sid))
 

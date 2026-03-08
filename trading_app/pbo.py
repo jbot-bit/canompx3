@@ -141,8 +141,20 @@ def compute_family_pbo(
     # _filter_type fetched but intentionally unused — PBO operates on raw outcomes
     # without filter application. See review I-1: if filter-aware PBO is needed,
     # join daily_features and apply filter_type here.
+    # NOTE: Key collision (same 5-tuple, different filter_type) is structurally
+    # prevented by edge family grouping — different filters → different trade days
+    # → different family_hash. Assertion below guards against future regressions.
     for sid, orb_label, orb_minutes, entry_model, rr_target, confirm_bars, _filter_type in members:
-        member_keys[(orb_label, orb_minutes, entry_model, rr_target, confirm_bars)] = sid
+        key = (orb_label, orb_minutes, entry_model, rr_target, confirm_bars)
+        if key in member_keys:
+            logger.warning(
+                "PBO key collision in family %s: %s and %s share 5-tuple %s",
+                family_hash,
+                member_keys[key],
+                sid,
+                key,
+            )
+        member_keys[key] = sid
 
     if not member_keys:
         return {"pbo": None, "n_splits": 0, "n_negative_oos": 0, "logit_pbo": None}
