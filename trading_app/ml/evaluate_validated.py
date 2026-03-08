@@ -146,7 +146,9 @@ def evaluate_validated(instrument: str, db_path: str) -> None:
     print(f"  {len(validated)} validated combos | threshold {threshold:.2f}")
     print(f"{'=' * 75}")
 
-    print(f"\n  {'METRIC':<18} {'BASELINE':>12} {'FILTERED':>12} {'SKIPPED':>12} {'DELTA':>12}")
+    # Metrics blend IS+OOS — model saw training portion of this data
+    print("\n  BLENDED IS+OOS (biased — includes training data):")
+    print(f"  {'METRIC':<18} {'BASELINE':>12} {'FILTERED':>12} {'SKIPPED':>12} {'DELTA':>12}")
     print(f"  {'-' * 18} {'-' * 12} {'-' * 12} {'-' * 12} {'-' * 12}")
     print(f"  {'Trades':<18} {len(meta_val):>12,d} {take_mask.sum():>12,d} {(~take_mask).sum():>12,d}")
     print(

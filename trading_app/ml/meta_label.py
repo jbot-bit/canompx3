@@ -292,7 +292,6 @@ def train_per_session_meta_label(
             if per_aperture:
                 # Further filter to this aperture within the session
                 amask = smask_session & (meta_all["orb_minutes"] == aperture).values
-                aperture_key = f"O{aperture}"
                 log_prefix = f"  {session:<20} O{aperture:<3}"
             else:
                 amask = smask_session
@@ -302,11 +301,13 @@ def train_per_session_meta_label(
             session_indices = np.where(amask)[0]
 
             # Helper: store result in flat or nested dict
-            def _store(result: dict, session=session, aperture_key=aperture_key) -> None:
-                if per_aperture:
-                    session_results[session][aperture_key] = result
+            _ak = f"O{aperture}" if per_aperture else None
+
+            def _store(result: dict, _s=session, _a=_ak) -> None:
+                if _a is not None:
+                    session_results[_s][_a] = result
                 else:
-                    session_results[session] = result
+                    session_results[_s] = result
 
             if n_session == 0:
                 if per_aperture:
@@ -349,7 +350,9 @@ def train_per_session_meta_label(
             const_cols = [c for c in X_session.columns if session_data[c].nunique() <= 1]
             if const_cols:
                 X_session = X_session.drop(columns=const_cols)
-                logger.debug(f"  {session}: dropped {len(const_cols)} constant columns")
+                preview = const_cols[:5]
+                extra = f" (+{len(const_cols) - 5} more)" if len(const_cols) > 5 else ""
+                logger.info(f"{log_prefix}    dropped {len(const_cols)} constant cols: {preview}{extra}")
 
             feature_names = list(X_session.columns)
 
