@@ -138,18 +138,23 @@ def check_duplicate_strategy_ids(con) -> list[str]:
 
 
 def check_win_rate_sanity(con) -> list[str]:
-    """15. Win rates in sane range [20%-85%].
+    """15. Win rates in sane range — RR-aware lower bound, 85% upper.
 
-    Lower bound is 20% (not 30%) because high-RR ORB strategies with
-    strict filters legitimately have win rates in the 22-30% range.
+    Lower bound accounts for stop_multiplier: breakeven = stop/(stop+rr).
+    Flag if WR < 80% of true breakeven (suspicious) or WR > 85%.
     """
     violations = []
     r = con.execute("""
-        SELECT strategy_id, win_rate FROM validated_setups
-        WHERE status='active' AND (win_rate > 0.85 OR win_rate < 0.20)
+        SELECT strategy_id, win_rate, rr_target, COALESCE(stop_multiplier, 1.0) as sm
+        FROM validated_setups
+        WHERE status='active' AND (
+            win_rate > 0.85
+            OR win_rate < (COALESCE(stop_multiplier, 1.0)
+                         / (COALESCE(stop_multiplier, 1.0) + rr_target)) * 0.80
+        )
     """).fetchall()
     if r:
-        violations.append(f"  {len(r)} strategies with extreme win rates (outside 20-85%)")
+        violations.append(f"  {len(r)} strategies with extreme win rates (below 80% of breakeven or above 85%)")
     return violations
 
 

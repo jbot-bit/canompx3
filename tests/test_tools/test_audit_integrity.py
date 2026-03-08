@@ -25,6 +25,7 @@ VALIDATED_SCHEMA = """
         confirm_bars INTEGER,
         filter_type VARCHAR,
         rr_target DOUBLE,
+        stop_multiplier DOUBLE DEFAULT 1.0,
         status VARCHAR,
         win_rate DOUBLE,
         expectancy_r DOUBLE,
@@ -376,8 +377,8 @@ class TestWinRateSanity:
         with _make_con(
             tmp_path,
             inserts="""
-            INSERT INTO validated_setups (strategy_id, status, win_rate)
-            VALUES ('s1', 'active', 0.95)
+            INSERT INTO validated_setups (strategy_id, status, win_rate, rr_target)
+            VALUES ('s1', 'active', 0.95, 2.0)
         """,
         ) as con:
             violations = audit_integrity.check_win_rate_sanity(con)
@@ -385,11 +386,12 @@ class TestWinRateSanity:
             assert "extreme win rates" in violations[0]
 
     def test_catches_extreme_low(self, tmp_path):
+        """WR=10% with RR=2.0 → breakeven=33%, 80% of that=26.7%. 10% < 26.7% → flagged."""
         with _make_con(
             tmp_path,
             inserts="""
-            INSERT INTO validated_setups (strategy_id, status, win_rate)
-            VALUES ('s1', 'active', 0.10)
+            INSERT INTO validated_setups (strategy_id, status, win_rate, rr_target)
+            VALUES ('s1', 'active', 0.10, 2.0)
         """,
         ) as con:
             violations = audit_integrity.check_win_rate_sanity(con)
@@ -399,12 +401,36 @@ class TestWinRateSanity:
         with _make_con(
             tmp_path,
             inserts="""
-            INSERT INTO validated_setups (strategy_id, status, win_rate)
-            VALUES ('s1', 'active', 0.45)
+            INSERT INTO validated_setups (strategy_id, status, win_rate, rr_target)
+            VALUES ('s1', 'active', 0.45, 2.0)
         """,
         ) as con:
             violations = audit_integrity.check_win_rate_sanity(con)
             assert len(violations) == 0
+
+    def test_passes_high_rr_tight_stop(self, tmp_path):
+        """RR=4.0, stop_mult=0.75 → breakeven=15.8%. WR=19% is above → no violation."""
+        with _make_con(
+            tmp_path,
+            inserts="""
+            INSERT INTO validated_setups (strategy_id, status, win_rate, rr_target, stop_multiplier)
+            VALUES ('s1', 'active', 0.19, 4.0, 0.75)
+        """,
+        ) as con:
+            violations = audit_integrity.check_win_rate_sanity(con)
+            assert len(violations) == 0
+
+    def test_catches_below_breakeven_high_rr_tight_stop(self, tmp_path):
+        """RR=4.0, stop_mult=0.75 → breakeven=15.8%, 80% threshold=12.6%. WR=10% → flagged."""
+        with _make_con(
+            tmp_path,
+            inserts="""
+            INSERT INTO validated_setups (strategy_id, status, win_rate, rr_target, stop_multiplier)
+            VALUES ('s1', 'active', 0.10, 4.0, 0.75)
+        """,
+        ) as con:
+            violations = audit_integrity.check_win_rate_sanity(con)
+            assert len(violations) > 0
 
 
 # ── Check 16: Negative expectancy ────────────────────────────────────
