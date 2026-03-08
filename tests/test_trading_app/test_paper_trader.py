@@ -24,6 +24,13 @@ from trading_app.paper_trader import (
     JournalEntry,
     _orb_from_strategy,
     _entry_model_from_strategy,
+    _print_header,
+    _print_drawdown,
+    _print_strategy_summary,
+    _print_session_summary,
+    _print_risk_rejections,
+    _print_daily_equity,
+    _export_csv,
 )
 
 
@@ -322,3 +329,206 @@ class TestCLI:
 
         result = get_calendar_action("MGC", "TOKYO_OPEN", date(2025, 1, 6))
         assert result == CalendarAction.NEUTRAL
+
+    def test_cli_has_output_and_quiet_flags(self):
+        """New --output and --quiet flags are recognized."""
+        import subprocess
+
+        r = subprocess.run(
+            [sys.executable, "trading_app/paper_trader.py", "--help"],
+            capture_output=True,
+            text=True,
+            cwd=str(Path(__file__).parent.parent.parent),
+        )
+        assert r.returncode == 0
+        assert "--output" in r.stdout
+        assert "--quiet" in r.stdout
+
+
+# ============================================================================
+# Output Helper Tests
+# ============================================================================
+
+
+def _make_test_result():
+    """Build a ReplayResult with known data for output testing."""
+    journal = [
+        JournalEntry(
+            mode="replay",
+            trading_day=date(2024, 1, 8),
+            strategy_id="MGC_TOKYO_OPEN_E1_RR2.5_CB4_ORB_G5",
+            entry_model="E1",
+            direction="long",
+            entry_ts=datetime(2024, 1, 7, 23, 10, tzinfo=timezone.utc),
+            entry_price=2705.0,
+            stop_price=2700.0,
+            target_price=2712.5,
+            contracts=2,
+            exit_ts=datetime(2024, 1, 7, 23, 45, tzinfo=timezone.utc),
+            exit_price=2712.5,
+            outcome="win",
+            pnl_r=2.5,
+        ),
+        JournalEntry(
+            mode="replay",
+            trading_day=date(2024, 1, 9),
+            strategy_id="MGC_CME_REOPEN_E2_RR1.0_CB1_ORB_G5",
+            entry_model="E2",
+            direction="short",
+            entry_ts=datetime(2024, 1, 9, 14, 35, tzinfo=timezone.utc),
+            entry_price=2710.0,
+            stop_price=2715.0,
+            target_price=2705.0,
+            contracts=3,
+            exit_ts=datetime(2024, 1, 9, 15, 10, tzinfo=timezone.utc),
+            exit_price=2715.0,
+            outcome="loss",
+            pnl_r=-1.0,
+        ),
+        JournalEntry(
+            mode="replay",
+            trading_day=date(2024, 1, 9),
+            strategy_id="MGC_TOKYO_OPEN_E1_RR2.5_CB4_ORB_G5",
+            entry_model="E1",
+            direction="long",
+            risk_rejected=True,
+            risk_reason="max_per_orb: 1 positions on TOKYO_OPEN",
+        ),
+    ]
+    day_summaries = [
+        DaySummary(trading_day=date(2024, 1, 8), bars_processed=150, trades_entered=1, wins=1, daily_pnl_r=2.5),
+        DaySummary(
+            trading_day=date(2024, 1, 9),
+            bars_processed=150,
+            trades_entered=1,
+            losses=1,
+            daily_pnl_r=-1.0,
+            risk_rejections=1,
+        ),
+    ]
+    return ReplayResult(
+        start_date=date(2024, 1, 8),
+        end_date=date(2024, 1, 9),
+        days_processed=2,
+        total_trades=2,
+        total_wins=1,
+        total_losses=1,
+        total_pnl_r=1.5,
+        total_risk_rejections=1,
+        journal=journal,
+        day_summaries=day_summaries,
+    )
+
+
+class TestOutputHelpers:
+    def test_print_header(self, capsys):
+        result = _make_test_result()
+        _print_header(result, "MGC")
+        output = capsys.readouterr().out
+        assert "PAPER TRADER REPLAY: MGC" in output
+        assert "Trades: 2" in output
+        assert "Win Rate: 50.0%" in output
+        assert "+1.50R" in output
+
+    def test_print_drawdown(self, capsys):
+        result = _make_test_result()
+        _print_drawdown(result)
+        output = capsys.readouterr().out
+        assert "Max Drawdown" in output
+        assert "High Water" in output
+
+    def test_print_strategy_summary(self, capsys):
+        result = _make_test_result()
+        _print_strategy_summary(result)
+        output = capsys.readouterr().out
+        assert "STRATEGY BREAKDOWN" in output
+        assert "TOKYO_OPEN" in output
+        assert "CME_REOPEN" in output
+
+    def test_print_session_summary(self, capsys):
+        result = _make_test_result()
+        _print_session_summary(result)
+        output = capsys.readouterr().out
+        assert "SESSION BREAKDOWN" in output
+        assert "TOKYO_OPEN" in output
+        assert "CME_REOPEN" in output
+
+    def test_print_risk_rejections(self, capsys):
+        result = _make_test_result()
+        _print_risk_rejections(result)
+        output = capsys.readouterr().out
+        assert "RISK REJECTIONS: 1" in output
+        assert "max_per_orb" in output
+
+    def test_print_daily_equity(self, capsys):
+        result = _make_test_result()
+        _print_daily_equity(result, quiet=False)
+        output = capsys.readouterr().out
+        assert "DAILY EQUITY" in output
+        assert "2024-01-08" in output
+        assert "2024-01-09" in output
+
+    def test_print_daily_equity_quiet(self, capsys):
+        result = _make_test_result()
+        _print_daily_equity(result, quiet=True)
+        output = capsys.readouterr().out
+        assert output == ""
+
+    def test_export_csv(self, tmp_path, capsys):
+        result = _make_test_result()
+        csv_path = str(tmp_path / "test_journal.csv")
+        _export_csv(result, csv_path)
+        output = capsys.readouterr().out
+        assert "Journal exported" in output
+        assert "3 rows" in output
+
+        import csv
+
+        with open(csv_path) as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+        assert len(rows) == 3
+        assert rows[0]["strategy_id"] == "MGC_TOKYO_OPEN_E1_RR2.5_CB4_ORB_G5"
+        assert rows[0]["outcome"] == "win"
+        assert rows[0]["pnl_r"] == "2.5"
+        assert rows[2]["risk_rejected"] == "True"
+
+    def test_drawdown_computation(self, capsys):
+        """Drawdown is correctly computed from daily summaries."""
+        result = ReplayResult(
+            start_date=date(2024, 1, 8),
+            end_date=date(2024, 1, 12),
+            days_processed=5,
+            day_summaries=[
+                DaySummary(trading_day=date(2024, 1, 8), daily_pnl_r=3.0),
+                DaySummary(trading_day=date(2024, 1, 9), daily_pnl_r=-5.0),
+                DaySummary(trading_day=date(2024, 1, 10), daily_pnl_r=1.0),
+                DaySummary(trading_day=date(2024, 1, 11), daily_pnl_r=-2.0),
+                DaySummary(trading_day=date(2024, 1, 12), daily_pnl_r=4.0),
+            ],
+        )
+        # Cumulative: 3, -2, -1, -3, 1
+        # High water: 3, 3, 3, 3, 3
+        # Drawdown: 0, -5, -4, -6, -2
+        # Max drawdown = -6.0 on Jan 11
+        _print_drawdown(result)
+        output = capsys.readouterr().out
+        assert "-6.00R" in output
+        assert "2024-01-11" in output
+        assert "High Water" in output
+        assert "+3.00R" in output
+
+    def test_drawdown_no_drawdown(self, capsys):
+        """When equity only goes up, drawdown shows 'none'."""
+        result = ReplayResult(
+            start_date=date(2024, 1, 8),
+            end_date=date(2024, 1, 9),
+            days_processed=2,
+            day_summaries=[
+                DaySummary(trading_day=date(2024, 1, 8), daily_pnl_r=2.0),
+                DaySummary(trading_day=date(2024, 1, 9), daily_pnl_r=1.0),
+            ],
+        )
+        _print_drawdown(result)
+        output = capsys.readouterr().out
+        assert "0.00R (none)" in output
