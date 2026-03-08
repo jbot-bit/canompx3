@@ -1,6 +1,9 @@
 {
     "pythonVersion": "3.13",
     "typeCheckingMode": "basic",
+    "extraPaths": ["."],
+    "venvPath": ".",
+    "venv": ".venv",
     "include": [
         "pipeline",
         "trading_app",
