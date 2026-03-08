@@ -108,11 +108,10 @@ for s in all_strategies:
 to experimental_strategies (init_db.py). Distinct from the existing `fdr_significant`
 column on validated_setups (which is post-validation BH FDR).
 
-**NOT a hard gate:** BH FDR at discovery is informational. The DSR/FST gates in
-validation are the hard filters. This stores the correction for auditability.
-Rationale: BH FDR assumes independence; our strategies share outcomes. DSR already
-accounts for K trials with non-normality correction. Using BH FDR as a hard gate
-on top of DSR would be double-counting the multiple testing penalty.
+**NOT a hard gate:** BH FDR at discovery is informational. ~~The DSR/FST gates in
+validation are the hard filters.~~ *(AMENDED: DSR/FST also demoted to informational —
+see note at top of Phase 1. BH FDR at discovery is now the primary multiple-testing
+defense.)* This stores the correction for auditability.
 
 **Verify:** `python pipeline/check_drift.py` + `pytest tests/ -x -q`
 
