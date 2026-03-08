@@ -100,13 +100,44 @@ class TestEdgeCases:
         result = tracker.on_entry_filled("UNKNOWN", 100.0)
         assert result is None
 
-    def test_double_entry_warns(self):
+    def test_double_entry_rejected_when_pending(self):
         tracker = PositionTracker()
         tracker.on_entry_sent("S1", "long", 100.0)
-        # Second entry should overwrite with warning (not crash)
+        # Second entry should be REJECTED (active position)
+        result = tracker.on_entry_sent("S1", "short", 200.0)
+        assert result is None
+        # Original position unchanged
+        assert tracker.get("S1").direction == "long"
+        assert tracker.get("S1").engine_entry_price == 100.0
+
+    def test_double_entry_rejected_when_entered(self):
+        tracker = PositionTracker()
+        tracker.on_entry_sent("S1", "long", 100.0)
+        tracker.on_entry_filled("S1", 100.5)
+        # Reject entry when already ENTERED
+        result = tracker.on_entry_sent("S1", "short", 200.0)
+        assert result is None
+        assert tracker.get("S1").state == PositionState.ENTERED
+
+    def test_entry_allowed_over_stale_pending_exit(self):
+        tracker = PositionTracker()
+        tracker.on_entry_sent("S1", "long", 100.0)
+        tracker.on_entry_filled("S1", 100.0)
+        tracker.on_exit_sent("S1", exit_order_id=99)
+        assert tracker.get("S1").state == PositionState.PENDING_EXIT
+        # Entry over stale PENDING_EXIT should be ALLOWED (failed rollover)
         record = tracker.on_entry_sent("S1", "short", 200.0)
+        assert record is not None
         assert record.direction == "short"
-        assert record.engine_entry_price == 200.0
+        assert record.state == PositionState.PENDING_ENTRY
+
+    def test_signal_entry_rejected_when_active(self):
+        tracker = PositionTracker()
+        tracker.on_signal_entry("S1", 100.0, "long")
+        # Second signal entry should be REJECTED
+        result = tracker.on_signal_entry("S1", 200.0, "short")
+        assert result is None
+        assert tracker.get("S1").direction == "long"
 
     def test_active_positions(self):
         tracker = PositionTracker()

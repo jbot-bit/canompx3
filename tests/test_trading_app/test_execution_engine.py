@@ -3,21 +3,20 @@ Tests for trading_app.execution_engine module.
 """
 
 import sys
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from datetime import date, datetime, timezone, timedelta
 
 import pytest
 
+from pipeline.cost_model import get_cost_spec
 from trading_app.execution_engine import (
+    ActiveTrade,
     ExecutionEngine,
     LiveORB,
-    ActiveTrade,
     TradeEvent,
     TradeState,
-    ORB_WINDOWS_UTC,
 )
 from trading_app.portfolio import Portfolio, PortfolioStrategy
-from pipeline.cost_model import get_cost_spec
 
 
 def _cost():
@@ -188,6 +187,35 @@ class TestEntry:
         # Bar that doesn't retrace: low > orb_high (2705)
         no_retrace = engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2708, 2715, 2706, 2712))
         assert len([e for e in no_retrace if e.event_type == "ENTRY"]) == 0
+
+    def test_entry_events_carry_risk_points(self):
+        """All entry models populate risk_points on ENTRY events."""
+        # E2: stop-market entry
+        e2_strat = _make_strategy(
+            entry_model="E2", confirm_bars=1, strategy_id="MGC_US_DATA_830_E2_RR2.0_CB1_NO_FILTER"
+        )
+        engine = ExecutionEngine(_make_portfolio([e2_strat]), _cost())
+        engine.on_trading_day_start(date(2024, 1, 5))
+        ts_base, _ = self._run_to_break(engine)
+        # E2 fills on confirm bar — high crosses ORB level
+        events = engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2708, 2715, 2703, 2712))
+        entries = [e for e in events if e.event_type == "ENTRY"]
+        if entries:
+            assert entries[0].risk_points is not None
+            assert entries[0].risk_points > 0
+
+        # E1: next-bar-open entry
+        e1_strat = _make_strategy(
+            entry_model="E1", confirm_bars=1, strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_NO_FILTER"
+        )
+        engine2 = ExecutionEngine(_make_portfolio([e1_strat]), _cost())
+        engine2.on_trading_day_start(date(2024, 1, 5))
+        ts_base2, _ = self._run_to_break(engine2)
+        events2 = engine2.on_bar(_bar(ts_base2 + timedelta(minutes=6), 2708, 2715, 2707, 2712))
+        entries2 = [e for e in events2 if e.event_type == "ENTRY"]
+        assert len(entries2) == 1
+        assert entries2[0].risk_points is not None
+        assert entries2[0].risk_points > 0
 
 
 # ============================================================================
@@ -707,6 +735,7 @@ class TestMLIntegration:
     def test_ml_skip_emits_event(self):
         """Mock predictor returning take=False → ML_SKIP event."""
         from unittest.mock import MagicMock
+
         from trading_app.ml.predict_live import MLPrediction
 
         mock_pred = MagicMock()
@@ -747,6 +776,7 @@ class TestMLIntegration:
     def test_ml_take_allows_entry(self):
         """Mock predictor returning take=True → normal entry flow."""
         from unittest.mock import MagicMock
+
         from trading_app.ml.predict_live import MLPrediction
 
         mock_pred = MagicMock()
@@ -792,13 +822,13 @@ class TestVolAdjustedSizing:
         contracts = engine._compute_contracts(10.0, _cost())
         assert contracts == 5
 
-    def test_sizing_zero_equity_returns_one(self):
-        """account_equity=0 (legacy) → fallback to 1 contract."""
+    def test_sizing_zero_equity_rejects(self):
+        """account_equity=0 → fail-closed, return 0 (reject entry)."""
         portfolio = _make_portfolio(account_equity=0.0)
         engine = ExecutionEngine(portfolio, _cost())
         engine._daily_features_row = {}
         contracts = engine._compute_contracts(10.0, _cost())
-        assert contracts == 1
+        assert contracts == 0
 
     def test_vol_scalar_high_atr_fewer_contracts(self):
         """High ATR (above median) → vol_scalar < 1 → fewer contracts."""

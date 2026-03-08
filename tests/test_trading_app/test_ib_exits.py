@@ -21,7 +21,6 @@ from trading_app.execution_engine import (
     ActiveTrade,
     TradeEvent,
     TradeState,
-    ORB_WINDOWS_UTC,
 )
 from trading_app.config import (
     SESSION_EXIT_MODE,
@@ -194,9 +193,10 @@ class TestLiveIB:
 
 class TestConfig:
     def test_session_exit_modes_defined(self):
-        """All active sessions have exit modes defined."""
-        for label in ORB_WINDOWS_UTC:
-            assert label in SESSION_EXIT_MODE
+        """All sessions with exit modes have valid values."""
+        assert len(SESSION_EXIT_MODE) > 0, "SESSION_EXIT_MODE must not be empty"
+        for label, mode in SESSION_EXIT_MODE.items():
+            assert mode in ("fixed_target", "ib_conditional"), f"{label} has invalid mode: {mode}"
 
     def test_tokyo_open_is_fixed_target(self):
         assert SESSION_EXIT_MODE["TOKYO_OPEN"] == "fixed_target"

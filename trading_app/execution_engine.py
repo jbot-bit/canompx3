@@ -43,15 +43,9 @@ from trading_app.portfolio import (
 
 logger = get_logger(__name__)
 
-# =========================================================================
-# ORB time windows (UTC offsets from Brisbane 09:00 trading day start)
-# Brisbane = UTC+10, trading day starts 23:00 UTC prev day
-# =========================================================================
-
-ORB_WINDOWS_UTC = {
-    # All sessions are now dynamic (DST-aware), resolved per-day via DYNAMIC_ORB_RESOLVERS.
-    # This dict is kept empty for backward compatibility with tests that check membership.
-}
+# All sessions are now dynamic (DST-aware), resolved per-day via DYNAMIC_ORB_RESOLVERS.
+# ORB_WINDOWS_UTC kept as empty dict for backward compatibility with existing imports.
+ORB_WINDOWS_UTC: dict[str, tuple[int, int]] = {}
 
 
 class TradeState(Enum):
@@ -73,6 +67,7 @@ class TradeEvent:
     contracts: int
     reason: str
     pnl_r: float | None = None  # Populated on EXIT/SCRATCH events
+    risk_points: float | None = None  # Actual risk at fill — used for broker brackets
 
 
 @dataclass
@@ -232,7 +227,7 @@ class ExecutionEngine:
         equity = self.portfolio.account_equity
         risk_pct = self.portfolio.risk_per_trade_pct
         if equity <= 0 or risk_points <= 0:
-            return 1  # Fallback: no equity info → 1 contract (legacy behavior)
+            return 0  # Fail-closed: invalid equity/risk → reject entry
 
         row = self._daily_features_row or {}
         atr_20 = row.get("atr_20") or 0.0
@@ -271,22 +266,7 @@ class ExecutionEngine:
         # Trading day in UTC: starts at 23:00 UTC on prev calendar day
         # Duration is session-specific (variable aperture from config)
 
-        # Fixed sessions: static UTC offsets from Brisbane time
-        for label, (hour, minute) in ORB_WINDOWS_UTC.items():
-            duration = ORB_DURATION_MINUTES.get(label, 5)
-            if hour >= 23:
-                base_date = prev_day
-            else:
-                base_date = trading_day
-            start = datetime(base_date.year, base_date.month, base_date.day, hour, minute, tzinfo=UTC)
-            end = start + timedelta(minutes=duration)
-            self.orbs[label] = LiveORB(
-                label=label,
-                window_start_utc=start,
-                window_end_utc=end,
-            )
-
-        # Dynamic sessions: DST-aware, resolved per-day
+        # All sessions are dynamic (DST-aware), resolved per-day
         from zoneinfo import ZoneInfo
 
         _brisbane = ZoneInfo("Australia/Brisbane")
@@ -756,6 +736,7 @@ class ExecutionEngine:
                     direction=trade.direction,
                     contracts=trade.contracts,
                     reason="stop_market_E2",
+                    risk_points=risk_points,
                 )
             )
             return events
@@ -924,6 +905,7 @@ class ExecutionEngine:
                             direction=trade.direction,
                             contracts=trade.contracts,
                             reason="confirm_bars_met_E1",
+                            risk_points=risk_points,
                         )
                     )
                     # Fall through to exit check — fill bar may hit stop/target
@@ -1060,6 +1042,7 @@ class ExecutionEngine:
                                 direction=trade.direction,
                                 contracts=trade.contracts,
                                 reason="retrace_fill_E3",
+                                risk_points=risk_points,
                             )
                         )
                         # Fall through to exit check — fill bar may hit target
