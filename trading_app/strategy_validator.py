@@ -477,6 +477,8 @@ def validate_strategy(
     # DSR < 0 means observed Sharpe doesn't exceed what K random strategies
     # would produce from noise alone. Strategy is indistinguishable from chance.
     sharpe_haircut = row.get("sharpe_haircut")
+    if sharpe_haircut is None:
+        logger.debug("Phase 4c: sharpe_haircut not populated for %s — gate skipped", row.get("strategy_id", "?"))
     if sharpe_haircut is not None and sharpe_haircut < 0:
         return (
             "REJECTED",
@@ -489,6 +491,8 @@ def validate_strategy(
     # Any strategy below this threshold is noise-floor indistinguishable.
     fst_hurdle = row.get("fst_hurdle")
     sharpe_ratio = row.get("sharpe_ratio")
+    if fst_hurdle is None:
+        logger.debug("Phase 4d: fst_hurdle not populated for %s — gate skipped", row.get("strategy_id", "?"))
     if fst_hurdle is not None and sharpe_ratio is not None and sharpe_ratio < fst_hurdle:
         return (
             "REJECTED",
