@@ -18,6 +18,7 @@ Usage:
 
 import json
 import sys
+from collections import defaultdict
 from dataclasses import asdict, dataclass
 from datetime import UTC, date
 from pathlib import Path
@@ -378,7 +379,168 @@ def _load_strategy_outcomes(
 
 
 # =========================================================================
-# Fitness computation
+# Bulk-load helpers (used by compute_portfolio_fitness only)
+# =========================================================================
+
+
+def _bulk_load_all_outcomes(con, instrument: str, end_date: date | None = None) -> dict:
+    """Load ALL outcomes for an instrument, indexed by strategy key tuple.
+
+    Returns: {(orb_label, orb_minutes, entry_model, rr_target, confirm_bars): [outcome_dicts]}
+    Used by compute_portfolio_fitness() bulk path only.
+    """
+    params = [instrument]
+    where = ["symbol = ?", "outcome IS NOT NULL"]
+    if end_date:
+        where.append("trading_day <= ?")
+        params.append(end_date)
+
+    rows = con.execute(
+        f"""SELECT orb_label, orb_minutes, entry_model, rr_target, confirm_bars,
+                   trading_day, outcome, pnl_r, mae_r, mfe_r, entry_price, stop_price
+            FROM orb_outcomes
+            WHERE {" AND ".join(where)}
+            ORDER BY trading_day""",
+        params,
+    ).fetchall()
+    cols = [desc[0] for desc in con.description]
+
+    index = defaultdict(list)
+    for row in rows:
+        d = dict(zip(cols, row, strict=False))
+        key = (d["orb_label"], d["orb_minutes"], d["entry_model"], d["rr_target"], d["confirm_bars"])
+        index[key].append(d)
+    return dict(index)
+
+
+def _bulk_load_all_features(con, instrument: str) -> dict:
+    """Load ALL daily_features for an instrument, indexed by (trading_day, orb_minutes).
+
+    Returns: {(trading_day, orb_minutes): feature_dict}
+    Used by compute_portfolio_fitness() bulk path only.
+    """
+    rows = con.execute(
+        "SELECT * FROM daily_features WHERE symbol = ?",
+        [instrument],
+    ).fetchall()
+    cols = [desc[0] for desc in con.description]
+
+    index = {}
+    for row in rows:
+        d = dict(zip(cols, row, strict=False))
+        index[(d["trading_day"], d["orb_minutes"])] = d
+    return index
+
+
+# =========================================================================
+# Fitness computation (cached path for bulk portfolio)
+# =========================================================================
+
+
+def _compute_fitness_from_cache(
+    con,
+    strategy_id: str,
+    params: dict,
+    outcome_cache: dict,
+    feature_cache: dict,
+    as_of_date: date,
+    rolling_months: int = 18,
+    min_rolling_trades: int = 15,
+) -> FitnessScore:
+    """Compute fitness using pre-loaded outcome and feature caches.
+
+    Same logic as _compute_fitness_with_con but avoids per-strategy DB queries.
+    """
+    rolling_start = _rolling_window_start(as_of_date, rolling_months)
+
+    # Layer 1: Full-period stats (from validated_setups params)
+    full_exp_r = params.get("expectancy_r", 0.0) or 0.0
+    full_sharpe = params.get("sharpe_ratio")
+    full_sample = params.get("sample_size", 0) or 0
+
+    # Get outcomes from cache
+    key = (
+        params["orb_label"],
+        params["orb_minutes"],
+        params["entry_model"],
+        params["rr_target"],
+        params["confirm_bars"],
+    )
+    all_outcomes_raw = outcome_cache.get(key, [])
+
+    # end_date filter already applied during bulk load, but filter for as_of_date safety
+    all_outcomes = [o for o in all_outcomes_raw if o["trading_day"] <= as_of_date]
+
+    # Apply filter (same logic as _load_strategy_outcomes)
+    filter_type = params["filter_type"]
+    filt = ALL_FILTERS.get(filter_type)
+    if filt is not None and filter_type != "NO_FILTER":
+        orb_label = params["orb_label"]
+        orb_minutes = params["orb_minutes"]
+        # Get eligible days from feature cache
+        eligible_days = set()
+        for (td, om), feat_dict in feature_cache.items():
+            if om == orb_minutes and filt.matches_row(feat_dict, orb_label):
+                eligible_days.add(td)
+        all_outcomes = [o for o in all_outcomes if o["trading_day"] in eligible_days]
+
+    # Apply tight stop simulation for S075 strategies
+    sm = params.get("stop_multiplier", 1.0)
+    if sm != 1.0:
+        from pipeline.cost_model import get_cost_spec
+
+        cost_spec = get_cost_spec(params["instrument"])
+        all_outcomes = apply_tight_stop(all_outcomes, sm, cost_spec)
+
+    # Layer 2: Rolling regime metrics
+    rolling_outcomes = [o for o in all_outcomes if rolling_start <= o["trading_day"] <= as_of_date]
+    rolling_metrics = compute_metrics(rolling_outcomes)
+
+    raw_rolling_exp_r = rolling_metrics["expectancy_r"]
+    rolling_sharpe = rolling_metrics["sharpe_ratio"]
+    rolling_wr = rolling_metrics["win_rate"]
+    rolling_sample = rolling_metrics["sample_size"]
+
+    # Layer 3: Decay monitoring
+    recent_30 = _recent_trade_sharpe(all_outcomes, 30)
+    recent_60 = _recent_trade_sharpe(all_outcomes, 60)
+
+    delta_30 = None
+    delta_60 = None
+    if recent_30 is not None and full_sharpe is not None:
+        delta_30 = recent_30 - full_sharpe
+    if recent_60 is not None and full_sharpe is not None:
+        delta_60 = recent_60 - full_sharpe
+
+    status, notes = classify_fitness(raw_rolling_exp_r, rolling_sample, recent_30)
+
+    rolling_exp_r = raw_rolling_exp_r
+    if rolling_sample < min_rolling_trades:
+        rolling_exp_r = None
+        rolling_sharpe = None
+        rolling_wr = None
+
+    return FitnessScore(
+        strategy_id=strategy_id,
+        full_period_exp_r=full_exp_r,
+        full_period_sharpe=full_sharpe,
+        full_period_sample=full_sample,
+        rolling_exp_r=rolling_exp_r,
+        rolling_sharpe=rolling_sharpe,
+        rolling_win_rate=rolling_wr,
+        rolling_sample=rolling_sample,
+        rolling_window_months=rolling_months,
+        recent_sharpe_30=recent_30,
+        recent_sharpe_60=recent_60,
+        sharpe_delta_30=delta_30,
+        sharpe_delta_60=delta_60,
+        fitness_status=status,
+        fitness_notes=notes,
+    )
+
+
+# =========================================================================
+# Fitness computation (per-strategy path)
 # =========================================================================
 
 
@@ -516,27 +678,51 @@ def compute_portfolio_fitness(
         # Exclude sessions with no confirmed edge (see config.EXCLUDED_FROM_FITNESS)
         exclusion_clause = " AND ".join(f"orb_label != '{s}'" for s in sorted(EXCLUDED_FROM_FITNESS))
         rows = con.execute(
-            f"""SELECT strategy_id FROM validated_setups
+            f"""SELECT strategy_id, instrument, orb_label, orb_minutes,
+                       entry_model, rr_target, confirm_bars, filter_type,
+                       COALESCE(stop_multiplier, 1.0) as stop_multiplier,
+                       sample_size, win_rate, expectancy_r, sharpe_ratio,
+                       max_drawdown_r
+               FROM validated_setups
                WHERE instrument = ? AND LOWER(status) = 'active'
                  AND {exclusion_clause}
                ORDER BY strategy_id""",
             [instrument],
         ).fetchall()
-        strategy_ids = [r[0] for r in rows]
+        param_cols = [desc[0] for desc in con.description]
+        all_params = [dict(zip(param_cols, r, strict=False)) for r in rows]
 
-        # Reuse single connection for all strategies (was N+1 before)
+        if not all_params:
+            return FitnessReport(
+                as_of_date=as_of_date, scores=[], summary={"fit": 0, "watch": 0, "decay": 0, "stale": 0}
+            )
+
+        # Bulk-load ALL outcomes and features for this instrument (2 queries total)
+        outcome_cache = _bulk_load_all_outcomes(con, instrument, end_date=as_of_date)
+        feature_cache = _bulk_load_all_features(con, instrument)
+
+        # Compute fitness from cache (no per-strategy queries)
         scores = []
-        for sid in strategy_ids:
+        for p in all_params:
             try:
-                score = _compute_fitness_with_con(
-                    con,
-                    sid,
-                    as_of_date,
-                    rolling_months,
-                )
+                filt = ALL_FILTERS.get(p["filter_type"])
+                if isinstance(filt, VolumeFilter):
+                    # VolumeFilter needs bars_1m enrichment — use per-strategy path
+                    score = _compute_fitness_with_con(con, p["strategy_id"], as_of_date, rolling_months)
+                else:
+                    score = _compute_fitness_from_cache(
+                        con,
+                        p["strategy_id"],
+                        p,
+                        outcome_cache,
+                        feature_cache,
+                        as_of_date,
+                        rolling_months,
+                    )
                 scores.append(score)
             except Exception:
-                logger.exception("Failed to compute fitness for %s", sid)
+                logger.exception("Failed to compute fitness for %s", p["strategy_id"])
+
     summary = {"fit": 0, "watch": 0, "decay": 0, "stale": 0}
     for s in scores:
         key = s.fitness_status.lower()
