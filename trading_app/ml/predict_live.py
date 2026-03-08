@@ -34,6 +34,10 @@ from trading_app.ml.features import apply_e6_filter, transform_to_features
 
 logger = logging.getLogger(__name__)
 
+# Cache eviction: prevent unbounded growth in long backtests.
+# 10K entries ≈ 4 instruments × 11 sessions × ~230 trading days.
+_MAX_CACHE_SIZE = 10_000
+
 
 class MLPrediction(NamedTuple):
     """Result of an ML prediction."""
@@ -208,6 +212,8 @@ class LiveMLPredictor:
             MLPrediction(p_win, take, threshold)
             Fail-open: returns (0.5, True, 0.5) on any error.
         """
+        self._evict_caches_if_needed()
+
         cache_key = (
             instrument,
             trading_day,
@@ -260,7 +266,14 @@ class LiveMLPredictor:
             # Aperture guard: check training aperture matches prediction aperture.
             # Old bundles without training_aperture → fail-open (safe default).
             training_aperture = session_info.get("training_aperture")
-            if training_aperture is not None and training_aperture != orb_minutes:
+            if training_aperture is None:
+                logger.warning(
+                    "Model for %s %s lacks training_aperture metadata — "
+                    "cannot verify aperture match (old model format)",
+                    instrument,
+                    orb_label,
+                )
+            elif training_aperture != orb_minutes:
                 logger.info(
                     "Aperture mismatch for %s %s: model trained on O%d, prediction for O%d — fail-open",
                     instrument,
@@ -339,9 +352,21 @@ class LiveMLPredictor:
                 threshold = float(session_info["optimal_threshold"])
             else:
                 # Legacy path: per-instrument model
-                model = bundle["model"]
-                feature_names = bundle["feature_names"]
-                threshold = float(bundle["optimal_threshold"])
+                model = bundle.get("model")
+                feature_names = bundle.get("feature_names")
+                opt_threshold = bundle.get("optimal_threshold")
+                if model is None or feature_names is None or opt_threshold is None:
+                    missing = [k for k in ("model", "feature_names", "optimal_threshold") if k not in bundle]
+                    logger.warning(
+                        "Corrupt model bundle for %s: missing keys %s — fail-open",
+                        instrument,
+                        missing,
+                    )
+                    self.fail_open_count += 1
+                    result = MLPrediction(p_win=0.5, take=True, threshold=0.5)
+                    self._prediction_cache[cache_key] = result
+                    return result
+                threshold = float(opt_threshold)
 
             # Step 4: Align to model's stored feature_names
             X_aligned = self._align_features(X, feature_names)
@@ -456,15 +481,28 @@ class LiveMLPredictor:
         - Order matches model exactly (sklearn RF is order-sensitive)
         """
         X_aligned = pd.DataFrame(index=X.index)
+        n_filled = 0
         for col in model_feature_names:
             if col in X.columns:
                 X_aligned[col] = X[col].values
             elif col.startswith(_CAT_PREFIXES):
                 # One-hot column for a category not present → 0.0
                 X_aligned[col] = 0.0
+                n_filled += 1
             else:
                 # Numeric feature missing → -999 (matches training fill)
                 X_aligned[col] = -999.0
+                n_filled += 1
+
+        n_total = len(model_feature_names)
+        if n_total > 0 and n_filled / n_total > 0.30:
+            logger.warning(
+                "Feature drift: %d/%d columns (%d%%) filled with sentinel values — "
+                "model may be stale or feature pipeline changed",
+                n_filled,
+                n_total,
+                int(n_filled / n_total * 100),
+            )
         return X_aligned
 
     def get_model_info(self, instrument: str) -> dict | None:
@@ -508,6 +546,18 @@ class LiveMLPredictor:
             "config_hash": b.get("config_hash"),
             "data_date_range": b.get("data_date_range"),
         }
+
+    def _evict_caches_if_needed(self) -> None:
+        """Evict caches when they exceed size limit (prevents unbounded growth)."""
+        if len(self._prediction_cache) > _MAX_CACHE_SIZE:
+            logger.info(
+                "Prediction cache exceeded %d entries (%d) — clearing",
+                _MAX_CACHE_SIZE,
+                len(self._prediction_cache),
+            )
+            self._prediction_cache.clear()
+        if len(self._daily_cache) > _MAX_CACHE_SIZE:
+            self._daily_cache.clear()
 
     def clear_daily_cache(self) -> None:
         """Clear daily features cache (call on new trading day)."""

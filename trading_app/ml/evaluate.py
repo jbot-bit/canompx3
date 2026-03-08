@@ -220,8 +220,9 @@ def print_evaluation(results: dict) -> None:
     )
     print(f"{'=' * 75}")
 
-    # Before/After comparison
-    print(f"\n  {'METRIC':<18} {'BASELINE':>12} {'FILTERED':>12} {'SKIPPED':>12} {'DELTA':>12}")
+    # Before/After comparison (IS+OOS blended — see OOS-ONLY section for unbiased metrics)
+    print("\n  BLENDED IS+OOS (biased — includes training data):")
+    print(f"  {'METRIC':<18} {'BASELINE':>12} {'FILTERED':>12} {'SKIPPED':>12} {'DELTA':>12}")
     print(f"  {'-' * 18} {'-' * 12} {'-' * 12} {'-' * 12} {'-' * 12}")
     print(f"  {'Trades':<18} {results['n_total']:>12,d} {results['n_kept']:>12,d} {results['n_skipped']:>12,d}")
     print(
