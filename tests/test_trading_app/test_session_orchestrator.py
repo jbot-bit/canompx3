@@ -69,6 +69,7 @@ class FakeTradeEvent:
     contracts: int
     reason: str = ""
     pnl_r: float | None = None
+    risk_points: float | None = None
 
 
 class FakeAuth:
@@ -1207,6 +1208,60 @@ class TestBracketOrders:
 
         # Position should be cleaned up despite "already flat" error
         assert orch._positions.get(STRATEGY_ID) is None
+
+
+# ---------------------------------------------------------------------------
+# RESERVE-THEN-SUBMIT safety tests
+# ---------------------------------------------------------------------------
+
+
+class TestReserveThenSubmit:
+    async def test_broker_failure_rolls_back_tracker(self):
+        """Order submit fails -> position tracker cleaned up (no phantom PENDING_ENTRY)."""
+        router = FakeRouter()
+        original_submit = router.submit
+
+        def fail_submit(spec):
+            raise ConnectionError("broker down")
+
+        router.submit = fail_submit
+        c = FakeBrokerComponents()
+        c.router = router
+        orch = build_orchestrator(c)
+        orch.order_router = router
+
+        await orch._handle_event(_entry_event(2350.5))
+
+        # Position tracker should be clean — no phantom PENDING_ENTRY
+        assert orch._positions.get(STRATEGY_ID) is None
+        assert len(orch._positions.active_positions()) == 0
+
+    async def test_duplicate_entry_rejected_before_broker(self):
+        """Second ENTRY for same strategy rejected before hitting broker."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2351.0))
+
+        # First entry goes through
+        await orch._handle_event(_entry_event(2350.5))
+        assert orch._positions.get(STRATEGY_ID) is not None
+        assert len(orch.order_router.submitted) == 1
+
+        # Second entry REJECTED — no second broker order
+        await orch._handle_event(_entry_event(2352.0))
+        assert len(orch.order_router.submitted) == 1  # still just the one
+
+    async def test_signal_only_duplicate_rejected(self):
+        """Signal-only mode also rejects duplicate entries."""
+        orch = build_orchestrator(FakeBrokerComponents(signal_only=True))
+
+        await orch._handle_event(_entry_event(2350.5))
+        record = orch._positions.get(STRATEGY_ID)
+        assert record is not None
+        assert record.direction == "long"
+
+        # Duplicate rejected
+        await orch._handle_event(_entry_event(2355.0))
+        # Price unchanged — still first entry
+        assert orch._positions.get(STRATEGY_ID).engine_entry_price == 2350.5
 
 
 # ---------------------------------------------------------------------------

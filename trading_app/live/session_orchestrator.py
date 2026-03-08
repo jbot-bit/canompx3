@@ -506,7 +506,7 @@ class SessionOrchestrator:
         if event.pnl_r is not None:
             actual_r = event.pnl_r
         else:
-            risk_pts = strategy.median_risk_points or 10.0
+            risk_pts = event.risk_points or strategy.median_risk_points or 10.0
             actual_r = self._compute_actual_r(entry_price, exit_price, event.direction, risk_pts)
 
         # Compute total slippage (entry + exit) in points
@@ -534,7 +534,7 @@ class SessionOrchestrator:
         if self.order_router is None or not self.order_router.supports_native_brackets():
             return
         try:
-            risk_pts = strategy.median_risk_points or 10.0
+            risk_pts = event.risk_points or strategy.median_risk_points or 10.0
             mult = getattr(strategy, "stop_multiplier", 1.0) or 1.0
             stop_dist = risk_pts * mult
             sign = 1 if event.direction == "long" else -1
@@ -604,9 +604,12 @@ class SessionOrchestrator:
 
         if event.event_type == "ENTRY":
             if self.signal_only:
-                self._positions.on_signal_entry(
+                record = self._positions.on_signal_entry(
                     event.strategy_id, event.price, event.direction, contracts=event.contracts
                 )
+                if record is None:
+                    log.warning("Duplicate entry REJECTED for %s (signal-only)", event.strategy_id)
+                    return
                 log.info(
                     "⚡ SIGNAL [%s]: %s %s @ %.2f  ← trade this manually on Tradovate/TradingView",
                     event.strategy_id,
@@ -632,6 +635,15 @@ class SessionOrchestrator:
                 self._write_signal_record({"type": "CIRCUIT_BREAKER", "strategy_id": event.strategy_id})
                 return
 
+            # Check position tracker BEFORE broker submit — reject duplicates
+            # before they become orphaned broker orders
+            pre_record = self._positions.on_entry_sent(
+                event.strategy_id, event.direction, event.price, contracts=event.contracts
+            )
+            if pre_record is None:
+                log.warning("Duplicate entry REJECTED for %s — not submitting to broker", event.strategy_id)
+                return
+
             spec = self.order_router.build_order_spec(
                 direction=event.direction,
                 entry_model=strategy.entry_model,
@@ -646,14 +658,14 @@ class SessionOrchestrator:
             except Exception as e:
                 self._circuit_breaker.record_failure()
                 log.error("ENTRY order failed for %s: %s", event.strategy_id, e)
+                # Rollback position tracker — order never reached broker
+                self._positions.pop(event.strategy_id)
                 return
             order_id = result.get("order_id") if isinstance(result, dict) else result.order_id
             fill_price = result.get("fill_price") if isinstance(result, dict) else getattr(result, "fill_price", None)
 
-            # Track entry via position tracker
-            self._positions.on_entry_sent(
-                event.strategy_id, event.direction, event.price, order_id=order_id, contracts=event.contracts
-            )
+            # Update tracker with broker order_id
+            pre_record.entry_order_id = order_id
             if fill_price is not None:
                 self._positions.on_entry_filled(event.strategy_id, fill_price)
                 slippage = fill_price - event.price

@@ -4,6 +4,10 @@ Wraps scripts/infra/telegram_feed.send_telegram() with fail-safe behavior.
 Notification failure must NEVER affect the trading loop.
 """
 
+import logging
+
+log = logging.getLogger(__name__)
+
 
 def notify(instrument: str, message: str) -> None:
     """Send Telegram notification. Never raises."""
@@ -11,5 +15,5 @@ def notify(instrument: str, message: str) -> None:
         from scripts.infra.telegram_feed import send_telegram
 
         send_telegram(f"[{instrument}] {message}")
-    except Exception:
-        pass  # notification failure must never affect trading
+    except Exception as exc:
+        log.warning("Notification failed for %s: %s", instrument, exc)

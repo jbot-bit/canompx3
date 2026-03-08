@@ -52,13 +52,26 @@ class PositionTracker:
         engine_price: float,
         order_id: int | None = None,
         contracts: int = 1,
-    ) -> PositionRecord:
-        """Record that an entry order has been submitted to the broker."""
-        if strategy_id in self._positions and self._positions[strategy_id].state != PositionState.FLAT:
+    ) -> PositionRecord | None:
+        """Record that an entry order has been submitted to the broker.
+
+        Returns None (rejects) if strategy already has an active position
+        (PENDING_ENTRY or ENTERED). Allows overwrite from PENDING_EXIT
+        (stale from failed rollover exit).
+        """
+        existing = self._positions.get(strategy_id)
+        if existing is not None and existing.state != PositionState.FLAT:
+            if existing.state in (PositionState.PENDING_ENTRY, PositionState.ENTERED):
+                log.warning(
+                    "Entry REJECTED for %s — already in state %s (active position)",
+                    strategy_id,
+                    existing.state.value,
+                )
+                return None
+            # PENDING_EXIT: stale from failed rollover — allow overwrite
             log.warning(
-                "Entry sent for %s but already in state %s — overwriting",
+                "Entry for %s overwriting stale PENDING_EXIT (failed rollover cleanup)",
                 strategy_id,
-                self._positions[strategy_id].state.value,
             )
         now = datetime.now(UTC)
         record = PositionRecord(
@@ -76,8 +89,24 @@ class PositionTracker:
 
     def on_signal_entry(
         self, strategy_id: str, engine_price: float, direction: str, contracts: int = 1
-    ) -> PositionRecord:
-        """Record a signal-only entry (no broker interaction)."""
+    ) -> PositionRecord | None:
+        """Record a signal-only entry (no broker interaction).
+
+        Returns None (rejects) if strategy already has an active position.
+        """
+        existing = self._positions.get(strategy_id)
+        if existing is not None and existing.state != PositionState.FLAT:
+            if existing.state in (PositionState.PENDING_ENTRY, PositionState.ENTERED):
+                log.warning(
+                    "Signal entry REJECTED for %s — already in state %s",
+                    strategy_id,
+                    existing.state.value,
+                )
+                return None
+            log.warning(
+                "Signal entry for %s overwriting stale PENDING_EXIT",
+                strategy_id,
+            )
         now = datetime.now(UTC)
         record = PositionRecord(
             strategy_id=strategy_id,
