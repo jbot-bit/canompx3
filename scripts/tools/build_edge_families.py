@@ -254,6 +254,7 @@ def build_edge_families(db_path: str, instrument: str) -> int:
 
         # 6. For each family: compute metrics, elect median head, classify
         status_counts = defaultdict(int)
+        family_heads = {}  # family_hash -> head_sid
 
         for family_hash, members in families.items():
             # Compute family metrics
@@ -274,6 +275,7 @@ def build_edge_families(db_path: str, instrument: str) -> int:
 
             # Elect head by MEDIAN (not max)
             (head_sid, head_expr, head_shann, _), _ = _elect_median_head(members)
+            family_heads[family_hash] = head_sid
 
             # Classify robustness + trade tier
             status = classify_family(len(members), avg_shann, cv_expr, min_trades)
@@ -320,17 +322,33 @@ def build_edge_families(db_path: str, instrument: str) -> int:
                 ],
             )
 
-            # Tag all members
+        # 6a. Batch-tag all members via temp table (replaces row-by-row UPDATEs)
+        member_updates = []
+        for family_hash, members in families.items():
+            head_sid = family_heads[family_hash]
             for sid, _, _, _ in members:
-                is_head = sid == head_sid
-                con.execute(
-                    """
-                    UPDATE validated_setups
-                    SET family_hash = ?, is_family_head = ?
-                    WHERE strategy_id = ?
-                """,
-                    [family_hash, is_head, sid],
+                member_updates.append((sid, family_hash, sid == head_sid))
+
+        if member_updates:
+            con.execute("""
+                CREATE TEMP TABLE _family_tags (
+                    strategy_id TEXT,
+                    family_hash TEXT,
+                    is_family_head BOOLEAN
                 )
+            """)
+            con.executemany(
+                "INSERT INTO _family_tags VALUES (?, ?, ?)",
+                member_updates,
+            )
+            con.execute("""
+                UPDATE validated_setups vs
+                SET family_hash = ft.family_hash,
+                    is_family_head = ft.is_family_head
+                FROM _family_tags ft
+                WHERE vs.strategy_id = ft.strategy_id
+            """)
+            con.execute("DROP TABLE _family_tags")
 
         # 6b. Compute PBO for families with 2+ members (Bailey et al. 2014)
         from trading_app.pbo import compute_family_pbo
