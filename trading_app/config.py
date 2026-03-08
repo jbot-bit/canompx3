@@ -223,26 +223,26 @@ class DayOfWeekSkipFilter(StrategyFilter):
 class ATRVelocityFilter(StrategyFilter):
     """Skip sessions when ATR is actively contracting AND ORB compression is Neutral or Compressed.
 
-    Research (Feb 2026 — research_avoid_crosscheck.py):
-      Contracting×Neutral:   9/9 sessions 100% negative, median avgR=-0.372R
-      Contracting×Compressed: 10/10 sessions 100% negative, median avgR=-0.362R
-      MES TOKYO_OPEN anchor: 5/5 years negative, BH-sig p=0.0022
-      MGC TOKYO_OPEN E1: 10/10 years (2016-2025) negative
+    @research-source research_avoid_crosscheck.py (Feb 2026, E0/old sessions — STALE)
+    @revalidated-for E1/E2 event-based sessions (Mar 2026):
+      - MGC: CONFIRMED. 10/10 years negative at TOKYO_OPEN E1.
+      - MES: AVOID is real but MES baselines already negative — redundant, not actionable
+             as standalone filter. 127/293 BH survivors but effect is baseline-wide.
+      - MNQ: NO SIGNAL. 0/169 BH FDR survivors across 11 sessions. Do NOT apply.
+      See compressed_spring.md for full revalidation.
 
     Signal is fully pre-entry — both atr_vel_regime and compression_tier are
-    computed from prior-days data and known at ORB close (10:05 AM).
+    computed from prior-days data and known at ORB close.
 
     Logic: skip when BOTH conditions hold:
       1. atr_vel_regime == 'Contracting'  (today ATR < 95% of prior-5-day avg)
       2. orb_{label}_compression_tier in ('Neutral', 'Compressed')
          (Expanded is OK — Contracting+Expanded has mixed/weaker signal)
 
-    Applied to: sessions CME_REOPEN and TOKYO_OPEN (where the signal is confirmed).
-    NOT applied to: LONDON_METALS, SINGAPORE_OPEN, NYSE_OPEN, US_DATA_830 (insufficient evidence or exception).
-    Exception: MNQ LONDON_METALS is positive in the contracting regime — explicitly excluded
-               by default apply_to_sessions.
+    Applied to: MGC CME_REOPEN and TOKYO_OPEN only (where signal is confirmed).
+    NOT applied to: MNQ (no signal), MES (baseline already negative — redundant).
 
-    Fail-open: missing data (warm-up period) → trade is allowed.
+    Fail-open: missing data (warm-up period) -> trade is allowed.
     """
 
     filter_type: str = "ATR_VEL"

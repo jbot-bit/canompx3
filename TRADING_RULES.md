@@ -514,32 +514,32 @@ A "family" = one unique combination of `(session, entry_model, filter_level)`. A
 - **KEEP rolling fitness:** `strategy_fitness.py` + `live_config.py` regime tier = the regime gate.
 - Full ATR research: `docs/RESEARCH_ARCHIVE.md`.
 
-### ATR Velocity + ORB Compression AVOID Signal (2026-02-20 — VALIDATED)
+### ATR Velocity + ORB Compression AVOID Signal (MGC ONLY — revalidated Mar 2026)
 
 **Signal:** Skip when ATR is **Contracting** AND ORB compression is **Neutral or Compressed**.
 - `atr_vel_ratio = atr_20 / mean(prior 5 days atr_20)`. Contracting = ratio < 0.95.
 - `orb_compression_z` = z-score of (orb_size/atr_20) vs rolling prior 20-day mean/std. Compressed = z < -0.5, Neutral = -0.5..0.5.
 - Both computed from prior days only — **no look-ahead**.
 
-**Cross-instrument scan results:**
-- Contracting×Neutral: 9/9 sessions 100% directional (all negative). Median delta = -0.372R.
-- Contracting×Compressed: 10/10 sessions 100% directional (all negative). Median delta = -0.362R.
-- BH-corrected anchor: MES TOKYO_OPEN Contracting x Neutral p_bh=0.0022. 5/5 years negative.
+**Per-instrument status (Mar 2026 revalidation with E1/E2 on event-based sessions):**
 
-**Two-condition rule (apply to CME_REOPEN and TOKYO_OPEN sessions):** Skip when `atr_vel_regime == "Contracting"` AND `orb_{label}_compression_tier` in `{"Neutral", "Compressed"}`. Expanding is allowed even during contracting (MES TOKYO_OPEN Contracting x Expanded = +0.149R).
+| Instrument | Status | Evidence |
+|-----------|--------|----------|
+| **MGC** | CONFIRMED | 10/10 years negative at TOKYO_OPEN E1. Wire as skip-filter. |
+| **MES** | Redundant | 127/293 BH survivors BUT MES baselines already negative. AVOID intensifies a negative baseline, doesn't flip a positive one. Not actionable as standalone filter. |
+| **MNQ** | NO SIGNAL | 0/169 BH FDR survivors across 11 sessions. Do NOT apply. |
+| **M2K** | NOT TESTED | No compressed spring research run. |
 
-**Exceptions:**
-- MNQ LONDON_METALS: positive in Contracting regime — explicitly excluded from filter.
-- Sessions SINGAPORE_OPEN, US_DATA_830, NYSE_OPEN: not wired (insufficient data or borderline delta).
-- Warm-up period (< 5 prior ATR days): fail-open → trade is allowed.
+**Two-condition rule (MGC CME_REOPEN and TOKYO_OPEN only):** Skip when `atr_vel_regime == "Contracting"` AND `orb_{label}_compression_tier` in `{"Neutral", "Compressed"}`. Expanded is allowed (Contracting+Expanded has mixed/weaker signal).
 
-**Mechanism:** Contracting ATR = volatility de-volatilizing. ORB in neutral/compressed zone = no expansion catalyst. Market lacks energy to follow through on the breakout. Expanded ORB even in contracting ATR = compressed spring still has local tension.
+**Mechanism:** Contracting ATR = volatility de-volatilizing. ORB in neutral/compressed zone = no expansion catalyst. Market lacks energy to follow through on the breakout.
 
 **Implementation:**
 - `ATRVelocityFilter` class in `trading_app/config.py`. `ATR_VELOCITY_OVERLAY = ATRVelocityFilter()`.
-- Columns in `daily_features`: `atr_vel_ratio`, `atr_vel_regime`, `orb_{CME_REOPEN/TOKYO_OPEN/LONDON_METALS}_compression_z`, `orb_{CME_REOPEN/TOKYO_OPEN/LONDON_METALS}_compression_tier`.
-- Wired into: `ExecutionEngine` (live), `build_strategy_daily_series()` + `correlation_matrix()` + `build_portfolio()` in `portfolio.py` (backtesting).
-- Script: `research/research_avoid_crosscheck.py`.
+- Columns in `daily_features`: `atr_vel_ratio`, `atr_vel_regime`, `orb_{label}_compression_z`, `orb_{label}_compression_tier`.
+- Wired into: `ExecutionEngine` (live), `portfolio.py` (backtesting).
+- Scripts: `research/research_avoid_crosscheck.py` (original, E0/old sessions), `research/research_mnq_singapore_avoid.py` (MNQ revalidation), `research/research_mes_compressed_spring.py` (MES revalidation).
+- Warm-up period (< 5 prior ATR days): fail-open.
 
 ---
 
