@@ -1,0 +1,11 @@
+{
+  "planPath": "docs/plans/2026-03-08-pipeline-fortification-plan.md",
+  "tasks": [
+    {"id": 13, "subject": "Phase 1: Harden exception handlers in strategy_fitness.py", "status": "pending"},
+    {"id": 14, "subject": "Phase 2: Bulk-load PBO member outcomes in pbo.py", "status": "pending", "blockedBy": [13]},
+    {"id": 15, "subject": "Phase 3: Batch UPDATE family tags in build_edge_families.py", "status": "pending", "blockedBy": [14]},
+    {"id": 16, "subject": "Phase 4: Bulk-load strategy outcomes in strategy_fitness.py", "status": "pending", "blockedBy": [13]},
+    {"id": 17, "subject": "Phase 5: Bisect optimization in walkforward.py", "status": "pending"}
+  ],
+  "lastUpdated": "2026-03-08T00:00:00Z"
+}
