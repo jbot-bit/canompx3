@@ -1140,13 +1140,15 @@ def run_validation(
     # ── Phase D: Log rejection rate per phase ─────────────────────────
     if not dry_run:
         # Count rejections per phase from notes
+        # NOTE: phase4c/phase4d are informational-only (not hard gates) since bc03c02.
+        # Counters kept for schema compat + future re-enablement when N_eff is implemented.
         phase_counts = {
             "phase1": 0,
             "phase2": 0,
             "phase3": 0,
             "phase4": 0,
-            "phase4c": 0,
-            "phase4d": 0,
+            "phase4c": 0,  # informational — always 0 until N_eff correction added
+            "phase4d": 0,  # informational — always 0 until unit mismatch fixed
             "phase4b": 0,
         }
         for sr in serial_results:
