@@ -3316,9 +3316,9 @@ CHECKS = [
     (
         "Pipeline staleness: orb_outcomes not >7 trading days behind daily_features",
         check_pipeline_staleness,
-        False,
         True,
-    ),  # requires_db
+        True,
+    ),  # requires_db — advisory: staleness is a pipeline status issue, not code drift
     ("Dead instruments doc sync (docs match DEAD_ORB_INSTRUMENTS)", check_dead_instruments_doc_sync, False, False),
 ]
 
