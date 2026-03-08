@@ -535,8 +535,8 @@ def compute_portfolio_fitness(
                     rolling_months,
                 )
                 scores.append(score)
-            except Exception as e:
-                logger.warning(f"  WARN: Failed to compute fitness for {sid}: {e}")
+            except Exception:
+                logger.exception("Failed to compute fitness for %s", sid)
     summary = {"fit": 0, "watch": 0, "decay": 0, "stale": 0}
     for s in scores:
         key = s.fitness_status.lower()
@@ -593,7 +593,7 @@ def diagnose_decay(
     try:
         own_fitness = _compute_fitness_with_con(con, strategy_id, as_of_date, rolling_months)
         actual_status = own_fitness.fitness_status
-    except Exception as e:
+    except (ValueError, duckdb.Error) as e:
         logger.warning("Could not compute fitness for %s: %s", strategy_id, e)
         actual_status = "UNKNOWN"
 
@@ -678,7 +678,7 @@ def diagnose_decay(
             score = _compute_fitness_with_con(con, sid, as_of_date, rolling_months)
             key = score.fitness_status
             counts[key] = counts.get(key, 0) + 1
-        except Exception as e:
+        except (ValueError, duckdb.Error) as e:
             logger.debug("Sibling %s fitness failed: %s", sid, e)
             counts["STALE"] += 1
 
@@ -762,7 +762,7 @@ def diagnose_portfolio_decay(
                 score = _compute_fitness_with_con(con, sid, as_of_date, rolling_months)
                 if score.fitness_status in ("DECAY", "WATCH"):
                     decay_ids.append(sid)
-            except Exception as e:
+            except (ValueError, duckdb.Error) as e:
                 logger.debug("Fitness computation failed for %s: %s", sid, e)
 
         # Second pass: diagnose each decaying strategy
@@ -784,7 +784,7 @@ def diagnose_portfolio_decay(
                 try:
                     own_score = _compute_fitness_with_con(con, sid, as_of_date, rolling_months)
                     own_status = own_score.fitness_status
-                except Exception:
+                except (ValueError, duckdb.Error):
                     own_status = "UNKNOWN"
                 diag = DecayDiagnosis(
                     strategy_id=sid,

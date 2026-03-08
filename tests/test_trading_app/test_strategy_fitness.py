@@ -1082,3 +1082,22 @@ class TestDecayDiagnostics:
         assert isinstance(diag, DecayDiagnosis)
         assert diag.strategy_id == strategies[0]["strategy_id"]
         assert diag.diagnosis in ("REGIME_SHIFT", "OVERFIT", "FRAGMENTED", "SINGLETON", "NO_FAMILY")
+
+
+def test_compute_fitness_raises_valueerror_for_missing_strategy(tmp_path):
+    """ValueError must propagate — not be swallowed by except Exception."""
+    db_path = tmp_path / "test.db"
+    con = duckdb.connect(str(db_path))
+    from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA, DAILY_FEATURES_SCHEMA
+
+    con.execute(BARS_1M_SCHEMA)
+    con.execute(BARS_5M_SCHEMA)
+    con.execute(DAILY_FEATURES_SCHEMA)
+    con.close()
+
+    from trading_app.db_manager import init_trading_app_schema
+
+    init_trading_app_schema(db_path=db_path)
+
+    with pytest.raises(ValueError, match="not found"):
+        compute_fitness("NONEXISTENT_STRATEGY_ID", db_path=db_path)
