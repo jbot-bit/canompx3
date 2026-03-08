@@ -227,6 +227,11 @@ class TestValidateStrategy:
         status, notes, _ = validate_strategy(_make_row(sharpe_haircut=0.5), _cost())
         assert status == "PASSED"
 
+    def test_pass_dsr_exactly_zero(self):
+        """DSR == 0.0 (exactly at noise floor boundary) should pass."""
+        status, notes, _ = validate_strategy(_make_row(sharpe_haircut=0.0), _cost())
+        assert status == "PASSED"
+
     def test_pass_dsr_missing(self):
         """Missing DSR (legacy strategies) should not be rejected."""
         row = _make_row()

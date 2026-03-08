@@ -38,16 +38,18 @@ from statsmodels.stats.multitest import multipletests
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.paths import GOLD_DB_PATH
 
-# Reuse calendar date builders and data loader from the flat script
-from research.research_calendar_effects import (
-    _build_cpi_set,
-    _build_fomc_set,
-    _is_month_end,
-    _is_month_start,
-    _is_quarter_end,
-    _opex_week_dates,
-    load_validated_outcomes,
+# Calendar date builders from canonical source
+from pipeline.calendar_filters import (
+    build_cpi_set,
+    build_fomc_set,
+    is_month_end,
+    is_month_start,
+    is_quarter_end,
+    opex_week_dates,
 )
+
+# Data loader from flat analysis script
+from research.research_calendar_effects import load_validated_outcomes
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
@@ -529,18 +531,18 @@ def run(db_path: Path):
     # Build calendar signal columns from date builders
     unique_dates = sorted(df["td_date"].unique())
     all_td_set = set(unique_dates)
-    fomc_dates = _build_fomc_set()
-    cpi_dates = _build_cpi_set()
-    opex_week = _opex_week_dates()
+    fomc_dates = build_fomc_set()
+    cpi_dates = build_cpi_set()
+    opex_week = opex_week_dates()
 
     cal_lookup = {}
     for td in unique_dates:
         cal_lookup[td] = {
             "is_fomc": td in fomc_dates,
             "is_cpi": td in cpi_dates,
-            "is_month_end": _is_month_end(td, all_td_set),
-            "is_month_start": _is_month_start(td, all_td_set),
-            "is_quarter_end": _is_quarter_end(td, all_td_set),
+            "is_month_end": is_month_end(td, all_td_set),
+            "is_month_start": is_month_start(td, all_td_set),
+            "is_quarter_end": is_quarter_end(td, all_td_set),
             "is_opex_week": td in opex_week,
         }
 
