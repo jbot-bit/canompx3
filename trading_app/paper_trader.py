@@ -239,7 +239,7 @@ def replay_historical(
     if use_market_state:
         from trading_app.cascade_table import build_cascade_table
 
-        cascade_table = build_cascade_table(db_path)
+        cascade_table = build_cascade_table(db_path, instrument=instrument)
 
     risk_mgr = RiskManager(risk_limits, corr_lookup=portfolio.corr_lookup)
 
