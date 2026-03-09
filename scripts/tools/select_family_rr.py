@@ -1,13 +1,22 @@
 #!/usr/bin/env python
-"""Select locked RR per family using SharpeDD criterion.
+"""Select locked RR per family using JK-MaxExpR criterion.
 
-SharpeDD: among RR levels with statistically-equal per-trade Sharpe
-(Jobson-Korkie p > 0.05 vs best), pick the one with lowest MaxDD.
+JK-MaxExpR: among RR levels with statistically-equal per-trade Sharpe
+(Jobson-Korkie p > 0.05 vs best), pick the one with highest ExpR.
 
-Statistical basis (Jobson-Korkie tests, Mar 5 2026):
-- 97% of families: Sharpe CANNOT distinguish RR levels (JK p > 0.05)
-- MaxDD IS significantly different (Kruskal-Wallis p < 0.000001)
-- Implication: Sharpe is noise across RR, DD is real signal
+Rationale (Carver, Systematic Trading Ch.7): when risk-adjusted returns
+are statistically indistinguishable (JK test), maximize raw edge.
+The previous JK-MaxExpR criterion picked lowest MaxDD as tiebreaker,
+which mechanically selected RR=1.0 for 74% of families (lower RR =
+lower variance = lower MaxDD by construction). This left significant
+ExpR on the table and created phantom trades where no RR=1.0 strategy
+passed the ExpR gate but higher-RR strategies did.
+
+Statistical basis:
+- JK rho=0.7 validated: measured rho 0.67-0.77 for adjacent RRs,
+  0.47-0.53 for distant pairs (RR1.0 vs RR4.0). 0.7 is conservative.
+- 74% of multi-RR families: ALL RRs are JK-equal candidates.
+  Tiebreaker is therefore the dominant selection force.
 
 Writes results to `family_rr_locks` table in gold.db.
 Run after strategy_validator, before build_edge_families.
@@ -37,7 +46,12 @@ FAMILY_COLS = ["instrument", "orb_label", "filter_type", "entry_model", "orb_min
 
 
 def select_rr_for_family(group: pd.DataFrame) -> dict:
-    """Select locked RR for one family using SharpeDD criterion.
+    """Select locked RR for one family using JK-MaxExpR criterion.
+
+    Among RR levels with statistically-equal Sharpe (JK p > 0.05),
+    pick the one with highest ExpR. Grounded in Carver (Systematic
+    Trading Ch.7): when risk-adjusted returns are indistinguishable,
+    maximize raw edge.
 
     Args:
         group: DataFrame rows for one family, all with same 6-col key,
@@ -85,16 +99,19 @@ def select_rr_for_family(group: pd.DataFrame) -> dict:
     if not candidates:
         candidates = [best_idx]
 
-    # Among candidates, pick lowest MaxDD
+    # Among candidates, pick highest ExpR (Carver: maximize edge when risk is equal)
     cand_df = group.loc[candidates]
-    selected_idx = cand_df["max_drawdown_r"].idxmin()
+    selected_idx = cand_df["expectancy_r"].idxmax()
     sel = group.loc[selected_idx]
 
     # Determine method
+    best_expr_idx = group["expectancy_r"].idxmax()
     if selected_idx == best_idx:
-        method = "MAX_SHARPE"  # best Sharpe already had lowest DD among candidates
+        method = "MAX_SHARPE"  # best Sharpe also had best ExpR among candidates
+    elif selected_idx == best_expr_idx:
+        method = "MAX_EXPR"  # picked highest ExpR from JK-equal candidates
     else:
-        method = "SHARPE_DD"  # picked a different RR for lower DD
+        method = "JK_EXPR"  # picked from JK-equal set (not global best Sharpe or ExpR)
 
     return {
         **family_key,
@@ -109,7 +126,7 @@ def select_rr_for_family(group: pd.DataFrame) -> dict:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Select locked RR per family (SharpeDD)")
+    parser = argparse.ArgumentParser(description="Select locked RR per family (JK-MaxExpR)")
     parser.add_argument("--db-path", type=Path, default=GOLD_DB_PATH)
     parser.add_argument("--dry-run", action="store_true", help="Print results without writing to DB")
     args = parser.parse_args()
@@ -161,8 +178,9 @@ def main():
 
     multi = rdf[rdf["method"] != "ONLY_RR"]
     print(f"\n--- Multi-RR Families: {len(multi)}/{n_total} ---")
-    print(f"  MAX_SHARPE (best Sharpe = lowest DD): {(multi['method'] == 'MAX_SHARPE').sum()}")
-    print(f"  SHARPE_DD  (picked lower DD from equal Sharpe): {(multi['method'] == 'SHARPE_DD').sum()}")
+    print(f"  MAX_SHARPE (best Sharpe = best ExpR among candidates): {(multi['method'] == 'MAX_SHARPE').sum()}")
+    print(f"  MAX_EXPR   (highest ExpR from JK-equal candidates):    {(multi['method'] == 'MAX_EXPR').sum()}")
+    print(f"  JK_EXPR    (JK-equal set, neither global best):        {(multi['method'] == 'JK_EXPR').sum()}")
 
     # Write to DB (transactional — crash between DELETE and INSERT won't empty table)
     if not args.dry_run:

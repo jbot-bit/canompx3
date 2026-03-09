@@ -218,7 +218,7 @@ class TestLoadBestRegimeVariant:
                 ('rr10', 'MGC', 'TOKYO_OPEN', 'E1', 1.0, 1, 'ORB_G4', 0.45, 0.60, 200, 1.8, 3.0, 'active'),
                 ('rr15', 'MGC', 'TOKYO_OPEN', 'E1', 1.5, 1, 'ORB_G4', 0.30, 0.52, 180, 1.2, 5.0, 'active')
         """)
-        # Lock at RR1.5 (lower ExpR but lower DD — SharpeDD picked it).
+        # Lock at RR1.5 (via JK-MaxExpR criterion).
         con.execute("""
             INSERT INTO family_rr_locks (instrument, orb_label, filter_type, entry_model,
                 orb_minutes, confirm_bars, locked_rr, method,

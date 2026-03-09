@@ -192,7 +192,7 @@ def _load_best_by_expr(
 ) -> dict | None:
     """Load the best locked-RR variant by ExpR.
 
-    Joins family_rr_locks to restrict each family to its SharpeDD-locked RR.
+    Joins family_rr_locks to restrict each family to its JK-MaxExpR-locked RR.
     Falls back to best ExpR if no lock exists (graceful degradation).
     """
     con = duckdb.connect(str(db_path), read_only=True)

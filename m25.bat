@@ -3,6 +3,11 @@ setlocal enabledelayedexpansion
 title M2.5 Audit Launcher
 cd /d "%~dp0"
 
+REM Activate project venv if not already active
+if exist ".venv\Scripts\activate.bat" (
+    if not defined VIRTUAL_ENV call .venv\Scripts\activate.bat
+)
+
 :menu
 cls
 echo.

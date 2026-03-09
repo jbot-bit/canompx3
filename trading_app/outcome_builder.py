@@ -966,7 +966,11 @@ def main():
     parser.add_argument("--end", type=date.fromisoformat, help="End date (YYYY-MM-DD)")
     parser.add_argument("--orb-minutes", type=int, default=5, help="ORB duration in minutes")
     parser.add_argument("--dry-run", action="store_true", help="Validate without writing")
-    parser.add_argument("--force", action="store_true", help="Rebuild all days (ignore checkpoint)")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Rebuild all days (ignore checkpoint). Required after grid changes (new entry_model/RR_TARGET/CB).",
+    )
     args = parser.parse_args()
 
     build_outcomes(

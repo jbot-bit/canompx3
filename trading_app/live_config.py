@@ -177,7 +177,7 @@ def _load_best_regime_variant(
     """Load the best variant from validated_setups, enforcing locked RR.
 
     Joins family_rr_locks to restrict each (instrument, orb_label, filter_type,
-    entry_model, orb_minutes, confirm_bars) to its SharpeDD-locked RR target.
+    entry_model, orb_minutes, confirm_bars) to its JK-MaxExpR-locked RR target.
     Among matching rows, picks the best by expectancy_r (tiebreaker across
     different orb_minutes/confirm_bars combos at the locked RR).
 
