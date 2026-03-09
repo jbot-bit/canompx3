@@ -79,7 +79,7 @@ class TestORBDetection:
         engine.on_bar(_bar(ts_base, 2700, 2705, 2695, 2702))
         engine.on_bar(_bar(ts_base + timedelta(minutes=1), 2702, 2710, 2698, 2708))
 
-        orb = engine.orbs["US_DATA_830"]
+        orb = engine.orbs[("US_DATA_830", 5)]
         assert orb.high == 2710.0
         assert orb.low == 2695.0
         assert not orb.complete  # Still within window
@@ -95,7 +95,7 @@ class TestORBDetection:
 
         # Bar at 13:35 — window is over
         engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2702, 2703, 2701, 2703))
-        assert engine.orbs["US_DATA_830"].complete
+        assert engine.orbs[("US_DATA_830", 5)].complete
 
     def test_break_detection_long(self):
         """Close above ORB high triggers long break."""
@@ -109,7 +109,7 @@ class TestORBDetection:
 
         # Bar after window with close > orb_high (2705)
         engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
-        assert engine.orbs["US_DATA_830"].break_dir == "long"
+        assert engine.orbs[("US_DATA_830", 5)].break_dir == "long"
 
     def test_no_break_inside_range(self):
         """Close within ORB range = no break."""
@@ -121,7 +121,7 @@ class TestORBDetection:
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
 
         engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2702, 2704, 2696, 2700))
-        assert engine.orbs["US_DATA_830"].break_dir is None
+        assert engine.orbs[("US_DATA_830", 5)].break_dir is None
 
 
 # ============================================================================

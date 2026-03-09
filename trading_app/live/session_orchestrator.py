@@ -97,20 +97,13 @@ class SessionOrchestrator:
         if not self.portfolio.strategies:
             raise RuntimeError(f"No active strategies for {instrument}")
 
-        # F23 guard: warn if any strategy's orb_minutes doesn't match session default
-        from trading_app.config import ORB_DURATION_MINUTES
-
+        # Log active apertures per session (multi-aperture support)
+        apertures: dict[str, set[int]] = {}
         for s in self.portfolio.strategies:
-            session_default = ORB_DURATION_MINUTES.get(s.orb_label, 5)
-            if hasattr(s, "orb_minutes") and s.orb_minutes != session_default:
-                log.warning(
-                    "APERTURE MISMATCH: %s has orb_minutes=%d but %s default=%d — live ORB window will use %d",
-                    s.strategy_id,
-                    s.orb_minutes,
-                    s.orb_label,
-                    session_default,
-                    session_default,
-                )
+            apertures.setdefault(s.orb_label, set()).add(s.orb_minutes)
+        for label, mins in sorted(apertures.items()):
+            if len(mins) > 1:
+                log.info("Multi-aperture: %s → %s", label, sorted(mins))
 
         # Strategy lookup map for resolving entry_model from strategy_id on TradeEvents
         self._strategy_map: dict[str, PortfolioStrategy] = {s.strategy_id: s for s in self.portfolio.strategies}
