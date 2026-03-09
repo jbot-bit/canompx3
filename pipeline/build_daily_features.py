@@ -552,6 +552,9 @@ def classify_day_type(
     range_pct = day_range / atr_20
     close_pct = (daily_close - daily_low) / day_range  # 0=closed at low, 1=at high
 
+    # Day-type thresholds: standard market microstructure cutoffs (not optimized).
+    # @research-source pipeline/build_daily_features.py (classify_day_type)
+    # @revalidated-for E1/E2 event-based sessions (Mar 2026)
     if range_pct < 0.5:
         return "NON_TREND"
     if close_pct >= 0.7:
@@ -635,6 +638,9 @@ def compute_rsi_at_cme_reopen(
     if bars_5m_ts is not None and bars_5m_closes is not None:
         # Fast path: slice from pre-loaded arrays using binary search
         end_idx = int(np.searchsorted(bars_5m_ts, pd.Timestamp(orb_0900_utc).asm8, side="right"))
+        # 200 bars ≈ 16.7 hours of 5m bars — covers full prior session + overnight.
+        # @research-source pipeline/build_daily_features.py (compute_rsi_at_open)
+        # @revalidated-for E1/E2 event-based sessions (Mar 2026)
         start_idx = max(0, end_idx - 200)
         closes = bars_5m_closes[start_idx:end_idx]
 
@@ -1109,6 +1115,10 @@ def build_daily_features(
 
         # ATR Velocity: today's ATR_20 vs 5-day prior average.
         # Uses ROWS [i-5 .. i-1] — prior days only, no look-ahead.
+        # Thresholds: ±5% change (1.05/0.95) = standard volatility regime cutoffs.
+        # Min 5 prior days for stable denominator.
+        # @research-source research/research_mgc_compressed_spring.py
+        # @revalidated-for E1/E2 event-based sessions (Mar 2026)
         atr_today = rows[i]["atr_20"]
         prior_atrs = [rows[j]["atr_20"] for j in range(max(0, i - 5), i) if rows[j].get("atr_20") is not None]
         if atr_today is not None and len(prior_atrs) >= 5:
@@ -1125,7 +1135,10 @@ def build_daily_features(
 
         # Per-session ORB compression z-score (prior 20 days, no look-ahead).
         # Compression = rolling z-score of (orb_size / atr_20).
-        # Requires ≥5 prior days to be meaningful.
+        # Tier cutoffs: ±0.5σ = half standard deviation (standard z-score bucketing).
+        # Requires ≥5 prior days for stable mean/std.
+        # @research-source research/research_mgc_compressed_spring.py
+        # @revalidated-for E1/E2 event-based sessions (Mar 2026)
         if atr_today is not None and atr_today > 0:
             for sess_label in ["CME_REOPEN", "TOKYO_OPEN", "LONDON_METALS"]:
                 size_col = f"orb_{sess_label}_size"

@@ -367,7 +367,8 @@ def validate_strategy(
     yearly_json = row.get("yearly_results", "{}")
     try:
         yearly = json.loads(yearly_json) if isinstance(yearly_json, str) else yearly_json
-    except (json.JSONDecodeError, TypeError):
+    except (json.JSONDecodeError, TypeError) as exc:
+        logger.warning("Corrupt yearly_results JSON for %s: %s", row.get("strategy_id", "?"), exc)
         yearly = {}
 
     if not yearly:
@@ -459,6 +460,14 @@ def validate_strategy(
         strategy_risk_points = avg_risk
     else:
         strategy_risk_points = cost_spec.min_risk_floor_points
+        logger.warning(
+            "Risk fallback to min_risk_floor_points=%.4f for %s — "
+            "median_risk=%s, avg_risk=%s. Stress test denominator may be compressed.",
+            cost_spec.min_risk_floor_points,
+            row.get("strategy_id", "?"),
+            median_risk,
+            avg_risk,
+        )
 
     strategy_risk_dollars = strategy_risk_points * cost_spec.point_value
     # Floor: never below tick-based minimum
@@ -996,7 +1005,8 @@ def run_validation(
                     yearly = rd.get("yearly_results", "{}")
                     try:
                         yearly_data = json.loads(yearly) if isinstance(yearly, str) else yearly
-                    except (json.JSONDecodeError, TypeError):
+                    except (json.JSONDecodeError, TypeError) as exc:
+                        logger.warning("Corrupt yearly_results JSON for %s: %s", sid, exc)
                         yearly_data = {}
 
                     included = {
