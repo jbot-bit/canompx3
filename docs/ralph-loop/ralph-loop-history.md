@@ -60,4 +60,20 @@
 - Finding: batch: F3 (annotation debt — 10 hardcoded thresholds missing @research-source) + F4 (silent risk fallback to min_risk_floor_points)
 - Action: F3: Added @research-source + @revalidated-for annotations at 4 threshold clusters (day_type, RSI lookback, ATR velocity, compression z-score). F4: Added logger.warning when risk fallback fires with strategy_id and values.
 - Verification: PASS — all 6 gates (71 drift, behavioral clean, 2751 passed/9 skipped, ruff clean, blast radius verified, regression clean)
-- Commit: pending
+- Commit: ea46784
+
+## Iteration 8 — 2026-03-09
+- Phase: audit (new targets)
+- Target: session_orchestrator.py, cusum_monitor.py, performance_monitor.py, scoring.py, portfolio.py
+- Finding: 8 findings (0 CRITICAL, 1 HIGH, 2 MEDIUM, 3 LOW, 2 SKIPPED) — orphan detection fail-open, CUSUM reset gap, dead max_contracts field
+- Action: Auditor ran 4 infrastructure gates + Seven Sins scan. scoring.py CLEAN. portfolio.py core sizing CORRECT.
+- Verification: 4/4 PASS (2751 passed, 0 failed, 9 skipped)
+- Commit: NONE (audit only)
+
+## Iteration 9 — 2026-03-09
+- Phase: fix (cross-terminal catch-up)
+- Target: batch: session_orchestrator.py:931, webhook_server.py:201
+- Finding: 2 remaining unsafe result.order_id patterns missed by iterations 1-8. Kill switch path (line 931) crashes on emergency flatten if broker returns non-dict. Webhook server (line 201) ALWAYS crashes — submit() returns dict, .order_id is never valid on dict.
+- Action: Applied safe getattr()/dict.get() pattern consistent with entry/exit paths fixed in iteration 4. Webhook server was a confirmed crash-on-every-call bug (endpoint non-functional since creation).
+- Verification: PASS — all 6 gates (71 drift, behavioral clean, 185 fast tests, ruff clean, blast radius clean, no regressions)
+- Commit: 7002aad
