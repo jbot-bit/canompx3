@@ -15,20 +15,18 @@ from pipeline.paths import GOLD_DB_PATH
 
 con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
 
-# Summary by instrument and regime
+# Summary by instrument and robustness status
 summary = con.execute('''
     SELECT
-        v.symbol,
-        COALESCE(f.fitness_regime, 'NO_FITNESS') as regime,
+        vs.instrument,
+        COALESCE(ef.robustness_status, 'NO_FAMILY') as status,
+        COALESCE(ef.trade_tier, 'NONE') as tier,
         COUNT(*) as count
-    FROM validated_setups v
-    LEFT JOIN (
-        SELECT strategy_id, fitness_regime
-        FROM strategy_fitness
-        WHERE as_of_date = (SELECT MAX(as_of_date) FROM strategy_fitness)
-    ) f ON v.strategy_id = f.strategy_id
-    GROUP BY v.symbol, regime
-    ORDER BY v.symbol, regime
+    FROM validated_setups vs
+    LEFT JOIN edge_families ef ON vs.strategy_id = ef.head_strategy_id
+    WHERE LOWER(vs.status) = 'active'
+    GROUP BY vs.instrument, status, tier
+    ORDER BY vs.instrument, status
 ''').fetchdf()
 
 print('=== REGIME SUMMARY ===')
@@ -37,28 +35,38 @@ print(summary.to_string(index=False))
 # Total counts
 totals = con.execute('''
     SELECT
-        COALESCE(f.fitness_regime, 'NO_FITNESS') as regime,
+        COALESCE(ef.robustness_status, 'NO_FAMILY') as status,
         COUNT(*) as count
-    FROM validated_setups v
-    LEFT JOIN (
-        SELECT strategy_id, fitness_regime
-        FROM strategy_fitness
-        WHERE as_of_date = (SELECT MAX(as_of_date) FROM strategy_fitness)
-    ) f ON v.strategy_id = f.strategy_id
-    GROUP BY regime
-    ORDER BY regime
+    FROM validated_setups vs
+    LEFT JOIN edge_families ef ON vs.strategy_id = ef.head_strategy_id
+    WHERE LOWER(vs.status) = 'active'
+    GROUP BY status
+    ORDER BY status
 ''').fetchdf()
 
 print()
 print('=== PORTFOLIO TOTALS ===')
 print(totals.to_string(index=False))
 
+# Edge family summary
+families = con.execute('''
+    SELECT instrument, trade_tier, COUNT(*) as families,
+           AVG(head_expectancy_r) as avg_expr,
+           MIN(min_member_trades) as min_trades
+    FROM edge_families
+    GROUP BY instrument, trade_tier
+    ORDER BY instrument, trade_tier
+''').fetchdf()
+
+print()
+print('=== EDGE FAMILIES ===')
+print(families.to_string(index=False))
+
 # Data freshness
 freshness = con.execute('''
-    SELECT MAX(as_of_date) as latest, MIN(as_of_date) as earliest
-    FROM strategy_fitness
+    SELECT MAX(created_at) as latest FROM edge_families
 ''').fetchdf()
-print(f'\\nFitness data: {freshness.iloc[0][\"earliest\"]} to {freshness.iloc[0][\"latest\"]}')
+print(f'\nEdge families last built: {freshness.iloc[0][\"latest\"]}')
 
 con.close()
 "
@@ -66,10 +74,10 @@ con.close()
 
 ### Step 2: Flag Concerns
 
-- Any instrument with 0 FIT strategies? -> RED FLAG
-- Any instrument with > 50% DECAY/UNFIT? -> YELLOW FLAG
-- Data freshness > 30 days old? -> STALE WARNING
-- Significant shift from previous check? -> Note the transition
+- Any instrument with 0 CORE families? -> RED FLAG
+- Any instrument losing families vs last check? -> YELLOW FLAG
+- Edge families older than 30 days? -> STALE WARNING
+- REGIME-tier families without fitness gate? -> Note
 
 ### Step 3: Present
 
@@ -77,11 +85,11 @@ One-liner per instrument, not a wall of text:
 
 ```
 === REGIME CHECK ===
-MGC:  X FIT, Y WATCH, Z DECAY  [HEALTHY/CONCERN/CRITICAL]
-MNQ:  X FIT, Y WATCH, Z DECAY  [HEALTHY/CONCERN/CRITICAL]
-MES:  X FIT, Y WATCH, Z DECAY  [HEALTHY/CONCERN/CRITICAL]
-M2K:  X FIT, Y WATCH, Z DECAY  [HEALTHY/CONCERN/CRITICAL]
-Portfolio: N total, X% FIT
+MGC:  X CORE, Y REGIME families  [HEALTHY/CONCERN/CRITICAL]
+MNQ:  X CORE, Y REGIME families  [HEALTHY/CONCERN/CRITICAL]
+MES:  X CORE, Y REGIME families  [HEALTHY/CONCERN/CRITICAL]
+M2K:  X CORE, Y REGIME families  [HEALTHY/CONCERN/CRITICAL]
+Portfolio: N total families, X validated strategies
 Data as of: YYYY-MM-DD
 ====================
 ```
@@ -90,4 +98,5 @@ Data as of: YYYY-MM-DD
 
 - NEVER cite counts from memory -- always query fresh
 - One query, one table, one summary. Keep it tight.
-- If strategy_fitness table is empty, say so clearly -- don't show zeros as if they're real.
+- Fitness lives in edge_families (robustness_status, trade_tier) -- NOT a strategy_fitness table
+- Column is `instrument` not `symbol` in validated_setups

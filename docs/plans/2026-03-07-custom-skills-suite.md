@@ -1,5 +1,9 @@
 # Custom Skills Suite — Implementation Plan
 
+> **STALE WARNING (2026-03-09):** SQL examples in this plan use wrong column/table names
+> (`strategy_fitness`, `v.symbol`, `avg_r`, `v.sharpe`). The actual skills in `.claude/commands/`
+> have been corrected. Do NOT copy SQL from this plan — use the live skill files as source of truth.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers-extended-cc:executing-plans to implement this plan task-by-task.
 
 **Goal:** Replace generic superpowers skills with 9 quant-pipeline-aware custom skills + fix 3 stale commands. All skills auto-trigger semantically so the user never needs to remember slash commands.

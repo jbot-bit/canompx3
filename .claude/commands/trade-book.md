@@ -1,88 +1,68 @@
 Show current trading book with full strategy details: $ARGUMENTS
 
-Use when: "what do I trade", "what's live", "show strategies", "what's at [session]", "trading book", "portfolio", "show me what's validated", "what's FIT", "live strategies", "what should I trade"
+Use when: "what do I trade", "what's live", "show strategies", "what's at [session]", "trading book", "portfolio", "show me what's validated", "what's FIT", "live strategies", "what should I trade", "tonight", "playbook", "what sessions", "session times"
 
-## Trade Book Query
+## Step 1: Generate the Trade Sheet
 
-Fast direct query against gold.db. Skips MCP for speed.
+ALWAYS run the trade sheet generator first. It resolves session times from `pipeline/dst.py` (never guess timezone math), applies dollar gates, checks fitness, and outputs a self-contained HTML.
 
-### Step 1: Parse Arguments
+```bash
+python scripts/tools/generate_trade_sheet.py
+```
 
-- If $ARGUMENTS contains a session name (e.g., "CME_REOPEN", "TOKYO_OPEN"): filter by that session
-- If $ARGUMENTS contains an instrument (e.g., "MGC", "MNQ"): filter by that instrument
-- If $ARGUMENTS contains "all" or is empty: show everything FIT
+This opens in the browser automatically. The terminal output shows correct Brisbane session times.
 
-### Step 2: Query gold.db Directly
+Optional flags:
+- `--date 2026-03-10` — specific trading day
+- `--no-open` — don't open browser
+- `--output path.html` — custom output path
+
+## Step 2: Answer the User's Question
+
+Use the terminal output from the generator to answer. The generator already:
+- Resolves DST-correct Brisbane times via `pipeline.dst.SESSION_CATALOG` resolvers
+- Filters to live portfolio specs from `trading_app.live_config.LIVE_PORTFOLIO`
+- Applies ExpR gate (`LIVE_MIN_EXPECTANCY_R`) and dollar gate
+- Checks fitness per strategy via `trading_app.strategy_fitness` module
+- Shows only cost-positive, gate-passing trades
+
+If the user asked about a specific session or instrument, highlight those from the output.
+
+## Step 3: If User Wants Raw Data
+
+For deeper queries (specific strategy IDs, historical performance, etc.), query gold.db directly:
 
 ```bash
 python -c "
 import duckdb
 from pipeline.paths import GOLD_DB_PATH
-
 con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+# Use correct column names:
+#   instrument (not symbol), orb_label (not session_name),
+#   expectancy_r (not avg_r), sharpe_ann (not sharpe)
+# Fitness is in edge_families.robustness_status (not strategy_fitness table)
 df = con.execute('''
-    SELECT
-        v.symbol,
-        v.orb_label,
-        v.orb_minutes,
-        v.entry_model,
-        v.confirm_bars,
-        v.filter_type,
-        v.rr_target,
-        v.direction,
-        v.sample_size,
-        v.win_rate,
-        v.avg_r AS ExpR,
-        v.sharpe,
-        v.all_years_positive,
-        v.years_tested,
-        COALESCE(f.fitness_regime, 'UNKNOWN') as fitness
-    FROM validated_setups v
-    LEFT JOIN (
-        SELECT strategy_id, fitness_regime
-        FROM strategy_fitness
-        WHERE as_of_date = (SELECT MAX(as_of_date) FROM strategy_fitness)
-    ) f ON v.strategy_id = f.strategy_id
-    WHERE 1=1
-    ORDER BY v.symbol, v.orb_label, v.orb_minutes, v.rr_target
+    SELECT vs.strategy_id, vs.instrument, vs.orb_label, vs.orb_minutes,
+           vs.entry_model, vs.confirm_bars, vs.filter_type, vs.rr_target,
+           vs.stop_multiplier, vs.sample_size, vs.win_rate, vs.expectancy_r,
+           vs.sharpe_ann, vs.all_years_positive, vs.years_tested,
+           ef.robustness_status, ef.trade_tier
+    FROM validated_setups vs
+    LEFT JOIN edge_families ef ON vs.strategy_id = ef.head_strategy_id
+    WHERE LOWER(vs.status) = 'active'
+    ORDER BY vs.orb_label, vs.instrument, vs.expectancy_r DESC
 ''').fetchdf()
 con.close()
-
 print(df.to_string(index=False))
-print(f'\\nTotal: {len(df)} strategies')
 "
 ```
 
-Modify the WHERE clause based on parsed arguments:
-- Session filter: `AND v.orb_label = '{session}'`
-- Instrument filter: `AND v.symbol = '{instrument}'`
-- FIT only (default unless user asks for all): `AND COALESCE(f.fitness_regime, 'UNKNOWN') = 'FIT'`
+## Rules
 
-### Step 3: Present Results
-
-Format as a clean table grouped by session (Brisbane time order).
-
-**For each strategy show ALL of these (MANDATORY -- never omit any):**
-- Symbol, orb_label, orb_minutes (5/15/30)
-- entry_model, confirm_bars
-- filter_type, rr_target
-- direction
-- sample_size, win_rate, ExpR, Sharpe
-- fitness_regime
-- all_years_positive, years_tested
-
-### Step 4: Summary
-
-- Count by instrument
-- Count by fitness regime (FIT/WATCH/DECAY/UNFIT)
-- Flag any strategies with `all_years_positive = False`
-- Note data freshness (latest as_of_date from strategy_fitness)
-
-### Rules
-
-- ALWAYS include rr_target -- user explicitly demanded this
-- NEVER use MCP for this query -- too slow and may be stale
-- NEVER cite strategy counts from memory -- always query fresh
-- Show WATCH strategies dimmed (mention but flag as "monitor only")
-- Hide UNFIT/DECAY unless user asks for them
-- If query returns 0 rows, check if gold.db exists and has data
+- ALWAYS run generate_trade_sheet.py FIRST — never hand-compute session times
+- NEVER guess timezone offsets — the resolvers handle DST automatically
+- ALWAYS include rr_target — user explicitly demanded this
+- NEVER use MCP for trade book queries — too slow and may be stale
+- NEVER cite strategy counts from memory — always query fresh
+- NEVER reference strategy_fitness table — it does not exist. Use edge_families
+- Correct column names: instrument, orb_label, expectancy_r, sharpe_ann (not symbol, session_name, avg_r, sharpe)
