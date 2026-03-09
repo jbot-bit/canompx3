@@ -165,13 +165,22 @@ class LiveMLPredictor:
                         current_hash,
                     )
 
-                # Freshness check (isolated — parsing failure must not prevent model use)
+                # Freshness check: warn at >60 days, fail-closed at >90 days
                 trained_at_str = bundle.get("trained_at")
                 if trained_at_str:
                     try:
                         trained_at = datetime.fromisoformat(trained_at_str)
                         age_days = (datetime.now(UTC) - trained_at).days
-                        if age_days > 60:
+                        if age_days > 90:
+                            logger.warning(
+                                "ML model for %s is %d days old (>90 day limit) — "
+                                "REMOVING from active models (fail-closed). Retrain to re-enable.",
+                                inst,
+                                age_days,
+                            )
+                            del self._models[inst]
+                            continue
+                        elif age_days > 60:
                             logger.warning(
                                 "ML model for %s is %d days old (>60 day threshold)",
                                 inst,

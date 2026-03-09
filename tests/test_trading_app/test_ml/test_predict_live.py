@@ -876,3 +876,56 @@ class TestPerApertureModel:
         # O5 threshold=0.50, O15 threshold=0.55
         assert result_o5.threshold == 0.50
         assert result_o15.threshold == 0.55
+
+
+class TestModelStaleness:
+    """Stale model fail-closed behavior (>90 days)."""
+
+    def test_model_over_90_days_removed(self):
+        """Model >90 days old is removed from active models (fail-closed)."""
+        old_date = "2025-06-01T00:00:00+00:00"  # well over 90 days ago
+        bundle = _make_mock_bundle(trained_at=old_date)
+
+        with patch("trading_app.ml.predict_live.LiveMLPredictor._load_models"):
+            predictor = LiveMLPredictor(db_path="dummy.db", instruments=["MGC"])
+        predictor._models["MGC"] = bundle
+
+        # Re-run _load_models with real logic to trigger the staleness check
+        predictor.instruments = ["MGC"]
+        with patch("trading_app.ml.predict_live.joblib") as mock_joblib:
+            mock_joblib.load.return_value = bundle
+            with patch("trading_app.ml.predict_live.MODEL_DIR") as mock_dir:
+                hybrid_path = MagicMock()
+                hybrid_path.exists.return_value = False
+                legacy_path = MagicMock()
+                legacy_path.exists.return_value = True
+                mock_dir.__truediv__ = lambda self, name: hybrid_path if "hybrid" in name else legacy_path
+                predictor._load_models()
+
+        # Model should have been removed due to staleness
+        assert "MGC" not in predictor._models
+
+    def test_model_under_90_days_kept(self):
+        """Model <90 days old remains active."""
+        from datetime import timedelta
+
+        recent_date = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+        bundle = _make_mock_bundle(trained_at=recent_date)
+
+        with patch("trading_app.ml.predict_live.LiveMLPredictor._load_models"):
+            predictor = LiveMLPredictor(db_path="dummy.db", instruments=["MGC"])
+        predictor._models["MGC"] = bundle
+
+        predictor.instruments = ["MGC"]
+        with patch("trading_app.ml.predict_live.joblib") as mock_joblib:
+            mock_joblib.load.return_value = bundle
+            with patch("trading_app.ml.predict_live.MODEL_DIR") as mock_dir:
+                hybrid_path = MagicMock()
+                hybrid_path.exists.return_value = False
+                legacy_path = MagicMock()
+                legacy_path.exists.return_value = True
+                mock_dir.__truediv__ = lambda self, name: hybrid_path if "hybrid" in name else legacy_path
+                predictor._load_models()
+
+        # Model should still be active
+        assert "MGC" in predictor._models
