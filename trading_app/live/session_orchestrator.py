@@ -1028,7 +1028,7 @@ class SessionOrchestrator:
                             self._positions.pop(record.strategy_id)
                             log.warning("Order %s for %s: %s", status["status"], record.strategy_id, status)
                     except NotImplementedError:
-                        pass  # broker doesn't support polling
+                        log.debug("Fill poller: %s broker does not support order polling", self._broker_name)
                     except Exception as e:
                         self._stats.fill_polls_failed += 1
                         log.warning("Fill poll failed for %s: %s", record.strategy_id, e)

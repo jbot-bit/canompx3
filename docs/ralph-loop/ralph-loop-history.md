@@ -70,6 +70,14 @@
 - Verification: 4/4 PASS (2751 passed, 0 failed, 9 skipped)
 - Commit: NONE (audit only)
 
+## Iteration 10 — 2026-03-09
+- Phase: fix (batch — MEDIUM + 2 LOW, same blast radius: live trading path)
+- Target: batch: performance_monitor.py:96-99 (F2) + performance_monitor.py:60 (F3) + session_orchestrator.py:1030 (F4)
+- Finding: batch: F2 (CUSUM monitors not reset at daily boundary) + F3 (threshold hardcoded) + F4 (fill poller NotImplementedError silent)
+- Action: F2: Added `monitor.clear()` loop to `reset_daily()`. F3: Extracted threshold to class constant `CUSUM_THRESHOLD=4.0` with @research-source annotation. F4: Added `log.debug` for NotImplementedError in fill poller.
+- Verification: PASS — all 6 gates (71 drift, behavioral clean, 2751 passed/9 skipped, ruff clean, blast radius verified, regression clean)
+- Commit: pending
+
 ## Iteration 9 — 2026-03-09
 - Phase: fix (cross-terminal catch-up)
 - Target: batch: session_orchestrator.py:931, webhook_server.py:201

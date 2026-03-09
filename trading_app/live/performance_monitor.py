@@ -52,12 +52,19 @@ class PerformanceMonitor:
             send_notification(alert)
     """
 
+    # CUSUM alarm threshold in standard deviation units.
+    # 4.0σ ≈ conservative: avoids false positives over ~100-trade windows
+    # while catching genuine regime change.
+    # @research-source arXiv:1509.01570 (Real-time financial surveillance via CUSUM)
+    # @revalidated-for E1/E2 event-based sessions (Mar 2026)
+    CUSUM_THRESHOLD: float = 4.0
+
     def __init__(self, strategies: list[PortfolioStrategy]):
         self._monitors: dict[str, CUSUMMonitor] = {
             s.strategy_id: CUSUMMonitor(
                 expected_r=s.expectancy_r,
                 std_r=_compute_std_r(s.win_rate, s.rr_target, s.expectancy_r),
-                threshold=4.0,
+                threshold=self.CUSUM_THRESHOLD,
             )
             for s in strategies
         }
@@ -94,9 +101,11 @@ class PerformanceMonitor:
         }
 
     def reset_daily(self) -> None:
-        """Clear daily accumulators (call at EOD after logging summary)."""
+        """Clear daily accumulators and CUSUM monitors (call at EOD after logging summary)."""
         self._daily_r.clear()
         self._trades.clear()
+        for monitor in self._monitors.values():
+            monitor.clear()
 
     @property
     def trade_count(self) -> int:
