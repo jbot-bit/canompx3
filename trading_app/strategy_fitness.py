@@ -86,6 +86,10 @@ class FitnessReport:
 # Classification
 # =========================================================================
 
+# @research-source: heuristic thresholds for regime fitness classification.
+# 15 trades ≈ 1 month of daily trading. Below this, Sharpe SE ≈ 0.26 (noisy
+# but directionally useful for regime monitoring, not discovery).
+# @revalidated-for: E1/E2 event-based (2026-03-09)
 MIN_ROLLING_FIT = 15
 MIN_ROLLING_WATCH = 10
 
@@ -331,7 +335,8 @@ def _load_strategy_outcomes(
     # Apply filter: load daily_features and check eligibility
     filt = ALL_FILTERS.get(filter_type)
     if filt is None:
-        return _apply_dst(all_outcomes)  # unknown filter = pass-through
+        logger.warning("Unknown filter_type '%s' not in ALL_FILTERS — fail-closed, returning no outcomes", filter_type)
+        return []  # fail-closed: unknown filter = no outcomes (not pass-through)
 
     # For NO_FILTER, skip the expensive daily_features check
     if filter_type == "NO_FILTER":
@@ -476,7 +481,11 @@ def _compute_fitness_from_cache(
     # Apply filter (same logic as _load_strategy_outcomes)
     filter_type = params["filter_type"]
     filt = ALL_FILTERS.get(filter_type)
-    if filt is not None and filter_type != "NO_FILTER":
+    if filt is None and filter_type != "NO_FILTER":
+        # Fail-closed: unknown filter = no outcomes (matches _load_strategy_outcomes)
+        logger.warning("Unknown filter_type '%s' in cache path — fail-closed", filter_type)
+        all_outcomes = []
+    elif filt is not None and filter_type != "NO_FILTER":
         orb_label = params["orb_label"]
         orb_minutes = params["orb_minutes"]
         # Get eligible days from feature cache

@@ -3,110 +3,94 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## RALPH AUDIT — Iteration 9 (Tradovate Broker Layer)
+## RALPH AUDIT — Iteration 12 (Bloomey Deep Dive: Live Trading Critical Path)
 ## Date: 2026-03-09
+## Bloomey Grade: B+
 ## Infrastructure Gates: 4/4 PASS
 
 | Gate | Result | Detail |
 |------|--------|--------|
 | `check_drift.py` | PASS | 71 checks passed, 0 skipped, 6 advisory (non-blocking) |
 | `audit_behavioral.py` | PASS | All 6 checks clean |
-| `pytest tests/ -x -q` | PASS | 2742 passed, 0 failed, 1 skipped (556s) |
+| `pytest (companion)` | PASS | 135 passed (portfolio + strategy_fitness + rolling_portfolio) |
 | `ruff check` | PASS | All checks passed |
 
 ## Target Files
-- `trading_app/live/tradovate/order_router.py` — order submission, bracket management
-- `trading_app/live/tradovate/auth.py` — OAuth token management
-- `trading_app/live/tradovate/contract_resolver.py` — front-month contract resolution
-- `trading_app/live/tradovate/positions.py` — broker position queries
+
+Deep Bloomey review of 5 live trading critical-path files:
+- `trading_app/risk_manager.py` — position limits, circuit breakers, correlation-weighted sizing
+- `trading_app/portfolio.py` — portfolio construction, position sizing, diversification
+- `pipeline/cost_model.py` — canonical cost specs, R-multiple calculations
+- `trading_app/rolling_portfolio.py` — rolling window stability classification
+- `trading_app/strategy_fitness.py` — 3-layer fitness assessment, decay diagnostics
 
 ---
 
-### Finding 1 — Fill price `or` pattern (falsy zero)
+### Finding F1 — Dormant orb_minutes=5 hardcode (ANNOTATED)
+- Severity: MEDIUM (dormant)
+- File: `trading_app/rolling_portfolio.py:304`
+- Issue: `WHERE symbol = ? AND orb_minutes = 5` loads wrong daily_features for 15m/30m families
+- Action: Added TODO comment noting multi-aperture extension needed. Currently dormant (rolling evaluation only runs 5m). Deferred to when rolling evaluation extends to multi-aperture.
+- Status: DEFERRED (annotated)
+
+---
+
+### Finding F2 — Hardcoded SINGAPORE_OPEN exclusion (FIXED)
+- Severity: MEDIUM
+- File: `trading_app/portfolio.py:312,352`
+- Issue: `AND vs.orb_label != 'SINGAPORE_OPEN'` hardcoded in both baseline and nested queries. Should use `config.EXCLUDED_FROM_FITNESS`.
+- Action: Built exclusion clause from `EXCLUDED_FROM_FITNESS` constant (same pattern as strategy_fitness.py). Both baseline (line 288) and nested (line 329) queries updated. Import added.
+- Status: FIXED
+
+---
+
+### Finding F3 — Unannotated magic numbers (PARTIALLY ANNOTATED)
+- Severity: MEDIUM (batch)
+- Locations annotated:
+  - `strategy_fitness.py:89-90` — MIN_ROLLING_FIT=15, MIN_ROLLING_WATCH=10 ✓
+  - `rolling_portfolio.py:35-39` — STABLE_THRESHOLD, TRANSITIONING_THRESHOLD, FULL_WEIGHT_SAMPLE ✓
+- Locations remaining:
+  - `portfolio.py:944` — 0.4 trades/strategy/day (estimate, not a gate — lower priority)
+  - `strategy_fitness.py:120` — -0.1 Sharpe decline threshold
+  - `cost_model.py:153-229` — SESSION_SLIPPAGE_MULT values (77 lines)
+- Status: PARTIALLY DONE
+
+---
+
+### Finding F4 — SESSION_SLIPPAGE_MULT no provenance
 - Severity: LOW
-- File: `trading_app/live/tradovate/order_router.py:136,140,202,206`
-- Evidence:
-```python
-# Line 136: avgPx=0.0 is falsy, falls through to fillPrice
-fill_price = data.get("avgPx") or data.get("fillPrice")
-# Line 140: fill_price=0.0 is falsy, returns None
-return OrderResult(..., fill_price=float(fill_price) if fill_price else None)
-```
-- Root Cause: Python truthiness treats 0.0 as False. If Tradovate returns `avgPx=0.0` (edge case: rejected/cancelled order with zero fill), the code falls through to the next field or returns None.
-- Blast Radius: LOW — futures prices are never 0.0 in practice. The pattern exists in both `submit()` and `query_order_status()`.
-- Fix Category: correctness (use `is not None` instead of `or`/truthiness)
+- File: `pipeline/cost_model.py:153-229`
+- Issue: 77 lines of per-session slippage multipliers with no @research-source. Are these measured or estimated?
+- Status: DEFERRED (LOW priority — affects live execution only, not backtesting)
 
 ---
 
-### Finding 2 — PRODUCT_MAP hardcodes instrument list
-- Severity: LOW
-- File: `trading_app/live/tradovate/contract_resolver.py:22-27`
-- Evidence:
-```python
-PRODUCT_MAP = {
-    "MGC": "MGC",
-    "MNQ": "MNQ",
-    "MES": "MES",
-    "M2K": "M2K",
-}
-```
-- Root Cause: Broker product name mapping hardcoded. If a new instrument is added to `ACTIVE_ORB_INSTRUMENTS` but not here, session start crashes with ValueError (fail-closed — correct, but brittle).
-- Blast Radius: LOW — instruments rarely change. All 4 active instruments present.
-- Fix Category: annotation (add comment noting canonical source dependency)
+### Finding F5 — Fail-open on unknown filter (FIXED)
+- Severity: MEDIUM
+- File: `trading_app/strategy_fitness.py:332-334`
+- Issue: Unknown filter_type returned ALL outcomes (fail-open). Should fail-closed.
+- Action: Changed to return [] with logger.warning. Also fixed divergent behavior in compute_portfolio_fitness inline batch path (line 479-482) to match. Population audit confirmed: all 32 active filter_types exist in ALL_FILTERS — no strategy will be affected by this change.
+- Status: FIXED
 
 ---
 
-### Finding 3 — Auth token refresh not logged
-- Severity: LOW
-- File: `trading_app/live/tradovate/auth.py:42-60`
-- Evidence:
-```python
-def _refresh(self) -> str:
-    resp = requests.post(...)
-    resp.raise_for_status()
-    data = resp.json()
-    self._token = data["accessToken"]
-    # No log.info for successful refresh
-    return self._token
-```
-- Root Cause: Token refresh succeeds silently. In a 23-hour session, can't tell from logs when refreshes occur or how many happened.
-- Blast Radius: LOW — observability gap only. Auth failures raise (fail-closed).
-- Fix Category: logging (add log.info for token refresh)
-
----
-
-### Finding 4 — positions.py CLEAN
-- Severity: NONE
-- File: `trading_app/live/tradovate/positions.py`
-- Assessment: Already uses `"long"/"short"` (previously fixed). Proper `raise_for_status()`. Account ID filtering correct. No issues found.
+### Deferred from Iteration 9 (3 LOW)
+1. Fill price `or` pattern (falsy zero) — `order_router.py:136,140,202,206`
+2. PRODUCT_MAP hardcodes instrument list — `contract_resolver.py:22-27`
+3. Auth token refresh not logged — `auth.py:42-60`
 
 ---
 
 ## Summary
-- Total findings: 3 (all LOW)
-- CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 3
-- Tradovate broker layer is CLEAN for production use
-- All findings are observability/style, not correctness
-- Deferred to next iteration (current iteration at 5-file safety boundary from Bloomey fixes)
-
-## Severity Counts
-
-| Severity | Count |
-|----------|-------|
-| CRITICAL | 0 |
-| HIGH     | 0 |
-| MEDIUM   | 0 |
-| LOW      | 3 |
-
-## What Was NOT Flagged (Anti-False-Positive Notes)
-- `requests.post` timeout=5 in order submission: Appropriate for REST order submission. Tradovate docs recommend 5-10s.
-- KeyError on `data["accessToken"]` in auth: Correct fail-closed — malformed auth response should crash at session start, not silently proceed.
-- `supports_native_brackets() -> False`: Correct — Tradovate REST doesn't support OSO/OCO bracket orders. Engine manages stops/targets internally.
-- `cancel()` returns None: Correct — `raise_for_status()` handles HTTP errors. Successful cancel doesn't need a return value since the caller (bracket cancel) already handles the exception path.
-- `date.today()` for contract expiry: Correct — contract expiry is calendar-date comparison, not trading-day-aware.
+- Total findings: 5 NEW (2 FIXED, 1 partially annotated, 2 deferred)
+- CRITICAL: 0, HIGH: 0, MEDIUM: 4, LOW: 1
+- Position sizing: mechanically correct (floors with int(), conservative)
+- Cost model: canonical and sound (friction increases risk, reduces reward)
+- Fitness gate: protects capital via DECAY→weight=0 path; WATCH boundary noisy at N=15
 
 ## Next Targets
-- `trading_app/strategy_discovery.py` — grid search, hypothesis generation
-- `trading_app/strategy_validator.py` — multi-phase validation + walk-forward
-- `trading_app/execution_engine.py` — re-audit after multi-aperture changes
-- `trading_app/live/circuit_breaker.py` — verify recovery logic
+- Fix F1 properly when rolling evaluation extends to multi-aperture
+- Complete F3 annotations (portfolio.py:944, strategy_fitness.py:120)
+- Add F4 provenance to SESSION_SLIPPAGE_MULT
+- Fix 3 deferred LOW findings from iter 9
+- Audit `scripts/tools/build_edge_families.py` — family clustering (not yet covered)
