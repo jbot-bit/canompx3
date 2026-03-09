@@ -21,11 +21,8 @@ from pipeline.calendar_filters import (
     build_cpi_set,
     build_fomc_set,
     day_of_week,
-    is_month_end,
-    is_month_start,
     is_nfp_day,
     is_opex_day,
-    is_quarter_end,
     opex_week_dates,
 )
 from pipeline.log import get_logger
@@ -87,16 +84,10 @@ _CPI_DATES: set[date] = build_cpi_set()
 _OPEX_WEEK_DATES: set[date] = opex_week_dates()
 
 # Signal name → column mapping (matches cascade scanner names)
-# Lazy-built set of all known trading days for month-end/start/quarter-end checks.
-# These functions need a set of trading days to count backwards/forwards. In
-# production, this doesn't matter much — if a day is close to month boundary and
-# happens to be a non-trading day, the window calculation degrades gracefully
-# (may be off by 1 day). For perfect accuracy, the cascade scanner uses the full
-# trading day set from the database. Here we pass a minimal set.
-# TODO: _EMPTY_TRADING_DAYS causes _is_month_end/_is_month_start/_is_quarter_end
-# to always return True (count=0 <= window). No impact while CALENDAR_RULES is
-# empty, but must be fixed before any MONTH_END/MONTH_START rules go live.
-_EMPTY_TRADING_DAYS: set[date] = set()
+# Month boundary signals (MONTH_END, MONTH_START, QUARTER_END) are DISABLED.
+# They require a populated trading-days set to compute correctly; without it,
+# is_month_end/is_month_start/is_quarter_end always return True (false positives).
+# To re-enable: populate _TRADING_DAYS from the database, then uncomment below.
 
 
 def _get_active_signals(trading_day: date) -> list[str]:
@@ -111,12 +102,8 @@ def _get_active_signals(trading_day: date) -> list[str]:
         signals.append("FOMC")
     if trading_day in _CPI_DATES:
         signals.append("CPI")
-    if is_month_end(trading_day, _EMPTY_TRADING_DAYS):
-        signals.append("MONTH_END")
-    if is_month_start(trading_day, _EMPTY_TRADING_DAYS):
-        signals.append("MONTH_START")
-    if is_quarter_end(trading_day, _EMPTY_TRADING_DAYS):
-        signals.append("QUARTER_END")
+    # MONTH_END, MONTH_START, QUARTER_END disabled — require populated trading-days set.
+    # See comment near line 90 for details.
     if trading_day in _OPEX_WEEK_DATES:
         signals.append("OPEX_WEEK")
 
