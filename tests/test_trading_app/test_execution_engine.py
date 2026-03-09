@@ -190,21 +190,23 @@ class TestEntry:
 
     def test_entry_events_carry_risk_points(self):
         """All entry models populate risk_points on ENTRY events."""
-        # E2: stop-market entry
+        # E2: stop-market entry — fills on the break bar itself
         e2_strat = _make_strategy(
             entry_model="E2", confirm_bars=1, strategy_id="MGC_US_DATA_830_E2_RR2.0_CB1_NO_FILTER"
         )
         engine = ExecutionEngine(_make_portfolio([e2_strat]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
-        ts_base, _ = self._run_to_break(engine)
-        # E2 fills on confirm bar — high crosses ORB level
-        events = engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2708, 2715, 2703, 2712))
-        entries = [e for e in events if e.event_type == "ENTRY"]
-        if entries:
-            assert entries[0].risk_points is not None
-            assert entries[0].risk_points > 0
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        for i in range(5):
+            engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
+        # Break bar with high > ORB high (2705) — E2 stop-market fills here
+        break_events = engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
+        e2_entries = [e for e in break_events if e.event_type == "ENTRY"]
+        assert len(e2_entries) == 1, f"E2 should fill on break bar, got {len(e2_entries)} entries"
+        assert e2_entries[0].risk_points is not None
+        assert e2_entries[0].risk_points > 0
 
-        # E1: next-bar-open entry
+        # E1: next-bar-open entry — fills on bar AFTER break
         e1_strat = _make_strategy(
             entry_model="E1", confirm_bars=1, strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_NO_FILTER"
         )
@@ -212,10 +214,10 @@ class TestEntry:
         engine2.on_trading_day_start(date(2024, 1, 5))
         ts_base2, _ = self._run_to_break(engine2)
         events2 = engine2.on_bar(_bar(ts_base2 + timedelta(minutes=6), 2708, 2715, 2707, 2712))
-        entries2 = [e for e in events2 if e.event_type == "ENTRY"]
-        assert len(entries2) == 1
-        assert entries2[0].risk_points is not None
-        assert entries2[0].risk_points > 0
+        e1_entries = [e for e in events2 if e.event_type == "ENTRY"]
+        assert len(e1_entries) == 1, f"E1 should fill on next bar, got {len(e1_entries)} entries"
+        assert e1_entries[0].risk_points is not None
+        assert e1_entries[0].risk_points > 0
 
 
 # ============================================================================
