@@ -21,6 +21,7 @@ import duckdb
 
 def build_cascade_table(
     db_path: Path | str,
+    instrument: str = "MGC",
     orb_minutes: int = 5,
 ) -> dict[tuple[str, str, str], dict]:
     """Build cross-session conditional probability table from historical data.
@@ -38,7 +39,9 @@ def build_cascade_table(
     Direction relation is "same" if both sessions break the same direction,
     "opposite" if they break in opposite directions.
     """
-    # Session pairs to analyze: (earlier, later)
+    # Session pairs to analyze: (earlier, later).
+    # Temporal ordering is domain knowledge — SESSION_CATALOG has per-session
+    # resolvers but no inter-session ordering, so pairs are explicit.
     pairs = [
         ("CME_REOPEN", "TOKYO_OPEN"),
         ("CME_REOPEN", "SINGAPORE_OPEN"),
@@ -59,14 +62,14 @@ def build_cascade_table(
                     da.orb_{sess_b}_break_dir AS dir_b,
                     da.orb_{sess_b}_outcome AS outcome_b
                 FROM daily_features da
-                WHERE da.symbol = 'MGC'
+                WHERE da.symbol = ?
                   AND da.orb_minutes = ?
                   AND da.orb_{sess_a}_outcome IS NOT NULL
                   AND da.orb_{sess_b}_outcome IS NOT NULL
                   AND da.orb_{sess_a}_break_dir IS NOT NULL
                   AND da.orb_{sess_b}_break_dir IS NOT NULL
             """,
-                [orb_minutes],
+                [instrument, orb_minutes],
             ).fetchall()
 
             # Group by (outcome_a, direction_relation)

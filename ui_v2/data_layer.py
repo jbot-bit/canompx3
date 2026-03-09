@@ -97,7 +97,7 @@ def _df_to_records(df: pd.DataFrame) -> list[dict]:
     records = df.to_dict("records")
     for rec in records:
         for k, v in rec.items():
-            if isinstance(v, float) and math.isnan(v) or pd.isna(v):
+            if (isinstance(v, float) and math.isnan(v)) or pd.isna(v):
                 rec[k] = None
     return records
 
@@ -132,6 +132,7 @@ def get_prior_day_atr(
         val = df.iloc[0]["atr_20"]
         return float(val) if val is not None else None
     except Exception:
+        log.exception("Failed to get ATR for %s", instrument)
         return None
 
 
@@ -159,6 +160,7 @@ def get_previous_trading_day(
             return val.date()
         return val
     except Exception:
+        log.exception("Failed to get previous trading day before %s", before)
         return None
 
 
@@ -183,6 +185,7 @@ def get_today_completed_sessions(
         df = query_df(sql, [trading_day.isoformat()], db_path)
         return _df_to_records(df)
     except Exception:
+        log.exception("Failed to get completed sessions for %s", trading_day)
         return []
 
 
@@ -214,6 +217,7 @@ def get_session_history(
         df = query_df(sql, [session_name, limit], db_path)
         return _df_to_records(df)
     except Exception:
+        log.exception("Failed to get session history for %s", session_name)
         return []
 
 
@@ -249,6 +253,7 @@ def get_rolling_pnl(
 
         return {"daily": daily, "week_r": round(week_r, 2), "month_r": round(month_r, 2)}
     except Exception:
+        log.exception("Failed to get rolling PnL")
         return {"daily": [], "week_r": 0.0, "month_r": 0.0}
 
 
@@ -293,6 +298,7 @@ def get_overnight_recap(
         df = query_df(sql, [trading_day.isoformat(), *overnight_sessions], db_path)
         return _df_to_records(df)
     except Exception:
+        log.exception("Failed to get overnight recap for %s", trading_day)
         return []
 
 
@@ -313,4 +319,5 @@ def get_fitness_regimes(db_path: Path | None = None) -> list[dict]:
         df = query_df(sql, db_path=db_path)
         return _df_to_records(df)
     except Exception:
+        log.exception("Failed to get fitness regimes")
         return []
