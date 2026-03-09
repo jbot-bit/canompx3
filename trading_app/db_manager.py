@@ -293,7 +293,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
             )
         """)
 
-        # Table 7: family_rr_locks (SharpeDD-locked RR per family)
+        # Table 7: family_rr_locks (JK-MaxExpR-locked RR per family)
         from pipeline.init_db import FAMILY_RR_LOCKS_SCHEMA
 
         con.execute(FAMILY_RR_LOCKS_SCHEMA)
