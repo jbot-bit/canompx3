@@ -107,8 +107,8 @@ except Exception as e:
 
 ---
 
-### Finding 5 — max_contracts field defined but never enforced
-- Severity: MEDIUM
+### Finding 5 — DEFERRED: max_contracts field defined but never enforced (tech debt)
+- Severity: MEDIUM (DEFERRED — currently dormant, all strategies use default 1)
 - File: `trading_app/portfolio.py:72`
 - Evidence:
 ```python
