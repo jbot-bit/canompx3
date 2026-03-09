@@ -46,7 +46,12 @@ class CUSUMMonitor:
         return False
 
     def clear(self) -> None:
-        """Reset CUSUM state after investigation/acknowledgement."""
+        """Reset CUSUM state after investigation/acknowledgement.
+
+        Resets accumulators and alarm flag. n_trades is intentionally
+        preserved — cumulative trade count across the session is useful
+        for diagnostics in alarm messages.
+        """
         self.cusum_pos = 0.0
         self.cusum_neg = 0.0
         self.alarm_triggered = False

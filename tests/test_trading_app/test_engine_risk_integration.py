@@ -873,6 +873,59 @@ class TestCalendarOverlay:
         assert len(trades) == 1
         assert trades[0].size_multiplier == 1.0
 
+    def test_half_size_reduces_contracts(self):
+        """HALF_SIZE multiplier actually reduces trade.contracts (not just stored).
+
+        With equity=100000, risk_pct=2.0, entry=2708, stop=2695 (ORB low):
+        risk_points=13, risk_dollars=130, available=2000, base_contracts=int(15.38)=15
+        After HALF_SIZE: max(1, int(15 * 0.5)) = 7
+        """
+        strategy = _make_strategy(entry_model="E1", confirm_bars=1)
+        engine = ExecutionEngine(
+            _make_portfolio([strategy], account_equity=100_000.0),
+            _cost(),
+        )
+        engine.on_trading_day_start(_TRADING_DAY, daily_features_row={})
+
+        break_ts = _build_orb(engine)
+        with patch(
+            "trading_app.execution_engine.get_calendar_action",
+            return_value=CalendarAction.HALF_SIZE,
+        ):
+            _break_long(engine, break_ts)
+            events = _fill_e1(engine, break_ts)
+        entry_events = [e for e in events if e.event_type == "ENTRY"]
+        assert len(entry_events) == 1
+        trades = [t for t in engine.active_trades if t.strategy_id == strategy.strategy_id]
+        assert len(trades) == 1
+        assert trades[0].size_multiplier == 0.5
+        # HALF_SIZE applied: contracts < base (15)
+        assert trades[0].contracts == 7
+
+    def test_neutral_contracts_unchanged(self):
+        """NEUTRAL multiplier does not reduce contracts — baseline comparison."""
+        strategy = _make_strategy(entry_model="E1", confirm_bars=1)
+        engine = ExecutionEngine(
+            _make_portfolio([strategy], account_equity=100_000.0),
+            _cost(),
+        )
+        engine.on_trading_day_start(_TRADING_DAY, daily_features_row={})
+
+        break_ts = _build_orb(engine)
+        with patch(
+            "trading_app.execution_engine.get_calendar_action",
+            return_value=CalendarAction.NEUTRAL,
+        ):
+            _break_long(engine, break_ts)
+            events = _fill_e1(engine, break_ts)
+        entry_events = [e for e in events if e.event_type == "ENTRY"]
+        assert len(entry_events) == 1
+        trades = [t for t in engine.active_trades if t.strategy_id == strategy.strategy_id]
+        assert len(trades) == 1
+        assert trades[0].size_multiplier == 1.0
+        # NEUTRAL: no reduction, full base contracts
+        assert trades[0].contracts == 15
+
     def test_default_neutral_no_mock(self):
         """Without mocking, empty CALENDAR_RULES returns NEUTRAL — entry allowed."""
         strategy = _make_strategy(entry_model="E1", confirm_bars=1)
