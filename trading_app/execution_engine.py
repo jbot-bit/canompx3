@@ -31,7 +31,6 @@ from trading_app.config import (
     EARLY_EXIT_MINUTES,
     HOLD_HOURS,
     IB_DURATION_MINUTES,
-    ORB_DURATION_MINUTES,
     SESSION_EXIT_MODE,
 )
 from trading_app.portfolio import (
@@ -77,6 +76,7 @@ class LiveORB:
     label: str
     window_start_utc: datetime
     window_end_utc: datetime
+    orb_minutes: int = 5
     high: float | None = None
     low: float | None = None
     complete: bool = False
@@ -141,6 +141,7 @@ class ActiveTrade:
     strategy_id: str
     strategy: PortfolioStrategy
     orb_label: str
+    orb_minutes: int  # Aperture this trade was armed on (5, 15, or 30)
     entry_model: str
     direction: str
     state: TradeState
@@ -207,7 +208,7 @@ class ExecutionEngine:
 
         # State
         self.trading_day: date | None = None
-        self.orbs: dict[str, LiveORB] = {}
+        self.orbs: dict[tuple[str, int], LiveORB] = {}  # (session_label, orb_minutes) → LiveORB
         self.ib: LiveIB | None = None
         self.active_trades: list[ActiveTrade] = []
         self.completed_trades: list[ActiveTrade] = []
@@ -262,33 +263,38 @@ class ExecutionEngine:
         ib_end = ib_start + timedelta(minutes=IB_DURATION_MINUTES)
         self.ib = LiveIB(window_start_utc=ib_start, window_end_utc=ib_end)
 
-        # Initialize ORB windows for this trading day
-        # Trading day in UTC: starts at 23:00 UTC on prev calendar day
-        # Duration is session-specific (variable aperture from config)
-
-        # All sessions are dynamic (DST-aware), resolved per-day
+        # Initialize ORB windows for this trading day.
+        # Multi-aperture: create one LiveORB per unique (session_label, orb_minutes)
+        # combination needed by loaded strategies. A session can have 5m, 15m, and 30m
+        # ORBs simultaneously — they share the same start time but end at different times.
         from zoneinfo import ZoneInfo
 
         _brisbane = ZoneInfo("Australia/Brisbane")
         _utc = ZoneInfo("UTC")
-        for label, resolver in DYNAMIC_ORB_RESOLVERS.items():
-            # Only create ORB if we have strategies for this session
-            if not any(s.orb_label == label for s in self.portfolio.strategies):
-                continue
+
+        # Collect unique (label, orb_minutes) pairs from portfolio
+        needed_orbs: set[tuple[str, int]] = set()
+        for s in self.portfolio.strategies:
+            if s.orb_label in DYNAMIC_ORB_RESOLVERS:
+                needed_orbs.add((s.orb_label, s.orb_minutes))
+
+        # Resolve DST-aware start times per session (shared across apertures)
+        session_starts: dict[str, datetime] = {}
+        for label in {lbl for lbl, _ in needed_orbs}:
+            resolver = DYNAMIC_ORB_RESOLVERS[label]
             bris_h, bris_m = resolver(trading_day)
-            duration = ORB_DURATION_MINUTES.get(label, 5)
-            # Determine Brisbane calendar date (before 09:00 = next day)
-            if bris_h < 9:
-                cal_date = trading_day + timedelta(days=1)
-            else:
-                cal_date = trading_day
+            cal_date = trading_day + timedelta(days=1) if bris_h < 9 else trading_day
             local_start = datetime(cal_date.year, cal_date.month, cal_date.day, bris_h, bris_m, 0, tzinfo=_brisbane)
-            start = local_start.astimezone(_utc).replace(tzinfo=UTC)
-            end = start + timedelta(minutes=duration)
-            self.orbs[label] = LiveORB(
+            session_starts[label] = local_start.astimezone(_utc).replace(tzinfo=UTC)
+
+        for label, orb_minutes in needed_orbs:
+            start = session_starts[label]
+            end = start + timedelta(minutes=orb_minutes)
+            self.orbs[(label, orb_minutes)] = LiveORB(
                 label=label,
                 window_start_utc=start,
                 window_end_utc=end,
+                orb_minutes=orb_minutes,
             )
 
     def on_bar(self, bar: dict) -> list[TradeEvent]:
@@ -440,6 +446,8 @@ class ExecutionEngine:
         for strategy in self.portfolio.strategies:
             if strategy.orb_label != orb.label:
                 continue
+            if strategy.orb_minutes != orb.orb_minutes:
+                continue
 
             # Check strategy filter (size, DOW, break speed, etc.)
             filt = ALL_FILTERS.get(strategy.filter_type)
@@ -524,6 +532,7 @@ class ExecutionEngine:
                 strategy_id=strategy.strategy_id,
                 strategy=strategy,
                 orb_label=orb.label,
+                orb_minutes=orb.orb_minutes,
                 entry_model=strategy.entry_model,
                 direction=orb.break_dir,
                 state=TradeState.CONFIRMING,
@@ -559,7 +568,7 @@ class ExecutionEngine:
                 continue
 
             trade.bars_since_break.append(bar)
-            orb = self.orbs[trade.orb_label]
+            orb = self.orbs[(trade.orb_label, trade.orb_minutes)]
 
             # Check if this bar closes in the break direction
             if trade.direction == "long":
@@ -939,7 +948,7 @@ class ExecutionEngine:
 
                 elif trade.entry_model == "E3":
                     # E3: check if bar retraces to ORB level
-                    orb = self.orbs[trade.orb_label]
+                    orb = self.orbs[(trade.orb_label, trade.orb_minutes)]
                     if trade.direction == "long":
                         retrace = bar["low"] <= orb.high
                         # CRITICAL: Check stop BEFORE fill — if bar also breaches stop,
