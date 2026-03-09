@@ -683,6 +683,9 @@ class ExecutionEngine:
                     return events
 
             trade.contracts = max(1, int(trade.contracts * suggested_contract_factor))
+            # Apply calendar overlay sizing (HALF_SIZE=0.5, NEUTRAL=1.0)
+            if trade.size_multiplier != 1.0:
+                trade.contracts = max(1, int(trade.contracts * trade.size_multiplier))
 
             if trade.direction == "long":
                 target_price = entry_price + risk_points * trade.strategy.rr_target
@@ -872,6 +875,9 @@ class ExecutionEngine:
 
                     # Apply suggested contract factor
                     trade.contracts = max(1, int(trade.contracts * suggested_contract_factor))
+                    # Apply calendar overlay sizing (HALF_SIZE=0.5, NEUTRAL=1.0)
+                    if trade.size_multiplier != 1.0:
+                        trade.contracts = max(1, int(trade.contracts * trade.size_multiplier))
 
                     if trade.direction == "long":
                         target_price = entry_price + risk_points * trade.strategy.rr_target
@@ -1010,6 +1016,9 @@ class ExecutionEngine:
 
                         # Apply suggested contract factor
                         trade.contracts = max(1, int(trade.contracts * suggested_contract_factor))
+                        # Apply calendar overlay sizing (HALF_SIZE=0.5, NEUTRAL=1.0)
+                        if trade.size_multiplier != 1.0:
+                            trade.contracts = max(1, int(trade.contracts * trade.size_multiplier))
 
                         if trade.direction == "long":
                             target_price = entry_price + risk_points * trade.strategy.rr_target
