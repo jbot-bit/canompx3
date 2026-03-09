@@ -683,7 +683,9 @@ class ExecutionEngine:
                     return events
 
             trade.contracts = max(1, int(trade.contracts * suggested_contract_factor))
-            # Apply calendar overlay sizing (HALF_SIZE=0.5, NEUTRAL=1.0)
+            # Apply calendar overlay sizing (HALF_SIZE=0.5, NEUTRAL=1.0).
+            # NOTE: For single-contract strategies, max(1, ...) floor means
+            # HALF_SIZE is a no-op — effective only for multi-contract sizing.
             if trade.size_multiplier != 1.0:
                 trade.contracts = max(1, int(trade.contracts * trade.size_multiplier))
 
