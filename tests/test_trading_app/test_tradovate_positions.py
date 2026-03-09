@@ -26,7 +26,7 @@ class TestTradovatePositions:
 
         assert len(result) == 1
         assert result[0]["contract_id"] == 123
-        assert result[0]["side"] == "BUY"
+        assert result[0]["side"] == "long"
         assert result[0]["size"] == 2
         assert result[0]["avg_price"] == 2350.0
 
@@ -44,7 +44,7 @@ class TestTradovatePositions:
 
         assert len(result) == 1
         assert result[0]["contract_id"] == 456
-        assert result[0]["side"] == "SELL"
+        assert result[0]["side"] == "short"
 
     def test_query_open_filters_by_account(self):
         """Only positions for the given account_id returned."""

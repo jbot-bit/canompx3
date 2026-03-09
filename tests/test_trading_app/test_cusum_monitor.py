@@ -127,3 +127,12 @@ def test_std_r_rr1_stays_near_one():
     monitor = PerformanceMonitor([s])
     cusum = monitor.get_cusum("TEST_RR1")
     assert 0.9 < cusum.std_r < 1.1
+
+
+def test_zero_std_r_returns_false():
+    """std_r=0 should not raise ZeroDivisionError — returns False safely."""
+    mon = CUSUMMonitor(expected_r=0.3, std_r=0.0, threshold=4.0)
+    result = mon.update(0.5)
+    assert result is False
+    assert mon.n_trades == 1
+    assert mon.alarm_triggered is False

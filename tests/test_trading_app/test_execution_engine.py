@@ -954,6 +954,40 @@ class TestTightStop:
         assert "stop_hit" in exit_evts[0].reason  # "loss_stop_hit" or "stop_hit"
 
 
+class TestUnknownEntryModel:
+    """Unknown entry_model must produce a REJECT event (fail-closed)."""
+
+    def _run_to_break(self, engine):
+        """Helper: build ORB and trigger a long break."""
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        for i in range(5):
+            engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
+        events = engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
+        return ts_base, events
+
+    def test_unknown_entry_model_rejected(self):
+        """Strategy with entry_model='E_UNKNOWN' should produce a REJECT event."""
+        strategy = _make_strategy(
+            entry_model="E_UNKNOWN",
+            confirm_bars=1,
+            strategy_id="MGC_US_DATA_830_EUNKNOWN_RR2.0_CB1_NO_FILTER",
+        )
+        engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
+        engine.on_trading_day_start(date(2024, 1, 5))
+
+        ts_base, break_events = self._run_to_break(engine)
+
+        # Collect all events from break bar onward
+        all_events = list(break_events)
+        # Feed one more bar in case entry is deferred
+        next_events = engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2708, 2715, 2707, 2712))
+        all_events.extend(next_events)
+
+        reject_events = [e for e in all_events if e.event_type == "REJECT"]
+        assert len(reject_events) == 1
+        assert "unknown_entry_model" in reject_events[0].reason
+
+
 class TestCLI:
     def test_import(self):
         """Module imports without error."""

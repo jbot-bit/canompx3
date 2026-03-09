@@ -1550,3 +1550,73 @@ class TestObservability:
                 pass
             # Verify we got PAST the notification gate (feed class was reached)
             mock_feed_cls.assert_called()
+
+
+# ---------------------------------------------------------------------------
+# F4: Kill switch direction=None guard
+# ---------------------------------------------------------------------------
+
+
+class TestKillSwitchDirectionNone:
+    """_emergency_flatten must skip positions with direction=None."""
+
+    async def test_direction_none_skips_order_and_notifies(self):
+        """Position with direction=None: no order submitted, CANNOT FLATTEN SAFELY logged."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._notify = MagicMock()
+
+        # Inject a position with direction=None via direct PositionRecord insertion
+        from trading_app.live.position_tracker import PositionRecord, PositionState
+
+        record = PositionRecord(
+            strategy_id=STRATEGY_ID,
+            state=PositionState.ENTERED,
+            direction=None,
+            engine_entry_price=2350.0,
+            contracts=1,
+        )
+        orch._positions._positions[STRATEGY_ID] = record
+
+        await orch._emergency_flatten()
+
+        # No order should have been submitted
+        assert len(orch.order_router.submitted) == 0
+        # _notify should have been called with CANNOT FLATTEN SAFELY
+        notify_calls = [str(c) for c in orch._notify.call_args_list]
+        assert any("CANNOT FLATTEN SAFELY" in c for c in notify_calls)
+
+
+# ---------------------------------------------------------------------------
+# F7: _on_bar engine error isolation
+# ---------------------------------------------------------------------------
+
+
+class TestOnBarEngineErrorIsolation:
+    """Engine errors in _on_bar must be caught — bar dropped, feed continues."""
+
+    async def test_engine_error_increments_counter_and_continues(self):
+        """engine.on_bar() raising RuntimeError: bar dropped, engine_errors incremented."""
+        orch = build_orchestrator()
+        orch.engine.on_bar.side_effect = RuntimeError("unexpected engine crash")
+        orch._check_trading_day_rollover = AsyncMock()
+
+        bar = FakeBar()
+        # Should NOT raise
+        await orch._on_bar(bar)
+
+        assert orch._stats.engine_errors == 1
+        assert orch._stats.bars_received == 1
+
+
+# ---------------------------------------------------------------------------
+# F9: _notifications_broken initialization order
+# ---------------------------------------------------------------------------
+
+
+class TestNotificationsBrokenInit:
+    """_notifications_broken must be False after __init__ (before run_self_tests)."""
+
+    def test_notifications_broken_is_false_after_init(self):
+        """build_orchestrator sets _notifications_broken=False before self-tests run."""
+        orch = build_orchestrator()
+        assert orch._notifications_broken is False

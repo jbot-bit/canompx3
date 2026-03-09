@@ -127,6 +127,14 @@ class PositionTracker:
         if record is None:
             log.warning("Entry fill for unknown strategy %s", strategy_id)
             return None
+        if record.state == PositionState.ENTERED:
+            log.warning(
+                "Duplicate entry fill for %s IGNORED (already ENTERED @ %.2f, duplicate=%.2f)",
+                strategy_id,
+                record.fill_entry_price or 0.0,
+                fill_price,
+            )
+            return record
         now = datetime.now(UTC)
         record.state = PositionState.ENTERED
         record.fill_entry_price = fill_price
