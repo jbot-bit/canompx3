@@ -523,12 +523,13 @@ class SessionOrchestrator:
         else:
             risk_pts = event.risk_points or strategy.median_risk_points
             if not risk_pts:
-                risk_pts = 10.0
                 log.error(
-                    "No risk_points for %s — using fallback 10.0 (P&L will be inaccurate)",
+                    "No risk_points for %s — actual_r set to 0.0 (cannot compute without risk)",
                     event.strategy_id,
                 )
-            actual_r = self._compute_actual_r(entry_price, exit_price, event.direction, risk_pts)
+                actual_r = 0.0
+            else:
+                actual_r = self._compute_actual_r(entry_price, exit_price, event.direction, risk_pts)
 
         # Compute total slippage (entry + exit) in points
         slippage_pts = 0.0
