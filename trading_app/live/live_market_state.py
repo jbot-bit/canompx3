@@ -5,12 +5,15 @@ CRITICAL: DYNAMIC_ORB_RESOLVERS[label](date) returns (hour, minute) in
 Brisbane local time (UTC+10, no DST). Must convert to UTC for bar comparisons.
 """
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from pipeline.dst import DYNAMIC_ORB_RESOLVERS
 from trading_app.live.bar_aggregator import Bar
+
+log = logging.getLogger(__name__)
 
 _BRISBANE = ZoneInfo("Australia/Brisbane")
 _UTC = UTC
@@ -29,7 +32,8 @@ def _session_start_utc(session_label: str, trading_day: date) -> datetime | None
         return None
     try:
         bris_h, bris_m = resolver(trading_day)
-    except Exception:
+    except Exception as exc:
+        log.warning("DST resolver failed for %s on %s: %s", session_label, trading_day, exc)
         return None
 
     # Before 09:00 Brisbane = next calendar day (midnight-crossing sessions)

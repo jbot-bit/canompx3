@@ -67,7 +67,9 @@ class ProjectXOrderRouter(BrokerRouter):
         if not data.get("success"):
             raise RuntimeError(f"ProjectX order failed: {data.get('errorMessage', data)}")
 
-        order_id = data.get("orderId", 0)
+        order_id = data.get("orderId")
+        if order_id is None or order_id <= 0:
+            raise RuntimeError(f"ProjectX order returned no valid orderId: {data}")
         fill_price = data.get("fillPrice") or data.get("averagePrice")
         log.info(
             "ProjectX order placed: side=%d type=%d qty=%d -> orderId=%d (%.0fms)",

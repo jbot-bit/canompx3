@@ -12,6 +12,7 @@ Usage:
     print(state.strategy_scores)
 """
 
+import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
@@ -19,6 +20,8 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 import duckdb
+
+log = logging.getLogger(__name__)
 
 from pipeline.init_db import ORB_LABELS
 
@@ -335,7 +338,8 @@ def _load_regime_context(con: duckdb.DuckDBPyConnection, state: MarketState) -> 
                 "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
             ).fetchall()
         }
-    except Exception:
+    except Exception as exc:
+        log.debug("Schema query failed in _load_regime_context: %s", exc)
         return
 
     if "regime_strategies" not in tables or "experimental_strategies" not in tables:
@@ -357,5 +361,5 @@ def _load_regime_context(con: duckdb.DuckDBPyConnection, state: MarketState) -> 
                 label="regime",
                 deltas={r[0]: r[1] for r in rows},
             )
-    except Exception:
-        pass
+    except Exception as exc:
+        log.debug("Regime query failed in _load_regime_context: %s", exc)

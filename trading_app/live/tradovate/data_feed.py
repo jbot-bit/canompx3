@@ -148,7 +148,8 @@ class TradovateDataFeed(BrokerFeed):
                     return
                 try:
                     await ws.send("[]")
-                except Exception:
+                except Exception as exc:
+                    log.warning("Heartbeat send failed: %s", exc)
                     break
 
         self._heartbeat_task = asyncio.create_task(heartbeat())
