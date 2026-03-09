@@ -165,8 +165,7 @@ class TradovateOrderRouter(BrokerRouter):
     def cancel(self, order_id: int) -> None:
         """Cancel an open order by ID."""
         if self.auth is None:
-            log.error("Cannot cancel order %d -- no auth configured", order_id)
-            return
+            raise RuntimeError(f"Cannot cancel order {order_id} -- no auth configured")
         resp = requests.post(
             f"{self.base}/order/cancelOrder",
             json={"orderId": order_id},
