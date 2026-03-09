@@ -238,6 +238,10 @@ def _exit_event(price: float = 2355.0, pnl_r: float | None = 1.5) -> FakeTradeEv
 
 # ---------------------------------------------------------------------------
 # HIGH-2: Orphan blocking tests
+# NOTE: These tests verify the orphan detection LOGIC PATTERN (raise/force/degrade)
+# inline, not via SessionOrchestrator.__init__. The actual __init__ requires full
+# broker/DB/config environment. The patterns here match the production code paths
+# at session_orchestrator.py:155-177. If __init__ orphan logic changes, update both.
 # ---------------------------------------------------------------------------
 
 

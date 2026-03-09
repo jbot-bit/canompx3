@@ -101,7 +101,14 @@ class PerformanceMonitor:
         }
 
     def reset_daily(self) -> None:
-        """Clear daily accumulators and CUSUM monitors (call at EOD after logging summary)."""
+        """Clear daily accumulators and CUSUM monitors (call at EOD after logging summary).
+
+        Design note: CUSUM monitors are intentionally reset at the daily boundary.
+        Trade-off: genuine multi-day drift resets at EOD and must re-accumulate.
+        Alternative (no reset) was worse — a single bad day permanently kills drift
+        detection for the rest of the session. Operators see the alarm in daily_summary()
+        and can investigate before the next trading day begins.
+        """
         self._daily_r.clear()
         self._trades.clear()
         for monitor in self._monitors.values():
