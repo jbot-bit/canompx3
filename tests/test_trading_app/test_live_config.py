@@ -47,6 +47,7 @@ def live_config_db(tmp_path):
             rr_target DOUBLE,
             confirm_bars INTEGER,
             filter_type VARCHAR,
+            orb_minutes INTEGER DEFAULT 5,
             expectancy_r DOUBLE,
             win_rate DOUBLE,
             sample_size INTEGER,
