@@ -316,3 +316,167 @@ class TestGetRefreshSeconds:
         from ui.session_helpers import get_refresh_seconds
 
         assert 15 <= get_refresh_seconds(minutes_to_next=120, is_weekend=False) <= 60
+
+
+# ── filter_to_english — new modifiers ────────────────────────────────────────
+
+
+class TestFilterToEnglishNewModifiers:
+    """Tests for filter modifiers added in DST awareness update."""
+
+    def test_fast5(self):
+        from ui.session_helpers import filter_to_english
+
+        result = filter_to_english("ORB_G4_FAST5")
+        assert "4pts" in result
+        assert "fast" in result.lower()
+        assert "5 bars" in result
+
+    def test_notue(self):
+        from ui.session_helpers import filter_to_english
+
+        result = filter_to_english("ORB_G6_NOTUE")
+        assert "6pts" in result
+        assert "tuesday" in result.lower()
+
+    def test_nofri(self):
+        from ui.session_helpers import filter_to_english
+
+        result = filter_to_english("ORB_G5_NOFRI")
+        assert "5pts" in result
+        assert "friday" in result.lower()
+
+    def test_no_filter(self):
+        from ui.session_helpers import filter_to_english
+
+        result = filter_to_english("NO_FILTER")
+        assert "all days" in result.lower()
+
+
+# ── DST transition detection ─────────────────────────────────────────────────
+
+
+class TestDSTSessionChanges:
+    """Tests for DST transition detection functions."""
+
+    def test_us_spring_forward_detects_7_sessions(self):
+        """US DST starts Mar 8 2026. Monday Mar 9 should detect 7 shifted sessions."""
+        from ui.session_helpers import get_dst_session_changes
+
+        changes = get_dst_session_changes(date(2026, 3, 9))
+        assert len(changes) == 7, f"Expected 7 US-linked sessions, got {len(changes)}"
+
+    def test_us_spring_forward_all_minus_60(self):
+        """All 7 sessions should shift -60 minutes (earlier) on spring forward."""
+        from ui.session_helpers import get_dst_session_changes
+
+        changes = get_dst_session_changes(date(2026, 3, 9))
+        for c in changes:
+            assert c.shift_minutes == -60, f"{c.session} shifted {c.shift_minutes}min, expected -60"
+
+    def test_us_spring_forward_includes_cme_reopen(self):
+        from ui.session_helpers import get_dst_session_changes
+
+        changes = get_dst_session_changes(date(2026, 3, 9))
+        names = {c.session for c in changes}
+        assert "CME_REOPEN" in names
+
+    def test_us_spring_forward_excludes_asia(self):
+        """TOKYO_OPEN and SINGAPORE_OPEN should NOT shift (no DST in Asia)."""
+        from ui.session_helpers import get_dst_session_changes
+
+        changes = get_dst_session_changes(date(2026, 3, 9))
+        names = {c.session for c in changes}
+        assert "TOKYO_OPEN" not in names
+        assert "SINGAPORE_OPEN" not in names
+        assert "BRISBANE_1025" not in names
+
+    def test_nyse_open_midnight_wrap(self):
+        """NYSE_OPEN wraps from 00:30 to 23:30 — should be -60min, not +1380."""
+        from ui.session_helpers import get_dst_session_changes
+
+        changes = get_dst_session_changes(date(2026, 3, 9))
+        nyse = [c for c in changes if c.session == "NYSE_OPEN"]
+        assert len(nyse) == 1
+        assert nyse[0].shift_minutes == -60
+        assert nyse[0].old_hour == 0 and nyse[0].old_minute == 30
+        assert nyse[0].new_hour == 23 and nyse[0].new_minute == 30
+
+    def test_normal_day_no_changes(self):
+        """A day with no DST transition should return empty list."""
+        from ui.session_helpers import get_dst_session_changes
+
+        # Mar 11 2026 (Wed) — DST already happened on Mar 8, no change today
+        changes = get_dst_session_changes(date(2026, 3, 11))
+        assert len(changes) == 0
+
+    def test_us_fall_back_detects_plus_60(self):
+        """US DST ends Nov 1 2026. Monday Nov 2 should detect +60 shifts."""
+        from ui.session_helpers import get_dst_session_changes
+
+        changes = get_dst_session_changes(date(2026, 11, 2))
+        assert len(changes) >= 6  # at least 6 US-linked sessions
+        for c in changes:
+            assert c.shift_minutes == 60, f"{c.session} shifted {c.shift_minutes}min, expected +60"
+
+
+class TestRecentDSTChanges:
+    """Tests for get_recent_dst_changes — lookback window."""
+
+    def test_detects_changes_within_lookback(self):
+        from ui.session_helpers import get_recent_dst_changes
+
+        # Day of transition
+        recent = get_recent_dst_changes(date(2026, 3, 9), lookback_days=3)
+        assert len(recent) == 7
+
+    def test_still_detects_2_days_after(self):
+        from ui.session_helpers import get_recent_dst_changes
+
+        # 2 days after DST transition (Wed Mar 11)
+        recent = get_recent_dst_changes(date(2026, 3, 11), lookback_days=3)
+        assert len(recent) == 7, "Should still show within 3-day window"
+
+    def test_gone_after_lookback_expires(self):
+        from ui.session_helpers import get_recent_dst_changes
+
+        # 5 days after (Fri Mar 13) with 3-day lookback
+        recent = get_recent_dst_changes(date(2026, 3, 13), lookback_days=3)
+        assert len(recent) == 0, "Should expire after lookback window"
+
+    def test_deduplicates_by_session(self):
+        from ui.session_helpers import get_recent_dst_changes
+
+        recent = get_recent_dst_changes(date(2026, 3, 9), lookback_days=3)
+        names = [c.session for c in recent]
+        assert len(names) == len(set(names)), "Should deduplicate"
+
+
+class TestUpcomingDSTTransitions:
+    """Tests for get_upcoming_dst_transitions."""
+
+    def test_detects_uk_dst_from_march(self):
+        """From Mar 9, UK DST on Mar 29 should be detected within 30 days."""
+        from ui.session_helpers import get_upcoming_dst_transitions
+
+        upcoming = get_upcoming_dst_transitions(date(2026, 3, 9), lookahead_days=30)
+        uk = [t for t in upcoming if t.region == "UK"]
+        assert len(uk) == 1
+        assert uk[0].direction == "start"
+        assert uk[0].transition_date == date(2026, 3, 29)
+        assert uk[0].days_away == 20
+
+    def test_no_us_transition_right_after_spring_forward(self):
+        """Right after US DST starts, next US transition is in November — too far."""
+        from ui.session_helpers import get_upcoming_dst_transitions
+
+        upcoming = get_upcoming_dst_transitions(date(2026, 3, 9), lookahead_days=30)
+        us = [t for t in upcoming if t.region == "US"]
+        assert len(us) == 0, "Nov transition is >30 days away"
+
+    def test_returns_empty_when_no_transitions(self):
+        """Mid-summer — no transitions within 30 days."""
+        from ui.session_helpers import get_upcoming_dst_transitions
+
+        upcoming = get_upcoming_dst_transitions(date(2026, 7, 1), lookahead_days=30)
+        assert len(upcoming) == 0

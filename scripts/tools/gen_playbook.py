@@ -9,6 +9,7 @@ from pathlib import Path
 import pandas as pd
 
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+from pipeline.dst import is_uk_dst, is_us_dst
 
 PROJECT = Path(__file__).parent.parent.parent
 CSV = PROJECT / "research" / "output" / "_playbook_data.csv"
@@ -98,8 +99,20 @@ def main():
     # ── Quick Reference ──────────────────────────────────────────────────────
     L.append("## Quick Reference — Session Schedule")
     L.append("")
+    us_summer = is_us_dst(datetime.date.today())
+    uk_summer = is_uk_dst(datetime.date.today())
+    us_label = "**NOW**" if not us_summer else ""
+    us_summer_label = "**NOW**" if us_summer else ""
+    L.append(
+        f"**Currently active:** US={'Summer (EDT)' if us_summer else 'Winter (EST)'}, "
+        f"UK={'Summer (BST)' if uk_summer else 'Winter (GMT)'}. "
+        f"Brisbane is always UTC+10 (no DST)."
+    )
+    L.append("")
     header_insts = " | ".join(INSTRUMENTS)
-    L.append(f"| Brisbane (Winter) | Brisbane (Summer) | Session | Event | {header_insts} |")
+    L.append(
+        f"| Brisbane (Winter) {us_label} | Brisbane (Summer) {us_summer_label} | Session | Event | {header_insts} |"
+    )
     L.append("|---|---|---|---|---|---|---|---|")
     for sess, bw, bs, event in SESSION_ORDER:
         cells = []
