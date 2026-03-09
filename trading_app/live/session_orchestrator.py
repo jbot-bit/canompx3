@@ -542,11 +542,11 @@ class SessionOrchestrator:
         try:
             risk_pts = event.risk_points or strategy.median_risk_points
             if not risk_pts:
-                risk_pts = 10.0
                 log.error(
-                    "No risk_points for %s bracket — using fallback 10.0 (STOP/TARGET WILL BE WRONG)",
+                    "No risk_points for %s — skipping bracket (would place wrong stop/target)",
                     event.strategy_id,
                 )
+                return
             mult = getattr(strategy, "stop_multiplier", 1.0) or 1.0
             stop_dist = risk_pts * mult
             sign = 1 if event.direction == "long" else -1
@@ -670,7 +670,8 @@ class SessionOrchestrator:
             except Exception as e:
                 self._circuit_breaker.record_failure()
                 log.error("ENTRY order failed for %s: %s", event.strategy_id, e)
-                # Rollback position tracker — order never reached broker
+                # Rollback position tracker — order never reached broker.
+                # Safe: single event loop + GIL means no concurrent modification.
                 self._positions.pop(event.strategy_id)
                 return
             order_id = result.get("order_id") if isinstance(result, dict) else result.order_id
@@ -1034,8 +1035,8 @@ class SessionOrchestrator:
                 if attempt < self.ORCHESTRATOR_MAX_RECONNECTS:
                     try:
                         self.auth.refresh_if_needed()
-                    except Exception:
-                        log.warning("Auth refresh failed before reconnect", exc_info=True)
+                    except Exception as exc:
+                        log.warning("Auth refresh failed before reconnect: %s", exc)
                     self._stats.reconnect_attempts += 1
                     self._notify(f"Reconnecting in {backoff:.0f}s (attempt {attempt + 2})")
                     await asyncio.sleep(backoff)
