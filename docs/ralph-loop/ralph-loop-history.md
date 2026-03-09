@@ -85,3 +85,20 @@
 - Action: Applied safe getattr()/dict.get() pattern consistent with entry/exit paths fixed in iteration 4. Webhook server was a confirmed crash-on-every-call bug (endpoint non-functional since creation).
 - Verification: PASS — all 6 gates (71 drift, behavioral clean, 185 fast tests, ruff clean, blast radius clean, no regressions)
 - Commit: 7002aad
+
+## Iteration 11 — 2026-03-09
+- Phase: audit (post-feature integrity)
+- Target: execution_engine.py (multi-aperture), live_config.py (orb_minutes), strategy_discovery.py, walkforward.py, strategy_fitness.py, circuit_breaker.py, + all uncommitted changes (ML predictor, liveness probe, model staleness, RR lock fix)
+- Finding: 0 new findings. All targets CLEAN. Multi-aperture ORB correct. Discovery/WF methodologically sound. Uncommitted changes verified.
+- Action: Auditor ran 4 infrastructure gates + Seven Sins scan on 10 production files. 3 LOW deferred from iter 9.
+- Verification: 4/4 PASS (2757 passed, 0 failed, 9 skipped)
+- Commit: NONE (audit only)
+
+## Iteration 12 — 2026-03-09
+- Phase: audit+fix (Bloomey deep dive — live trading critical path)
+- Target: risk_manager.py, portfolio.py, cost_model.py, rolling_portfolio.py, strategy_fitness.py
+- Finding: 5 findings (0 CRITICAL, 0 HIGH, 4 MEDIUM, 1 LOW) — hardcoded SINGAPORE_OPEN exclusion (portfolio.py:312,352), fail-open unknown filter (strategy_fitness.py:332), dormant orb_minutes=5 in rolling DOW stats (rolling_portfolio.py:304), unannotated thresholds (7 locations), session slippage no provenance
+- Action: F2 fixed (portfolio.py exclusion → config.EXCLUDED_FROM_FITNESS), F5 fixed (fail-open → fail-closed with warning log, both per-strategy and batch paths aligned), F3 partially annotated (strategy_fitness + rolling_portfolio thresholds), F1 annotated TODO for multi-aperture extension
+- Verification: PASS — 71 drift, behavioral clean, 135/135 companion tests, ruff clean
+- Grade: B+ (Bloomey)
+- Commit: PENDING

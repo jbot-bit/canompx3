@@ -31,11 +31,16 @@ import numpy as np
 from pipeline.init_db import ORB_LABELS
 from pipeline.paths import GOLD_DB_PATH
 
-# Stability thresholds (weighted score)
+# @research-source: stability thresholds calibrated from MGC rolling window
+# analysis. 0.6 = passes >60% of windows weighted by sample size.
+# 0.3 = minimum for TRANSITIONING (below = DEGRADED).
+# @revalidated-for: E1/E2 event-based (2026-03-09)
 STABLE_THRESHOLD = 0.6
 TRANSITIONING_THRESHOLD = 0.3
 
-# Sample size for full weight in stability scoring
+# @research-source: 50 trades = full weight in stability scoring.
+# Below 50, window contribution is linearly scaled (e.g., 20 trades = 0.4 weight).
+# @revalidated-for: E1/E2 event-based (2026-03-09)
 FULL_WEIGHT_SAMPLE = 50
 
 # Default lookback: only use the N most recent rolling windows for scoring.
@@ -297,6 +302,10 @@ def compute_day_of_week_stats(
     with duckdb.connect(str(db_path), read_only=True) as con:
         # Pre-load daily_features for filter eligibility
         _size_cols = ", ".join(f"orb_{lbl}_size" for lbl in ORB_LABELS)
+        # TODO(multi-aperture): This hardcodes orb_minutes=5. When rolling
+        # evaluation is extended to 15m/30m ORBs, this must load per
+        # family's actual orb_minutes to get correct filter eligibility.
+        # See Bloomey review iteration 12, finding F1.
         df_features = con.execute(
             f"""
             SELECT trading_day, {_size_cols}
