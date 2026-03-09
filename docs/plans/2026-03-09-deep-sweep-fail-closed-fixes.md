@@ -4,7 +4,7 @@
 **Origin:** Bloomey 3x review cycle → code reviewer → deep sweep of entire codebase
 **Grade impact:** Hardens live trading path from potential silent failures
 
-## 6 Issues (All Isolated to trading_app/)
+## 7 Issues (All Isolated to trading_app/)
 
 | # | File:Line | Severity | Current | Fix |
 |---|-----------|----------|---------|-----|
