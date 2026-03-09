@@ -149,7 +149,7 @@ class TradeRequest(BaseModel):
 
 
 class TradeResponse(BaseModel):
-    order_id: int
+    order_id: int | None
     status: str
     contract: str
     action: str
@@ -174,8 +174,8 @@ def _check_rate_limit() -> None:
     _ORDER_TIMESTAMPS.append(now)
 
 
-def _place_order(req: TradeRequest, contract: str) -> int:
-    """Build and submit order. Returns order_id. Runs in a thread executor."""
+def _place_order(req: TradeRequest, contract: str) -> int | None:
+    """Build and submit order. Returns order_id (or None if unavailable). Runs in a thread executor."""
     from trading_app.live.tradovate.order_router import TradovateOrderRouter as OrderRouter
 
     router = OrderRouter(account_id=_get_account_id(), auth=_get_auth(), demo=DEMO)
@@ -240,7 +240,7 @@ async def trade(req: TradeRequest, request: Request):
         raise HTTPException(status_code=500, detail=f"Order failed: {e}") from e
 
     log.info(
-        "WEBHOOK ORDER: %s %s %s qty=%d → orderId=%d (%s)",
+        "WEBHOOK ORDER: %s %s %s qty=%d → orderId=%s (%s)",
         req.action,
         req.instrument,
         req.direction,

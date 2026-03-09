@@ -296,6 +296,49 @@ class TestOrphanBlocking:
 
         assert warned, "NotImplementedError should be caught, not re-raised"
 
+    def test_unexpected_exception_blocks_startup(self):
+        """Unexpected exception from query_open → RuntimeError (fail-closed)."""
+
+        class BrokenPositions:
+            def query_open(self, account_id: int):
+                raise ConnectionError("broker unreachable")
+
+        positions = BrokenPositions()
+        force_orphans = False
+        with pytest.raises(RuntimeError, match="Orphan detection failed"):
+            try:
+                positions.query_open(12345)
+            except NotImplementedError:
+                pass
+            except RuntimeError:
+                raise
+            except Exception as e:
+                if not force_orphans:
+                    raise RuntimeError(f"Orphan detection failed ({e}). Cannot verify broker state.") from e
+
+    def test_unexpected_exception_allowed_with_force_flag(self):
+        """Unexpected exception + force_orphans=True → logs warning, proceeds."""
+
+        class BrokenPositions:
+            def query_open(self, account_id: int):
+                raise ConnectionError("broker unreachable")
+
+        positions = BrokenPositions()
+        force_orphans = True
+        proceeded = False
+        try:
+            positions.query_open(12345)
+        except NotImplementedError:
+            pass
+        except RuntimeError:
+            raise
+        except Exception as e:
+            if not force_orphans:
+                raise RuntimeError(f"Orphan detection failed ({e}).") from e
+            proceeded = True
+
+        assert proceeded, "force_orphans=True should allow startup despite unexpected exception"
+
 
 # ---------------------------------------------------------------------------
 # HIGH-1: Fill price tracking tests
