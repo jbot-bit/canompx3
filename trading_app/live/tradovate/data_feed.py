@@ -37,6 +37,9 @@ _MAX_RECONNECTS = 20  # give up after this many consecutive failures
 _STOP_FILE = Path(__file__).parent.parent.parent.parent / "live_session.stop"
 
 
+_LIVENESS_TIMEOUT = 60.0  # warn if no quotes arrive for this many seconds
+
+
 class TradovateDataFeed(BrokerFeed):
     """
     Streams Tradovate quotes -> 1-minute bars -> on_bar async callback.
@@ -63,6 +66,8 @@ class TradovateDataFeed(BrokerFeed):
         self._agg = BarAggregator()
         self._heartbeat_task: asyncio.Task | None = None
         self._stop_requested = False
+        self._last_quote_at: datetime | None = None
+        self._quote_count: int = 0
 
     async def run(self, symbol: str) -> None:
         """Connect and stream bars. Reconnects on disconnect up to _MAX_RECONNECTS times."""
@@ -138,6 +143,7 @@ class TradovateDataFeed(BrokerFeed):
 
         # Heartbeat task (required every 2.5s per Tradovate docs)
         async def heartbeat():
+            _liveness_warned = False
             while not stop_event.is_set():
                 await asyncio.sleep(2.5)
                 if _STOP_FILE.exists():
@@ -146,6 +152,18 @@ class TradovateDataFeed(BrokerFeed):
                     self._stop_requested = True
                     stop_event.set()
                     return
+                # Liveness probe: "connected but no data" detection
+                if self._last_quote_at is not None:
+                    gap = (datetime.now(UTC) - self._last_quote_at).total_seconds()
+                    if gap > _LIVENESS_TIMEOUT and not _liveness_warned:
+                        log.warning(
+                            "LIVENESS: %.0fs since last quote (%d total) — connected but no data",
+                            gap,
+                            self._quote_count,
+                        )
+                        _liveness_warned = True
+                    elif gap <= _LIVENESS_TIMEOUT:
+                        _liveness_warned = False
                 try:
                     await ws.send("[]")
                 except Exception as exc:
@@ -177,9 +195,12 @@ class TradovateDataFeed(BrokerFeed):
                 price = q.get("price")
             if price is None:
                 continue
-            bar = self._agg.on_tick(float(price), 1, datetime.now(UTC))
+            self._last_quote_at = datetime.now(UTC)
+            self._quote_count += 1
+            bar = self._agg.on_tick(float(price), 1, self._last_quote_at)
             if bar is not None:
                 bar.symbol = symbol
+                log.debug("BAR: %s", bar)
                 await self.on_bar(bar)
 
     def flush(self, symbol: str = "") -> Bar | None:

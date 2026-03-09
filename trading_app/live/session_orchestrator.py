@@ -32,6 +32,7 @@ from trading_app.live.live_market_state import LiveORBBuilder
 from trading_app.live.performance_monitor import PerformanceMonitor, TradeRecord
 from trading_app.live.position_tracker import PositionState, PositionTracker
 from trading_app.live_config import build_live_portfolio
+from trading_app.ml.predict_live import LiveMLPredictor
 from trading_app.portfolio import PortfolioStrategy
 from trading_app.risk_manager import RiskLimits, RiskManager
 
@@ -116,11 +117,27 @@ class SessionOrchestrator:
             max_concurrent_positions=self.portfolio.max_concurrent_positions,
         )
         self.risk_mgr = RiskManager(risk_limits)
+        # ML predictor: fail-open if models don't load (won't block trading)
+        try:
+            self._ml_predictor = LiveMLPredictor(
+                db_path=str(GOLD_DB_PATH),
+                instruments=[instrument],
+            )
+            ml_info = self._ml_predictor.get_model_info(instrument)
+            if ml_info:
+                log.info("ML predictor loaded: %s", ml_info.get("model_type", "unknown"))
+            else:
+                log.warning("ML predictor: no model for %s — all trades fail-open", instrument)
+        except Exception as e:
+            log.warning("ML predictor init failed: %s — all trades fail-open", e)
+            self._ml_predictor = None
+
         self.engine = ExecutionEngine(
             portfolio=self.portfolio,
             cost_spec=cost,
             risk_manager=self.risk_mgr,
             live_session_costs=True,
+            ml_predictor=self._ml_predictor,
         )
 
         # Contract resolution (needed even in signal-only for front-month lookup)
@@ -185,6 +202,7 @@ class SessionOrchestrator:
         self._bar_count = 0  # total bars received this session
         self._stats = SessionStats()  # observability counters
         self._poller_active = False  # set True once fill poller runs a cycle
+        self._consecutive_engine_errors = 0  # circuit breaker for engine crashes
 
         # Circuit breaker: blocks order submission after 5 consecutive broker failures
         from trading_app.live.circuit_breaker import CircuitBreaker
@@ -392,7 +410,7 @@ class SessionOrchestrator:
         except NotImplementedError:
             log.warning("Broker does not support query_order_status — fill poller will be inactive")
             return False
-        except Exception as e:  # noqa: audit-ok — 404/auth errors mean endpoint exists
+        except Exception as e:  # noqa: BLE001 — 404/auth errors mean endpoint exists
             log.info("Fill poller endpoint exists (non-fatal error: %s)", e)
         return True
 
@@ -467,6 +485,9 @@ class SessionOrchestrator:
         self.orb_builder = LiveORBBuilder(self.instrument, self.trading_day)
         self.monitor.reset_daily()
         self.risk_mgr.daily_reset(self.trading_day)
+        if self._ml_predictor is not None:
+            self._ml_predictor.clear_daily_cache()
+        self._consecutive_engine_errors = 0
         log.info("New trading day started: %s", self.trading_day)
 
     async def _on_bar(self, bar: Bar) -> None:
@@ -485,6 +506,18 @@ class SessionOrchestrator:
         self._last_bar_at = now
         self._bar_count += 1
         self._stats.bars_received += 1
+
+        # Periodic bar heartbeat log (every 10 bars ≈ 10 minutes)
+        if self._bar_count % 10 == 0:
+            active = len(self._positions.active_positions())
+            n_orbs = sum(1 for o in self.engine.orbs.values() if o.complete)
+            log.info(
+                "BAR HEARTBEAT: %d bars, %d ORBs complete, %d active positions, %d trades",
+                self._bar_count,
+                n_orbs,
+                active,
+                self.monitor.trade_count,
+            )
 
         # Kill switch fired = we already emergency-flattened at the broker.
         # Do NOT process further bars — engine doesn't know positions are closed,
@@ -505,12 +538,20 @@ class SessionOrchestrator:
 
         # bar.as_dict() returns {ts_utc, open, high, low, close, volume}
         # — exactly what ExecutionEngine.on_bar() expects
+        if self._consecutive_engine_errors >= 5:
+            return  # engine paused — bars dropped until rollover resets counter
         try:
             events = self.engine.on_bar(bar.as_dict())
+            self._consecutive_engine_errors = 0
         except Exception as e:
             log.critical("Engine error processing bar: %s — bar dropped, feed continues", e)
             self._notify(f"ENGINE ERROR: {e}")
             self._stats.engine_errors += 1
+            self._consecutive_engine_errors += 1
+            if self._consecutive_engine_errors == 5:
+                msg = f"ENGINE CIRCUIT BREAKER: {self._consecutive_engine_errors} consecutive errors — engine paused until next trading day"
+                log.critical(msg)
+                self._notify(msg)
             return
 
         for event in events:
@@ -967,6 +1008,13 @@ class SessionOrchestrator:
 
     async def _heartbeat_notifier(self) -> None:
         """Send periodic alive notification. Absence of heartbeat = notifications broken."""
+        # Emit immediate heartbeat so user knows session is alive without waiting 30 min
+        try:
+            n_strategies = len(self.portfolio.strategies)
+            mode = "SIGNAL" if self.signal_only else ("DEMO" if self.demo else "LIVE")
+            self._notify(f"Heartbeat: session alive, {n_strategies} strategies loaded ({mode})")
+        except Exception as e:
+            log.error("Initial heartbeat failed: %s", e)
         while True:
             try:
                 await asyncio.sleep(self.HEARTBEAT_INTERVAL)
