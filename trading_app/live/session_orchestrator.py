@@ -53,6 +53,7 @@ class SessionStats:
     fill_polls_failed: int = 0
     reconnect_attempts: int = 0
     bars_received: int = 0
+    engine_errors: int = 0
     events_processed: int = 0
 
 
@@ -128,6 +129,7 @@ class SessionOrchestrator:
             router_cls = components["router_class"]
             self.order_router = router_cls(account_id=account_id, auth=self.auth, demo=demo)
             self.positions = self._positions_cls(auth=self.auth)
+            self._notifications_broken = False
 
             # Position reconciliation on startup (M2.5 P0: crash recovery)
             try:
@@ -150,7 +152,12 @@ class SessionOrchestrator:
             except RuntimeError:
                 raise  # re-raise our own orphan-blocking error
             except Exception as e:
-                log.warning("Position query failed on startup: %s", e)
+                log.error(
+                    "Position query failed on startup: %s — ORPHAN DETECTION DEGRADED. "
+                    "Manually verify no open positions exist before proceeding.",
+                    e,
+                )
+                self._notify(f"ORPHAN CHECK FAILED: {e} — verify no open positions")
 
         # Live infrastructure
         self.orb_builder = LiveORBBuilder(instrument, self.trading_day)
@@ -479,7 +486,13 @@ class SessionOrchestrator:
 
         # bar.as_dict() returns {ts_utc, open, high, low, close, volume}
         # — exactly what ExecutionEngine.on_bar() expects
-        events = self.engine.on_bar(bar.as_dict())
+        try:
+            events = self.engine.on_bar(bar.as_dict())
+        except Exception as e:
+            log.critical("Engine error processing bar: %s — bar dropped, feed continues", e)
+            self._notify(f"ENGINE ERROR: {e}")
+            self._stats.engine_errors += 1
+            return
 
         for event in events:
             await self._handle_event(event)
@@ -492,7 +505,9 @@ class SessionOrchestrator:
         net_pts = gross_pts - self.cost_spec.friction_in_points
         return net_pts / risk_pts if risk_pts > 0 else 0.0
 
-    def _record_exit(self, event, entry_price: float, exit_fill_price: float | None = None) -> None:
+    def _record_exit(
+        self, event, entry_price: float, exit_fill_price: float | None = None, entry_slippage: float | None = None
+    ) -> None:
         """Record a completed trade (EXIT or SCRATCH) in the performance monitor.
 
         Uses broker fill prices when available for more accurate P&L.
@@ -517,6 +532,8 @@ class SessionOrchestrator:
 
         # Compute total slippage (entry + exit) in points
         slippage_pts = 0.0
+        if entry_slippage is not None:
+            slippage_pts += entry_slippage
         if exit_fill_price is not None:
             slippage_pts += exit_fill_price - event.price
 
@@ -674,7 +691,7 @@ class SessionOrchestrator:
                 # Safe: single event loop + GIL means no concurrent modification.
                 self._positions.pop(event.strategy_id)
                 return
-            order_id = result.get("order_id") if isinstance(result, dict) else result.order_id
+            order_id = result.get("order_id") if isinstance(result, dict) else getattr(result, "order_id", None)
             fill_price = result.get("fill_price") if isinstance(result, dict) else getattr(result, "fill_price", None)
 
             # Update tracker with broker order_id
@@ -729,7 +746,8 @@ class SessionOrchestrator:
                     event.direction.upper(),
                     event.price,
                 )
-                self._record_exit(event, entry_price)
+                pos_rec = self._positions.get(event.strategy_id)
+                self._record_exit(event, entry_price, entry_slippage=pos_rec.entry_slippage if pos_rec else None)
                 self._positions.pop(event.strategy_id)
                 self._write_signal_record(
                     {
@@ -767,8 +785,10 @@ class SessionOrchestrator:
                 err_msg = str(e).lower()
                 if "no position" in err_msg or "already flat" in err_msg:
                     log.info("Position already closed by bracket for %s — skipping exit order", event.strategy_id)
-                    self._positions.on_exit_filled(event.strategy_id)
-                    self._record_exit(event, entry_price)
+                    closed_rec = self._positions.on_exit_filled(event.strategy_id)
+                    self._record_exit(
+                        event, entry_price, entry_slippage=closed_rec.entry_slippage if closed_rec else None
+                    )
                     return
                 self._circuit_breaker.record_failure()
                 msg = f"EXIT order FAILED for {event.strategy_id}: {e} — MANUAL CLOSE REQUIRED"
@@ -776,7 +796,7 @@ class SessionOrchestrator:
                 self._notify(msg)
                 self._write_signal_record({"type": "EXIT_FAILED", "strategy_id": event.strategy_id, "error": str(e)})
                 return
-            order_id = result.get("order_id") if isinstance(result, dict) else result.order_id
+            order_id = result.get("order_id") if isinstance(result, dict) else getattr(result, "order_id", None)
             exit_fill = result.get("fill_price") if isinstance(result, dict) else getattr(result, "fill_price", None)
 
             if exit_fill is not None:
@@ -800,8 +820,13 @@ class SessionOrchestrator:
                     order_id,
                 )
 
-            self._positions.on_exit_filled(event.strategy_id, fill_price=exit_fill)
-            self._record_exit(event, entry_price, exit_fill_price=exit_fill)
+            closed_rec = self._positions.on_exit_filled(event.strategy_id, fill_price=exit_fill)
+            self._record_exit(
+                event,
+                entry_price,
+                exit_fill_price=exit_fill,
+                entry_slippage=closed_rec.entry_slippage if closed_rec else None,
+            )
             self._write_signal_record(
                 {
                     "type": f"ORDER_{event.event_type}",
@@ -857,7 +882,15 @@ class SessionOrchestrator:
 
         loop = asyncio.get_running_loop()
         for record in active:
-            direction = record.direction or "long"
+            if record.direction is None:
+                msg = (
+                    f"KILL SWITCH: {record.strategy_id} has no direction — "
+                    f"CANNOT FLATTEN SAFELY. MANUAL CLOSE REQUIRED."
+                )
+                log.critical(msg)
+                self._notify(msg)
+                continue
+            direction = record.direction
             for attempt in range(3):
                 try:
                     self.auth.refresh_if_needed()
@@ -1137,7 +1170,8 @@ class SessionOrchestrator:
             except NotImplementedError:
                 log.warning("EOD reconciliation skipped — broker does not support position queries")
             except Exception as e:
-                log.warning("EOD position reconciliation failed: %s", e)
+                log.error("EOD position reconciliation failed: %s — cannot confirm positions are flat", e)
+                self._notify(f"EOD RECON FAILED: {e} — manually verify all positions are flat")
 
         try:
             run_backfill_for_instrument(self.instrument)

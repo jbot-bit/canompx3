@@ -759,6 +759,24 @@ class ExecutionEngine:
             return events
 
         else:
+            logger.error(
+                "Unknown entry_model '%s' for %s — rejecting entry (fail-closed)",
+                trade.entry_model,
+                trade.strategy_id,
+            )
+            trade.state = TradeState.EXITED
+            self.completed_trades.append(trade)
+            events.append(
+                TradeEvent(
+                    event_type="REJECT",
+                    strategy_id=trade.strategy_id,
+                    timestamp=confirm_bar["ts_utc"],
+                    price=confirm_bar["close"],
+                    direction=trade.direction,
+                    contracts=0,
+                    reason=f"unknown_entry_model: {trade.entry_model}",
+                )
+            )
             return events
 
     def _process_ib_break(self, ib_break_dir: str, bar: dict) -> list[TradeEvent]:

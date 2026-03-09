@@ -33,7 +33,7 @@ class TradovatePositions(BrokerPositions):
         result = [
             {
                 "contract_id": p.get("contractId"),
-                "side": "BUY" if p.get("netPos", 0) > 0 else "SELL",
+                "side": "long" if p.get("netPos", 0) > 0 else "short",
                 "size": abs(p.get("netPos", 0)),
                 "avg_price": p.get("netPrice", 0.0),
             }

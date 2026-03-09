@@ -99,5 +99,5 @@ def test_tradovate_positions_query_open():
 
         result = pos.query_open(12345)
         assert len(result) == 1
-        assert result[0]["side"] == "BUY"
+        assert result[0]["side"] == "long"
         assert result[0]["size"] == 2

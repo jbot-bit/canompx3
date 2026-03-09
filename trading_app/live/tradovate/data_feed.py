@@ -117,7 +117,7 @@ class TradovateDataFeed(BrokerFeed):
             resp = resp[0]
         status = resp.get("s") if isinstance(resp, dict) else None
         if status is None:
-            log.warning("Tradovate auth returned no status field: %s", resp_raw[:200])
+            raise RuntimeError(f"Tradovate auth returned no status field: {resp_raw[:200]}")
         elif status not in (200,):
             raise RuntimeError(f"Tradovate auth failed: {resp}")
         log.info("Authenticated to Tradovate MD feed")

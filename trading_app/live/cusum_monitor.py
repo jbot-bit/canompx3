@@ -34,6 +34,8 @@ class CUSUMMonitor:
         (alarm stays set until clear() is called).
         """
         self.n_trades += 1
+        if self.std_r <= 0:
+            return False  # Cannot compute z-score — degenerate distribution
         z = (actual_r - self.expected_r) / self.std_r
         self.cusum_neg = min(0.0, self.cusum_neg + z)  # tracks persistent losses
         self.cusum_pos = max(0.0, self.cusum_pos + z)  # tracks persistent gains
