@@ -1219,7 +1219,6 @@ class TestReserveThenSubmit:
     async def test_broker_failure_rolls_back_tracker(self):
         """Order submit fails -> position tracker cleaned up (no phantom PENDING_ENTRY)."""
         router = FakeRouter()
-        original_submit = router.submit
 
         def fail_submit(spec):
             raise ConnectionError("broker down")
