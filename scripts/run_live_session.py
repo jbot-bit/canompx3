@@ -11,7 +11,13 @@ THREE MODES (pick exactly one):
 
   --live          Auto-places orders with REAL MONEY. Requires CONFIRM + broker creds.
 
+INSTRUMENT SELECTION:
+
+  --instrument MGC       Single instrument
+  --all                  All active instruments (MGC, MNQ, MES, M2K)
+
 Examples:
+    python scripts/run_live_session.py --all --signal-only
     python scripts/run_live_session.py --instrument MGC --signal-only
     python scripts/run_live_session.py --instrument MGC --demo
     python scripts/run_live_session.py --instrument MGC --live
@@ -21,6 +27,7 @@ import argparse
 import asyncio
 import logging
 import sys
+from pathlib import Path
 
 logging.basicConfig(
     level=logging.INFO,
@@ -167,7 +174,15 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    parser.add_argument("--instrument", required=True, help="e.g. MGC, MNQ, MES, M2K")
+    # Instrument selection: --instrument XYZ or --all
+    inst_group = parser.add_mutually_exclusive_group(required=True)
+    inst_group.add_argument("--instrument", help="e.g. MGC, MNQ, MES, M2K")
+    inst_group.add_argument(
+        "--all",
+        action="store_true",
+        default=False,
+        help="Run all active instruments (MGC, MNQ, MES, M2K) concurrently",
+    )
 
     mode_group = parser.add_mutually_exclusive_group()
     mode_group.add_argument(
@@ -215,6 +230,9 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.preflight:
+        if args.all:
+            print("Preflight with --all not supported. Use --instrument X.")
+            sys.exit(1)
         demo = not args.live
         ok = _run_preflight(args.instrument, args.broker, demo)
         sys.exit(0 if ok else 1)
@@ -228,21 +246,47 @@ def main() -> None:
     if args.signal_only:
         signal_only = True
         demo = True  # still needs auth for bar feed, but no orders placed
-        _print_mode_banner("signal", args.instrument)
-
     elif args.demo:
+        if args.all:
+            print("--all + --demo not supported. Use --instrument X for demo trading.")
+            sys.exit(1)
         signal_only = False
         demo = True
-        _print_mode_banner("demo", args.instrument)
-
     else:  # --live
+        if args.all:
+            print("--all + --live not supported. Use --instrument X for live trading.")
+            sys.exit(1)
         confirm = input("\n⚠  LIVE MODE — real money orders will be placed.\n   Type CONFIRM to proceed: ").strip()
         if confirm != "CONFIRM":
             print("Aborted.")
             sys.exit(0)
         signal_only = False
         demo = False
-        _print_mode_banner("live", args.instrument)
+
+    # Stop-file path — cleaned up after session ends (feeds no longer delete it)
+    _stop_file = Path(__file__).parent.parent / "live_session.stop"
+
+    # Multi-instrument mode (signal-only only — demo/live blocked above)
+    if args.all:
+        from trading_app.live.multi_runner import MultiInstrumentRunner
+
+        _print_mode_banner("signal", "ALL (MGC, MNQ, MES, M2K)")
+        runner = MultiInstrumentRunner(
+            instruments=None,  # uses ACTIVE_ORB_INSTRUMENTS
+            broker=args.broker,
+            demo=demo,
+            signal_only=signal_only,
+            account_id=args.account_id,
+            force_orphans=args.force_orphans,
+        )
+        try:
+            asyncio.run(runner.run())
+        finally:
+            runner.post_session()
+        return
+
+    # Single-instrument mode (existing path)
+    _print_mode_banner("signal" if signal_only else ("demo" if demo else "live"), args.instrument)
 
     session = SessionOrchestrator(
         instrument=args.instrument,
@@ -257,6 +301,7 @@ def main() -> None:
         asyncio.run(session.run())
     finally:
         session.post_session()
+        _stop_file.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
