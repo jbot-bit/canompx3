@@ -168,11 +168,16 @@ class SessionOrchestrator:
                 raise  # re-raise our own orphan-blocking error
             except Exception as e:
                 log.error(
-                    "Position query failed on startup: %s — ORPHAN DETECTION DEGRADED. "
-                    "Manually verify no open positions exist before proceeding.",
+                    "Position query failed on startup: %s — ORPHAN DETECTION FAILED. Cannot verify broker state.",
                     e,
                 )
                 self._notify(f"ORPHAN CHECK FAILED: {e} — verify no open positions")
+                if not force_orphans:
+                    raise RuntimeError(
+                        f"Orphan detection failed ({e}). Cannot verify broker state. "
+                        f"Close positions manually or pass --force-orphans to proceed at your own risk."
+                    ) from e
+                log.warning("--force-orphans: proceeding despite orphan check failure")
 
         # Live infrastructure
         self.orb_builder = LiveORBBuilder(instrument, self.trading_day)
@@ -922,7 +927,7 @@ class SessionOrchestrator:
                         qty=record.contracts,
                     )
                     result = await loop.run_in_executor(None, self.order_router.submit, exit_spec)
-                    order_id = result.get("order_id") if isinstance(result, dict) else result.order_id
+                    order_id = result.get("order_id") if isinstance(result, dict) else getattr(result, "order_id", None)
                     msg = f"KILL SWITCH FLATTEN: {record.strategy_id} {direction} → orderId={order_id} (attempt {attempt + 1})"
                     log.critical(msg)
                     self._notify(msg)

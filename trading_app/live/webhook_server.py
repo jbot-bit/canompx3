@@ -198,7 +198,7 @@ def _place_order(req: TradeRequest, contract: str) -> int:
         )
 
     result = router.submit(spec)
-    return result.order_id
+    return result.get("order_id") if isinstance(result, dict) else getattr(result, "order_id", None)
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
