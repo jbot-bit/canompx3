@@ -100,8 +100,7 @@ class ProjectXOrderRouter(BrokerRouter):
 
     def cancel(self, order_id: int) -> None:
         if self.auth is None:
-            log.error("Cannot cancel order %d — no auth", order_id)
-            return
+            raise RuntimeError(f"Cannot cancel order {order_id} — no auth configured")
         resp = requests.post(
             f"{BASE_URL}/api/Order/cancel",
             json={"orderId": order_id},
