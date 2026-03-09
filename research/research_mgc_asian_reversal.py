@@ -12,6 +12,9 @@ Statistical tests:
   - One-sample t-test on "fade" strategy returns (short if up, long if down)
   - Win rate with binomial exact test vs 50%
 
+NOTE: bars_1m.ts_utc is TIMESTAMPTZ. DuckDB interprets naive datetimes
+as local timezone (Brisbane). Pass Brisbane times directly.
+
 @research-source research_mgc_asian_reversal.py
 """
 
@@ -24,16 +27,8 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-from zoneinfo import ZoneInfo
-
 from pipeline.dst import SESSION_CATALOG
 from pipeline.paths import GOLD_DB_PATH
-
-_BRISBANE = ZoneInfo("Australia/Brisbane")
-
-
-def brisbane_to_utc(dt: datetime) -> datetime:
-    return dt.replace(tzinfo=_BRISBANE).astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
 
 
 def compute_vwap(bars: pd.DataFrame) -> float:
@@ -41,23 +36,20 @@ def compute_vwap(bars: pd.DataFrame) -> float:
     typical = (bars["high"] + bars["low"] + bars["close"]) / 3
     vol = bars["volume"].replace(0, np.nan)
     if vol.sum() == 0:
-        return bars["close"].mean()
+        return float(bars["close"].mean())
     return float((typical * vol).sum() / vol.sum())
 
 
 def main():
     con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
 
-    # All MGC trading days
     trading_days = (
-        con.execute(
-            """
-        SELECT DISTINCT trading_day
-        FROM daily_features
-        WHERE symbol = 'MGC' AND orb_minutes = 5
-        ORDER BY trading_day
-    """
-        )
+        con.execute("""
+            SELECT DISTINCT trading_day
+            FROM daily_features
+            WHERE symbol = 'MGC' AND orb_minutes = 5
+            ORDER BY trading_day
+        """)
         .fetchdf()["trading_day"]
         .tolist()
     )
@@ -67,70 +59,59 @@ def main():
 
     for td in trading_days:
         td_date = td.date() if hasattr(td, "date") else td
-
         if td_date.weekday() >= 5:
             continue
 
-        # Session times (Brisbane) for this specific day
+        # Session times (Brisbane) — DST-safe
         cme_h, cme_m = SESSION_CATALOG["CME_REOPEN"]["resolver"](td_date)
         sing_h, sing_m = SESSION_CATALOG["SINGAPORE_OPEN"]["resolver"](td_date)
 
-        cme_brisbane = datetime.combine(td_date, time(cme_h, cme_m))
-        sing_brisbane = datetime.combine(td_date, time(sing_h, sing_m))
-        peak_brisbane = sing_brisbane + timedelta(minutes=30)
+        cme_bris = datetime.combine(td_date, time(cme_h, cme_m))
+        sing_bris = datetime.combine(td_date, time(sing_h, sing_m))
 
-        # Multiple peak windows to avoid anchoring on one time
         peak_windows = {
-            "sing_open": sing_brisbane,
-            "sing_plus30": peak_brisbane,
-            "sing_plus60": sing_brisbane + timedelta(minutes=60),
+            "sing_open": sing_bris,
+            "sing_plus30": sing_bris + timedelta(minutes=30),
+            "sing_plus60": sing_bris + timedelta(minutes=60),
         }
 
-        # Exit horizons after peak
         exit_offsets = {
             "exit_60m": timedelta(minutes=60),
             "exit_120m": timedelta(minutes=120),
             "exit_180m": timedelta(minutes=180),
         }
 
-        # Query window: CME_REOPEN to latest possible exit
         latest_exit = max(
-            pw + max(exit_offsets.values())
-            for pw in peak_windows.values()
+            pw + max(exit_offsets.values()) for pw in peak_windows.values()
         )
-        cme_utc = brisbane_to_utc(cme_brisbane)
-        end_utc = brisbane_to_utc(latest_exit)
 
-        bars = con.execute(
-            """
+        # Pass Brisbane times directly — DuckDB TIMESTAMPTZ handles tz conversion
+        bars = con.execute("""
             SELECT ts_utc, open, high, low, close, volume
             FROM bars_1m
             WHERE symbol = 'MGC'
               AND ts_utc >= ? AND ts_utc <= ?
             ORDER BY ts_utc
-        """,
-            [cme_utc, end_utc],
-        ).fetchdf()
+        """, [cme_bris, latest_exit]).fetchdf()
 
         if len(bars) < 30:
             skipped += 1
             continue
 
-        bars["ts_utc"] = pd.to_datetime(bars["ts_utc"], utc=True).dt.tz_localize(None)
+        # Convert to naive Brisbane for comparisons
+        bars["ts_bris"] = pd.to_datetime(bars["ts_utc"]).dt.tz_localize(None)
         cme_open = float(bars.iloc[0]["open"])
-
         row: dict = {"trading_day": td_date, "cme_open": cme_open}
 
-        for pw_name, pw_brisbane in peak_windows.items():
-            pw_utc = brisbane_to_utc(pw_brisbane)
-            pw_bars = bars[bars["ts_utc"] <= pw_utc]
+        for pw_name, pw_bris in peak_windows.items():
+            pw_bars = bars[bars["ts_bris"] <= pw_bris]
             if len(pw_bars) < 10:
                 continue
 
             peak_close = float(pw_bars.iloc[-1]["close"])
             trend_return = (peak_close - cme_open) / cme_open
             vwap = compute_vwap(pw_bars)
-            vwap_dev = (peak_close - vwap) / vwap  # How far from VWAP at peak
+            vwap_dev = (peak_close - vwap) / vwap
 
             row[f"{pw_name}_trend"] = trend_return
             row[f"{pw_name}_peak"] = peak_close
@@ -138,16 +119,13 @@ def main():
             row[f"{pw_name}_vwap_dev"] = vwap_dev
 
             for ex_name, ex_offset in exit_offsets.items():
-                ex_utc = brisbane_to_utc(pw_brisbane + ex_offset)
-                ex_bars = bars[bars["ts_utc"] <= ex_utc]
+                ex_bris = pw_bris + ex_offset
+                ex_bars = bars[bars["ts_bris"] <= ex_bris]
                 if len(ex_bars) == 0:
                     continue
                 exit_close = float(ex_bars.iloc[-1]["close"])
                 reversion = (exit_close - peak_close) / peak_close
-                # Also measure reversion toward VWAP
-                vwap_reversion = (exit_close - peak_close) / (vwap - peak_close) if abs(vwap - peak_close) > 0.01 else np.nan
                 row[f"{pw_name}_{ex_name}_ret"] = reversion
-                row[f"{pw_name}_{ex_name}_vwap_rev"] = vwap_reversion
 
         results.append(row)
 
@@ -158,7 +136,6 @@ def main():
     print(f"Date range: {df['trading_day'].min()} to {df['trading_day'].max()}")
     print()
 
-    # ── Test each peak window × exit horizon ─────────────────────────────
     for pw_name in ["sing_open", "sing_plus30", "sing_plus60"]:
         trend_col = f"{pw_name}_trend"
         if trend_col not in df.columns:
@@ -188,13 +165,12 @@ def main():
             trend_vals = valid[trend_col].values
             ret_vals = valid[ret_col].values
 
-            # 1. Correlation test
             if np.std(ret_vals) < 1e-12 or np.std(trend_vals) < 1e-12:
                 print(f"  {ex_name}: constant input, skipping")
                 continue
+
             corr, p_corr = stats.pearsonr(trend_vals, ret_vals)
 
-            # 2. Fade strategy: take opposite position to trend
             fade_rets = -np.sign(trend_vals) * ret_vals
             mean_fade = fade_rets.mean()
             t_stat, p_t = stats.ttest_1samp(fade_rets, 0)
@@ -202,10 +178,8 @@ def main():
             n_wins = int((fade_rets > 0).sum())
             n_total = len(fade_rets)
 
-            # 3. Binomial test on win rate
             binom_p = stats.binomtest(n_wins, n_total, 0.5).pvalue
 
-            # 4. Year-by-year breakdown
             valid_copy = valid.copy()
             valid_copy["year"] = valid_copy["trading_day"].apply(
                 lambda d: d.year if isinstance(d, date) else d.year
@@ -217,7 +191,6 @@ def main():
             print(f"    Fade mean return:       {mean_fade:+.6f}  t={t_stat:.3f}  p={p_t:.4f}")
             print(f"    Win rate:               {win_rate:.1%} ({n_wins}/{n_total})  binom p={binom_p:.4f}")
 
-            # Year breakdown
             yr_summary = (
                 valid_copy.groupby("year")
                 .agg(
@@ -227,7 +200,7 @@ def main():
                 )
                 .reset_index()
             )
-            print(f"    Year breakdown:")
+            print("    Year breakdown:")
             for _, yr in yr_summary.iterrows():
                 star = "+" if yr["mean_ret"] > 0 else "-"
                 print(
@@ -246,26 +219,35 @@ def main():
         print(f"  Mean VWAP deviation at peak: {valid_vwap[vwap_col].mean():+.5f}")
         print(f"  Std VWAP deviation:          {valid_vwap[vwap_col].std():.5f}")
 
-        # Do bigger deviations predict stronger reversions?
         ret_col = "sing_plus30_exit_120m_ret"
         if ret_col in valid_vwap.columns:
             v2 = valid_vwap.dropna(subset=[ret_col])
-            # Split into high/low deviation
             med_dev = v2[vwap_col].abs().median()
             high_dev = v2[v2[vwap_col].abs() > med_dev]
             low_dev = v2[v2[vwap_col].abs() <= med_dev]
 
             if len(high_dev) > 20 and len(low_dev) > 20:
-                high_fade = (-np.sign(high_dev["sing_plus30_trend"]) * high_dev[ret_col]).values
-                low_fade = (-np.sign(low_dev["sing_plus30_trend"]) * low_dev[ret_col]).values
+                high_fade = (
+                    -np.sign(high_dev["sing_plus30_trend"]) * high_dev[ret_col]
+                ).values
+                low_fade = (
+                    -np.sign(low_dev["sing_plus30_trend"]) * low_dev[ret_col]
+                ).values
 
                 print(f"\n  High VWAP deviation (>{med_dev:.5f}):")
-                print(f"    N={len(high_fade)}, fade mean={high_fade.mean():+.6f}, WR={(high_fade > 0).mean():.1%}")
+                print(
+                    f"    N={len(high_fade)}, fade mean={high_fade.mean():+.6f}, "
+                    f"WR={(high_fade > 0).mean():.1%}"
+                )
                 print(f"  Low VWAP deviation (<={med_dev:.5f}):")
-                print(f"    N={len(low_fade)}, fade mean={low_fade.mean():+.6f}, WR={(low_fade > 0).mean():.1%}")
+                print(
+                    f"    N={len(low_fade)}, fade mean={low_fade.mean():+.6f}, "
+                    f"WR={(low_fade > 0).mean():.1%}"
+                )
 
-                # Mann-Whitney test for difference
-                u_stat, p_mw = stats.mannwhitneyu(high_fade, low_fade, alternative="greater")
+                u_stat, p_mw = stats.mannwhitneyu(
+                    high_fade, low_fade, alternative="greater"
+                )
                 print(f"  Mann-Whitney (high > low): U={u_stat:.0f}, p={p_mw:.4f}")
 
     print("\n--- Done ---")
