@@ -21,6 +21,7 @@ Endpoints:
 from __future__ import annotations
 
 import asyncio
+import hmac
 import logging
 import os
 import time
@@ -95,7 +96,7 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("WEBHOOK_SECRET env var is required — refusing to start without authentication")
     try:
         # Warm up auth + account ID in a thread (synchronous HTTP call)
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, _get_account_id)
         log.info("Auth ready — account_id=%d", _account_id)
     except Exception as e:
@@ -215,7 +216,7 @@ async def health():
 @app.post("/trade", response_model=TradeResponse)
 async def trade(req: TradeRequest, request: Request):
     # 1. Auth check
-    if req.secret != WEBHOOK_SECRET:
+    if not hmac.compare_digest(req.secret, WEBHOOK_SECRET):
         log.warning("Rejected webhook from %s — invalid secret", request.client)
         raise HTTPException(status_code=403, detail="Invalid webhook secret")
 
@@ -223,7 +224,7 @@ async def trade(req: TradeRequest, request: Request):
     _check_rate_limit()
 
     # 3. Resolve contract (cached, async-safe)
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     try:
         contract = await loop.run_in_executor(None, _get_contract, req.instrument)
     except Exception as e:
