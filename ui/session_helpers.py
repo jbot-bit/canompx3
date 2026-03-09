@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 from pipeline.build_daily_features import compute_trading_day
-from pipeline.dst import SESSION_CATALOG
+from pipeline.dst import SESSION_CATALOG, is_uk_dst, is_us_dst
 
 BRISBANE = ZoneInfo("Australia/Brisbane")
 
@@ -141,11 +141,15 @@ _G_PATTERN = re.compile(r"^ORB_G(\d+)(.*)$")
 
 _MODIFIERS = {
     "_CONT": " + continuation bar",
+    "_FAST5": " + fast break (5 bars)",
     "_FAST10": " + fast break (10 bars)",
     "_NOMON": " + not Monday",
+    "_NOTUE": " + not Tuesday",
+    "_NOFRI": " + not Friday",
 }
 
 _SPECIAL_FILTERS = {
+    "NO_FILTER": "All days (no filter)",
     "VOL_RV12_N20": "Realized vol in top 20%",
     "DIR_LONG": "Long breakouts only",
     "DIR_SHORT": "Short breakouts only",
@@ -330,3 +334,119 @@ def get_refresh_seconds(minutes_to_next: float, is_weekend: bool = False) -> int
     if minutes_to_next <= 60:
         return 15
     return 30
+
+
+# ── DST transition awareness ────────────────────────────────────────────────
+
+
+@dataclass
+class DSTChange:
+    """A session whose Brisbane time shifted due to a DST transition."""
+
+    session: str
+    old_hour: int
+    old_minute: int
+    new_hour: int
+    new_minute: int
+    shift_minutes: int  # negative = earlier, positive = later
+
+
+@dataclass
+class UpcomingDSTTransition:
+    """An upcoming DST transition date within the lookahead window."""
+
+    region: str  # "US" or "UK"
+    transition_date: date
+    direction: str  # "start" (clocks forward) or "end" (clocks back)
+    days_away: int
+
+
+def get_dst_session_changes(today: date) -> list[DSTChange]:
+    """Compare today's session times vs yesterday's. Return any that shifted.
+
+    Skips weekends (Saturday/Sunday) — compares against the most recent
+    weekday to avoid false positives from weekend gaps.
+    """
+    # Find the most recent prior weekday
+    yesterday = today - timedelta(days=1)
+    while yesterday.weekday() >= 5:  # skip Sat/Sun
+        yesterday -= timedelta(days=1)
+
+    changes: list[DSTChange] = []
+    for name, entry in SESSION_CATALOG.items():
+        h_old, m_old = entry["resolver"](yesterday)
+        h_new, m_new = entry["resolver"](today)
+        shift = (h_new * 60 + m_new) - (h_old * 60 + m_old)
+        # Handle midnight wrap (e.g. 00:30 -> 23:30 is -60min, not +1380)
+        if shift > 720:
+            shift -= 1440
+        elif shift < -720:
+            shift += 1440
+        if shift != 0:
+            changes.append(
+                DSTChange(
+                    session=name,
+                    old_hour=h_old,
+                    old_minute=m_old,
+                    new_hour=h_new,
+                    new_minute=m_new,
+                    shift_minutes=shift,
+                )
+            )
+    return changes
+
+
+def get_recent_dst_changes(today: date, lookback_days: int = 3) -> list[DSTChange]:
+    """Return DST changes from the last N days (deduplicated by session)."""
+    seen: set[str] = set()
+    result: list[DSTChange] = []
+    for offset in range(lookback_days):
+        check_date = today - timedelta(days=offset)
+        if check_date.weekday() >= 5:
+            continue
+        for change in get_dst_session_changes(check_date):
+            if change.session not in seen:
+                seen.add(change.session)
+                result.append(change)
+    return result
+
+
+def get_upcoming_dst_transitions(today: date, lookahead_days: int = 30) -> list[UpcomingDSTTransition]:
+    """Find upcoming DST transitions within the lookahead window.
+
+    Scans day-by-day for US and UK DST state changes.
+    """
+    transitions: list[UpcomingDSTTransition] = []
+
+    us_dst_today = is_us_dst(today)
+    uk_dst_today = is_uk_dst(today)
+
+    for offset in range(1, lookahead_days + 1):
+        check = today + timedelta(days=offset)
+
+        us_dst_check = is_us_dst(check)
+        if us_dst_check != us_dst_today and not any(t.region == "US" for t in transitions):
+            transitions.append(
+                UpcomingDSTTransition(
+                    region="US",
+                    transition_date=check,
+                    direction="start" if us_dst_check else "end",
+                    days_away=offset,
+                )
+            )
+
+        uk_dst_check = is_uk_dst(check)
+        if uk_dst_check != uk_dst_today and not any(t.region == "UK" for t in transitions):
+            transitions.append(
+                UpcomingDSTTransition(
+                    region="UK",
+                    transition_date=check,
+                    direction="start" if uk_dst_check else "end",
+                    days_away=offset,
+                )
+            )
+
+        if len(transitions) >= 2:
+            break
+
+    return transitions

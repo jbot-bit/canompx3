@@ -22,7 +22,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from pipeline.dst import SESSION_CATALOG
+from pipeline.dst import SESSION_CATALOG, is_us_dst
 from ui.db_reader import (
     get_previous_trading_day,
     get_prior_day_atr,
@@ -42,7 +42,9 @@ from ui.session_helpers import (
     SessionBriefing,
     build_session_briefings,
     get_app_state,
+    get_recent_dst_changes,
     get_refresh_seconds,
+    get_upcoming_dst_transitions,
     get_upcoming_sessions,
 )
 
@@ -72,8 +74,8 @@ def _render_header(now: datetime, state: AppState) -> None:
     """Top bar: date, time, session dots."""
     # Format times
     bris_time = now.strftime("%I:%M %p").lstrip("0")
-    # ET = Brisbane - 15h (EST) or -14h (EDT). Approximate.
-    et_offset = timedelta(hours=-15) if now.month >= 11 or now.month <= 2 else timedelta(hours=-14)
+    # ET = Brisbane - 14h (EDT) or -15h (EST). Use is_us_dst() for exact dates.
+    et_offset = timedelta(hours=-14) if is_us_dst(now.date()) else timedelta(hours=-15)
     et_time = (now + et_offset).strftime("%I:%M %p").lstrip("0")
     day_str = now.strftime("%a %d %b %Y")
 
@@ -126,10 +128,12 @@ def _render_weekend(state: AppState) -> None:
         unsafe_allow_html=True,
     )
     if state.next_monday:
+        h, m = SESSION_CATALOG["CME_REOPEN"]["resolver"](state.next_monday)
+        reopen_time = f"{h % 12 or 12}:{m:02d} {'AM' if h < 12 else 'PM'}"
         st.markdown(
             f"<p style='text-align:center; color:#666; font-size:1.3rem;'>"
             f"Next trading day: <b>Monday {state.next_monday.strftime('%d %b')}</b>"
-            f" &mdash; CME_REOPEN 9:00 AM</p>",
+            f" &mdash; CME_REOPEN {reopen_time}</p>",
             unsafe_allow_html=True,
         )
 
@@ -503,12 +507,45 @@ def _render_signal_log() -> None:
 # ── Main render ──────────────────────────────────────────────────────────────
 
 
+def _render_dst_banner(today: date) -> None:
+    """Show DST transition warnings if sessions shifted recently or will shift soon."""
+    # Recent changes (last 3 days)
+    recent = get_recent_dst_changes(today, lookback_days=3)
+    if recent:
+        # NOTE: assumes all changes in window share the same direction/magnitude.
+        # Safe because US and UK transitions are always 2-3 weeks apart.
+        shift_dir = "earlier" if recent[0].shift_minutes < 0 else "later"
+        shift_abs = abs(recent[0].shift_minutes)
+        lines = [f"**DST shift** — {len(recent)} sessions moved {shift_abs}min {shift_dir}:"]
+        for c in recent:
+            old_t = f"{c.old_hour % 12 or 12}:{c.old_minute:02d} {'AM' if c.old_hour < 12 else 'PM'}"
+            new_t = f"{c.new_hour % 12 or 12}:{c.new_minute:02d} {'AM' if c.new_hour < 12 else 'PM'}"
+            lines.append(f"&nbsp;&nbsp;&nbsp;&nbsp;{c.session}: {old_t} → **{new_t}**")
+        st.warning("\n\n".join(lines))
+
+    # Upcoming transitions (next 30 days)
+    upcoming = get_upcoming_dst_transitions(today, lookahead_days=30)
+    for t in upcoming:
+        if t.days_away <= 14:
+            action = (
+                "Clocks forward — sessions shift earlier"
+                if t.direction == "start"
+                else "Clocks back — sessions shift later"
+            )
+            st.info(
+                f"**{t.region} DST {t.direction}s {t.transition_date.strftime('%a %d %b')}** ({t.days_away} days) — {action}"
+            )
+
+
 def render() -> None:
     """Main entry point — renders the co-pilot dashboard."""
     now = datetime.now(BRISBANE)
     state = get_app_state(now)
 
     _render_header(now, state)
+
+    # DST transition banner — proactive session time change alerts
+    _render_dst_banner(now.date())
 
     # Sidebar — discipline settings
     with st.sidebar:
