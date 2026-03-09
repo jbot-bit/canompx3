@@ -341,7 +341,7 @@ def _check_dollar_gate(variant: dict, instrument: str) -> tuple[bool, str]:
             )
         return True, f"Exp${exp_dollars:.2f} >= ${min_dollars:.2f} ({LIVE_MIN_EXPECTANCY_DOLLARS_MULT}x RT)"
     except Exception:
-        return True, "dollar gate skipped (cost spec unavailable)"
+        return False, "dollar gate BLOCKED (cost spec unavailable)"
 
 
 def build_live_portfolio(

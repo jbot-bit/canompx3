@@ -506,7 +506,13 @@ class SessionOrchestrator:
         if event.pnl_r is not None:
             actual_r = event.pnl_r
         else:
-            risk_pts = event.risk_points or strategy.median_risk_points or 10.0
+            risk_pts = event.risk_points or strategy.median_risk_points
+            if not risk_pts:
+                risk_pts = 10.0
+                log.error(
+                    "No risk_points for %s — using fallback 10.0 (P&L will be inaccurate)",
+                    event.strategy_id,
+                )
             actual_r = self._compute_actual_r(entry_price, exit_price, event.direction, risk_pts)
 
         # Compute total slippage (entry + exit) in points
@@ -534,7 +540,13 @@ class SessionOrchestrator:
         if self.order_router is None or not self.order_router.supports_native_brackets():
             return
         try:
-            risk_pts = event.risk_points or strategy.median_risk_points or 10.0
+            risk_pts = event.risk_points or strategy.median_risk_points
+            if not risk_pts:
+                risk_pts = 10.0
+                log.error(
+                    "No risk_points for %s bracket — using fallback 10.0 (STOP/TARGET WILL BE WRONG)",
+                    event.strategy_id,
+                )
             mult = getattr(strategy, "stop_multiplier", 1.0) or 1.0
             stop_dist = risk_pts * mult
             sign = 1 if event.direction == "long" else -1

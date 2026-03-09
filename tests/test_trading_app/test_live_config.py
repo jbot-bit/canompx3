@@ -263,11 +263,11 @@ class TestCheckDollarGate:
         assert passes is True
         assert ">=" in note
 
-    def test_exception_in_cost_spec_passes(self):
-        """Unknown instrument raises in get_cost_spec — must pass (skip gate gracefully)."""
+    def test_exception_in_cost_spec_blocks(self):
+        """Unknown instrument raises in get_cost_spec — must BLOCK (fail-closed)."""
         passes, note = _check_dollar_gate(self._variant(0.10, 3.0), "UNKNOWN_INSTRUMENT_XYZ")
-        assert passes is True
-        assert "skipped" in note
+        assert passes is False
+        assert "BLOCKED" in note
 
     def test_one_r_excludes_friction(self):
         """1R dollars = median_risk_pts * point_value only — friction must NOT be added."""
