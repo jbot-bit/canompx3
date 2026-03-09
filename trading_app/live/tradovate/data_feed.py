@@ -148,7 +148,8 @@ class TradovateDataFeed(BrokerFeed):
                 await asyncio.sleep(2.5)
                 if _STOP_FILE.exists():
                     log.info("Stop file detected — requesting graceful shutdown")
-                    _STOP_FILE.unlink(missing_ok=True)
+                    # Don't delete stop file here — let the runner delete it
+                    # after ALL feeds have exited (multi-instrument safe).
                     self._stop_requested = True
                     stop_event.set()
                     return

@@ -399,7 +399,7 @@ def _render_session_controls() -> None:
                 _stop_session()
                 st.rerun()
     else:
-        col1, col2, col3 = st.columns([2, 2, 2])
+        col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
         with col1:
             instrument = st.selectbox(
                 "Instrument",
@@ -414,6 +414,10 @@ def _render_session_controls() -> None:
         with col3:
             if st.button("Start Demo"):
                 _start_session(instrument, signal_only=False)
+                st.rerun()
+        with col4:
+            if st.button("All Instruments", type="primary"):
+                _start_session_all()
                 st.rerun()
 
 
@@ -444,6 +448,33 @@ def _start_session(instrument: str, signal_only: bool) -> None:
     st.session_state["live_proc"] = proc
     st.session_state["live_instrument"] = instrument
     st.session_state["live_mode_short"] = "signal-only" if signal_only else "demo"
+
+
+def _start_session_all() -> None:
+    """Launch a multi-instrument signal-only session (all active instruments)."""
+    if _SIGNALS_FILE.exists():
+        try:
+            with open(_SIGNALS_FILE, "w"):
+                pass
+        except OSError:
+            pass
+    _STOP_FILE.unlink(missing_ok=True)
+
+    cmd = [
+        sys.executable,
+        "scripts/run_live_session.py",
+        "--all",
+        "--signal-only",
+    ]
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        cwd=Path(__file__).parent.parent,
+    )
+    st.session_state["live_proc"] = proc
+    st.session_state["live_instrument"] = "ALL"
+    st.session_state["live_mode_short"] = "signal-only"
 
 
 def _stop_session() -> None:
