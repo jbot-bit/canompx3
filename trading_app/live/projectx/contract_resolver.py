@@ -38,6 +38,8 @@ class ProjectXContracts(BrokerContracts):
             raise RuntimeError("No active ProjectX accounts found")
         acct = accounts[0]
         acct_id = acct.get("id") or acct.get("accountId")
+        if acct_id is None:
+            raise RuntimeError(f"ProjectX account has no id field: {acct}")
         log.info("ProjectX account: %s (id=%s)", acct.get("name", "unknown"), acct_id)
         return int(acct_id)
 

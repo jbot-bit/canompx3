@@ -98,6 +98,11 @@ class PerformanceMonitor:
         self._daily_r.clear()
         self._trades.clear()
 
+    @property
+    def trade_count(self) -> int:
+        """Number of trades recorded today (resets on reset_daily)."""
+        return len(self._trades)
+
     def get_cusum(self, strategy_id: str) -> CUSUMMonitor | None:
         """Return the CUSUM monitor for a specific strategy (for inspection/testing)."""
         return self._monitors.get(strategy_id)

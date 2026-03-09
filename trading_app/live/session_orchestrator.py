@@ -97,6 +97,21 @@ class SessionOrchestrator:
         if not self.portfolio.strategies:
             raise RuntimeError(f"No active strategies for {instrument}")
 
+        # F23 guard: warn if any strategy's orb_minutes doesn't match session default
+        from trading_app.config import ORB_DURATION_MINUTES
+
+        for s in self.portfolio.strategies:
+            session_default = ORB_DURATION_MINUTES.get(s.orb_label, 5)
+            if hasattr(s, "orb_minutes") and s.orb_minutes != session_default:
+                log.warning(
+                    "APERTURE MISMATCH: %s has orb_minutes=%d but %s default=%d — live ORB window will use %d",
+                    s.strategy_id,
+                    s.orb_minutes,
+                    s.orb_label,
+                    session_default,
+                    session_default,
+                )
+
         # Strategy lookup map for resolving entry_model from strategy_id on TradeEvents
         self._strategy_map: dict[str, PortfolioStrategy] = {s.strategy_id: s for s in self.portfolio.strategies}
 
@@ -104,7 +119,7 @@ class SessionOrchestrator:
         self.cost_spec: CostSpec = get_cost_spec(instrument)
         cost = self.cost_spec
         risk_limits = RiskLimits(
-            max_daily_loss_r=self.portfolio.max_daily_loss_r,
+            max_daily_loss_r=-abs(self.portfolio.max_daily_loss_r),
             max_concurrent_positions=self.portfolio.max_concurrent_positions,
         )
         self.risk_mgr = RiskManager(risk_limits)
@@ -480,7 +495,13 @@ class SessionOrchestrator:
             return
 
         # Check if we've crossed the 9:00 AM Brisbane boundary
-        await self._check_trading_day_rollover(bar.ts_utc)
+        try:
+            await self._check_trading_day_rollover(bar.ts_utc)
+        except Exception as e:
+            log.critical("Trading day rollover failed: %s — skipping rollover, feed continues", e)
+            self._notify(f"ROLLOVER ERROR: {e}")
+            # Continue processing bars with stale daily features rather than
+            # killing the feed loop. Existing positions still need management.
 
         self.orb_builder.on_bar(bar)
 
@@ -951,7 +972,7 @@ class SessionOrchestrator:
         while True:
             try:
                 await asyncio.sleep(self.HEARTBEAT_INTERVAL)
-                n_trades = len(self.monitor.trades) if hasattr(self.monitor, "trades") else 0
+                n_trades = self.monitor.trade_count
                 active = len(self._positions.active_positions())
                 poller_status = "ON" if self._poller_active else "OFF"
                 self._notify(
