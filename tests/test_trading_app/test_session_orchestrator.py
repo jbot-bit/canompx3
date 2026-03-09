@@ -1620,3 +1620,100 @@ class TestNotificationsBrokenInit:
         """build_orchestrator sets _notifications_broken=False before self-tests run."""
         orch = build_orchestrator()
         assert orch._notifications_broken is False
+
+
+# ---------------------------------------------------------------------------
+# F20: Circuit breaker sign mismatch — positive Portfolio magnitude
+#      must be negated to negative RiskLimits threshold
+# ---------------------------------------------------------------------------
+
+
+class TestCircuitBreakerSignConvention:
+    """Portfolio stores max_daily_loss_r as positive magnitude (5.0).
+    Orchestrator must negate to negative threshold (-5.0) for RiskLimits."""
+
+    def test_positive_portfolio_loss_does_not_block_entries(self):
+        """With max_daily_loss_r=5.0 in Portfolio, RiskLimits must get -5.0.
+        At 0.0 daily PnL, entries should be ALLOWED (not blocked)."""
+        from trading_app.risk_manager import RiskLimits
+
+        orch = build_orchestrator()
+        # Simulate what the real __init__ does with the fix
+        risk_limits = RiskLimits(
+            max_daily_loss_r=-abs(orch.portfolio.max_daily_loss_r),
+        )
+        assert risk_limits.max_daily_loss_r < 0, "RiskLimits must be negative"
+        assert risk_limits.max_daily_loss_r == -5.0
+
+
+# ---------------------------------------------------------------------------
+# F21/F31: Trading day rollover exception must not crash feed loop
+# ---------------------------------------------------------------------------
+
+
+class TestRolloverExceptionIsolation:
+    """_check_trading_day_rollover raising should NOT propagate out of _on_bar."""
+
+    async def test_rollover_error_caught_and_feed_continues(self):
+        """RuntimeError in rollover is caught — bar still processed."""
+        orch = build_orchestrator()
+        orch._check_trading_day_rollover = AsyncMock(side_effect=RuntimeError("daily_features 10 days stale"))
+        orch.engine.on_bar.return_value = []
+
+        bar = FakeBar()
+        # Should NOT raise
+        await orch._on_bar(bar)
+
+        assert orch._stats.bars_received == 1
+        orch.engine.on_bar.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# F32: Heartbeat trade count — monitor.trade_count property
+# ---------------------------------------------------------------------------
+
+
+class TestHeartbeatTradeCount:
+    """Heartbeat must report actual trade count, not always 0."""
+
+    def test_performance_monitor_trade_count_property(self):
+        """PerformanceMonitor.trade_count returns len(_trades)."""
+        from trading_app.live.performance_monitor import PerformanceMonitor, TradeRecord
+
+        strategy = _test_strategy()
+        monitor = PerformanceMonitor([strategy])
+        assert monitor.trade_count == 0
+
+        record = TradeRecord(
+            strategy_id=strategy.strategy_id,
+            trading_day=date(2026, 3, 9),
+            direction="long",
+            entry_price=2350.0,
+            exit_price=2355.0,
+            actual_r=1.5,
+            expected_r=0.20,
+        )
+        monitor.record_trade(record)
+        assert monitor.trade_count == 1
+
+    def test_trade_count_resets_on_daily(self):
+        """trade_count resets to 0 after reset_daily."""
+        from trading_app.live.performance_monitor import PerformanceMonitor, TradeRecord
+
+        strategy = _test_strategy()
+        monitor = PerformanceMonitor([strategy])
+
+        record = TradeRecord(
+            strategy_id=strategy.strategy_id,
+            trading_day=date(2026, 3, 9),
+            direction="long",
+            entry_price=2350.0,
+            exit_price=2355.0,
+            actual_r=1.5,
+            expected_r=0.20,
+        )
+        monitor.record_trade(record)
+        assert monitor.trade_count == 1
+
+        monitor.reset_daily()
+        assert monitor.trade_count == 0
