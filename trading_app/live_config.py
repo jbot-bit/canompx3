@@ -321,8 +321,9 @@ def _check_rolling_stability(
 def _check_dollar_gate(variant: dict, instrument: str) -> tuple[bool, str]:
     """Check that expected dollar profit >= LIVE_MIN_EXPECTANCY_DOLLARS_MULT * RT cost.
 
-    Returns (passes, note). If median_risk_points is unavailable, passes by default
-    (dollar gate skipped rather than blocking a strategy on missing data).
+    Returns (passes, note). If median_risk_points is unavailable, skips (passes)
+    because the gate cannot compute without risk data. If get_cost_spec() raises,
+    BLOCKS (returns False) — a broken cost model must not allow trading.
     """
     median_risk_pts = variant.get("median_risk_points")
     if median_risk_pts is None:
@@ -340,8 +341,8 @@ def _check_dollar_gate(variant: dict, instrument: str) -> tuple[bool, str]:
                 f"RT cost (${spec.total_friction:.2f} * {LIVE_MIN_EXPECTANCY_DOLLARS_MULT} = ${min_dollars:.2f})"
             )
         return True, f"Exp${exp_dollars:.2f} >= ${min_dollars:.2f} ({LIVE_MIN_EXPECTANCY_DOLLARS_MULT}x RT)"
-    except Exception:
-        return False, "dollar gate BLOCKED (cost spec unavailable)"
+    except Exception as exc:
+        return False, f"dollar gate BLOCKED (cost spec unavailable: {exc})"
 
 
 def build_live_portfolio(
