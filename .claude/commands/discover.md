@@ -30,7 +30,7 @@ import duckdb
 from pipeline.paths import GOLD_DB_PATH
 con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
 session_filter = \"AND orb_label='{SESSION}'\" if '{SESSION}' != '' else ''
-r = con.execute(f\"SELECT COUNT(*) FROM validated_setups WHERE symbol='{INSTRUMENT}' {session_filter}\").fetchone()
+r = con.execute(f\"SELECT COUNT(*) FROM validated_setups WHERE instrument='{INSTRUMENT}' AND LOWER(status)='active' {session_filter}\").fetchone()
 label = f'{INSTRUMENT} {SESSION}' if '{SESSION}' != '' else '{INSTRUMENT}'
 print(f'Validated strategies for {label}: {r[0]}')
 con.close()
