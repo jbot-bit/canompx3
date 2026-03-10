@@ -1,16 +1,17 @@
 """Tests for trading_app.live_config — live portfolio configuration."""
 
-import pytest
-import duckdb
 from pathlib import Path
 
+import duckdb
+import pytest
+
 from trading_app.live_config import (
-    LiveStrategySpec,
-    LIVE_PORTFOLIO,
     LIVE_MIN_EXPECTANCY_DOLLARS_MULT,
-    _load_best_regime_variant,
-    _load_best_experimental_variant,
+    LIVE_PORTFOLIO,
+    LiveStrategySpec,
     _check_dollar_gate,
+    _load_best_experimental_variant,
+    _load_best_regime_variant,
 )
 
 
@@ -240,11 +241,11 @@ class TestCheckDollarGate:
     def _variant(self, expectancy_r: float, median_risk_points: float | None) -> dict:
         return {"expectancy_r": expectancy_r, "median_risk_points": median_risk_points}
 
-    def test_none_guard_passes(self):
-        """Missing median_risk_points must pass (skip gate, not block strategy)."""
+    def test_none_guard_blocks(self):
+        """Missing median_risk_points must BLOCK (fail-closed, not skip gate)."""
         passes, note = _check_dollar_gate(self._variant(0.10, None), "MGC")
-        assert passes is True
-        assert "skipped" in note
+        assert passes is False
+        assert "blocked" in note
 
     def test_fails_when_exp_below_threshold(self):
         """Tiny ORB on MGC: exp$ well below 1.3x RT cost must fail."""

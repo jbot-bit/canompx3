@@ -29,6 +29,12 @@ from trading_app.db_manager import compute_trade_day_hash
 sys.stdout.reconfigure(line_buffering=True)
 
 # Robustness thresholds (Duke Protocol #3c)
+# @research-source build_edge_families calibration — BH FDR-validated strategies only;
+#   ShANN >= 0.8 (WHITELIST) / >= 1.0 (SINGLETON) from Bailey et al. 2014 PBO analysis
+#   (resources/the_probability_of_backtest_overfitting.pdf §4.2 — SR threshold for low PBO)
+#   CV <= 0.5 (coefficient of variation) from Carver Systematic Trading Ch.4 (member consistency)
+#   min_trades thresholds align with CORE_MIN_SAMPLES=100 / REGIME_MIN_SAMPLES=30 from config.py
+# @revalidated-for E1/E2 event-based sessions (2026-03-10)
 MIN_FAMILY_SIZE = 5
 WHITELIST_MIN_MEMBERS = 3  # N>=3 to avoid "one lucky sibling" at higher CV
 WHITELIST_MIN_SHANN = 0.8

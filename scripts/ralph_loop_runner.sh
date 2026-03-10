@@ -12,6 +12,23 @@
 
 set -euo pipefail
 
+# Resolve claude CLI — handle WSL/Git Bash/native
+if ! command -v claude &>/dev/null; then
+    for p in "/c/Users/joshd/.local/bin/claude.exe" \
+             "/mnt/c/Users/joshd/.local/bin/claude.exe"; do
+        if [[ -x "$p" ]]; then
+            CLAUDE="$p"
+            break
+        fi
+    done
+else
+    CLAUDE="claude"
+fi
+if [[ -z "${CLAUDE:-}" ]]; then
+    echo "ERROR: claude CLI not found in PATH or known locations."
+    exit 1
+fi
+
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
@@ -32,10 +49,16 @@ fi
 # Ensure directories exist
 mkdir -p "$LOG_DIR"
 
+# Clear Claude Code nesting detection env vars so claude --print can spawn
+# even when this script is launched from within a Claude Code session
+unset CLAUDECODE 2>/dev/null || true
+unset CLAUDE_CODE_ENTRYPOINT 2>/dev/null || true
+
 # Get current iteration number from history
 get_iteration() {
     local last
-    last=$(grep -c "^## Iteration:" "$HISTORY_FILE" 2>/dev/null || echo "0")
+    last=$(grep -c "^## Iteration " "$HISTORY_FILE" 2>/dev/null || true)
+    last=${last:-0}
     echo $((last + 1))
 }
 
@@ -48,7 +71,7 @@ run_audit() {
 
     echo "[$timestamp] Ralph Loop — Iteration $iter — AUDIT PHASE"
 
-    claude --print \
+    $CLAUDE --print \
         "You are the Ralph Loop Auditor (read .claude/agents/ralph-auditor.md for your full instructions).
 
 This is iteration $iter of the Ralph Loop.
@@ -79,7 +102,7 @@ run_implement() {
 
     echo "[$timestamp] Ralph Loop — Iteration $iter — IMPLEMENT PHASE"
 
-    claude --print \
+    $CLAUDE --print \
         "You are the Ralph Loop Architect (read .claude/agents/ralph-architect.md for your full instructions).
 
 This is iteration $iter of the Ralph Loop.
@@ -112,7 +135,7 @@ run_verify() {
 
     echo "[$timestamp] Ralph Loop — Iteration $iter — VERIFY PHASE"
 
-    claude --print \
+    $CLAUDE --print \
         "You are the Ralph Loop Verifier (read .claude/agents/ralph-verifier.md for your full instructions).
 
 This is iteration $iter of the Ralph Loop.
