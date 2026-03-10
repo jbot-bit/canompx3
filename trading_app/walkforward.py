@@ -158,6 +158,9 @@ def run_walkforward(
         test_exp_r = metrics["expectancy_r"]
 
         # IS metrics: all outcomes before this window (anchored expanding)
+        # @research-source Lopez de Prado AFML Ch.11 — minimum IS observations for stable estimate;
+        #   consistent with wf_min_trades=15 in strategy_validator.py
+        # @revalidated-for E1/E2 event-based sessions (2026-03-10)
         is_outcomes = outcomes[:lo]
         is_metrics = compute_metrics(is_outcomes) if len(is_outcomes) >= 15 else None
         is_exp_r = is_metrics["expectancy_r"] if is_metrics else None
@@ -234,6 +237,10 @@ def run_walkforward(
             wfe = round(mean_oos / mean_is, 4)
 
     # Window imbalance detection
+    # @research-source Pardo "The Evaluation and Optimization of Trading Strategies" Ch.7 —
+    #   imbalanced OOS windows inflate aggregate stats (one large window dominates);
+    #   5.0x threshold flags severe regime concentration for operator review
+    # @revalidated-for E1/E2 event-based sessions (2026-03-10)
     window_counts = [w["test_n"] for w in valid_windows if w["test_n"] > 0]
     window_imbalance_ratio = None
     window_imbalanced = False
