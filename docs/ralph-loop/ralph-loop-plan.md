@@ -1,8 +1,8 @@
-## Iteration: 17
-## Phase: implement (batch — T2 + T3, same function, same blast radius)
-## Target: scripts/tools/generate_trade_sheet.py:200-226 (_load_best_by_expr query)
-## Finding: T2: LEFT JOIN family_rr_locks with IS NULL fallback diverges from live_config's INNER JOIN — could show unlocked RR variants. T3: query missing vs.orb_minutes, aperture parsed from strategy_id string instead.
-## Decision: implement (batch — both touch same query, zero blast radius overlap)
-## Rationale: Aligns trade sheet query with live_config pattern. T2 dormant (all families have locks) but wrong code. T3 eliminates fragile string parsing. Both changes in _load_best_by_expr, called only from collect_trades (same file).
-## Blast Radius: _load_best_by_expr → collect_trades → generate_html (same file). _parse_aperture becomes dead code after T3.
-## Diff estimate: ~8 lines changed in query + 3 lines in collect_trades to use orb_minutes
+## Iteration: 18
+## Phase: implement (batch — code review findings T5 + T6)
+## Target: scripts/tools/generate_trade_sheet.py:121 (_exp_dollars_from_row) + :216 (ORDER BY)
+## Finding: T5 (IMPORTANT): _exp_dollars_from_row adds spec.total_friction to 1R base, inflating Exp$ and making dollar gate comparison diverge from live_config. T6 (cosmetic): Missing NULLS LAST in ORDER BY.
+## Decision: implement
+## Rationale: T5 is a formula error — 1R should be stop distance only (median_risk_pts * point_value), not stop + friction. live_config.py:381 is correct. Inflated Exp$ misleads the user and could let strategies pass the dollar gate in the trade sheet that would fail in live_config. T6 is cosmetic alignment.
+## Blast Radius: _exp_dollars_from_row → _passes_dollar_gate + collect_trades (same file only).
+## Diff estimate: 2 lines changed

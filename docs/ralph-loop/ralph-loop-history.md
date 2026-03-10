@@ -141,4 +141,12 @@
 - Finding: T2: LEFT JOIN family_rr_locks with IS NULL fallback diverges from live_config's INNER JOIN — could show unlocked RR variants. T3: query missing vs.orb_minutes, aperture parsed from strategy_id string instead.
 - Action: Changed LEFT JOIN → INNER JOIN, removed IS NULL fallback. Added vs.orb_minutes to SELECT, replaced _parse_aperture() call with variant["orb_minutes"]. Removed dead _parse_aperture function.
 - Verification: PASS — 71 drift, behavioral clean, 20/20 tests, ruff clean, 33 trades unchanged
+- Commit: 7caa6fa
+
+## Iteration 18 — 2026-03-10
+- Phase: fix (code review finding — IMPORTANT)
+- Target: scripts/tools/generate_trade_sheet.py:112,216
+- Finding: _exp_dollars_from_row adds spec.total_friction to 1R base (inflating Exp$), diverging from live_config which uses median_risk_pts * point_value only. Also: missing NULLS LAST in ORDER BY.
+- Action: Removed + spec.total_friction from 1R calculation. Added NULLS LAST. One marginal trade correctly dropped: MES CME_PRECLOSE VOL_RV12_N20 (old $5.48 inflated → real $4.82, gate $4.86).
+- Verification: PASS — 71 drift, behavioral clean, 20/20 tests, ruff clean, 32 trades (1 correctly dropped)
 - Commit: PENDING
