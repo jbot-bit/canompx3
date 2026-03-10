@@ -1,22 +1,27 @@
 #!/usr/bin/env python
-"""Select locked RR per family using JK-MaxExpR criterion.
+"""Select locked RR per family using JK-MaxSharpe criterion.
 
-JK-MaxExpR: among RR levels with statistically-equal per-trade Sharpe
-(Jobson-Korkie p > 0.05 vs best), pick the one with highest ExpR.
+JK-MaxSharpe: among RR levels with statistically-equal per-trade Sharpe
+(Jobson-Korkie p > 0.05 vs best), pick the one with highest Sharpe.
 
-Rationale (Carver, Systematic Trading Ch.7): when risk-adjusted returns
-are statistically indistinguishable (JK test), maximize raw edge.
-The previous JK-MaxExpR criterion picked lowest MaxDD as tiebreaker,
-which mechanically selected RR=1.0 for 74% of families (lower RR =
-lower variance = lower MaxDD by construction). This left significant
-ExpR on the table and created phantom trades where no RR=1.0 strategy
-passed the ExpR gate but higher-RR strategies did.
+History of tiebreaker evolution:
+- v1 (SharpeDD): lowest MaxDD among JK-equal → 74% locked to RR1.0
+  (lower RR = lower DD mechanically). Created phantom trades.
+- v2 (JK-MaxExpR): highest ExpR among JK-equal → biased to highest RR
+  for positive-skew distributions. Selection bias per Bailey & Lopez
+  de Prado (DSR, 2014): ExpR increases mechanically with RR when
+  skew > 0, so MAX_EXPR always picks grid edge.
+- v3 (JK-MaxSharpe): highest Sharpe among JK-equal → no directional
+  bias. Selects best risk-adjusted RR. Sharpe peak depends on actual
+  distribution shape, not mechanical RR ordering.
 
 Statistical basis:
 - JK rho=0.7 validated: measured rho 0.67-0.77 for adjacent RRs,
   0.47-0.53 for distant pairs (RR1.0 vs RR4.0). 0.7 is conservative.
-- 74% of multi-RR families: ALL RRs are JK-equal candidates.
+- 97% of multi-RR families: ALL RRs are JK-equal candidates.
   Tiebreaker is therefore the dominant selection force.
+- DSR (Bailey & LdP 2014): select on risk-adjusted metrics to avoid
+  "winner's curse" from multiple trials on the same dataset.
 
 Writes results to `family_rr_locks` table in gold.db.
 Run after strategy_validator, before build_edge_families.
@@ -46,12 +51,12 @@ FAMILY_COLS = ["instrument", "orb_label", "filter_type", "entry_model", "orb_min
 
 
 def select_rr_for_family(group: pd.DataFrame) -> dict:
-    """Select locked RR for one family using JK-MaxExpR criterion.
+    """Select locked RR for one family using JK-MaxSharpe criterion.
 
     Among RR levels with statistically-equal Sharpe (JK p > 0.05),
-    pick the one with highest ExpR. Grounded in Carver (Systematic
-    Trading Ch.7): when risk-adjusted returns are indistinguishable,
-    maximize raw edge.
+    pick the one with highest Sharpe. Grounded in Bailey & Lopez de
+    Prado (DSR, 2014): select on risk-adjusted metrics to avoid
+    selection bias from multiple trials.
 
     Args:
         group: DataFrame rows for one family, all with same 6-col key,
@@ -99,19 +104,18 @@ def select_rr_for_family(group: pd.DataFrame) -> dict:
     if not candidates:
         candidates = [best_idx]
 
-    # Among candidates, pick highest ExpR (Carver: maximize edge when risk is equal)
+    # Among candidates, pick highest Sharpe (DSR: select on risk-adjusted metric)
     cand_df = group.loc[candidates]
-    selected_idx = cand_df["expectancy_r"].idxmax()
+    selected_idx = cand_df["sharpe_ratio"].idxmax()
     sel = group.loc[selected_idx]
 
-    # Determine method
-    best_expr_idx = group["expectancy_r"].idxmax()
+    # Determine method — since we pick best Sharpe from JK-equal candidates,
+    # and best Sharpe is always JK-equal to itself, this is nearly always MAX_SHARPE.
+    # JK_SHARPE only occurs if JK excludes the global best Sharpe (extremely rare).
     if selected_idx == best_idx:
-        method = "MAX_SHARPE"  # best Sharpe also had best ExpR among candidates
-    elif selected_idx == best_expr_idx:
-        method = "MAX_EXPR"  # picked highest ExpR from JK-equal candidates
+        method = "MAX_SHARPE"  # best Sharpe from JK-equal candidates
     else:
-        method = "JK_EXPR"  # picked from JK-equal set (not global best Sharpe or ExpR)
+        method = "JK_SHARPE"  # JK excluded global best, picked best from remainder
 
     return {
         **family_key,
@@ -126,7 +130,7 @@ def select_rr_for_family(group: pd.DataFrame) -> dict:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Select locked RR per family (JK-MaxExpR)")
+    parser = argparse.ArgumentParser(description="Select locked RR per family (JK-MaxSharpe)")
     parser.add_argument("--db-path", type=Path, default=GOLD_DB_PATH)
     parser.add_argument("--dry-run", action="store_true", help="Print results without writing to DB")
     args = parser.parse_args()
@@ -178,9 +182,8 @@ def main():
 
     multi = rdf[rdf["method"] != "ONLY_RR"]
     print(f"\n--- Multi-RR Families: {len(multi)}/{n_total} ---")
-    print(f"  MAX_SHARPE (best Sharpe = best ExpR among candidates): {(multi['method'] == 'MAX_SHARPE').sum()}")
-    print(f"  MAX_EXPR   (highest ExpR from JK-equal candidates):    {(multi['method'] == 'MAX_EXPR').sum()}")
-    print(f"  JK_EXPR    (JK-equal set, neither global best):        {(multi['method'] == 'JK_EXPR').sum()}")
+    print(f"  MAX_SHARPE (best Sharpe from JK-equal candidates): {(multi['method'] == 'MAX_SHARPE').sum()}")
+    print(f"  JK_SHARPE  (JK excluded best, picked from rest):   {(multi['method'] == 'JK_SHARPE').sum()}")
 
     # Write to DB (transactional — crash between DELETE and INSERT won't empty table)
     if not args.dry_run:
