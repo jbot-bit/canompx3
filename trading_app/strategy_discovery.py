@@ -627,11 +627,11 @@ def compute_metrics(outcomes: list[dict], cost_spec=None, n_trials: int = 0) -> 
     avg_win_dollars = None
     avg_loss_dollars = None
     if cost_spec is not None and avg_risk is not None:
-        avg_risk_dollars = round(avg_risk * cost_spec.point_value + cost_spec.total_friction, 2)
+        avg_risk_dollars = round(avg_risk * cost_spec.point_value, 2)
         avg_win_dollars = round(avg_win_r * avg_risk_dollars, 2)
         avg_loss_dollars = round(avg_loss_r * avg_risk_dollars, 2)
     if cost_spec is not None and median_risk is not None:
-        median_risk_dollars = round(median_risk * cost_spec.point_value + cost_spec.total_friction, 2)
+        median_risk_dollars = round(median_risk * cost_spec.point_value, 2)
 
     return {
         "sample_size": n_traded,

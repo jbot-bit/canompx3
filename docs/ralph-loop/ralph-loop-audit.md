@@ -3,7 +3,7 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## RALPH AUDIT — Iteration 19 (execution_engine.py)
+## RALPH AUDIT — Iteration 20 (config.py, strategy_discovery.py, outcome_builder.py)
 ## Date: 2026-03-10
 ## Infrastructure Gates: 4/4 PASS
 
@@ -11,14 +11,16 @@
 |------|--------|--------|
 | `check_drift.py` | PASS | 71 checks passed, 0 skipped, 6 advisory (non-blocking) |
 | `audit_behavioral.py` | PASS | All 6 checks clean |
-| `pytest test_execution_engine.py` | PASS | 41/41 passed (0.12s) |
+| `pytest test_config + test_strategy_discovery + test_outcome_builder` | PASS | 141/141 passed |
 | `ruff check` | PASS | All checks passed |
 
 ---
 
 ## Target Files This Iteration
 
-- `trading_app/execution_engine.py` (1229 lines)
+- `trading_app/config.py` (1047 lines)
+- `trading_app/strategy_discovery.py` (1343 lines)
+- `trading_app/outcome_builder.py` (988 lines)
 
 ---
 
@@ -43,62 +45,72 @@
 2. PRODUCT_MAP hardcodes instrument list — `contract_resolver.py:22-27`
 3. Auth token refresh not logged — `auth.py:42-60`
 
+### Iter 19 LOWs (STILL OPEN)
+1. EE1: Conditional EXITED trade pruning — `execution_engine.py:1152-1154`
+2. EE2: E3 stop-before-fill silent exit — `execution_engine.py:963-967`
+3. EE3: IB start time hardcoded 23:00 UTC — `execution_engine.py:262`
+
 ---
 
 ## New Findings This Iteration
 
-### Finding EE1 — Conditional EXITED trade pruning (generate_trade_sheet.py:1152-1154)
-- Severity: LOW
-- File: `trading_app/execution_engine.py:1152-1154`
+### Finding SD1 — `median_risk_dollars` / `avg_risk_dollars` include friction (MEDIUM)
+- Severity: MEDIUM
+- File: `trading_app/strategy_discovery.py:630,634`
 - Evidence:
   ```python
-  if events:
-      self.active_trades = [t for t in self.active_trades if t.state != TradeState.EXITED]
+  avg_risk_dollars = round(avg_risk * cost_spec.point_value + cost_spec.total_friction, 2)
+  median_risk_dollars = round(median_risk * cost_spec.point_value + cost_spec.total_friction, 2)
   ```
-- Root Cause: Prune only fires when events were generated. E3 stop-before-fill (line 963-967) marks EXITED and appends to completed_trades, but generates no event. The EXITED trade lingers in active_trades until next prune. Harmless — duplicate check in completed_trades (line 528) prevents re-arming, and `if trade.state != TradeState.ENTERED: continue` (line 1090) skips exit checks.
-- Impact: Wastes iteration cycles on dead trades. No correctness bug.
-- Fix: Remove `if events:` guard — always prune.
+- Root Cause: `total_friction` (spread + commission) added to risk_dollars. Risk = stop distance in dollars = `risk_pts * point_value`. Friction is a cost, not part of risk. Same error class as trade sheet T5 (fixed in iter 18).
+- Cascade: `avg_win_dollars` (line 631) and `avg_loss_dollars` (line 632) inherit inflation since they're computed as `avg_win_r * avg_risk_dollars`.
+- Impact: Stored values in `experimental_strategies` are informational only — no gate decision uses them. Dollar gate in `live_config.py` correctly computes `median_risk_pts * point_value` (no friction). But misleading to anyone reading the table.
+- Fix: Remove `+ cost_spec.total_friction` from lines 630 and 634.
 
-### Finding EE2 — E3 stop-before-fill silent exit (LOW)
+### Finding SD2 — Session fallback to ORB_LABELS (LOW)
 - Severity: LOW
-- File: `trading_app/execution_engine.py:963-967`
+- Files: `outcome_builder.py:677-678`, `strategy_discovery.py:1022-1023`
 - Evidence:
   ```python
-  if stop_hit:
-      trade.state = TradeState.EXITED
-      self.completed_trades.append(trade)
-      continue  # No TradeEvent emitted
+  if not sessions:
+      sessions = ORB_LABELS  # fallback: all sessions
   ```
-- Root Cause: E3 stop-before-fill silently kills trade. Orchestrator/logger sees no event. E3 is soft-retired so impact is near-zero. But violates principle that all state transitions should be observable.
-- Fix: Emit REJECT event with reason "e3_stop_before_fill".
+- Root Cause: If `get_enabled_sessions()` returns empty, falls back to ALL known sessions. Could compute outcomes/strategies for sessions disabled for the instrument.
+- Impact: Downstream gates (validator, live_config) filter to enabled sessions. Wasted compute only.
+- Fix: Fail-closed: raise ValueError if no sessions enabled.
 
-### Finding EE3 — IB start time hardcoded (LOW)
+### Finding SD3 — CORE_MIN_SAMPLES / REGIME_MIN_SAMPLES missing @research-source (LOW)
 - Severity: LOW
-- File: `trading_app/execution_engine.py:262`
-- Evidence: `ib_start = datetime(prev_day.year, prev_day.month, prev_day.day, 23, 0, tzinfo=UTC)`
-- Analysis: Correct — Brisbane is UTC+10 with no DST, so 09:00 Brisbane = 23:00 UTC always. Only used for TOKYO_OPEN IB conditional. Not a bug, just not resolver-based.
-- Status: DEFERRED — only matters if IB extends beyond TOKYO_OPEN.
+- File: `trading_app/config.py:961-962`
+- Evidence: `CORE_MIN_SAMPLES = 100` / `REGIME_MIN_SAMPLES = 30` — FIX5 thresholds with inline comments but no @research-source annotation.
+- Impact: Annotation debt only.
 
 ---
 
 ## Confirmed Clean
 
-**execution_engine.py:**
-- **Seven Sins: CLEAN.** No look-ahead bias (sequential bar processing, ORB window gated by `ts >= orb.window_end_utc`). Fail-closed on unknown entry_model (line 775). Position sizing rejects on 0 contracts. Risk manager checked before every entry (E2, E1, E3 paths).
-- **Canonical integrity: CLEAN.** Imports from canonical sources (config.py filters, cost_model, dst resolvers). Session costs resolved per-trade via `get_session_cost_spec`. ATR velocity overlay externally injected.
-- **Entry model paths: CORRECT.** E2 (stop-market, line 619), E1 (next-bar open, line 825), E3 (retrace, line 949) all properly handle sizing, risk manager, calendar overlay, IB conditional, and target computation. E3 has stop-before-fill guard (line 954-967).
-- **Exit logic: CORRECT.** Stop-before-target on ambiguous bars (conservative loss, line 1144-1146). Hold-7h timeout. Early exit timed. IB opposed kill. All PnL computed via `to_r_multiple` with session-adjusted costs.
-- **State management: CLEAN.** No mutation during iteration — `_process_confirming` collects into separate lists then assigns. `_check_exits` prunes after loop. `_arm_strategies` appends to `new_trades` parameter.
+**config.py:**
+- **Seven Sins: CLEAN.** No data processing (config only). All threshold clusters annotated with @research-source (EARLY_EXIT_MINUTES, E3_RETRACE_WINDOW). SESSION_EXIT_MODE complete for all 11 sessions. FIX5 classification correct. EXCLUDED_FROM_FITNESS per-instrument. Warning generation references config enums.
+
+**strategy_discovery.py:**
+- **Seven Sins: CLEAN** (except SD1). No look-ahead (filter_days computed per-day, outcomes loaded with holdout_date cap, relative volume uses prior bars only). BH FDR correctly computed at discovery (informational). DSR/FST with proper n_trials. Canonical dedup by filter specificity. DST regime split correct. E2/E3 correctly restricted to CB1. Tight stop n_trials not doubled (documented rationale — correlated streams).
+- **Sharpe computation: CORRECT.** Per-trade → annualized via sqrt(trades_per_year). Lo (2002) autocorrelation adjustment. Haircut Sharpe via Mertens (2002) + BLP (2014). P-value from t-test with custom betainc (no scipy). All mathematical implementations verified.
+
+**outcome_builder.py:**
+- **Seven Sins: CLEAN.** Sequential bar processing — no look-ahead. Entry detection via `detect_break_touch` (E2) or `detect_entry_with_confirm_bars` (E1/E3). Post-entry bars filtered by entry_ts. Ambiguous bars = conservative loss. Fill bar checked first. Time-stop fires only when MTM < 0 at threshold. Batch insert via INSERT OR REPLACE (idempotent). Checkpoint/resume for incremental builds.
+- **Cost model: CORRECT.** Per-trade `risk_dollars` via canonical `risk_in_dollars()`. P&L via `to_r_multiple()`. Both from `pipeline.cost_model`.
+- **E2 slippage: CORRECT.** `_resolve_e2` applies `E2_SLIPPAGE_TICKS * cost_spec.tick_size`.
 
 ---
 
 ## Summary
-- Total new findings: 3 (0 CRIT, 0 HIGH, 0 MEDIUM, 3 LOW)
-- All 3 dormant or near-zero impact (E3 soft-retired, IB TOKYO_OPEN only, prune is harmless)
-- Deferred carry-forward: F1, F3 (partial), N4, N5, 3x iter-9 LOWs
+- Total new findings: 3 (0 CRIT, 0 HIGH, 1 MEDIUM, 2 LOW)
+- SD1 is actionable (MEDIUM) — same error class as iter 18 T5 fix
+- SD2/SD3 are LOW — annotation debt / wasted compute
+- Deferred carry-forward: F1, F3 (partial), N4, N5, 3x iter-9 LOWs, 3x iter-19 LOWs
 - Infrastructure Gates: 4/4 PASS
-- **No eligible fix this iteration** — all findings are LOW with minimal value.
 
 **Next iteration targets:**
-- Resolve F3 remaining: portfolio.py:944, strategy_fitness.py:120
-- Iter 9 LOWs: fill price `or` pattern (order_router.py) — potential correctness bug with price=0.0
+- Fix SD1 (risk_dollars friction inflation) — 2 lines changed
+- Then: Resolve F3 remaining (portfolio.py:944, strategy_fitness.py:120)
+- Then: Iter 9 LOWs (fill price `or` pattern, order_router.py)

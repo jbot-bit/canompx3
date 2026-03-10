@@ -1,8 +1,8 @@
-## Iteration: 18
-## Phase: implement (batch — code review findings T5 + T6)
-## Target: scripts/tools/generate_trade_sheet.py:121 (_exp_dollars_from_row) + :216 (ORDER BY)
-## Finding: T5 (IMPORTANT): _exp_dollars_from_row adds spec.total_friction to 1R base, inflating Exp$ and making dollar gate comparison diverge from live_config. T6 (cosmetic): Missing NULLS LAST in ORDER BY.
+## Iteration: 20
+## Phase: implement
+## Target: trading_app/strategy_discovery.py:630,634
+## Finding: SD1 — `median_risk_dollars` and `avg_risk_dollars` include `total_friction`, inflating stored values. Same error class as trade sheet T5 (iter 18).
 ## Decision: implement
-## Rationale: T5 is a formula error — 1R should be stop distance only (median_risk_pts * point_value), not stop + friction. live_config.py:381 is correct. Inflated Exp$ misleads the user and could let strategies pass the dollar gate in the trade sheet that would fail in live_config. T6 is cosmetic alignment.
-## Blast Radius: _exp_dollars_from_row → _passes_dollar_gate + collect_trades (same file only).
+## Rationale: Informational columns only — no gate uses them — but conceptually wrong and could mislead. Same friction-inflation pattern we fixed in generate_trade_sheet.py. Minimal risk (2 lines, no callers use these stored values for decisions).
+## Blast Radius: compute_metrics() → all_strategies list → batch_df → experimental_strategies table. Downstream consumers read these columns for display only (MCP templates, reports). No gate decision depends on median_risk_dollars or avg_risk_dollars.
 ## Diff estimate: 2 lines changed
