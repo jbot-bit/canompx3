@@ -89,10 +89,10 @@ def backfill_dollar_columns(db_path: Path | None = None, dry_run: bool = False) 
                 con.execute(
                     f"""
                     UPDATE experimental_strategies SET
-                        median_risk_dollars = ROUND(median_risk_points * {pv} + {friction}, 2),
-                        avg_risk_dollars    = ROUND(avg_risk_points * {pv} + {friction}, 2),
-                        avg_win_dollars     = ROUND(avg_win_r * (avg_risk_points * {pv} + {friction}), 2),
-                        avg_loss_dollars    = ROUND(avg_loss_r * (avg_risk_points * {pv} + {friction}), 2)
+                        median_risk_dollars = ROUND(median_risk_points * {pv}, 2),
+                        avg_risk_dollars    = ROUND(avg_risk_points * {pv}, 2),
+                        avg_win_dollars     = ROUND(avg_win_r * (avg_risk_points * {pv}), 2),
+                        avg_loss_dollars    = ROUND(avg_loss_r * (avg_risk_points * {pv}), 2)
                     WHERE instrument = ?
                       AND median_risk_points IS NOT NULL
                       AND median_risk_dollars IS NULL

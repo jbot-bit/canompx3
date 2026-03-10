@@ -962,7 +962,7 @@ def estimate_daily_capital(
     if risk_dollars_list:
         risk_per_trade_dollars = sum(risk_dollars_list) / len(risk_dollars_list)
         # Back-compute avg_risk_points for reporting
-        avg_risk_points = (risk_per_trade_dollars - cost_spec.total_friction) / cost_spec.point_value
+        avg_risk_points = risk_per_trade_dollars / cost_spec.point_value
     else:
         # Fallback: compute from points (legacy path)
         risk_points_list = [
