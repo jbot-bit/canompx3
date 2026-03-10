@@ -131,13 +131,13 @@ def _passes_dollar_gate(row: dict, instrument: str) -> tuple[bool, float | None]
     """
     exp_d = _exp_dollars_from_row(row, instrument)
     if exp_d is None:
-        return True, None  # skip gate if data missing (fail-open on missing data)
+        return False, None  # fail-closed: unknown cost adequacy must not allow trading
     try:
         spec = get_cost_spec(instrument)
         min_dollars = LIVE_MIN_EXPECTANCY_DOLLARS_MULT * spec.total_friction
         return exp_d >= min_dollars, exp_d
     except Exception:
-        return True, exp_d
+        return False, exp_d  # fail-closed: broken cost model must not allow trading
 
 
 def _check_fitness(strategy_id: str, db_path: Path) -> str:

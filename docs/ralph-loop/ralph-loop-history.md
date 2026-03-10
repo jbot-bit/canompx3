@@ -111,10 +111,26 @@
 - Grade: B+ (Bloomey)
 - Commit: PENDING
 
+## Iteration 15 — 2026-03-10
+- Phase: fix (batch LOW — annotation debt)
+- Target: trading_app/walkforward.py:162,242
+- Finding: IS minimum sample guard (15) and window imbalance ratio (5.0x) missing @research-source
+- Action: Added @research-source + @revalidated-for to both magic numbers (Lopez de Prado AFML Ch.11 for IS guard; Pardo Ch.7 for imbalance ratio). Comments only, no logic change.
+- Verification: PASS — 26/26 walkforward tests, 71 drift, behavioral clean, ruff clean
+- Commit: e2ca011
+
 ## Iteration 13 — 2026-03-10
 - Phase: audit+fix (tradebook/pipeline — outcome_builder, strategy_discovery, strategy_validator, build_edge_families, live_config)
 - Finding: 5 findings (0 CRITICAL, 0 HIGH, 1 MEDIUM, 4 LOW) — dollar gate fail-open on NULL median_risk_points (live_config.py:367), unannotated edge family thresholds (build_edge_families.py:31-38), WF gate thresholds missing @research-source (strategy_validator.py:654-656), HOT tier thresholds unannotated (live_config.py:54-57), live portfolio constructor magic numbers inline (live_config.py:354-355,583-584)
 - Action: N1 fixed (dollar gate fail-open → fail-closed with logger.warning). Test updated (test_none_guard_passes → test_none_guard_blocks). N2-N5 deferred (LOW annotation work).
 - Verification: PASS — 71 drift, behavioral clean, 20/20 live_config tests, ruff clean, blast radius verified (2 callers handle False), regression clean
 - Grade: A- (Bloomey)
+- Commit: PENDING
+
+## Iteration 16 — 2026-03-10
+- Phase: fix
+- Target: scripts/tools/generate_trade_sheet.py:134,140
+- Finding: Dollar gate `_passes_dollar_gate` fail-open on missing data/exception — diverges from live_config.py fail-closed pattern (fixed in iter 13). Trade sheet could show phantom trades user would never actually trade.
+- Action: Changed both `return True` paths to `return False` (fail-closed). Aligns with live_config.py:372-391.
+- Verification: PASS — 71 drift, behavioral clean, 20/20 live_config tests, ruff clean, blast radius = 0 external callers, trade sheet still generates 33 trades
 - Commit: PENDING
