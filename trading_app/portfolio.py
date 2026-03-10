@@ -292,9 +292,9 @@ def load_validated_strategies(
 
         # Load baseline strategies, enforcing locked RR from family_rr_locks
         # Exclude sessions with no confirmed edge (see config.EXCLUDED_FROM_FITNESS)
-        exclusion_clause = " AND ".join(f"vs.orb_label != '{s}'" for s in sorted(EXCLUDED_FROM_FITNESS))
+        excluded_sessions = sorted(EXCLUDED_FROM_FITNESS)
         baseline_rows = con.execute(
-            f"""
+            """
             SELECT vs.strategy_id, vs.instrument, vs.orb_label, vs.entry_model,
                    vs.rr_target, vs.confirm_bars, vs.filter_type,
                    vs.expectancy_r, vs.win_rate, vs.sample_size,
@@ -318,11 +318,11 @@ def load_validated_strategies(
             WHERE vs.instrument = ?
               AND LOWER(vs.status) = 'active'
               AND vs.expectancy_r >= ?
-              AND {exclusion_clause}
+              AND vs.orb_label NOT IN (SELECT UNNEST(?::VARCHAR[]))
               AND (frl.locked_rr IS NULL OR vs.rr_target = frl.locked_rr)
             ORDER BY vs.expectancy_r DESC
         """,
-            [instrument, min_expectancy_r],
+            [instrument, min_expectancy_r, excluded_sessions],
         ).fetchall()
 
         cols = [desc[0] for desc in con.description]
@@ -333,9 +333,8 @@ def load_validated_strategies(
             table_names = _get_table_names(con)
 
             if "nested_validated" in table_names:
-                nested_exclusion = " AND ".join(f"nv.orb_label != '{s}'" for s in sorted(EXCLUDED_FROM_FITNESS))
                 nested_rows = con.execute(
-                    f"""
+                    """
                     SELECT nv.strategy_id, nv.instrument, nv.orb_label, nv.entry_model,
                            nv.rr_target, nv.confirm_bars, nv.filter_type,
                            nv.expectancy_r, nv.win_rate, nv.sample_size,
@@ -359,11 +358,11 @@ def load_validated_strategies(
                     WHERE nv.instrument = ?
                       AND LOWER(nv.status) = 'active'
                       AND nv.expectancy_r >= ?
-                      AND {nested_exclusion}
+                      AND nv.orb_label NOT IN (SELECT UNNEST(?::VARCHAR[]))
                       AND (frl.locked_rr IS NULL OR nv.rr_target = frl.locked_rr)
                     ORDER BY nv.expectancy_r DESC
                 """,
-                    [instrument, min_expectancy_r],
+                    [instrument, min_expectancy_r, excluded_sessions],
                 ).fetchall()
 
                 nested_cols = [desc[0] for desc in con.description]
