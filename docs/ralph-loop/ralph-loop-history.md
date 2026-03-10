@@ -173,4 +173,12 @@
 - Finding: OR1: Fill price `or` pattern uses falsy check — 0.0 fill price treated as None. 7 instances across 2 broker routers. Python antipattern: `x or y` and `if x` on numeric types.
 - Action: Replaced `or` with `if x is None: x = fallback`, replaced `if x` with `if x is not None`, added float() cast to ProjectX query_order_status for consistency. Also found OR2 (no fill_price parsing tests) — deferred.
 - Verification: PASS — 6/6 gates (71 drift, behavioral clean, 8/8 router tests, ruff clean, blast radius confirmed — all callers already use `is not None`, 83/83 orchestrator regression)
+- Commit: 3b10732
+
+## Iteration 22 — 2026-03-10
+- Phase: fix (batch — contract_resolver.py, strategy_fitness.py, portfolio.py)
+- Target: contract_resolver.py:40, strategy_fitness.py:124, portfolio.py:953
+- Finding: CR1: account ID `or` falsy-zero (same class as OR1). F3a: Sharpe decay threshold -0.1 inline → SHARPE_DECAY_THRESHOLD constant. F3b: trade frequency 0.4 annotated. Also closed iter 9 PRODUCT_MAP finding (has fallback, not a gate).
+- Action: CR1 fixed (`or` → `is None`). F3a extracted to named constant with @research-source. F3b annotated inline. CR2 closed. F3 now resolved except cost_model.py (self-documenting canonical source).
+- Verification: PASS — 6/6 gates (71 drift, behavioral clean, 31 fitness + 68 portfolio + 20 live_config tests, ruff clean, blast radius verified)
 - Commit: pending

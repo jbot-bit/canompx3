@@ -949,7 +949,9 @@ def estimate_daily_capital(
 
     # Estimate daily trade frequency
     # Each strategy trades when its ORB breaks + filter passes + confirm bars met
-    # Rough estimate: ~0.3-0.5 trades per strategy per day
+    # @research-source: empirical range 0.3-0.5 trades/strategy/day from backtests.
+    # 0.4 is midpoint; used only for capital estimation (informational).
+    # @revalidated-for: E1/E2 event-based (2026-03-09)
     est_trades_per_day = len(portfolio.strategies) * 0.4
 
     # Max concurrent risk = max_concurrent * max_risk_per_trade
