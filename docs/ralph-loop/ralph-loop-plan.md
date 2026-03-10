@@ -1,8 +1,8 @@
-## Iteration: 16
-## Phase: implement
-## Target: scripts/tools/generate_trade_sheet.py:134,140
-## Finding: Dollar gate `_passes_dollar_gate` returns True (fail-open) on missing data and cost spec exceptions — diverges from live_config.py which correctly returns False (fail-closed). Trade sheet could show phantom trades.
-## Decision: implement
-## Rationale: Aligns trade sheet with live_config dollar gate (fixed in iter 13). Both gates must agree — the trade sheet is what the user reads before trading. Dormant today (0 NULL median_risk_points) but wrong code. Fix is 2 lines, same file, no external callers.
-## Blast Radius: `_passes_dollar_gate` → `collect_trades` (same file only). No callers outside generate_trade_sheet.py.
-## Diff estimate: 4 lines changed (2 return values flipped True→False)
+## Iteration: 17
+## Phase: implement (batch — T2 + T3, same function, same blast radius)
+## Target: scripts/tools/generate_trade_sheet.py:200-226 (_load_best_by_expr query)
+## Finding: T2: LEFT JOIN family_rr_locks with IS NULL fallback diverges from live_config's INNER JOIN — could show unlocked RR variants. T3: query missing vs.orb_minutes, aperture parsed from strategy_id string instead.
+## Decision: implement (batch — both touch same query, zero blast radius overlap)
+## Rationale: Aligns trade sheet query with live_config pattern. T2 dormant (all families have locks) but wrong code. T3 eliminates fragile string parsing. Both changes in _load_best_by_expr, called only from collect_trades (same file).
+## Blast Radius: _load_best_by_expr → collect_trades → generate_html (same file). _parse_aperture becomes dead code after T3.
+## Diff estimate: ~8 lines changed in query + 3 lines in collect_trades to use orb_minutes
