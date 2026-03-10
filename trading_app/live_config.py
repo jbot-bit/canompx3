@@ -48,6 +48,10 @@ class LiveStrategySpec:
     # "rolling" = must be STABLE in recent rolling eval
     rr_target: float | None = None  # Resolved at build time from family_rr_locks.
     # None in spec = look up locked RR per instrument.
+    exclude_instruments: frozenset[str] | None = None  # Per-instrument BH FDR exclusion.
+    # Instruments in this set are skipped during build_live_portfolio.
+    # Added Mar 2026: Bloomey audit identified spec-instrument combos
+    # that fail BH FDR while other instruments on the same spec survive.
 
 
 # Lookback for HOT tier rolling stability check (recent months only).
@@ -106,14 +110,33 @@ LIVE_PORTFOLIO = [
     #   ORB_G4_FAST10: MGC speed-filtered edge, 43 new days (75% overlap), ExpR=+0.269
     LiveStrategySpec("CME_REOPEN_E2_ORB_G5", "core", "CME_REOPEN", "E2", "ORB_G5", None),
     LiveStrategySpec("CME_REOPEN_E2_VOL_RV12_N20", "core", "CME_REOPEN", "E2", "VOL_RV12_N20", None),
-    LiveStrategySpec("CME_REOPEN_E2_ORB_G4_FAST10", "core", "CME_REOPEN", "E2", "ORB_G4_FAST10", None),
+    # BH FDR exclusion: MNQ fails (p_adj=0.146, Sharpe=0.068), MGC survives (p_adj=0.005)
+    LiveStrategySpec(
+        "CME_REOPEN_E2_ORB_G4_FAST10",
+        "core",
+        "CME_REOPEN",
+        "E2",
+        "ORB_G4_FAST10",
+        None,
+        exclude_instruments=frozenset({"MNQ"}),
+    ),
     # CME_PRECLOSE: MES wins with ORB_G6; MNQ wins with VOL_RV12_N20 (O15 suffix is aperture, not filter_type)
     #   ORB_G5: MES 15m aperture, 434 new days (57% overlap with G6), ExpR=+0.242
     LiveStrategySpec("CME_PRECLOSE_E2_ORB_G6", "core", "CME_PRECLOSE", "E2", "ORB_G6", None),
     LiveStrategySpec("CME_PRECLOSE_E2_VOL_RV12_N20", "core", "CME_PRECLOSE", "E2", "VOL_RV12_N20", None),
     LiveStrategySpec("CME_PRECLOSE_E2_ORB_G5", "core", "CME_PRECLOSE", "E2", "ORB_G5", None),
     # COMEX_SETTLE: MES wins with ORB_G6; MNQ wins with VOL_RV12_N20
-    LiveStrategySpec("COMEX_SETTLE_E2_ORB_G6", "core", "COMEX_SETTLE", "E2", "ORB_G6", None),
+    # BH FDR exclusion: MGC (p_adj=0.064, N=113, PURGED family) and M2K (p_adj=0.145, Sharpe=0.055) fail.
+    # MES (p_adj=0.004) and MNQ (p_adj=0.000) survive.
+    LiveStrategySpec(
+        "COMEX_SETTLE_E2_ORB_G6",
+        "core",
+        "COMEX_SETTLE",
+        "E2",
+        "ORB_G6",
+        None,
+        exclude_instruments=frozenset({"MGC", "M2K"}),
+    ),
     LiveStrategySpec("COMEX_SETTLE_E2_VOL_RV12_N20", "core", "COMEX_SETTLE", "E2", "VOL_RV12_N20", None),
     # NYSE_CLOSE: MES wins with ORB_G4; MNQ wins with VOL_RV12_N20
     LiveStrategySpec("NYSE_CLOSE_E2_ORB_G4", "core", "NYSE_CLOSE", "E2", "ORB_G4", None),
@@ -133,7 +156,10 @@ LIVE_PORTFOLIO = [
     #   ORB_G5 (15m aperture, hash d790ad6b) — MGC N=297+ FDR+WF, genuinely independent
     #   ORB_G6_CONT (hash dd81bcff7) — MES N=221, FDR+WF, Exp$=7.19 passes dollar gate
     LiveStrategySpec("TOKYO_OPEN_E2_ORB_G5_CONT", "core", "TOKYO_OPEN", "E2", "ORB_G5_CONT", None),
-    LiveStrategySpec("TOKYO_OPEN_E2_ORB_G5", "core", "TOKYO_OPEN", "E2", "ORB_G5", None),
+    # BH FDR exclusion: MES fails (p_adj=0.109, PURGED family). MGC (p_adj=0.009) and MNQ (p_adj=0.001) survive.
+    LiveStrategySpec(
+        "TOKYO_OPEN_E2_ORB_G5", "core", "TOKYO_OPEN", "E2", "ORB_G5", None, exclude_instruments=frozenset({"MES"})
+    ),
     LiveStrategySpec("TOKYO_OPEN_E2_ORB_G6_CONT", "core", "TOKYO_OPEN", "E2", "ORB_G6_CONT", None),
     # SINGAPORE_OPEN: DIR_LONG (long-only, any ORB size) is the primary filter for MNQ.
     #   Research H5: shorts avgR=-0.247 (raw session avg, config.py), p=0.006, N=236 — systematically
@@ -150,7 +176,17 @@ LIVE_PORTFOLIO = [
     #   N=1032, FDR=True, WF=True, ExpR=0.122). M2K is REGIME below (ORB_G6_CONT).
     #   ORB_G6_NOMON_O15 strategies were added after MNQ WF rebuild (Mar 2 2026) — not in original build.
     LiveStrategySpec("LONDON_METALS_E2_VOL_RV12_N20", "core", "LONDON_METALS", "E2", "VOL_RV12_N20", None),
-    LiveStrategySpec("LONDON_METALS_E2_ORB_G6_NOMON", "core", "LONDON_METALS", "E2", "ORB_G6_NOMON", None),
+    # BH FDR exclusion: M2K fails (p_adj=0.060, PBO=0.94 — 94% overfit probability).
+    # MNQ survives (p_adj=0.003, N=1032, PBO=0.13).
+    LiveStrategySpec(
+        "LONDON_METALS_E2_ORB_G6_NOMON",
+        "core",
+        "LONDON_METALS",
+        "E2",
+        "ORB_G6_NOMON",
+        None,
+        exclude_instruments=frozenset({"M2K"}),
+    ),
     # =========================================================================
     # REGIME: fitness-gated (N<100 — only trade when strategy_fitness = FIT)
     # =========================================================================
@@ -177,7 +213,7 @@ def _load_best_regime_variant(
     """Load the best variant from validated_setups, enforcing locked RR.
 
     Joins family_rr_locks to restrict each (instrument, orb_label, filter_type,
-    entry_model, orb_minutes, confirm_bars) to its JK-MaxExpR-locked RR target.
+    entry_model, orb_minutes, confirm_bars) to its JK-MaxSharpe-locked RR target.
     Among matching rows, picks the best by expectancy_r (tiebreaker across
     different orb_minutes/confirm_bars combos at the locked RR).
 
@@ -385,6 +421,10 @@ def build_live_portfolio(
         )
 
         for spec in core_specs:
+            if spec.exclude_instruments and instrument in spec.exclude_instruments:
+                notes.append(f"SKIP: {spec.family_id} -- {instrument} excluded (BH FDR)")
+                continue
+
             # Try rolling eval first
             match = None
             source = "rolling"
@@ -451,6 +491,10 @@ def build_live_portfolio(
     # re-activated with strategies that have median_risk_points available.
     hot_specs = [s for s in LIVE_PORTFOLIO if s.tier == "hot"]
     for spec in hot_specs:
+        if spec.exclude_instruments and instrument in spec.exclude_instruments:
+            notes.append(f"SKIP: {spec.family_id} -- {instrument} excluded (BH FDR)")
+            continue
+
         variant = _load_best_experimental_variant(
             db_path,
             instrument,
@@ -510,6 +554,10 @@ def build_live_portfolio(
     # --- REGIME tier: from validated_setups + fitness gate ---
     regime_specs = [s for s in LIVE_PORTFOLIO if s.tier == "regime"]
     for spec in regime_specs:
+        if spec.exclude_instruments and instrument in spec.exclude_instruments:
+            notes.append(f"SKIP: {spec.family_id} -- {instrument} excluded (BH FDR)")
+            continue
+
         variant = _load_best_regime_variant(
             db_path,
             instrument,

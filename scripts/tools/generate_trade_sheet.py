@@ -247,6 +247,9 @@ def collect_trades(trading_day: date, db_path: Path) -> list[dict]:
 
     for instrument in instruments:
         for spec in LIVE_PORTFOLIO:
+            if spec.exclude_instruments and instrument in spec.exclude_instruments:
+                continue
+
             variant = _load_best_by_expr(
                 db_path,
                 instrument,
