@@ -152,7 +152,7 @@ RSI, MACD, Bollinger Bands, moving average crossovers, Stochastics. These are th
 |---------|-------|-------------|-----------------|
 | CME_REOPEN | CME daily reopen | 5:00 PM CT | Asia/Sydney open. Gold physical demand. Thin liquidity. |
 | TOKYO_OPEN | Tokyo open | 10:00 AM AEST | Tokyo. Increasing liquidity. LONG-ONLY edge. |
-| SINGAPORE_OPEN | Singapore/HK open | 11:00 AM AEST | Singapore/HK. **EXCLUDED** — 74% double-break. |
+| SINGAPORE_OPEN | Singapore/HK open | 11:00 AM AEST | Singapore/HK. **MGC EXCLUDED** (74% double-break). MNQ ACTIVE (SGX/HKEX cross-market flow). |
 | LONDON_METALS | London metals open | 8:00 AM UK | London gold market. Data releases. Highest vol. |
 | US_DATA_830 | US economic data | 8:30 AM ET | US morning. Position building. |
 | NYSE_OPEN | NYSE equity open | 9:30 AM ET | US equity open. Key for MES/MNQ. |
