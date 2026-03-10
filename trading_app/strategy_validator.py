@@ -651,9 +651,9 @@ def run_validation(
     enable_walkforward: bool = True,
     wf_test_months: int = 6,
     wf_min_train_months: int = 12,
-    wf_min_trades: int = 15,
-    wf_min_windows: int = 3,
-    wf_min_pct_positive: float = 0.60,
+    wf_min_trades: int = 15,  # @research-source Lopez de Prado AFML Ch.11 — min trades/window for stable WF estimate; @revalidated-for E1/E2 (2026-03-10)
+    wf_min_windows: int = 3,  # @research-source Bailey et al. 2014 — min 3 OOS windows for meaningful WF; @revalidated-for E1/E2 (2026-03-10)
+    wf_min_pct_positive: float = 0.60,  # @research-source Fitschen "Building Reliable Trading Systems" — 60% positive windows; @revalidated-for E1/E2 (2026-03-10)
     wf_output_path: str = "data/walkforward_results.jsonl",
     enable_regime_waivers: bool = True,
     workers: int | None = None,

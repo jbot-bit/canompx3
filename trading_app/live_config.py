@@ -10,9 +10,12 @@ Usage:
     python -m trading_app.live_config --db-path C:/db/gold.db --output live_portfolio.json
 """
 
+import logging
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -359,13 +362,18 @@ def _check_rolling_stability(
 def _check_dollar_gate(variant: dict, instrument: str) -> tuple[bool, str]:
     """Check that expected dollar profit >= LIVE_MIN_EXPECTANCY_DOLLARS_MULT * RT cost.
 
-    Returns (passes, note). If median_risk_points is unavailable, skips (passes)
-    because the gate cannot compute without risk data. If get_cost_spec() raises,
-    BLOCKS (returns False) — a broken cost model must not allow trading.
+    Returns (passes, note). If median_risk_points is unavailable, BLOCKS
+    (returns False) — unknown cost adequacy must not allow trading.
+    If get_cost_spec() raises, also BLOCKS — a broken cost model must not
+    allow trading.
     """
     median_risk_pts = variant.get("median_risk_points")
     if median_risk_pts is None:
-        return True, "dollar gate skipped (no median_risk_points)"
+        log.warning(
+            "dollar gate BLOCKED %s — median_risk_points is NULL (cannot verify cost adequacy)",
+            variant.get("strategy_id", "unknown"),
+        )
+        return False, "dollar gate blocked (no median_risk_points)"
     try:
         from pipeline.cost_model import get_cost_spec
 

@@ -94,6 +94,14 @@
 - Verification: 4/4 PASS (2757 passed, 0 failed, 9 skipped)
 - Commit: NONE (audit only)
 
+## Iteration 13 — 2026-03-10
+- Phase: fix (HIGH — test infrastructure)
+- Target: tests/test_trading_app/test_ml/test_features.py:389,398,407,417,426
+- Finding: TestLoadFeatureMatrixIntegration called load_feature_matrix() without date bounds → OOM (1.1-1.2 GiB) on full MGC dataset, blocking CI
+- Action: Added min_date="2024-06-01" / max_date="2024-12-31" to all 5 unbounded calls. Function already supported params. No production code changed.
+- Verification: PASS — 71 drift, behavioral clean, 5/5 ML integration tests pass (68s), pre-commit hook 28 passed, ruff clean, blast radius = test file only
+- Commit: d93fa92
+
 ## Iteration 12 — 2026-03-09
 - Phase: audit+fix (Bloomey deep dive — live trading critical path)
 - Target: risk_manager.py, portfolio.py, cost_model.py, rolling_portfolio.py, strategy_fitness.py
@@ -101,4 +109,12 @@
 - Action: F2 fixed (portfolio.py exclusion → config.EXCLUDED_FROM_FITNESS), F5 fixed (fail-open → fail-closed with warning log, both per-strategy and batch paths aligned), F3 partially annotated (strategy_fitness + rolling_portfolio thresholds), F1 annotated TODO for multi-aperture extension
 - Verification: PASS — 71 drift, behavioral clean, 135/135 companion tests, ruff clean
 - Grade: B+ (Bloomey)
+- Commit: PENDING
+
+## Iteration 13 — 2026-03-10
+- Phase: audit+fix (tradebook/pipeline — outcome_builder, strategy_discovery, strategy_validator, build_edge_families, live_config)
+- Finding: 5 findings (0 CRITICAL, 0 HIGH, 1 MEDIUM, 4 LOW) — dollar gate fail-open on NULL median_risk_points (live_config.py:367), unannotated edge family thresholds (build_edge_families.py:31-38), WF gate thresholds missing @research-source (strategy_validator.py:654-656), HOT tier thresholds unannotated (live_config.py:54-57), live portfolio constructor magic numbers inline (live_config.py:354-355,583-584)
+- Action: N1 fixed (dollar gate fail-open → fail-closed with logger.warning). Test updated (test_none_guard_passes → test_none_guard_blocks). N2-N5 deferred (LOW annotation work).
+- Verification: PASS — 71 drift, behavioral clean, 20/20 live_config tests, ruff clean, blast radius verified (2 callers handle False), regression clean
+- Grade: A- (Bloomey)
 - Commit: PENDING
