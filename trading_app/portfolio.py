@@ -973,7 +973,7 @@ def estimate_daily_capital(
         avg_risk_points = (
             sum(risk_points_list) / len(risk_points_list) if risk_points_list else cost_spec.min_risk_floor_points
         )
-        risk_per_trade_dollars = avg_risk_points * cost_spec.point_value + cost_spec.total_friction
+        risk_per_trade_dollars = avg_risk_points * cost_spec.point_value
     max_concurrent_risk = portfolio.max_concurrent_positions * risk_per_trade_dollars
 
     # Worst case daily loss

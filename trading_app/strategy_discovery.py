@@ -621,7 +621,7 @@ def compute_metrics(outcomes: list[dict], cost_spec=None, n_trials: int = 0) -> 
 
     # Dollar aggregates (per-contract, approximate)
     # Uses average risk_points across all trades, not per-trade sums.
-    # risk_dollars = risk_points * point_value + total_friction
+    # risk_dollars = risk_points * point_value (stop distance only, no friction)
     median_risk_dollars = None
     avg_risk_dollars = None
     avg_win_dollars = None
