@@ -24,8 +24,6 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-import duckdb
-
 from pipeline.asset_configs import get_active_instruments
 from pipeline.cost_model import get_cost_spec
 from pipeline.dst import SESSION_CATALOG
@@ -34,6 +32,7 @@ from trading_app.live_config import (
     LIVE_MIN_EXPECTANCY_DOLLARS_MULT,
     LIVE_MIN_EXPECTANCY_R,
     LIVE_PORTFOLIO,
+    _load_best_regime_variant,
 )
 from trading_app.strategy_fitness import compute_fitness
 
@@ -101,34 +100,23 @@ def _direction_rule(filter_type: str) -> str:
     return "ANY"
 
 
-def _exp_dollars_from_row(row: dict, instrument: str) -> float | None:
-    """Compute expected dollars per trade from a DB row dict."""
-    median_risk_pts = row.get("median_risk_points")
-    exp_r = row.get("expectancy_r")
-    if median_risk_pts is None or exp_r is None:
-        return None
-    try:
-        spec = get_cost_spec(instrument)
-        one_r = median_risk_pts * spec.point_value
-        return exp_r * one_r
-    except Exception:
-        return None
-
-
 def _passes_dollar_gate(row: dict, instrument: str) -> tuple[bool, float | None]:
     """Check if expected $/trade >= LIVE_MIN_EXPECTANCY_DOLLARS_MULT * RT cost.
 
-    Returns (passes, exp_dollars).
+    Returns (passes, exp_dollars). Fail-closed: returns (False, None) when
+    median_risk_points is missing or cost spec is unavailable.
     """
-    exp_d = _exp_dollars_from_row(row, instrument)
-    if exp_d is None:
-        return False, None  # fail-closed: unknown cost adequacy must not allow trading
+    median_risk_pts = row.get("median_risk_points")
+    exp_r = row.get("expectancy_r")
+    if median_risk_pts is None or exp_r is None:
+        return False, None
     try:
         spec = get_cost_spec(instrument)
-        min_dollars = LIVE_MIN_EXPECTANCY_DOLLARS_MULT * spec.total_friction
-        return exp_d >= min_dollars, exp_d
     except Exception:
-        return False, exp_d  # fail-closed: broken cost model must not allow trading
+        return False, None
+    exp_d = exp_r * median_risk_pts * spec.point_value
+    min_dollars = LIVE_MIN_EXPECTANCY_DOLLARS_MULT * spec.total_friction
+    return exp_d >= min_dollars, exp_d
 
 
 def _check_fitness(strategy_id: str, db_path: Path) -> str:
@@ -173,61 +161,6 @@ def _sort_key(h: int, m: int) -> int:
 # ── Data collection ───────────────────────────────────────────────────
 
 
-def _load_best_by_expr(
-    db_path: Path,
-    instrument: str,
-    orb_label: str,
-    entry_model: str,
-    filter_type: str,
-    min_expectancy_r: float,
-) -> dict | None:
-    """Load the best locked-RR variant by ExpR.
-
-    INNER JOINs family_rr_locks to restrict each family to its locked RR.
-    Aligned with live_config._load_best_regime_variant — no fallback.
-    """
-    con = duckdb.connect(str(db_path), read_only=True)
-    try:
-        rows = con.execute(
-            """
-            SELECT vs.strategy_id, vs.instrument, vs.orb_label, vs.entry_model,
-                   vs.rr_target, vs.confirm_bars, vs.filter_type,
-                   vs.orb_minutes,
-                   vs.expectancy_r, vs.win_rate, vs.sample_size,
-                   vs.sharpe_ratio, vs.max_drawdown_r,
-                   es.median_risk_points
-            FROM validated_setups vs
-            LEFT JOIN experimental_strategies es
-              ON vs.strategy_id = es.strategy_id
-            INNER JOIN family_rr_locks frl
-              ON vs.instrument = frl.instrument
-              AND vs.orb_label = frl.orb_label
-              AND vs.filter_type = frl.filter_type
-              AND vs.entry_model = frl.entry_model
-              AND vs.orb_minutes = frl.orb_minutes
-              AND vs.confirm_bars = frl.confirm_bars
-              AND vs.rr_target = frl.locked_rr
-            WHERE vs.instrument = ?
-              AND vs.orb_label = ?
-              AND vs.entry_model = ?
-              AND vs.filter_type = ?
-              AND LOWER(vs.status) = 'active'
-              AND vs.expectancy_r >= ?
-            ORDER BY vs.expectancy_r DESC NULLS LAST
-            LIMIT 1
-        """,
-            [instrument, orb_label, entry_model, filter_type, min_expectancy_r],
-        ).fetchall()
-
-        if not rows:
-            return None
-
-        cols = [desc[0] for desc in con.description]
-        return dict(zip(cols, rows[0], strict=False))
-    finally:
-        con.close()
-
-
 def collect_trades(trading_day: date, db_path: Path) -> list[dict]:
     """Resolve best-ExpR variant for each live spec, per instrument.
 
@@ -242,7 +175,7 @@ def collect_trades(trading_day: date, db_path: Path) -> list[dict]:
             if spec.exclude_instruments and instrument in spec.exclude_instruments:
                 continue
 
-            variant = _load_best_by_expr(
+            variant = _load_best_regime_variant(
                 db_path,
                 instrument,
                 spec.orb_label,
@@ -261,7 +194,7 @@ def collect_trades(trading_day: date, db_path: Path) -> list[dict]:
             # Fitness check (regime gate for REGIME tier)
             fitness = _check_fitness(variant["strategy_id"], db_path)
             if spec.tier == "regime" and spec.regime_gate == "high_vol":
-                if fitness not in ("FIT",):
+                if fitness != "FIT":
                     continue  # gated off
 
             trades.append(
@@ -276,7 +209,7 @@ def collect_trades(trading_day: date, db_path: Path) -> list[dict]:
                     "rr": variant["rr_target"],
                     "win_rate": variant["win_rate"],
                     "exp_r": variant["expectancy_r"],
-                    "exp_dollars": exp_d if exp_d is not None else _exp_dollars_from_row(variant, instrument),
+                    "exp_dollars": exp_d,
                     "sample_size": variant["sample_size"],
                     "fitness": fitness,
                 }
