@@ -386,7 +386,7 @@ class TestLoadFeatureMatrixIntegration:
         """X, y, meta have consistent row counts and expected structure."""
         from trading_app.ml.features import load_feature_matrix
 
-        X, y, meta = load_feature_matrix(db_path, "MGC")
+        X, y, meta = load_feature_matrix(db_path, "MGC", min_date="2024-06-01", max_date="2024-12-31")
 
         assert len(X) == len(y) == len(meta)
         assert len(X) > 0
@@ -395,7 +395,7 @@ class TestLoadFeatureMatrixIntegration:
         """Feature matrix must be all-numeric after processing."""
         from trading_app.ml.features import load_feature_matrix
 
-        X, _, _ = load_feature_matrix(db_path, "MGC")
+        X, _, _ = load_feature_matrix(db_path, "MGC", min_date="2024-06-01", max_date="2024-12-31")
 
         non_numeric = X.select_dtypes(exclude=[np.number]).columns.tolist()
         assert non_numeric == [], f"Non-numeric columns in X: {non_numeric}"
@@ -404,7 +404,7 @@ class TestLoadFeatureMatrixIntegration:
         """No blacklisted column names or substrings should survive."""
         from trading_app.ml.features import load_feature_matrix
 
-        X, _, _ = load_feature_matrix(db_path, "MGC")
+        X, _, _ = load_feature_matrix(db_path, "MGC", min_date="2024-06-01", max_date="2024-12-31")
 
         for col in X.columns:
             for bl in LOOKAHEAD_BLACKLIST:
@@ -414,7 +414,7 @@ class TestLoadFeatureMatrixIntegration:
         """Meta should have trading_day, pnl_r, orb_label at minimum."""
         from trading_app.ml.features import load_feature_matrix
 
-        _, _, meta = load_feature_matrix(db_path, "MGC")
+        _, _, meta = load_feature_matrix(db_path, "MGC", min_date="2024-06-01", max_date="2024-12-31")
 
         required = {"trading_day", "pnl_r", "orb_label", "symbol"}
         assert required.issubset(set(meta.columns)), f"Missing meta columns: {required - set(meta.columns)}"
@@ -423,6 +423,6 @@ class TestLoadFeatureMatrixIntegration:
         """Target must be 0/1 only."""
         from trading_app.ml.features import load_feature_matrix
 
-        _, y, _ = load_feature_matrix(db_path, "MGC")
+        _, y, _ = load_feature_matrix(db_path, "MGC", min_date="2024-06-01", max_date="2024-12-31")
 
         assert set(y.unique()).issubset({0, 1})
