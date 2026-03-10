@@ -92,6 +92,10 @@ class FitnessReport:
 # @revalidated-for: E1/E2 event-based (2026-03-09)
 MIN_ROLLING_FIT = 15
 MIN_ROLLING_WATCH = 10
+# @research-source: heuristic. Sharpe <= -0.1 over 30 trades signals momentum
+# decay even when rolling ExpR is still positive. Catches early regime breaks.
+# @revalidated-for: E1/E2 event-based (2026-03-09)
+SHARPE_DECAY_THRESHOLD = -0.1
 
 
 def classify_fitness(
@@ -121,7 +125,7 @@ def classify_fitness(
     if rolling_sample < MIN_ROLLING_FIT:
         return "WATCH", f"Thin data: {rolling_sample} trades (need >= {MIN_ROLLING_FIT} for FIT)"
 
-    if recent_sharpe_30 is not None and recent_sharpe_30 <= -0.1:
+    if recent_sharpe_30 is not None and recent_sharpe_30 <= SHARPE_DECAY_THRESHOLD:
         return "WATCH", f"Declining Sharpe: recent_30={recent_sharpe_30:.4f}"
 
     return "FIT", "Positive rolling ExpR with stable recent Sharpe"
