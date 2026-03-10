@@ -3,7 +3,7 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## RALPH AUDIT — Iteration 16 (Trade Book: generate_trade_sheet.py, live_config.py)
+## RALPH AUDIT — Iteration 19 (execution_engine.py)
 ## Date: 2026-03-10
 ## Infrastructure Gates: 4/4 PASS
 
@@ -11,15 +11,14 @@
 |------|--------|--------|
 | `check_drift.py` | PASS | 71 checks passed, 0 skipped, 6 advisory (non-blocking) |
 | `audit_behavioral.py` | PASS | All 6 checks clean |
-| `pytest test_live_config.py` | PASS | 20/20 passed (0.67s) |
+| `pytest test_execution_engine.py` | PASS | 41/41 passed (0.12s) |
 | `ruff check` | PASS | All checks passed |
 
 ---
 
 ## Target Files This Iteration
 
-- `scripts/tools/generate_trade_sheet.py` (703 lines)
-- `trading_app/live_config.py` (731 lines)
+- `trading_app/execution_engine.py` (1229 lines)
 
 ---
 
@@ -27,26 +26,17 @@
 
 ### F1 — rolling_portfolio.py:304 orb_minutes=5 hardcode (STILL DEFERRED)
 - Severity: MEDIUM (dormant)
-- File: `trading_app/rolling_portfolio.py:304`
 - Status: DEFERRED — annotated. Dormant until rolling evaluation extends to multi-aperture.
 
 ### F3 — Unannotated magic numbers (PARTIALLY DONE)
 - Severity: MEDIUM (batch)
-- Remaining locations NOT yet annotated:
-  - `portfolio.py:944` — 0.4 trades/strategy/day estimate
-  - `strategy_fitness.py:120` — -0.1 Sharpe decline threshold
-  - `cost_model.py:153-229` — SESSION_SLIPPAGE_MULT values
-- Status: PARTIALLY DONE
+- Remaining: `portfolio.py:944`, `strategy_fitness.py:120`, `cost_model.py:153-229`
 
 ### N4 — HOT Tier Thresholds Missing @research-source (STILL DEFERRED)
 - Severity: LOW
-- File: `trading_app/live_config.py:54-57`
-- Status: DEFERRED (HOT tier dormant)
 
 ### N5 — Live Portfolio Constructor Magic Numbers (STILL DEFERRED)
 - Severity: LOW
-- File: `trading_app/live_config.py:354-355,583-584`
-- Status: DEFERRED (refactor scope — named constants in config.py needed)
 
 ### Iter 9 LOWs (STILL OPEN)
 1. Fill price `or` pattern (falsy zero) — `order_router.py:136,140,202,206`
@@ -57,73 +47,58 @@
 
 ## New Findings This Iteration
 
-### Finding T1 — Dollar gate FAIL-OPEN in trade sheet (generate_trade_sheet.py:134,140)
-- Severity: HIGH
-- File: `scripts/tools/generate_trade_sheet.py:134,140`
+### Finding EE1 — Conditional EXITED trade pruning (generate_trade_sheet.py:1152-1154)
+- Severity: LOW
+- File: `trading_app/execution_engine.py:1152-1154`
 - Evidence:
   ```python
-  # Line 134: NULL median_risk_points → passes gate
-  if exp_d is None:
-      return True, None  # skip gate if data missing (fail-open on missing data)
-  # Line 139-140: cost spec failure → passes gate
-  except Exception:
-      return True, exp_d
+  if events:
+      self.active_trades = [t for t in self.active_trades if t.state != TradeState.EXITED]
   ```
-- Root Cause: Trade sheet `_passes_dollar_gate` returns `True` (pass) when data is missing or cost spec fails. The IDENTICAL gate in `live_config.py:372-391` correctly returns `False` (block). Iteration 13 fixed live_config to fail-closed, but generate_trade_sheet.py was not updated. Result: trade sheet could display phantom trades that the live portfolio builder would never select.
-- Current Impact: DORMANT — all strategies currently have median_risk_points populated (0 NULL). But after a partial rebuild or data issue, this divergence would show misleading trades.
-- Fix: Align with live_config pattern — return `False` on missing data and on exception.
-- Blast Radius: `_passes_dollar_gate` called only from `collect_trades` (same file). No external callers.
+- Root Cause: Prune only fires when events were generated. E3 stop-before-fill (line 963-967) marks EXITED and appends to completed_trades, but generates no event. The EXITED trade lingers in active_trades until next prune. Harmless — duplicate check in completed_trades (line 528) prevents re-arming, and `if trade.state != TradeState.ENTERED: continue` (line 1090) skips exit checks.
+- Impact: Wastes iteration cycles on dead trades. No correctness bug.
+- Fix: Remove `if events:` guard — always prune.
 
-### Finding T2 — RR lock JOIN divergence (generate_trade_sheet.py:210 vs live_config.py:239)
-- Severity: MEDIUM
-- File: `scripts/tools/generate_trade_sheet.py:210` vs `trading_app/live_config.py:239`
+### Finding EE2 — E3 stop-before-fill silent exit (LOW)
+- Severity: LOW
+- File: `trading_app/execution_engine.py:963-967`
 - Evidence:
-  - Trade sheet: `LEFT JOIN family_rr_locks` + `(frl.locked_rr IS NULL OR vs.rr_target = frl.locked_rr)` — shows strategies even without RR lock
-  - live_config: `INNER JOIN family_rr_locks` + `AND vs.rr_target = frl.locked_rr` — requires lock
-- Root Cause: Trade sheet was designed for "graceful degradation" (show something even without locks). But this means it can show RR variants that live_config would never select. A maintenance hazard — any future family without an RR lock would appear on the trade sheet but not in the actual portfolio.
-- Current Impact: DORMANT — all live families have RR locks (480 rows in family_rr_locks, all 26 specs covered).
-- Fix: Change LEFT JOIN → INNER JOIN, remove IS NULL fallback.
-- Blast Radius: `_load_best_by_expr` called only from `collect_trades` (same file).
+  ```python
+  if stop_hit:
+      trade.state = TradeState.EXITED
+      self.completed_trades.append(trade)
+      continue  # No TradeEvent emitted
+  ```
+- Root Cause: E3 stop-before-fill silently kills trade. Orchestrator/logger sees no event. E3 is soft-retired so impact is near-zero. But violates principle that all state transitions should be observable.
+- Fix: Emit REJECT event with reason "e3_stop_before_fill".
 
-### Finding T3 — Missing orb_minutes column in trade sheet query
+### Finding EE3 — IB start time hardcoded (LOW)
 - Severity: LOW
-- File: `scripts/tools/generate_trade_sheet.py:200-226`
-- Evidence: Query does not SELECT `vs.orb_minutes`. Aperture is instead parsed from strategy_id string via `_parse_aperture()` (line 104-110). live_config query correctly selects `vs.orb_minutes`.
-- Fix: Add `vs.orb_minutes` to SELECT, use directly instead of string parsing.
-- Blast Radius: Same file only.
-
-### Finding T4 — Hardcoded G-filter list in display formatter
-- Severity: LOW
-- File: `scripts/tools/generate_trade_sheet.py:61`
-- Evidence: `["G2", "G3", "G4", "G5", "G6", "G8"]` — inline list. Display-only, no trading logic.
-- Status: DEFERRED (display formatting, no data impact)
+- File: `trading_app/execution_engine.py:262`
+- Evidence: `ib_start = datetime(prev_day.year, prev_day.month, prev_day.day, 23, 0, tzinfo=UTC)`
+- Analysis: Correct — Brisbane is UTC+10 with no DST, so 09:00 Brisbane = 23:00 UTC always. Only used for TOKYO_OPEN IB conditional. Not a bug, just not resolver-based.
+- Status: DEFERRED — only matters if IB extends beyond TOKYO_OPEN.
 
 ---
 
 ## Confirmed Clean
 
-**live_config.py:**
-- Seven Sins: CLEAN. Dollar gate fail-closed (fixed iter 13). Fitness gate fail-closed (fixed iter 12). Instrument exclusion working. All tier pathways correct.
-- Canonical integrity: CLEAN. Imports from canonical sources (asset_configs, cost_model, paths, dst).
-- The 26 specs match what the trade sheet generated (33 trades = 26 specs resolved across 4 instruments minus exclusions/dollar gate/fitness gate).
-
-**generate_trade_sheet.py:**
-- Session time resolution: CORRECT. Uses SESSION_CATALOG resolvers directly.
-- HTML generation: CLEAN. No trading logic in display layer.
-- Dollar gate + RR lock: DIVERGES from live_config (T1, T2).
+**execution_engine.py:**
+- **Seven Sins: CLEAN.** No look-ahead bias (sequential bar processing, ORB window gated by `ts >= orb.window_end_utc`). Fail-closed on unknown entry_model (line 775). Position sizing rejects on 0 contracts. Risk manager checked before every entry (E2, E1, E3 paths).
+- **Canonical integrity: CLEAN.** Imports from canonical sources (config.py filters, cost_model, dst resolvers). Session costs resolved per-trade via `get_session_cost_spec`. ATR velocity overlay externally injected.
+- **Entry model paths: CORRECT.** E2 (stop-market, line 619), E1 (next-bar open, line 825), E3 (retrace, line 949) all properly handle sizing, risk manager, calendar overlay, IB conditional, and target computation. E3 has stop-before-fill guard (line 954-967).
+- **Exit logic: CORRECT.** Stop-before-target on ambiguous bars (conservative loss, line 1144-1146). Hold-7h timeout. Early exit timed. IB opposed kill. All PnL computed via `to_r_multiple` with session-adjusted costs.
+- **State management: CLEAN.** No mutation during iteration — `_process_confirming` collects into separate lists then assigns. `_check_exits` prunes after loop. `_arm_strategies` appends to `new_trades` parameter.
 
 ---
 
 ## Summary
-- Total new findings: 4 (0 CRIT, 1 HIGH, 1 MEDIUM, 2 LOW)
-- CRITICAL: 0, HIGH: 1 (T1), MEDIUM: 1 (T2), LOW: 2 (T3, T4)
+- Total new findings: 3 (0 CRIT, 0 HIGH, 0 MEDIUM, 3 LOW)
+- All 3 dormant or near-zero impact (E3 soft-retired, IB TOKYO_OPEN only, prune is harmless)
 - Deferred carry-forward: F1, F3 (partial), N4, N5, 3x iter-9 LOWs
 - Infrastructure Gates: 4/4 PASS
-
-**Top eligible fix: T1** — dollar gate fail-open (HIGH, blast radius = 1 file, 2 lines).
-**Next: T2** — RR lock JOIN divergence (MEDIUM, same file).
+- **No eligible fix this iteration** — all findings are LOW with minimal value.
 
 **Next iteration targets:**
-- T2 fix (MEDIUM): RR lock LEFT→INNER JOIN alignment
-- T3 fix (LOW): Add orb_minutes to query
 - Resolve F3 remaining: portfolio.py:944, strategy_fitness.py:120
+- Iter 9 LOWs: fill price `or` pattern (order_router.py) — potential correctness bug with price=0.0

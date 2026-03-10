@@ -149,4 +149,12 @@
 - Finding: _exp_dollars_from_row adds spec.total_friction to 1R base (inflating Exp$), diverging from live_config which uses median_risk_pts * point_value only. Also: missing NULLS LAST in ORDER BY.
 - Action: Removed + spec.total_friction from 1R calculation. Added NULLS LAST. One marginal trade correctly dropped: MES CME_PRECLOSE VOL_RV12_N20 (old $5.48 inflated → real $4.82, gate $4.86).
 - Verification: PASS — 71 drift, behavioral clean, 20/20 tests, ruff clean, 32 trades (1 correctly dropped)
-- Commit: PENDING
+- Commit: f82c408
+
+## Iteration 19 — 2026-03-10
+- Phase: audit-only
+- Target: trading_app/execution_engine.py (1229 lines)
+- Finding: 3 LOW (conditional EXITED prune, E3 silent exit, IB hardcoded 23:00 UTC). All dormant — E3 soft-retired, IB TOKYO_OPEN only, prune harmless.
+- Action: Full Seven Sins scan. Engine CLEAN on all critical paths (E2/E1/E3 entry, exit logic, state management, canonical imports, fail-closed unknowns).
+- Verification: 4/4 PASS (71 drift, behavioral clean, 41/41 engine tests, ruff clean)
+- Commit: NONE (audit only)
