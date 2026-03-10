@@ -158,3 +158,19 @@
 - Action: Full Seven Sins scan. Engine CLEAN on all critical paths (E2/E1/E3 entry, exit logic, state management, canonical imports, fail-closed unknowns).
 - Verification: 4/4 PASS (71 drift, behavioral clean, 41/41 engine tests, ruff clean)
 - Commit: NONE (audit only)
+
+## Iteration 20 — 2026-03-10
+- Phase: audit+fix (trading logic pipeline — config.py, strategy_discovery.py, outcome_builder.py)
+- Target: strategy_discovery.py:630,634 + portfolio.py:965 + backfill_dollar_columns.py:92-95
+- Finding: 3 findings (0 CRIT, 0 HIGH, 1 MEDIUM, 2 LOW). SD1: median_risk_dollars and avg_risk_dollars include total_friction, inflating stored values. Same error class as trade sheet T5 (iter 18). SD2: session fallback to ORB_LABELS (LOW). SD3: CORE/REGIME_MIN_SAMPLES missing @research-source (LOW).
+- Action: SD1 fixed — removed + total_friction from both lines in compute_metrics(). Updated portfolio.py back-computation (was subtracting friction to undo the inflation). Aligned backfill_dollar_columns.py. All three core files CLEAN on Seven Sins (no look-ahead, fail-closed unknowns, correct cost model, BH FDR/DSR/FST properly computed).
+- Verification: PASS — 71 drift, behavioral clean, 113/113 tests (discovery + portfolio), ruff clean, blast radius verified (3 files)
+- Commit: 137bf27
+
+## Iteration 21 — 2026-03-10
+- Phase: fix (order_router.py — both brokers)
+- Target: tradovate/order_router.py:136,140,202,206 + projectx/order_router.py:74,88,171
+- Finding: OR1: Fill price `or` pattern uses falsy check — 0.0 fill price treated as None. 7 instances across 2 broker routers. Python antipattern: `x or y` and `if x` on numeric types.
+- Action: Replaced `or` with `if x is None: x = fallback`, replaced `if x` with `if x is not None`, added float() cast to ProjectX query_order_status for consistency. Also found OR2 (no fill_price parsing tests) — deferred.
+- Verification: PASS — 6/6 gates (71 drift, behavioral clean, 8/8 router tests, ruff clean, blast radius confirmed — all callers already use `is not None`, 83/83 orchestrator regression)
+- Commit: pending

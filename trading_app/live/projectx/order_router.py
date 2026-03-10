@@ -71,7 +71,9 @@ class ProjectXOrderRouter(BrokerRouter):
         if order_id is None or order_id <= 0:
             log.error("ProjectX order returned no valid orderId: %s", data)
             raise RuntimeError(f"ProjectX order returned no valid orderId: {data}")
-        fill_price = data.get("fillPrice") or data.get("averagePrice")
+        fill_price = data.get("fillPrice")
+        if fill_price is None:
+            fill_price = data.get("averagePrice")
         log.info(
             "ProjectX order placed: side=%d type=%d qty=%d -> orderId=%d (%.0fms)",
             spec.get("side", -1),
@@ -85,7 +87,7 @@ class ProjectXOrderRouter(BrokerRouter):
         return {
             "order_id": order_id,
             "status": "submitted",
-            "fill_price": float(fill_price) if fill_price else None,
+            "fill_price": float(fill_price) if fill_price is not None else None,
         }
 
     def build_exit_spec(self, direction: str, symbol: str, qty: int = 1) -> dict:
@@ -165,8 +167,11 @@ class ProjectXOrderRouter(BrokerRouter):
             "Rejected": "Rejected",
         }
         raw_status = data.get("status", "Unknown")
+        fill_price = data.get("fillPrice")
+        if fill_price is None:
+            fill_price = data.get("averagePrice")
         return {
             "order_id": order_id,
             "status": status_map.get(raw_status, raw_status),
-            "fill_price": data.get("fillPrice") or data.get("averagePrice"),
+            "fill_price": float(fill_price) if fill_price is not None else None,
         }

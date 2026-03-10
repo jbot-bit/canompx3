@@ -133,11 +133,13 @@ class TradovateOrderRouter(BrokerRouter):
         )
         if elapsed_ms > 1000:
             log.warning("Order HTTP round-trip took %.0fms", elapsed_ms)
-        fill_price = data.get("avgPx") or data.get("fillPrice")
+        fill_price = data.get("avgPx")
+        if fill_price is None:
+            fill_price = data.get("fillPrice")
         return OrderResult(
             order_id=order_id,
             status="submitted",
-            fill_price=float(fill_price) if fill_price else None,
+            fill_price=float(fill_price) if fill_price is not None else None,
         )
 
     def build_exit_spec(
@@ -199,9 +201,11 @@ class TradovateOrderRouter(BrokerRouter):
             "Rejected": "Rejected",
         }
         raw_status = data.get("ordStatus", "Unknown")
-        fill_price = data.get("avgPx") or data.get("fillPrice")
+        fill_price = data.get("avgPx")
+        if fill_price is None:
+            fill_price = data.get("fillPrice")
         return {
             "order_id": order_id,
             "status": status_map.get(raw_status, raw_status),
-            "fill_price": float(fill_price) if fill_price else None,
+            "fill_price": float(fill_price) if fill_price is not None else None,
         }
