@@ -304,9 +304,13 @@ Config: `SESSION_EXIT_MODE["TOKYO_OPEN"] = "fixed_target"`, `IB_DURATION_MINUTES
 **Full-period stats (E3 CB4 RR1.5 G8+):** N=50, WR=52%, TotalR=+12.3, AvgR=+0.25
 **Rolling eval:** AUTO-DEGRADED (70% double-break rate).
 
-### SINGAPORE_OPEN Session — PERMANENTLY OFF (formerly 1100/1130, 2026-02-13)
+### SINGAPORE_OPEN Session (formerly 1100/1130, 2026-02-13)
 
-No tradeable edge. 74% double-break rate (structurally mean-reverting). Hard exclusion in `execution_engine.py`, `portfolio.py`, `strategy_fitness.py`. Revisit only with fade/reversal model. Full research: `docs/RESEARCH_ARCHIVE.md`.
+**MGC: OFF.** 74% double-break rate (structurally mean-reverting). Excluded from fitness via `config.EXCLUDED_FROM_FITNESS["MGC"]`. Revisit only with fade/reversal model.
+
+**MNQ: ACTIVE.** 17 ROBUST strategies (all CORE tier, all WF passed). DIR_LONG and ORB_G8 families in live portfolio. Cross-market flow from SGX/HKEX open drives directional ORB edge on NQ that doesn't exist on gold. Full research: `docs/RESEARCH_ARCHIVE.md`.
+
+**MES/M2K: NOT EXCLUDED.** No blanket exclusion — assessed per normal fitness pipeline.
 
 ---
 
@@ -528,14 +532,15 @@ A "family" = one unique combination of `(session, entry_model, filter_level)`. A
 |--------|-------|----------------|--------|
 | TOKYO_OPEN_E1_G2 | 0.68-0.83 | 13-16/19 | STABLE |
 | CME_REOPEN_G3+ families | 0.42-0.54 | 9-11/19 | TRANSITIONING |
-| LONDON_METALS/US_DATA_830/SINGAPORE_OPEN/NYSE_OPEN | <0.30 | AUTO-DEGRADED | Double-break >67% |
+| LONDON_METALS/US_DATA_830/NYSE_OPEN | <0.30 | AUTO-DEGRADED | Double-break >67% (MGC) |
+| SINGAPORE_OPEN (MGC only) | <0.30 | AUTO-DEGRADED | 74% double-break (MGC). MNQ ACTIVE — 17 ROBUST strategies. |
 
 ### Double-Break Frequency
 | Session | Rate | Implication |
 |---------|------|------------|
 | CME_REOPEN | 57% | Survives |
 | TOKYO_OPEN | 57% | Survives |
-| SINGAPORE_OPEN | 74% | Mean-reverting (OFF) |
+| SINGAPORE_OPEN (MGC) | 74% | Mean-reverting (MGC OFF). MNQ ACTIVE — cross-market flow edge. |
 | LONDON_METALS | 81% | Breakout fails most of the time |
 | US_DATA_830 | 70% | Unreliable for breakout |
 | NYSE_OPEN | 76% | Unreliable for breakout |
@@ -600,7 +605,7 @@ This is why small ORBs lose — friction eats the edge.
 | LONDON_METALS E3 30-min check + retrace dwell | In-loss 24% WR; dwell >10min = 33% WR | DEPLOYED (discretionary) |
 | Nested 15m ORB for TOKYO_OPEN | +0.208R premium, 90% pairs improve | VALIDATED |
 | IB 120m direction alignment | Opposed=3% WR. Cross-validated CME_REOPEN+TOKYO_OPEN. | DEPLOYED |
-| SINGAPORE_OPEN permanent exclusion | 74% double-break, all signals failed | DEPLOYED |
+| SINGAPORE_OPEN exclusion (MGC only) | 74% double-break on MGC. MNQ ACTIVE (17 ROBUST). | DEPLOYED (MGC) |
 | **C3: Skip slow breaks at TOKYO_OPEN (>3 min confirm)** | Fast (<=3 min) avg +0.213R vs slow (>3 min) -0.339R at TOKYO_OPEN (delta=+0.552R, p=0.020, BH-sig). Portfolio delta: +0.069R/trade. Pre-entry, clean mechanism. | **OPTIONAL (via BreakSpeedFilter in config.py)** — removed from hardcoded outcome_builder.py Feb 2026. Now discoverable filter, not mandatory. |
 | **C8: Breakeven stop after 30-bar clean hold** | REVERTED. Corrected simulation (Feb 2026) shows +0.018R at CME_REOPEN, ~0.000R at TOKYO_OPEN, +0.017R at LONDON_METALS — noise level. Original +0.053-0.089R estimate was artifact: simulation used pnl_r < 0 filter but ignored Case B (winners scratched while trade still open). ~6 winners (avg +1.7R) scratched per session, nearly offsetting losers saved. | **NO-GO — removed from outcome_builder.py** |
 

@@ -236,7 +236,7 @@ Automated drift checks cover SOME of this (checks 12-14, 26-30), but not all.
 ### 4C. Session / ORB Label Sync (beyond drift check 32)
 - [ ] `dst.py:SESSION_CATALOG` keys vs `config.py:ORB_LABELS` vs `asset_configs.py` enabled_sessions
 - [ ] Any three-way mismatch → `SESSION_LABEL_DRIFT`
-- [ ] SINGAPORE_OPEN excluded: execution_engine.py, portfolio.py, strategy_fitness.py
+- [ ] SINGAPORE_OPEN excluded for MGC only (not blanket): execution_engine.py, portfolio.py, strategy_fitness.py use `get_excluded_sessions(instrument)`
 
 ### 4D. Grid Sync
 - [ ] `config.py:RR_TARGETS` + `CB_LEVELS` match `outcome_builder.py` iteration
@@ -319,13 +319,13 @@ Build the table:
 - [ ] Every family in `live_config.py` Tier 1/2/3 exists in validated_setups AND edge_families
 - [ ] Tier 2: families with `rolling_stability >= 0.6` — currently above? (Use `get_strategy_fitness`)
 - [ ] Tier 3: regime-gated families currently FIT?
-- [ ] SINGAPORE_OPEN excluded from all tiers
+- [ ] SINGAPORE_OPEN excluded from MGC tiers only (MNQ SINGAPORE_OPEN strategies ARE valid)
 
 ### 7B. Execution Engine Wiring
 - [ ] Early exit rules coded: 15-min CME_REOPEN kill, 30-min TOKYO_OPEN kill
 - [ ] IB-conditional exit: 120-min IB + 7-hour hold + opposed-kill in execution_engine.py
 - [ ] TOKYO_OPEN LONG-ONLY: direction filter in execution path
-- [ ] SINGAPORE_OPEN hard exclusion in execution_engine.py
+- [ ] SINGAPORE_OPEN exclusion is instrument-aware in execution_engine.py (MGC only, not blanket)
 
 ### 7C. Risk Manager
 - [ ] max concurrent, daily loss, max per ORB match `live_config.py` parameters

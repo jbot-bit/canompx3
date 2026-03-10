@@ -32,11 +32,11 @@ from pipeline.init_db import ORB_LABELS
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import (
     ALL_FILTERS,
-    EXCLUDED_FROM_FITNESS,
     ATRVelocityFilter,
     CalendarSkipFilter,
     apply_tight_stop,
     classify_strategy,
+    get_excluded_sessions,
 )
 
 
@@ -291,8 +291,8 @@ def load_validated_strategies(
                 head_ids = get_family_head_ids(con, instrument)
 
         # Load baseline strategies, enforcing locked RR from family_rr_locks
-        # Exclude sessions with no confirmed edge (see config.EXCLUDED_FROM_FITNESS)
-        excluded_sessions = sorted(EXCLUDED_FROM_FITNESS)
+        # Per-instrument session exclusions (see config.EXCLUDED_FROM_FITNESS)
+        excluded_sessions = sorted(get_excluded_sessions(instrument))
         baseline_rows = con.execute(
             """
             SELECT vs.strategy_id, vs.instrument, vs.orb_label, vs.entry_model,

@@ -34,7 +34,7 @@ import duckdb
 from pipeline.dst import DST_AFFECTED_SESSIONS, is_winter_for_session
 from pipeline.init_db import ORB_LABELS
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.config import ALL_FILTERS, EXCLUDED_FROM_FITNESS, VolumeFilter, apply_tight_stop
+from trading_app.config import ALL_FILTERS, VolumeFilter, apply_tight_stop, get_excluded_sessions
 from trading_app.strategy_discovery import compute_metrics
 
 # Whitelist for SQL column interpolation safety
@@ -686,20 +686,34 @@ def compute_portfolio_fitness(
         as_of_date = date.today()
 
     with duckdb.connect(str(db_path), read_only=True) as con:
-        # Exclude sessions with no confirmed edge (see config.EXCLUDED_FROM_FITNESS)
-        exclusion_clause = " AND ".join(f"orb_label != '{s}'" for s in sorted(EXCLUDED_FROM_FITNESS))
-        rows = con.execute(
-            f"""SELECT strategy_id, instrument, orb_label, orb_minutes,
-                       entry_model, rr_target, confirm_bars, filter_type,
-                       COALESCE(stop_multiplier, 1.0) as stop_multiplier,
-                       sample_size, win_rate, expectancy_r, sharpe_ratio,
-                       max_drawdown_r
-               FROM validated_setups
-               WHERE instrument = ? AND LOWER(status) = 'active'
-                 AND {exclusion_clause}
-               ORDER BY strategy_id""",
-            [instrument],
-        ).fetchall()
+        # Exclude sessions with no confirmed edge (per-instrument, see config.EXCLUDED_FROM_FITNESS)
+        excluded = get_excluded_sessions(instrument)
+        if excluded:
+            excluded_list = sorted(excluded)
+            rows = con.execute(
+                """SELECT strategy_id, instrument, orb_label, orb_minutes,
+                           entry_model, rr_target, confirm_bars, filter_type,
+                           COALESCE(stop_multiplier, 1.0) as stop_multiplier,
+                           sample_size, win_rate, expectancy_r, sharpe_ratio,
+                           max_drawdown_r
+                   FROM validated_setups
+                   WHERE instrument = ? AND LOWER(status) = 'active'
+                     AND orb_label NOT IN (SELECT UNNEST(?::VARCHAR[]))
+                   ORDER BY strategy_id""",
+                [instrument, excluded_list],
+            ).fetchall()
+        else:
+            rows = con.execute(
+                """SELECT strategy_id, instrument, orb_label, orb_minutes,
+                           entry_model, rr_target, confirm_bars, filter_type,
+                           COALESCE(stop_multiplier, 1.0) as stop_multiplier,
+                           sample_size, win_rate, expectancy_r, sharpe_ratio,
+                           max_drawdown_r
+                   FROM validated_setups
+                   WHERE instrument = ? AND LOWER(status) = 'active'
+                   ORDER BY strategy_id""",
+                [instrument],
+            ).fetchall()
         param_cols = [desc[0] for desc in con.description]
         all_params = [dict(zip(param_cols, r, strict=False)) for r in rows]
 
@@ -945,8 +959,24 @@ def diagnose_portfolio_decay(
             where.append("instrument = ?")
             params.append(instruments[0])
 
-        exclusion_clause = " AND ".join(f"orb_label != '{s}'" for s in sorted(EXCLUDED_FROM_FITNESS))
-        where.append(exclusion_clause)
+        # Per-instrument session exclusions (see config.EXCLUDED_FROM_FITNESS)
+        if instruments:
+            excluded = get_excluded_sessions(instruments[0])
+            if excluded:
+                excluded_list = sorted(excluded)
+                where.append("orb_label NOT IN (SELECT UNNEST(?::VARCHAR[]))")
+                params.append(excluded_list)
+        else:
+            # Multi-instrument: build compound exclusion
+            # e.g. NOT (instrument='MGC' AND orb_label='SINGAPORE_OPEN')
+            from trading_app.config import EXCLUDED_FROM_FITNESS
+
+            exc_parts = []
+            for inst, sessions in EXCLUDED_FROM_FITNESS.items():
+                for sess in sorted(sessions):
+                    exc_parts.append(f"NOT (instrument = '{inst}' AND orb_label = '{sess}')")
+            if exc_parts:
+                where.append(" AND ".join(exc_parts))
 
         rows = con.execute(
             f"""SELECT strategy_id FROM validated_setups

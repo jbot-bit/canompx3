@@ -14,7 +14,7 @@ ORB (Opening Range Breakout):
 ORB SESSIONS (defined in pipeline/init_db.py as ORB_LABELS):
   CME_REOPEN     - CME Globex electronic reopen 5:00 PM CT. Primary ORB session.
   TOKYO_OPEN     - Tokyo Stock Exchange open 9:00 AM JST. 15m ORB. Strong long bias.
-  SINGAPORE_OPEN - SGX/HKEX open 9:00 AM SGT. Inconsistent edge.
+  SINGAPORE_OPEN - SGX/HKEX open 9:00 AM SGT. MGC excluded (74% double-break). MNQ active (cross-market flow).
   LONDON_METALS  - London metals AM session 8:00 AM London. Best with E3 retrace.
   US_DATA_830    - US economic data release 8:30 AM ET.
   NYSE_OPEN      - NYSE cash open 9:30 AM ET.
@@ -961,11 +961,24 @@ HOLD_HOURS = 7
 CORE_MIN_SAMPLES = 100
 REGIME_MIN_SAMPLES = 30
 
-# Sessions excluded from portfolio fitness monitoring.
-# SINGAPORE_OPEN: documented as "inconsistent edge" (see session list above).
-# No FDR-confirmed edges survived validation for this session.
-# Strategies exist in validated_setups but should not appear in fitness reports.
-EXCLUDED_FROM_FITNESS = {"SINGAPORE_OPEN"}
+# Sessions excluded from portfolio fitness monitoring, PER INSTRUMENT.
+# MGC SINGAPORE_OPEN: 74% double-break rate, mean-reverting structure, no edge.
+# MNQ SINGAPORE_OPEN: HAS edge (17 ROBUST strategies, all CORE tier, all WF passed).
+# The exclusion is MGC-specific, not blanket.
+# @research-source: session analysis, double-break frequency audit
+# @revalidated-for: E2 event-based (2026-03-10)
+EXCLUDED_FROM_FITNESS: dict[str, set[str]] = {
+    "MGC": {"SINGAPORE_OPEN"},
+}
+
+
+def get_excluded_sessions(instrument: str) -> set[str]:
+    """Return sessions excluded from fitness for a specific instrument.
+
+    Callers MUST pass the instrument to get per-instrument exclusions.
+    Returns empty set if no exclusions exist for the instrument.
+    """
+    return EXCLUDED_FROM_FITNESS.get(instrument, set())
 
 
 def classify_strategy(sample_size: int) -> str:
