@@ -133,4 +133,12 @@
 - Finding: Dollar gate `_passes_dollar_gate` fail-open on missing data/exception — diverges from live_config.py fail-closed pattern (fixed in iter 13). Trade sheet could show phantom trades user would never actually trade.
 - Action: Changed both `return True` paths to `return False` (fail-closed). Aligns with live_config.py:372-391.
 - Verification: PASS — 71 drift, behavioral clean, 20/20 live_config tests, ruff clean, blast radius = 0 external callers, trade sheet still generates 33 trades
+- Commit: 29f37d1
+
+## Iteration 17 — 2026-03-10
+- Phase: fix (batch — T2 + T3, same query)
+- Target: scripts/tools/generate_trade_sheet.py:200-226 (_load_best_by_expr)
+- Finding: T2: LEFT JOIN family_rr_locks with IS NULL fallback diverges from live_config's INNER JOIN — could show unlocked RR variants. T3: query missing vs.orb_minutes, aperture parsed from strategy_id string instead.
+- Action: Changed LEFT JOIN → INNER JOIN, removed IS NULL fallback. Added vs.orb_minutes to SELECT, replaced _parse_aperture() call with variant["orb_minutes"]. Removed dead _parse_aperture function.
+- Verification: PASS — 71 drift, behavioral clean, 20/20 tests, ruff clean, 33 trades unchanged
 - Commit: PENDING
