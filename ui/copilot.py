@@ -51,6 +51,7 @@ from ui.session_helpers import (
 # Signals file written by SessionOrchestrator
 _SIGNALS_FILE = Path(__file__).parent.parent / "live_signals.jsonl"
 _STOP_FILE = Path(__file__).parent.parent / "live_session.stop"
+_LOG_FILE = Path(__file__).parent.parent / "live_session.log"
 
 
 # ── Cached data ──────────────────────────────────────────────────────────────
@@ -439,13 +440,22 @@ def _start_session(instrument: str, signal_only: bool) -> None:
         instrument,
         flag,
     ]
+    # Close any prior log handle (guard against start-without-stop)
+    old_fh = st.session_state.pop("live_log_fh", None)
+    if old_fh is not None:
+        try:
+            old_fh.close()
+        except Exception:  # noqa: BLE001
+            pass
+    log_fh = open(_LOG_FILE, "a")  # noqa: SIM115
     proc = subprocess.Popen(
         cmd,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=log_fh,
+        stderr=subprocess.STDOUT,
         cwd=Path(__file__).parent.parent,
     )
     st.session_state["live_proc"] = proc
+    st.session_state["live_log_fh"] = log_fh
     st.session_state["live_instrument"] = instrument
     st.session_state["live_mode_short"] = "signal-only" if signal_only else "demo"
 
@@ -466,13 +476,22 @@ def _start_session_all() -> None:
         "--all",
         "--signal-only",
     ]
+    # Close any prior log handle (guard against start-without-stop)
+    old_fh = st.session_state.pop("live_log_fh", None)
+    if old_fh is not None:
+        try:
+            old_fh.close()
+        except Exception:  # noqa: BLE001
+            pass
+    log_fh = open(_LOG_FILE, "a")  # noqa: SIM115
     proc = subprocess.Popen(
         cmd,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=log_fh,
+        stderr=subprocess.STDOUT,
         cwd=Path(__file__).parent.parent,
     )
     st.session_state["live_proc"] = proc
+    st.session_state["live_log_fh"] = log_fh
     st.session_state["live_instrument"] = "ALL"
     st.session_state["live_mode_short"] = "signal-only"
 
@@ -488,6 +507,12 @@ def _stop_session() -> None:
             _STOP_FILE.unlink(missing_ok=True)
             proc.kill()
     st.session_state.pop("live_proc", None)
+    log_fh = st.session_state.pop("live_log_fh", None)
+    if log_fh is not None:
+        try:
+            log_fh.close()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 # ── Signal log ───────────────────────────────────────────────────────────────
