@@ -109,7 +109,7 @@ def _exp_dollars_from_row(row: dict, instrument: str) -> float | None:
         return None
     try:
         spec = get_cost_spec(instrument)
-        one_r = median_risk_pts * spec.point_value + spec.total_friction
+        one_r = median_risk_pts * spec.point_value
         return exp_r * one_r
     except Exception:
         return None
@@ -213,7 +213,7 @@ def _load_best_by_expr(
               AND vs.filter_type = ?
               AND LOWER(vs.status) = 'active'
               AND vs.expectancy_r >= ?
-            ORDER BY vs.expectancy_r DESC
+            ORDER BY vs.expectancy_r DESC NULLS LAST
             LIMIT 1
         """,
             [instrument, orb_label, entry_model, filter_type, min_expectancy_r],
