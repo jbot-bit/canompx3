@@ -4,7 +4,11 @@ Use when: user says "4tp", "plan and build", "design and implement", "full pipel
 
 ## 4TP = 4T + Proceed
 
-This is the full-pipeline version of /4t. Run all 4 turns (orient, design, detail, validate), then AUTOMATICALLY proceed to planning and implementation. Zero stops.
+This is the full-pipeline version of /4t. Run all 4 turns (orient, design, detail, validate), then AUTOMATICALLY proceed to planning and implementation. Zero unnecessary stops.
+
+### Philosophy
+
+Zero stops means zero unnecessary pauses for human approval — NOT zero verification. Efficiency = correct autonomy. Speed without understanding = reckless, not efficient. Wrong autonomy costs more than no autonomy — measure twice, cut once.
 
 ### Phase 1: Run /4t
 
@@ -30,8 +34,15 @@ If the design reveals the task is:
 - **Trivial** (< 3 steps): skip writing-plans, just do it
 - **Dangerous** (schema change, entry model change, pipeline data flow change): STOP and ask -- override "no stops" for safety. Read the relevant guardian prompt first (ENTRY_MODEL_GUARDIAN or PIPELINE_DATA_GUARDIAN).
 
+### Blast Radius Escalation
+
+If during any Turn you discover blast radius > 5 files, or the change touches schema/entry models/pipeline data flow:
+- STOP even though 4TP says "no stops" — safety overrides speed
+- Read the relevant guardian prompt (ENTRY_MODEL_GUARDIAN or PIPELINE_DATA_GUARDIAN)
+- Map ALL callers and callees before proceeding
+
 ### Rules
 
 - Same rules as /4t apply (ORIENT is mandatory, read before proposing, YAGNI)
-- The entire value of 4TP is NO STOPS between design and planning -- respect that
+- The entire value of 4TP is NO UNNECESSARY STOPS between design and planning — but verification is never a "stop"
 - If a spec exists in `docs/specs/`, follow it -- do not redesign

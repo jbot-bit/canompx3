@@ -18,7 +18,7 @@ from trading_app.outcome_builder import (
     RR_TARGETS,
     CONFIRM_BARS_OPTIONS,
 )
-from trading_app.config import ENTRY_MODELS
+from trading_app.config import ENTRY_MODELS, SKIP_ENTRY_MODELS
 from trading_app.entry_rules import EntrySignal
 from pipeline.cost_model import get_cost_spec
 
@@ -677,7 +677,8 @@ class TestBuildOutcomes:
         con = duckdb.connect(str(db_path), read_only=True)
         models = {r[0] for r in con.execute("SELECT DISTINCT entry_model FROM orb_outcomes").fetchall()}
         con.close()
-        assert models == {"E1", "E2", "E3"}
+        expected = {"E1", "E2", "E3"} - SKIP_ENTRY_MODELS
+        assert models == expected
 
 
 class TestCheckpointResume:
