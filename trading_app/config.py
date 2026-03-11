@@ -967,6 +967,11 @@ HOLD_HOURS = 7
 # CORE: enough samples for standalone portfolio weight
 # REGIME: conditional overlay / signal only (not standalone)
 # INVALID: fails min-sample, stress, or robustness
+# @research-source: Lopez de Prado AFML Ch.11 — min sample for statistical power
+# under multiple testing. 100 chosen to ensure BH FDR at alpha=0.05 with
+# estimated correlation ρ̂≈0.3 (intra-session). 30 chosen as minimum for
+# meaningful regime-conditional signal.
+# @revalidated-for: E2 event-based sessions (2026-03-10)
 CORE_MIN_SAMPLES = 100
 REGIME_MIN_SAMPLES = 30
 

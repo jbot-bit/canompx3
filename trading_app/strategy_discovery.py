@@ -1027,6 +1027,10 @@ def run_discovery(
         # Determine which sessions to search
         sessions = get_enabled_sessions(instrument)
         if not sessions:
+            logger.warning(
+                f"No enabled sessions configured for {instrument}; "
+                "falling back to all ORB_LABELS — configure asset_configs.py to narrow scope"
+            )
             sessions = ORB_LABELS  # fallback: all sessions
         logger.info(f"Sessions: {len(sessions)} enabled for {instrument}")
 
