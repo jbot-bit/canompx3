@@ -132,6 +132,7 @@ REL_VOL_SESSIONS: list[str] = [
     "TOKYO_OPEN",
     "SINGAPORE_OPEN",
     "LONDON_METALS",
+    "EUROPE_FLOW",
     "US_DATA_830",
     "NYSE_OPEN",
     "US_DATA_1000",
@@ -142,6 +143,8 @@ REL_VOL_SESSIONS: list[str] = [
 ]
 
 # Session chronological order (Brisbane time) — used for cross-session features.
+# Note: EUROPE_FLOW/LONDON_METALS swap order by season (winter EF=17:00 before LM=18:00,
+# summer LM=17:00 before EF=18:00). Static ordering here uses summer convention.
 # @research-source: pipeline/dst.py SESSION_CATALOG ordering
 SESSION_CHRONOLOGICAL_ORDER: list[str] = [
     "CME_REOPEN",
@@ -149,6 +152,7 @@ SESSION_CHRONOLOGICAL_ORDER: list[str] = [
     "BRISBANE_1025",
     "SINGAPORE_OPEN",
     "LONDON_METALS",
+    "EUROPE_FLOW",
     "US_DATA_830",
     "NYSE_OPEN",
     "US_DATA_1000",

@@ -348,6 +348,7 @@ DOUBLE_BREAK_ALLOWLIST = {
     "sql_adapter.py",  # Routes DOUBLE_BREAK_STATS template (query exposure)
     "audit_ib_single_break.py",  # Audit script analyzing double_break classification
     "research_session_event_analysis.py",  # Historical double_break analysis (pre-NODBL removal)
+    "research_london_adjacent.py",  # Post-hoc double-break rate analysis (diagnostic, not filter)
 }
 
 # Scan directories for double_break scanner

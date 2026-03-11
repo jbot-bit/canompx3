@@ -125,6 +125,7 @@ class TestEarlyExitConfig:
             "TOKYO_OPEN",
             "SINGAPORE_OPEN",
             "LONDON_METALS",
+            "EUROPE_FLOW",
             "US_DATA_830",
             "NYSE_OPEN",
             "US_DATA_1000",

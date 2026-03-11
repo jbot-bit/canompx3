@@ -73,6 +73,7 @@ DST_CLEAN_SESSIONS = {
     "TOKYO_OPEN",
     "SINGAPORE_OPEN",
     "LONDON_METALS",
+    "EUROPE_FLOW",
     "US_DATA_830",
     "NYSE_OPEN",
     "US_DATA_1000",
@@ -97,6 +98,7 @@ DST_CLEAN_SESSIONS = {
 #   TOKYO_OPEN: Brisbane DOW = Tokyo DOW (no DST, same calendar day) ✓
 #   SINGAPORE_OPEN: Brisbane DOW = Singapore DOW (no DST) ✓
 #   LONDON_METALS: Brisbane DOW = London DOW (both morning same calendar day) ✓
+#   EUROPE_FLOW: Brisbane DOW = London DOW (same morning calendar day) ✓
 #   US_DATA_830: Brisbane DOW = US DOW (13:00 UTC = US morning same day) ✓
 #   NYSE_OPEN: Brisbane DOW = US DOW + 1 (00:30 Bris = 14:30 UTC PREV day) ✗
 #   US_DATA_1000: Brisbane DOW = US DOW (01:00 Bris = 15:00 UTC same US day) ✓
@@ -114,6 +116,7 @@ DOW_ALIGNED_SESSIONS = {
     "TOKYO_OPEN",
     "SINGAPORE_OPEN",
     "LONDON_METALS",
+    "EUROPE_FLOW",
     "US_DATA_830",
     "US_DATA_1000",
     "COMEX_SETTLE",
@@ -250,6 +253,20 @@ def london_open_brisbane(trading_day: date) -> tuple[int, int]:
     return (bris.hour, bris.minute)
 
 
+def europe_flow_brisbane(trading_day: date) -> tuple[int, int]:
+    """Hour adjacent to London metals open, opposite side of DST switch.
+
+    Returns (hour, minute) in Australia/Brisbane.
+      Winter (GMT): 07:00 London = 07:00 UTC = 17:00 AEST (pre-London-open flow)
+      Summer (BST): 09:00 London = 08:00 UTC = 18:00 AEST (post-metals equity flow)
+    """
+    h_lm, m_lm = london_open_brisbane(trading_day)
+    if is_uk_dst(trading_day):
+        return (h_lm + 1, m_lm)  # Summer: LM=17:00, adjacent=18:00
+    else:
+        return (h_lm - 1, m_lm)  # Winter: LM=18:00, adjacent=17:00
+
+
 def us_post_equity_brisbane(trading_day: date) -> tuple[int, int]:
     """US post-equity-open (10:00 AM ET) in Brisbane local time.
 
@@ -359,6 +376,12 @@ SESSION_CATALOG = {
         "resolver": london_open_brisbane,
         "break_group": "london",
         "event": "London metals AM session 8:00 AM London",
+    },
+    "EUROPE_FLOW": {
+        "type": "dynamic",
+        "resolver": europe_flow_brisbane,
+        "break_group": "london",
+        "event": "European flow adjacent to London metals (7AM London winter / 9AM London summer)",
     },
     "US_DATA_830": {
         "type": "dynamic",

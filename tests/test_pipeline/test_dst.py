@@ -300,6 +300,7 @@ class TestDynamicOrbResolvers:
             "TOKYO_OPEN",
             "SINGAPORE_OPEN",
             "LONDON_METALS",
+            "EUROPE_FLOW",
             "US_DATA_830",
             "NYSE_OPEN",
             "US_DATA_1000",
@@ -377,8 +378,8 @@ class TestSessionCatalog:
     def test_get_break_group_unknown_returns_none(self):
         assert get_break_group("NONEXISTENT") is None
 
-    def test_catalog_has_exactly_11_sessions(self):
-        assert len(SESSION_CATALOG) == 11
+    def test_catalog_has_exactly_12_sessions(self):
+        assert len(SESSION_CATALOG) == 12
 
     def test_dst_sets_cover_all_sessions(self):
         """Every session must be in either DST_AFFECTED or DST_CLEAN."""
