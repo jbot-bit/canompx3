@@ -64,11 +64,11 @@ ORB SIZE FILTERS:
   NO_FILTER: Trade all days regardless of ORB size.
     ALL no-filter strategies have negative expectancy. Do not trade.
 
-GRID (3,060 strategy combinations, full grid before ENABLED_SESSIONS filtering):
-  E1: 11 ORBs x 6 RRs x 5 CBs x 6 filters = 1,980
-  E2: 11 ORBs x 6 RRs x 1 CB x 6 filters = 396 (E2 always CB1)
-  E3: 11 ORBs x 6 RRs x 1 CB x 6 filters = 396 (E3 always CB1)
-  Total = 2,772 (base grid; session-specific composites expand per-session)
+GRID (3,024 strategy combinations, full grid before ENABLED_SESSIONS filtering):
+  E1: 12 ORBs x 6 RRs x 5 CBs x 6 filters = 2,160
+  E2: 12 ORBs x 6 RRs x 1 CB x 6 filters = 432 (E2 always CB1)
+  E3: 12 ORBs x 6 RRs x 1 CB x 6 filters = 432 (E3 always CB1)
+  Total = 3,024 (base grid; session-specific composites expand per-session)
 
 ==========================================================================
 """
@@ -856,6 +856,7 @@ ORB_DURATION_MINUTES: dict[str, int] = {
     "TOKYO_OPEN": 15,  # Tokyo Stock Exchange open 9:00 AM JST (15m ORB)
     "SINGAPORE_OPEN": 5,  # SGX/HKEX open 9:00 AM SGT
     "LONDON_METALS": 5,  # London metals AM session 8:00 AM London
+    "EUROPE_FLOW": 5,  # European flow adjacent to London metals (7AM London winter / 9AM summer)
     "US_DATA_830": 5,  # US economic data release 8:30 AM ET
     "NYSE_OPEN": 5,  # NYSE cash open 9:30 AM ET
     "US_DATA_1000": 5,  # US 10:00 AM data (ISM/CC) + post-equity-open flow
@@ -918,6 +919,7 @@ EARLY_EXIT_MINUTES: dict[str, int | None] = {
     "TOKYO_OPEN": 39,  # E2 T80=63m(agg), NetR=+1207R
     "SINGAPORE_OPEN": 31,  # E2 T80=65m(agg), NetR=+1114R
     "LONDON_METALS": 36,  # E2 T80=60m(agg), NetR=+937R
+    "EUROPE_FLOW": None,  # No T80 research yet — trades run to target/stop
     "US_DATA_830": 49,  # RR1.0 T80: MGC=46, MNQ=49, MES=44, M2K=45
     "NYSE_OPEN": 59,  # RR1.0 T80: MGC=28, MNQ=48, MES=43, M2K=59
     "US_DATA_1000": 45,  # RR1.0 T80: MGC=45, MNQ=40, MES=41, M2K=38
@@ -935,6 +937,7 @@ SESSION_EXIT_MODE: dict[str, str] = {
     "TOKYO_OPEN": "fixed_target",  # IB-conditional disabled — not validated in outcome_builder, creates parity gap
     "SINGAPORE_OPEN": "fixed_target",
     "LONDON_METALS": "fixed_target",
+    "EUROPE_FLOW": "fixed_target",
     "US_DATA_830": "fixed_target",
     "NYSE_OPEN": "fixed_target",
     "US_DATA_1000": "fixed_target",

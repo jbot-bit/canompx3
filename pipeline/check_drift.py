@@ -2135,12 +2135,13 @@ def check_trading_rules_authority() -> list[str]:
         )
         from trading_app.outcome_builder import RR_TARGETS
 
-        # 1. Session catalog must have all 11 dynamic sessions
+        # 1. Session catalog must have all 12 dynamic sessions
         expected_sessions = {
             "CME_REOPEN",
             "TOKYO_OPEN",
             "SINGAPORE_OPEN",
             "LONDON_METALS",
+            "EUROPE_FLOW",
             "US_DATA_830",
             "NYSE_OPEN",
             "US_DATA_1000",

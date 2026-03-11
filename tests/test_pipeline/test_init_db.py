@@ -71,6 +71,7 @@ class TestSchemaConstants:
             "CME_PRECLOSE",
             "NYSE_CLOSE",
             "BRISBANE_1025",
+            "EUROPE_FLOW",
         ]:
             assert session in ORB_LABELS_DYNAMIC
 
