@@ -175,6 +175,30 @@
 - Verification: PASS — 6/6 gates (71 drift, behavioral clean, 8/8 router tests, ruff clean, blast radius confirmed — all callers already use `is not None`, 83/83 orchestrator regression)
 - Commit: 3b10732
 
+## Iteration 25 — 2026-03-11
+- Phase: test (OR2 — fill_price parsing coverage)
+- Target: tests/test_trading_app/test_order_router.py + test_projectx_router.py
+- Finding: OR2: No unit tests for fill_price parsing in submit() / query_order_status() — the is-None guard from iter 21 was untested.
+- Action: 14 new tests (7 Tradovate + 7 ProjectX): primary field, fallback field, both absent → None, zero price not falsy. Mock at module level (no HTTP required).
+- Verification: PASS — 28/28 tests, 6/6 hooks (ruff auto-formatted, M2.5 skipped test-only change), drift clean
+- Commit: 8261a0e
+
+## Iteration 24 — 2026-03-11
+- Phase: fix (batch — slate-clear: 5 annotation/logging/warning fixes)
+- Target: config.py:970, live_config.py:61-64, execution_engine.py:262, auth.py:42, strategy_discovery.py:1030
+- Finding: SD3 (CORE/REGIME_MIN_SAMPLES unannotated), N4 (HOT tier unannotated), EE3 (IB 23:00 UTC hardcode), auth log gap (refresh_if_needed silent trigger), SD2 (ORB_LABELS fallback silent)
+- Action: @research-source annotations on 4 constants; log.debug at auth trigger site; logger.warning on SD2 session fallback. N5 closed (no magic numbers at current lines). EE3 annotated inline.
+- Verification: PASS — 71 drift, behavioral clean, 61/61 tests, ruff clean
+- Commit: 7cf57cb
+
+## Iteration 23 — 2026-03-11
+- Phase: fix (batch — EE1 + Bloomey finding, same file)
+- Target: execution_engine.py:1152-1154 (EE1) + execution_engine.py:640-641 (_try_entry silent drop)
+- Finding: EE1: `if events:` guard prevented pruning of ghost EXITED trades from silent-exit paths (832/965/973). Bloomey new finding: _try_entry:640 zero-risk was a silent drop — no EXITED state, no completed_trades, no event. Inconsistent with all other reject paths.
+- Action: EE1: Removed `if events:` — prune now unconditional (no-op when no EXITED trades). _try_entry: Added EXITED state + completed_trades.append + REJECT event before early return. Aligns with E1/E3 ARMED paths.
+- Verification: PASS — all 6 gates (71 drift, behavioral clean, 41/41 engine + 83/83 orchestrator, ruff clean, blast radius verified, 185 fast tests)
+- Commit: f7bd0c4
+
 ## Iteration 22 — 2026-03-10
 - Phase: fix (batch — contract_resolver.py, strategy_fitness.py, portfolio.py)
 - Target: contract_resolver.py:40, strategy_fitness.py:124, portfolio.py:953
@@ -182,3 +206,10 @@
 - Action: CR1 fixed (`or` → `is None`). F3a extracted to named constant with @research-source. F3b annotated inline. CR2 closed. F3 now resolved except cost_model.py (self-documenting canonical source).
 - Verification: PASS — 6/6 gates (71 drift, behavioral clean, 31 fitness + 68 portfolio + 20 live_config tests, ruff clean, blast radius verified)
 - Commit: 684a37c
+## Iteration 26 — 2026-03-11
+- Phase: fix
+- Target: trading_app/live/position_tracker.py:189
+- Finding: PT1: best_entry_price() uses `or` chain — fill_entry_price=0.0 silently falls through to engine_entry_price. Same falsy-zero antipattern as OR1 (iter 21) / OR2 (iter 25). Discovered during fresh audit of live/ modules.
+- Action: bar_aggregator.py audited (CLEAN). position_tracker.py: replaced `or` chain with explicit `is not None` guards. Added zero-fill guard test to test_position_tracker.py (20 tests total).
+- Verification: PASS — 4/4 gates (62 drift checks, behavioral clean, 20/20 position_tracker tests, ruff clean)
+- Commit: f713a1c
