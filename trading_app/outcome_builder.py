@@ -33,7 +33,7 @@ from pipeline.build_daily_features import compute_trading_day_utc_range
 from pipeline.cost_model import get_cost_spec, pnl_points_to_r, risk_in_dollars, to_r_multiple
 from pipeline.init_db import ORB_LABELS
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.config import E2_SLIPPAGE_TICKS, EARLY_EXIT_MINUTES, ENTRY_MODELS
+from trading_app.config import E2_SLIPPAGE_TICKS, EARLY_EXIT_MINUTES, ENTRY_MODELS, SKIP_ENTRY_MODELS
 from trading_app.db_manager import init_trading_app_schema
 from trading_app.entry_rules import _resolve_e2, detect_break_touch, detect_entry_with_confirm_bars
 
@@ -769,6 +769,8 @@ def build_outcomes(
                 # Optimized: detect entry ONCE per (session, EM, CB),
                 # then compute all 6 RR targets with shared bar slicing.
                 for em in ENTRY_MODELS:
+                    if em in SKIP_ENTRY_MODELS:
+                        continue
                     if em == "E2":
                         # E2: stop-market at ORB level. Uses break-touch detection
                         # (range crosses ORB, no close requirement) instead of confirm bars.

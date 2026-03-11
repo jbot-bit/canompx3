@@ -34,7 +34,14 @@ from pipeline.dst import (
 )
 from pipeline.init_db import ORB_LABELS
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.config import ENTRY_MODELS, STOP_MULTIPLIERS, VolumeFilter, apply_tight_stop, get_filters_for_grid
+from trading_app.config import (
+    ENTRY_MODELS,
+    SKIP_ENTRY_MODELS,
+    STOP_MULTIPLIERS,
+    VolumeFilter,
+    apply_tight_stop,
+    get_filters_for_grid,
+)
 from trading_app.db_manager import compute_trade_day_hash, init_trading_app_schema
 from trading_app.outcome_builder import CONFIRM_BARS_OPTIONS, RR_TARGETS
 
@@ -1077,6 +1084,8 @@ def run_discovery(
                 matching_day_set = filter_days[(filter_key, orb_label)]
 
                 for em in ENTRY_MODELS:
+                    if em in SKIP_ENTRY_MODELS:
+                        continue
                     for rr_target in RR_TARGETS:
                         for cb in CONFIRM_BARS_OPTIONS:
                             if em in ("E2", "E3") and cb > 1:

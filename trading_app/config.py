@@ -761,6 +761,12 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
 # E3 = Limit order at ORB level, waiting for retrace after confirm (may not fill)
 ENTRY_MODELS = ["E1", "E2", "E3"]
 
+# Entry models to skip during outcome computation and grid search.
+# E3 is soft-retired (100% fill = garbage on non-retrace sessions) but kept
+# in ENTRY_MODELS for schema/test compatibility. Skip at runtime to save ~14%
+# rebuild time. To re-enable E3: remove "E3" from this frozenset.
+SKIP_ENTRY_MODELS: frozenset[str] = frozenset({"E3"})
+
 # E2 stop-market slippage: number of ticks beyond ORB level for fill-through.
 # Default 1 = industry standard (fill-through-by-1-tick). Use 2 for stress testing.
 # Tick sizes per instrument are in pipeline/cost_model.py CostSpec.tick_size.
