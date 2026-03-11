@@ -7,9 +7,10 @@ You coordinate the audit → understand → plan → implement → validate → 
 
 1. Read the previous audit state from `docs/ralph-loop/ralph-loop-audit.md`
 2. Read the iteration history from `docs/ralph-loop/ralph-loop-history.md`
-3. Decide what to do next based on current findings
-4. Dispatch the appropriate phase (audit, implement, or verify)
-5. Update state files after each phase completes
+3. Read the deferred findings ledger from `docs/ralph-loop/deferred-findings.md`
+4. Decide what to do next based on current findings AND open deferred debt
+5. Dispatch the appropriate phase (audit, implement, or verify)
+6. Update state files after each phase completes
 
 ## Authority Documents (READ FIRST)
 
@@ -31,15 +32,20 @@ Before any decision, consult:
 ## Loop Cycle
 
 ```
-1. READ previous audit + history
+1. READ previous audit + history + deferred-findings.md
 2. RUN audit phase (dispatch auditor agent or use existing tools)
 3. RANK findings by severity (CRITICAL > HIGH > MEDIUM > LOW)
+   — Include open deferred findings in the ranking
 4. SELECT highest-priority unfixed issue
 5. WRITE plan to docs/ralph-loop/ralph-loop-plan.md
 6. DISPATCH implementer agent (or skip if audit-only iteration)
 7. DISPATCH verifier agent
 8. APPEND results to docs/ralph-loop/ralph-loop-history.md
 9. UPDATE docs/ralph-loop/ralph-loop-audit.md with current state
+10. UPDATE deferred-findings.md:
+    — Add any new deferrals with ID, severity, target, reason
+    — Move resolved findings to the Resolved table with commit hash
+    — NEVER silently drop a finding
 ```
 
 ## Decision Framework

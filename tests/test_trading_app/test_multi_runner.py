@@ -161,6 +161,40 @@ class TestMultiInstrumentRunner:
         # Should have created orchestrators for all active instruments
         assert len(runner.orchestrators) >= 4  # MGC, MNQ, MES, M2K
 
+    @patch("trading_app.live.multi_runner.SessionOrchestrator")
+    def test_one_crash_others_survive(self, mock_orch_cls):
+        """If one orchestrator crashes mid-run, others still complete."""
+
+        async def crash():
+            raise RuntimeError("MGC feed disconnected")
+
+        async def succeed():
+            pass
+
+        mock_mgc = MagicMock()
+        mock_mgc.portfolio.strategies = [MagicMock()]
+        mock_mgc.run = AsyncMock(side_effect=crash)
+
+        mock_mnq = MagicMock()
+        mock_mnq.portfolio.strategies = [MagicMock()]
+        mock_mnq.run = AsyncMock(side_effect=succeed)
+
+        mock_orch_cls.side_effect = [mock_mgc, mock_mnq]
+
+        runner = MultiInstrumentRunner(
+            instruments=["MGC", "MNQ"],
+            broker="projectx",
+            demo=True,
+            signal_only=True,
+        )
+
+        # Should NOT raise — gather(return_exceptions=True) isolates failures
+        asyncio.run(runner.run())
+
+        # Both should have been called
+        mock_mgc.run.assert_awaited_once()
+        mock_mnq.run.assert_awaited_once()
+
 
 class TestStopFileRaceCondition:
     """Verify stop-file is NOT deleted by individual feeds."""

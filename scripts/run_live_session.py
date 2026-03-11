@@ -14,7 +14,7 @@ THREE MODES (pick exactly one):
 INSTRUMENT SELECTION:
 
   --instrument MGC       Single instrument
-  --all                  All active instruments (MGC, MNQ, MES, M2K)
+  --all                  All active instruments (from ACTIVE_ORB_INSTRUMENTS)
 
 Examples:
     python scripts/run_live_session.py --all --signal-only
@@ -268,9 +268,11 @@ def main() -> None:
 
     # Multi-instrument mode (signal-only only — demo/live blocked above)
     if args.all:
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
         from trading_app.live.multi_runner import MultiInstrumentRunner
 
-        _print_mode_banner("signal", "ALL (MGC, MNQ, MES, M2K)")
+        _all_names = ", ".join(ACTIVE_ORB_INSTRUMENTS)
+        _print_mode_banner("signal", f"ALL ({_all_names})")
         runner = MultiInstrumentRunner(
             instruments=None,  # uses ACTIVE_ORB_INSTRUMENTS
             broker=args.broker,
