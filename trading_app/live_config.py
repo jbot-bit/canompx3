@@ -58,9 +58,14 @@ class LiveStrategySpec:
 
 
 # Lookback for HOT tier rolling stability check (recent months only).
+# @research-source: Pardo Ch.7 walk-forward methodology — 10 windows = ~10 months,
+# sufficient to distinguish regime from noise in WF rolling evaluation.
+# @revalidated-for: E2 event-based (dormant — HOT tier not yet wired to real-time)
 HOT_LOOKBACK_WINDOWS = 10
 
 # Minimum rolling stability score for HOT tier to be active.
+# @research-source: Pardo Ch.7 — 60% of WF windows passing = robust across regimes.
+# Below 0.6 indicates strategy works in <6/10 recent windows: not stable enough for live.
 HOT_MIN_STABILITY = 0.6
 
 # Minimum expectancy per trade to include in live portfolio.

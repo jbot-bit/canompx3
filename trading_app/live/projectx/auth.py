@@ -40,6 +40,7 @@ class ProjectXAuth(BrokerAuth):
 
     def refresh_if_needed(self) -> None:
         if self._token is None or time.time() >= self._acquired_at + self._token_lifetime:
+            log.debug("ProjectX auth: proactive token refresh triggered")
             self._validate_or_login()
 
     def _login(self) -> str:

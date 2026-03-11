@@ -258,6 +258,8 @@ class ExecutionEngine:
         self._daily_features_row = daily_features_row
 
         # Initialize IB tracker (23:00 UTC to 01:00 UTC = 09:00-11:00 Brisbane)
+        # 23 = Brisbane UTC+10 offset: 09:00 local - 10h = 23:00 UTC previous day.
+        # Brisbane has no DST (Australia/Brisbane is fixed UTC+10), so this is stable.
         prev_day = trading_day - timedelta(days=1)
         ib_start = datetime(prev_day.year, prev_day.month, prev_day.day, 23, 0, tzinfo=UTC)
         ib_end = ib_start + timedelta(minutes=IB_DURATION_MINUTES)
