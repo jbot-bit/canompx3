@@ -12,6 +12,7 @@ import duckdb
 import pandas as pd
 
 from pipeline.asset_configs import get_active_instruments
+from pipeline.init_db import ORB_LABELS
 
 
 class QueryTemplate(str, Enum):
@@ -49,21 +50,8 @@ class QueryIntent:
 # Maximum rows returned by any query
 MAX_RESULT_ROWS = 1000
 
-# Valid ORB labels for parameter validation
-VALID_ORB_LABELS = {
-    "CME_REOPEN",
-    "TOKYO_OPEN",
-    "SINGAPORE_OPEN",
-    "LONDON_METALS",
-    "EUROPE_FLOW",
-    "US_DATA_830",
-    "NYSE_OPEN",
-    "US_DATA_1000",
-    "COMEX_SETTLE",
-    "CME_PRECLOSE",
-    "NYSE_CLOSE",
-    "BRISBANE_1025",
-}
+# Valid ORB labels for parameter validation (canonical source, never hardcode)
+VALID_ORB_LABELS = set(ORB_LABELS)
 
 # Valid entry models
 VALID_ENTRY_MODELS = {"E1", "E2", "E3"}
