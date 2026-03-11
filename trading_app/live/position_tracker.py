@@ -186,7 +186,11 @@ class PositionTracker:
         record = self._positions.get(strategy_id)
         if record is None:
             return fallback
-        return record.fill_entry_price or record.engine_entry_price or fallback
+        if record.fill_entry_price is not None:
+            return record.fill_entry_price
+        if record.engine_entry_price is not None:
+            return record.engine_entry_price
+        return fallback
 
     def active_positions(self) -> list[PositionRecord]:
         """Return all non-FLAT positions."""

@@ -1,8 +1,8 @@
-## Iteration: 22
-## Phase: implement (batch — 3 mechanical fixes)
-## Target: contract_resolver.py:40, strategy_fitness.py:124, portfolio.py:953
-## Finding: CR1: account ID `or` falsy-zero (same class as OR1). F3a: Sharpe decay threshold -0.1 not extracted. F3b: trade frequency 0.4 not extracted. Also closes iter 9 PRODUCT_MAP finding (has fallback, not a gate).
+## Iteration: 26
+## Phase: implement
+## Target: trading_app/live/position_tracker.py:189
+## Finding: best_entry_price() uses `or` chain — fill_entry_price=0.0 silently falls through to engine_entry_price
 ## Decision: implement
-## Rationale: CR1 is same antipattern as iter 21 (OR1) — mechanical `is None` fix. F3a/F3b are named constant extractions. All 3 changes are 1-2 lines, no logic change, zero blast radius overlap.
-## Blast Radius: CR1: resolve_account_id() → session_orchestrator (caller). F3a: classify_fitness() used by compute_fitness (same file) → live_config, portfolio, trade sheet. F3b: estimate_daily_capital() → portfolio dashboard. All callers unaffected by constant extraction.
-## Diff estimate: ~8 lines changed
+## Rationale: Same pattern as OR1 (iter 21) / OR2 (iter 25). Low severity but well-understood fix, blast radius = 1 file + 1 test. Consistent with established is-None guard pattern.
+## Blast Radius: position_tracker.py (fix), tests/test_trading_app/test_position_tracker.py (add zero-fill test)
+## Diff estimate: 6 lines changed, 6 lines added (test)
