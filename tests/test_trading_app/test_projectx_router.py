@@ -96,3 +96,99 @@ def test_projectx_e3_blocked():
     router = ProjectXOrderRouter(account_id=123, auth=mock_auth)
     with pytest.raises(ValueError, match="not supported"):
         router.build_order_spec("long", "E3", 2950.0, "CON.F.US.MGC.M26")
+
+
+# ---- fill_price parsing (OR2) ----
+# Validates the is-None guard introduced in iter 21 (OR1 fix).
+# Key case: fill_price=0.0 must not fall through to fallback field.
+
+
+def _px_mock_resp(data: dict) -> MagicMock:
+    resp = MagicMock()
+    resp.raise_for_status.return_value = None
+    resp.json.return_value = data
+    return resp
+
+
+def _px_auth() -> MagicMock:
+    auth = MagicMock()
+    auth.headers.return_value = {"Authorization": "Bearer test"}
+    return auth
+
+
+def test_px_submit_fill_price_primary():
+    from trading_app.live.projectx.order_router import ProjectXOrderRouter
+
+    router = ProjectXOrderRouter(account_id=1, auth=_px_auth())
+    spec = {"accountId": 1, "contractId": "MGCM6", "type": 2, "side": 0, "size": 1}
+    with patch("trading_app.live.projectx.order_router.requests") as mock_req:
+        mock_req.post.return_value = _px_mock_resp({"success": True, "orderId": 99, "fillPrice": 2010.5})
+        result = router.submit(spec)
+    assert result["fill_price"] == 2010.5
+
+
+def test_px_submit_fill_price_fallback():
+    from trading_app.live.projectx.order_router import ProjectXOrderRouter
+
+    router = ProjectXOrderRouter(account_id=1, auth=_px_auth())
+    spec = {"accountId": 1, "contractId": "MGCM6", "type": 2, "side": 0, "size": 1}
+    with patch("trading_app.live.projectx.order_router.requests") as mock_req:
+        mock_req.post.return_value = _px_mock_resp({"success": True, "orderId": 99, "averagePrice": 2010.5})
+        result = router.submit(spec)
+    assert result["fill_price"] == 2010.5
+
+
+def test_px_submit_fill_price_none():
+    from trading_app.live.projectx.order_router import ProjectXOrderRouter
+
+    router = ProjectXOrderRouter(account_id=1, auth=_px_auth())
+    spec = {"accountId": 1, "contractId": "MGCM6", "type": 2, "side": 0, "size": 1}
+    with patch("trading_app.live.projectx.order_router.requests") as mock_req:
+        mock_req.post.return_value = _px_mock_resp({"success": True, "orderId": 99})
+        result = router.submit(spec)
+    assert result["fill_price"] is None
+
+
+def test_px_submit_fill_price_zero_not_falsy():
+    """fillPrice=0.0 must not fall through to averagePrice — guards the is-None fix."""
+    from trading_app.live.projectx.order_router import ProjectXOrderRouter
+
+    router = ProjectXOrderRouter(account_id=1, auth=_px_auth())
+    spec = {"accountId": 1, "contractId": "MGCM6", "type": 2, "side": 0, "size": 1}
+    with patch("trading_app.live.projectx.order_router.requests") as mock_req:
+        mock_req.post.return_value = _px_mock_resp(
+            {"success": True, "orderId": 99, "fillPrice": 0.0, "averagePrice": 2010.5}
+        )
+        result = router.submit(spec)
+    assert result["fill_price"] == 0.0
+
+
+def test_px_query_fill_price_primary():
+    from trading_app.live.projectx.order_router import ProjectXOrderRouter
+
+    router = ProjectXOrderRouter(account_id=1, auth=_px_auth())
+    with patch("trading_app.live.projectx.order_router.requests") as mock_req:
+        mock_req.get.return_value = _px_mock_resp({"status": "Filled", "fillPrice": 2011.0})
+        result = router.query_order_status(99)
+    assert result["fill_price"] == 2011.0
+
+
+def test_px_query_fill_price_fallback():
+    from trading_app.live.projectx.order_router import ProjectXOrderRouter
+
+    router = ProjectXOrderRouter(account_id=1, auth=_px_auth())
+    with patch("trading_app.live.projectx.order_router.requests") as mock_req:
+        mock_req.get.return_value = _px_mock_resp({"status": "Filled", "averagePrice": 2011.0})
+        result = router.query_order_status(99)
+    assert result["fill_price"] == 2011.0
+
+
+def test_px_query_fill_price_zero_not_falsy():
+    """fillPrice=0.0 must not fall through to averagePrice in query path."""
+    from trading_app.live.projectx.order_router import ProjectXOrderRouter
+
+    router = ProjectXOrderRouter(account_id=1, auth=_px_auth())
+    with patch("trading_app.live.projectx.order_router.requests") as mock_req:
+        mock_req.get.return_value = _px_mock_resp({"status": "Filled", "fillPrice": 0.0, "averagePrice": 2011.0})
+        result = router.query_order_status(99)
+    assert result["fill_price"] == 0.0
