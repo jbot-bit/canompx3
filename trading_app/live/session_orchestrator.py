@@ -432,7 +432,11 @@ class SessionOrchestrator:
         return results
 
     def _write_signal_record(self, extra: dict) -> None:
-        """Append a signal record to the JSONL file read by the Live Monitor UI."""
+        """Append a signal record to the JSONL file read by the Live Monitor UI.
+
+        Thread safety: safe under single-threaded asyncio (all orchestrators share
+        one event loop). If this ever moves to multi-process, this append needs a lock.
+        """
         record = {
             "ts": datetime.now(UTC).isoformat(),
             "instrument": self.instrument,

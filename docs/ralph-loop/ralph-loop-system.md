@@ -26,6 +26,7 @@ scripts/ralph_loop_runner.sh     <- Runner (bash loop)
   +-- docs/ralph-loop/ralph-loop-audit.md   <- Current findings (overwritten)
   +-- docs/ralph-loop/ralph-loop-plan.md    <- Current plan (overwritten)
   +-- docs/ralph-loop/ralph-loop-history.md <- All iterations (append-only)
+  +-- docs/ralph-loop/deferred-findings.md  <- Open debt ledger (structured)
   +-- docs/ralph-loop/logs/                 <- Per-iteration logs
 ```
 
