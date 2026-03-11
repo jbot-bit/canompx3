@@ -62,6 +62,13 @@ class TestBestEntryPrice:
         tracker = PositionTracker()
         assert tracker.best_entry_price("UNKNOWN", 42.0) == 42.0
 
+    def test_fill_price_zero_not_falsy(self):
+        """fill_entry_price=0.0 must not fall through to engine_entry_price — guards is-None fix (PT1)."""
+        tracker = PositionTracker()
+        tracker.on_entry_sent("S1", "long", 100.0)
+        tracker.on_entry_filled("S1", 0.0)
+        assert tracker.best_entry_price("S1", 99.0) == 0.0
+
 
 class TestStaleDetection:
     def test_fresh_pending_not_stale(self):
