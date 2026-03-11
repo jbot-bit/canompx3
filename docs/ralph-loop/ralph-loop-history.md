@@ -181,4 +181,4 @@
 - Finding: CR1: account ID `or` falsy-zero (same class as OR1). F3a: Sharpe decay threshold -0.1 inline → SHARPE_DECAY_THRESHOLD constant. F3b: trade frequency 0.4 annotated. Also closed iter 9 PRODUCT_MAP finding (has fallback, not a gate).
 - Action: CR1 fixed (`or` → `is None`). F3a extracted to named constant with @research-source. F3b annotated inline. CR2 closed. F3 now resolved except cost_model.py (self-documenting canonical source).
 - Verification: PASS — 6/6 gates (71 drift, behavioral clean, 31 fitness + 68 portfolio + 20 live_config tests, ruff clean, blast radius verified)
-- Commit: pending
+- Commit: 684a37c
