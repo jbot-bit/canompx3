@@ -6,6 +6,7 @@ and schema summary so Claude gives grounded, honest answers.
 """
 
 from pipeline.cost_model import COST_SPECS
+from pipeline.init_db import ORB_LABELS
 from trading_app.ai.sql_adapter import SQLAdapter
 
 # Derive MGC cost values from canonical source
@@ -52,7 +53,7 @@ You MUST ground all answers in the canonical documents below.
 - WR: Win rate
 - Sharpe: Risk-adjusted return ratio
 - MaxDD: Maximum drawdown in R-multiples
-- Sessions: CME_REOPEN, TOKYO_OPEN, SINGAPORE_OPEN, LONDON_METALS, US_DATA_830, NYSE_OPEN, US_DATA_1000, COMEX_SETTLE, CME_PRECLOSE, NYSE_CLOSE, BRISBANE_1025
+- Sessions: {", ".join(ORB_LABELS)}
 
 === AVAILABLE QUERY TEMPLATES ===
 {templates_list}
