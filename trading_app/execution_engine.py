@@ -638,6 +638,19 @@ class ExecutionEngine:
 
             risk_points = abs(entry_price - stop_price)
             if risk_points <= 0:
+                trade.state = TradeState.EXITED
+                self.completed_trades.append(trade)
+                events.append(
+                    TradeEvent(
+                        event_type="REJECT",
+                        strategy_id=trade.strategy_id,
+                        timestamp=confirm_bar["ts_utc"],
+                        price=entry_price,
+                        direction=trade.direction,
+                        contracts=0,
+                        reason="rejected: zero_risk_points",
+                    )
+                )
                 return events
 
             # Position sizing (vol-adjusted, Carver Ch.9)
@@ -1150,8 +1163,7 @@ class ExecutionEngine:
                 self._exit_trade(trade, bar, "loss", trade.stop_price, events)
 
         # Prune exited trades to prevent unbounded list growth and iteration bugs
-        if events:
-            self.active_trades = [t for t in self.active_trades if t.state != TradeState.EXITED]
+        self.active_trades = [t for t in self.active_trades if t.state != TradeState.EXITED]
 
         return events
 
