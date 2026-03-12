@@ -30,7 +30,7 @@ import duckdb
 from pipeline.asset_configs import get_active_instruments
 from pipeline.cost_model import get_cost_spec
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.config import CORE_MIN_SAMPLES
+from trading_app.config import ALL_FILTERS, CORE_MIN_SAMPLES, OrbSizeFilter
 from trading_app.live_config import (
     LIVE_MIN_EXPECTANCY_DOLLARS_MULT,
     LIVE_MIN_EXPECTANCY_R,
@@ -97,11 +97,79 @@ def find_uncovered_candidates(db_path: Path) -> list[dict]:
     return candidates
 
 
+# ── Day-overlap computation ───────────────────────────────────────────
+
+
+def build_day_sets(
+    con: duckdb.DuckDBPyConnection,
+    candidates: list[dict],
+) -> dict[tuple, frozenset[str]]:
+    """Build trade-day sets for candidates and same-session LIVE_PORTFOLIO specs.
+
+    Used to compute day-overlap before promotion. Only OrbSizeFilter types are
+    supported — VolumeFilter/DirectionFilter require separate pre-computation and
+    are skipped here (cross-class comparisons have structurally low overlap).
+
+    Key: (instrument, orb_label, entry_model, filter_type, orb_minutes)
+    Value: frozenset of trading_day strings
+    """
+    specs_to_load: set[tuple] = set()
+    for c in candidates:
+        inst, session, em, ft, om = (
+            c["instrument"],
+            c["orb_label"],
+            c["entry_model"],
+            c["filter_type"],
+            c["orb_minutes"],
+        )
+        if ft in ALL_FILTERS and isinstance(ALL_FILTERS[ft], OrbSizeFilter):
+            specs_to_load.add((inst, session, em, ft, om))
+        for spec in LIVE_PORTFOLIO:
+            if spec.orb_label != session or spec.entry_model != em:
+                continue
+            if spec.filter_type not in ALL_FILTERS:
+                continue
+            if not isinstance(ALL_FILTERS[spec.filter_type], OrbSizeFilter):
+                continue
+            specs_to_load.add((inst, session, em, spec.filter_type, om))
+
+    result: dict[tuple, frozenset[str]] = {}
+    for key in specs_to_load:
+        inst, session, em, ft, om = key
+        f = ALL_FILTERS[ft]
+        size_col = f"orb_{session}_size"
+        conds = [
+            "oo.symbol = ?",
+            "oo.orb_label = ?",
+            "oo.entry_model = ?",
+            "oo.orb_minutes = ?",
+            f"df.{size_col} IS NOT NULL",
+        ]
+        params: list = [inst, session, em, om]
+        if f.min_size is not None:
+            conds.append(f"df.{size_col} >= ?")
+            params.append(f.min_size)
+        if f.max_size is not None:
+            conds.append(f"df.{size_col} < ?")
+            params.append(f.max_size)
+        rows = con.execute(
+            f"SELECT DISTINCT CAST(oo.trading_day AS VARCHAR) "  # noqa: S608
+            f"FROM orb_outcomes oo "
+            f"JOIN daily_features df ON oo.symbol = df.symbol "
+            f"  AND oo.trading_day = df.trading_day "
+            f"WHERE {' AND '.join(conds)}",
+            params,
+        ).fetchall()
+        result[key] = frozenset(r[0] for r in rows)
+
+    return result
+
+
 # ── Enrichment ────────────────────────────────────────────────────────
 
 
-def enrich_candidate(candidate: dict) -> dict:
-    """Add year-by-year breakdown, decay trend, and dollar gate results."""
+def enrich_candidate(candidate: dict, day_sets: dict | None = None) -> dict:
+    """Add year-by-year breakdown, decay trend, dollar gate results, and overlap."""
     yearly_raw = candidate.get("yearly_results")
     if yearly_raw:
         yearly = json.loads(yearly_raw) if isinstance(yearly_raw, str) else yearly_raw
@@ -162,6 +230,39 @@ def enrich_candidate(candidate: dict) -> dict:
             dollar_results[inst] = {"rt_cost": None, "min_required": None, "point_value": None}
     candidate["dollar_gate_results"] = dollar_results
 
+    # --- Day-overlap against existing LIVE_PORTFOLIO specs ---
+    candidate["overlap_pct"] = None
+    candidate["overlap_with"] = None
+    candidate["marginal_days"] = None
+    if day_sets is not None:
+        ft = candidate["filter_type"]
+        if ft in ALL_FILTERS and isinstance(ALL_FILTERS[ft], OrbSizeFilter):
+            inst = candidate["instrument"]
+            session = candidate["orb_label"]
+            em = candidate["entry_model"]
+            om = candidate["orb_minutes"]
+            cand_key = (inst, session, em, ft, om)
+            cand_days = day_sets.get(cand_key, frozenset())
+            max_pct = 0.0
+            worst_ft: str | None = None
+            union_portfolio: set[str] = set()
+            for spec in LIVE_PORTFOLIO:
+                if spec.orb_label != session or spec.entry_model != em:
+                    continue
+                if spec.filter_type not in ALL_FILTERS or not isinstance(ALL_FILTERS[spec.filter_type], OrbSizeFilter):
+                    continue
+                spec_key = (inst, session, em, spec.filter_type, om)
+                spec_days = day_sets.get(spec_key, frozenset())
+                union_portfolio |= spec_days
+                if cand_days:
+                    pct = len(cand_days & spec_days) / len(cand_days)
+                    if pct > max_pct:
+                        max_pct = pct
+                        worst_ft = spec.filter_type
+            candidate["overlap_pct"] = round(max_pct, 4)
+            candidate["overlap_with"] = worst_ft
+            candidate["marginal_days"] = len(cand_days - union_portfolio)
+
     return candidate
 
 
@@ -195,19 +296,32 @@ def format_terminal(candidates: list[dict]) -> str:
     lines.append("")
     lines.append(
         f"{'Strategy ID':<55} {'Inst':<5} {'ORB':<4} {'ExpR':>6} "
-        f"{'N':>5} {'WR%':>5} {'Fam':>4} {'PBO':>5} {'WFE':>5} {'Decay':>7}"
+        f"{'N':>5} {'WR%':>5} {'Fam':>4} {'PBO':>5} {'WFE':>5} {'Decay':>7} {'Overlap':>10}"
     )
-    lines.append("-" * 110)
+    lines.append("-" * 122)
 
     for c in candidates:
         pbo_str = f"{c['pbo']:.2f}" if c.get("pbo") is not None else "n/a"
         wfe_str = f"{c['wfe']:.1%}" if c.get("wfe") is not None else "n/a"
         decay_str = f"{c['decay_slope']:+.4f}" if c.get("decay_slope") is not None else "n/a"
+        op = c.get("overlap_pct")
+        if op is None:
+            overlap_str = "n/a"
+            overlap_flag = ""
+        elif op >= 0.8:
+            overlap_str = f"{op:.0%} vs {c.get('overlap_with', '?')}"
+            overlap_flag = " [WARN]"
+        elif op >= 0.5:
+            overlap_str = f"{op:.0%} vs {c.get('overlap_with', '?')}"
+            overlap_flag = " [NOTE]"
+        else:
+            overlap_str = f"{op:.0%}"
+            overlap_flag = ""
         lines.append(
             f"{c['strategy_id']:<55} {c['instrument']:<5} {c['orb_minutes']:>3}m "
             f"{c['expectancy_r']:>+.3f} {c['sample_size']:>5} "
             f"{c['win_rate']:>4.0%} {c['member_count']:>4} "
-            f"{pbo_str:>5} {wfe_str:>5} {decay_str:>7}"
+            f"{pbo_str:>5} {wfe_str:>5} {decay_str:>7} {overlap_str:>10}{overlap_flag}"
         )
 
     lines.append("")
@@ -282,6 +396,22 @@ def generate_html(candidates: list[dict]) -> str:
 
             spec_code = generate_spec_code(c["orb_label"], c["entry_model"], c["filter_type"], c["sample_size"])
 
+            op = c.get("overlap_pct")
+            overlap_badge = ""
+            if op is not None:
+                wf_label = c.get("overlap_with") or "?"
+                marginal = c.get("marginal_days", "?")
+                if op >= 0.8:
+                    overlap_badge = (
+                        f"<span class='badge badge-overlap-warn'>"
+                        f"OVERLAP {op:.0%} vs {wf_label} ({marginal} new days)</span>"
+                    )
+                elif op >= 0.5:
+                    overlap_badge = (
+                        f"<span class='badge badge-overlap-note'>"
+                        f"OVERLAP {op:.0%} vs {wf_label} ({marginal} new days)</span>"
+                    )
+
             rows_html += f"""
             <div class="candidate-card">
                 <div class="candidate-header">
@@ -293,6 +423,7 @@ def generate_html(candidates: list[dict]) -> str:
                         {"<span class='badge badge-ayp'>ALL YEARS +</span>" if c.get("all_years_positive") else ""}
                         {"<span class='badge badge-decay-warn'>DECAYING</span>" if decay < -0.05 else ""}
                         {"<span class='badge badge-decay-warn'>0.75x STOP</span>" if c.get("stop_multiplier", 1.0) < 1.0 else ""}
+                        {overlap_badge}
                     </div>
                 </div>
 
@@ -463,6 +594,8 @@ def generate_html(candidates: list[dict]) -> str:
     .badge-wf {{ background: #1f2a3a; color: #58a6ff; border: 1px solid #58a6ff; }}
     .badge-ayp {{ background: #1f3a2a; color: #3fb950; border: 1px solid #3fb950; }}
     .badge-decay-warn {{ background: #3d1f20; color: #f85149; border: 1px solid #f85149; }}
+    .badge-overlap-warn {{ background: #3d1f20; color: #f85149; border: 1px solid #f85149; }}
+    .badge-overlap-note {{ background: #2d2210; color: #d29922; border: 1px solid #d29922; }}
     .metrics-grid {{
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
@@ -588,7 +721,16 @@ def main():
     print(f"  DB: {db_path}")
 
     candidates = find_uncovered_candidates(db_path)
-    enriched = [enrich_candidate(c) for c in candidates]
+
+    day_sets: dict = {}
+    if candidates:
+        con = duckdb.connect(str(db_path), read_only=True)
+        try:
+            day_sets = build_day_sets(con, candidates)
+        finally:
+            con.close()
+
+    enriched = [enrich_candidate(c, day_sets=day_sets) for c in candidates]
 
     if not enriched:
         print("\n  No uncovered ROBUST candidates found. Portfolio is fully covered.")

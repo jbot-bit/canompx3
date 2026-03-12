@@ -3,6 +3,7 @@
 import pytest
 
 from scripts.tools.generate_promotion_candidates import (
+    build_day_sets,
     enrich_candidate,
     find_uncovered_candidates,
     format_terminal,
@@ -10,6 +11,7 @@ from scripts.tools.generate_promotion_candidates import (
     generate_spec_code,
 )
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.config import ALL_FILTERS, OrbSizeFilter
 from trading_app.live_config import LIVE_PORTFOLIO
 
 
@@ -142,3 +144,86 @@ class TestGenerateHtml:
         html = generate_html(enriched)
         for c in enriched:
             assert c["strategy_id"] in html
+
+
+class TestBuildDaySets:
+    def test_returns_frozensets(self):
+        """build_day_sets must return frozensets of strings."""
+        import duckdb
+
+        candidates = find_uncovered_candidates(GOLD_DB_PATH)
+        if not candidates:
+            pytest.skip("No uncovered candidates")
+        orb_candidates = [
+            c
+            for c in candidates
+            if c["filter_type"] in ALL_FILTERS and isinstance(ALL_FILTERS[c["filter_type"]], OrbSizeFilter)
+        ]
+        if not orb_candidates:
+            pytest.skip("No OrbSizeFilter candidates to build day sets for")
+        con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+        try:
+            result = build_day_sets(con, orb_candidates[:2])
+        finally:
+            con.close()
+        assert isinstance(result, dict)
+        for v in result.values():
+            assert isinstance(v, frozenset)
+            if v:
+                assert isinstance(next(iter(v)), str)
+
+    def test_vol_filter_candidates_skipped(self):
+        """VolumeFilter candidates should not appear in day_sets keys."""
+        import duckdb
+
+        # Synthesise a fake VOL candidate
+        fake_vol = {
+            "instrument": "MNQ",
+            "orb_label": "TOKYO_OPEN",
+            "entry_model": "E2",
+            "filter_type": "VOL_RV12_N20",
+            "orb_minutes": 5,
+        }
+        con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+        try:
+            result = build_day_sets(con, [fake_vol])
+        finally:
+            con.close()
+        # VOL candidate should produce no keys (VolumeFilter skipped)
+        assert not any(k[3] == "VOL_RV12_N20" for k in result)
+
+
+class TestOverlapFields:
+    def test_enrich_with_no_day_sets_gives_none_overlap(self):
+        """enrich_candidate with day_sets=None must set overlap fields to None."""
+        candidates = find_uncovered_candidates(GOLD_DB_PATH)
+        if not candidates:
+            pytest.skip("No uncovered candidates")
+        enriched = enrich_candidate(candidates[0], day_sets=None)
+        assert enriched["overlap_pct"] is None
+        assert enriched["overlap_with"] is None
+        assert enriched["marginal_days"] is None
+
+    def test_overlap_pct_in_range(self):
+        """overlap_pct must be in [0, 1] when computed."""
+        import duckdb
+
+        candidates = find_uncovered_candidates(GOLD_DB_PATH)
+        orb_candidates = [
+            c
+            for c in candidates
+            if c["filter_type"] in ALL_FILTERS and isinstance(ALL_FILTERS[c["filter_type"]], OrbSizeFilter)
+        ]
+        if not orb_candidates:
+            pytest.skip("No OrbSizeFilter candidates")
+        con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+        try:
+            day_sets = build_day_sets(con, orb_candidates[:3])
+        finally:
+            con.close()
+        for c in orb_candidates[:3]:
+            enriched = enrich_candidate(c, day_sets=day_sets)
+            if enriched["overlap_pct"] is not None:
+                assert 0.0 <= enriched["overlap_pct"] <= 1.0
+            if enriched["marginal_days"] is not None:
+                assert enriched["marginal_days"] >= 0
