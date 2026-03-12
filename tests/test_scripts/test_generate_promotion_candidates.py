@@ -84,6 +84,16 @@ class TestGenerateSpecCode:
         code = generate_spec_code("TOKYO_OPEN", "E2", "VOL_RV12_N20")
         assert "TOKYO_OPEN_E2_VOL_RV12_N20" in code
 
+    def test_core_tier_for_large_sample(self):
+        code = generate_spec_code("CME_PRECLOSE", "E2", "ORB_G8", sample_size=500)
+        assert '"core"' in code
+        assert "high_vol" not in code
+
+    def test_regime_tier_for_small_sample(self):
+        code = generate_spec_code("TOKYO_OPEN", "E2", "ORB_G4", sample_size=91)
+        assert '"regime"' in code
+        assert '"high_vol"' in code
+
 
 class TestFormatTerminal:
     def test_includes_summary(self):
