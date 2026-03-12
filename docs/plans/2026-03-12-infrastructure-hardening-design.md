@@ -12,14 +12,14 @@ backup, logging, or assertion modules. Monitoring exists (CUSUM, fitness, Telegr
 
 ## Phased Delivery
 
-### Phase 1 — Safety Net (protects data today)
-1. Automated DB backup + restore
-2. Immutable audit log table
-3. Advisory DB write locking
+### Phase 1 — Safety Net (protects data today) ✓ DONE
+1. Automated DB backup + restore ✓
+2. Immutable audit log table ✓
+3. Advisory DB write locking ✓
 
-### Phase 2 — Rebuild Quality (catches bad rebuilds)
-4. Post-rebuild assertion suite
-5. Orchestrator hooks (wires Phase 1 + 2 together)
+### Phase 2 — Rebuild Quality (catches bad rebuilds) ✓ DONE
+4. Post-rebuild assertion suite ✓
+5. Orchestrator hooks (wires Phase 1 + 2 together) ✓
 
 ### Phase 3 — Observability (nice-to-have)
 6. Monitoring integration (Telegram alerts on fitness changes)
