@@ -166,3 +166,11 @@ def test_restore_db_no_backups(fake_db):
     """restore_db returns False when no backups exist."""
     ok = restore_db()
     assert not ok
+
+
+def test_restore_db_path_traversal(fake_db):
+    """restore_db blocks path traversal attempts."""
+    db_path, backup_dir = fake_db
+    backup_dir.mkdir(exist_ok=True)
+    ok = restore_db(target_file="../../../etc/passwd")
+    assert not ok

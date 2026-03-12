@@ -814,27 +814,28 @@ def main() -> None:
 
     # --- --rebuild-all ---
     if args.rebuild_all:
-        # Pre-rebuild backup (once for all instruments)
+        # Pre-rebuild backup (once for all instruments, before any connection)
         if not args.dry_run:
             _pre_rebuild_backup()
-        con = duckdb.connect(db_path)
         try:
             with PipelineLock("rebuild_all", db_path=Path(db_path)):
-                for inst in ACTIVE_ORB_INSTRUMENTS:
-                    status = staleness_engine(con, inst)
-                    if not status["stale_steps"]:
-                        print(f"{inst}: up to date, skipping.")
-                        continue
-                    print(f"{inst}: stale ({', '.join(status['stale_steps'])}), rebuilding...")
-                    ok = run_rebuild(con, inst, dry_run=args.dry_run, trigger=args.trigger)
-                    if not ok:
-                        print(f"{inst}: rebuild FAILED — stopping.")
-                        sys.exit(1)
+                con = duckdb.connect(db_path)
+                try:
+                    for inst in ACTIVE_ORB_INSTRUMENTS:
+                        status = staleness_engine(con, inst)
+                        if not status["stale_steps"]:
+                            print(f"{inst}: up to date, skipping.")
+                            continue
+                        print(f"{inst}: stale ({', '.join(status['stale_steps'])}), rebuilding...")
+                        ok = run_rebuild(con, inst, dry_run=args.dry_run, trigger=args.trigger)
+                        if not ok:
+                            print(f"{inst}: rebuild FAILED — stopping.")
+                            sys.exit(1)
+                finally:
+                    con.close()
         except PipelineLockError as e:
             print(f"ABORT: {e}", file=sys.stderr)
             sys.exit(1)
-        finally:
-            con.close()
         # Post-rebuild labeled backup
         if not args.dry_run:
             from scripts.infra.backup_db import labeled_backup

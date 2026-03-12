@@ -174,6 +174,12 @@ def test_get_table_row_count_instrument_tables(audit_db):
     assert get_table_row_count(audit_db, "validated_setups", "MNQ") == 1
 
 
+def test_get_table_row_count_rejects_unknown_table(audit_db):
+    """get_table_row_count raises ValueError for tables not in the allowlist."""
+    with pytest.raises(ValueError, match="not in allowlist"):
+        get_table_row_count(audit_db, "bobby_tables; DROP TABLE bars_1m")
+
+
 def test_get_git_sha_returns_string():
     """get_git_sha returns a 12-char hex string in a git repo."""
     sha = get_git_sha()
