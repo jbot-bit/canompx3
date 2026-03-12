@@ -249,3 +249,25 @@
 - Blast radius: 1 file checked. DEFAULT_LOOKBACK_WINDOWS imported by live_config.py (value unchanged). Callers always pass min_expectancy_r explicitly. compute_day_of_week_stats has no external callers.
 - Verification: PASS — all 6 gates (71 drift, behavioral clean, 36/36 rolling_portfolio tests + 185 fast, ruff clean, blast radius confirmed, regression clean)
 - Commit: 0515f15
+
+## Iteration 28-30 — 2026-03-12
+- See previous session context (outcome_builder, strategy_validator, strategy_discovery audits)
+- Commits: various (iter 28 audit-only, iter 29 OB1 silent fallback fix, iter 30 SD1 stale comment)
+
+## Iteration 31 — 2026-03-12
+- Phase: fix (batch MEDIUM — canonical integrity)
+- Target: trading_app/paper_trader.py:462,474 + trading_app/rolling_portfolio.py:238
+- Finding: PT1+DF-11 — Hardcoded ("E1","E2","E3") in strategy ID parsers, should use config.ENTRY_MODELS
+- Action: Added ENTRY_MODELS import to both files. Replaced 3 hardcoded tuples with canonical reference. Zero functional change — same values, different source.
+- Blast radius: 2 files changed. All callers internal (private helpers). 15+ modules already import ENTRY_MODELS correctly. Drift check #39 validates config.py, not consumers.
+- Verification: ACCEPT — Gate 1 (72 drift), Gate 2 (behavioral clean), Gate 3 (22/22 paper_trader + 36/36 rolling_portfolio), Gate 5 (no sins). Pre-commit: 186/186 fast tests pass.
+- Commit: 9158b77
+
+## Iteration 32 — 2026-03-13
+- Phase: fix (batch MEDIUM+LOW — volatile data + dead code)
+- Target: trading_app/mcp_server.py:213 + lines 54-55
+- Finding: MCP1 — hardcoded "735 FDR-validated" and instrument data years in MCP instructions (volatile data violation). MCP2 — unused _CORE_MIN/_REGIME_MIN aliases.
+- Action: Replaced hardcoded stats with dynamic values from ACTIVE_ORB_INSTRUMENTS. Removed unused constant aliases and their CORE_MIN_SAMPLES/REGIME_MIN_SAMPLES imports.
+- Blast radius: 1 file changed. _build_server called only from __main__. No tests assert on instructions string. 39 files already import ACTIVE_ORB_INSTRUMENTS.
+- Verification: ACCEPT — Gate 1 (72 drift), Gate 2 (behavioral clean), Gate 3 (17/17 mcp_server), Gate 5 (no sins). Pre-commit: 186/186 fast tests.
+- Commit: da8af67

@@ -80,12 +80,19 @@ python -m pytest tests/test_pipeline/test_foo.py -x -v
 - If no companion test exists, flag it: "NO TEST COVERAGE for [file]"
 - Must exit 0. Any failure = report the full error.
 
-**Gate 4: Full Test Suite** (if pipeline/ or trading_app/ changed)
+**Gate 4: Targeted Test Expansion** (if pipeline/ or trading_app/ changed)
+Run tests for all DIRECTLY AFFECTED modules — not just the changed file's companion test,
+but also tests for files that IMPORT the changed file. Use grep to find importers:
 ```bash
-python -m pytest tests/ -x -q
+# Find who imports the changed module
+grep -rl "from pipeline.foo import\|import pipeline.foo" tests/ --include="*.py"
+# Run all discovered test files
+python -m pytest tests/test_pipeline/test_foo.py tests/test_trading_app/test_bar.py -x -q
 ```
 - Only run this if Gates 1-3 pass. No point running everything on a broken state.
 - Must exit 0.
+- Do NOT run the full `pytest tests/` suite — it takes 16+ minutes and Gate 3 already
+  covers the direct companion tests. This gate catches cross-module breakage only.
 
 **Gate 5: Seven Sins Scan** (on ALL modified files)
 Read each modified file and scan for the seven sins. This is a CODE REVIEW gate, not a command:
