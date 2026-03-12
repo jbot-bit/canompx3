@@ -1,0 +1,14 @@
+{
+  "planPath": "docs/plans/2026-03-12-promotion-candidates-design.md",
+  "tasks": [
+    {"id": 5, "subject": "Task 1: Core query — find_uncovered_candidates()", "status": "pending"},
+    {"id": 6, "subject": "Task 2: Scorecard enrichment — year-by-year, decay, dollar gate", "status": "pending", "blockedBy": [5]},
+    {"id": 7, "subject": "Task 3: LiveStrategySpec code generator", "status": "pending", "blockedBy": [5]},
+    {"id": 8, "subject": "Task 4: HTML report generation", "status": "pending", "blockedBy": [5, 6, 7]},
+    {"id": 9, "subject": "Task 5: Terminal format output", "status": "pending", "blockedBy": [5, 6]},
+    {"id": 10, "subject": "Task 6: CLI main() and browser open", "status": "pending", "blockedBy": [8, 9]},
+    {"id": 11, "subject": "Task 7: Wire into rebuild chain + post-rebuild skill", "status": "pending", "blockedBy": [10]},
+    {"id": 12, "subject": "Task 8: REPO_MAP update and final verification", "status": "pending", "blockedBy": [11]}
+  ],
+  "lastUpdated": "2026-03-12T00:00:00"
+}

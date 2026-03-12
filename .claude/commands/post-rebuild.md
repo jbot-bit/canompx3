@@ -51,13 +51,22 @@ python -m pytest tests/ -x -q
 
 **ANY failure = STOP.** Fix the issue before proceeding to Step 5.
 
-### Step 5: Sync Pinecone Knowledge Base
+### Step 5: Surface Promotion Candidates
+
+```bash
+python scripts/tools/generate_promotion_candidates.py
+```
+
+Opens scorecard HTML in browser. Review candidates and decide which to add to `live_config.py`.
+If no candidates found, report "Portfolio fully covered" and continue.
+
+### Step 6: Sync Pinecone Knowledge Base
 
 ```bash
 python scripts/tools/sync_pinecone.py
 ```
 
-### Step 6: Report
+### Step 7: Report
 
 ```
 === POST-REBUILD COMPLETE ===
@@ -69,6 +78,7 @@ Integrity:      PASS/FAIL
 Drift:          PASS/FAIL
 Behavioral:     PASS/FAIL
 Tests:          PASS/FAIL (N passed)
+Candidates:     N found (or "fully covered")
 Pinecone sync:  PASS/FAIL
 =============================
 ```
