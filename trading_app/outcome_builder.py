@@ -675,6 +675,10 @@ def build_outcomes(
         # Determine which sessions to build outcomes for
         sessions = get_enabled_sessions(instrument)
         if not sessions:
+            logger.warning(
+                f"get_enabled_sessions returned empty for {instrument} — "
+                f"falling back to all ORB_LABELS ({len(ORB_LABELS)} sessions)"
+            )
             sessions = ORB_LABELS  # fallback: all sessions
         logger.info(f"  Sessions: {len(sessions)} enabled for {instrument}")
 
