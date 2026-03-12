@@ -28,7 +28,7 @@ import duckdb
 
 from pipeline.cost_model import get_cost_spec
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.config import ATR_VELOCITY_OVERLAY
+from trading_app.config import ATR_VELOCITY_OVERLAY, ENTRY_MODELS
 from trading_app.execution_engine import ExecutionEngine
 from trading_app.portfolio import Portfolio, build_portfolio
 from trading_app.risk_manager import RiskLimits, RiskManager
@@ -459,20 +459,17 @@ def _orb_from_strategy(strategy_id: str) -> str:
     # Find the entry model token (E1, E2, E3) — everything between
     # parts[0] (instrument) and that token is the ORB label.
     for i, p in enumerate(parts):
-        if p in ("E1", "E2", "E3") and i > 1:
+        if p in ENTRY_MODELS and i > 1:
             return "_".join(parts[1:i])
     # Fallback: assume position 1 (legacy format)
     return parts[1] if len(parts) > 1 else ""
 
 
 def _entry_model_from_strategy(strategy_id: str) -> str:
-    """Extract entry model from strategy ID.
-
-    Entry model is always E1, E2, or E3.
-    """
+    """Extract entry model from strategy ID."""
     parts = strategy_id.split("_")
     for p in parts:
-        if p in ("E1", "E2", "E3"):
+        if p in ENTRY_MODELS:
             return p
     # Fallback: assume position 2 (legacy format)
     return parts[2] if len(parts) > 2 else ""
