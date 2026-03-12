@@ -493,12 +493,24 @@ class TestRebuildDryRun:
 class TestRebuildExecution:
     def test_rebuild_all_steps_pass(self, tmp_path, capsys):
         """All steps succeed -> COMPLETED manifest written."""
+        from pipeline.dst import SESSION_CATALOG
+
         _, con = _create_test_db(tmp_path)
         sym = "MGC"
         # Seed prerequisites so preflight checks pass
+        _insert_bar_1m(con, sym, "2026-03-06T00:00:00+00:00")
+        _insert_bar_1m(con, sym, "2026-03-07T00:00:00+00:00")
         for ap in [5, 15, 30]:
             _insert_daily_features(con, sym, "2026-03-06", ap)
-        _insert_orb_outcome(con, sym, "2026-03-06")
+        # Seed all session×aperture combos so A5 assertion passes
+        for session in SESSION_CATALOG:
+            for ap in [5, 15, 30]:
+                con.execute(
+                    "INSERT INTO orb_outcomes (trading_day, symbol, orb_label, orb_minutes, rr_target, "
+                    "confirm_bars, entry_model, outcome, pnl_r) "
+                    "VALUES ('2026-03-06', ?, ?, ?, 1.5, 1, 'E2', 'win', 1.0)",
+                    [sym, session, ap],
+                )
         con.execute("INSERT INTO experimental_strategies (strategy_id, instrument) VALUES ('s1', ?)", [sym])
         con.execute("INSERT INTO validated_setups (strategy_id, instrument, status) VALUES ('s1', ?, 'active')", [sym])
         con.execute(

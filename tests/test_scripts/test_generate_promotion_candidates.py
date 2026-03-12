@@ -94,6 +94,14 @@ class TestGenerateSpecCode:
         assert '"regime"' in code
         assert '"high_vol"' in code
 
+    def test_boundary_100_is_core(self):
+        code = generate_spec_code("CME_PRECLOSE", "E2", "ORB_G8", sample_size=100)
+        assert '"core"' in code
+
+    def test_boundary_99_is_regime(self):
+        code = generate_spec_code("CME_PRECLOSE", "E2", "ORB_G8", sample_size=99)
+        assert '"regime"' in code
+
 
 class TestFormatTerminal:
     def test_includes_summary(self):
