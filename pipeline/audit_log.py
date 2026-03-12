@@ -13,6 +13,7 @@ Usage:
 """
 
 import subprocess
+import sys
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -90,7 +91,6 @@ def log_operation(
     If the insert fails, logs to stderr and returns empty string (audit failure
     should never block data writes).
     """
-    import sys
 
     log_id = str(uuid.uuid4())
     now = datetime.now(UTC)
@@ -159,8 +159,38 @@ def get_previous_counts(
             [instrument, table_name],
         ).fetchone()
         return row[0] if row else None
-    except Exception:
+    except Exception as e:
+        print(f"[AUDIT] WARNING: get_previous_counts failed: {e}", file=sys.stderr)
         return None
+
+
+# Allowlist of tables safe to query in get_table_row_count.
+# Must match tables defined in pipeline/init_db.py.
+_ALLOWED_TABLES: frozenset[str] = frozenset(
+    {
+        "bars_1m",
+        "bars_5m",
+        "daily_features",
+        "orb_outcomes",
+        "experimental_strategies",
+        "validated_setups",
+        "edge_families",
+        "family_rr_locks",
+        "prospective_signals",
+        "pipeline_audit_log",
+        "rebuild_manifest",
+    }
+)
+
+# Tables that use 'instrument' instead of 'symbol' for filtering
+_INSTRUMENT_COLUMN_TABLES: frozenset[str] = frozenset(
+    {
+        "experimental_strategies",
+        "validated_setups",
+        "edge_families",
+        "family_rr_locks",
+    }
+)
 
 
 def get_table_row_count(
@@ -171,15 +201,16 @@ def get_table_row_count(
     """Count rows in a table, optionally filtered by instrument.
 
     Uses the correct column name per table: 'symbol' for pipeline tables,
-    'instrument' for trading_app tables.
+    'instrument' for trading_app tables. Table name is validated against an
+    allowlist to prevent SQL injection.
     """
-    # Tables that use 'instrument' instead of 'symbol'
-    instrument_column_tables = {"experimental_strategies", "validated_setups", "edge_families", "family_rr_locks"}
+    if table_name not in _ALLOWED_TABLES:
+        raise ValueError(f"Table '{table_name}' not in allowlist: {sorted(_ALLOWED_TABLES)}")
 
     if instrument is None:
         row = con.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()
     else:
-        col = "instrument" if table_name in instrument_column_tables else "symbol"
+        col = "instrument" if table_name in _INSTRUMENT_COLUMN_TABLES else "symbol"
         row = con.execute(f"SELECT COUNT(*) FROM {table_name} WHERE {col} = $1", [instrument]).fetchone()
 
     return row[0] if row else 0

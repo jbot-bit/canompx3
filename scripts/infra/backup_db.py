@@ -23,7 +23,11 @@ from datetime import datetime
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-DB_PATH = PROJECT_ROOT / "gold.db"
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from pipeline.paths import GOLD_DB_PATH
+
+DB_PATH = GOLD_DB_PATH
 BACKUP_DIR = PROJECT_ROOT / "backups"
 DEFAULT_KEEP = 5
 REBUILD_KEEP = 3
@@ -203,7 +207,11 @@ def restore_db(target_file: str | None = None) -> bool:
 
     # Find backup to restore
     if target_file:
-        source = BACKUP_DIR / target_file
+        source = (BACKUP_DIR / target_file).resolve()
+        # Path containment check — prevent traversal outside BACKUP_DIR
+        if not str(source).startswith(str(BACKUP_DIR.resolve())):
+            print(f"SECURITY: path traversal blocked: {target_file}")
+            return False
         if not source.exists():
             print(f"Backup not found: {source}")
             print("Available backups:")
