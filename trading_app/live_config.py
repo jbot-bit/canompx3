@@ -94,8 +94,10 @@ LIVE_MIN_EXPECTANCY_DOLLARS_MULT = 1.3
 
 # The live portfolio: what we actually trade.
 #
-# TIER 1 (CORE): Always on. Full-period validated, N>=100, ROBUST/WHITELISTED
-#   edge family. Specs are instrument-agnostic — pass --instrument to select.
+# TIER 1 (CORE): Always on. Full-period validated (FDR+WF). Target N>=100;
+#   REGIME-N variants may be loaded when no CORE-N variant exists (warning logged).
+#   Edge family classification informational — PURGED/SINGLETON families may be present.
+#   Specs are instrument-agnostic — pass --instrument to select.
 #   If a spec has no match for an instrument, it emits WARN and skips.
 #
 # TIER 2 (REGIME): Fitness-gated. Validated but N<100 (REGIME classification).
@@ -123,7 +125,7 @@ LIVE_PORTFOLIO = [
     #   ORB_G4_FAST10: MGC speed-filtered edge, 43 new days (75% overlap), ExpR=+0.269
     LiveStrategySpec("CME_REOPEN_E2_ORB_G5", "core", "CME_REOPEN", "E2", "ORB_G5", None),
     LiveStrategySpec("CME_REOPEN_E2_VOL_RV12_N20", "core", "CME_REOPEN", "E2", "VOL_RV12_N20", None),
-    # BH FDR exclusion: MNQ fails (p_adj=0.146, Sharpe=0.068), MGC survives (p_adj=0.005)
+    # BH FDR exclusion: MNQ p_adj > 0.05; MGC survives. @research-source bloomey_audit 2026-03-12
     LiveStrategySpec(
         "CME_REOPEN_E2_ORB_G4_FAST10",
         "core",
@@ -139,8 +141,8 @@ LIVE_PORTFOLIO = [
     LiveStrategySpec("CME_PRECLOSE_E2_VOL_RV12_N20", "core", "CME_PRECLOSE", "E2", "VOL_RV12_N20", None),
     LiveStrategySpec("CME_PRECLOSE_E2_ORB_G5", "core", "CME_PRECLOSE", "E2", "ORB_G5", None),
     # COMEX_SETTLE: MES wins with ORB_G6; MNQ wins with VOL_RV12_N20
-    # BH FDR exclusion: MGC (p_adj=0.064, N=113, PURGED family) and M2K (p_adj=0.145, Sharpe=0.055) fail.
-    # MES (p_adj=0.004) and MNQ (p_adj=0.000) survive.
+    # BH FDR exclusion: MGC and M2K p_adj > 0.05; MES and MNQ survive.
+    # @research-source bloomey_audit 2026-03-12
     LiveStrategySpec(
         "COMEX_SETTLE_E2_ORB_G6",
         "core",
@@ -169,7 +171,7 @@ LIVE_PORTFOLIO = [
     #   ORB_G5 (15m aperture, hash d790ad6b) — MGC N=297+ FDR+WF, genuinely independent
     #   ORB_G6_CONT (hash dd81bcff7) — MES N=221, FDR+WF, Exp$=7.19 passes dollar gate
     LiveStrategySpec("TOKYO_OPEN_E2_ORB_G5_CONT", "core", "TOKYO_OPEN", "E2", "ORB_G5_CONT", None),
-    # BH FDR exclusion: MES fails (p_adj=0.109, PURGED family). MGC (p_adj=0.009) and MNQ (p_adj=0.001) survive.
+    # BH FDR exclusion: MES p_adj > 0.05; MGC and MNQ survive. @research-source bloomey_audit 2026-03-12
     LiveStrategySpec(
         "TOKYO_OPEN_E2_ORB_G5", "core", "TOKYO_OPEN", "E2", "ORB_G5", None, exclude_instruments=frozenset({"MES"})
     ),
@@ -191,8 +193,8 @@ LIVE_PORTFOLIO = [
     #   N=1032, FDR=True, WF=True, ExpR=0.122). M2K is REGIME below (ORB_G6_CONT).
     #   ORB_G6_NOMON_O15 strategies were added after MNQ WF rebuild (Mar 2 2026) — not in original build.
     LiveStrategySpec("LONDON_METALS_E2_VOL_RV12_N20", "core", "LONDON_METALS", "E2", "VOL_RV12_N20", None),
-    # BH FDR exclusion: M2K fails (p_adj=0.060, PBO=0.94 — 94% overfit probability).
-    # MNQ survives (p_adj=0.003, N=1032, PBO=0.13).
+    # BH FDR exclusion: M2K p_adj > 0.05, high PBO; MNQ survives.
+    # @research-source bloomey_audit 2026-03-12
     LiveStrategySpec(
         "LONDON_METALS_E2_ORB_G6_NOMON",
         "core",
@@ -207,8 +209,7 @@ LIVE_PORTFOLIO = [
     # =========================================================================
     # M2K LONDON_METALS: N=59, REGIME. ORB_G6_CONT filter (different from MNQ's VOL_RV12_N20_O15 above)
     LiveStrategySpec("LONDON_METALS_E2_ORB_G6_CONT", "regime", "LONDON_METALS", "E2", "ORB_G6_CONT", "high_vol"),
-    # NOTE: MGC TOKYO_OPEN (N=96) is loaded by the CORE TOKYO_OPEN_E2_ORB_G5_CONT spec above.
-    # N=96 is validated (passed full chain: 75%+ years positive, walk-forward).
+    # NOTE: MGC TOKYO_OPEN ORB_G5_CONT loads highest-ExpR FDR-preferred variant (varies by rebuild).
     # Monitor via get_strategy_fitness if conditional gating is needed.
 ]
 
@@ -229,8 +230,8 @@ def _load_best_regime_variant(
 
     Joins family_rr_locks to restrict each (instrument, orb_label, filter_type,
     entry_model, orb_minutes, confirm_bars) to its JK-MaxSharpe-locked RR target.
-    Among matching rows, picks the best by expectancy_r (tiebreaker across
-    different orb_minutes/confirm_bars combos at the locked RR).
+    Among matching rows, picks the best by FDR significance (primary), then
+    expectancy_r (tiebreaker across different orb_minutes/confirm_bars combos).
 
     Only returns strategies with expectancy_r >= min_expectancy_r.
     """
@@ -243,6 +244,7 @@ def _load_best_regime_variant(
                    vs.orb_minutes,
                    vs.expectancy_r, vs.win_rate, vs.sample_size,
                    vs.sharpe_ratio, vs.max_drawdown_r,
+                   vs.fdr_significant,
                    es.median_risk_points,
                    1.0 as stop_multiplier
             FROM validated_setups vs
@@ -262,7 +264,7 @@ def _load_best_regime_variant(
               AND vs.filter_type = ?
               AND LOWER(vs.status) = 'active'
               AND vs.expectancy_r >= ?
-            ORDER BY vs.expectancy_r DESC NULLS LAST
+            ORDER BY vs.fdr_significant DESC NULLS LAST, vs.expectancy_r DESC NULLS LAST
             LIMIT 1
         """,
             [instrument, orb_label, entry_model, filter_type, min_expectancy_r],
