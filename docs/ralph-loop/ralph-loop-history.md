@@ -214,6 +214,15 @@
 - Verification: PASS — 4/4 gates (62 drift checks, behavioral clean, 20/20 position_tracker tests, ruff clean)
 - Commit: f713a1c
 
+## Iteration 29 — 2026-03-12
+- Phase: fix (LOW — observability)
+- Target: trading_app/outcome_builder.py:677-678
+- Finding: OB1: build_outcomes() silently falls back to ORB_LABELS when get_enabled_sessions() returns empty — misconfigured instruments produce invisible no-ops, no diagnostic log
+- Action: Added logger.warning() before the fallback assignment. No logic change; fallback behavior preserved. Fresh audit of full file — no other actionable findings (look-ahead clean, canonical imports correct, idempotent writes correct).
+- Blast radius: 1 file changed (log-only). Callers unaffected. logger already defined at line 20.
+- Verification: ACCEPT — all 4 gates (71 drift, behavioral clean, 27/27 outcome_builder tests, ruff clean). Pre-commit: 185/185 fast tests. M2.5 advisory on pre-existing file patterns (not the added lines).
+- Commit: 07b4ba9
+
 ## Iteration 28 — 2026-03-12
 - Phase: fix (batch LOW — annotation debt + ledger cleanup)
 - Target: trading_app/live_config.py:75,89
