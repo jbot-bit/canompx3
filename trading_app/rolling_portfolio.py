@@ -43,9 +43,19 @@ TRANSITIONING_THRESHOLD = 0.3
 # @revalidated-for: E1/E2 event-based (2026-03-09)
 FULL_WEIGHT_SAMPLE = 50
 
+# @research-source: 24 months = ~2 years of monthly windows. Balances recency
+# (recent regime) vs. statistical power (enough windows for stable scoring).
+# Mirrors the 18-24 month rolling window convention from Lopez de Prado AFML Ch.7.
+# @revalidated-for: E1/E2 event-based (2026-03-09)
 # Default lookback: only use the N most recent rolling windows for scoring.
-# ~2 years of monthly windows. None = use all windows.
+# None = use all windows.
 DEFAULT_LOOKBACK_WINDOWS = 24
+
+# @research-source: same floor as live_config.LIVE_MIN_EXPECTANCY_R — strategies below
+# 0.10R/trade are not meaningful after costs and noise. Cannot import from live_config
+# directly (circular import: live_config imports rolling_portfolio).
+# @revalidated-for: E1/E2 event-based (2026-03-09)
+MIN_EXPECTANCY_R = 0.10
 
 
 @dataclass
@@ -322,6 +332,9 @@ def compute_day_of_week_stats(
             # Determine eligible days based on filter
             filt = ALL_FILTERS.get(fam.filter_type)
             if filt is None:
+                logger.warning(
+                    "compute_day_of_week_stats: unknown filter_type '%s' — skipping DOW stats", fam.filter_type
+                )
                 continue
 
             size_col = f"orb_{fam.orb_label}_size"
@@ -411,7 +424,7 @@ def load_rolling_validated_strategies(
     instrument: str,
     train_months: int,
     min_weighted_score: float = STABLE_THRESHOLD,
-    min_expectancy_r: float = 0.10,
+    min_expectancy_r: float = MIN_EXPECTANCY_R,
     lookback_windows: int | None = DEFAULT_LOOKBACK_WINDOWS,
 ) -> list[dict]:
     """Load strategies from STABLE rolling families for portfolio integration.
