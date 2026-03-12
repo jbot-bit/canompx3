@@ -21,13 +21,14 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.ai.sql_adapter import (
     QueryIntent,
     QueryTemplate,
     SQLAdapter,
 )
-from trading_app.config import CORE_MIN_SAMPLES, REGIME_MIN_SAMPLES, generate_strategy_warnings
+from trading_app.config import generate_strategy_warnings
 from trading_app.strategy_fitness import compute_fitness, compute_portfolio_fitness
 
 DB_PATH = str(GOLD_DB_PATH)
@@ -46,13 +47,6 @@ _ALLOWED_PARAMS = {
     "rr_target",
     "confirm_bars",
 }
-
-# ---------------------------------------------------------------------------
-# Warnings — thresholds imported from config.py (single source of truth)
-# ---------------------------------------------------------------------------
-
-_CORE_MIN = CORE_MIN_SAMPLES
-_REGIME_MIN = REGIME_MIN_SAMPLES
 
 
 def _generate_warnings(df) -> list[str]:
@@ -207,11 +201,12 @@ def _build_server():
     """Build and return the FastMCP server instance."""
     from fastmcp import FastMCP
 
+    instruments = ", ".join(sorted(ACTIVE_ORB_INSTRUMENTS))
     mcp = FastMCP(
         "gold-db",
         instructions=(
-            "Gold futures trading database with 4 instruments: MGC (10yr), MNQ (5yr), MES (7yr), M2K (5yr). "
-            "735 FDR-validated ORB breakout strategies. "
+            f"Gold futures trading database with {len(ACTIVE_ORB_INSTRUMENTS)} instruments: {instruments}. "
+            "FDR-validated ORB breakout strategies. "
             "WORKFLOW: (1) list_available_queries to discover templates, "
             "(2) query_trading_db for strategy lookups/comparisons/raw outcomes, "
             "(3) get_strategy_fitness for rolling regime assessment (FIT/WATCH/DECAY/STALE), "
