@@ -497,8 +497,24 @@ def run_rebuild(
         print(f"    PASSED ({duration:.1f}s)")
         completed.append(step_name)
 
-    # All steps passed
-    write_manifest(con, rebuild_id, instrument, "COMPLETED", steps_completed=completed, trigger=trigger)
+    # All steps passed — run post-rebuild assertions
+    from scripts.tools.assert_rebuild import has_failures, run_assertions
+
+    print()
+    print("=" * 50)
+    print("POST-REBUILD ASSERTIONS")
+    print("=" * 50)
+    assertion_results = run_assertions(con, instrument=instrument)
+    for r in assertion_results:
+        print(f"  {r}")
+
+    if has_failures(assertion_results):
+        print("\n  ASSERTION FAILURES detected — marking rebuild as WARNING")
+        write_manifest(con, rebuild_id, instrument, "COMPLETED", steps_completed=completed, trigger=trigger)
+        log_operation(con, "ASSERTIONS", "post_rebuild", instrument=instrument, rebuild_id=rebuild_id, status="WARNING")
+    else:
+        write_manifest(con, rebuild_id, instrument, "COMPLETED", steps_completed=completed, trigger=trigger)
+
     print(f"Rebuild COMPLETED: {rebuild_id}")
     return True
 
