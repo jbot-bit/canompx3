@@ -30,6 +30,7 @@ import numpy as np
 
 from pipeline.init_db import ORB_LABELS
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.config import ENTRY_MODELS
 
 # @research-source: stability thresholds calibrated from MGC rolling window
 # analysis. 0.6 = passes >60% of windows weighted by sample size.
@@ -235,7 +236,7 @@ def aggregate_rolling_performance(
     for fid, windows_data in family_windows.items():
         # Parse family_id back — entry_model is always E1/E2/E3
         parts = fid.split("_")
-        em_idx = next(i for i, p in enumerate(parts) if p in ("E1", "E2", "E3"))
+        em_idx = next(i for i, p in enumerate(parts) if p in ENTRY_MODELS)
         orb_label = "_".join(parts[:em_idx])
         entry_model = parts[em_idx]
         filter_type = "_".join(parts[em_idx + 1 :])
