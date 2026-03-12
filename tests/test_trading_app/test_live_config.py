@@ -36,7 +36,8 @@ def live_config_db(tmp_path):
             max_drawdown_r DOUBLE,
             status VARCHAR,
             orb_minutes INTEGER DEFAULT 5,
-            stop_multiplier DOUBLE DEFAULT 1.0
+            stop_multiplier DOUBLE DEFAULT 1.0,
+            fdr_significant BOOLEAN
         )
     """)
     con.execute("""
@@ -181,6 +182,38 @@ class TestLoadBestRegimeVariant:
 
         result = _load_best_regime_variant(live_config_db, "MGC", "TOKYO_OPEN", "E1", "ORB_G4")
         assert result["strategy_id"] == "high_expr"
+
+    def test_fdr_significant_preferred_over_higher_expr(self, live_config_db):
+        """FDR-significant variant wins over higher-ExpR FDR-failing variant."""
+        con = duckdb.connect(str(live_config_db))
+        con.execute("""
+            INSERT INTO validated_setups (strategy_id, instrument, orb_label, entry_model,
+                rr_target, confirm_bars, filter_type, expectancy_r, win_rate,
+                sample_size, sharpe_ratio, max_drawdown_r, status, orb_minutes,
+                fdr_significant)
+            VALUES
+                ('fdr_fail_high', 'MGC', 'NYSE_OPEN', 'E2', 1.0, 1, 'ORB_G8',
+                 0.35, 0.54, 144, 1.1, 4.0, 'active', 5, FALSE),
+                ('fdr_pass_low', 'MGC', 'NYSE_OPEN', 'E2', 1.0, 1, 'ORB_G8',
+                 0.22, 0.60, 472, 0.8, 6.0, 'active', 30, TRUE)
+        """)
+        # Two apertures (5m and 30m) each locked at RR=1.0.
+        con.execute("""
+            INSERT INTO family_rr_locks (instrument, orb_label, filter_type, entry_model,
+                orb_minutes, confirm_bars, locked_rr, method,
+                sharpe_at_rr, maxdd_at_rr, n_at_rr, expr_at_rr, tpy_at_rr)
+            VALUES
+                ('MGC', 'NYSE_OPEN', 'ORB_G8', 'E2', 5, 1, 1.0, 'ONLY_RR',
+                 1.1, 4.0, 144, 0.35, 15.0),
+                ('MGC', 'NYSE_OPEN', 'ORB_G8', 'E2', 30, 1, 1.0, 'ONLY_RR',
+                 0.8, 6.0, 472, 0.22, 47.0)
+        """)
+        con.close()
+
+        result = _load_best_regime_variant(live_config_db, "MGC", "NYSE_OPEN", "E2", "ORB_G8")
+        assert result is not None
+        # FDR-significant variant (ExpR=0.22) must win over FDR-failing (ExpR=0.35).
+        assert result["strategy_id"] == "fdr_pass_low"
 
     def test_unlocked_rr_excluded(self, live_config_db):
         """Strategy at non-locked RR is excluded by INNER JOIN."""
