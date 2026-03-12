@@ -1079,7 +1079,8 @@ def run_discovery(
         for s in sessions:
             nf = len(get_filters_for_grid(instrument, s))
             total_combos += nf * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS)  # E1 (all CBs)
-            total_combos += nf * len(RR_TARGETS) * 2  # E2+E3 (CB1 only)
+            total_combos += nf * len(RR_TARGETS) * 2  # E2+E3 CB1 — E3 skipped at runtime (SKIP_ENTRY_MODELS)
+            # but counted here for conservative n_trials_at_discovery (higher FST hurdle)
         combo_idx = 0
 
         for orb_label in sessions:
