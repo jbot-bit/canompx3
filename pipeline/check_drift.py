@@ -3212,6 +3212,59 @@ def check_ml_no_iterrows_filters() -> list[str]:
 # =============================================================================
 # CHECK REGISTRY — single source of truth for all drift checks
 # =============================================================================
+_PIPELINE_TABLES = frozenset({"orb_outcomes", "daily_features", "bars_1m", "bars_5m", "prospective_signals"})
+_TRADING_APP_TABLES = frozenset(
+    {
+        "validated_setups",
+        "edge_families",
+        "experimental_strategies",
+        "family_rr_locks",
+        "regime_strategies",
+        "rebuild_manifest",
+    }
+)
+_SQL_KW_RE = re.compile(r"\b(SELECT|FROM|JOIN|WHERE|AND|ON|GROUP BY|ORDER BY|INSERT|UPDATE|DELETE)\b", re.I)
+
+
+def check_symbol_instrument_sql_convention() -> list[str]:
+    """Pipeline tables use 'symbol'; trading app tables use 'instrument'.
+
+    Flags SQL-context lines in pipeline/, trading_app/, and scripts/ that use
+    the wrong column name for their table layer — the class of bug that caused
+    the BinderException on orb_outcomes in generate_promotion_candidates.py.
+
+    Only checks lines that also contain a SQL keyword to avoid false positives
+    on Python attribute access (e.g. self.instrument, self.trading_day).
+    """
+    violations: list[str] = []
+    for search_dir in (PIPELINE_DIR, TRADING_APP_DIR, SCRIPTS_DIR):
+        for py_file in sorted(search_dir.rglob("*.py")):
+            try:
+                lines = py_file.read_text(encoding="utf-8", errors="ignore").splitlines()
+            except OSError:
+                continue
+            for lineno, line in enumerate(lines, 1):
+                stripped = line.strip()
+                if stripped.startswith("#"):
+                    continue
+                if not _SQL_KW_RE.search(stripped):
+                    continue
+                lo = stripped.lower()
+                if any(t in lo for t in _PIPELINE_TABLES) and ".instrument" in lo:
+                    violations.append(
+                        f"  {py_file.relative_to(PROJECT_ROOT)}:{lineno} — "
+                        f"pipeline table with '.instrument' (use '.symbol'): "
+                        f"{stripped[:120]}"
+                    )
+                if any(t in lo for t in _TRADING_APP_TABLES) and ".symbol" in lo:
+                    violations.append(
+                        f"  {py_file.relative_to(PROJECT_ROOT)}:{lineno} — "
+                        f"trading app table with '.symbol' (use '.instrument'): "
+                        f"{stripped[:120]}"
+                    )
+    return violations
+
+
 # Each entry: (description, callable, is_advisory).
 # is_advisory=True → prints warnings but never blocks (shown as ADVISORY).
 # Check number is derived from position (1-indexed).
@@ -3398,7 +3451,13 @@ CHECKS = [
     ("ML bundles include total_full_delta_r (White 2000)", check_ml_bundle_full_delta, False, False),
     ("ML Sharpe deltas include JK p-value", check_ml_sharpe_jk_pvalue, False, False),
     ("No iterrows in features.py filter application", check_ml_no_iterrows_filters, False, False),
-]
+    (
+        "SQL column convention: pipeline tables use 'symbol', trading app tables use 'instrument'",
+        check_symbol_instrument_sql_convention,
+        False,
+        False,
+    ),
+]  # end CHECKS
 
 
 def main():
