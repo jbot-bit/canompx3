@@ -226,8 +226,8 @@ def block2_session_concordance(con: duckdb.DuckDBPyConnection) -> None:
     print("\n" + "=" * 70)
     print("BLOCK 2: SESSION DIRECTION CONCORDANCE (same session, same day)")
     print("=" * 70)
-    print("Question: When MGC breaks UP, does MNQ break DOWN more than base rate?")
-    print("Method: Fisher exact test, BH FDR across all sessions\n")
+    print("Question: Do MGC and MNQ break the SAME or OPPOSITE direction more than base rate (two-sided)?")
+    print("Method: Binomial test vs 50% base rate, BH FDR across all sessions\n")
 
     df = load_session_dirs(con)
 
@@ -328,10 +328,14 @@ def block2_session_concordance(con: duckdb.DuckDBPyConnection) -> None:
     if bh_survivors:
         print("\n  SURVIVING FINDINGS:")
         for r in bh_survivors:
-            print(f"    {r['session']}: {r['pct_opposite']:.1%} opposite breaks "
+            direction = "opposite" if r["pct_opposite"] > 0.5 else "concordant"
+            pct_display = r["pct_opposite"] if r["pct_opposite"] > 0.5 else 1 - r["pct_opposite"]
+            print(f"    {r['session']}: {pct_display:.1%} {direction} breaks "
                   f"(N={r['n_both_broke']}, p_bh={r['p_bh']:.4f})")
         print("\n  MECHANISM CHECK: Does this have a structural reason?")
-        print("  If MGC breaks one way and MNQ the other consistently = flight-to-safety flow.")
+        print("  CONCORDANT (same direction > 50%): macro trend effect - shared directional response")
+        print("  to data releases or Asian/European opens. Both assets move with the macro flow.")
+        print("  OPPOSITE (opposite direction > 50%): flight-to-safety - risk-off/risk-on split.")
         print("  Check year-by-year below to confirm stability.")
 
         # Year-by-year for survivors
@@ -464,7 +468,7 @@ def print_summary() -> None:
     print("\n" + "=" * 70)
     print("SUMMARY & TRADE SHEET IMPLICATIONS")
     print("=" * 70)
-    print("""
+    print(f"""
 Results above tell you one of three things:
 
 A) NEGATIVE correlation confirmed + stable + survives FDR:
@@ -482,7 +486,7 @@ C) POSITIVE correlation:
    - Market Context: 'Both instruments move together at SESSION - size down
                        if holding both simultaneously.'
 
-Trade sheet panel: ONLY add findings that survived BH FDR with p < 0.01.
+Trade sheet panel: ONLY add findings that survived BH FDR (p_bh < {BH_Q:.2f}).
 Grade PRELIMINARY (N=100-199) or HIGH-CONFIDENCE (N=500+) per RESEARCH_RULES.md.
 """)
 
@@ -509,7 +513,7 @@ def main() -> None:
         con.close()
 
     print("\nDone. Write findings to research/output/mgc_mnq_correlation_findings.md")
-    print("Only BH-surviving findings with p < 0.01 go to the trade sheet panel.")
+    print(f"Only BH-surviving findings (p_bh < {BH_Q:.2f}) go to the trade sheet panel.")
 
 
 if __name__ == "__main__":
