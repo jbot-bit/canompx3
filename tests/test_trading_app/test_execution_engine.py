@@ -988,6 +988,64 @@ class TestUnknownEntryModel:
         assert "unknown_entry_model" in reject_events[0].reason
 
 
+class TestZeroRiskRejections:
+    """Entry-model zero-risk paths must emit REJECT, not silently complete."""
+
+    def test_e2_zero_risk_emits_reject(self, monkeypatch):
+        """E2: zero slippage + zero-range ORB → entry_price == stop_price → REJECT.
+
+        In production slippage > 0 and ORB high > low, making this unreachable.
+        Guard must still emit an observable event rather than silently completing.
+        """
+        monkeypatch.setattr("trading_app.config.E2_SLIPPAGE_TICKS", 0)
+        strategy = _make_strategy(
+            entry_model="E2",
+            confirm_bars=1,
+            strategy_id="MGC_US_DATA_830_E2_RR2.0_CB1_NO_FILTER",
+        )
+        engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
+        engine.on_trading_day_start(date(2024, 1, 5))
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        # Zero-range ORB: high == low == 2705
+        # entry_price = orb.high + 0 slippage = 2705; stop_price = orb.low = 2705 → risk = 0
+        for i in range(5):
+            engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2705, 2705, 2705, 2705))
+        # Break bar: high > 2705 triggers E2 confirm → entry = 2705 + 0 = stop = 2705
+        events = engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2705, 2710, 2705, 2706))
+        reject_events = [e for e in events if e.event_type == "REJECT"]
+        assert len(reject_events) == 1
+        assert reject_events[0].reason == "rejected: zero_risk_points"
+        assert len(engine.active_trades) == 0
+        assert len(engine.completed_trades) == 1
+
+    def test_e1_zero_risk_emits_reject(self):
+        """E1: fill bar opens at orb.low (stop price) → entry_price == stop_price → REJECT.
+
+        With a long break from a [2695, 2705] ORB, stop = orb.low = 2695.
+        If the next bar opens at 2695, risk_points = 0.
+        """
+        strategy = _make_strategy(
+            entry_model="E1",
+            confirm_bars=1,
+            strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_NO_FILTER",
+        )
+        engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
+        engine.on_trading_day_start(date(2024, 1, 5))
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        # Standard ORB: low=2695, high=2705
+        for i in range(5):
+            engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
+        # Break bar (long)
+        engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
+        # E1 fill bar: open == orb.low (2695) → entry_price == stop_price → risk = 0
+        fill_events = engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2695, 2710, 2694, 2700))
+        reject_events = [e for e in fill_events if e.event_type == "REJECT"]
+        assert len(reject_events) == 1
+        assert reject_events[0].reason == "rejected: zero_risk_points"
+        assert len(engine.active_trades) == 0
+        assert len(engine.completed_trades) == 1
+
+
 class TestCLI:
     def test_import(self):
         """Module imports without error."""

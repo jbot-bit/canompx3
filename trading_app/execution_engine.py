@@ -846,6 +846,17 @@ class ExecutionEngine:
                     if risk_points <= 0:
                         trade.state = TradeState.EXITED
                         self.completed_trades.append(trade)
+                        events.append(
+                            TradeEvent(
+                                event_type="REJECT",
+                                strategy_id=trade.strategy_id,
+                                timestamp=entry_ts,
+                                price=entry_price,
+                                direction=trade.direction,
+                                contracts=0,
+                                reason="rejected: zero_risk_points",
+                            )
+                        )
                         continue
 
                     # Position sizing (vol-adjusted, Carver Ch.9)
@@ -985,8 +996,23 @@ class ExecutionEngine:
                         stop_price = trade.stop_price
                         risk_points = abs(entry_price - stop_price)
                         if risk_points <= 0:
+                            # Defensive dead code: stop_hit fires first when stop_price >= entry_price
+                            # (for longs: stop_hit = bar.low <= stop_price; retrace = bar.low <= orb.high;
+                            # zero-risk requires stop_price >= orb.high, so stop_hit always wins).
+                            # Guard retained for safety in case of corrupt ORB data.
                             trade.state = TradeState.EXITED
                             self.completed_trades.append(trade)
+                            events.append(
+                                TradeEvent(
+                                    event_type="REJECT",
+                                    strategy_id=trade.strategy_id,
+                                    timestamp=bar["ts_utc"],
+                                    price=entry_price,
+                                    direction=trade.direction,
+                                    contracts=0,
+                                    reason="rejected: zero_risk_points",
+                                )
+                            )
                             continue
 
                         # Position sizing (vol-adjusted, Carver Ch.9)
