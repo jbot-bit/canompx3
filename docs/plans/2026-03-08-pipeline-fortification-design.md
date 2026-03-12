@@ -1,7 +1,7 @@
 # Pipeline Fortification — Hot-Path Optimization Design
 
 **Date:** 2026-03-08
-**Status:** Design
+**Status:** Phases 1-3,5 DONE (verified 2026-03-12). Phase 4 deferred.
 **Scope:** `trading_app/strategy_fitness.py`, `trading_app/pbo.py`, `scripts/tools/build_edge_families.py`, `trading_app/walkforward.py`, `trading_app/strategy_fitness.py` exception handling
 **Relationship:** Complements `2026-03-05-perf-audit-design.md` (which covers check_drift/health_check/hooks). This doc targets **trading_app hot paths** — the code that runs during portfolio fitness checks, edge family builds, and walk-forward validation.
 

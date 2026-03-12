@@ -28,6 +28,7 @@ import duckdb
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.audit_log import get_table_row_count, log_operation
 from pipeline.db_lock import PipelineLock, PipelineLockError
+from pipeline.init_db import REBUILD_MANIFEST_SCHEMA
 from pipeline.paths import GOLD_DB_PATH
 
 # Step-to-table mapping for audit logging.
@@ -49,20 +50,6 @@ STEP_TABLE_MAP: dict[str, str] = {
 # Helpers
 # ---------------------------------------------------------------------------
 
-# Schema for rebuild_manifest — used by _ensure_manifest_table()
-_REBUILD_MANIFEST_DDL = """
-CREATE TABLE IF NOT EXISTS rebuild_manifest (
-    rebuild_id TEXT PRIMARY KEY,
-    instrument TEXT NOT NULL,
-    started_at TIMESTAMPTZ NOT NULL,
-    completed_at TIMESTAMPTZ,
-    status TEXT NOT NULL,
-    failed_step TEXT,
-    steps_completed TEXT[],
-    trigger TEXT NOT NULL
-);
-"""
-
 
 def _ensure_manifest_table(con: duckdb.DuckDBPyConnection) -> bool:
     """Create rebuild_manifest if it doesn't exist (idempotent).
@@ -70,7 +57,7 @@ def _ensure_manifest_table(con: duckdb.DuckDBPyConnection) -> bool:
     Returns True if table is available, False if DB is read-only and table missing.
     """
     try:
-        con.execute(_REBUILD_MANIFEST_DDL)
+        con.execute(REBUILD_MANIFEST_SCHEMA)
         return True
     except duckdb.InvalidInputException:
         # Read-only connection — check if table already exists
@@ -618,7 +605,7 @@ def staleness_engine(con: duckdb.DuckDBPyConnection, instrument: str) -> dict:
     # --- rebuild_manifest (last completed rebuild) ---
     if _ensure_manifest_table(con):
         row = con.execute(
-            "SELECT MAX(completed_at::DATE) FROM rebuild_manifest WHERE instrument = ? AND status = 'completed'",
+            "SELECT MAX(completed_at::DATE) FROM rebuild_manifest WHERE instrument = ? AND status = 'COMPLETED'",
             [instrument],
         ).fetchone()
         result["last_rebuild"] = row[0] if row and row[0] is not None else None

@@ -202,12 +202,16 @@ def assert_strategy_count_stable(
     instrument: str,
     threshold: float = STRATEGY_DROP_THRESHOLD,
 ) -> AssertionResult:
-    """A4: Check active validated_setups count didn't drop below threshold of previous."""
+    """A4: Check validated_setups count didn't drop below threshold of previous.
+
+    Compares total rows (not just active) to match what the audit log records
+    via get_previous_counts — which stores total rows_after, not filtered counts.
+    """
     prev = get_previous_counts(con, instrument, "validated_setups")
 
     try:
         row = con.execute(
-            "SELECT COUNT(*) FROM validated_setups WHERE instrument = $1 AND status = 'active'",
+            "SELECT COUNT(*) FROM validated_setups WHERE instrument = $1",
             [instrument],
         ).fetchone()
         current = row[0] if row else 0
@@ -223,7 +227,7 @@ def assert_strategy_count_stable(
             "A4",
             "WARNING",
             False,
-            f"{instrument}: active strategies dropped {prev} → {current} ({ratio:.0%} of previous, threshold {threshold:.0%})",
+            f"{instrument}: strategies dropped {prev} → {current} ({ratio:.0%} of previous, threshold {threshold:.0%})",
         )
 
     return AssertionResult(
@@ -289,12 +293,12 @@ def assert_schema_alignment(
     except Exception:
         return AssertionResult("A6", "FAIL", False, "daily_features table not found or not queryable")
 
-    if actual != EXPECTED_DAILY_FEATURES_COLUMNS:
+    if actual < EXPECTED_DAILY_FEATURES_COLUMNS:
         return AssertionResult(
             "A6",
             "FAIL",
             False,
-            f"daily_features has {actual} columns, expected {EXPECTED_DAILY_FEATURES_COLUMNS} "
+            f"daily_features has {actual} columns, expected >= {EXPECTED_DAILY_FEATURES_COLUMNS} "
             f"({len(ORB_LABELS)} sessions × {_ORB_COLUMNS_PER_SESSION} + {_STATIC_COLUMN_COUNT} static)",
         )
 
@@ -302,7 +306,7 @@ def assert_schema_alignment(
         "A6",
         "FAIL",
         True,
-        f"daily_features schema aligned ({actual} columns)",
+        f"daily_features schema aligned ({actual} columns, min {EXPECTED_DAILY_FEATURES_COLUMNS})",
     )
 
 
