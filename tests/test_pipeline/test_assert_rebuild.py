@@ -188,6 +188,24 @@ def test_a4_passes_acceptable_drop(assert_db):
     assert result.passed
 
 
+def test_a4_counts_all_statuses(assert_db):
+    """A4 counts total rows (not just active) to match audit log semantics."""
+    from pipeline.audit_log import log_operation
+
+    # Audit log recorded 100 total rows
+    log_operation(
+        assert_db, "VALIDATOR", "validated_setups", instrument="MGC", rows_before=0, rows_after=100, status="SUCCESS"
+    )
+    # Insert 80 total: 50 active + 30 retired — above 70% threshold
+    for i in range(50):
+        assert_db.execute(f"INSERT INTO validated_setups VALUES ('S{i}', 'MGC', 'active')")
+    for i in range(50, 80):
+        assert_db.execute(f"INSERT INTO validated_setups VALUES ('S{i}', 'MGC', 'retired')")
+    result = assert_strategy_count_stable(assert_db, "MGC")
+    # 80/100 = 80% >= 70% threshold → should pass (would fail if only counting active: 50/100 = 50%)
+    assert result.passed
+
+
 # ---------------------------------------------------------------------------
 # A5: Outcome coverage
 # ---------------------------------------------------------------------------
