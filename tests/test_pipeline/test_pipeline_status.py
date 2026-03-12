@@ -303,6 +303,23 @@ class TestStalenessEngine:
 
         assert "bars_5m" in status["stale_steps"]
 
+    def test_staleness_last_rebuild_from_manifest(self, tmp_path):
+        """staleness_engine returns last_rebuild date from COMPLETED manifest."""
+        db_path, con = _create_test_db(tmp_path)
+        sym = "MGC"
+
+        _insert_bar_1m(con, sym, "2026-03-06T00:00:00+00:00")
+        con.commit()
+
+        # Write a COMPLETED manifest
+        write_manifest(con, "rebuild-001", sym, "COMPLETED", trigger="CLI")
+
+        status = staleness_engine(con, sym)
+        con.close()
+
+        # last_rebuild should NOT be None — the COMPLETED manifest exists
+        assert status["last_rebuild"] is not None
+
 
 # ---------------------------------------------------------------------------
 # Pre-flight check tests
