@@ -14,6 +14,7 @@ Usage:
 import shlex
 import subprocess
 import sys
+import time
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -25,7 +26,24 @@ sys.path.insert(0, str(PROJECT_ROOT))
 import duckdb
 
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+from pipeline.audit_log import get_table_row_count, log_operation
+from pipeline.db_lock import PipelineLock, PipelineLockError
 from pipeline.paths import GOLD_DB_PATH
+
+# Step-to-table mapping for audit logging.
+# Maps each rebuild step to the primary table it writes to.
+STEP_TABLE_MAP: dict[str, str] = {
+    "outcome_builder": "orb_outcomes",
+    "discovery": "experimental_strategies",
+    "validator": "validated_setups",
+    "retire_e3": "validated_setups",
+    "edge_families": "edge_families",
+    "family_rr_locks": "family_rr_locks",
+    # Steps below don't write to DB tables
+    "repo_map": "",
+    "health_check": "",
+    "pinecone_sync": "",
+}
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -335,12 +353,23 @@ def _parse_step_preflight(step_name: str) -> tuple[str, int]:
     return step_name, 5
 
 
+def _get_step_table(step_name: str) -> str:
+    """Map a rebuild step name to the primary table it writes to.
+
+    E.g. 'outcome_builder_O15' -> 'orb_outcomes', 'validator' -> 'validated_setups'.
+    Returns empty string for steps that don't write to DB tables.
+    """
+    base, _ = _parse_step_preflight(step_name)
+    return STEP_TABLE_MAP.get(base, "")
+
+
 def run_rebuild(
     con: duckdb.DuckDBPyConnection,
     instrument: str,
     dry_run: bool = False,
     resume: bool = False,
     trigger: str = "CLI",
+    rebuild_id: str | None = None,
 ) -> bool:
     """Execute the full rebuild chain for *instrument*.
 
@@ -350,6 +379,7 @@ def run_rebuild(
         dry_run: If True, print steps without executing.
         resume: If True, skip steps completed in the last FAILED manifest.
         trigger: Trigger label for the manifest record.
+        rebuild_id: Optional pre-generated rebuild ID (from orchestrator).
 
     Returns:
         True if all steps passed (or dry_run), False on any failure.
@@ -372,7 +402,8 @@ def run_rebuild(
             print(f"  [{i}/{total}] {step['name']}: {step['cmd']}")
         return True
 
-    rebuild_id = str(uuid.uuid4())
+    if rebuild_id is None:
+        rebuild_id = str(uuid.uuid4())
     completed: list[str] = list(resume_completed)  # carry forward previously completed
 
     # Write RUNNING manifest
@@ -388,30 +419,82 @@ def run_rebuild(
         ok, msg = preflight_check(con, instrument, step_base, orb_minutes=orb_min)
         if not ok:
             print(f"  [{i}/{total}] {step_name} — {msg}")
+            log_operation(
+                con,
+                step_name,
+                _get_step_table(step_name) or "preflight",
+                instrument=instrument,
+                rebuild_id=rebuild_id,
+                status="FAILED",
+            )
             write_manifest(
                 con, rebuild_id, instrument, "FAILED", failed_step=step_name, steps_completed=completed, trigger=trigger
             )
             return False
+
+        # Capture rows_before for audit log
+        table_name = _get_step_table(step_name)
+        rows_before = get_table_row_count(con, table_name, instrument) if table_name else None
 
         # Execute
         print(f"  [{i}/{total}] {step_name}")
         print(f"    CMD: {step_cmd}")
+        step_start = time.monotonic()
         try:
             result = subprocess.run(shlex.split(step_cmd), cwd=str(PROJECT_ROOT), timeout=3600)
         except TimeoutExpired:
             print("    TIMED OUT (>3600s)")
-            write_manifest(
-                con, rebuild_id, instrument, "FAILED", failed_step=step_name, steps_completed=completed, trigger=trigger
+            duration = time.monotonic() - step_start
+            log_operation(
+                con,
+                step_name,
+                table_name or "timeout",
+                instrument=instrument,
+                rows_before=rows_before,
+                duration_s=duration,
+                rebuild_id=rebuild_id,
+                status="FAILED",
             )
-            return False
-        if result.returncode != 0:
-            print(f"    FAILED (exit code {result.returncode})")
             write_manifest(
                 con, rebuild_id, instrument, "FAILED", failed_step=step_name, steps_completed=completed, trigger=trigger
             )
             return False
 
-        print("    PASSED")
+        duration = time.monotonic() - step_start
+
+        if result.returncode != 0:
+            print(f"    FAILED (exit code {result.returncode})")
+            log_operation(
+                con,
+                step_name,
+                table_name or "nonzero_exit",
+                instrument=instrument,
+                rows_before=rows_before,
+                duration_s=duration,
+                rebuild_id=rebuild_id,
+                status="FAILED",
+            )
+            write_manifest(
+                con, rebuild_id, instrument, "FAILED", failed_step=step_name, steps_completed=completed, trigger=trigger
+            )
+            return False
+
+        # Capture rows_after and log success
+        rows_after = get_table_row_count(con, table_name, instrument) if table_name else None
+        if table_name:
+            log_operation(
+                con,
+                step_name,
+                table_name,
+                instrument=instrument,
+                rows_before=rows_before,
+                rows_after=rows_after,
+                duration_s=duration,
+                rebuild_id=rebuild_id,
+                status="SUCCESS",
+            )
+
+        print(f"    PASSED ({duration:.1f}s)")
         completed.append(step_name)
 
     # All steps passed
@@ -599,6 +682,76 @@ def format_status(instrument: str, status: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Safety wrappers (backup + lock + audit)
+# ---------------------------------------------------------------------------
+
+
+def _pre_rebuild_backup() -> None:
+    """Create a pre-rebuild backup. Aborts process if backup fails (fail-closed)."""
+    from scripts.infra.backup_db import backup_db
+
+    print("=" * 50)
+    print("PRE-REBUILD BACKUP")
+    print("=" * 50)
+    result = backup_db()
+    if result is None:
+        print("ABORT: Pre-rebuild backup failed — refusing to proceed.", file=sys.stderr)
+        sys.exit(1)
+    print()
+
+
+def _run_with_safety(
+    db_path: str,
+    instrument: str,
+    *,
+    dry_run: bool = False,
+    resume: bool = False,
+    trigger: str = "CLI",
+) -> bool:
+    """Run a rebuild with backup + lock + labeled post-backup.
+
+    Orchestrates the safety sequence:
+      1. Pre-rebuild backup (before connection opens)
+      2. Acquire PipelineLock
+      3. Open connection + run_rebuild (with per-step audit logging)
+      4. Post-rebuild labeled backup
+      5. Release lock
+    """
+    rebuild_id = str(uuid.uuid4())
+
+    # 1. Backup BEFORE connection opens (safe for shutil.copy2)
+    if not dry_run:
+        _pre_rebuild_backup()
+
+    # 2-3. Lock + connect + rebuild
+    try:
+        with PipelineLock("rebuild", db_path=Path(db_path)):
+            con = duckdb.connect(db_path)
+            try:
+                ok = run_rebuild(
+                    con,
+                    instrument,
+                    dry_run=dry_run,
+                    resume=resume,
+                    trigger=trigger,
+                    rebuild_id=rebuild_id,
+                )
+            finally:
+                con.close()
+    except PipelineLockError as e:
+        print(f"ABORT: {e}", file=sys.stderr)
+        return False
+
+    # 4. Post-rebuild labeled backup
+    if ok and not dry_run:
+        from scripts.infra.backup_db import labeled_backup
+
+        labeled_backup(rebuild_id)
+
+    return ok
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -656,29 +809,37 @@ def main() -> None:
     if args.rebuild:
         if not args.instrument:
             parser.error("--rebuild requires --instrument")
-        con = duckdb.connect(db_path)
-        try:
-            ok = run_rebuild(con, args.instrument, dry_run=args.dry_run, trigger=args.trigger)
-        finally:
-            con.close()
+        ok = _run_with_safety(db_path, args.instrument, dry_run=args.dry_run, trigger=args.trigger)
         sys.exit(0 if ok else 1)
 
     # --- --rebuild-all ---
     if args.rebuild_all:
+        # Pre-rebuild backup (once for all instruments)
+        if not args.dry_run:
+            _pre_rebuild_backup()
         con = duckdb.connect(db_path)
         try:
-            for inst in ACTIVE_ORB_INSTRUMENTS:
-                status = staleness_engine(con, inst)
-                if not status["stale_steps"]:
-                    print(f"{inst}: up to date, skipping.")
-                    continue
-                print(f"{inst}: stale ({', '.join(status['stale_steps'])}), rebuilding...")
-                ok = run_rebuild(con, inst, dry_run=args.dry_run, trigger=args.trigger)
-                if not ok:
-                    print(f"{inst}: rebuild FAILED — stopping.")
-                    sys.exit(1)
+            with PipelineLock("rebuild_all", db_path=Path(db_path)):
+                for inst in ACTIVE_ORB_INSTRUMENTS:
+                    status = staleness_engine(con, inst)
+                    if not status["stale_steps"]:
+                        print(f"{inst}: up to date, skipping.")
+                        continue
+                    print(f"{inst}: stale ({', '.join(status['stale_steps'])}), rebuilding...")
+                    ok = run_rebuild(con, inst, dry_run=args.dry_run, trigger=args.trigger)
+                    if not ok:
+                        print(f"{inst}: rebuild FAILED — stopping.")
+                        sys.exit(1)
+        except PipelineLockError as e:
+            print(f"ABORT: {e}", file=sys.stderr)
+            sys.exit(1)
         finally:
             con.close()
+        # Post-rebuild labeled backup
+        if not args.dry_run:
+            from scripts.infra.backup_db import labeled_backup
+
+            labeled_backup("rebuild_all")
         print("All stale instruments rebuilt successfully.")
         return
 
@@ -686,11 +847,7 @@ def main() -> None:
     if args.resume:
         if not args.instrument:
             parser.error("--resume requires --instrument")
-        con = duckdb.connect(db_path)
-        try:
-            ok = run_rebuild(con, args.instrument, dry_run=args.dry_run, resume=True, trigger=args.trigger)
-        finally:
-            con.close()
+        ok = _run_with_safety(db_path, args.instrument, dry_run=args.dry_run, resume=True, trigger=args.trigger)
         sys.exit(0 if ok else 1)
 
     # --- Default: --status ---

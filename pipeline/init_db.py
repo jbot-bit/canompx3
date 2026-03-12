@@ -150,6 +150,24 @@ CREATE TABLE IF NOT EXISTS rebuild_manifest (
 );
 """
 
+PIPELINE_AUDIT_LOG_SCHEMA = """
+CREATE TABLE IF NOT EXISTS pipeline_audit_log (
+    log_id        TEXT        PRIMARY KEY,
+    timestamp     TIMESTAMPTZ NOT NULL,
+    operation     TEXT        NOT NULL,
+    table_name    TEXT        NOT NULL,
+    instrument    TEXT,
+    date_start    DATE,
+    date_end      DATE,
+    rows_before   INTEGER,
+    rows_after    INTEGER,
+    duration_s    DOUBLE,
+    git_sha       TEXT,
+    rebuild_id    TEXT,
+    status        TEXT        NOT NULL
+);
+"""
+
 
 def _build_daily_features_ddl() -> str:
     """Generate CREATE TABLE DDL for daily_features.
@@ -327,6 +345,7 @@ def init_db(db_path: Path, force: bool = False):
                 "prospective_signals",
                 "family_rr_locks",
                 "rebuild_manifest",
+                "pipeline_audit_log",
             ]:
                 con.execute(f"DROP TABLE IF EXISTS {t}")
             # Drop pipeline tables
@@ -471,6 +490,9 @@ def init_db(db_path: Path, force: bool = False):
 
         con.execute(REBUILD_MANIFEST_SCHEMA)
         logger.info("  rebuild_manifest: created (or already exists)")
+
+        con.execute(PIPELINE_AUDIT_LOG_SCHEMA)
+        logger.info("  pipeline_audit_log: created (or already exists)")
 
         con.commit()
 
