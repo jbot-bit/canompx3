@@ -72,6 +72,8 @@ HOT_MIN_STABILITY = 0.6
 # Filters out statistically-validated but practically-thin strategies.
 # At 0.10 R, after execution uncertainty (spread variance, slippage noise),
 # there is still meaningful edge remaining per trade.
+# @research-source live_config calibration — 0.10 R practical edge floor after execution noise
+# @revalidated-for E1/E2 event-based sessions (2026-03-12)
 LIVE_MIN_EXPECTANCY_R = 0.10
 
 # Minimum expected dollar profit as a multiple of round-trip transaction cost.
@@ -86,6 +88,8 @@ LIVE_MIN_EXPECTANCY_R = 0.10
 # relative to point value.
 #
 # Adjust if cost structure changes (new broker, exchange fee changes, tighter spreads).
+# @research-source live_config calibration — 1.3x RT cost floor derived from MNQ/MES dollar analysis
+# @revalidated-for E1/E2 event-based sessions (2026-03-12)
 LIVE_MIN_EXPECTANCY_DOLLARS_MULT = 1.3
 
 # The live portfolio: what we actually trade.
