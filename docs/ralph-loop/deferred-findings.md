@@ -12,7 +12,6 @@
 | DF-02 | 9/11 | LOW | execution_engine.py:~1020 | E3 silent exit — no log when E3 limit order expires unfilled | Dormant: E3 soft-retired |
 | DF-03 | 9/11 | LOW | execution_engine.py:~879 | IB hardcoded 23:00 UTC close time — only affects TOKYO_OPEN on IB | Dormant: IB not in active use |
 | DF-04 | 12 | LOW | rolling_portfolio.py:304 | Dormant `orb_minutes=5` in rolling DOW stats — multi-aperture TODO | Annotated TODO, not blocking |
-| DF-11 | 27 | LOW | rolling_portfolio.py:228 | Hardcoded ("E1", "E2", "E3") set in aggregate_rolling_performance — StopIteration if new entry model added | Dormant: no E4 yet; should reference canonical config.ENTRY_MODELS when E4 arrives |
 
 ## Resolved Findings
 
@@ -25,3 +24,4 @@
 | DF-05 | 13 | 28 | already-present | build_edge_families.py thresholds — annotations already present at iter 28 audit; stale ledger entry |
 | DF-06 | 13 | 28 | already-present | strategy_validator.py WF thresholds — annotations already present at iter 28 audit; stale ledger entry |
 | DF-08 | 13 | 28 | 43a86ba | live_config.py LIVE_MIN_EXPECTANCY_R + LIVE_MIN_EXPECTANCY_DOLLARS_MULT — @research-source annotations added |
+| DF-11 | 27 | 31 | 9158b77 | Hardcoded ("E1","E2","E3") in rolling_portfolio + paper_trader → canonical ENTRY_MODELS import |
