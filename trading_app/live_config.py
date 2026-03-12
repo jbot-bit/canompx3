@@ -100,8 +100,9 @@ LIVE_MIN_EXPECTANCY_DOLLARS_MULT = 1.3
 # HOT tier removed — rolling_portfolio evaluation not yet wired to real-time
 # gate logic. Re-add when rolling eval pipeline is production-ready.
 #
-# Updated 2026-03-12: Added 4 promotion candidates (US_DATA_1000 G8, NYSE_OPEN G6/G5, SINGAPORE_OPEN VOL).
-#   30 unique specs (instrument-agnostic — filter_type is the base name, without _O15/_O30 aperture suffix).
+# Updated 2026-03-12: Added SINGAPORE_OPEN VOL_RV12_N20 (genuinely independent filter type).
+#   Reverted 3 redundant ORB_G variants (NYSE_OPEN G6/G5, US_DATA_1000 G8) — 99%+ day overlap with existing specs.
+#   27 unique specs (instrument-agnostic — filter_type is the base name, without _O15/_O30 aperture suffix).
 #   E0 fully purged. E2 dominant. E3 soft-retired.
 #   Filter_type note: strategy IDs encode aperture as _O15/_O30 suffix (e.g. VOL_RV12_N20_O15),
 #   but validated_setups.filter_type stores the base name (e.g. VOL_RV12_N20). Always use base name here.
@@ -154,17 +155,11 @@ LIVE_PORTFOLIO = [
     LiveStrategySpec("NYSE_OPEN_E2_VOL_RV12_N20", "core", "NYSE_OPEN", "E2", "VOL_RV12_N20", None),
     LiveStrategySpec("NYSE_OPEN_E2_ORB_G4", "core", "NYSE_OPEN", "E2", "ORB_G4", None),
     LiveStrategySpec("NYSE_OPEN_E2_ORB_G8", "core", "NYSE_OPEN", "E2", "ORB_G8", None),
-    #   ORB_G6: MNQ 5m, N=1292, PBO=0.00, ExpR=0.117, $11.8 vs $3.6 gate (3.3x)
-    LiveStrategySpec("NYSE_OPEN_E2_ORB_G6", "core", "NYSE_OPEN", "E2", "ORB_G6", None),
-    #   ORB_G5: MNQ 15m aperture, N=1226, PBO=0.00, ExpR=0.101, $14.9 vs $3.6 gate (4.1x)
-    LiveStrategySpec("NYSE_OPEN_E2_ORB_G5", "core", "NYSE_OPEN", "E2", "ORB_G5", None),
     # US_DATA_1000: M2K wins VOL_RV12_N20 (O30 is aperture, not filter_type); MNQ wins ORB_G5;
     #   MGC wins ORB_G6 (N=297, FDR+WF, hash 8946a234a — new session for MGC)
     LiveStrategySpec("US_DATA_1000_E2_VOL_RV12_N20", "core", "US_DATA_1000", "E2", "VOL_RV12_N20", None),
     LiveStrategySpec("US_DATA_1000_E2_ORB_G5", "core", "US_DATA_1000", "E2", "ORB_G5", None),
     LiveStrategySpec("US_DATA_1000_E2_ORB_G6", "core", "US_DATA_1000", "E2", "ORB_G6", None),
-    #   ORB_G8: MNQ 5m, N=1291, PBO=0.01, ExpR=0.133, $10.0 vs $3.6 gate (2.8x)
-    LiveStrategySpec("US_DATA_1000_E2_ORB_G8", "core", "US_DATA_1000", "E2", "ORB_G8", None),
     # TOKYO_OPEN: Multiple independent edges verified by family hash:
     #   ORB_G5_CONT (5m aperture, hash 2e921bb81) — MGC N=96 (REGIME), MNQ CORE
     #   ORB_G5 (15m aperture, hash d790ad6b) — MGC N=297+ FDR+WF, genuinely independent
