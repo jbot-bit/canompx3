@@ -1,16 +1,16 @@
-## Iteration: 29
+## Iteration: 30
 ## Phase: implement
-## Target: trading_app/outcome_builder.py:677-678
-## Finding: build_outcomes() silently falls back to ORB_LABELS when get_enabled_sessions() returns empty — misconfiguration invisible with no warning log
+## Target: trading_app/strategy_discovery.py:1082
+## Finding: SD1 — comment "# E2+E3 (CB1 only)" is stale; E3 is in SKIP_ENTRY_MODELS and never runs, but is intentionally still counted in total_combos for conservative n_trials_at_discovery
 ## Decision: implement
-## Rationale: Pure logging addition. logger already defined at module level (line 20). No behavior, no logic, no value change. Surfaces misconfigured instruments that currently produce silent no-ops.
+## Rationale: Pure comment clarification. No code logic change. Explains intentional overcounting for conservative FST hurdle / BH FDR — currently the comment misleads readers into thinking E3 still runs.
 ## Blast Radius:
-  - Callers: scripts/tools/build_outcomes_fast.py, tests/test_integration_l1_l2.py, tests/test_trading_app/test_integration.py (all unaffected by log-only change)
-  - Callees: get_enabled_sessions() (pipeline.asset_configs), ORB_LABELS (pipeline.init_db) — both unchanged
-  - Tests: tests/test_trading_app/test_outcome_builder.py (27 tests — logging not asserted, all will still pass)
-  - Drift checks: check_drift.py imports RR_TARGETS from outcome_builder (unaffected). No drift check validates logging.
+  - Callers: test_strategy_discovery.py, test_integration.py, test_integration_l1_l2.py, strategy_fitness.py, walkforward.py, strategy_validator.py — all unaffected by comment change
+  - Callees: compute_metrics() passes total_combos as n_trials — value unchanged
+  - Tests: tests/test_trading_app/test_strategy_discovery.py (45 tests — no assertions on comments)
+  - Drift checks: check_drift.py:2310 validates n_trials_at_discovery is NOT NULL — unaffected
 ## Invariants (MUST NOT change):
-  - sessions fallback to ORB_LABELS must still happen (logic preserved)
-  - No change to any outcome computation or DB write behavior
-  - logger.warning() is the only addition — no new imports, no new logic
-## Diff estimate: 1 line added
+  - total_combos value must remain identical (counting E3 conservatively)
+  - n_trials_at_discovery populated identically in experimental_strategies
+  - No import, logic, or DB write changes
+## Diff estimate: 1 line (comment only)

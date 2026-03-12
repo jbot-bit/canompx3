@@ -214,6 +214,15 @@
 - Verification: PASS — 4/4 gates (62 drift checks, behavioral clean, 20/20 position_tracker tests, ruff clean)
 - Commit: f713a1c
 
+## Iteration 30 — 2026-03-12
+- Phase: fix (LOW — stale comment)
+- Target: trading_app/strategy_discovery.py:1082
+- Finding: SD1: comment "# E2+E3 (CB1 only)" stale — E3 is in SKIP_ENTRY_MODELS and never runs, but is intentionally still counted in total_combos for conservative n_trials_at_discovery (higher FST hurdle). Comment didn't explain the intentional overcounting.
+- Action: Updated comment + added explanatory line. No code or logic change. Fresh full-file audit: sessions fallback already has warning (unlike outcome_builder at iter 29), canonical imports CLEAN, holdout temporal isolation correct, BH FDR annotation informational-only.
+- Blast radius: 1 file, comment-only. Callers unaffected. total_combos value unchanged.
+- Verification: ACCEPT — all 4 gates (71 drift, behavioral clean, 45/45 strategy_discovery tests, ruff clean). Pre-commit: 185/185 fast tests. M2.5 advisory on pre-existing file patterns.
+- Commit: 371bc51
+
 ## Iteration 29 — 2026-03-12
 - Phase: fix (LOW — observability)
 - Target: trading_app/outcome_builder.py:677-678
