@@ -12,9 +12,7 @@
 | DF-02 | 9/11 | LOW | execution_engine.py:~1020 | E3 silent exit — no log when E3 limit order expires unfilled | Dormant: E3 soft-retired |
 | DF-03 | 9/11 | LOW | execution_engine.py:~879 | IB hardcoded 23:00 UTC close time — only affects TOKYO_OPEN on IB | Dormant: IB not in active use |
 | DF-04 | 12 | LOW | rolling_portfolio.py:304 | Dormant `orb_minutes=5` in rolling DOW stats — multi-aperture TODO | Annotated TODO, not blocking |
-| DF-05 | 13 | LOW | build_edge_families.py:31-38 | Edge family thresholds missing @research-source | Annotation debt |
-| DF-06 | 13 | LOW | strategy_validator.py:654-656 | WF gate thresholds missing @research-source | Annotation debt |
-| DF-08 | 13 | LOW | live_config.py:354-355,583-584 | Live portfolio constructor magic numbers inline | Annotation debt |
+| DF-11 | 27 | LOW | rolling_portfolio.py:228 | Hardcoded ("E1", "E2", "E3") set in aggregate_rolling_performance — StopIteration if new entry model added | Dormant: no E4 yet; should reference canonical config.ENTRY_MODELS when E4 arrives |
 
 ## Resolved Findings
 
@@ -24,3 +22,6 @@
 | DF-07 | 13 | slate-clear | 7cf57cb | HOT tier thresholds unannotated — @research-source annotation added |
 | DF-09 | 21 | 25 | 8261a0e | OR2: No fill_price parsing tests — unit tests added for both Tradovate and ProjectX routers |
 | DF-10 | 26 | post-26 | (this session) | E1/E3 zero-risk paths silent continue — REJECT events added; E3 block documented as defensive dead code (unreachable by construction); E1/E2 tests added |
+| DF-05 | 13 | 28 | already-present | build_edge_families.py thresholds — annotations already present at iter 28 audit; stale ledger entry |
+| DF-06 | 13 | 28 | already-present | strategy_validator.py WF thresholds — annotations already present at iter 28 audit; stale ledger entry |
+| DF-08 | 13 | 28 | 43a86ba | live_config.py LIVE_MIN_EXPECTANCY_R + LIVE_MIN_EXPECTANCY_DOLLARS_MULT — @research-source annotations added |
