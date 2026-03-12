@@ -213,3 +213,21 @@
 - Action: bar_aggregator.py audited (CLEAN). position_tracker.py: replaced `or` chain with explicit `is not None` guards. Added zero-fill guard test to test_position_tracker.py (20 tests total).
 - Verification: PASS — 4/4 gates (62 drift checks, behavioral clean, 20/20 position_tracker tests, ruff clean)
 - Commit: f713a1c
+
+## Iteration 28 — 2026-03-12
+- Phase: fix (batch LOW — annotation debt + ledger cleanup)
+- Target: trading_app/live_config.py:75,89
+- Finding: DF-08: LIVE_MIN_EXPECTANCY_R=0.10 and LIVE_MIN_EXPECTANCY_DOLLARS_MULT=1.3 lacked @research-source annotations. DF-05 and DF-06 were already resolved (stale ledger entries — annotations confirmed present in build_edge_families.py and strategy_validator.py)
+- Action: Added @research-source + @revalidated-for annotations to both constants. Closed DF-05 and DF-06 as already-resolved. DF-08 now fully resolved.
+- Blast radius: 1 file changed (comment-only). Callers import constants by value — unaffected. Drift check #43 imports LIVE_MIN_EXPECTANCY_R — unaffected.
+- Verification: ACCEPT — all 4 gates (71 drift, behavioral clean, 20/20 live_config tests, ruff clean). Pre-commit: 185/185 fast tests pass.
+- Commit: 43a86ba
+
+## Iteration 27 — 2026-03-12
+- Phase: fix (batch LOW — annotation debt + warning log)
+- Target: trading_app/rolling_portfolio.py:48,323,414
+- Finding: batch: RP1 (silent filter skip in compute_day_of_week_stats — no log when ALL_FILTERS.get returns None) + RP2 (DEFAULT_LOOKBACK_WINDOWS=24 missing @research-source) + RP3 (min_expectancy_r=0.10 unannotated magic number)
+- Action: RP1: Added logger.warning for unknown filter_type. RP2: Added @research-source annotation (Lopez de Prado AFML Ch.7 rolling window convention). RP3: Extracted MIN_EXPECTANCY_R=0.10 constant with @research-source (circular import prevents referencing live_config.LIVE_MIN_EXPECTANCY_R directly). RP4 (hardcoded E1/E2/E3 set in aggregate_rolling_performance:228) deferred — dormant, no E4 yet.
+- Blast radius: 1 file checked. DEFAULT_LOOKBACK_WINDOWS imported by live_config.py (value unchanged). Callers always pass min_expectancy_r explicitly. compute_day_of_week_stats has no external callers.
+- Verification: PASS — all 6 gates (71 drift, behavioral clean, 36/36 rolling_portfolio tests + 185 fast, ruff clean, blast radius confirmed, regression clean)
+- Commit: 0515f15
