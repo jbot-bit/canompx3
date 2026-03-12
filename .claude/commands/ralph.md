@@ -15,8 +15,7 @@ Wrong autonomy costs more than no autonomy. Every step earns the right to procee
 
 ## Step 0: State
 
-Read `docs/ralph-loop/ralph-loop-history.md` — count `## Iteration` headers, add 1 = ITER.
-Read `docs/ralph-loop/ralph-loop-audit.md` — get deferred findings and Next Targets.
+Read `docs/ralph-loop/ralph-loop-audit.md` — get ITER from `## Last iteration: N` line (+1 = ITER), get deferred findings and Next Targets.
 Read `docs/ralph-loop/deferred-findings.md` — check Open Findings table for outstanding debt.
 
 Scope = $ARGUMENTS if provided, else Next Targets[0] from audit file (ONE target, not all).
@@ -28,9 +27,7 @@ Announce: `=== RALPH LOOP — Iteration ITER | Scope: SCOPE ===`
 
 ## Step 1: AUDIT PHASE
 
-Read `.claude/agents/ralph-auditor.md` for methodology.
-
-Run infrastructure gates (report exact last line of each):
+Run all 3 infrastructure gates in **parallel** — make 3 simultaneous Bash tool calls in a single response (report exact last line of each):
 ```
 python pipeline/check_drift.py
 python scripts/tools/audit_behavioral.py
@@ -66,22 +63,24 @@ Select the highest-priority finding that:
 
 If no eligible finding → write "no eligible finding" to plan, skip to Step 5.
 
+**Batching rule:** If ALL eligible findings are LOW + same file + same fix type (annotation / logging / validation) → batch up to 5 in one pass.
+
 ---
 
 ## Step 2.5: UNDERSTAND BEFORE TOUCHING (MANDATORY)
 
 **This step is non-negotiable. You do NOT earn the right to edit code until you complete it.**
 
-### A. Blast Radius — Map It, Don't Guess
+### A. Blast Radius — Dispatch Agent
 
-For the selected finding, identify ALL affected code:
-1. **Grep all callers** of the function/method you plan to change
-2. **Grep all callees** — what does the changed code depend on?
-3. **Check companion tests** — which test file covers this code?
-4. **Check drift checks** — does any drift check reference this code?
-5. **Check canonical sources** — does this touch SESSION_CATALOG, ENTRY_MODELS, COST_SPECS, ORB_LABELS, or ACTIVE_ORB_INSTRUMENTS?
+Dispatch the `blast-radius` agent (model: haiku) with:
+- Target: `file:function_or_line`
+- Change: 1-sentence description of what will be modified
 
-If blast radius > 5 files → STOP. Escalate to 4T orient phase before proceeding.
+It maps callers, importers, companion tests, drift checks, canonical sources, and DB impact.
+Write the compact impact report to `docs/ralph-loop/ralph-loop-plan.md`.
+
+If blast radius returns SIGNIFICANT or CRITICAL → STOP. Run /4t orient.
 If blast radius touches schema/entry models/pipeline data flow → STOP. Read the relevant guardian prompt (ENTRY_MODEL_GUARDIAN or PIPELINE_DATA_GUARDIAN).
 
 ### B. Prove Understanding — State What Must NOT Change
@@ -121,9 +120,7 @@ If during this step you discover:
 
 ## Step 3: IMPLEMENT
 
-Read `.claude/agents/ralph-implementer.md`.
-
-**Pass 1 (Verify Understanding):** Re-read the target file, blast radius files, and companion test. Confirm the invariants from Step 2.5 are correct. If anything surprises you → STOP, update the plan.
+**Pass 1 (Verify Understanding):** Review the blast-radius report from Step 2.5. Confirm invariants are correct. If anything surprises you → STOP, update the plan.
 
 **Pass 2 (Implementation):** Apply the minimal fix. Then:
 ```
@@ -139,22 +136,17 @@ Update plan with: lines changed, test result, drift result, Ready=YES/NO.
 
 ## Step 4: VERIFY
 
-Read `.claude/agents/ralph-verifier.md`.
+Dispatch `verify-complete` agent (model: haiku) with:
+- Changed files from this iteration
+- Scope module name (for targeted test selection)
+- Note: "SKIP Gate 4 full suite — targeted tests only (OOM risk)"
 
-Run these gates only (not full suite):
-```
-Gate 1: python pipeline/check_drift.py
-Gate 2: python scripts/tools/audit_behavioral.py
-Gate 3: python -m pytest tests/test_trading_app/test_<module>.py -x -q
-Gate 4: ruff check <changed files>
-Gate 5: Blast radius — grep callers, verify all handle new behavior
-Gate 6: Targeted regression — python -m pytest <specific test class> -x -v
-```
+It runs all gates and returns ACCEPT / ACCEPT WITH NOTE / HARD REJECT with a compact gate summary.
 
-Verdict:
-- All 6 PASS → ACCEPT, commit: `git add <changed files> && git commit -m "fix: Ralph Loop iter ITER — <finding>"`
-- Only Gate 4 fails → ACCEPT with NOTE (lint non-blocking)
-- Gate 1 or Gate 3 fail → HARD REJECT
+Verdict (from agent report):
+- ACCEPT → commit: `git add <changed files> && git commit -m "fix: Ralph Loop iter ITER — <finding>"`
+- ACCEPT WITH NOTE → commit with note appended
+- HARD REJECT (Gate 1 or Gate 3 fail) → revert change, mark REJECTED in plan, skip to Step 5
 
 Write verdict to plan file.
 
@@ -199,9 +191,10 @@ Next: [top deferred finding]
 ## Critical Rules
 
 - **NO `pytest tests/` ever** — causes OOM. Targeted tests only.
-- **No subagents** — do all 3 phases directly in this session.
+- **Subagents are Haiku** — blast-radius and verify-complete dispatch with `model: haiku`. Mechanical execution, no reasoning needed. Don't pay Sonnet prices for grep and gate-running.
 - **One target at a time** — 1-2 files per iteration, not 5.
 - **Fail-closed** — unknown state = block, not pass.
 - **Evidence over assertion** — show command output, not claims.
 - **Understand before editing** — Step 2.5 is mandatory. No exceptions. No shortcuts.
 - **Escalate, don't force** — if the change is bigger than expected, invoke /4t. That's not failure, that's discipline.
+- **Update Last iteration** — ralph-loop-audit.md (overwritten each iteration) must include `## Last iteration: N`. This is the single source of ITER for Step 0.
