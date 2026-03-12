@@ -40,6 +40,7 @@ from pipeline.paths import GOLD_DB_PATH
 SHARED_SESSIONS = [
     "TOKYO_OPEN",
     "SINGAPORE_OPEN",
+    "EUROPE_FLOW",
     "LONDON_METALS",
     "NYSE_OPEN",
     "US_DATA_830",
@@ -102,21 +103,21 @@ def load_session_dirs(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
 
 
 def load_portfolio_pnl(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
-    """orb_outcomes pnl_r for MGC and MNQ, E2, all sessions, orb_minutes=5.
+    """orb_outcomes pnl_r for MGC and MNQ, E2, orb_minutes=5, rr=1.0, cb=1.
 
-    Returns one row per (trading_day, symbol, orb_label) with avg pnl_r
-    across rr_target/confirm_bars variants (consistent with how strategies
-    are traded — single session, single entry per day).
+    Fixed configuration (rr_target=1.0, confirm_bars=1) to avoid synthetic
+    averages across different RR variants where wins at rr=3.0 produce +3.0R
+    vs +1.0R at rr=1.0. Using a single spec keeps pnl_r values real.
     """
     df = con.execute("""
-        SELECT trading_day, symbol, orb_label,
-               AVG(pnl_r) AS pnl_r
+        SELECT trading_day, symbol, orb_label, pnl_r
         FROM orb_outcomes
         WHERE symbol IN ('MGC', 'MNQ')
           AND entry_model = 'E2'
           AND orb_minutes = 5
+          AND rr_target = 1.0
+          AND confirm_bars = 1
           AND pnl_r IS NOT NULL
-        GROUP BY trading_day, symbol, orb_label
         ORDER BY trading_day, symbol, orb_label
     """).fetchdf()
     return df
@@ -285,9 +286,9 @@ def block2_session_concordance(con: duckdb.DuckDBPyConnection) -> None:
         pct_opposite = n_opposite / n_total
 
         # Fisher exact: is opposite > 50%?
-        # Contingency: [[opposite, concordant], [expected_50%, expected_50%]]
-        # One-sided: P(X >= n_opposite) under null p=0.5
-        p_raw = stats.binomtest(n_opposite, n_total, p=0.5, alternative="greater").pvalue
+        # Two-sided: tests both "opposite > 50%" and "concordant > 50%".
+        # One-sided "greater" would miss sessions with strong concordance signal.
+        p_raw = stats.binomtest(n_opposite, n_total, p=0.5, alternative="two-sided").pvalue
 
         all_results.append({
             "session": session,
@@ -330,7 +331,7 @@ def block2_session_concordance(con: duckdb.DuckDBPyConnection) -> None:
             print(f"    {r['session']}: {r['pct_opposite']:.1%} opposite breaks "
                   f"(N={r['n_both_broke']}, p_bh={r['p_bh']:.4f})")
         print("\n  MECHANISM CHECK: Does this have a structural reason?")
-        print("  If MGC breaks one way and MNQ the other consistently → flight-to-safety flow.")
+        print("  If MGC breaks one way and MNQ the other consistently = flight-to-safety flow.")
         print("  Check year-by-year below to confirm stability.")
 
         # Year-by-year for survivors
@@ -402,21 +403,17 @@ def block3_portfolio_pnl(con: duckdb.DuckDBPyConnection) -> None:
 
         # Simulate portfolio: equal weight, long MGC + long MNQ
         portfolio_r = (paired["MGC"] + paired["MNQ"]) / 2
-        port_sharpe = (portfolio_r.mean() / portfolio_r.std() * np.sqrt(252)
+        # Per-trade Sharpe (relative comparison only — not annualized, sessions
+        # don't fire every day so sqrt(252) overstates vs daily strategies)
+        port_sharpe = (portfolio_r.mean() / portfolio_r.std()
                        if portfolio_r.std() > 0 else np.nan)
-        mgc_sharpe = (paired["MGC"].mean() / paired["MGC"].std() * np.sqrt(252)
+        mgc_sharpe = (paired["MGC"].mean() / paired["MGC"].std()
                       if paired["MGC"].std() > 0 else np.nan)
-        mnq_sharpe = (paired["MNQ"].mean() / paired["MNQ"].std() * np.sqrt(252)
+        mnq_sharpe = (paired["MNQ"].mean() / paired["MNQ"].std()
                       if paired["MNQ"].std() > 0 else np.nan)
 
-        sig = " **" if p < 0.01 else (" *" if p < 0.05 else "")
-        print(f"  {session:20s}: N={N:4d}  r={r:+.3f}  p={p:.4f}{sig}  "
-              f"co-loss={co_loss:.1%}  co-win={co_win:.1%}")
-        print(f"    {'Sharpe':>10s}: MGC={mgc_sharpe:.2f}  MNQ={mnq_sharpe:.2f}  "
-              f"Combined={port_sharpe:.2f}")
-
         results.append({
-            "session": session, "N": N, "r": r, "p": p,
+            "session": session, "N": N, "r": r, "p": p, "p_bh": None,
             "co_loss": co_loss, "co_win": co_win,
             "port_sharpe": port_sharpe, "mgc_sharpe": mgc_sharpe,
             "mnq_sharpe": mnq_sharpe
@@ -425,6 +422,21 @@ def block3_portfolio_pnl(con: duckdb.DuckDBPyConnection) -> None:
     if not results:
         print("  No sessions with sufficient shared trade days.")
         return
+
+    # Apply BH FDR before printing (consistent with Block 2)
+    p_vals = [r["p"] for r in results]
+    p_adj = bh_fdr(p_vals)
+    for res, pa in zip(results, p_adj):
+        res["p_bh"] = pa
+
+    for res in results:
+        sig = " ** BH-SIG" if res["p_bh"] < BH_Q else ""
+        print(f"  {res['session']:20s}: N={res['N']:4d}  r={res['r']:+.3f}  "
+              f"p_raw={res['p']:.4f}  p_bh={res['p_bh']:.4f}{sig}  "
+              f"co-loss={res['co_loss']:.1%}  co-win={res['co_win']:.1%}")
+        print(f"    Sharpe (per-trade, relative): "
+              f"MGC={res['mgc_sharpe']:.2f}  MNQ={res['mnq_sharpe']:.2f}  "
+              f"Combined={res['port_sharpe']:.2f}")
 
     # Overall assessment
     avg_r = np.mean([r["r"] for r in results])
@@ -439,13 +451,10 @@ def block3_portfolio_pnl(con: duckdb.DuckDBPyConnection) -> None:
         print("  Near-zero P&L correlation — instruments trade largely independently.")
         print("  This is GOOD for portfolio construction: diversification without hedge.")
 
-    # Apply BH FDR across sessions
-    p_vals = [r["p"] for r in results]
-    p_adj = bh_fdr(p_vals)
-    bh_sig = [r for r, pa in zip(results, p_adj) if pa < BH_Q]
+    bh_sig = [r for r in results if r["p_bh"] < BH_Q]
     print(f"\n  BH FDR survivors: {len(bh_sig)} / {len(results)}")
     for r in bh_sig:
-        print(f"    {r['session']}: r={r['r']:+.3f}, p_bh<{BH_Q}")
+        print(f"    {r['session']}: r={r['r']:+.3f}, p_bh={r['p_bh']:.4f}")
 
 
 # ── Summary ───────────────────────────────────────────────────────────────────
