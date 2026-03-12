@@ -60,10 +60,13 @@ def find_uncovered_candidates(db_path: Path) -> list[dict]:
                    vs.wf_passed, vs.wf_windows, vs.wfe, vs.skewness,
                    vs.kurtosis_excess, vs.stop_multiplier,
                    ef.robustness_status, ef.member_count, ef.pbo,
-                   ef.cv_expectancy, ef.trade_tier
+                   ef.cv_expectancy, ef.trade_tier,
+                   es.median_risk_points
             FROM validated_setups vs
             INNER JOIN edge_families ef
               ON vs.strategy_id = ef.head_strategy_id
+            LEFT JOIN experimental_strategies es
+              ON vs.strategy_id = es.strategy_id AND es.is_canonical = TRUE
             WHERE LOWER(vs.status) = 'active'
               AND vs.fdr_significant = TRUE
               AND vs.wf_passed = TRUE
@@ -134,16 +137,25 @@ def enrich_candidate(candidate: dict) -> dict:
         candidate["decay_slope"] = 0.0
 
     instruments = get_active_instruments()
+    median_risk = candidate.get("median_risk_points")
+    expr = candidate.get("expectancy_r", 0)
     dollar_results = {}
     for inst in instruments:
         try:
             spec = get_cost_spec(inst)
             min_dollars = LIVE_MIN_EXPECTANCY_DOLLARS_MULT * spec.total_friction
-            dollar_results[inst] = {
+            result: dict = {
                 "rt_cost": round(spec.total_friction, 2),
                 "min_required": round(min_dollars, 2),
                 "point_value": spec.point_value,
             }
+            # Compute actual Exp$ and pass/fail when median_risk is available
+            # and this is the candidate's native instrument
+            if median_risk is not None and inst == candidate.get("instrument"):
+                exp_dollars = expr * median_risk * spec.point_value
+                result["exp_dollars"] = round(exp_dollars, 2)
+                result["passes"] = exp_dollars > min_dollars
+            dollar_results[inst] = result
         except Exception as exc:
             print(f"  WARNING: cost spec unavailable for {inst}: {exc}")
             dollar_results[inst] = {"rt_cost": None, "min_required": None, "point_value": None}
@@ -155,10 +167,20 @@ def enrich_candidate(candidate: dict) -> dict:
 # ── Spec code generator ──────────────────────────────────────────────
 
 
-def generate_spec_code(orb_label: str, entry_model: str, filter_type: str) -> str:
-    """Generate copy-paste LiveStrategySpec Python code."""
+def generate_spec_code(
+    orb_label: str,
+    entry_model: str,
+    filter_type: str,
+    sample_size: int = 100,
+) -> str:
+    """Generate copy-paste LiveStrategySpec Python code.
+
+    Tier is derived from sample_size: >=100 = core, <100 = regime (fitness-gated).
+    """
     family_id = f"{orb_label}_{entry_model}_{filter_type}"
-    return f'LiveStrategySpec("{family_id}", "core", "{orb_label}", "{entry_model}", "{filter_type}", None)'
+    if sample_size >= 100:
+        return f'LiveStrategySpec("{family_id}", "core", "{orb_label}", "{entry_model}", "{filter_type}", None)'
+    return f'LiveStrategySpec("{family_id}", "regime", "{orb_label}", "{entry_model}", "{filter_type}", "high_vol")'
 
 
 # ── Terminal format ──────────────────────────────────────────────────
@@ -198,7 +220,7 @@ def format_terminal(candidates: list[dict]) -> str:
         if combo in seen_combos:
             continue
         seen_combos.add(combo)
-        lines.append(f"    {generate_spec_code(c['orb_label'], c['entry_model'], c['filter_type'])},")
+        lines.append(f"    {generate_spec_code(c['orb_label'], c['entry_model'], c['filter_type'], c['sample_size'])},")
 
     lines.append("")
     return "\n".join(lines)
@@ -243,14 +265,21 @@ def generate_html(candidates: list[dict]) -> str:
             for inst, dg in c.get("dollar_gate_results", {}).items():
                 if dg.get("rt_cost") is None:
                     continue
+                exp_str = f"${dg['exp_dollars']:.2f}" if "exp_dollars" in dg else "-"
+                if "passes" in dg:
+                    pass_cls = "badge-ayp" if dg["passes"] else "badge-decay-warn"
+                    pass_str = f"<span class='{pass_cls}'>{'PASS' if dg['passes'] else 'FAIL'}</span>"
+                else:
+                    pass_str = "-"
                 dg_rows += (
                     f"<tr><td>{inst}</td>"
                     f"<td>${dg['rt_cost']:.2f}</td>"
                     f"<td>${dg['min_required']:.2f}</td>"
-                    f"<td>${dg['point_value']}/pt</td></tr>"
+                    f"<td>{exp_str}</td>"
+                    f"<td>{pass_str}</td></tr>"
                 )
 
-            spec_code = generate_spec_code(c["orb_label"], c["entry_model"], c["filter_type"])
+            spec_code = generate_spec_code(c["orb_label"], c["entry_model"], c["filter_type"], c["sample_size"])
 
             rows_html += f"""
             <div class="candidate-card">
@@ -262,6 +291,7 @@ def generate_html(candidates: list[dict]) -> str:
                         <span class="badge badge-wf">WF {c.get("wf_windows", "?")} win</span>
                         {"<span class='badge badge-ayp'>ALL YEARS +</span>" if c.get("all_years_positive") else ""}
                         {"<span class='badge badge-decay-warn'>DECAYING</span>" if decay < -0.05 else ""}
+                        {"<span class='badge badge-decay-warn'>0.75x STOP</span>" if c.get("stop_multiplier", 1.0) < 1.0 else ""}
                     </div>
                 </div>
 
@@ -327,7 +357,7 @@ def generate_html(candidates: list[dict]) -> str:
                     <div class="section-half">
                         <div class="section-title">Dollar Gate (per instrument)</div>
                         <table class="inner-table">
-                            <thead><tr><th>Inst</th><th>RT Cost</th><th>Min Req</th><th>Pt Value</th></tr></thead>
+                            <thead><tr><th>Inst</th><th>RT Cost</th><th>Gate</th><th>Exp$</th><th>Result</th></tr></thead>
                             <tbody>{dg_rows}</tbody>
                         </table>
                     </div>
@@ -336,6 +366,7 @@ def generate_html(candidates: list[dict]) -> str:
                 <div class="spec-code">
                     <div class="section-title">Add to live_config.py</div>
                     <pre><code>{spec_code},</code></pre>
+                    {"<div style='color:#d29922;font-size:12px;margin-top:4px;'>&#9888; 0.75x stop strategy &mdash; LiveStrategySpec does not yet support stop_multiplier. Will trade at 1.0x stops.</div>" if c.get("stop_multiplier", 1.0) < 1.0 else ""}
                 </div>
             </div>"""
 
