@@ -30,6 +30,7 @@ import duckdb
 from pipeline.asset_configs import get_active_instruments
 from pipeline.cost_model import get_cost_spec
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.config import CORE_MIN_SAMPLES
 from trading_app.live_config import (
     LIVE_MIN_EXPECTANCY_DOLLARS_MULT,
     LIVE_MIN_EXPECTANCY_R,
@@ -154,7 +155,7 @@ def enrich_candidate(candidate: dict) -> dict:
             if median_risk is not None and inst == candidate.get("instrument"):
                 exp_dollars = expr * median_risk * spec.point_value
                 result["exp_dollars"] = round(exp_dollars, 2)
-                result["passes"] = exp_dollars > min_dollars
+                result["passes"] = exp_dollars >= min_dollars
             dollar_results[inst] = result
         except Exception as exc:
             print(f"  WARNING: cost spec unavailable for {inst}: {exc}")
@@ -171,14 +172,14 @@ def generate_spec_code(
     orb_label: str,
     entry_model: str,
     filter_type: str,
-    sample_size: int = 100,
+    sample_size: int = CORE_MIN_SAMPLES,
 ) -> str:
     """Generate copy-paste LiveStrategySpec Python code.
 
-    Tier is derived from sample_size: >=100 = core, <100 = regime (fitness-gated).
+    Tier is derived from sample_size vs CORE_MIN_SAMPLES (config.py).
     """
     family_id = f"{orb_label}_{entry_model}_{filter_type}"
-    if sample_size >= 100:
+    if sample_size >= CORE_MIN_SAMPLES:
         return f'LiveStrategySpec("{family_id}", "core", "{orb_label}", "{entry_model}", "{filter_type}", None)'
     return f'LiveStrategySpec("{family_id}", "regime", "{orb_label}", "{entry_model}", "{filter_type}", "high_vol")'
 

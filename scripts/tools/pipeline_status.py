@@ -109,32 +109,32 @@ def is_stale(
 
 PREFLIGHT_RULES: dict[str, dict] = {
     "outcome_builder": {
-        "table": "daily_features",
-        "query": "SELECT COUNT(*) FROM daily_features WHERE symbol = '{instrument}' AND orb_minutes = {orb_minutes}",
+        "query": "SELECT COUNT(*) FROM daily_features WHERE symbol = $1 AND orb_minutes = $2",
+        "params": lambda inst, orb: [inst, orb],
         "fix": "python pipeline/build_daily_features.py --instrument {instrument} --start 2019-01-01 --end 2026-12-31",
         "desc": "daily_features rows for {instrument} O{orb_minutes}",
     },
     "strategy_discovery": {
-        "table": "orb_outcomes",
-        "query": "SELECT COUNT(*) FROM orb_outcomes WHERE symbol = '{instrument}' AND orb_minutes = {orb_minutes}",
+        "query": "SELECT COUNT(*) FROM orb_outcomes WHERE symbol = $1 AND orb_minutes = $2",
+        "params": lambda inst, orb: [inst, orb],
         "fix": "python trading_app/outcome_builder.py --instrument {instrument} --orb-minutes {orb_minutes}",
         "desc": "orb_outcomes rows for {instrument} O{orb_minutes}",
     },
     "strategy_validator": {
-        "table": "experimental_strategies",
-        "query": "SELECT COUNT(*) FROM experimental_strategies WHERE instrument = '{instrument}'",
+        "query": "SELECT COUNT(*) FROM experimental_strategies WHERE instrument = $1",
+        "params": lambda inst, orb: [inst],
         "fix": "python trading_app/strategy_discovery.py --instrument {instrument} --orb-minutes {orb_minutes}",
         "desc": "experimental_strategies rows for {instrument}",
     },
     "build_edge_families": {
-        "table": "validated_setups",
-        "query": "SELECT COUNT(*) FROM validated_setups WHERE instrument = '{instrument}' AND status = 'active'",
+        "query": "SELECT COUNT(*) FROM validated_setups WHERE instrument = $1 AND status = 'active'",
+        "params": lambda inst, orb: [inst],
         "fix": "python trading_app/strategy_validator.py --instrument {instrument} --min-sample 50 --no-regime-waivers --min-years-positive-pct 0.75",
         "desc": "active validated_setups for {instrument}",
     },
     "select_family_rr": {
-        "table": "edge_families",
-        "query": "SELECT COUNT(*) FROM edge_families WHERE instrument = '{instrument}'",
+        "query": "SELECT COUNT(*) FROM edge_families WHERE instrument = $1",
+        "params": lambda inst, orb: [inst],
         "fix": "python scripts/tools/build_edge_families.py --instrument {instrument}",
         "desc": "edge_families rows for {instrument}",
     },
@@ -155,11 +155,11 @@ def preflight_check(
         return (True, f"No pre-flight rule for step '{step}'")
 
     rule = PREFLIGHT_RULES[step]
-    query = rule["query"].format(instrument=instrument, orb_minutes=orb_minutes)
+    params = rule["params"](instrument, orb_minutes)
     desc = rule["desc"].format(instrument=instrument, orb_minutes=orb_minutes)
     fix = rule["fix"].format(instrument=instrument, orb_minutes=orb_minutes)
 
-    row = con.execute(query).fetchone()
+    row = con.execute(rule["query"], params).fetchone()
     count = row[0] if row else 0
 
     if count == 0:
@@ -496,9 +496,11 @@ def run_rebuild(
         print(f"  {r}")
 
     if has_failures(assertion_results):
-        print("\n  ASSERTION FAILURES detected — marking rebuild as WARNING")
+        print("\n  ASSERTION FAILURES detected — operator must investigate")
         write_manifest(con, rebuild_id, instrument, "COMPLETED", steps_completed=completed, trigger=trigger)
         log_operation(con, "ASSERTIONS", "post_rebuild", instrument=instrument, rebuild_id=rebuild_id, status="WARNING")
+        print(f"Rebuild COMPLETED with assertion failures: {rebuild_id}")
+        return False
     else:
         write_manifest(con, rebuild_id, instrument, "COMPLETED", steps_completed=completed, trigger=trigger)
 
