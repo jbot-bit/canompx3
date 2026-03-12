@@ -32,7 +32,7 @@ echo "=========================================="
 # NOTE: daily_features must already be built for each aperture.
 # If stale, run first: python pipeline/build_daily_features.py --instrument X --orb-minutes Y
 echo ""
-echo "Step 1/9: Rebuilding outcomes (O5 + O15 + O30)..."
+echo "Step 1/10: Rebuilding outcomes (O5 + O15 + O30)..."
 for OM in 5 15 30; do
     echo "  -- outcome_builder --orb-minutes $OM --"
     python trading_app/outcome_builder.py --instrument "$INSTRUMENT" --force --orb-minutes "$OM"
@@ -40,7 +40,7 @@ done
 
 # Step 2: Discover strategies for ALL apertures
 echo ""
-echo "Step 2/9: Discovering strategies (O5 + O15 + O30)..."
+echo "Step 2/10: Discovering strategies (O5 + O15 + O30)..."
 for OM in 5 15 30; do
     echo "  -- strategy_discovery --orb-minutes $OM --"
     python trading_app/strategy_discovery.py --instrument "$INSTRUMENT" --orb-minutes "$OM"
@@ -48,7 +48,7 @@ done
 
 # Step 3: Validate strategies
 echo ""
-echo "Step 3/9: Validating strategies..."
+echo "Step 3/10: Validating strategies..."
 python trading_app/strategy_validator.py \
     --instrument "$INSTRUMENT" --min-sample 50 \
     --no-regime-waivers --min-years-positive-pct 0.75 \
@@ -56,32 +56,37 @@ python trading_app/strategy_validator.py \
 
 # Step 4: Retire E3 strategies (validator promotes E3 to active; this fixes it)
 echo ""
-echo "Step 4/9: Retiring E3 strategies..."
+echo "Step 4/10: Retiring E3 strategies..."
 python scripts/migrations/retire_e3_strategies.py
 
 # Step 5: Build edge families
 echo ""
-echo "Step 5/9: Building edge families..."
+echo "Step 5/10: Building edge families..."
 python scripts/tools/build_edge_families.py --instrument "$INSTRUMENT"
 
 # Step 6: Recompute family RR locks (SharpeDD criterion)
 echo ""
-echo "Step 6/9: Recomputing family RR locks..."
+echo "Step 6/10: Recomputing family RR locks..."
 python scripts/tools/select_family_rr.py
 
 # Step 7: Regenerate REPO_MAP (tracks file inventory drift)
 echo ""
-echo "Step 7/9: Regenerating REPO_MAP.md..."
+echo "Step 7/10: Regenerating REPO_MAP.md..."
 python scripts/tools/gen_repo_map.py
 
 # Step 8: Post-rebuild health check (drift + integrity + tests)
 echo ""
-echo "Step 8/9: Running post-rebuild health check..."
+echo "Step 8/10: Running post-rebuild health check..."
 python pipeline/health_check.py
 
-# Step 9: Sync to Pinecone
+# Step 9: Surface promotion candidates (PM review queue)
 echo ""
-echo "Step 9/9: Syncing knowledge to Pinecone..."
+echo "Step 9/10: Surfacing promotion candidates..."
+python scripts/tools/generate_promotion_candidates.py --format terminal --no-open
+
+# Step 10: Sync to Pinecone
+echo ""
+echo "Step 10/10: Syncing knowledge to Pinecone..."
 python scripts/tools/sync_pinecone.py
 
 # Write rebuild manifest (success)

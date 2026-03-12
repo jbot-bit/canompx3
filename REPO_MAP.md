@@ -54,7 +54,7 @@ research/
     analyze_1100_ib_alignment.py
     analyze_1100_midday_reversal.py
     analyze_1100_zero_lookahead.py
-... and 960 more entries
+... and 963 more entries
 ```
 
 ## Module Index
@@ -180,7 +180,7 @@ research/
 | `scripts/infra/backup_db.py` | 209 | Database backup — copies gold.db to backups/ with date stamp. | verify_backup, backup_db, labeled_backup, list_backups, restore_db |
 | `scripts/infra/check_root_hygiene.py` | 92 | Check that the project root contains only allowed files and directories. | main |
 | `scripts/infra/parallel_rebuild.py` | 492 | Parallel per-instrument pipeline rebuild using isolated DB copies. | run_instrument, merge_instrument, main |
-... and 442 more modules
+... and 445 more modules
 
 ## Cross-Package Dependencies
 
@@ -233,7 +233,7 @@ research/
 - `trading_app/nested/schema.py` -> pipeline
 - `trading_app/nested/validator.py` -> pipeline, trading_app
 - `trading_app/outcome_builder.py` -> pipeline, trading_app
-... and 337 more edges
+... and 340 more edges
 
 ## CLI Entry Points
 
@@ -261,4 +261,4 @@ research/
 - `python trading_app/ml/evaluate.py` -- (no argparse description)
 - `python trading_app/ml/evaluate_validated.py` -- (no argparse description)
 - `python trading_app/ml/importance.py` -- (no argparse description)
-... and 274 more entry points
+... and 276 more entry points

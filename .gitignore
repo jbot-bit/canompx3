@@ -5,6 +5,7 @@ local_db/
 
 # Generated trade sheets
 trade_sheet.html
+promotion_candidates.html
 
 # Vector DB cache (Chroma)
 chroma/
