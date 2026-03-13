@@ -210,10 +210,16 @@ class TestBuildSessionBriefings:
         from ui.session_helpers import build_session_briefings
 
         briefings = build_session_briefings()
-        # CME_REOPEN has MGC with 3 filters (G5, VOL_RV12_N20, G4_FAST10)
-        cme_mgc = [b for b in briefings if b.session == "CME_REOPEN" and b.instrument == "MGC"]
-        assert len(cme_mgc) == 1, "Should merge to single briefing per session+instrument"
-        assert len(cme_mgc[0].conditions) >= 2, "Should have multiple conditions"
+        # Find ANY session+instrument with 2+ conditions to verify merge behavior.
+        # (CME_REOPEN+MGC is seasonal-dependent — FAST10 gated off outside Nov-Feb.)
+        multi_condition = [b for b in briefings if len(b.conditions) >= 2]
+        assert len(multi_condition) >= 1, "At least one session+instrument should have multiple merged conditions"
+        # Verify merge produces exactly 1 briefing per (session, instrument)
+        seen = set()
+        for b in briefings:
+            key = (b.session, b.instrument)
+            assert key not in seen, f"Duplicate briefing for {key}"
+            seen.add(key)
 
     def test_briefing_has_rr_target(self):
         from ui.session_helpers import build_session_briefings
