@@ -84,6 +84,12 @@ SESSION_WINDOWS = {
 # Valid ORB durations in minutes
 VALID_ORB_MINUTES = [5, 15, 30]
 
+# Sessions that have compression z-score and tier columns in daily_features.
+# Tied to schema in pipeline/init_db.py (orb_*_compression_z / orb_*_compression_tier).
+# @research-source research/research_mgc_compressed_spring.py
+# @revalidated-for E1/E2 event-based sessions (Mar 2026)
+COMPRESSION_SESSIONS = ["CME_REOPEN", "TOKYO_OPEN", "LONDON_METALS"]
+
 # FAIL-CLOSED: every ORB label must be classified as DST-affected or DST-clean.
 # Prevents silent contamination if a new session is added without DST classification.
 _dst_classified = set(DST_AFFECTED_SESSIONS.keys()) | DST_CLEAN_SESSIONS
@@ -881,7 +887,7 @@ def build_features_for_day(
     row["atr_vel_regime"] = None
     row["garch_forecast_vol"] = None
     row["garch_atr_ratio"] = None
-    for _sl in ["CME_REOPEN", "TOKYO_OPEN", "LONDON_METALS"]:
+    for _sl in COMPRESSION_SESSIONS:
         row[f"orb_{_sl}_compression_z"] = None
         row[f"orb_{_sl}_compression_tier"] = None
     # rel_vol initialised here; computed in post-pass after all days are processed
@@ -1140,7 +1146,7 @@ def build_daily_features(
         # @research-source research/research_mgc_compressed_spring.py
         # @revalidated-for E1/E2 event-based sessions (Mar 2026)
         if atr_today is not None and atr_today > 0:
-            for sess_label in ["CME_REOPEN", "TOKYO_OPEN", "LONDON_METALS"]:
+            for sess_label in COMPRESSION_SESSIONS:
                 size_col = f"orb_{sess_label}_size"
                 size_today = rows[i].get(size_col)
                 if size_today is None:
