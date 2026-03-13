@@ -520,6 +520,23 @@ def build_live_portfolio(
                 notes.append(f"SKIP: {spec.family_id} -- dollar gate failed: {dollar_note}")
                 continue
 
+            # --- Weight resolution (Carver forecast scaling / Chan half-Kelly) ---
+            weight = 1.0
+            weight_note = ""
+            if spec.weight_override is not None:
+                weight = spec.weight_override
+                weight_note = f"DEMOTED (weight={weight})"
+
+                # Auto-recovery: family rolling avg ExpR shows edge recovered?
+                if (
+                    spec.recovery_expr_threshold is not None
+                    and source == "rolling"
+                    and match.get("rolling_avg_expectancy_r", 0.0) >= spec.recovery_expr_threshold
+                ):
+                    weight = 1.0
+                    rolling_avg = match["rolling_avg_expectancy_r"]
+                    weight_note = f"RECOVERED (rolling_avg_ExpR={rolling_avg:+.3f} >= {spec.recovery_expr_threshold})"
+
             strategies.append(
                 PortfolioStrategy(
                     strategy_id=match["strategy_id"],
@@ -538,12 +555,14 @@ def build_live_portfolio(
                     median_risk_points=match.get("median_risk_points"),
                     stop_multiplier=match.get("stop_multiplier", 1.0),
                     source=source,
-                    weight=1.0,
+                    weight=weight,
                 )
             )
             notes.append(
                 f"CORE: {spec.family_id} -> {match['strategy_id']} "
-                f"(ExpR={match['expectancy_r']:+.3f}, source={source}, {dollar_note}, weight=1.0)"
+                f"(ExpR={match['expectancy_r']:+.3f}, source={source}, "
+                f"{dollar_note}, weight={weight}"
+                f"{', ' + weight_note if weight_note else ''})"
             )
 
     # --- HOT tier: from experimental_strategies + rolling stability gate ---
