@@ -490,7 +490,10 @@ def load_rolling_validated_strategies(
 
             if rows:
                 cols = [desc[0] for desc in con.description]
-                results.append(dict(zip(cols, rows[0], strict=False)))
+                d = dict(zip(cols, rows[0], strict=False))
+                d["rolling_avg_expectancy_r"] = fam.avg_expectancy_r
+                d["rolling_weighted_stability"] = fam.weighted_stability
+                results.append(d)
 
         return results
 

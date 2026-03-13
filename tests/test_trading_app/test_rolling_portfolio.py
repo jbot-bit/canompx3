@@ -435,6 +435,23 @@ class TestPortfolioIntegration:
         for s in strategies:
             assert s["source"] == "rolling"
 
+    def test_rolling_avg_fields_threaded(self, tmp_path):
+        """Returned dicts must contain rolling_avg_expectancy_r and rolling_weighted_stability."""
+        db_path = _setup_rolling_db(tmp_path)
+        strategies = load_rolling_validated_strategies(
+            db_path,
+            "MGC",
+            train_months=12,
+            min_weighted_score=0.0,
+            min_expectancy_r=0.0,
+        )
+        assert len(strategies) >= 1
+        for s in strategies:
+            assert "rolling_avg_expectancy_r" in s, "missing rolling_avg_expectancy_r key"
+            assert "rolling_weighted_stability" in s, "missing rolling_weighted_stability key"
+            assert isinstance(s["rolling_avg_expectancy_r"], float)
+            assert isinstance(s["rolling_weighted_stability"], float)
+
     def test_no_data_returns_empty(self, tmp_path):
         db_path = _setup_rolling_db(tmp_path)
         # Use a train_months that has no data
