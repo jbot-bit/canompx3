@@ -151,6 +151,9 @@ LIVE_PORTFOLIO = [
     #   ORB_G4_FAST10: MGC speed-filtered edge, 43 new days (75% overlap), ExpR=+0.269
     LiveStrategySpec("CME_REOPEN_E2_ORB_G5", "core", "CME_REOPEN", "E2", "ORB_G5", None),
     LiveStrategySpec("CME_REOPEN_E2_VOL_RV12_N20", "core", "CME_REOPEN", "E2", "VOL_RV12_N20", None),
+    # Adversarial audit 2026-03-13: SUSPICIOUS. Seasonal Q4+Q1 clustering (68% wins Nov-Feb),
+    # cost fragility at G4 minimum. No recovery — seasonal gate is a hard skip.
+    # No academic support for month-based gating (purely empirical — held to higher bar).
     # BH FDR exclusion: MNQ p_adj > 0.05; MGC survives. @research-source bloomey_audit 2026-03-12
     LiveStrategySpec(
         "CME_REOPEN_E2_ORB_G4_FAST10",
@@ -160,11 +163,24 @@ LIVE_PORTFOLIO = [
         "ORB_G4_FAST10",
         None,
         exclude_instruments=frozenset({"MNQ"}),
+        active_months=frozenset({11, 12, 1, 2}),
     ),
     # CME_PRECLOSE: MES wins with ORB_G6; MNQ wins with VOL_RV12_N20 (O15 suffix is aperture, not filter_type)
     #   ORB_G5: MES 15m aperture, 434 new days (57% overlap with G6), ExpR=+0.242
     LiveStrategySpec("CME_PRECLOSE_E2_ORB_G6", "core", "CME_PRECLOSE", "E2", "ORB_G6", None),
-    LiveStrategySpec("CME_PRECLOSE_E2_VOL_RV12_N20", "core", "CME_PRECLOSE", "E2", "VOL_RV12_N20", None),
+    # Adversarial audit 2026-03-13: LEGIT BUT DECAYING. Monotonic decay 0.54->0.30R/yr (2022-2025).
+    # Half weight (Chan half-Kelly under parameter uncertainty) until rolling avg ExpR > 0.25
+    # (midpoint of 2024-2025 decay range). Man AHL: recovery requires same gates, not lower bar.
+    LiveStrategySpec(
+        "CME_PRECLOSE_E2_VOL_RV12_N20",
+        "core",
+        "CME_PRECLOSE",
+        "E2",
+        "VOL_RV12_N20",
+        None,
+        weight_override=0.5,
+        recovery_expr_threshold=0.25,
+    ),
     LiveStrategySpec("CME_PRECLOSE_E2_ORB_G5", "core", "CME_PRECLOSE", "E2", "ORB_G5", None),
     # COMEX_SETTLE: MES wins with ORB_G6; MNQ wins with VOL_RV12_N20
     # BH FDR exclusion: MGC and M2K p_adj > 0.05; MES and MNQ survive.
@@ -759,7 +775,8 @@ def main():
 
     from pipeline.cost_model import get_cost_spec
 
-    active = [s for s in portfolio.strategies if s.weight > 0]
+    active = [s for s in portfolio.strategies if s.weight >= 1.0]
+    demoted = [s for s in portfolio.strategies if 0 < s.weight < 1]
     gated = [s for s in portfolio.strategies if s.weight == 0]
 
     def _exp_dollars(s) -> str:
@@ -787,6 +804,13 @@ def main():
             f"  {s.strategy_id:<50} {s.expectancy_r:>+6.3f}  {_exp_dollars(s):>10}  "
             f"{s.win_rate:>4.0%}  {s.sample_size:>5}"
         )
+
+    if demoted:
+        print(f"\nDemoted strategies (0 < weight < 1): {len(demoted)}")
+        print(f"  {'Strategy':<50} {'Weight':>6}  {'ExpR':>6}  {'Exp$/trade':>10}")
+        print(f"  {'-' * 50} {'------':>6}  {'------':>6}  {'----------':>10}")
+        for s in demoted:
+            print(f"  {s.strategy_id:<50} {s.weight:>6.2f}  {s.expectancy_r:>+6.3f}  {_exp_dollars(s):>10}")
 
     if gated:
         print(f"\nGated OFF (weight=0): {len(gated)}")
