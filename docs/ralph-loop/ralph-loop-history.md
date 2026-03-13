@@ -271,3 +271,21 @@
 - Blast radius: 1 file changed. _build_server called only from __main__. No tests assert on instructions string. 39 files already import ACTIVE_ORB_INSTRUMENTS.
 - Verification: ACCEPT — Gate 1 (72 drift), Gate 2 (behavioral clean), Gate 3 (17/17 mcp_server), Gate 5 (no sins). Pre-commit: 186/186 fast tests.
 - Commit: da8af67
+
+## Iteration 34 — 2026-03-13
+- Phase: fix (batched)
+- Target: trading_app/strategy_discovery.py:23,1125
+- Finding: SD1 — PROJECT_ROOT dead variable (Orphan Risk); SD2 — hardcoded "2376+" combo count in comment (Volatile Data)
+- Action: Deleted PROJECT_ROOT line; removed inline number from comment, kept intent
+- Blast radius: 1 file
+- Verification: PASS (45/45 tests, 72/72 drift checks)
+- Commit: d318da7
+
+## Iteration 35 — 2026-03-13
+- Phase: fix
+- Target: trading_app/strategy_validator.py:32
+- Finding: SV1 — PROJECT_ROOT module-level constant defined but never referenced (Orphan Risk)
+- Action: Deleted the single dead line; Path import retained (used at lines 641, 1287)
+- Blast radius: 1 file, 0 callers, 0 importers
+- Verification: PASS — 49/49 tests, drift clean (72 checks)
+- Commit: c0b6cf6
