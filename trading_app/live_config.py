@@ -66,6 +66,21 @@ class LiveStrategySpec:
     # None = no auto-recovery. Only fires when source="rolling".
     recovery_expr_threshold: float | None = None
 
+    def __post_init__(self):
+        if self.active_months is not None:
+            if not self.active_months:
+                raise ValueError("active_months must be non-empty if set")
+            if not all(1 <= m <= 12 for m in self.active_months):
+                raise ValueError("active_months must contain values 1-12")
+        if self.weight_override is not None:
+            if not 0.0 <= self.weight_override <= 1.0:
+                raise ValueError("weight_override must be in [0.0, 1.0]")
+        if self.recovery_expr_threshold is not None:
+            if self.recovery_expr_threshold <= 0.0:
+                raise ValueError("recovery_expr_threshold must be > 0.0")
+            if self.weight_override is None:
+                raise ValueError("recovery_expr_threshold requires weight_override to be set")
+
 
 # Lookback for HOT tier rolling stability check (recent months only).
 # @research-source: Pardo Ch.7 walk-forward methodology — 10 windows = ~10 months,

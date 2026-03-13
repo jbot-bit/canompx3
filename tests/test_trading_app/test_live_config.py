@@ -123,6 +123,56 @@ class TestLiveStrategySpec:
         )
         assert spec.recovery_expr_threshold == 0.25
 
+    def test_recovery_requires_weight_override(self):
+        """recovery_expr_threshold without weight_override is invalid."""
+        with pytest.raises(ValueError, match="recovery_expr_threshold requires weight_override"):
+            LiveStrategySpec(
+                "fam1",
+                "core",
+                "TOKYO_OPEN",
+                "E1",
+                "ORB_G4",
+                None,
+                recovery_expr_threshold=0.25,
+            )
+
+    def test_invalid_month_rejected(self):
+        with pytest.raises(ValueError, match="active_months"):
+            LiveStrategySpec(
+                "fam1",
+                "core",
+                "TOKYO_OPEN",
+                "E1",
+                "ORB_G4",
+                None,
+                active_months=frozenset({13}),
+            )
+
+    def test_weight_out_of_range_rejected(self):
+        with pytest.raises(ValueError, match="weight_override"):
+            LiveStrategySpec(
+                "fam1",
+                "core",
+                "TOKYO_OPEN",
+                "E1",
+                "ORB_G4",
+                None,
+                weight_override=1.5,
+            )
+
+    def test_negative_recovery_rejected(self):
+        with pytest.raises(ValueError, match="recovery_expr_threshold"):
+            LiveStrategySpec(
+                "fam1",
+                "core",
+                "TOKYO_OPEN",
+                "E1",
+                "ORB_G4",
+                None,
+                weight_override=0.5,
+                recovery_expr_threshold=-0.1,
+            )
+
 
 class TestLivePortfolio:
     def test_portfolio_not_empty(self):
