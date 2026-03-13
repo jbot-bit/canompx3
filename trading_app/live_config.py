@@ -55,6 +55,16 @@ class LiveStrategySpec:
     # Instruments in this set are skipped during build_live_portfolio.
     # Added Mar 2026: Bloomey audit identified spec-instrument combos
     # that fail BH FDR while other instruments on the same spec survive.
+    # Seasonal gate: only trade in these calendar months (1=Jan..12=Dec).
+    # None = all months. Outside active months -> weight=0, variant not loaded.
+    active_months: frozenset[int] | None = None
+    # Manual weight demotion (e.g. 0.5 for decay, 0.0 to disable).
+    # None = use default (1.0 for core, fitness-dependent for regime).
+    weight_override: float | None = None
+    # Auto-recovery: if rolling eval ExpR exceeds this threshold,
+    # ignore weight_override and promote back to weight=1.0.
+    # None = no auto-recovery. Only fires when source="rolling".
+    recovery_expr_threshold: float | None = None
 
 
 # Lookback for HOT tier rolling stability check (recent months only).
