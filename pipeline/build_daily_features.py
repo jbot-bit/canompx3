@@ -1322,7 +1322,11 @@ def build_daily_features(
 
 
 def verify_daily_features(
-    con: duckdb.DuckDBPyConnection, symbol: str, start_date: date, end_date: date
+    con: duckdb.DuckDBPyConnection,
+    symbol: str,
+    start_date: date,
+    end_date: date,
+    orb_minutes: int | None = None,
 ) -> tuple[bool, list[str]]:
     """
     Verify daily_features integrity after build.
@@ -1333,21 +1337,32 @@ def verify_daily_features(
     3. ORB size >= 0 where not NULL
     4. Break direction is valid enum
     5. Outcome is valid enum
+
+    When orb_minutes is provided, checks are scoped to that aperture only,
+    preventing stale sibling apertures from causing false verification failures.
     """
     failures = []
 
+    # Scope filter: when orb_minutes is provided, only verify that aperture
+    orb_clause = ""
+    base_params: list = [symbol, start_date, end_date]
+    if orb_minutes is not None:
+        orb_clause = " AND orb_minutes = ?"
+        base_params = [symbol, start_date, end_date, orb_minutes]
+
     # Check 1: duplicates (PK is symbol, trading_day, orb_minutes)
     dupe_count = con.execute(
-        """
+        f"""
         SELECT COUNT(*) FROM (
             SELECT symbol, trading_day, orb_minutes FROM daily_features
             WHERE symbol = ?
             AND trading_day >= ? AND trading_day <= ?
+            {orb_clause}
             GROUP BY symbol, trading_day, orb_minutes
             HAVING COUNT(*) > 1
         )
     """,
-        [symbol, start_date, end_date],
+        base_params,
     ).fetchone()[0]
 
     if dupe_count > 0:
@@ -1355,13 +1370,14 @@ def verify_daily_features(
 
     # Check 2: bar_count_1m > 0
     zero_bars = con.execute(
-        """
+        f"""
         SELECT COUNT(*) FROM daily_features
         WHERE symbol = ?
         AND trading_day >= ? AND trading_day <= ?
+        {orb_clause}
         AND (bar_count_1m IS NULL OR bar_count_1m <= 0)
     """,
-        [symbol, start_date, end_date],
+        base_params,
     ).fetchone()[0]
 
     if zero_bars > 0:
@@ -1374,9 +1390,10 @@ def verify_daily_features(
             SELECT COUNT(*) FROM daily_features
             WHERE symbol = ?
             AND trading_day >= ? AND trading_day <= ?
+            {orb_clause}
             AND orb_{label}_size < 0
         """,
-            [symbol, start_date, end_date],
+            base_params,
         ).fetchone()[0]
 
         if neg_size > 0:
@@ -1389,10 +1406,11 @@ def verify_daily_features(
             SELECT COUNT(*) FROM daily_features
             WHERE symbol = ?
             AND trading_day >= ? AND trading_day <= ?
+            {orb_clause}
             AND orb_{label}_break_dir IS NOT NULL
             AND orb_{label}_break_dir NOT IN ('long', 'short')
         """,
-            [symbol, start_date, end_date],
+            base_params,
         ).fetchone()[0]
 
         if bad_dir > 0:
@@ -1405,10 +1423,11 @@ def verify_daily_features(
             SELECT COUNT(*) FROM daily_features
             WHERE symbol = ?
             AND trading_day >= ? AND trading_day <= ?
+            {orb_clause}
             AND orb_{label}_outcome IS NOT NULL
             AND orb_{label}_outcome NOT IN ('win', 'loss', 'scratch')
         """,
-            [symbol, start_date, end_date],
+            base_params,
         ).fetchone()[0]
 
         if bad_outcome > 0:
@@ -1470,8 +1489,9 @@ def main():
 
         # Verify (skip for dry run)
         if not args.dry_run and row_count > 0:
-            logger.info("Verifying integrity...")
-            ok, failures = verify_daily_features(con, symbol, start_date, end_date)
+            scope = f"orb_minutes={args.orb_minutes}" if args.orb_minutes else "all apertures"
+            logger.info(f"Verifying integrity ({scope})...")
+            ok, failures = verify_daily_features(con, symbol, start_date, end_date, args.orb_minutes)
 
             if not ok:
                 logger.error("FATAL: Integrity verification FAILED:")
