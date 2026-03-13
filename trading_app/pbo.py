@@ -108,12 +108,38 @@ def compute_pbo(
     }
 
 
+def _get_eligible_days(con, instrument: str, orb_label: str, filter_obj) -> set:
+    """Return set of trading_days where filter passes on daily_features.
+
+    Loads daily_features for the instrument and evaluates the filter object's
+    matches_row() on each row. Build-time only — not performance-critical.
+    """
+    df = con.execute(
+        "SELECT * FROM daily_features WHERE symbol = ?",
+        [instrument],
+    ).fetchdf()
+
+    eligible = set()
+    for _, row in df.iterrows():
+        row_dict = row.to_dict()
+        if filter_obj.matches_row(row_dict, orb_label):
+            # Normalize pandas Timestamp → datetime.date to match orb_outcomes keys
+            td = row_dict["trading_day"]
+            eligible.add(td.date() if hasattr(td, "date") else td)
+    return eligible
+
+
 def compute_family_pbo(
     con,
     family_hash: str,
     instrument: str,
 ) -> dict:
     """Compute PBO for an edge family by loading member outcomes from DB.
+
+    Filter-aware: applies the family's filter_type to daily_features before
+    running CSCV, so PBO measures parameter stability on the filtered dataset
+    where the edge actually exists. Without this, filter-gated instruments
+    (MGC) get PBO=1.0 because the raw unfiltered dataset is uniformly negative.
 
     Args:
         con: DuckDB connection (read-only OK)
@@ -135,17 +161,38 @@ def compute_family_pbo(
     if len(members) < 2:
         return {"pbo": None, "n_splits": 0, "n_negative_oos": 0, "logit_pbo": None}
 
+    # All members of an edge family share the same filter_type (enforced by
+    # family_hash grouping — different filters → different trade days →
+    # different family_hash).
+    filter_type = members[0][6]
+    orb_label = members[0][1]
+
+    # Determine eligible trade days via filter application on daily_features.
+    # For NO_FILTER, all days are eligible (skip the query).
+    eligible_days = None
+    if filter_type and filter_type != "NO_FILTER":
+        from trading_app.config import ALL_FILTERS
+
+        filter_obj = ALL_FILTERS.get(filter_type)
+        if filter_obj is not None:
+            eligible_days = _get_eligible_days(con, instrument, orb_label, filter_obj)
+            if not eligible_days:
+                logger.warning(
+                    "PBO: filter %s yields 0 eligible days for %s %s",
+                    filter_type,
+                    instrument,
+                    orb_label,
+                )
+                return {"pbo": None, "n_splits": 0, "n_negative_oos": 0, "logit_pbo": None}
+
     # Bulk-load outcomes for ALL members in one query (eliminates N+1 loop)
     # Map (orb_label, orb_minutes, entry_model, rr_target, confirm_bars) -> strategy_id
     member_keys = {}
-    # _filter_type fetched but intentionally unused — PBO operates on raw outcomes
-    # without filter application. See review I-1: if filter-aware PBO is needed,
-    # join daily_features and apply filter_type here.
     # NOTE: Key collision (same 5-tuple, different filter_type) is structurally
     # prevented by edge family grouping — different filters → different trade days
     # → different family_hash. Assertion below guards against future regressions.
-    for sid, orb_label, orb_minutes, entry_model, rr_target, confirm_bars, _filter_type in members:
-        key = (orb_label, orb_minutes, entry_model, rr_target, confirm_bars)
+    for sid, _orb_label, orb_minutes, entry_model, rr_target, confirm_bars, _ft in members:
+        key = (_orb_label, orb_minutes, entry_model, rr_target, confirm_bars)
         if key in member_keys:
             logger.warning(
                 "PBO key collision in family %s: %s and %s share 5-tuple %s",
@@ -180,8 +227,11 @@ def compute_family_pbo(
 
     # Partition results by member key -> strategy_id
     strategy_pnl = {}
-    for trading_day, pnl_r, orb_label, orb_minutes, entry_model, rr_target, confirm_bars in rows:
-        key = (orb_label, orb_minutes, entry_model, rr_target, confirm_bars)
+    for trading_day, pnl_r, _orb_label, orb_minutes, entry_model, rr_target, confirm_bars in rows:
+        # Skip non-eligible days when filter is active
+        if eligible_days is not None and trading_day not in eligible_days:
+            continue
+        key = (_orb_label, orb_minutes, entry_model, rr_target, confirm_bars)
         sid = member_keys.get(key)
         if sid is not None:
             if sid not in strategy_pnl:
