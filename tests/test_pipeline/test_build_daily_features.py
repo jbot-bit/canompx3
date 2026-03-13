@@ -865,3 +865,27 @@ class TestBuildIntegration:
             ORDER BY orb_minutes
         """).fetchall()
         assert [v[0] for v in orb_vals] == [5, 15]
+
+    def test_verify_scoped_to_aperture(self, feature_db):
+        """Scoped verify ignores stale sibling apertures.
+
+        Regression test: before the fix, a corrupt 15m row would fail
+        verification of a clean 5m build because the verifier scanned
+        all apertures.
+        """
+        # Build clean 5m
+        build_daily_features(feature_db, "MGC", date(2024, 1, 5), date(2024, 1, 5), 5, False)
+
+        # Inject a corrupt 15m row (bar_count_1m = 0)
+        feature_db.execute("""
+            INSERT INTO daily_features (symbol, trading_day, orb_minutes, bar_count_1m)
+            VALUES ('MGC', '2024-01-05', 15, 0)
+        """)
+
+        # Unscoped verify should FAIL (sees the corrupt 15m row)
+        ok_all, failures_all = verify_daily_features(feature_db, "MGC", date(2024, 1, 5), date(2024, 1, 5))
+        assert not ok_all, "Unscoped verify should catch corrupt 15m row"
+
+        # Scoped verify for 5m should PASS (ignores 15m)
+        ok_5m, failures_5m = verify_daily_features(feature_db, "MGC", date(2024, 1, 5), date(2024, 1, 5), orb_minutes=5)
+        assert ok_5m, f"Scoped 5m verify should pass, got: {failures_5m}"
