@@ -7,7 +7,8 @@ All modules (execution_engine, paper_trader, risk_manager) share this object.
 Read-only consumer of the database -- never writes to DB.
 
 Usage:
-    state = MarketState.from_trading_day(date(2025, 6, 15), Path("gold.db"))
+    from pipeline.paths import GOLD_DB_PATH
+    state = MarketState.from_trading_day(date(2025, 6, 15), GOLD_DB_PATH)
     print(state.signals)
     print(state.strategy_scores)
 """
@@ -16,8 +17,6 @@ import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 import duckdb
 
