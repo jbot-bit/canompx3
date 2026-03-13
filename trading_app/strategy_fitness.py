@@ -27,8 +27,6 @@ from pipeline.log import get_logger
 
 logger = get_logger(__name__)
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-
 import duckdb
 
 from pipeline.dst import DST_AFFECTED_SESSIONS, is_winter_for_session
