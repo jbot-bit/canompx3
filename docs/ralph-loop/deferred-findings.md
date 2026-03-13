@@ -9,8 +9,7 @@
 
 | ID | Iter | Severity | Target | Description | Deferred Reason |
 |----|------|----------|--------|-------------|-----------------|
-| DF-02 | 9/11 | LOW | execution_engine.py:~1020 | E3 silent exit — no log when E3 limit order expires unfilled | Dormant: E3 soft-retired |
-| DF-03 | 9/11 | LOW | execution_engine.py:~879 | IB hardcoded 23:00 UTC close time — only affects TOKYO_OPEN on IB | Dormant: IB not in active use |
+| DF-02 | 9/11 | LOW | execution_engine.py:413 | ARMED/CONFIRMING silent exit at session_end — no TradeEvent or log emitted | Dormant: E3 soft-retired; paper_trader tracks by absence from completed_trades |
 | DF-04 | 12 | LOW | rolling_portfolio.py:304 | Dormant `orb_minutes=5` in rolling DOW stats — multi-aperture TODO | Annotated TODO, not blocking |
 
 ## Resolved Findings
@@ -18,6 +17,7 @@
 | ID | Iter Found | Resolved | Commit | Description |
 |----|-----------|----------|--------|-------------|
 | DF-01 | 9/11 | 23 | f7bd0c4 | Conditional EXITED trade prune — made unconditional; silent-exit paths now pruned correctly |
+| DF-03 | 9/11 | 40 | ACCEPTABLE | IB hardcoded 23:00 UTC — reassessed: correctly documents Brisbane UTC+10 fixed offset, no DST, IB_DURATION_MINUTES from config. Not a defect. |
 | DF-07 | 13 | slate-clear | 7cf57cb | HOT tier thresholds unannotated — @research-source annotation added |
 | DF-09 | 21 | 25 | 8261a0e | OR2: No fill_price parsing tests — unit tests added for both Tradovate and ProjectX routers |
 | DF-10 | 26 | post-26 | (this session) | E1/E3 zero-risk paths silent continue — REJECT events added; E3 block documented as defensive dead code (unreachable by construction); E1/E2 tests added |
