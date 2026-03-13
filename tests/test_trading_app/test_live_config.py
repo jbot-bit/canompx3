@@ -77,6 +77,52 @@ class TestLiveStrategySpec:
         assert spec.family_id == "fam1"
         assert spec.regime_gate == "rolling"
 
+    def test_new_fields_default_none(self):
+        """New gate fields default to None (no gate active)."""
+        spec = LiveStrategySpec("fam1", "core", "TOKYO_OPEN", "E1", "ORB_G4", None)
+        assert spec.active_months is None
+        assert spec.weight_override is None
+        assert spec.recovery_expr_threshold is None
+
+    def test_active_months_field(self):
+        spec = LiveStrategySpec(
+            "fam1",
+            "core",
+            "TOKYO_OPEN",
+            "E1",
+            "ORB_G4",
+            None,
+            active_months=frozenset({11, 12, 1, 2}),
+        )
+        assert spec.active_months == frozenset({11, 12, 1, 2})
+        assert 1 in spec.active_months
+        assert 6 not in spec.active_months
+
+    def test_weight_override_field(self):
+        spec = LiveStrategySpec(
+            "fam1",
+            "core",
+            "TOKYO_OPEN",
+            "E1",
+            "ORB_G4",
+            None,
+            weight_override=0.5,
+        )
+        assert spec.weight_override == 0.5
+
+    def test_recovery_threshold_field(self):
+        spec = LiveStrategySpec(
+            "fam1",
+            "core",
+            "TOKYO_OPEN",
+            "E1",
+            "ORB_G4",
+            None,
+            weight_override=0.5,
+            recovery_expr_threshold=0.25,
+        )
+        assert spec.recovery_expr_threshold == 0.25
+
 
 class TestLivePortfolio:
     def test_portfolio_not_empty(self):
