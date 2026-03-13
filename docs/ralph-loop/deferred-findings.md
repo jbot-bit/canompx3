@@ -9,7 +9,6 @@
 
 | ID | Iter | Severity | Target | Description | Deferred Reason |
 |----|------|----------|--------|-------------|-----------------|
-| DF-02 | 9/11 | LOW | execution_engine.py:413 | ARMED/CONFIRMING silent exit at session_end — no TradeEvent or log emitted | Dormant: E3 soft-retired; paper_trader tracks by absence from completed_trades |
 | DF-04 | 12 | LOW | rolling_portfolio.py:304 | Dormant `orb_minutes=5` in rolling DOW stats — multi-aperture TODO | Annotated TODO, not blocking |
 
 ## Resolved Findings
@@ -25,3 +24,4 @@
 | DF-06 | 13 | 28 | already-present | strategy_validator.py WF thresholds — annotations already present at iter 28 audit; stale ledger entry |
 | DF-08 | 13 | 28 | 43a86ba | live_config.py LIVE_MIN_EXPECTANCY_R + LIVE_MIN_EXPECTANCY_DOLLARS_MULT — @research-source annotations added |
 | DF-11 | 27 | 31 | 9158b77 | Hardcoded ("E1","E2","E3") in rolling_portfolio + paper_trader → canonical ENTRY_MODELS import |
+| DF-02 | 9/11 | 45 | 4c6bc4d | ARMED/CONFIRMING silent exit at session_end — logger.debug() added; no behavior change |

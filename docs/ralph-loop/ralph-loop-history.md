@@ -356,3 +356,30 @@
 - Blast radius: 1 file (live_config.py only; no external callers of PROJECT_ROOT)
 - Verification: PASS (36/36 tests, 72/72 drift checks)
 - Commit: 27604b9
+
+## Iteration 43 — 2026-03-14
+- Phase: fix
+- Target: trading_app/rolling_portfolio.py:24
+- Finding: RP1 — Dead PROJECT_ROOT assignment (never referenced; same orphan pattern as EE1/PT1/LC1/CT1/MS1/RM1)
+- Action: Removed 1-line dead assignment. Path import retained (used for Path(args.output) in main() at line 599).
+- Blast radius: 1 file (rolling_portfolio.py only; 3 importers unaffected — none import PROJECT_ROOT)
+- Verification: PASS (37/37 tests, 72/72 drift checks)
+- Commit: aa818e1
+
+## Iteration 44 — 2026-03-14
+- Phase: audit-only
+- Target: trading_app/strategy_fitness.py (1153 lines)
+- Finding: 0 findings — full Seven Sins scan clean
+- Action: No fix. Audit-only.
+- Blast radius: N/A
+- Verification: PASS (4/4 gates: drift 72 checks, behavioral 6 checks, ruff clean, pytest 31 tests)
+- Commit: NONE
+
+## Iteration 45 — 2026-03-14
+- Phase: fix
+- Target: trading_app/execution_engine.py:410-412
+- Finding: DF-02 (LOW) — ARMED/CONFIRMING trades silently discarded at session_end with no log entry; orphan trades invisible to diagnostics
+- Action: Added logger.debug() emitting strategy_id and state before the existing state=EXITED + completed_trades.append() path. Zero behavior change.
+- Blast radius: 1 file (execution_engine.py only; callers paper_trader.py and session_orchestrator.py unaffected — pure logging addition)
+- Verification: PASS (43/43 tests, 72/72 drift checks)
+- Commit: 4c6bc4d
