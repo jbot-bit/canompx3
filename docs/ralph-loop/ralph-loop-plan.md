@@ -1,6 +1,9 @@
-## Iteration: 42
-## Target: trading_app/live_config.py:21
-## Finding: Dead PROJECT_ROOT assignment defined at module level but never referenced anywhere in the file (LC1)
-## Blast Radius: 0 external callers, 0 importers of PROJECT_ROOT, test file test_live_config.py
-## Invariants: [Path import kept — used for db_path type annotations and Path(args.output); LIVE_PORTFOLIO list unchanged; all function signatures unchanged]
-## Diff estimate: 1 line removed
+## Iteration: 45
+## Target: trading_app/execution_engine.py:410-412
+## Finding: ARMED/CONFIRMING trades silently discarded at session_end — no log entry, invisible to diagnostics (DF-02)
+## Blast Radius: 1 file (execution_engine.py); 0 callers affected — pure logging addition
+## Invariants:
+1. No TradeEvent emitted for ARMED/CONFIRMING (they never entered — correct behavior preserved)
+2. Trade state set to EXITED and appended to completed_trades — unchanged
+3. 43 execution engine tests must continue to pass
+## Diff estimate: 5 lines added (logger.debug call)
