@@ -134,7 +134,7 @@ LIVE_MIN_EXPECTANCY_DOLLARS_MULT = 1.3
 #
 # Updated 2026-03-12: Added SINGAPORE_OPEN VOL_RV12_N20 (genuinely independent filter type).
 #   Reverted 3 redundant ORB_G variants (NYSE_OPEN G6/G5, US_DATA_1000 G8) — 99%+ day overlap with existing specs.
-#   27 unique specs (instrument-agnostic — filter_type is the base name, without _O15/_O30 aperture suffix).
+#   30 unique specs (instrument-agnostic — filter_type is the base name, without _O15/_O30 aperture suffix).
 #   E0 fully purged. E2 dominant. E3 soft-retired.
 #   Filter_type note: strategy IDs encode aperture as _O15/_O30 suffix (e.g. VOL_RV12_N20_O15),
 #   but validated_setups.filter_type stores the base name (e.g. VOL_RV12_N20). Always use base name here.
@@ -246,11 +246,34 @@ LIVE_PORTFOLIO = [
         None,
         exclude_instruments=frozenset({"M2K"}),
     ),
+    # EUROPE_FLOW (17:00 winter / 18:00 summer Brisbane): Added 2026-03-13.
+    #   MNQ: 5 years positive (2021-2025), 2026 Q1 weak (-0.02 to -0.09R on 35-45 trades)
+    #   but insufficient sample to call decay. 100% WF pass, 41% FDR significant.
+    #   VOL_RV12_N20: N=774, ExpR=0.144, Sharpe=2.28, 41% day compression vs NO_FILTER
+    #   ORB_G8: N=1117, ExpR=0.133, ROBUST family, Sharpe=1.88
+    #   M2K excluded (PURGED + 0% dollar gate pass). MES excluded (zero validated).
+    #   @research-source EUROPE_FLOW deep audit 2026-03-13
+    LiveStrategySpec("EUROPE_FLOW_E2_VOL_RV12_N20", "core", "EUROPE_FLOW", "E2", "VOL_RV12_N20", None),
+    LiveStrategySpec("EUROPE_FLOW_E2_ORB_G8", "core", "EUROPE_FLOW", "E2", "ORB_G8", None),
     # =========================================================================
     # REGIME: fitness-gated (N<100 — only trade when strategy_fitness = FIT)
     # =========================================================================
     # M2K LONDON_METALS: N=59, REGIME. ORB_G6_CONT filter (different from MNQ's VOL_RV12_N20_O15 above)
     LiveStrategySpec("LONDON_METALS_E2_ORB_G6_CONT", "regime", "LONDON_METALS", "E2", "ORB_G6_CONT", "high_vol"),
+    # MGC EUROPE_FLOW: N=147 but ~20-25 trades/yr in active years, dead years (2017-2019, 2023).
+    #   Institutionally regime-grade despite technically crossing CORE threshold.
+    #   ORB_G4: ROBUST family, 2026 positive (+0.30R), all dollar gate pass (>1.84x).
+    #   MNQ/MES/M2K excluded (MNQ no MGC-level edge, MES zero validated, M2K PURGED).
+    #   @research-source EUROPE_FLOW deep audit 2026-03-13
+    LiveStrategySpec(
+        "EUROPE_FLOW_E2_ORB_G4",
+        "regime",
+        "EUROPE_FLOW",
+        "E2",
+        "ORB_G4",
+        "high_vol",
+        exclude_instruments=frozenset({"MNQ", "MES", "M2K"}),
+    ),
     # NOTE: MGC TOKYO_OPEN ORB_G5_CONT loads highest-ExpR FDR-preferred variant (varies by rebuild).
     # Monitor via get_strategy_fitness if conditional gating is needed.
 ]
