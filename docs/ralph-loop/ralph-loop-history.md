@@ -298,3 +298,12 @@
 - Blast radius: 1 file, 0 external callers
 - Verification: PASS — 72/72 drift checks, 6/6 behavioral, ruff clean, 60/60 pytest
 - Commit: 49b32a9
+
+## Iteration 37 — 2026-03-13
+- Phase: fix
+- Target: trading_app/cascade_table.py:17
+- Finding: CT1 — Dead `PROJECT_ROOT` assignment (orphan risk) + relative path in module docstring usage example
+- Action: Removed unused `PROJECT_ROOT = Path(__file__).resolve().parent.parent`. Updated docstring example to use `GOLD_DB_PATH` from `pipeline.paths`.
+- Blast radius: 1 file (cascade_table.py); 3 importers checked — none reference PROJECT_ROOT
+- Verification: PASS (7/7 test_cascade_table.py, drift 72/72 clean, ruff clean)
+- Commit: 00511df
