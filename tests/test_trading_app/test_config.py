@@ -338,26 +338,20 @@ class TestDayOfWeekSkipFilter:
             f.filter_type = "CHANGED"
 
     def test_to_json_roundtrip(self):
-        f = DayOfWeekSkipFilter(filter_type="DOW_NOFRI", description="Skip Friday", skip_days=(4,))
+        f = DayOfWeekSkipFilter(filter_type="DOW_NOMON", description="Skip Monday", skip_days=(0,))
         data = json.loads(f.to_json())
-        assert data["filter_type"] == "DOW_NOFRI"
-        assert data["skip_days"] == [4]
+        assert data["filter_type"] == "DOW_NOMON"
+        assert data["skip_days"] == [0]
 
 
 class TestDowComposites:
     """DOW composites in get_filters_for_grid."""
 
-    def test_cme_reopen_has_nofri(self):
-        # MGC uses G6/G8 only (G4/G5 pass 85%+ of days — regime shift Feb 2026)
+    def test_cme_reopen_no_nofri(self):
+        """NOFRI removed from CME_REOPEN grid Mar 2026 — LIKELY NOISE (DOW stress test)."""
         filters = get_filters_for_grid("MGC", "CME_REOPEN")
-        for key in ["ORB_G6_NOFRI", "ORB_G8_NOFRI"]:
-            assert key in filters, f"{key} missing from MGC CME_REOPEN grid"
-            assert isinstance(filters[key], CompositeFilter)
-        # Non-MGC instruments still get full G4-G8
-        mnq_filters = get_filters_for_grid("MNQ", "CME_REOPEN")
-        for key in ["ORB_G4_NOFRI", "ORB_G5_NOFRI", "ORB_G6_NOFRI", "ORB_G8_NOFRI"]:
-            assert key in mnq_filters, f"{key} missing from MNQ CME_REOPEN grid"
-            assert isinstance(mnq_filters[key], CompositeFilter)
+        nofri_keys = [k for k in filters if "NOFRI" in k]
+        assert nofri_keys == [], f"NOFRI should be removed from CME_REOPEN grid, got {nofri_keys}"
 
     def test_london_metals_has_nomon(self):
         # MGC uses G6/G8 only
@@ -371,16 +365,12 @@ class TestDowComposites:
             assert key in mnq_filters, f"{key} missing from MNQ LONDON_METALS grid"
             assert isinstance(mnq_filters[key], CompositeFilter)
 
-    def test_tokyo_open_has_notue_and_dir_long(self):
-        # MGC uses G6/G8 only
+    def test_tokyo_open_has_dir_long_no_notue(self):
+        """NOTUE removed from TOKYO_OPEN grid Mar 2026 — LIKELY NOISE. DIR_LONG stays."""
         filters = get_filters_for_grid("MGC", "TOKYO_OPEN")
-        for key in ["ORB_G6_NOTUE", "ORB_G8_NOTUE"]:
-            assert key in filters, f"{key} missing from MGC TOKYO_OPEN grid"
+        notue_keys = [k for k in filters if "NOTUE" in k]
+        assert notue_keys == [], f"NOTUE should be removed from TOKYO_OPEN grid, got {notue_keys}"
         assert "DIR_LONG" in filters
-        # Non-MGC instruments still get full G4-G8
-        mnq_filters = get_filters_for_grid("MNQ", "TOKYO_OPEN")
-        for key in ["ORB_G4_NOTUE", "ORB_G5_NOTUE", "ORB_G6_NOTUE", "ORB_G8_NOTUE"]:
-            assert key in mnq_filters, f"{key} missing from MNQ TOKYO_OPEN grid"
 
     def test_singapore_open_has_base_only(self):
         """SINGAPORE_OPEN gets base grid only — no DOW, no DIR_LONG, no NODBL.
@@ -396,15 +386,15 @@ class TestDowComposites:
         assert nodbl_keys == [], f"SINGAPORE_OPEN should have no NODBL filters, got {nodbl_keys}"
 
     def test_composite_matches_row_correctly(self):
-        """Composite(G6 + skip Friday) rejects Friday even with big ORB."""
-        filters = get_filters_for_grid("MGC", "CME_REOPEN")
-        comp = filters["ORB_G6_NOFRI"]
-        # Big ORB on Friday -> rejected (DOW filter fails)
-        assert comp.matches_row({"orb_CME_REOPEN_size": 8.0, "day_of_week": 4}, "CME_REOPEN") is False
-        # Big ORB on Monday -> accepted
-        assert comp.matches_row({"orb_CME_REOPEN_size": 8.0, "day_of_week": 0}, "CME_REOPEN") is True
-        # Small ORB on Monday -> rejected (base G6 filter fails)
-        assert comp.matches_row({"orb_CME_REOPEN_size": 2.0, "day_of_week": 0}, "CME_REOPEN") is False
+        """Composite(G6 + skip Monday) rejects Monday even with big ORB."""
+        filters = get_filters_for_grid("MGC", "LONDON_METALS")
+        comp = filters["ORB_G6_NOMON"]
+        # Big ORB on Monday -> rejected (DOW filter fails)
+        assert comp.matches_row({"orb_LONDON_METALS_size": 8.0, "day_of_week": 0}, "LONDON_METALS") is False
+        # Big ORB on Tuesday -> accepted
+        assert comp.matches_row({"orb_LONDON_METALS_size": 8.0, "day_of_week": 1}, "LONDON_METALS") is True
+        # Small ORB on Tuesday -> rejected (base G6 filter fails)
+        assert comp.matches_row({"orb_LONDON_METALS_size": 2.0, "day_of_week": 1}, "LONDON_METALS") is False
 
 
 class TestDoubleBreakFilterRemoved:

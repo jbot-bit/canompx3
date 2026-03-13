@@ -200,10 +200,10 @@ The `day_of_week` column uses the Brisbane trading day. For sessions before midn
 
 **Implication for NYSE_OPEN:** Brisbane-Friday at NYSE_OPEN is the US THURSDAY equity open. Any DOW research at NYSE_OPEN using Brisbane DOW is offset by -1 day relative to the US calendar. Currently harmless (NYSE_OPEN has no DOW filter in grid), but MUST be accounted for if DOW filters are ever added. `validate_dow_filter_alignment()` in `dst.py` enforces this at runtime.
 
-**All three active DOW filters are correctly aligned:**
-- NOFRI@CME_REOPEN → skips CME Friday
-- NOMON@LONDON_METALS → skips London Monday
-- NOTUE@TOKYO_OPEN → skips Tokyo Tuesday
+**One active DOW filter in discovery grid (Mar 2026):**
+- NOMON@LONDON_METALS → skips London Monday (PLAUSIBLE BUT UNPROVEN, permutation p=0.006)
+
+NOFRI@CME_REOPEN and NOTUE@TOKYO_OPEN removed Mar 2026 — LIKELY NOISE. See `research/output/DOW_FILTER_STRESS_TEST.md`.
 
 ---
 
@@ -479,7 +479,6 @@ Many filter variants produce the SAME trade set.
 ### Tier 2: HOT (rolling-eval gated)
 | Family | Session | EM | Filter | Gate |
 |--------|---------|-----|--------|------|
-| CME_REOPEN_E2_ORB_G4_NOFRI | CME_REOPEN | E2 | G4_NOFRI | Rolling stability >= 0.6 |
 | TOKYO_OPEN_E2_ORB_G5_L12 | TOKYO_OPEN | E2 | G5_L12 | Rolling stability >= 0.6 |
 
 ### Tier 3: REGIME (fitness-gated)

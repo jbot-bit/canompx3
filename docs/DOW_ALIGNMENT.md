@@ -8,13 +8,13 @@
 
 ## Active DOW Filters
 
-All three active DOW filters are correctly aligned:
+One active DOW filter in the discovery grid (Mar 2026):
 
-| Filter | Session | Meaning |
-|--------|---------|---------|
-| NOFRI | CME_REOPEN | Skip Brisbane Friday (= exchange Friday) |
-| NOMON | LONDON_METALS | Skip Brisbane Monday (= exchange Monday) |
-| NOTUE | TOKYO_OPEN | Skip Brisbane Tuesday (= exchange Tuesday) |
+| Filter | Session | Meaning | Status |
+|--------|---------|---------|--------|
+| NOMON | LONDON_METALS | Skip Brisbane Monday (= exchange Monday) | Active (PLAUSIBLE BUT UNPROVEN) |
+
+NOFRI (CME_REOPEN) and NOTUE (TOKYO_OPEN) were removed from the discovery grid in Mar 2026 after the DOW Filter Stress Test found them to be LIKELY NOISE. Their definitions and ALL_FILTERS entries are retained for DB row compatibility. See `research/output/DOW_FILTER_STRESS_TEST.md`.
 
 ## Runtime Guard
 
@@ -24,3 +24,4 @@ All three active DOW filters are correctly aligned:
 
 Full investigation: `research/research_dow_alignment.py`
 Full DOW mapping: `TRADING_RULES.md` § DOW Alignment
+DOW stress test: `research/output/DOW_FILTER_STRESS_TEST.md`
