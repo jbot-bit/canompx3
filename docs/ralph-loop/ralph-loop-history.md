@@ -316,3 +316,25 @@
 - Blast radius: 1 file changed; 2 callers checked (paper_trader.py, test_market_state.py) — neither references PROJECT_ROOT
 - Verification: PASS (19/19 test_market_state.py, drift 72/72 clean)
 - Commit: 94dfe8c
+
+## Iteration 39 — 2026-03-13
+- Phase: fix
+- Target: trading_app/risk_manager.py:15-17
+- Finding: RM1 — Dead PROJECT_ROOT assignment + unused `from pathlib import Path` import — neither referenced anywhere in file (Orphan Risk)
+- Action: Removed `from pathlib import Path` import and `PROJECT_ROOT = Path(__file__).resolve().parent.parent` assignment (3 lines deleted)
+- Blast radius: 1 file (risk_manager.py only — callers use RiskLimits/RiskManager API, no API change)
+- Verification: PASS (30/30 test_risk_manager.py, drift 63 OK)
+- Commit: adf475f
+
+### scoring.py scan — CLEAN (except SC1 noted below)
+- SC1: Hardcoded session names SINGAPORE_OPEN/TOKYO_OPEN in heuristic bonus logic — ACCEPTABLE. These are intentional per-session heuristic adjustments, not a canonical list. Worst case on session rename: bonus silently stops applying. Not a safety/correctness issue.
+- No silent failures, no fail-open, no look-ahead bias, no cost illusion, no volatile data.
+
+## Iteration 40 — 2026-03-13
+- Phase: fix
+- Target: trading_app/execution_engine.py:21,23
+- Finding: EE1 — Dead `from pathlib import Path` import and `PROJECT_ROOT = Path(__file__).resolve().parent.parent` assignment; never referenced in the file. Same orphan pattern as CT1/MS1/RM1 (iters 37-39).
+- Action: Removed both dead lines; added missing blank line between stdlib and first-party import groups (ruff I001).
+- Blast radius: 0 files (pure dead code removal, no callers affected)
+- Verification: PASS — 64 tests passed, 72 drift checks passed, ruff clean
+- Commit: 1c7a133

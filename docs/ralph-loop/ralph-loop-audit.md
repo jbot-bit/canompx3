@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 38
+## Last iteration: 40
 
-## RALPH AUDIT — Iteration 38 (market_state.py + portfolio.py scan)
+## RALPH AUDIT — Iteration 40 (execution_engine.py scan)
 ## Date: 2026-03-13
 ## Infrastructure Gates: 4/4 PASS
 
@@ -13,62 +13,56 @@
 |------|--------|--------|
 | `check_drift.py` | PASS | 72 checks passed, 0 skipped, 6 advisory |
 | `audit_behavioral.py` | PASS | All 6 checks clean |
-| `pytest test_market_state.py` | PASS | 19/19 passed |
-| `ruff check` | PASS | All checks passed |
+| `pytest test_execution_engine.py + test_execution_spec.py` | PASS | 64/64 passed |
+| `ruff check` | PASS | All checks passed (I001 fixed as part of this iteration) |
 
 ---
 
 ## Files Audited This Iteration
 
-### market_state.py (365 lines) — 2 findings fixed (MS1+MS2)
+### execution_engine.py (1268 lines before fix, 1265 after) — 1 finding fixed (EE1)
 
-#### MS1 — Dead PROJECT_ROOT at module level [FIXED]
-- **Location**: `market_state.py:20` (pre-fix)
-- **Sin**: Orphan Risk — `PROJECT_ROOT = Path(__file__).resolve().parent.parent` defined at module level but never referenced anywhere in the file. Exact same pattern as CT1 in cascade_table.py (iter 37).
-- **Fix**: Removed dead `PROJECT_ROOT` assignment. **Commit: 94dfe8c**
+#### EE1 — Dead PROJECT_ROOT + unused Path import [FIXED]
+- **Location**: `execution_engine.py:21,23` (pre-fix)
+- **Sin**: Orphan Risk — `from pathlib import Path` imported and `PROJECT_ROOT = Path(__file__).resolve().parent.parent` defined at module level but never referenced anywhere in the file. Identical pattern to CT1 (iter 37), MS1 (iter 38), RM1 (iter 39).
+- **Fix**: Removed both the import and the dead assignment. Added missing blank line between stdlib and first-party import groups (ruff I001 triggered by removal collapsing the separator). **Commit: 1c7a133**
 
-#### MS2 — Relative path in module docstring usage example [FIXED]
-- **Location**: `market_state.py:10` (pre-fix)
-- **Sin**: Canonical violation — module docstring showed `Path("gold.db")` (relative path) instead of canonical `GOLD_DB_PATH` from `pipeline.paths`.
-- **Fix**: Updated docstring usage example to `from pipeline.paths import GOLD_DB_PATH` + `GOLD_DB_PATH` argument. **Commit: 94dfe8c**
+#### DF-02 — E3 silent exit at session_end [STILL DEFERRED]
+- **Location**: `execution_engine.py:413-415`
+- **Sin**: Silent Failure — when `session_end()` fires, ARMED/CONFIRMING trades are silently moved to EXITED with no TradeEvent emitted and no log entry.
+- **Assessment**: DEFERRED. E3 is soft-retired (SKIP_ENTRY_MODELS). E1 can also hit this path but paper_trader accounts for unfilled trades by their absence from completed_trades. Dormant, low severity.
 
-#### Full file Seven Sins scan — CLEAN (except MS1+MS2 fixed)
+#### DF-03 — IB hardcoded 23:00 UTC [REASSESSED — ACCEPTABLE]
+- **Location**: `execution_engine.py:264` (current line numbering)
+- **Sin candidate**: Hardcoded magic number
+- **Assessment**: ACCEPTABLE. The comment correctly documents that 23:00 UTC is the fixed Brisbane midnight offset (UTC+10, no DST) — not a hardcoded approximation. `IB_DURATION_MINUTES` is imported from config. No issue.
 
-- **Silent failure**: ACCEPTABLE — two `except Exception` handlers in `_load_regime_context` both log via `log.debug()` and return (not swallowing silently). Regime context is optional enrichment, not a hard gate.
-- **Fail-open**: CLEAN — regime load failure causes early return (no regime applied), which is conservative.
-- **Look-ahead bias**: CLEAN — reads historical `daily_features` and `orb_outcomes`; all queries are backward-looking.
-- **Cost illusion**: N/A — read-only state object; no P&L computation.
-- **Canonical violation**: FIXED (MS2). `instrument: str = "MGC"` default in `from_trading_day` is a method default argument for convenience, not a hardcoded instrument list — acceptable.
-- **Orphan risk**: FIXED (MS1).
+#### Full file Seven Sins scan — CLEAN (except EE1 fixed)
+
+- **Silent failure**: DF-02 noted above (DEFERRED). No bare except handlers.
+- **Fail-open**: CLEAN — REJECT events emitted for zero-risk and sizing-rejected paths. Risk manager blocks correctly.
+- **Look-ahead bias**: N/A — execution engine processes bars sequentially.
+- **Cost illusion**: CLEAN — `get_session_cost_spec` from `pipeline.cost_model` used throughout.
+- **Canonical violation**: CLEAN — no hardcoded instrument lists or magic numbers without annotation.
+- **Orphan risk**: FIXED (EE1).
 - **Volatile data**: CLEAN — no hardcoded counts.
-
-### portfolio.py (1105 lines) — scan only, CLEAN
-
-- `return 0` patterns: all in position sizing functions (`compute_position_size`, `compute_position_size_prop`, `compute_position_size_vol_scaled`) — correctly return 0 (no contracts) when risk parameters are invalid. Documented in function docstrings. Acceptable.
-- `return {"strategy_count": 0}` in `summary()`: legitimate early return for empty portfolio. Acceptable.
-- `except` handlers: none found — clean.
-- Canonical sources: imports `GOLD_DB_PATH`, `COST_SPECS`, `ACTIVE_ORB_INSTRUMENTS` — all correct.
-- No hardcoded instrument lists, session names, or magic numbers without annotation.
-- No look-ahead bias or cost illusion patterns.
 
 ---
 
-## Deferred Findings — Status After Iter 38
+## Deferred Findings — Status After Iter 40
 
 ### STILL DEFERRED (carried forward)
-- **DF-02** — `execution_engine.py:~1020` E3 silent exit (LOW dormant)
-- **DF-03** — `execution_engine.py:~879` IB hardcoded 23:00 UTC (LOW dormant)
+- **DF-02** — `execution_engine.py:413` ARMED/CONFIRMING silent exit at session_end (LOW dormant — E3 soft-retired)
 - **DF-04** — `rolling_portfolio.py:304` orb_minutes=5 hardcode (MEDIUM dormant — skip until multi-aperture)
+- (DF-03 reassessed ACCEPTABLE — removed from open debt)
 
 ---
 
 ## Summary
-- market_state.py: 2 findings fixed (MS1+MS2), full Seven Sins scan clean
-- portfolio.py: scanned, fully clean
+- execution_engine.py: 1 finding fixed (EE1), full Seven Sins scan clean, DF-02 still deferred, DF-03 reassessed acceptable
 - Infrastructure Gates: 4/4 PASS
 
 **Next iteration targets:**
-- `scoring.py` — strategy scoring logic, not yet audited
-- `risk_manager.py` — risk guard layer, not yet audited
-- DF-04: `rolling_portfolio.py` orb_minutes=5 (MEDIUM dormant — skip until multi-aperture)
-- DF-02/DF-03: `execution_engine.py` (LOW dormant — skip until E3/IB active)
+- `paper_trader.py` — not yet audited this cycle
+- `live_config.py` — not yet audited this cycle
+- `rolling_portfolio.py` — DF-04 lives here (MEDIUM dormant)
