@@ -7,14 +7,13 @@ from historical orb_outcomes data.
 Read-only consumer of the database -- never writes to DB.
 
 Usage:
-    table = build_cascade_table(Path("gold.db"))
+    from pipeline.paths import GOLD_DB_PATH
+    table = build_cascade_table(GOLD_DB_PATH)
     entry = table[("CME_REOPEN", "loss", "opposite")]
     print(entry)  # {"TOKYO_OPEN_wr": 0.52, "n": 148}
 """
 
 from pathlib import Path
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 import duckdb
 
