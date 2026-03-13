@@ -307,3 +307,12 @@
 - Blast radius: 1 file (cascade_table.py); 3 importers checked — none reference PROJECT_ROOT
 - Verification: PASS (7/7 test_cascade_table.py, drift 72/72 clean, ruff clean)
 - Commit: 00511df
+
+## Iteration 38 — 2026-03-13
+- Phase: fix
+- Target: trading_app/market_state.py:20 + docstring:10
+- Finding: MS1+MS2 — Dead `PROJECT_ROOT` assignment (Orphan Risk, defined but never referenced in file) + relative `Path("gold.db")` in module docstring usage example (Canonical violation). Identical pattern to CT1 fixed in cascade_table.py iter 37.
+- Action: Removed unused `PROJECT_ROOT = Path(__file__).resolve().parent.parent`. Updated docstring usage example to `from pipeline.paths import GOLD_DB_PATH` + `GOLD_DB_PATH` usage.
+- Blast radius: 1 file changed; 2 callers checked (paper_trader.py, test_market_state.py) — neither references PROJECT_ROOT
+- Verification: PASS (19/19 test_market_state.py, drift 72/72 clean)
+- Commit: 94dfe8c
