@@ -18,9 +18,6 @@ Usage:
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from enum import Enum
-from pathlib import Path
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 from pipeline.cost_model import CostSpec, get_session_cost_spec, to_r_multiple
 from pipeline.dst import DYNAMIC_ORB_RESOLVERS
