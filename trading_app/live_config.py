@@ -18,7 +18,8 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-sys.stdout.reconfigure(line_buffering=True)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]
 
 import duckdb
 

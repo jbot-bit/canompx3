@@ -20,7 +20,8 @@ from pipeline.log import get_logger
 
 logger = get_logger(__name__)
 
-sys.stdout.reconfigure(line_buffering=True)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]
 
 import duckdb
 
