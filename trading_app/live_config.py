@@ -276,6 +276,34 @@ LIVE_PORTFOLIO = [
     ),
     # NOTE: MGC TOKYO_OPEN ORB_G5_CONT loads highest-ExpR FDR-preferred variant (varies by rebuild).
     # Monitor via get_strategy_fitness if conditional gating is needed.
+    # MGC TOKYO_OPEN E1: limit entry at ORB edge (vs E2 stop-market above).
+    #   ORB_G5_FAST10: 30m aperture, N=151, ExpR=0.270, $24/trade, 6-member ROBUST CORE family.
+    #   Previously blocked by PBO=1.0 (filter-blind CSCV). Filter-aware PBO=0.000.
+    #   MGC-only — E1 not validated for MNQ/MES/M2K at this filter.
+    #   @research-source PBO_FILTER_BLINDNESS.md 2026-03-13
+    LiveStrategySpec(
+        "TOKYO_OPEN_E1_ORB_G5_FAST10",
+        "core",
+        "TOKYO_OPEN",
+        "E1",
+        "ORB_G5_FAST10",
+        None,
+        exclude_instruments=frozenset({"MNQ", "MES", "M2K"}),
+    ),
+    # MGC SINGAPORE_OPEN: ORB_G5 adds lower-threshold days vs existing ORB_G8.
+    #   N=269, ExpR=0.159, $12.27/trade, 5-member ROBUST CORE family.
+    #   Previously blocked by PBO=1.0. Filter-aware PBO=0.000.
+    #   MGC-only — MNQ already has SINGAPORE_OPEN via DIR_LONG and ORB_G8.
+    #   @research-source PBO_FILTER_BLINDNESS.md 2026-03-13
+    LiveStrategySpec(
+        "SINGAPORE_OPEN_E2_ORB_G5",
+        "core",
+        "SINGAPORE_OPEN",
+        "E2",
+        "ORB_G5",
+        None,
+        exclude_instruments=frozenset({"MNQ", "MES", "M2K"}),
+    ),
 ]
 
 # =========================================================================
