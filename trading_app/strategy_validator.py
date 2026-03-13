@@ -29,8 +29,6 @@ from pipeline.log import get_logger
 
 logger = get_logger(__name__)
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-
 import duckdb
 
 from pipeline.cost_model import get_cost_spec, stress_test_costs
