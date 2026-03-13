@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 35
+## Last iteration: 36
 
-## RALPH AUDIT — Iteration 35 (strategy_validator.py)
+## RALPH AUDIT — Iteration 36 (build_daily_features.py)
 ## Date: 2026-03-13
 ## Infrastructure Gates: 4/4 PASS
 
@@ -13,33 +13,33 @@
 |------|--------|--------|
 | `check_drift.py` | PASS | 72 checks passed, 0 skipped, 6 advisory |
 | `audit_behavioral.py` | PASS | All 6 checks clean |
-| `pytest test_strategy_validator.py` | PASS | 49/49 passed |
+| `pytest test_build_daily_features.py` | PASS | 60/60 passed |
 | `ruff check` | PASS | All checks passed |
 
 ---
 
 ## Files Audited This Iteration
 
-### strategy_validator.py (~1265 lines) — 1 finding fixed (SV1)
+### build_daily_features.py (~1528 lines) — 1 finding fixed (BDF1)
 
-#### SV1 — Orphaned PROJECT_ROOT module-level constant [FIXED]
-- **Location**: `strategy_validator.py:32` (pre-fix)
-- **Sin**: Orphan Risk — `PROJECT_ROOT = Path(__file__).resolve().parent.parent` defined but never referenced anywhere in the file or imported externally. Each trading_app module defines its own independently.
-- **Fix**: Deleted the single dead line. `Path` import retained (used in function signature at line 641 and arg parsing at line 1287). **Commit: c0b6cf6**
+#### BDF1 — Duplicated hardcoded COMPRESSION_SESSIONS list [FIXED]
+- **Location**: `build_daily_features.py:884,1143` (pre-fix)
+- **Sin**: Canonical Violation — `["CME_REOPEN", "TOKYO_OPEN", "LONDON_METALS"]` appeared verbatim twice with no shared source of truth. If a 4th compression session were added to the schema, one or both sites could be missed silently.
+- **Fix**: Extracted to module-level `COMPRESSION_SESSIONS` constant (line 91) with `@research-source` + `@revalidated-for` annotations and schema cross-reference comment. Both for-loops now reference the constant. **Commit: 49b32a9**
 
-#### Full file Seven Sins scan — CLEAN
+#### Full file Seven Sins scan — CLEAN (except BDF1 fixed)
 
-- **Look-ahead bias**: CLEAN — `double_break` exclusion explicitly noted as removed (Feb 2026 comment at line 215); no future data as predictor
-- **Silent failure**: CLEAN — `except Exception` at lines 633 and 863 both store error state → REJECTED downstream (fail-closed); no bare `except: pass`
-- **Fail-open**: CLEAN — worker errors become REJECTED (line 898-900); missing WF result also REJECTED (line 904-906)
-- **Canonical violation**: CLEAN — `get_cost_spec`, `stress_test_costs` from `pipeline.cost_model`; `GOLD_DB_PATH` from `pipeline.paths`; `CORE_MIN_SAMPLES`, `REGIME_MIN_SAMPLES`, `WF_START_OVERRIDE` from `trading_app.config`; `orb_minutes=5` in ATR query is intentional (justified in comment: avoids 3x inflation, 5m rows always exist); row-dict `.get("entry_model", "E1")` fallbacks are defensive, not canonical lists
-- **Cost illusion**: CLEAN — `get_cost_spec(instrument)` + `stress_test_costs` used for all dollar calculations
-- **Orphan risk**: FIXED (SV1)
-- **Volatile data**: CLEAN — no hardcoded counts
+- **Silent failure**: CLEAN — `except Exception: return None` at line 604 is inside `compute_garch_forecast`; GARCH is a supplemental feature (not core), diverse `arch` library exceptions are expected (convergence, numerical, import), and None propagates correctly as missing data. Not a silent success path.
+- **Fail-open**: CLEAN — `except Exception as e` at line 1313 inside transaction handler rolls back and re-raises; `except ValueError` at line 990 for cost spec is the correct narrow type.
+- **Look-ahead bias**: CLEAN — `detect_double_break` is explicitly labeled look-ahead (lines 386-390 comments); NOT used as a live filter. `day_type` also labeled look-ahead (line 541). All post-pass computations use only `rows[0..i-1]`.
+- **Cost illusion**: CLEAN — `get_cost_spec(symbol)` used for MAE/MFE; `pnl_points_to_r` imported from `pipeline.cost_model`.
+- **Canonical violation**: FIXED (BDF1). `ORB_LABELS` from `pipeline.init_db`; `GOLD_DB_PATH` from `pipeline.paths`; `DYNAMIC_ORB_RESOLVERS` from `pipeline.dst`.
+- **Orphan risk**: CLEAN — no dead imports, no unreachable code.
+- **Volatile data**: CLEAN — no hardcoded counts.
 
 ---
 
-## Deferred Findings — Status After Iter 35
+## Deferred Findings — Status After Iter 36
 
 ### STILL DEFERRED (carried forward)
 - **DF-02** — `execution_engine.py:~1020` E3 silent exit (LOW dormant)
@@ -49,10 +49,10 @@
 ---
 
 ## Summary
-- strategy_validator.py: 1 finding fixed (SV1), full Seven Sins scan clean
+- build_daily_features.py: 1 finding fixed (BDF1), full Seven Sins scan clean
 - Infrastructure Gates: 4/4 PASS
 
 **Next iteration targets:**
-- Fresh audit on a new module — candidates: `build_daily_features.py`, `cascade_table.py`, `walkforward.py`
+- Fresh audit on a new module — candidates: `cascade_table.py`, `walkforward.py`, `portfolio.py`
 - DF-04: `rolling_portfolio.py` orb_minutes=5 (MEDIUM dormant — skip until multi-aperture)
 - DF-02/DF-03: `execution_engine.py` (LOW dormant — skip until E3/IB active)

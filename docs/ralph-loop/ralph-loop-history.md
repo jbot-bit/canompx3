@@ -289,3 +289,12 @@
 - Blast radius: 1 file, 0 callers, 0 importers
 - Verification: PASS — 49/49 tests, drift clean (72 checks)
 - Commit: c0b6cf6
+
+## Iteration 36 — 2026-03-13
+- Phase: fix
+- Target: pipeline/build_daily_features.py:884,1143
+- Finding: BDF1 — ["CME_REOPEN","TOKYO_OPEN","LONDON_METALS"] duplicated verbatim at two for-loop sites with no shared constant (Canonical Violation)
+- Action: Extracted to module-level COMPRESSION_SESSIONS constant at line 91 with @research-source/@revalidated-for annotations and schema cross-reference; both loops replaced with constant reference
+- Blast radius: 1 file, 0 external callers
+- Verification: PASS — 72/72 drift checks, 6/6 behavioral, ruff clean, 60/60 pytest
+- Commit: 49b32a9
