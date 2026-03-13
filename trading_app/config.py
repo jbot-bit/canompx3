@@ -560,6 +560,9 @@ CALENDAR_SKIP_ALL_CME_REOPEN = CalendarSkipFilter(
 )
 
 # DOW skip filters (discovery grid composites, Feb 2026 research)
+# NOFRI and NOTUE removed from discovery grid Mar 2026 — DOW stress test found LIKELY NOISE.
+# See research/output/DOW_FILTER_STRESS_TEST.md for full analysis.
+# Definitions and ALL_FILTERS entries retained for DB row compatibility (Option B).
 _DOW_SKIP_FRIDAY = DayOfWeekSkipFilter(filter_type="DOW_NOFRI", description="Skip Friday", skip_days=(4,))
 _DOW_SKIP_MONDAY = DayOfWeekSkipFilter(filter_type="DOW_NOMON", description="Skip Monday", skip_days=(0,))
 _DOW_SKIP_TUESDAY = DayOfWeekSkipFilter(filter_type="DOW_NOTUE", description="Skip Tuesday", skip_days=(1,))
@@ -646,6 +649,8 @@ BASE_GRID_FILTERS: dict[str, StrategyFilter] = {
 ALL_FILTERS: dict[str, StrategyFilter] = {
     **BASE_GRID_FILTERS,
     **_M6E_SIZE_FILTERS,
+    # NOFRI/NOTUE retained in registry for DB row compatibility (Option B, Mar 2026).
+    # Removed from discovery grid only — see get_filters_for_grid().
     **_make_dow_composites(_GRID_SIZE_FILTERS_ORB, _DOW_SKIP_FRIDAY, "NOFRI"),
     **_make_dow_composites(_GRID_SIZE_FILTERS_ORB, _DOW_SKIP_MONDAY, "NOMON"),
     **_make_dow_composites(_GRID_SIZE_FILTERS_ORB, _DOW_SKIP_TUESDAY, "NOTUE"),
@@ -690,9 +695,8 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
       for each G-filter. Research basis: break_quality_deep.py showed fast breaks
       and conviction candles predict success on momentum sessions.
 
-    - Session CME_REOPEN: adds DOW composite (skip Friday) for each G-filter
     - Session LONDON_METALS: adds DOW composite (skip Monday) for each G-filter
-    - Session TOKYO_OPEN: adds DIR_LONG (H5) + DOW composite (skip Tuesday) for each G-filter
+    - Session TOKYO_OPEN: adds DIR_LONG (H5)
     - MES + TOKYO_OPEN: also adds G4_L12, G5_L12 band filters (H2 confirmed)
     - MNQ + SINGAPORE_OPEN: adds DIR_LONG (Feb 2026 raw-verified: SHORT avgR=-0.247 p=0.006,
       N=236, 2yrs consistent; LONG avgR=+0.187; asymmetry +0.434R)
@@ -730,16 +734,15 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
         filters.update(_make_break_quality_composites(size_filters_orb, _BREAK_SPEED_FAST10, "FAST10"))
         filters.update(_make_break_quality_composites(size_filters_orb, _BREAK_BAR_CONTINUES, "CONT"))
 
-    if session == "CME_REOPEN":
-        validate_dow_filter_alignment(session, _DOW_SKIP_FRIDAY.skip_days)
-        filters.update(_make_dow_composites(size_filters_orb, _DOW_SKIP_FRIDAY, "NOFRI"))
+    # NOFRI removed from CME_REOPEN grid Mar 2026 (LIKELY NOISE — DOW stress test).
+    # NOMON retained for LONDON_METALS (PLAUSIBLE BUT UNPROVEN, p=0.006 permutation).
+    # NOTUE removed from TOKYO_OPEN grid Mar 2026 (LIKELY NOISE — DOW stress test).
+    # See research/output/DOW_FILTER_STRESS_TEST.md.
     if session == "LONDON_METALS":
         validate_dow_filter_alignment(session, _DOW_SKIP_MONDAY.skip_days)
         filters.update(_make_dow_composites(size_filters_orb, _DOW_SKIP_MONDAY, "NOMON"))
     if session == "TOKYO_OPEN":
-        validate_dow_filter_alignment(session, _DOW_SKIP_TUESDAY.skip_days)
         filters["DIR_LONG"] = DIR_LONG
-        filters.update(_make_dow_composites(size_filters_orb, _DOW_SKIP_TUESDAY, "NOTUE"))
     if instrument == "MES" and session == "TOKYO_OPEN":
         filters.update(_MES_1000_BAND_FILTERS)
     if instrument == "MNQ" and session == "SINGAPORE_OPEN":

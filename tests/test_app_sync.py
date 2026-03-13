@@ -106,12 +106,12 @@ class TestAllFiltersSync:
 
     # Base: NO_FILTER + 4 G-filters + 1 VOL-filter = 6
     # DOW composites: 3 variants (NOFRI, NOMON, NOTUE) x 4 G-filters = 12
+    #   (NOFRI/NOTUE removed from grid Mar 2026 but retained in ALL_FILTERS for DB compat)
     # Break quality composites: 3 variants (FAST5, FAST10, CONT) x 4 G-filters = 12
     # M6E pip-scaled size filters: M6E_G4/G6/G8 = 3
     # Direction filters: DIR_LONG/DIR_SHORT = 2
     # MES 1000 band filters: ORB_G4_L12/ORB_G5_L12 = 2
     # Total: 6 + 12 + 12 + 3 + 2 + 2 = 37
-    # NOTE: NODBL removed Feb 2026 — double_break is look-ahead
     EXPECTED_FILTER_KEYS = {
         "NO_FILTER",
         "ORB_G4",
@@ -119,7 +119,7 @@ class TestAllFiltersSync:
         "ORB_G6",
         "ORB_G8",
         "VOL_RV12_N20",
-        # DOW composites (registered globally for portfolio.py lookups)
+        # DOW composites (registered globally for portfolio.py lookups / DB compat)
         "ORB_G4_NOFRI",
         "ORB_G5_NOFRI",
         "ORB_G6_NOFRI",
@@ -260,16 +260,14 @@ class TestGetFiltersForGrid:
         assert "ORB_G5_L12" in filters
         assert "DIR_LONG" in filters
 
-    def test_mgc_cme_reopen_has_nofri_composites(self):
+    def test_mgc_cme_reopen_no_nofri(self):
+        """NOFRI removed from CME_REOPEN grid Mar 2026 (DOW stress test: LIKELY NOISE)."""
         filters = get_filters_for_grid("MGC", "CME_REOPEN")
         assert "ORB_G4_L12" not in filters
         assert "DIR_LONG" not in filters
-        # MGC G4/G5 restored (Feb 2026 correction: G4 passes 7.2% of CME_REOPEN
-        # days, not 87.5% as originally claimed). All G filters get NOFRI.
-        assert "ORB_G4_NOFRI" in filters
-        assert "ORB_G5_NOFRI" in filters
-        assert "ORB_G6_NOFRI" in filters
-        assert "ORB_G8_NOFRI" in filters
+        nofri_keys = [k for k in filters if "NOFRI" in k]
+        assert nofri_keys == [], f"NOFRI should be removed from grid, got {nofri_keys}"
+        # Base filters still present
         assert "NO_FILTER" in filters
         assert "ORB_G4" in filters
         assert "ORB_G5" in filters
