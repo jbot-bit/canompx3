@@ -338,3 +338,21 @@
 - Blast radius: 0 files (pure dead code removal, no callers affected)
 - Verification: PASS — 64 tests passed, 72 drift checks passed, ruff clean
 - Commit: 1c7a133
+
+## Iteration 41 — 2026-03-13
+- Phase: fix
+- Target: trading_app/paper_trader.py:23
+- Finding: PT1 — Dead PROJECT_ROOT assignment (never referenced; same orphan pattern as EE1/CT1/MS1/RM1)
+- Action: Removed 1-line dead assignment. Path import retained (used for db_path type annotation at line 202).
+- Blast radius: 1 file (paper_trader.py only; 2 importers unaffected — they import replay_historical, not PROJECT_ROOT)
+- Verification: PASS (22/22 tests, 72/72 drift checks)
+- Commit: 6a09e64
+
+## Iteration 42 — 2026-03-13
+- Phase: fix
+- Target: trading_app/live_config.py:21
+- Finding: LC1 — Dead PROJECT_ROOT assignment (never referenced; same orphan pattern as EE1/PT1/CT1/MS1/RM1)
+- Action: Removed 1-line dead assignment. Path import retained (used for db_path type annotations and Path(args.output) in main()).
+- Blast radius: 1 file (live_config.py only; no external callers of PROJECT_ROOT)
+- Verification: PASS (36/36 tests, 72/72 drift checks)
+- Commit: 27604b9
