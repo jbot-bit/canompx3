@@ -1,6 +1,8 @@
 """Tests for trading_app.live_config — live portfolio configuration."""
 
+from datetime import date
 from pathlib import Path
+from unittest.mock import patch
 
 import duckdb
 import pytest
@@ -12,6 +14,7 @@ from trading_app.live_config import (
     _check_dollar_gate,
     _load_best_experimental_variant,
     _load_best_regime_variant,
+    build_live_portfolio,
 )
 
 
@@ -63,6 +66,10 @@ def live_config_db(tmp_path):
 
     con.execute(FAMILY_RR_LOCKS_SCHEMA)
     con.close()
+    # Rolling portfolio queries regime_strategies + regime_validated — use real schema.
+    from trading_app.regime.schema import init_regime_schema
+
+    init_regime_schema(db_path=db_path)
     return db_path
 
 
@@ -480,3 +487,95 @@ class TestLoadBestExperimentalVariant:
     def test_not_found(self, live_config_db):
         result = _load_best_experimental_variant(live_config_db, "MNQ", "CME_REOPEN", "E1", "ORB_G4")
         assert result is None
+
+
+def _seed_seasonal_gate_data(db_path: Path) -> None:
+    """Insert minimal data so build_live_portfolio can load one strategy for MGC."""
+    con = duckdb.connect(str(db_path))
+    con.execute("""
+        INSERT INTO validated_setups (strategy_id, instrument, orb_label, entry_model,
+            rr_target, confirm_bars, filter_type, expectancy_r, win_rate,
+            sample_size, sharpe_ratio, max_drawdown_r, status, orb_minutes,
+            fdr_significant)
+        VALUES (
+            'MGC_TOKYO_OPEN_E2_RR2.0_CB1_ORB_G4', 'MGC', 'TOKYO_OPEN', 'E2',
+            2.0, 1, 'ORB_G4', 0.35, 0.52, 150, 1.2, 3.5, 'active', 5, TRUE
+        )
+    """)
+    con.execute("""
+        INSERT INTO experimental_strategies (strategy_id, instrument, orb_label,
+            entry_model, rr_target, confirm_bars, filter_type, expectancy_r,
+            win_rate, sample_size, sharpe_ratio, max_drawdown_r, median_risk_points)
+        VALUES (
+            'MGC_TOKYO_OPEN_E2_RR2.0_CB1_ORB_G4', 'MGC', 'TOKYO_OPEN', 'E2',
+            2.0, 1, 'ORB_G4', 0.35, 0.52, 150, 1.2, 3.5, 5.0
+        )
+    """)
+    con.execute("""
+        INSERT INTO family_rr_locks (instrument, orb_label, filter_type, entry_model,
+            orb_minutes, confirm_bars, locked_rr, method,
+            sharpe_at_rr, maxdd_at_rr, n_at_rr, expr_at_rr, tpy_at_rr)
+        VALUES ('MGC', 'TOKYO_OPEN', 'ORB_G4', 'E2', 5, 1, 2.0, 'ONLY_RR',
+                1.2, 3.5, 150, 0.35, 50.0)
+    """)
+    con.close()
+
+
+_SEASONAL_SPEC = LiveStrategySpec(
+    "TOKYO_OPEN_E2_ORB_G4",
+    "core",
+    "TOKYO_OPEN",
+    "E2",
+    "ORB_G4",
+    None,
+    active_months=frozenset({11, 12, 1, 2}),
+)
+
+_UNCONSTRAINED_SPEC = LiveStrategySpec(
+    "TOKYO_OPEN_E2_ORB_G4",
+    "core",
+    "TOKYO_OPEN",
+    "E2",
+    "ORB_G4",
+    None,
+)
+
+
+class TestSeasonalGate:
+    """Seasonal gate: active_months + as_of_date parameter on build_live_portfolio."""
+
+    def test_out_of_season_skips_strategy(self, live_config_db):
+        """June with active_months={11,12,1,2} -> 0 strategies, SEASONAL in notes."""
+        _seed_seasonal_gate_data(live_config_db)
+        with patch("trading_app.live_config.LIVE_PORTFOLIO", [_SEASONAL_SPEC]):
+            portfolio, notes = build_live_portfolio(
+                db_path=live_config_db,
+                instrument="MGC",
+                as_of_date=date(2026, 6, 15),
+            )
+        assert len(portfolio.strategies) == 0
+        seasonal_notes = [n for n in notes if "SEASONAL" in n]
+        assert len(seasonal_notes) == 1
+        assert "month 6" in seasonal_notes[0]
+
+    def test_in_season_loads_strategy(self, live_config_db):
+        """January with active_months={11,12,1,2} -> 1 strategy, weight=1.0."""
+        _seed_seasonal_gate_data(live_config_db)
+        with patch("trading_app.live_config.LIVE_PORTFOLIO", [_SEASONAL_SPEC]):
+            portfolio, notes = build_live_portfolio(
+                db_path=live_config_db,
+                instrument="MGC",
+                as_of_date=date(2026, 1, 15),
+            )
+        assert len(portfolio.strategies) == 1
+        assert portfolio.strategies[0].weight == 1.0
+
+    def test_as_of_date_defaults_to_today(self, live_config_db):
+        """No active_months constraint, no as_of_date -> loads normally."""
+        _seed_seasonal_gate_data(live_config_db)
+        with patch("trading_app.live_config.LIVE_PORTFOLIO", [_UNCONSTRAINED_SPEC]):
+            portfolio, notes = build_live_portfolio(
+                db_path=live_config_db,
+                instrument="MGC",
+            )
+        assert len(portfolio.strategies) == 1

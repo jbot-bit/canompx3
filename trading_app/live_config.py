@@ -13,6 +13,7 @@ Usage:
 import logging
 import sys
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -437,6 +438,7 @@ def build_live_portfolio(
     account_equity: float = 25000.0,
     risk_per_trade_pct: float = 2.0,
     min_expectancy_r: float = LIVE_MIN_EXPECTANCY_R,
+    as_of_date: date | None = None,
 ) -> tuple[Portfolio, list[str]]:
     """
     Build the live portfolio from LIVE_PORTFOLIO spec.
@@ -444,7 +446,12 @@ def build_live_portfolio(
     Core tier: loads best variant from rolling eval (most recent window).
     Regime tier: loads best variant from validated_setups, then checks
     strategy_fitness -- weight=0.0 if not FIT.
+
+    as_of_date: Reference date for seasonal gating. Defaults to today.
     """
+    if as_of_date is None:
+        as_of_date = date.today()
+
     valid_instruments = set(get_active_instruments())
     if instrument not in valid_instruments:
         raise ValueError(f"Unknown instrument '{instrument}'. Valid: {sorted(valid_instruments)}")
@@ -471,6 +478,14 @@ def build_live_portfolio(
             if spec.exclude_instruments and instrument in spec.exclude_instruments:
                 notes.append(f"SKIP: {spec.family_id} -- {instrument} excluded (BH FDR)")
                 continue
+
+            # --- Seasonal gate (hard skip — no variant loaded) ---
+            if spec.active_months is not None:
+                if as_of_date.month not in spec.active_months:
+                    notes.append(
+                        f"SEASONAL: {spec.family_id} -- month {as_of_date.month} not in {sorted(spec.active_months)}"
+                    )
+                    continue
 
             # Try rolling eval first
             match = None
