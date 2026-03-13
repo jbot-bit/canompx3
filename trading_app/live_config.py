@@ -18,8 +18,6 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-
 sys.stdout.reconfigure(line_buffering=True)
 
 import duckdb
@@ -147,8 +145,9 @@ LIVE_PORTFOLIO = [
     # =========================================================================
     # CORE: always-on, full-period validated, N>=100
     # =========================================================================
-    # CME_REOPEN: MGC wins with ORB_G5; MNQ wins with VOL_RV12_N20
-    #   ORB_G4_FAST10: MGC speed-filtered edge, 43 new days (75% overlap), ExpR=+0.269
+    # CME_REOPEN: MGC-dominant session. Only MGC has ROBUST families (ORB_G4_FAST10, ORB_G5_FAST10).
+    #   ORB_G5 and VOL_RV12_N20 specs load from validated_setups but ALL families are PURGED/SINGLETON.
+    #   ORB_G4_FAST10: MGC 5-member ROBUST, PBO=0.0, head ExpR=0.244
     LiveStrategySpec("CME_REOPEN_E2_ORB_G5", "core", "CME_REOPEN", "E2", "ORB_G5", None),
     LiveStrategySpec("CME_REOPEN_E2_VOL_RV12_N20", "core", "CME_REOPEN", "E2", "VOL_RV12_N20", None),
     # Adversarial audit 2026-03-13: SUSPICIOUS. Seasonal Q4+Q1 clustering (68% wins Nov-Feb),
@@ -165,12 +164,12 @@ LIVE_PORTFOLIO = [
         exclude_instruments=frozenset({"MNQ"}),
         active_months=frozenset({11, 12, 1, 2}),
     ),
-    # CME_PRECLOSE: MES wins with ORB_G6; MNQ wins with VOL_RV12_N20 (O15 suffix is aperture, not filter_type)
-    #   ORB_G5: MES 15m aperture, 434 new days (57% overlap with G6), ExpR=+0.242
+    # CME_PRECLOSE: MES wins with ORB_G6; MNQ wins with VOL_RV12_N20
+    #   ORB_G5: MES 15m aperture, independent day-add vs G6
     LiveStrategySpec("CME_PRECLOSE_E2_ORB_G6", "core", "CME_PRECLOSE", "E2", "ORB_G6", None),
-    # Adversarial audit 2026-03-13: LEGIT BUT DECAYING. Monotonic decay 0.54->0.30R/yr (2022-2025).
-    # Half weight (Chan half-Kelly under parameter uncertainty) until rolling avg ExpR > 0.25
-    # (midpoint of 2024-2025 decay range). Man AHL: recovery requires same gates, not lower bar.
+    # Adversarial audit 2026-03-13: LEGIT BUT DECAYING. MNQ head avg_r/yr: 0.35→0.32→0.20→0.16 (2022-2025).
+    # Half weight (Chan half-Kelly under parameter uncertainty) until rolling avg ExpR > 0.25.
+    # Man AHL: recovery requires same gates, not lower bar.
     LiveStrategySpec(
         "CME_PRECLOSE_E2_VOL_RV12_N20",
         "core",
@@ -195,23 +194,25 @@ LIVE_PORTFOLIO = [
         exclude_instruments=frozenset({"MGC", "M2K"}),
     ),
     LiveStrategySpec("COMEX_SETTLE_E2_VOL_RV12_N20", "core", "COMEX_SETTLE", "E2", "VOL_RV12_N20", None),
-    # NYSE_CLOSE: MES wins with ORB_G4; MNQ wins with VOL_RV12_N20
+    # NYSE_CLOSE: MES ORB_G4; MNQ VOL_RV12_N20. WARNING: ALL families PURGED/SINGLETON.
+    #   Strategies load from validated_setups via RR-locks, but no family passes PBO scrutiny.
+    #   MES ORB_G4: N=388, ExpR=0.118. MNQ VOL_RV12_N20: N=337, ExpR=0.212.
     LiveStrategySpec("NYSE_CLOSE_E2_ORB_G4", "core", "NYSE_CLOSE", "E2", "ORB_G4", None),
     LiveStrategySpec("NYSE_CLOSE_E2_VOL_RV12_N20", "core", "NYSE_CLOSE", "E2", "VOL_RV12_N20", None),
-    # NYSE_OPEN: MES wins VOL_RV12_N20; MNQ wins ORB_G4; M2K VOL_RV12_N20 (report ORB_G5_O30 = base filter ORB_G5, covered by VOL)
-    #   ORB_G8: MES 583 new days (38% overlap with VOL_RV12_N20), ExpR=+0.165 — strongest day-add
+    # NYSE_OPEN: MES wins VOL_RV12_N20; MNQ wins ORB_G4; M2K VOL_RV12_N20
+    #   ORB_G8: MES 8-member ROBUST family, head ExpR=0.080, independent day-add
     LiveStrategySpec("NYSE_OPEN_E2_VOL_RV12_N20", "core", "NYSE_OPEN", "E2", "VOL_RV12_N20", None),
     LiveStrategySpec("NYSE_OPEN_E2_ORB_G4", "core", "NYSE_OPEN", "E2", "ORB_G4", None),
     LiveStrategySpec("NYSE_OPEN_E2_ORB_G8", "core", "NYSE_OPEN", "E2", "ORB_G8", None),
-    # US_DATA_1000: M2K wins VOL_RV12_N20 (O30 is aperture, not filter_type); MNQ wins ORB_G5;
-    #   MGC wins ORB_G6 (N=297, FDR+WF, hash 8946a234a — new session for MGC)
+    # US_DATA_1000: M2K wins VOL_RV12_N20; MNQ wins ORB_G5.
+    #   ORB_G6: MNQ 6-member ROBUST (head ExpR=0.132). MGC has FDR+WF (N=317) but SINGLETON family.
     LiveStrategySpec("US_DATA_1000_E2_VOL_RV12_N20", "core", "US_DATA_1000", "E2", "VOL_RV12_N20", None),
     LiveStrategySpec("US_DATA_1000_E2_ORB_G5", "core", "US_DATA_1000", "E2", "ORB_G5", None),
     LiveStrategySpec("US_DATA_1000_E2_ORB_G6", "core", "US_DATA_1000", "E2", "ORB_G6", None),
     # TOKYO_OPEN: Multiple independent edges verified by family hash:
-    #   ORB_G5_CONT (5m aperture, hash 2e921bb81) — MGC N=96 (REGIME), MNQ CORE
-    #   ORB_G5 (15m aperture, hash d790ad6b) — MGC N=297+ FDR+WF, genuinely independent
-    #   ORB_G6_CONT (hash dd81bcff7) — MES N=221, FDR+WF, Exp$=7.19 passes dollar gate
+    #   ORB_G5_CONT — MGC 5m N=115 CORE (9-member ROBUST), MNQ CORE
+    #   ORB_G5 — MGC 15m N=233+ FDR+WF, genuinely independent
+    #   ORB_G6_CONT — MES N=227, FDR+WF
     LiveStrategySpec("TOKYO_OPEN_E2_ORB_G5_CONT", "core", "TOKYO_OPEN", "E2", "ORB_G5_CONT", None),
     # BH FDR exclusion: MES p_adj > 0.05; MGC and MNQ survive. @research-source bloomey_audit 2026-03-12
     LiveStrategySpec(
@@ -219,21 +220,21 @@ LIVE_PORTFOLIO = [
     ),
     LiveStrategySpec("TOKYO_OPEN_E2_ORB_G6_CONT", "core", "TOKYO_OPEN", "E2", "ORB_G6_CONT", None),
     # SINGAPORE_OPEN: DIR_LONG (long-only, any ORB size) is the primary filter for MNQ.
-    #   Research H5: shorts avgR=-0.247 (raw session avg, config.py), p=0.006, N=236 — systematically
-    #   negative; long side positive. DIR_LONG validated strategy (different from raw avg): ExpR=+0.219,
-    #   N=673, Sharpe=0.138 (MNQ_SINGAPORE_OPEN_E2_RR2.5_CB1_DIR_LONG_O30).
-    #   ORB_G8 also validated as secondary size-filtered spec: ExpR=+0.107, N=861, Sharpe=0.093.
+    #   Research H5: shorts systematically negative; long side positive.
+    #   DIR_LONG E2 30m head: N=686, ExpR=0.211, Sharpe_ann=1.55, FDR=True, WF=True.
+    #   E2 strategies share family hash with E1 ROBUST family (17-member, PBO=0.0).
+    #   ORB_G8: 15m 10-member ROBUST family head N=1111, ExpR=0.091, PBO=0.057.
     LiveStrategySpec("SINGAPORE_OPEN_E2_DIR_LONG", "core", "SINGAPORE_OPEN", "E2", "DIR_LONG", None),
     LiveStrategySpec("SINGAPORE_OPEN_E2_ORB_G8", "core", "SINGAPORE_OPEN", "E2", "ORB_G8", None),
-    #   VOL_RV12_N20: MNQ 30m, N=1024, PBO=0.01, 12-member family, $5.0 vs $3.6 gate (1.4x)
+    #   VOL_RV12_N20: MNQ 30m 12-member ROBUST family, head N=1024, ExpR=0.112, PBO=0.0
     LiveStrategySpec("SINGAPORE_OPEN_E2_VOL_RV12_N20", "core", "SINGAPORE_OPEN", "E2", "VOL_RV12_N20", None),
     # BRISBANE_1025: MNQ wins ORB_G6
-    #   VOL_RV12_N20: MNQ 113 new days (78% overlap with G6), ExpR=+0.149
+    #   VOL_RV12_N20: MNQ 5m 9-member ROBUST, head ExpR=0.113, PBO=0.0
     LiveStrategySpec("BRISBANE_1025_E2_ORB_G6", "core", "BRISBANE_1025", "E2", "ORB_G6", None),
     LiveStrategySpec("BRISBANE_1025_E2_VOL_RV12_N20", "core", "BRISBANE_1025", "E2", "VOL_RV12_N20", None),
-    # LONDON_METALS: MNQ wins VOL_RV12_N20 (5m, all_years_positive) and ORB_G6_NOMON (15m aperture,
-    #   N=1032, FDR=True, WF=True, ExpR=0.122). M2K is REGIME below (ORB_G6_CONT).
-    #   ORB_G6_NOMON_O15 strategies were added after MNQ WF rebuild (Mar 2 2026) — not in original build.
+    # LONDON_METALS: MNQ wins VOL_RV12_N20 (5m, 8-member ROBUST, head ExpR=0.123) and
+    #   ORB_G6_NOMON (15m head: N=1050, FDR=True, WF=True, ExpR=0.098, 3-member WHITELISTED).
+    #   M2K is REGIME below (ORB_G6_CONT).
     LiveStrategySpec("LONDON_METALS_E2_VOL_RV12_N20", "core", "LONDON_METALS", "E2", "VOL_RV12_N20", None),
     # BH FDR exclusion: M2K p_adj > 0.05, high PBO; MNQ survives.
     # @research-source bloomey_audit 2026-03-12
@@ -249,8 +250,8 @@ LIVE_PORTFOLIO = [
     # EUROPE_FLOW (17:00 winter / 18:00 summer Brisbane): Added 2026-03-13.
     #   MNQ: 5 years positive (2021-2025), 2026 Q1 weak (-0.02 to -0.09R on 35-45 trades)
     #   but insufficient sample to call decay. 100% WF pass, 41% FDR significant.
-    #   VOL_RV12_N20: N=774, ExpR=0.144, Sharpe=2.28, 41% day compression vs NO_FILTER
-    #   ORB_G8: N=1117, ExpR=0.133, ROBUST family, Sharpe=1.88
+    #   VOL_RV12_N20: family head RR1.5 CB1: N=774, ExpR=0.117, Sharpe_ann=1.50, 7-member ROBUST, PBO=0.000
+    #   ORB_G8: family head RR1.5 CB1: N=1117, ExpR=0.121, Sharpe_ann=1.56, 9-member ROBUST, PBO=0.029
     #   M2K excluded (PURGED + 0% dollar gate pass). MES excluded (zero validated).
     #   @research-source EUROPE_FLOW deep audit 2026-03-13
     LiveStrategySpec("EUROPE_FLOW_E2_VOL_RV12_N20", "core", "EUROPE_FLOW", "E2", "VOL_RV12_N20", None),

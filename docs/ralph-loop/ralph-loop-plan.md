@@ -1,9 +1,6 @@
-## Iteration: 40
-## Target: trading_app/execution_engine.py:21,23
-## Finding: EE1 — Dead `from pathlib import Path` import and `PROJECT_ROOT` assignment — never referenced anywhere in the file (same orphan pattern as CT1/MS1/RM1 in iters 37-39)
-## Blast Radius: 0 callers affected — PROJECT_ROOT is module-level dead code only in this file; other files define their own PROJECT_ROOT independently
-## Invariants:
-- No functional logic changes — only remove two dead lines (import + assignment)
-- Path must not be used anywhere else in the file after removal
-- All imports from pathlib remain in other files that actually use them
-## Diff estimate: 2 lines removed
+## Iteration: 42
+## Target: trading_app/live_config.py:21
+## Finding: Dead PROJECT_ROOT assignment defined at module level but never referenced anywhere in the file (LC1)
+## Blast Radius: 0 external callers, 0 importers of PROJECT_ROOT, test file test_live_config.py
+## Invariants: [Path import kept — used for db_path type annotations and Path(args.output); LIVE_PORTFOLIO list unchanged; all function signatures unchanged]
+## Diff estimate: 1 line removed
