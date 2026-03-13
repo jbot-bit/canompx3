@@ -23,7 +23,8 @@ logger = get_logger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-sys.stdout.reconfigure(line_buffering=True)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]
 
 import duckdb
 import numpy as np
@@ -159,7 +160,7 @@ def load_rolling_degraded_counts(
     train_months: int,
     instrument: str = "MGC",
     run_labels: list[str] | None = None,
-) -> dict[str, dict[str, int]]:
+) -> dict[str, int]:
     """Load count of auto-degraded strategies per run_label and orb_label.
 
     If run_labels is provided, only count degraded windows in that set.
@@ -282,8 +283,8 @@ def aggregate_rolling_performance(
                 windows_passed=len(passing_windows),
                 weighted_stability=round(weighted_stability, 3),
                 classification=classify_stability(weighted_stability),
-                avg_expectancy_r=round(np.mean(exp_values), 4) if exp_values else 0.0,
-                avg_sharpe=round(np.mean(sharpe_values), 4) if sharpe_values else 0.0,
+                avg_expectancy_r=round(float(np.mean(exp_values)), 4) if exp_values else 0.0,
+                avg_sharpe=round(float(np.mean(sharpe_values)), 4) if sharpe_values else 0.0,
                 total_sample_size=total_sample,
                 oos_cumulative_r=round(oos_r, 2),
                 double_break_degraded_windows=degraded_counts.get(fid, 0),
