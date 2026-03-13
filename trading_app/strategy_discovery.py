@@ -20,8 +20,6 @@ from pipeline.log import get_logger
 
 logger = get_logger(__name__)
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-
 import duckdb
 import pandas as pd
 
@@ -1122,7 +1120,7 @@ def run_discovery(
                                 # NOTE: n_trials (total_combos) is NOT doubled for stop variants.
                                 # Tight stop is a post-hoc risk overlay on the same hypothesis,
                                 # producing highly correlated P&L streams. BH FDR with the base
-                                # combo count is already conservative (q=0.05 on 2376+ combos).
+                                # combo count is already conservative.
                                 sim_outcomes = apply_tight_stop(outcomes, stop_mult, cost_spec)
 
                                 metrics = compute_metrics(sim_outcomes, cost_spec=cost_spec, n_trials=total_combos)
