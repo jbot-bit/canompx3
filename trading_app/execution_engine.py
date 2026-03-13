@@ -408,6 +408,11 @@ class ExecutionEngine:
                     )
                 )
             elif trade.state in (TradeState.ARMED, TradeState.CONFIRMING):
+                logger.debug(
+                    "session_end: %s expired in %s state (never entered) — discarded",
+                    trade.strategy_id,
+                    trade.state.value,
+                )
                 trade.state = TradeState.EXITED
                 self.completed_trades.append(trade)
 
