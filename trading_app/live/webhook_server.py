@@ -41,6 +41,10 @@ WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")
 DEMO = os.environ.get("WEBHOOK_DEMO", "true").lower() != "false"
 PORT = int(os.environ.get("WEBHOOK_PORT", "8765"))
 
+# Dedup: reject identical (instrument, direction, action) within window (guards against TV double-fire)
+DEDUP_WINDOW = float(os.environ.get("WEBHOOK_DEDUP_SECONDS", "10"))
+_DEDUP_CACHE: dict[str, tuple[float, TradeResponse]] = {}  # key → (monotonic_ts, cached_response)
+
 # Rate limiting: max 3 orders per 60 seconds (guards against runaway alerts)
 _ORDER_TIMESTAMPS: deque[float] = deque(maxlen=10)
 RATE_LIMIT_ORDERS = 3
@@ -160,6 +164,43 @@ class TradeResponse(BaseModel):
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+def _dedup_key(req: TradeRequest) -> str:
+    return f"{req.instrument}:{req.direction}:{req.action}"
+
+
+def _check_dedup(req: TradeRequest) -> TradeResponse | None:
+    """Return cached response if identical request arrived within DEDUP_WINDOW, else None."""
+    if DEDUP_WINDOW <= 0:
+        return None
+    key = _dedup_key(req)
+    now = time.monotonic()
+    # Prune expired entries (cheap — cache is tiny, at most one per key)
+    expired = [k for k, (ts, _) in _DEDUP_CACHE.items() if now - ts > DEDUP_WINDOW]
+    for k in expired:
+        del _DEDUP_CACHE[k]
+    if key in _DEDUP_CACHE:
+        ts, cached = _DEDUP_CACHE[key]
+        if now - ts <= DEDUP_WINDOW:
+            log.warning("DEDUP: blocked duplicate %s within %.1fs", key, now - ts)
+            return TradeResponse(
+                order_id=cached.order_id,
+                status="deduplicated",
+                contract=cached.contract,
+                action=cached.action,
+                direction=cached.direction,
+                qty=cached.qty,
+                demo=cached.demo,
+                timestamp=cached.timestamp,
+            )
+    return None
+
+
+def _cache_response(req: TradeRequest, resp: TradeResponse) -> None:
+    """Cache a successful response for dedup."""
+    if DEDUP_WINDOW > 0:
+        _DEDUP_CACHE[_dedup_key(req)] = (time.monotonic(), resp)
+
+
 def _check_rate_limit() -> None:
     """Raise HTTPException if rate limit exceeded."""
     now = time.monotonic()
@@ -220,17 +261,22 @@ async def trade(req: TradeRequest, request: Request):
         log.warning("Rejected webhook from %s — invalid secret", request.client)
         raise HTTPException(status_code=403, detail="Invalid webhook secret")
 
-    # 2. Rate limit
+    # 2. Dedup check — block identical (instrument, direction, action) within window
+    cached = _check_dedup(req)
+    if cached is not None:
+        return cached
+
+    # 3. Rate limit
     _check_rate_limit()
 
-    # 3. Resolve contract (cached, async-safe)
+    # 4. Resolve contract (cached, async-safe)
     loop = asyncio.get_running_loop()
     try:
         contract = await loop.run_in_executor(None, _get_contract, req.instrument)
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Contract resolution failed: {e}") from e
 
-    # 4. Place order (synchronous HTTP in thread pool to avoid blocking event loop)
+    # 5. Place order (synchronous HTTP in thread pool to avoid blocking event loop)
     try:
         order_id = await loop.run_in_executor(None, _place_order, req, contract)
     except ValueError as e:
@@ -249,7 +295,7 @@ async def trade(req: TradeRequest, request: Request):
         "DEMO" if DEMO else "LIVE",
     )
 
-    return TradeResponse(
+    resp = TradeResponse(
         order_id=order_id,
         status="submitted",
         contract=contract,
@@ -259,3 +305,8 @@ async def trade(req: TradeRequest, request: Request):
         demo=DEMO,
         timestamp=datetime.now(UTC).isoformat(),
     )
+
+    # 6. Cache for dedup
+    _cache_response(req, resp)
+
+    return resp
