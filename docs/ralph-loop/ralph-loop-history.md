@@ -383,3 +383,12 @@
 - Blast radius: 1 file (execution_engine.py only; callers paper_trader.py and session_orchestrator.py unaffected — pure logging addition)
 - Verification: PASS (43/43 tests, 72/72 drift checks)
 - Commit: 4c6bc4d
+
+## Iteration 46 — 2026-03-14
+- Phase: fix
+- Target: trading_app/outcome_builder.py:22
+- Finding: OB1 (LOW) — Dead `PROJECT_ROOT` assignment at module level, never referenced in file or imported by callers. Same orphan-risk pattern as RP1 (iter 43).
+- Action: Removed the single dead assignment line. `Path` import retained (used elsewhere). Also conducted full Seven Sins scan of outcome_builder.py (all clean) and reassessed DF-04 structural blocker in rolling_portfolio.py (confirmed deferred — blast radius >5 files).
+- Blast radius: 1 file (outcome_builder.py only)
+- Verification: PASS (27/27 tests, 72/72 drift checks)
+- Commit: f6b34f6
