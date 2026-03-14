@@ -168,6 +168,21 @@ CREATE TABLE IF NOT EXISTS pipeline_audit_log (
 );
 """
 
+LIVE_TRADES_SCHEMA = """
+CREATE TABLE IF NOT EXISTS live_trades (
+    id           INTEGER,
+    strategy_id  TEXT        NOT NULL,
+    trading_day  DATE        NOT NULL,
+    direction    TEXT        NOT NULL,
+    entry_price  DOUBLE      NOT NULL,
+    exit_price   DOUBLE      NOT NULL,
+    actual_r     DOUBLE      NOT NULL,
+    expected_r   DOUBLE      NOT NULL,
+    slippage_pts DOUBLE      DEFAULT 0.0,
+    recorded_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+"""
+
 
 def _build_daily_features_ddl() -> str:
     """Generate CREATE TABLE DDL for daily_features.
@@ -493,6 +508,9 @@ def init_db(db_path: Path, force: bool = False):
 
         con.execute(PIPELINE_AUDIT_LOG_SCHEMA)
         logger.info("  pipeline_audit_log: created (or already exists)")
+
+        con.execute(LIVE_TRADES_SCHEMA)
+        logger.info("  live_trades: created (or already exists)")
 
         con.commit()
 
