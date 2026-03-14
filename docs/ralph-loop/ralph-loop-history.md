@@ -392,3 +392,12 @@
 - Blast radius: 1 file (outcome_builder.py only)
 - Verification: PASS (27/27 tests, 72/72 drift checks)
 - Commit: f6b34f6
+
+## Iteration 47 — 2026-03-14
+- Phase: fix
+- Target: trading_app/strategy_validator.py:7-14
+- Finding: SV1 (LOW) — Module docstring Phases list omitted phases 4c (Deflated Sharpe/DSR, informational) and 4d (False Strategy Theorem hurdle, informational), both added after the original docstring was written. Misleads readers about the full validation sequence.
+- Action: Added two lines to the docstring Phases list documenting 4c and 4d as informational-only sub-phases. The "7-phase" header count was not changed — it is accurate for the 7 hard-gate phases. Also conducted full Seven Sins scan of paper_trader.py and strategy_discovery.py (both clean, no findings).
+- Blast radius: 1 file (docstring only; "7-phase" string has no callers)
+- Verification: PASS (49/49 tests, 72/72 drift checks)
+- Commit: 7ed02ab
