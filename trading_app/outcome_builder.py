@@ -19,8 +19,6 @@ from pipeline.log import get_logger
 
 logger = get_logger(__name__)
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)
 
