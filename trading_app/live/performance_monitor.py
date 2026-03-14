@@ -9,7 +9,11 @@ import logging
 import math
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
+from pathlib import Path
 
+import duckdb
+
+from pipeline.db_config import configure_connection
 from trading_app.portfolio import PortfolioStrategy
 
 from .cusum_monitor import CUSUMMonitor
@@ -59,7 +63,8 @@ class PerformanceMonitor:
     # @revalidated-for E1/E2 event-based sessions (Mar 2026)
     CUSUM_THRESHOLD: float = 4.0
 
-    def __init__(self, strategies: list[PortfolioStrategy]):
+    def __init__(self, strategies: list[PortfolioStrategy], db_path: Path | None = None):
+        self._db_path = db_path
         self._monitors: dict[str, CUSUMMonitor] = {
             s.strategy_id: CUSUMMonitor(
                 expected_r=s.expectancy_r,
@@ -78,6 +83,21 @@ class PerformanceMonitor:
         """
         self._trades.append(record)
         self._daily_r[record.strategy_id] = self._daily_r.get(record.strategy_id, 0.0) + record.actual_r
+        if self._db_path is not None:
+            try:
+                with duckdb.connect(str(self._db_path)) as con:
+                    configure_connection(con)
+                    con.execute(
+                        """INSERT INTO live_trades
+                           (strategy_id, trading_day, direction, entry_price,
+                            exit_price, actual_r, expected_r, slippage_pts, recorded_at)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        [record.strategy_id, record.trading_day, record.direction,
+                         record.entry_price, record.exit_price, record.actual_r,
+                         record.expected_r, record.slippage_pts, record.timestamp],
+                    )
+            except duckdb.Error as e:
+                log.error("Trade journal write failed for %s: %s", record.strategy_id, e)
         monitor = self._monitors.get(record.strategy_id)
         if monitor and monitor.update(record.actual_r):
             msg = (
