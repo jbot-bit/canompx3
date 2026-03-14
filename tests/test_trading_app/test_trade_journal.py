@@ -291,6 +291,34 @@ class TestIncompleteTrades:
         assert len(journal.incomplete_trades()) == 0
 
 
+class TestOrphanedExit:
+    def test_exit_for_missing_entry_logs_critical(self, journal, caplog):
+        """Exit for nonexistent trade_id should log CRITICAL, not raise."""
+        import logging
+
+        with caplog.at_level(logging.CRITICAL):
+            journal.record_exit(trade_id="nonexistent_trade_id", exit_reason="target", actual_r=1.0)
+        assert "ORPHANED" in caplog.text
+
+    def test_exit_for_existing_entry_no_orphan_warning(self, journal, caplog):
+        """Normal exit should not log ORPHANED."""
+        import logging
+
+        tid = generate_trade_id()
+        journal.record_entry(
+            trade_id=tid,
+            trading_day=date(2026, 3, 14),
+            instrument="MGC",
+            strategy_id="normal",
+            direction="long",
+            entry_model="E1",
+            engine_entry=2950.0,
+        )
+        with caplog.at_level(logging.CRITICAL):
+            journal.record_exit(trade_id=tid, exit_reason="target", actual_r=1.0)
+        assert "ORPHANED" not in caplog.text
+
+
 class TestFailOpen:
     def test_record_entry_after_close(self, journal_path):
         """Writing after close should not raise."""
