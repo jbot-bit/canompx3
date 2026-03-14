@@ -129,13 +129,25 @@ class ProjectXDataFeed(BrokerFeed):
                 client.on("GatewayTrade", self._on_trade)
                 client.on_open(lambda _c=client, _s=symbol: self._on_connected_async(_c, _s))
 
-                # Run feed with stop-file watcher
+                # Race client.run() against stop-file watcher
+                run_task = asyncio.create_task(client.run())
                 stop_task = asyncio.create_task(self._stop_file_watcher())
                 try:
-                    await client.run()
+                    await asyncio.wait(
+                        [run_task, stop_task],
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
                 finally:
-                    stop_task.cancel()
+                    for t in (run_task, stop_task):
+                        t.cancel()
+                        try:
+                            await t
+                        except (asyncio.CancelledError, Exception):
+                            pass
 
+                if self._stop_requested:
+                    log.info("Feed stopped cleanly via stop flag for %s", symbol)
+                    return
                 log.info("Feed closed cleanly for %s", symbol)
                 return
 

@@ -128,3 +128,46 @@ class TestBrokerFeedABC:
     def test_has_flush_method(self, feed):
         """Must implement flush()."""
         assert callable(feed.flush)
+
+
+class TestPysignalrStop:
+    @pytest.mark.asyncio
+    async def test_stop_flag_cancels_client_run(self):
+        """Stop flag must interrupt client.run() via asyncio.wait(FIRST_COMPLETED)."""
+        auth = MagicMock()
+        auth.get_token.return_value = "fake-token"
+
+        feed = ProjectXDataFeed(auth=auth, on_bar=MagicMock())
+        feed._stop_requested = False
+
+        # Mock pysignalr client that blocks forever
+        mock_client = MagicMock()
+
+        async def run_forever():
+            await asyncio.sleep(10)
+
+        mock_client.run = run_forever
+        mock_client.on = MagicMock()
+        mock_client.on_open = MagicMock()
+
+        # Fast stop watcher: returns as soon as _stop_requested is set
+        async def fast_stop_watcher():
+            while not feed._stop_requested:
+                await asyncio.sleep(0.01)
+
+        # Set stop flag after 50ms
+        async def set_stop():
+            await asyncio.sleep(0.05)
+            feed._stop_requested = True
+
+        from unittest.mock import patch
+
+        with patch("pysignalr.client.SignalRClient", return_value=mock_client), \
+             patch.object(feed, "_stop_file_watcher", fast_stop_watcher):
+            stop_setter = asyncio.create_task(set_stop())
+            try:
+                await asyncio.wait_for(feed._run_pysignalr("12345"), timeout=2.0)
+            except asyncio.TimeoutError:
+                pytest.fail("_run_pysignalr did not exit within 2s — stop flag was ignored")
+            finally:
+                stop_setter.cancel()
