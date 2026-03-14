@@ -481,12 +481,9 @@ class SessionOrchestrator:
             try:
                 await self._handle_event(event)
             except Exception as e:
-                log.error(
-                    "Rollover close failed for %s (%s) — position may remain open: %s",
-                    event.strategy_id,
-                    event.event_type,
-                    e,
-                )
+                msg = f"ROLLOVER CLOSE FAILED: {event.strategy_id} ({event.event_type}) — position may remain open: {e}"
+                log.error(msg)
+                self._notify(msg)
 
         # Start new trading day
         self.trading_day = bar_trading_day
