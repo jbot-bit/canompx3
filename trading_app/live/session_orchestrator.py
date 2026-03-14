@@ -704,6 +704,43 @@ class SessionOrchestrator:
         # Brief pause to let cancellations settle
         await asyncio.sleep(0.5)
 
+    EXIT_RETRY_MAX = 3
+    EXIT_RETRY_BACKOFF = 1.0  # seconds, linear: 1s, 2s, 3s
+
+    async def _submit_exit_with_retry(self, spec, strategy_id: str):
+        """Submit an exit order with retry. ENTRY orders are NOT retried (miss = acceptable).
+
+        Returns the broker result dict/dataclass on success.
+        Raises on final failure after all retries exhausted.
+        """
+        loop = asyncio.get_running_loop()
+        for attempt in range(self.EXIT_RETRY_MAX):
+            try:
+                result = await loop.run_in_executor(None, self.order_router.submit, spec)
+                self._circuit_breaker.record_success()
+                return result
+            except Exception as e:
+                # "already flat" is not a retryable error — position was closed by bracket
+                err_msg = str(e).lower()
+                if "no position" in err_msg or "already flat" in err_msg:
+                    raise  # let caller handle bracket-closed case
+                if attempt < self.EXIT_RETRY_MAX - 1:
+                    wait = self.EXIT_RETRY_BACKOFF * (attempt + 1)
+                    log.warning(
+                        "Exit retry %d/%d for %s: %s (next attempt in %.0fs)",
+                        attempt + 1, self.EXIT_RETRY_MAX, strategy_id, e, wait,
+                    )
+                    await asyncio.sleep(wait)
+                else:
+                    self._circuit_breaker.record_failure()
+                    msg = (
+                        f"EXIT FAILED after {self.EXIT_RETRY_MAX} retries for "
+                        f"{strategy_id}: {e} — MANUAL CLOSE REQUIRED"
+                    )
+                    log.critical(msg)
+                    self._notify(msg)
+                    raise
+
     async def _handle_event(self, event) -> None:
         """
         Handle a TradeEvent from ExecutionEngine.
@@ -903,10 +940,8 @@ class SessionOrchestrator:
                 symbol=self.contract_symbol,
                 qty=event.contracts,
             )
-            loop = asyncio.get_running_loop()
             try:
-                result = await loop.run_in_executor(None, self.order_router.submit, exit_spec)
-                self._circuit_breaker.record_success()
+                result = await self._submit_exit_with_retry(exit_spec, event.strategy_id)
             except Exception as e:
                 # Handle "already flat" from bracket filling between cancel and exit
                 err_msg = str(e).lower()
@@ -919,10 +954,7 @@ class SessionOrchestrator:
                         journal_trade_id=exit_jtid,
                     )
                     return
-                self._circuit_breaker.record_failure()
-                msg = f"EXIT order FAILED for {event.strategy_id}: {e} — MANUAL CLOSE REQUIRED"
-                log.critical(msg)
-                self._notify(msg)
+                # All retries exhausted — position remains open
                 self._write_signal_record({"type": "EXIT_FAILED", "strategy_id": event.strategy_id, "error": str(e)})
                 return
             order_id = result.get("order_id") if isinstance(result, dict) else getattr(result, "order_id", None)
