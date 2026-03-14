@@ -168,9 +168,8 @@ CREATE TABLE IF NOT EXISTS pipeline_audit_log (
 );
 """
 
-LIVE_TRADES_SCHEMA = """
-CREATE TABLE IF NOT EXISTS live_trades (
-    id           INTEGER,
+PM_TRADE_LOG_SCHEMA = """
+CREATE TABLE IF NOT EXISTS pm_trade_log (
     strategy_id  TEXT        NOT NULL,
     trading_day  DATE        NOT NULL,
     direction    TEXT        NOT NULL,
@@ -361,6 +360,7 @@ def init_db(db_path: Path, force: bool = False):
                 "family_rr_locks",
                 "rebuild_manifest",
                 "pipeline_audit_log",
+                "pm_trade_log",
             ]:
                 con.execute(f"DROP TABLE IF EXISTS {t}")
             # Drop pipeline tables
@@ -509,8 +509,8 @@ def init_db(db_path: Path, force: bool = False):
         con.execute(PIPELINE_AUDIT_LOG_SCHEMA)
         logger.info("  pipeline_audit_log: created (or already exists)")
 
-        con.execute(LIVE_TRADES_SCHEMA)
-        logger.info("  live_trades: created (or already exists)")
+        con.execute(PM_TRADE_LOG_SCHEMA)
+        logger.info("  pm_trade_log: created (or already exists)")
 
         con.commit()
 
