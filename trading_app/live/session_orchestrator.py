@@ -193,7 +193,7 @@ class SessionOrchestrator:
         # Live infrastructure
         self.orb_builder = LiveORBBuilder(instrument, self.trading_day)
         # PerformanceMonitor takes list[PortfolioStrategy] (has strategy_id + expectancy_r)
-        self.monitor = PerformanceMonitor(self.portfolio.strategies, db_path=GOLD_DB_PATH)
+        self.monitor = PerformanceMonitor(self.portfolio.strategies)
 
         # Persistent trade journal — survives process crashes (separate DB to avoid contention)
         journal_mode = "signal" if signal_only else ("demo" if demo else "live")
