@@ -401,3 +401,12 @@
 - Blast radius: 1 file (docstring only; "7-phase" string has no callers)
 - Verification: PASS (49/49 tests, 72/72 drift checks)
 - Commit: 7ed02ab
+
+## Iteration 48 — 2026-03-14
+- Phase: fix
+- Target: trading_app/portfolio.py:22
+- Finding: PF1 (LOW) — Dead `PROJECT_ROOT` assignment at module level, never referenced in file or imported by callers. Same orphan-risk pattern as RP1 (iter 43) and OB1 (iter 46).
+- Action: Removed the single dead assignment line. `Path` import retained — used in function signatures throughout portfolio.py (load_validated_strategies, build_portfolio, build_strategy_daily_series, correlation_matrix, main). Seven Sins scan of walkforward.py (CLEAN), portfolio.py (1 finding FIXED), strategy_fitness.py (pending next iter).
+- Blast radius: 1 file (portfolio.py only; no callers import PROJECT_ROOT)
+- Verification: PASS (68/68 tests, 72/72 drift checks)
+- Commit: e792bb5
