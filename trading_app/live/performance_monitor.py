@@ -88,7 +88,7 @@ class PerformanceMonitor:
                 with duckdb.connect(str(self._db_path)) as con:
                     configure_connection(con)
                     con.execute(
-                        """INSERT INTO live_trades
+                        """INSERT INTO pm_trade_log
                            (strategy_id, trading_day, direction, entry_price,
                             exit_price, actual_r, expected_r, slippage_pts, recorded_at)
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
