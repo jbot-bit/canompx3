@@ -74,8 +74,10 @@ def _make_client():
 
         ws.WEBHOOK_SECRET = "s3cret"
         ws.DEDUP_WINDOW = 10.0
+        ws.MAX_OPEN_POSITIONS = 10  # high limit so dedup/rate tests aren't affected
         ws._DEDUP_CACHE.clear()
         ws._ORDER_TIMESTAMPS.clear()
+        ws._OPEN_POSITIONS.clear()
 
         from fastapi.testclient import TestClient
 
@@ -137,3 +139,34 @@ def test_dedup_different_key_not_blocked():
 
         r2 = client.post("/trade", json=exit_payload)
         assert r2.json()["status"] == "submitted"
+
+
+# ── Position limit tests ────────────────────────────────────────────────
+
+
+def test_entry_blocked_when_position_open():
+    """Second entry for same instrument blocked when at position limit."""
+    client, ws = _make_client()
+    ws.MAX_OPEN_POSITIONS = 1
+    ws._OPEN_POSITIONS.clear()
+    ws._OPEN_POSITIONS["MGC"] = 1
+
+    with patch("trading_app.live.webhook_server._place_order", return_value=12345), \
+         patch("trading_app.live.webhook_server._get_contract", return_value="MGCM5"):
+        resp = client.post("/trade", json=_ENTRY_PAYLOAD)
+        assert resp.status_code == 429
+        assert "position limit" in resp.json()["detail"].lower()
+
+
+def test_exit_allowed_when_position_open():
+    """Exit is never blocked by position limit."""
+    client, ws = _make_client()
+    ws._OPEN_POSITIONS.clear()
+    ws._OPEN_POSITIONS["MGC"] = 1
+
+    exit_payload = {**_ENTRY_PAYLOAD, "action": "exit"}
+
+    with patch("trading_app.live.webhook_server._place_order", return_value=12345), \
+         patch("trading_app.live.webhook_server._get_contract", return_value="MGCM5"):
+        resp = client.post("/trade", json=exit_payload)
+        assert resp.status_code == 200

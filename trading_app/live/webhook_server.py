@@ -50,6 +50,10 @@ _ORDER_TIMESTAMPS: deque[float] = deque(maxlen=10)
 RATE_LIMIT_ORDERS = 3
 RATE_LIMIT_WINDOW = 60.0  # seconds
 
+# Position limit: max 1 open position per instrument (guards against double entries)
+MAX_OPEN_POSITIONS = int(os.environ.get("WEBHOOK_MAX_POSITIONS", "1"))
+_OPEN_POSITIONS: dict[str, int] = {}
+
 
 # ── Lazy-initialized singletons (created on first request) ──────────────────
 _auth = None
@@ -201,6 +205,18 @@ def _cache_response(req: TradeRequest, resp: TradeResponse) -> None:
         _DEDUP_CACHE[_dedup_key(req)] = (time.monotonic(), resp)
 
 
+def _check_position_limit(req: TradeRequest) -> None:
+    """Block entry if instrument already at max open positions. Exits always allowed."""
+    if req.action != "entry":
+        return
+    current = _OPEN_POSITIONS.get(req.instrument, 0)
+    if current >= MAX_OPEN_POSITIONS:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Position limit: {req.instrument} already has {current} open position(s)",
+        )
+
+
 def _check_rate_limit() -> None:
     """Raise HTTPException if rate limit exceeded."""
     now = time.monotonic()
@@ -269,7 +285,10 @@ async def trade(req: TradeRequest, request: Request):
     # 3. Rate limit
     _check_rate_limit()
 
-    # 4. Resolve contract (cached, async-safe)
+    # 4. Position limit (entry only)
+    _check_position_limit(req)
+
+    # 5. Resolve contract (cached, async-safe)
     loop = asyncio.get_running_loop()
     try:
         contract = await loop.run_in_executor(None, _get_contract, req.instrument)
@@ -306,7 +325,13 @@ async def trade(req: TradeRequest, request: Request):
         timestamp=datetime.now(UTC).isoformat(),
     )
 
-    # 6. Cache for dedup
+    # 7. Update position tracking
+    if req.action == "entry":
+        _OPEN_POSITIONS[req.instrument] = _OPEN_POSITIONS.get(req.instrument, 0) + 1
+    elif req.action == "exit":
+        _OPEN_POSITIONS[req.instrument] = max(0, _OPEN_POSITIONS.get(req.instrument, 0) - 1)
+
+    # 8. Cache for dedup
     _cache_response(req, resp)
 
     return resp
