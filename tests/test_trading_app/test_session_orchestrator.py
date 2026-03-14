@@ -1767,3 +1767,67 @@ class TestHeartbeatTradeCount:
 
         monitor.reset_daily()
         assert monitor.trade_count == 0
+
+
+# ── Exit retry tests ────────────────────────────────────────────────────────
+
+
+class TestExitRetry:
+    """Tests for _submit_exit_with_retry — 3-attempt linear backoff for exits."""
+
+    async def test_retry_succeeds_on_third_attempt(self):
+        """Router fails twice, succeeds on attempt 3 → function returns result."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2351.0))
+        call_count = 0
+
+        def flaky_submit(spec):
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise ConnectionError("Tradovate 503")
+            return {"order_id": 999, "fill_price": 2351.0}
+
+        orch.order_router.submit = flaky_submit
+        # Patch sleep to avoid real delays
+        with patch("trading_app.live.session_orchestrator.asyncio.sleep", new_callable=AsyncMock):
+            result = await orch._submit_exit_with_retry({"dummy": "spec"}, "test_strat")
+        assert result["order_id"] == 999
+        assert call_count == 3
+
+    async def test_all_retries_exhausted_raises(self):
+        """Router fails all 3 times → raises, sends notification."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2351.0))
+
+        def always_fail(spec):
+            raise ConnectionError("Tradovate down")
+
+        orch.order_router.submit = always_fail
+        orch._notify = MagicMock()
+        with patch("trading_app.live.session_orchestrator.asyncio.sleep", new_callable=AsyncMock):
+            with pytest.raises(ConnectionError):
+                await orch._submit_exit_with_retry({"dummy": "spec"}, "test_strat")
+        # Notification sent on final failure
+        orch._notify.assert_called_once()
+        assert "MANUAL CLOSE REQUIRED" in str(orch._notify.call_args)
+
+    async def test_already_flat_not_retried(self):
+        """'no position' error bypasses retry — immediate re-raise."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2351.0))
+        call_count = 0
+
+        def already_flat(spec):
+            nonlocal call_count
+            call_count += 1
+            raise RuntimeError("no position found for contract")
+
+        orch.order_router.submit = already_flat
+        with pytest.raises(RuntimeError, match="no position"):
+            await orch._submit_exit_with_retry({"dummy": "spec"}, "test_strat")
+        assert call_count == 1  # no retry — immediate re-raise
+
+    async def test_entry_path_does_not_use_retry(self):
+        """ENTRY events use direct submit, not _submit_exit_with_retry."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2351.0))
+        with patch.object(orch, "_submit_exit_with_retry") as mock_retry:
+            await orch._handle_event(_entry_event(2350.5))
+            mock_retry.assert_not_called()
