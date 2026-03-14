@@ -239,5 +239,3 @@ class TestInitDb:
         assert "bars_1m" in tables
         assert "bars_5m" in tables
         assert "daily_features" in tables
-
-    # pm_trade_log removed — trade persistence moved to TradeJournal (live_journal.db)
