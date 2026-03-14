@@ -30,7 +30,7 @@ jobs:
       - name: Ruff lint check
         run: uv run ruff check pipeline/ trading_app/ ui/ scripts/
 
-      - name: Pyright type check
+      - name: Pyright type check (356 errors as of 2026-03-14 — fix before promoting to hard gate)
         run: uv run pyright
         continue-on-error: true
 
@@ -65,4 +65,4 @@ jobs:
         continue-on-error: true
 
       - name: Tests with coverage
-        run: uv run pytest tests/ -v --ignore=tests/test_trader_logic.py --cov=pipeline --cov=trading_app --cov-report=term-missing --cov-fail-under=28
+        run: uv run pytest tests/ -v --ignore=tests/test_trader_logic.py --cov=pipeline --cov=trading_app --cov-report=term-missing --cov-fail-under=35

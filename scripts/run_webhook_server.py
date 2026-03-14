@@ -80,13 +80,13 @@ def main() -> None:
 
     from trading_app.live.webhook_server import app
 
-    log.info("Webhook server on http://0.0.0.0:%d", args.port)
+    log.info("Webhook server on http://127.0.0.1:%d", args.port)
     log.info("Health check: http://localhost:%d/health", args.port)
     log.info("Trade endpoint: POST http://localhost:%d/trade", args.port)
 
     uvicorn.run(
         app,
-        host="0.0.0.0",
+        host="127.0.0.1",
         port=args.port,
         log_level="info",
         access_log=True,

@@ -19,7 +19,7 @@ from pipeline.log import get_logger
 
 logger = get_logger(__name__)
 
-sys.stdout.reconfigure(line_buffering=True)
+sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]
 
 import duckdb
 import numpy as np
@@ -744,7 +744,7 @@ def build_strategy_daily_series(
         if not outcomes_baseline.empty and "stop_multiplier" in outcomes_baseline.columns:
             sm_strategies = outcomes_baseline[outcomes_baseline["stop_multiplier"] != 1.0]
             if not sm_strategies.empty:
-                for sid in sm_strategies["strategy_id"].unique():
+                for sid in sm_strategies["strategy_id"].unique():  # type: ignore[union-attr]
                     mask = outcomes_baseline["strategy_id"] == sid
                     sm = outcomes_baseline.loc[mask, "stop_multiplier"].iloc[0]
                     instr = strats.loc[strats["strategy_id"] == sid, "instrument"].iloc[0]
@@ -782,9 +782,9 @@ def build_strategy_daily_series(
         stats = {}
 
         for _, strat in strats.iterrows():
-            sid = strat["strategy_id"]
-            ftype = strat["filter_type"]
-            orb_label = strat["orb_label"]
+            sid = str(strat["strategy_id"])
+            ftype = str(strat["filter_type"])
+            orb_label = str(strat["orb_label"])
             strat_om = int(strat["orb_minutes"])
 
             # Look up daily_features for this strategy's orb_minutes
@@ -845,8 +845,8 @@ def build_strategy_daily_series(
             trade_days_set = set()
             overlays_skipped_ineligible = 0
             overlays_skipped_missing = 0
-            for _, oc in strat_outcomes.iterrows():
-                td = pd.Timestamp(oc["trading_day"])
+            for _, oc in strat_outcomes.iterrows():  # type: ignore[union-attr]
+                td = pd.Timestamp(oc["trading_day"])  # type: ignore[arg-type]
                 if td not in series.index:
                     overlays_skipped_missing += 1
                 elif series.loc[td] == 0.0:
@@ -903,9 +903,9 @@ def correlation_matrix(
         return pd.DataFrame()
 
     # Compute pairwise correlation with overlap guard
-    cols = list(series_df.columns)
+    cols: list[str] = list(series_df.columns)
     n = len(cols)
-    corr = pd.DataFrame(np.nan, index=cols, columns=cols)
+    corr = pd.DataFrame(np.nan, index=cols, columns=cols)  # type: ignore[call-overload]
 
     for i in range(n):
         corr.iloc[i, i] = 1.0
@@ -916,7 +916,7 @@ def correlation_matrix(
             overlap = a.notna() & b.notna()
             overlap_count = int(overlap.sum())
             if overlap_count >= min_overlap_days:
-                r = a[overlap].corr(b[overlap])
+                r = a[overlap].corr(b[overlap])  # type: ignore[union-attr,arg-type]
                 corr.iloc[i, j] = r
                 corr.iloc[j, i] = r
             # else: stays NaN (insufficient overlap)
