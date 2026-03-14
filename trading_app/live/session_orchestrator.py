@@ -582,6 +582,7 @@ class SessionOrchestrator:
         exit_fill_price: float | None = None,
         entry_slippage: float | None = None,
         journal_trade_id: str | None = None,
+        order_id_exit: str | int | None = None,
     ) -> None:
         """Record a completed trade (EXIT or SCRATCH) in the performance monitor.
 
@@ -630,6 +631,9 @@ class SessionOrchestrator:
 
         # Persist exit to trade journal (fail-open)
         if journal_trade_id:
+            # Compute dollar P&L for prop firm accounting
+            risk_pts = event.risk_points or strategy.median_risk_points or 0.0
+            pnl_dollars = actual_r * risk_pts * self.cost_spec.multiplier * event.contracts if risk_pts else None
             self.journal.record_exit(
                 trade_id=journal_trade_id,
                 engine_exit=event.price,
@@ -637,7 +641,9 @@ class SessionOrchestrator:
                 actual_r=actual_r,
                 expected_r=strategy.expectancy_r,
                 slippage_pts=slippage_pts,
+                pnl_dollars=pnl_dollars,
                 exit_reason=event.event_type.lower(),
+                order_id_exit=order_id_exit,
                 cusum_alarm=alert is not None,
             )
 
