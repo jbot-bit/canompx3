@@ -219,24 +219,10 @@ def select_for_profile(
             ))
             continue
 
-        # Consistency rule: no single session > X% of portfolio ExpR.
-        # Only enforced once portfolio has enough entries for diversification
-        # (e.g., 40% cap requires 3+ entries before the check is meaningful).
-        min_entries_for_check = int(1 / firm_spec.consistency_rule) if firm_spec.consistency_rule else 0
-        if (
-            firm_spec.consistency_rule is not None
-            and slots_used >= min_entries_for_check
-            and total_effective_expr > 0
-        ):
-            projected_total = total_effective_expr + rs.effective_expr
-            pct_of_total = rs.effective_expr / projected_total
-            if pct_of_total > firm_spec.consistency_rule:
-                all_excluded.append(ExcludedEntry(
-                    s.strategy_id, s.instrument, s.orb_label,
-                    f"Consistency rule: {pct_of_total:.0%} of portfolio > "
-                    f"{firm_spec.consistency_rule:.0%} cap",
-                ))
-                continue
+        # NOTE: consistency_rule (e.g. TopStep 40%) is a PAYOUT gate on realized
+        # daily P&L, not a portfolio construction constraint. It's checked when
+        # requesting a payout: "best single day < X% of total profit." Not
+        # relevant to strategy selection — left in PropFirmSpec for reference only.
 
         # Minimum effective ExpR check (split kills the edge?)
         if rs.effective_expr < 0.05:
