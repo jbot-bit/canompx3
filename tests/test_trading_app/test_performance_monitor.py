@@ -60,4 +60,5 @@ def test_record_trade_db_write_failure_doesnt_block_cusum(tmp_path):
         actual_r=0.8, expected_r=0.1,
     ))
     # CUSUM still ran — monitor is functional
-    assert monitor.trade_count == 1
+    cusum = monitor.get_cusum("MGC_TEST_E1")
+    assert cusum is not None and cusum.n_trades == 1
