@@ -2,15 +2,16 @@
 
 The `orb-research` Pinecone Assistant is the project's knowledge base — 51 files across 5 tiers covering authority docs, config, research findings, and memory. Use `/pinecone:assistant-chat` or the Pinecone Assistant MCP tools to query it.
 
-## Three-System Routing
+## Two-System Routing
 
-Route every knowledge question to the RIGHT system. Zero overlap.
+Route every knowledge question to the RIGHT system. Zero overlap. Academic methodology is served from local PDFs (see `notebooklm.md`).
 
 | System | What It Knows | When to Use |
 |--------|--------------|-------------|
 | **Pinecone Assistant** | Project knowledge — research findings, architecture, memory, config, plans, NO-GOs, design decisions | "What did we find about X?", "Why did we do Y?", "What's the history of Z?" |
 | **gold-db MCP** | Live structured data — strategy counts, performance, fitness regimes, trade history, schema | "How many strategies?", "Is X still FIT?", "Show performance for MNQ" |
-| **NotebookLM** | Academic methodology — BH FDR math, walk-forward theory, deflated Sharpe, overfitting literature | "How does BH FDR work?", "What does the research say about overfitting?" |
+
+Academic methodology (BH FDR, walk-forward, deflated Sharpe, overfitting) → local PDFs in `resources/`. See `notebooklm.md` for the topic→PDF mapping.
 
 ## Decision Framework
 
@@ -28,16 +29,16 @@ Route every knowledge question to the RIGHT system. Zero overlap.
 | "Is strategy X still FIT?" | gold-db MCP |
 | "Show trade history for strategy Y" | gold-db MCP |
 | "Current strategy counts by instrument" | gold-db MCP |
-| "What does BH FDR do step by step?" | NotebookLM |
-| "Walk-forward validation theory" | NotebookLM |
-| "Deflated Sharpe ratio math" | NotebookLM |
+| "What does BH FDR do step by step?" | Local PDF (`resources/benjamini-and-Hochberg-1995-fdr.pdf`) |
+| "Walk-forward validation theory" | Local PDF (`resources/man_overfitting_2015.pdf`) |
+| "Deflated Sharpe ratio math" | Local PDF (`resources/deflated-sharpe.pdf`) |
 
 ## Keyword Routing
 
 - "what did we find", "research on", "history of", "why did we", "remind me", "what's the story" → **Pinecone**
 - "how many", "current", "right now", "still FIT", "performance", "trade history" → **gold-db MCP**
-- "BH FDR", "walk-forward theory", "deflated Sharpe", "academic", "methodology paper" → **NotebookLM**
-- Ambiguous (spans project + methodology) → query Pinecone first, NotebookLM if needed
+- "BH FDR", "walk-forward theory", "deflated Sharpe", "academic", "methodology paper" → **Local PDFs** (see `notebooklm.md`)
+- Ambiguous (spans project + methodology) → query Pinecone first, local PDFs if needed
 
 ## Content Tiers in Pinecone
 
@@ -77,5 +78,5 @@ bash scripts/tools/run_rebuild_with_sync.sh MGC
 
 - Query Pinecone for live strategy counts or performance (use gold-db MCP)
 - Query gold-db MCP for "why did we make this decision" (use Pinecone)
-- Query NotebookLM for project-specific findings (use Pinecone)
+- Try to call NotebookLM MCP tools — they are retired; use local PDFs
 - Skip sync after a rebuild — generated snapshots go stale

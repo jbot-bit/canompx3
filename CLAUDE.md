@@ -101,6 +101,24 @@ Every non-trivial code change follows two passes:
 
 One task at a time. Implement → verify → review → next. Never batch without verification.
 
+### Design Proposal Gate (MANDATORY)
+Before writing ANY code on a non-trivial change, present a brief proposal:
+
+1. **What:** One sentence — what you're about to do and why
+2. **Files:** Which files you'll touch (create/modify/delete)
+3. **Blast radius:** What else could break (callers, tests, drift checks)
+4. **Approach:** Key design choice if there are alternatives
+
+Wait for user confirmation ("go", "yes", "do it", "looks good") before writing code. If the user says "no" or redirects, update the proposal. Do NOT silently proceed.
+
+**Exceptions** (no proposal needed):
+- Trivial changes: typo fixes, comment updates, single-line bug fixes
+- User explicitly said "just do it" or "skip the proposal"
+- Git operations (commit, push, merge) — covered by Git Operations rule
+- Running queries or read-only exploration
+
+**Why this exists:** 38+ sessions hit "wrong approach" because Claude dove into code without confirming intent. A 10-second checkpoint prevents 30-minute reversals.
+
 ---
 
 ## Strategy Classification — Behavioral Rules
