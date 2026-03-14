@@ -37,6 +37,7 @@ class PositionRecord:
     fill_exit_price: float | None = None
     entered_at: datetime | None = None
     state_changed_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    journal_trade_id: str | None = None  # Links to TradeJournal.trade_id
 
 
 class PositionTracker:

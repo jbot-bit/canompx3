@@ -187,6 +187,7 @@ def build_orchestrator(components: FakeBrokerComponents | None = None) -> Sessio
 
     orch._circuit_breaker = CircuitBreaker(failure_threshold=5, recovery_timeout=30.0)
     orch._ml_predictor = None  # ML predictor not wired in test fixtures
+    orch.journal = MagicMock()  # Trade journal — mocked to avoid DB in tests
     orch._consecutive_engine_errors = 0
     orch.order_router = c.router
     orch.positions = c.positions
