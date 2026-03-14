@@ -191,9 +191,7 @@ class TradovateDataFeed(BrokerFeed):
         if not isinstance(frame, dict):
             return
         for q in frame.get("d", {}).get("quotes", []):
-            price = q.get("bidPrice")
-            if price is None:
-                price = q.get("price")
+            price = q.get("price") or q.get("bidPrice")
             if price is None:
                 continue
             self._last_quote_at = datetime.now(UTC)
