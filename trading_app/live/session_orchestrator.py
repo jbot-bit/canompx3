@@ -31,6 +31,7 @@ from trading_app.live.broker_factory import create_broker_components, get_broker
 from trading_app.live.live_market_state import LiveORBBuilder
 from trading_app.live.performance_monitor import PerformanceMonitor, TradeRecord
 from trading_app.live.position_tracker import PositionState, PositionTracker
+from trading_app.live.trade_journal import TradeJournal, generate_trade_id
 from trading_app.live_config import build_live_portfolio
 from trading_app.ml.predict_live import LiveMLPredictor
 from trading_app.portfolio import PortfolioStrategy
@@ -192,7 +193,12 @@ class SessionOrchestrator:
         # Live infrastructure
         self.orb_builder = LiveORBBuilder(instrument, self.trading_day)
         # PerformanceMonitor takes list[PortfolioStrategy] (has strategy_id + expectancy_r)
-        self.monitor = PerformanceMonitor(self.portfolio.strategies)
+        self.monitor = PerformanceMonitor(self.portfolio.strategies, db_path=GOLD_DB_PATH)
+
+        # Persistent trade journal — survives process crashes (separate DB to avoid contention)
+        journal_mode = "signal" if signal_only else ("demo" if demo else "live")
+        journal_path = Path(__file__).parent.parent.parent / "live_journal.db"
+        self.journal = TradeJournal(journal_path, mode=journal_mode)
 
         # Position lifecycle tracker — replaces ad-hoc _entry_prices dict
         self._positions = PositionTracker()
@@ -570,7 +576,12 @@ class SessionOrchestrator:
         return net_pts / risk_pts if risk_pts > 0 else 0.0
 
     def _record_exit(
-        self, event, entry_price: float, exit_fill_price: float | None = None, entry_slippage: float | None = None
+        self,
+        event,
+        entry_price: float,
+        exit_fill_price: float | None = None,
+        entry_slippage: float | None = None,
+        journal_trade_id: str | None = None,
     ) -> None:
         """Record a completed trade (EXIT or SCRATCH) in the performance monitor.
 
@@ -616,6 +627,19 @@ class SessionOrchestrator:
         if alert:
             log.warning(alert)
             self._notify(alert)
+
+        # Persist exit to trade journal (fail-open)
+        if journal_trade_id:
+            self.journal.record_exit(
+                trade_id=journal_trade_id,
+                engine_exit=event.price,
+                fill_exit=exit_fill_price,
+                actual_r=actual_r,
+                expected_r=strategy.expectancy_r,
+                slippage_pts=slippage_pts,
+                exit_reason=event.event_type.lower(),
+                cusum_alarm=alert is not None,
+            )
 
     async def _submit_bracket(self, event, strategy, entry_price: float) -> None:
         """Submit broker-side stop/target bracket after entry fill. Never raises."""
@@ -711,6 +735,20 @@ class SessionOrchestrator:
                     self.contract_symbol,
                     event.price,
                 )
+                # Persist signal entry to journal (fail-open)
+                trade_id = generate_trade_id()
+                record.journal_trade_id = trade_id
+                self.journal.record_entry(
+                    trade_id=trade_id,
+                    trading_day=self.trading_day,
+                    instrument=self.instrument,
+                    strategy_id=event.strategy_id,
+                    direction=event.direction,
+                    entry_model=strategy.entry_model,
+                    engine_entry=event.price,
+                    contracts=event.contracts,
+                )
+
                 self._write_signal_record(
                     {
                         "type": "SIGNAL_ENTRY",
@@ -782,6 +820,23 @@ class SessionOrchestrator:
                     order_id,
                 )
 
+            # Persist entry to trade journal (fail-open)
+            trade_id = generate_trade_id()
+            pre_record.journal_trade_id = trade_id
+            self.journal.record_entry(
+                trade_id=trade_id,
+                trading_day=self.trading_day,
+                instrument=self.instrument,
+                strategy_id=event.strategy_id,
+                direction=event.direction,
+                entry_model=strategy.entry_model,
+                engine_entry=event.price,
+                fill_entry=fill_price,
+                broker=self._broker_name,
+                order_id_entry=order_id,
+                contracts=event.contracts,
+            )
+
             self._write_signal_record(
                 {
                     "type": "ORDER_ENTRY",
@@ -812,7 +867,12 @@ class SessionOrchestrator:
                     event.price,
                 )
                 pos_rec = self._positions.get(event.strategy_id)
-                self._record_exit(event, entry_price, entry_slippage=pos_rec.entry_slippage if pos_rec else None)
+                jtid = pos_rec.journal_trade_id if pos_rec else None
+                self._record_exit(
+                    event, entry_price,
+                    entry_slippage=pos_rec.entry_slippage if pos_rec else None,
+                    journal_trade_id=jtid,
+                )
                 self._positions.pop(event.strategy_id)
                 self._write_signal_record(
                     {
@@ -835,6 +895,8 @@ class SessionOrchestrator:
                 log.critical(msg)
                 self._notify(msg)
 
+            exit_pos_rec = self._positions.get(event.strategy_id)
+            exit_jtid = exit_pos_rec.journal_trade_id if exit_pos_rec else None
             self._positions.on_exit_sent(event.strategy_id)
             exit_spec = self.order_router.build_exit_spec(
                 direction=event.direction,
@@ -852,7 +914,9 @@ class SessionOrchestrator:
                     log.info("Position already closed by bracket for %s — skipping exit order", event.strategy_id)
                     closed_rec = self._positions.on_exit_filled(event.strategy_id)
                     self._record_exit(
-                        event, entry_price, entry_slippage=closed_rec.entry_slippage if closed_rec else None
+                        event, entry_price,
+                        entry_slippage=closed_rec.entry_slippage if closed_rec else None,
+                        journal_trade_id=exit_jtid,
                     )
                     return
                 self._circuit_breaker.record_failure()
@@ -891,6 +955,7 @@ class SessionOrchestrator:
                 entry_price,
                 exit_fill_price=exit_fill,
                 entry_slippage=closed_rec.entry_slippage if closed_rec else None,
+                journal_trade_id=exit_jtid,
             )
             self._write_signal_record(
                 {
@@ -970,6 +1035,13 @@ class SessionOrchestrator:
                     log.critical(msg)
                     self._notify(msg)
                     self._positions.on_exit_filled(record.strategy_id)
+                    # Persist kill switch exit to journal (fail-open)
+                    if record.journal_trade_id:
+                        self.journal.record_exit(
+                            trade_id=record.journal_trade_id,
+                            exit_reason="kill_switch",
+                            order_id_exit=order_id,
+                        )
                     break
                 except Exception as e:
                     msg = f"KILL SWITCH FLATTEN FAILED: {record.strategy_id} attempt {attempt + 1}/3 — {e}"
@@ -1067,6 +1139,12 @@ class SessionOrchestrator:
                             fill_price = status.get("fill_price")
                             if fill_price is not None:
                                 self._positions.on_entry_filled(record.strategy_id, fill_price)
+                                # Update journal with confirmed fill price
+                                if record.journal_trade_id:
+                                    self.journal.update_entry_fill(
+                                        trade_id=record.journal_trade_id,
+                                        fill_entry=fill_price,
+                                    )
                             log.info("Fill confirmed for %s: %s", record.strategy_id, status)
                             self._stats.fill_polls_confirmed += 1
                         elif status["status"] in ("Cancelled", "Rejected"):
@@ -1244,6 +1322,9 @@ class SessionOrchestrator:
             except Exception as e:
                 log.error("EOD position reconciliation failed: %s — cannot confirm positions are flat", e)
                 self._notify(f"EOD RECON FAILED: {e} — manually verify all positions are flat")
+
+        # Close trade journal — flushes any pending writes
+        self.journal.close()
 
         try:
             run_backfill_for_instrument(self.instrument)
