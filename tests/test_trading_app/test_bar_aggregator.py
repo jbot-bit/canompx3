@@ -64,3 +64,14 @@ def test_symbol_propagated_via_setter():
     bar = agg.on_tick(price=2001.0, volume=1, ts=_ts(1, 0))
     bar.symbol = "MGCM6"
     assert bar.symbol == "MGCM6"
+
+
+def test_out_of_order_tick_dropped():
+    """Ticks older than current bar minute must be silently dropped."""
+    agg = BarAggregator()
+    agg.on_tick(price=3000.0, volume=1, ts=_ts(1, 0))
+    agg.on_tick(price=3001.0, volume=1, ts=_ts(1, 30))
+    # Send tick from minute 0 — out of order
+    result = agg.on_tick(price=2900.0, volume=1, ts=_ts(0, 15))
+    assert result is None  # no bar emitted
+    assert agg._current.low == 3000.0  # 2900 NOT incorporated

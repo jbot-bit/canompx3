@@ -6,8 +6,11 @@ Bar.as_dict() produces the exact format ExecutionEngine.on_bar() expects
 (key 'ts_utc', not 'ts_event').
 """
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -43,6 +46,10 @@ class BarAggregator:
 
         if self._current is None:
             self._open_bar(price, volume, tick_minute)
+            return None
+
+        if tick_minute < self._bar_minute:
+            log.warning("Dropped out-of-order tick: %s < current bar %s", tick_minute, self._bar_minute)
             return None
 
         if tick_minute == self._bar_minute:
