@@ -110,26 +110,25 @@ class _RankedStrategy:
 
     strategy: PortfolioStrategy
     effective_expr: float
-    sharpe_dd_ratio: float
+    expr_dd_ratio: float  # ExpR/DD — project rules: sort by ExpR, never Sharpe alone
 
 
 def _rank_strategies(
     strategies: list[PortfolioStrategy],
     split_factor: float,
 ) -> list[_RankedStrategy]:
-    """Rank strategies by Sharpe/DD ratio.
+    """Rank strategies by ExpR/DD ratio (per project statistical rules).
 
     ExpR is adjusted by profit split factor for effective ranking.
     """
     ranked = []
     for s in strategies:
         effective_expr = s.expectancy_r * split_factor
-        sharpe = s.sharpe_ratio or 0.0
         dd = s.max_drawdown_r or 999.0
-        ratio = sharpe / dd if dd > 0 else 0.0
+        ratio = effective_expr / dd if dd > 0 else 0.0
         ranked.append(_RankedStrategy(s, effective_expr, ratio))
 
-    ranked.sort(key=lambda r: r.sharpe_dd_ratio, reverse=True)
+    ranked.sort(key=lambda r: r.expr_dd_ratio, reverse=True)
     return ranked
 
 
@@ -220,6 +219,25 @@ def select_for_profile(
             ))
             continue
 
+        # Consistency rule: no single session > X% of portfolio ExpR.
+        # Only enforced once portfolio has enough entries for diversification
+        # (e.g., 40% cap requires 3+ entries before the check is meaningful).
+        min_entries_for_check = int(1 / firm_spec.consistency_rule) if firm_spec.consistency_rule else 0
+        if (
+            firm_spec.consistency_rule is not None
+            and slots_used >= min_entries_for_check
+            and total_effective_expr > 0
+        ):
+            projected_total = total_effective_expr + rs.effective_expr
+            pct_of_total = rs.effective_expr / projected_total
+            if pct_of_total > firm_spec.consistency_rule:
+                all_excluded.append(ExcludedEntry(
+                    s.strategy_id, s.instrument, s.orb_label,
+                    f"Consistency rule: {pct_of_total:.0%} of portfolio > "
+                    f"{firm_spec.consistency_rule:.0%} cap",
+                ))
+                continue
+
         # Minimum effective ExpR check (split kills the edge?)
         if rs.effective_expr < 0.05:
             all_excluded.append(ExcludedEntry(
@@ -244,7 +262,7 @@ def select_for_profile(
             contracts=contracts,
             stop_multiplier=profile.stop_multiplier,
             effective_expr=rs.effective_expr,
-            sharpe_dd_ratio=rs.sharpe_dd_ratio,
+            sharpe_dd_ratio=rs.expr_dd_ratio,
             dd_contribution=slot_dd,
         ))
 
@@ -319,10 +337,11 @@ def print_trading_book(book: TradingBook, profile: AccountProfile) -> None:
                 f"${e.dd_contribution:<6.0f}"
             )
 
+    dd_pct = (book.total_dd_used / tier.max_dd * 100) if tier.max_dd > 0 else 0
     print(
         f"\n  SUMMARY: {book.total_slots} slots | "
         f"${book.total_dd_used:,.0f} DD used of ${tier.max_dd:,.0f} "
-        f"({book.total_dd_used / tier.max_dd * 100:.0f}%) | "
+        f"({dd_pct:.0f}%) | "
         f"{book.total_contracts} contracts"
     )
 
@@ -382,13 +401,14 @@ def main() -> None:
         book = select_for_profile(profile, all_strategies)
         print_trading_book(book, profile)
     else:
-        books = {}
-        for pid, profile in ACCOUNT_PROFILES.items():
-            if not profile.active:
-                continue
-            book = select_for_profile(profile, all_strategies)
-            books[pid] = book
-            print_trading_book(book, profile)
+        # Use build_all_books to avoid duplicating profile iteration logic
+        strategies_by_instrument: dict[str, list[PortfolioStrategy]] = {}
+        # Re-key by instrument from the flat list
+        for s in all_strategies:
+            strategies_by_instrument.setdefault(s.instrument, []).append(s)
+        books = build_all_books(strategies_by_instrument)
+        for pid, book in books.items():
+            print_trading_book(book, ACCOUNT_PROFILES[pid])
 
         if args.summary and books:
             print(f"\n{'=' * 70}")

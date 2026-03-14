@@ -91,9 +91,10 @@ class TestDeduplicateSessions:
 
 
 class TestRankStrategies:
-    def test_ranks_by_sharpe_dd_ratio(self):
-        s1 = _make_strategy(sharpe_ratio=1.0, max_drawdown_r=4.0, strategy_id="s1")
-        s2 = _make_strategy(sharpe_ratio=2.0, max_drawdown_r=4.0, strategy_id="s2")
+    def test_ranks_by_expr_dd_ratio(self):
+        """Higher ExpR/DD ratio ranks first (project rule: sort by ExpR, never Sharpe)."""
+        s1 = _make_strategy(expectancy_r=0.10, max_drawdown_r=4.0, strategy_id="s1")
+        s2 = _make_strategy(expectancy_r=0.30, max_drawdown_r=4.0, strategy_id="s2")
         ranked = _rank_strategies([s1, s2], split_factor=1.0)
         assert ranked[0].strategy.strategy_id == "s2"
 
