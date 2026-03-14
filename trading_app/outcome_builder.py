@@ -20,7 +20,7 @@ from pipeline.log import get_logger
 logger = get_logger(__name__)
 
 # Force unbuffered stdout
-sys.stdout.reconfigure(line_buffering=True)
+sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]
 
 import duckdb
 import numpy as np
@@ -232,7 +232,7 @@ def _compute_outcomes_all_rr(
     }
 
     # Time-stop threshold for this session
-    ts_threshold = EARLY_EXIT_MINUTES.get(orb_label)
+    ts_threshold = EARLY_EXIT_MINUTES.get(orb_label) if orb_label is not None else None
 
     if not signal.triggered:
         return [dict(null_result) for _ in rr_targets]
@@ -269,7 +269,7 @@ def _compute_outcomes_all_rr(
     # Pre-slice post-entry bars ONCE
     post_entry = bars_df[
         (bars_df["ts_utc"] > pd.Timestamp(entry_ts)) & (bars_df["ts_utc"] < pd.Timestamp(trading_day_end))
-    ].sort_values("ts_utc")
+    ].sort_values(by="ts_utc")  # type: ignore[call-overload]
 
     # Pre-compute shared numpy arrays from post-entry (same for all RR)
     has_post = not post_entry.empty
@@ -445,7 +445,7 @@ def compute_single_outcome(
         "ts_exit_ts": None,
     }
 
-    ts_threshold = EARLY_EXIT_MINUTES.get(orb_label)
+    ts_threshold = EARLY_EXIT_MINUTES.get(orb_label) if orb_label is not None else None
 
     # Detect entry: E2 uses break-touch, E1/E3 use confirm bars
     if entry_model == "E2":
@@ -476,6 +476,7 @@ def compute_single_outcome(
     entry_price = signal.entry_price
     stop_price = signal.stop_price
     entry_ts = signal.entry_ts
+    assert entry_price is not None and stop_price is not None and entry_ts is not None
     risk_points = abs(entry_price - stop_price)
 
     if risk_points <= 0:
@@ -522,7 +523,7 @@ def compute_single_outcome(
     # Scan bars forward from entry to determine outcome
     post_entry = bars_df[
         (bars_df["ts_utc"] > pd.Timestamp(entry_ts)) & (bars_df["ts_utc"] < pd.Timestamp(trading_day_end))
-    ].sort_values("ts_utc")
+    ].sort_values(by="ts_utc")  # type: ignore[call-overload]
 
     if post_entry.empty:
         result["outcome"] = "scratch"
@@ -534,8 +535,8 @@ def compute_single_outcome(
             result["ts_exit_ts"] = result.get("exit_ts")
         return result
 
-    highs = post_entry["high"].values
-    lows = post_entry["low"].values
+    highs = post_entry["high"].to_numpy(dtype=float)
+    lows = post_entry["low"].to_numpy(dtype=float)
 
     if break_dir == "long":
         hit_target = highs >= target_price
@@ -721,7 +722,7 @@ def build_outcomes(
         ).fetchdf()
         if not all_bars_df.empty:
             all_bars_df["ts_utc"] = pd.to_datetime(all_bars_df["ts_utc"], utc=True)
-        all_ts = all_bars_df["ts_utc"].values  # numpy datetime64 array for searchsorted
+        all_ts = all_bars_df["ts_utc"].to_numpy(dtype="datetime64[ns]")  # tz-naive UTC ns for searchsorted
         logger.info(f"  Loaded {len(all_bars_df):,} bars into memory")
 
         # Pre-load already-computed days for checkpoint/resume
@@ -891,9 +892,9 @@ def build_outcomes(
 
             # Batch insert all outcomes for this trading day
             if day_batch and not dry_run:
-                batch_df = pd.DataFrame(  # noqa: F841 — used by DuckDB SQL below
+                batch_df = pd.DataFrame(  # noqa: F841
                     day_batch,
-                    columns=[
+                    columns=[  # type: ignore[arg-type]
                         "trading_day",
                         "symbol",
                         "orb_label",

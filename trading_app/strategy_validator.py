@@ -46,7 +46,7 @@ from trading_app.strategy_discovery import parse_dst_regime
 from trading_app.walkforward import append_walkforward_result
 
 # Force unbuffered stdout
-sys.stdout.reconfigure(line_buffering=True)
+sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]
 
 
 # =========================================================================
@@ -851,7 +851,7 @@ def run_validation(
                 future_to_sid = {}
                 for cand in wf_candidates:
                     kwargs = _build_worker_kwargs(cand)
-                    future = executor.submit(_walkforward_worker, **kwargs)
+                    future = executor.submit(_walkforward_worker, **kwargs)  # type: ignore[arg-type]
                     future_to_sid[future] = kwargs["strategy_id"]
 
                 for future in as_completed(future_to_sid):
@@ -874,7 +874,7 @@ def run_validation(
             logger.info(f"Running walkforward serially for {len(wf_candidates)} strategies...")
             for cand in wf_candidates:
                 kwargs = _build_worker_kwargs(cand)
-                result = _walkforward_worker(**kwargs)
+                result = _walkforward_worker(**kwargs)  # type: ignore[arg-type]
                 wf_results_map[kwargs["strategy_id"]] = result
                 total_wf_duration += result.get("wf_duration_s", 0)
 
