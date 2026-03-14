@@ -10,6 +10,8 @@ Phases:
   3. Yearly robustness (positive in ALL years; DORMANT regime waivers available)
   4. Stress test (ExpR > 0 at +50% costs)
   4b. Walk-forward OOS validation (anchored expanding, 6m test windows)
+  4c. Deflated Sharpe / DSR check (informational only — not a hard gate)
+  4d. False Strategy Theorem hurdle (informational only — not a hard gate)
   5. Sharpe ratio (optional quality filter)
   6. Max drawdown (optional risk filter)
 
