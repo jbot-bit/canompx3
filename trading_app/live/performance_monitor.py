@@ -96,8 +96,8 @@ class PerformanceMonitor:
                          record.entry_price, record.exit_price, record.actual_r,
                          record.expected_r, record.slippage_pts, record.timestamp],
                     )
-            except duckdb.Error as e:
-                log.error("Trade journal write failed for %s: %s", record.strategy_id, e)
+            except (duckdb.Error, OSError) as e:
+                log.error("Trade journal write failed for %s: %s — record lost", record.strategy_id, e)
         monitor = self._monitors.get(record.strategy_id)
         if monitor and monitor.update(record.actual_r):
             msg = (
