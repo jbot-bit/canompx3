@@ -1,9 +1,9 @@
-## Iteration: 45
-## Target: trading_app/execution_engine.py:410-412
-## Finding: ARMED/CONFIRMING trades silently discarded at session_end — no log entry, invisible to diagnostics (DF-02)
-## Blast Radius: 1 file (execution_engine.py); 0 callers affected — pure logging addition
+## Iteration: 46
+## Target: trading_app/outcome_builder.py:22
+## Finding: Dead `PROJECT_ROOT` assignment — assigned but never referenced anywhere in the file or imported by any caller. Same orphan-risk pattern fixed in rolling_portfolio.py (iter 43, RP1).
+## Blast Radius: 1 file (outcome_builder.py). No callers import PROJECT_ROOT from this module. Confirmed with grep across trading_app/, pipeline/, scripts/, tests/.
 ## Invariants:
-1. No TradeEvent emitted for ARMED/CONFIRMING (they never entered — correct behavior preserved)
-2. Trade state set to EXITED and appended to completed_trades — unchanged
-3. 43 execution engine tests must continue to pass
-## Diff estimate: 5 lines added (logger.debug call)
+1. All imports from outcome_builder (CONFIRM_BARS_OPTIONS, RR_TARGETS, compute_single_outcome) remain unchanged.
+2. `Path` import stays — used by function signatures and GOLD_DB_PATH.
+3. Zero behaviour change — removal of an unreferenced module-level assignment.
+## Diff estimate: 1 line deleted
