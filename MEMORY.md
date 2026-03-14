@@ -29,5 +29,5 @@
 
 ## Workspace setup
 
-- Codex should use the existing Claude-style workspace directly via `CLAUDE.md` and `.claude/`.
-- Avoid adding parallel repo-local `CODEX.md` or `.codex/` mirror layers unless explicitly requested.
+- `CLAUDE.md` and `.claude/` remain the canonical shared agent/rule/command layer.
+- A separate `CODEX.md` and `.codex/` layer is acceptable for Codex-specific routing as long as it stays parallel, minimal, and links directly to the Claude files instead of mirroring them.
