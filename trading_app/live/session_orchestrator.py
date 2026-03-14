@@ -633,7 +633,7 @@ class SessionOrchestrator:
         if journal_trade_id:
             # Compute dollar P&L for prop firm accounting
             risk_pts = event.risk_points or strategy.median_risk_points or 0.0
-            pnl_dollars = actual_r * risk_pts * self.cost_spec.multiplier * event.contracts if risk_pts else None
+            pnl_dollars = actual_r * risk_pts * self.cost_spec.point_value * event.contracts if risk_pts else None
             self.journal.record_exit(
                 trade_id=journal_trade_id,
                 engine_exit=event.price,
@@ -994,6 +994,7 @@ class SessionOrchestrator:
                 exit_fill_price=exit_fill,
                 entry_slippage=closed_rec.entry_slippage if closed_rec else None,
                 journal_trade_id=exit_jtid,
+                order_id_exit=order_id,
             )
             self._write_signal_record(
                 {
