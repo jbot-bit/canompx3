@@ -240,25 +240,4 @@ class TestInitDb:
         assert "bars_5m" in tables
         assert "daily_features" in tables
 
-    def test_creates_pm_trade_log_table(self, tmp_path):
-        db_path = tmp_path / "test.db"
-        init_db(db_path, force=False)
-
-        con = duckdb.connect(str(db_path))
-        tables = [
-            t[0]
-            for t in con.execute(
-                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
-            ).fetchall()
-        ]
-        cols = {
-            c[0]
-            for c in con.execute(
-                "SELECT column_name FROM information_schema.columns WHERE table_name='pm_trade_log'"
-            ).fetchall()
-        }
-        con.close()
-
-        assert "pm_trade_log" in tables
-        assert {"strategy_id", "trading_day", "direction", "entry_price",
-                "exit_price", "actual_r", "expected_r", "slippage_pts", "recorded_at"} <= cols
+    # pm_trade_log removed — trade persistence moved to TradeJournal (live_journal.db)
