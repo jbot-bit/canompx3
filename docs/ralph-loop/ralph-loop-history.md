@@ -5,6 +5,18 @@
 
 ---
 
+## Iteration 94 — 2026-03-16
+- Phase: fix
+- Classification: [mechanical]
+- Target: scripts/tools/gen_playbook.py:27 (SESSION_ORDER)
+- Finding: GP-94 — EUROPE_FLOW session missing from SESSION_ORDER. SESSION_CATALOG has 12 sessions but SESSION_ORDER only listed 11 (gap between SINGAPORE_OPEN and LONDON_METALS). Any EUROPE_FLOW validated strategies would be silently omitted from MARKET_PLAYBOOK.md.
+- Action: Added EUROPE_FLOW tuple ("EUROPE_FLOW", "17:00", "18:00", "London open 7:00/9:00 AM London") to SESSION_ORDER between SINGAPORE_OPEN and LONDON_METALS. Coverage now matches SESSION_CATALOG exactly.
+- Blast radius: 1 file (gen_playbook.py only — standalone script, no importers)
+- Verification: PASS (72 drift checks, behavioral audit 6/6, ruff clean, SESSION_ORDER == SESSION_CATALOG)
+- Commit: 69ac9ac
+
+---
+
 ## Iteration 88 — 2026-03-15
 - Phase: fix
 - Classification: [mechanical]

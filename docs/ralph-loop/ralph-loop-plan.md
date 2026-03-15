@@ -1,7 +1,7 @@
-## Iteration: 93
-## Target: scripts/tools/sensitivity_analysis.py:40
-## Finding: RR_STEPS = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0] duplicates canonical RR_TARGETS from outcome_builder.py — canonical violation
+## Iteration: 94
+## Target: scripts/tools/gen_playbook.py:18-30 (SESSION_ORDER)
+## Finding: EUROPE_FLOW session missing from SESSION_ORDER — any EUROPE_FLOW validated strategies silently omitted from MARKET_PLAYBOOK.md
 ## Classification: [mechanical]
-## Blast Radius: 1 file (standalone script, no importers, no callers)
-## Invariants: RR sweep ladder stays identical to outcome_builder grid; no logic change; CB_STEPS and G_LADDER unchanged
-## Diff estimate: 3 lines (1 import added, 1 assignment replaced, 1 comment updated)
+## Blast Radius: 1 file (gen_playbook.py only — standalone script, no importers)
+## Invariants: [1] SESSION_ORDER display order must match Quick Reference table header; [2] INSTRUMENTS assert must stay; [3] tuple format (session_name, brisbane_winter, brisbane_summer, event_label) preserved
+## Diff estimate: 1 line (add EUROPE_FLOW tuple to SESSION_ORDER between SINGAPORE_OPEN and LONDON_METALS)
