@@ -5,6 +5,17 @@
 
 ---
 
+## Iteration 78 — 2026-03-15
+- Phase: fix
+- Classification: [judgment]
+- Target: audit_integrity.py (CLEAN) + parallel_rebuild.py (CLEAN) + build_outcomes_fast.py (FIX)
+- Finding: BOF-01 — `DB_PATH = Path(r"C:\db\gold.db")` hardcoded scratch path. Evaded drift check #62 because regex only matches forward slashes. Fixed to use `GOLD_DB_PATH`.
+- Action: Imported GOLD_DB_PATH; replaced hardcoded path. Noted drift check #62 regex gap for future fix.
+- Blast radius: 1 file (build_outcomes_fast.py)
+- Verification: PASS (72 drift checks, ruff clean)
+
+---
+
 ## Iteration 77 — 2026-03-15
 - Phase: fix
 - Classification: [mechanical]
