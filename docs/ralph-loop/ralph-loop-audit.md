@@ -3,42 +3,48 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 49
+## Last iteration: 50
 
-## RALPH AUDIT — Iteration 49 (strategy_fitness.py)
-## Date: 2026-03-14
+## RALPH AUDIT — Iteration 50 (execution_engine.py)
+## Date: 2026-03-15
 ## Infrastructure Gates: 4/4 PASS
 
 | Gate | Result | Detail |
 |------|--------|--------|
 | `check_drift.py` | PASS | 72 checks passed, 0 skipped, 6 advisory |
 | `audit_behavioral.py` | PASS | All 6 checks clean |
-| `pytest test_strategy_fitness.py` | PASS | 31 tests, no failures |
-| `ruff check` | PASS | All checks passed |
+| `pytest test_execution_engine.py` | PASS | 43 tests, no failures |
+| `ruff check` | 2 pre-existing I001 in prop_portfolio.py + prop_profiles.py (out of scope) |
 
 ---
 
 ## Files Audited This Iteration
 
-### strategy_fitness.py — 0 findings, audit-only
+### execution_engine.py — 1 HIGH finding, FIXED
 
-#### Seven Sins scan — CLEAN
+#### Seven Sins scan
 
-- **Silent failure**: CLEAN. `params.get("expectancy_r", 0.0) or 0.0` pattern at lines 464/576 is intentional display-layer defaulting on validated_setups rows. No bare except. No silent pass. Exception handlers at lines 751 and 898 log + count skipped; do not report success.
-- **Fail-open**: CLEAN. Unknown `filter_type` returns empty outcomes (lines 339-341 and 486-489). Classification requires ALL 4 conditions for FIT. Exception in portfolio loop logs + skips, never reports false success.
-- **Look-ahead bias**: CLEAN. `end_date=as_of_date` explicitly passed to `_load_strategy_outcomes` (line 592). Rolling window computed from `rolling_start` forward (lines 509/604). Cache path also applies `as_of_date` filter (line 481).
-- **Cost illusion**: CLEAN. `get_cost_spec` from `pipeline.cost_model` used in both computation paths (lines 503-506, 598-601).
-- **Canonical violation**: CLEAN. `GOLD_DB_PATH` from `pipeline.paths`. `ORB_LABELS` from `pipeline.init_db`. `ALL_FILTERS`, `VolumeFilter`, `apply_tight_stop`, `get_excluded_sessions` from `trading_app.config`. `DST_AFFECTED_SESSIONS`, `is_winter_for_session` from `pipeline.dst`. No hardcoded instrument lists, session names, or magic numbers.
-- **Orphan risk**: CLEAN. All imports used. Lazy imports inside functions (`calendar`, `get_cost_spec`, `EXCLUDED_FROM_FITNESS`) are intentional deferred loading.
-- **Volatile data**: CLEAN. No hardcoded check counts, strategy counts, or session counts.
+- **Silent failure**: CLEAN. No bare except. No silent pass. Logging present at all key rejection paths.
+- **Fail-open**: FIXED (see below). Unknown filter_type in `_arm_strategies` previously fell through and armed the strategy — now logs error and skips (fail-closed).
+- **Look-ahead bias**: CLEAN. ORB break detected from `bar["close"]` after ORB window ends. No future data used. IB break resolved from live bars only.
+- **Cost illusion**: CLEAN. `get_session_cost_spec` from `pipeline.cost_model` used throughout all entry and exit paths. `CostSpec` passed in at construction.
+- **Canonical violation**: CLEAN. `ALL_FILTERS` from `trading_app.config`. `DYNAMIC_ORB_RESOLVERS` from `pipeline.dst`. `IB_DURATION_MINUTES`, `EARLY_EXIT_MINUTES`, `HOLD_HOURS`, `SESSION_EXIT_MODE` all from `trading_app.config`. No hardcoded instrument lists, session names, or magic numbers.
+- **Orphan risk**: CLEAN. All imports used. Lazy imports (`ZoneInfo`, `get_cost_spec`, `E2_SLIPPAGE_TICKS`, `MIN_SCORE_THRESHOLD`) are intentional deferred loading within methods.
+- **Volatile data**: CLEAN. No hardcoded strategy counts, session counts, or check counts.
 
-#### Low-severity observation (ACCEPTABLE, not a finding)
+#### Finding — FIXED
 
-`diagnose_portfolio_decay` multi-instrument branch (lines 976-981) builds SQL WHERE fragments by f-string from `EXCLUDED_FROM_FITNESS` config values. Values are config-controlled (not user input) — SQL injection is theoretical-only. Marked ACCEPTABLE.
+**ID**: EE-01
+**Severity**: HIGH
+**Location**: `trading_app/execution_engine.py:457-465` (`_arm_strategies`)
+**Sin**: Fail-open
+**Description**: `ALL_FILTERS.get(strategy.filter_type)` returning `None` (unknown filter) silently fell through and armed the strategy. Every other caller of `ALL_FILTERS.get()` in `portfolio.py:797`, `rolling_portfolio.py:334`, `strategy_fitness.py:339` returns/continues on `None`. Execution engine was the lone outlier.
+**Fix**: Inverted condition — `if filt is None:` now `logger.error + continue` before the filter application block.
+**Commit**: 100e9da
 
 ---
 
-## Deferred Findings — Status After Iter 49
+## Deferred Findings — Status After Iter 50
 
 ### STILL DEFERRED (carried forward)
 - **DF-04** — `rolling_portfolio.py:304` dormant `orb_minutes=5` in rolling DOW stats — structural multi-file fix, blast radius >5 files
@@ -46,10 +52,10 @@
 ---
 
 ## Summary
-- strategy_fitness.py: 0 findings — clean audit
+- execution_engine.py: 1 HIGH finding — FIXED
 - Infrastructure Gates: 4/4 PASS
 
 **Next iteration targets:**
-- `trading_app/execution_engine.py` — not yet audited this cycle
 - `trading_app/live_config.py` — not yet audited this cycle
 - `trading_app/order_router.py` — not yet audited this cycle
+- `trading_app/paper_trader.py` — not yet audited this cycle
