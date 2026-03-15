@@ -5,6 +5,17 @@
 
 ---
 
+## Iteration 75 — 2026-03-15
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/ml/ subpackage — config.py (CLEAN), meta_label.py (FIX), features.py (CLEAN)
+- Finding: ML-01 — `meta_label.py:1103` connection leak. `_con.close()` not in `finally` block during `--sweep-rr` query path. Same pattern as HC-01.
+- Action: Wrapped query in try/finally block.
+- Blast radius: 1 file (meta_label.py), CLI sweep path only
+- Verification: PASS (72 drift checks, ruff clean)
+
+---
+
 ## Iteration 74 — 2026-03-15
 - Phase: fix
 - Classification: [mechanical]
