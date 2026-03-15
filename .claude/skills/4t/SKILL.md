@@ -1,3 +1,8 @@
+---
+name: 4t
+description: Orient, design, detail, and validate a feature or change
+---
+
 Orient, design, detail, and validate a feature or change: $ARGUMENTS
 
 Use when: user says "4t", "plan this", "design this", "how should we build", "feature planning", "approach this", "think through"
