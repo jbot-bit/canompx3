@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 54
+## Last iteration: 56
 
-## RALPH AUDIT — Iteration 54 (pbo.py + nested/builder.py + nested/schema.py)
+## RALPH AUDIT — Iteration 56 (nested/compare.py + scripts/tools/build_edge_families.py)
 ## Date: 2026-03-15
 ## Infrastructure Gates: 4/4 PASS
 
@@ -13,56 +13,52 @@
 |------|--------|--------|
 | `check_drift.py` | PASS | 72 checks passed, 0 skipped, 6 advisory |
 | `audit_behavioral.py` | PASS | All 6 checks clean |
-| `pytest test_nested/ + test_pbo.py` | PASS | 73 tests, no failures |
+| `pytest test_nested/ + test_edge_families.py` | PASS | 85 tests, no failures |
 | `ruff check` | 2 pre-existing I001 in prop_portfolio.py + prop_profiles.py (out of scope) |
 
 ---
 
 ## Files Audited This Iteration
 
-### pbo.py — CLEAN
+### nested/compare.py — CLEAN
 
 #### Seven Sins scan
 
-- **Silent failure**: CLEAN. No bare excepts. `defaultdict(float)` handles missing keys correctly. Returns `None` pbo on insufficient data — conservative, not hiding errors.
-- **Fail-open**: CLEAN. All edge cases return `None` pbo (conservative — signals "don't use" rather than false confidence).
-- **Look-ahead bias**: CLEAN. Pure statistical aggregation over historical trade days; no future data.
-- **Cost illusion**: CLEAN. No PnL computation — pure statistics on pre-computed pnl_r values.
-- **Canonical violation**: CLEAN. Imports `ALL_FILTERS` from `trading_app.config` dynamically. No hardcoded instrument or strategy lists.
-- **Orphan risk**: CLEAN. `compute_pbo` and `compute_family_pbo` used by `scripts/tools/build_edge_families.py`. `compute_pbo` also tested in `tests/test_trading_app/test_pbo.py`.
+- **Silent failure**: CLEAN. No exception swallowing. DuckDB errors propagate. Read-only connection.
+- **Fail-open**: CLEAN. Reporting-only tool. `continue` on missing `nested_strategies` table (conservative).
+- **Look-ahead bias**: CLEAN. Reads from already-written strategies; post-hoc comparison only.
+- **Cost illusion**: CLEAN. No PnL computation — reads pre-computed `sharpe_ratio` and `expectancy_r`.
+- **Canonical violation**: CLEAN. `ORB_LABELS` from `pipeline.init_db`; `GOLD_DB_PATH` from `pipeline.paths`. Hardcoded `orb_minutes_list = [15, 30]` at line 68 is a function parameter default for the research experiment — ACCEPTABLE (intentional per-experiment configuration, not a production canonical list).
+- **Orphan risk**: CLEAN. Imported and tested in `test_nested/test_validator_compare.py`.
 - **Volatile data**: CLEAN. No hardcoded counts.
 
-Notes:
-- `_get_eligible_days` uses `iterrows()` — documented as build-time only (not performance-critical). Drift check #77 targets `features.py` only; drift check #2 targets ingest scripts only. Not a violation.
-- `_get_eligible_days` queries `daily_features` without `orb_minutes` filter — returns 3x rows (one per aperture) but `eligible_days` is a set of unique `trading_day` values so deduplication handles it. Inefficient but correct.
+#### Observations (all ACCEPTABLE)
 
-### nested/builder.py — CLEAN
+- **Line 68**: `orb_minutes_list = [15, 30]` — function default for nested experiment apertures. ACCEPTABLE: intentional per-experiment heuristic, not a canonical list.
+- **Lines 129, 134**: `(x or 0)` after outer `is not None` guard — redundant but harmless (0.0 and 0 are equivalent for float arithmetic). ACCEPTABLE: style, no correctness impact.
+- **Line 231**: `(b['expectancy_r'] or 0)` in display-only print — masks None as 0.0000 silently. ACCEPTABLE: reporting tool only, no correctness impact on any production path.
+
+### scripts/tools/build_edge_families.py — CLEAN
 
 #### Seven Sins scan
 
-- **Silent failure**: CLEAN. Guards for `bars_1m_df.empty`, `break_dir is None`, `orb_high is None` are legitimate — no ORB = no outcome to compute. Not hiding errors.
-- **Fail-open**: CLEAN. `INSERT OR REPLACE` is correct idempotent pattern. `risk_points <= 0` guard prevents division-by-zero and inserts NULL outcome rows (conservative).
-- **Look-ahead bias**: CLEAN. Only post-ORB bars used for outcome computation. `break_ts` is from `daily_features` (pre-computed ORB close). No `double_break` or future data references.
-- **Cost illusion**: CLEAN. `get_cost_spec(instrument)` from `pipeline.cost_model` used. `pnl_points_to_r` and `to_r_multiple` correctly applied.
-- **Canonical violation**: CLEAN. `for em in ENTRY_MODELS` (line 300) — canonical import from `trading_app.config`. `CONFIRM_BARS_OPTIONS, RR_TARGETS` imported from `outcome_builder`. `ORB_LABELS` from `pipeline.init_db`. `GOLD_DB_PATH` from `pipeline.paths`. Lines 301/348 `if em == "E2"` / `if em in ("E2", "E3") and cb > 1` are behavioral guards (CB1-only for stop-market/retrace entry types), not canonical lists — this pattern mirrors outcome_builder.
-- **Orphan risk**: CLEAN. Used by `trading_app/nested/audit_outcomes.py` (imports `_verify_e3_sub_bar_fill`, `resample_to_5m`). Tests in `test_nested/test_builder.py` and `test_nested/test_resample.py`.
-- **Volatile data**: CLEAN. No hardcoded counts.
+- **Silent failure**: CLEAN. No exception swallowing. DuckDB errors propagate naturally. `fallback_count` warning is printed, not hidden.
+- **Fail-open**: CLEAN. Fail gates before `con.commit()` — mega-family check (>100 members) and singleton rate check (>70% singletons) raise `RuntimeError` to abort before commit.
+- **Look-ahead bias**: CLEAN. Groups already-validated strategies by trade-day hash; no future data.
+- **Cost illusion**: CLEAN. No PnL computation — reads pre-computed `expectancy_r`/`sharpe_ann` from `validated_setups`.
+- **Canonical violation**: CLEAN. `ACTIVE_ORB_INSTRUMENTS` from `pipeline.asset_configs`; `GOLD_DB_PATH` from `pipeline.paths`; `CORE_MIN_SAMPLES`/`REGIME_MIN_SAMPLES` from `trading_app.config`. Robustness thresholds have `@research-source` + `@revalidated-for` annotations at lines 32-37.
+- **Orphan risk**: CLEAN. Tested in `tests/test_trading_app/test_edge_families.py` (22 tests).
+- **Volatile data**: CLEAN. No hardcoded counts. Classification thresholds imported from config.
 
-### nested/schema.py — CLEAN
+#### Specific checks
 
-#### Seven Sins scan
-
-- **Silent failure**: CLEAN. DuckDB errors propagate naturally. `verify_nested_schema` explicitly reports violations.
-- **Fail-open**: CLEAN. Schema creation is idempotent (CREATE TABLE IF NOT EXISTS). Force mode explicitly warns before dropping.
-- **Look-ahead bias**: N/A — schema definitions only.
-- **Cost illusion**: N/A — schema definitions only.
-- **Canonical violation**: CLEAN. `expected_tables` list in `verify_nested_schema` is self-referential (verifies what `init_nested_schema` creates) — not a canonical instrument/session list. `GOLD_DB_PATH` from `pipeline.paths`.
-- **Orphan risk**: CLEAN. Used by `builder.py`, `discovery.py`, `validator.py` in nested subpackage. Tests in `test_nested/test_schema.py` and `test_nested/test_discovery.py`.
-- **Volatile data**: CLEAN. No hardcoded counts.
+- `cv_expr = float("inf")` when `mean_expr <= 0` — correct: negative-mean strategies fail the WHITELIST CV filter (`inf > 0.5`). No silent pass.
+- DELETE+INSERT pattern: idempotent — clears families for instrument before rebuilding.
+- PBO computation (lines 363-384): non-critical path; `pbo_result.get("pbo")` returns None if unavailable — UPDATE only fires when value is present. No silent failure.
 
 ---
 
-## Deferred Findings — Status After Iter 54
+## Deferred Findings — Status After Iter 56
 
 ### STILL DEFERRED (carried forward)
 - **DF-04** — `rolling_portfolio.py:304` dormant `orb_minutes=5` in rolling DOW stats — structural multi-file fix, blast radius >5 files
@@ -70,16 +66,15 @@ Notes:
 ---
 
 ## Summary
-- pbo.py: CLEAN — 0 findings
-- nested/builder.py: CLEAN — 0 findings
-- nested/schema.py: CLEAN — 0 findings
+- nested/compare.py: CLEAN — 0 actionable findings (3 ACCEPTABLE observations)
+- scripts/tools/build_edge_families.py: CLEAN — 0 findings
 - Infrastructure Gates: 4/4 PASS
 - Action: audit-only
 
 **Next iteration targets:**
-- `trading_app/nested/discovery.py` — not yet audited this cycle
-- `trading_app/nested/validator.py` — not yet audited this cycle
-- `trading_app/nested/audit_outcomes.py` — not yet audited this cycle
+- `pipeline/check_drift.py` — not yet audited this cycle (large file, 3539 lines; focus on the check definitions themselves, not the full file)
+- `scripts/tools/generate_trade_sheet.py` — already audited iter 18, but check if any new patterns since then
+- `trading_app/live/data_feed.py` — not yet in Files Fully Scanned
 
 ---
 
@@ -120,6 +115,11 @@ Notes:
 - `trading_app/pbo.py` — iter 54 (CLEAN)
 - `trading_app/nested/builder.py` — iter 54 (CLEAN)
 - `trading_app/nested/schema.py` — iter 54 (CLEAN)
+- `trading_app/nested/discovery.py` — iter 55 (1 fix: ND-01 SKIP_ENTRY_MODELS guard)
+- `trading_app/nested/validator.py` — iter 55 (CLEAN)
+- `trading_app/nested/audit_outcomes.py` — iter 55 (CLEAN)
+- `trading_app/nested/compare.py` — iter 56 (CLEAN, 3 ACCEPTABLE observations)
+- `scripts/tools/build_edge_families.py` — iter 56 (CLEAN)
 - `pipeline/build_daily_features.py` — iter 36 (1 fix: canonical extraction)
 - `pipeline/ingest_dbn.py` — iter 1 (triaged via M2.5)
 - `pipeline/build_bars_5m.py` — iter 1 (triaged via M2.5)
