@@ -602,7 +602,7 @@ def staleness_engine(con: duckdb.DuckDBPyConnection, instrument: str) -> dict:
         try:
             row = con.execute("SELECT MAX(updated_at::DATE) FROM family_rr_locks").fetchone()
             result["family_rr_locks"] = row[0] if row and row[0] is not None else None
-        except Exception:
+        except duckdb.CatalogException:
             result["family_rr_locks"] = None
 
     # --- rebuild_manifest (last completed rebuild) ---
