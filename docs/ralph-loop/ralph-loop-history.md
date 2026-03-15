@@ -5,6 +5,17 @@
 
 ---
 
+## Iteration 77 — 2026-03-15
+- Phase: fix
+- Classification: [mechanical]
+- Target: Codebase sweep for hardcoded `"gold.db"` paths
+- Finding: A15-01 — `scripts/tools/audit_15m30m.py:9` uses `duckdb.connect("gold.db")` instead of GOLD_DB_PATH. Last production file with this violation (20 remaining are `scripts/tmp_*` — acceptable).
+- Action: Added sys.path setup, imported GOLD_DB_PATH, replaced hardcoded path.
+- Blast radius: 1 file (audit_15m30m.py)
+- Verification: PASS (72 drift checks, ruff clean)
+
+---
+
 ## Iteration 76 — 2026-03-15
 - Phase: fix
 - Classification: [judgment]
