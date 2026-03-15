@@ -8,7 +8,7 @@ disable-model-invocation: true
 ---
 # Claude Code Official Standards Reference
 
-Distilled from [code.claude.com](https://code.claude.com/docs) (fetched 2026-03-15).
+Distilled from [Anthropic Claude Code docs](https://docs.anthropic.com/en/docs/claude-code) (fetched 2026-03-15).
 
 ## Feature Taxonomy — Where Does This Belong?
 
@@ -22,7 +22,7 @@ Distilled from [code.claude.com](https://code.claude.com/docs) (fetched 2026-03-
 | **Subagents** (`.claude/agents/`) | When spawned | Isolated | Context isolation, parallel work, specialized workers |
 | **Hooks** | On trigger | Zero | Deterministic automation (lint, test, guard) |
 
-Source: [Extend Claude Code](https://code.claude.com/docs/en/features-overview)
+Source: [Extend Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview)
 
 ## Decision Framework
 
@@ -38,15 +38,15 @@ Source: [Extend Claude Code](https://code.claude.com/docs/en/features-overview)
 
 **Put it in a subagent** if it needs isolated context, specific tools/model, or parallel execution.
 
-Source: [CLAUDE.md vs Rules vs Skills](https://code.claude.com/docs/en/features-overview#compare-similar-features)
+Source: [Memory](https://docs.anthropic.com/en/docs/claude-code/memory) | [Skills](https://docs.anthropic.com/en/docs/claude-code/skills) | [Hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) | [Subagents](https://docs.anthropic.com/en/docs/claude-code/sub-agents)
 
 ## Context Budget
 
-- **CLAUDE.md**: Target <200 lines. For each line ask: "Would removing this cause mistakes?" If not, cut it. [Source](https://code.claude.com/docs/en/memory#write-effective-instructions)
-- **Rules**: Use `paths:` frontmatter to make conditional. Saves context for sessions that don't touch those files. [Source](https://code.claude.com/docs/en/memory#path-specific-rules)
-- **Skills**: Descriptions budget is ~2% of context window (16K chars fallback). Use `disable-model-invocation: true` for zero cost until manually invoked. [Source](https://code.claude.com/docs/en/skills#troubleshooting)
-- **MEMORY.md**: First 200 lines loaded at startup. Content past line 200 is silently dropped. [Source](https://code.claude.com/docs/en/memory#how-it-works)
-- **If Claude ignores a rule**: The file is probably too long and the rule is getting lost. [Source](https://code.claude.com/docs/en/best-practices#avoid-common-failure-patterns)
+- **CLAUDE.md**: Target <200 lines. For each line ask: "Would removing this cause mistakes?" If not, cut it. [Source](https://docs.anthropic.com/en/docs/claude-code/memory#write-effective-instructions)
+- **Rules**: Use `paths:` frontmatter to make conditional. Saves context for sessions that don't touch those files. [Source](https://docs.anthropic.com/en/docs/claude-code/memory#path-specific-rules)
+- **Skills**: Descriptions budget is ~2% of context window (16K chars fallback). Use `disable-model-invocation: true` for zero cost until manually invoked. [Source](https://docs.anthropic.com/en/docs/claude-code/skills#troubleshooting)
+- **MEMORY.md**: First 200 lines loaded at startup. Content past line 200 is silently dropped. [Source](https://docs.anthropic.com/en/docs/claude-code/memory#how-it-works)
+- **If Claude ignores a rule**: The file is probably too long and the rule is getting lost. [Source](https://docs.anthropic.com/en/docs/claude-code/best-practices#avoid-common-failure-patterns)
 
 ## Skill Authoring
 
@@ -63,7 +63,7 @@ Source: [CLAUDE.md vs Rules vs Skills](https://code.claude.com/docs/en/features-
 | `user-invocable` | `false` = hidden from `/` menu, Claude-only |
 | `model` | Model override for this skill |
 
-Source: [Skills frontmatter reference](https://code.claude.com/docs/en/skills#frontmatter-reference)
+Source: [Skills frontmatter reference](https://docs.anthropic.com/en/docs/claude-code/skills#frontmatter-reference)
 
 **Skill types:**
 - **Reference** (API conventions, style guides) → default, model-invocable
@@ -82,7 +82,7 @@ Source: [Skills frontmatter reference](https://code.claude.com/docs/en/skills#fr
 
 **Key fields:** `tools` (allowlist), `disallowedTools` (denylist), `model`, `memory` (user/project/local), `maxTurns`, `skills` (preload), `mcpServers` (scoped connections).
 
-Source: [Subagents docs](https://code.claude.com/docs/en/sub-agents)
+Source: [Subagents docs](https://docs.anthropic.com/en/docs/claude-code/sub-agents)
 
 ## Hook Patterns
 
@@ -93,7 +93,7 @@ Source: [Subagents docs](https://code.claude.com/docs/en/sub-agents)
 
 Exit code 2 = block action. Exit code 0 = allow. Zero context cost.
 
-Source: [Hooks reference](https://code.claude.com/docs/en/hooks)
+Source: [Hooks reference](https://docs.anthropic.com/en/docs/claude-code/hooks)
 
 ## What NOT to Put in CLAUDE.md
 
@@ -106,7 +106,7 @@ Source: [Hooks reference](https://code.claude.com/docs/en/hooks)
 | File-by-file descriptions of the codebase | Claude can explore |
 | Long explanations or tutorials | Not actionable instructions |
 
-Source: [Write effective instructions](https://code.claude.com/docs/en/memory#write-effective-instructions)
+Source: [Write effective instructions](https://docs.anthropic.com/en/docs/claude-code/memory#write-effective-instructions)
 
 ## Anti-Patterns
 
@@ -118,4 +118,4 @@ Source: [Write effective instructions](https://code.claude.com/docs/en/memory#wr
 | Trust-then-verify gap (no test, no proof) | Always provide verification |
 | Infinite exploration (reads hundreds of files) | Scope narrowly or use subagents |
 
-Source: [Best practices](https://code.claude.com/docs/en/best-practices#avoid-common-failure-patterns)
+Source: [Best practices](https://docs.anthropic.com/en/docs/claude-code/best-practices#avoid-common-failure-patterns)
