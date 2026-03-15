@@ -7,18 +7,6 @@
         "trading_app/mcp_server.py"
       ],
       "env": {}
-    },
-    "notebooklm": {
-      "type": "stdio",
-      "command": "notebooklm-mcp",
-      "args": [
-        "--config", "notebooklm-config.json",
-        "server",
-        "--transport", "stdio"
-      ],
-      "env": {
-        "PYTHONIOENCODING": "utf-8"
-      }
     }
   }
 }
