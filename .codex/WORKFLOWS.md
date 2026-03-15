@@ -34,7 +34,7 @@ Before proposing or implementing any non-trivial change:
 1. Check `docs/specs/` for an existing spec.
 2. If the task touches entry models, read `docs/prompts/ENTRY_MODEL_GUARDIAN.md`.
 3. If the task touches pipeline data flow or schema, read `docs/prompts/PIPELINE_DATA_GUARDIAN.md`.
-4. For broad design work, use the `/4t` logic in `.claude/commands/4t.md`.
+4. For broad design work, use the `/4t` logic in `.claude/skills/4t/SKILL.md`.
 
 ## Research And Data Routing
 

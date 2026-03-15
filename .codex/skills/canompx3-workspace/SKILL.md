@@ -28,7 +28,7 @@ Use this skill when Codex is operating in this repo and needs its own adapter la
 - Pipeline schema or joins: `.claude/rules/pipeline-patterns.md`, `.claude/rules/daily-features-joins.md`
 - Shared rules: `.claude/rules/`
 - Shared agents: `.claude/agents/`
-- Shared commands: `.claude/commands/`
+- Shared skills: `.claude/skills/`
 - Shared agent memory: `.claude/agent-memory/`
 - Shared plugin workflow: `plugins/ralph-wiggum/README.md`
 - DB or MCP work: `.claude/rules/mcp-usage.md`, `.mcp.json`
