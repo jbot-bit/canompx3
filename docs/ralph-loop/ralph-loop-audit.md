@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 75
+## Last iteration: 76
 
-## RALPH AUDIT — Iteration 75 (ML subpackage scan + 1 fix)
+## RALPH AUDIT — Iteration 76 (ML completion + scripts scan)
 ## Date: 2026-03-15
 ## Infrastructure Gates: 3/3 PASS
 
@@ -53,16 +53,16 @@
 ---
 
 ## Summary
-- ML subpackage: config.py (CLEAN), meta_label.py (ML-01 FIXED), features.py (CLEAN)
-- 1 fix, 0 new deferrals
+- ML completion: predict_live.py (CLEAN), evaluate.py (CLEAN), evaluate_validated.py (CLEAN), cpcv.py (CLEAN), importance.py (CLEAN)
+- scripts scan: rr_selection_analysis.py (RR-01 FIXED — 3 sins in 1 file)
+- 1 fix (3 sins), 0 new deferrals
 - Infrastructure Gates: 3/3 PASS
 - Action: fix (mechanical)
 
 **Next iteration targets:**
-- `trading_app/ml/predict_live.py` — live prediction, unscanned (587 lines)
-- `trading_app/ml/evaluate.py` — model evaluation, unscanned (363 lines)
-- `trading_app/ml/evaluate_validated.py` — validated evaluation, unscanned (238 lines)
-- `trading_app/ml/cpcv.py` — cross-validation, unscanned (172 lines)
+- Sweep `scripts/tools/` and `scripts/infra/` for remaining hardcoded `"gold.db"` paths
+- `scripts/tools/audit_integrity.py` — integrity audit, unscanned
+- `scripts/infra/parallel_rebuild.py` — rebuild orchestrator, unscanned
 
 ---
 
@@ -75,5 +75,5 @@
 - scripts/tools/ — 8 files (iters 18-72)
 - scripts/infra/ — 1 file (iter 72)
 - scripts/migrations/ — 1 file (iter 73)
-- **Total: 94 files fully scanned**
+- **Total: 100 files fully scanned**
 - See previous audit iterations for per-file detail
