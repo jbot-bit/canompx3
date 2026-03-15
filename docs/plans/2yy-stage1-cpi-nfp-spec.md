@@ -260,6 +260,38 @@ If the answer is "this is just another way of monetizing the same days," that co
 
 ---
 
+## Institutional Benchmark Check
+
+`2YY` is the primary first-pass research instrument because it is the cleaner small-size expression for this repo.
+
+But any result that looks promising must be checked against the institutional benchmark market:
+
+- `ZT` (2-Year Note futures)
+
+This is **not** permission to widen Stage 1 into a second full discovery program.
+It is a benchmark sanity check only.
+
+### Why this exists
+
+- `2YY` is the right first-pass product for your likely account size and deployability
+- `ZT` is the deeper benchmark market for 2-year U.S. rates exposure
+- if a supposed `2YY` effect has no structural analogue at all in `ZT`, that raises the risk that the result is thin-contract behavior rather than a durable macro effect
+
+### Required standard
+
+Before any `2YY` result is promoted beyond Stage 1, write a short benchmark note stating:
+
+- whether the same event family was inspected in `ZT`
+- whether the sign and broad follow-through character look directionally similar
+- whether any major divergence suggests `2YY`-specific noise or tradability risk
+
+This benchmark note can stay qualitative or lightly quantitative at first.
+It does not need a second full 12-variation scan.
+
+What matters is avoiding false confidence from a smaller product that may not represent the broader rates complex cleanly.
+
+---
+
 ## Kill Conditions
 
 Stop and mark the path `NO-GO` if any of these happen:
@@ -285,6 +317,9 @@ Stop and mark the path `NO-GO` if any of these happen:
 7. **Narrative over evidence**
    - the macro explanation sounds good but the actual event results are unstable, sign-flipping, or sample-fragile
 
+8. **Benchmark disconnect**
+   - the apparent `2YY` effect has no believable analogue in `ZT` and the divergence points to product-specific noise rather than a defensible mechanism
+
 ---
 
 ## Continuation Gate
@@ -297,6 +332,7 @@ Only continue to `5YY` or a broader rates program if at least one `2YY` event fa
 - no obvious dependence on a weak proxy bridge
 - enough event count to justify deeper validation
 - at least a plausible case for portfolio additivity versus the current ORB book
+- no major red flag from the `ZT` benchmark check
 
 If those conditions are not met, stop.
 

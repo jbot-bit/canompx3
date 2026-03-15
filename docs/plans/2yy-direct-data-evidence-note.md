@@ -17,6 +17,12 @@ This is the correct call based on the current evidence because:
 - the available historical depth appears long enough for monthly event research
 - there is no current evidence that a proxy is needed to answer the Stage-1 question
 
+At the same time, `2YY` should not be mistaken for the institutional benchmark market.
+The correct operating stance is:
+
+- use `2YY` as the primary first-pass research vehicle
+- use `ZT` as the benchmark sanity check for market-quality confirmation
+
 The first implementation task should therefore be:
 
 **prove the direct `2YY` pull works in this repo's normal data path**
@@ -97,6 +103,7 @@ So using a proxy at this stage would add explanation burden without a clear need
 - `2YY` has enough external and architectural support to justify a direct implementation attempt
 - the first implementation step should be a live vendor/data-path proof, not more planning
 - proxy use is not justified as the default route
+- any promising `2YY` effect should later be checked against `ZT` before it is trusted as a durable rates edge
 
 ### What it does not mean
 
@@ -127,6 +134,25 @@ Using a proxy now would increase narrative risk:
 - more ways to accidentally widen the mechanism
 
 That is bad process for the first pass.
+
+---
+
+## Why Not `ZT` First
+
+`ZT` is the institutional benchmark for 2-year U.S. rates exposure, but it is not the best first-pass research vehicle for this repo.
+
+Why not:
+
+- it is a larger contract and less naturally aligned with the small-size deployment question
+- it would immediately widen the research scope if treated as the co-primary discovery market
+- the first job is to find whether the mechanism exists in a realistically usable expression, not to run two parallel rates programs
+
+So the clean split is:
+
+- `2YY` first for discovery
+- `ZT` second as the benchmark cross-check
+
+That keeps the search narrow while still respecting institutional reality.
 
 ---
 
