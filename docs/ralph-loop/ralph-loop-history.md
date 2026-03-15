@@ -16,6 +16,17 @@
 
 ---
 
+## Iteration 50 — 2026-03-15
+- Phase: fix
+- Target: trading_app/execution_engine.py:457-465 (_arm_strategies)
+- Finding: Fail-open — unknown filter_type silently armed strategy instead of blocking
+- Action: Inverted condition to if filt is None: logger.error + continue (fail-closed). Matches portfolio.py, rolling_portfolio.py, strategy_fitness.py pattern.
+- Blast radius: 1 file
+- Verification: 43 tests PASS, drift 72/72 CLEAN
+- Commit: 100e9da
+
+---
+
 ## Iteration 1 — 2026-03-09
 - Phase: audit
 - Target: full codebase (trading_app/live/)
