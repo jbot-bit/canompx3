@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 81
+## Last iteration: 82
 
-## RALPH AUDIT — Iteration 81 (3 files scanned, 1 fix)
+## RALPH AUDIT — Iteration 82 (3 files scanned, 1 fix)
 ## Date: 2026-03-15
 ## Infrastructure Gates: 3/3 PASS
 
@@ -53,17 +53,17 @@
 ---
 
 ## Summary
-- hypothesis_test.py: HT-01 FIXED — duplicated DB path resolution logic (reimplemented `pipeline.paths._resolve_db_path()` instead of importing `GOLD_DB_PATH`)
-- explore.py: noted same pattern (`DEFAULT_DB = PROJECT_ROOT / "gold.db"`) — LOW priority
-- detect_volume_spikes.py: CLEAN (uses canonical `--db-path` with GOLD_DB_PATH default)
+- explore.py: EX-01 FIXED — `DEFAULT_DB = PROJECT_ROOT / "gold.db"` + duplicated env var logic
+- backfill_garch.py: CLEAN (con.close() is the only pattern, used after short query)
+- stress_test.py: noted same `DEFAULT_DB = PROJECT_ROOT / "gold.db"` pattern — next target
 - 1 fix, 0 new deferrals
 - Infrastructure Gates: 3/3 PASS
 - Action: fix (mechanical)
 
 **Next iteration targets:**
-- `scripts/tools/explore.py` — interactive explorer (has `DEFAULT_DB = PROJECT_ROOT / "gold.db"`)
-- `scripts/tools/backfill_garch.py` — GARCH backfill, unscanned
-- `scripts/tools/stress_test.py` — stress testing, unscanned
+- `scripts/tools/stress_test.py` — stress testing (has `DEFAULT_DB = PROJECT_ROOT / "gold.db"`)
+- `scripts/tools/coaching_digest.py` — coaching tool, unscanned
+- `scripts/tools/trading_coach.py` — AI coach, unscanned
 
 ---
 
