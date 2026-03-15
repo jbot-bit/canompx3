@@ -1,7 +1,7 @@
-## Iteration: 92
-## Target: scripts/tools/pinecone_snapshots.py:57-62
-## Finding: Hardcoded classification thresholds 100/30/99 — should reference CORE_MIN_SAMPLES/REGIME_MIN_SAMPLES from trading_app.config
+## Iteration: 93
+## Target: scripts/tools/sensitivity_analysis.py:40
+## Finding: RR_STEPS = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0] duplicates canonical RR_TARGETS from outcome_builder.py — canonical violation
 ## Classification: [mechanical]
-## Blast Radius: 2 callers (sync_pinecone.py imports generators, test_pinecone_snapshots.py), no behavior change (same values)
-## Invariants: SQL query logic unchanged; thresholds remain 100 and 30; output format identical
-## Diff estimate: 4 lines (1 import + 3 value replacements)
+## Blast Radius: 1 file (standalone script, no importers, no callers)
+## Invariants: RR sweep ladder stays identical to outcome_builder grid; no logic change; CB_STEPS and G_LADDER unchanged
+## Diff estimate: 3 lines (1 import added, 1 assignment replaced, 1 comment updated)
