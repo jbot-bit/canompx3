@@ -31,6 +31,7 @@ import duckdb
 
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.audit_log import get_previous_counts
+from pipeline.build_daily_features import VALID_ORB_MINUTES
 from pipeline.dst import SESSION_CATALOG
 from pipeline.init_db import ORB_LABELS
 from pipeline.paths import GOLD_DB_PATH
@@ -48,7 +49,7 @@ EXPECTED_DAILY_FEATURES_COLUMNS = _STATIC_COLUMN_COUNT + (len(ORB_LABELS) * _ORB
 # Strategy count drop threshold — WARNING if active count < this fraction of previous
 STRATEGY_DROP_THRESHOLD = 0.70
 
-APERTURES = [5, 15, 30]
+APERTURES = VALID_ORB_MINUTES  # canonical source — never hardcode
 
 
 # ---------------------------------------------------------------------------
