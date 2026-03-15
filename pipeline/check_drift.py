@@ -563,7 +563,12 @@ def check_config_filter_sync() -> list[str]:
 
 
 def check_entry_models_sync() -> list[str]:
-    """Check that ENTRY_MODELS constant matches expected values."""
+    """Check that ENTRY_MODELS in config is consistent with VALID_ENTRY_MODELS in sql_adapter.
+
+    Cross-system sync: trading_app.config.ENTRY_MODELS is the canonical definition;
+    trading_app.ai.sql_adapter.VALID_ENTRY_MODELS gates which entry models the AI CLI
+    accepts. If they diverge, legitimate queries get rejected or invalid models get queried.
+    """
     violations = []
 
     root_str = str(PROJECT_ROOT)
@@ -571,13 +576,18 @@ def check_entry_models_sync() -> list[str]:
         sys.path.insert(0, root_str)
 
     try:
+        from trading_app.ai.sql_adapter import VALID_ENTRY_MODELS
         from trading_app.config import ENTRY_MODELS
 
-        expected = ["E1", "E2", "E3"]
-        if expected != ENTRY_MODELS:
-            violations.append(f"  ENTRY_MODELS = {ENTRY_MODELS}, expected {expected}")
+        config_set = set(ENTRY_MODELS)
+        if config_set != VALID_ENTRY_MODELS:
+            diff = config_set.symmetric_difference(VALID_ENTRY_MODELS)
+            violations.append(
+                f"  sql_adapter.VALID_ENTRY_MODELS {sorted(VALID_ENTRY_MODELS)} "
+                f"!= config.ENTRY_MODELS {sorted(config_set)} (diff: {sorted(diff)})"
+            )
     except ImportError as e:
-        violations.append(f"  Cannot import trading_app.config.ENTRY_MODELS: {e}")
+        violations.append(f"  Cannot import ENTRY_MODELS or VALID_ENTRY_MODELS: {e}")
 
     return violations
 

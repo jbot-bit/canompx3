@@ -13,6 +13,7 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8")
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 SELF_PATH = Path(__file__).resolve()
 
 # Directories to scan for each check
@@ -83,7 +84,11 @@ def check_hardcoded_check_counts() -> list[str]:
 
 # Detects 3+ instrument symbols in a Python list literal or SQL IN clause.
 # These should import from pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS instead.
-_INST = r"(?:MGC|MNQ|MES|M2K|MCL|SIL|M6E)"
+# Build regex from canonical source — covers active + dead instruments.
+from pipeline.asset_configs import ASSET_CONFIGS as _ASSET_CONFIGS
+
+_ALL_SYMBOLS = sorted({k for k, v in _ASSET_CONFIGS.items() if v["symbol"] == k})
+_INST = r"(?:" + "|".join(_ALL_SYMBOLS) + ")"
 PY_INSTRUMENT_LIST = re.compile(
     rf"""\[[\s'"]*{_INST}['"][\s,'"]*{_INST}['"][\s,'"]*{_INST}""",
     re.IGNORECASE,
