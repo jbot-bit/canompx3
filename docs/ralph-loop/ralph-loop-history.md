@@ -5,6 +5,17 @@
 
 ---
 
+## Iteration 73 — 2026-03-15
+- Phase: fix
+- Classification: [mechanical]
+- Target: gen_repo_map.py (CLEAN) + sync_pinecone.py (CLEAN) + retire_e3_strategies.py (CLEAN) + refresh_data.py (FIX)
+- Finding: RD-01 — `ORB_APERTURES = [5, 15, 30]` in refresh_data.py. Same canonical violation (5th instance across codebase). Also swept all remaining `[5, 15, 30]` instances — remaining are research/tests/tmp (acceptable).
+- Action: Imported VALID_ORB_MINUTES; replaced hardcoded list.
+- Blast radius: 1 file (refresh_data.py)
+- Verification: PASS (72 drift checks, ruff clean)
+
+---
+
 ## Iteration 72 — 2026-03-15
 - Phase: fix
 - Classification: [mechanical]

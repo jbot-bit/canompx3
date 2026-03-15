@@ -27,6 +27,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 import duckdb  # noqa: E402
 
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS, ASSET_CONFIGS  # noqa: E402
+from pipeline.build_daily_features import VALID_ORB_MINUTES  # noqa: E402
 from pipeline.paths import GOLD_DB_PATH  # noqa: E402
 
 # Map stored instrument -> Databento parent symbol for download.
@@ -40,7 +41,7 @@ DOWNLOAD_SYMBOLS: dict[str, str] = {
 
 DATASET = "GLBX.MDP3"
 SCHEMA = "ohlcv-1m"
-ORB_APERTURES = [5, 15, 30]
+ORB_APERTURES = VALID_ORB_MINUTES  # canonical source — never hardcode
 
 
 def get_last_bar_date(instrument: str) -> date | None:
