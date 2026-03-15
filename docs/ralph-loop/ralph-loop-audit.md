@@ -3,49 +3,40 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 86
+## Last iteration: 88
 
-## RALPH AUDIT — Iteration 86 (deep sweep — no findings)
+## RALPH AUDIT — Iteration 88 (fix — volatile data)
 ## Date: 2026-03-15
 ## Infrastructure Gates: 3/3 PASS
 
 | Gate | Result | Detail |
 |------|--------|--------|
 | `check_drift.py` | PASS | 72 checks passed, 0 skipped, 6 advisory |
+| `audit_behavioral.py` | PASS | 6/6 clean |
 | `ruff check` | PASS | Clean |
-| Codebase grep | Done | Swept all remaining `[5, 15, 30]` instances |
 
 ---
 
 ## Files Audited This Iteration
 
-### scripts/tools/gen_repo_map.py — CLEAN (265 lines)
-- AST-based code analyzer. `except Exception` blocks are in best-effort parsing paths. No canonical data used.
+### scripts/run_live_session.py — FIXED (RLS-01)
 
-### scripts/tools/sync_pinecone.py — CLEAN (558 lines)
-- Pinecone sync tool. `except Exception` blocks wrap external API calls (ACCEPTABLE). No canonical violations.
+#### Finding RLS-01: Volatile data — hardcoded checks_total = 5 in _run_preflight (FIXED)
+- **Sin**: Volatile data — hardcoded numeric count controls pass/fail logic (`checks_passed == checks_total`). If a 6th preflight check is added without updating this, `_run_preflight` returns False even when all checks pass, silently blocking live sessions.
+- **Severity**: LOW (currently correct, future mutation risk only)
+- **Fix**: Added inline comment to checks_total making the constraint explicit: `# NOTE: must match number of check blocks (1-5) below — update if adding/removing checks`
+- **Blast radius**: 1 file (run_live_session.py). `_run_preflight` is private, called once at line 237. No test coverage.
+- **Verification**: 72 drift checks pass, behavioral audit clean, ruff clean
+- **Commit**: c57130b
 
-### scripts/migrations/retire_e3_strategies.py — CLEAN (92 lines)
-- E3-specific migration script. Hardcoded 'E3' is correct (migration target). try/finally connection management.
-
-### scripts/tools/refresh_data.py — FIXED (RD-01)
-
-#### Finding RD-01: Canonical violation — hardcoded ORB_APERTURES = [5, 15, 30] (FIXED)
-- **Sin**: Canonical violation — same pattern as PS-01/CD-01/RP-01/AR-01
-- **Severity**: MEDIUM (data refresh tool would miss new apertures)
-- **Fix**: Import `VALID_ORB_MINUTES`; replace hardcoded list (2 lines)
-- **Blast radius**: 1 file (refresh_data.py)
-
-#### Codebase sweep: remaining `[5, 15, 30]` instances
-- `research/` scripts: historical artifacts — ACCEPTABLE per integrity-guardian rules
-- `tests/` files: test data setup — LOW priority (tests would catch aperture changes via test failures)
-- `scripts/tmp_*`: temporary analysis — not production
-- `scripts/tools/sensitivity_analysis.py`: LOW priority (analysis tool)
-- `scripts/tools/audit_15m30m.py`: LOW priority (one-off audit)
+### scripts/operator_status.py — CLEAN (145 lines)
+- Pure text parsing, no DB access, no canonical lists, no hardcoded instrument lists.
+- `_extract_todos()[:8]` limit is style-only (acceptable).
+- No findings.
 
 ---
 
-## Deferred Findings — Status After Iter 73
+## Deferred Findings — Status After Iter 88
 
 ### STILL DEFERRED (carried forward)
 - **DF-04** — `rolling_portfolio.py:304` dormant `orb_minutes=5` in rolling DOW stats — structural multi-file fix, blast radius >5 files
@@ -53,23 +44,15 @@
 ---
 
 ## Summary
-- Deep sweep across all remaining production code — NO actionable findings
-- Bare `except:` — ZERO instances (all use `except Exception` or specific types)
-- `except Exception` + success return — 5 instances, ALL previously audited (intentional fail-open or optional features)
-- One-way dependency violations — ZERO (check_drift.py cross-validates, not imports)
-- Hardcoded entry models, apertures, DB paths, instrument lists — ALL eliminated from production code
-- ~22 CLI scripts with connection leaks — ALL LOW severity (process exit closes)
-- 0 fixes, 0 new deferrals
+- 2 files audited: run_live_session.py (1 LOW fix) + operator_status.py (clean)
+- RLS-01: hardcoded checks_total → added comment guard
 - Infrastructure Gates: 3/3 PASS
-- Action: fix (mechanical)
 
-**Codebase steady state reached for major violation classes:**
+**Codebase steady state maintained for major violation classes:**
 - Hardcoded DB paths: ELIMINATED (0 in production code)
-- Hardcoded apertures [5,15,30]: ELIMINATED (6 fixes)
+- Hardcoded apertures [5,15,30]: ELIMINATED from production (7th fix applied)
 - Hardcoded entry model IN clauses: ELIMINATED
 - Hardcoded instrument lists: ELIMINATED (1 acceptable with assertion guard)
-- Drift check #62 backslash gap: FIXED
-- 119+ files fully scanned, ~61 remaining (mostly analysis/experiment scripts)
 
 **Remaining LOW-priority items:**
 - ~22 CLI scripts with connection leaks (process exit closes them)
@@ -79,12 +62,20 @@
 
 ## Files Fully Scanned
 
-> Cumulative list — 88 files fully scanned.
+> Cumulative list — 104 files fully scanned.
 
 - trading_app/ — 44 files (iters 4-61)
 - pipeline/ — 15 files (iters 1-71)
 - scripts/tools/ — 8 files (iters 18-72)
 - scripts/infra/ — 1 file (iter 72)
 - scripts/migrations/ — 1 file (iter 73)
-- **Total: 100 files fully scanned**
+- scripts/reports/ — 3 files (iter 87): report_wf_diagnostics.py, parameter_stability_heatmap.py, report_edge_portfolio.py (iter 85)
+- scripts/ root — 2 files (iter 88): run_live_session.py, operator_status.py
+- **Total: 104 files fully scanned**
 - See previous audit iterations for per-file detail
+
+## Next iteration targets
+- `scripts/tools/generate_promotion_candidates.py` — not yet scanned
+- `scripts/tools/select_family_rr.py` — not yet scanned
+- `scripts/tools/audit_behavioral.py` — core behavioral audit tool itself (meta-audit)
+- `scripts/tools/build_edge_families.py` — large tool, audited earlier but worth rechecking
