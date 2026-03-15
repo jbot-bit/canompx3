@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 51
+## Last iteration: 52
 
-## RALPH AUDIT — Iteration 51 (live_config.py)
+## RALPH AUDIT — Iteration 52 (entry_rules.py + db_manager.py)
 ## Date: 2026-03-15
 ## Infrastructure Gates: 4/4 PASS
 
@@ -13,38 +13,40 @@
 |------|--------|--------|
 | `check_drift.py` | PASS | 72 checks passed, 0 skipped, 6 advisory |
 | `audit_behavioral.py` | PASS | All 6 checks clean |
-| `pytest test_live_config.py` | PASS | 36 tests, no failures |
+| `pytest test_entry_rules.py` | PASS | 64 tests, no failures |
 | `ruff check` | 2 pre-existing I001 in prop_portfolio.py + prop_profiles.py (out of scope) |
 
 ---
 
 ## Files Audited This Iteration
 
-### live_config.py — 1 LOW finding, FIXED
+### entry_rules.py — CLEAN
 
 #### Seven Sins scan
 
-- **Silent failure**: CLEAN. No bare except hiding failures. All rejection paths return fail-closed tuples or raise.
-- **Fail-open**: CLEAN. `_check_dollar_gate` returns `(False, ...)` on any exception — fail-closed. Fitness gate at line 745 uses `(ValueError, duckdb.Error)` — specific.
-- **Look-ahead bias**: CLEAN. No forward-looking data. All DB queries use `status='active'` and historical validated_setups.
-- **Cost illusion**: CLEAN. `get_cost_spec()` from `pipeline.cost_model` used in both `_check_dollar_gate` and CLI `_exp_dollars`.
-- **Canonical violation**: CLEAN. `get_active_instruments()` from `pipeline.asset_configs`. `GOLD_DB_PATH` from `pipeline.paths`. `ENTRY_MODELS` not required here (string per spec). `exclude_instruments` is intentional per-spec BH FDR exclusion — not a hardcoded canonical list.
-- **Orphan risk**: HOT tier loop (lines 637-702) is dead code on every run (no "hot" specs in LIVE_PORTFOLIO), but correctly documented as dormant infrastructure. Not a sin.
-- **Volatile data**: CLEAN. No hardcoded strategy counts, session counts, or check counts.
+- **Silent failure**: CLEAN. No bare `except` blocks. All invalid inputs raise `ValueError` explicitly (lines 92, 95, 175, 248).
+- **Fail-open**: CLEAN. `resolve_entry` raises `ValueError` on unknown entry_model (line 247-248). `detect_entry_with_confirm_bars` raises on E2 (line 415). Both are fail-closed.
+- **Look-ahead bias**: CLEAN. Detection windows are caller-supplied timestamps. No future data. No LAG() without orb_minutes filter. No `double_break`.
+- **Cost illusion**: CLEAN. Module is entry detection only. No PnL computation.
+- **Canonical violation**: CLEAN. `E3_RETRACE_WINDOW_MINUTES` from `trading_app.config`. Entry models handled via fail-closed string guard.
+- **Orphan risk**: CLEAN. All functions (`detect_confirm`, `detect_break_touch`, `resolve_entry`, `_resolve_e2`, `detect_entry_with_confirm_bars`) referenced by `outcome_builder.py`, `nested/builder.py`, tests.
+- **Volatile data**: CLEAN. No hardcoded counts or session names.
 
-#### Finding — FIXED
+### db_manager.py — CLEAN
 
-**ID**: LC-01
-**Severity**: LOW
-**Location**: `trading_app/live_config.py:499` (`_check_dollar_gate`)
-**Sin**: Overly broad exception handler
-**Description**: `except Exception as exc:` catches all exceptions including programming errors (AttributeError, TypeError from bad arithmetic). The only expected exceptions from `get_cost_spec()` are `ValueError` (unknown instrument) and `TypeError` (type mismatch in arithmetic). Other callers in the same file (line 745: `except (ValueError, duckdb.Error)`) use specific types per the pipeline fortification pattern.
-**Fix**: Changed `except Exception as exc:` → `except (ValueError, TypeError) as exc:`. Behavior is identical for all real paths — fail-closed return `(False, note)` preserved.
-**Commit**: b486e9a
+#### Seven Sins scan
+
+- **Silent failure**: CLEAN. `ALTER TABLE` migrations wrapped in `except duckdb.CatalogException: pass` — correct idempotency pattern for "column already exists". Not a data-hiding fallback.
+- **Fail-open**: CLEAN. `verify_trading_app_schema` opens DB `read_only=True`. `init_trading_app_schema` lets DuckDB exceptions propagate. No silent success paths.
+- **Look-ahead bias**: CLEAN. Schema DDL only. No data queries in this module.
+- **Cost illusion**: CLEAN. No PnL computation.
+- **Canonical violation**: CLEAN. `GOLD_DB_PATH` from `pipeline.paths`. No hardcoded instruments, sessions, or entry models.
+- **Orphan risk**: CLEAN. All functions used: `init_trading_app_schema` (outcome_builder, strategy_validator, strategy_discovery, tests), `compute_trade_day_hash` (strategy_discovery, build_edge_families), `get_family_head_ids` + `has_edge_families` (portfolio.py).
+- **Volatile data**: `expected_tables` list in `verify_trading_app_schema` (line 531-540) is intentionally hardcoded for schema verification — ACCEPTABLE. Matches tables created in `init_trading_app_schema`.
 
 ---
 
-## Deferred Findings — Status After Iter 51
+## Deferred Findings — Status After Iter 52
 
 ### STILL DEFERRED (carried forward)
 - **DF-04** — `rolling_portfolio.py:304` dormant `orb_minutes=5` in rolling DOW stats — structural multi-file fix, blast radius >5 files
@@ -52,12 +54,15 @@
 ---
 
 ## Summary
-- live_config.py: 1 LOW finding — FIXED
+- entry_rules.py: CLEAN — 0 findings
+- db_manager.py: CLEAN — 0 findings
 - Infrastructure Gates: 4/4 PASS
+- Action: audit-only
 
 **Next iteration targets:**
-- `trading_app/order_router.py` — not yet audited this cycle
-- `trading_app/paper_trader.py` — not yet audited this cycle
+- `trading_app/setup_detector.py` — not yet audited this cycle
+- `trading_app/execution_spec.py` — not yet audited this cycle
+- `trading_app/calendar_overlay.py` — not yet audited this cycle
 
 ---
 
@@ -90,6 +95,8 @@
 - `trading_app/tradovate/order_router.py` — iter 21 (fill price falsy-zero)
 - `trading_app/projectx/order_router.py` — iter 21 (fill price falsy-zero)
 - `trading_app/tradovate/auth.py` — iter 24 (log gap)
+- `trading_app/entry_rules.py` — iter 52 (CLEAN)
+- `trading_app/db_manager.py` — iter 52 (CLEAN)
 - `pipeline/build_daily_features.py` — iter 36 (1 fix: canonical extraction)
 - `pipeline/ingest_dbn.py` — iter 1 (triaged via M2.5)
 - `pipeline/build_bars_5m.py` — iter 1 (triaged via M2.5)
