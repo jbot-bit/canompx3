@@ -843,3 +843,15 @@
 - Commit: e529f42
 
 Also audited: scripts/tools/pipeline_status.py — CLEAN (no findings)
+
+---
+
+## Iteration 91 — 2026-03-15
+- Phase: fix
+- Classification: [mechanical]
+- Target: scripts/tools/build_edge_families.py:218
+- Finding: BEF-02 — unused loop variable `orb_min` in first strategies loop, introduced by iter 90 fix (ruff B007)
+- Action: Renamed `orb_min` to `_orb_min` on line 218 (1 line). Second loop at line 240 which uses `orb_min` for family_key was untouched. Also audited assert_rebuild.py, gen_repo_map.py, sync_pinecone.py — all clean.
+- Blast radius: 1 file
+- Verification: PASS (ruff clean, 22/22 test_edge_families tests pass, 72 drift checks pass)
+- Commit: 5d576c4
