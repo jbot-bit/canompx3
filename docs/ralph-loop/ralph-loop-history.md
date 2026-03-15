@@ -5,6 +5,17 @@
 
 ---
 
+## Iteration 82 — 2026-03-15
+- Phase: fix
+- Classification: [mechanical]
+- Target: explore.py (FIX) + backfill_garch.py (CLEAN) + stress_test.py (noted)
+- Finding: EX-01 — `DEFAULT_DB = PROJECT_ROOT / "gold.db"` + reimplemented env var logic in `get_db_path()`. Should use GOLD_DB_PATH.
+- Action: Added sys.path.insert, imported GOLD_DB_PATH, simplified get_db_path() to CLI override → GOLD_DB_PATH fallback.
+- Blast radius: 1 file (explore.py)
+- Verification: PASS (72 drift checks, ruff clean)
+
+---
+
 ## Iteration 81 — 2026-03-15
 - Phase: fix
 - Classification: [mechanical]
