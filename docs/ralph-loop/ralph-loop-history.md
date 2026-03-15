@@ -5,6 +5,18 @@
 
 ---
 
+## Iteration 98 — 2026-03-16
+- Phase: audit-only
+- Classification: N/A (no fix)
+- Target: scripts/tools/parity_check.py, build_outcomes_fast.py, build_mes_outcomes_fast.py, prospective_tracker.py, profile_1000_runners.py
+- Finding: All 5 files clean. Hardcoded parameters are intentional research-scope configuration (read-only scripts or fast-path MES-specific builders). Connection leaks in write scripts match existing ~22 CLI script pattern (process exit closes). No safety impact.
+- Action: Audit only — no fixes required.
+- Blast radius: N/A
+- Verification: PASS (72 drift checks, behavioral audit 6/6, ruff clean)
+- Commit: NONE
+
+---
+
 ## Iteration 97 — 2026-03-16
 - Phase: audit-only
 - Classification: N/A (no fix)
