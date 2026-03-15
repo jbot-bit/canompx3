@@ -1,6 +1,6 @@
 @echo off
 REM Ralph Wiggum Overnight Audit — double-click or run from cmd
-REM Uses the real Seven Sins auditor (ralph_headless.sh)
+REM Runs headless Seven Sins auditor, then Opus reviews judgment commits
 REM
 REM Usage:
 REM   run-ralph.bat          (default: 5 iterations)
@@ -11,6 +11,28 @@ set ITERS=%1
 if "%ITERS%"=="" set ITERS=5
 
 cd /d "C:\Users\joshd\canompx3"
-echo Ralph Headless — %ITERS% iterations
+echo.
+echo ============================================
+echo   Ralph Headless + Opus Review
+echo   %ITERS% iterations, then quality gate
+echo ============================================
+echo.
+
+REM Phase 1: Sonnet audits and fixes
+echo [Phase 1] Sonnet audit — %ITERS% iterations...
 "C:\Program Files\Git\bin\bash.exe" -l -c "cd /c/Users/joshd/canompx3 && export PATH=\"$HOME/.local/bin:$PATH\" && unset CLAUDECODE && bash scripts/tools/ralph_headless.sh %ITERS% 2>&1 | tee ralph-output.log"
+
+echo.
+echo ============================================
+echo   [Phase 2] Opus reviewing judgment commits...
+echo ============================================
+echo.
+
+REM Phase 2: Opus reviews judgment commits
+"C:\Program Files\Git\bin\bash.exe" -l -c "cd /c/Users/joshd/canompx3 && export PATH=\"$HOME/.local/bin:$PATH\" && unset CLAUDECODE && bash scripts/tools/ralph_review.sh %ITERS% 2>&1 | tee ralph-review.log"
+
+echo.
+echo ============================================
+echo   Done. Check ralph-output.log + ralph-review.log
+echo ============================================
 pause
