@@ -2551,15 +2551,19 @@ def check_session_resolver_sanity() -> list[str]:
 
 
 def check_daily_features_row_integrity(con=None) -> list[str]:
-    """Verify daily_features has exactly 3 rows per (trading_day, symbol).
+    """Verify daily_features has exactly N rows per (trading_day, symbol).
 
-    A partial rebuild can leave days with 1 or 2 rows instead of 3 (for
-    the three ORB apertures: 5, 15, 30 minutes). This causes strategy
-    discovery to silently compute on wrong N.
+    N = len(VALID_ORB_MINUTES) — one row per aperture. A partial rebuild
+    can leave days with fewer rows, causing strategy discovery to silently
+    compute on wrong N.
     """
     violations = []
     _own_con = False
     try:
+        from pipeline.build_daily_features import VALID_ORB_MINUTES
+
+        expected_rows = len(VALID_ORB_MINUTES)
+
         if con is None:
             import duckdb
 
@@ -2568,19 +2572,19 @@ def check_daily_features_row_integrity(con=None) -> list[str]:
                 return violations
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
-        # Find (trading_day, symbol) pairs with != 3 rows
-        bad = con.execute("""
+        # Find (trading_day, symbol) pairs with != expected_rows rows
+        bad = con.execute(f"""
             SELECT symbol, COUNT(*) as n_bad_days
             FROM (
                 SELECT trading_day, symbol, COUNT(*) as row_count
                 FROM daily_features
                 GROUP BY trading_day, symbol
-                HAVING COUNT(*) != 3
+                HAVING COUNT(*) != {expected_rows}
             )
             GROUP BY symbol
         """).fetchall()
         for symbol, n_bad in bad:
-            violations.append(f"  {symbol}: {n_bad} trading day(s) with != 3 rows in daily_features")
+            violations.append(f"  {symbol}: {n_bad} trading day(s) with != {expected_rows} rows in daily_features")
     except (ImportError, OSError) as e:
         print(f"    SKIP check_daily_features_row_integrity: {type(e).__name__}: {e}")
     finally:
@@ -3395,7 +3399,7 @@ CHECKS = [
         False,
     ),
     (
-        "Daily features row integrity (exactly 3 rows per trading_day × symbol)",
+        "Daily features row integrity (one row per aperture per trading_day × symbol)",
         check_daily_features_row_integrity,
         False,
         True,
