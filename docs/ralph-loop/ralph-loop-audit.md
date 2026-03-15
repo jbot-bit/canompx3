@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 60
+## Last iteration: 61
 
-## RALPH AUDIT — Iteration 60 (trading_app/ai/ — 6 files)
+## RALPH AUDIT — Iteration 61 (trading_app/prop_portfolio.py + prop_profiles.py)
 ## Date: 2026-03-15
 ## Infrastructure Gates: 4/4 PASS
 
@@ -13,76 +13,51 @@
 |------|--------|--------|
 | `check_drift.py` | PASS | 72 checks passed, 0 skipped, 6 advisory |
 | `audit_behavioral.py` | PASS | All 6 checks clean |
-| `pytest tests/test_trading_app/test_ai/` | PASS | 81 tests pass |
-| `ruff check` | 2 fixable errors in `trading_app/prop_portfolio.py` (outside scope) |
+| `pytest tests/test_trading_app/test_prop_portfolio.py test_prop_profiles.py` | PASS | 35 tests pass |
+| `ruff check` | FIXED | 2 I001 import sort errors fixed (prop_portfolio.py, prop_profiles.py) |
 
 ---
 
 ## Files Audited This Iteration
 
-### trading_app/ai/query_agent.py — CLEAN
+### trading_app/prop_portfolio.py — FIXED (PP-01)
+
+#### Finding PP-01: I001 import sort (FIXED — commit af5ff0b)
+- **Sin**: Orphan risk (style) — import block had extra blank line after imports causing ruff I001
+- **Severity**: LOW
+- **Fix**: Removed 1 blank line (line 34 in original) — ruff `--fix` applied
+- **Lines changed**: 1
 
 #### Seven Sins scan
 
-- **Silent failure**: CLEAN. `except Exception as e:` at line 82 wraps adapter.execute(). Error is surfaced in `result.explanation` and `result.warnings`. Not silent — the error text reaches the user. User-facing query tool, not trading path.
-- **Fail-open**: ACCEPTABLE. Error in query execution returns a failed-query result, not a "success" result. `result.explanation` contains the error. This is correct UI behavior for a query tool.
-- **Look-ahead bias**: N/A — read-only query tool.
-- **Cost illusion**: N/A — no PnL computation.
-- **Canonical violation**: CLEAN. `GOLD_DB_PATH` via env var. No hardcoded instruments.
-- **Orphan risk**: CLEAN. Tested by 81 tests in `tests/test_trading_app/test_ai/`.
-- **Volatile data**: CLEAN.
+- **Silent failure**: CLEAN. No except blocks.
+- **Fail-open**: CLEAN. `select_for_profile` returns empty TradingBook on no candidates.
+- **Look-ahead bias**: N/A — portfolio construction, no live trading.
+- **Cost illusion**: N/A — DD estimation from Monte Carlo constants (not PnL computation).
+- **Canonical violation**: `DD_PER_CONTRACT_075X = 935.0`, `DD_PER_CONTRACT_10X = 1350.0` — ACCEPTABLE. Monte Carlo simulation results annotated with `trading_plan_sim.md` source comment. Not canonical pipeline data.
+- **Orphan risk**: CLEAN. 35 tests in test_prop_portfolio.py.
+- **Volatile data**: CLEAN. No hardcoded session/strategy counts.
 
-### trading_app/ai/sql_adapter.py — CLEAN
+### trading_app/prop_profiles.py — FIXED (PP-01)
+
+#### Finding PP-01: I001 import sort (FIXED — commit af5ff0b)
+- **Sin**: Orphan risk (style) — import block had extra blank line causing ruff I001
+- **Severity**: LOW
+- **Fix**: Removed 1 blank line after `from dataclasses import dataclass` — ruff `--fix` applied
 
 #### Seven Sins scan
 
-- **Silent failure**: CLEAN. All validator functions raise ValueError on invalid input (fail-closed). `_execute_dst_split` raises ValueError explicitly (deprecated).
-- **Fail-open**: CLEAN. No broad except returning success. Connection uses try/finally for cleanup, not exception suppression.
-- **Look-ahead bias**: N/A — read-only query execution.
+- **Silent failure**: CLEAN. `get_firm_spec`, `get_account_tier`, `get_profile` all raise `KeyError` on invalid input (fail-closed).
+- **Fail-open**: CLEAN.
+- **Look-ahead bias**: N/A.
 - **Cost illusion**: N/A.
-- **Canonical violation**: `VALID_ENTRY_MODELS = {"E1", "E2", "E3"}` at line 57 — ACCEPTABLE. This is the analysis query allowlist, not the live trading set. E3 exists in DB (soft-retired, not purged). Querying E3 historical data is valid analytical use. `VALID_ORB_LABELS` correctly derives from canonical `ORB_LABELS`. `VALID_INSTRUMENTS` correctly derives from `get_active_instruments()`. Drift check #34 validates `VALID_RR_TARGETS` and `VALID_CONFIRM_BARS` against outcome_builder grids (PASS).
-- **Orphan risk**: CLEAN.
-- **Volatile data**: CLEAN.
-
-### trading_app/ai/grounding.py — CLEAN
-
-#### Seven Sins scan
-
-- **Silent failure**: CLEAN. Read-only prompt builder.
-- **Canonical violation**: Session names referenced in prompt text ("CME_REOPEN/TOKYO_OPEN", "LONDON_METALS/US_DATA_830") — ACCEPTABLE. These are informational strings in an AI prompt, not canonical logic. Worst case on rename: AI guidance text is stale. `ORB_LABELS` and `COST_SPECS` correctly imported from canonical sources.
-- **Orphan risk**: CLEAN.
-- **Volatile data**: `_mgc_friction` and `_mgc_pv` correctly derived from canonical `COST_SPECS["MGC"]` at module load.
-
-### trading_app/ai/corpus.py — CLEAN
-
-#### Seven Sins scan
-
-- **Silent failure**: CLEAN. Missing corpus files return `[MISSING: {fpath}]` string — surfaced to user, not silently hidden.
-- **Canonical violation**: CLEAN. `COST_SPECS` imported from canonical source. Document paths are static references to project authority docs, not instrument/session lists.
-- **Orphan risk**: CLEAN.
-- **Volatile data**: CLEAN. Friction computed from `COST_SPECS` at module load.
-
-### trading_app/ai/cli.py — CLEAN
-
-#### Seven Sins scan
-
-- **Silent failure**: CLEAN. Missing DB path → `sys.exit(1)`. Missing API key → `sys.exit(1)`. Fail-closed on all required inputs.
-- **Canonical violation**: CLEAN. Default DB path derived relative to project root (not hardcoded absolute path). Not a canonical source path concern.
-- **Orphan risk**: CLEAN. Tested by `tests/test_trading_app/test_ai/test_cli.py`.
-
-### trading_app/ai/strategy_matcher.py — CLEAN
-
-#### Seven Sins scan
-
-- **Silent failure**: CLEAN. `bars.empty` check at line 383 exits with error message.
-- **Canonical violation**: `symbol = 'MGC'` at line 58 in `load_bars_5m` — ACCEPTABLE. This module is a one-off reverse-engineering research tool tied to an explicit MGC DT trade log (`DT_V2_COMEX_MINI_MGC1!_2026-02-10.csv`). Hardcoded instrument matches the hardcoded input file. Not in production trading path.
-- **Orphan risk**: No tests. Module has a `main()` entrypoint — it's a standalone research script wrapped in a module. No callers in production path (grep confirms). ACCEPTABLE: research tool with explicit `if __name__ == "__main__"` guard.
-- **Look-ahead bias**: N/A — strategy matching against historical data, no live trading.
+- **Canonical violation**: Firm specs and account configs are intentional user-editable configuration, not canonical pipeline data. ACCEPTABLE.
+- **Orphan risk**: CLEAN. 35 tests in test_prop_profiles.py.
 - **Volatile data**: CLEAN.
 
 ---
 
-## Deferred Findings — Status After Iter 60
+## Deferred Findings — Status After Iter 61
 
 ### STILL DEFERRED (carried forward)
 - **DF-04** — `rolling_portfolio.py:304` dormant `orb_minutes=5` in rolling DOW stats — structural multi-file fix, blast radius >5 files
@@ -90,15 +65,16 @@
 ---
 
 ## Summary
-- 6 files in `trading_app/ai/`: CLEAN — 0 actionable findings
-- 4 ACCEPTABLE observations (broad except in query tool, VALID_ENTRY_MODELS includes E3, session names in prompt text, hardcoded MGC in research tool)
+- 2 files in `trading_app/prop_*`: PP-01 FIXED (import sort, 2 lines)
+- 0 deferred, 0 new deferrals
 - Infrastructure Gates: 4/4 PASS
-- Action: audit-only
+- Action: fix (mechanical)
+- Commit: af5ff0b
 
 **Next iteration targets:**
-- `scripts/tools/` remaining unscanned tools (many files — pick 1-2 for next iter)
-- `pipeline/check_drift.py` — large file, focus on check definitions for canonical violations
-- `trading_app/prop_portfolio.py` — ruff flagged import sort issue (unscanned)
+- `pipeline/check_drift.py` — large file (3539 lines), scan check definitions for canonical violations
+- `scripts/tools/pipeline_status.py` — key infrastructure tool, unscanned
+- `scripts/tools/audit_behavioral.py` — key infrastructure tool, unscanned
 
 ---
 
@@ -179,3 +155,5 @@
 - `trading_app/ai/corpus.py` — iter 60 (CLEAN)
 - `trading_app/ai/cli.py` — iter 60 (CLEAN)
 - `trading_app/ai/strategy_matcher.py` — iter 60 (CLEAN, ACCEPTABLE hardcoded MGC in research tool)
+- `trading_app/prop_portfolio.py` — iter 61 (1 fix: PP-01 import sort)
+- `trading_app/prop_profiles.py` — iter 61 (1 fix: PP-01 import sort)

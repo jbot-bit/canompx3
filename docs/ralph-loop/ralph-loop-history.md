@@ -5,6 +5,18 @@
 
 ---
 
+## Iteration 61 — 2026-03-15
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/prop_portfolio.py:16, trading_app/prop_profiles.py:13
+- Finding: I001 import block un-sorted — extra blank lines after import block causing ruff I001 errors
+- Action: ruff --fix applied; removed 1 blank line in each file (2 lines total)
+- Blast radius: 2 test files (test_prop_portfolio.py, test_prop_profiles.py), no pipeline callers
+- Verification: 35 tests PASS, drift 72/72 CLEAN
+- Commit: af5ff0b
+
+---
+
 ## Iteration 60 — 2026-03-15
 - Phase: audit-only
 - Classification: audit-only
