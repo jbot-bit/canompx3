@@ -3,50 +3,45 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 66
+## Last iteration: 67
 
-## RALPH AUDIT — Iteration 66 (pipeline/check_drift.py + scripts/tools/audit_behavioral.py)
+## RALPH AUDIT — Iteration 67 (pipeline/health_check.py)
 ## Date: 2026-03-15
 ## Infrastructure Gates: 3/3 PASS
 
 | Gate | Result | Detail |
 |------|--------|--------|
 | `check_drift.py` | PASS | 72 checks passed, 0 skipped, 6 advisory |
-| `audit_behavioral.py` | PASS | 6/6 checks clean |
 | `ruff check` | PASS | Clean |
+| `pytest health` | PASS | 22/22 tests |
 
 ---
 
 ## Files Audited This Iteration
 
-### pipeline/check_drift.py — COMPLETE (scan finished)
-- CD-01 FIXED in iter 65
-- Remaining sins scanned: orphan/dead code (CLEAN — all 78 functions registered), volatile data (CLEAN — hardcoded expected values are intentional for drift checks), silent failure (1 ACCEPTABLE at line 3482), broad exception (7 ACCEPTABLE)
-- **Full Seven Sins scan COMPLETE.**
+### pipeline/health_check.py — FIXED (HC-01)
 
-### scripts/tools/audit_behavioral.py — FIXED (AB-01)
-
-#### Finding AB-01: Canonical violation — hardcoded instrument regex missing MBT (FIXED)
-- **Sin**: Canonical violation — `_INST = r"(?:MGC|MNQ|MES|M2K|MCL|SIL|M6E)"` hardcodes 7 of 8 instrument symbols, missing MBT (dead for ORB). If a hardcoded list like `["MBT", "MGC", "MNQ"]` appeared in pipeline code, the scanner wouldn't catch it.
-- **Severity**: LOW (MBT is dead and unlikely to appear in new code, but completeness matters for a scanner)
-- **Fix**: Import `ASSET_CONFIGS` from `pipeline.asset_configs`; build `_INST` regex dynamically from all stored symbols (`v["symbol"] == k`). Added `sys.path.insert` for script-mode execution. Regex now includes all 8 symbols and auto-updates if instruments are added.
-- **Lines changed**: 5 (1 sys.path, 1 import, 2 symbol extraction, 1 regex build)
-- **Blast radius**: 1 file (audit_behavioral.py), internal regex pattern
+#### Finding HC-01: Connection leak in check_staleness (FIXED)
+- **Sin**: Silent failure / resource leak — `con.close()` not in `finally` block. If `staleness_engine()` raises inside the loop, connection stays open. Other health check functions (`check_database`) correctly use try/finally.
+- **Severity**: LOW (read-only DuckDB connection, GC'd eventually, but violates project pattern)
+- **Fix**: Wrapped connection usage in `try/finally: con.close()` block, matching `check_database()` pattern
+- **Lines changed**: 4 (added try/finally wrapper, reindented loop body)
+- **Blast radius**: 1 file, 1 function (`check_staleness`)
 
 #### Seven Sins scan — COMPLETE
 
 | Sin | Status | Detail |
 |-----|--------|--------|
-| Canonical violation | AB-01 FIXED | Hardcoded instrument regex |
-| Silent failure | CLEAN | All `except` clauses skip gracefully for file read errors (ACCEPTABLE for scanner) |
-| Fail-open | 1 ACCEPTABLE | `check_cli_arg_drift` — intentional, labeled "WARNING only / fails open" |
-| Broad exception | CLEAN | All clauses specific (UnicodeDecodeError, PermissionError, TimeoutExpired, FileNotFoundError) |
-| Orphan/dead code | CLEAN | All 6 functions registered |
+| Silent failure | HC-01 FIXED | Connection leak in check_staleness |
+| Fail-open | CLEAN | Advisory checks (staleness, m25) explicitly documented and always return True |
+| Canonical violation | CLEAN | Hardcoded dep list and table list are intentional for lightweight health check |
+| Broad exception | ACCEPTABLE | All 7 `except Exception` blocks return False (fail-closed pattern) |
+| Orphan/dead code | CLEAN | All functions used in main(), all referenced scripts exist |
 | Volatile data | CLEAN | No hardcoded stats |
 
 ---
 
-## Deferred Findings — Status After Iter 66
+## Deferred Findings — Status After Iter 67
 
 ### STILL DEFERRED (carried forward)
 - **DF-04** — `rolling_portfolio.py:304` dormant `orb_minutes=5` in rolling DOW stats — structural multi-file fix, blast radius >5 files
@@ -54,15 +49,15 @@
 ---
 
 ## Summary
-- 2 files scanned: `pipeline/check_drift.py` (scan completed, no new fix), `scripts/tools/audit_behavioral.py` AB-01 FIXED
+- 1 file: `pipeline/health_check.py` HC-01 FIXED (connection leak, 4 lines)
 - 0 new deferrals
 - Infrastructure Gates: 3/3 PASS
 - Action: fix (mechanical)
 
 **Next iteration targets:**
-- `pipeline/health_check.py` — orchestration script, unscanned
 - `pipeline/run_pipeline.py` — pipeline orchestrator, unscanned
 - `pipeline/init_db.py` — schema management, unscanned
+- `pipeline/dashboard.py` — report generator, unscanned
 
 ---
 
@@ -148,3 +143,4 @@
 - `scripts/tools/pipeline_status.py` — iter 62-64 (3 fixes: PS-01 canonical, PS-02 silent fallback, PS-03 preflight key mismatch)
 - `pipeline/check_drift.py` — iter 65-66 (1 fix: CD-01 canonical aperture count)
 - `scripts/tools/audit_behavioral.py` — iter 66 (1 fix: AB-01 instrument regex)
+- `pipeline/health_check.py` — iter 67 (1 fix: HC-01 connection leak)

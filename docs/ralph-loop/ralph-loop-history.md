@@ -5,6 +5,17 @@
 
 ---
 
+## Iteration 67 — 2026-03-15
+- Phase: fix
+- Classification: [mechanical]
+- Target: pipeline/health_check.py (full Seven Sins scan)
+- Finding: HC-01 — `check_staleness()` connection leak. `con.close()` not in `finally` block; if `staleness_engine()` raises, connection stays open. Violates project's consistent try/finally pattern.
+- Action: Wrapped connection usage in try/finally block, matching `check_database()` pattern.
+- Blast radius: 1 file (health_check.py), 1 function
+- Verification: PASS (22 health tests, 72 drift checks, ruff clean)
+
+---
+
 ## Iteration 66 — 2026-03-15
 - Phase: fix
 - Classification: [mechanical]
