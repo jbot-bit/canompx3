@@ -1,7 +1,7 @@
-## Iteration: 94
-## Target: scripts/tools/gen_playbook.py:18-30 (SESSION_ORDER)
-## Finding: EUROPE_FLOW session missing from SESSION_ORDER — any EUROPE_FLOW validated strategies silently omitted from MARKET_PLAYBOOK.md
+## Iteration: 95
+## Target: scripts/tools/ml_cross_session_experiment.py:26, scripts/tools/ml_hybrid_experiment.py:25, scripts/tools/ml_instrument_deep_dive.py:24
+## Finding: SESSION_ORDER missing EUROPE_FLOW in all three ML experiment scripts — EUROPE_FLOW trades silently skipped in cross-session feature computation
 ## Classification: [mechanical]
-## Blast Radius: 1 file (gen_playbook.py only — standalone script, no importers)
-## Invariants: [1] SESSION_ORDER display order must match Quick Reference table header; [2] INSTRUMENTS assert must stay; [3] tuple format (session_name, brisbane_winter, brisbane_summer, event_label) preserved
-## Diff estimate: 1 line (add EUROPE_FLOW tuple to SESSION_ORDER between SINGAPORE_OPEN and LONDON_METALS)
+## Blast Radius: 3 files changed (standalone experiment scripts, no production callers)
+## Invariants: SESSION_ORDER must remain in chronological Brisbane-time order; EUROPE_FLOW inserts between SINGAPORE_OPEN and LONDON_METALS; no logic changes
+## Diff estimate: 3 lines added (one per file)
