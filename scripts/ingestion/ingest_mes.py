@@ -26,6 +26,7 @@ from pipeline.ingest_dbn_mgc import (
     validate_chunk,
     validate_timestamp_utc,
 )
+from pipeline.paths import GOLD_DB_PATH
 
 # =========================================================================
 # CONFIG
@@ -34,7 +35,7 @@ INSTRUMENT = "MES"
 SYMBOL = "MES"
 OUTRIGHT_PATTERN_STR = r"^MES[FGHJKMNQUVXZ]\d{1,2}$"
 PREFIX_LEN = 3
-DB_PATH = Path(r"C:\db\gold.db")
+DB_PATH = GOLD_DB_PATH  # canonical source — never hardcode
 DATA_DIR = Path(r"C:\db\MES_DB")
 START_DATE = date(2024, 2, 12)
 END_DATE = date(2026, 2, 11)

@@ -5,6 +5,17 @@
 
 ---
 
+## Iteration 79 — 2026-03-15
+- Phase: fix
+- Classification: [judgment]
+- Target: Drift check #62 regex hardening + downstream fixes
+- Finding: DC62-01 — Drift check #62 regex only matched forward-slash paths (`C:/db/gold.db`), missing backslash (`C:\db\gold.db`) and escaped (`C:\\db\\gold.db`). Fixed regex with `[/\\]{1,2}` separator. Improved check immediately caught 2 hidden violations in `ingest_mes.py:37` and `ingest_mnq_fast.py:45`.
+- Action: (1) Fixed regex in check_drift.py, (2) Fixed ingest_mes.py DB_PATH, (3) Fixed ingest_mnq_fast.py DB_PATH + removed unused Path import.
+- Blast radius: 3 files (check_drift.py, ingest_mes.py, ingest_mnq_fast.py)
+- Verification: PASS (72 drift checks — including the now-stronger #62, ruff clean)
+
+---
+
 ## Iteration 78 — 2026-03-15
 - Phase: fix
 - Classification: [judgment]

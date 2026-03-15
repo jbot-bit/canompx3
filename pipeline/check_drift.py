@@ -2821,9 +2821,12 @@ def check_no_hardcoded_scratch_db() -> list[str]:
     not a hardcoded scratch path. Docstrings and archive/ are excluded.
     """
     violations = []
+    # Match both forward-slash (C:/db/gold.db) and backslash (C:\db\gold.db, C:\\db\\gold.db)
+    _sep = r"[/\\]{1,2}"  # matches /, \, or \\
+    _path = rf"C:{_sep}db{_sep}gold\.db"
     scratch_pattern = re.compile(
-        r"""(?:default\s*=\s*(?:Path\s*\(\s*)?["']C:/db/gold\.db["']|"""
-        r"""^DB_PATH\s*=\s*Path\s*\(\s*["']C:/db/gold\.db["'])""",
+        rf"""(?:default\s*=\s*(?:Path\s*\(\s*)?["']{_path}["']|"""
+        rf"""^DB_PATH\s*=\s*Path\s*\(\s*r?["']{_path}["'])""",
         re.MULTILINE,
     )
     scan_dirs = [RESEARCH_DIR, SCRIPTS_DIR]
