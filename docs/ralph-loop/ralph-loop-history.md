@@ -5,6 +5,17 @@
 
 ---
 
+## Iteration 80 — 2026-03-15
+- Phase: fix
+- Classification: [judgment]
+- Target: generate_promotion_candidates.py (CLEAN) + prospective_tracker.py (CLEAN) + rolling_portfolio_assembly.py (CLEAN) + build_mes_outcomes_fast.py (FIX)
+- Finding: BMOF-01 — `build_mes_outcomes_fast.py` had 3 canonical violations: (1) `DB_PATH = Path(r"C:\db\mes.db")` pointing to non-existent DB, (2) hardcoded `RR_TARGETS`, (3) hardcoded `CONFIRM_BARS_OPTIONS`. All should import from canonical sources.
+- Action: Imported GOLD_DB_PATH, RR_TARGETS, CONFIRM_BARS_OPTIONS from canonical sources. Removed unused Path import.
+- Blast radius: 1 file (build_mes_outcomes_fast.py)
+- Verification: PASS (72 drift checks, ruff clean)
+
+---
+
 ## Iteration 79 — 2026-03-15
 - Phase: fix
 - Classification: [judgment]

@@ -17,7 +17,6 @@ import sys
 import time
 from datetime import date
 from multiprocessing import Pool, cpu_count
-from pathlib import Path
 
 import duckdb
 import pandas as pd
@@ -27,18 +26,21 @@ sys.stdout.reconfigure(line_buffering=True)
 from pipeline.build_daily_features import compute_trading_day_utc_range
 from pipeline.cost_model import get_cost_spec
 from pipeline.init_db import ORB_LABELS
+from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import ENTRY_MODELS
-from trading_app.outcome_builder import compute_single_outcome
+from trading_app.outcome_builder import (
+    CONFIRM_BARS_OPTIONS,
+    RR_TARGETS,
+    compute_single_outcome,
+)
 
 # =========================================================================
 # CONFIG
 # =========================================================================
 INSTRUMENT = "MES"
-DB_PATH = Path(r"C:\db\mes.db")
+DB_PATH = GOLD_DB_PATH  # canonical source — never hardcode
 START_DATE = date(2024, 2, 12)
 END_DATE = date(2026, 2, 11)
-RR_TARGETS = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0]
-CONFIRM_BARS_OPTIONS = [1, 2, 3, 4, 5]
 
 
 def log(msg: str):
