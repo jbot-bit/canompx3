@@ -5,6 +5,17 @@
 
 ---
 
+## Iteration 66 — 2026-03-15
+- Phase: fix
+- Classification: [mechanical]
+- Target: pipeline/check_drift.py (scan completed, no new fix) + scripts/tools/audit_behavioral.py (full scan)
+- Finding: AB-01 — `_INST` regex hardcodes 7/8 instrument symbols, missing MBT. Built from `ASSET_CONFIGS` canonical source instead.
+- Action: Added `sys.path.insert`, imported `ASSET_CONFIGS`, built `_INST` regex dynamically from all stored symbols. Also completed check_drift.py full scan (orphan/dead code CLEAN, volatile data CLEAN).
+- Blast radius: 1 file (audit_behavioral.py), internal regex pattern
+- Verification: PASS (23 audit tests, 72 drift checks, 6 behavioral checks, ruff clean)
+
+---
+
 ## Iteration 65 — 2026-03-15
 - Phase: fix
 - Classification: [mechanical]

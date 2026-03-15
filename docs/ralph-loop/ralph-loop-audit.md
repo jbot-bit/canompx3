@@ -3,45 +3,50 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 65
+## Last iteration: 66
 
-## RALPH AUDIT — Iteration 65 (pipeline/check_drift.py)
+## RALPH AUDIT — Iteration 66 (pipeline/check_drift.py + scripts/tools/audit_behavioral.py)
 ## Date: 2026-03-15
 ## Infrastructure Gates: 3/3 PASS
 
 | Gate | Result | Detail |
 |------|--------|--------|
 | `check_drift.py` | PASS | 72 checks passed, 0 skipped, 6 advisory |
+| `audit_behavioral.py` | PASS | 6/6 checks clean |
 | `ruff check` | PASS | Clean |
-| `pytest test_check_drift.py` | PASS | 63/63 tests |
 
 ---
 
 ## Files Audited This Iteration
 
-### pipeline/check_drift.py — FIXED (CD-01), partial scan
+### pipeline/check_drift.py — COMPLETE (scan finished)
+- CD-01 FIXED in iter 65
+- Remaining sins scanned: orphan/dead code (CLEAN — all 78 functions registered), volatile data (CLEAN — hardcoded expected values are intentional for drift checks), silent failure (1 ACCEPTABLE at line 3482), broad exception (7 ACCEPTABLE)
+- **Full Seven Sins scan COMPLETE.**
 
-#### Finding CD-01: Canonical violation — hardcoded aperture count `3` (FIXED)
-- **Sin**: Canonical violation — `check_daily_features_row_integrity` uses `HAVING COUNT(*) != 3` where `3` = number of ORB apertures. Should derive from `len(VALID_ORB_MINUTES)`.
-- **Severity**: MEDIUM (if a 4th aperture is added, this check produces false violations for every trading day)
-- **Fix**: Import `VALID_ORB_MINUTES` from `pipeline.build_daily_features` inside function; replace hardcoded `3` with `len(VALID_ORB_MINUTES)` in SQL, error message, and docstring. Updated check registry label.
-- **Lines changed**: ~8 (import, variable, SQL, message, label)
-- **Blast radius**: 1 file (check_drift.py), self-contained check function
+### scripts/tools/audit_behavioral.py — FIXED (AB-01)
 
-#### Seven Sins scan — PARTIAL (file is 3539 lines)
+#### Finding AB-01: Canonical violation — hardcoded instrument regex missing MBT (FIXED)
+- **Sin**: Canonical violation — `_INST = r"(?:MGC|MNQ|MES|M2K|MCL|SIL|M6E)"` hardcodes 7 of 8 instrument symbols, missing MBT (dead for ORB). If a hardcoded list like `["MBT", "MGC", "MNQ"]` appeared in pipeline code, the scanner wouldn't catch it.
+- **Severity**: LOW (MBT is dead and unlikely to appear in new code, but completeness matters for a scanner)
+- **Fix**: Import `ASSET_CONFIGS` from `pipeline.asset_configs`; build `_INST` regex dynamically from all stored symbols (`v["symbol"] == k`). Added `sys.path.insert` for script-mode execution. Regex now includes all 8 symbols and auto-updates if instruments are added.
+- **Lines changed**: 5 (1 sys.path, 1 import, 2 symbol extraction, 1 regex build)
+- **Blast radius**: 1 file (audit_behavioral.py), internal regex pattern
+
+#### Seven Sins scan — COMPLETE
 
 | Sin | Status | Detail |
 |-----|--------|--------|
-| Canonical violation | CD-01 FIXED | Hardcoded aperture count in row integrity check |
-| Silent failure | 1 observation (line 3482) | `except Exception: pass` on DB connect — swallows non-busy errors. Impact mitigated: individual checks create own connections and report errors. ACCEPTABLE — noise reduction pattern. |
-| Fail-open | CLEAN (spot-checked) | Check functions return violations; main loop reports exceptions |
-| Broad exception | 7 occurrences | Lines 939, 1872, 2387, 2419, 2546, 3482, 3494. All either report violations or handle DB-busy. ACCEPTABLE for this infrastructure file. |
-| Orphan/dead code | Not fully scanned | 3539 lines — deferred to next iteration |
-| Volatile data | Not fully scanned | Deferred |
+| Canonical violation | AB-01 FIXED | Hardcoded instrument regex |
+| Silent failure | CLEAN | All `except` clauses skip gracefully for file read errors (ACCEPTABLE for scanner) |
+| Fail-open | 1 ACCEPTABLE | `check_cli_arg_drift` — intentional, labeled "WARNING only / fails open" |
+| Broad exception | CLEAN | All clauses specific (UnicodeDecodeError, PermissionError, TimeoutExpired, FileNotFoundError) |
+| Orphan/dead code | CLEAN | All 6 functions registered |
+| Volatile data | CLEAN | No hardcoded stats |
 
 ---
 
-## Deferred Findings — Status After Iter 65
+## Deferred Findings — Status After Iter 66
 
 ### STILL DEFERRED (carried forward)
 - **DF-04** — `rolling_portfolio.py:304` dormant `orb_minutes=5` in rolling DOW stats — structural multi-file fix, blast radius >5 files
@@ -49,15 +54,15 @@
 ---
 
 ## Summary
-- 1 file: `pipeline/check_drift.py` CD-01 FIXED (canonical violation, ~8 lines)
+- 2 files scanned: `pipeline/check_drift.py` (scan completed, no new fix), `scripts/tools/audit_behavioral.py` AB-01 FIXED
 - 0 new deferrals
 - Infrastructure Gates: 3/3 PASS
 - Action: fix (mechanical)
 
 **Next iteration targets:**
-- `pipeline/check_drift.py` — complete remaining Seven Sins scan (orphan/dead code, volatile data)
-- `scripts/tools/audit_behavioral.py` — key infrastructure tool, unscanned
 - `pipeline/health_check.py` — orchestration script, unscanned
+- `pipeline/run_pipeline.py` — pipeline orchestrator, unscanned
+- `pipeline/init_db.py` — schema management, unscanned
 
 ---
 
@@ -141,3 +146,5 @@
 - `trading_app/prop_portfolio.py` — iter 61 (1 fix: PP-01 import sort)
 - `trading_app/prop_profiles.py` — iter 61 (1 fix: PP-01 import sort)
 - `scripts/tools/pipeline_status.py` — iter 62-64 (3 fixes: PS-01 canonical, PS-02 silent fallback, PS-03 preflight key mismatch)
+- `pipeline/check_drift.py` — iter 65-66 (1 fix: CD-01 canonical aperture count)
+- `scripts/tools/audit_behavioral.py` — iter 66 (1 fix: AB-01 instrument regex)
