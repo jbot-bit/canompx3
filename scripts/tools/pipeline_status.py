@@ -115,25 +115,25 @@ PREFLIGHT_RULES: dict[str, dict] = {
         "fix": "python pipeline/build_daily_features.py --instrument {instrument} --start 2019-01-01 --end 2026-12-31",
         "desc": "daily_features rows for {instrument} O{orb_minutes}",
     },
-    "strategy_discovery": {
+    "discovery": {
         "query": "SELECT COUNT(*) FROM orb_outcomes WHERE symbol = $1 AND orb_minutes = $2",
         "params": lambda inst, orb: [inst, orb],
         "fix": "python trading_app/outcome_builder.py --instrument {instrument} --orb-minutes {orb_minutes}",
         "desc": "orb_outcomes rows for {instrument} O{orb_minutes}",
     },
-    "strategy_validator": {
+    "validator": {
         "query": "SELECT COUNT(*) FROM experimental_strategies WHERE instrument = $1",
         "params": lambda inst, orb: [inst],
         "fix": "python trading_app/strategy_discovery.py --instrument {instrument} --orb-minutes {orb_minutes}",
         "desc": "experimental_strategies rows for {instrument}",
     },
-    "build_edge_families": {
+    "edge_families": {
         "query": "SELECT COUNT(*) FROM validated_setups WHERE instrument = $1 AND status = 'active'",
         "params": lambda inst, orb: [inst],
         "fix": "python trading_app/strategy_validator.py --instrument {instrument} --min-sample 50 --no-regime-waivers --min-years-positive-pct 0.75",
         "desc": "active validated_setups for {instrument}",
     },
-    "select_family_rr": {
+    "family_rr_locks": {
         "query": "SELECT COUNT(*) FROM edge_families WHERE instrument = $1",
         "params": lambda inst, orb: [inst],
         "fix": "python scripts/tools/build_edge_families.py --instrument {instrument}",

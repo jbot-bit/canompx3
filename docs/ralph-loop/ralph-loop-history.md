@@ -5,6 +5,17 @@
 
 ---
 
+## Iteration 64 — 2026-03-15
+- Phase: fix
+- Classification: [judgment]
+- Target: scripts/tools/pipeline_status.py (full Seven Sins scan completion)
+- Finding: PS-03 — 4/5 PREFLIGHT_RULES keys unreachable. Keys ("strategy_discovery", "strategy_validator", "build_edge_families", "select_family_rr") don't match step base names ("discovery", "validator", "edge_families", "family_rr_locks") from _parse_step_preflight(). Lookup silently returns (True, "No pre-flight rule..."), skipping actual checks.
+- Action: Renamed 4 PREFLIGHT_RULES keys to match step base names. Full Seven Sins scan now complete for pipeline_status.py (3 fixes across iters 62-64).
+- Blast radius: 1 file (pipeline_status.py, internal-only key lookup)
+- Verification: PASS (31 tests, drift 72/72, ruff clean)
+
+---
+
 ## Iteration 61 — 2026-03-15
 - Phase: fix
 - Classification: [mechanical]
