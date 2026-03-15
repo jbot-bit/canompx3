@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 78
+## Last iteration: 79
 
-## RALPH AUDIT — Iteration 78 (3 files scanned, 1 fix)
+## RALPH AUDIT — Iteration 79 (drift check #62 hardening + 2 fixes)
 ## Date: 2026-03-15
 ## Infrastructure Gates: 3/3 PASS
 
@@ -53,16 +53,17 @@
 ---
 
 ## Summary
-- `audit_integrity.py` (CLEAN), `parallel_rebuild.py` (CLEAN — scratch default intentional), `build_outcomes_fast.py` (BOF-01 FIXED)
-- BOF-01: hardcoded `Path(r"C:\db\gold.db")` — evaded drift check #62 via backslash path
-- 1 fix, 0 new deferrals
+- Fixed drift check #62 regex to catch backslash Windows paths (`C:\db\gold.db`, `C:\\db\\gold.db`)
+- Improved regex immediately caught 2 previously-hidden violations: `ingest_mes.py`, `ingest_mnq_fast.py`
+- Fixed both: replaced hardcoded scratch DB paths with GOLD_DB_PATH
+- 3 fixes (1 drift check + 2 ingestion scripts), 0 new deferrals
 - Infrastructure Gates: 3/3 PASS
 - Action: fix (mechanical)
 
 **Next iteration targets:**
-- Fix drift check #62 regex to catch backslash Windows paths (prevents future evasion)
 - `scripts/tools/generate_promotion_candidates.py` — promotion tool, unscanned
 - `scripts/tools/prospective_tracker.py` — signal tracker, unscanned
+- `scripts/tools/rolling_portfolio_assembly.py` — portfolio assembly, unscanned
 
 ---
 

@@ -23,7 +23,6 @@ Usage:
 import sys
 import time
 from datetime import date, timedelta
-from pathlib import Path
 
 import databento as db
 import duckdb
@@ -37,12 +36,13 @@ from pipeline.ingest_dbn_mgc import (
     validate_chunk,
     validate_timestamp_utc,
 )
+from pipeline.paths import GOLD_DB_PATH
 
 # =========================================================================
 # CONFIG
 # =========================================================================
 INSTRUMENT = "MNQ"
-DB_PATH = Path(r"C:\db\gold.db")
+DB_PATH = GOLD_DB_PATH  # canonical source — never hardcode
 START_DATE = date(2024, 2, 4)
 END_DATE = date(2026, 2, 3)
 
