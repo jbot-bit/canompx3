@@ -452,3 +452,14 @@
 - Blast radius: N/A (no changes)
 - Verification: PASS (64 entry_rules tests, drift 72/72)
 - Commit: NONE
+
+---
+
+## Iteration 53 — 2026-03-15
+- Phase: fix
+- Target: trading_app/execution_spec.py:46
+- Finding: Hardcoded ["E1", "E3"] in ExecutionSpec.validate() — E2 (active primary entry model) rejected, E3 (soft-retired) accepted. Canonical violation (Sin 5).
+- Action: Imported ENTRY_MODELS from trading_app.config; replaced hardcoded list in validate(); updated error message to dynamic format; updated test_execution_spec.py to cover E2 and use dynamic error match
+- Blast radius: 2 files (execution_spec.py + test_execution_spec.py)
+- Verification: PASS (26 tests, drift 72/72)
+- Commit: 41f19b4
