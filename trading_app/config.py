@@ -19,7 +19,7 @@ ORB SESSIONS (defined in pipeline/init_db.py as ORB_LABELS):
   US_DATA_830    - US economic data release 8:30 AM ET.
   NYSE_OPEN      - NYSE cash open 9:30 AM ET.
   US_DATA_1000   - US 10:00 AM data (ISM/CC) + post-equity-open flow.
-  COMEX_SETTLE   - COMEX gold settlement 1:30 PM ET (MGC only).
+  COMEX_SETTLE   - COMEX gold settlement 1:30 PM ET (all instruments).
   CME_PRECLOSE   - CME equity futures pre-settlement 2:45 PM CT.
   NYSE_CLOSE     - NYSE closing bell 4:00 PM ET.
 
