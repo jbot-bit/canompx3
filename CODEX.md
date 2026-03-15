@@ -29,7 +29,7 @@ This file exists in parallel with `CLAUDE.md`. It does not replace it. The Claud
 - Project architecture and implementation guardrails: `CLAUDE.md`
 - Trading and live behavior: `TRADING_RULES.md`
 - Research, statistics, and anti-bias discipline: `RESEARCH_RULES.md`
-- Shared agent, command, rule, and agent-memory surfaces: `.claude/`
+- Shared agent, skill, rule, and agent-memory surfaces: `.claude/`
 - Codex-specific launch and routing notes only: `.codex/`
 
 If there is a conflict, follow `CLAUDE.md`, `.claude/`, `TRADING_RULES.md`, or `RESEARCH_RULES.md` over this file. This file is only a thin Codex adapter.
@@ -47,7 +47,7 @@ Read these Codex docs when you need them:
 - `.codex/AUTHORITY.md` for scope and conflict resolution
 - `.codex/WORKSPACE_MAP.md` for repo navigation
 - `.codex/AGENTS.md` for `.claude/agents/` routing
-- `.codex/COMMANDS.md` for `.claude/commands/` routing
+- `.codex/COMMANDS.md` for `.claude/skills/` routing
 - `.codex/RULES.md` for `.claude/rules/` routing
 - `.codex/INTEGRATIONS.md` for plugins, MCP servers, and related runtime surfaces
 - `.codex/MEMORY.md` for memory-writing policy
@@ -99,7 +99,7 @@ Open:
 
 - `plugins/ralph-wiggum/README.md`
 - `.claude/agents/ralph-loop.md`
-- `.claude/commands/ralph.md`
+- `.claude/skills/ralph/SKILL.md`
 - `.codex/AGENTS.md`
 - `.codex/COMMANDS.md`
 

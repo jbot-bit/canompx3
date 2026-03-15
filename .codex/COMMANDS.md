@@ -1,20 +1,20 @@
 # Codex Command Routing
 
-The shared slash-command equivalents live in `.claude/commands/`. Use them as task recipes.
+The shared slash-command equivalents live in `.claude/skills/`. Use them as task recipes.
 
 ## High-Value Commands
 
-- `discover.md`: structured read-first exploration
-- `health-check.md`: repo health and validation sweep
-- `validate-instrument.md`: instrument validation workflow
-- `rebuild-outcomes.md`: outcome rebuild workflow
-- `quant-debug.md`: debugging trading logic or validation issues
-- `quant-tdd.md`: test-driven implementation workflow
-- `quant-verify.md`: verification workflow for quant changes
-- `blast-radius.md`: change impact analysis
-- `verify-complete.md`: done-definition enforcement
-- `audit.md`, `audit-quick.md`, `audit-phase.md`: audit flows
-- `ralph.md`: autonomous Ralph loop entrypoint
+- `discover/SKILL.md`: structured read-first exploration
+- `health-check/SKILL.md`: repo health and validation sweep
+- `validate-instrument/SKILL.md`: instrument validation workflow
+- `rebuild-outcomes/SKILL.md`: outcome rebuild workflow
+- `quant-debug/SKILL.md`: debugging trading logic or validation issues
+- `quant-tdd/SKILL.md`: test-driven implementation workflow
+- `quant-verify/SKILL.md`: verification workflow for quant changes
+- `blast-radius/SKILL.md`: change impact analysis
+- `verify-complete/SKILL.md`: done-definition enforcement
+- `audit/SKILL.md`, `audit-quick/SKILL.md`, `audit-phase/SKILL.md`: audit flows
+- `ralph/SKILL.md`: autonomous Ralph loop entrypoint
 
 ## Codex-Native CLI Shortcuts
 
@@ -33,10 +33,10 @@ The shared slash-command equivalents live in `.claude/commands/`. Use them as ta
 
 ## Selection Heuristic
 
-- Start with `discover.md` when the repo area is unclear.
-- Use `blast-radius.md` before edits that touch shared interfaces.
-- Use `quant-verify.md` or `verify-complete.md` before closing any material implementation task.
-- Use `health-check.md` when the right validation command is unclear.
+- Start with `discover/SKILL.md` when the repo area is unclear.
+- Use `blast-radius/SKILL.md` before edits that touch shared interfaces.
+- Use `quant-verify/SKILL.md` or `verify-complete/SKILL.md` before closing any material implementation task.
+- Use `health-check/SKILL.md` when the right validation command is unclear.
 
 ## Codex Note
 
