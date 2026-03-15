@@ -19,6 +19,7 @@
 | WF-02 | 19 | execution_engine.py:EE3 | IB hardcoded 23:00 UTC for TOKYO_OPEN | Correctly documents Brisbane UTC+10 fixed offset. No DST. IB_DURATION_MINUTES from config. |
 | WF-03 | 44 | strategy_fitness.py | Full scan clean — no findings | Audited iter 44, no actionable findings |
 | WF-04 | 58 | projectx/positions.py:35 | `avg_price: p.get("averagePrice", 0)` uses int 0 vs float 0.0 | Style difference, no correctness impact. avg_price is only used for logging in session_orchestrator (never for P&L computation). |
+| WF-05 | 96 | scripts/tools/audit_15m30m.py:29,44,62,88 | Hardcoded `IN ('MGC','MNQ','MES','M2K')` in SQL queries | Read-only investigation script. Matches current active instruments exactly. If instrument removed, SQL returns 0 rows — not dangerous. Pattern: one-off diagnostic, not canonical source. |
 
 ## Resolved Findings
 
