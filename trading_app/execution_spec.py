@@ -8,6 +8,8 @@ Future extension point for TCA (slippage benchmarking, limit orders).
 import json
 from dataclasses import asdict, dataclass
 
+from trading_app.config import ENTRY_MODELS
+
 
 @dataclass(frozen=True)
 class ExecutionSpec:
@@ -43,8 +45,8 @@ class ExecutionSpec:
         if not (1 <= self.confirm_bars <= 5):
             raise ValueError(f"confirm_bars must be 1-5, got {self.confirm_bars}")
 
-        if self.entry_model not in ["E1", "E3"]:
-            raise ValueError(f"entry_model must be E1/E3, got {self.entry_model}")
+        if self.entry_model not in ENTRY_MODELS:
+            raise ValueError(f"entry_model must be one of {ENTRY_MODELS}, got {self.entry_model}")
 
         if self.order_type not in ["market", "limit", "stop"]:
             raise ValueError(f"order_type must be market/limit/stop, got {self.order_type}")
