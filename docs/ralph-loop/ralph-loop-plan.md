@@ -1,7 +1,7 @@
-## Iteration: 60
-## Target: trading_app/ai/ (cli.py, corpus.py, grounding.py, query_agent.py, sql_adapter.py, strategy_matcher.py)
-## Finding: audit-only — all 6 files CLEAN after Seven Sins scan. 4 ACCEPTABLE observations.
-## Classification: audit-only
-## Blast Radius: N/A
-## Invariants: N/A
-## Diff estimate: 0 lines (no fix)
+## Iteration: 61
+## Target: trading_app/prop_portfolio.py:16, trading_app/prop_profiles.py:13
+## Finding: I001 import block un-sorted — extra blank lines after import block in both files
+## Classification: [mechanical]
+## Blast Radius: 2 test files (test_prop_portfolio.py, test_prop_profiles.py), no pipeline callers
+## Invariants: no logic changes, no import additions/removals, only blank line removal
+## Diff estimate: 2 lines (2 blank lines removed)
