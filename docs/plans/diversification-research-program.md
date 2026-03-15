@@ -19,6 +19,9 @@ It should be a disciplined search for **genuinely different edge sources** that 
 
 This document defines that program.
 
+It also reflects one important negative result: a broad non-ORB sweep already failed to produce FDR-surviving alternatives.
+That means the next diversification program must be **narrower, more mechanism-led, and harsher on weak ideas** than a generic "scan everything" pass.
+
 ---
 
 ## Program Goal
@@ -162,6 +165,21 @@ Reject early if any of the following are true:
 
 ---
 
+## Candidate Ranking Order
+
+When deciding what to research first, rank candidates in this order:
+
+1. mechanism clarity
+2. expected diversification value versus the current book
+3. practical tradability and cost realism
+4. available history / path to meaningful sample size
+5. implementation complexity
+
+This deliberately puts mechanism and portfolio value above convenience.
+Easy-to-test ideas are not automatically good ideas.
+
+---
+
 ## Research Funnel
 
 The program should run through a staged funnel.
@@ -251,6 +269,18 @@ Important:
 - high day overlap with different PnL profile is ambiguous and must be interpreted carefully
 - portfolio-level outcome is the final judge
 
+### Provisional Screening Gates
+
+These are **screening thresholds**, not deployment thresholds:
+
+- same-day overlap should be meaningfully lower than existing same-family clones
+- absolute daily-PnL correlation should ideally land below `0.30` for a candidate to feel genuinely additive
+- if correlation lands in the `0.30-0.50` band, the candidate needs stronger mechanism and clearer marginal portfolio benefit
+- if correlation is above `0.50`, treat it as suspect unless there is a compelling regime-hedge argument proven by portfolio tests
+
+These gates are intentionally rough.
+They exist to stop fake diversification early, not to replace judgment.
+
 ---
 
 ## Candidate Universe
@@ -276,6 +306,14 @@ This is the starting universe, not an endorsement list.
 - more gold-adjacent products with the same macro driver
 - threshold-heavy indicator models
 
+### Explicit De-Prioritized Paths
+
+Based on existing repo findings, these should start near the back of the queue:
+
+- broad mean-reversion sweeps without a very specific session microstructure thesis
+- generic FX session-open ORB work that repeats the failed M6E-style logic
+- "find another edge by scanning more ORB filters" research framed as diversification
+
 ---
 
 ## Program Rules
@@ -287,6 +325,9 @@ This is the starting universe, not an endorsement list.
 5. Every no-go gets archived clearly so it is not re-litigated casually.
 6. No production wiring, config changes, or schema work until this program produces a reviewed winner.
 
+7. Every candidate must be compared against a representative existing ORB slot or family, not judged in isolation.
+8. Non-ORB research should start from a specific structural thesis, not a broad archetype grid.
+
 ---
 
 ## First Wave Deliverables
@@ -294,14 +335,19 @@ This is the starting universe, not an endorsement list.
 These are the first concrete research outputs this program should generate after approval.
 
 1. **Candidate shortlist memo**
-   - choose a small initial set of asset-class / model-type candidates
-   - include data availability, cost realism, and mechanism summary
+   - pick a *small* first batch, ideally 3-5 candidates total
+   - include data availability, cost realism, mechanism summary, and expected diversification role
 
 2. **Diversification scorecard template**
    - one standard report format for overlap, correlation, stress co-movement, and marginal portfolio value
 
 3. **Stage-1 triage on the first candidate batch**
    - decide which ideas deserve actual discovery work
+
+4. **First-wave order**
+   - Wave 1A: one or two truly different asset-class candidates
+   - Wave 1B: one tightly specified non-ORB or failed-auction style idea if the mechanism is strong
+   - Wave 1C: one overlay concept only if it is clearly a portfolio modifier, not pseudo-alpha
 
 No code is part of this document. This is the research charter only.
 
