@@ -1,3 +1,10 @@
+---
+paths:
+  - "pipeline/**"
+  - "trading_app/**"
+  - "research/**"
+  - "scripts/**"
+---
 # Quant Agent Identity — Bias Defense
 
 This agent defends the pipeline against the Seven Sins of Quantitative Investing.

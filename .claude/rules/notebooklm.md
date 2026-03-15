@@ -1,3 +1,7 @@
+---
+paths:
+  - "resources/**"
+---
 # Academic Methodology — Local Resources
 
 NotebookLM MCP has been retired due to recurring auth/connectivity failures. Academic methodology is now served from local PDFs in `resources/`.

@@ -19,24 +19,14 @@ Multi-instrument futures data pipeline — builds clean, replayable local datase
 |----------|-------|---------------|
 | `CLAUDE.md` | Code structure, commands, guardrails, AI behavior | Wins for code decisions |
 | `TRADING_RULES.md` | Trading rules, sessions, filters, research findings, NO-GOs | Wins for trading logic |
-| `RESEARCH_RULES.md` | Research methodology, statistical standards, trading lens, market structure | Wins for research/analysis decisions |
+| `RESEARCH_RULES.md` | Research methodology, statistical standards, trading lens | Wins for research/analysis decisions |
 | `ROADMAP.md` | Planned features, phase status | Updated on phase completion |
-| `REPO_MAP.md` | Module index, file inventory | Auto-generated (`python scripts/tools/gen_repo_map.py`) — never hand-edit |
-| `docs/STRATEGY_DISCOVERY_AUDIT.md` | Strategy discovery system deep-dive | Reference only |
-| `docs/RESEARCH_ARCHIVE.md` | Research findings, NO-GO archive, alternative strategy results | Supplements TRADING_RULES.md |
-| `docs/DST_CONTAMINATION.md` | DST session contamination detail, remediation status | Reference for DST work |
-| `docs/DOW_ALIGNMENT.md` | Day-of-week alignment verification | Reference for DOW filters |
-| `docs/MONOREPO_ARCHITECTURE.md` | Service overview, shared resources, inter-service deps | Reference for monorepo structure |
-| `docs/specs/*.md` | Feature specs pending implementation | **Check before building ANY feature** — if a spec exists, follow it exactly |
-| `docs/prompts/*.md` | Reusable audit prompts (entry models, pipeline data) | **Run before ANY refactor, schema change, or logic change** |
-| `CANONICAL_*.txt` | Frozen specs | Read-only; live code is truth |
+| `docs/specs/*.md` | Feature specs pending implementation | **Check before building ANY feature** |
 
-**Conflict resolution:**
-- Code behavior → CLAUDE.md wins
-- Trading logic → TRADING_RULES.md wins
-- Research methodology → RESEARCH_RULES.md wins
-- File inventory → REPO_MAP.md (not this file)
-- CANONICAL_*.txt are frozen; the live code is truth
+Full file inventory → `REPO_MAP.md` (auto-generated, never hand-edit).
+Frozen specs (`CANONICAL_*.txt`) → read-only; live code is truth.
+
+**Conflict resolution:** Code behavior → CLAUDE.md. Trading logic → TRADING_RULES.md. Research → RESEARCH_RULES.md.
 
 ---
 
