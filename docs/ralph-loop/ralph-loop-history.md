@@ -5,6 +5,18 @@
 
 ---
 
+## Iteration 97 — 2026-03-16
+- Phase: audit-only
+- Classification: N/A (no fix)
+- Target: scripts/tools/backtest_1100_early_exit.py, backtest_atr_regime.py, beginner_tradebook.py, find_pf_strategy.py, rank_slots.py
+- Finding: All 5 files clean. Hardcoded parameters in all files are intentional research-scope configuration (read-only scripts, not canonical lists). No safety impact.
+- Action: Audit only — no fixes required.
+- Blast radius: N/A
+- Verification: PASS (72 drift checks, behavioral audit 6/6, ruff clean)
+- Commit: NONE
+
+---
+
 ## Iteration 96 — 2026-03-16
 - Phase: audit-only
 - Classification: N/A (no fix)
