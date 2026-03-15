@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 68
+## Last iteration: 69
 
-## RALPH AUDIT — Iteration 68 (pipeline/run_pipeline.py)
+## RALPH AUDIT — Iteration 69 (pipeline/init_db.py)
 ## Date: 2026-03-15
 ## Infrastructure Gates: 3/3 PASS
 
@@ -13,35 +13,35 @@
 |------|--------|--------|
 | `check_drift.py` | PASS | 72 checks passed, 0 skipped, 6 advisory |
 | `ruff check` | PASS | Clean |
-| `import smoke test` | PASS | Module imports OK |
+| `pytest init_db` | PASS | 10/10 tests |
 
 ---
 
 ## Files Audited This Iteration
 
-### pipeline/run_pipeline.py — FIXED (RP-01)
+### pipeline/init_db.py — FIXED (ID-01)
 
-#### Finding RP-01: Canonical violation — hardcoded `choices=[5, 15, 30]` (FIXED)
-- **Sin**: Canonical violation — `--orb-minutes` CLI arg uses `choices=[5, 15, 30]` instead of `choices=VALID_ORB_MINUTES`. The same CLI pattern in `build_daily_features.py` already uses the canonical source correctly.
-- **Severity**: MEDIUM (if aperture values change, this CLI would reject valid values)
-- **Fix**: Import `VALID_ORB_MINUTES` from `pipeline.build_daily_features`; replace hardcoded list with canonical reference
-- **Lines changed**: 2 (1 import, 1 choices= replacement)
-- **Blast radius**: 1 file (run_pipeline.py), CLI arg validation only
+#### Finding ID-01: Fail-open — `--force` mode misses 5 tables (FIXED)
+- **Sin**: Fail-open — hardcoded force-drop list missing `edge_families`, `regime_strategies`, `regime_validated`, `strategy_trade_days`, `validation_run_log`. Users expecting a clean slate via `--force` get orphaned data.
+- **Severity**: MEDIUM (orphaned data after force reset could cause integrity issues)
+- **Fix**: Replaced hardcoded table list with dynamic `information_schema.tables` query. Now drops ALL user tables in the `main` schema, eliminating maintenance burden. Verified with smoke test.
+- **Lines changed**: ~10 (removed 13-line hardcoded list, added 7-line dynamic query)
+- **Blast radius**: 1 file (init_db.py), `--force` path only (non-force path unchanged)
 
 #### Seven Sins scan — COMPLETE
 
 | Sin | Status | Detail |
 |-----|--------|--------|
-| Canonical violation | RP-01 FIXED | Hardcoded ORB minutes choices |
-| Silent failure | CLEAN | No exception catching — subprocess results checked via returncode |
-| Fail-open | CLEAN | Non-zero returncode aborts pipeline (fail-closed) |
+| Fail-open | ID-01 FIXED | Force mode dropped incomplete table set |
+| Silent failure | CLEAN | All `except CatalogException: pass` blocks are idempotent migration (column already exists) |
+| Canonical violation | ACCEPTABLE | `ORB_LABELS_DYNAMIC` is a parallel definition to `SESSION_CATALOG`, enforced by drift check #32. Deriving from SESSION_CATALOG would be structural — deferred. |
 | Broad exception | CLEAN | No `except Exception` blocks |
-| Orphan/dead code | CLEAN | All referenced scripts exist (check_db.py, ingest_dbn.py, build_bars_5m.py, build_daily_features.py) |
-| Volatile data | CLEAN | No hardcoded stats |
+| Orphan/dead code | CLEAN | All schemas used, all migrations applied |
+| Volatile data | CLEAN | Comments mention counts but code is dynamic |
 
 ---
 
-## Deferred Findings — Status After Iter 68
+## Deferred Findings — Status After Iter 69
 
 ### STILL DEFERRED (carried forward)
 - **DF-04** — `rolling_portfolio.py:304` dormant `orb_minutes=5` in rolling DOW stats — structural multi-file fix, blast radius >5 files
@@ -49,15 +49,15 @@
 ---
 
 ## Summary
-- 1 file: `pipeline/run_pipeline.py` RP-01 FIXED (canonical violation, 2 lines)
+- 1 file: `pipeline/init_db.py` ID-01 FIXED (fail-open force drop, ~10 lines)
 - 0 new deferrals
 - Infrastructure Gates: 3/3 PASS
-- Action: fix (mechanical)
+- Action: fix (judgment)
 
 **Next iteration targets:**
-- `pipeline/init_db.py` — schema management, unscanned
 - `pipeline/dashboard.py` — report generator, unscanned
 - `pipeline/db_lock.py` — concurrency lock, unscanned
+- `pipeline/audit_log.py` — audit logging, unscanned
 
 ---
 
@@ -145,3 +145,4 @@
 - `scripts/tools/audit_behavioral.py` — iter 66 (1 fix: AB-01 instrument regex)
 - `pipeline/health_check.py` — iter 67 (1 fix: HC-01 connection leak)
 - `pipeline/run_pipeline.py` — iter 68 (1 fix: RP-01 canonical orb_minutes choices)
+- `pipeline/init_db.py` — iter 69 (1 fix: ID-01 fail-open force drop)
