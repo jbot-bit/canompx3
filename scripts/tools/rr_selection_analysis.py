@@ -1,20 +1,34 @@
 #!/usr/bin/env python
 """RR selection analysis: SharpeDD criterion + multi-account deployment sizing."""
 
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
 import duckdb
 import numpy as np
 import pandas as pd
 from scipy import stats
 
-con = duckdb.connect("gold.db", read_only=True)
-df = con.execute("""
-SELECT vs.instrument, vs.orb_label, vs.filter_type, vs.entry_model,
-    vs.rr_target, vs.sample_size as N, vs.win_rate as WR, vs.expectancy_r as ExpR,
-    vs.sharpe_ratio as Sharpe, vs.max_drawdown_r as MaxDD_R, vs.trades_per_year as TPY
-FROM validated_setups vs
-WHERE vs.entry_model IN ('E1','E2') AND vs.status = 'active'
-""").fetchdf()
-con.close()
+from pipeline.paths import GOLD_DB_PATH
+from trading_app.config import ENTRY_MODELS, SKIP_ENTRY_MODELS
+
+active_models = [em for em in ENTRY_MODELS if em not in SKIP_ENTRY_MODELS]
+placeholders = ", ".join(f"'{em}'" for em in active_models)
+
+con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+try:
+    df = con.execute(f"""
+    SELECT vs.instrument, vs.orb_label, vs.filter_type, vs.entry_model,
+        vs.rr_target, vs.sample_size as N, vs.win_rate as WR, vs.expectancy_r as ExpR,
+        vs.sharpe_ratio as Sharpe, vs.max_drawdown_r as MaxDD_R, vs.trades_per_year as TPY
+    FROM validated_setups vs
+    WHERE vs.entry_model IN ({placeholders}) AND vs.status = 'active'
+    """).fetchdf()
+finally:
+    con.close()
 
 df["AbsDD"] = df["MaxDD_R"].abs()
 

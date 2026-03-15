@@ -5,6 +5,17 @@
 
 ---
 
+## Iteration 76 — 2026-03-15
+- Phase: fix
+- Classification: [judgment]
+- Target: ML subpackage completion (5 files CLEAN) + scripts/tools/rr_selection_analysis.py (FIX)
+- Finding: RR-01 — rr_selection_analysis.py had 3 sins: (1) hardcoded `"gold.db"` path instead of GOLD_DB_PATH, (2) hardcoded `entry_model IN ('E1','E2')` instead of ENTRY_MODELS - SKIP_ENTRY_MODELS, (3) connection leak (no try/finally). Fixed all 3.
+- Action: Added sys.path setup, imported GOLD_DB_PATH + ENTRY_MODELS + SKIP_ENTRY_MODELS, wrapped in try/finally.
+- Blast radius: 1 file (rr_selection_analysis.py)
+- Verification: PASS (72 drift checks, ruff clean)
+
+---
+
 ## Iteration 75 — 2026-03-15
 - Phase: fix
 - Classification: [mechanical]
