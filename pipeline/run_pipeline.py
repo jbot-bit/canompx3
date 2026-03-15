@@ -29,6 +29,7 @@ from pathlib import Path
 
 # Add project root to path
 from pipeline.asset_configs import list_instruments
+from pipeline.build_daily_features import VALID_ORB_MINUTES
 from pipeline.log import get_logger
 
 logger = get_logger(__name__)
@@ -162,7 +163,7 @@ def main():
     parser.add_argument("--chunk-days", type=int, default=7, help="Trading days per ingest commit")
     parser.add_argument("--batch-size", type=int, default=50000, help="Rows per DBN read batch")
     parser.add_argument(
-        "--orb-minutes", type=int, default=5, choices=[5, 15, 30], help="ORB duration in minutes (default: 5)"
+        "--orb-minutes", type=int, default=5, choices=VALID_ORB_MINUTES, help="ORB duration in minutes (default: 5)"
     )
     args = parser.parse_args()
 
