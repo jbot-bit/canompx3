@@ -1,0 +1,78 @@
+{
+  "env": {
+    "GRAPHITI_ENABLED": "true"
+  },
+  "effortLevel": "high",
+  "alwaysThinkingEnabled": true,
+  "autoUpdatesChannel": "latest",
+  "includeGitInstructions": false,
+  "worktree": {
+    "symlinkDirectories": [".venv", "node_modules"]
+  },
+  "attribution": {
+    "commit": "Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "pr": "Generated with [Claude Code](https://claude.com/claude-code)"
+  },
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "excludedCommands": ["git", "uv", "ruff", "gh"],
+    "filesystem": {
+      "allowWrite": ["./", "C:\\db"]
+    }
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/pre-edit-guard.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/post-edit-pipeline.py",
+            "timeout": 60
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/post-edit-schema.py",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "context7@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true,
+    "superpowers@claude-plugins-official": false,
+    "commit-commands@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": true,
+    "pr-review-toolkit@claude-plugins-official": true,
+    "serena@claude-plugins-official": false,
+    "feature-dev@claude-plugins-official": true,
+    "explanatory-output-style@claude-plugins-official": true,
+    "greptile@claude-plugins-official": true,
+    "coderabbit@claude-plugins-official": false,
+    "firecrawl@claude-plugins-official": true,
+    "claude-mem@claude-plugins-official": false,
+    "frontend-design@claude-plugins-official": false,
+    "ralph-loop@claude-plugins-official": false,
+    "superpowers-extended-cc@superpowers-extended-cc-marketplace": false
+  }
+}
