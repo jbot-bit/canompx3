@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 64
+## Last iteration: 65
 
-## RALPH AUDIT — Iteration 64 (scripts/tools/pipeline_status.py)
+## RALPH AUDIT — Iteration 65 (pipeline/check_drift.py)
 ## Date: 2026-03-15
 ## Infrastructure Gates: 3/3 PASS
 
@@ -13,40 +13,35 @@
 |------|--------|--------|
 | `check_drift.py` | PASS | 72 checks passed, 0 skipped, 6 advisory |
 | `ruff check` | PASS | Clean |
-| `pytest test_pipeline_status.py` | PASS | 31/31 tests |
+| `pytest test_check_drift.py` | PASS | 63/63 tests |
 
 ---
 
 ## Files Audited This Iteration
 
-### scripts/tools/pipeline_status.py — FIXED (PS-03)
+### pipeline/check_drift.py — FIXED (CD-01), partial scan
 
-#### Finding PS-03: Silent failure — 4/5 preflight rules unreachable (FIXED)
-- **Sin**: Silent failure (PS-02 category) — `PREFLIGHT_RULES` keys don't match `REBUILD_STEPS` step base names
-- **Severity**: HIGH (preflight checks exist but silently do nothing for 4 of 5 steps)
-- **Root cause**: `_parse_step_preflight("discovery_O5")` returns base `"discovery"`, but `PREFLIGHT_RULES` has key `"strategy_discovery"`. Lookup fails silently — `preflight_check` returns `(True, "No pre-flight rule...")`, skipping the check.
-- **Affected keys**: `strategy_discovery`→`discovery`, `strategy_validator`→`validator`, `build_edge_families`→`edge_families`, `select_family_rr`→`family_rr_locks`
-- **Fix**: Renamed all 4 mismatched `PREFLIGHT_RULES` keys to match their step base names
-- **Lines changed**: 4 (key renames only, no logic change)
-- **Blast radius**: 0 external callers of `PREFLIGHT_RULES` keys. Internal-only lookup in `preflight_check()`. Tests pass (only tested `outcome_builder` key, which was already correct).
+#### Finding CD-01: Canonical violation — hardcoded aperture count `3` (FIXED)
+- **Sin**: Canonical violation — `check_daily_features_row_integrity` uses `HAVING COUNT(*) != 3` where `3` = number of ORB apertures. Should derive from `len(VALID_ORB_MINUTES)`.
+- **Severity**: MEDIUM (if a 4th aperture is added, this check produces false violations for every trading day)
+- **Fix**: Import `VALID_ORB_MINUTES` from `pipeline.build_daily_features` inside function; replace hardcoded `3` with `len(VALID_ORB_MINUTES)` in SQL, error message, and docstring. Updated check registry label.
+- **Lines changed**: ~8 (import, variable, SQL, message, label)
+- **Blast radius**: 1 file (check_drift.py), self-contained check function
 
-#### Seven Sins scan — COMPLETE
+#### Seven Sins scan — PARTIAL (file is 3539 lines)
 
 | Sin | Status | Detail |
 |-----|--------|--------|
-| Silent failure | PS-03 FIXED | Preflight key mismatch (see above) |
-| Fail-open | CLEAN | `run_rebuild` returns False on all failure paths; `preflight_check` now reaches all rules |
-| Canonical violation | PS-01 FIXED (iter 62) | `APERTURES = VALID_ORB_MINUTES` |
-| Orphan/dead code | CLEAN | All imports used, no dead functions |
-| Volatile data | CLEAN | No hardcoded counts or stats |
-| Broad exception | CLEAN | All `except` clauses are specific (`duckdb.BinderException`, `duckdb.CatalogException`, `duckdb.InvalidInputException`, `TimeoutExpired`, `PipelineLockError`) |
-| Schema trust | PS-02 FIXED (iter 63) | `family_rr_locks` fallback now logs schema-miss |
-
-**Full scan complete.** All 7 sins checked. 3 findings across iters 62-64 (PS-01, PS-02, PS-03), all fixed.
+| Canonical violation | CD-01 FIXED | Hardcoded aperture count in row integrity check |
+| Silent failure | 1 observation (line 3482) | `except Exception: pass` on DB connect — swallows non-busy errors. Impact mitigated: individual checks create own connections and report errors. ACCEPTABLE — noise reduction pattern. |
+| Fail-open | CLEAN (spot-checked) | Check functions return violations; main loop reports exceptions |
+| Broad exception | 7 occurrences | Lines 939, 1872, 2387, 2419, 2546, 3482, 3494. All either report violations or handle DB-busy. ACCEPTABLE for this infrastructure file. |
+| Orphan/dead code | Not fully scanned | 3539 lines — deferred to next iteration |
+| Volatile data | Not fully scanned | Deferred |
 
 ---
 
-## Deferred Findings — Status After Iter 64
+## Deferred Findings — Status After Iter 65
 
 ### STILL DEFERRED (carried forward)
 - **DF-04** — `rolling_portfolio.py:304` dormant `orb_minutes=5` in rolling DOW stats — structural multi-file fix, blast radius >5 files
@@ -54,13 +49,13 @@
 ---
 
 ## Summary
-- 1 file: `scripts/tools/pipeline_status.py` PS-03 FIXED (silent failure — 4 unreachable preflight rules, 4 key renames)
+- 1 file: `pipeline/check_drift.py` CD-01 FIXED (canonical violation, ~8 lines)
 - 0 new deferrals
 - Infrastructure Gates: 3/3 PASS
-- Action: fix (judgment)
+- Action: fix (mechanical)
 
 **Next iteration targets:**
-- `pipeline/check_drift.py` — large file (3539 lines), scan check definitions for canonical violations
+- `pipeline/check_drift.py` — complete remaining Seven Sins scan (orphan/dead code, volatile data)
 - `scripts/tools/audit_behavioral.py` — key infrastructure tool, unscanned
 - `pipeline/health_check.py` — orchestration script, unscanned
 

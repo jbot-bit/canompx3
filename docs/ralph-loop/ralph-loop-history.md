@@ -5,6 +5,17 @@
 
 ---
 
+## Iteration 65 — 2026-03-15
+- Phase: fix
+- Classification: [mechanical]
+- Target: pipeline/check_drift.py (partial Seven Sins scan — 3539 lines)
+- Finding: CD-01 — `check_daily_features_row_integrity` hardcodes `HAVING COUNT(*) != 3` where `3` = number of ORB apertures. Should derive from `len(VALID_ORB_MINUTES)`.
+- Action: Imported `VALID_ORB_MINUTES` inside function; replaced hardcoded `3` with `len(VALID_ORB_MINUTES)` in SQL, error message, docstring, and check registry label.
+- Blast radius: 1 file (check_drift.py), self-contained check function
+- Verification: PASS (63 tests, drift 72/72, ruff clean)
+
+---
+
 ## Iteration 64 — 2026-03-15
 - Phase: fix
 - Classification: [judgment]
