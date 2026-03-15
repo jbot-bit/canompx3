@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 96
+## Last iteration: 97
 
-## RALPH AUDIT — Iteration 96 (audit-only)
+## RALPH AUDIT — Iteration 97 (audit-only)
 ## Date: 2026-03-16
 ## Infrastructure Gates: 3/3 PASS
 
@@ -19,68 +19,67 @@
 
 ## Files Audited This Iteration
 
-### scripts/tools/ml_per_session_experiment.py — CLEAN
+### scripts/tools/backtest_1100_early_exit.py — CLEAN
 
 Seven Sins scan:
-- Lines 27-40: `SESSION_ORDER` — 12 sessions including EUROPE_FLOW (line 32). CLEAN.
-- Line 143: `duckdb.connect(str(GOLD_DB_PATH), read_only=True)` — canonical DB path. CLEAN.
-- Imports: `GOLD_DB_PATH`, `ALL_FILTERS`, `transform_to_features` — all canonical. CLEAN.
-- No hardcoded instrument lists (uses `--instrument` CLI arg). CLEAN.
+- Line 27: `from pipeline.cost_model import get_cost_spec, to_r_multiple` — canonical cost model. CLEAN.
+- Line 28: `from pipeline.paths import GOLD_DB_PATH` — canonical DB path. CLEAN.
+- Lines 34, 59-65: Hardcoded `'MGC'`, `'1100'`, `'E1'` in SQL — intentional investigation scope (entire script is scoped to MGC 1100 E1 backtest). Read-only. ACCEPTABLE.
+- Line 35: `duckdb.connect(str(db_path), read_only=True)` — read-only connection. CLEAN.
+- No silent failures; early exit paths use `continue`, not silent pass. CLEAN.
+
+**No findings.**
+
+### scripts/tools/backtest_atr_regime.py — CLEAN
+
+Seven Sins scan:
+- Lines 45-54: `FAMILIES = [...]` hardcoded list — intentional per-family research configuration. The list includes session/em/filter tuples as the explicit scope of investigation. ACCEPTABLE (intentional research scope, not canonical list).
+- Line 35: `from pipeline.paths import GOLD_DB_PATH` — canonical DB path. CLEAN.
+- Lines 36-42: `ALL_FILTERS`, `ENTRY_MODELS`, `CONFIRM_BARS_OPTIONS`, `RR_TARGETS` — all canonical imports. CLEAN.
+- Lines 51-52: `{"session": "LONDON_METALS", "em": "E3", ...}` — E3 soft-retired but present in FAMILIES as research artifact. Read-only research script, no writes. ACCEPTABLE.
+- Lines 276-278: `finally: con.close()` — proper connection cleanup. CLEAN.
+- No silent failures; empty/insufficient data paths print message and continue. CLEAN.
+
+**No findings.**
+
+### scripts/tools/beginner_tradebook.py — CLEAN
+
+Seven Sins scan:
+- Lines 32-44: `TIER1_SESSIONS` and `TIER2_SESSIONS` hardcoded lists — intentional hand-picked curated tradebook sessions. Not a canonical instrument list — it's a personal daily reference. Comment at line 27 explicitly says "Update this list after each rebuild chain." ACCEPTABLE.
+- Line 22: `from pipeline.cost_model import COST_SPECS` — canonical. CLEAN.
+- Line 23: `from pipeline.paths import GOLD_DB_PATH` — canonical. CLEAN.
+- Lines 147, 213, 223: Three DuckDB connections opened in sequence (con, _con, _con2). First closed at 194, second at 219, third at 229. Read-only CLI script — process exit would close any leaks. Redundant connections are LOW/ACCEPTABLE (process-exit cleanup pattern). ACCEPTABLE.
+- No silent failures in `get_session_best` — returns None on no rows. CLEAN.
+
+**No findings.**
+
+### scripts/tools/find_pf_strategy.py — CLEAN
+
+Seven Sins scan:
+- Lines 36-39: `TARGET_SESSIONS`, `START_DATE`, `END_DATE`, `YEARS_SPAN` hardcoded — intentional 2-year research window configuration. ACCEPTABLE (research scope, not canonical list).
+- Line 25: `from pipeline.paths import GOLD_DB_PATH` — canonical. CLEAN.
+- Lines 26-33: `ALL_FILTERS`, `ENTRY_MODELS`, `CONFIRM_BARS_OPTIONS`, `RR_TARGETS` — all canonical. CLEAN.
+- Lines 85-250: Read-only `try/finally` with `con.close()`. CLEAN.
 - No silent failures. CLEAN.
 
 **No findings.**
 
-### scripts/tools/ml_level_proximity_experiment.py — CLEAN
+### scripts/tools/rank_slots.py — CLEAN
 
 Seven Sins scan:
-- Lines 26-39: `SESSION_ORDER` — 12 sessions including EUROPE_FLOW (line 31). CLEAN.
-- Line 159: `duckdb.connect(str(GOLD_DB_PATH), read_only=True)` — canonical DB path. CLEAN.
-- Local `rf_params` dict — intentional experiment variation. ACCEPTABLE (same pattern as ml_hybrid_experiment allowlist).
-- No hardcoded instrument lists (uses `--instrument` CLI arg). CLEAN.
+- Lines 19-28: `slots` hardcoded list with specific strategy IDs — intentional research portfolio diagnostic. Read-only. ACCEPTABLE (per-investigation scope, not canonical list).
+- Line 14: `from pipeline.cost_model import get_cost_spec` — canonical. CLEAN.
+- Line 15: `from pipeline.paths import GOLD_DB_PATH` — canonical. CLEAN.
+- Line 17: `con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)` — canonical DB path, module-level connection, read-only. CLEAN.
+- Line 196: `con.close()` — proper cleanup. CLEAN.
+- Lines 71: Sharpe computed with `np.sqrt(252)` — daily Sharpe annualization, appropriate for portfolio-level daily P&L simulation. Not used for strategy selection. CLEAN.
+- No silent failures. CLEAN.
 
 **No findings.**
-
-### scripts/tools/ml_threshold_sweep.py — CLEAN
-
-Seven Sins scan:
-- No SESSION_ORDER — script does not use cross-session features. CLEAN.
-- Imports: `MODEL_DIR`, `replay_historical` — canonical imports. CLEAN.
-- Model backup/restore pattern (lines 98-155) — correct fail-safe pattern using `shutil.copy2` + `finally` block guarantees restore. CLEAN.
-- No hardcoded DB paths (uses `MODEL_DIR` from `trading_app.ml.config`). CLEAN.
-
-**No findings.**
-
-### scripts/tools/ml_session_leakage_audit.py — CLEAN
-
-Seven Sins scan:
-- Lines 29-42: `SESSION_ORDER` — 12 sessions including EUROPE_FLOW (line 34). CLEAN.
-- Line 145: `duckdb.connect(str(GOLD_DB_PATH), read_only=True)` — canonical DB path. CLEAN.
-- No hardcoded instrument lists (uses `--instrument` CLI arg). CLEAN.
-
-**No findings.**
-
-### scripts/tools/ml_license_diagnostic.py — CLEAN
-
-Seven Sins scan:
-- No local SESSION_ORDER — imports `SESSION_CHRONOLOGICAL_ORDER` from `trading_app.ml.config` (canonical). CLEAN.
-- `SESSION_CHRONOLOGICAL_ORDER` in `trading_app/ml/config.py` confirmed to include EUROPE_FLOW (line 155). CLEAN.
-- Imports: `ACTIVE_INSTRUMENTS`, `RF_PARAMS`, `GOLD_DB_PATH`, `load_validated_feature_matrix`, `apply_e6_filter` — all canonical. CLEAN.
-- Three-phase analysis (feature importance, honest OOS, signal diagnosis) — correct methodology. CLEAN.
-- Exception handlers at lines 199-201 and 220-222 catch `ValueError` from `roc_auc_score` only (not broad Exception). CLEAN.
-
-**No findings.**
-
-### Spot-check: scripts/tools/audit_15m30m.py — 1 LOW ACCEPTABLE finding
-
-Seven Sins scan:
-- Lines 29, 44, 62, 88: `IN ('MGC','MNQ','MES','M2K')` hardcoded in SQL — canonical violation.
-- ASSESSMENT: One-off investigation script (reads only, no writes). Hardcoded list matches current active instruments exactly. If an instrument is removed, SQL returns 0 rows — not dangerous. No imports of canonical instrument list needed. ACCEPTABLE (pattern: one-off diagnostic, not a canonical source).
-
-**Finding GP-96a: ACCEPTABLE — hardcoded instrument list in investigation SQL (read-only diagnostic, no safety impact)**
 
 ---
 
-## Deferred Findings — Status After Iter 96
+## Deferred Findings — Status After Iter 97
 
 ### STILL DEFERRED (carried forward)
 - **DF-04** — `rolling_portfolio.py:304` dormant `orb_minutes=5` in rolling DOW stats — structural multi-file fix, blast radius >5 files
@@ -88,10 +87,9 @@ Seven Sins scan:
 ---
 
 ## Summary
-- 5 primary target files audited: ml_per_session_experiment.py, ml_level_proximity_experiment.py, ml_threshold_sweep.py, ml_session_leakage_audit.py, ml_license_diagnostic.py
-- 1 spot-check file: audit_15m30m.py
+- 5 target files audited: backtest_1100_early_exit.py, backtest_atr_regime.py, beginner_tradebook.py, find_pf_strategy.py, rank_slots.py
 - 0 findings fixed (audit-only iteration — all files clean)
-- 1 ACCEPTABLE finding: GP-96a (hardcoded instruments in read-only diagnostic SQL)
+- 0 new ACCEPTABLE findings (all canonical violations are intentional research scope, no new additions to Won't Fix)
 - Infrastructure Gates: 3/3 PASS
 - Commit: NONE
 
@@ -110,21 +108,21 @@ Seven Sins scan:
 
 ## Files Fully Scanned
 
-> Cumulative list — 129 files fully scanned.
+> Cumulative list — 134 files fully scanned.
 
 - trading_app/ — 44 files (iters 4-61)
 - pipeline/ — 15 files (iters 1-71)
-- scripts/tools/ — 33 files (iters 18-72, 89, 90, 91, 92, 93, 94, 95, 96): audit_behavioral.py, generate_promotion_candidates.py, select_family_rr.py (iter 89); build_edge_families.py, pipeline_status.py (iter 90); assert_rebuild.py, gen_repo_map.py, sync_pinecone.py (iter 91); pinecone_snapshots.py, rolling_portfolio_assembly.py, generate_trade_sheet.py (iter 92); rr_selection_analysis.py, sensitivity_analysis.py (iter 93); gen_playbook.py, ml_audit.py, audit_integrity.py (iter 94); ml_cross_session_experiment.py, ml_hybrid_experiment.py, ml_instrument_deep_dive.py (iter 95); ml_per_session_experiment.py, ml_level_proximity_experiment.py, ml_threshold_sweep.py, ml_session_leakage_audit.py, ml_license_diagnostic.py, audit_15m30m.py (iter 96)
+- scripts/tools/ — 38 files (iters 18-72, 89, 90, 91, 92, 93, 94, 95, 96, 97): audit_behavioral.py, generate_promotion_candidates.py, select_family_rr.py (iter 89); build_edge_families.py, pipeline_status.py (iter 90); assert_rebuild.py, gen_repo_map.py, sync_pinecone.py (iter 91); pinecone_snapshots.py, rolling_portfolio_assembly.py, generate_trade_sheet.py (iter 92); rr_selection_analysis.py, sensitivity_analysis.py (iter 93); gen_playbook.py, ml_audit.py, audit_integrity.py (iter 94); ml_cross_session_experiment.py, ml_hybrid_experiment.py, ml_instrument_deep_dive.py (iter 95); ml_per_session_experiment.py, ml_level_proximity_experiment.py, ml_threshold_sweep.py, ml_session_leakage_audit.py, ml_license_diagnostic.py, audit_15m30m.py (iter 96); backtest_1100_early_exit.py, backtest_atr_regime.py, beginner_tradebook.py, find_pf_strategy.py, rank_slots.py (iter 97)
 - scripts/infra/ — 1 file (iter 72)
 - scripts/migrations/ — 1 file (iter 73)
 - scripts/reports/ — 3 files (iter 87): report_wf_diagnostics.py, parameter_stability_heatmap.py, report_edge_portfolio.py (iter 85)
 - scripts/ root — 2 files (iter 88): run_live_session.py, operator_status.py
-- **Total: 129 files fully scanned**
+- **Total: 134 files fully scanned**
 - See previous audit iterations for per-file detail
 
 ## Next iteration targets
-- `scripts/tools/backtest_1100_early_exit.py` — backtest script, orb_1100 session reference worth examining
-- `scripts/tools/backtest_atr_regime.py` — hardcoded FAMILIES list in research backtest
-- `scripts/tools/beginner_tradebook.py` — tradebook display script with dual connection pattern
-- `scripts/tools/find_pf_strategy.py`, `scripts/tools/rank_slots.py` — portfolio analysis tools
-- Any remaining scripts/tools/ files not yet scanned
+- `scripts/tools/backtest_compressed_spring.py` — backtest script, orb_1100 session reference worth examining
+- `scripts/tools/backtest_early_exit_mfe.py` — backtest script, early exit research
+- `scripts/tools/backtest_mgc_stop_opt.py` — stop optimization backtest
+- `scripts/tools/backtest_t80_profile.py` — T80 profile backtest
+- Any remaining scripts/tools/ backtest_*.py files not yet scanned
