@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 73
+## Last iteration: 74
 
-## RALPH AUDIT — Iteration 73 (4 files scanned, 1 fix)
+## RALPH AUDIT — Iteration 74 (3 files scanned, 1 fix)
 ## Date: 2026-03-15
 ## Infrastructure Gates: 3/3 PASS
 
@@ -53,15 +53,15 @@
 ---
 
 ## Summary
-- 4 files scanned: gen_repo_map.py (CLEAN), sync_pinecone.py (CLEAN), retire_e3_strategies.py (CLEAN), refresh_data.py (RD-01 FIXED)
+- 3 files scanned: sensitivity_analysis.py (SA-01 FIXED), report_edge_portfolio.py (CLEAN — proper try/finally), gen_playbook.py (noted EUROPE_FLOW gap)
 - 1 fix, 0 new deferrals
 - Infrastructure Gates: 3/3 PASS
 - Action: fix (mechanical)
 
 **Next iteration targets:**
-- `scripts/tools/sensitivity_analysis.py` — analysis tool, unscanned (has hardcoded apertures — LOW priority)
 - `scripts/reports/report_edge_portfolio.py` — portfolio report, unscanned
-- `scripts/tools/gen_playbook.py` — playbook generator, unscanned
+- `scripts/tools/gen_playbook.py` — playbook generator, unscanned (missing EUROPE_FLOW in SESSION_ORDER)
+- `trading_app/ml/` — ML subpackage files, unscanned
 
 ---
 
@@ -74,5 +74,5 @@
 - scripts/tools/ — 8 files (iters 18-72)
 - scripts/infra/ — 1 file (iter 72)
 - scripts/migrations/ — 1 file (iter 73)
-- **Total: 88 files fully scanned**
+- **Total: 91 files fully scanned**
 - See previous audit iterations for per-file detail
