@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 92
+## Last iteration: 93
 
-## RALPH AUDIT — Iteration 92 (fix)
+## RALPH AUDIT — Iteration 93 (fix)
 ## Date: 2026-03-15
 ## Infrastructure Gates: 3/3 PASS
 
@@ -19,41 +19,36 @@
 
 ## Files Audited This Iteration
 
-### scripts/tools/pinecone_snapshots.py — 1 FINDING FIXED (PS-92)
+### scripts/tools/rr_selection_analysis.py — CLEAN
 
 Seven Sins scan:
-- Lines 59-62: `sample_size >= 100` and `sample_size BETWEEN 30 AND 99` — hardcoded classification thresholds. `trading_app.config` exports `CORE_MIN_SAMPLES = 100` and `REGIME_MIN_SAMPLES = 30`. **FIXED** — imported canonical constants and replaced literals with f-string interpolation.
-- Line 303: `except Exception: summary = "(unreadable)"` — documentation generator reading research output files. No trading data. ACCEPTABLE (non-production doc tool).
-- No hardcoded instruments, sessions, entry models, or DB paths.
-- No silent failures on trading paths; no fail-open execution paths.
-
-**Finding PS-92: FIXED — hardcoded 100/30 replaced with CORE_MIN_SAMPLES/REGIME_MIN_SAMPLES (4 lines, [mechanical])**
-
-### scripts/tools/rolling_portfolio_assembly.py — CLEAN
-
-Seven Sins scan:
-- `WINDOW_MONTHS = 12`, `STABLE_SHARPE = 0.10`, `DEGRADED_SHARPE = 0.0` — operational rolling analysis heuristics, not trading parameters. No `@research-source` annotation required (analysis tool, not config). ACCEPTABLE.
-- `ACTIVE_ORB_INSTRUMENTS`, `GOLD_DB_PATH`, `get_cost_spec` — all canonical imports. CLEAN.
-- Slot head selection uses `ORDER BY ef.head_sharpe_ann DESC` — this is edge family ranking for portfolio assembly (not variant selection for live trading). Drift check #44 applies to variant selection ORDER BY in SQL adapters; this is a separate reporting context. ACCEPTABLE.
-- No exception handlers suppressing failures.
-- No hardcoded instruments, sessions, entry models, or DB paths.
+- Line 18: `active_models = [em for em in ENTRY_MODELS if em not in SKIP_ENTRY_MODELS]` — canonical dynamic filter using `ENTRY_MODELS` + `SKIP_ENTRY_MODELS`. CLEAN.
+- Lines 15-16: canonical imports (`GOLD_DB_PATH`, `ENTRY_MODELS`, `SKIP_ENTRY_MODELS`). CLEAN.
+- Lines 22-31: `try/finally con.close()` — clean connection management.
+- Line 67: `rho = 0.7` — assumed inter-RR correlation for Jobson-Korkie SE formula. Statistical analysis heuristic, not a trading parameter. ACCEPTABLE (Intentional per-session or per-instrument heuristic).
+- Lines 135-136: hardcoded DD ceiling brackets — display bucketing for analysis output only, not trading logic. ACCEPTABLE.
+- Lines 146: hardcoded account sizes — illustrative sizing for analysis display, not production trading config. ACCEPTABLE.
+- No hardcoded instruments, sessions, DB paths. No silent failures on trading paths. No fail-open execution paths.
 
 **Finding: CLEAN — no actionable findings**
 
-### scripts/tools/generate_trade_sheet.py — CLEAN (with note)
+### scripts/tools/sensitivity_analysis.py — 1 FINDING FIXED (SA-01)
 
 Seven Sins scan:
-- Line 127: `except Exception: return "UNKNOWN"` in `_check_fitness` — fitness failure blocks REGIME-gated trades (fail-closed). Non-gated trades show UNKNOWN badge (display only). CLEAN.
-- Line 60: `["G2", "G3", "G4", "G5", "G6", "G8"]` hardcoded in `_filter_description()` — UI display helper, not trading logic. ACCEPTABLE.
-- Line 558: `"All entries are E2 (stop-market)"` in HTML note — misleading since LIVE_PORTFOLIO includes E1 strategies. Display documentation only; does not affect trade execution logic. LOW/cosmetic — not worth a production code change for HTML string in a generator tool.
-- `LIVE_PORTFOLIO`, `SESSION_CATALOG`, `GOLD_DB_PATH`, `get_cost_spec`, `get_active_instruments` — all canonical imports. CLEAN.
-- No hardcoded instruments, sessions, or DB paths in execution paths.
+- Line 40 (pre-fix): `RR_STEPS = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0]` — hardcoded duplicate of `RR_TARGETS` from `trading_app/outcome_builder.py`. **FIXED** — replaced with `from trading_app.outcome_builder import RR_TARGETS` and `RR_STEPS = RR_TARGETS`.
+- Line 43: `CB_STEPS = [1, 2, 3, 4, 5]` — confirm bar sweep steps. These are a complete ordered sweep (1 through 5), not a subset of canonical. No canonical source for this list. ACCEPTABLE.
+- Line 46: `G_LADDER = ["NO_FILTER", "ORB_G4", "ORB_G5", "ORB_G6", "ORB_G8"]` — adjacency sweep ladder for G-filters. These are the base G-filter names used to navigate adjacency, guarded by `if G_LADDER[idx-1] in ALL_FILTERS` (line 118-120). ACCEPTABLE.
+- Line 49: `STABILITY_THRESHOLD = 0.50` — analysis stability threshold heuristic. Not a trading parameter. ACCEPTABLE.
+- Line 161: `orb_minutes = 5` hardcoded in `query_strategy_outcomes` — deliberate: filter columns (rel_vol etc.) only populated at 5m aperture. Comment explains reasoning at lines 152-155. ACCEPTABLE (matches strategy_discovery.py pattern).
+- Lines 169-172: `for _, row in df_rows.iterrows()` — iterrows in tool script. Drift check #77 applies to pipeline only. ACCEPTABLE.
+- Canonical imports: `VALID_ORB_MINUTES`, `get_cost_spec`, `GOLD_DB_PATH`, `ALL_FILTERS`, `TRADEABLE_INSTRUMENTS`, `LIVE_PORTFOLIO`. CLEAN.
+- No silent failures, no hardcoded instruments/sessions/DB paths.
 
-**Finding: CLEAN — HTML note at line 558 is cosmetically inaccurate (E1 also active) but display-only. ACCEPTABLE.**
+**Finding SA-01: FIXED — RR_STEPS hardcoded list replaced with canonical RR_TARGETS import (3 lines, [mechanical])**
 
 ---
 
-## Deferred Findings — Status After Iter 92
+## Deferred Findings — Status After Iter 93
 
 ### STILL DEFERRED (carried forward)
 - **DF-04** — `rolling_portfolio.py:304` dormant `orb_minutes=5` in rolling DOW stats — structural multi-file fix, blast radius >5 files
@@ -61,10 +56,10 @@ Seven Sins scan:
 ---
 
 ## Summary
-- 3 files audited: pinecone_snapshots.py (1 LOW finding FIXED) + rolling_portfolio_assembly.py (clean) + generate_trade_sheet.py (clean)
-- 1 finding fixed: PS-92 — hardcoded CORE/REGIME thresholds replaced with canonical constants (4 lines, [mechanical])
+- 2 files audited: rr_selection_analysis.py (clean) + sensitivity_analysis.py (1 LOW finding FIXED)
+- 1 finding fixed: SA-01 — RR_STEPS hardcoded list replaced with canonical RR_TARGETS import (3 lines, [mechanical])
 - Infrastructure Gates: 3/3 PASS
-- Commit: d2f582a
+- Commit: b7804ef
 
 **Codebase steady state maintained for major violation classes:**
 - Hardcoded DB paths: ELIMINATED (0 in production code)
@@ -80,20 +75,19 @@ Seven Sins scan:
 
 ## Files Fully Scanned
 
-> Cumulative list — 115 files fully scanned.
+> Cumulative list — 117 files fully scanned.
 
 - trading_app/ — 44 files (iters 4-61)
 - pipeline/ — 15 files (iters 1-71)
-- scripts/tools/ — 19 files (iters 18-72, 89, 90, 91, 92): audit_behavioral.py, generate_promotion_candidates.py, select_family_rr.py (iter 89); build_edge_families.py, pipeline_status.py (iter 90); assert_rebuild.py, gen_repo_map.py, sync_pinecone.py (iter 91); pinecone_snapshots.py, rolling_portfolio_assembly.py, generate_trade_sheet.py (iter 92)
+- scripts/tools/ — 21 files (iters 18-72, 89, 90, 91, 92, 93): audit_behavioral.py, generate_promotion_candidates.py, select_family_rr.py (iter 89); build_edge_families.py, pipeline_status.py (iter 90); assert_rebuild.py, gen_repo_map.py, sync_pinecone.py (iter 91); pinecone_snapshots.py, rolling_portfolio_assembly.py, generate_trade_sheet.py (iter 92); rr_selection_analysis.py, sensitivity_analysis.py (iter 93)
 - scripts/infra/ — 1 file (iter 72)
 - scripts/migrations/ — 1 file (iter 73)
 - scripts/reports/ — 3 files (iter 87): report_wf_diagnostics.py, parameter_stability_heatmap.py, report_edge_portfolio.py (iter 85)
 - scripts/ root — 2 files (iter 88): run_live_session.py, operator_status.py
-- **Total: 115 files fully scanned**
+- **Total: 117 files fully scanned**
 - See previous audit iterations for per-file detail
 
 ## Next iteration targets
-- `scripts/tools/rr_selection_analysis.py` — RR selection analysis, not yet scanned
-- `scripts/tools/sensitivity_analysis.py` — sensitivity analysis tool, not yet scanned
-- `scripts/tools/generate_trade_sheet.py` already scanned this iter
-- `scripts/tmp_*.py` — temporary analysis scripts (low priority, audit-only)
+- `scripts/tools/gen_playbook.py` — playbook generator, not yet scanned
+- `scripts/tools/ml_audit.py` — ML audit tool, not yet scanned
+- `scripts/tools/audit_integrity.py` — integrity audit tool, not yet scanned

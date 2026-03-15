@@ -881,3 +881,13 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 2 files (sync_pinecone.py imports generators, test_pinecone_snapshots.py)
 - Verification: 4/4 test_pinecone_snapshots tests PASS, 72 drift checks PASS
 - Commit: d2f582a
+
+## Iteration 93 — 2026-03-15
+- Phase: fix
+- Classification: [mechanical]
+- Target: scripts/tools/sensitivity_analysis.py:40
+- Finding: RR_STEPS = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0] hardcoded — duplicates canonical RR_TARGETS from trading_app/outcome_builder.py
+- Action: Added `from trading_app.outcome_builder import RR_TARGETS` and replaced literal list assignment with `RR_STEPS = RR_TARGETS`
+- Blast radius: 1 file (standalone CLI script, no importers)
+- Verification: PASS (import verified, ruff clean, 72/72 drift checks pass)
+- Commit: b7804ef
