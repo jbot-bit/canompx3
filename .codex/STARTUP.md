@@ -1,0 +1,59 @@
+# Codex Startup
+
+Use this workspace exactly as a parallel adapter to the existing Claude setup.
+
+## Core Rule
+
+- Use the same repo Claude Code uses.
+- Use the same files and git worktree.
+- Do not create a second project layout for Codex.
+- Do not assume Codex needs its own DB or project-local clone to operate.
+- Treat Claude rules as authoritative at all times.
+
+## Order
+
+1. Read `AGENTS.md`.
+2. Read `SOUL.md`.
+3. Read `USER.md`.
+4. Read `memory/<today>.md` and `memory/<yesterday>.md`.
+5. In the main session, read `MEMORY.md`.
+6. Read `CLAUDE.md`.
+7. Read `CODEX.md`.
+8. Read `.codex/OPENAI_CODEX_STANDARDS.md` when changing the Codex layer or improving setup.
+9. Read `.codex/PROJECT_BRIEF.md`.
+10. Read `.codex/CURRENT_STATE.md`.
+11. Read `.codex/NEXT_STEPS.md` when planning or prioritization matters.
+12. Read `.codex/CODEX_IMPROVEMENT_PLAN.md` when the task is about improving Codex itself.
+13. Read `.codex/config.toml` when runtime defaults or profiles matter.
+14. Load only the extra `.claude/` or `.codex/` docs needed for the task.
+
+## Runtime Defaults
+
+- Workspace root: `/mnt/c/Users/joshd/canompx3`
+- Codex CLI currently installed locally: `0.114.0`
+- Default Codex model in user config: `gpt-5.4`
+- Project trust level is already configured as `trusted` in `/home/joshd/.codex/config.toml`
+- Project-scoped defaults live in `.codex/config.toml`
+
+## Project Defaults
+
+- Python: `3.13`
+- Dependency manager: `uv`
+- Install/sync: `uv sync --frozen`
+- Fast verification path:
+  - `uv run python pipeline/check_drift.py`
+  - `uv run python -m pytest tests/ -x -q`
+  - `uv run ruff check pipeline/ trading_app/ ui/ scripts/ tests/`
+- Canonical DB: `gold.db` at the repo root unless `DUCKDB_PATH` overrides it
+- Repo launchers:
+  - `scripts/infra/codex-project.sh`
+  - `scripts/infra/codex-project-search.sh`
+  - `scripts/infra/codex-review.sh`
+
+## Non-Negotiables
+
+- `CLAUDE.md` and `.claude/` stay canonical.
+- Do not mirror Claude docs into `.codex/`; link to them.
+- Prefer the repo-managed environment over global Python.
+- Use Codex as another client on this same project, not as a parallel project.
+- Never let `.codex/` instructions override Claude rules.

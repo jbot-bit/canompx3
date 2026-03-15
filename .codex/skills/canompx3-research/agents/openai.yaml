@@ -1,0 +1,7 @@
+interface:
+  display_name: "Canompx3 Research"
+  short_description: "Apply canonical research standards in this repo"
+  default_prompt: "Use the canompx3-research skill to analyze this task under the repository's canonical research and quant-bias rules."
+
+policy:
+  allow_implicit_invocation: true

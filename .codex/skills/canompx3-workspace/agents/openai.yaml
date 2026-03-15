@@ -1,0 +1,4 @@
+interface:
+  display_name: "Canompx3 Codex Layer"
+  short_description: "Codex adapter for the canompx3 workspace"
+  default_prompt: "Use the canompx3 workspace skill to load the shared Claude setup through Codex's parallel adapter layer."
