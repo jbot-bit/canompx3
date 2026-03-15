@@ -31,12 +31,14 @@ HEAD_SHA=$(git rev-parse HEAD)
 
 **2. Dispatch the review agent:**
 
-Use Agent tool with `superpowers-extended-cc:code-reviewer` subagent type. Provide:
+Use Agent tool with `pr-review-toolkit:code-reviewer` subagent type. Provide:
 
 - **What was implemented** — one sentence
 - **Plan or requirements** — reference the design doc or task
 - **BASE_SHA / HEAD_SHA** — commit range
 - **Project-specific review criteria** (below)
+
+Alternatively, for a deeper quant-focused review with Seven Sins grading, use `/bloomey-review`.
 
 **3. Project-Specific Review Criteria**
 
