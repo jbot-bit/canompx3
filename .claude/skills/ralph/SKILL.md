@@ -1,3 +1,10 @@
+---
+name: ralph
+description: >
+  Run one Ralph Loop audit iteration. Finds Seven Sins violations, canonical
+  integrity issues, and silent failures. Fixes highest-priority finding.
+disable-model-invocation: true
+---
 Run one Ralph Loop iteration as a dedicated subagent (token-optimized).
 
 Use when: "ralph", "run ralph", "ralph loop", "ralph audit", "autonomous audit"

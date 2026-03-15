@@ -1,3 +1,11 @@
+---
+name: blast-radius
+description: >
+  Pre-edit impact analysis. Map all callers, importers, downstream effects,
+  companion tests, and canonical source dependencies before modifying production code.
+context: fork
+agent: blast-radius
+---
 Map the full blast radius before changing: $ARGUMENTS
 
 Use when: "blast radius", "what does this touch", "impact of changing", "before I edit", "what breaks if", "map dependencies", "what's affected"
