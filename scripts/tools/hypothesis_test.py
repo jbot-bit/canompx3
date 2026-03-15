@@ -14,7 +14,6 @@ Run: python scripts/tools/hypothesis_test.py [--db-path PATH]
 """
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
@@ -27,6 +26,8 @@ try:
 except ImportError:
     print("ERROR: duckdb not installed. Run: pip install duckdb")
     sys.exit(1)
+
+from pipeline.paths import GOLD_DB_PATH
 
 # Cost models (round-trip in points)
 FRICTION = {
@@ -51,10 +52,7 @@ def get_db_path():
     args = parser.parse_args()
     if args.db_path:
         return Path(args.db_path)
-    env = os.environ.get("DUCKDB_PATH")
-    if env:
-        return Path(env)
-    return PROJECT_ROOT / "gold.db"
+    return GOLD_DB_PATH  # canonical source — handles DUCKDB_PATH env var
 
 
 def fmt_r(val):

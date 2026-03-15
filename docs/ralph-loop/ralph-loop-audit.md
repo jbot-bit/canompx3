@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 80
+## Last iteration: 81
 
-## RALPH AUDIT — Iteration 80 (4 files scanned, 1 fix)
+## RALPH AUDIT — Iteration 81 (3 files scanned, 1 fix)
 ## Date: 2026-03-15
 ## Infrastructure Gates: 3/3 PASS
 
@@ -53,16 +53,17 @@
 ---
 
 ## Summary
-- generate_promotion_candidates.py (CLEAN), prospective_tracker.py (CLEAN), rolling_portfolio_assembly.py (CLEAN)
-- build_mes_outcomes_fast.py: BMOF-01 FIXED — 3 canonical violations (hardcoded `C:\db\mes.db`, hardcoded RR_TARGETS, hardcoded CONFIRM_BARS_OPTIONS)
-- 1 fix (3 sins), 0 new deferrals
+- hypothesis_test.py: HT-01 FIXED — duplicated DB path resolution logic (reimplemented `pipeline.paths._resolve_db_path()` instead of importing `GOLD_DB_PATH`)
+- explore.py: noted same pattern (`DEFAULT_DB = PROJECT_ROOT / "gold.db"`) — LOW priority
+- detect_volume_spikes.py: CLEAN (uses canonical `--db-path` with GOLD_DB_PATH default)
+- 1 fix, 0 new deferrals
 - Infrastructure Gates: 3/3 PASS
 - Action: fix (mechanical)
 
 **Next iteration targets:**
-- `scripts/tools/hypothesis_test.py` — statistical testing, unscanned
-- `scripts/tools/explore.py` — interactive explorer, unscanned
-- `scripts/tools/detect_volume_spikes.py` — volume analysis, unscanned
+- `scripts/tools/explore.py` — interactive explorer (has `DEFAULT_DB = PROJECT_ROOT / "gold.db"`)
+- `scripts/tools/backfill_garch.py` — GARCH backfill, unscanned
+- `scripts/tools/stress_test.py` — stress testing, unscanned
 
 ---
 

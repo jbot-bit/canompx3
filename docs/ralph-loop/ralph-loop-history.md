@@ -5,6 +5,17 @@
 
 ---
 
+## Iteration 81 — 2026-03-15
+- Phase: fix
+- Classification: [mechanical]
+- Target: hypothesis_test.py (FIX) + explore.py (noted) + detect_volume_spikes.py (CLEAN)
+- Finding: HT-01 — `hypothesis_test.py:48-57` reimplements `pipeline.paths._resolve_db_path()` logic (check CLI, check env var, fallback to `PROJECT_ROOT / "gold.db"`). Should import `GOLD_DB_PATH` which already handles all this.
+- Action: Imported GOLD_DB_PATH; simplified `get_db_path()` to CLI override → GOLD_DB_PATH fallback. Removed unused `os` import.
+- Blast radius: 1 file (hypothesis_test.py)
+- Verification: PASS (72 drift checks, ruff clean)
+
+---
+
 ## Iteration 80 — 2026-03-15
 - Phase: fix
 - Classification: [judgment]
