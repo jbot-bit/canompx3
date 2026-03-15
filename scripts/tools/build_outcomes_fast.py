@@ -28,6 +28,7 @@ import pandas as pd
 from pipeline.build_daily_features import compute_trading_day_utc_range
 from pipeline.cost_model import get_cost_spec
 from pipeline.init_db import ORB_LABELS
+from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import ENTRY_MODELS
 from trading_app.db_manager import init_trading_app_schema
 from trading_app.outcome_builder import (
@@ -36,7 +37,7 @@ from trading_app.outcome_builder import (
     compute_single_outcome,
 )
 
-DB_PATH = Path(r"C:\db\gold.db")
+DB_PATH = GOLD_DB_PATH  # canonical source — never hardcode
 
 
 def process_single_day(args_tuple):
