@@ -821,3 +821,25 @@
 - Blast radius: 1 file (discovery.py), 1 test file (test_discovery.py — no test exercises the skip guard directly)
 - Verification: PASS (63 tests across test_nested/, drift 72/72)
 - Commit: 52c74c5
+
+## Iteration 89 — 2026-03-15
+- Phase: audit-only
+- Classification: N/A
+- Target: scripts/tools/generate_promotion_candidates.py, scripts/tools/select_family_rr.py, scripts/tools/audit_behavioral.py
+- Finding: No actionable findings — all three files clean
+- Action: Audit only, no changes made
+- Blast radius: 0 files
+- Verification: PASS (infrastructure gates 3/3)
+- Commit: NONE
+
+## Iteration 90 — 2026-03-15
+- Phase: fix
+- Classification: [mechanical]
+- Target: scripts/tools/build_edge_families.py:217-220
+- Finding: Dead variable `orb_minutes_map` — built but never read; orphan code from refactor
+- Action: Removed 2 lines (dict initialization + single assignment). No behavior change.
+- Blast radius: 1 file, 0 callers
+- Verification: 22/22 tests passed, drift 72/72 PASS
+- Commit: e529f42
+
+Also audited: scripts/tools/pipeline_status.py — CLEAN (no findings)
