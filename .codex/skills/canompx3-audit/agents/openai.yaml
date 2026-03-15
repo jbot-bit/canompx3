@@ -1,0 +1,7 @@
+interface:
+  display_name: "Canompx3 Audit"
+  short_description: "Run canonical audit flows for this repo"
+  default_prompt: "Use the canompx3-audit skill to run the appropriate audit flow for this repository."
+
+policy:
+  allow_implicit_invocation: true

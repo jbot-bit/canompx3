@@ -1,0 +1,7 @@
+interface:
+  display_name: "Canompx3 Verify"
+  short_description: "Run repo-standard verification after changes"
+  default_prompt: "Use the canompx3-verify skill to run the standard verification flow for this repository."
+
+policy:
+  allow_implicit_invocation: true
