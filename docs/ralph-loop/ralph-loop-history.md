@@ -5,6 +5,17 @@
 
 ---
 
+## Iteration 74 — 2026-03-15
+- Phase: fix
+- Classification: [mechanical]
+- Target: sensitivity_analysis.py (FIX) + report_edge_portfolio.py (CLEAN) + gen_playbook.py (CLEAN, noted gap)
+- Finding: SA-01 — `orb_minutes_list = [5, 15, 30]` in sensitivity_analysis.py default param. 6th instance of same canonical violation.
+- Action: Imported VALID_ORB_MINUTES; replaced hardcoded default.
+- Blast radius: 1 file (sensitivity_analysis.py), function default only
+- Verification: PASS (72 drift checks, ruff clean)
+
+---
+
 ## Iteration 73 — 2026-03-15
 - Phase: fix
 - Classification: [mechanical]

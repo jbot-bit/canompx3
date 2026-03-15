@@ -30,6 +30,7 @@ import duckdb
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from pipeline.build_daily_features import VALID_ORB_MINUTES  # noqa: E402
 from pipeline.cost_model import get_cost_spec  # noqa: E402
 from pipeline.paths import GOLD_DB_PATH  # noqa: E402
 from trading_app.config import ALL_FILTERS, TRADEABLE_INSTRUMENTS  # noqa: E402
@@ -137,7 +138,7 @@ def query_strategy_outcomes(
     Returns list of (outcome, pnl_r) tuples for win/loss trades.
     """
     if orb_minutes_list is None:
-        orb_minutes_list = [5, 15, 30]
+        orb_minutes_list = list(VALID_ORB_MINUTES)
 
     # Strip aperture suffix (_O5, _O15, _O30) to get base filter name
     base_ft = filter_type
