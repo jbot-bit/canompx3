@@ -1,3 +1,8 @@
+---
+name: bloomey-review
+description: Institutional code review with seven sins analysis
+---
+
 Institutional code review with seven sins analysis: $ARGUMENTS
 
 Use when: "review this", "check my work", "is this good", "code review", "before I commit", "bloomey", "seven sins", "review my changes", "anything wrong with this"

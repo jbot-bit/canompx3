@@ -1,3 +1,8 @@
+---
+name: 4tp
+description: Plan, design, and proceed to implementation
+---
+
 Plan, design, and proceed to implementation for: $ARGUMENTS
 
 Use when: user says "4tp", "plan and build", "design and implement", "full pipeline", "just do it and plan"
