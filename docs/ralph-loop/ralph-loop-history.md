@@ -5,6 +5,17 @@
 
 ---
 
+## Iteration 69 — 2026-03-15
+- Phase: fix
+- Classification: [judgment]
+- Target: pipeline/init_db.py (full Seven Sins scan)
+- Finding: ID-01 — `--force` mode uses hardcoded 8-table drop list, missing 5 tables (edge_families, regime_strategies, regime_validated, strategy_trade_days, validation_run_log). Users expecting clean slate get orphaned data.
+- Action: Replaced hardcoded list with dynamic `information_schema.tables` query — drops ALL user tables, no maintenance burden.
+- Blast radius: 1 file (init_db.py), `--force` path only
+- Verification: PASS (10 init_db tests, 72 drift checks, ruff clean, smoke test)
+
+---
+
 ## Iteration 68 — 2026-03-15
 - Phase: fix
 - Classification: [mechanical]
