@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 58
+## Last iteration: 59
 
-## RALPH AUDIT — Iteration 58 (trading_app/live/projectx/ + trading_app/live/tradovate/ — 10 unscanned files)
+## RALPH AUDIT — Iteration 59 (trading_app/regime/ — 4 unscanned files)
 ## Date: 2026-03-15
 ## Infrastructure Gates: 4/4 PASS
 
@@ -13,113 +13,56 @@
 |------|--------|--------|
 | `check_drift.py` | PASS | 72 checks passed, 0 skipped, 6 advisory |
 | `audit_behavioral.py` | PASS | All 6 checks clean |
-| `pytest test_projectx_auth + test_projectx_feed + test_projectx_router + test_tradovate_positions` | PASS | 35 tests, no failures |
-| `ruff check` | 2 pre-existing I001 in prop_portfolio.py + prop_profiles.py (out of scope) |
+| `pytest tests/test_regime/` | PASS | regime tests pass |
+| `ruff check` | CLEAN for scoped files |
 
 ---
 
 ## Files Audited This Iteration
 
-### trading_app/live/projectx/auth.py — CLEAN
+### trading_app/regime/discovery.py — CLEAN
 
 #### Seven Sins scan
 
-- **Silent failure**: CLEAN. `except Exception` at line 84 logs warning and falls back to full login — intentional, not silent.
-- **Fail-open**: CLEAN. Token refresh failure falls back to full login — authentication still required.
-- **Look-ahead bias**: N/A — broker auth infra.
-- **Cost illusion**: N/A.
-- **Canonical violation**: CLEAN. No instrument/session/cost references needed.
-- **Orphan risk**: CLEAN. Tested in `test_projectx_auth.py` (3 tests).
+- **Silent failure**: CLEAN. No broad except in production paths. `duckdb.connect` in try/finally.
+- **Fail-open**: CLEAN. Exits with 0 count on empty features — not fail-open (empty input = valid empty result).
+- **Look-ahead bias**: CLEAN. Grid search over historical outcomes with proper date filtering.
+- **Cost illusion**: N/A — discovery phase (no cost computation).
+- **Canonical violation**: CLEAN. Imports `ENTRY_MODELS`, `SKIP_ENTRY_MODELS`, `get_filters_for_grid` from `trading_app.config`. Imports `ORB_LABELS` from `pipeline.init_db`. Uses `GOLD_DB_PATH` from `pipeline.paths`. `SKIP_ENTRY_MODELS` guard present at line 119.
+- **Orphan risk**: CLEAN. Tested in `tests/test_regime/test_discovery.py`.
 - **Volatile data**: CLEAN.
 
-### trading_app/live/projectx/contract_resolver.py — CLEAN
+### trading_app/regime/validator.py — CLEAN
 
 #### Seven Sins scan
 
-- **Silent failure**: CLEAN. Raises RuntimeError on missing account or contract.
-- **Canonical violation**: CLEAN. `INSTRUMENT_SEARCH_TERMS` is broker API search mapping (not a canonical strategy instrument list). Used only for contract discovery, not trading logic.
-- **Orphan risk**: CLEAN. Used by session_orchestrator via broker_factory.
+- **Silent failure**: CLEAN. Uses `get_cost_spec(instrument)` from canonical cost_model. Uses `validate_strategy` from production validator. Idempotent pattern (clears before insert).
+- **Fail-open**: CLEAN. No broad except.
+- **Canonical violation**: CLEAN. No hardcoded instruments or sessions.
+- **Orphan risk**: CLEAN. Called by rolling_eval scripts.
 - **Volatile data**: CLEAN.
 
-### trading_app/live/projectx/data_feed.py — CLEAN
+### trading_app/regime/compare.py — CLEAN
 
 #### Seven Sins scan
 
-- **Silent failure**: CLEAN. Queue-full handler at lines 299, 320 logs error (not silent). Quote/trade skips log debug.
-- **Fail-open**: CLEAN. No fail-open paths. Max reconnect exhaustion logs error.
-- **Canonical violation**: CLEAN. No instrument/session/cost references.
-- **Orphan risk**: CLEAN. Tested in `test_projectx_feed.py` (14 tests).
-- **Volatile data**: CLEAN.
+- **Silent failure**: CLEAN. Read-only analysis tool.
+- **Canonical violation**: CLEAN. Uses `ORB_LABELS` from canonical `pipeline.init_db`. Uses `GOLD_DB_PATH`.
+- **Orphan risk**: CLEAN. Analysis tool, not in critical path.
+- **Volatile data**: CLEAN. The `"experimental_strategies"` and `"regime_strategies"` table names are fixed DB schema names (not canonical instrument/session lists).
 
-### trading_app/live/projectx/order_router.py — CLEAN
-
-#### Seven Sins scan
-
-- **Silent failure**: CLEAN. Raises RuntimeError on no orderId, raises ValueError on unsupported entry model.
-- **Fail-open**: CLEAN. Fail-closed on unsupported entry models and order failures.
-- **Canonical violation**: CLEAN. E1/E2 hardcoded as order type strings (broker protocol mapping, not canonical entry model list).
-- **Orphan risk**: CLEAN. Tested in `test_projectx_router.py` (13 tests).
-- **Volatile data**: CLEAN.
-
-### trading_app/live/projectx/positions.py — CLEAN
+### trading_app/regime/schema.py — CLEAN
 
 #### Seven Sins scan
 
-- **Silent failure**: LOW observation: `avg_price: p.get("averagePrice", 0)` — int 0 default (vs tradovate's float 0.0). Style inconsistency only; `avg_price` is used solely for logging in session_orchestrator (not P&L computation). ACCEPTABLE.
-- **Canonical violation**: CLEAN.
-- **Orphan risk**: CLEAN. Used by session_orchestrator for crash recovery.
-- **Volatile data**: CLEAN.
-
-### trading_app/live/tradovate/auth.py — CLEAN
-
-#### Seven Sins scan
-
-- **Silent failure**: CLEAN. Raises on HTTP errors and missing token fields.
-- **Canonical violation**: CLEAN. No instrument/session/cost references.
-- **Orphan risk**: CLEAN. Used by session_orchestrator.
-- **Volatile data**: CLEAN.
-
-### trading_app/live/tradovate/contract_resolver.py — CLEAN
-
-#### Seven Sins scan
-
-- **Silent failure**: CLEAN. Raises RuntimeError on no accounts, no contracts, expired contracts.
-- **Canonical violation**: CLEAN. `PRODUCT_MAP` is broker API mapping (instrument codes = contract base names for Tradovate). Not a canonical strategy list.
-- **Orphan risk**: CLEAN. Used by session_orchestrator via broker_factory.
-- **Volatile data**: CLEAN.
-
-### trading_app/live/tradovate/data_feed.py — CLEAN
-
-#### Seven Sins scan
-
-- **Silent failure**: CLEAN. `except Exception as e: log.error(...)` at line 94 is logged with exc_info=True. Not silent.
-- **Fail-open**: CLEAN. Max reconnect exhaustion logs error. No silent pass.
-- **Canonical violation**: CLEAN.
-- **Orphan risk**: CLEAN.
-- **Volatile data**: CLEAN.
-
-### trading_app/live/tradovate/order_router.py — CLEAN
-
-#### Seven Sins scan
-
-- **Silent failure**: CLEAN. Raises RuntimeError on no orderId, raises ValueError on unsupported entry model.
-- **Fail-open**: CLEAN. Fail-closed on unsupported entry models.
-- **Canonical violation**: CLEAN. E1/E2 are broker protocol mapping strings.
-- **Orphan risk**: CLEAN. Tests present in existing test suite.
-- **Volatile data**: CLEAN.
-
-### trading_app/live/tradovate/positions.py — CLEAN
-
-#### Seven Sins scan
-
-- **Silent failure**: CLEAN. `avg_price: p.get("netPrice", 0.0)` default is only used for logging (same assessment as projectx/positions.py). Not P&L-impacting.
-- **Canonical violation**: CLEAN.
-- **Orphan risk**: CLEAN. Tested in `test_tradovate_positions.py` (5 tests).
+- **Silent failure**: CLEAN. Schema definitions only (CREATE TABLE IF NOT EXISTS).
+- **Canonical violation**: CLEAN. Uses `GOLD_DB_PATH` from canonical path. No hardcoded instruments/sessions/costs.
+- **Orphan risk**: CLEAN. Called by discovery.py and validator.py.
 - **Volatile data**: CLEAN.
 
 ---
 
-## Deferred Findings — Status After Iter 58
+## Deferred Findings — Status After Iter 59
 
 ### STILL DEFERRED (carried forward)
 - **DF-04** — `rolling_portfolio.py:304` dormant `orb_minutes=5` in rolling DOW stats — structural multi-file fix, blast radius >5 files
@@ -127,15 +70,15 @@
 ---
 
 ## Summary
-- 10 files in `trading_app/live/projectx/` + `trading_app/live/tradovate/`: CLEAN — 0 actionable findings
-- 1 ACCEPTABLE observation: `projectx/positions.py` int 0 vs float 0.0 default for avg_price (style only, no correctness impact)
+- 4 files in `trading_app/regime/`: CLEAN — 0 actionable findings
+- SKIP_ENTRY_MODELS guard already present in discovery.py:119 (same pattern as ND-01 fix in iter 55)
 - Infrastructure Gates: 4/4 PASS
 - Action: audit-only
 
 **Next iteration targets:**
 - `pipeline/check_drift.py` — not yet audited this cycle (large file, focus on check definitions for canonical violations and volatile data patterns)
-- `trading_app/regime/` — discovery.py, validator.py, compare.py, schema.py not yet in Files Fully Scanned
 - `trading_app/ai/` — not yet in Files Fully Scanned
+- `scripts/tools/` — remaining unscanned tools
 
 ---
 
@@ -206,3 +149,7 @@
 - `trading_app/live/tradovate/data_feed.py` — iter 58 (CLEAN)
 - `trading_app/live/tradovate/order_router.py` — iter 58 (CLEAN, supersedes iter 21 old path)
 - `trading_app/live/tradovate/positions.py` — iter 58 (CLEAN)
+- `trading_app/regime/discovery.py` — iter 59 (CLEAN, SKIP_ENTRY_MODELS guard already present)
+- `trading_app/regime/validator.py` — iter 59 (CLEAN)
+- `trading_app/regime/compare.py` — iter 59 (CLEAN)
+- `trading_app/regime/schema.py` — iter 59 (CLEAN)
