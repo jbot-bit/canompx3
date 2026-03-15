@@ -2,11 +2,17 @@
 """Investigate what happened to 15m/30m validated strategies."""
 
 import sys
+from pathlib import Path
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 sys.stdout.reconfigure(encoding="utf-8")
+
 import duckdb
 
-con = duckdb.connect("gold.db", read_only=True)
+from pipeline.paths import GOLD_DB_PATH
+
+con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
 
 print("=" * 70)
 print("15m/30m INVESTIGATION — WHAT HAPPENED?")

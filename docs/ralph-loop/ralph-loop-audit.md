@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 76
+## Last iteration: 77
 
-## RALPH AUDIT — Iteration 76 (ML completion + scripts scan)
+## RALPH AUDIT — Iteration 77 (hardcoded DB path sweep)
 ## Date: 2026-03-15
 ## Infrastructure Gates: 3/3 PASS
 
@@ -53,16 +53,17 @@
 ---
 
 ## Summary
-- ML completion: predict_live.py (CLEAN), evaluate.py (CLEAN), evaluate_validated.py (CLEAN), cpcv.py (CLEAN), importance.py (CLEAN)
-- scripts scan: rr_selection_analysis.py (RR-01 FIXED — 3 sins in 1 file)
-- 1 fix (3 sins), 0 new deferrals
+- Swept all production code for hardcoded `"gold.db"` — 1 remaining: `audit_15m30m.py` (A15-01 FIXED)
+- 20 `scripts/tmp_*.py` instances: temporary scripts, ACCEPTABLE
+- 0 instances in pipeline/ or trading_app/
+- 1 fix, 0 new deferrals
 - Infrastructure Gates: 3/3 PASS
 - Action: fix (mechanical)
 
 **Next iteration targets:**
-- Sweep `scripts/tools/` and `scripts/infra/` for remaining hardcoded `"gold.db"` paths
 - `scripts/tools/audit_integrity.py` — integrity audit, unscanned
 - `scripts/infra/parallel_rebuild.py` — rebuild orchestrator, unscanned
+- `scripts/tools/build_outcomes_fast.py` — fast outcome builder, unscanned
 
 ---
 
