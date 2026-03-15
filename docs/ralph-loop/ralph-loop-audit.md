@@ -3,61 +3,41 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 61
+## Last iteration: 62
 
-## RALPH AUDIT — Iteration 61 (trading_app/prop_portfolio.py + prop_profiles.py)
+## RALPH AUDIT — Iteration 62 (scripts/tools/pipeline_status.py)
 ## Date: 2026-03-15
-## Infrastructure Gates: 4/4 PASS
+## Infrastructure Gates: 3/3 PASS
 
 | Gate | Result | Detail |
 |------|--------|--------|
 | `check_drift.py` | PASS | 72 checks passed, 0 skipped, 6 advisory |
-| `audit_behavioral.py` | PASS | All 6 checks clean |
-| `pytest tests/test_trading_app/test_prop_portfolio.py test_prop_profiles.py` | PASS | 35 tests pass |
-| `ruff check` | FIXED | 2 I001 import sort errors fixed (prop_portfolio.py, prop_profiles.py) |
+| `ruff check` | PASS | Clean after fix |
+| `pipeline_status.py --status` | PASS | Smoke test — all steps up to date |
 
 ---
 
 ## Files Audited This Iteration
 
-### trading_app/prop_portfolio.py — FIXED (PP-01)
+### scripts/tools/pipeline_status.py — FIXED (PS-01)
 
-#### Finding PP-01: I001 import sort (FIXED — commit af5ff0b)
-- **Sin**: Orphan risk (style) — import block had extra blank line after imports causing ruff I001
-- **Severity**: LOW
-- **Fix**: Removed 1 blank line (line 34 in original) — ruff `--fix` applied
-- **Lines changed**: 1
+#### Finding PS-01: Canonical violation — hardcoded APERTURES (FIXED)
+- **Sin**: Canonical violation — `APERTURES = [5, 15, 30]` duplicates `VALID_ORB_MINUTES` from `pipeline/build_daily_features.py`
+- **Severity**: MEDIUM (if aperture values ever change, this file would silently diverge)
+- **Fix**: Import `VALID_ORB_MINUTES` from canonical source, alias as `APERTURES = VALID_ORB_MINUTES`
+- **Lines changed**: 2 (1 import added, 1 definition replaced)
+- **Blast radius**: 0 external callers of APERTURES, 3 internal usages (lines 553, 627, 669) — all unchanged, aliased name preserved
 
-#### Seven Sins scan
+#### Seven Sins scan (partial — PS-01 target only, full scan deferred to next iter)
 
-- **Silent failure**: CLEAN. No except blocks.
-- **Fail-open**: CLEAN. `select_for_profile` returns empty TradingBook on no candidates.
-- **Look-ahead bias**: N/A — portfolio construction, no live trading.
-- **Cost illusion**: N/A — DD estimation from Monte Carlo constants (not PnL computation).
-- **Canonical violation**: `DD_PER_CONTRACT_075X = 935.0`, `DD_PER_CONTRACT_10X = 1350.0` — ACCEPTABLE. Monte Carlo simulation results annotated with `trading_plan_sim.md` source comment. Not canonical pipeline data.
-- **Orphan risk**: CLEAN. 35 tests in test_prop_portfolio.py.
-- **Volatile data**: CLEAN. No hardcoded session/strategy counts.
-
-### trading_app/prop_profiles.py — FIXED (PP-01)
-
-#### Finding PP-01: I001 import sort (FIXED — commit af5ff0b)
-- **Sin**: Orphan risk (style) — import block had extra blank line causing ruff I001
-- **Severity**: LOW
-- **Fix**: Removed 1 blank line after `from dataclasses import dataclass` — ruff `--fix` applied
-
-#### Seven Sins scan
-
-- **Silent failure**: CLEAN. `get_firm_spec`, `get_account_tier`, `get_profile` all raise `KeyError` on invalid input (fail-closed).
-- **Fail-open**: CLEAN.
-- **Look-ahead bias**: N/A.
-- **Cost illusion**: N/A.
-- **Canonical violation**: Firm specs and account configs are intentional user-editable configuration, not canonical pipeline data. ACCEPTABLE.
-- **Orphan risk**: CLEAN. 35 tests in test_prop_profiles.py.
-- **Volatile data**: CLEAN.
+- **Canonical violation**: PS-01 FIXED (see above)
+- **Silent failure**: Not fully scanned this iteration
+- **Fail-open**: Not fully scanned this iteration
+- Remaining sins deferred — `pipeline_status.py` is 780+ lines, warrants dedicated full scan
 
 ---
 
-## Deferred Findings — Status After Iter 61
+## Deferred Findings — Status After Iter 62
 
 ### STILL DEFERRED (carried forward)
 - **DF-04** — `rolling_portfolio.py:304` dormant `orb_minutes=5` in rolling DOW stats — structural multi-file fix, blast radius >5 files
@@ -65,15 +45,14 @@
 ---
 
 ## Summary
-- 2 files in `trading_app/prop_*`: PP-01 FIXED (import sort, 2 lines)
-- 0 deferred, 0 new deferrals
-- Infrastructure Gates: 4/4 PASS
+- 1 file: `scripts/tools/pipeline_status.py` PS-01 FIXED (canonical violation, 2 lines)
+- 0 new deferrals
+- Infrastructure Gates: 3/3 PASS
 - Action: fix (mechanical)
-- Commit: af5ff0b
 
 **Next iteration targets:**
+- `scripts/tools/pipeline_status.py` — complete full Seven Sins scan (partial this iter)
 - `pipeline/check_drift.py` — large file (3539 lines), scan check definitions for canonical violations
-- `scripts/tools/pipeline_status.py` — key infrastructure tool, unscanned
 - `scripts/tools/audit_behavioral.py` — key infrastructure tool, unscanned
 
 ---

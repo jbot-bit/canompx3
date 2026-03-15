@@ -1,7 +1,7 @@
-## Iteration: 61
-## Target: trading_app/prop_portfolio.py:16, trading_app/prop_profiles.py:13
-## Finding: I001 import block un-sorted — extra blank lines after import block in both files
+## Iteration: 62
+## Target: scripts/tools/pipeline_status.py:515
+## Finding: APERTURES = [5, 15, 30] is a hardcoded local re-definition of VALID_ORB_MINUTES from pipeline/build_daily_features.py — canonical violation (Volatile data / Canonical violation)
 ## Classification: [mechanical]
-## Blast Radius: 2 test files (test_prop_portfolio.py, test_prop_profiles.py), no pipeline callers
-## Invariants: no logic changes, no import additions/removals, only blank line removal
-## Diff estimate: 2 lines (2 blank lines removed)
+## Blast Radius: 0 external callers of APERTURES, 3 internal usages (lines 552, 626, 668), 0 test references to APERTURES
+## Invariants: APERTURES values must remain [5, 15, 30] (sourced from canonical); staleness_engine, format_status, and preflight_check logic must not change
+## Diff estimate: 2 lines (add 1 import, replace 1 definition)
