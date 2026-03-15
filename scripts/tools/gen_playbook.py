@@ -25,6 +25,7 @@ SESSION_ORDER = [
     ("TOKYO_OPEN", "10:00", "10:00", "Tokyo Stock Exchange 9:00 AM JST"),
     ("BRISBANE_1025", "10:25", "10:25", "Fixed 10:25 AM Brisbane"),
     ("SINGAPORE_OPEN", "11:00", "11:00", "SGX/HKEX open 9:00 AM SGT"),
+    ("EUROPE_FLOW", "17:00", "18:00", "London open 7:00/9:00 AM London"),
     ("LONDON_METALS", "18:00", "17:00", "London metals AM 8:00 AM London"),
     ("US_DATA_830", "23:30", "22:30", "US econ data 8:30 AM ET"),
 ]
