@@ -23,10 +23,50 @@ You have ~20 turns. Every turn costs tokens. Combine operations aggressively:
 - **Don't re-read files** — read once, remember what you saw
 - **Skip redundant verification** — if you already ran targeted tests + drift post-fix, that IS verification for LOW findings
 
+## Guardrails — Hard Limits
+
+### Diff Cap
+If your fix touches **more than 20 lines of production code** (excluding test files and docs), **STOP**.
+Do not commit. Report the finding with `NEEDS_REVIEW` verdict. Skip to Step 5.
+
+### No-Touch Zones (audit only — NEVER modify)
+These files contain trading parameters, definitions, or research-derived values. You may audit and report findings, but you must NOT edit them:
+- `trading_app/config.py` — trading parameters, entry model definitions
+- `pipeline/dst.py` — session definitions and resolvers
+- `pipeline/cost_model.py` — cost specs
+- `pipeline/init_db.py` — schema definitions
+- Any line with a `@research-source` annotation — you may ADD annotations, never change the VALUE
+- SQL query logic in `strategy_discovery.py`, `strategy_validator.py`, `outcome_builder.py` — report only
+
+If a finding is in a no-touch zone → DEFER with reason "no-touch zone, needs human review".
+
+### ACCEPTABLE Verdict Rules
+You may only mark a finding ACCEPTABLE if it matches one of these patterns **exactly**:
+1. Intentional per-session or per-instrument heuristic (not a canonical list)
+2. Dormant infrastructure with an existing `# TODO` annotation
+3. Style/preference difference with no correctness impact
+4. Already guarded by a verified upstream check (cite the guard)
+
+If the finding does not match any of these → **DEFER**, not ACCEPTABLE.
+When in doubt, DEFER. Wrong ACCEPTABLEs are worse than conservative deferrals.
+
+### Commit Classification (MANDATORY)
+Every commit message must start with a classification tag:
+- `[mechanical]` — dead code removal, import fixes, annotations, logging, comments, formatting
+- `[judgment]` — behavior change, exception narrowing, logic fix, new guard, fail-closed change
+
+Format: `[tag] fix: Ralph Loop iter ITER — <finding> (<ID>)`
+
+If you're unsure which tag → use `[judgment]`. It gets reviewed by Opus.
+
 ## Step 0: State
 
-Read `docs/ralph-loop/ralph-loop-audit.md` (get ITER from `## Last iteration: N`, +1).
-Read `docs/ralph-loop/deferred-findings.md` (check open debt).
+Read `docs/ralph-loop/ralph-loop-audit.md`:
+- Get ITER from `## Last iteration: N`, increment to N+1
+- Check `## Files Fully Scanned` — do NOT re-audit files already listed there
+- Read `Next iteration targets` for scope
+
+Read `docs/ralph-loop/deferred-findings.md` (check open debt + Won't Fix to avoid re-investigating).
 
 SCOPE is provided in your task prompt.
 
@@ -63,6 +103,11 @@ Check canonical integrity:
 Rank findings: CRITICAL > HIGH > MEDIUM > LOW.
 Select highest-priority with a clear provable fix. Not schema/entry model changes.
 
+**Check guardrails BEFORE proceeding:**
+- Is the target in a no-touch zone? → DEFER
+- Will the fix exceed 20 lines of production code? → NEEDS_REVIEW
+- Is the finding in the Won't Fix table? → skip, already assessed
+
 **Batching:** If ALL findings are LOW + same file + same fix type → batch up to 5.
 
 **Inline blast radius** (no subagent — do it yourself):
@@ -79,6 +124,7 @@ Write plan to `docs/ralph-loop/ralph-loop-plan.md`:
 ## Iteration: ITER
 ## Target: file:line
 ## Finding: 1-sentence
+## Classification: [mechanical] or [judgment]
 ## Blast Radius: N callers, N importers, test file
 ## Invariants: [2-3 things that MUST NOT change]
 ## Diff estimate: N lines
@@ -95,9 +141,9 @@ If fails → revert with `git checkout HEAD -- <file>`, mark REJECTED, skip to S
 
 If passes → commit:
 ```bash
-git add <files> && git commit -m "fix: Ralph Loop iter ITER — <finding> (<ID>)
+git add <files> && git commit -m "[tag] fix: Ralph Loop iter ITER — <finding> (<ID>)
 
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ```
 
 ## Step 4: UPDATE FILES
@@ -105,14 +151,16 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
 **Overwrite** `docs/ralph-loop/ralph-loop-audit.md` with:
 - `## Last iteration: ITER`
 - Infrastructure gate results
-- All findings with status (FIXED/DEFERRED/ACCEPTABLE)
+- All findings with status (FIXED/DEFERRED/ACCEPTABLE/NEEDS_REVIEW)
 - Seven Sins scan results
 - Next iteration targets
+- Updated `## Files Fully Scanned` list (add any newly scanned files)
 
 **Append** to `docs/ralph-loop/ralph-loop-history.md`:
 ```
 ## Iteration ITER — YYYY-MM-DD
-- Phase: fix | audit-only | rejected
+- Phase: fix | audit-only | rejected | needs-review
+- Classification: [mechanical] | [judgment]
 - Target: file:line
 - Finding: 1-sentence
 - Action: what was done
@@ -126,11 +174,6 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
 - Resolved → move to Resolved with commit hash
 - ACCEPTABLE (won't-fix) → add to Won't Fix table with reasoning (so future iterations don't re-investigate)
 
-**Update** coverage in `docs/ralph-loop/ralph-loop-audit.md`:
-- Maintain a `## Files Fully Scanned` section listing every file that got a complete Seven Sins scan
-- Format: `- trading_app/execution_engine.py — iter 50 (CLEAN)` or `- pipeline/dst.py — iter 33 (1 fix)`
-- This prevents re-scanning clean files and shows coverage gaps at a glance
-
 ## Step 5: FINAL REPORT
 
 Return this exact format:
@@ -138,10 +181,11 @@ Return this exact format:
 === RALPH LOOP ITER [N] COMPLETE ===
 Scope: [target]
 Audit: N findings (X CRIT, X HIGH, X MED, X LOW)
-Action: [fix | audit-only | rejected]
+Classification: [mechanical | judgment | audit-only]
+Action: [fix | audit-only | rejected | needs-review]
 Target: [file:line]
 Blast radius: [N files, key callers]
-Verdict: [ACCEPT | REJECT | SKIPPED]
+Verdict: [ACCEPT | REJECT | SKIPPED | NEEDS_REVIEW]
 Commit: [hash or NONE]
 Deferred debt: [N open items]
 Next: [top candidate for next iteration]
@@ -157,6 +201,9 @@ Next: [top candidate for next iteration]
 - **Understand before editing** — blast radius + invariants BEFORE any edit.
 - **Escalate big changes** — blast radius > 5 files = stop, recommend /4t.
 - **Minimal diff** — fix exactly what's broken. No cleanup. No improvements.
+- **Diff cap** — >20 lines production code = NEEDS_REVIEW, not commit.
+- **No-touch zones** — config/dst/cost_model/init_db/research values = audit only.
+- **Classify every commit** — `[mechanical]` or `[judgment]`. When unsure → `[judgment]`.
 
 ## Project Structure
 
