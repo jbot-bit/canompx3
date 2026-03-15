@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 69
+## Last iteration: 70
 
-## RALPH AUDIT — Iteration 69 (pipeline/init_db.py)
+## RALPH AUDIT — Iteration 70 (pipeline/dashboard.py + pipeline/db_lock.py + pipeline/audit_log.py)
 ## Date: 2026-03-15
 ## Infrastructure Gates: 3/3 PASS
 
@@ -13,35 +13,32 @@
 |------|--------|--------|
 | `check_drift.py` | PASS | 72 checks passed, 0 skipped, 6 advisory |
 | `ruff check` | PASS | Clean |
-| `pytest init_db` | PASS | 10/10 tests |
+| Audit | CLEAN | No actionable findings across 3 files |
 
 ---
 
 ## Files Audited This Iteration
 
-### pipeline/init_db.py — FIXED (ID-01)
+### pipeline/dashboard.py — CLEAN
+- All 4 DB connections use try/finally with con.close()
+- 2 `except Exception` blocks (lines 186, 215) wrap subprocess calls in a report generator — ACCEPTABLE
+- No canonical violations, no orphan code, no volatile data
 
-#### Finding ID-01: Fail-open — `--force` mode misses 5 tables (FIXED)
-- **Sin**: Fail-open — hardcoded force-drop list missing `edge_families`, `regime_strategies`, `regime_validated`, `strategy_trade_days`, `validation_run_log`. Users expecting a clean slate via `--force` get orphaned data.
-- **Severity**: MEDIUM (orphaned data after force reset could cause integrity issues)
-- **Fix**: Replaced hardcoded table list with dynamic `information_schema.tables` query. Now drops ALL user tables in the `main` schema, eliminating maintenance burden. Verified with smoke test.
-- **Lines changed**: ~10 (removed 13-line hardcoded list, added 7-line dynamic query)
-- **Blast radius**: 1 file (init_db.py), `--force` path only (non-force path unchanged)
+### pipeline/db_lock.py — CLEAN
+- Atomic lock creation with `os.O_CREAT | os.O_EXCL` (line 139)
+- Stale lock reclamation only when PID is dead
+- All `except OSError: pass` blocks are in cleanup paths — ACCEPTABLE
+- Well-implemented advisory lock, no sins
 
-#### Seven Sins scan — COMPLETE
-
-| Sin | Status | Detail |
-|-----|--------|--------|
-| Fail-open | ID-01 FIXED | Force mode dropped incomplete table set |
-| Silent failure | CLEAN | All `except CatalogException: pass` blocks are idempotent migration (column already exists) |
-| Canonical violation | ACCEPTABLE | `ORB_LABELS_DYNAMIC` is a parallel definition to `SESSION_CATALOG`, enforced by drift check #32. Deriving from SESSION_CATALOG would be structural — deferred. |
-| Broad exception | CLEAN | No `except Exception` blocks |
-| Orphan/dead code | CLEAN | All schemas used, all migrations applied |
-| Volatile data | CLEAN | Comments mention counts but code is dynamic |
+### pipeline/audit_log.py — CLEAN
+- `log_operation` intentionally fail-open: "audit failure should never block data writes" (line 91-92) — documented design choice, ACCEPTABLE
+- `_ALLOWED_TABLES` allowlist is hardcoded but fail-closed (rejects unknown tables with ValueError)
+- `_INSTRUMENT_COLUMN_TABLES` correctly maps column convention per table
+- No canonical violations that affect current callers
 
 ---
 
-## Deferred Findings — Status After Iter 69
+## Deferred Findings — Status After Iter 70
 
 ### STILL DEFERRED (carried forward)
 - **DF-04** — `rolling_portfolio.py:304` dormant `orb_minutes=5` in rolling DOW stats — structural multi-file fix, blast radius >5 files
@@ -49,15 +46,16 @@
 ---
 
 ## Summary
-- 1 file: `pipeline/init_db.py` ID-01 FIXED (fail-open force drop, ~10 lines)
-- 0 new deferrals
+- 3 files scanned: `pipeline/dashboard.py`, `pipeline/db_lock.py`, `pipeline/audit_log.py` — all CLEAN
+- 0 fixes, 0 new deferrals
 - Infrastructure Gates: 3/3 PASS
-- Action: fix (judgment)
+- Action: audit-only (no code changes)
 
 **Next iteration targets:**
-- `pipeline/dashboard.py` — report generator, unscanned
-- `pipeline/db_lock.py` — concurrency lock, unscanned
-- `pipeline/audit_log.py` — audit logging, unscanned
+- `pipeline/paths.py` — path configuration, unscanned
+- `pipeline/log.py` — logging setup, unscanned
+- `pipeline/check_db.py` — DB integrity check, unscanned
+- `scripts/tools/select_family_rr.py` — RR lock selection, unscanned
 
 ---
 
@@ -146,3 +144,6 @@
 - `pipeline/health_check.py` — iter 67 (1 fix: HC-01 connection leak)
 - `pipeline/run_pipeline.py` — iter 68 (1 fix: RP-01 canonical orb_minutes choices)
 - `pipeline/init_db.py` — iter 69 (1 fix: ID-01 fail-open force drop)
+- `pipeline/dashboard.py` — iter 70 (CLEAN)
+- `pipeline/db_lock.py` — iter 70 (CLEAN)
+- `pipeline/audit_log.py` — iter 70 (CLEAN)
