@@ -5,6 +5,17 @@
 
 ---
 
+## Iteration 85 — 2026-03-15
+- Phase: fix
+- Classification: [mechanical]
+- Target: report_edge_portfolio.py (FIX) + instrument list sweep
+- Finding: REP-01 — `for inst in ["MGC", "MNQ", "MES", "M2K"]` in `--all` loop. Should use ACTIVE_ORB_INSTRUMENTS. If a 5th instrument is added, report would miss it.
+- Action: Imported ACTIVE_ORB_INSTRUMENTS; replaced hardcoded list. Ruff auto-fixed import ordering.
+- Blast radius: 1 file (report_edge_portfolio.py)
+- Verification: PASS (72 drift checks, ruff clean except pre-existing B905)
+
+---
+
 ## Iteration 84 — 2026-03-15
 - Phase: fix
 - Classification: [mechanical]

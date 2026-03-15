@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 84
+## Last iteration: 85
 
-## RALPH AUDIT — Iteration 84 (batch fix — last 3 PROJECT_ROOT/gold.db files)
+## RALPH AUDIT — Iteration 85 (hardcoded instrument list in report)
 ## Date: 2026-03-15
 ## Infrastructure Gates: 3/3 PASS
 
@@ -53,17 +53,16 @@
 ---
 
 ## Summary
-- Fixed last 3 production files with `PROJECT_ROOT / "gold.db"`:
-  - volume_session_analysis.py (VSA-01), orb_size_deep_dive.py (OSD-01), ingest_mnq.py (IMN-01)
-- Pattern **fully eliminated** from production code. Only `scripts/archive/` remains (acceptable).
-- 3 fixes, 0 new deferrals
+- report_edge_portfolio.py: REP-01 FIXED — hardcoded `["MGC", "MNQ", "MES", "M2K"]` in `--all` loop. Now uses `ACTIVE_ORB_INSTRUMENTS`.
+- Swept remaining hardcoded instrument lists: gen_playbook.py (has assertion guard — ACCEPTABLE), hypothesis_test.py (research script, missing M2K), ml_hybrid_experiment.py (experiment script)
+- 1 fix, 0 new deferrals
 - Infrastructure Gates: 3/3 PASS
 - Action: fix (mechanical)
 
 **Next iteration targets:**
-- `PROJECT_ROOT / "gold.db"` pattern ELIMINATED from production code
-- Continue scanning remaining unscanned scripts/tools/ files
-- `scripts/tools/coaching_digest.py`, `scripts/tools/trading_coach.py`
+- All major canonical violation patterns now eliminated (DB paths, apertures, entry models, instrument lists)
+- Remaining work: scan deeper into scripts/tools/ and scripts/infra/ for structural sins (fail-open, silent failure)
+- `scripts/tools/coaching_digest.py`, `scripts/tools/trading_coach.py`, `scripts/infra/rolling_eval.py`
 
 ---
 

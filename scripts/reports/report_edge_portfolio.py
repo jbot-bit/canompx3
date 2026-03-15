@@ -16,9 +16,9 @@ Usage:
 """
 
 import sys
+from collections import defaultdict
 from math import sqrt
 from pathlib import Path
-from collections import defaultdict
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -26,9 +26,10 @@ sys.stdout.reconfigure(line_buffering=True)
 
 import duckdb
 
+from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.strategy_discovery import compute_metrics
 from trading_app.db_manager import has_edge_families
+from trading_app.strategy_discovery import compute_metrics
 
 # ~252 trading days/year (standard futures approximation)
 TRADING_DAYS_PER_YEAR = 252
@@ -422,7 +423,7 @@ def main():
         return
 
     if args.all:
-        for inst in ["MGC", "MNQ", "MES", "M2K"]:
+        for inst in ACTIVE_ORB_INSTRUMENTS:
             result = report_instrument(db_path, inst, args.include_purged)
             if result is not None:
                 print_report(result)
