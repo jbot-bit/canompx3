@@ -455,14 +455,22 @@ class ExecutionEngine:
 
             # Check strategy filter (size, DOW, break speed, etc.)
             filt = ALL_FILTERS.get(strategy.filter_type)
-            if filt is not None:
-                # Build full row: daily_features + ORB runtime data
-                row = {}
-                if self._daily_features_row is not None:
-                    row.update(self._daily_features_row)
-                row[f"orb_{orb.label}_size"] = orb.size
-                if not filt.matches_row(row, orb.label):
-                    continue
+            if filt is None:
+                # Unknown filter type — fail-closed: do not arm.
+                # Every filter_type in validated_setups MUST be in ALL_FILTERS.
+                logger.error(
+                    "Unknown filter_type '%s' for %s — skipping (fail-closed)",
+                    strategy.filter_type,
+                    strategy.strategy_id,
+                )
+                continue
+            # Build full row: daily_features + ORB runtime data
+            row = {}
+            if self._daily_features_row is not None:
+                row.update(self._daily_features_row)
+            row[f"orb_{orb.label}_size"] = orb.size
+            if not filt.matches_row(row, orb.label):
+                continue
 
             # Check calendar overlay (per-instrument×session rules)
             action = get_calendar_action(strategy.instrument, orb.label, self.trading_day)
