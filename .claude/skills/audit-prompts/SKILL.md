@@ -1,3 +1,11 @@
+---
+name: audit-prompts
+description: >
+  Spec compliance and guardian prompt routing. Use before significant changes
+  to production logic, schema, entry models, or pipeline data flow. Use when
+  asked about health checks, system audits, guardian prompts, or "is everything
+  in sync". Also triggers on spec checking before building features.
+---
 # Specs & Audit Prompts
 
 ## Feature Specs — ALWAYS Check First

@@ -1,3 +1,11 @@
+---
+name: pinecone-assistant
+description: >
+  Pinecone knowledge base routing for project history and research findings.
+  Use when asked: "what did we find about X", "why did we do Y", "research on",
+  "history of", "remind me", "what's the story", "NO-GOs", design decisions.
+  Routes between Pinecone (project knowledge) and gold-db MCP (live data).
+---
 # Pinecone Assistant (orb-research)
 
 The `orb-research` Pinecone Assistant is the project's knowledge base — 51 files across 5 tiers covering authority docs, config, research findings, and memory. Use `/pinecone:assistant-chat` or the Pinecone Assistant MCP tools to query it.

@@ -36,10 +36,6 @@ When outcome_builder changes (e.g., C8/C3 exit rules):
 Or use the wrapper: `bash scripts/tools/run_rebuild_with_sync.sh MGC`
 
 ## Strategy Classification
-| Class | Min Samples | Usage |
-|-------|------------|-------|
-| CORE | >= 100 | Standalone portfolio weight |
-| REGIME | 30-99 | Conditional overlay / signal only |
-| INVALID | < 30 | Not tradeable |
 
+Classification thresholds (CORE/REGIME/INVALID) → see `docs/ARCHITECTURE.md`.
 Never treat "low trade count" alone as evidence of a bug. G6/G8 filters producing low N is expected.
