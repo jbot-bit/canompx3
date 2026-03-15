@@ -1102,16 +1102,18 @@ def main():
 
             _con = _ddb.connect(args.db_path, read_only=True)
             _cc(_con)
-            rr_vals = (
-                _con.execute(
-                    "SELECT DISTINCT rr_target FROM validated_setups "
-                    "WHERE instrument = ? AND status = 'active' ORDER BY rr_target",
-                    [inst],
+            try:
+                rr_vals = (
+                    _con.execute(
+                        "SELECT DISTINCT rr_target FROM validated_setups "
+                        "WHERE instrument = ? AND status = 'active' ORDER BY rr_target",
+                        [inst],
+                    )
+                    .fetchdf()["rr_target"]
+                    .tolist()
                 )
-                .fetchdf()["rr_target"]
-                .tolist()
-            )
-            _con.close()
+            finally:
+                _con.close()
 
             sweep_results = {}
             for rr in rr_vals:
