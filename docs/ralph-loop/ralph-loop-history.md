@@ -5,7 +5,19 @@
 
 ---
 
-## Iteration 94 — 2026-03-16
+## Iteration 96 — 2026-03-16
+- Phase: audit-only
+- Classification: N/A (no fix)
+- Target: scripts/tools/ml_per_session_experiment.py, ml_level_proximity_experiment.py, ml_threshold_sweep.py, ml_session_leakage_audit.py, ml_license_diagnostic.py, audit_15m30m.py
+- Finding: All 5 primary targets clean. 1 ACCEPTABLE finding (GP-96a: hardcoded instrument list in read-only diagnostic SQL in audit_15m30m.py — no safety impact).
+- Action: Audit only — no fixes required. SESSION_ORDER complete across all ML scripts.
+- Blast radius: N/A
+- Verification: PASS (72 drift checks, behavioral audit 6/6, ruff clean)
+- Commit: NONE
+
+---
+
+## Iteration 95 — 2026-03-16
 - Phase: fix
 - Classification: [mechanical]
 - Target: scripts/tools/gen_playbook.py:27 (SESSION_ORDER)
