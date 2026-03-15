@@ -15,7 +15,7 @@ Read these first:
 
 - `RESEARCH_RULES.md`
 - `.claude/rules/quant-agent-identity.md`
-- `.claude/rules/audit-prompts.md`
+- `.claude/skills/audit-prompts/SKILL.md`
 - `TRADING_RULES.md` when research conclusions touch live behavior
 
 ## What This Skill Does

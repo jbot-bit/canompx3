@@ -44,7 +44,7 @@ Route to the correct source:
   - Use the repo's canonical sources first
   - If the shared MCP path is intentionally enabled, follow `.claude/rules/mcp-usage.md`
 - Project memory, design history, prior findings:
-  - Use `.claude/rules/pinecone-assistant.md`
+  - Use `.claude/skills/pinecone-assistant/SKILL.md`
 - Academic methodology:
   - Use local PDFs in `resources/`
   - Follow `.claude/rules/notebooklm.md`
