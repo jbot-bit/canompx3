@@ -214,10 +214,8 @@ def build_edge_families(db_path: str, instrument: str) -> int:
         #    (100% populated for --no-walkforward runs); fall back to strategy_trade_days
         #    for legacy walk-forward strategies that didn't store trade_day_hash.
         hash_map = {}
-        orb_minutes_map = {}
         fallback_count = 0
         for sid, _expr, _shann, _sample, precomputed_hash, orb_min in strategies:
-            orb_minutes_map[sid] = orb_min or 5
             if precomputed_hash:
                 hash_map[sid] = precomputed_hash
             else:
