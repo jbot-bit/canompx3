@@ -54,7 +54,7 @@ def add_score(df: pd.DataFrame) -> pd.DataFrame:
     - Sharpe is NOT used because it structurally penalises high-RR configs (their
       binary variance is a feature, not a flaw).
     """
-    robustness = df["all_years_positive"].map({True: 1.25, False: 1.0})
+    robustness = df["all_years_positive"].map(lambda x: 1.25 if x else 1.0)
     df = df.copy()
     df["score"] = df["expectancy_r"] * df["sample_size"].pow(0.5) * robustness
     return df
