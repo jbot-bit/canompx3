@@ -17,14 +17,15 @@ Usage:
 """
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
 import duckdb
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-DEFAULT_DB = PROJECT_ROOT / "gold.db"
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from pipeline.paths import GOLD_DB_PATH
 
 # 96 time slots across 24 hours
 CANDIDATE_TIMES = [(h, m) for h in range(24) for m in (0, 15, 30, 45)]
@@ -190,10 +191,7 @@ ORDER BY bris_h, slot_m
 def get_db_path(args):
     if args.db_path:
         return Path(args.db_path)
-    env = os.environ.get("DUCKDB_PATH")
-    if env:
-        return Path(env)
-    return DEFAULT_DB
+    return GOLD_DB_PATH  # canonical source — handles DUCKDB_PATH env var
 
 
 def classify_slot(bar_cov, avg_vol, orb_pct):
