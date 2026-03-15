@@ -58,3 +58,42 @@
 **Next iteration targets:**
 - `trading_app/order_router.py` — not yet audited this cycle
 - `trading_app/paper_trader.py` — not yet audited this cycle
+
+---
+
+## Files Fully Scanned
+
+> Cumulative list of every file that received a complete Seven Sins scan.
+> Prevents re-scanning clean files. Shows coverage gaps at a glance.
+
+- `trading_app/execution_engine.py` — iter 50 (1 fix: EE-01 fail-open)
+- `trading_app/strategy_fitness.py` — iter 44 (CLEAN)
+- `trading_app/outcome_builder.py` — iter 46 (1 fix: OB1 silent fallback)
+- `trading_app/strategy_discovery.py` — iter 34 (2 fixes: SD1 orphan, SD2 volatile)
+- `trading_app/strategy_validator.py` — iter 47 (1 fix: SV1 docstring)
+- `trading_app/portfolio.py` — iter 48 (1 fix: PF1 orphan)
+- `trading_app/rolling_portfolio.py` — iter 43 (1 fix: RP1 orphan)
+- `trading_app/live_config.py` — iter 51 (1 fix: LC-01 broad except)
+- `trading_app/paper_trader.py` — iter 41 (1 fix: PT1 orphan)
+- `trading_app/scoring.py` — iter 39 (CLEAN, SC1 acceptable)
+- `trading_app/risk_manager.py` — iter 39 (1 fix: RM1 orphan)
+- `trading_app/cascade_table.py` — iter 37 (1 fix: CT1 orphan)
+- `trading_app/market_state.py` — iter 38 (1 fix: MS1 orphan)
+- `trading_app/config.py` — iter 24 (annotation fixes)
+- `trading_app/walkforward.py` — iter 15 (annotation fixes)
+- `trading_app/mcp_server.py` — iter 32 (2 fixes: volatile data, dead code)
+- `trading_app/live/position_tracker.py` — iter 26 (1 fix: PT1 falsy-zero)
+- `trading_app/live/bar_aggregator.py` — iter 26 (CLEAN)
+- `trading_app/live/webhook_server.py` — iter 4 (2 fixes: timing-safe auth, deprecated asyncio)
+- `trading_app/live/session_orchestrator.py` — iter 10 (2 fixes: CUSUM reset, fill poller)
+- `trading_app/live/performance_monitor.py` — iter 10 (2 fixes: CUSUM threshold, daily reset)
+- `trading_app/tradovate/order_router.py` — iter 21 (fill price falsy-zero)
+- `trading_app/projectx/order_router.py` — iter 21 (fill price falsy-zero)
+- `trading_app/tradovate/auth.py` — iter 24 (log gap)
+- `pipeline/build_daily_features.py` — iter 36 (1 fix: canonical extraction)
+- `pipeline/ingest_dbn.py` — iter 1 (triaged via M2.5)
+- `pipeline/build_bars_5m.py` — iter 1 (triaged via M2.5)
+- `pipeline/dst.py` — iter 1 (triaged via M2.5)
+- `pipeline/cost_model.py` — iter 12 (triaged)
+- `pipeline/asset_configs.py` — iter 1 (triaged via M2.5)
+- `scripts/tools/generate_trade_sheet.py` — iter 18 (3 fixes: dollar gate, join, friction)

@@ -124,6 +124,12 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
 **Update** `docs/ralph-loop/deferred-findings.md`:
 - New deferrals → add to Open Findings
 - Resolved → move to Resolved with commit hash
+- ACCEPTABLE (won't-fix) → add to Won't Fix table with reasoning (so future iterations don't re-investigate)
+
+**Update** coverage in `docs/ralph-loop/ralph-loop-audit.md`:
+- Maintain a `## Files Fully Scanned` section listing every file that got a complete Seven Sins scan
+- Format: `- trading_app/execution_engine.py — iter 50 (CLEAN)` or `- pipeline/dst.py — iter 33 (1 fix)`
+- This prevents re-scanning clean files and shows coverage gaps at a glance
 
 ## Step 5: FINAL REPORT
 
