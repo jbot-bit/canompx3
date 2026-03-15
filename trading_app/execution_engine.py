@@ -446,6 +446,7 @@ class ExecutionEngine:
 
     def _arm_strategies(self, orb: LiveORB, bar: dict) -> list[TradeEvent]:
         """When an ORB breaks, arm matching strategies for confirmation."""
+        assert orb.break_dir is not None  # only called on confirmed ORB breaks
         events = []
         for strategy in self.portfolio.strategies:
             if strategy.orb_label != orb.label:
@@ -473,6 +474,7 @@ class ExecutionEngine:
                 continue
 
             # Check calendar overlay (per-instrument×session rules)
+            assert self.trading_day is not None  # set by on_trading_day_start before any bar processing
             action = get_calendar_action(strategy.instrument, orb.label, self.trading_day)
             if action == CalendarAction.SKIP:
                 logger.info(
@@ -614,18 +616,21 @@ class ExecutionEngine:
         if new_trades is None:
             new_trades = self.active_trades  # Fallback for _arm_strategies calls
 
-        stop_price = orb.low if trade.direction == "long" else orb.high
+        orb_high = orb.high
+        orb_low = orb.low
+        assert orb_high is not None and orb_low is not None  # ORB is complete when _try_entry is called
+        stop_price = orb_low if trade.direction == "long" else orb_high
 
         # Apply tight stop (Option B): move stop closer by (1 - multiplier) * ORB range.
         # Uses orb_range (not entry-stop distance) — backtester uses risk_pts which includes
         # E2 slippage. Delta is ~1 tick per trade, structurally negligible (<0.2% of risk).
         sm = getattr(trade.strategy, "stop_multiplier", 1.0)
         if sm != 1.0:
-            orb_range = orb.high - orb.low
+            orb_range = orb_high - orb_low
             if trade.direction == "long":
-                stop_price = orb.low + (1.0 - sm) * orb_range
+                stop_price = orb_low + (1.0 - sm) * orb_range
             else:
-                stop_price = orb.high - (1.0 - sm) * orb_range
+                stop_price = orb_high - (1.0 - sm) * orb_range
 
         # Resolve entry price based on model
         if trade.entry_model == "E2":
@@ -640,13 +645,13 @@ class ExecutionEngine:
             slippage = E2_SLIPPAGE_TICKS * tick_size
 
             if trade.direction == "long":
-                if confirm_bar["high"] <= orb.high:
+                if confirm_bar["high"] <= orb_high:
                     return events  # Bar didn't cross ORB level — no fill
-                entry_price = orb.high + slippage
+                entry_price = orb_high + slippage
             else:
-                if confirm_bar["low"] >= orb.low:
+                if confirm_bar["low"] >= orb_low:
                     return events  # Bar didn't cross ORB level — no fill
-                entry_price = orb.low - slippage
+                entry_price = orb_low - slippage
 
             risk_points = abs(entry_price - stop_price)
             if risk_points <= 0:
@@ -985,16 +990,21 @@ class ExecutionEngine:
                 elif trade.entry_model == "E3":
                     # E3: check if bar retraces to ORB level
                     orb = self.orbs[(trade.orb_label, trade.orb_minutes)]
+                    orb_high = orb.high
+                    orb_low = orb.low
+                    assert orb_high is not None and orb_low is not None  # ORB complete for E3 retrace
+                    trade_stop = trade.stop_price
+                    assert trade_stop is not None  # set at arm time
                     if trade.direction == "long":
-                        retrace = bar["low"] <= orb.high
+                        retrace = bar["low"] <= orb_high
                         # CRITICAL: Check stop BEFORE fill — if bar also breaches stop,
                         # the trade is dead. Can't enter a stopped-out position.
-                        stop_hit = bar["low"] <= trade.stop_price
-                        entry_price = orb.high
+                        stop_hit = bar["low"] <= trade_stop
+                        entry_price = orb_high
                     else:
-                        retrace = bar["high"] >= orb.low
-                        stop_hit = bar["high"] >= trade.stop_price
-                        entry_price = orb.low
+                        retrace = bar["high"] >= orb_low
+                        stop_hit = bar["high"] >= trade_stop
+                        entry_price = orb_low
 
                     if stop_hit:
                         # Stop breached on or before retrace — no valid fill
@@ -1003,7 +1013,7 @@ class ExecutionEngine:
                         continue
 
                     if retrace:
-                        stop_price = trade.stop_price
+                        stop_price = trade_stop
                         risk_points = abs(entry_price - stop_price)
                         if risk_points <= 0:
                             # Defensive dead code: stop_hit fires first when stop_price >= entry_price
@@ -1194,11 +1204,17 @@ class ExecutionEngine:
 
             if hit_target and hit_stop:
                 # Ambiguous bar — conservative loss
-                self._exit_trade(trade, bar, "loss", trade.stop_price, events)
+                stop_px = trade.stop_price
+                assert stop_px is not None
+                self._exit_trade(trade, bar, "loss", stop_px, events)
             elif hit_target:
-                self._exit_trade(trade, bar, "win", trade.target_price, events)
+                target_px = trade.target_price
+                assert target_px is not None
+                self._exit_trade(trade, bar, "win", target_px, events)
             elif hit_stop:
-                self._exit_trade(trade, bar, "loss", trade.stop_price, events)
+                stop_px = trade.stop_price
+                assert stop_px is not None
+                self._exit_trade(trade, bar, "loss", stop_px, events)
 
         # Prune exited trades to prevent unbounded list growth and iteration bugs
         self.active_trades = [t for t in self.active_trades if t.state != TradeState.EXITED]
@@ -1213,7 +1229,10 @@ class ExecutionEngine:
         trade.exit_price = exit_price
         trade.state = TradeState.EXITED
 
-        risk_points = abs(trade.entry_price - trade.stop_price)
+        entry_px = trade.entry_price
+        stop_px = trade.stop_price
+        assert entry_px is not None and stop_px is not None  # trade is entered before exit
+        risk_points = abs(entry_px - stop_px)
 
         # Use session-adjusted costs for live P&L (backtest uses flat cost_spec)
         cost = self.cost_spec
@@ -1226,24 +1245,24 @@ class ExecutionEngine:
         if outcome == "win":
             pnl_points = risk_points * trade.strategy.rr_target
             trade.pnl_r = round(
-                to_r_multiple(cost, trade.entry_price, trade.stop_price, pnl_points),
+                to_r_multiple(cost, entry_px, stop_px, pnl_points),
                 4,
             )
         elif outcome in ("early_exit", "hold_timeout", "ib_opposed"):
             # Mark-to-market exit at bar close
             if trade.direction == "long":
-                mtm_points = exit_price - trade.entry_price
+                mtm_points = exit_price - entry_px
             else:
-                mtm_points = trade.entry_price - exit_price
+                mtm_points = entry_px - exit_price
             trade.pnl_r = round(
-                to_r_multiple(cost, trade.entry_price, trade.stop_price, mtm_points),
+                to_r_multiple(cost, entry_px, stop_px, mtm_points),
                 4,
             )
         else:
             # Precise loss R-multiple under session-adjusted costs
             loss_points = -risk_points
             trade.pnl_r = round(
-                to_r_multiple(cost, trade.entry_price, trade.stop_price, loss_points),
+                to_r_multiple(cost, entry_px, stop_px, loss_points),
                 4,
             )
 
