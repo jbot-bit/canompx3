@@ -5,6 +5,30 @@
 
 ---
 
+## Iteration 88 — 2026-03-15
+- Phase: fix
+- Classification: [mechanical]
+- Target: scripts/run_live_session.py:50
+- Finding: RLS-01 — `checks_total = 5` hardcoded in `_run_preflight()`. Controls pass/fail logic (`checks_passed == checks_total`). If a 6th check is added without updating this, preflight returns False even when all checks pass, silently blocking live sessions.
+- Action: Added inline comment making the constraint explicit: `# NOTE: must match number of check blocks (1-5) below — update if adding/removing checks`. operator_status.py audited as clean (no findings).
+- Blast radius: 1 file (run_live_session.py)
+- Verification: PASS (72 drift checks, behavioral audit 6/6, ruff clean)
+- Commit: c57130b
+
+---
+
+## Iteration 87 — 2026-03-15
+- Phase: fix
+- Classification: [mechanical]
+- Target: scripts/reports/parameter_stability_heatmap.py:43
+- Finding: PSH-01 — `APERTURES = [5, 15, 30]` hardcoded. Should use `VALID_ORB_MINUTES` from `pipeline.build_daily_features`. If a 4th aperture were added, neighbor discovery and matrix rendering would silently miss it.
+- Action: Imported `VALID_ORB_MINUTES`; replaced `APERTURES = [5, 15, 30]` with `APERTURES = VALID_ORB_MINUTES`.
+- Blast radius: 1 file (parameter_stability_heatmap.py)
+- Verification: PASS (19/19 tests, 72 drift checks)
+- Commit: 55fe2ec
+
+---
+
 ## Iteration 86 — 2026-03-15
 - Phase: audit-only
 - Target: Deep sweep — coaching_digest.py, trading_coach.py, rolling_eval.py, rolling_eval_parallel.py, run_parallel_ingest.py, scratch_ingest.py + pattern sweeps
