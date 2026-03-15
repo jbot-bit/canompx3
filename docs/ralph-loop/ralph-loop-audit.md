@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 53
+## Last iteration: 54
 
-## RALPH AUDIT — Iteration 53 (execution_spec.py + setup_detector.py + calendar_overlay.py)
+## RALPH AUDIT — Iteration 54 (pbo.py + nested/builder.py + nested/schema.py)
 ## Date: 2026-03-15
 ## Infrastructure Gates: 4/4 PASS
 
@@ -13,58 +13,56 @@
 |------|--------|--------|
 | `check_drift.py` | PASS | 72 checks passed, 0 skipped, 6 advisory |
 | `audit_behavioral.py` | PASS | All 6 checks clean |
-| `pytest test_execution_spec.py + test_setup_detector.py` | PASS | 26 tests, no failures |
+| `pytest test_nested/ + test_pbo.py` | PASS | 73 tests, no failures |
 | `ruff check` | 2 pre-existing I001 in prop_portfolio.py + prop_profiles.py (out of scope) |
 
 ---
 
 ## Files Audited This Iteration
 
-### execution_spec.py — 1 FIXED (ES-01)
+### pbo.py — CLEAN
 
 #### Seven Sins scan
 
-- **Silent failure**: CLEAN. `validate()` raises `ValueError` on bad inputs. No bare excepts.
-- **Fail-open**: CLEAN. Invalid entry model raises ValueError. `from_json` lets json.JSONDecodeError propagate.
-- **Look-ahead bias**: CLEAN. Pure dataclass with no data queries.
-- **Cost illusion**: CLEAN. No PnL computation.
-- **Canonical violation**: FIXED (ES-01). Was `["E1", "E3"]` — missing E2 (active), accepting E3 (soft-retired). Now uses `ENTRY_MODELS` from `trading_app.config`. Error message is now dynamic.
-- **Orphan risk**: CLEAN. Used by db_manager.py (column schema), nested/schema.py (column schema), tests.
+- **Silent failure**: CLEAN. No bare excepts. `defaultdict(float)` handles missing keys correctly. Returns `None` pbo on insufficient data — conservative, not hiding errors.
+- **Fail-open**: CLEAN. All edge cases return `None` pbo (conservative — signals "don't use" rather than false confidence).
+- **Look-ahead bias**: CLEAN. Pure statistical aggregation over historical trade days; no future data.
+- **Cost illusion**: CLEAN. No PnL computation — pure statistics on pre-computed pnl_r values.
+- **Canonical violation**: CLEAN. Imports `ALL_FILTERS` from `trading_app.config` dynamically. No hardcoded instrument or strategy lists.
+- **Orphan risk**: CLEAN. `compute_pbo` and `compute_family_pbo` used by `scripts/tools/build_edge_families.py`. `compute_pbo` also tested in `tests/test_trading_app/test_pbo.py`.
 - **Volatile data**: CLEAN. No hardcoded counts.
 
-**Finding ES-01 (HIGH — Canonical Violation):**
-- `execution_spec.py:46` had `["E1", "E3"]` — E2 (active primary model) was rejected; E3 (soft-retired) was accepted
-- Fixed: import `ENTRY_MODELS` from `trading_app.config`, use in validate(), update error message
-- Tests updated to cover E2 and use dynamic error match
-- Commit: 41f19b4
+Notes:
+- `_get_eligible_days` uses `iterrows()` — documented as build-time only (not performance-critical). Drift check #77 targets `features.py` only; drift check #2 targets ingest scripts only. Not a violation.
+- `_get_eligible_days` queries `daily_features` without `orb_minutes` filter — returns 3x rows (one per aperture) but `eligible_days` is a set of unique `trading_day` values so deduplication handles it. Inefficient but correct.
 
-### setup_detector.py — CLEAN
+### nested/builder.py — CLEAN
 
 #### Seven Sins scan
 
-- **Silent failure**: CLEAN. No bare except. `break_dir is None` guard correctly skips rows without a break (legitimate data check, not silent failure). Returns empty list if no matches — caller handles that.
-- **Fail-open**: CLEAN. `strategy_filter.matches_row()` is caller-owned; false means skip.
-- **Look-ahead bias**: CLEAN. Queries `daily_features` by `trading_day` range. No `double_break` or future data. `orb_minutes` correctly used as query parameter (not a LAG-style filter).
-- **Cost illusion**: CLEAN. Filter detection only. No PnL.
-- **Canonical violation**: CLEAN. No hardcoded instrument lists. `instrument` and `orb_label` are caller-supplied. `StrategyFilter` from `trading_app.config`. `orb_minutes` default of 5 is a convenience default, not a hardcoded canonical override.
-- **Orphan risk**: CLEAN. Called by `strategy_discovery.py` and tests.
+- **Silent failure**: CLEAN. Guards for `bars_1m_df.empty`, `break_dir is None`, `orb_high is None` are legitimate — no ORB = no outcome to compute. Not hiding errors.
+- **Fail-open**: CLEAN. `INSERT OR REPLACE` is correct idempotent pattern. `risk_points <= 0` guard prevents division-by-zero and inserts NULL outcome rows (conservative).
+- **Look-ahead bias**: CLEAN. Only post-ORB bars used for outcome computation. `break_ts` is from `daily_features` (pre-computed ORB close). No `double_break` or future data references.
+- **Cost illusion**: CLEAN. `get_cost_spec(instrument)` from `pipeline.cost_model` used. `pnl_points_to_r` and `to_r_multiple` correctly applied.
+- **Canonical violation**: CLEAN. `for em in ENTRY_MODELS` (line 300) — canonical import from `trading_app.config`. `CONFIRM_BARS_OPTIONS, RR_TARGETS` imported from `outcome_builder`. `ORB_LABELS` from `pipeline.init_db`. `GOLD_DB_PATH` from `pipeline.paths`. Lines 301/348 `if em == "E2"` / `if em in ("E2", "E3") and cb > 1` are behavioral guards (CB1-only for stop-market/retrace entry types), not canonical lists — this pattern mirrors outcome_builder.
+- **Orphan risk**: CLEAN. Used by `trading_app/nested/audit_outcomes.py` (imports `_verify_e3_sub_bar_fill`, `resample_to_5m`). Tests in `test_nested/test_builder.py` and `test_nested/test_resample.py`.
 - **Volatile data**: CLEAN. No hardcoded counts.
 
-### calendar_overlay.py — CLEAN
+### nested/schema.py — CLEAN
 
 #### Seven Sins scan
 
-- **Silent failure**: `_load_rules()` returns `{}` on missing file or parse error (logged as WARNING). This is intentional documented behaviour — missing rules → NEUTRAL (trade normally). Not a safety path, so fail-open-to-trade is acceptable here. `@research-source` annotation present.
-- **Fail-open**: `get_calendar_action()` wraps in `except Exception` and returns `CalendarAction.SKIP` on any exception — this is FAIL-CLOSED (bugs skip trades, not allow them). Correct behaviour.
-- **Look-ahead bias**: CLEAN. Calendar signals (NFP, OPEX, FOMC, CPI, DOW) use only `trading_day` date — no future data.
-- **Cost illusion**: CLEAN. Returns action enum only. No PnL.
-- **Canonical violation**: CLEAN. No hardcoded instrument/session lists — rules loaded from JSON keyed by (instrument, session, signal). `day_of_week` dict `{0:"Monday",...,4:"Friday"}` is a DOW name lookup, not an instrument list.
-- **Orphan risk**: CLEAN. `CALENDAR_RULES`, `CalendarAction`, `get_calendar_action` used by `execution_engine.py`. `_load_rules()` called at import time.
-- **Volatile data**: CLEAN. No hardcoded counts. Rules loaded dynamically from JSON.
+- **Silent failure**: CLEAN. DuckDB errors propagate naturally. `verify_nested_schema` explicitly reports violations.
+- **Fail-open**: CLEAN. Schema creation is idempotent (CREATE TABLE IF NOT EXISTS). Force mode explicitly warns before dropping.
+- **Look-ahead bias**: N/A — schema definitions only.
+- **Cost illusion**: N/A — schema definitions only.
+- **Canonical violation**: CLEAN. `expected_tables` list in `verify_nested_schema` is self-referential (verifies what `init_nested_schema` creates) — not a canonical instrument/session list. `GOLD_DB_PATH` from `pipeline.paths`.
+- **Orphan risk**: CLEAN. Used by `builder.py`, `discovery.py`, `validator.py` in nested subpackage. Tests in `test_nested/test_schema.py` and `test_nested/test_discovery.py`.
+- **Volatile data**: CLEAN. No hardcoded counts.
 
 ---
 
-## Deferred Findings — Status After Iter 53
+## Deferred Findings — Status After Iter 54
 
 ### STILL DEFERRED (carried forward)
 - **DF-04** — `rolling_portfolio.py:304` dormant `orb_minutes=5` in rolling DOW stats — structural multi-file fix, blast radius >5 files
@@ -72,16 +70,16 @@
 ---
 
 ## Summary
-- execution_spec.py: 1 HIGH finding FIXED (ES-01 — canonical violation, E2 missing from allowed entry models)
-- setup_detector.py: CLEAN — 0 findings
-- calendar_overlay.py: CLEAN — 0 findings
+- pbo.py: CLEAN — 0 findings
+- nested/builder.py: CLEAN — 0 findings
+- nested/schema.py: CLEAN — 0 findings
 - Infrastructure Gates: 4/4 PASS
-- Action: fix
+- Action: audit-only
 
 **Next iteration targets:**
-- `trading_app/nested/builder.py` — not yet audited this cycle
-- `trading_app/nested/schema.py` — not yet audited this cycle
-- `trading_app/pbo.py` — not yet audited this cycle
+- `trading_app/nested/discovery.py` — not yet audited this cycle
+- `trading_app/nested/validator.py` — not yet audited this cycle
+- `trading_app/nested/audit_outcomes.py` — not yet audited this cycle
 
 ---
 
@@ -119,6 +117,9 @@
 - `trading_app/execution_spec.py` — iter 53 (1 fix: ES-01 canonical violation)
 - `trading_app/setup_detector.py` — iter 53 (CLEAN)
 - `trading_app/calendar_overlay.py` — iter 53 (CLEAN)
+- `trading_app/pbo.py` — iter 54 (CLEAN)
+- `trading_app/nested/builder.py` — iter 54 (CLEAN)
+- `trading_app/nested/schema.py` — iter 54 (CLEAN)
 - `pipeline/build_daily_features.py` — iter 36 (1 fix: canonical extraction)
 - `pipeline/ingest_dbn.py` — iter 1 (triaged via M2.5)
 - `pipeline/build_bars_5m.py` — iter 1 (triaged via M2.5)
