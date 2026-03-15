@@ -1,7 +1,7 @@
-## Iteration: 62
-## Target: scripts/tools/pipeline_status.py:515
-## Finding: APERTURES = [5, 15, 30] is a hardcoded local re-definition of VALID_ORB_MINUTES from pipeline/build_daily_features.py — canonical violation (Volatile data / Canonical violation)
-## Classification: [mechanical]
-## Blast Radius: 0 external callers of APERTURES, 3 internal usages (lines 552, 626, 668), 0 test references to APERTURES
-## Invariants: APERTURES values must remain [5, 15, 30] (sourced from canonical); staleness_engine, format_status, and preflight_check logic must not change
-## Diff estimate: 2 lines (add 1 import, replace 1 definition)
+## Iteration: 63
+## Target: scripts/tools/pipeline_status.py:605
+## Finding: Silent failure — bare `except Exception` swallows unexpected errors when querying family_rr_locks without instrument filter; silently returns None with no log
+## Classification: [judgment]
+## Blast Radius: 0 external callers (staleness_engine used only in main()); family_rr_locks is display-only (not in stale_steps logic); 1 file changed
+## Invariants: result["family_rr_locks"] must remain in returned dict; when table has no instrument column AND table doesn't exist, result must be None (not exception); duckdb.BinderException outer catch must not change
+## Diff estimate: 1 line (except Exception -> except duckdb.CatalogException)
