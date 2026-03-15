@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 70
+## Last iteration: 71
 
-## RALPH AUDIT — Iteration 70 (pipeline/dashboard.py + pipeline/db_lock.py + pipeline/audit_log.py)
+## RALPH AUDIT — Iteration 71 (5 files scanned)
 ## Date: 2026-03-15
 ## Infrastructure Gates: 3/3 PASS
 
@@ -13,32 +13,38 @@
 |------|--------|--------|
 | `check_drift.py` | PASS | 72 checks passed, 0 skipped, 6 advisory |
 | `ruff check` | PASS | Clean |
-| Audit | CLEAN | No actionable findings across 3 files |
+| `import smoke test` | PASS | Module imports OK |
 
 ---
 
 ## Files Audited This Iteration
 
-### pipeline/dashboard.py — CLEAN
-- All 4 DB connections use try/finally with con.close()
-- 2 `except Exception` blocks (lines 186, 215) wrap subprocess calls in a report generator — ACCEPTABLE
-- No canonical violations, no orphan code, no volatile data
+### pipeline/paths.py — CLEAN (55 lines)
+- Correct dotenv fallback, DB path resolution with warning. No sins.
 
-### pipeline/db_lock.py — CLEAN
-- Atomic lock creation with `os.O_CREAT | os.O_EXCL` (line 139)
-- Stale lock reclamation only when PID is dead
-- All `except OSError: pass` blocks are in cleanup paths — ACCEPTABLE
-- Well-implemented advisory lock, no sins
+### pipeline/log.py — CLEAN (16 lines)
+- Trivial logger setup. No sins.
 
-### pipeline/audit_log.py — CLEAN
-- `log_operation` intentionally fail-open: "audit failure should never block data writes" (line 91-92) — documented design choice, ACCEPTABLE
-- `_ALLOWED_TABLES` allowlist is hardcoded but fail-closed (rejects unknown tables with ValueError)
-- `_INSTRUMENT_COLUMN_TABLES` correctly maps column convention per table
-- No canonical violations that affect current callers
+### pipeline/check_db.py — CLEAN (89 lines)
+- Uses `with` for connection (auto-close). No sins.
+
+### scripts/tools/select_family_rr.py — FIXED (SFR-01)
+
+#### Finding SFR-01: Canonical violation — hardcoded entry_model IN ('E1', 'E2') (FIXED)
+- **Sin**: Canonical violation — SQL query hardcodes `entry_model IN ('E1', 'E2')` instead of deriving from `ENTRY_MODELS - SKIP_ENTRY_MODELS`. If E4 is added, this script silently misses it.
+- **Severity**: MEDIUM (new entry model would be excluded from RR lock selection)
+- **Fix**: Import `ENTRY_MODELS` and `SKIP_ENTRY_MODELS` from `trading_app.config`; build active models list and SQL IN clause dynamically
+- **Lines changed**: 4 (1 import, 2 active_models computation, 1 SQL f-string)
+- **Blast radius**: 1 file (select_family_rr.py), query filter only
+
+#### Additional observation: connection not in try/finally (SFR-02, ACCEPTABLE)
+- `con.close()` at line 213 not in `finally`. Low severity — CLI script, process exit closes connection.
+
+#### Seven Sins scan — COMPLETE for all 4 files
 
 ---
 
-## Deferred Findings — Status After Iter 70
+## Deferred Findings — Status After Iter 71
 
 ### STILL DEFERRED (carried forward)
 - **DF-04** — `rolling_portfolio.py:304` dormant `orb_minutes=5` in rolling DOW stats — structural multi-file fix, blast radius >5 files
@@ -46,16 +52,16 @@
 ---
 
 ## Summary
-- 3 files scanned: `pipeline/dashboard.py`, `pipeline/db_lock.py`, `pipeline/audit_log.py` — all CLEAN
-- 0 fixes, 0 new deferrals
+- 5 files scanned: paths.py (CLEAN), log.py (CLEAN), check_db.py (CLEAN), select_family_rr.py (SFR-01 FIXED)
+- 1 fix, 0 new deferrals
 - Infrastructure Gates: 3/3 PASS
-- Action: audit-only (no code changes)
+- Action: fix (mechanical)
 
 **Next iteration targets:**
-- `pipeline/paths.py` — path configuration, unscanned
-- `pipeline/log.py` — logging setup, unscanned
-- `pipeline/check_db.py` — DB integrity check, unscanned
-- `scripts/tools/select_family_rr.py` — RR lock selection, unscanned
+- `scripts/tools/gen_repo_map.py` — repo map generator, unscanned
+- `scripts/tools/sync_pinecone.py` — Pinecone sync, unscanned
+- `scripts/tools/assert_rebuild.py` — post-rebuild assertions, unscanned
+- `scripts/infra/backup_db.py` — DB backup utility, unscanned
 
 ---
 
@@ -147,3 +153,7 @@
 - `pipeline/dashboard.py` — iter 70 (CLEAN)
 - `pipeline/db_lock.py` — iter 70 (CLEAN)
 - `pipeline/audit_log.py` — iter 70 (CLEAN)
+- `pipeline/paths.py` — iter 71 (CLEAN)
+- `pipeline/log.py` — iter 71 (CLEAN)
+- `pipeline/check_db.py` — iter 71 (CLEAN)
+- `scripts/tools/select_family_rr.py` — iter 71 (1 fix: SFR-01 canonical entry_model)

@@ -5,6 +5,17 @@
 
 ---
 
+## Iteration 71 — 2026-03-15
+- Phase: fix
+- Classification: [mechanical]
+- Target: pipeline/paths.py + pipeline/log.py + pipeline/check_db.py + scripts/tools/select_family_rr.py (full scan, 5 files)
+- Finding: SFR-01 — `select_family_rr.py:148` hardcodes `entry_model IN ('E1', 'E2')`. Should derive from `ENTRY_MODELS - SKIP_ENTRY_MODELS`. paths.py, log.py, check_db.py all CLEAN.
+- Action: Imported ENTRY_MODELS and SKIP_ENTRY_MODELS; built active models list and SQL IN clause dynamically.
+- Blast radius: 1 file (select_family_rr.py), query filter only
+- Verification: PASS (72 drift checks, ruff clean, import smoke test)
+
+---
+
 ## Iteration 70 — 2026-03-15
 - Phase: audit-only
 - Target: pipeline/dashboard.py + pipeline/db_lock.py + pipeline/audit_log.py
