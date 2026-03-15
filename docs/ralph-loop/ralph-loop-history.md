@@ -903,3 +903,15 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 1 file (standalone CLI script, no importers)
 - Verification: PASS (import verified, ruff clean, 72/72 drift checks pass)
 - Commit: b7804ef
+
+---
+
+## Iteration 95 — 2026-03-16
+- Phase: fix
+- Classification: [mechanical]
+- Target: scripts/tools/ml_cross_session_experiment.py:26, scripts/tools/ml_hybrid_experiment.py:25, scripts/tools/ml_instrument_deep_dive.py:24
+- Finding: GP-95 — EUROPE_FLOW missing from SESSION_ORDER in all 3 ML experiment scripts. SESSION_CATALOG has 12 sessions; all three SESSION_ORDER lists had 11 (missing EUROPE_FLOW between SINGAPORE_OPEN and LONDON_METALS). EUROPE_FLOW trades silently skipped in cross-session feature computation via `if session not in SESSION_ORDER: continue` guard.
+- Action: Added "EUROPE_FLOW" entry between "SINGAPORE_OPEN" and "LONDON_METALS" in SESSION_ORDER of all three files (3 lines, one per file). Same fix type as GP-94.
+- Blast radius: 3 files (standalone experiment scripts, no production callers)
+- Verification: PASS (72 drift checks pass, ruff clean, behavioral audit 6/6)
+- Commit: 3057e0c
