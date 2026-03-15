@@ -64,6 +64,7 @@ live_signals.jsonl
 !.claude/skills/
 !.claude/hooks/
 !.claude/agents/
+!.claude/settings.json
 .claude/hooks/.last_drift_ok
 memory/
 
