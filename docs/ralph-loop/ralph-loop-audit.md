@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 88
+## Last iteration: 90
 
-## RALPH AUDIT — Iteration 88 (fix — volatile data)
+## RALPH AUDIT — Iteration 90 (fix)
 ## Date: 2026-03-15
 ## Infrastructure Gates: 3/3 PASS
 
@@ -19,24 +19,37 @@
 
 ## Files Audited This Iteration
 
-### scripts/run_live_session.py — FIXED (RLS-01)
+### scripts/tools/build_edge_families.py — 1 FINDING FIXED
 
-#### Finding RLS-01: Volatile data — hardcoded checks_total = 5 in _run_preflight (FIXED)
-- **Sin**: Volatile data — hardcoded numeric count controls pass/fail logic (`checks_passed == checks_total`). If a 6th preflight check is added without updating this, `_run_preflight` returns False even when all checks pass, silently blocking live sessions.
-- **Severity**: LOW (currently correct, future mutation risk only)
-- **Fix**: Added inline comment to checks_total making the constraint explicit: `# NOTE: must match number of check blocks (1-5) below — update if adding/removing checks`
-- **Blast radius**: 1 file (run_live_session.py). `_run_preflight` is private, called once at line 237. No test coverage.
-- **Verification**: 72 drift checks pass, behavioral audit clean, ruff clean
-- **Commit**: c57130b
+Seven Sins scan:
+- Line 217-220: `orb_minutes_map = {}` / `orb_minutes_map[sid] = orb_min or 5` — dead variable, built but never read anywhere in the file. Orphan code left from a refactor. **FIXED** — removed 2 lines.
+- Line 243: `orb_min or 5` fallback in family_key — defensive guard for NULL orb_minutes; 0 NULL rows in production, acceptable defensive pattern. CLEAN.
+- Robustness thresholds annotated with `@research-source` and `@revalidated-for`. CLEAN.
+- Canonical sources: `ACTIVE_ORB_INSTRUMENTS`, `GOLD_DB_PATH`, `CORE_MIN_SAMPLES`, `REGIME_MIN_SAMPLES`. CLEAN.
+- Fail-closed gates at lines 391-401 (mega-family and singleton rate guards). CLEAN.
+- Idempotent: DELETE+INSERT pattern at lines 249-259. CLEAN.
+- Batch temp table pattern at lines 342-361 (post-fortification, confirmed correct). CLEAN.
 
-### scripts/operator_status.py — CLEAN (145 lines)
-- Pure text parsing, no DB access, no canonical lists, no hardcoded instrument lists.
-- `_extract_todos()[:8]` limit is style-only (acceptable).
-- No findings.
+**Finding BEF-01: FIXED — dead variable `orb_minutes_map` removed (2 lines)**
+
+### scripts/tools/pipeline_status.py — CLEAN
+
+Seven Sins scan:
+- Line 516: `APERTURES = VALID_ORB_MINUTES` — canonical source, not hardcoded. CLEAN.
+- Instrument validation at line 796-797 — validates against `ACTIVE_ORB_INSTRUMENTS`. CLEAN.
+- No hardcoded sessions, entry models, apertures, or DB paths.
+- Pre-flight rules (PREFLIGHT_RULES dict) use parameterized SQL. CLEAN.
+- `family_rr_locks` try/except at lines 594-606 — handles schema variance (table may lack instrument column). Catches `duckdb.BinderException` specifically, not broad Exception. CLEAN.
+- `_ensure_manifest_table` catches `duckdb.InvalidInputException` specifically for read-only case. CLEAN.
+- Rebuild chain correctly covers O5/O15/O30 apertures for outcome_builder and discovery. CLEAN.
+- All subprocess calls check return codes (lines 453-468). CLEAN.
+- Timeout handled explicitly (TimeoutExpired) — fail-closed. CLEAN.
+
+**Finding: CLEAN — no actionable findings**
 
 ---
 
-## Deferred Findings — Status After Iter 88
+## Deferred Findings — Status After Iter 90
 
 ### STILL DEFERRED (carried forward)
 - **DF-04** — `rolling_portfolio.py:304` dormant `orb_minutes=5` in rolling DOW stats — structural multi-file fix, blast radius >5 files
@@ -44,9 +57,10 @@
 ---
 
 ## Summary
-- 2 files audited: run_live_session.py (1 LOW fix) + operator_status.py (clean)
-- RLS-01: hardcoded checks_total → added comment guard
+- 2 files audited: build_edge_families.py (1 LOW finding FIXED) + pipeline_status.py (clean)
+- 1 finding fixed: BEF-01 — dead variable `orb_minutes_map` (2 lines removed, [mechanical])
 - Infrastructure Gates: 3/3 PASS
+- Commit: e529f42
 
 **Codebase steady state maintained for major violation classes:**
 - Hardcoded DB paths: ELIMINATED (0 in production code)
@@ -62,20 +76,20 @@
 
 ## Files Fully Scanned
 
-> Cumulative list — 104 files fully scanned.
+> Cumulative list — 109 files fully scanned.
 
 - trading_app/ — 44 files (iters 4-61)
 - pipeline/ — 15 files (iters 1-71)
-- scripts/tools/ — 8 files (iters 18-72)
+- scripts/tools/ — 13 files (iters 18-72, 89, 90): audit_behavioral.py, generate_promotion_candidates.py, select_family_rr.py (iter 89); build_edge_families.py, pipeline_status.py (iter 90)
 - scripts/infra/ — 1 file (iter 72)
 - scripts/migrations/ — 1 file (iter 73)
 - scripts/reports/ — 3 files (iter 87): report_wf_diagnostics.py, parameter_stability_heatmap.py, report_edge_portfolio.py (iter 85)
 - scripts/ root — 2 files (iter 88): run_live_session.py, operator_status.py
-- **Total: 104 files fully scanned**
+- **Total: 109 files fully scanned**
 - See previous audit iterations for per-file detail
 
 ## Next iteration targets
-- `scripts/tools/generate_promotion_candidates.py` — not yet scanned
-- `scripts/tools/select_family_rr.py` — not yet scanned
-- `scripts/tools/audit_behavioral.py` — core behavioral audit tool itself (meta-audit)
-- `scripts/tools/build_edge_families.py` — large tool, audited earlier but worth rechecking
+- `scripts/tools/assert_rebuild.py` — post-rebuild assertion module, not yet scanned
+- `scripts/tools/gen_repo_map.py` — repo map generator, not yet scanned
+- `scripts/tools/sync_pinecone.py` — Pinecone sync, not yet scanned
+- `scripts/tmp_*.py` — temporary analysis scripts (low priority, audit-only)
