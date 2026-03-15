@@ -47,7 +47,7 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool) -> bool:
     from trading_app.live_config import build_live_portfolio
 
     checks_passed = 0
-    checks_total = 5
+    checks_total = 5  # NOTE: must match number of check blocks (1-5) below — update if adding/removing checks
 
     # 1. Auth check
     broker_name = broker or get_broker_name()
