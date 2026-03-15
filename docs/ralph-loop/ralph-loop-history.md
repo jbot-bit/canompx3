@@ -5,6 +5,17 @@
 
 ---
 
+## Iteration 72 — 2026-03-15
+- Phase: fix
+- Classification: [mechanical]
+- Target: scripts/tools/assert_rebuild.py + scripts/infra/backup_db.py
+- Finding: AR-01 — `APERTURES = [5, 15, 30]` hardcoded (same pattern as PS-01/CD-01/RP-01). backup_db.py CLEAN.
+- Action: Imported VALID_ORB_MINUTES; replaced hardcoded list.
+- Blast radius: 1 file (assert_rebuild.py), assertion A5 only
+- Verification: PASS (72 drift checks, ruff clean, import smoke test)
+
+---
+
 ## Iteration 71 — 2026-03-15
 - Phase: fix
 - Classification: [mechanical]
