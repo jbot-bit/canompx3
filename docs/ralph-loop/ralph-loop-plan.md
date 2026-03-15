@@ -1,24 +1,6 @@
-## Iteration: 52
-## Target: trading_app/entry_rules.py + trading_app/db_manager.py
-## Finding: CLEAN — no actionable findings in either file
-## Blast Radius: N/A (audit-only)
-## Invariants: N/A
-## Diff estimate: 0 lines (audit-only)
-
-### entry_rules.py Summary
-- Silent failure: CLEAN (explicit ValueError raises, no bare excepts)
-- Fail-open: CLEAN (unknown entry_model raises ValueError at line 248)
-- Look-ahead bias: CLEAN (time-bounded window detection, caller-supplied timestamps)
-- Cost illusion: CLEAN (no PnL computation in this module)
-- Canonical violation: CLEAN (E3_RETRACE_WINDOW_MINUTES from config, fail-closed guard)
-- Orphan risk: CLEAN (all functions used by outcome_builder, nested/builder, tests)
-- Volatile data: CLEAN (no hardcoded counts)
-
-### db_manager.py Summary
-- Silent failure: CLEAN (CatalogException pass is idempotent migration pattern)
-- Fail-open: CLEAN (verify reads read_only=True, init propagates DuckDB exceptions)
-- Look-ahead bias: CLEAN (schema DDL only, no data queries)
-- Cost illusion: CLEAN (no PnL computation)
-- Canonical violation: CLEAN (GOLD_DB_PATH from pipeline.paths, no hardcoded instruments)
-- Orphan risk: CLEAN (all functions referenced by callers)
-- Volatile data: expected_tables hardcoded list is intentional schema verification — ACCEPTABLE
+## Iteration: 53
+## Target: trading_app/execution_spec.py:46 + tests/test_trading_app/test_execution_spec.py
+## Finding: Hardcoded ["E1", "E3"] in ExecutionSpec.validate() — E2 (active entry model) rejected, E3 (soft-retired) accepted. Should use canonical ENTRY_MODELS from trading_app.config.
+## Blast Radius: 2 files (execution_spec.py + test_execution_spec.py). db_manager.py and nested/schema.py reference column name only — unaffected.
+## Invariants: [1] E3 must still be accepted (in ENTRY_MODELS for schema/test compat); [2] E4 and unknown models must still raise ValueError; [3] frozen dataclass behavior unchanged
+## Diff estimate: ~6 lines in execution_spec.py, ~8 lines in test file

@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 52
+## Last iteration: 53
 
-## RALPH AUDIT — Iteration 52 (entry_rules.py + db_manager.py)
+## RALPH AUDIT — Iteration 53 (execution_spec.py + setup_detector.py + calendar_overlay.py)
 ## Date: 2026-03-15
 ## Infrastructure Gates: 4/4 PASS
 
@@ -13,40 +13,58 @@
 |------|--------|--------|
 | `check_drift.py` | PASS | 72 checks passed, 0 skipped, 6 advisory |
 | `audit_behavioral.py` | PASS | All 6 checks clean |
-| `pytest test_entry_rules.py` | PASS | 64 tests, no failures |
+| `pytest test_execution_spec.py + test_setup_detector.py` | PASS | 26 tests, no failures |
 | `ruff check` | 2 pre-existing I001 in prop_portfolio.py + prop_profiles.py (out of scope) |
 
 ---
 
 ## Files Audited This Iteration
 
-### entry_rules.py — CLEAN
+### execution_spec.py — 1 FIXED (ES-01)
 
 #### Seven Sins scan
 
-- **Silent failure**: CLEAN. No bare `except` blocks. All invalid inputs raise `ValueError` explicitly (lines 92, 95, 175, 248).
-- **Fail-open**: CLEAN. `resolve_entry` raises `ValueError` on unknown entry_model (line 247-248). `detect_entry_with_confirm_bars` raises on E2 (line 415). Both are fail-closed.
-- **Look-ahead bias**: CLEAN. Detection windows are caller-supplied timestamps. No future data. No LAG() without orb_minutes filter. No `double_break`.
-- **Cost illusion**: CLEAN. Module is entry detection only. No PnL computation.
-- **Canonical violation**: CLEAN. `E3_RETRACE_WINDOW_MINUTES` from `trading_app.config`. Entry models handled via fail-closed string guard.
-- **Orphan risk**: CLEAN. All functions (`detect_confirm`, `detect_break_touch`, `resolve_entry`, `_resolve_e2`, `detect_entry_with_confirm_bars`) referenced by `outcome_builder.py`, `nested/builder.py`, tests.
-- **Volatile data**: CLEAN. No hardcoded counts or session names.
-
-### db_manager.py — CLEAN
-
-#### Seven Sins scan
-
-- **Silent failure**: CLEAN. `ALTER TABLE` migrations wrapped in `except duckdb.CatalogException: pass` — correct idempotency pattern for "column already exists". Not a data-hiding fallback.
-- **Fail-open**: CLEAN. `verify_trading_app_schema` opens DB `read_only=True`. `init_trading_app_schema` lets DuckDB exceptions propagate. No silent success paths.
-- **Look-ahead bias**: CLEAN. Schema DDL only. No data queries in this module.
+- **Silent failure**: CLEAN. `validate()` raises `ValueError` on bad inputs. No bare excepts.
+- **Fail-open**: CLEAN. Invalid entry model raises ValueError. `from_json` lets json.JSONDecodeError propagate.
+- **Look-ahead bias**: CLEAN. Pure dataclass with no data queries.
 - **Cost illusion**: CLEAN. No PnL computation.
-- **Canonical violation**: CLEAN. `GOLD_DB_PATH` from `pipeline.paths`. No hardcoded instruments, sessions, or entry models.
-- **Orphan risk**: CLEAN. All functions used: `init_trading_app_schema` (outcome_builder, strategy_validator, strategy_discovery, tests), `compute_trade_day_hash` (strategy_discovery, build_edge_families), `get_family_head_ids` + `has_edge_families` (portfolio.py).
-- **Volatile data**: `expected_tables` list in `verify_trading_app_schema` (line 531-540) is intentionally hardcoded for schema verification — ACCEPTABLE. Matches tables created in `init_trading_app_schema`.
+- **Canonical violation**: FIXED (ES-01). Was `["E1", "E3"]` — missing E2 (active), accepting E3 (soft-retired). Now uses `ENTRY_MODELS` from `trading_app.config`. Error message is now dynamic.
+- **Orphan risk**: CLEAN. Used by db_manager.py (column schema), nested/schema.py (column schema), tests.
+- **Volatile data**: CLEAN. No hardcoded counts.
+
+**Finding ES-01 (HIGH — Canonical Violation):**
+- `execution_spec.py:46` had `["E1", "E3"]` — E2 (active primary model) was rejected; E3 (soft-retired) was accepted
+- Fixed: import `ENTRY_MODELS` from `trading_app.config`, use in validate(), update error message
+- Tests updated to cover E2 and use dynamic error match
+- Commit: 41f19b4
+
+### setup_detector.py — CLEAN
+
+#### Seven Sins scan
+
+- **Silent failure**: CLEAN. No bare except. `break_dir is None` guard correctly skips rows without a break (legitimate data check, not silent failure). Returns empty list if no matches — caller handles that.
+- **Fail-open**: CLEAN. `strategy_filter.matches_row()` is caller-owned; false means skip.
+- **Look-ahead bias**: CLEAN. Queries `daily_features` by `trading_day` range. No `double_break` or future data. `orb_minutes` correctly used as query parameter (not a LAG-style filter).
+- **Cost illusion**: CLEAN. Filter detection only. No PnL.
+- **Canonical violation**: CLEAN. No hardcoded instrument lists. `instrument` and `orb_label` are caller-supplied. `StrategyFilter` from `trading_app.config`. `orb_minutes` default of 5 is a convenience default, not a hardcoded canonical override.
+- **Orphan risk**: CLEAN. Called by `strategy_discovery.py` and tests.
+- **Volatile data**: CLEAN. No hardcoded counts.
+
+### calendar_overlay.py — CLEAN
+
+#### Seven Sins scan
+
+- **Silent failure**: `_load_rules()` returns `{}` on missing file or parse error (logged as WARNING). This is intentional documented behaviour — missing rules → NEUTRAL (trade normally). Not a safety path, so fail-open-to-trade is acceptable here. `@research-source` annotation present.
+- **Fail-open**: `get_calendar_action()` wraps in `except Exception` and returns `CalendarAction.SKIP` on any exception — this is FAIL-CLOSED (bugs skip trades, not allow them). Correct behaviour.
+- **Look-ahead bias**: CLEAN. Calendar signals (NFP, OPEX, FOMC, CPI, DOW) use only `trading_day` date — no future data.
+- **Cost illusion**: CLEAN. Returns action enum only. No PnL.
+- **Canonical violation**: CLEAN. No hardcoded instrument/session lists — rules loaded from JSON keyed by (instrument, session, signal). `day_of_week` dict `{0:"Monday",...,4:"Friday"}` is a DOW name lookup, not an instrument list.
+- **Orphan risk**: CLEAN. `CALENDAR_RULES`, `CalendarAction`, `get_calendar_action` used by `execution_engine.py`. `_load_rules()` called at import time.
+- **Volatile data**: CLEAN. No hardcoded counts. Rules loaded dynamically from JSON.
 
 ---
 
-## Deferred Findings — Status After Iter 52
+## Deferred Findings — Status After Iter 53
 
 ### STILL DEFERRED (carried forward)
 - **DF-04** — `rolling_portfolio.py:304` dormant `orb_minutes=5` in rolling DOW stats — structural multi-file fix, blast radius >5 files
@@ -54,15 +72,16 @@
 ---
 
 ## Summary
-- entry_rules.py: CLEAN — 0 findings
-- db_manager.py: CLEAN — 0 findings
+- execution_spec.py: 1 HIGH finding FIXED (ES-01 — canonical violation, E2 missing from allowed entry models)
+- setup_detector.py: CLEAN — 0 findings
+- calendar_overlay.py: CLEAN — 0 findings
 - Infrastructure Gates: 4/4 PASS
-- Action: audit-only
+- Action: fix
 
 **Next iteration targets:**
-- `trading_app/setup_detector.py` — not yet audited this cycle
-- `trading_app/execution_spec.py` — not yet audited this cycle
-- `trading_app/calendar_overlay.py` — not yet audited this cycle
+- `trading_app/nested/builder.py` — not yet audited this cycle
+- `trading_app/nested/schema.py` — not yet audited this cycle
+- `trading_app/pbo.py` — not yet audited this cycle
 
 ---
 
@@ -97,6 +116,9 @@
 - `trading_app/tradovate/auth.py` — iter 24 (log gap)
 - `trading_app/entry_rules.py` — iter 52 (CLEAN)
 - `trading_app/db_manager.py` — iter 52 (CLEAN)
+- `trading_app/execution_spec.py` — iter 53 (1 fix: ES-01 canonical violation)
+- `trading_app/setup_detector.py` — iter 53 (CLEAN)
+- `trading_app/calendar_overlay.py` — iter 53 (CLEAN)
 - `pipeline/build_daily_features.py` — iter 36 (1 fix: canonical extraction)
 - `pipeline/ingest_dbn.py` — iter 1 (triaged via M2.5)
 - `pipeline/build_bars_5m.py` — iter 1 (triaged via M2.5)
