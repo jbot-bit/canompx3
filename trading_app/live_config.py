@@ -496,7 +496,7 @@ def _check_dollar_gate(variant: dict, instrument: str) -> tuple[bool, str]:
                 f"RT cost (${spec.total_friction:.2f} * {LIVE_MIN_EXPECTANCY_DOLLARS_MULT} = ${min_dollars:.2f})"
             )
         return True, f"Exp${exp_dollars:.2f} >= ${min_dollars:.2f} ({LIVE_MIN_EXPECTANCY_DOLLARS_MULT}x RT)"
-    except Exception as exc:
+    except (ValueError, TypeError) as exc:
         return False, f"dollar gate BLOCKED (cost spec unavailable: {exc})"
 
 
