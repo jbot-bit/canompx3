@@ -31,7 +31,6 @@ from trading_app.prop_profiles import (
     get_firm_spec,
 )
 
-
 # =========================================================================
 # DD estimation constants (from Monte Carlo sim — trading_plan_sim.md)
 # =========================================================================
