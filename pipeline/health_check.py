@@ -177,12 +177,14 @@ def check_staleness() -> tuple[bool, str]:
         from scripts.tools.pipeline_status import staleness_engine
 
         con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
-        stale = []
-        for inst in ACTIVE_ORB_INSTRUMENTS:
-            status = staleness_engine(con, inst)
-            if status["stale_steps"]:
-                stale.append(f"{inst}: {', '.join(status['stale_steps'])}")
-        con.close()
+        try:
+            stale = []
+            for inst in ACTIVE_ORB_INSTRUMENTS:
+                status = staleness_engine(con, inst)
+                if status["stale_steps"]:
+                    stale.append(f"{inst}: {', '.join(status['stale_steps'])}")
+        finally:
+            con.close()
 
         if stale:
             return True, f"STALENESS WARNING: {'; '.join(stale)}"
