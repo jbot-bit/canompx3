@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 56
+## Last iteration: 57
 
-## RALPH AUDIT — Iteration 56 (nested/compare.py + scripts/tools/build_edge_families.py)
+## RALPH AUDIT — Iteration 57 (trading_app/live/ — 8 unscanned files)
 ## Date: 2026-03-15
 ## Infrastructure Gates: 4/4 PASS
 
@@ -13,52 +13,96 @@
 |------|--------|--------|
 | `check_drift.py` | PASS | 72 checks passed, 0 skipped, 6 advisory |
 | `audit_behavioral.py` | PASS | All 6 checks clean |
-| `pytest test_nested/ + test_edge_families.py` | PASS | 85 tests, no failures |
+| `pytest test_circuit_breaker + test_cusum + test_live_market_state + test_multi_runner + test_trade_journal` | PASS | 56 tests, no failures |
 | `ruff check` | 2 pre-existing I001 in prop_portfolio.py + prop_profiles.py (out of scope) |
 
 ---
 
 ## Files Audited This Iteration
 
-### nested/compare.py — CLEAN
+### trading_app/live/circuit_breaker.py — CLEAN
 
 #### Seven Sins scan
 
-- **Silent failure**: CLEAN. No exception swallowing. DuckDB errors propagate. Read-only connection.
-- **Fail-open**: CLEAN. Reporting-only tool. `continue` on missing `nested_strategies` table (conservative).
-- **Look-ahead bias**: CLEAN. Reads from already-written strategies; post-hoc comparison only.
-- **Cost illusion**: CLEAN. No PnL computation — reads pre-computed `sharpe_ratio` and `expectancy_r`.
-- **Canonical violation**: CLEAN. `ORB_LABELS` from `pipeline.init_db`; `GOLD_DB_PATH` from `pipeline.paths`. Hardcoded `orb_minutes_list = [15, 30]` at line 68 is a function parameter default for the research experiment — ACCEPTABLE (intentional per-experiment configuration, not a production canonical list).
-- **Orphan risk**: CLEAN. Imported and tested in `test_nested/test_validator_compare.py`.
+- **Silent failure**: CLEAN. No exception paths. Stateless dataclass, pure monotonic-clock logic.
+- **Fail-open**: CLEAN. Fail-closed by construction — `should_allow_request()` returns False when open and timer not elapsed. Probe-failed case resets timer to avoid flooding.
+- **Look-ahead bias**: N/A — runtime infra, no data.
+- **Cost illusion**: N/A.
+- **Canonical violation**: CLEAN. No config/canonical references needed (pure infra).
+- **Orphan risk**: CLEAN. Tested in `tests/test_trading_app/test_circuit_breaker.py` (7 tests).
 - **Volatile data**: CLEAN. No hardcoded counts.
 
-#### Observations (all ACCEPTABLE)
-
-- **Line 68**: `orb_minutes_list = [15, 30]` — function default for nested experiment apertures. ACCEPTABLE: intentional per-experiment heuristic, not a canonical list.
-- **Lines 129, 134**: `(x or 0)` after outer `is not None` guard — redundant but harmless (0.0 and 0 are equivalent for float arithmetic). ACCEPTABLE: style, no correctness impact.
-- **Line 231**: `(b['expectancy_r'] or 0)` in display-only print — masks None as 0.0000 silently. ACCEPTABLE: reporting tool only, no correctness impact on any production path.
-
-### scripts/tools/build_edge_families.py — CLEAN
+### trading_app/live/cusum_monitor.py — CLEAN
 
 #### Seven Sins scan
 
-- **Silent failure**: CLEAN. No exception swallowing. DuckDB errors propagate naturally. `fallback_count` warning is printed, not hidden.
-- **Fail-open**: CLEAN. Fail gates before `con.commit()` — mega-family check (>100 members) and singleton rate check (>70% singletons) raise `RuntimeError` to abort before commit.
-- **Look-ahead bias**: CLEAN. Groups already-validated strategies by trade-day hash; no future data.
-- **Cost illusion**: CLEAN. No PnL computation — reads pre-computed `expectancy_r`/`sharpe_ann` from `validated_setups`.
-- **Canonical violation**: CLEAN. `ACTIVE_ORB_INSTRUMENTS` from `pipeline.asset_configs`; `GOLD_DB_PATH` from `pipeline.paths`; `CORE_MIN_SAMPLES`/`REGIME_MIN_SAMPLES` from `trading_app.config`. Robustness thresholds have `@research-source` + `@revalidated-for` annotations at lines 32-37.
-- **Orphan risk**: CLEAN. Tested in `tests/test_trading_app/test_edge_families.py` (22 tests).
-- **Volatile data**: CLEAN. No hardcoded counts. Classification thresholds imported from config.
+- **Silent failure**: CLEAN. Degenerate-distribution guard (`std_r <= 0` → return False with no side effects). No exception paths.
+- **Fail-open**: CLEAN. Alarm stays set until explicitly cleared. Cannot be silently reset.
+- **Look-ahead bias**: N/A — processes realized R values only.
+- **Cost illusion**: N/A — no P&L computation.
+- **Canonical violation**: CLEAN. No imports needed (pure computation).
+- **Orphan risk**: CLEAN. Tested in `tests/test_trading_app/test_cusum_monitor.py` (10 tests).
+- **Volatile data**: CLEAN.
 
-#### Specific checks
+### trading_app/live/notifications.py — CLEAN
 
-- `cv_expr = float("inf")` when `mean_expr <= 0` — correct: negative-mean strategies fail the WHITELIST CV filter (`inf > 0.5`). No silent pass.
-- DELETE+INSERT pattern: idempotent — clears families for instrument before rebuilding.
-- PBO computation (lines 363-384): non-critical path; `pbo_result.get("pbo")` returns None if unavailable — UPDATE only fires when value is present. No silent failure.
+#### Seven Sins scan
+
+- **Silent failure**: CLEAN. `except Exception` with `log.warning()` — intentional fail-open for best-effort notification channel. Design doc explicitly states "notification failure must NEVER affect the trading loop."
+- **Fail-open**: ACCEPTABLE. Intentional by design — notification is non-critical infra.
+- **Canonical violation**: CLEAN.
+- **Orphan risk**: CLEAN. Used by session_orchestrator and performance_monitor.
+
+### trading_app/live/live_market_state.py — CLEAN
+
+#### Seven Sins scan
+
+- **Silent failure**: CLEAN. DST resolver exception at line 35 logs warning and returns None — cannot be caught more narrowly (resolver returns tuple, any Exception is valid). Callers handle None return.
+- **Fail-open**: CLEAN. None propagates upward cleanly.
+- **Look-ahead bias**: CLEAN. `DYNAMIC_ORB_RESOLVERS[label](date)` resolves session start from canonical `pipeline.dst`. No future data.
+- **Cost illusion**: N/A.
+- **Canonical violation**: CLEAN. `DYNAMIC_ORB_RESOLVERS` from `pipeline.dst`. Timezone `_BRISBANE = ZoneInfo("Australia/Brisbane")` is correct (no DST).
+- **Orphan risk**: CLEAN. Tested in `tests/test_trading_app/test_live_market_state.py` (6 tests).
+- **Volatile data**: CLEAN.
+
+### trading_app/live/multi_runner.py — CLEAN
+
+#### Seven Sins scan
+
+- **Silent failure**: CLEAN. Orchestrator creation failure at lines 66-68 logs error and appends to `failed` list. Total failure (no orchestrators) raises RuntimeError (fail-closed). Partial failure logs warning. `_run_one` re-raises exceptions after logging.
+- **Fail-open**: CLEAN. Partial instrument failure is intentional degraded operation with explicit warning. Not silent.
+- **Canonical violation**: CLEAN. `ACTIVE_ORB_INSTRUMENTS` from `pipeline.asset_configs` at line 16, used at line 44.
+- **Orphan risk**: CLEAN. Tested in `tests/test_trading_app/test_multi_runner.py` (10 tests).
+- **Volatile data**: CLEAN. No hardcoded instrument lists.
+
+### trading_app/live/broker_factory.py — CLEAN
+
+#### Seven Sins scan
+
+- **Silent failure**: CLEAN. Raises ValueError on unknown broker (fail-closed).
+- **Canonical violation**: CLEAN. Lazy imports for broker-specific classes; hard error on unknown broker name.
+- **Orphan risk**: CLEAN. Used by session_orchestrator.
+- **Volatile data**: CLEAN.
+
+### trading_app/live/broker_base.py — CLEAN
+
+#### Seven Sins scan
+
+- ABCs only. No runtime logic, no exceptions, no data references.
+
+### trading_app/live/trade_journal.py — CLEAN
+
+#### Seven Sins scan
+
+- **Silent failure**: CLEAN. Every `except Exception` logs CRITICAL (not hidden). Orphan detection on exit at lines 150-159 (logs CRITICAL for orphaned exits). `self._con = None` on init failure is intentional — allows graceful no-op operation.
+- **Fail-open**: ACCEPTABLE. Intentional by design (docstring line 7: "fail-open — journal write failures log CRITICAL but NEVER block trading"). This is correct for non-critical infra.
+- **Canonical violation**: CLEAN. `configure_connection` from `pipeline.db_config`. `LIVE_TRADES_SCHEMA` is local schema for a separate journal DB (not gold.db schema).
+- **Orphan risk**: CLEAN. Tested in `tests/test_trading_app/test_trade_journal.py` (23 tests).
+- **Volatile data**: CLEAN.
 
 ---
 
-## Deferred Findings — Status After Iter 56
+## Deferred Findings — Status After Iter 57
 
 ### STILL DEFERRED (carried forward)
 - **DF-04** — `rolling_portfolio.py:304` dormant `orb_minutes=5` in rolling DOW stats — structural multi-file fix, blast radius >5 files
@@ -66,15 +110,14 @@
 ---
 
 ## Summary
-- nested/compare.py: CLEAN — 0 actionable findings (3 ACCEPTABLE observations)
-- scripts/tools/build_edge_families.py: CLEAN — 0 findings
+- 8 files in `trading_app/live/`: CLEAN — 0 actionable findings
 - Infrastructure Gates: 4/4 PASS
 - Action: audit-only
 
 **Next iteration targets:**
-- `pipeline/check_drift.py` — not yet audited this cycle (large file, 3539 lines; focus on the check definitions themselves, not the full file)
-- `scripts/tools/generate_trade_sheet.py` — already audited iter 18, but check if any new patterns since then
-- `trading_app/live/data_feed.py` — not yet in Files Fully Scanned
+- `pipeline/check_drift.py` — not yet audited this cycle (large file, focus on check definitions for canonical violations and volatile data patterns)
+- `scripts/tools/generate_trade_sheet.py` — audited iter 18; verify nothing new since then
+- `trading_app/live/projectx/` — not yet in Files Fully Scanned (data_feed, order_router, positions, auth, contract_resolver)
 
 ---
 
@@ -127,3 +170,11 @@
 - `pipeline/cost_model.py` — iter 12 (triaged)
 - `pipeline/asset_configs.py` — iter 1 (triaged via M2.5)
 - `scripts/tools/generate_trade_sheet.py` — iter 18 (3 fixes: dollar gate, join, friction)
+- `trading_app/live/circuit_breaker.py` — iter 57 (CLEAN)
+- `trading_app/live/cusum_monitor.py` — iter 57 (CLEAN)
+- `trading_app/live/notifications.py` — iter 57 (CLEAN, intentional fail-open)
+- `trading_app/live/live_market_state.py` — iter 57 (CLEAN)
+- `trading_app/live/multi_runner.py` — iter 57 (CLEAN)
+- `trading_app/live/broker_factory.py` — iter 57 (CLEAN)
+- `trading_app/live/broker_base.py` — iter 57 (CLEAN)
+- `trading_app/live/trade_journal.py` — iter 57 (CLEAN, intentional fail-open)
