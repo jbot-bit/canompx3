@@ -1,9 +1,7 @@
-## Iteration: 91
-## Target: scripts/tools/build_edge_families.py:218
-## Finding: Unused loop variable `orb_min` in first strategies loop — ruff B007 introduced by iter 90 fix
+## Iteration: 92
+## Target: scripts/tools/pinecone_snapshots.py:57-62
+## Finding: Hardcoded classification thresholds 100/30/99 — should reference CORE_MIN_SAMPLES/REGIME_MIN_SAMPLES from trading_app.config
 ## Classification: [mechanical]
-## Blast Radius: 1 file, 0 callers, 0 importers
-## Invariants:
-##   1. Second loop (line 240) still uses `orb_min` for family_key — MUST NOT touch
-##   2. No behavior change — rename `orb_min` -> `_orb_min` only on line 218
-## Diff estimate: 1 line changed
+## Blast Radius: 2 callers (sync_pinecone.py imports generators, test_pinecone_snapshots.py), no behavior change (same values)
+## Invariants: SQL query logic unchanged; thresholds remain 100 and 30; output format identical
+## Diff estimate: 4 lines (1 import + 3 value replacements)

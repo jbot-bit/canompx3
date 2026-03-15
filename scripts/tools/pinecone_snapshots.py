@@ -26,6 +26,7 @@ sys.stdout.reconfigure(line_buffering=True)
 import duckdb
 
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.config import CORE_MIN_SAMPLES, REGIME_MIN_SAMPLES
 
 # ---------------------------------------------------------------------------
 # Utility
@@ -53,12 +54,12 @@ def generate_portfolio_state_snapshot() -> str:
     con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
     try:
         # Strategy counts by instrument
-        strat_rows = con.execute("""
+        strat_rows = con.execute(f"""
             SELECT instrument,
                 COUNT(*) FILTER (WHERE status='active') as active_count,
                 COUNT(*) FILTER (WHERE status='active' AND fdr_significant=true) as fdr_count,
-                COUNT(*) FILTER (WHERE status='active' AND sample_size >= 100) as core_count,
-                COUNT(*) FILTER (WHERE status='active' AND sample_size BETWEEN 30 AND 99) as regime_count
+                COUNT(*) FILTER (WHERE status='active' AND sample_size >= {CORE_MIN_SAMPLES}) as core_count,
+                COUNT(*) FILTER (WHERE status='active' AND sample_size BETWEEN {REGIME_MIN_SAMPLES} AND {CORE_MIN_SAMPLES - 1}) as regime_count
             FROM validated_setups
             GROUP BY instrument ORDER BY instrument
         """).fetchall()
