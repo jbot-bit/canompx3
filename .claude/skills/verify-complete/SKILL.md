@@ -1,3 +1,7 @@
+---
+name: verify-complete
+description: Verify completeness of recent changes
+---
 Verify completeness of recent changes: $ARGUMENTS
 
 Use when: "verify", "did I break anything", "check my work", "run checks", "is it complete", "post-edit check"

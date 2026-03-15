@@ -1,3 +1,7 @@
+---
+name: quant-tdd
+description: Write tests first, then implement for
+---
 Write tests first, then implement for: $ARGUMENTS
 
 Use when: "write tests", "test first", "add tests for", "TDD", implementing any feature or bugfix in pipeline/ or trading_app/

@@ -1,3 +1,7 @@
+---
+name: health-check
+description: Run the full project health check suite. No arguments needed.
+---
 Run the full project health check suite. No arguments needed.
 
 Use when: "health check", "is everything ok", "run all checks", "full check", "system check"

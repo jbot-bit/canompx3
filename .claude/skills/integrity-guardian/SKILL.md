@@ -1,3 +1,7 @@
+---
+name: integrity-guardian
+description: Post-completion integrity gate. Run after finishing a task to verify quality.
+---
 Post-completion integrity gate. Run after finishing a task to verify quality.
 
 Use when: task is COMPLETE and needs full impact verification, "integrity check", "full audit", "impact check", "guardian". For lightweight pre-commit gates only, use /quant-verify instead.
