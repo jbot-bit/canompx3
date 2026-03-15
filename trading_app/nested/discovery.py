@@ -19,7 +19,7 @@ import duckdb
 
 from pipeline.init_db import ORB_LABELS
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.config import ENTRY_MODELS, get_filters_for_grid
+from trading_app.config import ENTRY_MODELS, SKIP_ENTRY_MODELS, get_filters_for_grid
 from trading_app.nested.schema import init_nested_schema
 from trading_app.outcome_builder import CONFIRM_BARS_OPTIONS, RR_TARGETS
 from trading_app.strategy_discovery import (
@@ -172,6 +172,8 @@ def run_nested_discovery(
                     matching_day_set = filter_days[(filter_key, orb_label)]
 
                     for em in ENTRY_MODELS:
+                        if em in SKIP_ENTRY_MODELS:
+                            continue
                         for rr_target in RR_TARGETS:
                             for cb in CONFIRM_BARS_OPTIONS:
                                 if em in ("E2", "E3") and cb > 1:
