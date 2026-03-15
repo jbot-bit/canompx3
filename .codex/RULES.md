@@ -11,12 +11,12 @@ Codex should reach into the shared `.claude/rules/` set directly.
 
 - Pipeline structure: `.claude/rules/pipeline-patterns.md`
 - Feature joins and feature-table safety: `.claude/rules/daily-features-joins.md`
-- Research and audit framing: `.claude/rules/audit-prompts.md`
+- Research and audit framing: `.claude/skills/audit-prompts/SKILL.md`
 - Trading and quant identity: `.claude/rules/quant-agent-identity.md`
 - MCP usage: `.claude/rules/mcp-usage.md`
 - Integrity work: `.claude/rules/integrity-guardian.md`
 - NotebookLM integration: `.claude/rules/notebooklm.md`
-- Pinecone helper flow: `.claude/rules/pinecone-assistant.md`
+- Pinecone helper flow: `.claude/skills/pinecone-assistant/SKILL.md`
 - M25-specific audit flow: `.claude/rules/m25-audit.md`
 
 ## Load Guidance

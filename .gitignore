@@ -61,7 +61,6 @@ live_signals.jsonl
 # Claude Code (ignore internals, track rules/commands)
 .claude/*
 !.claude/rules/
-!.claude/commands/
 !.claude/skills/
 !.claude/hooks/
 !.claude/agents/

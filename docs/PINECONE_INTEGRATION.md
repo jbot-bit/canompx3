@@ -79,7 +79,7 @@ python scripts/tools/sync_pinecone.py --force      # Upload everything
 
 ## Routing Rules
 
-See `.claude/rules/pinecone-assistant.md` for complete decision framework.
+See `.claude/skills/pinecone-assistant/SKILL.md` for complete decision framework.
 
 **Summary**:
 - "What research have we done?" → **Pinecone**
@@ -156,7 +156,7 @@ Sync is idempotent — safe to run anytime. Only changed files upload.
 - `scripts/tools/sync_pinecone.py` — Main sync orchestrator (bundling, .py→.md, UTF-8, change detection)
 - `scripts/tools/run_rebuild_with_sync.sh` — Rebuild wrapper
 - `scripts/tools/README_rebuild_sync.md` — Rebuild+sync documentation
-- `.claude/rules/pinecone-assistant.md` — Three-system routing rules
+- `.claude/skills/pinecone-assistant/SKILL.md` — Three-system routing rules
 - `tests/tools/test_pinecone_manifest.py` — Manifest tests
 - `tests/tools/test_pinecone_snapshots.py` — Snapshot tests
 - `tests/tools/test_sync_pinecone.py` — Sync tests
@@ -216,7 +216,7 @@ Sync is idempotent — safe to run anytime. Only changed files upload.
 
 ## References
 
-- `.claude/rules/pinecone-assistant.md` — Decision framework for three-system routing
+- `.claude/skills/pinecone-assistant/SKILL.md` — Decision framework for three-system routing
 - `.claude/rules/notebooklm.md` — NotebookLM scope (academic methodology only)
 - `scripts/tools/sync_pinecone.py` — Implementation details
 - `trading_app/mcp_server.py` — gold-db MCP for live data queries
