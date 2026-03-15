@@ -1,3 +1,8 @@
+---
+name: trade-book
+description: Show current trading book with full strategy details
+allowed-tools: Read, Grep, Glob, Bash
+---
 Show current trading book with full strategy details: $ARGUMENTS
 
 Use when: "what do I trade", "what's live", "show strategies", "what's at [session]", "trading book", "portfolio", "show me what's validated", "what's FIT", "live strategies", "what should I trade", "tonight", "playbook", "what sessions", "session times"

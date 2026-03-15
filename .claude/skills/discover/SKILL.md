@@ -1,3 +1,8 @@
+---
+name: discover
+description: Research edge discovery for instrument and session
+allowed-tools: Read, Grep, Glob, Bash
+---
 Research edge discovery for instrument and session: $ARGUMENTS
 
 Use when: "discover", "scan for edges", "research [instrument]", "find strategies", "edge discovery", "what works for [instrument]", "test [session]"
