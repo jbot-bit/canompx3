@@ -1,3 +1,7 @@
+---
+name: quant-verify
+description: Run pre-commit quality gates and verify everything passes
+---
 Run pre-commit quality gates and verify everything passes: $ARGUMENTS
 
 Use when: about to claim work is done, before commits, before PRs, "verify", "are we good", "run the gates", "check everything", "pre-commit", "all green?"
