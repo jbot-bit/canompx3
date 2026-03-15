@@ -5,6 +5,18 @@
 
 ---
 
+## Iteration 56 — 2026-03-15
+- Phase: audit-only
+- Classification: audit-only
+- Target: trading_app/nested/compare.py + scripts/tools/build_edge_families.py
+- Finding: Both files CLEAN — 0 actionable findings. 3 ACCEPTABLE observations in compare.py (hardcoded orb_minutes default, redundant `or 0` patterns, cosmetic None-masking in display).
+- Action: audit-only; no code changes
+- Blast radius: N/A
+- Verification: 85 tests PASS (test_nested + test_edge_families), drift 72/72 CLEAN
+- Commit: NONE
+
+---
+
 ## Iteration 49 — 2026-03-14
 - Phase: audit-only
 - Target: trading_app/strategy_fitness.py
@@ -474,3 +486,15 @@
 - Blast radius: N/A (no changes)
 - Verification: PASS (73 tests across test_nested/ + test_pbo.py, drift 72/72)
 - Commit: NONE
+
+---
+
+## Iteration 55 — 2026-03-15
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/nested/discovery.py:174
+- Finding: nested/discovery.py missing SKIP_ENTRY_MODELS guard — E3 (soft-retired) processed in nested grid search, generating stale E3 nested strategies and wasting ~14% compute. Parent strategy_discovery.py applies this guard at line 1090; nested variant was missing it.
+- Action: Imported SKIP_ENTRY_MODELS from trading_app.config; added skip guard `if em in SKIP_ENTRY_MODELS: continue` inside the ENTRY_MODELS loop, matching the pattern in strategy_discovery.py
+- Blast radius: 1 file (discovery.py), 1 test file (test_discovery.py — no test exercises the skip guard directly)
+- Verification: PASS (63 tests across test_nested/, drift 72/72)
+- Commit: 52c74c5
