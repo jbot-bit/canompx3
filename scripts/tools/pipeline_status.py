@@ -27,6 +27,7 @@ import duckdb
 
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.audit_log import get_table_row_count, log_operation
+from pipeline.build_daily_features import VALID_ORB_MINUTES
 from pipeline.db_lock import PipelineLock, PipelineLockError
 from pipeline.init_db import REBUILD_MANIFEST_SCHEMA
 from pipeline.paths import GOLD_DB_PATH
@@ -512,7 +513,7 @@ def run_rebuild(
 # Core engine
 # ---------------------------------------------------------------------------
 
-APERTURES = [5, 15, 30]
+APERTURES = VALID_ORB_MINUTES  # canonical source — never hardcode
 
 
 def staleness_engine(con: duckdb.DuckDBPyConnection, instrument: str) -> dict:
