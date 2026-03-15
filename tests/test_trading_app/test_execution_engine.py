@@ -988,6 +988,34 @@ class TestUnknownEntryModel:
         assert "unknown_entry_model" in reject_events[0].reason
 
 
+class TestUnknownFilterType:
+    """Unknown filter_type must NOT arm the strategy (fail-closed)."""
+
+    def test_unknown_filter_type_not_armed(self):
+        """Strategy with filter_type='BOGUS_FILTER' should be silently skipped."""
+        strategy = _make_strategy(
+            filter_type="BOGUS_FILTER",
+            confirm_bars=1,
+            strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_BOGUS_FILTER",
+        )
+        engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
+        engine.on_trading_day_start(date(2024, 1, 5))
+
+        # Build ORB
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        for i in range(5):
+            engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
+
+        # Break bar + follow-up
+        all_events = list(engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706)))
+        all_events.extend(engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2708, 2715, 2707, 2712)))
+
+        # No ENTRY or armed trades — fail-closed skips the strategy entirely
+        entry_events = [e for e in all_events if e.event_type == "ENTRY"]
+        assert len(entry_events) == 0
+        assert len(engine.active_trades) == 0
+
+
 class TestZeroRiskRejections:
     """Entry-model zero-risk paths must emit REJECT, not silently complete."""
 

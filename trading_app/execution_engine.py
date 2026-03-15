@@ -1151,15 +1151,20 @@ class ExecutionEngine:
             if trade.state != TradeState.ENTERED:
                 continue
 
+            # Narrow mutable attributes for Pyright (guaranteed set in ENTERED state)
+            entry_px = trade.entry_price
+            stop_px = trade.stop_price
+            assert entry_px is not None and stop_px is not None
+
             # Check stop (always active)
             if trade.direction == "long":
-                hit_stop = bar["low"] <= trade.stop_price
-                favorable = bar["high"] - trade.entry_price
-                adverse = trade.entry_price - bar["low"]
+                hit_stop = bar["low"] <= stop_px
+                favorable = bar["high"] - entry_px
+                adverse = entry_px - bar["low"]
             else:
-                hit_stop = bar["high"] >= trade.stop_price
-                favorable = trade.entry_price - bar["low"]
-                adverse = bar["high"] - trade.entry_price
+                hit_stop = bar["high"] >= stop_px
+                favorable = entry_px - bar["low"]
+                adverse = bar["high"] - entry_px
 
             # Check target (only if target_price is set — hold_7h has no target)
             hit_target = False
@@ -1195,9 +1200,9 @@ class ExecutionEngine:
                 if elapsed >= threshold:
                     trade.early_exit_checked = True
                     if trade.direction == "long":
-                        mtm = bar["close"] - trade.entry_price
+                        mtm = bar["close"] - entry_px
                     else:
-                        mtm = trade.entry_price - bar["close"]
+                        mtm = entry_px - bar["close"]
                     if mtm < 0:
                         self._exit_trade(trade, bar, "early_exit", bar["close"], events)
                         continue
