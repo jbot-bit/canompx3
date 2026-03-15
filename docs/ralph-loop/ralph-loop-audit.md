@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 67
+## Last iteration: 68
 
-## RALPH AUDIT — Iteration 67 (pipeline/health_check.py)
+## RALPH AUDIT — Iteration 68 (pipeline/run_pipeline.py)
 ## Date: 2026-03-15
 ## Infrastructure Gates: 3/3 PASS
 
@@ -13,35 +13,35 @@
 |------|--------|--------|
 | `check_drift.py` | PASS | 72 checks passed, 0 skipped, 6 advisory |
 | `ruff check` | PASS | Clean |
-| `pytest health` | PASS | 22/22 tests |
+| `import smoke test` | PASS | Module imports OK |
 
 ---
 
 ## Files Audited This Iteration
 
-### pipeline/health_check.py — FIXED (HC-01)
+### pipeline/run_pipeline.py — FIXED (RP-01)
 
-#### Finding HC-01: Connection leak in check_staleness (FIXED)
-- **Sin**: Silent failure / resource leak — `con.close()` not in `finally` block. If `staleness_engine()` raises inside the loop, connection stays open. Other health check functions (`check_database`) correctly use try/finally.
-- **Severity**: LOW (read-only DuckDB connection, GC'd eventually, but violates project pattern)
-- **Fix**: Wrapped connection usage in `try/finally: con.close()` block, matching `check_database()` pattern
-- **Lines changed**: 4 (added try/finally wrapper, reindented loop body)
-- **Blast radius**: 1 file, 1 function (`check_staleness`)
+#### Finding RP-01: Canonical violation — hardcoded `choices=[5, 15, 30]` (FIXED)
+- **Sin**: Canonical violation — `--orb-minutes` CLI arg uses `choices=[5, 15, 30]` instead of `choices=VALID_ORB_MINUTES`. The same CLI pattern in `build_daily_features.py` already uses the canonical source correctly.
+- **Severity**: MEDIUM (if aperture values change, this CLI would reject valid values)
+- **Fix**: Import `VALID_ORB_MINUTES` from `pipeline.build_daily_features`; replace hardcoded list with canonical reference
+- **Lines changed**: 2 (1 import, 1 choices= replacement)
+- **Blast radius**: 1 file (run_pipeline.py), CLI arg validation only
 
 #### Seven Sins scan — COMPLETE
 
 | Sin | Status | Detail |
 |-----|--------|--------|
-| Silent failure | HC-01 FIXED | Connection leak in check_staleness |
-| Fail-open | CLEAN | Advisory checks (staleness, m25) explicitly documented and always return True |
-| Canonical violation | CLEAN | Hardcoded dep list and table list are intentional for lightweight health check |
-| Broad exception | ACCEPTABLE | All 7 `except Exception` blocks return False (fail-closed pattern) |
-| Orphan/dead code | CLEAN | All functions used in main(), all referenced scripts exist |
+| Canonical violation | RP-01 FIXED | Hardcoded ORB minutes choices |
+| Silent failure | CLEAN | No exception catching — subprocess results checked via returncode |
+| Fail-open | CLEAN | Non-zero returncode aborts pipeline (fail-closed) |
+| Broad exception | CLEAN | No `except Exception` blocks |
+| Orphan/dead code | CLEAN | All referenced scripts exist (check_db.py, ingest_dbn.py, build_bars_5m.py, build_daily_features.py) |
 | Volatile data | CLEAN | No hardcoded stats |
 
 ---
 
-## Deferred Findings — Status After Iter 67
+## Deferred Findings — Status After Iter 68
 
 ### STILL DEFERRED (carried forward)
 - **DF-04** — `rolling_portfolio.py:304` dormant `orb_minutes=5` in rolling DOW stats — structural multi-file fix, blast radius >5 files
@@ -49,15 +49,15 @@
 ---
 
 ## Summary
-- 1 file: `pipeline/health_check.py` HC-01 FIXED (connection leak, 4 lines)
+- 1 file: `pipeline/run_pipeline.py` RP-01 FIXED (canonical violation, 2 lines)
 - 0 new deferrals
 - Infrastructure Gates: 3/3 PASS
 - Action: fix (mechanical)
 
 **Next iteration targets:**
-- `pipeline/run_pipeline.py` — pipeline orchestrator, unscanned
 - `pipeline/init_db.py` — schema management, unscanned
 - `pipeline/dashboard.py` — report generator, unscanned
+- `pipeline/db_lock.py` — concurrency lock, unscanned
 
 ---
 
@@ -144,3 +144,4 @@
 - `pipeline/check_drift.py` — iter 65-66 (1 fix: CD-01 canonical aperture count)
 - `scripts/tools/audit_behavioral.py` — iter 66 (1 fix: AB-01 instrument regex)
 - `pipeline/health_check.py` — iter 67 (1 fix: HC-01 connection leak)
+- `pipeline/run_pipeline.py` — iter 68 (1 fix: RP-01 canonical orb_minutes choices)

@@ -5,6 +5,17 @@
 
 ---
 
+## Iteration 68 — 2026-03-15
+- Phase: fix
+- Classification: [mechanical]
+- Target: pipeline/run_pipeline.py (full Seven Sins scan)
+- Finding: RP-01 — `--orb-minutes` CLI arg uses `choices=[5, 15, 30]` instead of `choices=VALID_ORB_MINUTES`. Same pattern in `build_daily_features.py` already uses canonical source correctly.
+- Action: Imported `VALID_ORB_MINUTES`; replaced hardcoded list.
+- Blast radius: 1 file (run_pipeline.py), CLI arg validation only
+- Verification: PASS (72 drift checks, ruff clean, import smoke test)
+
+---
+
 ## Iteration 67 — 2026-03-15
 - Phase: fix
 - Classification: [mechanical]
