@@ -13,14 +13,15 @@ Usage:
     python scripts/tools/orb_size_deep_dive.py --db C:/db/gold.db
 """
 
-import os
 import sys
 from pathlib import Path
 
 import duckdb
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-DEFAULT_DB = PROJECT_ROOT / "gold.db"
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from pipeline.paths import GOLD_DB_PATH
 
 # Cost models (RT friction in points)
 FRICTION = {
@@ -35,10 +36,7 @@ def get_db_path():
     for i, arg in enumerate(sys.argv):
         if arg == "--db" and i + 1 < len(sys.argv):
             return Path(sys.argv[i + 1])
-    env = os.environ.get("DUCKDB_PATH")
-    if env:
-        return Path(env)
-    return DEFAULT_DB
+    return GOLD_DB_PATH  # canonical source — handles DUCKDB_PATH env var
 
 
 def print_table(headers, rows, col_widths=None):

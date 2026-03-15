@@ -28,6 +28,9 @@ from datetime import datetime
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from pipeline.paths import GOLD_DB_PATH
 
 # --- Configuration ---
 INSTRUMENT = "MNQ"
@@ -35,7 +38,7 @@ START_DATE = "2024-02-04"
 END_DATE = "2026-02-03"
 CHUNK_DAYS = 7
 
-MASTER_DB = PROJECT_ROOT / "gold.db"
+MASTER_DB = GOLD_DB_PATH  # canonical source — never hardcode
 LOCAL_DB = Path(r"C:\db\gold.db")
 LOCAL_DB_DIR = LOCAL_DB.parent
 

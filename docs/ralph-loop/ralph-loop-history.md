@@ -5,6 +5,17 @@
 
 ---
 
+## Iteration 84 — 2026-03-15
+- Phase: fix
+- Classification: [mechanical]
+- Target: Last 3 production files with `PROJECT_ROOT / "gold.db"` pattern
+- Finding: VSA-01 + OSD-01 + IMN-01 — volume_session_analysis.py, orb_size_deep_dive.py, ingest_mnq.py all had hardcoded DB path + duplicated env var logic.
+- Action: Imported GOLD_DB_PATH in all 3; simplified get_db_path() functions; removed unused os imports. Pattern now **fully eliminated** from production code (only scripts/archive/ remains).
+- Blast radius: 3 files
+- Verification: PASS (72 drift checks, ruff clean, grep confirms only archive/ remains)
+
+---
+
 ## Iteration 83 — 2026-03-15
 - Phase: fix
 - Classification: [mechanical]
