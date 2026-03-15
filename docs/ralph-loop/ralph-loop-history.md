@@ -432,3 +432,12 @@
 - Blast radius: 1 file (portfolio.py only; no callers import PROJECT_ROOT)
 - Verification: PASS (68/68 tests, 72/72 drift checks)
 - Commit: e792bb5
+
+## Iteration 51 — 2026-03-15
+- Phase: fix
+- Target: trading_app/live_config.py:499
+- Finding: Bare `except Exception` in `_check_dollar_gate` — narrowed to `(ValueError, TypeError)`
+- Action: Changed `except Exception as exc:` to `except (ValueError, TypeError) as exc:` — aligns with pipeline fortification pattern; behavior identical (fail-closed return preserved)
+- Blast radius: 1 file (live_config.py; _check_dollar_gate is private)
+- Verification: PASS (72 drift checks, 36 tests)
+- Commit: b486e9a
