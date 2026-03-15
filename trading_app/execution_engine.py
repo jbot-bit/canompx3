@@ -1209,16 +1209,12 @@ class ExecutionEngine:
 
             if hit_target and hit_stop:
                 # Ambiguous bar — conservative loss
-                stop_px = trade.stop_price
-                assert stop_px is not None
                 self._exit_trade(trade, bar, "loss", stop_px, events)
             elif hit_target:
                 target_px = trade.target_price
                 assert target_px is not None
                 self._exit_trade(trade, bar, "win", target_px, events)
             elif hit_stop:
-                stop_px = trade.stop_price
-                assert stop_px is not None
                 self._exit_trade(trade, bar, "loss", stop_px, events)
 
         # Prune exited trades to prevent unbounded list growth and iteration bugs
