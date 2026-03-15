@@ -5,6 +5,18 @@
 
 ---
 
+## Iteration 58 — 2026-03-15
+- Phase: audit-only
+- Classification: audit-only
+- Target: trading_app/live/projectx/ (5 files: auth, contract_resolver, data_feed, order_router, positions) + trading_app/live/tradovate/ (5 files: auth, contract_resolver, data_feed, order_router, positions)
+- Finding: All 10 files CLEAN — 0 actionable findings. 1 ACCEPTABLE observation: projectx/positions.py uses int 0 vs float 0.0 default for avg_price (style only, avg_price used solely for logging). INSTRUMENT_SEARCH_TERMS and PRODUCT_MAP are broker API mappings, not canonical instrument lists. Exception handlers are logged (not silent). Order routers fail-closed on unsupported entry models.
+- Action: audit-only; no code changes
+- Blast radius: N/A
+- Verification: 35 tests PASS (test_projectx_auth + test_projectx_feed + test_projectx_router + test_tradovate_positions), drift 72/72 CLEAN
+- Commit: NONE
+
+---
+
 ## Iteration 57 — 2026-03-15
 - Phase: audit-only
 - Classification: audit-only

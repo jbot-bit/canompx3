@@ -18,6 +18,7 @@
 | WF-01 | 39 | scoring.py:SC1 | Hardcoded SINGAPORE_OPEN/TOKYO_OPEN in heuristic bonus | Intentional per-session adjustments, not a canonical list. Worst case on rename: bonus silently stops. Not safety/correctness. |
 | WF-02 | 19 | execution_engine.py:EE3 | IB hardcoded 23:00 UTC for TOKYO_OPEN | Correctly documents Brisbane UTC+10 fixed offset. No DST. IB_DURATION_MINUTES from config. |
 | WF-03 | 44 | strategy_fitness.py | Full scan clean — no findings | Audited iter 44, no actionable findings |
+| WF-04 | 58 | projectx/positions.py:35 | `avg_price: p.get("averagePrice", 0)` uses int 0 vs float 0.0 | Style difference, no correctness impact. avg_price is only used for logging in session_orchestrator (never for P&L computation). |
 
 ## Resolved Findings
 
