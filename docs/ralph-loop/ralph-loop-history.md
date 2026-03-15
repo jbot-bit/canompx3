@@ -5,6 +5,17 @@
 
 ---
 
+## Iteration 83 — 2026-03-15
+- Phase: fix
+- Classification: [mechanical]
+- Target: stress_test.py (FIX)
+- Finding: ST-01 — Same as EX-01/HT-01: `DEFAULT_DB = PROJECT_ROOT / "gold.db"` + duplicated env var logic. Swept remaining: 3 production files left (volume_session_analysis.py, orb_size_deep_dive.py, ingest_mnq.py).
+- Action: Imported GOLD_DB_PATH; simplified get_db_path(). Removed unused os import.
+- Blast radius: 1 file (stress_test.py)
+- Verification: PASS (72 drift checks, ruff clean)
+
+---
+
 ## Iteration 82 — 2026-03-15
 - Phase: fix
 - Classification: [mechanical]

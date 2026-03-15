@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 82
+## Last iteration: 83
 
-## RALPH AUDIT — Iteration 82 (3 files scanned, 1 fix)
+## RALPH AUDIT — Iteration 83 (stress_test.py fix + sweep)
 ## Date: 2026-03-15
 ## Infrastructure Gates: 3/3 PASS
 
@@ -53,17 +53,16 @@
 ---
 
 ## Summary
-- explore.py: EX-01 FIXED — `DEFAULT_DB = PROJECT_ROOT / "gold.db"` + duplicated env var logic
-- backfill_garch.py: CLEAN (con.close() is the only pattern, used after short query)
-- stress_test.py: noted same `DEFAULT_DB = PROJECT_ROOT / "gold.db"` pattern — next target
+- stress_test.py: ST-01 FIXED — `DEFAULT_DB = PROJECT_ROOT / "gold.db"` + duplicated env var logic
+- Swept remaining `PROJECT_ROOT / "gold.db"` instances: 3 production files remain (ingest_mnq.py, volume_session_analysis.py, orb_size_deep_dive.py) + 1 archive (acceptable)
 - 1 fix, 0 new deferrals
 - Infrastructure Gates: 3/3 PASS
 - Action: fix (mechanical)
 
 **Next iteration targets:**
-- `scripts/tools/stress_test.py` — stress testing (has `DEFAULT_DB = PROJECT_ROOT / "gold.db"`)
-- `scripts/tools/coaching_digest.py` — coaching tool, unscanned
-- `scripts/tools/trading_coach.py` — AI coach, unscanned
+- `scripts/tools/volume_session_analysis.py` — has `DEFAULT_DB = PROJECT_ROOT / "gold.db"`
+- `scripts/tools/orb_size_deep_dive.py` — has `DEFAULT_DB = PROJECT_ROOT / "gold.db"`
+- `scripts/ingestion/ingest_mnq.py` — has `MASTER_DB = PROJECT_ROOT / "gold.db"`
 
 ---
 
