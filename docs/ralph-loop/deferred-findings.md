@@ -11,6 +11,14 @@
 |----|------|----------|--------|-------------|-----------------|
 | DF-04 | 12 | LOW | rolling_portfolio.py:304 | Dormant `orb_minutes=5` in rolling DOW stats — multi-aperture TODO | Annotated TODO, not blocking |
 
+## Won't Fix (ACCEPTABLE)
+
+| ID | Iter | Target | Description | Reasoning |
+|----|------|--------|-------------|-----------|
+| WF-01 | 39 | scoring.py:SC1 | Hardcoded SINGAPORE_OPEN/TOKYO_OPEN in heuristic bonus | Intentional per-session adjustments, not a canonical list. Worst case on rename: bonus silently stops. Not safety/correctness. |
+| WF-02 | 19 | execution_engine.py:EE3 | IB hardcoded 23:00 UTC for TOKYO_OPEN | Correctly documents Brisbane UTC+10 fixed offset. No DST. IB_DURATION_MINUTES from config. |
+| WF-03 | 44 | strategy_fitness.py | Full scan clean — no findings | Audited iter 44, no actionable findings |
+
 ## Resolved Findings
 
 | ID | Iter Found | Resolved | Commit | Description |
