@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 85
+## Last iteration: 86
 
-## RALPH AUDIT — Iteration 85 (hardcoded instrument list in report)
+## RALPH AUDIT — Iteration 86 (deep sweep — no findings)
 ## Date: 2026-03-15
 ## Infrastructure Gates: 3/3 PASS
 
@@ -53,16 +53,27 @@
 ---
 
 ## Summary
-- report_edge_portfolio.py: REP-01 FIXED — hardcoded `["MGC", "MNQ", "MES", "M2K"]` in `--all` loop. Now uses `ACTIVE_ORB_INSTRUMENTS`.
-- Swept remaining hardcoded instrument lists: gen_playbook.py (has assertion guard — ACCEPTABLE), hypothesis_test.py (research script, missing M2K), ml_hybrid_experiment.py (experiment script)
-- 1 fix, 0 new deferrals
+- Deep sweep across all remaining production code — NO actionable findings
+- Bare `except:` — ZERO instances (all use `except Exception` or specific types)
+- `except Exception` + success return — 5 instances, ALL previously audited (intentional fail-open or optional features)
+- One-way dependency violations — ZERO (check_drift.py cross-validates, not imports)
+- Hardcoded entry models, apertures, DB paths, instrument lists — ALL eliminated from production code
+- ~22 CLI scripts with connection leaks — ALL LOW severity (process exit closes)
+- 0 fixes, 0 new deferrals
 - Infrastructure Gates: 3/3 PASS
 - Action: fix (mechanical)
 
-**Next iteration targets:**
-- All major canonical violation patterns now eliminated (DB paths, apertures, entry models, instrument lists)
-- Remaining work: scan deeper into scripts/tools/ and scripts/infra/ for structural sins (fail-open, silent failure)
-- `scripts/tools/coaching_digest.py`, `scripts/tools/trading_coach.py`, `scripts/infra/rolling_eval.py`
+**Codebase steady state reached for major violation classes:**
+- Hardcoded DB paths: ELIMINATED (0 in production code)
+- Hardcoded apertures [5,15,30]: ELIMINATED (6 fixes)
+- Hardcoded entry model IN clauses: ELIMINATED
+- Hardcoded instrument lists: ELIMINATED (1 acceptable with assertion guard)
+- Drift check #62 backslash gap: FIXED
+- 119+ files fully scanned, ~61 remaining (mostly analysis/experiment scripts)
+
+**Remaining LOW-priority items:**
+- ~22 CLI scripts with connection leaks (process exit closes them)
+- DF-04 deferred: rolling_portfolio.py dormant orb_minutes=5 (structural, >5 files)
 
 ---
 
