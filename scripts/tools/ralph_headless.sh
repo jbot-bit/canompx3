@@ -66,16 +66,20 @@ IMPORTANT: You are running headless (no user interaction). After completing the 
         TARGET=$(grep -oP 'Scope: \K.*' "$ITER_LOG" | tail -1)
         VERDICT=""
 
-        if grep -q "ACCEPT" "$ITER_LOG"; then
-            VERDICT="ACCEPT"
-            ACCEPT_COUNT=$((ACCEPT_COUNT + 1))
-        elif grep -q "REJECT" "$ITER_LOG"; then
-            VERDICT="REJECT"
-            REJECT_COUNT=$((REJECT_COUNT + 1))
-        else
-            VERDICT="UNKNOWN"
-            ERROR_COUNT=$((ERROR_COUNT + 1))
+        # Parse verdict from structured report block (Verdict: ACCEPT|REJECT|SKIPPED)
+        VERDICT=$(grep -oP 'Verdict: \K\w+' "$ITER_LOG" | tail -1)
+        if [ -z "$VERDICT" ]; then
+            # Fallback: scan for keywords anywhere
+            if grep -q "ACCEPT" "$ITER_LOG"; then VERDICT="ACCEPT"
+            elif grep -q "REJECT" "$ITER_LOG"; then VERDICT="REJECT"
+            else VERDICT="UNKNOWN"; fi
         fi
+
+        case "$VERDICT" in
+            ACCEPT|SKIPPED) ACCEPT_COUNT=$((ACCEPT_COUNT + 1)) ;;
+            REJECT)         REJECT_COUNT=$((REJECT_COUNT + 1)) ;;
+            *)              ERROR_COUNT=$((ERROR_COUNT + 1)) ;;
+        esac
 
         # Extract commit hash if present
         COMMIT=$(grep -oP 'Commit: \K[a-f0-9]+' "$ITER_LOG" | tail -1)
