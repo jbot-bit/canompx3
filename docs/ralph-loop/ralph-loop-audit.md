@@ -3,41 +3,50 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 62
+## Last iteration: 64
 
-## RALPH AUDIT — Iteration 62 (scripts/tools/pipeline_status.py)
+## RALPH AUDIT — Iteration 64 (scripts/tools/pipeline_status.py)
 ## Date: 2026-03-15
 ## Infrastructure Gates: 3/3 PASS
 
 | Gate | Result | Detail |
 |------|--------|--------|
 | `check_drift.py` | PASS | 72 checks passed, 0 skipped, 6 advisory |
-| `ruff check` | PASS | Clean after fix |
-| `pipeline_status.py --status` | PASS | Smoke test — all steps up to date |
+| `ruff check` | PASS | Clean |
+| `pytest test_pipeline_status.py` | PASS | 31/31 tests |
 
 ---
 
 ## Files Audited This Iteration
 
-### scripts/tools/pipeline_status.py — FIXED (PS-01)
+### scripts/tools/pipeline_status.py — FIXED (PS-03)
 
-#### Finding PS-01: Canonical violation — hardcoded APERTURES (FIXED)
-- **Sin**: Canonical violation — `APERTURES = [5, 15, 30]` duplicates `VALID_ORB_MINUTES` from `pipeline/build_daily_features.py`
-- **Severity**: MEDIUM (if aperture values ever change, this file would silently diverge)
-- **Fix**: Import `VALID_ORB_MINUTES` from canonical source, alias as `APERTURES = VALID_ORB_MINUTES`
-- **Lines changed**: 2 (1 import added, 1 definition replaced)
-- **Blast radius**: 0 external callers of APERTURES, 3 internal usages (lines 553, 627, 669) — all unchanged, aliased name preserved
+#### Finding PS-03: Silent failure — 4/5 preflight rules unreachable (FIXED)
+- **Sin**: Silent failure (PS-02 category) — `PREFLIGHT_RULES` keys don't match `REBUILD_STEPS` step base names
+- **Severity**: HIGH (preflight checks exist but silently do nothing for 4 of 5 steps)
+- **Root cause**: `_parse_step_preflight("discovery_O5")` returns base `"discovery"`, but `PREFLIGHT_RULES` has key `"strategy_discovery"`. Lookup fails silently — `preflight_check` returns `(True, "No pre-flight rule...")`, skipping the check.
+- **Affected keys**: `strategy_discovery`→`discovery`, `strategy_validator`→`validator`, `build_edge_families`→`edge_families`, `select_family_rr`→`family_rr_locks`
+- **Fix**: Renamed all 4 mismatched `PREFLIGHT_RULES` keys to match their step base names
+- **Lines changed**: 4 (key renames only, no logic change)
+- **Blast radius**: 0 external callers of `PREFLIGHT_RULES` keys. Internal-only lookup in `preflight_check()`. Tests pass (only tested `outcome_builder` key, which was already correct).
 
-#### Seven Sins scan (partial — PS-01 target only, full scan deferred to next iter)
+#### Seven Sins scan — COMPLETE
 
-- **Canonical violation**: PS-01 FIXED (see above)
-- **Silent failure**: Not fully scanned this iteration
-- **Fail-open**: Not fully scanned this iteration
-- Remaining sins deferred — `pipeline_status.py` is 780+ lines, warrants dedicated full scan
+| Sin | Status | Detail |
+|-----|--------|--------|
+| Silent failure | PS-03 FIXED | Preflight key mismatch (see above) |
+| Fail-open | CLEAN | `run_rebuild` returns False on all failure paths; `preflight_check` now reaches all rules |
+| Canonical violation | PS-01 FIXED (iter 62) | `APERTURES = VALID_ORB_MINUTES` |
+| Orphan/dead code | CLEAN | All imports used, no dead functions |
+| Volatile data | CLEAN | No hardcoded counts or stats |
+| Broad exception | CLEAN | All `except` clauses are specific (`duckdb.BinderException`, `duckdb.CatalogException`, `duckdb.InvalidInputException`, `TimeoutExpired`, `PipelineLockError`) |
+| Schema trust | PS-02 FIXED (iter 63) | `family_rr_locks` fallback now logs schema-miss |
+
+**Full scan complete.** All 7 sins checked. 3 findings across iters 62-64 (PS-01, PS-02, PS-03), all fixed.
 
 ---
 
-## Deferred Findings — Status After Iter 62
+## Deferred Findings — Status After Iter 64
 
 ### STILL DEFERRED (carried forward)
 - **DF-04** — `rolling_portfolio.py:304` dormant `orb_minutes=5` in rolling DOW stats — structural multi-file fix, blast radius >5 files
@@ -45,15 +54,15 @@
 ---
 
 ## Summary
-- 1 file: `scripts/tools/pipeline_status.py` PS-01 FIXED (canonical violation, 2 lines)
+- 1 file: `scripts/tools/pipeline_status.py` PS-03 FIXED (silent failure — 4 unreachable preflight rules, 4 key renames)
 - 0 new deferrals
 - Infrastructure Gates: 3/3 PASS
-- Action: fix (mechanical)
+- Action: fix (judgment)
 
 **Next iteration targets:**
-- `scripts/tools/pipeline_status.py` — complete full Seven Sins scan (partial this iter)
 - `pipeline/check_drift.py` — large file (3539 lines), scan check definitions for canonical violations
 - `scripts/tools/audit_behavioral.py` — key infrastructure tool, unscanned
+- `pipeline/health_check.py` — orchestration script, unscanned
 
 ---
 
@@ -136,3 +145,4 @@
 - `trading_app/ai/strategy_matcher.py` — iter 60 (CLEAN, ACCEPTABLE hardcoded MGC in research tool)
 - `trading_app/prop_portfolio.py` — iter 61 (1 fix: PP-01 import sort)
 - `trading_app/prop_profiles.py` — iter 61 (1 fix: PP-01 import sort)
+- `scripts/tools/pipeline_status.py` — iter 62-64 (3 fixes: PS-01 canonical, PS-02 silent fallback, PS-03 preflight key mismatch)
