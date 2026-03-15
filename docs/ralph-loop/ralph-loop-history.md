@@ -846,6 +846,20 @@ Also audited: scripts/tools/pipeline_status.py — CLEAN (no findings)
 
 ---
 
+## Iteration 92 — 2026-03-15
+- Phase: fix
+- Classification: [mechanical]
+- Target: scripts/tools/pinecone_snapshots.py:57-62
+- Finding: PS-92 — hardcoded classification thresholds 100/30 in portfolio state SQL query; should reference CORE_MIN_SAMPLES/REGIME_MIN_SAMPLES from trading_app.config
+- Action: Added import of CORE_MIN_SAMPLES, REGIME_MIN_SAMPLES from trading_app.config; converted triple-quoted SQL string to f-string; replaced 3 literals with canonical constants. 4 lines changed.
+- Blast radius: 2 files (sync_pinecone.py imports generator functions, test_pinecone_snapshots.py)
+- Verification: 4/4 tests passed, drift 72/72 PASS
+- Commit: d2f582a
+
+Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (clean — E2-only HTML note acceptable as display-only)
+
+---
+
 ## Iteration 91 — 2026-03-15
 - Phase: fix
 - Classification: [mechanical]
@@ -855,3 +869,15 @@ Also audited: scripts/tools/pipeline_status.py — CLEAN (no findings)
 - Blast radius: 1 file
 - Verification: PASS (ruff clean, 22/22 test_edge_families tests pass, 72 drift checks pass)
 - Commit: 5d576c4
+
+---
+
+## Iteration 92 — 2026-03-15
+- Phase: fix
+- Classification: [mechanical]
+- Target: scripts/tools/pinecone_snapshots.py:57-62
+- Finding: Canonical violation — hardcoded classification thresholds 100 and 30 in SQL query; should reference CORE_MIN_SAMPLES/REGIME_MIN_SAMPLES from trading_app.config
+- Action: Added import of CORE_MIN_SAMPLES, REGIME_MIN_SAMPLES from trading_app.config; replaced 3 literal values with f-string interpolation (4 lines total). Also audited rolling_portfolio_assembly.py and generate_trade_sheet.py — both clean.
+- Blast radius: 2 files (sync_pinecone.py imports generators, test_pinecone_snapshots.py)
+- Verification: 4/4 test_pinecone_snapshots tests PASS, 72 drift checks PASS
+- Commit: d2f582a
