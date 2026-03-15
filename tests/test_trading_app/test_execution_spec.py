@@ -72,7 +72,7 @@ class TestExecutionSpecCreation:
     def test_frozen(self):
         spec = ExecutionSpec(confirm_bars=2)
         with pytest.raises(AttributeError):
-            spec.confirm_bars = 3
+            spec.confirm_bars = 3  # type: ignore[misc]
 
 
 class TestExecutionSpecSerialization:
