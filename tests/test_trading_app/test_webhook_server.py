@@ -97,8 +97,10 @@ def test_dedup_blocks_duplicate_within_window():
     """Second identical request within 10s returns deduplicated, not a new order."""
     client, _ = _make_client()
 
-    with patch("trading_app.live.webhook_server._place_order", return_value=12345), \
-         patch("trading_app.live.webhook_server._get_contract", return_value="MGCM5"):
+    with (
+        patch("trading_app.live.webhook_server._place_order", return_value=12345),
+        patch("trading_app.live.webhook_server._get_contract", return_value="MGCM5"),
+    ):
         r1 = client.post("/trade", json=_ENTRY_PAYLOAD)
         assert r1.status_code == 200
         assert r1.json()["status"] == "submitted"
@@ -112,8 +114,10 @@ def test_dedup_allows_after_window_expires():
     """Request after dedup window expires is treated as new."""
     client, ws = _make_client()
 
-    with patch("trading_app.live.webhook_server._place_order", return_value=12345), \
-         patch("trading_app.live.webhook_server._get_contract", return_value="MGCM5"):
+    with (
+        patch("trading_app.live.webhook_server._place_order", return_value=12345),
+        patch("trading_app.live.webhook_server._get_contract", return_value="MGCM5"),
+    ):
         r1 = client.post("/trade", json=_ENTRY_PAYLOAD)
         assert r1.json()["status"] == "submitted"
 
@@ -132,8 +136,10 @@ def test_dedup_different_key_not_blocked():
 
     exit_payload = {**_ENTRY_PAYLOAD, "action": "exit"}
 
-    with patch("trading_app.live.webhook_server._place_order", return_value=12345), \
-         patch("trading_app.live.webhook_server._get_contract", return_value="MGCM5"):
+    with (
+        patch("trading_app.live.webhook_server._place_order", return_value=12345),
+        patch("trading_app.live.webhook_server._get_contract", return_value="MGCM5"),
+    ):
         r1 = client.post("/trade", json=_ENTRY_PAYLOAD)
         assert r1.json()["status"] == "submitted"
 
@@ -151,8 +157,10 @@ def test_entry_blocked_when_position_open():
     ws._OPEN_POSITIONS.clear()
     ws._OPEN_POSITIONS["MGC"] = 1
 
-    with patch("trading_app.live.webhook_server._place_order", return_value=12345), \
-         patch("trading_app.live.webhook_server._get_contract", return_value="MGCM5"):
+    with (
+        patch("trading_app.live.webhook_server._place_order", return_value=12345),
+        patch("trading_app.live.webhook_server._get_contract", return_value="MGCM5"),
+    ):
         resp = client.post("/trade", json=_ENTRY_PAYLOAD)
         assert resp.status_code == 429
         assert "position limit" in resp.json()["detail"].lower()
@@ -166,8 +174,10 @@ def test_exit_allowed_when_position_open():
 
     exit_payload = {**_ENTRY_PAYLOAD, "action": "exit"}
 
-    with patch("trading_app.live.webhook_server._place_order", return_value=12345), \
-         patch("trading_app.live.webhook_server._get_contract", return_value="MGCM5"):
+    with (
+        patch("trading_app.live.webhook_server._place_order", return_value=12345),
+        patch("trading_app.live.webhook_server._get_contract", return_value="MGCM5"),
+    ):
         resp = client.post("/trade", json=exit_payload)
         assert resp.status_code == 200
 
@@ -189,8 +199,10 @@ def test_known_instrument_accepted():
     """Active instruments pass the allowlist check."""
     client, _ = _make_client()
     # MGC is in ACTIVE_ORB_INSTRUMENTS
-    with patch("trading_app.live.webhook_server._place_order", return_value=12345), \
-         patch("trading_app.live.webhook_server._get_contract", return_value="MGCM5"):
+    with (
+        patch("trading_app.live.webhook_server._place_order", return_value=12345),
+        patch("trading_app.live.webhook_server._get_contract", return_value="MGCM5"),
+    ):
         resp = client.post("/trade", json=_ENTRY_PAYLOAD)
         assert resp.status_code == 200
 
@@ -215,7 +227,9 @@ def test_qty_within_max_accepted():
     ws.MAX_ORDER_QTY = 5
     ok_payload = {**_ENTRY_PAYLOAD, "qty": 3}
 
-    with patch("trading_app.live.webhook_server._place_order", return_value=12345), \
-         patch("trading_app.live.webhook_server._get_contract", return_value="MGCM5"):
+    with (
+        patch("trading_app.live.webhook_server._place_order", return_value=12345),
+        patch("trading_app.live.webhook_server._get_contract", return_value="MGCM5"),
+    ):
         resp = client.post("/trade", json=ok_payload)
         assert resp.status_code == 200

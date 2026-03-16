@@ -2,7 +2,7 @@
 """
 Build bars_5m from bars_1m (deterministic aggregation).
 
-Bucket: floor(epoch(ts_utc) / 300) * 300  (UTC, 5-minute aligned)
+Bucket: time_bucket(INTERVAL '5 minutes', ts_utc)  (UTC, 5-minute aligned)
 
 For each (symbol, bucket_ts):
   open   = first open   (by ts_utc ASC)
@@ -46,7 +46,7 @@ def build_5m_bars(con: duckdb.DuckDBPyConnection, symbol: str, start_date: date,
     Returns number of rows written.
 
     The query is fully deterministic:
-    - Bucket alignment: floor(epoch/300)*300 in UTC
+    - Bucket alignment: time_bucket(INTERVAL '5 minutes', ts_utc) in UTC
     - open/close ordering: by ts_utc ASC (first/last)
     - source_symbol: mode with lexicographic tiebreak
     """
@@ -141,7 +141,7 @@ def build_5m_bars(con: duckdb.DuckDBPyConnection, symbol: str, start_date: date,
         # Count how many 5m bars would be built
         count_result = con.execute(
             """
-            SELECT COUNT(DISTINCT (EXTRACT(EPOCH FROM ts_utc)::BIGINT / 300 * 300))
+            SELECT COUNT(DISTINCT time_bucket(INTERVAL '5 minutes', ts_utc))
             FROM bars_1m
             WHERE symbol = ?
             AND ts_utc >= ?::TIMESTAMPTZ

@@ -299,9 +299,7 @@ def get_profile(profile_id: str) -> AccountProfile:
     return ACCOUNT_PROFILES[profile_id]
 
 
-def compute_profit_split_factor(
-    firm_spec: PropFirmSpec, cumulative_profit: float = 0.0
-) -> float:
+def compute_profit_split_factor(firm_spec: PropFirmSpec, cumulative_profit: float = 0.0) -> float:
     """Return the trader's effective split percentage (0.0-1.0).
 
     Evaluates profit_split_tiers in order. First tier where
