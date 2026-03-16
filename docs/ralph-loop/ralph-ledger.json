@@ -1,8 +1,8 @@
 {
-  "total_iterations": 107,
+  "total_iterations": 108,
   "last_updated": "2026-03-16",
   "consecutive_low_only": 0,
-  "last_high_finding_iter": 114,
+  "last_high_finding_iter": 115,
   "findings_by_type": {
     "canonical_violation": {
       "found": 44,
@@ -35,10 +35,10 @@
       "fix_rate": 1.0
     },
     "annotation_debt": {
-      "found": 4,
-      "fixed": 3,
+      "found": 5,
+      "fixed": 4,
       "deferred": 1,
-      "fix_rate": 0.75
+      "fix_rate": 0.8
     },
     "falsy_zero": {
       "found": 3,
@@ -107,6 +107,12 @@
       "fix_rate": 1.0
     },
     "type_error": {
+      "found": 1,
+      "fixed": 1,
+      "deferred": 0,
+      "fix_rate": 1.0
+    },
+    "fail_open": {
       "found": 1,
       "fixed": 1,
       "deferred": 0,

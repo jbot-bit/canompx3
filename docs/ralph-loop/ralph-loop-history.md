@@ -5,6 +5,20 @@
 
 ---
 
+## Iteration 115 — 2026-03-16
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/outcome_builder.py (critical centrality, 11 importers)
+- Finding OB-01: Fail-open pattern — `get_enabled_sessions()` returning empty triggered `logger.warning` + silent fallback to `ORB_LABELS` (all sessions). A misconfigured instrument would silently build outcomes for wrong sessions with no abort.
+- Finding OB-02: Dead E3 branch in `cb_options` assignment (line ~833) — `em == "E3"` branch unreachable since E3 is in `SKIP_ENTRY_MODELS`. Missing TODO annotation for future re-enablement.
+- Action OB-01: Changed `logger.warning` + `sessions = ORB_LABELS` fallback to `raise ValueError` (fail-closed). Removed unused `ORB_LABELS` import from `pipeline.init_db`.
+- Action OB-02: Added `# TODO(E3-retired)` annotation explaining the branch is currently unreachable and when to remove it.
+- Blast radius: outcome_builder.py only — both changes are local to `build_outcomes()`. All callers pass valid instruments (guarded by asset_configs).
+- Verification: 72 drift checks pass, ruff clean, 27 tests pass
+- Commit: d9c2609
+
+---
+
 ## Iteration 114 — 2026-03-16
 - Phase: fix
 - Classification: [mechanical]
