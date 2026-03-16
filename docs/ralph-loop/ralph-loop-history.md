@@ -5,6 +5,18 @@
 
 ---
 
+## Iteration 121 — 2026-03-16
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/live/projectx/auth.py:84
+- Finding: `except Exception:` in `_validate_or_login` broader than intended — swallows programming errors (AttributeError, TypeError) alongside network errors, masking real bugs as token refresh failures
+- Action: Narrowed to `except requests.RequestException:` — only HTTP/network errors now trigger fallback to full login
+- Blast radius: 1 file; 3 callers unaffected (broker_factory, order_router, fetch_broker_fills); 2 test files verified
+- Verification: PASS (9 tests passed; tradovate failure pre-existing missing websockets package)
+- Commit: 468ea1e
+
+---
+
 ## Iteration 120 — 2026-03-16
 - Phase: fix
 - Classification: [mechanical]
