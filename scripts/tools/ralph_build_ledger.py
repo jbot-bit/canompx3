@@ -19,10 +19,19 @@ LEDGER_PATH = PROJECT_ROOT / "docs" / "ralph-loop" / "ralph-ledger.json"
 # Maps keyword patterns (applied to finding text, lowercased) to a type.
 # Order matters: first match wins.
 FINDING_TYPE_RULES: list[tuple[str, str]] = [
-    (r"hardcod|canonical.?violat|should (use|import|derive|reference)|duplicat.*(canonical|source)|instead of.*canonical|not using.*variable|missing from session.?order", "canonical_violation"),
-    (r"silent(ly)?|fail[- ]?open|no (log|warning|diagnostic)|invisible|no-op|silently (return|drop|skip|arm|fall|omit|discard)", "silent_failure"),
+    (
+        r"hardcod|canonical.?violat|should (use|import|derive|reference)|duplicat.*(canonical|source)|instead of.*canonical|not using.*variable|missing from session.?order",
+        "canonical_violation",
+    ),
+    (
+        r"silent(ly)?|fail[- ]?open|no (log|warning|diagnostic)|invisible|no-op|silently (return|drop|skip|arm|fall|omit|discard)",
+        "silent_failure",
+    ),
     (r"bare\s+except|except\s+exception|broad\s+except|narrowed? to", "broad_except"),
-    (r"dead\b.*\b(variable|assignment|code|import|function)|orphan|never (referenced|used|read|imported)|unused.*(import|variable|assignment|loop var)|removed.*dead|PROJECT_ROOT.*dead|F841", "dead_code"),
+    (
+        r"dead\b.*\b(variable|assignment|code|import|function)|orphan|never (referenced|used|read|imported)|unused.*(import|variable|assignment|loop var)|removed.*dead|PROJECT_ROOT.*dead|F841",
+        "dead_code",
+    ),
     (r"connection.?leak|\.close\(\).*not in.*finally|not in.*finally.*block", "connection_leak"),
     (r"annotation|@research[- ]?source|missing.*provenance|unannotat", "annotation_debt"),
     (r"(stale|outdated|wrong).*(comment|docstring|count|stat|number)|volatile.?data|mislead", "stale_metadata"),
@@ -136,9 +145,9 @@ def parse_iterations(text: str) -> list[dict]:
 
         target = parse_field(block, "Target")
         finding_text = parse_field(block, "Finding")
-        action = parse_field(block, "Action")
-        blast_radius = parse_field(block, "Blast radius")
-        verification = parse_field(block, "Verification")
+        parse_field(block, "Action")
+        parse_field(block, "Blast radius")
+        parse_field(block, "Verification")
         commit = parse_field(block, "Commit")
 
         # Determine verdict
@@ -293,7 +302,7 @@ def build_ledger(text: str) -> dict:
 
 def print_summary(ledger: dict) -> None:
     """Print a concise summary of the ledger."""
-    print(f"=== Ralph Loop Ledger Summary ===")
+    print("=== Ralph Loop Ledger Summary ===")
     print(f"Total iterations parsed: {ledger['total_iterations']}")
     print(f"Consecutive LOW-only (tail): {ledger['consecutive_low_only']}")
     print(f"Last HIGH+ finding: iter {ledger['last_high_finding_iter']}")
@@ -318,7 +327,9 @@ def print_summary(ledger: dict) -> None:
     top_files = list(ledger["files_audited"].items())[:10]
     print("Most-audited files:")
     for f, stats in top_files:
-        print(f"  {f:<55s}  audits={stats['audit_count']}  findings={stats['findings']}  last_iter={stats['last_iter']}")
+        print(
+            f"  {f:<55s}  audits={stats['audit_count']}  findings={stats['findings']}  last_iter={stats['last_iter']}"
+        )
     print()
 
     dates = sorted(set(it["date"] for it in ledger["iterations"] if it.get("date")))
