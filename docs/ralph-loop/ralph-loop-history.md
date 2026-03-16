@@ -13,7 +13,7 @@
 - Action: Removed 4 dead lines from mgc_asian_fade_mfe.py; fixed import sort and renamed `t`→`_t`, `pct`→`_pct` in post_break_pullback.py
 - Blast radius: 2 files (standalone untracked research scripts, zero importers)
 - Verification: PASS (72 drift checks, 6/6 behavioral, ruff clean)
-- Commit: (pending)
+- Commit: 35c3b46
 
 ---
 
