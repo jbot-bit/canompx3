@@ -68,6 +68,15 @@ Read `docs/ralph-loop/ralph-loop-audit.md`:
 
 Read `docs/ralph-loop/deferred-findings.md` (check open debt + Won't Fix to avoid re-investigating).
 
+Read `docs/ralph-loop/ralph-ledger.json` (cross-iteration intelligence):
+- `consecutive_low_only` — how many recent iterations had only LOW findings
+- `last_high_finding_iter` — when was the last HIGH+ finding
+- `findings_by_type` — which finding types have the best fix rates (prioritize those)
+
+Read `docs/ralph-loop/import_centrality.json` (production-path weighting):
+- Use the `tiers` field to prioritize targets: critical > high > medium > low
+- When choosing between same-severity findings, prefer files with higher centrality
+
 SCOPE is provided in your task prompt.
 
 ## Step 1: AUDIT
@@ -78,6 +87,19 @@ python pipeline/check_drift.py && python scripts/tools/audit_behavioral.py && ru
 ```
 
 If any gate fails → report failure, stop.
+
+### Diminishing Returns Check
+After the audit, check the ledger: if `consecutive_low_only >= 3` AND the scope file has centrality tier `low` or `medium`:
+- Do NOT fix another LOW finding. Instead, report:
+```
+=== RALPH: DIMINISHING RETURNS ===
+Last HIGH+ finding: iter N (X iterations ago)
+Consecutive LOW-only iterations: Y
+Recommendation: Re-scope to unscanned critical/high-centrality files, or STOP.
+===
+```
+- Skip to Step 5 with verdict `DIMINISHING_RETURNS`.
+- **Override:** If scope was explicitly provided by the user (not from "Next iteration targets"), proceed anyway.
 
 Read the scope file. Scan for Seven Sins:
 
@@ -101,6 +123,8 @@ Check canonical integrity:
 ## Step 2: SELECT + BLAST RADIUS (inline)
 
 Rank findings: CRITICAL > HIGH > MEDIUM > LOW.
+**Tiebreaker (same severity):** prefer files with higher import centrality (from `import_centrality.json`). A canonical violation in `outcome_builder.py` (critical centrality, 8 importers) beats the same violation in `research/old_script.py` (low centrality, 0 importers).
+
 Select highest-priority with a clear provable fix. Not schema/entry model changes.
 
 **Check guardrails BEFORE proceeding:**
@@ -151,10 +175,16 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 **Overwrite** `docs/ralph-loop/ralph-loop-audit.md` with:
 - `## Last iteration: ITER`
 - Infrastructure gate results
-- All findings with status (FIXED/DEFERRED/ACCEPTABLE/NEEDS_REVIEW)
+- All findings with status (FIXED/DEFERRED/ACCEPTABLE/NEEDS_REVIEW/DIMINISHING_RETURNS)
 - Seven Sins scan results
-- Next iteration targets
+- Next iteration targets (prefer unscanned critical/high-centrality files)
 - Updated `## Files Fully Scanned` list (add any newly scanned files)
+
+**Update** `docs/ralph-loop/ralph-ledger.json`:
+```bash
+python scripts/tools/ralph_build_ledger.py
+```
+This regenerates the ledger from history.md. Run it AFTER appending to history.md.
 
 **Append** to `docs/ralph-loop/ralph-loop-history.md`:
 ```
