@@ -29,7 +29,7 @@ Usage:
 import argparse
 import time
 import warnings
-from datetime import datetime, date
+from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -520,7 +520,7 @@ def print_instrument_table(inst_rows, instrument):
 def print_honest_summary(all_rows):
     """RESEARCH_RULES.md mandated honest summary."""
     print(f"\n{'=' * 120}")
-    print(f"  HONEST SUMMARY")
+    print("  HONEST SUMMARY")
     print(f"{'=' * 120}")
 
     # Group rows by unique pair
@@ -545,7 +545,7 @@ def print_honest_summary(all_rows):
     print(f"    INDEPENDENT: {n_independent}")
     print(f"    REDUNDANT:   {n_redundant}")
     print(f"    GREY-ZONE:   {n_grey}")
-    print(f"    (Clean pairs = 1 verdict each; DST pairs = 2 verdicts each: WINTER + SUMMER)")
+    print("    (Clean pairs = 1 verdict each; DST pairs = 2 verdicts each: WINTER + SUMMER)")
 
     # --- Per-pair results ---
     def _fmt_row(r):
@@ -555,7 +555,7 @@ def print_honest_summary(all_rows):
         return sbp, rc, xa
 
     # SURVIVED
-    print(f"\n  SURVIVED (INDEPENDENT — genuinely new edges):")
+    print("\n  SURVIVED (INDEPENDENT — genuinely new edges):")
     found_independent = False
     for key, rows in pairs_by_key.items():
         inst, ex, cand = key
@@ -580,7 +580,7 @@ def print_honest_summary(all_rows):
         print("    None — all candidates overlap with existing sessions.")
 
     # DID NOT SURVIVE
-    print(f"\n  DID NOT SURVIVE (REDUNDANT — same edge, different clock):")
+    print("\n  DID NOT SURVIVE (REDUNDANT — same edge, different clock):")
     found_redundant = False
     for key, rows in pairs_by_key.items():
         inst, ex, cand = key
@@ -601,7 +601,7 @@ def print_honest_summary(all_rows):
         print("    None — no pairs clearly redundant.")
 
     # GREY-ZONE
-    print(f"\n  GREY-ZONE (ambiguous — needs deeper investigation):")
+    print("\n  GREY-ZONE (ambiguous — needs deeper investigation):")
     found_grey = False
     for key, rows in pairs_by_key.items():
         inst, ex, cand = key
@@ -622,7 +622,7 @@ def print_honest_summary(all_rows):
         print("    None.")
 
     # DST DIVERGENCE — flag pairs where winter/summer classifications differ
-    print(f"\n  DST REGIME DIVERGENCE (winter vs summer classification differs):")
+    print("\n  DST REGIME DIVERGENCE (winter vs summer classification differs):")
     divergence_found = False
     for key, rows in pairs_by_key.items():
         if len(rows) < 2:
@@ -639,7 +639,7 @@ def print_honest_summary(all_rows):
                 print(f"    ** {inst} {ex}->{cand}: "
                       f"WINTER={w['classification']} (shared={w_sbp}), "
                       f"SUMMER={s['classification']} (shared={s_sbp})")
-                print(f"       DIFFERENT TRADE in each regime.")
+                print("       DIFFERENT TRADE in each regime.")
 
     if not divergence_found:
         print("    None — all DST-affected pairs have consistent winter/summer classification.")
@@ -663,30 +663,30 @@ def print_honest_summary(all_rows):
         if cand in _PRE_LONDON_NOTES:
             pre_london_candidates.add((r["instrument"], cand))
     if pre_london_candidates:
-        print(f"\n  MECHANISM NOTES (UK-DST pre/post-London candidates):")
+        print("\n  MECHANISM NOTES (UK-DST pre/post-London candidates):")
         for inst, cand in sorted(pre_london_candidates):
             print(f"    {inst} {cand}: {_PRE_LONDON_NOTES[cand]}")
-            print(f"       The edge may be a different trade in each regime.")
+            print("       The edge may be a different trade in each regime.")
 
     # CAVEATS
-    print(f"\n  CAVEATS:")
-    print(f"    - This is IN-SAMPLE analysis (no walk-forward)")
-    print(f"    - E1 entry + CB1 only (5min aperture, G4+ filter)")
-    print(f"    - RR2.0 only (production tests 1.0-4.0)")
-    print(f"    - Overlap != causation. Two sessions can share break-days")
-    print(f"      by coincidence if the underlying move is large enough")
-    print(f"    - Small exclusive-day N (< 15) flagged with * in tables")
-    print(f"    - DST-affected pairs report WINTER and SUMMER separately (no blended number)")
+    print("\n  CAVEATS:")
+    print("    - This is IN-SAMPLE analysis (no walk-forward)")
+    print("    - E1 entry + CB1 only (5min aperture, G4+ filter)")
+    print("    - RR2.0 only (production tests 1.0-4.0)")
+    print("    - Overlap != causation. Two sessions can share break-days")
+    print("      by coincidence if the underlying move is large enough")
+    print("    - Small exclusive-day N (< 15) flagged with * in tables")
+    print("    - DST-affected pairs report WINTER and SUMMER separately (no blended number)")
 
     # NEXT STEPS
-    print(f"\n  NEXT STEPS:")
-    print(f"    - INDEPENDENT candidates: consider adding as pipeline sessions")
-    print(f"    - REDUNDANT candidates: do NOT add (would double-count same edge)")
-    print(f"    - GREY-ZONE candidates: investigate further before deciding")
-    print(f"      (e.g., conditional analysis, volume profiles, entry timing)")
-    print(f"    - DST-DIVERGENT pairs: treat winter and summer as separate")
-    print(f"      research questions — one regime may be independent while")
-    print(f"      the other is redundant")
+    print("\n  NEXT STEPS:")
+    print("    - INDEPENDENT candidates: consider adding as pipeline sessions")
+    print("    - REDUNDANT candidates: do NOT add (would double-count same edge)")
+    print("    - GREY-ZONE candidates: investigate further before deciding")
+    print("      (e.g., conditional analysis, volume profiles, entry timing)")
+    print("    - DST-DIVERGENT pairs: treat winter and summer as separate")
+    print("      research questions — one regime may be independent while")
+    print("      the other is redundant")
 
 
 # =========================================================================
@@ -714,7 +714,7 @@ def main():
 
     n_total_pairs = sum(len(pairs) for pairs in CANDIDATE_PAIRS.values())
     print(f"\n{'=' * 120}")
-    print(f"  OVERLAP ANALYSIS — Session Independence Test")
+    print("  OVERLAP ANALYSIS — Session Independence Test")
     print(f"  Database: {db_path}")
     print(f"  Parameters: G{G4_MIN:.0f}+ filter | RR{RR_TARGET:.1f} target | "
           f"{BREAK_WINDOW // 60}h break window | {OUTCOME_WINDOW // 60}h outcome window")
