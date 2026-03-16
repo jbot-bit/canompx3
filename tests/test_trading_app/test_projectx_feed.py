@@ -244,16 +244,20 @@ class TestLivenessMonitor:
     @pytest.mark.asyncio
     async def test_watcher_triggers_reconnect_on_stale(self):
         """Stop-file watcher must set _force_reconnect after consecutive stale periods."""
+        from unittest.mock import patch
+        from trading_app.live.projectx.data_feed import _STOP_FILE
+
         auth = MagicMock()
         auth.get_token.return_value = "fake"
         feed = ProjectXDataFeed(auth=auth, on_bar=MagicMock())
         feed._last_data_at = datetime.now(UTC) - timedelta(seconds=_STALE_TIMEOUT + 10)
         feed._stale_count = _MAX_STALE_BEFORE_RECONNECT - 1  # one more check triggers
 
-        # Run watcher briefly — it should detect stale and return
-        try:
-            await asyncio.wait_for(feed._stop_file_watcher(), timeout=5.0)
-        except asyncio.TimeoutError:
-            pytest.fail("Watcher did not exit on stale feed within 5s")
+        # Mock stop file to not exist (prevents false pass if file is on disk)
+        with patch.object(type(_STOP_FILE), "exists", return_value=False):
+            try:
+                await asyncio.wait_for(feed._stop_file_watcher(), timeout=5.0)
+            except asyncio.TimeoutError:
+                pytest.fail("Watcher did not exit on stale feed within 5s")
 
         assert feed._force_reconnect is True

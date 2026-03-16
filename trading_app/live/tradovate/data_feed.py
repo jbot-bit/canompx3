@@ -222,6 +222,8 @@ class TradovateDataFeed(BrokerFeed):
             return
         d = frame.get("d")
         if not isinstance(d, dict):
+            if d is not None:
+                log.debug("Unexpected frame 'd' type: %s", type(d).__name__)
             return
         for q in d.get("quotes", []):
             price = q.get("price") or q.get("bidPrice")
