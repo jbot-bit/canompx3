@@ -153,7 +153,12 @@ class SessionOrchestrator:
             if account_id == 0:
                 account_id = contracts.resolve_account_id()
             router_cls = components["router_class"]
-            self.order_router = router_cls(account_id=account_id, auth=self.auth, demo=demo)
+            self.order_router = router_cls(
+                account_id=account_id,
+                auth=self.auth,
+                demo=demo,
+                tick_size=self.cost_spec.tick_size,
+            )
             self.positions = self._positions_cls(auth=self.auth)
             self._notifications_broken = False
 
@@ -328,9 +333,7 @@ class SessionOrchestrator:
                 from trading_app.config import ALL_FILTERS, CrossAssetATRFilter
 
                 _cross_sources = {
-                    f.source_instrument
-                    for f in ALL_FILTERS.values()
-                    if isinstance(f, CrossAssetATRFilter)
+                    f.source_instrument for f in ALL_FILTERS.values() if isinstance(f, CrossAssetATRFilter)
                 }
                 for source in _cross_sources:
                     if source == instrument:
@@ -753,7 +756,11 @@ class SessionOrchestrator:
                     wait = self.EXIT_RETRY_BACKOFF * (attempt + 1)
                     log.warning(
                         "Exit retry %d/%d for %s: %s (next attempt in %.0fs)",
-                        attempt + 1, self.EXIT_RETRY_MAX, strategy_id, e, wait,
+                        attempt + 1,
+                        self.EXIT_RETRY_MAX,
+                        strategy_id,
+                        e,
+                        wait,
                     )
                     await asyncio.sleep(wait)
                 else:
@@ -845,6 +852,35 @@ class SessionOrchestrator:
                 symbol=self.contract_symbol,
                 qty=event.contracts,
             )
+
+            # Merge bracket into entry for atomic submission (native brackets only)
+            _bracket_merged = False
+            if self.order_router.supports_native_brackets():
+                risk_pts = event.risk_points or strategy.median_risk_points
+                if risk_pts:
+                    mult = getattr(strategy, "stop_multiplier", 1.0) or 1.0
+                    stop_dist = risk_pts * mult
+                    sign = 1 if event.direction == "long" else -1
+                    stop_price = event.price - sign * stop_dist
+                    target_price = event.price + sign * stop_dist * strategy.rr_target
+                    bracket = self.order_router.build_bracket_spec(
+                        direction=event.direction,
+                        symbol=self.contract_symbol,
+                        entry_price=event.price,
+                        stop_price=stop_price,
+                        target_price=target_price,
+                        qty=event.contracts,
+                    )
+                    if bracket:
+                        spec = self.order_router.merge_bracket_into_entry(spec, bracket)
+                        _bracket_merged = True
+                        log.info(
+                            "Bracket merged into entry for %s: risk=%.2f rr=%.1f",
+                            event.strategy_id,
+                            stop_dist,
+                            strategy.rr_target,
+                        )
+
             loop = asyncio.get_running_loop()
             try:
                 result = await loop.run_in_executor(None, self.order_router.submit, spec)
@@ -912,9 +948,16 @@ class SessionOrchestrator:
                 }
             )
 
-            # Submit broker-side stop/target bracket for crash protection
-            actual_entry = fill_price if fill_price is not None else event.price
-            await self._submit_bracket(event, strategy, actual_entry)
+            # Bracket handling: native brackets were merged into entry above;
+            # non-native brackets get submitted separately post-fill.
+            if _bracket_merged:
+                record = self._positions.get(event.strategy_id)
+                if record is not None and order_id:
+                    record.bracket_order_ids = [order_id]
+                self._stats.brackets_submitted += 1
+            else:
+                actual_entry = fill_price if fill_price is not None else event.price
+                await self._submit_bracket(event, strategy, actual_entry)
 
         elif event.event_type in ("EXIT", "SCRATCH"):
             entry_price = self._positions.best_entry_price(event.strategy_id, event.price)
@@ -931,7 +974,8 @@ class SessionOrchestrator:
                 pos_rec = self._positions.get(event.strategy_id)
                 jtid = pos_rec.journal_trade_id if pos_rec else None
                 self._record_exit(
-                    event, entry_price,
+                    event,
+                    entry_price,
                     entry_slippage=pos_rec.entry_slippage if pos_rec else None,
                     journal_trade_id=jtid,
                 )
@@ -974,7 +1018,8 @@ class SessionOrchestrator:
                     log.info("Position already closed by bracket for %s — skipping exit order", event.strategy_id)
                     closed_rec = self._positions.on_exit_filled(event.strategy_id)
                     self._record_exit(
-                        event, entry_price,
+                        event,
+                        entry_price,
                         entry_slippage=closed_rec.entry_slippage if closed_rec else None,
                         journal_trade_id=exit_jtid,
                     )

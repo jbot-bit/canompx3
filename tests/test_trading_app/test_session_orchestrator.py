@@ -1137,38 +1137,31 @@ class TestOrchestratorReconnect:
 
 
 class FakeBracketRouter(FakeRouter):
-    """Router that supports native brackets for testing."""
+    """Router that supports native brackets (atomic: merged into entry)."""
 
     def __init__(self, fill_price=None):
         super().__init__(fill_price)
-        self.bracket_submitted = []
         self.cancelled_ids = []
 
     def supports_native_brackets(self) -> bool:
         return True
 
     def build_bracket_spec(self, **kwargs) -> dict:
-        spec = {"type": "bracket", **kwargs}
-        return spec
-
-    def submit(self, spec):
-        self.submitted.append(spec)
-        if spec.get("type") == "bracket":
-            self.bracket_submitted.append(spec)
-            return {"order_id": 200, "order_ids": [201, 202], "status": "submitted"}
         return {
-            "order_id": 99,
-            "status": "submitted",
-            "fill_price": self._fill_price,
+            "stopLossBracket": {"ticks": 10, "type": 4},
+            "takeProfitBracket": {"ticks": 20, "type": 1},
         }
+
+    def merge_bracket_into_entry(self, entry_spec: dict, bracket_spec: dict) -> dict:
+        return {**entry_spec, **bracket_spec}
 
     def cancel(self, order_id: int) -> None:
         self.cancelled_ids.append(order_id)
 
 
 class TestBracketOrders:
-    async def test_bracket_submitted_after_entry(self):
-        """Entry fill -> bracket stop+target submitted to broker."""
+    async def test_bracket_merged_into_entry(self):
+        """Native brackets: bracket fields merged into entry spec before submission."""
         router = FakeBracketRouter(fill_price=2351.0)
         c = FakeBrokerComponents()
         c.router = router
@@ -1177,65 +1170,63 @@ class TestBracketOrders:
 
         await orch._handle_event(_entry_event(2350.5))
 
-        # Bracket should be submitted
-        assert len(router.bracket_submitted) == 1
-        bracket = router.bracket_submitted[0]
-        assert bracket["type"] == "bracket"
-        # Position should have bracket order IDs
+        # Single submission (entry + bracket merged)
+        assert len(router.submitted) == 1
+        submitted = router.submitted[0]
+        assert "stopLossBracket" in submitted
+        assert "takeProfitBracket" in submitted
+        # Position should have entry order ID as bracket parent
         record = orch._positions.get(STRATEGY_ID)
         assert record is not None
-        assert record.bracket_order_ids == [201, 202]
+        assert record.bracket_order_ids == [99]
 
     async def test_bracket_cancelled_before_exit(self):
-        """Exit signal -> bracket orders cancelled -> exit submitted."""
+        """Exit signal -> bracket parent order cancelled -> exit submitted."""
         router = FakeBracketRouter(fill_price=2351.0)
         c = FakeBrokerComponents()
         c.router = router
         orch = build_orchestrator(c)
         orch.order_router = router
 
-        # Enter and get brackets
+        # Enter with merged bracket
         await orch._handle_event(_entry_event(2350.5))
 
         # Exit
         await orch._handle_event(_exit_event(2355.0))
 
-        # Both bracket orders should have been cancelled
-        assert 201 in router.cancelled_ids
-        assert 202 in router.cancelled_ids
+        # Bracket parent order (entry ID 99) should have been cancelled
+        assert 99 in router.cancelled_ids
 
     async def test_no_bracket_when_unsupported(self):
-        """supports_native_brackets() returns False -> no bracket submitted."""
+        """supports_native_brackets() returns False -> no bracket merged."""
         orch = build_orchestrator(FakeBrokerComponents(fill_price=2351.0))
 
         await orch._handle_event(_entry_event(2350.5))
 
-        # No bracket submitted (FakeRouter returns False for supports_native_brackets)
-        assert len(orch.order_router.submitted) == 1  # only the entry order
+        # No bracket fields in submitted spec
+        assert len(orch.order_router.submitted) == 1
+        submitted = orch.order_router.submitted[0]
+        assert "stopLossBracket" not in submitted
 
-    async def test_bracket_failure_is_warning_not_error(self):
-        """Bracket submit fails -> WARNING logged, position still tracked."""
+    async def test_bracket_merged_fail_closed(self):
+        """Combined entry+bracket submit fails -> position rolled back (fail-closed)."""
         router = FakeBracketRouter(fill_price=2351.0)
-        original_submit = router.submit
 
-        def fail_bracket(spec):
-            if spec.get("type") == "bracket":
-                raise ConnectionError("bracket api down")
-            return original_submit(spec)
+        def fail_submit(spec):
+            raise ConnectionError("API down")
 
-        router.submit = fail_bracket
+        router.submit = fail_submit
         c = FakeBrokerComponents()
         c.router = router
         orch = build_orchestrator(c)
         orch.order_router = router
 
-        # Should not raise even though bracket submission fails
+        # Should not raise — circuit breaker catches it
         await orch._handle_event(_entry_event(2350.5))
 
-        # Position still tracked
+        # Position rolled back — fail-closed
         record = orch._positions.get(STRATEGY_ID)
-        assert record is not None
-        assert record.bracket_order_ids == []  # no brackets stored
+        assert record is None
 
     async def test_bracket_race_already_flat(self):
         """Bracket fills between cancel and exit -> 'already flat' handled gracefully."""
@@ -1243,7 +1234,7 @@ class TestBracketOrders:
         original_submit = router.submit
 
         def flat_on_exit(spec):
-            if spec.get("type") != "bracket" and spec.get("type") == "fake_exit":
+            if spec.get("type") == "fake_exit":
                 raise RuntimeError("No position - already flat")
             return original_submit(spec)
 
