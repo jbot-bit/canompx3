@@ -258,7 +258,7 @@ def section_3_friction_theory(con):
                     continue
 
             avg_r = round(total_pnl / total_n, 4) if total_n > 0 else 0
-            fric_pct = round(float(rt_points) / gate * 100, 1) if isinstance(rt_points, (int, float)) else "?"
+            fric_pct = round(float(rt_points) / gate * 100, 1) if isinstance(rt_points, int | float) else "?"
 
             rows.append(
                 (

@@ -73,7 +73,7 @@ def _parse_module(path: Path) -> dict:
     exports = []
     imports = set()
     for node in ast.iter_child_nodes(tree):
-        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+        if isinstance(node, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
             if not node.name.startswith("_"):
                 exports.append(node.name)
         elif isinstance(node, ast.Import):
