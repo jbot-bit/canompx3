@@ -1017,3 +1017,13 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 1 file, 0 external callers (standalone research script)
 - Verification: ruff PASS, check_drift 72/72 PASS
 - Commit: 06436e6
+
+## Iteration 105 — 2026-03-16
+- Phase: fix
+- Classification: [judgment]
+- Target: research/research_atr_velocity_gate.py:87-101, research/research_mgc_regime_shift.py:170-210
+- Finding: AV-01 (MEDIUM) — Part 0 COUNT query missing `AND o.orb_minutes = 5`, mixing 5m+15m+30m apertures and inflating removal rate stats ~3x. AV-02 (LOW) — `fetchone()` result not guarded for None before tuple destructure (Pyright reportOptionalMemberAccess). RS-01 (MEDIUM) — Parts 4+5 of regime_shift year-by-year and pre/post queries missing `AND o.orb_minutes = 5`, mixing apertures.
+- Action: Added `AND o.orb_minutes = 5` to Part 0 query (AV-01); added `if row is None: continue` guard before destructure (AV-02); added `AND o.orb_minutes = 5` to Parts 4 and 5 queries in regime_shift (RS-01)
+- Blast radius: 2 files, 0 external callers (standalone research scripts)
+- Verification: ruff PASS, check_drift 72/72 PASS
+- Commit: 7a09129
