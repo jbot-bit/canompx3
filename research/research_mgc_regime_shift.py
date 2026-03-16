@@ -6,12 +6,15 @@ ATR expanded 31->105. Do G4/G6/G8 filters still make sense?
 How does this affect validated strategies?
 """
 
-import sys, os
+import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import duckdb
 import numpy as np
 from scipy import stats
+
 from pipeline.paths import GOLD_DB_PATH
 
 DB = GOLD_DB_PATH
@@ -22,8 +25,8 @@ def run():
     con = duckdb.connect(str(DB), read_only=True)
     lines = []
     lines.append("# MGC Structural Regime Shift Analysis")
-    lines.append(f"**Date:** 2026-02-21")
-    lines.append(f"**Script:** research/research_mgc_regime_shift.py\n")
+    lines.append("**Date:** 2026-02-21")
+    lines.append("**Script:** research/research_mgc_regime_shift.py\n")
 
     # ── Quarterly ORB size and ATR trends ───────────────────────
     lines.append("=" * 70)
@@ -113,7 +116,7 @@ def run():
 
     for em in ["E0", "E1"]:
         for sess in ["0900", "1000"]:
-            rows = con.execute(f"""
+            rows = con.execute("""
                 SELECT d.atr_20, o.pnl_r,
                        EXTRACT(YEAR FROM o.trading_day) as yr
                 FROM orb_outcomes o
@@ -164,13 +167,14 @@ def run():
 
     for em in ["E0", "E1"]:
         for sess in ["0900", "1000", "1100"]:
-            rows = con.execute(f"""
+            rows = con.execute("""
                 SELECT o.pnl_r, EXTRACT(YEAR FROM o.trading_day) as yr
                 FROM orb_outcomes o
                 WHERE o.symbol = 'MGC'
                   AND o.orb_label = ?
                   AND o.entry_model = ?
                   AND o.rr_target = 2.0
+                  AND o.orb_minutes = 5
                   AND o.pnl_r IS NOT NULL
             """, [sess, em]).fetchall()
 
@@ -195,7 +199,7 @@ def run():
 
     for em in ["E0", "E1"]:
         for sess in ["0900", "1000", "1100"]:
-            rows = con.execute(f"""
+            rows = con.execute("""
                 SELECT o.pnl_r,
                        CASE WHEN o.trading_day >= '2025-01-01' THEN 'post' ELSE 'pre' END as era
                 FROM orb_outcomes o
@@ -203,6 +207,7 @@ def run():
                   AND o.orb_label = ?
                   AND o.entry_model = ?
                   AND o.rr_target = 2.0
+                  AND o.orb_minutes = 5
                   AND o.pnl_r IS NOT NULL
             """, [sess, em]).fetchall()
 

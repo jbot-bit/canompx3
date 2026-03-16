@@ -14,12 +14,15 @@ This script measures the EXACT lift from applying this gate:
 - Quantify days/trades removed and their toxicity
 """
 
-import sys, os
+import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import duckdb
 import numpy as np
 from scipy import stats
+
 from pipeline.paths import GOLD_DB_PATH
 
 DB = GOLD_DB_PATH
@@ -59,8 +62,8 @@ def run():
     con = duckdb.connect(str(DB), read_only=True)
     lines = []
     lines.append("# ATR Velocity Contraction Gate — Quantified Improvement")
-    lines.append(f"**Date:** 2026-02-22")
-    lines.append(f"**Script:** research/research_atr_velocity_gate.py\n")
+    lines.append("**Date:** 2026-02-22")
+    lines.append("**Script:** research/research_atr_velocity_gate.py\n")
 
     # ── PART 0: How many days does the gate remove? ──────────────
     lines.append("=" * 70)
@@ -93,8 +96,11 @@ def run():
                   AND o.pnl_r IS NOT NULL
                   AND d.atr_vel_regime IS NOT NULL
                   AND d.{comp_col} IS NOT NULL
+                  AND o.orb_minutes = 5
             """, [sym, sess]).fetchone()
 
+            if row is None:
+                continue
             total, skipped, contracting = row
             skip_pct = skipped / total * 100 if total else 0
             lines.append(f"  {sym} {sess}: {skipped}/{total} days skipped ({skip_pct:.1f}%), "
@@ -339,7 +345,6 @@ def run():
                     continue
 
                 avg_skip = np.mean(skipped)
-                avg_gate = np.mean(gated)
                 avg_all = np.mean([r[0] for r in rows])
                 s_all = annualized_sharpe([r[0] for r in rows])
                 s_gate = annualized_sharpe(gated)
@@ -365,8 +370,8 @@ def run():
         survivors.sort(key=lambda x: x[1])
 
         lines.append(f"  BH survivors (q=0.10): {len(survivors)}")
-        for (label, raw_p, n, avg_skip, avg_gate, delta, wr_skip, wr_gate,
-             s_all, s_gate, s_lift), adj_p in survivors:
+        for (label, raw_p, n, _avg_skip, _avg_gate, delta, wr_skip, wr_gate,
+             _s_all, _s_gate, s_lift), adj_p in survivors:
             direction = "TOXIC (skip helps)" if delta < 0 else "BENEFICIAL (skip hurts)"
             lift_str = f", Sharpe_lift={s_lift:+.3f}" if s_lift is not None else ""
             lines.append(f"    {label}: raw_p={raw_p:.4f}, p_bh={adj_p:.4f}, "
