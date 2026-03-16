@@ -3,8 +3,6 @@
 **Status:** CANONICAL prop trading playbook
 **Version:** V3 — consolidated manual + allocation memo, March 16 2026
 **Goal:** Prove edge live → scale to $100K/year via Apex 50K EOD copy-traded stack
-**Supersedes:** `docs/plans/2026-03-16-prop-account-allocation-design.md` as the main prop-playbook reference
-
 This file is the single working prop memo for this repo.
 Use it for:
 - current firm selection and sizing
