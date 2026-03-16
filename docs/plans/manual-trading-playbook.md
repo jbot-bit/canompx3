@@ -41,7 +41,7 @@ Maintenance rule:
   - `https://support.apextraderfunding.com/hc/en-us/articles/4404875002139-What-are-the-Consistency-Rules-For-PA-and-Funded-Accounts`
 
 **Topstep 50K Express Funded** `OFFICIAL RULE` — verified from support pages Mar 16 2026
-- MGC automation lane (5 Express accounts via ProjectX API).
+- Local use in this plan: MGC morning automation lane. `LOCAL MODEL`
 - Automation: ALLOWED on Combine + Funded. `OFFICIAL RULE`
 - Trade copier: Express only, NOT Live Funded. `OFFICIAL RULE`
 - Account cap: 5 Express + 1 Live. Live kills all Express. `OFFICIAL RULE`
@@ -54,9 +54,9 @@ Maintenance rule:
   - https://help.topstep.com/en/articles/8284219-can-i-have-more-than-one-funded-level-account
 
 **Tradeify 50K** `OFFICIAL RULE` — verified from support pages Mar 16 2026
-- Primary MNQ automation scaling lane (5 accounts via Tradovate API).
+- Local use in this plan: primary MNQ automation scaling lane. `LOCAL MODEL`
 - Automation: ALLOWED (exclusive ownership, no cross-firm use, no HFT). `OFFICIAL RULE`
-- Copy trading: same-owner accounts only, via API (GUI Group Trading does NOT support brackets). `OFFICIAL RULE`
+- Copy trading: same-owner accounts only. Tradovate Group Trading does NOT support brackets. `OFFICIAL RULE`
 - Account cap: 5 Simulated Funded per user/household. `OFFICIAL RULE`
 - Bot exclusivity: bot must not be shared or used across multiple firms. `OFFICIAL RULE`
 - Microscalping: >50% of trades must be held >10 seconds. `OFFICIAL RULE`
@@ -86,6 +86,12 @@ These are the operating conclusions from local research and sim work in this rep
 - `0.75x` stop sizing remains the preferred prop-risk setting in the current local modeling.
 - Prop ceiling: ~$60K/year. $100K/year target lives in self-funded IBKR (Phase 3).
 
+Ambiguity kill:
+- A separate local sim result also exists for a stricter `Apex manual ladder` built around `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G5 + MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20`.
+- Treat that result as `LOCAL MODEL ONLY`, not as the canonical repo plan.
+- The canonical repo plan in this file is still: `Apex manual proof -> Tradeify + TopStep scaling -> self-funded IBKR`.
+- If memory files or older notes imply "Apex remains the main scaling vehicle," those notes are superseded by this playbook.
+
 If any of these change, update them as `LOCAL MODEL` conclusions, not as firm rules.
 
 ---
@@ -98,7 +104,7 @@ Hard stops. If ANY line fails, do NOT trade that session.
 [ ] Account is funded and active (not in eval, not suspended)
 [ ] No open position on this instrument on this account
 [ ] Checked firm's status page — no maintenance, no rule changes
-[ ] No news restrictions apply (Apex: `OFFICIAL RULE`; TopStep: `OFFICIAL RULE` — news trading allowed per automation page; Tradeify: `OFFICIAL RULE` — no rules against news trading per guidelines page)
+[ ] News-rule check passed for this firm (Apex: `OFFICIAL RULE` — no current restriction on cited compliance page; Tradeify: `OFFICIAL RULE` — guidelines state no rules against major-news trading; TopStep: verify current help/account docs before assuming no restriction)
 [ ] ORB has fully formed (waited full 5m or 15m — no early entries)
 [ ] Filter passes (size >= threshold, CONT/NOMON/FAST10 if applicable)
 [ ] ORB gate passes (MGC on TopStep: ORB <= 26 points)
@@ -499,6 +505,24 @@ Important policy note:
 - So "sleep through entirely" is **not** a compliant Apex operating assumption under current official docs.
 
 The question is not whether the edge exists. It does. The question is whether you will reliably run that schedule.
+
+### Alternative Apex Manual Ladder `LOCAL MODEL ONLY`
+
+This section exists to prevent ambiguity with older notes and memory files.
+
+- The local sim work did identify a plausible strict-manual Apex pair:
+  - `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G5`
+  - `MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20`
+- Modeled economics from that pass were approximately:
+  - `1 micro`: `~100.0%` survival, `~$169/mo` median
+  - `2 micros`: `~99.3%` survival, `~$336/mo` median
+  - `3 micros`: `~96.0%` survival, `~$515/mo` median
+- That implies `20 accounts x 2 micros` is roughly an `$80K/year` manual-only model, and `20 x 3 micros` is the first modeled manual path through `$100K/year`.
+
+Decision rule:
+- Keep this as an alternative `LOCAL MODEL` ladder only.
+- Do **not** treat it as the canonical scaling architecture unless this file is explicitly rewritten to replace the current Tradeify + TopStep Phase 2 plan.
+- Until then, the endorsed operating plan remains: Apex manual proof first, then automation-capable scaling on Tradeify / TopStep, then self-funded IBKR.
 
 ---
 
@@ -1036,3 +1060,4 @@ Every 3 months, do a full system review. This is the "step back and look at ever
 | 2026-03-16 | CRITICAL: All Phase 1 RR targets corrected from 1.5/2.0 → 1.0 (verified against family_rr_locks in gold.db). | LOCAL MODEL | Claude |
 | 2026-03-16 | Added Apex EOD drawdown mechanics, post-safety-net sizing rules. | OFFICIAL RULE + LOCAL MODEL | Claude |
 | 2026-03-16 | **PHASE 2 REWRITE**: Removed "20 Apex copy-traded accounts" plan (Apex prohibits automation + copy trading per official compliance page). Replaced with grounded 3-firm architecture: Tradeify 5 accounts MNQ automation via Tradovate API, TopStep 5 Express MGC automation via ProjectX API, Apex 1 account manual only. Prop ceiling ~$60K/year. $100K target moved to Phase 3 IBKR. Official firm rules populated in `resources/prop-firm-official-rules.md`. | OFFICIAL RULE + LOCAL MODEL | Claude + Codex |
+| 2026-03-16 | Clarified that the `Apex manual ladder` finding is an alternative LOCAL MODEL only and does not replace the canonical `Apex manual proof -> Tradeify + TopStep scaling -> self-funded IBKR` plan. | PROCESS + LOCAL MODEL | Codex |
