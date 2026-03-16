@@ -408,6 +408,24 @@ These numbers are for the max-EV benchmark pair, not the manual-safe pair.
 | 4 | 20 funded accounts, 2 micros | Payout qualification actually achieved |
 | 5 | 20 funded accounts, 3 micros | 2+ months clean at 2 micros |
 
+### Post-Safety-Net Sizing `OFFICIAL RULE` + `LOCAL MODEL`
+
+Once an account's highest EOD close hits **$52,100**, the threshold freezes at **$50,100**. The trailing DD is gone — you now have a static floor. This changes the risk profile:
+
+| Account Balance | Buffer Above $50,100 | Equivalent "DD" | Sizing Headroom |
+|----------------|----------------------|-----------------|-----------------|
+| $52,100 (just hit safety net) | $2,000 | Same as start | No change yet |
+| $53,000 | $2,900 | 45% more room | Consider 3 micros |
+| $54,000 | $3,900 | ~2x starting room | 3-4 micros viable |
+| $55,000+ | $4,900+ | >2x starting room | Re-evaluate freely |
+
+**Rules:**
+1. **Do NOT size up immediately at $52,100.** Buffer is still only $2,000 — same as starting. Wait until balance grows above the safety net.
+2. **Size by buffer, not by balance.** The number that matters is `current balance - $50,100`. That's your real risk capacity.
+3. **Keep max risk per trade under 5% of buffer.** At $53,000 balance ($2,900 buffer), max risk = $145/trade. At $2/pt MNQ with 7.5pt stop = $15/trade, that's up to 9 micros mathematically — but start conservative (3-4) because you also need payout qualification buffer.
+4. **Payout withdrawals shrink your buffer.** If you withdraw $1,000 from a $54,000 balance, your buffer drops from $3,900 to $2,900. Re-check sizing after every payout.
+5. **Each account is independent.** One account hitting safety net doesn't mean you size up on all accounts. The threshold freeze is per-account.
+
 ### Apex Manual-First Ladder (`5am+`, No `3am`)
 
 Use this if manual means:
