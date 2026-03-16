@@ -170,3 +170,52 @@ def test_exit_allowed_when_position_open():
          patch("trading_app.live.webhook_server._get_contract", return_value="MGCM5"):
         resp = client.post("/trade", json=exit_payload)
         assert resp.status_code == 200
+
+
+# ── Instrument allowlist tests ─────────────────────────────────────────
+
+
+def test_unknown_instrument_rejected():
+    """Instruments not in ACTIVE_ORB_INSTRUMENTS get 400."""
+    client, _ = _make_client()
+    bad_payload = {**_ENTRY_PAYLOAD, "instrument": "FAKE"}
+
+    resp = client.post("/trade", json=bad_payload)
+    assert resp.status_code == 400
+    assert "unknown instrument" in resp.json()["detail"].lower()
+
+
+def test_known_instrument_accepted():
+    """Active instruments pass the allowlist check."""
+    client, _ = _make_client()
+    # MGC is in ACTIVE_ORB_INSTRUMENTS
+    with patch("trading_app.live.webhook_server._place_order", return_value=12345), \
+         patch("trading_app.live.webhook_server._get_contract", return_value="MGCM5"):
+        resp = client.post("/trade", json=_ENTRY_PAYLOAD)
+        assert resp.status_code == 200
+
+
+# ── Qty cap tests ──────────────────────────────────────────────────────
+
+
+def test_qty_exceeds_max_rejected():
+    """Orders with qty > MAX_ORDER_QTY get 400."""
+    client, ws = _make_client()
+    ws.MAX_ORDER_QTY = 5
+    big_payload = {**_ENTRY_PAYLOAD, "qty": 10}
+
+    resp = client.post("/trade", json=big_payload)
+    assert resp.status_code == 400
+    assert "exceeds max" in resp.json()["detail"].lower()
+
+
+def test_qty_within_max_accepted():
+    """Orders with qty <= MAX_ORDER_QTY pass."""
+    client, ws = _make_client()
+    ws.MAX_ORDER_QTY = 5
+    ok_payload = {**_ENTRY_PAYLOAD, "qty": 3}
+
+    with patch("trading_app.live.webhook_server._place_order", return_value=12345), \
+         patch("trading_app.live.webhook_server._get_contract", return_value="MGCM5"):
+        resp = client.post("/trade", json=ok_payload)
+        assert resp.status_code == 200
