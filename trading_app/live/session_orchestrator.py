@@ -368,10 +368,18 @@ class SessionOrchestrator:
         return row
 
     def _on_feed_stale(self, gap_seconds: float, stale_count: int) -> None:
-        """Called by BrokerFeed when data feed goes stale. Sends alert."""
-        msg = f"FEED STALE: {gap_seconds:.0f}s no data (check {stale_count})"
-        log.critical(msg)
-        self._notify(msg)
+        """Called by BrokerFeed when data feed goes stale or dies. Sends alert.
+
+        stale_count == -1 means feed exhausted all reconnect attempts (permanently dead).
+        """
+        if stale_count == -1:
+            msg = f"FEED DEAD: all reconnect attempts exhausted for {self.instrument}"
+            log.critical(msg)
+            self._notify(msg)
+        else:
+            msg = f"FEED STALE: {gap_seconds:.0f}s no data (check {stale_count})"
+            log.critical(msg)
+            self._notify(msg)
 
     def _notify(self, message: str) -> None:
         """Send Telegram notification. Never raises — notifications must not kill the trading loop.

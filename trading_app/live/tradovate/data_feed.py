@@ -112,7 +112,12 @@ class TradovateDataFeed(BrokerFeed):
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, _BACKOFF_MAX)
             else:
-                log.error("Max reconnects (%d) exhausted for %s — giving up", _MAX_RECONNECTS, symbol)
+                log.critical("FEED DEAD: max reconnects (%d) exhausted for %s", _MAX_RECONNECTS, symbol)
+                if self.on_stale is not None:
+                    try:
+                        self.on_stale(0.0, -1)  # -1 = exhaustion signal
+                    except Exception:
+                        pass
 
     async def _session(self, ws, symbol: str) -> None:
         """Run a single authenticated WebSocket session."""
@@ -215,7 +220,10 @@ class TradovateDataFeed(BrokerFeed):
     async def _handle_frame(self, frame: dict, symbol: str) -> None:
         if not isinstance(frame, dict):
             return
-        for q in frame.get("d", {}).get("quotes", []):
+        d = frame.get("d")
+        if not isinstance(d, dict):
+            return
+        for q in d.get("quotes", []):
             price = q.get("price") or q.get("bidPrice")
             if price is None:
                 continue

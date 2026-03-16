@@ -176,11 +176,16 @@ class ProjectXDataFeed(BrokerFeed):
                     await asyncio.sleep(backoff)
                     backoff = min(backoff * 2, _BACKOFF_MAX)
                 else:
-                    log.error(
-                        "Max reconnects (%d) exhausted for %s",
+                    log.critical(
+                        "FEED DEAD: max reconnects (%d) exhausted for %s",
                         _MAX_RECONNECTS,
                         symbol,
                     )
+                    if self.on_stale is not None:
+                        try:
+                            self.on_stale(0.0, -1)  # -1 = exhaustion signal
+                        except Exception:
+                            pass
 
     # ------------------------------------------------------------------
     # signalrcore fallback backend
@@ -241,11 +246,16 @@ class ProjectXDataFeed(BrokerFeed):
                     await asyncio.sleep(backoff)
                     backoff = min(backoff * 2, _BACKOFF_MAX)
                 else:
-                    log.error(
-                        "Max reconnects (%d) exhausted for %s",
+                    log.critical(
+                        "FEED DEAD: max reconnects (%d) exhausted for %s",
                         _MAX_RECONNECTS,
                         symbol,
                     )
+                    if self.on_stale is not None:
+                        try:
+                            self.on_stale(0.0, -1)
+                        except Exception:
+                            pass
 
     # ------------------------------------------------------------------
     # Sync → async queue bridge
