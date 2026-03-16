@@ -201,42 +201,105 @@ Institutional standard: no single trade > 10% of DD budget.
 
 ---
 
+## Monte Carlo Results (10,000 paths x 250 days, real trade data)
+
+Scripts: `scripts/tmp_prop_sim.py`, `scripts/tmp_apex_lockin.py`
+
+### Scenario A: Manual Only
+
+| Account | Survival | Monthly Net (med) | Monthly P5 | Max DD P95 |
+|---------|----------|-------------------|------------|------------|
+| TopStep $50K (no gate) | 96.1% | $90 | -$53 | $1,748 |
+| **TopStep $50K + ORB gate** | **100.0%** | **$78** | -$34 | **$829** |
+| Apex #1 (NYSE + LONDON) | 99.0% | $849 | $433 | $1,772 |
+| Apex #2 (SINGAPORE + EUROPE) | 100.0% | $406 | $174 | $1,080 |
+| **Combined (with ORB gate)** | **~99%** | **$1,333** | **~$573** | |
+
+### Sensitivity: Activation Rate
+
+| Rate | TopStep | Apex #1 | Apex #2 | Combined Monthly |
+|------|---------|---------|---------|-----------------|
+| 100% | 94.0% | 99.1% | 100% | med $1,396 |
+| 80% | 95.3% | 99.2% | 100% | med $1,082 |
+| 65% | 96.6% | 99.2% | 100% | med $860 |
+
+Missing trades actually IMPROVES survival (less DD risk). At 65% activation, still $860/month.
+
+### Apex Lock-in Analysis
+
+DD locks (Safety Net at $50,100) in **median 52 days** (P25: 35, P75: 76, P95: 126).
+99.9% of survivors lock. 0 blowups in first 20 days.
+
+| Approach | Survival | Monthly | Days to Lock |
+|----------|----------|---------|-------------|
+| Full size from day 1 | 99.1% | $904 | 52 |
+| Half size until lock | 99.9% | $674 | 109 |
+
+**Verdict: Go full size.** Conservative costs $230/month to avoid 0.9% blowup risk. Expected cost of blowup = $1.50/month. Not rational.
+
+### TopStep ORB Gate
+
+| Variant | Survival | Monthly | Notes |
+|---------|----------|---------|-------|
+| No gate | 96.1% | $90 | 6% blow risk |
+| **ORB gate ($200 cap)** | **100%** | **$78** | Skips 9/318 trade days |
+| $150K account | 100% | **-$11** | Fee kills profit |
+
+**ORB gate is NON-NEGOTIABLE.** Skip MGC trades where ORB > 26 points (risk > $200 = 10% of DD).
+TopStep $150K is a trap — higher fee wipes out the DD advantage.
+
+---
+
 ## Deployment Plan
 
-### Phase 1: Prove It (Months 1-3)
-- Open TopStep $50K only
-- Trade MGC CME_REOPEN + TOKYO_OPEN manually
-- Goal: 2+ payouts, prove the edge is real live
-- Expected: $144/month net, 0-2 trades/day
-- Cost: $49/month
+### Phase 1: Start Safe (Months 1-3)
+- Open **Apex $50K #2** (SINGAPORE_OPEN + EUROPE_FLOW)
+- Lowest risk account (100% survival, med $25-38 risk/trade)
+- Goal: 2+ payouts, learn the Apex platform, build confidence
+- Expected: $406/month net, 0-2 trades/day
+- Cost: $37/month
 
-### Phase 2: Scale Manual (Months 3-5)
-- Add Apex $50K #1 (NYSE_OPEN + LONDON_METALS)
-- Two accounts, two instruments, two time blocks
-- Expected: $437/month net
-- Cost: $86/month total
+### Phase 2: Add the Money Printer (Months 2-4)
+- Add **Apex $50K #1** (NYSE_OPEN + LONDON_METALS)
+- Highest E$/month account ($849/month median)
+- DD locks in ~52 days — first 2 months are the risk window
+- Expected: $1,255/month net combined
+- Cost: $74/month total
 
-### Phase 3: Full Manual (Months 5-7)
-- Add Apex $50K #2 (SINGAPORE_OPEN + EUROPE_FLOW)
-- Three accounts running
-- Expected: $576/month net
+### Phase 3: Add TopStep (Months 4-6)
+- Add **TopStep $50K** (CME_REOPEN + TOKYO_OPEN) WITH ORB gate
+- 100% survival with gate. Different instrument (MGC) = diversification.
+- Expected: $1,333/month net combined
 - Cost: $123/month total
 
 ### Phase 4: Auto-Execution (Months 7+)
 - Fix live trading infra (journal, pysignalr, exit retry)
 - Deploy MFFU Rapid + Apex #3 for overnight auto
-- Expected: $928/month net
+- Adds CME_PRECLOSE ($264/mo), US_DATA_1000 ($185/mo), COMEX_SETTLE ($106/mo)
+- Expected: ~$1,900/month net
 - Cost: $289/month total
 
 ### Phase 5: Copy Trade Scaling (Months 9+)
-- Duplicate winning accounts (TopStep allows 5, Apex allows 20)
+- Duplicate winning accounts (Apex allows 20)
 - Copy trade from master to follower accounts
-- 3x multiplier on proven strategies
+- 3x multiplier on proven strategies = ~$4,000/month potential
+
+---
+
+## Key Rules (From Monte Carlo)
+
+1. **ORB gate on TopStep: ALWAYS.** Skip MGC if ORB > 26 points. Non-negotiable.
+2. **Full size from day 1 on Apex.** Conservative early is a net loss.
+3. **Don't upgrade to TopStep $150K.** The fee kills you.
+4. **Start with Apex #2** (safest account, 100% survival) to learn the platform.
+5. **Apex #1 is the money printer** — $849/month, 99% survival, DD locks in 2 months.
 
 ---
 
 ## Open Questions / Things To Refine
 
+- [x] ~~Re-run Monte Carlo sims with THIS specific allocation~~ — DONE (see results above)
+- [x] ~~Trailing DD lock-in strategy~~ — DONE. Go full size. Conservative not worth it.
 - [ ] MFFU Core vs Rapid vs Pro — detailed comparison for overnight auto
 - [ ] Copy trading mechanics (Tradovate Group Trading, TraderSyncer)
 - [ ] Exact Apex contract limits at $50K before Safety Net ($52,600)
@@ -245,8 +308,7 @@ Institutional standard: no single trade > 10% of DD budget.
 - [ ] Max ORB gate implementation in trade sheet generator
 - [ ] Trade journal integration (the CRITICAL gap from Mar 14 audit)
 - [ ] FOMC/NFP/CPI calendar integration for MFFU T1 auto-skip
-- [ ] Worst-case scenario analysis: 3 consecutive all-loss nights per account
-- [ ] Re-run Monte Carlo sims with THIS specific allocation (not the old 8-session book)
 - [ ] Tax implications of multiple prop firm payouts
 - [ ] Which sessions benefit most from IBKR's full 1.0x stop vs 0.75x prop
-- [ ] Trailing DD lock-in strategy: early weeks conservative, then open up after lock?
+- [ ] Scenario B Monte Carlo (with auto-execution overnight sessions)
+- [ ] Correlated blowup risk: do TopStep and Apex blow on the same market conditions?
