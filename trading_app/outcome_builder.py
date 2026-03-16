@@ -29,7 +29,6 @@ import pandas as pd
 from pipeline.asset_configs import get_enabled_sessions
 from pipeline.build_daily_features import compute_trading_day_utc_range
 from pipeline.cost_model import get_cost_spec, pnl_points_to_r, risk_in_dollars, to_r_multiple
-from pipeline.init_db import ORB_LABELS
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import E2_SLIPPAGE_TICKS, EARLY_EXIT_MINUTES, ENTRY_MODELS, SKIP_ENTRY_MODELS
 from trading_app.db_manager import init_trading_app_schema
@@ -674,11 +673,10 @@ def build_outcomes(
         # Determine which sessions to build outcomes for
         sessions = get_enabled_sessions(instrument)
         if not sessions:
-            logger.warning(
+            raise ValueError(
                 f"get_enabled_sessions returned empty for {instrument} — "
-                f"falling back to all ORB_LABELS ({len(ORB_LABELS)} sessions)"
+                f"check pipeline/asset_configs.py enabled_sessions configuration"
             )
-            sessions = ORB_LABELS  # fallback: all sessions
         logger.info(f"  Sessions: {len(sessions)} enabled for {instrument}")
 
         # Fetch all daily_features rows
@@ -833,6 +831,8 @@ def build_outcomes(
 
                     # E1/E3: confirm-based path
                     # E3: retrace entry always uses CB1 (higher CBs produce identical outcomes).
+                    # TODO(E3-retired): cb_options E3 branch is currently unreachable — E3 is in
+                    # SKIP_ENTRY_MODELS. Remove this TODO when E3 is re-enabled.
                     cb_options = [1] if em == "E3" else CONFIRM_BARS_OPTIONS
                     for cb in cb_options:
                         signal = detect_entry_with_confirm_bars(
