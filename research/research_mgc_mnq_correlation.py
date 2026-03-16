@@ -24,6 +24,7 @@ Usage:
 import argparse
 import sys
 from pathlib import Path
+from typing import cast
 
 import duckdb
 import numpy as np
@@ -151,7 +152,8 @@ def block1_daily_returns(con: duckdb.DuckDBPyConnection) -> None:
     mnq_ret = mnq_ret.loc[common_idx]
 
     N = len(mgc_ret)
-    r, p = stats.pearsonr(mgc_ret, mnq_ret)
+    _pr = cast(tuple[float, float], stats.pearsonr(mgc_ret, mnq_ret))
+    r, p = _pr[0], _pr[1]
 
     print(f"\nFull period: {common_idx.min()} to {common_idx.max()}  N={N} days")
     print(f"  Pearson r = {r:+.4f}   p = {p:.4f}")
@@ -170,12 +172,14 @@ def block1_daily_returns(con: duckdb.DuckDBPyConnection) -> None:
     print("\n  Year-by-year Pearson r:")
     ret_df = pd.DataFrame({"MGC": mgc_ret, "MNQ": mnq_ret})
     ret_df.index = pd.to_datetime(ret_df.index)
-    for yr in sorted(ret_df.index.year.unique()):
-        sub = ret_df[ret_df.index.year == yr].dropna()
+    _yr_col = pd.Series([pd.Timestamp(d).year for d in ret_df.index], index=ret_df.index)
+    for yr in sorted(_yr_col.unique()):
+        sub = ret_df[_yr_col == yr].dropna()
         if len(sub) < 30:
             print(f"    {yr}: N={len(sub)} — too few, skip")
             continue
-        yr_r, yr_p = stats.pearsonr(sub["MGC"], sub["MNQ"])
+        _yr_pr: tuple[float, float] = stats.pearsonr(sub["MGC"], sub["MNQ"])  # type: ignore[assignment]
+        yr_r, yr_p = _yr_pr
         sig = "**" if yr_p < 0.01 else ("*" if yr_p < 0.05 else "")
         print(f"    {yr}: N={len(sub):3d}  r={yr_r:+.3f}  p={yr_p:.4f} {sig}")
 
