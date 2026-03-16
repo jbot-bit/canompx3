@@ -5,6 +5,18 @@
 
 ---
 
+## Iteration 101 — 2026-03-16
+- Phase: fix
+- Classification: [mechanical]
+- Target: research/research_mes_compressed_spring.py:42
+- Finding: Used os.environ.get("DUCKDB_PATH", ...) instead of canonical GOLD_DB_PATH from pipeline.paths — inconsistent with all other research scripts
+- Action: Removed `import os`, added `from pipeline.paths import GOLD_DB_PATH`, replaced DB_PATH assignment with `str(GOLD_DB_PATH)`
+- Blast radius: 1 file (standalone research script, zero importers)
+- Verification: PASS (72 drift checks, module imports cleanly)
+- Commit: f9618c0
+
+---
+
 ## Iteration 100 — 2026-03-16
 - Phase: fix
 - Classification: [mechanical]
