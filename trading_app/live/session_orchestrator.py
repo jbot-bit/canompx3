@@ -321,6 +321,20 @@ class SessionOrchestrator:
                 ).fetchone()
                 if median_result and median_result[0] is not None:
                     row["median_atr_20"] = float(median_result[0])
+
+                # Cross-asset ATR: load source instruments' latest atr_20_pct for
+                # CrossAssetATRFilter. Uses same connection, yesterday's proxy pattern.
+                for source in ("MES", "MGC"):
+                    if source == instrument:
+                        continue
+                    src_result = con.execute(
+                        """SELECT atr_20_pct FROM daily_features
+                           WHERE symbol = ? AND orb_minutes = 5 AND atr_20_pct IS NOT NULL
+                           ORDER BY trading_day DESC LIMIT 1""",
+                        [source],
+                    ).fetchone()
+                    if src_result and src_result[0] is not None:
+                        row[f"cross_atr_{source}_pct"] = float(src_result[0])
             finally:
                 con.close()
         except RuntimeError:
