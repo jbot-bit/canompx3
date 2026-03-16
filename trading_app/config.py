@@ -847,6 +847,9 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
         filters["DIR_LONG"] = DIR_LONG
     # Cross-asset ATR filters for MNQ US sessions (Mar 2026 vol-regime research).
     # WF-validated: MES ATR regime predicts MNQ breakout quality at US sessions.
+    # Selection: sessions whose timing overlaps US equity trading hours. Excludes
+    # CME_REOPEN (evening), Asia/London sessions (no US equity overlap).
+    # Review this set when adding new US-hours sessions.
     # @research-source research/research_vol_regime_filter.py
     if instrument == "MNQ":
         _cross_asset_sessions = {
