@@ -45,8 +45,8 @@ class OrderResult:
 
 
 class TradovateOrderRouter(BrokerRouter):
-    def __init__(self, account_id: int, auth: BrokerAuth | None, demo: bool = True):
-        super().__init__(account_id, auth)
+    def __init__(self, account_id: int, auth: BrokerAuth | None, demo: bool = True, **kwargs):
+        super().__init__(account_id, auth, **kwargs)
         self.base = DEMO_BASE if demo else LIVE_BASE
 
     def build_order_spec(

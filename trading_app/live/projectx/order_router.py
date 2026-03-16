@@ -2,6 +2,7 @@
 
 Order types: 1=Limit, 2=Market, 4=Stop, 5=TrailingStop
 Sides: 0=Bid (buy), 1=Ask (sell)
+Bracket: stopLossBracket/takeProfitBracket fields on entry order (ticks from fill).
 """
 
 import logging
@@ -16,8 +17,11 @@ log = logging.getLogger(__name__)
 
 
 class ProjectXOrderRouter(BrokerRouter):
-    def __init__(self, account_id: int, auth: BrokerAuth | None, **kwargs):
+    def __init__(self, account_id: int, auth: BrokerAuth | None, tick_size: float = 0.10, **kwargs):
         super().__init__(account_id, auth, **kwargs)
+        if tick_size <= 0:
+            raise ValueError(f"tick_size must be positive, got {tick_size}")
+        self.tick_size = tick_size
 
     def build_order_spec(
         self,
@@ -74,11 +78,14 @@ class ProjectXOrderRouter(BrokerRouter):
         fill_price = data.get("fillPrice")
         if fill_price is None:
             fill_price = data.get("averagePrice")
+
+        has_bracket = "stopLossBracket" in spec or "takeProfitBracket" in spec
         log.info(
-            "ProjectX order placed: side=%d type=%d qty=%d -> orderId=%d (%.0fms)",
+            "ProjectX order placed: side=%d type=%d qty=%d bracket=%s -> orderId=%d (%.0fms)",
             spec.get("side", -1),
             spec.get("type", -1),
             spec.get("size", 0),
+            has_bracket,
             order_id,
             elapsed_ms,
         )
@@ -124,29 +131,22 @@ class ProjectXOrderRouter(BrokerRouter):
         target_price: float,
         qty: int = 1,
     ) -> dict | None:
-        """Build OCO bracket (stop + limit target) for ProjectX."""
-        # Stop side: reverse direction to close position
-        stop_side = 1 if direction == "long" else 0
-        target_side = stop_side  # same side for close
+        """Build bracket fields for ProjectX native bracket order.
+
+        Returns stopLossBracket/takeProfitBracket dicts with tick offsets.
+        These get merged into the entry order spec via merge_bracket_into_entry().
+        """
+        stop_ticks = max(1, round(abs(entry_price - stop_price) / self.tick_size))
+        target_ticks = max(1, round(abs(target_price - entry_price) / self.tick_size))
 
         return {
-            "accountId": self.account_id,
-            "contractId": symbol,
-            "orders": [
-                {
-                    "type": 4,  # Stop
-                    "side": stop_side,
-                    "size": qty,
-                    "stopPrice": stop_price,
-                },
-                {
-                    "type": 1,  # Limit
-                    "side": target_side,
-                    "size": qty,
-                    "price": target_price,
-                },
-            ],
+            "stopLossBracket": {"ticks": stop_ticks, "type": 4},
+            "takeProfitBracket": {"ticks": target_ticks, "type": 1},
         }
+
+    def merge_bracket_into_entry(self, entry_spec: dict, bracket_spec: dict) -> dict:
+        """Attach bracket fields to entry order for atomic submission."""
+        return {**entry_spec, **bracket_spec}
 
     def query_order_status(self, order_id: int) -> dict:
         """Query order status from ProjectX REST API."""

@@ -109,6 +109,10 @@ class BrokerRouter(ABC):
         """Build OCO bracket (stop + target). Returns None if not supported."""
         return None
 
+    def merge_bracket_into_entry(self, entry_spec: dict, bracket_spec: dict) -> dict:
+        """Merge bracket fields into entry spec for atomic submission. Default: no-op."""
+        return entry_spec
+
     def query_order_status(self, order_id: int) -> dict:
         """Query order status. Returns {order_id, status, fill_price}.
 

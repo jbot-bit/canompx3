@@ -192,3 +192,185 @@ def test_px_query_fill_price_zero_not_falsy():
         mock_req.get.return_value = _px_mock_resp({"status": "Filled", "fillPrice": 0.0, "averagePrice": 2011.0})
         result = router.query_order_status(99)
     assert result["fill_price"] == 0.0
+
+
+# ---- Bracket order tests (native atomic brackets) ----
+
+
+def test_px_bracket_spec_format_mgc():
+    """build_bracket_spec returns stopLossBracket/takeProfitBracket with tick offsets."""
+    from trading_app.live.projectx.order_router import ProjectXOrderRouter
+
+    router = ProjectXOrderRouter(account_id=1, auth=_px_auth(), tick_size=0.10)  # MGC
+    spec = router.build_bracket_spec(
+        direction="long",
+        symbol="CON.F.US.MGC.M26",
+        entry_price=2950.0,
+        stop_price=2940.0,  # 10 pts = 100 ticks
+        target_price=2970.0,  # 20 pts = 200 ticks
+    )
+    assert spec is not None
+    assert spec["stopLossBracket"] == {"ticks": 100, "type": 4}
+    assert spec["takeProfitBracket"] == {"ticks": 200, "type": 1}
+    # No accountId or orders array — just bracket fields
+    assert "accountId" not in spec
+    assert "orders" not in spec
+
+
+def test_px_bracket_spec_format_mnq():
+    """Tick calculation with MNQ tick_size=0.25."""
+    from trading_app.live.projectx.order_router import ProjectXOrderRouter
+
+    router = ProjectXOrderRouter(account_id=1, auth=_px_auth(), tick_size=0.25)  # MNQ
+    spec = router.build_bracket_spec(
+        direction="short",
+        symbol="CON.F.US.MNQ.M26",
+        entry_price=21000.0,
+        stop_price=21010.0,  # 10 pts = 40 ticks
+        target_price=20980.0,  # 20 pts = 80 ticks
+    )
+    assert spec is not None
+    assert spec["stopLossBracket"] == {"ticks": 40, "type": 4}
+    assert spec["takeProfitBracket"] == {"ticks": 80, "type": 1}
+
+
+def test_px_bracket_tick_min_clamp():
+    """Bracket ticks never go below 1 (minimum 1 tick)."""
+    from trading_app.live.projectx.order_router import ProjectXOrderRouter
+
+    router = ProjectXOrderRouter(account_id=1, auth=_px_auth(), tick_size=0.10)
+    spec = router.build_bracket_spec(
+        direction="long",
+        symbol="TEST",
+        entry_price=100.0,
+        stop_price=99.999,  # < 1 tick → clamp to 1
+        target_price=100.001,  # < 1 tick → clamp to 1
+    )
+    assert spec["stopLossBracket"]["ticks"] >= 1
+    assert spec["takeProfitBracket"]["ticks"] >= 1
+
+
+def test_px_bracket_tick_rounding():
+    """Tick calculation rounds to nearest integer."""
+    from trading_app.live.projectx.order_router import ProjectXOrderRouter
+
+    router = ProjectXOrderRouter(account_id=1, auth=_px_auth(), tick_size=0.25)
+    spec = router.build_bracket_spec(
+        direction="long",
+        symbol="TEST",
+        entry_price=100.0,
+        stop_price=98.60,  # 1.40 / 0.25 = 5.6 → rounds to 6
+        target_price=102.90,  # 2.90 / 0.25 = 11.6 → rounds to 12
+    )
+    assert spec["stopLossBracket"]["ticks"] == 6
+    assert spec["takeProfitBracket"]["ticks"] == 12
+
+
+def test_px_merge_bracket_into_entry():
+    """merge_bracket_into_entry produces combined payload for atomic submission."""
+    from trading_app.live.projectx.order_router import ProjectXOrderRouter
+
+    router = ProjectXOrderRouter(account_id=123, auth=_px_auth(), tick_size=0.10)
+    entry_spec = {
+        "accountId": 123,
+        "contractId": "CON.F.US.MGC.M26",
+        "type": 4,
+        "side": 0,
+        "size": 1,
+        "stopPrice": 2950.0,
+    }
+    bracket_spec = {
+        "stopLossBracket": {"ticks": 100, "type": 4},
+        "takeProfitBracket": {"ticks": 200, "type": 1},
+    }
+    combined = router.merge_bracket_into_entry(entry_spec, bracket_spec)
+    # All entry fields preserved
+    assert combined["accountId"] == 123
+    assert combined["type"] == 4
+    assert combined["stopPrice"] == 2950.0
+    # Bracket fields attached
+    assert combined["stopLossBracket"] == {"ticks": 100, "type": 4}
+    assert combined["takeProfitBracket"] == {"ticks": 200, "type": 1}
+    # Original entry_spec not mutated
+    assert "stopLossBracket" not in entry_spec
+
+
+def test_px_submit_combined_bracket_entry():
+    """Submit with bracket fields sends correct combined payload to API."""
+    from trading_app.live.projectx.order_router import ProjectXOrderRouter
+
+    router = ProjectXOrderRouter(account_id=123, auth=_px_auth(), tick_size=0.10)
+    entry_spec = router.build_order_spec("long", "E2", 2950.0, "CON.F.US.MGC.M26", qty=1)
+    bracket = router.build_bracket_spec("long", "CON.F.US.MGC.M26", 2950.0, 2940.0, 2970.0)
+    combined = router.merge_bracket_into_entry(entry_spec, bracket)
+
+    with patch("trading_app.live.projectx.order_router.requests") as mock_req:
+        mock_req.post.return_value = _px_mock_resp({"success": True, "orderId": 5001, "fillPrice": 2950.1})
+        result = router.submit(combined)
+
+    assert result["order_id"] == 5001
+    assert result["fill_price"] == 2950.1
+    # Verify the payload sent to the API
+    call_body = mock_req.post.call_args[1]["json"]
+    assert call_body["type"] == 4  # Stop entry
+    assert call_body["stopPrice"] == 2950.0
+    assert call_body["stopLossBracket"] == {"ticks": 100, "type": 4}
+    assert call_body["takeProfitBracket"] == {"ticks": 200, "type": 1}
+
+
+def test_px_bracket_short_direction():
+    """Bracket tick calculation is symmetric for short direction."""
+    from trading_app.live.projectx.order_router import ProjectXOrderRouter
+
+    router = ProjectXOrderRouter(account_id=1, auth=_px_auth(), tick_size=0.10)
+    # Short: entry=2950, stop=2960 (above), target=2930 (below)
+    spec = router.build_bracket_spec(
+        direction="short",
+        symbol="CON.F.US.MGC.M26",
+        entry_price=2950.0,
+        stop_price=2960.0,
+        target_price=2930.0,
+    )
+    assert spec["stopLossBracket"]["ticks"] == 100  # abs(2950 - 2960) / 0.10
+    assert spec["takeProfitBracket"]["ticks"] == 200  # abs(2930 - 2950) / 0.10
+
+
+def test_px_tick_size_validation():
+    """Router rejects non-positive tick_size."""
+    import pytest
+
+    from trading_app.live.projectx.order_router import ProjectXOrderRouter
+
+    with pytest.raises(ValueError, match="tick_size must be positive"):
+        ProjectXOrderRouter(account_id=1, auth=_px_auth(), tick_size=0.0)
+    with pytest.raises(ValueError, match="tick_size must be positive"):
+        ProjectXOrderRouter(account_id=1, auth=_px_auth(), tick_size=-0.25)
+
+
+def test_px_base_merge_is_noop():
+    """BrokerRouter base class merge_bracket_into_entry is a no-op."""
+    from trading_app.live.broker_base import BrokerRouter
+
+    class StubRouter(BrokerRouter):
+        def build_order_spec(self, *a, **kw):
+            return {}
+
+        def submit(self, spec):
+            return {}
+
+        def build_exit_spec(self, *a, **kw):
+            return {}
+
+        def cancel(self, oid):
+            pass
+
+        def supports_native_brackets(self):
+            return False
+
+    router = StubRouter(account_id=1, auth=None)
+    entry = {"type": 2, "side": 0}
+    bracket = {"stopLossBracket": {"ticks": 10, "type": 4}}
+    result = router.merge_bracket_into_entry(entry, bracket)
+    # Base class returns entry unchanged — no bracket merged
+    assert result == {"type": 2, "side": 0}
+    assert "stopLossBracket" not in result
