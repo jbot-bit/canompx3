@@ -5,6 +5,16 @@
 
 ---
 
+## Iteration 107 — 2026-03-16
+- Phase: fix
+- Classification: [mechanical]
+- Target: research/research_vol_regime_switching.py:192,784
+- Finding: (1) VS-01–VS-04: 45 ruff violations (import sort, 4x unused loop vars, 40x extraneous f-string prefixes, unused os import) — partially applied in interrupted prior session, completed here; (2) VS-05: second hardcoded `IN ('E1','E2')` in load_data() SQL — not using ENTRY_MODELS variable; (3) VS-04: unused datetime import + hardcoded static date '2026-03-01' in output
+- Action: fixed load_data() SQL to use ENTRY_MODELS f-string expansion (matching get_validated_sessions fix); fixed markdown output date to use datetime.date.today().isoformat(); all ruff violations confirmed clean
+- Blast radius: 1 file, 0 production callers
+- Verification: ruff check PASS, check_drift.py PASS (72/72, 6 advisory)
+- Commit: 9c14df0
+
 ## Iteration 106 — 2026-03-16
 - Phase: fix
 - Classification: [mechanical]
