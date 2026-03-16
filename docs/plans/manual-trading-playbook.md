@@ -26,7 +26,7 @@ Maintenance rule:
 - Never promote an `UNRESOLVED` claim without adding or checking a current source.
 - If a sentence affects account selection, payout expectations, automation legality, or scaling, it must be mentally classified into one of these three buckets before editing.
 
-### Official Rule Snapshot To Underwrite Right Now
+### Firm Rule Snapshot (mixed evidence — read labels per entry)
 
 **Apex 50K EOD**
 - Treat as the current base vehicle for the main scaling lane.
@@ -40,7 +40,7 @@ Maintenance rule:
   - `https://support.apextraderfunding.com/hc/en-us/articles/31519788944411-Performance-Account-PA-and-Compliance`
   - `https://support.apextraderfunding.com/hc/en-us/articles/4404875002139-What-are-the-Consistency-Rules-For-PA-and-Funded-Accounts`
 
-**Topstep 50K Express Funded**
+**Topstep 50K Express Funded** `UNRESOLVED` — local assumptions, not re-verified this cycle
 - Treat as the cleanest MGC / morning alternative when you want a second firm.
 - Current local underwriting assumptions remain: `5 Express + 1 Live` account cap, `50 micro` cap on `50K`, flat by `3:10 PM CT`, and `90/10` payout structure on current accounts.
 - Use Topstep for the morning MGC lane and not as the main overnight scaling vehicle.
@@ -48,7 +48,7 @@ Maintenance rule:
   - `https://help.topstep.com/en/articles/10799569-xfa-faq`
   - `https://help.topstep.com/en/articles/9208217-topstep-pricing`
 
-**Tradeify 50K**
+**Tradeify 50K** `UNRESOLVED` — local assumptions, not re-verified this cycle
 - Treat as the best non-Apex secondary firm in current local modeling.
 - Current local planning assumptions still favor it as the clean external diversification lane, but this turn did not re-verify every payout / copier detail from Tradeify support.
 - Use the current local conclusion operationally only after checking the live Tradeify help pages you are actually signing up under.
@@ -87,7 +87,7 @@ Hard stops. If ANY line fails, do NOT trade that session.
 [ ] Account is funded and active (not in eval, not suspended)
 [ ] No open position on this instrument on this account
 [ ] Checked firm's status page — no maintenance, no rule changes
-[ ] No news restrictions apply (Apex/TopStep/Tradeify have none; if ever using MFFU, check T1 calendar)
+[ ] No news restrictions apply (Apex: `OFFICIAL RULE` per compliance page; TopStep/Tradeify: `UNRESOLVED` — believed true, not re-verified this cycle; if ever using MFFU, check T1 calendar)
 [ ] ORB has fully formed (waited full 5m or 15m — no early entries)
 [ ] Filter passes (size >= threshold, CONT/NOMON/FAST10 if applicable)
 [ ] ORB gate passes (MGC on TopStep: ORB <= 26 points)
@@ -565,7 +565,7 @@ This is driven by firm constraints, not preference:
 | TopStep close by 3:10 PM CT | `UNRESOLVED` — believed correct, not sourced this cycle | No CME_PRECLOSE (5:45am Bris) on TopStep |
 | TopStep max 5+1 accounts | `UNRESOLVED` — from prior planning, not re-verified | Not the main scaling vehicle |
 | Tradeify max 5 accounts | `UNRESOLVED` — playbook says "did not re-verify" | Secondary diversification, not scaling |
-| Apex max 20 accounts | `OFFICIAL RULE` — sourced in Official Rule Snapshot | Primary scaling vehicle |
+| Apex max 20 accounts | `OFFICIAL RULE` — sourced in Firm Rule Snapshot | Primary scaling vehicle |
 | MFFU unresolved / not re-verified | `UNRESOLVED` | Do not use as a primary lane without a fresh rules pass |
 
 **Practical assignments:**
@@ -1039,7 +1039,7 @@ Every 3 months, do a full system review. This is the "step back and look at ever
 
 1. **Backtest refresh:** Re-run `python scripts/tools/pipeline_status.py --status` to check data freshness. If bars are stale, rebuild.
 2. **Strategy re-validation:** Run `/validate-instrument` on all active instruments. Check for new validated strategies that should be in the grid.
-3. **Firm rules audit:** Visit each firm's official support pages. Check for DD changes, fee changes, account limit changes, instrument eligibility changes. Update the Official Rule Snapshot at the top of this file.
+3. **Firm rules audit:** Visit each firm's official support pages. Check for DD changes, fee changes, account limit changes, instrument eligibility changes. Update the Firm Rule Snapshot at the top of this file.
 4. **Sim re-run:** Re-run the survival sim (`scripts/tmp_prop_firm_proper_pass.py`) with current data + current rules. If survival on any active pair drops below 95%, reduce micros or swap strategy.
 5. **Concentration review:** What % of total income comes from the primary pair? The primary firm? If >80% either, plan Tier 2/3 diversification.
 6. **Playbook version bump:** If anything material changed, update the version at the top and add to the change log.
@@ -1054,5 +1054,5 @@ Every 3 months, do a full system review. This is the "step back and look at ever
 | 2026-03-16 | Added evidence taxonomy (OFFICIAL RULE / LOCAL MODEL / UNRESOLVED) | PROCESS | Codex |
 | 2026-03-16 | Added operational edge cases, journal, streak protocol, platform setup | LOCAL MODEL | Claude |
 | 2026-03-16 | Added pre-trade checklist, capital limits, red lines, change control | PROCESS | Claude |
-| 2026-03-16 | Code review fixes: SINGAPORE/LONDON aperture 15m→5m, CME_REOPEN DST, stats corrected, streak table recalculated, stop formula clarified, Phase 1→2 transition added | LOCAL MODEL | Claude (reviewer) |
-| 2026-03-16 | Evidence audit: fixed SINGAPORE/LONDON aperture back to 15m (Codex had reverted to 5m), added inline LOCAL MODEL/OFFICIAL RULE/UNRESOLVED labels to all sim tables + firm constraint table + platform setup. Flagged 6 UNRESOLVED firm claims (TopStep 3:10PM, TopStep 5+1 accounts, Tradeify 5 accounts, TopStep automation policy, Apex $160 fee, Tradeify Select Flex). Updated MEMORY.md firm table with evidence column. | PROCESS | Claude (auditor) |
+| 2026-03-16 | Code review: CME_REOPEN DST corrected, stats corrected, streak table recalculated, stop formula clarified, Phase 1→2 transition added. NOTE: SINGAPORE/LONDON aperture was incorrectly set to 5m in this pass (should be 15m per validated_setups). | LOCAL MODEL | Codex (reviewer) |
+| 2026-03-16 | Evidence audit: restored SINGAPORE/LONDON aperture to 15m (validated ORB_G8=15m, ORB_G6_NOMON=15m per gold.db). Added inline LOCAL MODEL/OFFICIAL RULE/UNRESOLVED labels. Flagged 6 UNRESOLVED firm claims. Relabeled section header from "Official Rule Snapshot" to "Firm Rule Snapshot" to avoid over-trust of unverified items. Fixed pre-trade checklist news restriction claim to label TopStep/Tradeify as UNRESOLVED. | PROCESS | Claude (auditor) |
