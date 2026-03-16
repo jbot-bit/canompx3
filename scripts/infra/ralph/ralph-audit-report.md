@@ -24,7 +24,7 @@ Commit count at time of audit: 119 (branch: main)
 
 1. **brisbane_1025_brisbane naming** — awkward function name in dst.py:315. Cosmetic rename.
 2. **5m bars dry-run: use `time_bucket()`** — consistency improvement vs `EPOCH/300`.
-3. **Threshold sweep documentation** — document ~36-value sweep multiple-testing trade-off in meta_label.py docstring.
+3. ~~**Threshold sweep documentation** — document ~36-value sweep multiple-testing trade-off in meta_label.py docstring.~~ **DONE 2026-03-16** — added Multiple-testing note to `_optimize_threshold_profit` docstring.
 4. **Feature drift detection expansion** — extend from top-10 to top-20 MDI features for broader drift coverage.
 5. **Column drop transparency** — surface dropped non-numeric columns in evaluate.py return dict.
 

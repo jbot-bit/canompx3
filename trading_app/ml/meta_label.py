@@ -144,6 +144,15 @@ def _optimize_threshold_profit(
     Called on the VALIDATION set (middle 20%) — never on the test set.
     Honest OOS evaluation happens separately on the frozen test set.
 
+    Multiple-testing note: sweeps thresholds from THRESHOLD_MIN to
+    THRESHOLD_MAX in steps of THRESHOLD_STEP (~36 candidates). Selecting
+    best-of-N on a finite validation set introduces mild selection bias —
+    the chosen threshold may not be optimal out-of-sample. Mitigation: 4
+    OOS quality gates applied on the frozen test set gate downstream model
+    acceptance (delta_r >= 0, CPCV AUC >= 0.50, test AUC >= 0.52,
+    skip_pct <= 0.85). The test set is NEVER used during optimization.
+    See train_per_session_meta_label for gate implementation.
+
     Args:
         min_kept: Minimum trades to keep at a threshold. Caller should set
             this to max(50, int(n_val * 0.15)) to prevent overfitting
