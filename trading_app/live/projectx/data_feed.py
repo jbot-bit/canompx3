@@ -226,18 +226,41 @@ class ProjectXDataFeed(BrokerFeed):
                 # Start async consumer for bars from sync callbacks
                 drain_task = asyncio.create_task(self._drain_bar_queue())
                 try:
-                    # Block until stop file
                     while not _STOP_FILE.exists():
                         await asyncio.sleep(2.5)
                         self.auth.refresh_if_needed()
+                        # Liveness check (same logic as pysignalr watcher)
+                        if self._last_data_at is not None:
+                            gap = (datetime.now(UTC) - self._last_data_at).total_seconds()
+                            if gap > _STALE_TIMEOUT:
+                                self._stale_count += 1
+                                log.warning(
+                                    "LIVENESS: %.0fs since last data (%d quotes, stale %d/%d)",
+                                    gap, self._quote_count, self._stale_count, _MAX_STALE_BEFORE_RECONNECT,
+                                )
+                                if self.on_stale is not None:
+                                    try:
+                                        self.on_stale(gap, self._stale_count)
+                                    except Exception:
+                                        log.exception("on_stale callback error")
+                                if self._stale_count >= _MAX_STALE_BEFORE_RECONNECT:
+                                    log.critical("FEED STALE: forcing reconnect (signalrcore)")
+                                    hub.stop()
+                                    self._stale_count = 0
+                                    self._last_data_at = None
+                                    break  # break inner loop → reconnect via outer loop
+                            else:
+                                self._stale_count = 0
+                    else:
+                        # while condition was False — stop file detected
+                        log.info("Stop file detected — shutting down")
+                        hub.stop()
+                        return
                 finally:
                     drain_task.cancel()
 
-                log.info("Stop file detected — shutting down")
-                # Don't delete stop file here — let the runner delete it
-                # after ALL feeds have exited (multi-instrument safe).
-                hub.stop()
-                return
+                # If we broke out of the while (stale), continue to reconnect
+                continue
 
             except ImportError:
                 raise
