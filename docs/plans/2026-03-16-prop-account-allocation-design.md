@@ -1,314 +1,234 @@
 # Prop Account Allocation Design
 
-**Status:** DRAFT — iterating before implementation
+**Status:** V3 — corrected after codex institutional review + proper sim pass
 **Date:** 2026-03-16
-**Purpose:** Assign strategies to prop firm accounts for maximum net income with clean per-account tracking
+**Purpose:** Scale validated ORB edge to $100K/year via copy-traded prop firm account stacks
 
 ---
 
-## Firms & Rules (Verified March 2026)
+## Core Thesis
 
-| Rule | TopStep $50K | Apex $50K | MFFU Rapid $50K |
-|------|-------------|-----------|-----------------|
-| Trailing DD | $2,000 (EOD) | $2,500 (real-time) | $2,000 (intraday) |
-| DD locks? | No (always trails) | Yes at $50,100 | Yes at starting balance |
-| Daily loss limit | Optional (you set it) | None | None |
-| Consistency rule | Combine only, not funded | None | None |
-| News restriction | None | None | T1 only (~40 days/yr) |
-| Max accounts | 5 Express + 1 Live | 20 | Unknown |
-| Contract limit (50K) | 50 micros | 5 micros (10 after $52,600) | Scaling (micro) |
-| Close-by time | 3:10 PM CT | Session close | Session close |
-| Profit split | 90/10 | 100% (legacy PAs) | 90/10 |
-| Monthly fee | ~$49 | ~$37 | $129 |
-| Copy trading | Yes (own accounts) | Yes | Yes (funded) |
-| Auto trading | Yes (API/ProjectX) | Yes (Tradovate) | Yes (since Jul 2025) |
+The edge is real. The question is scaling it. Single-account optimization was the wrong lens — the answer is **account stacking via copy trading.**
 
-### T1 News Events (MFFU only)
-Must be flat 2 minutes before and after: FOMC, FOMC Minutes, Employment/NFP, CPI.
-That's ~40 event days/year. Sessions at risk: COMEX_SETTLE (3:30am Bris ≈ 1:30pm ET, near FOMC 2pm ET).
+**$100K/year = 20 Apex EOD 50K accounts × 2 micros × best all-hours pair**
 
-### TopStep 3:10 PM CT Close
-Positions must be flat by 3:10 PM CT (≈5:10-6:10 AM Brisbane depending on DST).
-Sessions at risk: CME_PRECLOSE (5:45am), NYSE_CLOSE (6:00am).
+---
 
-### Apex Safety Net
-DD trails real-time until peak unrealized balance hits $52,600. Then floor locks at $50,100 forever.
-Danger zone: first ~2 weeks until $2,600 profit accumulated. After lock, account is nearly unkillable.
+## Firms & Rules (Current March 2026)
+
+| Rule | TopStep $50K | Apex EOD $50K | Apex Intraday $50K | Tradeify $50K | MFFU Rapid $50K |
+|------|-------------|---------------|--------------------|--------------|-----------------|
+| **Trailing DD** | $2,000 (EOD) | $2,000 (EOD) | $2,000 (real-time) | $2,000 (EOD) | $2,000 (intraday) |
+| **DD locks?** | No | Yes at +$2,100 | Yes at +$2,100 | Yes at $50,100 | Yes at starting |
+| **Daily loss limit** | Optional | None | None | None | None |
+| **Consistency (funded)** | None | None | None | None (Select Flex) | 40% (Core) / None (Rapid) |
+| **News restriction** | None | None | None | None | T1: FOMC/NFP/CPI |
+| **Max accounts** | **5 Express + 1 Live** | **20** | **20** | **5** | Unknown |
+| **Contract limit** | 50 micros | 4 mini / 40 micro | 4 mini / 40 micro | 4 mini / 40 micro | Scaling |
+| **Close-by time** | 3:10 PM CT | Session close | Session close | 4:59 PM ET | Session close |
+| **Profit split** | 90/10 | 100% first $25K, 90/10 | 100% first $25K, 90/10 | 90/10 | 90/10 |
+| **Fee after funded** | **$0** | **$0** (lifetime $160) | **$0** (lifetime) | **$0** | **$129/month FOREVER** |
+| **Copy trading** | Yes (own accts) | Yes | Yes | Yes (5 accts) | Yes |
+| **Auto trading** | Yes (TopstepX API) | Yes (Tradovate) | Yes (Tradovate) | Yes (own bots) | Yes |
+| **Metals (MGC)** | Yes | **BANNED** | **BANNED** | Yes | Yes |
+
+### Key Corrections (from codex review)
+- Apex legacy products ($2,500 DD) **discontinued March 1, 2026**. Current is $2,000.
+- TopStep new accounts (after Jan 12, 2026): 90/10 split from start (not 100% first $10K).
+- MFFU: $129/month never stops. No lifetime option. **Dead for this plan.**
+- Apex bans metals (MGC) — critical constraint for morning MGC strategies.
 
 Sources:
-- https://help.topstep.com/en/articles/8284204-what-is-the-maximum-loss-limit
-- https://help.topstep.com/en/articles/8284215-express-funded-account-parameters
-- https://support.apextraderfunding.com/hc/en-us/articles/40463582041371-Trailing-Drawdown-Rule
-- https://help.myfundedfutures.com/en/articles/8230009-news-trading-policy
-- https://www.proptradingvibes.com/blog/myfundedfutures-rules-overview
+- https://support.apextraderfunding.com/hc/en-us/articles/47204516592795-EOD-Performance-Accounts-PA
+- https://support.apextraderfunding.com/hc/en-us/articles/47206242141979-Intraday-Trailing-Drawdown-Performance-Accounts-PA
+- https://support.apextraderfunding.com/hc/en-us/articles/42526785111699-Legacy-Products-Overview
+- https://help.topstep.com/en/articles/10799569-xfa-faq
+- https://help.topstep.com/en/articles/9208217-topstep-pricing
+- https://help.tradeify.co/en/articles/10495897-rules-trailing-max-drawdowns
 
 ---
 
-## Strategy Ranking (Real Data)
+## Firm Ranking for Scale
 
-All 30 prop-book strategies ranked by expected $/month at 1 contract, 0.75x stop.
-Expected $/month = median_risk_dollars × ExpR × trades_per_month (2024+ data from gold.db).
-
-| # | Session | Inst | ORB | RR | Filter | ExpR | WR | Med$ | Tr/mo | E$/mo | Manual? |
-|---|---------|------|-----|-----|--------|------|----|------|-------|-------|---------|
-| 1 | CME_PRECLOSE | MNQ | 15m | 1.0 | VOL_RV12_N20 | 0.266 | 60% | $76 | 13.1 | $264 | AUTO |
-| 2 | NYSE_OPEN | MNQ | 5m | 1.5 | VOL_RV12_N20 | 0.132 | 40% | $84 | 18.7 | $208 | YES |
-| 3 | US_DATA_1000 | MNQ | 5m | 1.0 | VOL_RV12_N20 | 0.149 | 54% | $66 | 18.7 | $185 | AUTO |
-| 4 | CME_REOPEN | MGC | 5m | 1.5 | ORB_G4_FAST10 | 0.365 | 54% | $57 | 5.9 | $123 | YES |
-| 5 | LONDON_METALS | MNQ | 30m | 3.0 | ORB_G6_NOMON | 0.112 | 24% | $59 | 18.5 | $122 | YES |
-| 6 | SINGAPORE_OPEN | MNQ | 30m | 3.0 | DIR_LONG | 0.155 | 26% | $38 | 18.5 | $108 | YES |
-| 7 | COMEX_SETTLE | MNQ | 5m | 2.5 | VOL_RV12_N20 | 0.181 | 31% | $33 | 17.9 | $106 | AUTO |
-| 8 | TOKYO_OPEN | MGC | 15m | 2.0 | ORB_G5_FAST10 | 0.189 | 37% | $69 | 7.0 | $91 | YES |
-| 9 | SINGAPORE_OPEN | MGC | 5m | 3.0 | ORB_G5 | 0.179 | 27% | $66 | 6.6 | $79 | YES |
-| 10 | EUROPE_FLOW | MNQ | 5m | 1.0 | VOL_RV12_N20 | 0.144 | 57% | $25 | 18.7 | $68 | YES |
-| 11 | TOKYO_OPEN | MGC | 5m | 3.0 | ORB_G5 | 0.298 | 30% | $59 | 3.8 | $66 | YES |
-| 12 | BRISBANE_1025 | MNQ | 5m | 4.0 | ORB_G6 | 0.123 | 21% | $19 | 14.7 | $35 | YES |
-| 13 | NYSE_CLOSE | MES | 15m | 1.0 | VOL_RV12_N20 | 0.070 | 54% | $25 | 10.6 | $18 | AUTO |
-
-Manual trading hours: 7am-midnight Brisbane.
-AUTO sessions: US_DATA_1000 (midnight), COMEX_SETTLE (3:30am), CME_PRECLOSE (5:45am), NYSE_CLOSE (6am).
+| Rank | Firm | Why | Best For |
+|------|------|-----|----------|
+| 1 | **Apex EOD** | 20 accounts, copy trading, $0 after funded, EOD trailing | Main scaling vehicle |
+| 2 | **Tradeify** | $0 fees, EOD trailing, clean rules, auto allowed | Secondary diversification (5 acct cap) |
+| 3 | **TopStep** | Best for MGC (Apex bans metals), EOD trailing, API | Morning MGC lane |
+| 4 | **MFFU** | — | **Dead.** $129/month forever kills economics |
 
 ---
 
-## Scenario A: Manual Only ($576/month net)
+## Strategy Selection
 
-No auto-execution. Only sessions tradeable while awake (7am-midnight Brisbane).
+### Sim Corrections Applied
+The original sim (tmp_prop_sim.py) had 7 bugs identified by codex review:
+1. ~~Legacy Apex DD $2,500~~ → corrected to $2,000
+2. ~~Naive 0.75x (scale losses only)~~ → corrected via `apply_tight_stop()` from config.py
+3. ~~No MFE-aware trailing~~ → Apex trails on peak unrealized, modeled via mfe_r
+4. ~~Combined metrics not matched-path~~ → fixed
+5. ~~Wrong day pool for TopStep~~ → uses full calendar including zero-trade days
+6. ~~2024+ claim but pulls 2020+~~ → made explicit
+7. ~~TopStep 100% first $10K~~ → corrected to 90/10 for new accounts
 
-### Account 1: TopStep $50K — "MGC Morning"
-| Time | Strategy | E$/mo | Med Risk | P95 Risk |
-|------|----------|-------|----------|----------|
-| 08:00 | CME_REOPEN MGC 5m E2 ORB_G4_FAST10 RR1.5 0.75x | $123 | $57 | $274 |
-| 10:00 | TOKYO_OPEN MGC 15m E1 ORB_G5_FAST10 RR2.0 0.75x | $91 | $69 | $187 |
+Corrected sim: `scripts/tmp_prop_sim_v2.py`. Codex proper pass: `scripts/tmp_prop_firm_proper_pass.py`.
 
-**Gross:** $214/mo | **Net:** $144/mo (90% split - $49 fee)
-**Why TopStep:** MGC has wide ORB variance ($32-$749). EOD trailing gives intraday breathing room on spiky gold mornings. Both sessions finish by noon — no 3:10 PM CT risk.
-**Max risk per trade:** 3.5% DD median, 13.7% DD at P95.
-**Co-occurrence:** Both fire only 13% of nights. Most nights = 0-1 trades.
-**Trade duration:** CME_REOPEN median 34min. TOKYO median 36min. 7.2% overlap risk.
+### Best Bundles by Firm (from corrected sims)
 
-### Account 2: Apex $50K #1 — "MNQ Night+Evening"
-| Time | Strategy | E$/mo | Med Risk | P95 Risk |
-|------|----------|-------|----------|----------|
-| 23:30 | NYSE_OPEN MNQ 5m E2 VOL_RV12_N20 RR1.5 0.75x | $208 | $84 | $177 |
-| 18:00 | LONDON_METALS MNQ 30m E2 ORB_G6_NOMON RR3.0 0.75x | $122 | $59 | $146 |
+**Apex EOD 50K (scaling vehicle):**
+- Best all-hours pair: MNQ CME_PRECLOSE + MNQ COMEX_SETTLE
+- ~$214/mo at 1 micro, ~$423/mo at 2 micros, ~99.7% survival at 2 micros
+- Both are overnight AUTO sessions
 
-**Gross:** $330/mo | **Net:** $293/mo (100% split - $37 fee)
-**Why Apex:** Top E$/mo session. 100% payout. DD locks at $50,100 after ~$2,600 profit.
-**Max risk per trade:** 3.4% DD median, 7.1% DD at P95.
-**Co-occurrence:** Different time blocks (6pm vs 11:30pm) — no overlap.
+**TopStep (morning MGC lane):**
+- Best manual morning pair: MGC CME_REOPEN ORB_G5 + MGC TOKYO_OPEN ORB_G6_CONT_S075
+- ~$61/mo at 1 micro, 100% survival
+- ORB gate mandatory: skip if MGC ORB > 26 points
 
-### Account 3: Apex $50K #2 — "MNQ Day Sessions"
-| Time | Strategy | E$/mo | Med Risk | P95 Risk |
-|------|----------|-------|----------|----------|
-| 11:00 | SINGAPORE_OPEN MNQ 30m E2 DIR_LONG RR3.0 0.75x | $108 | $38 | $123 |
-| 17:00 | EUROPE_FLOW MNQ 5m E2 VOL_RV12_N20 RR1.0 0.75x | $68 | $25 | $59 |
+**Tradeify (secondary):**
+- Same equity pairs as Apex (MES/MNQ), or MGC morning if metals allowed
+- ~$33-57/mo at 1 micro depending on pair
 
-**Gross:** $176/mo | **Net:** $139/mo (100% split - $37 fee)
-**Why Apex not MFFU:** Same pair on MFFU Rapid ($129 fee, 90% split) = $29/month net. On Apex ($37 fee, 100% split) = $139/month net. Apex is strictly better for manual.
-**Max risk per trade:** 1.5% DD median, 4.9% DD at P95. Lowest risk account.
+**Apex (morning fallback, no metals):**
+- Best non-MGC morning pair: MES TOKYO_OPEN ORB_G6_CONT + MNQ CME_REOPEN VOL_RV12_N20
+- ~$36/mo at 1 micro, 100% survival
 
-### Why Not MFFU for Manual?
-MFFU Rapid costs $129/month with 90% split. For the SINGAPORE+EUROPE pair:
-- MFFU net: $176 × 0.90 - $129 = **$29/month**
-- Apex net: $176 × 1.00 - $37 = **$139/month**
-
-MFFU only makes economic sense when gross income justifies the fee (>$500/month = overnight auto).
+### 0.75x vs 1.0x Stop
+**0.75x is definitively better for prop.** Every strategy survives better. The win-kill rate (15-25% of 1.0x wins killed by tighter stop) is offset by 25% smaller losses. Net effect: survival improves +6-16% per account, income drops $20-60/month. On prop where DD = death, survival wins.
 
 ---
 
-## Scenario B: With Auto-Execution ($928/month net)
+## Income Plans
 
-Same 3 manual accounts PLUS overnight auto:
+### Plan A: $100K/year (Realistic)
+- **Apex EOD 50K × 20 accounts × 2 micros**
+- Best all-hours pair (CME_PRECLOSE + COMEX_SETTLE)
+- Copy-traded: same execution effort as 1 account
+- ~$423/mo per account × 20 = **~$8,460/month = ~$101K/year**
+- Upfront: 20 × ($35 eval + $160 lifetime) = ~$3,900
+- Monthly ongoing: **$0**
+- **Requires: auto-execution for overnight sessions**
 
-### Account 4: MFFU Rapid $50K — "Overnight AUTO"
-| Time | Strategy | E$/mo | Med Risk | P95 Risk |
-|------|----------|-------|----------|----------|
-| 05:45 AUTO | CME_PRECLOSE MNQ 15m E2 VOL_RV12_N20 RR1.0 0.75x | $264 | $76 | $191 |
-| 03:30 AUTO | COMEX_SETTLE MNQ 5m E2 VOL_RV12_N20 RR2.5 0.75x | $106 | $33 | $92 |
+### Plan B: $200K/year (Achievable)
+- Same Apex stack at higher per-account sizing (if validated)
+- OR Apex 20 accounts + Tradeify 5 accounts + TopStep 5 accounts = 30 total
+- ~$16-17K/month across all
+- **Requires: proven live results + auto-execution**
 
-**Gross:** $370/mo | **Net:** $204/mo (90% split - $129 fee)
-**Why MFFU for overnight auto:** EOD trailing means a bad overnight trade doesn't kill you until end of day — you can wake up and manage. Apex's real-time trailing is dangerous when sleeping (can't monitor P&L).
-**T1 risk:** COMEX_SETTLE at 1:30pm ET is near FOMC (2pm ET). Skip COMEX on ~8 FOMC days/year.
-**CME_PRECLOSE:** 3:45pm ET — after all T1 releases. No conflict.
-**Trade duration:** CME_PRECLOSE resolves in median 4 minutes (!). COMEX median 23 minutes. 3.3% overlap.
+### Plan C: $100K/month (Moonshot)
+- Not supported by current validated edge as base case
+- Would require: larger account sizes, additional firm capacity, own capital + IBKR auto
+- Self-funded IBKR at 10-20c on $100K capital: sims show $112-225K/year
+- Stretch target, not current operating plan
 
-### Account 5: Apex $50K #3 — "Overnight AUTO"
-| Time | Strategy | E$/mo | Med Risk | P95 Risk |
-|------|----------|-------|----------|----------|
-| 00:00 AUTO | US_DATA_1000 MNQ 5m E2 VOL_RV12_N20 RR1.0 0.75x | $185 | $66 | $170 |
+---
 
-**Gross:** $185/mo | **Net:** $148/mo (100% split - $37 fee)
-**Why not MFFU:** US_DATA_1000 (midnight = 10am ET) could conflict with CPI (8:30am ET) — but CPI is actually before this session, so no real issue. However Apex has no restriction at all and 100% split.
-**Note:** 40% overlap with NYSE_OPEN (same account? no — NYSE is on Apex #1). If running independently, no issue.
+## Deployment Phases
 
-### Auto Execution Readiness
-Live infra exists (DataFeed → BarAgg → Engine → OrderRouter) but Mar 14 audit found:
-- 1 CRITICAL: no trade journal
-- 3 HIGH: pysignalr stop, webhook risk, exit retry
-- Test gaps
+### Phase 1: Prove It Live (Months 1-3)
+- **1-2 Apex EOD 50K accounts**, manual, 1 micro
+- Morning sessions you can trade while awake + NYSE at 11:30pm if willing
+- Goal: 2+ payouts, confirm backtest-to-live match
+- Expected: $200-400/month
+- Cost: $195-390 upfront, $0 ongoing
 
-**Recommendation:** Start Scenario A (manual). Fix auto infra. Deploy Scenario B after 2-3 months.
+### Phase 2: Scale Accounts (Months 3-6)
+- Copy-trade proven strategy to **5-10 Apex accounts**
+- Still 1 micro per account
+- Add TopStep for MGC morning lane (diversification)
+- Expected: $1,000-4,000/month
+- Cost: $195 per additional account
+
+### Phase 3: Scale Contracts (Months 6-9)
+- Move to **2 micros per account** on proven bundles
+- Only after survival confirmed at 1 micro
+- Expected: $4,000-8,500/month
+- Cost: $0 (same accounts, more contracts)
+
+### Phase 4: Full Stack + Auto (Months 9-12)
+- **20 Apex accounts × 2 micros**, auto-execution for overnight sessions
+- Add overnight sessions (CME_PRECLOSE, COMEX_SETTLE — the highest E$/mo strategies)
+- Expected: **$8,000-10,000/month** (~$100K/year)
+- Auto infra: ProjectX/Tradovate already built. Wire to Apex API.
+
+### Phase 5: Self-Funded (Month 12+)
+- ONLY after 3+ months of proven prop results
+- IBKR self-funded, $50-100K capital, 10-20c, all 9 sessions
+- No DD death, no trailing, no rules
+- Expected: $9,000-19,000/month ($112-225K/year)
+- Build IBKR broker integration (~700 lines, broker ABC pattern ready)
+
+---
+
+## Key Rules
+
+1. **0.75x stop on all prop accounts.** Non-negotiable. Survival > income.
+2. **ORB gate on MGC (TopStep).** Skip if ORB > 26 points (risk > $200).
+3. **Apex EOD, never Intraday.** EOD trailing = safer, especially overnight.
+4. **Always pick Apex lifetime fee.** $160 one-time vs $85-137/month. Break-even: 1.6 months.
+5. **Never MFFU.** $129/month forever = dead money.
+6. **Scale horizontally (more accounts), not vertically (more contracts).** 20 × 1c >> 1 × 20c.
+7. **Copy trade = same effort as 1 account.** The whole point of account stacking.
+8. **Prop first, capital later.** Prove the edge live before risking own money.
 
 ---
 
 ## Variable Risk Management
 
-### The ORB Changes Every Trade
-Dollar risk = ORB_size × point_value × 0.75 + commission. Not fixed.
-
-Real ORB size distributions (2024+, filtered trades only):
-
-| Session | Inst | Min$ | Median$ | P75$ | P95$ | Max$ |
-|---------|------|------|---------|------|------|------|
-| CME_REOPEN | MGC | $32 | $57 | $113 | $278 | $749 |
-| TOKYO_OPEN | MGC | $39 | $59 | $86 | $172 | $447 |
-| NYSE_OPEN | MNQ | $16 | $84 | $115 | $177 | $368 |
-| US_DATA_1000 | MNQ | $10 | $66 | $97 | $170 | $401 |
-| COMEX_SETTLE | MNQ | $10 | $33 | $48 | $93 | $534 |
-| CME_PRECLOSE | MNQ | $12 | $33 | $50 | $92 | $292 |
-| LONDON_METALS | MNQ | (TBD) | $59 | (TBD) | $146 | (TBD) |
-| SINGAPORE_OPEN | MNQ | (TBD) | $38 | (TBD) | $123 | (TBD) |
-| EUROPE_FLOW | MNQ | (TBD) | $25 | (TBD) | $59 | (TBD) |
+### ORB Size Distributions (0.75x stop, filtered trades, 2024+)
+| Session | Inst | Median$ | P75$ | P95$ | Max$ |
+|---------|------|---------|------|------|------|
+| CME_REOPEN | MGC | $57 | $113 | $278 | $749 |
+| TOKYO_OPEN | MGC | $59 | $86 | $172 | $447 |
+| NYSE_OPEN | MNQ | $84 | $115 | $177 | $368 |
+| US_DATA_1000 | MNQ | $66 | $97 | $170 | $401 |
+| COMEX_SETTLE | MNQ | $33 | $48 | $93 | $534 |
+| CME_PRECLOSE | MNQ | $33 | $50 | $92 | $292 |
+| SINGAPORE_OPEN | MNQ | $38 | (TBD) | $123 | (TBD) |
+| EUROPE_FLOW | MNQ | $25 | (TBD) | $59 | (TBD) |
+| LONDON_METALS | MNQ | $59 | (TBD) | $146 | (TBD) |
 
 ### Max Risk Per Trade Gate
-Institutional standard: no single trade > 10% of DD budget.
-
-| Account | DD | 10% Cap | Max ORB (pts) | Trades Skipped |
-|---------|-----|---------|---------------|----------------|
-| TopStep $50K | $2,000 | $200 | MGC 26.4 pts | 13% of CME_REOPEN |
-| Apex $50K | $2,500 | $250 | MNQ 166 pts | <2% |
-| MFFU $50K | $2,000 | $200 | MNQ 133 pts | <1% |
-
-**Only MGC CME_REOPEN needs the gate** (13% skip rate). MNQ at $2/point naturally stays under.
-
-**Rule:** Before entering, check ORB size. If ORB_size × point_value × 0.75 > 10% of DD budget, skip.
-
-### Trade Duration & Overlap Risk
-| Session pair | Gap | Overlap % | Risk |
-|-------------|-----|-----------|------|
-| CME_REOPEN → TOKYO_OPEN | 120 min | 7.2% | Low |
-| NYSE_OPEN → US_DATA_1000 | 30 min | 40.5% | HIGH — 2 concurrent MNQ 40% of nights |
-| COMEX_SETTLE → CME_PRECLOSE | 135 min | 3.3% | Low |
-
-### Co-occurrence (Both Strategies Fire Same Night)
-| Account | Both fire | One fires | Neither |
-|---------|-----------|-----------|---------|
-| TopStep (CME_REOPEN + TOKYO) | 13% | ~20% | ~67% |
-| Apex #1 (NYSE + LONDON) | independent | — | — |
-| Apex #2 (SINGAPORE + EUROPE) | independent | — | — |
-| MFFU (COMEX + CME_PRECLOSE) | 85% | ~0% | ~15% |
-| Apex #3 (US_DATA only) | — | 89% | 11% |
+Rule: ORB_size × point_value × 0.75 must be < 10% of DD budget.
+- Apex $50K ($2K DD): max $200 → MGC 26.4 pts, MNQ 133 pts
+- Only MGC needs the gate. MNQ at $2/point naturally stays under.
 
 ---
 
-## Monte Carlo Results (10,000 paths x 250 days, real trade data)
+## Auto-Execution Status
 
-Scripts: `scripts/tmp_prop_sim.py`, `scripts/tmp_apex_lockin.py`
+### What Exists
+- Full live trading pipeline: DataFeed → BarAgg → ExecutionEngine → OrderRouter → TradeJournal
+- ProjectX (TopstepX) integration: complete (auth, data, orders, positions)
+- Tradovate integration: complete (auth, data, orders, positions)
+- Safeguards: CircuitBreaker, PositionTracker state machine, CUSUM drift detection, max concurrent positions
 
-### Scenario A: Manual Only
+### What's Missing
+- **IBKR integration: NOT BUILT** (zero code, but broker ABC pattern ready — ~700 lines to add)
+- Webhook risk hardening (Task #12)
+- pysignalr graceful stop (Task #10)
+- Tradovate feed tests (Task #11)
 
-| Account | Survival | Monthly Net (med) | Monthly P5 | Max DD P95 |
-|---------|----------|-------------------|------------|------------|
-| TopStep $50K (no gate) | 96.1% | $90 | -$53 | $1,748 |
-| **TopStep $50K + ORB gate** | **100.0%** | **$78** | -$34 | **$829** |
-| Apex #1 (NYSE + LONDON) | 99.0% | $849 | $433 | $1,772 |
-| Apex #2 (SINGAPORE + EUROPE) | 100.0% | $406 | $174 | $1,080 |
-| **Combined (with ORB gate)** | **~99%** | **$1,333** | **~$573** | |
+### Mar 14 Audit Status
+- Trade journal: ✅ DONE (was CRITICAL)
+- Exit order retry: ✅ DONE (was HIGH)
+- Remaining: 3 HIGH tasks (webhook, pysignalr, tradovate tests)
 
-### Sensitivity: Activation Rate
-
-| Rate | TopStep | Apex #1 | Apex #2 | Combined Monthly |
-|------|---------|---------|---------|-----------------|
-| 100% | 94.0% | 99.1% | 100% | med $1,396 |
-| 80% | 95.3% | 99.2% | 100% | med $1,082 |
-| 65% | 96.6% | 99.2% | 100% | med $860 |
-
-Missing trades actually IMPROVES survival (less DD risk). At 65% activation, still $860/month.
-
-### Apex Lock-in Analysis
-
-DD locks (Safety Net at $50,100) in **median 52 days** (P25: 35, P75: 76, P95: 126).
-99.9% of survivors lock. 0 blowups in first 20 days.
-
-| Approach | Survival | Monthly | Days to Lock |
-|----------|----------|---------|-------------|
-| Full size from day 1 | 99.1% | $904 | 52 |
-| Half size until lock | 99.9% | $674 | 109 |
-
-**Verdict: Go full size.** Conservative costs $230/month to avoid 0.9% blowup risk. Expected cost of blowup = $1.50/month. Not rational.
-
-### TopStep ORB Gate
-
-| Variant | Survival | Monthly | Notes |
-|---------|----------|---------|-------|
-| No gate | 96.1% | $90 | 6% blow risk |
-| **ORB gate ($200 cap)** | **100%** | **$78** | Skips 9/318 trade days |
-| $150K account | 100% | **-$11** | Fee kills profit |
-
-**ORB gate is NON-NEGOTIABLE.** Skip MGC trades where ORB > 26 points (risk > $200 = 10% of DD).
-TopStep $150K is a trap — higher fee wipes out the DD advantage.
+Design doc: `docs/plans/2026-03-14-live-trading-hardening-design.md`
 
 ---
 
-## Deployment Plan
+## Open Questions
 
-### Phase 1: Start Safe (Months 1-3)
-- Open **Apex $50K #2** (SINGAPORE_OPEN + EUROPE_FLOW)
-- Lowest risk account (100% survival, med $25-38 risk/trade)
-- Goal: 2+ payouts, learn the Apex platform, build confidence
-- Expected: $406/month net, 0-2 trades/day
-- Cost: $37/month
-
-### Phase 2: Add the Money Printer (Months 2-4)
-- Add **Apex $50K #1** (NYSE_OPEN + LONDON_METALS)
-- Highest E$/month account ($849/month median)
-- DD locks in ~52 days — first 2 months are the risk window
-- Expected: $1,255/month net combined
-- Cost: $74/month total
-
-### Phase 3: Add TopStep (Months 4-6)
-- Add **TopStep $50K** (CME_REOPEN + TOKYO_OPEN) WITH ORB gate
-- 100% survival with gate. Different instrument (MGC) = diversification.
-- Expected: $1,333/month net combined
-- Cost: $123/month total
-
-### Phase 4: Auto-Execution (Months 7+)
-- Fix live trading infra (journal, pysignalr, exit retry)
-- Deploy MFFU Rapid + Apex #3 for overnight auto
-- Adds CME_PRECLOSE ($264/mo), US_DATA_1000 ($185/mo), COMEX_SETTLE ($106/mo)
-- Expected: ~$1,900/month net
-- Cost: $289/month total
-
-### Phase 5: Copy Trade Scaling (Months 9+)
-- Duplicate winning accounts (Apex allows 20)
-- Copy trade from master to follower accounts
-- 3x multiplier on proven strategies = ~$4,000/month potential
-
----
-
-## Key Rules (From Monte Carlo)
-
-1. **ORB gate on TopStep: ALWAYS.** Skip MGC if ORB > 26 points. Non-negotiable.
-2. **Full size from day 1 on Apex.** Conservative early is a net loss.
-3. **Don't upgrade to TopStep $150K.** The fee kills you.
-4. **Start with Apex #2** (safest account, 100% survival) to learn the platform.
-5. **Apex #1 is the money printer** — $849/month, 99% survival, DD locks in 2 months.
-
----
-
-## Open Questions / Things To Refine
-
-- [x] ~~Re-run Monte Carlo sims with THIS specific allocation~~ — DONE (see results above)
-- [x] ~~Trailing DD lock-in strategy~~ — DONE. Go full size. Conservative not worth it.
-- [ ] MFFU Core vs Rapid vs Pro — detailed comparison for overnight auto
-- [ ] Copy trading mechanics (Tradovate Group Trading, TraderSyncer)
-- [ ] Exact Apex contract limits at $50K before Safety Net ($52,600)
-- [ ] Live trading infra gaps — what needs fixing before auto?
-- [ ] IBKR self-funded allocation (all strategies at 1.0x, position sizing)
-- [ ] Max ORB gate implementation in trade sheet generator
-- [ ] Trade journal integration (the CRITICAL gap from Mar 14 audit)
-- [ ] FOMC/NFP/CPI calendar integration for MFFU T1 auto-skip
-- [ ] Tax implications of multiple prop firm payouts
-- [ ] Which sessions benefit most from IBKR's full 1.0x stop vs 0.75x prop
-- [ ] Scenario B Monte Carlo (with auto-execution overnight sessions)
-- [ ] Correlated blowup risk: do TopStep and Apex blow on the same market conditions?
+- [x] ~~Monte Carlo with correct 0.75x mechanics~~ — DONE (tmp_prop_sim_v2.py)
+- [x] ~~Apex lock-in strategy~~ — Go full size from day 1
+- [x] ~~Firm fee comparison~~ — Apex lifetime wins, MFFU dead
+- [x] ~~0.75x vs 1.0x for prop~~ — 0.75x wins on survival
+- [x] ~~Strategy selection optimization~~ — Best pair varies by firm (codex proper pass)
+- [ ] Codex detailed 100K/200K/moonshot blueprints (exact account counts, sessions)
+- [ ] Copy trading setup mechanics (Tradovate Group Trading for Apex)
+- [ ] Apex EOD vs Intraday survival comparison with corrected sims
+- [ ] Live trading infra hardening (3 remaining HIGH tasks)
+- [ ] IBKR broker integration design (Phase 5)
+- [ ] Tax implications of 20 prop firm payouts
+- [ ] Payout cadence optimization (Apex payout rules)
