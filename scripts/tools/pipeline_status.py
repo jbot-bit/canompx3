@@ -452,8 +452,18 @@ def run_rebuild(
             )
             return False
 
-        # Reopen connection after subprocess released the DB
-        con = duckdb.connect(db_path or str(GOLD_DB_PATH))
+        # Reopen connection after subprocess released the DB.
+        # Retry briefly — Windows may not release the file handle immediately.
+        _db = db_path or str(GOLD_DB_PATH)
+        for _attempt in range(5):
+            try:
+                con = duckdb.connect(_db)
+                break
+            except duckdb.IOException:
+                if _attempt < 4:
+                    time.sleep(1)
+                else:
+                    raise
         duration = time.monotonic() - step_start
 
         if result.returncode != 0:
