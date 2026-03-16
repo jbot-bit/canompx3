@@ -137,6 +137,73 @@ class TestSelectForProfile:
         assert book.total_slots >= 1
 
 
+class TestSessionRouting:
+    """Session→firm routing from playbook account grid."""
+
+    def test_topstep_only_gets_mgc_morning(self):
+        """TopStep profile: only CME_REOPEN + TOKYO_OPEN, only MGC."""
+        pool = [
+            _make_strategy(instrument="MGC", orb_label="CME_REOPEN", strategy_id="mgc_reopen"),
+            _make_strategy(instrument="MGC", orb_label="TOKYO_OPEN", strategy_id="mgc_tokyo"),
+            _make_strategy(instrument="MNQ", orb_label="CME_PRECLOSE", strategy_id="mnq_preclose"),
+            _make_strategy(instrument="MGC", orb_label="NYSE_OPEN", strategy_id="mgc_nyse"),
+        ]
+        profile = AccountProfile(
+            "test_ts",
+            "topstep",
+            50_000,
+            1,
+            0.75,
+            max_slots=4,
+            allowed_sessions=frozenset({"CME_REOPEN", "TOKYO_OPEN"}),
+            allowed_instruments=frozenset({"MGC"}),
+        )
+        book = select_for_profile(profile, pool)
+        # Should only have CME_REOPEN + TOKYO_OPEN, both MGC
+        for e in book.entries:
+            assert e.instrument == "MGC"
+            assert e.orb_label in {"CME_REOPEN", "TOKYO_OPEN"}
+        # MNQ_PRECLOSE excluded (wrong session + wrong instrument)
+        # MGC_NYSE excluded (wrong session)
+        assert any("not assigned" in ex.reason.lower() for ex in book.excluded)
+
+    def test_tradeify_only_gets_mnq_overnight(self):
+        """Tradeify profile: only overnight sessions, only MNQ."""
+        pool = [
+            _make_strategy(instrument="MNQ", orb_label="CME_PRECLOSE", strategy_id="mnq_pre"),
+            _make_strategy(instrument="MNQ", orb_label="COMEX_SETTLE", strategy_id="mnq_comex"),
+            _make_strategy(instrument="MGC", orb_label="CME_REOPEN", strategy_id="mgc_reopen"),
+            _make_strategy(instrument="MNQ", orb_label="TOKYO_OPEN", strategy_id="mnq_tokyo"),
+        ]
+        profile = AccountProfile(
+            "test_tf",
+            "tradeify",
+            50_000,
+            1,
+            0.75,
+            max_slots=6,
+            allowed_sessions=frozenset({"CME_PRECLOSE", "COMEX_SETTLE", "NYSE_CLOSE", "NYSE_OPEN"}),
+            allowed_instruments=frozenset({"MNQ"}),
+        )
+        book = select_for_profile(profile, pool)
+        for e in book.entries:
+            assert e.instrument == "MNQ"
+            assert e.orb_label in {"CME_PRECLOSE", "COMEX_SETTLE", "NYSE_CLOSE", "NYSE_OPEN"}
+        # MGC_REOPEN excluded (wrong instrument)
+        # MNQ_TOKYO excluded (wrong session for this profile)
+        assert any("not assigned" in ex.reason.lower() for ex in book.excluded)
+
+    def test_no_routing_allows_all(self):
+        """Profile with no allowed_sessions/instruments = no filtering."""
+        pool = [
+            _make_strategy(instrument="MGC", orb_label="TOKYO_OPEN", strategy_id="s1"),
+            _make_strategy(instrument="MNQ", orb_label="CME_PRECLOSE", strategy_id="s2"),
+        ]
+        profile = AccountProfile("test_open", "self_funded", 50_000, 1, 1.0, max_slots=10)
+        book = select_for_profile(profile, pool)
+        assert book.total_slots == 2  # Both accepted
+
+
 class TestEndToEnd:
     """Integration tests with realistic multi-instrument strategy pools."""
 
@@ -178,6 +245,7 @@ class TestEndToEnd:
             ),
         ]
 
+        # No routing constraints (generic topstep)
         profile = AccountProfile("test", "topstep", 50_000, 1, 0.75, max_slots=6)
         book = select_for_profile(profile, pool)
 
@@ -193,7 +261,9 @@ class TestEndToEnd:
             _make_strategy(instrument="MGC", strategy_id="mgc1"),
             _make_strategy(instrument="MNQ", strategy_id="mnq1", orb_label="SINGAPORE_OPEN"),
         ]
-        profile = AccountProfile("test", "apex", 50_000, 1, 0.75, max_slots=6)
+        profile = AccountProfile(
+            "test", "apex", 50_000, 1, 0.75, max_slots=6, allowed_sessions=frozenset({"SINGAPORE_OPEN", "CME_REOPEN"})
+        )
         book = select_for_profile(profile, pool)
         assert all(e.instrument != "MGC" for e in book.entries)
         assert any("banned" in ex.reason.lower() for ex in book.excluded)

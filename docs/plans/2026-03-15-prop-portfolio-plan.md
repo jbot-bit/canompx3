@@ -1,6 +1,6 @@
 # Prop Firm Portfolio Construction — Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers-extended-cc:executing-plans to implement this plan task-by-task.
+> **HISTORICAL ARTIFACT (Mar 15 2026).** Code examples below are STALE — they predate the Apex automation/copy-trading prohibition discovery. The LIVE code is in `trading_app/prop_profiles.py` and `trading_app/prop_portfolio.py`. Canonical firm rules are in `docs/plans/manual-trading-playbook.md` (V3, Mar 16 2026). DO NOT copy code from this file.
 
 **Goal:** Build a profile-based portfolio selector that filters the validated strategy universe down to realistic, tradeable portfolios per prop firm account.
 

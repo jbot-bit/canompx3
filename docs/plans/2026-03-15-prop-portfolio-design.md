@@ -1,6 +1,6 @@
 # Prop Firm Portfolio Construction — Design Document
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers-extended-cc:executing-plans to implement this plan task-by-task.
+> **HISTORICAL ARTIFACT (Mar 15 2026).** Firm rules table below is STALE (Apex listed as "Semi" auto — actually PROHIBITED). Canonical firm rules: `docs/plans/manual-trading-playbook.md`. Live code: `trading_app/prop_profiles.py`.
 
 **Goal:** Build a profile-based portfolio selector that filters the validated strategy universe down to realistic, tradeable portfolios per prop firm account — with cognitive load caps, DD budget allocation, and clear excluded-with-reasons reporting.
 
