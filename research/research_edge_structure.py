@@ -28,7 +28,7 @@ import argparse
 import csv
 import time
 import warnings
-from datetime import datetime, date
+from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -390,7 +390,7 @@ Q1_WINDOWS = [30, 60, 120, 180, 240, 360]
 def window_sensitivity(data_cache):
     """Q1: Does overlap change with break window size?"""
     print(f"\n{'=' * 100}")
-    print(f"  Q1: BREAK WINDOW SENSITIVITY")
+    print("  Q1: BREAK WINDOW SENSITIVITY")
     print(f"  Testing 3 CLEAN pairs at windows: {Q1_WINDOWS}")
     print(f"{'=' * 100}")
 
@@ -443,7 +443,7 @@ def window_sensitivity(data_cache):
             })
 
     # Highlight thresholds
-    print(f"\n  THRESHOLD ANALYSIS:")
+    print("\n  THRESHOLD ANALYSIS:")
     for instrument, existing, candidate in Q1_PAIRS:
         pair_rows = [r for r in rows
                      if r["instrument"] == instrument
@@ -471,8 +471,8 @@ def window_sensitivity(data_cache):
 def size_distribution(data_cache):
     """Q2: Does the edge come from WHEN or HOW BIG?"""
     print(f"\n{'=' * 100}")
-    print(f"  Q2: ORB SIZE DISTRIBUTION BY TIME")
-    print(f"  16 sessions × 3 instruments, size-band avgR comparison")
+    print("  Q2: ORB SIZE DISTRIBUTION BY TIME")
+    print("  16 sessions × 3 instruments, size-band avgR comparison")
     print(f"{'=' * 100}")
 
     rows = []
@@ -530,8 +530,8 @@ def size_distribution(data_cache):
                 pct_g8 = float(np.mean(sizes >= 8.0))
 
                 # Size-band avgR (only on break-days within band)
-                def band_stats(lo, hi):
-                    band_days = [r for r in regime_days.values()
+                def band_stats(days, lo, hi):
+                    band_days = [r for r in days.values()
                                  if r["g4_pass"] and r["broke"]
                                  and r["orb_size"] >= lo
                                  and (r["orb_size"] < hi if hi is not None
@@ -541,9 +541,9 @@ def size_distribution(data_cache):
                     avg_r = float(np.mean([r["outcome_r"] for r in band_days]))
                     return avg_r, len(band_days)
 
-                g4g6_r, g4g6_n = band_stats(4.0, 6.0)
-                g6g8_r, g6g8_n = band_stats(6.0, 8.0)
-                g8p_r, g8p_n = band_stats(8.0, None)
+                g4g6_r, g4g6_n = band_stats(regime_days, 4.0, 6.0)
+                g6g8_r, g6g8_n = band_stats(regime_days, 6.0, 8.0)
+                g8p_r, g8p_n = band_stats(regime_days, 8.0, None)
 
                 # Console output
                 def _fr(v):
@@ -577,7 +577,7 @@ def size_distribution(data_cache):
                 })
 
     # Key comparison
-    print(f"\n  KEY COMPARISON: At same size band, do different sessions produce different avgR?")
+    print("\n  KEY COMPARISON: At same size band, do different sessions produce different avgR?")
     for instrument in INSTRUMENTS:
         inst_rows = [r for r in rows if r["instrument"] == instrument]
         # G6-G8 band comparison (most common actionable band)
@@ -600,7 +600,7 @@ def size_distribution(data_cache):
 def size_correlation(data_cache):
     """Q3: Are different outcomes because of different ORB sizes or noise?"""
     print(f"\n{'=' * 100}")
-    print(f"  Q3: ORB SIZE CORRELATION BETWEEN LOW-R-CORR PAIRS")
+    print("  Q3: ORB SIZE CORRELATION BETWEEN LOW-R-CORR PAIRS")
     print(f"{'=' * 100}")
 
     # Load overlap_analysis.csv
@@ -747,11 +747,11 @@ def size_correlation(data_cache):
 def print_honest_summary(q1_rows, q2_rows, q3_rows):
     """Print honest summary of all three questions."""
     print(f"\n{'=' * 100}")
-    print(f"  HONEST SUMMARY")
+    print("  HONEST SUMMARY")
     print(f"{'=' * 100}")
 
     # --- Q1 verdict ---
-    print(f"\n  Q1 VERDICT — BREAK WINDOW SENSITIVITY:")
+    print("\n  Q1 VERDICT — BREAK WINDOW SENSITIVITY:")
     if q1_rows:
         # Check overlap at smallest window
         min_window = min(Q1_WINDOWS)
@@ -761,8 +761,6 @@ def print_honest_summary(q1_rows, q2_rows, q3_rows):
         if at_min and at_240:
             avg_min_sbp = np.nanmean([r["shared_break_pct"] for r in at_min])
             avg_240_sbp = np.nanmean([r["shared_break_pct"] for r in at_240])
-            drop = avg_240_sbp - avg_min_sbp
-
             if avg_min_sbp > 0.80:
                 print(f"    REAL OVERLAP — even at {min_window}min window, "
                       f"shared break = {avg_min_sbp * 100:.1f}% "
@@ -792,12 +790,12 @@ def print_honest_summary(q1_rows, q2_rows, q3_rows):
                     print(f"      {instrument} {existing}v{candidate}: "
                           f"{min_window}min={m_s}, 240min={f_s}")
         else:
-            print(f"    INSUFFICIENT DATA for verdict")
+            print("    INSUFFICIENT DATA for verdict")
     else:
-        print(f"    NO DATA")
+        print("    NO DATA")
 
     # --- Q2 verdict ---
-    print(f"\n  Q2 VERDICT — SIZE vs TIME:")
+    print("\n  Q2 VERDICT — SIZE vs TIME:")
     if q2_rows:
         # Compare avgR at G6-G8 band across sessions
         g6g8 = [(r["instrument"], r["session"], r["dst_regime"],
@@ -824,14 +822,14 @@ def print_honest_summary(q1_rows, q2_rows, q3_rows):
                 print(f"      Worst: {worst[0]} {worst[1]} [{worst[2]}] "
                       f"avgR={worst[3]:+.3f} (N={worst[4]})")
             else:
-                print(f"    INSUFFICIENT DATA (no G6-G8 rows with N>=20)")
+                print("    INSUFFICIENT DATA (no G6-G8 rows with N>=20)")
         else:
-            print(f"    INSUFFICIENT DATA (no G6-G8 rows with N>=20)")
+            print("    INSUFFICIENT DATA (no G6-G8 rows with N>=20)")
     else:
-        print(f"    NO DATA")
+        print("    NO DATA")
 
     # --- Q3 verdict ---
-    print(f"\n  Q3 VERDICT — ORB SIZE CORRELATION:")
+    print("\n  Q3 VERDICT — ORB SIZE CORRELATION:")
     if q3_rows:
         valid = [r for r in q3_rows if not np.isnan(r["orb_size_r"])]
         if valid:
@@ -851,31 +849,31 @@ def print_honest_summary(q1_rows, q2_rows, q3_rows):
             print(f"      Mean |size_diff| = {avg_abs_diff:.2f}, "
                   f"size concordance = {avg_conc:.1%}")
         else:
-            print(f"    INSUFFICIENT DATA (no valid r values)")
+            print("    INSUFFICIENT DATA (no valid r values)")
     else:
-        print(f"    NO DATA")
+        print("    NO DATA")
 
     # --- Combined implications ---
-    print(f"\n  COMBINED IMPLICATIONS:")
-    print(f"    [See Q1/Q2/Q3 verdicts above for data-driven conclusions]")
-    print(f"    If Q1=REAL, Q2=SIZE, Q3=SAME: sessions are truly redundant")
-    print(f"    If Q1=ARTIFACT, Q2=TIME, Q3=DIVERSIFIERS: new sessions add value")
-    print(f"    Mixed results -> session-specific decisions needed")
+    print("\n  COMBINED IMPLICATIONS:")
+    print("    [See Q1/Q2/Q3 verdicts above for data-driven conclusions]")
+    print("    If Q1=REAL, Q2=SIZE, Q3=SAME: sessions are truly redundant")
+    print("    If Q1=ARTIFACT, Q2=TIME, Q3=DIVERSIFIERS: new sessions add value")
+    print("    Mixed results -> session-specific decisions needed")
 
     # --- Caveats ---
-    print(f"\n  CAVEATS:")
-    print(f"    - IN-SAMPLE analysis (no walk-forward)")
-    print(f"    - E1 entry + CB1 only (5min aperture)")
-    print(f"    - RR2.0 only")
-    print(f"    - DST-affected sessions report WINTER and SUMMER separately (no blended number)")
-    print(f"    - Q3 pair selection based on overlap_analysis.csv thresholds (|r|<0.3, shared>90%)")
+    print("\n  CAVEATS:")
+    print("    - IN-SAMPLE analysis (no walk-forward)")
+    print("    - E1 entry + CB1 only (5min aperture)")
+    print("    - RR2.0 only")
+    print("    - DST-affected sessions report WINTER and SUMMER separately (no blended number)")
+    print("    - Q3 pair selection based on overlap_analysis.csv thresholds (|r|<0.3, shared>90%)")
 
     # --- Next steps ---
-    print(f"\n  NEXT STEPS:")
-    print(f"    - If overlap is window-artifact: tighter break windows may reveal independence")
-    print(f"    - If size explains everything: single best-time per size band suffices")
-    print(f"    - If time matters at same size: adding sessions has structural justification")
-    print(f"    - Review DST-split results for regime-specific divergence")
+    print("\n  NEXT STEPS:")
+    print("    - If overlap is window-artifact: tighter break windows may reveal independence")
+    print("    - If size explains everything: single best-time per size band suffices")
+    print("    - If time matters at same size: adding sessions has structural justification")
+    print("    - Review DST-split results for regime-specific divergence")
 
 
 # =========================================================================
@@ -902,7 +900,7 @@ def main():
             db_path = Path("gold.db")
 
     print(f"\n{'=' * 100}")
-    print(f"  EDGE STRUCTURE ANALYSIS — Three Structural Questions")
+    print("  EDGE STRUCTURE ANALYSIS — Three Structural Questions")
     print(f"  Database: {db_path}")
     print(f"  Parameters: G{G4_MIN:.0f}+ filter | RR{RR_TARGET:.1f} target | "
           f"{OUTCOME_WINDOW // 60}h outcome window")

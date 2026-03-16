@@ -22,7 +22,7 @@ Usage:
 import argparse
 import time
 import warnings
-from datetime import datetime, date
+from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -183,18 +183,24 @@ def scan_session(highs, lows, closes, bris_h, bris_m):
             last_close = c_val
             if break_dir == "long":
                 if l_val <= stop and h_val >= target:
-                    outcome_r = -1.0; break
+                    outcome_r = -1.0
+                    break
                 if l_val <= stop:
-                    outcome_r = -1.0; break
+                    outcome_r = -1.0
+                    break
                 if h_val >= target:
-                    outcome_r = RR_TARGET; break
+                    outcome_r = RR_TARGET
+                    break
             else:
                 if h_val >= stop and l_val <= target:
-                    outcome_r = -1.0; break
+                    outcome_r = -1.0
+                    break
                 if h_val >= stop:
-                    outcome_r = -1.0; break
+                    outcome_r = -1.0
+                    break
                 if l_val <= target:
-                    outcome_r = RR_TARGET; break
+                    outcome_r = RR_TARGET
+                    break
 
         if outcome_r is None:
             if break_dir == "long":
@@ -243,7 +249,7 @@ def stats(filtered):
 
 def q1_head_to_head(data_cache):
     print(f"\n{'=' * 90}")
-    print(f"  Q1: HEAD-TO-HEAD — 1000 vs 1015")
+    print("  Q1: HEAD-TO-HEAD — 1000 vs 1015")
     print(f"{'=' * 90}")
 
     rows = []
@@ -251,9 +257,6 @@ def q1_head_to_head(data_cache):
         if instrument not in data_cache:
             continue
         all_days, _o, highs, lows, closes, _v = data_cache[instrument]
-
-        # Build DST mask (1000/1015 are CLEAN — Japan no DST — but scan anyway)
-        n = len(all_days)
 
         s1000 = scan_session(highs, lows, closes, 10, 0)
         s1015 = scan_session(highs, lows, closes, 10, 15)
@@ -296,8 +299,8 @@ def q1_head_to_head(data_cache):
 
 def q2_opening_noise(data_cache):
     print(f"\n{'=' * 90}")
-    print(f"  Q2: WHAT HAPPENS 1000-1015 ON WIN vs LOSS DAYS?")
-    print(f"  (Using 1000 G4+ break-days)")
+    print("  Q2: WHAT HAPPENS 1000-1015 ON WIN vs LOSS DAYS?")
+    print("  (Using 1000 G4+ break-days)")
     print(f"{'=' * 90}")
 
     rows = []
@@ -315,8 +318,6 @@ def q2_opening_noise(data_cache):
 
         # Minute offset for 1000 = (10-9)*60 = 60
         start_1000 = 60
-        # The 15 bars from 1000 to 1014
-        window_mins = list(range(start_1000, start_1000 + 15))
 
         wins = {d: r for d, r in breaks_g4.items() if r["outcome_r"] > 0}
         losses = {d: r for d, r in breaks_g4.items() if r["outcome_r"] <= 0}
@@ -333,36 +334,36 @@ def q2_opening_noise(data_cache):
               f"{'Vol':>6s} {'|Move|':>7s} {'Range':>6s} {'%Cross':>7s}")
         print(f"  {'-' * 80}")
 
+        def bar_stats(day_set, col_m, col_volumes, col_highs, col_lows, col_closes, col_opens, col_start):
+            vols, moves, ranges, crosses = [], [], [], []
+            for d, r in day_set.items():
+                v = col_volumes[d, col_m]
+                h = col_highs[d, col_m]
+                lv_bar = col_lows[d, col_m]
+                c = col_closes[d, col_m]
+                ref_open = col_opens[d, col_start]  # 1000 bar open
+
+                if np.isnan(c) or np.isnan(ref_open):
+                    continue
+                vols.append(v if not np.isnan(v) else 0)
+                moves.append(abs(c - ref_open))
+                ranges.append(h - lv_bar if not np.isnan(h) else 0)
+                # Has price crossed the ORB boundary?
+                oh = r["orb_high"]
+                ol = r["orb_low"]
+                crossed = (h > oh or lv_bar < ol) if not np.isnan(h) else False
+                crosses.append(1 if crossed else 0)
+
+            if not vols:
+                return np.nan, np.nan, np.nan, np.nan
+            return (float(np.mean(vols)), float(np.mean(moves)),
+                    float(np.mean(ranges)), float(np.mean(crosses)))
+
         for offset_from_1000 in range(15):
             m = start_1000 + offset_from_1000
 
-            def bar_stats(day_set):
-                vols, moves, ranges, crosses = [], [], [], []
-                for d, r in day_set.items():
-                    v = volumes[d, m]
-                    h = highs[d, m]
-                    l = lows[d, m]
-                    c = closes[d, m]
-                    ref_open = opens[d, start_1000]  # 1000 bar open
-
-                    if np.isnan(c) or np.isnan(ref_open):
-                        continue
-                    vols.append(v if not np.isnan(v) else 0)
-                    moves.append(abs(c - ref_open))
-                    ranges.append(h - l if not np.isnan(h) else 0)
-                    # Has price crossed the ORB boundary?
-                    oh = r["orb_high"]
-                    ol = r["orb_low"]
-                    crossed = (h > oh or l < ol) if not np.isnan(h) else False
-                    crosses.append(1 if crossed else 0)
-
-                if not vols:
-                    return np.nan, np.nan, np.nan, np.nan
-                return (float(np.mean(vols)), float(np.mean(moves)),
-                        float(np.mean(ranges)), float(np.mean(crosses)))
-
-            wv, wm, wr_val, wc = bar_stats(wins)
-            lv, lm, lr, lc = bar_stats(losses)
+            wv, wm, wr_val, wc = bar_stats(wins, m, volumes, highs, lows, closes, opens, start_1000)
+            lv, lm, lr, lc = bar_stats(losses, m, volumes, highs, lows, closes, opens, start_1000)
 
             time_label = f"10:{offset_from_1000:02d}"
             def _f2(v): return f"{v:7.2f}" if not np.isnan(v) else "     --"
@@ -386,7 +387,7 @@ def q2_opening_noise(data_cache):
 
 def q3_overlap(data_cache):
     print(f"\n{'=' * 90}")
-    print(f"  Q3: OVERLAP — ARE 1000 AND 1015 THE SAME TRADES?")
+    print("  Q3: OVERLAP — ARE 1000 AND 1015 THE SAME TRADES?")
     print(f"{'=' * 90}")
 
     for instrument in INSTRUMENTS:
@@ -470,7 +471,7 @@ def q3_overlap(data_cache):
 
 def q4_direction(data_cache):
     print(f"\n{'=' * 90}")
-    print(f"  Q4: DIRECTION — LONG vs SHORT at 1015 (1000 = LONG-ONLY confirmed)")
+    print("  Q4: DIRECTION — LONG vs SHORT at 1015 (1000 = LONG-ONLY confirmed)")
     print(f"{'=' * 90}")
 
     for instrument in INSTRUMENTS:
@@ -522,7 +523,7 @@ def main():
             db_path = Path("gold.db")
 
     print(f"\n{'=' * 90}")
-    print(f"  1015 vs 1000 — IS THE 15-MINUTE DELAY REAL EDGE?")
+    print("  1015 vs 1000 — IS THE 15-MINUTE DELAY REAL EDGE?")
     print(f"  Database: {db_path}")
     print(f"  RR{RR_TARGET} | {BREAK_WINDOW}min break window | {APERTURE_MIN}min aperture")
     print(f"{'=' * 90}")
@@ -561,13 +562,13 @@ def main():
             pd.DataFrame(q1_rows).to_csv(
                 output_dir / "1015_vs_1000_head_to_head.csv",
                 index=False, float_format="%.4f")
-            print(f"\n  Q1 CSV: research/output/1015_vs_1000_head_to_head.csv")
+            print("\n  Q1 CSV: research/output/1015_vs_1000_head_to_head.csv")
 
         if q2_rows:
             pd.DataFrame(q2_rows).to_csv(
                 output_dir / "1015_vs_1000_opening_noise.csv",
                 index=False, float_format="%.4f")
-            print(f"  Q2 CSV: research/output/1015_vs_1000_opening_noise.csv")
+            print("  Q2 CSV: research/output/1015_vs_1000_opening_noise.csv")
 
         print(f"\n  Total: {time.time() - t_total:.1f}s")
 
