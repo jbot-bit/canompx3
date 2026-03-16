@@ -28,8 +28,8 @@ Maintenance rule:
 
 ### Firm Rule Snapshot (mixed evidence — read labels per entry)
 
-**Apex 50K EOD**
-- Treat as the current base vehicle for the main scaling lane.
+**Apex 50K EOD** `OFFICIAL RULE`
+- Manual proof lane only (1 account). NOT the scaling vehicle.
 - Official docs checked in this cycle support: `20` active PA accounts max, `4 mini / 40 micro` cap on `50K EOD`, and EOD payout gating with `5` qualifying days at `+$250` minimum, safety net `52,100`, minimum balance `52,600`, and `6` payouts max.
 - Official compliance docs **prohibit** automation AND copy trading on PA / Live accounts. "PA and Live Prop Accounts must be traded by the actual individual listed on the account and not by any other party, person, system, automated trading bot, copy, or trade mirror service." Manual only.
 - Important caveat: Apex documentation is not perfectly clean. The EOD payout page uses a `50%` consistency framing, while broader compliance pages still contain stricter language around windfall concentration / compliance behavior. Underwrite to the stricter interpretation until the dashboard and support match.
@@ -40,20 +40,31 @@ Maintenance rule:
   - `https://support.apextraderfunding.com/hc/en-us/articles/31519788944411-Performance-Account-PA-and-Compliance`
   - `https://support.apextraderfunding.com/hc/en-us/articles/4404875002139-What-are-the-Consistency-Rules-For-PA-and-Funded-Accounts`
 
-**Topstep 50K Express Funded** `UNRESOLVED` — local assumptions, not re-verified this cycle
-- Treat as the cleanest MGC / morning alternative when you want a second firm.
-- Current local underwriting assumptions remain: `5 Express + 1 Live` account cap, `50 micro` cap on `50K`, flat by `3:10 PM CT`, and `90/10` payout structure on current accounts.
-- Use Topstep for the morning MGC lane and not as the main overnight scaling vehicle.
-- Sources used in local planning:
-  - `https://help.topstep.com/en/articles/10799569-xfa-faq`
-  - `https://help.topstep.com/en/articles/9208217-topstep-pricing`
+**Topstep 50K Express Funded** `OFFICIAL RULE` — verified from support pages Mar 16 2026
+- MGC automation lane (5 Express accounts via ProjectX API).
+- Automation: ALLOWED on Combine + Funded. `OFFICIAL RULE`
+- Trade copier: Express only, NOT Live Funded. `OFFICIAL RULE`
+- Account cap: 5 Express + 1 Live. Live kills all Express. `OFFICIAL RULE`
+- Payout structure: `90/10` `UNRESOLVED` — believed correct, not re-sourced this cycle.
+- Flat by `3:10 PM CT`: `UNRESOLVED` — believed correct, not re-sourced.
+- Sources:
+  - https://help.topstep.com/en/articles/8284097-can-automated-strategies-be-used-in-the-trading-combine-and-funded-account
+  - https://help.topstep.com/en/articles/8284140-what-is-a-trade-copier
+  - https://help.topstep.com/en/articles/8284218-multiple-express-funded-accounts
+  - https://help.topstep.com/en/articles/8284219-can-i-have-more-than-one-funded-level-account
 
-**Tradeify 50K** `UNRESOLVED` — local assumptions, not re-verified this cycle
-- Treat as the best non-Apex secondary firm in current local modeling.
-- Current local planning assumptions still favor it as the clean external diversification lane, but this turn did not re-verify every payout / copier detail from Tradeify support.
-- Use the current local conclusion operationally only after checking the live Tradeify help pages you are actually signing up under.
-- Source used in local planning:
-  - `https://help.tradeify.co/en/articles/10495897-rules-trailing-max-drawdowns`
+**Tradeify 50K** `OFFICIAL RULE` — verified from support pages Mar 16 2026
+- Primary MNQ automation scaling lane (5 accounts via Tradovate API).
+- Automation: ALLOWED (exclusive ownership, no cross-firm use, no HFT). `OFFICIAL RULE`
+- Copy trading: same-owner accounts only, via API (GUI Group Trading does NOT support brackets). `OFFICIAL RULE`
+- Account cap: 5 Simulated Funded per user/household. `OFFICIAL RULE`
+- Bot exclusivity: bot must not be shared or used across multiple firms. `OFFICIAL RULE`
+- Microscalping: >50% of trades must be held >10 seconds. `OFFICIAL RULE`
+- Payout policy / trailing DD details: `UNRESOLVED` — not re-sourced this cycle.
+- Sources:
+  - https://help.tradeify.co/en/articles/10468318-guidelines-for-traders
+  - https://help.tradeify.co/en/articles/10468299-group-trading-copy-trading
+  - https://help.tradeify.co/en/articles/10468251-how-many-simulated-funded-accounts-can-i-have-at-once
 
 **MFFU**
 - Do not use MFFU as a primary lane in the current plan.
@@ -87,7 +98,7 @@ Hard stops. If ANY line fails, do NOT trade that session.
 [ ] Account is funded and active (not in eval, not suspended)
 [ ] No open position on this instrument on this account
 [ ] Checked firm's status page — no maintenance, no rule changes
-[ ] No news restrictions apply (Apex: `OFFICIAL RULE` per compliance page; TopStep/Tradeify: `UNRESOLVED` — believed true, not re-verified this cycle; if ever using MFFU, check T1 calendar)
+[ ] No news restrictions apply (Apex: `OFFICIAL RULE`; TopStep: `OFFICIAL RULE` — news trading allowed per automation page; Tradeify: `OFFICIAL RULE` — no rules against news trading per guidelines page)
 [ ] ORB has fully formed (waited full 5m or 15m — no early entries)
 [ ] Filter passes (size >= threshold, CONT/NOMON/FAST10 if applicable)
 [ ] ORB gate passes (MGC on TopStep: ORB <= 26 points)
