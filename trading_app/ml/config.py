@@ -34,6 +34,7 @@ from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 # @revalidated-for: E1, E2
 GLOBAL_FEATURES: list[str] = [
     "atr_20",  # Volatility regime — defines the environment
+    "atr_20_pct",  # ATR percentile (0-100) — vol regime rank vs trailing 252d
     "atr_vel_ratio",  # Vol acceleration — compressed spring (confirmed)
     "gap_open_points",  # Overnight institutional repositioning
     "prev_day_range",  # Prior day activity level — regime context
