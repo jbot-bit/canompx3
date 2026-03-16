@@ -5,6 +5,18 @@
 
 ---
 
+## Iteration 114 — 2026-03-16
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/ml/features.py:84
+- Finding: `_backfill_global_features` used `GLOBAL_FEATURES[0]` ("atr_20") as sole proxy for post-backfill NaN count — if atr_20 was backfilled but overnight_range (#1 ML feature) was not, warning would silently not fire. Pre-backfill check (lines 56-59) correctly iterates ALL features; post-backfill count was asymmetric.
+- Action: Replaced `df[GLOBAL_FEATURES[0]].isna().sum()` with `max(df[col].isna().sum() for col in GLOBAL_FEATURES if col in df.columns, default=0)` — consistent with pre-backfill check pattern
+- Blast radius: 1 file (private function, 0 external callers)
+- Verification: ruff PASS, 6/6 TestBackfillGlobalFeatures PASS; unrelated joblib env failure in other test class
+- Commit: 2c7e419
+
+---
+
 ## Iteration 113 — 2026-03-16
 - Phase: diminishing-returns
 - Classification: N/A
