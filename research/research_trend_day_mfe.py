@@ -14,10 +14,9 @@ import argparse
 import os
 import sys
 import time
+import warnings
 from datetime import date, datetime, timezone
 from pathlib import Path
-
-import warnings
 
 import duckdb
 import numpy as np
@@ -27,10 +26,10 @@ from scipy import stats
 # Project imports
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
-from pipeline.cost_model import COST_SPECS, CostSpec, pnl_points_to_r
-from pipeline.paths import GOLD_DB_PATH
-from pipeline.dst import SESSION_CATALOG
 from pipeline.build_daily_features import compute_trading_day_utc_range
+from pipeline.cost_model import COST_SPECS, CostSpec, pnl_points_to_r
+from pipeline.dst import SESSION_CATALOG
+from pipeline.paths import GOLD_DB_PATH
 from research.lib.stats import bh_fdr
 
 # ---------------------------------------------------------------------------
@@ -539,7 +538,7 @@ def print_predictor_table(
         show_oe = show_oe.sort_values("p_value")
 
         if len(show_oe) > 0:
-            print(f"\n  Overnight Expansion Tertile Analysis:")
+            print("\n  Overnight Expansion Tertile Analysis:")
             print(
                 f"  {'Session':20s}| {'O':>2s} | {'RR':>3s} "
                 f"| {'chi2':>6s} | {'p-val':>7s} | {'FDR':>3s} "
@@ -659,7 +658,7 @@ def main() -> None:
 
     instruments = [args.instrument] if args.instrument else ACTIVE_INSTRUMENTS
 
-    print(f"=== Trend-Day MFE Research ===")
+    print("=== Trend-Day MFE Research ===")
     print(f"DB: {DB_PATH}")
     print(f"Instruments: {instruments}")
     print()
@@ -800,7 +799,7 @@ def main() -> None:
                 )
 
                 # Run predictor tests (suppress scipy precision warnings for small N)
-                print(f"  Running unicorn predictor tests...")
+                print("  Running unicorn predictor tests...")
                 with warnings.catch_warnings():
                     warnings.filterwarnings(
                         "ignore",

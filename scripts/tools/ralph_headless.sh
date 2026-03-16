@@ -8,7 +8,7 @@
 #   bash scripts/tools/ralph_headless.sh 10        # 10 iterations
 #   bash scripts/tools/ralph_headless.sh 3 "live_config.py"  # 3 iterations, scoped
 set -e
-cd /c/Users/joshd/canompx3
+cd /mnt/c/Users/joshd/canompx3 2>/dev/null || cd /c/Users/joshd/canompx3 2>/dev/null || true
 
 MAX_ITERS="${1:-5}"
 SCOPE="${2:-}"
@@ -54,6 +54,7 @@ IMPORTANT: You are running headless (no user interaction). After completing the 
 
     # Run claude in pipe mode with restricted tools
     if claude -p "$PROMPT" \
+        --model sonnet \
         --allowedTools "Edit,Read,Write,Bash,Grep,Glob,Agent" \
         > "$ITER_LOG" 2>&1; then
 

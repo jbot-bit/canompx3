@@ -21,9 +21,8 @@ import numpy as np
 from scipy import stats
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from pipeline.paths import GOLD_DB_PATH
 from pipeline.dst import DST_AFFECTED_SESSIONS
-
+from pipeline.paths import GOLD_DB_PATH
 
 # === CORRECT JOIN TEMPLATE ===
 SAFE_JOIN = """
