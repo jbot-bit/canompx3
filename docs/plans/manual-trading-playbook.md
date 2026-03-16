@@ -87,7 +87,7 @@ Hard stops. If ANY line fails, do NOT trade that session.
 [ ] Account is funded and active (not in eval, not suspended)
 [ ] No open position on this instrument on this account
 [ ] Checked firm's status page — no maintenance, no rule changes
-[ ] Checked economic calendar — no T1 event in next 30min (MFFU only; Apex/TopStep/Tradeify = no restriction)
+[ ] No news restrictions apply (Apex/TopStep/Tradeify have none; if ever using MFFU, check T1 calendar)
 [ ] ORB has fully formed (waited full 5m or 15m — no early entries)
 [ ] Filter passes (size >= threshold, CONT/NOMON/FAST10 if applicable)
 [ ] ORB gate passes (MGC on TopStep: ORB <= 26 points)
@@ -182,7 +182,7 @@ All times Brisbane local (AEST, UTC+10). Brisbane has no DST — everything else
 | Session | Time | Instrument | Filter | How to Check | ORB | RR | Entry |
 |---------|------|------------|--------|-------------|-----|-----|-------|
 | **TOKYO_OPEN** | 10:00 (fixed) | MNQ | ORB_G5_CONT | ORB >= 5 MNQ pts + break bar closes beyond ORB edge | 5m | 1.5 | E2 CB1 |
-| **SINGAPORE_OPEN** | 11:00 (fixed) | MNQ | ORB_G8 | ORB >= 8 MNQ pts | 15m | 1.5 | E2 CB1 |
+| **SINGAPORE_OPEN** | 11:00 (fixed) | MNQ | ORB_G8 | ORB >= 8 MNQ pts | 5m | 1.5 | E2 CB1 |
 
 - TOKYO: ORB forms by 10:05. Check size. Set bracket or walk away.
 - SINGAPORE: ORB forms by 11:15. Check size. Set bracket or walk away.
@@ -193,7 +193,7 @@ All times Brisbane local (AEST, UTC+10). Brisbane has no DST — everything else
 | Session | Time | Instrument | Filter | How to Check | ORB | RR | Entry |
 |---------|------|------------|--------|-------------|-----|-----|-------|
 | **EUROPE_FLOW** | 17:00 (winter) / 18:00 (summer) | MNQ | ORB_G8 | ORB >= 8 MNQ pts | 5m | 1.5 | E2 CB1 |
-| **LONDON_METALS** | 18:00 (winter) / 17:00 (summer) | MNQ | ORB_G6_NOMON | ORB >= 6 MNQ pts + not Monday | 15m | 2.0 | E2 CB1 |
+| **LONDON_METALS** | 18:00 (winter) / 17:00 (summer) | MNQ | ORB_G6_NOMON | ORB >= 6 MNQ pts + not Monday | 5m | 2.0 | E2 CB1 |
 
 - These two always swap order with DST but are always 1 hour apart.
 - Winter: EUROPE_FLOW 17:00 first, LONDON_METALS 18:00 second.
@@ -215,7 +215,7 @@ If you also open a TopStep $50K account for the MGC morning lane, add:
 
 | Session | Time | Instrument | Filter | ORB | RR | Entry | Note |
 |---------|------|------------|--------|-----|-----|-------|------|
-| **CME_REOPEN** | 08:00 (fixed) | MGC | ORB_G4_FAST10 | 5m | 1.5 | E2 CB1 | ORB gate: skip if ORB > 26 pts |
+| **CME_REOPEN** | 08:00 (summer) / 09:00 (winter) | MGC | ORB_G4_FAST10 | 5m | 1.5 | E2 CB1 | ORB gate: skip if ORB > 26 pts |
 
 - MGC = $10/point (5x MNQ). Higher per-trade value but more volatile.
 - ORB gate is mandatory on TopStep: if MGC ORB > 26 points, risk exceeds 10% of $2K DD. Skip.
@@ -226,14 +226,26 @@ If you also open a TopStep $50K account for the MGC morning lane, add:
 
 | Session | Filter | N (backtest) | ExpR | Sharpe | Est. Trades/Mo |
 |---------|--------|-------------|------|--------|----------------|
-| TOKYO_OPEN | ORB_G5_CONT | ~200+ | 0.17+ | 1.0+ | ~5-8 |
-| SINGAPORE_OPEN | ORB_G8 | 1,117 | 0.091 | 0.77 | ~8-10 |
-| EUROPE_FLOW | ORB_G8 | 1,117 | 0.133 | 1.46 | ~9-11 |
-| LONDON_METALS | ORB_G6_NOMON | 1,050 | 0.098 | 0.77 | ~8-10 |
-| NYSE_OPEN | ORB_G4 | ~500+ | 0.10+ | 0.70+ | ~8-12 |
+| TOKYO_OPEN | ORB_G5_CONT (5m) | ~997 | 0.124 | 1.15 | ~5-8 |
+| SINGAPORE_OPEN | ORB_G8 (5m) | ~1,117 | 0.091 | 0.77 | ~8-10 |
+| EUROPE_FLOW | ORB_G8 (5m) | 1,117 | 0.133 | 1.46 | ~9-11 |
+| LONDON_METALS | ORB_G6_NOMON (5m) | ~861 | 0.070 | 1.20 | ~8-10 |
+| NYSE_OPEN | ORB_G4 (5m) | 1,262 | 0.142 | 1.84 | ~8-12 |
 | **TOTAL** | | | | | **~38-51** |
 
 **~2 trades/day average.** Some days 0, some days 4. That's normal — filters exist to skip bad setups.
+
+### Phase 1 → Phase 2 Transition Note
+
+Phase 1 and Phase 2 trade **different sessions**. Phase 1 validates your ability to execute brackets, follow filters, and maintain discipline — NOT the specific overnight pair that Phase 2 scales.
+
+Before scaling Phase 2, you MUST:
+1. Complete Phase 1 gates (30+ trades, positive P&L, 2+ payouts)
+2. Do 10+ manual trades on the Phase 2 pair (CME_PRECLOSE at 05:45/06:45 + NYSE_CLOSE at 06:00/07:00) on a SINGLE Apex account
+3. Confirm schedule adherence — can you reliably wake at 05:30 and execute?
+4. Only THEN copy-trade to additional accounts
+
+Phase 1 proves process. The Phase 2 mini-trial proves the specific pair works for your lifestyle.
 
 ---
 
@@ -249,8 +261,8 @@ If you also open a TopStep $50K account for the MGC morning lane, add:
    - MGC ORB gate? Skip if ORB > 26 points (TopStep only).
 4. **If filter passes → set bracket:**
    - **Entry:** stop-market at ORB high (long side) AND ORB low (short side) — whichever breaks first
-   - **Stop:** opposite ORB edge × 0.75 (prop) or × 1.0 (self-funded)
-   - **Target:** entry + (stop distance × RR)
+   - **Stop:** entry ± (ORB range × 0.75) toward the opposite edge (prop) or × 1.0 (self-funded)
+   - **Target:** entry ± (ORB range × 0.75 × RR) in the breakout direction
 5. **If filter fails → no trade.** Close chart. Done.
 6. **After bracket set → walk away.** The bracket does the work.
 7. **If no fill within session → cancel.** No chasing into the next session.
@@ -883,11 +895,11 @@ At 40-55% win rate (our strategies), losing streaks are **mathematically guarant
 
 | Win Rate | 5-Loss Streak | 8-Loss Streak | 10-Loss Streak |
 |----------|--------------|---------------|----------------|
-| 55% | Once per ~55 trades (~1/month) | Once per ~790 trades (~1.5 years) | Once per ~5,900 trades (rare) |
-| 45% | Once per ~18 trades (~every 2 weeks) | Once per ~110 trades (~2 months) | Once per ~400 trades (~8 months) |
-| 40% | Once per ~13 trades (~every 8 days) | Once per ~58 trades (~1 month) | Once per ~170 trades (~3 months) |
+| 55% | Once per ~97 trades (~2 months) | Once per ~1,500 trades (~3 years) | Once per ~12,000 trades (rare) |
+| 45% | Once per ~42 trades (~1/month) | Once per ~250 trades (~5 months) | Once per ~1,000 trades (~2 years) |
+| 40% | Once per ~30 trades (~3 weeks) | Once per ~130 trades (~3 months) | Once per ~400 trades (~8 months) |
 
-**A 5-loss streak at 45% win rate happens every 2 weeks on average.** This is not a bug. This is math.
+**A 5-loss streak at 45% win rate happens about once per month.** This is not a bug. This is math.
 
 ### Protocol
 
@@ -996,8 +1008,8 @@ Print this. Tape it next to your screen.
 |    2. Measure range in points                                  |
 |    3. Range >= filter? Set bracket. Range < filter? Walk away. |
 |    4. E2: stop-market both sides. First fill = trade.          |
-|    5. Stop = opposite ORB edge x 0.75 (prop)                  |
-|    6. Target = risk x RR                                       |
+|    5. Stop = entry - (ORB range x 0.75) for long (prop)        |
+|    6. Target = entry + (ORB range x 0.75 x RR) for long       |
 |    7. Walk away. Check result later.                           |
 |                                                                |
 |  RULES:                                                        |
@@ -1042,3 +1054,4 @@ Every 3 months, do a full system review. This is the "step back and look at ever
 | 2026-03-16 | Added evidence taxonomy (OFFICIAL RULE / LOCAL MODEL / UNRESOLVED) | PROCESS | Codex |
 | 2026-03-16 | Added operational edge cases, journal, streak protocol, platform setup | LOCAL MODEL | Claude |
 | 2026-03-16 | Added pre-trade checklist, capital limits, red lines, change control | PROCESS | Claude |
+| 2026-03-16 | Code review fixes: SINGAPORE/LONDON aperture 15m→5m, CME_REOPEN DST, stats corrected, streak table recalculated, stop formula clarified, Phase 1→2 transition added | LOCAL MODEL | Claude (reviewer) |
