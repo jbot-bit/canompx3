@@ -124,7 +124,7 @@ class TradovateDataFeed(BrokerFeed):
             try:
                 self.on_stale(0.0, -1)
             except Exception:
-                pass
+                log.exception("FEED DEAD notification failed")
 
     async def _session(self, ws, symbol: str) -> None:
         """Run a single authenticated WebSocket session."""
