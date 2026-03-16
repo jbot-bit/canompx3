@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import math
 from dataclasses import dataclass
+from typing import cast
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from statistics import mean, median
@@ -222,14 +223,15 @@ def run_study(dbn_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, 
 
         pre = get_window_snapshot(df, event_date, family.pre_window)
         shock = get_window_snapshot(df, event_date, family.shock_window)
-        follow = {
+        follow_raw = {
             key: get_window_snapshot(df, event_date, window)
             for key, window in family.follow_windows.items()
         }
-        if pre is None or shock is None or any(snapshot is None for snapshot in follow.values()):
+        if pre is None or shock is None or any(v is None for v in follow_raw.values()):
             row["exclusion_reason"] = "missing_window_data"
             rows.append(row)
             continue
+        follow: dict[str, WindowSnapshot] = {k: v for k, v in follow_raw.items() if v is not None}
 
         shock_move = shock.close_price - shock.open_price
         shock_direction = 1 if shock_move > 0 else -1 if shock_move < 0 else 0
@@ -253,8 +255,8 @@ def run_study(dbn_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, 
             row[f"cont_{key}"] = cont
             row[f"rev_{key}"] = rev
 
-        total_move = row["fw_15m_close"] - pre.close_price
-        row["follow_15m_abs_move"] = abs(row["follow_15m_move"])
+        total_move = cast(float, row["fw_15m_close"]) - pre.close_price
+        row["follow_15m_abs_move"] = abs(cast(float, row["follow_15m_move"]))
         row["total_25m_abs_move"] = abs(total_move)
         row["usable_event_flag"] = shock_direction != 0
         row["exclusion_reason"] = "zero_shock" if shock_direction == 0 else None
