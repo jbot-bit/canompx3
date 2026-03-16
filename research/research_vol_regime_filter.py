@@ -31,20 +31,20 @@ Zero-lookahead guarantee:
 @research-source research_vol_regime_filter.py
 """
 
-import sys
-from pathlib import Path
+from __future__ import annotations
+
+from collections import defaultdict
 
 import duckdb
 import numpy as np
-from scipy import stats
+from scipy import stats  # noqa: F401 — used for ttest_1samp
 
-# ── Setup ──────────────────────────────────────────────────────────────
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
-
-from pipeline.paths import GOLD_DB_PATH
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+
+# ── Setup (importable without sys.path hack) ──────────────────────────
+# This file lives in research/, one level below project root.
+# The project root is on PYTHONPATH via pyproject.toml / .env / uv run.
+from pipeline.paths import GOLD_DB_PATH
 
 INSTRUMENTS = sorted(ACTIVE_ORB_INSTRUMENTS)  # MGC, MES, MNQ, M2K
 ORB_MINUTES = 5
@@ -172,42 +172,49 @@ def compute_stats(pnl_rs, years_span=None):
     }
 
 
-def jobson_korkie(r1, r2):
-    """Jobson-Korkie test for difference in Sharpe ratios.
+def matched_day_permutation_test(
+    all_pnls: list[float],
+    included_mask: list[bool],
+    n_perms: int = 10_000,
+    rng_seed: int = 42,
+) -> tuple[float, float]:
+    """Permutation test: does the filter select days with higher avg R?
 
-    Returns (z_stat, p_value). Positive z means r1 has higher Sharpe.
+    This is the correct test for a selection filter. Every filtered day
+    also exists in the baseline, so we compare INCLUDED vs EXCLUDED days
+    on the same outcome data. The null hypothesis is that the filter
+    label is independent of R.
+
+    Args:
+        all_pnls: R-multiples for ALL days (baseline).
+        included_mask: True for days that pass the filter.
+        n_perms: number of random permutations.
+
+    Returns:
+        (observed_uplift, p_value).
+        observed_uplift = mean(included) - mean(excluded).
+        p_value = fraction of permutations with uplift >= observed.
     """
-    r1, r2 = np.array(r1), np.array(r2)
-    n = min(len(r1), len(r2))
-    if n < 30:
+    arr = np.array(all_pnls)
+    mask = np.array(included_mask)
+    n_included = int(mask.sum())
+
+    if n_included < 10 or n_included >= len(arr) - 10:
         return 0.0, 1.0
 
-    mu1, mu2 = np.mean(r1), np.mean(r2)
-    s1, s2 = np.std(r1, ddof=1), np.std(r2, ddof=1)
+    observed = arr[mask].mean() - arr[~mask].mean()
 
-    if s1 == 0 or s2 == 0:
-        return 0.0, 1.0
+    rng = np.random.default_rng(rng_seed)
+    count_ge = 0
+    for _ in range(n_perms):
+        perm_mask = np.zeros(len(arr), dtype=bool)
+        perm_mask[rng.choice(len(arr), size=n_included, replace=False)] = True
+        perm_uplift = arr[perm_mask].mean() - arr[~perm_mask].mean()
+        if perm_uplift >= observed:
+            count_ge += 1
 
-    sr1, sr2 = mu1 / s1, mu2 / s2
-
-    # Correlation between the two series (matched by index)
-    if len(r1) == len(r2):
-        rho = np.corrcoef(r1, r2)[0, 1]
-    else:
-        rho = 0.0
-
-    # Variance of difference (Memmel 2003 correction)
-    theta = (1 / n) * (
-        2 * (1 - rho)
-        + 0.5 * (sr1**2 + sr2**2 - 2 * sr1 * sr2 * rho**2)
-    )
-
-    if theta <= 0:
-        return 0.0, 1.0
-
-    z = (sr1 - sr2) / np.sqrt(theta)
-    p = 2 * (1 - stats.norm.cdf(abs(z)))
-    return z, p
+    p_value = (count_ge + 1) / (n_perms + 1)  # +1 for continuity correction
+    return float(observed), float(p_value)
 
 
 def bh_fdr(p_values, q=0.05):
@@ -311,12 +318,12 @@ def run_research():
                         pairs_garch_vol.append((garch_p, rv))
 
             if len(pairs_atr_vol) >= 50:
-                a, v = zip(*pairs_atr_vol)
+                a, v = zip(*pairs_atr_vol, strict=True)
                 rho, p = stats.spearmanr(a, v)
                 print(f"  {instrument:4s} {session:20s}  ATR vs rel_vol: rho={rho:+.4f} p={p:.4f} (N={len(pairs_atr_vol)})")
 
             if len(pairs_garch_vol) >= 50:
-                g, v = zip(*pairs_garch_vol)
+                g, v = zip(*pairs_garch_vol, strict=True)
                 rho, p = stats.spearmanr(g, v)
                 print(f"  {instrument:4s} {session:20s}  GARCH vs rel_vol: rho={rho:+.4f} p={p:.4f} (N={len(pairs_garch_vol)})")
 
@@ -372,91 +379,50 @@ def run_research():
                         "rr": rr,
                         "filter": "BASELINE",
                         "pnls": baseline_pnls,
+                        "days": list(all_days),
                         **baseline_stats,
                     })
 
-                # ── Filter 2: VOL_ONLY (rel_vol >= 1.2) ───────────────
-                vol_pnls = [
-                    day_pnl[d] for d in all_days
-                    if rel_vol_lookup.get((instrument, session, d), 0) >= 1.2
+                # All filters for this (instrument, session, rr) combo
+                filter_specs = [
+                    ("VOL_ONLY", [
+                        d for d in all_days
+                        if rel_vol_lookup.get((instrument, session, d), 0) >= 1.2
+                    ]),
+                    ("GARCH_P70", [
+                        d for d in all_days
+                        if garch_pct.get((instrument, d), 0) >= 70
+                    ]),
+                    ("ATR70+VOL", [
+                        d for d in all_days
+                        if (atr_pct.get((instrument, d), 0) >= 70
+                            and rel_vol_lookup.get((instrument, session, d), 0) >= 1.2)
+                    ]),
+                    ("ATR70|VOL", [
+                        d for d in all_days
+                        if (atr_pct.get((instrument, d), 0) >= 70
+                            or rel_vol_lookup.get((instrument, session, d), 0) >= 1.2)
+                    ]),
                 ]
-                vol_stats = compute_stats(vol_pnls, years_span)
-                if vol_stats:
-                    results.append({
-                        "instrument": instrument,
-                        "session": session,
-                        "rr": rr,
-                        "filter": "VOL_ONLY",
-                        "pnls": vol_pnls,
-                        **vol_stats,
-                    })
-
-                # ── Filter 3-6: ATR percentile thresholds ──────────────
                 for pct_thresh in ATR_PCTILES:
-                    atr_pnls = [
-                        day_pnl[d] for d in all_days
+                    filter_specs.append((f"ATR_P{pct_thresh}", [
+                        d for d in all_days
                         if atr_pct.get((instrument, d), 0) >= pct_thresh
-                    ]
-                    atr_stats = compute_stats(atr_pnls, years_span)
-                    if atr_stats:
+                    ]))
+
+                for filt_name, filt_days in filter_specs:
+                    pnls = [day_pnl[d] for d in filt_days]
+                    st = compute_stats(pnls, years_span)
+                    if st:
                         results.append({
                             "instrument": instrument,
                             "session": session,
                             "rr": rr,
-                            "filter": f"ATR_P{pct_thresh}",
-                            "pnls": atr_pnls,
-                            **atr_stats,
+                            "filter": filt_name,
+                            "pnls": pnls,
+                            "days": list(filt_days),
+                            **st,
                         })
-
-                # ── Filter 7: GARCH percentile >= 70 ───────────────────
-                garch_pnls = [
-                    day_pnl[d] for d in all_days
-                    if garch_pct.get((instrument, d), 0) >= 70
-                ]
-                garch_stats = compute_stats(garch_pnls, years_span)
-                if garch_stats:
-                    results.append({
-                        "instrument": instrument,
-                        "session": session,
-                        "rr": rr,
-                        "filter": "GARCH_P70",
-                        "pnls": garch_pnls,
-                        **garch_stats,
-                    })
-
-                # ── Filter 8: COMBINED (ATR >= 70 AND vol >= 1.2) ──────
-                combined_pnls = [
-                    day_pnl[d] for d in all_days
-                    if (atr_pct.get((instrument, d), 0) >= 70 and
-                        rel_vol_lookup.get((instrument, session, d), 0) >= 1.2)
-                ]
-                combined_stats = compute_stats(combined_pnls, years_span)
-                if combined_stats:
-                    results.append({
-                        "instrument": instrument,
-                        "session": session,
-                        "rr": rr,
-                        "filter": "ATR70+VOL",
-                        "pnls": combined_pnls,
-                        **combined_stats,
-                    })
-
-                # ── Filter 9: ATR >= 70 OR vol >= 1.2 (union) ─────────
-                union_pnls = [
-                    day_pnl[d] for d in all_days
-                    if (atr_pct.get((instrument, d), 0) >= 70 or
-                        rel_vol_lookup.get((instrument, session, d), 0) >= 1.2)
-                ]
-                union_stats = compute_stats(union_pnls, years_span)
-                if union_stats:
-                    results.append({
-                        "instrument": instrument,
-                        "session": session,
-                        "rr": rr,
-                        "filter": "ATR70|VOL",
-                        "pnls": union_pnls,
-                        **union_stats,
-                    })
 
     # ── Cross-asset filters ────────────────────────────────────────────
     print()
@@ -502,11 +468,29 @@ def run_research():
                     else:
                         years_span = 1.0
 
+                    # Add baseline for cross-asset groups too
+                    base_pnls = [day_pnl[d] for d in all_days]
+                    base_stats = compute_stats(base_pnls, years_span)
+                    if base_stats:
+                        cross_key = (target, session, rr)
+                        if cross_key not in {(r["instrument"], r["session"], r["rr"])
+                                              for r in results if r["filter"] == "BASELINE"}:
+                            results.append({
+                                "instrument": target,
+                                "session": session,
+                                "rr": rr,
+                                "filter": "BASELINE",
+                                "pnls": base_pnls,
+                                "days": list(all_days),
+                                **base_stats,
+                            })
+
                     for pct_thresh in [60, 70]:
-                        cross_pnls = [
-                            day_pnl[d] for d in all_days
+                        cross_days = [
+                            d for d in all_days
                             if atr_pct.get((source, d), 0) >= pct_thresh
                         ]
+                        cross_pnls = [day_pnl[d] for d in cross_days]
                         cross_stats = compute_stats(cross_pnls, years_span)
                         if cross_stats:
                             results.append({
@@ -515,6 +499,7 @@ def run_research():
                                 "rr": rr,
                                 "filter": f"X_{source}_P{pct_thresh}",
                                 "pnls": cross_pnls,
+                                "days": list(cross_days),
                                 **cross_stats,
                             })
 
@@ -567,34 +552,47 @@ def run_research():
             f"{r['avg_r']:+8.4f} {r['sharpe_ann']:7.3f} {r['p_adj']:8.4f}"
         )
 
-    # ── Head-to-head: Filter X vs BASELINE for same (inst, session, rr) ─
+    # ── Head-to-head: matched-day permutation test ──────────────────────
     print()
     print("=" * 80)
-    print("PART 5: HEAD-TO-HEAD — FILTER LIFT OVER BASELINE")
+    print("PART 5: HEAD-TO-HEAD — MATCHED-DAY PERMUTATION TEST")
     print("=" * 80)
-    print("(Only showing combos where BOTH baseline and filter have data)")
+    print("Tests whether filter SELECTS higher-R days vs EXCLUDED days.")
+    print("Permutation test (10K perms): null = filter label independent of R.")
 
     # Group by (instrument, session, rr)
-    from collections import defaultdict
     grouped = defaultdict(dict)
     for r in results:
         key = (r["instrument"], r["session"], r["rr"])
         grouped[key][r["filter"]] = r
 
-    # For each group, compute lift
+    # For each group, run matched-day permutation test
     lifts = []
     for key, filters in grouped.items():
         baseline = filters.get("BASELINE")
         if not baseline:
             continue
+
+        baseline_pnls = baseline["pnls"]
+        baseline_days = baseline.get("days", [])
+
         for filt_name, filt_result in filters.items():
             if filt_name == "BASELINE":
                 continue
-            lift_expr = filt_result["avg_r"] - baseline["avg_r"]
-            lift_sharpe = filt_result["sharpe_ann"] - baseline["sharpe_ann"]
 
-            # Jobson-Korkie: is the Sharpe difference significant?
-            jk_z, jk_p = jobson_korkie(filt_result["pnls"], baseline["pnls"])
+            filt_days_set = set(filt_result.get("days", []))
+
+            # Build matched mask: for each baseline day, is it in the filter?
+            if baseline_days and filt_days_set:
+                included_mask = [d in filt_days_set for d in baseline_days]
+            else:
+                # Fallback: approximate from sample sizes
+                # Can't do matched test without day data
+                continue
+
+            uplift, perm_p = matched_day_permutation_test(
+                baseline_pnls, included_mask
+            )
 
             lifts.append({
                 "instrument": key[0],
@@ -605,29 +603,25 @@ def run_research():
                 "n_filt": filt_result["n"],
                 "expr_base": baseline["avg_r"],
                 "expr_filt": filt_result["avg_r"],
-                "lift_expr": lift_expr,
-                "sharpe_base": baseline["sharpe_ann"],
-                "sharpe_filt": filt_result["sharpe_ann"],
-                "lift_sharpe": lift_sharpe,
+                "uplift": uplift,
+                "perm_p": perm_p,
                 "fdr_sig": filt_result.get("fdr_sig", False),
-                "jk_z": jk_z,
-                "jk_p": jk_p,
             })
 
-    # Sort by Sharpe lift, show FDR survivors only
-    sig_lifts = [l for l in lifts if l["fdr_sig"]]
-    sig_lifts.sort(key=lambda x: x["lift_sharpe"], reverse=True)
+    # Sort by uplift, show FDR survivors only
+    sig_lifts = [x for x in lifts if x["fdr_sig"]]
+    sig_lifts.sort(key=lambda x: x["uplift"], reverse=True)
 
     print(f"\n{'Inst':4s} {'Session':20s} {'RR':>4s} {'Filter':14s} {'N_b':>5s} {'N_f':>5s} "
-          f"{'ExR_b':>7s} {'ExR_f':>7s} {'Lift':>7s} {'Sh_b':>6s} {'Sh_f':>6s} {'JK_p':>7s}")
-    print("-" * 100)
-    for l in sig_lifts[:40]:
-        jk_flag = " **" if l["jk_p"] < 0.05 else ""
+          f"{'ExR_b':>7s} {'ExR_f':>7s} {'Uplift':>8s} {'Perm_p':>8s}")
+    print("-" * 95)
+    for item in sig_lifts[:40]:
+        sig_flag = " **" if item["perm_p"] < 0.05 else ""
         print(
-            f"{l['instrument']:4s} {l['session']:20s} {l['rr']:4.1f} "
-            f"{l['filter']:14s} {l['n_base']:5d} {l['n_filt']:5d} "
-            f"{l['expr_base']:+7.4f} {l['expr_filt']:+7.4f} {l['lift_expr']:+7.4f} "
-            f"{l['sharpe_base']:6.3f} {l['sharpe_filt']:6.3f} {l['jk_p']:7.4f}{jk_flag}"
+            f"{item['instrument']:4s} {item['session']:20s} {item['rr']:4.1f} "
+            f"{item['filter']:14s} {item['n_base']:5d} {item['n_filt']:5d} "
+            f"{item['expr_base']:+7.4f} {item['expr_filt']:+7.4f} {item['uplift']:+8.4f} "
+            f"{item['perm_p']:8.4f}{sig_flag}"
         )
 
     # ── Cross-asset summary ────────────────────────────────────────────
@@ -674,8 +668,10 @@ def run_research():
     # ── NEW vs EXISTING: do ATR filters find edge where VOL doesn't? ──
     print()
     print("=" * 80)
-    print("PART 8: NEW OPPORTUNITIES — ATR finds edge where VOL doesn't")
+    print("PART 8: STANDALONE FDR-SIG SUBSETS WHERE VOL IS NOT SIGNIFICANT")
     print("=" * 80)
+    print("NOTE: This identifies promising subsets, NOT incremental uplift vs VOL.")
+    print("Matched-day permutation test in Part 5 is the correct uplift measure.")
 
     atr_only_wins = []
     for key, filters in grouped.items():

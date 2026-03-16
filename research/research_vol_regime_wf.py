@@ -416,7 +416,7 @@ def main():
     print(f"WF FAILED: {len(failed_list)}")
 
     if passed_list:
-        print(f"\nPASSED candidates (sorted by OOS Sharpe):")
+        print("\nPASSED candidates (sorted by OOS Sharpe):")
         passed_list.sort(key=lambda x: x.get("oos_sharpe_ann", 0), reverse=True)
         for p in passed_list:
             print(
@@ -427,7 +427,7 @@ def main():
             )
 
     if failed_list:
-        print(f"\nFAILED candidates:")
+        print("\nFAILED candidates:")
         for f in failed_list:
             print(
                 f"  {f['instrument']:4s} {f['session']:20s} RR{f['rr']:.1f} "
