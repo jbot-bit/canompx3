@@ -161,6 +161,7 @@ class ProjectXDataFeed(BrokerFeed):
                     log.warning("Feed stale — forcing reconnect for %s", symbol)
                     self._force_reconnect = False
                     self._stale_count = 0
+                    self._last_data_at = None  # prevent immediate re-trigger on next watcher cycle
                     backoff = _BACKOFF_INITIAL
                     continue  # next iteration of reconnect loop
                 log.info("Feed closed cleanly for %s", symbol)
@@ -372,7 +373,10 @@ class ProjectXDataFeed(BrokerFeed):
                         _MAX_STALE_BEFORE_RECONNECT,
                     )
                     if self.on_stale is not None:
-                        self.on_stale(gap, self._stale_count)
+                        try:
+                            self.on_stale(gap, self._stale_count)
+                        except Exception:
+                            log.exception("on_stale callback error — continuing liveness monitoring")
                     if self._stale_count >= _MAX_STALE_BEFORE_RECONNECT:
                         log.critical(
                             "FEED STALE: %d consecutive stale checks — forcing reconnect",

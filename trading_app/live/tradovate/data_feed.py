@@ -80,6 +80,9 @@ class TradovateDataFeed(BrokerFeed):
         backoff = _BACKOFF_INITIAL
 
         for attempt in range(_MAX_RECONNECTS + 1):
+            if self._stop_requested:
+                log.info("Feed stopped cleanly via stop flag for %s", symbol)
+                return
             try:
                 log.info("Connecting to %s for %s (attempt %d)", url, symbol, attempt + 1)
                 async with websockets.connect(url, ping_interval=None) as ws:
@@ -89,6 +92,7 @@ class TradovateDataFeed(BrokerFeed):
                         log.warning("Feed stale — forcing reconnect for %s", symbol)
                         self._force_reconnect = False
                         self._stale_count = 0
+                        self._last_quote_at = None  # prevent immediate re-trigger
                         continue  # next iteration of reconnect loop
                     log.info("Feed closed cleanly for %s", symbol)
                     return
@@ -172,7 +176,10 @@ class TradovateDataFeed(BrokerFeed):
                             _MAX_STALE_BEFORE_RECONNECT,
                         )
                         if self.on_stale is not None:
-                            self.on_stale(gap, self._stale_count)
+                            try:
+                                self.on_stale(gap, self._stale_count)
+                            except Exception:
+                                log.exception("on_stale callback error — continuing liveness monitoring")
                         if self._stale_count >= _MAX_STALE_BEFORE_RECONNECT:
                             log.critical(
                                 "FEED STALE: %d consecutive stale checks — forcing reconnect",
