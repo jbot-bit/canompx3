@@ -30,6 +30,10 @@ _MAX_RECONNECTS = 20
 _BACKOFF_INITIAL = 5.0  # seconds before first retry
 _BACKOFF_MAX = 60.0  # cap at 60s
 
+# Liveness monitoring — detect "connected but silent" state
+_STALE_TIMEOUT = 90.0  # seconds with no data before first warning
+_MAX_STALE_BEFORE_RECONNECT = 2  # consecutive stale checks before forcing reconnect
+
 
 class ProjectXDataFeed(BrokerFeed):
     """Stream ProjectX quotes -> 1-minute bars -> on_bar async callback.
@@ -52,7 +56,12 @@ class ProjectXDataFeed(BrokerFeed):
         self._agg = BarAggregator()
         self._symbol: str = ""
         self._stop_requested = False
+        self._force_reconnect = False
         self._bar_queue: asyncio.Queue = asyncio.Queue()
+        # Liveness tracking
+        self._last_data_at: datetime | None = None
+        self._stale_count: int = 0
+        self._quote_count: int = 0
 
     # ------------------------------------------------------------------
     # Public helpers
@@ -148,6 +157,12 @@ class ProjectXDataFeed(BrokerFeed):
                 if self._stop_requested:
                     log.info("Feed stopped cleanly via stop flag for %s", symbol)
                     return
+                if self._force_reconnect:
+                    log.warning("Feed stale — forcing reconnect for %s", symbol)
+                    self._force_reconnect = False
+                    self._stale_count = 0
+                    backoff = _BACKOFF_INITIAL
+                    continue  # next iteration of reconnect loop
                 log.info("Feed closed cleanly for %s", symbol)
                 return
 
@@ -258,7 +273,10 @@ class ProjectXDataFeed(BrokerFeed):
                 continue
             try:
                 price, vol = self.parse_quote(quote)
-                bar = self._agg.on_tick(price, vol, datetime.now(UTC))
+                now = datetime.now(UTC)
+                self._last_data_at = now
+                self._quote_count += 1
+                bar = self._agg.on_tick(price, vol, now)
                 if bar is not None:
                     bar.symbol = self._symbol
                     await self.on_bar(bar)
@@ -273,7 +291,10 @@ class ProjectXDataFeed(BrokerFeed):
             price = trade.get("price")
             vol = trade.get("volume", 1)
             if price is not None:
-                bar = self._agg.on_tick(float(price), int(vol) if vol else 1, datetime.now(UTC))
+                now = datetime.now(UTC)
+                self._last_data_at = now
+                self._quote_count += 1
+                bar = self._agg.on_tick(float(price), int(vol) if vol else 1, now)
                 if bar is not None:
                     bar.symbol = self._symbol
                     await self.on_bar(bar)
@@ -290,7 +311,10 @@ class ProjectXDataFeed(BrokerFeed):
                 continue
             try:
                 price, vol = self.parse_quote(quote)
-                bar = self._agg.on_tick(price, vol, datetime.now(UTC))
+                now = datetime.now(UTC)
+                self._last_data_at = now
+                self._quote_count += 1
+                bar = self._agg.on_tick(price, vol, now)
                 if bar is not None:
                     bar.symbol = self._symbol
                     log.info("BAR: %s", bar)
@@ -310,7 +334,10 @@ class ProjectXDataFeed(BrokerFeed):
             price = trade.get("price")
             vol = trade.get("volume", 1)
             if price is not None:
-                bar = self._agg.on_tick(float(price), int(vol) if vol else 1, datetime.now(UTC))
+                now = datetime.now(UTC)
+                self._last_data_at = now
+                self._quote_count += 1
+                bar = self._agg.on_tick(float(price), int(vol) if vol else 1, now)
                 if bar is not None:
                     bar.symbol = self._symbol
                     log.info("BAR: %s", bar)
@@ -324,12 +351,34 @@ class ProjectXDataFeed(BrokerFeed):
     # ------------------------------------------------------------------
 
     async def _stop_file_watcher(self) -> None:
-        """Watch for stop file — used with pysignalr backend."""
+        """Watch for stop file + feed liveness — used with pysignalr backend."""
         while True:
             await asyncio.sleep(2.5)
+            # Stop-file check (priority: stop overrides reconnect)
             if _STOP_FILE.exists():
                 log.info("Stop file detected — requesting graceful shutdown")
-                # Don't delete stop file here — let the runner delete it
-                # after ALL feeds have exited (multi-instrument safe).
                 self._stop_requested = True
                 return
+            # Liveness check: detect "connected but silent" state
+            if self._last_data_at is not None:
+                gap = (datetime.now(UTC) - self._last_data_at).total_seconds()
+                if gap > _STALE_TIMEOUT:
+                    self._stale_count += 1
+                    log.warning(
+                        "LIVENESS: %.0fs since last data (%d quotes total, stale check %d/%d)",
+                        gap,
+                        self._quote_count,
+                        self._stale_count,
+                        _MAX_STALE_BEFORE_RECONNECT,
+                    )
+                    if self.on_stale is not None:
+                        self.on_stale(gap, self._stale_count)
+                    if self._stale_count >= _MAX_STALE_BEFORE_RECONNECT:
+                        log.critical(
+                            "FEED STALE: %d consecutive stale checks — forcing reconnect",
+                            self._stale_count,
+                        )
+                        self._force_reconnect = True
+                        return  # break out of watcher → triggers reconnect in _run_pysignalr
+                else:
+                    self._stale_count = 0  # reset on any data

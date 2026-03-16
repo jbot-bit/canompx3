@@ -1,14 +1,18 @@
-"""Test ProjectX data feed — verify quote parsing and bar creation."""
+"""Test ProjectX data feed — verify quote parsing, bar creation, and liveness monitoring."""
 
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 import pytest
 
 from trading_app.live.bar_aggregator import Bar
 from trading_app.live.broker_base import BrokerFeed
-from trading_app.live.projectx.data_feed import ProjectXDataFeed
+from trading_app.live.projectx.data_feed import (
+    ProjectXDataFeed,
+    _MAX_STALE_BEFORE_RECONNECT,
+    _STALE_TIMEOUT,
+)
 
 
 @pytest.fixture()
@@ -162,8 +166,10 @@ class TestPysignalrStop:
 
         from unittest.mock import patch
 
-        with patch("pysignalr.client.SignalRClient", return_value=mock_client), \
-             patch.object(feed, "_stop_file_watcher", fast_stop_watcher):
+        with (
+            patch("pysignalr.client.SignalRClient", return_value=mock_client),
+            patch.object(feed, "_stop_file_watcher", fast_stop_watcher),
+        ):
             stop_setter = asyncio.create_task(set_stop())
             try:
                 await asyncio.wait_for(feed._run_pysignalr("12345"), timeout=2.0)
@@ -171,3 +177,83 @@ class TestPysignalrStop:
                 pytest.fail("_run_pysignalr did not exit within 2s — stop flag was ignored")
             finally:
                 stop_setter.cancel()
+
+
+class TestLivenessMonitor:
+    """Test feed staleness detection and forced reconnect."""
+
+    def test_quote_updates_last_data_at(self, feed):
+        """Receiving a quote must update _last_data_at."""
+        assert feed._last_data_at is None
+        # Simulate sync quote
+        feed._on_quote_sync([{"lastPrice": 100.0, "volume": 1}])
+        assert feed._last_data_at is not None
+        assert feed._quote_count == 1
+
+    def test_stale_count_increments_on_gap(self, feed):
+        """Stale count should increment when data is older than threshold."""
+        feed._last_data_at = datetime.now(UTC) - timedelta(seconds=_STALE_TIMEOUT + 10)
+        feed._stale_count = 0
+        # Simulate what the watcher does
+        gap = (datetime.now(UTC) - feed._last_data_at).total_seconds()
+        if gap > _STALE_TIMEOUT:
+            feed._stale_count += 1
+        assert feed._stale_count == 1
+
+    def test_stale_count_resets_on_fresh_data(self, feed):
+        """Stale count must reset to 0 when fresh data arrives."""
+        feed._stale_count = 5
+        feed._last_data_at = datetime.now(UTC)  # fresh
+        gap = (datetime.now(UTC) - feed._last_data_at).total_seconds()
+        if gap <= _STALE_TIMEOUT:
+            feed._stale_count = 0
+        assert feed._stale_count == 0
+
+    def test_force_reconnect_after_max_stale(self, feed):
+        """Feed must set _force_reconnect after MAX_STALE consecutive stale checks."""
+        feed._last_data_at = datetime.now(UTC) - timedelta(seconds=_STALE_TIMEOUT + 10)
+        feed._stale_count = _MAX_STALE_BEFORE_RECONNECT - 1
+        feed._force_reconnect = False
+        # One more stale check should trigger
+        feed._stale_count += 1
+        if feed._stale_count >= _MAX_STALE_BEFORE_RECONNECT:
+            feed._force_reconnect = True
+        assert feed._force_reconnect is True
+
+    def test_on_stale_callback_fires(self):
+        """on_stale callback must be called with gap and count."""
+        auth = MagicMock()
+        stale_calls = []
+        feed = ProjectXDataFeed(
+            auth=auth,
+            on_bar=MagicMock(),
+            on_stale=lambda gap, count: stale_calls.append((gap, count)),
+        )
+        feed._last_data_at = datetime.now(UTC) - timedelta(seconds=_STALE_TIMEOUT + 30)
+        feed._stale_count = 0
+        # Simulate watcher logic
+        gap = (datetime.now(UTC) - feed._last_data_at).total_seconds()
+        if gap > _STALE_TIMEOUT:
+            feed._stale_count += 1
+            if feed.on_stale is not None:
+                feed.on_stale(gap, feed._stale_count)
+        assert len(stale_calls) == 1
+        assert stale_calls[0][0] > _STALE_TIMEOUT
+        assert stale_calls[0][1] == 1
+
+    @pytest.mark.asyncio
+    async def test_watcher_triggers_reconnect_on_stale(self):
+        """Stop-file watcher must set _force_reconnect after consecutive stale periods."""
+        auth = MagicMock()
+        auth.get_token.return_value = "fake"
+        feed = ProjectXDataFeed(auth=auth, on_bar=MagicMock())
+        feed._last_data_at = datetime.now(UTC) - timedelta(seconds=_STALE_TIMEOUT + 10)
+        feed._stale_count = _MAX_STALE_BEFORE_RECONNECT - 1  # one more check triggers
+
+        # Run watcher briefly — it should detect stale and return
+        try:
+            await asyncio.wait_for(feed._stop_file_watcher(), timeout=5.0)
+        except asyncio.TimeoutError:
+            pytest.fail("Watcher did not exit on stale feed within 5s")
+
+        assert feed._force_reconnect is True

@@ -37,7 +37,8 @@ _MAX_RECONNECTS = 20  # give up after this many consecutive failures
 _STOP_FILE = Path(__file__).parent.parent.parent.parent / "live_session.stop"
 
 
-_LIVENESS_TIMEOUT = 60.0  # warn if no quotes arrive for this many seconds
+_LIVENESS_TIMEOUT = 90.0  # seconds with no data before warning
+_MAX_STALE_BEFORE_RECONNECT = 2  # consecutive stale periods before forcing reconnect
 
 
 class TradovateDataFeed(BrokerFeed):
@@ -68,6 +69,7 @@ class TradovateDataFeed(BrokerFeed):
         self._stop_requested = False
         self._last_quote_at: datetime | None = None
         self._quote_count: int = 0
+        self._stale_count: int = 0
 
     async def run(self, symbol: str) -> None:
         """Connect and stream bars. Reconnects on disconnect up to _MAX_RECONNECTS times."""
@@ -143,28 +145,37 @@ class TradovateDataFeed(BrokerFeed):
 
         # Heartbeat task (required every 2.5s per Tradovate docs)
         async def heartbeat():
-            _liveness_warned = False
             while not stop_event.is_set():
                 await asyncio.sleep(2.5)
                 if _STOP_FILE.exists():
                     log.info("Stop file detected — requesting graceful shutdown")
-                    # Don't delete stop file here — let the runner delete it
-                    # after ALL feeds have exited (multi-instrument safe).
                     self._stop_requested = True
                     stop_event.set()
                     return
-                # Liveness probe: "connected but no data" detection
+                # Liveness probe: detect "connected but silent" state
                 if self._last_quote_at is not None:
                     gap = (datetime.now(UTC) - self._last_quote_at).total_seconds()
-                    if gap > _LIVENESS_TIMEOUT and not _liveness_warned:
+                    if gap > _LIVENESS_TIMEOUT:
+                        self._stale_count += 1
                         log.warning(
-                            "LIVENESS: %.0fs since last quote (%d total) — connected but no data",
+                            "LIVENESS: %.0fs since last quote (%d total, stale %d/%d)",
                             gap,
                             self._quote_count,
+                            self._stale_count,
+                            _MAX_STALE_BEFORE_RECONNECT,
                         )
-                        _liveness_warned = True
-                    elif gap <= _LIVENESS_TIMEOUT:
-                        _liveness_warned = False
+                        if self.on_stale is not None:
+                            self.on_stale(gap, self._stale_count)
+                        if self._stale_count >= _MAX_STALE_BEFORE_RECONNECT:
+                            log.critical(
+                                "FEED STALE: %d consecutive stale checks — forcing reconnect",
+                                self._stale_count,
+                            )
+                            self._stale_count = 0
+                            stop_event.set()  # break out of message loop → reconnect
+                            return
+                    else:
+                        self._stale_count = 0
                 try:
                     await ws.send("[]")
                 except Exception as exc:

@@ -37,10 +37,12 @@ class BrokerFeed(ABC):
         self,
         auth: BrokerAuth,
         on_bar: Callable[[Bar], Coroutine[Any, Any, None]],
+        on_stale: Callable[[float, int], None] | None = None,
         **kwargs,
     ):
         self.auth = auth
         self.on_bar = on_bar
+        self.on_stale = on_stale  # callback(seconds_since_last_data, stale_count)
 
     @abstractmethod
     async def run(self, symbol: str) -> None:
