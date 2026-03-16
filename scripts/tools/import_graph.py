@@ -111,7 +111,24 @@ def extract_imports(filepath: Path) -> set[str]:
                     internal_imports.add(mod)
 
         elif isinstance(node, ast.ImportFrom):
-            if node.module:
+            if node.level > 0:
+                # Relative import: resolve against file's package
+                try:
+                    rel = filepath.relative_to(PROJECT_ROOT)
+                except ValueError:
+                    continue
+                pkg_parts = list(rel.with_suffix("").parts)
+                # Go up node.level directories
+                base_parts = pkg_parts[: -node.level] if node.level <= len(pkg_parts) else []
+                if node.module:
+                    full_name = ".".join(base_parts) + "." + node.module if base_parts else node.module
+                else:
+                    full_name = ".".join(base_parts) if base_parts else ""
+                if full_name:
+                    mod = resolve_import_to_module(full_name)
+                    if mod:
+                        internal_imports.add(mod)
+            elif node.module:
                 mod = resolve_import_to_module(node.module)
                 if mod:
                     internal_imports.add(mod)

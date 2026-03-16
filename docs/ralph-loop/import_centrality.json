@@ -411,6 +411,11 @@
       "imports": 1,
       "centrality": "low"
     },
+    "scripts/tools/ralph_build_ledger.py": {
+      "importers": 0,
+      "imports": 0,
+      "centrality": "low"
+    },
     "scripts/tools/rank_slots.py": {
       "importers": 0,
       "imports": 2,
@@ -557,18 +562,18 @@
       "centrality": "low"
     },
     "trading_app/live/bar_aggregator.py": {
-      "importers": 2,
+      "importers": 5,
       "imports": 0,
-      "centrality": "medium"
+      "centrality": "high"
     },
     "trading_app/live/broker_base.py": {
-      "importers": 0,
-      "imports": 0,
-      "centrality": "low"
+      "importers": 11,
+      "imports": 1,
+      "centrality": "critical"
     },
     "trading_app/live/broker_factory.py": {
       "importers": 1,
-      "imports": 0,
+      "imports": 11,
       "centrality": "low"
     },
     "trading_app/live/circuit_breaker.py": {
@@ -577,7 +582,7 @@
       "centrality": "low"
     },
     "trading_app/live/cusum_monitor.py": {
-      "importers": 0,
+      "importers": 1,
       "imports": 0,
       "centrality": "low"
     },
@@ -588,7 +593,7 @@
     },
     "trading_app/live/multi_runner.py": {
       "importers": 0,
-      "imports": 1,
+      "imports": 2,
       "centrality": "low"
     },
     "trading_app/live/notifications.py": {
@@ -598,7 +603,7 @@
     },
     "trading_app/live/performance_monitor.py": {
       "importers": 1,
-      "imports": 1,
+      "imports": 2,
       "centrality": "low"
     },
     "trading_app/live/position_tracker.py": {
@@ -612,32 +617,32 @@
       "centrality": "low"
     },
     "trading_app/live/projectx/auth.py": {
-      "importers": 1,
-      "imports": 0,
-      "centrality": "low"
+      "importers": 6,
+      "imports": 1,
+      "centrality": "high"
     },
     "trading_app/live/projectx/contract_resolver.py": {
-      "importers": 0,
-      "imports": 0,
+      "importers": 1,
+      "imports": 2,
       "centrality": "low"
     },
     "trading_app/live/projectx/data_feed.py": {
-      "importers": 0,
-      "imports": 0,
+      "importers": 1,
+      "imports": 3,
       "centrality": "low"
     },
     "trading_app/live/projectx/order_router.py": {
-      "importers": 0,
-      "imports": 0,
+      "importers": 1,
+      "imports": 2,
       "centrality": "low"
     },
     "trading_app/live/projectx/positions.py": {
-      "importers": 0,
-      "imports": 0,
+      "importers": 1,
+      "imports": 2,
       "centrality": "low"
     },
     "trading_app/live/session_orchestrator.py": {
-      "importers": 0,
+      "importers": 1,
       "imports": 18,
       "centrality": "low"
     },
@@ -648,33 +653,33 @@
     },
     "trading_app/live/tradovate/__init__.py": {
       "importers": 0,
-      "imports": 0,
+      "imports": 5,
       "centrality": "low"
     },
     "trading_app/live/tradovate/auth.py": {
-      "importers": 1,
-      "imports": 0,
-      "centrality": "low"
+      "importers": 3,
+      "imports": 1,
+      "centrality": "medium"
     },
     "trading_app/live/tradovate/contract_resolver.py": {
-      "importers": 1,
-      "imports": 0,
-      "centrality": "low"
+      "importers": 3,
+      "imports": 1,
+      "centrality": "medium"
     },
     "trading_app/live/tradovate/data_feed.py": {
-      "importers": 0,
-      "imports": 0,
-      "centrality": "low"
+      "importers": 2,
+      "imports": 2,
+      "centrality": "medium"
     },
     "trading_app/live/tradovate/order_router.py": {
-      "importers": 1,
-      "imports": 0,
-      "centrality": "low"
+      "importers": 3,
+      "imports": 1,
+      "centrality": "medium"
     },
     "trading_app/live/tradovate/positions.py": {
-      "importers": 0,
-      "imports": 0,
-      "centrality": "low"
+      "importers": 2,
+      "imports": 1,
+      "centrality": "medium"
     },
     "trading_app/live/webhook_server.py": {
       "importers": 0,
@@ -895,6 +900,7 @@
       "pipeline/dst.py",
       "trading_app/ml/features.py",
       "trading_app/ml/config.py",
+      "trading_app/live/broker_base.py",
       "trading_app/outcome_builder.py"
     ],
     "high": [
@@ -902,7 +908,9 @@
       "trading_app/live_config.py",
       "trading_app/strategy_discovery.py",
       "scripts/tools/m25_audit.py",
-      "trading_app/portfolio.py"
+      "trading_app/live/projectx/auth.py",
+      "trading_app/portfolio.py",
+      "trading_app/live/bar_aggregator.py"
     ],
     "medium": [
       "trading_app/ai/sql_adapter.py",
@@ -910,6 +918,9 @@
       "pipeline/calendar_filters.py",
       "pipeline/ingest_dbn_mgc.py",
       "pipeline/stats.py",
+      "trading_app/live/tradovate/auth.py",
+      "trading_app/live/tradovate/contract_resolver.py",
+      "trading_app/live/tradovate/order_router.py",
       "trading_app/ml/predict_live.py",
       "trading_app/nested/schema.py",
       "trading_app/strategy_validator.py",
@@ -919,7 +930,8 @@
       "trading_app/ai/corpus.py",
       "trading_app/entry_rules.py",
       "trading_app/execution_engine.py",
-      "trading_app/live/bar_aggregator.py",
+      "trading_app/live/tradovate/data_feed.py",
+      "trading_app/live/tradovate/positions.py",
       "trading_app/regime/schema.py",
       "trading_app/risk_manager.py",
       "trading_app/rolling_portfolio.py",
@@ -940,15 +952,17 @@
       "trading_app/cascade_table.py",
       "trading_app/live/broker_factory.py",
       "trading_app/live/circuit_breaker.py",
+      "trading_app/live/cusum_monitor.py",
       "trading_app/live/live_market_state.py",
       "trading_app/live/notifications.py",
       "trading_app/live/performance_monitor.py",
       "trading_app/live/position_tracker.py",
-      "trading_app/live/projectx/auth.py",
+      "trading_app/live/projectx/contract_resolver.py",
+      "trading_app/live/projectx/data_feed.py",
+      "trading_app/live/projectx/order_router.py",
+      "trading_app/live/projectx/positions.py",
+      "trading_app/live/session_orchestrator.py",
       "trading_app/live/trade_journal.py",
-      "trading_app/live/tradovate/auth.py",
-      "trading_app/live/tradovate/contract_resolver.py",
-      "trading_app/live/tradovate/order_router.py",
       "trading_app/market_state.py",
       "trading_app/ml/cpcv.py",
       "trading_app/ml/evaluate.py",
@@ -1017,6 +1031,7 @@
       "scripts/tools/parity_check.py",
       "scripts/tools/profile_1000_runners.py",
       "scripts/tools/prospective_tracker.py",
+      "scripts/tools/ralph_build_ledger.py",
       "scripts/tools/rank_slots.py",
       "scripts/tools/refresh_data.py",
       "scripts/tools/rolling_portfolio_assembly.py",
@@ -1036,18 +1051,9 @@
       "trading_app/analysis/asia_session_analyzer.py",
       "trading_app/execution_spec.py",
       "trading_app/live/__init__.py",
-      "trading_app/live/broker_base.py",
-      "trading_app/live/cusum_monitor.py",
       "trading_app/live/multi_runner.py",
       "trading_app/live/projectx/__init__.py",
-      "trading_app/live/projectx/contract_resolver.py",
-      "trading_app/live/projectx/data_feed.py",
-      "trading_app/live/projectx/order_router.py",
-      "trading_app/live/projectx/positions.py",
-      "trading_app/live/session_orchestrator.py",
       "trading_app/live/tradovate/__init__.py",
-      "trading_app/live/tradovate/data_feed.py",
-      "trading_app/live/tradovate/positions.py",
       "trading_app/live/webhook_server.py",
       "trading_app/mcp_server.py",
       "trading_app/ml/__init__.py",
