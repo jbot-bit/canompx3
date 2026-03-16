@@ -104,6 +104,9 @@ def is_stale(
     return gap > max_gap_trading_days
 
 
+# Use sys.executable to ensure subprocess uses the same Python/venv as the caller.
+_PY = sys.executable
+
 # ---------------------------------------------------------------------------
 # Pre-flight checks
 # ---------------------------------------------------------------------------
@@ -112,31 +115,31 @@ PREFLIGHT_RULES: dict[str, dict] = {
     "outcome_builder": {
         "query": "SELECT COUNT(*) FROM daily_features WHERE symbol = $1 AND orb_minutes = $2",
         "params": lambda inst, orb: [inst, orb],
-        "fix": "python pipeline/build_daily_features.py --instrument {instrument} --start 2019-01-01 --end 2026-12-31",
+        "fix": _PY + " pipeline/build_daily_features.py --instrument {instrument} --start 2019-01-01 --end 2026-12-31",
         "desc": "daily_features rows for {instrument} O{orb_minutes}",
     },
     "discovery": {
         "query": "SELECT COUNT(*) FROM orb_outcomes WHERE symbol = $1 AND orb_minutes = $2",
         "params": lambda inst, orb: [inst, orb],
-        "fix": "python trading_app/outcome_builder.py --instrument {instrument} --orb-minutes {orb_minutes}",
+        "fix": _PY + " trading_app/outcome_builder.py --instrument {instrument} --orb-minutes {orb_minutes}",
         "desc": "orb_outcomes rows for {instrument} O{orb_minutes}",
     },
     "validator": {
         "query": "SELECT COUNT(*) FROM experimental_strategies WHERE instrument = $1",
         "params": lambda inst, orb: [inst],
-        "fix": "python trading_app/strategy_discovery.py --instrument {instrument} --orb-minutes {orb_minutes}",
+        "fix": _PY + " trading_app/strategy_discovery.py --instrument {instrument} --orb-minutes {orb_minutes}",
         "desc": "experimental_strategies rows for {instrument}",
     },
     "edge_families": {
         "query": "SELECT COUNT(*) FROM validated_setups WHERE instrument = $1 AND status = 'active'",
         "params": lambda inst, orb: [inst],
-        "fix": "python trading_app/strategy_validator.py --instrument {instrument} --min-sample 50 --no-regime-waivers --min-years-positive-pct 0.75",
+        "fix": _PY + " trading_app/strategy_validator.py --instrument {instrument} --min-sample 50 --no-regime-waivers --min-years-positive-pct 0.75",
         "desc": "active validated_setups for {instrument}",
     },
     "family_rr_locks": {
         "query": "SELECT COUNT(*) FROM edge_families WHERE instrument = $1",
         "params": lambda inst, orb: [inst],
-        "fix": "python scripts/tools/build_edge_families.py --instrument {instrument}",
+        "fix": _PY + " scripts/tools/build_edge_families.py --instrument {instrument}",
         "desc": "edge_families rows for {instrument}",
     },
 }
@@ -281,22 +284,22 @@ def get_resume_point(
 # ---------------------------------------------------------------------------
 
 REBUILD_STEPS = [
-    ("outcome_builder_O5", "python trading_app/outcome_builder.py --instrument {instrument} --force --orb-minutes 5"),
-    ("outcome_builder_O15", "python trading_app/outcome_builder.py --instrument {instrument} --force --orb-minutes 15"),
-    ("outcome_builder_O30", "python trading_app/outcome_builder.py --instrument {instrument} --force --orb-minutes 30"),
-    ("discovery_O5", "python trading_app/strategy_discovery.py --instrument {instrument} --orb-minutes 5"),
-    ("discovery_O15", "python trading_app/strategy_discovery.py --instrument {instrument} --orb-minutes 15"),
-    ("discovery_O30", "python trading_app/strategy_discovery.py --instrument {instrument} --orb-minutes 30"),
+    ("outcome_builder_O5", f"{_PY} trading_app/outcome_builder.py --instrument {{instrument}} --force --orb-minutes 5"),
+    ("outcome_builder_O15", f"{_PY} trading_app/outcome_builder.py --instrument {{instrument}} --force --orb-minutes 15"),
+    ("outcome_builder_O30", f"{_PY} trading_app/outcome_builder.py --instrument {{instrument}} --force --orb-minutes 30"),
+    ("discovery_O5", f"{_PY} trading_app/strategy_discovery.py --instrument {{instrument}} --orb-minutes 5"),
+    ("discovery_O15", f"{_PY} trading_app/strategy_discovery.py --instrument {{instrument}} --orb-minutes 15"),
+    ("discovery_O30", f"{_PY} trading_app/strategy_discovery.py --instrument {{instrument}} --orb-minutes 30"),
     (
         "validator",
-        "python trading_app/strategy_validator.py --instrument {instrument} --min-sample 50 --no-regime-waivers --min-years-positive-pct 0.75",
+        f"{_PY} trading_app/strategy_validator.py --instrument {{instrument}} --min-sample 50 --no-regime-waivers --min-years-positive-pct 0.75",
     ),
-    ("retire_e3", "python scripts/migrations/retire_e3_strategies.py"),
-    ("edge_families", "python scripts/tools/build_edge_families.py --instrument {instrument}"),
-    ("family_rr_locks", "python scripts/tools/select_family_rr.py"),
-    ("repo_map", "python scripts/tools/gen_repo_map.py"),
-    ("health_check", "python pipeline/health_check.py"),
-    ("pinecone_sync", "python scripts/tools/sync_pinecone.py"),
+    ("retire_e3", f"{_PY} scripts/migrations/retire_e3_strategies.py"),
+    ("edge_families", f"{_PY} scripts/tools/build_edge_families.py --instrument {{instrument}}"),
+    ("family_rr_locks", f"{_PY} scripts/tools/select_family_rr.py"),
+    ("repo_map", f"{_PY} scripts/tools/gen_repo_map.py"),
+    ("health_check", f"{_PY} pipeline/health_check.py"),
+    ("pinecone_sync", f"{_PY} scripts/tools/sync_pinecone.py"),
 ]
 
 
