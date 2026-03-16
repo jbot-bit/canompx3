@@ -5,6 +5,16 @@
 
 ---
 
+## Iteration 100 — 2026-03-16
+- Phase: fix
+- Classification: [mechanical]
+- Target: scripts/tools/refresh_data.py, pipeline/asset_configs.py, tests/test_pipeline/test_asset_configs.py
+- Finding: Uncommitted changes adding orb_active field to ASSET_CONFIGS and 2YY/ZT research-only instrument support in refresh_data.py — correctly gated via cfg.get("orb_active", True)
+- Action: Verified clean (7 sins scan: no violations), ran tests (8/8 pass), committed cohesive change set
+- Blast radius: 1 production file (refresh_data.py), 1 config (asset_configs.py), 1 test
+- Verification: PASS
+- Commit: e98dba4
+
 ## Iteration 99 — 2026-03-16
 - Phase: audit-only
 - Classification: N/A (no fix)
