@@ -1,8 +1,8 @@
 {
-  "total_iterations": 106,
+  "total_iterations": 107,
   "last_updated": "2026-03-16",
-  "consecutive_low_only": 7,
-  "last_high_finding_iter": 105,
+  "consecutive_low_only": 0,
+  "last_high_finding_iter": 114,
   "findings_by_type": {
     "canonical_violation": {
       "found": 44,
@@ -16,17 +16,17 @@
       "deferred": 0,
       "fix_rate": 1.0
     },
+    "silent_failure": {
+      "found": 12,
+      "fixed": 10,
+      "deferred": 1,
+      "fix_rate": 0.83
+    },
     "other": {
       "found": 12,
       "fixed": 5,
       "deferred": 0,
       "fix_rate": 0.42
-    },
-    "silent_failure": {
-      "found": 11,
-      "fixed": 9,
-      "deferred": 1,
-      "fix_rate": 0.82
     },
     "lint": {
       "found": 5,
@@ -116,12 +116,12 @@
   "findings_by_severity": {
     "CRITICAL": 3,
     "HIGH": 6,
-    "MEDIUM": 18,
+    "MEDIUM": 19,
     "LOW": 79
   },
   "classifications": {
     "judgment": 51,
-    "mechanical": 34,
+    "mechanical": 35,
     "audit-only": 21
   },
   "files_audited": {
@@ -863,6 +863,11 @@
     "research/research_trend_day_mfe.py": {
       "audit_count": 1,
       "last_iter": 113,
+      "findings": 1
+    },
+    "trading_app/ml/features.py": {
+      "audit_count": 1,
+      "last_iter": 114,
       "findings": 1
     }
   },
@@ -2032,6 +2037,17 @@
       "severity": "LOW",
       "verdict": "ACCEPT",
       "commit": "NONE"
+    },
+    {
+      "iter": 114,
+      "date": "2026-03-16",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/ml/features.py:84",
+      "finding_type": "silent_failure",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "2c7e419"
     }
   ]
 }
