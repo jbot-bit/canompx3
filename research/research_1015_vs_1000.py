@@ -309,7 +309,7 @@ def q2_opening_noise(data_cache):
     for instrument in INSTRUMENTS:
         if instrument not in data_cache:
             continue
-        _all_days, opens, highs, lows, closes, volumes = data_cache[instrument]
+        _, opens, highs, lows, closes, volumes = data_cache[instrument]
 
         s1000 = scan_session(highs, lows, closes, 10, 0)
         breaks_g4 = filter_breaks(s1000, 4.0, None)
@@ -395,7 +395,7 @@ def q3_overlap(data_cache):
     for instrument in INSTRUMENTS:
         if instrument not in data_cache:
             continue
-        _all_days, _o, highs, lows, closes, _v = data_cache[instrument]
+        _, _, highs, lows, closes, _ = data_cache[instrument]
 
         s1000 = scan_session(highs, lows, closes, 10, 0)
         s1015 = scan_session(highs, lows, closes, 10, 15)
@@ -479,7 +479,7 @@ def q4_direction(data_cache):
     for instrument in INSTRUMENTS:
         if instrument not in data_cache:
             continue
-        _all_days, _o, highs, lows, closes, _v = data_cache[instrument]
+        _, _, highs, lows, closes, _ = data_cache[instrument]
 
         s1015 = scan_session(highs, lows, closes, 10, 15)
 
@@ -497,7 +497,7 @@ def q4_direction(data_cache):
 
             nl, al, wl, _ = stats(longs)
             ns, a_s, ws, _ = stats(shorts)
-            nb, ab, wb, _ = stats(fb)
+            nb, ab, _, _ = stats(fb)
 
             def _f(v): return f"{v:+7.3f}" if not np.isnan(v) else "     --"
             def _w(v): return f"{v:5.1%}" if not np.isnan(v) else "   --"
