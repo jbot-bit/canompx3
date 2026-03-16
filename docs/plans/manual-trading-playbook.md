@@ -2,7 +2,7 @@
 
 **Status:** CANONICAL prop trading playbook
 **Version:** V3 — consolidated manual + allocation memo, March 16 2026
-**Goal:** Prove edge live → scale to $100K/year via Apex 50K EOD copy-traded stack
+**Goal:** Prove edge live on props → scale via Tradeify/TopStep automation → self-funded IBKR for $100K/year
 This file is the single working prop memo for this repo.
 Use it for:
 - current firm selection and sizing
@@ -31,7 +31,7 @@ Maintenance rule:
 **Apex 50K EOD**
 - Treat as the current base vehicle for the main scaling lane.
 - Official docs checked in this cycle support: `20` active PA accounts max, `4 mini / 40 micro` cap on `50K EOD`, and EOD payout gating with `5` qualifying days at `+$250` minimum, safety net `52,100`, minimum balance `52,600`, and `6` payouts max.
-- Official compliance docs do **not** support unattended automation on PA / Live accounts. Copy trading is allowed, and semi-automated software can be used only while actively monitored by the trader.
+- Official compliance docs **prohibit** automation AND copy trading on PA / Live accounts. "PA and Live Prop Accounts must be traded by the actual individual listed on the account and not by any other party, person, system, automated trading bot, copy, or trade mirror service." Manual only.
 - Important caveat: Apex documentation is not perfectly clean. The EOD payout page uses a `50%` consistency framing, while broader compliance pages still contain stricter language around windfall concentration / compliance behavior. Underwrite to the stricter interpretation until the dashboard and support match.
 - Sources:
   - `https://support.apextraderfunding.com/hc/en-us/articles/4406804554779-How-Many-Paid-Funded-Accounts-Am-I-Allowed-to-Have`
@@ -66,14 +66,14 @@ Maintenance rule:
 
 These are the operating conclusions from local research and sim work in this repo. They are useful, but they are not firm-policy facts.
 
-- `Apex 50K EOD` is the current base vehicle for the main scaling lane.
-- The current deployed scale pair is:
-  - `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G5`
-  - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_VOL_RV12_N20`
+- `Apex 50K EOD` is manual proof only (1 account). Automation and copy trading are prohibited.
+- `Tradeify 50K` is the primary MNQ automation scaling lane (5 accounts, Tradovate API).
+- `TopStep 50K Express` is the MGC automation lane (5 Express accounts, ProjectX API).
+- The overnight deployed sessions are: CME_PRECLOSE, COMEX_SETTLE, NYSE_CLOSE, NYSE_OPEN (all MNQ on Tradeify).
+- The morning deployed sessions are: CME_REOPEN, TOKYO_OPEN (MGC on TopStep).
 - `2 micros/account` is the conservative serious sizing on the current model.
-- `Tradeify 50K` is the current best non-Apex secondary lane.
-- `Topstep 50K` is the current morning / MGC alternative, not the main overnight scaling vehicle.
 - `0.75x` stop sizing remains the preferred prop-risk setting in the current local modeling.
+- Prop ceiling: ~$60K/year. $100K/year target lives in self-funded IBKR (Phase 3).
 
 If any of these change, update them as `LOCAL MODEL` conclusions, not as firm rules.
 
@@ -107,7 +107,7 @@ If you skip ANY of these, you are not trading the system. You are gambling.
 | Max open positions | 1 per instrument per account | Prevents stacking on same breakout |
 | Max daily loss | $500 per account (Phase 1) | Circuit breaker — stop trading for the day |
 | Max contracts | 1 micro (Phase 1), 2 micro (Phase 2 after proof) | Scale only after gates pass |
-| Max accounts | 1 (Phase 1), 5 then 20 (Phase 2 ramp) | Follow the ramp schedule exactly |
+| Max accounts | 1 (Phase 1), 5+5 across two firms (Phase 2 ramp) | Follow the ramp schedule exactly |
 
 **Portfolio-level hard limits:**
 
@@ -161,7 +161,7 @@ These aren't suggestions. They're circuit breakers. The system makes money over 
 
 ## The Plan in One Sentence
 
-Phase 1: trade manually to prove the edge is real. Phase 2: copy-trade 20 Apex EOD accounts on the best compliant pair. Phase 3: add automation only on firms / venues that officially allow it, or move to self-funded capital.
+Phase 1: trade manually on Apex to prove the edge is real. Phase 2: scale via automated Tradeify (5 accts MNQ) + TopStep (5 accts MGC) for ~$60K/year. Phase 3: self-funded IBKR with $50K own capital for $100K+/year.
 
 ---
 
@@ -911,10 +911,7 @@ At 40-55% win rate (our strategies), losing streaks are **mathematically guarant
 5. Set up contract: search **MNQM6** (or current front month) → Micro E-mini Nasdaq
 6. After passing eval: activate PA → select **Lifetime fee** ($160, not monthly)
 
-**Copy trading setup (Phase 2):**
-- Tradovate → Group Trading → create group with lead + follower accounts
-- All followers mirror the lead account's orders automatically
-- Test with 2 accounts first before scaling to 20
+**Phase 2 note:** Apex is manual only — no copy trading, no automation. Scaling happens on Tradeify + TopStep via API automation (see Phase 2 section).
 
 ### TopStep $50K (MGC Morning Lane)
 
