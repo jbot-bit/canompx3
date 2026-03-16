@@ -100,6 +100,17 @@ CG-1 through CG-4 found **0 TRUE findings requiring action**.
 - Drift check: 53/53 passed, 5 advisory
 - REPO_MAP: regenerated, current (minor delta: +8 ralph files)
 
+## 2026-03-16 — WORTH-EXPLORING #3: Threshold sweep documentation
+
+**What:** Added Multiple-testing note to `_optimize_threshold_profit` docstring in `trading_app/ml/meta_label.py`.
+Documents ~36-candidate sweep design trade-off and 4-gate OOS mitigation. Pure docstring addition — zero behavioral change.
+
+**Verification:** ruff PASS, drift 72/72 PASS, 115/115 ML tests PASS.
+
+**Files modified:** trading_app/ml/meta_label.py, scripts/infra/ralph/ralph-audit-report.md, scripts/infra/ralph/ralph-activity.md
+
+---
+
 ## 2026-03-05 — Task 9: Final CG Report
 
 **What:** Wrote FINAL SUMMARY section at top of ralph-audit-report.md.
