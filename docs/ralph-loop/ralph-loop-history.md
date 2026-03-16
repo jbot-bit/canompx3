@@ -997,3 +997,13 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 3 files (standalone experiment scripts, no production callers)
 - Verification: PASS (72 drift checks pass, ruff clean, behavioral audit 6/6)
 - Commit: 3057e0c
+
+## Iteration 103 — 2026-03-16
+- Phase: fix
+- Classification: [mechanical]
+- Target: research/research_zt_cpi_nfp.py:101
+- Finding: zip() without strict= parameter in infer_tick_size consecutive-diff loop (ruff B905)
+- Action: Added strict=False to zip(uniq, uniq[1:]) — lists are deliberately unequal length, strict=False makes intent explicit
+- Blast radius: 1 file, 0 external callers
+- Verification: ruff PASS, check_drift 72/72 PASS
+- Commit: 8f2c05b
