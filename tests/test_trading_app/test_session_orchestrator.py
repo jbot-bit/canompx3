@@ -726,7 +726,7 @@ class TestKillSwitch:
 
         # Mock feed that completes immediately with stop request
         class InstantFeed:
-            def __init__(self, auth, on_bar, demo):
+            def __init__(self, auth, on_bar, demo, on_stale=None):
                 self._stop_requested = True
 
             @property
@@ -1012,7 +1012,7 @@ def _make_feed_class(was_stopped: bool = False, crash: Exception | None = None):
     """Factory: build a mock feed class for reconnect tests."""
 
     class MockFeed:
-        def __init__(self, auth, on_bar, demo):
+        def __init__(self, auth, on_bar, demo, on_stale=None):
             self._stop_requested = was_stopped
 
         @property
@@ -1045,7 +1045,7 @@ class TestOrchestratorReconnect:
         call_count = 0
 
         class CountingFeed:
-            def __init__(self, auth, on_bar, demo):
+            def __init__(self, auth, on_bar, demo, on_stale=None):
                 self._stop_requested = False
 
             @property
@@ -1071,7 +1071,7 @@ class TestOrchestratorReconnect:
         call_count = 0
 
         class NeverReachFeed:
-            def __init__(self, auth, on_bar, demo):
+            def __init__(self, auth, on_bar, demo, on_stale=None):
                 self._stop_requested = False
 
             @property
@@ -1097,7 +1097,7 @@ class TestOrchestratorReconnect:
         call_count = 0
 
         class CrashOnceFeed:
-            def __init__(self, auth, on_bar, demo):
+            def __init__(self, auth, on_bar, demo, on_stale=None):
                 self._stop_requested = False
 
             @property
