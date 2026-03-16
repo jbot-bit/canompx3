@@ -299,7 +299,12 @@ class ProjectXDataFeed(BrokerFeed):
         """Consume bars from the sync→async queue bridge."""
         while True:
             bar = await self._bar_queue.get()
-            await self.on_bar(bar)
+            try:
+                await self.on_bar(bar)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.exception("on_bar error in drain queue — bar dropped, drain continues")
 
     # ------------------------------------------------------------------
     # SignalR event handlers — pysignalr (async context)
