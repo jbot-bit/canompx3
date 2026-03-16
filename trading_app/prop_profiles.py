@@ -140,6 +140,7 @@ PROP_FIRM_SPECS: dict[str, PropFirmSpec] = {
         name="topstep",
         display_name="TopStep",
         dd_type="eod_trailing",
+        # UNRESOLVED per playbook — 50/90 tiered believed correct but not re-verified. Conservative for ranking.
         profit_split_tiers=((5_000, 0.50), (float("inf"), 0.90)),
         consistency_rule=0.40,
         news_restriction=False,
@@ -183,7 +184,7 @@ PROP_FIRM_SPECS: dict[str, PropFirmSpec] = {
         display_name="Apex Trader Funding",
         dd_type="eod_trailing",
         profit_split_tiers=((float("inf"), 1.00),),  # 100% split on recent plans
-        consistency_rule=0.50,
+        consistency_rule=0.30,  # Underwrite to stricter 30% (compliance page) over 50% (EOD payout page) per playbook
         news_restriction=False,
         close_time_et="16:59",
         platform="tradovate",
@@ -246,7 +247,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         copies=1,
         stop_multiplier=0.75,
         max_slots=4,
-        # Waking hours Brisbane — manual sessions the user can physically trade
+        # Phase 1 manual sessions (playbook 5-session plan + MGC morning)
         allowed_sessions=frozenset(
             {
                 "CME_REOPEN",
@@ -255,6 +256,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 "SINGAPORE_OPEN",
                 "EUROPE_FLOW",
                 "LONDON_METALS",
+                "NYSE_OPEN",  # Night block — "last thing before bed" per playbook
             }
         ),
         # Metals banned at firm level; MNQ is primary. MES/M2K also allowed.

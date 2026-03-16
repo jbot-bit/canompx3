@@ -460,7 +460,8 @@ def main() -> None:
             print(f"  Sessions: {', '.join(sorted(all_sessions))}")
             total_copies = sum(ACCOUNT_PROFILES[pid].copies for pid in books)
             if total_copies > len(books):
-                print(f"  Account copies: {total_copies} (${total_dd * total_copies / len(books):,.0f} aggregate DD)")
+                aggregate_dd = sum(books[pid].total_dd_used * ACCOUNT_PROFILES[pid].copies for pid in books)
+                print(f"  Account copies: {total_copies} (${aggregate_dd:,.0f} aggregate DD)")
             print()
 
 
