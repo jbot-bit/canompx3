@@ -133,7 +133,8 @@ PREFLIGHT_RULES: dict[str, dict] = {
     "edge_families": {
         "query": "SELECT COUNT(*) FROM validated_setups WHERE instrument = $1 AND status = 'active'",
         "params": lambda inst, orb: [inst],
-        "fix": _PY + " trading_app/strategy_validator.py --instrument {instrument} --min-sample 50 --no-regime-waivers --min-years-positive-pct 0.75",
+        "fix": _PY
+        + " trading_app/strategy_validator.py --instrument {instrument} --min-sample 50 --no-regime-waivers --min-years-positive-pct 0.75",
         "desc": "active validated_setups for {instrument}",
     },
     "family_rr_locks": {
@@ -284,13 +285,41 @@ def get_resume_point(
 # ---------------------------------------------------------------------------
 
 REBUILD_STEPS: list[tuple[str, list[str]]] = [
-    ("outcome_builder_O5", [_PY, "trading_app/outcome_builder.py", "--instrument", "{instrument}", "--force", "--orb-minutes", "5"]),
-    ("outcome_builder_O15", [_PY, "trading_app/outcome_builder.py", "--instrument", "{instrument}", "--force", "--orb-minutes", "15"]),
-    ("outcome_builder_O30", [_PY, "trading_app/outcome_builder.py", "--instrument", "{instrument}", "--force", "--orb-minutes", "30"]),
+    (
+        "outcome_builder_O5",
+        [_PY, "trading_app/outcome_builder.py", "--instrument", "{instrument}", "--force", "--orb-minutes", "5"],
+    ),
+    (
+        "outcome_builder_O15",
+        [_PY, "trading_app/outcome_builder.py", "--instrument", "{instrument}", "--force", "--orb-minutes", "15"],
+    ),
+    (
+        "outcome_builder_O30",
+        [_PY, "trading_app/outcome_builder.py", "--instrument", "{instrument}", "--force", "--orb-minutes", "30"],
+    ),
     ("discovery_O5", [_PY, "trading_app/strategy_discovery.py", "--instrument", "{instrument}", "--orb-minutes", "5"]),
-    ("discovery_O15", [_PY, "trading_app/strategy_discovery.py", "--instrument", "{instrument}", "--orb-minutes", "15"]),
-    ("discovery_O30", [_PY, "trading_app/strategy_discovery.py", "--instrument", "{instrument}", "--orb-minutes", "30"]),
-    ("validator", [_PY, "trading_app/strategy_validator.py", "--instrument", "{instrument}", "--min-sample", "50", "--no-regime-waivers", "--min-years-positive-pct", "0.75"]),
+    (
+        "discovery_O15",
+        [_PY, "trading_app/strategy_discovery.py", "--instrument", "{instrument}", "--orb-minutes", "15"],
+    ),
+    (
+        "discovery_O30",
+        [_PY, "trading_app/strategy_discovery.py", "--instrument", "{instrument}", "--orb-minutes", "30"],
+    ),
+    (
+        "validator",
+        [
+            _PY,
+            "trading_app/strategy_validator.py",
+            "--instrument",
+            "{instrument}",
+            "--min-sample",
+            "50",
+            "--no-regime-waivers",
+            "--min-years-positive-pct",
+            "0.75",
+        ],
+    ),
     ("retire_e3", [_PY, "scripts/migrations/retire_e3_strategies.py"]),
     ("edge_families", [_PY, "scripts/tools/build_edge_families.py", "--instrument", "{instrument}"]),
     ("family_rr_locks", [_PY, "scripts/tools/select_family_rr.py"]),
@@ -359,7 +388,7 @@ def run_rebuild(
     trigger: str = "CLI",
     rebuild_id: str | None = None,
     db_path: str | None = None,
-) -> bool:
+) -> tuple[bool, duckdb.DuckDBPyConnection]:
     """Execute the full rebuild chain for *instrument*.
 
     Args:
@@ -372,7 +401,8 @@ def run_rebuild(
         rebuild_id: Optional pre-generated rebuild ID (from orchestrator).
 
     Returns:
-        True if all steps passed (or dry_run), False on any failure.
+        (success, con) — success bool + live connection (may differ from input
+        if reconnected after subprocess steps). Caller must use the returned con.
     """
     resume_completed: list[str] = []
     if resume:
@@ -390,7 +420,7 @@ def run_rebuild(
         print(f"DRY RUN — {total} steps for {instrument}:")
         for i, step in enumerate(steps, 1):
             print(f"  [{i}/{total}] {step['name']}: {step['cmd']}")
-        return True
+        return True, con
 
     if rebuild_id is None:
         rebuild_id = str(uuid.uuid4())
@@ -420,7 +450,7 @@ def run_rebuild(
             write_manifest(
                 con, rebuild_id, instrument, "FAILED", failed_step=step_name, steps_completed=completed, trigger=trigger
             )
-            return False
+            return False, con
 
         # Capture rows_before for audit log
         table_name = _get_step_table(step_name)
@@ -450,7 +480,7 @@ def run_rebuild(
             write_manifest(
                 con, rebuild_id, instrument, "FAILED", failed_step=step_name, steps_completed=completed, trigger=trigger
             )
-            return False
+            return False, con
 
         # Reopen connection after subprocess released the DB.
         # Retry briefly — Windows may not release the file handle immediately.
@@ -481,7 +511,7 @@ def run_rebuild(
             write_manifest(
                 con, rebuild_id, instrument, "FAILED", failed_step=step_name, steps_completed=completed, trigger=trigger
             )
-            return False
+            return False, con
 
         # Capture rows_after and log success
         rows_after = get_table_row_count(con, table_name, instrument) if table_name else None
@@ -517,12 +547,12 @@ def run_rebuild(
         write_manifest(con, rebuild_id, instrument, "COMPLETED", steps_completed=completed, trigger=trigger)
         log_operation(con, "ASSERTIONS", "post_rebuild", instrument=instrument, rebuild_id=rebuild_id, status="WARNING")
         print(f"Rebuild COMPLETED with assertion failures: {rebuild_id}")
-        return False
+        return False, con
     else:
         write_manifest(con, rebuild_id, instrument, "COMPLETED", steps_completed=completed, trigger=trigger)
 
     print(f"Rebuild COMPLETED: {rebuild_id}")
-    return True
+    return True, con
 
 
 # ---------------------------------------------------------------------------
@@ -750,7 +780,7 @@ def _run_with_safety(
         with PipelineLock("rebuild", db_path=Path(db_path)):
             con = duckdb.connect(db_path)
             try:
-                ok = run_rebuild(
+                ok, con = run_rebuild(
                     con,
                     instrument,
                     dry_run=dry_run,
@@ -850,7 +880,7 @@ def main() -> None:
                             print(f"{inst}: up to date, skipping.")
                             continue
                         print(f"{inst}: stale ({', '.join(status['stale_steps'])}), rebuilding...")
-                        ok = run_rebuild(con, inst, dry_run=args.dry_run, trigger=args.trigger, db_path=db_path)
+                        ok, con = run_rebuild(con, inst, dry_run=args.dry_run, trigger=args.trigger, db_path=db_path)
                         if not ok:
                             print(f"{inst}: rebuild FAILED — stopping.")
                             sys.exit(1)
