@@ -1,0 +1,1071 @@
+{
+  "generated": "2026-03-16",
+  "files": {
+    "pipeline/__init__.py": {
+      "importers": 0,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "pipeline/asset_configs.py": {
+      "importers": 29,
+      "imports": 0,
+      "centrality": "critical"
+    },
+    "pipeline/audit_bars_coverage.py": {
+      "importers": 0,
+      "imports": 3,
+      "centrality": "low"
+    },
+    "pipeline/audit_log.py": {
+      "importers": 2,
+      "imports": 1,
+      "centrality": "medium"
+    },
+    "pipeline/build_bars_5m.py": {
+      "importers": 0,
+      "imports": 4,
+      "centrality": "low"
+    },
+    "pipeline/build_daily_features.py": {
+      "importers": 15,
+      "imports": 8,
+      "centrality": "critical"
+    },
+    "pipeline/calendar_filters.py": {
+      "importers": 3,
+      "imports": 0,
+      "centrality": "medium"
+    },
+    "pipeline/check_db.py": {
+      "importers": 0,
+      "imports": 2,
+      "centrality": "low"
+    },
+    "pipeline/check_drift.py": {
+      "importers": 0,
+      "imports": 12,
+      "centrality": "low"
+    },
+    "pipeline/cost_model.py": {
+      "importers": 32,
+      "imports": 0,
+      "centrality": "critical"
+    },
+    "pipeline/daily_backfill.py": {
+      "importers": 1,
+      "imports": 3,
+      "centrality": "low"
+    },
+    "pipeline/dashboard.py": {
+      "importers": 0,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "pipeline/db_config.py": {
+      "importers": 29,
+      "imports": 0,
+      "centrality": "critical"
+    },
+    "pipeline/db_lock.py": {
+      "importers": 1,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "pipeline/dst.py": {
+      "importers": 13,
+      "imports": 0,
+      "centrality": "critical"
+    },
+    "pipeline/export_parquet.py": {
+      "importers": 0,
+      "imports": 2,
+      "centrality": "low"
+    },
+    "pipeline/health_check.py": {
+      "importers": 0,
+      "imports": 3,
+      "centrality": "low"
+    },
+    "pipeline/ingest_dbn.py": {
+      "importers": 0,
+      "imports": 5,
+      "centrality": "low"
+    },
+    "pipeline/ingest_dbn_daily.py": {
+      "importers": 1,
+      "imports": 5,
+      "centrality": "low"
+    },
+    "pipeline/ingest_dbn_mgc.py": {
+      "importers": 3,
+      "imports": 3,
+      "centrality": "medium"
+    },
+    "pipeline/init_db.py": {
+      "importers": 22,
+      "imports": 2,
+      "centrality": "critical"
+    },
+    "pipeline/log.py": {
+      "importers": 20,
+      "imports": 0,
+      "centrality": "critical"
+    },
+    "pipeline/paths.py": {
+      "importers": 84,
+      "imports": 0,
+      "centrality": "critical"
+    },
+    "pipeline/run_full_pipeline.py": {
+      "importers": 0,
+      "imports": 2,
+      "centrality": "low"
+    },
+    "pipeline/run_pipeline.py": {
+      "importers": 0,
+      "imports": 3,
+      "centrality": "low"
+    },
+    "pipeline/stats.py": {
+      "importers": 3,
+      "imports": 0,
+      "centrality": "medium"
+    },
+    "scripts/infra/backup_db.py": {
+      "importers": 1,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "scripts/infra/telegram_feed.py": {
+      "importers": 1,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "scripts/reports/__init__.py": {
+      "importers": 0,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "scripts/reports/parameter_stability_heatmap.py": {
+      "importers": 0,
+      "imports": 5,
+      "centrality": "low"
+    },
+    "scripts/reports/report_edge_portfolio.py": {
+      "importers": 0,
+      "imports": 4,
+      "centrality": "low"
+    },
+    "scripts/reports/report_wf_diagnostics.py": {
+      "importers": 0,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "scripts/tools/__init__.py": {
+      "importers": 0,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "scripts/tools/assert_rebuild.py": {
+      "importers": 1,
+      "imports": 6,
+      "centrality": "low"
+    },
+    "scripts/tools/audit_15m30m.py": {
+      "importers": 0,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "scripts/tools/audit_behavioral.py": {
+      "importers": 0,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "scripts/tools/audit_ib_single_break.py": {
+      "importers": 0,
+      "imports": 3,
+      "centrality": "low"
+    },
+    "scripts/tools/audit_integrity.py": {
+      "importers": 0,
+      "imports": 2,
+      "centrality": "low"
+    },
+    "scripts/tools/backfill_dollar_columns.py": {
+      "importers": 0,
+      "imports": 4,
+      "centrality": "low"
+    },
+    "scripts/tools/backfill_garch.py": {
+      "importers": 0,
+      "imports": 2,
+      "centrality": "low"
+    },
+    "scripts/tools/backtest_1100_early_exit.py": {
+      "importers": 0,
+      "imports": 2,
+      "centrality": "low"
+    },
+    "scripts/tools/backtest_atr_regime.py": {
+      "importers": 0,
+      "imports": 4,
+      "centrality": "low"
+    },
+    "scripts/tools/beginner_tradebook.py": {
+      "importers": 0,
+      "imports": 2,
+      "centrality": "low"
+    },
+    "scripts/tools/build_edge_families.py": {
+      "importers": 0,
+      "imports": 5,
+      "centrality": "low"
+    },
+    "scripts/tools/build_mes_outcomes_fast.py": {
+      "importers": 0,
+      "imports": 6,
+      "centrality": "low"
+    },
+    "scripts/tools/build_outcomes_fast.py": {
+      "importers": 0,
+      "imports": 7,
+      "centrality": "low"
+    },
+    "scripts/tools/coaching_digest.py": {
+      "importers": 1,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "scripts/tools/coaching_prompts.py": {
+      "importers": 2,
+      "imports": 0,
+      "centrality": "medium"
+    },
+    "scripts/tools/convert_connections.py": {
+      "importers": 0,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "scripts/tools/detect_volume_spikes.py": {
+      "importers": 0,
+      "imports": 2,
+      "centrality": "low"
+    },
+    "scripts/tools/explore.py": {
+      "importers": 0,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "scripts/tools/fetch_broker_fills.py": {
+      "importers": 0,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "scripts/tools/find_pf_strategy.py": {
+      "importers": 0,
+      "imports": 4,
+      "centrality": "low"
+    },
+    "scripts/tools/gen_playbook.py": {
+      "importers": 0,
+      "imports": 2,
+      "centrality": "low"
+    },
+    "scripts/tools/gen_repo_map.py": {
+      "importers": 0,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "scripts/tools/generate_promotion_candidates.py": {
+      "importers": 0,
+      "imports": 5,
+      "centrality": "low"
+    },
+    "scripts/tools/generate_trade_sheet.py": {
+      "importers": 0,
+      "imports": 6,
+      "centrality": "low"
+    },
+    "scripts/tools/hypothesis_test.py": {
+      "importers": 0,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "scripts/tools/import_graph.py": {
+      "importers": 0,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "scripts/tools/m25_audit.py": {
+      "importers": 6,
+      "imports": 0,
+      "centrality": "high"
+    },
+    "scripts/tools/m25_auto_audit.py": {
+      "importers": 0,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "scripts/tools/m25_ml_audit.py": {
+      "importers": 0,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "scripts/tools/m25_nightly.py": {
+      "importers": 0,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "scripts/tools/m25_preflight.py": {
+      "importers": 0,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "scripts/tools/m25_run_grounded_system.py": {
+      "importers": 0,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "scripts/tools/m25_run_ml_alpha.py": {
+      "importers": 0,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "scripts/tools/migrate_session_names.py": {
+      "importers": 0,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "scripts/tools/ml_audit.py": {
+      "importers": 0,
+      "imports": 3,
+      "centrality": "low"
+    },
+    "scripts/tools/ml_cross_session_experiment.py": {
+      "importers": 0,
+      "imports": 5,
+      "centrality": "low"
+    },
+    "scripts/tools/ml_hybrid_experiment.py": {
+      "importers": 0,
+      "imports": 4,
+      "centrality": "low"
+    },
+    "scripts/tools/ml_instrument_deep_dive.py": {
+      "importers": 0,
+      "imports": 4,
+      "centrality": "low"
+    },
+    "scripts/tools/ml_level_proximity_experiment.py": {
+      "importers": 0,
+      "imports": 4,
+      "centrality": "low"
+    },
+    "scripts/tools/ml_license_diagnostic.py": {
+      "importers": 0,
+      "imports": 3,
+      "centrality": "low"
+    },
+    "scripts/tools/ml_per_session_experiment.py": {
+      "importers": 0,
+      "imports": 4,
+      "centrality": "low"
+    },
+    "scripts/tools/ml_session_leakage_audit.py": {
+      "importers": 0,
+      "imports": 4,
+      "centrality": "low"
+    },
+    "scripts/tools/ml_threshold_sweep.py": {
+      "importers": 0,
+      "imports": 2,
+      "centrality": "low"
+    },
+    "scripts/tools/orb_size_deep_dive.py": {
+      "importers": 0,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "scripts/tools/parity_check.py": {
+      "importers": 0,
+      "imports": 3,
+      "centrality": "low"
+    },
+    "scripts/tools/pinecone_snapshots.py": {
+      "importers": 1,
+      "imports": 3,
+      "centrality": "low"
+    },
+    "scripts/tools/pipeline_status.py": {
+      "importers": 2,
+      "imports": 8,
+      "centrality": "medium"
+    },
+    "scripts/tools/profile_1000_runners.py": {
+      "importers": 0,
+      "imports": 3,
+      "centrality": "low"
+    },
+    "scripts/tools/prospective_tracker.py": {
+      "importers": 0,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "scripts/tools/rank_slots.py": {
+      "importers": 0,
+      "imports": 2,
+      "centrality": "low"
+    },
+    "scripts/tools/refresh_data.py": {
+      "importers": 0,
+      "imports": 3,
+      "centrality": "low"
+    },
+    "scripts/tools/rolling_portfolio_assembly.py": {
+      "importers": 0,
+      "imports": 3,
+      "centrality": "low"
+    },
+    "scripts/tools/rr_selection_analysis.py": {
+      "importers": 0,
+      "imports": 2,
+      "centrality": "low"
+    },
+    "scripts/tools/select_family_rr.py": {
+      "importers": 0,
+      "imports": 3,
+      "centrality": "low"
+    },
+    "scripts/tools/sensitivity_analysis.py": {
+      "importers": 0,
+      "imports": 6,
+      "centrality": "low"
+    },
+    "scripts/tools/stress_test.py": {
+      "importers": 0,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "scripts/tools/sync_pinecone.py": {
+      "importers": 0,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "scripts/tools/trade_matcher.py": {
+      "importers": 0,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "scripts/tools/trading_coach.py": {
+      "importers": 0,
+      "imports": 2,
+      "centrality": "low"
+    },
+    "scripts/tools/volume_session_analysis.py": {
+      "importers": 0,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "trading_app/__init__.py": {
+      "importers": 0,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "trading_app/ai/__init__.py": {
+      "importers": 0,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "trading_app/ai/cli.py": {
+      "importers": 0,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "trading_app/ai/corpus.py": {
+      "importers": 2,
+      "imports": 1,
+      "centrality": "medium"
+    },
+    "trading_app/ai/grounding.py": {
+      "importers": 1,
+      "imports": 3,
+      "centrality": "low"
+    },
+    "trading_app/ai/query_agent.py": {
+      "importers": 1,
+      "imports": 4,
+      "centrality": "low"
+    },
+    "trading_app/ai/sql_adapter.py": {
+      "importers": 4,
+      "imports": 2,
+      "centrality": "medium"
+    },
+    "trading_app/ai/strategy_matcher.py": {
+      "importers": 0,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "trading_app/analysis/__init__.py": {
+      "importers": 0,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "trading_app/analysis/asia_session_analyzer.py": {
+      "importers": 0,
+      "imports": 2,
+      "centrality": "low"
+    },
+    "trading_app/calendar_overlay.py": {
+      "importers": 1,
+      "imports": 2,
+      "centrality": "low"
+    },
+    "trading_app/cascade_table.py": {
+      "importers": 1,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "trading_app/config.py": {
+      "importers": 39,
+      "imports": 2,
+      "centrality": "critical"
+    },
+    "trading_app/db_manager.py": {
+      "importers": 8,
+      "imports": 3,
+      "centrality": "high"
+    },
+    "trading_app/entry_rules.py": {
+      "importers": 2,
+      "imports": 1,
+      "centrality": "medium"
+    },
+    "trading_app/execution_engine.py": {
+      "importers": 2,
+      "imports": 7,
+      "centrality": "medium"
+    },
+    "trading_app/execution_spec.py": {
+      "importers": 0,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "trading_app/live/__init__.py": {
+      "importers": 0,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "trading_app/live/bar_aggregator.py": {
+      "importers": 2,
+      "imports": 0,
+      "centrality": "medium"
+    },
+    "trading_app/live/broker_base.py": {
+      "importers": 0,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "trading_app/live/broker_factory.py": {
+      "importers": 1,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "trading_app/live/circuit_breaker.py": {
+      "importers": 1,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "trading_app/live/cusum_monitor.py": {
+      "importers": 0,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "trading_app/live/live_market_state.py": {
+      "importers": 1,
+      "imports": 2,
+      "centrality": "low"
+    },
+    "trading_app/live/multi_runner.py": {
+      "importers": 0,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "trading_app/live/notifications.py": {
+      "importers": 1,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "trading_app/live/performance_monitor.py": {
+      "importers": 1,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "trading_app/live/position_tracker.py": {
+      "importers": 1,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "trading_app/live/projectx/__init__.py": {
+      "importers": 0,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "trading_app/live/projectx/auth.py": {
+      "importers": 1,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "trading_app/live/projectx/contract_resolver.py": {
+      "importers": 0,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "trading_app/live/projectx/data_feed.py": {
+      "importers": 0,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "trading_app/live/projectx/order_router.py": {
+      "importers": 0,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "trading_app/live/projectx/positions.py": {
+      "importers": 0,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "trading_app/live/session_orchestrator.py": {
+      "importers": 0,
+      "imports": 18,
+      "centrality": "low"
+    },
+    "trading_app/live/trade_journal.py": {
+      "importers": 1,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "trading_app/live/tradovate/__init__.py": {
+      "importers": 0,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "trading_app/live/tradovate/auth.py": {
+      "importers": 1,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "trading_app/live/tradovate/contract_resolver.py": {
+      "importers": 1,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "trading_app/live/tradovate/data_feed.py": {
+      "importers": 0,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "trading_app/live/tradovate/order_router.py": {
+      "importers": 1,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "trading_app/live/tradovate/positions.py": {
+      "importers": 0,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "trading_app/live/webhook_server.py": {
+      "importers": 0,
+      "imports": 3,
+      "centrality": "low"
+    },
+    "trading_app/live_config.py": {
+      "importers": 8,
+      "imports": 6,
+      "centrality": "high"
+    },
+    "trading_app/market_state.py": {
+      "importers": 1,
+      "imports": 2,
+      "centrality": "low"
+    },
+    "trading_app/mcp_server.py": {
+      "importers": 0,
+      "imports": 6,
+      "centrality": "low"
+    },
+    "trading_app/ml/__init__.py": {
+      "importers": 0,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "trading_app/ml/config.py": {
+      "importers": 12,
+      "imports": 1,
+      "centrality": "critical"
+    },
+    "trading_app/ml/cpcv.py": {
+      "importers": 1,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "trading_app/ml/evaluate.py": {
+      "importers": 1,
+      "imports": 4,
+      "centrality": "low"
+    },
+    "trading_app/ml/evaluate_validated.py": {
+      "importers": 0,
+      "imports": 6,
+      "centrality": "low"
+    },
+    "trading_app/ml/features.py": {
+      "importers": 13,
+      "imports": 3,
+      "centrality": "critical"
+    },
+    "trading_app/ml/importance.py": {
+      "importers": 0,
+      "imports": 3,
+      "centrality": "low"
+    },
+    "trading_app/ml/meta_label.py": {
+      "importers": 0,
+      "imports": 5,
+      "centrality": "low"
+    },
+    "trading_app/ml/predict_live.py": {
+      "importers": 3,
+      "imports": 3,
+      "centrality": "medium"
+    },
+    "trading_app/nested/__init__.py": {
+      "importers": 0,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "trading_app/nested/audit_outcomes.py": {
+      "importers": 1,
+      "imports": 7,
+      "centrality": "low"
+    },
+    "trading_app/nested/builder.py": {
+      "importers": 1,
+      "imports": 10,
+      "centrality": "low"
+    },
+    "trading_app/nested/compare.py": {
+      "importers": 0,
+      "imports": 2,
+      "centrality": "low"
+    },
+    "trading_app/nested/discovery.py": {
+      "importers": 0,
+      "imports": 7,
+      "centrality": "low"
+    },
+    "trading_app/nested/schema.py": {
+      "importers": 3,
+      "imports": 1,
+      "centrality": "medium"
+    },
+    "trading_app/nested/validator.py": {
+      "importers": 0,
+      "imports": 5,
+      "centrality": "low"
+    },
+    "trading_app/outcome_builder.py": {
+      "importers": 11,
+      "imports": 10,
+      "centrality": "critical"
+    },
+    "trading_app/paper_trader.py": {
+      "importers": 1,
+      "imports": 10,
+      "centrality": "low"
+    },
+    "trading_app/pbo.py": {
+      "importers": 1,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "trading_app/portfolio.py": {
+      "importers": 6,
+      "imports": 7,
+      "centrality": "high"
+    },
+    "trading_app/prop_portfolio.py": {
+      "importers": 0,
+      "imports": 6,
+      "centrality": "low"
+    },
+    "trading_app/prop_profiles.py": {
+      "importers": 1,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "trading_app/regime/__init__.py": {
+      "importers": 0,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "trading_app/regime/compare.py": {
+      "importers": 0,
+      "imports": 2,
+      "centrality": "low"
+    },
+    "trading_app/regime/discovery.py": {
+      "importers": 0,
+      "imports": 7,
+      "centrality": "low"
+    },
+    "trading_app/regime/schema.py": {
+      "importers": 2,
+      "imports": 1,
+      "centrality": "medium"
+    },
+    "trading_app/regime/validator.py": {
+      "importers": 0,
+      "imports": 5,
+      "centrality": "low"
+    },
+    "trading_app/risk_manager.py": {
+      "importers": 2,
+      "imports": 0,
+      "centrality": "medium"
+    },
+    "trading_app/rolling_correlation.py": {
+      "importers": 0,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "trading_app/rolling_portfolio.py": {
+      "importers": 2,
+      "imports": 4,
+      "centrality": "medium"
+    },
+    "trading_app/scoring.py": {
+      "importers": 2,
+      "imports": 0,
+      "centrality": "medium"
+    },
+    "trading_app/setup_detector.py": {
+      "importers": 0,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "trading_app/strategy_discovery.py": {
+      "importers": 8,
+      "imports": 11,
+      "centrality": "high"
+    },
+    "trading_app/strategy_fitness.py": {
+      "importers": 4,
+      "imports": 7,
+      "centrality": "medium"
+    },
+    "trading_app/strategy_validator.py": {
+      "importers": 3,
+      "imports": 9,
+      "centrality": "medium"
+    },
+    "trading_app/view_strategies.py": {
+      "importers": 0,
+      "imports": 2,
+      "centrality": "low"
+    },
+    "trading_app/walkforward.py": {
+      "importers": 1,
+      "imports": 3,
+      "centrality": "low"
+    }
+  },
+  "tiers": {
+    "critical": [
+      "pipeline/paths.py",
+      "trading_app/config.py",
+      "pipeline/cost_model.py",
+      "pipeline/asset_configs.py",
+      "pipeline/db_config.py",
+      "pipeline/init_db.py",
+      "pipeline/log.py",
+      "pipeline/build_daily_features.py",
+      "pipeline/dst.py",
+      "trading_app/ml/features.py",
+      "trading_app/ml/config.py",
+      "trading_app/outcome_builder.py"
+    ],
+    "high": [
+      "trading_app/db_manager.py",
+      "trading_app/live_config.py",
+      "trading_app/strategy_discovery.py",
+      "scripts/tools/m25_audit.py",
+      "trading_app/portfolio.py"
+    ],
+    "medium": [
+      "trading_app/ai/sql_adapter.py",
+      "trading_app/strategy_fitness.py",
+      "pipeline/calendar_filters.py",
+      "pipeline/ingest_dbn_mgc.py",
+      "pipeline/stats.py",
+      "trading_app/ml/predict_live.py",
+      "trading_app/nested/schema.py",
+      "trading_app/strategy_validator.py",
+      "pipeline/audit_log.py",
+      "scripts/tools/coaching_prompts.py",
+      "scripts/tools/pipeline_status.py",
+      "trading_app/ai/corpus.py",
+      "trading_app/entry_rules.py",
+      "trading_app/execution_engine.py",
+      "trading_app/live/bar_aggregator.py",
+      "trading_app/regime/schema.py",
+      "trading_app/risk_manager.py",
+      "trading_app/rolling_portfolio.py",
+      "trading_app/scoring.py"
+    ],
+    "low": [
+      "pipeline/daily_backfill.py",
+      "pipeline/db_lock.py",
+      "pipeline/ingest_dbn_daily.py",
+      "scripts/infra/backup_db.py",
+      "scripts/infra/telegram_feed.py",
+      "scripts/tools/assert_rebuild.py",
+      "scripts/tools/coaching_digest.py",
+      "scripts/tools/pinecone_snapshots.py",
+      "trading_app/ai/grounding.py",
+      "trading_app/ai/query_agent.py",
+      "trading_app/calendar_overlay.py",
+      "trading_app/cascade_table.py",
+      "trading_app/live/broker_factory.py",
+      "trading_app/live/circuit_breaker.py",
+      "trading_app/live/live_market_state.py",
+      "trading_app/live/notifications.py",
+      "trading_app/live/performance_monitor.py",
+      "trading_app/live/position_tracker.py",
+      "trading_app/live/projectx/auth.py",
+      "trading_app/live/trade_journal.py",
+      "trading_app/live/tradovate/auth.py",
+      "trading_app/live/tradovate/contract_resolver.py",
+      "trading_app/live/tradovate/order_router.py",
+      "trading_app/market_state.py",
+      "trading_app/ml/cpcv.py",
+      "trading_app/ml/evaluate.py",
+      "trading_app/nested/audit_outcomes.py",
+      "trading_app/nested/builder.py",
+      "trading_app/paper_trader.py",
+      "trading_app/pbo.py",
+      "trading_app/prop_profiles.py",
+      "trading_app/walkforward.py",
+      "pipeline/__init__.py",
+      "pipeline/audit_bars_coverage.py",
+      "pipeline/build_bars_5m.py",
+      "pipeline/check_db.py",
+      "pipeline/check_drift.py",
+      "pipeline/dashboard.py",
+      "pipeline/export_parquet.py",
+      "pipeline/health_check.py",
+      "pipeline/ingest_dbn.py",
+      "pipeline/run_full_pipeline.py",
+      "pipeline/run_pipeline.py",
+      "scripts/reports/__init__.py",
+      "scripts/reports/parameter_stability_heatmap.py",
+      "scripts/reports/report_edge_portfolio.py",
+      "scripts/reports/report_wf_diagnostics.py",
+      "scripts/tools/__init__.py",
+      "scripts/tools/audit_15m30m.py",
+      "scripts/tools/audit_behavioral.py",
+      "scripts/tools/audit_ib_single_break.py",
+      "scripts/tools/audit_integrity.py",
+      "scripts/tools/backfill_dollar_columns.py",
+      "scripts/tools/backfill_garch.py",
+      "scripts/tools/backtest_1100_early_exit.py",
+      "scripts/tools/backtest_atr_regime.py",
+      "scripts/tools/beginner_tradebook.py",
+      "scripts/tools/build_edge_families.py",
+      "scripts/tools/build_mes_outcomes_fast.py",
+      "scripts/tools/build_outcomes_fast.py",
+      "scripts/tools/convert_connections.py",
+      "scripts/tools/detect_volume_spikes.py",
+      "scripts/tools/explore.py",
+      "scripts/tools/fetch_broker_fills.py",
+      "scripts/tools/find_pf_strategy.py",
+      "scripts/tools/gen_playbook.py",
+      "scripts/tools/gen_repo_map.py",
+      "scripts/tools/generate_promotion_candidates.py",
+      "scripts/tools/generate_trade_sheet.py",
+      "scripts/tools/hypothesis_test.py",
+      "scripts/tools/import_graph.py",
+      "scripts/tools/m25_auto_audit.py",
+      "scripts/tools/m25_ml_audit.py",
+      "scripts/tools/m25_nightly.py",
+      "scripts/tools/m25_preflight.py",
+      "scripts/tools/m25_run_grounded_system.py",
+      "scripts/tools/m25_run_ml_alpha.py",
+      "scripts/tools/migrate_session_names.py",
+      "scripts/tools/ml_audit.py",
+      "scripts/tools/ml_cross_session_experiment.py",
+      "scripts/tools/ml_hybrid_experiment.py",
+      "scripts/tools/ml_instrument_deep_dive.py",
+      "scripts/tools/ml_level_proximity_experiment.py",
+      "scripts/tools/ml_license_diagnostic.py",
+      "scripts/tools/ml_per_session_experiment.py",
+      "scripts/tools/ml_session_leakage_audit.py",
+      "scripts/tools/ml_threshold_sweep.py",
+      "scripts/tools/orb_size_deep_dive.py",
+      "scripts/tools/parity_check.py",
+      "scripts/tools/profile_1000_runners.py",
+      "scripts/tools/prospective_tracker.py",
+      "scripts/tools/rank_slots.py",
+      "scripts/tools/refresh_data.py",
+      "scripts/tools/rolling_portfolio_assembly.py",
+      "scripts/tools/rr_selection_analysis.py",
+      "scripts/tools/select_family_rr.py",
+      "scripts/tools/sensitivity_analysis.py",
+      "scripts/tools/stress_test.py",
+      "scripts/tools/sync_pinecone.py",
+      "scripts/tools/trade_matcher.py",
+      "scripts/tools/trading_coach.py",
+      "scripts/tools/volume_session_analysis.py",
+      "trading_app/__init__.py",
+      "trading_app/ai/__init__.py",
+      "trading_app/ai/cli.py",
+      "trading_app/ai/strategy_matcher.py",
+      "trading_app/analysis/__init__.py",
+      "trading_app/analysis/asia_session_analyzer.py",
+      "trading_app/execution_spec.py",
+      "trading_app/live/__init__.py",
+      "trading_app/live/broker_base.py",
+      "trading_app/live/cusum_monitor.py",
+      "trading_app/live/multi_runner.py",
+      "trading_app/live/projectx/__init__.py",
+      "trading_app/live/projectx/contract_resolver.py",
+      "trading_app/live/projectx/data_feed.py",
+      "trading_app/live/projectx/order_router.py",
+      "trading_app/live/projectx/positions.py",
+      "trading_app/live/session_orchestrator.py",
+      "trading_app/live/tradovate/__init__.py",
+      "trading_app/live/tradovate/data_feed.py",
+      "trading_app/live/tradovate/positions.py",
+      "trading_app/live/webhook_server.py",
+      "trading_app/mcp_server.py",
+      "trading_app/ml/__init__.py",
+      "trading_app/ml/evaluate_validated.py",
+      "trading_app/ml/importance.py",
+      "trading_app/ml/meta_label.py",
+      "trading_app/nested/__init__.py",
+      "trading_app/nested/compare.py",
+      "trading_app/nested/discovery.py",
+      "trading_app/nested/validator.py",
+      "trading_app/prop_portfolio.py",
+      "trading_app/regime/__init__.py",
+      "trading_app/regime/compare.py",
+      "trading_app/regime/discovery.py",
+      "trading_app/regime/validator.py",
+      "trading_app/rolling_correlation.py",
+      "trading_app/setup_detector.py",
+      "trading_app/view_strategies.py"
+    ]
+  }
+}

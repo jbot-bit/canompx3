@@ -1,0 +1,2011 @@
+{
+  "total_iterations": 105,
+  "last_updated": "2026-03-16",
+  "consecutive_low_only": 6,
+  "last_high_finding_iter": 105,
+  "findings_by_type": {
+    "canonical_violation": {
+      "found": 44,
+      "fixed": 33,
+      "deferred": 3,
+      "fix_rate": 0.75
+    },
+    "dead_code": {
+      "found": 14,
+      "fixed": 14,
+      "deferred": 0,
+      "fix_rate": 1.0
+    },
+    "other": {
+      "found": 12,
+      "fixed": 5,
+      "deferred": 0,
+      "fix_rate": 0.42
+    },
+    "silent_failure": {
+      "found": 11,
+      "fixed": 9,
+      "deferred": 1,
+      "fix_rate": 0.82
+    },
+    "annotation_debt": {
+      "found": 4,
+      "fixed": 3,
+      "deferred": 1,
+      "fix_rate": 0.75
+    },
+    "lint": {
+      "found": 4,
+      "fixed": 4,
+      "deferred": 0,
+      "fix_rate": 1.0
+    },
+    "falsy_zero": {
+      "found": 3,
+      "fixed": 3,
+      "deferred": 0,
+      "fix_rate": 1.0
+    },
+    "stale_metadata": {
+      "found": 2,
+      "fixed": 2,
+      "deferred": 0,
+      "fix_rate": 1.0
+    },
+    "connection_leak": {
+      "found": 2,
+      "fixed": 2,
+      "deferred": 0,
+      "fix_rate": 1.0
+    },
+    "security": {
+      "found": 1,
+      "fixed": 1,
+      "deferred": 0,
+      "fix_rate": 1.0
+    },
+    "cost_model_bug": {
+      "found": 1,
+      "fixed": 1,
+      "deferred": 0,
+      "fix_rate": 1.0
+    },
+    "resource": {
+      "found": 1,
+      "fixed": 1,
+      "deferred": 0,
+      "fix_rate": 1.0
+    },
+    "query_alignment": {
+      "found": 1,
+      "fixed": 1,
+      "deferred": 0,
+      "fix_rate": 1.0
+    },
+    "query_bug": {
+      "found": 1,
+      "fixed": 1,
+      "deferred": 0,
+      "fix_rate": 1.0
+    },
+    "test_gap": {
+      "found": 1,
+      "fixed": 1,
+      "deferred": 0,
+      "fix_rate": 1.0
+    },
+    "broad_except": {
+      "found": 1,
+      "fixed": 1,
+      "deferred": 0,
+      "fix_rate": 1.0
+    },
+    "drift_check_fix": {
+      "found": 1,
+      "fixed": 1,
+      "deferred": 0,
+      "fix_rate": 1.0
+    },
+    "type_error": {
+      "found": 1,
+      "fixed": 1,
+      "deferred": 0,
+      "fix_rate": 1.0
+    }
+  },
+  "findings_by_severity": {
+    "CRITICAL": 3,
+    "HIGH": 6,
+    "MEDIUM": 18,
+    "LOW": 78
+  },
+  "classifications": {
+    "judgment": 51,
+    "mechanical": 34,
+    "audit-only": 20
+  },
+  "files_audited": {
+    "execution_engine.py": {
+      "audit_count": 6,
+      "last_iter": 24,
+      "findings": 4
+    },
+    "session_orchestrator.py": {
+      "audit_count": 4,
+      "last_iter": 10,
+      "findings": 3
+    },
+    "portfolio.py": {
+      "audit_count": 4,
+      "last_iter": 22,
+      "findings": 3
+    },
+    "trading_app/execution_engine.py": {
+      "audit_count": 4,
+      "last_iter": 50,
+      "findings": 3
+    },
+    "webhook_server.py": {
+      "audit_count": 3,
+      "last_iter": 9,
+      "findings": 3
+    },
+    "trading_app/strategy_validator.py": {
+      "audit_count": 3,
+      "last_iter": 47,
+      "findings": 3
+    },
+    "performance_monitor.py": {
+      "audit_count": 3,
+      "last_iter": 10,
+      "findings": 2
+    },
+    "strategy_discovery.py": {
+      "audit_count": 3,
+      "last_iter": 24,
+      "findings": 2
+    },
+    "strategy_fitness.py": {
+      "audit_count": 3,
+      "last_iter": 22,
+      "findings": 2
+    },
+    "scripts/tools/generate_trade_sheet.py": {
+      "audit_count": 3,
+      "last_iter": 18,
+      "findings": 3
+    },
+    "trading_app/rolling_portfolio.py": {
+      "audit_count": 3,
+      "last_iter": 43,
+      "findings": 3
+    },
+    "trading_app/live_config.py": {
+      "audit_count": 3,
+      "last_iter": 51,
+      "findings": 3
+    },
+    "scripts/tools/build_edge_families.py": {
+      "audit_count": 3,
+      "last_iter": 91,
+      "findings": 2
+    },
+    "tradovate/order_router.py": {
+      "audit_count": 2,
+      "last_iter": 21,
+      "findings": 2
+    },
+    "projectx/order_router.py": {
+      "audit_count": 2,
+      "last_iter": 21,
+      "findings": 2
+    },
+    "pipeline/build_daily_features.py": {
+      "audit_count": 2,
+      "last_iter": 36,
+      "findings": 2
+    },
+    "live_config.py": {
+      "audit_count": 2,
+      "last_iter": 24,
+      "findings": 1
+    },
+    "config.py": {
+      "audit_count": 2,
+      "last_iter": 75,
+      "findings": 2
+    },
+    "trading_app/outcome_builder.py": {
+      "audit_count": 2,
+      "last_iter": 46,
+      "findings": 2
+    },
+    "trading_app/strategy_discovery.py": {
+      "audit_count": 2,
+      "last_iter": 34,
+      "findings": 2
+    },
+    "trading_app/paper_trader.py": {
+      "audit_count": 2,
+      "last_iter": 41,
+      "findings": 2
+    },
+    "trading_app/strategy_fitness.py": {
+      "audit_count": 2,
+      "last_iter": 49,
+      "findings": 0
+    },
+    "pipeline/check_drift.py": {
+      "audit_count": 2,
+      "last_iter": 66,
+      "findings": 2
+    },
+    "scripts/tools/audit_behavioral.py": {
+      "audit_count": 2,
+      "last_iter": 89,
+      "findings": 1
+    },
+    "scripts/tools/select_family_rr.py": {
+      "audit_count": 2,
+      "last_iter": 89,
+      "findings": 1
+    },
+    "report_edge_portfolio.py": {
+      "audit_count": 2,
+      "last_iter": 85,
+      "findings": 2
+    },
+    "build_outcomes_fast.py": {
+      "audit_count": 2,
+      "last_iter": 98,
+      "findings": 1
+    },
+    "prospective_tracker.py": {
+      "audit_count": 2,
+      "last_iter": 98,
+      "findings": 1
+    },
+    "build_mes_outcomes_fast.py": {
+      "audit_count": 2,
+      "last_iter": 98,
+      "findings": 1
+    },
+    "explore.py": {
+      "audit_count": 2,
+      "last_iter": 82,
+      "findings": 2
+    },
+    "stress_test.py": {
+      "audit_count": 2,
+      "last_iter": 83,
+      "findings": 2
+    },
+    "research/research_edge_structure.py": {
+      "audit_count": 2,
+      "last_iter": 109,
+      "findings": 2
+    },
+    "research/research_1015_vs_1000.py": {
+      "audit_count": 2,
+      "last_iter": 109,
+      "findings": 2
+    },
+    "strategy_validator.py": {
+      "audit_count": 1,
+      "last_iter": 5,
+      "findings": 0
+    },
+    "outcome_builder.py": {
+      "audit_count": 1,
+      "last_iter": 5,
+      "findings": 0
+    },
+    "build_daily_features.py": {
+      "audit_count": 1,
+      "last_iter": 5,
+      "findings": 0
+    },
+    "calendar_overlay.py": {
+      "audit_count": 1,
+      "last_iter": 6,
+      "findings": 1
+    },
+    "cusum_monitor.py": {
+      "audit_count": 1,
+      "last_iter": 8,
+      "findings": 0
+    },
+    "scoring.py": {
+      "audit_count": 1,
+      "last_iter": 8,
+      "findings": 0
+    },
+    "walkforward.py": {
+      "audit_count": 1,
+      "last_iter": 11,
+      "findings": 0
+    },
+    "circuit_breaker.py": {
+      "audit_count": 1,
+      "last_iter": 11,
+      "findings": 0
+    },
+    "risk_manager.py": {
+      "audit_count": 1,
+      "last_iter": 12,
+      "findings": 1
+    },
+    "cost_model.py": {
+      "audit_count": 1,
+      "last_iter": 12,
+      "findings": 1
+    },
+    "rolling_portfolio.py": {
+      "audit_count": 1,
+      "last_iter": 12,
+      "findings": 1
+    },
+    "tests/test_trading_app/test_ml/test_features.py": {
+      "audit_count": 1,
+      "last_iter": 13,
+      "findings": 1
+    },
+    "trading_app/walkforward.py": {
+      "audit_count": 1,
+      "last_iter": 15,
+      "findings": 1
+    },
+    "backfill_dollar_columns.py": {
+      "audit_count": 1,
+      "last_iter": 20,
+      "findings": 1
+    },
+    "contract_resolver.py": {
+      "audit_count": 1,
+      "last_iter": 22,
+      "findings": 1
+    },
+    "auth.py": {
+      "audit_count": 1,
+      "last_iter": 24,
+      "findings": 1
+    },
+    "tests/test_trading_app/test_order_router.py": {
+      "audit_count": 1,
+      "last_iter": 25,
+      "findings": 1
+    },
+    "test_projectx_router.py": {
+      "audit_count": 1,
+      "last_iter": 25,
+      "findings": 1
+    },
+    "trading_app/live/position_tracker.py": {
+      "audit_count": 1,
+      "last_iter": 26,
+      "findings": 1
+    },
+    "trading_app/mcp_server.py": {
+      "audit_count": 1,
+      "last_iter": 32,
+      "findings": 1
+    },
+    "trading_app/cascade_table.py": {
+      "audit_count": 1,
+      "last_iter": 37,
+      "findings": 1
+    },
+    "trading_app/market_state.py": {
+      "audit_count": 1,
+      "last_iter": 38,
+      "findings": 1
+    },
+    "trading_app/risk_manager.py": {
+      "audit_count": 1,
+      "last_iter": 39,
+      "findings": 1
+    },
+    "trading_app/portfolio.py": {
+      "audit_count": 1,
+      "last_iter": 48,
+      "findings": 1
+    },
+    "trading_app/entry_rules.py": {
+      "audit_count": 1,
+      "last_iter": 52,
+      "findings": 0
+    },
+    "trading_app/db_manager.py": {
+      "audit_count": 1,
+      "last_iter": 52,
+      "findings": 0
+    },
+    "trading_app/execution_spec.py": {
+      "audit_count": 1,
+      "last_iter": 53,
+      "findings": 1
+    },
+    "trading_app/pbo.py": {
+      "audit_count": 1,
+      "last_iter": 54,
+      "findings": 0
+    },
+    "trading_app/nested/builder.py": {
+      "audit_count": 1,
+      "last_iter": 54,
+      "findings": 0
+    },
+    "trading_app/nested/schema.py": {
+      "audit_count": 1,
+      "last_iter": 54,
+      "findings": 0
+    },
+    "trading_app/nested/discovery.py": {
+      "audit_count": 1,
+      "last_iter": 55,
+      "findings": 1
+    },
+    "trading_app/nested/compare.py": {
+      "audit_count": 1,
+      "last_iter": 56,
+      "findings": 0
+    },
+    "cli.py": {
+      "audit_count": 1,
+      "last_iter": 60,
+      "findings": 0
+    },
+    "corpus.py": {
+      "audit_count": 1,
+      "last_iter": 60,
+      "findings": 0
+    },
+    "grounding.py": {
+      "audit_count": 1,
+      "last_iter": 60,
+      "findings": 0
+    },
+    "query_agent.py": {
+      "audit_count": 1,
+      "last_iter": 60,
+      "findings": 0
+    },
+    "sql_adapter.py": {
+      "audit_count": 1,
+      "last_iter": 60,
+      "findings": 0
+    },
+    "strategy_matcher.py": {
+      "audit_count": 1,
+      "last_iter": 60,
+      "findings": 0
+    },
+    "trading_app/prop_portfolio.py": {
+      "audit_count": 1,
+      "last_iter": 61,
+      "findings": 1
+    },
+    "trading_app/prop_profiles.py": {
+      "audit_count": 1,
+      "last_iter": 61,
+      "findings": 1
+    },
+    "scripts/tools/pipeline_status.py": {
+      "audit_count": 1,
+      "last_iter": 64,
+      "findings": 1
+    },
+    "pipeline/health_check.py": {
+      "audit_count": 1,
+      "last_iter": 67,
+      "findings": 1
+    },
+    "pipeline/run_pipeline.py": {
+      "audit_count": 1,
+      "last_iter": 68,
+      "findings": 1
+    },
+    "pipeline/init_db.py": {
+      "audit_count": 1,
+      "last_iter": 69,
+      "findings": 1
+    },
+    "pipeline/dashboard.py": {
+      "audit_count": 1,
+      "last_iter": 70,
+      "findings": 0
+    },
+    "pipeline/db_lock.py": {
+      "audit_count": 1,
+      "last_iter": 70,
+      "findings": 0
+    },
+    "pipeline/audit_log.py": {
+      "audit_count": 1,
+      "last_iter": 70,
+      "findings": 0
+    },
+    "pipeline/paths.py": {
+      "audit_count": 1,
+      "last_iter": 71,
+      "findings": 1
+    },
+    "pipeline/log.py": {
+      "audit_count": 1,
+      "last_iter": 71,
+      "findings": 1
+    },
+    "pipeline/check_db.py": {
+      "audit_count": 1,
+      "last_iter": 71,
+      "findings": 1
+    },
+    "scripts/tools/assert_rebuild.py": {
+      "audit_count": 1,
+      "last_iter": 72,
+      "findings": 1
+    },
+    "scripts/infra/backup_db.py": {
+      "audit_count": 1,
+      "last_iter": 72,
+      "findings": 1
+    },
+    "gen_repo_map.py": {
+      "audit_count": 1,
+      "last_iter": 73,
+      "findings": 1
+    },
+    "sync_pinecone.py": {
+      "audit_count": 1,
+      "last_iter": 73,
+      "findings": 1
+    },
+    "retire_e3_strategies.py": {
+      "audit_count": 1,
+      "last_iter": 73,
+      "findings": 1
+    },
+    "refresh_data.py": {
+      "audit_count": 1,
+      "last_iter": 73,
+      "findings": 1
+    },
+    "sensitivity_analysis.py": {
+      "audit_count": 1,
+      "last_iter": 74,
+      "findings": 1
+    },
+    "gen_playbook.py": {
+      "audit_count": 1,
+      "last_iter": 74,
+      "findings": 1
+    },
+    "meta_label.py": {
+      "audit_count": 1,
+      "last_iter": 75,
+      "findings": 1
+    },
+    "features.py": {
+      "audit_count": 1,
+      "last_iter": 75,
+      "findings": 1
+    },
+    "scripts/tools/rr_selection_analysis.py": {
+      "audit_count": 1,
+      "last_iter": 76,
+      "findings": 1
+    },
+    "audit_integrity.py": {
+      "audit_count": 1,
+      "last_iter": 78,
+      "findings": 1
+    },
+    "parallel_rebuild.py": {
+      "audit_count": 1,
+      "last_iter": 78,
+      "findings": 1
+    },
+    "generate_promotion_candidates.py": {
+      "audit_count": 1,
+      "last_iter": 80,
+      "findings": 1
+    },
+    "rolling_portfolio_assembly.py": {
+      "audit_count": 1,
+      "last_iter": 80,
+      "findings": 1
+    },
+    "hypothesis_test.py": {
+      "audit_count": 1,
+      "last_iter": 81,
+      "findings": 1
+    },
+    "detect_volume_spikes.py": {
+      "audit_count": 1,
+      "last_iter": 81,
+      "findings": 1
+    },
+    "backfill_garch.py": {
+      "audit_count": 1,
+      "last_iter": 82,
+      "findings": 1
+    },
+    "coaching_digest.py": {
+      "audit_count": 1,
+      "last_iter": 86,
+      "findings": 0
+    },
+    "trading_coach.py": {
+      "audit_count": 1,
+      "last_iter": 86,
+      "findings": 0
+    },
+    "rolling_eval.py": {
+      "audit_count": 1,
+      "last_iter": 86,
+      "findings": 0
+    },
+    "rolling_eval_parallel.py": {
+      "audit_count": 1,
+      "last_iter": 86,
+      "findings": 0
+    },
+    "run_parallel_ingest.py": {
+      "audit_count": 1,
+      "last_iter": 86,
+      "findings": 0
+    },
+    "scratch_ingest.py": {
+      "audit_count": 1,
+      "last_iter": 86,
+      "findings": 0
+    },
+    "scripts/reports/parameter_stability_heatmap.py": {
+      "audit_count": 1,
+      "last_iter": 87,
+      "findings": 1
+    },
+    "scripts/run_live_session.py": {
+      "audit_count": 1,
+      "last_iter": 88,
+      "findings": 1
+    },
+    "scripts/tools/generate_promotion_candidates.py": {
+      "audit_count": 1,
+      "last_iter": 89,
+      "findings": 0
+    },
+    "scripts/tools/pinecone_snapshots.py": {
+      "audit_count": 1,
+      "last_iter": 92,
+      "findings": 1
+    },
+    "scripts/tools/sensitivity_analysis.py": {
+      "audit_count": 1,
+      "last_iter": 93,
+      "findings": 1
+    },
+    "scripts/tools/gen_playbook.py": {
+      "audit_count": 1,
+      "last_iter": 95,
+      "findings": 1
+    },
+    "scripts/tools/ml_per_session_experiment.py": {
+      "audit_count": 1,
+      "last_iter": 96,
+      "findings": 0
+    },
+    "ml_level_proximity_experiment.py": {
+      "audit_count": 1,
+      "last_iter": 96,
+      "findings": 0
+    },
+    "ml_threshold_sweep.py": {
+      "audit_count": 1,
+      "last_iter": 96,
+      "findings": 0
+    },
+    "ml_session_leakage_audit.py": {
+      "audit_count": 1,
+      "last_iter": 96,
+      "findings": 0
+    },
+    "ml_license_diagnostic.py": {
+      "audit_count": 1,
+      "last_iter": 96,
+      "findings": 0
+    },
+    "audit_15m30m.py": {
+      "audit_count": 1,
+      "last_iter": 96,
+      "findings": 0
+    },
+    "scripts/tools/backtest_1100_early_exit.py": {
+      "audit_count": 1,
+      "last_iter": 97,
+      "findings": 0
+    },
+    "backtest_atr_regime.py": {
+      "audit_count": 1,
+      "last_iter": 97,
+      "findings": 0
+    },
+    "beginner_tradebook.py": {
+      "audit_count": 1,
+      "last_iter": 97,
+      "findings": 0
+    },
+    "find_pf_strategy.py": {
+      "audit_count": 1,
+      "last_iter": 97,
+      "findings": 0
+    },
+    "rank_slots.py": {
+      "audit_count": 1,
+      "last_iter": 97,
+      "findings": 0
+    },
+    "scripts/tools/parity_check.py": {
+      "audit_count": 1,
+      "last_iter": 98,
+      "findings": 0
+    },
+    "profile_1000_runners.py": {
+      "audit_count": 1,
+      "last_iter": 98,
+      "findings": 0
+    },
+    "scripts/tools/m25_nightly.py": {
+      "audit_count": 1,
+      "last_iter": 99,
+      "findings": 0
+    },
+    "m25_audit.py": {
+      "audit_count": 1,
+      "last_iter": 99,
+      "findings": 0
+    },
+    "m25_auto_audit.py": {
+      "audit_count": 1,
+      "last_iter": 99,
+      "findings": 0
+    },
+    "m25_preflight.py": {
+      "audit_count": 1,
+      "last_iter": 99,
+      "findings": 0
+    },
+    "m25_run_grounded_system.py": {
+      "audit_count": 1,
+      "last_iter": 99,
+      "findings": 0
+    },
+    "scripts/tools/refresh_data.py": {
+      "audit_count": 1,
+      "last_iter": 100,
+      "findings": 1
+    },
+    "pipeline/asset_configs.py": {
+      "audit_count": 1,
+      "last_iter": 100,
+      "findings": 1
+    },
+    "tests/test_pipeline/test_asset_configs.py": {
+      "audit_count": 1,
+      "last_iter": 100,
+      "findings": 1
+    },
+    "research/research_mes_compressed_spring.py": {
+      "audit_count": 1,
+      "last_iter": 101,
+      "findings": 1
+    },
+    "research/research_mgc_asian_fade_mfe.py": {
+      "audit_count": 1,
+      "last_iter": 102,
+      "findings": 1
+    },
+    "research/research_post_break_pullback.py": {
+      "audit_count": 1,
+      "last_iter": 102,
+      "findings": 1
+    },
+    "research/research_zt_cpi_nfp.py": {
+      "audit_count": 1,
+      "last_iter": 103,
+      "findings": 1
+    },
+    "research/research_mgc_mnq_correlation.py": {
+      "audit_count": 1,
+      "last_iter": 104,
+      "findings": 1
+    },
+    "research/research_atr_velocity_gate.py": {
+      "audit_count": 1,
+      "last_iter": 105,
+      "findings": 1
+    },
+    "research/research_mgc_regime_shift.py": {
+      "audit_count": 1,
+      "last_iter": 105,
+      "findings": 1
+    },
+    "research/research_zt_event_viability.py": {
+      "audit_count": 1,
+      "last_iter": 106,
+      "findings": 1
+    },
+    "research/research_vol_regime_switching.py": {
+      "audit_count": 1,
+      "last_iter": 107,
+      "findings": 1
+    },
+    "research/research_overlap_analysis.py": {
+      "audit_count": 1,
+      "last_iter": 110,
+      "findings": 1
+    },
+    "research/research_aperture_scan.py": {
+      "audit_count": 1,
+      "last_iter": 111,
+      "findings": 1
+    }
+  },
+  "iterations": [
+    {
+      "iter": 1,
+      "date": "2026-03-09",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "full codebase (trading_app/live/)",
+      "finding_type": "canonical_violation",
+      "severity": "HIGH",
+      "verdict": "NOTED",
+      "commit": "NONE (audit only)"
+    },
+    {
+      "iter": 2,
+      "date": "2026-03-09",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "tradovate/order_router.py:167, projectx/order_router.py:102",
+      "finding_type": "silent_failure",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "9c40b5e"
+    },
+    {
+      "iter": 3,
+      "date": "2026-03-09",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "session_orchestrator.py:524-530",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "e78d63b"
+    },
+    {
+      "iter": 4,
+      "date": "2026-03-09",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "webhook_server.py:218 (Finding 6) and webhook_server.py:99,227 (Finding 8)",
+      "finding_type": "security",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "ac90d71"
+    },
+    {
+      "iter": 5,
+      "date": "2026-03-09",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "execution_engine.py, strategy_validator.py, outcome_builder.py, build_daily_features.py",
+      "finding_type": "annotation_debt",
+      "severity": "HIGH",
+      "verdict": "NOTED",
+      "commit": "NONE (audit only)"
+    },
+    {
+      "iter": 6,
+      "date": "2026-03-09",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "batch: execution_engine.py:688,879,1020 + calendar_overlay.py:93-119",
+      "finding_type": "cost_model_bug",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "e465403"
+    },
+    {
+      "iter": 7,
+      "date": "2026-03-09",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "batch: pipeline/build_daily_features.py (F3) + trading_app/strategy_validator.py (F4)",
+      "finding_type": "canonical_violation",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "ea46784"
+    },
+    {
+      "iter": 8,
+      "date": "2026-03-09",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "session_orchestrator.py, cusum_monitor.py, performance_monitor.py, scoring.py, portfolio.py",
+      "finding_type": "silent_failure",
+      "severity": "CRITICAL",
+      "verdict": "NOTED",
+      "commit": "NONE (audit only)"
+    },
+    {
+      "iter": 9,
+      "date": "2026-03-09",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "batch: session_orchestrator.py:931, webhook_server.py:201",
+      "finding_type": "falsy_zero",
+      "severity": "HIGH",
+      "verdict": "FIXED",
+      "commit": "7002aad"
+    },
+    {
+      "iter": 10,
+      "date": "2026-03-09",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "batch: performance_monitor.py:96-99 (F2) + performance_monitor.py:60 (F3) + session_orchestrator.py:1030 (F4)",
+      "finding_type": "canonical_violation",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "2ce0c70"
+    },
+    {
+      "iter": 11,
+      "date": "2026-03-09",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "execution_engine.py (multi-aperture), live_config.py (orb_minutes), strategy_discovery.py, walkforward.py, strategy_fitness.py, circuit_breaker.py, + all uncommitted changes (ML predictor, liveness probe, model staleness, RR lock fix)",
+      "finding_type": "other",
+      "severity": "LOW",
+      "verdict": "CLEAN",
+      "commit": "NONE (audit only)"
+    },
+    {
+      "iter": 12,
+      "date": "2026-03-09",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "risk_manager.py, portfolio.py, cost_model.py, rolling_portfolio.py, strategy_fitness.py",
+      "finding_type": "canonical_violation",
+      "severity": "CRITICAL",
+      "verdict": "PENDING",
+      "commit": "PENDING"
+    },
+    {
+      "iter": 13,
+      "date": "2026-03-10",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "tests/test_trading_app/test_ml/test_features.py:389,398,407,417,426",
+      "finding_type": "resource",
+      "severity": "HIGH",
+      "verdict": "FIXED",
+      "commit": "d93fa92"
+    },
+    {
+      "iter": 15,
+      "date": "2026-03-10",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/walkforward.py:162,242",
+      "finding_type": "annotation_debt",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "e2ca011"
+    },
+    {
+      "iter": 16,
+      "date": "2026-03-10",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "scripts/tools/generate_trade_sheet.py:134,140",
+      "finding_type": "silent_failure",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "29f37d1"
+    },
+    {
+      "iter": 17,
+      "date": "2026-03-10",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "scripts/tools/generate_trade_sheet.py:200-226 (_load_best_by_expr)",
+      "finding_type": "query_alignment",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "7caa6fa"
+    },
+    {
+      "iter": 18,
+      "date": "2026-03-10",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "scripts/tools/generate_trade_sheet.py:112,216",
+      "finding_type": "query_bug",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "f82c408"
+    },
+    {
+      "iter": 19,
+      "date": "2026-03-10",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "trading_app/execution_engine.py (1229 lines)",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "NOTED",
+      "commit": "NONE (audit only)"
+    },
+    {
+      "iter": 20,
+      "date": "2026-03-10",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "strategy_discovery.py:630,634 + portfolio.py:965 + backfill_dollar_columns.py:92-95",
+      "finding_type": "annotation_debt",
+      "severity": "HIGH",
+      "verdict": "FIXED",
+      "commit": "137bf27"
+    },
+    {
+      "iter": 21,
+      "date": "2026-03-10",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "tradovate/order_router.py:136,140,202,206 + projectx/order_router.py:74,88,171",
+      "finding_type": "falsy_zero",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "3b10732"
+    },
+    {
+      "iter": 22,
+      "date": "2026-03-10",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "contract_resolver.py:40, strategy_fitness.py:124, portfolio.py:953",
+      "finding_type": "falsy_zero",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "684a37c"
+    },
+    {
+      "iter": 23,
+      "date": "2026-03-11",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "execution_engine.py:1152-1154 (EE1) + execution_engine.py:640-641 (_try_entry silent drop)",
+      "finding_type": "silent_failure",
+      "severity": "HIGH",
+      "verdict": "FIXED",
+      "commit": "f7bd0c4"
+    },
+    {
+      "iter": 24,
+      "date": "2026-03-11",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "config.py:970, live_config.py:61-64, execution_engine.py:262, auth.py:42, strategy_discovery.py:1030",
+      "finding_type": "canonical_violation",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "7cf57cb"
+    },
+    {
+      "iter": 25,
+      "date": "2026-03-11",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "tests/test_trading_app/test_order_router.py + test_projectx_router.py",
+      "finding_type": "test_gap",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "8261a0e"
+    },
+    {
+      "iter": 26,
+      "date": "2026-03-11",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/live/position_tracker.py:189",
+      "finding_type": "silent_failure",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "f713a1c"
+    },
+    {
+      "iter": 27,
+      "date": "2026-03-12",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/rolling_portfolio.py:48,323,414",
+      "finding_type": "silent_failure",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "0515f15"
+    },
+    {
+      "iter": 28,
+      "date": "2026-03-12",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/live_config.py:75,89",
+      "finding_type": "annotation_debt",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "43a86ba"
+    },
+    {
+      "iter": 29,
+      "date": "2026-03-12",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/outcome_builder.py:677-678",
+      "finding_type": "silent_failure",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "07b4ba9"
+    },
+    {
+      "iter": 30,
+      "date": "2026-03-12",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/strategy_discovery.py:1082",
+      "finding_type": "stale_metadata",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "371bc51"
+    },
+    {
+      "iter": 31,
+      "date": "2026-03-12",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/paper_trader.py:462,474 + trading_app/rolling_portfolio.py:238",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "9158b77"
+    },
+    {
+      "iter": 32,
+      "date": "2026-03-13",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/mcp_server.py:213 + lines 54-55",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "da8af67"
+    },
+    {
+      "iter": 34,
+      "date": "2026-03-13",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/strategy_discovery.py:23,1125",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "d318da7"
+    },
+    {
+      "iter": 35,
+      "date": "2026-03-13",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/strategy_validator.py:32",
+      "finding_type": "dead_code",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "c0b6cf6"
+    },
+    {
+      "iter": 36,
+      "date": "2026-03-13",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "pipeline/build_daily_features.py:884,1143",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "49b32a9"
+    },
+    {
+      "iter": 37,
+      "date": "2026-03-13",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/cascade_table.py:17",
+      "finding_type": "dead_code",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "00511df"
+    },
+    {
+      "iter": 38,
+      "date": "2026-03-13",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/market_state.py:20 + docstring:10",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "94dfe8c"
+    },
+    {
+      "iter": 39,
+      "date": "2026-03-13",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/risk_manager.py:15-17",
+      "finding_type": "dead_code",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "adf475f"
+    },
+    {
+      "iter": 40,
+      "date": "2026-03-13",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/execution_engine.py:21,23",
+      "finding_type": "dead_code",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "1c7a133"
+    },
+    {
+      "iter": 41,
+      "date": "2026-03-13",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/paper_trader.py:23",
+      "finding_type": "dead_code",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "6a09e64"
+    },
+    {
+      "iter": 42,
+      "date": "2026-03-13",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/live_config.py:21",
+      "finding_type": "dead_code",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "27604b9"
+    },
+    {
+      "iter": 43,
+      "date": "2026-03-14",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/rolling_portfolio.py:24",
+      "finding_type": "dead_code",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "aa818e1"
+    },
+    {
+      "iter": 44,
+      "date": "2026-03-14",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "trading_app/strategy_fitness.py (1153 lines)",
+      "finding_type": "other",
+      "severity": "LOW",
+      "verdict": "CLEAN",
+      "commit": "NONE"
+    },
+    {
+      "iter": 45,
+      "date": "2026-03-14",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/execution_engine.py:410-412",
+      "finding_type": "silent_failure",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "4c6bc4d"
+    },
+    {
+      "iter": 46,
+      "date": "2026-03-14",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/outcome_builder.py:22",
+      "finding_type": "dead_code",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "f6b34f6"
+    },
+    {
+      "iter": 47,
+      "date": "2026-03-14",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/strategy_validator.py:7-14",
+      "finding_type": "stale_metadata",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "7ed02ab"
+    },
+    {
+      "iter": 48,
+      "date": "2026-03-14",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/portfolio.py:22",
+      "finding_type": "dead_code",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "e792bb5"
+    },
+    {
+      "iter": 49,
+      "date": "2026-03-14",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "trading_app/strategy_fitness.py",
+      "finding_type": "other",
+      "severity": "LOW",
+      "verdict": "CLEAN",
+      "commit": "NONE"
+    },
+    {
+      "iter": 50,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/execution_engine.py:457-465 (_arm_strategies)",
+      "finding_type": "silent_failure",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "100e9da"
+    },
+    {
+      "iter": 51,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/live_config.py:499",
+      "finding_type": "broad_except",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "b486e9a"
+    },
+    {
+      "iter": 52,
+      "date": "2026-03-15",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "trading_app/entry_rules.py + trading_app/db_manager.py",
+      "finding_type": "other",
+      "severity": "LOW",
+      "verdict": "CLEAN",
+      "commit": "NONE"
+    },
+    {
+      "iter": 53,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/execution_spec.py:46",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "41f19b4"
+    },
+    {
+      "iter": 54,
+      "date": "2026-03-15",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "trading_app/pbo.py + trading_app/nested/builder.py + trading_app/nested/schema.py",
+      "finding_type": "other",
+      "severity": "LOW",
+      "verdict": "CLEAN",
+      "commit": "NONE"
+    },
+    {
+      "iter": 55,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/nested/discovery.py:174",
+      "finding_type": "other",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "52c74c5"
+    },
+    {
+      "iter": 56,
+      "date": "2026-03-15",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "trading_app/nested/compare.py + scripts/tools/build_edge_families.py",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "CLEAN",
+      "commit": "NONE"
+    },
+    {
+      "iter": 57,
+      "date": "2026-03-15",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "trading_app/live/ (8 files: circuit_breaker, cusum_monitor, notifications, live_market_state, multi_runner, broker_factory, broker_base, trade_journal)",
+      "finding_type": "canonical_violation",
+      "severity": "CRITICAL",
+      "verdict": "CLEAN",
+      "commit": "NONE"
+    },
+    {
+      "iter": 58,
+      "date": "2026-03-15",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "trading_app/live/projectx/ (5 files: auth, contract_resolver, data_feed, order_router, positions) + trading_app/live/tradovate/ (5 files: auth, contract_resolver, data_feed, order_router, positions)",
+      "finding_type": "silent_failure",
+      "severity": "LOW",
+      "verdict": "CLEAN",
+      "commit": "NONE"
+    },
+    {
+      "iter": 60,
+      "date": "2026-03-15",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "trading_app/ai/ (cli.py, corpus.py, grounding.py, query_agent.py, sql_adapter.py, strategy_matcher.py)",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "CLEAN",
+      "commit": "NONE"
+    },
+    {
+      "iter": 61,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/prop_portfolio.py:16, trading_app/prop_profiles.py:13",
+      "finding_type": "lint",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "af5ff0b"
+    },
+    {
+      "iter": 64,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "scripts/tools/pipeline_status.py (full Seven Sins scan completion)",
+      "finding_type": "silent_failure",
+      "severity": "MEDIUM",
+      "verdict": "ACCEPT",
+      "commit": null
+    },
+    {
+      "iter": 65,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "pipeline/check_drift.py (partial Seven Sins scan \u2014 3539 lines)",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "ACCEPT",
+      "commit": null
+    },
+    {
+      "iter": 66,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "pipeline/check_drift.py (scan completed, no new fix) + scripts/tools/audit_behavioral.py (full scan)",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "ACCEPT",
+      "commit": null
+    },
+    {
+      "iter": 67,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "pipeline/health_check.py (full Seven Sins scan)",
+      "finding_type": "connection_leak",
+      "severity": "MEDIUM",
+      "verdict": "ACCEPT",
+      "commit": null
+    },
+    {
+      "iter": 68,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "pipeline/run_pipeline.py (full Seven Sins scan)",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "ACCEPT",
+      "commit": null
+    },
+    {
+      "iter": 69,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "pipeline/init_db.py (full Seven Sins scan)",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "ACCEPT",
+      "commit": null
+    },
+    {
+      "iter": 70,
+      "date": "2026-03-15",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "pipeline/dashboard.py + pipeline/db_lock.py + pipeline/audit_log.py",
+      "finding_type": "other",
+      "severity": "LOW",
+      "verdict": "CLEAN",
+      "commit": "NONE"
+    },
+    {
+      "iter": 71,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "pipeline/paths.py + pipeline/log.py + pipeline/check_db.py + scripts/tools/select_family_rr.py (full scan, 5 files)",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "ACCEPT",
+      "commit": null
+    },
+    {
+      "iter": 72,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "scripts/tools/assert_rebuild.py + scripts/infra/backup_db.py",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "ACCEPT",
+      "commit": null
+    },
+    {
+      "iter": 73,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "gen_repo_map.py (CLEAN) + sync_pinecone.py (CLEAN) + retire_e3_strategies.py (CLEAN) + refresh_data.py (FIX)",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "ACCEPT",
+      "commit": null
+    },
+    {
+      "iter": 74,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "sensitivity_analysis.py (FIX) + report_edge_portfolio.py (CLEAN) + gen_playbook.py (CLEAN, noted gap)",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "ACCEPT",
+      "commit": null
+    },
+    {
+      "iter": 75,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/ml/ subpackage \u2014 config.py (CLEAN), meta_label.py (FIX), features.py (CLEAN)",
+      "finding_type": "connection_leak",
+      "severity": "MEDIUM",
+      "verdict": "ACCEPT",
+      "commit": null
+    },
+    {
+      "iter": 76,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "ML subpackage completion (5 files CLEAN) + scripts/tools/rr_selection_analysis.py (FIX)",
+      "finding_type": "canonical_violation",
+      "severity": "MEDIUM",
+      "verdict": "ACCEPT",
+      "commit": null
+    },
+    {
+      "iter": 77,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "Codebase sweep for hardcoded `\"gold.db\"` paths",
+      "finding_type": "other",
+      "severity": "LOW",
+      "verdict": "ACCEPT",
+      "commit": null
+    },
+    {
+      "iter": 78,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "audit_integrity.py (CLEAN) + parallel_rebuild.py (CLEAN) + build_outcomes_fast.py (FIX)",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "ACCEPT",
+      "commit": null
+    },
+    {
+      "iter": 79,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "Drift check #62 regex hardening + downstream fixes",
+      "finding_type": "drift_check_fix",
+      "severity": "LOW",
+      "verdict": "ACCEPT",
+      "commit": null
+    },
+    {
+      "iter": 80,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "generate_promotion_candidates.py (CLEAN) + prospective_tracker.py (CLEAN) + rolling_portfolio_assembly.py (CLEAN) + build_mes_outcomes_fast.py (FIX)",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "ACCEPT",
+      "commit": null
+    },
+    {
+      "iter": 81,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "hypothesis_test.py (FIX) + explore.py (noted) + detect_volume_spikes.py (CLEAN)",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "ACCEPT",
+      "commit": null
+    },
+    {
+      "iter": 82,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "explore.py (FIX) + backfill_garch.py (CLEAN) + stress_test.py (noted)",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "ACCEPT",
+      "commit": null
+    },
+    {
+      "iter": 83,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "stress_test.py (FIX)",
+      "finding_type": "other",
+      "severity": "LOW",
+      "verdict": "ACCEPT",
+      "commit": null
+    },
+    {
+      "iter": 84,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "Last 3 production files with `PROJECT_ROOT / \"gold.db\"` pattern",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "ACCEPT",
+      "commit": null
+    },
+    {
+      "iter": 85,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "report_edge_portfolio.py (FIX) + instrument list sweep",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "ACCEPT",
+      "commit": null
+    },
+    {
+      "iter": 86,
+      "date": "2026-03-15",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "Deep sweep \u2014 coaching_digest.py, trading_coach.py, rolling_eval.py, rolling_eval_parallel.py, run_parallel_ingest.py, scratch_ingest.py + pattern sweeps",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "CLEAN",
+      "commit": "NONE"
+    },
+    {
+      "iter": 87,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "scripts/reports/parameter_stability_heatmap.py:43",
+      "finding_type": "canonical_violation",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "55fe2ec"
+    },
+    {
+      "iter": 88,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "scripts/run_live_session.py:50",
+      "finding_type": "canonical_violation",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "c57130b"
+    },
+    {
+      "iter": 89,
+      "date": "2026-03-15",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "scripts/tools/generate_promotion_candidates.py, scripts/tools/select_family_rr.py, scripts/tools/audit_behavioral.py",
+      "finding_type": "other",
+      "severity": "LOW",
+      "verdict": "CLEAN",
+      "commit": "NONE"
+    },
+    {
+      "iter": 90,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "scripts/tools/build_edge_families.py:217-220",
+      "finding_type": "dead_code",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "e529f42"
+    },
+    {
+      "iter": 91,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "scripts/tools/build_edge_families.py:218",
+      "finding_type": "dead_code",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "5d576c4"
+    },
+    {
+      "iter": 92,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "scripts/tools/pinecone_snapshots.py:57-62",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "d2f582a"
+    },
+    {
+      "iter": 93,
+      "date": "2026-03-15",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "scripts/tools/sensitivity_analysis.py:40",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "b7804ef"
+    },
+    {
+      "iter": 95,
+      "date": "2026-03-16",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "scripts/tools/gen_playbook.py:27 (SESSION_ORDER)",
+      "finding_type": "canonical_violation",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "69ac9ac"
+    },
+    {
+      "iter": 96,
+      "date": "2026-03-16",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "scripts/tools/ml_per_session_experiment.py, ml_level_proximity_experiment.py, ml_threshold_sweep.py, ml_session_leakage_audit.py, ml_license_diagnostic.py, audit_15m30m.py",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "CLEAN",
+      "commit": "NONE"
+    },
+    {
+      "iter": 97,
+      "date": "2026-03-16",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "scripts/tools/backtest_1100_early_exit.py, backtest_atr_regime.py, beginner_tradebook.py, find_pf_strategy.py, rank_slots.py",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "CLEAN",
+      "commit": "NONE"
+    },
+    {
+      "iter": 98,
+      "date": "2026-03-16",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "scripts/tools/parity_check.py, build_outcomes_fast.py, build_mes_outcomes_fast.py, prospective_tracker.py, profile_1000_runners.py",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "CLEAN",
+      "commit": "NONE"
+    },
+    {
+      "iter": 99,
+      "date": "2026-03-16",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "scripts/tools/m25_nightly.py, m25_audit.py, m25_auto_audit.py, m25_preflight.py, m25_run_grounded_system.py",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "CLEAN",
+      "commit": "NONE"
+    },
+    {
+      "iter": 100,
+      "date": "2026-03-16",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "scripts/tools/refresh_data.py, pipeline/asset_configs.py, tests/test_pipeline/test_asset_configs.py",
+      "finding_type": "other",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "e98dba4"
+    },
+    {
+      "iter": 101,
+      "date": "2026-03-16",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "research/research_mes_compressed_spring.py:42",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "f9618c0"
+    },
+    {
+      "iter": 102,
+      "date": "2026-03-16",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "research/research_mgc_asian_fade_mfe.py:112-118, research/research_post_break_pullback.py:21-25,286",
+      "finding_type": "dead_code",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "35c3b46"
+    },
+    {
+      "iter": 103,
+      "date": "2026-03-16",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "research/research_zt_cpi_nfp.py:101",
+      "finding_type": "lint",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "8f2c05b"
+    },
+    {
+      "iter": 104,
+      "date": "2026-03-16",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "research/research_mgc_mnq_correlation.py:158,309,433",
+      "finding_type": "other",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "06436e6"
+    },
+    {
+      "iter": 105,
+      "date": "2026-03-16",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "research/research_atr_velocity_gate.py:87-101, research/research_mgc_regime_shift.py:170-210",
+      "finding_type": "type_error",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "7a09129"
+    },
+    {
+      "iter": 106,
+      "date": "2026-03-16",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "research/research_zt_event_viability.py:358",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "18de696"
+    },
+    {
+      "iter": 107,
+      "date": "2026-03-16",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "research/research_vol_regime_switching.py:192,784",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "9c14df0"
+    },
+    {
+      "iter": 108,
+      "date": "2026-03-16",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "research/research_edge_structure.py + research/research_1015_vs_1000.py",
+      "finding_type": "dead_code",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "150618a"
+    },
+    {
+      "iter": 109,
+      "date": "2026-03-16",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "research/research_edge_structure.py + research/research_1015_vs_1000.py",
+      "finding_type": "dead_code",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "df4ead3"
+    },
+    {
+      "iter": 110,
+      "date": "2026-03-16",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "research/research_overlap_analysis.py",
+      "finding_type": "lint",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "adfa5cd"
+    },
+    {
+      "iter": 111,
+      "date": "2026-03-16",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "research/research_aperture_scan.py",
+      "finding_type": "lint",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "16d472f"
+    }
+  ]
+}
