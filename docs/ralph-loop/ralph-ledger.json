@@ -1,8 +1,8 @@
 {
-  "total_iterations": 115,
+  "total_iterations": 116,
   "last_updated": "2026-03-16",
   "consecutive_low_only": 0,
-  "last_high_finding_iter": 122,
+  "last_high_finding_iter": 123,
   "findings_by_type": {
     "canonical_violation": {
       "found": 46,
@@ -10,17 +10,17 @@
       "deferred": 3,
       "fix_rate": 0.76
     },
+    "silent_failure": {
+      "found": 15,
+      "fixed": 13,
+      "deferred": 1,
+      "fix_rate": 0.87
+    },
     "other": {
       "found": 15,
       "fixed": 7,
       "deferred": 0,
       "fix_rate": 0.47
-    },
-    "silent_failure": {
-      "found": 14,
-      "fixed": 12,
-      "deferred": 1,
-      "fix_rate": 0.86
     },
     "dead_code": {
       "found": 14,
@@ -115,12 +115,12 @@
   },
   "findings_by_severity": {
     "CRITICAL": 3,
-    "HIGH": 6,
+    "HIGH": 7,
     "MEDIUM": 22,
     "LOW": 84
   },
   "classifications": {
-    "judgment": 54,
+    "judgment": 55,
     "mechanical": 39,
     "audit-only": 22
   },
@@ -878,6 +878,11 @@
     "trading_app/live/projectx/order_router.py": {
       "audit_count": 1,
       "last_iter": 122,
+      "findings": 1
+    },
+    "trading_app/live/projectx/data_feed.py": {
+      "audit_count": 1,
+      "last_iter": 123,
       "findings": 1
     }
   },
@@ -2146,6 +2151,17 @@
       "severity": "MEDIUM",
       "verdict": "FIXED",
       "commit": "4db63d2 (UP038 fixes + cancel fix already in d8e0f67)"
+    },
+    {
+      "iter": 123,
+      "date": "2026-03-16",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/live/projectx/data_feed.py:298",
+      "finding_type": "silent_failure",
+      "severity": "HIGH",
+      "verdict": "FIXED",
+      "commit": "c6be6d9"
     }
   ]
 }
