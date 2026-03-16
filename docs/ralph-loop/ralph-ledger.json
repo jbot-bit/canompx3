@@ -1,7 +1,7 @@
 {
-  "total_iterations": 105,
+  "total_iterations": 106,
   "last_updated": "2026-03-16",
-  "consecutive_low_only": 6,
+  "consecutive_low_only": 7,
   "last_high_finding_iter": 105,
   "findings_by_type": {
     "canonical_violation": {
@@ -28,17 +28,17 @@
       "deferred": 1,
       "fix_rate": 0.82
     },
+    "lint": {
+      "found": 5,
+      "fixed": 5,
+      "deferred": 0,
+      "fix_rate": 1.0
+    },
     "annotation_debt": {
       "found": 4,
       "fixed": 3,
       "deferred": 1,
       "fix_rate": 0.75
-    },
-    "lint": {
-      "found": 4,
-      "fixed": 4,
-      "deferred": 0,
-      "fix_rate": 1.0
     },
     "falsy_zero": {
       "found": 3,
@@ -117,12 +117,12 @@
     "CRITICAL": 3,
     "HIGH": 6,
     "MEDIUM": 18,
-    "LOW": 78
+    "LOW": 79
   },
   "classifications": {
     "judgment": 51,
     "mechanical": 34,
-    "audit-only": 20
+    "audit-only": 21
   },
   "files_audited": {
     "execution_engine.py": {
@@ -848,6 +848,21 @@
     "research/research_aperture_scan.py": {
       "audit_count": 1,
       "last_iter": 111,
+      "findings": 1
+    },
+    "research/discover.py": {
+      "audit_count": 1,
+      "last_iter": 113,
+      "findings": 1
+    },
+    "research/research_wf_stress_keepers.py": {
+      "audit_count": 1,
+      "last_iter": 113,
+      "findings": 1
+    },
+    "research/research_trend_day_mfe.py": {
+      "audit_count": 1,
+      "last_iter": 113,
       "findings": 1
     }
   },
@@ -2006,6 +2021,17 @@
       "severity": "LOW",
       "verdict": "FIXED",
       "commit": "16d472f"
+    },
+    {
+      "iter": 113,
+      "date": "2026-03-16",
+      "phase": "diminishing-returns",
+      "classification": "audit-only",
+      "target": "research/discover.py, research/research_wf_stress_keepers.py, research/research_trend_day_mfe.py",
+      "finding_type": "lint",
+      "severity": "LOW",
+      "verdict": "ACCEPT",
+      "commit": "NONE"
     }
   ]
 }
