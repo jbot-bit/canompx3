@@ -1,8 +1,10 @@
 """Tests for pipeline.asset_configs — canonical instrument source."""
 
 from pipeline.asset_configs import (
+    ASSET_CONFIGS,
     ACTIVE_ORB_INSTRUMENTS,
     get_active_instruments,
+    list_instruments,
 )
 
 
@@ -40,3 +42,15 @@ class TestActiveInstruments:
     def test_constant_matches_function(self):
         """Module constant and function return the same data."""
         assert list(ACTIVE_ORB_INSTRUMENTS) == get_active_instruments()
+
+    def test_research_only_2yy_not_active(self):
+        """2YY is onboarded for research without entering the active ORB universe."""
+        assert "2YY" in list_instruments()
+        assert "2YY" not in get_active_instruments()
+        assert ASSET_CONFIGS["2YY"]["orb_active"] is False
+
+    def test_research_only_zt_not_active(self):
+        """ZT is onboarded for research without entering the active ORB universe."""
+        assert "ZT" in list_instruments()
+        assert "ZT" not in get_active_instruments()
+        assert ASSET_CONFIGS["ZT"]["orb_active"] is False

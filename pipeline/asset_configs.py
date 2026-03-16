@@ -10,6 +10,7 @@ Each asset defines:
   (GC=2 -> GCG5, NQ=2 -> NQH5, MNQ=3 -> MNQH5)
 - minimum_start_date: Earliest usable date (None if unknown/no DBN)
 - schema_required: Expected DBN schema (always ohlcv-1m)
+- orb_active: Whether the instrument belongs in the active ORB/live universe
 
 FAIL-CLOSED: get_asset_config() aborts if:
 - Unknown instrument
@@ -61,6 +62,7 @@ ASSET_CONFIGS = {
         # Identical pattern to RTY→M2K, SI→SIL, 6E→M6E. Cost model uses MGC micro specs ($10/pt).
         "dbn_path": PROJECT_ROOT / "DB" / "GOLD_DB_FULLSIZE",
         "symbol": "MGC",
+        "orb_active": True,
         "outright_pattern": re.compile(r"^GC[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 2,
         "minimum_start_date": date(2019, 1, 1),
@@ -80,6 +82,7 @@ ASSET_CONFIGS = {
     "MNQ": {
         "dbn_path": PROJECT_ROOT / "DB" / "MNQ_DB",
         "symbol": "MNQ",
+        "orb_active": True,
         "outright_pattern": re.compile(r"^MNQ[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 3,
         "minimum_start_date": date(2024, 2, 4),
@@ -105,6 +108,7 @@ ASSET_CONFIGS = {
         # CL trades ~500k contracts/day vs MCL ~50k — far better 1m bar coverage.
         "dbn_path": PROJECT_ROOT / "DB" / "CL_DB",
         "symbol": "MCL",
+        "orb_active": False,
         "outright_pattern": re.compile(r"^CL[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 2,
         "minimum_start_date": date(2021, 2, 1),
@@ -128,6 +132,7 @@ ASSET_CONFIGS = {
         # this config's ^MES pattern selects only native MES outrights (2024 transition).
         "dbn_path": PROJECT_ROOT / "DB" / "MES_DB_2019-2024",
         "symbol": "MES",
+        "orb_active": True,
         "outright_pattern": re.compile(r"^MES[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 3,
         "minimum_start_date": date(2019, 2, 12),
@@ -152,6 +157,7 @@ ASSET_CONFIGS = {
         # Identical pattern to GC→MGC, NQ→MNQ, RTY→M2K.
         "dbn_path": PROJECT_ROOT / "DB" / "MES_DB_2019-2024",
         "symbol": "MES",
+        "orb_active": False,
         "outright_pattern": re.compile(r"^ES[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 2,
         "minimum_start_date": date(2019, 2, 12),
@@ -176,6 +182,7 @@ ASSET_CONFIGS = {
         # Quarterly cycle only: H/M/U/Z.
         "dbn_path": PROJECT_ROOT / "DB" / "M2K_DB",
         "symbol": "M2K",
+        "orb_active": True,
         "outright_pattern": re.compile(r"^RTY[HMUZ]\d{1,2}$"),
         "prefix_len": 3,
         "minimum_start_date": date(2021, 2, 21),
@@ -200,6 +207,7 @@ ASSET_CONFIGS = {
         # Identical pattern to GC→MGC, 6E→M6E, RTY→M2K. Cost model uses SIL micro specs ($1000/pt).
         "dbn_path": PROJECT_ROOT / "DB" / "SL_DB",
         "symbol": "SIL",
+        "orb_active": False,
         "outright_pattern": re.compile(r"^SI[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 2,
         "minimum_start_date": date(2024, 2, 18),
@@ -220,6 +228,7 @@ ASSET_CONFIGS = {
         # Asia sessions (TOKYO_OPEN/SINGAPORE_OPEN) are WATCH-ONLY until data confirms breakout edge.
         "dbn_path": PROJECT_ROOT / "DB" / "M6E_DB",
         "symbol": "M6E",
+        "orb_active": False,
         "outright_pattern": re.compile(r"^6E[HMUZ]\d{1,2}$"),
         "prefix_len": 2,
         "minimum_start_date": date(2021, 2, 21),
@@ -239,6 +248,7 @@ ASSET_CONFIGS = {
         # Identical pattern to GC→MGC, ES→MES, RTY→M2K.
         "dbn_path": PROJECT_ROOT / "DB" / "NQ_DB_2021-2024",
         "symbol": "MNQ",
+        "orb_active": False,
         "outright_pattern": re.compile(r"^NQ[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 2,
         "minimum_start_date": date(2021, 2, 4),
@@ -258,6 +268,32 @@ ASSET_CONFIGS = {
             "BRISBANE_1025",
         ],
     },
+    "2YY": {
+        # Research-only rates candidate. Kept out of ACTIVE_ORB_INSTRUMENTS on purpose.
+        # Source data is native CME 2-Year Yield futures (parent symbol 2YY).
+        # The initial research path is event-window macro work, not ORB/live trading.
+        "dbn_path": PROJECT_ROOT / "DB" / "2YY_DB",
+        "symbol": "2YY",
+        "orb_active": False,
+        "outright_pattern": re.compile(r"^2YY[FGHJKMNQUVXZ]\d{1,2}$"),
+        "prefix_len": 3,
+        "minimum_start_date": date(2021, 2, 1),
+        "schema_required": "ohlcv-1m",
+        "enabled_sessions": [],
+    },
+    "ZT": {
+        # Research-only rates benchmark. Kept out of ACTIVE_ORB_INSTRUMENTS on purpose.
+        # Source data is native CME 2-Year Treasury Note futures (parent symbol ZT).
+        # The initial research path is event-window macro work, not ORB/live trading.
+        "dbn_path": PROJECT_ROOT / "DB" / "ZT_DB",
+        "symbol": "ZT",
+        "orb_active": False,
+        "outright_pattern": re.compile(r"^ZT[FGHJKMNQUVXZ]\d{1,2}$"),
+        "prefix_len": 2,
+        "minimum_start_date": date(2021, 2, 1),
+        "schema_required": "ohlcv-1m",
+        "enabled_sessions": [],
+    },
 }
 
 # Dead instruments — tested and confirmed NO ORB breakout edge.
@@ -268,7 +304,7 @@ DEAD_ORB_INSTRUMENTS = frozenset({"MCL", "SIL", "M6E", "MBT"})
 # Excludes source aliases (ES, NQ) and dead-for-ORB instruments.
 # This is the canonical source — import this instead of hardcoding instrument lists.
 ACTIVE_ORB_INSTRUMENTS = sorted(
-    [k for k, v in ASSET_CONFIGS.items() if v["symbol"] == k and k not in DEAD_ORB_INSTRUMENTS]
+    [k for k, v in ASSET_CONFIGS.items() if v["symbol"] == k and v.get("orb_active", True) and k not in DEAD_ORB_INSTRUMENTS]
 )
 
 
