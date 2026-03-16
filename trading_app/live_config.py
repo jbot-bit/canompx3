@@ -258,6 +258,38 @@ LIVE_PORTFOLIO = [
     LiveStrategySpec("EUROPE_FLOW_E2_VOL_RV12_N20", "core", "EUROPE_FLOW", "E2", "VOL_RV12_N20", None),
     LiveStrategySpec("EUROPE_FLOW_E2_ORB_G8", "core", "EUROPE_FLOW", "E2", "ORB_G8", None),
     # =========================================================================
+    # ATR70_VOL + cross-asset ATR (Mar 2026 vol-regime research)
+    # Combined ATR percentile >= 70 AND rel_vol >= 1.2. Orthogonal to existing filters.
+    # 73 new-only edge families across MNQ — zero overlap with G/VOL filters.
+    # Cross-asset: MES/MGC ATR regime predicts MNQ US session edge.
+    # @research-source research/research_vol_regime_filter.py
+    # @revalidated-for E2 event-based sessions (Mar 2026)
+    # =========================================================================
+    # CME_PRECLOSE: MES ATR70_VOL best=+0.294 (4 strats). MNQ ATR70_VOL best=+0.326 (6 strats).
+    #   Cross-asset: MNQ X_MES_ATR60 best=+0.360 (7 strats), X_MGC_ATR70 best=+0.231 (7 strats).
+    LiveStrategySpec("CME_PRECLOSE_E2_ATR70_VOL", "core", "CME_PRECLOSE", "E2", "ATR70_VOL", None),
+    LiveStrategySpec("CME_PRECLOSE_E2_X_MES_ATR60", "core", "CME_PRECLOSE", "E2", "X_MES_ATR60", None),
+    LiveStrategySpec("CME_PRECLOSE_E2_X_MGC_ATR70", "core", "CME_PRECLOSE", "E2", "X_MGC_ATR70", None),
+    # COMEX_SETTLE: MNQ ATR70_VOL best=+0.340 (14 strats).
+    #   Cross-asset: X_MES_ATR60 (10), X_MES_ATR70 (13), X_MGC_ATR70 (8).
+    LiveStrategySpec("COMEX_SETTLE_E2_ATR70_VOL", "core", "COMEX_SETTLE", "E2", "ATR70_VOL", None),
+    LiveStrategySpec("COMEX_SETTLE_E2_X_MES_ATR70", "core", "COMEX_SETTLE", "E2", "X_MES_ATR70", None),
+    LiveStrategySpec("COMEX_SETTLE_E2_X_MGC_ATR70", "core", "COMEX_SETTLE", "E2", "X_MGC_ATR70", None),
+    # NYSE_OPEN: MNQ ATR70_VOL best=+0.225 (10 strats). Cross-asset X_MGC_ATR70 (12 strats).
+    LiveStrategySpec("NYSE_OPEN_E2_ATR70_VOL", "core", "NYSE_OPEN", "E2", "ATR70_VOL", None),
+    LiveStrategySpec("NYSE_OPEN_E2_X_MGC_ATR70", "core", "NYSE_OPEN", "E2", "X_MGC_ATR70", None),
+    # US_DATA_1000: MNQ X_MGC_ATR70 best=+0.185 (7 strats).
+    LiveStrategySpec("US_DATA_1000_E2_ATR70_VOL", "core", "US_DATA_1000", "E2", "ATR70_VOL", None),
+    LiveStrategySpec("US_DATA_1000_E2_X_MGC_ATR70", "core", "US_DATA_1000", "E2", "X_MGC_ATR70", None),
+    # US_DATA_830: MNQ X_MGC_ATR70 best=+0.206 (13 strats).
+    LiveStrategySpec("US_DATA_830_E2_X_MGC_ATR70", "core", "US_DATA_830", "E2", "X_MGC_ATR70", None),
+    # SINGAPORE_OPEN: MNQ ATR70_VOL best=+0.250 (33 strats — largest new cluster).
+    LiveStrategySpec("SINGAPORE_OPEN_E2_ATR70_VOL", "core", "SINGAPORE_OPEN", "E2", "ATR70_VOL", None),
+    # LONDON_METALS: MNQ ATR70_VOL best=+0.235 (8 strats).
+    LiveStrategySpec("LONDON_METALS_E2_ATR70_VOL", "core", "LONDON_METALS", "E2", "ATR70_VOL", None),
+    # NYSE_CLOSE: MNQ ATR70_VOL best=+0.317 (2 strats).
+    LiveStrategySpec("NYSE_CLOSE_E2_ATR70_VOL", "core", "NYSE_CLOSE", "E2", "ATR70_VOL", None),
+    # =========================================================================
     # REGIME: fitness-gated (N<100 — only trade when strategy_fitness = FIT)
     # =========================================================================
     # M2K LONDON_METALS: N=59, REGIME. ORB_G6_CONT filter (different from MNQ's VOL_RV12_N20_O15 above)
