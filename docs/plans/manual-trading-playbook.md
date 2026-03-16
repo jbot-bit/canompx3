@@ -1,13 +1,61 @@
 # Trading Playbook — Brisbane
 
-**Version:** V2 — Combined Claude + Codex, March 16 2026
-**Goal:** Prove edge live → scale to $100K/year via Apex EOD copy-traded stack
+**Status:** CANONICAL prop trading playbook
+**Version:** V3 — consolidated manual + allocation memo, March 16 2026
+**Goal:** Prove edge live → scale to $100K/year via Apex 50K EOD copy-traded stack
+**Supersedes:** `docs/plans/2026-03-16-prop-account-allocation-design.md` as the main prop-playbook reference
+
+This file is the single working prop memo for this repo.
+Use it for:
+- current firm selection and sizing
+- manual bridge trading
+- the copy-traded scale plan
+- operating gates and abort rules
+
+Rule hygiene:
+- Official firm rules drift. Re-check the firm's support docs before paying for or scaling any account.
+- This file separates verified official rules from local modeled conclusions.
+- If a firm doc conflicts with older local notes, underwrite to the stricter interpretation until confirmed.
+
+### Official Rule Snapshot To Underwrite Right Now
+
+**Apex 50K EOD**
+- Treat as the current base vehicle for the main scaling lane.
+- Official docs checked in this cycle support: `20` active PA accounts max, `4 mini / 40 micro` cap on `50K EOD`, and EOD payout gating with `5` qualifying days at `+$250` minimum, safety net `52,100`, minimum balance `52,600`, and `6` payouts max.
+- Official compliance docs do **not** support unattended automation on PA / Live accounts. Copy trading is allowed, and semi-automated software can be used only while actively monitored by the trader.
+- Important caveat: Apex documentation is not perfectly clean. The EOD payout page uses a `50%` consistency framing, while broader compliance pages still contain stricter language around windfall concentration / compliance behavior. Underwrite to the stricter interpretation until the dashboard and support match.
+- Sources:
+  - `https://support.apextraderfunding.com/hc/en-us/articles/4406804554779-How-Many-Paid-Funded-Accounts-Am-I-Allowed-to-Have`
+  - `https://support.apextraderfunding.com/hc/en-us/articles/47204516592795-EOD-Performance-Accounts-PA`
+  - `https://support.apextraderfunding.com/hc/en-us/articles/47205823183003-EOD-Payouts`
+  - `https://support.apextraderfunding.com/hc/en-us/articles/31519788944411-Performance-Account-PA-and-Compliance`
+  - `https://support.apextraderfunding.com/hc/en-us/articles/4404875002139-What-are-the-Consistency-Rules-For-PA-and-Funded-Accounts`
+
+**Topstep 50K Express Funded**
+- Treat as the cleanest MGC / morning alternative when you want a second firm.
+- Current local underwriting assumptions remain: `5 Express + 1 Live` account cap, `50 micro` cap on `50K`, flat by `3:10 PM CT`, and `90/10` payout structure on current accounts.
+- Use Topstep for the morning MGC lane and not as the main overnight scaling vehicle.
+- Sources used in local planning:
+  - `https://help.topstep.com/en/articles/10799569-xfa-faq`
+  - `https://help.topstep.com/en/articles/9208217-topstep-pricing`
+
+**Tradeify 50K**
+- Treat as the best non-Apex secondary firm in current local modeling.
+- Current local planning assumptions still favor it as the clean external diversification lane, but this turn did not re-verify every payout / copier detail from Tradeify support.
+- Use the current local conclusion operationally only after checking the live Tradeify help pages you are actually signing up under.
+- Source used in local planning:
+  - `https://help.tradeify.co/en/articles/10495897-rules-trailing-max-drawdowns`
+
+**MFFU**
+- Do not use MFFU as a primary lane in the current plan.
+- Older local notes that framed this as a simple "`$129/month forever`" rejection are not clean enough to keep treating as canonical without a fresh re-check.
+- Current honest position: deprioritized, not chosen, and not fully re-verified in this turn.
 
 ---
 
 ## The Plan in One Sentence
 
-Phase 1: trade manually to prove the edge is real. Phase 2: copy-trade 20 Apex EOD accounts on the best overnight pair. Phase 3: add automation + self-funded capital.
+Phase 1: trade manually to prove the edge is real. Phase 2: copy-trade 20 Apex EOD accounts on the best compliant pair. Phase 3: add automation only on firms / venues that officially allow it, or move to self-funded capital.
 
 ---
 
@@ -57,7 +105,7 @@ All times Brisbane local (AEST, UTC+10). Brisbane has no DST — everything else
 
 ### Optional: TopStep MGC Morning Lane
 
-If you also open a TopStep $50K account (Apex bans metals), add:
+If you also open a TopStep $50K account for the MGC morning lane, add:
 
 | Session | Time | Instrument | Filter | ORB | RR | Entry | Note |
 |---------|------|------------|--------|-----|-----|-------|------|
@@ -66,6 +114,7 @@ If you also open a TopStep $50K account (Apex bans metals), add:
 - MGC = $10/point (5x MNQ). Higher per-trade value but more volatile.
 - ORB gate is mandatory on TopStep: if MGC ORB > 26 points, risk exceeds 10% of $2K DD. Skip.
 - This adds a 4th sit-down at 08:00 but on a different firm + instrument = diversification.
+- Planning note: the current Apex operating lane in this file is equity-only. Treat MGC-on-Apex as unavailable unless you re-confirm product eligibility directly in current Apex support/dashboard.
 
 ### Phase 1 Expected Stats
 
@@ -188,6 +237,28 @@ Once Phase 1 proves the edge (30+ live trades, positive P&L, 2+ payouts), transi
 **Vehicle:** Apex 50K EOD
 **Method:** Copy-trade from 1 lead account to all follower accounts
 
+### Manual-First Variant (No 03:30 / 04:30 Brisbane)
+
+If manual trading will not include `COMEX_SETTLE`, use a separate manual lane and keep the ugly-hours pair as a modeled benchmark only.
+
+**Best strict no-3am manual pair on Apex EOD**
+
+| Strategy ID | Session | Time (Brisbane) | Inst | ORB | RR | Filter |
+|------------|---------|-----------------|------|-----|-----|--------|
+| `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G5` | CME_PRECLOSE | 05:45 / 06:45 | MNQ | 5m | 1.0 | ORB_G5 |
+| `MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20` | NYSE_CLOSE | 06:00 / 07:00 | MNQ | 5m | 1.0 | VOL_RV12_N20 |
+
+Modeled at `1 micro/account`, this pair was about `100.0%` survival with roughly `$166/month` median on Apex EOD.
+
+**Higher-income manual variant if midnight is acceptable**
+
+| Strategy ID | Session | Time (Brisbane) | Inst | ORB | RR | Filter |
+|------------|---------|-----------------|------|-----|-----|--------|
+| `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G5` | CME_PRECLOSE | 05:45 / 06:45 | MNQ | 5m | 1.0 | ORB_G5 |
+| `MNQ_US_DATA_1000_E2_RR1.0_CB1_ORB_G6` | US_DATA_1000 | 00:00 / 01:00 | MNQ | 5m | 1.0 | ORB_G6 |
+
+Modeled at `1 micro/account`, this pair was roughly `98.8%` survival with about `$264/month` median on Apex EOD.
+
 ### Per-Account Economics (Apex 50K EOD, simulated)
 
 | Micros | Survival | Median $/mo | P5 $/mo |
@@ -207,6 +278,8 @@ Once Phase 1 proves the edge (30+ live trades, positive P&L, 2+ payouts), transi
 | **$150K/year** | 20 | 3/acct | ~$12,760 | **~$153K** | Aggressive, 94.9% survival |
 | $200K/year | 20 | 4/acct | ~$17,540 | ~$210K | Too hot (89.3% survival) |
 
+These numbers are for the max-EV benchmark pair, not the manual-safe pair.
+
 ### Ramp Schedule
 
 | Step | What | Gate Before Proceeding |
@@ -216,6 +289,63 @@ Once Phase 1 proves the edge (30+ live trades, positive P&L, 2+ payouts), transi
 | 3 | 20 funded accounts, 1 micro | Live DD not worse than modeled P95 |
 | 4 | 20 funded accounts, 2 micros | Payout qualification actually achieved |
 | 5 | 20 funded accounts, 3 micros | 2+ months clean at 2 micros |
+
+### Apex Manual-First Ladder (`5am+`, No `3am`)
+
+Use this if manual means:
+- `05:00+` starts are fine
+- `03:30 / 04:30` is not
+- unattended Apex automation is off the table
+
+**Manual base pair**
+- `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G5`
+- `MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20`
+
+**Modeled per-account economics on Apex EOD**
+
+| Micros | Survival | Median $/mo | P5 $/mo |
+|--------|----------|-------------|---------|
+| 1 | 100.0% | ~$169 | ~$64 |
+| **2** | **99.3%** | **~$336** | **~$122** |
+| 3 | 96.0% | ~$515 | ~$193 |
+| 4 | 90.8% | ~$696 | ~$301 |
+
+**Institutional use**
+- `2 micros/account` is the manual serious-size lane
+- `3 micros/account` is the aggressive manual lane
+- `4 micros/account` is too hot for the base plan
+
+**Manual-first stack math**
+
+| Target | Accounts | Micros | Monthly | Annual | Notes |
+|--------|----------|--------|---------|--------|-------|
+| Base proof | 5 | 1/acct | ~$845 | ~$10K | Process proof, not income replacement |
+| Serious manual | 20 | 2/acct | ~$6,700 | ~$80K | Clean first manual target |
+| Aggressive manual | 20 | 3/acct | ~$10,300 | ~$124K | Requires better discipline and tolerance |
+
+If you want a manual-first path to `100K/year`, the realistic answer is:
+- start with the `5am+` pair
+- get to `20 x 2 micros`
+- only then decide whether the jump to `3 micros` is justified
+
+### Midnight + `5am` Manual Ladder
+
+If midnight is acceptable manually, the higher-income pair is:
+- `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G5`
+- `MNQ_US_DATA_1000_E2_RR1.0_CB1_ORB_G6`
+
+But the risk profile is materially worse:
+
+| Micros | Survival | Median $/mo | P5 $/mo |
+|--------|----------|-------------|---------|
+| 1 | 98.5% | ~$257 | ~$63 |
+| 2 | 81.8% | ~$564 | ~$219 |
+| 3 | 66.7% | ~$877 | ~$332 |
+
+Interpretation:
+- this is a viable **small-account manual supplement**
+- it is **not** a clean primary scaling lane on Apex EOD
+- the extra income is not worth the survival collapse once you size it
 
 ### Abort Scaling If
 
@@ -238,14 +368,17 @@ Source: https://support.apextraderfunding.com/hc/en-us/articles/47205823183003-E
 
 ### Lifestyle Consideration
 
-The deployed pair requires early Brisbane starts:
+The max-EV deployed pair requires early Brisbane starts:
 - COMEX_SETTLE: ~03:30/04:30
 - CME_PRECLOSE: ~05:45/06:45
 
-**Options:**
-- Wake at 03:15, place brackets for both sessions, go back to sleep
-- Set an alarm, place the order in 2 minutes, back to bed
-- Once auto-execution is ready (Phase 3), sleep through entirely
+If you will not do `03:30 / 04:30` manually, do **not** force this pair into the manual playbook. Use the manual-first variant above and keep the full pair as a benchmark for either:
+- a future automation-capable venue, or
+- a future self-funded broker lane
+
+Important policy note:
+- Apex PA / Live accounts should **not** be underwritten for unattended automation.
+- So "sleep through entirely" is **not** a compliant Apex operating assumption under current official docs.
 
 The question is not whether the edge exists. It does. The question is whether you will reliably run that schedule.
 
@@ -265,11 +398,11 @@ Each account gets ONE assignment. Track P&L per account, not per trade.
 |                                                                   |
 |  Account   Firm         Strategy Pair         Micros  Status      |
 |  -------   ----         --------------         ------  ------     |
-|  AX-01     Apex EOD     PRECLOSE + COMEX       2c     LEAD        |
-|  AX-02     Apex EOD     PRECLOSE + COMEX       2c     COPY        |
-|  AX-03     Apex EOD     PRECLOSE + COMEX       2c     COPY        |
+|  AX-01     Apex EOD     PRECLOSE + CLOSE       2c     LEAD        |
+|  AX-02     Apex EOD     PRECLOSE + CLOSE       2c     COPY        |
+|  AX-03     Apex EOD     PRECLOSE + CLOSE       2c     COPY        |
 |  ...       ...          ...                    ...    COPY        |
-|  AX-20     Apex EOD     PRECLOSE + COMEX       2c     COPY        |
+|  AX-20     Apex EOD     PRECLOSE + CLOSE       2c     COPY        |
 |                                                                   |
 |  TS-01     TopStep      CME_REOPEN MGC         1c     LEAD        |
 |  TS-02     TopStep      CME_REOPEN MGC         1c     COPY        |
@@ -310,12 +443,12 @@ This is driven by firm constraints, not preference:
 
 | Constraint | Effect |
 |-----------|--------|
-| Apex bans metals (MGC) | MGC strategies → TopStep or Tradeify only |
+| Apex planning lane is equity-only | MGC strategies default to TopStep or Tradeify unless Apex product eligibility is re-verified |
 | TopStep close by 3:10 PM CT | No CME_PRECLOSE (5:45am Bris) on TopStep |
 | TopStep max 5+1 accounts | Not the main scaling vehicle |
 | Tradeify max 5 accounts | Secondary diversification, not scaling |
 | Apex max 20 accounts | Primary scaling vehicle |
-| MFFU $129/month forever | Don't use unless gross > $500/month on that account |
+| MFFU unresolved / not re-verified | Do not use as a primary lane without a fresh rules pass |
 
 **Practical assignments:**
 
@@ -329,7 +462,7 @@ This is driven by firm constraints, not preference:
 | LONDON_METALS | Apex EOD or Tradeify | Either works | TopStep |
 | TOKYO_OPEN | Any firm | No restrictions | — |
 | SINGAPORE_OPEN | Any firm | No restrictions | — |
-| CME_REOPEN | **TopStep only** (if MGC) | Apex bans metals | Tradeify (if MGC) |
+| CME_REOPEN | **TopStep first** (if MGC) | Current MGC planning lane | Tradeify (if MGC) |
 | CME_REOPEN | Apex EOD (if MNQ/MES) | Fine if equity variant | — |
 
 ### Diversification Tiers
@@ -337,13 +470,14 @@ This is driven by firm constraints, not preference:
 Don't diversify for the sake of it. Add complexity only when it earns more or reduces risk.
 
 **Tier 1 (start here):** One pair, one firm, copy-traded.
-- Apex EOD × 20 accounts × PRECLOSE + COMEX
-- This alone = ~$100K/year at 2 micros
+- Manual-first route: Apex EOD × up to 20 accounts × `PRECLOSE + CLOSE`
+- Max-EV benchmark route: Apex EOD × 20 accounts × `PRECLOSE + COMEX`
+- Use the benchmark route only as a modeled ceiling unless the operating venue and policy allow it cleanly
 
 **Tier 2 (after Tier 1 is stable):** Add a second firm for a different session cluster.
-- TopStep × 3-5 accounts × CME_REOPEN MGC (morning, different instrument)
-- Tradeify × 3-5 accounts × EUROPE + LONDON (evening, different time zone)
-- Now you have morning + evening + overnight coverage
+- TopStep × 3-5 accounts × MGC morning lane or other automation-capable session cluster
+- Tradeify × 3-5 accounts × evening / ugly-hours cluster if current live rules still permit the operating style you want
+- Now you have manual Apex income plus automation-capable or time-diversified expansion
 
 **Tier 3 (after Tier 2 is stable):** Add different pairs on Apex.
 - Some Apex accounts run NYSE + US_DATA instead of PRECLOSE + COMEX
@@ -353,6 +487,27 @@ Don't diversify for the sake of it. Add complexity only when it earns more or re
 **Tier 4 (mature):** Self-funded IBKR running all sessions at higher contracts.
 - No prop constraints, no account caps, no trailing DD death
 - This is the graduation — prop was the proof, IBKR is the engine
+
+### Automation-Capable Expansion Ladder
+
+This is separate from the Apex manual-first ladder.
+
+Use it when:
+- the ugly-hour sessions still model best,
+- you want execution without human wakeups,
+- and the venue officially allows the automation style you plan to use.
+
+Current institutional framing:
+- `Apex`: main scaling vehicle, but do **not** underwrite unattended automation on PA / Live
+- `Topstep`: cleanest officially automation-capable lane in the current doc set
+- `Tradeify`: likely usable as a secondary automation-capable lane, but re-check the exact live rule pages before committing
+- `IBKR / self-funded`: end-state for fully controlled automation
+
+Suggested sequence:
+1. Prove the `Apex` manual-first lane live
+2. Add `Topstep` or `Tradeify` only for the sessions you do not want to handle manually
+3. Keep the strategy-family tracking separate by venue
+4. Promote the ugly-hours lane to self-funded infrastructure once the live edge is proven and broker integration is production-grade
 
 ### Code Integration
 
@@ -419,18 +574,18 @@ If `/regime-check` shows DECAY on a strategy you're actively trading → pause t
 
 Prop firms change rules regularly. When this happens:
 
-1. **Check the design doc** (`docs/plans/2026-03-16-prop-account-allocation-design.md`) for the rules table.
+1. **Check this file first** for the current local underwriting assumptions.
 2. **Re-run the sim** with updated DD/trailing/fees. The sim scripts are in `scripts/tmp_prop_sim_v2.py` and `scripts/tmp_prop_firm_proper_pass.py`.
 3. **If survival drops below 95%** → reduce micros or move to a different firm.
 4. **Update the account grid** above.
-5. **Update the design doc** rules table.
+5. **Update this file** if the rules change materially.
 
 Things that change often:
 - DD amounts and trailing type (Apex changed Mar 1, 2026)
 - Payout splits and consistency rules
 - Account count limits
 - Monthly fees / activation fees
-- Instrument bans
+- Instrument eligibility / product availability
 
 Things that don't change:
 - Your strategies (validated in gold.db, re-checked by `/regime-check`)
@@ -508,7 +663,191 @@ IBKR integration not built yet. Architecture ready (broker ABC pattern, ~700 lin
 - First: 1c MNQ on all sessions (current plan)
 - Second: 2c on highest-confidence session (start with the deployed pair)
 - Third: 2c across all sessions
-- Note: Apex bans MGC — MNQ scales on Apex, MGC only on TopStep/Tradeify
+- Note: keep Apex scaling equity-only unless MGC eligibility is re-confirmed in current Apex support/dashboard
+
+---
+
+## Operational Edge Cases
+
+These situations WILL happen. Know the answer before they do.
+
+### Both Sides Fill (Dual Fill)
+
+E2 places stop-market on both sides of the ORB. In fast markets (NFP, CPI, gap opens), both can trigger within seconds. This is rare but real.
+
+**If both sides fill:**
+1. You are now hedged (long + short on the same instrument). Net exposure = zero.
+2. **Close both immediately.** This is a scratch, not a disaster.
+3. Total cost = 2x commission + any slippage between fills. Typically < $5 on MNQ.
+4. Do NOT try to "manage" one side. Close both, move on, wait for the next session.
+5. Log it in your journal as "dual fill / scratch."
+
+**Prevention:** If your platform supports OCO (one-cancels-other) brackets, use them. Tradovate supports OCO. TopstepX supports OCO. This auto-cancels the unfilled side when one triggers.
+
+### Overlapping Positions
+
+TOKYO fires at 10:05, still running at SINGAPORE 11:00. Do you take both?
+
+**Rule: max 1 open position per instrument per account.**
+
+- If TOKYO MNQ is still open when SINGAPORE MNQ fires → **skip SINGAPORE**. Do not stack.
+- If TOKYO MGC is open and SINGAPORE MNQ fires → fine, different instruments.
+- If the TOKYO trade exits during SINGAPORE's ORB window and SINGAPORE still qualifies → you can enter SINGAPORE. But do NOT re-measure the ORB — use the original measurement from 11:00/11:15.
+
+This applies to ALL session pairs on the same instrument:
+- EUROPE_FLOW + LONDON_METALS (both MNQ, 1 hour apart) — same rule
+- CME_PRECLOSE + NYSE_CLOSE (both MNQ, 15 minutes apart) — same rule
+
+### Cancel the Unfilled Side
+
+After one side of the bracket fills:
+
+**If using OCO:** Automatic. The other side cancels. Nothing to do.
+
+**If NOT using OCO:**
+1. Cancel the other stop-market order **immediately after fill notification**.
+2. If you walked away: set a fill alert on your phone. When the alert fires, open the platform and cancel the other side.
+3. If you forgot and both filled: see "Both Sides Fill" above.
+
+**Platform-specific OCO setup:**
+- **Tradovate (Apex):** Order entry → Advanced → OCO group. Link the two stop-market orders.
+- **TopstepX:** Bracket order type. Both sides linked by default.
+- **NinjaTrader:** OCO order type in the order entry window.
+
+### Partial Fills at 2+ Contracts
+
+At 2+ micros, what if only 1 micro fills?
+
+**Rule: manage what fills. Same stop, same target.**
+
+- MNQ micro futures are extremely liquid. Partial fills are very rare (< 0.1% of orders).
+- If it happens: manage the 1 micro that filled with the same bracket (stop + target).
+- Do NOT re-enter to "complete" the position. That's chasing.
+- Log it in your journal as a partial fill.
+
+---
+
+## Trade Journal
+
+Every trade must be recorded. You cannot track edge decay, diagnose problems, or prove Phase 1 readiness without records.
+
+### Minimum Fields Per Trade
+
+| Field | Example | Notes |
+|-------|---------|-------|
+| Date | 2026-03-17 | Trading day |
+| Session | EUROPE_FLOW | Which session |
+| Time (Brisbane) | 17:05 | When bracket was set |
+| Instrument | MNQ | |
+| Direction | Long | Which side of the ORB broke |
+| ORB Size (pts) | 12.5 | High minus low |
+| Filter | ORB_G8 PASS | Which filter, did it pass |
+| Entry Price | 20,150.00 | Fill price |
+| Stop Price | 20,140.63 | 0.75x from opposite edge |
+| Target Price | 20,164.06 | Entry + (risk x RR) |
+| Outcome | WIN / LOSS / SCRATCH | |
+| P&L ($) | +$28.12 | Actual dollars after commission |
+| Account | AX-01 | Which account |
+| Notes | Clean fill, walked away | Any observations |
+
+### Where to Journal
+
+Options (pick one, stick with it):
+1. **Spreadsheet** — Google Sheets or Excel. Simple, always accessible.
+2. **`live_journal.db`** — the codebase has a trade journal module (`trading_app/live/trade_journal.py`). Auto-logs if using the live trading engine.
+3. **Tradovate built-in** — trade history export. Less structured but zero effort.
+
+**Minimum viable:** a Google Sheet with the fields above. Fill it out within 1 hour of each session.
+
+### Weekly Journal Review
+
+Every Sunday:
+1. Count trades taken vs opportunities (execution rate should be > 80%)
+2. Count filter overrides (should be ZERO)
+3. Compare win rate to backtest expectation
+4. Flag any patterns (e.g., "losing every Monday evening" → investigate)
+5. If 5+ consecutive losses: mandatory — see Losing Streak Protocol below
+
+---
+
+## Losing Streak Protocol
+
+At 40-55% win rate (our strategies), losing streaks are **mathematically guaranteed**:
+
+| Win Rate | 5-Loss Streak | 8-Loss Streak | 10-Loss Streak |
+|----------|--------------|---------------|----------------|
+| 55% | Once per ~55 trades (~1/month) | Once per ~790 trades (~1.5 years) | Once per ~5,900 trades (rare) |
+| 45% | Once per ~18 trades (~every 2 weeks) | Once per ~110 trades (~2 months) | Once per ~400 trades (~8 months) |
+| 40% | Once per ~13 trades (~every 8 days) | Once per ~58 trades (~1 month) | Once per ~170 trades (~3 months) |
+
+**A 5-loss streak at 45% win rate happens every 2 weeks on average.** This is not a bug. This is math.
+
+### Protocol
+
+**After 5 consecutive losses:**
+1. Stop trading for the rest of the day (not the week — just today).
+2. Review journal: did you follow the system on all 5 trades? (Filter check, bracket correct, no overrides?)
+3. If YES (system followed correctly): **resume tomorrow, same plan, same size.** The system is working. Variance is variance.
+4. If NO (overrides detected): identify which rule you broke. Write it down. Resume only after committing to follow the plan.
+
+**After 8 consecutive losses:**
+1. Take 2 days off.
+2. Run `/regime-check` on the affected strategies. If DECAY → pause that session.
+3. If strategies are still FIT: resume at **half size** for 10 trades, then back to full.
+
+**After 10 consecutive losses:**
+1. Full stop. Take a week off.
+2. Run full `/health-check`. Review backtest-to-live comparison.
+3. Do NOT resume until you understand whether this is variance or edge decay.
+
+**NEVER DO:**
+- Increase size after losses ("I need to make it back")
+- Add extra sessions ("I'll trade CME_PRECLOSE at 5:45am to recover")
+- Skip filters ("the ORB was 7.5 points, close enough to G8")
+- Blame the system after 5 losses. Blame the system after STATISTICAL EVIDENCE of edge decay (run the test).
+
+---
+
+## Platform Setup Guide
+
+### Apex 50K EOD (Primary)
+
+**Platform:** Tradovate (web, desktop, or mobile)
+1. Sign up at apextraderfunding.com → select 50K EOD evaluation
+2. Receive Tradovate credentials after purchase
+3. Log in to Tradovate → set to **Simulation** mode (eval account)
+4. Configure order entry:
+   - Default order type: **Stop Market**
+   - Default TIF: **DAY** (auto-cancels at session close)
+   - Enable OCO (one-cancels-other) for bracket pairs
+5. Set up contract: search **MNQM6** (or current front month) → Micro E-mini Nasdaq
+6. After passing eval: activate PA → select **Lifetime fee** ($160, not monthly)
+
+**Copy trading setup (Phase 2):**
+- Tradovate → Group Trading → create group with lead + follower accounts
+- All followers mirror the lead account's orders automatically
+- Test with 2 accounts first before scaling to 20
+
+### TopStep $50K (MGC Morning Lane)
+
+**Platform:** TopstepX
+1. Sign up at topstep.com → select $50K Trading Combine ($49/month standard)
+2. Download TopstepX platform
+3. Pass the combine (profit target $3K, max loss $2K, no daily loss limit required)
+4. Activate Express Funded Account ($149 one-time)
+5. Configure for MGC: search **MGCM6** (or current front month)
+6. Set ORB gate alert: if MGC ORB > 26 points → skip
+
+**API access (for future auto):**
+- TopstepX API via ProjectX ($14.50/month with TopStep discount)
+- Live trading infra already built: `trading_app/live/projectx/`
+
+### Tradeify $50K (Secondary)
+
+**Platform:** Tradovate (same as Apex)
+1. Sign up at tradeify.co → select 50K Select evaluation
+2. Same Tradovate setup as Apex
+3. After passing: select **Select Flex** payout policy (no consistency rule, 5-day payout cadence)
 
 ---
 
