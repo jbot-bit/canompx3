@@ -323,8 +323,16 @@ class SessionOrchestrator:
                     row["median_atr_20"] = float(median_result[0])
 
                 # Cross-asset ATR: load source instruments' latest atr_20_pct for
-                # CrossAssetATRFilter. Uses same connection, yesterday's proxy pattern.
-                for source in ("MES", "MGC"):
+                # CrossAssetATRFilter. Derive sources dynamically from ALL_FILTERS
+                # so new cross-asset filters don't require code changes here.
+                from trading_app.config import ALL_FILTERS, CrossAssetATRFilter
+
+                _cross_sources = {
+                    f.source_instrument
+                    for f in ALL_FILTERS.values()
+                    if isinstance(f, CrossAssetATRFilter)
+                }
+                for source in _cross_sources:
                     if source == instrument:
                         continue
                     src_result = con.execute(
