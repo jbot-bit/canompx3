@@ -251,6 +251,205 @@ The question is not whether the edge exists. It does. The question is whether yo
 
 ---
 
+## Phase 2b: Multi-Strategy Portfolio (Month 6+)
+
+Phase 2 is one pair on Apex. Phase 2b adds sessions, firms, and instruments. This is how you go from "one trick" to a real portfolio without losing track of what's working.
+
+### The Portfolio Grid
+
+Each account gets ONE assignment. Track P&L per account, not per trade.
+
+```
++------------------------------------------------------------------+
+|  ACCOUNT GRID (example — edit as plans change)                    |
+|                                                                   |
+|  Account   Firm         Strategy Pair         Micros  Status      |
+|  -------   ----         --------------         ------  ------     |
+|  AX-01     Apex EOD     PRECLOSE + COMEX       2c     LEAD        |
+|  AX-02     Apex EOD     PRECLOSE + COMEX       2c     COPY        |
+|  AX-03     Apex EOD     PRECLOSE + COMEX       2c     COPY        |
+|  ...       ...          ...                    ...    COPY        |
+|  AX-20     Apex EOD     PRECLOSE + COMEX       2c     COPY        |
+|                                                                   |
+|  TS-01     TopStep      CME_REOPEN MGC         1c     LEAD        |
+|  TS-02     TopStep      CME_REOPEN MGC         1c     COPY        |
+|                                                                   |
+|  TF-01     Tradeify     TOKYO + SINGAPORE      1c     LEAD        |
+|  TF-02     Tradeify     EUROPE + LONDON        1c     LEAD        |
+|                                                                   |
+|  IBKR      Self-funded  ALL sessions           5-10c  MASTER      |
++------------------------------------------------------------------+
+```
+
+### Rules for the Grid
+
+**Adding a strategy to the grid:**
+1. Strategy must be in `validated_setups` with status `active` and NOT `PURGED`/`DECAY`
+2. Must pass sim at >95% survival on the target firm's DD + trailing type
+3. Start at 1 micro on ONE account. Run 30+ trades. Then copy.
+4. Update this grid when you add it.
+
+**Removing a strategy from the grid:**
+1. Run `/regime-check`. If status = `DECAY` → pause ALL accounts running that strategy.
+2. Don't close the accounts immediately — DECAY can reverse. Pause for 1 month.
+3. If still DECAY after 1 month → close accounts, remove from grid.
+
+**Changing firms:**
+1. If a firm changes rules (DD, fees, account limits) → re-run the sim with new rules before continuing.
+2. If survival drops below 95% → reduce micros or move strategy to a different firm.
+3. This grid is the single source of truth — update it, don't keep it in your head.
+
+**Changing strategy parameters:**
+1. If you want to try a different RR or filter on a session → open a NEW account for it.
+2. Don't change parameters on a running account mid-stream. That breaks tracking.
+3. Run both old and new in parallel for 30+ trades, then compare.
+
+### Which Sessions Go on Which Firms
+
+This is driven by firm constraints, not preference:
+
+| Constraint | Effect |
+|-----------|--------|
+| Apex bans metals (MGC) | MGC strategies → TopStep or Tradeify only |
+| TopStep close by 3:10 PM CT | No CME_PRECLOSE (5:45am Bris) on TopStep |
+| TopStep max 5+1 accounts | Not the main scaling vehicle |
+| Tradeify max 5 accounts | Secondary diversification, not scaling |
+| Apex max 20 accounts | Primary scaling vehicle |
+| MFFU $129/month forever | Don't use unless gross > $500/month on that account |
+
+**Practical assignments:**
+
+| Session | Best Firm | Why | Fallback |
+|---------|-----------|-----|----------|
+| CME_PRECLOSE | Apex EOD | Main scaling pair, 20 accts | Tradeify |
+| COMEX_SETTLE | Apex EOD | Main scaling pair | Tradeify |
+| NYSE_OPEN | Apex EOD | High E$/mo, no restrictions | Tradeify |
+| US_DATA_1000 | Apex EOD | No news restriction | Tradeify |
+| EUROPE_FLOW | Apex EOD or Tradeify | Either works | TopStep |
+| LONDON_METALS | Apex EOD or Tradeify | Either works | TopStep |
+| TOKYO_OPEN | Any firm | No restrictions | — |
+| SINGAPORE_OPEN | Any firm | No restrictions | — |
+| CME_REOPEN | **TopStep only** (if MGC) | Apex bans metals | Tradeify (if MGC) |
+| CME_REOPEN | Apex EOD (if MNQ/MES) | Fine if equity variant | — |
+
+### Diversification Tiers
+
+Don't diversify for the sake of it. Add complexity only when it earns more or reduces risk.
+
+**Tier 1 (start here):** One pair, one firm, copy-traded.
+- Apex EOD × 20 accounts × PRECLOSE + COMEX
+- This alone = ~$100K/year at 2 micros
+
+**Tier 2 (after Tier 1 is stable):** Add a second firm for a different session cluster.
+- TopStep × 3-5 accounts × CME_REOPEN MGC (morning, different instrument)
+- Tradeify × 3-5 accounts × EUROPE + LONDON (evening, different time zone)
+- Now you have morning + evening + overnight coverage
+
+**Tier 3 (after Tier 2 is stable):** Add different pairs on Apex.
+- Some Apex accounts run NYSE + US_DATA instead of PRECLOSE + COMEX
+- Reduces single-pair concentration risk
+- Only do this AFTER the primary pair has 3+ months of live data
+
+**Tier 4 (mature):** Self-funded IBKR running all sessions at higher contracts.
+- No prop constraints, no account caps, no trailing DD death
+- This is the graduation — prop was the proof, IBKR is the engine
+
+### Code Integration
+
+The portfolio grid is NOT just a markdown table. It must stay aligned with the codebase.
+
+**Canonical sources (always query, never hardcode):**
+- Active strategies: `from trading_app.live_config import LIVE_PORTFOLIO`
+- Strategy fitness: `edge_families.robustness_status` (FIT/WATCH/DECAY/PURGED)
+- Session times: `from pipeline.dst import SESSION_CATALOG` (resolves DST automatically)
+- Cost specs: `from pipeline.cost_model import COST_SPECS`
+- Active instruments: `from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS`
+
+**Before adding a strategy to the grid, verify:**
+```bash
+# Check it exists and is active
+python -c "
+import duckdb
+from pipeline.paths import GOLD_DB_PATH
+con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+print(con.execute('''
+    SELECT strategy_id, status, sample_size, win_rate, expectancy_r
+    FROM validated_setups
+    WHERE strategy_id = 'YOUR_STRATEGY_ID'
+''').fetchdf())
+con.close()
+"
+
+# Check fitness (not PURGED or DECAY)
+python -c "
+import duckdb
+from pipeline.paths import GOLD_DB_PATH
+con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+print(con.execute('''
+    SELECT head_strategy_id, robustness_status, trade_tier
+    FROM edge_families
+    WHERE head_strategy_id = 'YOUR_STRATEGY_ID'
+''').fetchdf())
+con.close()
+"
+```
+
+**Trade sheet integration:**
+- Run `python scripts/tools/generate_trade_sheet.py` to see tonight's sessions with correct Brisbane times
+- The trade sheet already filters to LIVE_PORTFOLIO and checks fitness
+- If a strategy shows PURGED in the trade sheet, it should NOT be in your grid
+
+**Sim validation before deploying on a firm:**
+- Use `scripts/tmp_prop_sim_v2.py` or `scripts/tmp_prop_firm_proper_pass.py`
+- Must test with the EXACT firm's DD amount, trailing type, and contract limits
+- Survival must be >95% at your planned micro count before deploying
+
+**Regime monitoring (run weekly or on-demand):**
+```bash
+# Quick fitness check
+/regime-check
+
+# Full trade book with session times
+/trade-book
+```
+
+If `/regime-check` shows DECAY on a strategy you're actively trading → pause that account immediately. Don't wait for the monthly review.
+
+### When Rules Change
+
+Prop firms change rules regularly. When this happens:
+
+1. **Check the design doc** (`docs/plans/2026-03-16-prop-account-allocation-design.md`) for the rules table.
+2. **Re-run the sim** with updated DD/trailing/fees. The sim scripts are in `scripts/tmp_prop_sim_v2.py` and `scripts/tmp_prop_firm_proper_pass.py`.
+3. **If survival drops below 95%** → reduce micros or move to a different firm.
+4. **Update the account grid** above.
+5. **Update the design doc** rules table.
+
+Things that change often:
+- DD amounts and trailing type (Apex changed Mar 1, 2026)
+- Payout splits and consistency rules
+- Account count limits
+- Monthly fees / activation fees
+- Instrument bans
+
+Things that don't change:
+- Your strategies (validated in gold.db, re-checked by `/regime-check`)
+- The bracket mechanics (E2, stop-market, ORB-based)
+- The principle: prove at 1 micro → copy → scale micros
+
+### Monthly Portfolio Review
+
+In addition to the per-session monthly review (below), do a portfolio-level check:
+
+1. **Account grid audit:** Is every account's assignment still current? Any closed/paused?
+2. **Firm rules check:** Any emails from Apex/TopStep/Tradeify about rule changes?
+3. **Cross-account P&L:** Is the primary pair still the best? Compare to alternatives.
+4. **Concentration risk:** What % of income comes from the primary pair? If >80%, consider Tier 2/3.
+5. **Payout health:** Are all accounts meeting payout qualification? If any are stalling, diagnose.
+6. **Run `/regime-check`** across all strategies in the grid. DECAY = pause.
+
+---
+
 ## Phase 3: Automation + Self-Funded (Month 12+)
 
 ### What Automation Unlocks
