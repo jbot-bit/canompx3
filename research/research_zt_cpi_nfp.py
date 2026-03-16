@@ -182,6 +182,8 @@ def run_study(dbn_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame, float | None]:
             }
         )
         for key, snapshot in follow.items():
+            if snapshot is None:
+                continue
             follow_close = snapshot.close_price
             follow_move = follow_close - shock.close_price
             cont = shock_direction != 0 and follow_move * shock_direction > 0
