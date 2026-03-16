@@ -104,6 +104,7 @@ def is_stale(
 
 
 # Use sys.executable to ensure subprocess uses the same Python/venv as the caller.
+# Store as list element (not string) so paths with spaces don't break on .split().
 _PY = sys.executable
 
 # ---------------------------------------------------------------------------
@@ -282,23 +283,20 @@ def get_resume_point(
 # Rebuild orchestration
 # ---------------------------------------------------------------------------
 
-REBUILD_STEPS = [
-    ("outcome_builder_O5", f"{_PY} trading_app/outcome_builder.py --instrument {{instrument}} --force --orb-minutes 5"),
-    ("outcome_builder_O15", f"{_PY} trading_app/outcome_builder.py --instrument {{instrument}} --force --orb-minutes 15"),
-    ("outcome_builder_O30", f"{_PY} trading_app/outcome_builder.py --instrument {{instrument}} --force --orb-minutes 30"),
-    ("discovery_O5", f"{_PY} trading_app/strategy_discovery.py --instrument {{instrument}} --orb-minutes 5"),
-    ("discovery_O15", f"{_PY} trading_app/strategy_discovery.py --instrument {{instrument}} --orb-minutes 15"),
-    ("discovery_O30", f"{_PY} trading_app/strategy_discovery.py --instrument {{instrument}} --orb-minutes 30"),
-    (
-        "validator",
-        f"{_PY} trading_app/strategy_validator.py --instrument {{instrument}} --min-sample 50 --no-regime-waivers --min-years-positive-pct 0.75",
-    ),
-    ("retire_e3", f"{_PY} scripts/migrations/retire_e3_strategies.py"),
-    ("edge_families", f"{_PY} scripts/tools/build_edge_families.py --instrument {{instrument}}"),
-    ("family_rr_locks", f"{_PY} scripts/tools/select_family_rr.py"),
-    ("repo_map", f"{_PY} scripts/tools/gen_repo_map.py"),
-    ("health_check", f"{_PY} pipeline/health_check.py"),
-    ("pinecone_sync", f"{_PY} scripts/tools/sync_pinecone.py"),
+REBUILD_STEPS: list[tuple[str, list[str]]] = [
+    ("outcome_builder_O5", [_PY, "trading_app/outcome_builder.py", "--instrument", "{instrument}", "--force", "--orb-minutes", "5"]),
+    ("outcome_builder_O15", [_PY, "trading_app/outcome_builder.py", "--instrument", "{instrument}", "--force", "--orb-minutes", "15"]),
+    ("outcome_builder_O30", [_PY, "trading_app/outcome_builder.py", "--instrument", "{instrument}", "--force", "--orb-minutes", "30"]),
+    ("discovery_O5", [_PY, "trading_app/strategy_discovery.py", "--instrument", "{instrument}", "--orb-minutes", "5"]),
+    ("discovery_O15", [_PY, "trading_app/strategy_discovery.py", "--instrument", "{instrument}", "--orb-minutes", "15"]),
+    ("discovery_O30", [_PY, "trading_app/strategy_discovery.py", "--instrument", "{instrument}", "--orb-minutes", "30"]),
+    ("validator", [_PY, "trading_app/strategy_validator.py", "--instrument", "{instrument}", "--min-sample", "50", "--no-regime-waivers", "--min-years-positive-pct", "0.75"]),
+    ("retire_e3", [_PY, "scripts/migrations/retire_e3_strategies.py"]),
+    ("edge_families", [_PY, "scripts/tools/build_edge_families.py", "--instrument", "{instrument}"]),
+    ("family_rr_locks", [_PY, "scripts/tools/select_family_rr.py"]),
+    ("repo_map", [_PY, "scripts/tools/gen_repo_map.py"]),
+    ("health_check", [_PY, "pipeline/health_check.py"]),
+    ("pinecone_sync", [_PY, "scripts/tools/sync_pinecone.py"]),
 ]
 
 
@@ -314,13 +312,13 @@ def build_step_list(instrument: str, resume_from: list[str] | None = None) -> li
     """
     skip = set(resume_from) if resume_from else set()
     steps = []
-    for name, cmd_template in REBUILD_STEPS:
+    for name, cmd_args in REBUILD_STEPS:
         if name in skip:
             continue
         steps.append(
             {
                 "name": name,
-                "cmd": cmd_template.format(instrument=instrument),
+                "cmd": [arg.format(instrument=instrument) for arg in cmd_args],
             }
         )
     return steps
@@ -360,6 +358,7 @@ def run_rebuild(
     resume: bool = False,
     trigger: str = "CLI",
     rebuild_id: str | None = None,
+    db_path: str | None = None,
 ) -> bool:
     """Execute the full rebuild chain for *instrument*.
 
@@ -369,6 +368,7 @@ def run_rebuild(
         dry_run: If True, print steps without executing.
         resume: If True, skip steps completed in the last FAILED manifest.
         trigger: Trigger label for the manifest record.
+        db_path: DB file path for reconnecting after subprocess steps.
         rebuild_id: Optional pre-generated rebuild ID (from orchestrator).
 
     Returns:
@@ -426,15 +426,15 @@ def run_rebuild(
         table_name = _get_step_table(step_name)
         rows_before = get_table_row_count(con, table_name, instrument) if table_name else None
 
-        # Execute
+        # Execute — close DB connection before subprocess (DuckDB single-writer on Windows)
         print(f"  [{i}/{total}] {step_name}")
-        print(f"    CMD: {step_cmd}")
+        print(f"    CMD: {' '.join(step_cmd)}")
         step_start = time.monotonic()
+        con.close()
         try:
-            # Use shell=False with list args. shlex.split mangles Windows backslashes
-            # in sys.executable paths, so split manually on spaces instead.
-            result = subprocess.run(step_cmd.split(), cwd=str(PROJECT_ROOT), timeout=3600)
+            result = subprocess.run(step_cmd, cwd=str(PROJECT_ROOT), timeout=3600)
         except TimeoutExpired:
+            con = duckdb.connect(db_path or str(GOLD_DB_PATH))  # reopen for logging
             print("    TIMED OUT (>3600s)")
             duration = time.monotonic() - step_start
             log_operation(
@@ -452,6 +452,8 @@ def run_rebuild(
             )
             return False
 
+        # Reopen connection after subprocess released the DB
+        con = duckdb.connect(db_path or str(GOLD_DB_PATH))
         duration = time.monotonic() - step_start
 
         if result.returncode != 0:
@@ -745,6 +747,7 @@ def _run_with_safety(
                     resume=resume,
                     trigger=trigger,
                     rebuild_id=rebuild_id,
+                    db_path=db_path,
                 )
             finally:
                 con.close()
@@ -837,7 +840,7 @@ def main() -> None:
                             print(f"{inst}: up to date, skipping.")
                             continue
                         print(f"{inst}: stale ({', '.join(status['stale_steps'])}), rebuilding...")
-                        ok = run_rebuild(con, inst, dry_run=args.dry_run, trigger=args.trigger)
+                        ok = run_rebuild(con, inst, dry_run=args.dry_run, trigger=args.trigger, db_path=db_path)
                         if not ok:
                             print(f"{inst}: rebuild FAILED — stopping.")
                             sys.exit(1)
