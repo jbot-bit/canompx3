@@ -81,7 +81,10 @@ def _backfill_global_features(
                 df.loc[mask, col] = df.loc[mask, g5_col].values
             df.drop(columns=[g5_col], inplace=True)
 
-    n_still_missing = df[GLOBAL_FEATURES[0]].isna().sum()
+    n_still_missing = max(
+        (df[col].isna().sum() for col in GLOBAL_FEATURES if col in df.columns),
+        default=0,
+    )
     if n_still_missing > 0:
         logger.warning(
             f"  {n_still_missing:,d} rows still missing global features "
