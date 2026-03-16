@@ -182,7 +182,7 @@ All times Brisbane local (AEST, UTC+10). Brisbane has no DST — everything else
 | Session | Time | Instrument | Filter | How to Check | ORB | RR | Entry |
 |---------|------|------------|--------|-------------|-----|-----|-------|
 | **TOKYO_OPEN** | 10:00 (fixed) | MNQ | ORB_G5_CONT | ORB >= 5 MNQ pts + break bar closes beyond ORB edge | 5m | 1.5 | E2 CB1 |
-| **SINGAPORE_OPEN** | 11:00 (fixed) | MNQ | ORB_G8 | ORB >= 8 MNQ pts | 5m | 1.5 | E2 CB1 |
+| **SINGAPORE_OPEN** | 11:00 (fixed) | MNQ | ORB_G8 | ORB >= 8 MNQ pts | 15m | 1.5 | E2 CB1 |
 
 - TOKYO: ORB forms by 10:05. Check size. Set bracket or walk away.
 - SINGAPORE: ORB forms by 11:15. Check size. Set bracket or walk away.
@@ -193,7 +193,7 @@ All times Brisbane local (AEST, UTC+10). Brisbane has no DST — everything else
 | Session | Time | Instrument | Filter | How to Check | ORB | RR | Entry |
 |---------|------|------------|--------|-------------|-----|-----|-------|
 | **EUROPE_FLOW** | 17:00 (winter) / 18:00 (summer) | MNQ | ORB_G8 | ORB >= 8 MNQ pts | 5m | 1.5 | E2 CB1 |
-| **LONDON_METALS** | 18:00 (winter) / 17:00 (summer) | MNQ | ORB_G6_NOMON | ORB >= 6 MNQ pts + not Monday | 5m | 2.0 | E2 CB1 |
+| **LONDON_METALS** | 18:00 (winter) / 17:00 (summer) | MNQ | ORB_G6_NOMON | ORB >= 6 MNQ pts + not Monday | 15m | 2.0 | E2 CB1 |
 
 - These two always swap order with DST but are always 1 hour apart.
 - Winter: EUROPE_FLOW 17:00 first, LONDON_METALS 18:00 second.
@@ -222,14 +222,14 @@ If you also open a TopStep $50K account for the MGC morning lane, add:
 - This adds a 4th sit-down at 08:00 but on a different firm + instrument = diversification.
 - Planning note: the current Apex operating lane in this file is equity-only. Treat MGC-on-Apex as unavailable unless you re-confirm product eligibility directly in current Apex support/dashboard.
 
-### Phase 1 Expected Stats
+### Phase 1 Expected Stats `LOCAL MODEL` (from gold.db backtest)
 
 | Session | Filter | N (backtest) | ExpR | Sharpe | Est. Trades/Mo |
 |---------|--------|-------------|------|--------|----------------|
 | TOKYO_OPEN | ORB_G5_CONT (5m) | ~997 | 0.124 | 1.15 | ~5-8 |
-| SINGAPORE_OPEN | ORB_G8 (5m) | ~1,117 | 0.091 | 0.77 | ~8-10 |
+| SINGAPORE_OPEN | ORB_G8 (15m) | ~1,117 | 0.091 | 0.77 | ~8-10 |
 | EUROPE_FLOW | ORB_G8 (5m) | 1,117 | 0.133 | 1.46 | ~9-11 |
-| LONDON_METALS | ORB_G6_NOMON (5m) | ~861 | 0.070 | 1.20 | ~8-10 |
+| LONDON_METALS | ORB_G6_NOMON (15m) | ~861 | 0.070 | 1.20 | ~8-10 |
 | NYSE_OPEN | ORB_G4 (5m) | 1,262 | 0.142 | 1.84 | ~8-12 |
 | **TOTAL** | | | | | **~38-51** |
 
@@ -377,7 +377,7 @@ Modeled at `1 micro/account`, this pair was about `100.0%` survival with roughly
 
 Modeled at `1 micro/account`, this pair was roughly `98.8%` survival with about `$264/month` median on Apex EOD.
 
-### Per-Account Economics (Apex 50K EOD, simulated)
+### Per-Account Economics (Apex 50K EOD) `LOCAL MODEL` (Monte Carlo sim)
 
 | Micros | Survival | Median $/mo | P5 $/mo |
 |--------|----------|-------------|---------|
@@ -388,7 +388,7 @@ Modeled at `1 micro/account`, this pair was roughly `98.8%` survival with about 
 
 **2 micros/account is the conservative serious sizing.** 3 micros is aggressive. 4 is too hot.
 
-### Stack Math
+### Stack Math `LOCAL MODEL` (sim × account count)
 
 | Target | Accounts | Micros | Monthly | Annual | Notes |
 |--------|----------|--------|---------|--------|-------|
@@ -419,7 +419,7 @@ Use this if manual means:
 - `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G5`
 - `MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20`
 
-**Modeled per-account economics on Apex EOD**
+**Modeled per-account economics on Apex EOD** `LOCAL MODEL`
 
 | Micros | Survival | Median $/mo | P5 $/mo |
 |--------|----------|-------------|---------|
@@ -433,7 +433,7 @@ Use this if manual means:
 - `3 micros/account` is the aggressive manual lane
 - `4 micros/account` is too hot for the base plan
 
-**Manual-first stack math**
+**Manual-first stack math** `LOCAL MODEL`
 
 | Target | Accounts | Micros | Monthly | Annual | Notes |
 |--------|----------|--------|---------|--------|-------|
@@ -452,7 +452,7 @@ If midnight is acceptable manually, the higher-income pair is:
 - `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G5`
 - `MNQ_US_DATA_1000_E2_RR1.0_CB1_ORB_G6`
 
-But the risk profile is materially worse:
+But the risk profile is materially worse: `LOCAL MODEL`
 
 | Micros | Survival | Median $/mo | P5 $/mo |
 |--------|----------|-------------|---------|
@@ -473,7 +473,7 @@ Interpretation:
 - Payout qualification stalls
 - You start manually interfering with bracket logic
 
-### Apex EOD Payout Rules (Current March 2026)
+### Apex EOD Payout Rules (Current March 2026) `OFFICIAL RULE`
 
 - 5 qualifying days required (each day must be +$250 minimum)
 - Safety net: $52,100 (trailing stops)
@@ -559,14 +559,14 @@ Each account gets ONE assignment. Track P&L per account, not per trade.
 
 This is driven by firm constraints, not preference:
 
-| Constraint | Effect |
-|-----------|--------|
-| Apex planning lane is equity-only | MGC strategies default to TopStep or Tradeify unless Apex product eligibility is re-verified |
-| TopStep close by 3:10 PM CT | No CME_PRECLOSE (5:45am Bris) on TopStep |
-| TopStep max 5+1 accounts | Not the main scaling vehicle |
-| Tradeify max 5 accounts | Secondary diversification, not scaling |
-| Apex max 20 accounts | Primary scaling vehicle |
-| MFFU unresolved / not re-verified | Do not use as a primary lane without a fresh rules pass |
+| Constraint | Evidence | Effect |
+|-----------|----------|--------|
+| Apex planning lane is equity-only | `UNRESOLVED` — product eligibility not re-verified this cycle | MGC strategies default to TopStep or Tradeify unless Apex product eligibility is re-verified |
+| TopStep close by 3:10 PM CT | `UNRESOLVED` — believed correct, not sourced this cycle | No CME_PRECLOSE (5:45am Bris) on TopStep |
+| TopStep max 5+1 accounts | `UNRESOLVED` — from prior planning, not re-verified | Not the main scaling vehicle |
+| Tradeify max 5 accounts | `UNRESOLVED` — playbook says "did not re-verify" | Secondary diversification, not scaling |
+| Apex max 20 accounts | `OFFICIAL RULE` — sourced in Official Rule Snapshot | Primary scaling vehicle |
+| MFFU unresolved / not re-verified | `UNRESOLVED` | Do not use as a primary lane without a fresh rules pass |
 
 **Practical assignments:**
 
@@ -616,10 +616,10 @@ Use it when:
 - and the venue officially allows the automation style you plan to use.
 
 Current institutional framing:
-- `Apex`: main scaling vehicle, but do **not** underwrite unattended automation on PA / Live
-- `Topstep`: cleanest officially automation-capable lane in the current doc set
-- `Tradeify`: likely usable as a secondary automation-capable lane, but re-check the exact live rule pages before committing
-- `IBKR / self-funded`: end-state for fully controlled automation
+- `Apex`: main scaling vehicle, but do **not** underwrite unattended automation on PA / Live `OFFICIAL RULE` — compliance page sourced above
+- `Topstep`: believed automation-capable `UNRESOLVED` — not sourced this cycle, re-verify before deploying
+- `Tradeify`: likely usable as a secondary automation-capable lane `UNRESOLVED` — re-check live rule pages before committing
+- `IBKR / self-funded`: end-state for fully controlled automation `OFFICIAL RULE` — your own capital, your own rules
 
 Suggested sequence:
 1. Prove the `Apex` manual-first lane live
@@ -744,7 +744,7 @@ Switch from G-filters (eyeball) to **VOL_RV12_N20** (volume-based, needs code):
 | COMEX_SETTLE | VOL_RV12_N20 | ~14 | 0.181 | 2.08 |
 | CME_PRECLOSE | VOL_RV12_N20 | ~13 | 0.266 | 2.29 |
 
-### Self-Funded IBKR (when prop edge is proven)
+### Self-Funded IBKR (when prop edge is proven) `LOCAL MODEL` (sim projections)
 
 No prop constraints. DD is temporary, not death. Scale by contracts, not accounts.
 
@@ -891,7 +891,7 @@ Every Sunday:
 
 ## Losing Streak Protocol
 
-At 40-55% win rate (our strategies), losing streaks are **mathematically guaranteed**:
+At 40-55% win rate (our strategies), losing streaks are **mathematically guaranteed**: (geometric probability — not a model, just math)
 
 | Win Rate | 5-Loss Streak | 8-Loss Streak | 10-Loss Streak |
 |----------|--------------|---------------|----------------|
@@ -927,7 +927,7 @@ At 40-55% win rate (our strategies), losing streaks are **mathematically guarant
 
 ---
 
-## Platform Setup Guide
+## Platform Setup Guide `UNRESOLVED` (platform UX can change — verify before following)
 
 ### Apex 50K EOD (Primary)
 
@@ -1055,3 +1055,4 @@ Every 3 months, do a full system review. This is the "step back and look at ever
 | 2026-03-16 | Added operational edge cases, journal, streak protocol, platform setup | LOCAL MODEL | Claude |
 | 2026-03-16 | Added pre-trade checklist, capital limits, red lines, change control | PROCESS | Claude |
 | 2026-03-16 | Code review fixes: SINGAPORE/LONDON aperture 15m→5m, CME_REOPEN DST, stats corrected, streak table recalculated, stop formula clarified, Phase 1→2 transition added | LOCAL MODEL | Claude (reviewer) |
+| 2026-03-16 | Evidence audit: fixed SINGAPORE/LONDON aperture back to 15m (Codex had reverted to 5m), added inline LOCAL MODEL/OFFICIAL RULE/UNRESOLVED labels to all sim tables + firm constraint table + platform setup. Flagged 6 UNRESOLVED firm claims (TopStep 3:10PM, TopStep 5+1 accounts, Tradeify 5 accounts, TopStep automation policy, Apex $160 fee, Tradeify Select Flex). Updated MEMORY.md firm table with evidence column. | PROCESS | Claude (auditor) |
