@@ -41,7 +41,9 @@ _US_EASTERN = ZoneInfo("America/New_York")
 def is_us_dst(trading_day: date) -> bool:
     dt = datetime(trading_day.year, trading_day.month, trading_day.day,
                   12, 0, 0, tzinfo=_US_EASTERN)
-    return dt.utcoffset().total_seconds() == -4 * 3600
+    offset = dt.utcoffset()
+    assert offset is not None
+    return offset.total_seconds() == -4 * 3600
 
 OUTCOME_WINDOW = 480
 RR_TARGET = 2.0
@@ -307,7 +309,7 @@ def q2_opening_noise(data_cache):
     for instrument in INSTRUMENTS:
         if instrument not in data_cache:
             continue
-        all_days, opens, highs, lows, closes, volumes = data_cache[instrument]
+        _all_days, opens, highs, lows, closes, volumes = data_cache[instrument]
 
         s1000 = scan_session(highs, lows, closes, 10, 0)
         breaks_g4 = filter_breaks(s1000, 4.0, None)
@@ -393,7 +395,7 @@ def q3_overlap(data_cache):
     for instrument in INSTRUMENTS:
         if instrument not in data_cache:
             continue
-        all_days, _o, highs, lows, closes, _v = data_cache[instrument]
+        _all_days, _o, highs, lows, closes, _v = data_cache[instrument]
 
         s1000 = scan_session(highs, lows, closes, 10, 0)
         s1015 = scan_session(highs, lows, closes, 10, 15)
@@ -477,7 +479,7 @@ def q4_direction(data_cache):
     for instrument in INSTRUMENTS:
         if instrument not in data_cache:
             continue
-        all_days, _o, highs, lows, closes, _v = data_cache[instrument]
+        _all_days, _o, highs, lows, closes, _v = data_cache[instrument]
 
         s1015 = scan_session(highs, lows, closes, 10, 15)
 

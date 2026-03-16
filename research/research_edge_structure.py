@@ -25,7 +25,6 @@ Usage:
 """
 
 import argparse
-import csv
 import time
 import warnings
 from datetime import date, datetime
@@ -56,14 +55,18 @@ def is_us_dst(trading_day: date) -> bool:
     """True if US Eastern is in DST (EDT, UTC-4) on this date."""
     dt = datetime(trading_day.year, trading_day.month, trading_day.day,
                   12, 0, 0, tzinfo=_US_EASTERN)
-    return dt.utcoffset().total_seconds() == -4 * 3600
+    offset = dt.utcoffset()
+    assert offset is not None
+    return offset.total_seconds() == -4 * 3600
 
 
 def is_uk_dst(trading_day: date) -> bool:
     """True if UK is in BST (UTC+1) on this date."""
     dt = datetime(trading_day.year, trading_day.month, trading_day.day,
                   12, 0, 0, tzinfo=_UK_LONDON)
-    return dt.utcoffset().total_seconds() == 1 * 3600
+    offset = dt.utcoffset()
+    assert offset is not None
+    return offset.total_seconds() == 1 * 3600
 
 
 # =========================================================================
@@ -397,7 +400,7 @@ def window_sensitivity(data_cache):
     rows = []
 
     for instrument, existing, candidate in Q1_PAIRS:
-        all_days, _opens, highs, lows, closes, _us, _uk = data_cache[instrument]
+        _all_days, _opens, highs, lows, closes, _us, _uk = data_cache[instrument]
         bh_e, bm_e = parse_session_label(existing)
         bh_c, bm_c = parse_session_label(candidate)
 
@@ -702,7 +705,8 @@ def size_correlation(data_cache):
             orb_r = np.nan
             orb_p = np.nan
             if HAS_SCIPY and np.std(e_sizes) > 0 and np.std(c_sizes) > 0:
-                orb_r, orb_p = pearsonr(e_sizes, c_sizes)
+                _res = pearsonr(e_sizes, c_sizes)
+                orb_r, orb_p = float(_res[0]), float(_res[1])
 
             # Mean absolute size difference
             mean_abs_diff = float(np.mean(np.abs(e_sizes - c_sizes)))
