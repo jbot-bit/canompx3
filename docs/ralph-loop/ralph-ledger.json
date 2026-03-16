@@ -1,14 +1,14 @@
 {
-  "total_iterations": 109,
+  "total_iterations": 110,
   "last_updated": "2026-03-16",
-  "consecutive_low_only": 2,
-  "last_high_finding_iter": 114,
+  "consecutive_low_only": 0,
+  "last_high_finding_iter": 117,
   "findings_by_type": {
     "canonical_violation": {
-      "found": 44,
-      "fixed": 33,
+      "found": 45,
+      "fixed": 34,
       "deferred": 3,
-      "fix_rate": 0.75
+      "fix_rate": 0.76
     },
     "other": {
       "found": 14,
@@ -116,12 +116,12 @@
   "findings_by_severity": {
     "CRITICAL": 3,
     "HIGH": 6,
-    "MEDIUM": 19,
+    "MEDIUM": 20,
     "LOW": 81
   },
   "classifications": {
     "judgment": 52,
-    "mechanical": 36,
+    "mechanical": 37,
     "audit-only": 21
   },
   "files_audited": {
@@ -134,6 +134,11 @@
       "audit_count": 4,
       "last_iter": 10,
       "findings": 3
+    },
+    "trading_app/strategy_validator.py": {
+      "audit_count": 4,
+      "last_iter": 117,
+      "findings": 4
     },
     "portfolio.py": {
       "audit_count": 4,
@@ -148,11 +153,6 @@
     "webhook_server.py": {
       "audit_count": 3,
       "last_iter": 9,
-      "findings": 3
-    },
-    "trading_app/strategy_validator.py": {
-      "audit_count": 3,
-      "last_iter": 47,
       "findings": 3
     },
     "performance_monitor.py": {
@@ -2070,6 +2070,17 @@
       "severity": "LOW",
       "verdict": "FIXED",
       "commit": "6b9a3f6"
+    },
+    {
+      "iter": 117,
+      "date": "2026-03-16",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/strategy_validator.py:824,1056",
+      "finding_type": "canonical_violation",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "0b9b466"
     }
   ]
 }

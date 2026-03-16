@@ -5,6 +5,18 @@
 
 ---
 
+## Iteration 117 — 2026-03-16
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/strategy_validator.py:824,1056
+- Finding: SV-01 — `rd.get("entry_model", "E1")` hardcoded canonical fallback is unreachable dead code (schema enforces NOT NULL) but would silently assign wrong entry model if triggered; no annotation to document this
+- Action: Replaced `.get("entry_model", "E1")` with `.get("entry_model") or "E1"` + inline comment at both sites documenting the NOT NULL schema constraint; same treatment for `filter_type` at line 824
+- Blast radius: 1 file
+- Verification: PASS — 49 tests, drift 72/72, ruff clean
+- Commit: 0b9b466
+
+---
+
 ## Iteration 116 — 2026-03-16
 - Phase: fix
 - Classification: [judgment]
