@@ -14,22 +14,22 @@ Usage:
     python research/research_signal_stack.py --db-path C:/db/gold.db
 """
 
-import sys
 import argparse
-from pathlib import Path
-from math import sqrt
+import sys
 from collections import defaultdict
 from datetime import date
+from math import sqrt
+from pathlib import Path
 
+import duckdb
 import numpy as np
 import pandas as pd
-import duckdb
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.config import ALL_FILTERS, VolumeFilter, EARLY_EXIT_MINUTES
+from trading_app.config import ALL_FILTERS, EARLY_EXIT_MINUTES, VolumeFilter
 from trading_app.strategy_discovery import (
     _build_filter_day_sets,
     _compute_relative_volumes,
@@ -358,8 +358,8 @@ def main():
             return
 
         print(f"\n{'#' * 80}")
-        print(f"#  SIGNAL STACKING REPORT")
-        print(f"#  Measuring incremental impact of each overlay signal")
+        print("#  SIGNAL STACKING REPORT")
+        print("#  Measuring incremental impact of each overlay signal")
         print(f"{'#' * 80}\n")
 
         print(f"Database: {db_path}")

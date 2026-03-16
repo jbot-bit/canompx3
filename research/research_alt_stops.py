@@ -35,8 +35,8 @@ from scipy import stats
 # ---------------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-from pipeline.cost_model import COST_SPECS, CostSpec
 from pipeline.asset_configs import get_enabled_sessions
+from pipeline.cost_model import COST_SPECS, CostSpec
 from trading_app.entry_rules import detect_entry_with_confirm_bars
 
 # ---------------------------------------------------------------------------
@@ -699,7 +699,7 @@ def print_baseline_comparison(valid_results: list[StrategyResult]) -> None:
             if r and r.n_trades >= MIN_TRADES:
                 line += f" {r.avg_pnl_r:+.3f}({r.n_trades:3d})"
             else:
-                line += f"            ---"
+                line += "            ---"
         print(line)
 
 

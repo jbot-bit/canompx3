@@ -24,8 +24,8 @@ Output:
 """
 
 import sys
-from pathlib import Path
 from datetime import date
+from pathlib import Path
 
 import duckdb
 import numpy as np
@@ -35,8 +35,8 @@ from scipy import stats
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from pipeline.paths import GOLD_DB_PATH
 from pipeline.asset_configs import get_enabled_sessions
+from pipeline.paths import GOLD_DB_PATH
 
 # Config — broad net to catch anything
 ENTRY_MODEL = "E1"
@@ -129,7 +129,7 @@ def classify(avg_r: float, p: float, n: int) -> str:
 
 
 def main():
-    print(f"Direction Asymmetry Hunt")
+    print("Direction Asymmetry Hunt")
     print(f"Config: {ENTRY_MODEL}/CB{CONFIRM_BARS}/RR{RR_TARGET}/G{MIN_ORB_G}+")
     print(f"DB: {GOLD_DB_PATH}")
     print()
