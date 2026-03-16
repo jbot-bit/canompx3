@@ -5,26 +5,25 @@ from datetime import date
 import pytest
 
 from pipeline.dst import (
-    is_us_dst,
-    is_uk_dst,
-    cme_open_brisbane,
-    us_equity_open_brisbane,
-    us_data_open_brisbane,
-    london_open_brisbane,
-    us_post_equity_brisbane,
-    cme_close_brisbane,
-    comex_settle_brisbane,
-    nyse_close_brisbane,
-    tokyo_open_brisbane,
-    singapore_open_brisbane,
-    brisbane_1025_brisbane,
     DYNAMIC_ORB_RESOLVERS,
     SESSION_CATALOG,
-    validate_catalog,
+    cme_close_brisbane,
+    cme_open_brisbane,
+    comex_settle_brisbane,
+    fixed_1025_brisbane,
     get_break_group,
+    is_uk_dst,
+    is_us_dst,
+    london_open_brisbane,
+    nyse_close_brisbane,
+    singapore_open_brisbane,
+    tokyo_open_brisbane,
+    us_data_open_brisbane,
+    us_equity_open_brisbane,
+    us_post_equity_brisbane,
+    validate_catalog,
 )
 from pipeline.init_db import ORB_LABELS
-
 
 # =========================================================================
 # US DST transitions (second Sunday Mar, first Sunday Nov)
@@ -631,20 +630,20 @@ class TestBrisbane1025:
     """Fixed 10:25 AM Brisbane session — no DST, no market event anchor."""
 
     def test_winter(self):
-        h, m = brisbane_1025_brisbane(date(2025, 1, 15))
+        h, m = fixed_1025_brisbane(date(2025, 1, 15))
         assert (h, m) == (10, 25)
 
     def test_summer(self):
-        h, m = brisbane_1025_brisbane(date(2025, 7, 15))
+        h, m = fixed_1025_brisbane(date(2025, 7, 15))
         assert (h, m) == (10, 25)
 
     def test_us_spring_forward(self):
-        h, m = brisbane_1025_brisbane(date(2025, 3, 9))
+        h, m = fixed_1025_brisbane(date(2025, 3, 9))
         assert (h, m) == (10, 25)
 
     def test_no_seasonal_shift(self):
         """BRISBANE_1025 never shifts — fixed Brisbane clock time."""
-        assert brisbane_1025_brisbane(date(2025, 7, 15)) == brisbane_1025_brisbane(date(2025, 1, 15))
+        assert fixed_1025_brisbane(date(2025, 7, 15)) == fixed_1025_brisbane(date(2025, 1, 15))
 
     def test_break_group_is_asia(self):
         assert get_break_group("BRISBANE_1025") == "asia"
