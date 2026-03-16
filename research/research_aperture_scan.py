@@ -32,7 +32,7 @@ Usage:
 import argparse
 import time
 import warnings
-from datetime import datetime, date
+from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -510,7 +510,7 @@ def print_instrument_table(inst_rows, instrument):
 def print_honest_summary(all_rows):
     """RESEARCH_RULES.md mandated honest summary."""
     print(f"\n{'=' * 110}")
-    print(f"  HONEST SUMMARY")
+    print("  HONEST SUMMARY")
     print(f"{'=' * 110}")
 
     # Count what we tested
@@ -544,7 +544,7 @@ def print_honest_summary(all_rows):
 
     beats_baseline.sort(key=lambda r: r["delta_vs_5m"], reverse=True)
 
-    print(f"\n  SURVIVED SCRUTINY (beats 5m baseline, N>=30):")
+    print("\n  SURVIVED SCRUTINY (beats 5m baseline, N>=30):")
     if not beats_baseline:
         print("    None — no aperture consistently outperformed 5m.")
     else:
@@ -556,7 +556,7 @@ def print_honest_summary(all_rows):
                   f"[{r['sample_class']}]")
 
     # Specifically flag robust + significant + core/preliminary
-    print(f"\n  STRONGEST CANDIDATES (beats 5m, BH p<0.05, ROBUST, N>=30):")
+    print("\n  STRONGEST CANDIDATES (beats 5m, BH p<0.05, ROBUST, N>=30):")
     strong = [r for r in beats_baseline
               if not np.isnan(r["p_adj_bh"]) and r["p_adj_bh"] < 0.05
               and r["sensitivity_verdict"] == "ROBUST"]
@@ -569,7 +569,7 @@ def print_honest_summary(all_rows):
                   f"N={r['n_trades']} p_adj={r['p_adj_bh']:.4f} [{r['sample_class']}]")
 
     # DID NOT SURVIVE
-    print(f"\n  DID NOT SURVIVE:")
+    print("\n  DID NOT SURVIVE:")
     worse = []
     for r in all_rows:
         if r["aperture_min"] == 5:
@@ -584,12 +584,12 @@ def print_honest_summary(all_rows):
     print(f"    {n_fragile} combos beat 5m but were FRAGILE (±2min kills the edge)")
 
     # CAVEATS
-    print(f"\n  CAVEATS:")
-    print(f"    - This is IN-SAMPLE research (not walk-forward validated)")
-    print(f"    - E1 entry + CB1 only (production uses CB1-5)")
-    print(f"    - RR2.0 only (production tests 1.0-4.0)")
-    print(f"    - G4+ only (production tests G2-G8)")
-    print(f"    - Any finding needs full pipeline rebuild to confirm")
+    print("\n  CAVEATS:")
+    print("    - This is IN-SAMPLE research (not walk-forward validated)")
+    print("    - E1 entry + CB1 only (production uses CB1-5)")
+    print("    - RR2.0 only (production tests 1.0-4.0)")
+    print("    - G4+ only (production tests G2-G8)")
+    print("    - Any finding needs full pipeline rebuild to confirm")
 
     # Instrument-specific data caveats
     for inst in INSTRUMENTS:
@@ -600,12 +600,12 @@ def print_honest_summary(all_rows):
                 print(f"    - {inst}: only {n_days} trading days (short history)")
 
     # NEXT STEPS
-    print(f"\n  NEXT STEPS:")
-    print(f"    - If any combo is ROBUST + BH p<0.05 + CORE class:")
-    print(f"      -> Run outcome_builder at that aperture (~60-90s)")
-    print(f"      -> Run strategy_discovery + validation")
-    print(f"      -> Compare family-level Sharpe to 5m families")
-    print(f"    - If nothing survives: 5m is optimal, stop here")
+    print("\n  NEXT STEPS:")
+    print("    - If any combo is ROBUST + BH p<0.05 + CORE class:")
+    print("      -> Run outcome_builder at that aperture (~60-90s)")
+    print("      -> Run strategy_discovery + validation")
+    print("      -> Compare family-level Sharpe to 5m families")
+    print("    - If nothing survives: 5m is optimal, stop here")
 
 
 # =========================================================================
@@ -633,7 +633,7 @@ def main():
 
     n_combos = len(INSTRUMENTS) * len(SESSIONS) * len(APERTURES)
     print(f"\n{'=' * 110}")
-    print(f"  MULTI-APERTURE ORB SCAN")
+    print("  MULTI-APERTURE ORB SCAN")
     print(f"  Database: {db_path}")
     print(f"  Parameters: G{G4_MIN:.0f}+ filter | RR{RR_TARGET:.1f} target | "
           f"{BREAK_WINDOW // 60}h break window | {OUTCOME_WINDOW // 60}h outcome window")
