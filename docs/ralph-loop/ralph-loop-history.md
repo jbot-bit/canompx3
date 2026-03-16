@@ -5,6 +5,18 @@
 
 ---
 
+## Iteration 122 — 2026-03-16
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/live/projectx/order_router.py:110
+- Finding: cancel() fail-open — ProjectX /api/Order/cancel returns {"success": false} on HTTP 200 for rejected cancels; cancel() only called raise_for_status() and silently returned success, unlike submit() which already checks data.get("success")
+- Action: Added data = resp.json() + success check after raise_for_status(); raises RuntimeError on success=False. Also fixed 3 pre-existing UP038 ruff lint errors (isinstance tuple -> union syntax) in gen_repo_map.py, orb_size_deep_dive.py, strategy_fitness.py.
+- Blast radius: 1 production file + 3 lint files; session_orchestrator._cancel_brackets() already wraps cancel() in exception handler; 22 tests verified
+- Verification: PASS (22/22 test_projectx_router.py; drift 72/72 checks PASS + 6 advisory)
+- Commit: 4db63d2 (UP038 fixes + cancel fix already in d8e0f67)
+
+---
+
 ## Iteration 121 — 2026-03-16
 - Phase: fix
 - Classification: [judgment]
