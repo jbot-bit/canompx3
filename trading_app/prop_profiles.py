@@ -63,6 +63,11 @@ class AccountProfile:
     stop_multiplier: float = 0.75  # 0.75 for prop, 1.0 for self-funded
     max_slots: int = 6  # Cognitive cap
     active: bool = True
+    # Session→firm routing (from playbook account grid).
+    # None = all sessions allowed. Set = only these sessions eligible.
+    allowed_sessions: frozenset[str] | None = None
+    # Instrument routing. None = all allowed (firm bans still apply).
+    allowed_instruments: frozenset[str] | None = None
     notes: str = ""
 
 
@@ -143,7 +148,7 @@ PROP_FIRM_SPECS: dict[str, PropFirmSpec] = {
         min_hold_seconds=None,
         banned_instruments=frozenset(),
         auto_trading="full",
-        notes="TopstepX API for automation. 5 min winning days @$200+ for payout.",
+        notes="MGC morning lane. 5 Express + 1 Live (stay Express). ProjectX API. Copier on Express only.",
     ),
     "mffu": PropFirmSpec(
         name="mffu",
@@ -170,8 +175,8 @@ PROP_FIRM_SPECS: dict[str, PropFirmSpec] = {
         platform="tradovate",
         min_hold_seconds=10,  # 50% of trades held 10+ seconds
         banned_instruments=frozenset(),
-        auto_trading="full",  # Own bots allowed on Select
-        notes="DD locks to static at starting_balance+$100. 10s hold rule. No weekend holds.",
+        auto_trading="full",  # Own bots allowed on Select (exclusive ownership, no cross-firm)
+        notes="PRIMARY MNQ scaling lane. 5 accts, Tradovate API. Bot must be exclusive (no cross-firm). Group Trading broken for brackets — use API.",
     ),
     "apex": PropFirmSpec(
         name="apex",
@@ -184,8 +189,8 @@ PROP_FIRM_SPECS: dict[str, PropFirmSpec] = {
         platform="tradovate",
         min_hold_seconds=None,
         banned_instruments=frozenset({"MGC", "GC", "SI", "SIL", "HG", "PL", "PA"}),
-        auto_trading="semi",  # Copy trading only, no independent bots
-        notes="ALL METALS SUSPENDED as of Mar 2026. No return date.",
+        auto_trading="none",  # PROHIBITED — PA Compliance: no bots, no copy trading, manual only
+        notes="Manual proof only (1 account). Automation AND copy trading PROHIBITED on PA/Live. Metals suspended.",
     ),
     "self_funded": PropFirmSpec(
         name="self_funded",
@@ -220,7 +225,7 @@ ACCOUNT_TIERS: dict[tuple[str, int], PropFirmAccount] = {
     # Apex (metals banned — included for completeness)
     ("apex", 50_000): PropFirmAccount("apex", 50_000, 1_500, 4, 40),
     ("apex", 100_000): PropFirmAccount("apex", 100_000, 3_000, 6, 60),
-    ("apex", 150_000): PropFirmAccount("apex", 150_000, 4_500, 9, 90),
+    ("apex", 150_000): PropFirmAccount("apex", 150_000, 4_000, 10, 100),  # Official: $4K DD, 10 mini
     # Self-funded
     ("self_funded", 50_000): PropFirmAccount("self_funded", 50_000, 5_000, 50, 500),
 }
@@ -231,42 +236,67 @@ ACCOUNT_TIERS: dict[tuple[str, int], PropFirmAccount] = {
 # =========================================================================
 
 ACCOUNT_PROFILES: dict[str, AccountProfile] = {
-    "topstep_50k": AccountProfile(
-        profile_id="topstep_50k",
-        firm="topstep",
+    # =========================================================================
+    # Phase 1: Manual proof (1 account, prove the edge)
+    # =========================================================================
+    "apex_50k_manual": AccountProfile(
+        profile_id="apex_50k_manual",
+        firm="apex",
         account_size=50_000,
         copies=1,
         stop_multiplier=0.75,
-        max_slots=6,
-        notes="Phase 1: single account, auto via TopstepX API",
+        max_slots=4,
+        # Waking hours Brisbane — manual sessions the user can physically trade
+        allowed_sessions=frozenset(
+            {
+                "CME_REOPEN",
+                "TOKYO_OPEN",
+                "BRISBANE_1025",
+                "SINGAPORE_OPEN",
+                "EUROPE_FLOW",
+                "LONDON_METALS",
+            }
+        ),
+        # Metals banned at firm level; MNQ is primary. MES/M2K also allowed.
+        notes="Phase 1 manual proof. No automation, no copy trading. Waking hours only.",
     ),
-    "topstep_150k": AccountProfile(
-        profile_id="topstep_150k",
-        firm="topstep",
-        account_size=150_000,
-        copies=1,
-        stop_multiplier=0.75,
-        max_slots=8,
-        notes="Phase 2: scale-up",
-    ),
+    # =========================================================================
+    # Phase 2: Automation scaling (Tradeify MNQ + TopStep MGC)
+    # =========================================================================
     "tradeify_50k": AccountProfile(
         profile_id="tradeify_50k",
         firm="tradeify",
         account_size=50_000,
-        copies=1,
+        copies=5,  # 5 identical accounts — PRIMARY MNQ scaling lane
         stop_multiplier=0.75,
         max_slots=6,
-        notes="Alternative: 90/10 flat split, DD locks to static",
+        # Overnight sessions from playbook account grid
+        allowed_sessions=frozenset(
+            {
+                "CME_PRECLOSE",
+                "COMEX_SETTLE",
+                "NYSE_CLOSE",
+                "NYSE_OPEN",
+            }
+        ),
+        allowed_instruments=frozenset({"MNQ"}),
+        notes="MNQ overnight auto. Tradovate API. Bot exclusive (no cross-firm).",
     ),
-    "mffu_50k": AccountProfile(
-        profile_id="mffu_50k",
-        firm="mffu",
+    "topstep_50k": AccountProfile(
+        profile_id="topstep_50k",
+        firm="topstep",
         account_size=50_000,
-        copies=1,
+        copies=5,  # 5 Express accounts — MGC morning lane
         stop_multiplier=0.75,
-        max_slots=5,
-        notes="Tightest DD ($1,500). News restriction active.",
+        max_slots=4,
+        # Morning sessions from playbook account grid
+        allowed_sessions=frozenset({"CME_REOPEN", "TOKYO_OPEN"}),
+        allowed_instruments=frozenset({"MGC"}),
+        notes="MGC morning auto. ProjectX API. Stay Express (don't accept Live).",
     ),
+    # =========================================================================
+    # Phase 3: Self-funded (after prop proof, $100K/year target)
+    # =========================================================================
     "self_funded_50k": AccountProfile(
         profile_id="self_funded_50k",
         firm="self_funded",
@@ -274,7 +304,9 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         copies=1,
         stop_multiplier=1.0,
         max_slots=10,
-        notes="Own capital. DD=temporary. 1.0x stops.",
+        active=False,  # Phase 3 — not active until prop proof complete
+        # None = all sessions, all instruments
+        notes="Own capital. ALL 9 sessions. 5-10c. DD=temporary. IBKR (not built yet).",
     ),
 }
 

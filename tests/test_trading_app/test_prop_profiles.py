@@ -74,13 +74,26 @@ class TestAccountProfile:
         assert p.firm == "topstep"
         assert p.account_size == 50_000
         assert p.stop_multiplier == 0.75
-        assert p.max_slots == 6
+        assert p.copies == 5  # 5 Express accounts — MGC morning lane
+        assert p.active is True
+
+    def test_apex_manual_profile(self):
+        p = get_profile("apex_50k_manual")
+        assert p.firm == "apex"
+        assert p.copies == 1  # Manual proof only
+        assert p.active is True
+
+    def test_tradeify_scaling_profile(self):
+        p = get_profile("tradeify_50k")
+        assert p.firm == "tradeify"
+        assert p.copies == 5  # PRIMARY MNQ scaling lane
         assert p.active is True
 
     def test_self_funded_profile(self):
         p = get_profile("self_funded_50k")
         assert p.stop_multiplier == 1.0
         assert p.max_slots == 10
+        assert p.active is False  # Phase 3 — not active yet
 
     def test_profile_copies(self):
         p = get_profile("topstep_50k")

@@ -167,9 +167,43 @@ def select_for_profile(
     tier = get_account_tier(profile.firm, profile.account_size)
     all_excluded: list[ExcludedEntry] = []
 
-    # 1. Instrument bans
+    # 1. Instrument bans (firm-level)
     candidates, banned_excluded = _apply_instrument_bans(strategies, firm_spec.banned_instruments)
     all_excluded.extend(banned_excluded)
+
+    # 1b. Session routing (profile-level — from playbook account grid)
+    if profile.allowed_sessions is not None:
+        routed = []
+        for s in candidates:
+            if s.orb_label in profile.allowed_sessions:
+                routed.append(s)
+            else:
+                all_excluded.append(
+                    ExcludedEntry(
+                        s.strategy_id,
+                        s.instrument,
+                        s.orb_label,
+                        f"Session not assigned to this profile ({s.orb_label})",
+                    )
+                )
+        candidates = routed
+
+    # 1c. Instrument routing (profile-level — e.g. Tradeify=MNQ, TopStep=MGC)
+    if profile.allowed_instruments is not None:
+        routed = []
+        for s in candidates:
+            if s.instrument in profile.allowed_instruments:
+                routed.append(s)
+            else:
+                all_excluded.append(
+                    ExcludedEntry(
+                        s.strategy_id,
+                        s.instrument,
+                        s.orb_label,
+                        f"Instrument not assigned to this profile ({s.instrument})",
+                    )
+                )
+        candidates = routed
 
     # 2. Deduplicate sessions
     candidates, dedup_excluded = _deduplicate_sessions(candidates)

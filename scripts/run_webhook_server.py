@@ -18,7 +18,7 @@ Environment variables (.env):
 Security checklist before going live:
     [ ] WEBHOOK_SECRET set in .env (at least 32 random chars)
     [ ] cloudflared tunnel is a NAMED tunnel (not trycloudflare.com temporary)
-    [ ] Apex/prop firm allows automated API trading on your account
+    [ ] Prop firm allows automated API trading (Tradeify/TopStep YES, Apex NO)
     [ ] Rate limit tested (max 3 orders / 60s)
     [ ] Tested in DEMO mode for 5+ sessions before live
 """
