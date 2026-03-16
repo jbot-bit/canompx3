@@ -5,6 +5,30 @@
 
 ---
 
+## Iteration 123 — 2026-03-16
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/live/projectx/data_feed.py:298
+- Finding: _drain_bar_queue silent crash — unguarded await self.on_bar(bar) in infinite loop; any unhandled exception from on_bar kills the signalrcore drain task silently, halting bar delivery with no log or recovery; pysignalr path propagates to outer reconnect loop but signalrcore drain task has no equivalent recovery
+- Action: Wrapped on_bar call in try/except — re-raise CancelledError for clean task shutdown, log+continue on all other exceptions; drain loop now survives individual bar processing failures
+- Blast radius: 1 file changed; broker_factory.py imports only; test_projectx_feed.py tests drain queue
+- Verification: PASS (20/20 tests pass, 1 deselected pre-existing pysignalr env issue; drift 72/72 PASS + 6 advisory)
+- Commit: c6be6d9
+
+---
+
+## Iteration 123 — 2026-03-16
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/live/projectx/data_feed.py:298-302
+- Finding: _drain_bar_queue silent crash — unguarded await self.on_bar(bar) in infinite drain loop; any unhandled exception from the callback kills the signalrcore bar-delivery task silently with no log or recovery path
+- Action: Wrapped on_bar call in try/except; re-raises CancelledError for clean shutdown, logs+continues on all other exceptions
+- Blast radius: 1 production file; broker_factory.py imports only; test_projectx_feed.py + test_broker_base.py verified
+- Verification: PASS (20/20 tests; drift 72/72 PASS + 6 advisory; ruff clean)
+- Commit: c6be6d9
+
+---
+
 ## Iteration 122 — 2026-03-16
 - Phase: fix
 - Classification: [judgment]
