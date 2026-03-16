@@ -25,6 +25,7 @@ import duckdb
 import numpy as np
 import pandas as pd
 
+from pipeline.build_daily_features import COMPRESSION_SESSIONS
 from pipeline.cost_model import CostSpec, get_cost_spec
 from pipeline.init_db import ORB_LABELS
 from pipeline.paths import GOLD_DB_PATH
@@ -695,9 +696,8 @@ def build_strategy_daily_series(
             om_int = int(om)
             # Build dynamic column list from ORB_LABELS
             _size_cols = ", ".join(f"orb_{lbl}_size" for lbl in ORB_LABELS)
-            # Compression tier only exists for momentum sessions
-            _COMPRESSION_SESSIONS = ["CME_REOPEN", "TOKYO_OPEN", "LONDON_METALS"]
-            _comp_cols = ", ".join(f"orb_{lbl}_compression_tier" for lbl in _COMPRESSION_SESSIONS)
+            # Compression tier only exists for momentum sessions (canonical: pipeline.build_daily_features.COMPRESSION_SESSIONS)
+            _comp_cols = ", ".join(f"orb_{lbl}_compression_tier" for lbl in COMPRESSION_SESSIONS)
             df_om = con.execute(
                 f"""
                 SELECT trading_day, day_of_week,
