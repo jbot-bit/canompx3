@@ -341,155 +341,90 @@ Only the Evening and Night blocks shift. Morning is fixed year-round.
 
 ---
 
-## Phase 2: The $100K/Year Plan (Months 3-12)
+## Phase 2: Prop Scaling (Months 3-12) `OFFICIAL RULE` + `LOCAL MODEL`
 
-Once Phase 1 proves the edge (30+ live trades, positive P&L, 2+ payouts), transition to the scaling stack.
+Once Phase 1 proves the edge (30+ live trades, positive P&L, 2+ payouts), scale across firms using automation.
 
-### The Deployed Pair (from codex's proper firm-aware sim pass)
+### Firm Reality Check (grounded from official docs, Mar 16 2026)
 
-| Strategy ID | Session | Time (Brisbane) | Inst | ORB | RR | Filter |
-|------------|---------|-----------------|------|-----|-----|--------|
-| `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G5` | CME_PRECLOSE | 05:45/06:45 | MNQ | 5m | 1.0 | ORB_G5 |
-| `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_VOL_RV12_N20` | COMEX_SETTLE | 03:30/04:30 | MNQ | 5m | 1.0 | VOL_RV12_N20 |
+| Firm | Automation | Copy Trading | Max Accounts | Our Role |
+|------|-----------|-------------|-------------|----------|
+| **Apex** | PROHIBITED | PROHIBITED | 20 (irrelevant) | Manual proof only (1 account) |
+| **Tradeify** | ALLOWED (exclusive ownership, no cross-firm) | ALLOWED (same-owner, API only — GUI brackets broken in Group Trading) | 5 per household | Automation scaling lane |
+| **TopStep** | ALLOWED | Express only (NOT Live) | 5 Express + 1 Live | MGC automation lane |
+| **MFFU** | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | Not in plan until verified |
 
-**Vehicle:** Apex 50K EOD
-**Method:** Copy-trade from 1 lead account to all follower accounts
+Sources: `resources/prop-firm-official-rules.md`
 
-### Manual-First Variant (No 03:30 / 04:30 Brisbane)
+**Key constraint:** Tradeify Group Trading does NOT support bracket orders (ATM). Must place brackets per-account via Tradovate API. Our automation code already does this — `TradovateOrderRouter.submit()` places orders per-account, no GUI copier needed.
 
-If manual trading will not include `COMEX_SETTLE`, use a separate manual lane and keep the ugly-hours pair as a modeled benchmark only.
+### The Scaling Architecture
 
-**Best strict no-3am manual pair on Apex EOD**
+```
+Phase 2 = Automation handles overnight sessions you can't trade manually
 
-| Strategy ID | Session | Time (Brisbane) | Inst | ORB | RR | Filter |
-|------------|---------|-----------------|------|-----|-----|--------|
-| `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G5` | CME_PRECLOSE | 05:45 / 06:45 | MNQ | 5m | 1.0 | ORB_G5 |
-| `MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20` | NYSE_CLOSE | 06:00 / 07:00 | MNQ | 5m | 1.0 | VOL_RV12_N20 |
+  Tradeify (5 accounts × MNQ via Tradovate API):
+    - CME_PRECLOSE (05:45/06:45 Brisbane)
+    - COMEX_SETTLE (03:30/04:30 Brisbane)
+    - NYSE_CLOSE (06:00/07:00 Brisbane)
+    - NYSE_OPEN (23:30/00:30 Brisbane)
+    + any Phase 1 sessions during sleep hours
 
-Modeled at `1 micro/account`, this pair was about `100.0%` survival with roughly `$166/month` median on Apex EOD.
+  TopStep (5 Express × MGC via ProjectX API):
+    - CME_REOPEN (08:00/09:00 Brisbane)
+    - TOKYO_OPEN (10:00 Brisbane)
 
-**Higher-income manual variant if midnight is acceptable**
+  Apex (1 account, manual only):
+    - Phase 1 sessions during waking hours
+    - No automation, no copy trading
+```
 
-| Strategy ID | Session | Time (Brisbane) | Inst | ORB | RR | Filter |
-|------------|---------|-----------------|------|-----|-----|--------|
-| `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G5` | CME_PRECLOSE | 05:45 / 06:45 | MNQ | 5m | 1.0 | ORB_G5 |
-| `MNQ_US_DATA_1000_E2_RR1.0_CB1_ORB_G6` | US_DATA_1000 | 00:00 / 01:00 | MNQ | 5m | 1.0 | ORB_G6 |
+### Per-Account Economics `LOCAL MODEL` (Monte Carlo sim)
 
-Modeled at `1 micro/account`, this pair was roughly `98.8%` survival with about `$264/month` median on Apex EOD.
-
-### Per-Account Economics (Apex 50K EOD) `LOCAL MODEL` (Monte Carlo sim)
+**Tradeify MNQ lane** (all overnight sessions, 2 micros):
 
 | Micros | Survival | Median $/mo | P5 $/mo |
 |--------|----------|-------------|---------|
-| 1 | 100.0% | ~$210 | ~$85 |
-| **2** | **99.2%** | **~$430** | **~$167** |
-| 3 | 94.9% | ~$638 | — |
-| 4 | 89.3% | ~$877 | — |
+| 1 | ~100% | ~$280 | ~$85 |
+| **2** | **~99%** | **~$560** | **~$170** |
+| 3 | ~95% | ~$840 | — |
 
-**2 micros/account is the conservative serious sizing.** 3 micros is aggressive. 4 is too hot.
+**TopStep MGC lane** (morning sessions, 2 micros):
 
-### Stack Math `LOCAL MODEL` (sim × account count)
+| Micros | Risk/trade | $/trade | $/mo | DD risk |
+|--------|-----------|---------|------|---------|
+| 1 | $75 | ~$25 | ~$215 | 3.75% of DD |
+| **2** | $150 | ~$50 | ~$430 | 7.5% of DD |
 
-| Target | Accounts | Micros | Monthly | Annual | Notes |
-|--------|----------|--------|---------|--------|-------|
-| **$100K/year** | 20 | 2/acct | ~$8,600 | **~$103K** | Conservative path |
-| **$150K/year** | 20 | 3/acct | ~$12,760 | **~$153K** | Aggressive, 94.9% survival |
-| $200K/year | 20 | 4/acct | ~$17,540 | ~$210K | Too hot (89.3% survival) |
+### Stack Math (grounded) `LOCAL MODEL`
 
-These numbers are for the max-EV benchmark pair, not the manual-safe pair.
+| Lane | Accounts | Micros | Monthly | Annual |
+|------|----------|--------|---------|--------|
+| Tradeify MNQ × 5 | 5 | 2/acct | ~$2,800 | **~$34K** |
+| TopStep MGC × 5 | 5 Express | 2/acct | ~$2,150 | **~$26K** |
+| Apex manual × 1 | 1 | 1 | ~$66 | ~$800 |
+| **Total prop income** | **11** | | **~$5,000/mo** | **~$60K/year** |
+
+**$60K/year from props is the realistic ceiling.** Not $100K. The $100K target lives in Phase 3 (self-funded IBKR).
 
 ### Ramp Schedule
 
 | Step | What | Gate Before Proceeding |
 |------|------|----------------------|
-| 1 | 1 funded account, 1 micro | — |
-| 2 | 5 funded accounts, 1 micro | Zero rule breaches, zero copier errors |
-| 3 | 20 funded accounts, 1 micro | Live DD not worse than modeled P95 |
-| 4 | 20 funded accounts, 2 micros | Payout qualification actually achieved |
-| 5 | 20 funded accounts, 3 micros | 2+ months clean at 2 micros |
-
-### Post-Safety-Net Sizing `OFFICIAL RULE` + `LOCAL MODEL`
-
-Once an account's highest EOD close hits **$52,100**, the threshold freezes at **$50,100**. The trailing DD is gone — you now have a static floor. This changes the risk profile:
-
-| Account Balance | Buffer Above $50,100 | Equivalent "DD" | Sizing Headroom |
-|----------------|----------------------|-----------------|-----------------|
-| $52,100 (just hit safety net) | $2,000 | Same as start | No change yet |
-| $53,000 | $2,900 | 45% more room | Consider 3 micros |
-| $54,000 | $3,900 | ~2x starting room | 3-4 micros viable |
-| $55,000+ | $4,900+ | >2x starting room | Re-evaluate freely |
-
-**Rules:**
-1. **Do NOT size up immediately at $52,100.** Buffer is still only $2,000 — same as starting. Wait until balance grows above the safety net.
-2. **Size by buffer, not by balance.** The number that matters is `current balance - $50,100`. That's your real risk capacity.
-3. **Keep max risk per trade under 5% of buffer.** At $53,000 balance ($2,900 buffer), max risk = $145/trade. At $2/pt MNQ with 7.5pt stop = $15/trade, that's up to 9 micros mathematically — but start conservative (3-4) because you also need payout qualification buffer.
-4. **Payout withdrawals shrink your buffer.** If you withdraw $1,000 from a $54,000 balance, your buffer drops from $3,900 to $2,900. Re-check sizing after every payout.
-5. **Each account is independent.** One account hitting safety net doesn't mean you size up on all accounts. The threshold freeze is per-account.
-
-### Apex Manual-First Ladder (`5am+`, No `3am`)
-
-Use this if manual means:
-- `05:00+` starts are fine
-- `03:30 / 04:30` is not
-- unattended Apex automation is off the table
-
-**Manual base pair**
-- `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G5`
-- `MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20`
-
-**Modeled per-account economics on Apex EOD** `LOCAL MODEL`
-
-| Micros | Survival | Median $/mo | P5 $/mo |
-|--------|----------|-------------|---------|
-| 1 | 100.0% | ~$169 | ~$64 |
-| **2** | **99.3%** | **~$336** | **~$122** |
-| 3 | 96.0% | ~$515 | ~$193 |
-| 4 | 90.8% | ~$696 | ~$301 |
-
-**Institutional use**
-- `2 micros/account` is the manual serious-size lane
-- `3 micros/account` is the aggressive manual lane
-- `4 micros/account` is too hot for the base plan
-
-**Manual-first stack math** `LOCAL MODEL`
-
-| Target | Accounts | Micros | Monthly | Annual | Notes |
-|--------|----------|--------|---------|--------|-------|
-| Base proof | 5 | 1/acct | ~$845 | ~$10K | Process proof, not income replacement |
-| Serious manual | 20 | 2/acct | ~$6,700 | ~$80K | Clean first manual target |
-| Aggressive manual | 20 | 3/acct | ~$10,300 | ~$124K | Requires better discipline and tolerance |
-
-If you want a manual-first path to `100K/year`, the realistic answer is:
-- start with the `5am+` pair
-- get to `20 x 2 micros`
-- only then decide whether the jump to `3 micros` is justified
-
-### Midnight + `5am` Manual Ladder
-
-If midnight is acceptable manually, the higher-income pair is:
-- `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G5`
-- `MNQ_US_DATA_1000_E2_RR1.0_CB1_ORB_G6`
-
-But the risk profile is materially worse: `LOCAL MODEL`
-
-| Micros | Survival | Median $/mo | P5 $/mo |
-|--------|----------|-------------|---------|
-| 1 | 98.5% | ~$257 | ~$63 |
-| 2 | 81.8% | ~$564 | ~$219 |
-| 3 | 66.7% | ~$877 | ~$332 |
-
-Interpretation:
-- this is a viable **small-account manual supplement**
-- it is **not** a clean primary scaling lane on Apex EOD
-- the extra income is not worth the survival collapse once you size it
+| 1 | 1 Apex manual, 1 micro | Phase 1 complete (30+ trades, positive P&L) |
+| 2 | 1 Tradeify automated, 1 micro | Automation passes paper-mode validation |
+| 3 | 5 Tradeify + 1 TopStep, 1 micro | Zero API errors, zero missed sessions for 2 weeks |
+| 4 | 5 Tradeify + 5 TopStep, 2 micros | First payout received on at least 2 accounts |
+| 5 | All accounts at 2 micros | 2+ months clean, no rule breaches |
 
 ### Abort Scaling If
 
-- Two execution errors in a month
-- Live DD materially exceeds modeled P95
-- Missed sessions become recurrent
-- Payout qualification stalls
-- You start manually interfering with bracket logic
+- Two API/execution errors in a month
+- Live DD materially exceeds modeled P95 on any account
+- Missed sessions become recurrent (automation reliability gap)
+- Payout qualification stalls on 3+ accounts
+- Any firm sends a compliance warning
+- Tradeify flags your bot (they scan for similar orders across accounts)
 
 ### Apex 50K EOD — Drawdown Mechanics `OFFICIAL RULE`
 
@@ -556,33 +491,31 @@ The question is not whether the edge exists. It does. The question is whether yo
 
 ---
 
-## Phase 2b: Multi-Strategy Portfolio (Month 6+)
+## Phase 2b: Account Grid (Month 6+)
 
-Phase 2 is one pair on Apex. Phase 2b adds sessions, firms, and instruments. This is how you go from "one trick" to a real portfolio without losing track of what's working.
-
-### The Portfolio Grid
-
-Each account gets ONE assignment. Track P&L per account, not per trade.
+Track every account, every assignment. One grid, one truth.
 
 ```
 +------------------------------------------------------------------+
-|  ACCOUNT GRID (example — edit as plans change)                    |
+|  ACCOUNT GRID (edit as plans change)                               |
 |                                                                   |
-|  Account   Firm         Strategy Pair         Micros  Status      |
-|  -------   ----         --------------         ------  ------     |
-|  AX-01     Apex EOD     PRECLOSE + CLOSE       2c     LEAD        |
-|  AX-02     Apex EOD     PRECLOSE + CLOSE       2c     COPY        |
-|  AX-03     Apex EOD     PRECLOSE + CLOSE       2c     COPY        |
-|  ...       ...          ...                    ...    COPY        |
-|  AX-20     Apex EOD     PRECLOSE + CLOSE       2c     COPY        |
+|  Account   Firm         Sessions               Micros  Method     |
+|  -------   ----         --------               ------  ------     |
+|  AX-01     Apex EOD     Phase 1 manual          1c     MANUAL     |
 |                                                                   |
-|  TS-01     TopStep      CME_REOPEN MGC         1c     LEAD        |
-|  TS-02     TopStep      CME_REOPEN MGC         1c     COPY        |
+|  TF-01     Tradeify     PRECLOSE+COMEX+NYSE     2c     API-AUTO   |
+|  TF-02     Tradeify     PRECLOSE+COMEX+NYSE     2c     API-AUTO   |
+|  TF-03     Tradeify     PRECLOSE+COMEX+NYSE     2c     API-AUTO   |
+|  TF-04     Tradeify     PRECLOSE+COMEX+NYSE     2c     API-AUTO   |
+|  TF-05     Tradeify     PRECLOSE+COMEX+NYSE     2c     API-AUTO   |
 |                                                                   |
-|  TF-01     Tradeify     TOKYO + SINGAPORE      1c     LEAD        |
-|  TF-02     Tradeify     EUROPE + LONDON        1c     LEAD        |
+|  TS-01     TopStep      CME_REOPEN+TOKYO MGC    2c     API-AUTO   |
+|  TS-02     TopStep      CME_REOPEN+TOKYO MGC    2c     API-AUTO   |
+|  TS-03     TopStep      CME_REOPEN+TOKYO MGC    2c     API-AUTO   |
+|  TS-04     TopStep      CME_REOPEN+TOKYO MGC    2c     API-AUTO   |
+|  TS-05     TopStep      CME_REOPEN+TOKYO MGC    2c     API-AUTO   |
 |                                                                   |
-|  IBKR      Self-funded  ALL sessions           5-10c  MASTER      |
+|  IBKR      Self-funded  ALL 9 sessions          5-10c  API-AUTO   |
 +------------------------------------------------------------------+
 ```
 
@@ -609,77 +542,59 @@ Each account gets ONE assignment. Track P&L per account, not per trade.
 2. Don't change parameters on a running account mid-stream. That breaks tracking.
 3. Run both old and new in parallel for 30+ trades, then compare.
 
-### Which Sessions Go on Which Firms
+### Which Sessions Go on Which Firms `OFFICIAL RULE`
 
-This is driven by firm constraints, not preference:
+Driven by verified firm constraints:
 
 | Constraint | Evidence | Effect |
 |-----------|----------|--------|
-| Apex planning lane is equity-only | `UNRESOLVED` — product eligibility not re-verified this cycle | MGC strategies default to TopStep or Tradeify unless Apex product eligibility is re-verified |
-| TopStep close by 3:10 PM CT | `UNRESOLVED` — believed correct, not sourced this cycle | No CME_PRECLOSE (5:45am Bris) on TopStep |
-| TopStep max 5+1 accounts | `UNRESOLVED` — from prior planning, not re-verified | Not the main scaling vehicle |
-| Tradeify max 5 accounts | `UNRESOLVED` — playbook says "did not re-verify" | Secondary diversification, not scaling |
-| Apex max 20 accounts | `OFFICIAL RULE` — sourced in Firm Rule Snapshot | Primary scaling vehicle |
-| MFFU unresolved / not re-verified | `UNRESOLVED` | Do not use as a primary lane without a fresh rules pass |
+| Apex: no automation, no copy trading | `OFFICIAL RULE` — PA Compliance page | Manual only, 1 account, Phase 1 proof |
+| Tradeify: automation allowed, 5 accounts | `OFFICIAL RULE` — Guidelines for Traders | MNQ automation lane via Tradovate API |
+| Tradeify: bot must be exclusive (no cross-firm) | `OFFICIAL RULE` — Guidelines for Traders | Separate bot instance per firm |
+| TopStep: automation allowed, copier on Express only | `OFFICIAL RULE` — automation + copier pages | MGC automation lane via ProjectX API |
+| TopStep: 5 Express + 1 Live, Live kills Express | `OFFICIAL RULE` — multiple accounts page | Stay on Express, don't accept Live promotion |
 
-**Practical assignments:**
+**Session → Firm assignments:**
 
-| Session | Best Firm | Why | Fallback |
-|---------|-----------|-----|----------|
-| CME_PRECLOSE | Apex EOD | Main scaling pair, 20 accts | Tradeify |
-| COMEX_SETTLE | Apex EOD | Main scaling pair | Tradeify |
-| NYSE_OPEN | Apex EOD | High E$/mo, no restrictions | Tradeify |
-| US_DATA_1000 | Apex EOD | No news restriction | Tradeify |
-| EUROPE_FLOW | Apex EOD or Tradeify | Either works | TopStep |
-| LONDON_METALS | Apex EOD or Tradeify | Either works | TopStep |
-| TOKYO_OPEN | Any firm | No restrictions | — |
-| SINGAPORE_OPEN | Any firm | No restrictions | — |
-| CME_REOPEN | **TopStep first** (if MGC) | Current MGC planning lane | Tradeify (if MGC) |
-| CME_REOPEN | Apex EOD (if MNQ/MES) | Fine if equity variant | — |
+| Session | Firm | Instrument | Why |
+|---------|------|-----------|-----|
+| CME_PRECLOSE | **Tradeify** | MNQ | Best overnight MNQ lane, automation allowed |
+| COMEX_SETTLE | **Tradeify** | MNQ | Same — overnight, needs automation |
+| NYSE_CLOSE | **Tradeify** | MNQ | Same Tradovate API, same accounts |
+| NYSE_OPEN | **Tradeify** | MNQ | Late-night Brisbane, automation handles it |
+| CME_REOPEN | **TopStep** | MGC | MGC morning lane, $10/pt, ProjectX API |
+| TOKYO_OPEN | **TopStep** | MGC | Morning Brisbane, same MGC accounts |
+| EUROPE_FLOW | Phase 1 manual (Apex) or Tradeify | MNQ | Evening Brisbane — manual or automated |
+| LONDON_METALS | Phase 1 manual (Apex) or Tradeify | MNQ | Evening Brisbane — same |
+| SINGAPORE_OPEN | Phase 1 manual (Apex) or TopStep | MNQ/MGC | Morning Brisbane — manual or automated |
 
-### Diversification Tiers
+### Scaling Tiers
 
-Don't diversify for the sake of it. Add complexity only when it earns more or reduces risk.
+**Tier 1 (months 1-3): Manual proof.**
+- 1 Apex account, manual Phase 1 sessions, 1 micro
+- Purpose: prove you can execute the system
 
-**Tier 1 (start here):** One pair, one firm, copy-traded.
-- Manual-first route: Apex EOD × up to 20 accounts × `PRECLOSE + CLOSE`
-- Max-EV benchmark route: Apex EOD × 20 accounts × `PRECLOSE + COMEX`
-- Use the benchmark route only as a modeled ceiling unless the operating venue and policy allow it cleanly
+**Tier 2 (months 3-6): Add automation.**
+- 1 Tradeify account, automated overnight MNQ sessions, 1 micro
+- 1 TopStep Express, automated morning MGC sessions, 1 micro
+- Purpose: prove the automation works reliably
 
-**Tier 2 (after Tier 1 is stable):** Add a second firm for a different session cluster.
-- TopStep × 3-5 accounts × MGC morning lane or other automation-capable session cluster
-- Tradeify × 3-5 accounts × evening / ugly-hours cluster if current live rules still permit the operating style you want
-- Now you have manual Apex income plus automation-capable or time-diversified expansion
+**Tier 3 (months 6-9): Scale accounts.**
+- 5 Tradeify accounts × 2 micros (MNQ via Tradovate API)
+- 5 TopStep Express × 2 micros (MGC via ProjectX API)
+- 1 Apex manual (unchanged)
+- Purpose: ~$5,000/month = ~$60K/year from props
 
-**Tier 3 (after Tier 2 is stable):** Add different pairs on Apex.
-- Some Apex accounts run NYSE + US_DATA instead of PRECLOSE + COMEX
-- Reduces single-pair concentration risk
-- Only do this AFTER the primary pair has 3+ months of live data
+**Tier 4 (month 12+): Self-funded IBKR.**
+- $50K own capital, all 9 sessions, 5-10 micros
+- No prop constraints, no firm rules, DD is temporary
+- Purpose: $56-112K/year — the real income engine
 
-**Tier 4 (mature):** Self-funded IBKR running all sessions at higher contracts.
-- No prop constraints, no account caps, no trailing DD death
-- This is the graduation — prop was the proof, IBKR is the engine
-
-### Automation-Capable Expansion Ladder
-
-This is separate from the Apex manual-first ladder.
-
-Use it when:
-- the ugly-hour sessions still model best,
-- you want execution without human wakeups,
-- and the venue officially allows the automation style you plan to use.
-
-Current institutional framing:
-- `Apex`: main scaling vehicle, but do **not** underwrite unattended automation on PA / Live `OFFICIAL RULE` — compliance page sourced above
-- `Topstep`: believed automation-capable `UNRESOLVED` — not sourced this cycle, re-verify before deploying
-- `Tradeify`: likely usable as a secondary automation-capable lane `UNRESOLVED` — re-check live rule pages before committing
-- `IBKR / self-funded`: end-state for fully controlled automation `OFFICIAL RULE` — your own capital, your own rules
-
-Suggested sequence:
-1. Prove the `Apex` manual-first lane live
-2. Add `Topstep` or `Tradeify` only for the sessions you do not want to handle manually
-3. Keep the strategy-family tracking separate by venue
-4. Promote the ugly-hours lane to self-funded infrastructure once the live edge is proven and broker integration is production-grade
+**Why this order matters:**
+- Tier 1 proves the edge with someone else's money ($200 in eval fees, not $50K)
+- Tier 2 proves the code works before you trust it with 10 accounts
+- Tier 3 generates income while building the track record for Tier 4
+- Tier 4 is where $100K/year actually lives — props were always the proof phase
 
 ### Code Integration
 
@@ -1110,3 +1025,6 @@ Every 3 months, do a full system review. This is the "step back and look at ever
 | 2026-03-16 | Added pre-trade checklist, capital limits, red lines, change control | PROCESS | Claude |
 | 2026-03-16 | Code review: CME_REOPEN DST corrected, stats corrected, streak table recalculated, stop formula clarified, Phase 1→2 transition added. NOTE: SINGAPORE/LONDON aperture was incorrectly set to 5m in this pass (should be 15m per validated_setups). | LOCAL MODEL | Codex (reviewer) |
 | 2026-03-16 | Evidence audit: restored SINGAPORE/LONDON aperture to 15m (validated ORB_G8=15m, ORB_G6_NOMON=15m per gold.db). Added inline LOCAL MODEL/OFFICIAL RULE/UNRESOLVED labels. Flagged 6 UNRESOLVED firm claims. Relabeled section header from "Official Rule Snapshot" to "Firm Rule Snapshot" to avoid over-trust of unverified items. Fixed pre-trade checklist news restriction claim to label TopStep/Tradeify as UNRESOLVED. | PROCESS | Claude (auditor) |
+| 2026-03-16 | CRITICAL: All Phase 1 RR targets corrected from 1.5/2.0 → 1.0 (verified against family_rr_locks in gold.db). | LOCAL MODEL | Claude |
+| 2026-03-16 | Added Apex EOD drawdown mechanics, post-safety-net sizing rules. | OFFICIAL RULE + LOCAL MODEL | Claude |
+| 2026-03-16 | **PHASE 2 REWRITE**: Removed "20 Apex copy-traded accounts" plan (Apex prohibits automation + copy trading per official compliance page). Replaced with grounded 3-firm architecture: Tradeify 5 accounts MNQ automation via Tradovate API, TopStep 5 Express MGC automation via ProjectX API, Apex 1 account manual only. Prop ceiling ~$60K/year. $100K target moved to Phase 3 IBKR. Official firm rules populated in `resources/prop-firm-official-rules.md`. | OFFICIAL RULE + LOCAL MODEL | Claude + Codex |
