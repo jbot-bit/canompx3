@@ -473,11 +473,47 @@ Interpretation:
 - Payout qualification stalls
 - You start manually interfering with bracket logic
 
+### Apex 50K EOD — Drawdown Mechanics `OFFICIAL RULE`
+
+Three distinct numbers — do not confuse them:
+
+| Concept | Value | What It Means |
+|---------|-------|--------------|
+| **Liquidation threshold** | Starts at **$48,000** | Account closed if equity touches this intraday |
+| **Safety net balance** | **$52,100** | When highest EOD close reaches this, the threshold freezes at $50,100 permanently |
+| **Minimum payout balance** | **$52,600** | Safety net ($52,100) + minimum payout ($500) |
+
+**How the EOD trailing DD works:**
+
+1. Threshold is calculated from the **highest end-of-day closing balance**, not intraday peaks.
+2. Recalculated once per day at **4:59:59 PM ET**. Enforced intraday during the next session.
+3. If equity touches the threshold intraday → account liquidated/closed.
+4. Threshold trails upward **only** when a new highest closing balance is set.
+5. On a 50K EOD PA, the threshold **stops trailing** once it reaches **$50,100** (when highest close hits $52,100).
+6. After freeze: $50,100 is a fixed floor forever. No more trailing.
+
+**What this means operationally:**
+- During the trading day, unrealized swings do NOT ratchet the threshold higher (unlike intraday trailing).
+- You can be up $500 unrealized, give it back, and close flat — the threshold doesn't move because it's based on EOD close, not intraday peak.
+- This gives materially more breathing room than intraday trailing accounts.
+
+**Comparison to other Apex account types:**
+
+| Type | DD Basis | When It Moves | Freeze Point |
+|------|----------|--------------|--------------|
+| **EOD PA** (our plan) | Highest EOD close | Once/day at 4:59:59 PM ET | $50,100 (when close hits $52,100) |
+| Intraday Trailing PA | Highest intraday balance (incl. unrealized) | Real-time during open trades | $50,100 (same freeze) |
+| Static PA | Fixed from start | Never | N/A — threshold is fixed |
+
+Sources:
+- EOD PA: https://support.apextraderfunding.com/hc/en-us/articles/47204516592795-EOD-Performance-Accounts-PA
+- EOD Drawdown: https://support.apextraderfunding.com/hc/en-us/articles/45631563363483-EOD-Drawdown-Explained
+- Intraday Trailing: https://support.apextraderfunding.com/hc/en-us/articles/45683513113115-Intraday-Trailing-Drawdown-Explained
+
 ### Apex EOD Payout Rules (Current March 2026) `OFFICIAL RULE`
 
 - 5 qualifying days required (each day must be +$250 minimum)
-- Safety net: $52,100 (trailing stops)
-- Minimum balance to request payout: $52,600
+- Minimum balance to request payout: $52,600 ($52,100 safety net + $500 minimum payout)
 - Max 6 payouts
 - 50% consistency rule (no single day > 50% of total profits)
 - **Caveat:** Broader compliance pages mention stricter 30% windfall language. Underwrite to the stricter interpretation until confirmed.
