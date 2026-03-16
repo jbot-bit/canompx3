@@ -1,7 +1,7 @@
-## Iteration: 116
-## Target: trading_app/strategy_discovery.py:1082-1088
-## Finding: Fail-open fallback — empty get_enabled_sessions() silently falls back to all ORB_LABELS instead of raising; misconfigured instrument would run discovery for wrong sessions
-## Classification: [judgment]
-## Blast Radius: 1 file (strategy_discovery.py); callers: pipeline_status.py, scripts/infra/parallel_rebuild.py, run_full_pipeline.py — all pass instrument arg from config, not empty
-## Invariants: run_discovery() public signature unchanged; fallback behaviour for valid instruments (non-empty sessions) unchanged; raise path only reached on misconfiguration
-## Diff estimate: 4 lines
+## Iteration: 117
+## Target: trading_app/strategy_validator.py:824,1056
+## Finding: Hardcoded `"E1"` fallback in `rd.get("entry_model", "E1")` is unreachable dead code (schema enforces NOT NULL) but would silently assign wrong entry model if somehow triggered; no warning emitted
+## Classification: [mechanical]
+## Blast Radius: 1 file (strategy_validator.py), no callers of the affected lines (internal to run_validation/_build_worker_kwargs), 49 passing tests
+## Invariants: (1) behavior unchanged — path is unreachable; (2) no new exceptions raised; (3) test suite stays green
+## Diff estimate: 4 lines (2 warning logs added, one at each fallback site)
