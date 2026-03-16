@@ -5,6 +5,18 @@
 
 ---
 
+## Iteration 102 — 2026-03-16
+- Phase: fix
+- Classification: [mechanical]
+- Target: research/research_mgc_asian_fade_mfe.py:112-118, research/research_post_break_pullback.py:21-25,286
+- Finding: Ruff violations in two new research files — (1) unused `bar_mfe`/`bar_mae` scaffolding assignments (F841) in mgc_asian_fade_mfe.py; (2) unsorted import block (I001) and unused loop vars `t`/`pct` should be `_t`/`_pct` (B007) in post_break_pullback.py. research_zt_fomc_unwind.py clean.
+- Action: Removed 4 dead lines from mgc_asian_fade_mfe.py; fixed import sort and renamed `t`→`_t`, `pct`→`_pct` in post_break_pullback.py
+- Blast radius: 2 files (standalone untracked research scripts, zero importers)
+- Verification: PASS (72 drift checks, 6/6 behavioral, ruff clean)
+- Commit: (pending)
+
+---
+
 ## Iteration 101 — 2026-03-16
 - Phase: fix
 - Classification: [mechanical]
