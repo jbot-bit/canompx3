@@ -104,14 +104,14 @@ class TestOrbLabelsSync:
 class TestAllFiltersSync:
     """ALL_FILTERS keys must match filter_type inside each filter."""
 
-    # Base: NO_FILTER + 4 G-filters + 1 VOL-filter = 6
+    # Base: NO_FILTER + 4 G-filters + 2 VOL-filters (VOL_RV12_N20 + ATR70_VOL) = 7
     # DOW composites: 3 variants (NOFRI, NOMON, NOTUE) x 4 G-filters = 12
     #   (NOFRI/NOTUE removed from grid Mar 2026 but retained in ALL_FILTERS for DB compat)
     # Break quality composites: 3 variants (FAST5, FAST10, CONT) x 4 G-filters = 12
     # M6E pip-scaled size filters: M6E_G4/G6/G8 = 3
     # Direction filters: DIR_LONG/DIR_SHORT = 2
     # MES 1000 band filters: ORB_G4_L12/ORB_G5_L12 = 2
-    # Total: 6 + 12 + 12 + 3 + 2 + 2 = 37
+    # Total: 7 + 12 + 12 + 3 + 2 + 2 = 38
     EXPECTED_FILTER_KEYS = {
         "NO_FILTER",
         "ORB_G4",
