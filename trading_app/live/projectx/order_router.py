@@ -117,6 +117,9 @@ class ProjectXOrderRouter(BrokerRouter):
             timeout=5,
         )
         resp.raise_for_status()
+        data = resp.json()
+        if not data.get("success", True):
+            raise RuntimeError(f"ProjectX cancel failed for orderId={order_id}: {data.get('errorMessage', data)}")
         log.info("ProjectX order cancelled: orderId=%d", order_id)
 
     def supports_native_brackets(self) -> bool:
