@@ -186,7 +186,7 @@ class ProjectXDataFeed(BrokerFeed):
             try:
                 self.on_stale(0.0, -1)
             except Exception:
-                pass
+                log.exception("FEED DEAD notification failed")
 
     # ------------------------------------------------------------------
     # signalrcore fallback backend
@@ -196,15 +196,17 @@ class ProjectXDataFeed(BrokerFeed):
         from signalrcore.hub_connection_builder import HubConnectionBuilder
 
         backoff = _BACKOFF_INITIAL
+        error_attempts = 0  # only ERROR reconnects count toward budget (not stale)
 
-        for attempt in range(_MAX_RECONNECTS + 1):
+        while error_attempts <= _MAX_RECONNECTS:
             if self._stop_requested:
                 return
 
             try:
                 log.info(
-                    "Connecting to ProjectX Market Hub (signalrcore, attempt %d)",
-                    attempt + 1,
+                    "Connecting to ProjectX Market Hub (signalrcore, errors=%d/%d)",
+                    error_attempts,
+                    _MAX_RECONNECTS,
                 )
 
                 token = self.auth.get_token()
@@ -225,6 +227,7 @@ class ProjectXDataFeed(BrokerFeed):
 
                 # Start async consumer for bars from sync callbacks
                 drain_task = asyncio.create_task(self._drain_bar_queue())
+                _stale_break = False
                 try:
                     while not _STOP_FILE.exists():
                         await asyncio.sleep(2.5)
@@ -236,7 +239,10 @@ class ProjectXDataFeed(BrokerFeed):
                                 self._stale_count += 1
                                 log.warning(
                                     "LIVENESS: %.0fs since last data (%d quotes, stale %d/%d)",
-                                    gap, self._quote_count, self._stale_count, _MAX_STALE_BEFORE_RECONNECT,
+                                    gap,
+                                    self._quote_count,
+                                    self._stale_count,
+                                    _MAX_STALE_BEFORE_RECONNECT,
                                 )
                                 if self.on_stale is not None:
                                     try:
@@ -248,6 +254,7 @@ class ProjectXDataFeed(BrokerFeed):
                                     hub.stop()
                                     self._stale_count = 0
                                     self._last_data_at = None
+                                    _stale_break = True
                                     break  # break inner loop → reconnect via outer loop
                             else:
                                 self._stale_count = 0
@@ -259,27 +266,30 @@ class ProjectXDataFeed(BrokerFeed):
                 finally:
                     drain_task.cancel()
 
-                # If we broke out of the while (stale), continue to reconnect
-                continue
+                if _stale_break:
+                    # Stale reconnect does NOT increment error_attempts
+                    backoff = _BACKOFF_INITIAL
+                    continue
+                log.info("Feed closed cleanly for %s", symbol)
+                return
 
             except ImportError:
                 raise
             except Exception as e:
-                log.warning("ProjectX feed error (signalrcore): %s", e)
-                if attempt < _MAX_RECONNECTS:
+                error_attempts += 1
+                log.warning("ProjectX feed error (signalrcore, %d/%d): %s", error_attempts, _MAX_RECONNECTS, e)
+                if error_attempts <= _MAX_RECONNECTS:
+                    log.info("Reconnecting in %.0fs...", backoff)
                     await asyncio.sleep(backoff)
                     backoff = min(backoff * 2, _BACKOFF_MAX)
-                else:
-                    log.critical(
-                        "FEED DEAD: max reconnects (%d) exhausted for %s",
-                        _MAX_RECONNECTS,
-                        symbol,
-                    )
-                    if self.on_stale is not None:
-                        try:
-                            self.on_stale(0.0, -1)
-                        except Exception:
-                            pass
+
+        # Exhausted error budget
+        log.critical("FEED DEAD: max error reconnects (%d) exhausted for %s", _MAX_RECONNECTS, symbol)
+        if self.on_stale is not None:
+            try:
+                self.on_stale(0.0, -1)
+            except Exception:
+                log.exception("FEED DEAD notification failed")
 
     # ------------------------------------------------------------------
     # Sync → async queue bridge
