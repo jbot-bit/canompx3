@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 109
+## Last iteration: 110
 
-## RALPH AUDIT — Iteration 109 (fix)
+## RALPH AUDIT — Iteration 110 (fix)
 ## Date: 2026-03-16
 ## Infrastructure Gates: 4/4 PASS
 
@@ -13,40 +13,37 @@
 |------|--------|--------|
 | `check_drift.py` | PASS | 72 checks passed, 0 skipped, 6 advisory |
 | `audit_behavioral.py` | PASS | 6/6 clean |
-| `ruff check` | PASS | Clean (both target files) |
-| `pyright` (targeted) | PASS | 0 errors, 0 warnings on both target files |
+| `ruff check` | PASS | Clean after auto-fix (27 F541 + 1 I001 fixed) |
+| `pyright` (targeted) | PASS | 0 errors, 0 warnings on research_overlap_analysis.py |
 
 ---
 
 ## Files Audited This Iteration
 
-### research/research_edge_structure.py + research/research_1015_vs_1000.py — FIXED (PE-01 through PE-07)
+### research/research_overlap_analysis.py — FIXED (OA-01 through OA-04)
 
-Seven Sins scan: carried forward from iter 108 (both files fully scanned then). No new sins introduced by these fixes.
+Seven Sins scan:
+- Silent failure: None — DST helpers always use ZoneInfo-aware datetimes (no None utcoffset possible)
+- Fail-open: None — `con.close()` in `finally` block, ValueError raised on conflicting DST types
+- Look-ahead bias: None — standalone vectorized engine, no DB strategy reads
+- Cost illusion: N/A — no P&L computation, returns only
+- Canonical violation: Hardcoded instrument list `CANDIDATE_PAIRS` — ACCEPTABLE per WF-05 pattern (read-only investigation, scope-limited, if instrument removed returns 0 rows)
+- Orphan risk: None
+- Volatile data: None
 
-Note: iter 108 scan incorrectly noted `csv` import as used for CSV output in research_edge_structure.py — PE-04 corrects this; `csv.` was never referenced in the file body. The fix removes the dead import.
+**OA-01 (FIXED, LOW/MECHANICAL):** `research_overlap_analysis.py:29` — I001 unsorted import block. Fixed: `ruff check --fix`.
 
-**PE-01 (FIXED, LOW/MECHANICAL):** `research_edge_structure.py:59` — `dt.utcoffset()` returns `timedelta | None`; `.total_seconds()` called directly. Fixed: extract to `offset` local, assert not None before call.
+**OA-02 (FIXED, LOW/MECHANICAL):** `research_overlap_analysis.py:523` and 24 other lines — F541 bare f-strings without any placeholders in print statements throughout `print_honest_summary()` and `main()`. Fixed: `ruff check --fix` removed extraneous `f` prefix.
 
-**PE-02 (FIXED, LOW/MECHANICAL):** `research_edge_structure.py:66` — same `utcoffset()` None pattern in `is_uk_dst()`. Same assert-guard fix applied.
-
-**PE-03 (FIXED, LOW/MECHANICAL):** `research_edge_structure.py:720-721` — `pearsonr()` return type typed as `PearsonRResult` whose tuple elements carry `_T_co@tuple | float`, causing numpy ufunc argument mismatch when passed to `np.isnan()`. Fixed: `_res = pearsonr(...); orb_r, orb_p = float(_res[0]), float(_res[1])`.
-
-**PE-04 (FIXED, LOW/MECHANICAL):** `research_edge_structure.py:28` — `import csv` present but `csv.` never referenced. Removed.
-
-**PE-05 (FIXED, LOW/MECHANICAL):** `research_edge_structure.py:400` — `all_days` unpacked but not used in Q1 loop body (only `highs`/`lows`/`closes` consumed). Renamed to `_all_days`. Other unpack sites (lines 484, 650) that do use `all_days` are untouched.
-
-**PE-06 (FIXED, LOW/MECHANICAL):** `research_1015_vs_1000.py:44` — same `utcoffset()` None pattern in `is_us_dst()`. Same assert-guard fix applied.
-
-**PE-07 (FIXED, LOW/MECHANICAL):** `research_1015_vs_1000.py` — `all_days` unpacked but unused at 3 sites: q2 (line 312), q3 (line 398), q4 (line 482). Renamed to `_all_days` at all three. q1 at line 261 legitimately uses `all_days` in a `len()` print — left unchanged.
+Note: `research_session_clustering.py` does not exist — skip.
 
 ---
 
 ## Summary
-- 2 targets patched (batched): research/research_edge_structure.py + research/research_1015_vs_1000.py
-- 7 findings fixed (PE-01 through PE-07): all LOW/mechanical Pyright type-guard fixes
+- 1 target patched: research/research_overlap_analysis.py
+- 2 finding groups fixed (OA-01 + OA-02): all LOW/mechanical ruff auto-fixes (1 I001 + 27 F541)
 - 0 findings deferred
-- Infrastructure Gates: 4/4 PASS (0 errors, 0 warnings from pyright on both files)
+- Infrastructure Gates: 4/4 PASS (ruff clean, pyright 0 errors)
 
 **Codebase steady state maintained for major violation classes:**
 - Hardcoded DB paths: ELIMINATED (0 in production code; research/ consistent)
@@ -64,7 +61,7 @@ Note: iter 108 scan incorrectly noted `csv` import as used for CSV output in res
 
 ## Files Fully Scanned
 
-> Cumulative list — 163 files fully scanned (no new files added this iteration — re-fix of previously scanned files).
+> Cumulative list — 164 files fully scanned (1 new file added this iteration).
 
 - trading_app/ — 44 files (iters 4-61)
 - pipeline/ — 15 files (iters 1-71)
@@ -74,12 +71,12 @@ Note: iter 108 scan incorrectly noted `csv` import as used for CSV output in res
 - scripts/migrations/ — 1 file (iter 73)
 - scripts/reports/ — 3 files (iter 87): report_wf_diagnostics.py, parameter_stability_heatmap.py, report_edge_portfolio.py (iter 85)
 - scripts/ root — 2 files (iter 88): run_live_session.py, operator_status.py
-- research/ — 17 files (iters 101-109): research_zt_event_viability.py, research_london_adjacent.py, research_mes_compressed_spring.py (iter 101); research_post_break_pullback.py, research_mgc_asian_fade_mfe.py, research_zt_fomc_unwind.py (iter 102); research_zt_cpi_nfp.py (iter 103); research_mgc_mnq_correlation.py (iter 104); research_atr_velocity_gate.py, research_mgc_regime_shift.py (iter 105); research_zt_event_viability.py (iter 106); research_vol_regime_switching.py (iter 107); research_edge_structure.py, research_1015_vs_1000.py (iters 108-109)
+- research/ — 18 files (iters 101-110): research_zt_event_viability.py, research_london_adjacent.py, research_mes_compressed_spring.py (iter 101); research_post_break_pullback.py, research_mgc_asian_fade_mfe.py, research_zt_fomc_unwind.py (iter 102); research_zt_cpi_nfp.py (iter 103); research_mgc_mnq_correlation.py (iter 104); research_atr_velocity_gate.py, research_mgc_regime_shift.py (iter 105); research_zt_event_viability.py (iter 106); research_vol_regime_switching.py (iter 107); research_edge_structure.py, research_1015_vs_1000.py (iters 108-109); research_overlap_analysis.py (iter 110)
 - docs/plans/ — 2 files (iter 103): 2026-03-15-zt-stage1-cpi-nfp-spec.md, 2026-03-15-zt-stage1-triage-gate.md
-- **Total: 163 files fully scanned**
+- **Total: 164 files fully scanned**
 - See previous audit iterations for per-file detail
 
 ## Next iteration targets
-- `research/research_overlap_analysis.py` — unscanned; likely has similar ruff/Pyright violations; full Seven Sins scan
-- `research/research_session_clustering.py` — unscanned; full Seven Sins scan
+- `research/research_aperture_scan.py` — unscanned; primary scan engine; Seven Sins audit
+- `research/research_session_stats.py` — unscanned if it exists; Seven Sins audit
 - DF-04 remains open but annotated — do not re-investigate unless rolling portfolio is extended to multi-aperture
