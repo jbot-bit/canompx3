@@ -31,8 +31,9 @@ from datetime import UTC, datetime
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
-from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pydantic import BaseModel, field_validator
+
+from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 
 load_dotenv()
 
