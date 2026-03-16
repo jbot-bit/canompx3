@@ -181,8 +181,8 @@ All times Brisbane local (AEST, UTC+10). Brisbane has no DST — everything else
 
 | Session | Time | Instrument | Filter | How to Check | ORB | RR | Entry |
 |---------|------|------------|--------|-------------|-----|-----|-------|
-| **TOKYO_OPEN** | 10:00 (fixed) | MNQ | ORB_G5_CONT | ORB >= 5 MNQ pts + break bar closes beyond ORB edge | 5m | 1.5 | E2 CB1 |
-| **SINGAPORE_OPEN** | 11:00 (fixed) | MNQ | ORB_G8 | ORB >= 8 MNQ pts | 15m | 1.5 | E2 CB1 |
+| **TOKYO_OPEN** | 10:00 (fixed) | MNQ | ORB_G5_CONT | ORB >= 5 MNQ pts + break bar closes beyond ORB edge | 5m | 1.0 | E2 CB1 |
+| **SINGAPORE_OPEN** | 11:00 (fixed) | MNQ | ORB_G8 | ORB >= 8 MNQ pts | 15m | 1.0 | E2 CB1 |
 
 - TOKYO: ORB forms by 10:05. Check size. Set bracket or walk away.
 - SINGAPORE: ORB forms by 11:15. Check size. Set bracket or walk away.
@@ -192,8 +192,8 @@ All times Brisbane local (AEST, UTC+10). Brisbane has no DST — everything else
 
 | Session | Time | Instrument | Filter | How to Check | ORB | RR | Entry |
 |---------|------|------------|--------|-------------|-----|-----|-------|
-| **EUROPE_FLOW** | 17:00 (winter) / 18:00 (summer) | MNQ | ORB_G8 | ORB >= 8 MNQ pts | 5m | 1.5 | E2 CB1 |
-| **LONDON_METALS** | 18:00 (winter) / 17:00 (summer) | MNQ | ORB_G6_NOMON | ORB >= 6 MNQ pts + not Monday | 15m | 2.0 | E2 CB1 |
+| **EUROPE_FLOW** | 17:00 (winter) / 18:00 (summer) | MNQ | ORB_G8 | ORB >= 8 MNQ pts | 5m | 1.0 | E2 CB1 |
+| **LONDON_METALS** | 18:00 (winter) / 17:00 (summer) | MNQ | ORB_G6_NOMON | ORB >= 6 MNQ pts + not Monday | 15m | 1.0 | E2 CB1 |
 
 - These two always swap order with DST but are always 1 hour apart.
 - Winter: EUROPE_FLOW 17:00 first, LONDON_METALS 18:00 second.
@@ -205,7 +205,7 @@ All times Brisbane local (AEST, UTC+10). Brisbane has no DST — everything else
 
 | Session | Time | Instrument | Filter | How to Check | ORB | RR | Entry |
 |---------|------|------------|--------|-------------|-----|-----|-------|
-| **NYSE_OPEN** | 23:30 (summer) / 00:30 (winter) | MNQ | ORB_G4 | ORB >= 4 MNQ pts | 5m | 1.5 | E2 CB1 |
+| **NYSE_OPEN** | 23:30 (summer) / 00:30 (winter) | MNQ | ORB_G4 | ORB >= 4 MNQ pts | 5m | 1.0 | E2 CB1 |
 
 - Lowest threshold (G4) so it fires often — NYSE_OPEN has big ORBs.
 
@@ -276,17 +276,17 @@ Example: MNQ EUROPE_FLOW, ORB high = 20,150, ORB low = 20,140 (10pt range, passe
 
 Stop multiplier: 0.75x prop
 Risk = 10 pts x 0.75 = 7.5 pts
-RR target = 1.5
+RR target = 1.0
 
 LONG bracket:
   Entry:  buy stop at 20,150
   Stop:   20,150 - 7.5 = 20,142.50
-  Target: 20,150 + (7.5 x 1.5) = 20,161.25
+  Target: 20,150 + (7.5 x 1.0) = 20,157.50
 
 SHORT bracket:
   Entry:  sell stop at 20,140
   Stop:   20,140 + 7.5 = 20,147.50
-  Target: 20,140 - (7.5 x 1.5) = 20,128.75
+  Target: 20,140 - (7.5 x 1.0) = 20,132.50
 
 → Place both. First one fills = your trade. Cancel the other.
 ```
@@ -991,17 +991,17 @@ Print this. Tape it next to your screen.
 |  PHASE 1 MANUAL TRADING — DAILY CARD                          |
 |                                                                |
 |  MORNING (10:00-11:15 Brisbane — fixed, no DST)                |
-|    TOKYO_OPEN     10:00  MNQ  G5_CONT  5m ORB   RR 1.5        |
-|    SINGAPORE_OPEN 11:00  MNQ  G8       15m ORB  RR 1.5        |
+|    TOKYO_OPEN     10:00  MNQ  G5_CONT  5m ORB   RR 1.0        |
+|    SINGAPORE_OPEN 11:00  MNQ  G8       15m ORB  RR 1.0        |
 |                                                                |
 |  EVENING (17:00-18:15 Brisbane — shifts with UK/summer DST)    |
 |    First session   17:00  (see DST table for which is which)   |
 |    Second session  18:00                                       |
-|    EUROPE_FLOW     MNQ  G8       5m ORB   RR 1.5              |
-|    LONDON_METALS   MNQ  G6_NOMON 15m ORB  RR 2.0  skip Mon   |
+|    EUROPE_FLOW     MNQ  G8       5m ORB   RR 1.0              |
+|    LONDON_METALS   MNQ  G6_NOMON 15m ORB  RR 1.0  skip Mon   |
 |                                                                |
 |  NIGHT (23:30 summer / 00:30 winter Brisbane)                  |
-|    NYSE_OPEN       MNQ  G4       5m ORB   RR 1.5              |
+|    NYSE_OPEN       MNQ  G4       5m ORB   RR 1.0              |
 |                                                                |
 |  EVERY SESSION:                                                |
 |    1. Wait for ORB to form                                     |
