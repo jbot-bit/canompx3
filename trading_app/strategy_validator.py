@@ -821,10 +821,10 @@ def run_validation(
                 strategy_id=rd["strategy_id"],
                 instrument=instrument,
                 orb_label=rd["orb_label"],
-                entry_model=rd.get("entry_model", "E1"),
+                entry_model=rd.get("entry_model") or "E1",  # NOT NULL in schema — fallback unreachable
                 rr_target=rd["rr_target"],
                 confirm_bars=rd["confirm_bars"],
-                filter_type=rd.get("filter_type", "NO_FILTER"),
+                filter_type=rd.get("filter_type") or "NO_FILTER",  # NOT NULL in schema — fallback unreachable
                 filter_params=rd.get("filter_params"),
                 orb_minutes=rd.get("orb_minutes", 5),
                 db_path_str=str(db_path),
@@ -1053,7 +1053,7 @@ def run_validation(
                             rd["orb_minutes"],
                             rd["rr_target"],
                             rd["confirm_bars"],
-                            rd.get("entry_model", "E1"),
+                            rd.get("entry_model") or "E1",  # NOT NULL in schema — fallback unreachable
                             rd.get("filter_type", ""),
                             rd.get("filter_params", ""),
                             rd.get("stop_multiplier", 1.0),
