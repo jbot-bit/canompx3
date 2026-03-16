@@ -5,6 +5,16 @@
 
 ---
 
+## Iteration 109 — 2026-03-16
+- Phase: fix
+- Classification: [mechanical]
+- Target: research/research_edge_structure.py + research/research_1015_vs_1000.py
+- Finding: PE-01–PE-07: Pyright errors — (1) utcoffset() returns timedelta|None; .total_seconds() called directly without None guard at 3 sites; (2) pearsonr() return type inferred as tuple|float causing numpy ufunc mismatch at 2 sites; (3) unused `csv` import; (4) 4x `all_days` assigned but never used in function scope (q2/q3/q4/Q1 inner loop)
+- Action: Added `offset = dt.utcoffset(); assert offset is not None` pattern at all 3 utcoffset() call sites; replaced `orb_r, orb_p = pearsonr(...)` with `_res = pearsonr(...); orb_r, orb_p = float(_res[0]), float(_res[1])`; removed `csv` import; renamed 4x `all_days` → `_all_days` at unpack sites where value was discarded
+- Blast radius: 0 callers, 0 importers (standalone research scripts, no tests)
+- Verification: pyright 0 errors 0 warnings, ruff check PASS (both files clean), check_drift.py PASS (72/72, 6 advisory)
+- Commit: df4ead3
+
 ## Iteration 108 — 2026-03-16
 - Phase: fix
 - Classification: [mechanical]
