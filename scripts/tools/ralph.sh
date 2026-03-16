@@ -207,8 +207,8 @@ case "$SUBCOMMAND" in
         if [[ -n "$CLAUDE" ]]; then
             SCOPE_ARG=""
             [[ -n "$SCOPE" ]] && SCOPE_ARG="Scope: $SCOPE"
-            $CLAUDE -p "Run /ralph $SCOPE_ARG" --allowedTools "Read,Edit,Write,Bash,Grep,Glob" --max-turns 25
-            exit_code=$?
+            exit_code=0
+            $CLAUDE -p "Run /ralph $SCOPE_ARG" --allowedTools "Read,Edit,Write,Bash,Grep,Glob" --max-turns 25 || exit_code=$?
         else
             echo "ERROR: Claude CLI required for 'once' mode" >&2
             exit 2
@@ -230,8 +230,8 @@ case "$SUBCOMMAND" in
         SCOPE_ARG=""
         [[ -n "$SCOPE" ]] && SCOPE_ARG="$SCOPE"
 
-        bash "$HEADLESS" "$ITERATIONS" "$SCOPE_ARG"
-        exit_code=$?
+        exit_code=0
+        bash "$HEADLESS" "$ITERATIONS" "$SCOPE_ARG" || exit_code=$?
 
         if $AUTO_REVIEW; then
             echo ""
@@ -263,12 +263,9 @@ case "$SUBCOMMAND" in
     audit)
         echo "Ralph: behavioral audit only (no fixes)"
         echo ""
-        python pipeline/check_drift.py
-        drift_exit=$?
-        python scripts/tools/audit_behavioral.py
-        audit_exit=$?
-        ruff check pipeline/ trading_app/ scripts/ --quiet
-        ruff_exit=$?
+        drift_exit=0;  python pipeline/check_drift.py || drift_exit=$?
+        audit_exit=0;  python scripts/tools/audit_behavioral.py || audit_exit=$?
+        ruff_exit=0;   ruff check pipeline/ trading_app/ scripts/ --quiet || ruff_exit=$?
 
         echo ""
         echo "════════════════════════════════════════════"

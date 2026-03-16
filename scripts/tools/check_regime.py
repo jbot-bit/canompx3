@@ -109,7 +109,8 @@ def main():
     print("TRADE MANAGEMENT (post-entry)")
     print(f"{'-' * 70}")
     print("  rel_vol is known AFTER break bar closes (not pre-entry).")
-    print("  High rel_vol (>=1.2) on ATR70 days -> 1.15x more MFE (p<0.05).")
+    print("  High rel_vol (>=1.2) on ATR70 days correlates with more MFE.")
+    print("  (See research/research_vol_regime_filter.py for current stats.)")
     print("  Use as confidence signal: high vol = hold to target,")
     print("  low vol = consider tighter management.")
 

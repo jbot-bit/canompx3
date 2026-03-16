@@ -1,8 +1,8 @@
 {
-  "total_iterations": 111,
+  "total_iterations": 113,
   "last_updated": "2026-03-16",
-  "consecutive_low_only": 1,
-  "last_high_finding_iter": 117,
+  "consecutive_low_only": 0,
+  "last_high_finding_iter": 120,
   "findings_by_type": {
     "canonical_violation": {
       "found": 46,
@@ -11,10 +11,10 @@
       "fix_rate": 0.76
     },
     "other": {
-      "found": 14,
+      "found": 15,
       "fixed": 7,
       "deferred": 0,
-      "fix_rate": 0.5
+      "fix_rate": 0.47
     },
     "dead_code": {
       "found": 14,
@@ -23,10 +23,10 @@
       "fix_rate": 1.0
     },
     "silent_failure": {
-      "found": 12,
-      "fixed": 10,
+      "found": 13,
+      "fixed": 11,
       "deferred": 1,
-      "fix_rate": 0.83
+      "fix_rate": 0.85
     },
     "lint": {
       "found": 5,
@@ -116,13 +116,13 @@
   "findings_by_severity": {
     "CRITICAL": 3,
     "HIGH": 6,
-    "MEDIUM": 20,
-    "LOW": 82
+    "MEDIUM": 21,
+    "LOW": 83
   },
   "classifications": {
     "judgment": 52,
-    "mechanical": 38,
-    "audit-only": 21
+    "mechanical": 39,
+    "audit-only": 22
   },
   "files_audited": {
     "execution_engine.py": {
@@ -148,6 +148,11 @@
     "trading_app/execution_engine.py": {
       "audit_count": 4,
       "last_iter": 50,
+      "findings": 3
+    },
+    "trading_app/live_config.py": {
+      "audit_count": 4,
+      "last_iter": 119,
       "findings": 3
     },
     "webhook_server.py": {
@@ -178,11 +183,6 @@
     "trading_app/rolling_portfolio.py": {
       "audit_count": 3,
       "last_iter": 43,
-      "findings": 3
-    },
-    "trading_app/live_config.py": {
-      "audit_count": 3,
-      "last_iter": 51,
       "findings": 3
     },
     "trading_app/outcome_builder.py": {
@@ -239,6 +239,11 @@
       "audit_count": 2,
       "last_iter": 118,
       "findings": 2
+    },
+    "trading_app/db_manager.py": {
+      "audit_count": 2,
+      "last_iter": 120,
+      "findings": 1
     },
     "pipeline/check_drift.py": {
       "audit_count": 2,
@@ -411,11 +416,6 @@
       "findings": 1
     },
     "trading_app/entry_rules.py": {
-      "audit_count": 1,
-      "last_iter": 52,
-      "findings": 0
-    },
-    "trading_app/db_manager.py": {
       "audit_count": 1,
       "last_iter": 52,
       "findings": 0
@@ -2092,6 +2092,28 @@
       "severity": "LOW",
       "verdict": "FIXED",
       "commit": "603542e"
+    },
+    {
+      "iter": 119,
+      "date": "2026-03-16",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "trading_app/live_config.py",
+      "finding_type": "other",
+      "severity": "LOW",
+      "verdict": "CLEAN",
+      "commit": "NONE"
+    },
+    {
+      "iter": 120,
+      "date": "2026-03-16",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/db_manager.py:verify_trading_app_schema (lines 602-644)",
+      "finding_type": "silent_failure",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "360ec68"
     }
   ]
 }
