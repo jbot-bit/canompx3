@@ -18,6 +18,8 @@ from pathlib import Path
 
 import duckdb
 
+from pipeline.paths import GOLD_DB_PATH
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _PY = sys.executable
 
@@ -30,7 +32,7 @@ def main():
         action="store_true",
         help="Only rebuild daily_features (skip outcome/discovery/validation chain)",
     )
-    parser.add_argument("--db-path", default=str(PROJECT_ROOT / "gold.db"))
+    parser.add_argument("--db-path", default=str(GOLD_DB_PATH))
     args = parser.parse_args()
 
     instrument = args.instrument

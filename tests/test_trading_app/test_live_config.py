@@ -687,18 +687,42 @@ class TestWeightOverrideAndRecovery:
 
     def test_recovery_only_from_rolling_source(self):
         """Empty rolling results -> baseline fallback, weight stays 0.5 even if baseline ExpR > threshold."""
+        # Mock baseline variant with high ExpR — recovery must NOT fire because source is "baseline"
+        baseline_match = {
+            "strategy_id": "MGC_TOKYO_OPEN_E2_CB1_ORB_G4_RR2.0",
+            "instrument": "MGC",
+            "orb_label": "TOKYO_OPEN",
+            "entry_model": "E2",
+            "rr_target": 2.0,
+            "confirm_bars": 1,
+            "filter_type": "ORB_G4",
+            "orb_minutes": 5,
+            "expectancy_r": 0.40,  # above recovery threshold — but source is baseline
+            "win_rate": 0.45,
+            "sample_size": 200,
+            "sharpe_ratio": 1.2,
+            "max_drawdown_r": 3.0,
+            "median_risk_points": 3.0,
+            "stop_multiplier": 1.0,
+            "fdr_significant": True,
+        }
         with (
             patch("trading_app.live_config.LIVE_PORTFOLIO", [_DEMOTED_WITH_RECOVERY_SPEC]),
             patch(
                 "trading_app.live_config.load_rolling_validated_strategies",
                 return_value=[],  # No rolling results — forces baseline fallback
             ),
+            patch(
+                "trading_app.live_config._load_best_regime_variant",
+                return_value=baseline_match,
+            ),
         ):
-            # Need a real DB with baseline data for fallback
             portfolio, notes = build_live_portfolio(instrument="MGC")
 
-        # With no rolling AND no baseline match, strategy won't load at all.
-        # That's fine — the key assertion is that recovery never fires on baseline.
-        # If strategies load, weight must be 0.5 (DEMOTED), never 1.0.
-        for s in portfolio.strategies:
-            assert s.weight == 0.5, "Recovery must not fire from baseline source"
+        # Baseline match loads, but recovery gate requires source=="rolling" — weight stays 0.5
+        assert len(portfolio.strategies) == 1
+        assert portfolio.strategies[0].weight == 0.5, "Recovery must not fire from baseline source"
+        demoted_notes = [n for n in notes if "DEMOTED" in n]
+        assert len(demoted_notes) == 1
+        recovered_notes = [n for n in notes if "RECOVERED" in n]
+        assert len(recovered_notes) == 0
