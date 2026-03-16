@@ -254,6 +254,37 @@ class CombinedATRVolumeFilter(VolumeFilter):
 
 
 @dataclass(frozen=True)
+class CrossAssetATRFilter(StrategyFilter):
+    """Filter by another instrument's ATR regime.
+
+    Reads cross_atr_{source_instrument}_pct from the row dict.
+    This key is injected at discovery/fitness time by
+    _inject_cross_asset_atrs() — NOT stored in daily_features schema.
+
+    Fail-closed: if the key is absent or None, day is ineligible.
+
+    @research-source research/research_vol_regime_filter.py
+    """
+
+    source_instrument: str = "MES"
+    min_pct: float = 70.0
+
+    def matches_row(self, row: dict, orb_label: str) -> bool:
+        val = row.get(f"cross_atr_{self.source_instrument}_pct")
+        if val is None:
+            return False  # fail-closed
+        return val >= self.min_pct
+
+    def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        import pandas as pd
+
+        col = f"cross_atr_{self.source_instrument}_pct"
+        if col not in df.columns:
+            return pd.Series(False, index=df.index)
+        return df[col].notna() & (df[col] >= self.min_pct)
+
+
+@dataclass(frozen=True)
 class DirectionFilter(StrategyFilter):
     """Filter by breakout direction (long/short only)."""
 
@@ -713,6 +744,18 @@ ALL_FILTERS: dict[str, StrategyFilter] = {
     # Direction filters (session-specific but must be registered for portfolio lookups)
     "DIR_LONG": DIR_LONG,
     "DIR_SHORT": DIR_SHORT,
+    # Cross-asset ATR filters (Mar 2026 vol-regime research)
+    # MNQ sessions filtered by MES/MGC ATR regime. Added to grid via get_filters_for_grid().
+    # @research-source research/research_vol_regime_filter.py
+    "X_MES_ATR70": CrossAssetATRFilter(
+        filter_type="X_MES_ATR70", description="MES ATR pct >= 70", source_instrument="MES", min_pct=70.0,
+    ),
+    "X_MES_ATR60": CrossAssetATRFilter(
+        filter_type="X_MES_ATR60", description="MES ATR pct >= 60", source_instrument="MES", min_pct=60.0,
+    ),
+    "X_MGC_ATR70": CrossAssetATRFilter(
+        filter_type="X_MGC_ATR70", description="MGC ATR pct >= 70", source_instrument="MGC", min_pct=70.0,
+    ),
     # MES TOKYO_OPEN band filters (H2: ORBs >= 12pt are toxic)
     **_MES_1000_BAND_FILTERS,
 }
@@ -802,6 +845,19 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
         # Feb 2026: SHORT is systematic AVOID (N=236, avgR=-0.247, p=0.006, raw-verified).
         # LONG is positive (+0.187). Wire long-only to block short discovery.
         filters["DIR_LONG"] = DIR_LONG
+    # Cross-asset ATR filters for MNQ US sessions (Mar 2026 vol-regime research).
+    # WF-validated: MES ATR regime predicts MNQ breakout quality at US sessions.
+    # @research-source research/research_vol_regime_filter.py
+    if instrument == "MNQ":
+        _cross_asset_sessions = {
+            "CME_PRECLOSE", "COMEX_SETTLE", "US_DATA_1000",
+            "NYSE_OPEN", "NYSE_CLOSE", "US_DATA_830",
+        }
+        if session in _cross_asset_sessions:
+            filters["X_MES_ATR70"] = ALL_FILTERS["X_MES_ATR70"]
+            filters["X_MES_ATR60"] = ALL_FILTERS["X_MES_ATR60"]
+            filters["X_MGC_ATR70"] = ALL_FILTERS["X_MGC_ATR70"]
+
     # REMOVED (Feb 2026): NO_DBL_BREAK / NODBL composites for SINGAPORE_OPEN.
     # double_break column is LOOK-AHEAD — computed over full session AFTER
     # trade entry. Cannot be used as a pre-entry filter. All 6 validated

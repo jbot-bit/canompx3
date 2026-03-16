@@ -32,7 +32,7 @@ import duckdb
 from pipeline.dst import DST_AFFECTED_SESSIONS, is_winter_for_session
 from pipeline.init_db import ORB_LABELS
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.config import ALL_FILTERS, VolumeFilter, apply_tight_stop, get_excluded_sessions
+from trading_app.config import ALL_FILTERS, CrossAssetATRFilter, VolumeFilter, apply_tight_stop, get_excluded_sessions
 from trading_app.strategy_discovery import compute_metrics
 
 # Whitelist for SQL column interpolation safety
@@ -272,6 +272,38 @@ def _enrich_relative_volumes(con, feat_dicts, instrument, orb_label, lookback_da
         row[f"rel_vol_{orb_label}"] = break_vol / baseline
 
 
+def _enrich_cross_asset_atr(con, feat_dicts, source_instrument):
+    """Inject cross-asset ATR percentile into feature row dicts for fitness re-evaluation.
+
+    Mirrors strategy_discovery._inject_cross_asset_atrs() for a single source instrument.
+    Modifies feat_dicts in-place. Fail-closed: missing data = no cross_atr key.
+    """
+    rows = con.execute(
+        """SELECT trading_day, atr_20_pct FROM daily_features
+           WHERE symbol = ? AND orb_minutes = 5 AND atr_20_pct IS NOT NULL
+           ORDER BY trading_day""",
+        [source_instrument],
+    ).fetchall()
+
+    if not rows:
+        return
+
+    source_atr = {}
+    for td, pct in rows:
+        key = td.date() if hasattr(td, "date") else td
+        source_atr[key] = pct
+
+    col_name = f"cross_atr_{source_instrument}_pct"
+    for row in feat_dicts:
+        td = row.get("trading_day")
+        if td is None:
+            continue
+        td_key = td.date() if hasattr(td, "date") else td
+        pct = source_atr.get(td_key)
+        if pct is not None:
+            row[col_name] = pct
+
+
 def _load_strategy_outcomes(
     con,
     instrument: str,
@@ -375,6 +407,10 @@ def _load_strategy_outcomes(
     # VolumeFilter needs rel_vol enrichment from bars_1m
     if isinstance(filt, VolumeFilter):
         _enrich_relative_volumes(con, feat_dicts, instrument, orb_label, filt.lookback_days)
+
+    # CrossAssetATRFilter needs source instrument's ATR percentile injected
+    if isinstance(filt, CrossAssetATRFilter):
+        _enrich_cross_asset_atr(con, feat_dicts, filt.source_instrument)
 
     eligible_days = set()
     for row_dict in feat_dicts:
@@ -734,8 +770,9 @@ def compute_portfolio_fitness(
         for p in all_params:
             try:
                 filt = ALL_FILTERS.get(p["filter_type"])
-                if isinstance(filt, VolumeFilter):
-                    # VolumeFilter needs bars_1m enrichment — use per-strategy path
+                if isinstance(filt, (VolumeFilter, CrossAssetATRFilter)):
+                    # VolumeFilter needs bars_1m enrichment, CrossAssetATRFilter needs
+                    # source instrument ATR — both use per-strategy path
                     score = _compute_fitness_with_con(con, p["strategy_id"], as_of_date, rolling_months)
                 else:
                     score = _compute_fitness_from_cache(

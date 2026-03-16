@@ -111,7 +111,8 @@ class TestAllFiltersSync:
     # M6E pip-scaled size filters: M6E_G4/G6/G8 = 3
     # Direction filters: DIR_LONG/DIR_SHORT = 2
     # MES 1000 band filters: ORB_G4_L12/ORB_G5_L12 = 2
-    # Total: 7 + 12 + 12 + 3 + 2 + 2 = 38
+    # Cross-asset ATR filters: X_MES_ATR70/X_MES_ATR60/X_MGC_ATR70 = 3
+    # Total: 7 + 12 + 12 + 3 + 2 + 2 + 3 = 41
     EXPECTED_FILTER_KEYS = {
         "NO_FILTER",
         "ORB_G4",
@@ -157,6 +158,10 @@ class TestAllFiltersSync:
         # MES 1000 band filters (ORB size between min and max points)
         "ORB_G4_L12",
         "ORB_G5_L12",
+        # Cross-asset ATR filters (Mar 2026 vol-regime research)
+        "X_MES_ATR70",
+        "X_MES_ATR60",
+        "X_MGC_ATR70",
     }
 
     def test_expected_keys(self):
@@ -193,10 +198,10 @@ class TestAllFiltersSync:
 
     def test_size_filters_have_thresholds(self):
         """Every ORB size filter (or composite with size base) has thresholds."""
-        from trading_app.config import CompositeFilter, DirectionFilter
+        from trading_app.config import CompositeFilter, CrossAssetATRFilter, DirectionFilter
 
         for key, filt in ALL_FILTERS.items():
-            if key == "NO_FILTER" or isinstance(filt, (VolumeFilter, DirectionFilter)):
+            if key == "NO_FILTER" or isinstance(filt, (VolumeFilter, DirectionFilter, CrossAssetATRFilter)):
                 continue
             if isinstance(filt, CompositeFilter):
                 # Composite: base should be OrbSizeFilter with thresholds

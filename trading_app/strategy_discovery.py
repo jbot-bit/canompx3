@@ -36,6 +36,7 @@ from trading_app.config import (
     ENTRY_MODELS,
     SKIP_ENTRY_MODELS,
     STOP_MULTIPLIERS,
+    CrossAssetATRFilter,
     VolumeFilter,
     apply_tight_stop,
     get_filters_for_grid,
@@ -931,6 +932,61 @@ def _compute_relative_volumes(con, features, instrument, orb_labels, all_filters
             row[f"rel_vol_{orb_label}"] = break_vol / baseline
 
 
+def _inject_cross_asset_atrs(con, features, instrument, all_filters):
+    """Inject cross-asset ATR percentile into feature row dicts.
+
+    For each CrossAssetATRFilter in all_filters, loads the source instrument's
+    atr_20_pct from daily_features and injects cross_atr_{source}_pct into
+    each target feature row, matched by trading_day.
+
+    Only runs if at least one CrossAssetATRFilter is in all_filters.
+    Fail-closed: missing source data → key stays absent → filter rejects.
+    """
+    cross_filters = [f for f in all_filters.values() if isinstance(f, CrossAssetATRFilter)]
+    if not cross_filters:
+        return
+
+    # Collect unique source instruments
+    sources = {f.source_instrument for f in cross_filters}
+
+    for source in sources:
+        if source == instrument:
+            continue  # skip self-referencing
+
+        # Bulk-load source instrument's ATR percentile
+        rows = con.execute(
+            """SELECT trading_day, atr_20_pct FROM daily_features
+               WHERE symbol = ? AND orb_minutes = 5 AND atr_20_pct IS NOT NULL
+               ORDER BY trading_day""",
+            [source],
+        ).fetchall()
+
+        if not rows:
+            logger.warning(f"No atr_20_pct data for source instrument {source}")
+            continue
+
+        # Build lookup: trading_day → atr_20_pct
+        source_atr = {}
+        for td, pct in rows:
+            key = td.date() if hasattr(td, "date") else td
+            source_atr[key] = pct
+
+        # Inject into target feature rows
+        col_name = f"cross_atr_{source}_pct"
+        injected = 0
+        for row in features:
+            td = row.get("trading_day")
+            if td is None:
+                continue
+            td_key = td.date() if hasattr(td, "date") else td
+            pct = source_atr.get(td_key)
+            if pct is not None:
+                row[col_name] = pct
+                injected += 1
+
+        logger.info(f"  Injected {col_name} for {injected}/{len(features)} rows")
+
+
 def _load_outcomes_bulk(con, instrument, orb_minutes, orb_labels, entry_models, holdout_date=None):
     """
     Load all non-NULL outcomes in one query per (orb, entry_model).
@@ -1050,6 +1106,9 @@ def run_discovery(
 
         logger.info("Computing relative volumes for volume filters...")
         _compute_relative_volumes(con, features, instrument, sessions, all_grid_filters)
+
+        logger.info("Injecting cross-asset ATR percentiles...")
+        _inject_cross_asset_atrs(con, features, instrument, all_grid_filters)
 
         logger.info("Building filter/ORB day sets...")
         filter_days = _build_filter_day_sets(features, sessions, all_grid_filters)

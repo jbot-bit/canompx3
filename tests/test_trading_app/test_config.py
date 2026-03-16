@@ -142,8 +142,9 @@ class TestAllFilters:
         # + 3 M6E pip-scaled size filters (M6E_G4/G6/G8)
         # + 2 direction filters (DIR_LONG, DIR_SHORT)
         # + 2 MES 1000 band filters (ORB_G4_L12, ORB_G5_L12)
-        # = 38
-        assert len(ALL_FILTERS) == 38
+        # + 3 cross-asset ATR filters (X_MES_ATR70, X_MES_ATR60, X_MGC_ATR70)
+        # = 41
+        assert len(ALL_FILTERS) == 41
 
     def test_contains_volume_filter(self):
         assert "VOL_RV12_N20" in ALL_FILTERS
@@ -288,6 +289,70 @@ class TestCombinedATRVolumeFilter:
         assert f.min_atr_pct == 70.0
         assert f.min_rel_vol == 1.2
         assert f.lookback_days == 20
+
+
+class TestCrossAssetATRFilter:
+    """CrossAssetATRFilter matches by source instrument's ATR percentile."""
+
+    def test_passes_when_above_threshold(self):
+        from trading_app.config import CrossAssetATRFilter
+
+        f = CrossAssetATRFilter(filter_type="TEST", description="test", source_instrument="MES", min_pct=70.0)
+        row = {"cross_atr_MES_pct": 85.0}
+        assert f.matches_row(row, "CME_PRECLOSE") is True
+
+    def test_fails_when_below_threshold(self):
+        from trading_app.config import CrossAssetATRFilter
+
+        f = CrossAssetATRFilter(filter_type="TEST", description="test", source_instrument="MES", min_pct=70.0)
+        row = {"cross_atr_MES_pct": 50.0}
+        assert f.matches_row(row, "CME_PRECLOSE") is False
+
+    def test_fail_closed_missing_key(self):
+        from trading_app.config import CrossAssetATRFilter
+
+        f = CrossAssetATRFilter(filter_type="TEST", description="test", source_instrument="MES", min_pct=70.0)
+        assert f.matches_row({}, "CME_PRECLOSE") is False
+
+    def test_fail_closed_none_value(self):
+        from trading_app.config import CrossAssetATRFilter
+
+        f = CrossAssetATRFilter(filter_type="TEST", description="test", source_instrument="MES", min_pct=70.0)
+        row = {"cross_atr_MES_pct": None}
+        assert f.matches_row(row, "CME_PRECLOSE") is False
+
+    def test_at_boundary(self):
+        from trading_app.config import CrossAssetATRFilter
+
+        f = CrossAssetATRFilter(filter_type="TEST", description="test", source_instrument="MES", min_pct=70.0)
+        row = {"cross_atr_MES_pct": 70.0}
+        assert f.matches_row(row, "CME_PRECLOSE") is True
+
+    def test_mgc_source(self):
+        from trading_app.config import CrossAssetATRFilter
+
+        f = CrossAssetATRFilter(filter_type="TEST", description="test", source_instrument="MGC", min_pct=70.0)
+        row = {"cross_atr_MGC_pct": 75.0}
+        assert f.matches_row(row, "COMEX_SETTLE") is True
+        # Wrong source key → fail-closed
+        row2 = {"cross_atr_MES_pct": 99.0}
+        assert f.matches_row(row2, "COMEX_SETTLE") is False
+
+    def test_predefined_x_mes_atr70(self):
+        """X_MES_ATR70 in ALL_FILTERS has correct parameters."""
+        from trading_app.config import CrossAssetATRFilter
+
+        f = ALL_FILTERS["X_MES_ATR70"]
+        assert isinstance(f, CrossAssetATRFilter)
+        assert f.source_instrument == "MES"
+        assert f.min_pct == 70.0
+
+    def test_not_volume_filter_subclass(self):
+        """CrossAssetATRFilter is NOT a VolumeFilter subclass (different enrichment path)."""
+        from trading_app.config import CrossAssetATRFilter
+
+        f = CrossAssetATRFilter(filter_type="TEST", description="test")
+        assert not isinstance(f, VolumeFilter)
 
 
 class TestBreakSpeedFilter:
