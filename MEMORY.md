@@ -15,7 +15,7 @@
 
 - Apex Trader Funding Static 100K ($297/month, $625 hard DD, Tradovate)
 - Phase-in plan: A0 only first -> Gold slots -> full schedule as buffer builds
-- `PROP_PLAYS.md` contains the definitive manual trading plan
+- `docs/plans/manual-trading-playbook.md` is the definitive prop/manual trading playbook
 - Trailing accounts rejected by user. Static wins long-term as buffer compounds.
 
 ## New Validated / Confirmed Signals (2026-02-24)
