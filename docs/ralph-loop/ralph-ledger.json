@@ -1,14 +1,20 @@
 {
-  "total_iterations": 108,
+  "total_iterations": 109,
   "last_updated": "2026-03-16",
-  "consecutive_low_only": 0,
-  "last_high_finding_iter": 115,
+  "consecutive_low_only": 2,
+  "last_high_finding_iter": 114,
   "findings_by_type": {
     "canonical_violation": {
       "found": 44,
       "fixed": 33,
       "deferred": 3,
       "fix_rate": 0.75
+    },
+    "other": {
+      "found": 14,
+      "fixed": 7,
+      "deferred": 0,
+      "fix_rate": 0.5
     },
     "dead_code": {
       "found": 14,
@@ -22,12 +28,6 @@
       "deferred": 1,
       "fix_rate": 0.83
     },
-    "other": {
-      "found": 12,
-      "fixed": 5,
-      "deferred": 0,
-      "fix_rate": 0.42
-    },
     "lint": {
       "found": 5,
       "fixed": 5,
@@ -35,10 +35,10 @@
       "fix_rate": 1.0
     },
     "annotation_debt": {
-      "found": 5,
-      "fixed": 4,
+      "found": 4,
+      "fixed": 3,
       "deferred": 1,
-      "fix_rate": 0.8
+      "fix_rate": 0.75
     },
     "falsy_zero": {
       "found": 3,
@@ -111,23 +111,17 @@
       "fixed": 1,
       "deferred": 0,
       "fix_rate": 1.0
-    },
-    "fail_open": {
-      "found": 1,
-      "fixed": 1,
-      "deferred": 0,
-      "fix_rate": 1.0
     }
   },
   "findings_by_severity": {
     "CRITICAL": 3,
     "HIGH": 6,
     "MEDIUM": 19,
-    "LOW": 79
+    "LOW": 81
   },
   "classifications": {
-    "judgment": 51,
-    "mechanical": 35,
+    "judgment": 52,
+    "mechanical": 36,
     "audit-only": 21
   },
   "files_audited": {
@@ -191,6 +185,16 @@
       "last_iter": 51,
       "findings": 3
     },
+    "trading_app/outcome_builder.py": {
+      "audit_count": 3,
+      "last_iter": 115,
+      "findings": 3
+    },
+    "trading_app/strategy_discovery.py": {
+      "audit_count": 3,
+      "last_iter": 116,
+      "findings": 3
+    },
     "scripts/tools/build_edge_families.py": {
       "audit_count": 3,
       "last_iter": 91,
@@ -219,16 +223,6 @@
     "config.py": {
       "audit_count": 2,
       "last_iter": 75,
-      "findings": 2
-    },
-    "trading_app/outcome_builder.py": {
-      "audit_count": 2,
-      "last_iter": 46,
-      "findings": 2
-    },
-    "trading_app/strategy_discovery.py": {
-      "audit_count": 2,
-      "last_iter": 34,
       "findings": 2
     },
     "trading_app/paper_trader.py": {
@@ -2054,6 +2048,28 @@
       "severity": "MEDIUM",
       "verdict": "FIXED",
       "commit": "2c7e419"
+    },
+    {
+      "iter": 115,
+      "date": "2026-03-16",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/outcome_builder.py (critical centrality, 11 importers)",
+      "finding_type": "other",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "d9c2609"
+    },
+    {
+      "iter": 116,
+      "date": "2026-03-16",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/strategy_discovery.py:1082-1088 (high centrality, 8 importers)",
+      "finding_type": "other",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "6b9a3f6"
     }
   ]
 }

@@ -5,6 +5,18 @@
 
 ---
 
+## Iteration 116 — 2026-03-16
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/strategy_discovery.py:1082-1088 (high centrality, 8 importers)
+- Finding SD-01: Fail-open pattern — `get_enabled_sessions()` returning empty triggered `logger.warning` + silent fallback to `ORB_LABELS` (all sessions). A misconfigured instrument would silently run discovery for all sessions instead of aborting. Same sin as OB-01 (iter 115).
+- Action: Replaced `logger.warning` + `sessions = ORB_LABELS` fallback with `raise ValueError`. Removed now-unused `ORB_LABELS` import from `pipeline.init_db`.
+- Blast radius: strategy_discovery.py only — change is local to `run_discovery()`. All callers pass valid instruments from config.
+- Verification: 71 drift checks pass (5 env-only violations pre-existing), ruff clean, 45/45 strategy_discovery tests pass, 218 fast tests pass
+- Commit: 6b9a3f6
+
+---
+
 ## Iteration 115 — 2026-03-16
 - Phase: fix
 - Classification: [mechanical]
