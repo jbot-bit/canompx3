@@ -1,7 +1,7 @@
 {
-  "total_iterations": 113,
+  "total_iterations": 114,
   "last_updated": "2026-03-16",
-  "consecutive_low_only": 0,
+  "consecutive_low_only": 1,
   "last_high_finding_iter": 120,
   "findings_by_type": {
     "canonical_violation": {
@@ -52,6 +52,12 @@
       "deferred": 0,
       "fix_rate": 1.0
     },
+    "broad_except": {
+      "found": 2,
+      "fixed": 2,
+      "deferred": 0,
+      "fix_rate": 1.0
+    },
     "connection_leak": {
       "found": 2,
       "fixed": 2,
@@ -94,12 +100,6 @@
       "deferred": 0,
       "fix_rate": 1.0
     },
-    "broad_except": {
-      "found": 1,
-      "fixed": 1,
-      "deferred": 0,
-      "fix_rate": 1.0
-    },
     "drift_check_fix": {
       "found": 1,
       "fixed": 1,
@@ -117,10 +117,10 @@
     "CRITICAL": 3,
     "HIGH": 6,
     "MEDIUM": 21,
-    "LOW": 83
+    "LOW": 84
   },
   "classifications": {
-    "judgment": 52,
+    "judgment": 53,
     "mechanical": 39,
     "audit-only": 22
   },
@@ -868,6 +868,11 @@
     "trading_app/ml/features.py": {
       "audit_count": 1,
       "last_iter": 114,
+      "findings": 1
+    },
+    "trading_app/live/projectx/auth.py": {
+      "audit_count": 1,
+      "last_iter": 121,
       "findings": 1
     }
   },
@@ -2114,6 +2119,17 @@
       "severity": "MEDIUM",
       "verdict": "FIXED",
       "commit": "360ec68"
+    },
+    {
+      "iter": 121,
+      "date": "2026-03-16",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/live/projectx/auth.py:84",
+      "finding_type": "broad_except",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "468ea1e"
     }
   ]
 }
