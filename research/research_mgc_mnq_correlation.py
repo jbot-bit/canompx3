@@ -155,7 +155,7 @@ def block1_daily_returns(con: duckdb.DuckDBPyConnection) -> None:
 
     print(f"\nFull period: {common_idx.min()} to {common_idx.max()}  N={N} days")
     print(f"  Pearson r = {r:+.4f}   p = {p:.4f}")
-    print(f"  Interpretation: ", end="")
+    print("  Interpretation: ", end="")
     if p < 0.01:
         if r < -0.1:
             print(f"SIGNIFICANT negative correlation (r={r:.3f}). Modest inverse relationship.")
@@ -306,7 +306,7 @@ def block2_session_concordance(con: duckdb.DuckDBPyConnection) -> None:
     if valid:
         p_vals = [r["p_raw"] for r in valid]
         p_adj = bh_fdr(p_vals, q=BH_Q)
-        for r, padj in zip(valid, p_adj):
+        for r, padj in zip(valid, p_adj, strict=False):
             r["p_bh"] = padj
 
     # Print results
@@ -430,7 +430,7 @@ def block3_portfolio_pnl(con: duckdb.DuckDBPyConnection) -> None:
     # Apply BH FDR before printing (consistent with Block 2)
     p_vals = [r["p"] for r in results]
     p_adj = bh_fdr(p_vals)
-    for res, pa in zip(results, p_adj):
+    for res, pa in zip(results, p_adj, strict=False):
         res["p_bh"] = pa
 
     for res in results:
