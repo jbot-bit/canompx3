@@ -249,6 +249,12 @@ CREATE TABLE IF NOT EXISTS daily_features (
     atr_vel_ratio     DOUBLE,
     atr_vel_regime    TEXT,
 
+    -- ATR percentile: rolling rank of atr_20 among prior 252 trading days (0-100).
+    -- Used by CombinedATRVolumeFilter (ATR70+VOL): trade only when atr_20_pct >= 70
+    -- AND rel_vol >= 1.2. Prior-days only, no look-ahead.
+    -- @research-source research/research_vol_regime_filter.py
+    atr_20_pct        DOUBLE,
+
     -- Per-session ORB compression tier (Feb 2026 — research_avoid_crosscheck.py)
     -- z-score of (orb_size/atr_20) vs rolling prior-20-day mean/std. Prior-days only.
     -- 'Compressed' (z < -0.5), 'Neutral' (-0.5..0.5), 'Expanded' (z > 0.5), NULL (<5 prior days)
@@ -443,6 +449,13 @@ def init_db(db_path: Path, force: bool = False):
                 logger.info(f"  Migration: added {col} column to daily_features")
             except duckdb.CatalogException:
                 pass  # column already exists
+
+        # Migration: add ATR percentile column (Mar 2026)
+        try:
+            con.execute("ALTER TABLE daily_features ADD COLUMN atr_20_pct DOUBLE")
+            logger.info("  Migration: added atr_20_pct column to daily_features")
+        except duckdb.CatalogException:
+            pass  # column already exists
 
         # Migration: add GARCH forecast columns (Feb 2026)
         for col, typedef in [

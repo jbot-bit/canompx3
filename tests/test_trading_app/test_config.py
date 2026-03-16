@@ -136,14 +136,14 @@ class TestAllFilters:
             assert key not in ALL_FILTERS, f"{key} should not be in ALL_FILTERS"
 
     def test_total_count(self):
-        # NO_FILTER + 4 G-filters + 1 VOL-filter = 6
+        # NO_FILTER + 4 G-filters + 2 VOL-filters (VOL_RV12_N20 + ATR70_VOL) = 7
         # + 12 DOW composites (3 DOW x 4 G)
         # + 12 break quality composites (3 BRK x 4 G: FAST5, FAST10, CONT)
         # + 3 M6E pip-scaled size filters (M6E_G4/G6/G8)
         # + 2 direction filters (DIR_LONG, DIR_SHORT)
         # + 2 MES 1000 band filters (ORB_G4_L12, ORB_G5_L12)
-        # = 37
-        assert len(ALL_FILTERS) == 37
+        # = 38
+        assert len(ALL_FILTERS) == 38
 
     def test_contains_volume_filter(self):
         assert "VOL_RV12_N20" in ALL_FILTERS
@@ -216,6 +216,76 @@ class TestVolumeFilter:
         """VOL_RV12_N20 has correct parameters."""
         f = ALL_FILTERS["VOL_RV12_N20"]
         assert isinstance(f, VolumeFilter)
+        assert f.min_rel_vol == 1.2
+        assert f.lookback_days == 20
+
+
+class TestCombinedATRVolumeFilter:
+    """CombinedATRVolumeFilter requires BOTH ATR pct and rel_vol."""
+
+    def test_both_conditions_met(self):
+        from trading_app.config import CombinedATRVolumeFilter
+
+        f = CombinedATRVolumeFilter(filter_type="TEST", description="test")
+        row = {"atr_20_pct": 80.0, "rel_vol_CME_REOPEN": 1.5}
+        assert f.matches_row(row, "CME_REOPEN") is True
+
+    def test_atr_below_threshold(self):
+        from trading_app.config import CombinedATRVolumeFilter
+
+        f = CombinedATRVolumeFilter(filter_type="TEST", description="test")
+        row = {"atr_20_pct": 50.0, "rel_vol_CME_REOPEN": 1.5}
+        assert f.matches_row(row, "CME_REOPEN") is False
+
+    def test_vol_below_threshold(self):
+        from trading_app.config import CombinedATRVolumeFilter
+
+        f = CombinedATRVolumeFilter(filter_type="TEST", description="test")
+        row = {"atr_20_pct": 80.0, "rel_vol_CME_REOPEN": 0.8}
+        assert f.matches_row(row, "CME_REOPEN") is False
+
+    def test_fail_closed_missing_atr(self):
+        from trading_app.config import CombinedATRVolumeFilter
+
+        f = CombinedATRVolumeFilter(filter_type="TEST", description="test")
+        row = {"rel_vol_CME_REOPEN": 1.5}
+        assert f.matches_row(row, "CME_REOPEN") is False
+
+    def test_fail_closed_missing_vol(self):
+        from trading_app.config import CombinedATRVolumeFilter
+
+        f = CombinedATRVolumeFilter(filter_type="TEST", description="test")
+        row = {"atr_20_pct": 80.0}
+        assert f.matches_row(row, "CME_REOPEN") is False
+
+    def test_fail_closed_none_atr(self):
+        from trading_app.config import CombinedATRVolumeFilter
+
+        f = CombinedATRVolumeFilter(filter_type="TEST", description="test")
+        row = {"atr_20_pct": None, "rel_vol_CME_REOPEN": 1.5}
+        assert f.matches_row(row, "CME_REOPEN") is False
+
+    def test_at_boundary(self):
+        from trading_app.config import CombinedATRVolumeFilter
+
+        f = CombinedATRVolumeFilter(filter_type="TEST", description="test")
+        # Exactly at thresholds (>= 70 and >= 1.2)
+        row = {"atr_20_pct": 70.0, "rel_vol_CME_REOPEN": 1.2}
+        assert f.matches_row(row, "CME_REOPEN") is True
+
+    def test_is_volume_filter_subclass(self):
+        from trading_app.config import CombinedATRVolumeFilter
+
+        f = CombinedATRVolumeFilter(filter_type="TEST", description="test")
+        assert isinstance(f, VolumeFilter)
+
+    def test_predefined_atr70_vol(self):
+        """ATR70_VOL in ALL_FILTERS has correct parameters."""
+        f = ALL_FILTERS["ATR70_VOL"]
+        from trading_app.config import CombinedATRVolumeFilter
+
+        assert isinstance(f, CombinedATRVolumeFilter)
+        assert f.min_atr_pct == 70.0
         assert f.min_rel_vol == 1.2
         assert f.lookback_days == 20
 

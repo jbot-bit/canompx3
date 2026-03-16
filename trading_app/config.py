@@ -208,6 +208,52 @@ class VolumeFilter(StrategyFilter):
 
 
 @dataclass(frozen=True)
+class CombinedATRVolumeFilter(VolumeFilter):
+    """Combined ATR regime + break-bar volume filter.
+
+    Requires BOTH:
+    1. ATR_20 percentile >= min_atr_pct (high-vol regime)
+    2. Relative volume >= min_rel_vol (break-bar conviction)
+
+    Subclasses VolumeFilter so strategy_fitness.py isinstance guard
+    triggers bars_1m enrichment for rel_vol computation.
+
+    atr_20_pct is pre-computed in daily_features (rolling 252d percentile).
+    Fail-closed: if either value is missing, day is ineligible.
+
+    @research-source research/research_vol_regime_filter.py
+    """
+
+    min_atr_pct: float = 70.0
+
+    def matches_row(self, row: dict, orb_label: str) -> bool:
+        atr_pct = row.get("atr_20_pct")
+        if atr_pct is None:
+            return False  # fail-closed
+        rel_vol = row.get(f"rel_vol_{orb_label}")
+        if rel_vol is None:
+            return False  # fail-closed
+        return atr_pct >= self.min_atr_pct and rel_vol >= self.min_rel_vol
+
+    def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        import pandas as pd
+
+        rel_col = f"rel_vol_{orb_label}"
+        has_rel = rel_col in df.columns
+        has_atr = "atr_20_pct" in df.columns
+
+        if not has_rel or not has_atr:
+            return pd.Series(False, index=df.index)
+
+        return (
+            df["atr_20_pct"].notna()
+            & (df["atr_20_pct"] >= self.min_atr_pct)
+            & df[rel_col].notna()
+            & (df[rel_col] >= self.min_rel_vol)
+        )
+
+
+@dataclass(frozen=True)
 class DirectionFilter(StrategyFilter):
     """Filter by breakout direction (long/short only)."""
 
@@ -481,6 +527,13 @@ MGC_VOLUME_FILTERS = {
         description="Relative volume >= 1.2 (20-day lookback)",
         min_rel_vol=1.2,
         lookback_days=20,
+    ),
+    "ATR70_VOL": CombinedATRVolumeFilter(
+        filter_type="ATR70_VOL",
+        description="ATR pct >= 70 AND rel_vol >= 1.2 (combined regime+conviction)",
+        min_rel_vol=1.2,
+        lookback_days=20,
+        min_atr_pct=70.0,
     ),
 }
 

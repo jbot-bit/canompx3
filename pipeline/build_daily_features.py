@@ -20,6 +20,7 @@ Usage:
 
 import argparse
 import sys
+from bisect import bisect_left
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -885,6 +886,7 @@ def build_features_for_day(
     row["atr_20"] = None
     row["atr_vel_ratio"] = None
     row["atr_vel_regime"] = None
+    row["atr_20_pct"] = None
     row["garch_forecast_vol"] = None
     row["garch_atr_ratio"] = None
     for _sl in COMPRESSION_SESSIONS:
@@ -1138,6 +1140,22 @@ def build_daily_features(
                     rows[i]["atr_vel_regime"] = "Contracting"
                 else:
                     rows[i]["atr_vel_regime"] = "Stable"
+
+        # ATR percentile: rank of today's ATR_20 among prior 252 trading days.
+        # Used by CombinedATRVolumeFilter (ATR70+VOL): trade only in top 30% vol regime.
+        # Prior-only window [i-252:i], no look-ahead. Min 60 prior days for stable ranking.
+        # @research-source research/research_vol_regime_filter.py
+        if atr_today is not None:
+            atr_lookback = 252
+            prior_atrs_pct = [
+                rows[j]["atr_20"]
+                for j in range(max(0, i - atr_lookback), i)
+                if rows[j].get("atr_20") is not None
+            ]
+            if len(prior_atrs_pct) >= 60:
+                sorted_prior = sorted(prior_atrs_pct)
+                rank = bisect_left(sorted_prior, atr_today)
+                rows[i]["atr_20_pct"] = round(rank / len(sorted_prior) * 100, 2)
 
         # Per-session ORB compression z-score (prior 20 days, no look-ahead).
         # Compression = rolling z-score of (orb_size / atr_20).

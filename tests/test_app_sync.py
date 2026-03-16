@@ -119,6 +119,8 @@ class TestAllFiltersSync:
         "ORB_G6",
         "ORB_G8",
         "VOL_RV12_N20",
+        # Combined ATR+VOL filter (Mar 2026 vol-regime research)
+        "ATR70_VOL",
         # DOW composites (registered globally for portfolio.py lookups / DB compat)
         "ORB_G4_NOFRI",
         "ORB_G5_NOFRI",
@@ -320,20 +322,20 @@ class TestGridParamsSync:
     def test_grid_size(self):
         """Total base grid size matches expected formula (E2+E3 use CB1 only).
 
-        Base grid uses 6 core filters (NO_FILTER + G4/G5/G6/G8 + VOL).
+        Base grid uses 7 core filters (NO_FILTER + G4/G5/G6/G8 + VOL + ATR70_VOL).
         Session-specific DOW composites are added by get_filters_for_grid()
         per-session, expanding the grid contextually.
 
-        12 ORBs x 6 RRs x 5 CBs x 6 base filters = 2160 (E1, all CB options)
-        12 ORBs x 6 RRs x 1 CB x 6 base filters = 432  (E2, always CB1)
-        12 ORBs x 6 RRs x 1 CB x 6 base filters = 432  (E3, always CB1)
-        Total base: 3024
+        12 ORBs x 6 RRs x 5 CBs x 7 base filters = 2520 (E1, all CB options)
+        12 ORBs x 6 RRs x 1 CB x 7 base filters = 504  (E2, always CB1)
+        12 ORBs x 6 RRs x 1 CB x 7 base filters = 504  (E3, always CB1)
+        Total base: 3528
         """
-        BASE_FILTER_COUNT = 6  # NO_FILTER + ORB_G4/G5/G6/G8 + VOL_RV12_N20
+        BASE_FILTER_COUNT = 7  # NO_FILTER + ORB_G4/G5/G6/G8 + VOL_RV12_N20 + ATR70_VOL
         e1 = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * BASE_FILTER_COUNT
         e2_e3 = 2 * len(ORB_LABELS) * len(RR_TARGETS) * 1 * BASE_FILTER_COUNT
         expected = e1 + e2_e3
-        assert expected == 3024
+        assert expected == 3528
 
 
 class TestEntryModelsSync:
@@ -410,7 +412,7 @@ class TestStrategyIdSync:
     def test_all_grid_ids_unique(self):
         """Every combination in the base grid produces a unique ID (E2+E3 CB1 only).
 
-        Uses BASE_GRID_FILTERS (6 entries) not ALL_FILTERS (18 entries).
+        Uses BASE_GRID_FILTERS (7 entries) not ALL_FILTERS.
         Session-specific DOW composites expand the grid per-session via
         get_filters_for_grid(); the base grid is the common denominator.
         """
@@ -425,7 +427,7 @@ class TestStrategyIdSync:
                             sid = make_strategy_id("MGC", orb, em, rr, cb, fk)
                             assert sid not in ids, f"Duplicate ID: {sid}"
                             ids.add(sid)
-        assert len(ids) == 3024
+        assert len(ids) == 3528
 
 
 # ============================================================================
