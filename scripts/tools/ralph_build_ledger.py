@@ -321,8 +321,9 @@ def print_summary(ledger: dict) -> None:
         print(f"  {f:<55s}  audits={stats['audit_count']}  findings={stats['findings']}  last_iter={stats['last_iter']}")
     print()
 
-    dates = sorted(set(it["date"] for it in ledger["iterations"]))
-    print(f"Date range: {dates[0]} to {dates[-1]} ({len(dates)} days)")
+    dates = sorted(set(it["date"] for it in ledger["iterations"] if it.get("date")))
+    if dates:
+        print(f"Date range: {dates[0]} to {dates[-1]} ({len(dates)} days)")
 
 
 def main() -> None:

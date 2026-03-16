@@ -180,16 +180,10 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 - Next iteration targets (prefer unscanned critical/high-centrality files)
 - Updated `## Files Fully Scanned` list (add any newly scanned files)
 
-**Update** `docs/ralph-loop/ralph-ledger.json`:
-```bash
-python scripts/tools/ralph_build_ledger.py
-```
-This regenerates the ledger from history.md. Run it AFTER appending to history.md.
-
-**Append** to `docs/ralph-loop/ralph-loop-history.md`:
+**Append** to `docs/ralph-loop/ralph-loop-history.md` (MUST be done BEFORE ledger rebuild):
 ```
 ## Iteration ITER — YYYY-MM-DD
-- Phase: fix | audit-only | rejected | needs-review
+- Phase: fix | audit-only | rejected | needs-review | diminishing-returns
 - Classification: [mechanical] | [judgment]
 - Target: file:line
 - Finding: 1-sentence
@@ -197,6 +191,11 @@ This regenerates the ledger from history.md. Run it AFTER appending to history.m
 - Blast radius: N files
 - Verification: PASS/REJECT
 - Commit: hash or NONE
+```
+
+**Rebuild** `docs/ralph-loop/ralph-ledger.json` (AFTER appending to history.md):
+```bash
+python scripts/tools/ralph_build_ledger.py
 ```
 
 **Update** `docs/ralph-loop/deferred-findings.md`:
