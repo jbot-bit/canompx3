@@ -1148,9 +1148,7 @@ def build_daily_features(
         if atr_today is not None:
             atr_lookback = 252
             prior_atrs_pct = [
-                rows[j]["atr_20"]
-                for j in range(max(0, i - atr_lookback), i)
-                if rows[j].get("atr_20") is not None
+                rows[j]["atr_20"] for j in range(max(0, i - atr_lookback), i) if rows[j].get("atr_20") is not None
             ]
             if len(prior_atrs_pct) >= 60:
                 sorted_prior = sorted(prior_atrs_pct)

@@ -748,13 +748,22 @@ ALL_FILTERS: dict[str, StrategyFilter] = {
     # MNQ sessions filtered by MES/MGC ATR regime. Added to grid via get_filters_for_grid().
     # @research-source research/research_vol_regime_filter.py
     "X_MES_ATR70": CrossAssetATRFilter(
-        filter_type="X_MES_ATR70", description="MES ATR pct >= 70", source_instrument="MES", min_pct=70.0,
+        filter_type="X_MES_ATR70",
+        description="MES ATR pct >= 70",
+        source_instrument="MES",
+        min_pct=70.0,
     ),
     "X_MES_ATR60": CrossAssetATRFilter(
-        filter_type="X_MES_ATR60", description="MES ATR pct >= 60", source_instrument="MES", min_pct=60.0,
+        filter_type="X_MES_ATR60",
+        description="MES ATR pct >= 60",
+        source_instrument="MES",
+        min_pct=60.0,
     ),
     "X_MGC_ATR70": CrossAssetATRFilter(
-        filter_type="X_MGC_ATR70", description="MGC ATR pct >= 70", source_instrument="MGC", min_pct=70.0,
+        filter_type="X_MGC_ATR70",
+        description="MGC ATR pct >= 70",
+        source_instrument="MGC",
+        min_pct=70.0,
     ),
     # MES TOKYO_OPEN band filters (H2: ORBs >= 12pt are toxic)
     **_MES_1000_BAND_FILTERS,
@@ -853,8 +862,12 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
     # @research-source research/research_vol_regime_filter.py
     if instrument == "MNQ":
         _cross_asset_sessions = {
-            "CME_PRECLOSE", "COMEX_SETTLE", "US_DATA_1000",
-            "NYSE_OPEN", "NYSE_CLOSE", "US_DATA_830",
+            "CME_PRECLOSE",
+            "COMEX_SETTLE",
+            "US_DATA_1000",
+            "NYSE_OPEN",
+            "NYSE_CLOSE",
+            "US_DATA_830",
         }
         if session in _cross_asset_sessions:
             filters["X_MES_ATR70"] = ALL_FILTERS["X_MES_ATR70"]

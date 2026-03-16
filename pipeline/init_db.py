@@ -168,6 +168,7 @@ CREATE TABLE IF NOT EXISTS pipeline_audit_log (
 );
 """
 
+
 def _build_daily_features_ddl() -> str:
     """Generate CREATE TABLE DDL for daily_features.
 
