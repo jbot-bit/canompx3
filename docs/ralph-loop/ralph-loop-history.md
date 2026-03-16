@@ -5,6 +5,18 @@
 
 ---
 
+## Iteration 99 — 2026-03-16
+- Phase: audit-only
+- Classification: N/A (no fix)
+- Target: scripts/tools/m25_nightly.py, m25_audit.py, m25_auto_audit.py, m25_preflight.py, m25_run_grounded_system.py
+- Finding: All 5 files clean. M25 suite is well-designed advisory tooling. Exception handlers in budget tracker and context-enrichment helpers are advisory-path patterns, not production safety failures. Hardcoded OneDrive path in m25_run_grounded_system.py is a local research script with graceful skip on missing files. Fail-open in m25_preflight.py is intentional (M2.5 is advisory only per .claude/rules/m25-audit.md).
+- Action: Audit only — no fixes required.
+- Blast radius: N/A
+- Verification: PASS (72 drift checks, behavioral audit 6/6, ruff clean)
+- Commit: NONE
+
+---
+
 ## Iteration 98 — 2026-03-16
 - Phase: audit-only
 - Classification: N/A (no fix)

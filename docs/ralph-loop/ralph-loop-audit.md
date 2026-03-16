@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 98
+## Last iteration: 99
 
-## RALPH AUDIT — Iteration 98 (audit-only)
+## RALPH AUDIT — Iteration 99 (audit-only)
 ## Date: 2026-03-16
 ## Infrastructure Gates: 3/3 PASS
 
@@ -19,77 +19,63 @@
 
 ## Files Audited This Iteration
 
-### scripts/tools/parity_check.py — CLEAN
+### scripts/tools/m25_nightly.py — CLEAN
 
 Seven Sins scan:
-- Line 31: `from pipeline.cost_model import get_cost_spec` — canonical. CLEAN.
-- Line 32: `from pipeline.paths import GOLD_DB_PATH` — canonical. CLEAN.
-- Line 33: `from trading_app.config import TRADEABLE_INSTRUMENTS` — canonical instrument list. CLEAN.
-- Lines 343-361: try/finally with `con.close()` — proper cleanup. CLEAN.
-- Line 373: `checks_per_inst = 4` — local computation count, not a drift check count. CLEAN.
-- No silent failures; all failures collected and reported, sys.exit(1) on any failure. CLEAN.
+- Lines 59-62: `except SystemExit` on `load_api_key()` failure → prints warning, returns. Deliberate graceful degradation for nightly batch. ACCEPTABLE.
+- Lines 98-103: `except Exception as e:` → prints ERROR, continues to next file. Not silent. ACCEPTABLE.
+- No hardcoded DB paths, no canonical violations, no volatile data.
+- `len(NIGHTLY_TARGETS)` used dynamically throughout — no hardcoded counts. CLEAN.
+- File list (`NIGHTLY_TARGETS`) is a curated batch configuration, not a canonical instrument/session list. ACCEPTABLE.
 
 **No findings.**
 
-### scripts/tools/build_outcomes_fast.py — CLEAN
+### scripts/tools/m25_audit.py — CLEAN
 
 Seven Sins scan:
-- Line 29: `from pipeline.cost_model import get_cost_spec` — canonical. CLEAN.
-- Line 30: `from pipeline.init_db import ORB_LABELS` — canonical. CLEAN.
-- Line 31: `from pipeline.paths import GOLD_DB_PATH` — canonical. CLEAN.
-- Line 32: `from trading_app.config import ENTRY_MODELS` — canonical. CLEAN.
-- Line 40: `DB_PATH = GOLD_DB_PATH` — canonical alias. CLEAN.
-- Line 86: `if em == "E3" and cb > 1: continue` — hardcoded "E3" skip matches SKIP_ENTRY_MODELS logic in production outcome_builder. Intentional per-entry-model heuristic. ACCEPTABLE.
-- Lines 235-268: Write connection not in try/finally — if INSERT loop throws, connection leaks. LOW, same as ~22 CLI script pattern already catalogued as acceptable (process exit closes it). ACCEPTABLE.
-- Lines 50-126: Worker connection in try/finally. CLEAN.
-- No silent failures; exceptions propagate from worker futures. CLEAN.
+- Lines 83-84: `except Exception: data = {}` in budget counter read — silent on corrupt/missing JSON budget file. LOW/ACCEPTABLE: budget tracking is advisory only, not a safety-critical path.
+- Lines 93-94: `except Exception: pass` in budget file write — silent on write failure. Same reasoning. ACCEPTABLE.
+- Lines 504-505, 528-529, 574-575, 614-615, 669-670: `except Exception: pass` in `gather_runtime_context` / `build_diff_content` — context enrichment helpers that feed M2.5 pre-context. Silently skipping context gathering is correct design (advisory tool; missing context = less accurate M2.5, not a broken system). ACCEPTABLE per `.claude/rules/m25-audit.md`.
+- Line 704: bare `pass` in `triage_output` — follows `skip_section = False` assignment. Intentional no-op (no body needed after the flag set). CLEAN.
+- Line 454: `db_path = project_root / "gold.db"` in `gather_runtime_context` — uses dynamic project_root, not hardcoded absolute path. CLEAN.
+- Lines 487-495, 514-518, 538-560: subprocess calls use canonical imports (`ACTIVE_ORB_INSTRUMENTS`, `COST_SPECS`, `SESSION_CATALOG`, `ENTRY_MODELS`). CLEAN.
+- No hardcoded instrument lists, no hardcoded entry model strings in non-subprocess context.
 
 **No findings.**
 
-### scripts/tools/build_mes_outcomes_fast.py — CLEAN
+### scripts/tools/m25_auto_audit.py — CLEAN
 
 Seven Sins scan:
-- Line 29: `from pipeline.cost_model import get_cost_spec` — canonical. CLEAN.
-- Line 30: `from pipeline.init_db import ORB_LABELS` — canonical. CLEAN.
-- Line 31: `from pipeline.paths import GOLD_DB_PATH` — canonical. CLEAN.
-- Line 32: `from trading_app.config import ENTRY_MODELS` — canonical. CLEAN.
-- Line 41: `DB_PATH = GOLD_DB_PATH` — canonical alias. CLEAN.
-- Lines 40-43: `INSTRUMENT = "MES"`, `START_DATE`, `END_DATE` — intentional MES-specific script scope. ACCEPTABLE.
-- Line 73: `if em == "E3" and cb > 1: continue` — same as build_outcomes_fast.py above. ACCEPTABLE.
-- Lines 234-268: Write connection not in try/finally — same CLI connection leak pattern. ACCEPTABLE.
-- Line 137: Read connection in try/finally block (implicitly — actually no try/finally but read-only, process-exit safe). LOW.
+- Lines 141-142: `except SystemExit: return 0` on missing API key — deliberate no-op. Documented in docstring. ACCEPTABLE.
+- Lines 167-169: `except Exception as e: print(...)` → logs `type(e).__name__`, continues. Not silent. ACCEPTABLE.
+- `AUDIT_DIRS = ("pipeline/", "trading_app/")` — curated scope filter for what M2.5 should auto-audit. Not a canonical instrument/session list. ACCEPTABLE.
+- `MODE_MAP` hardcodes file → mode mappings — intentional configuration, not canonical trading data. ACCEPTABLE.
+- No DB path references, no canonical violations.
 
 **No findings.**
 
-### scripts/tools/prospective_tracker.py — CLEAN
+### scripts/tools/m25_preflight.py — CLEAN
 
 Seven Sins scan:
-- Line 20: `from pipeline.paths import GOLD_DB_PATH` — canonical. CLEAN.
-- Line 71: `WHERE orb_minutes = 5` in SQL — intentional 5m-aperture scoping for this prospective tracker. ACCEPTABLE (per-investigation scope, not a canonical list).
-- Lines 30-41: `SIGNALS` dict with hardcoded MGC/CME_REOPEN config — intentional frozen hypothesis definition. ACCEPTABLE.
-- Lines 117-155: DELETE+INSERT pattern — canonical write pattern. CLEAN.
-- Line 156: `con.commit()` called after inserts. CLEAN.
-- Line 300-306: `con = duckdb.connect(args.db_path)` not in try/finally — CLI script, process exit closes. ACCEPTABLE.
-- No silent failures; all errors propagate. CLEAN.
+- Lines 73-76: `except Exception as e: print(f"WARNING..."); return 0` — fail-open on M2.5 API error. This is intentional: if the advisory scanner crashes, don't block the researcher. The `.claude/rules/m25-audit.md` explicitly classifies M2.5 as advisory only. ACCEPTABLE.
+- Return code 2 for "no API key" (skipped) vs return 0 for "API error" (fail-open) vs return 1 for "FAIL verdict" — distinct codes allow callers to distinguish states. CLEAN.
+- No hardcoded DB paths, no canonical violations.
 
 **No findings.**
 
-### scripts/tools/profile_1000_runners.py — CLEAN
+### scripts/tools/m25_run_grounded_system.py — CLEAN
 
 Seven Sins scan:
-- Lines 42-43: `spec = get_cost_spec("MGC")` — hardcoded MGC, but this is an MGC-specific research script. ACCEPTABLE.
-- Lines 46-63: Hardcoded `'MGC'`, `'1000'`, `'E1'`, `RR=2.0`, `CB=2` in SQL — intentional research scope. Read-only. ACCEPTABLE.
-- Line 31: `from pipeline.cost_model import get_cost_spec, to_r_multiple` — canonical. CLEAN.
-- Line 32: `from pipeline.paths import GOLD_DB_PATH` — canonical. CLEAN.
-- Lines 43-80: Read-only connection, `con.close()` at line 80 after all queries. CLEAN.
-- Line 84: `for _, row in df.iterrows()` — iterrows in a research script, not production pipeline. Not caught by drift check #77 (pipeline-only). ACCEPTABLE.
-- No silent failures; continues on empty bars (explicit check at line 87). CLEAN.
+- Line 17: `api_key = load_api_key()` at module level — raises SystemExit if key missing. Intentional: this is a one-shot research script, not a library. ACCEPTABLE.
+- Line 20: `NB_DIR = Path(r"C:\Users\joshd\OneDrive\Desktop\Organisation\nb resources")` — hardcoded absolute path to personal OneDrive. LOCAL RESEARCH SCRIPT ONLY. Files skipped gracefully if not found (line 127: `if not fpath.exists(): continue`). ACCEPTABLE (per-machine research script, not production).
+- `KEY_FILES` list (lines 154-170) enumerates production files to read — not a canonical instrument/session list. Intentional research scope. ACCEPTABLE.
+- No hardcoded DB paths, no hardcoded entry model strings in SQL, no canonical violations.
 
 **No findings.**
 
 ---
 
-## Deferred Findings — Status After Iter 98
+## Deferred Findings — Status After Iter 99
 
 ### STILL DEFERRED (carried forward)
 - **DF-04** — `rolling_portfolio.py:304` dormant `orb_minutes=5` in rolling DOW stats — structural multi-file fix, blast radius >5 files
@@ -97,9 +83,9 @@ Seven Sins scan:
 ---
 
 ## Summary
-- 5 target files audited: parity_check.py, build_outcomes_fast.py, build_mes_outcomes_fast.py, prospective_tracker.py, profile_1000_runners.py
+- 5 target files audited: m25_nightly.py, m25_audit.py, m25_auto_audit.py, m25_preflight.py, m25_run_grounded_system.py
 - 0 findings fixed (audit-only iteration — all files clean)
-- 0 new ACCEPTABLE findings added to Won't Fix (connection leaks match existing catalogued pattern)
+- 0 new ACCEPTABLE findings (patterns match existing catalogued patterns)
 - Infrastructure Gates: 3/3 PASS
 - Commit: NONE
 
@@ -118,21 +104,21 @@ Seven Sins scan:
 
 ## Files Fully Scanned
 
-> Cumulative list — 139 files fully scanned.
+> Cumulative list — 144 files fully scanned.
 
 - trading_app/ — 44 files (iters 4-61)
 - pipeline/ — 15 files (iters 1-71)
-- scripts/tools/ — 43 files (iters 18-72, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98): audit_behavioral.py, generate_promotion_candidates.py, select_family_rr.py (iter 89); build_edge_families.py, pipeline_status.py (iter 90); assert_rebuild.py, gen_repo_map.py, sync_pinecone.py (iter 91); pinecone_snapshots.py, rolling_portfolio_assembly.py, generate_trade_sheet.py (iter 92); rr_selection_analysis.py, sensitivity_analysis.py (iter 93); gen_playbook.py, ml_audit.py, audit_integrity.py (iter 94); ml_cross_session_experiment.py, ml_hybrid_experiment.py, ml_instrument_deep_dive.py (iter 95); ml_per_session_experiment.py, ml_level_proximity_experiment.py, ml_threshold_sweep.py, ml_session_leakage_audit.py, ml_license_diagnostic.py, audit_15m30m.py (iter 96); backtest_1100_early_exit.py, backtest_atr_regime.py, beginner_tradebook.py, find_pf_strategy.py, rank_slots.py (iter 97); parity_check.py, build_outcomes_fast.py, build_mes_outcomes_fast.py, prospective_tracker.py, profile_1000_runners.py (iter 98)
+- scripts/tools/ — 48 files (iters 18-72, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99): audit_behavioral.py, generate_promotion_candidates.py, select_family_rr.py (iter 89); build_edge_families.py, pipeline_status.py (iter 90); assert_rebuild.py, gen_repo_map.py, sync_pinecone.py (iter 91); pinecone_snapshots.py, rolling_portfolio_assembly.py, generate_trade_sheet.py (iter 92); rr_selection_analysis.py, sensitivity_analysis.py (iter 93); gen_playbook.py, ml_audit.py, audit_integrity.py (iter 94); ml_cross_session_experiment.py, ml_hybrid_experiment.py, ml_instrument_deep_dive.py (iter 95); ml_per_session_experiment.py, ml_level_proximity_experiment.py, ml_threshold_sweep.py, ml_session_leakage_audit.py, ml_license_diagnostic.py, audit_15m30m.py (iter 96); backtest_1100_early_exit.py, backtest_atr_regime.py, beginner_tradebook.py, find_pf_strategy.py, rank_slots.py (iter 97); parity_check.py, build_outcomes_fast.py, build_mes_outcomes_fast.py, prospective_tracker.py, profile_1000_runners.py (iter 98); m25_nightly.py, m25_audit.py, m25_auto_audit.py, m25_preflight.py, m25_run_grounded_system.py (iter 99)
 - scripts/infra/ — 1 file (iter 72)
 - scripts/migrations/ — 1 file (iter 73)
 - scripts/reports/ — 3 files (iter 87): report_wf_diagnostics.py, parameter_stability_heatmap.py, report_edge_portfolio.py (iter 85)
 - scripts/ root — 2 files (iter 88): run_live_session.py, operator_status.py
-- **Total: 139 files fully scanned**
+- **Total: 144 files fully scanned**
 - See previous audit iterations for per-file detail
 
 ## Next iteration targets
-- `scripts/tools/m25_nightly.py` — M25 nightly runner, production-adjacent
-- `scripts/tools/m25_audit.py` — M25 audit script
-- `scripts/tools/m25_auto_audit.py` — M25 auto audit
-- `scripts/tools/m25_preflight.py` — M25 preflight checks
-- `scripts/tools/m25_run_grounded_system.py` — M25 grounded system runner
+- `scripts/tools/refresh_data.py` — data refresh utility (has uncommitted changes per git status)
+- `scripts/tools/m25_ml_audit.py` — M25 ML-specific audit (if exists)
+- `scripts/tools/codex_review.py` — codex review tooling (if exists)
+- `research/research_zt_event_viability.py` — new research file (untracked per git status)
+- `research/research_zt_cpi_nfp.py` — new research file (untracked per git status)
