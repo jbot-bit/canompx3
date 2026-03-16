@@ -5,6 +5,16 @@
 
 ---
 
+## Iteration 108 — 2026-03-16
+- Phase: fix
+- Classification: [mechanical]
+- Target: research/research_edge_structure.py + research/research_1015_vs_1000.py
+- Finding: ES-01–ES-07: combined 65 ruff violations in edge_structure (37) and 28 in 1015_vs_1000 — F541 extraneous f-strings, F841 unused variables (drop, n, window_mins), B007/B023 loop variable binding in closures (band_stats, bar_stats), E702 semicolon statements, I001 import sort
+- Action: ruff --fix applied 44 auto-fixes in edge_structure + 37 in 1015_vs_1000; manual fixes: removed unused n/window_mins assignments, split 6 E702 semicolons to two-line form, refactored bar_stats() out of loop with explicit params (volumes/highs/lows/closes/opens/m/start_1000), added regime_days param to band_stats(); batched both files (all LOW, same type, 0 callers)
+- Blast radius: 0 callers, 0 importers (standalone research scripts)
+- Verification: ruff check PASS (both files clean), check_drift.py PASS (72/72, 6 advisory), audit_behavioral.py PASS (6/6)
+- Commit: 150618a
+
 ## Iteration 107 — 2026-03-16
 - Phase: fix
 - Classification: [mechanical]
