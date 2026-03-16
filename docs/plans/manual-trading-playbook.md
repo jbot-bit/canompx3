@@ -15,6 +15,17 @@ Rule hygiene:
 - This file separates verified official rules from local modeled conclusions.
 - If a firm doc conflicts with older local notes, underwrite to the stricter interpretation until confirmed.
 
+### Evidence Classes Used In This File
+
+- `OFFICIAL RULE`: directly supported by a current firm help / compliance / pricing page listed in this file
+- `LOCAL MODEL`: conclusion from local sims, backtests, or operational judgment inside this repo
+- `UNRESOLVED`: plausible local belief that is not verified enough to underwrite as fact
+
+Maintenance rule:
+- Never rewrite a `LOCAL MODEL` as if it were an `OFFICIAL RULE`.
+- Never promote an `UNRESOLVED` claim without adding or checking a current source.
+- If a sentence affects account selection, payout expectations, automation legality, or scaling, it must be mentally classified into one of these three buckets before editing.
+
 ### Official Rule Snapshot To Underwrite Right Now
 
 **Apex 50K EOD**
@@ -48,6 +59,103 @@ Rule hygiene:
 - Do not use MFFU as a primary lane in the current plan.
 - Older local notes that framed this as a simple "`$129/month forever`" rejection are not clean enough to keep treating as canonical without a fresh re-check.
 - Current honest position: deprioritized, not chosen, and not fully re-verified in this turn.
+
+---
+
+### Current Local Model Conclusions
+
+These are the operating conclusions from local research and sim work in this repo. They are useful, but they are not firm-policy facts.
+
+- `Apex 50K EOD` is the current base vehicle for the main scaling lane.
+- The current deployed scale pair is:
+  - `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G5`
+  - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_VOL_RV12_N20`
+- `2 micros/account` is the conservative serious sizing on the current model.
+- `Tradeify 50K` is the current best non-Apex secondary lane.
+- `Topstep 50K` is the current morning / MGC alternative, not the main overnight scaling vehicle.
+- `0.75x` stop sizing remains the preferred prop-risk setting in the current local modeling.
+
+If any of these change, update them as `LOCAL MODEL` conclusions, not as firm rules.
+
+---
+
+### Pre-Trade Checklist (Run Before Every Session)
+
+Hard stops. If ANY line fails, do NOT trade that session.
+
+```
+[ ] Account is funded and active (not in eval, not suspended)
+[ ] No open position on this instrument on this account
+[ ] Checked firm's status page — no maintenance, no rule changes
+[ ] Checked economic calendar — no T1 event in next 30min (MFFU only; Apex/TopStep/Tradeify = no restriction)
+[ ] ORB has fully formed (waited full 5m or 15m — no early entries)
+[ ] Filter passes (size >= threshold, CONT/NOMON/FAST10 if applicable)
+[ ] ORB gate passes (MGC on TopStep: ORB <= 26 points)
+[ ] Stop and target calculated BEFORE placing any order
+[ ] Both bracket orders placed (long stop + short stop) OR OCO bracket set
+[ ] Journal entry started (date, session, instrument, ORB size, filter result)
+```
+
+If you skip ANY of these, you are not trading the system. You are gambling.
+
+### Capital Exposure Limits
+
+**Per-account hard limits (enforce in platform risk settings where possible):**
+
+| Limit | Value | Why |
+|-------|-------|-----|
+| Max open positions | 1 per instrument per account | Prevents stacking on same breakout |
+| Max daily loss | $500 per account (Phase 1) | Circuit breaker — stop trading for the day |
+| Max contracts | 1 micro (Phase 1), 2 micro (Phase 2 after proof) | Scale only after gates pass |
+| Max accounts | 1 (Phase 1), 5 then 20 (Phase 2 ramp) | Follow the ramp schedule exactly |
+
+**Portfolio-level hard limits:**
+
+| Limit | Value | Why |
+|-------|-------|-----|
+| Max total open exposure | 3 positions across all accounts | Prevents correlated blowups |
+| Max firm concentration | 80% of accounts on one firm | If Apex changes rules, you don't lose everything |
+| Max daily portfolio loss | $1,000 (Phase 1), scales with ramp | Stop ALL trading for the day |
+
+Set these in each platform's risk settings on day 1. Don't rely on discipline — let the platform enforce them.
+
+### Change Control
+
+This playbook is a living document. But changes must follow a process:
+
+**Who can change what:**
+- **Strategy parameters** (RR, filter, session) → requires sim re-validation at >95% survival before deploying
+- **Firm selection** → requires official rule verification from firm's current support pages
+- **Contract sizing** → requires ramp gate passage (see Phase 2 ramp schedule)
+- **Adding a new session** → requires strategy in `validated_setups` with status `active`, fitness NOT PURGED/DECAY
+
+**Change log format** (append to bottom of this file):
+```
+## Change Log
+| Date | Change | Evidence Class | Verified By |
+|------|--------|---------------|-------------|
+| 2026-03-16 | Initial V3 | LOCAL MODEL + OFFICIAL RULE | Claude + Codex |
+```
+
+**What triggers a mandatory review of this playbook:**
+- Email/notification from any prop firm about rule changes
+- `/regime-check` shows DECAY on any active strategy
+- Any account blown (even if expected — review what happened)
+- Monthly portfolio review (scheduled, not reactive)
+- Any sim re-run showing survival < 95% on current config
+
+### Red Lines — Immediate Full Stop
+
+If ANY of these happen, stop ALL trading immediately. Do not resume until resolved.
+
+1. **Rule violation notice from a prop firm** — you may have misunderstood a rule. Stop, read, clarify with support before placing another trade.
+2. **Two accounts blown in the same week** — possible regime shift or execution error. Run full `/health-check` and `/regime-check`.
+3. **You override a filter** — even once. Stop for the day. Journal why. Recommit to the system.
+4. **Copy trading error** — follower account takes wrong trade, double entry, or missed entry. Stop all followers, debug the copy setup.
+5. **Platform outage during open position** — if you can't manage the trade, flatten everything via phone/mobile app. Don't hope.
+6. **You trade while impaired** (drunk, sleep-deprived, emotional crisis) — close everything. Come back when clear-headed.
+
+These aren't suggestions. They're circuit breakers. The system makes money over time. Any single session is irrelevant. Protecting the system IS the edge.
 
 ---
 
@@ -577,6 +685,7 @@ Prop firms change rules regularly. When this happens:
 3. **If survival drops below 95%** → reduce micros or move to a different firm.
 4. **Update the account grid** above.
 5. **Update this file** if the rules change materially.
+6. **Re-label the edited claim mentally** as `OFFICIAL RULE`, `LOCAL MODEL`, or `UNRESOLVED` before you leave it in the file.
 
 Things that change often:
 - DD amounts and trailing type (Apex changed Mar 1, 2026)
@@ -911,3 +1020,25 @@ Print this. Tape it next to your screen.
 5. **Sleep check:** if Night block is wrecking you, drop it. 4 sessions is plenty.
 6. **Phase 2 readiness:** after 30+ trades with consistent execution, start scaling accounts.
 7. **Payout check:** are you qualifying for Apex payouts? If not, diagnose why.
+
+### Quarterly Deep Review
+
+Every 3 months, do a full system review. This is the "step back and look at everything" check.
+
+1. **Backtest refresh:** Re-run `python scripts/tools/pipeline_status.py --status` to check data freshness. If bars are stale, rebuild.
+2. **Strategy re-validation:** Run `/validate-instrument` on all active instruments. Check for new validated strategies that should be in the grid.
+3. **Firm rules audit:** Visit each firm's official support pages. Check for DD changes, fee changes, account limit changes, instrument eligibility changes. Update the Official Rule Snapshot at the top of this file.
+4. **Sim re-run:** Re-run the survival sim (`scripts/tmp_prop_firm_proper_pass.py`) with current data + current rules. If survival on any active pair drops below 95%, reduce micros or swap strategy.
+5. **Concentration review:** What % of total income comes from the primary pair? The primary firm? If >80% either, plan Tier 2/3 diversification.
+6. **Playbook version bump:** If anything material changed, update the version at the top and add to the change log.
+
+---
+
+## Change Log
+
+| Date | Change | Evidence Class | Verified By |
+|------|--------|---------------|-------------|
+| 2026-03-16 | Initial V3 — consolidated manual + allocation + operating memo | LOCAL MODEL + OFFICIAL RULE | Claude + Codex |
+| 2026-03-16 | Added evidence taxonomy (OFFICIAL RULE / LOCAL MODEL / UNRESOLVED) | PROCESS | Codex |
+| 2026-03-16 | Added operational edge cases, journal, streak protocol, platform setup | LOCAL MODEL | Claude |
+| 2026-03-16 | Added pre-trade checklist, capital limits, red lines, change control | PROCESS | Claude |
