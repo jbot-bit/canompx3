@@ -11,7 +11,6 @@ Usage:
     python scripts/tools/pipeline_status.py  # all active instruments
 """
 
-import shlex
 import subprocess
 import sys
 import time
