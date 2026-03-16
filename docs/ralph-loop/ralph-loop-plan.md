@@ -1,13 +1,14 @@
-## Iteration: 106
-## Target: research/research_zt_event_viability.py:358
-## Finding: Hardcoded variation count "18" in report output — should be computed dynamically from EVENT_FAMILIES structure
+## Iteration: 107
+## Target: research/research_vol_regime_switching.py:192,784
+## Finding: (1) hardcoded IN ('E1','E2') in load_data() SQL; (2) unused datetime import + hardcoded static date in output
 ## Classification: [mechanical]
-## Blast Radius: 1 file, 0 external callers (standalone research script, no importers)
-## Invariants: (1) report structure and analysis logic unchanged; (2) computed count equals 18 with current EVENT_FAMILIES; (3) no changes to EVENT_FAMILIES or any analysis code
-## Diff estimate: 4 lines (1 new compute expression, 1 string line changed)
+## Blast Radius: 1 file, 0 production callers
+## Invariants: (1) SQL filtering logic unchanged — only the IN clause literal replaced with runtime expression; (2) date in output reflects today; (3) no analysis logic changes
+## Diff estimate: 2 lines changed
 
-### ZT-01 (LOW): research_zt_event_viability.py:358
-- Hardcoded `"18"` directional cells in markdown report template
-- Derived from: 3 EVENT_FAMILIES × 3 follow_windows × 2 models = 18
-- If EVENT_FAMILIES structure changes, the report count silently diverges from actual tested count
-- Fix: compute `variation_count` dynamically and use f-string interpolation in report
+### VS-05 (MEDIUM): research_vol_regime_switching.py:192
+- `AND o.entry_model IN ('E1', 'E2')` hardcoded — use ENTRY_MODELS (same fix already applied to get_validated_sessions)
+
+### VS-04 (LOW): research_vol_regime_switching.py:784 + orphan import
+- `datetime` imported but never used; hardcoded date 2026-03-01 in output
+- Fix: use datetime.date.today().isoformat()

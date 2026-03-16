@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 106
+## Last iteration: 107
 
-## RALPH AUDIT — Iteration 106 (fix)
+## RALPH AUDIT — Iteration 107 (fix)
 ## Date: 2026-03-16
 ## Infrastructure Gates: 3/3 PASS
 
@@ -13,37 +13,39 @@
 |------|--------|--------|
 | `check_drift.py` | PASS | 72 checks passed, 0 skipped, 6 advisory |
 | `audit_behavioral.py` | PASS | 6/6 clean |
-| `ruff check` | PASS | Clean (target file) |
+| `ruff check` | PASS | Clean after fixes |
 
 ---
 
 ## Files Audited This Iteration
 
-### research/research_zt_event_viability.py — FIXED (ZT-01)
+### research/research_vol_regime_switching.py — FIXED (VS-01 through VS-05)
 
 Seven Sins scan:
-- Canonical: No gold.db access — reads raw DBN files via `get_asset_config("ZT")["dbn_path"]` ✓
-- `"ZT"` hardcoded throughout: intentional — this is a ZT-specific viability study for a prospective instrument. ZT is not in the active ORB instruments list (MGC/MNQ/MES/M2K). ACCEPTABLE.
-- `_FOMC_DATES_RAW`, `build_cpi_set()`, `is_nfp_day()` from `pipeline.calendar_filters`: canonical source. CLEAN.
-- Silent failure: no bare exception handlers. Script raises `SystemExit` on fatal conditions (empty dir). Returns `None` for missing windows and checks before use. CLEAN.
-- Fail-open: no exception handlers returning success. CLEAN.
-- Look-ahead bias: sequential windows only (pre → shock → follow). No ORB aperture mixing (no gold.db usage). CLEAN.
-- Cost illusion: tick-based economics study, not a P&L backtest. No cost model needed. CLEAN.
-- Orphan risk: all imports used. CLEAN.
-- `usable == True` comparisons (lines 264, 345, 346): flagged `# noqa: E712` intentionally (pandas comparison quirk). CLEAN.
-- **ZT-01 (FIXED, LOW):** Line 358 — hardcoded `"18"` variation count in markdown report template. Count is derived from `len(EVENT_FAMILIES) × len(follow_windows) × 2 models` = 18, but was a static string literal. If EVENT_FAMILIES structure changes, the report would silently diverge from the actual tested count. Fixed by computing `variation_count` dynamically and using f-string interpolation.
+- Canonical: DB path via `GOLD_DB_PATH` from `pipeline.paths`. Instruments via `ACTIVE_ORB_INSTRUMENTS`. Entry models via local `ENTRY_MODELS` (now used in both SQL IN clauses). CLEAN after fix.
+- Silent failure: `except Exception` in `get_validated_sessions()` prints WARNING and falls back to enabled sessions. Not silent. ACCEPTABLE for pre-scan fallback in research context.
+- Fail-open: `except Exception` in kruskal block (line 424) → sets `kw_p = float("nan")` → filtered from kw_valid downstream. Not fail-open — NaN propagated correctly. ACCEPTABLE.
+- Look-ahead bias: `shift(1)` on expanding percentile rank with 60-day warmup. Spot-check verification included. CLEAN.
+- Cost illusion: regime switching study, no P&L backtest against cost model needed. CLEAN.
+- Orphan risk: `import datetime` added in prior interrupted session but date fix was incomplete — both resolved this iteration.
+- Volatile data: hardcoded `2026-03-01` in output — fixed to `datetime.date.today().isoformat()`.
+- **VS-01–VS-04 (FIXED, LOW/MECHANICAL):** 45 ruff violations — import sort (I001), unused `os` import, 4x unused loop control variables (B007), 40x extraneous f-string prefixes (F541). Auto-fixed via `ruff --fix` + manual B007 renames. Applied in prior interrupted session; verified clean this iteration.
+- **VS-05 (FIXED, MEDIUM):** Line 192 in `load_data()` — `AND o.entry_model IN ('E1', 'E2')` hardcoded. Second IN clause not updated when `get_validated_sessions` was fixed. Fixed to use ENTRY_MODELS f-string expansion: `{", ".join(f"'{m}'" for m in ENTRY_MODELS)}`.
+- **VS-04 (FIXED, LOW):** Line 784 — `"**Date:** 2026-03-01\n"` hardcoded. Fixed to `f"**Date:** {datetime.date.today().isoformat()}\n"`, also resolving the unused `datetime` import.
+- **VS-03 (ACCEPTABLE):** Line 424 — bare `except Exception` on `stats.kruskal()`. Sets `kw_p = float("nan")`, filtered downstream. Research script, not fail-open. Matches ACCEPTABLE rule #1 (research context, not production path).
 
 ---
 
 ## Summary
-- 1 target reviewed: research/research_zt_event_viability.py
-- 1 finding fixed (ZT-01: volatile data count in report template)
+- 1 target reviewed: research/research_vol_regime_switching.py
+- 5 findings fixed (VS-01 through VS-05: ruff cleanup, canonical ENTRY_MODELS, dynamic date)
+- 1 finding ACCEPTABLE (VS-03: kruskal except → NaN, research context)
 - Infrastructure Gates: 3/3 PASS
 
 **Codebase steady state maintained for major violation classes:**
 - Hardcoded DB paths: ELIMINATED (0 in production code; research/ now consistent)
 - Hardcoded apertures [5,15,30]: ELIMINATED from production (7th fix applied)
-- Hardcoded entry model IN clauses: ELIMINATED
+- Hardcoded entry model IN clauses: ELIMINATED (research_vol_regime_switching.py both SQL sites now fixed)
 - Hardcoded instrument lists: ELIMINATED (1 acceptable with assertion guard in production; 1 acceptable in read-only diagnostic)
 - SESSION_ORDER coverage: COMPLETE across all scripts (12/12 sessions in all SESSION_ORDER lists)
 
@@ -55,7 +57,7 @@ Seven Sins scan:
 
 ## Files Fully Scanned
 
-> Cumulative list — 160 files fully scanned.
+> Cumulative list — 161 files fully scanned.
 
 - trading_app/ — 44 files (iters 4-61)
 - pipeline/ — 15 files (iters 1-71)
@@ -65,12 +67,12 @@ Seven Sins scan:
 - scripts/migrations/ — 1 file (iter 73)
 - scripts/reports/ — 3 files (iter 87): report_wf_diagnostics.py, parameter_stability_heatmap.py, report_edge_portfolio.py (iter 85)
 - scripts/ root — 2 files (iter 88): run_live_session.py, operator_status.py
-- research/ — 14 files (iters 101-106): research_zt_event_viability.py, research_london_adjacent.py, research_mes_compressed_spring.py (iter 101); research_post_break_pullback.py, research_mgc_asian_fade_mfe.py, research_zt_fomc_unwind.py (iter 102); research_zt_cpi_nfp.py (iter 103); research_mgc_mnq_correlation.py (iter 104); research_atr_velocity_gate.py, research_mgc_regime_shift.py (iter 105); research_zt_event_viability.py (iter 106)
+- research/ — 15 files (iters 101-107): research_zt_event_viability.py, research_london_adjacent.py, research_mes_compressed_spring.py (iter 101); research_post_break_pullback.py, research_mgc_asian_fade_mfe.py, research_zt_fomc_unwind.py (iter 102); research_zt_cpi_nfp.py (iter 103); research_mgc_mnq_correlation.py (iter 104); research_atr_velocity_gate.py, research_mgc_regime_shift.py (iter 105); research_zt_event_viability.py (iter 106); research_vol_regime_switching.py (iter 107)
 - docs/plans/ — 2 files (iter 103): 2026-03-15-zt-stage1-cpi-nfp-spec.md, 2026-03-15-zt-stage1-triage-gate.md
-- **Total: 160 files fully scanned**
+- **Total: 161 files fully scanned**
 - See previous audit iterations for per-file detail
 
 ## Next iteration targets
-- `research/research_vol_regime_switching.py` — highest ruff violation count (45) in non-archive research files; full Seven Sins scan
-- Batch-triage: `research_edge_structure.py` (37 violations), `research_1015_vs_1000.py` (28 violations)
+- `research/research_edge_structure.py` — 37 ruff violations; full Seven Sins scan
+- `research/research_1015_vs_1000.py` — 28 ruff violations; full Seven Sins scan
 - DF-04 remains open but annotated — do not re-investigate unless rolling portfolio is extended to multi-aperture
