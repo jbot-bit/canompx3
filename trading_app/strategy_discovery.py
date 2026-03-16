@@ -30,7 +30,6 @@ from pipeline.dst import (
     classify_dst_verdict,
     is_winter_for_session,
 )
-from pipeline.init_db import ORB_LABELS
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import (
     ENTRY_MODELS,
@@ -1081,11 +1080,10 @@ def run_discovery(
         # Determine which sessions to search
         sessions = get_enabled_sessions(instrument)
         if not sessions:
-            logger.warning(
-                f"No enabled sessions configured for {instrument}; "
-                "falling back to all ORB_LABELS — configure asset_configs.py to narrow scope"
+            raise ValueError(
+                f"get_enabled_sessions returned empty for {instrument} — "
+                f"check pipeline/asset_configs.py enabled_sessions configuration"
             )
-            sessions = ORB_LABELS  # fallback: all sessions
         logger.info(f"Sessions: {len(sessions)} enabled for {instrument}")
 
         # ---- Bulk load phase (all DB reads happen here) ----
