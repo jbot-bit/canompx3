@@ -196,9 +196,7 @@ def main() -> None:
 
     # Sort tier lists by importer count descending
     for tier_name in tiers:
-        tiers[tier_name].sort(
-            key=lambda p: files_output[p]["importers"], reverse=True
-        )
+        tiers[tier_name].sort(key=lambda p: files_output[p]["importers"], reverse=True)
 
     result = {
         "generated": date.today().isoformat(),

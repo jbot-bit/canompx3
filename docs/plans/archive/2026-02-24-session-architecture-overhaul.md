@@ -132,7 +132,7 @@ When a fixed session has a dynamic equivalent (e.g., `0900` and `CME_OPEN`):
   - `edge_families`: old → new
 - Update `daily_features` column names
 - Update all config references
-- Update PROP_PLAYS.md, TRADING_RULES.md
+- Update `PROP_PLAYS.md` (historical at the time; later removed and superseded by `docs/plans/manual-trading-playbook.md`), `TRADING_RULES.md`
 
 **Phase 4 — Clean up**
 - Remove fixed session entries from SESSION_CATALOG

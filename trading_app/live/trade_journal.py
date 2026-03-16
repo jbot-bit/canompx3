@@ -147,9 +147,7 @@ class TradeJournal:
             return
         try:
             # Check entry exists before updating (detect orphaned exits)
-            exists = self._con.execute(
-                "SELECT 1 FROM live_trades WHERE trade_id = ?", [trade_id]
-            ).fetchone()
+            exists = self._con.execute("SELECT 1 FROM live_trades WHERE trade_id = ?", [trade_id]).fetchone()
             if exists is None:
                 log.critical(
                     "TradeJournal.record_exit ORPHANED: trade_id=%s not found — "

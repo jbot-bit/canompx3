@@ -920,7 +920,7 @@ python scripts/tools/build_edge_families.py --instrument M2K
 
 **Files:**
 - Modify: `TRADING_RULES.md` — replace all old session names
-- Modify: `PROP_PLAYS.md` — already updated with event names from earlier
+- Modify: `PROP_PLAYS.md` — historical note only; this file was later removed and superseded by `docs/plans/manual-trading-playbook.md`
 - Modify: `CLAUDE.md` — update session references
 - Modify: `RESEARCH_RULES.md` — if any session names mentioned
 - Modify: `docs/DST_CONTAMINATION.md` — update DST session list
@@ -933,7 +933,7 @@ grep -rn '"0900"\|"1000"\|"1100"\|"1800"\|"2300"\|"0030"' *.md docs/ --include="
 
 Replace each occurrence with the event-based name.
 
-**Step 2: Update PROP_PLAYS.md session references**
+**Step 2: Update PROP_PLAYS.md session references** (`PROP_PLAYS.md` was later retired; keep this as archive context only)
 
 Replace slot names:
 - `MGC_0900` → `MGC_CME_REOPEN`

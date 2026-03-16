@@ -44,9 +44,7 @@ DD_PER_CONTRACT_10X = 1350.0
 INTRADAY_TRAILING_FACTOR = 1.4
 
 
-def _compute_dd_per_contract(
-    stop_multiplier: float, dd_type: str
-) -> float:
+def _compute_dd_per_contract(stop_multiplier: float, dd_type: str) -> float:
     """Estimated median max DD contribution per contract.
 
     Based on Monte Carlo simulation results (see trading_plan_sim.md).
@@ -72,10 +70,14 @@ def _apply_instrument_bans(
     excluded = []
     for s in strategies:
         if s.instrument in banned:
-            excluded.append(ExcludedEntry(
-                s.strategy_id, s.instrument, s.orb_label,
-                f"Instrument banned by firm ({s.instrument})",
-            ))
+            excluded.append(
+                ExcludedEntry(
+                    s.strategy_id,
+                    s.instrument,
+                    s.orb_label,
+                    f"Instrument banned by firm ({s.instrument})",
+                )
+            )
         else:
             kept.append(s)
     return kept, excluded
@@ -94,7 +96,9 @@ def _deduplicate_sessions(
     kept_ids = {s.strategy_id for s in best.values()}
     excluded = [
         ExcludedEntry(
-            s.strategy_id, s.instrument, s.orb_label,
+            s.strategy_id,
+            s.instrument,
+            s.orb_label,
             f"Session conflict: better strategy exists for {s.orb_label} x {s.instrument}",
         )
         for s in strategies
@@ -164,9 +168,7 @@ def select_for_profile(
     all_excluded: list[ExcludedEntry] = []
 
     # 1. Instrument bans
-    candidates, banned_excluded = _apply_instrument_bans(
-        strategies, firm_spec.banned_instruments
-    )
+    candidates, banned_excluded = _apply_instrument_bans(strategies, firm_spec.banned_instruments)
     all_excluded.extend(banned_excluded)
 
     # 2. Deduplicate sessions
@@ -196,26 +198,38 @@ def select_for_profile(
         # DD budget check
         slot_dd = dd_per_slot * contracts
         if dd_used + slot_dd > dd_budget:
-            all_excluded.append(ExcludedEntry(
-                s.strategy_id, s.instrument, s.orb_label,
-                f"DD budget exhausted (${dd_used:.0f} + ${slot_dd:.0f} > ${dd_budget:.0f})",
-            ))
+            all_excluded.append(
+                ExcludedEntry(
+                    s.strategy_id,
+                    s.instrument,
+                    s.orb_label,
+                    f"DD budget exhausted (${dd_used:.0f} + ${slot_dd:.0f} > ${dd_budget:.0f})",
+                )
+            )
             continue
 
         # Contract cap check
         if contracts_used + contracts > contract_budget:
-            all_excluded.append(ExcludedEntry(
-                s.strategy_id, s.instrument, s.orb_label,
-                f"Contract cap reached ({contracts_used}/{contract_budget} micro)",
-            ))
+            all_excluded.append(
+                ExcludedEntry(
+                    s.strategy_id,
+                    s.instrument,
+                    s.orb_label,
+                    f"Contract cap reached ({contracts_used}/{contract_budget} micro)",
+                )
+            )
             continue
 
         # Slot cap check
         if slots_used >= slot_budget:
-            all_excluded.append(ExcludedEntry(
-                s.strategy_id, s.instrument, s.orb_label,
-                f"Cognitive cap reached ({slots_used}/{slot_budget} slots)",
-            ))
+            all_excluded.append(
+                ExcludedEntry(
+                    s.strategy_id,
+                    s.instrument,
+                    s.orb_label,
+                    f"Cognitive cap reached ({slots_used}/{slot_budget} slots)",
+                )
+            )
             continue
 
         # NOTE: consistency_rule (e.g. TopStep 40%) is a PAYOUT gate on realized
@@ -225,31 +239,37 @@ def select_for_profile(
 
         # Minimum effective ExpR check (split kills the edge?)
         if rs.effective_expr < 0.05:
-            all_excluded.append(ExcludedEntry(
-                s.strategy_id, s.instrument, s.orb_label,
-                f"Edge too thin after profit split (eff_ExpR={rs.effective_expr:.3f})",
-            ))
+            all_excluded.append(
+                ExcludedEntry(
+                    s.strategy_id,
+                    s.instrument,
+                    s.orb_label,
+                    f"Edge too thin after profit split (eff_ExpR={rs.effective_expr:.3f})",
+                )
+            )
             continue
 
         # --- ACCEPTED ---
         session_time = _get_session_time_brisbane(s.orb_label)
 
-        entries.append(TradingBookEntry(
-            strategy_id=s.strategy_id,
-            instrument=s.instrument,
-            orb_label=s.orb_label,
-            session_time_brisbane=session_time,
-            entry_model=s.entry_model,
-            rr_target=s.rr_target,
-            confirm_bars=s.confirm_bars,
-            filter_type=s.filter_type,
-            direction="both",  # Resolved at trade time from ORB break direction
-            contracts=contracts,
-            stop_multiplier=profile.stop_multiplier,
-            effective_expr=rs.effective_expr,
-            sharpe_dd_ratio=rs.expr_dd_ratio,
-            dd_contribution=slot_dd,
-        ))
+        entries.append(
+            TradingBookEntry(
+                strategy_id=s.strategy_id,
+                instrument=s.instrument,
+                orb_label=s.orb_label,
+                session_time_brisbane=session_time,
+                entry_model=s.entry_model,
+                rr_target=s.rr_target,
+                confirm_bars=s.confirm_bars,
+                filter_type=s.filter_type,
+                direction="both",  # Resolved at trade time from ORB break direction
+                contracts=contracts,
+                stop_multiplier=profile.stop_multiplier,
+                effective_expr=rs.effective_expr,
+                sharpe_dd_ratio=rs.expr_dd_ratio,
+                dd_contribution=slot_dd,
+            )
+        )
 
         dd_used += slot_dd
         contracts_used += contracts
@@ -333,10 +353,7 @@ def print_trading_book(book: TradingBook, profile: AccountProfile) -> None:
     if book.excluded:
         print(f"\n  EXCLUDED ({len(book.excluded)}):")
         for ex in book.excluded:
-            print(
-                f"    x {ex.strategy_id[:40]:<40} {ex.instrument:<5} "
-                f"{ex.orb_label:<18} -- {ex.reason}"
-            )
+            print(f"    x {ex.strategy_id[:40]:<40} {ex.instrument:<5} {ex.orb_label:<18} -- {ex.reason}")
     print()
 
 
@@ -349,9 +366,7 @@ def main() -> None:
     from trading_app.live_config import build_live_portfolio
     from trading_app.prop_profiles import get_profile
 
-    parser = argparse.ArgumentParser(
-        description="Build prop firm trading books from validated strategies"
-    )
+    parser = argparse.ArgumentParser(description="Build prop firm trading books from validated strategies")
     parser.add_argument(
         "--profile",
         type=str,
@@ -359,9 +374,7 @@ def main() -> None:
         help=f"Profile ID. Available: {', '.join(ACCOUNT_PROFILES.keys())}",
     )
     parser.add_argument("--all", action="store_true", help="Build all active profiles")
-    parser.add_argument(
-        "--summary", action="store_true", help="Cross-account summary"
-    )
+    parser.add_argument("--summary", action="store_true", help="Cross-account summary")
     parser.add_argument("--db-path", type=str, default=None)
     args = parser.parse_args()
 
@@ -413,10 +426,7 @@ def main() -> None:
             print(f"  Sessions: {', '.join(sorted(all_sessions))}")
             total_copies = sum(ACCOUNT_PROFILES[pid].copies for pid in books)
             if total_copies > len(books):
-                print(
-                    f"  Account copies: {total_copies} "
-                    f"(${total_dd * total_copies / len(books):,.0f} aggregate DD)"
-                )
+                print(f"  Account copies: {total_copies} (${total_dd * total_copies / len(books):,.0f} aggregate DD)")
             print()
 
 

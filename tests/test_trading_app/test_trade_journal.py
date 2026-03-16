@@ -86,9 +86,7 @@ class TestRecordEntry:
             broker="tradovate",
             order_id_entry=99999,
         )
-        row = journal._con.execute(
-            "SELECT fill_entry FROM live_trades WHERE trade_id = ?", [tid]
-        ).fetchone()
+        row = journal._con.execute("SELECT fill_entry FROM live_trades WHERE trade_id = ?", [tid]).fetchone()
         assert row[0] is None
 
     def test_signal_only_entry(self, journal):
@@ -103,9 +101,7 @@ class TestRecordEntry:
             entry_model="E1",
             engine_entry=19500.0,
         )
-        row = j._con.execute(
-            "SELECT session_mode FROM live_trades WHERE trade_id = ?", [tid]
-        ).fetchone()
+        row = j._con.execute("SELECT session_mode FROM live_trades WHERE trade_id = ?", [tid]).fetchone()
         assert row[0] == "signal"
         j.close()
 
@@ -124,9 +120,7 @@ class TestUpdateEntryFill:
             fill_entry=None,
         )
         journal.update_entry_fill(trade_id=tid, fill_entry=2950.5)
-        row = journal._con.execute(
-            "SELECT fill_entry FROM live_trades WHERE trade_id = ?", [tid]
-        ).fetchone()
+        row = journal._con.execute("SELECT fill_entry FROM live_trades WHERE trade_id = ?", [tid]).fetchone()
         assert row[0] == pytest.approx(2950.5)
 
 
@@ -179,9 +173,7 @@ class TestRecordExit:
             trade_id=tid,
             exit_reason="kill_switch",
         )
-        row = journal._con.execute(
-            "SELECT exit_reason, actual_r FROM live_trades WHERE trade_id = ?", [tid]
-        ).fetchone()
+        row = journal._con.execute("SELECT exit_reason, actual_r FROM live_trades WHERE trade_id = ?", [tid]).fetchone()
         assert row[0] == "kill_switch"
         assert row[1] is None  # no R computed for emergency flatten
 
@@ -206,9 +198,7 @@ class TestRecordExit:
             slippage_pts=1.2,
             exit_reason="scratch",
         )
-        row = journal._con.execute(
-            "SELECT exit_reason, actual_r FROM live_trades WHERE trade_id = ?", [tid]
-        ).fetchone()
+        row = journal._con.execute("SELECT exit_reason, actual_r FROM live_trades WHERE trade_id = ?", [tid]).fetchone()
         assert row[0] == "scratch"
         assert row[1] == pytest.approx(-0.15)
 

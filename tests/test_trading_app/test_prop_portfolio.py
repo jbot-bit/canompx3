@@ -102,10 +102,7 @@ class TestRankStrategies:
 class TestSelectForProfile:
     def test_dd_budget_exhaustion(self):
         profile = AccountProfile("test", "topstep", 50_000, 1, 0.75, max_slots=10)
-        strats = [
-            _make_strategy(strategy_id=f"s{i}", orb_label=f"SESSION_{i}")
-            for i in range(5)
-        ]
+        strats = [_make_strategy(strategy_id=f"s{i}", orb_label=f"SESSION_{i}") for i in range(5)]
         book = select_for_profile(profile, strats)
         assert book.total_slots == 2
         assert book.total_dd_used <= 2_000
@@ -115,20 +112,14 @@ class TestSelectForProfile:
         # max_slots=3 with 0.75x stop ($935/slot) and $5K budget = DD fits 5 slots
         # so the cognitive cap (3) is the binding constraint, not DD
         profile = AccountProfile("test", "self_funded", 50_000, 1, 0.75, max_slots=3)
-        strats = [
-            _make_strategy(strategy_id=f"s{i}", orb_label=f"SESSION_{i}")
-            for i in range(5)
-        ]
+        strats = [_make_strategy(strategy_id=f"s{i}", orb_label=f"SESSION_{i}") for i in range(5)]
         book = select_for_profile(profile, strats)
         assert book.total_slots == 3
         assert any("cognitive cap" in e.reason.lower() for e in book.excluded)
 
     def test_contract_cap(self):
         profile = AccountProfile("test", "tradeify", 50_000, 1, 0.75, max_slots=10)
-        strats = [
-            _make_strategy(strategy_id=f"s{i}", orb_label=f"SESSION_{i}")
-            for i in range(5)
-        ]
+        strats = [_make_strategy(strategy_id=f"s{i}", orb_label=f"SESSION_{i}") for i in range(5)]
         book = select_for_profile(profile, strats)
         assert book.total_contracts <= 40
 
@@ -140,15 +131,8 @@ class TestSelectForProfile:
 
     def test_consistency_rule(self):
         profile = AccountProfile("test", "topstep", 50_000, 1, 0.75, max_slots=10)
-        dominant = _make_strategy(
-            strategy_id="dominant", orb_label="TOKYO_OPEN", expectancy_r=0.80
-        )
-        weak = [
-            _make_strategy(
-                strategy_id=f"w{i}", orb_label=f"SESSION_{i}", expectancy_r=0.10
-            )
-            for i in range(4)
-        ]
+        dominant = _make_strategy(strategy_id="dominant", orb_label="TOKYO_OPEN", expectancy_r=0.80)
+        weak = [_make_strategy(strategy_id=f"w{i}", orb_label=f"SESSION_{i}", expectancy_r=0.10) for i in range(4)]
         book = select_for_profile(profile, [dominant] + weak)
         assert book.total_slots >= 1
 
@@ -200,19 +184,14 @@ class TestEndToEnd:
         assert book.total_slots > 0
         assert book.total_dd_used <= 2_000
         # TOKYO_OPEN MGC should be deduped to 1
-        tokyo_mgc = [
-            e for e in book.entries
-            if e.orb_label == "TOKYO_OPEN" and e.instrument == "MGC"
-        ]
+        tokyo_mgc = [e for e in book.entries if e.orb_label == "TOKYO_OPEN" and e.instrument == "MGC"]
         assert len(tokyo_mgc) <= 1
         assert len(book.excluded) > 0
 
     def test_apex_blocks_mgc(self):
         pool = [
             _make_strategy(instrument="MGC", strategy_id="mgc1"),
-            _make_strategy(
-                instrument="MNQ", strategy_id="mnq1", orb_label="SINGAPORE_OPEN"
-            ),
+            _make_strategy(instrument="MNQ", strategy_id="mnq1", orb_label="SINGAPORE_OPEN"),
         ]
         profile = AccountProfile("test", "apex", 50_000, 1, 0.75, max_slots=6)
         book = select_for_profile(profile, pool)

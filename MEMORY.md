@@ -13,9 +13,10 @@
 
 ## Prop Firm Decision
 
-- Apex Trader Funding Static 100K ($297/month, $625 hard DD, Tradovate)
-- Phase-in plan: A0 only first -> Gold slots -> full schedule as buffer builds
+- Canonical operating plan: `Apex manual proof -> Tradeify + TopStep scaling -> self-funded IBKR`
+- Apex manual-only ladders found in local sims must stay `LOCAL MODEL` unless `docs/plans/manual-trading-playbook.md` is explicitly rewritten.
 - `docs/plans/manual-trading-playbook.md` is the definitive prop/manual trading playbook
+- Prop docs must explicitly separate `OFFICIAL RULE` vs `LOCAL MODEL` vs `UNRESOLVED` claims. Never let firm-policy facts and local sim conclusions blur together again.
 - Trailing accounts rejected by user. Static wins long-term as buffer compounds.
 
 ## New Validated / Confirmed Signals (2026-02-24)

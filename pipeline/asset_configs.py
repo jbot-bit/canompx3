@@ -304,7 +304,11 @@ DEAD_ORB_INSTRUMENTS = frozenset({"MCL", "SIL", "M6E", "MBT"})
 # Excludes source aliases (ES, NQ) and dead-for-ORB instruments.
 # This is the canonical source — import this instead of hardcoding instrument lists.
 ACTIVE_ORB_INSTRUMENTS = sorted(
-    [k for k, v in ASSET_CONFIGS.items() if v["symbol"] == k and v.get("orb_active", True) and k not in DEAD_ORB_INSTRUMENTS]
+    [
+        k
+        for k, v in ASSET_CONFIGS.items()
+        if v["symbol"] == k and v.get("orb_active", True) and k not in DEAD_ORB_INSTRUMENTS
+    ]
 )
 
 
