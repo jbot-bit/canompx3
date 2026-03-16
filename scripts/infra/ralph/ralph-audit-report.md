@@ -22,7 +22,7 @@ Commit count at time of audit: 119 (branch: main)
 
 ### WORTH-EXPLORING Queue (improvements, not bugs)
 
-1. **brisbane_1025_brisbane naming** — awkward function name in dst.py:315. Cosmetic rename.
+1. ~~**brisbane_1025_brisbane naming** — awkward function name in dst.py:315. Cosmetic rename.~~ **DONE 2026-03-16** — renamed to `fixed_1025_brisbane` (aligns with resolver convention and docstring; zero behavioral change).
 2. **5m bars dry-run: use `time_bucket()`** — consistency improvement vs `EPOCH/300`.
 3. ~~**Threshold sweep documentation** — document ~36-value sweep multiple-testing trade-off in meta_label.py docstring.~~ **DONE 2026-03-16** — added Multiple-testing note to `_optimize_threshold_profit` docstring.
 4. **Feature drift detection expansion** — extend from top-10 to top-20 MDI features for broader drift coverage.

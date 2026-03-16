@@ -331,7 +331,7 @@ def nyse_close_brisbane(trading_day: date) -> tuple[int, int]:
     return (bris.hour, bris.minute)
 
 
-def brisbane_1025_brisbane(trading_day: date) -> tuple[int, int]:
+def fixed_1025_brisbane(trading_day: date) -> tuple[int, int]:
     """Fixed 10:25 AM Brisbane session. No market event anchor.
 
     Session discovery scan (2026-03-01): FDR survivor for MNQ.
@@ -421,7 +421,7 @@ SESSION_CATALOG = {
     },
     "BRISBANE_1025": {
         "type": "dynamic",
-        "resolver": brisbane_1025_brisbane,
+        "resolver": fixed_1025_brisbane,
         "break_group": "asia",
         "event": "Fixed 10:25 AM Brisbane (not event-relative)",
     },

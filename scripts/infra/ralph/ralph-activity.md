@@ -100,6 +100,19 @@ CG-1 through CG-4 found **0 TRUE findings requiring action**.
 - Drift check: 53/53 passed, 5 advisory
 - REPO_MAP: regenerated, current (minor delta: +8 ralph files)
 
+## 2026-03-16 — WORTH-EXPLORING #1: brisbane_1025_brisbane rename
+
+**What:** Renamed `brisbane_1025_brisbane` → `fixed_1025_brisbane` in `pipeline/dst.py`.
+All other resolver functions follow `<event>_brisbane` naming convention. The old name had "brisbane" on both sides — redundant and inconsistent. New name aligns with the docstring ("Fixed 10:25 AM Brisbane session") and makes the no-anchor nature explicit.
+
+**Blast radius:** 2 files — `pipeline/dst.py` (definition + SESSION_CATALOG) and `tests/test_pipeline/test_dst.py` (import + 4 call sites). Zero behavioral change — pure cosmetic rename.
+
+**Verification:** ruff PASS (import sort auto-fixed), drift 72/72 PASS, 91/91 DST tests PASS.
+
+**Files modified:** pipeline/dst.py, tests/test_pipeline/test_dst.py, scripts/infra/ralph/ralph-audit-report.md, scripts/infra/ralph/ralph-activity.md
+
+---
+
 ## 2026-03-16 — WORTH-EXPLORING #3: Threshold sweep documentation
 
 **What:** Added Multiple-testing note to `_optimize_threshold_profit` docstring in `trading_app/ml/meta_label.py`.
