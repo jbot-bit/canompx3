@@ -1007,3 +1007,13 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 1 file, 0 external callers
 - Verification: ruff PASS, check_drift 72/72 PASS
 - Commit: 8f2c05b
+
+## Iteration 104 — 2026-03-16
+- Phase: fix
+- Classification: [mechanical]
+- Target: research/research_mgc_mnq_correlation.py:158,309,433
+- Finding: RC-01 (F541) — extraneous f-prefix on string with no placeholders (line 158). RC-02 (B905) — zip() without strict= in two BH FDR result-merging loops (lines 309, 433).
+- Action: Removed f-prefix from line 158 print string; added strict=False to both zip() calls (bh_fdr always returns same-length list as input, so strict=False is correct)
+- Blast radius: 1 file, 0 external callers (standalone research script)
+- Verification: ruff PASS, check_drift 72/72 PASS
+- Commit: 06436e6

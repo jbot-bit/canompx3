@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 103
+## Last iteration: 104
 
-## RALPH AUDIT — Iteration 103 (fix)
+## RALPH AUDIT — Iteration 104 (fix)
 ## Date: 2026-03-16
 ## Infrastructure Gates: 3/3 PASS
 
@@ -13,55 +13,33 @@
 |------|--------|--------|
 | `check_drift.py` | PASS | 72 checks passed, 0 skipped, 6 advisory |
 | `audit_behavioral.py` | PASS | 6/6 clean |
-| `ruff check` | PASS | Clean |
+| `ruff check` | PASS | Clean (target file) |
 
 ---
 
 ## Files Audited This Iteration
 
-### research/research_zt_cpi_nfp.py — FIXED (RZ-01)
+### research/research_mgc_mnq_correlation.py — FIXED (RC-01, RC-02)
 
 Seven Sins scan:
-- Canonical: `get_asset_config("ZT")` for dbn_path, `build_cpi_set`/`is_nfp_day` from `pipeline.calendar_filters` — CANONICAL ✓
-- `"ZT"` hardcoded as instrument string: intentional single-instrument research script. ACCEPTABLE.
-- Fail-closed: `raise SystemExit` on missing DBN directory ✓
-- Silent failure: explicit exclusion tracking per event (`missing_daily_file`, `empty_day`, `missing_window_data`, `zero_shock`). CLEAN.
-- Fail-open: no exception handlers that return success. CLEAN.
-- Look-ahead bias: not applicable — event study, not ORB strategy. CLEAN.
-- Cost illusion: friction sanity uses inferred tick size heuristic (avg_ticks > 2.0). Spec explicitly documents this is not a full cost model. ACCEPTABLE.
-- Volatile data: no hardcoded counts. CLEAN.
-- **Ruff B905 (FIXED):** `zip(uniq, uniq[1:])` without `strict=` in `infer_tick_size`. Lists are deliberately unequal length (consecutive-diff pattern). Added `strict=False` to make intent explicit.
+- Canonical: DB path uses `GOLD_DB_PATH` from `pipeline.paths` ✓
+- `SHARED_SESSIONS` hardcoded list (8 sessions): intentional research scope — this script studies cross-instrument concordance for these two specific instruments (MGC/MNQ) only. ACCEPTABLE.
+- `WHERE symbol IN ('MGC', 'MNQ')`: intentional single-pair research scope. ACCEPTABLE.
+- `orb_minutes = 5` hardcoded in queries: single-aperture research design (fair cross-instrument comparison). Documented in docstring. ACCEPTABLE.
+- Silent failure: no bare exception handlers. Functions return empty/skip on insufficient data, explicitly logged. CLEAN.
+- Fail-open: no exception handlers returning success. `con.close()` in finally block. CLEAN.
+- Look-ahead bias: N/A — research analysis script, not a strategy. No future data as predictor. CLEAN.
+- Cost illusion: N/A — uses pre-computed `pnl_r` from `orb_outcomes`. CLEAN.
+- Volatile data: no hardcoded counts. Dynamic. CLEAN.
+- **F541 (FIXED, RC-01):** `print(f"  Interpretation: ", end="")` at line 158 — f-string without any placeholders. Removed extraneous `f` prefix.
+- **B905 x2 (FIXED, RC-02):** `zip(valid, p_adj)` and `zip(results, p_adj)` at lines 309, 433 without `strict=`. Both cases: `p_adj = bh_fdr(p_vals)` where `p_vals` is built from the same list — always equal length. Added `strict=False` to make intent explicit.
 
-**Finding RZ-01 (FIXED):** zip() without strict= in infer_tick_size. Mechanical. 1-line fix.
-
-### docs/plans/2026-03-15-zt-stage1-cpi-nfp-spec.md — CLEAN (doc review)
-
-- Pure planning/research document. No production code. No canonical violations.
-- One markdown hyperlink uses an absolute path (`/mnt/c/users/joshd/...`) — cosmetic doc artifact, no code impact.
-- No findings.
-
-### docs/plans/2026-03-15-zt-stage1-triage-gate.md — CLEAN (doc review)
-
-- Pure planning/research document. No production code. No canonical violations.
-- Contains example bash commands with `find`/`sed` — doc examples only, no impact.
-- No findings.
-
-### research_fomc_unwind.py — DOES NOT EXIST
-
-Target from previous iteration. File not present in repo. Skipped.
-
-### DF-04 Re-evaluation: rolling_portfolio.py:304
-
-`compute_day_of_week_stats` at line 315-326 hardcodes `orb_minutes=5` in `daily_features` query.
-- TODO annotation already present and accurate: "When rolling evaluation is extended to 15m/30m ORBs, this must load per family's actual orb_minutes"
-- `FamilyResult.orb_label` is a session name, not an aperture minutes value — fix requires architectural decision on how to map session families to their aperture minutes
-- Caller: only internal to `rolling_portfolio.py` (line 591), 0 external callers
-- Current rolling evaluation only uses 5m families — genuinely dormant
-- **REMAINS DEFERRED.** TODO annotation is accurate. Fix requires semantic design work beyond a mechanical change.
+**Finding RC-01 (FIXED):** F541 — extraneous f-prefix on print string. Mechanical. 1-line fix.
+**Finding RC-02 (FIXED):** B905 x2 — zip without strict= in BH FDR result-merge loops. Mechanical. 2-line fix.
 
 ---
 
-## Deferred Findings — Status After Iter 103
+## Deferred Findings — Status After Iter 104
 
 ### STILL DEFERRED (carried forward)
 - **DF-04** — `rolling_portfolio.py:304` dormant `orb_minutes=5` in rolling DOW stats — annotated TODO, fix requires design work on orb_label→aperture mapping
@@ -69,9 +47,8 @@ Target from previous iteration. File not present in repo. Skipped.
 ---
 
 ## Summary
-- 4 targets reviewed: research_zt_cpi_nfp.py (fixed), 2 spec docs (clean), DF-04 re-evaluation (still deferred)
-- 1 finding fixed (RZ-01: zip strict=False)
-- research_fomc_unwind.py: does not exist
+- 1 target reviewed: research_mgc_mnq_correlation.py (3 ruff violations fixed)
+- 2 findings fixed (RC-01: F541 f-string; RC-02: B905 zip strict=False x2)
 - Infrastructure Gates: 3/3 PASS
 
 **Codebase steady state maintained for major violation classes:**
@@ -89,7 +66,7 @@ Target from previous iteration. File not present in repo. Skipped.
 
 ## Files Fully Scanned
 
-> Cumulative list — 156 files fully scanned.
+> Cumulative list — 157 files fully scanned.
 
 - trading_app/ — 44 files (iters 4-61)
 - pipeline/ — 15 files (iters 1-71)
@@ -99,12 +76,13 @@ Target from previous iteration. File not present in repo. Skipped.
 - scripts/migrations/ — 1 file (iter 73)
 - scripts/reports/ — 3 files (iter 87): report_wf_diagnostics.py, parameter_stability_heatmap.py, report_edge_portfolio.py (iter 85)
 - scripts/ root — 2 files (iter 88): run_live_session.py, operator_status.py
-- research/ — 10 files (iters 101-103): research_zt_event_viability.py, research_london_adjacent.py, research_mes_compressed_spring.py (iter 101); research_post_break_pullback.py, research_mgc_asian_fade_mfe.py, research_zt_fomc_unwind.py (iter 102); research_zt_cpi_nfp.py (iter 103)
+- research/ — 11 files (iters 101-104): research_zt_event_viability.py, research_london_adjacent.py, research_mes_compressed_spring.py (iter 101); research_post_break_pullback.py, research_mgc_asian_fade_mfe.py, research_zt_fomc_unwind.py (iter 102); research_zt_cpi_nfp.py (iter 103); research_mgc_mnq_correlation.py (iter 104)
 - docs/plans/ — 2 files (iter 103): 2026-03-15-zt-stage1-cpi-nfp-spec.md, 2026-03-15-zt-stage1-triage-gate.md
-- **Total: 156 files fully scanned**
+- **Total: 157 files fully scanned**
 - See previous audit iterations for per-file detail
 
 ## Next iteration targets
-- `research/research_mgc_mnq_correlation.py` — unscanned, recent MGC/MNQ correlation work (520 lines)
-- Any remaining unscanned research/ files — run `ruff check research/` to triage batch
+- `research/research_atr_velocity_gate.py` — unscanned (run `ruff check` to triage first)
+- `research/research_mgc_regime_shift.py` — unscanned
+- Batch-triage remaining unscanned research/ files with `ruff check research/` to prioritize by violation count
 - DF-04 remains open but annotated — do not re-investigate unless rolling portfolio is extended to multi-aperture
