@@ -432,7 +432,9 @@ def run_rebuild(
         print(f"    CMD: {step_cmd}")
         step_start = time.monotonic()
         try:
-            result = subprocess.run(shlex.split(step_cmd), cwd=str(PROJECT_ROOT), timeout=3600)
+            # Use shell=False with list args. shlex.split mangles Windows backslashes
+            # in sys.executable paths, so split manually on spaces instead.
+            result = subprocess.run(step_cmd.split(), cwd=str(PROJECT_ROOT), timeout=3600)
         except TimeoutExpired:
             print("    TIMED OUT (>3600s)")
             duration = time.monotonic() - step_start
