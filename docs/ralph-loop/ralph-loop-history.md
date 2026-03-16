@@ -5,6 +5,18 @@
 
 ---
 
+## Iteration 106 — 2026-03-16
+- Phase: fix
+- Classification: [mechanical]
+- Target: research/research_zt_event_viability.py:358
+- Finding: Hardcoded variation count "18" in report template — should be computed dynamically from EVENT_FAMILIES structure
+- Action: Added `variation_count = sum(len(family.follow_windows) * 2 for family in EVENT_FAMILIES.values())` and used f-string interpolation in report line
+- Blast radius: 1 file (standalone research script, zero importers)
+- Verification: PASS (72 drift checks, ruff clean)
+- Commit: 18de696
+
+---
+
 ## Iteration 102 — 2026-03-16
 - Phase: fix
 - Classification: [mechanical]
