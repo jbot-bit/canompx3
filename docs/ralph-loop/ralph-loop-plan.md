@@ -1,14 +1,7 @@
-## Iteration: 107
-## Target: research/research_vol_regime_switching.py:192,784
-## Finding: (1) hardcoded IN ('E1','E2') in load_data() SQL; (2) unused datetime import + hardcoded static date in output
+## Iteration: 108
+## Target: research/research_edge_structure.py + research/research_1015_vs_1000.py
+## Finding: Ruff violations — F541 (extraneous f-strings), F841 (unused variables), B007/B023 (loop var binding), E702 (semicolon stmts), I001 (import sort)
 ## Classification: [mechanical]
-## Blast Radius: 1 file, 0 production callers
-## Invariants: (1) SQL filtering logic unchanged — only the IN clause literal replaced with runtime expression; (2) date in output reflects today; (3) no analysis logic changes
-## Diff estimate: 2 lines changed
-
-### VS-05 (MEDIUM): research_vol_regime_switching.py:192
-- `AND o.entry_model IN ('E1', 'E2')` hardcoded — use ENTRY_MODELS (same fix already applied to get_validated_sessions)
-
-### VS-04 (LOW): research_vol_regime_switching.py:784 + orphan import
-- `datetime` imported but never used; hardcoded date 2026-03-01 in output
-- Fix: use datetime.date.today().isoformat()
+## Blast Radius: 0 callers, 0 importers (standalone research scripts, no tests)
+## Invariants: [1] No behavior change — output identical; [2] DB path resolution unchanged; [3] All logic paths preserved
+## Diff estimate: ~50 lines across two research scripts (non-production)
