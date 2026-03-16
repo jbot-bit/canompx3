@@ -47,8 +47,8 @@ OUTPUT:
     - research/output/vol_regime_switching_results.csv
 """
 
+import datetime
 import sys
-import os
 from pathlib import Path
 
 # Windows line buffering + encoding
@@ -103,7 +103,7 @@ def bh_fdr(p_values, q=0.05):
             max_k = k
     rejected = set()
     if max_k >= 0:
-        for k, (idx, _) in enumerate(ranked[:max_k + 1]):
+        for _k, (idx, _) in enumerate(ranked[:max_k + 1]):
             rejected.add(idx)
     return rejected
 
@@ -137,7 +137,7 @@ def get_validated_sessions(con):
         rows = con.execute("""
             SELECT DISTINCT instrument, orb_label
             FROM validated_setups
-            WHERE entry_model IN ('E1', 'E2')
+            WHERE entry_model IN ({", ".join(f"'{m}'" for m in ENTRY_MODELS)})
         """).fetchall()
     except Exception:
         # Table might not exist; fall back to enabled sessions
@@ -189,7 +189,7 @@ def load_data(con, instrument, session):
       AND d.{size_col} IS NOT NULL
       AND o.orb_label = '{session}'
       AND o.confirm_bars = {CB}
-      AND o.entry_model IN ('E1', 'E2')
+      AND o.entry_model IN ({", ".join(f"'{m}'" for m in ENTRY_MODELS)})
       AND o.pnl_r IS NOT NULL
       AND o.outcome IN ('win', 'loss')
     ORDER BY d.trading_day
@@ -293,7 +293,7 @@ def run():
     # Pre-scan validated sessions
     validated = get_validated_sessions(con)
     print(f"\nInstruments: {ACTIVE_ORB_INSTRUMENTS}")
-    print(f"Validated sessions per instrument:")
+    print("Validated sessions per instrument:")
     for inst, sessions in sorted(validated.items()):
         print(f"  {inst}: {sessions}")
 
@@ -308,9 +308,9 @@ def run():
 
     report(f"\nParameter grid: RR={RR_TARGETS}, Filters={list(FILTER_THRESHOLDS.keys())}, "
            f"Entry={ENTRY_MODELS}, CB={CB}")
-    report(f"BH FDR q=0.05 (stricter due to high comparison count)")
-    report(f"Vol regime: expanding-window ATR percentile rank, terciles (LOW/MID/HIGH)")
-    report(f"Warmup: 60 days minimum per instrument")
+    report("BH FDR q=0.05 (stricter due to high comparison count)")
+    report("Vol regime: expanding-window ATR percentile rank, terciles (LOW/MID/HIGH)")
+    report("Warmup: 60 days minimum per instrument")
 
     combos_tested = 0
     combos_skipped_n = 0
@@ -496,7 +496,7 @@ def run():
 
                 # Check if regimes picked different parameters
                 regime_params = set()
-                for regime, bp in best_per_regime.items():
+                for _regime, bp in best_per_regime.items():
                     if bp["rr"] is not None:
                         regime_params.add((bp["rr"], bp["filter"]))
 
@@ -574,7 +574,7 @@ def run():
 
     # -- BH FDR on per-regime t-tests --------------------------------------
     report(f"\n{'=' * 78}")
-    report(f"RESULTS SUMMARY")
+    report("RESULTS SUMMARY")
     report(f"{'=' * 78}")
     report(f"\nCombos tested: {combos_tested}")
     report(f"Combos skipped (N<30): {combos_skipped_n}")
@@ -589,27 +589,27 @@ def run():
     report(f"BH FDR survivors (q=0.05): {len(rejected)}")
 
     # Mark survivors
-    for local_i, (orig_i, r) in enumerate(valid_records):
+    for local_i, (orig_i, _r) in enumerate(valid_records):
         all_records[orig_i]["bh_survives"] = local_i in rejected
 
     # Show BH survivors
     if rejected:
-        report(f"\n  BH FDR SURVIVORS (per-regime t-test vs zero):")
+        report("\n  BH FDR SURVIVORS (per-regime t-test vs zero):")
         report(f"  {'Combo':<45} {'Regime':<6} {'N':>5} {'avgR':>7} {'WR':>6} "
                f"{'Sharpe':>7} {'p':>8}")
         report(f"  {'-' * 90}")
         survivors_list = [(local_i, valid_records[local_i]) for local_i in sorted(rejected)]
         survivors_list.sort(key=lambda x: x[1][1]["p_value"])
-        for local_i, (orig_i, r) in survivors_list:
+        for _local_i, (_orig_i, r) in survivors_list:
             report(f"  {r['combo_label']:<45} {r['regime']:<6} "
                    f"{r['n']:>5} {r['avg_r']:>+7.3f} {r['wr']:>6.1%} "
                    f"{r['sharpe']:>7.2f} {r['p_value']:>8.4f}")
     else:
-        report(f"\n  NO BH FDR survivors at q=0.05")
+        report("\n  NO BH FDR survivors at q=0.05")
 
     # -- Kruskal-Wallis results --------------------------------------------
     report(f"\n{'-' * 78}")
-    report(f"KRUSKAL-WALLIS: Do regimes differ for the same parameter set?")
+    report("KRUSKAL-WALLIS: Do regimes differ for the same parameter set?")
     report(f"{'-' * 78}")
 
     kw_valid = [r for r in kw_records if not np.isnan(r["kw_p"])]
@@ -631,12 +631,12 @@ def run():
             report(f"  {r['combo_label']:<45} {r['kw_p']:>8.4f} "
                    f"{low_s:>10} {mid_s:>10} {high_s:>10}")
     else:
-        report(f"\n  NO regime differences survive BH FDR at q=0.05")
-        report(f"  Regimes do NOT significantly differ for any tested parameter set.")
+        report("\n  NO regime differences survive BH FDR at q=0.05")
+        report("  Regimes do NOT significantly differ for any tested parameter set.")
 
     # -- Best parameter per regime (do they differ?) -----------------------
     report(f"\n{'-' * 78}")
-    report(f"ADAPTIVE vs STATIC: Does regime-switching improve performance?")
+    report("ADAPTIVE vs STATIC: Does regime-switching improve performance?")
     report(f"{'-' * 78}")
 
     for ar in adaptive_records:
@@ -667,12 +667,12 @@ def run():
             report(f"    {r['instrument']} {r['session']} {r['entry_model']}: "
                    f"delta={r['delta_avg_r']:+.4f}, p={r['paired_p']:.4f}")
     else:
-        report(f"  Regime-adaptive switching does NOT significantly improve over best static params.")
+        report("  Regime-adaptive switching does NOT significantly improve over best static params.")
 
     # -- Year-by-year stability for per-regime BH survivors ----------------
     if rejected:
         report(f"\n{'-' * 78}")
-        report(f"YEAR-BY-YEAR STABILITY: BH survivors")
+        report("YEAR-BY-YEAR STABILITY: BH survivors")
         report(f"{'-' * 78}")
 
         con = duckdb.connect(DB_PATH, read_only=True)
@@ -723,7 +723,7 @@ def run():
 
     # -- Honest summary ----------------------------------------------------
     report(f"\n{'=' * 78}")
-    report(f"HONEST SUMMARY")
+    report("HONEST SUMMARY")
     report(f"{'=' * 78}")
 
     n_regime_ttest_survivors = len(rejected)
@@ -731,44 +731,44 @@ def run():
     n_adapt_survivors = len(adapt_rejected)
 
     if n_regime_ttest_survivors == 0 and n_kw_survivors == 0 and n_adapt_survivors == 0:
-        report(f"\nVERDICT: NO-GO")
-        report(f"  Volatility regime-dependent parameter switching does NOT produce")
-        report(f"  statistically significant improvements over static parameters.")
-        report(f"  The existing binary ATR contraction AVOID signal is sufficient.")
-        report(f"")
-        report(f"  Key findings:")
+        report("\nVERDICT: NO-GO")
+        report("  Volatility regime-dependent parameter switching does NOT produce")
+        report("  statistically significant improvements over static parameters.")
+        report("  The existing binary ATR contraction AVOID signal is sufficient.")
+        report("")
+        report("  Key findings:")
         report(f"  - Per-regime t-tests: 0/{len(valid_records)} survive BH FDR at q=0.05")
         report(f"  - Kruskal-Wallis: 0/{len(kw_valid)} regime differences survive BH FDR")
         report(f"  - Adaptive vs static: 0/{len(adapt_valid)} paired tests survive BH FDR")
     elif n_adapt_survivors == 0:
-        report(f"\nVERDICT: STATISTICAL OBSERVATION (not actionable)")
-        report(f"  Some per-regime differences exist but adaptive switching does NOT")
-        report(f"  produce significant improvement over static best parameters.")
-        report(f"  The existing binary ATR contraction AVOID signal remains sufficient.")
-        report(f"")
+        report("\nVERDICT: STATISTICAL OBSERVATION (not actionable)")
+        report("  Some per-regime differences exist but adaptive switching does NOT")
+        report("  produce significant improvement over static best parameters.")
+        report("  The existing binary ATR contraction AVOID signal remains sufficient.")
+        report("")
         report(f"  Per-regime BH survivors: {n_regime_ttest_survivors}")
         report(f"  KW regime differences: {n_kw_survivors}")
-        report(f"  Adaptive improvement: 0 (NOT significant)")
+        report("  Adaptive improvement: 0 (NOT significant)")
     else:
-        report(f"\nVERDICT: PROMISING HYPOTHESIS (requires OOS validation)")
-        report(f"  Regime-adaptive parameter switching shows significant improvement.")
-        report(f"  HOWEVER: this is in-sample only. OOS validation required before live use.")
-        report(f"")
+        report("\nVERDICT: PROMISING HYPOTHESIS (requires OOS validation)")
+        report("  Regime-adaptive parameter switching shows significant improvement.")
+        report("  HOWEVER: this is in-sample only. OOS validation required before live use.")
+        report("")
         report(f"  Per-regime BH survivors: {n_regime_ttest_survivors}")
         report(f"  KW regime differences: {n_kw_survivors}")
         report(f"  Adaptive improvement: {n_adapt_survivors} significant")
 
-    report(f"\nMANDATORY DISCLOSURES:")
+    report("\nMANDATORY DISCLOSURES:")
     report(f"  Instruments: {ACTIVE_ORB_INSTRUMENTS}")
     report(f"  Parameter grid: RR={RR_TARGETS}, Filters={list(FILTER_THRESHOLDS.keys())}, "
            f"Entry={ENTRY_MODELS}, CB={CB}")
     report(f"  Total effective tests: {len(valid_records)} (per-regime) + {len(kw_valid)} (KW) "
            f"+ {len(adapt_valid)} (adaptive)")
-    report(f"  BH FDR: q=0.05")
-    report(f"  Vol regime: expanding-window percentile rank on atr_20, shift(1), 60-day warmup")
-    report(f"  IS/OOS: In-sample only -- NO holdout OOS performed")
-    report(f"  What kills it: MGC regime shift (gold tripled), MNQ only ~2 years, "
-           f"regime proxy for ORB size")
+    report("  BH FDR: q=0.05")
+    report("  Vol regime: expanding-window percentile rank on atr_20, shift(1), 60-day warmup")
+    report("  IS/OOS: In-sample only -- NO holdout OOS performed")
+    report("  What kills it: MGC regime shift (gold tripled), MNQ only ~2 years, "
+           "regime proxy for ORB size")
 
     # -- Save outputs ------------------------------------------------------
     # CSV of all per-regime results
@@ -781,12 +781,12 @@ def run():
     md_path = OUTPUT_DIR / "vol_regime_switching_summary.md"
     with open(md_path, "w") as f:
         f.write("# Volatility Regime-Dependent Parameter Switching\n\n")
-        f.write(f"**Date:** 2026-03-01\n")
-        f.write(f"**Script:** `research/research_vol_regime_switching.py`\n\n")
+        f.write(f"**Date:** {datetime.date.today().isoformat()}\n")
+        f.write("**Script:** `research/research_vol_regime_switching.py`\n\n")
         for line in report_lines:
             f.write(line + "\n")
     report(f"Summary MD: {md_path}")
-    report(f"\nDone.")
+    report("\nDone.")
 
 
 if __name__ == "__main__":
