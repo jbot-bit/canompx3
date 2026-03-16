@@ -770,7 +770,7 @@ def compute_portfolio_fitness(
         for p in all_params:
             try:
                 filt = ALL_FILTERS.get(p["filter_type"])
-                if isinstance(filt, (VolumeFilter, CrossAssetATRFilter)):
+                if isinstance(filt, VolumeFilter | CrossAssetATRFilter):
                     # VolumeFilter needs bars_1m enrichment, CrossAssetATRFilter needs
                     # source instrument ATR — both use per-strategy path
                     score = _compute_fitness_with_con(con, p["strategy_id"], as_of_date, rolling_months)
