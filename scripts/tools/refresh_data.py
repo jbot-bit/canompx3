@@ -37,6 +37,8 @@ DOWNLOAD_SYMBOLS: dict[str, str] = {
     "MNQ": "MNQ",  # Native micro Nasdaq (post-2024)
     "MES": "MES",  # Native micro S&P (post-2024)
     "M2K": "RTY",  # Full-size Russell -> stored as M2K
+    "2YY": "2YY",  # Native 2-Year Yield futures (research-only)
+    "ZT": "ZT",  # Native 2-Year Treasury Note futures (research-only)
 }
 
 DATASET = "GLBX.MDP3"
@@ -164,6 +166,28 @@ def run_build_steps(instrument: str, start: date, end: date) -> bool:
     return True
 
 
+def run_research_build_steps(instrument: str, start: date, end: date) -> bool:
+    """Build only the bars needed for research-only instruments."""
+    start_str, end_str = str(start), str(end)
+
+    print(f"  Building 5m bars {start} to {end} ...")
+    cmd = [
+        sys.executable,
+        "pipeline/build_bars_5m.py",
+        "--instrument",
+        instrument,
+        "--start",
+        start_str,
+        "--end",
+        end_str,
+    ]
+    if not _run(cmd, "build_bars_5m"):
+        return False
+
+    print(f"    Research bars complete for {instrument} (daily_features skipped)")
+    return True
+
+
 def refresh_instrument(instrument: str, dry_run: bool = False) -> bool:
     """Full refresh for one instrument: download -> ingest -> build."""
     print(f"\n{'=' * 60}")
@@ -199,8 +223,15 @@ def refresh_instrument(instrument: str, dry_run: bool = False) -> bool:
     if not run_ingest(instrument):
         return False
 
-    # Step 3: Build 5m bars + daily features (all apertures)
-    if not run_build_steps(instrument, fetch_start, today):
+    cfg = ASSET_CONFIGS[instrument]
+
+    # Step 3: Build downstream artifacts
+    if cfg.get("orb_active", True):
+        ok = run_build_steps(instrument, fetch_start, today)
+    else:
+        ok = run_research_build_steps(instrument, fetch_start, today)
+
+    if not ok:
         return False
 
     print(f"  DONE: {instrument} refreshed to {today}")
