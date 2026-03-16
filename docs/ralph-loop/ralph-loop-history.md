@@ -5,6 +5,30 @@
 
 ---
 
+## Iteration 120 — 2026-03-16
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/db_manager.py:verify_trading_app_schema (lines 602-644)
+- Finding: verify_trading_app_schema expected_cols for experimental_strategies missing 9 migration-added columns (p_value, sharpe_ann_adj, autocorr_lag1, n_trials_at_discovery, fst_hurdle, median_risk_dollars, avg_risk_dollars, avg_win_dollars, avg_loss_dollars) — schema verification gate silently passes DBs missing production columns
+- Action: Added 9 missing columns to experimental_strategies expected_cols verification set (11 lines inserted)
+- Blast radius: 3 files (test_db_manager.py, test_app_sync.py, db_manager.py CLI)
+- Verification: PASS (11 db_manager tests pass; pre-existing app_sync failure unrelated to change confirmed by stash test)
+- Commit: 360ec68
+
+---
+
+## Iteration 119 — 2026-03-16
+- Phase: audit-only
+- Classification: audit-only
+- Target: trading_app/live_config.py
+- Finding: No actionable findings — file clean (4 ACCEPTABLE patterns documented)
+- Action: Scan only; no fix applied
+- Blast radius: N/A
+- Verification: PASS (36 tests pass)
+- Commit: NONE
+
+---
+
 ## Iteration 118 — 2026-03-16
 - Phase: fix
 - Classification: [mechanical]
