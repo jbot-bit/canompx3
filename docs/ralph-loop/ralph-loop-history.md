@@ -5,6 +5,18 @@
 
 ---
 
+## Iteration 118 — 2026-03-16
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/portfolio.py:699
+- Finding: Hardcoded `_COMPRESSION_SESSIONS = ["CME_REOPEN", "TOKYO_OPEN", "LONDON_METALS"]` inside loop body in `build_strategy_daily_series` duplicates canonical `COMPRESSION_SESSIONS` from `pipeline.build_daily_features` (canonical violation)
+- Action: Added `from pipeline.build_daily_features import COMPRESSION_SESSIONS` to imports; removed inline list assignment; replaced `_COMPRESSION_SESSIONS` reference with `COMPRESSION_SESSIONS`
+- Blast radius: 1 file
+- Verification: PASS (68 tests, ruff clean, drift clean)
+- Commit: 603542e
+
+---
+
 ## Iteration 117 — 2026-03-16
 - Phase: fix
 - Classification: [mechanical]
