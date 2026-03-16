@@ -60,13 +60,15 @@ class TradovateDataFeed(BrokerFeed):
         self,
         auth: BrokerAuth,
         on_bar: Callable[[Bar], Coroutine[Any, Any, None]],
+        on_stale: Callable[[float, int], None] | None = None,
         demo: bool = True,
     ):
-        super().__init__(auth, on_bar)
+        super().__init__(auth, on_bar, on_stale=on_stale)
         self.demo = demo
         self._agg = BarAggregator()
         self._heartbeat_task: asyncio.Task | None = None
         self._stop_requested = False
+        self._force_reconnect = False
         self._last_quote_at: datetime | None = None
         self._quote_count: int = 0
         self._stale_count: int = 0
@@ -83,6 +85,11 @@ class TradovateDataFeed(BrokerFeed):
                 async with websockets.connect(url, ping_interval=None) as ws:
                     backoff = _BACKOFF_INITIAL  # reset on successful connect
                     await self._session(ws, symbol)
+                    if self._force_reconnect:
+                        log.warning("Feed stale — forcing reconnect for %s", symbol)
+                        self._force_reconnect = False
+                        self._stale_count = 0
+                        continue  # next iteration of reconnect loop
                     log.info("Feed closed cleanly for %s", symbol)
                     return
 
@@ -171,7 +178,7 @@ class TradovateDataFeed(BrokerFeed):
                                 "FEED STALE: %d consecutive stale checks — forcing reconnect",
                                 self._stale_count,
                             )
-                            self._stale_count = 0
+                            self._force_reconnect = True
                             stop_event.set()  # break out of message loop → reconnect
                             return
                     else:
