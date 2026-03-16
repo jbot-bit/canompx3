@@ -367,6 +367,12 @@ class SessionOrchestrator:
         )
         return row
 
+    def _on_feed_stale(self, gap_seconds: float, stale_count: int) -> None:
+        """Called by BrokerFeed when data feed goes stale. Sends alert."""
+        msg = f"FEED STALE: {gap_seconds:.0f}s no data (check {stale_count})"
+        log.critical(msg)
+        self._notify(msg)
+
     def _notify(self, message: str) -> None:
         """Send Telegram notification. Never raises — notifications must not kill the trading loop.
 
@@ -1296,7 +1302,12 @@ class SessionOrchestrator:
                     self._notify(msg)
                     return
 
-                feed = self._feed_class(self.auth, on_bar=self._on_bar, demo=self.demo)
+                feed = self._feed_class(
+                    self.auth,
+                    on_bar=self._on_bar,
+                    on_stale=self._on_feed_stale,
+                    demo=self.demo,
+                )
                 log.info(
                     "Starting feed (attempt %d/%d): %s (broker: %s)",
                     attempt + 1,
