@@ -31,6 +31,7 @@ from datetime import UTC, datetime
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
+from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pydantic import BaseModel, field_validator
 
 load_dotenv()
@@ -59,8 +60,6 @@ _OPEN_POSITIONS: dict[str, int] = {}
 MAX_ORDER_QTY = int(os.environ.get("WEBHOOK_MAX_QTY", "5"))
 
 # Instrument allowlist — only instruments in ACTIVE_ORB_INSTRUMENTS can be traded
-from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
-
 _ALLOWED_INSTRUMENTS = frozenset(ACTIVE_ORB_INSTRUMENTS)
 
 
@@ -326,14 +325,14 @@ async def trade(req: TradeRequest, request: Request):
     # 6. Position limit (entry only)
     _check_position_limit(req)
 
-    # 5. Resolve contract (cached, async-safe)
+    # 7. Resolve contract (cached, async-safe)
     loop = asyncio.get_running_loop()
     try:
         contract = await loop.run_in_executor(None, _get_contract, req.instrument)
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Contract resolution failed: {e}") from e
 
-    # 5. Place order (synchronous HTTP in thread pool to avoid blocking event loop)
+    # 8. Place order (synchronous HTTP in thread pool to avoid blocking event loop)
     try:
         order_id = await loop.run_in_executor(None, _place_order, req, contract)
     except ValueError as e:
