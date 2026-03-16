@@ -1,8 +1,8 @@
 {
-  "total_iterations": 116,
+  "total_iterations": 117,
   "last_updated": "2026-03-16",
   "consecutive_low_only": 0,
-  "last_high_finding_iter": 123,
+  "last_high_finding_iter": 124,
   "findings_by_type": {
     "canonical_violation": {
       "found": 46,
@@ -11,10 +11,10 @@
       "fix_rate": 0.76
     },
     "silent_failure": {
-      "found": 15,
-      "fixed": 13,
+      "found": 16,
+      "fixed": 14,
       "deferred": 1,
-      "fix_rate": 0.87
+      "fix_rate": 0.88
     },
     "other": {
       "found": 15,
@@ -116,12 +116,12 @@
   "findings_by_severity": {
     "CRITICAL": 3,
     "HIGH": 7,
-    "MEDIUM": 22,
+    "MEDIUM": 23,
     "LOW": 84
   },
   "classifications": {
     "judgment": 55,
-    "mechanical": 39,
+    "mechanical": 40,
     "audit-only": 22
   },
   "files_audited": {
@@ -883,6 +883,11 @@
     "trading_app/live/projectx/data_feed.py": {
       "audit_count": 1,
       "last_iter": 123,
+      "findings": 1
+    },
+    "tests/test_trading_app/test_session_orchestrator.py": {
+      "audit_count": 1,
+      "last_iter": 124,
       "findings": 1
     }
   },
@@ -2162,6 +2167,17 @@
       "severity": "HIGH",
       "verdict": "FIXED",
       "commit": "c6be6d9"
+    },
+    {
+      "iter": 124,
+      "date": "2026-03-16",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "tests/test_trading_app/test_session_orchestrator.py:729,1015,1048,1074,1100",
+      "finding_type": "silent_failure",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "fd37cbb"
     }
   ]
 }

@@ -5,6 +5,18 @@
 
 ---
 
+## Iteration 124 — 2026-03-16
+- Phase: fix
+- Classification: [mechanical]
+- Target: tests/test_trading_app/test_session_orchestrator.py:729,1015,1048,1074,1100
+- Finding: 5 inline feed stub __init__ signatures missing on_stale=None — TypeError introduced when d4fe8cb added on_stale kwarg to BrokerFeed; test_run_starts_watchdog_task broken, 4 other reconnect stubs silently stale
+- Action: Added on_stale=None to all 5 stubs (InstantFeed, MockFeed, CountingFeed, NeverReachFeed, CrashOnceFeed) — no production code touched
+- Blast radius: 1 file (test only)
+- Verification: PASS (87/87 tests pass, was 86+1 fail; drift unchanged — 14 pre-existing env violations in Check 16)
+- Commit: fd37cbb
+
+---
+
 ## Iteration 123 — 2026-03-16
 - Phase: fix
 - Classification: [judgment]
