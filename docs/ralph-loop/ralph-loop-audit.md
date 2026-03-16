@@ -3,68 +3,58 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 108
+## Last iteration: 109
 
-## RALPH AUDIT — Iteration 108 (fix)
+## RALPH AUDIT — Iteration 109 (fix)
 ## Date: 2026-03-16
-## Infrastructure Gates: 3/3 PASS
+## Infrastructure Gates: 4/4 PASS
 
 | Gate | Result | Detail |
 |------|--------|--------|
 | `check_drift.py` | PASS | 72 checks passed, 0 skipped, 6 advisory |
 | `audit_behavioral.py` | PASS | 6/6 clean |
-| `ruff check` | PASS | Clean after fixes |
+| `ruff check` | PASS | Clean (both target files) |
+| `pyright` (targeted) | PASS | 0 errors, 0 warnings on both target files |
 
 ---
 
 ## Files Audited This Iteration
 
-### research/research_edge_structure.py — FIXED (ES-01 through ES-05)
+### research/research_edge_structure.py + research/research_1015_vs_1000.py — FIXED (PE-01 through PE-07)
 
-Seven Sins scan:
-- Silent failure: No bare `except: pass`. scipy `ImportError` guarded with `HAS_SCIPY` flag — not silent. CLEAN.
-- Fail-open: No exception handlers that return success. CLEAN.
-- Look-ahead bias: Standalone bar scanner from raw 1m bars; no DB outcome lookups; no future data. CLEAN.
-- Cost illusion: Research script — overlap/structure analysis, no P&L vs cost model required. CLEAN.
-- Canonical violation: `INSTRUMENTS = ["MGC", "MNQ", "MES"]` hardcoded (line 98) — missing M2K. However this script is a standalone research tool analysing session overlap structure for three instruments; M2K was not part of the overlap study scope. ACCEPTABLE per WF-05 pattern (one-off diagnostic, returning 0 rows if instrument absent is not dangerous).
-- Orphan risk: `csv` import present and used (CSV output). `_opens` intentionally discarded via naming. CLEAN.
-- Volatile data: No hardcoded counts. CLEAN.
-- DB path: Uses `pipeline.paths.GOLD_DB_PATH` with graceful `ImportError` fallback. CLEAN.
-- **ES-01 (FIXED, LOW/MECHANICAL):** I001 import sort.
-- **ES-02 (FIXED, LOW/MECHANICAL):** 30x F541 extraneous f-string prefixes on print statements.
-- **ES-03 (FIXED, LOW/MECHANICAL):** F841 unused `drop` variable.
-- **ES-04 (FIXED, LOW/MECHANICAL):** B007 unused loop variables.
-- **ES-05 (FIXED, LOW/MECHANICAL):** B023 `band_stats` closes over `regime_days` loop variable — fixed by adding `days` parameter and passing `regime_days` explicitly at call sites.
+Seven Sins scan: carried forward from iter 108 (both files fully scanned then). No new sins introduced by these fixes.
 
-### research/research_1015_vs_1000.py — FIXED (ES-06 through ES-07, batched)
+Note: iter 108 scan incorrectly noted `csv` import as used for CSV output in research_edge_structure.py — PE-04 corrects this; `csv.` was never referenced in the file body. The fix removes the dead import.
 
-Seven Sins scan:
-- Silent failure: No bare `except: pass`. CLEAN.
-- Fail-open: No handlers returning success on error. CLEAN.
-- Look-ahead bias: Standalone bar scanner; no DB outcomes used; no future data leak. CLEAN.
-- Cost illusion: Research script — aperture comparison, no cost model needed. CLEAN.
-- Canonical violation: `INSTRUMENTS = ["MNQ", "MES", "MGC"]` hardcoded — missing M2K. ACCEPTABLE per WF-05 pattern (1000 vs 1015 aperture comparison is Japan-timezone CLEAN sessions; M2K not relevant to this specific study).
-- Orphan risk: `argparse` imported and used. CLEAN.
-- Volatile data: No hardcoded counts. CLEAN.
-- DB path: Uses `pipeline.paths.GOLD_DB_PATH` with graceful `ImportError` fallback. CLEAN.
-- **ES-06 (FIXED, LOW/MECHANICAL):** I001 import sort, 10x F541 extraneous f-strings, F841 unused `n` and `window_mins` assignments, 6x E702 semicolons split to two-line form. Auto-fixed + manual removal.
-- **ES-07 (FIXED, LOW/MECHANICAL):** B023 `bar_stats` closes over `volumes`, `highs`, `lows`, `closes`, `opens`, `m`, `start_1000` loop variables — fixed by moving `bar_stats` outside the loop body and passing all closed-over names as explicit parameters. Also resolved incidental E741 (ambiguous `l` renamed to `lv_bar`).
+**PE-01 (FIXED, LOW/MECHANICAL):** `research_edge_structure.py:59` — `dt.utcoffset()` returns `timedelta | None`; `.total_seconds()` called directly. Fixed: extract to `offset` local, assert not None before call.
+
+**PE-02 (FIXED, LOW/MECHANICAL):** `research_edge_structure.py:66` — same `utcoffset()` None pattern in `is_uk_dst()`. Same assert-guard fix applied.
+
+**PE-03 (FIXED, LOW/MECHANICAL):** `research_edge_structure.py:720-721` — `pearsonr()` return type typed as `PearsonRResult` whose tuple elements carry `_T_co@tuple | float`, causing numpy ufunc argument mismatch when passed to `np.isnan()`. Fixed: `_res = pearsonr(...); orb_r, orb_p = float(_res[0]), float(_res[1])`.
+
+**PE-04 (FIXED, LOW/MECHANICAL):** `research_edge_structure.py:28` — `import csv` present but `csv.` never referenced. Removed.
+
+**PE-05 (FIXED, LOW/MECHANICAL):** `research_edge_structure.py:400` — `all_days` unpacked but not used in Q1 loop body (only `highs`/`lows`/`closes` consumed). Renamed to `_all_days`. Other unpack sites (lines 484, 650) that do use `all_days` are untouched.
+
+**PE-06 (FIXED, LOW/MECHANICAL):** `research_1015_vs_1000.py:44` — same `utcoffset()` None pattern in `is_us_dst()`. Same assert-guard fix applied.
+
+**PE-07 (FIXED, LOW/MECHANICAL):** `research_1015_vs_1000.py` — `all_days` unpacked but unused at 3 sites: q2 (line 312), q3 (line 398), q4 (line 482). Renamed to `_all_days` at all three. q1 at line 261 legitimately uses `all_days` in a `len()` print — left unchanged.
 
 ---
 
 ## Summary
-- 2 targets reviewed (batched): research/research_edge_structure.py + research/research_1015_vs_1000.py
-- 7 findings fixed (ES-01 through ES-07): all LOW/mechanical ruff cleanup
+- 2 targets patched (batched): research/research_edge_structure.py + research/research_1015_vs_1000.py
+- 7 findings fixed (PE-01 through PE-07): all LOW/mechanical Pyright type-guard fixes
 - 0 findings deferred
-- 2 ACCEPTABLE canonical violations (WF-05 pattern — one-off diagnostic scripts, M2K not in study scope)
-- Infrastructure Gates: 3/3 PASS
+- Infrastructure Gates: 4/4 PASS (0 errors, 0 warnings from pyright on both files)
 
 **Codebase steady state maintained for major violation classes:**
-- Hardcoded DB paths: ELIMINATED (0 in production code; research/ now consistent)
-- Hardcoded apertures [5,15,30]: ELIMINATED from production (7th fix applied)
-- Hardcoded entry model IN clauses: ELIMINATED (research_vol_regime_switching.py both SQL sites now fixed)
-- Hardcoded instrument lists: ELIMINATED (1 acceptable with assertion guard in production; research scripts with scope-limited studies ACCEPTABLE per WF-05)
-- SESSION_ORDER coverage: COMPLETE across all scripts (12/12 sessions in all SESSION_ORDER lists)
+- Hardcoded DB paths: ELIMINATED (0 in production code; research/ consistent)
+- Hardcoded apertures [5,15,30]: ELIMINATED from production
+- Hardcoded entry model IN clauses: ELIMINATED
+- Hardcoded instrument lists: ELIMINATED (research scripts with scope-limited studies ACCEPTABLE per WF-05)
+- SESSION_ORDER coverage: COMPLETE (12/12 sessions)
+- Pyright errors in research/: ELIMINATED for all scanned files
 
 **Remaining LOW-priority items:**
 - ~22 CLI scripts with connection leaks (process exit closes them)
@@ -74,7 +64,7 @@ Seven Sins scan:
 
 ## Files Fully Scanned
 
-> Cumulative list — 163 files fully scanned.
+> Cumulative list — 163 files fully scanned (no new files added this iteration — re-fix of previously scanned files).
 
 - trading_app/ — 44 files (iters 4-61)
 - pipeline/ — 15 files (iters 1-71)
@@ -84,12 +74,12 @@ Seven Sins scan:
 - scripts/migrations/ — 1 file (iter 73)
 - scripts/reports/ — 3 files (iter 87): report_wf_diagnostics.py, parameter_stability_heatmap.py, report_edge_portfolio.py (iter 85)
 - scripts/ root — 2 files (iter 88): run_live_session.py, operator_status.py
-- research/ — 17 files (iters 101-108): research_zt_event_viability.py, research_london_adjacent.py, research_mes_compressed_spring.py (iter 101); research_post_break_pullback.py, research_mgc_asian_fade_mfe.py, research_zt_fomc_unwind.py (iter 102); research_zt_cpi_nfp.py (iter 103); research_mgc_mnq_correlation.py (iter 104); research_atr_velocity_gate.py, research_mgc_regime_shift.py (iter 105); research_zt_event_viability.py (iter 106); research_vol_regime_switching.py (iter 107); research_edge_structure.py, research_1015_vs_1000.py (iter 108)
+- research/ — 17 files (iters 101-109): research_zt_event_viability.py, research_london_adjacent.py, research_mes_compressed_spring.py (iter 101); research_post_break_pullback.py, research_mgc_asian_fade_mfe.py, research_zt_fomc_unwind.py (iter 102); research_zt_cpi_nfp.py (iter 103); research_mgc_mnq_correlation.py (iter 104); research_atr_velocity_gate.py, research_mgc_regime_shift.py (iter 105); research_zt_event_viability.py (iter 106); research_vol_regime_switching.py (iter 107); research_edge_structure.py, research_1015_vs_1000.py (iters 108-109)
 - docs/plans/ — 2 files (iter 103): 2026-03-15-zt-stage1-cpi-nfp-spec.md, 2026-03-15-zt-stage1-triage-gate.md
 - **Total: 163 files fully scanned**
 - See previous audit iterations for per-file detail
 
 ## Next iteration targets
-- `research/research_overlap_analysis.py` — unscanned; likely has similar ruff violations; full Seven Sins scan
+- `research/research_overlap_analysis.py` — unscanned; likely has similar ruff/Pyright violations; full Seven Sins scan
 - `research/research_session_clustering.py` — unscanned; full Seven Sins scan
 - DF-04 remains open but annotated — do not re-investigate unless rolling portfolio is extended to multi-aperture
