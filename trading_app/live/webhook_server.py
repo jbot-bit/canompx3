@@ -363,13 +363,13 @@ async def trade(req: TradeRequest, request: Request):
         timestamp=datetime.now(UTC).isoformat(),
     )
 
-    # 7. Update position tracking
+    # 9. Update position tracking
     if req.action == "entry":
         _OPEN_POSITIONS[req.instrument] = _OPEN_POSITIONS.get(req.instrument, 0) + 1
     elif req.action == "exit":
         _OPEN_POSITIONS[req.instrument] = max(0, _OPEN_POSITIONS.get(req.instrument, 0) - 1)
 
-    # 8. Cache for dedup
+    # 10. Cache for dedup
     _cache_response(req, resp)
 
     return resp
