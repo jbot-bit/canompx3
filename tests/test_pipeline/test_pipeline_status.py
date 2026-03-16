@@ -468,7 +468,7 @@ class TestRebuildDryRun:
     def test_rebuild_dry_run(self, tmp_path, capsys):
         """Dry run prints steps without executing."""
         db_path, con = _create_test_db(tmp_path)
-        result = run_rebuild(con, "MGC", dry_run=True)
+        result, con = run_rebuild(con, "MGC", dry_run=True)
         assert result is True
         captured = capsys.readouterr()
         assert "DRY RUN" in captured.out
@@ -478,7 +478,7 @@ class TestRebuildDryRun:
     def test_rebuild_dry_run_shows_all_steps(self, tmp_path, capsys):
         """Dry run lists all 13 steps."""
         db_path, con = _create_test_db(tmp_path)
-        run_rebuild(con, "MGC", dry_run=True)
+        _, con = run_rebuild(con, "MGC", dry_run=True)
         captured = capsys.readouterr()
         assert "[13/13]" in captured.out
         assert "pinecone_sync" in captured.out
@@ -522,7 +522,7 @@ class TestRebuildExecution:
 
         mock_result = type("Result", (), {"returncode": 0})()
         with patch("scripts.tools.pipeline_status.subprocess.run", return_value=mock_result):
-            ok = run_rebuild(con, sym)
+            ok, con = run_rebuild(con, sym)
 
         assert ok is True
         manifest = read_last_manifest(con, sym)
@@ -549,7 +549,7 @@ class TestRebuildExecution:
             return type("Result", (), {"returncode": rc})()
 
         with patch("scripts.tools.pipeline_status.subprocess.run", side_effect=mock_run):
-            ok = run_rebuild(con, sym)
+            ok, con = run_rebuild(con, sym)
 
         assert ok is False
         manifest = read_last_manifest(con, sym)
@@ -573,7 +573,7 @@ class TestRebuildExecution:
             raise TimeoutExpired(cmd="test", timeout=3600)
 
         with patch("scripts.tools.pipeline_status.subprocess.run", side_effect=mock_run):
-            ok = run_rebuild(con, sym)
+            ok, con = run_rebuild(con, sym)
 
         assert ok is False
         manifest = read_last_manifest(con, sym)

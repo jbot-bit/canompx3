@@ -96,7 +96,9 @@ def main():
         from trading_app.config import get_filters_for_grid
 
         print("\n  Sessions with cross-asset filters:")
-        for session in ["CME_PRECLOSE", "COMEX_SETTLE", "US_DATA_1000", "NYSE_OPEN", "NYSE_CLOSE", "US_DATA_830"]:
+        from pipeline.dst import SESSION_CATALOG
+
+        for session in sorted(SESSION_CATALOG):
             grid = get_filters_for_grid("MNQ", session)
             cross_in_grid = [k for k in grid if k.startswith("X_")]
             if cross_in_grid:
