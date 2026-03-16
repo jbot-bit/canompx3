@@ -18,6 +18,7 @@ Usage:
 import argparse
 import sys
 import webbrowser
+from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 
@@ -35,6 +36,14 @@ from trading_app.live_config import (
     _load_best_regime_variant,
 )
 from trading_app.strategy_fitness import compute_fitness
+
+
+@dataclass(frozen=True)
+class FitnessCheckResult:
+    """Resolved fitness status for a strategy, including lookup failures."""
+
+    status: str
+    error: str | None = None
 
 # ── Filter → plain English ────────────────────────────────────────────
 
@@ -119,13 +128,24 @@ def _passes_dollar_gate(row: dict, instrument: str) -> tuple[bool, float | None]
     return exp_d >= min_dollars, exp_d
 
 
-def _check_fitness(strategy_id: str, db_path: Path) -> str:
-    """Quick fitness check. Returns status string."""
+def _check_fitness(
+    strategy_id: str,
+    db_path: Path,
+    cache: dict[str, FitnessCheckResult] | None = None,
+) -> FitnessCheckResult:
+    """Quick fitness check. Returns cached status and surfaces lookup failures."""
+    if cache is not None and strategy_id in cache:
+        return cache[strategy_id]
+
     try:
         f = compute_fitness(strategy_id, db_path=db_path)
-        return f.fitness_status
-    except Exception:
-        return "UNKNOWN"
+        result = FitnessCheckResult(status=f.fitness_status)
+    except Exception as exc:
+        result = FitnessCheckResult(status="UNKNOWN", error=f"{type(exc).__name__}: {exc}")
+
+    if cache is not None:
+        cache[strategy_id] = result
+    return result
 
 
 # ── Session time resolution ───────────────────────────────────────────
@@ -169,6 +189,7 @@ def collect_trades(trading_day: date, db_path: Path) -> list[dict]:
     """
     instruments = get_active_instruments()
     trades = []
+    fitness_cache: dict[str, FitnessCheckResult] = {}
 
     for instrument in instruments:
         for spec in LIVE_PORTFOLIO:
@@ -192,9 +213,9 @@ def collect_trades(trading_day: date, db_path: Path) -> list[dict]:
                 continue
 
             # Fitness check (regime gate for REGIME tier)
-            fitness = _check_fitness(variant["strategy_id"], db_path)
+            fitness = _check_fitness(variant["strategy_id"], db_path, fitness_cache)
             if spec.tier == "regime" and spec.regime_gate == "high_vol":
-                if fitness != "FIT":
+                if fitness.status != "FIT":
                     continue  # gated off
 
             trades.append(
@@ -211,7 +232,8 @@ def collect_trades(trading_day: date, db_path: Path) -> list[dict]:
                     "exp_r": variant["expectancy_r"],
                     "exp_dollars": exp_d,
                     "sample_size": variant["sample_size"],
-                    "fitness": fitness,
+                    "fitness": fitness.status,
+                    "fitness_error": fitness.error,
                 }
             )
 
@@ -240,7 +262,8 @@ def _fitness_badge(fitness: str) -> str:
         "WATCH": "badge-watch",
         "DECAY": "badge-decay",
         "STALE": "badge-stale",
-    }.get(fitness, "badge-decay")
+        "UNKNOWN": "badge-unknown",
+    }.get(fitness, "badge-unknown")
     return f' <span class="badge {cls}">{fitness}</span>'
 
 
@@ -269,6 +292,9 @@ def generate_html(trades: list[dict], session_times: dict, trading_day: date) ->
             exp_d_str = f"${t['exp_dollars']:+.2f}" if t["exp_dollars"] is not None else "n/a"
             dir_badge = _direction_badge(t["direction"])
             fit_badge = _fitness_badge(t["fitness"])
+            fitness_title = ""
+            if t.get("fitness_error"):
+                fitness_title = f' title="{t["fitness_error"]}"'
 
             exp_r_class = "expr-high" if t["exp_r"] >= 0.20 else ""
 
@@ -282,7 +308,7 @@ def generate_html(trades: list[dict], session_times: dict, trading_day: date) ->
                 <td>{t["win_rate"]:.0%}</td>
                 <td class="{exp_r_class}">{t["exp_r"]:+.3f}</td>
                 <td class="dollars-cell">{exp_d_str}</td>
-                <td>{fit_badge if fit_badge else '<span class="fit-ok">FIT</span>'}</td>
+                <td{fitness_title}>{fit_badge if fit_badge else '<span class="fit-ok">FIT</span>'}</td>
             </tr>"""
 
         cards_html += f"""
@@ -329,6 +355,22 @@ def generate_html(trades: list[dict], session_times: dict, trading_day: date) ->
             <div class="summary-count">{instr_counts[instr]} trades</div>
             <div class="summary-dollars">${total:.2f}/day edge</div>
         </div>"""
+
+    fitness_errors = [t for t in trades if t.get("fitness_error")]
+    fitness_warning_html = ""
+    if fitness_errors:
+        error_items = ""
+        for t in fitness_errors[:10]:
+            error_items += f"<li><code>{t['strategy_id']}</code>: {t['fitness_error']}</li>"
+        more_note = ""
+        if len(fitness_errors) > 10:
+            more_note = f"<p>+ {len(fitness_errors) - 10} more fitness lookup errors.</p>"
+        fitness_warning_html = f"""
+    <div class="warning-box">
+        <strong>Fitness lookup errors:</strong> {len(fitness_errors)} row(s) rendered as <code>UNKNOWN</code>.
+        <ul>{error_items}</ul>
+        {more_note}
+    </div>"""
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -522,6 +564,28 @@ def generate_html(trades: list[dict], session_times: dict, trading_day: date) ->
         color: #8b949e;
         border: 1px solid #8b949e;
     }}
+    .badge-unknown {{
+        background: #5c4712;
+        color: #ffd58a;
+        border: 1px solid #d29922;
+    }}
+    .warning-box {{
+        background: #271b05;
+        border: 1px solid #d29922;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 24px;
+        color: #ffd58a;
+        line-height: 1.5;
+    }}
+    .warning-box ul {{
+        margin: 8px 0 0 20px;
+    }}
+    .warning-box code {{
+        background: #3d2e1f;
+        padding: 1px 4px;
+        border-radius: 4px;
+    }}
     .footer {{
         text-align: center;
         padding: 20px;
@@ -558,6 +622,8 @@ def generate_html(trades: list[dict], session_times: dict, trading_day: date) ->
         All entries are <strong>E2 (stop-market)</strong> &mdash; place stop orders at ORB high/low.
         They trigger automatically on breakout. ORB = first N minutes after session start.
     </div>
+
+    {fitness_warning_html}
 
     <div class="summary-row">
         {summary_html}
