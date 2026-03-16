@@ -79,12 +79,14 @@ class TradovateDataFeed(BrokerFeed):
         url = MD_WS_DEMO if self.demo else MD_WS_LIVE
         backoff = _BACKOFF_INITIAL
 
-        for attempt in range(_MAX_RECONNECTS + 1):
+        error_attempts = 0  # only ERROR reconnects count toward budget (not stale)
+
+        while error_attempts <= _MAX_RECONNECTS:
             if self._stop_requested:
                 log.info("Feed stopped cleanly via stop flag for %s", symbol)
                 return
             try:
-                log.info("Connecting to %s for %s (attempt %d)", url, symbol, attempt + 1)
+                log.info("Connecting to %s for %s (errors=%d/%d)", url, symbol, error_attempts, _MAX_RECONNECTS)
                 async with websockets.connect(url, ping_interval=None) as ws:
                     backoff = _BACKOFF_INITIAL  # reset on successful connect
                     await self._session(ws, symbol)
@@ -93,31 +95,36 @@ class TradovateDataFeed(BrokerFeed):
                         self._force_reconnect = False
                         self._stale_count = 0
                         self._last_quote_at = None  # prevent immediate re-trigger
-                        continue  # next iteration of reconnect loop
+                        # stale reconnect does NOT increment error_attempts
+                        continue
                     log.info("Feed closed cleanly for %s", symbol)
                     return
 
             except websockets.exceptions.ConnectionClosedError as e:
-                log.warning("WebSocket connection dropped: %s", e)
+                error_attempts += 1
+                log.warning("WebSocket connection dropped (%d/%d): %s", error_attempts, _MAX_RECONNECTS, e)
             except websockets.exceptions.ConnectionClosedOK:
                 log.info("WebSocket closed normally")
                 return
             except OSError as e:
-                log.error("Network error: %s", e)
+                error_attempts += 1
+                log.error("Network error (%d/%d): %s", error_attempts, _MAX_RECONNECTS, e)
             except Exception as e:
-                log.error("Unexpected feed error: %s", e, exc_info=True)
+                error_attempts += 1
+                log.error("Unexpected feed error (%d/%d): %s", error_attempts, _MAX_RECONNECTS, e, exc_info=True)
 
-            if attempt < _MAX_RECONNECTS:
+            if error_attempts <= _MAX_RECONNECTS:
                 log.info("Reconnecting in %.0fs...", backoff)
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, _BACKOFF_MAX)
-            else:
-                log.critical("FEED DEAD: max reconnects (%d) exhausted for %s", _MAX_RECONNECTS, symbol)
-                if self.on_stale is not None:
-                    try:
-                        self.on_stale(0.0, -1)  # -1 = exhaustion signal
-                    except Exception:
-                        pass
+
+        # Exhausted error budget
+        log.critical("FEED DEAD: max error reconnects (%d) exhausted for %s", _MAX_RECONNECTS, symbol)
+        if self.on_stale is not None:
+            try:
+                self.on_stale(0.0, -1)
+            except Exception:
+                pass
 
     async def _session(self, ws, symbol: str) -> None:
         """Run a single authenticated WebSocket session."""
@@ -198,8 +205,10 @@ class TradovateDataFeed(BrokerFeed):
                 try:
                     await ws.send("[]")
                 except Exception as exc:
-                    log.warning("Heartbeat send failed: %s", exc)
-                    break
+                    log.warning("Heartbeat send failed — forcing reconnect: %s", exc)
+                    self._force_reconnect = True
+                    stop_event.set()
+                    return
 
         self._heartbeat_task = asyncio.create_task(heartbeat())
         try:

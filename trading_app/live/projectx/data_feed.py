@@ -115,15 +115,17 @@ class ProjectXDataFeed(BrokerFeed):
         from pysignalr.client import SignalRClient
 
         backoff = _BACKOFF_INITIAL
+        error_attempts = 0  # only ERROR reconnects count toward budget (not stale)
 
-        for attempt in range(_MAX_RECONNECTS + 1):
+        while error_attempts <= _MAX_RECONNECTS:
             if self._stop_requested:
                 return
 
             try:
                 log.info(
-                    "Connecting to ProjectX Market Hub (pysignalr, attempt %d)",
-                    attempt + 1,
+                    "Connecting to ProjectX Market Hub (pysignalr, errors=%d/%d)",
+                    error_attempts,
+                    _MAX_RECONNECTS,
                 )
 
                 token = self.auth.get_token()
@@ -161,31 +163,30 @@ class ProjectXDataFeed(BrokerFeed):
                     log.warning("Feed stale — forcing reconnect for %s", symbol)
                     self._force_reconnect = False
                     self._stale_count = 0
-                    self._last_data_at = None  # prevent immediate re-trigger on next watcher cycle
+                    self._last_data_at = None  # prevent immediate re-trigger
                     backoff = _BACKOFF_INITIAL
-                    continue  # next iteration of reconnect loop
+                    # stale reconnect does NOT increment error_attempts
+                    continue
                 log.info("Feed closed cleanly for %s", symbol)
                 return
 
             except ImportError:
                 raise  # let caller fall back to signalrcore
             except Exception as e:
-                log.warning("ProjectX feed error (pysignalr): %s", e)
-                if attempt < _MAX_RECONNECTS:
+                error_attempts += 1
+                log.warning("ProjectX feed error (pysignalr, %d/%d): %s", error_attempts, _MAX_RECONNECTS, e)
+                if error_attempts <= _MAX_RECONNECTS:
                     log.info("Reconnecting in %.0fs...", backoff)
                     await asyncio.sleep(backoff)
                     backoff = min(backoff * 2, _BACKOFF_MAX)
-                else:
-                    log.critical(
-                        "FEED DEAD: max reconnects (%d) exhausted for %s",
-                        _MAX_RECONNECTS,
-                        symbol,
-                    )
-                    if self.on_stale is not None:
-                        try:
-                            self.on_stale(0.0, -1)  # -1 = exhaustion signal
-                        except Exception:
-                            pass
+
+        # Exhausted error budget
+        log.critical("FEED DEAD: max error reconnects (%d) exhausted for %s", _MAX_RECONNECTS, symbol)
+        if self.on_stale is not None:
+            try:
+                self.on_stale(0.0, -1)
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     # signalrcore fallback backend
