@@ -1081,3 +1081,13 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 2 files, 0 external callers (standalone research scripts)
 - Verification: ruff PASS, check_drift 72/72 PASS
 - Commit: 7a09129
+
+## Iteration 111 — 2026-03-16
+- Phase: fix
+- Classification: [mechanical]
+- Target: research/research_aperture_scan.py
+- Finding: AS-01/AS-02 (LOW) — 17 F541 bare f-strings without placeholders in print_honest_summary() and main(); 1 I001 unsorted import block. research_session_stats.py does not exist (skip).
+- Action: ruff check --fix — removed extraneous f-prefix from 17 print strings; sorted import block. No logic or behaviour change.
+- Blast radius: 1 file, 0 external callers (standalone research script)
+- Verification: ruff PASS, check_drift 72/72 PASS
+- Commit: 16d472f

@@ -3,9 +3,9 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 110
+## Last iteration: 111
 
-## RALPH AUDIT — Iteration 110 (fix)
+## RALPH AUDIT — Iteration 111 (fix)
 ## Date: 2026-03-16
 ## Infrastructure Gates: 4/4 PASS
 
@@ -13,37 +13,42 @@
 |------|--------|--------|
 | `check_drift.py` | PASS | 72 checks passed, 0 skipped, 6 advisory |
 | `audit_behavioral.py` | PASS | 6/6 clean |
-| `ruff check` | PASS | Clean after auto-fix (27 F541 + 1 I001 fixed) |
-| `pyright` (targeted) | PASS | 0 errors, 0 warnings on research_overlap_analysis.py |
+| `ruff check` | PASS | Clean after auto-fix (17 F541 + 1 I001 fixed) |
+| `check_drift.py` post-fix | PASS | 72/72 PASS |
 
 ---
 
 ## Files Audited This Iteration
 
-### research/research_overlap_analysis.py — FIXED (OA-01 through OA-04)
+### research/research_aperture_scan.py — FIXED (AS-01, AS-02)
 
 Seven Sins scan:
-- Silent failure: None — DST helpers always use ZoneInfo-aware datetimes (no None utcoffset possible)
-- Fail-open: None — `con.close()` in `finally` block, ValueError raised on conflicting DST types
-- Look-ahead bias: None — standalone vectorized engine, no DB strategy reads
-- Cost illusion: N/A — no P&L computation, returns only
-- Canonical violation: Hardcoded instrument list `CANDIDATE_PAIRS` — ACCEPTABLE per WF-05 pattern (read-only investigation, scope-limited, if instrument removed returns 0 rows)
-- Orphan risk: None
-- Volatile data: None
+- Silent failure: None — `con.close()` in `finally` block; empty data returns early with message
+- Fail-open: None — no exception swallowing; result=None treated as empty
+- Look-ahead bias: None — standalone vectorized scan, break detection uses first close AFTER ORB ends (break_start = start_min + aperture_min), outcome window does not reference future data beyond the outcome window
+- Cost illusion: N/A — no P&L in R-units beyond raw avg_r (research only, no cost deduction needed for screening scan)
+- Canonical violation: `INSTRUMENTS = ["MGC", "MNQ", "MES", "MCL"]` line 77 includes dead instrument MCL — ACCEPTABLE per WF-05 pattern (read-only investigation; MCL returns 0 bars → prints "No data, skipping"; no correctness impact). Sessions dict uses fixed Brisbane clock times (intentional for this research — testing raw time slots, not production sessions).
+- Orphan risk: `opens` array allocated but never passed to scan_session_aperture (only highs/lows/closes used). Line 661: `all_days, opens, highs, lows, closes = build_day_arrays(...)`. `opens` is built but unused. Deleted via `del opens, highs, lows, closes` at line 739. LOW/ACCEPTABLE — orphan array, no correctness impact, memory is released.
+- Volatile data: `n_combos` computed dynamically from len(INSTRUMENTS)*len(SESSIONS)*len(APERTURES) — correct.
 
-**OA-01 (FIXED, LOW/MECHANICAL):** `research_overlap_analysis.py:29` — I001 unsorted import block. Fixed: `ruff check --fix`.
+**AS-01 (FIXED, LOW/MECHANICAL):** `research_aperture_scan.py:32` — I001 unsorted import block. Fixed: `ruff check --fix`.
 
-**OA-02 (FIXED, LOW/MECHANICAL):** `research_overlap_analysis.py:523` and 24 other lines — F541 bare f-strings without any placeholders in print statements throughout `print_honest_summary()` and `main()`. Fixed: `ruff check --fix` removed extraneous `f` prefix.
+**AS-02 (FIXED, LOW/MECHANICAL):** `research_aperture_scan.py:513,547,559,572,587-592,603-608,636` — 17 F541 bare f-strings without any placeholders in `print_honest_summary()` and `main()`. Fixed: `ruff check --fix` removed extraneous `f` prefix.
 
-Note: `research_session_clustering.py` does not exist — skip.
+**AS-03 (ACCEPTABLE):** `research_aperture_scan.py:77` — `INSTRUMENTS = ["MGC", "MNQ", "MES", "MCL"]` includes dead instrument MCL. Per WF-05 pattern: read-only investigation script; MCL has no bars data → `load_bars` returns empty df → script prints "No data for MCL, skipping". No correctness impact.
+
+**AS-04 (ACCEPTABLE):** `research_aperture_scan.py:661` — `opens` array allocated in `build_day_arrays` return but never passed to `scan_session_aperture`. Array is released via `del` at line 739. Style difference with no correctness impact — scan only needs highs/lows/closes.
+
+Note: `research_session_stats.py` does not exist — skip.
 
 ---
 
 ## Summary
-- 1 target patched: research/research_overlap_analysis.py
-- 2 finding groups fixed (OA-01 + OA-02): all LOW/mechanical ruff auto-fixes (1 I001 + 27 F541)
+- 1 target patched: research/research_aperture_scan.py
+- 2 finding groups fixed (AS-01 + AS-02): all LOW/mechanical ruff auto-fixes (1 I001 + 17 F541)
+- 2 findings ACCEPTABLE (AS-03 + AS-04): dead instrument skip, unused array (no correctness impact)
 - 0 findings deferred
-- Infrastructure Gates: 4/4 PASS (ruff clean, pyright 0 errors)
+- Infrastructure Gates: 4/4 PASS (ruff clean, check_drift 72/72 PASS)
 
 **Codebase steady state maintained for major violation classes:**
 - Hardcoded DB paths: ELIMINATED (0 in production code; research/ consistent)
@@ -61,7 +66,7 @@ Note: `research_session_clustering.py` does not exist — skip.
 
 ## Files Fully Scanned
 
-> Cumulative list — 164 files fully scanned (1 new file added this iteration).
+> Cumulative list — 165 files fully scanned (1 new file added this iteration).
 
 - trading_app/ — 44 files (iters 4-61)
 - pipeline/ — 15 files (iters 1-71)
@@ -71,12 +76,11 @@ Note: `research_session_clustering.py` does not exist — skip.
 - scripts/migrations/ — 1 file (iter 73)
 - scripts/reports/ — 3 files (iter 87): report_wf_diagnostics.py, parameter_stability_heatmap.py, report_edge_portfolio.py (iter 85)
 - scripts/ root — 2 files (iter 88): run_live_session.py, operator_status.py
-- research/ — 18 files (iters 101-110): research_zt_event_viability.py, research_london_adjacent.py, research_mes_compressed_spring.py (iter 101); research_post_break_pullback.py, research_mgc_asian_fade_mfe.py, research_zt_fomc_unwind.py (iter 102); research_zt_cpi_nfp.py (iter 103); research_mgc_mnq_correlation.py (iter 104); research_atr_velocity_gate.py, research_mgc_regime_shift.py (iter 105); research_zt_event_viability.py (iter 106); research_vol_regime_switching.py (iter 107); research_edge_structure.py, research_1015_vs_1000.py (iters 108-109); research_overlap_analysis.py (iter 110)
+- research/ — 19 files (iters 101-111): research_zt_event_viability.py, research_london_adjacent.py, research_mes_compressed_spring.py (iter 101); research_post_break_pullback.py, research_mgc_asian_fade_mfe.py, research_zt_fomc_unwind.py (iter 102); research_zt_cpi_nfp.py (iter 103); research_mgc_mnq_correlation.py (iter 104); research_atr_velocity_gate.py, research_mgc_regime_shift.py (iter 105); research_zt_event_viability.py (iter 106); research_vol_regime_switching.py (iter 107); research_edge_structure.py, research_1015_vs_1000.py (iters 108-109); research_overlap_analysis.py (iter 110); research_aperture_scan.py (iter 111)
 - docs/plans/ — 2 files (iter 103): 2026-03-15-zt-stage1-cpi-nfp-spec.md, 2026-03-15-zt-stage1-triage-gate.md
-- **Total: 164 files fully scanned**
+- **Total: 165 files fully scanned**
 - See previous audit iterations for per-file detail
 
 ## Next iteration targets
-- `research/research_aperture_scan.py` — unscanned; primary scan engine; Seven Sins audit
-- `research/research_session_stats.py` — unscanned if it exists; Seven Sins audit
+- Remaining unscanned research/ files: glob research/ to find any not yet in the scanned list
 - DF-04 remains open but annotated — do not re-investigate unless rolling portfolio is extended to multi-aperture
