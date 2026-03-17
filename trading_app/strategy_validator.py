@@ -40,7 +40,13 @@ from pipeline.dst import (
     is_winter_for_session,
 )
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.config import CORE_MIN_SAMPLES, REGIME_MIN_SAMPLES, WF_START_OVERRIDE
+from trading_app.config import (
+    CORE_MIN_SAMPLES,
+    REGIME_MIN_SAMPLES,
+    WF_MIN_TRAIN_TRADES,
+    WF_START_OVERRIDE,
+    WF_TRADE_COUNT_OVERRIDE,
+)
 from trading_app.db_manager import init_trading_app_schema
 from trading_app.strategy_discovery import parse_dst_regime
 from trading_app.walkforward import append_walkforward_result
@@ -547,6 +553,8 @@ def _walkforward_worker(
     dst_cols_from_discovery: dict | None,
     wf_start_date: date | None = None,
     stop_multiplier: float = 1.0,
+    wf_test_trades: int | None = None,
+    wf_min_train_trades: int | None = None,
 ) -> dict:
     """Worker function for parallel walkforward. Runs in a subprocess.
 
@@ -597,6 +605,8 @@ def _walkforward_worker(
                 wf_start_date=wf_start_date,
                 stop_multiplier=stop_multiplier,
                 cost_spec=wf_cost_spec,
+                test_window_trades=wf_test_trades,
+                min_train_trades=wf_min_train_trades,
             )
             result["wf_result"] = {
                 "passed": wf_result.passed,
@@ -671,6 +681,8 @@ def run_validation(
 
     cost_spec = get_cost_spec(instrument)
     wf_start_date = WF_START_OVERRIDE.get(instrument)
+    wf_test_trades = WF_TRADE_COUNT_OVERRIDE.get(instrument)
+    wf_min_train = WF_MIN_TRAIN_TRADES.get(instrument)
 
     if workers is None:
         workers = min(8, max(1, (os.cpu_count() or 2) - 1))
@@ -833,6 +845,8 @@ def run_validation(
                 dst_verdict_from_discovery=rd.get("dst_verdict"),
                 wf_start_date=wf_start_date,
                 stop_multiplier=rd.get("stop_multiplier", 1.0),
+                wf_test_trades=wf_test_trades,
+                wf_min_train_trades=wf_min_train,
                 dst_cols_from_discovery={
                     "winter_n": rd.get("dst_winter_n"),
                     "winter_avg_r": rd.get("dst_winter_avg_r"),

@@ -1,5 +1,7 @@
 """Tests for trading_app.prop_portfolio — prop firm portfolio selection."""
 
+from datetime import date
+
 import pytest
 
 from trading_app.portfolio import PortfolioStrategy
@@ -7,11 +9,14 @@ from trading_app.prop_profiles import (
     AccountProfile,
 )
 from trading_app.prop_portfolio import (
-    select_for_profile,
+    _calendar_gate_reason,
     _compute_dd_per_contract,
     _apply_instrument_bans,
     _deduplicate_sessions,
+    _format_time_ampm,
     _rank_strategies,
+    _time_sort_key,
+    select_for_profile,
 )
 
 
@@ -284,3 +289,63 @@ class TestEndToEnd:
         self_book = select_for_profile(self_profile, pool)
 
         assert self_book.total_slots >= prop_book.total_slots
+
+
+class TestCalendarGate:
+    """Calendar filter skip logic (NOMON/NOTUE/NOFRI)."""
+
+    def test_nomon_skips_monday(self):
+        monday = date(2026, 3, 16)  # Monday
+        assert _calendar_gate_reason("ORB_G6_NOMON", monday) is not None
+
+    def test_nomon_allows_tuesday(self):
+        tuesday = date(2026, 3, 17)  # Tuesday
+        assert _calendar_gate_reason("ORB_G6_NOMON", tuesday) is None
+
+    def test_nofri_skips_friday(self):
+        friday = date(2026, 3, 20)  # Friday
+        assert _calendar_gate_reason("ORB_G4_NOFRI", friday) is not None
+
+    def test_nofri_allows_wednesday(self):
+        wednesday = date(2026, 3, 18)
+        assert _calendar_gate_reason("ORB_G4_NOFRI", wednesday) is None
+
+    def test_no_filter_allows_all(self):
+        assert _calendar_gate_reason("ORB_G5", date(2026, 3, 16)) is None
+        assert _calendar_gate_reason(None, date(2026, 3, 16)) is None
+
+
+class TestTimeSortKey:
+    """Brisbane time sorting starting from 08:00."""
+
+    def test_morning_before_evening(self):
+        assert _time_sort_key("08:00") < _time_sort_key("18:00")
+
+    def test_overnight_after_evening(self):
+        assert _time_sort_key("23:30") < _time_sort_key("05:45")  # both after 08:00 in cycle
+
+    def test_early_morning_wraps(self):
+        # 05:45 AM is "tomorrow" in trading day — after 23:30
+        assert _time_sort_key("05:45") > _time_sort_key("23:30")
+
+    def test_unknown_sorts_last(self):
+        assert _time_sort_key("unknown") == 9999
+
+
+class TestFormatTimeAmPm:
+    """HH:MM to h:MM AM/PM conversion."""
+
+    def test_midnight(self):
+        assert _format_time_ampm("00:00") == "12:00 AM"
+
+    def test_noon(self):
+        assert _format_time_ampm("12:00") == "12:00 PM"
+
+    def test_morning(self):
+        assert _format_time_ampm("08:00") == "8:00 AM"
+
+    def test_evening(self):
+        assert _format_time_ampm("23:30") == "11:30 PM"
+
+    def test_unknown_passthrough(self):
+        assert _format_time_ampm("unknown") == "unknown"

@@ -693,6 +693,158 @@ class TestWalkForward:
         if result.wfe is not None:
             assert result.wfe > 0  # OOS is positive, IS (later) turns positive
 
+    # ================================================================
+    # Trade-count-based WF windows (AFML Ch.2)
+    # ================================================================
+
+    def test_trade_count_basic(self, con):
+        """Trade-count windows: 90 trades, window=30, min_train=30 -> 2 OOS windows."""
+        outcomes = _monthly_outcomes(2020, 2022)  # 3 years, 3/month = 108 trades
+        _insert_outcomes(con, outcomes)
+
+        result = run_walkforward(
+            con=con,
+            strategy_id="TEST_TC_BASIC",
+            instrument="MGC",
+            test_window_trades=30,
+            min_train_trades=30,
+            min_valid_windows=2,
+            **_WF_BASE,
+        )
+
+        # 108 trades total. min_train=30. Remaining=78. window=30 -> 2 full windows (idx 30-59, 60-89), partial 18 discarded.
+        assert result.n_total_windows == 2
+        assert result.n_valid_windows == 2
+        # Every trade-count window has exactly 30 trades
+        for w in result.windows:
+            assert w["test_n"] == 30
+        assert result.passed is True
+
+    def test_trade_count_insufficient_trades(self, con):
+        """Fewer trades than min_train -> no windows, fail-closed."""
+        # Only 20 trades total
+        outcomes = []
+        for i in range(20):
+            outcomes.append(
+                {
+                    "trading_day": date(2020, 1, 10 + i),
+                    "outcome": "win",
+                    "pnl_r": 2.0,
+                }
+            )
+        _insert_outcomes(con, outcomes)
+
+        result = run_walkforward(
+            con=con,
+            strategy_id="TEST_TC_INSUF",
+            instrument="MGC",
+            test_window_trades=30,
+            min_train_trades=30,
+            **_WF_BASE,
+        )
+
+        assert result.passed is False
+        assert result.n_total_windows == 0
+
+    def test_trade_count_exact_one_window(self, con):
+        """Exactly min_train + window_size trades -> 1 OOS window."""
+        # 60 trades: 30 IS + 30 OOS
+        outcomes = _monthly_outcomes(2020, 2021)  # 24 months * 3 = 72 trades
+        _insert_outcomes(con, outcomes[:60])
+
+        result = run_walkforward(
+            con=con,
+            strategy_id="TEST_TC_EXACT",
+            instrument="MGC",
+            test_window_trades=30,
+            min_train_trades=30,
+            min_valid_windows=1,
+            **_WF_BASE,
+        )
+
+        assert result.n_total_windows == 1
+        assert result.windows[0]["test_n"] == 30
+
+    def test_trade_count_regime_spanning(self, con):
+        """Trade-count windows span across ATR regimes organically."""
+        # Simulate MGC: low-vol years (1 trade/month) then high-vol (5 trades/month)
+        outcomes = []
+        # 2020-2022: 1 trade/month (low vol) = 36 trades
+        for year in range(2020, 2023):
+            for month in range(1, 13):
+                outcomes.append(
+                    {
+                        "trading_day": date(year, month, 15),
+                        "outcome": "win",
+                        "pnl_r": 1.5,
+                    }
+                )
+        # 2023-2024: 5 trades/month (high vol) = 120 trades
+        for year in range(2023, 2025):
+            for month in range(1, 13):
+                for day in [3, 8, 13, 18, 23]:
+                    outcomes.append(
+                        {
+                            "trading_day": date(year, month, day),
+                            "outcome": "win",
+                            "pnl_r": 2.0,
+                        }
+                    )
+        _insert_outcomes(con, outcomes)
+
+        result = run_walkforward(
+            con=con,
+            strategy_id="TEST_TC_REGIME",
+            instrument="MGC",
+            test_window_trades=30,
+            min_train_trades=30,
+            min_valid_windows=3,
+            **_WF_BASE,
+        )
+
+        assert result.passed is True
+        # First OOS window should start in low-vol era (2020-2022)
+        first_window = result.windows[0]
+        assert first_window["window_start"] < "2023-01-01"
+        assert result.n_valid_windows >= 3
+
+    def test_trade_count_no_window_imbalance(self, con):
+        """Trade-count windows are perfectly balanced by construction."""
+        outcomes = _monthly_outcomes(2020, 2023)
+        _insert_outcomes(con, outcomes)
+
+        result = run_walkforward(
+            con=con,
+            strategy_id="TEST_TC_BAL",
+            instrument="MGC",
+            test_window_trades=20,
+            min_train_trades=20,
+            min_valid_windows=2,
+            **_WF_BASE,
+        )
+
+        # Every window has exactly 20 trades -> imbalance ratio = 1.0
+        if result.window_imbalance_ratio is not None:
+            assert result.window_imbalance_ratio == 1.0
+            assert result.window_imbalanced is False
+
+    def test_calendar_mode_unchanged_with_trade_count_none(self, con):
+        """When test_window_trades=None (default), calendar mode unchanged."""
+        outcomes = _monthly_outcomes(2020, 2023)
+        _insert_outcomes(con, outcomes)
+
+        result = run_walkforward(
+            con=con,
+            strategy_id="TEST_CAL_COMPAT",
+            instrument="MGC",
+            test_window_trades=None,
+            **_WF_BASE,
+        )
+
+        # Calendar mode: 4 years, 12mo train, 6mo windows -> ~6 windows
+        assert result.n_total_windows >= 4
+        assert result.passed is True
+
     def test_wfe_in_result_dataclass(self, con):
         """WFE field present in WalkForwardResult and serializable."""
         outcomes = _monthly_outcomes(2020, 2023)

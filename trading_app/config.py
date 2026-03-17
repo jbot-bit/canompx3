@@ -97,11 +97,24 @@ if TYPE_CHECKING:
 # Consequence: WF validates the HIGH-VOL regime only. It does NOT confirm
 # that these strategies work in moderate-vol (ATR 15-25) environments.
 # Compare: MNQ 1.9x ATR variation, MES 2.8x, M2K 1.5x — MGC is the outlier.
-# Phase 2 TODO: Implement trade-count-based WF windows (Lopez de Prado AFML
-# Ch.2 information-driven sampling) to get regime-spanning OOS validation.
+# RESOLVED: Trade-count-based WF windows implemented in walkforward.py.
+# MGC uses trade-count mode (30 trades/window) for regime-spanning validation.
+# Calendar mode remains default for MNQ/MES/M2K.
 # ─────────────────────────────────────────────────────────────────────────
 WF_START_OVERRIDE: dict[str, date] = {
     "MGC": date(2022, 1, 1),  # Gold <$1800 pre-2022 = tiny ORBs, G4+ windows invalid
+}
+
+# @research-source Lopez de Prado AFML Ch.2 — information-driven sampling;
+#   window by trade count for regime-spanning OOS validation where calendar
+#   windows fail due to extreme ATR variation (MGC 9.2x)
+# @entry-models E1/E2
+# @revalidated-for E1/E2 event-based sessions (2026-03-17)
+WF_TRADE_COUNT_OVERRIDE: dict[str, int] = {
+    "MGC": 30,  # 30 trades per OOS window — regime-spanning
+}
+WF_MIN_TRAIN_TRADES: dict[str, int] = {
+    "MGC": 45,  # 1.5x OOS window — stable IS estimation
 }
 
 
