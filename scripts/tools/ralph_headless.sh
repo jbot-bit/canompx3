@@ -56,7 +56,7 @@ fi
 # ── Config ────────────────────────────────────────────────────
 MAX_ITERS="${1:-5}"
 SCOPE="${2:-}"
-MODEL="${RALPH_MODEL:-haiku}"  # Override: RALPH_MODEL=sonnet bash scripts/tools/ralph_headless.sh
+MODEL="${RALPH_MODEL:-sonnet}"  # Override: RALPH_MODEL=haiku bash scripts/tools/ralph_headless.sh
 LOG_DIR="docs/ralph-loop/logs"
 STOP_FILE="$PROJECT_ROOT/ralph_loop.stop"
 TIMESTAMP=$(date +%Y%m%d_%H%M)
