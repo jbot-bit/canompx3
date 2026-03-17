@@ -244,6 +244,11 @@ def run_walkforward(
             window_start = window_end
 
     if not windows:
+        if test_window_trades is not None:
+            _min_is = min_train_trades if min_train_trades is not None else test_window_trades
+            _reason = f"Trade-count mode: need {_min_is + test_window_trades} outcomes after anchor, got {len(outcomes)}."
+        else:
+            _reason = f"All {len(outcomes)} outcomes in training period ({min_train_months}mo). No test windows."
         return WalkForwardResult(
             strategy_id=strategy_id,
             instrument=instrument,
@@ -254,15 +259,15 @@ def run_walkforward(
             agg_oos_exp_r=0.0,
             total_oos_trades=0,
             passed=False,
-            rejection_reason=(
-                f"All {len(outcomes)} outcomes in training period ({min_train_months}mo). No test windows."
-            ),
+            rejection_reason=_reason,
             windows=[],
             params=params,
         )
 
     # Aggregate valid windows (test_n >= threshold)
-    valid_windows = [w for w in windows if w["test_n"] >= min_trades_per_window]
+    # In trade-count mode, use test_window_trades as threshold (not calendar min)
+    _per_win_min = test_window_trades if test_window_trades is not None else min_trades_per_window
+    valid_windows = [w for w in windows if w["test_n"] >= _per_win_min]
     n_valid = len(valid_windows)
     n_positive = sum(1 for w in valid_windows if w["test_exp_r"] is not None and w["test_exp_r"] > 0)
     pct_positive = n_positive / n_valid if n_valid > 0 else 0.0
@@ -303,7 +308,7 @@ def run_walkforward(
         window_imbalanced = window_imbalance_ratio > 5.0
 
     # Pass rule (ALL 4 required, fail-closed)
-    oos_trade_floor = min_trades_per_window * min_valid_windows
+    oos_trade_floor = _per_win_min * min_valid_windows
     rejection_reason = None
 
     if n_valid < min_valid_windows:
