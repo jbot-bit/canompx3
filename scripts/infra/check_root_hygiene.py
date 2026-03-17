@@ -48,7 +48,8 @@ ALLOWED_DIRS = {
 
 ALLOWED_FILES = {
     "CLAUDE.md",
-    "MARKET_PLAYBOOK.md",
+    "HANDOFF.md",
+    "AGENTS.md",
     "ROADMAP.md",
     "REPO_MAP.md",
     "README.md",

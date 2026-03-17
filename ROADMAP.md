@@ -50,7 +50,7 @@ Do not schedule active delivery work against SIL until explicitly re-opened.
 - Grid: 6 ORBs x 6 RRs x 5 CBs x 13 filters x 3 EMs = 6,480 combos (post-5b expansion)
 - **Current state (Feb 27 2026):** 15m/30m rebuilt + 5 new volume-validated sessions added (MGC NYSE_OPEN, MNQ US_DATA_830+COMEX_SETTLE, MES COMEX_SETTLE, M2K COMEX_SETTLE). Full rebuild chain completed for all 4 instruments. Counts in TRADING_RULES.md.
 - Edge requires G4+ ORB size filter (NO_FILTER and L-filters ALL negative ExpR)
-- MARKET_PLAYBOOK.md: comprehensive empirical findings
+- Empirical findings: query gold.db or `python -m trading_app.prop_portfolio --daily`
 
 ## Phase 5b: Entry Model Fix + Risk Floor + Win PnL Fix — DONE
 
