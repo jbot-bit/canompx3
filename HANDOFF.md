@@ -74,6 +74,7 @@ If nothing changed, leave it as-is.
 - ATR-normalized position sizing (item 12)
 - MGC WF revalidation with trade-count windows
 - If Claude native startup should also force preflight outside the worktree wrapper path, add a machine-local launcher or shell alias on the Windows side
+- Pre-commit hook is LF-normalized again at `.githooks/pre-commit`; normal `git commit` should no longer die on `/usr/bin/env: 'bash\r'`
 
 ## Blockers / Warnings
 - `.venv-wsl/bin/python` exists in this checkout now. The old “empty `.venv-wsl/`” warning is stale.
