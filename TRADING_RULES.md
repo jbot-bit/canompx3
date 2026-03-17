@@ -632,7 +632,7 @@ This is why small ORBs lose — friction eats the edge.
 | Document | Content |
 |----------|---------|
 | `docs/RESEARCH_ARCHIVE.md` | All research deep-dives, data tables, scripts |
-| `MARKET_PLAYBOOK.md` | Full backtest results, yearly breakdowns |
+| `python -m trading_app.prop_portfolio --daily` | Daily execution card with firm routing |
 | `artifacts/TRADE_MANAGEMENT_RULES.md` | LONDON_METALS E3 management rules with full data |
 | `artifacts/EARLY_EXIT_RULES.md` | Early exit research per-session |
 | `trading_app/live_config.py` | Declarative live portfolio (code) |
