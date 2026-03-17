@@ -349,3 +349,124 @@ class TestFormatTimeAmPm:
 
     def test_unknown_passthrough(self):
         assert _format_time_ampm("unknown") == "unknown"
+
+
+class TestResolveDailyLane:
+    """Integration tests for _resolve_daily_lane — the critical manual trading path."""
+
+    @pytest.fixture()
+    def lane_db(self, tmp_path):
+        """In-memory DuckDB with one validated_setups row for lane testing."""
+        import duckdb
+
+        db_path = tmp_path / "test.db"
+        con = duckdb.connect(str(db_path))
+        con.execute("""
+            CREATE TABLE validated_setups (
+                strategy_id VARCHAR, instrument VARCHAR, orb_label VARCHAR,
+                entry_model VARCHAR, rr_target DOUBLE, confirm_bars INTEGER,
+                filter_type VARCHAR, orb_minutes INTEGER, stop_multiplier DOUBLE,
+                expectancy_r DOUBLE, win_rate DOUBLE, sample_size INTEGER,
+                status VARCHAR
+            )
+        """)
+        con.execute("""
+            CREATE TABLE experimental_strategies (
+                strategy_id VARCHAR, median_risk_points DOUBLE
+            )
+        """)
+        con.execute("""
+            INSERT INTO validated_setups VALUES
+            ('TEST_STRAT_S075', 'MNQ', 'TOKYO_OPEN', 'E2', 1.0, 1,
+             'ORB_G5', 5, 0.75, 0.10, 0.55, 200, 'active')
+        """)
+        con.execute("""
+            INSERT INTO experimental_strategies VALUES ('TEST_STRAT_S075', 10.0)
+        """)
+        con.close()
+        return db_path
+
+    def test_trade_when_all_checks_pass(self, lane_db):
+        from trading_app.prop_portfolio import _resolve_daily_lane
+        from trading_app.prop_profiles import DailyLaneSpec
+
+        profile = AccountProfile("test", "self_funded", 50_000, 1, 0.75, max_slots=4)
+        # Allow UNKNOWN fitness since test DB has no edge_families
+        lane = DailyLaneSpec("TEST_STRAT_S075", "MNQ", "TOKYO_OPEN", required_fitness=("FIT", "UNKNOWN"))
+        result = _resolve_daily_lane(profile, lane, lane_db, date(2026, 3, 17))
+        assert result.status == "TRADE"
+
+    def test_hold_when_strategy_missing(self, lane_db):
+        from trading_app.prop_portfolio import _resolve_daily_lane
+        from trading_app.prop_profiles import DailyLaneSpec
+
+        profile = AccountProfile("test", "self_funded", 50_000, 1, 0.75, max_slots=4)
+        lane = DailyLaneSpec("NONEXISTENT_STRAT", "MNQ", "TOKYO_OPEN")
+        result = _resolve_daily_lane(profile, lane, lane_db, date(2026, 3, 17))
+        assert result.status == "HOLD"
+        assert "missing" in result.reason.lower()
+
+    def test_skip_on_calendar_gate(self, lane_db):
+        """NOMON filter on a Monday should SKIP."""
+        import duckdb
+
+        con = duckdb.connect(str(lane_db))
+        con.execute("""
+            INSERT INTO validated_setups VALUES
+            ('TEST_NOMON', 'MNQ', 'LONDON_METALS', 'E2', 1.0, 1,
+             'ORB_G6_NOMON', 15, 0.75, 0.08, 0.52, 150, 'active')
+        """)
+        con.close()
+
+        from trading_app.prop_portfolio import _resolve_daily_lane
+        from trading_app.prop_profiles import DailyLaneSpec
+
+        profile = AccountProfile("test", "self_funded", 50_000, 1, 0.75, max_slots=4)
+        lane = DailyLaneSpec("TEST_NOMON", "MNQ", "LONDON_METALS")
+        monday = date(2026, 3, 16)
+        result = _resolve_daily_lane(profile, lane, lane_db, monday)
+        assert result.status == "SKIP"
+        assert "monday" in result.reason.lower()
+
+    def test_review_on_stop_mismatch(self, lane_db):
+        """Plan uses 0.75x but validated row has 1.0x -> REVIEW."""
+        import duckdb
+
+        con = duckdb.connect(str(lane_db))
+        con.execute("""
+            INSERT INTO validated_setups VALUES
+            ('TEST_10X', 'MNQ', 'NYSE_OPEN', 'E2', 1.0, 1,
+             'ORB_G4', 5, 1.0, 0.10, 0.55, 200, 'active')
+        """)
+        con.close()
+
+        from trading_app.prop_portfolio import _resolve_daily_lane
+        from trading_app.prop_profiles import DailyLaneSpec
+
+        profile = AccountProfile("test", "self_funded", 50_000, 1, 0.75, max_slots=4)
+        # Allow UNKNOWN fitness so we reach the stop mismatch check
+        lane = DailyLaneSpec("TEST_10X", "MNQ", "NYSE_OPEN", required_fitness=("FIT", "UNKNOWN"))
+        result = _resolve_daily_lane(profile, lane, lane_db, date(2026, 3, 17))
+        assert result.status == "REVIEW"
+        assert "mismatch" in result.reason.lower()
+
+    def test_hold_on_inactive_strategy(self, lane_db):
+        """Strategy with status != active -> HOLD."""
+        import duckdb
+
+        con = duckdb.connect(str(lane_db))
+        con.execute("""
+            INSERT INTO validated_setups VALUES
+            ('TEST_INACTIVE', 'MNQ', 'CME_PRECLOSE', 'E2', 1.0, 1,
+             'ORB_G5', 5, 0.75, 0.10, 0.55, 200, 'retired')
+        """)
+        con.close()
+
+        from trading_app.prop_portfolio import _resolve_daily_lane
+        from trading_app.prop_profiles import DailyLaneSpec
+
+        profile = AccountProfile("test", "self_funded", 50_000, 1, 0.75, max_slots=4)
+        lane = DailyLaneSpec("TEST_INACTIVE", "MNQ", "CME_PRECLOSE")
+        result = _resolve_daily_lane(profile, lane, lane_db, date(2026, 3, 17))
+        assert result.status == "HOLD"
+        assert "retired" in result.reason.lower()
