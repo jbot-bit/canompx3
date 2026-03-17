@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from pathlib import Path
 
 from pipeline.dst import SESSION_CATALOG
 from trading_app.portfolio import PortfolioStrategy
@@ -339,7 +340,7 @@ def build_all_books(
     return books
 
 
-def print_trading_book(book: TradingBook, profile: AccountProfile) -> None:
+def print_trading_book(book: TradingBook, profile: AccountProfile, verbose: bool = False) -> None:
     """Pretty-print a trading book."""
     firm_spec = get_firm_spec(profile.firm)
     tier = get_account_tier(profile.firm, profile.account_size)
@@ -385,64 +386,203 @@ def print_trading_book(book: TradingBook, profile: AccountProfile) -> None:
     )
 
     if book.excluded:
-        print(f"\n  EXCLUDED ({len(book.excluded)}):")
-        for ex in book.excluded:
-            print(f"    x {ex.strategy_id[:40]:<40} {ex.instrument:<5} {ex.orb_label:<18} -- {ex.reason}")
+        if verbose:
+            print(f"\n  EXCLUDED ({len(book.excluded)}):")
+            for ex in book.excluded:
+                print(f"    x {ex.strategy_id[:40]:<40} {ex.instrument:<5} {ex.orb_label:<18} -- {ex.reason}")
+        else:
+            print(f"  ({len(book.excluded)} excluded — use --verbose to see reasons)")
     print()
 
 
-def main() -> None:
-    """CLI entry point."""
-    import argparse
+def _time_sort_key(time_str: str) -> int:
+    """Sort Brisbane times starting from 08:00 (trading day start)."""
+    try:
+        h, m = int(time_str[:2]), int(time_str[3:5])
+    except (ValueError, IndexError):
+        return 9999
+    return (h * 60 + m - 8 * 60) % (24 * 60)
 
-    from pipeline.asset_configs import get_active_instruments
-    from pipeline.paths import GOLD_DB_PATH
-    from trading_app.live_config import build_live_portfolio
-    from trading_app.prop_profiles import get_profile
 
-    parser = argparse.ArgumentParser(description="Build prop firm trading books from validated strategies")
-    parser.add_argument(
-        "--profile",
-        type=str,
-        default=None,
-        help=f"Profile ID. Available: {', '.join(ACCOUNT_PROFILES.keys())}",
+def _format_time_ampm(time_str: str) -> str:
+    """Convert HH:MM to h:MM AM/PM."""
+    try:
+        h, m = int(time_str[:2]), int(time_str[3:5])
+    except (ValueError, IndexError):
+        return time_str
+    period = "AM" if h < 12 else "PM"
+    display_h = h % 12 or 12
+    return f"{display_h}:{m:02d} {period}"
+
+
+def print_daily(
+    books: dict[str, TradingBook],
+    trading_day: date,
+    fitness_results: dict[str, str] | None = None,
+) -> None:
+    """Print glanceable daily execution card — one line per trade, sorted by time."""
+    day_name = trading_day.strftime("%A")
+    date_str = trading_day.strftime("%d %b %Y")
+
+    # Collect all trades with firm labels
+    all_trades: list[tuple[str, TradingBookEntry, str]] = []  # (time_sort, entry, firm_label)
+    for pid, book in books.items():
+        profile = ACCOUNT_PROFILES[pid]
+        firm_spec = get_firm_spec(profile.firm)
+        copies_str = f" x{profile.copies}" if profile.copies > 1 else ""
+        short_name = {
+            "apex": "Apex",
+            "topstep": "TopStep",
+            "tradeify": "Tradeify",
+            "self_funded": "Self",
+            "mffu": "MFFU",
+        }.get(profile.firm, firm_spec.display_name)
+        label = f"{short_name}{copies_str}"
+        if firm_spec.auto_trading == "none":
+            label += " manual"
+        for entry in book.entries:
+            all_trades.append((entry.session_time_brisbane, entry, label))
+
+    all_trades.sort(key=lambda t: _time_sort_key(t[0]))
+
+    print(f"\n  TODAY: {day_name} {date_str}")
+    print(f"  {'=' * 68}")
+
+    if not all_trades:
+        print("  No trades selected across any profile.")
+        print()
+        return
+
+    # Header
+    print(
+        f"  {'Time':<10} {'Session':<16} {'Inst':<5} {'Filter':<16} "
+        f"{'RR':<5} {'Entry':<8} {'Account':<18} {'Fitness':<8}"
     )
-    parser.add_argument("--all", action="store_true", help="Build all active profiles")
-    parser.add_argument("--summary", action="store_true", help="Cross-account summary")
-    parser.add_argument("--db-path", type=str, default=None)
-    args = parser.parse_args()
+    print(f"  {'-' * 10} {'-' * 16} {'-' * 5} {'-' * 16} {'-' * 5} {'-' * 8} {'-' * 18} {'-' * 8}")
 
-    if not args.profile and not args.all:
-        args.all = True  # Default: show all
+    warnings = []
+    for time_str, entry, firm_label in all_trades:
+        time_display = _format_time_ampm(time_str)
 
-    from pathlib import Path
+        # Fitness lookup
+        fitness = "—"
+        if fitness_results and entry.strategy_id in fitness_results:
+            fitness = fitness_results[entry.strategy_id]
+        if fitness in ("DECAY", "UNKNOWN"):
+            warnings.append(f"  !! {entry.strategy_id}: {fitness}")
 
-    db_path = Path(args.db_path) if args.db_path else GOLD_DB_PATH
+        print(
+            f"  {time_display:<10} {entry.orb_label:<16} {entry.instrument:<5} "
+            f"{entry.filter_type:<16} {entry.rr_target:<5.1f} "
+            f"{entry.entry_model} CB{entry.confirm_bars:<4} "
+            f"{firm_label:<18} {fitness:<8}"
+        )
 
-    # Build eligible strategies for each instrument
+    # Summary
+    total_slots = sum(b.total_slots for b in books.values())
+    total_copies = sum(ACCOUNT_PROFILES[pid].copies for pid in books)
+    aggregate_dd = sum(books[pid].total_dd_used * ACCOUNT_PROFILES[pid].copies for pid in books)
+    firms_used = len(books)
+    print(f"  {'=' * 68}")
+    print(f"  {total_slots} trades | {firms_used} firms | {total_copies} accounts | ${aggregate_dd:,.0f} aggregate DD")
+
+    if warnings:
+        print()
+        for w in warnings:
+            print(w)
+
+    print()
+
+
+def _load_strategies_and_build_books(db_path: Path) -> tuple[dict[str, TradingBook], list[PortfolioStrategy]]:
+    """Load strategies from DB and build books for all active profiles."""
+    from pipeline.asset_configs import get_active_instruments
+    from trading_app.live_config import build_live_portfolio
+
     print("Loading validated strategies...")
     all_strategies: list[PortfolioStrategy] = []
     for instrument in get_active_instruments():
         portfolio, _notes = build_live_portfolio(db_path=db_path, instrument=instrument)
         print(f"  {instrument}: {len(portfolio.strategies)} eligible")
         all_strategies.extend(portfolio.strategies)
-    print(f"  Total pool: {len(all_strategies)} strategies across all instruments")
+    print(f"  Total pool: {len(all_strategies)} strategies across all instruments\n")
+
+    strategies_by_instrument: dict[str, list[PortfolioStrategy]] = {}
+    for s in all_strategies:
+        strategies_by_instrument.setdefault(s.instrument, []).append(s)
+    books = build_all_books(strategies_by_instrument)
+    return books, all_strategies
+
+
+def main() -> None:
+    """CLI entry point."""
+    import argparse
+
+    from pipeline.paths import GOLD_DB_PATH
+    from trading_app.prop_profiles import get_profile
+
+    parser = argparse.ArgumentParser(description="Prop firm portfolio — what to trade, where, when")
+    parser.add_argument(
+        "--profile",
+        type=str,
+        default=None,
+        help=f"Single profile. Available: {', '.join(ACCOUNT_PROFILES.keys())}",
+    )
+    parser.add_argument("--all", action="store_true", help="Show all active profiles (default)")
+    parser.add_argument(
+        "--daily", action="store_true", help="Daily execution card — one line per trade, sorted by time"
+    )
+    parser.add_argument("--summary", action="store_true", help="Cross-account summary")
+    parser.add_argument("--verbose", action="store_true", help="Show excluded strategies and reasons")
+    parser.add_argument("--fitness", action="store_true", help="Check fitness status per strategy (slower)")
+    parser.add_argument("--date", type=str, default=None, help="Trading date YYYY-MM-DD (default: today)")
+    parser.add_argument("--db-path", type=str, default=None)
+    args = parser.parse_args()
+
+    if not args.profile and not args.all and not args.daily:
+        args.daily = True  # Default to the useful view
+
+    from pathlib import Path
+
+    db_path = Path(args.db_path) if args.db_path else GOLD_DB_PATH
+    trading_day = date.fromisoformat(args.date) if args.date else date.today()
+
+    # Fitness check (optional — adds ~2s)
+    fitness_results: dict[str, str] | None = None
+    if args.fitness or args.daily:
+        from trading_app.strategy_fitness import compute_fitness
+
+        fitness_results = {}
+
+    if args.daily:
+        books, _ = _load_strategies_and_build_books(db_path)
+
+        # Run fitness checks for all selected strategies
+        if fitness_results is not None:
+            from trading_app.strategy_fitness import compute_fitness
+
+            all_sids = [e.strategy_id for b in books.values() for e in b.entries]
+            for sid in all_sids:
+                try:
+                    f = compute_fitness(sid, db_path=db_path)
+                    fitness_results[sid] = f.fitness_status
+                except Exception:
+                    fitness_results[sid] = "UNKNOWN"
+
+        print_daily(books, trading_day, fitness_results)
+        return
 
     if args.profile:
+        books, all_strategies = _load_strategies_and_build_books(db_path)
         profile = get_profile(args.profile)
         book = select_for_profile(profile, all_strategies)
-        print_trading_book(book, profile)
+        print_trading_book(book, profile, verbose=args.verbose)
     else:
-        # Use build_all_books to avoid duplicating profile iteration logic
-        strategies_by_instrument: dict[str, list[PortfolioStrategy]] = {}
-        # Re-key by instrument from the flat list
-        for s in all_strategies:
-            strategies_by_instrument.setdefault(s.instrument, []).append(s)
-        books = build_all_books(strategies_by_instrument)
+        books, _ = _load_strategies_and_build_books(db_path)
         for pid, book in books.items():
-            print_trading_book(book, ACCOUNT_PROFILES[pid])
+            print_trading_book(book, ACCOUNT_PROFILES[pid], verbose=args.verbose)
 
-        if args.summary and books:
+        if args.summary:
             print(f"\n{'=' * 70}")
             print("  CROSS-ACCOUNT SUMMARY")
             print(f"{'=' * 70}")
