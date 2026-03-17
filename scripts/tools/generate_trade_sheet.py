@@ -45,6 +45,7 @@ class FitnessCheckResult:
     status: str
     error: str | None = None
 
+
 # ── Filter → plain English ────────────────────────────────────────────
 
 

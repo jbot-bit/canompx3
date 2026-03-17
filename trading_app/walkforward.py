@@ -246,7 +246,9 @@ def run_walkforward(
     if not windows:
         if test_window_trades is not None:
             _min_is = min_train_trades if min_train_trades is not None else test_window_trades
-            _reason = f"Trade-count mode: need {_min_is + test_window_trades} outcomes after anchor, got {len(outcomes)}."
+            _reason = (
+                f"Trade-count mode: need {_min_is + test_window_trades} outcomes after anchor, got {len(outcomes)}."
+            )
         else:
             _reason = f"All {len(outcomes)} outcomes in training period ({min_train_months}mo). No test windows."
         return WalkForwardResult(

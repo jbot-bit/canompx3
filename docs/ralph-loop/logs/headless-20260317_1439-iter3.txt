@@ -1,0 +1,26 @@
+Ledger updated: `consecutive_low_only` now = 4 (was 3, this audit-only iter incremented it again). The diminishing returns signal is confirmed.
+
+`★ Insight ─────────────────────────────────────`
+**The Ralph Loop's DIMINISHING_RETURNS mechanism is itself a form of the circuit breaker pattern** — after N consecutive low-value iterations, it stops "making requests" (expensive audits of marginal files) and recommends re-scoping to higher-value targets. This mirrors the exact state machine in `circuit_breaker.py`: open after threshold failures, probe only after timeout.
+
+**`circuit_breaker.py` implements the classic 3-state half-open pattern** with careful `_opened_at is None` defensive guard — even if `consecutive_failures` were externally set to ≥ threshold without a `record_failure()` call, the circuit would still fail-closed on `should_allow_request()`. This is proper defensive programming.
+
+**`cusum_monitor.py`'s `n_trades` preserved through `clear()`** is a subtle but correct design choice: the monitor tracks cumulative trade count for diagnostic logging, but resets the CUSUM accumulators. Without this, alarms after `clear()` would lose context about how long the strategy has been running.
+`─────────────────────────────────────────────────`
+
+---
+
+```
+=== RALPH LOOP ITER [128] COMPLETE ===
+Scope: trading_app/live/circuit_breaker.py + cusum_monitor.py + projectx/__init__.py
+Audit: 0 findings (0 CRIT, 0 HIGH, 0 MED, 0 LOW)
+Classification: audit-only
+Action: diminishing-returns
+Target: N/A — all three files CLEAN
+Blast radius: 0 files
+Verdict: DIMINISHING_RETURNS
+Commit: NONE
+Deferred debt: 1 open item (DF-04)
+Next: trading_app/ml/config.py — CRITICAL tier, 12 importers, unscanned (highest-value remaining target)
+================================
+```

@@ -1,0 +1,18 @@
+All done.
+
+```
+=== RALPH LOOP ITER [129] COMPLETE ===
+Scope: trading_app/ml/config.py (CRITICAL tier, 12 importers)
+Audit: 1 finding (0 CRIT, 1 HIGH, 0 MED, 0 LOW)
+Classification: [judgment]
+Action: fix
+Target: trading_app/ml/config.py:267-274 (compute_config_hash)
+Blast radius: 1 file changed; callers meta_label.py, predict_live.py, check_drift.py unchanged
+Verdict: ACCEPT
+Commit: 3a0e01b
+Deferred debt: 1 open item (DF-04)
+Next: trading_app/ml/meta_label.py — CRITICAL tier, largest ML module, look-ahead/CPCV split risk
+================================
+```
+
+**Finding fixed:** `compute_config_hash()` was missing `GLOBAL_FEATURES`, `SESSION_FEATURE_SUFFIXES`, `ATR_NORMALIZE`, `CATEGORICAL_FEATURES`, and `sorted(LOOKAHEAD_BLACKLIST)` from its hash formula. These are all the primary feature-engineering lists consumed by `features.py`. A change to any of them (e.g., adding a new global feature, or accidentally removing a feature from `LOOKAHEAD_BLACKLIST`) would not have been caught by the drift check's "retrain needed" gate — a silent failure in the safety mechanism.

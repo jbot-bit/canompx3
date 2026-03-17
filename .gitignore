@@ -172,3 +172,37 @@ scripts/tools/.pinecone_sync_state.json
 # Cloudflare tunnel credentials (never commit)
 .cloudflared/*.json
 .cloudflared/*.pem
+
+# Shell dotfiles (leaked from home dir)
+.bash_profile
+.bashrc
+.zshrc
+.zprofile
+.profile
+.gitconfig
+.gitmodules
+.ripgreprc
+
+# Git internals leaked into worktree root
+hooks/
+objects/
+refs/
+
+# Venv path artifacts
+..venv*
+
+# Temp path artifacts (mangled Windows paths)
+C*/
+Users*
+
+# Config dir (hypercorn/secret_key — not for VCS)
+config/
+
+# PDF resources (large, not for VCS)
+resources/*.pdf
+
+# Temp script output
+scripts/tmp_lit_results.txt
+
+# WSL env scripts
+scripts/infra/wsl-env.ps1
