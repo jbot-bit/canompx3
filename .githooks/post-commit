@@ -6,6 +6,12 @@
 # This is ADVISORY — if it fails, the commit is already done. Never exit 1.
 #
 
+# Skip during rebase, merge, or cherry-pick (fires per replayed commit = spam)
+if [ -n "$GIT_REBASE_TODO" ] || [ -d ".git/rebase-merge" ] || [ -d ".git/rebase-apply" ] \
+   || [ -f ".git/MERGE_HEAD" ] || [ -f ".git/CHERRY_PICK_HEAD" ]; then
+    exit 0
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HANDOFF="$SCRIPT_DIR/HANDOFF.md"
 
@@ -19,7 +25,6 @@ if [ -n "$CLAUDECODE" ]; then
 elif [ -n "$CODEX_CLI" ] || [ -n "$CODEX" ]; then
     TOOL="Codex"
 else
-    # Check parent process or WSL hint
     if grep -qi "wsl" /proc/version 2>/dev/null; then
         TOOL="Codex (WSL)"
     else
@@ -42,7 +47,6 @@ NEW_SESSION="## Last Session
 - **Commit:** ${SHA} — ${SUBJECT}
 - **Files changed:** ${FILE_COUNT} files"
 
-# Replace everything between "## Last Session" and the next "##" heading
 # Use python for reliable cross-platform multiline replacement
 PYTHON="python"
 if [ -f "$SCRIPT_DIR/.venv/Scripts/python.exe" ]; then
@@ -71,21 +75,12 @@ if file_lines:
 else:
     replacement = new_block + '\n'
 
-# Replace the Last Session section (up to next ## or end of Decisions Made)
+# Replace the Last Session section (up to next ## heading)
 pattern = r'## Last Session\n.*?(?=\n## (?!Last Session))'
 match = re.search(pattern, content, re.DOTALL)
 if match:
     content = content[:match.start()] + replacement + content[match.end():]
-else:
-    # No existing Last Session — insert after the --- separator
-    sep = content.find('---\n')
-    if sep >= 0:
-        insert_at = content.index('\n', sep) + 1
-        content = content[:insert_at] + '\n' + replacement + '\n' + content[insert_at:]
-
-with open(handoff_path, 'w', encoding='utf-8', newline='\n') as f:
-    f.write(content)
+    with open(handoff_path, 'w', encoding='utf-8', newline='\n') as f:
+        f.write(content)
+# If no match, do nothing — don't guess where to insert
 " "$HANDOFF" "$NEW_SESSION" "$FILES_CHANGED" 2>/dev/null || true
-
-# Stage the updated HANDOFF but do NOT create a new commit (that would loop)
-# The change will be picked up by the next commit automatically.
