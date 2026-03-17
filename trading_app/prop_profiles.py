@@ -277,7 +277,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             DailyLaneSpec("MNQ_TOKYO_OPEN_E2_RR1.0_CB1_ORB_G5_CONT_S075", "MNQ", "TOKYO_OPEN"),
             DailyLaneSpec("MNQ_SINGAPORE_OPEN_E2_RR1.0_CB1_ORB_G8_O15_S075", "MNQ", "SINGAPORE_OPEN"),
             DailyLaneSpec("MNQ_EUROPE_FLOW_E2_RR1.0_CB1_ORB_G8_S075", "MNQ", "EUROPE_FLOW"),
-            DailyLaneSpec("MNQ_LONDON_METALS_E2_RR1.0_CB1_ORB_G6_NOMON_O15", "MNQ", "LONDON_METALS"),
+            DailyLaneSpec("MNQ_LONDON_METALS_E2_RR1.0_CB1_ORB_G6_NOMON_S075", "MNQ", "LONDON_METALS"),
             DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_ORB_G4_S075", "MNQ", "NYSE_OPEN"),
         ),
         notes="Phase 1 manual proof. No automation, no copy trading. Waking hours only.",
