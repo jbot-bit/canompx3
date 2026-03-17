@@ -8,6 +8,9 @@ from .broker_base import BrokerAuth, BrokerContracts, BrokerFeed, BrokerPosition
 
 log = logging.getLogger(__name__)
 
+# Valid broker names — canonical source for dispatcher
+VALID_BROKERS = ("projectx", "tradovate")
+
 
 class BrokerComponents(TypedDict):
     auth: BrokerAuth
@@ -19,6 +22,7 @@ class BrokerComponents(TypedDict):
 
 # Re-export ABCs for type-checking convenience
 __all__ = [
+    "VALID_BROKERS",
     "get_broker_name",
     "create_broker_components",
     "BrokerComponents",
@@ -83,4 +87,4 @@ def create_broker_components(
         }
 
     else:
-        raise ValueError(f"Unknown broker: '{broker}'. Valid: 'projectx', 'tradovate'")
+        raise ValueError(f"Unknown broker: '{broker}'. Valid: {sorted(VALID_BROKERS)}")
