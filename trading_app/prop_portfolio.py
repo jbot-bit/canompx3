@@ -19,11 +19,16 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
+import duckdb  # noqa: F401 — used at runtime in _load_daily_snapshot
+
+from pipeline.cost_model import get_cost_spec  # noqa: F401
+from pipeline.db_config import configure_connection  # noqa: F401
 from pipeline.dst import SESSION_CATALOG
 from trading_app.portfolio import PortfolioStrategy
 from trading_app.prop_profiles import (
     ACCOUNT_PROFILES,
     AccountProfile,
+    DailyLaneSpec,  # noqa: F401
     ExcludedEntry,
     TradingBook,
     TradingBookEntry,
@@ -31,6 +36,7 @@ from trading_app.prop_profiles import (
     get_account_tier,
     get_firm_spec,
 )
+from trading_app.strategy_fitness import compute_fitness  # noqa: F401
 
 # =========================================================================
 # DD estimation constants (from Monte Carlo sim — trading_plan_sim.md)
@@ -136,7 +142,7 @@ def _rank_strategies(
     return ranked
 
 
-def _get_session_time_brisbane(orb_label: str) -> str:
+def _get_session_time_brisbane(orb_label: str, trading_day: date | None = None) -> str:
     """Look up session time in Brisbane timezone from SESSION_CATALOG."""
     entry = SESSION_CATALOG.get(orb_label)
     if entry is None:
@@ -144,8 +150,195 @@ def _get_session_time_brisbane(orb_label: str) -> str:
     resolver = entry.get("resolver")
     if resolver is None:
         return "unknown"
-    h, m = resolver(date.today())
+    h, m = resolver(trading_day or date.today())
     return f"{h:02d}:{m:02d}"
+
+
+# =========================================================================
+# Daily lane resolver (pinned strategy IDs for manual profiles)
+# =========================================================================
+
+
+@dataclass(frozen=True)
+class DailyExecutionLane:
+    """Resolved daily lane with TRADE/HOLD/REVIEW/SKIP status."""
+
+    strategy_id: str
+    instrument: str
+    orb_label: str
+    session_time_brisbane: str
+    status: str
+    reason: str
+    entry_model: str | None = None
+    rr_target: float | None = None
+    confirm_bars: int | None = None
+    filter_type: str | None = None
+    orb_minutes: int | None = None
+    strategy_stop: float | None = None
+    planned_stop: float | None = None
+    fitness_status: str = "UNKNOWN"
+    expectancy_r: float | None = None
+    exp_dollars: float | None = None
+    sample_size: int | None = None
+    execution_notes: str = ""
+
+
+def _calendar_gate_reason(filter_type: str | None, trading_day: date) -> str | None:
+    """Skip reason for weekday filters (NOMON/NOTUE/NOFRI)."""
+    if not filter_type:
+        return None
+    wd = trading_day.weekday()
+    if "NOMON" in filter_type and wd == 0:
+        return "Calendar: skip Monday"
+    if "NOTUE" in filter_type and wd == 1:
+        return "Calendar: skip Tuesday"
+    if "NOFRI" in filter_type and wd == 4:
+        return "Calendar: skip Friday"
+    return None
+
+
+def _load_daily_snapshot(db_path: Path, strategy_id: str) -> dict | None:
+    """Load validated row for a pinned daily lane."""
+    con = duckdb.connect(str(db_path), read_only=True)
+    try:
+        configure_connection(con, writing=False)
+        row = con.execute(
+            """
+            SELECT vs.strategy_id, vs.instrument, vs.orb_label,
+                   vs.entry_model, vs.rr_target, vs.confirm_bars,
+                   vs.filter_type, vs.orb_minutes,
+                   COALESCE(vs.stop_multiplier, 1.0) AS stop_multiplier,
+                   vs.expectancy_r, vs.win_rate, vs.sample_size,
+                   LOWER(vs.status) AS status,
+                   es.median_risk_points
+            FROM validated_setups vs
+            LEFT JOIN experimental_strategies es ON vs.strategy_id = es.strategy_id
+            WHERE vs.strategy_id = ?
+            LIMIT 1
+            """,
+            [strategy_id],
+        ).fetchone()
+        if row is None:
+            return None
+        cols = [d[0] for d in con.description]
+        return dict(zip(cols, row, strict=False))
+    finally:
+        con.close()
+
+
+def _resolve_daily_lane(
+    profile: AccountProfile, lane: DailyLaneSpec, db_path: Path, trading_day: date
+) -> DailyExecutionLane:
+    """Resolve one pinned lane against DB + fitness."""
+    session_time = _get_session_time_brisbane(lane.orb_label, trading_day)
+    planned_stop = lane.planned_stop_multiplier if lane.planned_stop_multiplier is not None else profile.stop_multiplier
+    snap = _load_daily_snapshot(db_path, lane.strategy_id)
+    if snap is None:
+        return DailyExecutionLane(
+            strategy_id=lane.strategy_id,
+            instrument=lane.instrument,
+            orb_label=lane.orb_label,
+            session_time_brisbane=session_time,
+            status="HOLD",
+            reason="Strategy missing from validated_setups.",
+            planned_stop=planned_stop,
+            execution_notes=lane.execution_notes,
+        )
+    fitness_status = "UNKNOWN"
+    try:
+        f = compute_fitness(snap["strategy_id"], db_path=db_path)
+        fitness_status = f.fitness_status
+    except Exception:
+        pass
+    exp_dollars = None
+    mrp = snap.get("median_risk_points")
+    if snap["expectancy_r"] is not None and mrp is not None:
+        try:
+            exp_dollars = snap["expectancy_r"] * mrp * get_cost_spec(snap["instrument"]).point_value
+        except Exception:
+            pass
+    status, reason = "TRADE", "Ready."
+    firm_spec = get_firm_spec(profile.firm)
+    strat_stop = snap["stop_multiplier"]
+    if snap["status"] != "active":
+        status, reason = "HOLD", f"Strategy status: {snap['status']}"
+    elif snap["instrument"] in firm_spec.banned_instruments:
+        status, reason = "HOLD", f"Instrument banned ({snap['instrument']})"
+    else:
+        cal = _calendar_gate_reason(snap["filter_type"], trading_day)
+        if cal:
+            status, reason = "SKIP", cal
+        elif fitness_status not in lane.required_fitness:
+            status, reason = "HOLD", f"Fitness: {fitness_status}"
+        elif abs(strat_stop - planned_stop) > 1e-9:
+            status, reason = "REVIEW", f"Stop mismatch: plan {planned_stop:.2f}x vs validated {strat_stop:.2f}x"
+    return DailyExecutionLane(
+        strategy_id=snap["strategy_id"],
+        instrument=snap["instrument"],
+        orb_label=snap["orb_label"],
+        session_time_brisbane=session_time,
+        status=status,
+        reason=reason,
+        entry_model=snap["entry_model"],
+        rr_target=snap["rr_target"],
+        confirm_bars=snap["confirm_bars"],
+        filter_type=snap["filter_type"],
+        orb_minutes=snap["orb_minutes"],
+        strategy_stop=strat_stop,
+        planned_stop=planned_stop,
+        fitness_status=fitness_status,
+        expectancy_r=snap["expectancy_r"],
+        exp_dollars=exp_dollars,
+        sample_size=snap["sample_size"],
+        execution_notes=lane.execution_notes,
+    )
+
+
+def resolve_daily_lanes(profile: AccountProfile, db_path: Path, trading_day: date) -> list[DailyExecutionLane]:
+    """Resolve all pinned daily lanes for a profile, sorted by time."""
+    lanes = [_resolve_daily_lane(profile, lane, db_path, trading_day) for lane in profile.daily_lanes]
+    return sorted(lanes, key=lambda la: _time_sort_key(la.session_time_brisbane))
+
+
+def print_daily_lanes(profile: AccountProfile, lanes: list[DailyExecutionLane], trading_day: date) -> None:
+    """Print manual daily execution sheet for one profile."""
+    firm_spec = get_firm_spec(profile.firm)
+    day_str = trading_day.strftime("%A %d %b %Y")
+    print(f"\n{'=' * 100}")
+    print(f"  MANUAL DAILY SHEET — {firm_spec.display_name} — {profile.profile_id}")
+    print(f"  {day_str} | Brisbane | Source: daily_lanes + validated_setups + fitness")
+    print(f"{'=' * 100}")
+    print(
+        f"\n  {'Status':<8} {'Time':<10} {'Session':<16} {'Inst':<5} {'ORB':<4} "
+        f"{'RR':<4} {'Stop':<8} {'Fit':<8} {'Strategy'}"
+    )
+    print(f"  {'-' * 8} {'-' * 10} {'-' * 16} {'-' * 5} {'-' * 4} {'-' * 4} {'-' * 8} {'-' * 8} {'-' * 44}")
+    for la in lanes:
+        rr = f"{la.rr_target:.1f}" if la.rr_target is not None else "-"
+        orb = f"{la.orb_minutes}m" if la.orb_minutes is not None else "-"
+        stop = f"{la.planned_stop:.2f}x" if la.planned_stop is not None else "-"
+        print(
+            f"  {la.status:<8} {_format_time_ampm(la.session_time_brisbane):<10} "
+            f"{la.orb_label:<16} {la.instrument:<5} {orb:<4} {rr:<4} {stop:<8} "
+            f"{la.fitness_status:<8} {la.strategy_id[:44]}"
+        )
+        details = []
+        if la.filter_type:
+            details.append(f"filter={la.filter_type}")
+        if la.expectancy_r is not None:
+            details.append(f"ExpR={la.expectancy_r:+.3f}")
+        if la.exp_dollars is not None:
+            details.append(f"Exp$={la.exp_dollars:+.2f}")
+        if la.sample_size is not None:
+            details.append(f"N={la.sample_size}")
+        if la.entry_model and la.confirm_bars is not None:
+            details.append(f"{la.entry_model} CB{la.confirm_bars}")
+        if details:
+            print(f"    {' | '.join(details)}")
+        print(f"    -> {la.reason}")
+        if la.execution_notes:
+            print(f"    note: {la.execution_notes}")
+    print()
 
 
 def select_for_profile(
@@ -555,12 +748,17 @@ def main() -> None:
         fitness_results = {}
 
     if args.daily:
+        if args.profile:
+            # Single profile with pinned daily lanes
+            profile = get_profile(args.profile)
+            if profile.daily_lanes:
+                lanes = resolve_daily_lanes(profile, db_path=db_path, trading_day=trading_day)
+                print_daily_lanes(profile, lanes, trading_day)
+                return
+            # Fallback: profile has no pinned lanes, use dynamic
+        # Cross-account daily view (all firms, sorted by time)
         books, _ = _load_strategies_and_build_books(db_path)
-
-        # Run fitness checks for all selected strategies
         if fitness_results is not None:
-            from trading_app.strategy_fitness import compute_fitness
-
             all_sids = [e.strategy_id for b in books.values() for e in b.entries]
             for sid in all_sids:
                 try:
@@ -568,7 +766,6 @@ def main() -> None:
                     fitness_results[sid] = f.fitness_status
                 except Exception:
                     fitness_results[sid] = "UNKNOWN"
-
         print_daily(books, trading_day, fitness_results)
         return
 
