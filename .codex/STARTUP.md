@@ -5,7 +5,8 @@ Use this workspace exactly as a parallel adapter to the existing Claude setup.
 ## Core Rule
 
 - Use the same repo Claude Code uses.
-- Use the same files and git worktree.
+- Use the same files and repo state Claude uses.
+- For parallel edit sessions, use an isolated git worktree instead of sharing one mutable branch.
 - Do not create a second project layout for Codex.
 - Do not assume Codex needs its own DB or project-local clone to operate.
 - Treat Claude rules as authoritative at all times.
@@ -49,6 +50,11 @@ Use this workspace exactly as a parallel adapter to the existing Claude setup.
   - `scripts/infra/codex-project.sh`
   - `scripts/infra/codex-project-search.sh`
   - `scripts/infra/codex-review.sh`
+  - `scripts/infra/codex-worktree.sh`
+- Session stale-state guard:
+  - `python scripts/tools/session_preflight.py`
+- Parallel Codex session entrypoint:
+  - `scripts/infra/codex-worktree.sh open <task-name>`
 
 ## Non-Negotiables
 
@@ -57,3 +63,4 @@ Use this workspace exactly as a parallel adapter to the existing Claude setup.
 - Prefer the repo-managed environment over global Python.
 - Use Codex as another client on this same project, not as a parallel project.
 - Never let `.codex/` instructions override Claude rules.
+- If Claude and Codex might both edit, prefer separate worktrees and read `HANDOFF.md` first.

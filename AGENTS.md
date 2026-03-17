@@ -42,6 +42,9 @@ Two tools share this repo. They must not lose context when the user switches bet
 - Tool-specific memory (`.claude/projects/*/memory/`, `memory/*.md`) is scratch — useful within that tool, not a source of truth for the other tool.
 - On session start: read `HANDOFF.md` before starting work.
 - On session end: update `HANDOFF.md` if you changed anything meaningful.
+- Before code edits: run `git log --oneline -10` and re-read touched files if another tool may have committed.
+- For parallel edit sessions: prefer isolated worktrees via `scripts/infra/claude-worktree.sh` and `scripts/infra/codex-worktree.sh`. Do not let Claude and Codex edit the same mutable branch in parallel.
+- Repo launchers should run `scripts/tools/session_preflight.py` automatically; if you bypass them, run preflight manually.
 
 **Environment:**
 - Windows (Claude Code): uses `.venv/`

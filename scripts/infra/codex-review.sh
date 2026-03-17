@@ -8,9 +8,9 @@ PREFLIGHT="$ROOT/scripts/tools/session_preflight.py"
 
 if [[ "${CANOMPX3_SKIP_PREFLIGHT:-0}" != "1" && -f "$PREFLIGHT" ]]; then
   if command -v python3 >/dev/null 2>&1; then
-    python3 "$PREFLIGHT" --context codex-wsl --claim codex-search || true
+    python3 "$PREFLIGHT" --context codex-wsl --claim codex-review || true
   elif command -v python >/dev/null 2>&1; then
-    python "$PREFLIGHT" --context codex-wsl --claim codex-search || true
+    python "$PREFLIGHT" --context codex-wsl --claim codex-review || true
   fi
 fi
 
@@ -26,10 +26,4 @@ export JOBLIB_MULTIPROCESSING=0
 export VIRTUAL_ENV="$VENV"
 export PATH="$VENV/bin:$PATH"
 
-exec codex \
-  -C "$ROOT" \
-  -p canompx3_search \
-  --sandbox workspace-write \
-  --ask-for-approval on-request \
-  --search \
-  "$@"
+exec codex -p canompx3_max review --uncommitted "$@"
