@@ -10,9 +10,11 @@ If nothing changed, leave it as-is.
 ---
 
 ## Last Session
-- **Tool:** Codex (GPT-5.4)
-- **Date:** 2026-03-17
-- **Summary:** Finished the cross-tool workstream layer. Restored `session_preflight.py`, wired WSL/Codex startup preflight, added managed Claude/Codex worktree wrappers, verified real `git worktree` create/reuse/close, then refactored the Windows UX into `ai-workstreams.bat` with purpose-first workstream flow and review-driven hardening.
+- **Tool:** Claude Code
+- **Date:** 2026-03-18
+- **Commit:** 982cab8 — feat: auto-update HANDOFF.md on every commit (post-commit hook)
+- **Files changed:** 1 files
+  - `.githooks/post-commit`
 
 ## Decisions Made
 - Apex: automation AND copy trading PROHIBITED (OFFICIAL RULE). Manual proof only, 1 account.

@@ -41,6 +41,11 @@ elif [ -f "$SCRIPT_DIR/venv/bin/python" ]; then
     PYTHON="$SCRIPT_DIR/venv/bin/python"
 fi
 
+# 0a. Auto-stage HANDOFF.md if dirty (picks up post-commit hook's auto-update)
+if git diff --name-only -- HANDOFF.md 2>/dev/null | grep -q 'HANDOFF.md'; then
+    git add HANDOFF.md
+fi
+
 # 0. Ruff lint check (~1 second)
 echo "[0/6] Ruff lint..."
 RUFF="ruff"
