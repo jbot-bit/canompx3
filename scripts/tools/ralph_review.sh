@@ -7,8 +7,9 @@
 #   bash scripts/tools/ralph_review.sh                    # review last 5 commits
 #   bash scripts/tools/ralph_review.sh 3                  # review last 3 commits
 #   bash scripts/tools/ralph_review.sh 10 abc1234         # review 10 commits since abc1234
-set -e
-cd /c/Users/joshd/canompx3
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 LOOK_BACK="${1:-5}"
 SINCE_COMMIT="${2:-}"
@@ -20,11 +21,21 @@ REVIEW_LOG="$LOG_DIR/review-${TIMESTAMP}.log"
 # Ensure claude CLI is available
 export PATH="/c/Users/joshd/.local/bin:$HOME/.local/bin:$PATH"
 unset CLAUDECODE 2>/dev/null || true
+unset CLAUDE_CODE_ENTRYPOINT 2>/dev/null || true
 
-CLAUDE_BIN=$(command -v claude 2>/dev/null || echo "")
+CLAUDE_BIN=""
+for p in "claude" \
+         "/c/Users/joshd/.local/bin/claude.exe" \
+         "/mnt/c/Users/joshd/.local/bin/claude.exe" \
+         "$HOME/.local/bin/claude"; do
+    if command -v "$p" &>/dev/null || [[ -x "$p" ]]; then
+        CLAUDE_BIN="$p"
+        break
+    fi
+done
 if [[ -z "$CLAUDE_BIN" ]]; then
-    echo "ERROR: claude CLI not found on PATH"
-    exit 1
+    echo "ERROR: claude CLI not found"
+    exit 2
 fi
 
 echo "════════════════════════════════════════════" | tee "$REVIEW_LOG"
@@ -125,7 +136,12 @@ Here are the diffs:
 
 $DIFF_PAYLOAD"
 
-REVIEW_OUTPUT=$("$CLAUDE_BIN" --print --model opus "$REVIEW_PROMPT" 2>&1) || true
+REVIEW_OUTPUT=$("$CLAUDE_BIN" -p "$REVIEW_PROMPT" \
+    --model opus \
+    --dangerously-skip-permissions \
+    --max-turns 5 \
+    --no-session-persistence \
+    2>&1) || true
 
 echo "$REVIEW_OUTPUT" | tee -a "$REVIEW_LOG"
 echo "" | tee -a "$REVIEW_LOG"

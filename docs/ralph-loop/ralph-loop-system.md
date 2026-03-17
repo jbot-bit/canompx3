@@ -2,58 +2,78 @@
 
 ## Overview
 
-The Ralph Loop is a multi-agent continuous improvement system that audits, fixes,
+The Ralph Loop is a single-agent continuous improvement system that audits, fixes,
 and verifies this codebase in autonomous cycles. Each iteration:
 
-1. **Audit** — Find real bugs with institutional-grade rigor
-2. **Understand** — Map blast radius, trace callers, read authority docs
-3. **Plan** — Select highest-priority fix, document approach
-4. **Implement** — Apply minimal targeted fix (2-pass method)
-5. **Validate** — Run 6-gate verification (drift, tests, lint, behavioral, blast, regression)
-6. **Review** — Accept or reject, append to history
-7. **Repeat**
+1. **Read state** — Check audit file, history, ledger, centrality
+2. **Audit** — Run infrastructure gates, Seven Sins scan on target file
+3. **Select + blast radius** — Pick highest-priority finding, check callers
+4. **Implement + verify** — Apply minimal fix, run tests + drift check
+5. **Update files** — Audit state, history, ledger, deferred findings
+6. **Report** — Structured output block for batch tracking
 
 ## Architecture
 
 ```
-scripts/ralph_loop_runner.sh     <- Runner (bash loop)
+scripts/tools/ralph.sh              <- CLI dispatcher (once/batch/loop/review/audit/doctor)
   |
-  +-- .claude/agents/ralph-architect.md    <- Coordinator
-  +-- .claude/agents/ralph-auditor.md      <- Finds bugs (never writes code)
-  +-- .claude/agents/ralph-implementer.md  <- Applies minimal fixes
-  +-- .claude/agents/ralph-verifier.md     <- 6-gate verification
+  +-- scripts/tools/ralph_headless.sh   <- Batch runner (N iterations via claude -p)
+  +-- scripts/tools/ralph_review.sh     <- Post-batch Opus quality gate
+  |
+  +-- .claude/agents/ralph-loop.md      <- Single agent prompt (Sonnet)
+  +-- .claude/skills/ralph/SKILL.md     <- Interactive skill (/ralph)
   |
   +-- docs/ralph-loop/ralph-loop-audit.md   <- Current findings (overwritten)
   +-- docs/ralph-loop/ralph-loop-plan.md    <- Current plan (overwritten)
   +-- docs/ralph-loop/ralph-loop-history.md <- All iterations (append-only)
   +-- docs/ralph-loop/deferred-findings.md  <- Open debt ledger (structured)
+  +-- docs/ralph-loop/ralph-ledger.json     <- Cross-iteration intelligence
+  +-- docs/ralph-loop/import_centrality.json <- Production-path weighting
   +-- docs/ralph-loop/logs/                 <- Per-iteration logs
 ```
-
-## Agent Roles
-
-| Agent | Reads | Writes | Runs Code |
-|-------|-------|--------|-----------|
-| Architect | audit, history, CLAUDE.md | plan, history | No |
-| Auditor | all production code, tests | audit report | Yes (read-only: drift, tests, lint) |
-| Implementer | plan, blast radius files | production code, tests | Yes (tests, drift) |
-| Verifier | plan, audit, changed files | history, audit | Yes (all 6 gates) |
 
 ## Running
 
 ```bash
-# Full loop (runs until stopped)
-bash scripts/ralph_loop_runner.sh
+# Single interactive iteration (uses /ralph skill)
+bash scripts/tools/ralph.sh once
 
-# Single iteration
-bash scripts/ralph_loop_runner.sh --once
+# Batch of 5 iterations (headless, no interaction needed)
+bash scripts/tools/ralph.sh batch
 
-# Audit only (no fixes)
-bash scripts/ralph_loop_runner.sh --audit-only
+# Batch with custom count and scope
+bash scripts/tools/ralph.sh batch --iterations 10 --scope "live_config.py"
 
-# Stop gracefully
+# Continuous loop (5-iteration batches with 30s pause)
+bash scripts/tools/ralph.sh loop
+
+# Post-batch Opus review of judgment commits
+bash scripts/tools/ralph.sh review --last 10
+
+# Quick audit only (drift + behavioral + ruff, no fixes)
+bash scripts/tools/ralph.sh audit
+
+# Preflight health check
+bash scripts/tools/ralph.sh doctor
+
+# Stop a running loop gracefully
 touch ralph_loop.stop
 ```
+
+### Headless Mode Details (v3)
+
+The headless runner (`ralph_headless.sh`) uses:
+- `claude -p` with `--output-format json` for structured output + cost tracking
+- `--dangerously-skip-permissions` to prevent blocked permission prompts
+- `--max-turns 25` to prevent runaway iterations
+- `--no-session-persistence` to keep session list clean
+- `--append-system-prompt` for headless-specific instructions
+- Retry once on empty output before counting as error
+- Git safety checks (stash uncommitted changes between iterations)
+- Separate stderr from stdout (prevents JSON corruption)
+
+Per-iteration logs: `docs/ralph-loop/logs/headless-YYYYMMDD_HHMM-iterN.json` (raw)
+and `*.txt` (extracted result text).
 
 ## Safety Boundaries
 
@@ -78,20 +98,17 @@ These require human approval and are flagged in the plan file.
 
 ## Integration with Existing Tools
 
-The Ralph Loop leverages the repository's existing infrastructure:
-
-| Tool | Used By | Purpose |
-|------|---------|---------|
-| `pipeline/check_drift.py` | Auditor, Verifier | 71+ automated drift checks |
-| `scripts/tools/audit_behavioral.py` | Auditor, Verifier | 7-gate behavioral rules |
-| `pytest tests/` | Auditor, Implementer, Verifier | Full test suite |
-| `ruff check` | Verifier | Lint enforcement |
-| `docs/prompts/ENTRY_MODEL_GUARDIAN.md` | Architect | Schema change safety |
-| `docs/prompts/PIPELINE_DATA_GUARDIAN.md` | Architect | Pipeline change safety |
+| Tool | Purpose |
+|------|---------|
+| `pipeline/check_drift.py` | 71+ automated drift checks |
+| `scripts/tools/audit_behavioral.py` | 7-gate behavioral rules |
+| `pytest tests/test_<module>.py` | Targeted test suite (never full `pytest tests/` — OOMs) |
+| `ruff check` | Lint enforcement |
+| `docs/prompts/ENTRY_MODEL_GUARDIAN.md` | Schema change safety |
+| `docs/prompts/PIPELINE_DATA_GUARDIAN.md` | Pipeline change safety |
 
 ## Grounding in Literature
 
-The agents' auditing methodology is informed by:
 - **Lopez de Prado** — Seven sins of quantitative investing, deflated Sharpe, PBO
 - **Aronson** — Evidence-based technical analysis, data snooping bias
 - **Harvey/Liu/Zhu** — Multiple testing framework, BH FDR for strategy selection

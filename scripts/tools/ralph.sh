@@ -55,8 +55,8 @@ done
 
 # ── Delegate scripts ──────────────────────────────────────────
 HEADLESS="$SCRIPT_DIR/ralph_headless.sh"
-LOOP_RUNNER="$PROJECT_ROOT/scripts/ralph_loop_runner.sh"
 REVIEW="$SCRIPT_DIR/ralph_review.sh"
+STOP_FILE="$PROJECT_ROOT/ralph_loop.stop"
 
 # ── Defaults ──────────────────────────────────────────────────
 ITERATIONS=5
@@ -164,7 +164,7 @@ do_doctor() {
     done
 
     # Delegate scripts
-    for s in "$HEADLESS" "$LOOP_RUNNER" "$REVIEW"; do
+    for s in "$HEADLESS" "$REVIEW"; do
         if [[ -f "$s" ]]; then
             echo "  [OK] Script: $s"
         else
@@ -252,7 +252,21 @@ case "$SUBCOMMAND" in
 
     loop)
         echo "Ralph: continuous loop (stop: touch ralph_loop.stop)"
-        bash "$LOOP_RUNNER"
+        echo "Running batches of $ITERATIONS until stop file detected."
+        rm -f "$STOP_FILE"
+        while true; do
+            if [[ -f "$STOP_FILE" ]]; then
+                echo "Stop file detected — exiting loop."
+                rm -f "$STOP_FILE"
+                break
+            fi
+            SCOPE_ARG=""
+            [[ -n "$SCOPE" ]] && SCOPE_ARG="$SCOPE"
+            bash "$HEADLESS" "$ITERATIONS" "$SCOPE_ARG" || true
+            echo ""
+            echo "Batch complete. Sleeping 30s... (touch ralph_loop.stop to exit)"
+            sleep 30
+        done
         ;;
 
     review)
