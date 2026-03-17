@@ -10,11 +10,15 @@ If nothing changed, leave it as-is.
 ---
 
 ## Last Session
-- **Tool:** Codex (GPT-5.4)
+- **Tool:** Claude Code (Opus 4.6)
 - **Date:** 2026-03-17
-- **Summary:** Finished the cross-tool workstream layer. Restored `session_preflight.py`, wired WSL/Codex startup preflight, added managed Claude/Codex worktree wrappers, verified real `git worktree` create/reuse/close, then refactored the Windows UX into `ai-workstreams.bat` with purpose-first workstream flow and review-driven hardening.
+- **Summary:** Designed "Project Mental Model Layer" — a persistent project awareness system. Brainstormed → 4TP design → 6-phase implementation plan created. Design doc committed. Zero code written yet — all 6 phases are pending implementation.
 
 ## Decisions Made
+- **Project Mental Model Layer (Option B)**: One mechanical pulse script + AI narrator. Design: `docs/plans/2026-03-17-project-mental-model-design.md`
+- Architecture: `project_pulse.py` aggregates 8 signal sources (git, handoff, drift, staleness, fitness, ralph, action queue, code debt) → JSON/text/markdown. `/orient` skill narrates. Bat launcher gets `[0] Orient me`. Preflight gets `--with-pulse`. Codex reads `PROJECT_PULSE.md`.
+- Token optimization: extract-then-reason pattern — ~2K tokens of compressed pulse vs ~15K raw docs.
+- User wants advisory layer **throughout** the tooling, not just at session start. This is Phase 1 of that vision.
 - Apex: automation AND copy trading PROHIBITED (OFFICIAL RULE). Manual proof only, 1 account.
 - Tradeify: PRIMARY MNQ scaling lane (5 accounts, overnight sessions, Tradovate API)
 - TopStep: MGC morning lane (5 Express, CME_REOPEN + TOKYO_OPEN, ProjectX API)
@@ -45,7 +49,11 @@ If nothing changed, leave it as-is.
   - Reopening an existing workstream preserves its saved purpose instead of silently rewriting it
   - Repo root should stay visually clean: one obvious AI launcher, not a pile of near-duplicates
 
-## Files Modified
+## Files Modified (this session)
+- `docs/plans/2026-03-17-project-mental-model-design.md` — full 4TP design doc (committed ae0ea7d)
+- `HANDOFF.md` — updated with plan state
+
+## Files Modified (prior sessions)
 - `trading_app/prop_profiles.py` — DailyLaneSpec, session/instrument routing, firm specs, daily lanes
 - `trading_app/prop_portfolio.py` — daily lane resolver, cross-account daily, calendar gates, --daily/--verbose/--fitness/--date
 - `tests/test_trading_app/test_prop_profiles.py` — 21 tests
@@ -68,12 +76,21 @@ If nothing changed, leave it as-is.
 - `tests/test_tools/test_session_preflight.py`, `tests/test_tools/test_worktree_manager.py` — targeted coverage
 - `AGENTS.md`, `CLAUDE.md`, `CODEX.md`, `.codex/STARTUP.md` — worktree/preflight routing guidance
 
-## Next Steps
+## Next Steps — Project Mental Model (ACTIVE, 6 phases)
+1. **Phase 1**: Build `scripts/tools/project_pulse.py` — 8 collectors, PulseReport dataclass, CLI, caching
+2. **Phase 2**: Tests for project_pulse.py (~15 tests, mocked inputs)
+3. **Phase 3**: Create `/orient` skill (AI narrator reads pulse JSON)
+4. **Phase 4**: Add `[0] Orient me` to `ai-workstreams.bat` launcher
+5. **Phase 5**: Wire into `session_preflight.py --with-pulse` + `claude-worktree.sh` + `.codex/STARTUP.md`
+6. **Phase 6**: Verify — drift checks, behavioral audit, all tests pass
+
+Phases 2-5 are independent (parallel-safe). Phase 6 blocked by all.
+
+## Next Steps — Other (unchanged)
 - Streamlit dashboard: add prop portfolio view (daily card + firm selector + DD bars) — plan with /4tp + /quant-tdd
 - CUSUM-based fitness (MEMORY.md action queue item 11)
 - ATR-normalized position sizing (item 12)
 - MGC WF revalidation with trade-count windows
-- If Claude native startup should also force preflight outside the worktree wrapper path, add a machine-local launcher or shell alias on the Windows side
 - Pre-commit hook is LF-normalized again at `.githooks/pre-commit`; normal `git commit` should no longer die on `/usr/bin/env: 'bash\r'`
 
 ## Blockers / Warnings
