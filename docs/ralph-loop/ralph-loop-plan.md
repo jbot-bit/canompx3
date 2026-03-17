@@ -1,7 +1,7 @@
-## Iteration: 124
-## Target: tests/test_trading_app/test_session_orchestrator.py:729,1015,1048,1074,1100
-## Finding: 5 test feed stubs missing `on_stale` keyword arg — TypeError at test runtime since d4fe8cb added on_stale to SessionOrchestrator.run()
+## Iteration: 126
+## Target: trading_app/live/tradovate/contract_resolver.py:16-17, order_router.py:26-27, positions.py:11-12
+## Finding: LIVE_BASE/DEMO_BASE URL constants duplicated across 4 tradovate modules — auth.py is canonical source, others should import from it
 ## Classification: [mechanical]
-## Blast Radius: 1 file (test only), 0 production callers affected
-## Invariants: [1] production session_orchestrator.py NOT touched; [2] stub run()/was_stopped logic unchanged; [3] only __init__ signatures extended with on_stale=None
-## Diff estimate: 5 lines
+## Blast Radius: 3 files modified (contract_resolver.py, order_router.py, positions.py); auth.py untouched; test files: test_order_router.py, test_tradovate_positions.py, test_broker_factory.py
+## Invariants: [1] LIVE_BASE value "https://live.tradovateapi.com/v1" unchanged; [2] DEMO_BASE value "https://demo.tradovateapi.com/v1" unchanged; [3] all runtime behavior identical — only deduplication
+## Diff estimate: 6 lines removed + 3 lines added = 9 lines total
