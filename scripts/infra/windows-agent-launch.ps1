@@ -258,6 +258,7 @@ function Run-Menu() {
         Write-Host ""
         Write-Host "Purpose: run one problem per isolated workstream so Claude and Codex do not stomp on each other." -ForegroundColor DarkGray
         Write-Host ""
+        Write-Host "[0] Orient me (project pulse)"
         Write-Host "[1] Start new workstream"
         Write-Host "[2] Continue workstream"
         Write-Host "[3] Finish workstream"
@@ -268,6 +269,19 @@ function Run-Menu() {
 
         $choice = Read-Host ">>>"
         switch ($choice.ToLowerInvariant()) {
+            "0" {
+                $venvPython = Join-Path $repoRoot ".venv\Scripts\python.exe"
+                $pulseScript = Join-Path $repoRoot "scripts\tools\project_pulse.py"
+                if (Test-Path $venvPython) {
+                    & $venvPython $pulseScript --fast
+                } elseif (Get-Command python -ErrorAction SilentlyContinue) {
+                    & python $pulseScript --fast
+                } else {
+                    Write-Host "Python not found." -ForegroundColor Red
+                }
+                Write-Host ""
+                Read-Host "Press Enter to continue"
+            }
             "1" {
                 $name = Prompt-WorkstreamName
                 $purpose = Select-WorkstreamPurpose
