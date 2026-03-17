@@ -56,6 +56,7 @@ fi
 # ── Config ────────────────────────────────────────────────────
 MAX_ITERS="${1:-5}"
 SCOPE="${2:-}"
+MODEL="${RALPH_MODEL:-haiku}"  # Override: RALPH_MODEL=sonnet bash scripts/tools/ralph_headless.sh
 LOG_DIR="docs/ralph-loop/logs"
 STOP_FILE="$PROJECT_ROOT/ralph_loop.stop"
 TIMESTAMP=$(date +%Y%m%d_%H%M)
@@ -149,7 +150,7 @@ banner "════════════════════════
 banner "  Started:    $(date)"
 banner "  Iterations: $MAX_ITERS"
 banner "  Scope:      ${SCOPE:-auto (Next Targets from audit file)}"
-banner "  Model:      haiku (no MCP) | Max turns: $MAX_TURNS"
+banner "  Model:      $MODEL (no MCP) | Max turns: $MAX_TURNS"
 banner "  Log:        $MASTER_LOG"
 banner "════════════════════════════════════════════"
 banner ""
@@ -183,7 +184,7 @@ Execute ALL steps from ralph-loop.md (Steps 0 through 5).
 Your FINAL output MUST be the structured === RALPH LOOP ITER [N] COMPLETE === report block."
 
     $CLAUDE -p "$PROMPT" \
-        --model haiku \
+        --model "$MODEL" \
         --dangerously-skip-permissions \
         --allowedTools "Edit,Read,Write,Bash,Grep,Glob" \
         --max-turns "$MAX_TURNS" \
@@ -265,6 +266,23 @@ run_iteration() {
         new_sha=$(git rev-parse HEAD 2>/dev/null) || true
         if [[ "$new_sha" != "$head_sha" ]]; then
             commit=$(git rev-parse --short HEAD 2>/dev/null) || true
+        fi
+    fi
+
+    # ── DIFF SIZE GUARD ──────────────────────────────────────
+    # Auto-revert if Ralph committed >30 lines of production code (scope creep)
+    local new_head
+    new_head=$(git rev-parse HEAD 2>/dev/null) || true
+    if [[ "$new_head" != "$head_sha" ]]; then
+        local prod_lines
+        prod_lines=$(git diff "$head_sha" "$new_head" -- '*.py' ':!tests/' ':!docs/' \
+            | grep -c '^[+-]' 2>/dev/null) || prod_lines=0
+        if [[ "$prod_lines" -gt 60 ]]; then
+            banner "  ⚠ DIFF GUARD: $prod_lines production lines changed (limit 60) — reverting"
+            # Revert all commits since head_sha
+            git reset --hard "$head_sha" 2>/dev/null || true
+            commit=""
+            verdict="NEEDS_REVIEW"
         fi
     fi
 
