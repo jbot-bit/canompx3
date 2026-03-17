@@ -52,6 +52,9 @@ def create_broker_components(
     if broker is None:
         broker = get_broker_name()
 
+    if broker not in VALID_BROKERS:
+        raise ValueError(f"Unknown broker: '{broker}'. Valid: {sorted(VALID_BROKERS)}")
+
     if broker == "projectx":
         from .projectx.auth import ProjectXAuth
         from .projectx.contract_resolver import ProjectXContracts
@@ -86,5 +89,4 @@ def create_broker_components(
             "positions_class": TradovatePositions,
         }
 
-    else:
-        raise ValueError(f"Unknown broker: '{broker}'. Valid: {sorted(VALID_BROKERS)}")
+    raise AssertionError("unreachable")
