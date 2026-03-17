@@ -3,22 +3,22 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 129
+## Last iteration: 130
 
-## RALPH AUDIT — Iteration 129
+## RALPH AUDIT — Iteration 130
 ## Date: 2026-03-17
-## Infrastructure Gates: PASS (drift 72 PASS + 6 advisory; behavioral audit 6/6 clean; ruff clean; 46/46 ML tests pass)
+## Infrastructure Gates: PASS (drift 72 PASS + 6 advisory; behavioral audit 6/6 clean; ruff clean; 10/10 ML meta_label tests pass)
 
 | Gate | Result | Detail |
 |------|--------|--------|
 | `check_drift.py` | PASS | 72 checks PASS, 0 failed, 6 advisory |
 | `audit_behavioral.py` | PASS | all 6 checks clean |
 | `ruff check` | PASS | clean |
-| pytest targeted | PASS | 46/46 (test_predict_live.py + test_meta_label.py) |
+| pytest targeted | PASS | 10/10 (test_meta_label.py) |
 
 ---
 
-## Scope: trading_app/ml/config.py
+## Scope: trading_app/ml/meta_label.py
 
 ---
 
@@ -26,29 +26,31 @@
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
-| Silent failure | `compute_config_hash()` omits `GLOBAL_FEATURES`, `SESSION_FEATURE_SUFFIXES`, `ATR_NORMALIZE`, `CATEGORICAL_FEATURES`, and `LOOKAHEAD_BLACKLIST` — changes to these primary feature-engineering lists would NOT invalidate stored model bundles via the drift check | HIGH | FIXED (3a0e01b) |
-| Fail-open | None | — | CLEAN |
-| Look-ahead bias | `LOOKAHEAD_BLACKLIST` exists and is comprehensive. All AT-BREAK features blacklisted. Annotated with `@research-source`. | — | CLEAN |
-| Cost illusion | N/A — ML config, no P&L computation | — | CLEAN |
-| Canonical violation | `ACTIVE_INSTRUMENTS` derived from `ACTIVE_ORB_INSTRUMENTS` (canonical). `REL_VOL_SESSIONS` and `SESSION_CHRONOLOGICAL_ORDER` are hardcoded lists but guarded by drift checks #check_ml_session_coverage that compare them to SESSION_CATALOG dynamic entries. | — | ACCEPTABLE (drift-guarded) |
-| Orphan risk | `REL_VOL_SESSIONS` is only used by drift check, not by features.py — potential dead export. However it serves as a documentation artifact and drift guard, not dead code. | LOW | ACCEPTABLE (serves as drift-guard contract) |
-| Volatile data | None — no hardcoded counts | — | CLEAN |
+| Silent failure | Line 386: `except Exception` for CPCV logged at DEBUG (invisible at INFO log level). CPCV failure silently bypasses Gate 2 (CPCV AUC < 0.50 check) without any visible warning or stack trace. | MEDIUM | FIXED (c7b0774) |
+| Silent failure | Line 706: `except Exception` for feature stability check — properly logged at WARNING with exc_info=True. Non-critical informational path. | — | ACCEPTABLE |
+| Fail-open | Line 1146: `except Exception as e` in RR sweep — logs at WARNING, marks result as error. Sweep continues for next RR. | — | ACCEPTABLE |
+| Look-ahead bias | 3-way 60/20/20 time split. CPCV runs within training split only. Threshold optimized on val (never touches test). Honest OOS on test only. Gate logic is clean. | — | CLEAN |
+| Cost illusion | N/A — ML training pipeline, no P&L computation beyond threshold delta_r tracking | — | CLEAN |
+| Canonical violation | `ACTIVE_INSTRUMENTS` imported from `trading_app.ml.config` (derived from canonical `ACTIVE_ORB_INSTRUMENTS`). "MGC" default is CLI-only fallback. | — | CLEAN |
+| Orphan risk | No dead code paths identified | — | CLEAN |
+| Volatile data | No hardcoded counts | — | CLEAN |
 
 ---
 
 ## Summary
-- trading_app/ml/config.py: 1 HIGH finding — FIXED
-- Action: fix committed (3a0e01b)
+- trading_app/ml/meta_label.py: 1 MEDIUM finding — FIXED
+- Action: fix committed (c7b0774)
 
 ---
 
 ## Files Fully Scanned
 
-> Cumulative list — 192 files fully scanned (1 new file added this iteration: trading_app/ml/config.py).
+> Cumulative list — 193 files fully scanned (1 new file added this iteration: trading_app/ml/meta_label.py).
 
 - trading_app/ — 44 files (iters 4-61)
 - trading_app/ml/features.py — added iter 114
 - trading_app/ml/config.py — added iter 129
+- trading_app/ml/meta_label.py — added iter 130
 - trading_app/outcome_builder.py — added iter 115
 - trading_app/strategy_discovery.py — added iter 116
 - trading_app/strategy_validator.py — added iter 117
@@ -81,10 +83,10 @@
 - research/ — 19 files (iters 101-111): research_zt_event_viability.py, research_london_adjacent.py, research_mes_compressed_spring.py (iter 101); research_post_break_pullback.py, research_mgc_asian_fade_mfe.py, research_zt_fomc_unwind.py (iter 102); research_zt_cpi_nfp.py (iter 103); research_mgc_mnq_correlation.py (iter 104); research_atr_velocity_gate.py, research_mgc_regime_shift.py (iter 105); research_zt_event_viability.py (iter 106); research_vol_regime_switching.py (iter 107); research_edge_structure.py, research_1015_vs_1000.py (iters 108-109); research_overlap_analysis.py (iter 110); research_aperture_scan.py (iter 111)
 - research/ additional (iters 112-113): research_alt_stops.py, research_direction_asymmetry.py, research_signal_stack.py (iter 112); discover.py, research_wf_stress_keepers.py, research_trend_day_mfe.py scanned but already clean (iter 113)
 - docs/plans/ — 2 files (iter 103): 2026-03-15-zt-stage1-cpi-nfp-spec.md, 2026-03-15-zt-stage1-triage-gate.md
-- **Total: 192 files fully scanned**
+- **Total: 193 files fully scanned**
 - See previous audit iterations for per-file detail
 
 ## Next iteration targets
-- `trading_app/ml/meta_label.py` — CRITICAL tier (imported by meta_label training pipeline), unscanned. Largest ML module. High risk for look-ahead bias and silent failures in CPCV/WF splits.
 - `trading_app/ml/predict_live.py` — HIGH tier (live prediction path), unscanned. Critical for production correctness.
 - `trading_app/walkforward.py` — LOW tier but has uncommitted changes in git status (M) — recently modified, worth scanning for introduced issues
+- `trading_app/ml/evaluate.py` — medium tier, unscanned ML evaluation path

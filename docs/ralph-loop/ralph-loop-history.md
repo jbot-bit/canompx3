@@ -5,6 +5,18 @@
 
 ---
 
+## Iteration 130 — 2026-03-17
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/ml/meta_label.py:386
+- Finding: CPCV failure logged at DEBUG (invisible at INFO log level), silently bypasses Gate 2 (CPCV AUC check) with no visible warning
+- Action: Changed logger.debug to logger.warning with exc_info=True so CPCV failures are visible and the cause is captured
+- Blast radius: 1 file (meta_label.py); no callers affected
+- Verification: PASS (10/10 test_meta_label.py + 72 drift checks + 218 fast tests pass)
+- Commit: c7b0774
+
+---
+
 ## Iteration 129 — 2026-03-17
 - Phase: fix
 - Classification: [judgment]

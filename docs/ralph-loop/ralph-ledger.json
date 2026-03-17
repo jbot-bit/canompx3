@@ -1,8 +1,8 @@
 {
-  "total_iterations": 122,
+  "total_iterations": 123,
   "last_updated": "2026-03-17",
   "consecutive_low_only": 0,
-  "last_high_finding_iter": 129,
+  "last_high_finding_iter": 130,
   "findings_by_type": {
     "canonical_violation": {
       "found": 47,
@@ -10,17 +10,17 @@
       "deferred": 3,
       "fix_rate": 0.77
     },
+    "silent_failure": {
+      "found": 18,
+      "fixed": 16,
+      "deferred": 1,
+      "fix_rate": 0.89
+    },
     "other": {
       "found": 18,
       "fixed": 9,
       "deferred": 0,
       "fix_rate": 0.5
-    },
-    "silent_failure": {
-      "found": 17,
-      "fixed": 15,
-      "deferred": 1,
-      "fix_rate": 0.88
     },
     "dead_code": {
       "found": 14,
@@ -116,12 +116,12 @@
   "findings_by_severity": {
     "CRITICAL": 3,
     "HIGH": 7,
-    "MEDIUM": 24,
+    "MEDIUM": 25,
     "LOW": 88
   },
   "classifications": {
     "judgment": 56,
-    "mechanical": 42,
+    "mechanical": 43,
     "audit-only": 24
   },
   "files_audited": {
@@ -933,6 +933,11 @@
     "trading_app/ml/config.py": {
       "audit_count": 1,
       "last_iter": 129,
+      "findings": 1
+    },
+    "trading_app/ml/meta_label.py": {
+      "audit_count": 1,
+      "last_iter": 130,
       "findings": 1
     }
   },
@@ -2278,6 +2283,17 @@
       "severity": "MEDIUM",
       "verdict": "FIXED",
       "commit": "3a0e01b"
+    },
+    {
+      "iter": 130,
+      "date": "2026-03-17",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/ml/meta_label.py:386",
+      "finding_type": "silent_failure",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "c7b0774"
     }
   ]
 }
