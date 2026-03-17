@@ -53,6 +53,18 @@ class PropFirmAccount:
 
 
 @dataclass(frozen=True)
+class DailyLaneSpec:
+    """Exact daily execution lane for a manual profile."""
+
+    strategy_id: str
+    instrument: str
+    orb_label: str
+    execution_notes: str = ""
+    planned_stop_multiplier: float | None = None
+    required_fitness: tuple[str, ...] = ("FIT",)
+
+
+@dataclass(frozen=True)
 class AccountProfile:
     """User's actual trading account. Editable."""
 
@@ -68,6 +80,8 @@ class AccountProfile:
     allowed_sessions: frozenset[str] | None = None
     # Instrument routing. None = all allowed (firm bans still apply).
     allowed_instruments: frozenset[str] | None = None
+    # Exact daily lanes for manual profiles. Empty = use dynamic selection.
+    daily_lanes: tuple[DailyLaneSpec, ...] = ()
     notes: str = ""
 
 
@@ -259,7 +273,13 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 "NYSE_OPEN",  # Night block — "last thing before bed" per playbook
             }
         ),
-        # Metals banned at firm level; MNQ is primary. MES/M2K also allowed.
+        daily_lanes=(
+            DailyLaneSpec("MNQ_TOKYO_OPEN_E2_RR1.0_CB1_ORB_G5_CONT_S075", "MNQ", "TOKYO_OPEN"),
+            DailyLaneSpec("MNQ_SINGAPORE_OPEN_E2_RR1.0_CB1_ORB_G8_O15_S075", "MNQ", "SINGAPORE_OPEN"),
+            DailyLaneSpec("MNQ_EUROPE_FLOW_E2_RR1.0_CB1_ORB_G8_S075", "MNQ", "EUROPE_FLOW"),
+            DailyLaneSpec("MNQ_LONDON_METALS_E2_RR1.0_CB1_ORB_G6_NOMON_O15", "MNQ", "LONDON_METALS"),
+            DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_ORB_G4_S075", "MNQ", "NYSE_OPEN"),
+        ),
         notes="Phase 1 manual proof. No automation, no copy trading. Waking hours only.",
     ),
     # =========================================================================
@@ -294,6 +314,14 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         # Morning sessions from playbook account grid
         allowed_sessions=frozenset({"CME_REOPEN", "TOKYO_OPEN"}),
         allowed_instruments=frozenset({"MGC"}),
+        daily_lanes=(
+            DailyLaneSpec(
+                "MGC_CME_REOPEN_E2_RR1.5_CB1_ORB_G4_FAST10_S075",
+                "MGC",
+                "CME_REOPEN",
+                execution_notes="Skip if CME_REOPEN ORB exceeds 26 points.",
+            ),
+        ),
         notes="MGC morning auto. ProjectX API. Stay Express (don't accept Live).",
     ),
     # =========================================================================

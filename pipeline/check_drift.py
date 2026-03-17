@@ -2225,6 +2225,7 @@ def check_ml_config_canonical_sources() -> list[str]:
             GLOBAL_FEATURES,
             LOOKAHEAD_BLACKLIST,
             REL_VOL_SESSIONS,
+            SESSION_CHRONOLOGICAL_ORDER,
             TRADE_CONFIG_FEATURES,
         )
 
@@ -2253,6 +2254,16 @@ def check_ml_config_canonical_sources() -> list[str]:
             missing = catalog_dynamic - set(REL_VOL_SESSIONS)
             violations.append(
                 f"  ml/config.REL_VOL_SESSIONS mismatch with SESSION_CATALOG: extra={extra}, missing={missing}"
+            )
+
+        # SESSION_CHRONOLOGICAL_ORDER membership must match SESSION_CATALOG dynamic entries.
+        # Order is intentionally manual (Brisbane time order), but the SET must stay in sync.
+        # A missing session causes index=-1 in features.py, silently corrupting cross-session counts.
+        if set(SESSION_CHRONOLOGICAL_ORDER) != catalog_dynamic:
+            extra = set(SESSION_CHRONOLOGICAL_ORDER) - catalog_dynamic
+            missing = catalog_dynamic - set(SESSION_CHRONOLOGICAL_ORDER)
+            violations.append(
+                f"  ml/config.SESSION_CHRONOLOGICAL_ORDER mismatch with SESSION_CATALOG: extra={extra}, missing={missing}"
             )
 
     except ImportError as e:
