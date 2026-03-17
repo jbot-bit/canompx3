@@ -12,66 +12,47 @@ If nothing changed, leave it as-is.
 ## Last Session
 - **Tool:** Claude Code (Opus 4.6)
 - **Date:** 2026-03-17
-- **Summary:** Three major tracks: (1) Ralph Loop v3 consolidation + optimization, (2) Trade-count-based WF windows (AFML Ch.2), (3) Codex prop portfolio integration. Code review caught and fixed 2 critical WF bugs.
+- **Summary:** Built complete prop firm portfolio system end-to-end. Session→firm routing, DailyLaneSpec pinned manual lanes, cross-tool coordination, stale surface cleanup, double-click launchers, 5 rounds of code review. Fixed stale HEAD file that was causing git desync all session.
 
 ## Decisions Made
+- Apex: automation AND copy trading PROHIBITED (OFFICIAL RULE). Manual proof only, 1 account.
+- Tradeify: PRIMARY MNQ scaling lane (5 accounts, overnight sessions, Tradovate API)
+- TopStep: MGC morning lane (5 Express, CME_REOPEN + TOKYO_OPEN, ProjectX API)
+- Self-funded: Phase 3, inactive until prop proof complete
+- Prop ceiling ~$60K/year. $100K requires self-funded IBKR (Phase 3).
+- Canonical playbook: `docs/plans/manual-trading-playbook.md` (V3)
+- Trading surface authority:
+  - `python -m trading_app.prop_portfolio --daily --profile apex_50k_manual` = manual canonical
+  - `python -m trading_app.prop_portfolio --daily` = cross-account overview
+  - `python scripts/tools/generate_trade_sheet.py` = live/automation canonical
+  - `trade-sheet.bat` / `daily-sheet.bat` = double-click launchers
+- DailyLaneSpec pins exact strategy IDs per manual profile. TRADE/HOLD/REVIEW/SKIP catches drift honestly.
+- LONDON_METALS lane swapped to 0.75x strategy (S075) — no more stop mismatch.
+- EUROPE_FLOW stays in plan. HOLD when fitness is WATCH — correct behavior.
 
-### Ralph Loop v3
-- **ONE system now.** Deleted 5 dead files (ralph_loop_runner.sh, 4 dead agent files). Single agent: `.claude/agents/ralph-loop.md`.
-- Entry point: `bash scripts/tools/ralph.sh batch|loop|once|review|audit|doctor`
-- Headless runner uses `--output-format json`, `--dangerously-skip-permissions`, `--max-turns 50`, `--strict-mcp-config` (strips unused MCP tools), `--no-session-persistence`, `--append-system-prompt`
-- Diff size guard: auto-reverts if >60 production lines changed (catches feature creep)
-- Model default: Sonnet (plan-based billing, cost irrelevant). Override: `RALPH_MODEL=haiku`
-- **prop_portfolio.py + prop_profiles.py are NO-TOUCH zones** for Ralph (actively developed by human/Codex)
-- Agent prompt hardened with explicit "BUG FINDER not FEATURE BUILDER" rule
-
-### Trade-Count WF Windows
-- Implemented in `trading_app/walkforward.py` — new `test_window_trades` + `min_train_trades` params
-- MGC uses trade-count mode (30 trades/OOS, 45 min IS) via `WF_TRADE_COUNT_OVERRIDE` in config.py
-- MNQ/MES/M2K unchanged (calendar mode)
-- Code review found 2 critical bugs (wrong threshold, wrong rejection message) — both fixed
-- 32/32 WF tests pass, 72/72 drift checks pass
-
-### Prop Portfolio (from Codex + earlier session)
-- DailyLaneSpec pins exact strategy IDs per manual profile. TRADE/HOLD/REVIEW/SKIP status.
-- `beginner_tradebook.py` and `gen_playbook.py` DELETED (stale)
-- `MARKET_PLAYBOOK.md` and `TRADING_PLAN_BEGINNER.md` DELETED (superseded)
-- Codex also built: `--daily` execution card, `--verbose`, `--fitness`, `--date` flags, double-click launchers
-- Drift check 27 (configure_connection) NOW PASSES — was fixed in Codex's changes
-
-## Files Modified (this session)
-- `scripts/tools/ralph_headless.sh` — full v3 rewrite
-- `scripts/tools/ralph.sh` — loop mode, doctor updates
-- `scripts/tools/ralph_review.sh` — portable CLI resolution
-- `.claude/agents/ralph-loop.md` — hardened (no-touch zones, anti-feature, maxTurns 50)
-- `.claude/agents/ralph-{auditor,architect,implementer,verifier}.md` — DELETED (dead)
-- `scripts/ralph_loop_runner.sh` — DELETED (dead)
-- `docs/ralph-loop/ralph-loop-system.md` — rewritten for v3
-- `docs/ralph-loop/ralph-mcp.json` — NEW (empty MCP config for headless)
-- `trading_app/walkforward.py` — trade-count window path + code review fixes
-- `trading_app/config.py` — WF_TRADE_COUNT_OVERRIDE, WF_MIN_TRAIN_TRADES
-- `trading_app/strategy_validator.py` — thread trade-count params
-- `tests/test_trading_app/test_walkforward.py` — 7 new TDD tests
-- `docs/plans/2026-03-17-trade-count-wf-design.md` — design doc
-- `trading_app/prop_portfolio.py` — Codex changes (daily lanes, daily card, flags)
-- `trading_app/prop_profiles.py` — Codex changes (DailyLaneSpec, Apex DD fix)
-
-## Concurrent Work Warning
-- **Codex was running simultaneously with Claude Code this session.** This caused:
-  - Git lock errors (both trying to commit at same time)
-  - Codex working from stale state (didn't see Claude Code's commits)
-  - Ralph's diff guard reverting Claude Code's WF changes (thought they were Ralph's)
-- **Fix:** Never run both tools on the same branch simultaneously. Sequential only. Read HANDOFF.md on session start.
+## Files Modified
+- `trading_app/prop_profiles.py` — DailyLaneSpec, session/instrument routing, firm specs, daily lanes
+- `trading_app/prop_portfolio.py` — daily lane resolver, cross-account daily, calendar gates, --daily/--verbose/--fitness/--date
+- `tests/test_trading_app/test_prop_profiles.py` — 21 tests
+- `tests/test_trading_app/test_prop_portfolio.py` — 38 tests (including 5 integration tests for daily lane resolver)
+- `HANDOFF.md`, `AGENTS.md`, `CLAUDE.md`, `CODEX.md` — cross-tool coordination
+- `scripts/infra/*.sh` — fail-fast env guards for .venv-wsl
+- `trade-sheet.bat`, `daily-sheet.bat` — double-click launchers
+- `MARKET_PLAYBOOK.md` — DELETED
+- `docs/plans/TRADING_PLAN_BEGINNER.md` — DELETED
+- `scripts/tools/beginner_tradebook.py` — DELETED
+- `scripts/tools/gen_playbook.py` — DELETED
+- `ROADMAP.md`, `TRADING_RULES.md`, `scripts/infra/check_root_hygiene.py` — references cleaned
 
 ## Next Steps
-- Run Ralph batch with hardened prompt (should be clean now — prop files are no-touch)
-- MGC WF revalidation: run `python trading_app/strategy_validator.py --instrument MGC` to see trade-count windows in action on real data
-- Codex CLI facade proposal: design is reasonable (thin dispatcher, not new package). Low priority.
-- MEMORY.md action queue item 10 (trade-count WF): DONE
-- Remaining items: 11 (CUSUM fitness), 12 (ATR position sizing), Phase 6e (monitoring)
+- Streamlit dashboard: add prop portfolio view (daily card + firm selector + DD bars) — plan with /4tp + /quant-tdd
+- CUSUM-based fitness (MEMORY.md action queue item 11)
+- ATR-normalized position sizing (item 12)
+- MGC WF revalidation with trade-count windows
 
 ## Blockers / Warnings
 - `.venv-wsl/` is empty. Must `uv sync --frozen` in WSL before Codex scripts work.
 - Windows uses `.venv/`, WSL uses `.venv-wsl/`. Do not cross-wire.
-- Ralph batch that ran during this session: 1/5 accept, 3/5 reverted (feature creep), 1 diminishing returns. $5.36. Agent prompt now hardened — next batch should be clean.
-- `--no-verify` used on some commits due to Ralph's concurrent changes causing lock errors.
+- Pre-existing test failure: `test_pipeline_status.py` — MGC missing outcomes for CME_PRECLOSE/NYSE_CLOSE. Not related to prop portfolio.
+- A stale `HEAD` file in repo root was causing git desync — DELETED. If git commands fail with "ambiguous argument 'HEAD'", check for stale files in repo root.
+- `prop_portfolio.py` and `prop_profiles.py` are NO-TOUCH zones for Ralph (actively developed).
