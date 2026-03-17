@@ -1283,3 +1283,13 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 5 importers (broker_base.py, live_market_state.py, projectx/data_feed.py, tradovate/data_feed.py, session_orchestrator.py)
 - Verification: PASS (8/8 bar_aggregator tests, 72 drift checks, behavioral audit clean)
 - Commit: NONE
+
+## Iteration 127 — 2026-03-17
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/live/broker_factory.py:89-90
+- Finding: VALID_BROKERS declared as "canonical source for dispatcher" but only used in ValueError message string — actual dispatch guard was if/elif chain, allowing coherence drift
+- Action: Added early guard `if broker not in VALID_BROKERS: raise ValueError(...)` before if/elif; removed redundant else clause; kept `raise AssertionError("unreachable")` as defensive guard
+- Blast radius: 1 production file, 1 test file
+- Verification: PASS (9/9 tests, 72 drift checks, 218 pre-commit suite)
+- Commit: 2f039df

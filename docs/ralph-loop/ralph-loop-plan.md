@@ -1,7 +1,10 @@
-## Iteration: 126
-## Target: trading_app/live/tradovate/contract_resolver.py:16-17, order_router.py:26-27, positions.py:11-12
-## Finding: LIVE_BASE/DEMO_BASE URL constants duplicated across 4 tradovate modules — auth.py is canonical source, others should import from it
-## Classification: [mechanical]
-## Blast Radius: 3 files modified (contract_resolver.py, order_router.py, positions.py); auth.py untouched; test files: test_order_router.py, test_tradovate_positions.py, test_broker_factory.py
-## Invariants: [1] LIVE_BASE value "https://live.tradovateapi.com/v1" unchanged; [2] DEMO_BASE value "https://demo.tradovateapi.com/v1" unchanged; [3] all runtime behavior identical — only deduplication
-## Diff estimate: 6 lines removed + 3 lines added = 9 lines total
+## Iteration: 127
+## Target: trading_app/live/broker_factory.py:89-90
+## Finding: VALID_BROKERS is defined as "canonical source for dispatcher" but used only in the ValueError message string — the actual dispatch guard is the if/elif chain. These can drift (e.g. adding broker to one but not the other). Fix: add early guard using VALID_BROKERS before if/elif; remove redundant else clause.
+## Classification: [mechanical] — coherence fix, no behavior change (same ValueError, same message)
+## Blast Radius: 1 production file, 1 test file (test_broker_factory.py). 3 callers unaffected (no signature change).
+## Invariants:
+## 1. create_broker_components raises ValueError for unknown brokers (fail-closed preserved)
+## 2. Auth is an instance; feed/router/contracts/positions are classes — dict shape unchanged
+## 3. Valid broker strings "projectx" / "tradovate" behave identically
+## Diff estimate: ~5 lines (add 2, remove 3)
