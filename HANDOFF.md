@@ -12,77 +12,27 @@ If nothing changed, leave it as-is.
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-03-18
-- **Commit:** 982cab8 — feat: auto-update HANDOFF.md on every commit (post-commit hook)
-- **Files changed:** 1 files
+- **Commit:** 513f166 — fix: harden post-commit hook — skip rebase/merge, safe regex fallback, auto-stage HANDOFF
+- **Files changed:** 3 files
   - `.githooks/post-commit`
+  - `.githooks/pre-commit`
+  - `HANDOFF.md`
 
 ## Decisions Made
-- Apex: automation AND copy trading PROHIBITED (OFFICIAL RULE). Manual proof only, 1 account.
-- Tradeify: PRIMARY MNQ scaling lane (5 accounts, overnight sessions, Tradovate API)
-- TopStep: MGC morning lane (5 Express, CME_REOPEN + TOKYO_OPEN, ProjectX API)
-- Self-funded: Phase 3, inactive until prop proof complete
-- Prop ceiling ~$60K/year. $100K requires self-funded IBKR (Phase 3).
-- Canonical playbook: `docs/plans/manual-trading-playbook.md` (V3)
-- Trading surface authority:
-  - `python -m trading_app.prop_portfolio --daily --profile apex_50k_manual` = manual canonical
-  - `python -m trading_app.prop_portfolio --daily` = cross-account overview
-  - `python scripts/tools/generate_trade_sheet.py` = live/automation canonical
-  - `trade-sheet.bat` / `daily-sheet.bat` = double-click launchers
-- DailyLaneSpec pins exact strategy IDs per manual profile. TRADE/HOLD/REVIEW/SKIP catches drift honestly.
-- LONDON_METALS lane swapped to 0.75x strategy (S075) — no more stop mismatch.
-- EUROPE_FLOW stays in plan. HOLD when fitness is WATCH — correct behavior.
-- Parallel edit sessions should use isolated worktrees, not one shared mutable branch.
-- Canonical parallel entrypoints:
-  - `scripts/infra/claude-worktree.sh open <task-name>`
-  - `scripts/infra/codex-worktree.sh open <task-name>`
-- Shared stale-state guard: `scripts/tools/session_preflight.py`
-- Human-friendly Windows front doors:
-  - `ai-workstreams.bat` = primary root front door
-  - extra Windows shortcuts are hidden under `scripts/infra/windows-shortcuts/`
-- Workstream UX rules:
-  - Human concept = `workstream`, not `task`
-  - Primary launcher = `ai-workstreams.bat`
-  - Start flow is intent-first: name -> purpose -> recommended agent
-  - Continue/finish flows use numbered managed workstream selection
-  - Reopening an existing workstream preserves its saved purpose instead of silently rewriting it
-  - Repo root should stay visually clean: one obvious AI launcher, not a pile of near-duplicates
-
-## Files Modified
-- `trading_app/prop_profiles.py` — DailyLaneSpec, session/instrument routing, firm specs, daily lanes
-- `trading_app/prop_portfolio.py` — daily lane resolver, cross-account daily, calendar gates, --daily/--verbose/--fitness/--date
-- `tests/test_trading_app/test_prop_profiles.py` — 21 tests
-- `tests/test_trading_app/test_prop_portfolio.py` — 38 tests (including 5 integration tests for daily lane resolver)
-- `HANDOFF.md`, `AGENTS.md`, `CLAUDE.md`, `CODEX.md` — cross-tool coordination
-- `scripts/infra/*.sh` — fail-fast env guards for .venv-wsl
-- `trade-sheet.bat`, `daily-sheet.bat` — double-click launchers
-- `MARKET_PLAYBOOK.md` — DELETED
-- `docs/plans/TRADING_PLAN_BEGINNER.md` — DELETED
-- `scripts/tools/beginner_tradebook.py` — DELETED
-- `scripts/tools/gen_playbook.py` — DELETED
-- `ROADMAP.md`, `TRADING_RULES.md`, `scripts/infra/check_root_hygiene.py` — references cleaned
-- `scripts/tools/session_preflight.py` — restored shared startup/stale-state guard with claim verification
-- `scripts/tools/worktree_manager.py` — managed git worktree create/list/prune/close helper
-- `scripts/infra/codex-project.sh`, `codex-project-search.sh`, `codex-review.sh`, `wsl-env.sh` — root override + auto-preflight
-- `scripts/infra/codex-worktree.sh`, `scripts/infra/claude-worktree.sh` — parallel session wrappers
-- `scripts/infra/windows-agent-launch.ps1` — Windows workstream launcher/menu
-- `ai-workstreams.bat` — primary human-facing launcher in repo root
-- `scripts/infra/windows-shortcuts/*.bat` — hidden compatibility/direct Windows shortcuts
-- `tests/test_tools/test_session_preflight.py`, `tests/test_tools/test_worktree_manager.py` — targeted coverage
-- `AGENTS.md`, `CLAUDE.md`, `CODEX.md`, `.codex/STARTUP.md` — worktree/preflight routing guidance
+- HANDOFF.md is now auto-updated by post-commit hook — no manual “handover” needed
+- Pre-commit hook auto-stages dirty HANDOFF.md so updates ride along with the next commit
+- Post-commit hook skips rebase/merge/cherry-pick (no spam)
+- Trade-count WF design approved (`docs/plans/2026-03-17-trade-count-wf-design.md`) — ready to build
+- Project pulse/mental model 4T design done by Codex (`docs/plans/2026-03-17-project-mental-model-design.md`) — no code yet
 
 ## Next Steps
-- Streamlit dashboard: add prop portfolio view (daily card + firm selector + DD bars) — plan with /4tp + /quant-tdd
+- **Trade-count WF** — implement from design doc (4 files, no schema changes)
+- **Project pulse** — implement from Codex's 4T design (scripts/tools/project_pulse.py)
+- Streamlit dashboard: prop portfolio view
 - CUSUM-based fitness (MEMORY.md action queue item 11)
 - ATR-normalized position sizing (item 12)
-- MGC WF revalidation with trade-count windows
-- If Claude native startup should also force preflight outside the worktree wrapper path, add a machine-local launcher or shell alias on the Windows side
-- Pre-commit hook is LF-normalized again at `.githooks/pre-commit`; normal `git commit` should no longer die on `/usr/bin/env: 'bash\r'`
 
 ## Blockers / Warnings
-- `.venv-wsl/bin/python` exists in this checkout now. The old “empty `.venv-wsl/`” warning is stale.
-- Windows uses `.venv/`, WSL uses `.venv-wsl/`. Do not cross-wire.
-- Pre-existing test failure: `test_pipeline_status.py` — MGC missing outcomes for CME_PRECLOSE/NYSE_CLOSE. Not related to prop portfolio.
-- A stale `HEAD` file in repo root was causing git desync — DELETED. If git commands fail with "ambiguous argument 'HEAD'", check for stale files in repo root.
-- `prop_portfolio.py` and `prop_profiles.py` are NO-TOUCH zones for Ralph (actively developed).
-- `session_preflight.py --verify-claim` will intentionally scream if another tool updates the same branch/HEAD claim. That is desired.
-- Verified live: managed worktree create/reuse/close passed for `smoke-verify`.
+- Pre-existing test failure: `test_pipeline_status.py` — MGC missing outcomes for CME_PRECLOSE/NYSE_CLOSE
+- `prop_portfolio.py` and `prop_profiles.py` are NO-TOUCH zones for Ralph
+- Windows uses `.venv/`, WSL uses `.venv-wsl/` — do not cross-wire
