@@ -1,7 +1,7 @@
 @echo off
 setlocal
 title Codex Workstream Shortcut
-cd /d "%~dp0"
+cd /d "%~dp0\..\..\.."
 
 set "TASK=%~1"
 if "%TASK%"=="" (

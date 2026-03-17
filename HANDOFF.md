@@ -35,16 +35,15 @@ If nothing changed, leave it as-is.
   - `scripts/infra/codex-worktree.sh open <task-name>`
 - Shared stale-state guard: `scripts/tools/session_preflight.py`
 - Human-friendly Windows front doors:
-  - `ai-workstreams.bat` = primary front door
-  - `ai-workspaces.bat` = compatibility alias
-  - `agent-tasks.bat` = compatibility alias
-  - `claude-task.bat`, `codex-task.bat`, `codex-search-task.bat` = direct shortcuts
+  - `ai-workstreams.bat` = primary root front door
+  - extra Windows shortcuts are hidden under `scripts/infra/windows-shortcuts/`
 - Workstream UX rules:
   - Human concept = `workstream`, not `task`
   - Primary launcher = `ai-workstreams.bat`
   - Start flow is intent-first: name -> purpose -> recommended agent
   - Continue/finish flows use numbered managed workstream selection
   - Reopening an existing workstream preserves its saved purpose instead of silently rewriting it
+  - Repo root should stay visually clean: one obvious AI launcher, not a pile of near-duplicates
 
 ## Files Modified
 - `trading_app/prop_profiles.py` — DailyLaneSpec, session/instrument routing, firm specs, daily lanes
@@ -64,7 +63,8 @@ If nothing changed, leave it as-is.
 - `scripts/infra/codex-project.sh`, `codex-project-search.sh`, `codex-review.sh`, `wsl-env.sh` — root override + auto-preflight
 - `scripts/infra/codex-worktree.sh`, `scripts/infra/claude-worktree.sh` — parallel session wrappers
 - `scripts/infra/windows-agent-launch.ps1` — Windows workstream launcher/menu
-- `ai-workstreams.bat`, `ai-workspaces.bat`, `agent-tasks.bat`, `claude-task.bat`, `codex-task.bat`, `codex-search-task.bat`, `task-list.bat`, `task-close.bat`, `task-prune.bat` — human-facing launcher layer
+- `ai-workstreams.bat` — primary human-facing launcher in repo root
+- `scripts/infra/windows-shortcuts/*.bat` — hidden compatibility/direct Windows shortcuts
 - `tests/test_tools/test_session_preflight.py`, `tests/test_tools/test_worktree_manager.py` — targeted coverage
 - `AGENTS.md`, `CLAUDE.md`, `CODEX.md`, `.codex/STARTUP.md` — worktree/preflight routing guidance
 
