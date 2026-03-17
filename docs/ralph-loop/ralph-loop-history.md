@@ -5,6 +5,30 @@
 
 ---
 
+## Iteration 126 — 2026-03-17
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/live/tradovate/contract_resolver.py:16-17, order_router.py:26-27, positions.py:11-12
+- Finding: LIVE_BASE/DEMO_BASE URL constants duplicated across 4 tradovate modules — canonical source is auth.py; 3 files hardcoded them independently (maintenance hazard: URL change requires 4 edits)
+- Action: Removed duplicate constants from contract_resolver.py, order_router.py, positions.py; added `from .auth import DEMO_BASE, LIVE_BASE` to each
+- Blast radius: 3 production files
+- Verification: PASS (29/29 targeted tests + 218/218 pre-commit suite + drift clean)
+- Commit: 4650a54
+
+---
+
+## Iteration 125 — 2026-03-17
+- Phase: audit-only
+- Classification: audit-only
+- Target: trading_app/live/bar_aggregator.py
+- Finding: No findings — file is entirely clean
+- Action: Audit only, no changes
+- Blast radius: 0
+- Verification: PASS (8/8 tests)
+- Commit: NONE
+
+---
+
 ## Iteration 124 — 2026-03-16
 - Phase: fix
 - Classification: [mechanical]
@@ -1249,3 +1273,13 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 1 file, 0 external callers (standalone research script)
 - Verification: ruff PASS, check_drift 72/72 PASS
 - Commit: 16d472f
+
+## Iteration 125 — 2026-03-17
+- Phase: audit-only
+- Classification: N/A
+- Target: trading_app/live/bar_aggregator.py
+- Finding: No findings — file entirely clean (0 Seven Sins violations, 8/8 tests PASS)
+- Action: Audit only — no code changes
+- Blast radius: 5 importers (broker_base.py, live_market_state.py, projectx/data_feed.py, tradovate/data_feed.py, session_orchestrator.py)
+- Verification: PASS (8/8 bar_aggregator tests, 72 drift checks, behavioral audit clean)
+- Commit: NONE
