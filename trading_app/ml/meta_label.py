@@ -384,7 +384,7 @@ def train_per_session_meta_label(
                     )
                     cpcv_auc = cpcv_results["auc_mean"]
                 except Exception:
-                    logger.debug(f"  {session}: CPCV failed, continuing without")
+                    logger.warning(f"  {session}: CPCV failed, continuing without CPCV validation", exc_info=True)
 
             # --- Train RF on training data (first 60%) ---
             rf = RandomForestClassifier(**rf_base_params, min_samples_leaf=leaf_size)
