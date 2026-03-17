@@ -224,7 +224,7 @@ ACCOUNT_TIERS: dict[tuple[str, int], PropFirmAccount] = {
     ("tradeify", 100_000): PropFirmAccount("tradeify", 100_000, 4_000, 8, 80),
     ("tradeify", 150_000): PropFirmAccount("tradeify", 150_000, 6_000, 12, 120),
     # Apex (metals banned — included for completeness)
-    ("apex", 50_000): PropFirmAccount("apex", 50_000, 1_500, 4, 40),
+    ("apex", 50_000): PropFirmAccount("apex", 50_000, 2_000, 4, 40),  # Official: $2K DD per rules doc
     ("apex", 100_000): PropFirmAccount("apex", 100_000, 3_000, 6, 60),
     ("apex", 150_000): PropFirmAccount("apex", 150_000, 4_000, 10, 100),  # Official: $4K DD, 10 mini
     # Self-funded
@@ -247,12 +247,12 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         copies=1,
         stop_multiplier=0.75,
         max_slots=4,
-        # Phase 1 manual sessions (playbook 5-session plan + MGC morning)
+        # Phase 1 manual: playbook 5-session plan (lines 193-227)
+        # TOKYO_OPEN, SINGAPORE_OPEN, EUROPE_FLOW, LONDON_METALS, NYSE_OPEN
+        # CME_REOPEN is TopStep-only (playbook line 600). BRISBANE_1025 not in Phase 1.
         allowed_sessions=frozenset(
             {
-                "CME_REOPEN",
                 "TOKYO_OPEN",
-                "BRISBANE_1025",
                 "SINGAPORE_OPEN",
                 "EUROPE_FLOW",
                 "LONDON_METALS",
