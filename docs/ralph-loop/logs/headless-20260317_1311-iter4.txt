@@ -1,0 +1,27 @@
+`★ Insight ─────────────────────────────────────`
+The `_per_win_min` pattern here exemplifies a common dual-mode API issue: when a function supports two operating modes (calendar vs. trade-count), threshold parameters often have mode-specific semantics. The safe pattern is to compute the effective threshold upfront before the aggregation loop, not inline — this makes the mode-specific logic visible in one place rather than scattered across 3 downstream uses.
+`─────────────────────────────────────────────────`
+
+**Step 5: FINAL REPORT**
+
+```
+=== RALPH LOOP ITER [128] COMPLETE ===
+Scope: trading_app/walkforward.py (trade-count mode — AFML Ch.2 feature, active unstaged changes)
+Audit: 3 findings (0 CRIT, 0 HIGH, 0 MED, 3 LOW)
+Classification: [mechanical]
+Action: fix
+Target: trading_app/walkforward.py:246-316
+Blast radius: 2 files (walkforward.py modified, strategy_validator.py verified unaffected)
+Verdict: ACCEPT
+Commit: 32665a7 (fixes incorporated into feature commit; docs commit b705950)
+Deferred debt: 1 open item (DF-04: rolling_portfolio.py dormant orb_minutes=5)
+Next: DIMINISHING_RETURNS — consecutive_low_only=4; all high/critical-tier files scanned; recommend STOP or re-scope to cusum_monitor.py / circuit_breaker.py if continuing
+================================
+```
+
+**Details on the 3 batched LOW findings fixed:**
+1. `valid_windows` filter used `min_trades_per_window` (calendar param) in trade-count mode — incoherent when `test_window_trades < min_trades_per_window`. Fixed with `_per_win_min = test_window_trades if test_window_trades is not None else min_trades_per_window`.
+2. `rejection_reason` in "no windows" case mentioned `min_train_months` even in trade-count mode. Fixed with mode-aware message.
+3. `oos_trade_floor = min_trades_per_window * min_valid_windows` — same root, fixed to use `_per_win_min`.
+
+All 32 tests pass. Drift 72 PASS. Current production config (MGC: `test_window_trades=30 >= min_trades_per_window=15`) was never broken — only the edge case `test_window_trades < 15` was incoherent, and it was fail-closed (over-rejected, not under-rejected).

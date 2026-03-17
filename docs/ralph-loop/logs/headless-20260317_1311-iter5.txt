@@ -1,0 +1,26 @@
+Ledger updated: `consecutive_low_only=3`. The deferred-findings.md needs no update (no new deferrals). Final report:
+
+---
+
+```
+=== RALPH LOOP ITER [127] COMPLETE ===
+Scope: trading_app/live/broker_factory.py + trading_app/live/tradovate/__init__.py
+Audit: 0 findings (0 CRIT, 0 HIGH, 0 MED, 0 LOW actionable; 1 ACCEPTABLE: demo param
+       ignored for ProjectX — intentional architectural difference, ProjectX env
+       controlled by PROJECTX_BASE_URL)
+Classification: audit-only
+Action: audit-only
+Target: trading_app/live/broker_factory.py (entire file) + tradovate/__init__.py
+Blast radius: 5 callers (webhook_server.py, session_orchestrator.py, run_live_session.py,
+              test_broker_factory.py, test_projectx_integration.py)
+Verdict: SKIPPED (no findings)
+Commit: NONE
+Deferred debt: 1 open item (DF-04: rolling_portfolio.py:304 dormant orb_minutes=5)
+Next: ⚠️ consecutive_low_only=3 — DIMINISHING RETURNS threshold hit.
+      Recommend re-scoping to:
+        1. trading_app/live/circuit_breaker.py (unscanned, live safety net — fail-open potential)
+        2. trading_app/live/trade_journal.py (unscanned, flagged CRITICAL in audit_mar14)
+        3. trading_app/live/cusum_monitor.py (unscanned, MEMORY.md action queue item #11)
+      These are higher-probability HIGH+ finding targets than further clean factory/init files.
+================================
+```
