@@ -20,11 +20,9 @@ from dataclasses import dataclass
 import requests
 
 from ..broker_base import BrokerAuth, BrokerRouter
+from .auth import DEMO_BASE, LIVE_BASE
 
 log = logging.getLogger(__name__)
-
-LIVE_BASE = "https://live.tradovateapi.com/v1"
-DEMO_BASE = "https://demo.tradovateapi.com/v1"
 
 
 @dataclass
