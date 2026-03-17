@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+#
+# Post-commit hook: auto-updates HANDOFF.md so nobody has to remember.
+# Writes the Last Session block with tool, date, SHA, summary, and files changed.
+#
+# This is ADVISORY — if it fails, the commit is already done. Never exit 1.
+#
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+HANDOFF="$SCRIPT_DIR/HANDOFF.md"
+
+if [ ! -f "$HANDOFF" ]; then
+    exit 0
+fi
+
+# Detect which tool is committing
+if [ -n "$CLAUDECODE" ]; then
+    TOOL="Claude Code"
+elif [ -n "$CODEX_CLI" ] || [ -n "$CODEX" ]; then
+    TOOL="Codex"
+else
+    # Check parent process or WSL hint
+    if grep -qi "wsl" /proc/version 2>/dev/null; then
+        TOOL="Codex (WSL)"
+    else
+        TOOL="Unknown"
+    fi
+fi
+
+TODAY=$(date +%Y-%m-%d)
+SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+SUBJECT=$(git log -1 --pretty=format:'%s' 2>/dev/null || echo "unknown")
+
+# Files changed in this commit (compact list)
+FILES_CHANGED=$(git diff-tree --no-commit-id --name-only -r HEAD 2>/dev/null | head -20)
+FILE_COUNT=$(echo "$FILES_CHANGED" | grep -c '.' 2>/dev/null || echo "0")
+
+# Build the new Last Session block
+NEW_SESSION="## Last Session
+- **Tool:** ${TOOL}
+- **Date:** ${TODAY}
+- **Commit:** ${SHA} — ${SUBJECT}
+- **Files changed:** ${FILE_COUNT} files"
+
+# Replace everything between "## Last Session" and the next "##" heading
+# Use python for reliable cross-platform multiline replacement
+PYTHON="python"
+if [ -f "$SCRIPT_DIR/.venv/Scripts/python.exe" ]; then
+    PYTHON="$SCRIPT_DIR/.venv/Scripts/python.exe"
+elif [ -f "$SCRIPT_DIR/.venv/bin/python" ]; then
+    PYTHON="$SCRIPT_DIR/.venv/bin/python"
+fi
+
+"$PYTHON" -c "
+import re, sys
+
+handoff_path = sys.argv[1]
+new_block = sys.argv[2]
+files_list = sys.argv[3]
+
+with open(handoff_path, 'r', encoding='utf-8') as f:
+    content = f.read()
+
+# Build full replacement block
+file_lines = [l for l in files_list.strip().splitlines() if l.strip()]
+if file_lines:
+    detail = '\n'.join(f'  - \`{f}\`' for f in file_lines[:15])
+    if len(file_lines) > 15:
+        detail += f'\n  - ... and {len(file_lines) - 15} more'
+    replacement = new_block + '\n' + detail + '\n'
+else:
+    replacement = new_block + '\n'
+
+# Replace the Last Session section (up to next ## or end of Decisions Made)
+pattern = r'## Last Session\n.*?(?=\n## (?!Last Session))'
+match = re.search(pattern, content, re.DOTALL)
+if match:
+    content = content[:match.start()] + replacement + content[match.end():]
+else:
+    # No existing Last Session — insert after the --- separator
+    sep = content.find('---\n')
+    if sep >= 0:
+        insert_at = content.index('\n', sep) + 1
+        content = content[:insert_at] + '\n' + replacement + '\n' + content[insert_at:]
+
+with open(handoff_path, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(content)
+" "$HANDOFF" "$NEW_SESSION" "$FILES_CHANGED" 2>/dev/null || true
+
+# Stage the updated HANDOFF but do NOT create a new commit (that would loop)
+# The change will be picked up by the next commit automatically.
