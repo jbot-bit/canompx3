@@ -34,7 +34,7 @@ This file exists in parallel with `CLAUDE.md`. It does not replace it. The Claud
 
 If there is a conflict, follow `CLAUDE.md`, `.claude/`, `TRADING_RULES.md`, or `RESEARCH_RULES.md` over this file. This file is only a thin Codex adapter.
 
-**Cross-tool state:** Shared decisions live in `HANDOFF.md` and `docs/plans/`, not in Codex-private files. Read `HANDOFF.md` on session start. Update it on session end. See `AGENTS.md` § Cross-Tool Coordination.
+**Cross-tool state:** Shared decisions live in `HANDOFF.md` and `docs/plans/`, not in Codex-private files. Read `HANDOFF.md` on session start. Update it on session end. For parallel work, prefer `scripts/infra/codex-worktree.sh open <task>` instead of sharing one mutable branch with Claude. See `AGENTS.md` § Cross-Tool Coordination.
 
 ## Codex Working Set
 

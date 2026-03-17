@@ -28,7 +28,7 @@ Frozen specs (`CANONICAL_*.txt`) → read-only; live code is truth.
 
 **Conflict resolution:** Code behavior → CLAUDE.md. Trading logic → TRADING_RULES.md. Research → RESEARCH_RULES.md.
 
-**Cross-tool state:** Shared decisions live in `HANDOFF.md` and `docs/plans/`, not in Claude-private memory. Read `HANDOFF.md` on session start. See `AGENTS.md` § Cross-Tool Coordination.
+**Cross-tool state:** Shared decisions live in `HANDOFF.md` and `docs/plans/`, not in Claude-private memory. Read `HANDOFF.md` on session start. For parallel work, prefer `scripts/infra/claude-worktree.sh open <task>` instead of sharing one mutable branch with Codex. See `AGENTS.md` § Cross-Tool Coordination.
 
 ---
 
