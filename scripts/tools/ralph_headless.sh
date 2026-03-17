@@ -128,6 +128,8 @@ extract_verdict() {
 
     # Primary: structured report field
     verdict=$(grep -oP 'Verdict: \K\w+' "$txt_file" 2>/dev/null | tail -1) || true
+    # Normalize synonyms (Haiku sometimes uses FIXED instead of ACCEPT)
+    [[ "$verdict" == "FIXED" ]] && verdict="ACCEPT"
 
     # Fallback: keyword scan
     if [[ -z "$verdict" ]]; then
