@@ -149,7 +149,7 @@ banner "════════════════════════
 banner "  Started:    $(date)"
 banner "  Iterations: $MAX_ITERS"
 banner "  Scope:      ${SCOPE:-auto (Next Targets from audit file)}"
-banner "  Model:      sonnet | Max turns: $MAX_TURNS"
+banner "  Model:      haiku (no MCP) | Max turns: $MAX_TURNS"
 banner "  Log:        $MASTER_LOG"
 banner "════════════════════════════════════════════"
 banner ""
@@ -183,13 +183,15 @@ Execute ALL steps from ralph-loop.md (Steps 0 through 5).
 Your FINAL output MUST be the structured === RALPH LOOP ITER [N] COMPLETE === report block."
 
     $CLAUDE -p "$PROMPT" \
-        --model sonnet \
+        --model haiku \
         --dangerously-skip-permissions \
         --allowedTools "Edit,Read,Write,Bash,Grep,Glob" \
         --max-turns "$MAX_TURNS" \
         --no-session-persistence \
         --output-format json \
         --append-system-prompt "$SYSTEM_APPEND" \
+        --mcp-config "$PROJECT_ROOT/docs/ralph-loop/ralph-mcp.json" \
+        --strict-mcp-config \
         > "$iter_json" 2>"$iter_err" || true
 }
 

@@ -6,7 +6,7 @@ description: >
   canonical integrity issues, and silent failures. Fixes the highest-priority finding
   per iteration. Returns structured report.
 tools: Read, Edit, Write, Bash, Grep, Glob
-model: sonnet
+model: haiku
 maxTurns: 50
 ---
 
