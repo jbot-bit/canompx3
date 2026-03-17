@@ -71,6 +71,8 @@ def run_walkforward(
     wf_start_date: date | None = None,
     stop_multiplier: float = 1.0,
     cost_spec=None,
+    test_window_trades: int | None = None,
+    min_train_trades: int | None = None,
 ) -> WalkForwardResult:
     """
     Anchored walk-forward validation on existing orb_outcomes.
@@ -143,51 +145,103 @@ def run_walkforward(
     # Apply per-instrument WF start override (skip regime-shifted early data)
     anchor = max(earliest, wf_start_date) if wf_start_date else earliest
     windows = []
-    window_start = _add_months(anchor, min_train_months)
 
-    while window_start <= latest:
-        window_end = _add_months(window_start, test_window_months)
+    if test_window_trades is not None:
+        # ── Trade-count mode (AFML Ch.2 information-driven sampling) ──────
+        # @research-source Lopez de Prado AFML Ch.2 — information-driven bars;
+        #   window by trade count for regime-spanning OOS validation
+        # @entry-models E1/E2
+        # @revalidated-for E1/E2 event-based sessions (2026-03-17)
+        min_is = min_train_trades if min_train_trades is not None else test_window_trades
+        # Apply anchor: skip outcomes before wf_start_date
+        anchor_idx = bisect_left(all_trading_days, anchor)
+        usable = outcomes[anchor_idx:]
+        usable_days = all_trading_days[anchor_idx:]
 
-        # O(log N) window slicing via bisect
-        lo = bisect_left(all_trading_days, window_start)
-        hi = bisect_left(all_trading_days, window_end)
-        test_outcomes = outcomes[lo:hi]
+        idx = min_is
+        while idx + test_window_trades <= len(usable):
+            is_outcomes = usable[:idx]
+            oos_outcomes = usable[idx : idx + test_window_trades]
 
-        metrics = compute_metrics(test_outcomes)
-        test_n = metrics["sample_size"]
-        test_exp_r = metrics["expectancy_r"]
+            metrics = compute_metrics(oos_outcomes)
+            is_metrics = compute_metrics(is_outcomes) if len(is_outcomes) >= 15 else None
+            is_exp_r = is_metrics["expectancy_r"] if is_metrics else None
 
-        # IS metrics: all outcomes before this window (anchored expanding)
-        # @research-source Lopez de Prado AFML Ch.11 — minimum IS observations for stable estimate;
-        #   consistent with wf_min_trades=15 in strategy_validator.py
-        # @revalidated-for E1/E2 event-based sessions (2026-03-10)
-        is_outcomes = outcomes[:lo]
-        is_metrics = compute_metrics(is_outcomes) if len(is_outcomes) >= 15 else None
-        is_exp_r = is_metrics["expectancy_r"] if is_metrics else None
+            windows.append(
+                {
+                    "window_start": usable_days[idx].isoformat(),
+                    "window_end": usable_days[idx + test_window_trades - 1].isoformat(),
+                    "test_n": metrics["sample_size"],
+                    "test_exp_r": metrics["expectancy_r"],
+                    "test_wr": metrics["win_rate"],
+                    "test_sharpe": metrics["sharpe_ratio"],
+                    "test_pass": metrics["expectancy_r"] is not None and metrics["expectancy_r"] > 0,
+                    "is_exp_r": is_exp_r,
+                }
+            )
 
-        windows.append(
-            {
-                "window_start": window_start.isoformat(),
-                "window_end": window_end.isoformat(),
-                "test_n": test_n,
-                "test_exp_r": test_exp_r,
-                "test_wr": metrics["win_rate"],
-                "test_sharpe": metrics["sharpe_ratio"],
-                "test_pass": (test_n >= min_trades_per_window and test_exp_r is not None and test_exp_r > 0),
-                "is_exp_r": is_exp_r,
-            }
-        )
+            logger.info(
+                "WF %s trade-count window [%d:%d] %s..%s: N=%d ExpR=%s",
+                strategy_id,
+                idx,
+                idx + test_window_trades,
+                usable_days[idx],
+                usable_days[idx + test_window_trades - 1],
+                metrics["sample_size"],
+                metrics["expectancy_r"],
+            )
 
-        logger.info(
-            "WF %s window %s..%s: N=%d ExpR=%s",
-            strategy_id,
-            window_start,
-            window_end,
-            test_n,
-            test_exp_r,
-        )
+            idx += test_window_trades
+        params["mode"] = "trade_count"
+        params["test_window_trades"] = test_window_trades
+        params["min_train_trades"] = min_is
+    else:
+        # ── Calendar mode (existing, unchanged) ──────────────────────────
+        window_start = _add_months(anchor, min_train_months)
 
-        window_start = window_end
+        while window_start <= latest:
+            window_end = _add_months(window_start, test_window_months)
+
+            # O(log N) window slicing via bisect
+            lo = bisect_left(all_trading_days, window_start)
+            hi = bisect_left(all_trading_days, window_end)
+            test_outcomes = outcomes[lo:hi]
+
+            metrics = compute_metrics(test_outcomes)
+            test_n = metrics["sample_size"]
+            test_exp_r = metrics["expectancy_r"]
+
+            # IS metrics: all outcomes before this window (anchored expanding)
+            # @research-source Lopez de Prado AFML Ch.11 — minimum IS observations for stable estimate;
+            #   consistent with wf_min_trades=15 in strategy_validator.py
+            # @revalidated-for E1/E2 event-based sessions (2026-03-10)
+            is_outcomes = outcomes[:lo]
+            is_metrics = compute_metrics(is_outcomes) if len(is_outcomes) >= 15 else None
+            is_exp_r = is_metrics["expectancy_r"] if is_metrics else None
+
+            windows.append(
+                {
+                    "window_start": window_start.isoformat(),
+                    "window_end": window_end.isoformat(),
+                    "test_n": test_n,
+                    "test_exp_r": test_exp_r,
+                    "test_wr": metrics["win_rate"],
+                    "test_sharpe": metrics["sharpe_ratio"],
+                    "test_pass": (test_n >= min_trades_per_window and test_exp_r is not None and test_exp_r > 0),
+                    "is_exp_r": is_exp_r,
+                }
+            )
+
+            logger.info(
+                "WF %s window %s..%s: N=%d ExpR=%s",
+                strategy_id,
+                window_start,
+                window_end,
+                test_n,
+                test_exp_r,
+            )
+
+            window_start = window_end
 
     if not windows:
         return WalkForwardResult(

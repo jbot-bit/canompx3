@@ -248,14 +248,14 @@ def _resolve_daily_lane(
     try:
         f = compute_fitness(snap["strategy_id"], db_path=db_path)
         fitness_status = f.fitness_status
-    except Exception:
+    except (ValueError, duckdb.Error):
         pass
     exp_dollars = None
     mrp = snap.get("median_risk_points")
     if snap["expectancy_r"] is not None and mrp is not None:
         try:
             exp_dollars = snap["expectancy_r"] * mrp * get_cost_spec(snap["instrument"]).point_value
-        except Exception:
+        except (KeyError, ValueError):
             pass
     status, reason = "TRADE", "Ready."
     firm_spec = get_firm_spec(profile.firm)
@@ -623,13 +623,7 @@ def print_daily(
         profile = ACCOUNT_PROFILES[pid]
         firm_spec = get_firm_spec(profile.firm)
         copies_str = f" x{profile.copies}" if profile.copies > 1 else ""
-        short_name = {
-            "apex": "Apex",
-            "topstep": "TopStep",
-            "tradeify": "Tradeify",
-            "self_funded": "Self",
-            "mffu": "MFFU",
-        }.get(profile.firm, firm_spec.display_name)
+        short_name = firm_spec.display_name.split()[0]  # "Apex Trader Funding" -> "Apex"
         label = f"{short_name}{copies_str}"
         if firm_spec.auto_trading == "none":
             label += " manual"
@@ -743,8 +737,6 @@ def main() -> None:
     # Fitness check (optional — adds ~2s)
     fitness_results: dict[str, str] | None = None
     if args.fitness or args.daily:
-        from trading_app.strategy_fitness import compute_fitness
-
         fitness_results = {}
 
     if args.daily:
@@ -764,7 +756,7 @@ def main() -> None:
                 try:
                     f = compute_fitness(sid, db_path=db_path)
                     fitness_results[sid] = f.fitness_status
-                except Exception:
+                except (ValueError, duckdb.Error):
                     fitness_results[sid] = "UNKNOWN"
         print_daily(books, trading_day, fitness_results)
         return
