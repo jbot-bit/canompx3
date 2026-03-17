@@ -5,6 +5,30 @@
 
 ---
 
+## Iteration 129 — 2026-03-17
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/ml/config.py:267-274
+- Finding: compute_config_hash() omits GLOBAL_FEATURES, SESSION_FEATURE_SUFFIXES, ATR_NORMALIZE, CATEGORICAL_FEATURES, and LOOKAHEAD_BLACKLIST — changes to these primary feature-engineering lists would not be detected as "retrain needed" (silent failure in safety mechanism)
+- Action: Added missing feature-engineering lists to config_str. Used sorted(LOOKAHEAD_BLACKLIST) for deterministic hashing of the set.
+- Blast radius: 1 file (config.py); callers unchanged
+- Verification: PASS (46 ML tests pass, 72 drift checks pass, 218 fast tests pass)
+- Commit: 3a0e01b
+
+---
+
+## Iteration 128 — 2026-03-17
+- Phase: diminishing-returns
+- Classification: audit-only
+- Target: trading_app/live/circuit_breaker.py, trading_app/live/cusum_monitor.py, trading_app/live/projectx/__init__.py
+- Finding: All three scope files clean — zero Seven Sins violations. consecutive_low_only = 3 (≥3 threshold); all targets LOW centrality.
+- Action: DIMINISHING_RETURNS triggered — audited all three files, found zero findings. No fix performed. Recommend re-scope to trading_app/ml/config.py (CRITICAL tier).
+- Blast radius: 0 files
+- Verification: PASS (7/7 test_circuit_breaker.py + drift clean + behavioral audit clean)
+- Commit: NONE
+
+---
+
 ## Iteration 126 — 2026-03-17
 - Phase: fix
 - Classification: [mechanical]
