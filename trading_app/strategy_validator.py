@@ -240,7 +240,7 @@ def compute_dst_split(
 
     rows = con.execute(
         f"""
-        SELECT o.trading_day, o.pnl_r
+        SELECT o.trading_day, COALESCE(o.ts_pnl_r, o.pnl_r) AS pnl_r
         FROM orb_outcomes o
         JOIN daily_features df
           ON o.trading_day = df.trading_day
@@ -252,7 +252,7 @@ def compute_dst_split(
           AND o.entry_model = ?
           AND o.rr_target = ?
           AND o.confirm_bars = ?
-          AND o.outcome IN ('win', 'loss')
+          AND o.outcome IN ('win', 'loss', 'time_stop')
           {size_where}
         ORDER BY o.trading_day
     """,

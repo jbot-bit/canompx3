@@ -161,6 +161,34 @@ def _get_daily_features_row(con, instrument: str, trading_day: date) -> dict | N
     return dict(zip(columns, row, strict=False))
 
 
+def _inject_cross_asset_atrs_for_replay(
+    con, row: dict, instrument: str, trading_day: date
+) -> None:
+    """Inject cross-asset ATR percentiles into daily features row for replay.
+
+    Mirrors session_orchestrator._build_daily_features_row() lines 330-348.
+    Without this, CrossAssetATRFilter strategies silently reject every trade
+    in replay (fail-closed: missing key → filter returns False).
+    """
+    from trading_app.config import ALL_FILTERS, CrossAssetATRFilter
+
+    cross_sources = {
+        f.source_instrument for f in ALL_FILTERS.values() if isinstance(f, CrossAssetATRFilter)
+    }
+    for source in cross_sources:
+        if source == instrument:
+            continue
+        src_result = con.execute(
+            """SELECT atr_20_pct FROM daily_features
+               WHERE symbol = ? AND orb_minutes = 5 AND atr_20_pct IS NOT NULL
+                 AND trading_day = ?
+               LIMIT 1""",
+            [source, trading_day],
+        ).fetchone()
+        if src_result and src_result[0] is not None:
+            row[f"cross_atr_{source}_pct"] = float(src_result[0])
+
+
 def _get_bars_for_day(con, instrument: str, trading_day: date) -> list[dict]:
     """
     Fetch 1-minute bars for a trading day.
@@ -301,6 +329,7 @@ def replay_historical(
             df_row = _get_daily_features_row(con, instrument, td)
             if df_row is not None:
                 df_row["median_atr_20"] = _get_median_atr_20(con, instrument, td)
+                _inject_cross_asset_atrs_for_replay(con, df_row, instrument, td)
             engine.on_trading_day_start(td, daily_features_row=df_row)
             risk_mgr.daily_reset(td)
 
