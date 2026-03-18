@@ -42,6 +42,16 @@ if _SCRIPTS_TOOLS_DIR not in sys.path:
 CATEGORIES = ("broken", "decaying", "ready", "unactioned", "paused")
 
 
+SKILL_SUGGESTIONS: dict[str, str] = {
+    "staleness": "/rebuild-outcomes {inst}",
+    "fitness": "/regime-check",
+    "drift": "/health-check",
+    "tests": "/quant-verify",
+    "handoff": "/orient --full",
+    "ralph": "/audit-quick",
+}
+
+
 @dataclass
 class PulseItem:
     category: str  # broken / decaying / ready / unactioned / paused
@@ -49,6 +59,7 @@ class PulseItem:
     source: str  # which collector found it
     summary: str  # one-line human description
     detail: str | None = None  # optional extra context
+    action: str | None = None  # suggested skill/command to resolve
 
 
 @dataclass
@@ -65,6 +76,13 @@ class PulseReport:
     handoff_next_steps: list[str] = field(default_factory=list)
     # Fitness summary (fast proxy or deep)
     fitness_summary: dict | None = None
+    # Trading day context
+    upcoming_sessions: list[dict] = field(default_factory=list)
+    # Single recommendation
+    recommendation: str | None = None
+    # Health metrics
+    time_since_green: str | None = None
+    session_delta: list[str] = field(default_factory=list)
 
     @property
     def broken(self) -> list[PulseItem]:
@@ -597,15 +615,14 @@ def collect_worktrees(canonical: Path) -> list[PulseItem]:
     for data in worktrees:
         name = data.get("name", "?")
         tool = data.get("tool", "unknown")
-        purpose = data.get("purpose", "")
-        branch = data.get("branch", "")
+        momentum = _workstream_momentum(data, canonical)
+        stalled = "STALLED" in momentum
         items.append(
             PulseItem(
                 category="paused",
-                severity="low",
+                severity="medium" if stalled else "low",
                 source="worktrees",
-                summary=f"Open worktree: {name} ({tool}) — {purpose}",
-                detail=f"Branch: {branch}",
+                summary=f"{name} ({tool}) — {momentum}",
             )
         )
 
@@ -698,6 +715,251 @@ def collect_ralph_deferred(root: Path) -> list[PulseItem]:
                     )
 
     return items
+
+
+def collect_upcoming_sessions(db_path: Path) -> list[dict]:
+    """Find trading sessions starting in the next 6 hours with strategy counts."""
+    sessions: list[dict] = []
+    try:
+        from datetime import date, time, timedelta
+
+        import duckdb
+
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+        from pipeline.dst import SESSION_CATALOG
+
+        now = datetime.now()
+        today = date.today()
+
+        for label, entry in SESSION_CATALOG.items():
+            if entry.get("type") != "dynamic":
+                continue
+            try:
+                h, m = entry["resolver"](today)
+            except Exception:
+                continue
+            session_dt = datetime.combine(today, time(h, m))
+            if session_dt < now:
+                tomorrow = today + timedelta(days=1)
+                try:
+                    h2, m2 = entry["resolver"](tomorrow)
+                    session_dt = datetime.combine(tomorrow, time(h2, m2))
+                except Exception:
+                    continue
+            hours_away = (session_dt - now).total_seconds() / 3600
+            if 0 <= hours_away <= 6:
+                info: dict = {"label": label, "brisbane_time": session_dt.strftime("%H:%M"), "hours_away": round(hours_away, 1), "instruments": {}}
+                if db_path.exists():
+                    try:
+                        con = duckdb.connect(str(db_path), read_only=True)
+                        try:
+                            for inst in ACTIVE_ORB_INSTRUMENTS:
+                                row = con.execute(
+                                    "SELECT COUNT(*) FROM validated_setups WHERE instrument = ? AND orb_label = ? AND LOWER(status) = 'active'",
+                                    [inst, label],
+                                ).fetchone()
+                                if row and row[0] > 0:
+                                    info["instruments"][inst] = row[0]
+                        finally:
+                            con.close()
+                    except Exception:
+                        pass
+                sessions.append(info)
+        sessions.sort(key=lambda s: s["hours_away"])
+    except Exception:
+        pass
+    return sessions
+
+
+def collect_worktree_conflicts(canonical: Path) -> list[PulseItem]:
+    """Detect file overlap between active worktrees (merge conflict radar)."""
+    items: list[PulseItem] = []
+    wt_base = canonical / ".worktrees"
+    if not wt_base.exists():
+        return items
+
+    # Collect modified files per worktree branch
+    worktree_files: dict[str, set[str]] = {}
+    for meta_file in wt_base.rglob(".canompx3-worktree.json"):
+        try:
+            data = json.loads(meta_file.read_text(encoding="utf-8"))
+            branch = data.get("branch", "")
+            name = data.get("name", "?")
+            if not branch:
+                continue
+            r = _run_git(canonical, "diff", "--name-only", f"main...{branch}")
+            if r and r.returncode == 0:
+                files = {f.strip() for f in r.stdout.splitlines() if f.strip()}
+                if files:
+                    worktree_files[name] = files
+        except (json.JSONDecodeError, OSError):
+            continue
+
+    # Find overlaps
+    names = list(worktree_files.keys())
+    for i, name_a in enumerate(names):
+        for name_b in names[i + 1 :]:
+            overlap = worktree_files[name_a] & worktree_files[name_b]
+            if overlap:
+                files_str = ", ".join(sorted(overlap)[:3])
+                extra = f" +{len(overlap) - 3} more" if len(overlap) > 3 else ""
+                items.append(
+                    PulseItem(
+                        category="decaying",
+                        severity="medium",
+                        source="conflicts",
+                        summary=f"Merge risk: '{name_a}' and '{name_b}' both touch {files_str}{extra}",
+                    )
+                )
+
+    return items
+
+
+def collect_session_delta(root: Path, canonical: Path) -> list[str]:
+    """What changed since THIS tool's last session (session continuity fingerprint)."""
+    lines: list[str] = []
+    # Read the last-session marker
+    marker_path = root / ".pulse_last_session.json"
+    current_head = _git_head(root)
+
+    if marker_path.exists():
+        try:
+            data = json.loads(marker_path.read_text(encoding="utf-8"))
+            last_head = data.get("head", "")
+            last_tool = data.get("tool", "unknown")
+            last_at = data.get("at", "")
+
+            if last_head and last_head != current_head:
+                r = _run_git(root, "log", "--oneline", f"{last_head}..{current_head}")
+                if r and r.returncode == 0:
+                    commits = [ln for ln in r.stdout.splitlines() if ln.strip()]
+                    if commits:
+                        lines.append(f"Since last session ({last_tool}, {last_at[:10] if last_at else '?'}):")
+                        for c in commits[:5]:
+                            lines.append(f"  {c}")
+                        if len(commits) > 5:
+                            lines.append(f"  ... +{len(commits) - 5} more commits")
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # Write current marker
+    try:
+        marker_path.write_text(
+            json.dumps({"head": current_head, "tool": "claude", "at": datetime.now(UTC).isoformat()}, indent=2),
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
+
+    return lines
+
+
+def _workstream_momentum(data: dict, canonical: Path) -> str:
+    """Derive momentum label for a worktree from git history."""
+    branch = data.get("branch", "")
+    created = data.get("created_at", "")
+    if not branch:
+        return "unknown"
+
+    days_old = 0
+    if created:
+        try:
+            created_dt = datetime.fromisoformat(created)
+            days_old = max(0, (datetime.now(UTC) - created_dt).days)
+        except (ValueError, TypeError):
+            pass
+
+    r = _run_git(canonical, "rev-list", "--count", f"main..{branch}")
+    commits = 0
+    if r and r.returncode == 0:
+        try:
+            commits = int(r.stdout.strip())
+        except ValueError:
+            pass
+
+    if days_old <= 1:
+        return f"new, {commits} commit(s)"
+    if commits == 0:
+        return f"{days_old}d old, 0 commits — STALLED"
+    if days_old > 5 and commits < 3:
+        return f"{days_old}d old, {commits} commit(s) — slow"
+    return f"{days_old}d old, {commits} commit(s)"
+
+
+def _compute_recommendation(report: PulseReport) -> str:
+    """Pick the single most impactful next action."""
+    if report.broken:
+        top = report.broken[0]
+        action = top.action or "fix the issue"
+        return f"Fix: {top.summary} → {action}"
+
+    if report.upcoming_sessions:
+        s = report.upcoming_sessions[0]
+        strats = sum(s.get("instruments", {}).values())
+        if strats > 0:
+            return f"Prep: {s['label']} in {s['hours_away']}h ({strats} strategies) → /trade-book"
+
+    if report.decaying:
+        top = report.decaying[0]
+        action = top.action or "investigate"
+        return f"Check: {top.summary} → {action}"
+
+    ready = report.ready
+    if ready:
+        return f"Next: {ready[0].summary}"
+
+    return "All clear — start new work or /orient --full for deep check"
+
+
+def _update_time_since_green(root: Path, is_green: bool) -> str | None:
+    """Track and return how long since the system was fully clean."""
+    cache_path = root / CACHE_FILE
+    try:
+        data = {}
+        if cache_path.exists():
+            data = json.loads(cache_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        data = {}
+
+    if is_green:
+        data["last_green"] = datetime.now(UTC).isoformat()
+        try:
+            cache_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        except OSError:
+            pass
+        return "now"
+
+    last_green = data.get("last_green")
+    if last_green:
+        try:
+            dt = datetime.fromisoformat(last_green)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=UTC)
+            hours = (datetime.now(UTC) - dt).total_seconds() / 3600
+            if hours < 1:
+                return f"{int(hours * 60)}m ago"
+            if hours < 48:
+                return f"{int(hours)}h ago"
+            return f"{int(hours / 24)}d ago"
+        except (ValueError, TypeError):
+            pass
+
+    return None
+
+
+def _attach_skill_suggestions(items: list[PulseItem]) -> None:
+    """Attach actionable skill/command suggestions to pulse items."""
+    for item in items:
+        if item.action:
+            continue
+        template = SKILL_SUGGESTIONS.get(item.source)
+        if template:
+            # Substitute {inst} if present in summary
+            inst_match = re.match(r"^(M\w+):", item.summary)
+            if inst_match and "{inst}" in template:
+                item.action = template.format(inst=inst_match.group(1))
+            else:
+                item.action = template.replace(" {inst}", "")
 
 
 # ---------------------------------------------------------------------------
@@ -882,9 +1144,12 @@ def build_pulse(
 
     handoff_context, handoff_items = collect_handoff(root)
     worktree_items = collect_worktrees(canonical)
+    conflict_items = collect_worktree_conflicts(canonical)
     git_items = collect_git_state(root)
     action_items = collect_action_queue(canonical)
     ralph_items = collect_ralph_deferred(root)
+    session_delta = collect_session_delta(root, canonical)
+    upcoming = collect_upcoming_sessions(db_path)
 
     # Flag stale handoff (>2 days old)
     handoff_date_str = handoff_context.get("date")
@@ -906,29 +1171,46 @@ def build_pulse(
         except ValueError:
             pass
 
+    # Collect all items
+    all_items = (
+        drift_items
+        + test_items
+        + staleness_items
+        + fitness_items
+        + conflict_items
+        + handoff_items
+        + worktree_items
+        + git_items
+        + action_items
+        + ralph_items
+    )
+
+    # Attach skill invocation suggestions
+    _attach_skill_suggestions(all_items)
+
+    # Check system health for time-since-green
+    is_green = not any(i.category in ("broken", "decaying") for i in all_items)
+    time_since_green = _update_time_since_green(root, is_green)
+
     # --- Assemble report ---
     report = PulseReport(
         generated_at=datetime.now(UTC).isoformat(),
         cache_hit=used_cache,
         git_head=head,
         git_branch=_git_branch(root),
-        items=(
-            drift_items
-            + test_items
-            + staleness_items
-            + fitness_items
-            + handoff_items
-            + worktree_items
-            + git_items
-            + action_items
-            + ralph_items
-        ),
+        items=all_items,
         handoff_tool=handoff_context.get("tool"),
         handoff_date=handoff_context.get("date"),
         handoff_summary=handoff_context.get("summary"),
         handoff_next_steps=handoff_context.get("next_steps", []),
         fitness_summary=fitness_summary,
+        upcoming_sessions=upcoming,
+        time_since_green=time_since_green,
+        session_delta=session_delta,
     )
+
+    # Compute single recommendation after full report is assembled
+    report.recommendation = _compute_recommendation(report)
 
     return report
 
@@ -954,9 +1236,19 @@ def format_text(report: PulseReport) -> str:
     lines.append("=" * 60)
     lines.append("PROJECT PULSE")
     lines.append("=" * 60)
-    cache_tag = " (drift/tests cached)" if report.cache_hit else ""
-    lines.append(f"Branch: {report.git_branch}  HEAD: {report.git_head}{cache_tag}")
+    meta_parts = [f"Branch: {report.git_branch}", f"HEAD: {report.git_head}"]
+    if report.cache_hit:
+        meta_parts.append("(cached)")
+    if report.time_since_green:
+        meta_parts.append(f"Green: {report.time_since_green}")
+    lines.append("  ".join(meta_parts))
     lines.append("")
+
+    # Session delta (what changed since last session)
+    if report.session_delta:
+        for dl in report.session_delta:
+            lines.append(dl)
+        lines.append("")
 
     if report.handoff_summary:
         lines.append(f"Last: {report.handoff_tool or '?'} ({report.handoff_date or '?'})")
@@ -982,9 +1274,19 @@ def format_text(report: PulseReport) -> str:
         limit = MAX_DISPLAY.get(cat, len(cat_items))
         for item in cat_items[:limit]:
             icon = SEVERITY_ICONS.get(item.severity, " ")
-            lines.append(f"  {icon} {item.summary}")
+            action_hint = f"  → {item.action}" if item.action else ""
+            lines.append(f"  {icon} {item.summary}{action_hint}")
         if len(cat_items) > limit:
             lines.append(f"  ... +{len(cat_items) - limit} more")
+        lines.append("")
+
+    # Upcoming sessions
+    if report.upcoming_sessions:
+        lines.append("Upcoming sessions:")
+        for s in report.upcoming_sessions[:3]:
+            insts = ", ".join(f"{i}:{n}" for i, n in sorted(s.get("instruments", {}).items()))
+            inst_str = f" — {insts}" if insts else ""
+            lines.append(f"  {s['label']} in {s['hours_away']}h ({s['brisbane_time']} AEST){inst_str}")
         lines.append("")
 
     if report.fitness_summary:
@@ -997,14 +1299,9 @@ def format_text(report: PulseReport) -> str:
                 lines.append(f"  {inst}: {', '.join(parts)}")
         lines.append("")
 
-    broken_count = len(report.broken)
-    if broken_count > 0:
-        lines.append(f">>> {broken_count} BROKEN item(s) — fix before doing anything else <<<")
-    elif report.decaying:
-        lines.append(f">>> {len(report.decaying)} item(s) need attention soon <<<")
-    else:
-        lines.append(">>> All clear — pick from ON DECK or start new work <<<")
-
+    # Single recommendation — the most valuable line
+    if report.recommendation:
+        lines.append(f">>> {report.recommendation} <<<")
     lines.append("=" * 60)
     return "\n".join(lines)
 
@@ -1023,6 +1320,10 @@ def format_json(report: PulseReport) -> str:
             "next_steps": report.handoff_next_steps,
         },
         "fitness_summary": report.fitness_summary,
+        "upcoming_sessions": report.upcoming_sessions,
+        "recommendation": report.recommendation,
+        "time_since_green": report.time_since_green,
+        "session_delta": report.session_delta,
         "counts": {cat: len([i for i in report.items if i.category == cat]) for cat in CATEGORIES},
         "items": [asdict(i) for i in report.items],
     }

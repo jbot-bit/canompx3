@@ -403,6 +403,7 @@ def _sample_report() -> PulseReport:
         handoff_summary="Did work",
         handoff_next_steps=["Phase 1: build", "Phase 2: test"],
         fitness_summary={"MGC": {"active_strategies": 573}},
+        recommendation="Fix: Drift FAILED → /health-check",
     )
 
 
@@ -416,7 +417,7 @@ class TestFormatText:
         assert "PAUSED" in text
         assert "Strategy fitness" in text
         assert "MGC: 573 active" in text
-        assert "BROKEN item(s)" in text
+        assert "Fix: Drift FAILED" in text  # recommendation line
 
     def test_all_clear_message(self) -> None:
         report = PulseReport(
@@ -424,6 +425,7 @@ class TestFormatText:
             cache_hit=False,
             git_head="abc",
             git_branch="main",
+            recommendation="All clear — start new work",
         )
         text = format_text(report)
         assert "All clear" in text

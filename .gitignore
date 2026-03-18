@@ -9,6 +9,7 @@ promotion_candidates.html
 
 # Pulse (regenerated on demand)
 .pulse_cache.json
+.pulse_last_session.json
 PROJECT_PULSE.md
 
 # Vector DB cache (Chroma)
