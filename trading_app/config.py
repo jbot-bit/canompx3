@@ -87,19 +87,24 @@ if TYPE_CHECKING:
 # Full-sample validation (Phase A) uses ALL data. Only WF window generation
 # starts from max(earliest_outcome, override_date).
 #
-# ── MGC REGIME LIMITATION (verified Mar 5 2026) ──────────────────────────
-# Gold ATR: 11.5 (2018) → 30.6 (2020) → 105.3 (2026) = 9.2x variation.
+# ── MGC REGIME LIMITATION (verified Mar 18 2026 — adversarial review) ────
+# Gold ATR: 11.5 (2018) → 30.6 (2020) → 155 (2026) = 13.5x variation.
 # Gold price: $1,300 → $3,500+ makes G4+ filters trivially easy at high prices.
-# With WF_START=2022-01-01 and 6-month test windows (min 15 trades):
-#   - CME_REOPEN strategies: only 3 valid windows, ALL in 2025-2026
-#   - US_DATA_1000 strategies: 5 valid windows, ALL in 2024-2026
-#   - Pre-2024 windows are INVALID (N<15) for most G4+ filter strategies
-# Consequence: WF validates the HIGH-VOL regime only. It does NOT confirm
-# that these strategies work in moderate-vol (ATR 15-25) environments.
-# Compare: MNQ 1.9x ATR variation, MES 2.8x, M2K 1.5x — MGC is the outlier.
-# RESOLVED: Trade-count-based WF windows implemented in walkforward.py.
-# MGC uses trade-count mode (30 trades/window) for regime-spanning validation.
-# Calendar mode remains default for MNQ/MES/M2K.
+#
+# REGIME DEPENDENCY IS REAL AND NOT RESOLVED:
+#   - All WF windows cluster in 2025-2026 regardless of mode (trade-count or
+#     calendar). Insufficient trades exist in low-vol years to form windows.
+#   - 86/90 FDR-surviving MGC strategies use G-filters. G4 at ATR=12 requires
+#     ORB ≥ 33% of daily range (restrictive). G4 at ATR=50 requires ≥ 8% (trivial).
+#     The filter self-selects for high-vol conditions.
+#   - Per-year win rates: 2017 14%, 2018 33%, 2019 50%, 2020+ 70-100%.
+#   - Full-sample validation includes low-vol years (75%-of-years-positive check),
+#     but WF does NOT validate OOS performance in low vol.
+#
+# CONSEQUENCE: MGC strategies are regime-conditional on ATR > ~20. They may
+# not produce edge if gold volatility returns to 2016-2019 levels (ATR 11-17).
+# This is acceptable IF position sizing scales with regime confidence.
+# Runtime check: scripts/tools/check_regime.py flags low-ATR conditions.
 # ─────────────────────────────────────────────────────────────────────────
 WF_START_OVERRIDE: dict[str, date] = {
     "MGC": date(2022, 1, 1),  # Gold <$1800 pre-2022 = tiny ORBs, G4+ windows invalid

@@ -505,6 +505,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 phase4c_rejected  INTEGER,
                 phase4d_rejected  INTEGER,
                 phase4b_rejected  INTEGER,
+                phase_fdr_rejected INTEGER DEFAULT 0,
                 final_passed      INTEGER,
                 rejection_rate    DOUBLE,
                 notes             TEXT

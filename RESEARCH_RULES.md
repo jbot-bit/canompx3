@@ -58,8 +58,20 @@ Before calling any parameterized finding "real," test:
 ### The Mechanism Test
 Every statistical finding MUST have a structural market reason (mechanism) for WHY it works. Without a mechanism, it is a "statistical artifact until proven otherwise."
 
-**Good mechanisms (structural, likely to persist):**
-- Friction eats small ORBs → size filter works (cost structure). **This is THE primary edge in the project — confirmed across all instruments Feb 2026.**
+**What this test DOES:** Screens out obvious artifacts — things that look like edge but are
+explained by data bugs (E0 fill-at-open bias), cost model errors, or filter tautologies.
+This is an artifact screen, not a causation proof.
+
+**What this test does NOT DO:** Prove why price continues after a breakout. The mechanisms
+below are structural plausibility arguments inferred from market microstructure theory.
+They are not measured or verified from order flow data. Adversarial review (2026-03-18)
+correctly identified that "friction eats small ORBs" describes what the G-filter does,
+not why breakout continuation exists. The honest statement: we have statistical evidence
+of edge after cost, plus plausible structural reasons it should persist, but no direct
+measurement of the proposed mechanism.
+
+**Plausible mechanisms (structural, likely to persist):**
+- Friction eats small ORBs → size filter works (cost structure). **Primary artifact screen — confirmed across all instruments Feb 2026. NOTE: this explains why small ORBs fail, not why large ORBs succeed.**
 - Double-break = chop, no directional conviction → exclude (market microstructure)
 - All 3 instruments breaking same direction = macro flow day → concordance (institutional behavior)
 - Large gold ORB at US_DATA_830 = active overnight session → equity vol at NYSE_OPEN (cross-market information flow)
