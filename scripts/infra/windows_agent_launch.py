@@ -7,8 +7,16 @@ import os
 import shutil
 import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
+
+console = Console(force_terminal=True)
 
 VALID_MODES = {
     "claude",
@@ -21,6 +29,16 @@ VALID_MODES = {
     "menu",
     "prune",
 }
+
+AGENT_STYLES = {
+    "claude": "bold cyan",
+    "codex": "bold green",
+}
+
+
+# ---------------------------------------------------------------------------
+# Plumbing (unchanged)
+# ---------------------------------------------------------------------------
 
 
 def repo_root() -> Path:
@@ -76,8 +94,6 @@ def invoke_manager(arguments: list[str]) -> tuple[bool, str]:
 def get_managed_workstreams() -> list[dict[str, Any]]:
     success, output = invoke_manager(["list", "--managed-only", "--json"])
     if not success:
-        print()
-        print(output)
         return []
     if not output:
         return []
@@ -95,44 +111,6 @@ def get_existing_purpose(tool_name: str, workstream_name: str) -> str | None:
         return None
     purpose = meta.get("purpose")
     return purpose if isinstance(purpose, str) and purpose else None
-
-
-def show_managed_workstreams(workstreams: list[dict[str, Any]]) -> None:
-    if not workstreams:
-        print()
-        print("No active workstreams found.")
-        return
-    print()
-    print("Active workstreams")
-    print("------------------")
-    for index, workstream in enumerate(workstreams, start=1):
-        status = "dirty" if workstream.get("dirty") else "clean"
-        purpose = workstream.get("purpose") or "No purpose saved"
-        opened = workstream.get("last_opened_at") or workstream.get("created_at") or "-"
-        branch = workstream.get("branch") or "-"
-        name = workstream.get("name") or "-"
-        tool = workstream.get("tool") or "-"
-        print(f"[{index}] {name} | {tool} | {status}")
-        print(f"     Purpose: {purpose}")
-        print(f"     Last used: {opened}")
-        print(f"     Branch: {branch}")
-
-
-def select_managed_workstream() -> dict[str, Any] | None:
-    workstreams = get_managed_workstreams()
-    show_managed_workstreams(workstreams)
-    if not workstreams:
-        return None
-    choice = input("Pick a workstream number: ").strip()
-    if not choice:
-        return None
-    try:
-        index = int(choice)
-    except ValueError as exc:
-        raise RuntimeError("Invalid workstream selection.") from exc
-    if index < 1 or index > len(workstreams):
-        raise RuntimeError("Workstream selection out of range.")
-    return workstreams[index - 1]
 
 
 def git_bash_path() -> str:
@@ -186,152 +164,292 @@ def open_codex_workstream(workstream_name: str, purpose: str | None, search_mode
     return run_wsl(" ".join(command_parts))
 
 
-def prompt_workstream_name() -> str:
-    value = input("Workstream name: ").strip()
-    if not value:
-        raise RuntimeError("Workstream name required.")
-    return value
+# ---------------------------------------------------------------------------
+# UI helpers
+# ---------------------------------------------------------------------------
 
 
-def select_workstream_purpose() -> dict[str, Any]:
-    print()
-    print("Pick the purpose")
-    print("[1] Build / edit")
-    print("[2] Investigate / search")
-    print("[3] Review / verify")
-    print()
-    choice = input(">>> ").strip()
-    if choice == "1":
-        return {"label": "Build / edit", "recommended_tool": "codex", "search_mode": False}
-    if choice == "2":
-        return {
-            "label": "Investigate / search",
-            "recommended_tool": "codex",
-            "search_mode": True,
-        }
-    if choice == "3":
-        return {
-            "label": "Review / verify",
-            "recommended_tool": "claude",
-            "search_mode": False,
-        }
-    raise RuntimeError("Invalid purpose selection.")
+def relative_time(iso_str: str | None) -> str:
+    if not iso_str:
+        return "-"
+    try:
+        dt = datetime.fromisoformat(iso_str)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UTC)
+        delta = datetime.now(UTC) - dt
+        seconds = int(delta.total_seconds())
+        if seconds < 60:
+            return "just now"
+        if seconds < 3600:
+            return f"{seconds // 60}m ago"
+        if seconds < 86400:
+            return f"{seconds // 3600}h ago"
+        return f"{seconds // 86400}d ago"
+    except (ValueError, TypeError):
+        return "-"
 
 
-def select_agent_for_purpose(purpose: dict[str, Any]) -> str:
-    print()
-    print(f"Recommended agent: {purpose['recommended_tool']}")
-    print("[1] Use recommended")
-    print("[2] Claude")
-    print("[3] Codex")
-    print()
-    choice = input(">>> ").strip()
-    if choice in {"", "1"}:
-        return str(purpose["recommended_tool"])
-    if choice == "2":
-        return "claude"
-    if choice == "3":
-        return "codex"
-    raise RuntimeError("Invalid agent selection.")
+def _supports_unicode() -> bool:
+    try:
+        "●".encode(sys.stdout.encoding or "ascii")
+        return True
+    except (UnicodeEncodeError, LookupError):
+        return False
+
+
+_BULLET = "●" if _supports_unicode() else "*"
+
+
+def status_text(dirty: bool) -> Text:
+    if dirty:
+        return Text(f"{_BULLET} dirty", style="bold yellow")
+    return Text(f"{_BULLET} clean", style="dim green")
+
+
+def agent_text(tool: str) -> Text:
+    style = AGENT_STYLES.get(tool, "bold white")
+    return Text(tool, style=style)
+
+
+def build_workstream_table(workstreams: list[dict[str, Any]], numbered: bool = True) -> Table | None:
+    if not workstreams:
+        return None
+    table = Table(show_header=False, box=None, padding=(0, 2), expand=False)
+    if numbered:
+        table.add_column("#", style="bold white", width=3, justify="right")
+    table.add_column("Name", style="bold white", min_width=16)
+    table.add_column("Agent", min_width=8)
+    table.add_column("Last Used", style="dim", min_width=8)
+    table.add_column("Status", min_width=6)
+    for i, ws in enumerate(workstreams, start=1):
+        name = ws.get("name") or "-"
+        tool = ws.get("tool") or "-"
+        opened = ws.get("last_opened_at") or ws.get("created_at")
+        dirty = bool(ws.get("dirty"))
+        row: list[Any] = []
+        if numbered:
+            row.append(str(i))
+        row.extend([name, agent_text(tool), relative_time(opened), status_text(dirty)])
+        table.add_row(*row)
+    return table
 
 
 def clear_screen() -> None:
-    os.system("cls")
+    subprocess.run(["cmd", "/c", "cls"], check=False)
+
+
+def prompt(label: str, default: str = "") -> str:
+    try:
+        if default:
+            console.print(f"  {label} [dim]\\[{default}][/]: ", end="")
+        else:
+            console.print(f"  {label}: ", end="")
+        value = input().strip()
+        return value or default
+    except (EOFError, KeyboardInterrupt):
+        return default
+
+
+def wait_for_key(label: str = "Press Enter") -> None:
+    try:
+        input(f"  {label}")
+    except (EOFError, KeyboardInterrupt):
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Menu
+# ---------------------------------------------------------------------------
 
 
 def run_menu() -> int:
     while True:
         clear_screen()
-        print()
-        print("============================================================")
-        print(" AI WORKSTREAMS")
-        print("============================================================")
-        print()
-        print("Purpose: run one problem per isolated workstream so Claude and Codex do not stomp on each other.")
-        print()
-        print("[0] Orient me (project pulse)")
-        print("[1] Start new workstream")
-        print("[2] Continue workstream")
-        print("[3] Finish workstream")
-        print("[4] Show active workstreams")
-        print("[5] Clean stale workstream records")
-        print("[Q] Quit")
-        print()
-        choice = input(">>> ").strip().lower()
-        if choice == "0":
-            pulse_script = repo_root() / "scripts" / "tools" / "project_pulse.py"
-            if pulse_script.exists():
-                subprocess.run([sys.executable, str(pulse_script), "--fast"])
-            else:
-                print("project_pulse.py not found.")
-            input("Press Enter to continue")
-            continue
-        if choice == "1":
-            name = prompt_workstream_name()
-            purpose = select_workstream_purpose()
-            agent = select_agent_for_purpose(purpose)
-            if agent == "claude":
-                return open_claude_workstream(name, str(purpose["label"]))
-            return open_codex_workstream(
-                name,
-                str(purpose["label"]),
-                bool(purpose["search_mode"]),
+        workstreams = get_managed_workstreams()
+        most_recent = workstreams[0] if workstreams else None
+
+        # Header
+        console.print()
+        console.print(
+            Panel(
+                Text("AI WORKSTREAMS", style="bold white", justify="center"),
+                border_style="bright_blue",
+                expand=True,
+                padding=(0, 1),
             )
-        if choice == "2":
-            workstream = select_managed_workstream()
-            if workstream is None:
-                input("Press Enter to continue")
-                continue
-            if workstream.get("tool") == "claude":
-                return open_claude_workstream(
-                    str(workstream.get("name", "")),
-                    str(workstream.get("purpose") or ""),
-                )
-            if workstream.get("tool") == "codex":
-                purpose = str(workstream.get("purpose") or "")
-                return open_codex_workstream(
-                    str(workstream.get("name", "")),
-                    purpose,
-                    purpose == "Investigate / search",
-                )
-            raise RuntimeError(f"Unsupported workstream tool: {workstream.get('tool')}")
-        if choice == "3":
-            workstream = select_managed_workstream()
-            if workstream is None:
-                input("Press Enter to continue")
-                continue
-            success, output = invoke_manager(
-                [
-                    "close",
-                    "--tool",
-                    str(workstream.get("tool")),
-                    "--name",
-                    str(workstream.get("name")),
-                    "--force",
-                    "--drop-branch",
-                ]
-            )
-            if not success:
-                raise RuntimeError(output)
-            if output:
-                print(output)
-            input("Press Enter to continue")
-            return 0
-        if choice == "4":
-            show_managed_workstreams(get_managed_workstreams())
-            input("Press Enter to continue")
+        )
+
+        # Active workstreams
+        if workstreams:
+            table = build_workstream_table(workstreams)
+            if table:
+                console.print()
+                console.print("  [bold bright_blue]Active[/]")
+                console.print(table)
+        else:
+            console.print()
+            console.print("  [dim]No active workstreams[/]")
+
+        # Actions
+        console.print()
+        actions = Text()
+        actions.append("  ")
+        actions.append("[N]", style="bold white")
+        actions.append(" New   ", style="dim")
+        actions.append("[O]", style="bold white")
+        actions.append(" Orient   ", style="dim")
+        actions.append("[F]", style="bold white")
+        actions.append(" Finish   ", style="dim")
+        actions.append("[P]", style="bold white")
+        actions.append(" Prune   ", style="dim")
+        actions.append("[Q]", style="bold white")
+        actions.append(" Quit", style="dim")
+        console.print(actions)
+
+        # Default action hint
+        if most_recent:
+            name = most_recent.get("name", "")
+            tool = most_recent.get("tool", "")
+            console.print(f"  [dim]Enter = resume [bold]{name}[/bold] ({tool})[/dim]")
+
+        console.print()
+        choice = prompt(">>>").lower()
+
+        # Default: resume most recent
+        if not choice and most_recent:
+            return _launch_workstream(most_recent)
+
+        # Resume by number
+        if choice.isdigit():
+            idx = int(choice)
+            if 1 <= idx <= len(workstreams):
+                return _launch_workstream(workstreams[idx - 1])
+            console.print("  [red]Invalid number[/]")
+            wait_for_key()
             continue
-        if choice == "5":
+
+        if choice == "n":
+            result = _new_workstream()
+            if result == 0:
+                return result  # Successfully launched agent
+            continue  # Bad input — back to menu
+
+        if choice == "o":
+            _run_pulse()
+            wait_for_key("Press Enter to continue")
+            continue
+
+        if choice == "f":
+            _finish_workstream(workstreams)
+            continue  # Back to menu after finish
+
+        if choice == "p":
             success, output = invoke_manager(["prune"])
-            if not success:
-                raise RuntimeError(output)
             if output:
-                print(output)
-            input("Press Enter to continue")
-            return 0
+                console.print(f"  {output}")
+            wait_for_key()
+            continue
+
         if choice == "q":
             return 0
-        print("Invalid choice.")
+
+        # Unrecognized input — redraw
+
+
+def _launch_workstream(ws: dict[str, Any]) -> int:
+    name = str(ws.get("name", ""))
+    tool = str(ws.get("tool", ""))
+    purpose = str(ws.get("purpose") or "")
+    console.print(f"  [dim]Opening[/] [bold]{name}[/] [dim]with[/] [{AGENT_STYLES.get(tool, '')}]{tool}[/]...")
+    if tool == "claude":
+        return open_claude_workstream(name, purpose)
+    if tool == "codex":
+        return open_codex_workstream(name, purpose, purpose == "Investigate / search")
+    console.print(f"  [red]Unknown agent: {tool}[/]")
+    return 1
+
+
+def _new_workstream() -> int:
+    console.print()
+    name = prompt("Name")
+    if not name:
+        console.print("  [red]Name required[/]")
+        return 1
+
+    console.print()
+    console.print("  [bold bright_blue]Agent[/]")
+    console.print("  [bold cyan]1[/] Claude       [dim]review, verify, complex reasoning[/]")
+    console.print("  [bold green]2[/] Codex        [dim]build, edit, implement[/]")
+    console.print("  [bold green]3[/] Codex search [dim]investigate, research with web[/]")
+    console.print()
+    agent_choice = prompt("Agent", "1")
+
+    if agent_choice in {"1", "claude", "c"}:
+        console.print(f"  [dim]Opening[/] [bold]{name}[/] [dim]with[/] [bold cyan]claude[/]...")
+        return open_claude_workstream(name, "Build / edit")
+    if agent_choice in {"2", "codex", "x"}:
+        console.print(f"  [dim]Opening[/] [bold]{name}[/] [dim]with[/] [bold green]codex[/]...")
+        return open_codex_workstream(name, "Build / edit", False)
+    if agent_choice in {"3", "search", "s"}:
+        console.print(f"  [dim]Opening[/] [bold]{name}[/] [dim]with[/] [bold green]codex search[/]...")
+        return open_codex_workstream(name, "Investigate / search", True)
+
+    console.print("  [red]Invalid agent choice[/]")
+    return 1
+
+
+def _finish_workstream(workstreams: list[dict[str, Any]]) -> None:
+    if not workstreams:
+        console.print("  [dim]Nothing to finish[/]")
+        wait_for_key()
+        return
+
+    console.print()
+    console.print("  [bold bright_blue]Finish which?[/]")
+    table = build_workstream_table(workstreams)
+    if table:
+        console.print(table)
+    console.print()
+    choice = prompt("#")
+    if not choice or not choice.isdigit():
+        return
+    idx = int(choice)
+    if idx < 1 or idx > len(workstreams):
+        console.print("  [red]Invalid number[/]")
+        wait_for_key()
+        return
+    ws = workstreams[idx - 1]
+    name = str(ws.get("name", ""))
+    tool = str(ws.get("tool", ""))
+    success, output = invoke_manager(
+        [
+            "close",
+            "--tool",
+            tool,
+            "--name",
+            name,
+            "--force",
+            "--drop-branch",
+        ]
+    )
+    if success:
+        console.print(f"  [green]Closed[/] [bold]{name}[/]")
+    else:
+        console.print(f"  [red]Failed:[/] {output}")
+    wait_for_key()
+
+
+def _run_pulse() -> None:
+    pulse_script = repo_root() / "scripts" / "tools" / "project_pulse.py"
+    if pulse_script.exists():
+        subprocess.run(pick_python() + [str(pulse_script), "--fast"], check=False)
+    else:
+        console.print("  [red]project_pulse.py not found[/]")
+
+
+# ---------------------------------------------------------------------------
+# CLI modes
+# ---------------------------------------------------------------------------
 
 
 def main() -> int:
@@ -344,34 +462,45 @@ def main() -> int:
     if args.mode == "menu":
         return run_menu()
     if args.mode == "claude":
-        task = args.task or prompt_workstream_name()
+        task = args.task or prompt("Workstream name")
+        if not task:
+            return 1
         return open_claude_workstream(task, "Build / edit")
     if args.mode == "codex":
-        task = args.task or prompt_workstream_name()
+        task = args.task or prompt("Workstream name")
+        if not task:
+            return 1
         return open_codex_workstream(task, "Build / edit", False)
     if args.mode == "codex-search":
-        task = args.task or prompt_workstream_name()
+        task = args.task or prompt("Workstream name")
+        if not task:
+            return 1
         return open_codex_workstream(task, "Investigate / search", True)
     if args.mode == "list":
-        show_managed_workstreams(get_managed_workstreams())
+        workstreams = get_managed_workstreams()
+        table = build_workstream_table(workstreams, numbered=False)
+        if table:
+            console.print(table)
+        else:
+            console.print("[dim]No active workstreams[/]")
         return 0
     if args.mode == "resume":
-        workstream = select_managed_workstream()
-        if workstream is None:
+        workstreams = get_managed_workstreams()
+        if not workstreams:
+            console.print("[dim]No active workstreams[/]")
             return 0
-        if workstream.get("tool") == "claude":
-            return open_claude_workstream(
-                str(workstream.get("name", "")),
-                str(workstream.get("purpose") or ""),
-            )
-        if workstream.get("tool") == "codex":
-            purpose = str(workstream.get("purpose") or "")
-            return open_codex_workstream(
-                str(workstream.get("name", "")),
-                purpose,
-                purpose == "Investigate / search",
-            )
-        raise RuntimeError(f"Unsupported workstream tool: {workstream.get('tool')}")
+        if len(workstreams) == 1:
+            return _launch_workstream(workstreams[0])
+        table = build_workstream_table(workstreams)
+        if table:
+            console.print(table)
+        choice = prompt("#")
+        if not choice or not choice.isdigit():
+            return 0
+        idx = int(choice)
+        if idx < 1 or idx > len(workstreams):
+            return 0
+        return _launch_workstream(workstreams[idx - 1])
     if args.mode == "close":
         if not args.task:
             raise RuntimeError("Workstream name required for close.")
@@ -391,19 +520,30 @@ def main() -> int:
         if not success:
             raise RuntimeError(output)
         if output:
-            print(output)
+            console.print(output)
         return 0
     if args.mode == "close-pick":
-        workstream = select_managed_workstream()
-        if workstream is None:
+        workstreams = get_managed_workstreams()
+        if not workstreams:
+            console.print("[dim]No active workstreams[/]")
             return 0
+        table = build_workstream_table(workstreams)
+        if table:
+            console.print(table)
+        choice = prompt("#")
+        if not choice or not choice.isdigit():
+            return 0
+        idx = int(choice)
+        if idx < 1 or idx > len(workstreams):
+            return 0
+        ws = workstreams[idx - 1]
         success, output = invoke_manager(
             [
                 "close",
                 "--tool",
-                str(workstream.get("tool")),
+                str(ws.get("tool")),
                 "--name",
-                str(workstream.get("name")),
+                str(ws.get("name")),
                 "--force",
                 "--drop-branch",
             ]
@@ -411,14 +551,14 @@ def main() -> int:
         if not success:
             raise RuntimeError(output)
         if output:
-            print(output)
+            console.print(output)
         return 0
     if args.mode == "prune":
         success, output = invoke_manager(["prune"])
         if not success:
             raise RuntimeError(output)
         if output:
-            print(output)
+            console.print(output)
         return 0
     raise RuntimeError(f"Unsupported mode: {args.mode}")
 
@@ -427,5 +567,5 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except Exception as exc:
-        print(f"AI Workstreams error: {exc}", file=sys.stderr)
+        console.print(f"[red]AI Workstreams error:[/] {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
