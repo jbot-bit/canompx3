@@ -723,7 +723,8 @@ def build_strategy_daily_series(
         # Step 3: Load outcomes from both orb_outcomes (baseline) and nested_outcomes (nested)
         outcomes_baseline = con.execute(
             f"""
-            SELECT vs.strategy_id, oo.trading_day, oo.pnl_r,
+            SELECT vs.strategy_id, oo.trading_day,
+                   COALESCE(oo.ts_pnl_r, oo.pnl_r) AS pnl_r,
                    oo.mae_r, oo.entry_price, oo.stop_price,
                    COALESCE(vs.stop_multiplier, 1.0) as stop_multiplier
             FROM validated_setups vs

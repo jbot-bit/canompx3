@@ -118,6 +118,20 @@ LIVE_MIN_EXPECTANCY_R = 0.25
 # @revalidated-for E1/E2 event-based sessions (2026-03-12)
 LIVE_MIN_EXPECTANCY_DOLLARS_MULT = 1.3
 
+# Instrument-level ATR regime gate.  Maps instrument → minimum atr_20_pct.
+# When current ATR percentile is below threshold, ALL strategies for that
+# instrument are skipped (weight=0).  Only applies to instruments whose edges
+# are regime-conditional on elevated volatility.
+#
+# MGC: WF window (2022+) only covers high-vol era.  Low-vol gold is not
+# validated OOS.  Threshold 50 = median vol (skip when below historical median).
+# See config.py:112 and adversarial audit 2026-03-18 Finding #4.
+# @research-source adversarial_audit_2026-03-18
+# @revalidated-for E2 event-based sessions (2026-03-18)
+INSTRUMENT_ATR_GATE: dict[str, float] = {
+    "MGC": 50.0,  # skip MGC when atr_20_pct < 50 (below-median vol)
+}
+
 # The live portfolio: what we actually trade.
 #
 # TIER 1 (CORE): Always on. Full-period validated (FDR+WF). Target N>=100;
@@ -580,6 +594,27 @@ def build_live_portfolio(
 
     strategies = []
     notes = []
+
+    # --- Instrument-level ATR regime gate ---
+    atr_threshold = INSTRUMENT_ATR_GATE.get(instrument)
+    if atr_threshold is not None:
+        import duckdb as _ddb
+
+        with _ddb.connect(str(db_path), read_only=True) as _con:
+            _atr_row = _con.execute(
+                """SELECT atr_20_pct FROM daily_features
+                   WHERE symbol = ? AND orb_minutes = 5 AND atr_20_pct IS NOT NULL
+                   ORDER BY trading_day DESC LIMIT 1""",
+                [instrument],
+            ).fetchone()
+        current_atr_pct = float(_atr_row[0]) if _atr_row else None
+        if current_atr_pct is None or current_atr_pct < atr_threshold:
+            notes.append(
+                f"ATR GATE: {instrument} atr_20_pct={current_atr_pct} < {atr_threshold} -- "
+                f"ALL strategies skipped (low-vol regime not validated OOS)"
+            )
+            return Portfolio(strategies=[]), notes
+        notes.append(f"ATR GATE: {instrument} atr_20_pct={current_atr_pct:.1f} >= {atr_threshold} -- OPEN")
 
     # --- CORE tier: try rolling validated first, fall back to validated_setups ---
     core_specs = [s for s in LIVE_PORTFOLIO if s.tier == "core"]
