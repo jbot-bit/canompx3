@@ -3516,7 +3516,7 @@ CHECKS = [
         False,
     ),
     (
-        "No validated strategies below entry-model noise floor (null test 2026-03-18)",
+        "No validated strategies below entry-model noise floor (null test 2026-03-19, 100 seeds)",
         check_noise_floor_compliance,
         False,
         True,
