@@ -83,26 +83,14 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import pandas as pd
 
-# ── Noise ExpR floor per entry model (adversarial validation 2026-03-18) ──
-# Null test (10 seeds: 1,2,3,4,5,6,7,8,42,99) ran the full pipeline on
-# random-walk bars. 611 total noise survivors across seeds.
+# ── Noise ExpR floor per entry model (adversarial validation 2026-03-19) ──
+# 100-seed null test ran the full pipeline on Gaussian random-walk bars.
 # Any production strategy below this floor is indistinguishable from chance.
-#
-# E2 (stop-market): structural near-breakeven on noise. 456 survivors across
-#   9 seeds, max ExpR = 0.3162 (seed 1). Noise easily fakes E2 edge.
-# E1 (limit entry): NOT immune — 31 survivors across 9 seeds, max ExpR = 0.2426
-#   (seed 1). 2-seed estimate (0.05) was dangerously optimistic.
-#
-# Floors are rounded UP from the noise max across 9 seeds (White's Reality Check):
-#   E2: 456 noise survivors, max ExpR = 0.3162 -> floor 0.32
-#   E1: 31 noise survivors, max ExpR = 0.2426 -> floor 0.25
+# Method: conservative mean + 2*std of per-seed maxima (97 seeds analyzed).
 #
 # @research-source null_test_100_seeds (White's Reality Check 2026-03-19)
 # @entry-models E1, E2
 # @revalidated-for E1/E2 event-based sessions (2026-03-19)
-# Conservative floors: mean + 2*std of per-seed maxima (97 seeds analyzed).
-# E1: 21 survivors across 9 seeds, max=0.2062, conservative=0.2143 → 0.22
-# E2: 1720 survivors across 62 seeds, max=0.3809, conservative=0.3165 → 0.32
 NOISE_EXPR_FLOOR: dict[str, float] = {
     "E1": 0.22,
     "E2": 0.32,

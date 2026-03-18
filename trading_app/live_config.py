@@ -97,10 +97,10 @@ HOT_MIN_STABILITY = 0.6
 # SQL pre-filter: set to the LOWER of the two noise floors so both
 # E1 and E2 strategies are pre-filtered before the per-model check.
 # The per-model noise floor gate (_check_noise_floor) applies the
-# exact threshold: E1=0.25, E2=0.32.
-# @research-source null_test_10_seeds (White's Reality Check 2026-03-18)
-# @revalidated-for E1/E2 event-based sessions (2026-03-18)
-LIVE_MIN_EXPECTANCY_R = 0.25
+# exact threshold: E1=0.22, E2=0.32.
+# @research-source null_test_100_seeds (White's Reality Check 2026-03-19)
+# @revalidated-for E1/E2 event-based sessions (2026-03-19)
+LIVE_MIN_EXPECTANCY_R = 0.22
 
 # Minimum expected dollar profit as a multiple of round-trip transaction cost.
 # Strategies must earn at least this multiple of their RT cost per trade so that

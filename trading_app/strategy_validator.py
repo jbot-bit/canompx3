@@ -370,7 +370,7 @@ def validate_strategy(
         return "REJECTED", f"Phase 2: ExpR={exp_r} <= 0", []
 
     # Phase 2b: Noise floor — reject strategies indistinguishable from noise
-    # @research-source null_test_10_seeds (White's Reality Check 2026-03-18)
+    # @research-source null_test_100_seeds (White's Reality Check 2026-03-19)
     entry_model = row.get("entry_model") or "E1"
     noise_floor = NOISE_EXPR_FLOOR.get(entry_model, NOISE_EXPR_FLOOR.get("E2", 0.32))
     if exp_r <= noise_floor:
