@@ -45,8 +45,7 @@ def _load_strategy_pnl(
 
     rows = con.execute(
         f"""
-        SELECT std.strategy_id, std.trading_day,
-               COALESCE(oo.ts_pnl_r, oo.pnl_r) AS pnl_r
+        SELECT std.strategy_id, std.trading_day, oo.pnl_r
         FROM strategy_trade_days std
         JOIN validated_setups vs ON vs.strategy_id = std.strategy_id
         JOIN orb_outcomes oo

@@ -346,10 +346,7 @@ def _load_strategy_outcomes(
         params.append(end_date)
 
     rows = con.execute(
-        f"""SELECT trading_day,
-                   COALESCE(ts_outcome, outcome) AS outcome,
-                   COALESCE(ts_pnl_r, pnl_r) AS pnl_r,
-                   mae_r, mfe_r,
+        f"""SELECT trading_day, outcome, pnl_r, mae_r, mfe_r,
                    entry_price, stop_price
             FROM orb_outcomes
             WHERE {" AND ".join(where)}
@@ -443,9 +440,7 @@ def _bulk_load_all_outcomes(con, instrument: str, end_date: date | None = None) 
 
     rows = con.execute(
         f"""SELECT orb_label, orb_minutes, entry_model, rr_target, confirm_bars,
-                   trading_day,
-                   COALESCE(ts_outcome, outcome) AS outcome,
-                   COALESCE(ts_pnl_r, pnl_r) AS pnl_r,
+                   trading_day, outcome, pnl_r,
                    mae_r, mfe_r, entry_price, stop_price
             FROM orb_outcomes
             WHERE {" AND ".join(where)}

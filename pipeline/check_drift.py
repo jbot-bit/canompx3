@@ -2196,11 +2196,11 @@ def check_trading_rules_authority() -> list[str]:
             if abs(mgc_friction - 5.74) > 0.01:
                 violations.append(f"  MGC total_friction = {mgc_friction}, TRADING_RULES says $5.74")
 
-        # 7. Early exit thresholds: sessions with T80 must have positive values
-        for session in ["CME_REOPEN", "TOKYO_OPEN", "CME_PRECLOSE"]:
-            t80 = EARLY_EXIT_MINUTES.get(session)
-            if t80 is None or t80 <= 0:
-                violations.append(f"  EARLY_EXIT_MINUTES['{session}'] = {t80}, expected positive T80 value")
+        # 7. Early exit thresholds: values must be None or positive int.
+        # T80 disabled 2026-03-18 (OOS validation NO-GO). All values are None.
+        for session, t80 in EARLY_EXIT_MINUTES.items():
+            if t80 is not None and t80 <= 0:
+                violations.append(f"  EARLY_EXIT_MINUTES['{session}'] = {t80}, must be None or positive")
 
         # 8. All EARLY_EXIT_MINUTES keys must be valid sessions
         for session in EARLY_EXIT_MINUTES:
@@ -3322,53 +3322,6 @@ def check_symbol_instrument_sql_convention() -> list[str]:
     return violations
 
 
-def check_ts_outcome_usage() -> list[str]:
-    """Ensure all orb_outcomes queries use COALESCE(ts_outcome/ts_pnl_r).
-
-    After adversarial audit 2026-03-18, discovery/fitness/reporting must use
-    time-stop adjusted outcomes, not raw outcome/pnl_r. Queries that SELECT
-    raw outcome or pnl_r directly from orb_outcomes (without COALESCE) are
-    violations.  outcome_builder.py is excluded (it WRITES these columns).
-    """
-    violations = []
-    # Files that legitimately write raw outcome to orb_outcomes
-    _WRITER_STEMS = {"outcome_builder", "init_db", "parity_check"}
-
-    _RAW_OUTCOME_RE = re.compile(
-        r"""
-        \bSELECT\b[^;]*?           # SELECT ... (non-greedy to next semicolon-ish)
-        (?<!\bCOALESCE\()           # NOT preceded by COALESCE(
-        \b(?:oo?\.)?\boutcome\b     # bare 'outcome' or 'o.outcome' or 'oo.outcome'
-        [^;]*?                      # ... rest of query
-        \bFROM\s+orb_outcomes\b     # FROM orb_outcomes
-        """,
-        re.IGNORECASE | re.DOTALL | re.VERBOSE,
-    )
-
-    search_dirs = [TRADING_APP_DIR, PROJECT_ROOT / "scripts"]
-    for search_dir in search_dirs:
-        if not search_dir.exists():
-            continue
-        for py_file in search_dir.rglob("*.py"):
-            if py_file.stem in _WRITER_STEMS:
-                continue
-            try:
-                content = py_file.read_text(encoding="utf-8")
-            except Exception:
-                continue
-            if "orb_outcomes" not in content:
-                continue
-            # Simple heuristic: any line with SELECT ... outcome ... FROM orb_outcomes
-            # that doesn't have COALESCE(ts_outcome nearby
-            if "COALESCE" not in content and _RAW_OUTCOME_RE.search(content):
-                violations.append(
-                    f"  {py_file.relative_to(PROJECT_ROOT)} — "
-                    f"queries orb_outcomes without COALESCE(ts_outcome/ts_pnl_r)"
-                )
-
-    return violations
-
-
 # Each entry: (description, callable, is_advisory).
 # is_advisory=True → prints warnings but never blocks (shown as ADVISORY).
 # Check number is derived from position (1-indexed).
@@ -3567,12 +3520,6 @@ CHECKS = [
         False,
         True,
     ),  # requires_db
-    (
-        "orb_outcomes queries use COALESCE(ts_outcome/ts_pnl_r) not raw outcome",
-        check_ts_outcome_usage,
-        True,  # advisory — scripts/tools may intentionally use raw outcomes for research
-        False,
-    ),
 ]  # end CHECKS
 
 
