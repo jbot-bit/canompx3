@@ -12,17 +12,15 @@ IMPORTANT: You must manually set NOISE_EXPR_FLOOR = {"E1": 0, "E2": 0} in
 trading_app/config.py BEFORE running. The script aborts if floors are active.
 
 Usage:
-    python scripts/tests/run_null_batch.py                     # 50 seeds, all apertures
+    python scripts/tests/run_null_batch.py                      # 100 seeds, 8 parallel
+    python scripts/tests/run_null_batch.py --seeds 100 --parallel 10  # 10 parallel workers
     python scripts/tests/run_null_batch.py --seeds 20           # quick run
-    python scripts/tests/run_null_batch.py --seeds 50 --batch 1 --of 3  # parallel: terminal 1 of 3
     python scripts/tests/run_null_batch.py --analyze-only       # just analyze existing seed DBs
 
-Seed assignment for parallel terminals:
-    Terminal 1: --batch 1 --of 3  → seeds 0-16
-    Terminal 2: --batch 2 --of 3  → seeds 17-33
-    Terminal 3: --batch 3 --of 3  → seeds 34-49
+Hardware: i9-14900HX (24C/32T), 32GB RAM, NVMe SSD.
+Each seed uses ~1 core + ~2GB RAM. Default 8 parallel = 16GB peak, safe.
 
-Expected runtime: ~30 min/seed. 50 seeds / 3 terminals ≈ 8-9 hours.
+Expected runtime: 100 seeds / 8 parallel x 30 min = ~6.25 hours.
 """
 
 from __future__ import annotations
@@ -251,6 +249,7 @@ def analyze_seeds(seed_dir: Path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Batch null test runner (White's Reality Check)")
     parser.add_argument("--seeds", type=int, default=100, help="Total seeds to run (default: 100)")
+    parser.add_argument("--parallel", type=int, default=8, help="Max parallel seeds (default: 8, safe for 32GB RAM)")
     parser.add_argument("--batch", type=int, default=1, help="Which batch (for parallel terminals)")
     parser.add_argument("--of", type=int, default=1, help="Total batches (for parallel terminals)")
     parser.add_argument("--analyze-only", action="store_true", help="Skip running, just analyze existing DBs")
@@ -288,13 +287,18 @@ def main() -> int:
     start, end = get_seed_range(args.seeds, args.batch, args.of)
     seed_range = list(range(start, end))
 
+    n_parallel = min(args.parallel, len(seed_range))
+
     print(f"{'='*60}")
     print(f"NULL TEST BATCH RUNNER")
     print(f"{'='*60}")
     print(f"  Total seeds:  {args.seeds}")
     print(f"  This batch:   {args.batch} of {args.of} (seeds {start}-{end-1})")
+    print(f"  Parallel:     {n_parallel} workers")
     print(f"  Output dir:   {SEED_DIR}")
     print(f"  Seeds to run: {len(seed_range)}")
+    est_hours = len(seed_range) * 30 / 60 / n_parallel
+    print(f"  ETA:          ~{est_hours:.1f} hours ({len(seed_range)} seeds / {n_parallel} parallel x ~30min)")
     print()
 
     # Snapshot current config for the manifest
@@ -307,10 +311,40 @@ def main() -> int:
 
     t_batch_start = time.time()
 
-    for i, seed in enumerate(seed_range):
-        print(f"\n[{i+1}/{len(seed_range)}] Running seed {seed}...")
-        result = run_seed(seed, SEED_DIR)
-        manifest["seeds"][str(seed)] = result
+    if n_parallel <= 1:
+        # Sequential fallback
+        for i, seed in enumerate(seed_range):
+            print(f"\n[{i+1}/{len(seed_range)}] Running seed {seed}...")
+            result = run_seed(seed, SEED_DIR)
+            manifest["seeds"][str(seed)] = result
+            save_manifest(manifest)
+    else:
+        # Parallel execution
+        from concurrent.futures import ProcessPoolExecutor, as_completed
+
+        completed = 0
+        with ProcessPoolExecutor(max_workers=n_parallel) as executor:
+            futures = {
+                executor.submit(run_seed, seed, SEED_DIR): seed
+                for seed in seed_range
+            }
+            for future in as_completed(futures):
+                seed = futures[future]
+                completed += 1
+                try:
+                    result = future.result()
+                    manifest["seeds"][str(seed)] = result
+                    survivors = result.get("survivors", "?")
+                    elapsed = result.get("elapsed_s", 0)
+                    print(f"  [{completed}/{len(seed_range)}] Seed {seed}: {survivors} survivors ({elapsed:.0f}s)")
+                except Exception as e:
+                    print(f"  [{completed}/{len(seed_range)}] Seed {seed}: EXCEPTION — {e}")
+                    manifest["seeds"][str(seed)] = {"seed": seed, "status": "EXCEPTION", "error": str(e)}
+
+                # Save manifest periodically
+                if completed % 5 == 0 or completed == len(seed_range):
+                    save_manifest(manifest)
+
         save_manifest(manifest)
 
     batch_time = time.time() - t_batch_start
