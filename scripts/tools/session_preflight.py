@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import subprocess
+import sys
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -279,6 +280,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.with_pulse:
         try:
+            _tools_dir = str(Path(__file__).resolve().parent)
+            if _tools_dir not in sys.path:
+                sys.path.insert(0, _tools_dir)
             from project_pulse import build_pulse, format_text
 
             report = build_pulse(root, skip_drift=True, skip_tests=True)

@@ -721,15 +721,17 @@ def collect_upcoming_sessions(db_path: Path) -> list[dict]:
     """Find trading sessions starting in the next 6 hours with strategy counts."""
     sessions: list[dict] = []
     try:
-        from datetime import date, time, timedelta
+        from datetime import time, timedelta
+        from zoneinfo import ZoneInfo
 
         import duckdb
 
         from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
         from pipeline.dst import SESSION_CATALOG
 
-        now = datetime.now()
-        today = date.today()
+        brisbane = ZoneInfo("Australia/Brisbane")
+        now = datetime.now(brisbane).replace(tzinfo=None)  # naive Brisbane time
+        today = now.date()
 
         for label, entry in SESSION_CATALOG.items():
             if entry.get("type") != "dynamic":

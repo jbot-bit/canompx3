@@ -641,3 +641,77 @@ class TestFormatJsonV2:
         assert data["upcoming_sessions"][0]["label"] == "TOKYO"
         assert data["time_since_green"] == "3h ago"
         assert "Since last" in data["session_delta"][0]
+
+
+# ---------------------------------------------------------------------------
+# collect_session_delta, collect_upcoming_sessions, _resolve_db_path
+# ---------------------------------------------------------------------------
+
+
+class TestSessionDelta:
+    def test_first_run_creates_marker(self, tmp_path: Path) -> None:
+        from scripts.tools.project_pulse import collect_session_delta
+
+        with patch.object(project_pulse, "_git_head", return_value="abc123"):
+            lines = collect_session_delta(tmp_path, tmp_path)
+        # First run — no prior marker, so no delta
+        assert lines == []
+        # But marker was written
+        marker = tmp_path / ".pulse_last_session.json"
+        assert marker.exists()
+        data = json.loads(marker.read_text(encoding="utf-8"))
+        assert data["head"] == "abc123"
+
+    def test_detects_new_commits(self, tmp_path: Path) -> None:
+        from scripts.tools.project_pulse import collect_session_delta
+
+        # Write a prior marker with old HEAD
+        marker = tmp_path / ".pulse_last_session.json"
+        marker.write_text(
+            json.dumps({"head": "old123", "tool": "codex", "at": "2026-03-17T00:00:00+00:00"}),
+            encoding="utf-8",
+        )
+
+        def mock_git(root, *args):
+            joined = " ".join(str(a) for a in args)
+            if "rev-parse" in joined:
+                return MagicMock(returncode=0, stdout="new456")
+            if "log" in joined and "old123" in joined:
+                return MagicMock(returncode=0, stdout="new456 feat: something\nabc789 fix: other\n")
+            return MagicMock(returncode=0, stdout="new456")
+
+        with patch.object(project_pulse, "_run_git", side_effect=mock_git):
+            with patch.object(project_pulse, "_git_head", return_value="new456"):
+                lines = collect_session_delta(tmp_path, tmp_path)
+        assert len(lines) > 0
+        assert "codex" in lines[0]  # shows which tool had last session
+
+
+class TestResolveDbPath:
+    def test_canonical_gold_db(self, tmp_path: Path) -> None:
+        from scripts.tools.project_pulse import _resolve_db_path
+
+        db = tmp_path / "gold.db"
+        db.touch()
+        result = _resolve_db_path(tmp_path, tmp_path)
+        assert result == db
+
+    def test_fallback_to_root(self, tmp_path: Path) -> None:
+        from scripts.tools.project_pulse import _resolve_db_path
+
+        canonical = tmp_path / "canonical"
+        canonical.mkdir()
+        # No gold.db anywhere — falls back to root/gold.db
+        with patch.dict("sys.modules", {"pipeline": None, "pipeline.paths": None}):
+            result = _resolve_db_path(tmp_path, canonical)
+        assert result.name == "gold.db"
+
+
+class TestUpcomingSessions:
+    def test_graceful_on_import_failure(self, tmp_path: Path) -> None:
+        from scripts.tools.project_pulse import collect_upcoming_sessions
+
+        # When pipeline isn't importable, should return empty list
+        with patch.dict("sys.modules", {"pipeline.dst": None}):
+            result = collect_upcoming_sessions(tmp_path / "nonexistent.db")
+        assert result == []
