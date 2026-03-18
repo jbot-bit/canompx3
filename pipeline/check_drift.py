@@ -3257,8 +3257,8 @@ _SQL_KW_RE = re.compile(r"\b(SELECT|FROM|JOIN|WHERE|AND|ON|GROUP BY|ORDER BY|INS
 def check_noise_floor_compliance(con=None) -> list[str]:
     """Verify no validated strategy has ExpR at or below its entry-model noise floor.
 
-    Null test (seeds 42, 99) established that E2 noise can produce ExpR up to 0.2379
-    and E1 up to 0.0461. Any strategy below these floors is indistinguishable from noise.
+    Floors defined in NOISE_EXPR_FLOOR (trading_app.config) — derived from
+    10-seed null test (White's Reality Check 2026-03-18).
     """
     from trading_app.config import NOISE_EXPR_FLOOR
 

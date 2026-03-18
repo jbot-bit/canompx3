@@ -370,10 +370,9 @@ def validate_strategy(
         return "REJECTED", f"Phase 2: ExpR={exp_r} <= 0", []
 
     # Phase 2b: Noise floor — reject strategies indistinguishable from noise
-    # Null test (seeds 42, 99) established entry-model-specific ExpR floors.
-    # E2 near-breakeven on random walks lets noise fake edge up to 0.238 ExpR.
+    # @research-source null_test_10_seeds (White's Reality Check 2026-03-18)
     entry_model = row.get("entry_model") or "E1"
-    noise_floor = NOISE_EXPR_FLOOR.get(entry_model, NOISE_EXPR_FLOOR.get("E2", 0.24))
+    noise_floor = NOISE_EXPR_FLOOR.get(entry_model, NOISE_EXPR_FLOOR.get("E2", 0.32))
     if exp_r <= noise_floor:
         return (
             "REJECTED",

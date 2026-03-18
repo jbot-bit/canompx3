@@ -98,7 +98,7 @@ HOT_MIN_STABILITY = 0.6
 # E1 and E2 strategies are pre-filtered before the per-model check.
 # The per-model noise floor gate (_check_noise_floor) applies the
 # exact threshold: E1=0.25, E2=0.32.
-# @research-source null_test_8_seeds (White's Reality Check 2026-03-18)
+# @research-source null_test_10_seeds (White's Reality Check 2026-03-18)
 # @revalidated-for E1/E2 event-based sessions (2026-03-18)
 LIVE_MIN_EXPECTANCY_R = 0.25
 
@@ -505,7 +505,7 @@ def _check_noise_floor(variant: dict) -> tuple[bool, str]:
     """Check that variant ExpR exceeds its entry-model noise floor.
 
     Returns (passes, note). Strategies at or below the noise floor are
-    indistinguishable from random-walk artifacts (null test, 8 seeds).
+    indistinguishable from random-walk artifacts (null test, 10 seeds).
     """
     from trading_app.config import NOISE_EXPR_FLOOR
 
