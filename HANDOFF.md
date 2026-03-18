@@ -12,13 +12,15 @@ If nothing changed, leave it as-is.
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-03-18
-- **Commit:** a893e62 — [mechanical] chore: Ralph Loop iter 134 — update audit state files
-- **Files changed:** 5 files
+- **Commit:** 4735741 — adversarial review fixes: FDR hard gate, remove fake DSR/FST gates, honest docs
+- **Files changed:** 7 files
   - `HANDOFF.md`
-  - `docs/ralph-loop/ralph-ledger.json`
-  - `docs/ralph-loop/ralph-loop-audit.md`
-  - `docs/ralph-loop/ralph-loop-history.md`
-  - `docs/ralph-loop/ralph-loop-plan.md`
+  - `RESEARCH_RULES.md`
+  - `docs/plans/2026-03-18-adversarial-review-findings.md`
+  - `pipeline/cost_model.py`
+  - `trading_app/config.py`
+  - `trading_app/db_manager.py`
+  - `trading_app/strategy_validator.py`
 
 ## Decisions Made
 - HANDOFF.md is now auto-updated by post-commit hook — no manual "handover" needed
