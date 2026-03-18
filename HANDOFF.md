@@ -12,22 +12,19 @@ If nothing changed, leave it as-is.
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-03-18
-- **Commit:** 513f166 — fix: harden post-commit hook — skip rebase/merge, safe regex fallback, auto-stage HANDOFF
-- **Files changed:** 3 files
-  - `.githooks/post-commit`
-  - `.githooks/pre-commit`
-  - `HANDOFF.md`
+- **Commit:** d0460bb — feat: project pulse — 9-signal project awareness engine
+- **Summary:** Merged project pulse from workstream branch. Fixed drift failures in worktrees (symlink gold.db + models, uv sync).
 
 ## Decisions Made
-- HANDOFF.md is now auto-updated by post-commit hook — no manual “handover” needed
+- HANDOFF.md is now auto-updated by post-commit hook — no manual "handover" needed
 - Pre-commit hook auto-stages dirty HANDOFF.md so updates ride along with the next commit
 - Post-commit hook skips rebase/merge/cherry-pick (no spam)
 - Trade-count WF design approved (`docs/plans/2026-03-17-trade-count-wf-design.md`) — ready to build
-- Project pulse/mental model 4T design done by Codex (`docs/plans/2026-03-17-project-mental-model-design.md`) — no code yet
+- Project pulse BUILT and merged (`scripts/tools/project_pulse.py`) — 9 collectors, /orient skill, bat launcher menu item
+- Worktree env fix: symlink gold.db + models/ from main repo, use `uv run` (not bare `python`) in worktrees
 
 ## Next Steps
 - **Trade-count WF** — implement from design doc (4 files, no schema changes)
-- **Project pulse** — implement from Codex's 4T design (scripts/tools/project_pulse.py)
 - Streamlit dashboard: prop portfolio view
 - CUSUM-based fitness (MEMORY.md action queue item 11)
 - ATR-normalized position sizing (item 12)

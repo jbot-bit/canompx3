@@ -7,6 +7,10 @@ local_db/
 trade_sheet.html
 promotion_candidates.html
 
+# Pulse (regenerated on demand)
+.pulse_cache.json
+PROJECT_PULSE.md
+
 # Vector DB cache (Chroma)
 chroma/
 chroma_data/

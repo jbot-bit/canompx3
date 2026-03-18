@@ -1,0 +1,480 @@
+"""Tests for scripts.tools.project_pulse."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from scripts.tools import project_pulse
+from scripts.tools.project_pulse import (
+    PulseItem,
+    PulseReport,
+    _find_memory_md,
+    _read_expensive_cache,
+    _write_expensive_cache,
+    build_pulse,
+    collect_action_queue,
+    collect_drift,
+    collect_git_state,
+    collect_handoff,
+    collect_ralph_deferred,
+    collect_staleness,
+    collect_tests,
+    collect_worktrees,
+    format_json,
+    format_markdown,
+    format_text,
+)
+
+
+def _mkfile(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# collect_handoff
+# ---------------------------------------------------------------------------
+
+
+class TestCollectHandoff:
+    def test_missing_handoff(self, tmp_path: Path) -> None:
+        context, items = collect_handoff(tmp_path)
+        assert any(i.category == "broken" and "missing" in i.summary.lower() for i in items)
+        assert context == {}
+
+    def test_extracts_metadata_and_next_steps(self, tmp_path: Path) -> None:
+        _mkfile(
+            tmp_path / "HANDOFF.md",
+            "\n".join(
+                [
+                    "## Last Session",
+                    "- **Tool:** Claude",
+                    "- **Date:** 2026-03-17",
+                    "- **Summary:** Built pulse",
+                    "",
+                    "## Next Steps — Active",
+                    "1. Phase 1: do thing",
+                    "2. Phase 2: do other thing",
+                    "",
+                    "## Blockers / Warnings",
+                    "- All good here",
+                    "- Pre-existing test failure: broken thing",
+                ]
+            ),
+        )
+        context, items = collect_handoff(tmp_path)
+        assert context["tool"] == "Claude"
+        assert context["date"] == "2026-03-17"
+        assert context["summary"] == "Built pulse"
+        assert len(context["next_steps"]) == 2
+        # "failure" keyword → broken item
+        assert any(i.category == "broken" and "failure" in i.summary.lower() for i in items)
+        # "All good here" has no blocker keywords → not surfaced
+        assert not any("All good" in i.summary for i in items)
+
+    def test_no_blockers_section(self, tmp_path: Path) -> None:
+        _mkfile(
+            tmp_path / "HANDOFF.md",
+            "\n".join(
+                [
+                    "## Last Session",
+                    "- **Tool:** Codex",
+                    "- **Date:** 2026-03-18",
+                    "- **Summary:** Research",
+                ]
+            ),
+        )
+        context, items = collect_handoff(tmp_path)
+        assert context["tool"] == "Codex"
+        assert items == []
+
+
+# ---------------------------------------------------------------------------
+# collect_git_state
+# ---------------------------------------------------------------------------
+
+
+class TestCollectGitState:
+    def test_clean_repo(self, tmp_path: Path) -> None:
+        mock_status = MagicMock(returncode=0, stdout="")
+        mock_stash = MagicMock(returncode=0, stdout="")
+        with patch.object(project_pulse, "_run_git", side_effect=[mock_status, mock_stash]):
+            items = collect_git_state(tmp_path)
+        assert items == []
+
+    def test_dirty_files_excludes_cache(self, tmp_path: Path) -> None:
+        mock_status = MagicMock(returncode=0, stdout=" M foo.py\n?? .pulse_cache.json\n M bar.py\n")
+        mock_stash = MagicMock(returncode=0, stdout="")
+        with patch.object(project_pulse, "_run_git", side_effect=[mock_status, mock_stash]):
+            items = collect_git_state(tmp_path)
+        assert len(items) == 1
+        assert "2 uncommitted" in items[0].summary  # foo.py and bar.py, not cache
+
+    def test_stashes_detected(self, tmp_path: Path) -> None:
+        mock_status = MagicMock(returncode=0, stdout="")
+        mock_stash = MagicMock(returncode=0, stdout="stash@{0}: WIP on main\nstash@{1}: old work\n")
+        with patch.object(project_pulse, "_run_git", side_effect=[mock_status, mock_stash]):
+            items = collect_git_state(tmp_path)
+        assert len(items) == 1
+        assert "2 git stash" in items[0].summary
+
+
+# ---------------------------------------------------------------------------
+# collect_drift
+# ---------------------------------------------------------------------------
+
+
+class TestCollectDrift:
+    def test_clean_drift(self, tmp_path: Path) -> None:
+        _mkfile(tmp_path / "pipeline" / "check_drift.py", "")
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="NO DRIFT DETECTED: 67 passed")
+            items = collect_drift(tmp_path)
+        assert items == []
+
+    def test_drift_failure(self, tmp_path: Path) -> None:
+        _mkfile(tmp_path / "pipeline" / "check_drift.py", "")
+        stdout = "Check 5: something...\n  FAILED:\n    violation 1\nDRIFT DETECTED: 1 violation(s)"
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=1, stdout=stdout)
+            items = collect_drift(tmp_path)
+        assert len(items) == 1
+        assert items[0].category == "broken"
+        # Only "FAILED:" line counted, not the "DRIFT DETECTED" summary line
+        assert "1 violation" in items[0].summary
+
+    def test_drift_timeout(self, tmp_path: Path) -> None:
+        _mkfile(tmp_path / "pipeline" / "check_drift.py", "")
+        from subprocess import TimeoutExpired
+
+        with patch("subprocess.run", side_effect=TimeoutExpired("cmd", 60)):
+            items = collect_drift(tmp_path)
+        assert len(items) == 1
+        assert "timed out" in items[0].summary
+
+    def test_missing_script(self, tmp_path: Path) -> None:
+        items = collect_drift(tmp_path)
+        assert items == []
+
+
+# ---------------------------------------------------------------------------
+# collect_tests
+# ---------------------------------------------------------------------------
+
+
+class TestCollectTests:
+    def test_tests_pass(self, tmp_path: Path) -> None:
+        (tmp_path / "tests").mkdir()
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="42 passed")
+            items = collect_tests(tmp_path)
+        assert items == []
+
+    def test_tests_fail(self, tmp_path: Path) -> None:
+        (tmp_path / "tests").mkdir()
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=1,
+                stdout="FAILED tests/test_foo.py::test_bar\n1 failed, 41 passed",
+            )
+            items = collect_tests(tmp_path)
+        assert len(items) == 1
+        assert items[0].category == "broken"
+
+
+# ---------------------------------------------------------------------------
+# collect_staleness
+# ---------------------------------------------------------------------------
+
+
+class TestCollectStaleness:
+    def test_db_missing(self, tmp_path: Path) -> None:
+        items = collect_staleness(tmp_path, tmp_path / "nonexistent.db")
+        assert len(items) == 1
+        assert items[0].category == "broken"
+        assert "not found" in items[0].summary
+
+    def test_stale_instruments(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "gold.db"
+        db_path.touch()
+        mock_engine = MagicMock(return_value={"stale_steps": ["outcome_builder", "discovery"]})
+        mock_asset_configs = MagicMock()
+        mock_asset_configs.ACTIVE_ORB_INSTRUMENTS = ["MGC"]
+        mock_pipeline_status = MagicMock(staleness_engine=mock_engine)
+        with (
+            patch.dict(
+                "sys.modules",
+                {
+                    "pipeline.asset_configs": mock_asset_configs,
+                    "pipeline_status": mock_pipeline_status,
+                },
+            ),
+            patch("duckdb.connect") as mock_connect,
+        ):
+            mock_con = MagicMock()
+            mock_connect.return_value = mock_con
+            items = collect_staleness(tmp_path, db_path)
+        assert isinstance(items, list)
+        # With mocked staleness_engine returning stale steps, we expect a decaying item
+        assert any(i.category == "decaying" for i in items)
+
+
+# ---------------------------------------------------------------------------
+# collect_action_queue
+# ---------------------------------------------------------------------------
+
+
+class TestCollectActionQueue:
+    def test_parses_open_items(self, tmp_path: Path) -> None:
+        _mkfile(
+            tmp_path / "memory" / "MEMORY.md",
+            "\n".join(
+                [
+                    "# Memory",
+                    "## ACTION QUEUE",
+                    "1. ~~**Full rebuild**~~ — DONE.",
+                    "2. **CUSUM-based fitness** — Faster regime break detection.",
+                    "3. **ATR-normalized sizing** — Carver approach. Scale with certainty.",
+                    "## Other Section",
+                ]
+            ),
+        )
+        with patch.object(project_pulse, "_find_memory_md", return_value=tmp_path / "memory" / "MEMORY.md"):
+            items = collect_action_queue(tmp_path)
+        assert len(items) == 2  # item 1 is strikethrough (done)
+        assert items[0].summary == "CUSUM-based fitness"
+        assert items[1].summary == "ATR-normalized sizing"
+        assert all(i.category == "ready" for i in items)
+
+    def test_no_memory_file(self, tmp_path: Path) -> None:
+        with patch.object(project_pulse, "_find_memory_md", return_value=None):
+            items = collect_action_queue(tmp_path)
+        assert items == []
+
+    def test_truncates_long_items(self, tmp_path: Path) -> None:
+        long_item = "A" * 100
+        _mkfile(
+            tmp_path / "memory" / "MEMORY.md",
+            f"## ACTION QUEUE\n1. **{long_item}** — description\n## End",
+        )
+        with patch.object(project_pulse, "_find_memory_md", return_value=tmp_path / "memory" / "MEMORY.md"):
+            items = collect_action_queue(tmp_path)
+        assert len(items) == 1
+        assert len(items[0].summary) <= 80
+
+
+# ---------------------------------------------------------------------------
+# collect_ralph_deferred
+# ---------------------------------------------------------------------------
+
+
+class TestCollectRalphDeferred:
+    def test_parses_open_findings(self, tmp_path: Path) -> None:
+        _mkfile(
+            tmp_path / "docs" / "ralph-loop" / "deferred-findings.md",
+            "\n".join(
+                [
+                    "# Deferred",
+                    "## Open Findings",
+                    "| ID | Iter | Severity | Target | Description | Reason |",
+                    "|----|------|----------|--------|-------------|--------|",
+                    "| DF-04 | 12 | LOW | rolling.py:304 | Dormant orb_minutes | annotated |",
+                    "## Won't Fix",
+                ]
+            ),
+        )
+        items = collect_ralph_deferred(tmp_path)
+        assert len(items) == 1
+        assert items[0].source == "ralph"
+        assert "DF-04" in items[0].summary
+        assert items[0].severity == "low"
+
+    def test_no_deferred_file(self, tmp_path: Path) -> None:
+        items = collect_ralph_deferred(tmp_path)
+        assert items == []
+
+    def test_empty_open_findings(self, tmp_path: Path) -> None:
+        _mkfile(
+            tmp_path / "docs" / "ralph-loop" / "deferred-findings.md",
+            "\n".join(
+                [
+                    "## Open Findings",
+                    "| ID | Iter | Severity | Target | Description | Reason |",
+                    "|----|------|----------|--------|-------------|--------|",
+                    "## Won't Fix",
+                ]
+            ),
+        )
+        items = collect_ralph_deferred(tmp_path)
+        assert items == []
+
+
+# ---------------------------------------------------------------------------
+# collect_worktrees
+# ---------------------------------------------------------------------------
+
+
+class TestCollectWorktrees:
+    def test_detects_worktree(self, tmp_path: Path) -> None:
+        meta = tmp_path / ".worktrees" / "claude" / "my-task" / ".canompx3-worktree.json"
+        _mkfile(
+            meta,
+            json.dumps({"tool": "claude", "name": "my-task", "purpose": "Build", "branch": "wt-my-task"}),
+        )
+        items = collect_worktrees(tmp_path)
+        assert len(items) == 1
+        assert "my-task" in items[0].summary
+        assert items[0].category == "paused"
+
+    def test_no_worktrees_dir(self, tmp_path: Path) -> None:
+        items = collect_worktrees(tmp_path)
+        assert items == []
+
+
+# ---------------------------------------------------------------------------
+# Cache
+# ---------------------------------------------------------------------------
+
+
+class TestExpensiveCache:
+    def test_write_and_read(self, tmp_path: Path) -> None:
+        drift = [PulseItem("broken", "high", "drift", "drift failed")]
+        tests = [PulseItem("broken", "high", "tests", "test failed")]
+        _write_expensive_cache(tmp_path, "abc123", drift, tests, None)
+
+        result = _read_expensive_cache(tmp_path, "abc123")
+        assert result is not None
+        assert result["head"] == "abc123"
+        assert len(result["drift_items"]) == 1
+        assert len(result["test_items"]) == 1
+
+    def test_cache_miss_on_head_change(self, tmp_path: Path) -> None:
+        _write_expensive_cache(tmp_path, "abc123", [], [], None)
+        result = _read_expensive_cache(tmp_path, "def456")
+        assert result is None
+
+    def test_merge_preserves_existing(self, tmp_path: Path) -> None:
+        """Partial run preserves previously cached values."""
+        drift = [PulseItem("broken", "high", "drift", "drift failed")]
+        _write_expensive_cache(tmp_path, "abc123", drift, [], None)
+
+        # Second run skips drift (None), runs tests
+        existing = _read_expensive_cache(tmp_path, "abc123")
+        test_items = [PulseItem("broken", "high", "tests", "test failed")]
+        _write_expensive_cache(tmp_path, "abc123", None, test_items, existing)
+
+        result = _read_expensive_cache(tmp_path, "abc123")
+        assert result is not None
+        # Drift preserved from first run
+        assert len(result["drift_items"]) == 1
+        assert result["drift_items"][0]["source"] == "drift"
+        # Tests from second run
+        assert len(result["test_items"]) == 1
+        assert result["test_items"][0]["source"] == "tests"
+
+    def test_corrupted_cache_returns_none(self, tmp_path: Path) -> None:
+        (tmp_path / ".pulse_cache.json").write_text("not json", encoding="utf-8")
+        assert _read_expensive_cache(tmp_path, "abc") is None
+
+
+# ---------------------------------------------------------------------------
+# Formatters
+# ---------------------------------------------------------------------------
+
+
+def _sample_report() -> PulseReport:
+    return PulseReport(
+        generated_at="2026-03-18T00:00:00+00:00",
+        cache_hit=False,
+        git_head="abc123",
+        git_branch="main",
+        items=[
+            PulseItem("broken", "high", "drift", "Drift FAILED"),
+            PulseItem("decaying", "medium", "staleness", "MGC: 2 stale steps"),
+            PulseItem("ready", "low", "action_queue", "CUSUM fitness"),
+            PulseItem("paused", "low", "git", "3 uncommitted file(s)"),
+        ],
+        handoff_tool="Claude",
+        handoff_date="2026-03-17",
+        handoff_summary="Did work",
+        handoff_next_steps=["Phase 1: build", "Phase 2: test"],
+        fitness_summary={"MGC": {"active_strategies": 573}},
+    )
+
+
+class TestFormatText:
+    def test_contains_all_sections(self) -> None:
+        text = format_text(_sample_report())
+        assert "PROJECT PULSE" in text
+        assert "FIX NOW" in text
+        assert "ACT SOON" in text
+        assert "ON DECK" in text
+        assert "PAUSED" in text
+        assert "Strategy fitness" in text
+        assert "MGC: 573 active" in text
+        assert "BROKEN item(s)" in text
+
+    def test_all_clear_message(self) -> None:
+        report = PulseReport(
+            generated_at="now",
+            cache_hit=False,
+            git_head="abc",
+            git_branch="main",
+        )
+        text = format_text(report)
+        assert "All clear" in text
+
+
+class TestFormatJson:
+    def test_valid_json(self) -> None:
+        output = format_json(_sample_report())
+        data = json.loads(output)
+        assert data["counts"]["broken"] == 1
+        assert data["counts"]["decaying"] == 1
+        assert data["handoff"]["tool"] == "Claude"
+        assert len(data["items"]) == 4
+
+
+class TestFormatMarkdown:
+    def test_markdown_structure(self) -> None:
+        md = format_markdown(_sample_report())
+        assert md.startswith("# Project Pulse")
+        assert "## FIX NOW" in md
+        assert "## ACT SOON" in md
+        assert "## Strategy Fitness" in md
+
+
+# ---------------------------------------------------------------------------
+# build_pulse integration (mocked externals)
+# ---------------------------------------------------------------------------
+
+
+class TestBuildPulse:
+    def test_fast_mode_skips_drift_and_tests(self, tmp_path: Path) -> None:
+        _mkfile(tmp_path / "HANDOFF.md", "## Last Session\n- **Tool:** Test\n- **Date:** today\n- **Summary:** test")
+        _mkfile(tmp_path / ".git" / "HEAD", "ref: refs/heads/main")
+        db_path = tmp_path / "gold.db"
+        db_path.touch()
+
+        with (
+            patch.object(project_pulse, "_canonical_repo_root", return_value=tmp_path),
+            patch.object(project_pulse, "_git_head", return_value="abc123"),
+            patch.object(project_pulse, "_git_branch", return_value="main"),
+            patch.object(project_pulse, "_run_git", return_value=MagicMock(returncode=0, stdout="")),
+            patch.object(project_pulse, "collect_staleness", return_value=[]),
+            patch.object(project_pulse, "collect_fitness_fast", return_value=({}, [])),
+            patch.object(project_pulse, "collect_worktrees", return_value=[]),
+            patch.object(project_pulse, "collect_action_queue", return_value=[]),
+            patch.object(project_pulse, "collect_ralph_deferred", return_value=[]),
+            patch.object(project_pulse, "collect_drift") as mock_drift,
+            patch.object(project_pulse, "collect_tests") as mock_tests,
+        ):
+            report = build_pulse(tmp_path, db_path=db_path, skip_drift=True, skip_tests=True)
+
+        mock_drift.assert_not_called()
+        mock_tests.assert_not_called()
+        assert isinstance(report, PulseReport)

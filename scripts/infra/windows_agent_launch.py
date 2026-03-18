@@ -249,6 +249,7 @@ def run_menu() -> int:
         print()
         print("Purpose: run one problem per isolated workstream so Claude and Codex do not stomp on each other.")
         print()
+        print("[0] Orient me (project pulse)")
         print("[1] Start new workstream")
         print("[2] Continue workstream")
         print("[3] Finish workstream")
@@ -257,6 +258,14 @@ def run_menu() -> int:
         print("[Q] Quit")
         print()
         choice = input(">>> ").strip().lower()
+        if choice == "0":
+            pulse_script = repo_root() / "scripts" / "tools" / "project_pulse.py"
+            if pulse_script.exists():
+                subprocess.run([sys.executable, str(pulse_script), "--fast"])
+            else:
+                print("project_pulse.py not found.")
+            input("Press Enter to continue")
+            continue
         if choice == "1":
             name = prompt_workstream_name()
             purpose = select_workstream_purpose()
