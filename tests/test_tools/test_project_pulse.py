@@ -480,3 +480,164 @@ class TestBuildPulse:
         mock_drift.assert_not_called()
         mock_tests.assert_not_called()
         assert isinstance(report, PulseReport)
+
+
+# ---------------------------------------------------------------------------
+# v2 features: recommendation, momentum, conflicts, skill suggestions
+# ---------------------------------------------------------------------------
+
+
+class TestRecommendation:
+    def test_broken_takes_priority(self) -> None:
+        from scripts.tools.project_pulse import _compute_recommendation
+
+        report = PulseReport(
+            generated_at="now",
+            cache_hit=False,
+            git_head="abc",
+            git_branch="main",
+            items=[
+                PulseItem("broken", "high", "drift", "Drift FAILED", action="/health-check"),
+                PulseItem("ready", "low", "action_queue", "CUSUM fitness"),
+            ],
+            recommendation="",
+        )
+        rec = _compute_recommendation(report)
+        assert rec.startswith("Fix:")
+        assert "/health-check" in rec
+
+    def test_upcoming_session_before_decay(self) -> None:
+        from scripts.tools.project_pulse import _compute_recommendation
+
+        report = PulseReport(
+            generated_at="now",
+            cache_hit=False,
+            git_head="abc",
+            git_branch="main",
+            items=[PulseItem("decaying", "low", "fitness", "MGC: 5 WATCH")],
+            upcoming_sessions=[{"label": "TOKYO_OPEN", "hours_away": 1.5, "instruments": {"MGC": 3}}],
+        )
+        rec = _compute_recommendation(report)
+        assert "TOKYO_OPEN" in rec
+        assert "/trade-book" in rec
+
+    def test_all_clear(self) -> None:
+        from scripts.tools.project_pulse import _compute_recommendation
+
+        report = PulseReport(generated_at="now", cache_hit=False, git_head="abc", git_branch="main")
+        rec = _compute_recommendation(report)
+        assert "All clear" in rec
+
+
+class TestSkillSuggestions:
+    def test_attaches_action_to_staleness(self) -> None:
+        from scripts.tools.project_pulse import _attach_skill_suggestions
+
+        items = [PulseItem("decaying", "medium", "staleness", "MGC: 2 stale steps")]
+        _attach_skill_suggestions(items)
+        assert items[0].action == "/rebuild-outcomes MGC"
+
+    def test_attaches_action_to_drift(self) -> None:
+        from scripts.tools.project_pulse import _attach_skill_suggestions
+
+        items = [PulseItem("broken", "high", "drift", "Drift FAILED")]
+        _attach_skill_suggestions(items)
+        assert items[0].action == "/health-check"
+
+    def test_preserves_existing_action(self) -> None:
+        from scripts.tools.project_pulse import _attach_skill_suggestions
+
+        items = [PulseItem("broken", "high", "drift", "Drift FAILED", action="custom")]
+        _attach_skill_suggestions(items)
+        assert items[0].action == "custom"
+
+
+class TestWorkstreamMomentum:
+    def test_stalled_detection(self, tmp_path: Path) -> None:
+        from scripts.tools.project_pulse import _workstream_momentum
+
+        data = {"branch": "wt-old-task", "created_at": "2026-03-10T00:00:00+00:00"}
+        with patch.object(project_pulse, "_run_git", return_value=MagicMock(returncode=0, stdout="0")):
+            result = _workstream_momentum(data, tmp_path)
+        assert "STALLED" in result
+
+    def test_active_workstream(self, tmp_path: Path) -> None:
+        from scripts.tools.project_pulse import _workstream_momentum
+
+        data = {"branch": "wt-active", "created_at": "2026-03-16T00:00:00+00:00"}
+        with patch.object(project_pulse, "_run_git", return_value=MagicMock(returncode=0, stdout="5")):
+            result = _workstream_momentum(data, tmp_path)
+        assert "5 commit(s)" in result
+        assert "STALLED" not in result
+
+
+class TestWorktreeConflicts:
+    def test_detects_overlap(self, tmp_path: Path) -> None:
+        from scripts.tools.project_pulse import collect_worktree_conflicts
+
+        wt_a = tmp_path / ".worktrees" / "claude" / "task-a"
+        wt_b = tmp_path / ".worktrees" / "claude" / "task-b"
+        _mkfile(wt_a / ".canompx3-worktree.json", json.dumps({"branch": "wt-a", "name": "task-a"}))
+        _mkfile(wt_b / ".canompx3-worktree.json", json.dumps({"branch": "wt-b", "name": "task-b"}))
+
+        def mock_git(root, *args):
+            # args is ("diff", "--name-only", "main...wt-a") or similar
+            joined = " ".join(str(a) for a in args)
+            if "wt-a" in joined:
+                return MagicMock(returncode=0, stdout="config.py\nutils.py\n")
+            if "wt-b" in joined:
+                return MagicMock(returncode=0, stdout="config.py\nrouter.py\n")
+            return MagicMock(returncode=0, stdout="")
+
+        with patch.object(project_pulse, "_run_git", side_effect=mock_git):
+            items = collect_worktree_conflicts(tmp_path)
+        assert len(items) == 1
+        assert "config.py" in items[0].summary
+        assert items[0].category == "decaying"
+
+    def test_no_overlap(self, tmp_path: Path) -> None:
+        from scripts.tools.project_pulse import collect_worktree_conflicts
+
+        wt_a = tmp_path / ".worktrees" / "claude" / "task-a"
+        _mkfile(wt_a / ".canompx3-worktree.json", json.dumps({"branch": "wt-a", "name": "task-a"}))
+
+        with patch.object(project_pulse, "_run_git", return_value=MagicMock(returncode=0, stdout="foo.py\n")):
+            items = collect_worktree_conflicts(tmp_path)
+        assert items == []  # only 1 worktree, no overlap possible
+
+
+class TestTimeSinceGreen:
+    def test_records_green(self, tmp_path: Path) -> None:
+        from scripts.tools.project_pulse import _update_time_since_green
+
+        result = _update_time_since_green(tmp_path, is_green=True)
+        assert result == "now"
+        # Cache file should have last_green
+        cache = json.loads((tmp_path / ".pulse_cache.json").read_text(encoding="utf-8"))
+        assert "last_green" in cache
+
+    def test_reports_time_since(self, tmp_path: Path) -> None:
+        from datetime import UTC, datetime, timedelta
+
+        from scripts.tools.project_pulse import CACHE_FILE, _update_time_since_green
+
+        # Write a green timestamp 2 hours ago
+        two_hours_ago = (datetime.now(UTC) - timedelta(hours=2)).isoformat()
+        (tmp_path / CACHE_FILE).write_text(json.dumps({"last_green": two_hours_ago}), encoding="utf-8")
+        result = _update_time_since_green(tmp_path, is_green=False)
+        assert result is not None
+        assert "h ago" in result
+
+
+class TestFormatJsonV2:
+    def test_includes_v2_fields(self) -> None:
+        report = _sample_report()
+        report.upcoming_sessions = [{"label": "TOKYO", "hours_away": 2}]
+        report.time_since_green = "3h ago"
+        report.session_delta = ["Since last: 2 commits"]
+        output = format_json(report)
+        data = json.loads(output)
+        assert data["recommendation"] is not None
+        assert data["upcoming_sessions"][0]["label"] == "TOKYO"
+        assert data["time_since_green"] == "3h ago"
+        assert "Since last" in data["session_delta"][0]
