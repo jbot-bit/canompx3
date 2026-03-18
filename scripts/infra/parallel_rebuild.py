@@ -218,6 +218,11 @@ def _clear_downstream_tables(db_path: Path, instrument: str) -> None:
     con = duckdb.connect(str(db_path))
     try:
         # FK-safe order: child -> parent
+        # edge_families.head_strategy_id -> validated_setups(strategy_id)
+        con.execute(
+            "DELETE FROM edge_families WHERE instrument = ?",
+            [instrument],
+        )
         con.execute(
             "DELETE FROM validated_setups_archive "
             "WHERE original_strategy_id IN "
@@ -341,6 +346,11 @@ def merge_instrument(
         # --- DELETE in FK-safe order (child -> parent) ---
 
         if "validation" in steps:
+            # edge_families.head_strategy_id -> validated_setups(strategy_id)
+            con.execute(
+                "DELETE FROM edge_families WHERE instrument = ?",
+                [instrument],
+            )
             # Archive references validated_setups via FK
             con.execute(
                 "DELETE FROM validated_setups_archive "
