@@ -175,6 +175,41 @@ class TestRepriceE2Entry:
         result = reprice_e2_entry(tbbo_df=tbbo, break_dir="long", **self._base_kwargs())
         assert result.tbbo_records_in_window == 5
 
+    def test_pre_orb_trades_filtered_out(self):
+        """Trades before orb_end_utc must not trigger — ORB not formed yet."""
+        tbbo = _make_tbbo_df([
+            # Pre-ORB: price crosses level but should be ignored
+            {"ts_event": "2024-06-05T22:03:00", "price": 2351.0, "bid_px_00": 2350.9, "ask_px_00": 2351.1},
+            # Post-ORB: this is the real trigger
+            {"ts_event": "2024-06-05T22:06:00", "price": 2349.5, "bid_px_00": 2349.4, "ask_px_00": 2349.6},
+            {"ts_event": "2024-06-05T22:10:00", "price": 2350.0, "bid_px_00": 2349.9, "ask_px_00": 2350.1},
+        ])
+        # ORB ends at 22:05 (5 min aperture from 22:00)
+        result = reprice_e2_entry(
+            tbbo_df=tbbo,
+            break_dir="long",
+            orb_end_utc="2024-06-05T22:05:00+00:00",
+            **self._base_kwargs(),
+        )
+        assert result.error is None
+        # Should match the 22:10 trade, not the 22:03 pre-ORB trade
+        assert result.trigger_trade_price == 2350.0
+        assert result.estimated_fill_price == 2350.1
+
+    def test_all_trades_pre_orb_returns_error(self):
+        """If all trades are before orb_end, return error."""
+        tbbo = _make_tbbo_df([
+            {"ts_event": "2024-06-05T22:03:00", "price": 2351.0, "bid_px_00": 2350.9, "ask_px_00": 2351.1},
+            {"ts_event": "2024-06-05T22:04:00", "price": 2350.5, "bid_px_00": 2350.4, "ask_px_00": 2350.6},
+        ])
+        result = reprice_e2_entry(
+            tbbo_df=tbbo,
+            break_dir="long",
+            orb_end_utc="2024-06-05T22:05:00+00:00",
+            **self._base_kwargs(),
+        )
+        assert result.error == "no_post_orb_records"
+
 
 # ── analyze_slippage ────────────────────────────────────────────────────
 

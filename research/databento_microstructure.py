@@ -219,11 +219,33 @@ def pull_all_pilot_days(
 
 
 def load_tbbo_df(cache_path: Path) -> pd.DataFrame:
-    """Load a cached .dbn.zst file into a DataFrame."""
+    """Load a cached .dbn.zst file, filtering to front-month outright only.
+
+    Parent symbol requests (e.g. MGC.FUT) return ALL instruments: front month,
+    back months, calendar spreads (e.g. MGCJ5-MGCM5). Spread trades have
+    negative prices and must be excluded. Back months trade at different
+    prices. We keep only the most-traded outright symbol (= front contract).
+    """
     import databento as db
 
     store = db.DBNStore.from_file(cache_path)
-    return store.to_df()
+    df = store.to_df()
+
+    if df.empty:
+        return df
+
+    # Drop calendar spreads (symbol contains '-')
+    df = df[~df["symbol"].str.contains("-", na=False)]
+
+    if df.empty:
+        return df
+
+    # Keep only the most-traded outright symbol (front month by volume)
+    symbol_volume = df.groupby("symbol")["size"].sum()
+    front_symbol = symbol_volume.idxmax()
+    df = df[df["symbol"] == front_symbol]
+
+    return df
 
 
 def reprice_e2_entry(
@@ -237,6 +259,7 @@ def reprice_e2_entry(
     symbol_pulled: str,
     tick_size: float,
     modeled_slippage_ticks: int = E2_SLIPPAGE_TICKS,
+    orb_end_utc: str | None = None,
 ) -> RepricedEntry:
     """Reprice one E2 entry against actual tick data.
 
@@ -245,6 +268,10 @@ def reprice_e2_entry(
       Fill = ask at that moment (optimistic lower bound).
     - Short: stop sits at orb_low. Triggers when trade <= orb_low.
       Fill = bid at that moment (optimistic lower bound).
+
+    CRITICAL: Only trades AFTER orb_end_utc are considered. The ORB range
+    is not established until the aperture window closes. Trades before that
+    are pre-ORB and must not be matched as trigger events.
 
     The BBO at the trigger trade is the BEST CASE — a real stop-market
     competes with other triggered orders and HFT. Actual fills are likely worse.
@@ -279,6 +306,28 @@ def reprice_e2_entry(
     # Sort by event timestamp
     df = tbbo_df.sort_index() if tbbo_df.index.name == "ts_event" else tbbo_df.sort_values("ts_event")
 
+    # Filter to only post-ORB trades (ORB range not set until aperture closes)
+    if orb_end_utc is not None:
+        orb_end_ts = pd.Timestamp(orb_end_utc)
+        if df.index.name == "ts_event":
+            df = df[df.index >= orb_end_ts]
+        else:
+            df = df[df["ts_event"] >= orb_end_ts]
+
+    if df.empty:
+        return RepricedEntry(
+            **base,
+            trigger_trade_price=None,
+            trigger_trade_ts=None,
+            bbo_at_trigger_bid=None,
+            bbo_at_trigger_ask=None,
+            bbo_at_trigger_spread=None,
+            estimated_fill_price=None,
+            actual_slippage_points=None,
+            actual_slippage_ticks=None,
+            error="no_post_orb_records",
+        )
+
     # Find the first trade that crosses the ORB level
     if break_dir == "long":
         trigger_mask = df["price"] >= orb_level
@@ -299,11 +348,12 @@ def reprice_e2_entry(
             error="no_trigger_trade_found",
         )
 
-    trigger_idx = trigger_mask.idxmax()
-    trigger_row = df.loc[trigger_idx]
+    # Use positional index — ts_event index may have duplicate timestamps
+    trigger_pos = int(trigger_mask.values.argmax())
+    trigger_row = df.iloc[trigger_pos]
 
     trigger_price = float(trigger_row["price"])
-    trigger_ts = str(trigger_row.name if tbbo_df.index.name == "ts_event" else trigger_row["ts_event"])
+    trigger_ts = str(trigger_row.name if df.index.name == "ts_event" else trigger_row["ts_event"])
     bid = float(trigger_row["bid_px_00"])
     ask = float(trigger_row["ask_px_00"])
     spread_ticks = round((ask - bid) / tick_size, 1) if tick_size > 0 else None
@@ -368,6 +418,11 @@ def reprice_all_pilot_days(
                 continue
 
             tbbo_df = load_tbbo_df(cache)
+            # ORB range is not set until aperture closes
+            orb_end = (
+                pd.Timestamp(row["orb_start_utc"])
+                + pd.Timedelta(minutes=int(row["orb_minutes"]))
+            ).isoformat()
             repriced = reprice_e2_entry(
                 tbbo_df=tbbo_df,
                 orb_high=row["orb_CME_REOPEN_high"],
@@ -379,6 +434,7 @@ def reprice_all_pilot_days(
                 symbol_pulled=sym,
                 tick_size=cost_spec.tick_size,
                 modeled_slippage_ticks=int(row["modeled_entry_slippage_ticks"]),
+                orb_end_utc=orb_end,
             )
             results.append(asdict(repriced))
 
