@@ -85,6 +85,53 @@ class TestValidateStrategy:
         assert status == "REJECTED"
         assert "Phase 2" in notes
 
+    def test_reject_e2_below_noise_floor(self):
+        """E2 strategy below noise floor (0.24) -> REJECT Phase 2b."""
+        status, notes, _ = validate_strategy(
+            _make_row(entry_model="E2", expectancy_r=0.20), _cost()
+        )
+        assert status == "REJECTED"
+        assert "Phase 2b" in notes
+        assert "noise floor" in notes
+
+    def test_reject_e2_at_noise_floor(self):
+        """E2 strategy AT noise floor (0.24) -> REJECT (must exceed, not equal)."""
+        status, notes, _ = validate_strategy(
+            _make_row(entry_model="E2", expectancy_r=0.24), _cost()
+        )
+        assert status == "REJECTED"
+        assert "Phase 2b" in notes
+
+    def test_pass_e2_above_noise_floor(self):
+        """E2 strategy above noise floor -> passes Phase 2b."""
+        status, notes, _ = validate_strategy(
+            _make_row(entry_model="E2", expectancy_r=0.30), _cost()
+        )
+        assert status == "PASSED"
+
+    def test_reject_e1_below_noise_floor(self):
+        """E1 strategy below noise floor (0.05) -> REJECT Phase 2b."""
+        status, notes, _ = validate_strategy(
+            _make_row(entry_model="E1", expectancy_r=0.04), _cost()
+        )
+        assert status == "REJECTED"
+        assert "Phase 2b" in notes
+
+    def test_pass_e1_above_noise_floor(self):
+        """E1 strategy above noise floor (0.05) -> passes Phase 2b."""
+        status, notes, _ = validate_strategy(
+            _make_row(entry_model="E1", expectancy_r=0.10), _cost()
+        )
+        assert status == "PASSED"
+
+    def test_unknown_entry_model_uses_e2_floor(self):
+        """Unknown entry model defaults to E2 floor (conservative)."""
+        status, notes, _ = validate_strategy(
+            _make_row(entry_model="E99", expectancy_r=0.20), _cost()
+        )
+        assert status == "REJECTED"
+        assert "Phase 2b" in notes
+
     def test_reject_one_year_negative(self):
         """One year with avg_r <= 0 -> REJECT."""
         yearly = json.dumps(
@@ -153,8 +200,16 @@ class TestValidateStrategy:
         assert "Phase 3" in notes
 
     def test_reject_stress_test(self):
-        """Marginal ExpR that fails stress test -> REJECT."""
-        status, notes, _ = validate_strategy(_make_row(expectancy_r=0.01), _cost())
+        """Marginal ExpR that fails stress test -> REJECT.
+
+        ExpR must exceed E1 noise floor (0.05) to reach Phase 4.
+        Use small risk points (1.0) so stress friction delta_r is large
+        enough to push stress_exp below 0.
+        """
+        status, notes, _ = validate_strategy(
+            _make_row(expectancy_r=0.06, median_risk_points=1.0, avg_risk_points=1.0),
+            _cost(),
+        )
         assert status == "REJECTED"
         assert "Phase 4" in notes
 

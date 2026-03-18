@@ -495,7 +495,7 @@ class TestRebuildExecution:
         """All steps succeed -> COMPLETED manifest written."""
         from pipeline.dst import SESSION_CATALOG
 
-        _, con = _create_test_db(tmp_path)
+        db_path, con = _create_test_db(tmp_path)
         sym = "MGC"
         # Seed prerequisites so preflight checks pass
         _insert_bar_1m(con, sym, "2026-03-06T00:00:00+00:00")
@@ -522,7 +522,7 @@ class TestRebuildExecution:
 
         mock_result = type("Result", (), {"returncode": 0})()
         with patch("scripts.tools.pipeline_status.subprocess.run", return_value=mock_result):
-            ok, con = run_rebuild(con, sym)
+            ok, con = run_rebuild(con, sym, db_path=str(db_path))
 
         assert ok is True
         manifest = read_last_manifest(con, sym)

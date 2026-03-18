@@ -12,17 +12,12 @@ If nothing changed, leave it as-is.
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-03-18
-- **Commit:** 641da97 — feat: rewrite AI workstream launcher with Rich UI
-- **Files changed:** 9 files
-  - `ai-workstreams.bat`
-  - `pyproject.toml`
-  - `scripts/infra/claude-worktree.sh`
-  - `scripts/infra/codex-project-search.sh`
-  - `scripts/infra/codex-project.sh`
-  - `scripts/infra/windows_agent_launch.py`
-  - `scripts/tools/session_preflight.py`
-  - `scripts/tools/worktree_manager.py`
-  - `uv.lock`
+- **Commit:** 7658237 — code review fixes: bare except, stale docstring, inlined stats, FDR tests
+- **Files changed:** 4 files
+  - `HANDOFF.md`
+  - `tests/test_trading_app/test_strategy_validator.py`
+  - `trading_app/config.py`
+  - `trading_app/strategy_validator.py`
 
 ## Decisions Made
 - HANDOFF.md is now auto-updated by post-commit hook — no manual "handover" needed

@@ -41,6 +41,7 @@ from pipeline.dst import (
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import (
     CORE_MIN_SAMPLES,
+    NOISE_EXPR_FLOOR,
     REGIME_MIN_SAMPLES,
     WF_MIN_TRAIN_TRADES,
     WF_START_OVERRIDE,
@@ -367,6 +368,18 @@ def validate_strategy(
     exp_r = row.get("expectancy_r")
     if exp_r is None or exp_r <= 0:
         return "REJECTED", f"Phase 2: ExpR={exp_r} <= 0", []
+
+    # Phase 2b: Noise floor — reject strategies indistinguishable from noise
+    # Null test (seeds 42, 99) established entry-model-specific ExpR floors.
+    # E2 near-breakeven on random walks lets noise fake edge up to 0.238 ExpR.
+    entry_model = row.get("entry_model") or "E1"
+    noise_floor = NOISE_EXPR_FLOOR.get(entry_model, NOISE_EXPR_FLOOR.get("E2", 0.24))
+    if exp_r <= noise_floor:
+        return (
+            "REJECTED",
+            f"Phase 2b: ExpR={exp_r:.4f} <= noise floor {noise_floor} for {entry_model}",
+            [],
+        )
 
     # Phase 3: Yearly robustness
     yearly_json = row.get("yearly_results", "{}")
@@ -1172,6 +1185,7 @@ def run_validation(
         phase_counts = {
             "phase1": 0,
             "phase2": 0,
+            "phase2b": 0,  # noise floor gate — added 2026-03-18
             "phase3": 0,
             "phase4": 0,
             "phase4c": 0,  # removed — was never a gate (N_eff broken)
@@ -1184,6 +1198,8 @@ def run_validation(
             if sr["status"] == "REJECTED":
                 if notes_str.startswith("Phase 1:"):
                     phase_counts["phase1"] += 1
+                elif notes_str.startswith("Phase 2b:"):
+                    phase_counts["phase2b"] += 1
                 elif notes_str.startswith("Phase 2:"):
                     phase_counts["phase2"] += 1
                 elif notes_str.startswith("Phase 3:"):
@@ -1240,8 +1256,9 @@ def run_validation(
         logger.info(
             f"  Run logged: {run_id} — rejection_rate={rejection_rate:.1%}, "
             f"P1={phase_counts['phase1']}, P2={phase_counts['phase2']}, "
-            f"P3={phase_counts['phase3']}, P4={phase_counts['phase4']}, "
-            f"P4b={phase_counts['phase4b']}, FDR={phase_counts['phase_fdr']}"
+            f"P2b={phase_counts['phase2b']}, P3={phase_counts['phase3']}, "
+            f"P4={phase_counts['phase4']}, P4b={phase_counts['phase4b']}, "
+            f"FDR={phase_counts['phase_fdr']}"
         )
 
     return passed, rejected
