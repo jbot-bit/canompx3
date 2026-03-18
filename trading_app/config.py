@@ -84,8 +84,8 @@ if TYPE_CHECKING:
     import pandas as pd
 
 # ── Noise ExpR floor per entry model (adversarial validation 2026-03-18) ──
-# Null test (8 seeds: 1,2,3,5,6,7,42,99; seeds 4,9 pending) ran the full
-# pipeline on random-walk bars. 487 total noise survivors across seeds.
+# Null test (10 seeds: 1,2,3,4,5,6,7,8,42,99) ran the full pipeline on
+# random-walk bars. 611 total noise survivors across seeds.
 # Any production strategy below this floor is indistinguishable from chance.
 #
 # E2 (stop-market): structural near-breakeven on noise. 456 survivors across
@@ -97,7 +97,7 @@ if TYPE_CHECKING:
 #   E2: 456 noise survivors, max ExpR = 0.3162 -> floor 0.32
 #   E1: 31 noise survivors, max ExpR = 0.2426 -> floor 0.25
 #
-# @research-source null_test_9_seeds (White's Reality Check 2026-03-18)
+# @research-source null_test_10_seeds (White's Reality Check 2026-03-18)
 # @entry-models E1, E2
 # @revalidated-for E1/E2 event-based sessions (2026-03-18)
 NOISE_EXPR_FLOOR: dict[str, float] = {
