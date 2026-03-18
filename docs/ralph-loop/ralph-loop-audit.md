@@ -3,22 +3,22 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 130
+## Last iteration: 131
 
-## RALPH AUDIT — Iteration 130
-## Date: 2026-03-17
-## Infrastructure Gates: PASS (drift 72 PASS + 6 advisory; behavioral audit 6/6 clean; ruff clean; 10/10 ML meta_label tests pass)
+## RALPH AUDIT — Iteration 131
+## Date: 2026-03-18
+## Infrastructure Gates: PASS (drift 71 PASS + 6 advisory [14 env-only violations: missing databento/requests in headless env, pre-existing]; behavioral audit 6/6 clean; ruff clean via uv run; 36/36 test_predict_live.py pass)
 
 | Gate | Result | Detail |
 |------|--------|--------|
-| `check_drift.py` | PASS | 72 checks PASS, 0 failed, 6 advisory |
+| `check_drift.py` | PASS (env caveat) | 71 checks PASS, 14 env-only violations (missing databento/requests packages), 6 advisory |
 | `audit_behavioral.py` | PASS | all 6 checks clean |
-| `ruff check` | PASS | clean |
-| pytest targeted | PASS | 10/10 (test_meta_label.py) |
+| `ruff check` | PASS | clean (via `uv run`) |
+| pytest targeted | PASS | 36/36 (test_predict_live.py) |
 
 ---
 
-## Scope: trading_app/ml/meta_label.py
+## Scope: trading_app/ml/predict_live.py
 
 ---
 
@@ -26,31 +26,33 @@
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
-| Silent failure | Line 386: `except Exception` for CPCV logged at DEBUG (invisible at INFO log level). CPCV failure silently bypasses Gate 2 (CPCV AUC < 0.50 check) without any visible warning or stack trace. | MEDIUM | FIXED (c7b0774) |
-| Silent failure | Line 706: `except Exception` for feature stability check — properly logged at WARNING with exc_info=True. Non-critical informational path. | — | ACCEPTABLE |
-| Fail-open | Line 1146: `except Exception as e` in RR sweep — logs at WARNING, marks result as error. Sweep continues for next RR. | — | ACCEPTABLE |
-| Look-ahead bias | 3-way 60/20/20 time split. CPCV runs within training split only. Threshold optimized on val (never touches test). Honest OOS on test only. Gate logic is clean. | — | CLEAN |
-| Cost illusion | N/A — ML training pipeline, no P&L computation beyond threshold delta_r tracking | — | CLEAN |
-| Canonical violation | `ACTIVE_INSTRUMENTS` imported from `trading_app.ml.config` (derived from canonical `ACTIVE_ORB_INSTRUMENTS`). "MGC" default is CLI-only fallback. | — | CLEAN |
-| Orphan risk | No dead code paths identified | — | CLEAN |
-| Volatile data | No hardcoded counts | — | CLEAN |
+| Silent failure | Line 307: `logger.debug()` for aggressive RR mismatch (trade skip, take=False) — invisible at INFO log level. Aperture mismatch (take=True) correctly logged at INFO. Inconsistent severity ordering. | MEDIUM | FIXED (d0fe929) |
+| Silent failure | Line 196: `except Exception` in `_load_models` — logged at WARNING with exc_info=True. Intentional fail-open design. | — | ACCEPTABLE |
+| Silent failure | Line 410: `except Exception` in `predict()` — logged at WARNING with exc_info=True, fail_open_count tracked. Intentional. | — | ACCEPTABLE |
+| Fail-open | Module docstring explicitly declares fail-open as design principle (de Prado AIFML). All fail-open paths logged at WARNING/INFO and counter-tracked. | — | ACCEPTABLE |
+| Look-ahead bias | Features read from pre-computed daily_features table. No LAG() or double_break. 60/20/20 split is in training only (meta_label.py). | — | CLEAN |
+| Cost illusion | No P&L computation — ML prediction only outputs P(win). | — | CLEAN |
+| Canonical violation | ACTIVE_INSTRUMENTS from trading_app.ml.config (derived from ACTIVE_ORB_INSTRUMENTS). GLOBAL_FEATURES from ml.config. No hardcoded lists. | — | CLEAN |
+| Orphan risk | No dead code, no unused imports. | — | CLEAN |
+| Volatile data | No hardcoded counts. | — | CLEAN |
 
 ---
 
 ## Summary
-- trading_app/ml/meta_label.py: 1 MEDIUM finding — FIXED
-- Action: fix committed (c7b0774)
+- trading_app/ml/predict_live.py: 1 MEDIUM finding — FIXED
+- Action: fix committed (d0fe929)
 
 ---
 
 ## Files Fully Scanned
 
-> Cumulative list — 193 files fully scanned (1 new file added this iteration: trading_app/ml/meta_label.py).
+> Cumulative list — 194 files fully scanned (1 new file added this iteration: trading_app/ml/predict_live.py).
 
 - trading_app/ — 44 files (iters 4-61)
 - trading_app/ml/features.py — added iter 114
 - trading_app/ml/config.py — added iter 129
 - trading_app/ml/meta_label.py — added iter 130
+- trading_app/ml/predict_live.py — added iter 131
 - trading_app/outcome_builder.py — added iter 115
 - trading_app/strategy_discovery.py — added iter 116
 - trading_app/strategy_validator.py — added iter 117
@@ -83,10 +85,10 @@
 - research/ — 19 files (iters 101-111): research_zt_event_viability.py, research_london_adjacent.py, research_mes_compressed_spring.py (iter 101); research_post_break_pullback.py, research_mgc_asian_fade_mfe.py, research_zt_fomc_unwind.py (iter 102); research_zt_cpi_nfp.py (iter 103); research_mgc_mnq_correlation.py (iter 104); research_atr_velocity_gate.py, research_mgc_regime_shift.py (iter 105); research_zt_event_viability.py (iter 106); research_vol_regime_switching.py (iter 107); research_edge_structure.py, research_1015_vs_1000.py (iters 108-109); research_overlap_analysis.py (iter 110); research_aperture_scan.py (iter 111)
 - research/ additional (iters 112-113): research_alt_stops.py, research_direction_asymmetry.py, research_signal_stack.py (iter 112); discover.py, research_wf_stress_keepers.py, research_trend_day_mfe.py scanned but already clean (iter 113)
 - docs/plans/ — 2 files (iter 103): 2026-03-15-zt-stage1-cpi-nfp-spec.md, 2026-03-15-zt-stage1-triage-gate.md
-- **Total: 193 files fully scanned**
+- **Total: 194 files fully scanned**
 - See previous audit iterations for per-file detail
 
 ## Next iteration targets
-- `trading_app/ml/predict_live.py` — HIGH tier (live prediction path), unscanned. Critical for production correctness.
-- `trading_app/walkforward.py` — LOW tier but has uncommitted changes in git status (M) — recently modified, worth scanning for introduced issues
-- `trading_app/ml/evaluate.py` — medium tier, unscanned ML evaluation path
+- `trading_app/walkforward.py` — LOW tier, has recently modified (M) in git; worth scanning for introduced issues
+- `trading_app/ml/evaluate.py` — LOW tier, unscanned ML evaluation path (1 importer)
+- `trading_app/ml/evaluate_validated.py` — LOW tier, unscanned (0 importers — standalone eval script)

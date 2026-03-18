@@ -12,10 +12,13 @@ If nothing changed, leave it as-is.
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-03-18
-- **Commit:** 85780a0 — test: pulse integration tests — real repo, no mocks, checker checks checker
-- **Files changed:** 2 files
+- **Commit:** d0fe929 — [mechanical] fix: Ralph Loop iter 131 — RR mismatch trade-skip logged at DEBUG instead of INFO (RL-131)
+- **Files changed:** 5 files
   - `HANDOFF.md`
-  - `tests/test_tools/test_pulse_integration.py`
+  - `docs/ralph-loop/logs/headless-20260318_1341-iter1.err`
+  - `docs/ralph-loop/logs/headless-20260318_1341-iter1.json`
+  - `docs/ralph-loop/ralph-loop-plan.md`
+  - `trading_app/ml/predict_live.py`
 
 ## Decisions Made
 - HANDOFF.md is now auto-updated by post-commit hook — no manual "handover" needed

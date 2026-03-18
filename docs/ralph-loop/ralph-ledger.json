@@ -1,7 +1,7 @@
 {
-  "total_iterations": 123,
-  "last_updated": "2026-03-17",
-  "consecutive_low_only": 0,
+  "total_iterations": 124,
+  "last_updated": "2026-03-18",
+  "consecutive_low_only": 1,
   "last_high_finding_iter": 130,
   "findings_by_type": {
     "canonical_violation": {
@@ -11,8 +11,8 @@
       "fix_rate": 0.77
     },
     "silent_failure": {
-      "found": 18,
-      "fixed": 16,
+      "found": 19,
+      "fixed": 17,
       "deferred": 1,
       "fix_rate": 0.89
     },
@@ -117,11 +117,11 @@
     "CRITICAL": 3,
     "HIGH": 7,
     "MEDIUM": 25,
-    "LOW": 88
+    "LOW": 89
   },
   "classifications": {
     "judgment": 56,
-    "mechanical": 43,
+    "mechanical": 44,
     "audit-only": 24
   },
   "files_audited": {
@@ -938,6 +938,11 @@
     "trading_app/ml/meta_label.py": {
       "audit_count": 1,
       "last_iter": 130,
+      "findings": 1
+    },
+    "trading_app/ml/predict_live.py": {
+      "audit_count": 1,
+      "last_iter": 131,
       "findings": 1
     }
   },
@@ -2294,6 +2299,17 @@
       "severity": "MEDIUM",
       "verdict": "FIXED",
       "commit": "c7b0774"
+    },
+    {
+      "iter": 131,
+      "date": "2026-03-18",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/ml/predict_live.py:307",
+      "finding_type": "silent_failure",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "d0fe929"
     }
   ]
 }
