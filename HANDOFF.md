@@ -12,12 +12,11 @@ If nothing changed, leave it as-is.
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-03-18
-- **Commit:** faa6aba — docs: pulse v2 — tests, skill update, design doc, final polish
-- **Files changed:** 5 files
-  - `.claude/skills/orient/SKILL.md`
+- **Commit:** 09bf10b — fix: pulse review fixes — worktree import, Brisbane TZ, test coverage
+- **Files changed:** 4 files
   - `HANDOFF.md`
-  - `docs/plans/2026-03-17-project-mental-model-design.md`
   - `scripts/tools/project_pulse.py`
+  - `scripts/tools/session_preflight.py`
   - `tests/test_tools/test_project_pulse.py`
 
 ## Decisions Made
