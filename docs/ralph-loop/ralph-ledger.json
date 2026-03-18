@@ -1,7 +1,7 @@
 {
-  "total_iterations": 125,
+  "total_iterations": 127,
   "last_updated": "2026-03-18",
-  "consecutive_low_only": 0,
+  "consecutive_low_only": 2,
   "last_high_finding_iter": 132,
   "findings_by_type": {
     "canonical_violation": {
@@ -17,10 +17,10 @@
       "fix_rate": 0.9
     },
     "other": {
-      "found": 18,
+      "found": 19,
       "fixed": 9,
-      "deferred": 0,
-      "fix_rate": 0.5
+      "deferred": 1,
+      "fix_rate": 0.47
     },
     "dead_code": {
       "found": 14,
@@ -47,8 +47,8 @@
       "fix_rate": 1.0
     },
     "stale_metadata": {
-      "found": 2,
-      "fixed": 2,
+      "found": 3,
+      "fixed": 3,
       "deferred": 0,
       "fix_rate": 1.0
     },
@@ -117,12 +117,12 @@
     "CRITICAL": 3,
     "HIGH": 7,
     "MEDIUM": 26,
-    "LOW": 89
+    "LOW": 91
   },
   "classifications": {
     "judgment": 57,
-    "mechanical": 44,
-    "audit-only": 24
+    "mechanical": 45,
+    "audit-only": 25
   },
   "files_audited": {
     "execution_engine.py": {
@@ -943,6 +943,16 @@
     "trading_app/ml/predict_live.py": {
       "audit_count": 1,
       "last_iter": 131,
+      "findings": 1
+    },
+    "pipeline/calendar_filters.py": {
+      "audit_count": 1,
+      "last_iter": 133,
+      "findings": 0
+    },
+    "pipeline/stats.py": {
+      "audit_count": 1,
+      "last_iter": 134,
       "findings": 1
     }
   },
@@ -2321,6 +2331,28 @@
       "severity": "MEDIUM",
       "verdict": "FIXED",
       "commit": "1b2ac93"
+    },
+    {
+      "iter": 133,
+      "date": "2026-03-18",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "pipeline/calendar_filters.py",
+      "finding_type": "other",
+      "severity": "LOW",
+      "verdict": "NOTED",
+      "commit": "NONE"
+    },
+    {
+      "iter": 134,
+      "date": "2026-03-18",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "pipeline/stats.py:3-5",
+      "finding_type": "stale_metadata",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "a514218"
     }
   ]
 }
