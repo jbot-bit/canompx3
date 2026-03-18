@@ -83,6 +83,28 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import pandas as pd
 
+# ── Noise ExpR floor per entry model (adversarial validation 2026-03-18) ──
+# Null test (2 seeds: 42, 99) ran the full pipeline on random-walk bars.
+# Noise survivors set a floor: any production strategy below this is
+# indistinguishable from chance.
+#
+# E2 (stop-market) has structural near-breakeven on noise (-0.004R avg),
+# so noise easily produces E2 strategies with apparent edge.
+# E1 (limit entry) costs real money immediately (-0.118R avg on noise),
+# so noise rarely produces E1 survivors.
+#
+# Floors are rounded UP from the noise max across both seeds:
+#   E2 noise max = 0.2379 → floor 0.24
+#   E1 noise max = 0.0461 → floor 0.05
+#
+# @research-source null_test_seed42 + null_test_seed99 (adversarial validation 2026-03-18)
+# @entry-models E1, E2
+# @revalidated-for E1/E2 event-based sessions (2026-03-18)
+NOISE_EXPR_FLOOR: dict[str, float] = {
+    "E1": 0.05,
+    "E2": 0.24,
+}
+
 # Walk-forward start-date override per instrument.
 # Full-sample validation (Phase A) uses ALL data. Only WF window generation
 # starts from max(earliest_outcome, override_date).

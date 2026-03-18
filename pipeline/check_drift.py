@@ -3254,6 +3254,35 @@ _TRADING_APP_TABLES = frozenset(
 _SQL_KW_RE = re.compile(r"\b(SELECT|FROM|JOIN|WHERE|AND|ON|GROUP BY|ORDER BY|INSERT|UPDATE|DELETE)\b", re.I)
 
 
+def check_noise_floor_compliance(con=None) -> list[str]:
+    """Verify no validated strategy has ExpR at or below its entry-model noise floor.
+
+    Null test (seeds 42, 99) established that E2 noise can produce ExpR up to 0.2379
+    and E1 up to 0.0461. Any strategy below these floors is indistinguishable from noise.
+    """
+    from trading_app.config import NOISE_EXPR_FLOOR
+
+    violations = []
+    if con is None:
+        return violations
+
+    for entry_model, floor in NOISE_EXPR_FLOOR.items():
+        rows = con.execute(
+            """SELECT strategy_id, expectancy_r
+               FROM validated_setups
+               WHERE entry_model = ?
+               AND expectancy_r <= ?
+               AND (status IS NULL OR status NOT IN ('RETIRED', 'PURGED'))""",
+            [entry_model, floor],
+        ).fetchall()
+        for sid, expr in rows:
+            violations.append(
+                f"  {sid}: ExpR={expr:.4f} <= noise floor {floor} for {entry_model}"
+            )
+
+    return violations
+
+
 def check_symbol_instrument_sql_convention() -> list[str]:
     """Pipeline tables use 'symbol'; trading app tables use 'instrument'.
 
@@ -3485,6 +3514,12 @@ CHECKS = [
         False,
         False,
     ),
+    (
+        "No validated strategies below entry-model noise floor (null test 2026-03-18)",
+        check_noise_floor_compliance,
+        False,
+        True,
+    ),  # requires_db
 ]  # end CHECKS
 
 
