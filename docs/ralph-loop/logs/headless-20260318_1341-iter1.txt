@@ -1,0 +1,20 @@
+Both commits made (`d0fe929` fix + `e3b6f5a` docs). Deferred findings unchanged (still only DF-04 open). Step 5:
+
+---
+
+```
+=== RALPH LOOP ITER [131] COMPLETE ===
+Scope: trading_app/ml/predict_live.py
+Audit: 1 finding (0 CRIT, 0 HIGH, 1 MED, 0 LOW)
+Classification: [mechanical]
+Action: fix
+Target: trading_app/ml/predict_live.py:307
+Blast radius: 1 file (log level change only, no callers affected)
+Verdict: ACCEPT
+Commit: d0fe929
+Deferred debt: 1 open item (DF-04 — rolling_portfolio.py dormant orb_minutes=5)
+Next: trading_app/walkforward.py (LOW tier, recently modified per git status)
+================================
+```
+
+**Finding detail:** Aggressive RR mismatch (`rr_target > training_rr`) caused `take=False` (trade skipped) but logged at `logger.debug()` — invisible at standard INFO log level. The aperture mismatch path (`take=True`, less consequential) was correctly logged at `logger.info()`. Fixed by promoting the aggressive RR skip to `logger.info()`. Conservative RR path (`take=True`) left at debug (informational only). 36/36 targeted tests + 218 pre-commit tests pass.

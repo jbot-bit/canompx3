@@ -1,8 +1,8 @@
 {
-  "total_iterations": 124,
+  "total_iterations": 125,
   "last_updated": "2026-03-18",
-  "consecutive_low_only": 1,
-  "last_high_finding_iter": 130,
+  "consecutive_low_only": 0,
+  "last_high_finding_iter": 132,
   "findings_by_type": {
     "canonical_violation": {
       "found": 47,
@@ -11,10 +11,10 @@
       "fix_rate": 0.77
     },
     "silent_failure": {
-      "found": 19,
-      "fixed": 17,
+      "found": 20,
+      "fixed": 18,
       "deferred": 1,
-      "fix_rate": 0.89
+      "fix_rate": 0.9
     },
     "other": {
       "found": 18,
@@ -116,11 +116,11 @@
   "findings_by_severity": {
     "CRITICAL": 3,
     "HIGH": 7,
-    "MEDIUM": 25,
+    "MEDIUM": 26,
     "LOW": 89
   },
   "classifications": {
-    "judgment": 56,
+    "judgment": 57,
     "mechanical": 44,
     "audit-only": 24
   },
@@ -219,6 +219,11 @@
       "audit_count": 2,
       "last_iter": 24,
       "findings": 1
+    },
+    "trading_app/walkforward.py": {
+      "audit_count": 2,
+      "last_iter": 132,
+      "findings": 2
     },
     "config.py": {
       "audit_count": 2,
@@ -358,11 +363,6 @@
     "tests/test_trading_app/test_ml/test_features.py": {
       "audit_count": 1,
       "last_iter": 13,
-      "findings": 1
-    },
-    "trading_app/walkforward.py": {
-      "audit_count": 1,
-      "last_iter": 15,
       "findings": 1
     },
     "backfill_dollar_columns.py": {
@@ -2310,6 +2310,17 @@
       "severity": "LOW",
       "verdict": "FIXED",
       "commit": "d0fe929"
+    },
+    {
+      "iter": 132,
+      "date": "2026-03-18",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/walkforward.py:134-136",
+      "finding_type": "silent_failure",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "1b2ac93"
     }
   ]
 }

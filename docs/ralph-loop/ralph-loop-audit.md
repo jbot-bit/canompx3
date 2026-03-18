@@ -3,22 +3,23 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 131
+## Last iteration: 132
 
-## RALPH AUDIT — Iteration 131
+## RALPH AUDIT — Iteration 132
 ## Date: 2026-03-18
-## Infrastructure Gates: PASS (drift 71 PASS + 6 advisory [14 env-only violations: missing databento/requests in headless env, pre-existing]; behavioral audit 6/6 clean; ruff clean via uv run; 36/36 test_predict_live.py pass)
+## Infrastructure Gates: PASS (drift 72 PASS + 6 advisory [headless env: pipeline module not on sys.path without uv run — pre-existing]; behavioral audit 6/6 clean; ruff clean; 32/32 test_walkforward.py pass; 218/218 pre-commit suite pass)
 
 | Gate | Result | Detail |
 |------|--------|--------|
-| `check_drift.py` | PASS (env caveat) | 71 checks PASS, 14 env-only violations (missing databento/requests packages), 6 advisory |
+| `check_drift.py` | PASS | 72 checks PASS, 6 advisory (headless env-only) |
 | `audit_behavioral.py` | PASS | all 6 checks clean |
 | `ruff check` | PASS | clean (via `uv run`) |
-| pytest targeted | PASS | 36/36 (test_predict_live.py) |
+| pytest targeted | PASS | 32/32 (test_walkforward.py) |
+| pre-commit suite | PASS | 218/218 |
 
 ---
 
-## Scope: trading_app/ml/predict_live.py
+## Scope: trading_app/walkforward.py
 
 ---
 
@@ -26,33 +27,32 @@
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
-| Silent failure | Line 307: `logger.debug()` for aggressive RR mismatch (trade skip, take=False) — invisible at INFO log level. Aperture mismatch (take=True) correctly logged at INFO. Inconsistent severity ordering. | MEDIUM | FIXED (d0fe929) |
-| Silent failure | Line 196: `except Exception` in `_load_models` — logged at WARNING with exc_info=True. Intentional fail-open design. | — | ACCEPTABLE |
-| Silent failure | Line 410: `except Exception` in `predict()` — logged at WARNING with exc_info=True, fail_open_count tracked. Intentional. | — | ACCEPTABLE |
-| Fail-open | Module docstring explicitly declares fail-open as design principle (de Prado AIFML). All fail-open paths logged at WARNING/INFO and counter-tracked. | — | ACCEPTABLE |
-| Look-ahead bias | Features read from pre-computed daily_features table. No LAG() or double_break. 60/20/20 split is in training only (meta_label.py). | — | CLEAN |
-| Cost illusion | No P&L computation — ML prediction only outputs P(win). | — | CLEAN |
-| Canonical violation | ACTIVE_INSTRUMENTS from trading_app.ml.config (derived from ACTIVE_ORB_INSTRUMENTS). GLOBAL_FEATURES from ml.config. No hardcoded lists. | — | CLEAN |
-| Orphan risk | No dead code, no unused imports. | — | CLEAN |
+| Silent failure | Lines 134-136: tight stop silently skipped with no warning when stop_multiplier != 1.0 but cost_spec is None. Current caller (strategy_validator) handles correctly; no defensive warning existed for future misconfiguration. | MEDIUM | FIXED (1b2ac93) |
+| Fail-open | No fail-open paths. Pass/fail uses 4-gate conjunction (ALL required), fail-closed. | — | CLEAN |
+| Look-ahead bias | Calendar mode: IS uses outcomes[:lo], OOS uses outcomes[lo:hi] — no look-ahead. Trade-count mode: IS uses usable[:idx], OOS uses usable[idx:idx+N] — no look-ahead. | — | CLEAN |
+| Cost illusion | No P&L computation in this file. Costs applied via apply_tight_stop at outcome loading time. | — | CLEAN |
+| Canonical violation | No hardcoded instrument lists, entry models, or session names. Thresholds (min_valid_windows, min_pct_positive, etc.) are all parameters. The 5.0 imbalance ratio has @research-source annotation. The hardcoded 15 in IS metrics checks has @research-source annotation in calendar mode (line 215); trade-count mode (line 167) lacks annotation but the same rationale applies — acceptable given existing annotation on same pattern. | LOW | ACCEPTABLE (annotation present in calendar mode; trade-count 15 consistent with same threshold) |
+| Orphan risk | All imports used: calendar, json, logging, bisect_left, asdict, dataclass, UTC, date, datetime, Path, apply_tight_stop, compute_metrics, _load_strategy_outcomes. | — | CLEAN |
 | Volatile data | No hardcoded counts. | — | CLEAN |
 
 ---
 
 ## Summary
-- trading_app/ml/predict_live.py: 1 MEDIUM finding — FIXED
-- Action: fix committed (d0fe929)
+- trading_app/walkforward.py: 1 MEDIUM finding — FIXED
+- Action: fix committed (1b2ac93)
 
 ---
 
 ## Files Fully Scanned
 
-> Cumulative list — 194 files fully scanned (1 new file added this iteration: trading_app/ml/predict_live.py).
+> Cumulative list — 195 files fully scanned (1 new file added this iteration: trading_app/walkforward.py).
 
 - trading_app/ — 44 files (iters 4-61)
 - trading_app/ml/features.py — added iter 114
 - trading_app/ml/config.py — added iter 129
 - trading_app/ml/meta_label.py — added iter 130
 - trading_app/ml/predict_live.py — added iter 131
+- trading_app/walkforward.py — added iter 132
 - trading_app/outcome_builder.py — added iter 115
 - trading_app/strategy_discovery.py — added iter 116
 - trading_app/strategy_validator.py — added iter 117
@@ -85,10 +85,10 @@
 - research/ — 19 files (iters 101-111): research_zt_event_viability.py, research_london_adjacent.py, research_mes_compressed_spring.py (iter 101); research_post_break_pullback.py, research_mgc_asian_fade_mfe.py, research_zt_fomc_unwind.py (iter 102); research_zt_cpi_nfp.py (iter 103); research_mgc_mnq_correlation.py (iter 104); research_atr_velocity_gate.py, research_mgc_regime_shift.py (iter 105); research_zt_event_viability.py (iter 106); research_vol_regime_switching.py (iter 107); research_edge_structure.py, research_1015_vs_1000.py (iters 108-109); research_overlap_analysis.py (iter 110); research_aperture_scan.py (iter 111)
 - research/ additional (iters 112-113): research_alt_stops.py, research_direction_asymmetry.py, research_signal_stack.py (iter 112); discover.py, research_wf_stress_keepers.py, research_trend_day_mfe.py scanned but already clean (iter 113)
 - docs/plans/ — 2 files (iter 103): 2026-03-15-zt-stage1-cpi-nfp-spec.md, 2026-03-15-zt-stage1-triage-gate.md
-- **Total: 194 files fully scanned**
+- **Total: 195 files fully scanned**
 - See previous audit iterations for per-file detail
 
 ## Next iteration targets
-- `trading_app/walkforward.py` — LOW tier, has recently modified (M) in git; worth scanning for introduced issues
 - `trading_app/ml/evaluate.py` — LOW tier, unscanned ML evaluation path (1 importer)
-- `trading_app/ml/evaluate_validated.py` — LOW tier, unscanned (0 importers — standalone eval script)
+- `trading_app/ml/evaluate_validated.py` — LOW tier, unscanned standalone eval script (0 importers)
+- `trading_app/paper_trader.py` — if not already scanned; production simulation path worth reviewing

@@ -1341,3 +1341,13 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 1 production file, 1 test file
 - Verification: PASS (9/9 tests, 72 drift checks, 218 pre-commit suite)
 - Commit: 2f039df
+
+## Iteration 132 — 2026-03-18
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/walkforward.py:134-136
+- Finding: Silent failure — tight stop silently skipped (no warning) when stop_multiplier != 1.0 but cost_spec is None; current caller (strategy_validator) handles this correctly but future callers could silently misconfigure
+- Action: Added elif branch with logger.warning() to emit visible warning when stop is requested but cost_spec missing
+- Blast radius: 1 production file, 1 test file (test_walkforward.py — all 32 pass unchanged)
+- Verification: PASS (32/32 walkforward tests, 72 drift checks, 218 pre-commit suite, ruff clean)
+- Commit: 1b2ac93
