@@ -748,7 +748,12 @@ def collect_upcoming_sessions(db_path: Path) -> list[dict]:
                     continue
             hours_away = (session_dt - now).total_seconds() / 3600
             if 0 <= hours_away <= 6:
-                info: dict = {"label": label, "brisbane_time": session_dt.strftime("%H:%M"), "hours_away": round(hours_away, 1), "instruments": {}}
+                info: dict = {
+                    "label": label,
+                    "brisbane_time": session_dt.strftime("%H:%M"),
+                    "hours_away": round(hours_away, 1),
+                    "instruments": {},
+                }
                 if db_path.exists():
                     try:
                         con = duckdb.connect(str(db_path), read_only=True)

@@ -10,21 +10,27 @@ If nothing changed, leave it as-is.
 ---
 
 ## Last Session
-- **Tool:** Claude Code
+- **Tool:** Claude Code (Opus 4.6)
 - **Date:** 2026-03-18
-- **Commit:** d0460bb — feat: project pulse — 9-signal project awareness engine
-- **Summary:** Merged project pulse from workstream branch. Fixed drift failures in worktrees (symlink gold.db + models, uv sync).
+- **Summary:** Built complete Project Mental Model Layer (pulse v2). 9 core collectors + 7 innovations (trading day, workstream momentum, recommendation engine, skill suggestions, session continuity, time since green, conflict radar). 44 tests. Full code review + 20-day dry run simulation. Design doc updated to reflect shipped state.
 
 ## Decisions Made
 - HANDOFF.md is now auto-updated by post-commit hook — no manual "handover" needed
 - Pre-commit hook auto-stages dirty HANDOFF.md so updates ride along with the next commit
 - Post-commit hook skips rebase/merge/cherry-pick (no spam)
 - Trade-count WF design approved (`docs/plans/2026-03-17-trade-count-wf-design.md`) — ready to build
-- Project pulse BUILT and merged (`scripts/tools/project_pulse.py`) — 9 collectors, /orient skill, bat launcher menu item
+- **Pulse v2 SHIPPED** — `scripts/tools/project_pulse.py` (1300 lines, 44 tests)
+  - `--fast` serves cached drift/tests, `--deep` caches FIT/WATCH/DECAY
+  - `/orient` skill narrates pulse JSON, supports `--full`
+  - `[0] Orient me` in ai-workstreams.bat launcher
+  - `--with-pulse` in session_preflight + claude-worktree.sh
+  - Research innovations: skill suggestions, session continuity, time-since-green, conflict radar
 - Worktree env fix: symlink gold.db + models/ from main repo, use `uv run` (not bare `python`) in worktrees
+- **Workstream finish flow needs improvement** — [3] Finish only deletes, doesn't merge+push first. Noted in `workstream_finish_flow.md`.
 
 ## Next Steps
 - **Trade-count WF** — implement from design doc (4 files, no schema changes)
+- **Workstream finish flow** — enhance [3] Finish to merge+push before close (noted for after pulse)
 - Streamlit dashboard: prop portfolio view
 - CUSUM-based fitness (MEMORY.md action queue item 11)
 - ATR-normalized position sizing (item 12)
