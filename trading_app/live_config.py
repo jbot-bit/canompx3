@@ -94,12 +94,13 @@ HOT_LOOKBACK_WINDOWS = 10
 HOT_MIN_STABILITY = 0.6
 
 # Minimum expectancy per trade to include in live portfolio.
-# Filters out statistically-validated but practically-thin strategies.
-# At 0.10 R, after execution uncertainty (spread variance, slippage noise),
-# there is still meaningful edge remaining per trade.
-# @research-source live_config calibration — 0.10 R practical edge floor after execution noise
-# @revalidated-for E1/E2 event-based sessions (2026-03-12)
-LIVE_MIN_EXPECTANCY_R = 0.10
+# SQL pre-filter: set to the LOWER of the two noise floors so both
+# E1 and E2 strategies are pre-filtered before the per-model check.
+# The per-model noise floor gate (_check_noise_floor) applies the
+# exact threshold: E1=0.25, E2=0.32.
+# @research-source null_test_8_seeds (White's Reality Check 2026-03-18)
+# @revalidated-for E1/E2 event-based sessions (2026-03-18)
+LIVE_MIN_EXPECTANCY_R = 0.25
 
 # Minimum expected dollar profit as a multiple of round-trip transaction cost.
 # Strategies must earn at least this multiple of their RT cost per trade so that
@@ -500,6 +501,23 @@ def _check_rolling_stability(
     return 0.0, "family not found in rolling results"
 
 
+def _check_noise_floor(variant: dict) -> tuple[bool, str]:
+    """Check that variant ExpR exceeds its entry-model noise floor.
+
+    Returns (passes, note). Strategies at or below the noise floor are
+    indistinguishable from random-walk artifacts (null test, 8 seeds).
+    """
+    from trading_app.config import NOISE_EXPR_FLOOR
+
+    entry_model = variant.get("entry_model", "E2")
+    expr = variant.get("expectancy_r", 0.0)
+    floor = NOISE_EXPR_FLOOR.get(entry_model, NOISE_EXPR_FLOOR.get("E2", 0.32))
+
+    if expr <= floor:
+        return False, f"ExpR={expr:.3f} <= noise floor {floor} for {entry_model}"
+    return True, f"ExpR={expr:.3f} > noise floor {floor}"
+
+
 def _check_dollar_gate(variant: dict, instrument: str) -> tuple[bool, str]:
     """Check that expected dollar profit >= LIVE_MIN_EXPECTANCY_DOLLARS_MULT * RT cost.
 
@@ -614,6 +632,11 @@ def build_live_portfolio(
 
             if match is None:
                 notes.append(f"WARN: {spec.family_id} -- no variant found")
+                continue
+
+            passes_noise, noise_note = _check_noise_floor(match)
+            if not passes_noise:
+                notes.append(f"SKIP: {spec.family_id} -- noise floor: {noise_note}")
                 continue
 
             passes_dollar, dollar_note = _check_dollar_gate(match, instrument)
@@ -751,6 +774,12 @@ def build_live_portfolio(
 
         if variant is None:
             notes.append(f"WARN: {spec.family_id} -- no validated variant found")
+            continue
+
+        # Noise floor gate — no point running downstream gates on noise.
+        passes_noise, noise_note = _check_noise_floor(variant)
+        if not passes_noise:
+            notes.append(f"SKIP: {spec.family_id} -- noise floor: {noise_note}")
             continue
 
         # Dollar gate first — no point running compute_fitness (DB query) on a
