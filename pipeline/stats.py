@@ -1,7 +1,8 @@
 """Shared statistical utilities.
 
 Provides per-trade Sharpe ratio and Jobson-Korkie test (1981) for Sharpe
-comparison. Used by evaluate scripts, select_family_rr.py, and meta_label.py.
+comparison. Used by trading_app/ml/evaluate.py, evaluate_validated.py, and
+scripts/tools/select_family_rr.py.
 """
 
 from __future__ import annotations

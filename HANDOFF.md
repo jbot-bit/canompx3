@@ -12,16 +12,11 @@ If nothing changed, leave it as-is.
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-03-18
-- **Commit:** 16f95fd — [mechanical] chore: Ralph Loop iter 132 — update audit state, history, ledger
-- **Files changed:** 8 files
+- **Commit:** 274a6ca — docs: adversarial validation plan + findings from zero-context reviews
+- **Files changed:** 3 files
   - `HANDOFF.md`
-  - `docs/ralph-loop/logs/headless-20260318_1341-iter1.json`
-  - `docs/ralph-loop/logs/headless-20260318_1341-iter1.txt`
-  - `docs/ralph-loop/logs/headless-20260318_1341-iter2.err`
-  - `docs/ralph-loop/logs/headless-20260318_1341-iter2.json`
-  - `docs/ralph-loop/ralph-ledger.json`
-  - `docs/ralph-loop/ralph-loop-audit.md`
-  - `docs/ralph-loop/ralph-loop-history.md`
+  - `docs/plans/2026-03-18-adversarial-review-findings.md`
+  - `docs/plans/2026-03-18-adversarial-validation-plan.md`
 
 ## Decisions Made
 - HANDOFF.md is now auto-updated by post-commit hook — no manual "handover" needed
