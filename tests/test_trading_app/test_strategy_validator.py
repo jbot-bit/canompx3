@@ -86,18 +86,18 @@ class TestValidateStrategy:
         assert "Phase 2" in notes
 
     def test_reject_e2_below_noise_floor(self):
-        """E2 strategy below noise floor (0.24) -> REJECT Phase 2b."""
+        """E2 strategy below noise floor (0.32) -> REJECT Phase 2b."""
         status, notes, _ = validate_strategy(
-            _make_row(entry_model="E2", expectancy_r=0.20), _cost()
+            _make_row(entry_model="E2", expectancy_r=0.28), _cost()
         )
         assert status == "REJECTED"
         assert "Phase 2b" in notes
         assert "noise floor" in notes
 
     def test_reject_e2_at_noise_floor(self):
-        """E2 strategy AT noise floor (0.24) -> REJECT (must exceed, not equal)."""
+        """E2 strategy AT noise floor (0.32) -> REJECT (must exceed, not equal)."""
         status, notes, _ = validate_strategy(
-            _make_row(entry_model="E2", expectancy_r=0.24), _cost()
+            _make_row(entry_model="E2", expectancy_r=0.32), _cost()
         )
         assert status == "REJECTED"
         assert "Phase 2b" in notes
@@ -105,29 +105,29 @@ class TestValidateStrategy:
     def test_pass_e2_above_noise_floor(self):
         """E2 strategy above noise floor -> passes Phase 2b."""
         status, notes, _ = validate_strategy(
-            _make_row(entry_model="E2", expectancy_r=0.30), _cost()
+            _make_row(entry_model="E2", expectancy_r=0.40), _cost()
         )
         assert status == "PASSED"
 
     def test_reject_e1_below_noise_floor(self):
-        """E1 strategy below noise floor (0.05) -> REJECT Phase 2b."""
+        """E1 strategy below noise floor (0.25) -> REJECT Phase 2b."""
         status, notes, _ = validate_strategy(
-            _make_row(entry_model="E1", expectancy_r=0.04), _cost()
+            _make_row(entry_model="E1", expectancy_r=0.20), _cost()
         )
         assert status == "REJECTED"
         assert "Phase 2b" in notes
 
     def test_pass_e1_above_noise_floor(self):
-        """E1 strategy above noise floor (0.05) -> passes Phase 2b."""
+        """E1 strategy above noise floor (0.25) -> passes Phase 2b."""
         status, notes, _ = validate_strategy(
-            _make_row(entry_model="E1", expectancy_r=0.10), _cost()
+            _make_row(entry_model="E1", expectancy_r=0.30), _cost()
         )
         assert status == "PASSED"
 
     def test_unknown_entry_model_uses_e2_floor(self):
         """Unknown entry model defaults to E2 floor (conservative)."""
         status, notes, _ = validate_strategy(
-            _make_row(entry_model="E99", expectancy_r=0.20), _cost()
+            _make_row(entry_model="E99", expectancy_r=0.28), _cost()
         )
         assert status == "REJECTED"
         assert "Phase 2b" in notes
@@ -202,12 +202,12 @@ class TestValidateStrategy:
     def test_reject_stress_test(self):
         """Marginal ExpR that fails stress test -> REJECT.
 
-        ExpR must exceed E1 noise floor (0.05) to reach Phase 4.
-        Use small risk points (1.0) so stress friction delta_r is large
+        ExpR must exceed noise floor (E1=0.25) to reach Phase 4.
+        Use very small risk points (0.5) so stress friction delta_r is large
         enough to push stress_exp below 0.
         """
         status, notes, _ = validate_strategy(
-            _make_row(expectancy_r=0.06, median_risk_points=1.0, avg_risk_points=1.0),
+            _make_row(expectancy_r=0.26, median_risk_points=0.5, avg_risk_points=0.5),
             _cost(),
         )
         assert status == "REJECTED"
@@ -231,34 +231,41 @@ class TestValidateStrategy:
         assert "Phase 6" in notes
 
     def test_stress_test_uses_outcome_risk(self):
-        """Stress test uses median_risk_points when available."""
+        """Stress test uses median_risk_points when available.
+
+        ExpR must exceed E1 noise floor (0.25) to reach Phase 4.
+        MGC min_risk_floor_dollars=10.0 floors the denominator, so
+        stress delta is ~0.287R. Need ExpR > 0.287 to pass stress.
+        """
         # With large risk, stress delta is small -> passes
-        status, _, _ = validate_strategy(_make_row(expectancy_r=0.10, median_risk_points=20.0), _cost())
+        status, _, _ = validate_strategy(_make_row(expectancy_r=0.30, median_risk_points=20.0), _cost())
         assert status == "PASSED"
 
-        # With tiny risk, stress delta is large -> rejects
-        status, notes, _ = validate_strategy(_make_row(expectancy_r=0.10, median_risk_points=0.5), _cost())
+        # ExpR 0.26 is above noise floor (0.25) but below stress delta (0.287) -> rejects at Phase 4
+        status, notes, _ = validate_strategy(_make_row(expectancy_r=0.26, median_risk_points=0.5), _cost())
         assert status == "REJECTED"
         assert "Phase 4" in notes
 
     def test_stress_test_falls_back_to_avg_risk(self):
         """Stress test uses avg_risk_points when median is None."""
         status, _, _ = validate_strategy(
-            _make_row(expectancy_r=0.10, median_risk_points=None, avg_risk_points=20.0), _cost()
+            _make_row(expectancy_r=0.30, median_risk_points=None, avg_risk_points=20.0), _cost()
         )
         assert status == "PASSED"
 
     def test_stress_test_falls_back_to_tick_floor(self):
-        """Stress test uses tick-based floor when both risk stats are None."""
-        # tick floor = 10 * 0.10 = 1.0 point, risk $ = 10.0
-        # stress delta = (5.74 * 0.5) / 10.0 = 0.287R -> needs ExpR > 0.287
+        """Stress test uses tick-based floor when both risk stats are None.
+
+        tick floor = 10 * 0.10 = 1.0 point, risk $ = 10.0
+        stress delta = (5.74 * 0.5) / 10.0 = 0.287R -> needs ExpR > 0.287
+        """
         status, _, _ = validate_strategy(
             _make_row(expectancy_r=0.50, median_risk_points=None, avg_risk_points=None), _cost()
         )
         assert status == "PASSED"
 
         status, notes, _ = validate_strategy(
-            _make_row(expectancy_r=0.10, median_risk_points=None, avg_risk_points=None), _cost()
+            _make_row(expectancy_r=0.26, median_risk_points=None, avg_risk_points=None), _cost()
         )
         assert status == "REJECTED"
         assert "Phase 4" in notes
