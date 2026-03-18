@@ -240,7 +240,9 @@ _TEMPLATES = {
     QueryTemplate.TRADE_HISTORY: """
         SELECT trading_day, orb_label, entry_model,
                rr_target, confirm_bars, entry_price, stop_price,
-               target_price, pnl_r, outcome
+               target_price,
+               COALESCE(ts_pnl_r, pnl_r) AS pnl_r,
+               COALESCE(ts_outcome, outcome) AS outcome
         FROM orb_outcomes
         WHERE 1=1
         {instrument_clause_symbol}
@@ -362,7 +364,9 @@ _TEMPLATES = {
     # (test_all_templates_have_sql).  Actual execution uses custom _execute_*
     # methods which build queries dynamically via _build_outcomes_base().
     QueryTemplate.OUTCOMES_STATS: """
-        SELECT o.pnl_r, o.outcome, o.mae_r, o.mfe_r, o.trading_day
+        SELECT COALESCE(o.ts_pnl_r, o.pnl_r) AS pnl_r,
+               COALESCE(o.ts_outcome, o.outcome) AS outcome,
+               o.mae_r, o.mfe_r, o.trading_day
         FROM orb_outcomes o
         JOIN daily_features d
             ON o.trading_day = d.trading_day
@@ -370,11 +374,13 @@ _TEMPLATES = {
             AND o.orb_minutes = d.orb_minutes
         WHERE o.symbol = ?
           AND o.orb_label = ?
-          AND o.outcome IN ('win', 'loss', 'early_exit')
+          AND o.outcome IN ('win', 'loss', 'early_exit', 'time_stop')
           AND o.pnl_r IS NOT NULL
     """,
     QueryTemplate.ENTRY_MODEL_COMPARE: """
-        SELECT o.entry_model, o.pnl_r, o.outcome
+        SELECT o.entry_model,
+               COALESCE(o.ts_pnl_r, o.pnl_r) AS pnl_r,
+               COALESCE(o.ts_outcome, o.outcome) AS outcome
         FROM orb_outcomes o
         JOIN daily_features d
             ON o.trading_day = d.trading_day
@@ -382,11 +388,13 @@ _TEMPLATES = {
             AND o.orb_minutes = d.orb_minutes
         WHERE o.symbol = ?
           AND o.orb_label = ?
-          AND o.outcome IN ('win', 'loss', 'early_exit')
+          AND o.outcome IN ('win', 'loss', 'early_exit', 'time_stop')
           AND o.pnl_r IS NOT NULL
     """,
     QueryTemplate.DOW_BREAKDOWN: """
-        SELECT o.trading_day, o.pnl_r, o.outcome
+        SELECT o.trading_day,
+               COALESCE(o.ts_pnl_r, o.pnl_r) AS pnl_r,
+               COALESCE(o.ts_outcome, o.outcome) AS outcome
         FROM orb_outcomes o
         JOIN daily_features d
             ON o.trading_day = d.trading_day
@@ -394,12 +402,14 @@ _TEMPLATES = {
             AND o.orb_minutes = d.orb_minutes
         WHERE o.symbol = ?
           AND o.orb_label = ?
-          AND o.outcome IN ('win', 'loss', 'early_exit')
+          AND o.outcome IN ('win', 'loss', 'early_exit', 'time_stop')
           AND o.pnl_r IS NOT NULL
     """,
     # Runtime selects us_dst or uk_dst based on session (see _execute_dst_split)
     QueryTemplate.DST_SPLIT: """
-        SELECT o.pnl_r, o.outcome, d.us_dst AS dst_active
+        SELECT COALESCE(o.ts_pnl_r, o.pnl_r) AS pnl_r,
+               COALESCE(o.ts_outcome, o.outcome) AS outcome,
+               d.us_dst AS dst_active
         FROM orb_outcomes o
         JOIN daily_features d
             ON o.trading_day = d.trading_day
@@ -407,11 +417,12 @@ _TEMPLATES = {
             AND o.orb_minutes = d.orb_minutes
         WHERE o.symbol = ?
           AND o.orb_label = ?
-          AND o.outcome IN ('win', 'loss', 'early_exit')
+          AND o.outcome IN ('win', 'loss', 'early_exit', 'time_stop')
           AND o.pnl_r IS NOT NULL
     """,
     QueryTemplate.FILTER_COMPARE: """
-        SELECT o.pnl_r, o.outcome
+        SELECT COALESCE(o.ts_pnl_r, o.pnl_r) AS pnl_r,
+               COALESCE(o.ts_outcome, o.outcome) AS outcome
         FROM orb_outcomes o
         JOIN daily_features d
             ON o.trading_day = d.trading_day
@@ -419,7 +430,7 @@ _TEMPLATES = {
             AND o.orb_minutes = d.orb_minutes
         WHERE o.symbol = ?
           AND o.orb_label = ?
-          AND o.outcome IN ('win', 'loss', 'early_exit')
+          AND o.outcome IN ('win', 'loss', 'early_exit', 'time_stop')
           AND o.pnl_r IS NOT NULL
     """,
 }
@@ -664,7 +675,7 @@ class SQLAdapter:
         wheres = [
             "o.symbol = ?",
             "o.orb_label = ?",
-            "o.outcome IN ('win', 'loss', 'early_exit')",
+            "o.outcome IN ('win', 'loss', 'early_exit', 'time_stop')",
             "o.pnl_r IS NOT NULL",
         ]
         bind: list = [instrument, orb_label]
@@ -687,7 +698,9 @@ class SQLAdapter:
         where_clause = "\n          AND ".join(wheres)
 
         sql = f"""
-            SELECT o.pnl_r, o.outcome, o.mae_r, o.mfe_r, o.trading_day{extra}
+            SELECT COALESCE(o.ts_pnl_r, o.pnl_r) AS pnl_r,
+                   COALESCE(o.ts_outcome, o.outcome) AS outcome,
+                   o.mae_r, o.mfe_r, o.trading_day{extra}
             FROM orb_outcomes o
             JOIN daily_features d
                 ON o.trading_day = d.trading_day

@@ -363,7 +363,7 @@ def compute_day_of_week_stats(
                 """
                 SELECT DAYOFWEEK(oo.trading_day) as dow,
                        oo.trading_day,
-                       AVG(oo.pnl_r) as avg_pnl_r
+                       AVG(COALESCE(oo.ts_pnl_r, oo.pnl_r)) as avg_pnl_r
                 FROM orb_outcomes oo
                 WHERE oo.symbol = ?
                   AND oo.orb_label = ?
