@@ -11,7 +11,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from rich.console import Console
+import readchar
+from rich.console import Console, ConsoleOptions, RenderResult
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -35,9 +36,13 @@ AGENT_STYLES = {
     "codex": "bold green",
 }
 
+UP = readchar.key.UP
+DOWN = readchar.key.DOWN
+ENTER = readchar.key.ENTER
+
 
 # ---------------------------------------------------------------------------
-# Plumbing (unchanged)
+# Plumbing
 # ---------------------------------------------------------------------------
 
 
@@ -197,7 +202,9 @@ def _supports_unicode() -> bool:
         return False
 
 
-_BULLET = "●" if _supports_unicode() else "*"
+_UNI = _supports_unicode()
+_BULLET = "●" if _UNI else "*"
+_ARROW = "▸" if _UNI else ">"
 
 
 def status_text(dirty: bool) -> Text:
@@ -211,31 +218,94 @@ def agent_text(tool: str) -> Text:
     return Text(tool, style=style)
 
 
-def build_workstream_table(workstreams: list[dict[str, Any]], numbered: bool = True) -> Table | None:
+def build_workstream_table(
+    workstreams: list[dict[str, Any]],
+    cursor: int = -1,
+) -> Table | None:
     if not workstreams:
         return None
-    table = Table(show_header=False, box=None, padding=(0, 2), expand=False)
-    if numbered:
-        table.add_column("#", style="bold white", width=3, justify="right")
-    table.add_column("Name", style="bold white", min_width=16)
+    table = Table(show_header=False, box=None, padding=(0, 2), expand=True)
+    table.add_column("Sel", width=2)
+    table.add_column("Name", style="bold white", min_width=16, ratio=1)
     table.add_column("Agent", min_width=8)
-    table.add_column("Last Used", style="dim", min_width=8)
-    table.add_column("Status", min_width=6)
-    for i, ws in enumerate(workstreams, start=1):
+    table.add_column("Last Used", min_width=8)
+    table.add_column("Status", min_width=8)
+    for i, ws in enumerate(workstreams):
         name = ws.get("name") or "-"
         tool = ws.get("tool") or "-"
         opened = ws.get("last_opened_at") or ws.get("created_at")
         dirty = bool(ws.get("dirty"))
-        row: list[Any] = []
-        if numbered:
-            row.append(str(i))
-        row.extend([name, agent_text(tool), relative_time(opened), status_text(dirty)])
-        table.add_row(*row)
+        selected = i == cursor
+        sel = Text(f" {_ARROW}", style="bold bright_blue") if selected else Text("  ")
+        row_style = "on grey15" if selected else ""
+        table.add_row(
+            sel,
+            Text(name, style=f"bold white {row_style}"),
+            Text(tool, style=f"{AGENT_STYLES.get(tool, '')} {row_style}"),
+            Text(relative_time(opened), style=f"dim {row_style}"),
+            status_text(dirty),
+            style=row_style,
+        )
     return table
 
 
-def clear_screen() -> None:
-    subprocess.run(["cmd", "/c", "cls"], check=False)
+def build_footer() -> Text:
+    keys = Text()
+    keys.append(" ↑↓ " if _UNI else " Up/Dn ", style="bold white on grey30")
+    keys.append(" Navigate ", style="dim")
+    keys.append(" Enter " if _UNI else " Enter ", style="bold white on grey30")
+    keys.append(" Launch ", style="dim")
+    keys.append(" N ", style="bold white on grey30")
+    keys.append(" New ", style="dim")
+    keys.append(" O ", style="bold white on grey30")
+    keys.append(" Orient ", style="dim")
+    keys.append(" F ", style="bold white on grey30")
+    keys.append(" Finish ", style="dim")
+    keys.append(" P ", style="bold white on grey30")
+    keys.append(" Prune ", style="dim")
+    keys.append(" Q ", style="bold white on grey30")
+    keys.append(" Quit ", style="dim")
+    return keys
+
+
+def build_header() -> Panel:
+    title = Text()
+    title.append(" AI WORKSTREAMS ", style="bold white")
+    title.append("  ", style="dim")
+    title.append("canompx3", style="dim cyan")
+    return Panel(title, border_style="bright_blue", expand=True, padding=(0, 1))
+
+
+class MenuRenderable:
+    """Full-screen menu layout rendered on each keypress."""
+
+    def __init__(self, workstreams: list[dict[str, Any]], cursor: int, message: str = "") -> None:
+        self.workstreams = workstreams
+        self.cursor = cursor
+        self.message = message
+
+    def __rich_console__(self, rconsole: Console, options: ConsoleOptions) -> RenderResult:
+        yield Text()
+        yield build_header()
+        yield Text()
+
+        if self.workstreams:
+            yield Text("  Active", style="bold bright_blue")
+            yield Text()
+            table = build_workstream_table(self.workstreams, cursor=self.cursor)
+            if table:
+                yield table
+        else:
+            yield Text()
+            yield Text("  No active workstreams — press N to start one", style="dim")
+            yield Text()
+
+        yield Text()
+        yield build_footer()
+
+        if self.message:
+            yield Text()
+            yield Text(f"  {self.message}", style="dim yellow")
 
 
 def prompt(label: str, default: str = "") -> str:
@@ -263,104 +333,57 @@ def wait_for_key(label: str = "Press Enter") -> None:
 
 
 def run_menu() -> int:
+    cursor = 0
+    message = ""
+
     while True:
-        clear_screen()
         workstreams = get_managed_workstreams()
-        most_recent = workstreams[0] if workstreams else None
+        if cursor >= len(workstreams):
+            cursor = max(0, len(workstreams) - 1)
 
-        # Header
-        console.print()
-        console.print(
-            Panel(
-                Text("AI WORKSTREAMS", style="bold white", justify="center"),
-                border_style="bright_blue",
-                expand=True,
-                padding=(0, 1),
-            )
-        )
+        renderable = MenuRenderable(workstreams, cursor, message)
+        message = ""
 
-        # Active workstreams
-        if workstreams:
-            table = build_workstream_table(workstreams)
-            if table:
-                console.print()
-                console.print("  [bold bright_blue]Active[/]")
-                console.print(table)
-        else:
-            console.print()
-            console.print("  [dim]No active workstreams[/]")
+        # Render to alternate screen
+        subprocess.run(["cmd", "/c", "cls"], check=False)
+        console.print(renderable)
 
-        # Actions
-        console.print()
-        actions = Text()
-        actions.append("  ")
-        actions.append("[N]", style="bold white")
-        actions.append(" New   ", style="dim")
-        actions.append("[O]", style="bold white")
-        actions.append(" Orient   ", style="dim")
-        actions.append("[F]", style="bold white")
-        actions.append(" Finish   ", style="dim")
-        actions.append("[P]", style="bold white")
-        actions.append(" Prune   ", style="dim")
-        actions.append("[Q]", style="bold white")
-        actions.append(" Quit", style="dim")
-        console.print(actions)
-
-        # Default action hint
-        if most_recent:
-            name = most_recent.get("name", "")
-            tool = most_recent.get("tool", "")
-            console.print(f"  [dim]Enter = resume [bold]{name}[/bold] ({tool})[/dim]")
-
-        console.print()
-        choice = prompt(">>>").lower()
-
-        # Default: resume most recent
-        if not choice and most_recent:
-            return _launch_workstream(most_recent)
-
-        # Resume by number
-        if choice.isdigit():
-            idx = int(choice)
-            if 1 <= idx <= len(workstreams):
-                return _launch_workstream(workstreams[idx - 1])
-            console.print("  [red]Invalid number[/]")
-            wait_for_key()
-            continue
-
-        if choice == "n":
-            result = _new_workstream()
-            if result == 0:
-                return result  # Successfully launched agent
-            continue  # Bad input — back to menu
-
-        if choice == "o":
-            _run_pulse()
-            wait_for_key("Press Enter to continue")
-            continue
-
-        if choice == "f":
-            _finish_workstream(workstreams)
-            continue  # Back to menu after finish
-
-        if choice == "p":
-            success, output = invoke_manager(["prune"])
-            if output:
-                console.print(f"  {output}")
-            wait_for_key()
-            continue
-
-        if choice == "q":
+        try:
+            key = readchar.readkey()
+        except (EOFError, KeyboardInterrupt):
             return 0
 
-        # Unrecognized input — redraw
+        if key == UP:
+            cursor = max(0, cursor - 1)
+        elif key == DOWN:
+            cursor = min(max(0, len(workstreams) - 1), cursor + 1)
+        elif key == ENTER:
+            if workstreams:
+                return _launch_workstream(workstreams[cursor])
+        elif key.lower() == "n":
+            result = _new_workstream()
+            if result == 0:
+                return result
+        elif key.lower() == "o":
+            _run_pulse()
+            wait_for_key("Press Enter to continue")
+        elif key.lower() == "f":
+            if workstreams:
+                _finish_workstream(workstreams, cursor)
+            else:
+                message = "Nothing to finish"
+        elif key.lower() == "p":
+            success, output = invoke_manager(["prune"])
+            message = output if output else "Pruned"
+        elif key.lower() == "q":
+            return 0
 
 
 def _launch_workstream(ws: dict[str, Any]) -> int:
     name = str(ws.get("name", ""))
     tool = str(ws.get("tool", ""))
     purpose = str(ws.get("purpose") or "")
-    console.print(f"  [dim]Opening[/] [bold]{name}[/] [dim]with[/] [{AGENT_STYLES.get(tool, '')}]{tool}[/]...")
+    console.print(f"\n  [dim]Opening[/] [bold]{name}[/] [dim]with[/] [{AGENT_STYLES.get(tool, '')}]{tool}[/]...\n")
     if tool == "claude":
         return open_claude_workstream(name, purpose)
     if tool == "codex":
@@ -370,57 +393,55 @@ def _launch_workstream(ws: dict[str, Any]) -> int:
 
 
 def _new_workstream() -> int:
+    subprocess.run(["cmd", "/c", "cls"], check=False)
+    console.print()
+    console.print(
+        Panel(Text("NEW WORKSTREAM", style="bold white", justify="center"), border_style="bright_blue", expand=True)
+    )
     console.print()
     name = prompt("Name")
     if not name:
-        console.print("  [red]Name required[/]")
         return 1
 
     console.print()
     console.print("  [bold bright_blue]Agent[/]")
-    console.print("  [bold cyan]1[/] Claude       [dim]review, verify, complex reasoning[/]")
-    console.print("  [bold green]2[/] Codex        [dim]build, edit, implement[/]")
-    console.print("  [bold green]3[/] Codex search [dim]investigate, research with web[/]")
+    console.print()
+    console.print("  [bold cyan]1[/]  Claude        [dim]review, verify, complex reasoning[/]")
+    console.print("  [bold green]2[/]  Codex         [dim]build, edit, implement[/]")
+    console.print("  [bold green]3[/]  Codex search  [dim]investigate, research with web[/]")
     console.print()
     agent_choice = prompt("Agent", "1")
 
     if agent_choice in {"1", "claude", "c"}:
-        console.print(f"  [dim]Opening[/] [bold]{name}[/] [dim]with[/] [bold cyan]claude[/]...")
+        console.print(f"\n  [dim]Opening[/] [bold]{name}[/] [dim]with[/] [bold cyan]claude[/]...\n")
         return open_claude_workstream(name, "Build / edit")
     if agent_choice in {"2", "codex", "x"}:
-        console.print(f"  [dim]Opening[/] [bold]{name}[/] [dim]with[/] [bold green]codex[/]...")
+        console.print(f"\n  [dim]Opening[/] [bold]{name}[/] [dim]with[/] [bold green]codex[/]...\n")
         return open_codex_workstream(name, "Build / edit", False)
     if agent_choice in {"3", "search", "s"}:
-        console.print(f"  [dim]Opening[/] [bold]{name}[/] [dim]with[/] [bold green]codex search[/]...")
+        console.print(f"\n  [dim]Opening[/] [bold]{name}[/] [dim]with[/] [bold green]codex search[/]...\n")
         return open_codex_workstream(name, "Investigate / search", True)
 
-    console.print("  [red]Invalid agent choice[/]")
     return 1
 
 
-def _finish_workstream(workstreams: list[dict[str, Any]]) -> None:
+def _finish_workstream(workstreams: list[dict[str, Any]], cursor: int = 0) -> None:
     if not workstreams:
-        console.print("  [dim]Nothing to finish[/]")
-        wait_for_key()
         return
-
-    console.print()
-    console.print("  [bold bright_blue]Finish which?[/]")
-    table = build_workstream_table(workstreams)
-    if table:
-        console.print(table)
-    console.print()
-    choice = prompt("#")
-    if not choice or not choice.isdigit():
-        return
-    idx = int(choice)
-    if idx < 1 or idx > len(workstreams):
-        console.print("  [red]Invalid number[/]")
-        wait_for_key()
-        return
-    ws = workstreams[idx - 1]
+    ws = workstreams[cursor]
     name = str(ws.get("name", ""))
     tool = str(ws.get("tool", ""))
+
+    subprocess.run(["cmd", "/c", "cls"], check=False)
+    console.print()
+    console.print(f"  Close [bold]{name}[/] ({tool})? [dim]y/n[/]")
+    try:
+        key = readchar.readkey()
+    except (EOFError, KeyboardInterrupt):
+        return
+    if key.lower() != "y":
+        return
+
     success, output = invoke_manager(
         [
             "close",
@@ -440,6 +461,7 @@ def _finish_workstream(workstreams: list[dict[str, Any]]) -> None:
 
 
 def _run_pulse() -> None:
+    subprocess.run(["cmd", "/c", "cls"], check=False)
     pulse_script = repo_root() / "scripts" / "tools" / "project_pulse.py"
     if pulse_script.exists():
         subprocess.run(pick_python() + [str(pulse_script), "--fast"], check=False)
@@ -478,7 +500,7 @@ def main() -> int:
         return open_codex_workstream(task, "Investigate / search", True)
     if args.mode == "list":
         workstreams = get_managed_workstreams()
-        table = build_workstream_table(workstreams, numbered=False)
+        table = build_workstream_table(workstreams)
         if table:
             console.print(table)
         else:
