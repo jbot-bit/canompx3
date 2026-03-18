@@ -522,6 +522,7 @@ def main() -> int:
     parser.add_argument("--start-date", type=str, default="2020-01-01", help="Start date YYYY-MM-DD")
     parser.add_argument("--end-date", type=str, default="2025-12-31", help="End date YYYY-MM-DD")
     parser.add_argument("--keep-db", action="store_true", help="Keep temp database after test for inspection")
+    parser.add_argument("--output-dir", type=str, default=None, help="Write DB to this directory instead of temp (implies --keep-db)")
     parser.add_argument("--instrument", type=str, default="MGC", help="Instrument symbol (default: MGC)")
 
     args = parser.parse_args()
@@ -552,8 +553,13 @@ def main() -> int:
         print(f"# SEED {seed} ({i+1}/{args.seeds})")
         print(f"{'#'*60}")
 
-        # Create temp directory and empty DuckDB file
-        tmpdir = tempfile.mkdtemp(prefix=f"null_test_seed{seed}_")
+        # Create output directory: --output-dir (permanent) or temp
+        if args.output_dir:
+            tmpdir = str(Path(args.output_dir) / f"seed_{seed:04d}")
+            Path(tmpdir).mkdir(parents=True, exist_ok=True)
+            args.keep_db = True  # implied
+        else:
+            tmpdir = tempfile.mkdtemp(prefix=f"null_test_seed{seed}_")
         db_path = Path(tmpdir) / "null_test.db"
 
         try:

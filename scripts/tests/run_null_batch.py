@@ -3,10 +3,13 @@
 Batch null test runner — 50-seed White's Reality Check with proper infrastructure.
 
 Handles:
-  1. Temporarily disables noise floor gate (sets floors to 0) so noise can survive
+  1. Checks prerequisites (noise floor must be zeroed, T80 must be removed)
   2. Runs N seeds sequentially, saving each DB to a permanent location
   3. After all seeds complete, runs envelope analysis and reports results
   4. Does NOT auto-update config — that's a manual decision after reviewing results
+
+IMPORTANT: You must manually set NOISE_EXPR_FLOOR = {"E1": 0, "E2": 0} in
+trading_app/config.py BEFORE running. The script aborts if floors are active.
 
 Usage:
     python scripts/tests/run_null_batch.py                     # 50 seeds, all apertures
@@ -117,10 +120,9 @@ def run_seed(seed: int, output_dir: Path) -> dict:
     print(f"# SEED {seed}")
     print(f"{'#'*60}")
 
-    # Run the null test with output dir override
+    # Run the null test with --output-dir for direct permanent storage
     env = os.environ.copy()
     env["PYTHONPATH"] = str(PROJECT_ROOT)
-    env["NULL_TEST_OUTPUT_DIR"] = str(db_dir)
 
     result = subprocess.run(
         [
@@ -128,7 +130,7 @@ def run_seed(seed: int, output_dir: Path) -> dict:
             str(PROJECT_ROOT / "scripts" / "tests" / "test_synthetic_null.py"),
             "--seeds", "1",
             "--start-seed", str(seed),
-            "--keep-db",
+            "--output-dir", str(output_dir),
         ],
         env=env,
         capture_output=True,
@@ -138,24 +140,6 @@ def run_seed(seed: int, output_dir: Path) -> dict:
     )
 
     elapsed = time.time() - t0
-
-    # The null test saves to a temp dir with --keep-db. We need to find and move it.
-    # Look for the most recent null_test_seed{N}_ directory in temp
-    import tempfile
-    tmp = tempfile.gettempdir()
-    found_db = None
-    for entry in sorted(Path(tmp).iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
-        if entry.is_dir() and entry.name.startswith(f"null_test_seed{seed}_"):
-            candidate = entry / "null_test.db"
-            if candidate.exists():
-                found_db = candidate
-                break
-
-    if found_db and found_db != db_path:
-        # Move from temp to permanent location
-        shutil.copy2(str(found_db), str(db_path))
-        shutil.rmtree(str(found_db.parent), ignore_errors=True)
-        print(f"  Moved DB to {db_path}")
 
     # Count survivors
     survivors = -1
@@ -271,6 +255,7 @@ def main() -> int:
     parser.add_argument("--of", type=int, default=1, help="Total batches (for parallel terminals)")
     parser.add_argument("--analyze-only", action="store_true", help="Skip running, just analyze existing DBs")
     parser.add_argument("--check", action="store_true", help="Check prerequisites only, don't run")
+    parser.add_argument("--force", action="store_true", help="Override prerequisite failures (results may be invalid)")
     args = parser.parse_args()
 
     SEED_DIR.mkdir(parents=True, exist_ok=True)
@@ -280,11 +265,15 @@ def main() -> int:
     if issues:
         print("PREREQUISITE ISSUES:")
         for issue in issues:
-            print(f"  WARNING: {issue}")
+            print(f"  FAIL: {issue}")
         if args.check:
-            return 1 if issues else 0
+            return 1
+        if not args.force:
+            print()
+            print("ABORTED — fix prerequisites or use --force to override.")
+            return 1
         print()
-        print("Proceeding anyway — but results may be invalid if floors are not disabled.")
+        print("--force: proceeding despite prerequisite failures. Results may be invalid.")
         print()
 
     if args.check:
