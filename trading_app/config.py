@@ -97,11 +97,14 @@ if TYPE_CHECKING:
 #   E2: 456 noise survivors, max ExpR = 0.3162 -> floor 0.32
 #   E1: 31 noise survivors, max ExpR = 0.2426 -> floor 0.25
 #
-# @research-source null_test_10_seeds (White's Reality Check 2026-03-18)
+# @research-source null_test_100_seeds (White's Reality Check 2026-03-19)
 # @entry-models E1, E2
-# @revalidated-for E1/E2 event-based sessions (2026-03-18)
+# @revalidated-for E1/E2 event-based sessions (2026-03-19)
+# Conservative floors: mean + 2*std of per-seed maxima (97 seeds analyzed).
+# E1: 21 survivors across 9 seeds, max=0.2062, conservative=0.2143 → 0.22
+# E2: 1720 survivors across 62 seeds, max=0.3809, conservative=0.3165 → 0.32
 NOISE_EXPR_FLOOR: dict[str, float] = {
-    "E1": 0.25,
+    "E1": 0.22,
     "E2": 0.32,
 }
 
