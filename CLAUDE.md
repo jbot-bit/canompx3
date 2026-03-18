@@ -6,7 +6,7 @@ Guidance for Claude Code working with this repository.
 
 ## Project Overview
 
-Multi-instrument futures data pipeline — builds clean, replayable local datasets for ORB breakout trading research and backtesting from Databento DBN files. Active instruments: MGC (Micro Gold), MNQ (Micro Nasdaq), MES (Micro S&P 500), M2K (Micro Russell). Dead for ORB: MCL, SIL, M6E, MBT.
+Multi-instrument futures data pipeline — builds clean, replayable local datasets for ORB breakout trading research and backtesting from Databento DBN files. Active instruments: MGC (Micro Gold), MNQ (Micro Nasdaq), MES (Micro S&P 500). Dead for ORB: MCL, SIL, M6E, MBT, M2K.
 
 **For instruments, cost models, sessions, entry models, and all trading logic → see `TRADING_RULES.md`.**
 **For research methodology, statistical standards, and market structure knowledge → see `RESEARCH_RULES.md`.**

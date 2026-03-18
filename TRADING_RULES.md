@@ -1,4 +1,5 @@
-# Trading Rules — Multi-Instrument Futures (MGC/MNQ/MES/M2K)
+# Trading Rules — Multi-Instrument Futures (MGC/MNQ/MES)
+# M2K removed 2026-03-18: null test — 0/18 families survive noise screening
 
 Single source of truth for live trading. All claims verified against gold.db.
 For research deep-dives and data tables, see `docs/RESEARCH_ARCHIVE.md`.
