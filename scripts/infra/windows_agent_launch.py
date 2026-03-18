@@ -250,6 +250,13 @@ def prompt(label: str, default: str = "") -> str:
         return default
 
 
+def wait_for_key(label: str = "Press Enter") -> None:
+    try:
+        input(f"  {label}")
+    except (EOFError, KeyboardInterrupt):
+        pass
+
+
 # ---------------------------------------------------------------------------
 # Menu
 # ---------------------------------------------------------------------------
@@ -318,7 +325,7 @@ def run_menu() -> int:
             if 1 <= idx <= len(workstreams):
                 return _launch_workstream(workstreams[idx - 1])
             console.print("  [red]Invalid number[/]")
-            input("  Press Enter")
+            wait_for_key()
             continue
 
         if choice == "n":
@@ -329,7 +336,7 @@ def run_menu() -> int:
 
         if choice == "o":
             _run_pulse()
-            input("  Press Enter to continue")
+            wait_for_key("Press Enter to continue")
             continue
 
         if choice == "f":
@@ -340,7 +347,7 @@ def run_menu() -> int:
             success, output = invoke_manager(["prune"])
             if output:
                 console.print(f"  {output}")
-            input("  Press Enter")
+            wait_for_key()
             continue
 
         if choice == "q":
@@ -394,7 +401,7 @@ def _new_workstream() -> int:
 def _finish_workstream(workstreams: list[dict[str, Any]]) -> None:
     if not workstreams:
         console.print("  [dim]Nothing to finish[/]")
-        input("  Press Enter")
+        wait_for_key()
         return
 
     console.print()
@@ -409,7 +416,7 @@ def _finish_workstream(workstreams: list[dict[str, Any]]) -> None:
     idx = int(choice)
     if idx < 1 or idx > len(workstreams):
         console.print("  [red]Invalid number[/]")
-        input("  Press Enter")
+        wait_for_key()
         return
     ws = workstreams[idx - 1]
     name = str(ws.get("name", ""))
@@ -429,7 +436,7 @@ def _finish_workstream(workstreams: list[dict[str, Any]]) -> None:
         console.print(f"  [green]Closed[/] [bold]{name}[/]")
     else:
         console.print(f"  [red]Failed:[/] {output}")
-    input("  Press Enter")
+    wait_for_key()
 
 
 def _run_pulse() -> None:
