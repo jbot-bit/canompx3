@@ -1210,6 +1210,7 @@ def check_db_config_usage() -> list[str]:
         "rolling_portfolio.py",
         "strategy_fitness.py",
         "view_strategies.py",
+        "dsr.py",  # read-only DSR estimation utilities
         # validate_1800_*.py moved to research/archive/ (I12 audit cleanup)
         # Nested subpackages
         "corpus.py",

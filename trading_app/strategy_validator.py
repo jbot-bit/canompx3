@@ -1173,16 +1173,6 @@ def run_validation(
             if passed_strategy_ids:
                 from trading_app.dsr import compute_dsr, compute_sr0
 
-                # Migration: add DSR columns if missing
-                for col, coltype in [
-                    ("dsr_score", "DOUBLE"),
-                    ("sr0_at_discovery", "DOUBLE"),
-                ]:
-                    try:
-                        con.execute(f"ALTER TABLE validated_setups ADD COLUMN {col} {coltype}")
-                    except duckdb.CatalogException:
-                        pass  # column already exists
-
                 # V[SR] from per-trade Sharpe ratios across all canonical strategies
                 var_sr_row = con.execute(
                     """SELECT VAR_SAMP(sharpe_ratio)

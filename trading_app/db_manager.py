@@ -490,6 +490,15 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
             except duckdb.CatalogException:
                 pass  # column already exists
 
+        # Migration: DSR columns (Mar 2026 — adversarial validation)
+        # dsr_score: Deflated Sharpe Ratio (Bailey & Lopez de Prado 2014)
+        # sr0_at_discovery: expected max Sharpe from noise at time of validation
+        for col, typedef in [("dsr_score", "DOUBLE"), ("sr0_at_discovery", "DOUBLE")]:
+            try:
+                con.execute(f"ALTER TABLE validated_setups ADD COLUMN {col} {typedef}")
+            except duckdb.CatalogException:
+                pass  # column already exists
+
         # Table 7: validation_run_log (Mar 2026 — Bloomey FIX 8)
         # Tracks rejection rate per phase per validation run for auditability.
         con.execute("""
