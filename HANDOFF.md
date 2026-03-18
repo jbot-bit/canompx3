@@ -10,9 +10,15 @@ If nothing changed, leave it as-is.
 ---
 
 ## Last Session
-- **Tool:** Claude Code (Opus 4.6)
+- **Tool:** Claude Code
 - **Date:** 2026-03-18
-- **Summary:** Built complete Project Mental Model Layer (pulse v2). 9 core collectors + 7 innovations (trading day, workstream momentum, recommendation engine, skill suggestions, session continuity, time since green, conflict radar). 44 tests. Full code review + 20-day dry run simulation. Design doc updated to reflect shipped state.
+- **Commit:** faa6aba — docs: pulse v2 — tests, skill update, design doc, final polish
+- **Files changed:** 5 files
+  - `.claude/skills/orient/SKILL.md`
+  - `HANDOFF.md`
+  - `docs/plans/2026-03-17-project-mental-model-design.md`
+  - `scripts/tools/project_pulse.py`
+  - `tests/test_tools/test_project_pulse.py`
 
 ## Decisions Made
 - HANDOFF.md is now auto-updated by post-commit hook — no manual "handover" needed
