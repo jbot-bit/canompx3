@@ -35,6 +35,7 @@ import pandas as pd
 
 from pipeline.cost_model import get_cost_spec
 from pipeline.paths import GOLD_DB_PATH, PROJECT_ROOT
+from trading_app.config import E2_SLIPPAGE_TICKS
 
 DATASET = "GLBX.MDP3"
 SYMBOLS = ["MGC.FUT", "GC.FUT"]
@@ -175,9 +176,14 @@ def pull_all_pilot_days(
     *,
     force: bool = False,
 ) -> dict[str, list[Path]]:
-    """Pull tbbo for all pilot days and symbols. Returns {symbol: [paths]}."""
+    """Pull tbbo for all pilot days and symbols. Returns {symbol: [paths]}.
+
+    Raises RuntimeError if any pulls fail (fail-closed). Error details
+    are printed before the exception.
+    """
     symbols = symbols or SYMBOLS
     result: dict[str, list[Path]] = {sym: [] for sym in symbols}
+    errors: list[tuple[str, str, str]] = []
 
     total = len(manifest_df) * len(symbols)
     done = 0
@@ -201,6 +207,13 @@ def pull_all_pilot_days(
                 result[sym].append(path)
             except Exception as e:
                 print(f"    ERROR: {e}")
+                errors.append((day, sym, str(e)))
+
+    if errors:
+        print(f"\n{len(errors)} pull failures:")
+        for day, sym, err in errors:
+            print(f"  {day} {sym}: {err}")
+        raise RuntimeError(f"{len(errors)} tbbo pulls failed — see above for details")
 
     return result
 
@@ -223,7 +236,7 @@ def reprice_e2_entry(
     trading_day: str,
     symbol_pulled: str,
     tick_size: float,
-    modeled_slippage_ticks: int = 1,
+    modeled_slippage_ticks: int = E2_SLIPPAGE_TICKS,
 ) -> RepricedEntry:
     """Reprice one E2 entry against actual tick data.
 
@@ -424,7 +437,7 @@ def analyze_slippage(repriced_df: pd.DataFrame) -> dict:
     valid = repriced_df[repriced_df["actual_slippage_ticks"].notna()].copy()
     if not valid.empty:
         analysis["_comparison"] = {
-            "modeled_assumption_ticks": 1,
+            "modeled_assumption_ticks": E2_SLIPPAGE_TICKS,
             "caveat": "BBO at trigger trade is optimistic lower bound — real fills likely worse",
         }
 
