@@ -261,6 +261,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--context", default="generic", help="Startup context label")
     parser.add_argument("--claim", default=None, help="Write or verify a session claim for this tool")
     parser.add_argument("--verify-claim", action="store_true", help="Verify current HEAD against the stored claim")
+    parser.add_argument("--with-pulse", action="store_true", help="Append project pulse summary")
     parser.add_argument("--root", default=None, help="Override repo root")
     return parser
 
@@ -269,12 +270,24 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     root = Path(args.root).resolve() if args.root else DEFAULT_ROOT.resolve()
-    return print_report(
+    exit_code = print_report(
         root,
         context=args.context,
         claim_tool=args.claim,
         verify_only=args.verify_claim,
     )
+
+    if args.with_pulse:
+        try:
+            from project_pulse import build_pulse, format_text
+
+            report = build_pulse(root, skip_drift=True, skip_tests=True)
+            print()
+            print(format_text(report))
+        except Exception as exc:
+            print(f"Pulse: unavailable ({type(exc).__name__})")  # Advisory — preflight unaffected
+
+    return exit_code
 
 
 if __name__ == "__main__":
