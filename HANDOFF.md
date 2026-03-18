@@ -12,11 +12,16 @@ If nothing changed, leave it as-is.
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-03-18
-- **Commit:** 1b2ac93 — [judgment] fix: Ralph Loop iter 132 — silent skip when stop_multiplier != 1.0 but cost_spec is None (silent_failure)
-- **Files changed:** 3 files
+- **Commit:** 16f95fd — [mechanical] chore: Ralph Loop iter 132 — update audit state, history, ledger
+- **Files changed:** 8 files
   - `HANDOFF.md`
-  - `docs/ralph-loop/ralph-loop-plan.md`
-  - `trading_app/walkforward.py`
+  - `docs/ralph-loop/logs/headless-20260318_1341-iter1.json`
+  - `docs/ralph-loop/logs/headless-20260318_1341-iter1.txt`
+  - `docs/ralph-loop/logs/headless-20260318_1341-iter2.err`
+  - `docs/ralph-loop/logs/headless-20260318_1341-iter2.json`
+  - `docs/ralph-loop/ralph-ledger.json`
+  - `docs/ralph-loop/ralph-loop-audit.md`
+  - `docs/ralph-loop/ralph-loop-history.md`
 
 ## Decisions Made
 - HANDOFF.md is now auto-updated by post-commit hook — no manual "handover" needed
