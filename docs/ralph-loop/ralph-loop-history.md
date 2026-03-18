@@ -5,6 +5,18 @@
 
 ---
 
+## Iteration 131 — 2026-03-18
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/ml/predict_live.py:307
+- Finding: Aggressive RR mismatch (trade skip, take=False) logged at logger.debug() — invisible at standard INFO log level; aperture mismatch (take=True) inconsistently logged at INFO
+- Action: Changed logger.debug → logger.info for aggressive RR skip path only; conservative path left at debug (trade proceeds, informational only)
+- Blast radius: 1 file (predict_live.py); log level change only, no callers affected
+- Verification: PASS (36/36 test_predict_live.py + 218 fast tests pass)
+- Commit: d0fe929
+
+---
+
 ## Iteration 130 — 2026-03-17
 - Phase: fix
 - Classification: [mechanical]
