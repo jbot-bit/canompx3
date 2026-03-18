@@ -1053,13 +1053,8 @@ from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS  # noqa: E402
 
 TRADEABLE_INSTRUMENTS = list(ACTIVE_ORB_INSTRUMENTS)
 
-# Timed early exit: kill losers at N minutes after fill.
-# Research (artifacts/EARLY_EXIT_RULES.md, P5b winner speed profiling):
-#   CME_REOPEN: 15 min -> +26% Sharpe, 38% tighter MaxDD (T80=38m, only 24% recover)
-#   TOKYO_OPEN: 30 min -> 3.7x Sharpe, 35% tighter MaxDD (T80=32m, only 12-18% recover)
-#   LONDON_METALS: 30 min -> T80=36m, avg_r_after=-0.339R (worst dead-chop penalty)
-#   Other sessions: no benefit
-# Rule: At N minutes after fill, if bar close vs entry is negative, exit at bar close.
+# Timed early exit: DISABLED (2026-03-18 OOS validation NO-GO).
+# See EARLY_EXIT_MINUTES below for full rationale.
 # None = no early exit for that session.
 # E3 retrace window: max minutes after confirm bar to wait for retrace fill.
 # None = unbounded (scan to trading day end). Value set from audit results.
