@@ -488,35 +488,13 @@ def validate_strategy(
             [],
         )
 
-    # Phase 4c: Deflated Sharpe (Bailey & Lopez de Prado 2014) — INFORMATIONAL ONLY
-    # DSR uses raw n_trials (K) without correlated-trial adjustment (N_eff, BLP Appendix A.3).
-    # Until N_eff is estimated per-instrument, DSR threshold is inflated. BH FDR already
-    # handles multiple testing at discovery. Stacking both as hard gates double-penalizes.
-    # @research-source: deflated-sharpe.pdf (BLP 2014), Appendix A.3 (correlated trials)
-    sharpe_haircut = row.get("sharpe_haircut")
-    if sharpe_haircut is not None and sharpe_haircut < 0:
-        logger.info(
-            "Phase 4c (info): DSR below noise floor for %s (haircut=%.4f) — logged, not rejected",
-            row.get("strategy_id", "?"),
-            sharpe_haircut,
-        )
-
-    # Phase 4d: False Strategy Theorem hurdle (Lopez de Prado 2018) — INFORMATIONAL ONLY
-    # TWO issues prevent using this as a hard gate:
-    # 1. fst_hurdle is in Z-score units (E[max{Z_K}] ≈ 3.63 for K=4074) but sharpe_ratio
-    #    is per-trade (mean_r/std_r). Correct comparison: sharpe_ratio < hurdle/sqrt(T).
-    #    See FST Theorem 1: E[max{SR}] = sqrt(V[SR]) * Z_max, where V[SR] = 1/T.
-    # 2. Same N_eff issue as P4c — raw n_trials without correlated-trial adjustment.
-    # @research-source: false-strategy-lopez.pdf (BLP 2018), Theorem 1
-    fst_hurdle = row.get("fst_hurdle")
-    sharpe_ratio = row.get("sharpe_ratio")
-    if fst_hurdle is not None and sharpe_ratio is not None and sharpe_ratio < fst_hurdle:
-        logger.info(
-            "Phase 4d (info): Sharpe %.4f < FST hurdle %.4f for %s — logged, not rejected",
-            sharpe_ratio,
-            fst_hurdle,
-            row.get("strategy_id", "?"),
-        )
+    # Phase 4c/4d (DSR, FST) — REMOVED as fake gates (2026-03-18 adversarial review).
+    # Both used raw n_trials (K≈120K) without N_eff correction for correlated tests
+    # (BLP 2014 Appendix A.3). FST passed 13/116,900 strategies — the hurdle was
+    # broken, not selective. DSR had the same N_eff inflation.
+    # Multiple testing is now handled by BH FDR hard gate (global K) in Phase C.
+    # Data columns (sharpe_haircut, fst_hurdle) remain in experimental_strategies
+    # for future use if N_eff estimation is implemented.
 
     # Phase 5: Sharpe ratio (optional)
     if min_sharpe is not None:
@@ -950,6 +928,7 @@ def run_validation(
         logger.warning(f"Walkforward: {wf_errors} strategies rejected due to worker errors")
 
     # ── Phase C: Batch write all results ─────────────────────────────
+    n_fdr_rejected = 0  # set by FDR hard gate below; used in Phase D logging
     processed_orb_minutes = sorted({sr["row_dict"].get("orb_minutes", 5) for sr in serial_results})
     if not dry_run and processed_orb_minutes:
         with duckdb.connect(str(db_path)) as con:
@@ -1116,21 +1095,25 @@ def run_validation(
                     )
                     append_walkforward_result(wf_obj, wf_output_path)
 
-            # FDR correction (unchanged)
+            # FDR hard gate — global K across ALL instruments
+            # BH FDR valid under PRDS (Benjamini & Yekutieli 2001). Cross-instrument
+            # equity correlations (MNQ-MES rho=0.44-0.77) satisfy PRDS. Global K is
+            # the honest test count: you searched all instruments, not just this one.
+            # Adversarial review 2026-03-18: FDR was cosmetic — now it rejects.
             if passed_strategy_ids:
-                logger.info("Computing FDR correction (Benjamini-Hochberg)...")
+                logger.info("Computing FDR correction (Benjamini-Hochberg, global K)...")
                 all_p_values = con.execute(
                     """SELECT strategy_id, p_value FROM experimental_strategies
-                       WHERE instrument = ?
-                       AND is_canonical = TRUE
+                       WHERE is_canonical = TRUE
                        AND p_value IS NOT NULL""",
-                    [instrument],
                 ).fetchall()
                 p_value_list = [(r[0], r[1]) for r in all_p_values]
                 fdr_results = benjamini_hochberg(p_value_list, alpha=0.05)
+                global_k = len(p_value_list)
 
                 n_fdr_sig = 0
-                n_fdr_insig = 0
+                n_fdr_rejected = 0
+                fdr_rejected_ids = []
                 for sid in passed_strategy_ids:
                     fdr = fdr_results.get(sid)
                     if fdr is not None:
@@ -1144,17 +1127,34 @@ def run_validation(
                         if fdr["fdr_significant"]:
                             n_fdr_sig += 1
                         else:
-                            n_fdr_insig += 1
+                            fdr_rejected_ids.append(sid)
+                            n_fdr_rejected += 1
+
+                # Hard gate: remove FDR-failing strategies from validated_setups
+                if fdr_rejected_ids:
+                    for sid in fdr_rejected_ids:
+                        con.execute(
+                            "DELETE FROM validated_setups WHERE strategy_id = ?",
+                            [sid],
+                        )
+                        con.execute(
+                            """UPDATE experimental_strategies
+                               SET validation_status = 'REJECTED',
+                                   validation_notes = 'Phase FDR: BH adjusted p >= 0.05 (global K='
+                                       || ? || ')'
+                               WHERE strategy_id = ?""",
+                            [str(global_k), sid],
+                        )
+                    passed -= n_fdr_rejected
+                    rejected += n_fdr_rejected
+                    # Remove from passed list so downstream counts are correct
+                    passed_strategy_ids = [s for s in passed_strategy_ids if s not in set(fdr_rejected_ids)]
 
                 logger.info(
-                    f"  FDR results: {n_fdr_sig} significant, {n_fdr_insig} not significant "
-                    f"(of {len(passed_strategy_ids)} passed, from {len(p_value_list)} tested)"
+                    f"  FDR hard gate (global K={global_k}): "
+                    f"{n_fdr_sig} survived, {n_fdr_rejected} REJECTED "
+                    f"(of {n_fdr_sig + n_fdr_rejected} passed prior phases)"
                 )
-                if n_fdr_insig > 0:
-                    logger.info(
-                        f"  WARNING: {n_fdr_insig} validated strategies do NOT survive "
-                        f"FDR correction — potential false positives"
-                    )
 
             con.commit()
 
@@ -1169,16 +1169,16 @@ def run_validation(
     # ── Phase D: Log rejection rate per phase ─────────────────────────
     if not dry_run:
         # Count rejections per phase from notes
-        # NOTE: phase4c/phase4d are informational-only (not hard gates) since bc03c02.
-        # Counters kept for schema compat + future re-enablement when N_eff is implemented.
+        # phase4c/phase4d: REMOVED as fake gates (2026-03-18). Counters kept at 0 for schema compat.
         phase_counts = {
             "phase1": 0,
             "phase2": 0,
             "phase3": 0,
             "phase4": 0,
-            "phase4c": 0,  # informational — always 0 until N_eff correction added
-            "phase4d": 0,  # informational — always 0 until unit mismatch fixed
+            "phase4c": 0,  # removed — was never a gate (N_eff broken)
+            "phase4d": 0,  # removed — was never a gate (N_eff + unit mismatch)
             "phase4b": 0,
+            "phase_fdr": 0,  # BH FDR hard gate (global K) — added 2026-03-18
         }
         for sr in serial_results:
             notes_str = sr.get("notes", "")
@@ -1189,14 +1189,12 @@ def run_validation(
                     phase_counts["phase2"] += 1
                 elif notes_str.startswith("Phase 3:"):
                     phase_counts["phase3"] += 1
-                elif notes_str.startswith("Phase 4c:"):
-                    phase_counts["phase4c"] += 1
-                elif notes_str.startswith("Phase 4d:"):
-                    phase_counts["phase4d"] += 1
                 elif notes_str.startswith("Phase 4b:"):
                     phase_counts["phase4b"] += 1
                 elif notes_str.startswith("Phase 4:"):
                     phase_counts["phase4"] += 1
+        # FDR rejections happen post-write (Phase C), not in serial_results.
+        phase_counts["phase_fdr"] = n_fdr_rejected
 
         candidates = len(rows) - skipped_aliases
         rejection_rate = 1.0 - (passed / candidates) if candidates > 0 else 1.0
@@ -1209,13 +1207,20 @@ def run_validation(
             from pipeline.db_config import configure_connection
 
             configure_connection(con, writing=True)
+            # Migration: add phase_fdr_rejected column if missing
+            try:
+                con.execute("ALTER TABLE validation_run_log ADD COLUMN phase_fdr_rejected INTEGER DEFAULT 0")
+            except Exception:
+                pass  # column already exists
+
             con.execute(
                 """INSERT INTO validation_run_log
                    (run_id, instrument, candidates,
                     phase1_rejected, phase2_rejected, phase3_rejected,
                     phase4_rejected, phase4c_rejected, phase4d_rejected,
-                    phase4b_rejected, final_passed, rejection_rate)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    phase4b_rejected, phase_fdr_rejected,
+                    final_passed, rejection_rate)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 [
                     run_id,
                     instrument,
@@ -1227,6 +1232,7 @@ def run_validation(
                     phase_counts["phase4c"],
                     phase_counts["phase4d"],
                     phase_counts["phase4b"],
+                    phase_counts["phase_fdr"],
                     passed,
                     round(rejection_rate, 4),
                 ],
@@ -1236,8 +1242,7 @@ def run_validation(
             f"  Run logged: {run_id} — rejection_rate={rejection_rate:.1%}, "
             f"P1={phase_counts['phase1']}, P2={phase_counts['phase2']}, "
             f"P3={phase_counts['phase3']}, P4={phase_counts['phase4']}, "
-            f"P4c={phase_counts['phase4c']}, P4d={phase_counts['phase4d']}, "
-            f"P4b={phase_counts['phase4b']}"
+            f"P4b={phase_counts['phase4b']}, FDR={phase_counts['phase_fdr']}"
         )
 
     return passed, rejected

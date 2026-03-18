@@ -144,6 +144,23 @@ COST_SPECS = {
 
 
 # =============================================================================
+# COST MODEL LIMITATIONS (adversarial review 2026-03-18)
+# =============================================================================
+# Backtest uses FLAT slippage per instrument. Real slippage likely correlates
+# with ORB size and session liquidity — bigger breakouts = more competition
+# at the entry level = more slippage. The 1.5x stress test partially addresses
+# this but is a fixed multiplier, not a function of trade characteristics.
+#
+# Until paper trading fills provide actual TCA data (Apex Phase 1), the cost
+# model is structurally optimistic for ORB entries. The magnitude is unknown —
+# the adversarial review suggested 2.0-2.5x but provided no evidence.
+# Paper trading kill criteria: if actual slippage > 2x modeled → cost model
+# is wrong and all backtest results are overstated.
+#
+# SESSION_SLIPPAGE_MULT below applies to LIVE execution only, not backtests.
+# =============================================================================
+
+# =============================================================================
 # SESSION-AWARE SLIPPAGE (live execution only — backtest uses flat costs)
 # =============================================================================
 

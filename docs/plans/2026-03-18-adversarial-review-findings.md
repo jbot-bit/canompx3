@@ -40,16 +40,20 @@ Fixed slippage assumption. Real slippage correlates with ORB size (bigger breako
 
 ---
 
-## Priority Actions (Both Reviews Converge)
+## Priority Actions — Status (updated 2026-03-18)
 
-| Priority | Action | Cost | Time | What It Proves |
-|----------|--------|------|------|----------------|
-| **1** | **Synthetic null pipeline test** | Free | 4-6h | Whether the pipeline manufactures false edges |
-| **2** | **Make FDR a hard gate** | Free | 1h | How many strategies survive honest correction |
-| **3** | **Fresh-AI adversarial review** (different model, zero context) | Free | 1h | Cross-model consistency of findings |
-| **4** | **External human quant review** | $200-500 | 1 week | Genuinely independent assessment |
-| **5** | **20-trade manual spot-check** | Free | 2h | Whether fills/costs are computed correctly |
-| **6** | **Paper trading with tracking** | Free | 3 months | Reality vs backtest |
+| Priority | Action | Status | Result |
+|----------|--------|--------|--------|
+| **1** | **Synthetic null pipeline test** | **DONE** | **FAIL: 60-63 false positives from noise survive pipeline.** 20-33 survive even BH FDR. E2 near-breakeven on random walks (-0.004R) enables lucky streaks. Confirmed across 2 seeds (42, 99). |
+| **2** | **Make FDR a hard gate** | **DONE** | Global K (120,376 tests), BH at α=0.05. Cuts ~1,500 strategies. Now rejects, not just tags. |
+| **3** | **DSR/FST fake gates removed** | **DONE** | Were "logged, not rejected" — dead code pretending to be safety nets. FST passed 13/116,900 (broken hurdle). Removed. |
+| **4** | **MGC regime documented honestly** | **DONE** | All WF windows 2025-2026 only. "RESOLVED" claim in config.py was false — corrected. |
+| **5** | **Cost model limitations documented** | **DONE** | Flat slippage is structurally optimistic for ORB entries. No fix without live fills. |
+| **6** | **Mechanism test reclassified** | **DONE** | Now called "artifact screen" not "mechanism proof." Honest about what it does/doesn't do. |
+| **7** | **Null envelope (10 seeds)** | TODO | White's Reality Check — set acceptance threshold from 95th percentile of noise. |
+| **8** | **E2-specific ExpR floor** | TODO | E2 null avg = -0.004R vs E1 null avg = -0.118R. Different thresholds needed. |
+| **9** | **External human quant review** | TODO | $200-500. Genuinely independent assessment. |
+| **10** | **Paper trading with tracking** | TODO | 3 months live. Kill criteria: slippage > 2x modeled, P&L < 50% backtest. |
 
 ---
 
