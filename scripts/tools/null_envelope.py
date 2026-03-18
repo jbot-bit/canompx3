@@ -247,9 +247,12 @@ def main() -> int:
     elif args.analyze_glob:
         db_paths = [Path(p) for p in sorted(glob.glob(args.analyze_glob))]
     else:
-        # Default: scan temp dir
-        tmp = os.environ.get("TEMP", os.environ.get("TMPDIR", "/tmp"))
-        db_paths = find_null_dbs(tmp)
+        # Default: scan permanent seed dir first, then temp dir
+        permanent_dir = PROJECT_ROOT / "scripts" / "tests" / "null_seeds"
+        db_paths = find_null_dbs(str(permanent_dir)) if permanent_dir.exists() else []
+        if not db_paths:
+            tmp = os.environ.get("TEMP", os.environ.get("TMPDIR", "/tmp"))
+            db_paths = find_null_dbs(tmp)
 
     if not db_paths:
         print("No null test databases found!")

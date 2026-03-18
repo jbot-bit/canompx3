@@ -1,0 +1,3 @@
+# Null test seed databases — large files, don't commit.
+# Only the manifest.json and this .gitignore are tracked.
+seed_*/
