@@ -214,7 +214,7 @@ def compute_family_pbo(
         flat_params.extend(row)
 
     rows = con.execute(
-        f"""SELECT o.trading_day, COALESCE(o.ts_pnl_r, o.pnl_r) AS pnl_r,
+        f"""SELECT o.trading_day, o.pnl_r,
                    o.orb_label, o.orb_minutes, o.entry_model, o.rr_target, o.confirm_bars
             FROM orb_outcomes o
             WHERE o.symbol = ?

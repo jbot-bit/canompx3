@@ -1002,9 +1002,7 @@ def _load_outcomes_bulk(con, instrument, orb_minutes, orb_labels, entry_models, 
     for orb_label in orb_labels:
         for em in entry_models:
             sql = """SELECT trading_day, rr_target, confirm_bars,
-                          COALESCE(ts_outcome, outcome) AS outcome,
-                          COALESCE(ts_pnl_r, pnl_r) AS pnl_r,
-                          mae_r, mfe_r,
+                          outcome, pnl_r, mae_r, mfe_r,
                           entry_price, stop_price
                    FROM orb_outcomes
                    WHERE symbol = ? AND orb_minutes = ?

@@ -75,49 +75,10 @@ DAY_END = datetime(2024, 1, 16, 23, 0, tzinfo=timezone.utc)
 
 
 class TestEarlyExitConfig:
-    def test_cme_reopen_t80(self):
-        """P5b: MGC T80=38m (N=908, avg_r_after=-0.300R)."""
-        assert EARLY_EXIT_MINUTES["CME_REOPEN"] == 38
-
-    def test_tokyo_open_t80(self):
-        """P5b: MGC T80=32m, MES T80=39m -> use 39 (patient)."""
-        assert EARLY_EXIT_MINUTES["TOKYO_OPEN"] == 39
-
-    def test_singapore_open_t80(self):
-        """P5b: MES T80=31m."""
-        assert EARLY_EXIT_MINUTES["SINGAPORE_OPEN"] == 31
-
-    def test_london_metals_t80(self):
-        """P5b: MGC T80=36m, avg_r_after=-0.339R (worst dead-chop penalty)."""
-        assert EARLY_EXIT_MINUTES["LONDON_METALS"] == 36
-
-    def test_cme_preclose_t80(self):
-        """P5b: MES T80=16m (short session, fast-resolve)."""
-        assert EARLY_EXIT_MINUTES["CME_PRECLOSE"] == 16
-
-    def test_us_data_830_t80(self):
-        """T80: max across instruments at RR1.0 (MNQ=49m)."""
-        assert EARLY_EXIT_MINUTES["US_DATA_830"] == 49
-
-    def test_nyse_open_t80(self):
-        """T80: max across instruments at RR1.0 (M2K=59m)."""
-        assert EARLY_EXIT_MINUTES["NYSE_OPEN"] == 59
-
-    def test_us_data_1000_t80(self):
-        """T80: max across instruments at RR1.0 (MGC=45m)."""
-        assert EARLY_EXIT_MINUTES["US_DATA_1000"] == 45
-
-    def test_comex_settle_t80(self):
-        """T80: max across instruments at RR1.0 (MGC=39m)."""
-        assert EARLY_EXIT_MINUTES["COMEX_SETTLE"] == 39
-
-    def test_nyse_close_t80(self):
-        """T80: max across instruments at RR1.0 (MNQ=111m)."""
-        assert EARLY_EXIT_MINUTES["NYSE_CLOSE"] == 111
-
-    def test_brisbane_1025_t80(self):
-        """T80: max across instruments at RR1.0 (MNQ=26m)."""
-        assert EARLY_EXIT_MINUTES["BRISBANE_1025"] == 26
+    def test_all_t80_disabled(self):
+        """T80 disabled 2026-03-18: OOS validation NO-GO. All values must be None."""
+        for session, value in EARLY_EXIT_MINUTES.items():
+            assert value is None, f"EARLY_EXIT_MINUTES['{session}'] = {value}, expected None (T80 disabled)"
 
     def test_all_active_sessions_present(self):
         expected = {
@@ -394,42 +355,34 @@ def _bar(ts, o, h, l, c, v=100):
 
 
 class TestExecutionEngineEarlyExit:
-    def test_early_exit_fires_at_t80_cme_reopen(self):
-        """CME_REOPEN E1 trade losing at T80 (38m) -> early_exit event."""
+    def test_no_early_exit_when_t80_disabled(self):
+        """T80 disabled: losing trade at 45m should NOT trigger early_exit."""
         strategy = _make_strategy(orb_label="CME_REOPEN")
         portfolio = _make_portfolio(strategies=[strategy])
         engine = ExecutionEngine(portfolio, _cost(), live_session_costs=False)
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        # CME_REOPEN = 23:00 UTC prev day. ORB window 23:00-23:05
         base = datetime(2024, 1, 4, 23, 0, tzinfo=timezone.utc)
 
-        # Build ORB: 5 bars within window
         for i in range(5):
             ts = base + timedelta(minutes=i)
             engine.on_bar(_bar(ts, 2345, 2350, 2340, 2345))
 
-        # Break bar at 23:05 — close above ORB high
         break_ts = base + timedelta(minutes=5)
-        events = engine.on_bar(_bar(break_ts, 2350, 2355, 2349, 2352))
+        engine.on_bar(_bar(break_ts, 2350, 2355, 2349, 2352))
 
-        # E1 ARMED: next bar fills
         fill_ts = base + timedelta(minutes=6)
-        events = engine.on_bar(_bar(fill_ts, 2352, 2353, 2351, 2352))
-        assert any(e.event_type == "ENTRY" for e in events)
+        engine.on_bar(_bar(fill_ts, 2352, 2353, 2351, 2352))
 
-        # Feed bars for 45 minutes (past T80=38m), gradually losing
+        # Feed bars for 45 minutes, gradually losing — no early exit should fire
+        early_exits = []
         for i in range(1, 45):
             ts = fill_ts + timedelta(minutes=i)
-            price = 2352.0 - i * 0.1  # drifting down slowly
+            price = 2352.0 - i * 0.1
             events = engine.on_bar(_bar(ts, price + 0.1, price + 0.3, price - 0.3, price))
-            if any(e.event_type == "EXIT" and e.reason == "early_exit_timed" for e in events):
-                break
-        else:
-            pytest.fail("Early exit event not fired within 45 bars (T80=38m)")
+            early_exits.extend(e for e in events if e.reason == "early_exit_timed")
 
-        exit_event = [e for e in events if e.reason == "early_exit_timed"][0]
-        assert exit_event.event_type == "EXIT"
+        assert len(early_exits) == 0, "T80 is disabled — no early exit should fire"
 
     def test_no_early_exit_when_winning(self):
         """CME_REOPEN E1 trade winning at 15 min -> no early exit."""
@@ -496,8 +449,8 @@ class TestExecutionEngineEarlyExit:
 
         assert len(early_exits) == 0
 
-    def test_early_exit_pnl_is_partial_loss(self):
-        """Early exit PnL should be between -1R and 0."""
+    def test_no_partial_loss_when_t80_disabled(self):
+        """T80 disabled: losing trade drifts but no early exit — trade stays open."""
         strategy = _make_strategy(orb_label="CME_REOPEN")
         portfolio = _make_portfolio(strategies=[strategy])
         engine = ExecutionEngine(portfolio, _cost(), live_session_costs=False)
@@ -515,13 +468,12 @@ class TestExecutionEngineEarlyExit:
         fill_ts = base + timedelta(minutes=6)
         engine.on_bar(_bar(fill_ts, 2352, 2353, 2351, 2352))
 
-        # Feed bars past T80=38m, gradually losing (but not hitting stop)
+        # Feed 45 bars drifting down slowly (stays above stop)
         for i in range(1, 45):
             ts = fill_ts + timedelta(minutes=i)
-            price = 2352.0 - i * 0.1  # slow drift, stays above stop
+            price = 2352.0 - i * 0.1
             engine.on_bar(_bar(ts, price + 0.1, price + 0.3, price - 0.3, price))
 
-        # Check PnL on the completed trade
+        # Trade should still be open — no early exit, no stop hit
         exited = [t for t in engine.completed_trades if t.pnl_r is not None]
-        assert len(exited) == 1
-        assert -1.0 < exited[0].pnl_r < 0
+        assert len(exited) == 0, "T80 disabled — trade should remain open (no stop hit)"

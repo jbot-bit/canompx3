@@ -1070,34 +1070,32 @@ TRADEABLE_INSTRUMENTS = list(ACTIVE_ORB_INSTRUMENTS)
 E3_RETRACE_WINDOW_MINUTES: int | None = 60  # Audit: 4/12 sessions show stale inflation >0.1R
 
 EARLY_EXIT_MINUTES: dict[str, int | None] = {
-    # T80 = time by which 80% of winners hit target. Trades past T80 are net
-    # negative (P5b, BH FDR confirmed). At threshold: if MTM < 0, exit.
-    # Per-session (not per-instrument). Where instruments differ, uses max
-    # T80 (more patient) to avoid cutting slower instruments' winners.
-    #
-    # @research-source: research/research_winner_speed.py
-    # @research-date: 2026-03-04 (6 new sessions); 2026-02-20 (original 5)
-    # @entry-models: E0, E1, E2, E3
-    # @revalidated-for: E2 (2026-03-03, bar-level P5b simulation)
-    # @revalidation-result: ALL sessions net-positive at current thresholds.
-    #   E2 T80 differs (CME_REOPEN: 110m agg vs 38m config) but rule is
-    #   robust — 76-94% of MTM-negative trades at threshold never recover.
-    #   Future optimization: CME_REOPEN 25m saves ~47% more R than 38m.
-    # @note: New 6 sessions use RR=1.0 T80 max-across-instruments from
-    #   winner_speed_summary.csv (2026-03-04 run, all 4 instruments).
-    #   Pending P5b bar-level simulation for fine-tuning.
-    "CME_REOPEN": 38,  # E2 T80=110m(agg), config checks early, NetR=+905R
-    "TOKYO_OPEN": 39,  # E2 T80=63m(agg), NetR=+1207R
-    "SINGAPORE_OPEN": 31,  # E2 T80=65m(agg), NetR=+1114R
-    "LONDON_METALS": 36,  # E2 T80=60m(agg), NetR=+937R
-    "EUROPE_FLOW": None,  # No T80 research yet — trades run to target/stop
-    "US_DATA_830": 49,  # RR1.0 T80: MGC=46, MNQ=49, MES=44, M2K=45
-    "NYSE_OPEN": 59,  # RR1.0 T80: MGC=28, MNQ=48, MES=43, M2K=59
-    "US_DATA_1000": 45,  # RR1.0 T80: MGC=45, MNQ=40, MES=41, M2K=38
-    "COMEX_SETTLE": 39,  # RR1.0 T80: MGC=39, MNQ=26, MES=24, M2K=27
-    "CME_PRECLOSE": 16,  # E2 T80=13m(agg), closest to optimal, NetR=+607R
-    "NYSE_CLOSE": 111,  # RR1.0 T80: MNQ=111, MES=110, M2K=108 (no MGC)
-    "BRISBANE_1025": 26,  # RR1.0 T80: MNQ=26, M2K=24 (MNQ/M2K only)
+    # T80 time-stop: DISABLED (2026-03-18).
+    # OOS paired portfolio replay (scripts/research/test_t80_oos.py) showed T80
+    # does not improve walk-forward performance for any instrument:
+    #   MGC: delta=-0.012, p=0.71 (inconclusive)
+    #   MNQ: delta=-0.008, p=0.02 (T80 HURTS, 1/9 windows better)
+    #   MES: delta=+0.005, p=0.56 (inconclusive)
+    # Sessions with strongest in-sample BH evidence (LONDON_METALS 27 survivors,
+    # SINGAPORE_OPEN 24 survivors) still hurt OOS. Original research had zero MNQ
+    # BH survivors yet T80 was applied to MNQ — now confirmed harmful.
+    # Decision: remove from execution. Discovery uses raw outcome/pnl_r.
+    # ts_outcome/ts_pnl_r columns remain in DB schema (historical record).
+    # @research-source: research/research_winner_speed.py (original)
+    # @oos-validation: scripts/research/test_t80_oos.py (2026-03-18)
+    # @decision: NO-GO — in-sample finding did not survive OOS validation
+    "CME_REOPEN": None,
+    "TOKYO_OPEN": None,
+    "SINGAPORE_OPEN": None,
+    "LONDON_METALS": None,
+    "EUROPE_FLOW": None,
+    "US_DATA_830": None,
+    "NYSE_OPEN": None,
+    "US_DATA_1000": None,
+    "COMEX_SETTLE": None,
+    "CME_PRECLOSE": None,
+    "NYSE_CLOSE": None,
+    "BRISBANE_1025": None,
 }
 
 # Session exit modes: how each session manages target/stop after entry.
