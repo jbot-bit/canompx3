@@ -213,51 +213,19 @@ class TestValidateStrategy:
         status, notes, _ = validate_strategy(_make_row(sharpe_ratio=0.01, max_drawdown_r=50.0), _cost())
         assert status == "PASSED"
 
-    # --- Phase 4c: DSR (Bailey & Lopez de Prado 2014) — INFORMATIONAL ONLY ---
-    # DSR logged but not used as hard gate until N_eff estimation is implemented.
-    # BH FDR already handles multiple testing at discovery level.
+    # --- Phase 4c/4d: DSR and FST — REMOVED (2026-03-18 adversarial review) ---
+    # Both were "logged, not rejected" (fake gates). DSR/FST data columns remain
+    # in experimental_strategies but are no longer checked during validation.
+    # Multiple testing is now handled by FDR hard gate in Phase C.
 
-    def test_dsr_below_noise_floor_passes(self):
-        """DSR < 0 is logged but does NOT reject (informational only)."""
-        status, notes, _ = validate_strategy(_make_row(sharpe_haircut=-0.5), _cost())
+    def test_dsr_fields_ignored(self):
+        """DSR fields in row dict have no effect on validation (removed gate)."""
+        status, _, _ = validate_strategy(_make_row(sharpe_haircut=-0.5), _cost())
         assert status == "PASSED"
 
-    def test_dsr_above_noise_floor_passes(self):
-        """DSR >= 0 passes."""
-        status, notes, _ = validate_strategy(_make_row(sharpe_haircut=0.5), _cost())
-        assert status == "PASSED"
-
-    def test_dsr_exactly_zero_passes(self):
-        """DSR == 0.0 passes."""
-        status, notes, _ = validate_strategy(_make_row(sharpe_haircut=0.0), _cost())
-        assert status == "PASSED"
-
-    def test_dsr_missing_passes(self):
-        """Missing DSR (legacy strategies) passes."""
-        row = _make_row()
-        assert "sharpe_haircut" not in row  # not in defaults
-        status, notes, _ = validate_strategy(row, _cost())
-        assert status == "PASSED"
-
-    # --- Phase 4d: FST hurdle (Lopez de Prado 2018) — INFORMATIONAL ONLY ---
-    # FST hurdle in Z-score units, sharpe_ratio in per-trade units. Unit mismatch.
-    # Also same N_eff issue as P4c. Demoted to informational.
-
-    def test_fst_below_hurdle_passes(self):
-        """Sharpe below FST hurdle is logged but does NOT reject (informational)."""
-        status, notes, _ = validate_strategy(_make_row(sharpe_ratio=0.05, fst_hurdle=0.15), _cost())
-        assert status == "PASSED"
-
-    def test_fst_above_hurdle_passes(self):
-        """Sharpe above FST hurdle passes."""
-        status, notes, _ = validate_strategy(_make_row(sharpe_ratio=0.30, fst_hurdle=0.15), _cost())
-        assert status == "PASSED"
-
-    def test_fst_hurdle_missing_passes(self):
-        """Missing FST hurdle (legacy strategies) passes."""
-        row = _make_row()
-        assert "fst_hurdle" not in row  # not in defaults
-        status, notes, _ = validate_strategy(row, _cost())
+    def test_fst_fields_ignored(self):
+        """FST fields in row dict have no effect on validation (removed gate)."""
+        status, _, _ = validate_strategy(_make_row(sharpe_ratio=0.05, fst_hurdle=0.15), _cost())
         assert status == "PASSED"
 
     def test_validation_notes_contain_reason(self):
@@ -275,6 +243,73 @@ def _yearly(years_data: dict) -> str:
             for y, (t, avg_r) in years_data.items()
         }
     )
+
+
+class TestBenjaminiHochberg:
+    """Tests for BH FDR correction — the sole multiple-testing gate."""
+
+    def test_all_significant(self):
+        """All p-values well below threshold pass FDR."""
+        from trading_app.strategy_validator import benjamini_hochberg
+
+        p_values = [("s1", 0.001), ("s2", 0.002), ("s3", 0.003)]
+        results = benjamini_hochberg(p_values, alpha=0.05)
+        assert all(r["fdr_significant"] for r in results.values())
+
+    def test_all_insignificant(self):
+        """All p-values above threshold fail FDR."""
+        from trading_app.strategy_validator import benjamini_hochberg
+
+        p_values = [("s1", 0.8), ("s2", 0.9), ("s3", 0.95)]
+        results = benjamini_hochberg(p_values, alpha=0.05)
+        assert not any(r["fdr_significant"] for r in results.values())
+
+    def test_mixed_significance(self):
+        """BH step-up correctly separates signal from noise."""
+        from trading_app.strategy_validator import benjamini_hochberg
+
+        # 3 real signals + 7 noise = K=10
+        p_values = [
+            ("real1", 0.001),
+            ("real2", 0.003),
+            ("real3", 0.005),
+            ("noise1", 0.10),
+            ("noise2", 0.20),
+            ("noise3", 0.30),
+            ("noise4", 0.50),
+            ("noise5", 0.60),
+            ("noise6", 0.80),
+            ("noise7", 0.90),
+        ]
+        results = benjamini_hochberg(p_values, alpha=0.05)
+        # Real signals should pass, noise should fail
+        for sid in ["real1", "real2", "real3"]:
+            assert results[sid]["fdr_significant"], f"{sid} should be significant"
+        for sid in ["noise1", "noise2", "noise3", "noise4"]:
+            assert not results[sid]["fdr_significant"], f"{sid} should not be significant"
+
+    def test_empty_input(self):
+        """Empty list returns empty dict."""
+        from trading_app.strategy_validator import benjamini_hochberg
+
+        assert benjamini_hochberg([], alpha=0.05) == {}
+
+    def test_global_k_stricter_than_subset(self):
+        """A p-value that passes with K=10 may fail with K=1000 (more tests = higher bar)."""
+        from trading_app.strategy_validator import benjamini_hochberg
+
+        # Borderline p-value
+        small_set = [("target", 0.04)] + [(f"n{i}", 0.5 + i * 0.01) for i in range(9)]
+        large_set = [("target", 0.04)] + [(f"n{i}", 0.5 + i * 0.0001) for i in range(999)]
+
+        result_small = benjamini_hochberg(small_set, alpha=0.05)
+        result_large = benjamini_hochberg(large_set, alpha=0.05)
+
+        # With K=10, rank 1 threshold = 0.05 * 1/10 = 0.005 — target at 0.04 fails both
+        # Actually BH threshold at rank 1 of 10 = 0.005, at rank 1 of 1000 = 0.00005
+        # But target is at rank 1 (smallest), so threshold scales with 1/K
+        # This test verifies the monotonicity property
+        assert result_small["target"]["adjusted_p"] <= result_large["target"]["adjusted_p"]
 
 
 class TestRegimeWaivers:

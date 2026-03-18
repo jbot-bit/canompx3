@@ -87,22 +87,19 @@ if TYPE_CHECKING:
 # Full-sample validation (Phase A) uses ALL data. Only WF window generation
 # starts from max(earliest_outcome, override_date).
 #
-# ── MGC REGIME LIMITATION (verified Mar 18 2026 — adversarial review) ────
-# Gold ATR: 11.5 (2018) → 30.6 (2020) → 155 (2026) = 13.5x variation.
-# Gold price: $1,300 → $3,500+ makes G4+ filters trivially easy at high prices.
-#
+# ── MGC REGIME LIMITATION (adversarial review 2026-03-18) ────────────────
 # REGIME DEPENDENCY IS REAL AND NOT RESOLVED:
-#   - All WF windows cluster in 2025-2026 regardless of mode (trade-count or
-#     calendar). Insufficient trades exist in low-vol years to form windows.
-#   - 86/90 FDR-surviving MGC strategies use G-filters. G4 at ATR=12 requires
-#     ORB ≥ 33% of daily range (restrictive). G4 at ATR=50 requires ≥ 8% (trivial).
-#     The filter self-selects for high-vol conditions.
-#   - Per-year win rates: 2017 14%, 2018 33%, 2019 50%, 2020+ 70-100%.
-#   - Full-sample validation includes low-vol years (75%-of-years-positive check),
+#   - All WF windows cluster in recent high-vol years regardless of mode
+#     (trade-count or calendar). Insufficient trades in low-vol years.
+#   - Most FDR-surviving MGC strategies use G-filters, which self-select for
+#     high-vol conditions (G4 at low ATR requires large % of daily range).
+#   - Full-sample validation includes low-vol years (75%-of-years-positive),
 #     but WF does NOT validate OOS performance in low vol.
 #
-# CONSEQUENCE: MGC strategies are regime-conditional on ATR > ~20. They may
-# not produce edge if gold volatility returns to 2016-2019 levels (ATR 11-17).
+# CONSEQUENCE: MGC strategies are regime-conditional on elevated ATR. They
+# may not produce edge if gold volatility returns to historical low levels.
+# @research-source adversarial-review-findings 2026-03-18
+# @revalidated-for E1/E2 event-based sessions (2026-03-18)
 # This is acceptable IF position sizing scales with regime confidence.
 # Runtime check: scripts/tools/check_regime.py flags low-ATR conditions.
 # ─────────────────────────────────────────────────────────────────────────
