@@ -17,6 +17,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 WORKTREE_ROOT = PROJECT_ROOT / ".worktrees"
 WORKTREE_META = ".canompx3-worktree.json"
 SYMLINK_TARGETS = [".venv", ".venv-wsl"]
+# Files/dirs linked into worktrees via hard links (files) or junctions (dirs).
+# These don't need admin on Windows, unlike symlinks.
+HARDLINK_FILES = ["gold.db"]
+JUNCTION_DIRS = ["models"]
 
 
 @dataclass(frozen=True)
@@ -131,6 +135,37 @@ def ensure_symlink(target: Path, link_path: Path) -> None:
         pass
 
 
+def ensure_hardlink(target: Path, link_path: Path) -> None:
+    """Create a hard link for a file. No admin needed on Windows (same volume)."""
+    if link_path.exists():
+        return
+    if not target.exists():
+        return
+    try:
+        os.link(target, link_path)
+    except OSError:
+        pass
+
+
+def ensure_junction(target: Path, link_path: Path) -> None:
+    """Create a directory junction. No admin needed on Windows (same volume)."""
+    if link_path.exists() or link_path.is_symlink():
+        return
+    if not target.exists() or not target.is_dir():
+        return
+    if os.name == "nt":
+        result = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(link_path), str(target)],
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            # Fall back to symlink
+            ensure_symlink(target, link_path)
+    else:
+        ensure_symlink(target, link_path)
+
+
 def write_metadata(path: Path, tool: str, name: str, branch: str, base_ref: str, purpose: str | None = None) -> None:
     existing = read_metadata(path) or {}
     now = datetime.now(UTC).isoformat()
@@ -164,6 +199,10 @@ def read_metadata_for(tool: str, name: str) -> dict[str, str] | None:
 def _ensure_scaffold(path: Path, tool: str, name: str, branch: str, base_ref: str, purpose: str | None = None) -> None:
     for item in SYMLINK_TARGETS:
         ensure_symlink(PROJECT_ROOT / item, path / item)
+    for item in HARDLINK_FILES:
+        ensure_hardlink(PROJECT_ROOT / item, path / item)
+    for item in JUNCTION_DIRS:
+        ensure_junction(PROJECT_ROOT / item, path / item)
     write_metadata(path, tool=tool, name=name, branch=branch, base_ref=base_ref, purpose=purpose)
 
 

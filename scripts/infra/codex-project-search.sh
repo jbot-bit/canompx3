@@ -8,9 +8,9 @@ PREFLIGHT="$ROOT/scripts/tools/session_preflight.py"
 
 if [[ "${CANOMPX3_SKIP_PREFLIGHT:-0}" != "1" && -f "$PREFLIGHT" ]]; then
   if command -v python3 >/dev/null 2>&1; then
-    python3 "$PREFLIGHT" --context codex-wsl --claim codex-search || true
+    python3 "$PREFLIGHT" --quiet --context codex-wsl --claim codex-search || true
   elif command -v python >/dev/null 2>&1; then
-    python "$PREFLIGHT" --context codex-wsl --claim codex-search || true
+    python "$PREFLIGHT" --quiet --context codex-wsl --claim codex-search || true
   fi
 fi
 
