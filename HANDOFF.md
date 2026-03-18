@@ -12,12 +12,10 @@ If nothing changed, leave it as-is.
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-03-18
-- **Commit:** 09bf10b — fix: pulse review fixes — worktree import, Brisbane TZ, test coverage
-- **Files changed:** 4 files
+- **Commit:** 85780a0 — test: pulse integration tests — real repo, no mocks, checker checks checker
+- **Files changed:** 2 files
   - `HANDOFF.md`
-  - `scripts/tools/project_pulse.py`
-  - `scripts/tools/session_preflight.py`
-  - `tests/test_tools/test_project_pulse.py`
+  - `tests/test_tools/test_pulse_integration.py`
 
 ## Decisions Made
 - HANDOFF.md is now auto-updated by post-commit hook — no manual "handover" needed
