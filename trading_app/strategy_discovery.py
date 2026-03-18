@@ -470,10 +470,10 @@ def compute_metrics(outcomes: list[dict], cost_spec=None, n_trials: int = 0) -> 
 
     # Split wins/losses (scratches/early_exits excluded from W/L stats)
     wins = [o for o in outcomes if o["outcome"] == "win"]
-    losses = [o for o in outcomes if o["outcome"] in ("loss", "time_stop")]
+    losses = [o for o in outcomes if o["outcome"] == "loss"]
     scratches = [o for o in outcomes if o["outcome"] == "scratch"]
     early_exits = [o for o in outcomes if o["outcome"] == "early_exit"]
-    traded = [o for o in outcomes if o["outcome"] in ("win", "loss", "time_stop")]
+    traded = [o for o in outcomes if o["outcome"] in ("win", "loss")]
 
     n_traded = len(traded)
     entry_signals = len(wins) + len(losses) + len(scratches) + len(early_exits)
@@ -688,7 +688,7 @@ def compute_dst_split_from_outcomes(outcomes: list[dict], orb_label: str) -> dic
     summer_rs = []
 
     for o in outcomes:
-        if o["outcome"] not in ("win", "loss", "time_stop"):
+        if o["outcome"] not in ("win", "loss"):
             continue
         td = o["trading_day"]
         if hasattr(td, "date"):

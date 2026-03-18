@@ -362,8 +362,7 @@ _TEMPLATES = {
     # (test_all_templates_have_sql).  Actual execution uses custom _execute_*
     # methods which build queries dynamically via _build_outcomes_base().
     QueryTemplate.OUTCOMES_STATS: """
-        SELECT COALESCE(o.ts_pnl_r, o.pnl_r) AS pnl_r,
-               o.outcome, o.mae_r, o.mfe_r, o.trading_day
+        SELECT o.pnl_r, o.outcome, o.mae_r, o.mfe_r, o.trading_day
         FROM orb_outcomes o
         JOIN daily_features d
             ON o.trading_day = d.trading_day
@@ -413,7 +412,7 @@ _TEMPLATES = {
     """,
     QueryTemplate.FILTER_COMPARE: """
         SELECT o.pnl_r, o.outcome
-        From orb_outcomes o
+        FROM orb_outcomes o
         JOIN daily_features d
             ON o.trading_day = d.trading_day
             AND o.symbol = d.symbol
