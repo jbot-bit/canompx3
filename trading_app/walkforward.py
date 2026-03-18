@@ -134,6 +134,12 @@ def run_walkforward(
     # Apply tight stop simulation (no-op for 1.0x)
     if stop_multiplier != 1.0 and cost_spec is not None:
         outcomes = apply_tight_stop(outcomes, stop_multiplier, cost_spec)
+    elif stop_multiplier != 1.0:
+        logger.warning(
+            "WF %s: tight stop requested (stop_multiplier=%.2f) but cost_spec is None — skipping",
+            strategy_id,
+            stop_multiplier,
+        )
 
     # Pre-sort outcomes by trading_day (should already be sorted from DB, make explicit)
     outcomes.sort(key=lambda o: o["trading_day"])
