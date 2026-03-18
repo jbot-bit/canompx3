@@ -12,8 +12,8 @@ class TestActiveInstruments:
     """Test the canonical active instruments list and accessor."""
 
     def test_exact_contents(self):
-        """Active instruments are exactly the 4 traded ORB instruments."""
-        assert get_active_instruments() == ["M2K", "MES", "MGC", "MNQ"]
+        """Active instruments are exactly the 3 traded ORB instruments."""
+        assert get_active_instruments() == ["MES", "MGC", "MNQ"]
 
     def test_sorted(self):
         """List is alphabetically sorted."""
@@ -25,12 +25,12 @@ class TestActiveInstruments:
         instruments = get_active_instruments()
         instruments.append("FAKE")
         assert "FAKE" not in ACTIVE_ORB_INSTRUMENTS
-        assert len(get_active_instruments()) == 4
+        assert len(get_active_instruments()) == 3
 
     def test_no_dead_instruments(self):
         """Dead-for-ORB instruments must not appear."""
         instruments = get_active_instruments()
-        for dead in ("MCL", "SIL", "M6E", "MBT"):
+        for dead in ("MCL", "SIL", "M6E", "MBT", "M2K"):
             assert dead not in instruments
 
     def test_no_source_aliases(self):

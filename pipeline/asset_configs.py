@@ -298,7 +298,9 @@ ASSET_CONFIGS = {
 
 # Dead instruments — tested and confirmed NO ORB breakout edge.
 # This is the canonical source for dead instruments.
-DEAD_ORB_INSTRUMENTS = frozenset({"MCL", "SIL", "M6E", "MBT"})
+# M2K added 2026-03-18: null test (8 seeds) — 0/18 families survive noise screening.
+#   Max family head ExpR = 0.223, below noise P95 (E2=0.20). Dead at any threshold.
+DEAD_ORB_INSTRUMENTS = frozenset({"MCL", "SIL", "M6E", "MBT", "M2K"})
 
 # Primary instruments actively traded for ORB breakout.
 # Excludes source aliases (ES, NQ) and dead-for-ORB instruments.
@@ -315,7 +317,7 @@ ACTIVE_ORB_INSTRUMENTS = sorted(
 def get_active_instruments() -> list[str]:
     """Return the list of actively traded ORB instruments (sorted copy).
 
-    Use this instead of hardcoding instrument lists. Dead: MCL, SIL, M6E, MBT.
+    Use this instead of hardcoding instrument lists. Dead: MCL, SIL, M6E, MBT, M2K.
     """
     return list(ACTIVE_ORB_INSTRUMENTS)
 
