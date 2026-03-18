@@ -201,8 +201,23 @@ def print_report(
     context: str,
     claim_tool: str | None = None,
     verify_only: bool = False,
+    quiet: bool = False,
     claim_path: Path = ACTIVE_SESSION_FILE,
 ) -> int:
+    warnings = build_warnings(root, context=context, active_tool=claim_tool, claim_path=claim_path)
+
+    if quiet:
+        # Quiet mode: only print warnings, silently write claims
+        if warnings:
+            for warning in warnings:
+                print(f"  !! {warning}")
+        if claim_tool and not verify_only:
+            write_claim(claim_path, tool=claim_tool, branch=branch_name(root), head=head_sha(root))
+        if verify_only and claim_tool:
+            ok, _ = verify_claim(root, active_tool=claim_tool, claim_path=claim_path)
+            return 0 if ok else 1
+        return 0
+
     print("=== SESSION PREFLIGHT ===")
     print(f"Root: {root}")
     print(f"Context: {context}")
@@ -226,7 +241,6 @@ def print_report(
     wsl_env = (root / ".venv-wsl" / "bin" / "python").exists()
     print(f"Env: .venv={'yes' if windows_env else 'no'} | .venv-wsl={'yes' if wsl_env else 'no'}")
 
-    warnings = build_warnings(root, context=context, active_tool=claim_tool, claim_path=claim_path)
     if warnings:
         print("Warnings:")
         for warning in warnings:
@@ -262,6 +276,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--context", default="generic", help="Startup context label")
     parser.add_argument("--claim", default=None, help="Write or verify a session claim for this tool")
     parser.add_argument("--verify-claim", action="store_true", help="Verify current HEAD against the stored claim")
+    parser.add_argument("--quiet", action="store_true", help="Only print warnings, suppress verbose output")
     parser.add_argument("--with-pulse", action="store_true", help="Append project pulse summary")
     parser.add_argument("--root", default=None, help="Override repo root")
     return parser
@@ -276,6 +291,7 @@ def main(argv: list[str] | None = None) -> int:
         context=args.context,
         claim_tool=args.claim,
         verify_only=args.verify_claim,
+        quiet=args.quiet,
     )
 
     if args.with_pulse:
