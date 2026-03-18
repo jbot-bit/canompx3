@@ -119,8 +119,10 @@ def compute_dsr(
 
     numerator = (sr_hat - sr0) * math.sqrt(t_obs - 1)
 
-    # Denominator adjusts for non-normal returns
-    denom_sq = 1.0 - skewness * sr_hat + (kurtosis_excess / 4.0) * sr_hat**2
+    # Denominator: Var[SR] per Lo (2002) Prop.2, Mertens (2002).
+    # Normal baseline contributes 0.5*SR^2; excess kurtosis adds (kurt_excess/4)*SR^2.
+    # Combined: (kurtosis_excess + 2) / 4 * SR^2.
+    denom_sq = 1.0 - skewness * sr_hat + ((kurtosis_excess + 2) / 4.0) * sr_hat**2
     if denom_sq <= 0:
         return 0.0
 
