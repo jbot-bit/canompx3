@@ -50,10 +50,14 @@ Fixed slippage assumption. Real slippage correlates with ORB size (bigger breako
 | **4** | **MGC regime documented honestly** | **DONE** | All WF windows 2025-2026 only. "RESOLVED" claim in config.py was false — corrected. |
 | **5** | **Cost model limitations documented** | **DONE** | Flat slippage is structurally optimistic for ORB entries. No fix without live fills. |
 | **6** | **Mechanism test reclassified** | **DONE** | Now called "artifact screen" not "mechanism proof." Honest about what it does/doesn't do. |
-| **7** | **Null envelope (10 seeds)** | TODO | White's Reality Check — set acceptance threshold from 95th percentile of noise. |
-| **8** | **E2-specific ExpR floor** | TODO | E2 null avg = -0.004R vs E1 null avg = -0.118R. Different thresholds needed. |
-| **9** | **External human quant review** | TODO | $200-500. Genuinely independent assessment. |
-| **10** | **Paper trading with tracking** | TODO | 3 months live. Kill criteria: slippage > 2x modeled, P&L < 50% backtest. |
+| **7** | **Null envelope (10 seeds)** | **DONE** | 10 seeds, 611 survivors. E1 floor=0.25, E2 floor=0.32. `scripts/tools/null_envelope.py`. |
+| **8** | **E2-specific ExpR floor** | **DONE** | Phase 2b hard gate in validator. E1=0.25, E2=0.32. Drift check enforces. |
+| **9** | **DSR analytical cross-check** | **DONE** | `trading_app/dsr.py`. Informational (not hard gate — N_eff unknown). DSR kills everything at N_eff>=10. Agrees with null test: most is noise. |
+| **10** | **M2K dropped** | **DONE** | 0/18 families survive any noise threshold. Added to DEAD_ORB_INSTRUMENTS. |
+| **11** | **ONC N_eff estimation** | TODO | Required to make DSR a hard gate. Lopez de Prado clustering algorithm. |
+| **12** | **Block bootstrap null** | TODO | Politis-Romano on actual returns. Realistic null (fat tails, vol clustering). |
+| **13** | **Cross-model AI review** | TODO | GPT-4/Gemini zero-context adversarial methodology review. |
+| **14** | **Paper trading with tracking** | TODO | 3 months live. Kill criteria: slippage > 2x modeled, P&L < 50% backtest. |
 
 ---
 
