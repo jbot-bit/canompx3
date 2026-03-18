@@ -12,13 +12,13 @@ If nothing changed, leave it as-is.
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-03-18
-- **Commit:** d0fe929 — [mechanical] fix: Ralph Loop iter 131 — RR mismatch trade-skip logged at DEBUG instead of INFO (RL-131)
+- **Commit:** e3b6f5a — [mechanical] chore: Ralph Loop iter 131 — update audit docs and ledger
 - **Files changed:** 5 files
   - `HANDOFF.md`
   - `docs/ralph-loop/logs/headless-20260318_1341-iter1.err`
-  - `docs/ralph-loop/logs/headless-20260318_1341-iter1.json`
-  - `docs/ralph-loop/ralph-loop-plan.md`
-  - `trading_app/ml/predict_live.py`
+  - `docs/ralph-loop/ralph-ledger.json`
+  - `docs/ralph-loop/ralph-loop-audit.md`
+  - `docs/ralph-loop/ralph-loop-history.md`
 
 ## Decisions Made
 - HANDOFF.md is now auto-updated by post-commit hook — no manual "handover" needed
