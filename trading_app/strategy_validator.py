@@ -1167,6 +1167,66 @@ def run_validation(
                     f"(of {n_fdr_sig + n_fdr_rejected} passed prior phases)"
                 )
 
+            # ── DSR: Deflated Sharpe Ratio (informational, not a gate) ──
+            # Computed per Bailey & Lopez de Prado (2014). Stored for analysis.
+            # NOT a hard gate because N_eff is uncertain (see dsr.py docstring).
+            if passed_strategy_ids:
+                from trading_app.dsr import compute_dsr, compute_sr0
+
+                # Migration: add DSR columns if missing
+                for col, coltype in [
+                    ("dsr_score", "DOUBLE"),
+                    ("sr0_at_discovery", "DOUBLE"),
+                ]:
+                    try:
+                        con.execute(f"ALTER TABLE validated_setups ADD COLUMN {col} {coltype}")
+                    except duckdb.CatalogException:
+                        pass  # column already exists
+
+                # V[SR] from per-trade Sharpe ratios across all canonical strategies
+                var_sr_row = con.execute(
+                    """SELECT VAR_SAMP(sharpe_ratio)
+                       FROM experimental_strategies
+                       WHERE sample_size >= 30
+                       AND sharpe_ratio IS NOT NULL
+                       AND is_canonical = TRUE"""
+                ).fetchone()
+                var_sr = var_sr_row[0] if var_sr_row and var_sr_row[0] else 0.047
+
+                # N_eff: use edge family count as conservative estimate.
+                # True N_eff requires ONC algorithm (action queue #9).
+                n_eff_row = con.execute(
+                    "SELECT COUNT(DISTINCT family_hash) FROM edge_families"
+                ).fetchone()
+                n_eff = max(n_eff_row[0] if n_eff_row and n_eff_row[0] else 253, 2)
+
+                sr0 = compute_sr0(n_eff, var_sr)
+                n_dsr_pass = 0
+
+                for sid in passed_strategy_ids:
+                    row_data = con.execute(
+                        """SELECT sharpe_ratio, sample_size, skewness, kurtosis_excess
+                           FROM validated_setups WHERE strategy_id = ?""",
+                        [sid],
+                    ).fetchone()
+                    if row_data:
+                        sr_hat = row_data[0] or 0
+                        t_obs = row_data[1] or 30
+                        skew = row_data[2] or 0
+                        kurt = row_data[3] or 0
+                        dsr_val = compute_dsr(sr_hat, sr0, t_obs, skew, kurt)
+                        con.execute(
+                            "UPDATE validated_setups SET dsr_score = ?, sr0_at_discovery = ? WHERE strategy_id = ?",
+                            [dsr_val, sr0, sid],
+                        )
+                        if dsr_val > 0.95:
+                            n_dsr_pass += 1
+
+                logger.info(
+                    f"  DSR (informational, N_eff={n_eff}, V[SR]={var_sr:.4f}, SR0={sr0:.4f}): "
+                    f"{n_dsr_pass}/{len(passed_strategy_ids)} pass DSR>0.95"
+                )
+
             con.commit()
 
     logger.info(
