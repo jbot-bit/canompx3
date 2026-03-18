@@ -1,10 +1,7 @@
-## Iteration: 132
-## Target: trading_app/walkforward.py:134-136
-## Finding: Silent failure — tight stop silently skipped when stop_multiplier != 1.0 but cost_spec is None (no warning emitted)
-## Classification: [judgment]
-## Blast Radius: 1 file changed (walkforward.py); 2 importers (strategy_validator.py [no-touch], test_walkforward.py)
-## Invariants:
-  1. Pass/fail rule (4 gates) MUST NOT change
-  2. apply_tight_stop MUST NOT be called without a valid cost_spec
-  3. stop_multiplier == 1.0 path MUST stay silent (no spurious warning)
-## Diff estimate: 4 lines
+## Iteration: 134
+## Target: pipeline/stats.py:4
+## Finding: Module docstring lists meta_label.py as a caller but meta_label.py does not import pipeline.stats (computes Sharpe inline instead). Real callers: evaluate.py, evaluate_validated.py, select_family_rr.py.
+## Classification: [mechanical]
+## Blast Radius: 0 callers affected (docstring-only change)
+## Invariants: [1] No behavior change; [2] All three real callers remain correct; [3] Function signatures and return values unchanged
+## Diff estimate: 1 line

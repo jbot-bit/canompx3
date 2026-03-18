@@ -1351,3 +1351,23 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 1 production file, 1 test file (test_walkforward.py — all 32 pass unchanged)
 - Verification: PASS (32/32 walkforward tests, 72 drift checks, 218 pre-commit suite, ruff clean)
 - Commit: 1b2ac93
+
+## Iteration 133 — 2026-03-18
+- Phase: audit-only
+- Classification: audit-only
+- Target: pipeline/calendar_filters.py
+- Finding: No actionable findings. Two LOW/ACCEPTABLE: (1) is_month_end/is_month_start/is_quarter_end are dormant exports with documented re-enablement path in calendar_overlay.py; (2) CPI list stale since 2026-03-12 and FOMC list missing 2026-05+ but both guarded by empty CALENDAR_RULES (0 rules loaded — calendar cascade research found zero BH FDR survivors).
+- Action: Audit only. All findings ACCEPTABLE. No code changes.
+- Blast radius: 3 callers (build_daily_features.py, calendar_overlay.py, session_orchestrator.py), 1 test file
+- Verification: PASS (58/58 test_calendar_filters.py, 72 drift checks, behavioral clean, ruff clean)
+- Commit: NONE
+
+## Iteration 134 — 2026-03-18
+- Phase: fix
+- Classification: [mechanical]
+- Target: pipeline/stats.py:3-5
+- Finding: Stale module docstring listed meta_label.py as an importer of pipeline.stats, but meta_label.py does not import it. Real callers: evaluate.py, evaluate_validated.py, select_family_rr.py.
+- Action: Corrected docstring to list all three actual callers by explicit path. No behavior change.
+- Blast radius: 0 production callers affected (docstring-only change)
+- Verification: PASS (13/13 test_rr_selection.py, 72 drift checks, 733 pre-commit suite, ruff clean)
+- Commit: a514218
