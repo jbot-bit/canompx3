@@ -1173,15 +1173,20 @@ def run_validation(
             if passed_strategy_ids:
                 from trading_app.dsr import compute_dsr, compute_sr0
 
-                # V[SR] from per-trade Sharpe ratios across all canonical strategies
-                var_sr_row = con.execute(
-                    """SELECT VAR_SAMP(sharpe_ratio)
-                       FROM experimental_strategies
-                       WHERE sample_size >= 30
-                       AND sharpe_ratio IS NOT NULL
-                       AND is_canonical = TRUE"""
-                ).fetchone()
-                var_sr = var_sr_row[0] if var_sr_row and var_sr_row[0] else 0.047
+                # V[SR] partitioned by entry model (cross-model review finding:
+                # mixing E1+E2 inflates V[SR] due to structural cost gap).
+                var_sr_by_em = {}
+                for em_query in ["E1", "E2"]:
+                    vr = con.execute(
+                        """SELECT VAR_SAMP(sharpe_ratio)
+                           FROM experimental_strategies
+                           WHERE entry_model = ?
+                           AND sample_size >= 30
+                           AND sharpe_ratio IS NOT NULL
+                           AND is_canonical = TRUE""",
+                        [em_query],
+                    ).fetchone()
+                    var_sr_by_em[em_query] = vr[0] if vr and vr[0] else 0.047
 
                 # N_eff: use edge family count as conservative estimate.
                 # True N_eff requires ONC algorithm (action queue #9).
@@ -1190,12 +1195,11 @@ def run_validation(
                 ).fetchone()
                 n_eff = max(n_eff_row[0] if n_eff_row and n_eff_row[0] else 253, 2)
 
-                sr0 = compute_sr0(n_eff, var_sr)
                 n_dsr_pass = 0
 
                 for sid in passed_strategy_ids:
                     row_data = con.execute(
-                        """SELECT sharpe_ratio, sample_size, skewness, kurtosis_excess
+                        """SELECT sharpe_ratio, sample_size, skewness, kurtosis_excess, entry_model
                            FROM validated_setups WHERE strategy_id = ?""",
                         [sid],
                     ).fetchone()
@@ -1204,6 +1208,9 @@ def run_validation(
                         t_obs = row_data[1] or 30
                         skew = row_data[2] or 0
                         kurt = row_data[3] or 0
+                        em_val = row_data[4] or "E2"
+                        var_sr = var_sr_by_em.get(em_val, 0.047)
+                        sr0 = compute_sr0(n_eff, var_sr)
                         dsr_val = compute_dsr(sr_hat, sr0, t_obs, skew, kurt)
                         con.execute(
                             "UPDATE validated_setups SET dsr_score = ?, sr0_at_discovery = ? WHERE strategy_id = ?",
@@ -1213,7 +1220,8 @@ def run_validation(
                             n_dsr_pass += 1
 
                 logger.info(
-                    f"  DSR (informational, N_eff={n_eff}, V[SR]={var_sr:.4f}, SR0={sr0:.4f}): "
+                    f"  DSR (informational, N_eff={n_eff}, "
+                    f"V[SR] E1={var_sr_by_em.get('E1', 0):.4f} E2={var_sr_by_em.get('E2', 0):.4f}): "
                     f"{n_dsr_pass}/{len(passed_strategy_ids)} pass DSR>0.95"
                 )
 
