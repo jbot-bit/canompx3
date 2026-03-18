@@ -12,10 +12,17 @@ If nothing changed, leave it as-is.
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-03-18
-- **Commit:** a514218 — [mechanical] fix: Ralph Loop iter 134 — stale docstring listed meta_label.py as importer; corrected to explicit caller paths (DF-STATS-01)
-- **Files changed:** 2 files
-  - `HANDOFF.md`
-  - `pipeline/stats.py`
+- **Commit:** 641da97 — feat: rewrite AI workstream launcher with Rich UI
+- **Files changed:** 9 files
+  - `ai-workstreams.bat`
+  - `pyproject.toml`
+  - `scripts/infra/claude-worktree.sh`
+  - `scripts/infra/codex-project-search.sh`
+  - `scripts/infra/codex-project.sh`
+  - `scripts/infra/windows_agent_launch.py`
+  - `scripts/tools/session_preflight.py`
+  - `scripts/tools/worktree_manager.py`
+  - `uv.lock`
 
 ## Decisions Made
 - HANDOFF.md is now auto-updated by post-commit hook — no manual "handover" needed
