@@ -250,7 +250,7 @@ def analyze_seeds(seed_dir: Path) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Batch null test runner (White's Reality Check)")
-    parser.add_argument("--seeds", type=int, default=50, help="Total seeds to run (default: 50)")
+    parser.add_argument("--seeds", type=int, default=100, help="Total seeds to run (default: 100)")
     parser.add_argument("--batch", type=int, default=1, help="Which batch (for parallel terminals)")
     parser.add_argument("--of", type=int, default=1, help="Total batches (for parallel terminals)")
     parser.add_argument("--analyze-only", action="store_true", help="Skip running, just analyze existing DBs")
