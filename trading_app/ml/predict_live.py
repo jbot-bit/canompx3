@@ -304,7 +304,7 @@ class LiveMLPredictor:
             # P(win) is understated (actual win rate is higher) — safe direction.
             training_rr = session_info.get("training_rr")
             if training_rr is not None and rr_target > training_rr:
-                logger.debug(
+                logger.info(
                     "RR mismatch for %s %s: model trained on RR%.1f, "
                     "prediction for RR%.1f (AGGRESSIVE) — skipping trade",
                     instrument,
