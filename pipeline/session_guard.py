@@ -59,6 +59,11 @@ _ALWAYS_SAFE: set[str] = {
     "prev_day_high", "prev_day_low", "prev_day_close",
     "prev_day_range", "prev_day_direction",
     "daily_open",  # known at 09:00
+    "rsi_14_at_CME_REOPEN",  # computed from prior-day 5m bars, known before any session
+    "confirm_bars",  # trade config, not market data
+    "orb_minutes",  # trade config
+    "entry_model",  # trade config
+    "stop_multiplier",  # trade config
 }
 
 # Features that are NEVER safe for ANY session (computed from full trading day)
@@ -77,8 +82,6 @@ _WINDOW_FEATURES: dict[str, str] = {
     "overnight_took_pdl": "LONDON_METALS",
     "session_asia_high": "LONDON_METALS",
     "session_asia_low": "LONDON_METALS",
-    # RSI at CME_REOPEN — computed from bars up to CME_REOPEN start
-    "rsi_14_at_CME_REOPEN": "CME_REOPEN",
     # Pre-1000 window (09:00-10:00) — safe after TOKYO_OPEN
     "pre_1000_high": "TOKYO_OPEN",
     "pre_1000_low": "TOKYO_OPEN",
@@ -138,13 +141,14 @@ def is_feature_safe(column: str, target_session: str) -> bool:
     match = _SESSION_COL_RE.match(column)
     if match:
         feature_session = match.group(1)
-        # Feature from session X is safe for session Y only if X is BEFORE Y
-        return _session_index(feature_session) < _session_index(target_session)
+        # Feature from session X is safe for session Y if X is BEFORE or SAME as Y
+        # Same-session features (orb_TOKYO_OPEN_size for TOKYO) ARE known at trade time
+        return _session_index(feature_session) <= _session_index(target_session)
 
     # Compression features follow the same pattern
     for sess in _SESSION_ORDER:
         if sess in column and ("compression" in column or "orb_" in column):
-            return _session_index(sess) < _session_index(target_session)
+            return _session_index(sess) <= _session_index(target_session)
 
     # Unknown column — fail CLOSED (not safe)
     return False
