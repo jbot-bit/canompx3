@@ -259,7 +259,7 @@ def analyze_seeds(seed_dir: Path) -> None:
             print(f"    -> CONSERVATIVE FLOOR: {float(np.ceil(conservative * 100) / 100)}")
 
     print(f"\n  RECOMMENDED: Update NOISE_EXPR_FLOOR in trading_app/config.py")
-    print(f"  Then run: python scripts/tools/null_envelope.py --analyze scripts/tests/null_seeds --update-config")
+    print(f"  Then run: python scripts/tools/null_envelope.py --analyze {seed_dir} --update-config")
 
 
 def main() -> int:
