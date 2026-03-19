@@ -1,0 +1,535 @@
+{
+  "seeds": {
+    "3": {
+      "seed": 3,
+      "status": "CACHED",
+      "survivors": 7
+    },
+    "1": {
+      "seed": 1,
+      "status": "CACHED",
+      "survivors": 34
+    },
+    "4": {
+      "seed": 4,
+      "status": "CACHED",
+      "survivors": 15
+    },
+    "2": {
+      "seed": 2,
+      "status": "CACHED",
+      "survivors": 24
+    },
+    "7": {
+      "seed": 7,
+      "status": "CACHED",
+      "survivors": 25
+    },
+    "6": {
+      "seed": 6,
+      "status": "CACHED",
+      "survivors": 7
+    },
+    "5": {
+      "seed": 5,
+      "status": "CACHED",
+      "survivors": 57
+    },
+    "0": {
+      "seed": 0,
+      "status": "CACHED",
+      "survivors": 55
+    },
+    "9": {
+      "seed": 9,
+      "status": "CACHED",
+      "survivors": 26
+    },
+    "8": {
+      "seed": 8,
+      "status": "CACHED",
+      "survivors": 40
+    },
+    "10": {
+      "seed": 10,
+      "status": "CACHED",
+      "survivors": 17
+    },
+    "12": {
+      "seed": 12,
+      "status": "CACHED",
+      "survivors": 6
+    },
+    "13": {
+      "seed": 13,
+      "status": "CACHED",
+      "survivors": 48
+    },
+    "11": {
+      "seed": 11,
+      "status": "CACHED",
+      "survivors": 34
+    },
+    "14": {
+      "seed": 14,
+      "status": "CACHED",
+      "survivors": 4
+    },
+    "15": {
+      "seed": 15,
+      "status": "CACHED",
+      "survivors": 34
+    },
+    "20": {
+      "seed": 20,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "23": {
+      "seed": 23,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "18": {
+      "seed": 18,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "19": {
+      "seed": 19,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "21": {
+      "seed": 21,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "22": {
+      "seed": 22,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "17": {
+      "seed": 17,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "16": {
+      "seed": 16,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "24": {
+      "seed": 24,
+      "status": "CACHED",
+      "survivors": 4
+    },
+    "31": {
+      "seed": 31,
+      "status": "CACHED",
+      "survivors": 10
+    },
+    "30": {
+      "seed": 30,
+      "status": "CACHED",
+      "survivors": 4
+    },
+    "27": {
+      "seed": 27,
+      "status": "CACHED",
+      "survivors": 13
+    },
+    "25": {
+      "seed": 25,
+      "status": "CACHED",
+      "survivors": 28
+    },
+    "26": {
+      "seed": 26,
+      "status": "CACHED",
+      "survivors": 21
+    },
+    "28": {
+      "seed": 28,
+      "status": "CACHED",
+      "survivors": 35
+    },
+    "29": {
+      "seed": 29,
+      "status": "CACHED",
+      "survivors": 44
+    },
+    "32": {
+      "seed": 32,
+      "status": "CACHED",
+      "survivors": 21
+    },
+    "34": {
+      "seed": 34,
+      "status": "CACHED",
+      "survivors": 5
+    },
+    "37": {
+      "seed": 37,
+      "status": "CACHED",
+      "survivors": 7
+    },
+    "33": {
+      "seed": 33,
+      "status": "CACHED",
+      "survivors": 22
+    },
+    "36": {
+      "seed": 36,
+      "status": "CACHED",
+      "survivors": 8
+    },
+    "35": {
+      "seed": 35,
+      "status": "CACHED",
+      "survivors": 14
+    },
+    "38": {
+      "seed": 38,
+      "status": "CACHED",
+      "survivors": 60
+    },
+    "39": {
+      "seed": 39,
+      "status": "CACHED",
+      "survivors": 20
+    },
+    "40": {
+      "seed": 40,
+      "status": "CACHED",
+      "survivors": 58
+    },
+    "41": {
+      "seed": 41,
+      "status": "CACHED",
+      "survivors": 48
+    },
+    "47": {
+      "seed": 47,
+      "status": "CACHED",
+      "survivors": 1
+    },
+    "42": {
+      "seed": 42,
+      "status": "CACHED",
+      "survivors": 20
+    },
+    "45": {
+      "seed": 45,
+      "status": "CACHED",
+      "survivors": 12
+    },
+    "43": {
+      "seed": 43,
+      "status": "CACHED",
+      "survivors": 39
+    },
+    "44": {
+      "seed": 44,
+      "status": "CACHED",
+      "survivors": 73
+    },
+    "46": {
+      "seed": 46,
+      "status": "CACHED",
+      "survivors": 65
+    },
+    "48": {
+      "seed": 48,
+      "status": "CACHED",
+      "survivors": 58
+    },
+    "49": {
+      "seed": 49,
+      "status": "CACHED",
+      "survivors": 30
+    },
+    "50": {
+      "seed": 50,
+      "status": "CACHED",
+      "survivors": 29
+    },
+    "51": {
+      "seed": 51,
+      "status": "CACHED",
+      "survivors": 14
+    },
+    "52": {
+      "seed": 52,
+      "status": "CACHED",
+      "survivors": 15
+    },
+    "53": {
+      "seed": 53,
+      "status": "CACHED",
+      "survivors": 74
+    },
+    "54": {
+      "seed": 54,
+      "status": "CACHED",
+      "survivors": 14
+    },
+    "55": {
+      "seed": 55,
+      "status": "CACHED",
+      "survivors": 37
+    },
+    "57": {
+      "seed": 57,
+      "status": "CACHED",
+      "survivors": 34
+    },
+    "56": {
+      "seed": 56,
+      "status": "CACHED",
+      "survivors": 53
+    },
+    "58": {
+      "seed": 58,
+      "status": "CACHED",
+      "survivors": 60
+    },
+    "59": {
+      "seed": 59,
+      "status": "CACHED",
+      "survivors": 18
+    },
+    "60": {
+      "seed": 60,
+      "status": "CACHED",
+      "survivors": 33
+    },
+    "61": {
+      "seed": 61,
+      "status": "CACHED",
+      "survivors": 3
+    },
+    "62": {
+      "seed": 62,
+      "status": "CACHED",
+      "survivors": 9
+    },
+    "63": {
+      "seed": 63,
+      "status": "CACHED",
+      "survivors": 5
+    },
+    "65": {
+      "seed": 65,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "67": {
+      "seed": 67,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "72": {
+      "seed": 72,
+      "status": "FAIL",
+      "survivors": 15,
+      "elapsed_s": 3301.5,
+      "completed_at": "2026-03-18T23:16:14.827237+00:00"
+    },
+    "73": {
+      "seed": 73,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "74": {
+      "seed": 74,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "75": {
+      "seed": 75,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "71": {
+      "seed": 71,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "78": {
+      "seed": 78,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "77": {
+      "seed": 77,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "76": {
+      "seed": 76,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "68": {
+      "seed": 68,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "66": {
+      "seed": 66,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "81": {
+      "seed": 81,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "80": {
+      "seed": 80,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "79": {
+      "seed": 79,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "83": {
+      "seed": 83,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "82": {
+      "seed": 82,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "85": {
+      "seed": 85,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "86": {
+      "seed": 86,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "84": {
+      "seed": 84,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "87": {
+      "seed": 87,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "89": {
+      "seed": 89,
+      "status": "FAIL",
+      "survivors": 45,
+      "elapsed_s": 3324.1,
+      "completed_at": "2026-03-18T23:16:37.129973+00:00"
+    },
+    "88": {
+      "seed": 88,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "90": {
+      "seed": 90,
+      "status": "FAIL",
+      "survivors": 11,
+      "elapsed_s": 2129.3,
+      "completed_at": "2026-03-18T22:56:42.322208+00:00"
+    },
+    "91": {
+      "seed": 91,
+      "status": "FAIL",
+      "survivors": 42,
+      "elapsed_s": 3349.1,
+      "completed_at": "2026-03-18T23:17:02.087952+00:00"
+    },
+    "94": {
+      "seed": 94,
+      "status": "FAIL",
+      "survivors": 23,
+      "elapsed_s": 3207.0,
+      "completed_at": "2026-03-18T23:14:41.519615+00:00"
+    },
+    "93": {
+      "seed": 93,
+      "status": "FAIL",
+      "survivors": 69,
+      "elapsed_s": 3349.7,
+      "completed_at": "2026-03-18T23:17:02.714607+00:00"
+    },
+    "95": {
+      "seed": 95,
+      "status": "FAIL",
+      "survivors": 53,
+      "elapsed_s": 3207.3,
+      "completed_at": "2026-03-18T23:14:41.917755+00:00"
+    },
+    "92": {
+      "seed": 92,
+      "status": "FAIL",
+      "survivors": 43,
+      "elapsed_s": 3212.1,
+      "completed_at": "2026-03-18T23:14:46.676346+00:00"
+    },
+    "96": {
+      "seed": 96,
+      "status": "PASS",
+      "survivors": 0,
+      "elapsed_s": 2214.0,
+      "completed_at": "2026-03-18T23:33:36.322436+00:00"
+    },
+    "97": {
+      "seed": 97,
+      "status": "PASS",
+      "survivors": 0,
+      "elapsed_s": 1623.4,
+      "completed_at": "2026-03-18T23:41:48.952210+00:00"
+    },
+    "98": {
+      "seed": 98,
+      "status": "PASS",
+      "survivors": 0,
+      "elapsed_s": 1620.0,
+      "completed_at": "2026-03-18T23:41:48.048775+00:00"
+    },
+    "99": {
+      "seed": 99,
+      "status": "PASS",
+      "survivors": 0,
+      "elapsed_s": 1618.4,
+      "completed_at": "2026-03-18T23:41:52.038605+00:00"
+    },
+    "69": {
+      "seed": 69,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "70": {
+      "seed": 70,
+      "status": "CACHED",
+      "survivors": 0
+    },
+    "64": {
+      "seed": 64,
+      "status": "CACHED",
+      "survivors": 0
+    }
+  },
+  "config_snapshot": {
+    "noise_floors": {
+      "E1": 0,
+      "E2": 0
+    }
+  },
+  "created": "2026-03-18T11:31:18.778309+00:00"
+}

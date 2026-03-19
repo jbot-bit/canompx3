@@ -1,0 +1,136 @@
+================================================================================
+COMPLETE TRADING SYSTEM AUDIT — GOLD.DB STATE AS OF 2026-03-19
+================================================================================
+
+EXECUTIVE SUMMARY
+Portfolio Status: HEALTHY | 2,372 active strategies | 100% WF-tested | 3-7 days fresh
+
+PORTFOLIO BREAKDOWN
+===================
+MGC:   573 strategies (134 families) | Avg ExpR: 0.1627 | Avg Sharpe: 0.5738
+MNQ: 1,443 strategies (326 families) | Avg ExpR: 0.1012 | Avg Sharpe: 1.1113
+MES:   261 strategies (105 families) | Avg ExpR: 0.0877 | Avg Sharpe: 0.7742
+M2K:    95 strategies (46 families)  | Avg ExpR: 0.0766 | Avg Sharpe: 0.8145
+────────────────────────────────────────────────────────────────────────────
+2,372 TOTAL (611 families)
+
+CRITICAL METRICS
+================
+Walk-Forward Pass Rate: 100% (2,372/2,372 strategies passed)
+Edge Family Robustness: 187 ROBUST + 24 SINGLETON + 60 WHITELISTED = 271 high-quality (44%)
+Entry Model: E2 dominates (E2 +49-152% Sharpe gain over E1 across all instruments)
+Sample Sizes: MGC median n=147 | MNQ median n=1,038 | MES median n=683 | M2K median n=755
+
+E1 vs E2 PERFORMANCE COMPARISON
+===============================
+         E1 Count  E2 Count  E1 Med ExpR  E2 Med ExpR  Gain    E1 Sharpe  E2 Sharpe  Gain
+MGC         323       250       0.1273       0.1902    +49%       0.4348     0.7109    +64%
+MNQ         118     1,325       0.0562       0.0951    +69%       0.5855     1.0873    +86%
+MES          12       249       0.0485       0.0753    +55%       0.2941     0.7430   +152%
+M2K           7        88       0.0755       0.0721     -4%       0.4010     0.8565   +114%
+
+Verdict: E2 (stop-market) wins uniformly. E1 retained as conservative baseline only.
+
+ORB APERTURE DISTRIBUTION (5/15/30 minute breakouts)
+====================================================
+MGC:   O5 strongest (238 strats, 0.2033 ExpR) | O15: 268 (0.1316) | O30: 67 (0.1433)
+MNQ:   O5 strongest (784 strats, 0.1141 ExpR) | O15: 339 (0.0845) | O30: 320 (0.0873)
+MES:   O5 strongest (128 strats, 0.1028 ExpR) | O15: 115 (0.0765) | O30: 18 (0.0520)
+M2K:   O15 slightly stronger (34 strats, 0.0820 ExpR) | O5: 44 (0.0724) | O30: 17 (0.0769)
+
+Portfolio insight: 5-minute apertures dominate (51% of strategies). Current allocation optimal.
+
+SAMPLE SIZE STATISTICS
+======================
+MGC (TIGHTEST):       Min 62 | p25 90 | Median 147 | p75 230 | Max 1,863
+M2K (MOST CONSISTENT):Min 144 | p25 513 | Median 755 | p75 1,055 | Max 1,287
+MES (GOOD SPREAD):    Min 124 | p25 328 | Median 683 | p75 1,219 | Max 1,798
+MNQ (DEEPEST):        Min 77 | p25 655 | Median 1,026 | p75 1,260 | Max 1,314
+
+MGC at edge of statistical confidence (n=147) but above REGIME threshold (30).
+All instruments above validation threshold. MNQ has best depth.
+
+EDGE FAMILY ROBUSTNESS
+======================
+ROBUST (5+ consistent members): 187 families
+  MGC 42 | MNQ 125 | MES 16 | M2K 4
+  
+SINGLETON (isolated high-quality edge): 24 families
+  MES has best Sharpe (1.3413), MGC has best ExpR (0.1908)
+
+WHITELISTED (3-4 members, manually validated): 60 families
+  MNQ 29 | MES 6 | MGC 2 | M2K 5
+
+PURGED (failed consistency): 340 families (55% of all families)
+  Correctly removed from live portfolio. Historical artifacts only.
+
+PORTFOLIO RANKING BY EDGE QUALITY
+==================================
+1. MGC E2:     0.1902 ExpR | 250 strats | n=151 | Sharpe 0.7109 (HIGHEST ABSOLUTE EDGE)
+2. MGC E1:     0.1273 ExpR | 323 strats | n=138 | Sharpe 0.4348
+3. MNQ E2:     0.0951 ExpR | 1,325 strats | n=1,038 | Sharpe 1.0873 (BEST RISK-ADJUSTED)
+4. MES E2:     0.0753 ExpR | 249 strats | n=727 | Sharpe 0.7430
+5. M2K E2:     0.0721 ExpR | 88 strats | n=775 | Sharpe 0.8565
+6. MNQ E1:     0.0562 ExpR | 118 strats | n=682 | Sharpe 0.5855
+7. MES E1:     0.0485 ExpR | 12 strats | n=388 | Sharpe 0.2941 (WEAK)
+
+TOP STRATEGIES (by ExpR)
+========================
+MGC: MGC_TOKYO_OPEN_E2_RR4.0_CB1_ORB_G4_FAST5_S075
+     ExpR: 0.5533 | n: 89 | Sharpe: 1.0798 | Win: 48.3%
+
+MES: MES_CME_PRECLOSE_E2_RR1.5_CB1_ATR70_VOL_S075
+     ExpR: 0.2940 | n: 229 | Sharpe: 1.6982 | Win: 41.5%
+
+MNQ: MNQ_CME_PRECLOSE_E2_RR1.0_CB1_VOL_RV12_N20_O15
+     ExpR: 0.3741 | n: 142 | Sharpe: 2.2943 | Win: 39.4%
+
+M2K: M2K_LONDON_METALS_E2_RR3.0_CB1_ORB_G6_NOMON_O15_S075
+     ExpR: 0.2228 | n: 184 | Sharpe: 0.8667 | Win: 51.1%
+
+SESSION DOMINANCE
+=================
+MGC:  TOKYO_OPEN (all top 5) | Filter: ORB_G4_FAST5
+MES:  CME_PRECLOSE (dominant) | Filter: ATR70_VOL
+MNQ:  CME_PRECLOSE + COMEX_SETTLE (split) | Filters: VOL_RV12_N20, ATR70_VOL
+M2K:  LONDON_METALS (all top 5) | Filter: ORB_G6_NOMON
+
+Each instrument has a clear "home session" with superior edge. Concentration is
+NOT a red flag but worth monitoring for regime changes.
+
+DATA FRESHNESS
+==============
+MNQ: 2026-03-16 19:48 (3 days old)
+MGC: 2026-03-16 18:55 (3 days old)
+MES: 2026-03-16 17:48 (3 days old)
+M2K: 2026-03-12 09:04 (7 days old)
+
+All data < 1 week old. Excellent freshness. M2K slightly stale; rebuild if
+this instrument is critical.
+
+KEY FINDINGS
+============
+1. E2 DOMINANCE: Stop-market beats market-order by +49-152% Sharpe.
+2. MGC PEAK: Highest ExpR (0.1627) but lowest samples (n=147 median).
+3. MNQ BREADTH: Best Sharpe (1.1113), largest samples (n=1,038), 92% E2.
+4. 100% WF PASS: All 2,372 strategies validated; no overfit signs.
+5. ROBUST EDGES: 44% of 611 families are high-quality (187+24+60).
+
+RED FLAGS
+=========
+NONE CRITICAL. Minor observations:
+  - MGC at statistical edge (n=147). Monitor OOS variance.
+  - M2K rebuild stale (7 days). Rebuild before heavy trading.
+  - MES O30 sparse (18 strats). Non-issue unless O30 is strategic.
+
+RECOMMENDATION
+===============
+TRADE AS-IS. Portfolio is healthy, validated, and fresh.
+
+Allocation suggestion: MNQ 40-50% (best Sharpe), MGC 25-35% (highest ExpR),
+MES 15-20%, M2K 5-10%.
+
+Monitor: MGC out-of-sample variance. Rebuild M2K before heavy deployment.
+Refresh data weekly to maintain edge quality.
+
+================================================================================

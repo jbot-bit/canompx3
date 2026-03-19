@@ -1,0 +1,4 @@
+
+⚠ Sandbox disabled: sandbox.enabled is set but windows is not supported (requires macOS, Linux, or WSL2)
+  Commands will run WITHOUT sandboxing. Network and filesystem restrictions will NOT be enforced.
+
