@@ -488,7 +488,16 @@ def compute_overnight_stats(bars_df: pd.DataFrame, trading_day: date) -> dict:
     overnight_*: Asia session window (09:00-17:00 Brisbane = first 8h of trading day).
     pre_1000_*:  Bars from trading day start to 10:00 Brisbane (hour before TOKYO_OPEN ORB).
 
-    These are pre-entry for the TOKYO_OPEN session — no look-ahead.
+    LOOK-AHEAD WARNING (2026-03-19): overnight_* features use the FULL 09:00-17:00
+    Brisbane window. They contain FUTURE price data for any session starting inside
+    that window:
+      - CME_REOPEN at 09:00 (winter/CST): 8hrs of future data
+      - TOKYO_OPEN at 10:00: 7hrs of future data
+      - SINGAPORE_OPEN at 11:00: 6hrs of future data
+    These features are ONLY valid for sessions starting AFTER 17:00 Brisbane
+    (LONDON_METALS, US_DATA_830, NYSE_OPEN, etc.).
+    pre_1000_* features are valid for TOKYO_OPEN (window ends at 10:00, before ORB).
+    See trading_app/ml/config.py LOOKAHEAD_BLACKLIST for ML usage restrictions.
     """
     result: dict = {
         "overnight_high": None,
