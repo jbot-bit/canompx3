@@ -453,9 +453,9 @@ class LiveMLPredictor:
 
             # Backfill global features from orb_minutes=5 if needed.
             # Check multiple features — atr_20 may exist at O15 while
-            # overnight_range/prev_day_range are NULL.
+            # prev_day_range/atr_vel_ratio are NULL.
             if orb_minutes != 5 and any(
-                row_dict.get(c) is None for c in ("overnight_range", "prev_day_range", "atr_vel_ratio")
+                row_dict.get(c) is None for c in ("prev_day_range", "atr_vel_ratio")
             ):
                 g5_result = con.execute(
                     """SELECT * FROM daily_features
