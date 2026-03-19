@@ -16,6 +16,8 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 WORKTREE_ROOT = PROJECT_ROOT / ".worktrees"
 WORKTREE_META = ".canompx3-worktree.json"
+TASK_NAMESPACE = "tasks"
+KNOWN_TOOLS = ("claude", "codex")
 SYMLINK_TARGETS = [".venv", ".venv-wsl"]
 # Files/dirs linked into worktrees via hard links (files) or junctions (dirs).
 # These don't need admin on Windows, unlike symlinks.
@@ -42,6 +44,9 @@ class ManagedWorktreeInfo:
     created_at: str | None = None
     last_opened_at: str | None = None
     purpose: str | None = None
+    state: str | None = None
+    handoff_note: str | None = None
+    last_actor_tool: str | None = None
     dirty: bool = False
 
 
@@ -67,7 +72,51 @@ def build_branch_name(tool: str, name: str) -> str:
 
 
 def build_worktree_path(tool: str, name: str) -> Path:
+    _ = tool
+    return WORKTREE_ROOT / TASK_NAMESPACE / slugify(name)
+
+
+def build_legacy_worktree_path(tool: str, name: str) -> Path:
     return WORKTREE_ROOT / slugify(tool) / slugify(name)
+
+
+def _candidate_worktree_paths(name: str, tool: str | None = None) -> list[Path]:
+    candidates: list[Path] = [build_worktree_path(tool or "", name)]
+    if tool:
+        candidates.append(build_legacy_worktree_path(tool, name))
+    for known_tool in KNOWN_TOOLS:
+        legacy = build_legacy_worktree_path(known_tool, name)
+        if legacy not in candidates:
+            candidates.append(legacy)
+    return candidates
+
+
+def find_managed_worktree_path(name: str, tool: str | None = None) -> Path | None:
+    matches: list[Path] = []
+    seen: set[Path] = set()
+
+    for path in _candidate_worktree_paths(name, tool):
+        meta_path = path / WORKTREE_META
+        if meta_path.exists():
+            resolved = path.resolve()
+            if resolved not in seen:
+                matches.append(resolved)
+                seen.add(resolved)
+
+    if WORKTREE_ROOT.exists():
+        for meta_path in sorted(WORKTREE_ROOT.rglob(WORKTREE_META)):
+            path = meta_path.parent.resolve()
+            if path in seen:
+                continue
+            meta = read_metadata(path)
+            if meta and str(meta.get("name")) == name:
+                matches.append(path)
+                seen.add(path)
+
+    if len(matches) > 1:
+        joined = ", ".join(str(path) for path in matches)
+        raise RuntimeError(f"Multiple managed worktrees share the name {name!r}: {joined}")
+    return matches[0] if matches else None
 
 
 def current_branch(root: Path = PROJECT_ROOT) -> str:
@@ -166,7 +215,17 @@ def ensure_junction(target: Path, link_path: Path) -> None:
         ensure_symlink(target, link_path)
 
 
-def write_metadata(path: Path, tool: str, name: str, branch: str, base_ref: str, purpose: str | None = None) -> None:
+def write_metadata(
+    path: Path,
+    tool: str,
+    name: str,
+    branch: str,
+    base_ref: str,
+    purpose: str | None = None,
+    state: str | None = "active",
+    handoff_note: str | None = None,
+    last_actor_tool: str | None = None,
+) -> None:
     existing = read_metadata(path) or {}
     now = datetime.now(UTC).isoformat()
     meta = {
@@ -177,6 +236,9 @@ def write_metadata(path: Path, tool: str, name: str, branch: str, base_ref: str,
         "created_at": existing.get("created_at", now),
         "last_opened_at": now,
         "purpose": purpose or existing.get("purpose"),
+        "state": state or existing.get("state") or "active",
+        "handoff_note": handoff_note if handoff_note is not None else existing.get("handoff_note"),
+        "last_actor_tool": last_actor_tool or existing.get("last_actor_tool") or tool,
         "repo_root": str(PROJECT_ROOT),
     }
     (path / WORKTREE_META).write_text(json.dumps(meta, indent=2), encoding="utf-8")
@@ -193,7 +255,20 @@ def read_metadata(path: Path) -> dict[str, str] | None:
 
 
 def read_metadata_for(tool: str, name: str) -> dict[str, str] | None:
-    return read_metadata(build_worktree_path(tool, name))
+    path = find_managed_worktree_path(name, tool=tool)
+    if path is None:
+        return None
+    return read_metadata(path)
+
+
+def set_metadata_fields(path: Path, **changes: str | None) -> dict[str, str]:
+    meta = read_metadata(path)
+    if meta is None:
+        raise RuntimeError(f"Missing metadata for managed worktree: {path}")
+    meta.update({key: value for key, value in changes.items() if value is not None})
+    meta["last_opened_at"] = datetime.now(UTC).isoformat()
+    (path / WORKTREE_META).write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    return meta
 
 
 def _ensure_scaffold(path: Path, tool: str, name: str, branch: str, base_ref: str, purpose: str | None = None) -> None:
@@ -203,22 +278,41 @@ def _ensure_scaffold(path: Path, tool: str, name: str, branch: str, base_ref: st
         ensure_hardlink(PROJECT_ROOT / item, path / item)
     for item in JUNCTION_DIRS:
         ensure_junction(PROJECT_ROOT / item, path / item)
-    write_metadata(path, tool=tool, name=name, branch=branch, base_ref=base_ref, purpose=purpose)
+    write_metadata(
+        path,
+        tool=tool,
+        name=name,
+        branch=branch,
+        base_ref=base_ref,
+        purpose=purpose,
+        state="active",
+        last_actor_tool=tool,
+    )
 
 
 def create_worktree(tool: str, name: str, base_ref: str = "HEAD", purpose: str | None = None) -> Path:
     prune_worktrees()
-    branch = build_branch_name(tool, name)
-    path = build_worktree_path(tool, name)
+    path = find_managed_worktree_path(name, tool=tool)
+    if path is None:
+        for candidate in _candidate_worktree_paths(name, tool):
+            if candidate.exists():
+                path = candidate
+                break
+    if path is None:
+        path = build_worktree_path(tool, name)
     active_paths = {Path(wt.path).resolve() for wt in list_worktrees()}
     if path.exists():
         if path.resolve() not in active_paths:
             raise RuntimeError(
                 f"Managed worktree path exists but is not active: {path}. Run prune or remove the stale directory."
             )
+        existing = read_metadata(path) or {}
+        branch = str(existing.get("branch") or build_branch_name(tool, name))
+        base_ref = str(existing.get("base_ref") or base_ref)
         _ensure_scaffold(path, tool=tool, name=name, branch=branch, base_ref=base_ref, purpose=purpose)
         return path
 
+    branch = build_branch_name(tool, name)
     ensure_parent(path)
     result = _run_git("worktree", "add", "-b", branch, str(path), base_ref)
     if result.returncode != 0:
@@ -260,6 +354,9 @@ def list_managed_worktrees(root: Path = PROJECT_ROOT) -> list[ManagedWorktreeInf
                 created_at=meta.get("created_at"),
                 last_opened_at=meta.get("last_opened_at"),
                 purpose=meta.get("purpose"),
+                state=meta.get("state"),
+                handoff_note=meta.get("handoff_note"),
+                last_actor_tool=meta.get("last_actor_tool"),
                 dirty=bool(worktree_status(path)),
             )
         )
@@ -271,7 +368,8 @@ def _resolve_worktree(path: str | None = None, name: str | None = None, tool: st
     if path:
         return Path(path).resolve()
     if name and tool:
-        return build_worktree_path(tool, name)
+        existing = find_managed_worktree_path(name, tool=tool)
+        return existing or build_worktree_path(tool, name)
     raise ValueError("Provide --path or both --tool and --name")
 
 
@@ -309,6 +407,65 @@ def close_worktree(path: Path, force: bool = False, drop_branch: bool = False) -
 
     if path.exists():
         shutil.rmtree(path, ignore_errors=True)
+
+
+def handoff_worktree(path: Path, target_tool: str, purpose: str | None = None, note: str | None = None) -> dict[str, str]:
+    meta = read_metadata(path)
+    if meta is None:
+        raise RuntimeError(f"Missing metadata for managed worktree: {path}")
+
+    previous_tool = str(meta.get("tool") or "unknown")
+    return set_metadata_fields(
+        path,
+        tool=target_tool,
+        purpose=purpose or str(meta.get("purpose") or ""),
+        state="handoff",
+        handoff_note=note if note is not None else str(meta.get("handoff_note") or ""),
+        last_actor_tool=previous_tool,
+    )
+
+
+def ship_worktree(path: Path, merge_target: str = "main", commit_message: str | None = None) -> dict[str, str]:
+    meta = read_metadata(path)
+    if meta is None:
+        raise RuntimeError(f"Missing metadata for managed worktree: {path}")
+
+    dirty = worktree_status(path)
+    if dirty and not commit_message:
+        raise RuntimeError("Worktree has uncommitted changes. Provide --commit-message to ship it.")
+
+    root_dirty = worktree_status(PROJECT_ROOT)
+    if root_dirty:
+        raise RuntimeError("Main repo worktree is dirty. Clean it before shipping a task workstream.")
+
+    current = current_branch(PROJECT_ROOT)
+    if current != merge_target:
+        raise RuntimeError(f"Main repo is on {current}, expected {merge_target}. Refusing to ship.")
+
+    if dirty:
+        add_result = _run_git("add", "-A", cwd=path)
+        if add_result.returncode != 0:
+            raise RuntimeError(add_result.stderr.strip() or add_result.stdout.strip() or "git add failed")
+        commit_result = _run_git("commit", "-m", commit_message, cwd=path)
+        if commit_result.returncode != 0:
+            raise RuntimeError(commit_result.stderr.strip() or commit_result.stdout.strip() or "git commit failed")
+
+    branch_result = _run_git("branch", "--show-current", cwd=path)
+    branch = branch_result.stdout.strip() if branch_result.returncode == 0 else ""
+    if not branch:
+        raise RuntimeError(f"Unable to determine worktree branch for {path}")
+
+    merge_result = _run_git("merge", "--no-ff", "--no-edit", branch, cwd=PROJECT_ROOT)
+    if merge_result.returncode != 0:
+        raise RuntimeError(merge_result.stderr.strip() or merge_result.stdout.strip() or "git merge failed")
+
+    close_worktree(path, force=False, drop_branch=True)
+    return {
+        "path": str(path),
+        "branch": branch,
+        "merge_target": merge_target,
+        "name": str(meta.get("name") or path.name),
+    }
 
 
 def cmd_list(_args: argparse.Namespace) -> int:
@@ -371,6 +528,13 @@ def cmd_show(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_handoff(args: argparse.Namespace) -> int:
+    path = _resolve_worktree(path=args.path, name=args.name, tool=args.tool)
+    meta = handoff_worktree(path, target_tool=args.target_tool, purpose=args.purpose, note=args.note)
+    print(json.dumps(meta, indent=2) if args.json else f"Handoff set: {meta.get('name')} -> {meta.get('tool')}")
+    return 0
+
+
 def cmd_prune(_args: argparse.Namespace) -> int:
     before = list_worktrees()
     prune_worktrees()
@@ -389,6 +553,16 @@ def cmd_close(args: argparse.Namespace) -> int:
         return 0
     close_worktree(path, force=args.force, drop_branch=args.drop_branch)
     print(f"Closed {path}")
+    return 0
+
+
+def cmd_ship(args: argparse.Namespace) -> int:
+    path = _resolve_worktree(path=args.path, name=args.name, tool=args.tool)
+    result = ship_worktree(path, merge_target=args.merge_target, commit_message=args.commit_message)
+    if args.json:
+        print(json.dumps(result, indent=2))
+    else:
+        print(f"Shipped {result['name']} into {result['merge_target']} and closed {result['path']}")
     return 0
 
 
@@ -414,6 +588,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_show.add_argument("--name", required=True, help="Managed workstream name")
     p_show.set_defaults(func=cmd_show)
 
+    p_handoff = sub.add_parser("handoff", help="Reassign a managed workstream to another tool")
+    p_handoff.add_argument("--path", default=None, help="Explicit worktree path")
+    p_handoff.add_argument("--tool", choices=["claude", "codex"], default=None, help="Current tool namespace for --name")
+    p_handoff.add_argument("--name", default=None, help="Managed workstream name")
+    p_handoff.add_argument("--target-tool", required=True, choices=["claude", "codex"], help="New owning tool")
+    p_handoff.add_argument("--purpose", default=None, help="Optional updated purpose")
+    p_handoff.add_argument("--note", default=None, help="Optional baton note")
+    p_handoff.add_argument("--json", action="store_true", help="Print machine-readable result")
+    p_handoff.set_defaults(func=cmd_handoff)
+
     p_prune = sub.add_parser("prune", help="Prune stale worktree metadata")
     p_prune.set_defaults(func=cmd_prune)
 
@@ -424,6 +608,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_close.add_argument("--force", action="store_true", help="Remove even if dirty")
     p_close.add_argument("--drop-branch", action="store_true", help="Delete the worktree branch after removal")
     p_close.set_defaults(func=cmd_close)
+
+    p_ship = sub.add_parser("ship", help="Commit if needed, merge into main, and close the worktree")
+    p_ship.add_argument("--path", default=None, help="Explicit worktree path")
+    p_ship.add_argument("--tool", choices=["claude", "codex"], default=None, help="Tool namespace for --name")
+    p_ship.add_argument("--name", default=None, help="Managed workstream name")
+    p_ship.add_argument("--commit-message", default=None, help="Commit message to use if the worktree is dirty")
+    p_ship.add_argument("--merge-target", default="main", help="Target branch to merge into")
+    p_ship.add_argument("--json", action="store_true", help="Print machine-readable result")
+    p_ship.set_defaults(func=cmd_ship)
 
     return parser
 

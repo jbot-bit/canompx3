@@ -23,10 +23,12 @@ VALID_MODES = {
     "claude",
     "codex",
     "codex-search",
+    "handoff",
     "list",
     "close",
     "close-pick",
     "resume",
+    "ship",
     "menu",
     "prune",
 }
@@ -52,13 +54,6 @@ def repo_root() -> Path:
 
 def manager_py() -> Path:
     return repo_root() / "scripts" / "tools" / "worktree_manager.py"
-
-
-def windows_to_git_bash(path_value: Path) -> str:
-    full = str(path_value.resolve())
-    drive = full[0].lower()
-    rest = full[2:].replace("\\", "/")
-    return f"/{drive}{rest}"
 
 
 def windows_to_wsl(path_value: Path) -> str:
@@ -118,38 +113,63 @@ def get_existing_purpose(tool_name: str, workstream_name: str) -> str | None:
     return purpose if isinstance(purpose, str) and purpose else None
 
 
-def git_bash_path() -> str:
-    candidates = [
-        os.path.join(os.environ.get("PROGRAMFILES", ""), "Git", "bin", "bash.exe"),
-        os.path.join(os.environ.get("PROGRAMW6432", ""), "Git", "bin", "bash.exe"),
-        os.path.join(os.environ.get("PROGRAMFILES(X86)", ""), "Git", "bin", "bash.exe"),
-    ]
-    for candidate in candidates:
-        if candidate and os.path.exists(candidate):
-            return candidate
-    raise RuntimeError("Git Bash not found. Install Git for Windows or adjust the launcher.")
-
-
-def run_git_bash(command_text: str) -> int:
-    return subprocess.call([git_bash_path(), "-lc", command_text])
+def get_workstream_metadata(tool_name: str, workstream_name: str) -> dict[str, Any] | None:
+    success, output = invoke_manager(["show", "--tool", tool_name, "--name", workstream_name])
+    if not success or not output or output == "{}":
+        return None
+    try:
+        payload = json.loads(output)
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
 
 
 def run_wsl(command_text: str) -> int:
     return subprocess.call(["wsl.exe", "bash", "-lc", command_text])
 
 
-def open_claude_workstream(workstream_name: str, purpose: str | None) -> int:
-    import shlex
+def ensure_managed_worktree(tool_name: str, workstream_name: str, purpose: str | None) -> tuple[Path, str | None]:
+    saved_purpose = get_existing_purpose(tool_name, workstream_name)
+    final_purpose = saved_purpose or purpose
+    arguments = ["create", "--tool", tool_name, "--name", workstream_name, "--json"]
+    if final_purpose:
+        arguments.extend(["--purpose", final_purpose])
+    success, output = invoke_manager(arguments)
+    if not success:
+        raise RuntimeError(output or f"Unable to open {tool_name} workstream {workstream_name}.")
+    try:
+        payload = json.loads(output)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Invalid worktree manager output: {output}") from exc
+    path_value = payload.get("path")
+    if not isinstance(path_value, str) or not path_value:
+        raise RuntimeError(f"Worktree manager did not return a path: {output}")
+    return Path(path_value), final_purpose
 
-    root = windows_to_git_bash(repo_root())
-    saved_purpose = get_existing_purpose("claude", workstream_name)
-    if saved_purpose:
-        purpose = saved_purpose
-    command_parts = [f"cd {shlex.quote(root)} &&"]
-    if purpose:
-        command_parts.append(f"CANOMPX3_WORKSTREAM_PURPOSE={shlex.quote(purpose)}")
-    command_parts.append(f"exec ./scripts/infra/claude-worktree.sh open {shlex.quote(workstream_name)}")
-    return run_git_bash(" ".join(command_parts))
+
+def run_preflight(worktree_path: Path, claim_tool: str, context: str = "generic") -> None:
+    preflight = worktree_path / "scripts" / "tools" / "session_preflight.py"
+    if not preflight.exists():
+        return
+    subprocess.run(
+        pick_python() + [str(preflight), "--quiet", "--context", context, "--claim", claim_tool],
+        cwd=worktree_path,
+        check=False,
+    )
+
+
+def find_claude_cli() -> str:
+    for candidate in ("claude", "claude.exe"):
+        resolved = shutil.which(candidate)
+        if resolved:
+            return resolved
+    raise RuntimeError("Claude CLI not found on PATH. Expected `claude` or `claude.exe`.")
+
+
+def open_claude_workstream(workstream_name: str, purpose: str | None) -> int:
+    worktree_path, _ = ensure_managed_worktree("claude", workstream_name, purpose)
+    run_preflight(worktree_path, claim_tool="claude", context="generic")
+    return subprocess.call([find_claude_cli(), "-C", str(worktree_path)])
 
 
 def open_codex_workstream(workstream_name: str, purpose: str | None, search_mode: bool = False) -> int:
@@ -167,6 +187,36 @@ def open_codex_workstream(workstream_name: str, purpose: str | None, search_mode
         command_parts.append(f"CANOMPX3_WORKSTREAM_PURPOSE={shlex.quote(purpose)}")
     command_parts.append(f"exec ./scripts/infra/codex-worktree.sh {script_mode} {shlex.quote(workstream_name)}")
     return run_wsl(" ".join(command_parts))
+
+
+def handoff_workstream(
+    name: str,
+    current_tool: str,
+    target_tool: str,
+    purpose: str | None,
+    note: str | None = None,
+) -> tuple[bool, str]:
+    arguments = [
+        "handoff",
+        "--name",
+        name,
+        "--tool",
+        current_tool,
+        "--target-tool",
+        target_tool,
+    ]
+    if purpose:
+        arguments.extend(["--purpose", purpose])
+    if note is not None:
+        arguments.extend(["--note", note])
+    return invoke_manager(arguments)
+
+
+def ship_workstream(name: str, tool: str, commit_message: str | None = None) -> tuple[bool, str]:
+    arguments = ["ship", "--name", name, "--tool", tool]
+    if commit_message:
+        arguments.extend(["--commit-message", commit_message])
+    return invoke_manager(arguments)
 
 
 # ---------------------------------------------------------------------------
@@ -218,6 +268,13 @@ def agent_text(tool: str) -> Text:
     return Text(tool, style=style)
 
 
+def state_text(state: str | None) -> Text:
+    normalized = (state or "active").strip().lower() or "active"
+    if normalized == "handoff":
+        return Text("handoff", style="bold magenta")
+    return Text(normalized, style="dim cyan")
+
+
 def build_workstream_table(
     workstreams: list[dict[str, Any]],
     cursor: int = -1,
@@ -227,12 +284,14 @@ def build_workstream_table(
     table = Table(show_header=False, box=None, padding=(0, 2), expand=True)
     table.add_column("Sel", width=2)
     table.add_column("Name", style="bold white", min_width=16, ratio=1)
-    table.add_column("Agent", min_width=8)
+    table.add_column("Owner", min_width=8)
+    table.add_column("State", min_width=8)
     table.add_column("Last Used", min_width=8)
-    table.add_column("Status", min_width=8)
+    table.add_column("Git", min_width=8)
     for i, ws in enumerate(workstreams):
         name = ws.get("name") or "-"
         tool = ws.get("tool") or "-"
+        state = str(ws.get("state") or "active")
         opened = ws.get("last_opened_at") or ws.get("created_at")
         dirty = bool(ws.get("dirty"))
         selected = i == cursor
@@ -242,6 +301,7 @@ def build_workstream_table(
             sel,
             Text(name, style=f"bold white {row_style}"),
             Text(tool, style=f"{AGENT_STYLES.get(tool, '')} {row_style}"),
+            state_text(state),
             Text(relative_time(opened), style=f"dim {row_style}"),
             status_text(dirty),
             style=row_style,
@@ -257,10 +317,14 @@ def build_footer() -> Text:
     keys.append(" Launch ", style="dim")
     keys.append(" N ", style="bold white on grey30")
     keys.append(" New ", style="dim")
+    keys.append(" H ", style="bold white on grey30")
+    keys.append(" Handoff ", style="dim")
+    keys.append(" S ", style="bold white on grey30")
+    keys.append(" Ship ", style="dim")
     keys.append(" O ", style="bold white on grey30")
     keys.append(" Orient ", style="dim")
     keys.append(" F ", style="bold white on grey30")
-    keys.append(" Finish ", style="dim")
+    keys.append(" Drop ", style="dim")
     keys.append(" P ", style="bold white on grey30")
     keys.append(" Prune ", style="dim")
     keys.append(" Q ", style="bold white on grey30")
@@ -306,6 +370,13 @@ class MenuRenderable:
         if self.message:
             yield Text()
             yield Text(f"  {self.message}", style="dim yellow")
+
+        if self.workstreams and 0 <= self.cursor < len(self.workstreams):
+            selected = self.workstreams[self.cursor]
+            note = str(selected.get("handoff_note") or "").strip()
+            if note:
+                yield Text()
+                yield Text(f"  Note: {note}", style="dim")
 
 
 def prompt(label: str, default: str = "") -> str:
@@ -364,6 +435,18 @@ def run_menu() -> int:
             result = _new_workstream()
             if result == 0:
                 return result
+        elif key.lower() == "h":
+            if workstreams:
+                result = _handoff_workstream(workstreams, cursor)
+                if result is not None:
+                    return result
+            else:
+                message = "Nothing to hand off"
+        elif key.lower() == "s":
+            if workstreams:
+                _ship_workstream(workstreams, cursor)
+            else:
+                message = "Nothing to ship"
         elif key.lower() == "o":
             _run_pulse()
             wait_for_key("Press Enter to continue")
@@ -434,7 +517,7 @@ def _finish_workstream(workstreams: list[dict[str, Any]], cursor: int = 0) -> No
 
     subprocess.run(["cmd", "/c", "cls"], check=False)
     console.print()
-    console.print(f"  Close [bold]{name}[/] ({tool})? [dim]y/n[/]")
+    console.print(f"  Drop [bold]{name}[/] ({tool}) without merging? [dim]y/n[/]")
     try:
         key = readchar.readkey()
     except (EOFError, KeyboardInterrupt):
@@ -454,7 +537,88 @@ def _finish_workstream(workstreams: list[dict[str, Any]], cursor: int = 0) -> No
         ]
     )
     if success:
-        console.print(f"  [green]Closed[/] [bold]{name}[/]")
+        console.print(f"  [green]Dropped[/] [bold]{name}[/]")
+    else:
+        console.print(f"  [red]Failed:[/] {output}")
+    wait_for_key()
+
+
+def _handoff_workstream(workstreams: list[dict[str, Any]], cursor: int = 0) -> int | None:
+    ws = workstreams[cursor]
+    name = str(ws.get("name", ""))
+    current_tool = str(ws.get("tool", ""))
+    current_purpose = str(ws.get("purpose") or "")
+
+    subprocess.run(["cmd", "/c", "cls"], check=False)
+    console.print()
+    console.print(f"  Handoff [bold]{name}[/] from [bold]{current_tool}[/]")
+    console.print()
+    console.print("  [bold cyan]1[/]  Claude")
+    console.print("  [bold green]2[/]  Codex")
+    console.print("  [bold green]3[/]  Codex search")
+    console.print()
+
+    default_choice = "2" if current_tool == "claude" else "1"
+    choice = prompt("Target", default_choice)
+    note = prompt("Note", "")
+
+    target_tool = ""
+    purpose = current_purpose or "Build / edit"
+    launch_search = False
+
+    if choice in {"1", "claude", "c"}:
+        target_tool = "claude"
+        if current_purpose == "Investigate / search":
+            purpose = "Review / verify"
+        else:
+            purpose = current_purpose or "Review / verify"
+    elif choice in {"2", "codex", "x"}:
+        target_tool = "codex"
+        purpose = "Build / edit" if current_purpose == "Investigate / search" else (current_purpose or "Build / edit")
+    elif choice in {"3", "search", "s"}:
+        target_tool = "codex"
+        purpose = "Investigate / search"
+        launch_search = True
+    else:
+        return None
+
+    success, output = handoff_workstream(name, current_tool=current_tool, target_tool=target_tool, purpose=purpose, note=note)
+    if not success:
+        console.print(f"  [red]Failed:[/] {output}")
+        wait_for_key()
+        return None
+
+    console.print(f"  [green]Handoff set[/] [bold]{name}[/] -> [bold]{target_tool}[/]")
+    if target_tool == "claude":
+        return open_claude_workstream(name, purpose)
+    return open_codex_workstream(name, purpose, search_mode=launch_search)
+
+
+def _ship_workstream(workstreams: list[dict[str, Any]], cursor: int = 0) -> None:
+    ws = workstreams[cursor]
+    name = str(ws.get("name", ""))
+    tool = str(ws.get("tool", ""))
+    dirty = bool(ws.get("dirty"))
+
+    subprocess.run(["cmd", "/c", "cls"], check=False)
+    console.print()
+    console.print(f"  Ship [bold]{name}[/] into [bold]main[/] and close the worktree? [dim]y/n[/]")
+    try:
+        key = readchar.readkey()
+    except (EOFError, KeyboardInterrupt):
+        return
+    if key.lower() != "y":
+        return
+
+    commit_message = None
+    if dirty:
+        commit_message = prompt("Commit message", f"workstream: {name}")
+        if not commit_message:
+            return
+
+    success, output = ship_workstream(name, tool=tool, commit_message=commit_message)
+    if success:
+        console.print(f"  [green]Shipped[/] [bold]{name}[/] into [bold]main[/]")
     else:
         console.print(f"  [red]Failed:[/] {output}")
     wait_for_key()
@@ -498,6 +662,22 @@ def main() -> int:
         if not task:
             return 1
         return open_codex_workstream(task, "Investigate / search", True)
+    if args.mode == "handoff":
+        if not args.task:
+            raise RuntimeError("Workstream name required for handoff.")
+        if not args.tool:
+            raise RuntimeError("Target tool required for handoff.")
+        current = get_workstream_metadata("claude", args.task) or get_workstream_metadata("codex", args.task)
+        if current is None:
+            raise RuntimeError(f"Unable to find workstream {args.task}.")
+        current_tool = str(current.get("tool") or "")
+        purpose = str(current.get("purpose") or "")
+        success, output = handoff_workstream(args.task, current_tool=current_tool, target_tool=args.tool, purpose=purpose)
+        if not success:
+            raise RuntimeError(output)
+        if args.tool == "claude":
+            return open_claude_workstream(args.task, purpose)
+        return open_codex_workstream(args.task, purpose, purpose == "Investigate / search")
     if args.mode == "list":
         workstreams = get_managed_workstreams()
         table = build_workstream_table(workstreams)
@@ -570,6 +750,18 @@ def main() -> int:
                 "--drop-branch",
             ]
         )
+        if not success:
+            raise RuntimeError(output)
+        if output:
+            console.print(output)
+        return 0
+    if args.mode == "ship":
+        if not args.task:
+            raise RuntimeError("Workstream name required for ship.")
+        current = get_workstream_metadata("claude", args.task) or get_workstream_metadata("codex", args.task)
+        if current is None:
+            raise RuntimeError(f"Unable to find workstream {args.task}.")
+        success, output = ship_workstream(args.task, tool=str(current.get("tool") or ""))
         if not success:
             raise RuntimeError(output)
         if output:
