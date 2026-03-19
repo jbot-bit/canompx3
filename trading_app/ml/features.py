@@ -744,9 +744,11 @@ def load_single_config_feature_matrix(
     try:
         # Build optional RR filter
         rr_clause = ""
+        rr_clause_bare = ""  # same without table alias, for fallback subqueries
         params: dict = {"instrument": instrument}
         if rr_target is not None:
             rr_clause = "AND v.rr_target = $rr_target"
+            rr_clause_bare = "AND rr_target = $rr_target"
             params["rr_target"] = rr_target
 
         # Config picker: max_samples picks loosest filter (most data for ML),
@@ -778,22 +780,84 @@ def load_single_config_feature_matrix(
             frl_join = ""
             frl_where = ""
 
-        query = f"""
-            WITH best_configs AS (
-                SELECT
-                    v.orb_label, v.entry_model, v.rr_target, v.confirm_bars,
-                    v.orb_minutes, v.filter_type, v.sharpe_ratio, v.sample_size,
-                    ROW_NUMBER() OVER (
-                        {partition_clause}
-                        {order_clause}
-                    ) AS rn
-                FROM validated_setups v  -- family_rr_locks via frl_join (conditional)
-                {frl_join}
-                WHERE v.instrument = $instrument
-                    AND v.status = 'active'
-                    {frl_where}
-                    {rr_clause}
+        # Check if validated_setups has configs for this instrument+RR.
+        # If not, fall back to orb_outcomes directly — ML needs trade
+        # mechanics (entry/exit structure), not validated edge.
+        _check_params = dict(params)
+        _check_query = (
+            "SELECT COUNT(*) FROM validated_setups "
+            "WHERE instrument = $instrument AND status = 'active'"
+        )
+        if rr_target is not None:
+            _check_query += " AND rr_target = $rr_target"
+        _n_validated = con.execute(_check_query, _check_params).fetchone()[0]
+
+        if _n_validated > 0:
+            # Normal path: pick configs from validated_setups
+            config_cte = f"""
+                WITH best_configs AS (
+                    SELECT
+                        v.orb_label, v.entry_model, v.rr_target, v.confirm_bars,
+                        v.orb_minutes, v.filter_type, v.sharpe_ratio, v.sample_size,
+                        ROW_NUMBER() OVER (
+                            {partition_clause}
+                            {order_clause}
+                        ) AS rn
+                    FROM validated_setups v
+                    {frl_join}
+                    WHERE v.instrument = $instrument
+                        AND v.status = 'active'
+                        {frl_where}
+                        {rr_clause}
+                )"""
+        else:
+            # Fallback: pick configs from orb_outcomes directly.
+            # ML only needs trade structure — group by config, pick max samples.
+            logger.warning(
+                f"No validated_setups for {instrument}{f' at RR {rr_target}' if rr_target else ''} — "
+                f"picking configs from orb_outcomes (ML needs trade mechanics only)"
             )
+            # Force skip_filter — orb_outcomes has no filter concept, applying
+            # filter eligibility would wipe all data (filter_type='NONE' has no
+            # matching entry in ALL_FILTERS).
+            if not skip_filter:
+                logger.info("  Forcing skip_filter=True for fallback path (no filter to apply)")
+                skip_filter = True
+            if config_selection == "best_sharpe":
+                logger.warning("  config_selection='best_sharpe' unavailable in fallback — using max_samples")
+            _fb_partition_v = (
+                "PARTITION BY v.orb_label, v.orb_minutes" if per_aperture
+                else "PARTITION BY v.orb_label"
+            )
+            _fb_partition_bare = (
+                "PARTITION BY orb_label, orb_minutes" if per_aperture
+                else "PARTITION BY orb_label"
+            )
+            config_cte = f"""
+                WITH best_configs AS (
+                    SELECT
+                        v.orb_label, v.entry_model, v.rr_target, v.confirm_bars,
+                        v.orb_minutes,
+                        'NONE' AS filter_type,
+                        NULL AS sharpe_ratio,
+                        v.cnt AS sample_size,
+                        ROW_NUMBER() OVER (
+                            {_fb_partition_v}
+                            ORDER BY v.cnt DESC
+                        ) AS rn
+                    FROM (
+                        SELECT orb_label, entry_model, rr_target, confirm_bars,
+                               orb_minutes, COUNT(*) AS cnt
+                        FROM orb_outcomes
+                        WHERE symbol = $instrument
+                            AND pnl_r IS NOT NULL
+                            {rr_clause_bare}
+                        GROUP BY orb_label, entry_model, rr_target, confirm_bars, orb_minutes
+                    ) v
+                )"""
+
+        query = f"""
+            {config_cte}
             SELECT
                 o.trading_day,
                 o.symbol,
@@ -827,28 +891,49 @@ def load_single_config_feature_matrix(
 
         df = con.execute(query, params).fetchdf()
 
-        # Also fetch the selected configs for reporting
-        configs_query = f"""
-            WITH ranked AS (
-                SELECT
-                    v.orb_label, v.entry_model, v.rr_target, v.confirm_bars,
-                    v.orb_minutes, v.filter_type, v.sharpe_ratio, v.sample_size,
-                    ROW_NUMBER() OVER (
-                        {partition_clause}
-                        {order_clause}
-                    ) AS rn
-                FROM validated_setups v  -- family_rr_locks via frl_join (conditional)
-                {frl_join}
-                WHERE v.instrument = $instrument
-                    AND v.status = 'active'
-                    {frl_where}
-                    {rr_clause}
-            )
-            SELECT orb_label, entry_model, rr_target, confirm_bars,
-                   orb_minutes, filter_type, sharpe_ratio, sample_size
-            FROM ranked WHERE rn = 1
-            ORDER BY orb_label
-        """
+        # Fetch selected configs for reporting (same source as main query)
+        if _n_validated > 0:
+            configs_query = f"""
+                WITH ranked AS (
+                    SELECT
+                        v.orb_label, v.entry_model, v.rr_target, v.confirm_bars,
+                        v.orb_minutes, v.filter_type, v.sharpe_ratio, v.sample_size,
+                        ROW_NUMBER() OVER (
+                            {partition_clause}
+                            {order_clause}
+                        ) AS rn
+                    FROM validated_setups v
+                    {frl_join}
+                    WHERE v.instrument = $instrument
+                        AND v.status = 'active'
+                        {frl_where}
+                        {rr_clause}
+                )
+                SELECT orb_label, entry_model, rr_target, confirm_bars,
+                       orb_minutes, filter_type, sharpe_ratio, sample_size
+                FROM ranked WHERE rn = 1
+                ORDER BY orb_label
+            """
+        else:
+            configs_query = f"""
+                WITH ranked AS (
+                    SELECT orb_label, entry_model, rr_target, confirm_bars,
+                           orb_minutes, 'NONE' AS filter_type, NULL AS sharpe_ratio,
+                           COUNT(*) AS sample_size,
+                           ROW_NUMBER() OVER (
+                               {_fb_partition_bare}
+                               ORDER BY COUNT(*) DESC
+                           ) AS rn
+                    FROM orb_outcomes
+                    WHERE symbol = $instrument AND pnl_r IS NOT NULL
+                        {rr_clause_bare}
+                    GROUP BY orb_label, entry_model, rr_target, confirm_bars, orb_minutes
+                )
+                SELECT orb_label, entry_model, rr_target, confirm_bars,
+                       orb_minutes, filter_type, sharpe_ratio, sample_size
+                FROM ranked WHERE rn = 1
+                ORDER BY orb_label
+            """
         configs_df = con.execute(configs_query, params).fetchdf()
 
         # Backfill global features for orb_minutes != 5 (pipeline gap)
