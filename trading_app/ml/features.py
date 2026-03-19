@@ -422,6 +422,23 @@ def transform_to_features(df: pd.DataFrame) -> pd.DataFrame:
     # --- Session chronological guard (catches cross-session look-ahead) ---
     # For per-session models, mask features from sessions that haven't happened yet.
     # This is the RUNTIME enforcement of pipeline.session_guard.
+    #
+    # NOTE: By this point, _extract_session_features() has already converted
+    # session-prefixed columns (orb_TOKYO_OPEN_size) into generic names (orb_size).
+    # Generic names are SAFE — the extraction guarantees same-session-only data.
+    # Cross-session features (prior_sessions_broken, levels_within_2R) are also
+    # safe — _extract_cross_session_features uses SESSION_CHRONOLOGICAL_ORDER[:idx].
+    #
+    # The guard here catches any RAW daily_features columns that leaked through
+    # without going through extraction (e.g. from df[feature_cols].copy() above).
+    _GENERIC_SAFE = {
+        "orb_size", "orb_volume", "rel_vol", "break_dir",
+        "orb_break_bar_continues", "orb_size_norm",
+        "prior_sessions_broken", "prior_sessions_long", "prior_sessions_short",
+        "nearest_level_to_high_R", "nearest_level_to_low_R",
+        "levels_within_1R", "levels_within_2R",
+        "orb_nested_in_prior", "prior_orb_size_ratio_max",
+    }
     if "orb_label" in df.columns:
         try:
             from pipeline.session_guard import is_feature_safe
@@ -429,10 +446,13 @@ def transform_to_features(df: pd.DataFrame) -> pd.DataFrame:
             for session in df["orb_label"].unique():
                 session_mask = df["orb_label"] == session
                 for col in numeric_cols:
+                    if col in _GENERIC_SAFE:
+                        continue  # extracted by same-session/chronological functions
                     if not is_feature_safe(col, session):
                         X.loc[session_mask, col] = -999.0  # sentinel = unknown
+                        logger.warning(f"Session guard: masked {col} for {session}")
         except ImportError:
-            pass  # pipeline not on path — skip guard (live prediction may not have it)
+            logger.error("session_guard import failed — look-ahead protection DISABLED")
 
     # --- Normalize ---
     X = _normalize_features(X)
