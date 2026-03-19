@@ -59,7 +59,6 @@ _ALWAYS_SAFE: set[str] = {
     "prev_day_high", "prev_day_low", "prev_day_close",
     "prev_day_range", "prev_day_direction",
     "daily_open",  # known at 09:00
-    "rsi_14_at_CME_REOPEN",  # known after CME_REOPEN
 }
 
 # Features that are NEVER safe for ANY session (computed from full trading day)
@@ -78,6 +77,8 @@ _WINDOW_FEATURES: dict[str, str] = {
     "overnight_took_pdl": "LONDON_METALS",
     "session_asia_high": "LONDON_METALS",
     "session_asia_low": "LONDON_METALS",
+    # RSI at CME_REOPEN — computed from bars up to CME_REOPEN start
+    "rsi_14_at_CME_REOPEN": "CME_REOPEN",
     # Pre-1000 window (09:00-10:00) — safe after TOKYO_OPEN
     "pre_1000_high": "TOKYO_OPEN",
     "pre_1000_low": "TOKYO_OPEN",

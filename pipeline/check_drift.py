@@ -3270,6 +3270,24 @@ def check_noise_floor_active() -> list[str]:
     return []
 
 
+def check_session_guard_sync() -> list[str]:
+    """Verify pipeline.session_guard._SESSION_ORDER matches trading_app.ml.config.SESSION_CHRONOLOGICAL_ORDER."""
+    violations = []
+    try:
+        from pipeline.session_guard import _SESSION_ORDER
+        from trading_app.ml.config import SESSION_CHRONOLOGICAL_ORDER
+
+        if list(_SESSION_ORDER) != list(SESSION_CHRONOLOGICAL_ORDER):
+            violations.append(
+                f"  session_guard._SESSION_ORDER ({len(_SESSION_ORDER)} items) != "
+                f"ml.config.SESSION_CHRONOLOGICAL_ORDER ({len(SESSION_CHRONOLOGICAL_ORDER)} items). "
+                f"These MUST be identical or look-ahead protection breaks."
+            )
+    except ImportError as e:
+        violations.append(f"  Cannot import session ordering: {e}")
+    return violations
+
+
 def check_noise_floor_compliance(con=None) -> list[str]:
     """Verify no validated strategy has ExpR at or below its entry-model noise floor.
 
@@ -3530,6 +3548,7 @@ CHECKS = [
         False,
         False,
     ),
+    ("Session guard ordering matches ML config", check_session_guard_sync, False, False),
     ("Noise floor gate is active (not zeroed for calibration)", check_noise_floor_active, False, False),
     (
         "No validated strategies below entry-model noise floor (null test 2026-03-19, 100 seeds)",

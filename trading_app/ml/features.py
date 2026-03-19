@@ -419,6 +419,21 @@ def transform_to_features(df: pd.DataFrame) -> pd.DataFrame:
             X.drop(columns=col, inplace=True)
             logger.warning(f"Dropped look-ahead column: {col}")
 
+    # --- Session chronological guard (catches cross-session look-ahead) ---
+    # For per-session models, mask features from sessions that haven't happened yet.
+    # This is the RUNTIME enforcement of pipeline.session_guard.
+    if "orb_label" in df.columns:
+        try:
+            from pipeline.session_guard import is_feature_safe
+            numeric_cols = X.select_dtypes(include=[np.number]).columns
+            for session in df["orb_label"].unique():
+                session_mask = df["orb_label"] == session
+                for col in numeric_cols:
+                    if not is_feature_safe(col, session):
+                        X.loc[session_mask, col] = -999.0  # sentinel = unknown
+        except ImportError:
+            pass  # pipeline not on path — skip guard (live prediction may not have it)
+
     # --- Normalize ---
     X = _normalize_features(X)
 
