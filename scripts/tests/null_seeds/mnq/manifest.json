@@ -67,367 +67,269 @@
     },
     "14": {
       "seed": 14,
-      "status": "FAIL",
-      "survivors": 440,
-      "elapsed_s": 2838.2,
-      "completed_at": "2026-03-19T02:28:29.451774+00:00"
+      "status": "CACHED",
+      "survivors": 440
     },
     "16": {
       "seed": 16,
-      "status": "FAIL",
-      "survivors": 429,
-      "elapsed_s": 2842.6,
-      "completed_at": "2026-03-19T02:28:33.826505+00:00"
+      "status": "CACHED",
+      "survivors": 429
     },
     "13": {
       "seed": 13,
-      "status": "FAIL",
-      "survivors": 668,
-      "elapsed_s": 2883.4,
-      "completed_at": "2026-03-19T02:29:14.573603+00:00"
+      "status": "CACHED",
+      "survivors": 668
     },
     "15": {
       "seed": 15,
-      "status": "FAIL",
-      "survivors": 445,
-      "elapsed_s": 2898.3,
-      "completed_at": "2026-03-19T02:29:29.534971+00:00"
+      "status": "CACHED",
+      "survivors": 445
     },
     "17": {
       "seed": 17,
-      "status": "FAIL",
-      "survivors": 397,
-      "elapsed_s": 4851.7,
-      "completed_at": "2026-03-19T03:49:22.454558+00:00"
+      "status": "CACHED",
+      "survivors": 397
     },
     "18": {
       "seed": 18,
-      "status": "FAIL",
-      "survivors": 567,
-      "elapsed_s": 5178.7,
-      "completed_at": "2026-03-19T03:54:52.984737+00:00"
+      "status": "CACHED",
+      "survivors": 567
     },
     "19": {
       "seed": 19,
-      "status": "FAIL",
-      "survivors": 609,
-      "elapsed_s": 5953.3,
-      "completed_at": "2026-03-19T04:08:28.551068+00:00"
+      "status": "CACHED",
+      "survivors": 609
     },
     "20": {
       "seed": 20,
-      "status": "FAIL",
-      "survivors": 555,
-      "elapsed_s": 6105.3,
-      "completed_at": "2026-03-19T04:11:14.877659+00:00"
+      "status": "CACHED",
+      "survivors": 555
     },
     "21": {
       "seed": 21,
-      "status": "FAIL",
-      "survivors": 521,
-      "elapsed_s": 3445.0,
-      "completed_at": "2026-03-19T04:46:48.173704+00:00"
+      "status": "CACHED",
+      "survivors": 521
     },
     "23": {
       "seed": 23,
-      "status": "FAIL",
-      "survivors": 438,
-      "elapsed_s": 2541.8,
-      "completed_at": "2026-03-19T04:50:50.389814+00:00"
+      "status": "CACHED",
+      "survivors": 438
     },
     "22": {
       "seed": 22,
-      "status": "FAIL",
-      "survivors": 480,
-      "elapsed_s": 3425.8,
-      "completed_at": "2026-03-19T04:51:59.024036+00:00"
+      "status": "CACHED",
+      "survivors": 480
     },
     "24": {
       "seed": 24,
-      "status": "FAIL",
-      "survivors": 425,
-      "elapsed_s": 2630.9,
-      "completed_at": "2026-03-19T04:55:05.772589+00:00"
+      "status": "CACHED",
+      "survivors": 425
     },
     "25": {
       "seed": 25,
-      "status": "FAIL",
-      "survivors": 425,
-      "elapsed_s": 3030.3,
-      "completed_at": "2026-03-19T05:37:18.706761+00:00"
+      "status": "CACHED",
+      "survivors": 425
     },
     "26": {
       "seed": 26,
-      "status": "FAIL",
-      "survivors": 570,
-      "elapsed_s": 2847.0,
-      "completed_at": "2026-03-19T05:38:17.532035+00:00"
+      "status": "CACHED",
+      "survivors": 570
     },
     "27": {
       "seed": 27,
-      "status": "FAIL",
-      "survivors": 371,
-      "elapsed_s": 2878.8,
-      "completed_at": "2026-03-19T05:39:57.963053+00:00"
+      "status": "CACHED",
+      "survivors": 371
     },
     "28": {
       "seed": 28,
-      "status": "FAIL",
-      "survivors": 543,
-      "elapsed_s": 2866.4,
-      "completed_at": "2026-03-19T05:42:52.220716+00:00"
+      "status": "CACHED",
+      "survivors": 543
     },
     "29": {
       "seed": 29,
-      "status": "FAIL",
-      "survivors": 473,
-      "elapsed_s": 2573.0,
-      "completed_at": "2026-03-19T06:20:11.962355+00:00"
+      "status": "CACHED",
+      "survivors": 473
     },
     "30": {
       "seed": 30,
-      "status": "FAIL",
-      "survivors": 436,
-      "elapsed_s": 2530.4,
-      "completed_at": "2026-03-19T06:20:28.299325+00:00"
+      "status": "CACHED",
+      "survivors": 436
     },
     "31": {
       "seed": 31,
-      "status": "FAIL",
-      "survivors": 590,
-      "elapsed_s": 2633.6,
-      "completed_at": "2026-03-19T06:23:51.791271+00:00"
+      "status": "CACHED",
+      "survivors": 590
     },
     "32": {
       "seed": 32,
-      "status": "FAIL",
-      "survivors": 525,
-      "elapsed_s": 2700.8,
-      "completed_at": "2026-03-19T06:27:53.018242+00:00"
+      "status": "CACHED",
+      "survivors": 525
     },
     "34": {
       "seed": 34,
-      "status": "FAIL",
-      "survivors": 381,
-      "elapsed_s": 2086.6,
-      "completed_at": "2026-03-19T06:55:14.909816+00:00"
+      "status": "CACHED",
+      "survivors": 381
     },
     "33": {
       "seed": 33,
-      "status": "FAIL",
-      "survivors": 585,
-      "elapsed_s": 2119.2,
-      "completed_at": "2026-03-19T06:55:31.191970+00:00"
+      "status": "CACHED",
+      "survivors": 585
     },
     "35": {
       "seed": 35,
-      "status": "FAIL",
-      "survivors": 501,
-      "elapsed_s": 2173.2,
-      "completed_at": "2026-03-19T07:00:05.113015+00:00"
+      "status": "CACHED",
+      "survivors": 501
     },
     "36": {
       "seed": 36,
-      "status": "FAIL",
-      "survivors": 442,
-      "elapsed_s": 2223.4,
-      "completed_at": "2026-03-19T07:04:56.472530+00:00"
+      "status": "CACHED",
+      "survivors": 442
     },
     "37": {
       "seed": 37,
-      "status": "FAIL",
-      "survivors": 507,
-      "elapsed_s": 2313.9,
-      "completed_at": "2026-03-19T07:33:49.546837+00:00"
+      "status": "CACHED",
+      "survivors": 507
     },
     "38": {
       "seed": 38,
-      "status": "FAIL",
-      "survivors": 501,
-      "elapsed_s": 2385.0,
-      "completed_at": "2026-03-19T07:35:16.205533+00:00"
+      "status": "CACHED",
+      "survivors": 501
     },
     "39": {
       "seed": 39,
-      "status": "FAIL",
-      "survivors": 417,
-      "elapsed_s": 2297.1,
-      "completed_at": "2026-03-19T07:38:22.200965+00:00"
+      "status": "CACHED",
+      "survivors": 417
     },
     "40": {
       "seed": 40,
-      "status": "FAIL",
-      "survivors": 471,
-      "elapsed_s": 2249.1,
-      "completed_at": "2026-03-19T07:42:25.634002+00:00"
+      "status": "CACHED",
+      "survivors": 471
     },
     "41": {
       "seed": 41,
-      "status": "FAIL",
-      "survivors": 585,
-      "elapsed_s": 2849.8,
-      "completed_at": "2026-03-19T08:21:19.781853+00:00"
+      "status": "CACHED",
+      "survivors": 585
     },
     "42": {
       "seed": 42,
-      "status": "FAIL",
-      "survivors": 603,
-      "elapsed_s": 2997.5,
-      "completed_at": "2026-03-19T08:25:14.075067+00:00"
+      "status": "CACHED",
+      "survivors": 603
     },
     "43": {
       "seed": 43,
-      "status": "FAIL",
-      "survivors": 666,
-      "elapsed_s": 3051.3,
-      "completed_at": "2026-03-19T08:29:13.550977+00:00"
+      "status": "CACHED",
+      "survivors": 666
     },
     "44": {
       "seed": 44,
-      "status": "FAIL",
-      "survivors": 645,
-      "elapsed_s": 3233.0,
-      "completed_at": "2026-03-19T08:36:18.663175+00:00"
+      "status": "CACHED",
+      "survivors": 645
     },
     "45": {
       "seed": 45,
-      "status": "FAIL",
-      "survivors": 464,
-      "elapsed_s": 2694.2,
-      "completed_at": "2026-03-19T09:06:14.161939+00:00"
+      "status": "CACHED",
+      "survivors": 464
     },
     "46": {
       "seed": 46,
-      "status": "FAIL",
-      "survivors": 518,
-      "elapsed_s": 2707.1,
-      "completed_at": "2026-03-19T09:10:21.343576+00:00"
+      "status": "CACHED",
+      "survivors": 518
     },
     "47": {
       "seed": 47,
-      "status": "FAIL",
-      "survivors": 360,
-      "elapsed_s": 2677.5,
-      "completed_at": "2026-03-19T09:13:51.146258+00:00"
+      "status": "CACHED",
+      "survivors": 360
     },
     "48": {
       "seed": 48,
-      "status": "FAIL",
-      "survivors": 528,
-      "elapsed_s": 2629.5,
-      "completed_at": "2026-03-19T09:20:08.188500+00:00"
+      "status": "CACHED",
+      "survivors": 528
     },
     "49": {
       "seed": 49,
-      "status": "FAIL",
-      "survivors": 591,
-      "elapsed_s": 2533.2,
-      "completed_at": "2026-03-19T09:48:27.373703+00:00"
+      "status": "CACHED",
+      "survivors": 591
     },
     "50": {
       "seed": 50,
-      "status": "FAIL",
-      "survivors": 431,
-      "elapsed_s": 2662.5,
-      "completed_at": "2026-03-19T09:54:43.897559+00:00"
+      "status": "CACHED",
+      "survivors": 431
     },
     "51": {
       "seed": 51,
-      "status": "FAIL",
-      "survivors": 682,
-      "elapsed_s": 2635.4,
-      "completed_at": "2026-03-19T09:57:46.575855+00:00"
+      "status": "CACHED",
+      "survivors": 682
     },
     "52": {
       "seed": 52,
-      "status": "FAIL",
-      "survivors": 471,
-      "elapsed_s": 2480.7,
-      "completed_at": "2026-03-19T10:01:28.973859+00:00"
+      "status": "CACHED",
+      "survivors": 471
     },
     "53": {
       "seed": 53,
-      "status": "FAIL",
-      "survivors": 557,
-      "elapsed_s": 3038.4,
-      "completed_at": "2026-03-19T10:39:05.886386+00:00"
+      "status": "CACHED",
+      "survivors": 557
     },
     "54": {
       "seed": 54,
-      "status": "FAIL",
-      "survivors": 574,
-      "elapsed_s": 3639.1,
-      "completed_at": "2026-03-19T10:55:23.052892+00:00"
+      "status": "CACHED",
+      "survivors": 574
     },
     "55": {
       "seed": 55,
-      "status": "FAIL",
-      "survivors": 468,
-      "elapsed_s": 4343.5,
-      "completed_at": "2026-03-19T11:10:10.212828+00:00"
-    },
-    "56": {
-      "seed": 56,
-      "status": "FAIL",
-      "survivors": 460,
-      "elapsed_s": 4555.3,
-      "completed_at": "2026-03-19T11:17:24.366855+00:00"
+      "status": "CACHED",
+      "survivors": 468
     },
     "57": {
       "seed": 57,
-      "status": "FAIL",
-      "survivors": 500,
-      "elapsed_s": 4379.4,
-      "completed_at": "2026-03-19T11:52:05.363483+00:00"
+      "status": "CACHED",
+      "survivors": 500
+    },
+    "56": {
+      "seed": 56,
+      "status": "CACHED",
+      "survivors": 460
     },
     "58": {
       "seed": 58,
-      "status": "FAIL",
-      "survivors": 687,
-      "elapsed_s": 4032.1,
-      "completed_at": "2026-03-19T12:02:35.353531+00:00"
+      "status": "CACHED",
+      "survivors": 687
     },
     "59": {
       "seed": 59,
-      "status": "ERROR",
-      "survivors": -1,
-      "elapsed_s": 3332.0,
-      "completed_at": "2026-03-19T12:05:42.694347+00:00"
-    },
-    "60": {
-      "seed": 60,
-      "status": "ERROR",
-      "survivors": -1,
-      "elapsed_s": 2956.0,
-      "completed_at": "2026-03-19T12:06:40.902654+00:00"
+      "status": "FAIL",
+      "survivors": 534,
+      "elapsed_s": 3940.8,
+      "completed_at": "2026-03-19T13:10:09.951562+00:00"
     },
     "61": {
       "seed": 61,
-      "status": "FAIL",
-      "survivors": 347,
-      "elapsed_s": 3646.3,
-      "completed_at": "2026-03-19T12:52:51.741325+00:00"
+      "status": "CACHED",
+      "survivors": 347
     },
     "62": {
       "seed": 62,
-      "status": "FAIL",
-      "survivors": 569,
-      "elapsed_s": 3890.1,
-      "completed_at": "2026-03-19T13:07:26.475798+00:00"
+      "status": "CACHED",
+      "survivors": 569
     },
     "63": {
       "seed": 63,
-      "status": "FAIL",
-      "survivors": 323,
-      "elapsed_s": 3859.3,
-      "completed_at": "2026-03-19T13:10:02.075982+00:00"
+      "status": "CACHED",
+      "survivors": 323
     },
-    "64": {
-      "seed": 64,
+    "60": {
+      "seed": 60,
+      "status": "FAIL",
+      "survivors": 554,
+      "elapsed_s": 3988.5,
+      "completed_at": "2026-03-19T13:10:57.700672+00:00"
+    },
+    "65": {
+      "seed": 65,
       "status": "ERROR",
       "survivors": -1,
-      "elapsed_s": 3828.8,
-      "completed_at": "2026-03-19T13:10:30.056156+00:00"
+      "elapsed_s": 177.8,
+      "completed_at": "2026-03-19T13:13:56.154196+00:00"
     }
   },
   "config_snapshot": {
