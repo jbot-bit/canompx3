@@ -148,6 +148,181 @@
       "survivors": 425,
       "elapsed_s": 2630.9,
       "completed_at": "2026-03-19T04:55:05.772589+00:00"
+    },
+    "25": {
+      "seed": 25,
+      "status": "FAIL",
+      "survivors": 425,
+      "elapsed_s": 3030.3,
+      "completed_at": "2026-03-19T05:37:18.706761+00:00"
+    },
+    "26": {
+      "seed": 26,
+      "status": "FAIL",
+      "survivors": 570,
+      "elapsed_s": 2847.0,
+      "completed_at": "2026-03-19T05:38:17.532035+00:00"
+    },
+    "27": {
+      "seed": 27,
+      "status": "FAIL",
+      "survivors": 371,
+      "elapsed_s": 2878.8,
+      "completed_at": "2026-03-19T05:39:57.963053+00:00"
+    },
+    "28": {
+      "seed": 28,
+      "status": "FAIL",
+      "survivors": 543,
+      "elapsed_s": 2866.4,
+      "completed_at": "2026-03-19T05:42:52.220716+00:00"
+    },
+    "29": {
+      "seed": 29,
+      "status": "FAIL",
+      "survivors": 473,
+      "elapsed_s": 2573.0,
+      "completed_at": "2026-03-19T06:20:11.962355+00:00"
+    },
+    "30": {
+      "seed": 30,
+      "status": "FAIL",
+      "survivors": 436,
+      "elapsed_s": 2530.4,
+      "completed_at": "2026-03-19T06:20:28.299325+00:00"
+    },
+    "31": {
+      "seed": 31,
+      "status": "FAIL",
+      "survivors": 590,
+      "elapsed_s": 2633.6,
+      "completed_at": "2026-03-19T06:23:51.791271+00:00"
+    },
+    "32": {
+      "seed": 32,
+      "status": "FAIL",
+      "survivors": 525,
+      "elapsed_s": 2700.8,
+      "completed_at": "2026-03-19T06:27:53.018242+00:00"
+    },
+    "34": {
+      "seed": 34,
+      "status": "FAIL",
+      "survivors": 381,
+      "elapsed_s": 2086.6,
+      "completed_at": "2026-03-19T06:55:14.909816+00:00"
+    },
+    "33": {
+      "seed": 33,
+      "status": "FAIL",
+      "survivors": 585,
+      "elapsed_s": 2119.2,
+      "completed_at": "2026-03-19T06:55:31.191970+00:00"
+    },
+    "35": {
+      "seed": 35,
+      "status": "FAIL",
+      "survivors": 501,
+      "elapsed_s": 2173.2,
+      "completed_at": "2026-03-19T07:00:05.113015+00:00"
+    },
+    "36": {
+      "seed": 36,
+      "status": "FAIL",
+      "survivors": 442,
+      "elapsed_s": 2223.4,
+      "completed_at": "2026-03-19T07:04:56.472530+00:00"
+    },
+    "37": {
+      "seed": 37,
+      "status": "FAIL",
+      "survivors": 507,
+      "elapsed_s": 2313.9,
+      "completed_at": "2026-03-19T07:33:49.546837+00:00"
+    },
+    "38": {
+      "seed": 38,
+      "status": "FAIL",
+      "survivors": 501,
+      "elapsed_s": 2385.0,
+      "completed_at": "2026-03-19T07:35:16.205533+00:00"
+    },
+    "39": {
+      "seed": 39,
+      "status": "FAIL",
+      "survivors": 417,
+      "elapsed_s": 2297.1,
+      "completed_at": "2026-03-19T07:38:22.200965+00:00"
+    },
+    "40": {
+      "seed": 40,
+      "status": "FAIL",
+      "survivors": 471,
+      "elapsed_s": 2249.1,
+      "completed_at": "2026-03-19T07:42:25.634002+00:00"
+    },
+    "41": {
+      "seed": 41,
+      "status": "FAIL",
+      "survivors": 585,
+      "elapsed_s": 2849.8,
+      "completed_at": "2026-03-19T08:21:19.781853+00:00"
+    },
+    "42": {
+      "seed": 42,
+      "status": "FAIL",
+      "survivors": 603,
+      "elapsed_s": 2997.5,
+      "completed_at": "2026-03-19T08:25:14.075067+00:00"
+    },
+    "43": {
+      "seed": 43,
+      "status": "FAIL",
+      "survivors": 666,
+      "elapsed_s": 3051.3,
+      "completed_at": "2026-03-19T08:29:13.550977+00:00"
+    },
+    "44": {
+      "seed": 44,
+      "status": "FAIL",
+      "survivors": 645,
+      "elapsed_s": 3233.0,
+      "completed_at": "2026-03-19T08:36:18.663175+00:00"
+    },
+    "45": {
+      "seed": 45,
+      "status": "FAIL",
+      "survivors": 464,
+      "elapsed_s": 2694.2,
+      "completed_at": "2026-03-19T09:06:14.161939+00:00"
+    },
+    "46": {
+      "seed": 46,
+      "status": "FAIL",
+      "survivors": 518,
+      "elapsed_s": 2707.1,
+      "completed_at": "2026-03-19T09:10:21.343576+00:00"
+    },
+    "47": {
+      "seed": 47,
+      "status": "FAIL",
+      "survivors": 360,
+      "elapsed_s": 2677.5,
+      "completed_at": "2026-03-19T09:13:51.146258+00:00"
+    },
+    "48": {
+      "seed": 48,
+      "status": "FAIL",
+      "survivors": 528,
+      "elapsed_s": 2629.5,
+      "completed_at": "2026-03-19T09:20:08.188500+00:00"
+    },
+    "49": {
+      "seed": 49,
+      "status": "FAIL",
+      "survivors": 591,
+      "elapsed_s": 2533.2,
+      "completed_at": "2026-03-19T09:48:27.373703+00:00"
     }
   },
   "config_snapshot": {
