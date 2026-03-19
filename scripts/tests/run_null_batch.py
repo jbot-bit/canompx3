@@ -36,21 +36,32 @@ from datetime import datetime, UTC
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-SEED_DIR = PROJECT_ROOT / "scripts" / "tests" / "null_seeds"
-MANIFEST_PATH = SEED_DIR / "manifest.json"
+BASE_SEED_DIR = PROJECT_ROOT / "scripts" / "tests" / "null_seeds"
+# Per-instrument calibration: sigma from empirical 1m return std (p99 trimmed)
+INSTRUMENT_NULL_PARAMS: dict[str, dict] = {
+    "MGC": {"sigma": 1.2, "start_price": 2000.0, "tick_size": 0.10},
+    "MNQ": {"sigma": 5.0, "start_price": 20000.0, "tick_size": 0.25},
+    "MES": {"sigma": 1.1, "start_price": 5000.0, "tick_size": 0.25},
+}
 
 
-def load_manifest() -> dict:
+def _seed_dir(instrument: str) -> Path:
+    """Per-instrument seed directory."""
+    return BASE_SEED_DIR / instrument.lower()
+
+
+def load_manifest(seed_dir: Path) -> dict:
     """Load or create the seed manifest."""
-    if MANIFEST_PATH.exists():
-        return json.loads(MANIFEST_PATH.read_text())
+    manifest_path = seed_dir / "manifest.json"
+    if manifest_path.exists():
+        return json.loads(manifest_path.read_text())
     return {"seeds": {}, "config_snapshot": {}, "created": datetime.now(UTC).isoformat()}
 
 
-def save_manifest(manifest: dict) -> None:
+def save_manifest(manifest: dict, seed_dir: Path) -> None:
     """Save the seed manifest."""
-    SEED_DIR.mkdir(parents=True, exist_ok=True)
-    MANIFEST_PATH.write_text(json.dumps(manifest, indent=2, default=str))
+    seed_dir.mkdir(parents=True, exist_ok=True)
+    (seed_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, default=str))
 
 
 def check_prerequisites() -> list[str]:
@@ -93,7 +104,7 @@ def get_seed_range(total_seeds: int, batch: int, of: int) -> tuple[int, int]:
     return start, end
 
 
-def run_seed(seed: int, output_dir: Path) -> dict:
+def run_seed(seed: int, output_dir: Path, instrument: str = "MGC", sigma: float | None = None) -> dict:
     """Run one null test seed, saving DB to permanent location."""
     db_dir = output_dir / f"seed_{seed:04d}"
     db_dir.mkdir(parents=True, exist_ok=True)
@@ -115,21 +126,26 @@ def run_seed(seed: int, output_dir: Path) -> dict:
 
     t0 = time.time()
     print(f"\n{'#'*60}")
-    print(f"# SEED {seed}")
+    print(f"# SEED {seed} ({instrument})")
     print(f"{'#'*60}")
 
     # Run the null test with --output-dir for direct permanent storage
     env = os.environ.copy()
     env["PYTHONPATH"] = str(PROJECT_ROOT)
 
+    cmd = [
+        sys.executable,
+        str(PROJECT_ROOT / "scripts" / "tests" / "test_synthetic_null.py"),
+        "--seeds", "1",
+        "--start-seed", str(seed),
+        "--output-dir", str(output_dir),
+        "--instrument", instrument,
+    ]
+    if sigma is not None:
+        cmd += ["--sigma", str(sigma)]
+
     result = subprocess.run(
-        [
-            sys.executable,
-            str(PROJECT_ROOT / "scripts" / "tests" / "test_synthetic_null.py"),
-            "--seeds", "1",
-            "--start-seed", str(seed),
-            "--output-dir", str(output_dir),
-        ],
+        cmd,
         env=env,
         capture_output=True,
         text=True,
@@ -252,11 +268,18 @@ def main() -> int:
     parser.add_argument("--parallel", type=int, default=8, help="Max parallel seeds (default: 8, safe for 32GB RAM)")
     parser.add_argument("--batch", type=int, default=1, help="Which batch (for parallel terminals)")
     parser.add_argument("--of", type=int, default=1, help="Total batches (for parallel terminals)")
+    parser.add_argument("--instrument", type=str, default="MGC", help="Instrument (default: MGC). Calibrates sigma/price/tick.")
+    parser.add_argument("--sigma", type=float, default=None, help="Override sigma (default: auto from INSTRUMENT_NULL_PARAMS)")
     parser.add_argument("--analyze-only", action="store_true", help="Skip running, just analyze existing DBs")
     parser.add_argument("--check", action="store_true", help="Check prerequisites only, don't run")
     parser.add_argument("--force", action="store_true", help="Override prerequisite failures (results may be invalid)")
     args = parser.parse_args()
 
+    instrument = args.instrument.upper()
+    params = INSTRUMENT_NULL_PARAMS.get(instrument, INSTRUMENT_NULL_PARAMS["MGC"])
+    sigma = args.sigma if args.sigma is not None else params["sigma"]
+
+    SEED_DIR = _seed_dir(instrument)
     SEED_DIR.mkdir(parents=True, exist_ok=True)
 
     # Prerequisites check
@@ -290,8 +313,10 @@ def main() -> int:
     n_parallel = min(args.parallel, len(seed_range))
 
     print(f"{'='*60}")
-    print(f"NULL TEST BATCH RUNNER")
+    print(f"NULL TEST BATCH RUNNER — {instrument}")
     print(f"{'='*60}")
+    print(f"  Instrument:   {instrument}")
+    print(f"  Sigma:        {sigma} (calibrated {'auto' if args.sigma is None else 'manual'})")
     print(f"  Total seeds:  {args.seeds}")
     print(f"  This batch:   {args.batch} of {args.of} (seeds {start}-{end-1})")
     print(f"  Parallel:     {n_parallel} workers")
@@ -302,7 +327,9 @@ def main() -> int:
     print()
 
     # Snapshot current config for the manifest
-    manifest = load_manifest()
+    manifest = load_manifest(SEED_DIR)
+    manifest["config_snapshot"]["instrument"] = instrument
+    manifest["config_snapshot"]["sigma"] = sigma
     try:
         from trading_app.config import NOISE_EXPR_FLOOR
         manifest["config_snapshot"]["noise_floors"] = dict(NOISE_EXPR_FLOOR)
@@ -315,9 +342,9 @@ def main() -> int:
         # Sequential fallback
         for i, seed in enumerate(seed_range):
             print(f"\n[{i+1}/{len(seed_range)}] Running seed {seed}...")
-            result = run_seed(seed, SEED_DIR)
+            result = run_seed(seed, SEED_DIR, instrument=instrument, sigma=sigma)
             manifest["seeds"][str(seed)] = result
-            save_manifest(manifest)
+            save_manifest(manifest, SEED_DIR)
     else:
         # Parallel execution
         from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -325,7 +352,7 @@ def main() -> int:
         completed = 0
         with ProcessPoolExecutor(max_workers=n_parallel) as executor:
             futures = {
-                executor.submit(run_seed, seed, SEED_DIR): seed
+                executor.submit(run_seed, seed, SEED_DIR, instrument, sigma): seed
                 for seed in seed_range
             }
             for future in as_completed(futures):
@@ -343,9 +370,9 @@ def main() -> int:
 
                 # Save manifest periodically
                 if completed % 5 == 0 or completed == len(seed_range):
-                    save_manifest(manifest)
+                    save_manifest(manifest, SEED_DIR)
 
-        save_manifest(manifest)
+        save_manifest(manifest, SEED_DIR)
 
     batch_time = time.time() - t_batch_start
     print(f"\nBatch complete: {len(seed_range)} seeds in {batch_time:.0f}s ({batch_time/3600:.1f}h)")

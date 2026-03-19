@@ -623,6 +623,13 @@ def main() -> int:
             # Step 2: Generate and insert synthetic bars
             print(f"\n--- Generate synthetic bars (seed={seed}, sigma={args.sigma}) ---")
             t0 = time.time()
+            # Per-instrument calibration for realistic price/tick scale
+            _inst_defaults = {
+                "MGC": {"start_price": 2000.0, "tick_size": 0.10},
+                "MNQ": {"start_price": 20000.0, "tick_size": 0.25},
+                "MES": {"start_price": 5000.0, "tick_size": 0.25},
+            }
+            _id = _inst_defaults.get(args.instrument, _inst_defaults["MGC"])
             bar_stats = generate_synthetic_bars(
                 db_path,
                 seed=seed,
@@ -630,6 +637,8 @@ def main() -> int:
                 start_date=start_dt,
                 end_date=end_dt,
                 sigma=args.sigma,
+                start_price=_id["start_price"],
+                tick_size=_id["tick_size"],
             )
             gen_time = time.time() - t0
             print(f"  Generated {bar_stats['row_count']:,} bars in {gen_time:.1f}s")

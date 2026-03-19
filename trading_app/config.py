@@ -91,9 +91,12 @@ if TYPE_CHECKING:
 # @research-source null_test_100_seeds (White's Reality Check 2026-03-19)
 # @entry-models E1, E2
 # @revalidated-for E1/E2 event-based sessions (2026-03-19)
+# TEMPORARILY ZEROED for per-instrument null test calibration (2026-03-19).
+# MGC floors (100-seed): E1=0.22, E2=0.32.
+# MNQ/MES floors: pending — run null test with --instrument MNQ/MES.
 NOISE_EXPR_FLOOR: dict[str, float] = {
-    "E1": 0.22,
-    "E2": 0.32,
+    "E1": 0,
+    "E2": 0,
 }
 
 # Walk-forward start-date override per instrument.
