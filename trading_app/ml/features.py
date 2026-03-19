@@ -51,7 +51,7 @@ def _backfill_global_features(
     """
     # Quick check: if ALL global features are present, skip.
     # Must check every feature — some (atr_20) may be populated at O15/O30
-    # while others (overnight_range, prev_day_range) are NULL.
+    # while others (prev_day_range, atr_vel_ratio) are NULL.
     any_missing = False
     for col in GLOBAL_FEATURES:
         if col in df.columns and df[col].isna().any():

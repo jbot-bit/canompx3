@@ -196,7 +196,6 @@ class TestBackfillGlobalFeatures:
                 "atr_vel_ratio": [np.nan, np.nan],  # NULL
                 "gap_open_points": [1.0, 2.0],  # populated
                 "prev_day_range": [np.nan, np.nan],  # NULL
-                "overnight_range": [np.nan, np.nan],  # NULL
             }
         )
         g5 = pd.DataFrame(
@@ -206,7 +205,6 @@ class TestBackfillGlobalFeatures:
                 "atr_vel_ratio": [1.1, 1.2],
                 "gap_open_points": [1.0, 2.0],
                 "prev_day_range": [30.0, 40.0],
-                "overnight_range": [15.0, 25.0],
             }
         )
         con = self._make_mock_con(g5)
@@ -214,7 +212,6 @@ class TestBackfillGlobalFeatures:
 
         assert result["atr_vel_ratio"].tolist() == [1.1, 1.2]
         assert result["prev_day_range"].tolist() == [30.0, 40.0]
-        assert result["overnight_range"].tolist() == [15.0, 25.0]
 
     def test_does_not_overwrite_existing_values(self):
         """Backfill only fills NULL — never overwrites existing data."""
@@ -226,7 +223,6 @@ class TestBackfillGlobalFeatures:
                 "atr_vel_ratio": [999.0],  # existing — must NOT be overwritten
                 "gap_open_points": [1.0],
                 "prev_day_range": [np.nan],  # NULL — should fill
-                "overnight_range": [np.nan],
             }
         )
         g5 = pd.DataFrame(
@@ -236,7 +232,6 @@ class TestBackfillGlobalFeatures:
                 "atr_vel_ratio": [1.1],  # different from existing 999.0
                 "gap_open_points": [1.0],
                 "prev_day_range": [30.0],
-                "overnight_range": [15.0],
             }
         )
         con = self._make_mock_con(g5)
@@ -246,7 +241,6 @@ class TestBackfillGlobalFeatures:
         assert result["atr_vel_ratio"].iloc[0] == 999.0
         # NULL values filled
         assert result["prev_day_range"].iloc[0] == 30.0
-        assert result["overnight_range"].iloc[0] == 15.0
 
     def test_missing_o5_rows_stay_null(self):
         """If no orb_minutes=5 row exists for a day, features stay NULL."""
@@ -258,7 +252,6 @@ class TestBackfillGlobalFeatures:
                 "atr_vel_ratio": [np.nan, np.nan],
                 "gap_open_points": [1.0, 2.0],
                 "prev_day_range": [np.nan, np.nan],
-                "overnight_range": [np.nan, np.nan],
             }
         )
         # Only one day in g5
@@ -269,7 +262,6 @@ class TestBackfillGlobalFeatures:
                 "atr_vel_ratio": [1.1],
                 "gap_open_points": [1.0],
                 "prev_day_range": [30.0],
-                "overnight_range": [15.0],
             }
         )
         con = self._make_mock_con(g5)
