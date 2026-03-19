@@ -1,0 +1,40 @@
+{
+  "seeds": {
+    "0": {
+      "seed": 0,
+      "status": "CACHED",
+      "survivors": 16
+    },
+    "1": {
+      "seed": 1,
+      "status": "CACHED",
+      "survivors": 4
+    },
+    "3": {
+      "seed": 3,
+      "status": "CACHED",
+      "survivors": 3
+    },
+    "2": {
+      "seed": 2,
+      "status": "CACHED",
+      "survivors": 1
+    },
+    "7": {
+      "seed": 7,
+      "status": "ERROR",
+      "survivors": -1,
+      "elapsed_s": 15.5,
+      "completed_at": "2026-03-19T21:57:18.280071+00:00"
+    }
+  },
+  "config_snapshot": {
+    "instrument": "MES",
+    "sigma": 1.1,
+    "noise_floors": {
+      "E1": 0,
+      "E2": 0
+    }
+  },
+  "created": "2026-03-19T21:57:02.175967+00:00"
+}
