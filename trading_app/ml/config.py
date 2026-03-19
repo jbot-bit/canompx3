@@ -38,7 +38,14 @@ GLOBAL_FEATURES: list[str] = [
     "atr_vel_ratio",  # Vol acceleration — compressed spring (confirmed)
     "gap_open_points",  # Overnight institutional repositioning
     "prev_day_range",  # Prior day activity level — regime context
-    "overnight_range",  # Asian session range — #1 feature (6.5% avg imp)
+    # overnight_range REMOVED (2026-03-19) — session-dependent look-ahead.
+    # Computed from 09:00-17:00 Brisbane (full Asia window). Contaminates ANY
+    # session starting inside that window: TOKYO_OPEN (10:00), SINGAPORE_OPEN
+    # (11:00), CME_REOPEN (09:00 winter/CST). DST split confirmed: summer-only
+    # (clean) shows zero signal; winter-only (contaminated) carries all apparent
+    # edge. As a GLOBAL feature used across mixed sessions, it leaks future
+    # price action into Asian session predictions.
+    # @research-source: sweep look-ahead audit 2026-03-19 (DST split test)
 ]
 
 # Per-session features (extracted dynamically from orb_{SESSION}_{field})
@@ -72,7 +79,6 @@ SESSION_FEATURE_SUFFIXES: list[str] = [
 ATR_NORMALIZE: list[str] = [
     "gap_open_points",
     "prev_day_range",
-    "overnight_range",
     "orb_size",  # Session-specific, normalized after extraction
 ]
 
@@ -117,8 +123,24 @@ LOOKAHEAD_BLACKLIST: set[str] = {
     "ts_outcome",  # Time-stop outcome (post-trade)
     "ts_pnl_r",  # Time-stop PnL (post-trade)
     "ts_exit_ts",  # Time-stop exit (post-trade)
-    "took_pdh_before_1000",  # Time-dependent within day
-    "took_pdl_before_1000",  # Time-dependent within day
+    # SESSION-DEPENDENT LOOK-AHEAD (added 2026-03-19)
+    # overnight_* computed from 09:00-17:00 Brisbane. Contaminates sessions
+    # starting inside that window (TOKYO 10:00, SINGAPORE 11:00, CME_REOPEN
+    # 09:00 winter). Valid ONLY for sessions starting AFTER 17:00 Brisbane
+    # (LONDON_METALS, US_DATA_830, NYSE_OPEN, etc.) but unsafe as global
+    # features in mixed-session models.
+    # @research-source: sweep look-ahead audit 2026-03-19 (DST split test)
+    "overnight_range",  # 09:00-17:00 range — look-ahead for Asian sessions
+    "overnight_high",  # 09:00-17:00 high — look-ahead for Asian sessions
+    "overnight_low",  # 09:00-17:00 low — look-ahead for Asian sessions
+    "overnight_took_pdh",  # overnight_high > prev_day_high — look-ahead
+    "overnight_took_pdl",  # overnight_low < prev_day_low — look-ahead
+    "session_asia_high",  # Same window as overnight — look-ahead
+    "session_asia_low",  # Same window as overnight — look-ahead
+    "took_pdh_before_1000",  # 09:00-10:00 — clean for TOKYO but not global
+    "took_pdl_before_1000",  # 09:00-10:00 — clean for TOKYO but not global
+    "pre_1000_high",  # 09:00-10:00 high — clean for TOKYO but not global
+    "pre_1000_low",  # 09:00-10:00 low — clean for TOKYO but not global
     # AT-BREAK features — valid theory but unknown pre-break (added Mar 4 2026)
     # @research-source: M2.5 audit + trading theory review
     "break_delay_min",  # Minutes from ORB close to break — unknown pre-break
