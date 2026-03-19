@@ -629,7 +629,7 @@ def main() -> int:
                 "MNQ": {"start_price": 20000.0, "tick_size": 0.25},
                 "MES": {"start_price": 5000.0, "tick_size": 0.25},
             }
-            _id = _inst_defaults.get(args.instrument, _inst_defaults["MGC"])
+            _id = _inst_defaults.get(args.instrument.upper(), _inst_defaults["MGC"])
             bar_stats = generate_synthetic_bars(
                 db_path,
                 seed=seed,

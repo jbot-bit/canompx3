@@ -3255,11 +3255,26 @@ _TRADING_APP_TABLES = frozenset(
 _SQL_KW_RE = re.compile(r"\b(SELECT|FROM|JOIN|WHERE|AND|ON|GROUP BY|ORDER BY|INSERT|UPDATE|DELETE)\b", re.I)
 
 
+def check_noise_floor_active() -> list[str]:
+    """Verify noise floors are not zeroed (calibration mode left active)."""
+    from trading_app.config import NOISE_EXPR_FLOOR
+
+    zeroed = [em for em, floor in NOISE_EXPR_FLOOR.items() if floor < 0.01]
+    if zeroed:
+        return [
+            f"  NOISE_EXPR_FLOOR[{em}]=0 — calibration mode active. "
+            f"Production rebuilds/validation will bypass noise gate. "
+            f"Restore floors after null test calibration."
+            for em in zeroed
+        ]
+    return []
+
+
 def check_noise_floor_compliance(con=None) -> list[str]:
     """Verify no validated strategy has ExpR at or below its entry-model noise floor.
 
     Floors defined in NOISE_EXPR_FLOOR (trading_app.config) — derived from
-    10-seed null test (White's Reality Check 2026-03-18).
+    100-seed null test (White's Reality Check 2026-03-19).
     """
     from trading_app.config import NOISE_EXPR_FLOOR
 
@@ -3515,6 +3530,7 @@ CHECKS = [
         False,
         False,
     ),
+    ("Noise floor gate is active (not zeroed for calibration)", check_noise_floor_active, False, False),
     (
         "No validated strategies below entry-model noise floor (null test 2026-03-19, 100 seeds)",
         check_noise_floor_compliance,
