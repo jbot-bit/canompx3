@@ -109,8 +109,8 @@ Every tunable parameter, its values, and canonical source. QUERY these, never ci
 | Instrument | Status | Unfiltered E2 O5 RR1.0 | Source |
 |-----------|--------|------------------------|--------|
 | MNQ | **ACTIVE** | +0.085R (POSITIVE) | `ACTIVE_ORB_INSTRUMENTS` |
-| MGC | ACTIVE (filter-dependent) | −0.157R (negative) | `ACTIVE_ORB_INSTRUMENTS` |
-| MES | ACTIVE (filter-dependent) | −0.061R (negative) | `ACTIVE_ORB_INSTRUMENTS` |
+| MGC | ACTIVE (filter-dependent) | −0.157R unfiltered, positive with G5+ on select sessions | `ACTIVE_ORB_INSTRUMENTS` |
+| MES | ACTIVE (filter-dependent) | −0.061R unfiltered, positive with G4+ on select sessions | `ACTIVE_ORB_INSTRUMENTS` |
 | M2K | DEAD | 0/18 families survive noise | Removed 2026-03-18. **Trap:** `orb_active=True` in ASSET_CONFIGS but excluded by `DEAD_ORB_INSTRUMENTS`. Always use `ACTIVE_ORB_INSTRUMENTS`, never `orb_active` directly. |
 | MCL, SIL, M6E, MBT | DEAD | 0 validated | `ASSET_CONFIGS` (present, not active) |
 
@@ -128,15 +128,31 @@ Every tunable parameter, its values, and canonical source. QUERY these, never ci
 
 → `from trading_app.config import ENTRY_MODELS`
 
-### RR Targets (MNQ E2 O5 unfiltered, verified 2026-03-21)
+### RR Targets (MNQ E2 O5 NO_FILTER, verified 2026-03-21)
 | RR | ExpR | WR | Status |
 |----|------|-----|--------|
-| 1.0 | +0.085 | 54.8% | Strongest baseline |
+| 1.0 | +0.085 | 54.8% | Strongest unfiltered baseline |
 | 1.5 | +0.083 | 42.5% | Strong |
-| 2.0 | +0.077 | 34.4% | ML signal found here (O30) |
+| 2.0 | +0.077 | 34.4% | ML signal at O30 (AUC 0.658, bootstrap p=0.005) |
 | 2.5 | +0.053 | 28.3% | Weakening |
 | 3.0 | +0.033 | 23.9% | Marginal |
 | 4.0 | −0.010 | 17.9% | DEAD |
+
+**MGC/MES:** All RR targets negative without size filters. With G5+ filter, MGC CME_REOPEN becomes positive (see TRADING_RULES.md Session Playbook). Size filter is mandatory for MGC/MES.
+
+### Confirm Bars
+| Value | Notes |
+|-------|-------|
+| CB1 | Default for E2 (no confirmation needed — stop-market triggers on touch) |
+| CB2 | Optimal for E1 on G5+ days per TRADING_RULES.md |
+| CB3-CB5 | Identical to CB1-CB2 for E3 (same limit order) |
+
+### Direction
+| Value | When |
+|-------|------|
+| BOTH | Default. Most sessions. |
+| LONG-ONLY | TOKYO_OPEN (shorts negative across all instruments — TRADING_RULES.md) |
+| DIR_LONG / DIR_SHORT | Available as discovery grid filters via `config.ALL_FILTERS` |
 
 ### Apertures (MNQ E2 RR1.0 unfiltered)
 | Aperture | ExpR | Notes |
@@ -166,12 +182,16 @@ Every tunable parameter, its values, and canonical source. QUERY these, never ci
 ### Filters
 | Filter | What it does | Source |
 |--------|-------------|--------|
-| NO_FILTER | Take all trades | `config.ALL_FILTERS["NO_FILTER"]` |
+| NO_FILTER | Take all trades (pass-through) | `config.ALL_FILTERS["NO_FILTER"]` |
 | ORB_G4 through ORB_G8 | ORB size >= N points | `config.ALL_FILTERS` |
 | ATR70_VOL | ATR percentile >= 70 | `config.ALL_FILTERS["ATR70_VOL"]` |
 | DIR_LONG / DIR_SHORT | Direction filter | `config.ALL_FILTERS` |
-| VOL_RV12_N20 | Relative volume | `config.ALL_FILTERS` |
-| X_MES_ATR60 | Cross-asset MES ATR | `config.ALL_FILTERS` |
+| VOL_RV12_N20 | Relative volume >= 1.2× median | `config.ALL_FILTERS` |
+| X_MES_ATR60 / X_MES_ATR70 | Cross-asset MES ATR filter | `config.ALL_FILTERS` |
+| X_MGC_ATR60 / X_MGC_ATR70 | Cross-asset MGC ATR filter | `config.ALL_FILTERS` |
+| Composites (ORB_G4_NODBL etc) | Size + no-double-break | `config.ALL_FILTERS` |
+
+**CRITICAL:** `filter_type` must EXACTLY match a key in `ALL_FILTERS`. Unknown strings cause silent trade drops (fail-closed). Use `"NO_FILTER"`, never `"NONE"` or `"BASE"`.
 
 → `from trading_app.config import ALL_FILTERS`
 
@@ -196,7 +216,8 @@ Everything confirmed dead. Do NOT re-test without a fundamentally new approach.
 | E0 entry model | PURGED | 3 compounding biases | Nothing — structurally flawed |
 | E3 entry model | RETIRED | Adverse selection. 19/20 both negative. | At-break architecture (not pre-break) |
 | RR4.0 (any instrument) | DEAD | Negative even on MNQ E2 | Nothing at current cost structure |
-| ML on negative baselines | DEAD | Threshold artifact, bootstrap p=0.35 | Nothing — mathematical trap |
+| ML on PORTFOLIO-LEVEL negative baselines | DEAD | Threshold artifact, bootstrap p=0.35 | Nothing — mathematical trap |
+| ML on PER-SESSION negative baselines | **ALIVE** | Bootstrap p=0.005 on NYSE_OPEN O30 RR2.0 | Requires bootstrap verification (mandatory) |
 | Calendar blanket skip | DEAD | Mixed results (some days BETTER) | Per-combo only, never blanket |
 | Non-ORB strategies | DEAD | 6 archetypes, 540 tests, 0 survivors | Fundamentally different market model |
 | MCL, SIL, M6E, MBT, M2K ORB | DEAD | 0 validated per instrument | New data source or contract change |
@@ -214,9 +235,10 @@ Full NO-GO table with details: TRADING_RULES.md "What Doesn't Work"
 Separate decision tree for ML meta-labeling. ML is OPTIONAL — raw baselines are tradeable without it.
 
 ### When to use ML
-- Baseline exists but you want to improve per-trade selection
+- Baseline exists (positive or negative) and you want per-trade selection
 - Feature signal exists (univariate quartile test shows discrimination)
-- NOT a replacement for baseline viability (Gate 2 must pass first)
+- **ML CAN work on negative-baseline sessions** — verified 2026-03-21 (NYSE_OPEN O30 RR2.0: raw baseline −0.136R, ML delta +30.5R, bootstrap p=0.005). The key: bootstrap MUST verify it's not the threshold artifact.
+- ML is NOT a replacement for having SOME positive population in the variable space. If the entire instrument × entry model space is negative at every point, ML can't help.
 
 ### ML Test Sequence
 ```
