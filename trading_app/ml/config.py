@@ -82,7 +82,11 @@ ATR_NORMALIZE: list[str] = [
     "gap_open_points",
     "prev_day_range",
     "orb_size",  # Session-specific, normalized after extraction
-    "orb_vwap",  # Session VWAP — absolute price, normalize to ATR scale
+    # orb_vwap REMOVED from ATR_NORMALIZE (Mar 2026 code review):
+    # VWAP is absolute price, not a delta. Dividing price by ATR produces
+    # a non-stationary feature that trends with the underlying. The meaningful
+    # signal is (vwap - orb_midpoint) / atr_20, which is already computed as
+    # orb_vwap_norm in build_daily_features.py.
     "orb_pre_velocity",  # Pre-session velocity in points → ATR units
 ]
 
