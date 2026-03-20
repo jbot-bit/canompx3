@@ -1,6 +1,7 @@
 ---
 name: bloomey-review
 description: Institutional code review with seven sins analysis
+effort: high
 ---
 
 Institutional code review with seven sins analysis: $ARGUMENTS

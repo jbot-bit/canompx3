@@ -1,6 +1,7 @@
 ---
 name: 4t
 description: Orient, design, detail, and validate a feature or change
+effort: high
 ---
 
 Orient, design, detail, and validate a feature or change: $ARGUMENTS

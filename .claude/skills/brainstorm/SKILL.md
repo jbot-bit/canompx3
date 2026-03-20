@@ -4,6 +4,7 @@ description: >
   Design-before-build for features and changes. Use before any non-trivial work:
   new features, architecture changes, research programs, pipeline modifications.
   Explores intent, proposes approaches, produces a design doc. No code until approved.
+effort: high
 ---
 
 # Brainstorm
