@@ -56,7 +56,7 @@ SURVIVORS = [
     ("CME_PRECLOSE", None, 1.5, 5.4),   # NOT YET TESTED
 ]
 
-N_PERMUTATIONS = 200  # 200 gives p-value precision ±0.05 at p=0.05
+N_PERMUTATIONS = 5000  # 5000 per Phipson & Smyth 2010: reliable p-values need 1000+ perms
 
 
 def bootstrap_one(
