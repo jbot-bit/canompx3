@@ -16,10 +16,11 @@ You are running the 4T feature planning workflow. Execute all 4 turns in order. 
 Understand the landscape before proposing anything.
 
 1. Parse $ARGUMENTS for the topic/feature
-2. Read ALL files that could be affected -- trace imports, check callers, map blast radius
-3. Check `docs/specs/` for an existing spec (if one exists, follow it -- do NOT redesign)
-4. Check authority docs: CLAUDE.md for code decisions, TRADING_RULES.md for trading logic, RESEARCH_RULES.md for research methodology
-5. Check canonical sources -- will this change touch any?
+2. **Check `docs/STRATEGY_BLUEPRINT.md` first** — route to correct section, check NO-GO registry, check "What We Might Be Wrong About"
+3. Read ALL files that could be affected -- trace imports, check callers, map blast radius
+4. Check `docs/specs/` for an existing spec (if one exists, follow it -- do NOT redesign)
+5. Check authority docs: CLAUDE.md for code decisions, TRADING_RULES.md for trading logic, RESEARCH_RULES.md for research methodology
+6. Check canonical sources -- will this change touch any?
    - Active instruments: `pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS`
    - Sessions: `pipeline.dst.SESSION_CATALOG`
    - Entry models/filters: `trading_app.config`
@@ -29,10 +30,17 @@ Understand the landscape before proposing anything.
 
 Output: "ORIENT COMPLETE" + summary of affected files, blast radius, and purpose.
 
-### Turn 2: DESIGN
+### Turn 2: DESIGN (with multi-take deliberation)
 
-Propose the solution architecture.
+Propose the solution architecture. For trading/research designs, do MULTIPLE takes:
 
+**Multi-take process (minimum 3 takes for non-trivial designs):**
+1. What went wrong before in this domain? (Check `hard_lessons.md`, blueprint §10-§11)
+2. Design bottom-up from prevention — what prevents those failures?
+3. Challenge: too complex? too simple? right ordering? missing variable?
+4. Pressure-test against specific past failures
+
+**Then propose:**
 1. Data model: what tables/columns/fields change?
 2. Interfaces: what functions/classes/APIs are added or modified?
 3. Data flow: how does data move through the change?

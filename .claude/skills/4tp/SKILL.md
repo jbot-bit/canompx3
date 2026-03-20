@@ -18,9 +18,9 @@ Zero stops means zero unnecessary pauses for human approval — NOT zero verific
 ### Phase 1: Run /4t
 
 Execute the full 4T flow for $ARGUMENTS. All 4 turns, no shortcuts:
-1. ORIENT -- read all affected files, map blast radius, articulate purpose
-2. DESIGN -- data model, interfaces, data flow, recommend approach
-3. DETAIL -- ordered implementation steps, test strategy, migration needs
+1. ORIENT -- read all affected files, **check STRATEGY_BLUEPRINT.md first**, map blast radius, articulate purpose
+2. DESIGN -- **multi-take deliberation (min 3 takes)**, data model, interfaces, data flow, recommend approach
+3. DETAIL -- ordered implementation steps, test strategy, migration needs. **Use TaskCreate for phased execution.**
 4. VALIDATE -- risks, failure modes, rollback plan, guardian prompts
 
 ### Phase 2: Auto-Proceed (NO PAUSE)

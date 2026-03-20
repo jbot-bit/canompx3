@@ -1,6 +1,9 @@
 # Strategy Research Blueprint
 
-Single reference doc for strategy research, planning, and implementation. Open this BEFORE starting any session.
+**This doc defines HOW strategy research is MEANT to be done.** The process, the gates, the order of operations, the kill criteria. Follow this regardless of what the current numbers say.
+
+Sections §1-§3, §6, §10-§11 are **METHODOLOGY** — the permanent process. They don't change when data changes.
+Sections §4-§5, §7-§9 are **CURRENT STATE** — volatile snapshots. Query canonical sources, don't cite from memory.
 
 **Authority:** This doc ROUTES to governing docs. It does not override them.
 - Trading logic → `TRADING_RULES.md`
@@ -8,20 +11,23 @@ Single reference doc for strategy research, planning, and implementation. Open t
 - Code structure → `CLAUDE.md`
 - Feature specs → `docs/specs/`
 
-**Freshness:** Variable space and active state sections are VOLATILE. Query canonical sources, don't cite from memory. Last structural audit: 2026-03-21.
+**Freshness:** Last structural audit: 2026-03-21. Re-audit after: any NO-GO declaration, new instrument/session/entry model, pipeline rebuild, ML finding, or validated_setups change.
+
+**Core principle:** Our system is not proven right — it's proven not-yet-wrong. Every finding is provisional until forward-tested. The methodology exists to catch our own mistakes before they cost capital.
 
 ---
 
 ## 1. Quick Reference — "What Am I Doing?"
 
-| If you're... | Go to section | Also read |
-|-------------|--------------|-----------|
-| Researching a new idea | §3 Research Test Sequence | RESEARCH_RULES.md |
-| Training/evaluating ML | §6 ML Sub-Pipeline | `trading_app/ml/config.py` |
-| Building/changing a portfolio | §4 Variable Space | TRADING_RULES.md Session Playbook |
-| Setting up paper trading | §7 Paper Trading Checklist | Pre-registration doc |
-| Running a pipeline rebuild | §8 Pipeline Order | `docs/ARCHITECTURE.md` |
-| Checking if something is dead | §5 NO-GO Registry | TRADING_RULES.md "What Doesn't Work" |
+| If you're... | Go to section | Also read | Think about |
+|-------------|--------------|-----------|-------------|
+| Researching a new idea | §3 Research Test Sequence | RESEARCH_RULES.md | Is this in the NO-GO registry (§5)? Does a mechanism exist? What variable space will I search? |
+| Training/evaluating ML | §6 ML Sub-Pipeline | `trading_app/ml/config.py` | Have I checked univariate signal first? Am I testing all RR/aperture combinations? Bootstrap is mandatory. |
+| Building/changing a portfolio | §4 Variable Space | TRADING_RULES.md Session Playbook | What are the deployment constraints (DD limits, position limits)? Correlation between strategies? Stop multiplier (0.75x for prop)? |
+| Setting up paper trading | §7 Paper Trading Checklist | Pre-registration doc | Kill criteria defined BEFORE starting? Cost model verified? 2026 holdout is SACRED? |
+| Running a pipeline rebuild | §8 Pipeline Order | `docs/ARCHITECTURE.md` | Dependency order matters. init_db first if adding sessions. FK constraints block deletes. |
+| Checking if something is dead | §5 NO-GO Registry | TRADING_RULES.md "What Doesn't Work" | What would REOPEN this path? Has the variable space been fully explored? |
+| Declaring something dead | §5 + §10 | §3 Gate 2 (CRITICAL RULE) | Tested ≥3 values per dimension? Bootstrap run? Fresh audit done? |
 
 ---
 
@@ -30,11 +36,13 @@ Single reference doc for strategy research, planning, and implementation. Open t
 **ORB size IS the edge.** Cross-instrument stress test (Feb 2026) proved: strip the size filter and ALL edges die. CB, RR, entry model are refinements. Without G4+, only MNQ E2 has positive baseline. Source: TRADING_RULES.md "ORB Size = The Edge".
 
 **Current reality (from gold.db, verified 2026-03-21):**
-- **MNQ E2:** ONLY instrument × entry model with positive unfiltered baseline
-- **MGC E2 unfiltered:** Negative at all RR (−0.06 to −0.33R). Needs G5+ size filter.
-- **MES E2 unfiltered:** Negative at all RR (−0.04 to −0.25R). Needs G4+ size filter.
+- **MNQ E2:** ONLY instrument × entry model with positive UNFILTERED baseline
+- **MGC E2 unfiltered:** Negative at all RR (−0.06 to −0.33R). Positive WITH G5+ on select sessions (CME_REOPEN, TOKYO_OPEN, LONDON_METALS).
+- **MES E2 unfiltered:** Negative at all RR (−0.04 to −0.25R). Positive WITH G4+ on select sessions.
 - **E1 unfiltered:** Negative everywhere including MNQ (−0.03 to −0.20R)
 - **Only 11 validated setups exist.** All MNQ. All E2. CME_PRECLOSE + COMEX_SETTLE + BRISBANE_1025.
+
+**All tables in §4 below are MNQ E2 unless stated otherwise.** For MGC/MES session-specific performance, see TRADING_RULES.md Session Playbook.
 
 → `from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS`  # ['MES', 'MGC', 'MNQ']
 → `from trading_app.config import ENTRY_MODELS`  # ['E1', 'E2', 'E3']
@@ -153,6 +161,41 @@ Every tunable parameter, its values, and canonical source. QUERY these, never ci
 | BOTH | Default. Most sessions. |
 | LONG-ONLY | TOKYO_OPEN (shorts negative across all instruments — TRADING_RULES.md) |
 | DIR_LONG / DIR_SHORT | Available as discovery grid filters via `config.ALL_FILTERS` |
+
+### Stop Multiplier
+| Value | When | Source |
+|-------|------|--------|
+| 1.0 | Standard (self-funded, backtesting) | Default |
+| 0.75 | Prop firm accounts (survival over income) | `manual-trading-playbook.md` |
+
+Prop 0.75x reduces risk per trade by 25% — stop is 75% of ORB range from entry. Affects position sizing, drawdown, and ExpR. Use `--stop-multiplier 0.75` on paper_trader CLI.
+
+### Instrument × Session Mapping
+Not all sessions are enabled for all instruments. Canonical source:
+→ `from pipeline.asset_configs import ASSET_CONFIGS`  # `ASSET_CONFIGS[instrument]["enabled_sessions"]`
+
+Key exclusions:
+- **MGC SINGAPORE_OPEN: OFF** (74% double-break rate — structurally mean-reverting)
+- See `config.get_excluded_sessions(instrument)` for runtime exclusions
+
+### Deployment Constraints (Prop Firms)
+| Constraint | Value | Impact |
+|-----------|-------|--------|
+| Apex max trailing DD | $2,500-$6,000 (depends on account) | Limits position count and risk per trade |
+| Tradeify max DD | $2,000-$3,000 | Same |
+| TopStep max DD | $2,000-$3,000 | Same |
+| Max concurrent | Typically 1-3 positions | `max_concurrent_positions` param |
+| Automation allowed | Apex: NO. Tradeify/TopStep: YES. | Signal-only for Apex, auto for others |
+
+→ See `docs/plans/manual-trading-playbook.md` for full prop deployment plan
+
+### Portfolio Correlation
+Session correlations affect portfolio diversification. Key pairs:
+- **TOKYO_OPEN vs LONDON_METALS: −0.39** (negative — genuine diversification)
+- **MNQ vs MES: +0.83** (same asset class — DON'T stack)
+- **MGC vs MNQ/MES: +0.04** (near-zero — independent)
+
+→ `portfolio.correlation_matrix()` for computed values. `RiskManager` enforces `max_correlation` at entry.
 
 ### Apertures (MNQ E2 RR1.0 unfiltered)
 | Aperture | ExpR | Notes |
@@ -281,7 +324,7 @@ Before deploying paper trading:
 - [ ] Pre-registration doc exists in `docs/pre-registrations/` (git-committed BEFORE testing)
 - [ ] Kill criteria defined (per-session ExpR threshold, slippage threshold, portfolio threshold)
 - [ ] Portfolio built from canonical source (not hardcoded)
-- [ ] `filter_type = "NO_FILTER"` verified (ALL_FILTERS.get() fail-closes on unknown keys)
+- [ ] `filter_type` matches portfolio intent AND exists in `ALL_FILTERS` (unknown keys = silent trade drops)
 - [ ] Replay validation matches expectations (trade count, WR, PnL within 10%)
 - [ ] Cost model verified: `from pipeline.cost_model import get_cost_spec`
 - [ ] 2026 holdout is SACRED — no "quick checks" on 2026 data
@@ -335,15 +378,35 @@ Row counts verified 2026-03-21. Commands: `docs/ARCHITECTURE.md`.
 
 | Thread | Stage | Next Step | Blocking? |
 |--------|-------|-----------|-----------|
-| MNQ RR1.0 raw baseline | Gate 7 (paper trade) | Deploy signal-only. Kill criteria in pre-reg doc. | No |
-| MNQ RR2.0 O30 ML | Gate 6 (replay done) | Multi-RR portfolio design, then paper trade | No |
-| 2026 holdout test | Gate 4 (waiting) | April 2026, N≥100 per session | Time-gated |
-| Simple regime filter (ATR>50pct) | Gate 2 (untested) | Run quartile comparison vs ML | Deferred |
-| Edge families rebuild | Infrastructure | Run build_edge_families.py | Needed for fitness tracking |
+| MNQ RR1.0 raw baseline | Gate 7 (paper trade) | Deploy signal-only. Kill criteria in pre-reg doc. Code ready (`--raw-baseline`). | No |
+| MNQ RR2.0 O30 ML | Gate 5 PASSED (5/7 bootstrap p<0.05), Gate 6 done (+12.2R delta, −12.5R DD improvement) | Multi-RR portfolio design, then paper trade | No |
+| 2026 holdout test | Gate 4 (waiting) | April 2026, N≥100 per session. 3 pre-registered strategies. | Time-gated |
+| Simple regime filter (ATR>50pct) | Gate 2 (untested) | Run quartile comparison vs ML. Lower complexity alternative. | Deferred |
+| Edge families rebuild | Infrastructure | Run build_edge_families.py (0 rows currently) | Needed for fitness tracking |
+
+**⚠ This table goes stale fast. When starting a session, query the actual state rather than trusting these rows.**
 
 ---
 
-## 10. Failure Patterns — What Catches Us
+## 10. What We Might Be Wrong About
+
+Epistemic humility. These are assumptions baked into the system that COULD be wrong.
+
+| Assumption | Why we believe it | What would prove us wrong | How to test |
+|-----------|------------------|--------------------------|-------------|
+| ORB size is THE edge | Feb 2026 stress test, friction mechanism | Size filter stops working (gold returns to $1800, ORBs shrink) | Monitor avg ORB size vs filter gate. If G5+ qualifies < 5 days/month → edge dying. |
+| MNQ E2 baselines are real | BH FDR at N=55, yearly consistency | 2026 forward test fails (pre-registered, binding) | April 2026: N≥100 per session |
+| ML at RR2.0 O30 has genuine skill | Bootstrap p=0.005, AUC=0.658 | 2025 test set was anomalous (hot market). ML fails on 2026 data. | Forward test. Compare ML-filtered vs raw on 2026 trades. |
+| Cost model is accurate ($2.74 MNQ) | Industry standard + 1-tick slippage | Real slippage > 1 tick systematically | Paper trade kill criterion: avg slippage > 3 ticks → STOP |
+| E2 stop-market is unbiased | Includes fakeouts, uses slippage | E2 still optimistic vs real fills (spread widens at session opens) | Compare paper trade fills to backtest fills |
+| 60/20/20 time split is appropriate | Standard ML practice | Market regime shifted at split boundary (val period was hot) | Walk-forward validation with multiple split points |
+| Sessions are stationary | Event-based (DST-clean) | CME changes trading hours, new session opens | Monitor SESSION_CATALOG against exchange calendars |
+
+**Rule:** When planning research, check this table. If your plan depends on one of these assumptions, note it explicitly. If the assumption breaks, your plan breaks.
+
+---
+
+## 11. Failure Patterns — What Catches Us
 
 | Pattern | Example | Prevention |
 |---------|---------|------------|

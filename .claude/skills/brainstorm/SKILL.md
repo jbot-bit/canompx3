@@ -30,7 +30,21 @@ This aligns with `workflow-preferences.md` — design mode words vs implement wo
 - For pipeline changes: which tables affected? what's the rebuild impact?
 - For research: what's the hypothesis? what's the kill criterion?
 
-### 3. Propose Approaches
+### 3. Multi-Take Deliberation (MANDATORY for non-trivial designs)
+
+Do NOT propose a structure on the first pass. Instead, do multiple takes that challenge your own assumptions:
+
+1. **Catalog actual failures** in this domain — what went wrong before? (Check `hard_lessons.md`, `STRATEGY_BLUEPRINT.md §10-§11`)
+2. **Identify failure patterns** — incomplete search? missing gates? stale info? process skip?
+3. **Design bottom-up from prevention** — what structure would have PREVENTED each failure?
+4. **Challenge your own structure** — is this too complex? too simple? right ordering? missing a variable?
+5. **Pressure-test against specific past failures** — would this design have caught ML RR1.0-only? E0 biases? threshold artifact?
+6. **Check `docs/STRATEGY_BLUEPRINT.md`** — does the proposal follow the test sequence (§3)? Check NO-GO registry (§5). Check "What We Might Be Wrong About" (§10).
+7. **Only then propose** — with the failure analysis visible, not hidden.
+
+Minimum 3 takes for any design touching trading logic or research methodology. Show the reasoning, not just the conclusion. The user wants to SEE the deliberation, not just the output.
+
+### 4. Propose Approaches
 - 2-3 options with trade-offs
 - Lead with your recommendation and why
 - For each option, state:
@@ -39,16 +53,16 @@ This aligns with `workflow-preferences.md` — design mode words vs implement wo
   - **Rebuild impact** (does gold.db need rebuilding?)
   - **Test impact** (new tests needed? existing tests break?)
 
-### 4. Present Design
+### 5. Present Design
 - Scale detail to complexity — a few sentences for simple, full sections for complex
 - Check after each section: "does this look right so far?"
 - Cover: what, why, how, what could go wrong
 
-### 5. Write Design Doc
+### 6. Write Design Doc
 - Save to `docs/plans/YYYY-MM-DD-<topic>-design.md`
 - Commit the design doc
 
-### 6. Transition
+### 7. Transition
 - If user says "implement" / "go" / "build it" → create implementation plan
 - If user says "iterate" / "change X" → revise design
 - If user says nothing → stay in design mode, don't assume
@@ -63,6 +77,8 @@ Before finalizing any design, verify:
 - [ ] Does the design require a gold.db schema change? If yes, flag rebuild cost.
 - [ ] Does the design add a new session/instrument/entry model? If yes, flag the full rebuild chain: outcomes → discovery → validation → edge families.
 - [ ] Is there prior research on this topic? Check memory before designing from scratch.
+- [ ] Have you checked `docs/STRATEGY_BLUEPRINT.md`? Route to correct section. Check NO-GO registry. Check "What We Might Be Wrong About."
+- [ ] Did you do multi-take deliberation (§3 above)? Minimum 3 takes for trading/research designs.
 
 ## Anti-Patterns
 
