@@ -704,6 +704,7 @@ class ExecutionEngine:
                     orb_label=trade.orb_label,
                     active_trades=self.active_trades,
                     daily_pnl_r=self.daily_pnl_r,
+                    orb_minutes=trade.orb_minutes,
                 )
                 if not can_enter:
                     trade.state = TradeState.EXITED
@@ -908,6 +909,7 @@ class ExecutionEngine:
                             orb_label=trade.orb_label,
                             active_trades=self.active_trades,
                             daily_pnl_r=self.daily_pnl_r,
+                            orb_minutes=trade.orb_minutes,
                         )
                         if not can_enter:
                             trade.state = TradeState.EXITED
@@ -1069,6 +1071,7 @@ class ExecutionEngine:
                                 orb_label=trade.orb_label,
                                 active_trades=self.active_trades,
                                 daily_pnl_r=self.daily_pnl_r,
+                                orb_minutes=trade.orb_minutes,
                             )
                             if not can_enter:
                                 trade.state = TradeState.EXITED

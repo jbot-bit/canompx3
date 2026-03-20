@@ -86,3 +86,13 @@ Format recommendation: `>>> [recommendation] <<<`
 - Strategy counts are from `fitness_summary` + the live query — do not cite stale memory.
 - Each item has an `action` field — always show it so the user can copy-paste the command.
 - When in doubt about a number, QUERY. Never cite from memory for volatile data.
+
+## Next → Route the User
+
+Based on the briefing, suggest the appropriate next skill:
+- Something broken? → `/health-check` or `/quant-debug`
+- Strategy research needed? → `/discover [instrument]` or `/research [topic]`
+- Portfolio health? → `/regime-check`
+- Want to know what to trade? → `/trade-book`
+- Planning a change? → `/brainstorm [topic]`
+- ML question? → `/ml-verify`
