@@ -9,7 +9,14 @@ Use when: "fitness", "regime", "any decay", "how's the portfolio", "health of st
 
 ## Regime Health Check
 
-Quick portfolio fitness snapshot. Shows regime distribution and flags transitions.
+Quick portfolio fitness snapshot. Shows regime distribution, flags transitions, and checks assumptions.
+
+### Step 0: Blueprint Context
+
+Check `docs/STRATEGY_BLUEPRINT.md §10` — "What We Might Be Wrong About." Flag any assumption that affects this check:
+- Are ORB sizes shrinking? (edge dying signal)
+- Is the cost model still accurate?
+- Have any sessions changed behavior (exchange schedule changes)?
 
 ### Step 1: Query Current Fitness
 
@@ -99,9 +106,46 @@ Data as of: YYYY-MM-DD
 ====================
 ```
 
+### Step 3: Assumption Health Check
+
+Also query for early warning signs from Blueprint §10:
+
+```bash
+python -c "
+import duckdb
+from pipeline.paths import GOLD_DB_PATH
+con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+# ORB size trend — are ORBs shrinking? (if yes, G4+ filter qualifies fewer days = edge dying)
+print('=== ORB SIZE TREND (MNQ O5, last 6 months vs prior 6 months) ===')
+print(con.sql('''
+    SELECT CASE WHEN trading_day >= CURRENT_DATE - 180 THEN 'recent_6mo' ELSE 'prior_6mo' END as period,
+           ROUND(AVG(orb_CME_PRECLOSE_size), 2) as avg_cme_pre,
+           ROUND(AVG(orb_NYSE_OPEN_size), 2) as avg_nyse
+    FROM daily_features WHERE symbol = 'MNQ' AND orb_minutes = 5
+      AND trading_day >= CURRENT_DATE - 360
+    GROUP BY period ORDER BY period
+''').fetchdf().to_string(index=False))
+# ML model age
+import os
+model_path = 'models/ml/meta_label_MNQ_hybrid.joblib'
+if os.path.exists(model_path):
+    import joblib
+    b = joblib.load(model_path)
+    print(f'\nML model trained: {b.get(\"trained_at\", \"unknown\")}')
+    print(f'ML model RR lock: {b.get(\"rr_target_lock\", \"unknown\")}')
+con.close()
+"
+```
+
+Flag if:
+- ORB sizes trending down significantly → edge may be weakening
+- ML model older than 30 days → consider retraining
+- validated_setups count changed → pipeline rebuild may be needed
+
 ### Rules
 
-- NEVER cite counts from memory -- always query fresh
+- NEVER cite counts from memory — always query fresh
 - One query, one table, one summary. Keep it tight.
-- Fitness lives in edge_families (robustness_status, trade_tier) -- NOT a strategy_fitness table
+- Fitness lives in edge_families (robustness_status, trade_tier) — NOT a strategy_fitness table
 - Column is `instrument` not `symbol` in validated_setups
+- Check Blueprint §10 assumptions — report any early warning signs

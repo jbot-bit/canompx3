@@ -41,6 +41,15 @@ If user gave a focus area, **weight that section heavier** and call it out at th
 
 Read EVERY changed file before reviewing. Never review code you haven't read.
 
+### Section 0: BLUEPRINT CROSS-CHECK (Pre-scan)
+
+Before diving into code, check if the changes touch anything flagged in `docs/STRATEGY_BLUEPRINT.md`:
+- Does this touch a NO-GO path (§5)? If reimplementing something dead, grade F immediately.
+- Does this depend on an assumption from §10 "What We Might Be Wrong About"?
+- Does this follow the test sequence (§3) if it's research-related?
+- Is `filter_type` used correctly? Unknown strings = silent trade drops.
+- Any session time logic? Must use `SESSION_CATALOG` resolvers, never manual TZ math (hard lesson #10).
+
 ### Section A: SEVEN SINS SCAN (Weight: 40%)
 
 For each changed file, scan for the seven sins of quantitative investing:
