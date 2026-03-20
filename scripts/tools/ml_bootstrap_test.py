@@ -44,16 +44,16 @@ log = logging.getLogger(__name__)
 
 # Survivors from the exhaustive sweep — (session, aperture_or_None, RR, honest_delta)
 SURVIVORS = [
-    # RR2.0 per-aperture
-    ("NYSE_OPEN", 30, 2.0, 33.5),
-    ("US_DATA_1000", 30, 2.0, 38.5),
-    ("US_DATA_1000", 15, 2.0, 10.6),
-    ("US_DATA_830", 30, 2.0, 12.5),
+    # RR2.0 per-aperture — ALL PASSED bootstrap (p=0.005 to 0.020)
+    ("NYSE_OPEN", 30, 2.0, 33.5),       # p=0.005 PASS
+    ("US_DATA_1000", 30, 2.0, 38.5),    # p=0.005 PASS
+    ("US_DATA_1000", 15, 2.0, 10.6),    # p=0.020 PASS
+    ("US_DATA_830", 30, 2.0, 12.5),     # p=0.020 PASS
     # RR2.0 flat
-    ("NYSE_OPEN", None, 2.0, 3.3),
-    ("CME_PRECLOSE", None, 2.0, 2.2),
+    ("NYSE_OPEN", None, 2.0, 3.3),      # p=0.005 PASS
+    ("CME_PRECLOSE", None, 2.0, 2.2),   # verified_delta=0.0 (seed variance)
     # RR1.5 flat
-    ("CME_PRECLOSE", None, 1.5, 5.4),
+    ("CME_PRECLOSE", None, 1.5, 5.4),   # NOT YET TESTED
 ]
 
 N_PERMUTATIONS = 200  # 200 gives p-value precision ±0.05 at p=0.05
@@ -126,7 +126,7 @@ def bootstrap_one(
         X_session = X_session.drop(columns=const_cols)
 
     # RF params
-    rf_base_params = {k: v for k, v in RF_PARAMS.items() if k != "min_samples_leaf"}
+    rf_base_params = {k: v for k, v in RF_PARAMS.items() if k not in ("min_samples_leaf", "random_state")}
     leaf_size = max(20, min(100, len(train_idx) // 20))
 
     # --- Compute real delta (verify it matches sweep) ---
@@ -137,9 +137,9 @@ def bootstrap_one(
     val_min_kept = max(50, int(len(val_idx) * 0.15))
     best_t, _ = _optimize_threshold_profit(val_prob, pnl_r[val_idx], min_kept=val_min_kept)
 
+    test_pnl = pnl_r[test_idx]
     if best_t is not None:
         test_prob = rf_real.predict_proba(X_session.iloc[test_idx])[:, 1]
-        test_pnl = pnl_r[test_idx]
         kept = test_prob >= best_t
         verified_delta = float(test_pnl[kept].sum()) - float(test_pnl.sum())
     else:
