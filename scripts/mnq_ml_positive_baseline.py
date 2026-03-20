@@ -58,9 +58,9 @@ SKIP = {"pnl_r","trading_day","symbol","orb_minutes","orb_label","entry_price","
         "trading_day_1","outcome","entry_ts","exit_ts","exit_price","target_price",
         "risk_dollars","pnl_dollars","mae_r","mfe_r","ambiguous_bar","ts_outcome","ts_pnl_r","ts_exit_ts",
         "entry_model","rr_target","confirm_bars","instrument"}
-BLACKLIST = ["mfe","mae","overnight_range","overnight_high","overnight_low","day_type",
-             "took_pdh","took_pdl","session_asia","pre_1000","garch","break_ts",
-             "outcome","double_break","break_bar_continues","break_delay"]
+# Import canonical blacklist — NEVER maintain a separate list
+from trading_app.ml.config import LOOKAHEAD_BLACKLIST
+BLACKLIST = list(LOOKAHEAD_BLACKLIST) + ["garch", "break_ts"]  # garch/break_ts not in canonical but still noise
 
 all_features = [c for c in df.columns if c not in SKIP and not any(b in c for b in BLACKLIST)]
 print(f"Available features: {len(all_features)}")
