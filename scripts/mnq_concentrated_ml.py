@@ -13,12 +13,15 @@ from trading_app.ml.config import RF_PARAMS, SESSION_CHRONOLOGICAL_ORDER
 SESSION_ORDER = list(SESSION_CHRONOLOGICAL_ORDER)
 KEEP_SESSIONS = ["CME_PRECLOSE", "EUROPE_FLOW", "SINGAPORE_OPEN", "LONDON_METALS"]
 
-# Blacklist: only OUTCOMES and POST-SESSION retrospective features
-# At-break features for CURRENT session are ALLOWED (known at E2 entry)
-HARD_BLACKLIST = ["mfe_r","mae_r","pnl_r","outcome","double_break",
-                  "overnight_range","overnight_high","overnight_low",
-                  "day_type","took_pdh","took_pdl","session_asia",
-                  "pre_1000","garch","break_ts"]
+# Import canonical blacklist — NEVER maintain separate lists
+from trading_app.ml.config import LOOKAHEAD_BLACKLIST
+# At-break features (break_bar_volume, break_delay, break_bar_continues) are in the
+# canonical blacklist because they're unknown at ORB close. For E2 stop-market,
+# break_bar_volume is also unknown at entry (only known at bar CLOSE, 1 bar after fill).
+# Only CROSS-SESSION at-break features from EARLIER sessions are truly known.
+# The session eligibility function handles this — same-session at-break features
+# will be blocked by the canonical blacklist via get_eligible_features.
+HARD_BLACKLIST = list(LOOKAHEAD_BLACKLIST) + ["garch", "break_ts"]
 
 # For cross-session features: outcome/double_break from ANY session is blacklisted
 # At-break features from EARLIER sessions are ALLOWED (they've already happened)
