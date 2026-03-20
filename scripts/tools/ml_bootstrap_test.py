@@ -130,7 +130,7 @@ def bootstrap_one(
     leaf_size = max(20, min(100, len(train_idx) // 20))
 
     # --- Compute real delta (verify it matches sweep) ---
-    rf_real = RandomForestClassifier(**rf_base_params, min_samples_leaf=leaf_size)
+    rf_real = RandomForestClassifier(**rf_base_params, min_samples_leaf=leaf_size, random_state=42)
     rf_real.fit(X_session.iloc[train_idx], y_all.iloc[train_idx])
 
     val_prob = rf_real.predict_proba(X_session.iloc[val_idx])[:, 1]
@@ -184,7 +184,8 @@ def bootstrap_one(
             log.info(f"    {i + 1}/{n_perms} permutations ({elapsed:.0f}s, ETA {eta:.0f}s)")
 
     null_deltas = np.array(null_deltas)
-    p_value = float((null_deltas >= verified_delta).mean())
+    # Phipson & Smyth 2010: (B+1)/(m+1) prevents anti-conservative p=0.0000
+    p_value = float((null_deltas >= verified_delta).sum() + 1) / (n_perms + 1)
     elapsed_total = time.time() - start
 
     log.info(f"\n  RESULT: {session}{ap_str} RR{rr_target}")
@@ -224,7 +225,11 @@ def main():
 
     all_results = []
     for session, aperture, rr, delta in SURVIVORS:
-        result = bootstrap_one(session, aperture, rr, delta)
+        try:
+            result = bootstrap_one(session, aperture, rr, delta)
+        except Exception as exc:
+            log.error(f"  bootstrap_one({session}, {aperture}, {rr}) CRASHED: {exc}", exc_info=True)
+            result = {"session": session, "aperture": aperture, "rr": rr, "error": str(exc)}
         all_results.append(result)
 
     # Final summary
