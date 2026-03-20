@@ -1,89 +1,155 @@
 ---
 name: discover
-description: Research edge discovery for instrument and session
+description: Research edge discovery for instrument and session — follows Blueprint test sequence
 allowed-tools: Read, Grep, Glob, Bash
 ---
 Research edge discovery for instrument and session: $ARGUMENTS
 
 Use when: "discover", "scan for edges", "research [instrument]", "find strategies", "edge discovery", "what works for [instrument]", "test [session]"
 
-## Instructions
+## Step 0: Blueprint Pre-Check (MANDATORY)
 
-You are running an AI-assisted strategy research workflow. Follow these steps exactly.
+Before ANY research, check `docs/STRATEGY_BLUEPRINT.md`:
 
-### Step 1: Parse Arguments
+1. **NO-GO Registry (§5):** Is this instrument/session/approach already dead? If yes, tell the user immediately and STOP. Don't rediscover dead paths.
+2. **Variable Space (§4):** What's the baseline for this instrument? MNQ E2 is the only positive unfiltered baseline. MGC/MES need size filters.
+3. **What We Might Be Wrong About (§10):** Flag relevant assumptions.
+4. **Active Threads (§9):** Is someone already working on this?
+
+```bash
+python -c "
+from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS, ASSET_CONFIGS
+inst = '{INSTRUMENT}'
+if inst not in ACTIVE_ORB_INSTRUMENTS:
+    print(f'WARNING: {inst} is NOT in ACTIVE_ORB_INSTRUMENTS. Check if dead.')
+else:
+    cfg = ASSET_CONFIGS.get(inst, {})
+    sessions = cfg.get('enabled_sessions', [])
+    print(f'{inst} enabled sessions: {sessions}')
+"
+```
+
+## Step 1: Parse Arguments
 
 Parse $ARGUMENTS for instrument (required) and session (optional).
 Examples: "MGC CME_REOPEN", "MES NYSE_OPEN", "MNQ", "MGC all"
 
-Session names use the dynamic catalog: CME_REOPEN, TOKYO_OPEN, SINGAPORE_OPEN, LONDON_METALS, US_DATA_830, NYSE_OPEN, US_DATA_1000, COMEX_SETTLE, CME_PRECLOSE, NYSE_CLOSE, BRISBANE_1025.
+Session names from `SESSION_CATALOG`: CME_REOPEN, TOKYO_OPEN, SINGAPORE_OPEN, LONDON_METALS, EUROPE_FLOW, US_DATA_830, NYSE_OPEN, US_DATA_1000, COMEX_SETTLE, CME_PRECLOSE, NYSE_CLOSE, BRISBANE_1025.
 
-Default entry model: E2 (stop-market, industry standard). Use E1 for conservative baseline comparison.
-E0 is DEAD (purged Feb 2026) -- never use E0.
+Default entry model: E2 (stop-market). E0 is PURGED. E3 is in SKIP_ENTRY_MODELS.
 
-### Step 2: Check Research Memory
+## Step 2: Baseline Viability (Blueprint Gate 2)
 
-Check memory files in the project memory directory for previous findings on this (instrument, session).
-Relevant files: `regime_findings.md`, `m2k_findings.md`, `mgc_regime_analysis.md`, `aperture_comparison.md`, and other topic files in MEMORY.md index.
-If previous findings exist, summarize them before running new scans.
-
-### Step 3: Check Current Validated State
+Before running discovery, check if a baseline exists. This determines whether to proceed or stop.
 
 ```bash
 python -c "
 import duckdb
 from pipeline.paths import GOLD_DB_PATH
 con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
-session_filter = \"AND orb_label='{SESSION}'\" if '{SESSION}' != '' else ''
-r = con.execute(f\"SELECT COUNT(*) FROM validated_setups WHERE instrument='{INSTRUMENT}' AND LOWER(status)='active' {session_filter}\").fetchone()
-label = f'{INSTRUMENT} {SESSION}' if '{SESSION}' != '' else '{INSTRUMENT}'
-print(f'Validated strategies for {label}: {r[0]}')
+# Check across RR targets — don't just test one
+for rr in [1.0, 1.5, 2.0]:
+    for om in [5, 15, 30]:
+        r = con.execute('''
+            SELECT COUNT(*) as n, ROUND(AVG(pnl_r), 4) as expr
+            FROM orb_outcomes
+            WHERE symbol=? AND entry_model='E2' AND rr_target=? AND orb_minutes=?
+              AND confirm_bars=1
+        ''', ['{INSTRUMENT}', rr, om]).fetchone()
+        tag = '+' if r[1] and r[1] > 0 else '-'
+        print(f'  {tag} RR{rr} O{om}: N={r[0]:,} ExpR={r[1]}')
 con.close()
 "
 ```
 
-### Step 4: Run the Discovery Scanner
+**CRITICAL RULE (from Blueprint §3 Gate 2):** Test ≥3 RR values and ≥3 apertures before declaring dead. ONE negative point doesn't kill the space.
 
+If ALL combinations are negative → report "NO-GO: negative baseline across all tested RR/aperture combinations" and recommend checking with size filters (G4+/G5+).
+
+## Step 3: Check Previous Research
+
+Check memory files AND the NO-GO registry for previous findings:
+- Blueprint §5: consolidated NO-GO table
+- Memory files: `regime_findings.md`, `m2k_findings.md`, `aperture_comparison.md`, topic files in MEMORY.md
+
+If previous findings exist, summarize them. Don't repeat dead-end research.
+
+## Step 4: Check Current Validated State
+
+```bash
+python -c "
+import duckdb
+from pipeline.paths import GOLD_DB_PATH
+con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+r = con.execute(\"SELECT strategy_id, orb_label, entry_model, rr_target, orb_minutes, filter_type, sample_size, ROUND(expectancy_r,4) as expr FROM validated_setups WHERE instrument='{INSTRUMENT}' AND LOWER(status)='active' ORDER BY expectancy_r DESC\").fetchall()
+print(f'Validated strategies for {\"INSTRUMENT\"}: {len(r)}')
+for row in r:
+    print(f'  {row[0]} | {row[1]} {row[2]} RR{row[3]} O{row[4]} {row[5]} N={row[6]} ExpR={row[7]}')
+con.close()
+"
+```
+
+## Step 5: Per-Session Scan
+
+For each session (or the specified session), query the baseline:
+
+```bash
+python -c "
+import duckdb
+from pipeline.paths import GOLD_DB_PATH
+con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+print(con.sql('''
+    SELECT orb_label, COUNT(*) as n, ROUND(AVG(pnl_r), 4) as expr,
+           ROUND(COUNT(CASE WHEN pnl_r > 0 THEN 1 END)*100.0/COUNT(*), 1) as wr
+    FROM orb_outcomes
+    WHERE symbol='{INSTRUMENT}' AND entry_model='E2' AND rr_target=1.0
+      AND confirm_bars=1 AND orb_minutes=5
+    GROUP BY orb_label ORDER BY expr DESC
+''').fetchdf().to_string(index=False))
+con.close()
+"
+```
+
+If a specific session was requested, also run the discovery scanner:
 ```bash
 python research/discover.py --instrument {INSTRUMENT} --session {SESSION} --entry-model E2 --json
 ```
-If no session specified, add `--all-sessions`.
 
-### Step 5: Interpret Results
+## Step 6: Interpret Results (Blueprint Gates 1+3)
 
-For each scan result, apply RESEARCH_RULES.md labels:
-- BH-significant with p<0.005: "validated finding"
-- BH-significant with p<0.05: "promising hypothesis"
-- Not BH-significant: "statistical observation" (mention but don't recommend action)
-- Baseline ExpR <= 0: "NO-GO -- negative baseline"
+For each finding:
 
-CRITICAL: Run the actual statistical test. NEVER present counts or eyeball comparisons as analysis. Every quantitative claim MUST have a p-value from an actual test.
+1. **Mechanism check (Gate 1):** WHY should this work? Plausible structural reason? If "the numbers show it" — flag as suspicious.
+2. **Statistical test (Gate 3):** BH FDR at honest test count. NEVER present counts or eyeball comparisons.
+   - p < 0.005: "validated finding"
+   - p < 0.05: "promising hypothesis"
+   - Not BH-significant: "statistical observation"
+   - ExpR ≤ 0: "NO-GO — negative baseline"
+3. **Variable coverage:** Did you test enough of the space? Mark what's untested.
 
-### Step 6: Report
+## Step 7: Report
 
 **{INSTRUMENT} {SESSION} Discovery Report**
 
-| Predictor | Delta | p-value | BH-sig? | N | Label |
-|-----------|-------|---------|---------|---|-------|
-| ... | ... | ... | ... | ... | ... |
+| Session | RR | O | ExpR | WR | N | p-value | BH-sig? | Mechanism | Label |
+|---------|-----|---|------|-----|---|---------|---------|-----------|-------|
 
-Key findings: [2-3 bullet summary]
-Recommended actions: [specific next steps, if any survive FDR]
+**Variable coverage:**
+- RR tested: [list] — missing: [list]
+- Apertures tested: [list] — missing: [list]
+- Entry models: E2 ☑ E1 ☐
 
-### Step 7: Save Findings
+**Key findings:** [2-3 bullets]
+**Recommended next steps:** [specific, with Blueprint gate reference]
+**NO-GO paths hit:** [list any dead ends found]
 
-Save findings to the appropriate memory file:
-- MGC findings -> `regime_findings.md` or `mgc_regime_analysis.md`
-- MNQ findings -> update existing topic file or create new one
-- New instrument -> create `{instrument}_findings.md`
-
-Include: n_tests, n_significant, top findings, recommended actions, date.
-
-### Rules (from RESEARCH_RULES.md)
+## Rules (from RESEARCH_RULES.md + Blueprint)
 
 - NEVER say "significant" without p-value
 - NEVER say "edge" without BH FDR confirmation
-- Sample size labels: <30 INVALID, 30-99 REGIME, 100+ CORE
-- RSI/MACD/Bollinger are "guilty until proven" -- flag if they appear significant
-- Always include year-by-year breakdown for any BH-significant finding
-- All sessions are dynamic/event-based from SESSION_CATALOG -- DST is fully resolved
+- Sample size: <30 INVALID, 30-99 REGIME, 100+ CORE
+- RSI/MACD/Bollinger are "guilty until proven"
+- Always include year-by-year breakdown for BH-significant findings
+- All sessions are dynamic/event-based from SESSION_CATALOG
+- Before declaring dead: tested ≥3 RR, ≥3 apertures, E1+E2?
+- Check NO-GO registry FIRST — don't rediscover dead paths
