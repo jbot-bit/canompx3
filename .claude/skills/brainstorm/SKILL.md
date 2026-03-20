@@ -89,3 +89,10 @@ Before finalizing any design, verify:
 | Present one option | Always 2-3 with trade-offs |
 | Ask 5 questions at once | One per message |
 | Assume "plan" means "implement" | Design mode until explicit green light |
+
+## Next → After Design Approved
+
+- User says "go" / "build it" → `/4tp [topic]` to plan + implement
+- User says "review first" → `/bloomey-review` on the design
+- User says "research first" → `/research [hypothesis]` to validate assumptions
+- User says "iterate" → revise design, stay in brainstorm mode

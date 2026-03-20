@@ -93,3 +93,9 @@ The reviewer MUST check these in addition to standard code quality:
 | Critical | Hardcoded instrument list, bare except in health path, trading logic change without approval, one-way dependency violation |
 | Important | Missing companion test, drift check not run, research stat inlined in docstring |
 | Minor | Naming convention, comment clarity, import ordering |
+
+## Next → After Review
+
+- All clean? → `/verify-done` for evidence-based completion, then commit
+- Critical findings? → fix, then re-review
+- ML code reviewed? → `/ml-verify` for ML-specific gates
