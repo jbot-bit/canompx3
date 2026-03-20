@@ -446,6 +446,41 @@
       "survivors": -1,
       "elapsed_s": 6294.0,
       "completed_at": "2026-03-20T14:28:34.502411+00:00"
+    },
+    "65": {
+      "seed": 65,
+      "status": "FAIL",
+      "survivors": 6,
+      "elapsed_s": 6298.2,
+      "completed_at": "2026-03-20T14:34:47.953717+00:00"
+    },
+    "66": {
+      "seed": 66,
+      "status": "ERROR",
+      "survivors": -1,
+      "elapsed_s": 5756.9,
+      "completed_at": "2026-03-20T15:33:23.249977+00:00"
+    },
+    "67": {
+      "seed": 67,
+      "status": "PASS",
+      "survivors": 0,
+      "elapsed_s": 5829.1,
+      "completed_at": "2026-03-20T16:01:46.411302+00:00"
+    },
+    "68": {
+      "seed": 68,
+      "status": "ERROR",
+      "survivors": -1,
+      "elapsed_s": 6040.6,
+      "completed_at": "2026-03-20T16:09:16.010909+00:00"
+    },
+    "69": {
+      "seed": 69,
+      "status": "FAIL",
+      "survivors": 2,
+      "elapsed_s": 5993.7,
+      "completed_at": "2026-03-20T16:14:41.710450+00:00"
     }
   },
   "config_snapshot": {
