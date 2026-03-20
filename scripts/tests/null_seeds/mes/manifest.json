@@ -216,6 +216,37 @@
       "seed": 35,
       "status": "CACHED",
       "survivors": 0
+    },
+    "34": {
+      "seed": 34,
+      "status": "PASS",
+      "survivors": 0,
+      "elapsed_s": 6275.3,
+      "completed_at": "2026-03-20T03:41:00.135374+00:00"
+    },
+    "37": {
+      "seed": 37,
+      "status": "CACHED",
+      "survivors": 1
+    },
+    "36": {
+      "seed": 36,
+      "status": "PASS",
+      "survivors": 0,
+      "elapsed_s": 6628.9,
+      "completed_at": "2026-03-20T04:56:37.183679+00:00"
+    },
+    "38": {
+      "seed": 38,
+      "status": "FAIL",
+      "survivors": 10,
+      "elapsed_s": 6993.6,
+      "completed_at": "2026-03-20T05:37:34.997018+00:00"
+    },
+    "40": {
+      "seed": 40,
+      "status": "CACHED",
+      "survivors": 9
     }
   },
   "config_snapshot": {
