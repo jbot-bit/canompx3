@@ -155,6 +155,14 @@ LOOKAHEAD_BLACKLIST: set[str] = {
     "break_bar_volume",  # Volume on the break bar — unknown pre-break
     "break_bar_continues",  # Break bar close direction — unknown pre-break
     "break_dir",  # Direction — unknown pre-break (DIR_BOTH) or constant (DIR_LONG/SHORT)
+    # Defense-in-depth: currently safe (never enter X) but prevent future refactoring leaks
+    "break_ts",  # Exact break timestamp — post-break
+    "garch_forecast_vol",  # GARCH model output — statistical artifact, no structural mechanism
+    "garch_atr_ratio",  # GARCH/ATR ratio — statistical artifact, no structural mechanism
+    "session_london_high",  # London session high — look-ahead for pre-London sessions
+    "session_london_low",  # London session low — look-ahead for pre-London sessions
+    "session_ny_high",  # NY session high — look-ahead for pre-NY sessions
+    "session_ny_low",  # NY session low — look-ahead for pre-NY sessions
 }
 
 # Sessions available as rel_vol features

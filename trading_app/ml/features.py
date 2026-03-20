@@ -839,10 +839,47 @@ def load_single_config_feature_matrix(
                 f"using orb_outcomes directly for all sessions"
             )
 
+        # Pre-compute fallback partition clauses (hybrid + full fallback paths)
+        _fb_partition_v = (
+            "PARTITION BY v.orb_label, v.orb_minutes" if per_aperture
+            else "PARTITION BY v.orb_label"
+        )
+        _fb_partition_bare = (
+            "PARTITION BY orb_label, orb_minutes" if per_aperture
+            else "PARTITION BY orb_label"
+        )
+        _missing_sessions: list[str] = []
+
         if _n_validated > 0 and not bypass_validated:
-            # Normal path: pick configs from validated_setups
-            config_cte = f"""
-                WITH best_configs AS (
+            # Check which sessions are actually covered (after RR lock + RR filter)
+            _vs_check = f"""
+                SELECT DISTINCT v.orb_label
+                FROM validated_setups v
+                {frl_join}
+                WHERE v.instrument = $instrument
+                    AND v.status = 'active'
+                    {frl_where}
+                    {rr_clause}
+            """
+            _validated_sessions = con.execute(_vs_check, params).fetchdf()["orb_label"].tolist()
+
+            # Find sessions in orb_outcomes NOT covered by validated_setups
+            _oo_sessions_query = (
+                "SELECT DISTINCT orb_label FROM orb_outcomes "
+                "WHERE symbol = $instrument AND pnl_r IS NOT NULL"
+            )
+            if rr_target is not None:
+                _oo_sessions_query += " AND rr_target = $rr_target"
+            _all_outcome_sessions = con.execute(
+                _oo_sessions_query, params
+            ).fetchdf()["orb_label"].tolist()
+            _missing_sessions = [
+                s for s in _all_outcome_sessions
+                if s not in set(_validated_sessions)
+            ]
+
+            # Validated CTE inner query (reused in hybrid and non-hybrid paths)
+            _validated_inner = f"""
                     SELECT
                         v.orb_label, v.entry_model, v.rr_target, v.confirm_bars,
                         v.orb_minutes, v.filter_type, v.sharpe_ratio, v.sample_size,
@@ -855,10 +892,63 @@ def load_single_config_feature_matrix(
                     WHERE v.instrument = $instrument
                         AND v.status = 'active'
                         {frl_where}
-                        {rr_clause}
+                        {rr_clause}"""
+
+            if _missing_sessions:
+                # HYBRID: validated for covered sessions, orb_outcomes for missing
+                _missing_list = ",".join(f"'{s}'" for s in _missing_sessions)
+                _fallback_inner = f"""
+                    SELECT
+                        v.orb_label, v.entry_model, v.rr_target, v.confirm_bars,
+                        v.orb_minutes,
+                        'NO_FILTER' AS filter_type,
+                        NULL AS sharpe_ratio,
+                        v.cnt AS sample_size,
+                        ROW_NUMBER() OVER (
+                            {_fb_partition_v}
+                            ORDER BY v.cnt DESC
+                        ) AS rn
+                    FROM (
+                        SELECT orb_label, entry_model, rr_target, confirm_bars,
+                               orb_minutes, COUNT(*) AS cnt
+                        FROM orb_outcomes
+                        WHERE symbol = $instrument
+                            AND pnl_r IS NOT NULL
+                            AND orb_label IN ({_missing_list})
+                            {rr_clause_bare}
+                        GROUP BY orb_label, entry_model, rr_target, confirm_bars, orb_minutes
+                    ) v"""
+
+                config_cte = f"""
+                WITH best_configs AS (
+                    SELECT orb_label, entry_model, rr_target, confirm_bars,
+                           orb_minutes, filter_type, sharpe_ratio, sample_size, 1 AS rn
+                    FROM ({_validated_inner}
+                    ) sub_v WHERE sub_v.rn = 1
+                    UNION ALL
+                    SELECT orb_label, entry_model, rr_target, confirm_bars,
+                           orb_minutes, filter_type, sharpe_ratio, sample_size, 1 AS rn
+                    FROM ({_fallback_inner}
+                    ) sub_f WHERE sub_f.rn = 1
+                )"""
+
+                logger.info(
+                    f"HYBRID config: {len(_validated_sessions)} sessions from validated_setups, "
+                    f"{len(_missing_sessions)} from orb_outcomes fallback: {_missing_sessions}"
+                )
+                # Force skip_filter for hybrid — fallback sessions have
+                # filter_type='NO_FILTER', applying filters would fail for them
+                if not skip_filter:
+                    logger.info("  Forcing skip_filter=True for hybrid path (mixed filter sources)")
+                    skip_filter = True
+            else:
+                # All sessions covered by validated_setups — no fallback needed
+                config_cte = f"""
+                WITH best_configs AS (
+                    {_validated_inner}
                 )"""
         else:
-            # Fallback: pick configs from orb_outcomes directly.
+            # Full fallback: pick configs from orb_outcomes directly.
             # ML only needs trade structure — group by config, pick max samples.
             if bypass_validated:
                 logger.info(
@@ -871,27 +961,19 @@ def load_single_config_feature_matrix(
                     f"picking configs from orb_outcomes (ML needs trade mechanics only)"
                 )
             # Force skip_filter — orb_outcomes has no filter concept, applying
-            # filter eligibility would wipe all data (filter_type='NONE' has no
-            # matching entry in ALL_FILTERS).
+            # filter eligibility would wipe all data (filter_type='NO_FILTER'
+            # passes all, but validated filters are not available here).
             if not skip_filter:
                 logger.info("  Forcing skip_filter=True for fallback path (no filter to apply)")
                 skip_filter = True
             if config_selection == "best_sharpe":
                 logger.warning("  config_selection='best_sharpe' unavailable in fallback — using max_samples")
-            _fb_partition_v = (
-                "PARTITION BY v.orb_label, v.orb_minutes" if per_aperture
-                else "PARTITION BY v.orb_label"
-            )
-            _fb_partition_bare = (
-                "PARTITION BY orb_label, orb_minutes" if per_aperture
-                else "PARTITION BY orb_label"
-            )
             config_cte = f"""
                 WITH best_configs AS (
                     SELECT
                         v.orb_label, v.entry_model, v.rr_target, v.confirm_bars,
                         v.orb_minutes,
-                        'NONE' AS filter_type,
+                        'NO_FILTER' AS filter_type,
                         NULL AS sharpe_ratio,
                         v.cnt AS sample_size,
                         ROW_NUMBER() OVER (
@@ -946,32 +1028,73 @@ def load_single_config_feature_matrix(
 
         # Fetch selected configs for reporting (same source as main query)
         if _n_validated > 0 and not bypass_validated:
-            configs_query = f"""
-                WITH ranked AS (
-                    SELECT
-                        v.orb_label, v.entry_model, v.rr_target, v.confirm_bars,
-                        v.orb_minutes, v.filter_type, v.sharpe_ratio, v.sample_size,
-                        ROW_NUMBER() OVER (
-                            {partition_clause}
-                            {order_clause}
-                        ) AS rn
-                    FROM validated_setups v
-                    {frl_join}
-                    WHERE v.instrument = $instrument
-                        AND v.status = 'active'
-                        {frl_where}
-                        {rr_clause}
-                )
-                SELECT orb_label, entry_model, rr_target, confirm_bars,
-                       orb_minutes, filter_type, sharpe_ratio, sample_size
-                FROM ranked WHERE rn = 1
-                ORDER BY orb_label
-            """
+            if _missing_sessions:
+                # HYBRID reporting: validated + fallback configs
+                _rpt_missing_list = ",".join(f"'{s}'" for s in _missing_sessions)
+                configs_query = f"""
+                    SELECT orb_label, entry_model, rr_target, confirm_bars,
+                           orb_minutes, filter_type, sharpe_ratio, sample_size
+                    FROM (
+                        SELECT
+                            v.orb_label, v.entry_model, v.rr_target, v.confirm_bars,
+                            v.orb_minutes, v.filter_type, v.sharpe_ratio, v.sample_size,
+                            ROW_NUMBER() OVER (
+                                {partition_clause}
+                                {order_clause}
+                            ) AS rn
+                        FROM validated_setups v
+                        {frl_join}
+                        WHERE v.instrument = $instrument
+                            AND v.status = 'active'
+                            {frl_where}
+                            {rr_clause}
+                    ) sub_v WHERE sub_v.rn = 1
+                    UNION ALL
+                    SELECT orb_label, entry_model, rr_target, confirm_bars,
+                           orb_minutes, filter_type, sharpe_ratio, sample_size
+                    FROM (
+                        SELECT orb_label, entry_model, rr_target, confirm_bars,
+                               orb_minutes, 'NO_FILTER' AS filter_type, NULL AS sharpe_ratio,
+                               COUNT(*) AS sample_size,
+                               ROW_NUMBER() OVER (
+                                   {_fb_partition_bare}
+                                   ORDER BY COUNT(*) DESC
+                               ) AS rn
+                        FROM orb_outcomes
+                        WHERE symbol = $instrument AND pnl_r IS NOT NULL
+                            AND orb_label IN ({_rpt_missing_list})
+                            {rr_clause_bare}
+                        GROUP BY orb_label, entry_model, rr_target, confirm_bars, orb_minutes
+                    ) sub_f WHERE sub_f.rn = 1
+                    ORDER BY orb_label
+                """
+            else:
+                configs_query = f"""
+                    WITH ranked AS (
+                        SELECT
+                            v.orb_label, v.entry_model, v.rr_target, v.confirm_bars,
+                            v.orb_minutes, v.filter_type, v.sharpe_ratio, v.sample_size,
+                            ROW_NUMBER() OVER (
+                                {partition_clause}
+                                {order_clause}
+                            ) AS rn
+                        FROM validated_setups v
+                        {frl_join}
+                        WHERE v.instrument = $instrument
+                            AND v.status = 'active'
+                            {frl_where}
+                            {rr_clause}
+                    )
+                    SELECT orb_label, entry_model, rr_target, confirm_bars,
+                           orb_minutes, filter_type, sharpe_ratio, sample_size
+                    FROM ranked WHERE rn = 1
+                    ORDER BY orb_label
+                """
         else:
             configs_query = f"""
                 WITH ranked AS (
                     SELECT orb_label, entry_model, rr_target, confirm_bars,
-                           orb_minutes, 'NONE' AS filter_type, NULL AS sharpe_ratio,
+                           orb_minutes, 'NO_FILTER' AS filter_type, NULL AS sharpe_ratio,
                            COUNT(*) AS sample_size,
                            ROW_NUMBER() OVER (
                                {_fb_partition_bare}
