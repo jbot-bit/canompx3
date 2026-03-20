@@ -6,99 +6,115 @@
 
 ## Purpose
 
-Test the pre-registered hypothesis (ORB breakout at RR1.0 has positive ExpR)
-across ALL instruments and sessions using a clean train/holdout split.
-Get the honest number of tradeable setups.
+Structured reanalysis of 2025 data for the pre-registered RR1.0 hypothesis.
+Get the honest number of tradeable setups with correct multiple testing.
 
-## Why This Matters
+## Relationship to Other Documents
 
-Previous approaches conflated discovery and validation:
-- Grid search (120K tests) → 0.52R noise floor → killed everything
-- Other terminal tested 55 things on 2025 holdout → N=55 → only 2 survived
-- This plan: pre-specify RR1.0, test ALL instrument×session combos, BH FDR at exact N
+- **This plan** governs a FRESH reanalysis of 2025 with honest N and pre-specified RR1.0
+- **`2026-03-20-mnq-rr1-verified-sessions.md`** governs the 2026 FORWARD holdout (N=3, frozen strategies)
+- These are INDEPENDENT analyses. This plan does NOT replace the 2026 holdout.
 
-The pre-registration is committed. RR1.0 is frozen from economic reasoning, not scanning.
+## Limitations (HONEST)
+
+2025 is a **contaminated holdout.** 55+ tests touched 2025 data before this plan.
+The BH FDR correction addresses multiplicity but NOT information leakage — we already
+know which sessions look good on 2025. Results from this analysis are **supporting
+evidence**, not clean discovery. The binding discovery test is the 2026 holdout
+from the verified sessions pre-registration (N=3).
 
 ## Phases
 
-### Phase 1: Data Preparation (no holdout contact)
+### Phase 1: Data Preparation (no holdout values)
 
 **Tasks:**
-1. Count exact N: how many instrument × session combos have >= 50 trades in 2025?
+
+1. **Count exact N:** How many instrument x session combos have >= 50 trades in 2025?
    - Instruments: MNQ, MGC, MES
-   - Sessions: all 12 per instrument
+   - Sessions: all available per instrument
    - Filter: E2, CB1, RR1.0, O5, outcome IS NOT NULL, pnl_r IS NOT NULL
-   - This count = N for BH FDR denominator
-   - NOTE: counting trades in 2025 is NOT touching the holdout — it's just measuring sample size
+   - **N = ALL qualifying combos regardless of training performance**
+   - This is the BH FDR denominator — no deflation from training filters
 
-2. Verify pnl_r is correct:
-   - pnl_r should be in R multiples (win ≈ +0.7 to +1.0 after costs, loss ≈ -1.0 to -1.1)
-   - Check a sample of rows: does pnl_r = (exit_price - entry_price) / (entry_price - stop_price)?
-   - If pnl_r values are in dollars or points instead of R, the entire analysis is wrong
-   - THIS IS WHY THE LAST QUERY PRODUCED NONSENSE — need to verify units first
+2. **Verify pnl_r units (FULL distribution, not sample):**
+   - Compute: min, max, mean, median, P5, P95 of pnl_r across ALL rows
+   - For RR1.0 E2: wins should be ~+0.7 to +1.0 (target hit minus costs), losses ~-1.0 to -1.1
+   - If ANY pnl_r > 2.0 or < -2.0: investigate — something is wrong
+   - Reproduce the +138R error from the previous broken query and diagnose exactly what went wrong
+   - **STOP if pnl_r units are wrong. Do not proceed to Phase 2.**
 
-3. Compute per-session dollar risk:
-   - avg_risk_dollars = mean(|entry_price - stop_price|) × point_value per instrument
-   - This converts ExpR to $/trade: dollar_per_trade = ExpR × avg_risk_dollars
+3. **Compute per-instrument dollar risk:**
+   - avg_risk_dollars = mean(|entry_price - stop_price|) x point_value
+   - MNQ: point_value = $2.00
+   - MGC: point_value = $10.00
+   - MES: point_value = $5.00
+   - Cost model: MNQ = $2.74 RT (canonical from pipeline.cost_model.COST_SPECS)
 
 ### Phase 2: Training Analysis (pre-2025 data only)
 
 **Tasks:**
-4. For each instrument × session combo:
-   - Compute: N_train, mean_pnl_r, t-test p-value, std
-   - Compute yearly consistency: what % of years are positive?
-   - Requirement: >= 60% of pre-2025 years positive to proceed to holdout
 
-5. Apply training filter:
-   - Only combos that are positive AND >= 60% yearly consistency on training data
-   - proceed to holdout test
-   - This reduces N further (good — fewer tests = lower BH FDR penalty)
+4. **For each of the N combos from Phase 1:**
+   - Compute on pre-2025 data: N_train, mean_pnl_r, t-test p-value, std
+   - Compute yearly consistency: % of pre-2025 years that are positive
+   - Report ALL combos (positive and negative) — do not filter yet
+
+5. **Flag training-positive combos** (for reporting only):
+   - Positive mean AND >= 60% yearly consistency = "training-positive"
+   - **This does NOT reduce N for BH FDR.** N stays at the Phase 1 count.
+   - The training filter is for INTERPRETATION, not for penalty reduction.
 
 ### Phase 3: Holdout Test (2025 data — ONE PASS, NO ITERATION)
 
 **Tasks:**
-6. For ONLY the Phase 2 survivors:
-   - Compute: N_holdout, mean_pnl_r, t-test p-value
-   - BH FDR at alpha=0.05 across the EXACT number of holdout tests
-   - Report: which survive BH FDR?
 
-7. For each BH FDR survivor:
-   - Compute dollar estimate: ExpR × avg_risk_dollars × N_trades_per_year
-   - Compute cost sensitivity: what ExpR at 2-tick and 3-tick slippage?
-   - Report yearly breakdown (including 2025 breakdown by quarter if possible)
+6. **For ALL N combos (not just training-positive):**
+   - Compute: N_holdout, mean_pnl_r, t-test p-value
+   - BH FDR at alpha=0.05 across ALL N tests
+   - Report: which survive BH FDR?
+   - Cross-reference with training-positive flag from Phase 2
+
+7. **For each BH FDR survivor that is ALSO training-positive:**
+   - Compute dollar estimate: ExpR x avg_risk_dollars x N_trades_per_year
+   - Compute cost sensitivity: ExpR at 1.5x and 2x cost model
+   - Report yearly breakdown on ALL data (training + holdout)
 
 ### Phase 4: Verification
 
 **Tasks:**
-8. Fresh agent audit:
-   - Send the COMPLETE methodology + results to a fresh agent
-   - Ask it to verify the math, check for errors, assess statistical validity
-   - No project context — just the numbers and the method
 
-9. Save results:
-   - Update pre-registration doc with results
-   - Update memory
+8. **Fresh agent audit:**
+   - Send complete methodology + all numbers to fresh agent (no project context)
+   - Include: N, BH FDR thresholds, all p-values, training performance, holdout performance
+   - Ask: is the math correct? Are there errors? Is the methodology valid?
+   - **MANDATORY — do not skip.**
+
+9. **Save results:**
+   - Update memory with honest state
    - Commit and push
 
 ### Phase 5: Forward Registration
 
 **Tasks:**
-10. Pre-register survivors for 2026 holdout:
-    - Freeze exact parameters
-    - Declare 2026 data sacred
-    - Set kill criteria for paper trading
+
+10. **Update verified sessions pre-registration:**
+    - Add any NEW survivors (beyond NYSE_OPEN + COMEX_SETTLE) to the 2026 holdout list
+    - Adjust N for 2026 BH FDR accordingly
+    - Freeze parameters
+    - Declare 2026 data remains sacred
 
 ## Key Guardrails
 
-- pnl_r MUST be verified as R multiples before any dollar calculation
-- The holdout test (Phase 3) runs ONCE — no iteration, no "let me check one more thing"
-- Phase 2 training filter reduces N BEFORE touching holdout — this is the honest way
-- If Phase 1 reveals pnl_r is in wrong units, STOP and fix before proceeding
-- Fresh agent audit (Phase 4) is MANDATORY, not optional
+- pnl_r MUST be verified as R multiples before any dollar calculation (Phase 1 gate)
+- N for BH FDR = ALL qualifying combos, NOT reduced by training filter (Fix #2)
+- The holdout test (Phase 3) runs ONCE — no iteration
+- 2025 is contaminated — results are supporting evidence, not discovery (Fix #3)
+- Fresh agent audit (Phase 4) is MANDATORY
+- This analysis is independent of the N=55 analysis and the N=3 forward test (Fix #1, #6)
 
 ## Estimated Time
 
-- Phase 1: 15 minutes (data checks)
+- Phase 1: 15 minutes (data checks + pnl_r verification)
 - Phase 2: 15 minutes (training analysis)
 - Phase 3: 10 minutes (one pass holdout)
 - Phase 4: 20 minutes (fresh agent)
