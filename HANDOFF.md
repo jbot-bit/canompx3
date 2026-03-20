@@ -10,75 +10,56 @@ If nothing changed, leave it as-is.
 ---
 
 ## Current Session
-- **Tool:** Claude Code
-- **Date:** 2026-03-19
-- **Branch:** `pipeline-fixes`
-- **Status:** Post-rebuild audit complete. MNQ null test running overnight (~100 seeds, sigma=5.0).
+- **Tool:** Claude Code (Paper Trading Terminal)
+- **Date:** 2026-03-21
+- **Branch:** `main`
+- **Status:** Major session — paper trading built, ML verified, blueprint + skill system upgraded.
 
-### What was done this session
+### What was done this session (Mar 20-21)
 
-#### 1. Full Post-Rebuild Audit
-Pipeline rebuilt today (MGC/MES/MNQ × O5/O15/O30). Results:
-- **MGC: 0 validated** (was 573). 64% negative ExpR, remainder killed by noise floor + WF + yearly robustness.
-- **MES: 0 validated** (was 261). 86% negative ExpR.
-- **MNQ: 11 validated** (was 1,443). All E2, all ATR70_VOL/VOL filtered, CME afternoon sessions.
-- **M2K: 95 stale** (not rebuilt, from Mar 12).
+#### 1. Raw Baseline Paper Trading (BUILT + VERIFIED)
+- `build_raw_baseline_portfolio()` in `trading_app/portfolio.py`
+- `--raw-baseline` CLI on paper_trader.py and run_live_session.py
+- 2025 replay: 2,606 trades, 59.4% WR, +0.105R/trade, +272.56R total
+- Lookahead audit: CLEAN across all 6 execution paths
 
-#### 2. Root Cause Analysis — MGC Wipeout
-- **Structural impossibility:** Noise floor requires tight G-filters (G4+/G5+) for high ExpR. Tight filters produce only 100-130 trades over 10 years. WF needs 135+ trades minimum (45 train + 30 test × 3 windows). Noise floor + WF = mathematically incompatible for MGC.
-- NOT a bug — the gates are working correctly. The edge doesn't survive honest gating.
+#### 2. ML Exhaustive Sweep (COMPLETE)
+- Tested RR2.0, RR1.5, RR1.0 flat + RR2.0 per-aperture
+- Results: RR2.0 per-aperture has 5/36 models passing 4-gate quality check
+- NYSE_OPEN O30 AUC=0.658, US_DATA_1000 O30 AUC=0.612
+- Logs: `logs/ml_sweep_*.log`
 
-#### 3. Noise Floor Calibration Audit (Literature-Grounded)
-- **NOISE_EXPR_FLOOR zeroed in config.py** for MNQ null test calibration. MUST restore after.
-- **MGC null (sigma=1.2 vs actual 0.70):** 1.71x too volatile = CONSERVATIVE (safe).
-- **MNQ null (sigma=5.0 vs actual 5.95, ATR70 days 6.6-8.3):** 0.84x too quiet = LENIENT (dangerous).
-- **Literature:** Aronson/Masters MCP (permutation of actual returns) is gold standard — automatically preserves all distributional properties. Our parametric Gaussian approach requires correct sigma. Bailey & López de Prado FST: V[SR] must match actual data for threshold to be valid.
-- **Memory file:** `null_test_methodology.md` has full comparison with citations.
+#### 3. Bootstrap Permutation Test (5/7 PASS)
+- 200 permutations per survivor
+- NYSE_OPEN O30: p=0.005, US_DATA_1000 O30: p=0.005
+- US_DATA_1000 O15: p=0.020, US_DATA_830 O30: p=0.020
+- NYSE_OPEN flat: p=0.005
+- CME_PRECLOSE: p=0.095 (marginal), p=0.145 (fail)
+- Logs: `logs/ml_bootstrap_results.log`, `logs/ml_bootstrap_remaining.log`
 
-#### 4. Code Audit Findings (from 3 exploration agents)
-- **Noise floor gate:** HOT tier in live_config has NO noise floor gate (violates fail-closed)
-- **rolling_portfolio.MIN_EXPECTANCY_R = 0.10:** Below both noise floors, allows sub-floor families
-- **Ambiguous bars:** Hardcoded to loss — conservative, ~0.2% of trades
-- **ATR_20_PCT:** bisect_left percentile off by ~1-2% (minor)
-- **MAE/MFE friction:** Inconsistent with actual P&L friction treatment
-- **Drift check:** `python pipeline/check_drift.py` broken (ModuleNotFoundError). Use `python -m pipeline.check_drift`.
-- **15 drift violations** detected including zeroed noise floors.
+#### 4. ML Replay Validation (COMPLETE)
+- RR2.0 O30: ML adds +12.20R, reduces DD by 12.46R vs raw baseline
+- Model on disk: `models/ml/meta_label_MNQ_hybrid.joblib` (per-aperture, RR2.0)
 
-#### 5. Academic Literature Review
-Read actual PDFs from `resources/`:
-- `deflated-sharpe.pdf` (Bailey & López de Prado 2014)
-- `false-strategy-lopez.pdf` (Bailey & López de Prado 2018)
-- `man_overfitting_2015.pdf` (Man AHL Advisory Board 2015)
-- `Evidence_Based_Technical_Analysis_Aronson.pdf` Ch.5 pp.238-258 (Monte Carlo Permutation)
+#### 5. Strategy Research Blueprint (NEW DOC)
+- `docs/STRATEGY_BLUEPRINT.md` — 11 sections, methodology + current state
+- 3 audit passes, verified against live code/data
+- Referenced from CLAUDE.md document authority table
 
-### MNQ Null Test Status
-- Location: `scripts/tests/null_seeds/mnq/`
-- Config: `instrument=MNQ, sigma=5.0, noise_floors={E1:0, E2:0}`
-- **Sigma=5.0 is LENIENT** — actual MNQ sigma=5.95 (overall), 6.6-8.3 (ATR70 days the strategies trade on)
-- Results establish a LOWER BOUND on noise ceiling only
-- ETA: ~6hrs from start (~early morning AEST Mar 20)
-
-### Decision Tree (blocked on null test)
-- **If MNQ E2 ceiling > 0.37 at sigma=5.0:** All 11 dead (even easy null kills them) — DEFINITIVE
-- **If MNQ E2 ceiling ≤ 0.32 at sigma=5.0:** Inconclusive — need sigma=5.95 and 7.5 runs
-- **If MNQ E2 ceiling 0.32-0.37 at sigma=5.0:** Some might survive easy null but die at honest null — INCONCLUSIVE
+#### 6. Skill System Upgrade (15 touchpoints)
+- Shared rule: `strategy-awareness.md` (blueprint routing for all skills)
+- Upgraded: brainstorm, 4t, 4tp, orient, discover, regime-check, trade-book, bloomey-review, verify-done, code-review (11 skills)
+- New: research, ml-verify (2 skills)
+- Multi-take deliberation baked into planning skills
+- Next→ routing for skill chaining
+- Effort frontmatter on deep-think skills
 
 ### Next Steps (for incoming session)
-1. **Check null test results** — read `scripts/tests/null_seeds/mnq/` output
-2. **Restore noise floors** in config.py (E1=0.22, E2=0.32) if null test is done
-3. **If inconclusive:** queue sigma=5.95 and sigma=7.5 runs
-4. **Fix drift check** ModuleNotFoundError (path resolution in check_drift.py)
-5. **Fix HOT tier** noise floor gap in live_config.py
-6. **Rebuild M2K** with current gates to see what survives
-
-### Files modified (uncommitted from prior Codex session)
-- `scripts/infra/windows_agent_launch.py`
-- `scripts/tools/worktree_manager.py`
-- `tests/test_tools/test_worktree_manager.py`
-- `tests/test_tools/test_windows_agent_launch.py`
-
-### Files created this session
-- `GOLD_DB_AUDIT_2026-03-19.txt` — snapshot (can delete)
+1. **Multi-RR portfolio design** — RR1.0 O5 raw (11 sessions) + RR2.0 O30 ML-filtered (4 sessions)
+2. **Paper trade raw baseline** — deploy signal-only mode
+3. **April 2026: 2026 holdout test** — 3 pre-registered strategies, N≥100 per session
+4. **Edge families rebuild** — 0 rows currently, needed for fitness tracking
+5. **Simple regime filter** — ATR>50pct as ML-free alternative (deferred)
 
 ---
 

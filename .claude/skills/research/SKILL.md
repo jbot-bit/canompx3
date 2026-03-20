@@ -5,6 +5,7 @@ description: >
   and adversarial verification. For any trading hypothesis, feature evaluation,
   or edge investigation.
 allowed-tools: Read, Grep, Glob, Bash
+effort: high
 ---
 
 Research this topic and produce actionable findings: $ARGUMENTS
