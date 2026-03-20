@@ -253,119 +253,72 @@ def pull_tbbo(manifest: list[PilotDay], force: bool = False) -> list[Path]:
 
 
 def reprice_entries(manifest: list[PilotDay]) -> pd.DataFrame:
-    """Measure actual slippage at each E2 entry."""
-    import databento as db
+    """Measure actual slippage using the PROVEN MGC pilot functions.
+
+    Delegates to databento_microstructure.load_tbbo_df (front-month filtering)
+    and databento_microstructure.reprice_entry (crossing detection + BBO).
+    """
+    from research.databento_microstructure import load_tbbo_df, reprice_entry
 
     spec = get_cost_spec(INSTRUMENT)
-    tick_size = spec.tick_size  # 0.25 for MNQ
     results = []
 
-    for day in manifest:
+    for i, day in enumerate(manifest):
         cache_path = CACHE_DIR / f"{day.trading_day}_{day.orb_label}_MNQ.dbn.zst"
         if not cache_path.exists():
-            results.append({
-                "trading_day": day.trading_day, "orb_label": day.orb_label,
-                "error": "no cache file",
-            })
+            results.append({"trading_day": day.trading_day, "orb_label": day.orb_label,
+                            "error": "no cache file"})
             continue
 
-        try:
-            store = db.DBNStore.from_file(cache_path)
-            df = store.to_df().reset_index()
-        except Exception as e:
-            results.append({
-                "trading_day": day.trading_day, "orb_label": day.orb_label,
-                "error": str(e),
-            })
+        tbbo_df = load_tbbo_df(cache_path)
+        if tbbo_df.empty:
+            results.append({"trading_day": day.trading_day, "orb_label": day.orb_label,
+                            "error": "empty after filtering"})
             continue
 
-        if df.empty:
-            results.append({
-                "trading_day": day.trading_day, "orb_label": day.orb_label,
-                "error": "empty tbbo data",
-            })
-            continue
-
-        # Filter to front-month outright (drop spreads and back months)
-        df = df[~df["symbol"].str.contains("-", na=False)]
-        if "action" in df.columns:
-            trades_df = df[df["action"] == "T"].copy()
-        else:
-            trades_df = df.copy()
-
-        # Price scaling: Databento to_df() should already convert from fixed-point
-        # Check if prices are in the right range (MNQ trades at 10,000-30,000)
-        if "price" in trades_df.columns:
-            sample_price = trades_df["price"].iloc[0] if len(trades_df) > 0 else 0
-            if sample_price > 1e6:  # Still in fixed-point
-                for pcol in ["price", "bid_px_00", "ask_px_00"]:
-                    if pcol in trades_df.columns:
-                        trades_df[pcol] = trades_df[pcol] / 1e9
-
-        # Only look at trades AFTER the ORB window closes
-        # The window starts 2min before ORB close, so we need to skip early trades
+        # Compute ORB end time for post-ORB filtering
         td = date.fromisoformat(day.trading_day)
         _, orb_end = _orb_utc_window(td, day.orb_label, ORB_MINUTES)
-        if "ts_event" in trades_df.columns:
-            trades_df = trades_df[trades_df["ts_event"] >= orb_end]
-        elif trades_df.index.name == "ts_event":
-            trades_df = trades_df[trades_df.index >= orb_end]
 
-        orb_level = day.orb_level
-
-        # Find first trade crossing the ORB level AFTER ORB closes
+        # Use the PROVEN reprice function from the MGC pilot
+        # It needs orb_high/orb_low — derive from break_dir + orb_level
         if day.break_dir == "long":
-            crosses = trades_df[trades_df["price"] >= orb_level]
+            orb_high = day.orb_level
+            orb_low = day.orb_level - 1.0  # dummy — only orb_high matters for long
         else:
-            crosses = trades_df[trades_df["price"] <= orb_level]
+            orb_low = day.orb_level
+            orb_high = day.orb_level + 1.0  # dummy — only orb_low matters for short
 
-        if crosses.empty:
-            results.append({
-                "trading_day": day.trading_day, "orb_label": day.orb_label,
-                "break_dir": day.break_dir, "atr_regime": day.atr_regime,
-                "orb_level": orb_level,
-                "error": "no crossing trade found",
-                "n_tbbo_records": len(df),
-            })
-            continue
+        entry = reprice_entry(
+            tbbo_df=tbbo_df,
+            trading_day=day.trading_day,
+            break_dir=day.break_dir,
+            orb_high=orb_high,
+            orb_low=orb_low,
+            model_entry_price=day.orb_level + (spec.tick_size if day.break_dir == "long" else -spec.tick_size),
+            modeled_slippage_ticks=int(spec.slippage / spec.point_value / spec.tick_size),
+            tick_size=spec.tick_size,
+            symbol_pulled="MNQ.FUT",
+            orb_end_utc=orb_end.isoformat(),
+        )
 
-        trigger = crosses.iloc[0]
-
-        # BBO at trigger: what's the bid/ask when this trade happens?
-        bid_col = "bid_px_00" if "bid_px_00" in trades_df.columns else "bid_px"
-        ask_col = "ask_px_00" if "ask_px_00" in trades_df.columns else "ask_px"
-
-        trigger_price = float(trigger["price"])
-        bid = float(trigger[bid_col]) if bid_col in trigger.index else None
-        ask = float(trigger[ask_col]) if ask_col in trigger.index else None
-
-        # E2 stop-market fill estimate:
-        # Long: filled at ask (or worse). Short: filled at bid (or worse).
-        if day.break_dir == "long":
-            estimated_fill = ask if ask else trigger_price
-            slippage_pts = estimated_fill - orb_level
-        else:
-            estimated_fill = bid if bid else trigger_price
-            slippage_pts = orb_level - estimated_fill
-
-        slippage_ticks = slippage_pts / tick_size if tick_size > 0 else 0
-
-        results.append({
-            "trading_day": day.trading_day,
+        row = {
+            "trading_day": entry.trading_day,
             "orb_label": day.orb_label,
-            "break_dir": day.break_dir,
+            "break_dir": entry.break_dir,
             "atr_regime": day.atr_regime,
-            "orb_level": orb_level,
-            "trigger_price": trigger_price,
-            "bid_at_trigger": bid,
-            "ask_at_trigger": ask,
-            "spread_ticks": (ask - bid) / tick_size if (bid and ask) else None,
-            "estimated_fill": estimated_fill,
-            "slippage_pts": slippage_pts,
-            "slippage_ticks": slippage_ticks,
-            "n_tbbo_records": len(df),
-            "error": None,
-        })
+            "orb_level": entry.orb_level,
+            "trigger_price": entry.trigger_trade_price,
+            "bid_at_trigger": entry.bbo_at_trigger_bid,
+            "ask_at_trigger": entry.bbo_at_trigger_ask,
+            "spread_ticks": entry.bbo_at_trigger_spread,
+            "estimated_fill": entry.estimated_fill_price,
+            "slippage_pts": entry.actual_slippage_points,
+            "slippage_ticks": entry.actual_slippage_ticks,
+            "n_tbbo_records": entry.tbbo_records_in_window,
+            "error": entry.error,
+        }
+        results.append(row)
 
     return pd.DataFrame(results)
 
