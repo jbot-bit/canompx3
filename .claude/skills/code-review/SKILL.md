@@ -40,7 +40,14 @@ Use Agent tool with `pr-review-toolkit:code-reviewer` subagent type. Provide:
 
 Alternatively, for a deeper quant-focused review with Seven Sins grading, use `/bloomey-review`.
 
-**3. Project-Specific Review Criteria**
+**3. Blueprint Cross-Check**
+
+If the changes touch strategy, research, ML, or trading logic:
+- Check `docs/STRATEGY_BLUEPRINT.md §5` — are we reimplementing a NO-GO?
+- Check `docs/STRATEGY_BLUEPRINT.md §10` — do we depend on a flagged assumption?
+- Check `docs/STRATEGY_BLUEPRINT.md §3` — does research follow the test sequence?
+
+**4. Project-Specific Review Criteria**
 
 The reviewer MUST check these in addition to standard code quality:
 

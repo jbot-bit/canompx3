@@ -76,6 +76,20 @@ If you changed a specific file, check `TEST_MAP` in `.claude/hooks/post-edit-pip
 | Trading app code | Gates 1-4 |
 | Config / canonical sources | Gates 1-4 + manual review |
 | Schema change | Gates 1-4 + `python pipeline/init_db.py` test |
+| Strategy/research code | Gates 1-4 + Blueprint §3 test sequence check |
+| ML code | Gates 1-4 + lookahead blacklist check + bootstrap if claiming skill |
+| Portfolio/paper trading | Gates 1-4 + replay validation matches expectations |
+
+## Trading-Specific Done Criteria
+
+If the work touches strategy, research, or trading logic, also verify:
+
+- [ ] **Blueprint compliance:** Does the implementation follow `STRATEGY_BLUEPRINT.md` test sequence?
+- [ ] **NO-GO check:** Did we avoid reimplementing dead paths?
+- [ ] **Canonical sources:** All instruments, sessions, costs from imports — nothing hardcoded?
+- [ ] **filter_type valid:** Any filter_type used exists in `ALL_FILTERS`?
+- [ ] **No stale citations:** Any numbers cited are from fresh queries, not memory?
+- [ ] **Lookahead clean:** For ML code — all features in `LOOKAHEAD_BLACKLIST` excluded?
 
 ## Output Format
 

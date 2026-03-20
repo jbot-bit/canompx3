@@ -62,6 +62,19 @@ print(df.to_string(index=False))
 "
 ```
 
+## Step 3: Deployment Context (if user asks "what should I trade")
+
+When the user is asking about LIVE deployment (not just data):
+
+- **Prop firm constraints:** Apex max trailing DD $2,500-$6,000. Tradeify/TopStep $2,000-$3,000. Use 0.75x stop multiplier for prop (see `manual-trading-playbook.md`).
+- **Automation rules:** Apex PROHIBITS automation + copy trading. Tradeify + TopStep allow it.
+- **Raw baseline available:** `--raw-baseline` flag for MNQ E2 RR1.0 O5 (11 sessions, NO_FILTER). Already verified: 2025 replay +272.56R.
+- **ML-filtered available:** RR2.0 O30 with `--use-ml`. Bootstrap-verified (p≤0.02) on 4 sessions.
+- **Correlation:** TOKYO_OPEN vs LONDON_METALS: −0.39 (diversification). MNQ vs MES: +0.83 (same trade, don't stack).
+- **2026 holdout is SACRED** — 3 pre-registered strategies only.
+
+See `docs/STRATEGY_BLUEPRINT.md §7` for full paper trading checklist.
+
 ## Rules
 
 - ALWAYS run generate_trade_sheet.py FIRST — never hand-compute session times
@@ -69,5 +82,7 @@ print(df.to_string(index=False))
 - ALWAYS include rr_target — user explicitly demanded this
 - NEVER use MCP for trade book queries — too slow and may be stale
 - NEVER cite strategy counts from memory — always query fresh
+- NEVER show PURGED or DECAY strategies — trade book = tradeable only
 - NEVER reference strategy_fitness table — it does not exist. Use edge_families
 - Correct column names: instrument, orb_label, expectancy_r, sharpe_ann (not symbol, session_name, avg_r, sharpe)
+- For "what do I trade" → query `build_live_portfolio()`, NOT validated_setups (hard lesson #1)
