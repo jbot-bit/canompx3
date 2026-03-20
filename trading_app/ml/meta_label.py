@@ -220,6 +220,7 @@ def train_per_session_meta_label(
     config_selection: str = "max_samples",
     skip_filter: bool = False,
     per_aperture: bool = False,
+    bypass_validated: bool = False,
 ) -> dict:
     """Train hybrid per-session meta-label models for one instrument.
 
@@ -265,6 +266,7 @@ def train_per_session_meta_label(
             skip_filter=skip_filter,
             per_aperture=per_aperture,
             apply_rr_lock=False,
+            bypass_validated=bypass_validated,
         )
     else:
         X_all, y_all, meta_all = load_validated_feature_matrix(db_path, instrument)

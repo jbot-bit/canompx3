@@ -732,6 +732,7 @@ def load_single_config_feature_matrix(
     skip_filter: bool = False,
     per_aperture: bool = False,
     apply_rr_lock: bool = True,
+    bypass_validated: bool = False,
 ) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
     """Load ML feature matrix with ONE config per session — clean labels.
 
@@ -760,6 +761,10 @@ def load_single_config_feature_matrix(
             family_rr_locks to only use locked RR per family. Set False for ML
             training — decouples training RR from portfolio RR lock so the model
             picks whatever RR gives best label balance for discrimination.
+        bypass_validated: If True, skip validated_setups entirely and pick
+            configs from orb_outcomes directly. Use for full-population ML
+            training where all sessions should be included regardless of
+            whether they have validated strategies.
 
     Returns:
         X: Feature matrix (float, ready for sklearn)
@@ -828,7 +833,13 @@ def load_single_config_feature_matrix(
             _check_query += " AND rr_target = $rr_target"
         _n_validated = con.execute(_check_query, _check_params).fetchone()[0]
 
-        if _n_validated > 0:
+        if bypass_validated and _n_validated > 0:
+            logger.info(
+                f"bypass_validated=True: skipping {_n_validated} validated_setups entries, "
+                f"using orb_outcomes directly for all sessions"
+            )
+
+        if _n_validated > 0 and not bypass_validated:
             # Normal path: pick configs from validated_setups
             config_cte = f"""
                 WITH best_configs AS (
@@ -849,10 +860,16 @@ def load_single_config_feature_matrix(
         else:
             # Fallback: pick configs from orb_outcomes directly.
             # ML only needs trade structure — group by config, pick max samples.
-            logger.warning(
-                f"No validated_setups for {instrument}{f' at RR {rr_target}' if rr_target else ''} — "
-                f"picking configs from orb_outcomes (ML needs trade mechanics only)"
-            )
+            if bypass_validated:
+                logger.info(
+                    f"bypass_validated: picking configs from orb_outcomes for "
+                    f"full-population ML training on {instrument}"
+                )
+            else:
+                logger.warning(
+                    f"No validated_setups for {instrument}{f' at RR {rr_target}' if rr_target else ''} — "
+                    f"picking configs from orb_outcomes (ML needs trade mechanics only)"
+                )
             # Force skip_filter — orb_outcomes has no filter concept, applying
             # filter eligibility would wipe all data (filter_type='NONE' has no
             # matching entry in ALL_FILTERS).
@@ -928,7 +945,7 @@ def load_single_config_feature_matrix(
         df = con.execute(query, params).fetchdf()
 
         # Fetch selected configs for reporting (same source as main query)
-        if _n_validated > 0:
+        if _n_validated > 0 and not bypass_validated:
             configs_query = f"""
                 WITH ranked AS (
                     SELECT
