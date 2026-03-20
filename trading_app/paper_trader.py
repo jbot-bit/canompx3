@@ -791,6 +791,7 @@ def main():
         default=1.0,
         help="Stop multiplier (1.0=standard, 0.75=tight prop stop)",
     )
+    parser.add_argument("--orb-minutes", type=int, default=5, help="ORB aperture (5, 15, or 30)")
     args = parser.parse_args()
 
     risk_limits = RiskLimits(
@@ -805,6 +806,7 @@ def main():
             instrument=args.instrument,
             rr_target=args.rr_target,
             entry_model=args.entry_model,
+            orb_minutes=args.orb_minutes,
             exclude_sessions=exclude,
             stop_multiplier=args.stop_multiplier,
             max_concurrent_positions=args.max_concurrent,
