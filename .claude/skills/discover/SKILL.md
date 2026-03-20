@@ -153,3 +153,10 @@ For each finding:
 - All sessions are dynamic/event-based from SESSION_CATALOG
 - Before declaring dead: tested ≥3 RR, ≥3 apertures, E1+E2?
 - Check NO-GO registry FIRST — don't rediscover dead paths
+
+## Next → After Discovery
+
+- BH-significant findings? → `/research [finding]` for deeper hypothesis testing
+- Ready to implement? → `/brainstorm [feature]` then `/4tp`
+- Want review? → `/bloomey-review`
+- Everything NO-GO? → Update Blueprint §5, move on
