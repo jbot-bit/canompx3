@@ -29,7 +29,7 @@ from pipeline.cost_model import get_cost_spec
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import ATR_VELOCITY_OVERLAY, ENTRY_MODELS
 from trading_app.execution_engine import ExecutionEngine
-from trading_app.portfolio import Portfolio, build_portfolio, build_raw_baseline_portfolio
+from trading_app.portfolio import Portfolio, build_multi_rr_portfolio, build_portfolio, build_raw_baseline_portfolio
 from trading_app.risk_manager import RiskLimits, RiskManager
 
 # Explicit mapping from execution engine exit reasons to journal outcomes.
@@ -375,6 +375,17 @@ def replay_historical(
                     elif event.event_type == "ML_SKIP":
                         day_summary.ml_skips += 1
                         result.total_ml_skips += 1
+                        result.journal.append(
+                            JournalEntry(
+                                mode="replay",
+                                trading_day=td,
+                                strategy_id=event.strategy_id,
+                                entry_model=_entry_model_from_strategy(event.strategy_id),
+                                direction=event.direction,
+                                outcome="ml_skip",
+                                risk_rejected=True,
+                            )
+                        )
 
                     elif event.event_type in ("EXIT", "SCRATCH"):
                         # Find matching journal entry and update
@@ -578,6 +589,62 @@ def _print_drawdown(result: ReplayResult) -> None:
         print("  Max Drawdown: 0.00R (none)")
     if high_water > 0:
         print(f"  High Water: {high_water:+.2f}R")
+
+
+def _print_layer_summary(result: ReplayResult) -> None:
+    """Print per-layer breakdown (O5 baseline vs O30 ML overlay).
+
+    Only prints when both layers are present (multi-RR portfolio).
+    Supports kill criteria monitoring from the multi-RR plan.
+    """
+    from collections import defaultdict
+
+    layers: dict[str, dict] = defaultdict(lambda: {"w": 0, "l": 0, "s": 0, "pnl": 0.0, "ml_skip": 0})
+    has_o30 = False
+    for je in result.journal:
+        if je.risk_rejected or je.outcome is None:
+            continue
+        # Detect layer from strategy_id: O30 strategies have _O30 suffix
+        if "_O30" in je.strategy_id:
+            layer = "Layer2 (O30 RR2.0 ML)"
+            has_o30 = True
+        else:
+            layer = "Layer1 (O5 RR1.0 raw)"
+        s = layers[layer]
+        if je.pnl_r is not None:
+            s["pnl"] += je.pnl_r
+        if je.outcome == "win":
+            s["w"] += 1
+        elif je.outcome in _LOSS_OUTCOMES:
+            s["l"] += 1
+        elif je.outcome == "scratch":
+            s["s"] += 1
+
+    # Count ML skips for Layer 2
+    for je in result.journal:
+        if je.outcome == "ml_skip" and "_O30" in je.strategy_id:
+            layers["Layer2 (O30 RR2.0 ML)"]["ml_skip"] += 1
+
+    if not has_o30:
+        return  # Not a multi-RR portfolio
+
+    print(f"\n{'-' * 72}")
+    print("  LAYER BREAKDOWN (kill criteria monitoring)")
+    print(f"{'-' * 72}")
+    header = f"  {'Layer':<30} {'Trd':>4} {'W':>3} {'L':>3} {'WR%':>5} {'PnL(R)':>8} {'ExpR':>7} {'Skip':>5}"
+    print(header)
+    print(f"  {'-' * 67}")
+
+    for layer_name in ["Layer1 (O5 RR1.0 raw)", "Layer2 (O30 RR2.0 ML)"]:
+        s = layers.get(layer_name, {"w": 0, "l": 0, "s": 0, "pnl": 0.0, "ml_skip": 0})
+        total = s["w"] + s["l"] + s["s"]
+        decided = s["w"] + s["l"]
+        wr = (s["w"] / decided * 100) if decided > 0 else 0.0
+        expr = s["pnl"] / total if total > 0 else 0.0
+        skip_str = str(s["ml_skip"]) if s["ml_skip"] > 0 else "-"
+        print(
+            f"  {layer_name:<30} {total:>4} {s['w']:>3} {s['l']:>3} {wr:>5.1f} {s['pnl']:>+8.2f} {expr:>+7.3f} {skip_str:>5}"
+        )
 
 
 def _print_strategy_summary(result: ReplayResult) -> None:
@@ -792,15 +859,39 @@ def main():
         help="Stop multiplier (1.0=standard, 0.75=tight prop stop)",
     )
     parser.add_argument("--orb-minutes", type=int, default=5, help="ORB aperture (5, 15, or 30)")
+    parser.add_argument(
+        "--multi-rr",
+        action="store_true",
+        default=False,
+        help="Multi-RR portfolio: O5 RR1.0 raw baseline + O30 RR2.0 ML-filtered overlay. Implies --use-ml.",
+    )
     args = parser.parse_args()
+
+    # --multi-rr implies --use-ml (Layer 2 needs ML predictor)
+    if args.multi_rr:
+        args.use_ml = True
 
     risk_limits = RiskLimits(
         max_daily_loss_r=args.max_daily_loss,
         max_concurrent_positions=args.max_concurrent,
+        max_per_session_positions=2,
     )
 
     portfolio = None
-    if args.raw_baseline:
+    if args.multi_rr:
+        portfolio = build_multi_rr_portfolio(
+            instrument=args.instrument,
+            stop_multiplier=args.stop_multiplier,
+            max_concurrent_positions=args.max_concurrent,
+            max_daily_loss_r=args.max_daily_loss,
+        )
+        logger.info(
+            "Multi-RR: %d strategies (%d Layer1 O5 + %d Layer2 O30)",
+            len(portfolio.strategies),
+            sum(1 for s in portfolio.strategies if s.orb_minutes == 5),
+            sum(1 for s in portfolio.strategies if s.orb_minutes == 30),
+        )
+    elif args.raw_baseline:
         exclude = {s.strip() for s in args.exclude_sessions.split(",") if s.strip()}
         portfolio = build_raw_baseline_portfolio(
             instrument=args.instrument,
@@ -839,6 +930,7 @@ def main():
     # Rich output
     _print_header(result, args.instrument)
     _print_drawdown(result)
+    _print_layer_summary(result)
     _print_strategy_summary(result)
     _print_session_summary(result)
     _print_risk_rejections(result)

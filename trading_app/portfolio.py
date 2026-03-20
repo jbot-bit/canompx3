@@ -700,6 +700,92 @@ def build_raw_baseline_portfolio(
     )
 
 
+# Sessions with bootstrap-verified ML skill at RR2.0 O30 (BH FDR q=0.05, N=7).
+# Do NOT add sessions here without bootstrap evidence.
+ML_OVERLAY_SESSIONS = {"NYSE_OPEN", "US_DATA_1000", "US_DATA_830"}
+
+
+def build_multi_rr_portfolio(
+    db_path: Path | None = None,
+    instrument: str = "MNQ",
+    account_equity: float = 25000.0,
+    risk_per_trade_pct: float = 2.0,
+    max_concurrent_positions: int = 3,
+    max_daily_loss_r: float = 5.0,
+    stop_multiplier: float = 1.0,
+) -> Portfolio:
+    """Build a two-layer multi-RR portfolio from orb_outcomes.
+
+    Layer 1: O5 RR1.0 raw baseline (11 sessions, no ML, no filter).
+    Layer 2: O30 RR2.0 ML-filtered overlay (3 bootstrap-verified sessions).
+
+    The ML predictor (LiveMLPredictor) filters Layer 2 at runtime — this
+    function just registers the strategies. Sessions without an ML model
+    fail-open (take all trades), which is correct for Layer 1 (O5).
+
+    Layer 2 sessions may have negative O30 RR2.0 baselines — the ML filter
+    provides the edge. include_negative=True for Layer 2.
+    """
+    if db_path is None:
+        db_path = GOLD_DB_PATH
+
+    # Layer 1: O5 RR1.0 raw baseline (all sessions except NYSE_CLOSE)
+    layer1 = build_raw_baseline_portfolio(
+        db_path=db_path,
+        instrument=instrument,
+        rr_target=1.0,
+        orb_minutes=5,
+        exclude_sessions={"NYSE_CLOSE"},
+        account_equity=account_equity,
+        risk_per_trade_pct=risk_per_trade_pct,
+        max_concurrent_positions=max_concurrent_positions,
+        max_daily_loss_r=max_daily_loss_r,
+        stop_multiplier=stop_multiplier,
+    )
+
+    # Layer 2: O30 RR2.0 ML-filtered overlay (3 sessions only)
+    layer2 = build_raw_baseline_portfolio(
+        db_path=db_path,
+        instrument=instrument,
+        rr_target=2.0,
+        orb_minutes=30,
+        exclude_sessions={"NYSE_CLOSE"},
+        include_negative=True,  # ML filter provides the edge
+        account_equity=account_equity,
+        risk_per_trade_pct=risk_per_trade_pct,
+        max_concurrent_positions=max_concurrent_positions,
+        max_daily_loss_r=max_daily_loss_r,
+        stop_multiplier=stop_multiplier,
+    )
+
+    # Filter Layer 2 to only ML_OVERLAY_SESSIONS
+    layer2_strategies = [s for s in layer2.strategies if s.orb_label in ML_OVERLAY_SESSIONS]
+
+    # Re-tag Layer 2 strategy IDs to include aperture (avoid future confusion)
+    retagged = []
+    for s in layer2_strategies:
+        new_sid = f"{s.strategy_id}_O{s.orb_minutes}"
+        retagged.append(replace(s, strategy_id=new_sid, source="ml_overlay"))
+    layer2_strategies = retagged
+
+    all_strategies = list(layer1.strategies) + layer2_strategies
+    logger.info(
+        "Multi-RR portfolio: %d Layer1 (O5 RR1.0) + %d Layer2 (O30 RR2.0 ML)",
+        len(layer1.strategies),
+        len(layer2_strategies),
+    )
+
+    return Portfolio(
+        name=f"multi_rr_{instrument}",
+        instrument=instrument,
+        strategies=all_strategies,
+        account_equity=account_equity,
+        risk_per_trade_pct=risk_per_trade_pct,
+        max_concurrent_positions=max_concurrent_positions,
+        max_daily_loss_r=max_daily_loss_r,
+    )
+
+
 # Minimum overlapping non-NaN days required for a meaningful correlation.
 # Pairs below this threshold get NaN correlation (insufficient evidence).
 MIN_OVERLAP_DAYS = 200

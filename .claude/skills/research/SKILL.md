@@ -131,3 +131,10 @@ LABEL: [validated finding / promising hypothesis / statistical observation / NO-
 - Every claim needs evidence: line numbers, row counts, test output
 - Honesty over outcome. If the hypothesis is dead, say so directly.
 - The user prefers STATISTICS FIRST — p-value from actual test, not rule-of-thumb
+
+## Next → After Research
+
+- Finding survived? → `/bloomey-review` for code/methodology review, then `/brainstorm` for implementation
+- ML-related finding? → `/ml-verify` to check lookahead + bootstrap
+- Ready to build? → `/4tp [feature]` to plan and implement
+- Finding is NO-GO? → update Blueprint §5 NO-GO Registry

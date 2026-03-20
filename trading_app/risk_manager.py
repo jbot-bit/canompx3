@@ -20,7 +20,8 @@ class RiskLimits:
 
     max_daily_loss_r: float = -5.0  # Circuit breaker threshold (R)
     max_concurrent_positions: int = 3  # Max open positions at once
-    max_per_orb_positions: int = 1  # Max positions from same ORB
+    max_per_orb_positions: int = 1  # Max positions from same ORB (aperture-specific when orb_minutes provided)
+    max_per_session_positions: int = 2  # Max positions from same session across ALL apertures
     max_daily_trades: int = 15  # Max entries per day
     drawdown_warning_r: float = -3.0  # Log warning threshold (R)
     corr_threshold_for_reduction: float = 0.5  # Correlation above this triggers size reduction
@@ -75,6 +76,7 @@ class RiskManager:
         active_trades: list,
         daily_pnl_r: float,
         market_state=None,
+        orb_minutes: int | None = None,
     ) -> tuple[bool, str, float]:  # Added float to return type
         suggested_contract_factor = 1.0
 
@@ -129,8 +131,22 @@ class RiskManager:
             if len(entered) >= self.limits.max_concurrent_positions:
                 return False, f"max_concurrent: {len(entered)} >= {self.limits.max_concurrent_positions}", 0.0
 
-        # Check 3: Max per ORB
+        # Check 3: Max per ORB (aperture-specific when orb_minutes provided)
+        # When orb_minutes is given, O5 and O30 on the same session are different ORBs.
         orb_count = sum(
+            1
+            for t in active_trades
+            if hasattr(t, "orb_label")
+            and t.orb_label == orb_label
+            and (orb_minutes is None or not hasattr(t, "orb_minutes") or t.orb_minutes == orb_minutes)
+            and hasattr(t, "state")
+            and t.state.value == "ENTERED"
+        )
+        if orb_count >= self.limits.max_per_orb_positions:
+            return False, f"max_per_orb: {orb_count} positions on {orb_label}", 0.0
+
+        # Check 3b: Max per session across ALL apertures
+        session_count = sum(
             1
             for t in active_trades
             if hasattr(t, "orb_label")
@@ -138,8 +154,12 @@ class RiskManager:
             and hasattr(t, "state")
             and t.state.value == "ENTERED"
         )
-        if orb_count >= self.limits.max_per_orb_positions:
-            return False, f"max_per_orb: {orb_count} positions on {orb_label}", 0.0
+        if session_count >= self.limits.max_per_session_positions:
+            return (
+                False,
+                f"max_per_session: {session_count} on {orb_label}",
+                0.0,
+            )
 
         # Check 4: Max daily trades
         if self.daily_trade_count >= self.limits.max_daily_trades:
@@ -155,6 +175,23 @@ class RiskManager:
         if market_state is not None and hasattr(market_state, "signals"):
             if market_state.signals.chop_detected:
                 self._warnings.append(f"chop_warning: chop detected for {strategy_id} on {orb_label}")
+
+        # Check 7: Concurrent same-session different-aperture sizing
+        # When an O5 trade is active and O30 enters (or vice versa), suggest half-size
+        # to limit correlated same-direction exposure.
+        if orb_minutes is not None:
+            same_session_diff_aperture = sum(
+                1
+                for t in active_trades
+                if hasattr(t, "orb_label")
+                and t.orb_label == orb_label
+                and hasattr(t, "orb_minutes")
+                and t.orb_minutes != orb_minutes
+                and hasattr(t, "state")
+                and t.state.value == "ENTERED"
+            )
+            if same_session_diff_aperture > 0:
+                suggested_contract_factor = min(suggested_contract_factor, 0.5)
 
         return True, "", suggested_contract_factor
 

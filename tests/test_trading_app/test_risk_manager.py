@@ -25,14 +25,16 @@ class _State(Enum):
 class _FakeTrade:
     orb_label: str
     state: _State = _State.ENTERED
+    orb_minutes: int | None = None  # None for backward-compat tests
+    strategy_id: str = ""  # Needed for correlation-weighted checks
 
 
-def _entered(orb="US_DATA_830"):
-    return _FakeTrade(orb_label=orb, state=_State.ENTERED)
+def _entered(orb="US_DATA_830", orb_minutes=None):
+    return _FakeTrade(orb_label=orb, state=_State.ENTERED, orb_minutes=orb_minutes)
 
 
-def _armed(orb="US_DATA_830"):
-    return _FakeTrade(orb_label=orb, state=_State.ARMED)
+def _armed(orb="US_DATA_830", orb_minutes=None):
+    return _FakeTrade(orb_label=orb, state=_State.ARMED, orb_minutes=orb_minutes)
 
 
 # ============================================================================
@@ -380,3 +382,118 @@ class TestEquityDrawdown:
         assert status["equity_high_water_r"] == pytest.approx(5.0)
         assert status["equity_drawdown_r"] == pytest.approx(-2.0)
         assert status["equity_halted"] is False
+
+
+# ============================================================================
+# Aperture-Aware Multi-RR Risk Tests
+# ============================================================================
+
+
+class TestApertureAware:
+    """Tests for multi-aperture position management (O5 + O30 same session)."""
+
+    def test_different_apertures_allowed_concurrently(self):
+        """O5 and O30 on same session are different ORBs — both allowed."""
+        rm = RiskManager(RiskLimits(max_per_orb_positions=1, max_per_session_positions=2))
+        rm.daily_reset(date(2024, 1, 5))
+
+        trades = [_entered("NYSE_OPEN", orb_minutes=5)]
+        allowed, reason, _ = rm.can_enter("s2", "NYSE_OPEN", trades, 0.0, orb_minutes=30)
+        assert allowed, f"O30 should be allowed alongside O5: {reason}"
+
+    def test_same_aperture_blocked(self):
+        """Two O5 on same session blocked by max_per_orb."""
+        rm = RiskManager(RiskLimits(max_per_orb_positions=1, max_per_session_positions=2))
+        rm.daily_reset(date(2024, 1, 5))
+
+        trades = [_entered("NYSE_OPEN", orb_minutes=5)]
+        allowed, reason, _ = rm.can_enter("s2", "NYSE_OPEN", trades, 0.0, orb_minutes=5)
+        assert not allowed
+        assert "max_per_orb" in reason
+
+    def test_third_aperture_blocked_by_per_session(self):
+        """O5 + O30 active, O15 blocked by max_per_session=2."""
+        rm = RiskManager(RiskLimits(max_per_orb_positions=1, max_per_session_positions=2))
+        rm.daily_reset(date(2024, 1, 5))
+
+        trades = [
+            _entered("NYSE_OPEN", orb_minutes=5),
+            _entered("NYSE_OPEN", orb_minutes=30),
+        ]
+        allowed, reason, _ = rm.can_enter("s3", "NYSE_OPEN", trades, 0.0, orb_minutes=15)
+        assert not allowed
+        assert "max_per_session" in reason
+
+    def test_half_size_when_concurrent_different_aperture(self):
+        """contract_factor=0.5 returned when same-session different-aperture active."""
+        rm = RiskManager(RiskLimits(max_per_orb_positions=1, max_per_session_positions=2))
+        rm.daily_reset(date(2024, 1, 5))
+
+        trades = [_entered("NYSE_OPEN", orb_minutes=5)]
+        allowed, reason, factor = rm.can_enter("s2", "NYSE_OPEN", trades, 0.0, orb_minutes=30)
+        assert allowed
+        assert factor == 0.5
+
+    def test_full_size_when_no_concurrent(self):
+        """contract_factor=1.0 when no existing position on that session."""
+        rm = RiskManager(RiskLimits(max_per_orb_positions=1, max_per_session_positions=2))
+        rm.daily_reset(date(2024, 1, 5))
+
+        trades = [_entered("LONDON_METALS", orb_minutes=5)]
+        allowed, reason, factor = rm.can_enter("s2", "NYSE_OPEN", trades, 0.0, orb_minutes=30)
+        assert allowed
+        assert factor == 1.0
+
+    def test_backward_compat_no_orb_minutes(self):
+        """Without orb_minutes param, behaves like old per-ORB check."""
+        rm = RiskManager(RiskLimits(max_per_orb_positions=1, max_per_session_positions=2))
+        rm.daily_reset(date(2024, 1, 5))
+
+        # _FakeTrade without orb_minutes set (None)
+        trades = [_entered("NYSE_OPEN")]
+        allowed, reason, _ = rm.can_enter("s2", "NYSE_OPEN", trades, 0.0)
+        assert not allowed
+        assert "max_per_orb" in reason
+
+    def test_different_sessions_unaffected(self):
+        """Aperture logic only applies within same session."""
+        rm = RiskManager(RiskLimits(max_per_orb_positions=1, max_per_session_positions=2))
+        rm.daily_reset(date(2024, 1, 5))
+
+        trades = [_entered("NYSE_OPEN", orb_minutes=5)]
+        allowed, _, factor = rm.can_enter("s2", "US_DATA_1000", trades, 0.0, orb_minutes=30)
+        assert allowed
+        assert factor == 1.0  # Different session — no half-sizing
+
+    def test_defaults_include_max_per_session(self):
+        """RiskLimits default includes max_per_session_positions=2."""
+        limits = RiskLimits()
+        assert limits.max_per_session_positions == 2
+
+    def test_corr_weighted_plus_aperture_half_sizing(self):
+        """Correlation reduction (0.7) further reduced to 0.5 by aperture half-sizing."""
+        from trading_app.execution_engine import TradeState
+
+        class _CorrTrade:
+            def __init__(self, sid, orb, om):
+                self.strategy_id = sid
+                self.orb_label = orb
+                self.orb_minutes = om
+                self.state = TradeState.ENTERED
+
+        corr_lookup = {("s_new", "s_existing"): 0.8}
+        limits = RiskLimits(
+            max_concurrent_positions=3,
+            max_per_orb_positions=1,
+            max_per_session_positions=2,
+        )
+        rm = RiskManager(limits, corr_lookup=corr_lookup)
+        rm.daily_reset(date(2024, 1, 5))
+
+        active = [_CorrTrade("s_existing", "NYSE_OPEN", 5)]
+        allowed, _, factor = rm.can_enter(
+            "s_new", "NYSE_OPEN", active, 0.0, orb_minutes=30
+        )
+        assert allowed
+        # Correlation gives some factor, aperture caps at 0.5
+        assert factor <= 0.5
