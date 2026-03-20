@@ -111,7 +111,8 @@ for rr in [1.0, 1.5, 2.0]:
 
     # Per-session top 5 by ExpR spread (best quartile - worst quartile for ORB size)
     print(f"\\n  ORB size signal per session (Q2 vs Q4):")
-    for sess in ['NYSE_OPEN', 'COMEX_SETTLE', 'CME_PRECLOSE', 'US_DATA_1000', 'EUROPE_FLOW']:
+    _sessions = con.sql("SELECT DISTINCT orb_label FROM orb_outcomes WHERE symbol='MNQ' ORDER BY orb_label").fetchdf()['orb_label'].tolist()
+    for sess in _sessions:
         col = f'orb_{sess}_size'
         try:
             result = con.sql(f'''

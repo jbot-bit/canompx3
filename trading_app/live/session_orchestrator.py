@@ -34,7 +34,7 @@ from trading_app.live.position_tracker import PositionState, PositionTracker
 from trading_app.live.trade_journal import TradeJournal, generate_trade_id
 from trading_app.live_config import build_live_portfolio
 from trading_app.ml.predict_live import LiveMLPredictor
-from trading_app.portfolio import PortfolioStrategy
+from trading_app.portfolio import Portfolio, PortfolioStrategy
 from trading_app.risk_manager import RiskLimits, RiskManager
 
 log = logging.getLogger(__name__)
@@ -71,7 +71,7 @@ class SessionOrchestrator:
         account_id: int = 0,
         signal_only: bool = False,
         force_orphans: bool = False,
-        portfolio=None,
+        portfolio: Portfolio | None = None,
     ):
         self.instrument = instrument
         self.demo = demo

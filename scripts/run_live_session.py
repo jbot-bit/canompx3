@@ -38,7 +38,7 @@ log = logging.getLogger(__name__)
 from trading_app.live.session_orchestrator import SessionOrchestrator
 
 
-def _run_preflight(instrument: str, broker: str | None, demo: bool) -> bool:
+def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=None) -> bool:
     """Pre-flight validation. Returns True if all checks pass."""
     from datetime import date
 
@@ -64,9 +64,13 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool) -> bool:
     # 2. Portfolio check
     print(f"[2/{checks_total}] Portfolio check ({instrument})...", end=" ", flush=True)
     try:
-        portfolio, notes = build_live_portfolio(db_path=GOLD_DB_PATH, instrument=instrument)
-        print(f"OK ({len(portfolio.strategies)} strategies)")
-        for s in portfolio.strategies:
+        if portfolio is not None:
+            pf = portfolio
+            notes = [f"Using injected portfolio ({len(pf.strategies)} strategies)"]
+        else:
+            pf, notes = build_live_portfolio(db_path=GOLD_DB_PATH, instrument=instrument)
+        print(f"OK ({len(pf.strategies)} strategies)")
+        for s in pf.strategies:
             print(
                 f"    {s.strategy_id} | {s.orb_label} {s.entry_model} "
                 f"RR{s.rr_target} O{s.orb_minutes} | WR={s.win_rate:.0%} "
@@ -112,6 +116,7 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool) -> bool:
             broker=broker_name,
             demo=demo,
             signal_only=True,  # safe: no orders, just test components
+            portfolio=portfolio,
         )
         test_results = orch.run_self_tests()
         all_pass = all(test_results.values())
@@ -272,7 +277,7 @@ def main() -> None:
             print("Preflight with --all not supported. Use --instrument X.")
             sys.exit(1)
         demo = not args.live
-        ok = _run_preflight(args.instrument, args.broker, demo)
+        ok = _run_preflight(args.instrument, args.broker, demo, portfolio=raw_portfolio)
         sys.exit(0 if ok else 1)
 
     # Default to signal-only if no mode specified (safest default)
