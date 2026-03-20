@@ -207,6 +207,8 @@ def _build_daily_features_ddl() -> str:
                 f"    orb_{label}_mfe_r             DOUBLE,",
                 f"    orb_{label}_double_break      BOOLEAN,",
                 f"    rel_vol_{label}               DOUBLE,",
+                f"    orb_{label}_vwap              DOUBLE,",
+                f"    orb_{label}_pre_velocity      DOUBLE,",
             ]
         )
     orb_block = "\n".join(orb_cols)

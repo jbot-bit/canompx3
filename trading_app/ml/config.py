@@ -73,6 +73,8 @@ GLOBAL_FEATURES: list[str] = [
 SESSION_FEATURE_SUFFIXES: list[str] = [
     "size",  # ORB range in points — known at ORB close (pre-break)
     "volume",  # Total ORB-window volume — known at ORB close (pre-break)
+    "vwap",  # Session VWAP from trading day start to ORB start (pre-break, no look-ahead)
+    "pre_velocity",  # Slope of last 5 closes before session start (pre-break, no look-ahead)
 ]
 
 # Features to normalize by atr_20 for stationarity
@@ -80,6 +82,8 @@ ATR_NORMALIZE: list[str] = [
     "gap_open_points",
     "prev_day_range",
     "orb_size",  # Session-specific, normalized after extraction
+    "orb_vwap",  # Session VWAP — absolute price, normalize to ATR scale
+    "orb_pre_velocity",  # Pre-session velocity in points → ATR units
 ]
 
 # Categorical features that get one-hot encoded
