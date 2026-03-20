@@ -1007,7 +1007,7 @@ def build_features_for_day(
         # Positive = trending up into session, negative = trending down
         if len(pre_bars) >= 5:
             last5 = pre_bars.iloc[-5:]["close"].values.astype(float)
-            # Simple linear slope normalized by mean price
+            # Simple linear slope: points per bar (ATR-normalized downstream)
             slope = (last5[-1] - last5[0]) / 4.0  # points per bar
             row[f"orb_{label}_pre_velocity"] = round(float(slope), 4)
         else:
