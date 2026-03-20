@@ -10,6 +10,7 @@ Multi-instrument futures data pipeline — builds clean, replayable local datase
 
 **For instruments, cost models, sessions, entry models, and all trading logic → see `TRADING_RULES.md`.**
 **For research methodology, statistical standards, and market structure knowledge → see `RESEARCH_RULES.md`.**
+**For strategy research routing, test sequences, variable space, and NO-GO registry → see `docs/STRATEGY_BLUEPRINT.md`.**
 
 ---
 
@@ -21,6 +22,7 @@ Multi-instrument futures data pipeline — builds clean, replayable local datase
 | `TRADING_RULES.md` | Trading rules, sessions, filters, research findings, NO-GOs | Wins for trading logic |
 | `RESEARCH_RULES.md` | Research methodology, statistical standards, trading lens | Wins for research/analysis decisions |
 | `ROADMAP.md` | Planned features, phase status | Updated on phase completion |
+| `docs/STRATEGY_BLUEPRINT.md` | Research routing, test gates, variable space, NO-GOs | **Open before ANY research/planning session** |
 | `docs/specs/*.md` | Feature specs pending implementation | **Check before building ANY feature** |
 
 Full file inventory → `REPO_MAP.md` (auto-generated, never hand-edit).
