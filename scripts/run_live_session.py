@@ -227,7 +227,45 @@ def main() -> None:
         default=False,
         help="Run pre-flight checks (auth, portfolio, daily_features, contract) then exit — no trading",
     )
+    parser.add_argument(
+        "--raw-baseline",
+        action="store_true",
+        default=False,
+        help="Use raw baseline portfolio from orb_outcomes (no validated_setups needed)",
+    )
+    parser.add_argument("--rr-target", type=float, default=1.0, help="RR target for raw baseline (default 1.0)")
+    parser.add_argument(
+        "--exclude-sessions",
+        type=str,
+        default="NYSE_CLOSE",
+        help="Comma-separated sessions to exclude from raw baseline (default NYSE_CLOSE)",
+    )
+    parser.add_argument(
+        "--stop-multiplier",
+        type=float,
+        default=1.0,
+        help="Stop multiplier (1.0=standard, 0.75=tight prop stop)",
+    )
+    parser.add_argument("--entry-model", type=str, default="E2", help="Entry model for raw baseline (default E2)")
     args = parser.parse_args()
+
+    # Build raw baseline portfolio if requested (shared by preflight and session)
+    raw_portfolio = None
+    if args.raw_baseline:
+        if args.all:
+            print("--raw-baseline + --all not supported. Use --instrument X.")
+            sys.exit(1)
+        from trading_app.portfolio import build_raw_baseline_portfolio
+
+        exclude = {s.strip() for s in args.exclude_sessions.split(",") if s.strip()}
+        raw_portfolio = build_raw_baseline_portfolio(
+            instrument=args.instrument,
+            rr_target=args.rr_target,
+            entry_model=args.entry_model,
+            exclude_sessions=exclude,
+            stop_multiplier=args.stop_multiplier,
+        )
+        log.info("Raw baseline: %d strategies loaded", len(raw_portfolio.strategies))
 
     if args.preflight:
         if args.all:
@@ -297,6 +335,7 @@ def main() -> None:
         account_id=args.account_id,
         signal_only=signal_only,
         force_orphans=args.force_orphans,
+        portfolio=raw_portfolio,
     )
 
     try:

@@ -29,7 +29,7 @@ from pipeline.cost_model import get_cost_spec
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import ATR_VELOCITY_OVERLAY, ENTRY_MODELS
 from trading_app.execution_engine import ExecutionEngine
-from trading_app.portfolio import Portfolio, build_portfolio
+from trading_app.portfolio import Portfolio, build_portfolio, build_raw_baseline_portfolio
 from trading_app.risk_manager import RiskLimits, RiskManager
 
 # Explicit mapping from execution engine exit reasons to journal outcomes.
@@ -771,6 +771,26 @@ def main():
     )
     parser.add_argument("--output", type=str, default=None, help="Export journal to CSV file path")
     parser.add_argument("--quiet", action="store_true", help="Suppress daily equity lines")
+    parser.add_argument(
+        "--raw-baseline",
+        action="store_true",
+        default=False,
+        help="Use raw baseline portfolio from orb_outcomes (no validated_setups needed)",
+    )
+    parser.add_argument("--rr-target", type=float, default=1.0, help="RR target for raw baseline (default 1.0)")
+    parser.add_argument("--entry-model", type=str, default="E2", help="Entry model for raw baseline (default E2)")
+    parser.add_argument(
+        "--exclude-sessions",
+        type=str,
+        default="NYSE_CLOSE",
+        help="Comma-separated sessions to exclude from raw baseline (default NYSE_CLOSE)",
+    )
+    parser.add_argument(
+        "--stop-multiplier",
+        type=float,
+        default=1.0,
+        help="Stop multiplier (1.0=standard, 0.75=tight prop stop)",
+    )
     args = parser.parse_args()
 
     risk_limits = RiskLimits(
@@ -778,8 +798,23 @@ def main():
         max_concurrent_positions=args.max_concurrent,
     )
 
+    portfolio = None
+    if args.raw_baseline:
+        exclude = {s.strip() for s in args.exclude_sessions.split(",") if s.strip()}
+        portfolio = build_raw_baseline_portfolio(
+            instrument=args.instrument,
+            rr_target=args.rr_target,
+            entry_model=args.entry_model,
+            exclude_sessions=exclude,
+            stop_multiplier=args.stop_multiplier,
+            max_concurrent_positions=args.max_concurrent,
+            max_daily_loss_r=args.max_daily_loss,
+        )
+        logger.info("Raw baseline: %d strategies loaded", len(portfolio.strategies))
+
     result = replay_historical(
         instrument=args.instrument,
+        portfolio=portfolio,
         start_date=args.start,
         end_date=args.end,
         risk_limits=risk_limits,

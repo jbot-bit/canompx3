@@ -600,6 +600,102 @@ def build_portfolio(
     )
 
 
+def build_raw_baseline_portfolio(
+    db_path: Path | None = None,
+    instrument: str = "MNQ",
+    rr_target: float = 1.0,
+    entry_model: str = "E2",
+    confirm_bars: int = 1,
+    orb_minutes: int = 5,
+    exclude_sessions: set[str] | None = None,
+    account_equity: float = 25000.0,
+    risk_per_trade_pct: float = 2.0,
+    max_concurrent_positions: int = 3,
+    max_daily_loss_r: float = 5.0,
+    stop_multiplier: float = 1.0,
+) -> Portfolio:
+    """Build a portfolio directly from orb_outcomes — no validated_setups required.
+
+    One PortfolioStrategy per session with positive expectancy. Used for raw
+    baseline paper trading (no ML, no filters).
+    """
+    if db_path is None:
+        db_path = GOLD_DB_PATH
+    if exclude_sessions is None:
+        exclude_sessions = {"NYSE_CLOSE"}
+
+    with duckdb.connect(str(db_path), read_only=True) as con:
+        rows = con.execute(
+            """
+            SELECT
+                orb_label,
+                COUNT(*) AS n,
+                AVG(pnl_r) AS expr,
+                COUNT(CASE WHEN pnl_r > 0 THEN 1 END) * 1.0 / COUNT(*) AS wr,
+                STDDEV_POP(pnl_r) AS sd,
+                MEDIAN(risk_dollars) AS med_risk_dollars
+            FROM orb_outcomes
+            WHERE symbol = ? AND entry_model = ? AND rr_target = ?
+              AND confirm_bars = ? AND orb_minutes = ?
+            GROUP BY orb_label
+            ORDER BY expr DESC
+            """,
+            [instrument, entry_model, rr_target, confirm_bars, orb_minutes],
+        ).fetchall()
+
+    cost_spec = get_cost_spec(instrument)
+    strategies: list[PortfolioStrategy] = []
+
+    for orb_label, n, expr, wr, sd, med_risk_dollars in rows:
+        if orb_label in exclude_sessions:
+            logger.info("Raw baseline: excluding %s (in exclude_sessions)", orb_label)
+            continue
+        if expr is None or expr <= 0:
+            logger.info("Raw baseline: excluding %s (ExpR=%.4f <= 0)", orb_label, expr or 0)
+            continue
+
+        sharpe = float(expr / sd) if sd and sd > 0 else None
+        med_risk_pts = float(med_risk_dollars / cost_spec.point_value) if med_risk_dollars else None
+        sid = f"{instrument}_{orb_label}_{entry_model}_RR{rr_target}_CB{confirm_bars}_NO_FILTER"
+
+        strategies.append(
+            PortfolioStrategy(
+                strategy_id=sid,
+                instrument=instrument,
+                orb_label=orb_label,
+                entry_model=entry_model,
+                rr_target=rr_target,
+                confirm_bars=confirm_bars,
+                filter_type="NO_FILTER",
+                expectancy_r=float(expr),
+                win_rate=float(wr),
+                sample_size=int(n),
+                sharpe_ratio=sharpe,
+                max_drawdown_r=None,
+                median_risk_points=med_risk_pts,
+                median_risk_dollars=float(med_risk_dollars) if med_risk_dollars else None,
+                orb_minutes=orb_minutes,
+                stop_multiplier=stop_multiplier,
+                source="raw_baseline",
+            )
+        )
+
+    logger.info(
+        "Raw baseline portfolio: %d sessions (excluded %d)",
+        len(strategies),
+        len(exclude_sessions),
+    )
+    return Portfolio(
+        name=f"raw_baseline_{instrument}_{entry_model}_RR{rr_target}",
+        instrument=instrument,
+        strategies=strategies,
+        account_equity=account_equity,
+        risk_per_trade_pct=risk_per_trade_pct,
+        max_concurrent_positions=max_concurrent_positions,
+        max_daily_loss_r=max_daily_loss_r,
+    )
+
+
 # Minimum overlapping non-NaN days required for a meaningful correlation.
 # Pairs below this threshold get NaN correlation (insufficient evidence).
 MIN_OVERLAP_DAYS = 200
