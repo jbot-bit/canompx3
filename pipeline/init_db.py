@@ -491,6 +491,18 @@ def init_db(db_path: Path, force: bool = False):
                 except duckdb.CatalogException:
                     pass  # column already exists
 
+        # Migration: add VWAP + pre-velocity columns (Mar 2026)
+        for label in ORB_LABELS:
+            for col, typedef in [
+                (f"orb_{label}_vwap", "DOUBLE"),
+                (f"orb_{label}_pre_velocity", "DOUBLE"),
+            ]:
+                try:
+                    con.execute(f"ALTER TABLE daily_features ADD COLUMN {col} {typedef}")
+                    logger.info(f"  Migration: added {col} column to daily_features")
+                except duckdb.CatalogException:
+                    pass  # column already exists
+
         con.execute(PROSPECTIVE_SIGNALS_SCHEMA)
         logger.info("  prospective_signals: created (or already exists)")
 
