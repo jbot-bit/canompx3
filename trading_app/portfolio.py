@@ -613,11 +613,15 @@ def build_raw_baseline_portfolio(
     max_concurrent_positions: int = 3,
     max_daily_loss_r: float = 5.0,
     stop_multiplier: float = 1.0,
+    include_negative: bool = False,
 ) -> Portfolio:
     """Build a portfolio directly from orb_outcomes — no validated_setups required.
 
     One PortfolioStrategy per session with positive expectancy. Used for raw
     baseline paper trading (no ML, no filters).
+
+    When include_negative=True, includes sessions with negative baselines too.
+    Use this for ML replay comparison where ML IS the filter.
     """
     if db_path is None:
         db_path = GOLD_DB_PATH
@@ -650,7 +654,7 @@ def build_raw_baseline_portfolio(
         if orb_label in exclude_sessions:
             logger.info("Raw baseline: excluding %s (in exclude_sessions)", orb_label)
             continue
-        if expr is None or expr <= 0:
+        if not include_negative and (expr is None or expr <= 0):
             logger.info("Raw baseline: excluding %s (ExpR=%.4f <= 0)", orb_label, expr or 0)
             continue
 
