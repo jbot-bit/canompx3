@@ -71,6 +71,7 @@ class SessionOrchestrator:
         account_id: int = 0,
         signal_only: bool = False,
         force_orphans: bool = False,
+        portfolio=None,
     ):
         self.instrument = instrument
         self.demo = demo
@@ -91,10 +92,14 @@ class SessionOrchestrator:
         contracts_cls = components["contracts_class"]
         self._positions_cls = components["positions_class"]
 
-        # build_live_portfolio returns (Portfolio, list[str]) — unpack the tuple
-        self.portfolio, notes = build_live_portfolio(db_path=GOLD_DB_PATH, instrument=instrument)
-        for note in notes:
-            log.info("live_config note: %s", note)
+        # Use injected portfolio or build from live_config
+        if portfolio is not None:
+            self.portfolio = portfolio
+            log.info("Using injected portfolio: %d strategies", len(portfolio.strategies))
+        else:
+            self.portfolio, notes = build_live_portfolio(db_path=GOLD_DB_PATH, instrument=instrument)
+            for note in notes:
+                log.info("live_config note: %s", note)
 
         if not self.portfolio.strategies:
             raise RuntimeError(f"No active strategies for {instrument}")
