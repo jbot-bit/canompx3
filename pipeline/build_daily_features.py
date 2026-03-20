@@ -984,6 +984,35 @@ def build_features_for_day(
             orb["low"],
         )
 
+        # Module 7: Pre-session VWAP and velocity (Mar 20 2026)
+        # Both use only bars BEFORE the ORB window — no look-ahead.
+        orb_start, _ = _orb_utc_window(trading_day, label, orb_minutes)
+        td_start, _ = compute_trading_day_utc_range(trading_day)
+
+        # Pre-session bars: from trading day start to ORB window start
+        pre_mask = (bars_df["ts_utc"] >= td_start) & (bars_df["ts_utc"] < orb_start)
+        pre_bars = bars_df[pre_mask]
+
+        # VWAP: cumulative (price × volume) / cumulative(volume) from day start to session
+        if len(pre_bars) >= 5 and pre_bars["volume"].sum() > 0:
+            vwap_prices = pre_bars["close"].values.astype(float)
+            vwap_vols = pre_bars["volume"].values.astype(float)
+            row[f"orb_{label}_vwap"] = round(
+                float((vwap_prices * vwap_vols).sum() / vwap_vols.sum()), 4
+            )
+        else:
+            row[f"orb_{label}_vwap"] = None
+
+        # Pre-session velocity: slope of last 5 closes before session start
+        # Positive = trending up into session, negative = trending down
+        if len(pre_bars) >= 5:
+            last5 = pre_bars.iloc[-5:]["close"].values.astype(float)
+            # Simple linear slope normalized by mean price
+            slope = (last5[-1] - last5[0]) / 4.0  # points per bar
+            row[f"orb_{label}_pre_velocity"] = round(float(slope), 4)
+        else:
+            row[f"orb_{label}_pre_velocity"] = None
+
     return row
 
 

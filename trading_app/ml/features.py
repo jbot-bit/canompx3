@@ -434,6 +434,7 @@ def transform_to_features(df: pd.DataFrame) -> pd.DataFrame:
     _GENERIC_SAFE = {
         "orb_size", "orb_volume", "rel_vol", "break_dir",
         "orb_break_bar_continues", "orb_size_norm",
+        "orb_vwap", "orb_vwap_norm", "orb_pre_velocity", "orb_pre_velocity_norm",
         "prior_sessions_broken", "prior_sessions_long", "prior_sessions_short",
         "nearest_level_to_high_R", "nearest_level_to_low_R",
         "levels_within_1R", "levels_within_2R",
