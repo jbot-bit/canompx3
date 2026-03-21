@@ -30,6 +30,7 @@ from trading_app.ml.config import (
     MAX_EARLY_SESSION_INDEX,
     MIN_SAMPLES_TRAIN,
     MIN_SESSION_SAMPLES,
+    ML_METHODOLOGY_VERSION,
     MODEL_DIR,
     RF_PARAMS,
     SESSION_CHRONOLOGICAL_ORDER,
@@ -614,6 +615,7 @@ def train_per_session_meta_label(
             "instrument": instrument,
             "sessions": {},
             "config_hash": config_hash,
+            "methodology_version": ML_METHODOLOGY_VERSION,
             "trained_at": datetime.now(UTC).isoformat(),
             "data_date_range": (
                 str(meta_all["trading_day"].min()),
