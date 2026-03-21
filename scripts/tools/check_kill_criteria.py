@@ -4,16 +4,17 @@ Kill criteria monitor for MNQ RR1.0 raw baseline paper trading.
 Two modes:
   1. Live mode (default): reads live_journal.db for broker-execution results
   2. Batch mode (--from-outcomes): reads orb_outcomes from gold.db for
-     pre-computed trade results. Use for daily batch forward testing.
+     pre-computed trade results. Use this for daily batch forward testing
+     when NOT running a live WebSocket session.
 
 Checks against pre-registered thresholds from:
     docs/pre-registrations/2026-03-20-mnq-rr1-verified-sessions.md
 
 Kill criteria (frozen):
-    1. After 100 trades/session: actual ExpR < +0.03R -> STOP that session
-    2. After 100 trades: actual slippage > 3 ticks average -> STOP (cost model wrong)
+    1. After 100 trades/session: actual ExpR < +0.03R → STOP that session
+    2. After 100 trades: actual slippage > 3 ticks average → STOP (cost model wrong)
        (Live mode only -- slippage is baked into outcomes in batch mode)
-    3. After 200 trades total: combined portfolio ExpR < +0.05R -> STOP everything
+    3. After 200 trades total: combined portfolio ExpR < +0.05R → STOP everything
     4. O'Brien-Fleming sequential monitoring -- checked at interim fractions
 
 Usage:
@@ -22,8 +23,6 @@ Usage:
     python scripts/tools/check_kill_criteria.py --from-outcomes --since 2026-01-01
     python scripts/tools/check_kill_criteria.py --journal-path /path/to/live_journal.db
 """
-
-from __future__ import annotations
 
 import argparse
 import math
@@ -59,7 +58,11 @@ MNQ_TICK_SIZE = 0.25
 # =========================================================================
 
 # Lan-DeMets O'Brien-Fleming spending function approximation.
-# z(t) = z_alpha / sqrt(t), one-sided for kill on underperformance.
+# For K equally-spaced looks, the z-boundary at fraction t is approximately:
+#   z(t) = z_alpha / sqrt(t)
+# where z_alpha is the final-look z-threshold.
+# With alpha=0.05 (two-sided) → z_alpha ≈ 2.00 (one-sided for kill = 1.645)
+# We use ONE-SIDED (kill only on underperformance, not outperformance).
 OBF_FINAL_Z = 1.645  # one-sided alpha=0.05
 
 
@@ -79,7 +82,7 @@ def compute_obf_p_equivalent(z_boundary: float) -> float:
 
 
 # =========================================================================
-# Data loaders
+# Journal reader
 # =========================================================================
 
 
@@ -95,6 +98,7 @@ def load_journal(
         return []
 
     with duckdb.connect(str(journal_path), read_only=True) as con:
+        # Check table exists
         tables = {
             r[0]
             for r in con.execute(
@@ -138,12 +142,15 @@ def load_from_outcomes(
     """Load completed trades from orb_outcomes (gold.db) for batch mode.
 
     Returns the same list[dict] shape as load_journal() so all downstream
-    check functions work identically.
+    check functions work identically. Maps orb_outcomes fields:
+        orb_label → session (via synthetic strategy_id)
+        pnl_r → actual_r
+        slippage_pts = None (baked into entry_price for E2)
     """
     from pipeline.paths import GOLD_DB_PATH
 
     if since is None:
-        since = date(2026, 1, 1)
+        since = date(2026, 1, 1)  # 2026 forward test default
 
     with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
         result = con.execute(
@@ -171,6 +178,7 @@ def load_from_outcomes(
         r = dict(zip(cols, row, strict=False))
         if r["orb_label"] in exclude_sessions:
             continue
+        # Synthesize strategy_id matching the format used by build_raw_baseline_portfolio
         sid = f"{instrument}_{r['orb_label']}_{entry_model}_RR{rr_target}_CB{confirm_bars}_NO_FILTER"
         trades.append({
             "trade_id": f"batch_{r['trading_day']}_{r['orb_label']}",
@@ -186,14 +194,13 @@ def load_from_outcomes(
     return trades
 
 
-# =========================================================================
-# Session extraction
-# =========================================================================
-
-
 def extract_session(strategy_id: str) -> str:
     """Extract orb_label from strategy_id like 'MNQ_NYSE_OPEN_E2_RR1.0_CB1_NO_FILTER'."""
     parts = strategy_id.split("_")
+    # Format: INSTRUMENT_SESSION_ENTRYMODEL_RR_CB_FILTER
+    # Session can be multi-word: NYSE_OPEN, US_DATA_1000, etc.
+    # Strategy ID starts with instrument, ends with _E{n}_RR{x}_CB{n}_FILTER
+    # Find where _E1 or _E2 appears to delimit session from entry model
     for i, part in enumerate(parts):
         if part in ("E1", "E2", "E3"):
             return "_".join(parts[1:i])
@@ -283,7 +290,12 @@ def check_portfolio_expr(trades: list[dict]) -> dict:
 def check_obf_sequential(
     trades: list[dict], target_trades_per_session: int = 100
 ) -> list[dict]:
-    """O'Brien-Fleming sequential monitoring per session."""
+    """O'Brien-Fleming sequential monitoring per session.
+
+    Checks at current information fraction whether the session's cumulative
+    z-statistic exceeds the spending boundary. A z below the NEGATIVE boundary
+    means underperformance severe enough to warrant early stopping.
+    """
     sessions: dict[str, list[float]] = {}
     for t in trades:
         sess = extract_session(t["strategy_id"])
@@ -292,7 +304,7 @@ def check_obf_sequential(
     results = []
     for sess, rs in sorted(sessions.items()):
         n = len(rs)
-        if n < 10:
+        if n < 10:  # too few for meaningful sequential test
             results.append({
                 "session": sess,
                 "trades": n,
@@ -301,13 +313,20 @@ def check_obf_sequential(
             })
             continue
 
+        # Under H0 (no edge): ExpR = 0. Under H1 (edge exists): ExpR > 0.
+        # Test H0 vs H1 using standardized cumulative sum.
         mean_r = sum(rs) / n
         sd_r = math.sqrt(sum((r - mean_r) ** 2 for r in rs) / n) if n > 1 else 1.0
         se = sd_r / math.sqrt(n) if sd_r > 0 else 1.0
+
+        # z-statistic: positive = performing above zero, negative = underperforming
         z_stat = mean_r / se
 
+        # Information fraction
         fraction = min(n / target_trades_per_session, 1.0)
         boundary = obf_boundary(fraction)
+
+        # Kill if z is significantly negative (underperformance)
         early_kill = z_stat < -boundary
 
         results.append({
@@ -347,7 +366,7 @@ def print_report(
     if not trades:
         print("\n  No completed trades found. Nothing to check.")
         if batch_mode:
-            print(f"  Refresh data: python scripts/tools/forward_test.py --instrument {instrument}")
+            print(f"  Refresh data first: python scripts/tools/forward_test.py --instrument {instrument}")
         else:
             print(f"  Start paper trading: python scripts/run_live_session.py "
                   f"--instrument {instrument} --signal-only --raw-baseline")

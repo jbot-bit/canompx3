@@ -86,7 +86,7 @@ def bootstrap_one(
         skip_filter=True,
         per_aperture=(aperture is not None),
         apply_rr_lock=False,
-        bypass_validated=False,
+        bypass_validated=True,  # V2: match training data source (full universe)
     )
     X_e6 = apply_e6_filter(X_all)
     pnl_r = meta_all["pnl_r"].values
