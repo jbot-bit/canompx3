@@ -1,8 +1,8 @@
-# ML Methodology Fix — Design Doc
+# ML Methodology Fix — Design Doc (V2: Post-Audit)
 
-**Status:** APPROVED for implementation
-**Date:** 2026-03-21
-**Context:** ML meta-labeling system has 3 methodology FAILs (EPV, negative baselines, selection bias). Bootstrap resolution already FIXED (5K perms). This design fixes the remaining 3 to produce honest ML results.
+**Status:** APPROVED for phased implementation
+**Date:** 2026-03-21 (V2 after zero-context audit + truth-check)
+**Audit:** `docs/plans/2026-03-21-ml-zero-context-audit.md` (28 questions, 5 kill shots)
 
 **Key constraint:** Layer 1 (O5 RR1.0 raw baseline) is CLEAN (p<1e-9). Do NOT touch it.
 
@@ -10,129 +10,107 @@
 
 ## Problem Statement
 
-The current ML system produces numbers that cannot be trusted because:
+The current ML system produces numbers that cannot be trusted. 6 proven bugs:
 
-1. **EPV = 2.4** (need ≥10). 55 positives / 23 features. Model memorizes noise. (Peduzzi 1996, van Smeden 2019)
-2. **Negative baselines.** ML trains on sessions where raw ExpR < 0. De Prado (AIFML Ch 3.6) requires positive-edge primary model.
-3. **Selection bias.** Data loaded from `validated_setups` (pre-selected winners). Bootstrap tests on same subset. (White 2000)
+| # | Bug | Evidence | Severity |
+|---|-----|----------|----------|
+| A | Non-deterministic config selection | `ORDER BY cnt DESC` with no tiebreaker (`features.py:979`) | Medium |
+| B | EUROPE_FLOW cross-session lookahead in winter | Static `SESSION_CHRONOLOGICAL_ORDER` — EF index 5 includes LM index 4, but in winter EF (17:00) precedes LM (18:00). ~42% of EF rows contaminated. | High |
+| C | Constant-column drop on full data (train+test) | `session_data = X_session.iloc[session_indices]` not `train_idx` (`meta_label.py:360`) | Low |
+| D | No universe-wide BH/FDR | Bootstrap reports per-config p<0.05. No FDR code exists. BH at 7 tests → 1 survivor. BH at 68 (full sweep) → 0 survivors. | Critical |
+| E | No positive-baseline gate | Training proceeds on sessions with Sharpe=nan (10/12 at O30 RR2.0). De Prado (AIFML Ch 3.6) violation. | Critical |
+| F | EPV = 2.2 | 25 E6 features, ~55 positives per session at O30 RR2.0. (Peduzzi 1996: need ≥10) | Critical |
 
-All 5K bootstrap p-values (p=0.0016 to p=0.1190) are from the BROKEN system and will change after fixes.
+**All 5K bootstrap p-values are from the BROKEN system. "3/7 passed" does not survive BH FDR even at family=7.**
 
----
+### Additional Context from Baseline Queries
 
-## Fix Sequence: B → A → C → D
-
-### Fix B: Replace Data Source (selection bias)
-- Use `load_single_config_feature_matrix()` with `bypass_validated=True`
-- Loads from `orb_outcomes` directly — all 12 sessions, all break days
-- Bootstrap test must also use `bypass_validated=True` (currently False at line 89)
-- Forces `skip_filter=True` (ML sees full population, learns filters from features)
-
-**Files:** `meta_label.py` (change default call), `ml_bootstrap_test.py` (line 89)
-**Academic basis:** White (2000) — test the full search space, not just survivors
-
-### Fix A: Hard Gates Before Training (negative baselines + EPV)
-Add 3 checks in `train_per_session_meta_label()` BEFORE the training loop:
-
-1. **Baseline gate:** Compute raw session ExpR from full unfiltered data. If ExpR ≤ 0, skip session → `model_type="NONE", reason="negative_baseline_expr={value}"`
-2. **EPV gate:** After feature selection (Fix C), check `n_positives / n_features ≥ 10`. If not, skip → `model_type="NONE", reason="epv_{value}_below_10"`
-3. **Pre-registered sessions:** New `ML_PRE_REGISTERED_SESSIONS` in config.py. Only these sessions train. Committed to git before running.
-
-**Files:** `meta_label.py` (new gates), `config.py` (new constant)
-**Academic basis:** De Prado AIFML Ch 3.6 (positive baseline), Peduzzi 1996 (EPV ≥ 10)
-
-### Fix C: Cut Features 23 → ≤5 (EPV fix)
-Two-step process:
-
-1. **Univariate scan (train split only):** For each feature × session, compute quintile spread of ExpR. Rank by signal strength. This is a NEW script.
-2. **Select top 5:** Features with structural mechanism (RESEARCH_RULES.md) AND univariate signal. Store as `ML_CORE_FEATURES` in config.py.
-
-Expert prior (all have structural mechanisms):
-- `orb_size_norm` — ORB size IS the edge
-- `atr_20_pct` — vol regime rank
-- `gap_open_points_norm` — overnight institutional repositioning
-- `orb_pre_velocity` — pre-session momentum
-- `prior_sessions_broken` — cross-session flow
-
-The univariate scan CONFIRMS or OVERRIDES this prior. If a feature has no univariate signal, it doesn't make the cut regardless of mechanism.
-
-**Files:** `config.py` (new `ML_CORE_FEATURES` list), new script `scripts/tools/ml_univariate_scan.py`
-**Academic basis:** Hastie/Tibshirani/Friedman ESL Ch 7.10 — feature selection on train split only
-
-### Fix D: Retrain + Re-bootstrap + Replay
-1. Retrain with fixes B+A+C in place
-2. Bootstrap 5K perms with Phipson & Smyth correction
-3. Replay vs raw baseline (paper_trader --use-ml vs --raw-baseline)
-4. Accept results — 0 survivors is a valid and useful answer
-
-**Files:** `ml_bootstrap_test.py` (update SURVIVORS list after retrain)
+| Config | Positive Sessions | Best ML Territory? |
+|--------|------------------|--------------------|
+| O5 RR1.0 | **12/12** | YES — all positive, high N (~1300/session), EPV=86 with 5 features |
+| O5 RR2.0 | 11/12 | Good |
+| O15 RR1.0 | 12/12 | Good |
+| O15 RR2.0 | 9/12 | Moderate |
+| O30 RR1.0 | 12/12 | Good |
+| O30 RR2.0 | **6/12** | NO — old ML territory. NYSE_OPEN (-0.136R) and US_DATA_1000 (-0.125R) are negative. |
 
 ---
 
-## Safety: ML Kill Switch During Fix Window
+## Implementation: 6 Fixes, Phased
 
-Between changing config and retraining, `predict_live.py` would silently pad 78% of features with -999 sentinels. To prevent garbage predictions:
+Each fix is implemented, verified, and committed independently. No batching without verification.
 
-- Add `ML_METHODOLOGY_VERSION: int = 2` to config.py (bump from implicit v1)
-- Store version in model bundle at training time
-- `predict_live.py` checks bundle version matches config version — if not, fail-open with WARNING
-- This ensures no ML inference runs against stale models during the fix window
+### Fix A: Deterministic Config Selection
+- **File:** `features.py` ~line 979
+- **Change:** Add tiebreaker to `ORDER BY cnt DESC` → `ORDER BY cnt DESC, rr_target ASC, entry_model ASC, orb_minutes ASC`
+- **Blast radius:** Query change only. All callers of `load_single_config_feature_matrix` get deterministic results.
+- **Verify:** Run query twice, confirm same config selected both times.
+
+### Fix B: EUROPE_FLOW / LONDON_METALS DST Cross-Session Lookahead
+- **File:** `meta_label.py` `_get_session_features()` ~line 196
+- **Change:** Drop cross-session features for EUROPE_FLOW and LONDON_METALS (they swap order by season — neither can safely include the other).
+- **Alternative considered:** Dynamic per-date ordering. Rejected — too complex for the benefit.
+- **Blast radius:** Only affects cross-session features for 2 sessions. No schema change.
+- **Verify:** After fix, EF and LM models train without `prior_sessions_broken`, `prior_sessions_long`, `prior_sessions_short`, `nearest_level_to_high_R`, etc.
+
+### Fix C: Train-Only Constant-Column Drop
+- **File:** `meta_label.py` ~line 360
+- **Change:** `session_data = X_session.iloc[session_indices]` → `session_data = X_session.iloc[train_idx]`
+- **Blast radius:** Negligible — same columns drop in practice (entry_model one-hots are constant in train and test).
+- **Verify:** Log which columns drop, confirm same set as before.
+
+### Fix E: Positive Baseline Gate
+- **File:** `meta_label.py` — inside per-session loop, before training
+- **Change:** Compute raw ExpR for this (session, aperture, RR) from pnl_r in the train split. If ExpR ≤ 0, skip with reason `"negative_baseline_expr={value}"`.
+- **Gate uses TRAIN split only** — no test-set info.
+- **Blast radius:** Blocks negative-baseline sessions from training. At O30 RR2.0, kills 6/12 sessions (including NYSE_OPEN and US_DATA_1000). At O5 RR1.0, kills 0/12.
+- **Verify:** Run training, confirm skipped sessions match the baseline query results above.
+
+### Fix F: Feature Reduction (EPV Fix)
+- **File:** `config.py` (new `ML_CORE_FEATURES` list), `meta_label.py` (apply selection)
+- **Change:** Define 5 features with structural mechanisms:
+  - `orb_size_norm` — ORB size IS the edge (Blueprint §2)
+  - `atr_20_pct` — vol regime rank (confirmed)
+  - `gap_open_points_norm` — overnight institutional repositioning
+  - `orb_pre_velocity_norm` — pre-session momentum
+  - `prior_sessions_broken` — cross-session flow (confirmed #1 importance)
+- **Expert prior, not data-driven selection** — avoids scan-on-train bias (Hastie/Tibshirani ESL §7.10). If univariate scan later contradicts, revisit.
+- **Blast radius:** Changes `compute_config_hash()` → all existing models invalidated. Drift check `check_ml_config_hash_match` fires. Expected.
+- **Verify:** After fix, `X_e6.shape[1]` should be ~5 (plus any surviving categoricals). EPV at O5 RR1.0 ≈ 430/5 = 86.
+
+### Fix D: Universe-Wide BH/FDR (Post-Bootstrap)
+- **File:** `ml_bootstrap_test.py` — add BH correction in summary section
+- **Change:** After all configs are bootstrapped, collect all p-values, apply BH FDR at q=0.05 across the full tested family. Report both raw p-values and FDR-adjusted q-values.
+- **Blast radius:** None — post-processing only.
+- **Verify:** Run BH on results, confirm which configs survive.
 
 ---
 
-## Blast Radius Summary
+## Pre-Registration (commit before any retrain)
 
-| Component | Impact | Action |
-|-----------|--------|--------|
-| `config.py` | Feature lists change → hash changes → drift check fires | Expected. Retrain immediately after. |
-| `meta_label.py` | New gates + data source change | Core fix. |
-| `features.py` | No changes needed | `bypass_validated` path already exists. |
-| `predict_live.py` | Version check added | Safety gate. |
-| `ml_bootstrap_test.py` | `bypass_validated=True` + updated SURVIVORS | Must match training. |
-| `check_drift.py` | `check_ml_config_hash_match` fires until retrain | Expected behavior. |
-| 11 research scripts | Import from config — silently get new feature set | Research scripts are historical artifacts. |
-| 4 test files | No round-trip feature count test | Add one. |
-| `paper_trader.py` | ML predictions change | Only with `--use-ml`. Raw baseline unaffected. |
-
-**Zero impact on:** Layer 1 raw baseline, gold.db schema, pipeline/, any non-ML code.
+```
+Universe: MNQ E2, all 12 sessions, O5/O15/O30, RR1.0/RR1.5/RR2.0
+Total configs: 108 (12 × 3 × 3)
+Entry model: E2 only
+Data source: bypass_validated=True (full universe)
+Gates: baseline ExpR > 0 (train split), EPV ≥ 10
+Bootstrap: 5000 perms, Phipson & Smyth correction
+Multiple testing: BH FDR q=0.05 across ALL bootstrapped configs
+Acceptance: whatever survives FDR is real. 0 survivors = ML dead.
+```
 
 ---
 
-## Pre-Registration (committed before running)
+## Version Gate (Already Deployed)
 
-Sessions to test ML on (all 12, full universe):
-CME_REOPEN, TOKYO_OPEN, BRISBANE_1025, SINGAPORE_OPEN, LONDON_METALS, EUROPE_FLOW,
-US_DATA_830, NYSE_OPEN, US_DATA_1000, COMEX_SETTLE, CME_PRECLOSE, NYSE_CLOSE
-
-Only sessions with positive raw baseline ExpR will train models (Fix A).
-All sessions are reported in results regardless (White 2000).
-
-RR targets to test: 1.0, 1.5, 2.0
-Apertures to test: O5, O15, O30 (per-aperture mode)
-Entry model: E2 only (E1 optional second pass)
-
-Significance threshold: p < 0.05 (Phipson & Smyth corrected, 5000 perms)
-EPV minimum: 10
-Multiple testing correction: BH FDR across all tested session × aperture × RR combos
-
----
-
-## Success Criteria
-
-1. All 3 methodology FAILs are resolved (hard gates in code)
-2. Univariate scan completed on train split only
-3. Models retrained with ≤5 features on positive-baseline sessions only
-4. Bootstrap 5K re-run with honest p-values
-5. Results accepted — even if 0 survivors (that's information)
-6. Drift checks pass after retrain
-7. Layer 1 raw baseline completely unaffected
+`ML_METHODOLOGY_VERSION = 2` in config.py. Existing V1 model rejected at inference. Commit `9853817`.
 
 ---
 
 ## Risk: Zero Survivors
 
-If no session survives after honest methodology:
+If no config survives after honest methodology + BH FDR:
 - ML for ORB is DEAD — add to NO-GO registry
-- Focus shifts to univariate filters (confluence features design, already drafted)
 - Layer 1 raw baseline remains the tradeable portfolio
-- This is the honest answer and worth having
+- Confluence univariate features become the research path (no ML)
+- This is an honest answer worth having
