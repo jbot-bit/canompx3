@@ -23,18 +23,36 @@ Deploy MNQ E2 RR1.0 raw baseline strategies in signal-only mode to collect 2026 
 
 ## Deployment Commands
 
-### Start paper trading (signal-only — Apex manual)
+### RECOMMENDED: Daily batch forward test (no live connection needed)
 ```bash
-python scripts/run_live_session.py --instrument MNQ --signal-only --raw-baseline
+# Full refresh: download from Databento -> ingest -> features -> outcomes -> kill check
+python scripts/tools/forward_test.py
+
+# Check-only (skip download, just check kill criteria on existing data)
+python scripts/tools/forward_test.py --check-only
+
+# Dry run (show what would be downloaded)
+python scripts/tools/forward_test.py --dry-run
 ```
 
-### With prop 0.75x stops
+Run whenever you open your PC. Catches up on all missed days automatically.
+Requires DATABENTO_API_KEY in .env. No live connection, no WebSocket, no broker auth.
+
+### ALTERNATIVE: Live signal session (requires always-on connection)
 ```bash
+python scripts/run_live_session.py --instrument MNQ --signal-only --raw-baseline
 python scripts/run_live_session.py --instrument MNQ --signal-only --raw-baseline --stop-multiplier 0.75
 ```
 
-### Check kill criteria (run weekly or after significant trade accumulation)
+Use for real-time signals when manually trading on Apex. Needs broker auth (ProjectX).
+PC off = signals off. Only needed when you're actively placing manual orders.
+
+### Kill criteria check (standalone)
 ```bash
+# Batch mode (reads orb_outcomes from gold.db)
+python scripts/tools/check_kill_criteria.py --from-outcomes
+
+# Live mode (reads live_journal.db from broker sessions)
 python scripts/tools/check_kill_criteria.py
 ```
 
@@ -94,19 +112,32 @@ python -m trading_app.paper_trader --instrument MNQ --raw-baseline --rr-target 1
 
 ## Architecture
 
+### Batch mode (RECOMMENDED)
+```
+forward_test.py
+  -> refresh_data.py --instrument MNQ
+     -> Databento API: download missing .dbn.zst files
+     -> ingest_dbn.py --resume: bars into gold.db:bars_1m
+     -> build_bars_5m.py: gold.db:bars_5m
+     -> build_daily_features.py: gold.db:daily_features
+  -> outcome_builder.py (gap dates only)
+     -> gold.db:orb_outcomes (pre-computed trade results with E2 slippage)
+  -> check_kill_criteria.py --from-outcomes
+     -> queries orb_outcomes WHERE trading_day >= 2026-01-01
+     -> per-session ExpR, portfolio ExpR, O'Brien-Fleming
+     -> PASS / WAITING / KILL verdict
+```
+
+### Live mode (for manual trading with real-time signals)
 ```
 run_live_session.py --signal-only --raw-baseline
-  → build_raw_baseline_portfolio() (portfolio.py)
-    → queries orb_outcomes for MNQ E2 RR1.0 O5
-    → 11 PortfolioStrategy objects (positive ExpR sessions)
-  → SessionOrchestrator (signal_only=True)
-    → DataFeed → BarAggregator → ExecutionEngine → signal output
-    → TradeJournal → live_journal.db (persistent)
-    → PerformanceMonitor + CUSUM per strategy
+  -> build_raw_baseline_portfolio() (portfolio.py)
+  -> SessionOrchestrator (signal_only=True)
+     -> DataFeed (WebSocket) -> BarAggregator -> ExecutionEngine -> signal output
+     -> TradeJournal -> live_journal.db (persistent)
+     -> PerformanceMonitor + CUSUM per strategy
 
-check_kill_criteria.py
-  → reads live_journal.db
-  → per-session ExpR, slippage, portfolio ExpR
-  → O'Brien-Fleming sequential boundaries
-  → PASS / WAITING / KILL verdict
+check_kill_criteria.py (no --from-outcomes)
+  -> reads live_journal.db
+  -> per-session ExpR, slippage, portfolio ExpR, O'Brien-Fleming
 ```
