@@ -280,7 +280,7 @@ Separate decision tree for ML meta-labeling. ML is OPTIONAL — raw baselines ar
 ### When to use ML
 - Baseline exists (positive or negative) and you want per-trade selection
 - Feature signal exists (univariate quartile test shows discrimination)
-- **ML CAN work on negative-baseline sessions** — verified 2026-03-21 (NYSE_OPEN O30 RR2.0: raw baseline −0.136R, ML delta +30.5R, bootstrap p=0.005). The key: bootstrap MUST verify it's not the threshold artifact.
+- **ML on negative-baseline sessions: WEAK.** NYSE_OPEN O30 RR2.0 survived 5K bootstrap (p=0.019) but with EPV=2.4 (needs ≥10) and is the ONLY survivor out of 7 tested. Three marginal (p=0.05-0.09), three dead. Treat with extreme caution.
 - ML is NOT a replacement for having SOME positive population in the variable space. If the entire instrument × entry model space is negative at every point, ML can't help.
 
 ### ML Test Sequence
