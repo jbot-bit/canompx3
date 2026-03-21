@@ -154,6 +154,22 @@ class LiveMLPredictor:
                         bundle.get("trained_at", "unknown"),
                     )
 
+                # Methodology version gate: reject models from older methodology
+                from trading_app.ml.config import ML_METHODOLOGY_VERSION
+
+                model_version = bundle.get("methodology_version", 1)
+                if model_version < ML_METHODOLOGY_VERSION:
+                    logger.warning(
+                        "ML model for %s has methodology_version=%d, "
+                        "current=%d — REJECTING (stale methodology). "
+                        "Will fail-open until retrained.",
+                        inst,
+                        model_version,
+                        ML_METHODOLOGY_VERSION,
+                    )
+                    del self._models[inst]
+                    continue
+
                 # Config hash check
                 model_hash = bundle.get("config_hash")
                 if model_hash and model_hash != current_hash:

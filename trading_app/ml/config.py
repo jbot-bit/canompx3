@@ -294,6 +294,15 @@ ACTIVE_INSTRUMENTS: list[str] = [i for i in ACTIVE_ORB_INSTRUMENTS if i not in _
 # Model persistence directory
 MODEL_DIR: pathlib.Path = pathlib.Path(__file__).resolve().parent.parent.parent / "models" / "ml"
 
+# ---------------------------------------------------------------------------
+# Methodology version gate
+# ---------------------------------------------------------------------------
+# Bump this when methodology changes invalidate existing models.
+# predict_live.py checks bundle version matches this — fail-open if mismatch.
+# V1 = original (23 features, validated_setups source, no baseline/EPV gates)
+# V2 = methodology fix (≤5 features, full universe, baseline+EPV gates)
+ML_METHODOLOGY_VERSION: int = 2
+
 
 def compute_config_hash() -> str:
     """Compute SHA-256 hash of ML config for drift detection.
