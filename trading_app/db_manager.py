@@ -502,6 +502,9 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
         # Migration: noise_risk flag (2026-03-21 — methodology audit canon lock)
         # Post-validation flag: True if strategy ExpR <= instrument-specific p95
         # noise floor. NOT a hard gate — computed after WF+FDR validation.
+        # STATUS: Column exists but is NOT YET POPULATED (NULL everywhere).
+        # Population logic is a separate implementation stage using
+        # config.NOISE_FLOOR_BY_INSTRUMENT. Do not assume non-NULL values.
         try:
             con.execute("ALTER TABLE validated_setups ADD COLUMN noise_risk BOOLEAN")
         except duckdb.CatalogException:
