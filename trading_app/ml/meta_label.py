@@ -221,7 +221,7 @@ def train_per_session_meta_label(
     config_selection: str = "max_samples",
     skip_filter: bool = False,
     per_aperture: bool = False,
-    bypass_validated: bool = False,
+    bypass_validated: bool = True,  # V2: full universe, no selection bias (White 2000)
 ) -> dict:
     """Train hybrid per-session meta-label models for one instrument.
 

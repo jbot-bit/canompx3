@@ -283,13 +283,35 @@ Separate decision tree for ML meta-labeling. ML is OPTIONAL — raw baselines ar
 - **ML on negative-baseline sessions: WEAK.** NYSE_OPEN O30 RR2.0 survived 5K bootstrap (p=0.019) but with EPV=2.4 (needs ≥10) and is the ONLY survivor out of 7 tested. Three marginal (p=0.05-0.09), three dead. Treat with extreme caution.
 - ML is NOT a replacement for having SOME positive population in the variable space. If the entire instrument × entry model space is negative at every point, ML can't help.
 
+### ML Methodology Blockers (3 open FAILs — MUST FIX before production)
+
+| # | FAIL | Detail | Fix |
+|---|------|--------|-----|
+| 1 | **EPV = 2.4** (need ≥10) | 55 positives / 23 features. Overfit by definition. (Peduzzi 1996, van Smeden 2019) | Reduce features to ≤5 or pool sessions to ≥230 positives |
+| 2 | **Negative baselines** | ML trained on sessions where raw ExpR is NEGATIVE. De Prado (AIFML Ch 3.6) assumes positive-edge primary model. | Retrain on positive-baseline sessions ONLY |
+| 3 | **Selection bias** | 7/12 sessions selected with quality gates, THEN bootstrapped on same data. (White 2000) | Pre-register session list BEFORE testing |
+
+**Bootstrap resolution: FIXED.** 5K perms with Phipson & Smyth (2010) correction. Results from `logs/ml_bootstrap_5k_overnight.log`:
+
+| Session | Aperture | RR | Delta | Null Mean | p-value | Verdict |
+|---------|----------|-----|-------|-----------|---------|---------|
+| NYSE_OPEN | O30 | 2.0 | +33.5R | +4.9R | 0.0016 | PASS |
+| US_DATA_1000 | O30 | 2.0 | +38.5R | +14.7R | 0.0176 | PASS |
+| CME_PRECLOSE | -- | 1.5 | +4.4R | -2.4R | 0.0376 | PASS |
+| US_DATA_830 | O30 | 2.0 | +12.5R | -1.3R | 0.0512 | MARGINAL |
+| NYSE_OPEN | -- | 2.0 | +3.2R | -0.9R | 0.0546 | MARGINAL |
+| US_DATA_1000 | O15 | 2.0 | +10.6R | +0.8R | 0.0930 | MARGINAL |
+| CME_PRECLOSE | -- | 2.0 | +1.2R | -2.8R | 0.1190 | FAIL |
+
+**Until the 3 FAILs above are resolved, ML is RESEARCH-ONLY, not production.**
+
 ### ML Test Sequence
 ```
 1. UNIVARIATE SIGNAL → quartile test per feature × session × RR
    Kill: no feature shows meaningful spread → ML can't help
 2. TRAIN → 3-way split (60/20/20), per-session RF, E6 noise filter
    Gates: CPCV AUC ≥ 0.50, Test AUC ≥ 0.52, delta ≥ 0, skip ≤ 85%
-3. BOOTSTRAP → 200 permutations, shuffle labels, rerun pipeline
+3. BOOTSTRAP → 5000 permutations (Phipson & Smyth corrected p-values)
    Kill: p > 0.05 → threshold artifact, not skill
 4. REPLAY → paper_trader with --use-ml vs without
    Kill: ML-filtered worse than raw baseline → configuration error
@@ -378,8 +400,9 @@ Row counts verified 2026-03-21. Commands: `docs/ARCHITECTURE.md`.
 
 | Thread | Stage | Next Step | Blocking? |
 |--------|-------|-----------|-----------|
-| MNQ RR1.0 raw baseline | Gate 7 (paper trade) | Deploy signal-only. Kill criteria in pre-reg doc. Code ready (`--raw-baseline`). | No |
-| MNQ RR2.0 O30 ML | Gate 5 PASSED (5/7 bootstrap p<0.05), Gate 6 done (+12.2R delta, −12.5R DD improvement) | Multi-RR portfolio design, then paper trade | No |
+| MNQ RR1.0 raw baseline | Gate 7 (paper trade) | Deploy signal-only. Kill criteria in pre-reg doc. Code ready (`--raw-baseline`). | No — other terminal running |
+| MNQ RR2.0 O30 ML | **BLOCKED by 3 methodology FAILs** (see §6 Blockers) | Fix EPV (reduce features ≤5), retrain positive-only, pre-register sessions | Yes — cannot go to production |
+| Confluence univariate scan | Gate 1 (design drafted) | Test existing ML features as standalone signals on positive baselines. `docs/plans/2026-03-21-confluence-features-design.md` | No — feeds EPV fix |
 | 2026 holdout test | Gate 4 (waiting) | April 2026, N≥100 per session. 3 pre-registered strategies. | Time-gated |
 | Simple regime filter (ATR>50pct) | Gate 2 (untested) | Run quartile comparison vs ML. Lower complexity alternative. | Deferred |
 | Edge families rebuild | Infrastructure | Run build_edge_families.py (0 rows currently) | Needed for fitness tracking |
@@ -396,7 +419,7 @@ Epistemic humility. These are assumptions baked into the system that COULD be wr
 |-----------|------------------|--------------------------|-------------|
 | ORB size is THE edge | Feb 2026 stress test, friction mechanism | Size filter stops working (gold returns to $1800, ORBs shrink) | Monitor avg ORB size vs filter gate. If G5+ qualifies < 5 days/month → edge dying. |
 | MNQ E2 baselines are real | BH FDR at N=55, yearly consistency | 2026 forward test fails (pre-registered, binding) | April 2026: N≥100 per session |
-| ML at RR2.0 O30 has genuine skill | Bootstrap p=0.005, AUC=0.658 | 2025 test set was anomalous (hot market). ML fails on 2026 data. | Forward test. Compare ML-filtered vs raw on 2026 trades. |
+| ML at RR2.0 O30 has genuine skill | Bootstrap 5K: p=0.0016 (NYSE_OPEN O30). BUT 3 methodology FAILs open (EPV, negative baselines, selection bias). | EPV fix changes feature set → model changes → p-values change. Current model is overfit (23 features, 55 positives). | Fix 3 FAILs → retrain → re-bootstrap → THEN evaluate. |
 | Cost model is accurate ($2.74 MNQ) | Industry standard + 1-tick slippage | Real slippage > 1 tick systematically | Paper trade kill criterion: avg slippage > 3 ticks → STOP |
 | E2 stop-market is unbiased | Includes fakeouts, uses slippage | E2 still optimistic vs real fills (spread widens at session opens) | Compare paper trade fills to backtest fills |
 | 60/20/20 time split is appropriate | Standard ML practice | Market regime shifted at split boundary (val period was hot) | Walk-forward validation with multiple split points |
