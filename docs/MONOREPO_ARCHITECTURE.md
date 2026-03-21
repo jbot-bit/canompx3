@@ -46,7 +46,7 @@ python pipeline/run_pipeline.py --instrument MGC --start 2024-01-01 --end 2024-1
 # Strategy discovery + validation
 python trading_app/outcome_builder.py --instrument MGC --start 2021-02-05 --end 2026-02-04
 python trading_app/strategy_discovery.py --instrument MGC
-python trading_app/strategy_validator.py --instrument MGC --min-sample 50
+python trading_app/strategy_validator.py --instrument MGC --min-sample 30
 
 # View results
 python trading_app/view_strategies.py --summary

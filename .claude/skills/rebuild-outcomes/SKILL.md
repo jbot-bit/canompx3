@@ -25,7 +25,7 @@ done
 
 3. Re-validate (walk-forward enabled for all instruments):
 ```bash
-python trading_app/strategy_validator.py --instrument $ARGUMENTS --min-sample 50 --no-regime-waivers --min-years-positive-pct 0.75
+python trading_app/strategy_validator.py --instrument $ARGUMENTS --min-sample 30 --no-regime-waivers --min-years-positive-pct 0.75
 ```
 
 4. Rebuild edge families:

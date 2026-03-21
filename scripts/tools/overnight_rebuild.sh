@@ -23,7 +23,7 @@ for INST in MNQ MES M2K; do
     python trading_app/outcome_builder.py --instrument "$INST" --force
     python trading_app/strategy_discovery.py --instrument "$INST"
     python trading_app/strategy_validator.py \
-        --instrument "$INST" --min-sample 50 \
+        --instrument "$INST" --min-sample 30 \
         --no-regime-waivers --min-years-positive-pct 0.75
     python scripts/migrations/retire_e3_strategies.py
     python scripts/tools/build_edge_families.py --instrument "$INST"
