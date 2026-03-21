@@ -94,12 +94,11 @@ HOT_LOOKBACK_WINDOWS = 10
 HOT_MIN_STABILITY = 0.6
 
 # Minimum expectancy per trade to include in live portfolio.
-# SQL pre-filter: set to the LOWER of the two noise floors so both
-# E1 and E2 strategies are pre-filtered before the per-model check.
-# The per-model noise floor gate (_check_noise_floor) applies the
-# exact threshold: E1=0.22, E2=0.32.
-# @research-source null_test_100_seeds (White's Reality Check 2026-03-19)
-# @revalidated-for E1/E2 event-based sessions (2026-03-19)
+# SQL pre-filter applied before _check_noise_floor.
+# NOTE (2026-03-22): NOISE_EXPR_FLOOR is zeroed (Phase 2b removed).
+# _check_noise_floor currently passes all strategies with ExpR > 0.
+# This 0.22 pre-filter is now the sole magnitude gate in live_config.
+# When noise_risk flag is populated, live_config should check that instead.
 LIVE_MIN_EXPECTANCY_R = 0.22
 
 # Minimum expected dollar profit as a multiple of round-trip transaction cost.

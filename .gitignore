@@ -130,6 +130,8 @@ E3_REBUILD_PROMPT.md
 DB_PERFORMANCE_PLAN.md
 *.docx
 orbresearch.txt
+live_journal.db
+mlprompt*.txt
 
 # External repos cloned into project tree
 CodePilot/
