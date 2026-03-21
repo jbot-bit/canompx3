@@ -7,73 +7,71 @@
 ---
 
 ## Current Session
-- **Tool:** Claude Code (ML Audit + Fix Planning Terminal)
-- **Date:** 2026-03-21 (night)
+- **Tool:** Claude Code (Pipeline Methodology Audit + Canon Lock)
+- **Date:** 2026-03-22
 - **Branch:** `main`
-- **Status:** ML audit complete. Fix plan designed. Implementation NOT started (paused for pipeline rebuild in other terminal).
+- **Status:** Policy plumbing committed. NO rebuild run. NO validation rerun. NO live_config update.
 
 ### What was done this session
 
-#### 1. Bootstrap 5K Results Updated (memory + docs)
-- 3/7 PASS, 3 MARGINAL, 1 FAIL (from `logs/ml_bootstrap_5k_overnight.log`)
-- Memory files corrected to match actual log output
+#### 1. Full Pipeline Truth Audit
+- Non-ML pipeline audited from ground up (DB, code, config, git history, seed artifacts)
+- Found: DB state is artifact of multiple partial rebuilds with inconsistent config
+- Found: min_sample=50 was used (non-canonical), noise floor=0.22/0.32 applied cross-instrument
+- Found: MGC 0 validated, MES 0 validated, MNQ 11 validated (current DB)
+- Found: family_rr_locks 3 days stale vs discovery, 5/11 strategies orphaned
 
-#### 2. Zero-Context ML Audit (28 questions, 5 kill shots)
-- `docs/plans/2026-03-21-ml-zero-context-audit.md`
-- Key findings verified against code/logs:
-  - BH FDR at family=7 → only 1 survivor (NYSE_OPEN O30 p=0.0016). At family=68 → 0 survivors.
-  - 10/12 sessions at O30 RR2.0 have Sharpe=nan (negative baselines)
-  - EUROPE_FLOW has winter lookahead from LONDON_METALS (~42% of rows)
-  - No FDR code exists in bootstrap script
-  - Constant-column drop uses full data, not train-only
+#### 2. Noise Floor Methodology Audit
+- Proved: noise floor is NOT White's RC or Hansen's SPA — it's a heuristic minimum-effect-size gate
+- Proved: WF+FDR alone are insufficient (38,755 MNQ noise strategies pass both on random walk)
+- Proved: noise floor IS non-redundant but was miscalibrated (MGC sigma 2.54x real, cross-instrument reuse)
+- Proved: mean+2std aggregation has no literature basis, conflates noise volume with magnitude
+- Found: MNQ and MES null test seeds already exist (100 MNQ, 94 MES) — were not surfaced in prior sessions
 
-#### 3. ML Fix Execution Plan (6 bugs, 7 phases)
-- `docs/plans/2026-03-21-ml-fix-execution-plan.md`
-- `docs/plans/2026-03-21-ml-methodology-fix-design.md` (V2)
-- Execution order: B→A→C→E→F→D (lookahead first, then determinism, then methodology)
-- Implementation NOT started — only the V2 version gate (`ML_METHODOLOGY_VERSION=2`) is deployed
+#### 3. Canon Lock — D1 (Noise Floor) + D2 (Min Sample)
+- **D1 locked:** Per-instrument p95 of pooled null survivor ExpR. Gate moved downstream of WF/FDR. Flag, not hard rejection.
+- **D2 locked:** min_sample=30 (REGIME_MIN_SAMPLES). Code default restored.
+- Interim floors (p95, Gaussian seeds): MGC E2=0.21, MES E2=0.29, MNQ E2=0.21
 
-#### 4. Upstream Discovery: Live Portfolio is EMPTY
-- `build_live_portfolio()` returns 0 strategies, 47 warnings
-- 42 specs say "no variant found" — live_config references filters not in validated_setups
-- Raw baseline (`build_raw_baseline_portfolio()`) works fine — 11 strategies
-- MGC/MES data stale (Mar 6). MNQ current (Mar 20).
+#### 4. Implementation (commit `f0086d7`)
+- Phase 2b hard gate REMOVED from strategy_validator.py
+- `noise_risk` BOOLEAN column added to validated_setups (NULL stub — not populated yet)
+- `NOISE_FLOOR_BY_INSTRUMENT` added to config.py (interim p95 values)
+- min_sample=30 in 4 wrapper locations (was 50)
+- Drift check 80 converted to no-op
+- Tests updated: 114 pass, 0 regressions
+- 2x code review caught + fixed missed `pipeline_status.py:317` (second --min-sample 50 occurrence)
 
-#### 5. Version Gate Deployed
-- Commit `9853817`: `ML_METHODOLOGY_VERSION=2` in config.py
-- Old V1 model rejected at inference → fail-open → Layer 1 raw baseline runs clean
+### What was NOT done (explicit scope boundaries)
+- **No rebuild run.** DB still has stale validation state from Mar 19.
+- **No validation rerun.** Current validated_setups (11 MNQ) built with old gates.
+- **No live_config update.** `_check_noise_floor` in live_config.py still imports zeroed `NOISE_EXPR_FLOOR` — passes everything. Separate design decision.
+- **No noise_risk population.** Column exists but is NULL everywhere. Computation is next stage.
+- **No skill/shell script updates.** 6 files still hardcode `--min-sample 50` (.claude/skills/, shell scripts).
 
-### Truth State (verified from code/logs/DB, not memory)
-- **Raw baseline = tradeable.** 11 MNQ strategies, works with `--raw-baseline`.
-- **Filtered portfolio = BROKEN.** 0 strategies. live_config→validated_setups mismatch.
-- **ML = FROZEN.** V2 gate rejects old models. 6 bugs identified, 0 fixed in code yet.
-- **MGC/MES = STALE** (Mar 6). Other terminal doing rebuild.
-- **MNQ = CURRENT** (Mar 20).
-
-### Pipeline Status
-- bars_1m: 15M rows
-- daily_features: 34K rows
-- orb_outcomes: 8.4M rows
-- validated_setups: 11 rows (all MNQ E2)
-- edge_families: 5 rows (1 ROBUST, 1 WHITELISTED, 2 SINGLETON, 1 PURGED)
-
-### Tasks Pending (in task system)
-1. Phase 1: Fix B — EF/LM DST lookahead (drop cross-session + level features)
-2. Phase 2: Fix A — deterministic config tiebreaker (4 ORDER BY clauses)
-3. Phase 3: Fix C — train-only constant-column drop
-4. Phase 3.1: Fix E — positive baseline gate
-5. Phase 4.1: Fix F — feature reduction to 5
-6. Phase 5.1: Fix D — BH/FDR in bootstrap
-7. Phase 6: Retrain + bootstrap 5K + BH FDR
-8. Phase 7: Update docs with real numbers
+### Truth State
+- **Validator logic:** Phase 2b removed, min_sample=30. Next validation run will produce different population than current DB.
+- **DB:** Stale. Built with old gates (noise floor=0.22/0.32, min_sample=50). Does NOT match current code.
+- **NOISE_FLOOR_BY_INSTRUMENT:** Interim. Derived from Gaussian null seeds with known sigma overshoot. p95 aggregation. NOT final truth — block bootstrap calibration deferred.
+- **MGC/MES bars:** 14+ days stale (Mar 6/7). MNQ current (Mar 20).
+- **ML:** Still frozen. V2 gate active. 6 bugs identified, 0 fixed.
 
 ### Next Steps (for incoming session)
-1. **Wait for pipeline rebuild** (other terminal) — MGC/MES need fresh data
-2. **Audit live_config** — 42 "no variant found" specs need investigation. Either rebuild validated_setups or strip live_config to match reality.
-3. **Then implement ML fixes** — 6 bugs, phased, one at a time
-4. **Then retrain on full pre-registered universe** — accept 0 survivors if honest result
+Pick ONE:
+1. **Populate noise_risk flag** — compute from NOISE_FLOOR_BY_INSTRUMENT on current validated_setups
+2. **Rebuild truth path** — ingest fresh bars → discovery → validation (with new gates) → downstream
+
+Do not combine. One stage at a time.
+
+### Known workflow issues
+- Post-edit drift hook fails on `ModuleNotFoundError: No module named 'pipeline'` — import path issue in hook runner. Not blocking but masks real drift detection.
 
 ---
+
+## Prior Session
+- **Tool:** Claude Code (ML Audit + Fix Planning Terminal)
+- **Date:** 2026-03-21 (night)
+- **Summary:** ML audit complete. Fix plan designed. Live portfolio found EMPTY (42 specs no match). Version gate deployed. Implementation paused for pipeline rebuild.
 
 ## Prior Session
 - **Tool:** Claude Code
