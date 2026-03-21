@@ -83,20 +83,31 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import pandas as pd
 
-# ── Noise ExpR floor per entry model (adversarial validation 2026-03-19) ──
-# 100-seed null test ran the full pipeline on Gaussian random-walk bars.
-# Any production strategy below this floor is indistinguishable from chance.
-# Method: conservative mean + 2*std of per-seed maxima (97 seeds analyzed).
+# ── Noise ExpR floor per entry model ──────────────────────────────────────
+# NO LONGER A HARD GATE (2026-03-21). Phase 2b removed from strategy_validator.
+# Now used only for post-validation noise_risk flag computation.
 #
-# @research-source null_test_100_seeds (White's Reality Check 2026-03-19)
-# @entry-models E1, E2
-# @revalidated-for E1/E2 event-based sessions (2026-03-19)
-# TEMPORARILY ZEROED for per-instrument null test calibration (2026-03-19).
-# MGC floors (100-seed): E1=0.22, E2=0.32.
-# MNQ/MES floors: pending — run null test with --instrument MNQ/MES.
+# Canonical aggregation: p95 of pooled null survivor ExpR per instrument
+# per entry model. Per-instrument floors are in NOISE_FLOOR_BY_INSTRUMENT.
+# This global dict retained for backward compat with live_config / null scripts.
+#
+# Seed artifacts: scripts/tests/null_seeds/{.,mnq,mes}/
+# Caveat: Gaussian null has sigma overshoot (MGC 2.54x, MNQ 1.23x real
+# trimmed std). Bias direction on ORB noise floors is unproven.
+# Block bootstrap calibration is a future workstream.
 NOISE_EXPR_FLOOR: dict[str, float] = {
     "E1": 0,
     "E2": 0,
+}
+
+# Per-instrument noise floors (p95 of pooled null survivor ExpR).
+# Derived from 100-seed Gaussian null tests (94 for MES).
+# Used for post-validation noise_risk flag, NOT as a hard gate.
+# E1 floors are provisional (N=16-25 null survivors, unreliable p95).
+NOISE_FLOOR_BY_INSTRUMENT: dict[str, dict[str, float]] = {
+    "MGC": {"E1": 0.18, "E2": 0.21},
+    "MES": {"E1": 0.30, "E2": 0.29},
+    "MNQ": {"E1": 0.30, "E2": 0.21},
 }
 
 # Walk-forward start-date override per instrument.

@@ -3256,17 +3256,12 @@ _SQL_KW_RE = re.compile(r"\b(SELECT|FROM|JOIN|WHERE|AND|ON|GROUP BY|ORDER BY|INS
 
 
 def check_noise_floor_active() -> list[str]:
-    """Verify noise floors are not zeroed (calibration mode left active)."""
-    from trading_app.config import NOISE_EXPR_FLOOR
+    """Noise floor is no longer a hard gate (2026-03-21 canon lock).
 
-    zeroed = [em for em, floor in NOISE_EXPR_FLOOR.items() if floor < 0.01]
-    if zeroed:
-        return [
-            f"  NOISE_EXPR_FLOOR[{em}]=0 — calibration mode active. "
-            f"Production rebuilds/validation will bypass noise gate. "
-            f"Restore floors after null test calibration."
-            for em in zeroed
-        ]
+    Phase 2b removed. Noise check is now a post-validation flag (noise_risk).
+    NOISE_EXPR_FLOOR being zeroed is the expected canonical state.
+    This check is retained as a no-op for registry compatibility.
+    """
     return []
 
 
@@ -3549,7 +3544,7 @@ CHECKS = [
         False,
     ),
     ("Session guard ordering matches ML config", check_session_guard_sync, False, False),
-    ("Noise floor gate is active (not zeroed for calibration)", check_noise_floor_active, False, False),
+    ("Noise floor gate removed — no-op since 2026-03-21 canon lock", check_noise_floor_active, False, False),
     (
         "No validated strategies below entry-model noise floor (null test 2026-03-19, 100 seeds)",
         check_noise_floor_compliance,

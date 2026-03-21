@@ -499,6 +499,14 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
             except duckdb.CatalogException:
                 pass  # column already exists
 
+        # Migration: noise_risk flag (2026-03-21 — methodology audit canon lock)
+        # Post-validation flag: True if strategy ExpR <= instrument-specific p95
+        # noise floor. NOT a hard gate — computed after WF+FDR validation.
+        try:
+            con.execute("ALTER TABLE validated_setups ADD COLUMN noise_risk BOOLEAN")
+        except duckdb.CatalogException:
+            pass  # column already exists
+
         # Table 7: validation_run_log (Mar 2026 — Bloomey FIX 8)
         # Tracks rejection rate per phase per validation run for auditability.
         con.execute("""

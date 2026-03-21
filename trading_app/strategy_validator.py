@@ -41,7 +41,6 @@ from pipeline.dst import (
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import (
     CORE_MIN_SAMPLES,
-    NOISE_EXPR_FLOOR,
     REGIME_MIN_SAMPLES,
     WF_MIN_TRAIN_TRADES,
     WF_START_OVERRIDE,
@@ -369,16 +368,10 @@ def validate_strategy(
     if exp_r is None or exp_r <= 0:
         return "REJECTED", f"Phase 2: ExpR={exp_r} <= 0", []
 
-    # Phase 2b: Noise floor — reject strategies indistinguishable from noise
-    # @research-source null_test_100_seeds (White's Reality Check 2026-03-19)
-    entry_model = row.get("entry_model") or "E1"
-    noise_floor = NOISE_EXPR_FLOOR.get(entry_model, NOISE_EXPR_FLOOR.get("E2", 0.32))
-    if exp_r <= noise_floor:
-        return (
-            "REJECTED",
-            f"Phase 2b: ExpR={exp_r:.4f} <= noise floor {noise_floor} for {entry_model}",
-            [],
-        )
+    # Phase 2b: REMOVED (2026-03-21).
+    # Noise floor is now a post-validation flag (noise_risk), not a pre-WF hard gate.
+    # See: methodology audit — floor kills strategies before WF/FDR can test them,
+    # destroying evidence of OOS consistency. Moved downstream per canon lock.
 
     # Phase 3: Yearly robustness
     yearly_json = row.get("yearly_results", "{}")
@@ -1242,7 +1235,7 @@ def run_validation(
         phase_counts = {
             "phase1": 0,
             "phase2": 0,
-            "phase2b": 0,  # noise floor gate — added 2026-03-18
+            "phase2b": 0,  # REMOVED as hard gate (2026-03-21). Counter kept at 0 for schema compat.
             "phase3": 0,
             "phase4": 0,
             "phase4c": 0,  # removed — was never a gate (N_eff broken)
@@ -1255,8 +1248,6 @@ def run_validation(
             if sr["status"] == "REJECTED":
                 if notes_str.startswith("Phase 1:"):
                     phase_counts["phase1"] += 1
-                elif notes_str.startswith("Phase 2b:"):
-                    phase_counts["phase2b"] += 1
                 elif notes_str.startswith("Phase 2:"):
                     phase_counts["phase2"] += 1
                 elif notes_str.startswith("Phase 3:"):

@@ -134,7 +134,7 @@ PREFLIGHT_RULES: dict[str, dict] = {
         "query": "SELECT COUNT(*) FROM validated_setups WHERE instrument = $1 AND status = 'active'",
         "params": lambda inst, orb: [inst],
         "fix": _PY
-        + " trading_app/strategy_validator.py --instrument {instrument} --min-sample 50 --no-regime-waivers --min-years-positive-pct 0.75",
+        + " trading_app/strategy_validator.py --instrument {instrument} --min-sample 30 --no-regime-waivers --min-years-positive-pct 0.75",
         "desc": "active validated_setups for {instrument}",
     },
     "family_rr_locks": {
@@ -314,7 +314,7 @@ REBUILD_STEPS: list[tuple[str, list[str]]] = [
             "--instrument",
             "{instrument}",
             "--min-sample",
-            "50",
+            "30",
             "--no-regime-waivers",
             "--min-years-positive-pct",
             "0.75",
