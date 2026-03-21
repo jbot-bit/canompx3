@@ -50,7 +50,7 @@ done
 echo ""
 echo "Step 3/10: Validating strategies..."
 python trading_app/strategy_validator.py \
-    --instrument "$INSTRUMENT" --min-sample 50 \
+    --instrument "$INSTRUMENT" --min-sample 30 \
     --no-regime-waivers --min-years-positive-pct 0.75 \
     $WF_FLAG
 

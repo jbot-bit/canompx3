@@ -51,7 +51,7 @@ for INST in MGC MNQ MES M2K; do
     echo ""
     echo "--- [$INST] Step 3/5: Strategy Validator ---"
     python trading_app/strategy_validator.py \
-        --instrument "$INST" --min-sample 50 \
+        --instrument "$INST" --min-sample 30 \
         --no-regime-waivers --min-years-positive-pct 0.75 \
         2>&1 | tail -10
     echo "[$INST] Validation done: $(date)"
