@@ -112,15 +112,15 @@ def step_discover(instrument: str, args) -> int:
 def step_validate(instrument: str, args) -> int:
     """Strategy validation with canonical flags.
 
-    Matches the canonical command from CLAUDE.md / validation-workflow.md:
-      --min-sample 50 --no-regime-waivers --min-years-positive-pct 0.75
+    Canon lock (2026-03-21): min-sample=30 (REGIME_MIN_SAMPLES).
+    Prior runs used 50 — non-canonical, now corrected.
     Walk-forward enabled for all instruments (Mar 2026). All have 5+ years of data.
     """
     cmd = [
         sys.executable,
         str(PROJECT_ROOT / "trading_app" / "strategy_validator.py"),
         f"--instrument={instrument}",
-        "--min-sample=50",
+        "--min-sample=30",
         "--no-regime-waivers",
         "--min-years-positive-pct=0.75",
     ]

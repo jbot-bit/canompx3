@@ -85,52 +85,26 @@ class TestValidateStrategy:
         assert status == "REJECTED"
         assert "Phase 2" in notes
 
-    def test_reject_e2_below_noise_floor(self):
-        """E2 strategy below noise floor (0.32) -> REJECT Phase 2b."""
+    def test_e2_low_expr_reaches_phase3(self):
+        """E2 strategy with low but positive ExpR reaches Phase 3 (no noise floor gate).
+
+        Phase 2b (noise floor hard gate) removed 2026-03-21. Strategies with ExpR > 0
+        now proceed to Phase 3 regardless of magnitude. Noise risk is computed
+        post-validation as a flag, not a pre-validation gate.
+        """
+        # ExpR=0.28 previously rejected by noise floor; now reaches Phase 3+
         status, notes, _ = validate_strategy(
             _make_row(entry_model="E2", expectancy_r=0.28), _cost()
         )
-        assert status == "REJECTED"
-        assert "Phase 2b" in notes
-        assert "noise floor" in notes
-
-    def test_reject_e2_at_noise_floor(self):
-        """E2 strategy AT noise floor (0.32) -> REJECT (must exceed, not equal)."""
-        status, notes, _ = validate_strategy(
-            _make_row(entry_model="E2", expectancy_r=0.32), _cost()
-        )
-        assert status == "REJECTED"
-        assert "Phase 2b" in notes
-
-    def test_pass_e2_above_noise_floor(self):
-        """E2 strategy above noise floor -> passes Phase 2b."""
-        status, notes, _ = validate_strategy(
-            _make_row(entry_model="E2", expectancy_r=0.40), _cost()
-        )
+        # Should pass (yearly data is positive in _make_row defaults)
         assert status == "PASSED"
 
-    def test_reject_e1_below_noise_floor(self):
-        """E1 strategy below noise floor (0.25) -> REJECT Phase 2b."""
+    def test_e1_low_expr_reaches_phase3(self):
+        """E1 strategy with low but positive ExpR proceeds past removed Phase 2b."""
         status, notes, _ = validate_strategy(
-            _make_row(entry_model="E1", expectancy_r=0.20), _cost()
-        )
-        assert status == "REJECTED"
-        assert "Phase 2b" in notes
-
-    def test_pass_e1_above_noise_floor(self):
-        """E1 strategy above noise floor (0.25) -> passes Phase 2b."""
-        status, notes, _ = validate_strategy(
-            _make_row(entry_model="E1", expectancy_r=0.30), _cost()
+            _make_row(entry_model="E1", expectancy_r=0.10), _cost()
         )
         assert status == "PASSED"
-
-    def test_unknown_entry_model_uses_e2_floor(self):
-        """Unknown entry model defaults to E2 floor (conservative)."""
-        status, notes, _ = validate_strategy(
-            _make_row(entry_model="E99", expectancy_r=0.28), _cost()
-        )
-        assert status == "REJECTED"
-        assert "Phase 2b" in notes
 
     def test_reject_one_year_negative(self):
         """One year with avg_r <= 0 -> REJECT."""
@@ -202,7 +176,6 @@ class TestValidateStrategy:
     def test_reject_stress_test(self):
         """Marginal ExpR that fails stress test -> REJECT.
 
-        ExpR must exceed noise floor (E1=0.25) to reach Phase 4.
         Use very small risk points (0.5) so stress friction delta_r is large
         enough to push stress_exp below 0.
         """
@@ -233,7 +206,6 @@ class TestValidateStrategy:
     def test_stress_test_uses_outcome_risk(self):
         """Stress test uses median_risk_points when available.
 
-        ExpR must exceed E1 noise floor (0.25) to reach Phase 4.
         MGC min_risk_floor_dollars=10.0 floors the denominator, so
         stress delta is ~0.287R. Need ExpR > 0.287 to pass stress.
         """
@@ -241,7 +213,7 @@ class TestValidateStrategy:
         status, _, _ = validate_strategy(_make_row(expectancy_r=0.30, median_risk_points=20.0), _cost())
         assert status == "PASSED"
 
-        # ExpR 0.26 is above noise floor (0.25) but below stress delta (0.287) -> rejects at Phase 4
+        # ExpR 0.26 is below stress delta (0.287) -> rejects at Phase 4
         status, notes, _ = validate_strategy(_make_row(expectancy_r=0.26, median_risk_points=0.5), _cost())
         assert status == "REJECTED"
         assert "Phase 4" in notes

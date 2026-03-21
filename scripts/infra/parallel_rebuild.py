@@ -151,7 +151,7 @@ def _build_command(
             "--min-years-positive-pct",
             "0.75",
             "--min-sample",
-            str(extra.get("min_sample", 50)),
+            str(extra.get("min_sample", 30)),
         ]
 
     else:
@@ -505,7 +505,7 @@ Examples:
         default=DEFAULT_APERTURES,
         help=f"ORB apertures to rebuild (default: {DEFAULT_APERTURES})",
     )
-    parser.add_argument("--min-sample", type=int, default=50, help="Min sample for validator")
+    parser.add_argument("--min-sample", type=int, default=30, help="Min sample for validator (canon: REGIME_MIN_SAMPLES=30)")
     parser.add_argument("--dry-run", action="store_true", help="Show plan, don't execute")
 
     args = parser.parse_args()
