@@ -81,6 +81,20 @@ Output: Risk table + verification checklist.
 
 Save the design to `docs/plans/YYYY-MM-DD-<topic>-design.md` and present it to the user for approval.
 
+### Stage-Gate Integration
+
+When the user approves the design ("go", "approved", "do it", "looks good"):
+1. Write the approved Stage 1 to `docs/runtime/STAGE_STATE.md` using the full schema:
+   - `mode: IMPLEMENTATION`
+   - `stage_purpose:` from Turn 3 step 1
+   - Scope lock: file list from Turn 3
+   - Acceptance: verification commands from Turn 4
+   - Proven/unproven/blockers from Turn 1+4
+2. Confirm: "Stage 1 approved and locked in STAGE_STATE.md."
+3. This enables the stage-gate hook to allow edits to scope-locked files only.
+
+If the user does NOT approve (says "iterate", "change", "not yet") → stay in design mode, do not write STAGE_STATE.
+
 ## Rules
 
 - ONE topic at a time. Never batch.

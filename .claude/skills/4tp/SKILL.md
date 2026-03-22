@@ -28,8 +28,9 @@ Execute the full 4T flow for $ARGUMENTS. All 4 turns, no shortcuts:
 After Turn 4 completes:
 
 1. **Write design doc** to `docs/plans/YYYY-MM-DD-<topic>-design.md`
-2. **Commit it**: `git add docs/plans/<file> && git commit -m "docs: 4TP design -- <topic>"`
-3. **Invoke writing-plans skill** to create the implementation plan from the design
+2. **Write STAGE_STATE** — approved Stage 1 to `docs/runtime/STAGE_STATE.md` (mode: IMPLEMENTATION, scope_lock from Turn 3, acceptance from Turn 4). This unlocks the stage-gate hook for implementation.
+3. **Commit both**: `git add docs/plans/<file> docs/runtime/STAGE_STATE.md && git commit -m "docs: 4TP design -- <topic>"`
+4. **Invoke writing-plans skill** to create the implementation plan from the design
 
 Do NOT pause for approval between Phase 1 and Phase 2. The whole point of 4TP is zero stops.
 

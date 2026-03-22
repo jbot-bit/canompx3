@@ -29,13 +29,22 @@ BASE_SHA=$(git merge-base HEAD origin/main)  # or HEAD~N for recent work
 HEAD_SHA=$(git rev-parse HEAD)
 ```
 
-**2. Dispatch the review agent:**
+**2. Load stage context:**
+
+If `docs/runtime/STAGE_STATE.md` exists, read it to get:
+- **Task description** — what was being implemented
+- **Scope lock** — which files should have been changed (flag unexpected changes)
+- **Acceptance criteria** — what the review should verify
+- **Out of scope** — flag any changes to out-of-scope files as potential scope creep
+
+**3. Dispatch the review agent:**
 
 Use Agent tool with `pr-review-toolkit:code-reviewer` subagent type. Provide:
 
-- **What was implemented** — one sentence
-- **Plan or requirements** — reference the design doc or task
+- **What was implemented** — from STAGE_STATE task field, or one sentence
+- **Plan or requirements** — reference the design doc or task (check STAGE_STATE + `docs/plans/`)
 - **BASE_SHA / HEAD_SHA** — commit range
+- **Scope lock** — from STAGE_STATE (reviewer should flag edits outside scope)
 - **Project-specific review criteria** (below)
 
 Alternatively, for a deeper quant-focused review with Seven Sins grading, use `/bloomey-review`.

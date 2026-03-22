@@ -83,10 +83,13 @@ If 2+ domains but tightly coupled with clear joint acceptance → proceed. Note 
 |------|--------|
 | REBASE/RESUME | → /resume-rebase |
 | TRUTH AUDIT | → dispatch preflight-auditor agent (standalone) |
-| DESIGN | → dispatch planner agent → present plan → **wait for explicit approval** |
+| DESIGN (quick, ≤2 stages) | → dispatch planner agent → present plan → **wait for approval** |
+| DESIGN (full architecture) | → /4t or /brainstorm (they write STAGE_STATE on approval) |
 | IMPLEMENTATION | → preflight-auditor → if CLEAR → Step 6 |
-| VERIFICATION | → /verify-done or /quant-verify |
-| TOO BROAD | → /task-splitter → present Stage 1 → **wait for explicit approval** |
+| VERIFICATION (stage checkpoint) | → /verify-done (reads acceptance from STAGE_STATE) |
+| VERIFICATION (pre-commit) | → /quant-verify |
+| VERIFICATION (deep audit) | → /integrity-guardian |
+| TOO BROAD | → /task-splitter → present Stage 1 → **wait for approval** |
 
 ### DESIGN → APPROVAL → STATE WRITE
 

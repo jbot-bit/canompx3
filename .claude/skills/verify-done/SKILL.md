@@ -12,6 +12,16 @@ description: >
 
 If you haven't run the command in this response, you cannot claim it passes.
 
+## Stage-Gate Integration
+
+If `docs/runtime/STAGE_STATE.md` exists and has acceptance criteria:
+- Read the `## Acceptance` section — these are the SPECIFIC verification targets for this stage
+- Run those commands FIRST (they're the task-specific "done" definition)
+- Then proceed to the standard gates below
+- After all pass: update STAGE_STATE.md to mark stage DONE
+
+If no STAGE_STATE.md → use standard gates only (backward compatible).
+
 ## The Gate
 
 Before claiming ANY status (done, fixed, passing, complete, working):
