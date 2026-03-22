@@ -63,9 +63,12 @@ Minimum 3 takes for any design touching trading logic or research methodology. S
 - Save to `docs/plans/YYYY-MM-DD-<topic>-design.md`
 - Commit the design doc
 
-### 7. Transition
-- If user says "implement" / "go" / "build it" → create implementation plan
-- If user says "iterate" / "change X" → revise design
+### 7. Transition + Stage-Gate Integration
+- If user says "implement" / "go" / "build it":
+  1. Write approved Stage 1 to `docs/runtime/STAGE_STATE.md` (mode: IMPLEMENTATION, scope_lock from design, acceptance criteria from design)
+  2. Confirm: "Stage 1 approved and locked in STAGE_STATE.md."
+  3. Then create implementation plan or hand off to `/stage-gate` for preflight
+- If user says "iterate" / "change X" → revise design, do NOT write STAGE_STATE
 - If user says nothing → stay in design mode, don't assume
 
 ## Project-Specific Checks

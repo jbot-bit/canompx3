@@ -42,6 +42,29 @@ When querying trading strategies or trade data:
 - Include data freshness (when was the strategy last validated/promoted)
 - The user has corrected missing rr_target, missing session times, wrong sort order, and incomplete field sets across 10+ sessions. Get it right the first time.
 
+## Stage-Gate System — Workflow Entry Point
+
+For non-trivial work, `/stage-gate` is the canonical entry point. It classifies, then routes:
+
+| User intent | Route |
+|-------------|-------|
+| "orient" / session start | `/orient` → checks STAGE_STATE → routes |
+| "plan" / "design" / "4t" | `/stage-gate` → DESIGN → `/4t` or `/brainstorm` |
+| "build" / "go" / "implement" | `/stage-gate` → IMPLEMENTATION → preflight → execute |
+| "verify" / "done?" | `/verify-done` (reads acceptance from STAGE_STATE if available) |
+| "review" | `/code-review` (reads scope from STAGE_STATE if available) |
+| "where was I" / "resume" | `/resume-rebase` → drift check → continue or reclassify |
+| Quick fix / typo | `/stage-gate trivial [file]` → minimal STAGE_STATE → edit |
+
+**Verification skill routing (which one when):**
+- Pre-commit quick check → `/quant-verify`
+- "Is this stage done?" → `/verify-done` (reads STAGE_STATE acceptance criteria)
+- Post-major-milestone deep audit → `/integrity-guardian`
+- Institutional code review → `/bloomey-review` or `/code-review`
+
+The stage-gate-guard hook hard-blocks production edits without an active STAGE_STATE.md.
+See `.claude/rules/stage-gate-protocol.md` for the always-loaded awareness rules.
+
 ## Session Start — Intent Framing
 If the user's first message is ambiguous about whether they want design or implementation, ask ONE question: "Design or implement?" Then follow their answer strictly.
 

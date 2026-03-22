@@ -7,6 +7,15 @@ Orient me on the current project state: $ARGUMENTS
 
 Use when: "orient", "what's going on", "what's broken", "what should I work on", "status", "where are we", "project state", "session start", "what happened", "catch me up"
 
+## Step 0: Check active stage
+
+Read `docs/runtime/STAGE_STATE.md` if it exists. If an active stage is found:
+- Surface it at the TOP of the briefing: "**ACTIVE STAGE:** [task] — Stage [N/M]: [purpose] (mode: [mode])"
+- If mode is IMPLEMENTATION and stage is mid-flight → recommend `/resume-rebase` before new work
+- If stale (check `git log --oneline --since="[updated]" -- [scope files]` for drift) → flag: "Stage state is STALE — rebase before continuing"
+
+If no STAGE_STATE.md exists → proceed normally (no stage active).
+
 ## Step 1: Run the pulse
 
 If `$ARGUMENTS` contains `--full`:
@@ -90,9 +99,11 @@ Format recommendation: `>>> [recommendation] <<<`
 ## Next → Route the User
 
 Based on the briefing, suggest the appropriate next skill:
+- Active stage mid-flight? → `/resume-rebase` to continue safely
 - Something broken? → `/health-check` or `/quant-debug`
+- Starting new work? → `/stage-gate [task]` to classify first
 - Strategy research needed? → `/discover [instrument]` or `/research [topic]`
 - Portfolio health? → `/regime-check`
 - Want to know what to trade? → `/trade-book`
-- Planning a change? → `/brainstorm [topic]`
+- Planning a change? → `/brainstorm [topic]` (stage-gate will route)
 - ML question? → `/ml-verify`
