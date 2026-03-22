@@ -145,9 +145,12 @@ INSTRUMENT_ATR_GATE: dict[str, float] = {
 # Tier labels preserve existing resolver semantics. They do NOT
 # canonically derive from edge_families robustness_status.
 #
-# NOTE: REGIME-path honesty remains subject to the known fitness-gate
-# session-name mismatch (numeric vs event-based in rolling portfolio).
-# Regime gate behavior requires separate audit.
+# NOTE: CORE-path rolling eval is degraded — rolling portfolio tables
+# contain stale numeric session names (0900, 1000) that don't match
+# current event-based names. CORE specs fall back to baseline resolution,
+# which is honest but loses rolling stability scoring. REGIME-path
+# fitness gate (compute_fitness) is unaffected — it loads outcomes
+# directly, not through rolling portfolio tables.
 LIVE_PORTFOLIO = [
     # =========================================================================
     # CORE: always-on.

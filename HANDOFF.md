@@ -104,6 +104,16 @@
 - 6 REGIME (CME_PRECLOSE x4 filters, CME_REOPEN ATR70_VOL, CME_PRECLOSE ORB_G8)
 - Resolves 8 MNQ strategies. MGC/MES do not qualify under current live gates.
 
+#### 5. REGIME Fitness-Gate Audit (misdiagnosis corrected)
+- **REGIME gate works correctly.** `compute_fitness()` loads outcomes directly from
+  `orb_outcomes` — independent of rolling portfolio tables. All 6 REGIME strategies
+  are genuinely FIT (rolling ExpR 0.11-0.35, N 40-228, recent Sharpe all positive).
+- **CORE rolling eval is degraded, not broken.** Rolling portfolio tables (`regime_validated`)
+  contain stale numeric session names (0900, 1000) that don't match event-based names.
+  CORE specs fall back to baseline resolution — honest but loses stability scoring.
+- **Next data task:** Rebuild rolling portfolio tables with event-based session names
+  to restore CORE rolling eval. This is a data refresh, not a code fix.
+
 ### Truth State (verified Mar 23 2026)
 - **validated_setups:** 404 rows (MGC 6, MES 9, MNQ 389). All wf_passed=True, FDR-corrected at K=105,640.
 - **family_rr_locks:** 166 rows (MGC 2, MES 7, MNQ 157).
@@ -114,13 +124,13 @@
 - **ML:** Still frozen. V2 gate active.
 
 ### Next Steps (for incoming session)
-1. **REGIME fitness-gate audit** — rolling portfolio session-name mismatch (numeric vs event-based) means regime gate always passes through. Separate fix needed.
+1. **Rolling portfolio rebuild** — rebuild `regime_validated`/`regime_strategies` with event-based session names to restore CORE rolling eval. Data refresh, not code fix.
 2. **Layer 8** — forward test / paper trade the 8-strategy MNQ portfolio
 3. **MGC/MES edge investigation** — MGC 6 validated but all below 0.22 ExpR at locked RR. MES 9 validated but all below 0.08 ExpR. Neither qualifies under current live rules.
 
 ### Known issues
 - Post-edit drift hook fails on module import (PYTHONPATH not set) — masks drift detection during edits
-- REGIME fitness gate has session-name mismatch — always resolves FIT (not gating). Flagged in live_config.py comment.
+- CORE rolling eval degraded — rolling tables have stale numeric session names, CORE falls back to baseline (honest, loses stability scoring). REGIME gate is unaffected.
 - MGC/MES: 0 live strategies under current rules
 
 ---
