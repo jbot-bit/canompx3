@@ -40,7 +40,9 @@ def live_config_db(tmp_path):
             status VARCHAR,
             orb_minutes INTEGER DEFAULT 5,
             stop_multiplier DOUBLE DEFAULT 1.0,
-            fdr_significant BOOLEAN
+            fdr_significant BOOLEAN,
+            noise_risk BOOLEAN,
+            oos_exp_r DOUBLE
         )
     """)
     con.execute("""
@@ -625,6 +627,8 @@ def _mock_rolling_result(rolling_avg_expr: float) -> list[dict]:
             "median_risk_points": 5.0,
             "stop_multiplier": 1.0,
             "fdr_significant": True,
+            "noise_risk": False,
+            "oos_exp_r": 0.35,
             "rolling_avg_expectancy_r": rolling_avg_expr,
             "rolling_weighted_stability": 0.85,
         }
@@ -705,6 +709,8 @@ class TestWeightOverrideAndRecovery:
             "median_risk_points": 3.0,
             "stop_multiplier": 1.0,
             "fdr_significant": True,
+            "noise_risk": False,
+            "oos_exp_r": 0.40,
         }
         with (
             patch("trading_app.live_config.LIVE_PORTFOLIO", [_DEMOTED_WITH_RECOVERY_SPEC]),
