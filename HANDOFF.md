@@ -7,10 +7,10 @@
 ---
 
 ## Current Session
-- **Tool:** Claude Code (Pipeline Audit → Canon Lock → Interim Rebuild)
-- **Date:** 2026-03-22
+- **Tool:** Claude Code (Canonical Refresh + FDR Fix + Pipeline Status Fix + Live Spec Rebuild)
+- **Date:** 2026-03-23
 - **Branch:** `main`
-- **Status:** Full audit Layers 1-7 FROZEN. 821 validated. 16 specs. 11 strategies live-resolvable (MGC 0, MES 1, MNQ 10). noise_risk fully populated.
+- **Status:** Full canonical refresh complete. 404 validated. 8 specs. 8 MNQ live-resolvable (MGC 0, MES 0). FDR K snapshot fix applied. pipeline_status per-aperture fix applied.
 
 ### What was done this session
 
@@ -80,25 +80,48 @@
 - 4 policy constraints documented in TRADING_RULES.md "Execution Realism Constraints"
 - Signal collision priority, scratch gap, manual session focus, correlation guard
 
-### Truth State (verified Mar 22 2026)
-- **validated_setups:** 821 rows (MGC 9, MES 81, MNQ 731). All wf_passed=True, all FDR-corrected at K=105,612.
-- **family_rr_locks:** 248 rows (MGC 3, MES 40, MNQ 205).
-- **edge_families:** 241 rows (MGC 3, MES 40, MNQ 198).
-- **LIVE_PORTFOLIO:** 16 specs (10 CORE, 6 REGIME). Resolves 11 strategies (MGC 0, MES 1, MNQ 10).
-- **noise_risk:** Fully populated for all instruments. Zero NULLs.
-- **Bars:** All instruments current to 2026-03-21. MGC daily_features refreshed to 2026-03-20.
-- **ML:** Still frozen. V2 gate active. 6 bugs identified, 0 fixed.
+### What was done this session (Mar 23)
+
+#### 1. Full Canonical Refresh
+- Fixed MNQ O15/O30 outcomes (2 weeks stale: max was 2026-03-06, rebuilt to 2026-03-20)
+- Full discovery rerun (3 instruments x 3 apertures = 9 runs)
+- Full validation rerun with --fdr-k 105640 (fixed K snapshot)
+- Edge families + RR locks rebuilt
+- Result: 404 validated (MGC 6, MES 9, MNQ 389), down from 821
+
+#### 2. FDR K Fixed-Snapshot Fix
+- strategy_validator.py: added --fdr-k parameter for BH consistency across instrument runs
+- Fail-closed: RuntimeError on K mismatch, ValueError on fdr_k <= 0
+- Backward compatible: omitting --fdr-k computes from DB at runtime
+
+#### 3. pipeline_status.py Per-Aperture Fix
+- orb_outcomes staleness now checked per aperture (matching daily_features pattern)
+- Root cause of missed MNQ O15/O30 staleness: MAX(trading_day) across all apertures masked per-aperture gaps
+
+#### 4. LIVE_PORTFOLIO Spec Rebuild
+- 16 specs -> 8 specs (8 dead specs dropped, 0 added)
+- 2 CORE (CME_PRECLOSE ATR70_VOL, COMEX_SETTLE ATR70_VOL)
+- 6 REGIME (CME_PRECLOSE x4 filters, CME_REOPEN ATR70_VOL, CME_PRECLOSE ORB_G8)
+- Resolves 8 MNQ strategies. MGC/MES do not qualify under current live gates.
+
+### Truth State (verified Mar 23 2026)
+- **validated_setups:** 404 rows (MGC 6, MES 9, MNQ 389). All wf_passed=True, FDR-corrected at K=105,640.
+- **family_rr_locks:** 166 rows (MGC 2, MES 7, MNQ 157).
+- **edge_families:** 162 rows (MGC 2, MES 7, MNQ 153).
+- **LIVE_PORTFOLIO:** 8 specs (2 CORE, 6 REGIME). Resolves 8 MNQ strategies (MGC 0, MES 0).
+- **noise_risk:** Fully populated. Zero NULLs.
+- **Bars:** All instruments current to 2026-03-21. daily_features/outcomes to 2026-03-20.
+- **ML:** Still frozen. V2 gate active.
 
 ### Next Steps (for incoming session)
-1. **Layer 8** — forward test / paper trade the resolved 11-strategy portfolio
-2. **MGC edge investigation** — all 9 survivors below noise floor. MGC may be dead for ORB.
-3. **LIVE_PORTFOLIO spec review** — 5 specs resolve nothing for any instrument (dead specs)
+1. **REGIME fitness-gate audit** — rolling portfolio session-name mismatch (numeric vs event-based) means regime gate always passes through. Separate fix needed.
+2. **Layer 8** — forward test / paper trade the 8-strategy MNQ portfolio
+3. **MGC/MES edge investigation** — MGC 6 validated but all below 0.22 ExpR at locked RR. MES 9 validated but all below 0.08 ExpR. Neither qualifies under current live rules.
 
 ### Known issues
-- Post-edit drift hook fails on module import — masks drift detection during edits
-- MGC: 0 live strategies (all 9 validated below noise floor 0.21)
-- MES: only 1 live strategy (CME_PRECLOSE ATR70_VOL). Weak instrument for ORB.
-- MGC live resolution is 0 because MGC validated set (TOKYO_OPEN ORB_G4) doesn't match any live spec
+- Post-edit drift hook fails on module import (PYTHONPATH not set) — masks drift detection during edits
+- REGIME fitness gate has session-name mismatch — always resolves FIT (not gating). Flagged in live_config.py comment.
+- MGC/MES: 0 live strategies under current rules
 
 ---
 

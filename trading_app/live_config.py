@@ -131,57 +131,38 @@ INSTRUMENT_ATR_GATE: dict[str, float] = {
 
 # The live portfolio: what we actually trade.
 #
-# REBUILT 2026-03-22 from ground truth (832 validated strategies, 255 RR locks).
-# Every spec below resolves to at least one strategy through the full chain:
-#   validated_setups INNER JOIN family_rr_locks WHERE ExpR >= 0.22
-# Zero dead specs. Zero aspirational specs.
+# Each spec below is grounded in current validated_setups + family_rr_locks
+# truth and is intended to resolve under the current live resolver.
+# No dead specs. No aspirational specs.
 #
-# TIER 1 (CORE): Always on. ROBUST or WHITELISTED edge families.
-#   All FDR-significant at global K=105,612. All WF-passed.
-# TIER 2 (REGIME): Fitness-gated. PURGED or SINGLETON families.
-#   Only fires when strategy_fitness = FIT. regime_gate="high_vol".
+# MGC/MES currently do not qualify under current live resolution rules.
+# Their exclusion is driven by current validated/live gates, not forced
+# diversification choices.
 #
-# ExpR floor: 0.22 pre-filter + noise_risk flag (per-instrument p95 OOS floors).
-# Dollar gate 1.3x RT cost is the second active floor.
+# Tier selects the resolution code path (see build_live_portfolio):
+#   "core"   -> tries rolling eval first, falls back to validated_setups
+#   "regime" -> validated_setups only, fitness-gated via compute_fitness
+# Tier labels preserve existing resolver semantics. They do NOT
+# canonically derive from edge_families robustness_status.
 #
-# No instrument exclusions: all resolvable strategies are FDR-significant
-# in the current validation (K=105,612). Re-derive if K changes.
-#
-# Specs are instrument-agnostic. If a spec has no match for an instrument,
-# it emits WARN and skips gracefully.
+# NOTE: REGIME-path honesty remains subject to the known fitness-gate
+# session-name mismatch (numeric vs event-based in rolling portfolio).
+# Regime gate behavior requires separate audit.
 LIVE_PORTFOLIO = [
     # =========================================================================
-    # CORE: always-on. ROBUST or WHITELISTED families.
+    # CORE: always-on.
     # =========================================================================
-    # CME_PRECLOSE: strongest session. MES+MNQ.
     LiveStrategySpec("CME_PRECLOSE_E2_ATR70_VOL", "core", "CME_PRECLOSE", "E2", "ATR70_VOL", None),
-    LiveStrategySpec("CME_PRECLOSE_E2_VOL_RV12_N20", "core", "CME_PRECLOSE", "E2", "VOL_RV12_N20", None),
-    LiveStrategySpec("CME_PRECLOSE_E2_X_MES_ATR60", "core", "CME_PRECLOSE", "E2", "X_MES_ATR60", None),
-    LiveStrategySpec("CME_PRECLOSE_E2_X_MES_ATR70", "core", "CME_PRECLOSE", "E2", "X_MES_ATR70", None),
-    LiveStrategySpec("CME_PRECLOSE_E2_X_MGC_ATR70", "core", "CME_PRECLOSE", "E2", "X_MGC_ATR70", None),
-    # COMEX_SETTLE: MNQ ROBUST family.
     LiveStrategySpec("COMEX_SETTLE_E2_ATR70_VOL", "core", "COMEX_SETTLE", "E2", "ATR70_VOL", None),
-    # CME_REOPEN: MNQ WHITELISTED family.
-    LiveStrategySpec("CME_REOPEN_E2_ATR70_VOL", "core", "CME_REOPEN", "E2", "ATR70_VOL", None),
-    # TOKYO_OPEN: MGC's primary edge. Two independent ROBUST families (different trade-day hashes).
-    LiveStrategySpec("TOKYO_OPEN_E2_ORB_G4", "core", "TOKYO_OPEN", "E2", "ORB_G4", None),
-    LiveStrategySpec("TOKYO_OPEN_E2_ORB_G4_CONT", "core", "TOKYO_OPEN", "E2", "ORB_G4_CONT", None),
-    # BRISBANE_1025: MNQ WHITELISTED family.
-    LiveStrategySpec("BRISBANE_1025_E2_ATR70_VOL", "core", "BRISBANE_1025", "E2", "ATR70_VOL", None),
     # =========================================================================
-    # REGIME: fitness-gated. PURGED or SINGLETON families.
-    # Only active when strategy_fitness = FIT.
+    # REGIME: fitness-gated (when gate is functional -- see NOTE above).
     # =========================================================================
-    # CME_PRECLOSE: MES SINGLETON families (ORB size filters).
-    LiveStrategySpec("CME_PRECLOSE_E2_ORB_G5", "regime", "CME_PRECLOSE", "E2", "ORB_G5", "high_vol"),
-    LiveStrategySpec("CME_PRECLOSE_E2_ORB_G4", "regime", "CME_PRECLOSE", "E2", "ORB_G4", "high_vol"),
-    # CME_PRECLOSE: MNQ PURGED family.
+    LiveStrategySpec("CME_PRECLOSE_E2_VOL_RV12_N20", "regime", "CME_PRECLOSE", "E2", "VOL_RV12_N20", "high_vol"),
+    LiveStrategySpec("CME_PRECLOSE_E2_X_MES_ATR60", "regime", "CME_PRECLOSE", "E2", "X_MES_ATR60", "high_vol"),
+    LiveStrategySpec("CME_PRECLOSE_E2_X_MES_ATR70", "regime", "CME_PRECLOSE", "E2", "X_MES_ATR70", "high_vol"),
+    LiveStrategySpec("CME_PRECLOSE_E2_X_MGC_ATR70", "regime", "CME_PRECLOSE", "E2", "X_MGC_ATR70", "high_vol"),
+    LiveStrategySpec("CME_REOPEN_E2_ATR70_VOL", "regime", "CME_REOPEN", "E2", "ATR70_VOL", "high_vol"),
     LiveStrategySpec("CME_PRECLOSE_E2_ORB_G8", "regime", "CME_PRECLOSE", "E2", "ORB_G8", "high_vol"),
-    # NYSE_CLOSE: MNQ PURGED, MES SINGLETON.
-    LiveStrategySpec("NYSE_CLOSE_E2_ATR70_VOL", "regime", "NYSE_CLOSE", "E2", "ATR70_VOL", "high_vol"),
-    LiveStrategySpec("NYSE_CLOSE_E2_ORB_G6", "regime", "NYSE_CLOSE", "E2", "ORB_G6", "high_vol"),
-    # SINGAPORE_OPEN: MNQ PURGED family.
-    LiveStrategySpec("SINGAPORE_OPEN_E2_ATR70_VOL", "regime", "SINGAPORE_OPEN", "E2", "ATR70_VOL", "high_vol"),
 ]
 
 # =========================================================================
