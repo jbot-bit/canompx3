@@ -95,10 +95,8 @@ HOT_MIN_STABILITY = 0.6
 
 # Minimum expectancy per trade to include in live portfolio.
 # SQL pre-filter applied before _check_noise_floor.
-# NOTE (2026-03-22): NOISE_EXPR_FLOOR is zeroed (Phase 2b removed).
-# _check_noise_floor currently passes all strategies with ExpR > 0.
-# This 0.22 pre-filter is now the sole magnitude gate in live_config.
-# When noise_risk flag is populated, live_config should check that instead.
+# _check_noise_floor reads the pre-computed noise_risk flag from validated_setups
+# (set during validation from OOS ExpR vs per-instrument p95 null floor).
 LIVE_MIN_EXPECTANCY_R = 0.22
 
 # Minimum expected dollar profit as a multiple of round-trip transaction cost.
@@ -143,9 +141,8 @@ INSTRUMENT_ATR_GATE: dict[str, float] = {
 # TIER 2 (REGIME): Fitness-gated. PURGED or SINGLETON families.
 #   Only fires when strategy_fitness = FIT. regime_gate="high_vol".
 #
-# ExpR floor: 0.22 (INTERIM — not canon. Placeholder until noise_risk flag
-# is populated with per-instrument p95 floors. Dollar gate 1.3x RT cost
-# is the second active floor.)
+# ExpR floor: 0.22 pre-filter + noise_risk flag (per-instrument p95 OOS floors).
+# Dollar gate 1.3x RT cost is the second active floor.
 #
 # No instrument exclusions: all resolvable strategies are FDR-significant
 # in the current validation (K=105,612). Re-derive if K changes.
@@ -219,6 +216,7 @@ def _load_best_regime_variant(
                    vs.expectancy_r, vs.win_rate, vs.sample_size,
                    vs.sharpe_ratio, vs.max_drawdown_r,
                    vs.fdr_significant,
+                   vs.noise_risk, vs.oos_exp_r,
                    es.median_risk_points,
                    1.0 as stop_multiplier
             FROM validated_setups vs
@@ -348,20 +346,20 @@ def _check_rolling_stability(
 
 
 def _check_noise_floor(variant: dict) -> tuple[bool, str]:
-    """Check that variant ExpR exceeds its entry-model noise floor.
+    """Check pre-computed noise_risk flag from validated_setups.
 
-    Returns (passes, note). Strategies at or below the noise floor are
-    indistinguishable from random-walk artifacts (null test, 10 seeds).
+    Returns (passes, note). Strategies with noise_risk=True have OOS ExpR
+    at or below the per-instrument p95 null floor (indistinguishable from noise).
+    Fail-closed: if noise_risk is NULL (not yet computed), reject.
     """
-    from trading_app.config import NOISE_EXPR_FLOOR
+    noise_risk = variant.get("noise_risk")
+    oos_exp_r = variant.get("oos_exp_r")
 
-    entry_model = variant.get("entry_model", "E2")
-    expr = variant.get("expectancy_r", 0.0)
-    floor = NOISE_EXPR_FLOOR.get(entry_model, NOISE_EXPR_FLOOR.get("E2", 0.32))
-
-    if expr <= floor:
-        return False, f"ExpR={expr:.3f} <= noise floor {floor} for {entry_model}"
-    return True, f"ExpR={expr:.3f} > noise floor {floor}"
+    if noise_risk is None:
+        return False, "noise_risk not computed (NULL) — fail-closed"
+    if noise_risk:
+        return False, f"noise_risk=True (oos_ExpR={oos_exp_r:.4f})" if oos_exp_r is not None else "noise_risk=True"
+    return True, f"noise_risk=False (oos_ExpR={oos_exp_r:.4f})" if oos_exp_r is not None else "noise_risk=False"
 
 
 def _check_dollar_gate(variant: dict, instrument: str) -> tuple[bool, str]:
@@ -501,10 +499,13 @@ def build_live_portfolio(
                 notes.append(f"WARN: {spec.family_id} -- no variant found")
                 continue
 
-            passes_noise, noise_note = _check_noise_floor(match)
-            if not passes_noise:
-                notes.append(f"SKIP: {spec.family_id} -- noise floor: {noise_note}")
-                continue
+            # Noise floor check: only for baseline-sourced variants (validated_setups).
+            # Rolling-sourced variants have their own quality gates (weighted stability).
+            if source == "baseline":
+                passes_noise, noise_note = _check_noise_floor(match)
+                if not passes_noise:
+                    notes.append(f"SKIP: {spec.family_id} -- noise floor: {noise_note}")
+                    continue
 
             passes_dollar, dollar_note = _check_dollar_gate(match, instrument)
             if not passes_dollar:

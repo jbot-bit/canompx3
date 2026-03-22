@@ -499,16 +499,15 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
             except duckdb.CatalogException:
                 pass  # column already exists
 
-        # Migration: noise_risk flag (2026-03-21 — methodology audit canon lock)
-        # Post-validation flag: True if strategy ExpR <= instrument-specific p95
-        # noise floor. NOT a hard gate — computed after WF+FDR validation.
-        # STATUS: Column exists but is NOT YET POPULATED (NULL everywhere).
-        # Population logic is a separate implementation stage using
-        # config.NOISE_FLOOR_BY_INSTRUMENT. Do not assume non-NULL values.
-        try:
-            con.execute("ALTER TABLE validated_setups ADD COLUMN noise_risk BOOLEAN")
-        except duckdb.CatalogException:
-            pass  # column already exists
+        # Migration: noise_risk flag + oos_exp_r (2026-03-21 → 2026-03-22)
+        # oos_exp_r: aggregate OOS ExpR from walk-forward (fresh, post-cost).
+        # noise_risk: True if oos_exp_r <= per-instrument p95 noise floor.
+        # Post-validation flag, NOT a hard gate.
+        for col, typedef in [("noise_risk", "BOOLEAN"), ("oos_exp_r", "DOUBLE")]:
+            try:
+                con.execute(f"ALTER TABLE validated_setups ADD COLUMN {col} {typedef}")
+            except duckdb.CatalogException:
+                pass  # column already exists
 
         # Table 7: validation_run_log (Mar 2026 — Bloomey FIX 8)
         # Tracks rejection rate per phase per validation run for auditability.

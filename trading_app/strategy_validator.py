@@ -41,6 +41,7 @@ from pipeline.dst import (
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import (
     CORE_MIN_SAMPLES,
+    NOISE_FLOOR_BY_INSTRUMENT,
     REGIME_MIN_SAMPLES,
     WF_MIN_TRAIN_TRADES,
     WF_START_OVERRIDE,
@@ -1022,6 +1023,18 @@ def run_validation(
                         (wf_result_dict or {}).get("as_dict", {}).get("n_valid_windows") if wf_tested else None
                     )
                     wfe_val = (wf_result_dict or {}).get("as_dict", {}).get("wfe") if wf_tested else None
+                    oos_exp_r = (
+                        (wf_result_dict or {}).get("as_dict", {}).get("agg_oos_exp_r") if wf_tested else None
+                    )
+
+                    # noise_risk: OOS ExpR at or below per-instrument p95 null floor
+                    entry_model_key = rd.get("entry_model") or "E2"
+                    inst_floors = NOISE_FLOOR_BY_INSTRUMENT.get(instrument, {})
+                    noise_floor = inst_floors.get(entry_model_key, inst_floors.get("E2"))
+                    if oos_exp_r is not None and noise_floor is not None:
+                        noise_risk_val = oos_exp_r <= noise_floor
+                    else:
+                        noise_risk_val = None  # not computed (live_config treats as fail-closed)
 
                     con.execute(
                         """INSERT OR REPLACE INTO validated_setups
@@ -1040,8 +1053,9 @@ def run_validation(
                             dst_summer_n, dst_summer_avg_r,
                             dst_verdict,
                             wf_tested, wf_passed, wf_windows, wfe,
-                            sharpe_haircut, skewness, kurtosis_excess)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            sharpe_haircut, skewness, kurtosis_excess,
+                            oos_exp_r, noise_risk)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         [
                             sid,
                             sid,
@@ -1084,6 +1098,8 @@ def run_validation(
                             rd.get("sharpe_haircut"),
                             rd.get("skewness"),
                             rd.get("kurtosis_excess"),
+                            oos_exp_r,
+                            noise_risk_val,
                         ],
                     )
 
