@@ -61,11 +61,13 @@ def get_last_bar_date(instrument: str) -> date | None:
 
 def _run(cmd: list[str], label: str) -> bool:
     """Run a subprocess with PROJECT_ROOT as cwd. Returns True on success."""
+    env = {**os.environ, "PYTHONPATH": str(PROJECT_ROOT)}
     result = subprocess.run(
         cmd,
         capture_output=True,
         text=True,
         cwd=str(PROJECT_ROOT),
+        env=env,
     )
     if result.returncode != 0:
         print(f"  FAIL: {label} returned {result.returncode}")
