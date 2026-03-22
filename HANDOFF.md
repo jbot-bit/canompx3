@@ -10,7 +10,7 @@
 - **Tool:** Claude Code (Pipeline Audit → Canon Lock → Interim Rebuild)
 - **Date:** 2026-03-22
 - **Branch:** `main`
-- **Status:** Interim validation rebuild COMPLETE. 832 strategies validated. Downstream tables rebuilt. Live_config partially resolves (9/46 specs → 9 strategies).
+- **Status:** Interim rebuild + live_config redesign DONE. 832 validated. 16 specs from ground truth. 17 strategies live-resolvable (MGC 2, MES 4, MNQ 11).
 
 ### What was done this session
 
@@ -45,39 +45,32 @@
 - edge_families: 248 rows (MGC 10, MES 40, MNQ 198)
 - Edge family robustness: MGC 2 ROBUST, MES 2 ROBUST + 8 WHITELISTED, MNQ 61 ROBUST + 45 WHITELISTED
 
-#### 6. Live_config Resolution Test
-- MGC: 0 strategies resolved (MGC validated strategies are TOKYO_OPEN ORB_G4, but specs ask for ORB_G5_CONT/ORB_G5)
-- MES: 2 strategies (CME_PRECLOSE ORB_G5 + ATR70_VOL)
-- MNQ: 7 strategies (CME_PRECLOSE, COMEX_SETTLE, SINGAPORE_OPEN, NYSE_CLOSE)
-- 43/46 specs have matching validated strategies in DB; resolution blocked by spec-filter mismatch, not missing data
-- live_config LIVE_PORTFOLIO specs need redesign to match the actual validated inventory
+#### 6. Live_config Redesign (commit `21dca30`)
+- LIVE_PORTFOLIO rewritten: 46 dead specs → 16 ground-truth specs (10 CORE, 6 REGIME)
+- MGC: 2 strategies (TOKYO_OPEN ORB_G4 + ORB_G4_CONT, both ROBUST)
+- MES: 4 strategies (CME_PRECLOSE ATR70_VOL + ORB_G5 + ORB_G4, NYSE_CLOSE ORB_G6)
+- MNQ: 11 strategies (CME_PRECLOSE 5 filters, COMEX_SETTLE, CME_REOPEN, BRISBANE_1025, NYSE_CLOSE, SINGAPORE_OPEN)
+- PURGED/SINGLETON families placed in REGIME tier with fitness gating (D1 lock)
+- No instrument exclusions (all FDR-significant at K=105,612)
+- 2x code review: CLEAN (all specs valid, all callers generic, zero downstream breakage)
 
 ### What this is NOT
 - **Not final canon.** NOISE_EXPR_FLOOR is zeroed (interim). noise_risk not computed. MGC/MES bars 16 days stale.
 - **Not a full ground-up rebuild.** Reused existing experimental_strategies from Mar 19. Only validation re-ran.
-- **Not live-ready.** live_config specs don't match new inventory. Specs were designed for prior state.
 
 ### Truth State
 - **validated_setups:** 832 rows (MGC 20, MES 81, MNQ 731). All wf_passed=True, all FDR-corrected at K=105,612.
-- **family_rr_locks:** 255 rows. Fresh (rebuilt Mar 22 from current experimental_strategies).
-- **edge_families:** 248 rows. Fresh. MGC 2 ROBUST, MES 2+8 ROBUST/WHITELISTED, MNQ 61+45.
+- **family_rr_locks:** 255 rows. Fresh.
+- **edge_families:** 248 rows. Fresh.
+- **LIVE_PORTFOLIO:** 16 specs (10 CORE, 6 REGIME). Resolves 17 strategies (MGC 2, MES 4, MNQ 11).
 - **noise_risk:** NULL everywhere. Column exists but not computed.
 - **Bars:** MGC/MES stale (Mar 6/7). MNQ current (Mar 20).
 - **ML:** Still frozen. V2 gate active. 6 bugs identified, 0 fixed.
-- **live_config:** Resolves 9/46 specs (2 MES + 7 MNQ). MGC=0 (spec-filter mismatch). LIVE_PORTFOLIO needs redesign.
 
 ### Next Steps (for incoming session)
-Two paths, pick based on priority:
-
-**Path A: Make live_config work (trading-ready)**
-1. Redesign LIVE_PORTFOLIO specs to match actual 832-set inventory
-2. Populate noise_risk flag
-3. Verify live resolution → paper trade
-
-**Path B: Full upstream refresh (data completeness)**
-1. Ingest fresh MGC/MES bars (16 days stale)
-2. Rebuild 5m bars → features → outcomes
-3. Re-run discovery + validation on fresh data
+1. **Populate noise_risk flag** — compute from NOISE_FLOOR_BY_INSTRUMENT on validated_setups
+2. **Upstream refresh** — ingest fresh MGC/MES bars → rebuild chain
+3. **Paper trade** — run paper_trader on resolved portfolio
 4. Then Path A
 
 Path A is faster and gets the book live sooner. Path B is more thorough. Either is valid.
