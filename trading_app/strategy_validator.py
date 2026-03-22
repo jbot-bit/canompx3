@@ -650,6 +650,7 @@ def run_validation(
     wf_output_path: str = "data/walkforward_results.jsonl",
     enable_regime_waivers: bool = True,
     workers: int | None = None,
+    fdr_k: int | None = None,
 ) -> tuple[int, int]:
     """
     Validate all experimental_strategies and promote passing ones.
@@ -658,6 +659,9 @@ def run_validation(
     """
     import os
     from concurrent.futures import ProcessPoolExecutor, as_completed
+
+    if fdr_k is not None and fdr_k <= 0:
+        raise ValueError(f"fdr_k must be a positive integer, got {fdr_k}")
 
     if db_path is None:
         db_path = GOLD_DB_PATH
@@ -1128,8 +1132,18 @@ def run_validation(
                        AND p_value IS NOT NULL""",
                 ).fetchall()
                 p_value_list = [(r[0], r[1]) for r in all_p_values]
+                db_k = len(p_value_list)
+                if fdr_k is not None:
+                    if db_k != fdr_k:
+                        raise RuntimeError(
+                            f"FDR K mismatch: --fdr-k={fdr_k} but DB has {db_k} canonical "
+                            f"strategies. K must be fixed across a validation batch. "
+                            f"Re-run discovery or pass the correct --fdr-k."
+                        )
+                    global_k = fdr_k
+                else:
+                    global_k = db_k
                 fdr_results = benjamini_hochberg(p_value_list, alpha=0.05)
-                global_k = len(p_value_list)
 
                 n_fdr_sig = 0
                 n_fdr_rejected = 0
@@ -1380,6 +1394,13 @@ def main():
         default=None,
         help="Parallel workers for walkforward (default: min(8, cpu_count-1), 1=serial)",
     )
+    parser.add_argument(
+        "--fdr-k",
+        type=int,
+        default=None,
+        help="Fixed FDR K (total canonical strategies). Pre-compute once, pass to all "
+        "instrument runs for BH consistency. If omitted, computed from DB at runtime.",
+    )
     args = parser.parse_args()
 
     exclude = set(args.exclude_years) if args.exclude_years else None
@@ -1404,6 +1425,7 @@ def main():
         wf_min_pct_positive=args.wf_min_pct_positive,
         enable_regime_waivers=not args.no_regime_waivers,
         workers=args.workers,
+        fdr_k=args.fdr_k,
     )
 
 
