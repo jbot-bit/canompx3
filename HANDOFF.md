@@ -10,7 +10,7 @@
 - **Tool:** Claude Code (Pipeline Audit → Canon Lock → Interim Rebuild)
 - **Date:** 2026-03-22
 - **Branch:** `main`
-- **Status:** Interim rebuild + live_config redesign DONE. 832 validated. 16 specs from ground truth. 17 strategies live-resolvable (MGC 2, MES 4, MNQ 11).
+- **Status:** Full audit Layers 1-7 FROZEN. 821 validated. 16 specs. 11 strategies live-resolvable (MGC 0, MES 1, MNQ 10). noise_risk fully populated.
 
 ### What was done this session
 
@@ -54,30 +54,50 @@
 - No instrument exclusions (all FDR-significant at K=105,612)
 - 2x code review: CLEAN (all specs valid, all callers generic, zero downstream breakage)
 
-### What this is NOT
-- **Not final canon.** NOISE_EXPR_FLOOR is zeroed (interim). noise_risk not computed. MGC/MES bars 16 days stale.
-- **Not a full ground-up rebuild.** Reused existing experimental_strategies from Mar 19. Only validation re-ran.
+### What was done this session (continued — Mar 22 evening)
 
-### Truth State
-- **validated_setups:** 832 rows (MGC 20, MES 81, MNQ 731). All wf_passed=True, all FDR-corrected at K=105,612.
-- **family_rr_locks:** 255 rows. Fresh.
-- **edge_families:** 248 rows. Fresh.
-- **LIVE_PORTFOLIO:** 16 specs (10 CORE, 6 REGIME). Resolves 17 strategies (MGC 2, MES 4, MNQ 11).
-- **noise_risk:** NULL everywhere. Column exists but not computed.
-- **Bars:** MGC/MES stale (Mar 6/7). MNQ current (Mar 20).
+#### 7. noise_risk Implementation (commit `324b3a5`)
+- Added `oos_exp_r` (DOUBLE) + `noise_risk` (BOOLEAN) to validated_setups
+- Computed from WF `agg_oos_exp_r` vs per-instrument p95 null floor
+- live_config `_check_noise_floor` reads pre-computed flag (fail-closed on NULL)
+- Rolling-sourced strategies bypass noise check (own quality gates)
+
+#### 8. Full Revalidation (all instruments)
+- MES: 81/81 passed. 78 noise_risk=True, 3 clean (CME_PRECLOSE ATR70_VOL cluster)
+- MNQ: 731/731 passed. 671 noise_risk=True, 60 clean
+- MGC: 9/20 passed (11 rejected Phase 3 — yearly robustness with fresh data). 9/9 noise_risk=True (all below 0.21 floor)
+
+#### 9. Layer 1-6 Audit (full retroactive)
+- Layer 1 (Data): SURVIVED. Zero duplicates, no lookahead, correct TZ handling
+- Layer 2 (Outcomes): SURVIVED. Cost model verified from raw arithmetic. Scratch conservative bias noted (+0.40R avg net excursion)
+- Layer 3 (Discovery): SURVIVED. No redefinitions, full grid written, FDR correct
+- Layer 4 (Validation): SURVIVED. WF anchored expanding, no leakage, FDR hard gate at global K=105,612
+- Layer 5 (noise_risk): Implemented and verified
+- Layer 6 (Portfolio): FROZEN. 11 active strategies (MES 1, MNQ 10, MGC 0)
+
+#### 10. Layer 7 (Execution Realism): FROZEN
+- No code bugs found
+- 4 policy constraints documented in TRADING_RULES.md "Execution Realism Constraints"
+- Signal collision priority, scratch gap, manual session focus, correlation guard
+
+### Truth State (verified Mar 22 2026)
+- **validated_setups:** 821 rows (MGC 9, MES 81, MNQ 731). All wf_passed=True, all FDR-corrected at K=105,612.
+- **family_rr_locks:** 248 rows (MGC 3, MES 40, MNQ 205).
+- **edge_families:** 241 rows (MGC 3, MES 40, MNQ 198).
+- **LIVE_PORTFOLIO:** 16 specs (10 CORE, 6 REGIME). Resolves 11 strategies (MGC 0, MES 1, MNQ 10).
+- **noise_risk:** Fully populated for all instruments. Zero NULLs.
+- **Bars:** All instruments current to 2026-03-21. MGC daily_features refreshed to 2026-03-20.
 - **ML:** Still frozen. V2 gate active. 6 bugs identified, 0 fixed.
 
 ### Next Steps (for incoming session)
-1. **Populate noise_risk flag** — compute from NOISE_FLOOR_BY_INSTRUMENT on validated_setups
-2. **Upstream refresh** — ingest fresh MGC/MES bars → rebuild chain
-3. **Paper trade** — run paper_trader on resolved portfolio
-4. Then Path A
-
-Path A is faster and gets the book live sooner. Path B is more thorough. Either is valid.
+1. **Layer 8** — forward test / paper trade the resolved 11-strategy portfolio
+2. **MGC edge investigation** — all 9 survivors below noise floor. MGC may be dead for ORB.
+3. **LIVE_PORTFOLIO spec review** — 5 specs resolve nothing for any instrument (dead specs)
 
 ### Known issues
 - Post-edit drift hook fails on module import — masks drift detection during edits
-- 3 live specs have 0 matching validated strategies (dead specs: CME_REOPEN ORB_G4_FAST10, CME_REOPEN ORB_G5, TOKYO_OPEN E1 ORB_G5_FAST10)
+- MGC: 0 live strategies (all 9 validated below noise floor 0.21)
+- MES: only 1 live strategy (CME_PRECLOSE ATR70_VOL). Weak instrument for ORB.
 - MGC live resolution is 0 because MGC validated set (TOKYO_OPEN ORB_G4) doesn't match any live spec
 
 ---
