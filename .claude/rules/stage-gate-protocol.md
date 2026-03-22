@@ -1,12 +1,36 @@
-# Stage-Gate Protocol
+# Stage-Gate Protocol (AUTO-ENFORCED)
 
-Before any non-trivial work, check `docs/runtime/STAGE_STATE.md`:
-- Exists with active stage? → verify mode matches intent, continue or reclassify
-- Missing? → run /stage-gate to classify first
-- Stale? → check drift first (git log on scope files), age second (>4h fallback)
+## On every user message, you receive stage context via hook output:
+- `stage: none` → no active stage
+- `stage: TRIVIAL | task description` → quick fix in progress
+- `stage: IMPLEMENTATION | task | (1/2)` → staged work in progress
 
-Trivial work (≤2 non-core files, mechanical, obvious acceptance) → /stage-gate writes TRIVIAL state.
-Core files (pipeline logic, config, schema, validation, session, DB-write) can NEVER be TRIVIAL.
+## Automatic behaviors (no user action needed):
 
-Do NOT edit production code (pipeline/, trading_app/, protected scripts/) without an active STAGE_STATE.
-Do NOT commit STAGE_STATE.md alone — bundle with stage code changes at checkpoints only.
+**If stage = none AND user asks for non-trivial work:**
+→ Classify the task yourself. Write STAGE_STATE.md BEFORE editing any production code.
+→ For trivial fixes on non-core files, the hook auto-creates TRIVIAL state.
+→ For core files, write a proper STAGE_STATE with scope_lock.
+
+**If stage = IMPLEMENTATION AND user asks about something else:**
+→ Note: "You have an active stage: [task]. Continue, or reclassify?"
+→ Don't silently abandon the active stage.
+
+**If stage = TRIVIAL AND user starts a bigger task:**
+→ Delete the TRIVIAL state. Reclassify via full staging.
+
+## What counts as production code (hook-enforced):
+pipeline/, trading_app/, scripts/ (except reports/infra/gen_*)
+
+## Core files (NEVER TRIVIAL — hook enforces):
+Pipeline logic, config, schema, validation, session, DB-write paths.
+See NEVER_TRIVIAL list in `.claude/hooks/stage-gate-guard.py`.
+
+## Stale detection (drift-first):
+1. Git log on scope files since last update → if changed → STALE
+2. >4 hours since update → AGE STALE (fallback)
+
+## Token efficiency:
+- TRIVIAL state = 3 lines. Don't over-document quick fixes.
+- Stage awareness hook = 1 line per message. Minimal overhead.
+- Don't re-read STAGE_STATE.md if the hook already told you the mode.
