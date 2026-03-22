@@ -65,6 +65,18 @@
           }
         ]
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/stage-awareness.py",
+            "timeout": 3
+          }
+        ]
+      }
     ]
   },
   "enabledPlugins": {
