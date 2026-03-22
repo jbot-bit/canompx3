@@ -32,6 +32,8 @@ Frozen specs (`CANONICAL_*.txt`) → read-only; live code is truth.
 
 **Cross-tool state:** Shared decisions live in `HANDOFF.md` and `docs/plans/`, not in Claude-private memory. Read `HANDOFF.md` on session start. For parallel work, prefer `scripts/infra/claude-worktree.sh open <task>` instead of sharing one mutable branch with Codex. See `AGENTS.md` § Cross-Tool Coordination.
 
+**Staleness rule:** `HANDOFF.md`, `docs/plans/`, memory notes, and prior session summaries capture intent and coordination state — but they may be stale. They are NOT authoritative over live code, current DB state, canonical config modules, or current command output. If a doc's claims about state contradict the repo/DB → repo/DB is truth; explicitly report the contradiction.
+
 ---
 
 ## Architecture
@@ -86,6 +88,24 @@ Five layers enforce quality: pre-commit hook (`.githooks/pre-commit`), drift det
 
 ### Research Provenance Rule
 Config values derived from research (e.g. `EARLY_EXIT_MINUTES`) must include `@research-source`, `@entry-models`, and `@revalidated-for` annotations. Drift check #45 enforces this. When entry models change, re-validate all research-derived values against the new model before citing them as validated.
+
+### Source-of-Truth Chain Rule
+For any audit, debugging, or research task:
+- First identify the canonical source of truth for the layer being examined
+- Verify whether each downstream file/module/table derives from that source or silently redefines it
+- If the source-of-truth itself may be wrong, audit upstream first before touching downstream
+- Never patch downstream behavior to compensate for suspected upstream corruption
+
+### Local Academic / Project-Source Grounding Rule
+For methodological, statistical, validation, monitoring, execution-realism, or prop-rule claims:
+- Prefer local project sources and local academic PDFs/books in the project directory (including `resources/` if present) over generic model memory
+- Use local sources to test rigor, detect drift, and challenge weak assumptions
+- For nontrivial methodological claims, name the local source(s) consulted when relevant
+- If project canon and an academic source differ, project canon governs implementation; academic source is used as adversarial reference material
+- If no local source supports a claim, say UNSUPPORTED rather than improvising
+
+### Audit-First Default for Research Layers
+For research pipeline layers (data integrity, outcomes, discovery, validation, noise/significance, portfolio construction, execution realism, monitoring): default workflow is **audit → adversarial audit → fix → rerun → freeze layer → move on**. Do not skip to implementation when truth-state is unverified. Do not advance to the next layer until the current layer is explicitly frozen or blocked upstream.
 
 ### 2-Pass Implementation Method (MANDATORY)
 Every non-trivial code change follows two passes:
