@@ -3351,6 +3351,44 @@ def check_symbol_instrument_sql_convention() -> list[str]:
     return violations
 
 
+def check_holdout_contamination(con=None) -> list[str]:
+    """Detect 2026 holdout contamination in pre-registered instruments.
+
+    Pre-registration: docs/pre-registrations/2026-03-20-mnq-rr1-verified-sessions.md
+    Rule: discovery must not be re-run with 2026 data after the holdout was declared.
+    Detection: experimental_strategies rows created after pre-registration date
+    that contain 2026 trade data in yearly_results.
+    """
+    from datetime import datetime, timezone
+
+    violations = []
+    if con is None:
+        return violations
+
+    # Pre-registration dates by instrument (extend when new holdouts declared)
+    HOLDOUT_DECLARATIONS = {
+        "MNQ": datetime(2026, 3, 20, 0, 0, 0, tzinfo=timezone.utc),
+    }
+
+    for instrument, declaration_date in HOLDOUT_DECLARATIONS.items():
+        contaminated = con.execute(
+            """SELECT COUNT(*) FROM experimental_strategies
+               WHERE instrument = ?
+               AND created_at > ?
+               AND yearly_results LIKE '%"2026"%'""",
+            [instrument, declaration_date],
+        ).fetchone()[0]
+        if contaminated > 0:
+            violations.append(
+                f"  HOLDOUT CONTAMINATION: {instrument} has {contaminated} experimental_strategies "
+                f"created after {declaration_date.date()} containing 2026 trade data. "
+                f"Discovery was re-run without --holdout-date. "
+                f"Pre-registration: docs/pre-registrations/2026-03-20-mnq-rr1-verified-sessions.md"
+            )
+
+    return violations
+
+
 # Each entry: (description, callable, is_advisory).
 # is_advisory=True → prints warnings but never blocks (shown as ADVISORY).
 # Check number is derived from position (1-indexed).
@@ -3548,6 +3586,12 @@ CHECKS = [
     (
         "No validated strategies below entry-model noise floor (null test 2026-03-19, 100 seeds)",
         check_noise_floor_compliance,
+        False,
+        True,
+    ),  # requires_db
+    (
+        "2026 holdout not contaminated (pre-registered strategies sacred)",
+        check_holdout_contamination,
         False,
         True,
     ),  # requires_db
