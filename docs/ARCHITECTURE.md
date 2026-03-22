@@ -25,15 +25,17 @@ Databento .dbn.zst files
 
 Several instruments use full-size contract data for better 1m bar coverage. Full-size and micro contracts trade at identical prices on the same exchange — only the multiplier differs. Pipeline stores under the micro symbol; `source_symbol` records the actual contract.
 
-| Stored Symbol | Source Contracts | Reason | Cost Model |
-|--------------|-----------------|--------|------------|
-| MGC | GC (full gold) | Better 1m coverage than MGC | MGC ($10/pt) |
-| MES | ES (pre-Feb 2024), then native MES | ES has data back to 2019 | MES ($5/pt) |
-| M2K | RTY (E-mini Russell) | RTY has better coverage | M2K ($5/pt) |
-| M6E | 6E (full EUR/USD) | 6E has better coverage | M6E ($12,500/pt) |
-| SIL | SI (full silver) | SI has better coverage | SIL ($1,000/pt) |
-| MNQ | MNQ (native micro) | No mapping needed | MNQ ($2/pt) |
-| MCL | CL (full crude oil) | Better 1m coverage than MCL | MCL ($100/pt) |
+**Active instruments (Mar 2026): MGC, MNQ, MES.** Dead for ORB: M2K, MCL, SIL, M6E, MBT.
+
+| Stored Symbol | Source Contracts | Reason | Cost Model | Status |
+|--------------|-----------------|--------|------------|--------|
+| MGC | GC (full gold) | Better 1m coverage than MGC | MGC ($10/pt) | **ACTIVE** |
+| MES | ES (pre-Feb 2024), then native MES | ES has data back to 2019 | MES ($5/pt) | **ACTIVE** |
+| MNQ | MNQ (native micro) | No mapping needed | MNQ ($2/pt) | **ACTIVE** |
+| M2K | RTY (E-mini Russell) | RTY has better coverage | M2K ($5/pt) | DEAD — 0/18 families survive null test (Mar 2026) |
+| M6E | 6E (full EUR/USD) | 6E has better coverage | M6E ($12,500/pt) | DEAD — 0/2064 validated (Feb 2026) |
+| SIL | SI (full silver) | SI has better coverage | SIL ($1,000/pt) | DEAD — 0/432 validated (Feb 2026) |
+| MCL | CL (full crude oil) | Better 1m coverage than MCL | MCL ($100/pt) | DEAD — 0 validated |
 
 ## Key Commands
 

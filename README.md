@@ -1,6 +1,6 @@
 # Canompx3 — Multi-Instrument Futures ORB Trading Pipeline
 
-Self-contained data pipeline and backtesting engine for Opening Range Breakout (ORB) strategies on micro futures (MGC, MNQ, MES, M2K). 10 years of 1-minute bar data, validated strategies across 5/15/30m ORB apertures, fully automated guardrails. See TRADING_RULES.md for current counts.
+Self-contained data pipeline and backtesting engine for Opening Range Breakout (ORB) strategies on micro futures (MGC, MNQ, MES). 10 years of 1-minute bar data, validated strategies across 5/15/30m ORB apertures, fully automated guardrails. Dead for ORB: MCL, SIL, M6E, MBT, M2K. See TRADING_RULES.md for current counts.
 
 ## Quick Start
 
