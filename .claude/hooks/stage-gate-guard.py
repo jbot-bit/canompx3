@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage-gate guard v2.2: hard-blocks production edits outside approved scope.
+"""Stage-gate guard v2.3: hard-blocks production edits outside approved scope.
 
 Enforcement layers:
 1. Explicitly safe files → pass
@@ -7,17 +7,15 @@ Enforcement layers:
 3. Production code → requires STAGE_STATE.md with correct mode + scope
 4. NEVER_TRIVIAL files → cannot use TRIVIAL mode
 
-v2.2 fixes (from code review):
-- Scope lock parser handles both markdown (## Scope Lock) and YAML (scope_lock:) formats
-- Removed Path.name fallback in scope matching (was a bypass vector)
-- Directory entries in scope_lock now match files inside them via startswith
-- ALWAYS_ALLOWED test_ check moved to filename-only (was matching backtest_*.py)
-- SAFE_SCRIPT_PREFIXES uses startswith only (removed substring fallback)
-- NEVER_TRIVIAL expanded: execution_engine, risk_manager, paper_trader, walkforward, etc.
+v2.3 fixes (from simulation):
+- F1: Auto-creates TRIVIAL STAGE_STATE for non-core files when no state exists
+- F2: IMPLEMENTATION without scope_lock → blocks (was wide-open)
+- F3: Better error messages with exact remediation steps
 """
 
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 STAGE_STATE = Path("docs/runtime/STAGE_STATE.md")
@@ -209,10 +207,29 @@ def main():
     # ── Layer 3: Production code — enforce stage gate ─────────────────
 
     if not STAGE_STATE.exists():
+        # F1 fix: Auto-create TRIVIAL state for non-core files
+        # This eliminates the 2-step friction for quick fixes
+        is_core = any(marker in file_path for marker in NEVER_TRIVIAL)
+        if not is_core:
+            STAGE_STATE.parent.mkdir(parents=True, exist_ok=True)
+            now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            STAGE_STATE.write_text(
+                f"---\ntask: auto-trivial edit of {file_path}\n"
+                f"mode: TRIVIAL\nscope: [{file_path}]\n"
+                f"updated: {now}\nterminal: auto\n---\n",
+                encoding="utf-8",
+            )
+            print(
+                f"STAGE-GATE: Auto-created TRIVIAL state for {file_path}.\n"
+                f"  Non-core file — proceeding. Delete docs/runtime/STAGE_STATE.md when done.",
+                file=sys.stderr,
+            )
+            sys.exit(0)
+        # Core file with no state — hard block
         print(
-            "STAGE-GATE BLOCK: No active stage.\n"
-            "  Run /stage-gate to classify before editing production code.\n"
-            "  For quick mechanical fixes: /stage-gate trivial fix in [filename]",
+            f"STAGE-GATE BLOCK: No active stage. {file_path} is a core file.\n"
+            f"  Core files cannot use TRIVIAL mode — full staging required.\n"
+            f"  → Run /stage-gate to classify and create an approved stage.",
             file=sys.stderr,
         )
         sys.exit(2)
@@ -254,16 +271,26 @@ def main():
 
     # ── IMPLEMENTATION mode — check scope lock ────────────────────────
     scope_lock = parse_scope_lock(content)
-    if scope_lock:
-        if not matches_scope(file_path, scope_lock):
-            print(
-                f"STAGE-GATE BLOCK: {file_path} not in scope_lock.\n"
-                f"  Allowed: {', '.join(scope_lock)}\n"
-                f"  → Add to scope_lock in docs/runtime/STAGE_STATE.md if needed\n"
-                f"  → Otherwise this is scope creep — defer to later stage",
-                file=sys.stderr,
-            )
-            sys.exit(2)
+    if not scope_lock:
+        # F2 fix: No scope_lock = no contract. Block to prevent wide-open edits.
+        print(
+            f"STAGE-GATE BLOCK: IMPLEMENTATION mode but no scope_lock defined.\n"
+            f"  STAGE_STATE.md must list allowed files in a ## Scope Lock section.\n"
+            f"  → Add scope_lock to docs/runtime/STAGE_STATE.md\n"
+            f"  → Or reclassify: /stage-gate (which writes scope automatically)",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    if not matches_scope(file_path, scope_lock):
+        print(
+            f"STAGE-GATE BLOCK: {file_path} not in scope_lock.\n"
+            f"  Allowed: {', '.join(scope_lock)}\n"
+            f"  → Edit docs/runtime/STAGE_STATE.md to add this file if genuinely needed\n"
+            f"  → Otherwise defer to a later stage (scope creep)",
+            file=sys.stderr,
+        )
+        sys.exit(2)
 
     sys.exit(0)
 

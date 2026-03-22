@@ -118,6 +118,7 @@ When stage work is done:
    - Do NOT commit on every in-flight update — only at checkpoints
 4. **STOP. Do not auto-proceed.**
 5. User says "next" → write next stage to STAGE_STATE.md → preflight → execute
+6. If ALL stages are done → delete `docs/runtime/STAGE_STATE.md` (cleanup — prevents stale state lingering)
 
 ## HARD RULES
 - No implementation without an approved stage in STAGE_STATE.md
