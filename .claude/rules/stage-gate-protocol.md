@@ -30,6 +30,12 @@ See NEVER_TRIVIAL list in `.claude/hooks/stage-gate-guard.py`.
 1. Git log on scope files since last update → if changed → STALE
 2. >4 hours since update → AGE STALE (fallback)
 
+## Mid-execution discipline:
+When a script or command fails during execution:
+- Fix the infrastructure (import, env, path) → resume the plan
+- Do NOT change behavior (rewrite flow, replace scripts with manual steps, rework pipeline)
+- If the fix requires a system change → STOP, flag it, return to user
+
 ## Token efficiency:
 - TRIVIAL state = 3 lines. Don't over-document quick fixes.
 - Stage awareness hook = 1 line per message. Minimal overhead.

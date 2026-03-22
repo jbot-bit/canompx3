@@ -34,6 +34,11 @@ STAGE [N] COMPLETE
   NEXT: Stage [N+1]: [description]
 ```
 
+## MID-EXECUTION: FIX INFRA, NEVER CHANGE BEHAVIOR
+If a script fails: fix the import/env/path, then resume the plan.
+Do NOT replace a failing script with manual pipeline steps. That changes behavior and invalidates the run.
+If the fix requires a system change → STOP and report back.
+
 ## WHAT YOU REFUSE
 - Editing files not in scope_lock (report the dependency instead)
 - "While I'm here" improvements
