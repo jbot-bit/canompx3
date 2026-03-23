@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from trading_app.live.position_tracker import PositionTracker
+from trading_app.live.position_tracker import PositionState, PositionTracker
 from trading_app.live.session_orchestrator import SessionOrchestrator
 from trading_app.portfolio import Portfolio, PortfolioStrategy
 
@@ -895,6 +895,20 @@ class TestCircuitBreaker:
         assert len(exit_failed) == 1
         assert "broker dead" in exit_failed[0]["error"]
 
+    async def test_exit_failure_leaves_pending_exit_state(self):
+        """Failed exit keeps position in PENDING_EXIT — honest broker state."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=1)
+        orch._positions.on_entry_filled(STRATEGY_ID, 2350.0)
+        orch.order_router.submit = MagicMock(side_effect=ConnectionError("broker dead"))
+
+        await orch._handle_event(_exit_event(2355.0))
+
+        # Position must still exist and be in PENDING_EXIT
+        record = orch._positions.get(STRATEGY_ID)
+        assert record is not None, "Position should not be deleted after failed exit"
+        assert record.state == PositionState.PENDING_EXIT
+
 
 # ---------------------------------------------------------------------------
 # NOTIFICATION tests
@@ -1001,6 +1015,35 @@ class TestTradingDayRollover:
 
         # No EOD call since we didn't roll
         orch.engine.on_trading_day_end.assert_not_called()
+
+    async def test_rollover_close_failure_detects_orphans(self):
+        """Rollover close failure → orphan detection logs CRITICAL + notifies."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._notify = MagicMock()
+        orch.trading_day = date(2026, 3, 6)
+
+        # Put a position in the tracker (simulating an open trade)
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=1)
+        orch._positions.on_entry_filled(STRATEGY_ID, 2350.0)
+
+        # Make _handle_event fail for the rollover close
+        orch._handle_event = AsyncMock(side_effect=ConnectionError("broker unreachable"))
+
+        exit_event = _exit_event(price=2355.0)
+        orch.engine.on_trading_day_end.return_value = [exit_event]
+
+        bar_ts = datetime(2026, 3, 6, 23, 1, tzinfo=UTC)
+        with patch.object(SessionOrchestrator, "_build_daily_features_row", return_value={}):
+            await orch._check_trading_day_rollover(bar_ts)
+
+        # Position should still be in tracker (orphaned)
+        orphan = orch._positions.get(STRATEGY_ID)
+        assert orphan is not None, "Orphaned position should survive rollover"
+
+        # Notification should mention orphan
+        notify_calls = [c[0][0] for c in orch._notify.call_args_list]
+        orphan_msgs = [m for m in notify_calls if "ORPHAN" in m]
+        assert len(orphan_msgs) >= 1, f"Expected ORPHAN notification, got: {notify_calls}"
 
 
 # ---------------------------------------------------------------------------
