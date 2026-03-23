@@ -56,6 +56,7 @@ ASSET_CONFIGS = {
             "CME_PRECLOSE",
             "NYSE_CLOSE",
         ],
+        "orb_active": False,  # 0 validated, NO ORB edge (Mar 2026)
     },
     "MGC": {
         # Source data is GC (full-size Gold, $100/pt) — same price, stored as symbol='MGC'.

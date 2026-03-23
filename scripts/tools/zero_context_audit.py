@@ -8,6 +8,8 @@ import sys
 
 import duckdb
 import numpy as np
+
+from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from scipy import stats
 
 sys.path.insert(0, ".")
@@ -34,23 +36,15 @@ p("# Costs: included in pnl_r (MGC $5.74, MNQ $2.74, MES $3.74 round-trip)")
 p("# All p-values: one-sample t-test, H0: mean_R = 0")
 p()
 
-sessions = [
-    r[0]
-    for r in con.execute(
-        "SELECT DISTINCT orb_label FROM orb_outcomes ORDER BY orb_label"
-    ).fetchall()
-]
+sessions = [r[0] for r in con.execute("SELECT DISTINCT orb_label FROM orb_outcomes ORDER BY orb_label").fetchall()]
 
 # --- Section 1: Unfiltered baseline ---
 p("## 1. UNFILTERED BASELINE (ALL ORB sizes, E2 CB1 RR2.0 O5)")
 p()
-p(
-    f"{'Inst':5s} {'Session':20s} {'N':>6s} {'MeanR':>8s} {'StdR':>7s} "
-    f"{'WinR':>6s} {'t':>7s} {'p':>10s} {'Yrs':>4s}"
-)
+p(f"{'Inst':5s} {'Session':20s} {'N':>6s} {'MeanR':>8s} {'StdR':>7s} {'WinR':>6s} {'t':>7s} {'p':>10s} {'Yrs':>4s}")
 p("-" * 80)
 
-for inst in ["MGC", "MNQ", "MES"]:
+for inst in sorted(ACTIVE_ORB_INSTRUMENTS):
     for sess in sessions:
         rows = con.execute(
             """SELECT pnl_r, EXTRACT(YEAR FROM trading_day) as yr
@@ -78,7 +72,7 @@ p("## 2. BH FDR CORRECTION (all instruments x sessions x RR1.0-4.0)")
 p()
 
 all_tests = []
-for inst in ["MGC", "MNQ", "MES"]:
+for inst in sorted(ACTIVE_ORB_INSTRUMENTS):
     for sess in sessions:
         for rr in [1.0, 1.5, 2.0, 2.5, 3.0, 4.0]:
             rows = con.execute(
@@ -141,13 +135,10 @@ for t in sorted(neg_surv, key=lambda x: x["mean_r"]):
 p()
 p("## 3. G4 FILTER IMPACT (ORB >= 4 points, E2 CB1 RR2.0 O5)")
 p()
-p(
-    f"{'Inst':5s} {'Session':20s} {'N_raw':>6s} {'R_raw':>8s} "
-    f"{'N_g4':>6s} {'R_g4':>8s} {'Delta':>8s} {'p_g4':>10s}"
-)
+p(f"{'Inst':5s} {'Session':20s} {'N_raw':>6s} {'R_raw':>8s} {'N_g4':>6s} {'R_g4':>8s} {'Delta':>8s} {'p_g4':>10s}")
 p("-" * 78)
 
-for inst in ["MGC", "MNQ", "MES"]:
+for inst in sorted(ACTIVE_ORB_INSTRUMENTS):
     for sess in sessions:
         try:
             raw = con.execute(
@@ -244,7 +235,7 @@ p(f"  Positive survivors: {len(pos_surv)}")
 by_inst = {}
 for t in pos_surv:
     by_inst[t["inst"]] = by_inst.get(t["inst"], 0) + 1
-for inst in ["MGC", "MNQ", "MES"]:
+for inst in sorted(ACTIVE_ORB_INSTRUMENTS):
     p(f"    {inst}: {by_inst.get(inst, 0)}")
 p(f"  Negative survivors: {len(neg_surv)}")
 

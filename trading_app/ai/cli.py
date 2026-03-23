@@ -13,6 +13,8 @@ import os
 import sys
 from pathlib import Path
 
+from pipeline.paths import GOLD_DB_PATH
+
 # Fix Windows cp1252 console encoding -- replace unencodable chars
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding=sys.stdout.encoding, errors="replace")
@@ -35,7 +37,7 @@ def main():
     parser.add_argument("query", help="Question in plain English")
     parser.add_argument(
         "--db",
-        default=str(Path(__file__).parent.parent.parent / "gold.db"),
+        default=str(GOLD_DB_PATH),
         help="Path to DuckDB database (default: gold.db)",
     )
     parser.add_argument(
