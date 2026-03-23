@@ -236,7 +236,7 @@ class ExecutionEngine:
             vol_scalar = 1.0
             logger.warning(
                 "vol_scalar=1.0 fallback for %s — daily_features missing or ATR null (atr_20=%s, median=%s)",
-                self._instrument,
+                self.portfolio.instrument,
                 atr_20,
                 median_atr_20,
             )

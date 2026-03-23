@@ -289,6 +289,18 @@ def _jk_fallback_rr(
     best_note = None
 
     for locked_rr, locked_sharpe, locked_n, locked_expr, orb_min, cb in lock_rows:
+        # NULL guard — JK test requires non-null Sharpe and sample size
+        if locked_sharpe is None or locked_n is None:
+            log.warning(
+                "JK fallback skipped for %s/%s (orb_min=%s, cb=%s): locked Sharpe=%s, N=%s",
+                instrument,
+                orb_label,
+                orb_min,
+                cb,
+                locked_sharpe,
+                locked_n,
+            )
+            continue
         # Get all validated RR levels for this exact sub-family that pass LIVE_MIN.
         # No ORDER BY sharpe_ratio here — JK filtering + best-pick done in Python
         # to avoid drift check #44 false positive (Sharpe ORDER BY is intentional
@@ -331,6 +343,8 @@ def _jk_fallback_rr(
             candidate = dict(zip(alt_cols, row, strict=False))
             cand_sharpe = candidate["sharpe_ratio"]
             cand_n = candidate["sample_size"]
+            if cand_sharpe is None or cand_n is None:
+                continue
 
             jk_p = jobson_korkie_p(
                 locked_sharpe,
