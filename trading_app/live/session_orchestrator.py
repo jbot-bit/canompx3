@@ -722,6 +722,7 @@ class SessionOrchestrator:
                 qty=event.contracts,
             )
             if bracket is None:
+                log.warning("Bracket spec returned None for %s — NO CRASH PROTECTION", event.strategy_id)
                 return
             loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(None, self.order_router.submit, bracket)
