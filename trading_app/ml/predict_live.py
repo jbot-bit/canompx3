@@ -353,9 +353,8 @@ class LiveMLPredictor:
                     orb_minutes,
                 )
                 self.fail_open_count += 1
-                result = MLPrediction(p_win=0.5, take=True, threshold=0.5)
-                self._prediction_cache[cache_key] = result
-                return result
+                # Do NOT cache — daily_features may arrive later (transient)
+                return MLPrediction(p_win=0.5, take=True, threshold=0.5)
 
             # Step 2: Build single-row DataFrame matching training format
             df = pd.DataFrame([daily_row])
@@ -432,9 +431,8 @@ class LiveMLPredictor:
                 exc_info=True,
             )
             self.fail_open_count += 1
-            result = MLPrediction(p_win=0.5, take=True, threshold=0.5)
-            self._prediction_cache[cache_key] = result
-            return result
+            # Do NOT cache — exception may be transient (DB lock, numpy error)
+            return MLPrediction(p_win=0.5, take=True, threshold=0.5)
 
     def _get_daily_features(
         self,
@@ -470,9 +468,7 @@ class LiveMLPredictor:
             # Backfill global features from orb_minutes=5 if needed.
             # Check multiple features — atr_20 may exist at O15 while
             # prev_day_range/atr_vel_ratio are NULL.
-            if orb_minutes != 5 and any(
-                row_dict.get(c) is None for c in ("prev_day_range", "atr_vel_ratio")
-            ):
+            if orb_minutes != 5 and any(row_dict.get(c) is None for c in ("prev_day_range", "atr_vel_ratio")):
                 g5_result = con.execute(
                     """SELECT * FROM daily_features
                        WHERE symbol = ? AND orb_minutes = 5 AND trading_day = ?

@@ -71,6 +71,11 @@ class TradeJournal:
             log.critical("TradeJournal FAILED to open %s — trades will NOT be persisted", db_path, exc_info=True)
             self._con = None
 
+    @property
+    def is_healthy(self) -> bool:
+        """True if the journal DB connection is open and usable."""
+        return self._con is not None
+
     def record_entry(
         self,
         *,

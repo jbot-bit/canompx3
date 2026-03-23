@@ -91,12 +91,10 @@ def build_daily_pnl_matrix(
         ).fetchall()
         all_days = pd.DatetimeIndex([r[0] for r in day_range])
         # day_to_idx keyed by datetime.date (matches DuckDB DATE return type)
-        day_to_idx = {d.date() if hasattr(d, 'date') else d: i for i, d in enumerate(all_days)}
+        day_to_idx = {d.date() if hasattr(d, "date") else d: i for i, d in enumerate(all_days)}
         T = len(all_days)
 
-        log.info(
-            f"  {instrument}: {T} trading days, {len(strategies)} strategies"
-        )
+        log.info(f"  {instrument}: {T} trading days, {len(strategies)} strategies")
 
         # Build the matrix: T rows x K columns
         K = len(strategies)
@@ -168,17 +166,13 @@ def run_spa_test(
 
     t0 = time.time()
 
-    benchmark_losses, model_losses, strategy_ids, trading_days = build_daily_pnl_matrix(
-        db_path, instrument
-    )
+    benchmark_losses, model_losses, strategy_ids, trading_days = build_daily_pnl_matrix(db_path, instrument)
 
     T, K = model_losses.shape
     if block_size is None:
         block_size = max(int(np.sqrt(T)), 1)
 
-    log.info(
-        f"  Running SPA: T={T}, K={K}, reps={reps}, block_size={block_size}"
-    )
+    log.info(f"  Running SPA: T={T}, K={K}, reps={reps}, block_size={block_size}")
 
     # Run the test
     spa = SPA(
@@ -202,11 +196,13 @@ def run_spa_test(
 
     # Which strategies are significantly better than benchmark?
     # better_models returns indices of models with p < threshold
+    spa_error = None
     try:
         better_005 = spa.better_models(pvalue=0.05, pvalue_type="consistent")
         n_better = len(better_005) if better_005 is not None else 0
-    except Exception:
+    except Exception as exc:
         n_better = 0
+        spa_error = f"{type(exc).__name__}: {exc}"
 
     return {
         "instrument": instrument,
@@ -218,6 +214,7 @@ def run_spa_test(
         "best_strategy_id": best_sid,
         "best_mean_daily_pnl_r": round(best_mean_pnl, 6),
         "n_better_005": n_better,
+        "spa_error": spa_error,
         "block_size_used": block_size,
         "reps": reps,
         "elapsed_s": round(elapsed, 1),
@@ -229,9 +226,7 @@ def main():
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-    parser = argparse.ArgumentParser(
-        description="Hansen's SPA test — is any strategy better than not trading?"
-    )
+    parser = argparse.ArgumentParser(description="Hansen's SPA test — is any strategy better than not trading?")
     parser.add_argument("--instrument", type=str, default=None, help="Single instrument (default: all active)")
     parser.add_argument("--reps", type=int, default=10000, help="Bootstrap replications (default: 10000)")
     parser.add_argument("--block-size", type=int, default=None, help="Bootstrap block size (default: sqrt(T))")
@@ -261,7 +256,8 @@ def main():
         print(f"--- {instrument} ---")
         try:
             result = run_spa_test(
-                db_path, instrument,
+                db_path,
+                instrument,
                 reps=args.reps,
                 block_size=args.block_size,
                 seed=args.seed,

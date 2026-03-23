@@ -338,7 +338,7 @@ def _load_regime_context(con: duckdb.DuckDBPyConnection, state: MarketState) -> 
             ).fetchall()
         }
     except Exception as exc:
-        log.debug("Schema query failed in _load_regime_context: %s", exc)
+        log.warning("Schema query failed in _load_regime_context: %s", exc)
         return
 
     if "regime_strategies" not in tables or "experimental_strategies" not in tables:

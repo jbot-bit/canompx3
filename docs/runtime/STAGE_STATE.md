@@ -1,34 +1,32 @@
 ---
-task: "RR policy audit: JK-equal liveability tiebreaker in live_config"
+task: "Master guardian audit: fix fail-open defects, stale narrative, canonical violations, test staleness"
 mode: IMPLEMENTATION
 stage: 1
-stage_of: 1
-stage_purpose: "Add JK-equal fallback to _load_best_regime_variant: when locked RR fails LIVE_MIN, try JK-equal alternatives that pass. Live-resolution only, no research table changes."
-updated: 2026-03-24T19:30+10:00
+stage_of: 4
+stage_purpose: "Phase 1: Fix 6 fail-open defects in live trading path"
+updated: 2026-03-24T21:00+10:00
 terminal: main
 scope_lock:
-  - trading_app/live_config.py
-  - tests/test_trading_app/test_live_config.py
-  - scripts/tools/generate_trade_sheet.py
-  - scripts/tmp_dst_wrong_time.py
-  - scripts/tmp_dst_audit_v2.py
-  - scripts/tmp_dst_audit_v3.py
-  - HANDOFF.md
+  - trading_app/ml/predict_live.py
+  - trading_app/live/trade_journal.py
+  - trading_app/live/session_orchestrator.py
+  - trading_app/execution_engine.py
+  - trading_app/live/multi_runner.py
+  - trading_app/market_state.py
+  - trading_app/spa_test.py
+  - tests/test_trading_app/test_trade_journal.py
+  - tests/test_trading_app/test_multi_runner.py
+  # Phase 2 (stage 2): docs/memory/agents narrative cleanup
+  # Phase 3 (stage 3): scripts/tools canonical imports, check_drift, asset_configs
+  # Phase 4 (stage 4): tests, ui, env
 acceptance:
-  - "Locked RR tried first (existing behavior preserved)"
-  - "Fallback only fires when locked RR fails LIVE_MIN"
-  - "Fallback candidates: same family, validated only, JK-equal to locked RR (p>0.05, rho=0.7)"
-  - "Among JK-equal gate-passers, highest Sharpe wins"
-  - "Audit log: family_id, locked_rr, fallback_rr, jk_p, locked_expr, fallback_expr, reason"
-  - "family_rr_locks table UNCHANGED"
-  - "select_family_rr.py UNCHANGED"
-  - "MGC still 0-live (noise_risk becomes binding)"
-  - "Existing tests pass, new tests cover fallback path"
-proven:
-  - "RR policy audit complete: MAX_SHARPE has 73% RR1.0 bias (mechanical Sharpe advantage)"
-  - "MGC: all 3 RR levels JK-equal (p=0.64-0.89), Sharpe CV=5.2%"
-  - "RR1.5 passes LIVE_MIN (0.235>0.22), best OOS (0.1858), dollar gate PASS"
-  - "7 families system-wide where suppression crosses LIVE_MIN"
-unproven: []
+  - "predict_live: fail-open results NOT cached for transient errors (lines 357, 436)"
+  - "trade_journal: is_healthy property added, orchestrator checks at startup"
+  - "execution_engine: log.warning on vol_scalar=1.0 fallback"
+  - "multi_runner: post_session failures tracked and logged at CRITICAL"
+  - "market_state: regime context failure logged at WARNING not DEBUG"
+  - "spa_test: spa_error key added to return dict on exception"
+  - "All existing tests pass"
+  - "Drift check unchanged or improved"
 blockers: []
 ---
