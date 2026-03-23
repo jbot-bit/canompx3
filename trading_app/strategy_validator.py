@@ -60,7 +60,11 @@ sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]
 # =========================================================================
 
 
-def benjamini_hochberg(p_values: list[tuple[str, float]], alpha: float = 0.05) -> dict[str, dict]:
+def benjamini_hochberg(
+    p_values: list[tuple[str, float]],
+    alpha: float = 0.05,
+    total_tests: int | None = None,
+) -> dict[str, dict]:
     """Apply Benjamini-Hochberg FDR correction to a set of p-values.
 
     Addresses the Bailey Rule: when testing thousands of strategies, some will
@@ -71,6 +75,10 @@ def benjamini_hochberg(p_values: list[tuple[str, float]], alpha: float = 0.05) -
         p_values: List of (strategy_id, raw_p_value) tuples. Strategies with
             None p-values are excluded from correction.
         alpha: FDR significance level (default 0.05 = 5% expected false discoveries).
+        total_tests: Fixed number of total tests (K) for BH denominator.
+            When running validation across instruments in separate batches,
+            pass the pre-computed global K to ensure consistent correction.
+            If None, uses len(valid_p_values) as the denominator.
 
     Returns:
         Dict keyed by strategy_id with:
@@ -89,7 +97,7 @@ def benjamini_hochberg(p_values: list[tuple[str, float]], alpha: float = 0.05) -
 
     # Sort by p-value ascending
     valid.sort(key=lambda x: x[1])
-    m = len(valid)
+    m = total_tests if total_tests is not None else len(valid)
 
     results = {}
     # BH procedure: adjusted_p[i] = min(p[i] * m / rank, 1.0)
@@ -1148,7 +1156,7 @@ def run_validation(
                     global_k = fdr_k
                 else:
                     global_k = db_k
-                fdr_results = benjamini_hochberg(p_value_list, alpha=0.05)
+                fdr_results = benjamini_hochberg(p_value_list, alpha=0.05, total_tests=global_k)
 
                 n_fdr_sig = 0
                 n_fdr_rejected = 0

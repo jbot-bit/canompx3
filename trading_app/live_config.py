@@ -560,6 +560,14 @@ def build_live_portfolio(
             notes.append(f"SKIP: {spec.family_id} -- {instrument} excluded (BH FDR)")
             continue
 
+        # --- Seasonal gate (hard skip — no variant loaded) ---
+        if spec.active_months is not None:
+            if as_of_date.month not in spec.active_months:
+                notes.append(
+                    f"SEASONAL: {spec.family_id} -- month {as_of_date.month} not in {sorted(spec.active_months)}"
+                )
+                continue
+
         variant = _load_best_experimental_variant(
             db_path,
             instrument,
@@ -622,6 +630,14 @@ def build_live_portfolio(
         if spec.exclude_instruments and instrument in spec.exclude_instruments:
             notes.append(f"SKIP: {spec.family_id} -- {instrument} excluded (BH FDR)")
             continue
+
+        # --- Seasonal gate (hard skip — no variant loaded) ---
+        if spec.active_months is not None:
+            if as_of_date.month not in spec.active_months:
+                notes.append(
+                    f"SEASONAL: {spec.family_id} -- month {as_of_date.month} not in {sorted(spec.active_months)}"
+                )
+                continue
 
         variant = _load_best_regime_variant(
             db_path,

@@ -20,7 +20,7 @@ When reviewing or writing research/strategy code, actively scan for:
 | **Look-ahead bias** | Using future data as a predictor. `double_break` is look-ahead. Any LAG() without `WHERE orb_minutes = 5` |
 | **Data snooping** | Claiming significance after testing 50+ hypotheses without BH FDR correction |
 | **Overfitting** | Strategy with high Sharpe but N < 30, or passing only one year |
-| **Survivorship bias** | Ignoring dead instruments (MCL/SIL/M6E/MBT) or purged entry models (E0) when drawing conclusions |
+| **Survivorship bias** | Ignoring dead instruments (MCL/SIL/M6E/MBT/M2K) or purged entry models (E0) when drawing conclusions |
 | **Storytelling bias** | Crafting a narrative around noise. If p > 0.05, it's an observation, not a finding |
 | **Outlier distortion** | Single extreme day driving aggregate stats. Check year-by-year breakdown |
 | **Transaction cost illusion** | Ignoring spread + slippage + commission. Always use `COST_SPECS` from `pipeline/cost_model.py` |
