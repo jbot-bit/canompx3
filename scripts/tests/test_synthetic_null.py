@@ -56,6 +56,7 @@ def generate_synthetic_bars(
     start_date: date = date(2020, 1, 1),
     end_date: date = date(2025, 12, 31),
     sigma: float = 1.2,
+    sigma_by_year: dict[int, float] | None = None,
     start_price: float = 2000.0,
     tick_size: float = 0.10,
 ) -> dict:
@@ -70,10 +71,13 @@ def generate_synthetic_bars(
 
     The question: can the validation chain reject all of it?
 
-    Calibration (sigma=1.2):
-    - 5m ORB range: ~4-8 points (some pass G4/G6 filters — intentional)
-    - Daily ATR: ~40-60 points (mid-range for gold)
-    - Cost drag is realistic, not dominant — statistical gates must do the work
+    sigma_by_year (C1 time-varying null):
+        If provided, overrides flat sigma. Dict mapping calendar year -> trimmed_std.
+        Each year's bars use that year's sigma. Built from real bars_1m data,
+        per-year, IS-only. No cross-year pooling, no forward leakage.
+
+        NOTE: This is a pre-holdout-era null audit tool, not predictive evidence.
+        If reused inside walk-forward later, sigma must be IS-only for that fold.
 
     Returns dict with row_count, price stats, and null-property verification.
     """
@@ -87,8 +91,28 @@ def generate_synthetic_bars(
 
     print(f"  Generating {total_bars:,} bars ({n_days} days x {n_bars_per_day} min/day)...")
 
+    # --- Build per-bar sigma array: flat or time-varying (C1) ---
+    if sigma_by_year:
+        # C1 time-varying null: per-year sigma from real bars_1m trimmed_std.
+        # Year blocks built from the actual bday scaffold (real holidays/closures
+        # preserved via pd.bdate_range). Each year's bars get that year's sigma.
+        sigma_arr = np.empty(total_bars)
+        bar_idx = 0
+        for d in bdays:
+            yr_sigma = sigma_by_year.get(d.year, sigma)  # fallback to flat sigma
+            sigma_arr[bar_idx:bar_idx + n_bars_per_day] = yr_sigma
+            bar_idx += n_bars_per_day
+        # Log sigma schedule
+        unique_years = sorted(set(d.year for d in bdays))
+        for yr in unique_years:
+            yr_sigma = sigma_by_year.get(yr, sigma)
+            yr_days = sum(1 for d in bdays if d.year == yr)
+            print(f"    {yr}: sigma={yr_sigma}, {yr_days} days")
+    else:
+        sigma_arr = np.full(total_bars, sigma)
+
     # --- Vectorized random walk (zero drift) ---
-    increments = rng.normal(0, sigma, size=total_bars)
+    increments = rng.normal(0, sigma_arr)
     closes_raw = start_price + np.cumsum(increments)
 
     # Opens: each bar opens at previous bar's close
@@ -101,9 +125,9 @@ def generate_synthetic_bars(
     opens = np.round(opens_raw / tick_size) * tick_size
 
     # Intrabar high/low: extend beyond open-close range
-    # Uses 0.3*sigma — enough to create realistic wicks without inflating ORBs excessively
-    high_ext = np.abs(rng.normal(0, sigma * 0.3, size=total_bars))
-    low_ext = np.abs(rng.normal(0, sigma * 0.3, size=total_bars))
+    # Uses 0.3*per-bar sigma — wicks scale with the same year's volatility
+    high_ext = np.abs(rng.normal(0, sigma_arr * 0.3))
+    low_ext = np.abs(rng.normal(0, sigma_arr * 0.3))
 
     highs = np.round((np.maximum(opens, closes) + high_ext) / tick_size) * tick_size
     lows = np.round((np.minimum(opens, closes) - low_ext) / tick_size) * tick_size
@@ -517,7 +541,14 @@ def main() -> int:
         "--sigma",
         type=float,
         default=1.2,
-        help="Per-minute bar volatility in points (default: 1.2, produces ATR ~40-60)",
+        help="Flat per-minute bar volatility in points (default: 1.2). Overridden by --sigma-by-year.",
+    )
+    parser.add_argument(
+        "--sigma-by-year",
+        type=str,
+        default=None,
+        help="JSON dict of year->sigma for C1 time-varying null (e.g. '{\"2020\":0.53,\"2025\":0.99}'). "
+             "Overrides --sigma. Each year uses that year's real trimmed_std. 2026 excluded.",
     )
     parser.add_argument("--start-date", type=str, default="2020-01-01", help="Start date YYYY-MM-DD")
     parser.add_argument("--end-date", type=str, default="2025-12-31", help="End date YYYY-MM-DD")
@@ -530,6 +561,13 @@ def main() -> int:
     start_dt = date.fromisoformat(args.start_date)
     end_dt = date.fromisoformat(args.end_date)
 
+    # Parse sigma_by_year if provided
+    import json as _json
+    sigma_by_year = None
+    if args.sigma_by_year:
+        raw = _json.loads(args.sigma_by_year)
+        sigma_by_year = {int(k): float(v) for k, v in raw.items()}
+
     print("=" * 60)
     print("SYNTHETIC NULL PIPELINE TEST")
     print("=" * 60)
@@ -537,8 +575,14 @@ def main() -> int:
     print(f"  Instrument:  {args.instrument}")
     print(f"  Date range:  {start_dt} to {end_dt}")
     print(f"  Apertures:   {args.apertures}")
-    print(f"  Sigma:       {args.sigma} pts/min")
+    if sigma_by_year:
+        print(f"  Sigma mode:  C1 time-varying (per-year trimmed_std, 2026 excluded)")
+        for yr in sorted(sigma_by_year):
+            print(f"    {yr}: {sigma_by_year[yr]}")
+    else:
+        print(f"  Sigma:       {args.sigma} pts/min (flat)")
     print("  Null model:  Gaussian random walk, i.i.d. N(0, sigma), zero drift")
+    print("  NOTE:        Pre-holdout-era null audit. If reused in WF, sigma must be IS-only per fold.")
     print(f"  Keep DB:     {args.keep_db}")
     print()
 
@@ -621,7 +665,8 @@ def main() -> int:
                 continue
 
             # Step 2: Generate and insert synthetic bars
-            print(f"\n--- Generate synthetic bars (seed={seed}, sigma={args.sigma}) ---")
+            sigma_label = f"C1 time-varying" if sigma_by_year else f"flat sigma={args.sigma}"
+            print(f"\n--- Generate synthetic bars (seed={seed}, {sigma_label}) ---")
             t0 = time.time()
             # Per-instrument calibration for realistic price/tick scale
             _inst_defaults = {
@@ -637,6 +682,7 @@ def main() -> int:
                 start_date=start_dt,
                 end_date=end_dt,
                 sigma=args.sigma,
+                sigma_by_year=sigma_by_year,
                 start_price=_id["start_price"],
                 tick_size=_id["tick_size"],
             )
