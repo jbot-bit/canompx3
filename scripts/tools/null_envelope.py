@@ -129,14 +129,17 @@ def compute_envelope(all_results: list[dict]) -> dict:
         exprs = np.array([s["expectancy_r"] for s in subs])
         sharpes = np.array([s["sharpe_ann"] for s in subs])
 
-        # Floor = ceiling of noise max, rounded up to nearest 0.01
+        # Floor = P95 of pooled null survivor ExpR, rounded up to nearest 0.01.
+        # Matches production logic: strategy_validator uses NOISE_FLOOR_BY_INSTRUMENT
+        # (set from P95) to compute noise_risk flag.
         raw_max = float(np.max(exprs))
-        floor = np.ceil(raw_max * 100) / 100  # round up to 0.01
+        p95 = float(np.percentile(exprs, 95))
+        floor = np.ceil(p95 * 100) / 100  # round up to 0.01
 
         envelope[em] = {
             "count": len(subs),
             "max_expr": raw_max,
-            "p95_expr": float(np.percentile(exprs, 95)),
+            "p95_expr": p95,
             "p90_expr": float(np.percentile(exprs, 90)),
             "median_expr": float(np.median(exprs)),
             "max_sharpe": float(np.max(sharpes)),
@@ -179,9 +182,9 @@ def update_config_file(envelope: dict, n_seeds: int) -> None:
         f"# E1 (limit entry) costs real money immediately (-0.118R avg on noise),\n"
         f"# so noise rarely produces E1 survivors.\n"
         f"#\n"
-        f"# Floors are rounded UP from the noise max across {n_seeds} seeds:\n"
-        f"#   E2: {e2_count} noise survivors, max ExpR = {e2_max:.4f} → floor {e2_floor}\n"
-        f"#   E1: {e1_count} noise survivors, max ExpR = {e1_max:.4f} → floor {e1_floor}\n"
+        f"# Floors are P95 of pooled noise survivor ExpR, rounded UP (ceil to 0.01):\n"
+        f"#   E2: {e2_count} noise survivors, P95 ExpR → floor {e2_floor} (max={e2_max:.4f})\n"
+        f"#   E1: {e1_count} noise survivors, P95 ExpR → floor {e1_floor} (max={e1_max:.4f})\n"
         f"#\n"
         f"# @research-source null_test_{n_seeds}_seeds (White's Reality Check 2026-03-18)\n"
         f"# @entry-models E1, E2\n"
