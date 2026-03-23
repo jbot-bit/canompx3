@@ -1,23 +1,19 @@
 ---
-task: "Post-audit cleanup: stale comments, p_value propagation, doc consistency"
+task: "null_envelope.py MAX->P95 tooling consistency fix"
 mode: IMPLEMENTATION
 stage: 1
 stage_of: 1
-stage_purpose: "Fix 4 outstanding items from session audits. No logic changes. No threshold changes."
-updated: 2026-03-24T01:00+10:00
-terminal: main
+stage_purpose: "Fix null_envelope.py to compute P95 floor (matching production), not MAX. Tooling-only, no threshold change."
+updated: 2026-03-24T01:30+10:00
+terminal: review
 scope_lock:
-  - trading_app/live_config.py
-  - HANDOFF.md
-  - chatgpt-project-kit/PROJECT_REFERENCE.md
+  - scripts/tools/null_envelope.py
 acceptance:
-  - "live_config.py stale rolling comment updated"
-  - "HANDOFF section 10 removed (duplicate of corrected section 8)"
-  - "PROJECT_REFERENCE.md classification matches RESEARCH_RULES.md"
-  - "p_values propagated to validated_setups (already done via SQL)"
-  - "No logic changes, no threshold changes"
-proven:
-  - "p_value propagation: 772/772 done, verified matching"
+  - "compute_envelope floor uses P95 not MAX"
+  - "update_config_file comment says P95 not noise max"
+  - "No production threshold changes"
+  - "No changes to NOISE_FLOOR_BY_INSTRUMENT or strategy_validator"
+proven: []
 unproven: []
 blockers: []
 ---
