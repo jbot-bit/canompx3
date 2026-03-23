@@ -536,6 +536,15 @@ class SessionOrchestrator:
                 log.error(msg)
                 self._notify(msg)
 
+        # Orphan check: if any positions survived the close loop, they are stuck
+        # at the broker. Engine reset (below) will forget them — log and notify.
+        rollover_orphans = self._positions.active_positions()
+        if rollover_orphans:
+            orphan_ids = [(r.strategy_id, r.state.value) for r in rollover_orphans]
+            msg = f"ROLLOVER ORPHANS: {orphan_ids} — positions open at broker, engine will not track. MANUAL CLOSE REQUIRED."
+            log.critical(msg)
+            self._notify(msg)
+
         # Start new trading day
         self.trading_day = bar_trading_day
         daily_row = self._build_daily_features_row(self.trading_day, self.instrument)
@@ -1051,7 +1060,14 @@ class SessionOrchestrator:
                         journal_trade_id=exit_jtid,
                     )
                     return
-                # All retries exhausted — position remains open
+                # All retries exhausted — position remains open at broker, stuck in PENDING_EXIT.
+                # Recovery paths: (1) stale_positions detects after 300s, (2) new entry overwrites
+                # PENDING_EXIT, (3) kill switch flattens on feed death, (4) manual close.
+                log.critical(
+                    "EXIT FAILED — %s stuck in PENDING_EXIT. Position open at broker. "
+                    "Kill switch or manual close required.",
+                    event.strategy_id,
+                )
                 self._write_signal_record({"type": "EXIT_FAILED", "strategy_id": event.strategy_id, "error": str(e)})
                 return
             order_id = result.get("order_id") if isinstance(result, dict) else getattr(result, "order_id", None)
