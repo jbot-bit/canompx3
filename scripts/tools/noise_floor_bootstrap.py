@@ -66,25 +66,33 @@ def load_filtered_pnl_r(
 
     filt = ALL_FILTERS.get(filter_type)
     if filt is not None and filter_type != "NO_FILTER":
-        size_col = f"orb_{orb_label}_size"
-        features = con.execute(
-            f"SELECT trading_day, {size_col} FROM daily_features WHERE symbol = ? AND orb_minutes = ?",
+        feat_result = con.execute(
+            "SELECT * FROM daily_features WHERE symbol = ? AND orb_minutes = ?",
             [instrument, orb_minutes],
-        ).fetchall()
+        )
+        feat_cols = [desc[0] for desc in feat_result.description]
         eligible_days = set()
-        for td, size in features:
-            if size is not None and filt.matches_row({size_col: size}, orb_label):
-                eligible_days.add(td)
+        for row in feat_result.fetchall():
+            row_dict = dict(zip(feat_cols, row))
+            if filt.matches_row(row_dict, orb_label):
+                eligible_days.add(row_dict["trading_day"])
         outcomes_raw = [o for o in outcomes_raw if o[0] in eligible_days]
 
     outcome_dicts = []
     for o in outcomes_raw:
         if o[2] not in ("win", "loss"):
             continue
-        outcome_dicts.append({
-            "trading_day": o[0], "pnl_r": o[1], "outcome": o[2],
-            "entry_price": o[3], "stop_price": o[4], "mae_r": o[5], "mfe_r": o[6],
-        })
+        outcome_dicts.append(
+            {
+                "trading_day": o[0],
+                "pnl_r": o[1],
+                "outcome": o[2],
+                "entry_price": o[3],
+                "stop_price": o[4],
+                "mae_r": o[5],
+                "mfe_r": o[6],
+            }
+        )
 
     if stop_multiplier != 1.0:
         cost_spec = get_cost_spec(instrument)
@@ -210,7 +218,9 @@ def check_stability(db_path, instrument, entry_model, reps=10000, quantile=0.95,
 
     con.close()
 
-    return [sign_randomization_floor(all_pnl, reps=reps, quantile=quantile, seed=42 + i * 1000)[0] for i in range(n_runs)]
+    return [
+        sign_randomization_floor(all_pnl, reps=reps, quantile=quantile, seed=42 + i * 1000)[0] for i in range(n_runs)
+    ]
 
 
 def main():
@@ -256,7 +266,9 @@ def main():
             cv = (np.std(floors) / abs(mean_f) * 100) if mean_f != 0 else 0
             stable = spread < 0.02
             stable_all = stable_all and stable
-            print(f"  {inst} {em}: {[round(f, 4) for f in floors]} spread={spread:.4f} {'STABLE' if stable else 'UNSTABLE'}")
+            print(
+                f"  {inst} {em}: {[round(f, 4) for f in floors]} spread={spread:.4f} {'STABLE' if stable else 'UNSTABLE'}"
+            )
 
     if stable_all:
         print("\nALL STABLE")
@@ -273,6 +285,7 @@ def main():
 
     # Update config
     import re
+
     config_path = PROJECT_ROOT / "trading_app" / "config.py"
     content = config_path.read_text()
     lines = ["NOISE_FLOOR_BY_INSTRUMENT: dict[str, dict[str, float]] = {"]

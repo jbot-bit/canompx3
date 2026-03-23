@@ -46,9 +46,8 @@ def find_null_dbs(search_dir: str) -> list[Path]:
             p = Path(root) / "null_test.db"
             # Verify it's actually a null test DB (has validated_setups table)
             try:
-                con = duckdb.connect(str(p), read_only=True)
-                con.execute("SELECT 1 FROM validated_setups LIMIT 1")
-                con.close()
+                with duckdb.connect(str(p), read_only=True) as con:
+                    con.execute("SELECT 1 FROM validated_setups LIMIT 1")
                 results.append(p)
             except Exception:
                 continue
@@ -78,17 +77,19 @@ def analyze_db(db_path: Path) -> dict:
 
         survivors = []
         for r in rows:
-            survivors.append({
-                "entry_model": r[0],
-                "expectancy_r": r[1],
-                "sharpe_ann": r[2],
-                "sample_size": r[3],
-                "strategy_id": r[4],
-                "instrument": r[5],
-                "orb_label": r[6],
-                "filter_type": r[7],
-                "rr_target": r[8],
-            })
+            survivors.append(
+                {
+                    "entry_model": r[0],
+                    "expectancy_r": r[1],
+                    "sharpe_ann": r[2],
+                    "sample_size": r[3],
+                    "strategy_id": r[4],
+                    "instrument": r[5],
+                    "orb_label": r[6],
+                    "filter_type": r[7],
+                    "rr_target": r[8],
+                }
+            )
 
         return {
             "path": str(db_path),
@@ -163,12 +164,10 @@ def update_config_file(envelope: dict, n_seeds: int) -> None:
     e2_count = envelope["E2"].get("count", 0)
 
     # Find and replace the NOISE_EXPR_FLOOR block
-    import re as re_mod
-
-    pattern = re_mod.compile(
+    pattern = re.compile(
         r"(# ── Noise ExpR floor per entry model.*?)"
         r"(NOISE_EXPR_FLOOR: dict\[str, float\] = \{.*?\})",
-        re_mod.DOTALL,
+        re.DOTALL,
     )
 
     new_comment = (
@@ -191,12 +190,7 @@ def update_config_file(envelope: dict, n_seeds: int) -> None:
         f"# @revalidated-for E1/E2 event-based sessions (2026-03-18)\n"
     )
 
-    new_dict = (
-        f'NOISE_EXPR_FLOOR: dict[str, float] = {{\n'
-        f'    "E1": {e1_floor},\n'
-        f'    "E2": {e2_floor},\n'
-        f'}}'
-    )
+    new_dict = f'NOISE_EXPR_FLOOR: dict[str, float] = {{\n    "E1": {e1_floor},\n    "E2": {e2_floor},\n}}'
 
     new_block = new_comment + new_dict
     new_content = pattern.sub(new_block, content)
@@ -233,8 +227,10 @@ def main() -> int:
             [
                 sys.executable,
                 "scripts/tests/test_synthetic_null.py",
-                "--seeds", str(args.run_seeds),
-                "--start-seed", str(args.start_seed),
+                "--seeds",
+                str(args.run_seeds),
+                "--start-seed",
+                str(args.start_seed),
                 "--keep-db",
                 *aperture_args,
             ],
@@ -268,9 +264,9 @@ def main() -> int:
         print(f"  {p}{seed_str}")
 
     # Analyze each
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("ANALYZING NULL TEST RESULTS")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     all_results = []
     for p in db_paths:
@@ -284,9 +280,9 @@ def main() -> int:
                 print(f"    {s['strategy_id']}: ExpR={s['expectancy_r']:.4f}, Sharpe={s['sharpe_ann']:.4f}")
 
     # Compute envelope
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"NOISE ENVELOPE ({len(all_results)} seeds)")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     envelope = compute_envelope(all_results)
     n_seeds = len(all_results)
@@ -306,9 +302,9 @@ def main() -> int:
 
     # Update config if requested
     if args.update_config:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print("UPDATING CONFIG")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         update_config_file(envelope, n_seeds)
 
     return 0
