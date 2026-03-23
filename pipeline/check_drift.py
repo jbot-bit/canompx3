@@ -3141,27 +3141,27 @@ def check_dead_instruments_doc_sync() -> list[str]:
         PROJECT_ROOT / "docs" / "STRATEGY_DISCOVERY_AUDIT.md",
     ]
 
-    # Match patterns like "MCL, SIL, M6E" or "MCL/SIL/M6E" (with or without MBT)
-    # Only match lines that look like dead-instrument lists (contain MCL AND SIL)
-    pattern = re.compile(r"MCL[,/\s]+SIL[,/\s]+M6E(?:[,/\s]+\w+)*")
-
+    # Extract ALL uppercase instrument-like symbols from lines containing at least
+    # MCL and SIL, intersect with known dead set. Skip lines that also list active
+    # instruments (general instrument coverage lists, not dead-specific lists).
     for fpath in doc_files:
         if not fpath.exists():
             continue
         text = fpath.read_text(encoding="utf-8")
         for i, line in enumerate(text.splitlines(), 1):
-            match = pattern.search(line)
-            if match:
-                found_symbols = set(re.findall(r"\b([A-Z][A-Z0-9]{1,3})\b", match.group()))
-                # Filter to only known dead instruments + potential missing ones
-                found_dead = found_symbols & (DEAD_ORB_INSTRUMENTS | {"MCL", "SIL", "M6E", "MBT"})
-                if found_dead != DEAD_ORB_INSTRUMENTS:
-                    missing = DEAD_ORB_INSTRUMENTS - found_dead
-                    violations.append(
-                        f"  {fpath.relative_to(PROJECT_ROOT)}:{i} — "
-                        f"lists {sorted(found_dead)} but canonical is [{canonical_str}], "
-                        f"missing: {sorted(missing)}"
-                    )
+            if "MCL" not in line or "SIL" not in line:
+                continue
+            all_symbols = set(re.findall(r"\b([A-Z][A-Z0-9]{1,3})\b", line))
+            found_dead = all_symbols & DEAD_ORB_INSTRUMENTS
+            # Skip lines that also list active instruments (general coverage lists)
+            active_in_line = all_symbols & {"MGC", "MNQ", "MES"}
+            if len(found_dead) >= 3 and not active_in_line and found_dead != DEAD_ORB_INSTRUMENTS:
+                missing = DEAD_ORB_INSTRUMENTS - found_dead
+                violations.append(
+                    f"  {fpath.relative_to(PROJECT_ROOT)}:{i} — "
+                    f"lists {sorted(found_dead)} but canonical is [{canonical_str}], "
+                    f"missing: {sorted(missing)}"
+                )
 
     return violations
 
@@ -3358,33 +3358,49 @@ def check_holdout_contamination(con=None) -> list[str]:
     Rule: discovery must not be re-run with 2026 data after the holdout was declared.
     Detection: experimental_strategies rows created after pre-registration date
     that contain 2026 trade data in yearly_results.
+
+    Fail-closed: if DB unavailable, returns a violation (not a silent pass).
     """
     from datetime import datetime, timezone
 
     violations = []
-    if con is None:
-        return violations
+    _own_con = False
+    try:
+        if con is None:
+            import duckdb
 
-    # Pre-registration dates by instrument (extend when new holdouts declared)
-    HOLDOUT_DECLARATIONS = {
-        "MNQ": datetime(2026, 3, 20, 0, 0, 0, tzinfo=timezone.utc),
-    }
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return ["  HOLDOUT CHECK SKIPPED: gold.db not found — cannot verify holdout integrity"]
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
 
-    for instrument, declaration_date in HOLDOUT_DECLARATIONS.items():
-        contaminated = con.execute(
-            """SELECT COUNT(*) FROM experimental_strategies
-               WHERE instrument = ?
-               AND created_at > ?
-               AND yearly_results LIKE '%"2026"%'""",
-            [instrument, declaration_date],
-        ).fetchone()[0]
-        if contaminated > 0:
-            violations.append(
-                f"  HOLDOUT CONTAMINATION: {instrument} has {contaminated} experimental_strategies "
-                f"created after {declaration_date.date()} containing 2026 trade data. "
-                f"Discovery was re-run without --holdout-date. "
-                f"Pre-registration: docs/pre-registrations/2026-03-20-mnq-rr1-verified-sessions.md"
-            )
+        # Pre-registration dates by instrument (extend when new holdouts declared)
+        HOLDOUT_DECLARATIONS = {
+            "MNQ": datetime(2026, 3, 20, 0, 0, 0, tzinfo=timezone.utc),
+        }
+
+        for instrument, declaration_date in HOLDOUT_DECLARATIONS.items():
+            contaminated = con.execute(
+                """SELECT COUNT(*) FROM experimental_strategies
+                   WHERE instrument = ?
+                   AND created_at > ?
+                   AND yearly_results IS NOT NULL
+                   AND json_extract_string(yearly_results, '$."2026"') IS NOT NULL""",
+                [instrument, declaration_date],
+            ).fetchone()[0]
+            if contaminated > 0:
+                violations.append(
+                    f"  HOLDOUT CONTAMINATION: {instrument} has {contaminated} experimental_strategies "
+                    f"created after {declaration_date.date()} containing 2026 trade data. "
+                    f"Discovery was re-run without --holdout-date. "
+                    f"Pre-registration: docs/pre-registrations/2026-03-20-mnq-rr1-verified-sessions.md"
+                )
+    except (ImportError, OSError) as e:
+        violations.append(f"  HOLDOUT CHECK FAILED: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
 
     return violations
 

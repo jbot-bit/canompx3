@@ -10,6 +10,9 @@ from pathlib import Path
 
 _DEBOUNCE_FILE = Path(__file__).parent / ".last_drift_ok"
 _DEBOUNCE_SECONDS = 30
+# Resolve project root for subprocess cwd and PYTHONPATH
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_SUBPROCESS_ENV = {**os.environ, "PYTHONPATH": str(_PROJECT_ROOT)}
 
 # Map edited modules to their test files for targeted testing
 TEST_MAP = {
@@ -55,8 +58,9 @@ def main():
 
     if not _skip_drift:
         result = subprocess.run(
-            [sys.executable, "pipeline/check_drift.py"],
-            capture_output=True, text=True, timeout=30
+            [sys.executable, str(_PROJECT_ROOT / "pipeline" / "check_drift.py")],
+            capture_output=True, text=True, timeout=30,
+            cwd=str(_PROJECT_ROOT), env=_SUBPROCESS_ENV,
         )
         if result.returncode != 0:
             # Invalidate debounce on failure
@@ -77,7 +81,8 @@ def main():
             result = subprocess.run(
                 [sys.executable, "-m", "pytest", test_file, "-x", "-q", "--no-header", "--tb=short",
                  "-k", "not Integration and not integration and not Idempotent"],
-                capture_output=True, text=True, timeout=45
+                capture_output=True, text=True, timeout=45,
+                cwd=str(_PROJECT_ROOT), env=_SUBPROCESS_ENV,
             )
             if result.returncode != 0:
                 print(f"TESTS FAILED after editing {file_path}", file=sys.stderr)
@@ -94,8 +99,9 @@ def main():
     if "pipeline/" in norm or "scripts/tools/" in norm:
         try:
             result = subprocess.run(
-                [sys.executable, "scripts/tools/audit_behavioral.py"],
-                capture_output=True, text=True, timeout=15
+                [sys.executable, str(_PROJECT_ROOT / "scripts" / "tools" / "audit_behavioral.py")],
+                capture_output=True, text=True, timeout=15,
+                cwd=str(_PROJECT_ROOT), env=_SUBPROCESS_ENV,
             )
             if result.returncode != 0:
                 print(f"BEHAVIORAL AUDIT FAILED after editing {file_path}", file=sys.stderr)

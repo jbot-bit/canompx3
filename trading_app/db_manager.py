@@ -731,6 +731,21 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
                 "sharpe_haircut",
                 "skewness",
                 "kurtosis_excess",
+                # Migration-added columns (statistical audit, costs, noise)
+                "fdr_significant",
+                "fdr_adjusted_p",
+                "p_value",
+                "sharpe_ann_adj",
+                "median_risk_dollars",
+                "avg_risk_dollars",
+                "avg_win_dollars",
+                "avg_loss_dollars",
+                "n_trials_at_discovery",
+                "fst_hurdle",
+                "dsr_score",
+                "sr0_at_discovery",
+                "noise_risk",
+                "oos_exp_r",
             }
             actual_cols = {row[0] for row in result}
 

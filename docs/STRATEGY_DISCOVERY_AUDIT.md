@@ -74,7 +74,7 @@ Portfolio construction & fitness monitoring
 | **Validated active** | **1,322** | MGC: 339, MES: 273, MNQ: 614, M2K: 96 |
 | **By entry model** | E0: 817, E1: 442, E3: 63 | E0 CB1 only (CB2+ purged Feb 2026) |
 | **Edge families** | **472** | Unique trade-day patterns |
-| Dead instruments | MCL, SIL, M6E, MBT | 0 validated for ORB breakout |
+| Dead instruments | MCL, SIL, M6E, MBT, M2K | 0 validated for ORB breakout |
 
 ---
 
