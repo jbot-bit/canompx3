@@ -65,7 +65,10 @@ def is_uk_dst(trading_day: date) -> bool:
 #
 # All sessions are now dynamic and handle DST internally via resolver functions.
 # No fixed sessions remain, so DST_AFFECTED_SESSIONS is empty.
-DST_AFFECTED_SESSIONS = {}
+# Consumers (strategy_validator.compute_dst_split, strategy_fitness) always return
+# verdict='CLEAN' / None because this dict is empty. This is correct — DST splits
+# are meaningless when all sessions use dynamic resolvers.
+DST_AFFECTED_SESSIONS: dict = {}
 
 # All sessions are dynamic (DST-aware resolvers) — all are "clean" by definition.
 DST_CLEAN_SESSIONS = {

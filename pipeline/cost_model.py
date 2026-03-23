@@ -171,34 +171,42 @@ SESSION_SLIPPAGE_MULT = {
     "MGC": {
         "CME_REOPEN": 1.3,  # 23:00 UTC -- thin Asian session
         "TOKYO_OPEN": 1.2,  # 00:00 UTC -- thin early Asian
+        "BRISBANE_1025": 1.2,  # 00:25 UTC -- adjacent to TOKYO
         "SINGAPORE_OPEN": 1.0,  # 01:00 UTC -- moderate
+        "EUROPE_FLOW": 0.9,  # ~08:00 UTC -- pre-London (adjacent to LONDON_METALS)
         "LONDON_METALS": 0.9,  # 08:00 UTC -- pre-London, decent liquidity
         "US_DATA_830": 0.8,  # 13:00 UTC -- NY session, best liquidity
         "NYSE_OPEN": 1.1,  # 14:30 UTC -- moderate NY
+        "US_DATA_1000": 0.9,  # ~14:00 UTC -- post-equity-open flow
         "COMEX_SETTLE": 0.9,  # ~18:25 UTC -- settlement window
         "CME_PRECLOSE": 1.0,  # ~19:45 UTC -- closing session
         "NYSE_CLOSE": 1.0,  # ~20:00 UTC -- NYSE close
-        "US_DATA_1000": 0.9,  # ~14:00 UTC -- post-equity-open flow
     },
     "MNQ": {
         "CME_REOPEN": 1.0,  # 23:00 UTC -- NQ liquid even in Asian
         "TOKYO_OPEN": 1.0,  # 00:00 UTC -- early Asian
+        "BRISBANE_1025": 1.0,  # 00:25 UTC -- adjacent to TOKYO
         "SINGAPORE_OPEN": 0.9,  # 01:00 UTC -- moderate
+        "EUROPE_FLOW": 0.9,  # ~08:00 UTC -- pre-London (adjacent to LONDON_METALS)
         "LONDON_METALS": 0.9,  # 08:00 UTC -- pre-London
         "US_DATA_830": 0.8,  # 13:00 UTC -- NY session, best liquidity
         "NYSE_OPEN": 0.9,  # 14:30 UTC -- moderate NY
         "US_DATA_1000": 0.9,  # ~14:00 UTC -- post-equity-open flow
+        "COMEX_SETTLE": 0.9,  # ~18:25 UTC -- settlement window
         "CME_PRECLOSE": 1.0,  # ~19:45 UTC -- closing session
         "NYSE_CLOSE": 0.9,  # ~20:00 UTC -- NYSE close
     },
     "MES": {
         "CME_REOPEN": 1.0,  # 23:00 UTC -- ES/MES liquid 24h
         "TOKYO_OPEN": 1.0,  # 00:00 UTC -- early Asian
+        "BRISBANE_1025": 1.0,  # 00:25 UTC -- adjacent to TOKYO
         "SINGAPORE_OPEN": 0.9,  # 01:00 UTC -- moderate
+        "EUROPE_FLOW": 0.9,  # ~08:00 UTC -- pre-London (adjacent to LONDON_METALS)
         "LONDON_METALS": 0.9,  # 08:00 UTC -- pre-London
         "US_DATA_830": 0.8,  # 13:00 UTC -- NY session, best liquidity
         "NYSE_OPEN": 0.9,  # 14:30 UTC -- moderate NY
         "US_DATA_1000": 0.9,  # ~14:00 UTC -- post-equity-open flow
+        "COMEX_SETTLE": 0.9,  # ~18:25 UTC -- settlement window (MES has COMEX-adjacent flow)
         "CME_PRECLOSE": 1.0,  # ~19:45 UTC -- closing session
         "NYSE_CLOSE": 0.9,  # ~20:00 UTC -- NYSE close
     },
