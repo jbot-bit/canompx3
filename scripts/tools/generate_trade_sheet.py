@@ -122,7 +122,8 @@ def _passes_dollar_gate(row: dict, instrument: str) -> tuple[bool, float | None]
         return False, None
     try:
         spec = get_cost_spec(instrument)
-    except Exception:
+    except Exception as exc:
+        print(f"  WARNING: cost spec lookup failed for {instrument}: {exc}", flush=True)
         return False, None
     exp_d = exp_r * median_risk_pts * spec.point_value
     min_dollars = LIVE_MIN_EXPECTANCY_DOLLARS_MULT * spec.total_friction

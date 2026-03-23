@@ -234,7 +234,12 @@ def _load_best_regime_variant(
 
         # Locked RR failed min_expectancy_r — try JK-equal fallback.
         return _jk_fallback_rr(
-            con, instrument, orb_label, entry_model, filter_type, min_expectancy_r,
+            con,
+            instrument,
+            orb_label,
+            entry_model,
+            filter_type,
+            min_expectancy_r,
         )
     finally:
         con.close()
@@ -312,8 +317,7 @@ def _jk_fallback_rr(
               AND LOWER(vs.status) = 'active'
               AND vs.expectancy_r >= ?
         """,
-            [instrument, orb_label, entry_model, filter_type,
-             orb_min, cb, locked_rr, min_expectancy_r],
+            [instrument, orb_label, entry_model, filter_type, orb_min, cb, locked_rr, min_expectancy_r],
         ).fetchall()
 
         if not alt_rows:
@@ -329,7 +333,11 @@ def _jk_fallback_rr(
             cand_n = candidate["sample_size"]
 
             jk_p = jobson_korkie_p(
-                locked_sharpe, cand_sharpe, int(locked_n), int(cand_n), _JK_RHO,
+                locked_sharpe,
+                cand_sharpe,
+                int(locked_n),
+                int(cand_n),
+                _JK_RHO,
             )
             if jk_p > _JK_ALPHA:
                 jk_equal_candidates.append((candidate, jk_p))
@@ -922,7 +930,8 @@ def main():
             one_r_dollars = s.median_risk_points * spec.point_value
             d = s.expectancy_r * one_r_dollars
             return f"${d:+6.2f}"
-        except Exception:
+        except Exception as exc:
+            log.warning("Exp$ calculation failed for %s: %s", s.instrument, exc)
             return "   n/a"
 
     print(f"Active strategies: {len(active)}")

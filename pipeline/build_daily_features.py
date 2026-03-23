@@ -617,7 +617,10 @@ def compute_garch_forecast(daily_closes: list[float], min_obs: int = 252) -> flo
         daily_vol = (cond_var**0.5) / 100
         annual_vol = daily_vol * (252**0.5)
         return round(float(annual_vol), 6)
-    except Exception:
+    except ImportError:
+        return None  # arch not installed — optional dependency
+    except Exception as exc:
+        logger.debug("GARCH forecast failed: %s", exc)
         return None
 
 
@@ -997,9 +1000,7 @@ def build_features_for_day(
         if len(pre_bars) >= 5 and pre_bars["volume"].sum() > 0:
             vwap_prices = pre_bars["close"].values.astype(float)
             vwap_vols = pre_bars["volume"].values.astype(float)
-            row[f"orb_{label}_vwap"] = round(
-                float((vwap_prices * vwap_vols).sum() / vwap_vols.sum()), 4
-            )
+            row[f"orb_{label}_vwap"] = round(float((vwap_prices * vwap_vols).sum() / vwap_vols.sum()), 4)
         else:
             row[f"orb_{label}_vwap"] = None
 

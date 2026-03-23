@@ -182,8 +182,8 @@ def overview(con):
             FROM validated_setups GROUP BY instrument ORDER BY instrument
         """).fetchall()
         print_table(["Symbol", "Total", "CORE", "REGIME"], rows)
-    except Exception:
-        print("  No validated strategies yet.")
+    except Exception as exc:
+        print(f"  Could not query validated_setups: {exc}")
 
     pause()
 
@@ -741,8 +741,8 @@ def full_rundown(con):
             else:
                 issues.append(f"  !! Outcome builder heartbeat is {age_min:.0f} min old — process may be dead")
                 actions.append("Check if outcome builder is still running, restart if dead")
-        except Exception:
-            pass
+        except Exception as exc:
+            issues.append(f"  !! Heartbeat file unreadable: {exc}")
 
     # ══════════════════════════════════════════
     # PRINT THE REPORT

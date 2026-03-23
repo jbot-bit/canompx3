@@ -649,6 +649,7 @@ def _walkforward_worker(
 
     except Exception as e:
         result["error"] = f"{type(e).__name__}: {e}"
+        logger.warning("Walk-forward failed for %s: %s", result.get("strategy_id", "?"), e)
 
     result["wf_duration_s"] = time.monotonic() - t0
     return result
@@ -1051,9 +1052,7 @@ def run_validation(
                         (wf_result_dict or {}).get("as_dict", {}).get("n_valid_windows") if wf_tested else None
                     )
                     wfe_val = (wf_result_dict or {}).get("as_dict", {}).get("wfe") if wf_tested else None
-                    oos_exp_r = (
-                        (wf_result_dict or {}).get("as_dict", {}).get("agg_oos_exp_r") if wf_tested else None
-                    )
+                    oos_exp_r = (wf_result_dict or {}).get("as_dict", {}).get("agg_oos_exp_r") if wf_tested else None
 
                     # noise_risk: OOS ExpR at or below per-instrument p95 null floor
                     entry_model_key = rd.get("entry_model") or "E2"
@@ -1237,9 +1236,7 @@ def run_validation(
 
                 # N_eff: use edge family count as conservative estimate.
                 # True N_eff requires ONC algorithm (action queue #9).
-                n_eff_row = con.execute(
-                    "SELECT COUNT(DISTINCT family_hash) FROM edge_families"
-                ).fetchone()
+                n_eff_row = con.execute("SELECT COUNT(DISTINCT family_hash) FROM edge_families").fetchone()
                 n_eff = max(n_eff_row[0] if n_eff_row and n_eff_row[0] else 253, 2)
 
                 n_dsr_pass = 0
