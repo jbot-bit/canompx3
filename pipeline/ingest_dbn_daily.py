@@ -377,7 +377,7 @@ def main():
             stats["files_processed"] += 1
 
         except Exception as e:
-            logger.warning(f"ERROR processing {fpath.name}: {e}")
+            logger.error(f"Failed processing {fpath.name}: {e}")
             stats["files_failed"] += 1
             continue
 

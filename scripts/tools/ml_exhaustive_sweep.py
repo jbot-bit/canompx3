@@ -28,11 +28,16 @@ def run_ml(label: str, rr: float, per_aperture: bool = False) -> tuple[str, int,
     """Run one ML training pass. Returns (label, returncode, elapsed_seconds)."""
     logfile = LOG_DIR / f"ml_sweep_{label}.log"
     cmd = [
-        sys.executable, "-m", "trading_app.ml.meta_label",
-        "--instrument", "MNQ",
+        sys.executable,
+        "-m",
+        "trading_app.ml.meta_label",
+        "--instrument",
+        "MNQ",
         "--single-config",
-        "--rr-target", str(rr),
-        "--config-selection", "max_samples",
+        "--rr-target",
+        str(rr),
+        "--config-selection",
+        "max_samples",
         "--skip-filter",
     ]
     if per_aperture:
@@ -45,7 +50,9 @@ def run_ml(label: str, rr: float, per_aperture: bool = False) -> tuple[str, int,
 
     start = time.time()
     with open(logfile, "w") as f:
-        result = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT, cwd=str(Path(__file__).resolve().parent.parent.parent))
+        result = subprocess.run(
+            cmd, stdout=f, stderr=subprocess.STDOUT, cwd=str(Path(__file__).resolve().parent.parent.parent)
+        )
     elapsed = time.time() - start
 
     log.info(f"  DONE: {label} — exit={result.returncode}, {elapsed:.0f}s")
@@ -141,9 +148,16 @@ print("\\nUnivariate audit complete.")
 """
 
     with open(logfile, "w") as f:
-        subprocess.run([sys.executable, "-c", script], stdout=f, stderr=subprocess.STDOUT,
-                       cwd=str(Path(__file__).resolve().parent.parent.parent))
-    log.info(f"  Univariate audit saved to {logfile}")
+        proc = subprocess.run(
+            [sys.executable, "-c", script],
+            stdout=f,
+            stderr=subprocess.STDOUT,
+            cwd=str(Path(__file__).resolve().parent.parent.parent),
+        )
+    if proc.returncode != 0:
+        log.warning(f"  Univariate audit FAILED (exit code {proc.returncode}) — see {logfile}")
+    else:
+        log.info(f"  Univariate audit saved to {logfile}")
 
 
 def print_summary(results: list[tuple[str, int, float]]) -> None:
@@ -163,8 +177,10 @@ def print_summary(results: list[tuple[str, int, float]]) -> None:
         text = logfile.read_text()
         # Extract SUMMARY section
         for line in text.split("\n"):
-            if any(kw in line for kw in ["SUMMARY:", "Honest delta", "Full delta",
-                                          "Selection uplift", ">> ML t=", "NO_MODEL"]):
+            if any(
+                kw in line
+                for kw in ["SUMMARY:", "Honest delta", "Full delta", "Selection uplift", ">> ML t=", "NO_MODEL"]
+            ):
                 log.info(f"    {line.strip()}")
 
     # Also print the univariate audit path

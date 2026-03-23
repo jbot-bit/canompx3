@@ -502,9 +502,12 @@ def _compute_fitness_from_cache(
     rolling_start = _rolling_window_start(as_of_date, rolling_months)
 
     # Layer 1: Full-period stats (from validated_setups params)
-    full_exp_r = params.get("expectancy_r", 0.0) or 0.0
+    # Explicit None guard — 0.0 is a valid ExpR, None means not computed
+    _raw_exp = params.get("expectancy_r")
+    full_exp_r = float(_raw_exp) if _raw_exp is not None else 0.0
     full_sharpe = params.get("sharpe_ratio")
-    full_sample = params.get("sample_size", 0) or 0
+    _raw_sample = params.get("sample_size")
+    full_sample = int(_raw_sample) if _raw_sample is not None else 0
 
     # Get outcomes from cache
     key = (

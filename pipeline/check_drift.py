@@ -3636,8 +3636,8 @@ def main():
     if db_path.exists():
         try:
             _shared_con = duckdb.connect(str(db_path), read_only=True)
-        except Exception:
-            pass  # DB busy — individual checks will skip
+        except Exception as exc:
+            print(f"  WARNING: could not open DB ({exc}) — DB-dependent checks will skip")
 
     for i, (label, check_fn, is_advisory, requires_db) in enumerate(CHECKS, 1):
         print(f"Check {i}: {label}...")
