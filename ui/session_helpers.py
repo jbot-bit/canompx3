@@ -153,6 +153,10 @@ _SPECIAL_FILTERS = {
     "VOL_RV12_N20": "Realized vol in top 20%",
     "DIR_LONG": "Long breakouts only",
     "DIR_SHORT": "Short breakouts only",
+    "ATR70_VOL": "ATR top 30% + above-median volume",
+    "X_MES_ATR70": "MES ATR top 30% (cross-asset)",
+    "X_MES_ATR60": "MES ATR top 40% (cross-asset)",
+    "X_MGC_ATR70": "MGC ATR top 30% (cross-asset)",
 }
 
 

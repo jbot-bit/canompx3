@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from trading_app.live.multi_runner import _STOP_FILE, MultiInstrumentRunner
 
 
@@ -159,7 +160,7 @@ class TestMultiInstrumentRunner:
         )
 
         # Should have created orchestrators for all active instruments
-        assert len(runner.orchestrators) >= 4  # MGC, MNQ, MES, M2K
+        assert len(runner.orchestrators) >= len(ACTIVE_ORB_INSTRUMENTS)
 
     @patch("trading_app.live.multi_runner.SessionOrchestrator")
     def test_one_crash_others_survive(self, mock_orch_cls):

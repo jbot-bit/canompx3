@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from datetime import date, datetime, timezone, timedelta
 
+from unittest.mock import patch
+
 import pytest
 import pandas as pd
 import duckdb
@@ -916,6 +918,7 @@ class TestTimeStop:
         assert result["ts_pnl_r"] is None
         assert result["ts_exit_ts"] is None
 
+    @patch.dict("trading_app.config.EARLY_EXIT_MINUTES", {"TOKYO_OPEN": 30})
     def test_loss_after_threshold_gets_time_stopped(self):
         """Trade that loses after 30+ min at 1000 gets ts_outcome=time_stop."""
         orb_high, orb_low = 2700.0, 2690.0
@@ -957,6 +960,7 @@ class TestTimeStop:
         assert result["ts_pnl_r"] < 0
         assert result["ts_pnl_r"] > -1.0
 
+    @patch.dict("trading_app.config.EARLY_EXIT_MINUTES", {"TOKYO_OPEN": 30})
     def test_win_before_threshold_ts_matches_baseline(self):
         """Trade that wins before T80 -> ts_* matches baseline."""
         orb_high, orb_low = 2700.0, 2690.0
@@ -990,6 +994,7 @@ class TestTimeStop:
         assert result["ts_outcome"] == "win"
         assert result["ts_pnl_r"] == result["pnl_r"]
 
+    @patch.dict("trading_app.config.EARLY_EXIT_MINUTES", {"TOKYO_OPEN": 30})
     def test_positive_at_threshold_keeps_running(self):
         """Trade above entry at threshold bar but not at target -> keeps running."""
         orb_high, orb_low = 2700.0, 2690.0
