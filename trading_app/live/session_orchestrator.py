@@ -1063,11 +1063,12 @@ class SessionOrchestrator:
                 # All retries exhausted — position remains open at broker, stuck in PENDING_EXIT.
                 # Recovery paths: (1) stale_positions detects after 300s, (2) new entry overwrites
                 # PENDING_EXIT, (3) kill switch flattens on feed death, (4) manual close.
-                log.critical(
-                    "EXIT FAILED — %s stuck in PENDING_EXIT. Position open at broker. "
-                    "Kill switch or manual close required.",
-                    event.strategy_id,
+                stuck_msg = (
+                    f"EXIT FAILED — {event.strategy_id} stuck in PENDING_EXIT. "
+                    "Position open at broker. Kill switch or manual close required."
                 )
+                log.critical(stuck_msg)
+                self._notify(stuck_msg)
                 self._write_signal_record({"type": "EXIT_FAILED", "strategy_id": event.strategy_id, "error": str(e)})
                 return
             order_id = result.get("order_id") if isinstance(result, dict) else getattr(result, "order_id", None)
