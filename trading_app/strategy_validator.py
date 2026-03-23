@@ -99,11 +99,14 @@ def benjamini_hochberg(
     valid.sort(key=lambda x: x[1])
     m = total_tests if total_tests is not None else len(valid)
 
+    n = len(valid)
     results = {}
     # BH procedure: adjusted_p[i] = min(p[i] * m / rank, 1.0)
+    # m = total tests (may exceed n when some p-values are None / from other batches)
+    # Loop iterates over the n valid p-values; m is only used in the adjustment formula.
     # Enforce monotonicity: adjusted_p[i] = min(adjusted_p[i], adjusted_p[i+1])
     prev_adj = 1.0
-    for rank_idx in range(m - 1, -1, -1):
+    for rank_idx in range(n - 1, -1, -1):
         sid, raw_p = valid[rank_idx]
         rank = rank_idx + 1  # 1-indexed rank
         adj_p = min(raw_p * m / rank, 1.0)
