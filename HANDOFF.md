@@ -7,10 +7,53 @@
 ---
 
 ## Current Session
-- **Tool:** Claude Code (Canonical Refresh + FDR Fix + Pipeline Status Fix + Live Spec Rebuild)
-- **Date:** 2026-03-23
+- **Tool:** Claude Code (Review Terminal — code review + institutional MGC audit + bootstrap audit)
+- **Date:** 2026-03-23 to 2026-03-24
 - **Branch:** `main`
-- **Status:** Full canonical refresh complete. 404 validated. 8 specs. 8 MNQ live-resolvable (MGC 0, MES 0). FDR K snapshot fix applied. pipeline_status per-aperture fix applied.
+- **Status:** 12 production bugs fixed. Drift 18→3. MGC institutional audit complete. Shadow tracker activated. Bootstrap audit: NO CHANGE (Gaussian floors are valid lower bound). Sign-randomization bootstrap built by other terminal (STAGE_STATE active).
+
+### What was done this session (Review Terminal, Mar 23-24)
+
+#### 1. 2-Day Code Review (4 parallel review agents)
+- 12 production bugs found and fixed across 9 files
+- C1: Portfolio ATR gate crash (TypeError), C3: BH total_tests param + IndexError fix
+- C4+C5: 5 test regressions fixed (pipeline_status per-aperture + seasonal gate)
+- H1: holdout check fail-closed, H3: seasonal gate in REGIME/HOT, H4: schema verification 14 cols
+- M1: holdout JSON extraction, M3: dead instruments docs, P1: post-edit hook PYTHONPATH
+- Drift checks: 18 violations → 3 (all ML #61, frozen)
+- Post-edit hook now fully operational (was broken by PYTHONPATH)
+
+#### 2. MGC Institutional Truth Audit
+- Full raw-verified audit (all metadata matched raw recomputation)
+- Sigma overshoot: 2.82x trimmed but trade-weighted match 1.03x in 2025 regime
+- Sigma-invariance PROVEN: R-multiple floors don't depend on sigma (MGC vs MNQ test)
+- Real Gaussian defects: fat tails (kurtosis 374-8950), vol clustering (autocorr 0.64-0.91), session structure
+- Noise floor is approximately correct for tradeable regime, not artificially strict
+- RR lock: HONEST BUT CLIFFY (flat Sharpe surface, CV=5.2%). Not binding — noise_risk blocks all RR levels
+- Verdict: MGC 0-live stands. Shadow only.
+
+#### 3. Shadow Tracker Activated
+- `docs/pre-registrations/mgc-tokyo-shadow-ACTIVE.md` — frozen pre-registration
+- `docs/pre-registrations/shadow-logs/mgc-tokyo-shadow.csv` — empty, header-only
+- Candidate: MGC_TOKYO_OPEN_E2_RR1.5_CB1_ORB_G4_S075 (verified from raw)
+- Forward-only start: 2026-03-21. Zero capital. Kill-switches defined.
+- No production impact. Not in LIVE_PORTFOLIO. Not CORE.
+
+#### 4. Block Bootstrap Audit
+- Verdict: NO CHANGE. Bootstrap is methodologically better but would produce EQUAL OR HIGHER floors
+- MES/MNQ: floors go UP (stricter). MGC: direction UNCERTAIN but blocked regardless
+- 225 hours compute for no tradability change. Not justified.
+- Other terminal running sign-randomization bootstrap (faster alternative)
+
+#### 5. Tooling Fixes
+- null_envelope.py: fixed MAX→P95 floor computation (matched production)
+- websockets installed, spa_test configure_connection added
+- ML model check #51 → advisory (ML frozen)
+- Dead instruments regex: fixed cross-function false positive
+
+### Prior Session (same page, earlier Mar 23)
+- **Tool:** Claude Code (Canonical Refresh terminal)
+- See sections below for full canonical refresh details (FDR K fix, pipeline_status, live_config redesign, etc.)
 
 ### What was done this session
 
