@@ -99,6 +99,14 @@ def benjamini_hochberg(
     valid.sort(key=lambda x: x[1])
     m = total_tests if total_tests is not None else len(valid)
 
+    # Fail-closed: BH requires m >= n to maintain FDR control.
+    # m < n would make the correction anti-conservative (fewer tests than p-values).
+    if m < len(valid):
+        raise ValueError(
+            f"total_tests ({m}) < valid p-values ({len(valid)}): "
+            f"BH requires m >= n to maintain FDR control (Benjamini & Hochberg 1995)"
+        )
+
     n = len(valid)
     results = {}
     # BH procedure: adjusted_p[i] = min(p[i] * m / rank, 1.0)
