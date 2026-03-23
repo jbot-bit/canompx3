@@ -10,7 +10,7 @@
 - **Tool:** Claude Code (Guardian Audit — live execution safety)
 - **Date:** 2026-03-24
 - **Branch:** `main`
-- **Status:** Live execution orphan containment gate: COMPLETE. Code reviewed (2x). SHIP.
+- **Status:** Live execution orphan containment gate: **DONE.** 2x code review + institutional closure audit. CLOSED.
 
 ### What was done this session (Mar 24 — guardian audit)
 
@@ -281,6 +281,8 @@
 - MGC: 0 live — noise_risk is binding blocker (RR lock resolved via JK fallback)
 - Spec set: MNQ-shaped by construction, not by architecture bug
 - Live execution: orphan containment is session-scoped (process restart clears _blocked_strategies). Startup orphan check (query_open) covers restart case independently.
+- Pre-existing (NOT blocking): `on_exit_sent` in position_tracker.py doesn't guard against duplicate PENDING_EXIT transition (unreachable in practice — called once before retry loop)
+- Pre-existing (NOT blocking): `_emergency_flatten` doesn't cancel brackets before exit (broker order management handles this)
 
 ---
 
