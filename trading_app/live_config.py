@@ -427,7 +427,15 @@ def build_live_portfolio(
                 f"ATR GATE: {instrument} atr_20_pct={current_atr_pct} < {atr_threshold} -- "
                 f"ALL strategies skipped (low-vol regime not validated OOS)"
             )
-            return Portfolio(strategies=[]), notes
+            return Portfolio(
+                name="live",
+                instrument=instrument,
+                strategies=[],
+                account_equity=account_equity,
+                risk_per_trade_pct=risk_per_trade_pct,
+                max_concurrent_positions=3,
+                max_daily_loss_r=5.0,
+            ), notes
         notes.append(f"ATR GATE: {instrument} atr_20_pct={current_atr_pct:.1f} >= {atr_threshold} -- OPEN")
 
     # --- CORE tier: try rolling validated first, fall back to validated_setups ---

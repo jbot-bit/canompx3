@@ -151,13 +151,14 @@ def _insert_daily_features(con, symbol, trading_day, orb_minutes):
     )
 
 
-def _insert_orb_outcome(con, symbol, trading_day):
-    """Insert a minimal orb_outcomes row."""
-    con.execute(
-        "INSERT INTO orb_outcomes (trading_day, symbol, orb_label, orb_minutes, rr_target, "
-        "confirm_bars, entry_model, outcome, pnl_r) VALUES (?, ?, 'CME_REOPEN', 5, 1.5, 1, 'E2', 'win', 1.0)",
-        [trading_day, symbol],
-    )
+def _insert_orb_outcome(con, symbol, trading_day, apertures=(5, 15, 30)):
+    """Insert minimal orb_outcomes rows for each aperture."""
+    for ap in apertures:
+        con.execute(
+            "INSERT INTO orb_outcomes (trading_day, symbol, orb_label, orb_minutes, rr_target, "
+            "confirm_bars, entry_model, outcome, pnl_r) VALUES (?, ?, 'CME_REOPEN', ?, 1.5, 1, 'E2', 'win', 1.0)",
+            [trading_day, symbol, ap],
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -268,7 +269,7 @@ class TestStalenessEngine:
         status = staleness_engine(con, sym)
         con.close()
 
-        assert "orb_outcomes" in status["stale_steps"]
+        assert any(s.startswith("orb_outcomes_O") for s in status["stale_steps"])
         assert status["orb_outcomes"] == date(2026, 2, 20)
         assert status["daily_features_min"] == date(2026, 3, 6)
 
