@@ -239,6 +239,6 @@ Next: [top candidate for next iteration]
 
 - One-way dep: `pipeline/` → `trading_app/` (never reversed)
 - DB: `gold.db` at project root. All timestamps UTC. Local: Australia/Brisbane (UTC+10).
-- 4 active instruments: MGC, MNQ, MES, M2K
+- Active instruments: from ACTIVE_ORB_INSTRUMENTS (currently 3: MGC, MNQ, MES; M2K dead Mar 2026)
 - Entry models: E1+E2 active. E0 purged. E3 soft-retired (in SKIP_ENTRY_MODELS).
 - Idempotent writes: DELETE+INSERT pattern everywhere.

@@ -1049,9 +1049,8 @@ ORB_DURATION_MINUTES: dict[str, int] = {
 #   Tested: 5m/15m/30m ORBs, all sessions, NYMEX-focused, breakout + fade.
 #   Oil is structurally mean-reverting (47-80% double break). No edge exists.
 #   See memory/mcl_research.md for full scientific validation.
-# MNQ (Micro Nasdaq): ~5 years data, 14 live strategies, 8 sessions.
-# MES (Micro S&P 500): 4-5 live strategies, CME_PRECLOSE dominant.
-# M2K (Micro Russell): 4-5 live strategies, NYSE_OPEN/US_DATA_1000/LONDON_METALS.
+# Live strategy counts change after every rebuild — query live_config, do not hardcode.
+# M2K (Micro Russell): DEAD for ORB (0/18 families survive null test, Mar 2026).
 # Canonical source: pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS
 # Do NOT hardcode — import from the single source of truth.
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS  # noqa: E402

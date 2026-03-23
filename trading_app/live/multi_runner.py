@@ -4,7 +4,7 @@ Runs one SessionOrchestrator per instrument concurrently via asyncio.gather().
 Each orchestrator is fully independent — own feed, engine, ORB builder, monitor.
 
 Usage:
-    runner = MultiInstrumentRunner(["MGC", "MNQ", "MES", "M2K"], ...)
+    runner = MultiInstrumentRunner(["MGC", "MNQ", "MES"], ...)
     asyncio.run(runner.run())
     runner.post_session()
 """

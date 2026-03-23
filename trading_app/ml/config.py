@@ -106,7 +106,7 @@ CATEGORICAL_FEATURES: list[str] = [
 # The model was learning "low RR = higher win rate" (tautological) instead
 # of market-regime signals. Removing it forces the model to discriminate
 # based on daily market conditions.
-# @research-source: scripts/tools/ml_audit.py, all 4 instruments
+# @research-source: scripts/tools/ml_audit.py, all active instruments
 # @revalidated-for: E1, E2
 TRADE_CONFIG_FEATURES: list[str] = [
     "confirm_bars",
@@ -224,7 +224,7 @@ LEVEL_PROXIMITY_FEATURES: list[str] = [
 
 # E6 noise features to exclude from clean feature set.
 # @research-source: ml_level_proximity_experiment.py (Mar 4 2026)
-#   All had <1% importance across all 4 instruments in E3/E6 experiments.
+#   All had <1% importance across all active instruments in E3/E6 experiments.
 #   orb_label one-hots are the #1 problem — cause session identity leakage.
 E6_NOISE_PREFIXES: list[str] = [
     "orb_label_",  # Session identity leakage (11-13% importance = tautological)
