@@ -167,15 +167,10 @@
 - Drift check #82: NOW PASSING. Down from 18 violations to 3 (all in frozen ML code).
 
 #### 10. MGC Research Truth Audit
-- **MGC is weak for ORB. Primary cause: friction arithmetic.**
-  MGC TOKYO_OPEN median ORB=1.0pt, friction=57% of risk. MNQ CME_PRECLOSE: 7%.
-- **Phase 3 asymmetry:** MGC 11 years vs MNQ 6. "All years positive" is harder with more data.
-  6,083 MGC strategies killed by Phase 3 (27%). Design choice, not a bug.
-- **Positive islands exist** (CME_REOPEN, LONDON_METALS at high RR/G8) but all REGIME-class (N=25-57).
-- **RR lock picks MAX_SHARPE → RR1.0** (ExpR=0.186) over head at RR1.5 (ExpR=0.235). By design.
-- **Spec set confirmed MNQ-shaped:** architecture is instrument-agnostic, spec SET is biased.
-  Expanding specs would NOT produce new live strategies (all non-MNQ candidates blocked by other gates).
-- **ML NOT YET ready:** 0 clean positive baselines for MGC/MES. Only MNQ contributes.
+- See section 8 (corrected MGC truth block) for canonical MGC findings.
+- Key additions from institutional audit: noise floor sigma overshoot (MGC 2.54x trimmed std)
+  is a known method defect with unproven bias direction. Block bootstrap calibration needed.
+- p_values propagated to validated_setups (772/772, verified matching).
 
 #### 11. Spec Policy Audit
 - **VERDICT: SPEC SET BIASED + GENUINE STRUCTURAL WEAKNESS.**
