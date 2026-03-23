@@ -44,6 +44,20 @@ INSTRUMENT_NULL_PARAMS: dict[str, dict] = {
     "MES": {"sigma": 1.1, "start_price": 5000.0, "tick_size": 0.25},
 }
 
+# C1 time-varying null: per-year trimmed_std from real bars_1m.
+# Each year's sigma derived from that year's own data only. No cross-year pooling.
+# 2026 excluded (holdout sacred).
+# NOTE: Pre-holdout-era null audit. If reused in WF, sigma must be IS-only per fold.
+# Calibrated via: python scripts/tools/calibrate_null_sigma.py --per-year
+# Default null range is 2020-2025. Years 2016-2019 included for --start-date override.
+SIGMA_BY_YEAR: dict[str, dict[int, float]] = {
+    "MGC": {
+        2016: 0.29, 2017: 0.20, 2018: 0.20, 2019: 0.24,
+        2020: 0.53, 2021: 0.37, 2022: 0.41, 2023: 0.36,
+        2024: 0.51, 2025: 0.99,
+    },
+}
+
 
 def _seed_dir(instrument: str) -> Path:
     """Per-instrument seed directory."""
@@ -104,7 +118,13 @@ def get_seed_range(total_seeds: int, batch: int, of: int) -> tuple[int, int]:
     return start, end
 
 
-def run_seed(seed: int, output_dir: Path, instrument: str = "MGC", sigma: float | None = None) -> dict:
+def run_seed(
+    seed: int,
+    output_dir: Path,
+    instrument: str = "MGC",
+    sigma: float | None = None,
+    sigma_by_year: dict[int, float] | None = None,
+) -> dict:
     """Run one null test seed, saving DB to permanent location."""
     db_dir = output_dir / f"seed_{seed:04d}"
     db_dir.mkdir(parents=True, exist_ok=True)
@@ -141,7 +161,10 @@ def run_seed(seed: int, output_dir: Path, instrument: str = "MGC", sigma: float 
         "--output-dir", str(output_dir),
         "--instrument", instrument,
     ]
-    if sigma is not None:
+    if sigma_by_year:
+        import json as _json
+        cmd += ["--sigma-by-year", _json.dumps({str(k): v for k, v in sigma_by_year.items()})]
+    elif sigma is not None:
         cmd += ["--sigma", str(sigma)]
 
     result = subprocess.run(
@@ -269,7 +292,12 @@ def main() -> int:
     parser.add_argument("--batch", type=int, default=1, help="Which batch (for parallel terminals)")
     parser.add_argument("--of", type=int, default=1, help="Total batches (for parallel terminals)")
     parser.add_argument("--instrument", type=str, default="MGC", help="Instrument (default: MGC). Calibrates sigma/price/tick.")
-    parser.add_argument("--sigma", type=float, default=None, help="Override sigma (default: auto from INSTRUMENT_NULL_PARAMS)")
+    parser.add_argument("--sigma", type=float, default=None, help="Override flat sigma (default: auto from INSTRUMENT_NULL_PARAMS)")
+    parser.add_argument(
+        "--time-varying",
+        action="store_true",
+        help="Use C1 time-varying null: per-year sigma from SIGMA_BY_YEAR. Overrides --sigma.",
+    )
     parser.add_argument("--analyze-only", action="store_true", help="Skip running, just analyze existing DBs")
     parser.add_argument("--check", action="store_true", help="Check prerequisites only, don't run")
     parser.add_argument("--force", action="store_true", help="Override prerequisite failures (results may be invalid)")
@@ -278,6 +306,18 @@ def main() -> int:
     instrument = args.instrument.upper()
     params = INSTRUMENT_NULL_PARAMS.get(instrument, INSTRUMENT_NULL_PARAMS["MGC"])
     sigma = args.sigma if args.sigma is not None else params["sigma"]
+
+    # C1 time-varying null: use per-year sigma if available and requested
+    sigma_by_year_dict = None
+    if args.time_varying:
+        sigma_by_year_dict = SIGMA_BY_YEAR.get(instrument)
+        if not sigma_by_year_dict:
+            print(f"ERROR: No SIGMA_BY_YEAR for {instrument}. Add to run_null_batch.py or use --sigma.")
+            return 1
+        print(f"C1 time-varying null: per-year sigma for {instrument}")
+        for yr in sorted(sigma_by_year_dict):
+            print(f"  {yr}: {sigma_by_year_dict[yr]}")
+        print()
 
     SEED_DIR = _seed_dir(instrument)
     SEED_DIR.mkdir(parents=True, exist_ok=True)
@@ -316,7 +356,10 @@ def main() -> int:
     print(f"NULL TEST BATCH RUNNER — {instrument}")
     print(f"{'='*60}")
     print(f"  Instrument:   {instrument}")
-    print(f"  Sigma:        {sigma} (calibrated {'auto' if args.sigma is None else 'manual'})")
+    if sigma_by_year_dict:
+        print(f"  Sigma:        C1 time-varying (per-year trimmed_std)")
+    else:
+        print(f"  Sigma:        {sigma} (calibrated {'auto' if args.sigma is None else 'manual'})")
     print(f"  Total seeds:  {args.seeds}")
     print(f"  This batch:   {args.batch} of {args.of} (seeds {start}-{end-1})")
     print(f"  Parallel:     {n_parallel} workers")
@@ -329,7 +372,9 @@ def main() -> int:
     # Snapshot current config for the manifest
     manifest = load_manifest(SEED_DIR)
     manifest["config_snapshot"]["instrument"] = instrument
-    manifest["config_snapshot"]["sigma"] = sigma
+    manifest["config_snapshot"]["sigma"] = sigma if not sigma_by_year_dict else "C1_time_varying"
+    if sigma_by_year_dict:
+        manifest["config_snapshot"]["sigma_by_year"] = {str(k): v for k, v in sigma_by_year_dict.items()}
     try:
         from trading_app.config import NOISE_EXPR_FLOOR
         manifest["config_snapshot"]["noise_floors"] = dict(NOISE_EXPR_FLOOR)
@@ -342,7 +387,7 @@ def main() -> int:
         # Sequential fallback
         for i, seed in enumerate(seed_range):
             print(f"\n[{i+1}/{len(seed_range)}] Running seed {seed}...")
-            result = run_seed(seed, SEED_DIR, instrument=instrument, sigma=sigma)
+            result = run_seed(seed, SEED_DIR, instrument=instrument, sigma=sigma, sigma_by_year=sigma_by_year_dict)
             manifest["seeds"][str(seed)] = result
             save_manifest(manifest, SEED_DIR)
     else:
@@ -352,7 +397,7 @@ def main() -> int:
         completed = 0
         with ProcessPoolExecutor(max_workers=n_parallel) as executor:
             futures = {
-                executor.submit(run_seed, seed, SEED_DIR, instrument, sigma): seed
+                executor.submit(run_seed, seed, SEED_DIR, instrument, sigma, sigma_by_year_dict): seed
                 for seed in seed_range
             }
             for future in as_completed(futures):
