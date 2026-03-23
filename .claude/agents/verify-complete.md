@@ -235,7 +235,7 @@ ruff format --check pipeline/ trading_app/    # Format check
 - Fail-closed: any validation failure aborts immediately
 - Idempotent: all operations safe to re-run (DELETE+INSERT)
 - All DB timestamps UTC. Local timezone Australia/Brisbane (UTC+10, no DST)
-- 4 active instruments: MGC, MNQ, MES, M2K
+- Active instruments: from ACTIVE_ORB_INSTRUMENTS (currently 3: MGC, MNQ, MES; M2K dead Mar 2026)
 
 ## Memory Instructions
 

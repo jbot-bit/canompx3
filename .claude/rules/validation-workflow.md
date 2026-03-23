@@ -9,7 +9,7 @@ paths:
 ## Correct Validator Flags
 ```bash
 # Walk-forward enabled for all instruments (Mar 2026).
-# All 4 active instruments have 5+ years — sufficient for WF.
+# All active instruments (from ACTIVE_ORB_INSTRUMENTS) have 5+ years — sufficient for WF.
 # MGC uses WF_START_OVERRIDE=2022-01-01 in config.py (regime shift).
 python trading_app/strategy_validator.py --instrument MGC --min-sample 30 \
   --no-regime-waivers --min-years-positive-pct 0.75

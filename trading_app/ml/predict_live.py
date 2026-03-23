@@ -35,7 +35,7 @@ from trading_app.ml.features import apply_e6_filter, transform_to_features
 logger = logging.getLogger(__name__)
 
 # Cache eviction: prevent unbounded growth in long backtests.
-# 12K entries ≈ 4 instruments × 12 sessions × ~230 trading days.
+# 12K entries ≈ N instruments × 12 sessions × ~230 trading days.
 _MAX_CACHE_SIZE = 12_000
 
 
