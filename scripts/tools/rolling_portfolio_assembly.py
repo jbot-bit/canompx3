@@ -459,7 +459,7 @@ def main():
     elif args.all:
         instruments = sorted(ACTIVE_ORB_INSTRUMENTS)
     else:
-        instruments = ["MGC"]
+        instruments = sorted(ACTIVE_ORB_INSTRUMENTS)
 
     run(args.db_path, instruments)
 

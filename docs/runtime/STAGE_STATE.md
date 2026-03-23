@@ -1,25 +1,25 @@
 ---
 task: "Master guardian audit: fix fail-open defects, stale narrative, canonical violations, test staleness"
 mode: IMPLEMENTATION
-stage: 2
+stage: 3
 stage_of: 4
-stage_purpose: "Phase 2: Fix stale narrative across docs/memory/agents (instrument counts, session counts, dead advice)"
-updated: 2026-03-24T21:30+10:00
+stage_purpose: "Phase 3: Replace hardcoded values with canonical imports"
+updated: 2026-03-24T22:00+10:00
 terminal: main
 scope_lock:
-  - trading_app/config.py
-  - trading_app/ml/predict_live.py
-  - trading_app/ml/config.py
-  - trading_app/live/multi_runner.py
-  - TRADING_RULES.md
-  - .claude/agents/verify-complete.md
-  - .claude/agents/ralph-loop.md
-  - .claude/rules/validation-workflow.md
+  - scripts/tools/zero_context_audit.py
+  - scripts/tools/hypothesis_test.py
+  - scripts/tools/ml_hybrid_experiment.py
+  - scripts/tools/rolling_portfolio_assembly.py
+  - trading_app/ai/cli.py
+  - pipeline/asset_configs.py
+  - pipeline/check_drift.py
 acceptance:
-  - "All '4 active instruments' references corrected to 3 or canonical"
-  - "config.py stale live strategy counts removed"
-  - "TRADING_RULES.md session count corrected to 12"
-  - "Memory files marked stale or corrected"
-  - "No new drift introduced"
+  - "Hardcoded instrument lists replaced with ACTIVE_ORB_INSTRUMENTS"
+  - "Hardcoded session lists replaced with SESSION_CATALOG"
+  - "Duplicated FRICTION dict replaced with COST_SPECS"
+  - "MBT has explicit orb_active: False"
+  - "Drift check #61 recognizes frl_join variable"
+  - "Behavioral audit passes (0 violations)"
 blockers: []
 ---

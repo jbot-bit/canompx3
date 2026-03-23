@@ -27,14 +27,14 @@ except ImportError:
     print("ERROR: duckdb not installed. Run: pip install duckdb")
     sys.exit(1)
 
+from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+from pipeline.cost_model import COST_SPECS
 from pipeline.paths import GOLD_DB_PATH
 
-# Cost models (round-trip in points)
+# Derive friction from canonical source
 FRICTION = {
-    "MGC": {"rt_points": 0.84, "tick_value": 1.00},
-    "MES": {"rt_points": 1.68, "tick_value": 1.25},
-    "MNQ": {"rt_points": 1.37, "tick_value": 2.00},
-    "MCL": {"rt_points": 0.30, "tick_value": 1.00},
+    sym: {"rt_points": spec.total_friction / spec.point_value, "tick_value": spec.tick_size * spec.point_value}
+    for sym, spec in COST_SPECS.items()
 }
 
 # Typical price levels (for percentage calculation when daily_close missing)
@@ -222,7 +222,7 @@ def test_h3_percentage_filter(con):
     print("  5pt on MGC (price ~2900) = 0.17%. 5pt on MNQ (~21000) = 0.024%.")
     print("  Question: Does a universal % threshold work across instruments?")
 
-    instruments = ["MGC", "MNQ", "MES"]
+    instruments = sorted(ACTIVE_ORB_INSTRUMENTS)
     pct_thresholds = [0.05, 0.10, 0.15, 0.20, 0.30, 0.50]
 
     for sym in instruments:
@@ -289,7 +289,7 @@ def test_h4_orb_atr_ratio(con):
     print("  for current volatility. Adapts automatically to regime.")
     print("  Question: Does ATR-normalized ORB filter beat fixed points?")
 
-    instruments = ["MGC", "MNQ", "MES"]
+    instruments = sorted(ACTIVE_ORB_INSTRUMENTS)
     atr_thresholds = [0.20, 0.30, 0.40, 0.50, 0.60, 0.80]
 
     for sym in instruments:
@@ -339,7 +339,7 @@ def test_h5_direction_filter(con):
     print("  Deep dive showed: Asia sessions favor LONGS, US sessions favor SHORTS.")
     print("  Question: Does filtering by direction improve edge?")
 
-    instruments = ["MGC", "MNQ", "MES"]
+    instruments = sorted(ACTIVE_ORB_INSTRUMENTS)
 
     for sym in instruments:
         print_subheader(f"{sym}")

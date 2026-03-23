@@ -19,23 +19,12 @@ from sklearn.ensemble import RandomForestClassifier
 
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
+from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+from pipeline.dst import SESSION_CATALOG
 from trading_app.config import ALL_FILTERS
 from trading_app.ml.features import transform_to_features
 
-SESSION_ORDER = [
-    "CME_REOPEN",
-    "TOKYO_OPEN",
-    "BRISBANE_1025",
-    "SINGAPORE_OPEN",
-    "EUROPE_FLOW",
-    "LONDON_METALS",
-    "US_DATA_830",
-    "NYSE_OPEN",
-    "US_DATA_1000",
-    "COMEX_SETTLE",
-    "CME_PRECLOSE",
-    "NYSE_CLOSE",
-]
+SESSION_ORDER = sorted(SESSION_CATALOG.keys())
 
 
 def build_level_features(df):
@@ -334,5 +323,5 @@ def run_hybrid(instrument):
 
 
 if __name__ == "__main__":
-    for instrument in ["MNQ", "MES", "MGC", "M2K"]:
+    for instrument in sorted(ACTIVE_ORB_INSTRUMENTS):
         run_hybrid(instrument)

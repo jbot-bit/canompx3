@@ -2798,9 +2798,7 @@ def check_rr_resolution_paths_locked() -> list[str]:
     # causing false positives (e.g. FROM validated_setups in function A matching
     # LIMIT 1 in function B which queries experimental_strategies).
     sql_block_pattern = re.compile(r'"""(.*?)"""', re.DOTALL)
-    variant_in_block = re.compile(
-        r"FROM\s+validated_setups", re.IGNORECASE
-    )
+    variant_in_block = re.compile(r"FROM\s+validated_setups", re.IGNORECASE)
     pick_pattern = re.compile(r"LIMIT\s+1|ROW_NUMBER", re.IGNORECASE)
 
     for fpath in production_files:
@@ -2816,7 +2814,7 @@ def check_rr_resolution_paths_locked() -> list[str]:
             if not pick_pattern.search(block):
                 continue
             # This block selects from validated_setups with LIMIT 1 / ROW_NUMBER
-            if "family_rr_locks" not in block:
+            if "family_rr_locks" not in block and "frl_join" not in block:
                 line_num = content[: block_match.start()].count("\n") + 1
                 rel = fpath.relative_to(PROJECT_ROOT)
                 violations.append(
@@ -3307,9 +3305,7 @@ def check_noise_floor_compliance(con=None) -> list[str]:
             [entry_model, floor],
         ).fetchall()
         for sid, expr in rows:
-            violations.append(
-                f"  {sid}: ExpR={expr:.4f} <= noise floor {floor} for {entry_model}"
-            )
+            violations.append(f"  {sid}: ExpR={expr:.4f} <= noise floor {floor} for {entry_model}")
 
     return violations
 
@@ -3519,7 +3515,12 @@ CHECKS = [
     ),
     ("ML lookahead blacklist includes all outcome targets", check_ml_lookahead_blacklist, False, False),
     ("Audit columns populated (n_trials, fst_hurdle, DSR)", check_audit_columns_populated, False, True),  # requires_db
-    ("ML model files exist for all active instruments", check_ml_model_files_exist, True, False),  # advisory: ML frozen (V2 gate), MES/MGC models intentionally absent
+    (
+        "ML model files exist for all active instruments",
+        check_ml_model_files_exist,
+        True,
+        False,
+    ),  # advisory: ML frozen (V2 gate), MES/MGC models intentionally absent
     ("ML model config hashes match current config", check_ml_config_hash_match, True, False),
     ("ML model freshness < 90 days", check_ml_model_freshness, False, False),
     # ── New checks from deep audit (Mar 2026) ──────────────────────────
