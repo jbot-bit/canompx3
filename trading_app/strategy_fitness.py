@@ -87,12 +87,17 @@ class FitnessReport:
 # @research-source: heuristic thresholds for regime fitness classification.
 # 15 trades ≈ 1 month of daily trading. Below this, Sharpe SE ≈ 0.26 (noisy
 # but directionally useful for regime monitoring, not discovery).
-# @revalidated-for: E1/E2 event-based (2026-03-09)
+# @sensitivity-tested: 2026-03-23. ROBUST. Monitoring only — does not gate
+# portfolio inclusion. All 9 live strategies have rolling_sample 40-228,
+# well above both thresholds. Varying +-20% has zero live effect.
+# @revalidated-for: E1/E2 event-based (2026-03-23)
 MIN_ROLLING_FIT = 15
 MIN_ROLLING_WATCH = 10
 # @research-source: heuristic. Sharpe <= -0.1 over 30 trades signals momentum
 # decay even when rolling ExpR is still positive. Catches early regime breaks.
-# @revalidated-for: E1/E2 event-based (2026-03-09)
+# @sensitivity-tested: 2026-03-23. ROBUST. Monitoring only. All 9 live
+# strategies currently FIT with positive recent Sharpe. No live gate effect.
+# @revalidated-for: E1/E2 event-based (2026-03-23)
 SHARPE_DECAY_THRESHOLD = -0.1
 
 

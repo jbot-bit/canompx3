@@ -34,13 +34,19 @@ from trading_app.config import ENTRY_MODELS
 # @research-source: stability thresholds calibrated from MGC rolling window
 # analysis. 0.6 = passes >60% of windows weighted by sample size.
 # 0.3 = minimum for TRANSITIONING (below = DEGRADED).
-# @revalidated-for: E1/E2 event-based (2026-03-09)
+# No calibration script survives — original analysis predates event-based rename.
+# @sensitivity-tested: 2026-03-23. ROBUST. MNQ: 32 rolling strategies at 0.48/0.54/0.60
+# (no cliff). MES: 4/4/3. MGC: 0 at all values. No live portfolio cliff in +-20%.
+# @revalidated-for: E1/E2 event-based (2026-03-23)
 STABLE_THRESHOLD = 0.6
 TRANSITIONING_THRESHOLD = 0.3
 
 # @research-source: 50 trades = full weight in stability scoring.
 # Below 50, window contribution is linearly scaled (e.g., 20 trades = 0.4 weight).
-# @revalidated-for: E1/E2 event-based (2026-03-09)
+# No academic derivation — practical heuristic for minimum meaningful sample.
+# @sensitivity-tested: 2026-03-23. ROBUST. MNQ 91% of windows at full weight.
+# Changing to 40 or 60 shifts stability scores <0.02. Not load-bearing.
+# @revalidated-for: E1/E2 event-based (2026-03-23)
 FULL_WEIGHT_SAMPLE = 50
 
 # @research-source: 24 months = ~2 years of monthly windows. Balances recency
@@ -54,7 +60,9 @@ DEFAULT_LOOKBACK_WINDOWS = 24
 # @research-source: same floor as live_config.LIVE_MIN_EXPECTANCY_R — strategies below
 # 0.10R/trade are not meaningful after costs and noise. Cannot import from live_config
 # directly (circular import: live_config imports rolling_portfolio).
-# @revalidated-for: E1/E2 event-based (2026-03-09)
+# @sensitivity-tested: 2026-03-23. ROBUST. MNQ: 36/33/29 qualifying families at
+# 0.08/0.10/0.12. Smooth gradient, no cliff. MES: 7/5/5 (small step at 0.08->0.09).
+# @revalidated-for: E1/E2 event-based (2026-03-23)
 MIN_EXPECTANCY_R = 0.10
 
 
