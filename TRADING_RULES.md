@@ -8,7 +8,7 @@ For research deep-dives and data tables, see `docs/RESEARCH_ARCHIVE.md`.
 
 ## Glossary
 
-### Sessions (ORB Labels — 12 total, 10 event-based + BRISBANE_1025 fixed + EUROPE_FLOW)
+### Sessions (ORB Labels — 12 total, all dynamic/event-based)
 
 All sessions are now dynamic/event-based. Times are resolved per-day from `pipeline/dst.py` SESSION_CATALOG, eliminating DST contamination.
 
