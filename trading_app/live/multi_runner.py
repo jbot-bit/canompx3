@@ -114,13 +114,19 @@ class MultiInstrumentRunner:
             log.exception("Orchestrator %s crashed", instrument)
             raise
 
-    def post_session(self) -> None:
-        """Run post-session cleanup for all instruments."""
+    def post_session(self) -> list[str]:
+        """Run post-session cleanup for all instruments. Returns failed instrument list."""
+        failed: list[str] = []
         for inst, orch in self.orchestrators.items():
             try:
                 orch.post_session()
             except Exception:
                 log.exception("Post-session failed for %s", inst)
+                failed.append(inst)
+
+        if failed:
+            log.critical("Post-session FAILED for %s — CHECK POSITIONS MANUALLY", failed)
 
         # Final cleanup
         _STOP_FILE.unlink(missing_ok=True)
+        return failed

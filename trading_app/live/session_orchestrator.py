@@ -209,6 +209,13 @@ class SessionOrchestrator:
         journal_mode = "signal" if signal_only else ("demo" if demo else "live")
         journal_path = Path(__file__).parent.parent.parent / "live_journal.db"
         self.journal = TradeJournal(journal_path, mode=journal_mode)
+        if not self.journal.is_healthy:
+            if journal_mode == "live":
+                raise RuntimeError(
+                    f"TradeJournal failed to open {journal_path} — refusing to start live session "
+                    "without trade persistence. Fix the journal path or use --demo."
+                )
+            log.warning("TradeJournal unhealthy — trades will NOT be persisted (mode=%s)", journal_mode)
 
         # Position lifecycle tracker — replaces ad-hoc _entry_prices dict
         self._positions = PositionTracker()

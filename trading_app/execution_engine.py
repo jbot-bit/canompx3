@@ -230,7 +230,16 @@ class ExecutionEngine:
         row = self._daily_features_row or {}
         atr_20 = row.get("atr_20") or 0.0
         median_atr_20 = row.get("median_atr_20") or 0.0
-        vol_scalar = compute_vol_scalar(atr_20, median_atr_20) if (atr_20 > 0 and median_atr_20 > 0) else 1.0
+        if atr_20 > 0 and median_atr_20 > 0:
+            vol_scalar = compute_vol_scalar(atr_20, median_atr_20)
+        else:
+            vol_scalar = 1.0
+            logger.warning(
+                "vol_scalar=1.0 fallback for %s — daily_features missing or ATR null (atr_20=%s, median=%s)",
+                self._instrument,
+                atr_20,
+                median_atr_20,
+            )
 
         contracts = compute_position_size_vol_scaled(
             equity,
