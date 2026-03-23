@@ -7,10 +7,34 @@
 ---
 
 ## Current Session
-- **Tool:** Claude Code (Review Terminal — code review + institutional MGC audit + bootstrap audit)
-- **Date:** 2026-03-23 to 2026-03-24
+- **Tool:** Claude Code (Guardian Audit — live execution safety)
+- **Date:** 2026-03-24
 - **Branch:** `main`
-- **Status:** 12 production bugs fixed. Drift 18→3. MGC institutional audit complete. Shadow tracker activated. Bootstrap audit: NO CHANGE (Gaussian floors are valid lower bound). Sign-randomization bootstrap built by other terminal (STAGE_STATE active).
+- **Status:** Live execution orphan containment gate: COMPLETE. Code reviewed (2x). SHIP.
+
+### What was done this session (Mar 24 — guardian audit)
+
+#### 1. Live Execution Bug Audit (Pass 1 — audit only)
+- Full source-of-truth chain traced: PositionTracker owns state, SessionOrchestrator owns containment
+- Bug A (PENDING_EXIT stuck): PENDING_EXIT is HONEST broker state, not a bug. Added visibility (log.critical + _notify) so overnight failures are seen.
+- Bug B (rollover orphan): Rollover close failure leaves positions the engine forgets on reset. Without containment, engine re-enters same strategy = doubling up at broker.
+- State transition table, unaffected path proof, blast radius, diff budget, stop conditions — all documented before writing code.
+
+#### 2. Implementation (3 commits)
+- `761308e` — PENDING_EXIT visibility (log.critical + _notify) + rollover orphan detection
+- `7763b59` — _notify on exit failure path (review finding: log alone invisible overnight)
+- `6f81cfc` — fail-closed orphan containment gate: `_blocked_strategies` set blocks entries for orphaned strategies. No auto-clear. Manual resolution required.
+
+#### 3. Documentation + Coverage Pass
+- `3dfac08` — Fixed stale recovery comment (referenced overwrite path now blocked by gate), documented intentional double-notify, added partial rollover test (2 strategies, 1 fails = only failed one blocked)
+
+#### 4. Code Review (2 independent passes)
+- Pass 1: pr-review-toolkit:code-reviewer — all 9 edge cases verified, all checklist items PASS
+- Pass 2: second pr-review-toolkit run — SHIP verdict, 0 Critical/Important findings
+- 92/92 orchestrator tests, 20/20 position tracker tests, 75/75 drift checks
+
+### What was done prior session (Mar 23-24 — review terminal)
+
 
 ### What was done this session (Review Terminal, Mar 23-24)
 
@@ -249,12 +273,14 @@
 2. **MGC noise floor rerun** — 100-seed with sigma=0.54, now decision-relevant (RR resolved)
 3. **Phase 3 fairness audit** — MGC 11 years vs MNQ 6: is "all years positive" the right test?
 4. **TOKYO_OPEN spec** — consider adding to LIVE_PORTFOLIO if noise floor clears
+5. **Live execution** — orphan containment gate is ready for paper/live sim testing
 
 ### Known issues
 - ML #61: 3 violations in features.py (frozen, fix when ML unfrozen)
 - DOUBLE_BREAK_THRESHOLD=0.67: HEURISTIC, proximity warning active
 - MGC: 0 live — noise_risk is binding blocker (RR lock resolved via JK fallback)
 - Spec set: MNQ-shaped by construction, not by architecture bug
+- Live execution: orphan containment is session-scoped (process restart clears _blocked_strategies). Startup orphan check (query_open) covers restart case independently.
 
 ---
 
