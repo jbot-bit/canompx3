@@ -1,6 +1,6 @@
 # PRE-REGISTRATION: MGC TOKYO_OPEN REGIME SLEEVE (TEMPLATE)
 
-**Status:** TEMPLATE — NOT ACTIVE. Activate only after shadow period + noise floor recalibration.
+**Status:** SUPERSEDED by `mgc-tokyo-shadow-ACTIVE.md` (2026-03-24). This was the design template; the active version has corrected baselines and structural disclosures.
 **Created:** 2026-03-23
 **Source audit:** docs/audits/2026-03-23-mgc-regime-truth-audit.md
 
