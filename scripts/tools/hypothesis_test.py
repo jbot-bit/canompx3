@@ -28,22 +28,7 @@ except ImportError:
     sys.exit(1)
 
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
-from pipeline.cost_model import COST_SPECS
 from pipeline.paths import GOLD_DB_PATH
-
-# Derive friction from canonical source
-FRICTION = {
-    sym: {"rt_points": spec.total_friction / spec.point_value, "tick_value": spec.tick_size * spec.point_value}
-    for sym, spec in COST_SPECS.items()
-}
-
-# Typical price levels (for percentage calculation when daily_close missing)
-TYPICAL_PRICE = {
-    "MGC": 2900.0,
-    "MES": 6000.0,
-    "MNQ": 21000.0,
-    "MCL": 70.0,
-}
 
 
 def get_db_path():

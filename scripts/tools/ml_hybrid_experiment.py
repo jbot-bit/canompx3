@@ -20,11 +20,11 @@ from sklearn.ensemble import RandomForestClassifier
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
-from pipeline.dst import SESSION_CATALOG
 from trading_app.config import ALL_FILTERS
+from trading_app.ml.config import SESSION_CHRONOLOGICAL_ORDER
 from trading_app.ml.features import transform_to_features
 
-SESSION_ORDER = sorted(SESSION_CATALOG.keys())
+SESSION_ORDER = list(SESSION_CHRONOLOGICAL_ORDER)
 
 
 def build_level_features(df):
