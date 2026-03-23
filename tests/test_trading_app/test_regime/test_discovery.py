@@ -223,3 +223,66 @@ class TestRegimeDiscovery:
                 assert "NESTED_" not in sid
         finally:
             con.close()
+
+    def test_cross_instrument_isolation(self, regime_db):
+        """Running discovery for instrument B must NOT delete instrument A's data."""
+        # Insert MES data alongside existing MGC
+        con = duckdb.connect(str(regime_db))
+        for i, day in enumerate(
+            [date(2025, 1, 6), date(2025, 1, 7), date(2025, 1, 8), date(2025, 1, 9), date(2025, 1, 10)]
+        ):
+            orb_size = 5.0 + i
+            orb_high = 5000.0 + orb_size / 2
+            orb_low = 5000.0 - orb_size / 2
+            con.execute(
+                """INSERT INTO daily_features
+                   (symbol, trading_day, orb_minutes, bar_count_1m,
+                    orb_CME_REOPEN_high, orb_CME_REOPEN_low, orb_CME_REOPEN_size, orb_CME_REOPEN_break_dir)
+                   VALUES (?, ?, 5, 1400, ?, ?, ?, 'long')""",
+                ["MES", day, orb_high, orb_low, orb_size],
+            )
+            outcome = "win" if i % 2 == 0 else "loss"
+            pnl_r = 1.5 if outcome == "win" else -1.0
+            con.execute(
+                """INSERT INTO orb_outcomes
+                   (trading_day, symbol, orb_label, orb_minutes,
+                    rr_target, confirm_bars, entry_model,
+                    entry_price, stop_price, target_price,
+                    outcome, pnl_r, mae_r, mfe_r)
+                   VALUES (?, 'MES', 'CME_REOPEN', 5, 2.0, 2, 'E1',
+                           5001.0, 4998.0, 5007.0, ?, ?, -0.3, 1.2)""",
+                [day, outcome, pnl_r],
+            )
+        con.commit()
+        con.close()
+
+        # Run MGC discovery
+        mgc_count = run_regime_discovery(
+            db_path=regime_db, instrument="MGC",
+            start_date=date(2025, 1, 1), end_date=date(2025, 12, 31),
+            run_label="shared_label",
+        )
+        # Run MES discovery with SAME run_label
+        mes_count = run_regime_discovery(
+            db_path=regime_db, instrument="MES",
+            start_date=date(2025, 1, 1), end_date=date(2025, 12, 31),
+            run_label="shared_label",
+        )
+
+        # Both should have written data
+        assert mgc_count > 0
+        assert mes_count > 0
+
+        # CRITICAL: MGC data must still exist after MES run
+        con = duckdb.connect(str(regime_db), read_only=True)
+        try:
+            mgc_rows = con.execute(
+                "SELECT COUNT(*) FROM regime_strategies WHERE run_label = 'shared_label' AND instrument = 'MGC'"
+            ).fetchone()[0]
+            mes_rows = con.execute(
+                "SELECT COUNT(*) FROM regime_strategies WHERE run_label = 'shared_label' AND instrument = 'MES'"
+            ).fetchone()[0]
+            assert mgc_rows == mgc_count, f"MGC data wiped! Expected {mgc_count}, got {mgc_rows}"
+            assert mes_rows == mes_count, f"MES data wrong! Expected {mes_count}, got {mes_rows}"
+        finally:
+            con.close()

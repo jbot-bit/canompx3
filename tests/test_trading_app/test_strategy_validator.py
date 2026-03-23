@@ -345,6 +345,37 @@ class TestBenjaminiHochberg:
         # This test verifies the monotonicity property
         assert result_small["target"]["adjusted_p"] <= result_large["target"]["adjusted_p"]
 
+    def test_total_tests_stricter_than_default(self):
+        """Passing total_tests > len(valid) makes BH stricter (higher adjusted p)."""
+        from trading_app.strategy_validator import benjamini_hochberg
+
+        pvals = [("a", 0.01), ("b", 0.03), ("c", 0.05)]
+        result_default = benjamini_hochberg(pvals, alpha=0.05)
+        result_global = benjamini_hochberg(pvals, alpha=0.05, total_tests=1000)
+
+        # global K=1000 > n=3 -> adjusted_p must be higher (stricter)
+        assert result_global["a"]["adjusted_p"] > result_default["a"]["adjusted_p"]
+
+    def test_total_tests_equal_to_n_matches_default(self):
+        """total_tests == len(valid) should match default behavior exactly."""
+        from trading_app.strategy_validator import benjamini_hochberg
+
+        pvals = [("a", 0.01), ("b", 0.03), ("c", 0.05)]
+        result_default = benjamini_hochberg(pvals, alpha=0.05)
+        result_explicit = benjamini_hochberg(pvals, alpha=0.05, total_tests=3)
+
+        for sid in ["a", "b", "c"]:
+            assert result_default[sid]["adjusted_p"] == result_explicit[sid]["adjusted_p"]
+
+    def test_total_tests_less_than_n_raises(self):
+        """total_tests < len(valid) violates BH assumptions -> must raise."""
+        from trading_app.strategy_validator import benjamini_hochberg
+        import pytest
+
+        pvals = [("a", 0.01), ("b", 0.03), ("c", 0.05)]
+        with pytest.raises(ValueError, match="BH requires m >= n"):
+            benjamini_hochberg(pvals, alpha=0.05, total_tests=2)
+
 
 class TestRegimeWaivers:
     """Tests for DORMANT regime waiver logic in Phase 3."""
