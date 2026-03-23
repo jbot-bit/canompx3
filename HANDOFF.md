@@ -232,16 +232,28 @@
 - **Drift checks:** 74 pass, 3 violations (all ML #61, frozen). #82 RESOLVED.
 - **ML:** Still frozen. V2 gate active. NOT READY (0 clean MGC/MES baselines).
 
+#### 12. RR Policy Audit + JK Fallback (commit `6a0d853`)
+- **Audit:** MAX_SHARPE has 73% RR1.0 bias (mechanical Sharpe advantage at lower RR).
+  Sharpe monotonically decreases with RR system-wide. 44% of families suppress higher-ExpR alt.
+  7 families where suppression crosses LIVE_MIN gate.
+- **Fix:** JK-equal liveability tiebreaker in `_load_best_regime_variant`. When locked RR
+  fails LIVE_MIN, tries JK-equal alternatives (vs locked RR's Sharpe, rho=0.7, p>0.05).
+  Among gate-passers: FDR-significant first, then highest Sharpe.
+- **Result:** MGC TOKYO_OPEN: RR1.0 (ExpR=0.186) -> RR1.5 (ExpR=0.235, p=0.894).
+  RR blocker REMOVED. noise_risk=True is now binding. MGC still 0-live.
+- **No impact:** MNQ 7 strategies, MES 1 strategy — unchanged. family_rr_locks untouched.
+- **Code reviewed (2x):** FDR priority fix applied. All callers updated. No import cycle.
+
 ### Next Steps (for incoming session)
-1. **RR policy audit** — is MAX_SHARPE→RR1.0 lock correct when RR1.5 has higher ExpR? Design decision.
-2. **Layer 8** — forward test / paper trade the 8-strategy portfolio (MNQ 7 + MES 1)
+1. **Layer 8** — forward test / paper trade the 8-strategy portfolio (MNQ 7 + MES 1)
+2. **MGC noise floor rerun** — 100-seed with sigma=0.54, now decision-relevant (RR resolved)
 3. **Phase 3 fairness audit** — MGC 11 years vs MNQ 6: is "all years positive" the right test?
-4. **MGC noise floor rerun** — 100-seed with sigma=0.54, DEFERRED until RR policy resolved
+4. **TOKYO_OPEN spec** — consider adding to LIVE_PORTFOLIO if noise floor clears
 
 ### Known issues
 - ML #61: 3 violations in features.py (frozen, fix when ML unfrozen)
 - DOUBLE_BREAK_THRESHOLD=0.67: HEURISTIC, proximity warning active
-- MGC: 0 live — RR lock + LIVE_MIN interaction (NOT friction; 57% claim debunked)
+- MGC: 0 live — noise_risk is binding blocker (RR lock resolved via JK fallback)
 - Spec set: MNQ-shaped by construction, not by architecture bug
 
 ---
