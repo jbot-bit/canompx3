@@ -53,7 +53,7 @@ def _process_window(args: dict) -> dict:
         init_regime_schema(db_path=tmp_db)
 
         # Step 1: Double-break
-        db_pct = compute_double_break_pct(tmp_db, window["train_start"], window["train_end"], orb_minutes)
+        db_pct = compute_double_break_pct(tmp_db, window["train_start"], window["train_end"], orb_minutes, instrument=instrument)
         degraded_sessions = {label for label, pct in db_pct.items() if pct >= DOUBLE_BREAK_THRESHOLD}
 
         # Step 2: Discovery
