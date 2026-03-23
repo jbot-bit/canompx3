@@ -143,17 +143,21 @@
 - All thresholds annotated with @research-source, @sensitivity-tested, @heuristic where applicable.
 - Proximity warning added (DOUBLE_BREAK_PROXIMITY_WARN=0.05).
 
-#### 8. MGC Validated→Live Attrition Audit
-- **MGC 0 live is correct, not a bug.** Full attrition traced:
-  - 22,464 discovered → 6 validated (ALL TOKYO_OPEN ORB_G4 E2 S075)
-  - 14,951 killed Phase 2 (post-cost ExpR), 6,083 Phase 3 (yearly robustness)
-  - 6 validated have noise_risk=True (OOS ExpR below null floor)
-  - TOKYO_OPEN rolling: 100% auto-degraded (79-85% double-break rate)
-  - CME_REOPEN rolling: best stability 0.333 (TRANSITIONING, needs 0.60)
-  - CME_PRECLOSE: not in MGC enabled_sessions (0 experimental)
-  - LIVE_PORTFOLIO specs are MNQ-shaped (CME_PRECLOSE/COMEX_SETTLE/CME_REOPEN) — no TOKYO_OPEN spec
-- **Verdict: STRUCTURAL SCARCITY.** MGC is a weak ORB instrument under current architecture.
-- **Open question:** Should spec policy be instrument-specific rather than shared?
+#### 8. MGC Research Truth Audit
+- **MGC is weak for ORB. Primary cause: friction arithmetic.**
+  MGC TOKYO_OPEN median ORB=1.0pt, friction=57% of risk. MNQ CME_PRECLOSE: 7%.
+- **One honest positive island:** TOKYO_OPEN E2 ORB_G4/G4_CONT, N=175-177 (PRELIMINARY),
+  ExpR=0.19-0.26, all wf_passed=True. Real edge under honest gates.
+- **Binding gate: noise_risk=True on all 6 validated.** OOS ExpR below null floor. Baseline
+  blocked by noise gate. Rolling blocked by 100% double-break degradation (TOKYO_OPEN 78-85%).
+- **Phase 3 asymmetry (secondary):** MGC 11 years vs MNQ 6 — real fairness concern but not the
+  binding constraint (noise_risk blocks before Phase 3 matters for live resolution).
+- **RR lock structural clash:** MAX_SHARPE picks RR1.0 (ExpR=0.186) over head at RR1.5
+  (ExpR=0.235). Design choice, not a bug.
+- **Verdict: NOT LIVE, SHADOW-TRACK ONLY.** MGC does not qualify under current live gates.
+  Spec gap + noise_risk + double-break = no path to live. Monitor TOKYO_OPEN in forward data.
+- **ML:** No clean ML-eligible / deployable positive baseline. TOKYO_OPEN is a real PRELIMINARY
+  positive island but fails liveability via noise/live gates. MGC is 0 live-tradeable in canon.
 
 #### 9. #82 Holdout Contamination Cleanup
 - MNQ experimental_strategies cleared and re-discovered with `--holdout-date 2026-01-01`
