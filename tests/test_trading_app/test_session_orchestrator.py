@@ -1089,6 +1089,75 @@ class TestTradingDayRollover:
         record = orch._positions.get(STRATEGY_ID)
         assert record is not None
 
+    async def test_partial_rollover_failure_blocks_only_failed_strategy(self):
+        """2 strategies open, 1 close succeeds, 1 fails → only failed one blocked."""
+        STRAT_B = "TEST_STRAT_002"
+        strat_b = PortfolioStrategy(
+            strategy_id=STRAT_B,
+            instrument="MGC",
+            orb_label="NYSE_OPEN",
+            entry_model="E2",
+            rr_target=2.0,
+            confirm_bars=1,
+            filter_type="ORB_G5",
+            expectancy_r=0.15,
+            win_rate=0.38,
+            sample_size=180,
+            sharpe_ratio=1.2,
+            max_drawdown_r=4.0,
+            median_risk_points=3.0,
+            stop_multiplier=1.0,
+            source="test",
+            weight=1.0,
+        )
+
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._notify = MagicMock()
+        orch._strategy_map[STRAT_B] = strat_b
+        orch.trading_day = date(2026, 3, 6)
+
+        # Both strategies have open positions
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=1)
+        orch._positions.on_entry_filled(STRATEGY_ID, 2350.0)
+        orch._positions.on_entry_sent(STRAT_B, "long", 18000.0, order_id=2)
+        orch._positions.on_entry_filled(STRAT_B, 18000.0)
+
+        # _handle_event fails only for STRAT_B's exit, succeeds for STRATEGY_ID
+        call_count = 0
+
+        async def partial_fail(event):
+            nonlocal call_count
+            call_count += 1
+            if event.strategy_id == STRAT_B:
+                raise ConnectionError("broker unreachable")
+            # Successful close: remove from tracker
+            orch._positions.on_exit_sent(event.strategy_id)
+            orch._positions.on_exit_filled(event.strategy_id)
+
+        orch._handle_event = partial_fail
+
+        exit_a = FakeTradeEvent(
+            event_type="EXIT", strategy_id=STRATEGY_ID,
+            timestamp=datetime.now(UTC), price=2355.0, direction="long", contracts=1,
+        )
+        exit_b = FakeTradeEvent(
+            event_type="EXIT", strategy_id=STRAT_B,
+            timestamp=datetime.now(UTC), price=18050.0, direction="long", contracts=1,
+        )
+        orch.engine.on_trading_day_end.return_value = [exit_a, exit_b]
+
+        bar_ts = datetime(2026, 3, 6, 23, 1, tzinfo=UTC)
+        with patch.object(SessionOrchestrator, "_build_daily_features_row", return_value={}):
+            await orch._check_trading_day_rollover(bar_ts)
+
+        # STRATEGY_ID closed successfully — should NOT be blocked
+        assert STRATEGY_ID not in orch._blocked_strategies
+        assert orch._positions.get(STRATEGY_ID) is None
+
+        # STRAT_B failed — should be blocked
+        assert STRAT_B in orch._blocked_strategies
+        assert orch._positions.get(STRAT_B) is not None
+
 
 # ---------------------------------------------------------------------------
 # ORCHESTRATOR RECONNECT tests
