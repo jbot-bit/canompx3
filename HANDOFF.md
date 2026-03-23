@@ -108,30 +108,43 @@
 - **REGIME gate works correctly.** `compute_fitness()` loads outcomes directly from
   `orb_outcomes` — independent of rolling portfolio tables. All 6 REGIME strategies
   are genuinely FIT (rolling ExpR 0.11-0.35, N 40-228, recent Sharpe all positive).
-- **CORE rolling eval is degraded, not broken.** Rolling portfolio tables (`regime_validated`)
-  contain stale numeric session names (0900, 1000) that don't match event-based names.
-  CORE specs fall back to baseline resolution — honest but loses stability scoring.
-- **Next data task:** Rebuild rolling portfolio tables with event-based session names
-  to restore CORE rolling eval. This is a data refresh, not a code fix.
+
+#### 6. Rolling Portfolio Rebuild (event-based session names)
+- **Root cause:** Rolling tables (`regime_strategies`, `regime_validated`) had stale
+  numeric session names (0030/0900/1000/1100/1800/2300) from before Feb 2026 rename.
+  HOT-path `_check_rolling_stability()` always returned "family not found" (0.0) because
+  it queried with event-based names that never matched stale numeric labels.
+- **Bug found during rebuild:** `regime.discovery` lines 66-67 deleted by `run_label`
+  without `AND instrument = ?`, so sequential multi-instrument runs wiped each other.
+  Fixed: scoped delete to `(run_label, instrument)`.
+- **Rebuild:** All 3 instruments (MNQ, MGC, MES), 12m+18m windows, 2024-07 to 2026-03.
+  regime_strategies: 500,748 rows (MNQ 190,512, MES 181,044, MGC 129,192).
+  regime_validated: 8,795 rows (MNQ 6,275, MES 1,414, MGC 1,106).
+- **Live portfolio impact:** MES gained 1 strategy (`MES_CME_PRECLOSE_E2_RR1.0_CB1_ATR70_VOL`,
+  source=rolling, ExpR=+0.262, stability 1.000 = 10/10 windows). This is a CORE spec
+  with `regime_gate=None` — it was blocked by missing variant data, not by a stability gate.
+- **Verification (all PASS):** orb_labels event-based only, validated_setups/edge_families/
+  family_rr_locks unchanged (404/162/166), strategy_fitness identical, MGC/MNQ counts unchanged.
 
 ### Truth State (verified Mar 23 2026)
 - **validated_setups:** 404 rows (MGC 6, MES 9, MNQ 389). All wf_passed=True, FDR-corrected at K=105,640.
 - **family_rr_locks:** 166 rows (MGC 2, MES 7, MNQ 157).
 - **edge_families:** 162 rows (MGC 2, MES 7, MNQ 153).
-- **LIVE_PORTFOLIO:** 8 specs (2 CORE, 6 REGIME). Resolves 8 MNQ strategies (MGC 0, MES 0).
+- **LIVE_PORTFOLIO:** 8 specs (2 CORE, 6 REGIME). Resolves MNQ 8, MES 1, MGC 0 (9 total).
 - **noise_risk:** Fully populated. Zero NULLs.
 - **Bars:** All instruments current to 2026-03-21. daily_features/outcomes to 2026-03-20.
 - **ML:** Still frozen. V2 gate active.
 
 ### Next Steps (for incoming session)
-1. **Rolling portfolio rebuild** — rebuild `regime_validated`/`regime_strategies` with event-based session names to restore CORE rolling eval. Data refresh, not code fix.
-2. **Layer 8** — forward test / paper trade the 8-strategy MNQ portfolio
-3. **MGC/MES edge investigation** — MGC 6 validated but all below 0.22 ExpR at locked RR. MES 9 validated but all below 0.08 ExpR. Neither qualifies under current live rules.
+1. **Threshold-grounding audit** — rolling/regime thresholds (0.6, 0.3, 50, 0.67, 1.5) are
+   heuristic/ungrounded. Sensitivity test each +-20%, source-support or remove/flag.
+2. **Layer 8** — forward test / paper trade the 9-strategy portfolio (MNQ 8 + MES 1)
+3. **MGC/MES edge investigation** — MGC 6 validated but all below 0.22 ExpR at locked RR. MES CME_PRECLOSE now live via rolling. Other MES specs still below threshold.
 
 ### Known issues
 - Post-edit drift hook fails on module import (PYTHONPATH not set) — masks drift detection during edits
-- CORE rolling eval degraded — rolling tables have stale numeric session names, CORE falls back to baseline (honest, loses stability scoring). REGIME gate is unaffected.
-- MGC/MES: 0 live strategies under current rules
+- Rolling/regime thresholds (STABLE=0.6, TRANSITIONING=0.3, FULL_WEIGHT_SAMPLE=50, DOUBLE_BREAK=0.67, stress_multiplier=1.5) are heuristic — no calibration trail or academic source. Threshold-grounding audit is next task.
+- MGC: 0 live strategies under current rules
 
 ---
 

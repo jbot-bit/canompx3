@@ -498,10 +498,11 @@ def _seed_seasonal_gate_data(db_path: Path) -> None:
         INSERT INTO validated_setups (strategy_id, instrument, orb_label, entry_model,
             rr_target, confirm_bars, filter_type, expectancy_r, win_rate,
             sample_size, sharpe_ratio, max_drawdown_r, status, orb_minutes,
-            fdr_significant)
+            fdr_significant, noise_risk, oos_exp_r)
         VALUES (
             'MGC_TOKYO_OPEN_E2_RR2.0_CB1_ORB_G4', 'MGC', 'TOKYO_OPEN', 'E2',
-            2.0, 1, 'ORB_G4', 0.35, 0.52, 150, 1.2, 3.5, 'active', 5, TRUE
+            2.0, 1, 'ORB_G4', 0.35, 0.52, 150, 1.2, 3.5, 'active', 5, TRUE,
+            FALSE, 0.50
         )
     """)
     con.execute("""
@@ -549,7 +550,8 @@ class TestSeasonalGate:
     def test_out_of_season_skips_strategy(self, live_config_db):
         """June with active_months={11,12,1,2} -> 0 strategies, SEASONAL in notes."""
         _seed_seasonal_gate_data(live_config_db)
-        with patch("trading_app.live_config.LIVE_PORTFOLIO", [_SEASONAL_SPEC]):
+        with patch("trading_app.live_config.LIVE_PORTFOLIO", [_SEASONAL_SPEC]), \
+             patch("trading_app.live_config.INSTRUMENT_ATR_GATE", {}):
             portfolio, notes = build_live_portfolio(
                 db_path=live_config_db,
                 instrument="MGC",
@@ -563,7 +565,8 @@ class TestSeasonalGate:
     def test_in_season_loads_strategy(self, live_config_db):
         """January with active_months={11,12,1,2} -> 1 strategy, weight=1.0."""
         _seed_seasonal_gate_data(live_config_db)
-        with patch("trading_app.live_config.LIVE_PORTFOLIO", [_SEASONAL_SPEC]):
+        with patch("trading_app.live_config.LIVE_PORTFOLIO", [_SEASONAL_SPEC]), \
+             patch("trading_app.live_config.INSTRUMENT_ATR_GATE", {}):
             portfolio, notes = build_live_portfolio(
                 db_path=live_config_db,
                 instrument="MGC",
@@ -575,7 +578,8 @@ class TestSeasonalGate:
     def test_as_of_date_defaults_to_today(self, live_config_db):
         """No active_months constraint, no as_of_date -> loads normally."""
         _seed_seasonal_gate_data(live_config_db)
-        with patch("trading_app.live_config.LIVE_PORTFOLIO", [_UNCONSTRAINED_SPEC]):
+        with patch("trading_app.live_config.LIVE_PORTFOLIO", [_UNCONSTRAINED_SPEC]), \
+             patch("trading_app.live_config.INSTRUMENT_ATR_GATE", {}):
             portfolio, notes = build_live_portfolio(
                 db_path=live_config_db,
                 instrument="MGC",

@@ -62,9 +62,9 @@ def run_regime_discovery(
 
         if not dry_run:
             init_regime_schema(con=con)
-            # Idempotent: clear previous run with same label
-            con.execute("DELETE FROM regime_validated WHERE run_label = ?", [run_label])
-            con.execute("DELETE FROM regime_strategies WHERE run_label = ?", [run_label])
+            # Idempotent: clear previous run with same label AND instrument
+            con.execute("DELETE FROM regime_validated WHERE run_label = ? AND instrument = ?", [run_label, instrument])
+            con.execute("DELETE FROM regime_strategies WHERE run_label = ? AND instrument = ?", [run_label, instrument])
             con.commit()
 
         # ---- Bulk load phase ----
