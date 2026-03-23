@@ -135,16 +135,46 @@
 - **Bars:** All instruments current to 2026-03-21. daily_features/outcomes to 2026-03-20.
 - **ML:** Still frozen. V2 gate active.
 
+#### 7. Threshold-Grounding Audit (commit `a9c40cb`, `75abdbf`)
+- All 9 rolling/regime thresholds sensitivity-tested +-20% from live DB.
+- 8/9 ROBUST (no live cliff). 1 SENSITIVE: DOUBLE_BREAK_THRESHOLD=0.67.
+- BUG FIXED: `compute_double_break_pct` had no instrument filter (blended 7 instruments incl 4 dead).
+  Per-instrument margins: MNQ 7.6pp, MES 5.0pp, MGC 1.7pp.
+- All thresholds annotated with @research-source, @sensitivity-tested, @heuristic where applicable.
+- Proximity warning added (DOUBLE_BREAK_PROXIMITY_WARN=0.05).
+
+#### 8. MGC Validated→Live Attrition Audit
+- **MGC 0 live is correct, not a bug.** Full attrition traced:
+  - 22,464 discovered → 6 validated (ALL TOKYO_OPEN ORB_G4 E2 S075)
+  - 14,951 killed Phase 2 (post-cost ExpR), 6,083 Phase 3 (yearly robustness)
+  - 6 validated have noise_risk=True (OOS ExpR below null floor)
+  - TOKYO_OPEN rolling: 100% auto-degraded (79-85% double-break rate)
+  - CME_REOPEN rolling: best stability 0.333 (TRANSITIONING, needs 0.60)
+  - CME_PRECLOSE: not in MGC enabled_sessions (0 experimental)
+  - LIVE_PORTFOLIO specs are MNQ-shaped (CME_PRECLOSE/COMEX_SETTLE/CME_REOPEN) — no TOKYO_OPEN spec
+- **Verdict: STRUCTURAL SCARCITY.** MGC is a weak ORB instrument under current architecture.
+- **Open question:** Should spec policy be instrument-specific rather than shared?
+
+### Truth State (verified Mar 23 2026)
+- **validated_setups:** 404 rows (MGC 6, MES 9, MNQ 389). All wf_passed=True, FDR-corrected at K=105,640.
+- **family_rr_locks:** 166 rows (MGC 2, MES 7, MNQ 157).
+- **edge_families:** 162 rows (MGC 2, MES 7, MNQ 153).
+- **regime_validated (rolling):** 8,795 rows (MNQ 6,275, MES 1,414, MGC 1,106). All event-based session names.
+- **LIVE_PORTFOLIO:** 8 specs (2 CORE, 6 REGIME). Resolves MNQ 8, MES 1, MGC 0 (9 total).
+- **noise_risk:** Fully populated. Zero NULLs.
+- **Bars:** All instruments current to 2026-03-21. daily_features/outcomes to 2026-03-20.
+- **ML:** Still frozen. V2 gate active.
+- **Thresholds:** All 9 annotated + sensitivity-tested. DOUBLE_BREAK proximity warning active.
+
 ### Next Steps (for incoming session)
-1. **Threshold-grounding audit** — rolling/regime thresholds (0.6, 0.3, 50, 0.67, 1.5) are
-   heuristic/ungrounded. Sensitivity test each +-20%, source-support or remove/flag.
+1. **Spec architecture audit** — are live specs MNQ-shaped? Should spec policy be instrument-specific?
 2. **Layer 8** — forward test / paper trade the 9-strategy portfolio (MNQ 8 + MES 1)
-3. **MGC/MES edge investigation** — MGC 6 validated but all below 0.22 ExpR at locked RR. MES CME_PRECLOSE now live via rolling. Other MES specs still below threshold.
+3. **MGC decision** — accept 0 live as structural truth, or explore non-ORB / different architecture
 
 ### Known issues
-- Post-edit drift hook fails on module import (PYTHONPATH not set) — masks drift detection during edits
-- Rolling/regime thresholds (STABLE=0.6, TRANSITIONING=0.3, FULL_WEIGHT_SAMPLE=50, DOUBLE_BREAK=0.67, stress_multiplier=1.5) are heuristic — no calibration trail or academic source. Threshold-grounding audit is next task.
-- MGC: 0 live strategies under current rules
+- Post-edit drift hook PYTHONPATH: FIXED (commit c3b04a1)
+- DOUBLE_BREAK_THRESHOLD=0.67: HEURISTIC, proximity warning active. MNQ 7.6pp, MES 5.0pp margin.
+- MGC: 0 live strategies — structural scarcity, not a bug
 
 ---
 
