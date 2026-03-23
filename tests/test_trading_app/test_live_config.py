@@ -228,14 +228,14 @@ class TestLoadBestRegimeVariant:
         """)
         con.close()
 
-        result = _load_best_regime_variant(live_config_db, "MGC", "TOKYO_OPEN", "E1", "ORB_G4")
+        result, _ = _load_best_regime_variant(live_config_db, "MGC", "TOKYO_OPEN", "E1", "ORB_G4")
         assert result is not None
         assert result["strategy_id"] == "MGC_TOKYO_OPEN_E1_RR2.0_CB1_ORB_G4"
         assert result["sharpe_ratio"] == 1.2
 
     def test_not_found(self, live_config_db):
         """No matching strategy returns None."""
-        result = _load_best_regime_variant(live_config_db, "MGC", "9999", "E1", "ORB_G4")
+        result, _ = _load_best_regime_variant(live_config_db, "MGC", "9999", "E1", "ORB_G4")
         assert result is None
 
     def test_inactive_filtered(self, live_config_db):
@@ -260,7 +260,7 @@ class TestLoadBestRegimeVariant:
         """)
         con.close()
 
-        result = _load_best_regime_variant(live_config_db, "MGC", "TOKYO_OPEN", "E1", "ORB_G4")
+        result, _ = _load_best_regime_variant(live_config_db, "MGC", "TOKYO_OPEN", "E1", "ORB_G4")
         assert result is None
 
     def test_best_expectancy_selected(self, live_config_db):
@@ -285,7 +285,7 @@ class TestLoadBestRegimeVariant:
         """)
         con.close()
 
-        result = _load_best_regime_variant(live_config_db, "MGC", "TOKYO_OPEN", "E1", "ORB_G4")
+        result, _ = _load_best_regime_variant(live_config_db, "MGC", "TOKYO_OPEN", "E1", "ORB_G4")
         assert result["strategy_id"] == "high_expr"
 
     def test_fdr_significant_preferred_over_higher_expr(self, live_config_db):
@@ -315,7 +315,7 @@ class TestLoadBestRegimeVariant:
         """)
         con.close()
 
-        result = _load_best_regime_variant(live_config_db, "MGC", "NYSE_OPEN", "E2", "ORB_G8")
+        result, _ = _load_best_regime_variant(live_config_db, "MGC", "NYSE_OPEN", "E2", "ORB_G8")
         assert result is not None
         # FDR-significant variant (ExpR=0.22) must win over FDR-failing (ExpR=0.35).
         assert result["strategy_id"] == "fdr_pass_low"
@@ -342,7 +342,7 @@ class TestLoadBestRegimeVariant:
         """)
         con.close()
 
-        result = _load_best_regime_variant(live_config_db, "MGC", "TOKYO_OPEN", "E1", "ORB_G4")
+        result, _ = _load_best_regime_variant(live_config_db, "MGC", "TOKYO_OPEN", "E1", "ORB_G4")
         assert result is None  # RR2.5 != locked RR1.0
 
     def test_locked_rr_only_returned(self, live_config_db):
@@ -367,10 +367,152 @@ class TestLoadBestRegimeVariant:
         """)
         con.close()
 
-        result = _load_best_regime_variant(live_config_db, "MGC", "TOKYO_OPEN", "E1", "ORB_G4")
+        result, _ = _load_best_regime_variant(live_config_db, "MGC", "TOKYO_OPEN", "E1", "ORB_G4")
         assert result is not None
         assert result["strategy_id"] == "rr15"
         assert result["rr_target"] == 1.5
+
+
+class TestJKFallbackRR:
+    """JK-equal liveability tiebreaker: when locked RR fails LIVE_MIN,
+    try JK-equal alternatives that pass."""
+
+    def _insert_family(self, con, rr, sharpe, expr, n=200, status="active"):
+        """Insert a validated strategy + experimental_strategies row + RR lock."""
+        sid = f"MGC_TOKYO_OPEN_E2_RR{rr}_CB1_ORB_G4"
+        con.execute(
+            """INSERT INTO validated_setups
+               (strategy_id, instrument, orb_label, entry_model, rr_target,
+                confirm_bars, filter_type, expectancy_r, win_rate, sample_size,
+                sharpe_ratio, max_drawdown_r, status, orb_minutes, noise_risk, oos_exp_r)
+               VALUES (?, 'MGC', 'TOKYO_OPEN', 'E2', ?, 1, 'ORB_G4', ?, 0.55, ?,
+                       ?, 5.0, ?, 5, FALSE, 0.15)""",
+            [sid, rr, expr, n, sharpe, status],
+        )
+        con.execute(
+            """INSERT INTO experimental_strategies
+               (strategy_id, instrument, orb_label, entry_model, rr_target,
+                confirm_bars, filter_type, orb_minutes, expectancy_r, win_rate,
+                sample_size, sharpe_ratio, max_drawdown_r, median_risk_points)
+               VALUES (?, 'MGC', 'TOKYO_OPEN', 'E2', ?, 1, 'ORB_G4', 5, ?, 0.55,
+                       ?, ?, 5.0, 6.3)""",
+            [sid, rr, expr, n, sharpe],
+        )
+
+    def test_no_fallback_when_locked_rr_passes(self, live_config_db):
+        """When locked RR passes LIVE_MIN, no fallback fires."""
+        con = duckdb.connect(str(live_config_db))
+        self._insert_family(con, 1.0, 0.24, 0.25)  # passes LIVE_MIN
+        self._insert_family(con, 1.5, 0.23, 0.30)
+        con.execute("""
+            INSERT INTO family_rr_locks (instrument, orb_label, filter_type, entry_model,
+                orb_minutes, confirm_bars, locked_rr, method,
+                sharpe_at_rr, maxdd_at_rr, n_at_rr, expr_at_rr, tpy_at_rr)
+            VALUES ('MGC', 'TOKYO_OPEN', 'ORB_G4', 'E2', 5, 1, 1.0, 'MAX_SHARPE',
+                    0.24, 5.0, 200, 0.25, 50.0)
+        """)
+        con.close()
+
+        result, fallback_note = _load_best_regime_variant(
+            live_config_db, "MGC", "TOKYO_OPEN", "E2", "ORB_G4",
+        )
+        assert result is not None
+        assert result["rr_target"] == 1.0  # locked RR used directly
+        assert fallback_note is None  # no fallback
+
+    def test_fallback_fires_when_locked_rr_fails_live_min(self, live_config_db):
+        """When locked RR fails LIVE_MIN but JK-equal alt passes, fallback fires."""
+        con = duckdb.connect(str(live_config_db))
+        self._insert_family(con, 1.0, 0.236, 0.186)  # fails LIVE_MIN (0.186 < 0.22)
+        self._insert_family(con, 1.5, 0.228, 0.235)  # passes LIVE_MIN, JK-equal
+        self._insert_family(con, 2.0, 0.208, 0.257)  # passes LIVE_MIN, JK-equal
+        con.execute("""
+            INSERT INTO family_rr_locks (instrument, orb_label, filter_type, entry_model,
+                orb_minutes, confirm_bars, locked_rr, method,
+                sharpe_at_rr, maxdd_at_rr, n_at_rr, expr_at_rr, tpy_at_rr)
+            VALUES ('MGC', 'TOKYO_OPEN', 'ORB_G4', 'E2', 5, 1, 1.0, 'MAX_SHARPE',
+                    0.236, 5.0, 200, 0.186, 50.0)
+        """)
+        con.close()
+
+        result, fallback_note = _load_best_regime_variant(
+            live_config_db, "MGC", "TOKYO_OPEN", "E2", "ORB_G4",
+        )
+        assert result is not None
+        assert result["rr_target"] == 1.5  # highest Sharpe among JK-equal gate-passers
+        assert fallback_note is not None
+        assert "JK_FALLBACK" in fallback_note
+        assert "locked_rr=1.0" in fallback_note
+        assert "fallback_rr=1.5" in fallback_note
+
+    def test_no_fallback_when_no_jk_equal_passes(self, live_config_db):
+        """When locked RR fails and all alternatives also fail LIVE_MIN, returns None."""
+        con = duckdb.connect(str(live_config_db))
+        self._insert_family(con, 1.0, 0.24, 0.15)  # fails LIVE_MIN
+        self._insert_family(con, 1.5, 0.23, 0.18)  # also fails LIVE_MIN
+        con.execute("""
+            INSERT INTO family_rr_locks (instrument, orb_label, filter_type, entry_model,
+                orb_minutes, confirm_bars, locked_rr, method,
+                sharpe_at_rr, maxdd_at_rr, n_at_rr, expr_at_rr, tpy_at_rr)
+            VALUES ('MGC', 'TOKYO_OPEN', 'ORB_G4', 'E2', 5, 1, 1.0, 'MAX_SHARPE',
+                    0.24, 5.0, 200, 0.15, 50.0)
+        """)
+        con.close()
+
+        result, fallback_note = _load_best_regime_variant(
+            live_config_db, "MGC", "TOKYO_OPEN", "E2", "ORB_G4",
+        )
+        assert result is None
+        assert fallback_note is None
+
+    def test_fallback_excludes_jk_unequal(self, live_config_db):
+        """Alt with significantly worse Sharpe (JK p < 0.05) is NOT used as fallback."""
+        con = duckdb.connect(str(live_config_db))
+        # Locked: high Sharpe, fails LIVE_MIN
+        self._insert_family(con, 1.0, 2.5, 0.15, n=500)
+        # Alt: MUCH worse Sharpe (JK will reject), passes LIVE_MIN
+        self._insert_family(con, 4.0, 0.3, 0.30, n=500)
+        con.execute("""
+            INSERT INTO family_rr_locks (instrument, orb_label, filter_type, entry_model,
+                orb_minutes, confirm_bars, locked_rr, method,
+                sharpe_at_rr, maxdd_at_rr, n_at_rr, expr_at_rr, tpy_at_rr)
+            VALUES ('MGC', 'TOKYO_OPEN', 'ORB_G4', 'E2', 5, 1, 1.0, 'MAX_SHARPE',
+                    2.5, 5.0, 500, 0.15, 50.0)
+        """)
+        con.close()
+
+        result, fallback_note = _load_best_regime_variant(
+            live_config_db, "MGC", "TOKYO_OPEN", "E2", "ORB_G4",
+        )
+        # JK should reject this alt — significantly worse Sharpe
+        assert result is None
+        assert fallback_note is None
+
+    def test_fallback_note_has_audit_fields(self, live_config_db):
+        """Fallback note contains all required audit fields."""
+        con = duckdb.connect(str(live_config_db))
+        self._insert_family(con, 1.0, 0.236, 0.186)
+        self._insert_family(con, 1.5, 0.228, 0.235)
+        con.execute("""
+            INSERT INTO family_rr_locks (instrument, orb_label, filter_type, entry_model,
+                orb_minutes, confirm_bars, locked_rr, method,
+                sharpe_at_rr, maxdd_at_rr, n_at_rr, expr_at_rr, tpy_at_rr)
+            VALUES ('MGC', 'TOKYO_OPEN', 'ORB_G4', 'E2', 5, 1, 1.0, 'MAX_SHARPE',
+                    0.236, 5.0, 200, 0.186, 50.0)
+        """)
+        con.close()
+
+        _, fallback_note = _load_best_regime_variant(
+            live_config_db, "MGC", "TOKYO_OPEN", "E2", "ORB_G4",
+        )
+        assert fallback_note is not None
+        # Required audit fields
+        assert "locked_rr=" in fallback_note
+        assert "fallback_rr=" in fallback_note
+        assert "jk_p=" in fallback_note
+        assert "ExpR=" in fallback_note
+        assert "Sharpe=" in fallback_note
+        assert "reason=" in fallback_note
 
 
 class TestCheckDollarGate:
@@ -724,7 +866,7 @@ class TestWeightOverrideAndRecovery:
             ),
             patch(
                 "trading_app.live_config._load_best_regime_variant",
-                return_value=baseline_match,
+                return_value=(baseline_match, None),
             ),
         ):
             portfolio, notes = build_live_portfolio(instrument="MGC")
