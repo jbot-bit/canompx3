@@ -226,6 +226,7 @@ class SessionOrchestrator:
         self._stats = SessionStats()  # observability counters
         self._poller_active = False  # set True once fill poller runs a cycle
         self._consecutive_engine_errors = 0  # circuit breaker for engine crashes
+        self._blocked_strategies: set[str] = set()  # orphan containment — entries blocked until manual clear
 
         # Circuit breaker: blocks order submission after 5 consecutive broker failures
         from trading_app.live.circuit_breaker import CircuitBreaker
@@ -544,6 +545,12 @@ class SessionOrchestrator:
             msg = f"ROLLOVER ORPHANS: {orphan_ids} — positions open at broker, engine will not track. MANUAL CLOSE REQUIRED."
             log.critical(msg)
             self._notify(msg)
+            # CONTAINMENT: block new entries for orphaned strategies until manual resolution.
+            # Prevents doubling up: engine would re-enter the same strategy on the new day
+            # while the old position is still open at the broker.
+            for r in rollover_orphans:
+                self._blocked_strategies.add(r.strategy_id)
+            log.critical("ENTRY BLOCKED for %s until manual orphan resolution", list(self._blocked_strategies))
 
         # Start new trading day
         self.trading_day = bar_trading_day
@@ -826,6 +833,17 @@ class SessionOrchestrator:
             return
 
         if event.event_type == "ENTRY":
+            # Orphan containment gate (applies to both signal-only and live)
+            if event.strategy_id in self._blocked_strategies:
+                msg = (
+                    f"ENTRY BLOCKED — {event.strategy_id} has orphaned position at broker. "
+                    "Resolve orphan before new entries."
+                )
+                log.critical(msg)
+                self._notify(msg)
+                self._write_signal_record({"type": "ENTRY_BLOCKED_ORPHAN", "strategy_id": event.strategy_id})
+                return
+
             if self.signal_only:
                 record = self._positions.on_signal_entry(
                     event.strategy_id, event.price, event.direction, contracts=event.contracts

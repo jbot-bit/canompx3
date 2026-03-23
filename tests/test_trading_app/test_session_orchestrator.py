@@ -189,6 +189,7 @@ def build_orchestrator(components: FakeBrokerComponents | None = None) -> Sessio
     orch._ml_predictor = None  # ML predictor not wired in test fixtures
     orch.journal = MagicMock()  # Trade journal — mocked to avoid DB in tests
     orch._consecutive_engine_errors = 0
+    orch._blocked_strategies = set()
     orch.order_router = c.router
     orch.positions = c.positions
     orch._write_signal_record = MagicMock()
@@ -1044,6 +1045,49 @@ class TestTradingDayRollover:
         notify_calls = [c[0][0] for c in orch._notify.call_args_list]
         orphan_msgs = [m for m in notify_calls if "ORPHAN" in m]
         assert len(orphan_msgs) >= 1, f"Expected ORPHAN notification, got: {notify_calls}"
+
+        # CONTAINMENT: strategy should be blocked for new entries
+        assert STRATEGY_ID in orch._blocked_strategies
+
+    async def test_orphan_blocks_new_entry(self):
+        """After rollover orphan, new ENTRY for same strategy is rejected."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._notify = MagicMock()
+
+        # Simulate orphaned strategy
+        orch._blocked_strategies.add(STRATEGY_ID)
+
+        # Engine tries to enter the same strategy on new day
+        await orch._handle_event(_entry_event(2360.0))
+
+        # Entry should be rejected — signal record written
+        calls = [c[0][0] for c in orch._write_signal_record.call_args_list]
+        blocked = [c for c in calls if c.get("type") == "ENTRY_BLOCKED_ORPHAN"]
+        assert len(blocked) == 1
+
+        # Position tracker should NOT have a new entry
+        assert (
+            orch._positions.get(STRATEGY_ID) is None
+            or orch._positions.get(STRATEGY_ID).state != PositionState.PENDING_ENTRY
+        )
+
+    async def test_non_orphaned_entry_proceeds_after_rollover(self):
+        """Non-orphaned strategies can still enter after a rollover with orphans."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._notify = MagicMock()
+
+        # Block only one strategy
+        orch._blocked_strategies.add("SOME_OTHER_STRATEGY")
+
+        # Our test strategy should NOT be blocked
+        assert STRATEGY_ID not in orch._blocked_strategies
+
+        # Entry should proceed normally
+        await orch._handle_event(_entry_event(2360.0))
+
+        # Position tracker should have the new entry
+        record = orch._positions.get(STRATEGY_ID)
+        assert record is not None
 
 
 # ---------------------------------------------------------------------------
