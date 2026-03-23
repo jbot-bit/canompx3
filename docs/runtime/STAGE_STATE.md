@@ -1,17 +1,16 @@
 ---
-task: "Guardian audit phase 2: fix remaining silent failures + type safety + stale docs + noise floor scripts"
+task: "Guardian audit phase 2: type safety, dead code, stale docs"
 mode: IMPLEMENTATION
-stage: 2
+stage: 3
 stage_of: 4
-stage_purpose: "Class D: Fix noise floor bootstrap filter bug + null_envelope connection leak"
-updated: 2026-03-25T00:30+10:00
+stage_purpose: "Class B: Fix type safety gaps (slippage mult, DST dead code marker)"
+updated: 2026-03-25T01:00+10:00
 terminal: main
 scope_lock:
-  - scripts/tools/noise_floor_bootstrap.py
-  - scripts/tools/null_envelope.py
+  - pipeline/cost_model.py
+  - pipeline/dst.py
 acceptance:
-  - "noise_floor_bootstrap: pass full daily_features row to filter (not just size column)"
-  - "null_envelope: DuckDB connection leak fixed (use context manager)"
-  - "null_envelope: redundant import re as re_mod removed"
+  - "SESSION_SLIPPAGE_MULT: add missing MNQ COMEX_SETTLE, BRISBANE_1025, EUROPE_FLOW for active instruments"
+  - "DST_AFFECTED_SESSIONS: add deprecation comment (empty dict, all consumers return CLEAN)"
 blockers: []
 ---
