@@ -36,12 +36,15 @@ from trading_app.regime.discovery import run_regime_discovery
 from trading_app.regime.schema import init_regime_schema
 from trading_app.regime.validator import run_regime_validation
 
-# @research-source: heuristic. Sessions with >= 67% double-break days lack
+# @research-source: HEURISTIC. Sessions with >= 67% double-break days lack
 # directional conviction for single-direction breakout strategies. The 0.67
-# value has no academic derivation — it was chosen as ~2/3 (majority rule).
-# @sensitivity-tested: 2026-03-23. ONE-DIRECTIONAL CLIFF: CME_PRECLOSE is at
-# 63.9% double-break rate (margin=3.1pp). Lowering to 0.60 auto-degrades
-# CME_PRECLOSE, killing 7/9 live strategies. Raising to 0.80 has no effect.
+# value has no academic derivation — chosen as ~2/3 (majority rule).
+# Mechanism is sound (both ORB sides hit = chop), specific value is arbitrary.
+# @sensitivity-tested: 2026-03-23 (per-instrument, post instrument-filter fix).
+# Per-instrument margins: MNQ 7.6pp, MES 5.0pp, MGC 1.7pp (trending up).
+# Lowering to 0.60 kills CME_PRECLOSE (7/9 live). Raising to 0.80: no effect.
+# @heuristic: no academic source in project resources. Classify as
+# "empirically robust but structurally unjustified threshold."
 # @revalidated-for: E1/E2 event-based (2026-03-23)
 DOUBLE_BREAK_THRESHOLD = 0.67
 
@@ -101,28 +104,40 @@ def compute_double_break_pct(
     train_start: date,
     train_end: date,
     orb_minutes: int = 5,
+    instrument: str | None = None,
 ) -> dict[str, float]:
     """Compute double-break percentage per ORB session in a date range.
 
     Returns dict: {orb_label: fraction of break-days with double_break}.
     Only counts days where break_dir IS NOT NULL (a break occurred).
+
+    If instrument is provided, filters to that symbol only. Otherwise
+    blends across all instruments (legacy behavior — prefer per-instrument).
     """
     con = duckdb.connect(str(db_path), read_only=True)
     try:
         result = {}
         for label in ORB_LABELS:
+            where = [
+                "orb_minutes = ?",
+                "trading_day >= ?",
+                "trading_day <= ?",
+                f"orb_{label}_break_dir IS NOT NULL",
+            ]
+            params: list = [orb_minutes, train_start, train_end]
+            if instrument is not None:
+                where.append("symbol = ?")
+                params.append(instrument)
+
             row = con.execute(
                 f"""
                 SELECT
                     COUNT(*) FILTER (WHERE orb_{label}_double_break = TRUE) as double_ct,
                     COUNT(*) as break_ct
                 FROM daily_features
-                WHERE orb_minutes = ?
-                  AND trading_day >= ?
-                  AND trading_day <= ?
-                  AND orb_{label}_break_dir IS NOT NULL
+                WHERE {' AND '.join(where)}
             """,
-                [orb_minutes, train_start, train_end],
+                params,
             ).fetchone()
 
             double_ct, break_ct = row
@@ -228,8 +243,8 @@ def run_rolling_evaluation(
             print(f"  Train: {w['train_start']} to {w['train_end']}")
             print(f"  Test:  {w['test_start']} to {w['test_end']}")
 
-            # Step 1: Compute double-break frequency
-            db_pct = compute_double_break_pct(db_path, w["train_start"], w["train_end"], orb_minutes)
+            # Step 1: Compute double-break frequency (per-instrument)
+            db_pct = compute_double_break_pct(db_path, w["train_start"], w["train_end"], orb_minutes, instrument=instrument)
             degraded_sessions = {label for label, pct in db_pct.items() if pct >= DOUBLE_BREAK_THRESHOLD}
 
             # Advisory: warn on sessions approaching threshold
