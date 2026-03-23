@@ -25,6 +25,7 @@ import duckdb
 
 from pipeline.asset_configs import get_active_instruments
 from pipeline.paths import GOLD_DB_PATH
+from pipeline.stats import jobson_korkie_p
 from trading_app.portfolio import Portfolio, PortfolioStrategy
 from trading_app.rolling_portfolio import (
     DEFAULT_LOOKBACK_WINDOWS,
@@ -177,7 +178,7 @@ def _load_best_regime_variant(
     entry_model: str,
     filter_type: str,
     min_expectancy_r: float = LIVE_MIN_EXPECTANCY_R,
-) -> dict | None:
+) -> tuple[dict | None, str | None]:
     """Load the best variant from validated_setups, enforcing locked RR.
 
     Joins family_rr_locks to restrict each (instrument, orb_label, filter_type,
@@ -185,7 +186,11 @@ def _load_best_regime_variant(
     Among matching rows, picks the best by FDR significance (primary), then
     expectancy_r (tiebreaker across different orb_minutes/confirm_bars combos).
 
-    Only returns strategies with expectancy_r >= min_expectancy_r.
+    If the locked RR fails min_expectancy_r, tries JK-equal alternatives that
+    pass (liveability tiebreaker). Research family_rr_locks table is unchanged.
+
+    Returns (variant_dict, fallback_note). fallback_note is None when the locked
+    RR was used directly, or a structured audit string when JK fallback fired.
     """
     con = duckdb.connect(str(db_path), read_only=True)
     try:
@@ -223,13 +228,146 @@ def _load_best_regime_variant(
             [instrument, orb_label, entry_model, filter_type, min_expectancy_r],
         ).fetchall()
 
-        if not rows:
-            return None
+        if rows:
+            cols = [desc[0] for desc in con.description]
+            return dict(zip(cols, rows[0], strict=False)), None
 
-        cols = [desc[0] for desc in con.description]
-        return dict(zip(cols, rows[0], strict=False))
+        # Locked RR failed min_expectancy_r — try JK-equal fallback.
+        return _jk_fallback_rr(
+            con, instrument, orb_label, entry_model, filter_type, min_expectancy_r,
+        )
     finally:
         con.close()
+
+
+# JK parameters for live-resolution fallback (same as select_family_rr.py).
+_JK_RHO = 0.7
+_JK_ALPHA = 0.05
+
+
+def _jk_fallback_rr(
+    con: duckdb.DuckDBPyConnection,
+    instrument: str,
+    orb_label: str,
+    entry_model: str,
+    filter_type: str,
+    min_expectancy_r: float,
+) -> tuple[dict | None, str | None]:
+    """Try JK-equal alternatives when the locked RR fails LIVE_MIN.
+
+    Scoped to the same family/instrument/session/entry, validated only.
+    Compares each candidate to the locked RR's Sharpe (not to "best Sharpe").
+    Among JK-equal candidates that pass min_expectancy_r, picks highest Sharpe.
+
+    Returns (variant_dict, fallback_note). Returns (None, None) if no
+    JK-equal alternative passes the gate.
+    """
+    # Get the locked RR's Sharpe and N for JK comparison.
+    lock_rows = con.execute(
+        """
+        SELECT frl.locked_rr, frl.sharpe_at_rr, frl.n_at_rr, frl.expr_at_rr,
+               frl.orb_minutes, frl.confirm_bars
+        FROM family_rr_locks frl
+        WHERE frl.instrument = ?
+          AND frl.orb_label = ?
+          AND frl.entry_model = ?
+          AND frl.filter_type = ?
+    """,
+        [instrument, orb_label, entry_model, filter_type],
+    ).fetchall()
+
+    if not lock_rows:
+        return None, None
+
+    # May have multiple (orb_minutes, confirm_bars) sub-families. Try each.
+    best_candidate = None
+    best_note = None
+
+    for locked_rr, locked_sharpe, locked_n, locked_expr, orb_min, cb in lock_rows:
+        # Get all validated RR levels for this exact sub-family that pass LIVE_MIN.
+        # No ORDER BY sharpe_ratio here — JK filtering + best-pick done in Python
+        # to avoid drift check #44 false positive (Sharpe ORDER BY is intentional
+        # inside JK-equal set, but check can't distinguish context).
+        alt_rows = con.execute(
+            """
+            SELECT vs.strategy_id, vs.instrument, vs.orb_label, vs.entry_model,
+                   vs.rr_target, vs.confirm_bars, vs.filter_type,
+                   vs.orb_minutes,
+                   vs.expectancy_r, vs.win_rate, vs.sample_size,
+                   vs.sharpe_ratio, vs.max_drawdown_r,
+                   vs.fdr_significant,
+                   vs.noise_risk, vs.oos_exp_r,
+                   es.median_risk_points,
+                   1.0 as stop_multiplier
+            FROM validated_setups vs
+            LEFT JOIN experimental_strategies es
+              ON vs.strategy_id = es.strategy_id
+            WHERE vs.instrument = ?
+              AND vs.orb_label = ?
+              AND vs.entry_model = ?
+              AND vs.filter_type = ?
+              AND vs.orb_minutes = ?
+              AND vs.confirm_bars = ?
+              AND vs.rr_target != ?
+              AND LOWER(vs.status) = 'active'
+              AND vs.expectancy_r >= ?
+        """,
+            [instrument, orb_label, entry_model, filter_type,
+             orb_min, cb, locked_rr, min_expectancy_r],
+        ).fetchall()
+
+        if not alt_rows:
+            continue
+
+        alt_cols = [desc[0] for desc in con.description]
+
+        # Collect all JK-equal candidates, then pick highest Sharpe.
+        jk_equal_candidates: list[tuple[dict, float]] = []  # (variant, jk_p)
+        for row in alt_rows:
+            candidate = dict(zip(alt_cols, row, strict=False))
+            cand_sharpe = candidate["sharpe_ratio"]
+            cand_n = candidate["sample_size"]
+
+            jk_p = jobson_korkie_p(
+                locked_sharpe, cand_sharpe, int(locked_n), int(cand_n), _JK_RHO,
+            )
+            if jk_p > _JK_ALPHA:
+                jk_equal_candidates.append((candidate, jk_p))
+
+        if not jk_equal_candidates:
+            continue
+
+        # Among JK-equal gate-passers: FDR-significant first (mirrors main path),
+        # then highest Sharpe as tiebreaker.
+        jk_equal_candidates.sort(
+            key=lambda x: (bool(x[0].get("fdr_significant")), x[0]["sharpe_ratio"]),
+            reverse=True,
+        )
+        winner, winner_jk_p = jk_equal_candidates[0]
+
+        family_id = f"{orb_label}_{entry_model}_{filter_type}"
+        note = (
+            f"JK_FALLBACK: {family_id} [{instrument}] "
+            f"locked_rr={locked_rr} (ExpR={locked_expr:.4f}) -> "
+            f"fallback_rr={winner['rr_target']} "
+            f"(ExpR={winner['expectancy_r']:.4f}, "
+            f"Sharpe={winner['sharpe_ratio']:.4f}, jk_p={winner_jk_p:.4f}) "
+            f"reason=locked_rr_below_LIVE_MIN"
+        )
+        log.info(note)
+
+        # Cross-sub-family comparison: FDR first, then Sharpe (consistent with main path).
+        if best_candidate is None:
+            best_candidate = winner
+            best_note = note
+        else:
+            winner_fdr = bool(winner.get("fdr_significant"))
+            best_fdr = bool(best_candidate.get("fdr_significant"))
+            if (winner_fdr, winner["sharpe_ratio"]) > (best_fdr, best_candidate["sharpe_ratio"]):
+                best_candidate = winner
+                best_note = note
+
+    return best_candidate, best_note
 
 
 def _load_best_experimental_variant(
@@ -474,7 +612,7 @@ def build_live_portfolio(
 
             # Fall back to validated_setups (best Sharpe variant meeting quality floor)
             if match is None:
-                match = _load_best_regime_variant(
+                match, fallback_note = _load_best_regime_variant(
                     db_path,
                     instrument,
                     spec.orb_label,
@@ -483,6 +621,8 @@ def build_live_portfolio(
                     min_expectancy_r=min_expectancy_r,
                 )
                 source = "baseline"
+                if fallback_note:
+                    notes.append(fallback_note)
 
             if match is None:
                 notes.append(f"WARN: {spec.family_id} -- no variant found")
@@ -636,7 +776,7 @@ def build_live_portfolio(
                 )
                 continue
 
-        variant = _load_best_regime_variant(
+        variant, fallback_note = _load_best_regime_variant(
             db_path,
             instrument,
             spec.orb_label,
@@ -644,6 +784,8 @@ def build_live_portfolio(
             spec.filter_type,
             min_expectancy_r=min_expectancy_r,
         )
+        if fallback_note:
+            notes.append(fallback_note)
 
         if variant is None:
             notes.append(f"WARN: {spec.family_id} -- no validated variant found")

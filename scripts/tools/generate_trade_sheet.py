@@ -197,7 +197,7 @@ def collect_trades(trading_day: date, db_path: Path) -> list[dict]:
             if spec.exclude_instruments and instrument in spec.exclude_instruments:
                 continue
 
-            variant = _load_best_regime_variant(
+            variant, _fallback_note = _load_best_regime_variant(
                 db_path,
                 instrument,
                 spec.orb_label,
