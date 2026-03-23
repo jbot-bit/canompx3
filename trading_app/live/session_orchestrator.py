@@ -1079,8 +1079,15 @@ class SessionOrchestrator:
                     )
                     return
                 # All retries exhausted — position remains open at broker, stuck in PENDING_EXIT.
-                # Recovery paths: (1) stale_positions detects after 300s, (2) new entry overwrites
-                # PENDING_EXIT, (3) kill switch flattens on feed death, (4) manual close.
+                # Recovery paths: (1) stale_positions detects after 300s,
+                # (2) kill switch flattens on feed death, (3) manual close.
+                # Note: if this strategy later becomes a rollover orphan, the orphan
+                # containment gate (_blocked_strategies) prevents new entries until
+                # manual resolution — so "new entry overwrites PENDING_EXIT" is NOT
+                # a recovery path for orphaned strategies.
+                #
+                # _submit_exit_with_retry already notified at the retry-exhaustion level.
+                # This second notify is intentional — belt-and-suspenders for overnight failures.
                 stuck_msg = (
                     f"EXIT FAILED — {event.strategy_id} stuck in PENDING_EXIT. "
                     "Position open at broker. Kill switch or manual close required."
