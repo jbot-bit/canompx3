@@ -2793,29 +2793,31 @@ def check_rr_resolution_paths_locked() -> list[str]:
         SCRIPTS_DIR / "tools" / "generate_trade_sheet.py",
     ]
 
-    # Pattern: SELECT ... FROM validated_setups ... (LIMIT 1 or ROW_NUMBER)
-    # WITHOUT family_rr_locks in the same query block
-    variant_pick = re.compile(
-        r"FROM\s+validated_setups.*?(?:LIMIT\s+1|ROW_NUMBER)",
-        re.IGNORECASE | re.DOTALL,
+    # Extract individual SQL string blocks (triple-quoted) and check each
+    # independently. Previous DOTALL regex matched across function boundaries,
+    # causing false positives (e.g. FROM validated_setups in function A matching
+    # LIMIT 1 in function B which queries experimental_strategies).
+    sql_block_pattern = re.compile(r'"""(.*?)"""', re.DOTALL)
+    variant_in_block = re.compile(
+        r"FROM\s+validated_setups", re.IGNORECASE
     )
+    pick_pattern = re.compile(r"LIMIT\s+1|ROW_NUMBER", re.IGNORECASE)
 
     for fpath in production_files:
         if not fpath.exists():
             continue
         content = fpath.read_text(encoding="utf-8")
 
-        # Find all query blocks that pick a single variant
-        for match in variant_pick.finditer(content):
-            # Get surrounding context (200 chars before, 500 after) to check
-            # for family_rr_locks in the same query
-            start = max(0, match.start() - 200)
-            end = min(len(content), match.end() + 500)
-            block = content[start:end]
-
+        # Check each SQL string block independently
+        for block_match in sql_block_pattern.finditer(content):
+            block = block_match.group(1)
+            if not variant_in_block.search(block):
+                continue
+            if not pick_pattern.search(block):
+                continue
+            # This block selects from validated_setups with LIMIT 1 / ROW_NUMBER
             if "family_rr_locks" not in block:
-                # Find the line number
-                line_num = content[: match.start()].count("\n") + 1
+                line_num = content[: block_match.start()].count("\n") + 1
                 rel = fpath.relative_to(PROJECT_ROOT)
                 violations.append(
                     f"  {rel}:{line_num}: variant selection (LIMIT 1 / "
@@ -3517,7 +3519,7 @@ CHECKS = [
     ),
     ("ML lookahead blacklist includes all outcome targets", check_ml_lookahead_blacklist, False, False),
     ("Audit columns populated (n_trials, fst_hurdle, DSR)", check_audit_columns_populated, False, True),  # requires_db
-    ("ML model files exist for all active instruments", check_ml_model_files_exist, False, False),
+    ("ML model files exist for all active instruments", check_ml_model_files_exist, True, False),  # advisory: ML frozen (V2 gate), MES/MGC models intentionally absent
     ("ML model config hashes match current config", check_ml_config_hash_match, True, False),
     ("ML model freshness < 90 days", check_ml_model_freshness, False, False),
     # ── New checks from deep audit (Mar 2026) ──────────────────────────

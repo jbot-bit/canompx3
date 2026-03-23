@@ -63,7 +63,10 @@ def build_daily_pnl_matrix(
     Convention: SPA uses LOSSES (higher = worse). We negate pnl_r so
     positive loss = negative P&L = bad performance.
     """
+    from pipeline.db_config import configure_connection
+
     con = duckdb.connect(str(db_path), read_only=True)
+    configure_connection(con)
 
     try:
         # Get all active strategies for this instrument

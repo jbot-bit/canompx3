@@ -10,6 +10,7 @@ scope_lock:
   - trading_app/strategy_validator.py
   - trading_app/live_config.py
   - trading_app/db_manager.py
+  - trading_app/spa_test.py
   - pipeline/check_drift.py
   - tests/test_pipeline/test_pipeline_status.py
   - tests/test_trading_app/test_live_config.py
