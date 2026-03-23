@@ -155,26 +155,51 @@
 - **Verdict: STRUCTURAL SCARCITY.** MGC is a weak ORB instrument under current architecture.
 - **Open question:** Should spec policy be instrument-specific rather than shared?
 
-### Truth State (verified Mar 23 2026)
-- **validated_setups:** 404 rows (MGC 6, MES 9, MNQ 389). All wf_passed=True, FDR-corrected at K=105,640.
-- **family_rr_locks:** 166 rows (MGC 2, MES 7, MNQ 157).
-- **edge_families:** 162 rows (MGC 2, MES 7, MNQ 153).
-- **regime_validated (rolling):** 8,795 rows (MNQ 6,275, MES 1,414, MGC 1,106). All event-based session names.
-- **LIVE_PORTFOLIO:** 8 specs (2 CORE, 6 REGIME). Resolves MNQ 8, MES 1, MGC 0 (9 total).
-- **noise_risk:** Fully populated. Zero NULLs.
-- **Bars:** All instruments current to 2026-03-21. daily_features/outcomes to 2026-03-20.
-- **ML:** Still frozen. V2 gate active.
-- **Thresholds:** All 9 annotated + sensitivity-tested. DOUBLE_BREAK proximity warning active.
+#### 9. #82 Holdout Contamination Cleanup
+- MNQ experimental_strategies cleared and re-discovered with `--holdout-date 2026-01-01`
+- 3 apertures (O5/O15/O30) rebuilt, 31,104 strategies. 757 validated (was 389).
+- Edge families: 228 (was 153). RR locks: 249 (was 157).
+- **MNQ live: 7** (was 8, lost CME_PRECLOSE_E2_X_MGC_ATR70_S075 — honest holdout effect).
+- Drift check #82: NOW PASSING. Down from 18 violations to 3 (all in frozen ML code).
+
+#### 10. MGC Research Truth Audit
+- **MGC is weak for ORB. Primary cause: friction arithmetic.**
+  MGC TOKYO_OPEN median ORB=1.0pt, friction=57% of risk. MNQ CME_PRECLOSE: 7%.
+- **Phase 3 asymmetry:** MGC 11 years vs MNQ 6. "All years positive" is harder with more data.
+  6,083 MGC strategies killed by Phase 3 (27%). Design choice, not a bug.
+- **Positive islands exist** (CME_REOPEN, LONDON_METALS at high RR/G8) but all REGIME-class (N=25-57).
+- **RR lock picks MAX_SHARPE → RR1.0** (ExpR=0.186) over head at RR1.5 (ExpR=0.235). By design.
+- **Spec set confirmed MNQ-shaped:** architecture is instrument-agnostic, spec SET is biased.
+  Expanding specs would NOT produce new live strategies (all non-MNQ candidates blocked by other gates).
+- **ML NOT YET ready:** 0 clean positive baselines for MGC/MES. Only MNQ contributes.
+
+#### 11. Spec Policy Audit
+- **VERDICT: SPEC SET BIASED + GENUINE STRUCTURAL WEAKNESS.**
+- Code is instrument-agnostic. Spec set covers CME_PRECLOSE/COMEX_SETTLE/CME_REOPEN.
+- MES/MGC edges are on different sessions, all blocked by noise_risk or double-break regardless of specs.
+- No spec expansion warranted — would produce 0 new live strategies.
+- Latest-window-only fragility is real but causes 0 actual false negatives currently.
+
+### Truth State (verified Mar 23 2026, post-#82 cleanup)
+- **validated_setups:** 772 rows (MGC 6, MES 9, MNQ 757). All wf_passed=True, holdout-clean.
+- **family_rr_locks:** 258 rows (MGC 2, MES 7, MNQ 249).
+- **edge_families:** 237 rows (MGC 2, MES 7, MNQ 228).
+- **regime_validated (rolling):** 8,795 rows. All event-based session names.
+- **LIVE_PORTFOLIO:** 8 specs (2 CORE, 6 REGIME). Resolves MNQ 7, MES 1, MGC 0 (8 total).
+- **noise_risk:** Fully populated. Zero NULLs. MNQ 50 clean (was 42).
+- **Drift checks:** 74 pass, 3 violations (all ML #61, frozen). #82 RESOLVED.
+- **ML:** Still frozen. V2 gate active. NOT READY (0 clean MGC/MES baselines).
 
 ### Next Steps (for incoming session)
-1. **Spec architecture audit** — are live specs MNQ-shaped? Should spec policy be instrument-specific?
-2. **Layer 8** — forward test / paper trade the 9-strategy portfolio (MNQ 8 + MES 1)
-3. **MGC decision** — accept 0 live as structural truth, or explore non-ORB / different architecture
+1. **Layer 8** — forward test / paper trade the 8-strategy portfolio (MNQ 7 + MES 1)
+2. **Phase 3 fairness audit** — MGC 11 years vs MNQ 6: is "all years positive" the right test?
+3. **MGC: accept structural weakness** — friction is arithmetic, not a gate problem
 
 ### Known issues
-- Post-edit drift hook PYTHONPATH: FIXED (commit c3b04a1)
-- DOUBLE_BREAK_THRESHOLD=0.67: HEURISTIC, proximity warning active. MNQ 7.6pp, MES 5.0pp margin.
-- MGC: 0 live strategies — structural scarcity, not a bug
+- ML #61: 3 violations in features.py (frozen, fix when ML unfrozen)
+- DOUBLE_BREAK_THRESHOLD=0.67: HEURISTIC, proximity warning active
+- MGC: 0 live — structural friction (57% of median ORB eaten by costs)
+- Spec set: MNQ-shaped by construction, not by architecture bug
 
 ---
 
