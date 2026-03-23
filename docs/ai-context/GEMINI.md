@@ -24,17 +24,17 @@ This project is a **Quantitative Trading System for Micro Futures** — a self-c
     *   **Strategy Management:** Discovery (grid search ~105K combos), validation (walk-forward + BH FDR), portfolio construction, risk management.
     *   **Backtesting:** Historical replay via `trading_app/paper_trader.py`.
 
-3.  **Sessions (10 total, all event-based):**
-    All sessions resolve times dynamically per-day from `pipeline/dst.py` SESSION_CATALOG, eliminating DST contamination. Old fixed-clock sessions have been replaced.
-    *   CME_REOPEN, TOKYO_OPEN, SINGAPORE_OPEN, LONDON_METALS, US_DATA_830, NYSE_OPEN, US_DATA_1000, CME_PRECLOSE, COMEX_SETTLE, NYSE_CLOSE.
+3.  **Sessions (12 total, all dynamic/event-based):**
+    All sessions resolve times dynamically per-day from `pipeline/dst.py` SESSION_CATALOG, eliminating DST contamination.
+    *   CME_REOPEN, TOKYO_OPEN, BRISBANE_1025, SINGAPORE_OPEN, EUROPE_FLOW, LONDON_METALS, US_DATA_830, NYSE_OPEN, US_DATA_1000, COMEX_SETTLE, CME_PRECLOSE, NYSE_CLOSE.
 
 ## Validation Pipeline:
 
-*   **Grid Search:** ~105,000 strategy combinations (3 apertures x 6 RR x 5 CB x 13 filters x 3 entry models x 10 sessions x 3 instruments).
+*   **Grid Search:** Strategy combinations vary by instrument and session (E2/E3 are CB1-only, filters are session-specific). Query `experimental_strategies` for current grid size.
 *   **Walk-forward validation:** 3-year train / 1-year test, rolling. WFE > 50% required.
-*   **BH FDR:** Benjamini-Hochberg correction across all ~105K tests.
+*   **BH FDR:** Benjamini-Hochberg correction across all tests per instrument.
 *   **Classification:** CORE (>=100 trades), REGIME (30-99), INVALID (<30). min_sample=30.
-*   **Current state (Mar 22 2026):** 832 validated (MGC 20, MES 81, MNQ 731). 17 live-tradeable strategies.
+*   **Current state:** Query `validated_setups` and `live_config` for current counts — they change after every rebuild. 3 active instruments (MGC, MNQ, MES). M2K dead Mar 2026.
 
 ## What Works:
 

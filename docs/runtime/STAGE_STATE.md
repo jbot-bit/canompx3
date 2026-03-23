@@ -1,16 +1,18 @@
 ---
-task: "Guardian audit phase 2: type safety, dead code, stale docs"
+task: "Guardian audit phase 2: stale docs cleanup"
 mode: IMPLEMENTATION
-stage: 3
+stage: 4
 stage_of: 4
-stage_purpose: "Class B: Fix type safety gaps (slippage mult, DST dead code marker)"
-updated: 2026-03-25T01:00+10:00
+stage_purpose: "Class C: Fix stale docs — PLAN_codex, external AI context docs, HANDOFF"
+updated: 2026-03-25T01:15+10:00
 terminal: main
 scope_lock:
-  - pipeline/cost_model.py
-  - pipeline/dst.py
+  - PLAN_codex.md
+  - docs/ai-context/GEMINI.md
+  - chatgpt-project-kit/PROJECT_REFERENCE.md
+  - chatgpt-project-kit/PROJECT_INSTRUCTIONS.md
 acceptance:
-  - "SESSION_SLIPPAGE_MULT: add missing MNQ COMEX_SETTLE, BRISBANE_1025, EUROPE_FLOW for active instruments"
-  - "DST_AFFECTED_SESSIONS: add deprecation comment (empty dict, all consumers return CLEAN)"
+  - "All stale volatile counts removed or marked as snapshots with dates"
+  - "No new stale counts introduced"
 blockers: []
 ---
