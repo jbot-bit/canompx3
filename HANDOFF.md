@@ -186,21 +186,21 @@
 - All thresholds annotated with @research-source, @sensitivity-tested, @heuristic where applicable.
 - Proximity warning added (DOUBLE_BREAK_PROXIMITY_WARN=0.05).
 
-#### 8. MGC Research Truth Audit
-- **MGC is weak for ORB. Primary cause: friction arithmetic.**
-  MGC TOKYO_OPEN median ORB=1.0pt, friction=57% of risk. MNQ CME_PRECLOSE: 7%.
+#### 8. MGC Research Truth Audit (CORRECTED Mar 24 — friction debunked)
+- **57% friction claim DEBUNKED.** Used unfiltered ORB median (1.0pt). At G4+ filter:
+  median risk=6.3pt, friction=9.1% of risk. Comparable to MNQ (7.0%), better than MES (15.7%).
+- **Dollar gate PASSES.** $11.71 expected profit > $7.46 threshold.
+- **True binding blocker: RR lock + LIVE_MIN.** MAX_SHARPE locks RR1.0 where full-sample
+  ExpR=0.186 < LIVE_MIN=0.22. At RR1.5: ExpR=0.235 > LIVE_MIN. This is a design choice, not a bug.
+- **noise_risk is secondary under current RR lock; becomes decision-relevant if RR policy changes.** Sigma miscalibrated 2.21x (should be 0.54, not 1.2).
+  5-seed pilot: 0 E2 survivors at sigma=0.54 vs 1827 at sigma=1.2. Floor drops dramatically.
+  `calibrate_null_sigma.py` built (uncommitted). 100-seed rerun deferred until RR policy resolved.
 - **One honest positive island:** TOKYO_OPEN E2 ORB_G4/G4_CONT, N=175-177 (PRELIMINARY),
   ExpR=0.19-0.26, all wf_passed=True. Real edge under honest gates.
-- **Binding gate: noise_risk=True on all 6 validated.** OOS ExpR below null floor. Baseline
-  blocked by noise gate. Rolling blocked by 100% double-break degradation (TOKYO_OPEN 78-85%).
-- **Phase 3 asymmetry (secondary):** MGC 11 years vs MNQ 6 — real fairness concern but not the
-  binding constraint (noise_risk blocks before Phase 3 matters for live resolution).
-- **RR lock structural clash:** MAX_SHARPE picks RR1.0 (ExpR=0.186) over head at RR1.5
-  (ExpR=0.235). Design choice, not a bug.
-- **Verdict: NOT LIVE, SHADOW-TRACK ONLY.** MGC does not qualify under current live gates.
-  Spec gap + noise_risk + double-break = no path to live. Monitor TOKYO_OPEN in forward data.
-- **ML:** No clean ML-eligible / deployable positive baseline. TOKYO_OPEN is a real PRELIMINARY
-  positive island but fails liveability via noise/live gates. MGC is 0 live-tradeable in canon.
+- **Verdict: NOT LIVE, SHADOW-TRACK ONLY.** MGC blocked by RR lock + LIVE_MIN interaction,
+  not friction. Path to live exists IF RR lock policy relaxed AND noise floor recalibrated.
+- **Next task: RR policy audit** — is MAX_SHARPE→RR1.0 the right lock policy when RR1.5
+  has higher ExpR? Design question, not a bug fix.
 
 #### 9. #82 Holdout Contamination Cleanup
 - MNQ experimental_strategies cleared and re-discovered with `--holdout-date 2026-01-01`
@@ -233,14 +233,15 @@
 - **ML:** Still frozen. V2 gate active. NOT READY (0 clean MGC/MES baselines).
 
 ### Next Steps (for incoming session)
-1. **Layer 8** — forward test / paper trade the 8-strategy portfolio (MNQ 7 + MES 1)
-2. **Phase 3 fairness audit** — MGC 11 years vs MNQ 6: is "all years positive" the right test?
-3. **MGC: accept structural weakness** — friction is arithmetic, not a gate problem
+1. **RR policy audit** — is MAX_SHARPE→RR1.0 lock correct when RR1.5 has higher ExpR? Design decision.
+2. **Layer 8** — forward test / paper trade the 8-strategy portfolio (MNQ 7 + MES 1)
+3. **Phase 3 fairness audit** — MGC 11 years vs MNQ 6: is "all years positive" the right test?
+4. **MGC noise floor rerun** — 100-seed with sigma=0.54, DEFERRED until RR policy resolved
 
 ### Known issues
 - ML #61: 3 violations in features.py (frozen, fix when ML unfrozen)
 - DOUBLE_BREAK_THRESHOLD=0.67: HEURISTIC, proximity warning active
-- MGC: 0 live — structural friction (57% of median ORB eaten by costs)
+- MGC: 0 live — RR lock + LIVE_MIN interaction (NOT friction; 57% claim debunked)
 - Spec set: MNQ-shaped by construction, not by architecture bug
 
 ---
