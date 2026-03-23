@@ -319,6 +319,11 @@ def classify_regime(atr_20: float) -> str:
 def validate_strategy(
     row: dict,
     cost_spec,
+    # @research-source: engineering safety margin (50% cost buffer). No academic
+    # derivation. The concept of cost stress testing is standard (Chan, Carver) but
+    # the 1.5x multiplier is a project heuristic.
+    # @sensitivity-tested: 2026-03-23. All 9 live strategies have ExpR 0.11-0.40,
+    # wide margin above breakeven. Robust at 1.2x-1.8x. Not currently load-bearing.
     stress_multiplier: float = 1.5,
     min_sample: int = REGIME_MIN_SAMPLES,
     min_sharpe: float | None = None,

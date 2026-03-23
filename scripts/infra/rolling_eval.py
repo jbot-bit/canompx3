@@ -36,9 +36,18 @@ from trading_app.regime.discovery import run_regime_discovery
 from trading_app.regime.schema import init_regime_schema
 from trading_app.regime.validator import run_regime_validation
 
-# Double-break threshold: if >= this fraction of break-days had double
-# breaks, single-direction breakout strategies are auto-DEGRADED.
+# @research-source: heuristic. Sessions with >= 67% double-break days lack
+# directional conviction for single-direction breakout strategies. The 0.67
+# value has no academic derivation — it was chosen as ~2/3 (majority rule).
+# @sensitivity-tested: 2026-03-23. ONE-DIRECTIONAL CLIFF: CME_PRECLOSE is at
+# 63.9% double-break rate (margin=3.1pp). Lowering to 0.60 auto-degrades
+# CME_PRECLOSE, killing 7/9 live strategies. Raising to 0.80 has no effect.
+# @revalidated-for: E1/E2 event-based (2026-03-23)
 DOUBLE_BREAK_THRESHOLD = 0.67
+
+# Advisory margin: warn when any live session's double-break rate approaches
+# within this margin of DOUBLE_BREAK_THRESHOLD.
+DOUBLE_BREAK_PROXIMITY_WARN = 0.05
 
 
 def generate_rolling_windows(
@@ -222,6 +231,12 @@ def run_rolling_evaluation(
             # Step 1: Compute double-break frequency
             db_pct = compute_double_break_pct(db_path, w["train_start"], w["train_end"], orb_minutes)
             degraded_sessions = {label for label, pct in db_pct.items() if pct >= DOUBLE_BREAK_THRESHOLD}
+
+            # Advisory: warn on sessions approaching threshold
+            for label, pct in db_pct.items():
+                margin = DOUBLE_BREAK_THRESHOLD - pct
+                if 0 < margin <= DOUBLE_BREAK_PROXIMITY_WARN:
+                    print(f"  WARNING: {label} double-break {pct:.1%} is within {margin:.1%} of threshold {DOUBLE_BREAK_THRESHOLD:.0%}")
 
             if degraded_sessions:
                 print(f"  Double-break degraded sessions: {degraded_sessions}")
