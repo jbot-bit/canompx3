@@ -31,9 +31,8 @@ from pipeline.cost_model import get_cost_spec
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.live_config import PAPER_TRADE_CANDIDATES
 
-# ── Constants (derived from PAPER_TRADE_CANDIDATES where possible) ──────────
-# Instrument/entry/aperture/RR/CB are common across all candidates.
-# Assert at import time to catch config drift.
+# ── Constants ───────────────────────────────────────────────────────────────
+# Entry model and filter type validated against PAPER_TRADE_CANDIDATES at import.
 
 INSTRUMENT = "MNQ"
 ENTRY_MODEL = "E2"
@@ -41,10 +40,11 @@ ORB_MINUTES = 5
 RR_TARGET = 1.0
 CONFIRM_BARS = 1
 
-# Validate constants match PAPER_TRADE_CANDIDATES
+# Validate entry_model, filter_type, and rr_target match PAPER_TRADE_CANDIDATES
 for _s in PAPER_TRADE_CANDIDATES:
     assert _s.entry_model == ENTRY_MODEL, f"{_s.family_id}: entry_model mismatch"
     assert _s.filter_type == "NO_FILTER", f"{_s.family_id}: expected NO_FILTER"
+    assert _s.rr_target is None or _s.rr_target == RR_TARGET, f"{_s.family_id}: rr_target mismatch"
 
 # Kill rules
 KILL_CONSECUTIVE_NEGATIVE_MONTHS = 3
