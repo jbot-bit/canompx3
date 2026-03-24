@@ -7,10 +7,43 @@
 ---
 
 ## Current Session
-- **Tool:** Claude Code (MNQ Unfiltered Baseline Audit + Paper-Trade Setup)
-- **Date:** 2026-03-24
+- **Tool:** Claude Code (FDR Remediation + Truth Protocol + Forward Eval Pack)
+- **Date:** 2026-03-24 (session 2)
 - **Branch:** `main`
-- **Status:** Paper-trade candidates added. C1 null rerun paused (chunk 2 of 10).
+- **Status:** FDR remediation complete. Forward eval pack frozen. Paper book ready to run.
+
+### What was done this session (Mar 24 — session 2)
+
+#### 1. MNQ FDR Remediation (DB-only, no code changes)
+- Applied BH FDR to 757 MNQ validated_setups (all had fdr_significant=NULL)
+- Used canonical `benjamini_hochberg()` with global K=105,627
+- Result: 494 TRUE, 263 FALSE, 0 NULL remaining
+- Rebuilt MNQ edge families (228 families: 55 ROBUST, 54 WHITELISTED, 24 SINGLETON, 95 PURGED)
+- Refreshed orb_outcomes: MES +432 rows (3 days), MGC +360 rows (3 days), all through 2026-03-23
+
+#### 2. Research Truth Protocol — K-Rule Addition
+- RESEARCH_RULES.md: BH K selection rule added (report both global K and instrument K; use instrument K for promotion, global K for headlines; never swap post-hoc)
+- .claude/rules/research-truth-protocol.md: mirrored in claim requirements
+- Governance lane is now FROZEN. No more protocol/doc changes unless real conflict appears.
+
+#### 3. Forward Eval Pack (pre-registered)
+- `docs/plans/2026-03-24-mnq-core5-forward-eval-pack.md`
+- 5 CORE MNQ sessions: CME_PRECLOSE, COMEX_SETTLE, NYSE_OPEN, US_DATA_1000, EUROPE_FLOW
+- Daily checklist, weekly risk memo template, scoreboard fields
+- 8-gate promotion card (fail-closed, human sign-off required)
+- Kill criteria: 3 consecutive months negative, cumulative <= -10R, slippage > 2x on 20+ fills
+- Monitoring only — no promotion, no portfolio edits, no discovery
+
+#### 4. Decisions
+- MGC TOKYO_OPEN: intentionally excluded from LIVE_PORTFOLIO (in PAPER_TRADE_CANDIDATES, pending forward evidence)
+- CME_REOPEN: no new unfiltered path; existing live spec NOT removed (separate audit)
+- 3 lanes separated: governance (FROZEN), truth of edge (MNQ unfiltered baseline real), live deployment (NOT YET)
+
+### Next actions
+1. **Run paper book daily** per forward eval pack checklist
+2. **Do NOT reopen governance** — protocol is frozen
+3. **Do NOT edit LIVE_PORTFOLIO** — current live specs stay until separate audit
+4. **C1 null rerun** still paused at chunk 2 of 10 (lower priority than paper monitoring)
 
 ### MNQ Unfiltered Baseline — Paper-Trade Control Note (2026-03-24)
 
