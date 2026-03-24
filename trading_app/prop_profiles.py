@@ -261,26 +261,29 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         copies=1,
         stop_multiplier=0.75,
         max_slots=4,
-        # Phase 1 manual: playbook 5-session plan (lines 193-227)
-        # TOKYO_OPEN, SINGAPORE_OPEN, EUROPE_FLOW, LONDON_METALS, NYSE_OPEN
-        # CME_REOPEN is TopStep-only (playbook line 600). BRISBANE_1025 not in Phase 1.
+        # Phase 1 manual: edge-maximized 4-session plan (Mar 24 2026 restructure).
+        # Routed by expected value, not convenience. CME_PRECLOSE is #1 session
+        # by avg ExpR (0.2272) and pre-registered for 2026 forward test.
+        # Dropped: EUROPE_FLOW (not pre-registered), LONDON_METALS (dead last ExpR).
+        # Old SINGAPORE_OPEN lane (ORB_G8_O15_S075) was a broken DB reference.
         allowed_sessions=frozenset(
             {
-                "TOKYO_OPEN",
-                "SINGAPORE_OPEN",
-                "EUROPE_FLOW",
-                "LONDON_METALS",
-                "NYSE_OPEN",  # Night block — "last thing before bed" per playbook
+                "CME_PRECLOSE",  # 5:45 AM Brisbane (CDT) / 6:45 AM (CST) — strongest session, pre-registered
+                "TOKYO_OPEN",  # 10:00 AM Brisbane
+                "SINGAPORE_OPEN",  # 11:00 AM Brisbane
+                "NYSE_OPEN",  # 11:30 PM Brisbane — pre-registered
             }
         ),
         daily_lanes=(
-            DailyLaneSpec("MNQ_TOKYO_OPEN_E2_RR1.0_CB1_ORB_G5_CONT_S075", "MNQ", "TOKYO_OPEN"),
-            DailyLaneSpec("MNQ_SINGAPORE_OPEN_E2_RR1.0_CB1_ORB_G8_O15_S075", "MNQ", "SINGAPORE_OPEN"),
-            DailyLaneSpec("MNQ_EUROPE_FLOW_E2_RR1.0_CB1_ORB_G8_S075", "MNQ", "EUROPE_FLOW"),
-            DailyLaneSpec("MNQ_LONDON_METALS_E2_RR1.0_CB1_ORB_G6_NOMON_S075", "MNQ", "LONDON_METALS"),
-            DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_ORB_G4_S075", "MNQ", "NYSE_OPEN"),
+            DailyLaneSpec(
+                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ATR70_VOL_S075", "MNQ", "CME_PRECLOSE",
+                execution_notes="Hard time-stop at 3:45 PM CT (Apex close safety). Avg trade duration ~10 min.",
+            ),
+            DailyLaneSpec("MNQ_TOKYO_OPEN_E2_RR1.0_CB1_VOL_RV12_N20_S075", "MNQ", "TOKYO_OPEN"),
+            DailyLaneSpec("MNQ_SINGAPORE_OPEN_E2_RR1.0_CB1_ATR70_VOL_O30_S075", "MNQ", "SINGAPORE_OPEN"),
+            DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_VOL_RV12_N20_O15_S075", "MNQ", "NYSE_OPEN"),
         ),
-        notes="Phase 1 manual proof. No automation, no copy trading. Waking hours only.",
+        notes="Phase 1 manual proof. Edge-maximized: 2 pre-registered sessions (CME_PRECLOSE, NYSE_OPEN). Wake at 5:30 AM for CME_PRECLOSE.",
     ),
     # =========================================================================
     # Phase 2: Automation scaling (Tradeify MNQ + TopStep MGC)
