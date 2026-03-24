@@ -66,6 +66,10 @@ Operator: _______________
 - [ ] Slippage > 2x cost model on 20+ fills? YES / NO
 - [ ] Any data pipeline failure unresolved > 2 business days? YES / NO
 
+## Regime Context (monitoring only — not a gate)
+- Median cost/risk % this week: _____ (ref: edge lives below ~10%)
+- Average ATR_20 this week: _____ (ref: edge amplified above ~200)
+
 ## Anomalies / Notes
 (Anything unusual: missed days, data gaps, cost model concerns, market regime observations)
 
