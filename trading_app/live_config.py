@@ -101,18 +101,18 @@ HOT_MIN_STABILITY = 0.6
 # SQL pre-filter applied before _check_noise_floor.
 # _check_noise_floor reads the pre-computed noise_risk flag from validated_setups
 # (set during validation from OOS ExpR vs per-instrument p95 null floor).
+# @research-source live_config calibration — 0.22R floor from MNQ noise floor analysis
+# @revalidated-for E2 event-based sessions (2026-03-24)
 LIVE_MIN_EXPECTANCY_R = 0.22
 
 # Minimum expected dollar profit as a multiple of round-trip transaction cost.
 # Strategies must earn at least this multiple of their RT cost per trade so that
 # execution variance (spread widening, extra slippage) cannot eliminate the edge.
 #
-# 1.3x rationale: kills strategies where net edge is barely above RT cost
-# (MNQ TOKYO $2.93 = 1.07x, MNQ BRISBANE $2.83 = 1.03x — too thin to survive
-# live execution uncertainty). Keeps real edge at 1.4x+ (MES strategies at $5-6,
-# MNQ strategies at $4.82+). Tighter instruments (MNQ) have a proportionally
-# tougher screen than larger ones (MGC) because slippage uncertainty is bigger
-# relative to point value.
+# 1.3x rationale: kills strategies where net edge is barely above RT cost.
+# Tighter instruments (MNQ) have a proportionally tougher screen than larger
+# ones (MGC) because slippage uncertainty is bigger relative to point value.
+# See pipeline.cost_model.COST_SPECS for current dollar values per instrument.
 #
 # Adjust if cost structure changes (new broker, exchange fee changes, tighter spreads).
 # @research-source live_config calibration — 1.3x RT cost floor derived from MNQ/MES dollar analysis
