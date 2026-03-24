@@ -327,6 +327,8 @@ def run_monitor(
     print("2026 remains sacred for discovery — do not use forward results to select new sessions.")
     print("No rule changes allowed during the forward test period.")
     print("TOKYO_OPEN is monitored separately as REGIME (borderline at 5yr, dead at 10yr unfiltered).")
+    print("EUROPE_FLOW: DEAD at 10yr unfiltered (negative expectancy, WF FAIL). Included for completeness only.")
+    print("COMEX_SETTLE: REGIME-DEPENDENT (negative 2016-2020, positive 2021+). Monitor half-decade split.")
     print(f"Kill: {KILL_CONSECUTIVE_NEGATIVE_MONTHS} consecutive negative months OR cumulative R <= {KILL_CUMULATIVE_R}.")
     print("Promotion to LIVE_PORTFOLIO requires separate approval after paper-trade period.")
     print(f"{'=' * 90}")

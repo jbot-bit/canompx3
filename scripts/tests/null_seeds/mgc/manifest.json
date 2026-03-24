@@ -587,6 +587,126 @@
       "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0064",
       "elapsed_s": 2245.5,
       "completed_at": "2026-03-24T08:46:28.684343+00:00"
+    },
+    "68": {
+      "seed": 68,
+      "status": "PASS",
+      "survivors": 0,
+      "max_oos_expr": null,
+      "date_range": "2020-01-01 to 2025-12-31",
+      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0068",
+      "elapsed_s": 1863.3,
+      "completed_at": "2026-03-24T09:15:10.264321+00:00"
+    },
+    "67": {
+      "seed": 67,
+      "status": "PASS",
+      "survivors": 0,
+      "max_oos_expr": null,
+      "date_range": "2020-01-01 to 2025-12-31",
+      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0067",
+      "elapsed_s": 1873.7,
+      "completed_at": "2026-03-24T09:15:10.913127+00:00"
+    },
+    "66": {
+      "seed": 66,
+      "status": "FAIL",
+      "survivors": 8,
+      "max_oos_expr": 0.3049,
+      "date_range": "2020-01-01 to 2025-12-31",
+      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0066",
+      "elapsed_s": 1899.2,
+      "completed_at": "2026-03-24T09:15:26.760061+00:00"
+    },
+    "69": {
+      "seed": 69,
+      "status": "FAIL",
+      "survivors": 4,
+      "max_oos_expr": 0.1945,
+      "date_range": "2020-01-01 to 2025-12-31",
+      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0069",
+      "elapsed_s": 1870.1,
+      "completed_at": "2026-03-24T09:15:46.772112+00:00"
+    },
+    "70": {
+      "seed": 70,
+      "status": "PASS",
+      "survivors": 0,
+      "max_oos_expr": null,
+      "date_range": "2020-01-01 to 2025-12-31",
+      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0070",
+      "elapsed_s": 1906.1,
+      "completed_at": "2026-03-24T09:17:48.810994+00:00"
+    },
+    "71": {
+      "seed": 71,
+      "status": "FAIL",
+      "survivors": 24,
+      "max_oos_expr": 0.3149,
+      "date_range": "2020-01-01 to 2025-12-31",
+      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0071",
+      "elapsed_s": 1897.9,
+      "completed_at": "2026-03-24T09:18:06.569557+00:00"
+    },
+    "72": {
+      "seed": 72,
+      "status": "PASS",
+      "survivors": 0,
+      "max_oos_expr": null,
+      "date_range": "2020-01-01 to 2025-12-31",
+      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0072",
+      "elapsed_s": 1724.3,
+      "completed_at": "2026-03-24T09:43:54.556427+00:00"
+    },
+    "73": {
+      "seed": 73,
+      "status": "PASS",
+      "survivors": 0,
+      "max_oos_expr": null,
+      "date_range": "2020-01-01 to 2025-12-31",
+      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0073",
+      "elapsed_s": 1733.2,
+      "completed_at": "2026-03-24T09:44:04.135149+00:00"
+    },
+    "74": {
+      "seed": 74,
+      "status": "PASS",
+      "survivors": 0,
+      "max_oos_expr": null,
+      "date_range": "2020-01-01 to 2025-12-31",
+      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0074",
+      "elapsed_s": 1727.9,
+      "completed_at": "2026-03-24T09:44:14.684236+00:00"
+    },
+    "75": {
+      "seed": 75,
+      "status": "PASS",
+      "survivors": 0,
+      "max_oos_expr": null,
+      "date_range": "2020-01-01 to 2025-12-31",
+      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0075",
+      "elapsed_s": 1777.4,
+      "completed_at": "2026-03-24T09:45:24.227272+00:00"
+    },
+    "76": {
+      "seed": 76,
+      "status": "FAIL",
+      "survivors": 1,
+      "max_oos_expr": 0.191,
+      "date_range": "2020-01-01 to 2025-12-31",
+      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0076",
+      "elapsed_s": 1739.5,
+      "completed_at": "2026-03-24T09:46:48.342079+00:00"
+    },
+    "77": {
+      "seed": 77,
+      "status": "PASS",
+      "survivors": 0,
+      "max_oos_expr": null,
+      "date_range": "2020-01-01 to 2025-12-31",
+      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0077",
+      "elapsed_s": 1740.9,
+      "completed_at": "2026-03-24T09:47:07.512985+00:00"
     }
   },
   "config_snapshot": {
