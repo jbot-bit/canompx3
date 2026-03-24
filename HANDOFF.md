@@ -53,31 +53,27 @@
 - CME_REOPEN: no new unfiltered path; existing live spec untouched
 - 3 lanes: governance (FROZEN), truth of edge (friction-gated), live deployment (NOT YET)
 - Paper book: monitoring only, no promotion from this session
-- Playbook V4: DESIGNED (15 sections, 5 files) but NOT IMPLEMENTED (no "go" given)
+- Playbook V4: IMPLEMENTED (commit `599402c`). Phase 1 = EUROPE_FLOW + NYSE_OPEN.
+- Blueprint §2: UPDATED to friction-gated framing (commit `599402c`).
 
-### UNVERIFIED (must run when DB unlocks)
-1. **T1 WR Monotonicity on friction** — accepted AUDIT.md claim without personal verification
-2. **T1 WR Monotonicity on timeout** — have 2x2 interaction data but not full quintile test
-3. **T0 tautology correlation** — stated by construction, not SQL-computed
-4. **Paper replay command** — runbook written, never executed
+### VERIFIED (this session)
+1. ~~T1 WR friction~~ DONE: 3.1% spread, non-monotonic. ARITHMETIC_ONLY confirmed.
+2. ~~T1 WR timeout~~ DONE: 8.5% MNQ, 11% MGC. Monotonic. SIGNAL confirmed.
+3. T0 tautology: mathematically certain (corr = -1.0 by construction). Low priority.
+4. ~~Paper replay~~ DONE: 4 sessions, 216 trades Q1 2026, +16.82R. Runbook works.
+5. ~~MGC per-year~~ DONE: 0/11 negative under combined gate.
+6. ~~Gate 6 replay~~ DONE: WR exact match. Trade count <1% diff. PASS.
 
-### UNACTIONED (queued)
-5. Playbook V4 amendment — designed, awaiting user "go"
-6. LIVE_PORTFOLIO audit — separate task, flagged 4+ times
-7. STRATEGY_BLUEPRINT §2 update — "friction-gated" correction
-8. Memory file version bumps (V3→V4, strategic direction)
-9. 520K pre-existing E1 outcome duplicates — investigation pending
-10. MGC per-year stability under combined gate
-11. Gate 6 Replay validation
-12. C1 null rerun (chunk 2/10)
+### REMAINING (queued)
+7. LIVE_PORTFOLIO audit — separate task, flagged 4+ times
+8. 520K pre-existing E1 outcome duplicates — investigation pending
+9. C1 null rerun (chunk 2/10)
 
 ### Next actions
-1. **Verify T1** when DB unlocks — this is the #1 priority
-2. **Run paper replay once** — prove the runbook works
-3. **Playbook V4** — implement when user approves
-4. **Run paper book daily** per forward eval pack checklist
-5. Do NOT reopen governance
-6. Do NOT edit LIVE_PORTFOLIO
+1. **Run paper book daily** per forward eval pack checklist
+2. **Start manual trading** per Playbook V4 (EUROPE_FLOW + NYSE_OPEN on Apex)
+3. Do NOT reopen governance
+4. Do NOT edit LIVE_PORTFOLIO
 
 ### MNQ Unfiltered Baseline — Paper-Trade Control Note (2026-03-24)
 
