@@ -26,22 +26,39 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
+# Derive instruments and sessions from canonical sources
+from trading_app.live_config import PAPER_TRADE_CANDIDATES
+from trading_app.prop_profiles import ACCOUNT_PROFILES
+
+_PAPER_SESSIONS = sorted({s.orb_label for s in PAPER_TRADE_CANDIDATES if s.tier == "core"})
+_PAPER_INSTRUMENTS = {"MNQ"}  # All PAPER_TRADE_CANDIDATES are MNQ
+_TOPSTEP = ACCOUNT_PROFILES.get("topstep_50k")
+_TOPSTEP_INSTRUMENTS = set(_TOPSTEP.allowed_instruments) if _TOPSTEP else set()
+_ALL_INSTRUMENTS = _PAPER_INSTRUMENTS | _TOPSTEP_INSTRUMENTS
+
 
 def run_step(step_num: int, description: str, cmd: list[str], allow_fail: bool = False) -> bool:
-    """Run a pipeline step and report pass/fail."""
+    """Run a pipeline step and report pass/fail. Fail-closed on timeout."""
     print(f"\n[{step_num}/6] {description}")
     print(f"  CMD: {' '.join(cmd)}")
-    result = subprocess.run(
-        cmd,
-        cwd=str(PROJECT_ROOT),
-        capture_output=True,
-        text=True,
-        timeout=600,
-    )
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=str(PROJECT_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
+    except subprocess.TimeoutExpired:
+        print(f"  TIMEOUT after 600s")
+        if not allow_fail:
+            print(f"  ABORT — fix before continuing")
+            return False
+        print(f"  (allow_fail=True, continuing)")
+        return True
     if result.returncode != 0:
         print(f"  FAILED (exit {result.returncode})")
         if result.stderr:
-            # Show last 5 lines of stderr
             for line in result.stderr.strip().split("\n")[-5:]:
                 print(f"    {line}")
         if not allow_fail:
@@ -49,7 +66,6 @@ def run_step(step_num: int, description: str, cmd: list[str], allow_fail: bool =
             return False
         print(f"  (allow_fail=True, continuing)")
     else:
-        # Show last line of stdout as confirmation
         last = result.stdout.strip().split("\n")[-1] if result.stdout.strip() else "OK"
         print(f"  OK: {last[:120]}")
     return True
@@ -71,53 +87,60 @@ def main():
     print("=" * 70)
     print(f"DAILY PAPER-TRADE RUN — {date_str}")
     print("=" * 70)
-    print(f"Instrument: MNQ | Entry: E2 | ORB: O5 | RR: 1.0")
-    print(f"Sessions: CME_PRECLOSE, COMEX_SETTLE, NYSE_OPEN, US_DATA_1000, EUROPE_FLOW")
-    print(f"+ TopStep MGC TOKYO_OPEN (conditional, 1 contract)")
+    print(f"Paper sessions: {', '.join(_PAPER_SESSIONS)}")
+    print(f"Instruments: {', '.join(sorted(_ALL_INSTRUMENTS))}")
+    if _TOPSTEP:
+        print(f"TopStep: {', '.join(sorted(_TOPSTEP.allowed_sessions))} {', '.join(sorted(_TOPSTEP_INSTRUMENTS))} (conditional)")
 
     py = sys.executable
 
     if not args.monitor_only:
+        # Primary instrument = MNQ (paper CORE). Secondary = TopStep instruments.
+        primary = sorted(_PAPER_INSTRUMENTS)
+        secondary = sorted(_TOPSTEP_INSTRUMENTS - _PAPER_INSTRUMENTS)
+
         # Step 1: Refresh bars
         if not args.skip_ingest:
-            ok = run_step(1, "Refresh MNQ bars", [
-                py, "-m", "pipeline.ingest_dbn", "--instrument", "MNQ", "--resume",
-            ])
-            if not ok:
-                return 1
-
-            # Also refresh MGC for TopStep lane
-            run_step(1, "Refresh MGC bars (TopStep lane)", [
-                py, "-m", "pipeline.ingest_dbn", "--instrument", "MGC", "--resume",
-            ], allow_fail=True)
+            for inst in primary:
+                ok = run_step(1, f"Refresh {inst} bars", [
+                    py, "-m", "pipeline.ingest_dbn", "--instrument", inst, "--resume",
+                ])
+                if not ok:
+                    return 1
+            for inst in secondary:
+                run_step(1, f"Refresh {inst} bars (secondary)", [
+                    py, "-m", "pipeline.ingest_dbn", "--instrument", inst, "--resume",
+                ], allow_fail=True)
         else:
             print(f"\n[1/6] Skipped (--skip-ingest)")
 
         # Step 2: Build features
-        ok = run_step(2, f"Build daily_features MNQ {date_str}", [
-            py, "-m", "pipeline.build_daily_features",
-            "--instrument", "MNQ", "--start", date_str, "--end", date_str,
-        ])
-        if not ok:
-            return 1
-
-        run_step(2, f"Build daily_features MGC {date_str}", [
-            py, "-m", "pipeline.build_daily_features",
-            "--instrument", "MGC", "--start", date_str, "--end", date_str,
-        ], allow_fail=True)
+        for inst in primary:
+            ok = run_step(2, f"Build daily_features {inst} {date_str}", [
+                py, "-m", "pipeline.build_daily_features",
+                "--instrument", inst, "--start", date_str, "--end", date_str,
+            ])
+            if not ok:
+                return 1
+        for inst in secondary:
+            run_step(2, f"Build daily_features {inst} {date_str}", [
+                py, "-m", "pipeline.build_daily_features",
+                "--instrument", inst, "--start", date_str, "--end", date_str,
+            ], allow_fail=True)
 
         # Step 3: Build outcomes
-        ok = run_step(3, f"Build orb_outcomes MNQ {date_str}", [
-            py, "-m", "trading_app.outcome_builder",
-            "--instrument", "MNQ", "--start", date_str, "--end", date_str,
-        ])
-        if not ok:
-            return 1
-
-        run_step(3, f"Build orb_outcomes MGC {date_str}", [
-            py, "-m", "trading_app.outcome_builder",
-            "--instrument", "MGC", "--start", date_str, "--end", date_str,
-        ], allow_fail=True)
+        for inst in primary:
+            ok = run_step(3, f"Build orb_outcomes {inst} {date_str}", [
+                py, "-m", "trading_app.outcome_builder",
+                "--instrument", inst, "--start", date_str, "--end", date_str,
+            ])
+            if not ok:
+                return 1
+        for inst in secondary:
+            run_step(3, f"Build orb_outcomes {inst} {date_str}", [
+                py, "-m", "trading_app.outcome_builder",
+                "--instrument", inst, "--start", date_str, "--end", date_str,
+            ], allow_fail=True)
 
     # Step 4: Run paper monitor
     data_dir = PROJECT_ROOT / "data"
