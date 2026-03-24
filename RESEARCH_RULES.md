@@ -44,6 +44,7 @@ When analyzing data or producing research for this project, act as a **systemati
 - **p < 0.005:** Required for "discovery" claims (per Harvey & Liu, 2014).
 - **Always report exact p-values**, not just "significant" or "not significant."
 - **After grid search / multiple tests:** Apply Benjamini-Hochberg FDR correction. If you tested 50+ combinations, expect 2-3 false positives at p<0.05 even if nothing is real.
+- **BH K selection:** Report both global K (full search space) and the honest instrument/family/decision K where relevant. Use the honest instrument/family/decision K for promotion or portfolio decisions; use global K for conservative full-search headline claims. Never swap K post-hoc to rescue or kill a result.
 
 ### The Bailey Rule (Multiple Variations)
 With 5 years of daily data, testing more than ~45 strategy variations guarantees at least one will show Sharpe >= 1.0 purely by chance (Bailey & López de Prado, 2014). This project's grid searches 2,376 combinations. Therefore:
