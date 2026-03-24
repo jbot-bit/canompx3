@@ -81,7 +81,7 @@ These are the operating conclusions from local research and sim work in this rep
 - `Tradeify 50K` is the primary MNQ automation scaling lane (5 accounts, Tradovate API).
 - `TopStep 50K Express` is the MGC automation lane (5 Express accounts, ProjectX API).
 - The overnight deployed sessions are: CME_PRECLOSE, COMEX_SETTLE, NYSE_OPEN (all MNQ on Tradeify). NYSE_CLOSE removed in V4 (not CORE 5).
-- The morning deployed sessions are: CME_REOPEN (MGC on TopStep). TOKYO_OPEN: optional regime-only add-on (not default).
+- The morning deployed session is: TOKYO_OPEN (MGC on TopStep, conditional — 1 contract only until N=250). CME_REOPEN is DEAD (no validated survivors).
 - `2 micros/account` is the conservative serious sizing on the current model.
 - `0.75x` stop sizing remains the preferred prop-risk setting in the current local modeling.
 - Prop ceiling: ~$60K/year. $100K/year target lives in self-funded IBKR (Phase 3).
@@ -386,8 +386,8 @@ Phase 2 = Automation handles overnight sessions you can't trade manually
     NOTE: NYSE_CLOSE removed in V4 (not CORE 5, p=0.031, small N=595)
 
   TopStep (5 Express × MGC via ProjectX API):
-    - CME_REOPEN (08:00/09:00 Brisbane)
-    - TOKYO_OPEN (10:00 Brisbane)
+    - TOKYO_OPEN (10:00 Brisbane) — 1 contract only, conditional edge
+    - CME_REOPEN: DEAD (no validated survivors)
 
   Apex (1 account, manual only):
     - Phase 1 sessions during waking hours
@@ -542,11 +542,11 @@ Track every account, every assignment. One grid, one truth.
 |  TF-04     Tradeify     PRECLOSE+COMEX+NYSE     2c     API-AUTO   |
 |  TF-05     Tradeify     PRECLOSE+COMEX+NYSE     2c     API-AUTO   |
 |                                                                   |
-|  TS-01     TopStep      CME_REOPEN+TOKYO MGC    2c     API-AUTO   |
-|  TS-02     TopStep      CME_REOPEN+TOKYO MGC    2c     API-AUTO   |
-|  TS-03     TopStep      CME_REOPEN+TOKYO MGC    2c     API-AUTO   |
-|  TS-04     TopStep      CME_REOPEN+TOKYO MGC    2c     API-AUTO   |
-|  TS-05     TopStep      CME_REOPEN+TOKYO MGC    2c     API-AUTO   |
+|  TS-01     TopStep      TOKYO_OPEN MGC          1c     API-AUTO   |
+|  TS-02     TopStep      TOKYO_OPEN MGC          1c     API-AUTO   |
+|  TS-03     TopStep      TOKYO_OPEN MGC          1c     API-AUTO   |
+|  TS-04     TopStep      TOKYO_OPEN MGC          1c     API-AUTO   |
+|  TS-05     TopStep      TOKYO_OPEN MGC          1c     API-AUTO   |
 |                                                                   |
 |  IBKR      Self-funded  ALL 9 sessions          5-10c  API-AUTO   |
 +------------------------------------------------------------------+
@@ -595,8 +595,8 @@ Driven by verified firm constraints:
 | COMEX_SETTLE | **Tradeify** | MNQ | Same — overnight, needs automation |
 | NYSE_CLOSE | **Tradeify** | MNQ | Same Tradovate API, same accounts |
 | NYSE_OPEN | **Tradeify** | MNQ | Late-night Brisbane, automation handles it |
-| CME_REOPEN | **TopStep** | MGC | MGC morning lane, $10/pt, ProjectX API |
-| TOKYO_OPEN | **TopStep** | MGC | Morning Brisbane, same MGC accounts |
+| CME_REOPEN | ~~DEAD~~ | MGC | No validated survivors — do not trade |
+| TOKYO_OPEN | **TopStep** | MGC | Conditional (P95 cleared, P99 not). 1 contract only until N=250. |
 | EUROPE_FLOW | Phase 1 manual (Apex) or Tradeify | MNQ | Evening Brisbane — manual or automated |
 | LONDON_METALS | Phase 1 manual (Apex) or Tradeify | MNQ | Evening Brisbane — same |
 | SINGAPORE_OPEN | Phase 1 manual (Apex) or TopStep | MNQ/MGC | Morning Brisbane — manual or automated |
