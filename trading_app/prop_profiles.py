@@ -261,29 +261,28 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         copies=1,
         stop_multiplier=0.75,
         max_slots=4,
-        # Phase 1 manual: edge-maximized 4-session plan (Mar 24 2026 restructure).
-        # Routed by expected value, not convenience. CME_PRECLOSE is #1 session
-        # by avg ExpR (0.2272) and pre-registered for 2026 forward test.
-        # Dropped: EUROPE_FLOW (not pre-registered), LONDON_METALS (dead last ExpR).
-        # Old SINGAPORE_OPEN lane (ORB_G8_O15_S075) was a broken DB reference.
+        # Phase 1 manual: 4 validated MNQ lanes (Mar 24 2026).
+        # All strategies pass: stratified-K BH FDR (holdout-clean), walk-forward,
+        # stress test, yearly robustness. Verified on canonical gold.db.
+        # 2026 forward: NYSE_CLOSE +4.30R, SINGAPORE_OPEN +1.84R,
+        #   COMEX_SETTLE +3.99R, NYSE_OPEN +8.37R.
+        # Dropped: CME_PRECLOSE (0 MNQ survivors, MES only), TOKYO_OPEN (0 MNQ),
+        #   EUROPE_FLOW (dead 10yr), LONDON_METALS (dead last ExpR).
         allowed_sessions=frozenset(
             {
-                "CME_PRECLOSE",  # 5:45 AM Brisbane (CDT) / 6:45 AM (CST) — strongest session, pre-registered
-                "TOKYO_OPEN",  # 10:00 AM Brisbane
+                "NYSE_CLOSE",  # 6:00/7:00 AM Brisbane — highest ExpR (0.2078)
                 "SINGAPORE_OPEN",  # 11:00 AM Brisbane
-                "NYSE_OPEN",  # 11:30 PM Brisbane — pre-registered
+                "COMEX_SETTLE",  # 3:30/4:30 AM Brisbane — alarm required
+                "NYSE_OPEN",  # 11:30 PM Brisbane
             }
         ),
         daily_lanes=(
-            DailyLaneSpec(
-                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ATR70_VOL_S075", "MNQ", "CME_PRECLOSE",
-                execution_notes="Hard time-stop at 3:45 PM CT (Apex close safety). Avg trade duration ~10 min.",
-            ),
-            DailyLaneSpec("MNQ_TOKYO_OPEN_E2_RR1.0_CB1_VOL_RV12_N20_S075", "MNQ", "TOKYO_OPEN"),
-            DailyLaneSpec("MNQ_SINGAPORE_OPEN_E2_RR1.0_CB1_ATR70_VOL_O30_S075", "MNQ", "SINGAPORE_OPEN"),
-            DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_VOL_RV12_N20_O15_S075", "MNQ", "NYSE_OPEN"),
+            DailyLaneSpec("MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20_O15", "MNQ", "NYSE_CLOSE"),
+            DailyLaneSpec("MNQ_SINGAPORE_OPEN_E2_RR4.0_CB1_ORB_G8_O15", "MNQ", "SINGAPORE_OPEN"),
+            DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G8", "MNQ", "COMEX_SETTLE"),
+            DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60_O15", "MNQ", "NYSE_OPEN"),
         ),
-        notes="Phase 1 manual proof. Edge-maximized: 2 pre-registered sessions (CME_PRECLOSE, NYSE_OPEN). Wake at 5:30 AM for CME_PRECLOSE.",
+        notes="Phase 1 manual. 4 validated MNQ lanes (stratified-K, holdout-clean, all gates). NYSE_CLOSE highest ExpR.",
     ),
     # =========================================================================
     # Phase 2: Automation scaling (Tradeify MNQ + TopStep MGC)
@@ -314,7 +313,11 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         copies=5,  # 5 Express accounts — MGC morning lane
         stop_multiplier=0.75,
         max_slots=4,
-        # Morning sessions from playbook account grid
+        # MGC LANES EXCLUDED — c236c57
+        # C1 null rerun (100 seeds): P95 noise floor = 0.305 ExpR
+        # Best MGC strategy (TOKYO_OPEN) = 0.2832 — below floor
+        # Do not add MGC lanes without new null rerun showing floor < best ExpR
+        # TopStep MGC plan is ON HOLD pending further research
         allowed_sessions=frozenset({"CME_REOPEN", "TOKYO_OPEN"}),
         allowed_instruments=frozenset({"MGC"}),
         daily_lanes=(
@@ -325,7 +328,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 execution_notes="Skip if CME_REOPEN ORB exceeds 26 points.",
             ),
         ),
-        notes="MGC morning auto. ProjectX API. Stay Express (don't accept Live).",
+        notes="MGC ON HOLD — noise floor violation (c236c57). Do not trade until resolved.",
     ),
     # =========================================================================
     # Phase 3: Self-funded (after prop proof, $100K/year target)

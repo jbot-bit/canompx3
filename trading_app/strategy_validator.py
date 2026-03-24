@@ -1146,43 +1146,58 @@ def run_validation(
                     )
                     append_walkforward_result(wf_obj, wf_output_path)
 
-            # FDR hard gate — decision-relevant K (active instruments only)
+            # FDR hard gate — stratified K by session (orb_label)
             #
-            # BH FDR valid under PRDS (Benjamini & Yekutieli 2001). Cross-instrument
-            # equity correlations (MNQ-MES rho=0.44-0.77) satisfy PRDS.
+            # BH FDR applied per session: each orb_label is a structurally
+            # distinct hypothesis family (different market microstructure,
+            # participant pool, liquidity regime). K = canonical strategies
+            # within that session across ALL active instruments and apertures.
             #
-            # K scoped to ACTIVE_ORB_INSTRUMENTS only. Dead instruments (M2K, SIL,
-            # M6E, MBT) are excluded: they are not part of the current deployment
-            # decision and their test count should not penalize live strategies.
-            # Grounding: BH (1995) defines m as the "family" of hypotheses under
-            # simultaneous consideration. Harvey et al (2016, "Two Million Trading
-            # Strategies") confirm BH-FDR does not mechanically inflate thresholds
-            # with K. de Prado (2018) scopes K to "trials" in the current decision.
-            # RESEARCH_RULES.md: "instrument/family K for promotion decisions."
+            # Grounding:
+            #   BH (1995): m = "family" of hypotheses under simultaneous consideration
+            #   Efron Separate-Class model: stratified FDR valid and more powerful
+            #     when group structure is pre-specified on logical grounds
+            #   Harvey et al (2016): BH-FDR robust to K specification
+            #   RESEARCH_RULES.md: "instrument/family K for promotion decisions"
             #
-            # All apertures (O5/O15/O30) for active instruments ARE included —
-            # they represent genuine alternative hypotheses you could deploy.
-            # Adversarial review 2026-03-18: FDR was cosmetic — now it rejects.
-            # K methodology review 2026-03-24: scoped to active instruments.
+            # Sessions are pre-specified strata defined by exchange events
+            # (CME settlement, NYSE open, etc.), not by data outcomes.
+            # Dead instruments excluded (ACTIVE_ORB_INSTRUMENTS only).
+            #
+            # History:
+            #   2026-03-18: FDR gate made real (was cosmetic before)
+            #   2026-03-24: scoped to active instruments (killed dead M2K/SIL/etc.)
+            #   2026-03-24: stratified by session (global K=78K killed CME_PRECLOSE
+            #     and TOKYO_OPEN with 0 survivors; stratified K restores valid strata)
             if passed_strategy_ids:
-                logger.info("Computing FDR correction (Benjamini-Hochberg, active-instrument K)...")
+                logger.info("Computing FDR correction (Benjamini-Hochberg, stratified K by session)...")
                 active_instruments = ACTIVE_ORB_INSTRUMENTS
                 placeholders = ", ".join(["?"] * len(active_instruments))
-                all_p_values = con.execute(
-                    f"""SELECT strategy_id, p_value FROM experimental_strategies
-                       WHERE is_canonical = TRUE
-                       AND p_value IS NOT NULL
-                       AND instrument IN ({placeholders})""",
+
+                # Build per-session p-value pools
+                session_p_pools: dict[str, list[tuple[str, float]]] = {}
+                rows = con.execute(
+                    f"""SELECT strategy_id, p_value, orb_label
+                        FROM experimental_strategies
+                        WHERE is_canonical = TRUE
+                        AND p_value IS NOT NULL
+                        AND instrument IN ({placeholders})""",
                     active_instruments,
                 ).fetchall()
-                p_value_list = [(r[0], r[1]) for r in all_p_values]
-                db_k = len(p_value_list)
-                if fdr_k is not None:
-                    global_k = fdr_k
-                    logger.info(f"  Using --fdr-k override: {global_k} (DB active K={db_k})")
-                else:
-                    global_k = db_k
-                fdr_results = benjamini_hochberg(p_value_list, alpha=0.05, total_tests=global_k)
+                for sid_row, pval_row, orb_row in rows:
+                    session_p_pools.setdefault(orb_row, []).append((sid_row, pval_row))
+
+                total_k = sum(len(v) for v in session_p_pools.values())
+                logger.info(f"  Total active K={total_k}, split across {len(session_p_pools)} sessions")
+
+                # Run BH per session
+                fdr_results: dict[str, dict] = {}
+                for session_name, pool in sorted(session_p_pools.items()):
+                    k_session = len(pool)
+                    session_fdr = benjamini_hochberg(pool, alpha=0.05, total_tests=k_session)
+                    fdr_results.update(session_fdr)
+                    n_sig = sum(1 for v in session_fdr.values() if v["fdr_significant"])
+                    logger.info(f"  {session_name}: K={k_session}, {n_sig} significant")
 
                 n_fdr_sig = 0
                 n_fdr_rejected = 0
@@ -1206,6 +1221,13 @@ def run_validation(
                 # Hard gate: remove FDR-failing strategies from validated_setups
                 if fdr_rejected_ids:
                     for sid in fdr_rejected_ids:
+                        # Look up session for rejection note
+                        sid_session = con.execute(
+                            "SELECT orb_label FROM experimental_strategies WHERE strategy_id = ?",
+                            [sid],
+                        ).fetchone()
+                        sess_name = sid_session[0] if sid_session else "?"
+                        sess_k = len(session_p_pools.get(sess_name, []))
                         con.execute(
                             "DELETE FROM validated_setups WHERE strategy_id = ?",
                             [sid],
@@ -1213,10 +1235,10 @@ def run_validation(
                         con.execute(
                             """UPDATE experimental_strategies
                                SET validation_status = 'REJECTED',
-                                   validation_notes = 'Phase FDR: BH adjusted p >= 0.05 (global K='
-                                       || ? || ')'
+                                   validation_notes = 'Phase FDR: BH adjusted p >= 0.05 (session='
+                                       || ? || ', K=' || ? || ')'
                                WHERE strategy_id = ?""",
-                            [str(global_k), sid],
+                            [sess_name, str(sess_k), sid],
                         )
                     passed -= n_fdr_rejected
                     rejected += n_fdr_rejected
@@ -1224,7 +1246,7 @@ def run_validation(
                     passed_strategy_ids = [s for s in passed_strategy_ids if s not in set(fdr_rejected_ids)]
 
                 logger.info(
-                    f"  FDR hard gate (global K={global_k}): "
+                    f"  FDR hard gate (stratified, total K={total_k}): "
                     f"{n_fdr_sig} survived, {n_fdr_rejected} REJECTED "
                     f"(of {n_fdr_sig + n_fdr_rejected} passed prior phases)"
                 )
