@@ -19,25 +19,41 @@ except ImportError:
 
 # Database — single canonical DB:
 #   <project>/gold.db    = canonical DB used by all code (pipeline, research, live trading)
-#   C:/db/gold.db        = auto-synced scratch copy (drift check #37 copies canonical when stale)
-#   DUCKDB_PATH env var  = override (set in .env)
+#   DUCKDB_PATH env var  = override for genuine test databases only
 #
-# All scripts default to GOLD_DB_PATH. The scratch copy exists for isolation during
-# long-running writes but is never the default.
+# C:/db/gold.db scratch copy is DEPRECATED (Mar 24 2026). It caused stale-data
+# bugs: terminals reading 88-min-old data, reporting strategies as alive that
+# were killed by fresh FDR. DUCKDB_PATH pointing to C:/db/gold.db is blocked.
 # If DUCKDB_PATH points to a non-existent file → warns and falls back to project root.
 import os as _os
 import sys as _sys
 
 
 def _resolve_db_path() -> Path:
+    """Resolve the canonical DB path. ALWAYS returns project root gold.db.
+
+    The scratch DB at C:/db/gold.db is DEPRECATED — it caused stale-data bugs
+    across multiple sessions (Mar 24 2026: decisions made on 88-min-stale data,
+    strategies reported as alive that were actually killed by fresh FDR).
+    Any DUCKDB_PATH pointing to the scratch copy is rejected with a loud warning.
+    """
+    _SCRATCH = Path("C:/db/gold.db")
     if "DUCKDB_PATH" in _os.environ:
         candidate = Path(_os.environ["DUCKDB_PATH"])
-        if candidate.exists():
+        if candidate.resolve() == _SCRATCH.resolve():
+            print(
+                "[DB] BLOCKED: DUCKDB_PATH points to deprecated scratch DB C:/db/gold.db. "
+                "Using canonical project gold.db instead. Remove DUCKDB_PATH or point it "
+                "to a real override.",
+                file=_sys.stderr,
+            )
+        elif candidate.exists():
             return candidate
-        print(
-            f"[DB] WARNING: DUCKDB_PATH={candidate} does not exist — falling back to project gold.db",
-            file=_sys.stderr,
-        )
+        else:
+            print(
+                f"[DB] WARNING: DUCKDB_PATH={candidate} does not exist — falling back to project gold.db",
+                file=_sys.stderr,
+            )
     return PROJECT_ROOT / "gold.db"
 
 

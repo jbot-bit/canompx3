@@ -1510,7 +1510,8 @@ def check_stale_scratch_db() -> list[str]:
     """Check #37: Canonical gold.db must exist at project root.
 
     Canonical DB is <project>/gold.db (via pipeline.paths.GOLD_DB_PATH).
-    C:/db/gold.db is scratch only — auto-synced from canonical when stale.
+    C:/db/gold.db scratch copy is DEPRECATED (Mar 24 2026) — caused stale-data
+    decisions across terminals. No auto-sync. Use canonical only.
     """
     violations = []
     project_root_db = PROJECT_ROOT / "gold.db"
@@ -1519,18 +1520,10 @@ def check_stale_scratch_db() -> list[str]:
         return violations
     scratch_db = Path("C:/db/gold.db")
     if scratch_db.exists():
-        # Scratch copy exists — auto-sync if it's older than canonical
-        root_mtime = project_root_db.stat().st_mtime
-        scratch_mtime = scratch_db.stat().st_mtime
-        delta_hours = (root_mtime - scratch_mtime) / 3600
-        if delta_hours >= 1:
-            import shutil
-
-            try:
-                shutil.copy2(str(project_root_db), str(scratch_db))
-                print(f"  [AUTO-SYNC] Scratch DB was {delta_hours:.0f}h stale — copied canonical → C:/db/gold.db")
-            except OSError as e:
-                violations.append(f"  Scratch DB C:/db/gold.db is {delta_hours:.0f}h stale and auto-copy failed: {e}")
+        violations.append(
+            f"  DEPRECATED scratch DB still exists at C:/db/gold.db. "
+            f"Delete it to prevent stale-data bugs: del C:\\db\\gold.db"
+        )
     return violations
 
 
