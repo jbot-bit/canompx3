@@ -261,16 +261,16 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         copies=1,
         stop_multiplier=0.75,
         max_slots=4,
-        # Phase 1 manual: 4 validated MNQ lanes (Mar 24 2026).
+        # Phase 1 manual: 4 validated MNQ lanes.
         # All strategies pass: stratified-K BH FDR (holdout-clean), walk-forward,
         # stress test, yearly robustness. Verified on canonical gold.db.
-        # 2026 forward: NYSE_CLOSE +4.30R, SINGAPORE_OPEN +1.84R,
-        #   COMEX_SETTLE +3.99R, NYSE_OPEN +8.37R.
-        # Dropped: CME_PRECLOSE (0 MNQ survivors, MES only), TOKYO_OPEN (0 MNQ),
-        #   EUROPE_FLOW (dead 10yr), LONDON_METALS (dead last ExpR).
+        # @research-source stratified-K validation 2026-03-24
+        # @revalidated-for E2 event-based sessions (2026-03-24)
+        # Dropped: CME_PRECLOSE (0 MNQ survivors), TOKYO_OPEN (0 MNQ),
+        #   EUROPE_FLOW (dead 10yr), LONDON_METALS (dead last).
         allowed_sessions=frozenset(
             {
-                "NYSE_CLOSE",  # 6:00/7:00 AM Brisbane — highest ExpR (0.2078)
+                "NYSE_CLOSE",  # 6:00/7:00 AM Brisbane
                 "SINGAPORE_OPEN",  # 11:00 AM Brisbane
                 "COMEX_SETTLE",  # 3:30/4:30 AM Brisbane — alarm required
                 "NYSE_OPEN",  # 11:30 PM Brisbane
