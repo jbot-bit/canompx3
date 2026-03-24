@@ -1,4 +1,7 @@
 """
+DISCOVERY SAFETY: UNSAFE — reads validated_setups, writes edge_families (both derived).
+Do not use edge_families output as discovery truth. See CLAUDE.md Project Truth Protocol.
+
 Build edge families by hashing strategy trade-day lists.
 
 Groups validated strategies that share identical post-filter trade-day

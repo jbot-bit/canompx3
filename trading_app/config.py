@@ -62,7 +62,9 @@ ORB SIZE FILTERS:
   L-filters (Less-than): Only trade when ORB size < N points.
     ALL L-filter strategies have negative expectancy. Do not trade.
   NO_FILTER: Trade all days regardless of ORB size.
-    ALL no-filter strategies have negative expectancy. Do not trade.
+    MGC/MES: ALL no-filter strategies have negative expectancy. Do not trade.
+    MNQ: POSITIVE unfiltered at 5 CORE sessions after BH FDR (K=105,627) and WF.
+    See TRADING_RULES.md ORB Size Filters table for details (audit 2026-03-24).
 
 GRID (3,024 strategy combinations, full grid before ENABLED_SESSIONS filtering):
   E1: 12 ORBs x 6 RRs x 5 CBs x 6 filters = 2,160
@@ -1186,7 +1188,7 @@ def classify_strategy(sample_size: int) -> str:
 # =========================================================================
 
 _WARNING_RULES = {
-    "NO_FILTER": "NO_FILTER strategies have negative expectancy -- house wins.",
+    "NO_FILTER": "NO_FILTER: MGC/MES negative expectancy. MNQ positive unfiltered at 5 CORE sessions (audit 2026-03-24).",
     "ORB_L": "L-filter (less-than) strategies have negative expectancy -- house wins.",
 }
 

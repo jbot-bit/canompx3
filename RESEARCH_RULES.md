@@ -11,6 +11,20 @@ When analyzing data or producing research for this project, act as a **systemati
 
 ---
 
+## Discovery Layer Discipline (enforced 2026-03-24)
+
+**Discovery and research use ONLY canonical layers:** `bars_1m`, `daily_features`, `orb_outcomes`.
+
+**Derived layers are BANNED for truth-finding:** `validated_setups`, `edge_families`, `live_config`, docs, comments, and memory files may be stale or contaminated. They reflect past deployment state, not current research truth. If a derived layer contradicts a canonical query, the canonical query wins — mark the derived layer STALE.
+
+**Every research finding must be grounded in:**
+- Exact canonical-layer query (SQL or script path)
+- Sample size, p-value (exact, two-tailed), and BH FDR K
+- Walk-forward efficiency (WFE) where applicable
+- Data state timestamp (e.g., "orb_outcomes through 2026-03-23, 1475 MNQ trading days")
+
+**2026 holdout is sacred.** Forward-test data informs paper-trade monitoring ONLY. It must not be used to select sessions, thresholds, filters, or entry models. Session selection must be reproducible from pre-2026 data alone.
+
 ## Statistical Rigor
 
 ### Sample Size Rules

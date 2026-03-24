@@ -7,10 +7,41 @@
 ---
 
 ## Current Session
-- **Tool:** Claude Code (C1 Null Rerun + Canonical Sync)
+- **Tool:** Claude Code (MNQ Unfiltered Baseline Audit + Paper-Trade Setup)
 - **Date:** 2026-03-24
 - **Branch:** `main`
-- **Status:** C1 time-varying null rerun IN PROGRESS (chunk 2 of 10 running).
+- **Status:** Paper-trade candidates added. C1 null rerun paused (chunk 2 of 10).
+
+### MNQ Unfiltered Baseline — Paper-Trade Control Note (2026-03-24)
+
+**Finding:** MNQ E2, 5m ORB, RR1.0, CB1, NO_FILTER is positive across 6 sessions.
+Verified by: source-of-truth audit, anti-bias audit, no-lookahead audit, refreshed data (1475 days).
+
+**5 CORE sessions** (BH FDR PASS at K=105,627, WF PASS, all years positive):
+| Session | N | ExpR | p | WFE | OOS ExpR | OOS %Pos |
+|---------|---|------|---|-----|----------|----------|
+| CME_PRECLOSE | 1108 | +0.200 | <1e-8 | 0.77 | +0.191 | 89% |
+| US_DATA_1000 | 1310 | +0.137 | 2e-7 | 1.00 | +0.138 | 100% |
+| COMEX_SETTLE | 1272 | +0.124 | 1e-6 | 1.50 | +0.141 | 100% |
+| NYSE_OPEN | 1305 | +0.117 | 1e-5 | 1.61 | +0.131 | 100% |
+| EUROPE_FLOW | 1324 | +0.101 | 3e-5 | 1.15 | +0.109 | 100% |
+
+**1 REGIME session** (marginal — WFE=0.53, p=0.010, 67% WF positive, 2026 marginal):
+| TOKYO_OPEN | 1325 | +0.062 | 0.010 | 0.53 | +0.062 | 67% |
+
+**Paper-trade specs:** `PAPER_TRADE_CANDIDATES` in `trading_app/live_config.py`. NOT in LIVE_PORTFOLIO.
+**Kill criteria:** 3 consecutive months negative OR cumulative -10R.
+**Forward baseline target:** +0.12R/day (5-session equal-weight portfolio mean).
+**2026 holdout:** SACRED. Not used for discovery. Same 6 sessions selected from pre-2026 data.
+**Doc changes:** TRADING_RULES.md ORB table updated, config.py NO_FILTER comment updated.
+
+### Project Truth Protocol (enforced 2026-03-24)
+
+**CANONICAL layers (safe for discovery):** `bars_1m`, `daily_features`, `orb_outcomes`.
+**DERIVED layers (banned for discovery):** `validated_setups` (757 MNQ fdr=NULL), `edge_families`, `live_config`, docs/comments.
+**Rule:** If derived layer contradicts canonical query, canonical wins. Mark derived layer STALE.
+**Written into:** `CLAUDE.md` (Guardrails > Project Truth Protocol), `RESEARCH_RULES.md` (Discovery Layer Discipline).
+**PASS 4 verified:** monitor script output matches raw SQL exactly (14/14 metrics, 10/10 trades).
 
 ### What was done this session (Mar 24 — C1 null rerun + sync)
 

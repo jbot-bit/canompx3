@@ -1,4 +1,7 @@
 """
+DISCOVERY SAFETY: UNSAFE — hardcoded deployment config, not research truth.
+Do not use LIVE_PORTFOLIO as evidence of edge. See CLAUDE.md Project Truth Protocol.
+
 Declarative live portfolio configuration.
 
 Defines exactly what to trade based on rolling evaluation results:
@@ -164,6 +167,28 @@ LIVE_PORTFOLIO = [
     LiveStrategySpec("CME_PRECLOSE_E2_X_MGC_ATR70", "regime", "CME_PRECLOSE", "E2", "X_MGC_ATR70", "high_vol"),
     LiveStrategySpec("CME_REOPEN_E2_ATR70_VOL", "regime", "CME_REOPEN", "E2", "ATR70_VOL", "high_vol"),
     LiveStrategySpec("CME_PRECLOSE_E2_ORB_G8", "regime", "CME_PRECLOSE", "E2", "ORB_G8", "high_vol"),
+]
+
+# =========================================================================
+# PAPER-TRADE CANDIDATES (audit 2026-03-24)
+# NOT in LIVE_PORTFOLIO. NOT resolved by build_live_portfolio().
+# MNQ unfiltered baseline: 5 CORE + 1 REGIME, BH FDR PASS at K=105,627,
+# WF PASS (WFE 0.53-1.61), all years positive (5/6 sessions).
+# Promote to LIVE_PORTFOLIO only after forward paper-trade confirmation.
+# Kill criteria: 3 consecutive months negative OR cumulative -10R.
+# 2026 holdout remains sacred — do NOT use for discovery.
+# =========================================================================
+PAPER_TRADE_CANDIDATES = [
+    # CORE: 5 sessions, all WFE > 0.77, all years positive, BH PASS at K=105,627
+    LiveStrategySpec("NYSE_OPEN_E2_NO_FILTER", "core", "NYSE_OPEN", "E2", "NO_FILTER", None),
+    LiveStrategySpec("US_DATA_1000_E2_NO_FILTER", "core", "US_DATA_1000", "E2", "NO_FILTER", None),
+    LiveStrategySpec("EUROPE_FLOW_E2_NO_FILTER", "core", "EUROPE_FLOW", "E2", "NO_FILTER", None),
+    # NOTE: CME_PRECLOSE and COMEX_SETTLE already in LIVE_PORTFOLIO with ATR70_VOL filter.
+    # Unfiltered versions are stronger at baseline but paper-trade first.
+    LiveStrategySpec("CME_PRECLOSE_E2_NO_FILTER", "core", "CME_PRECLOSE", "E2", "NO_FILTER", None),
+    LiveStrategySpec("COMEX_SETTLE_E2_NO_FILTER", "core", "COMEX_SETTLE", "E2", "NO_FILTER", None),
+    # REGIME: TOKYO_OPEN — WFE=0.53, p=0.010, 67% WF windows positive, 2026 marginal
+    LiveStrategySpec("TOKYO_OPEN_E2_NO_FILTER", "regime", "TOKYO_OPEN", "E2", "NO_FILTER", "high_vol"),
 ]
 
 # =========================================================================
