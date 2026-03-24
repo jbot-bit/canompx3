@@ -71,20 +71,55 @@ Monotonic. No threshold fragility. 10% is not special — any value in the 8-15%
 Positive in ALL eras. The "era effect" seen in unfiltered data (negative pre-2021) is
 explained by friction composition — pre-2021 had more high-friction trades.
 
+## T0 Tautology Investigation (stress test, same session)
+
+**cost<10% is a strict subset of G5.** 100% of cost-gated trades also pass G5.
+Zero trades pass cost gate but fail G5. The gate is G5 + additional tightening.
+
+| Metric | cost<10% | G5 | G8 |
+|--------|----------|-----|-----|
+| Trades | 13,153 | 22,017 | 17,909 |
+| % of total | 47% | 78% | 64% |
+
+cost<10% selectivity is between G5 and G8, closer to G8.
+
+**Within G5, cost DOES add value:**
+- G5 + low cost (<10%): N=13,153, ExpR=+0.107
+- G5 + high cost (>=10%): N=8,864, ExpR=+0.025
+- Delta: +0.082R
+
+**Per-instrument overlap (Pearson r with G5 pass/fail):**
+- MNQ: -0.83 (near-tautology — G5 rate 78.3%)
+- MES: -0.75 (high overlap — G5 rate 41.4%)
+- MGC: -0.52 (more distinct — G5 rate 10.5%)
+
+**WR decomposition (from T1):** WR is flat across cost bins (57-61%).
+The ExpR improvement is driven by win payoff arithmetic (lower friction =
+higher avg win R), NOT by better breakout prediction. At fixed payoff,
+all bins are positive including >30% friction.
+
 ## Verdict
 
-**The cost/risk% < 10% gate survives all institutional gates:**
-- Walk-forward: 18/19 positive (95%), WFE=1.00
-- BH FDR: p=1.6e-39, K=7, trivially survives
-- Sensitivity: monotonic, no threshold fragility
-- Cross-instrument: same direction on all 3
-- Era stability: positive in all eras
-- Mechanism: friction eats the trade (structural, not fitted)
+**Classification: ARITHMETIC_ONLY G-filter refinement.**
+
+The cost/risk% gate is NOT a structural mechanism and NOT a breakout quality
+predictor. It is a transaction cost screen in the same family as G-filters.
+It provides +0.082R refinement within G5-passing trades by further excluding
+trades where friction consumes too much of the win payoff.
+
+WF and sensitivity results are real (18/19 positive, monotonic, all eras).
+But the underlying variable is near-tautological with ORB size on MNQ
+(r=-0.83 with G5). On MGC (r=-0.52) it carries more distinct information.
+
+**No new pipeline filter warranted for MNQ.** The existing G-filter family
+already captures this. The cost/risk% framing explains WHY G-filters work
+(friction eats small-ORB payoffs) but does not add a new independent variable.
 
 ## What This Does NOT Authorize
 
+- NOT a new filter (G-filters already handle this)
+- NOT a "structural mechanism" (WR is flat — it's payoff arithmetic)
 - NOT a trading rule change (paper spec is frozen)
-- NOT a filter implementation (requires separate design + code review)
-- NOT tested as a live gate (requires execution realism audit)
-- The 10% threshold is not special — 8-15% all work. If implemented, use the
-  broadest defensible threshold (e.g., 15%) to maximize trade count.
+- The finding confirms existing G-filter architecture is correct
+- On MGC where G5 rate is 10.5%, cost/risk% MAY carry independent
+  information — but MGC is dead at baseline regardless
