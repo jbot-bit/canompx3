@@ -283,6 +283,7 @@
 - Live execution: orphan containment is session-scoped (process restart clears _blocked_strategies). Startup orphan check (query_open) covers restart case independently.
 - Pre-existing (NOT blocking): `on_exit_sent` in position_tracker.py doesn't guard against duplicate PENDING_EXIT transition (unreachable in practice — called once before retry loop)
 - Pre-existing (NOT blocking): `_emergency_flatten` doesn't cancel brackets before exit (broker order management handles this)
+- Scratch accounting (VERIFIED, CLOSED): 12-15% of RR1.0 outcomes are scratches (pnl_r=NULL, excluded from ExpR/WR/N). Intentional design (strategy_discovery.py:428-430). TRUE session-end MTM VERIFIED from bars_1m: MNQ avg=+0.004R med=0.0R, MES avg=-0.007R med=0.0R, MGC avg=-0.041R med=-0.049R. Zero live strategy sign flips under 0R/-0.25R/-0.50R stress. Recheck if portfolio moves to RR2.0+ or MGC goes live.
 
 ---
 
