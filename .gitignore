@@ -220,3 +220,4 @@ scripts/tmp_lit_results.txt
 # WSL env scripts
 scripts/infra/wsl-env.ps1
 deets.txt
+data/
