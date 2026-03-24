@@ -15,13 +15,13 @@ python pipeline/init_db.py
 python pipeline/run_pipeline.py --instrument MGC --start 2016-02-01 --end 2026-02-04
 
 # Run strategy discovery + validation
-python trading_app/outcome_builder.py --instrument MGC --start 2021-02-05 --end 2026-02-04
-python trading_app/strategy_discovery.py --instrument MGC
-python trading_app/strategy_validator.py --instrument MGC --min-sample 30
+python -m trading_app.outcome_builder --instrument MGC --start 2021-02-05 --end 2026-02-04
+python -m trading_app.strategy_discovery --instrument MGC
+python -m trading_app.strategy_validator --instrument MGC --min-sample 30
 
 # View results
-python trading_app/view_strategies.py
-python trading_app/view_strategies.py --orb 0900 --sort sharpe
+python -m trading_app.view_strategies
+python -m trading_app.view_strategies --orb 0900 --sort sharpe
 python pipeline/dashboard.py
 ```
 
@@ -41,7 +41,7 @@ docs/               Plans, archives, analysis documents
 ## Key Commands
 
 ```bash
-python trading_app/view_strategies.py --summary    # Strategy overview
+python -m trading_app.view_strategies --summary    # Strategy overview
 python pipeline/check_drift.py                     # Static analysis drift checks
 python -m pytest tests/ -x -q                      # Full test suite
 python pipeline/dashboard.py                       # Generate HTML dashboard

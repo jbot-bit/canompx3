@@ -7,8 +7,8 @@ journal. Two modes:
   2. Walk-forward — train/test split for OOS robustness check
 
 Usage:
-    python trading_app/paper_trader.py --instrument MGC --start 2024-01-01 --end 2024-12-31
-    python trading_app/paper_trader.py --instrument MGC --walk-forward --train-years 3 --test-years 1
+    python -m trading_app.paper_trader --instrument MGC --start 2024-01-01 --end 2024-12-31
+    python -m trading_app.paper_trader --instrument MGC --walk-forward --train-years 3 --test-years 1
 """
 
 import sys

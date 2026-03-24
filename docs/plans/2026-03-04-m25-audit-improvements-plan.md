@@ -126,7 +126,7 @@ python -m pytest tests/test_trading_app/test_execution_engine.py -x -q
 python -m pytest tests/test_trading_app/test_portfolio.py -x -q
 python pipeline/check_drift.py
 # Regression: replay with default account_equity=0 must match baseline
-python trading_app/paper_trader.py --instrument MGC --start 2024-01-01 --end 2024-12-31
+python -m trading_app.paper_trader --instrument MGC --start 2024-01-01 --end 2024-12-31
 ```
 
 ---

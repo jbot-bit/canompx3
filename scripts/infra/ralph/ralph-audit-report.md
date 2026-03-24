@@ -752,7 +752,7 @@ CLAUDE.md documents key commands. Python execution is blocked by sandbox, so com
 | `python trading_app/outcome_builder.py` | ✅ | Path correct |
 | `python trading_app/strategy_discovery.py` | ✅ | Path correct |
 | `python trading_app/strategy_validator.py` | ✅ | Path correct |
-| `python trading_app/paper_trader.py` | ✅ | Path correct |
+| `python -m trading_app.paper_trader` | ✅ | Module invocation |
 | `python -m trading_app.live_config` | ✅ | Module exists |
 | `python pipeline/check_drift.py` | ✅ | Path correct |
 | `python -m pytest tests/ -v` | ✅ | Test dir exists |
