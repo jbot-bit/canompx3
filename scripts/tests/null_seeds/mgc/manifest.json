@@ -2,291 +2,255 @@
   "seeds": {
     "3": {
       "seed": 3,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0003"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0003",
+      "completed_at": "rebuilt-from-db"
     },
     "1": {
       "seed": 1,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0001"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0001",
+      "completed_at": "rebuilt-from-db"
     },
     "2": {
       "seed": 2,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0002"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0002",
+      "completed_at": "rebuilt-from-db"
     },
     "4": {
       "seed": 4,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0004"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0004",
+      "completed_at": "rebuilt-from-db"
     },
     "0": {
       "seed": 0,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0000"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0000",
+      "completed_at": "rebuilt-from-db"
     },
     "11": {
       "seed": 11,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0011"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0011",
+      "completed_at": "rebuilt-from-db"
     },
     "12": {
       "seed": 12,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0012"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0012",
+      "completed_at": "rebuilt-from-db"
     },
     "23": {
       "seed": 23,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0023"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0023",
+      "completed_at": "rebuilt-from-db"
     },
     "10": {
       "seed": 10,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0010"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0010",
+      "completed_at": "rebuilt-from-db"
     },
     "26": {
       "seed": 26,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0026"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0026",
+      "completed_at": "rebuilt-from-db"
     },
     "7": {
       "seed": 7,
-      "status": "CACHED",
+      "status": "FAIL",
       "survivors": 1,
-      "max_oos_expr": 0.2153,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0007"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0007",
+      "completed_at": "rebuilt-from-db"
     },
     "21": {
       "seed": 21,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0021"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0021",
+      "completed_at": "rebuilt-from-db"
     },
     "20": {
       "seed": 20,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0020"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0020",
+      "completed_at": "rebuilt-from-db"
     },
     "6": {
       "seed": 6,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0006"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0006",
+      "completed_at": "rebuilt-from-db"
     },
     "19": {
       "seed": 19,
-      "status": "CACHED",
+      "status": "FAIL",
       "survivors": 10,
-      "max_oos_expr": 0.2369,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0019"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0019",
+      "completed_at": "rebuilt-from-db"
     },
     "17": {
       "seed": 17,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0017"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0017",
+      "completed_at": "rebuilt-from-db"
     },
     "9": {
       "seed": 9,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0009"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0009",
+      "completed_at": "rebuilt-from-db"
     },
     "22": {
       "seed": 22,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0022"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0022",
+      "completed_at": "rebuilt-from-db"
     },
     "8": {
       "seed": 8,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0008"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0008",
+      "completed_at": "rebuilt-from-db"
     },
     "5": {
       "seed": 5,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0005"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0005",
+      "completed_at": "rebuilt-from-db"
     },
     "13": {
       "seed": 13,
-      "status": "CACHED",
+      "status": "FAIL",
       "survivors": 2,
-      "max_oos_expr": 0.2377,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0013"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0013",
+      "completed_at": "rebuilt-from-db"
     },
     "18": {
       "seed": 18,
-      "status": "CACHED",
+      "status": "FAIL",
       "survivors": 3,
-      "max_oos_expr": 0.1892,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0018"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0018",
+      "completed_at": "rebuilt-from-db"
     },
     "15": {
       "seed": 15,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0015"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0015",
+      "completed_at": "rebuilt-from-db"
     },
     "14": {
       "seed": 14,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0014"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0014",
+      "completed_at": "rebuilt-from-db"
     },
     "16": {
       "seed": 16,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0016"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0016",
+      "completed_at": "rebuilt-from-db"
     },
     "24": {
       "seed": 24,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0024"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0024",
+      "completed_at": "rebuilt-from-db"
     },
     "25": {
       "seed": 25,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0025"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0025",
+      "completed_at": "rebuilt-from-db"
     },
     "27": {
       "seed": 27,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0027"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0027",
+      "completed_at": "rebuilt-from-db"
     },
     "28": {
       "seed": 28,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0028"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0028",
+      "completed_at": "rebuilt-from-db"
     },
     "29": {
       "seed": 29,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0029"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0029",
+      "completed_at": "rebuilt-from-db"
     },
     "34": {
       "seed": 34,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0034"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0034",
+      "completed_at": "rebuilt-from-db"
     },
     "35": {
       "seed": 35,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0035"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0035",
+      "completed_at": "rebuilt-from-db"
     },
     "33": {
       "seed": 33,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0033"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0033",
+      "completed_at": "rebuilt-from-db"
     },
     "30": {
       "seed": 30,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0030"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0030",
+      "completed_at": "rebuilt-from-db"
     },
     "32": {
       "seed": 32,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0032"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0032",
+      "completed_at": "rebuilt-from-db"
     },
     "31": {
       "seed": 31,
-      "status": "CACHED",
+      "status": "PASS",
       "survivors": 0,
-      "max_oos_expr": null,
-      "date_range": "2020-01-01 to 2025-12-31",
-      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0031"
+      "output_path": "scripts\\tests\\null_seeds\\mgc\\seed_0031",
+      "completed_at": "rebuilt-from-db"
     },
     "41": {
       "seed": 41,

@@ -679,9 +679,17 @@ def run_validation(
     wf_output_path: str = "data/walkforward_results.jsonl",
     enable_regime_waivers: bool = True,
     workers: int | None = None,
+    fdr_k_overrides: dict[str, int] | None = None,
 ) -> tuple[int, int]:
     """
     Validate all experimental_strategies and promote passing ones.
+
+    Args:
+        fdr_k_overrides: Per-session K overrides for BH FDR. When provided,
+            uses these K values instead of auto-counting from the DB. Required
+            for null seed testing where the DB only contains one instrument
+            but the real pipeline has multiple instruments contributing to K.
+            Format: {"CME_PRECLOSE": 3254, "NYSE_OPEN": 5184, ...}
 
     Returns (passed_count, rejected_count).
     """
@@ -1189,11 +1197,16 @@ def run_validation(
                 # Run BH per session
                 fdr_results: dict[str, dict] = {}
                 for session_name, pool in sorted(session_p_pools.items()):
-                    k_session = len(pool)
+                    if fdr_k_overrides and session_name in fdr_k_overrides:
+                        k_session = fdr_k_overrides[session_name]
+                        k_source = "override"
+                    else:
+                        k_session = len(pool)
+                        k_source = "auto"
                     session_fdr = benjamini_hochberg(pool, alpha=0.05, total_tests=k_session)
                     fdr_results.update(session_fdr)
                     n_sig = sum(1 for v in session_fdr.values() if v["fdr_significant"])
-                    logger.info(f"  {session_name}: K={k_session}, {n_sig} significant")
+                    logger.info(f"  {session_name}: K={k_session} ({k_source}), {n_sig} significant")
 
                 n_fdr_sig = 0
                 n_fdr_rejected = 0
@@ -1449,10 +1462,27 @@ def main():
         default=None,
         help="Parallel workers for walkforward (default: min(8, cpu_count-1), 1=serial)",
     )
+    parser.add_argument(
+        "--fdr-k-file",
+        type=str,
+        default=None,
+        help="JSON file with per-session K overrides for BH FDR. "
+        "Format: {\"CME_PRECLOSE\": 3254, ...}. Use for null seed testing "
+        "where the DB has fewer strategies than the real pipeline.",
+    )
     args = parser.parse_args()
 
     exclude = set(args.exclude_years) if args.exclude_years else None
     db_path = Path(args.db) if args.db else None
+
+    # Load per-session K overrides if provided
+    fdr_k_overrides = None
+    if args.fdr_k_file:
+        import json as _json
+
+        with open(args.fdr_k_file) as _f:
+            fdr_k_overrides = _json.load(_f)
+        logger.info(f"Loaded FDR K overrides from {args.fdr_k_file}: {len(fdr_k_overrides)} sessions")
 
     run_validation(
         db_path=db_path,
@@ -1473,6 +1503,7 @@ def main():
         wf_min_pct_positive=args.wf_min_pct_positive,
         enable_regime_waivers=not args.no_regime_waivers,
         workers=args.workers,
+        fdr_k_overrides=fdr_k_overrides,
     )
 
 
