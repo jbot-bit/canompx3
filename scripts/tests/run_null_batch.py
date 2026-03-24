@@ -136,9 +136,21 @@ def run_seed(
         try:
             con = duckdb.connect(str(db_path), read_only=True)
             n = con.execute("SELECT COUNT(*) FROM validated_setups").fetchone()[0]
+            dr = con.execute(
+                "SELECT min(trading_day)::VARCHAR, max(trading_day)::VARCHAR FROM orb_outcomes"
+            ).fetchone()
+            cached_range = f"{dr[0]} to {dr[1]}" if dr[0] else None
+            cached_max_expr = None
+            if n > 0:
+                row = con.execute("SELECT MAX(expectancy_r) FROM validated_setups").fetchone()
+                cached_max_expr = round(float(row[0]), 4) if row[0] is not None else None
             con.close()
-            print(f"  Seed {seed}: ALREADY DONE ({n} survivors)")
-            return {"seed": seed, "status": "CACHED", "survivors": n}
+            print(f"  Seed {seed}: ALREADY DONE ({n} survivors, range={cached_range})")
+            return {
+                "seed": seed, "status": "CACHED", "survivors": n,
+                "max_oos_expr": cached_max_expr, "date_range": cached_range,
+                "output_path": str(db_dir),
+            }
         except Exception:
             # Corrupt or incomplete — delete and rerun
             shutil.rmtree(db_dir, ignore_errors=True)
@@ -178,16 +190,42 @@ def run_seed(
 
     elapsed = time.time() - t0
 
-    # Count survivors
+    # Count survivors and verify date range
     survivors = -1
+    date_range = None
+    max_oos_expr = None
     if db_path.exists():
         import duckdb
         try:
             con = duckdb.connect(str(db_path), read_only=True)
             survivors = con.execute("SELECT COUNT(*) FROM validated_setups").fetchone()[0]
+            # Date range from orb_outcomes (the binding constraint)
+            dr = con.execute(
+                "SELECT min(trading_day)::VARCHAR, max(trading_day)::VARCHAR FROM orb_outcomes"
+            ).fetchone()
+            date_range = f"{dr[0]} to {dr[1]}" if dr[0] else None
+            # Max OOS ExpR from survivors
+            if survivors > 0:
+                row = con.execute(
+                    "SELECT MAX(expectancy_r) FROM validated_setups"
+                ).fetchone()
+                max_oos_expr = round(float(row[0]), 4) if row[0] is not None else None
             con.close()
         except Exception:
             survivors = -1
+
+    # Fail-closed date range guard
+    if date_range and date_range != "2020-01-01 to 2025-12-31":
+        print(f"  FAIL-CLOSED: date range is {date_range}, expected 2020-01-01 to 2025-12-31")
+        shutil.rmtree(db_dir, ignore_errors=True)
+        return {
+            "seed": seed,
+            "status": "DATE_RANGE_ERROR",
+            "survivors": -1,
+            "date_range": date_range,
+            "elapsed_s": round(elapsed, 1),
+            "completed_at": datetime.now(UTC).isoformat(),
+        }
 
     status = "PASS" if survivors == 0 else "FAIL" if survivors > 0 else "ERROR"
     print(f"  Seed {seed}: {status} ({survivors} survivors, {elapsed:.0f}s)")
@@ -200,6 +238,9 @@ def run_seed(
         "seed": seed,
         "status": status,
         "survivors": survivors,
+        "max_oos_expr": max_oos_expr,
+        "date_range": date_range,
+        "output_path": str(db_dir),
         "elapsed_s": round(elapsed, 1),
         "completed_at": datetime.now(UTC).isoformat(),
     }
@@ -413,9 +454,8 @@ def main() -> int:
                     print(f"  [{completed}/{len(seed_range)}] Seed {seed}: EXCEPTION — {e}")
                     manifest["seeds"][str(seed)] = {"seed": seed, "status": "EXCEPTION", "error": str(e)}
 
-                # Save manifest periodically
-                if completed % 5 == 0 or completed == len(seed_range):
-                    save_manifest(manifest, SEED_DIR)
+                # Save manifest after EVERY seed — no data loss on crash
+                save_manifest(manifest, SEED_DIR)
 
         save_manifest(manifest, SEED_DIR)
 
