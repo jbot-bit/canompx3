@@ -1,4 +1,7 @@
 """
+DISCOVERY SAFETY: UNSAFE — writes to validated_setups (derived layer).
+Do not use validated_setups output as discovery truth. See CLAUDE.md Project Truth Protocol.
+
 7-phase strategy validation per CANONICAL_LOGIC.txt section 9.
 
 Validates strategies from experimental_strategies and promotes passing

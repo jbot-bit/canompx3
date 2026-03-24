@@ -78,6 +78,9 @@ Frozen specs (`CANONICAL_*.txt`) → read-only; live code is truth.
 
 Five layers enforce quality: pre-commit hook (`.githooks/pre-commit`), drift detection (`pipeline/check_drift.py` — count self-reported at runtime), Claude Code hooks (auto-run drift/tests on file edits), GitHub Actions CI, and built-in pipeline validation gates (7 ingestion gates, 4 aggregation gates). Setup: `git config core.hooksPath .githooks`
 
+### Project Truth Protocol
+Discovery uses ONLY canonical layers (`bars_1m`, `daily_features`, `orb_outcomes`). Derived layers (`validated_setups`, `edge_families`, `live_config`, docs) are **banned for truth-finding**. Full rules → `RESEARCH_RULES.md` § Discovery Layer Discipline. Enforcement → `.claude/rules/research-truth-protocol.md`.
+
 ### Volatile Data Rule
 **NEVER cite strategy counts, session counts, drift check counts, cost model numbers, or any other changing stat from memory files or docs.** These go stale after every rebuild. Instead:
 - Strategy counts/performance → query `gold-db` MCP tools
