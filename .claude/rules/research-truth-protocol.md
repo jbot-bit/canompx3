@@ -23,7 +23,7 @@ Every research claim must include:
 3. Exact query or script path
 4. Sample size (N)
 5. p-value (two-tailed t-test, exact)
-6. K used for BH FDR
+6. K used for BH FDR (report both global K and instrument/family K; use instrument/family K for promotion decisions, global K for headline claims; never swap K post-hoc)
 7. WFE (if walk-forward was performed)
 
 ## Hard Rules
