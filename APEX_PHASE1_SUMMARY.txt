@@ -1,0 +1,58 @@
+====================================================================================================
+APEX PHASE 1 MANUAL TRADING PORTFOLIO
+Validated Strategies for: TOKYO_OPEN, SINGAPORE_OPEN, EUROPE_FLOW, LONDON_METALS, NYSE_OPEN
+====================================================================================================
+
+PORTFOLIO SUMMARY
+====================================================================================================
+Total Strategies: 502
+Sessions: 5
+Instruments: 3 (MGC, MNQ, MES)
+Avg ExpR: 0.0955
+Max ExpR: 0.2574
+FDR-Significant: 319/502
+
+BY SESSION
+====================================================================================================
+     orb_label  count  instruments  avg_expr  max_expr  fdr_sig
+   EUROPE_FLOW     63            1    0.1131    0.2104       51
+ LONDON_METALS    210            1    0.0773    0.1485       91
+     NYSE_OPEN    105            2    0.0956    0.1899       73
+SINGAPORE_OPEN     49            1    0.1214    0.2443       37
+    TOKYO_OPEN     75            2    0.1148    0.2574       67
+
+BY INSTRUMENT
+====================================================================================================
+instrument  count  sessions  avg_expr  max_expr  fdr_sig
+       MGC      6         1    0.2255    0.2574        6
+       MNQ    489         5    0.0944    0.2443      306
+       MES      7         1    0.0646    0.0743        7
+
+TOP 25 STRATEGIES BY EXPR
+====================================================================================================
+instrument      orb_label entry_model  rr_target filter_type  orb_minutes  sample_size  win_pct   expr  sharpe    wfe fdr_sig
+       MGC     TOKYO_OPEN          E2        2.0      ORB_G4            5          177     40.1 0.2574  0.2083 0.5336       Y
+       MGC     TOKYO_OPEN          E2        2.0 ORB_G4_CONT            5          175     40.0 0.2542  0.2058 0.5336       Y
+       MNQ SINGAPORE_OPEN          E2        4.0   ATR70_VOL           15          317     22.4 0.2443  0.1317 2.3439       Y
+       MNQ SINGAPORE_OPEN          E2        3.0   ATR70_VOL           15          318     28.3 0.2423  0.1530 1.6375       Y
+       MNQ SINGAPORE_OPEN          E2        3.0   ATR70_VOL           30          324     27.8 0.2407  0.1504 1.7434       Y
+       MGC     TOKYO_OPEN          E2        1.5      ORB_G4            5          177     48.0 0.2347  0.2281 0.8328       Y
+       MNQ SINGAPORE_OPEN          E2        4.0   ATR70_VOL           30          321     21.8 0.2344  0.1255 1.3210       N
+       MGC     TOKYO_OPEN          E2        1.5 ORB_G4_CONT            5          175     48.0 0.2339  0.2274 0.8328       Y
+       MNQ     TOKYO_OPEN          E2        2.5   ATR70_VOL            5          278     38.1 0.2177  0.1398 1.0306       Y
+       MNQ     TOKYO_OPEN          E2        2.5   ATR70_VOL            5          278     32.7 0.2120  0.1531 1.4016       Y
+       MNQ SINGAPORE_OPEN          E2        2.5   ATR70_VOL           30          324     31.2 0.2104  0.1471 1.3628       Y
+       MNQ    EUROPE_FLOW          E2        1.0   ATR70_VOL            5          269     59.9 0.2104  0.2663 0.8641       Y
+       MNQ SINGAPORE_OPEN          E2        4.0    DIR_LONG           30          656     25.9 0.2085  0.1019 0.8442       Y
+       MNQ SINGAPORE_OPEN          E2        1.5   ATR70_VOL           30          324     44.8 0.2015  0.1901 1.6139       Y
+       MNQ SINGAPORE_OPEN          E2        2.0   ATR70_VOL           30          324     36.4 0.1970  0.1571 1.3016       Y
+       MNQ     TOKYO_OPEN          E2        2.0   ATR70_VOL            5          278     43.5 0.1946  0.1425 0.5914       Y
+       MNQ    EUROPE_FLOW          E2        1.0   ATR70_VOL            5          269     64.3 0.1916  0.2149 0.7050       Y
+       MNQ      NYSE_OPEN          E2        2.5 X_MES_ATR70            5          390     34.9 0.1899  0.1166 1.8221       N
+       MNQ SINGAPORE_OPEN          E2        1.0   ATR70_VOL           30          324     56.8 0.1892  0.2304 1.6029       Y
+       MGC     TOKYO_OPEN          E2        1.0 ORB_G4_CONT            5          175     58.9 0.1872  0.2378 0.7489       Y
+       MNQ     TOKYO_OPEN          E2        1.5   ATR70_VOL            5          278     51.8 0.1864  0.1622 0.7623       Y
+       MGC     TOKYO_OPEN          E2        1.0      ORB_G4            5          177     58.8 0.1858  0.2360 0.7489       Y
+       MNQ      NYSE_OPEN          E2        1.5 X_MGC_ATR70            5          481     48.4 0.1754  0.1444 1.3041       Y
+       MNQ SINGAPORE_OPEN          E2        1.5   ATR70_VOL           30          324     49.4 0.1743  0.1463 1.4766       Y
+       MNQ SINGAPORE_OPEN          E2        1.5   ATR70_VOL           15          318     44.0 0.1718  0.1648 2.0698       Y
