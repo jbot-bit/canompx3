@@ -7,43 +7,77 @@
 ---
 
 ## Current Session
-- **Tool:** Claude Code (FDR Remediation + Truth Protocol + Forward Eval Pack)
-- **Date:** 2026-03-24 (session 2)
+- **Tool:** Claude Code (FDR remediation + backfill + regime audit + quant protocol)
+- **Date:** 2026-03-24 (session 2, extended)
 - **Branch:** `main`
-- **Status:** FDR remediation complete. Forward eval pack frozen. Paper book ready to run.
+- **Status:** Major research session. DB changes + 3 research artifacts + merged audit protocol. Paper book ready but never run.
 
-### What was done this session (Mar 24 — session 2)
+### What was done (Mar 24 — session 2)
 
-#### 1. MNQ FDR Remediation (DB-only, no code changes)
-- Applied BH FDR to 757 MNQ validated_setups (all had fdr_significant=NULL)
-- Used canonical `benjamini_hochberg()` with global K=105,627
-- Result: 494 TRUE, 263 FALSE, 0 NULL remaining
-- Rebuilt MNQ edge families (228 families: 55 ROBUST, 54 WHITELISTED, 24 SINGLETON, 95 PURGED)
-- Refreshed orb_outcomes: MES +432 rows (3 days), MGC +360 rows (3 days), all through 2026-03-23
+#### 1. MNQ FDR Remediation (DB-only)
+- 757 NULL → 494 TRUE + 263 FALSE (global K=105,627)
+- Edge families rebuilt (228). Outcomes refreshed through 2026-03-23.
 
-#### 2. Research Truth Protocol — K-Rule Addition
-- RESEARCH_RULES.md: BH K selection rule added (report both global K and instrument K; use instrument K for promotion, global K for headlines; never swap post-hoc)
-- .claude/rules/research-truth-protocol.md: mirrored in claim requirements
-- Governance lane is now FROZEN. No more protocol/doc changes unless real conflict appears.
+#### 2. Governance
+- BH K selection rule added to RESEARCH_RULES.md + rules file
+- Governance lane FROZEN
 
-#### 3. Forward Eval Pack (pre-registered)
-- `docs/plans/2026-03-24-mnq-core5-forward-eval-pack.md`
-- 5 CORE MNQ sessions: CME_PRECLOSE, COMEX_SETTLE, NYSE_OPEN, US_DATA_1000, EUROPE_FLOW
-- Daily checklist, weekly risk memo template, scoreboard fields
-- 8-gate promotion card (fail-closed, human sign-off required)
-- Kill criteria: 3 consecutive months negative, cumulative <= -10R, slippage > 2x on 20+ fills
-- Monitoring only — no promotion, no portfolio edits, no discovery
+#### 3. Forward Eval Pack
+- `docs/plans/2026-03-24-mnq-core5-forward-eval-pack.md` — pre-registered, frozen
+- Kill criteria: 3 months negative, -10R cumulative, 2x slippage
+- Cost/risk% + ATR as monitoring context (not gates)
 
-#### 4. Decisions
-- MGC TOKYO_OPEN: intentionally excluded from LIVE_PORTFOLIO (in PAPER_TRADE_CANDIDATES, pending forward evidence)
-- CME_REOPEN: no new unfiltered path; existing live spec NOT removed (separate audit)
-- 3 lanes separated: governance (FROZEN), truth of edge (MNQ unfiltered baseline real), live deployment (NOT YET)
+#### 4. NQ 2016-2021 Backfill
+- MNQ now 10yr (2016-02-01 to 2026-03-24, 3.5M bars, 2.1M outcomes)
+- Full pipeline built: bars_1m → 5m bars → daily_features → orb_outcomes
+- Config reverted after ingest
+
+#### 5. Regime Audit (3 research artifacts)
+- `research/output/2026-03-24-backfill-regime-audit.md` — friction mechanism
+- `research/output/2026-03-24-break-quality-audit.md` — timeout signal
+- `research/output/2026-03-24-combined-gate-stress-test.md` — 13-test battery
+
+**Key findings:**
+- Friction gate (cost/risk <10%): **ARITHMETIC_ONLY** — cost screen, tautology with G-filters, WR flat. Real and useful but NOT a mechanism.
+- Timeout (break_delay <=10m): **SIGNAL** — WR 54-64% spread, predicts win probability. Pending full T3-T8 verification (DB locked).
+- Combined gate: +0.150R, 0/10 negative years, 8/8 OOS positive, avg WFE=1.08, bootstrap p=0.001, all 12 sessions positive.
+- RECLASSIFIED: "cost screen + conviction signal", NOT "dual mechanism."
+
+#### 6. Quant Audit Protocol
+- `.claude/rules/quant-audit-protocol.md` — merged with AUDIT.md from parallel terminal
+- `.claude/skills/quant-audit/SKILL.md` — `/quant-audit` slash command
+- Added T0 Tautology, T1 WR Monotonicity, ARITHMETIC_ONLY label, Known Failure Patterns
+
+#### 7. Decisions
+- MGC TOKYO_OPEN: excluded from LIVE_PORTFOLIO (in PAPER_TRADE_CANDIDATES)
+- CME_REOPEN: no new unfiltered path; existing live spec untouched
+- 3 lanes: governance (FROZEN), truth of edge (friction-gated), live deployment (NOT YET)
+- Paper book: monitoring only, no promotion from this session
+- Playbook V4: DESIGNED (15 sections, 5 files) but NOT IMPLEMENTED (no "go" given)
+
+### UNVERIFIED (must run when DB unlocks)
+1. **T1 WR Monotonicity on friction** — accepted AUDIT.md claim without personal verification
+2. **T1 WR Monotonicity on timeout** — have 2x2 interaction data but not full quintile test
+3. **T0 tautology correlation** — stated by construction, not SQL-computed
+4. **Paper replay command** — runbook written, never executed
+
+### UNACTIONED (queued)
+5. Playbook V4 amendment — designed, awaiting user "go"
+6. LIVE_PORTFOLIO audit — separate task, flagged 4+ times
+7. STRATEGY_BLUEPRINT §2 update — "friction-gated" correction
+8. Memory file version bumps (V3→V4, strategic direction)
+9. 520K pre-existing E1 outcome duplicates — investigation pending
+10. MGC per-year stability under combined gate
+11. Gate 6 Replay validation
+12. C1 null rerun (chunk 2/10)
 
 ### Next actions
-1. **Run paper book daily** per forward eval pack checklist
-2. **Do NOT reopen governance** — protocol is frozen
-3. **Do NOT edit LIVE_PORTFOLIO** — current live specs stay until separate audit
-4. **C1 null rerun** still paused at chunk 2 of 10 (lower priority than paper monitoring)
+1. **Verify T1** when DB unlocks — this is the #1 priority
+2. **Run paper replay once** — prove the runbook works
+3. **Playbook V4** — implement when user approves
+4. **Run paper book daily** per forward eval pack checklist
+5. Do NOT reopen governance
+6. Do NOT edit LIVE_PORTFOLIO
 
 ### MNQ Unfiltered Baseline — Paper-Trade Control Note (2026-03-24)
 
