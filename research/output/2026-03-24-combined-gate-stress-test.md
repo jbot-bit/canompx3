@@ -148,14 +148,21 @@ Pearson r = 0.035 (friction vs delay). INDEPENDENT signals.
 
 All 9 cells positive. No cliff. No fragility.
 
-## Honest Flags
+## Verified Items (post-stress-test)
+
+- **T1 Friction WR:** 3.1% spread, non-monotonic, flat (2.4%) controlling for timeout. ARITHMETIC_ONLY confirmed.
+- **T1 Timeout WR:** 8.5% spread MNQ, 11% spread MGC. Monotonic. SIGNAL confirmed cross-instrument.
+- **MGC per-year:** 0/11 negative under combined gate (small N pre-2020 but all positive).
+- **MGC T1 timeout:** WR 62.5→51.5% (low friction). Monotonic. SIGNAL.
+- **Gate 6 Replay:** WR exact match (63.8/57.4/57.6/59.6). Trade count <1% diff (35 risk rejections). PnL diff on CME_PRECLOSE = stop multiplier, not bug. PASS.
+- **Paper replay works:** 4 sessions, 216 trades Q1 2026, +16.82R. EUROPE_FLOW auto-excluded (ExpR<0).
+
+## Remaining Flags
 
 1. O30m aperture is weak (+0.063). Timeout is O5m-calibrated.
-2. MGC N=3,676 needs per-year stability check.
-3. Max 16 consecutive losses = real risk. ~-$1,600 on 2 micros.
-4. RR2.0 > RR1.0 under gate — paper book at RR1.0 may not be optimal.
-5. Bootstrap shuffles break autocorrelation — conservative block shuffle would be more rigorous.
-6. Gate Sequence Gate 6 (Replay) not yet executed.
+2. Max 16 consecutive losses = real risk. ~-$1,600 on 2 micros.
+3. RR2.0 > RR1.0 under gate — paper book at RR1.0 may not be optimal.
+4. Bootstrap shuffles break autocorrelation — conservative block shuffle would be more rigorous.
 
 ## Academic Grounding
 
