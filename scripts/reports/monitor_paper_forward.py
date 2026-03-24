@@ -31,13 +31,20 @@ from pipeline.cost_model import get_cost_spec
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.live_config import PAPER_TRADE_CANDIDATES
 
-# ── Constants ───────────────────────────────────────────────────────────────
+# ── Constants (derived from PAPER_TRADE_CANDIDATES where possible) ──────────
+# Instrument/entry/aperture/RR/CB are common across all candidates.
+# Assert at import time to catch config drift.
 
 INSTRUMENT = "MNQ"
 ENTRY_MODEL = "E2"
 ORB_MINUTES = 5
 RR_TARGET = 1.0
 CONFIRM_BARS = 1
+
+# Validate constants match PAPER_TRADE_CANDIDATES
+for _s in PAPER_TRADE_CANDIDATES:
+    assert _s.entry_model == ENTRY_MODEL, f"{_s.family_id}: entry_model mismatch"
+    assert _s.filter_type == "NO_FILTER", f"{_s.family_id}: expected NO_FILTER"
 
 # Kill rules
 KILL_CONSECUTIVE_NEGATIVE_MONTHS = 3
@@ -48,9 +55,13 @@ ROLLING_WINDOW = 20
 
 
 def _t_test_p(values: list[float]) -> float | None:
-    """Two-tailed t-test p-value, H0: mean=0."""
+    """Two-tailed t-test p-value, H0: mean=0.
+
+    Uses normal approximation (erfc). Only valid for N >= 30.
+    Returns None for N < 30 to avoid overstating significance at small samples.
+    """
     n = len(values)
-    if n < 5:
+    if n < 30:
         return None
     mean_v = sum(values) / n
     var_v = sum((x - mean_v) ** 2 for x in values) / (n - 1)
@@ -315,7 +326,7 @@ def run_monitor(
     print("This is PAPER TRADE monitoring only. No live capital at risk.")
     print("2026 remains sacred for discovery — do not use forward results to select new sessions.")
     print("No rule changes allowed during the forward test period.")
-    print("TOKYO_OPEN is monitored separately as REGIME (WFE=0.53, borderline).")
+    print("TOKYO_OPEN is monitored separately as REGIME (borderline at 5yr, dead at 10yr unfiltered).")
     print(f"Kill: {KILL_CONSECUTIVE_NEGATIVE_MONTHS} consecutive negative months OR cumulative R <= {KILL_CUMULATIVE_R}.")
     print("Promotion to LIVE_PORTFOLIO requires separate approval after paper-trade period.")
     print(f"{'=' * 90}")

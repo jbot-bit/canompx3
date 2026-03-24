@@ -35,6 +35,12 @@ gold.db.bak*
 pipeline-explorer.html
 dashboard.html
 
+# Generated outputs (paper trade, strategy exports)
+paper_trade_*.csv
+APEX_PHASE1_*.txt
+apex_phase1_*.csv
+gold_ro.db
+
 # Python
 __pycache__/
 *.pyc
