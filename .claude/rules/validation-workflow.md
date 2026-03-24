@@ -11,7 +11,7 @@ paths:
 # Walk-forward enabled for all instruments (Mar 2026).
 # All active instruments (from ACTIVE_ORB_INSTRUMENTS) have 5+ years — sufficient for WF.
 # MGC uses WF_START_OVERRIDE=2022-01-01 in config.py (regime shift).
-python trading_app/strategy_validator.py --instrument MGC --min-sample 30 \
+python -m trading_app.strategy_validator --instrument MGC --min-sample 30 \
   --no-regime-waivers --min-years-positive-pct 0.75
 ```
 
@@ -24,9 +24,9 @@ python trading_app/strategy_validator.py --instrument MGC --min-sample 30 \
 
 ## Full Rebuild Chain
 When outcome_builder changes (e.g., C8/C3 exit rules):
-1. `python trading_app/outcome_builder.py --instrument MGC --force --orb-minutes 5`  # repeat for 15, 30
-2. `python trading_app/strategy_discovery.py --instrument MGC --orb-minutes 5`  # repeat for 15, 30
-3. `python trading_app/strategy_validator.py --instrument MGC --min-sample 30 --no-regime-waivers --min-years-positive-pct 0.75`
+1. `python -m trading_app.outcome_builder --instrument MGC --force --orb-minutes 5`  # repeat for 15, 30
+2. `python -m trading_app.strategy_discovery --instrument MGC --orb-minutes 5`  # repeat for 15, 30
+3. `python -m trading_app.strategy_validator --instrument MGC --min-sample 30 --no-regime-waivers --min-years-positive-pct 0.75`
 4. `python scripts/migrations/retire_e3_strategies.py`  # validator promotes E3; this fixes it
 5. `python scripts/tools/build_edge_families.py --instrument MGC`
 6. `python scripts/tools/gen_repo_map.py`  # auto-regen file inventory

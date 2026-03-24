@@ -111,7 +111,7 @@ python scripts/tools/audit_integrity.py 2>&1
 ### 1F. End-to-End Smoke Test
 ```bash
 # Can the paper trader actually run for 1 trading day without error?
-python trading_app/paper_trader.py --instrument MGC --start 2025-01-02 --end 2025-01-03 2>&1 | tail -10
+python -m trading_app.paper_trader --instrument MGC --start 2025-01-02 --end 2025-01-03 2>&1 | tail -10
 ```
 - [ ] Exits cleanly (no Python errors)
 - [ ] If errors → `SMOKE_TEST_FAILURE` (investigate before proceeding)

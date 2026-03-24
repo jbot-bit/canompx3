@@ -10,7 +10,7 @@ Use when: "validate", "run validation", "validate [instrument]", "re-validate", 
 Run this exact command from bash (not PowerShell):
 
 ```bash
-python trading_app/strategy_validator.py --instrument $ARGUMENTS --min-sample 30 --no-regime-waivers --min-years-positive-pct 0.75
+python -m trading_app.strategy_validator --instrument $ARGUMENTS --min-sample 30 --no-regime-waivers --min-years-positive-pct 0.75
 ```
 
 After validation completes, run mandatory steps:

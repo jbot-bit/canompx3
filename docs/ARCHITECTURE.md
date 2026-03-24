@@ -63,7 +63,7 @@ python scripts/tools/pipeline_status.py --rebuild-all         # All stale instru
 python scripts/tools/pipeline_status.py --resume --instrument MGC   # Resume failed rebuild
 
 # Trading App
-python trading_app/paper_trader.py --instrument MGC --start 2025-01-01 --end 2025-12-31
+python -m trading_app.paper_trader --instrument MGC --start 2025-01-01 --end 2025-12-31
 python -m trading_app.live_config --db-path C:/db/gold.db
 python pipeline/dashboard.py                 # Generate dashboard.html
 python scripts/reports/report_edge_portfolio.py      # Edge family portfolio report
