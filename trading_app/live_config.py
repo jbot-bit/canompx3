@@ -183,7 +183,7 @@ LIVE_PORTFOLIO = [
 # 10yr audit reclassified sessions (HANDOFF.md has details):
 #   STRUCTURAL: CME_PRECLOSE, NYSE_OPEN (positive both halves 2016-2020 / 2021-2025)
 #   REGIME-DEPENDENT: US_DATA_1000, COMEX_SETTLE (negative 2016-2020, positive 2021+)
-#   DEAD at 10yr unfiltered: EUROPE_FLOW (ExpR=-0.014, WF FAIL)
+#   DEAD at 10yr unfiltered: EUROPE_FLOW (negative expectancy, WF FAIL)
 #   REGIME: TOKYO_OPEN (borderline at 5yr, dead at 10yr unfiltered)
 # Spec remains frozen at 5 + 1 for forward-test comparability.
 # =========================================================================
