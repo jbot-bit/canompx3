@@ -313,22 +313,24 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         copies=5,  # 5 Express accounts — MGC morning lane
         stop_multiplier=0.75,
         max_slots=4,
-        # MGC LANES EXCLUDED — c236c57
-        # C1 null rerun (100 seeds): P95 noise floor = 0.305 ExpR
-        # Best MGC strategy (TOKYO_OPEN) = 0.2832 — below floor
-        # Do not add MGC lanes without new null rerun showing floor < best ExpR
-        # TopStep MGC plan is ON HOLD pending further research
-        allowed_sessions=frozenset({"CME_REOPEN", "TOKYO_OPEN"}),
+        # CONDITIONAL — per-session null P95=0.153 cleared, P99=0.364 not cleared
+        # N=125 trades. Reduce size: 1 contract only until N=250.
+        # Invalidation: 3 consecutive losing months OR forward ExpR < 0.10
+        # Evidence: commits c236c57 (pooled null), 3850efa (per-session null)
+        # Pooled P95=0.305 killed this; per-session P95=0.153 revived it.
+        # Per Harvey & Liu (2015): per-session floor is methodologically correct.
+        # @research-source C1 null rerun per-session TOKYO_OPEN 2026-03-24
+        allowed_sessions=frozenset({"TOKYO_OPEN"}),
         allowed_instruments=frozenset({"MGC"}),
         daily_lanes=(
             DailyLaneSpec(
-                "MGC_CME_REOPEN_E2_RR1.5_CB1_ORB_G4_FAST10_S075",
+                "MGC_TOKYO_OPEN_E2_RR2.0_CB1_ORB_G4_CONT_S075",
                 "MGC",
-                "CME_REOPEN",
-                execution_notes="Skip if CME_REOPEN ORB exceeds 26 points.",
+                "TOKYO_OPEN",
+                execution_notes="1 contract only until N=250. Skip if ORB > 26 pts.",
             ),
         ),
-        notes="MGC ON HOLD — noise floor violation (c236c57). Do not trade until resolved.",
+        notes="MGC CONDITIONAL — per-session P95 cleared, P99 not. 1 contract max. Invalidate at 3 losing months or ExpR<0.10.",
     ),
     # =========================================================================
     # Phase 3: Self-funded (after prop proof, $100K/year target)

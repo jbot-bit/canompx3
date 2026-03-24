@@ -224,18 +224,19 @@ All times Brisbane local (AEST, UTC+10). Brisbane has no DST — everything else
 - Include at your discretion for morning practice — not a default Phase 1 session.
 - Monitor via forward eval pack. Kill if 3 consecutive months negative.
 
-### Optional: TopStep MGC Morning Lane
-
-If you also open a TopStep $50K account for the MGC morning lane, add:
+### Optional: TopStep MGC Morning Lane (CONDITIONAL)
 
 | Session | Time | Instrument | Filter | ORB | RR | Entry | Note |
 |---------|------|------------|--------|-----|-----|-------|------|
-| **CME_REOPEN** | 08:00 (summer) / 09:00 (winter) | MGC | ORB_G4_FAST10 | 5m | 1.5 | E2 CB1 | ORB gate: skip if ORB > 26 pts |
+| **TOKYO_OPEN** | 10:00 AM Brisbane (fixed, no DST) | MGC | ORB_G4_CONT | 5m | 2.0 | E2 CB1 | 1 contract only. ORB gate: skip if ORB > 26 pts |
 
+- **CONDITIONAL edge** — per-session null P95=0.153 cleared, P99=0.364 not cleared. Between P95 and P99.
+- N=125 trades (REGIME-class). **1 contract only until N=250** (~2 years at current frequency).
 - MGC = $10/point (5x MNQ). Higher per-trade value but more volatile.
 - ORB gate is mandatory on TopStep: if MGC ORB > 26 points, risk exceeds 10% of $2K DD. Skip.
-- This adds a 4th sit-down at 08:00 but on a different firm + instrument = diversification.
-- Planning note: the current Apex operating lane in this file is equity-only. Treat MGC-on-Apex as unavailable unless you re-confirm product eligibility directly in current Apex support/dashboard.
+- **Invalidation criteria:** 3 consecutive losing months OR forward ExpR < 0.10. If triggered, remove lane.
+- Evidence: commits c236c57 (pooled null, P95=0.305), 3850efa (per-session null, P95=0.153).
+- CME_REOPEN is DEAD (no validated survivors). Do not trade.
 
 ### Phase 1 Expected Stats `LOCAL MODEL` (from gold.db backtest)
 
