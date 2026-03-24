@@ -628,6 +628,33 @@ This is why small ORBs lose — friction eats the edge.
 
 ---
 
+## Execution Realism Constraints (Layer 7 Audit, Mar 2026)
+
+### Signal Collision Priority
+When multiple strategies fire on the same ORB break (same session × aperture), `max_per_orb=1` in the risk manager allows only one entry. The winning strategy is the first match in portfolio iteration order (`LIVE_PORTFOLIO` spec order → `build_live_portfolio` output order). There is no ExpR-based or Sharpe-based ranking. Backtester and execution engine share this behavior — backtest results reflect this ordering. If priority matters operationally, reorder `LIVE_PORTFOLIO` specs by preference.
+
+### Backtest-to-Live Scratch Gap
+Backtester (outcome_builder) labels unresolved trades as "scratch" with `pnl_r=NULL`, excluding them from win/loss/ExpR statistics. The execution engine marks scratches to market at session end, producing real P&L. Layer 2 audit confirmed scratches average +0.40R net favorable excursion (MES). **Live performance will exceed backtested performance on scratch-heavy strategies.** This is a conservative backtest bias — not a concern, but worth knowing when comparing live results to historical ExpR.
+
+### Manual Execution Session Focus
+The 11-strategy portfolio spans 5 active sessions (6 with spec coverage). All US-anchored session times shift ±1 hour with US DST. Resolve exact times via `pipeline/dst.py SESSION_CATALOG`.
+
+| Session | Brisbane (US summer) | Brisbane (US winter) |
+|---------|---------------------|---------------------|
+| COMEX_SETTLE | 03:30 | 04:30 |
+| CME_PRECLOSE | 05:45 | 06:45 |
+| NYSE_CLOSE | 06:00 | 07:00 |
+| CME_REOPEN | 08:00 | 09:00 |
+| BRISBANE_1025 | 10:25 | 10:25 (no DST, noise-gated — currently inactive) |
+| SINGAPORE_OPEN | 11:00 | 11:00 (no DST) |
+
+Manual execution of all 5 active sessions by one person is not viable (03:30–11:00 summer, 04:30–11:00 winter). **Select session focus based on account constraints.** Recommended manual focus: CME_PRECLOSE + NYSE_CLOSE (adjacent, 8 strategies). Full coverage requires automation (Tradeify/TopStep allow; Apex prohibits).
+
+### Correlation Guard (Pre-Scaling)
+`corr_lookup` in the portfolio is currently empty `{}`. The risk manager falls back to simple position counting (`max_concurrent=3`). This is acceptable for single-contract trading. **Before scaling to multi-contract or adding correlated instruments, populate `corr_lookup` from empirical session-level return correlations.** Without it, the effective exposure calculation in `risk_manager.py:99-120` is a no-op.
+
+---
+
 ## Reference Documents
 
 | Document | Content |

@@ -7,12 +7,27 @@
 ---
 
 ## Current Session
-- **Tool:** Claude Code (Guardian Audit — live execution safety)
+- **Tool:** Claude Code (C1 Null Rerun + Canonical Sync)
 - **Date:** 2026-03-24
 - **Branch:** `main`
-- **Status:** Live execution orphan containment gate: **DONE.** 2x code review + institutional closure audit. CLOSED.
+- **Status:** C1 time-varying null rerun IN PROGRESS (chunk 2 of 10 running).
 
-### What was done this session (Mar 24 — guardian audit)
+### What was done this session (Mar 24 — C1 null rerun + sync)
+
+#### 1. C1 Time-Varying Null Rerun (IN PROGRESS)
+- Previous run crashed (orphan workers, 62 processes). 3 seeds salvaged (7, 18, 19) with 14 total survivors.
+- Max null OOS ExpR provisionally 0.2369 — may challenge current 0.21 floor.
+- 3 script changes to `run_null_batch.py`: per-seed manifest save, enriched checkpoint (date_range, max_oos_expr, output_path), fail-closed date range guard.
+- Running 10 chunks of 10 seeds, parallel 6, IS-only 2020-01-01 to 2025-12-31.
+- Chunk 1 DONE: 10/10 complete, 0 new survivors, all date ranges verified.
+- Chunk 2 RUNNING.
+
+#### 2. Canonical Sync
+- `chatgpt-project-kit/TRADING_RULES.md` synced (was missing Layer 7 execution realism section)
+- `chatgpt-project-kit/PROJECT_INSTRUCTIONS.md` updated: ML institutional audit, live portfolio count, C1 status, orphan gate
+- `chatgpt-project-kit/PROJECT_REFERENCE.md` updated: strategic direction Mar 24, ML audit finding
+
+### What was done prior session (Mar 24 — guardian audit)
 
 #### 1. Live Execution Bug Audit (Pass 1 — audit only)
 - Full source-of-truth chain traced: PositionTracker owns state, SessionOrchestrator owns containment

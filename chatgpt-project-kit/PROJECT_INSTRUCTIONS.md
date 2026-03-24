@@ -35,11 +35,15 @@ ORB size IS the edge. Without G4+ filter, ALL edges die. MNQ E2 is the ONLY posi
 ## Confirmed NO-GOs
 No filter/L-filters, unfiltered MGC/MES, all dead instruments, E0, ML on negative baselines (p=0.350), non-ORB strategies (30 archetypes), calendar cascade, cross-asset lead-lag, prior-day context, breakeven trails, VWAP overlay, RSI reversion, gap fade, quintile conviction.
 
-## ML Status: RESEARCH ONLY
+## ML Status: RESEARCH ONLY — NOT USABLE (Mar 24 institutional audit)
 3 open methodology FAILs: negative baselines violate meta-labeling assumptions, EPV=2.4 (need 10+), selection bias (quality gates then bootstrap on same data). Do not recommend ML deployment.
+**Mar 24 institutional audit (grounded in local academic PDFs):** BH FDR kills ALL ML claims at family=60 total tests. ML adds zero value to baseline-only portfolio. Do NOT retrain, do NOT expand. Baseline-only is cleaner.
 
 ## Current State (volatile — query for current counts)
 Strategy counts, live portfolio, and drift status change after every rebuild. Query `validated_setups` and `live_config` for current numbers. 3 active instruments (MGC, MNQ, MES). M2K dead Mar 2026. MGC 0 live (noise_risk binding after JK-fallback, Mar 24). 57% friction claim DEBUNKED. 2026 holdout is SACRED.
+**Live portfolio:** 8 specs (2 CORE, 6 REGIME) → MNQ 7, MES 1, MGC 0 (8 total strategies).
+**C1 time-varying null rerun IN PROGRESS (Mar 24):** 100-seed MGC, per-year sigma, 2020-2025 IS-only. Provisional max null ExpR 0.2369 from 3 early seeds (14 survivors). May challenge current 0.21 floor.
+**Orphan containment gate (Mar 24):** Live execution has fail-closed orphan blocking. Manual resolution required.
 
 ## Project Files Reference
 - TRADING_RULES.md: Complete trading rules, sessions, cost models, edge summary, all NO-GOs
