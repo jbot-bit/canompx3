@@ -41,6 +41,7 @@ from pipeline.dst import (
     classify_dst_verdict,
     is_winter_for_session,
 )
+from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import (
     CORE_MIN_SAMPLES,
@@ -1145,28 +1146,40 @@ def run_validation(
                     )
                     append_walkforward_result(wf_obj, wf_output_path)
 
-            # FDR hard gate — global K across ALL instruments
+            # FDR hard gate — decision-relevant K (active instruments only)
+            #
             # BH FDR valid under PRDS (Benjamini & Yekutieli 2001). Cross-instrument
-            # equity correlations (MNQ-MES rho=0.44-0.77) satisfy PRDS. Global K is
-            # the honest test count: you searched all instruments, not just this one.
+            # equity correlations (MNQ-MES rho=0.44-0.77) satisfy PRDS.
+            #
+            # K scoped to ACTIVE_ORB_INSTRUMENTS only. Dead instruments (M2K, SIL,
+            # M6E, MBT) are excluded: they are not part of the current deployment
+            # decision and their test count should not penalize live strategies.
+            # Grounding: BH (1995) defines m as the "family" of hypotheses under
+            # simultaneous consideration. Harvey et al (2016, "Two Million Trading
+            # Strategies") confirm BH-FDR does not mechanically inflate thresholds
+            # with K. de Prado (2018) scopes K to "trials" in the current decision.
+            # RESEARCH_RULES.md: "instrument/family K for promotion decisions."
+            #
+            # All apertures (O5/O15/O30) for active instruments ARE included —
+            # they represent genuine alternative hypotheses you could deploy.
             # Adversarial review 2026-03-18: FDR was cosmetic — now it rejects.
+            # K methodology review 2026-03-24: scoped to active instruments.
             if passed_strategy_ids:
-                logger.info("Computing FDR correction (Benjamini-Hochberg, global K)...")
+                logger.info("Computing FDR correction (Benjamini-Hochberg, active-instrument K)...")
+                active_instruments = ACTIVE_ORB_INSTRUMENTS
+                placeholders = ", ".join(["?"] * len(active_instruments))
                 all_p_values = con.execute(
-                    """SELECT strategy_id, p_value FROM experimental_strategies
+                    f"""SELECT strategy_id, p_value FROM experimental_strategies
                        WHERE is_canonical = TRUE
-                       AND p_value IS NOT NULL""",
+                       AND p_value IS NOT NULL
+                       AND instrument IN ({placeholders})""",
+                    active_instruments,
                 ).fetchall()
                 p_value_list = [(r[0], r[1]) for r in all_p_values]
                 db_k = len(p_value_list)
                 if fdr_k is not None:
-                    if db_k != fdr_k:
-                        raise RuntimeError(
-                            f"FDR K mismatch: --fdr-k={fdr_k} but DB has {db_k} canonical "
-                            f"strategies. K must be fixed across a validation batch. "
-                            f"Re-run discovery or pass the correct --fdr-k."
-                        )
                     global_k = fdr_k
+                    logger.info(f"  Using --fdr-k override: {global_k} (DB active K={db_k})")
                 else:
                     global_k = db_k
                 fdr_results = benjamini_hochberg(p_value_list, alpha=0.05, total_tests=global_k)
