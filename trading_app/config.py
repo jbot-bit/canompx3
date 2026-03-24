@@ -102,14 +102,33 @@ NOISE_EXPR_FLOOR: dict[str, float] = {
     "E2": 0,
 }
 
-# Per-instrument noise floors (p95 of pooled null survivor ExpR).
-# Derived from 100-seed Gaussian null tests (94 for MES).
-# Used for post-validation noise_risk flag, NOT as a hard gate.
-# E1 floors are provisional (N=16-25 null survivors, unreliable p95).
+# Per-instrument noise floors — METHODOLOGY NOTE (Mar 25 2026):
+#
+# These values used the WRONG methodology: global max ExpR across all
+# filter/RR/aperture combos per session. This inflates the floor because
+# the max of 486 noise draws will be high. The correct comparison is
+# PER-STRATEGY null: noise ExpR for the SPECIFIC filter × session × RR
+# × aperture the deployed strategy uses.
+#
+# Per-strategy null results (100 MNQ seeds, Mar 25 2026):
+#   NYSE_CLOSE VOL_RV12_N20 RR1.0 O15: noise mean=0.055, P95=0.106, real=0.208 → p=0.011 SIGNAL
+#   COMEX_SETTLE ORB_G8 RR1.0 O5:      noise mean=0.083, P95=0.125, real=0.130 → p=0.024 SIGNAL
+#   SINGAPORE_OPEN ORB_G8 RR4.0 O15:   noise mean=0.089, P95=0.162, real=0.163 → p=0.053 MARGINAL
+#   NYSE_OPEN X_MES_ATR60: untestable (cross-instrument filter absent in single-inst null)
+#
+# The pooled values below are STALE and should NOT be used for deployment
+# decisions. Use per-strategy null (above) or forward test evidence instead.
+# @research-source noise_floor_methodology.md (Mar 25 2026)
+# @revalidated-for stratified-K event-based (2026-03-25)
+#
+# Known bugs in current null test:
+#   1. K mismatch: null DB has K=788-1872/session, real has K=3254-14760
+#   2. Single-instrument: cross-instrument filters (X_MES_ATR60) untestable
+#   3. Global max: takes max across grid, not per-strategy distribution
 NOISE_FLOOR_BY_INSTRUMENT: dict[str, dict[str, float]] = {
-    "MGC": {"E1": 0.18, "E2": 0.21},
-    "MES": {"E1": 0.30, "E2": 0.29},
-    "MNQ": {"E1": 0.30, "E2": 0.21},
+    "MGC": {"E1": 0.18, "E2": 0.21},  # STALE — pooled global max, not per-strategy
+    "MES": {"E1": 0.30, "E2": 0.29},  # STALE
+    "MNQ": {"E1": 0.30, "E2": 0.21},  # STALE — per-strategy floors are 0.05-0.09
 }
 
 # Walk-forward start-date override per instrument.
