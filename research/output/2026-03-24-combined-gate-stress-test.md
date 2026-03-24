@@ -5,11 +5,22 @@
 **Gate:** cost/risk < 10% AND break_delay_min <= 10
 **Data:** MNQ E2 O5 CB1 RR1.0, 10 years (2016-02-01 to 2026-03-23)
 
+## RECLASSIFICATION (post quant-audit-protocol merge, 2026-03-24)
+
+**The combined gate has TWO components with different classifications:**
+
+| Component | Classification | Evidence |
+|-----------|---------------|---------|
+| Friction (cost/risk <10%) | **ARITHMETIC_ONLY** | WR flat across friction bins (<3% spread). Payoff improves because costs eat less of wins. Tautology with G-filters (corr = -1.0 by construction). Correct framing: cost screen / minimum trade size gate. |
+| Timeout (delay <=10m) | **SIGNAL** (pending T3-T8) | WR spread 54-64% across delay quintiles. WR improvement persists controlling for friction. Mechanism: order flow concentration at ORB edge. |
+
+**Honest framing: "cost screen + conviction signal", NOT "dual mechanism."**
+
 ## Gate Sequence Status
 
 | Gate | Status | Evidence |
 |------|--------|---------|
-| 1. Mechanism | PASS | Order flow concentration + friction (Chan, de Prado) |
+| 1. Mechanism | PARTIAL | Timeout = order flow concentration (Chan). Friction = arithmetic cost screen, not mechanism. |
 | 2. Baseline | PASS | Monotonic gradient, 10yr, 3 instruments |
 | 3. BH FDR | PASS | K=64 (8x8 grid), all p<0.001. Bootstrap p=0.001 |
 | 4. Walk-forward | PASS | 8/8 OOS positive, avg WFE=1.08 |
