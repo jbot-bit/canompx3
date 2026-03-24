@@ -28,7 +28,11 @@ Mechanism hypothesis strengthened: edge appears cost-gated, with ATR as amplifie
 
 MNQ cost model: $2.74 RT (commission $1.24 + spread+slippage $1.50).
 
-### 2x2 friction x ATR matrix (10 years)
+### 2x2 friction x ATR matrix (10 years, ALL MNQ sessions)
+
+**SCOPE: ALL MNQ sessions** (N=25,101), not CORE 5 only. The friction decile and direction
+tables above use CORE 5 (N=12,483). This table, the era stability table, and the sensitivity
+table below use ALL sessions. Numbers are real; the mechanism generalizes beyond CORE 5.
 
 | Regime | N | ExpR | p | WR% |
 |--------|---|------|---|-----|
@@ -39,7 +43,7 @@ MNQ cost model: $2.74 RT (commission $1.24 + spread+slippage $1.50).
 
 Friction: cost/risk < 10% vs >= 10%. ATR: atr_20 >= 200 vs < 200.
 
-### Era stability (LOW friction + HIGH ATR)
+### Era stability (LOW friction + HIGH ATR, ALL MNQ sessions)
 
 | Era | N | ExpR | t | p |
 |-----|---|------|---|---|
@@ -49,7 +53,7 @@ Friction: cost/risk < 10% vs >= 10%. ATR: atr_20 >= 200 vs < 200.
 
 Positive in ALL eras under the same regime conditions.
 
-### Sensitivity (low friction, ATR threshold +-20%)
+### Sensitivity (low friction, ATR threshold +-20%, ALL MNQ sessions)
 
 | ATR threshold | N | ExpR | t | p |
 |---------------|---|------|---|---|
