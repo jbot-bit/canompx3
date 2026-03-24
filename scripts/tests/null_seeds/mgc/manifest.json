@@ -54,15 +54,21 @@
       "seed": 11,
       "status": "PASS",
       "survivors": 0,
-      "elapsed_s": 3562.7,
-      "completed_at": "2026-03-23T22:52:34.666695+00:00"
+      "max_oos_expr": null,
+      "date_range": "2020-01-01 to 2025-12-31",
+      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0011",
+      "elapsed_s": 2026.5,
+      "completed_at": "2026-03-24T00:55:19.771036+00:00"
     },
     "12": {
       "seed": 12,
       "status": "PASS",
       "survivors": 0,
-      "elapsed_s": 3576.3,
-      "completed_at": "2026-03-23T22:52:48.605739+00:00"
+      "max_oos_expr": null,
+      "date_range": "2020-01-01 to 2025-12-31",
+      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0012",
+      "elapsed_s": 2035.3,
+      "completed_at": "2026-03-24T00:55:28.538822+00:00"
     },
     "23": {
       "seed": 23,
@@ -75,8 +81,11 @@
       "seed": 10,
       "status": "PASS",
       "survivors": 0,
-      "elapsed_s": 3595.3,
-      "completed_at": "2026-03-23T22:53:04.926925+00:00"
+      "max_oos_expr": null,
+      "date_range": "2020-01-01 to 2025-12-31",
+      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0010",
+      "elapsed_s": 2046.3,
+      "completed_at": "2026-03-24T00:55:39.544348+00:00"
     },
     "26": {
       "seed": 26,
@@ -119,17 +128,21 @@
     },
     "19": {
       "seed": 19,
-      "status": "FAIL",
+      "status": "CACHED",
       "survivors": 10,
-      "elapsed_s": 3704.9,
-      "completed_at": "2026-03-23T22:54:54.399801+00:00"
+      "max_oos_expr": 0.2369,
+      "date_range": "2020-01-01 to 2025-12-31",
+      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0019"
     },
     "17": {
       "seed": 17,
       "status": "PASS",
       "survivors": 0,
-      "elapsed_s": 3726.4,
-      "completed_at": "2026-03-23T22:55:15.726121+00:00"
+      "max_oos_expr": null,
+      "date_range": "2020-01-01 to 2025-12-31",
+      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0017",
+      "elapsed_s": 1490.9,
+      "completed_at": "2026-03-24T01:20:19.492072+00:00"
     },
     "9": {
       "seed": 9,
@@ -167,6 +180,54 @@
       "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0005",
       "elapsed_s": 1787.0,
       "completed_at": "2026-03-23T23:45:49.085998+00:00"
+    },
+    "13": {
+      "seed": 13,
+      "status": "FAIL",
+      "survivors": 2,
+      "max_oos_expr": 0.2377,
+      "date_range": "2020-01-01 to 2025-12-31",
+      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0013",
+      "elapsed_s": 2042.4,
+      "completed_at": "2026-03-24T00:55:35.691422+00:00"
+    },
+    "18": {
+      "seed": 18,
+      "status": "CACHED",
+      "survivors": 3,
+      "max_oos_expr": 0.1892,
+      "date_range": "2020-01-01 to 2025-12-31",
+      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0018"
+    },
+    "15": {
+      "seed": 15,
+      "status": "PASS",
+      "survivors": 0,
+      "max_oos_expr": null,
+      "date_range": "2020-01-01 to 2025-12-31",
+      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0015",
+      "elapsed_s": 2059.4,
+      "completed_at": "2026-03-24T00:55:52.668093+00:00"
+    },
+    "14": {
+      "seed": 14,
+      "status": "PASS",
+      "survivors": 0,
+      "max_oos_expr": null,
+      "date_range": "2020-01-01 to 2025-12-31",
+      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0014",
+      "elapsed_s": 2067.1,
+      "completed_at": "2026-03-24T00:56:00.380311+00:00"
+    },
+    "16": {
+      "seed": 16,
+      "status": "PASS",
+      "survivors": 0,
+      "max_oos_expr": null,
+      "date_range": "2020-01-01 to 2025-12-31",
+      "output_path": "C:\\Users\\joshd\\canompx3\\scripts\\tests\\null_seeds\\mgc\\seed_0016",
+      "elapsed_s": 1495.8,
+      "completed_at": "2026-03-24T01:20:15.614215+00:00"
     }
   },
   "config_snapshot": {
