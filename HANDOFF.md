@@ -47,20 +47,25 @@
 
 ### MNQ Unfiltered Baseline — Paper-Trade Control Note (2026-03-24)
 
-**Finding:** MNQ E2, 5m ORB, RR1.0, CB1, NO_FILTER is positive across 6 sessions.
-Verified by: source-of-truth audit, anti-bias audit, no-lookahead audit, refreshed data (1475 days).
+**Finding (UPDATED with 10-year data, session 2 terminal):**
+MNQ E2, 5m ORB, RR1.0, CB1. 10-year data (2016-2026, 2896 trading days, NQ full-size pre-2024).
 
-**5 CORE sessions** (BH FDR PASS at K=105,627, WF PASS, all years positive):
-| Session | N | ExpR | p | WFE | OOS ExpR | OOS %Pos |
-|---------|---|------|---|-----|----------|----------|
-| CME_PRECLOSE | 1108 | +0.200 | <1e-8 | 0.77 | +0.191 | 89% |
-| US_DATA_1000 | 1310 | +0.137 | 2e-7 | 1.00 | +0.138 | 100% |
-| COMEX_SETTLE | 1272 | +0.124 | 1e-6 | 1.50 | +0.141 | 100% |
-| NYSE_OPEN | 1305 | +0.117 | 1e-5 | 1.61 | +0.131 | 100% |
-| EUROPE_FLOW | 1324 | +0.101 | 3e-5 | 1.15 | +0.109 | 100% |
+**The structural mechanism is cost/risk% < ~10%, NOT session selection.**
+Below 10% friction share: ALL 3 instruments positive (MNQ +0.107, MGC +0.072, MES +0.063).
+Above 20%: all 3 negative. Monotonic, cross-instrument, not threshold-fragile.
+MNQ low-friction positive in ALL eras: 2016-2020 +0.085, 2021-2025 +0.115, 2026 +0.101.
 
-**1 REGIME session** (marginal — WFE=0.53, p=0.010, 67% WF positive, 2026 marginal):
-| TOKYO_OPEN | 1325 | +0.062 | 0.010 | 0.53 | +0.062 | 67% |
+**10yr unfiltered session truth (replaces 5yr "5 CORE" claim above):**
+| Session | 10yr N | 10yr ExpR | 10yr p | Class |
+|---------|--------|-----------|--------|-------|
+| CME_PRECLOSE | 2181 | +0.117 | <1e-6 | STRUCTURAL (positive both halves) |
+| NYSE_OPEN | 2581 | +0.079 | 1.6e-5 | STRUCTURAL (positive both halves) |
+| US_DATA_1000 | 2592 | +0.059 | 0.001 | REGIME-DEPENDENT (negative 2016-2020) |
+| COMEX_SETTLE | 2516 | +0.033 | 0.060 | MARGINAL (fails p<0.05 at 10yr) |
+| EUROPE_FLOW | 2613 | -0.014 | 0.41 | DEAD at 10yr (WF FAIL) |
+
+**Paper-trade spec remains frozen** (5 sessions unfiltered). Forward monitoring includes
+cost/risk% and ATR as context fields. The cost gate is a research finding, NOT a trading rule yet.
 
 **Paper-trade specs:** `PAPER_TRADE_CANDIDATES` in `trading_app/live_config.py`. NOT in LIVE_PORTFOLIO.
 **Kill criteria:** 3 consecutive months negative OR cumulative -10R.
@@ -71,7 +76,7 @@ Verified by: source-of-truth audit, anti-bias audit, no-lookahead audit, refresh
 ### Project Truth Protocol (enforced 2026-03-24)
 
 **CANONICAL layers (safe for discovery):** `bars_1m`, `daily_features`, `orb_outcomes`.
-**DERIVED layers (banned for discovery):** `validated_setups` (757 MNQ fdr=NULL), `edge_families`, `live_config`, docs/comments.
+**DERIVED layers (banned for discovery):** `validated_setups` (FDR remediated: 494 TRUE, 263 FALSE, 0 NULL), `edge_families`, `live_config`, docs/comments.
 **Rule:** If derived layer contradicts canonical query, canonical wins. Mark derived layer STALE.
 **Written into:** `CLAUDE.md` (Guardrails > Project Truth Protocol), `RESEARCH_RULES.md` (Discovery Layer Discipline).
 **PASS 4 verified:** monitor script output matches raw SQL exactly (14/14 metrics, 10/10 trades).
