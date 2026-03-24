@@ -158,7 +158,7 @@ Change parameter +/-20%. If small changes kill the finding, it's curve-fit, not 
 
 ---
 
-## ML Status (Research Only — NOT Production)
+## ML Status: NOT USABLE (Mar 24 Institutional Audit)
 
 3 open methodology FAILs from adversarial audit:
 1. **Negative baselines violate de Prado's meta-labeling assumptions** — need positive ExpR underlying
@@ -168,6 +168,8 @@ Change parameter +/-20%. If small changes kill the finding, it's curve-fit, not 
 Bootstrap (5K perms, Phipson & Smyth): 3/7 PASS (p=0.0016, 0.0176, 0.0376), 3 MARGINAL, 1 FAIL.
 ML on negative baselines: DEAD (threshold artifact, p=0.350).
 Positive-baseline ML: UNTESTED post-fixes. Layer 2 is paper-only.
+
+**Mar 24 institutional audit (grounded in local academic PDFs):** BH FDR kills ALL ML claims at family=60. 6 proven bugs, 3 critical FAILs. ML adds zero value over baseline-only. Do NOT retrain, do NOT expand. Baseline-only portfolio is the cleaner path.
 
 ---
 
@@ -195,16 +197,17 @@ Positive-baseline ML: UNTESTED post-fixes. Layer 2 is paper-only.
 
 ---
 
-## Strategic Direction (Mar 23, 2026)
+## Strategic Direction (Mar 24, 2026 — UPDATED)
 
 - **Raw baseline = the tradeable path.** Layer 1 (O5 RR1.0) statistically clean (p<1e-9, survives Bonferroni).
 - **8-strategy live portfolio (holdout-clean):** MNQ 7 (CME_PRECLOSE x5, COMEX_SETTLE, CME_REOPEN) + MES 1 (CME_PRECLOSE ATR70_VOL via rolling).
 - **MNQ RR1.0 at NYSE_OPEN + COMEX_SETTLE:** effect is real. 2026 forward test is binding.
 - **3 pre-registered strategies** for 2026 holdout (NYSE_OPEN, COMEX_SETTLE, CME_PRECLOSE). Holdout is SACRED.
 - **Rolling portfolio now functional.** Rebuilt with event-based session names. HOT-path stability scoring operational.
-- **Threshold audit COMPLETE.** All 9 thresholds sensitivity-tested ±20%. 8/9 robust. DOUBLE_BREAK=0.67 is the one load-bearing heuristic (CME_PRECLOSE margins: MNQ 7.6pp, MES 5.0pp, MGC 1.7pp). Proximity warning added.
-- **MGC 0 live = structural scarcity, not a bug.** Only validated edge is TOKYO_OPEN (all noise_risk=True, 100% double-break degraded in rolling). Live specs are MNQ-shaped. Open question: instrument-specific spec policy.
-- **ML = research-only.** Fix 3 methodology FAILs before expanding.
+- **Threshold audit COMPLETE.** All 9 thresholds sensitivity-tested ±20%. 8/9 robust. DOUBLE_BREAK=0.67 is the one load-bearing heuristic.
+- **MGC 0 live = structural.** RR lock resolved (JK fallback, Mar 24). noise_risk is now binding blocker. Sigma miscalibrated 2.21x. C1 time-varying null rerun IN PROGRESS (100-seed, per-year sigma, 2020-2025). Max null ExpR provisionally 0.2369 — may challenge 0.21 floor.
+- **ML = NOT USABLE (Mar 24 institutional audit).** BH FDR kills ALL claims at family=60. Baseline-only is cleaner. Do NOT retrain.
+- **Live execution safety:** Orphan containment gate deployed (fail-closed, manual resolution). Code reviewed 2x.
 - **Prop firm path:** Apex manual -> Tradeify+TopStep auto -> IBKR self-funded.
 - **0.75x stops for prop** — survival over income.
 
