@@ -33,14 +33,14 @@ Sections §4-§5, §7-§9 are **CURRENT STATE** — volatile snapshots. Query ca
 
 ## 2. The One Thing That Matters
 
-**ORB size IS the edge.** Cross-instrument stress test (Feb 2026) proved: strip the size filter and ALL edges die. CB, RR, entry model are refinements. Without G4+, only MNQ E2 has positive baseline. Source: TRADING_RULES.md "ORB Size = The Edge".
+**ORB size relative to friction IS the primary edge gate, with break timing as a conviction signal.** 10-year regime audit (Mar 2026) proved: the edge is cost-gated (ARITHMETIC_ONLY — trades where cost/risk < ~10% are profitable, above ~15% they're not). G-filters approximate this gate at current prices. Break delay (<=10m) adds a genuine WIN RATE signal on top of the cost screen. Source: TRADING_RULES.md "ORB Size = The Edge" + `research/output/2026-03-24-combined-gate-stress-test.md`.
 
-**Current reality (from gold.db, verified 2026-03-21):**
-- **MNQ E2:** ONLY instrument × entry model with positive UNFILTERED baseline
-- **MGC E2 unfiltered:** Negative at all RR (−0.06 to −0.33R). Positive WITH G5+ on select sessions (CME_REOPEN, TOKYO_OPEN, LONDON_METALS).
-- **MES E2 unfiltered:** Negative at all RR (−0.04 to −0.25R). Positive WITH G4+ on select sessions.
-- **E1 unfiltered:** Negative everywhere including MNQ (−0.03 to −0.20R)
-- **Only 11 validated setups exist.** All MNQ. All E2. CME_PRECLOSE + COMEX_SETTLE + BRISBANE_1025.
+**Current reality (from gold.db, verified 2026-03-24, 10-year backfill):**
+- **MNQ E2:** Positive unfiltered at 5yr (2021-2025). At 10yr: CME_PRECLOSE and NYSE_OPEN are structural (positive both halves). COMEX_SETTLE marginal (p=0.060). EUROPE_FLOW dead at 10yr unfiltered. US_DATA_1000 regime-dependent.
+- **MGC E2 unfiltered:** Negative. Positive ONLY under combined gate (friction <10% + timeout <=10m): +0.148R.
+- **MES E2 unfiltered:** Negative. Positive under combined gate: +0.116R.
+- **E1 unfiltered:** Negative everywhere including MNQ.
+- **Validated setups:** 772 total (494 MNQ FDR TRUE, 9 MES, 6 MGC). Query `validated_setups` for current count — do not cite from memory.
 
 **All tables in §4 below are MNQ E2 unless stated otherwise.** For MGC/MES session-specific performance, see TRADING_RULES.md Session Playbook.
 
