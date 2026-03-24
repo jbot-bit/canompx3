@@ -11,8 +11,8 @@
 
 | Component | Classification | Evidence |
 |-----------|---------------|---------|
-| Friction (cost/risk <10%) | **ARITHMETIC_ONLY** | WR flat across friction bins (<3% spread). Payoff improves because costs eat less of wins. Tautology with G-filters (corr = -1.0 by construction). Correct framing: cost screen / minimum trade size gate. |
-| Timeout (delay <=10m) | **SIGNAL** (pending T3-T8) | WR spread 54-64% across delay quintiles. WR improvement persists controlling for friction. Mechanism: order flow concentration at ORB edge. |
+| Friction (cost/risk <10%) | **ARITHMETIC_ONLY** (VERIFIED) | WR 57.4-60.5% across quintiles (3.1% spread, non-monotonic — peaks at Q3 then drops). AvgWinR 0.30→0.94 is the driver. T1d: WR flat (2.4% spread) when controlling for timeout. Cost screen confirmed. |
+| Timeout (delay <=10m) | **SIGNAL** (VERIFIED) | WR 63.8→55.3% across quintiles (8.5% spread, monotonic). T1c: WR 63.2→54.2% persists in low friction. T1c: WR 62.2→57.3% persists in high friction. Genuine win-rate predictor. |
 
 **Honest framing: "cost screen + conviction signal", NOT "dual mechanism."**
 
