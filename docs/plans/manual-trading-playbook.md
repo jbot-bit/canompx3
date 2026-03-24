@@ -1,7 +1,7 @@
 # Trading Playbook — Brisbane
 
 **Status:** CANONICAL prop trading playbook
-**Version:** V3 — consolidated manual + allocation memo, March 16 2026
+**Version:** V4 — Phase 1 trimmed to CORE 5 tradeable sessions, March 24 2026
 **Goal:** Prove edge live on props → scale via Tradeify/TopStep automation → self-funded IBKR for $100K/year
 This file is the single working prop memo for this repo.
 Use it for:
@@ -80,8 +80,8 @@ These are the operating conclusions from local research and sim work in this rep
 - `Apex 50K EOD` is manual proof only (1 account). Automation and copy trading are prohibited.
 - `Tradeify 50K` is the primary MNQ automation scaling lane (5 accounts, Tradovate API).
 - `TopStep 50K Express` is the MGC automation lane (5 Express accounts, ProjectX API).
-- The overnight deployed sessions are: CME_PRECLOSE, COMEX_SETTLE, NYSE_CLOSE, NYSE_OPEN (all MNQ on Tradeify).
-- The morning deployed sessions are: CME_REOPEN, TOKYO_OPEN (MGC on TopStep).
+- The overnight deployed sessions are: CME_PRECLOSE, COMEX_SETTLE, NYSE_OPEN (all MNQ on Tradeify). NYSE_CLOSE removed in V4 (not CORE 5).
+- The morning deployed sessions are: CME_REOPEN (MGC on TopStep). TOKYO_OPEN: optional regime-only add-on (not default).
 - `2 micros/account` is the conservative serious sizing on the current model.
 - `0.75x` stop sizing remains the preferred prop-risk setting in the current local modeling.
 - Prop ceiling: ~$60K/year. $100K/year target lives in self-funded IBKR (Phase 3).
@@ -190,33 +190,20 @@ Trade 5 sessions manually using G-filters you can eyeball. No automation needed.
 **Contracts:** 1 micro per signal
 **Stop:** 0.75x on prop | 1.0x on self-funded
 
-### The 5-Session Plan (3 sit-downs)
+### The 2-Session Plan (2 sit-downs)
+
+**V4 change (2026-03-24):** Trimmed from 5 sessions to 2, per CORE 5 unfiltered baseline from 10-year regime audit. TOKYO_OPEN (p=0.010, marginal), SINGAPORE_OPEN (p=0.154, not significant), and LONDON_METALS (p=0.058, not significant) dropped from default Phase 1. Paper book runs all 5 CORE sessions in parallel — see `docs/plans/2026-03-24-mnq-core5-forward-eval-pack.md`.
 
 All times Brisbane local (AEST, UTC+10). Brisbane has no DST — everything else shifts around you.
 
-**Morning Block (10:00–11:15) — coffee + charts**
-
-| Session | Time | Instrument | Filter | How to Check | ORB | RR | Entry |
-|---------|------|------------|--------|-------------|-----|-----|-------|
-| **TOKYO_OPEN** | 10:00 (fixed) | MNQ | ORB_G5_CONT | ORB >= 5 MNQ pts + break bar closes beyond ORB edge | 5m | 1.0 | E2 CB1 |
-| **SINGAPORE_OPEN** | 11:00 (fixed) | MNQ | ORB_G8 | ORB >= 8 MNQ pts | 15m | 1.0 | E2 CB1 |
-
-- TOKYO: ORB forms by 10:05. Check size. Set bracket or walk away.
-- SINGAPORE: ORB forms by 11:15. Check size. Set bracket or walk away.
-- Both Asia sessions — no DST, same time every day, year-round.
-
-**Evening Block (17:00–18:15) — after work**
+**Evening Block (17:00 or 18:00) — after work**
 
 | Session | Time | Instrument | Filter | How to Check | ORB | RR | Entry |
 |---------|------|------------|--------|-------------|-----|-----|-------|
 | **EUROPE_FLOW** | 17:00 (winter) / 18:00 (summer) | MNQ | ORB_G8 | ORB >= 8 MNQ pts | 5m | 1.0 | E2 CB1 |
-| **LONDON_METALS** | 18:00 (winter) / 17:00 (summer) | MNQ | ORB_G6_NOMON | ORB >= 6 MNQ pts + not Monday | 15m | 1.0 | E2 CB1 |
 
-- These two always swap order with DST but are always 1 hour apart.
-- Winter: EUROPE_FLOW 17:00 first, LONDON_METALS 18:00 second.
-- Summer: LONDON_METALS 17:00 first, EUROPE_FLOW 18:00 second.
-- One sit-down, two sessions, back-to-back.
-- LONDON_METALS NOMON = skip Mondays (Mondays are statistically negative).
+- Single session, single sit-down. 5 minutes to check, set bracket, walk away.
+- G8 filter at current MNQ prices (~20K) passes most days (ORBs are large). Functions as a minimum-size cost screen.
 
 **Night Block (23:30 or 00:30) — last thing before bed**
 
@@ -225,6 +212,17 @@ All times Brisbane local (AEST, UTC+10). Brisbane has no DST — everything else
 | **NYSE_OPEN** | 23:30 (summer) / 00:30 (winter) | MNQ | ORB_G4 | ORB >= 4 MNQ pts | 5m | 1.0 | E2 CB1 |
 
 - Lowest threshold (G4) so it fires often — NYSE_OPEN has big ORBs.
+- CORE 5 session — structural edge (positive both halves of 10yr data).
+
+### Optional: TOKYO_OPEN (regime-only, not default)
+
+| Session | Time | Instrument | Filter | How to Check | ORB | RR | Entry |
+|---------|------|------------|--------|-------------|-----|-----|-------|
+| **TOKYO_OPEN** | 10:00 (fixed) | MNQ | NO_FILTER | Any break | 5m | 1.0 | E2 CB1 |
+
+- **Marginal statistical basis:** p=0.010 unfiltered, WFE=0.53, regime-class only. NOT in CORE 5.
+- Include at your discretion for morning practice — not a default Phase 1 session.
+- Monitor via forward eval pack. Kill if 3 consecutive months negative.
 
 ### Optional: TopStep MGC Morning Lane
 
@@ -241,26 +239,29 @@ If you also open a TopStep $50K account for the MGC morning lane, add:
 
 ### Phase 1 Expected Stats `LOCAL MODEL` (from gold.db backtest)
 
-| Session | Filter | N (backtest) | ExpR | Sharpe | Est. Trades/Mo |
-|---------|--------|-------------|------|--------|----------------|
-| TOKYO_OPEN | ORB_G5_CONT (5m) | ~997 | 0.124 | 1.15 | ~5-8 |
-| SINGAPORE_OPEN | ORB_G8 (15m) | ~1,117 | 0.091 | 0.77 | ~8-10 |
-| EUROPE_FLOW | ORB_G8 (5m) | 1,117 | 0.133 | 1.46 | ~9-11 |
-| LONDON_METALS | ORB_G6_NOMON (15m) | ~861 | 0.070 | 1.20 | ~8-10 |
-| NYSE_OPEN | ORB_G4 (5m) | 1,262 | 0.142 | 1.84 | ~8-12 |
-| **TOTAL** | | | | | **~38-51** |
+| Session | Filter | N (10yr backtest) | ExpR | p-value | Est. Trades/Mo |
+|---------|--------|-------------------|------|---------|----------------|
+| EUROPE_FLOW | ORB_G8 (5m) | 2,613 | +0.101 (5yr) / -0.014 (10yr unfilt) | 3e-5 (5yr) | ~9-11 |
+| NYSE_OPEN | ORB_G4 (5m) | 2,581 | +0.117 (5yr) / +0.079 (10yr unfilt) | 1e-5 (5yr) | ~8-12 |
+| **TOTAL** | | | | | **~17-23** |
 
-**~2 trades/day average.** Some days 0, some days 4. That's normal — filters exist to skip bad setups.
+**~1 trade/day average.** Some days 0, some days 2.
+
+**Note on EUROPE_FLOW:** 10-year unfiltered is negative (-0.014, p=0.41). 5-year (2021-2025) is positive (+0.101, p=3e-5). The regime audit (2026-03-24) classified this as ERA-DEPENDENT. G8 filter provides some protection at current prices. Monitor closely. Kill if 3 consecutive months negative.
+
+**Note on filters:** G-filters are cost screens (same family as friction <10% gate). At current MNQ prices (~20K), G4/G8 pass most days. They function as minimum trade size gates, not edge predictors. See regime audit: `research/output/2026-03-24-combined-gate-stress-test.md`.
+
+Paper book runs all 5 CORE sessions in parallel: `docs/plans/2026-03-24-mnq-core5-forward-eval-pack.md`.
 
 ### Phase 1 → Phase 2 Transition Note
 
-Phase 1 and Phase 2 trade **different sessions**. Phase 1 validates your ability to execute brackets, follow filters, and maintain discipline — NOT the specific overnight pair that Phase 2 scales.
+Phase 1 and Phase 2 trade **different sessions**. Phase 1 validates your ability to execute brackets, follow filters, and maintain discipline — NOT the specific overnight sessions that Phase 2 scales.
 
 Before scaling Phase 2, you MUST:
 1. Complete Phase 1 gates (30+ trades, positive P&L, 2+ payouts)
-2. Do 10+ manual trades on the Phase 2 pair (CME_PRECLOSE at 05:45/06:45 + NYSE_CLOSE at 06:00/07:00) on a SINGLE Apex account
+2. Do 10+ manual trades on the Phase 2 sessions (CME_PRECLOSE at 05:45/06:45) on a SINGLE Apex account
 3. Confirm schedule adherence — can you reliably wake at 05:30 and execute?
-4. Only THEN copy-trade to additional accounts
+4. Only THEN deploy automation to additional accounts
 
 Phase 1 proves process. The Phase 2 mini-trial proves the specific pair works for your lifestyle.
 
@@ -316,45 +317,41 @@ SHORT bracket:
 START
   |
   +-- Full energy, normal day?
-  |     -> All 3 blocks: Morning (10:00-11:15) + Evening (17:00-18:15) + Night (23:30/00:30)
-  |     -> ~2-4 signals depending on filter pass
+  |     -> Evening (17:00/18:00) + Night (23:30/00:30)
+  |     -> ~1-2 signals
   |
-  +-- Good energy, but want an easy day?
-  |     -> Morning + Evening only (skip Night)
-  |     -> Still 4 sessions, still ~2 signals
+  +-- Good energy, skip the late night?
+  |     -> Evening only (EUROPE_FLOW)
+  |     -> ~1 signal, no late night
   |
-  +-- Tired but functional?
-  |     -> Evening block only (17:00-18:15)
-  |     -> 2 sessions, ~1 signal, no late night
+  +-- Night owl?
+  |     -> Night only (NYSE_OPEN at 23:30/00:30)
+  |     -> Strongest CORE 5 session at tradeable hours
   |
-  +-- Morning only available?
-  |     -> TOKYO + SINGAPORE (10:00-11:15)
-  |     -> Best human hours, no DST nonsense
+  +-- Want morning practice? (optional)
+  |     -> TOKYO_OPEN at 10:00 (regime-only, marginal)
+  |     -> Not default. Best human hours.
   |
   +-- Wrecked / sick / distracted?
-  |     -> Trade NOTHING. Zero trades is a valid day.
-  |     -> The edge is there tomorrow.
-  |
-  +-- Monday?
-        -> Skip LONDON_METALS (NOMON filter)
-        -> Everything else runs normal
+        -> Trade NOTHING. Zero trades is a valid day.
+        -> The edge is there tomorrow.
 ```
 
 ---
 
 ## DST Calendar: When Do Times Shift?
 
-Only the Evening and Night blocks shift. Morning is fixed year-round.
+Both Phase 1 sessions shift with DST. Brisbane is fixed — the world moves around you.
 
-| Period | EUROPE_FLOW | LONDON_METALS | NYSE_OPEN |
-|--------|-------------|---------------|-----------|
-| **Jan–mid Mar** (both winter) | 17:00 | 18:00 | 00:30 |
-| **Mid Mar** (US springs forward, UK hasn't) | 17:00 | 18:00 | 23:30 |
-| **Late Mar–late Oct** (both summer) | 18:00 | 17:00 | 23:30 |
-| **Late Oct–early Nov** (UK falls back, US hasn't) | 17:00 | 18:00 | 23:30 |
-| **Nov–Dec** (both winter) | 17:00 | 18:00 | 00:30 |
+| Period | EUROPE_FLOW | NYSE_OPEN |
+|--------|-------------|-----------|
+| **Jan–mid Mar** (both winter) | 17:00 | 00:30 |
+| **Mid Mar** (US springs forward, UK hasn't) | 17:00 | 23:30 |
+| **Late Mar–late Oct** (both summer) | 18:00 | 23:30 |
+| **Late Oct–early Nov** (UK falls back, US hasn't) | 17:00 | 23:30 |
+| **Nov–Dec** (both winter) | 17:00 | 00:30 |
 
-**Morning block: TOKYO 10:00, SINGAPORE 11:00 — always. No exceptions.**
+**Optional TOKYO_OPEN: 10:00 always. No DST. No exceptions.**
 
 ---
 
@@ -381,11 +378,11 @@ Sources: `resources/prop-firm-official-rules.md`
 Phase 2 = Automation handles overnight sessions you can't trade manually
 
   Tradeify (5 accounts × MNQ via Tradovate API):
-    - CME_PRECLOSE (05:45/06:45 Brisbane)
-    - COMEX_SETTLE (03:30/04:30 Brisbane)
-    - NYSE_CLOSE (06:00/07:00 Brisbane)
-    - NYSE_OPEN (23:30/00:30 Brisbane)
+    - CME_PRECLOSE (05:45/06:45 Brisbane) — CORE 5, strongest session
+    - COMEX_SETTLE (03:30/04:30 Brisbane) — CORE 5 (marginal at 10yr unfiltered, monitor)
+    - NYSE_OPEN (23:30/00:30 Brisbane) — CORE 5, structural
     + any Phase 1 sessions during sleep hours
+    NOTE: NYSE_CLOSE removed in V4 (not CORE 5, p=0.031, small N=595)
 
   TopStep (5 Express × MGC via ProjectX API):
     - CME_REOPEN (08:00/09:00 Brisbane)
@@ -1057,6 +1054,7 @@ Every 3 months, do a full system review. This is the "step back and look at ever
 | 2026-03-16 | Added pre-trade checklist, capital limits, red lines, change control | PROCESS | Claude |
 | 2026-03-16 | Code review: CME_REOPEN DST corrected, stats corrected, streak table recalculated, stop formula clarified, Phase 1→2 transition added. NOTE: SINGAPORE/LONDON aperture was incorrectly set to 5m in this pass (should be 15m per validated_setups). | LOCAL MODEL | Codex (reviewer) |
 | 2026-03-16 | Evidence audit: restored SINGAPORE/LONDON aperture to 15m (validated ORB_G8=15m, ORB_G6_NOMON=15m per gold.db). Added inline LOCAL MODEL/OFFICIAL RULE/UNRESOLVED labels. Flagged 6 UNRESOLVED firm claims. Relabeled section header from "Official Rule Snapshot" to "Firm Rule Snapshot" to avoid over-trust of unverified items. Fixed pre-trade checklist news restriction claim to label TopStep/Tradeify as UNRESOLVED. | PROCESS | Claude (auditor) |
+| 2026-03-24 | **V4 — Phase 1 trimmed from 5 sessions to 2** (EUROPE_FLOW + NYSE_OPEN) per CORE 5 unfiltered baseline from 10-year regime audit. TOKYO_OPEN moved to optional regime-only. SINGAPORE_OPEN, LONDON_METALS dropped (not CORE 5). NYSE_CLOSE dropped from Phase 2 Tradeify (not CORE 5). Paper book added as parallel track. Decision tree simplified. DST table simplified. Stats updated from 10-year backfill. | LOCAL MODEL (regime audit `research/output/2026-03-24-combined-gate-stress-test.md`) | Claude |
 | 2026-03-16 | CRITICAL: All Phase 1 RR targets corrected from 1.5/2.0 → 1.0 (verified against family_rr_locks in gold.db). | LOCAL MODEL | Claude |
 | 2026-03-16 | Added Apex EOD drawdown mechanics, post-safety-net sizing rules. | OFFICIAL RULE + LOCAL MODEL | Claude |
 | 2026-03-16 | **PHASE 2 REWRITE**: Removed "20 Apex copy-traded accounts" plan (Apex prohibits automation + copy trading per official compliance page). Replaced with grounded 3-firm architecture: Tradeify 5 accounts MNQ automation via Tradovate API, TopStep 5 Express MGC automation via ProjectX API, Apex 1 account manual only. Prop ceiling ~$60K/year. $100K target moved to Phase 3 IBKR. Official firm rules populated in `resources/prop-firm-official-rules.md`. | OFFICIAL RULE + LOCAL MODEL | Claude + Codex |
