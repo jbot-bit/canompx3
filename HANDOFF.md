@@ -7,10 +7,72 @@
 ---
 
 ## Current Session
-- **Tool:** Claude Code (FDR remediation + backfill + regime audit + quant protocol)
-- **Date:** 2026-03-24 (session 2, extended)
+- **Tool:** Claude Code (Apex restructure + stratified-K + noise floor fix + deployment prep)
+- **Date:** 2026-03-24 to 2026-03-25
 - **Branch:** `main`
-- **Status:** Major research session. DB changes + 3 research artifacts + merged audit protocol. Paper book ready but never run.
+- **Status:** 12 commits. Pipeline rebuilt holdout-clean. 4 Apex MNQ lanes validated. Noise floor methodology fixed. Tradovate auth pending.
+
+### What was done (Mar 24-25)
+
+#### 1. Apex Manual Plan Restructure
+- Replaced 5 convenience-routed sessions with 4 edge-maximized MNQ lanes
+- All lanes pass: stratified-K BH FDR (holdout-clean), walk-forward, stress test, yearly robustness
+- NYSE_CLOSE VOL_RV12_N20 O15 (ExpR 0.2078, fwd +4.30R)
+- SINGAPORE_OPEN ORB_G8 RR4.0 O15 (ExpR 0.1631, fwd +1.84R)
+- COMEX_SETTLE ORB_G8 RR1.0 O5 (ExpR 0.1300, fwd +3.99R)
+- NYSE_OPEN X_MES_ATR60 RR1.0 O15 (ExpR 0.0933, fwd +8.37R)
+
+#### 2. Stratified-K FDR (methodology change)
+- BH correction per session, not global. Dead instruments excluded.
+- Grounded: BH (1995), Harvey (2016), Efron Separate-Class, RESEARCH_RULES.md
+- Global K=78K killed CME_PRECLOSE + TOKYO_OPEN. Stratified K restores valid strata.
+- `--fdr-k-file` arg added for null seed testing with production K injection.
+
+#### 3. Noise Floor Methodology Fix
+- **Global max was WRONG** — took max across 486 combos per session
+- **Per-strategy null is CORRECT** — noise for the specific filter the strategy uses
+- Per-strategy results: NYSE_CLOSE p=0.011 SIGNAL, COMEX_SETTLE p=0.024 SIGNAL, SINGAPORE_OPEN p=0.053 MARGINAL
+- K mismatch bug: null DB has K=788-1872, real has K=3254-14760. Fix: --fdr-k-file override.
+
+#### 4. Infrastructure
+- Scratch DB C:/db/gold.db KILLED (blocked in paths.py, nag in drift check)
+- Discovery re-run with --holdout-date 2026-01-01 (fixes Check 82)
+- Edge families + family_rr_locks rebuilt
+- 75/75 drift checks pass, 56 validated strategies
+
+#### 5. Tradovate Setup (INCOMPLETE)
+- Creds in .env: TDFYU599072179. CID=8/SEC from public Tradovate demo docs.
+- Bot infrastructure FULLY BUILT (auth, feed, orders, execution engine, risk manager)
+- Auth NOT working — password rejected. Needs manual verification of correct API password.
+
+#### 6. Null Seed Revalidation (RUNNING)
+- 300 seeds being revalidated with production K override
+- Batch running as nohup (check revalidate_production_k.log)
+- Previous seeds used wrong K (auto-counted from null DB). Fixed script injects production K.
+
+### Truth State (verified Mar 25 2026)
+- **validated_setups:** 56 rows (MGC 4, MES 14, MNQ 38). Stratified-K, holdout-clean.
+- **family_rr_locks:** 33 rows. **edge_families:** 33 rows.
+- **LIVE_PORTFOLIO:** 8 specs (2 CORE, 6 REGIME). Unchanged.
+- **Apex daily_lanes:** 4 MNQ lanes. TopStep MGC CONDITIONAL (1 contract).
+- **Drift:** 75/75 pass. **Tests:** All pass.
+- **2026 forward:** +30.21R unfiltered, +18.50R (4 Apex lanes).
+
+### What's Running
+- Null seed revalidation batch (production K override). Check: `tail scripts/tests/null_seeds/revalidate_production_k.log`
+
+### What's Broken
+1. Tradovate auth — password rejected. User needs to verify correct API password from Tradeify dashboard.
+2. .env has `TRADOVATE_PASS=Password1!` which doesn't work. Original `*ctMP5|xVc#$` also rejected.
+
+### Next Actions
+1. Fix Tradovate auth (user action)
+2. Run preflight once auth works
+3. Demo mode test
+4. Wait for null seed revalidation (~25 hrs)
+5. Compute corrected noise floor from production-K seeds
+
+## Prior Session (Mar 24 session 2)
 
 ### What was done (Mar 24 — session 2)
 
