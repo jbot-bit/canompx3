@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ORB Bot Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+  body { font-family: 'JetBrains Mono', monospace; background: #0a0e14; color: #e0e0e0; }
+  .pulse { animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+  .lane-card { transition: border-color 0.3s, box-shadow 0.3s; }
+  .lane-card:hover { box-shadow: 0 0 20px rgba(59,130,246,0.15); }
+  .btn-control { transition: transform 0.1s; cursor: pointer; }
+  .btn-control:active { transform: scale(0.95); }
+  .progress-bar { transition: width 0.5s ease; }
+  #preflight-output { max-height: 300px; overflow-y: auto; }
+</style>
+</head>
+<body class="min-h-screen p-4 md:p-6">
+
+<!-- TOP STATUS BAR -->
+<div class="flex flex-wrap items-center gap-4 mb-6 p-4 rounded-xl bg-[#111922] border border-[#1e2d3d]">
+  <div id="mode-badge" class="px-5 py-2 rounded-lg text-xl font-bold tracking-wider bg-gray-800 text-gray-400">STOPPED</div>
+  <div class="flex-1 min-w-[200px]">
+    <div class="text-xs text-gray-500">ACCOUNT</div>
+    <div id="account-info" class="text-sm truncate">&mdash;</div>
+  </div>
+  <div class="text-right">
+    <div class="text-xs text-gray-500">DAILY P&amp;L</div>
+    <div id="daily-pnl" class="text-lg font-bold">0.00R</div>
+  </div>
+  <div class="w-full md:w-48">
+    <div class="flex justify-between text-xs text-gray-500 mb-1">
+      <span>DD USED</span>
+      <span id="dd-pct">0%</span>
+    </div>
+    <div class="h-3 bg-[#1a2332] rounded-full overflow-hidden">
+      <div id="dd-bar" class="progress-bar h-full bg-green-500 rounded-full" style="width:0%"></div>
+    </div>
+  </div>
+  <div class="text-right">
+    <div class="text-xs text-gray-500">HEARTBEAT</div>
+    <div id="heartbeat" class="text-sm">&mdash;</div>
+  </div>
+  <div class="text-right">
+    <div class="text-xs text-gray-500">BARS</div>
+    <div id="bars-count" class="text-sm">0</div>
+  </div>
+</div>
+
+<!-- 4 LANE CARDS -->
+<div id="lanes-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6"></div>
+
+<!-- CONTROL BUTTONS -->
+<div class="flex flex-wrap gap-3 mb-6">
+  <button id="btn-preflight" class="btn-control px-6 py-3 rounded-lg font-bold text-sm bg-gray-700 hover:bg-gray-600 text-white">
+    PREFLIGHT CHECK
+  </button>
+  <button id="btn-paper" class="btn-control px-6 py-3 rounded-lg font-bold text-sm bg-green-700 hover:bg-green-600 text-white">
+    START PAPER
+  </button>
+  <button id="btn-live" class="btn-control px-6 py-3 rounded-lg font-bold text-sm bg-yellow-700 hover:bg-yellow-600 text-black">
+    START LIVE
+  </button>
+  <button id="btn-kill" class="btn-control px-6 py-3 rounded-lg font-bold text-sm bg-red-700 hover:bg-red-600 text-white">
+    KILL ALL TRADES
+  </button>
+</div>
+
+<!-- PREFLIGHT OUTPUT -->
+<div id="preflight-panel" class="hidden mb-6 p-4 rounded-xl bg-[#111922] border border-[#1e2d3d]">
+  <div class="flex justify-between items-center mb-2">
+    <span class="text-sm font-bold text-gray-400">PREFLIGHT OUTPUT</span>
+    <button id="btn-close-preflight" class="text-gray-500 hover:text-white text-xs cursor-pointer">CLOSE</button>
+  </div>
+  <pre id="preflight-output" class="text-xs text-green-400 whitespace-pre-wrap">Running...</pre>
+</div>
+
+<!-- TRADE LOG -->
+<div class="rounded-xl bg-[#111922] border border-[#1e2d3d] overflow-hidden">
+  <div class="p-4 border-b border-[#1e2d3d]">
+    <span class="text-sm font-bold text-gray-400">TODAY'S TRADES</span>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full text-xs">
+      <thead>
+        <tr class="text-gray-500 border-b border-[#1e2d3d]">
+          <th class="p-2 text-left">TIME</th>
+          <th class="p-2 text-left">LANE</th>
+          <th class="p-2 text-left">DIR</th>
+          <th class="p-2 text-right">ENTRY</th>
+          <th class="p-2 text-right">EXIT</th>
+          <th class="p-2 text-right">P&amp;L (R)</th>
+          <th class="p-2 text-left">STATUS</th>
+        </tr>
+      </thead>
+      <tbody id="trade-log">
+        <tr><td colspan="7" class="p-4 text-center text-gray-600">No trades today</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="mt-4 text-center text-xs text-gray-600">
+  ORB Bot Dashboard &middot; Auto-refreshes every 5s &middot; <span id="last-update">&mdash;</span>
+</div>
+
+<script>
+"use strict";
+
+const LANES = [
+  { name: "NYSE_CLOSE",      color: "text-blue-400",    borderActive: "#3b82f6" },
+  { name: "SINGAPORE_OPEN",  color: "text-purple-400",  borderActive: "#a855f7" },
+  { name: "COMEX_SETTLE",    color: "text-amber-400",   borderActive: "#f59e0b" },
+  { name: "NYSE_OPEN",       color: "text-emerald-400", borderActive: "#10b981" },
+];
+
+function buildLaneCards() {
+  const grid = document.getElementById("lanes-grid");
+  for (const lane of LANES) {
+    const card = document.createElement("div");
+    card.id = "lane-" + lane.name;
+    card.className = "lane-card p-4 rounded-xl bg-[#111922] border border-[#1e2d3d]";
+    card.dataset.borderActive = lane.borderActive;
+
+    const header = document.createElement("div");
+    header.className = "flex justify-between items-center mb-3";
+    const title = document.createElement("span");
+    title.className = "text-sm font-bold " + lane.color;
+    title.textContent = lane.name;
+    const badge = document.createElement("span");
+    badge.className = "lane-status px-2 py-0.5 rounded text-xs font-bold bg-gray-700 text-gray-300";
+    badge.textContent = "WAITING";
+    header.appendChild(title);
+    header.appendChild(badge);
+
+    const filterDiv = document.createElement("div");
+    filterDiv.className = "lane-filter text-xs text-gray-500 mb-2";
+    filterDiv.textContent = "\u2014";
+
+    const details = document.createElement("div");
+    details.className = "grid grid-cols-2 gap-2 text-sm";
+    for (const [label, cls] of [["Dir", "lane-dir"], ["Entry", "lane-entry"], ["P&L", "lane-pnl"], ["RR", "lane-rr"]]) {
+      const cell = document.createElement("div");
+      const lbl = document.createElement("span");
+      lbl.className = "text-gray-500";
+      lbl.textContent = label + ": ";
+      const val = document.createElement("span");
+      val.className = cls;
+      val.textContent = "\u2014";
+      cell.appendChild(lbl);
+      cell.appendChild(val);
+      details.appendChild(cell);
+    }
+
+    card.appendChild(header);
+    card.appendChild(filterDiv);
+    card.appendChild(details);
+    grid.appendChild(card);
+  }
+}
+
+function setText(id, text) { const el = document.getElementById(id); if (el) el.textContent = text; }
+function setClass(id, cls) { const el = document.getElementById(id); if (el) el.className = cls; }
+
+async function fetchStatus() {
+  try {
+    const r = await fetch("/api/status");
+    const d = await r.json();
+    updateStatus(d);
+  } catch (_e) {
+    setText("mode-badge", "OFFLINE");
+    setClass("mode-badge", "px-5 py-2 rounded-lg text-xl font-bold tracking-wider bg-gray-800 text-gray-400");
+  }
+}
+
+async function fetchTrades() {
+  try {
+    const r = await fetch("/api/trades");
+    const d = await r.json();
+    updateTrades(d.trades || []);
+  } catch (_e) {}
+}
+
+function updateStatus(d) {
+  const mode = d.mode || "STOPPED";
+  const badge = document.getElementById("mode-badge");
+  badge.textContent = mode;
+  const colors = {
+    LIVE:    "px-5 py-2 rounded-lg text-xl font-bold tracking-wider bg-red-600 text-white",
+    DEMO:    "px-5 py-2 rounded-lg text-xl font-bold tracking-wider bg-blue-600 text-white",
+    SIGNAL:  "px-5 py-2 rounded-lg text-xl font-bold tracking-wider bg-green-700 text-white",
+    STOPPED: "px-5 py-2 rounded-lg text-xl font-bold tracking-wider bg-gray-800 text-gray-400",
+  };
+  badge.className = colors[mode] || colors.STOPPED;
+
+  setText("account-info", d.account_name ? d.account_name + " (#" + d.account_id + ")" : "\u2014");
+
+  const pnl = d.daily_pnl_r || 0;
+  setText("daily-pnl", (pnl >= 0 ? "+" : "") + pnl.toFixed(2) + "R");
+  setClass("daily-pnl", "text-lg font-bold " + (pnl >= 0 ? "text-green-400" : "text-red-400"));
+
+  const limit = Math.abs(d.daily_loss_limit_r || 5);
+  const used = Math.abs(Math.min(pnl, 0));
+  const pct = Math.min(100, (used / limit) * 100);
+  setText("dd-pct", pct.toFixed(0) + "%");
+  const bar = document.getElementById("dd-bar");
+  bar.style.width = pct + "%";
+  bar.className = "progress-bar h-full rounded-full " + (pct > 80 ? "bg-red-500" : pct > 50 ? "bg-yellow-500" : "bg-green-500");
+
+  const hbEl = document.getElementById("heartbeat");
+  const age = d.heartbeat_age_s || 9999;
+  if (age < 30) {
+    hbEl.textContent = age.toFixed(0) + "s ago";
+    hbEl.className = "text-sm text-green-400";
+  } else if (age < 120) {
+    hbEl.textContent = age.toFixed(0) + "s ago";
+    hbEl.className = "text-sm text-yellow-400";
+  } else if (mode === "STOPPED") {
+    hbEl.textContent = "\u2014";
+    hbEl.className = "text-sm text-gray-500";
+  } else {
+    hbEl.textContent = age.toFixed(0) + "s STALE";
+    hbEl.className = "text-sm text-red-400 pulse";
+  }
+
+  setText("bars-count", String(d.bars_received || 0));
+
+  const lanes = d.lanes || {};
+  for (const laneInfo of LANES) {
+    const card = document.getElementById("lane-" + laneInfo.name);
+    if (!card) continue;
+    const lane = lanes[laneInfo.name] || {};
+    const status = lane.status || "WAITING";
+
+    const statusEl = card.querySelector(".lane-status");
+    statusEl.textContent = status;
+    const sc = {
+      WAITING:  "lane-status px-2 py-0.5 rounded text-xs font-bold bg-gray-700 text-gray-300",
+      ARMED:    "lane-status px-2 py-0.5 rounded text-xs font-bold bg-yellow-700 text-yellow-200",
+      IN_TRADE: "lane-status px-2 py-0.5 rounded text-xs font-bold bg-blue-600 text-white",
+      FLAT:     "lane-status px-2 py-0.5 rounded text-xs font-bold bg-green-800 text-green-300",
+    };
+    statusEl.className = sc[status] || sc.WAITING;
+    card.style.borderColor = status === "IN_TRADE" ? laneInfo.borderActive : (status === "FLAT" ? "#22c55e33" : "#1e2d3d");
+
+    card.querySelector(".lane-filter").textContent = lane.filter_type || "\u2014";
+    card.querySelector(".lane-dir").textContent = lane.direction || "\u2014";
+    card.querySelector(".lane-entry").textContent = lane.entry_price ? lane.entry_price.toFixed(2) : "\u2014";
+    const pnlEl = card.querySelector(".lane-pnl");
+    if (lane.current_pnl_r != null) {
+      pnlEl.textContent = (lane.current_pnl_r >= 0 ? "+" : "") + lane.current_pnl_r.toFixed(2) + "R";
+      pnlEl.className = "lane-pnl " + (lane.current_pnl_r >= 0 ? "text-green-400" : "text-red-400");
+    } else { pnlEl.textContent = "\u2014"; pnlEl.className = "lane-pnl"; }
+    card.querySelector(".lane-rr").textContent = lane.rr_target ? "RR" + lane.rr_target : "\u2014";
+  }
+  setText("last-update", new Date().toLocaleTimeString());
+}
+
+function updateTrades(trades) {
+  const tbody = document.getElementById("trade-log");
+  while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+  if (!trades.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 7; td.className = "p-4 text-center text-gray-600"; td.textContent = "No trades today";
+    tr.appendChild(td); tbody.appendChild(tr); return;
+  }
+  for (const t of trades) {
+    const tr = document.createElement("tr");
+    tr.className = "border-b border-[#1e2d3d] hover:bg-[#1a2332]";
+    const cells = [
+      { text: t.created_at ? new Date(t.created_at).toLocaleTimeString() : "\u2014", cls: "p-2" },
+      { text: extractSession(t.strategy_id), cls: "p-2" },
+      { text: (t.direction || "\u2014").toUpperCase(), cls: "p-2 " + (t.direction === "long" ? "text-green-400" : "text-red-400") },
+      { text: fmtP(t.fill_entry || t.engine_entry), cls: "p-2 text-right" },
+      { text: fmtP(t.fill_exit), cls: "p-2 text-right" },
+      { text: fmtR(t.pnl_r), cls: "p-2 text-right " + rCol(t.pnl_r) },
+      { text: t.exited_at ? "CLOSED" : "OPEN", cls: "p-2 " + (t.exited_at ? "text-gray-400" : "text-blue-400") },
+    ];
+    for (const c of cells) {
+      const td = document.createElement("td"); td.className = c.cls; td.textContent = c.text; tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+}
+
+function extractSession(s) {
+  if (!s) return "\u2014";
+  const p = s.split("_");
+  for (let i = 1; i < p.length; i++) { if (/^E[0-9]$/.test(p[i])) return p.slice(1, i).join("_"); }
+  return s;
+}
+function fmtP(v) { return v != null ? v.toFixed(2) : "\u2014"; }
+function fmtR(r) { return r != null ? ((r >= 0 ? "+" : "") + r.toFixed(2) + "R") : "\u2014"; }
+function rCol(r) { return r == null ? "" : (r >= 0 ? "text-green-400" : "text-red-400"); }
+
+// Controls
+document.getElementById("btn-preflight").addEventListener("click", async function() {
+  const panel = document.getElementById("preflight-panel");
+  const output = document.getElementById("preflight-output");
+  panel.classList.remove("hidden");
+  output.textContent = "Running preflight checks...";
+  output.className = "text-xs text-yellow-400 whitespace-pre-wrap";
+  try {
+    const r = await fetch("/api/action/preflight", { method: "POST" });
+    const d = await r.json();
+    output.textContent = d.output || "No output";
+    output.className = "text-xs whitespace-pre-wrap " + (d.status === "pass" ? "text-green-400" : "text-red-400");
+  } catch (e) { output.textContent = "Error: " + e.message; output.className = "text-xs text-red-400 whitespace-pre-wrap"; }
+});
+document.getElementById("btn-close-preflight").addEventListener("click", function() {
+  document.getElementById("preflight-panel").classList.add("hidden");
+});
+document.getElementById("btn-paper").addEventListener("click", function() {
+  alert("Start paper mode from terminal:\n\npython -m scripts.run_live_session --profile apex_50k_manual --signal-only\n\n(Dashboard auto-launches with the bot)");
+});
+document.getElementById("btn-live").addEventListener("click", function() {
+  const code = prompt("Type CONFIRM to start LIVE trading with real money:");
+  if (code === "CONFIRM") {
+    alert("Start live mode from terminal:\n\npython -m scripts.run_live_session --profile apex_50k_manual --live --account-id <FUNDED_ID>\n\n(Dashboard auto-launches with the bot)");
+  }
+});
+document.getElementById("btn-kill").addEventListener("click", async function() {
+  if (!confirm("KILL ALL TRADES?\n\nThis writes the stop file and shuts down the bot.\nOpen positions will be closed at market.")) return;
+  if (!confirm("SECOND CONFIRMATION:\nAre you sure? This stops all trading immediately.")) return;
+  try {
+    const r = await fetch("/api/action/kill", { method: "POST" });
+    const d = await r.json();
+    alert(d.message || "Kill signal sent");
+  } catch (e) { alert("Kill failed: " + e.message); }
+});
+
+// Init
+buildLaneCards();
+fetchStatus();
+fetchTrades();
+setInterval(fetchStatus, 5000);
+setInterval(fetchTrades, 10000);
+</script>
+</body>
+</html>
