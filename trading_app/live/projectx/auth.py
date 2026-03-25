@@ -17,8 +17,9 @@ load_dotenv()
 log = logging.getLogger(__name__)
 
 # Base URLs — configurable via PROJECTX_BASE_URL env var.
-# TopstepX uses api.topstepx.com; older ProjectX docs reference thefuturesdesk.
-_DEFAULT_BASE = "https://api.topstepx.com"
+# Canonical: https://api.thefuturesdesk.projectx.com (per official API spec).
+# See docs/reference/PROJECTX_API_REFERENCE.md for ground truth.
+_DEFAULT_BASE = "https://api.thefuturesdesk.projectx.com"
 BASE_URL = os.environ.get("PROJECTX_BASE_URL", _DEFAULT_BASE).rstrip("/")
 MARKET_HUB_URL = BASE_URL.replace("://api.", "://rtc.") + "/hubs/market"
 USER_HUB_URL = BASE_URL.replace("://api.", "://rtc.") + "/hubs/user"
