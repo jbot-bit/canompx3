@@ -23,6 +23,10 @@ class ProjectXPositions(BrokerPositions):
         )
         resp.raise_for_status()
         data = resp.json()
+        # Validate application-level success — orphan detection that silently
+        # returns nothing is worse than no orphan detection at all.
+        if isinstance(data, dict) and data.get("success") is False:
+            raise RuntimeError(f"ProjectX position query failed: {data.get('errorMessage', data)}")
         # Response might be a list directly or have a "positions" key
         positions = data if isinstance(data, list) else data.get("positions", [])
         result = []

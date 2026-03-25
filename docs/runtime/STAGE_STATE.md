@@ -4,6 +4,8 @@ task: Live trading hardening — 7 fixes from adversarial audit (kill scenarios)
 scope_lock:
   - trading_app/live/session_orchestrator.py
   - trading_app/live/projectx/order_router.py
+  - trading_app/live/projectx/contract_resolver.py
+  - trading_app/live/projectx/positions.py
   - trading_app/execution_engine.py
   - trading_app/live/trade_journal.py
   - trading_app/live/bot_state.py
