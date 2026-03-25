@@ -1,17 +1,23 @@
 ---
 mode: IMPLEMENTATION
-task: TopstepX live bot deployment — fix blockers and wire Apex lanes
+task: TopstepX bot hardening — pre-live safety audit fixes
 scope_lock:
+  - trading_app/execution_engine.py
+  - trading_app/live/session_orchestrator.py
+  - trading_app/live/projectx/order_router.py
+  - trading_app/live/trade_journal.py
   - trading_app/portfolio.py
   - scripts/run_live_session.py
-  - trading_app/live/projectx/order_router.py
-  - docs/plans/topstepx-preflight-checklist.md
   - scripts/e2e_sim_test.py
+  - tests/test_trading_app/test_projectx_router.py
+  - docs/plans/topstepx-preflight-checklist.md
 acceptance:
-  - pysignalr installed and SignalR data feed verified
-  - 4 Apex lanes load via --profile apex_50k_manual
-  - Order cancel format verified on sim account
-  - End-to-end sim test passes (7 checks)
-  - Preflight checklist committed
-  - Drift checks pass
+  - max_contracts enforced at execution layer
+  - Restart dedup seeds from journal
+  - Naked position protection with loud alerts
+  - Max DD tracking wired from profile
+  - 6 broken unit tests fixed
+  - Order payload logged before submission
+  - All drift checks pass
+  - e2e sim test passes
 ---

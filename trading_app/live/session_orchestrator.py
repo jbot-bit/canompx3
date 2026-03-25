@@ -118,11 +118,43 @@ class SessionOrchestrator:
         # Execution stack
         self.cost_spec: CostSpec = get_cost_spec(instrument)
         cost = self.cost_spec
+        # Compute max equity drawdown in R from profile if available
+        max_equity_dd_r = None
+        if portfolio is not None and portfolio.strategies:
+            first = portfolio.strategies[0]
+            if first.source == "profile" and first.median_risk_dollars and first.median_risk_dollars > 0:
+                try:
+                    from trading_app.prop_profiles import ACCOUNT_PROFILES, get_account_tier
+
+                    # Find the profile that generated this portfolio
+                    for pid, prof in ACCOUNT_PROFILES.items():
+                        if portfolio.name == f"profile_{pid}":
+                            tier = get_account_tier(prof.firm, prof.account_size)
+                            avg_risk = sum(
+                                s.median_risk_dollars for s in portfolio.strategies if s.median_risk_dollars
+                            ) / max(1, sum(1 for s in portfolio.strategies if s.median_risk_dollars))
+                            if avg_risk > 0:
+                                max_equity_dd_r = -abs(tier.max_dd / avg_risk)
+                                log.info(
+                                    "Max DD tracking ENABLED: $%.0f / $%.1f avg_risk = %.1fR",
+                                    tier.max_dd,
+                                    avg_risk,
+                                    max_equity_dd_r,
+                                )
+                            break
+                except Exception as e:
+                    log.warning("Failed to compute max_equity_drawdown_r from profile: %s", e)
+
         risk_limits = RiskLimits(
             max_daily_loss_r=-abs(self.portfolio.max_daily_loss_r),
             max_concurrent_positions=self.portfolio.max_concurrent_positions,
+            max_equity_drawdown_r=max_equity_dd_r,
         )
         self.risk_mgr = RiskManager(risk_limits)
+        if max_equity_dd_r is not None:
+            log.info("Risk limits: daily_loss=%.1fR, max_DD=%.1fR", risk_limits.max_daily_loss_r, max_equity_dd_r)
+        else:
+            log.info("Risk limits: daily_loss=%.1fR, max_DD=DISABLED", risk_limits.max_daily_loss_r)
         # ML predictor: fail-open if models don't load (won't block trading)
         try:
             self._ml_predictor = LiveMLPredictor(
@@ -259,6 +291,18 @@ class SessionOrchestrator:
 
         # Signal engine that a new trading day is starting
         self.engine.on_trading_day_start(self.trading_day, daily_features_row=daily_row)
+
+        # Crash recovery: seed engine with strategies that already traded today.
+        # Prevents duplicate entries after restart mid-session.
+        already_traded = self.journal.get_strategy_ids_for_day(self.trading_day)
+        for sid in already_traded:
+            self.engine.mark_strategy_traded(sid)
+        if already_traded:
+            log.warning(
+                "RESTART RECOVERY: %d strategies already traded today — will NOT re-enter: %s",
+                len(already_traded),
+                sorted(already_traded),
+            )
 
         mode = "SIGNAL" if signal_only else ("DEMO" if demo else "LIVE")
         self._notify(f"Session started: {instrument} ({mode})")
@@ -934,6 +978,31 @@ class SessionOrchestrator:
                             stop_dist,
                             strategy.rr_target,
                         )
+                    else:
+                        log.critical(
+                            "NAKED POSITION RISK: build_bracket_spec returned None for %s",
+                            event.strategy_id,
+                        )
+                else:
+                    log.critical(
+                        "NAKED POSITION RISK: no risk_points for %s — cannot build bracket "
+                        "(risk_points=%s, median_risk_points=%s)",
+                        event.strategy_id,
+                        event.risk_points,
+                        strategy.median_risk_points,
+                    )
+
+            # SAFETY GATE: refuse entry without bracket protection in live/demo mode
+            if not _bracket_merged and not self.signal_only:
+                if self.order_router.supports_native_brackets():
+                    msg = (
+                        f"ENTRY BLOCKED: {event.strategy_id} — no bracket protection. "
+                        f"Position would be NAKED (no stop loss). Refusing entry."
+                    )
+                    log.critical(msg)
+                    self._notify(msg)
+                    self._positions.pop(event.strategy_id)
+                    return
 
             loop = asyncio.get_running_loop()
             try:
@@ -1141,7 +1210,8 @@ class SessionOrchestrator:
             )
 
         elif event.event_type == "REJECT":
-            log.info("REJECT: %s — %s", event.strategy_id, event.reason)
+            log.warning("REJECT: %s — %s", event.strategy_id, event.reason)
+            self._notify(f"REJECTED: {event.strategy_id} — {event.reason}")
             self._write_signal_record(
                 {
                     "type": "REJECT",

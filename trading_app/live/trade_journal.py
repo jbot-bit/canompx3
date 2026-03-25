@@ -224,6 +224,32 @@ class TradeJournal:
             log.critical("TradeJournal.daily_summary FAILED", exc_info=True)
             return {"error": "query failed", "n_trades": 0}
 
+    def get_strategy_ids_for_day(self, trading_day) -> set[str]:
+        """Return set of strategy_ids that have journal entries for a given trading day.
+
+        Used on startup to seed the execution engine's deduplication state,
+        preventing re-entry after crash-restart mid-session.
+        """
+        if self._con is None:
+            return set()
+        try:
+            rows = self._con.execute(
+                "SELECT DISTINCT strategy_id FROM live_trades WHERE trading_day = ?",
+                [trading_day],
+            ).fetchall()
+            result = {r[0] for r in rows}
+            if result:
+                log.info(
+                    "Journal recovery: %d strategies already traded on %s: %s",
+                    len(result),
+                    trading_day,
+                    sorted(result),
+                )
+            return result
+        except Exception:
+            log.critical("TradeJournal.get_strategy_ids_for_day FAILED", exc_info=True)
+            return set()
+
     def incomplete_trades(self) -> list[dict]:
         """Return trades with entry but no exit (crash detection)."""
         if self._con is None:
