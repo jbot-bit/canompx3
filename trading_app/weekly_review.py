@@ -282,6 +282,113 @@ def section_7_phase2_blockers():
         print(f"  {check} {name}: {status}")
 
 
+def section_8_orb_monitor(con):
+    """SECTION 8 — ORB size monitor per lane (risk management)."""
+    print("\n  SECTION 8 - ORB SIZE MONITOR")
+
+    try:
+        from trading_app.prop_profiles import get_lane_registry
+    except ImportError:
+        print("  Cannot load lane registry — skipping ORB monitor.")
+        return
+
+    registry = get_lane_registry()
+    print(
+        f"  {'Lane':<25} {'Cap':>8} {'20d Med':>8} {'5d Med':>8} {'Trend':>10} {'Alert':>20}"
+    )
+    print("  " + "-" * 90)
+
+    for label, info in sorted(registry.items()):
+        sess = info["orb_label"]
+        om = info["orb_minutes"]
+        cap_risk = info.get("max_orb_size_pts")  # cap on risk_points (stop distance)
+        stop_mult = info.get("stop_multiplier", 1.0) or 1.0
+
+        # Convert risk_points cap to raw ORB equivalent for monitoring.
+        # risk_points ~ orb_size * stop_mult, so orb_cap ~ risk_cap / stop_mult.
+        cap_orb = cap_risk / stop_mult if cap_risk is not None and stop_mult > 0 else None
+        cap_str = f"~{cap_orb:.0f} pts" if cap_orb is not None else "NO CAP"
+
+        # Defensive: session label must be a valid identifier (prevents SQL injection
+        # if registry is ever corrupted — source is trusted but defense-in-depth).
+        if not sess.replace("_", "").isalnum():
+            print(f"  {label:<25} INVALID SESSION LABEL: {sess!r}")
+            continue
+
+        try:
+            # Rolling 20-day and 5-day medians from orb_outcomes (break-days only)
+            row_20 = con.execute(
+                f"""
+                SELECT MEDIAN(d."orb_{sess}_size")
+                FROM orb_outcomes o
+                JOIN daily_features d ON o.trading_day = d.trading_day
+                    AND o.symbol = d.symbol AND o.orb_minutes = d.orb_minutes
+                WHERE o.symbol = ? AND o.orb_label = ? AND o.orb_minutes = ?
+                  AND o.entry_model = 'E2' AND o.confirm_bars = 1
+                  AND d."orb_{sess}_size" IS NOT NULL AND d."orb_{sess}_size" > 0
+                  AND o.trading_day >= CURRENT_DATE - 30
+                """,
+                [info["instrument"], sess, om],
+            ).fetchone()
+            med_20 = row_20[0] if row_20 and row_20[0] else 0
+
+            row_5 = con.execute(
+                f"""
+                SELECT MEDIAN(d."orb_{sess}_size")
+                FROM orb_outcomes o
+                JOIN daily_features d ON o.trading_day = d.trading_day
+                    AND o.symbol = d.symbol AND o.orb_minutes = d.orb_minutes
+                WHERE o.symbol = ? AND o.orb_label = ? AND o.orb_minutes = ?
+                  AND o.entry_model = 'E2' AND o.confirm_bars = 1
+                  AND d."orb_{sess}_size" IS NOT NULL AND d."orb_{sess}_size" > 0
+                  AND o.trading_day >= CURRENT_DATE - 7
+                """,
+                [info["instrument"], sess, om],
+            ).fetchone()
+            med_5 = row_5[0] if row_5 and row_5[0] else 0
+
+            trend = "EXPANDING" if med_5 > med_20 > 0 else ("CONTRACTING" if 0 < med_5 < med_20 else "STABLE")
+
+            alert = ""
+            if cap_orb is not None and med_20 > 0:
+                if med_20 >= cap_orb:
+                    # Count recent skip rate (raw ORB >= equivalent cap)
+                    total = con.execute(
+                        f"""
+                        SELECT COUNT(*) FROM orb_outcomes o
+                        JOIN daily_features d ON o.trading_day = d.trading_day
+                            AND o.symbol = d.symbol AND o.orb_minutes = d.orb_minutes
+                        WHERE o.symbol = ? AND o.orb_label = ? AND o.orb_minutes = ?
+                          AND o.entry_model = 'E2' AND o.confirm_bars = 1
+                          AND d."orb_{sess}_size" IS NOT NULL
+                          AND o.trading_day >= CURRENT_DATE - 30
+                        """,
+                        [info["instrument"], sess, om],
+                    ).fetchone()[0]
+                    over_cap = con.execute(
+                        f"""
+                        SELECT COUNT(*) FROM orb_outcomes o
+                        JOIN daily_features d ON o.trading_day = d.trading_day
+                            AND o.symbol = d.symbol AND o.orb_minutes = d.orb_minutes
+                        WHERE o.symbol = ? AND o.orb_label = ? AND o.orb_minutes = ?
+                          AND o.entry_model = 'E2' AND o.confirm_bars = 1
+                          AND d."orb_{sess}_size" >= ?
+                          AND o.trading_day >= CURRENT_DATE - 30
+                        """,
+                        [info["instrument"], sess, om, cap_orb],
+                    ).fetchone()[0]
+                    pct = over_cap / total * 100 if total > 0 else 0
+                    alert = f"AT CAP {pct:.0f}% skip"
+                elif med_20 >= cap_orb * 0.80:
+                    alert = "APPROACHING CAP"
+
+            print(
+                f"  {label:<25} {cap_str:>8} {med_20:>7.1f}p {med_5:>7.1f}p {trend:>10} {alert:>20}"
+            )
+        except Exception as e:
+            print(f"  {label:<25} {cap_str:>8} {'ERROR':>8}  {str(e)[:40]}")
+
+
 def run_review():
     with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
         configure_connection(con)
@@ -302,6 +409,7 @@ def run_review():
         section_5_forward_monitor()
         section_6_mgc_shadow(con)
         section_7_phase2_blockers()
+        section_8_orb_monitor(con)
 
         print(f"\n{'=' * 80}")
         print("END OF WEEKLY REVIEW")

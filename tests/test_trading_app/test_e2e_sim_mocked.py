@@ -7,6 +7,7 @@ Covers the 8 components changed since last 7/7 sim pass:
 4. Full TopStep lifecycle (clean + DD breach)
 5. Orphan detection (ProjectX)
 6. Stress: simultaneous events, restart persistence, corrupt state
+7. ORB cap gate in live path (SIM-20)
 """
 
 import asyncio
@@ -408,3 +409,209 @@ class TestCorruptHWMStateOnStartup:
         # Normal operation continues
         state = t.update_equity(50000.0)
         assert state.hwm_dollars == 50000.0
+
+
+# ===========================================================================
+# SIM-20: ORB CAP GATE IN LIVE PATH
+# ===========================================================================
+
+
+def _build_orch_with_orb_cap():
+    """Build a minimal SessionOrchestrator with NYSE_OPEN ORB cap at 150pts."""
+    from dataclasses import dataclass, field
+    from trading_app.live.session_orchestrator import SessionOrchestrator, SessionStats
+    from trading_app.live.circuit_breaker import CircuitBreaker
+    from trading_app.portfolio import Portfolio, PortfolioStrategy
+
+    strategy = PortfolioStrategy(
+        strategy_id="MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60_O15",
+        instrument="MNQ",
+        orb_label="NYSE_OPEN",
+        entry_model="E2",
+        rr_target=1.0,
+        confirm_bars=1,
+        filter_type="X_MES_ATR60",
+        expectancy_r=0.09,
+        win_rate=0.55,
+        sample_size=500,
+        sharpe_ratio=0.8,
+        max_drawdown_r=5.0,
+        median_risk_points=85.0,
+        stop_multiplier=0.75,
+        source="test",
+        weight=1.0,
+    )
+    portfolio = Portfolio(
+        name="test",
+        instrument="MNQ",
+        strategies=[strategy],
+        account_equity=50000.0,
+        risk_per_trade_pct=2.0,
+        max_concurrent_positions=4,
+        max_daily_loss_r=5.0,
+    )
+
+    # Build orchestrator with __init__ mocked out
+    with patch.object(SessionOrchestrator, "__init__", lambda self, **kw: None):
+        orch = SessionOrchestrator.__new__(SessionOrchestrator)
+
+    orch.instrument = "MNQ"
+    orch.demo = True
+    orch.signal_only = False
+    orch.trading_day = date(2026, 3, 25)
+    orch._broker_name = "test"
+    orch.auth = MagicMock()
+    orch.portfolio = portfolio
+    orch._strategy_map = {strategy.strategy_id: strategy}
+    orch._orb_caps = {"NYSE_OPEN": 150.0}  # THE CAP
+    orch.cost_spec = MagicMock()
+    orch.cost_spec.friction_in_points = 0.5
+    orch.risk_mgr = MagicMock()
+    orch.engine = MagicMock()
+    orch.orb_builder = MagicMock()
+    orch.monitor = MagicMock()
+    orch.monitor.record_trade.return_value = None
+    orch.monitor.daily_summary.return_value = {"n_trades": 0, "total_r": 0.0, "total_slippage_pts": 0.0}
+    orch._positions = PositionTracker()
+    orch._last_bar_at = None
+    orch._kill_switch_fired = False
+    orch._bar_count = 0
+    orch._notifications_broken = False
+    orch._close_hour_et = None
+    orch._close_min_et = None
+    orch._close_time_forced = False
+    orch._hwm_tracker = None
+    orch._stats = SessionStats()
+    orch._poller_active = False
+    orch.contract_symbol = "MNQM6"
+    orch._circuit_breaker = CircuitBreaker(failure_threshold=5, recovery_timeout=30.0)
+    orch._ml_predictor = None
+    orch.journal = MagicMock()
+    orch._consecutive_engine_errors = 0
+    orch._blocked_strategies = set()
+    orch._write_signal_record = MagicMock()
+    orch.run_self_tests = MagicMock(return_value={"notifications": True, "brackets": True, "fill_poller": True})
+
+    # Fake order router that tracks submissions
+    router = MagicMock()
+    router.submitted = []
+
+    def fake_submit(spec):
+        router.submitted.append(spec)
+        return {"order_id": 99, "status": "submitted", "fill_price": 20000.0}
+
+    router.submit = fake_submit
+    router.supports_native_brackets.return_value = False
+    router.build_order_spec.return_value = {"type": "fake_entry"}
+    router.account_id = 12345
+    orch.order_router = router
+
+    return orch
+
+
+from dataclasses import dataclass as _dataclass
+
+
+@_dataclass
+class _OrbCapEvent:
+    event_type: str
+    strategy_id: str
+    timestamp: datetime
+    price: float
+    direction: str
+    contracts: int
+    reason: str = ""
+    pnl_r: float | None = None
+    risk_points: float | None = None
+
+
+@pytest.mark.asyncio
+class TestOrbCapGateInLivePath:
+    """SIM-20: ORB cap prevents oversized NYSE_OPEN trades in live execution path."""
+
+    async def test_160pt_skipped_order_not_submitted(self):
+        """NYSE_OPEN signal at 160pt ORB: cap check fires, order NOT submitted."""
+        orch = _build_orch_with_orb_cap()
+        event = _OrbCapEvent(
+            event_type="ENTRY",
+            strategy_id="MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60_O15",
+            timestamp=datetime.now(UTC),
+            price=20000.0,
+            direction="long",
+            contracts=1,
+            risk_points=160.0,
+        )
+        await orch._handle_event(event)
+
+        assert orch._stats.orb_cap_skips == 1
+        assert len(orch.order_router.submitted) == 0
+
+    async def test_cap_skip_logged_with_correct_format(self):
+        """ORB_CAP_SKIP signal record contains required fields."""
+        orch = _build_orch_with_orb_cap()
+        event = _OrbCapEvent(
+            event_type="ENTRY",
+            strategy_id="MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60_O15",
+            timestamp=datetime.now(UTC),
+            price=20000.0,
+            direction="long",
+            contracts=1,
+            risk_points=160.0,
+        )
+        await orch._handle_event(event)
+
+        orch._write_signal_record.assert_called_once()
+        record = orch._write_signal_record.call_args[0][0]
+        assert record["type"] == "ORB_CAP_SKIP"
+        assert record["risk_pts"] == 160.0
+        assert record["cap_pts"] == 150.0
+        assert record["strategy_id"] == "MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60_O15"
+
+    async def test_149pt_under_cap_order_submitted(self):
+        """NYSE_OPEN signal at 149pt ORB: under cap, order submitted normally."""
+        orch = _build_orch_with_orb_cap()
+        event = _OrbCapEvent(
+            event_type="ENTRY",
+            strategy_id="MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60_O15",
+            timestamp=datetime.now(UTC),
+            price=20000.0,
+            direction="long",
+            contracts=1,
+            risk_points=149.0,
+        )
+        await orch._handle_event(event)
+
+        assert orch._stats.orb_cap_skips == 0
+        assert len(orch.order_router.submitted) > 0
+
+    async def test_session_continues_after_cap_skip(self):
+        """After cap skip, next signal with ORB under cap processes normally."""
+        orch = _build_orch_with_orb_cap()
+
+        # First signal: 160pt -> skipped
+        event1 = _OrbCapEvent(
+            event_type="ENTRY",
+            strategy_id="MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60_O15",
+            timestamp=datetime.now(UTC),
+            price=20000.0,
+            direction="long",
+            contracts=1,
+            risk_points=160.0,
+        )
+        await orch._handle_event(event1)
+        assert orch._stats.orb_cap_skips == 1
+        assert len(orch.order_router.submitted) == 0
+
+        # Second signal: 100pt -> submitted (session not broken)
+        event2 = _OrbCapEvent(
+            event_type="ENTRY",
+            strategy_id="MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60_O15",
+            timestamp=datetime.now(UTC),
+            price=20100.0,
+            direction="long",
+            contracts=1,
+            risk_points=100.0,
+        )
+        await orch._handle_event(event2)
+        assert orch._stats.orb_cap_skips == 1  # unchanged
+        assert len(orch.order_router.submitted) > 0  # order went through

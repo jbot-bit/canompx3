@@ -194,6 +194,7 @@ def build_orchestrator(components: FakeBrokerComponents | None = None) -> Sessio
     orch.journal = MagicMock()  # Trade journal — mocked to avoid DB in tests
     orch._consecutive_engine_errors = 0
     orch._blocked_strategies = set()
+    orch._orb_caps = {}  # ORB cap map — populated per test
     orch.order_router = c.router
     orch.positions = c.positions
     orch._write_signal_record = MagicMock()
@@ -1986,3 +1987,132 @@ class TestExitRetry:
         with patch.object(orch, "_submit_exit_with_retry") as mock_retry:
             await orch._handle_event(_entry_event(2350.5))
             mock_retry.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# ORB cap gate tests
+# ---------------------------------------------------------------------------
+
+
+def _nyse_open_strategy() -> PortfolioStrategy:
+    return PortfolioStrategy(
+        strategy_id="MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60_O15",
+        instrument="MNQ",
+        orb_label="NYSE_OPEN",
+        entry_model="E2",
+        rr_target=1.0,
+        confirm_bars=1,
+        filter_type="X_MES_ATR60",
+        expectancy_r=0.09,
+        win_rate=0.55,
+        sample_size=500,
+        sharpe_ratio=0.8,
+        max_drawdown_r=5.0,
+        median_risk_points=85.0,
+        stop_multiplier=0.75,
+        source="test",
+        weight=1.0,
+    )
+
+
+def _nyse_open_entry(risk_points: float | None = None) -> FakeTradeEvent:
+    return FakeTradeEvent(
+        event_type="ENTRY",
+        strategy_id="MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60_O15",
+        timestamp=datetime.now(UTC),
+        price=20000.0,
+        direction="long",
+        contracts=1,
+        risk_points=risk_points,
+    )
+
+
+@pytest.mark.asyncio
+class TestOrbCapGate:
+    """ORB cap gate in _handle_event: skip oversized ORBs on capped lanes."""
+
+    def _build_capped_orch(self, signal_only: bool = False) -> SessionOrchestrator:
+        strat = _nyse_open_strategy()
+        portfolio = Portfolio(
+            name="test",
+            instrument="MNQ",
+            strategies=[strat],
+            account_equity=50000.0,
+            risk_per_trade_pct=2.0,
+            max_concurrent_positions=4,
+            max_daily_loss_r=5.0,
+        )
+        c = FakeBrokerComponents(fill_price=20000.0, signal_only=signal_only)
+        orch = build_orchestrator(c)
+        orch.instrument = "MNQ"
+        orch.portfolio = portfolio
+        orch._strategy_map = {strat.strategy_id: strat}
+        orch._orb_caps = {"NYSE_OPEN": 150.0}
+        return orch
+
+    async def test_149pt_under_cap_submits(self):
+        """ORB at 149 pts: under cap, trade should proceed."""
+        orch = self._build_capped_orch()
+        event = _nyse_open_entry(risk_points=149.0)
+        await orch._handle_event(event)
+        assert orch._stats.orb_cap_skips == 0
+        # Order was submitted (router got a call)
+        assert len(orch.order_router.submitted) > 0
+
+    async def test_150pt_at_cap_skipped(self):
+        """ORB at 150 pts: at cap boundary, trade should be SKIPPED (inclusive)."""
+        orch = self._build_capped_orch()
+        event = _nyse_open_entry(risk_points=150.0)
+        await orch._handle_event(event)
+        assert orch._stats.orb_cap_skips == 1
+        assert len(orch.order_router.submitted) == 0
+
+    async def test_151pt_over_cap_skipped(self):
+        """ORB at 151 pts: over cap, trade should be SKIPPED."""
+        orch = self._build_capped_orch()
+        event = _nyse_open_entry(risk_points=151.0)
+        await orch._handle_event(event)
+        assert orch._stats.orb_cap_skips == 1
+        assert len(orch.order_router.submitted) == 0
+
+    async def test_no_cap_any_size_passes(self):
+        """Lane without a cap: any ORB size should proceed."""
+        orch = self._build_capped_orch()
+        orch._orb_caps = {}  # No caps at all
+        event = _nyse_open_entry(risk_points=999.0)
+        await orch._handle_event(event)
+        assert orch._stats.orb_cap_skips == 0
+        assert len(orch.order_router.submitted) > 0
+
+    async def test_none_risk_points_passes(self):
+        """No risk_points on event: cap check should be skipped (fail-open)."""
+        orch = self._build_capped_orch()
+        event = _nyse_open_entry(risk_points=None)
+        await orch._handle_event(event)
+        assert orch._stats.orb_cap_skips == 0
+
+    async def test_skip_counter_increments(self):
+        """Multiple oversized trades should each increment the counter."""
+        orch = self._build_capped_orch()
+        for pts in [150.0, 200.0, 300.0]:
+            event = _nyse_open_entry(risk_points=pts)
+            await orch._handle_event(event)
+        assert orch._stats.orb_cap_skips == 3
+
+    async def test_signal_only_also_skipped(self):
+        """Signal-only mode should also skip oversized ORBs."""
+        orch = self._build_capped_orch(signal_only=True)
+        event = _nyse_open_entry(risk_points=200.0)
+        await orch._handle_event(event)
+        assert orch._stats.orb_cap_skips == 1
+
+    async def test_cap_skip_writes_signal_record(self):
+        """Cap skip should write a signal record for observability."""
+        orch = self._build_capped_orch()
+        event = _nyse_open_entry(risk_points=200.0)
+        await orch._handle_event(event)
+        orch._write_signal_record.assert_called()
+        record = orch._write_signal_record.call_args[0][0]
+        assert record["type"] == "ORB_CAP_SKIP"
+        assert record["risk_pts"] == 200.0
+        assert record["cap_pts"] == 150.0

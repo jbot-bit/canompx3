@@ -62,7 +62,7 @@ class DailyLaneSpec:
     execution_notes: str = ""
     planned_stop_multiplier: float | None = None
     required_fitness: tuple[str, ...] = ("FIT",)
-    max_orb_size_pts: float | None = None  # ORB cap in points — skip trade if ORB >= this
+    max_orb_size_pts: float | None = None  # Max risk in pts — skip if risk_points >= this (includes stop_mult)
 
 
 @dataclass(frozen=True)
@@ -288,10 +288,10 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 planned_stop_multiplier=0.75,
             ),
             DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G8", "MNQ", "COMEX_SETTLE"),
-            # ORB cap: risk management only, not return optimization.
-            # Derived from DD math (P95 portfolio DD < 67% of $3K DD limit).
-            # Not data snooped — 150pt chosen from account math, not backtest returns.
-            # Data: Lane 4 ExpR is flat across ORB quintiles (r=+0.03, p=0.143, not significant).
+            # Risk cap: 150pt max risk_points (stop distance, not raw ORB size).
+            # At 0.75x stops, 150pt risk ~ 200pt raw ORB. $300 max loss per trade ($2/pt).
+            # Derived from DD math: $3K limit * 10% / $2 = 150pt risk. Not data snooped.
+            # Data: Lane 4 ExpR flat across ORB quintiles (r=+0.03, p=0.143, not significant).
             DailyLaneSpec(
                 "MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60_O15",
                 "MNQ",
