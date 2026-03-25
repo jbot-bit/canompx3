@@ -142,6 +142,12 @@ class SessionOrchestrator:
                                     max_equity_dd_r,
                                 )
                             break
+                    else:
+                        log.warning(
+                            "Profile-sourced portfolio '%s' matched no ACCOUNT_PROFILES entry — "
+                            "max DD tracking DISABLED (fail-open)",
+                            portfolio.name,
+                        )
                 except Exception as e:
                     log.warning("Failed to compute max_equity_drawdown_r from profile: %s", e)
 
