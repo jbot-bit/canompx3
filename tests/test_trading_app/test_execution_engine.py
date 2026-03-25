@@ -821,15 +821,25 @@ class TestVolAdjustedSizing:
         portfolio = _make_portfolio(account_equity=25000.0, risk_per_trade_pct=2.0)
         engine = ExecutionEngine(portfolio, _cost())
         engine._daily_features_row = {}  # No ATR data → vol_scalar=1.0
-        contracts = engine._compute_contracts(10.0, _cost())
+        # max_contracts=10 to test sizing math without hitting the clamp
+        contracts = engine._compute_contracts(10.0, _cost(), max_contracts=10)
         assert contracts == 5
+
+    def test_sizing_clamped_by_max_contracts(self):
+        """_compute_contracts clamps result to max_contracts."""
+        portfolio = _make_portfolio(account_equity=25000.0, risk_per_trade_pct=2.0)
+        engine = ExecutionEngine(portfolio, _cost())
+        engine._daily_features_row = {}
+        # Without clamp: would be 5. With max_contracts=1: returns 1.
+        contracts = engine._compute_contracts(10.0, _cost(), max_contracts=1)
+        assert contracts == 1
 
     def test_sizing_zero_equity_rejects(self):
         """account_equity=0 → fail-closed, return 0 (reject entry)."""
         portfolio = _make_portfolio(account_equity=0.0)
         engine = ExecutionEngine(portfolio, _cost())
         engine._daily_features_row = {}
-        contracts = engine._compute_contracts(10.0, _cost())
+        contracts = engine._compute_contracts(10.0, _cost(), max_contracts=10)
         assert contracts == 0
 
     def test_vol_scalar_high_atr_fewer_contracts(self):
@@ -838,10 +848,10 @@ class TestVolAdjustedSizing:
         engine = ExecutionEngine(portfolio, _cost())
         # ATR_20 = 60 (high), median = 30 → scalar = 30/60 = 0.5
         engine._daily_features_row = {"atr_20": 60.0, "median_atr_20": 30.0}
-        contracts_high_vol = engine._compute_contracts(10.0, _cost())
+        contracts_high_vol = engine._compute_contracts(10.0, _cost(), max_contracts=10)
         # Without vol scaling: 5 contracts. With 0.5 scalar: 2 contracts
         engine._daily_features_row = {"atr_20": 30.0, "median_atr_20": 30.0}
-        contracts_normal = engine._compute_contracts(10.0, _cost())
+        contracts_normal = engine._compute_contracts(10.0, _cost(), max_contracts=10)
         assert contracts_high_vol < contracts_normal
 
     def test_vol_scalar_low_atr_more_contracts(self):
@@ -850,9 +860,9 @@ class TestVolAdjustedSizing:
         engine = ExecutionEngine(portfolio, _cost())
         # ATR_20 = 20 (low), median = 30 → scalar = 30/20 = 1.5
         engine._daily_features_row = {"atr_20": 20.0, "median_atr_20": 30.0}
-        contracts_low_vol = engine._compute_contracts(10.0, _cost())
+        contracts_low_vol = engine._compute_contracts(10.0, _cost(), max_contracts=10)
         engine._daily_features_row = {"atr_20": 30.0, "median_atr_20": 30.0}
-        contracts_normal = engine._compute_contracts(10.0, _cost())
+        contracts_normal = engine._compute_contracts(10.0, _cost(), max_contracts=10)
         assert contracts_low_vol > contracts_normal
 
     def test_sizing_rejects_when_risk_exceeds_budget(self):
@@ -869,7 +879,7 @@ class TestVolAdjustedSizing:
         portfolio = _make_portfolio(account_equity=25000.0)
         engine = ExecutionEngine(portfolio, _cost())
         engine._daily_features_row = None
-        contracts = engine._compute_contracts(10.0, _cost())
+        contracts = engine._compute_contracts(10.0, _cost(), max_contracts=10)
         assert contracts == 5  # Same as baseline
 
 

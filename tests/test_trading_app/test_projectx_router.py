@@ -210,7 +210,8 @@ def test_px_bracket_spec_format_mgc():
         target_price=2970.0,  # 20 pts = 200 ticks
     )
     assert spec is not None
-    assert spec["stopLossBracket"] == {"ticks": 100, "type": 4}
+    # Long: SL negative (below entry), TP positive (above entry)
+    assert spec["stopLossBracket"] == {"ticks": -100, "type": 4}
     assert spec["takeProfitBracket"] == {"ticks": 200, "type": 1}
     # No accountId or orders array — just bracket fields
     assert "accountId" not in spec
@@ -230,8 +231,9 @@ def test_px_bracket_spec_format_mnq():
         target_price=20980.0,  # 20 pts = 80 ticks
     )
     assert spec is not None
+    # Short: SL positive (above entry), TP negative (below entry)
     assert spec["stopLossBracket"] == {"ticks": 40, "type": 4}
-    assert spec["takeProfitBracket"] == {"ticks": 80, "type": 1}
+    assert spec["takeProfitBracket"] == {"ticks": -80, "type": 1}
 
 
 def test_px_bracket_tick_min_clamp():
@@ -246,8 +248,11 @@ def test_px_bracket_tick_min_clamp():
         stop_price=99.999,  # < 1 tick → clamp to 1
         target_price=100.001,  # < 1 tick → clamp to 1
     )
-    assert spec["stopLossBracket"]["ticks"] >= 1
-    assert spec["takeProfitBracket"]["ticks"] >= 1
+    # Long: SL negative, TP positive, both at least 1 tick magnitude
+    assert abs(spec["stopLossBracket"]["ticks"]) >= 1
+    assert abs(spec["takeProfitBracket"]["ticks"]) >= 1
+    assert spec["stopLossBracket"]["ticks"] < 0  # Long SL is negative
+    assert spec["takeProfitBracket"]["ticks"] > 0  # Long TP is positive
 
 
 def test_px_bracket_tick_rounding():
@@ -262,7 +267,8 @@ def test_px_bracket_tick_rounding():
         stop_price=98.60,  # 1.40 / 0.25 = 5.6 → rounds to 6
         target_price=102.90,  # 2.90 / 0.25 = 11.6 → rounds to 12
     )
-    assert spec["stopLossBracket"]["ticks"] == 6
+    # Long: SL negative, TP positive
+    assert spec["stopLossBracket"]["ticks"] == -6
     assert spec["takeProfitBracket"]["ticks"] == 12
 
 
@@ -280,7 +286,7 @@ def test_px_merge_bracket_into_entry():
         "stopPrice": 2950.0,
     }
     bracket_spec = {
-        "stopLossBracket": {"ticks": 100, "type": 4},
+        "stopLossBracket": {"ticks": -100, "type": 4},
         "takeProfitBracket": {"ticks": 200, "type": 1},
     }
     combined = router.merge_bracket_into_entry(entry_spec, bracket_spec)
@@ -288,8 +294,8 @@ def test_px_merge_bracket_into_entry():
     assert combined["accountId"] == 123
     assert combined["type"] == 4
     assert combined["stopPrice"] == 2950.0
-    # Bracket fields attached
-    assert combined["stopLossBracket"] == {"ticks": 100, "type": 4}
+    # Bracket fields attached (signed ticks)
+    assert combined["stopLossBracket"] == {"ticks": -100, "type": 4}
     assert combined["takeProfitBracket"] == {"ticks": 200, "type": 1}
     # Original entry_spec not mutated
     assert "stopLossBracket" not in entry_spec
@@ -314,7 +320,8 @@ def test_px_submit_combined_bracket_entry():
     call_body = mock_req.post.call_args[1]["json"]
     assert call_body["type"] == 4  # Stop entry
     assert call_body["stopPrice"] == 2950.0
-    assert call_body["stopLossBracket"] == {"ticks": 100, "type": 4}
+    # Long: SL negative, TP positive
+    assert call_body["stopLossBracket"] == {"ticks": -100, "type": 4}
     assert call_body["takeProfitBracket"] == {"ticks": 200, "type": 1}
 
 
@@ -331,8 +338,9 @@ def test_px_bracket_short_direction():
         stop_price=2960.0,
         target_price=2930.0,
     )
-    assert spec["stopLossBracket"]["ticks"] == 100  # abs(2950 - 2960) / 0.10
-    assert spec["takeProfitBracket"]["ticks"] == 200  # abs(2930 - 2950) / 0.10
+    # Short: SL positive (above entry), TP negative (below entry)
+    assert spec["stopLossBracket"]["ticks"] == 100  # abs(2950 - 2960) / 0.10, positive for short SL
+    assert spec["takeProfitBracket"]["ticks"] == -200  # abs(2930 - 2950) / 0.10, negative for short TP
 
 
 def test_px_tick_size_validation():

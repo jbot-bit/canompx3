@@ -803,7 +803,7 @@ def build_profile_portfolio(
             )
 
             # Use profile's stop multiplier if lane doesn't override
-            effective_stop_mult = lane.planned_stop_multiplier or profile.stop_multiplier
+            effective_stop_mult = lane.planned_stop_multiplier if lane.planned_stop_multiplier is not None else profile.stop_multiplier
 
             strategies.append(
                 PortfolioStrategy(

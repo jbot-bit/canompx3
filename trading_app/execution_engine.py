@@ -215,11 +215,12 @@ class ExecutionEngine:
         self._last_bar: dict | None = None  # Track last bar for scratch mark-to-market
         self._daily_features_row: dict | None = None  # Calendar filter data
 
-    def _compute_contracts(self, risk_points: float, cost: CostSpec) -> int:
+    def _compute_contracts(self, risk_points: float, cost: CostSpec, max_contracts: int = 1) -> int:
         """Compute position size using vol-adjusted sizing from portfolio params.
 
         Uses account_equity and risk_per_trade_pct from self.portfolio.
         Applies Turtle-style vol scalar from ATR_20 / median_atr_20 (Carver Ch.9).
+        Clamps result to max_contracts (from strategy or firm limits).
         Returns 0 if risk exceeds budget (caller should reject entry).
         """
         equity = self.portfolio.account_equity
@@ -248,7 +249,40 @@ class ExecutionEngine:
             cost,
             vol_scalar,
         )
+        if contracts > max_contracts:
+            logger.warning(
+                "CONTRACTS CLAMPED: computed=%d > max=%d for %s — firm/strategy limit enforced",
+                contracts,
+                max_contracts,
+                self.portfolio.instrument,
+            )
+            contracts = max_contracts
         return contracts
+
+    def mark_strategy_traded(self, strategy_id: str) -> None:
+        """Mark a strategy as already traded today (crash recovery).
+
+        Seeds completed_trades so _arm_strategies() won't re-arm it.
+        Called by SessionOrchestrator on startup to load journal state.
+        """
+        strategy = next(
+            (s for s in self.portfolio.strategies if s.strategy_id == strategy_id),
+            None,
+        )
+        if strategy is None:
+            logger.warning("mark_strategy_traded: '%s' not in portfolio — skipping", strategy_id)
+            return
+        trade = ActiveTrade(
+            strategy_id=strategy_id,
+            strategy=strategy,
+            orb_label=strategy.orb_label,
+            orb_minutes=strategy.orb_minutes,
+            entry_model=strategy.entry_model,
+            direction="unknown",
+            state=TradeState.EXITED,
+        )
+        self.completed_trades.append(trade)
+        logger.info("RESTART DEDUP: strategy '%s' marked as already traded today", strategy_id)
 
     def on_trading_day_start(self, trading_day: date, daily_features_row: dict | None = None) -> None:
         """Reset state for a new trading day."""
@@ -688,7 +722,7 @@ class ExecutionEngine:
                 if self._live_session_costs
                 else self.cost_spec
             )
-            trade.contracts = self._compute_contracts(risk_points, cost)
+            trade.contracts = self._compute_contracts(risk_points, cost, trade.strategy.max_contracts)
             if trade.contracts == 0:
                 trade.state = TradeState.EXITED
                 self.completed_trades.append(trade)
@@ -893,7 +927,7 @@ class ExecutionEngine:
                         if self._live_session_costs
                         else self.cost_spec
                     )
-                    trade.contracts = self._compute_contracts(risk_points, cost)
+                    trade.contracts = self._compute_contracts(risk_points, cost, trade.strategy.max_contracts)
                     if trade.contracts == 0:
                         trade.state = TradeState.EXITED
                         self.completed_trades.append(trade)
@@ -1055,7 +1089,7 @@ class ExecutionEngine:
                             if self._live_session_costs
                             else self.cost_spec
                         )
-                        trade.contracts = self._compute_contracts(risk_points, cost)
+                        trade.contracts = self._compute_contracts(risk_points, cost, trade.strategy.max_contracts)
                         if trade.contracts == 0:
                             trade.state = TradeState.EXITED
                             self.completed_trades.append(trade)

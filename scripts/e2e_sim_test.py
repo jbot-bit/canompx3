@@ -77,12 +77,16 @@ def test_2_data_feed():
     except (asyncio.TimeoutError, TimeoutError):
         pass
 
+    connected = getattr(feed, "_last_data_at", None) is not None or quote_count[0] > 0
     if quote_count[0] > 0:
         results["2_data_feed"] = f"PASS ({quote_count[0]} quotes in 10s)"
         log.info("TEST 2: PASS - %d quotes in 10s", quote_count[0])
+    elif connected:
+        results["2_data_feed"] = "PASS (connected, 0 quotes - market closed)"
+        log.info("TEST 2: PASS (connected, market may be closed)")
     else:
-        results["2_data_feed"] = "PASS (0 quotes - market closed, connection OK)"
-        log.info("TEST 2: PASS (connection OK, market may be closed)")
+        results["2_data_feed"] = "WARN (no connection confirmed - check network/auth)"
+        log.warning("TEST 2: WARN - could not confirm connection was established")
 
 
 def test_3_bracket_spec(orch):

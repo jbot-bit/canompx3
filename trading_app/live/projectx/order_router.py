@@ -57,6 +57,11 @@ class ProjectXOrderRouter(BrokerRouter):
         if self.auth is None:
             raise RuntimeError("No auth — cannot submit orders without ProjectXAuth")
 
+        # Full payload audit trail — logged BEFORE submission
+        import json as _json
+
+        log.info("ORDER SUBMIT PAYLOAD: %s", _json.dumps(spec, default=str))
+
         t0 = time.monotonic()
         resp = requests.post(
             f"{BASE_URL}/api/Order/place",
@@ -67,6 +72,9 @@ class ProjectXOrderRouter(BrokerRouter):
         elapsed_ms = (time.monotonic() - t0) * 1000
         resp.raise_for_status()
         data = resp.json()
+
+        # Full response audit trail
+        log.info("ORDER RESPONSE: %s", _json.dumps(data, default=str))
 
         if not data.get("success"):
             raise RuntimeError(f"ProjectX order failed: {data.get('errorMessage', data)}")
