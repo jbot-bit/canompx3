@@ -700,6 +700,161 @@ def build_raw_baseline_portfolio(
     )
 
 
+def build_profile_portfolio(
+    profile_id: str,
+    db_path: Path | None = None,
+    account_equity: float | None = None,
+    risk_per_trade_pct: float = 2.0,
+    max_concurrent_positions: int = 3,
+    max_daily_loss_r: float = 5.0,
+) -> Portfolio:
+    """Build a portfolio from a prop_profiles.py account profile.
+
+    Reads daily_lanes from the profile, looks up each strategy_id in
+    validated_setups, and builds a Portfolio with the exact validated params.
+
+    This bypasses LIVE_PORTFOLIO and its LIVE_MIN_EXPECTANCY_R threshold,
+    using the pre-validated, FDR-tested strategies directly.
+
+    Raises RuntimeError if any lane's strategy_id is missing from validated_setups.
+    """
+    from trading_app.prop_profiles import ACCOUNT_PROFILES, get_account_tier
+
+    if profile_id not in ACCOUNT_PROFILES:
+        raise ValueError(
+            f"Unknown profile '{profile_id}'. Valid: {sorted(ACCOUNT_PROFILES.keys())}"
+        )
+
+    profile = ACCOUNT_PROFILES[profile_id]
+    if not profile.daily_lanes:
+        raise RuntimeError(
+            f"Profile '{profile_id}' has no daily_lanes defined. "
+            f"Cannot build portfolio without explicit strategy lanes."
+        )
+
+    if db_path is None:
+        db_path = GOLD_DB_PATH
+
+    # Get account tier for DD-based equity if not specified
+    if account_equity is None:
+        tier = get_account_tier(profile.firm, profile.account_size)
+        account_equity = float(profile.account_size)
+
+    # Determine instrument from lanes (all lanes must be same instrument)
+    instruments = {lane.instrument for lane in profile.daily_lanes}
+    if len(instruments) != 1:
+        raise RuntimeError(
+            f"Profile '{profile_id}' has mixed instruments: {instruments}. "
+            f"SessionOrchestrator requires single instrument."
+        )
+    instrument = instruments.pop()
+
+    strategies: list[PortfolioStrategy] = []
+    cost_spec = get_cost_spec(instrument)
+
+    with duckdb.connect(str(db_path), read_only=True) as con:
+        for lane in profile.daily_lanes:
+            row = con.execute(
+                """
+                SELECT strategy_id, instrument, orb_label, entry_model,
+                       rr_target, confirm_bars, filter_type, orb_minutes,
+                       sample_size, win_rate, expectancy_r, sharpe_ratio,
+                       max_drawdown_r, median_risk_dollars, avg_risk_dollars,
+                       avg_win_dollars, avg_loss_dollars, stop_multiplier,
+                       status, fdr_significant
+                FROM validated_setups
+                WHERE strategy_id = ?
+                """,
+                [lane.strategy_id],
+            ).fetchone()
+
+            if row is None:
+                raise RuntimeError(
+                    f"BLOCKER: Strategy '{lane.strategy_id}' from profile "
+                    f"'{profile_id}' NOT FOUND in validated_setups. "
+                    f"Run strategy validation first."
+                )
+
+            (
+                sid, inst, orb_label, entry_model, rr_target, confirm_bars,
+                filter_type, orb_minutes, sample_size, win_rate, expectancy_r,
+                sharpe_ratio, max_drawdown_r, median_risk_dollars,
+                avg_risk_dollars, avg_win_dollars, avg_loss_dollars,
+                stop_mult, status, fdr_sig,
+            ) = row
+
+            if status == "RETIRED":
+                raise RuntimeError(
+                    f"BLOCKER: Strategy '{sid}' is RETIRED in validated_setups. "
+                    f"Remove from profile '{profile_id}' or re-validate."
+                )
+
+            if not fdr_sig:
+                logger.warning(
+                    "WARNING: Strategy '%s' is NOT FDR-significant (fdr_significant=False). "
+                    "Proceeding but this strategy has weak statistical evidence.",
+                    sid,
+                )
+
+            med_risk_pts = (
+                float(median_risk_dollars / cost_spec.point_value)
+                if median_risk_dollars
+                else None
+            )
+
+            # Use profile's stop multiplier if lane doesn't override
+            effective_stop_mult = lane.planned_stop_multiplier or profile.stop_multiplier
+
+            strategies.append(
+                PortfolioStrategy(
+                    strategy_id=sid,
+                    instrument=inst,
+                    orb_label=orb_label,
+                    entry_model=entry_model,
+                    rr_target=float(rr_target),
+                    confirm_bars=int(confirm_bars),
+                    filter_type=filter_type,
+                    expectancy_r=float(expectancy_r),
+                    win_rate=float(win_rate),
+                    sample_size=int(sample_size),
+                    sharpe_ratio=float(sharpe_ratio) if sharpe_ratio else None,
+                    max_drawdown_r=float(max_drawdown_r) if max_drawdown_r else None,
+                    median_risk_points=med_risk_pts,
+                    median_risk_dollars=float(median_risk_dollars) if median_risk_dollars else None,
+                    avg_risk_dollars=float(avg_risk_dollars) if avg_risk_dollars else None,
+                    avg_win_dollars=float(avg_win_dollars) if avg_win_dollars else None,
+                    avg_loss_dollars=float(avg_loss_dollars) if avg_loss_dollars else None,
+                    orb_minutes=int(orb_minutes),
+                    stop_multiplier=float(effective_stop_mult),
+                    source="profile",
+                    weight=1.0,
+                    max_contracts=1,
+                )
+            )
+            logger.info(
+                "Profile lane: %s | %s %s RR%.1f O%d | N=%d WR=%.0f%% ExpR=%.3f | stop=%.2fx",
+                sid, orb_label, filter_type, rr_target, orb_minutes,
+                sample_size, win_rate * 100, expectancy_r, effective_stop_mult,
+            )
+
+    if not strategies:
+        raise RuntimeError(f"Profile '{profile_id}' resolved 0 strategies")
+
+    logger.info(
+        "Profile portfolio '%s': %d strategies for %s (stop=%.2fx)",
+        profile_id, len(strategies), instrument, profile.stop_multiplier,
+    )
+    return Portfolio(
+        name=f"profile_{profile_id}",
+        instrument=instrument,
+        strategies=strategies,
+        account_equity=account_equity,
+        risk_per_trade_pct=risk_per_trade_pct,
+        max_concurrent_positions=max_concurrent_positions,
+        max_daily_loss_r=max_daily_loss_r,
+    )
+
+
 # Sessions with bootstrap-verified ML skill at RR2.0 O30 (BH FDR q=0.05, N=7).
 # Do NOT add sessions here without bootstrap evidence.
 ML_OVERLAY_SESSIONS = {"NYSE_OPEN", "US_DATA_1000", "US_DATA_830"}

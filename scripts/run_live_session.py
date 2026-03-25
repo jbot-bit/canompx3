@@ -180,7 +180,7 @@ def main() -> None:
         epilog=__doc__,
     )
     # Instrument selection: --instrument XYZ or --all
-    inst_group = parser.add_mutually_exclusive_group(required=True)
+    inst_group = parser.add_mutually_exclusive_group(required=False)
     inst_group.add_argument("--instrument", help="e.g. MGC, MNQ, MES, M2K")
     inst_group.add_argument(
         "--all",
@@ -252,11 +252,35 @@ def main() -> None:
         help="Stop multiplier (1.0=standard, 0.75=tight prop stop)",
     )
     parser.add_argument("--entry-model", type=str, default="E2", help="Entry model for raw baseline (default E2)")
+    parser.add_argument(
+        "--profile",
+        type=str,
+        default=None,
+        help="Load portfolio from prop_profiles.py account profile (e.g. 'apex_50k_manual'). "
+        "Uses exact validated strategies from the profile's daily_lanes.",
+    )
     args = parser.parse_args()
 
-    # Build raw baseline portfolio if requested (shared by preflight and session)
+    # Build custom portfolio if requested (shared by preflight and session)
     raw_portfolio = None
-    if args.raw_baseline:
+    if args.profile:
+        if args.raw_baseline:
+            print("--profile and --raw-baseline are mutually exclusive.")
+            sys.exit(1)
+        from trading_app.portfolio import build_profile_portfolio
+
+        raw_portfolio = build_profile_portfolio(profile_id=args.profile)
+        # Override instrument from profile (profile knows its instrument)
+        if not args.all and args.instrument is None:
+            args.instrument = raw_portfolio.instrument
+        elif args.instrument and args.instrument != raw_portfolio.instrument:
+            print(
+                f"WARNING: --instrument {args.instrument} conflicts with profile instrument "
+                f"{raw_portfolio.instrument}. Using profile instrument."
+            )
+            args.instrument = raw_portfolio.instrument
+        log.info("Profile '%s': %d strategies loaded for %s", args.profile, len(raw_portfolio.strategies), raw_portfolio.instrument)
+    elif args.raw_baseline:
         if args.all:
             print("--raw-baseline + --all not supported. Use --instrument X.")
             sys.exit(1)
@@ -271,6 +295,11 @@ def main() -> None:
             stop_multiplier=args.stop_multiplier,
         )
         log.info("Raw baseline: %d strategies loaded", len(raw_portfolio.strategies))
+
+    # Validate instrument is set (required unless --profile inferred it)
+    if not args.instrument and not args.all:
+        print("ERROR: --instrument or --all is required (unless --profile is used).")
+        sys.exit(1)
 
     if args.preflight:
         if args.all:
