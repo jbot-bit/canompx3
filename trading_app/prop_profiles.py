@@ -261,13 +261,13 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         account_size=50_000,
         copies=1,
         stop_multiplier=0.75,
-        max_slots=4,
-        # Phase 1 manual: 4 validated MNQ lanes.
+        max_slots=5,
+        # Phase 1 manual: 5 validated MNQ lanes.
         # All strategies pass: stratified-K BH FDR (holdout-clean), walk-forward,
         # stress test, yearly robustness. Verified on canonical gold.db.
         # @research-source stratified-K validation 2026-03-24
         # @revalidated-for E2 event-based sessions (2026-03-24)
-        # Dropped: CME_PRECLOSE (0 MNQ survivors), TOKYO_OPEN (0 MNQ),
+        # Dropped: CME_PRECLOSE (0/360 MNQ survivors), TOKYO_OPEN (0 MNQ),
         #   EUROPE_FLOW (dead 10yr), LONDON_METALS (dead last).
         allowed_sessions=frozenset(
             {
@@ -275,6 +275,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 "SINGAPORE_OPEN",  # 11:00 AM Brisbane
                 "COMEX_SETTLE",  # 3:30/4:30 AM Brisbane — alarm required
                 "NYSE_OPEN",  # 11:30 PM Brisbane
+                "US_DATA_1000",  # 00:00/01:00 AM Brisbane (30 min after NYSE_OPEN)
             }
         ),
         daily_lanes=(
@@ -298,9 +299,14 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 "NYSE_OPEN",
                 max_orb_size_pts=150.0,
             ),
+            DailyLaneSpec(
+                "MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR60_S075",
+                "MNQ",
+                "US_DATA_1000",
+            ),
         ),
         notes=(
-            "Phase 1 manual. 4 validated MNQ lanes (stratified-K, holdout-clean, all gates). "
+            "Phase 1 manual. 5 validated MNQ lanes (stratified-K, holdout-clean, all gates). "
             "NYSE_CLOSE highest ExpR. "
             "RISK: Historical combined DD = -$3,409 (breaches $2K limit). "
             "Lane 2 (SINGAPORE_OPEN RR4.0) hist DD = -$3,540 alone. "

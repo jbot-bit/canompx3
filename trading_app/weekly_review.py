@@ -20,7 +20,7 @@ from pipeline.paths import GOLD_DB_PATH
 STATE_DIR = Path(__file__).resolve().parents[1] / "data" / "state"
 MONITOR_DIR = Path(__file__).resolve().parents[1] / "data" / "forward_monitoring"
 
-SESSIONS = ["NYSE_CLOSE", "SINGAPORE_OPEN", "COMEX_SETTLE", "NYSE_OPEN", "TOKYO_OPEN"]
+SESSIONS = ["NYSE_CLOSE", "SINGAPORE_OPEN", "COMEX_SETTLE", "NYSE_OPEN", "US_DATA_1000", "TOKYO_OPEN"]
 
 
 def section_0_account_health():
