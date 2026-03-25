@@ -213,6 +213,10 @@ class ProjectXOrderRouter(BrokerRouter):
         )
         resp.raise_for_status()
         data = resp.json()
+        # Validate application-level success — an empty list from a failed query
+        # looks identical to "no open orders" and will fool bracket verification.
+        if isinstance(data, dict) and data.get("success") is False:
+            raise RuntimeError(f"ProjectX searchOpen failed: {data.get('errorMessage', data)}")
         orders = data.get("orders", []) if isinstance(data, dict) else data
         return orders
 

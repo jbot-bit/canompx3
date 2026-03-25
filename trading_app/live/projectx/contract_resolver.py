@@ -32,6 +32,9 @@ class ProjectXContracts(BrokerContracts):
         )
         resp.raise_for_status()
         data = resp.json()
+        # Validate application-level success (HTTP 200 is not enough)
+        if isinstance(data, dict) and data.get("success") is False:
+            raise RuntimeError(f"ProjectX account search failed: {data.get('errorMessage', data)}")
         # Response might be a list directly or have an "accounts" key
         accounts = data if isinstance(data, list) else data.get("accounts", [])
         if not accounts:
@@ -57,6 +60,9 @@ class ProjectXContracts(BrokerContracts):
         )
         resp.raise_for_status()
         data = resp.json()
+        # Validate application-level success (HTTP 200 is not enough)
+        if isinstance(data, dict) and data.get("success") is False:
+            raise RuntimeError(f"ProjectX contract query failed: {data.get('errorMessage', data)}")
         # Response might be a list directly or have a "contracts" key
         contracts = data if isinstance(data, list) else data.get("contracts", [])
 

@@ -1292,8 +1292,19 @@ class SessionOrchestrator:
                             record.bracket_order_ids = [x for x in [sl_id, tp_id] if x]
                     except Exception as e:
                         log.error("Bracket verification failed for %s: %s", event.strategy_id, e)
-                        # Fallback: assume bracket IDs are sequential (best guess)
-                        record.bracket_order_ids = [order_id + 1, order_id + 2]
+                        if order_id is not None:
+                            # Fallback: assume bracket IDs are sequential (best guess)
+                            record.bracket_order_ids = [order_id + 1, order_id + 2]
+                        else:
+                            log.critical(
+                                "BRACKET FALLBACK IMPOSSIBLE: order_id is None for %s — "
+                                "cannot derive bracket leg IDs. Position may be UNPROTECTED.",
+                                event.strategy_id,
+                            )
+                            self._notify(
+                                f"NAKED POSITION RISK: bracket verification failed and "
+                                f"order_id is None for {event.strategy_id}"
+                            )
                 self._stats.brackets_submitted += 1
             else:
                 actual_entry = fill_price if fill_price is not None else event.price
@@ -1760,9 +1771,15 @@ class SessionOrchestrator:
                     msg = f"Auth refresh attempt {attempt + 1}/3 failed before EOD close: {e}"
                     log.critical(msg)
                     self._notify(msg)
+                    # BLOCKING SLEEP — acceptable here because:
+                    # 1. post_session() runs AFTER asyncio.run() exits (no event loop)
+                    # 2. Total worst-case block: 1+2+4 = 7 seconds across 3 retries
+                    # 3. No positions can enter during post_session() — only exits
+                    # 4. Risk window: market can move 7s during auth retry, but
+                    #    bracket orders at the broker still protect the position
                     import time
 
-                    time.sleep(2**attempt)
+                    time.sleep(min(2**attempt, 4))  # Cap at 4s to limit risk window
             if not auth_ok:
                 msg = f"MANUAL CLOSE REQUIRED: Auth failed after 3 attempts. {len(eod_events)} position(s) may remain open"
                 log.critical(msg)
