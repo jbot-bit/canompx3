@@ -1114,6 +1114,10 @@ class SessionOrchestrator:
             log.critical(msg)
             self._notify(msg)
             self._blocked_strategies.add(sid)
+            # Reset stale timer to throttle retries — without this, _retry_stuck_exit
+            # fires on every bar gap (>180s), generating repeated exit attempts and
+            # notification spam. With this, next retry is at least 300s away.
+            record.state_changed_at = datetime.now(UTC)
 
     async def _handle_event(self, event) -> None:
         """
