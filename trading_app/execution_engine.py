@@ -259,6 +259,26 @@ class ExecutionEngine:
             contracts = max_contracts
         return contracts
 
+    def _total_pnl_r(self) -> float:
+        """Realized + unrealized PnL in R for risk checks.
+
+        Unrealized = mark-to-market of all ENTERED positions using last bar close.
+        This ensures the circuit breaker accounts for open position losses,
+        not just closed trade losses.
+        """
+        unrealized = 0.0
+        if self._last_bar is not None:
+            current_price = self._last_bar.get("close", 0)
+            for t in self.active_trades:
+                if t.state == TradeState.ENTERED and t.entry_price and t.stop_price:
+                    risk = abs(t.entry_price - t.stop_price)
+                    if risk > 0:
+                        if t.direction == "long":
+                            unrealized += (current_price - t.entry_price) / risk
+                        else:
+                            unrealized += (t.entry_price - current_price) / risk
+        return self.daily_pnl_r + unrealized
+
     def mark_strategy_traded(self, strategy_id: str) -> None:
         """Mark a strategy as already traded today (crash recovery).
 
@@ -746,7 +766,7 @@ class ExecutionEngine:
                     strategy_id=trade.strategy_id,
                     orb_label=trade.orb_label,
                     active_trades=self.active_trades,
-                    daily_pnl_r=self.daily_pnl_r,
+                    daily_pnl_r=self._total_pnl_r(),
                     orb_minutes=trade.orb_minutes,
                 )
                 if not can_enter:

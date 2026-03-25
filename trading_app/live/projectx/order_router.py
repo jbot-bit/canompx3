@@ -196,3 +196,78 @@ class ProjectXOrderRouter(BrokerRouter):
             "status": status_map.get(raw_status, raw_status),
             "fill_price": float(fill_price) if fill_price is not None else None,
         }
+
+    def query_open_orders(self) -> list[dict]:
+        """Query all open/working orders for this account.
+
+        Returns list of order dicts with id, type, side, stopPrice, limitPrice, customTag.
+        Used for bracket verification and orphan detection.
+        """
+        if self.auth is None:
+            return []
+        resp = requests.post(
+            f"{BASE_URL}/api/Order/searchOpen",
+            json={"accountId": self.account_id},
+            headers=self.auth.headers(),
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        orders = data.get("orders", []) if isinstance(data, dict) else data
+        return orders
+
+    def verify_bracket_legs(self, entry_order_id: int, contract_id: str) -> tuple[int | None, int | None]:
+        """Verify bracket legs exist after entry fill.
+
+        Returns (sl_order_id, tp_order_id). Either can be None if not found.
+        Bracket legs are created with sequential IDs: entry_id+1 (SL), entry_id+2 (TP).
+        Also identified by customTag containing 'AutoBracket'.
+        """
+        try:
+            orders = self.query_open_orders()
+        except Exception as e:
+            log.error("Bracket verification failed (cannot query open orders): %s", e)
+            return None, None
+
+        sl_id = None
+        tp_id = None
+        expected_sl = entry_order_id + 1
+        expected_tp = entry_order_id + 2
+
+        for o in orders:
+            oid = o.get("id", o.get("orderId"))
+            tag = o.get("customTag") or ""
+            o_contract = o.get("contractId", "")
+
+            if o_contract != contract_id:
+                continue
+
+            # Match by sequential ID (primary) or AutoBracket tag (fallback)
+            if oid == expected_sl or (tag.endswith("-SL") and "AutoBracket" in tag):
+                sl_id = oid
+            elif oid == expected_tp or (tag.endswith("-TP") and "AutoBracket" in tag):
+                tp_id = oid
+
+        return sl_id, tp_id
+
+    def cancel_bracket_orders(self, contract_id: str) -> int:
+        """Cancel all AutoBracket-tagged orders for a contract. Returns count cancelled."""
+        try:
+            orders = self.query_open_orders()
+        except Exception as e:
+            log.error("Cannot query open orders for bracket cleanup: %s", e)
+            return 0
+
+        cancelled = 0
+        for o in orders:
+            tag = o.get("customTag") or ""
+            o_contract = o.get("contractId", "")
+            oid = o.get("id", o.get("orderId"))
+
+            if o_contract == contract_id and "AutoBracket" in tag and oid:
+                try:
+                    self.cancel(oid)
+                    cancelled += 1
+                except Exception as e:
+                    log.warning("Failed to cancel bracket order %s: %s", oid, e)
+        return cancelled

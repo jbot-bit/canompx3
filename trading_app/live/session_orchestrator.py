@@ -248,6 +248,22 @@ class SessionOrchestrator:
                     ) from e
                 log.warning("--force-orphans: proceeding despite orphan check failure")
 
+            # Clean up orphaned bracket orders from previous crashes.
+            # These are AutoBracket-tagged orders that survived a prior session.
+            # If not cancelled, they will fire and open unwanted positions.
+            try:
+                contract_sym = contracts.resolve_front_month(instrument)
+                cancelled = self.order_router.cancel_bracket_orders(contract_sym)
+                if cancelled > 0:
+                    log.warning(
+                        "STARTUP CLEANUP: cancelled %d orphaned bracket orders on %s",
+                        cancelled,
+                        contract_sym,
+                    )
+                    self._notify(f"STARTUP: Cancelled {cancelled} orphaned bracket orders")
+            except Exception as e:
+                log.warning("Bracket orphan cleanup failed on startup: %s", e)
+
         # Live infrastructure
         self.orb_builder = LiveORBBuilder(instrument, self.trading_day)
         # PerformanceMonitor takes list[PortfolioStrategy] (has strategy_id + expectancy_r)
@@ -271,6 +287,31 @@ class SessionOrchestrator:
         self._kill_switch_fired = False  # one-shot emergency flatten
         self._notifications_broken = False  # set by self-test
         self._bar_count = 0  # total bars received this session
+        self._close_time_forced = False  # one-shot force-flatten at session close
+
+        # Prop firm close time (ET) — used for post-market buffer and force-flatten
+        self._close_hour_et: int | None = None
+        self._close_min_et: int | None = None
+        if portfolio is not None and portfolio.strategies and portfolio.strategies[0].source == "profile":
+            try:
+                from trading_app.prop_profiles import ACCOUNT_PROFILES, get_firm_spec
+
+                for pid, prof in ACCOUNT_PROFILES.items():
+                    if portfolio.name == f"profile_{pid}":
+                        firm = get_firm_spec(prof.firm)
+                        if firm.close_time_et and firm.close_time_et != "none":
+                            parts = firm.close_time_et.split(":")
+                            self._close_hour_et = int(parts[0])
+                            self._close_min_et = int(parts[1])
+                            log.info(
+                                "Firm close time: %s ET (%02d:%02d)",
+                                firm.close_time_et,
+                                self._close_hour_et,
+                                self._close_min_et,
+                            )
+                        break
+            except Exception as e:
+                log.warning("Failed to load firm close time: %s", e)
         self._stats = SessionStats()  # observability counters
         self._poller_active = False  # set True once fill poller runs a cycle
         self._consecutive_engine_errors = 0  # circuit breaker for engine crashes
@@ -326,6 +367,29 @@ class SessionOrchestrator:
                 len(already_traded),
                 sorted(already_traded),
             )
+
+        # Restore position tracker from incomplete journal trades (crash recovery).
+        # If the bot crashed with open positions, the journal has entry records but no exits.
+        # Restoring these lets the orchestrator properly track and exit broker-held positions.
+        if not signal_only:
+            incomplete = self.journal.incomplete_trades()
+            for trade in incomplete:
+                sid = trade.get("strategy_id", "")
+                direction = trade.get("direction", "")
+                fill = trade.get("fill_entry") or trade.get("engine_entry")
+                if sid and direction and fill and self._positions.get(sid) is None:
+                    record = self._positions.on_entry_sent(sid, direction, float(fill))
+                    if record:
+                        self._positions.on_entry_filled(sid, float(fill))
+                        log.warning(
+                            "POSITION RESTORED from journal: %s %s @ %.2f",
+                            sid, direction, float(fill),
+                        )
+            if incomplete:
+                log.warning(
+                    "CRASH RECOVERY: restored %d incomplete positions from journal",
+                    len(incomplete),
+                )
 
         mode = "SIGNAL" if signal_only else ("DEMO" if demo else "LIVE")
         self._notify(f"Session started: {instrument} ({mode})")
@@ -460,6 +524,23 @@ class SessionOrchestrator:
             msg = f"FEED STALE: {gap_seconds:.0f}s no data (check {stale_count})"
             log.critical(msg)
             self._notify(msg)
+
+    def _minutes_to_close_et(self) -> float | None:
+        """Minutes until firm close time in ET. None if no close time set."""
+        if self._close_hour_et is None:
+            return None
+        try:
+            et_now = datetime.now(ZoneInfo("America/New_York"))
+            close_today = et_now.replace(
+                hour=self._close_hour_et,
+                minute=self._close_min_et or 0,
+                second=0,
+                microsecond=0,
+            )
+            diff = (close_today - et_now).total_seconds() / 60.0
+            return diff
+        except Exception:
+            return None
 
     def _publish_state(self) -> None:
         """Write bot state to JSON for dashboard consumption. Never raises."""
@@ -691,6 +772,18 @@ class SessionOrchestrator:
         # Publish bot state for dashboard (every bar, non-fatal)
         self._publish_state()
 
+        # Force-flatten within 5 minutes of firm close time (prevents positions at cutoff)
+        if not self._close_time_forced and self._close_hour_et is not None:
+            mins_to_close = self._minutes_to_close_et()
+            if mins_to_close is not None and 0 < mins_to_close <= 5.0:
+                active = self._positions.active_positions()
+                if active:
+                    self._close_time_forced = True
+                    msg = f"CLOSE TIME FLATTEN: {len(active)} position(s) being closed ({mins_to_close:.0f}min before cutoff)"
+                    log.critical(msg)
+                    self._notify(msg)
+                    await self._emergency_flatten()
+
         # Periodic bar heartbeat log (every 10 bars ≈ 10 minutes)
         if self._bar_count % 10 == 0:
             active = len(self._positions.active_positions())
@@ -868,22 +961,41 @@ class SessionOrchestrator:
             log.warning("Bracket submit failed for %s (position still managed by engine): %s", event.strategy_id, e)
 
     async def _cancel_brackets(self, strategy_id: str) -> None:
-        """Cancel bracket orders before submitting exit. Never raises."""
+        """Cancel bracket orders before submitting exit. Never raises.
+
+        Two-pass approach:
+        1. Cancel known bracket leg IDs from position record
+        2. Sweep for any remaining AutoBracket orders on the contract (orphan cleanup)
+        """
         if self.order_router is None:
             return
-        record = self._positions.get(strategy_id)
-        if record is None or not record.bracket_order_ids:
-            return
         loop = asyncio.get_running_loop()
-        for oid in record.bracket_order_ids:
-            try:
-                await loop.run_in_executor(None, self.order_router.cancel, oid)
-                self._stats.bracket_cancels_ok += 1
-            except Exception as e:
-                self._stats.bracket_cancels_failed += 1
-                log.warning("Bracket cancel failed (may have filled): %s", e)
+
+        # Pass 1: Cancel known bracket leg IDs
+        record = self._positions.get(strategy_id)
+        if record is not None and record.bracket_order_ids:
+            for oid in record.bracket_order_ids:
+                try:
+                    await loop.run_in_executor(None, self.order_router.cancel, oid)
+                    self._stats.bracket_cancels_ok += 1
+                except Exception as e:
+                    self._stats.bracket_cancels_failed += 1
+                    log.warning("Bracket cancel failed (may have filled): %s", e)
+
         # Brief pause to let cancellations settle
         await asyncio.sleep(0.5)
+
+        # Pass 2: Sweep for any remaining AutoBracket orders on this contract
+        # This catches orphaned bracket legs that survived a previous crash or
+        # bracket legs whose IDs we never captured
+        try:
+            remaining = await loop.run_in_executor(
+                None, self.order_router.cancel_bracket_orders, self.contract_symbol
+            )
+            if remaining > 0:
+                log.warning("ORPHAN CLEANUP: cancelled %d leftover bracket orders on %s", remaining, self.contract_symbol)
+        except Exception as e:
+            log.warning("Bracket sweep failed: %s", e)
 
     EXIT_RETRY_MAX = 3
     EXIT_RETRY_BACKOFF = 1.0  # seconds, linear: 1s, 2s, 3s
@@ -998,6 +1110,14 @@ class SessionOrchestrator:
                 log.critical("CIRCUIT BREAKER OPEN — skipping ENTRY for %s", event.strategy_id)
                 self._notify(f"CIRCUIT BREAKER OPEN — skipping ENTRY for {event.strategy_id}")
                 self._write_signal_record({"type": "CIRCUIT_BREAKER", "strategy_id": event.strategy_id})
+                return
+
+            # Post-market buffer: block entries within 10 minutes of firm close
+            mins_to_close = self._minutes_to_close_et()
+            if mins_to_close is not None and 0 < mins_to_close <= 10.0:
+                msg = f"POST-MARKET BUFFER: skipping ENTRY for {event.strategy_id} ({mins_to_close:.0f}min to close)"
+                log.warning(msg)
+                self._notify(msg)
                 return
 
             # Check position tracker BEFORE broker submit — reject duplicates
@@ -1142,7 +1262,38 @@ class SessionOrchestrator:
             if _bracket_merged:
                 record = self._positions.get(event.strategy_id)
                 if record is not None and order_id:
-                    record.bracket_order_ids = [order_id]
+                    # Verify bracket legs were actually created at the broker.
+                    # ProjectX creates bracket legs as separate orders with IDs entry_id+1 (SL)
+                    # and entry_id+2 (TP), tagged with 'AutoBracket'.
+                    try:
+                        sl_id, tp_id = self.order_router.verify_bracket_legs(
+                            order_id, self.contract_symbol
+                        )
+                        if sl_id and tp_id:
+                            record.bracket_order_ids = [sl_id, tp_id]
+                            log.info(
+                                "BRACKET VERIFIED: %s SL=%d TP=%d",
+                                event.strategy_id, sl_id, tp_id,
+                            )
+                        else:
+                            missing = []
+                            if not sl_id:
+                                missing.append("SL")
+                            if not tp_id:
+                                missing.append("TP")
+                            msg = (
+                                f"BRACKET LEGS MISSING for {event.strategy_id}: "
+                                f"{', '.join(missing)} not found after entry fill. "
+                                f"POSITION MAY BE UNPROTECTED."
+                            )
+                            log.critical(msg)
+                            self._notify(msg)
+                            # Store what we have — partial protection is better than none
+                            record.bracket_order_ids = [x for x in [sl_id, tp_id] if x]
+                    except Exception as e:
+                        log.error("Bracket verification failed for %s: %s", event.strategy_id, e)
+                        # Fallback: assume bracket IDs are sequential (best guess)
+                        record.bracket_order_ids = [order_id + 1, order_id + 2]
                 self._stats.brackets_submitted += 1
             else:
                 actual_entry = fill_price if fill_price is not None else event.price
@@ -1533,6 +1684,27 @@ class SessionOrchestrator:
                         self.auth.refresh_if_needed()
                     except Exception as exc:
                         log.warning("Auth refresh failed before reconnect: %s", exc)
+
+                    # Re-resolve front-month contract (handles contract roll mid-session)
+                    try:
+                        from trading_app.live.projectx.contract_resolver import ProjectXContracts
+
+                        _contracts = ProjectXContracts(auth=self.auth)
+                        _contracts._contract_cache.clear()  # Force fresh resolution
+                        new_symbol = _contracts.resolve_front_month(self.instrument)
+                        if new_symbol != self.contract_symbol:
+                            log.warning(
+                                "CONTRACT ROLLED: %s -> %s (updating feed subscription)",
+                                self.contract_symbol,
+                                new_symbol,
+                            )
+                            self._notify(f"CONTRACT ROLLED: {self.contract_symbol} -> {new_symbol}")
+                            self.contract_symbol = new_symbol
+                        else:
+                            log.info("Contract unchanged on reconnect: %s", self.contract_symbol)
+                    except Exception as exc:
+                        log.warning("Contract re-resolution failed on reconnect: %s (keeping %s)", exc, self.contract_symbol)
+
                     self._stats.reconnect_attempts += 1
                     self._notify(f"Reconnecting in {backoff:.0f}s (attempt {attempt + 2})")
                     await asyncio.sleep(backoff)
