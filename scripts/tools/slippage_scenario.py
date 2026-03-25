@@ -16,54 +16,33 @@ import numpy as np
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.prop_profiles import get_lane_registry
 from trading_app.strategy_fitness import _load_strategy_outcomes
 
-# 4 Apex MNQ lanes (from prop_profiles.py apex_50k_manual)
-# filter_type must match exactly — orb_outcomes is joined with daily_features
-# via _load_strategy_outcomes to apply the correct filter.
-LANES = [
-    {
-        "name": "NYSE_CLOSE VOL_RV12_N20 RR1.0 O15",
-        "symbol": "MNQ",
-        "orb_label": "NYSE_CLOSE",
-        "entry_model": "E2",
-        "rr_target": 1.0,
-        "confirm_bars": 1,
-        "orb_minutes": 15,
-        "filter_type": "VOL_RV12_N20",
-    },
-    {
-        "name": "SINGAPORE_OPEN ORB_G8 RR4.0 O15",
-        "symbol": "MNQ",
-        "orb_label": "SINGAPORE_OPEN",
-        "entry_model": "E2",
-        "rr_target": 4.0,
-        "confirm_bars": 1,
-        "orb_minutes": 15,
-        "filter_type": "ORB_G8",
-    },
-    {
-        "name": "COMEX_SETTLE ORB_G8 RR1.0 O5",
-        "symbol": "MNQ",
-        "orb_label": "COMEX_SETTLE",
-        "entry_model": "E2",
-        "rr_target": 1.0,
-        "confirm_bars": 1,
-        "orb_minutes": 5,
-        "filter_type": "ORB_G8",
-    },
-    {
-        "name": "NYSE_OPEN X_MES_ATR60 RR1.0 O15",
-        "symbol": "MNQ",
-        "orb_label": "NYSE_OPEN",
-        "entry_model": "E2",
-        "rr_target": 1.0,
-        "confirm_bars": 1,
-        "orb_minutes": 15,
-        "filter_type": "X_MES_ATR60",
-    },
-]
+
+def _build_lanes() -> list[dict]:
+    """Build lane list from canonical registry (MNQ lanes only for slippage)."""
+    registry = get_lane_registry()
+    lanes = []
+    for label, lane in sorted(registry.items()):
+        if lane["instrument"] != "MNQ":
+            continue  # slippage scenario is MNQ-specific
+        lanes.append({
+            "name": f"{label} {lane['filter_type']} RR{lane['rr_target']} O{lane['orb_minutes']}",
+            "symbol": lane["instrument"],
+            "orb_label": label,
+            "entry_model": lane["entry_model"],
+            "rr_target": lane["rr_target"],
+            "confirm_bars": lane["confirm_bars"],
+            "orb_minutes": lane["orb_minutes"],
+            "filter_type": lane["filter_type"],
+        })
+    return lanes
+
+
+LANES = _build_lanes()
 
 # MNQ cost parameters
 TICK_SIZE_PTS = 0.25
@@ -73,6 +52,7 @@ TICK_DOLLAR = TICK_SIZE_PTS * POINT_VALUE  # $0.50
 
 def run_scenario():
     con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+    configure_connection(con)
 
     print("=" * 90)
     print("SLIPPAGE SCENARIO ANALYSIS — 4 Apex MNQ Lanes")

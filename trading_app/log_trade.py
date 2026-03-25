@@ -26,53 +26,10 @@ from pipeline.cost_model import COST_SPECS
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
 
-LANE_DEFS = {
-    "NYSE_CLOSE": {
-        "strategy_id": "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20_O15",
-        "lane_name": "NYSE_CLOSE_VOL",
-        "instrument": "MNQ",
-        "filter_type": "VOL_RV12_N20",
-        "rr_target": 1.0,
-        "orb_minutes": 15,
-        "entry_model": "E2",
-    },
-    "SINGAPORE_OPEN": {
-        "strategy_id": "MNQ_SINGAPORE_OPEN_E2_RR4.0_CB1_ORB_G8_O15",
-        "lane_name": "SING_G8",
-        "instrument": "MNQ",
-        "filter_type": "ORB_G8",
-        "rr_target": 4.0,
-        "orb_minutes": 15,
-        "entry_model": "E2",
-    },
-    "COMEX_SETTLE": {
-        "strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G8",
-        "lane_name": "COMEX_G8",
-        "instrument": "MNQ",
-        "filter_type": "ORB_G8",
-        "rr_target": 1.0,
-        "orb_minutes": 5,
-        "entry_model": "E2",
-    },
-    "NYSE_OPEN": {
-        "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60_O15",
-        "lane_name": "NYSE_OPEN_XMES",
-        "instrument": "MNQ",
-        "filter_type": "X_MES_ATR60",
-        "rr_target": 1.0,
-        "orb_minutes": 15,
-        "entry_model": "E2",
-    },
-    "TOKYO_OPEN": {
-        "strategy_id": "MGC_TOKYO_OPEN_E2_RR2.0_CB1_ORB_G4_CONT_S075",
-        "lane_name": "MGC_TOKYO",
-        "instrument": "MGC",
-        "filter_type": "ORB_G4_CONT",
-        "rr_target": 2.0,
-        "orb_minutes": 5,
-        "entry_model": "E2",
-    },
-}
+# Lane definitions — imported from canonical source (prop_profiles.py)
+from trading_app.prop_profiles import get_lane_registry
+
+LANE_DEFS = get_lane_registry()
 
 
 def compute_pnl_r(direction: str, entry: float, exit_price: float, stop: float) -> float:
@@ -103,15 +60,15 @@ def log_trade(args):
     slippage_exit = args.slippage_exit or 0
     notes = args.notes or ""
 
-    # Get today's ORB for stop/target computation
-    con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
-    configure_connection(con)
-    orb_row = con.execute(
-        f"""SELECT orb_{session}_high, orb_{session}_low, orb_{session}_size
-            FROM daily_features
-            WHERE symbol = ? AND trading_day = ? AND orb_minutes = ?""",
-        [instrument, today, lane["orb_minutes"]],
-    ).fetchone()
+    # Get today's ORB for stop/target computation (read-only, closed before write)
+    with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as _con_r:
+        configure_connection(_con_r)
+        orb_row = _con_r.execute(
+            f"""SELECT orb_{session}_high, orb_{session}_low, orb_{session}_size
+                FROM daily_features
+                WHERE symbol = ? AND trading_day = ? AND orb_minutes = ?""",
+            [instrument, today, lane["orb_minutes"]],
+        ).fetchone()
 
     if not orb_row:
         print(f"WARNING: No ORB data for {instrument} {session} O{lane['orb_minutes']} on {today}")
@@ -140,7 +97,6 @@ def log_trade(args):
         exit_reason = "manual" if args.exit != target_price else "target"
     else:
         print("ERROR: Must specify --exit, --stop-hit, or --target-hit")
-        con.close()
         sys.exit(1)
 
     # Compute P&L
@@ -150,7 +106,7 @@ def log_trade(args):
 
     now = datetime.now(timezone.utc)
 
-    # Write to DB
+    # Write to DB (separate connection — read connection already closed above)
     con_w = duckdb.connect(str(GOLD_DB_PATH))
     configure_connection(con_w, writing=True)
     con_w.execute(
@@ -174,7 +130,7 @@ def log_trade(args):
             round(pnl_r, 4),
             slippage_entry,
             lane["strategy_id"],
-            lane["lane_name"],
+            f"{session}_{lane['filter_type']}",
             instrument,
             lane["orb_minutes"],
             lane["rr_target"],
@@ -199,7 +155,6 @@ def log_trade(args):
     ).fetchone()[0]
 
     con_w.close()
-    con.close()
 
     # Print confirmation
     outcome = "WIN" if pnl_r > 0 else ("LOSS" if pnl_r < 0 else "SCRATCH")

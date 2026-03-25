@@ -62,6 +62,7 @@ class DailyLaneSpec:
     execution_notes: str = ""
     planned_stop_multiplier: float | None = None
     required_fitness: tuple[str, ...] = ("FIT",)
+    max_orb_size_pts: float | None = None  # ORB cap in points — skip trade if ORB >= this
 
 
 @dataclass(frozen=True)
@@ -287,7 +288,16 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 planned_stop_multiplier=0.75,
             ),
             DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G8", "MNQ", "COMEX_SETTLE"),
-            DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60_O15", "MNQ", "NYSE_OPEN"),
+            # ORB cap: risk management only, not return optimization.
+            # Derived from DD math (P95 portfolio DD < 67% of $3K DD limit).
+            # Not data snooped — 150pt chosen from account math, not backtest returns.
+            # Data: Lane 4 ExpR is flat across ORB quintiles (r=+0.03, p=0.143, not significant).
+            DailyLaneSpec(
+                "MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60_O15",
+                "MNQ",
+                "NYSE_OPEN",
+                max_orb_size_pts=150.0,
+            ),
         ),
         notes=(
             "Phase 1 manual. 4 validated MNQ lanes (stratified-K, holdout-clean, all gates). "
@@ -298,6 +308,34 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             "Remediation audit 2026-03-25."
         ),
     ),
+    # =========================================================================
+    # UPGRADE PATH: When moving to $100K Apex, activate this profile.
+    # DD limit $3,000 (vs $2K on $50K). Same 4 lanes, same 1 contract.
+    # Purpose: more DD headroom for current ORB sizes, not more contracts.
+    # =========================================================================
+    # "apex_100k_manual": AccountProfile(
+    #     profile_id="apex_100k_manual",
+    #     firm="apex",
+    #     account_size=100_000,  # dd_limit_dollars=3000, max_contracts_micro=60
+    #     copies=1,
+    #     stop_multiplier=0.75,
+    #     max_slots=4,
+    #     allowed_sessions=frozenset({"NYSE_CLOSE", "SINGAPORE_OPEN", "COMEX_SETTLE", "NYSE_OPEN"}),
+    #     daily_lanes=(
+    #         DailyLaneSpec("MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20_O15", "MNQ", "NYSE_CLOSE"),
+    #         DailyLaneSpec(
+    #             "MNQ_SINGAPORE_OPEN_E2_RR4.0_CB1_ORB_G8_O15", "MNQ", "SINGAPORE_OPEN",
+    #             execution_notes="0.5x sizing. RR4.0 long loss streaks structural.",
+    #             planned_stop_multiplier=0.75,
+    #         ),
+    #         DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G8", "MNQ", "COMEX_SETTLE"),
+    #         DailyLaneSpec(
+    #             "MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60_O15", "MNQ", "NYSE_OPEN",
+    #             max_orb_size_pts=150.0,
+    #         ),
+    #     ),
+    #     notes="$100K upgrade. Same strategies, more DD headroom ($3K vs $2K).",
+    # ),
     # =========================================================================
     # Phase 2: Automation scaling (Tradeify MNQ + TopStep MGC)
     # =========================================================================
@@ -388,6 +426,104 @@ def get_account_tier(firm: str, account_size: int) -> PropFirmAccount:
 def get_profile(profile_id: str) -> AccountProfile:
     """Look up account profile. Raises KeyError if not found."""
     return ACCOUNT_PROFILES[profile_id]
+
+
+def _parse_strategy_id(strategy_id: str) -> dict:
+    """Parse strategy parameters from canonical strategy_id string.
+
+    Format: {INSTR}_{SESSION}_{ENTRY}_{RR}_{CB}_{FILTER}[_O{MIN}][_S{MULT}]
+    Returns dict with: entry_model, rr_target, confirm_bars, filter_type, orb_minutes.
+    """
+    parts = strategy_id.split("_")
+    result: dict = {"entry_model": "E2", "rr_target": 1.0, "confirm_bars": 1, "filter_type": "NO_FILTER", "orb_minutes": 5}
+    for i, p in enumerate(parts):
+        if p in ("E1", "E2", "E3"):
+            result["entry_model"] = p
+        elif p.startswith("RR"):
+            result["rr_target"] = float(p[2:])
+        elif p.startswith("CB"):
+            result["confirm_bars"] = int(p[2:])
+        elif p.startswith("O") and p[1:].isdigit():
+            result["orb_minutes"] = int(p[1:])
+    # filter_type: everything between CB and O/S suffix (or end)
+    # Reconstruct from parts after CB until we hit O{digits} or S{digits} or end
+    cb_idx = None
+    for i, p in enumerate(parts):
+        if p.startswith("CB") and p[2:].isdigit():
+            cb_idx = i
+            break
+    if cb_idx is not None:
+        filter_parts = []
+        for p in parts[cb_idx + 1 :]:
+            if (p.startswith("O") and p[1:].isdigit()) or (p.startswith("S") and p[1:].replace(".", "").isdigit()):
+                break
+            filter_parts.append(p)
+        if filter_parts:
+            result["filter_type"] = "_".join(filter_parts)
+        else:
+            result["filter_type"] = "NO_FILTER"
+    return result
+
+
+def get_lane_registry(profile_id: str = "apex_50k_manual") -> dict[str, dict]:
+    """Build a lane registry from a profile's daily_lanes.
+
+    Returns {orb_label: {strategy_id, instrument, orb_label, entry_model,
+    rr_target, confirm_bars, filter_type, orb_minutes, is_half_size, shadow_only,
+    execution_notes, stop_multiplier}}.
+
+    This is the SINGLE SOURCE OF TRUTH for lane definitions.
+    All consumer scripts (pre_session_check, log_trade, forward_monitor,
+    slippage_scenario, sprt_monitor) must import from here.
+    """
+    profile = ACCOUNT_PROFILES[profile_id]
+    registry: dict[str, dict] = {}
+
+    for lane in profile.daily_lanes:
+        parsed = _parse_strategy_id(lane.strategy_id)
+        is_half = lane.planned_stop_multiplier is not None or "0.5x" in lane.execution_notes
+        shadow = lane.instrument == "MGC" and lane.orb_label == "TOKYO_OPEN"  # MGC is shadow-only
+
+        registry[lane.orb_label] = {
+            "strategy_id": lane.strategy_id,
+            "instrument": lane.instrument,
+            "orb_label": lane.orb_label,
+            "entry_model": parsed["entry_model"],
+            "rr_target": parsed["rr_target"],
+            "confirm_bars": parsed["confirm_bars"],
+            "filter_type": parsed["filter_type"],
+            "orb_minutes": parsed["orb_minutes"],
+            "stop_multiplier": profile.stop_multiplier,
+            "is_half_size": is_half,
+            "shadow_only": shadow,
+            "execution_notes": lane.execution_notes,
+            "max_orb_size_pts": lane.max_orb_size_pts,
+        }
+
+    # Also include TopStep lanes
+    if profile_id == "apex_50k_manual":
+        ts_profile = ACCOUNT_PROFILES.get("topstep_50k")
+        if ts_profile:
+            for lane in ts_profile.daily_lanes:
+                if lane.orb_label not in registry:
+                    parsed = _parse_strategy_id(lane.strategy_id)
+                    registry[lane.orb_label] = {
+                        "strategy_id": lane.strategy_id,
+                        "instrument": lane.instrument,
+                        "orb_label": lane.orb_label,
+                        "entry_model": parsed["entry_model"],
+                        "rr_target": parsed["rr_target"],
+                        "confirm_bars": parsed["confirm_bars"],
+                        "filter_type": parsed["filter_type"],
+                        "orb_minutes": parsed["orb_minutes"],
+                        "stop_multiplier": ts_profile.stop_multiplier,
+                        "is_half_size": False,
+                        "shadow_only": True,  # TopStep MGC is shadow-trade
+                        "execution_notes": lane.execution_notes,
+                        "max_orb_size_pts": lane.max_orb_size_pts,
+                    }
+
+    return registry
 
 
 def compute_profit_split_factor(firm_spec: PropFirmSpec, cumulative_profit: float = 0.0) -> float:
