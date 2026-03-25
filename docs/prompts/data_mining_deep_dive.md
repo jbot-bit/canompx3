@@ -1,8 +1,7 @@
-# Data Mining Deep Dive — Find What Nobody Asked About
+# Data Mining Deep Dive — Let The Data Speak
 
-The other prompts optimize known workstreams. This one prospects for unknowns.
-You are not confirming hypotheses — you are discovering what the data contains
-that has never been examined. No story first. Data first.
+No pre-ranking. No cherry-picking. No "mechanism plausibility" filtering.
+Map everything. Screen everything. The data decides what matters.
 
 ---
 
@@ -12,350 +11,255 @@ I have a futures ORB breakout system with 10 years of 1-minute candle data acros
 3 instruments (MNQ, MGC, MES), 12 sessions, and ~10M rows in orb_outcomes. The system
 has been optimized along known dimensions (filters, ORB aperture, entry models, RR targets).
 
-**But nobody has systematically audited what features exist in the data that have NEVER
-been analyzed.** There are columns in daily_features that may have never been binned.
-There are patterns in bars_1m that were never aggregated. There are interaction effects
-between known features that were never tested together.
+**Nobody has systematically screened every feature in this dataset against outcomes.**
+There are columns in daily_features that were computed but never binned against win rate.
+There are feature interactions never tested. There are temporal patterns never checked.
 
-Your job: find the unexplored corners of this dataset. No hypothesis. No story.
-Just: what's in the data, what's never been tested, and does any of it predict outcomes?
+Your job: screen EVERYTHING. No hypothesis. No pre-ranking. No "this one looks more
+plausible." Run the numbers on ALL unexplored dimensions simultaneously and let the
+data tell you which ones matter.
 
-**You are a prospector, not a storyteller. Dig first, interpret later.**
+**You are a screening machine, not a storyteller. Test everything. Report what survives.**
 
 ---
 
 ### STEP 0 — READ THE LAW
 
-Same as master prompt. Read in order, internalize, don't repeat back:
+Read in order, internalize, don't repeat back:
 1. `CLAUDE.md`
 2. `TRADING_RULES.md`
 3. `RESEARCH_RULES.md`
-4. `docs/STRATEGY_BLUEPRINT.md` — especially §5 NO-GO registry (know what's already dead)
+4. `docs/STRATEGY_BLUEPRINT.md` — especially §5 NO-GO registry (know what's dead)
 5. `.claude/rules/quant-audit-protocol.md`
 
-**Critical: the NO-GO registry exists for a reason.** Some paths are dead. Before you
-"discover" something, check if it was already tested and killed. If it's on the NO-GO,
-skip it unless you can articulate why your test is structurally different from the one
-that killed it.
+**NO-GO registry is a hard boundary.** If something is dead, skip it. You can test a
+STRUCTURALLY DIFFERENT version of a dead idea (e.g., within-day cross-session vs prior-day
+context), but you must verify the prior kill doesn't apply before spending time on it.
 
 ---
 
-### STEP 1 — MAP THE UNEXPLORED TERRITORY
+### STEP 1 — MAP EVERY UNEXPLORED DIMENSION
 
-This is the core differentiator. Before testing anything, CATALOG what exists.
-
-#### 1A — Schema audit
-
-Run these queries and report the FULL column list:
+#### 1A — Full schema audit
 
 ```sql
 DESCRIBE daily_features;
 DESCRIBE orb_outcomes;
-DESCRIBE bars_1m;
-DESCRIBE bars_5m;
 ```
 
-For daily_features specifically, classify EVERY column into:
+Classify EVERY column in daily_features:
 
 ```
-COLUMN                          | ANALYZED? | HOW DO YOU KNOW?
-────────────────────────────────┼───────────┼──────────────────
-orb_NYSE_OPEN_size_pts          | YES       | Used in G-filters, validated
-orb_NYSE_OPEN_break_delay_min   | PARTIAL   | T1 done, T3-T8 pending
-atr_20                          | YES       | Used in ATR filters
-rel_vol                         | PARTIAL   | In feature set, not binned alone
-rsi_14                          | NO-GO     | Blueprint §5: GUILTY
-[some_column_you_find]          | UNKNOWN   | No references found in codebase
+COLUMN                     | STATUS   | EVIDENCE
+───────────────────────────┼──────────┼──────────────────
+[column]                   | USED     | In filter grid / validated strategy
+[column]                   | PARTIAL  | Tested once, not through full T0-T8
+[column]                   | NO-GO    | Blueprint §5 / audit protocol dead
+[column]                   | VIRGIN   | Zero references outside build script
 ```
 
-**How to determine "ANALYZED?":**
-- `grep -r "column_name" pipeline/ trading_app/ scripts/ tests/` — is it used anywhere?
-- Check `TRADING_RULES.md` — is it mentioned as a filter or feature?
-- Check `docs/STRATEGY_BLUEPRINT.md` §5 NO-GO — is it dead?
-- Check `quant-audit-protocol.md` KNOWN FAILURE PATTERNS — was it tested and killed?
-- If ZERO references outside of `build_daily_features.py` → it's computed but NEVER ANALYZED.
-  These are your primary targets.
+**How to classify:** `grep -r "column_name" pipeline/ trading_app/ scripts/ tests/`
+If zero hits outside `build_daily_features.py` → VIRGIN. These are your targets.
+No judgment about which VIRGINs "look more interesting." They're all targets.
 
-#### 1B — Feature interaction matrix
+#### 1B — Enumerate ALL testable dimensions
 
-List all PAIRS of known-useful features that have never been tested TOGETHER:
-- break_delay × orb_size (do fast breaks on big ORBs predict differently than fast breaks on small ORBs?)
-- break_delay × session (already known to reverse — but within the "good direction" sessions, does break_delay × vol regime interact?)
-- day_of_week × session (are certain sessions stronger on certain days?)
-- direction × session (already known SINGAPORE_OPEN is long-only — are other sessions directionally biased?)
-- orb_size × vol_regime (do small ORBs in high-vol regimes behave differently than small ORBs in low-vol?)
+From the schema, mechanically list every dimension that CAN be screened:
 
-**Don't make this list up from imagination.** Build it from what actually exists in the schema.
+- Every VIRGIN feature column (continuous → quintile bin; boolean → True/False split)
+- Every VIRGIN × session combination
+- Every pair of (USED feature × VIRGIN feature) — interaction candidates
+- DOW × session (5 × 12 cells per instrument)
+- Month × session (12 × 12 cells per instrument)
+- Consecutive outcome serial correlation per session
+- Vol regime transition (low→high, high→low, stable) per session
+- Cross-session within-day chains (if NOT killed by NO-GO — verify first)
+- Direction asymmetry per session (long vs short outcomes)
 
-#### 1C — Temporal pattern audit
-
-Check for patterns that most ORB research ignores:
-- **Month-of-year effects:** Is there seasonality? (January effect, September/October volatility, FOMC cycle months)
-- **Day-of-week effects PER SESSION:** Not global DOW — session-specific. Tuesday NYSE_OPEN vs Friday NYSE_OPEN.
-- **Time-since-last-trade effects:** After a 2-day break (holiday), is the next ORB different?
-- **Consecutive outcome effects:** After 3 losses in a row on a session, is the next trade different? (Serial correlation test)
-- **Volatility regime transitions:** Not vol LEVEL (already filtered) — the CHANGE. Does the day vol regime switches from low→high predict ORB behavior differently than stable-high?
-
-#### 1D — Cross-session within-day patterns
-
-This is the interaction nobody looks at:
-- If NYSE_OPEN ORB breaks long AND wins, does US_DATA_1000 (30 min later) also break long more often?
-- If COMEX_SETTLE was a loss, does CME_PRECLOSE (75 min later) behave differently?
-- Does the SIZE of the NYSE_OPEN ORB predict anything about US_DATA_1000 behavior?
-
-**WARNING:** Cross-session lead-lag is on the NO-GO registry. CHECK what specific test was done and why it was killed. If the prior test was "prior-day context" (different-day), within-day same-session-chain may be structurally different and still testable. But verify before assuming.
+Count the total. This is your honest K for FDR.
 
 ---
 
-### STEP 2 — REPORT THE MAP (before testing anything)
+### STEP 2 — SCREEN EVERYTHING (no cherry-picking)
 
-Present the catalog:
+**Do NOT pick and choose which dimensions to test.** Run the Step 3A screening pass
+on ALL of them. The point is to let the data surface what matters, not to let human
+intuition pre-filter.
 
-```
-DATA MINING MAP — [date]
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+For EVERY dimension identified in Step 1B, run the fast screening query:
 
-NEVER-ANALYZED FEATURES (computed but never tested):
-  1. [column] — exists in daily_features since [date], zero codebase references
-  2. [column] — ...
-
-PARTIALLY-ANALYZED (T1 done, no OOS/WF):
-  1. break_delay_min — T1 SIGNAL, T3-T8 pending
-  2. ...
-
-UNTESTED INTERACTIONS:
-  1. [feature_A] × [feature_B] — never tested together, structural reason to check: [why]
-  2. ...
-
-TEMPORAL GAPS (never checked):
-  1. Month-of-year × session
-  2. DOW × session (session-specific, not global)
-  3. ...
-
-CROSS-SESSION WITHIN-DAY (check NO-GO first):
-  1. NYSE_OPEN outcome → US_DATA_1000 direction
-  2. ...
-
-NO-GO CONFIRMED DEAD (skip these):
-  1. [item] — killed by [test], reason: [why]
-  2. ...
-
-ESTIMATED TOTAL UNEXPLORED DIMENSIONS: [N]
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
-**WAIT for my direction after presenting the map.** I'll pick which veins to mine.
-
----
-
-### STEP 3 — MINE (only what I greenlight)
-
-For each dimension I greenlight:
-
-#### 3A — Exploratory bin analysis (fast, cheap, kills early)
+#### Continuous features → quintile bin:
 
 ```sql
--- Quintile the feature, compute ExpR and WR per bin, per session, per instrument
 SELECT
-    [session],
-    NTILE(5) OVER (PARTITION BY [session] ORDER BY [feature]) AS bin,
-    COUNT(*) AS n,
-    AVG(pnl_r) AS expr,
-    AVG(CASE WHEN outcome='win' THEN 1.0 ELSE 0.0 END) AS wr,
-    STDDEV(pnl_r) AS std_r
-FROM orb_outcomes o
-JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol
-WHERE o.symbol = 'MNQ'
-  AND o.entry_model = 'E2'
-  AND o.rr_target = 1.0
-  AND o.orb_minutes = 5
-  AND d.[filter_column] IS NOT NULL  -- session-specific filter if applicable
-GROUP BY 1, 2
-ORDER BY 1, 2
-```
-
-Report format (PER SESSION — never pooled):
-
-```
-FEATURE: [name]
-SESSION: [name] | INSTRUMENT: [MNQ/MGC/MES]
-
-BIN | N    | ExpR   | WR    | Std
-────┼──────┼────────┼───────┼──────
-1   | XXX  | +0.XXX | XX.X% | X.XX
-2   | XXX  | +0.XXX | XX.X% | X.XX
-3   | XXX  | +0.XXX | XX.X% | X.XX
-4   | XXX  | +0.XXX | XX.X% | X.XX
-5   | XXX  | +0.XXX | XX.X% | X.XX
-
-WR SPREAD: [Q5 - Q1]  → SIGNAL (>5%) / FLAT (<3%) / NOISE (3-5%)
-ExpR MONOTONIC: YES / NO / PARTIAL
-QUICK VERDICT: DIG_DEEPER / ARITHMETIC_ONLY / DEAD
-```
-
-**Kill rule for Step 3A:** If WR spread < 3% AND ExpR is not monotonic → DEAD. Move on.
-Don't invest T0-T8 time on something that shows nothing in the exploratory bin.
-
-#### 3B — Interaction analysis (for feature pairs)
-
-Hold feature A constant (e.g., top quintile), vary feature B across quintiles.
-Then swap: hold B constant, vary A. This isolates the marginal contribution of each.
-
-```
-INTERACTION: [feature_A] × [feature_B]
-SESSION: [name]
-
-HOLDING A=Q5 (high), VARYING B:
-B_BIN | N   | ExpR   | WR    | MARGINAL EFFECT OF B
-──────┼─────┼────────┼───────┼─────────────────────
-1     | XX  | +0.XXX | XX.X% |
-5     | XX  | +0.XXX | XX.X% | Δ = [difference]
-
-HOLDING B=Q5 (high), VARYING A:
-A_BIN | N   | ExpR   | WR    | MARGINAL EFFECT OF A
-──────┼─────┼────────┼───────┼─────────────────────
-1     | XX  | +0.XXX | XX.X% |
-5     | XX  | +0.XXX | XX.X% | Δ = [difference]
-
-INTERACTION VERDICT:
-  A alone explains: [X]% of variance
-  B alone explains: [X]% of variance
-  A×B together explains: [X]% — if > A+B individually → REAL INTERACTION
-  If A×B ≈ A+B → NO INTERACTION, features are additive (still useful, but not a new finding)
-```
-
-#### 3C — Temporal pattern analysis
-
-For month/DOW/sequence effects:
-
-```sql
--- DOW × session example
-SELECT
-    DAYOFWEEK(trading_day) AS dow,
-    [session],
+    [session_column],
+    NTILE(5) OVER (PARTITION BY [session_column] ORDER BY [feature]) AS bin,
     COUNT(*) AS n,
     AVG(pnl_r) AS expr,
     AVG(CASE WHEN outcome='win' THEN 1.0 ELSE 0.0 END) AS wr
 FROM orb_outcomes o
-WHERE symbol = 'MNQ' AND entry_model = 'E2' AND rr_target = 1.0
+JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol
+WHERE o.symbol = [instrument]
+  AND o.entry_model = 'E2'
+  AND o.rr_target = 1.0
+  AND o.orb_minutes = 5
+  AND d.[feature] IS NOT NULL
 GROUP BY 1, 2
-ORDER BY 2, 1
+ORDER BY 1, 2
 ```
 
-**WARNING on temporal patterns:** These have the HIGHEST multiple testing risk.
-5 DOW × 12 sessions × 3 instruments = K=180 comparisons just for DOW.
-BH FDR threshold at K=180 is brutal. Most things will die. That's correct.
-If something survives K=180, it's real. If nothing does, temporal patterns don't matter
-for this system. Report that finding honestly.
+#### Boolean features → True/False split:
+
+```sql
+SELECT
+    [session_column],
+    d.[boolean_feature] AS flag,
+    COUNT(*) AS n,
+    AVG(pnl_r) AS expr,
+    AVG(CASE WHEN outcome='win' THEN 1.0 ELSE 0.0 END) AS wr
+FROM orb_outcomes o
+JOIN daily_features d ON o.trading_day = d.trading_day AND o.symbol = d.symbol
+WHERE o.symbol = [instrument]
+  AND o.entry_model = 'E2'
+  AND o.rr_target = 1.0
+GROUP BY 1, 2
+ORDER BY 1, 2
+```
+
+#### Temporal → group by time unit:
+
+```sql
+SELECT
+    [session_column],
+    EXTRACT(DOW FROM trading_day) AS time_unit,
+    COUNT(*) AS n,
+    AVG(pnl_r) AS expr,
+    AVG(CASE WHEN outcome='win' THEN 1.0 ELSE 0.0 END) AS wr
+FROM orb_outcomes o
+WHERE symbol = [instrument] AND entry_model = 'E2' AND rr_target = 1.0
+GROUP BY 1, 2
+ORDER BY 1, 2
+```
+
+**Run ALL of these. Per session. Per instrument where relevant (start with MNQ).**
+
+For each screening result, compute mechanically:
+- WR spread = max(bin WR) - min(bin WR)
+- ExpR monotonic? = does ExpR consistently increase or decrease across bins?
+- N per bin (is any bin < 50? → flag as underpowered)
+
+#### Automatic classification (no human judgment):
+
+| WR Spread | ExpR Pattern | Classification |
+|-----------|-------------|----------------|
+| > 5% AND monotonic | ExpR monotonic | **SIGNAL** → escalate |
+| > 5% AND non-monotonic | ExpR mixed | **PARTIAL** → escalate with caution |
+| < 3% | ExpR rising | **ARITHMETIC_ONLY** → note but don't escalate |
+| < 3% | ExpR flat/mixed | **DEAD** → record and move on |
+| 3-5% | Any | **NOISE** → record, do not escalate |
+| Any | N < 50 in any bin | **UNDERPOWERED** → flag, don't conclude |
+
+**The classification is mechanical. Not vibes. Not "this seems like it could be something."
+WR spread > 5% + monotonic = escalate. Everything else = record and move on.**
 
 ---
 
-### STEP 4 — ESCALATE SURVIVORS (full T0-T8)
+### STEP 3 — REPORT THE FULL SCREENING (before any escalation)
 
-Any finding that passes Step 3A with WR spread > 5% AND monotonic ExpR gets
-the FULL audit battery from `quant-audit-protocol.md`. No shortcuts. T0 through T8,
-in order, per session.
+Present ALL results in a single table, sorted by WR spread descending:
 
-Pre-register before running:
 ```
-FINDING: [feature] predicts [session] ORB outcomes
-CLAIM TYPE: statistical_observation (upgrading to validated_finding if T0-T8 pass)
-IS_END: [define before running — do not adjust]
-KILL CRITERIA: WFE < 0.50, sensitivity flips, bootstrap p > 0.05
-K FOR FDR: [honest K — total dimensions explored in this mining session]
+FULL SCREENING RESULTS — [date]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TOTAL DIMENSIONS SCREENED: [N]
+K FOR FDR:                 [N] (this is your multiple testing tax — pay it)
+
+DIMENSION                  | SESSION        | WR SPREAD | ExpR MONO | CLASS
+───────────────────────────┼────────────────┼───────────┼───────────┼──────────
+[whatever the data says]   | [per session]  | XX.X%     | YES/NO    | SIGNAL
+[whatever the data says]   | [per session]  | XX.X%     | YES/NO    | SIGNAL
+[whatever the data says]   | [per session]  | XX.X%     | PARTIAL   | PARTIAL
+...                        | ...            | ...       | ...       | DEAD
+...                        | ...            | ...       | ...       | DEAD
+[all the rest]             | [all sessions] | < 3%      | NO        | DEAD
+
+SIGNALS FOUND:      [count]
+PARTIAL:            [count]
+ARITHMETIC_ONLY:    [count]
+DEAD:               [count]
+UNDERPOWERED:       [count]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-**K must include ALL dimensions you explored in Step 3, not just the one that
-survived.** If you binned 15 features × 12 sessions and 1 survived, K=180.
-This is the tax on data mining. Pay it honestly.
+**Do NOT interpret the results yet.** Present the table. I'll look at what the data
+surfaced. Then we decide together which SIGNALs to escalate to T0-T8.
+
+**If ZERO dimensions classify as SIGNAL:** Report that. "All [N] dimensions screened.
+Zero show WR spread > 5% with monotonic ExpR. The existing filter set captures
+available signal in this dataset. Mining complete." That's a valid, valuable finding.
+
+---
+
+### STEP 4 — ESCALATE SURVIVORS (full T0-T8, only after Step 3 review)
+
+For any SIGNAL I greenlight from Step 3:
+
+1. **T0 tautology** — correlate against ALL existing filters (ATR, G-filters, X_MES_ATR60, vol regime). If |corr| > 0.70 → DUPLICATE. Already captured.
+
+2. **T1-T8 full battery** from `quant-audit-protocol.md`. In order. No skipping. Per session.
+
+3. **Pre-register before running:**
+   ```
+   FINDING: [feature] predicts [session] outcomes
+   IS_END: [define BEFORE running]
+   K FOR FDR: [total dimensions screened in Step 2 — the FULL K, not just survivors]
+   KILL: WFE < 0.50, sensitivity flips, bootstrap p > 0.05 at honest K
+   ```
+
+4. **Report in audit protocol output format.** Numbers. No prose conclusions until
+   all tests complete.
 
 ---
 
 ### BEHAVIORAL RULES
 
-**No stories before numbers.** Don't hypothesize why DOW=Tuesday might matter
-before you've seen the data. Bin first, interpret second.
+**Screen everything, interpret nothing (until Step 3).** The screening pass is mechanical.
+WR spread and ExpR monotonicity are computed, not judged. Don't skip a dimension because
+"it probably won't show anything." Don't prioritize a dimension because "the mechanism
+is plausible." Screen them all equally.
 
-**Session-specificity at every step.** A Tuesday effect on NYSE_OPEN and a Tuesday
-effect on SINGAPORE_OPEN are different findings. Always decompose.
+**Session-specificity at every step.** Every screening query runs per session.
+A feature that shows SIGNAL on NYSE_OPEN and DEAD on SINGAPORE_OPEN is TWO results,
+not one averaged result.
 
-**The NO-GO registry is not a suggestion.** If something is dead, it's dead.
-You can test a STRUCTURALLY DIFFERENT version of a dead idea (e.g., within-day
-lead-lag vs prior-day context), but you must explain how it's different and why
-the prior kill doesn't apply.
-
-**Multiple testing tax is real.** Data mining explores many dimensions. The more
-you explore, the higher K goes, the harder it is to pass FDR. This is the CORRECT
-outcome — it prevents you from finding noise and calling it signal. If nothing
-survives after honest FDR correction, the data has been mined and there's nothing
-left. That's a valid finding.
+**The multiple testing tax is non-negotiable.** If you screen 200 dimensions, K=200.
+BH FDR at K=200 will kill most things. That's correct. It's the price of looking at
+everything. Pay it honestly. Don't reduce K by "only counting the ones that looked
+worth testing" — that's retroactive cherry-picking.
 
 **No lookahead.** Every feature must be knowable at trade entry time.
 Trade-time-knowable: `risk_dollars`, `break_delay_min`, `rel_vol`, `atr_20`, `orb_size`,
-`day_of_week`, `month`, any prior-session outcome (if that session has already closed).
-BANNED: `double_break`, anything computed from post-entry price action.
+`day_of_week`, `month`, any same-day prior-session outcome (if that session closed first).
+BANNED: `double_break`, anything computed from post-entry price action, MAE/MFE (these
+are post-trade metrics — knowable for daily_features analysis but NOT as live filters).
 
-**Report EVERYTHING you tested, not just what worked.** The null results are as
-important as the positives. They close off dead ends for future sessions.
-Append findings (positive AND negative) to the KNOWN FAILURE PATTERNS section
-of `quant-audit-protocol.md` so they're never re-tested.
+**Report EVERYTHING you tested.** The dead ends are as important as the signals.
+They close off dimensions for future sessions. Append ALL findings (positive AND
+negative) to KNOWN FAILURE PATTERNS in `quant-audit-protocol.md`.
 
-**The most likely outcome is that most dimensions are noise.** The existing
-filter set (G-filters, ATR, X_MES_ATR60, vol regime) has already captured the
-low-hanging fruit. What's left is either subtle interactions, temporal patterns,
-or nothing. "Nothing new found" is a valid, useful result. Don't manufacture
-a finding to justify the mining session.
+**No stories before numbers.** Don't hypothesize mechanisms before seeing data.
+After Step 3, if something shows SIGNAL, THEN we discuss why. Not before.
 
----
-
-### OUTPUT FORMAT
-
-After mining, deliver:
-
-```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-MINING REPORT — canompx3
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-TIMESTAMP:        [UTC]
-DIMENSIONS EXPLORED: [N total]
-K FOR FDR:           [honest total]
-
-TERRITORY MAPPED:
-  Never-analyzed features found:    [N]
-  Untested interactions found:      [N]
-  Temporal patterns checked:        [N]
-
-SURVIVORS (passed Step 3A screening):
-  [feature] × [session]: WR spread=[X]%, ExpR monotonic=[Y/N]
-  → Escalated to T0-T8: [YES/NO]
-  → T0-T8 result: [VALIDATED / KILLED at T[N] / PENDING]
-
-DEAD ENDS (failed Step 3A — record for future sessions):
-  [feature] × [session]: WR spread=[X]%, verdict=DEAD
-  [feature] × [session]: ExpR non-monotonic, verdict=DEAD
-  [temporal pattern]: K=[N], no survivors after FDR
-
-INTERACTION FINDINGS:
-  [feature_A × feature_B]: Real interaction=[Y/N], marginal=[X]R
-
-NEW NO-GO ENTRIES (append to audit protocol):
-  [date] [feature/pattern]: DEAD, reason=[X]
-
-GEMS FOUND: [count]
-  If 0: "Dataset mined thoroughly. Existing filters capture available signal.
-         No new dimensions worth pursuing. This is a valid finding."
-  If >0: [structured finding per quant-audit-protocol output format]
-
-RECOMMENDATION:
-  [what to do with findings — or "stop mining, trade what you have"]
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
+**"Nothing found" is a result.** If the screening produces zero SIGNALs, the dataset
+has been mined and the existing filters capture what's available. Report that honestly.
+Don't manufacture a finding to justify the session.
 
 ---
 
 ### START
 
-Read the law. Run Step 1 (schema audit + feature catalog). Present the map.
-Don't test anything until I pick the veins.
+Read the law. Run Step 1 (full schema audit + dimension enumeration).
+Run Step 2 (screen ALL dimensions — no cherry-picking).
+Present Step 3 (full results table). Wait.
 
 ## PROMPT END

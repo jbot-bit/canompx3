@@ -1,14 +1,14 @@
 ---
 mode: IMPLEMENTATION
-task: Deploy US_DATA_1000 as lane 5 — code review fixes (paper_trade_logger, weekly_review, prop_profiles)
+task: FDR K correction — count stop multiplier in K, freeze K at validation time
 scope_lock:
-  - trading_app/prop_profiles.py
-  - trading_app/weekly_review.py
-  - trading_app/paper_trade_logger.py
+  - trading_app/strategy_discovery.py
+  - trading_app/strategy_validator.py
+  - trading_app/db_manager.py
+  - pipeline/init_db.py
 acceptance:
-  - paper_trade_logger LANES matches prop_profiles (5 lanes)
-  - weekly_review section_4 includes US_DATA_1000
-  - _LANE_NAMES has US_DATA_1000 entry
-  - apex_100k comment updated to 5 lanes
+  - stop multiplier counted in total_combos (K *= len(STOP_MULTIPLIERS))
+  - validated_setups has discovery_k and discovery_date columns
+  - 4 Apex lanes still pass BH FDR at corrected K
   - 75/75 drift, 0 regressions
 ---

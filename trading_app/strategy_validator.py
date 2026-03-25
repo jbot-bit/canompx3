@@ -1211,15 +1211,26 @@ def run_validation(
                 n_fdr_sig = 0
                 n_fdr_rejected = 0
                 fdr_rejected_ids = []
+                from datetime import date as _date
+
+                _today = _date.today()
                 for sid in passed_strategy_ids:
                     fdr = fdr_results.get(sid)
                     if fdr is not None:
+                        # Look up per-session K for this strategy
+                        _sid_session = con.execute(
+                            "SELECT orb_label FROM experimental_strategies WHERE strategy_id = ?",
+                            [sid],
+                        ).fetchone()
+                        _sess_k = len(session_p_pools.get(_sid_session[0], [])) if _sid_session else total_k
                         con.execute(
                             """UPDATE validated_setups
                                SET fdr_significant = ?,
-                                   fdr_adjusted_p = ?
+                                   fdr_adjusted_p = ?,
+                                   discovery_k = ?,
+                                   discovery_date = ?
                                WHERE strategy_id = ?""",
-                            [fdr["fdr_significant"], fdr["adjusted_p"], sid],
+                            [fdr["fdr_significant"], fdr["adjusted_p"], _sess_k, _today, sid],
                         )
                         if fdr["fdr_significant"]:
                             n_fdr_sig += 1
