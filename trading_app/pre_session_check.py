@@ -25,55 +25,10 @@ from pipeline.paths import GOLD_DB_PATH
 STATE_DIR = Path(__file__).resolve().parents[1] / "data" / "state"
 STATE_DIR.mkdir(parents=True, exist_ok=True)
 
-# Lane definitions matching prop_profiles.py apex_50k_manual
-LANE_DEFS = {
-    "NYSE_CLOSE": {
-        "strategy_id": "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20_O15",
-        "instrument": "MNQ",
-        "filter_type": "VOL_RV12_N20",
-        "rr_target": 1.0,
-        "orb_minutes": 15,
-        "sizing": 1,
-        "is_half_size": False,
-    },
-    "SINGAPORE_OPEN": {
-        "strategy_id": "MNQ_SINGAPORE_OPEN_E2_RR4.0_CB1_ORB_G8_O15",
-        "instrument": "MNQ",
-        "filter_type": "ORB_G8",
-        "rr_target": 4.0,
-        "orb_minutes": 15,
-        "sizing": 1,
-        "is_half_size": True,  # 0.5x per remediation audit
-    },
-    "COMEX_SETTLE": {
-        "strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G8",
-        "instrument": "MNQ",
-        "filter_type": "ORB_G8",
-        "rr_target": 1.0,
-        "orb_minutes": 5,
-        "sizing": 1,
-        "is_half_size": False,
-    },
-    "NYSE_OPEN": {
-        "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60_O15",
-        "instrument": "MNQ",
-        "filter_type": "X_MES_ATR60",
-        "rr_target": 1.0,
-        "orb_minutes": 15,
-        "sizing": 1,
-        "is_half_size": False,
-    },
-    "TOKYO_OPEN": {
-        "strategy_id": "MGC_TOKYO_OPEN_E2_RR2.0_CB1_ORB_G4_CONT_S075",
-        "instrument": "MGC",
-        "filter_type": "ORB_G4_CONT",
-        "rr_target": 2.0,
-        "orb_minutes": 5,
-        "sizing": 1,
-        "is_half_size": False,
-        "shadow_only": True,
-    },
-}
+# Lane definitions — imported from canonical source (prop_profiles.py)
+from trading_app.prop_profiles import get_lane_registry
+
+LANE_DEFS = get_lane_registry()
 
 
 def check_data_freshness(con, instrument: str) -> tuple[bool, str]:

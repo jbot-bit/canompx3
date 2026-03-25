@@ -21,75 +21,45 @@ import numpy as np
 from scipy import stats
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.prop_profiles import get_lane_registry
 from trading_app.strategy_fitness import _load_strategy_outcomes
 
 FORWARD_START = date(2026, 1, 1)
 
-# All monitored lanes (m=5 for BH correction)
-# filter_type is required for correct daily_features join.
-LANES = [
-    {
-        "name": "L1 NYSE_CLOSE VOL_RV12_N20 RR1.0 O15",
-        "symbol": "MNQ",
-        "orb_label": "NYSE_CLOSE",
-        "entry_model": "E2",
-        "rr_target": 1.0,
-        "confirm_bars": 1,
-        "orb_minutes": 15,
-        "filter_type": "VOL_RV12_N20",
-        "backtest_expr": 0.2078,
-        "backtest_std": 0.891,
-    },
-    {
-        "name": "L2 SINGAPORE_OPEN ORB_G8 RR4.0 O15",
-        "symbol": "MNQ",
-        "orb_label": "SINGAPORE_OPEN",
-        "entry_model": "E2",
-        "rr_target": 4.0,
-        "confirm_bars": 1,
-        "orb_minutes": 15,
-        "filter_type": "ORB_G8",
-        "backtest_expr": 0.1557,
-        "backtest_std": 1.844,
-    },
-    {
-        "name": "L3 COMEX_SETTLE ORB_G8 RR1.0 O5",
-        "symbol": "MNQ",
-        "orb_label": "COMEX_SETTLE",
-        "entry_model": "E2",
-        "rr_target": 1.0,
-        "confirm_bars": 1,
-        "orb_minutes": 5,
-        "filter_type": "ORB_G8",
-        "backtest_expr": 0.1094,
-        "backtest_std": 0.864,
-    },
-    {
-        "name": "L4 NYSE_OPEN X_MES_ATR60 RR1.0 O15",
-        "symbol": "MNQ",
-        "orb_label": "NYSE_OPEN",
-        "entry_model": "E2",
-        "rr_target": 1.0,
-        "confirm_bars": 1,
-        "orb_minutes": 15,
-        "filter_type": "X_MES_ATR60",
-        "backtest_expr": 0.0933,
-        "backtest_std": 0.956,
-    },
-    {
-        "name": "L5 MGC TOKYO_OPEN ORB_G4 RR2.0 O5",
-        "symbol": "MGC",
-        "orb_label": "TOKYO_OPEN",
-        "entry_model": "E2",
-        "rr_target": 2.0,
-        "confirm_bars": 1,
-        "orb_minutes": 5,
-        "filter_type": "ORB_G4_CONT",
-        "backtest_expr": 0.2832,
-        "backtest_std": 1.42,
-    },
-]
+# Backtest stats per lane (from validated_setups — these are reference values for power analysis).
+# These are the ONLY hardcoded values — lane structure comes from prop_profiles.
+_BACKTEST_STATS: dict[str, dict] = {
+    "NYSE_CLOSE": {"backtest_expr": 0.2078, "backtest_std": 0.891},
+    "SINGAPORE_OPEN": {"backtest_expr": 0.1557, "backtest_std": 1.844},
+    "COMEX_SETTLE": {"backtest_expr": 0.1094, "backtest_std": 0.864},
+    "NYSE_OPEN": {"backtest_expr": 0.0933, "backtest_std": 0.956},
+    "TOKYO_OPEN": {"backtest_expr": 0.2832, "backtest_std": 1.42},
+}
+
+
+def _build_lanes() -> list[dict]:
+    """Build lane list from canonical registry + backtest stats overlay."""
+    registry = get_lane_registry()
+    lanes = []
+    for i, (label, lane) in enumerate(sorted(registry.items()), 1):
+        bt = _BACKTEST_STATS.get(label, {"backtest_expr": 0.10, "backtest_std": 1.0})
+        lanes.append({
+            "name": f"L{i} {label} {lane['filter_type']} RR{lane['rr_target']} O{lane['orb_minutes']}",
+            "symbol": lane["instrument"],
+            "orb_label": label,
+            "entry_model": lane["entry_model"],
+            "rr_target": lane["rr_target"],
+            "confirm_bars": lane["confirm_bars"],
+            "orb_minutes": lane["orb_minutes"],
+            "filter_type": lane["filter_type"],
+            **bt,
+        })
+    return lanes
+
+
+LANES = _build_lanes()
 
 
 def compute_power_n(effect: float, std: float, alpha: float = 0.05, power: float = 0.80) -> int:
@@ -123,6 +93,7 @@ def benjamini_hochberg(p_values: list[tuple[str, float]], alpha: float = 0.05) -
 
 def run_monitor():
     con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+    configure_connection(con)
 
     print("=" * 100)
     print(f"FORWARD PERFORMANCE MONITOR — BH correction at m={len(LANES)}")

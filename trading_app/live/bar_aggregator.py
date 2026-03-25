@@ -9,6 +9,7 @@ Bar.as_dict() produces the exact format ExecutionEngine.on_bar() expects
 import logging
 import math
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -57,7 +58,7 @@ _BAD_BAR_ALERT_THRESHOLD = 3
 
 
 class BarAggregator:
-    def __init__(self, on_bad_bar_alert: callable = None):
+    def __init__(self, on_bad_bar_alert: Callable[[str], None] | None = None):
         self._current: Bar | None = None
         self._bar_minute: datetime | None = None
         self._lock = threading.Lock()  # R2-C1: protects OHLCV from cross-thread corruption

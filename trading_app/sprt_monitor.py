@@ -37,14 +37,34 @@ BETA = 0.20
 A = math.log((1 - BETA) / ALPHA)  # 2.079 — reject H0 (accept DEGRADED) when LR < -A
 B = math.log((1 - ALPHA) / BETA)  # 1.504 — accept H0 (SIGNAL) when LR > B
 
-# Lane parameters (backtest ExpR and std from validated_setups)
-LANES = {
-    "NYSE_CLOSE": {"mu0": 0.2078, "sigma": 0.891, "label": "L1 NYSE_CLOSE VOL_RV12_N20"},
-    "SINGAPORE_OPEN": {"mu0": 0.1587, "sigma": 1.844, "label": "L2 SINGAPORE_OPEN ORB_G8 RR4.0"},
-    "COMEX_SETTLE": {"mu0": 0.1300, "sigma": 0.864, "label": "L3 COMEX_SETTLE ORB_G8"},
-    "NYSE_OPEN": {"mu0": 0.0933, "sigma": 0.956, "label": "L4 NYSE_OPEN X_MES_ATR60"},
-    "TOKYO_OPEN": {"mu0": 0.2832, "sigma": 1.42, "label": "L5 MGC TOKYO_OPEN (shadow)"},
+# Backtest reference stats per lane (mu0=ExpR, sigma=std of R returns).
+# Lane structure (session names, instruments) derived from prop_profiles canonical source.
+_BACKTEST_STATS: dict[str, dict] = {
+    "NYSE_CLOSE": {"mu0": 0.2078, "sigma": 0.891},
+    "SINGAPORE_OPEN": {"mu0": 0.1587, "sigma": 1.844},
+    "COMEX_SETTLE": {"mu0": 0.1300, "sigma": 0.864},
+    "NYSE_OPEN": {"mu0": 0.0933, "sigma": 0.956},
+    "TOKYO_OPEN": {"mu0": 0.2832, "sigma": 1.42},
 }
+
+
+def _build_lanes() -> dict[str, dict]:
+    from trading_app.prop_profiles import get_lane_registry
+
+    registry = get_lane_registry()
+    lanes = {}
+    for i, (label, lane) in enumerate(sorted(registry.items()), 1):
+        bt = _BACKTEST_STATS.get(label, {"mu0": 0.10, "sigma": 1.0})
+        suffix = " (shadow)" if lane.get("shadow_only") else ""
+        lanes[label] = {
+            "mu0": bt["mu0"],
+            "sigma": bt["sigma"],
+            "label": f"L{i} {label} {lane['filter_type']}{suffix}",
+        }
+    return lanes
+
+
+LANES = _build_lanes()
 
 
 def compute_sprt(trades: list[float], mu0: float, sigma: float) -> tuple[float, str]:
