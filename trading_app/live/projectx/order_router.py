@@ -6,6 +6,7 @@ Bracket: stopLossBracket/takeProfitBracket fields on entry order (ticks from fil
 """
 
 import logging
+import random
 import time
 
 import requests
@@ -17,6 +18,56 @@ log = logging.getLogger(__name__)
 
 
 _DEFAULT_PRICE_COLLAR_PCT = 0.005
+
+# Rate-limit retry configuration (matches Tradovate order_router).
+_429_MAX_RETRIES = 3
+_429_BACKOFF_BASE = 1.0  # seconds: 1, 2, 4
+_429_BACKOFF_MAX = 30.0
+_429_JITTER_FACTOR = 0.2  # ±20%
+
+
+def _backoff_wait(attempt: int) -> float:
+    """Exponential backoff with jitter for 429 retries."""
+    base_wait = min(_429_BACKOFF_BASE * (2**attempt), _429_BACKOFF_MAX)
+    jitter = base_wait * _429_JITTER_FACTOR * (2 * random.random() - 1)
+    return max(0.1, base_wait + jitter)
+
+
+def _submit_with_429_retry(
+    url: str,
+    auth_headers: dict,
+    json_body: dict,
+    timeout: float = 5,
+) -> requests.Response:
+    """HTTP POST with 429 rate-limit detection and exponential backoff.
+
+    On non-429 errors, raises immediately (no retry).
+    On 429 after max retries, raises with clear error message.
+    """
+    last_resp = None
+    for attempt in range(_429_MAX_RETRIES + 1):
+        resp = requests.post(url, json=json_body, headers=auth_headers, timeout=timeout)
+        if resp.status_code != 429:
+            return resp
+        last_resp = resp
+        if attempt < _429_MAX_RETRIES:
+            wait = _backoff_wait(attempt)
+            log.warning(
+                "HTTP 429 rate-limited on %s (attempt %d/%d) — retrying in %.1fs",
+                url.split("/")[-1],
+                attempt + 1,
+                _429_MAX_RETRIES + 1,
+                wait,
+            )
+            time.sleep(wait)
+    log.error(
+        "HTTP 429 rate limit EXHAUSTED after %d attempts on %s",
+        _429_MAX_RETRIES + 1,
+        url.split("/")[-1],
+    )
+    assert last_resp is not None
+    last_resp.raise_for_status()
+    return last_resp  # unreachable, satisfies type checker
 
 
 class ProjectXOrderRouter(BrokerRouter):
@@ -68,11 +119,7 @@ class ProjectXOrderRouter(BrokerRouter):
 
         # Price collar — entry orders only (Stop type=4)
         stop_price = spec.get("stopPrice")
-        if (
-            stop_price is not None
-            and self._last_known_price is not None
-            and self._last_known_price > 0
-        ):
+        if stop_price is not None and self._last_known_price is not None and self._last_known_price > 0:
             deviation = abs(stop_price - self._last_known_price) / self._last_known_price
             if deviation > self._price_collar_pct:
                 msg = (
@@ -89,10 +136,10 @@ class ProjectXOrderRouter(BrokerRouter):
         log.info("ORDER SUBMIT PAYLOAD: %s", _json.dumps(spec, default=str))
 
         t0 = time.monotonic()
-        resp = requests.post(
+        resp = _submit_with_429_retry(
             f"{BASE_URL}/api/Order/place",
-            json=spec,
-            headers={**self.auth.headers(), "Content-Type": "application/json"},
+            {**self.auth.headers(), "Content-Type": "application/json"},
+            json_body=spec,
             timeout=5,
         )
         elapsed_ms = (time.monotonic() - t0) * 1000
@@ -184,10 +231,10 @@ class ProjectXOrderRouter(BrokerRouter):
         target_ticks_abs = max(1, round(abs(target_price - entry_price) / self.tick_size))
 
         if direction == "long":
-            stop_ticks = -stop_ticks_abs   # SL below entry
+            stop_ticks = -stop_ticks_abs  # SL below entry
             target_ticks = target_ticks_abs  # TP above entry
         else:
-            stop_ticks = stop_ticks_abs     # SL above entry
+            stop_ticks = stop_ticks_abs  # SL above entry
             target_ticks = -target_ticks_abs  # TP below entry
 
         return {
@@ -202,7 +249,7 @@ class ProjectXOrderRouter(BrokerRouter):
     # ProjectX OrderStatus enum (per official API spec)
     _STATUS_INT_MAP = {
         0: "None",
-        1: "Working",       # Open/working
+        1: "Working",  # Open/working
         2: "Filled",
         3: "Cancelled",
         4: "Expired",

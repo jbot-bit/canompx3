@@ -57,17 +57,28 @@ def check_paper_trades_accessible(con) -> tuple[bool, str]:
 
 
 def check_dd_circuit_breaker() -> tuple[bool, str]:
-    """Check if DD circuit breaker has halted trading today."""
-    cb_file = STATE_DIR / "dd_circuit_breaker.json"
-    if not cb_file.exists():
-        return True, "No DD halt file (first session)"
-    try:
-        data = json.loads(cb_file.read_text())
-        if data.get("session_halt") and data.get("date") == str(date.today()):
-            return False, f"DD CIRCUIT BREAKER ACTIVE: halted at {data.get('reason', 'unknown')}"
-        return True, "DD circuit breaker: clear"
-    except Exception:
-        return True, "DD halt file unreadable (proceeding)"
+    """Check DD status from AccountHWMTracker state files.
+
+    Replaces the previous dd_circuit_breaker.json ghost check (file was never
+    written by any code path). Now reads the authoritative HWM tracker state
+    which IS written by session_orchestrator on every equity poll.
+    """
+    # Primary: check HWM tracker state files (authoritative source)
+    hwm_files = list(STATE_DIR.glob("account_hwm_*.json"))
+    hwm_files = [f for f in hwm_files if "CORRUPT" not in f.name]
+    if hwm_files:
+        for f in hwm_files:
+            try:
+                data = json.loads(f.read_text())
+                if data.get("halt_triggered"):
+                    return (
+                        False,
+                        f"DD HALT ACTIVE: account {data.get('account_id', '?')} — DD ${data.get('dd_used_dollars', 0):.0f} >= limit ${data.get('dd_limit_dollars', 0):.0f}",
+                    )
+            except Exception:
+                pass
+        return True, "DD circuit breaker: clear (HWM tracker)"
+    return True, "No DD tracker state (first session — will init from broker)"
 
 
 def check_daily_equity() -> tuple[bool, str]:
