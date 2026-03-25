@@ -1194,8 +1194,9 @@ def run_validation(
                 total_k = sum(len(v) for v in session_p_pools.values())
                 logger.info(f"  Total active K={total_k}, split across {len(session_p_pools)} sessions")
 
-                # Run BH per session
+                # Run BH per session, tracking effective K per session for auditability
                 fdr_results: dict[str, dict] = {}
+                effective_k_by_session: dict[str, int] = {}
                 for session_name, pool in sorted(session_p_pools.items()):
                     if fdr_k_overrides and session_name in fdr_k_overrides:
                         k_session = fdr_k_overrides[session_name]
@@ -1203,6 +1204,7 @@ def run_validation(
                     else:
                         k_session = len(pool)
                         k_source = "auto"
+                    effective_k_by_session[session_name] = k_session
                     session_fdr = benjamini_hochberg(pool, alpha=0.05, total_tests=k_session)
                     fdr_results.update(session_fdr)
                     n_sig = sum(1 for v in session_fdr.values() if v["fdr_significant"])
@@ -1211,18 +1213,16 @@ def run_validation(
                 n_fdr_sig = 0
                 n_fdr_rejected = 0
                 fdr_rejected_ids = []
-                from datetime import date as _date
-
-                _today = _date.today()
+                _today = date.today()
                 for sid in passed_strategy_ids:
                     fdr = fdr_results.get(sid)
                     if fdr is not None:
-                        # Look up per-session K for this strategy
+                        # Look up the effective K that was ACTUALLY used for BH on this strategy's session
                         _sid_session = con.execute(
                             "SELECT orb_label FROM experimental_strategies WHERE strategy_id = ?",
                             [sid],
                         ).fetchone()
-                        _sess_k = len(session_p_pools.get(_sid_session[0], [])) if _sid_session else total_k
+                        _sess_k = effective_k_by_session.get(_sid_session[0], total_k) if _sid_session else total_k
                         con.execute(
                             """UPDATE validated_setups
                                SET fdr_significant = ?,
