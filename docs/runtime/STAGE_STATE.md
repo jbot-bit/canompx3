@@ -1,31 +1,21 @@
 ---
 mode: IMPLEMENTATION
-task: Persistent dollar HWM tracker + prop firm compliance monitors
+task: ORB risk management — max ORB cap on NYSE_OPEN, account upgrade prep, weekly monitoring
 scope_lock:
-  - trading_app/live/instance_lock.py
-  - trading_app/live/projectx/auth.py
-  - trading_app/account_hwm_tracker.py
-  - trading_app/consistency_tracker.py
-  - trading_app/pre_session_check.py
-  - trading_app/weekly_review.py
+  - trading_app/prop_profiles.py
   - trading_app/live/session_orchestrator.py
-  - trading_app/live/broker_base.py
-  - trading_app/live/tradovate/positions.py
-  - trading_app/live/projectx/positions.py
-  - trading_app/live/tradovate/order_router.py
-  - trading_app/live/projectx/order_router.py
-  - tests/test_trading_app/test_account_hwm_tracker.py
-  - tests/test_trading_app/test_consistency_tracker.py
-  - tests/test_trading_app/test_price_collar.py
+  - trading_app/weekly_review.py
+  - trading_app/pre_session_check.py
+  - trading_app/log_trade.py
+  - tests/test_trading_app/test_prop_profiles.py
+  - tests/test_trading_app/test_weekly_review.py
+  - tests/test_trading_app/test_session_orchestrator.py
 acceptance:
-  - AccountHWMTracker persists HWM across sessions in dollars
-  - check_halt() blocks trading when DD >= limit
-  - Corrupt state file recovery works
-  - pre_session_check shows HWM status
-  - weekly_review shows account health section
-  - consistency_tracker computes windfall % per firm rule
-  - Price collar rejects entry orders >0.5% from market
-  - All new tests pass
-  - Existing 3112 tests unaffected
-  - Drift checks 75/75 pass
+  - DailyLaneSpec has max_orb_size_pts field
+  - NYSE_OPEN lane has max_orb_size_pts=150.0, others None
+  - Lane registry propagates max_orb_size_pts
+  - SessionOrchestrator checks ORB cap before entry
+  - Weekly review section_8 shows ORB size monitor
+  - Tests: 149pt passes, 150pt skips, 151pt skips, None=no cap
+  - 75/75 drift, 0 regressions
 ---

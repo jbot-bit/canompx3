@@ -107,54 +107,52 @@ def log_trade(args):
     now = datetime.now(timezone.utc)
 
     # Write to DB (separate connection — read connection already closed above)
-    con_w = duckdb.connect(str(GOLD_DB_PATH))
-    configure_connection(con_w, writing=True)
-    con_w.execute(
-        """INSERT INTO paper_trades
-           (trading_day, orb_label, entry_time, direction, entry_price, stop_price,
-            target_price, exit_price, exit_time, exit_reason, pnl_r, slippage_ticks,
-            strategy_id, lane_name, instrument, orb_minutes, rr_target, filter_type,
-            entry_model, execution_source, pnl_dollar, notes)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        [
-            today,
-            session,
-            now.isoformat(),
-            direction,
-            entry_price,
-            stop_price,
-            target_price,
-            exit_price,
-            now.isoformat(),
-            exit_reason,
-            round(pnl_r, 4),
-            slippage_entry,
-            lane["strategy_id"],
-            f"{session}_{lane['filter_type']}",
-            instrument,
-            lane["orb_minutes"],
-            lane["rr_target"],
-            lane["filter_type"],
-            lane["entry_model"],
-            "live",
-            round(pnl_dollar, 2),
-            notes,
-        ],
-    )
+    with duckdb.connect(str(GOLD_DB_PATH)) as con_w:
+        configure_connection(con_w, writing=True)
+        con_w.execute(
+            """INSERT INTO paper_trades
+               (trading_day, orb_label, entry_time, direction, entry_price, stop_price,
+                target_price, exit_price, exit_time, exit_reason, pnl_r, slippage_ticks,
+                strategy_id, lane_name, instrument, orb_minutes, rr_target, filter_type,
+                entry_model, execution_source, pnl_dollar, notes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            [
+                today,
+                session,
+                now.isoformat(),
+                direction,
+                entry_price,
+                stop_price,
+                target_price,
+                exit_price,
+                now.isoformat(),
+                exit_reason,
+                round(pnl_r, 4),
+                slippage_entry,
+                lane["strategy_id"],
+                lane["lane_name"],
+                instrument,
+                lane["orb_minutes"],
+                lane["rr_target"],
+                lane["filter_type"],
+                lane["entry_model"],
+                "live",
+                round(pnl_dollar, 2),
+                notes,
+            ],
+        )
 
-    # Get updated stats
-    stats = con_w.execute(
-        """SELECT COUNT(*) as n, ROUND(SUM(pnl_r), 2) as cum_r,
-                  ROUND(AVG(CASE WHEN pnl_r > 0 THEN 1.0 ELSE 0.0 END)*100, 1) as wr
-           FROM paper_trades WHERE orb_label = ?""",
-        [session],
-    ).fetchone()
+        # Get updated stats
+        stats = con_w.execute(
+            """SELECT COUNT(*) as n, ROUND(SUM(pnl_r), 2) as cum_r,
+                      ROUND(AVG(CASE WHEN pnl_r > 0 THEN 1.0 ELSE 0.0 END)*100, 1) as wr
+               FROM paper_trades WHERE orb_label = ?""",
+            [session],
+        ).fetchone()
 
-    live_n = con_w.execute(
-        "SELECT COUNT(*) FROM paper_trades WHERE execution_source = 'live' AND slippage_ticks IS NOT NULL"
-    ).fetchone()[0]
-
-    con_w.close()
+        live_n = con_w.execute(
+            "SELECT COUNT(*) FROM paper_trades WHERE execution_source = 'live' AND slippage_ticks IS NOT NULL"
+        ).fetchone()[0]
 
     # Print confirmation
     outcome = "WIN" if pnl_r > 0 else ("LOSS" if pnl_r < 0 else "SCRATCH")

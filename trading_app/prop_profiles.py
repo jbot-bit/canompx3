@@ -465,12 +465,23 @@ def _parse_strategy_id(strategy_id: str) -> dict:
     return result
 
 
+# Abbreviated lane names for paper_trades.lane_name column.
+# Must match existing DB values to preserve continuity.
+_LANE_NAMES: dict[str, str] = {
+    "NYSE_CLOSE": "NYSE_CLOSE_VOL",
+    "SINGAPORE_OPEN": "SING_G8",
+    "COMEX_SETTLE": "COMEX_G8",
+    "NYSE_OPEN": "NYSE_OPEN_XMES",
+    "TOKYO_OPEN": "MGC_TOKYO",
+}
+
+
 def get_lane_registry(profile_id: str = "apex_50k_manual") -> dict[str, dict]:
     """Build a lane registry from a profile's daily_lanes.
 
     Returns {orb_label: {strategy_id, instrument, orb_label, entry_model,
-    rr_target, confirm_bars, filter_type, orb_minutes, is_half_size, shadow_only,
-    execution_notes, stop_multiplier}}.
+    rr_target, confirm_bars, filter_type, orb_minutes, lane_name,
+    is_half_size, shadow_only, execution_notes, stop_multiplier}}.
 
     This is the SINGLE SOURCE OF TRUTH for lane definitions.
     All consumer scripts (pre_session_check, log_trade, forward_monitor,
@@ -493,6 +504,7 @@ def get_lane_registry(profile_id: str = "apex_50k_manual") -> dict[str, dict]:
             "confirm_bars": parsed["confirm_bars"],
             "filter_type": parsed["filter_type"],
             "orb_minutes": parsed["orb_minutes"],
+            "lane_name": _LANE_NAMES.get(lane.orb_label, lane.orb_label),
             "stop_multiplier": profile.stop_multiplier,
             "is_half_size": is_half,
             "shadow_only": shadow,
@@ -516,6 +528,7 @@ def get_lane_registry(profile_id: str = "apex_50k_manual") -> dict[str, dict]:
                         "confirm_bars": parsed["confirm_bars"],
                         "filter_type": parsed["filter_type"],
                         "orb_minutes": parsed["orb_minutes"],
+                        "lane_name": _LANE_NAMES.get(lane.orb_label, lane.orb_label),
                         "stop_multiplier": ts_profile.stop_multiplier,
                         "is_half_size": False,
                         "shadow_only": True,  # TopStep MGC is shadow-trade
