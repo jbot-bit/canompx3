@@ -298,6 +298,32 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
 
         con.execute(FAMILY_RR_LOCKS_SCHEMA)
 
+        # Table 8: paper_trades (forward OOS validation for Apex lanes)
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS paper_trades (
+                trading_day      DATE NOT NULL,
+                orb_label        TEXT NOT NULL,
+                entry_time       TIMESTAMPTZ,
+                direction        TEXT,
+                entry_price      DOUBLE,
+                stop_price       DOUBLE,
+                target_price     DOUBLE,
+                exit_price       DOUBLE,
+                exit_time        TIMESTAMPTZ,
+                exit_reason      TEXT,
+                pnl_r            DOUBLE,
+                slippage_ticks   DOUBLE DEFAULT 0,
+                strategy_id      TEXT NOT NULL,
+                lane_name        TEXT,
+                instrument       TEXT DEFAULT 'MNQ',
+                orb_minutes      INTEGER,
+                rr_target        DOUBLE,
+                filter_type      TEXT,
+                entry_model      TEXT,
+                PRIMARY KEY (strategy_id, trading_day)
+            )
+        """)
+
         # Migration: add regime waiver columns (for existing DBs)
         for col, typedef in [
             ("regime_waivers", "TEXT"),
@@ -557,6 +583,7 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
             "edge_families",
             "family_rr_locks",
             "validation_run_log",
+            "paper_trades",
         ]
 
         # Check tables exist
