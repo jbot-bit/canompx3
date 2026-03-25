@@ -1327,6 +1327,21 @@ class SessionOrchestrator:
                     )
                     return
 
+            # HWM DD halt gate — fail-closed on prop accounts.
+            # Checked on every entry (not just every 10 bars) to close the gap
+            # between periodic equity polls and actual order submission.
+            if self._hwm_tracker is not None:
+                halted, reason = self._hwm_tracker.check_halt()
+                if halted:
+                    log.critical(
+                        "ENTRY BLOCKED — HWM DD halt: %s (strategy=%s)",
+                        reason,
+                        event.strategy_id,
+                    )
+                    self._notify(f"ENTRY BLOCKED (DD HALT): {event.strategy_id} — {reason}")
+                    self._write_signal_record({"type": "ENTRY_BLOCKED_DD_HALT", "strategy_id": event.strategy_id})
+                    return
+
             if self.signal_only:
                 record = self._positions.on_signal_entry(
                     event.strategy_id, event.price, event.direction, contracts=event.contracts
