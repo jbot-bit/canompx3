@@ -42,3 +42,26 @@ class ProjectXPositions(BrokerPositions):
         if result:
             log.warning("Found %d open positions on ProjectX", len(result))
         return result
+
+    def query_equity(self, account_id: int) -> float | None:
+        """Query current account equity from ProjectX.
+
+        GET /api/Account/item?id={account_id} -> balance field.
+        Returns account balance in dollars, or None on failure.
+        """
+        try:
+            resp = requests.get(
+                f"{BASE_URL}/api/Account/{account_id}",
+                headers=self.auth.headers(),
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            balance = data.get("balance") or data.get("cashBalance")
+            if balance is not None:
+                return float(balance)
+            log.warning("ProjectX account response missing balance: %s", data)
+            return None
+        except Exception as e:
+            log.warning("Failed to query ProjectX equity: %s", e)
+            return None

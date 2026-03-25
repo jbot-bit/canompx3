@@ -292,6 +292,50 @@ class SessionOrchestrator:
         self._bar_count = 0  # total bars received this session
         self._close_time_forced = False  # one-shot force-flatten at session close
 
+        # Persistent dollar-based HWM tracker for prop firm trailing DD.
+        # Separate from RiskManager's R-based intraday tracker.
+        # dd_circuit_breaker.json = intraday R-limit (session-scoped)
+        # account_hwm_{id}.json = cross-session dollar HWM (prop firm compliance)
+        self._hwm_tracker = None
+        if not signal_only and portfolio is not None and portfolio.strategies:
+            first = portfolio.strategies[0]
+            if first.source == "profile":
+                try:
+                    from trading_app.account_hwm_tracker import AccountHWMTracker
+                    from trading_app.prop_profiles import ACCOUNT_PROFILES, get_account_tier
+
+                    for pid, prof in ACCOUNT_PROFILES.items():
+                        if portfolio.name == f"profile_{pid}":
+                            tier = get_account_tier(prof.firm, prof.account_size)
+                            acct_id = str(account_id) if account_id else pid
+                            self._hwm_tracker = AccountHWMTracker(
+                                account_id=acct_id,
+                                firm=prof.firm,
+                                dd_limit_dollars=float(tier.max_dd),
+                            )
+                            # Query initial equity from broker
+                            if self.positions is not None:
+                                initial_equity = self.positions.query_equity(
+                                    self.order_router.account_id if self.order_router else 0
+                                )
+                                if initial_equity is not None:
+                                    state = self._hwm_tracker.update_equity(initial_equity)
+                                    self._hwm_tracker.record_session_start(initial_equity)
+                                    halted, reason = self._hwm_tracker.check_halt()
+                                    if halted:
+                                        raise RuntimeError(
+                                            f"FAIL-CLOSED: Account HWM DD limit breached — {reason}. "
+                                            f"Refusing to start session."
+                                        )
+                                    log.info("HWM tracker: %s", reason)
+                                else:
+                                    log.warning("HWM tracker: broker equity unavailable at startup — will init on first poll")
+                            break
+                except ImportError:
+                    log.warning("HWM tracker: account_hwm_tracker not available — DD tracking DISABLED")
+                except Exception as e:
+                    log.warning("HWM tracker init failed: %s — DD tracking DISABLED", e)
+
         # Prop firm close time (ET) — used for post-market buffer and force-flatten
         self._close_hour_et: int | None = None
         self._close_min_et: int | None = None
@@ -869,6 +913,21 @@ class SessionOrchestrator:
                 active,
                 self.monitor.trade_count,
             )
+            # HWM equity poll (every 10 bars ≈ 10 minutes)
+            if self._hwm_tracker is not None and self.positions is not None and self.order_router is not None:
+                try:
+                    equity = self.positions.query_equity(self.order_router.account_id)
+                    self._hwm_tracker.update_equity(equity)
+                    halted, reason = self._hwm_tracker.check_halt()
+                    if halted:
+                        log.critical("HWM DD HALT: %s — triggering kill switch", reason)
+                        self._notify(f"ACCOUNT DD LIMIT: {reason}")
+                        self._kill_switch_fired = True
+                        await self._emergency_flatten()
+                    elif "WARN" in reason:
+                        log.warning("HWM: %s", reason)
+                except Exception as e:
+                    log.warning("HWM equity poll failed: %s", e)
 
         # Kill switch fired = we already emergency-flattened at the broker.
         # Do NOT process further bars — engine doesn't know positions are closed,
@@ -886,6 +945,10 @@ class SessionOrchestrator:
             # killing the feed loop. Existing positions still need management.
 
         self.orb_builder.on_bar(bar)
+
+        # Update order router's last known market price for price collar validation
+        if self.order_router is not None and hasattr(self.order_router, "update_market_price"):
+            self.order_router.update_market_price(bar.close)
 
         # bar.as_dict() returns {ts_utc, open, high, low, close, volume}
         # — exactly what ExecutionEngine.on_bar() expects
@@ -1966,6 +2029,18 @@ class SessionOrchestrator:
             f"{self._stats.fill_polls_confirmed} fills confirmed, "
             f"{self._stats.reconnect_attempts} reconnects"
         )
+
+        # Record session end in HWM tracker
+        if self._hwm_tracker is not None and self.positions is not None and self.order_router is not None:
+            try:
+                end_equity = self.positions.query_equity(self.order_router.account_id)
+                if end_equity is not None:
+                    self._hwm_tracker.update_equity(end_equity)
+                    self._hwm_tracker.record_session_end(end_equity)
+                    _, reason = self._hwm_tracker.check_halt()
+                    log.info("HWM session close: %s", reason)
+            except Exception as e:
+                log.warning("HWM session-end recording failed: %s", e)
 
         # EOD position reconciliation (M2.5 P0)
         if self.positions and not self.signal_only:

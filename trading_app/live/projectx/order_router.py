@@ -16,12 +16,21 @@ from .auth import BASE_URL
 log = logging.getLogger(__name__)
 
 
+_DEFAULT_PRICE_COLLAR_PCT = 0.005
+
+
 class ProjectXOrderRouter(BrokerRouter):
     def __init__(self, account_id: int, auth: BrokerAuth | None, tick_size: float = 0.10, **kwargs):
         super().__init__(account_id, auth, **kwargs)
         if tick_size <= 0:
             raise ValueError(f"tick_size must be positive, got {tick_size}")
         self.tick_size = tick_size
+        self._price_collar_pct: float = kwargs.get("price_collar_pct", _DEFAULT_PRICE_COLLAR_PCT)
+        self._last_known_price: float | None = None
+
+    def update_market_price(self, price: float) -> None:
+        if price > 0:
+            self._last_known_price = price
 
     def build_order_spec(
         self,
@@ -56,6 +65,23 @@ class ProjectXOrderRouter(BrokerRouter):
     def submit(self, spec: dict) -> dict:
         if self.auth is None:
             raise RuntimeError("No auth — cannot submit orders without ProjectXAuth")
+
+        # Price collar — entry orders only (Stop type=4)
+        stop_price = spec.get("stopPrice")
+        if (
+            stop_price is not None
+            and self._last_known_price is not None
+            and self._last_known_price > 0
+        ):
+            deviation = abs(stop_price - self._last_known_price) / self._last_known_price
+            if deviation > self._price_collar_pct:
+                msg = (
+                    f"PRICE_COLLAR_REJECTED: contractId={spec.get('contractId')} "
+                    f"stop={stop_price:.2f} deviates {deviation:.2%} from market "
+                    f"{self._last_known_price:.2f} (collar={self._price_collar_pct:.2%})"
+                )
+                log.critical(msg)
+                raise ValueError(msg)
 
         # Full payload audit trail — logged BEFORE submission
         import json as _json

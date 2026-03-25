@@ -14,6 +14,7 @@ Entry model -> order type mapping:
 """
 
 import logging
+import random
 import time
 from dataclasses import dataclass
 
@@ -23,6 +24,72 @@ from ..broker_base import BrokerAuth, BrokerRouter
 from .auth import DEMO_BASE, LIVE_BASE
 
 log = logging.getLogger(__name__)
+
+# Rate-limit retry configuration.
+# REQUIRES_SIM_RETEST after any change to these values.
+_429_MAX_RETRIES = 3
+_429_BACKOFF_BASE = 1.0  # seconds: 1, 2, 4
+_429_BACKOFF_MAX = 30.0
+_429_JITTER_FACTOR = 0.2  # ±20%
+
+
+def _backoff_wait(attempt: int) -> float:
+    """Exponential backoff with jitter for 429 retries."""
+    base_wait = min(_429_BACKOFF_BASE * (2**attempt), _429_BACKOFF_MAX)
+    jitter = base_wait * _429_JITTER_FACTOR * (2 * random.random() - 1)
+    return max(0.1, base_wait + jitter)
+
+
+def _submit_with_429_retry(
+    method: str,
+    url: str,
+    auth_headers: dict,
+    timeout: float = 5,
+    json_body: dict | None = None,
+    params: dict | None = None,
+) -> requests.Response:
+    """HTTP request with 429 rate-limit detection and exponential backoff.
+
+    On non-429 errors, raises immediately (no retry).
+    On 429 after max retries, raises with clear error message.
+
+    Note: auth_headers is a snapshot from caller. If token expires during
+    retry backoff (~7s worst case), subsequent retries will get 401 (not 429),
+    which raises immediately. TradovateAuth refreshes 60s before expiry so
+    this is only an issue if the first request was made <7s before expiry.
+    Accepted risk: failure mode is correct (raises -> FILL_UNKNOWN).
+    """
+    last_resp = None
+    for attempt in range(_429_MAX_RETRIES + 1):
+        if method == "POST":
+            resp = requests.post(url, json=json_body, headers=auth_headers, timeout=timeout)
+        else:
+            resp = requests.get(url, params=params, headers=auth_headers, timeout=timeout)
+
+        if resp.status_code != 429:
+            return resp
+
+        last_resp = resp
+        if attempt < _429_MAX_RETRIES:
+            wait = _backoff_wait(attempt)
+            log.warning(
+                "HTTP 429 rate-limited on %s (attempt %d/%d) — retrying in %.1fs",
+                url.split("/")[-1],
+                attempt + 1,
+                _429_MAX_RETRIES + 1,
+                wait,
+            )
+            time.sleep(wait)
+
+    # Exhausted retries — raise with context
+    log.error(
+        "HTTP 429 rate limit EXHAUSTED after %d attempts on %s",
+        _429_MAX_RETRIES + 1,
+        url.split("/")[-1],
+    )
+    assert last_resp is not None
+    last_resp.raise_for_status()
+    return last_resp  # unreachable, but satisfies type checker
 
 
 @dataclass
@@ -42,10 +109,17 @@ class OrderResult:
     fill_price: float | None = None
 
 
+# Default price collar: reject entry orders >0.5% from last known price.
+# Configurable per-instrument via price_collar_pct kwarg.
+_DEFAULT_PRICE_COLLAR_PCT = 0.005
+
+
 class TradovateOrderRouter(BrokerRouter):
     def __init__(self, account_id: int, auth: BrokerAuth | None, demo: bool = True, **kwargs):
         super().__init__(account_id, auth, **kwargs)
         self.base = DEMO_BASE if demo else LIVE_BASE
+        self._price_collar_pct: float = kwargs.get("price_collar_pct", _DEFAULT_PRICE_COLLAR_PCT)
+        self._last_known_price: float | None = None
 
     def build_order_spec(
         self,
@@ -87,14 +161,42 @@ class TradovateOrderRouter(BrokerRouter):
                 f"E3 has no timeout mechanism -- use E1 or E2 only."
             )
 
+    def update_market_price(self, price: float) -> None:
+        """Update last known market price for price collar validation."""
+        if price > 0:
+            self._last_known_price = price
+
     def submit(self, spec: OrderSpec) -> OrderResult:
         """Submit an order to Tradovate. Requires auth.
 
         Synchronous HTTP call — the orchestrator wraps this in run_in_executor
         so the async event loop is never blocked.
+
+        Handles HTTP 429 (rate limit) with exponential backoff + jitter.
+        After exhausting retries, raises — caller must handle as FILL_UNKNOWN.
+
+        Price collar: entry orders (Stop type) are rejected if stop_price deviates
+        more than collar_pct from last known market price. Exit orders (Market type)
+        are not collared — we must always be able to close.
         """
         if self.auth is None:
             raise RuntimeError("No auth -- cannot submit live orders without TradovateAuth")
+
+        # Price collar — entry orders only (Stop type)
+        if (
+            spec.stop_price is not None
+            and self._last_known_price is not None
+            and self._last_known_price > 0
+        ):
+            deviation = abs(spec.stop_price - self._last_known_price) / self._last_known_price
+            if deviation > self._price_collar_pct:
+                msg = (
+                    f"PRICE_COLLAR_REJECTED: {spec.action} {spec.symbol} stop={spec.stop_price:.2f} "
+                    f"deviates {deviation:.2%} from market {self._last_known_price:.2f} "
+                    f"(collar={self._price_collar_pct:.2%})"
+                )
+                log.critical(msg)
+                raise ValueError(msg)
 
         body = {
             "accountId": spec.account_id,
@@ -108,11 +210,12 @@ class TradovateOrderRouter(BrokerRouter):
             body["stopPrice"] = spec.stop_price
 
         t0 = time.monotonic()
-        resp = requests.post(
+        resp = _submit_with_429_retry(
+            "POST",
             f"{self.base}/order/placeOrder",
-            json=body,
-            headers=self.auth.headers(),
+            self.auth.headers(),
             timeout=5,
+            json_body=body,
         )
         elapsed_ms = (time.monotonic() - t0) * 1000
         resp.raise_for_status()
@@ -163,14 +266,15 @@ class TradovateOrderRouter(BrokerRouter):
         )
 
     def cancel(self, order_id: int) -> None:
-        """Cancel an open order by ID."""
+        """Cancel an open order by ID. Handles HTTP 429 with backoff."""
         if self.auth is None:
             raise RuntimeError(f"Cannot cancel order {order_id} -- no auth configured")
-        resp = requests.post(
+        resp = _submit_with_429_retry(
+            "POST",
             f"{self.base}/order/cancelOrder",
-            json={"orderId": order_id},
-            headers=self.auth.headers(),
+            self.auth.headers(),
             timeout=5,
+            json_body={"orderId": order_id},
         )
         resp.raise_for_status()
         log.info("Order cancelled: orderId=%d", order_id)
@@ -180,14 +284,15 @@ class TradovateOrderRouter(BrokerRouter):
         return False
 
     def query_order_status(self, order_id: int) -> dict:
-        """Query order status from Tradovate REST API."""
+        """Query order status from Tradovate REST API. Handles HTTP 429 with backoff."""
         if self.auth is None:
             raise RuntimeError("No auth — cannot query order status")
-        resp = requests.get(
+        resp = _submit_with_429_retry(
+            "GET",
             f"{self.base}/order/item",
-            params={"id": order_id},
-            headers=self.auth.headers(),
+            self.auth.headers(),
             timeout=5,
+            params={"id": order_id},
         )
         resp.raise_for_status()
         data = resp.json()
