@@ -190,7 +190,7 @@ def section_4_signal_quality(con, week_start: date):
     """Signal quality — signals generated vs taken."""
     print("\n  SECTION 4 - SIGNAL QUALITY (EXECUTION DISCIPLINE)")
     # Count signals from orb_outcomes vs trades in paper_trades
-    for session in SESSIONS[:4]:  # MNQ only
+    for session in SESSIONS[:5]:  # MNQ only (skip TOKYO_OPEN = MGC)
         signals = con.execute(
             """SELECT COUNT(DISTINCT trading_day) FROM orb_outcomes
                WHERE symbol = 'MNQ' AND orb_label = ? AND entry_model = 'E2'

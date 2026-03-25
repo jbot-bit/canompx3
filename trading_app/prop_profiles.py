@@ -316,7 +316,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
     ),
     # =========================================================================
     # UPGRADE PATH: When moving to $100K Apex, activate this profile.
-    # DD limit $3,000 (vs $2K on $50K). Same 4 lanes, same 1 contract.
+    # DD limit $3,000 (vs $2K on $50K). Same 5 lanes, same 1 contract.
     # Purpose: more DD headroom for current ORB sizes, not more contracts.
     # =========================================================================
     # "apex_100k_manual": AccountProfile(
@@ -325,8 +325,8 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
     #     account_size=100_000,  # dd_limit_dollars=3000, max_contracts_micro=60
     #     copies=1,
     #     stop_multiplier=0.75,
-    #     max_slots=4,
-    #     allowed_sessions=frozenset({"NYSE_CLOSE", "SINGAPORE_OPEN", "COMEX_SETTLE", "NYSE_OPEN"}),
+    #     max_slots=5,
+    #     allowed_sessions=frozenset({"NYSE_CLOSE", "SINGAPORE_OPEN", "COMEX_SETTLE", "NYSE_OPEN", "US_DATA_1000"}),
     #     daily_lanes=(
     #         DailyLaneSpec("MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20_O15", "MNQ", "NYSE_CLOSE"),
     #         DailyLaneSpec(
@@ -339,8 +339,9 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
     #             "MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60_O15", "MNQ", "NYSE_OPEN",
     #             max_orb_size_pts=150.0,
     #         ),
+    #         DailyLaneSpec("MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR60_S075", "MNQ", "US_DATA_1000"),
     #     ),
-    #     notes="$100K upgrade. Same strategies, more DD headroom ($3K vs $2K).",
+    #     notes="$100K upgrade. Same 5 strategies, more DD headroom ($3K vs $2K).",
     # ),
     # =========================================================================
     # Phase 2: Automation scaling (Tradeify MNQ + TopStep MGC)
@@ -478,6 +479,7 @@ _LANE_NAMES: dict[str, str] = {
     "SINGAPORE_OPEN": "SING_G8",
     "COMEX_SETTLE": "COMEX_G8",
     "NYSE_OPEN": "NYSE_OPEN_XMES",
+    "US_DATA_1000": "US_DATA_XMES",
     "TOKYO_OPEN": "MGC_TOKYO",
 }
 
