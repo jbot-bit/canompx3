@@ -149,6 +149,11 @@ class SessionOrchestrator:
                             portfolio.name,
                         )
                 except Exception as e:
+                    if not signal_only:
+                        raise RuntimeError(
+                            f"FAIL-CLOSED: Cannot compute max_equity_drawdown_r from profile: {e}. "
+                            f"Refusing to trade without DD protection on prop account."
+                        ) from e
                     log.warning("Failed to compute max_equity_drawdown_r from profile: %s", e)
 
         risk_limits = RiskLimits(
@@ -273,6 +278,7 @@ class SessionOrchestrator:
 
         # Resolve front-month contract symbol (needed even in signal-only for logging)
         self.contract_symbol = contracts.resolve_front_month(instrument)
+        self._account_name = self.portfolio.name  # For dashboard display
         log.info(
             "Session ready: %s → %s (%s)",
             instrument,

@@ -107,8 +107,14 @@ async def action_kill():
 async def action_preflight():
     """Run preflight checks and return output."""
     try:
+        # Read profile from bot state if available, default to apex_50k_manual
+        state = read_state()
+        profile = "apex_50k_manual"
+        portfolio_name = state.get("account_name", "")
+        if portfolio_name.startswith("profile_"):
+            profile = portfolio_name.removeprefix("profile_")
         result = subprocess.run(
-            [sys.executable, "-m", "scripts.run_live_session", "--profile", "apex_50k_manual", "--preflight"],
+            [sys.executable, "-m", "scripts.run_live_session", "--profile", profile, "--preflight"],
             capture_output=True, text=True, timeout=30, cwd=str(PROJECT_ROOT),
         )
         return {
@@ -138,7 +144,7 @@ async def index():
 # ── Server launch ─────────────────────────────────────────────────────────────
 
 
-def run_dashboard(host: str = "0.0.0.0", port: int = PORT) -> None:
+def run_dashboard(host: str = "127.0.0.1", port: int = PORT) -> None:
     """Run the dashboard server (blocking). For standalone use or subprocess."""
     uvicorn.run(app, host=host, port=port, log_level="warning")
 
@@ -173,7 +179,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Bot Operations Dashboard")
     parser.add_argument("--port", type=int, default=PORT)
-    parser.add_argument("--host", default="0.0.0.0")
+    parser.add_argument("--host", default="127.0.0.1")
     _args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")

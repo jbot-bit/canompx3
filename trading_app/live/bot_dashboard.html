@@ -110,12 +110,39 @@
 <script>
 "use strict";
 
-const LANES = [
+// Default lanes — overridden dynamically from API on first poll
+let LANES = [
   { name: "NYSE_CLOSE",      color: "text-blue-400",    borderActive: "#3b82f6" },
   { name: "SINGAPORE_OPEN",  color: "text-purple-400",  borderActive: "#a855f7" },
   { name: "COMEX_SETTLE",    color: "text-amber-400",   borderActive: "#f59e0b" },
   { name: "NYSE_OPEN",       color: "text-emerald-400", borderActive: "#10b981" },
 ];
+
+const LANE_COLORS = [
+  { color: "text-blue-400",    borderActive: "#3b82f6" },
+  { color: "text-purple-400",  borderActive: "#a855f7" },
+  { color: "text-amber-400",   borderActive: "#f59e0b" },
+  { color: "text-emerald-400", borderActive: "#10b981" },
+  { color: "text-cyan-400",    borderActive: "#06b6d4" },
+  { color: "text-rose-400",    borderActive: "#f43f5e" },
+  { color: "text-lime-400",    borderActive: "#84cc16" },
+  { color: "text-orange-400",  borderActive: "#f97316" },
+];
+let lanesBuilt = false;
+
+function rebuildLanesFromApi(laneKeys) {
+  if (lanesBuilt && laneKeys.length === LANES.length &&
+      laneKeys.every((k, i) => k === LANES[i].name)) return;
+  LANES = laneKeys.map((name, i) => ({
+    name,
+    color: LANE_COLORS[i % LANE_COLORS.length].color,
+    borderActive: LANE_COLORS[i % LANE_COLORS.length].borderActive,
+  }));
+  const grid = document.getElementById("lanes-grid");
+  while (grid.firstChild) grid.removeChild(grid.firstChild);
+  buildLaneCards();
+  lanesBuilt = true;
+}
 
 function buildLaneCards() {
   const grid = document.getElementById("lanes-grid");
@@ -229,6 +256,8 @@ function updateStatus(d) {
   setText("bars-count", String(d.bars_received || 0));
 
   const lanes = d.lanes || {};
+  const laneKeys = Object.keys(lanes);
+  if (laneKeys.length > 0) rebuildLanesFromApi(laneKeys);
   for (const laneInfo of LANES) {
     const card = document.getElementById("lane-" + laneInfo.name);
     if (!card) continue;
