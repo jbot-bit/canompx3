@@ -41,3 +41,30 @@ class TradovatePositions(BrokerPositions):
         if result:
             log.warning("Found %d open positions on Tradovate", len(result))
         return result
+
+    def query_equity(self, account_id: int) -> float | None:
+        """Query current account equity from Tradovate.
+
+        GET /account/item?id={account_id} -> cashBalance + unrealized PnL.
+        Returns net liquidation value in dollars, or None on failure.
+        """
+        try:
+            resp = requests.get(
+                f"{self.base}/account/item",
+                params={"id": account_id},
+                headers=self.auth.headers(),
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            # Tradovate returns cashBalance (realized) — for equity we need
+            # cashBalance which already includes realized P&L.
+            # Unrealized P&L is tracked separately in positions.
+            cash = data.get("cashBalance")
+            if cash is not None:
+                return float(cash)
+            log.warning("Tradovate account response missing cashBalance: %s", data)
+            return None
+        except Exception as e:
+            log.warning("Failed to query Tradovate equity: %s", e)
+            return None

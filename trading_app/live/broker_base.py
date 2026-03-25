@@ -151,3 +151,11 @@ class BrokerPositions(ABC):
     def query_open(self, account_id: int) -> list[dict]:
         """Return open positions: [{contract_id, side, size, avg_price}]."""
         ...
+
+    def query_equity(self, account_id: int) -> float | None:
+        """Return current account equity in dollars. None if unavailable.
+
+        Default: not implemented (returns None). Override in broker-specific classes.
+        Used by AccountHWMTracker for cross-session DD tracking.
+        """
+        return None

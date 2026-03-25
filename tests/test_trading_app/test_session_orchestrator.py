@@ -179,6 +179,7 @@ def build_orchestrator(components: FakeBrokerComponents | None = None) -> Sessio
     orch._close_hour_et = None
     orch._close_min_et = None
     orch._close_time_forced = False
+    orch._hwm_tracker = None
 
     from trading_app.live.session_orchestrator import SessionStats
 
