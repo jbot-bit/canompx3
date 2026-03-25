@@ -51,7 +51,7 @@ class LaneDef:
     filter_sql: str  # WHERE clause fragment referencing daily_features alias
 
 
-# ── 4 Apex MNQ lanes (source: prop_profiles.py apex_150k.daily_lanes) ──
+# ── 5 Apex MNQ lanes (source: prop_profiles.py apex_50k_manual.daily_lanes) ──
 LANES: tuple[LaneDef, ...] = (
     LaneDef(
         strategy_id="MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20_O15",
@@ -100,6 +100,18 @@ LANES: tuple[LaneDef, ...] = (
         confirm_bars=1,
         filter_type="X_MES_ATR60",
         # Cross-asset: MES atr_20_pct from a separate daily_features row
+        filter_sql="d_mes.atr_20_pct >= 60.0",
+    ),
+    LaneDef(
+        strategy_id="MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR60_S075",
+        lane_name="US_DATA_XMES",
+        instrument="MNQ",
+        orb_label="US_DATA_1000",
+        orb_minutes=5,
+        rr_target=1.0,
+        entry_model="E2",
+        confirm_bars=1,
+        filter_type="X_MES_ATR60",
         filter_sql="d_mes.atr_20_pct >= 60.0",
     ),
 )

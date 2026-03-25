@@ -1,19 +1,14 @@
 ---
 mode: IMPLEMENTATION
-task: Fresh-eyes audit — fix CRITICAL/HIGH safety findings (429 retry, HWM gate, dd ghost, isAutomated)
+task: Deploy US_DATA_1000 as lane 5 — code review fixes (paper_trade_logger, weekly_review, prop_profiles)
 scope_lock:
-  - trading_app/live/projectx/order_router.py
-  - trading_app/live/session_orchestrator.py
-  - trading_app/pre_session_check.py
   - trading_app/prop_profiles.py
   - trading_app/weekly_review.py
-  - trading_app/log_trade.py
-  - tests/test_trading_app/test_prop_profiles.py
-  - tests/test_trading_app/test_session_orchestrator.py
-  - tests/test_trading_app/test_e2e_sim_mocked.py
+  - trading_app/paper_trade_logger.py
 acceptance:
-  - ProjectX order router has 429 retry with backoff+jitter
-  - HWM halt check in entry gate chain before broker submit
-  - dd_circuit_breaker ghost check removed or replaced with HWM check
+  - paper_trade_logger LANES matches prop_profiles (5 lanes)
+  - weekly_review section_4 includes US_DATA_1000
+  - _LANE_NAMES has US_DATA_1000 entry
+  - apex_100k comment updated to 5 lanes
   - 75/75 drift, 0 regressions
 ---
