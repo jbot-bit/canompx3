@@ -45,8 +45,19 @@ class TradovatePositions(BrokerPositions):
     def query_equity(self, account_id: int) -> float | None:
         """Query current account equity from Tradovate.
 
-        GET /account/item?id={account_id} -> cashBalance + unrealized PnL.
-        Returns net liquidation value in dollars, or None on failure.
+        Returns cashBalance (realized equity). Does NOT include unrealized PnL
+        from open positions. This means:
+        - When flat (no positions): accurate account equity
+        - When positions open: understates drawdown by the unrealized loss amount
+
+        KNOWN LIMITATION: Intraday with open positions, the HWM tracker may not
+        see the full drawdown. Prop firm EOD DD is computed when flat, so EOD
+        readings are correct. For intraday protection, rely on the R-based
+        circuit breaker in RiskManager (which tracks trade-level risk).
+
+        A more accurate approach would use /cashBalance/getCashBalanceSnapshot
+        or sum cashBalance + open position P&L, but those endpoints are not
+        confirmed available on all Tradovate account types.
         """
         try:
             resp = requests.get(
@@ -57,9 +68,6 @@ class TradovatePositions(BrokerPositions):
             )
             resp.raise_for_status()
             data = resp.json()
-            # Tradovate returns cashBalance (realized) — for equity we need
-            # cashBalance which already includes realized P&L.
-            # Unrealized P&L is tracked separately in positions.
             cash = data.get("cashBalance")
             if cash is not None:
                 return float(cash)

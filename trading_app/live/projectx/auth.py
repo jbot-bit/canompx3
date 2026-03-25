@@ -60,9 +60,7 @@ class ProjectXAuth(BrokerAuth):
                     attempt + 1, _MAX_RETRIES, e, wait,
                 )
                 if attempt < _MAX_RETRIES - 1:
-                    import time as _t
-
-                    _t.sleep(wait)
+                    time.sleep(wait)
 
         self._auth_healthy = False
         log.critical(

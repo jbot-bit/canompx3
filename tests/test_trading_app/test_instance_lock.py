@@ -18,10 +18,8 @@ def _clean_lock_state():
     """Reset module-level lock state between tests."""
     import trading_app.live.instance_lock as mod
 
-    mod._lock_fd = None
-    mod._lock_path = None
+    mod._locks.clear()
     yield
-    # Clean up after test
     release_instance_lock()
 
 
@@ -32,11 +30,11 @@ class TestInstanceLock:
         acquire_instance_lock("TEST_INST")
         lock_path = _lock_file_for("TEST_INST")
         assert lock_path.exists()
-        assert mod._lock_fd is not None
+        assert "TEST_INST" in mod._locks
 
         release_instance_lock()
         assert not lock_path.exists()
-        assert mod._lock_fd is None
+        assert len(mod._locks) == 0
 
     def test_stale_pid_cleaned_up(self):
         """Lock file from dead process should be cleaned up."""
@@ -44,7 +42,6 @@ class TestInstanceLock:
 
         lock_path = _lock_file_for("TEST_STALE")
         lock_path.parent.mkdir(parents=True, exist_ok=True)
-        # Write a PID that doesn't exist
         lock_path.write_text("99999999")
 
         with patch(
@@ -52,8 +49,7 @@ class TestInstanceLock:
         ):
             acquire_instance_lock("TEST_STALE")
 
-        # Should have acquired successfully
-        assert mod._lock_fd is not None
+        assert "TEST_STALE" in mod._locks
         release_instance_lock()
 
     def test_live_pid_blocks(self):
@@ -70,6 +66,34 @@ class TestInstanceLock:
 
         assert exc_info.value.code == 1
         lock_path.unlink(missing_ok=True)
+
+    def test_multi_instrument_locks(self):
+        """Multi-instrument: each instrument gets its own lock, all released together."""
+        import trading_app.live.instance_lock as mod
+
+        acquire_instance_lock("MGC")
+        acquire_instance_lock("MNQ")
+        acquire_instance_lock("MES")
+
+        assert len(mod._locks) == 3
+        assert _lock_file_for("MGC").exists()
+        assert _lock_file_for("MNQ").exists()
+        assert _lock_file_for("MES").exists()
+
+        release_instance_lock()
+
+        assert len(mod._locks) == 0
+        assert not _lock_file_for("MGC").exists()
+        assert not _lock_file_for("MNQ").exists()
+        assert not _lock_file_for("MES").exists()
+
+    def test_reacquire_same_instrument_is_noop(self):
+        """Acquiring the same instrument twice should not fail."""
+        import trading_app.live.instance_lock as mod
+
+        acquire_instance_lock("TEST_DUP")
+        acquire_instance_lock("TEST_DUP")  # should not raise
+        assert len(mod._locks) == 1
 
     def test_pid_alive_current_process(self):
         assert _is_pid_alive(os.getpid()) is True

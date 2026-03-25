@@ -2,6 +2,8 @@
 mode: IMPLEMENTATION
 task: Persistent dollar HWM tracker + prop firm compliance monitors
 scope_lock:
+  - trading_app/live/instance_lock.py
+  - trading_app/live/projectx/auth.py
   - trading_app/account_hwm_tracker.py
   - trading_app/consistency_tracker.py
   - trading_app/pre_session_check.py

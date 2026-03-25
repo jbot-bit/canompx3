@@ -3,6 +3,7 @@ Single-instance lock for live trading bot.
 
 Prevents two bot instances from trading the same account simultaneously.
 Uses an exclusive file lock (msvcrt on Windows, fcntl on Unix).
+Supports multiple instruments (multi-instrument mode acquires one lock per instrument).
 """
 
 import atexit
@@ -15,8 +16,8 @@ from pathlib import Path
 log = logging.getLogger(__name__)
 
 _LOCK_DIR = Path(tempfile.gettempdir()) / "canompx3"
-_lock_fd: int | None = None
-_lock_path: Path | None = None
+# Track all acquired locks: {instrument: (fd, path)}
+_locks: dict[str, tuple[int, Path]] = {}
 
 
 def _lock_file_for(instrument: str) -> Path:
@@ -25,15 +26,17 @@ def _lock_file_for(instrument: str) -> Path:
 
 
 def acquire_instance_lock(instrument: str) -> None:
-    """Acquire exclusive lock. Raises SystemExit if another instance is running."""
-    global _lock_fd, _lock_path
+    """Acquire exclusive lock for one instrument. Raises SystemExit if held by another process."""
+    if instrument in _locks:
+        log.info("Lock already held for %s — skipping re-acquire", instrument)
+        return
 
-    _lock_path = _lock_file_for(instrument)
+    lock_path = _lock_file_for(instrument)
 
     # Check for stale PID in existing lock file
-    if _lock_path.exists():
+    if lock_path.exists():
         try:
-            content = _lock_path.read_text().strip()
+            content = lock_path.read_text().strip()
             if content:
                 old_pid = int(content)
                 if _is_pid_alive(old_pid):
@@ -41,76 +44,83 @@ def acquire_instance_lock(instrument: str) -> None:
                         "Another bot instance is running (PID %d). "
                         "If stale, delete %s and retry.",
                         old_pid,
-                        _lock_path,
+                        lock_path,
                     )
                     print(
                         f"\n!!! CRITICAL: Another bot instance for {instrument} is running (PID {old_pid}).\n"
-                        f"    If stale, delete {_lock_path} and retry.\n"
+                        f"    If stale, delete {lock_path} and retry.\n"
                     )
                     sys.exit(1)
                 else:
                     log.info("Stale lock file from dead PID %d — removing", old_pid)
-                    _lock_path.unlink(missing_ok=True)
+                    lock_path.unlink(missing_ok=True)
         except (ValueError, OSError):
-            # Corrupt lock file — remove and proceed
-            _lock_path.unlink(missing_ok=True)
+            lock_path.unlink(missing_ok=True)
 
-    # Write our PID and acquire exclusive lock
+    # Acquire exclusive lock, then write PID
+    lock_fd = None
     try:
-        _lock_fd = os.open(str(_lock_path), os.O_CREAT | os.O_WRONLY | os.O_TRUNC)
+        lock_fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR)
         if sys.platform == "win32":
             import msvcrt
 
-            msvcrt.locking(_lock_fd, msvcrt.LK_NBLCK, 1)
+            msvcrt.locking(lock_fd, msvcrt.LK_NBLCK, 1)
         else:
             import fcntl
 
-            fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
-        os.write(_lock_fd, str(os.getpid()).encode())
-        os.fsync(_lock_fd)
-        log.info("Instance lock acquired: %s (PID %d)", _lock_path, os.getpid())
+        # Truncate and write PID after lock is held (avoids race on read)
+        os.ftruncate(lock_fd, 0)
+        os.lseek(lock_fd, 0, os.SEEK_SET)
+        os.write(lock_fd, str(os.getpid()).encode())
+        os.fsync(lock_fd)
+        _locks[instrument] = (lock_fd, lock_path)
+        log.info("Instance lock acquired: %s (PID %d)", lock_path, os.getpid())
 
     except (OSError, IOError) as e:
-        if _lock_fd is not None:
-            os.close(_lock_fd)
-            _lock_fd = None
-        log.critical("Failed to acquire instance lock: %s", e)
+        if lock_fd is not None:
+            os.close(lock_fd)
+        log.critical("Failed to acquire instance lock for %s: %s", instrument, e)
         print(
             f"\n!!! CRITICAL: Cannot acquire lock for {instrument}.\n"
             f"    Another instance may be running. Error: {e}\n"
         )
         sys.exit(1)
 
-    # Register cleanup
-    atexit.register(release_instance_lock)
+    # Register cleanup only once
+    if len(_locks) == 1:
+        atexit.register(release_instance_lock)
 
 
 def release_instance_lock() -> None:
-    """Release lock and clean up file."""
-    global _lock_fd, _lock_path
+    """Release ALL held locks and clean up files."""
+    for instrument in list(_locks.keys()):
+        _release_one(instrument)
 
-    if _lock_fd is not None:
-        try:
-            if sys.platform == "win32":
-                import msvcrt
 
-                try:
-                    msvcrt.locking(_lock_fd, msvcrt.LK_UNLCK, 1)
-                except OSError:
-                    pass
-            else:
-                import fcntl
+def _release_one(instrument: str) -> None:
+    """Release lock for a single instrument."""
+    if instrument not in _locks:
+        return
+    lock_fd, lock_path = _locks.pop(instrument)
+    try:
+        if sys.platform == "win32":
+            import msvcrt
 
-                fcntl.flock(_lock_fd, fcntl.LOCK_UN)
-            os.close(_lock_fd)
-        except OSError:
-            pass
-        _lock_fd = None
+            try:
+                os.lseek(lock_fd, 0, os.SEEK_SET)
+                msvcrt.locking(lock_fd, msvcrt.LK_UNLCK, 1)
+            except OSError:
+                pass
+        else:
+            import fcntl
 
-    if _lock_path is not None:
-        _lock_path.unlink(missing_ok=True)
-        _lock_path = None
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        os.close(lock_fd)
+    except OSError:
+        pass
+    lock_path.unlink(missing_ok=True)
 
 
 def _is_pid_alive(pid: int) -> bool:
