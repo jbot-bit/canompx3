@@ -278,11 +278,25 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         ),
         daily_lanes=(
             DailyLaneSpec("MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20_O15", "MNQ", "NYSE_CLOSE"),
-            DailyLaneSpec("MNQ_SINGAPORE_OPEN_E2_RR4.0_CB1_ORB_G8_O15", "MNQ", "SINGAPORE_OPEN"),
+            DailyLaneSpec(
+                "MNQ_SINGAPORE_OPEN_E2_RR4.0_CB1_ORB_G8_O15",
+                "MNQ",
+                "SINGAPORE_OPEN",
+                execution_notes="0.5x sizing (1 micro lot max). RR4.0 at 25% WR = long loss streaks structural. "
+                "Hist max DD -$3,540 on this lane alone. Remediation audit 2026-03-25.",
+                planned_stop_multiplier=0.75,
+            ),
             DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G8", "MNQ", "COMEX_SETTLE"),
             DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60_O15", "MNQ", "NYSE_OPEN"),
         ),
-        notes="Phase 1 manual. 4 validated MNQ lanes (stratified-K, holdout-clean, all gates). NYSE_CLOSE highest ExpR.",
+        notes=(
+            "Phase 1 manual. 4 validated MNQ lanes (stratified-K, holdout-clean, all gates). "
+            "NYSE_CLOSE highest ExpR. "
+            "RISK: Historical combined DD = -$3,409 (breaches $2K limit). "
+            "Lane 2 (SINGAPORE_OPEN RR4.0) hist DD = -$3,540 alone. "
+            "MITIGATIONS: Lane 2 at 0.5x sizing. Intraday DD halt at -$1,000. "
+            "Remediation audit 2026-03-25."
+        ),
     ),
     # =========================================================================
     # Phase 2: Automation scaling (Tradeify MNQ + TopStep MGC)
@@ -330,7 +344,14 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 execution_notes="1 contract only until N=250. Skip if ORB > 26 pts.",
             ),
         ),
-        notes="MGC CONDITIONAL — per-session P95 cleared, P99 not. 1 contract max. Invalidate at 3 losing months or ExpR<0.10.",
+        notes=(
+            "MGC CONDITIONAL — per-session P95 cleared, P99 not. 1 contract max. "
+            "Invalidate at 3 losing months or ExpR<0.10. "
+            "ERA_DEPENDENT: 77.6% of trades from 2025 (gold vol regime). "
+            "G4 filter = de facto ATR regime selector (0.4% pass rate in low-vol vs 40.8% in high-vol). "
+            "Shadow-trade only — no position size increase until N=250 with temporal diversity. "
+            "Remediation audit 2026-03-25."
+        ),
     ),
     # =========================================================================
     # Phase 3: Self-funded (after prop proof, $100K/year target)

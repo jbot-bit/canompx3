@@ -75,7 +75,7 @@ class TestHWMTracking:
         tracker.update_equity(49500.0)
         halted, reason = tracker.check_halt()
         assert not halted
-        assert "WARN" in reason  # $1700 / $2000 = 85% > 75% threshold
+        assert "WARNING_75" in reason  # $1700 / $2000 = 85% > 75% threshold
 
         # Day 4: -$400 more (total DD from HWM = $2,100 >= $2,000 limit)
         state = tracker.update_equity(49100.0)
@@ -116,7 +116,30 @@ class TestHaltBehavior:
         tracker.update_equity(50000.0)  # DD = 1500 = 75%
         halted, reason = tracker.check_halt()
         assert not halted
-        assert "WARN" in reason
+        assert "WARNING_75" in reason
+
+    def test_warn_at_50_pct(self, tracker):
+        tracker.update_equity(50000.0)
+        tracker.update_equity(51000.0)  # HWM
+        tracker.update_equity(50000.0)  # DD = 1000 = 50%
+        halted, reason = tracker.check_halt()
+        assert not halted
+        assert "WARNING_50" in reason
+
+    def test_warning_level_in_state(self, tracker):
+        tracker.update_equity(50000.0)
+        tracker.update_equity(51500.0)  # HWM
+        state = tracker.update_equity(50000.0)  # DD = 1500 = 75%
+        assert state.warning_level == "WARNING_75"
+
+    def test_warning_level_clear(self, tracker):
+        state = tracker.update_equity(50000.0)
+        assert state.warning_level == "CLEAR"
+
+    def test_warning_level_halt(self, tracker):
+        tracker.update_equity(52000.0)
+        state = tracker.update_equity(49000.0)  # DD = 3000 > limit
+        assert state.warning_level == "HALT"
 
 
 class TestPollFailures:

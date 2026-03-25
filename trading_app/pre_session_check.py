@@ -178,10 +178,7 @@ def check_hwm_tracker() -> tuple[bool, str]:
                     f"${remaining:.0f} remaining. HWM ${hwm:.0f} on {hwm_date}"
                 )
             else:
-                results.append(
-                    f"OK {acct}: DD ${used:.0f}/{limit:.0f} ({pct:.0%}) — "
-                    f"${remaining:.0f} remaining"
-                )
+                results.append(f"OK {acct}: DD ${used:.0f}/{limit:.0f} ({pct:.0%}) — ${remaining:.0f} remaining")
         except Exception as e:
             results.append(f"ERROR reading {f.name}: {e}")
 
@@ -245,41 +242,39 @@ def run_checks(session: str) -> bool:
     today = date.today()
     results = []
 
-    con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
-    configure_connection(con)
+    with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
+        configure_connection(con)
 
-    # Data freshness
-    ok, msg = check_data_freshness(con, lane["instrument"])
-    results.append(("Data freshness", ok, msg))
+        # Data freshness
+        ok, msg = check_data_freshness(con, lane["instrument"])
+        results.append(("Data freshness", ok, msg))
 
-    ok, msg = check_paper_trades_accessible(con)
-    results.append(("Paper trades table", ok, msg))
+        ok, msg = check_paper_trades_accessible(con)
+        results.append(("Paper trades table", ok, msg))
 
-    ok, msg = check_forward_monitor_freshness()
-    results.append(("Forward monitor", ok, msg))
+        ok, msg = check_forward_monitor_freshness()
+        results.append(("Forward monitor", ok, msg))
 
-    # Account state
-    ok, msg = check_hwm_tracker()
-    results.append(("HWM DD tracker", ok, msg))
+        # Account state
+        ok, msg = check_hwm_tracker()
+        results.append(("HWM DD tracker", ok, msg))
 
-    ok, msg = check_dd_circuit_breaker()
-    results.append(("DD circuit breaker (intraday)", ok, msg))
+        ok, msg = check_dd_circuit_breaker()
+        results.append(("DD circuit breaker (intraday)", ok, msg))
 
-    ok, msg = check_daily_equity()
-    results.append(("Daily equity", ok, msg))
+        ok, msg = check_daily_equity()
+        results.append(("Daily equity", ok, msg))
 
-    ok, msg = check_consistency_rule()
-    results.append(("Consistency rule", ok, msg))
+        ok, msg = check_consistency_rule()
+        results.append(("Consistency rule", ok, msg))
 
-    # Signal
-    ok, msg = check_signal_exists(con, session, lane, today)
-    results.append(("Signal check", ok, msg))
+        # Signal
+        ok, msg = check_signal_exists(con, session, lane, today)
+        results.append(("Signal check", ok, msg))
 
-    # Slippage pilot progress
-    slip_msg = check_slippage_pilot_progress(con)
-    results.append(("Slippage pilot", True, slip_msg))
-
-    con.close()
+        # Slippage pilot progress
+        slip_msg = check_slippage_pilot_progress(con)
+        results.append(("Slippage pilot", True, slip_msg))
 
     # Lane 2 enforcement
     if lane.get("is_half_size"):

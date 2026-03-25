@@ -77,6 +77,16 @@ COST_SPECS = {
         tick_size=0.10,
         min_ticks_floor=10,
     ),
+    # TODO(remediation-2026-03-25): MNQ slippage model is 1 tick ($0.50).
+    # MGC tbbo pilot showed mean=6.75 ticks (vs 1 modeled), std=41.57, max=263.
+    # MNQ tbbo pilot has NOT been run yet — research/research_mnq_e2_slippage_pilot.py exists.
+    # Run MNQ pilot before adjusting production slippage.
+    # Break-even analysis (scripts/tools/slippage_scenario.py):
+    #   COMEX_SETTLE: 4.9 extra ticks to zero (FRAGILE)
+    #   SINGAPORE_OPEN: 6.0 extra ticks to zero
+    #   NYSE_CLOSE: 15.4 extra ticks (robust)
+    #   NYSE_OPEN: 17.7 extra ticks (robust)
+    # SESSION_SLIPPAGE_MULT exists for live but is NOT used in backtests.
     "MNQ": CostSpec(
         instrument="MNQ",
         point_value=2.0,

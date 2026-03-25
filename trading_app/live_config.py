@@ -133,25 +133,21 @@ INSTRUMENT_ATR_GATE: dict[str, float] = {
     "MGC": 50.0,  # skip MGC when atr_20_pct < 50 (below-median vol)
 }
 
-# The live portfolio: what we actually trade.
+# =========================================================================
+# DEPRECATED (2026-03-25 remediation audit)
 #
-# Each spec below is grounded in current validated_setups + family_rr_locks
-# truth and is intended to resolve under the current live resolver.
-# No dead specs. No aspirational specs.
+# LIVE_PORTFOLIO specs reference filter types (ATR70_VOL, X_MGC_ATR70) that
+# do not exist in validated_setups. build_live_portfolio() resolves to ZERO
+# strategies. This entire code path is dead.
 #
-# MGC/MES currently do not qualify under current live resolution rules.
-# Their exclusion is driven by current validated/live gates, not forced
-# diversification choices.
+# SOLE AUTHORITY for live strategy config: trading_app.prop_profiles.py
+#   - Apex manual: ACCOUNT_PROFILES["apex_50k_manual"] (4 MNQ lanes)
+#   - TopStep conditional: ACCOUNT_PROFILES["topstep_50k"] (1 MGC lane)
+#   - Tradeify auto: ACCOUNT_PROFILES["tradeify_50k"] (pending)
 #
-# Tier selects the resolution code path (see build_live_portfolio):
-#   "core"   -> tries rolling eval first, falls back to validated_setups
-#   "regime" -> validated_setups only, fitness-gated via compute_fitness
-# Tier labels preserve existing resolver semantics. They do NOT
-# canonically derive from edge_families robustness_status.
-#
-# Rolling portfolio rebuilt 2026-03-23 with event-based session names.
-# CORE-path rolling eval is functional. REGIME-path fitness gate
-# (compute_fitness) loads outcomes directly, independent of rolling tables.
+# Kept for backwards compatibility with drift checks and UI code that
+# import LIVE_PORTFOLIO. Will be removed in a future cleanup pass.
+# =========================================================================
 LIVE_PORTFOLIO = [
     # =========================================================================
     # CORE: always-on.
@@ -579,12 +575,28 @@ def build_live_portfolio(
     """
     Build the live portfolio from LIVE_PORTFOLIO spec.
 
+    DEPRECATED (2026-03-25): LIVE_PORTFOLIO specs reference filter types that
+    do not exist in validated_setups. This function resolves to ZERO strategies.
+    Use trading_app.prop_profiles.ACCOUNT_PROFILES for live strategy config.
+
     Core tier: loads best variant from rolling eval (most recent window).
     Regime tier: loads best variant from validated_setups, then checks
     strategy_fitness -- weight=0.0 if not FIT.
 
     as_of_date: Reference date for seasonal gating. Defaults to today.
     """
+    import warnings
+
+    warnings.warn(
+        "build_live_portfolio() is DEPRECATED — LIVE_PORTFOLIO specs resolve to 0 strategies. "
+        "Use trading_app.prop_profiles.ACCOUNT_PROFILES as sole authority for live config.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    log.warning(
+        "DEPRECATED: build_live_portfolio() called. LIVE_PORTFOLIO resolves to 0 strategies. "
+        "Use prop_profiles.ACCOUNT_PROFILES instead."
+    )
     if as_of_date is None:
         as_of_date = date.today()
 

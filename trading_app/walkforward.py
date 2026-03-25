@@ -289,8 +289,15 @@ def run_walkforward(
     else:
         agg_oos_exp_r = 0.0
 
-    # Walk-Forward Efficiency (Pardo): WFE = mean(OOS ExpR) / mean(IS ExpR)
-    # WFE > 0.50 = healthy strategy (OOS retains half of IS performance)
+    # Walk-Forward Efficiency (Pardo): trade-weighted OOS/IS ExpR ratio.
+    # WFE > 0.50 = healthy strategy (OOS retains half of IS performance).
+    #
+    # Uses trade-weighted ratio (not mean-of-ratios) to avoid numerical
+    # instability when early expanding folds have near-zero IS ExpR.
+    # Mean-of-ratios produced WFE=2.269 for NYSE_OPEN due to 3 folds
+    # with IS_ExpR < 0.004 yielding fold-WFEs of 19, -18, 228.
+    # Trade-weighted WFE for that strategy = 1.14 (normal).
+    # Fix: remediation audit 2026-03-25.
     wfe = None
     wfe_windows = [
         w
@@ -298,10 +305,12 @@ def run_walkforward(
         if w.get("is_exp_r") is not None and w["is_exp_r"] > 0 and w.get("test_exp_r") is not None
     ]
     if wfe_windows:
-        mean_oos = sum(w["test_exp_r"] for w in wfe_windows) / len(wfe_windows)
-        mean_is = sum(w["is_exp_r"] for w in wfe_windows) / len(wfe_windows)
-        if mean_is > 0:
-            wfe = round(mean_oos / mean_is, 4)
+        total_oos_n = sum(w["test_n"] for w in wfe_windows)
+        if total_oos_n > 0:
+            weighted_oos = sum(w["test_exp_r"] * w["test_n"] for w in wfe_windows) / total_oos_n
+            weighted_is = sum(w["is_exp_r"] * w["test_n"] for w in wfe_windows) / total_oos_n
+            if weighted_is > 0:
+                wfe = round(weighted_oos / weighted_is, 4)
 
     # Window imbalance detection
     # @research-source Pardo "The Evaluation and Optimization of Trading Strategies" Ch.7 —
