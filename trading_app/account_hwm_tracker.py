@@ -46,6 +46,7 @@ class HWMState:
     dd_pct_used: float
     halt_triggered: bool
     halt_timestamp: str | None
+    warning_level: str = "CLEAR"  # "CLEAR" | "WARNING_50" | "WARNING_75" | "HALT"
     session_log: list[dict] = field(default_factory=list)
 
     @property
@@ -114,11 +115,20 @@ class AccountHWMTracker:
             self._session_log = data.get("session_log", [])[-_MAX_SESSION_LOG:]
             log.info(
                 "HWM tracker loaded: account=%s firm=%s HWM=$%.2f last=$%.2f halt=%s",
-                self._account_id, self._firm, self._hwm, self._last_equity, self._halt,
+                self._account_id,
+                self._firm,
+                self._hwm,
+                self._last_equity,
+                self._halt,
             )
         except (json.JSONDecodeError, ValueError, TypeError) as e:
-            log.error("HWM state file corrupt for account %s: %s — saving backup and reinitialising", self._account_id, e)
-            corrupt_path = self._state_dir / f"account_hwm_{self._account_id}_CORRUPT_{datetime.now(UTC).strftime('%Y%m%dT%H%M%S')}.json"
+            log.error(
+                "HWM state file corrupt for account %s: %s — saving backup and reinitialising", self._account_id, e
+            )
+            corrupt_path = (
+                self._state_dir
+                / f"account_hwm_{self._account_id}_CORRUPT_{datetime.now(UTC).strftime('%Y%m%dT%H%M%S')}.json"
+            )
             shutil.copy2(self._state_file, corrupt_path)
             log.error("Corrupt state backed up to %s", corrupt_path)
             # Reset to fresh state — will init on first equity update
@@ -160,7 +170,8 @@ class AccountHWMTracker:
             self._consecutive_poll_failures += 1
             log.warning(
                 "HWM: equity poll returned None (failure %d/%d)",
-                self._consecutive_poll_failures, _MAX_CONSECUTIVE_POLL_FAILURES,
+                self._consecutive_poll_failures,
+                _MAX_CONSECUTIVE_POLL_FAILURES,
             )
             if self._consecutive_poll_failures >= _MAX_CONSECUTIVE_POLL_FAILURES:
                 self._halt = True
@@ -200,7 +211,10 @@ class AccountHWMTracker:
             self._halt_ts = now
             log.critical(
                 "HWM HALT TRIGGERED: DD $%.2f >= limit $%.2f (HWM=$%.2f, equity=$%.2f)",
-                self._dd_used(), self._dd_limit, self._hwm, current_equity,
+                self._dd_used(),
+                self._dd_limit,
+                self._hwm,
+                current_equity,
             )
 
         self._save_state()
@@ -215,15 +229,20 @@ class AccountHWMTracker:
             )
 
         pct = self._dd_pct()
-        if pct >= _WARN_THRESHOLD:
+        remaining = self._dd_limit - self._dd_used()
+        if pct >= 0.75:
             return False, (
-                f"HWM_WARN: DD ${self._dd_used():.2f} = {pct:.0%} of ${self._dd_limit:.2f} limit "
-                f"(${self._dd_limit - self._dd_used():.2f} remaining)"
+                f"HWM_WARNING_75: DD ${self._dd_used():.2f} = {pct:.0%} of ${self._dd_limit:.2f} limit "
+                f"(${remaining:.2f} remaining)"
             )
 
-        return False, (
-            f"HWM_OK: DD ${self._dd_used():.2f} = {pct:.0%} of ${self._dd_limit:.2f} limit"
-        )
+        if pct >= 0.50:
+            return False, (
+                f"HWM_WARNING_50: DD ${self._dd_used():.2f} = {pct:.0%} of ${self._dd_limit:.2f} limit "
+                f"(${remaining:.2f} remaining)"
+            )
+
+        return False, (f"HWM_OK: DD ${self._dd_used():.2f} = {pct:.0%} of ${self._dd_limit:.2f} limit")
 
     def record_session_start(self, equity: float) -> None:
         """Called at session open. Does NOT reset HWM."""
@@ -246,18 +265,25 @@ class AccountHWMTracker:
         self._save_state()
         log.info(
             "HWM session end: start=$%.2f end=$%.2f peak=$%.2f dd=$%.2f",
-            entry["start_equity"], equity, self._session_peak, entry["session_dd"],
+            entry["start_equity"],
+            equity,
+            self._session_peak,
+            entry["session_dd"],
         )
 
-    def reset_halt(self) -> None:
+    def reset_halt(self, operator_note: str = "") -> None:
         """Manual halt reset. Requires explicit call — never automatic."""
         old_halt = self._halt
         self._halt = False
         self._halt_ts = None
+        self._consecutive_poll_failures = 0
         self._save_state()
         log.warning(
-            "HWM halt MANUALLY RESET: was_halted=%s, equity=$%.2f, HWM=$%.2f",
-            old_halt, self._last_equity, self._hwm,
+            "HWM halt MANUALLY RESET: was_halted=%s, equity=$%.2f, HWM=$%.2f, note='%s'",
+            old_halt,
+            self._last_equity,
+            self._hwm,
+            operator_note,
         )
 
     def get_status_summary(self) -> dict:
@@ -278,6 +304,16 @@ class AccountHWMTracker:
         }
 
     def _build_state(self) -> HWMState:
+        pct = self._dd_pct()
+        if self._halt:
+            wl = "HALT"
+        elif pct >= 0.75:
+            wl = "WARNING_75"
+        elif pct >= 0.50:
+            wl = "WARNING_50"
+        else:
+            wl = "CLEAR"
+
         return HWMState(
             account_id=self._account_id,
             firm=self._firm,
@@ -290,5 +326,6 @@ class AccountHWMTracker:
             dd_pct_used=round(self._dd_pct(), 4),
             halt_triggered=self._halt,
             halt_timestamp=self._halt_ts,
+            warning_level=wl,
             session_log=self._session_log[-_MAX_SESSION_LOG:],
         )

@@ -26,7 +26,9 @@ SESSIONS = ["NYSE_CLOSE", "SINGAPORE_OPEN", "COMEX_SETTLE", "NYSE_OPEN", "TOKYO_
 def section_0_account_health():
     """SECTION 0 — Account HWM DD status (before all other sections)."""
     print("\n  SECTION 0 - ACCOUNT HEALTH (Dollar DD Tracker)")
-    print(f"  {'Account':<15} {'Firm':<12} {'Equity':>10} {'HWM':>10} {'DD Used':>10} {'DD Limit':>10} {'%Used':>8} {'Status':>10}")
+    print(
+        f"  {'Account':<15} {'Firm':<12} {'Equity':>10} {'HWM':>10} {'DD Used':>10} {'DD Limit':>10} {'%Used':>8} {'Status':>10}"
+    )
     print("  " + "-" * 90)
 
     hwm_files = list(STATE_DIR.glob("account_hwm_*.json"))
@@ -38,9 +40,7 @@ def section_0_account_health():
         if "CORRUPT" in f.name:
             continue
         try:
-            import json as _json
-
-            data = _json.loads(f.read_text())
+            data = json.loads(f.read_text())
             acct = data.get("account_id", "?")
             firm = data.get("firm", "?")
             equity = data.get("last_equity", 0)
@@ -50,11 +50,12 @@ def section_0_account_health():
             pct = data.get("dd_pct_used", 0)
             halted = data.get("halt_triggered", False)
 
-            status = "HALTED" if halted else ("WARNING" if pct >= 75 else "OK")
-            flag = " ***" if pct >= 50 else ""
+            status = "HALTED" if halted else ("WARNING" if pct >= 0.75 else "OK")
+            flag = " ***" if pct >= 0.50 else ""
+            pct_display = pct * 100 if pct <= 1.0 else pct  # stored as decimal (0.75) or pct (75.0)
             print(
                 f"  {acct:<15} {firm:<12} ${equity:>9,.0f} ${hwm:>9,.0f} "
-                f"${used:>9,.0f} ${limit_d:>9,.0f} {pct:>7.1f}% {status:>10}{flag}"
+                f"${used:>9,.0f} ${limit_d:>9,.0f} {pct_display:>7.1f}% {status:>10}{flag}"
             )
 
             # Session history
@@ -282,32 +283,29 @@ def section_7_phase2_blockers():
 
 
 def run_review():
-    con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
-    configure_connection(con)
+    with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
+        configure_connection(con)
 
-    today = date.today()
-    # Monday of this week
-    week_start = today - timedelta(days=today.weekday())
+        today = date.today()
+        week_start = today - timedelta(days=today.weekday())
 
-    print(f"{'=' * 80}")
-    print(f"PHASE 1 WEEKLY OPERATIONS REVIEW | {today}")
-    print(f"{'=' * 80}")
+        print(f"{'=' * 80}")
+        print(f"PHASE 1 WEEKLY OPERATIONS REVIEW | {today}")
+        print(f"{'=' * 80}")
 
-    section_0_account_health()
-    section_0b_consistency()
-    section_1_forward_performance(con, week_start)
-    section_2_slippage(con)
-    section_3_dd_events()
-    section_4_signal_quality(con, week_start)
-    section_5_forward_monitor()
-    section_6_mgc_shadow(con)
-    section_7_phase2_blockers()
+        section_0_account_health()
+        section_0b_consistency()
+        section_1_forward_performance(con, week_start)
+        section_2_slippage(con)
+        section_3_dd_events()
+        section_4_signal_quality(con, week_start)
+        section_5_forward_monitor()
+        section_6_mgc_shadow(con)
+        section_7_phase2_blockers()
 
-    print(f"\n{'=' * 80}")
-    print("END OF WEEKLY REVIEW")
-    print(f"{'=' * 80}")
-
-    con.close()
+        print(f"\n{'=' * 80}")
+        print("END OF WEEKLY REVIEW")
+        print(f"{'=' * 80}")
 
 
 if __name__ == "__main__":

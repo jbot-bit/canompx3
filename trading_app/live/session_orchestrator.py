@@ -124,7 +124,9 @@ class SessionOrchestrator:
             first = portfolio.strategies[0]
             if first.source == "profile":
                 # Compute avg risk from ALL strategies with valid risk data (not just first)
-                strats_with_risk = [s for s in portfolio.strategies if s.median_risk_dollars and s.median_risk_dollars > 0]
+                strats_with_risk = [
+                    s for s in portfolio.strategies if s.median_risk_dollars and s.median_risk_dollars > 0
+                ]
                 if not strats_with_risk and not signal_only:
                     raise RuntimeError(
                         "FAIL-CLOSED: Profile portfolio has no strategies with median_risk_dollars. "
@@ -137,7 +139,9 @@ class SessionOrchestrator:
                     for pid, prof in ACCOUNT_PROFILES.items():
                         if portfolio.name == f"profile_{pid}":
                             tier = get_account_tier(prof.firm, prof.account_size)
-                            avg_risk = sum(s.median_risk_dollars for s in strats_with_risk) / max(1, len(strats_with_risk))
+                            avg_risk = sum(s.median_risk_dollars for s in strats_with_risk) / max(
+                                1, len(strats_with_risk)
+                            )
                             if avg_risk > 0:
                                 max_equity_dd_r = -abs(tier.max_dd / avg_risk)
                                 log.info(
@@ -292,10 +296,17 @@ class SessionOrchestrator:
         self._bar_count = 0  # total bars received this session
         self._close_time_forced = False  # one-shot force-flatten at session close
 
-        # Persistent dollar-based HWM tracker for prop firm trailing DD.
-        # Separate from RiskManager's R-based intraday tracker.
-        # dd_circuit_breaker.json = intraday R-limit (session-scoped)
-        # account_hwm_{id}.json = cross-session dollar HWM (prop firm compliance)
+        # DD PROTECTION — TWO LAYERS
+        # Layer 1: RiskManager — intraday R-units, resets each session
+        #   Stops a single bad session from burning too much capital.
+        #   Tracks cumulative_pnl_r and equity_high_water_r in memory.
+        #   Resets on daily_reset(). Lost on process restart.
+        # Layer 2: AccountHWMTracker — cross-session dollars, permanent HWM
+        #   Enforces prop firm EOD trailing DD rule. Breach = account terminated.
+        #   Persists to data/state/account_hwm_{id}.json. Never resets automatically.
+        #   Polls broker equity every ~10 bars. Triggers kill switch on breach.
+        # BOTH layers must clear before any order is submitted.
+        # Layer 1 resets daily. Layer 2 never resets automatically.
         self._hwm_tracker = None
         if not signal_only and portfolio is not None and portfolio.strategies:
             first = portfolio.strategies[0]
@@ -329,10 +340,14 @@ class SessionOrchestrator:
                                         )
                                     log.info("HWM tracker: %s", reason)
                                 else:
-                                    log.warning("HWM tracker: broker equity unavailable at startup — will init on first poll")
+                                    log.warning(
+                                        "HWM tracker: broker equity unavailable at startup — will init on first poll"
+                                    )
                             break
                 except ImportError:
                     log.warning("HWM tracker: account_hwm_tracker not available — DD tracking DISABLED")
+                except RuntimeError:
+                    raise  # Re-raise halt and other fail-closed errors — NEVER swallow these
                 except Exception as e:
                     log.warning("HWM tracker init failed: %s — DD tracking DISABLED", e)
 
@@ -426,7 +441,8 @@ class SessionOrchestrator:
             if prev_incomplete:
                 log.warning(
                     "Found %d incomplete trades from previous day %s — including in crash recovery",
-                    len(prev_incomplete), prev_day,
+                    len(prev_incomplete),
+                    prev_day,
                 )
                 incomplete.extend(prev_incomplete)
             for trade in incomplete:
@@ -440,7 +456,9 @@ class SessionOrchestrator:
                         self._positions.on_entry_filled(sid, validated_fill)
                         log.warning(
                             "POSITION RESTORED from journal: %s %s @ %.2f",
-                            sid, direction, float(fill),
+                            sid,
+                            direction,
+                            float(fill),
                         )
             if incomplete:
                 log.warning(
@@ -622,7 +640,10 @@ class SessionOrchestrator:
                 if deviation > 0.10:
                     log.critical(
                         "BAD FILL (%s): price %.4f deviates %.1f%% from last close %.4f",
-                        context, fill_price, deviation * 100, last_close,
+                        context,
+                        fill_price,
+                        deviation * 100,
+                        last_close,
                     )
                     self._notify(
                         f"BAD FILL ({context}): {fill_price} deviates {deviation:.1%} from market {last_close}"
@@ -884,7 +905,11 @@ class SessionOrchestrator:
                     # Without this, a REST outage with live WebSocket leaves positions
                     # stuck indefinitely — kill switch only fires on feed silence.
                     for sr in stale:
-                        if sr.state == PositionState.PENDING_EXIT and not self.signal_only and self.order_router is not None:
+                        if (
+                            sr.state == PositionState.PENDING_EXIT
+                            and not self.signal_only
+                            and self.order_router is not None
+                        ):
                             await self._retry_stuck_exit(sr)
         self._last_bar_at = now
         self._bar_count += 1
@@ -970,7 +995,10 @@ class SessionOrchestrator:
                 # Without brackets (Tradovate) or with failed bracket submission,
                 # positions would be completely unmanaged until rollover (potentially hours).
                 if self._positions.active_positions():
-                    log.critical("ENGINE CIRCUIT BREAKER: flattening %d open positions before pause", len(self._positions.active_positions()))
+                    log.critical(
+                        "ENGINE CIRCUIT BREAKER: flattening %d open positions before pause",
+                        len(self._positions.active_positions()),
+                    )
                     await self._emergency_flatten()
             return
 
@@ -1458,14 +1486,14 @@ class SessionOrchestrator:
                     # ProjectX creates bracket legs as separate orders with IDs entry_id+1 (SL)
                     # and entry_id+2 (TP), tagged with 'AutoBracket'.
                     try:
-                        sl_id, tp_id = self.order_router.verify_bracket_legs(
-                            order_id, self.contract_symbol
-                        )
+                        sl_id, tp_id = self.order_router.verify_bracket_legs(order_id, self.contract_symbol)
                         if sl_id and tp_id:
                             record.bracket_order_ids = [sl_id, tp_id]
                             log.info(
                                 "BRACKET VERIFIED: %s SL=%d TP=%d",
-                                event.strategy_id, sl_id, tp_id,
+                                event.strategy_id,
+                                sl_id,
+                                tp_id,
                             )
                         else:
                             missing = []
@@ -1586,7 +1614,9 @@ class SessionOrchestrator:
                 self._write_signal_record({"type": "EXIT_FAILED", "strategy_id": event.strategy_id, "error": str(e)})
                 return
             order_id = result.get("order_id") if isinstance(result, dict) else getattr(result, "order_id", None)
-            raw_exit_fill = result.get("fill_price") if isinstance(result, dict) else getattr(result, "fill_price", None)
+            raw_exit_fill = (
+                result.get("fill_price") if isinstance(result, dict) else getattr(result, "fill_price", None)
+            )
             exit_fill = self._validate_fill_price(raw_exit_fill, f"EXIT {event.strategy_id}")
 
             if exit_fill is not None:
@@ -1693,7 +1723,9 @@ class SessionOrchestrator:
                     except Exception as e:
                         log.warning(
                             "KILL SWITCH: bracket cancel failed for %s order %s (proceeding): %s",
-                            record.strategy_id, oid, e,
+                            record.strategy_id,
+                            oid,
+                            e,
                         )
 
             direction = record.direction
@@ -1813,9 +1845,7 @@ class SessionOrchestrator:
                         self._stats.fill_polls_run += 1
                         if status["status"] == "Filled":
                             raw_poll_fill = status.get("fill_price")
-                            fill_price = self._validate_fill_price(
-                                raw_poll_fill, f"POLL {record.strategy_id}"
-                            )
+                            fill_price = self._validate_fill_price(raw_poll_fill, f"POLL {record.strategy_id}")
                             if fill_price is not None:
                                 self._positions.on_entry_filled(record.strategy_id, fill_price)
                                 # Update journal with confirmed fill price
@@ -1862,7 +1892,8 @@ class SessionOrchestrator:
         if actual_day != self.trading_day:
             log.warning(
                 "Trading day corrected on run start: %s -> %s (init was stale)",
-                self.trading_day, actual_day,
+                self.trading_day,
+                actual_day,
             )
             self.trading_day = actual_day
 
@@ -1941,7 +1972,9 @@ class SessionOrchestrator:
                         else:
                             log.info("Contract unchanged on reconnect: %s", self.contract_symbol)
                     except Exception as exc:
-                        log.warning("Contract re-resolution failed on reconnect: %s (keeping %s)", exc, self.contract_symbol)
+                        log.warning(
+                            "Contract re-resolution failed on reconnect: %s (keeping %s)", exc, self.contract_symbol
+                        )
 
                     self._stats.reconnect_attempts += 1
                     self._notify(f"Reconnecting in {backoff:.0f}s (attempt {attempt + 2})")

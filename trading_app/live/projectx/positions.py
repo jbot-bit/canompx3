@@ -46,21 +46,29 @@ class ProjectXPositions(BrokerPositions):
     def query_equity(self, account_id: int) -> float | None:
         """Query current account equity from ProjectX.
 
-        GET /api/Account/item?id={account_id} -> balance field.
-        Returns account balance in dollars, or None on failure.
+        Uses POST /api/Account/search to find account by id, returns balance.
+        The /api/Account/{id} GET endpoint returns 404 on TopStepX — use search instead.
+
+        KNOWN LIMITATION: Returns realized balance. May not include unrealized PnL
+        from open positions. EOD readings (when flat) are accurate for prop firm DD.
         """
         try:
-            resp = requests.get(
-                f"{BASE_URL}/api/Account/{account_id}",
+            resp = requests.post(
+                f"{BASE_URL}/api/Account/search",
+                json={"onlyActiveAccounts": True},
                 headers=self.auth.headers(),
                 timeout=10,
             )
             resp.raise_for_status()
             data = resp.json()
-            balance = data.get("balance") or data.get("cashBalance")
-            if balance is not None:
-                return float(balance)
-            log.warning("ProjectX account response missing balance: %s", data)
+            accounts = data if isinstance(data, list) else data.get("accounts", [])
+            for acct in accounts:
+                acct_id = acct.get("id") or acct.get("accountId")
+                if acct_id is not None and int(acct_id) == account_id:
+                    balance = acct.get("balance") or acct.get("cashBalance")
+                    if balance is not None:
+                        return float(balance)
+            log.warning("ProjectX account %d not found in search results", account_id)
             return None
         except Exception as e:
             log.warning("Failed to query ProjectX equity: %s", e)
