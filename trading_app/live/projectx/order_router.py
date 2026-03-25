@@ -246,10 +246,12 @@ class ProjectXOrderRouter(BrokerRouter):
             if o_contract != contract_id:
                 continue
 
-            # Match by sequential ID (primary) or AutoBracket tag (fallback)
-            if oid == expected_sl or (tag.endswith("-SL") and "AutoBracket" in tag):
+            # Match by sequential ID ONLY — tag-based fallback removed because
+            # it can cross-contaminate bracket IDs between concurrent strategies
+            # on the same contract (4 MNQ lanes share one contract).
+            if oid == expected_sl:
                 sl_id = oid
-            elif oid == expected_tp or (tag.endswith("-TP") and "AutoBracket" in tag):
+            elif oid == expected_tp:
                 tp_id = oid
 
         return sl_id, tp_id

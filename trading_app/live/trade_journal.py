@@ -250,19 +250,35 @@ class TradeJournal:
             log.critical("TradeJournal.get_strategy_ids_for_day FAILED", exc_info=True)
             return set()
 
-    def incomplete_trades(self) -> list[dict]:
-        """Return trades with entry but no exit (crash detection)."""
+    def incomplete_trades(self, trading_day=None) -> list[dict]:
+        """Return trades with entry but no exit (crash detection).
+
+        If trading_day is specified, only returns incomplete trades from that day.
+        Without a filter, stale incomplete records from previous days would be
+        incorrectly restored as active positions.
+        """
         if self._con is None:
             return []
         try:
-            rows = self._con.execute(
-                """
-                SELECT trade_id, strategy_id, instrument, direction, engine_entry, fill_entry
-                FROM live_trades
-                WHERE exited_at IS NULL
-                ORDER BY created_at
-                """
-            ).fetchall()
+            if trading_day is not None:
+                rows = self._con.execute(
+                    """
+                    SELECT trade_id, strategy_id, instrument, direction, engine_entry, fill_entry
+                    FROM live_trades
+                    WHERE exited_at IS NULL AND trading_day = ?
+                    ORDER BY created_at
+                    """,
+                    [trading_day],
+                ).fetchall()
+            else:
+                rows = self._con.execute(
+                    """
+                    SELECT trade_id, strategy_id, instrument, direction, engine_entry, fill_entry
+                    FROM live_trades
+                    WHERE exited_at IS NULL
+                    ORDER BY created_at
+                    """
+                ).fetchall()
             return [
                 {
                     "trade_id": r[0],
