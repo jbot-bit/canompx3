@@ -222,7 +222,14 @@ class ProjectXDataFeed(BrokerFeed):
 
                 hub.on("GatewayQuote", lambda args: self._on_quote_sync(args))
                 hub.on("GatewayTrade", lambda args: self._on_trade_sync(args))
-                hub.on_open(lambda: log.info("Connected to ProjectX Market Hub"))
+                # Check 10 fix: re-subscribe after automatic reconnect.
+                # The spec requires re-invoking Subscribe* methods after reconnect.
+                # Without this, signalrcore's automatic reconnect restores the WebSocket
+                # but the quote subscription is lost → silent data loss.
+                hub.on_open(lambda: (
+                    log.info("Connected to ProjectX Market Hub — subscribing to %s", symbol),
+                    hub.send("SubscribeContractQuotes", [symbol]),
+                ))
 
                 hub.start()
                 hub.send("SubscribeContractQuotes", [symbol])

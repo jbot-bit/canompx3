@@ -83,7 +83,11 @@ class ProjectXOrderRouter(BrokerRouter):
         if order_id is None or order_id <= 0:
             log.error("ProjectX order returned no valid orderId: %s", data)
             raise RuntimeError(f"ProjectX order returned no valid orderId: {data}")
-        fill_price = data.get("fillPrice")
+        # Spec says place response only has orderId/success/errorCode/errorMessage.
+        # filledPrice may appear on immediate fills — try spec field name first.
+        fill_price = data.get("filledPrice")
+        if fill_price is None:
+            fill_price = data.get("fillPrice")  # fallback for non-spec field name
         if fill_price is None:
             fill_price = data.get("averagePrice")
 
@@ -169,8 +173,23 @@ class ProjectXOrderRouter(BrokerRouter):
         """Attach bracket fields to entry order for atomic submission."""
         return {**entry_spec, **bracket_spec}
 
+    # ProjectX OrderStatus enum (per official API spec)
+    _STATUS_INT_MAP = {
+        0: "None",
+        1: "Working",       # Open/working
+        2: "Filled",
+        3: "Cancelled",
+        4: "Expired",
+        5: "Rejected",
+        6: "Pending",
+    }
+
     def query_order_status(self, order_id: int) -> dict:
-        """Query order status from ProjectX REST API."""
+        """Query order status from ProjectX REST API.
+
+        The API returns status as an INTEGER (OrderStatus enum), not a string.
+        See docs/reference/PROJECTX_API_REFERENCE.md for canonical spec.
+        """
         if self.auth is None:
             raise RuntimeError("No auth — cannot query order status")
         resp = requests.get(
@@ -180,20 +199,22 @@ class ProjectXOrderRouter(BrokerRouter):
         )
         resp.raise_for_status()
         data = resp.json()
-        # Map ProjectX status to standard format
-        status_map = {
-            "Filled": "Filled",
-            "Working": "Working",
-            "Cancelled": "Cancelled",
-            "Rejected": "Rejected",
-        }
-        raw_status = data.get("status", "Unknown")
-        fill_price = data.get("fillPrice")
+        # Map integer status to string (spec returns int, callers expect string)
+        raw_status = data.get("status", 0)
+        if isinstance(raw_status, int):
+            mapped = self._STATUS_INT_MAP.get(raw_status, f"Unknown({raw_status})")
+        else:
+            # Defensive: handle string if API ever changes
+            mapped = str(raw_status)
+        # Spec field is "filledPrice", not "fillPrice"
+        fill_price = data.get("filledPrice")
+        if fill_price is None:
+            fill_price = data.get("fillPrice")  # fallback for non-spec endpoints
         if fill_price is None:
             fill_price = data.get("averagePrice")
         return {
             "order_id": order_id,
-            "status": status_map.get(raw_status, raw_status),
+            "status": mapped,
             "fill_price": float(fill_price) if fill_price is not None else None,
         }
 
@@ -224,8 +245,15 @@ class ProjectXOrderRouter(BrokerRouter):
         """Verify bracket legs exist after entry fill.
 
         Returns (sl_order_id, tp_order_id). Either can be None if not found.
-        Bracket legs are created with sequential IDs: entry_id+1 (SL), entry_id+2 (TP).
-        Also identified by customTag containing 'AutoBracket'.
+
+        Per API spec, place response returns ONE orderId — bracket legs appear
+        as separate orders in searchOpen AFTER fill. We identify them by:
+        1. Primary: sequential IDs (entry_id+1 for SL, entry_id+2 for TP)
+        2. Fallback: type matching on same contract (type=4 for Stop/SL, type=1 for Limit/TP)
+           with IDs greater than the entry order (created after it).
+
+        See docs/reference/PROJECTX_API_REFERENCE.md — searchOpen does NOT
+        return customTag, so tag-based matching is impossible.
         """
         try:
             orders = self.query_open_orders()
@@ -238,26 +266,48 @@ class ProjectXOrderRouter(BrokerRouter):
         expected_sl = entry_order_id + 1
         expected_tp = entry_order_id + 2
 
+        # Fallback candidates: orders on same contract with ID > entry_id
+        sl_fallback = None
+        tp_fallback = None
+
         for o in orders:
             oid = o.get("id", o.get("orderId"))
-            tag = o.get("customTag") or ""
             o_contract = o.get("contractId", "")
 
-            if o_contract != contract_id:
+            if o_contract != contract_id or oid is None:
                 continue
 
-            # Match by sequential ID ONLY — tag-based fallback removed because
-            # it can cross-contaminate bracket IDs between concurrent strategies
-            # on the same contract (4 MNQ lanes share one contract).
+            # Primary: sequential ID match
             if oid == expected_sl:
                 sl_id = oid
             elif oid == expected_tp:
                 tp_id = oid
+            # Fallback: type-based match for orders created after entry
+            elif oid > entry_order_id:
+                o_type = o.get("type")
+                if o_type == 4 and sl_fallback is None:  # Stop = SL
+                    sl_fallback = oid
+                elif o_type == 1 and tp_fallback is None:  # Limit = TP
+                    tp_fallback = oid
+
+        # Use fallback if primary didn't find both legs
+        if sl_id is None and sl_fallback is not None:
+            sl_id = sl_fallback
+            log.info("Bracket SL found via type-match fallback: orderId=%d", sl_id)
+        if tp_id is None and tp_fallback is not None:
+            tp_id = tp_fallback
+            log.info("Bracket TP found via type-match fallback: orderId=%d", tp_id)
 
         return sl_id, tp_id
 
     def cancel_bracket_orders(self, contract_id: str) -> int:
-        """Cancel all AutoBracket-tagged orders for a contract. Returns count cancelled."""
+        """Cancel orphaned bracket orders for a contract. Returns count cancelled.
+
+        Per API spec, searchOpen does NOT return customTag. Bracket legs are
+        identified by type: Stop (type=4) for SL, Limit (type=1) for TP.
+        This is used at startup for orphan cleanup — during normal exit flow,
+        bracket IDs are tracked per-strategy and cancelled by specific ID.
+        """
         try:
             orders = self.query_open_orders()
         except Exception as e:
@@ -266,11 +316,12 @@ class ProjectXOrderRouter(BrokerRouter):
 
         cancelled = 0
         for o in orders:
-            tag = o.get("customTag") or ""
             o_contract = o.get("contractId", "")
             oid = o.get("id", o.get("orderId"))
+            o_type = o.get("type")
 
-            if o_contract == contract_id and "AutoBracket" in tag and oid:
+            # Bracket legs are Stop (type=4) or Limit (type=1) orders
+            if o_contract == contract_id and o_type in (1, 4) and oid:
                 try:
                     self.cancel(oid)
                     cancelled += 1
