@@ -138,8 +138,7 @@ def estimate_var_sr_from_db(db_path, min_sample: int = 30) -> float:
     """
     import duckdb
 
-    con = duckdb.connect(str(db_path), read_only=True)
-    try:
+    with duckdb.connect(str(db_path), read_only=True) as con:
         row = con.execute(
             """SELECT VAR_SAMP(sharpe_ratio)
                FROM experimental_strategies
@@ -149,8 +148,6 @@ def estimate_var_sr_from_db(db_path, min_sample: int = 30) -> float:
             [min_sample],
         ).fetchone()
         return row[0] if row and row[0] is not None else 0.0
-    finally:
-        con.close()
 
 
 def estimate_n_eff_from_db(db_path) -> dict:
@@ -164,8 +161,7 @@ def estimate_n_eff_from_db(db_path) -> dict:
     """
     import duckdb
 
-    con = duckdb.connect(str(db_path), read_only=True)
-    try:
+    with duckdb.connect(str(db_path), read_only=True) as con:
         n_raw = con.execute(
             "SELECT COUNT(*) FROM experimental_strategies WHERE is_canonical = TRUE"
         ).fetchone()[0]
@@ -189,5 +185,3 @@ def estimate_n_eff_from_db(db_path) -> dict:
             "n_families_active": n_fam_active,
             "n_instrument_session": n_inst_sess,
         }
-    finally:
-        con.close()

@@ -1,3 +1,4 @@
+import math
 import threading
 from datetime import datetime, timezone
 
@@ -113,3 +114,100 @@ def test_concurrent_ticks_do_not_corrupt_bar():
     assert agg._current.high == max_price
     # Low must be the seed (2000.0 is lowest)
     assert agg._current.low == 2000.0
+
+
+# ---------------------------------------------------------------------------
+# Tick validation tests
+# ---------------------------------------------------------------------------
+
+
+def test_tick_zero_price_rejected():
+    agg = BarAggregator()
+    result = agg.on_tick(price=0.0, volume=1, ts=_ts(0, 5))
+    assert result is None
+    assert agg._current is None  # never opened a bar
+
+
+def test_tick_negative_price_rejected():
+    agg = BarAggregator()
+    result = agg.on_tick(price=-100.0, volume=1, ts=_ts(0, 5))
+    assert result is None
+
+
+def test_tick_nan_rejected():
+    agg = BarAggregator()
+    result = agg.on_tick(price=float("nan"), volume=1, ts=_ts(0, 5))
+    assert result is None
+
+
+def test_tick_inf_rejected():
+    agg = BarAggregator()
+    result = agg.on_tick(price=float("inf"), volume=1, ts=_ts(0, 5))
+    assert result is None
+
+
+def test_tick_negative_volume_rejected():
+    agg = BarAggregator()
+    result = agg.on_tick(price=2000.0, volume=-1, ts=_ts(0, 5))
+    assert result is None
+
+
+def test_tick_spike_rejected():
+    """Price 10x last known → rejected as spike."""
+    agg = BarAggregator()
+    agg.on_tick(price=2000.0, volume=1, ts=_ts(0, 5))
+    # 10x spike (above 5x threshold)
+    result = agg.on_tick(price=20000.0, volume=1, ts=_ts(0, 10))
+    assert result is None
+    # Current bar should only have the first tick
+    assert agg._current.high == 2000.0
+
+
+def test_normal_price_movement_accepted():
+    """2x move is within 5x threshold — not rejected."""
+    agg = BarAggregator()
+    agg.on_tick(price=2000.0, volume=1, ts=_ts(0, 5))
+    result = agg.on_tick(price=4000.0, volume=1, ts=_ts(0, 10))
+    assert result is None
+    assert agg._current.high == 4000.0
+
+
+# ---------------------------------------------------------------------------
+# Bar validation tests
+# ---------------------------------------------------------------------------
+
+
+def test_bar_is_valid_good_bar():
+    bar = Bar(ts_utc=_ts(0), open=100.0, high=105.0, low=99.0, close=102.0, volume=10)
+    assert bar.is_valid() is True
+
+
+def test_bar_is_valid_high_less_than_low():
+    bar = Bar(ts_utc=_ts(0), open=100.0, high=95.0, low=105.0, close=100.0, volume=10)
+    assert bar.is_valid() is False
+
+
+def test_bar_is_valid_zero_price():
+    bar = Bar(ts_utc=_ts(0), open=0.0, high=100.0, low=99.0, close=100.0, volume=10)
+    assert bar.is_valid() is False
+
+
+def test_bar_is_valid_nan_price():
+    bar = Bar(ts_utc=_ts(0), open=float("nan"), high=100.0, low=99.0, close=100.0, volume=10)
+    assert bar.is_valid() is False
+
+
+def test_bad_bar_alert_fires():
+    """After 3 consecutive bad bars, alert callback fires."""
+    alerts = []
+    agg = BarAggregator(on_bad_bar_alert=alerts.append)
+    # Open a bar with good tick, then manually corrupt and flush 3 times
+    for i in range(4):
+        agg.on_tick(price=2000.0, volume=1, ts=_ts(i, 5))
+        # Corrupt the current bar
+        agg._current.high = -1.0
+        bar = agg.flush()
+        assert bar is None  # rejected
+
+    assert len(alerts) >= 1
+    assert "consecutive bad bars" in alerts[0]

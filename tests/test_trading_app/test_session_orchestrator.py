@@ -176,6 +176,9 @@ def build_orchestrator(components: FakeBrokerComponents | None = None) -> Sessio
     orch._kill_switch_fired = False
     orch._bar_count = 0
     orch._notifications_broken = False
+    orch._close_hour_et = None
+    orch._close_min_et = None
+    orch._close_time_forced = False
 
     from trading_app.live.session_orchestrator import SessionStats
 
@@ -1311,6 +1314,9 @@ class FakeBracketRouter(FakeRouter):
     def merge_bracket_into_entry(self, entry_spec: dict, bracket_spec: dict) -> dict:
         return {**entry_spec, **bracket_spec}
 
+    def verify_bracket_legs(self, order_id: int, contract_symbol: str) -> tuple[int, int]:
+        return (order_id + 1, order_id + 2)
+
     def cancel(self, order_id: int) -> None:
         self.cancelled_ids.append(order_id)
 
@@ -1331,10 +1337,10 @@ class TestBracketOrders:
         submitted = router.submitted[0]
         assert "stopLossBracket" in submitted
         assert "takeProfitBracket" in submitted
-        # Position should have entry order ID as bracket parent
+        # Position should have bracket leg IDs (SL=entry_id+1, TP=entry_id+2)
         record = orch._positions.get(STRATEGY_ID)
         assert record is not None
-        assert record.bracket_order_ids == [99]
+        assert record.bracket_order_ids == [100, 101]
 
     async def test_bracket_cancelled_before_exit(self):
         """Exit signal -> bracket parent order cancelled -> exit submitted."""
@@ -1350,8 +1356,9 @@ class TestBracketOrders:
         # Exit
         await orch._handle_event(_exit_event(2355.0))
 
-        # Bracket parent order (entry ID 99) should have been cancelled
-        assert 99 in router.cancelled_ids
+        # Bracket leg orders (SL=100, TP=101) should have been cancelled before exit
+        assert 100 in router.cancelled_ids
+        assert 101 in router.cancelled_ids
 
     async def test_no_bracket_when_unsupported(self):
         """supports_native_brackets() returns False -> no bracket merged."""

@@ -35,6 +35,7 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
+from trading_app.live.instance_lock import acquire_instance_lock, release_instance_lock
 from trading_app.live.session_orchestrator import SessionOrchestrator
 
 
@@ -354,6 +355,10 @@ def main() -> None:
         from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
         from trading_app.live.multi_runner import MultiInstrumentRunner
 
+        # Acquire instance lock for each instrument
+        for inst in ACTIVE_ORB_INSTRUMENTS:
+            acquire_instance_lock(inst)
+
         _all_names = ", ".join(ACTIVE_ORB_INSTRUMENTS)
         _print_mode_banner("signal", f"ALL ({_all_names})")
         runner = MultiInstrumentRunner(
@@ -368,9 +373,11 @@ def main() -> None:
             asyncio.run(runner.run())
         finally:
             runner.post_session()
+            release_instance_lock()
         return
 
     # Single-instrument mode (existing path)
+    acquire_instance_lock(args.instrument)
     _print_mode_banner("signal" if signal_only else ("demo" if demo else "live"), args.instrument)
 
     # Launch dashboard as background subprocess (non-fatal if it fails)
@@ -396,6 +403,7 @@ def main() -> None:
         asyncio.run(session.run())
     finally:
         session.post_session()
+        release_instance_lock()
         _stop_file.unlink(missing_ok=True)
         # Clear bot state so dashboard shows STOPPED
         try:

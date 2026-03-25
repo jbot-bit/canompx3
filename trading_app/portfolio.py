@@ -840,6 +840,19 @@ def build_profile_portfolio(
     if not strategies:
         raise RuntimeError(f"Profile '{profile_id}' resolved 0 strategies")
 
+    # Validate session names against SESSION_CATALOG
+    from pipeline.dst import SESSION_CATALOG
+
+    valid_sessions = set(SESSION_CATALOG.keys())
+    for s in strategies:
+        if s.orb_label not in valid_sessions:
+            raise RuntimeError(
+                f"Unknown session '{s.orb_label}' in profile '{profile_id}' "
+                f"strategy '{s.strategy_id}'. "
+                f"Valid sessions: {sorted(valid_sessions)}. "
+                f"Check for typos in prop_profiles.py daily_lanes."
+            )
+
     logger.info(
         "Profile portfolio '%s': %d strategies for %s (stop=%.2fx)",
         profile_id, len(strategies), instrument, profile.stop_multiplier,

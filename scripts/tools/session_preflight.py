@@ -13,7 +13,14 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 DEFAULT_ROOT = Path(os.environ.get("CANOMPX3_ROOT", Path.cwd()))
-ACTIVE_SESSION_FILE = Path(os.environ.get("CANOMPX3_ACTIVE_SESSION_FILE", "/tmp/canompx3-active-session.json"))
+import tempfile
+
+ACTIVE_SESSION_FILE = Path(
+    os.environ.get(
+        "CANOMPX3_ACTIVE_SESSION_FILE",
+        os.path.join(tempfile.gettempdir(), "canompx3-active-session.json"),
+    )
+)
 CLAIM_FRESHNESS = timedelta(hours=8)
 GIT_TIMEOUT_SECONDS = 2.0
 
