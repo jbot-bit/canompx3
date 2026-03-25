@@ -57,6 +57,7 @@ class SessionStats:
     bars_received: int = 0
     engine_errors: int = 0
     events_processed: int = 0
+    orb_cap_skips: int = 0
 
 
 class SessionOrchestrator:
@@ -114,6 +115,23 @@ class SessionOrchestrator:
 
         # Strategy lookup map for resolving entry_model from strategy_id on TradeEvents
         self._strategy_map: dict[str, PortfolioStrategy] = {s.strategy_id: s for s in self.portfolio.strategies}
+
+        # ORB cap map: orb_label -> max risk in points (risk management gate).
+        # Values are compared against event.risk_points (stop distance, NOT raw ORB size).
+        self._orb_caps: dict[str, float] = {}
+        _is_profile = portfolio is not None and portfolio.strategies and portfolio.strategies[0].source == "profile"
+        try:
+            from trading_app.prop_profiles import get_lane_registry
+
+            for label, info in get_lane_registry().items():
+                cap = info.get("max_orb_size_pts")
+                if cap is not None:
+                    self._orb_caps[label] = cap
+                    log.info("ORB cap loaded: %s max=%.1f pts risk", label, cap)
+        except Exception:
+            if _is_profile:
+                raise  # Fail-closed: prop accounts MUST have working cap loading
+            log.warning("Could not load ORB caps from lane registry — caps DISABLED")
 
         # Execution stack
         self.cost_spec: CostSpec = get_cost_spec(instrument)
@@ -1284,6 +1302,30 @@ class SessionOrchestrator:
                 self._notify(msg)
                 self._write_signal_record({"type": "ENTRY_BLOCKED_ORPHAN", "strategy_id": event.strategy_id})
                 return
+
+            # ORB cap check — risk management gate (prevents oversized trades).
+            # event.risk_points = stop distance in points (abs(entry - stop)), set
+            # by ExecutionEngine. With 0.75x stops, risk_points ~ 0.75 * ORB range.
+            # Cap at 150 pts risk = $300 max loss per trade on MNQ ($2/pt).
+            orb_cap = self._orb_caps.get(strategy.orb_label)
+            if orb_cap is not None and event.risk_points is not None:
+                if event.risk_points >= orb_cap:
+                    log.info(
+                        "ORB_CAP_SKIP: %s risk=%.1f pts >= cap=%.1f pts. Trade skipped.",
+                        strategy.orb_label,
+                        event.risk_points,
+                        orb_cap,
+                    )
+                    self._stats.orb_cap_skips += 1
+                    self._write_signal_record(
+                        {
+                            "type": "ORB_CAP_SKIP",
+                            "strategy_id": event.strategy_id,
+                            "risk_pts": event.risk_points,
+                            "cap_pts": orb_cap,
+                        }
+                    )
+                    return
 
             if self.signal_only:
                 record = self._positions.on_signal_entry(

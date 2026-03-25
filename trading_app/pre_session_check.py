@@ -244,7 +244,9 @@ def run_checks(session: str) -> bool:
     print(f"\n{'=' * 70}")
     print(f"PRE-SESSION CHECK: {session} | {today} | {lane['instrument']}")
     print(f"Strategy: {lane['strategy_id']}")
-    print(f"Filter: {lane['filter_type']} | RR: {lane['rr_target']} | ORB: O{lane['orb_minutes']}")
+    orb_cap = lane.get("max_orb_size_pts")
+    cap_str = f"{orb_cap:.0f} pts" if orb_cap else "NONE"
+    print(f"Filter: {lane['filter_type']} | RR: {lane['rr_target']} | ORB: O{lane['orb_minutes']} | ORB Cap: {cap_str}")
     print(f"{'=' * 70}")
 
     for name, ok, msg in results:

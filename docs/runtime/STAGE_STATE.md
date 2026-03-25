@@ -8,8 +8,8 @@ scope_lock:
   - trading_app/pre_session_check.py
   - trading_app/log_trade.py
   - tests/test_trading_app/test_prop_profiles.py
-  - tests/test_trading_app/test_weekly_review.py
   - tests/test_trading_app/test_session_orchestrator.py
+  - tests/test_trading_app/test_e2e_sim_mocked.py
 acceptance:
   - DailyLaneSpec has max_orb_size_pts field
   - NYSE_OPEN lane has max_orb_size_pts=150.0, others None

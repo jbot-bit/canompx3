@@ -7,6 +7,7 @@ from trading_app.prop_profiles import (
     PropFirmSpec,
     PropFirmAccount,
     AccountProfile,
+    DailyLaneSpec,
     TradingBookEntry,
     ExcludedEntry,
     TradingBook,
@@ -16,6 +17,7 @@ from trading_app.prop_profiles import (
     get_firm_spec,
     get_account_tier,
     get_profile,
+    get_lane_registry,
     compute_profit_split_factor,
 )
 
@@ -155,3 +157,88 @@ class TestTradingBook:
         book = TradingBook(profile_id="test", entries=[entry], excluded=[])
         assert book.total_slots == 1
         assert book.total_dd_used == 935.0
+
+
+class TestDailyLaneSpecOrbCap:
+    """Tests for the ORB size cap on DailyLaneSpec."""
+
+    def test_default_max_orb_is_none(self):
+        lane = DailyLaneSpec("TEST_ID", "MNQ", "NYSE_CLOSE")
+        assert lane.max_orb_size_pts is None
+
+    def test_explicit_max_orb(self):
+        lane = DailyLaneSpec("TEST_ID", "MNQ", "NYSE_OPEN", max_orb_size_pts=150.0)
+        assert lane.max_orb_size_pts == 150.0
+
+    def test_nyse_open_has_cap(self):
+        """NYSE_OPEN lane must have max_orb_size_pts=150.0 in the apex manual profile."""
+        p = get_profile("apex_50k_manual")
+        nyse_open_lanes = [l for l in p.daily_lanes if l.orb_label == "NYSE_OPEN"]
+        assert len(nyse_open_lanes) == 1
+        assert nyse_open_lanes[0].max_orb_size_pts == 150.0
+
+    def test_other_lanes_no_cap(self):
+        """Lanes 1-3 must have max_orb_size_pts=None (no cap)."""
+        p = get_profile("apex_50k_manual")
+        for lane in p.daily_lanes:
+            if lane.orb_label != "NYSE_OPEN":
+                assert lane.max_orb_size_pts is None, f"{lane.orb_label} should have no cap"
+
+
+class TestLaneRegistryOrbCap:
+    """Tests for ORB cap propagation through get_lane_registry."""
+
+    def test_registry_has_max_orb_field(self):
+        registry = get_lane_registry()
+        for label, info in registry.items():
+            assert "max_orb_size_pts" in info, f"{label} missing max_orb_size_pts"
+
+    def test_nyse_open_cap_in_registry(self):
+        registry = get_lane_registry()
+        assert registry["NYSE_OPEN"]["max_orb_size_pts"] == 150.0
+
+    def test_nyse_close_no_cap_in_registry(self):
+        registry = get_lane_registry()
+        assert registry["NYSE_CLOSE"]["max_orb_size_pts"] is None
+
+    def test_singapore_open_no_cap_in_registry(self):
+        registry = get_lane_registry()
+        assert registry["SINGAPORE_OPEN"]["max_orb_size_pts"] is None
+
+    def test_comex_settle_no_cap_in_registry(self):
+        registry = get_lane_registry()
+        assert registry["COMEX_SETTLE"]["max_orb_size_pts"] is None
+
+
+class TestOrbCapLogic:
+    """Unit tests for the ORB cap check logic (mirrors session_orchestrator gate)."""
+
+    @staticmethod
+    def _should_skip(risk_points, orb_cap):
+        """Replicate the cap check from session_orchestrator._handle_event."""
+        if orb_cap is not None and risk_points is not None:
+            return risk_points >= orb_cap
+        return False
+
+    def test_149pt_under_cap_passes(self):
+        assert not self._should_skip(149.0, 150.0)
+
+    def test_150pt_at_cap_skipped(self):
+        assert self._should_skip(150.0, 150.0)
+
+    def test_151pt_over_cap_skipped(self):
+        assert self._should_skip(151.0, 150.0)
+
+    def test_no_cap_any_size_passes(self):
+        assert not self._should_skip(999.0, None)
+
+    def test_no_risk_points_passes(self):
+        assert not self._should_skip(None, 150.0)
+
+    def test_skip_counter_increments(self):
+        """Verify the pattern: cap skip should increment a counter."""
+        skips = 0
+        for risk_pts in [100.0, 150.0, 200.0, 80.0, 160.0]:
+            if self._should_skip(risk_pts, 150.0):
+                skips += 1
+        assert skips == 3  # 150, 200, 160 all >= 150
