@@ -112,7 +112,7 @@ class ProjectXOrderRouter(BrokerRouter):
             raise RuntimeError(f"Cannot cancel order {order_id} — no auth configured")
         resp = requests.post(
             f"{BASE_URL}/api/Order/cancel",
-            json={"orderId": order_id},
+            json={"accountId": self.account_id, "orderId": order_id},
             headers=self.auth.headers(),
             timeout=5,
         )
@@ -120,7 +120,7 @@ class ProjectXOrderRouter(BrokerRouter):
         data = resp.json()
         if not data.get("success", True):
             raise RuntimeError(f"ProjectX cancel failed for orderId={order_id}: {data.get('errorMessage', data)}")
-        log.info("ProjectX order cancelled: orderId=%d", order_id)
+        log.info("ProjectX order cancelled: orderId=%d (account=%d)", order_id, self.account_id)
 
     def supports_native_brackets(self) -> bool:
         return True
@@ -139,8 +139,18 @@ class ProjectXOrderRouter(BrokerRouter):
         Returns stopLossBracket/takeProfitBracket dicts with tick offsets.
         These get merged into the entry order spec via merge_bracket_into_entry().
         """
-        stop_ticks = max(1, round(abs(entry_price - stop_price) / self.tick_size))
-        target_ticks = max(1, round(abs(target_price - entry_price) / self.tick_size))
+        # ProjectX requires SIGNED ticks: negative = below entry, positive = above.
+        # Long: SL below entry (negative), TP above (positive).
+        # Short: SL above entry (positive), TP below (negative).
+        stop_ticks_abs = max(1, round(abs(entry_price - stop_price) / self.tick_size))
+        target_ticks_abs = max(1, round(abs(target_price - entry_price) / self.tick_size))
+
+        if direction == "long":
+            stop_ticks = -stop_ticks_abs   # SL below entry
+            target_ticks = target_ticks_abs  # TP above entry
+        else:
+            stop_ticks = stop_ticks_abs     # SL above entry
+            target_ticks = -target_ticks_abs  # TP below entry
 
         return {
             "stopLossBracket": {"ticks": stop_ticks, "type": 4},
