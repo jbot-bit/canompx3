@@ -149,9 +149,10 @@ def run_dashboard(host: str = "127.0.0.1", port: int = PORT) -> None:
     uvicorn.run(app, host=host, port=port, log_level="warning")
 
 
-def launch_dashboard_background(port: int = PORT) -> None:
+def launch_dashboard_background(port: int = PORT) -> subprocess.Popen | None:
     """Launch dashboard as a background subprocess (Windows-safe).
 
+    Returns the Popen handle so the caller can terminate it on exit.
     Using subprocess instead of threading avoids asyncio event loop
     conflicts between uvicorn and the main bot's event loop on Windows.
     """
@@ -167,11 +168,12 @@ def launch_dashboard_background(port: int = PORT) -> None:
         log.info("Bot dashboard launched as subprocess (PID %d) at http://localhost:%d", proc.pid, port)
     except Exception as e:
         log.warning("Dashboard subprocess launch failed: %s", e)
-        return
+        return None
     try:
         webbrowser.open(f"http://localhost:{port}")
     except Exception:
         pass
+    return proc
 
 
 if __name__ == "__main__":

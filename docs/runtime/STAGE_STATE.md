@@ -1,19 +1,16 @@
 ---
 mode: IMPLEMENTATION
-task: Bot operations dashboard — dark theme, mobile, ADHD-optimized
+task: Review fixes + dashboard UX tweaks
 scope_lock:
   - trading_app/live/bot_state.py
   - trading_app/live/bot_dashboard.py
   - trading_app/live/bot_dashboard.html
   - trading_app/live/session_orchestrator.py
+  - trading_app/live/trade_journal.py
+  - trading_app/portfolio.py
   - scripts/run_live_session.py
-  - docs/plans/topstepx-preflight-checklist.md
 acceptance:
-  - Dashboard serves at http://localhost:8080
-  - Shows bot mode, heartbeat, 4 lane cards, trade log
-  - Control buttons work (paper, kill, preflight)
-  - Auto-launches with bot as daemon thread
-  - Standalone launch works: python -m trading_app.live.bot_dashboard
-  - Dark theme, mobile responsive
-  - Bot unaffected if dashboard crashes
+  - 3 critical review findings fixed
+  - Dashboard UX tweaks applied
+  - All tests pass
 ---

@@ -122,7 +122,14 @@ class SessionOrchestrator:
         max_equity_dd_r = None
         if portfolio is not None and portfolio.strategies:
             first = portfolio.strategies[0]
-            if first.source == "profile" and first.median_risk_dollars and first.median_risk_dollars > 0:
+            if first.source == "profile":
+                # Compute avg risk from ALL strategies with valid risk data (not just first)
+                strats_with_risk = [s for s in portfolio.strategies if s.median_risk_dollars and s.median_risk_dollars > 0]
+                if not strats_with_risk and not signal_only:
+                    raise RuntimeError(
+                        "FAIL-CLOSED: Profile portfolio has no strategies with median_risk_dollars. "
+                        "Cannot compute max DD protection. Fix validated_setups data."
+                    )
                 try:
                     from trading_app.prop_profiles import ACCOUNT_PROFILES, get_account_tier
 
@@ -130,9 +137,7 @@ class SessionOrchestrator:
                     for pid, prof in ACCOUNT_PROFILES.items():
                         if portfolio.name == f"profile_{pid}":
                             tier = get_account_tier(prof.firm, prof.account_size)
-                            avg_risk = sum(
-                                s.median_risk_dollars for s in portfolio.strategies if s.median_risk_dollars
-                            ) / max(1, sum(1 for s in portfolio.strategies if s.median_risk_dollars))
+                            avg_risk = sum(s.median_risk_dollars for s in strats_with_risk) / max(1, len(strats_with_risk))
                             if avg_risk > 0:
                                 max_equity_dd_r = -abs(tier.max_dd / avg_risk)
                                 log.info(
@@ -306,6 +311,12 @@ class SessionOrchestrator:
 
         # Crash recovery: seed engine with strategies that already traded today.
         # Prevents duplicate entries after restart mid-session.
+        # Fail-closed: if journal is broken in live/demo mode, refuse to start.
+        if not self.journal.is_healthy and not signal_only:
+            raise RuntimeError(
+                "FAIL-CLOSED: Trade journal is not healthy — cannot perform crash recovery. "
+                "Duplicate entries could occur. Fix journal or use --signal-only."
+            )
         already_traded = self.journal.get_strategy_ids_for_day(self.trading_day)
         for sid in already_traded:
             self.engine.mark_strategy_traded(sid)
