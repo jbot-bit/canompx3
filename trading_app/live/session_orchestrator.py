@@ -283,7 +283,10 @@ class SessionOrchestrator:
 
         # Position lifecycle tracker — replaces ad-hoc _entry_prices dict
         self._positions = PositionTracker()
-        self._last_bar_at: datetime | None = None  # bar heartbeat
+        # R2-C5: initialize to session start time so watchdog always has a baseline.
+        # Without this, if feed dies before any bar arrives, watchdog skips forever
+        # because it checks `if _last_bar_at is None: continue`.
+        self._last_bar_at: datetime | None = datetime.now(UTC)
         self._kill_switch_fired = False  # one-shot emergency flatten
         self._notifications_broken = False  # set by self-test
         self._bar_count = 0  # total bars received this session
@@ -372,7 +375,7 @@ class SessionOrchestrator:
         # If the bot crashed with open positions, the journal has entry records but no exits.
         # Restoring these lets the orchestrator properly track and exit broker-held positions.
         if not signal_only:
-            incomplete = self.journal.incomplete_trades()
+            incomplete = self.journal.incomplete_trades(trading_day=self.trading_day)
             for trade in incomplete:
                 sid = trade.get("strategy_id", "")
                 direction = trade.get("direction", "")
@@ -515,11 +518,23 @@ class SessionOrchestrator:
         """Called by BrokerFeed when data feed goes stale or dies. Sends alert.
 
         stale_count == -1 means feed exhausted all reconnect attempts (permanently dead).
+        R2-C5: when feed is permanently dead and positions are open, schedule
+        emergency flatten. The watchdog may never fire if _last_bar_at is None
+        (no bars received before death), so this is the only flatten trigger.
         """
         if stale_count == -1:
             msg = f"FEED DEAD: all reconnect attempts exhausted for {self.instrument}"
             log.critical(msg)
             self._notify(msg)
+            # R2-C5: flatten if positions exist — watchdog alone is insufficient
+            if self._positions.active_positions() and not self._kill_switch_fired:
+                self._kill_switch_fired = True
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(self._emergency_flatten())
+                except RuntimeError:
+                    # No running event loop (post_session context) — cannot schedule
+                    log.critical("FEED DEAD: cannot schedule flatten (no event loop) — MANUAL CLOSE REQUIRED")
         else:
             msg = f"FEED STALE: {gap_seconds:.0f}s no data (check {stale_count})"
             log.critical(msg)
@@ -750,6 +765,7 @@ class SessionOrchestrator:
         if self._ml_predictor is not None:
             self._ml_predictor.clear_daily_cache()
         self._consecutive_engine_errors = 0
+        self._close_time_forced = False  # Reset so next day's close-time flatten can fire
         log.info("New trading day started: %s", self.trading_day)
 
     async def _on_bar(self, bar: Bar) -> None:
@@ -765,6 +781,12 @@ class SessionOrchestrator:
                 if stale:
                     log.critical("STALE ORDERS: %s", [(s.strategy_id, s.state.value) for s in stale])
                     self._notify(f"STALE ORDERS: {[(s.strategy_id, s.state.value) for s in stale]}")
+                    # R2-C6: re-attempt close for stuck PENDING_EXIT positions.
+                    # Without this, a REST outage with live WebSocket leaves positions
+                    # stuck indefinitely — kill switch only fires on feed silence.
+                    for sr in stale:
+                        if sr.state == PositionState.PENDING_EXIT and not self.signal_only and self.order_router is not None:
+                            await self._retry_stuck_exit(sr)
         self._last_bar_at = now
         self._bar_count += 1
         self._stats.bars_received += 1
@@ -985,15 +1007,38 @@ class SessionOrchestrator:
         # Brief pause to let cancellations settle
         await asyncio.sleep(0.5)
 
-        # Pass 2: Sweep for any remaining AutoBracket orders on this contract
-        # This catches orphaned bracket legs that survived a previous crash or
-        # bracket legs whose IDs we never captured
+        # Pass 2: Sweep for any remaining AutoBracket orders owned by THIS strategy.
+        # CRITICAL: Do NOT cancel brackets belonging to OTHER active strategies
+        # on the same contract — that would leave them unprotected (naked position).
+        # Collect bracket IDs that belong to other active positions and exclude them.
+        protected_ids: set[int] = set()
+        for other_rec in self._positions.active_positions():
+            if other_rec.strategy_id != strategy_id:
+                protected_ids.update(other_rec.bracket_order_ids)
+
         try:
-            remaining = await loop.run_in_executor(
-                None, self.order_router.cancel_bracket_orders, self.contract_symbol
+            orders = await loop.run_in_executor(
+                None, self.order_router.query_open_orders
             )
-            if remaining > 0:
-                log.warning("ORPHAN CLEANUP: cancelled %d leftover bracket orders on %s", remaining, self.contract_symbol)
+            cancelled = 0
+            for o in orders:
+                tag = o.get("customTag") or ""
+                o_contract = o.get("contractId", "")
+                oid = o.get("id", o.get("orderId"))
+                if (
+                    o_contract == self.contract_symbol
+                    and "AutoBracket" in tag
+                    and oid
+                    and oid not in protected_ids
+                ):
+                    # Only cancel if this bracket is NOT protecting another active position
+                    try:
+                        await loop.run_in_executor(None, self.order_router.cancel, oid)
+                        cancelled += 1
+                    except Exception as e:
+                        log.warning("Bracket sweep cancel failed for %s: %s", oid, e)
+            if cancelled > 0:
+                log.warning("ORPHAN CLEANUP: cancelled %d leftover bracket orders on %s (protected %d)", cancelled, self.contract_symbol, len(protected_ids))
         except Exception as e:
             log.warning("Bracket sweep failed: %s", e)
 
@@ -1114,7 +1159,7 @@ class SessionOrchestrator:
 
             # Post-market buffer: block entries within 10 minutes of firm close
             mins_to_close = self._minutes_to_close_et()
-            if mins_to_close is not None and 0 < mins_to_close <= 10.0:
+            if mins_to_close is not None and mins_to_close <= 10.0:
                 msg = f"POST-MARKET BUFFER: skipping ENTRY for {event.strategy_id} ({mins_to_close:.0f}min to close)"
                 log.warning(msg)
                 self._notify(msg)
@@ -1490,6 +1535,19 @@ class SessionOrchestrator:
                 log.critical(msg)
                 self._notify(msg)
                 continue
+
+            # R2-C4: Cancel bracket legs BEFORE exit to prevent orphaned orders
+            # opening unwanted positions after the flatten closes us out.
+            if record.bracket_order_ids and self.order_router is not None:
+                for oid in record.bracket_order_ids:
+                    try:
+                        await loop.run_in_executor(None, self.order_router.cancel, oid)
+                    except Exception as e:
+                        log.warning(
+                            "KILL SWITCH: bracket cancel failed for %s order %s (proceeding): %s",
+                            record.strategy_id, oid, e,
+                        )
+
             direction = record.direction
             for attempt in range(3):
                 try:
