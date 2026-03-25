@@ -198,6 +198,9 @@ class ProjectXDataFeed(BrokerFeed):
         backoff = _BACKOFF_INITIAL
         error_attempts = 0  # only ERROR reconnects count toward budget (not stale)
 
+        # R2-C2: capture event loop for thread-safe callback bridging
+        self._loop = asyncio.get_running_loop()
+
         while error_attempts <= _MAX_RECONNECTS:
             if self._stop_requested:
                 return
@@ -354,7 +357,13 @@ class ProjectXDataFeed(BrokerFeed):
     # ------------------------------------------------------------------
 
     def _on_quote_sync(self, args: Any) -> None:
-        """Handle GatewayQuote event (signalrcore — synchronous callback)."""
+        """Handle GatewayQuote event (signalrcore — synchronous callback on foreign thread).
+
+        R2-C1/C2: signalrcore fires this on its own thread. All state mutations
+        and queue operations are routed through the asyncio event loop via
+        call_soon_threadsafe to prevent cross-thread data corruption.
+        BarAggregator.on_tick() is additionally protected by its own threading.Lock.
+        """
         quotes = args if isinstance(args, list) else [args]
         for quote in quotes:
             if not isinstance(quote, dict):
@@ -362,21 +371,23 @@ class ProjectXDataFeed(BrokerFeed):
             try:
                 price, vol = self.parse_quote(quote)
                 now = datetime.now(UTC)
-                self._last_data_at = now
-                self._quote_count += 1
+                # on_tick is thread-safe (has internal lock)
                 bar = self._agg.on_tick(price, vol, now)
-                if bar is not None:
-                    bar.symbol = self._symbol
-                    log.info("BAR: %s", bar)
-                    try:
-                        self._bar_queue.put_nowait(bar)
-                    except Exception:
-                        log.error("Bar queue full — dropping bar %s", bar.ts_utc)
+                # Route state updates and queue puts through event loop thread
+                loop = getattr(self, "_loop", None)
+                if loop is not None and not loop.is_closed():
+                    loop.call_soon_threadsafe(self._apply_tick_state, now, bar)
+                else:
+                    # Fallback: direct update (acceptable if loop is gone)
+                    self._apply_tick_state(now, bar)
             except (ValueError, KeyError) as e:
                 log.debug("Skipping quote: %s", e)
 
     def _on_trade_sync(self, args: Any) -> None:
-        """Handle GatewayTrade (signalrcore — sync)."""
+        """Handle GatewayTrade (signalrcore — sync on foreign thread).
+
+        R2-C1/C2: same thread-safety pattern as _on_quote_sync.
+        """
         trades = args if isinstance(args, list) else [args]
         for trade in trades:
             if not isinstance(trade, dict):
@@ -385,16 +396,28 @@ class ProjectXDataFeed(BrokerFeed):
             vol = trade.get("volume", 1)
             if price is not None:
                 now = datetime.now(UTC)
-                self._last_data_at = now
-                self._quote_count += 1
                 bar = self._agg.on_tick(float(price), int(vol) if vol else 1, now)
-                if bar is not None:
-                    bar.symbol = self._symbol
-                    log.info("BAR: %s", bar)
-                    try:
-                        self._bar_queue.put_nowait(bar)
-                    except Exception:
-                        log.error("Bar queue full — dropping bar %s", bar.ts_utc)
+                loop = getattr(self, "_loop", None)
+                if loop is not None and not loop.is_closed():
+                    loop.call_soon_threadsafe(self._apply_tick_state, now, bar)
+                else:
+                    self._apply_tick_state(now, bar)
+
+    def _apply_tick_state(self, now: datetime, bar: "Bar | None") -> None:
+        """Apply tick state updates on the event loop thread (thread-safe target).
+
+        Called via call_soon_threadsafe from signalrcore callbacks.
+        Updates liveness tracking and enqueues completed bars.
+        """
+        self._last_data_at = now
+        self._quote_count += 1
+        if bar is not None:
+            bar.symbol = self._symbol
+            log.info("BAR: %s", bar)
+            try:
+                self._bar_queue.put_nowait(bar)
+            except Exception:
+                log.error("Bar queue full — dropping bar %s", bar.ts_utc)
 
     # ------------------------------------------------------------------
     # Stop-file watcher

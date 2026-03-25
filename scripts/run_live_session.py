@@ -83,9 +83,20 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=No
         print(f"FAILED: {e}")
 
     # 3. Daily features freshness
+    # R2-M5: use Brisbane trading day, not date.today() (Windows system time).
+    # For late-night sessions (NYSE_OPEN at 00:30 Brisbane), date.today() gives
+    # yesterday's date, validating stale data and producing a false-positive pass.
     print(f"[3/{checks_total}] Daily features freshness...", end=" ", flush=True)
     try:
-        row = SessionOrchestrator._build_daily_features_row(date.today(), instrument)
+        from datetime import datetime, timedelta
+        from zoneinfo import ZoneInfo
+
+        bris_now = datetime.now(ZoneInfo("Australia/Brisbane"))
+        if bris_now.hour < 9:
+            preflight_trading_day = (bris_now - timedelta(days=1)).date()
+        else:
+            preflight_trading_day = bris_now.date()
+        row = SessionOrchestrator._build_daily_features_row(preflight_trading_day, instrument)
         atr = row.get("atr_20")
         vel = row.get("atr_vel_regime")
         print(f"OK (atr_20={atr}, atr_vel={vel})")

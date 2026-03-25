@@ -1,3 +1,4 @@
+import threading
 from datetime import datetime, timezone
 
 from trading_app.live.bar_aggregator import Bar, BarAggregator
@@ -75,3 +76,40 @@ def test_out_of_order_tick_dropped():
     result = agg.on_tick(price=2900.0, volume=1, ts=_ts(0, 15))
     assert result is None  # no bar emitted
     assert agg._current.low == 3000.0  # 2900 NOT incorporated
+
+
+def test_concurrent_ticks_do_not_corrupt_bar():
+    """R2-C1: Two threads calling on_tick simultaneously must not corrupt OHLCV.
+
+    Without the threading.Lock in BarAggregator, concurrent read-modify-write
+    on high/low/volume can produce wrong values. This test hammers the aggregator
+    from multiple threads and verifies the final bar is consistent.
+    """
+    agg = BarAggregator()
+    n_threads = 4
+    ticks_per_thread = 500
+    barrier = threading.Barrier(n_threads)
+
+    def worker(thread_id: int) -> None:
+        barrier.wait()  # synchronize start for maximum contention
+        for i in range(ticks_per_thread):
+            price = 2000.0 + thread_id * 100 + i * 0.01
+            agg.on_tick(price=price, volume=1, ts=_ts(5, 30))
+
+    threads = [threading.Thread(target=worker, args=(t,)) for t in range(n_threads)]
+    # Seed the aggregator with one tick to open the bar
+    agg.on_tick(price=2000.0, volume=1, ts=_ts(5, 0))
+
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    total_expected = 1 + n_threads * ticks_per_thread  # 1 seed + all thread ticks
+    assert agg._current is not None
+    assert agg._current.volume == total_expected
+    # High must be the maximum price any thread sent
+    max_price = 2000.0 + (n_threads - 1) * 100 + (ticks_per_thread - 1) * 0.01
+    assert agg._current.high == max_price
+    # Low must be the seed (2000.0 is lowest)
+    assert agg._current.low == 2000.0
