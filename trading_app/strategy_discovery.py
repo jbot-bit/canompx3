@@ -1136,6 +1136,10 @@ def run_discovery(
             total_combos += nf * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS)  # E1 (all CBs)
             total_combos += nf * len(RR_TARGETS) * 2  # E2+E3 CB1 — E3 skipped at runtime (SKIP_ENTRY_MODELS)
             # but counted here for conservative n_trials_at_discovery (higher FST hurdle)
+        # Each base combo is tested at every stop multiplier — count them as
+        # separate hypotheses per Harvey & Liu (2015). Different stop distances
+        # produce distinct P&L series and distinct p-values.
+        total_combos *= len(STOP_MULTIPLIERS)
         combo_idx = 0
 
         for orb_label in sessions:
@@ -1174,10 +1178,10 @@ def run_discovery(
 
                             for stop_mult in STOP_MULTIPLIERS:
                                 # Apply tight stop simulation (no-op for 1.0x).
-                                # NOTE: n_trials (total_combos) is NOT doubled for stop variants.
-                                # Tight stop is a post-hoc risk overlay on the same hypothesis,
-                                # producing highly correlated P&L streams. BH FDR with the base
-                                # combo count is already conservative.
+                                # Stop variants ARE counted in total_combos (K includes
+                                # len(STOP_MULTIPLIERS) factor). Each stop multiplier
+                                # produces a distinct P&L series and distinct p-value —
+                                # they are separate hypotheses per Harvey & Liu (2015).
                                 sim_outcomes = apply_tight_stop(outcomes, stop_mult, cost_spec)
 
                                 metrics = compute_metrics(sim_outcomes, cost_spec=cost_spec, n_trials=total_combos)

@@ -535,6 +535,16 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
             except duckdb.CatalogException:
                 pass  # column already exists
 
+        # Migration: discovery_k + discovery_date (2026-03-26 — FDR K freeze)
+        # Freeze K at the time each strategy was validated so it doesn't change
+        # retroactively when new strategies are added in future discovery runs.
+        # Per Harvey & Liu (2015): K must be the honest count at discovery time.
+        for col, typedef in [("discovery_k", "INTEGER"), ("discovery_date", "DATE")]:
+            try:
+                con.execute(f"ALTER TABLE validated_setups ADD COLUMN {col} {typedef}")
+            except duckdb.CatalogException:
+                pass  # column already exists
+
         # Table 7: validation_run_log (Mar 2026 — Bloomey FIX 8)
         # Tracks rejection rate per phase per validation run for auditability.
         con.execute("""
