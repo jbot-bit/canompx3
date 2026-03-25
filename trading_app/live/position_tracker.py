@@ -136,6 +136,17 @@ class PositionTracker:
                 fill_price,
             )
             return record
+        # R2-H3: reject fill if position is already exiting or flat.
+        # A late fill arriving after on_exit_sent must NOT resurrect the position.
+        if record.state in (PositionState.PENDING_EXIT, PositionState.FLAT):
+            log.critical(
+                "LATE FILL REJECTED for %s: state=%s, fill=%.2f — "
+                "position is already exiting, cannot resurrect",
+                strategy_id,
+                record.state.value,
+                fill_price,
+            )
+            return None
         now = datetime.now(UTC)
         record.state = PositionState.ENTERED
         record.fill_entry_price = fill_price
@@ -157,6 +168,22 @@ class PositionTracker:
         if record is None:
             log.warning("Exit sent for unknown strategy %s", strategy_id)
             return None
+        # R2-H2: reject exit-sent if entry hasn't been filled yet.
+        # An unfilled PENDING_ENTRY (resting E2 stop-market) cannot be "exited" —
+        # it should be cancelled instead. Also reject from FLAT (should not happen).
+        if record.state == PositionState.PENDING_ENTRY:
+            log.critical(
+                "EXIT SENT REJECTED for %s: state=PENDING_ENTRY — "
+                "entry not yet filled, cancel the entry order instead",
+                strategy_id,
+            )
+            return None
+        if record.state == PositionState.PENDING_EXIT:
+            log.warning(
+                "Duplicate on_exit_sent for %s IGNORED (already PENDING_EXIT)",
+                strategy_id,
+            )
+            return record
         record.state = PositionState.PENDING_EXIT
         record.exit_order_id = exit_order_id
         record.state_changed_at = datetime.now(UTC)

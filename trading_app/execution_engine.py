@@ -304,6 +304,29 @@ class ExecutionEngine:
         self.completed_trades.append(trade)
         logger.info("RESTART DEDUP: strategy '%s' marked as already traded today", strategy_id)
 
+    def cancel_trade(self, strategy_id: str) -> bool:
+        """R2-C3: Remove a trade from active_trades after broker cancellation.
+
+        Called by the fill poller when an E2 stop-market order is cancelled/rejected
+        by the broker. Without this, the engine holds a ghost trade that emits
+        EXIT events for a position that never existed at the broker.
+
+        Moves the trade to completed_trades (as EXITED) to prevent re-arming.
+        Returns True if the trade was found and cancelled.
+        """
+        for trade in self.active_trades:
+            if trade.strategy_id == strategy_id:
+                trade.state = TradeState.EXITED
+                self.active_trades.remove(trade)
+                self.completed_trades.append(trade)
+                logger.warning(
+                    "TRADE CANCELLED: %s removed from active_trades (broker cancelled/rejected)",
+                    strategy_id,
+                )
+                return True
+        logger.debug("cancel_trade: %s not found in active_trades", strategy_id)
+        return False
+
     def on_trading_day_start(self, trading_day: date, daily_features_row: dict | None = None) -> None:
         """Reset state for a new trading day."""
         self.trading_day = trading_day
@@ -965,13 +988,16 @@ class ExecutionEngine:
                         continue
 
                     # Risk manager check BEFORE entry
+                    # R2-H6: use _total_pnl_r() (realized + unrealized) for consistency
+                    # with E2 path. Using realized-only would let E1/E3 enter through
+                    # a daily loss gate that E2 would correctly block.
                     suggested_contract_factor = 1.0
                     if self.risk_manager is not None:
                         can_enter, reason, suggested_contract_factor = self.risk_manager.can_enter(
                             strategy_id=trade.strategy_id,
                             orb_label=trade.orb_label,
                             active_trades=self.active_trades,
-                            daily_pnl_r=self.daily_pnl_r,
+                            daily_pnl_r=self._total_pnl_r(),
                             orb_minutes=trade.orb_minutes,
                         )
                         if not can_enter:
@@ -1127,13 +1153,14 @@ class ExecutionEngine:
                             continue
 
                         # Risk manager check BEFORE entry
+                        # R2-H6: use _total_pnl_r() for consistency with E2 path
                         suggested_contract_factor = 1.0
                         if self.risk_manager is not None:
                             can_enter, reason, suggested_contract_factor = self.risk_manager.can_enter(
                                 strategy_id=trade.strategy_id,
                                 orb_label=trade.orb_label,
                                 active_trades=self.active_trades,
-                                daily_pnl_r=self.daily_pnl_r,
+                                daily_pnl_r=self._total_pnl_r(),
                                 orb_minutes=trade.orb_minutes,
                             )
                             if not can_enter:

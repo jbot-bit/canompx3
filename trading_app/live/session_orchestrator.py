@@ -745,6 +745,14 @@ class SessionOrchestrator:
         daily_row = self._build_daily_features_row(self.trading_day, self.instrument)
         self.engine.on_trading_day_start(self.trading_day, daily_features_row=daily_row)
 
+        # R2-C7: Re-seed engine dedup for orphaned strategies so they cannot re-arm.
+        # on_trading_day_start() cleared active_trades, so without this the engine
+        # would re-enter an orphaned strategy on the new day → 2x exposure at broker.
+        # _blocked_strategies already blocks at orchestrator level, but this prevents
+        # the engine from even generating the ENTRY event.
+        for r in rollover_orphans:
+            self.engine.mark_strategy_traded(r.strategy_id)
+
         # Re-seed journal dedup for the new day (same logic as init).
         # Without this, strategies that traded earlier today (e.g. from a crashed
         # prior process) would not be blocked after rollover clears completed_trades.
@@ -790,9 +798,6 @@ class SessionOrchestrator:
         self._last_bar_at = now
         self._bar_count += 1
         self._stats.bars_received += 1
-
-        # Publish bot state for dashboard (every bar, non-fatal)
-        self._publish_state()
 
         # Force-flatten within 5 minutes of firm close time (prevents positions at cutoff)
         if not self._close_time_forced and self._close_hour_et is not None:
@@ -851,10 +856,21 @@ class SessionOrchestrator:
                 msg = f"ENGINE CIRCUIT BREAKER: {self._consecutive_engine_errors} consecutive errors — engine paused until next trading day"
                 log.critical(msg)
                 self._notify(msg)
+                # R2-H5: flatten open positions BEFORE pausing engine.
+                # Without brackets (Tradovate) or with failed bracket submission,
+                # positions would be completely unmanaged until rollover (potentially hours).
+                if self._positions.active_positions():
+                    log.critical("ENGINE CIRCUIT BREAKER: flattening %d open positions before pause", len(self._positions.active_positions()))
+                    await self._emergency_flatten()
             return
 
         for event in events:
             await self._handle_event(event)
+
+        # R2-M1: publish state AFTER engine processing and event handling.
+        # Previously ran before engine.on_bar(), adding 2-50ms disk write latency
+        # to the signal detection critical path. Dashboard staleness of 1 bar is acceptable.
+        self._publish_state()
 
     def _compute_actual_r(self, entry_price: float, exit_price: float, direction: str, risk_pts: float) -> float:
         """Compute cost-adjusted R-multiple from entry/exit prices."""
@@ -985,62 +1001,35 @@ class SessionOrchestrator:
     async def _cancel_brackets(self, strategy_id: str) -> None:
         """Cancel bracket orders before submitting exit. Never raises.
 
-        Two-pass approach:
-        1. Cancel known bracket leg IDs from position record
-        2. Sweep for any remaining AutoBracket orders on the contract (orphan cleanup)
+        R2-H4: Strategy-scoped — only cancels the specific bracket order IDs
+        stored on this strategy's PositionRecord. Does NOT sweep contract-wide,
+        which would nuke other strategies' stop/target protection.
+
+        Contract-wide orphan cleanup is handled separately at startup (line ~254).
         """
         if self.order_router is None:
             return
         loop = asyncio.get_running_loop()
 
-        # Pass 1: Cancel known bracket leg IDs
         record = self._positions.get(strategy_id)
-        if record is not None and record.bracket_order_ids:
-            for oid in record.bracket_order_ids:
-                try:
-                    await loop.run_in_executor(None, self.order_router.cancel, oid)
-                    self._stats.bracket_cancels_ok += 1
-                except Exception as e:
-                    self._stats.bracket_cancels_failed += 1
-                    log.warning("Bracket cancel failed (may have filled): %s", e)
-
-        # Brief pause to let cancellations settle
-        await asyncio.sleep(0.5)
-
-        # Pass 2: Sweep for any remaining AutoBracket orders owned by THIS strategy.
-        # CRITICAL: Do NOT cancel brackets belonging to OTHER active strategies
-        # on the same contract — that would leave them unprotected (naked position).
-        # Collect bracket IDs that belong to other active positions and exclude them.
-        protected_ids: set[int] = set()
-        for other_rec in self._positions.active_positions():
-            if other_rec.strategy_id != strategy_id:
-                protected_ids.update(other_rec.bracket_order_ids)
-
-        try:
-            orders = await loop.run_in_executor(
-                None, self.order_router.query_open_orders
+        if record is None or not record.bracket_order_ids:
+            log.warning(
+                "No bracket order IDs stored for %s — skipping bracket cancel "
+                "(position may have engine-only stop/target management)",
+                strategy_id,
             )
-            cancelled = 0
-            for o in orders:
-                tag = o.get("customTag") or ""
-                o_contract = o.get("contractId", "")
-                oid = o.get("id", o.get("orderId"))
-                if (
-                    o_contract == self.contract_symbol
-                    and "AutoBracket" in tag
-                    and oid
-                    and oid not in protected_ids
-                ):
-                    # Only cancel if this bracket is NOT protecting another active position
-                    try:
-                        await loop.run_in_executor(None, self.order_router.cancel, oid)
-                        cancelled += 1
-                    except Exception as e:
-                        log.warning("Bracket sweep cancel failed for %s: %s", oid, e)
-            if cancelled > 0:
-                log.warning("ORPHAN CLEANUP: cancelled %d leftover bracket orders on %s (protected %d)", cancelled, self.contract_symbol, len(protected_ids))
-        except Exception as e:
-            log.warning("Bracket sweep failed: %s", e)
+            return
+
+        for oid in record.bracket_order_ids:
+            try:
+                await loop.run_in_executor(None, self.order_router.cancel, oid)
+                self._stats.bracket_cancels_ok += 1
+            except Exception as e:
+                self._stats.bracket_cancels_failed += 1
+                log.warning("Bracket cancel failed for %s order %s (may have filled): %s", strategy_id, oid, e)
+
+        # Brief pause to let cancellations settle at broker before exit order
+        await asyncio.sleep(0.5)
 
     EXIT_RETRY_MAX = 3
     EXIT_RETRY_BACKOFF = 1.0  # seconds, linear: 1s, 2s, 3s
@@ -1082,6 +1071,49 @@ class SessionOrchestrator:
                     log.critical(msg)
                     self._notify(msg)
                     raise
+
+    async def _retry_stuck_exit(self, record) -> None:
+        """R2-C6: Re-attempt close for a PENDING_EXIT position stuck > 300s.
+
+        Called from _on_bar stale detection. Refreshes auth, then retries the exit.
+        On success: removes from tracker. On failure: blocks new entries for strategy
+        and sends CRITICAL alert with actionable details.
+        """
+        sid = record.strategy_id
+        log.critical("STUCK EXIT RECOVERY: re-attempting close for %s", sid)
+        try:
+            self.auth.refresh_if_needed()
+        except Exception as e:
+            log.warning("Auth refresh failed before stuck exit retry for %s: %s", sid, e)
+
+        if record.direction is None:
+            msg = f"STUCK EXIT: {sid} has no direction — MANUAL CLOSE REQUIRED"
+            log.critical(msg)
+            self._notify(msg)
+            self._blocked_strategies.add(sid)
+            return
+
+        exit_spec = self.order_router.build_exit_spec(
+            direction=record.direction,
+            symbol=self.contract_symbol,
+            qty=record.contracts,
+        )
+        try:
+            result = await self._submit_exit_with_retry(exit_spec, sid)
+            order_id = result.get("order_id") if isinstance(result, dict) else getattr(result, "order_id", None)
+            self._positions.on_exit_filled(sid)
+            msg = f"STUCK EXIT RECOVERED: {sid} closed → orderId={order_id}"
+            log.critical(msg)
+            self._notify(msg)
+        except Exception as e:
+            msg = (
+                f"STUCK EXIT RETRY FAILED: {sid} still PENDING_EXIT after recovery attempt. "
+                f"Direction={record.direction}, contracts={record.contracts}. "
+                f"Error: {e}. MANUAL CLOSE REQUIRED — new entries BLOCKED for this strategy."
+            )
+            log.critical(msg)
+            self._notify(msg)
+            self._blocked_strategies.add(sid)
 
     async def _handle_event(self, event) -> None:
         """
@@ -1677,7 +1709,12 @@ class SessionOrchestrator:
                             self._stats.fill_polls_confirmed += 1
                         elif status["status"] in ("Cancelled", "Rejected"):
                             self._positions.pop(record.strategy_id)
+                            # R2-C3: notify engine to remove ghost trade from active_trades.
+                            # Without this, the engine keeps emitting EXIT events for a
+                            # position that was never filled at the broker.
+                            self.engine.cancel_trade(record.strategy_id)
                             log.warning("Order %s for %s: %s", status["status"], record.strategy_id, status)
+                            self._notify(f"Order {status['status']}: {record.strategy_id} — entry cancelled by broker")
                     except NotImplementedError:
                         log.debug("Fill poller: %s broker does not support order polling", self._broker_name)
                     except Exception as e:
