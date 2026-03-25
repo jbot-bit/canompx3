@@ -4,6 +4,7 @@ task: Bot operations dashboard — dark theme, mobile, ADHD-optimized
 scope_lock:
   - trading_app/live/bot_state.py
   - trading_app/live/bot_dashboard.py
+  - trading_app/live/bot_dashboard.html
   - trading_app/live/session_orchestrator.py
   - scripts/run_live_session.py
   - docs/plans/topstepx-preflight-checklist.md

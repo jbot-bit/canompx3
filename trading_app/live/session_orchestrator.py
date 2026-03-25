@@ -444,6 +444,31 @@ class SessionOrchestrator:
             log.critical(msg)
             self._notify(msg)
 
+    def _publish_state(self) -> None:
+        """Write bot state to JSON for dashboard consumption. Never raises."""
+        try:
+            from trading_app.live.bot_state import build_state_snapshot, write_state
+
+            mode = "SIGNAL" if self.signal_only else ("DEMO" if self.demo else "LIVE")
+            account_id = self.order_router.account_id if self.order_router else 0
+            snapshot = build_state_snapshot(
+                mode=mode,
+                instrument=self.instrument,
+                contract=self.contract_symbol,
+                account_id=account_id,
+                account_name=getattr(self, "_account_name", ""),
+                daily_pnl_r=self.engine.daily_pnl_r,
+                daily_loss_limit_r=self.risk_mgr.limits.max_daily_loss_r,
+                max_equity_dd_r=self.risk_mgr.limits.max_equity_drawdown_r,
+                bars_received=self._stats.bars_received,
+                strategies=self.portfolio.strategies,
+                active_trades=self.engine.active_trades,
+                completed_trades=self.engine.completed_trades,
+            )
+            write_state(snapshot)
+        except Exception:
+            pass  # Dashboard state is best-effort — never kill the trading loop
+
     def _notify(self, message: str) -> None:
         """Send Telegram notification. Never raises — notifications must not kill the trading loop.
 
@@ -645,6 +670,9 @@ class SessionOrchestrator:
         self._last_bar_at = now
         self._bar_count += 1
         self._stats.bars_received += 1
+
+        # Publish bot state for dashboard (every bar, non-fatal)
+        self._publish_state()
 
         # Periodic bar heartbeat log (every 10 bars ≈ 10 minutes)
         if self._bar_count % 10 == 0:

@@ -3,6 +3,7 @@
 ## Prerequisites
 - Funded TopstepX account active and visible
 - This machine running (local execution only — TopStep rules)
+- Dashboard: http://localhost:8080 (auto-launches with bot, or standalone: `python -m trading_app.live.bot_dashboard`)
 - Terminal open in `C:\Users\joshd\canompx3`
 
 ---

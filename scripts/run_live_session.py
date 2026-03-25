@@ -362,6 +362,14 @@ def main() -> None:
     # Single-instrument mode (existing path)
     _print_mode_banner("signal" if signal_only else ("demo" if demo else "live"), args.instrument)
 
+    # Launch dashboard as background thread (non-fatal if it fails)
+    try:
+        from trading_app.live.bot_dashboard import launch_dashboard_background
+
+        launch_dashboard_background()
+    except Exception as e:
+        log.warning("Dashboard launch failed (non-fatal): %s", e)
+
     session = SessionOrchestrator(
         instrument=args.instrument,
         broker=args.broker,
@@ -377,6 +385,13 @@ def main() -> None:
     finally:
         session.post_session()
         _stop_file.unlink(missing_ok=True)
+        # Clear bot state so dashboard shows STOPPED
+        try:
+            from trading_app.live.bot_state import clear_state
+
+            clear_state()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
