@@ -600,6 +600,21 @@ class SessionOrchestrator:
         self.trading_day = bar_trading_day
         daily_row = self._build_daily_features_row(self.trading_day, self.instrument)
         self.engine.on_trading_day_start(self.trading_day, daily_features_row=daily_row)
+
+        # Re-seed journal dedup for the new day (same logic as init).
+        # Without this, strategies that traded earlier today (e.g. from a crashed
+        # prior process) would not be blocked after rollover clears completed_trades.
+        already_traded = self.journal.get_strategy_ids_for_day(self.trading_day)
+        for sid in already_traded:
+            self.engine.mark_strategy_traded(sid)
+        if already_traded:
+            log.warning(
+                "ROLLOVER DEDUP: %d strategies already traded on %s — will NOT re-enter: %s",
+                len(already_traded),
+                self.trading_day,
+                sorted(already_traded),
+            )
+
         self.orb_builder = LiveORBBuilder(self.instrument, self.trading_day)
         self.monitor.reset_daily()
         self.risk_mgr.daily_reset(self.trading_day)
