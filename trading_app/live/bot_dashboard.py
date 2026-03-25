@@ -64,9 +64,8 @@ async def api_trades():
     if not JOURNAL_PATH.exists():
         return {"trades": [], "note": "No journal DB found"}
     try:
-        con = duckdb.connect(str(JOURNAL_PATH), read_only=True)
-        configure_connection(con)
-        try:
+        with duckdb.connect(str(JOURNAL_PATH), read_only=True) as con:
+            configure_connection(con)
             rows = con.execute(
                 """
                 SELECT trading_day, strategy_id, direction, entry_model,
@@ -87,8 +86,6 @@ async def api_trades():
             ]
             trades = [dict(zip(cols, r)) for r in rows]
             return {"trades": trades}
-        finally:
-            con.close()
     except Exception as e:
         return {"trades": [], "error": str(e)}
 

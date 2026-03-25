@@ -25,16 +25,53 @@ MARKET_HUB_URL = BASE_URL.replace("://api.", "://rtc.") + "/hubs/market"
 USER_HUB_URL = BASE_URL.replace("://api.", "://rtc.") + "/hubs/user"
 
 
+_MAX_RETRIES = 3
+_BACKOFF_BASE = 1.0  # seconds: 1, 2, 4
+
+
 class ProjectXAuth(BrokerAuth):
     def __init__(self):
         self._token: str | None = None
         self._acquired_at: float = 0
         self._token_lifetime: float = 23 * 3600  # refresh after 23h (token lasts 24h)
+        self._auth_healthy = True
 
     def get_token(self) -> str:
         if self._token and time.time() < self._acquired_at + self._token_lifetime:
             return self._token
-        return self._login()
+        return self._login_with_retry()
+
+    @property
+    def is_healthy(self) -> bool:
+        return self._auth_healthy
+
+    def _login_with_retry(self) -> str:
+        last_error = None
+        for attempt in range(_MAX_RETRIES):
+            try:
+                token = self._login()
+                self._auth_healthy = True
+                return token
+            except Exception as e:
+                last_error = e
+                wait = _BACKOFF_BASE * (2**attempt)
+                log.warning(
+                    "Auth login attempt %d/%d failed: %s — retrying in %.0fs",
+                    attempt + 1, _MAX_RETRIES, e, wait,
+                )
+                if attempt < _MAX_RETRIES - 1:
+                    import time as _t
+
+                    _t.sleep(wait)
+
+        self._auth_healthy = False
+        log.critical(
+            "Auth login FAILED after %d attempts: %s — orders will fail until resolved",
+            _MAX_RETRIES, last_error,
+        )
+        raise RuntimeError(
+            f"Auth login failed after {_MAX_RETRIES} attempts: {last_error}"
+        ) from last_error
 
     def headers(self) -> dict:
         return {"Authorization": f"Bearer {self.get_token()}"}

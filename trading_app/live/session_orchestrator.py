@@ -374,16 +374,26 @@ class SessionOrchestrator:
         # Restore position tracker from incomplete journal trades (crash recovery).
         # If the bot crashed with open positions, the journal has entry records but no exits.
         # Restoring these lets the orchestrator properly track and exit broker-held positions.
+        # Check both today and yesterday to catch cross-midnight restarts.
         if not signal_only:
             incomplete = self.journal.incomplete_trades(trading_day=self.trading_day)
+            prev_day = self.trading_day - timedelta(days=1)
+            prev_incomplete = self.journal.incomplete_trades(trading_day=prev_day)
+            if prev_incomplete:
+                log.warning(
+                    "Found %d incomplete trades from previous day %s — including in crash recovery",
+                    len(prev_incomplete), prev_day,
+                )
+                incomplete.extend(prev_incomplete)
             for trade in incomplete:
                 sid = trade.get("strategy_id", "")
                 direction = trade.get("direction", "")
                 fill = trade.get("fill_entry") or trade.get("engine_entry")
-                if sid and direction and fill and self._positions.get(sid) is None:
-                    record = self._positions.on_entry_sent(sid, direction, float(fill))
+                validated_fill = self._validate_fill_price(float(fill) if fill else None, f"RESTORE {sid}")
+                if sid and direction and validated_fill and self._positions.get(sid) is None:
+                    record = self._positions.on_entry_sent(sid, direction, validated_fill)
                     if record:
-                        self._positions.on_entry_filled(sid, float(fill))
+                        self._positions.on_entry_filled(sid, validated_fill)
                         log.warning(
                             "POSITION RESTORED from journal: %s %s @ %.2f",
                             sid, direction, float(fill),
@@ -427,8 +437,7 @@ class SessionOrchestrator:
         try:
             import duckdb
 
-            con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
-            try:
+            with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
                 configure_connection(con)
                 df = con.execute(
                     """
@@ -493,8 +502,6 @@ class SessionOrchestrator:
                     ).fetchone()
                     if src_result and src_result[0] is not None:
                         row[f"cross_atr_{source}_pct"] = float(src_result[0])
-            finally:
-                con.close()
         except RuntimeError:
             raise  # re-raise our own fail-closed errors
         except Exception as e:
@@ -539,6 +546,46 @@ class SessionOrchestrator:
             msg = f"FEED STALE: {gap_seconds:.0f}s no data (check {stale_count})"
             log.critical(msg)
             self._notify(msg)
+
+    def _validate_fill_price(self, fill_price: float | None, context: str) -> float | None:
+        """Validate fill price from broker. Returns price if valid, None if rejected."""
+        if fill_price is None:
+            return None
+
+        import math
+
+        # Basic sanity: must be positive, finite number
+        if not isinstance(fill_price, (int, float)):
+            log.critical("BAD FILL (%s): not numeric: %r", context, fill_price)
+            self._notify(f"BAD FILL ({context}): price is not numeric: {fill_price}")
+            return None
+
+        if math.isnan(fill_price) or math.isinf(fill_price):
+            log.critical("BAD FILL (%s): NaN/inf: %r", context, fill_price)
+            self._notify(f"BAD FILL ({context}): price is NaN/inf")
+            return None
+
+        if fill_price <= 0:
+            log.critical("BAD FILL (%s): non-positive: %s", context, fill_price)
+            self._notify(f"BAD FILL ({context}): price <= 0: {fill_price}")
+            return None
+
+        # Range check: within 10% of last bar close (if available)
+        if hasattr(self, "orb_builder") and self.orb_builder is not None:
+            last_close = getattr(self.orb_builder, "last_close", None)
+            if isinstance(last_close, (int, float)) and last_close > 0:
+                deviation = abs(fill_price - last_close) / last_close
+                if deviation > 0.10:
+                    log.critical(
+                        "BAD FILL (%s): price %.4f deviates %.1f%% from last close %.4f",
+                        context, fill_price, deviation * 100, last_close,
+                    )
+                    self._notify(
+                        f"BAD FILL ({context}): {fill_price} deviates {deviation:.1%} from market {last_close}"
+                    )
+                    return None
+
+        return float(fill_price)
 
     def _minutes_to_close_et(self) -> float | None:
         """Minutes until firm close time in ET. None if no close time set."""
@@ -1283,7 +1330,8 @@ class SessionOrchestrator:
                 self._positions.pop(event.strategy_id)
                 return
             order_id = result.get("order_id") if isinstance(result, dict) else getattr(result, "order_id", None)
-            fill_price = result.get("fill_price") if isinstance(result, dict) else getattr(result, "fill_price", None)
+            raw_fill = result.get("fill_price") if isinstance(result, dict) else getattr(result, "fill_price", None)
+            fill_price = self._validate_fill_price(raw_fill, f"ENTRY {event.strategy_id}")
 
             # Update tracker with broker order_id
             pre_record.entry_order_id = order_id
@@ -1475,7 +1523,8 @@ class SessionOrchestrator:
                 self._write_signal_record({"type": "EXIT_FAILED", "strategy_id": event.strategy_id, "error": str(e)})
                 return
             order_id = result.get("order_id") if isinstance(result, dict) else getattr(result, "order_id", None)
-            exit_fill = result.get("fill_price") if isinstance(result, dict) else getattr(result, "fill_price", None)
+            raw_exit_fill = result.get("fill_price") if isinstance(result, dict) else getattr(result, "fill_price", None)
+            exit_fill = self._validate_fill_price(raw_exit_fill, f"EXIT {event.strategy_id}")
 
             if exit_fill is not None:
                 exit_slip = exit_fill - event.price
@@ -1700,7 +1749,10 @@ class SessionOrchestrator:
                             continue
                         self._stats.fill_polls_run += 1
                         if status["status"] == "Filled":
-                            fill_price = status.get("fill_price")
+                            raw_poll_fill = status.get("fill_price")
+                            fill_price = self._validate_fill_price(
+                                raw_poll_fill, f"POLL {record.strategy_id}"
+                            )
                             if fill_price is not None:
                                 self._positions.on_entry_filled(record.strategy_id, fill_price)
                                 # Update journal with confirmed fill price
@@ -1738,6 +1790,19 @@ class SessionOrchestrator:
     ORCHESTRATOR_BACKOFF_MAX = 300.0
 
     async def run(self) -> None:
+        # Re-check trading day at run start — catches restart across day boundary
+        bris_now = datetime.now(ZoneInfo("Australia/Brisbane"))
+        if bris_now.hour < 9:
+            actual_day = (bris_now - timedelta(days=1)).date()
+        else:
+            actual_day = bris_now.date()
+        if actual_day != self.trading_day:
+            log.warning(
+                "Trading day corrected on run start: %s -> %s (init was stale)",
+                self.trading_day, actual_day,
+            )
+            self.trading_day = actual_day
+
         # Run component self-tests before accepting any bars
         results = self.run_self_tests()
 
