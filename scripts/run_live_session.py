@@ -362,11 +362,12 @@ def main() -> None:
     # Single-instrument mode (existing path)
     _print_mode_banner("signal" if signal_only else ("demo" if demo else "live"), args.instrument)
 
-    # Launch dashboard as background thread (non-fatal if it fails)
+    # Launch dashboard as background subprocess (non-fatal if it fails)
+    _dashboard_proc = None
     try:
         from trading_app.live.bot_dashboard import launch_dashboard_background
 
-        launch_dashboard_background()
+        _dashboard_proc = launch_dashboard_background()
     except Exception as e:
         log.warning("Dashboard launch failed (non-fatal): %s", e)
 
@@ -392,6 +393,17 @@ def main() -> None:
             clear_state()
         except Exception:
             pass
+        # Terminate dashboard subprocess (prevent orphan on Windows)
+        if _dashboard_proc is not None:
+            try:
+                _dashboard_proc.terminate()
+                _dashboard_proc.wait(timeout=5)
+                log.info("Dashboard subprocess terminated")
+            except Exception:
+                try:
+                    _dashboard_proc.kill()
+                except Exception:
+                    pass
 
 
 if __name__ == "__main__":

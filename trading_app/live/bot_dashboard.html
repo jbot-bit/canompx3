@@ -4,12 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ORB Bot Dashboard</title>
+<link id="favicon" rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%23ef4444'/></svg>">
 <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
   body { font-family: 'JetBrains Mono', monospace; background: #0a0e14; color: #e0e0e0; }
   .pulse { animation: pulse 2s infinite; }
   @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+  .pulse-warning { animation: pulse-warning 1s infinite; }
+  @keyframes pulse-warning { 0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); } 50% { box-shadow: 0 0 20px 4px rgba(239,68,68,0.6); } }
   .lane-card { transition: border-color 0.3s, box-shadow 0.3s; }
   .lane-card:hover { box-shadow: 0 0 20px rgba(59,130,246,0.15); }
   .btn-control { transition: transform 0.1s; cursor: pointer; }
@@ -19,6 +22,11 @@
 </style>
 </head>
 <body class="min-h-screen p-4 md:p-6">
+
+<!-- KILL BUTTON — TOP OF PAGE, FULL WIDTH, ALWAYS VISIBLE -->
+<button id="btn-kill" class="btn-control w-full py-4 mb-4 rounded-xl font-bold text-lg bg-red-700 hover:bg-red-600 text-white tracking-wider">
+  KILL ALL TRADES
+</button>
 
 <!-- TOP STATUS BAR -->
 <div class="flex flex-wrap items-center gap-4 mb-6 p-4 rounded-xl bg-[#111922] border border-[#1e2d3d]">
@@ -51,7 +59,7 @@
 </div>
 
 <!-- 4 LANE CARDS -->
-<div id="lanes-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6"></div>
+<div id="lanes-grid" class="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4 mb-6"></div>
 
 <!-- CONTROL BUTTONS -->
 <div class="flex flex-wrap gap-3 mb-6">
@@ -63,9 +71,6 @@
   </button>
   <button id="btn-live" class="btn-control px-6 py-3 rounded-lg font-bold text-sm bg-yellow-700 hover:bg-yellow-600 text-black">
     START LIVE
-  </button>
-  <button id="btn-kill" class="btn-control px-6 py-3 rounded-lg font-bold text-sm bg-red-700 hover:bg-red-600 text-white">
-    KILL ALL TRADES
   </button>
 </div>
 
@@ -182,11 +187,55 @@ function buildLaneCards() {
       details.appendChild(cell);
     }
 
+    const countdown = document.createElement("div");
+    countdown.className = "lane-countdown text-xs text-gray-600 mt-2 text-right";
+    countdown.textContent = "";
+
     card.appendChild(header);
     card.appendChild(filterDiv);
     card.appendChild(details);
+    card.appendChild(countdown);
     grid.appendChild(card);
   }
+}
+
+// Session times in Brisbane (UTC+10). Approximate — DST shifts handled server-side.
+const SESSION_TIMES_BRIS = {
+  NYSE_CLOSE:      { h: 6, m: 0,  label: "6:00 AM" },   // EST close = 6-7 AM AEST
+  SINGAPORE_OPEN:  { h: 11, m: 0, label: "11:00 AM" },
+  COMEX_SETTLE:    { h: 3, m: 30, label: "3:30 AM" },    // Alarm required
+  NYSE_OPEN:       { h: 23, m: 30, label: "11:30 PM" },  // Previous evening
+  TOKYO_OPEN:      { h: 9, m: 0,  label: "9:00 AM" },
+  CME_PRECLOSE:    { h: 5, m: 45, label: "5:45 AM" },
+  EUROPE_FLOW:     { h: 16, m: 0, label: "4:00 PM" },
+  US_DATA_1000:    { h: 0, m: 0,  label: "12:00 AM" },
+  COMEX_OPEN:      { h: 0, m: 0,  label: "12:00 AM" },
+};
+
+function getCountdown(sessionName) {
+  const info = SESSION_TIMES_BRIS[sessionName];
+  if (!info) return "";
+  const now = new Date();
+  // Convert to Brisbane time (UTC+10)
+  const brisOffset = 10 * 60;
+  const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
+  const brisNow = new Date(utcMs + brisOffset * 60000);
+
+  const target = new Date(brisNow);
+  target.setHours(info.h, info.m, 0, 0);
+  let diff = target - brisNow;
+  if (diff < -3600000) diff += 86400000; // Next day if >1hr past
+  if (diff < 0) return "NOW";
+  const hrs = Math.floor(diff / 3600000);
+  const mins = Math.floor((diff % 3600000) / 60000);
+  if (hrs > 0) return "in " + hrs + "h " + mins + "m";
+  return "in " + mins + "m";
+}
+
+function updateFavicon(mode) {
+  const color = (mode === "STOPPED" || mode === "OFFLINE") ? "%23ef4444" : "%2322c55e";
+  const svg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='" + color + "'/></svg>";
+  document.getElementById("favicon").setAttribute("href", "data:image/svg+xml," + svg);
 }
 
 function setText(id, text) { const el = document.getElementById(id); if (el) el.textContent = text; }
@@ -222,6 +271,7 @@ function updateStatus(d) {
     STOPPED: "px-5 py-2 rounded-lg text-xl font-bold tracking-wider bg-gray-800 text-gray-400",
   };
   badge.className = colors[mode] || colors.STOPPED;
+  updateFavicon(mode);
 
   setText("account-info", d.account_name ? d.account_name + " (#" + d.account_id + ")" : "\u2014");
 
@@ -236,6 +286,9 @@ function updateStatus(d) {
   const bar = document.getElementById("dd-bar");
   bar.style.width = pct + "%";
   bar.className = "progress-bar h-full rounded-full " + (pct > 80 ? "bg-red-500" : pct > 50 ? "bg-yellow-500" : "bg-green-500");
+  // Pulse the entire DD container when over 70%
+  const ddContainer = bar.parentElement;
+  if (pct > 70) { ddContainer.classList.add("pulse-warning"); } else { ddContainer.classList.remove("pulse-warning"); }
 
   const hbEl = document.getElementById("heartbeat");
   const age = d.heartbeat_age_s || 9999;
@@ -284,6 +337,12 @@ function updateStatus(d) {
       pnlEl.className = "lane-pnl " + (lane.current_pnl_r >= 0 ? "text-green-400" : "text-red-400");
     } else { pnlEl.textContent = "\u2014"; pnlEl.className = "lane-pnl"; }
     card.querySelector(".lane-rr").textContent = lane.rr_target ? "RR" + lane.rr_target : "\u2014";
+    // Countdown to next session
+    const cdEl = card.querySelector(".lane-countdown");
+    if (cdEl) {
+      const cd = getCountdown(laneInfo.name);
+      cdEl.textContent = cd ? cd : "";
+    }
   }
   setText("last-update", new Date().toLocaleTimeString());
 }
