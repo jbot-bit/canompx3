@@ -1,15 +1,13 @@
 ---
 mode: IMPLEMENTATION
-task: Commit triage -- fairness audit + overnight range + waiver fix from Mar 26
+task: Commit triage -- schema fix + stash cleanup + test recovery
 scope_lock:
-  - trading_app/config.py
-  - trading_app/strategy_validator.py
-  - trading_app/db_manager.py
-  - pipeline/build_daily_features.py
-  - tests/test_trading_app/test_strategy_validator.py
-  - HANDOFF.md
+  - pipeline/init_db.py
+  - tests/test_pipeline/test_build_daily_features.py
+  - docs/runtime/STAGE_STATE.md
 acceptance:
-  - OvernightRangeFilter docstring corrected (US→Asian, WR spread claim removed)
-  - All 6 diffs reviewed and verified
-  - Tests pass
+  - overnight_range_pct column added to schema
+  - Market profile tests pass
+  - Stashes cleaned up
+  - Remote branch cleaned up
 ---
