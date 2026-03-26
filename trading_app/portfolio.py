@@ -735,9 +735,9 @@ def build_profile_portfolio(
     if db_path is None:
         db_path = GOLD_DB_PATH
 
-    # Get account tier for DD-based equity if not specified
+    # Always fetch tier (needed for DD budget check even if equity is specified)
+    tier = get_account_tier(profile.firm, profile.account_size)
     if account_equity is None:
-        tier = get_account_tier(profile.firm, profile.account_size)
         account_equity = float(profile.account_size)
 
     # Determine instrument from lanes (all lanes must be same instrument)
@@ -852,6 +852,36 @@ def build_profile_portfolio(
                 f"Valid sessions: {sorted(valid_sessions)}. "
                 f"Check for typos in prop_profiles.py daily_lanes."
             )
+
+    # --- DD budget pre-flight check (fail-closed) ---
+    # DD per contract estimates (mirrors prop_portfolio.py constants to avoid circular import)
+    _DD_075X, _DD_10X, _INTRADAY_FACTOR = 935.0, 1350.0, 1.4
+    from trading_app.prop_profiles import get_firm_spec
+
+    firm_spec = get_firm_spec(profile.firm)
+    dd_type = firm_spec.dd_type
+
+    dd_breakdown: list[str] = []
+    total_dd = 0.0
+    for s in strategies:
+        base = _DD_075X if s.stop_multiplier <= 0.75 else _DD_10X
+        lane_dd = base * _INTRADAY_FACTOR if dd_type == "intraday_trailing" else base
+        total_dd += lane_dd
+        dd_breakdown.append(f"  {s.strategy_id}: stop={s.stop_multiplier:.2f}x -> ${lane_dd:,.0f}")
+
+    dd_pct = total_dd / tier.max_dd * 100 if tier.max_dd > 0 else 0
+    if total_dd > tier.max_dd:
+        raise RuntimeError(
+            f"DD BUDGET EXCEEDED: ${total_dd:,.0f} / ${tier.max_dd:,.0f} ({dd_pct:.0f}%) "
+            f"for profile '{profile_id}' ({profile.firm} ${profile.account_size:,}).\n"
+            + "\n".join(dd_breakdown)
+            + f"\nReduce lanes or increase account tier. "
+            f"select_for_profile() would reject lanes 3+."
+        )
+    logger.info(
+        "DD budget: $%.0f / $%.0f (%.0f%%) — %d lanes for %s",
+        total_dd, tier.max_dd, dd_pct, len(strategies), profile_id,
+    )
 
     logger.info(
         "Profile portfolio '%s': %d strategies for %s (stop=%.2fx)",
